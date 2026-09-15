@@ -50,27 +50,35 @@ chore(docs): clarify contribution workflow
 
 ### Target branch
 
-This repository uses `dev` as the integration branch, `staging` for release candidates, and `main` for production:
+This repository uses `staging` for integration and UAT, and `main` for production. Development happens on short-lived branches:
 
 ```text
-feat/*, fix/*, chore/*, docs/*  →  dev  →  staging  →  main (prod)
+feat/*, fix/*, chore/*, docs/*  →  staging  →  main (production)
 ```
 
-- Open normal feature, fix, chore, and documentation pull requests against `dev`.
-- When `dev` is stable, open a `dev` → `staging` pull request to validate the release candidate.
+- Open normal feature, fix, chore, and documentation pull requests against `staging`.
+- A merge into `staging` may deploy automatically to the staging environment after required checks pass.
 - After `staging` passes its checks, open a `staging` → `main` pull request for the production release.
-- Start hotfixes from `main`, open the pull request against `main`, then synchronize the change back to `staging` and `dev`.
-- Do not push directly, force-push, or manually merge into `main`, `staging`, or `dev`.
-- Do not introduce new `dev`, `staging`, or `release` branches unless the repository has an explicit policy for them.
+- Production deployment requires a tag or manual approval; merging to `main` alone must not bypass this gate.
+- Start hotfixes from `main`, open the pull request against `main`, then synchronize the same fix back to `staging`.
+- Do not push directly, force-push, or manually merge into `main` or `staging`.
+- Do not introduce a long-lived `dev` or `release` branch without an explicit workflow change.
 
-Create a feature or fix branch from `dev`:
+Create a feature or fix branch from `staging`:
 
 ```bash
 git fetch origin
-git switch dev
+git switch staging
 git pull --ff-only
 git switch -c feat/<short-description>
 ```
+
+### Required checks and deployment
+
+- Pull requests into `staging` and `main` must pass configured checks before merge.
+- Deploy the same tested commit or artifact from staging to production; environment-specific values belong in secrets or environment configuration.
+- Run database migrations on staging before production. Destructive migrations require an explicit rollback or recovery plan.
+- Initial GitHub Actions should validate documentation links and diagram sources. Add Core/FE lint, tests, build, and migration smoke tests when those runtimes are introduced.
 
 ### Pull request title
 

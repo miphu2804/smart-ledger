@@ -2,7 +2,7 @@
 
 ## Repository Layout
 
-Documentation-first MVP. **Verified:** BRD/PRD remain provisional; architecture and ADRs are proposals. The application folders contain placeholder files, not a working runtime. Java/Python and hosting are not finalized.
+Documentation-first MVP. **Verified:** BRD/PRD remain provisional and architecture remains a proposal. The application folders contain placeholder files, not a working runtime. Java/Python and hosting are not finalized.
 
 ```text
 smart-ledger/
@@ -25,11 +25,10 @@ smart-ledger/
 | Document | Description |
 |---|---|
 | [Documentation Index](docs/README.md) | Map, lifecycle, and source-of-truth rules |
-| [Project description](docs/product/project-description.md) | Product, audience, and boundaries |
-| [Architecture overview](docs/architecture/README.md) | System boundary and ownership |
+| [Project overview](docs/product/project-overview.md) | Product, audience, and boundaries |
+| [Architecture diagram](docs/architecture/diagrams/src/architecture.mmd) | MVP target system boundary |
 | [Technical design](docs/architecture/technical-design.md) | Proposed MVP design, pending review |
-| [Architecture decisions](docs/architecture/decisions/README.md) | Proposed decisions and open choices |
-| [Progress log](PROGRESS.md) | Append-only completion and blocker log |
+| [Progress log](PROGRESS.md) | Append-only completion log |
 | [`AGENTS.md`](AGENTS.md) | Canonical project instructions for coding agents |
 | [`CLAUDE.md`](CLAUDE.md) | Imports `AGENTS.md` for Claude |
 | [Contributing guide](CONTRIBUTING.md) | Branch, commit, and pull request conventions |
