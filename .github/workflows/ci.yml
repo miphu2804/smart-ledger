@@ -13,7 +13,7 @@ jobs:
         working-directory: backend/ai
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.1.0
         with:
           python-version: "3.11"
       - run: uv sync --group dev
