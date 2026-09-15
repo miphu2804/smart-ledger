@@ -18,7 +18,7 @@
 
 Kiến trúc trong sơ đồ là **đích MVP**: Mobile dành cho OWNER và dashboard web dành cho ADMIN cùng gọi Core; Core sở hữu API công khai và điều phối AI; PostgreSQL lưu sổ nghiệp vụ; Redis, Qdrant, Langfuse và LiteLLM hỗ trợ AI.
 
-**Đã xác minh:** FE ngoài repo có màn đăng nhập, danh mục, POS, câu bán hàng, thu/chi/nợ và báo cáo. FE hiện dùng Firebase ID token, `X-Shop-Id`, STT giả lập và parser cục bộ. Repo này chưa có Core/AI runtime.
+**Đã xác minh:** FE ngoài repo có màn đăng nhập, danh mục, POS, câu bán hàng, thu/chi/nợ và báo cáo. FE hiện dùng Firebase ID token, `X-Shop-Id`, STT giả lập và parser cục bộ. Core là Java; AI là Python FastAPI. Runtime AI hiện chỉ có `GET /health`, chưa có API nghiệp vụ.
 
 **Chưa xác minh:** FE chưa có tích hợp chạy thật cho image analysis, RAG, recommendation và insight chat. Các phần này thuộc đích MVP nhưng chỉ được nghiệm thu khi có luồng UI/API và `AC-010`–`AC-014`.
 
@@ -81,7 +81,7 @@ Schema PostgreSQL được quản lý bằng migration SQL có phiên bản tron
 |---|---|
 | FE | `API_BASE_URL` |
 | Core | `DATABASE_URL`, `REDIS_URL`, `AI_BASE_URL`, cấu hình auth |
-| AI | `DATABASE_URL`, `REDIS_URL`, `QDRANT_URL`, `LITELLM_URL`, `LANGFUSE_*` |
+| AI | `POSTGRES__URL`, `REDIS__URL`, `QDRANT__URL`, `LITELLM__URL`, `LANGFUSE__*` |
 
 Host và port thuộc cấu hình môi trường, không phải API contract.
 
