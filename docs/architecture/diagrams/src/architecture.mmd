@@ -1,0 +1,61 @@
+%% SmartLedger — MVP target architecture
+%% Rendered: ../images/architecture.svg, ../images/architecture.png
+%% Editable: architecture.drawio
+flowchart TB
+    mobile["Mobile app · OWNER"]
+    admin_web["Admin web dashboard · ADMIN"]
+
+    subgraph core["Core · HTTP :8000"]
+        direction TB
+        core_hub["Core services"]
+        auth["Auth / session service"]
+        ai_client["AI client service"]
+        replenishment["Replenishment service"]
+        analytics["Analytics service"]
+        sales["Sales service"]
+        core_hub --> auth
+        core_hub --> ai_client
+        core_hub --> replenishment
+        core_hub --> analytics
+        core_hub --> sales
+    end
+
+    subgraph data["Data"]
+        direction TB
+        data_access["Data access"]
+        postgres[("PostgreSQL")]
+        redis["Redis"]
+        qdrant["Qdrant"]
+        data_access --> postgres
+        data_access --> redis
+        data_access --> qdrant
+    end
+
+    subgraph ai_infra["AI infrastructure"]
+        direction LR
+        langfuse["Langfuse · :3000"]
+        litellm["LiteLLM · :4000"]
+    end
+
+    subgraph ai["AI · HTTP :8001"]
+        direction TB
+        ai_hub["AI services"]
+        ai_image["Image analysis service"]
+        ai_voice["Voice intake service"]
+        ai_rag["RAG service"]
+        ai_rec["Recommendation service"]
+        ai_chat["Insight chat service"]
+        ai_hub --> ai_image
+        ai_hub --> ai_voice
+        ai_hub --> ai_rag
+        ai_hub --> ai_rec
+        ai_hub --> ai_chat
+    end
+
+    mobile -->|"HTTP :8000"| core_hub
+    admin_web -->|"HTTP :8000"| core_hub
+    core_hub -->|"SQL / cache / vectors"| data_access
+    core_hub -->|"HTTP :8001"| ai_hub
+    ai_hub -->|"SQL / cache / vectors"| data_access
+    ai_hub -->|"tracing"| langfuse
+    ai_hub -->|"routing"| litellm

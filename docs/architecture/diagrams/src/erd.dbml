@@ -1,0 +1,178 @@
+// SmartLedger logical data model — MVP target.
+// Amounts are integer VND. Core owns business writes; AI writes only AI audit/chat.
+// Keep migrations PostgreSQL-compatible so DATABASE_URL can move from Supabase to AWS.
+
+Table users {
+  id uuid [pk]
+  role text [not null, note: 'CHECK: OWNER | ADMIN']
+  phone text [unique]
+  email text [unique]
+  full_name text
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table auth_identities {
+  id uuid [pk]
+  user_id uuid [not null]
+  provider text [not null]
+  provider_subject text [not null]
+  created_at timestamptz [not null]
+
+  indexes {
+    (provider, provider_subject) [unique]
+  }
+}
+
+Table sessions {
+  id uuid [pk]
+  user_id uuid [not null]
+  token_hash text [not null, unique]
+  expires_at timestamptz [not null]
+  revoked_at timestamptz
+  created_at timestamptz [not null]
+}
+
+Table shops {
+  id uuid [pk]
+  owner_user_id uuid [not null]
+  name text [not null]
+  phone text
+  address text
+  industries text
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table admin_audit_logs {
+  id uuid [pk]
+  admin_user_id uuid [not null]
+  shop_id uuid
+  action text [not null]
+  target_type text [not null]
+  target_id uuid
+  metadata jsonb
+  created_at timestamptz [not null]
+}
+
+Table products {
+  id uuid [pk]
+  shop_id uuid [not null]
+  name text [not null]
+  price_vnd bigint [not null]
+  stock numeric(12,3) [not null, default: 0]
+  tracked boolean [not null, default: false]
+  category text
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (shop_id, name)
+  }
+}
+
+Table invoices {
+  id uuid [pk]
+  shop_id uuid [not null]
+  created_by_user_id uuid [not null]
+  customer_name text
+  customer_phone text
+  kind text [not null, note: 'CHECK: AI | POS | MANUAL']
+  status text [not null, note: 'CHECK: PAID | DEBT | PARTIAL']
+  total_vnd bigint [not null]
+  paid_vnd bigint [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table invoice_items {
+  id uuid [pk]
+  invoice_id uuid [not null]
+  product_id uuid
+  name text [not null]
+  qty numeric(12,3) [not null]
+  unit_price_vnd bigint [not null]
+  line_total_vnd bigint [not null]
+}
+
+Table expenses {
+  id uuid [pk]
+  shop_id uuid [not null]
+  created_by_user_id uuid [not null]
+  name text [not null]
+  amount_vnd bigint [not null]
+  created_at timestamptz [not null]
+}
+
+Table debts {
+  id uuid [pk]
+  shop_id uuid [not null]
+  invoice_id uuid [not null, unique]
+  customer_name text [not null]
+  customer_phone text
+  original_vnd bigint [not null]
+  outstanding_vnd bigint [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table debt_payments {
+  id uuid [pk]
+  debt_id uuid [not null]
+  created_by_user_id uuid [not null]
+  amount_vnd bigint [not null]
+  created_at timestamptz [not null]
+}
+
+Table ai_requests {
+  id uuid [pk]
+  shop_id uuid [not null]
+  user_id uuid [not null]
+  input_type text [not null, note: 'CHECK: TEXT | AUDIO | IMAGE']
+  mode text [not null, note: 'CHECK: SALE | EXPENSE | INSIGHT | REPLENISHMENT']
+  status text [not null, note: 'CHECK: SUCCEEDED | FAILED']
+  model text
+  model_version text
+  result jsonb
+  error_code text
+  created_at timestamptz [not null]
+}
+
+Table conversations {
+  id uuid [pk]
+  shop_id uuid [not null]
+  user_id uuid [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table conversation_messages {
+  id uuid [pk]
+  conversation_id uuid [not null]
+  role text [not null, note: 'CHECK: USER | ASSISTANT']
+  content text [not null]
+  citations jsonb
+  created_at timestamptz [not null]
+}
+
+Ref: users.id < auth_identities.user_id
+Ref: users.id < sessions.user_id
+Ref: users.id < shops.owner_user_id
+Ref: users.id < admin_audit_logs.admin_user_id
+Ref: shops.id < admin_audit_logs.shop_id
+Ref: shops.id < products.shop_id
+Ref: shops.id < invoices.shop_id
+Ref: users.id < invoices.created_by_user_id
+Ref: invoices.id < invoice_items.invoice_id
+Ref: products.id < invoice_items.product_id
+Ref: shops.id < expenses.shop_id
+Ref: users.id < expenses.created_by_user_id
+Ref: shops.id < debts.shop_id
+Ref: invoices.id - debts.invoice_id
+Ref: debts.id < debt_payments.debt_id
+Ref: users.id < debt_payments.created_by_user_id
+Ref: shops.id < ai_requests.shop_id
+Ref: users.id < ai_requests.user_id
+Ref: shops.id < conversations.shop_id
+Ref: users.id < conversations.user_id
+Ref: conversations.id < conversation_messages.conversation_id
