@@ -1,3 +1,14 @@
+### [2026-09-16 00:00 UTC+07:00] — [Fix] Pin setup-uv action version
+
+**Done:** Replaced unresolved `astral-sh/setup-uv@v10` with `v10.1.0` so CI can resolve the action.
+
+**Changed files:**
+- `.github/workflows/ci.yml` — modified
+
+**Flow explained:** GitHub Actions has no floating `v10` tag; the workflow now pins a released tag.
+
+**Check:** Confirmed `v10` 404 and `v10.1.0` exists via GitHub API. CI run on the PR is unverified until Actions starts.
+
 ### [2026-09-15 23:41 UTC+07:00] — [Feature] Set up Python AI runtime; leave Java Core
 
 **Done:** Scaffolded FastAPI `/health` for AI (`:8001`) with uv, ruff, and pytest. Left Core as Java; did not record an ADR for the scaffold.
