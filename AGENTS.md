@@ -2,7 +2,7 @@
 
 ## Scope
 
-SmartLedger is currently a documentation-first MVP. The current scope focuses on business and product requirements; do not assume that services, commands, or implementation behavior already exist.
+SmartLedger is currently a documentation-first MVP. Core is Java under `backend/core` — do not modify it. AI is a Python FastAPI scaffold with `/health` only; do not assume business APIs, commands, or product behavior already exist.
 
 ## Before changing anything
 

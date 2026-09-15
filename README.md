@@ -2,7 +2,7 @@
 
 ## Repository Layout
 
-Documentation-first MVP. **Verified:** BRD/PRD remain provisional and architecture remains a proposal. The application folders contain placeholder files, not a working runtime. Java/Python and hosting are not finalized.
+Documentation-first MVP. **Verified:** BRD/PRD remain provisional and architecture remains a proposal. Core is Java under `backend/core`. AI is a Python FastAPI scaffold with `/health` only; business APIs are not implemented. Hosting is not finalized.
 
 ```text
 smart-ledger/
@@ -16,9 +16,19 @@ smart-ledger/
 │   └── contracts/        # HTTP/wire contracts
 ├── frontend/             # FE app; chỉ gọi Core public API
 ├── backend/
-│   ├── core/             # proposed Core API (Java candidate), DB owner
-│   └── ai/               # proposed internal text parser (Python candidate)
+│   ├── core/             # Core public API (Java), DB owner
+│   └── ai/               # Internal AI API (Python FastAPI)
 ```
+
+## AI scaffold
+
+Python 3.11+, [uv](https://docs.astral.sh/uv/). See [backend/ai/README.md](backend/ai/README.md).
+
+```bash
+cd backend/ai && uv sync --group dev && uv run python -m src.main
+```
+
+`GET /health` is implemented. Internal `/internal/v1` routes are not.
 
 ## References
 
