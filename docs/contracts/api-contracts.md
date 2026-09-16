@@ -154,6 +154,7 @@ Phủ `FR-007`, `FR-008`, `FR-017`–`FR-021`.
 | `POST` | `/internal/v1/rag/search` | Truy xuất vector có filter `shopId` |
 | `POST` | `/internal/v1/recommendations/replenishment` | Tạo gợi ý nhập hàng có lý do |
 | `POST` | `/internal/v1/insights/chat` | Trả lời có citation và phạm vi thời gian |
+| `POST` | `/internal/v1/admin/support/analyze` | Phân tích context hỗ trợ đã lọc, trả lời có căn cứ và task draft không có side effect |
 
 Yêu cầu chung:
 
@@ -164,7 +165,7 @@ Yêu cầu chung:
 
 ## 7. Dashboard quản trị
 
-Các endpoint dưới đây chỉ đọc, yêu cầu role `ADMIN` và ghi audit khi truy cập dữ liệu chi tiết. OWNER nhận `403 forbidden`.
+Các endpoint dưới đây yêu cầu role `ADMIN`. OWNER nhận `403 forbidden`. Truy cập dữ liệu chi tiết, tạo task và cập nhật task đều ghi audit. Endpoint ghi chỉ áp dụng cho support task và preference của chính ADMIN, không sửa sổ nghiệp vụ hoặc role.
 
 | Method | Đường | Body / query | Trả về |
 |---|---|---|---|
@@ -172,7 +173,18 @@ Các endpoint dưới đây chỉ đọc, yêu cầu role `ADMIN` và ghi audit 
 | `GET` | `/api/v1/admin/users?query=&page=` | tìm theo tên, email hoặc số điện thoại | `AdminUserPage` |
 | `GET` | `/api/v1/admin/shops?query=&page=` | tìm theo tên hoặc thông tin liên hệ | `AdminShopPage` |
 | `GET` | `/api/v1/admin/shops/{id}` | — | `AdminShopDetailView` |
+| `POST` | `/api/v1/admin/support/chat` | `{ message, conversationId?, shopId? }` | `AdminSupportMessageView` |
+| `GET` | `/api/v1/admin/tasks?status=&assignee=&priority=&query=&page=` | lọc task hỗ trợ | `AdminTaskPage` |
+| `POST` | `/api/v1/admin/tasks` | `CreateAdminTaskRequest`; yêu cầu `Idempotency-Key` | `AdminTaskView` |
+| `GET` | `/api/v1/admin/tasks/{id}` | — | `AdminTaskView` |
+| `PATCH` | `/api/v1/admin/tasks/{id}` | `UpdateAdminTaskRequest` gồm `version` | `AdminTaskView` |
+| `GET` | `/api/v1/admin/preferences` | — | `AdminPreferencesView` |
+| `PATCH` | `/api/v1/admin/preferences` | `{ theme, density, locale }` | `AdminPreferencesView` |
 
-`AdminOverviewView` chỉ gồm số liệu tổng hợp tối thiểu phục vụ hỗ trợ. `AdminShopDetailView` không trả token, secret hoặc dữ liệu sổ chi tiết ngoài phạm vi hỗ trợ. MVP không có giả danh OWNER và không có endpoint ADMIN sửa hóa đơn, chi phí, công nợ hoặc tồn kho.
+`AdminOverviewView` chỉ gồm số liệu tổng hợp tối thiểu phục vụ hỗ trợ. `AdminShopDetailView` không trả token, secret hoặc dữ liệu sổ chi tiết ngoài phạm vi hỗ trợ. `AdminSupportMessageView` gồm `conversationId`, `messageId`, `answer`, `scope`, `citations`, `insufficientData` và `taskDraft?`; task draft không tạo task.
 
-Phủ `FR-022`–`FR-024`, `NFR-003`, `NFR-009`.
+`AdminTaskView` gồm `id`, `title`, `shopId?`, `ownerUserId?`, `priority`, `assigneeUserId?`, `dueAt?`, `source`, `status`, `version`, `createdAt`, `updatedAt`. `status` chỉ nhận `INBOX|INVESTIGATING|WAITING|RESOLVED`. `UpdateAdminTaskRequest` chỉ cho sửa title, priority, assignee, due date và status; version cũ trả `409 conflict`. Cùng `Idempotency-Key` và cùng actor không tạo trùng task.
+
+`AdminPreferencesView` chỉ gồm `theme`, `density`, `locale`; role/quyền lấy từ session và không có endpoint client tự đổi. MVP không có giả danh OWNER và không có endpoint ADMIN sửa hóa đơn, chi phí, công nợ hoặc tồn kho.
+
+Phủ `FR-022`–`FR-028`, `NFR-003`, `NFR-009`–`NFR-011`.

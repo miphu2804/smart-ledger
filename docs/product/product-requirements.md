@@ -5,7 +5,7 @@
 | Trạng thái | tạm thời — Core theo FE; AI theo kiến trúc MVP đã chốt |
 | Chủ sở hữu | Chủ sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; người rà soát kỹ thuật |
-| Cập nhật lần cuối | 2026-09-15 |
+| Cập nhật lần cuối | 2026-09-16 |
 
 ## Tài liệu liên quan
 
@@ -44,7 +44,7 @@ Cho phép người bán rất nhỏ ghi nhận bán hàng, chi phí và công n�
 ## 2. Vai trò
 
 - **OWNER — chủ tiệm:** dùng ứng dụng mobile để tạo và vận hành tiệm, ghi nhận giao dịch, quản lý danh mục, công nợ và xem báo cáo.
-- **ADMIN — nhân sự hỗ trợ nội bộ:** dùng dashboard web để tra cứu tài khoản/cơ sở khách hàng và xem tổng quan hỗ trợ. ADMIN không giả danh OWNER và không sửa trực tiếp hóa đơn, chi phí, công nợ hoặc tồn kho.
+- **ADMIN — nhân sự hỗ trợ nội bộ:** dùng dashboard web để tra cứu tài khoản/cơ sở khách hàng, xem tổng quan, dùng AI Support, quản lý task Kanban và preference cá nhân. ADMIN không giả danh OWNER và không sửa trực tiếp hóa đơn, chi phí, công nợ hoặc tồn kho.
 
 ## 3. Luồng MVP chính
 
@@ -58,7 +58,7 @@ Cho phép người bán rất nhỏ ghi nhận bán hàng, chi phí và công n�
 
 Khi AI lỗi, text/POS thủ công vẫn phải dùng được. Không output AI nào được tự chốt giao dịch.
 
-Luồng hỗ trợ: ADMIN đăng nhập dashboard web, tìm OWNER hoặc cơ sở khách hàng, xem thông tin cần thiết để hỗ trợ và tổng quan hệ thống. Mọi truy cập nhạy cảm phải được ghi audit.
+Luồng hỗ trợ: ADMIN đăng nhập dashboard web, tìm OWNER hoặc cơ sở khách hàng, xem tổng quan, hỏi AI Support để phân tích có căn cứ, xác nhận task draft, rồi theo dõi task qua Kanban. Settings chỉ cho đổi preference cá nhân. Mọi truy cập nhạy cảm, tạo task và chuyển trạng thái task phải được ghi audit.
 
 ## 4. Yêu cầu chức năng — MVP đã chấp nhận
 
@@ -88,6 +88,10 @@ Luồng hỗ trợ: ADMIN đăng nhập dashboard web, tìm OWNER hoặc cơ s�
 | `FR-022` | `BR-013`, `BR-014` | ADMIN đăng nhập dashboard web và chỉ vào được khu vực quản trị; OWNER không truy cập được dashboard quản trị. | P0 — MVP |
 | `FR-023` | `BR-013`, `BR-014` | ADMIN tìm kiếm, xem danh sách và chi tiết OWNER/cơ sở khách hàng để hỗ trợ; không có thao tác sửa trực tiếp dữ liệu sổ nghiệp vụ. | P0 — MVP |
 | `FR-024` | `BO-003`, `BR-013`, `BR-014` | ADMIN xem tổng quan hỗ trợ cấp hệ thống bằng số liệu tổng hợp tối thiểu; không xem nội dung chi tiết ngoài phạm vi hỗ trợ được cấp. | P1 — MVP |
+| `FR-025` | `BO-006`, `BR-014`, `BR-016` | ADMIN hỏi AI Support về một yêu cầu hoặc cơ sở được phép xem; câu trả lời nêu phạm vi, căn cứ và có thể trả task draft, nhưng không tự tạo hoặc thay đổi task. | P1 — MVP |
+| `FR-026` | `BO-006`, `BR-015`, `BR-016` | ADMIN tạo task hỗ trợ bằng nhập tay hoặc xác nhận task draft từ AI; task gồm tiêu đề, cơ sở/OWNER liên quan, mức ưu tiên, người phụ trách tùy chọn, hạn tùy chọn và nguồn. | P1 — MVP |
+| `FR-027` | `BO-006`, `BR-014`, `BR-015` | ADMIN xem, lọc và chuyển task giữa `Inbox`, `Investigating`, `Waiting`, `Resolved`; mỗi chuyển trạng thái lưu người thực hiện, trạng thái trước/sau và thời điểm. | P1 — MVP |
+| `FR-028` | `BR-017` | ADMIN chỉnh theme, mật độ hiển thị và locale của chính mình; xem role/quyền ở chế độ chỉ đọc và không thể tắt audit hoặc tự nâng quyền. | P1 — MVP |
 
 `FR-001`–`FR-009` giữ nguyên mã. `FR-007` không bị tái sử dụng cho yêu cầu khác.
 
@@ -131,6 +135,8 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 | `NFR-007` | `BR-012` | Truy xuất, vector, cache và trace AI phải cô lập theo `shop_id`; test chéo shop phải trả 403 hoặc không có dữ liệu. |
 | `NFR-008` | `BR-012` | Không gửi token, số điện thoại hoặc media thô vào trace; dữ liệu gửi model phải theo cấu hình đã duyệt. |
 | `NFR-009` | `BR-014` | ADMIN không thể tự cấp role từ client. Mọi truy cập dữ liệu khách hàng và hành động nhạy cảm của ADMIN phải được ghi audit gồm người thực hiện, mục tiêu, hành động và thời điểm. |
+| `NFR-010` | `BR-012`, `BR-016` | AI Support chỉ nhận context do Core cấp theo quyền ADMIN, không gọi trực tiếp từ FE, không tự ghi dữ liệu và không trả token, secret hoặc dữ liệu sổ chi tiết ngoài phạm vi hỗ trợ. |
+| `NFR-011` | `BR-014`, `BR-015` | Tạo/cập nhật task phải chống ghi đè im lặng bằng version và lưu lịch sử; request lặp với cùng idempotency key không được tạo trùng task. |
 
 ## 8. Tiêu chí nghiệm thu cốt lõi
 
@@ -153,6 +159,10 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 | `AC-015` | OWNER mở URL dashboard quản trị nhận 403 hoặc được đưa về đăng nhập; ADMIN đăng nhập hợp lệ vào được dashboard. | `FR-022`, `NFR-003` |
 | `AC-016` | ADMIN tìm và xem được OWNER/cơ sở khách hàng nhưng không có hoặc không gọi được API sửa hóa đơn, chi phí, công nợ và tồn kho. | `FR-023`, `NFR-003` |
 | `AC-017` | Khi ADMIN xem chi tiết cơ sở khách hàng, hệ thống tạo bản ghi audit đúng người, cơ sở, hành động và thời điểm; số tổng quan khớp nguồn dữ liệu kiểm thử. | `FR-024`, `NFR-009` |
+| `AC-018` | ADMIN hỏi AI Support về cơ sở được phép xem và nhận câu trả lời có phạm vi/căn cứ; với cơ sở ngoài quyền hoặc dữ liệu nhạy cảm ngoài contract, hệ thống trả 403 hoặc không có dữ liệu. | `FR-025`, `NFR-003`, `NFR-010` |
+| `AC-019` | AI trả task draft nhưng không tạo task; chỉ sau khi ADMIN xác nhận mới có một task, request lặp cùng idempotency key không tạo task thứ hai và audit ghi nguồn AI cùng người xác nhận. | `FR-025`, `FR-026`, `NFR-011` |
+| `AC-020` | ADMIN chuyển task từ `Inbox` sang `Investigating`; reload vẫn giữ trạng thái và audit có actor, from/to, thời điểm. Cập nhật bằng version cũ nhận lỗi conflict thay vì ghi đè. | `FR-027`, `NFR-009`, `NFR-011` |
+| `AC-021` | ADMIN đổi theme/mật độ/locale của chính mình; role chỉ đọc và request tự đổi role hoặc tắt audit bị từ chối. | `FR-028`, `NFR-009` |
 | `AC-INV-001` | Không thể kích hoạt hóa đơn điện tử khi hồ sơ áp dụng hoặc quy tắc pháp lý chưa được phê duyệt/hoàn tất. | `FR-INV-001` |
 | `AC-INV-002` | Mỗi giao dịch thuộc diện lập hóa đơn có một trạng thái đối soát và không biến mất khi nhà cung cấp lỗi. | `FR-INV-003`, `FR-INV-005`, `NFR-004` |
 

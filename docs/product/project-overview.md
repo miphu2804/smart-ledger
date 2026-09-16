@@ -4,7 +4,7 @@
 |---|---|
 | Trạng thái | tạm thời — Core theo FE; AI theo kiến trúc MVP đã chốt |
 | Chủ sở hữu | Chủ sản phẩm |
-| Cập nhật lần cuối | 2026-09-15 |
+| Cập nhật lần cuối | 2026-09-16 |
 | Tên tiếng Anh | So Nghe Loi — AI Voice POS |
 
 ## Tài liệu liên quan
@@ -28,7 +28,7 @@
 
 ## 1. Mô tả ngắn
 
-Sổ Nghe Lời có hai giao diện theo vai trò. `OWNER` dùng ứng dụng mobile để vận hành tiệm: danh mục, bán hàng, thu/chi/nợ, báo cáo và gợi ý. `ADMIN` dùng web dashboard để tìm và xem cơ sở khách hàng, theo dõi tình trạng hỗ trợ và số liệu nền tảng; không trực tiếp sửa sổ bán hàng của chủ tiệm.
+Sổ Nghe Lời có hai giao diện theo vai trò. `OWNER` dùng ứng dụng mobile để vận hành tiệm: danh mục, bán hàng, thu/chi/nợ, báo cáo và gợi ý. `ADMIN` dùng web dashboard để tìm và xem cơ sở khách hàng, theo dõi tình trạng hỗ trợ, dùng AI phân tích yêu cầu, quản lý task trên Kanban và cấu hình preference cá nhân; không trực tiếp sửa sổ bán hàng của chủ tiệm.
 
 FE hiện mới có đường mic giả lập và parser cục bộ. Đích MVP bổ sung AI service cho voice/text, ảnh, gợi ý và hỏi đáp; mọi kết quả AI là bản nháp hoặc gợi ý, không tự ghi sổ.
 
@@ -55,7 +55,7 @@ Các hệ thống POS/kế toán hiện có thường rộng và nặng hơn nhu
 - Danh mục hàng/giá/tồn là cơ sở khớp tên và lên đơn, không bắt người bán gõ lại giá mỗi lần.
 - Người bán luôn kiểm tra giỏ và chốt thanh toán trước khi bản ghi trở thành sổ.
 - Báo cáo, gợi ý nhập hàng và hỏi đáp có căn cứ từ dữ liệu của đúng cửa hàng.
-- Web dashboard cho ADMIN: đăng nhập có role guard, danh sách/tìm kiếm chủ tiệm và cơ sở, trang hỗ trợ và tổng quan nền tảng.
+- Web dashboard cho ADMIN: đăng nhập có role guard, danh sách/tìm kiếm chủ tiệm và cơ sở, tổng quan nền tảng, AI Support, task Kanban và Settings giới hạn.
 
 ## 5. Luồng giá trị cốt lõi
 
@@ -70,6 +70,9 @@ Các hệ thống POS/kế toán hiện có thường rộng và nặng hơn nhu
 - Lịch sử bản ghi bán hàng, sửa, xóa trên UI; sổ chi phí; sổ nợ và thu nợ.
 - Báo cáo theo kỳ: doanh thu, số đơn, bán chạy, chi, lãi ước tính, nợ còn.
 - Gợi ý nhập hàng và hỏi đáp insight có giải thích/căn cứ; không tự sửa dữ liệu.
+- ADMIN dùng AI Support để phân tích yêu cầu có căn cứ, rồi xác nhận trước khi tạo task hỗ trợ.
+- ADMIN quản lý task hỗ trợ qua `Inbox`, `Investigating`, `Waiting`, `Resolved`; mọi chuyển trạng thái được audit.
+- Settings chỉ cho phép preference cá nhân và hiển thị role/quyền ở chế độ chỉ đọc.
 
 Không thuộc MVP: máy in, gói dịch vụ, kế toán/thuế và hóa đơn điện tử.
 
@@ -77,7 +80,7 @@ Không thuộc MVP: máy in, gói dịch vụ, kế toán/thuế và hóa đơn 
 
 MVP không phải phần mềm kế toán, không tính hay kê khai thuế, không xử lý thanh toán thật, không quản lý tồn kho đầy đủ theo lô/kho. Con số chi phí, lợi nhuận trên báo cáo là ước tính vận hành. Bản ghi bán hàng trên UI không phải hóa đơn điện tử; không được mô tả như chứng từ theo nghị định cho đến khi initiative hóa đơn được phê duyệt.
 
-ADMIN không được giả danh OWNER hoặc sửa invoice, expense, debt và tồn kho trong MVP. Truy cập dữ liệu hỗ trợ phải có audit.
+ADMIN không được giả danh OWNER hoặc sửa invoice, expense, debt và tồn kho trong MVP. ADMIN chỉ được ghi task hỗ trợ và preference cá nhân qua API quản trị đã cho phép. Truy cập dữ liệu khách hàng, tạo task và chuyển trạng thái task phải có audit.
 
 ## 8. Mở rộng hóa đơn điện tử — chưa cam kết vào MVP
 

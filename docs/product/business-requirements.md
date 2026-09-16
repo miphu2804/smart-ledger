@@ -5,7 +5,7 @@
 | Trạng thái | tạm thời — Core theo FE; AI theo kiến trúc MVP đã chốt |
 | Chủ sở hữu | Chủ kinh doanh/sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; chủ thuế cho `BR-INV-*` |
-| Cập nhật lần cuối | 2026-09-15 |
+| Cập nhật lần cuối | 2026-09-16 |
 
 ## Tài liệu liên quan
 
@@ -42,6 +42,7 @@ Sổ Nghe Lời giúp người bán rất nhỏ ghi nhận bán hàng, chi phí 
 | `BO-003` | Giúp người bán hiểu số liệu vận hành | Tỷ lệ cửa hàng xem báo cáo/gợi ý; tỷ lệ gợi ý được người dùng mở hoặc sử dụng |
 | `BO-004` | Nếu mở rộng hóa đơn: hỗ trợ cửa hàng tuân thủ mà không phải nhập lại giao dịch | Tỷ lệ giao dịch thuộc diện lập hóa đơn được xử lý đúng hạn; số sai lệch khi đối soát |
 | `BO-005` | Giảm thất thoát công nợ và chi phí không ghi | Số khoản nợ còn mở được theo dõi; tỷ lệ chi phí được ghi so với ước tính chủ tiệm |
+| `BO-006` | Giảm thời gian phát hiện, phân loại và xử lý yêu cầu hỗ trợ | Thời gian từ lúc yêu cầu xuất hiện đến khi được phân loại; thời gian xử lý task; tỷ lệ task quá hạn |
 
 Chủ sở hữu sản phẩm phải chốt target định lượng sau pilot; tài liệu nguồn hiện chưa có baseline đủ để đặt con số có căn cứ.
 
@@ -64,6 +65,7 @@ Chủ sở hữu sản phẩm phải chốt target định lượng sau pilot; t
 - Lịch sử bản ghi bán hàng; sổ chi phí; sổ nợ và thu nợ.
 - Báo cáo doanh thu, số đơn, bán chạy, chi phí và lãi ước tính theo kỳ.
 - STT/parser AI, đề xuất từ ảnh, gợi ý nhập hàng và hỏi đáp insight có căn cứ.
+- Dashboard ADMIN có AI Support, task Kanban và Settings giới hạn để phân tích, theo dõi và xử lý công việc hỗ trợ.
 
 ### Ngoài phạm vi MVP đã chấp nhận
 
@@ -92,6 +94,9 @@ Hóa đơn điện tử là initiative kế tiếp, không mặc nhiên thuộc 
 | `BR-012` | Input, vector, trace và output AI phải được cô lập theo cửa hàng và không làm lộ dữ liệu nhạy cảm sang nhà cung cấp ngoài cấu hình đã duyệt. |
 | `BR-013` | ADMIN chỉ dùng web dashboard để hỗ trợ cơ sở khách hàng; không dùng mobile như OWNER và không trực tiếp sửa sổ bán hàng trong MVP. |
 | `BR-014` | Mọi lần ADMIN xem dữ liệu hoặc thực hiện hành động hỗ trợ phải được phân quyền và lưu audit. |
+| `BR-015` | ADMIN phải có một hàng đợi task hỗ trợ thống nhất, có người phụ trách, mức ưu tiên, hạn xử lý và trạng thái `Inbox`, `Investigating`, `Waiting` hoặc `Resolved`. |
+| `BR-016` | AI Support chỉ phân tích dữ liệu hỗ trợ ADMIN được phép xem, phải nêu căn cứ/phạm vi và chỉ tạo task draft; ADMIN xác nhận trước khi task được tạo hoặc thay đổi trạng thái. |
+| `BR-017` | Settings của ADMIN chỉ cho phép preference cá nhân; role và quyền là chỉ đọc, không thể tự nâng quyền hoặc tắt audit. |
 
 `BR-003` giữ nguyên ý: người bán quyết định số liệu được ghi.
 
@@ -130,6 +135,8 @@ Copy UI viện dẫn nghị định trên màn bản ghi bán hàng **không** b
 - Dữ liệu người mua, số điện thoại và doanh thu là dữ liệu nhạy cảm cần chính sách truy cập, lưu giữ và audit.
 - Xóa cứng bản ghi trên MVP làm giảm khả năng truy vết so với `BR-006`; đây là đánh đổi thí điểm, không phải mức sản xuất.
 - Hóa đơn điện tử phụ thuộc nhà cung cấp dịch vụ, đăng ký của người bán và quy trình vận hành ngoài ứng dụng.
+- AI Support có thể đưa ra phân tích sai hoặc thiếu căn cứ; UI phải hiển thị nguồn/phạm vi và không tự tạo hoặc di chuyển task.
+- Task hỗ trợ có nhiều ADMIN thao tác đồng thời; cập nhật phải phát hiện xung đột và giữ lịch sử chuyển trạng thái.
 
 ## 8. Quyết định còn mở
 
@@ -155,6 +162,8 @@ Copy UI viện dẫn nghị định trên màn bản ghi bán hàng **không** b
 | `BR-007` | `FR-009`, `FR-013` | tạm thời — MVP đã chấp nhận |
 | `BR-009` | `FR-010`, `FR-011`, `NFR-003` | tạm thời — MVP đã chấp nhận; không tuyên bố sẵn sàng sản xuất |
 | `BR-013`, `BR-014` | `FR-022`–`FR-024`, `NFR-009` | tạm thời — admin web dashboard trong MVP |
+| `BO-006`, `BR-015`, `BR-016` | `FR-025`–`FR-027`, `NFR-010`, `NFR-011` | tạm thời — AI Support và task Kanban trong MVP |
+| `BR-017` | `FR-028`, `NFR-009` | tạm thời — Settings giới hạn trong MVP |
 | `BR-010` | `FR-014` | tạm thời — MVP đã chấp nhận |
 | `BR-002`, `BR-003`, `BR-011`, `BR-012` | `FR-008`, `FR-017`–`FR-021`, `NFR-006`–`NFR-008` | tạm thời — đích MVP; chưa có FE/runtime để chứng minh |
 | `BO-004`, `BR-INV-001`–`BR-INV-008` | `FR-INV-001`–`FR-INV-007` | Hoãn, chờ `OQ-INV-001`–`OQ-INV-005` và phê duyệt pháp lý |
