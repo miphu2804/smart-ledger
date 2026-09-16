@@ -1,178 +1,444 @@
-// SmartLedger logical data model — MVP target.
-// Amounts are integer VND. Core owns business writes; AI writes only AI audit/chat.
-// Keep migrations PostgreSQL-compatible so DATABASE_URL can move from Supabase to AWS.
+// ============================================
+// SO NGHE LOI - PostgreSQL ERD
+// Final Version
+// ============================================
+
+
+// ==================== AUTH ====================
 
 Table users {
-  id uuid [pk]
-  role text [not null, note: 'CHECK: OWNER | ADMIN']
-  phone text [unique]
-  email text [unique]
-  full_name text
-  created_at timestamptz [not null]
-  updated_at timestamptz [not null]
-}
+  id bigint [pk, increment]
+  name varchar(255) [not null]
+  email varchar(255) [not null, unique]
+  phone varchar(30)
+  password_hash varchar(255)
+  avatar_url text
 
-Table auth_identities {
-  id uuid [pk]
-  user_id uuid [not null]
-  provider text [not null]
-  provider_subject text [not null]
-  created_at timestamptz [not null]
+  system_role varchar(20) [not null, default: 'user'] // user, admin
+  status varchar(20) [not null, default: 'active']
+
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
 
   indexes {
-    (provider, provider_subject) [unique]
+    phone
+    system_role
+    status
   }
 }
 
-Table sessions {
-  id uuid [pk]
-  user_id uuid [not null]
-  token_hash text [not null, unique]
-  expires_at timestamptz [not null]
-  revoked_at timestamptz
-  created_at timestamptz [not null]
+
+Table oauth_accounts {
+  id bigint [pk, increment]
+  user_id bigint [not null]
+
+  provider varchar(20) [not null] // google, facebook
+  provider_user_id varchar(255) [not null]
+
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    (provider, provider_user_id) [unique]
+    user_id
+  }
 }
 
-Table shops {
-  id uuid [pk]
-  owner_user_id uuid [not null]
-  name text [not null]
-  phone text
+
+Table refresh_tokens {
+  id bigint [pk, increment]
+  user_id bigint [not null]
+
+  token_hash varchar(255) [not null, unique]
+  device_info text
+
+  expires_at timestamp [not null]
+  revoked_at timestamp
+  created_at timestamp [not null]
+
+  indexes {
+    user_id
+    expires_at
+  }
+}
+
+
+// ==================== STORE ====================
+
+Table stores {
+  id bigint [pk, increment]
+  owner_id bigint [not null]
+
+  name varchar(255) [not null]
+  phone varchar(30)
   address text
-  industries text
-  created_at timestamptz [not null]
-  updated_at timestamptz [not null]
+
+  status varchar(20) [not null, default: 'active']
+
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    owner_id
+    status
+  }
 }
 
-Table admin_audit_logs {
-  id uuid [pk]
-  admin_user_id uuid [not null]
-  shop_id uuid
-  action text [not null]
-  target_type text [not null]
-  target_id uuid
-  metadata jsonb
-  created_at timestamptz [not null]
+
+Table categories {
+  id bigint [pk, increment]
+  store_id bigint [not null]
+
+  name varchar(255) [not null]
+
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    store_id
+    (store_id, name) [unique]
+  }
 }
+
+
+// ==================== SYSTEM PRODUCT CATALOG ====================
+
+// Catalog sản phẩm dùng chung toàn hệ thống.
+// Barcode chỉ được quản lý tại đây.
+
+Table system_products {
+  id bigint [pk, increment]
+
+  name varchar(255) [not null]
+  barcode varchar(100) [not null]
+  image_url text
+  unit varchar(50)
+
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    name
+    barcode [unique]
+  }
+}
+
+
+// ==================== STORE PRODUCTS ====================
+
+// Sản phẩm được cấu hình riêng cho từng cửa hàng.
+// system_product_id có thể NULL nếu sản phẩm không thuộc catalog hệ thống.
+//
+// custom_image_url:
+// - NULL → dùng ảnh từ system_products.image_url
+// - Có giá trị → ưu tiên ảnh user upload
 
 Table products {
-  id uuid [pk]
-  shop_id uuid [not null]
-  name text [not null]
-  price_vnd bigint [not null]
-  stock numeric(12,3) [not null, default: 0]
-  tracked boolean [not null, default: false]
-  category text
-  created_at timestamptz [not null]
-  updated_at timestamptz [not null]
+  id bigint [pk, increment]
+
+  store_id bigint [not null]
+  category_id bigint
+  system_product_id bigint
+
+  name varchar(255) [not null]
+  custom_image_url text
+  unit varchar(50) [not null]
+
+  selling_price decimal(15,2) [not null]
+  cost_price decimal(15,2)
+  stock_quantity decimal(15,3) [not null, default: 0]
+
+  status varchar(20) [not null, default: 'active']
+
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
 
   indexes {
-    (shop_id, name)
+    store_id
+    category_id
+    system_product_id
+    (store_id, name)
   }
 }
 
-Table invoices {
-  id uuid [pk]
-  shop_id uuid [not null]
-  created_by_user_id uuid [not null]
-  customer_name text
-  customer_phone text
-  kind text [not null, note: 'CHECK: AI | POS | MANUAL']
-  status text [not null, note: 'CHECK: PAID | DEBT | PARTIAL']
-  total_vnd bigint [not null]
-  paid_vnd bigint [not null]
-  created_at timestamptz [not null]
-  updated_at timestamptz [not null]
+
+// ==================== SALES ====================
+
+Table sales {
+  id bigint [pk, increment]
+
+  store_id bigint [not null]
+  user_id bigint [not null]
+
+  discount_amount decimal(15,2) [not null, default: 0]
+  total_amount decimal(15,2) [not null]
+
+  payment_method varchar(50)
+  sold_at timestamp [not null]
+  created_at timestamp [not null]
+
+  indexes {
+    store_id
+    user_id
+    sold_at
+  }
 }
 
-Table invoice_items {
-  id uuid [pk]
-  invoice_id uuid [not null]
-  product_id uuid
-  name text [not null]
-  qty numeric(12,3) [not null]
-  unit_price_vnd bigint [not null]
-  line_total_vnd bigint [not null]
+
+Table sale_items {
+  id bigint [pk, increment]
+
+  sale_id bigint [not null]
+  product_id bigint [not null]
+
+  quantity decimal(15,3) [not null]
+  unit_price decimal(15,2) [not null]
+
+  indexes {
+    sale_id
+    product_id
+  }
 }
+
+
+// Hóa đơn do ứng dụng xuất cho khách hàng.
+// sale_id là 1-1 với đơn hàng (unique).
+
+Table invoices {
+  id bigint [pk, increment]
+
+  store_id bigint [not null]
+  sale_id bigint [not null, unique]
+
+  invoice_number varchar(100) [not null]
+  invoice_type varchar(30) [not null, default: 'sales']
+
+  customer_name varchar(255)
+  customer_phone varchar(30)
+  customer_email varchar(255)
+
+  subtotal_amount decimal(15,2) [not null]
+  discount_amount decimal(15,2) [not null, default: 0]
+  total_amount decimal(15,2) [not null]
+
+  status varchar(20) [not null, default: 'issued'] // draft, issued, cancelled
+
+  issued_at timestamp [not null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    store_id
+    (store_id, invoice_number) [unique]
+    status
+    issued_at
+  }
+}
+
+
+// ==================== AI CHAT ====================
+
+// Lưu cả text chat và voice chat.
+// Text2SQL xử lý ở backend, không cần bảng riêng.
+
+Table chat_history {
+  id bigint [pk, increment]
+
+  user_id bigint [not null]
+  store_id bigint [not null]
+
+  session_id varchar(100)
+
+  message_type varchar(20) [not null] // text, voice
+  role varchar(20) [not null] // user, assistant
+
+  content text
+  audio_url text
+
+  created_at timestamp [not null]
+
+  indexes {
+    user_id
+    store_id
+    session_id
+    created_at
+  }
+}
+
+
+// ==================== EXPENSES & SOURCE DOCUMENTS ====================
+
+// Lưu chứng từ gốc / ảnh hóa đơn đầu vào / menu phục vụ OCR.
+// ocr_data lưu kết quả trích xuất dạng JSON.
+
+Table source_documents {
+  id bigint [pk, increment]
+
+  store_id bigint [not null]
+  user_id bigint [not null]
+
+  document_type varchar(30) [not null] // menu, invoice, receipt, other
+
+  file_url text [not null]
+  ocr_data jsonb
+
+  status varchar(20) [not null, default: 'pending'] // pending, processed, failed
+
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    store_id
+    user_id
+    document_type
+    status
+    created_at
+  }
+}
+
+
+// Sổ ghi nhận chi phí thực tế của cửa hàng.
+// source_document_id liên kết tới chứng từ gốc (nếu có).
 
 Table expenses {
-  id uuid [pk]
-  shop_id uuid [not null]
-  created_by_user_id uuid [not null]
-  name text [not null]
-  amount_vnd bigint [not null]
-  created_at timestamptz [not null]
+  id bigint [pk, increment]
+
+  store_id bigint [not null]
+  user_id bigint [not null]
+  source_document_id bigint
+
+  category varchar(100) [not null]
+  description text
+
+  amount decimal(15,2) [not null]
+  expense_date timestamp [not null]
+
+  payment_method varchar(50)
+
+  status varchar(20) [not null, default: 'active']
+
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    store_id
+    user_id
+    source_document_id
+    category
+    expense_date
+    status
+  }
 }
 
-Table debts {
-  id uuid [pk]
-  shop_id uuid [not null]
-  invoice_id uuid [not null, unique]
-  customer_name text [not null]
-  customer_phone text
-  original_vnd bigint [not null]
-  outstanding_vnd bigint [not null]
-  created_at timestamptz [not null]
-  updated_at timestamptz [not null]
+
+// ==================== SYSTEM AUDIT ====================
+
+// Lưu lịch sử thay đổi để phục vụ Admin,
+// debugging và mở rộng hệ thống.
+
+Table audit_logs {
+  id bigint [pk, increment]
+
+  user_id bigint [not null]
+
+  action varchar(100) [not null]
+  entity_type varchar(100)
+  entity_id bigint
+
+  old_value jsonb
+  new_value jsonb
+
+  ip_address varchar(45)
+
+  created_at timestamp [not null]
+
+  indexes {
+    user_id
+    (entity_type, entity_id)
+    created_at
+  }
 }
 
-Table debt_payments {
-  id uuid [pk]
-  debt_id uuid [not null]
-  created_by_user_id uuid [not null]
-  amount_vnd bigint [not null]
-  created_at timestamptz [not null]
+
+// ==================== RELATIONSHIPS ====================
+
+// ---------- AUTH ----------
+
+Ref: oauth_accounts.user_id > users.id
+Ref: refresh_tokens.user_id > users.id
+
+
+// ---------- STORE ----------
+
+Ref: stores.owner_id > users.id
+
+Ref: categories.store_id > stores.id
+
+Ref: products.store_id > stores.id
+Ref: products.category_id > categories.id
+Ref: products.system_product_id > system_products.id
+
+
+// ---------- SALES ----------
+
+Ref: sales.store_id > stores.id
+Ref: sales.user_id > users.id
+
+Ref: sale_items.sale_id > sales.id
+Ref: sale_items.product_id > products.id
+
+Ref: invoices.store_id > stores.id
+Ref: invoices.sale_id > sales.id
+
+
+// ---------- EXPENSES & SOURCE DOCUMENTS ----------
+
+Ref: source_documents.store_id > stores.id
+Ref: source_documents.user_id > users.id
+
+Ref: expenses.store_id > stores.id
+Ref: expenses.user_id > users.id
+Ref: expenses.source_document_id > source_documents.id
+
+
+// ---------- AI CHAT ----------
+
+Ref: chat_history.user_id > users.id
+Ref: chat_history.store_id > stores.id
+
+
+// ---------- AUDIT ----------
+
+Ref: audit_logs.user_id > users.id
+
+
+// ==================== TABLE GROUPS ====================
+
+TableGroup auth_management {
+  users
+  oauth_accounts
+  refresh_tokens
 }
 
-Table ai_requests {
-  id uuid [pk]
-  shop_id uuid [not null]
-  user_id uuid [not null]
-  input_type text [not null, note: 'CHECK: TEXT | AUDIO | IMAGE']
-  mode text [not null, note: 'CHECK: SALE | EXPENSE | INSIGHT | REPLENISHMENT']
-  status text [not null, note: 'CHECK: SUCCEEDED | FAILED']
-  model text
-  model_version text
-  result jsonb
-  error_code text
-  created_at timestamptz [not null]
+TableGroup store_catalog {
+  stores
+  categories
+  system_products
+  products
 }
 
-Table conversations {
-  id uuid [pk]
-  shop_id uuid [not null]
-  user_id uuid [not null]
-  created_at timestamptz [not null]
-  updated_at timestamptz [not null]
+TableGroup sales_operations {
+  sales
+  sale_items
+  invoices
 }
 
-Table conversation_messages {
-  id uuid [pk]
-  conversation_id uuid [not null]
-  role text [not null, note: 'CHECK: USER | ASSISTANT']
-  content text [not null]
-  citations jsonb
-  created_at timestamptz [not null]
+TableGroup expense_management {
+  source_documents
+  expenses
 }
 
-Ref: users.id < auth_identities.user_id
-Ref: users.id < sessions.user_id
-Ref: users.id < shops.owner_user_id
-Ref: users.id < admin_audit_logs.admin_user_id
-Ref: shops.id < admin_audit_logs.shop_id
-Ref: shops.id < products.shop_id
-Ref: shops.id < invoices.shop_id
-Ref: users.id < invoices.created_by_user_id
-Ref: invoices.id < invoice_items.invoice_id
-Ref: products.id < invoice_items.product_id
-Ref: shops.id < expenses.shop_id
-Ref: users.id < expenses.created_by_user_id
-Ref: shops.id < debts.shop_id
-Ref: invoices.id - debts.invoice_id
-Ref: debts.id < debt_payments.debt_id
-Ref: users.id < debt_payments.created_by_user_id
-Ref: shops.id < ai_requests.shop_id
-Ref: users.id < ai_requests.user_id
-Ref: shops.id < conversations.shop_id
-Ref: users.id < conversations.user_id
-Ref: conversations.id < conversation_messages.conversation_id
+TableGroup system_ai {
+  chat_history
+  audit_logs
+}
