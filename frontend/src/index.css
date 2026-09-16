@@ -1,0 +1,130 @@
+@import "@fontsource-variable/plus-jakarta-sans";
+@import "tailwindcss";
+
+:root {
+  --canvas: #e8e4dc;
+  --frame: #f7f6f2;
+  --card: #ffffff;
+  --sidebar: transparent;
+  --text: #1a1916;
+  --text-2: #6b675e;
+  --text-3: #9a958a;
+  --line: #e8e4dc;
+  --accent: #8fdb6e;
+  --accent-hover: #7cc85c;
+  --accent-ink: #16350c;
+  --icon-well: #2a2926;
+  --chip-green-bg: #e7f6dc;
+  --chip-green-fg: #2f6b1f;
+  --chip-blue-bg: #e4f0ff;
+  --chip-blue-fg: #2157a4;
+  --chip-amber-bg: #f8e9c8;
+  --chip-amber-fg: #8a5a12;
+  --chip-red-bg: #f8d9d4;
+  --chip-red-fg: #9b2c1f;
+  --chip-gray-bg: #eeebe4;
+  --chip-gray-fg: #5c5850;
+  --insight-blue-bg: #eaf1fb;
+  --insight-blue-fg: #1e4e9c;
+  --insight-green-bg: #e7f4dc;
+  --insight-green-fg: #215c14;
+  --warn-bg: #f8e9c8;
+  --danger-bg: #fbe4df;
+  --kanban-done-col: #e7f4dc;
+  --calendar: #2a2926;
+  --row-selected: #efeee8;
+  --icon-btn: #efece6;
+
+  --background: var(--frame);
+  --foreground: var(--text);
+  --card-foreground: var(--text);
+  --popover: #ffffff;
+  --popover-foreground: var(--text);
+  --primary: #1a1916;
+  --primary-foreground: #ffffff;
+  --secondary: #efece6;
+  --secondary-foreground: var(--text);
+  --muted: #f3f1ec;
+  --muted-foreground: var(--text-2);
+  --accent-foreground: var(--accent-ink);
+  --destructive: #9b2c1f;
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--accent);
+  --radius: 1rem;
+}
+
+@theme inline {
+  --font-sans: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", ui-sans-serif,
+    system-ui, sans-serif;
+  --color-canvas: var(--canvas);
+  --color-frame: var(--frame);
+  --color-card: var(--card);
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-text-3: var(--text-3);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-ink: var(--accent-ink);
+  --color-icon-well: var(--icon-well);
+  --color-insight-blue-bg: var(--insight-blue-bg);
+  --color-insight-blue-fg: var(--insight-blue-fg);
+  --color-danger-bg: var(--danger-bg);
+  --color-calendar: var(--calendar);
+  --color-row-selected: var(--row-selected);
+  --color-icon-btn: var(--icon-btn);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 16px;
+  --radius-3xl: 24px;
+  --radius-4xl: 28px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01" on, "cv11" on;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input {
+  font-family: inherit;
+}
+
+#shell-rail:empty {
+  display: none;
+}
+
+.hatch {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    #3a3936 0 1.5px,
+    transparent 1.5px 5px
+  );
+}
