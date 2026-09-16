@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-smartledger}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smartledger}
+      POSTGRES_DB: ${POSTGRES_DB:-smartledger}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-smartledger} -d ${POSTGRES_DB:-smartledger}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - redis-data:/data
+
+  ai:
+    build:
+      context: ./backend/ai
+    ports:
+      - "${AI_PORT:-8001}:8001"
+    environment:
+      POSTGRES__URL: postgresql://${POSTGRES_USER:-smartledger}:${POSTGRES_PASSWORD:-smartledger}@postgres:5432/${POSTGRES_DB:-smartledger}
+      REDIS__URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  redis-data:

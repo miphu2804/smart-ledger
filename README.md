@@ -2,7 +2,7 @@
 
 ## Repository Layout
 
-Documentation-first MVP. **Verified:** BRD/PRD remain provisional and architecture remains a proposal. Core is Java under `backend/core`. AI is a Python FastAPI scaffold with `/health` only; business APIs are not implemented. Hosting is not finalized.
+Documentation-first MVP. **Verified:** BRD/PRD remain provisional and architecture remains a proposal. Core is Java under `backend/core`. AI is a Python FastAPI scaffold with `/health` and `/ready`; business APIs are not implemented. Hosting is not finalized.
 
 ```text
 smart-ledger/
@@ -10,6 +10,7 @@ smart-ledger/
 ├── AGENTS.md
 ├── CLAUDE.md
 ├── PROGRESS.md
+├── compose.yaml         # local Postgres + Redis + AI
 ├── docs/
 │   ├── product/          # product description, BRD, PRD
 │   ├── architecture/     # overview, technical design, ADRs
@@ -28,7 +29,15 @@ Python 3.11+, [uv](https://docs.astral.sh/uv/). See [backend/ai/README.md](backe
 cd backend/ai && uv sync --group dev && uv run python -m src.main
 ```
 
-`GET /health` is implemented. Internal `/internal/v1` routes are not.
+`GET /health` is liveness. `GET /ready` pings Postgres and Redis. Internal `/internal/v1` routes are not implemented.
+
+## Local Compose
+
+Default stack is PostgreSQL, Redis, and AI. Langfuse is not enabled.
+
+```bash
+docker compose up --build
+```
 
 ## References
 
