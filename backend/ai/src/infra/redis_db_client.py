@@ -7,10 +7,12 @@ logger = logging.getLogger(__name__)
 
 class RedisDBClient:
     def __init__(self, connection_string: str | None = None) -> None:
+        """Create a client that treats a missing or blank URL as unconfigured."""
         self.connection_string = connection_string
         self.client = None
 
     def connect(self) -> None:
+        """Create the configured client, logging and suppressing setup failures."""
         if self.client is not None:
             return
         url = self.connection_string
@@ -29,6 +31,11 @@ class RedisDBClient:
             self.client = None
 
     def check_health(self) -> None:
+        """Verify Redis responds, using a temporary client if needed.
+
+        Raises:
+            RuntimeError: If no URL is configured or the ping result is unexpected.
+        """
         if self.client is not None:
             if self.client.ping() is not True:
                 raise RuntimeError("redis ping did not return True")
@@ -45,6 +52,7 @@ class RedisDBClient:
                 raise RuntimeError("redis ping did not return True")
 
     def close(self) -> None:
+        """Close and discard the active client, if any."""
         if self.client is not None:
             self.client.close()
             self.client = None

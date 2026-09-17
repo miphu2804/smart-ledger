@@ -15,6 +15,7 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Attach data-store clients at startup and close them at shutdown."""
     postgres = PostgreDBClient(app_config.postgres.url)
     redis = RedisDBClient(app_config.redis.url)
     postgres.connect()
