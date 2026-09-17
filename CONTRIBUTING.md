@@ -59,7 +59,7 @@ feat/*, fix/*, chore/*, docs/*  →  staging  →  main (production)
 - Open normal feature, fix, chore, and documentation pull requests against `staging`.
 - A merge into `staging` may deploy automatically to the staging environment after required checks pass.
 - After `staging` passes its checks, open a `staging` → `main` pull request for the production release.
-- Merge release pull requests with a merge commit, never squash: squashing disconnects `staging` history from `main` and forces a manual resync. This follows the production-branch pattern in [GitLab Flow](https://docs.gitlab.com/topics/gitlab_flow/#production-branch-with-gitlab-flow).
+- Merge release pull requests with a merge commit, never squash: squashing disconnects `staging` history from `main` and forces a manual resync. This follows the production-branch pattern in [GitLab Flow](https://about.gitlab.com/topics/version-control/what-is-gitlab-flow/) and [branch-per-environment strategies](https://docs.gitlab.com/user/project/repository/branches/strategies/).
 - Production deployment requires a tag or manual approval; merging to `main` alone must not bypass this gate.
 - Start hotfixes from `main`, open the pull request against `main`, then synchronize the same fix back to `staging`.
 - Do not push directly, force-push, or manually merge into `main` or `staging`.
