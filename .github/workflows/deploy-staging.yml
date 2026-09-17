@@ -1,0 +1,61 @@
+name: Deploy staging
+
+on:
+  push:
+    branches: [staging]
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}-ai
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push ai image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend/ai
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:staging
+            ${{ env.IMAGE }}:${{ github.sha }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Deploy to staging VM over SSH
+        env:
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_USER: ${{ secrets.STAGING_USER }}
+          STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s' "$STAGING_SSH_KEY" > ~/.ssh/staging_key
+          chmod 600 ~/.ssh/staging_key
+          ssh-keyscan -H "$STAGING_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/staging_key "$STAGING_USER@$STAGING_HOST" '
+            set -e
+            cd ~/smart-ledger
+            git fetch origin staging
+            git reset --hard origin/staging
+            docker compose pull ai
+            docker compose up -d ai
+            curl -sf localhost:${AI_PORT:-8001}/health
+          '

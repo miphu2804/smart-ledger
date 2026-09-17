@@ -37,8 +37,10 @@ Default stack is PostgreSQL, Redis, and AI. Langfuse is not enabled.
 
 ```bash
 cp .env.example .env
-docker compose up --build
+docker compose --profile infra up --build
 ```
+
+The `infra` profile starts local Postgres and Redis. Without it, `docker compose up ai` runs the AI service alone against `POSTGRES__URL`/`REDIS__URL` from `.env` — the mode used on the staging VM with managed backing services. See [Staging runbook](docs/ops/staging.md).
 
 ## References
 

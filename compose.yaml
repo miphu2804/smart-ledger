@@ -1,5 +1,6 @@
 services:
   postgres:
+    profiles: ["infra"]
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-smartledger}
@@ -20,6 +21,7 @@ services:
       - postgres-data:/var/lib/postgresql/data
 
   redis:
+    profiles: ["infra"]
     image: redis:7-alpine
     ports:
       - "127.0.0.1:${REDIS_PORT:-6379}:6379"
@@ -32,18 +34,22 @@ services:
       - redis-data:/data
 
   ai:
+    image: ghcr.io/miphu2804/smart-ledger-ai:${AI_IMAGE_TAG:-staging}
     build:
       context: ./backend/ai
+    restart: unless-stopped
     ports:
-      - "${AI_PORT:-8001}:8001"
+      - "127.0.0.1:${AI_PORT:-8001}:8001"
     environment:
-      POSTGRES__URL: postgresql://${POSTGRES_USER:-smartledger}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-smartledger}
-      REDIS__URL: redis://redis:6379/0
+      POSTGRES__URL: ${POSTGRES__URL:-postgresql://${POSTGRES_USER:-smartledger}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-smartledger}}
+      REDIS__URL: ${REDIS__URL:-redis://redis:6379/0}
     depends_on:
       postgres:
         condition: service_healthy
+        required: false
       redis:
         condition: service_healthy
+        required: false
 
 volumes:
   postgres-data:
