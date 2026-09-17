@@ -1,178 +1,625 @@
-// SmartLedger logical data model — MVP target.
-// Amounts are integer VND. Core owns business writes; AI writes only AI audit/chat.
-// Keep migrations PostgreSQL-compatible so DATABASE_URL can move from Supabase to AWS.
+// =====================================================
+// SMART LEDGER — PHASE 1 ERD
+//
+// ID: BIGINT IDENTITY → Java Long
+// Money: BIGINT VND (50.000đ = 50000)
+// Time: TIMESTAMPTZ, stored in UTC
+// Quantity: NUMERIC(15,3), supports kg/liter/item
+// =====================================================
+
+Enum SystemRole {
+  OWNER
+  ADMIN
+}
+
+Enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+Enum StoreStatus {
+  ACTIVE
+  INACTIVE
+}
+
+Enum CatalogStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+Enum SaleStatus {
+  CONFIRMED
+  VOIDED
+}
+
+Enum PaymentStatus {
+  PAID
+  DEBT
+  PARTIAL
+}
+
+Enum PaymentType {
+  INITIAL
+  DEBT_REPAYMENT
+}
+
+Enum PaymentMethod {
+  CASH
+  TRANSFER
+}
+
+Enum DebtStatus {
+  OPEN
+  SETTLED
+}
+
+Enum DraftStatus {
+  DRAFT
+  CONFIRMED
+  CANCELLED
+  EXPIRED
+}
+
+Enum DraftSourceType {
+  MANUAL
+  AI_VOICE
+}
+
+Enum ExpenseStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+Enum AiInputType {
+  TEXT
+  AUDIO
+  IMAGE
+}
+
+Enum AiMode {
+  SALE
+  EXPENSE
+  INSIGHT
+  REPLENISHMENT
+}
+
+Enum AiRequestStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+
+// =====================================================
+// AUTH & TENANCY
+// =====================================================
 
 Table users {
-  id uuid [pk]
-  role text [not null, note: 'CHECK: OWNER | ADMIN']
-  phone text [unique]
-  email text [unique]
-  full_name text
-  created_at timestamptz [not null]
-  updated_at timestamptz [not null]
+  id bigint [pk, increment]
+
+  display_name varchar(150) [not null]
+  email varchar(255)
+  phone varchar(30)
+  avatar_url varchar(1000)
+
+  system_role SystemRole [not null, default: 'OWNER']
+  status UserStatus [not null, default: 'ACTIVE']
+
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    email
+    phone
+    system_role
+  }
+
+  Note: 'No password_hash. Phone and Google authentication are handled by Firebase.'
 }
 
 Table auth_identities {
-  id uuid [pk]
-  user_id uuid [not null]
-  provider text [not null]
-  provider_subject text [not null]
-  created_at timestamptz [not null]
+  id bigint [pk, increment]
+  user_id bigint [not null, unique]
+
+  provider varchar(30) [not null, default: 'FIREBASE']
+  provider_subject varchar(255) [not null, unique] // Firebase UID
+
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  Note: 'Firebase Account Linking makes Phone and Google belong to one Firebase UID.'
+}
+
+Table stores {
+  id bigint [pk, increment]
+  owner_id bigint [not null]
+
+  name varchar(200) [not null]
+  industry varchar(100) [not null]
+  phone varchar(30)
+  address varchar(500)
+
+  status StoreStatus [not null, default: 'ACTIVE']
+
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (provider, provider_subject) [unique]
+    owner_id
+    status
   }
+
+  Note: 'One OWNER can own multiple stores. One store has one OWNER in Phase 1.'
 }
 
-Table sessions {
-  id uuid [pk]
-  user_id uuid [not null]
-  token_hash text [not null, unique]
-  expires_at timestamptz [not null]
-  revoked_at timestamptz
-  created_at timestamptz [not null]
-}
 
-Table shops {
-  id uuid [pk]
-  owner_user_id uuid [not null]
-  name text [not null]
-  phone text
-  address text
-  industries text
-  created_at timestamptz [not null]
-  updated_at timestamptz [not null]
-}
+// =====================================================
+// CATALOG & SIMPLE STOCK
+// =====================================================
 
-Table admin_audit_logs {
-  id uuid [pk]
-  admin_user_id uuid [not null]
-  shop_id uuid
-  action text [not null]
-  target_type text [not null]
-  target_id uuid
-  metadata jsonb
-  created_at timestamptz [not null]
+Table categories {
+  id bigint [pk, increment]
+  store_id bigint [not null]
+
+  name varchar(150) [not null]
+  status CatalogStatus [not null, default: 'ACTIVE']
+
+  archived_at timestamptz
+  archived_by_user_id bigint
+
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (store_id, status)
+  }
+
+  Note: 'PostgreSQL migration: UNIQUE(store_id, lower(name)) WHERE archived_at IS NULL.'
 }
 
 Table products {
-  id uuid [pk]
-  shop_id uuid [not null]
-  name text [not null]
-  price_vnd bigint [not null]
-  stock numeric(12,3) [not null, default: 0]
+  id bigint [pk, increment]
+  store_id bigint [not null]
+  category_id bigint
+
+  name varchar(255) [not null]
+  barcode varchar(100)
+  image_url varchar(1000)
+  unit varchar(50) [not null]
+
+  selling_price_vnd bigint [not null]
+  cost_price_vnd bigint
+
   tracked boolean [not null, default: false]
-  category text
-  created_at timestamptz [not null]
-  updated_at timestamptz [not null]
+  stock_quantity numeric(15,3)
+
+  status CatalogStatus [not null, default: 'ACTIVE']
+  archived_at timestamptz
+  archived_by_user_id bigint
+
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (shop_id, name)
+    (store_id, status)
+    category_id
+    barcode
   }
+
+  Note: 'Simple stock only; no inventory ledger in Phase 1. Soft delete only. PostgreSQL migration: unique active product name per store.'
 }
 
-Table invoices {
-  id uuid [pk]
-  shop_id uuid [not null]
-  created_by_user_id uuid [not null]
-  customer_name text
-  customer_phone text
-  kind text [not null, note: 'CHECK: AI | POS | MANUAL']
-  status text [not null, note: 'CHECK: PAID | DEBT | PARTIAL']
-  total_vnd bigint [not null]
-  paid_vnd bigint [not null]
-  created_at timestamptz [not null]
-  updated_at timestamptz [not null]
+
+// =====================================================
+// CUSTOMERS
+// =====================================================
+
+Table customers {
+  id bigint [pk, increment]
+  store_id bigint [not null]
+
+  name varchar(150) [not null]
+  normalized_phone varchar(30)
+
+  status CatalogStatus [not null, default: 'ACTIVE']
+  archived_at timestamptz
+  archived_by_user_id bigint
+
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (store_id, normalized_phone)
+    (store_id, status)
+  }
+
+  Note: 'Minimal customer directory for debt tracking, not a full CRM. PostgreSQL migration: unique active normalized phone per store when phone is not null.'
 }
 
-Table invoice_items {
-  id uuid [pk]
-  invoice_id uuid [not null]
-  product_id uuid
-  name text [not null]
-  qty numeric(12,3) [not null]
+
+// =====================================================
+// DRAFTS — DO NOT AFFECT REVENUE, DEBT OR STOCK
+// =====================================================
+
+Table sale_drafts {
+  id bigint [pk, increment]
+  store_id bigint [not null]
+  created_by_user_id bigint [not null]
+  customer_id bigint
+
+  customer_name varchar(150)
+  customer_phone varchar(30)
+
+  discount_vnd bigint [not null, default: 0]
+  estimated_total_vnd bigint [not null, default: 0]
+
+  initial_paid_vnd bigint [not null, default: 0]
+  initial_payment_method PaymentMethod
+
+  source_type DraftSourceType [not null, default: 'MANUAL']
+  source_ai_request_id bigint
+
+  status DraftStatus [not null, default: 'DRAFT']
+
+  expires_at timestamptz [not null]
+  expired_at timestamptz
+  confirmed_sale_id bigint [unique]
+  confirmed_at timestamptz
+  cancelled_at timestamptz
+
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (store_id, created_by_user_id, status, expires_at)
+    source_ai_request_id
+  }
+
+  Note: 'Draft expires 7 days after its last meaningful business edit. It can be confirmed exactly once.'
+}
+
+Table sale_draft_items {
+  id bigint [pk, increment]
+  draft_id bigint [not null]
+  product_id bigint
+
+  raw_product_name varchar(255)
+  product_name_snapshot varchar(255)
+  unit_snapshot varchar(50)
+
+  quantity numeric(15,3) [not null]
   unit_price_vnd bigint [not null]
   line_total_vnd bigint [not null]
+
+  needs_review boolean [not null, default: false]
+  confidence_score numeric(5,4)
+
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    draft_id
+    product_id
+  }
+
+  Note: 'Check: product_id IS NOT NULL OR raw_product_name is present. AI-uncertain items must be reviewed before confirmation.'
 }
 
-Table expenses {
-  id uuid [pk]
-  shop_id uuid [not null]
-  created_by_user_id uuid [not null]
-  name text [not null]
-  amount_vnd bigint [not null]
-  created_at timestamptz [not null]
+
+// =====================================================
+// CONFIRMED SALES, PAYMENTS & DEBTS
+// =====================================================
+
+Table sales {
+  id bigint [pk, increment]
+  store_id bigint [not null]
+  created_by_user_id bigint [not null]
+  customer_id bigint
+
+  customer_name_snapshot varchar(150)
+  customer_phone_snapshot varchar(30)
+
+  subtotal_vnd bigint [not null]
+  discount_vnd bigint [not null, default: 0]
+  total_vnd bigint [not null]
+  paid_vnd bigint [not null, default: 0]
+
+  sale_status SaleStatus [not null, default: 'CONFIRMED']
+  payment_status PaymentStatus [not null]
+
+  sold_at timestamptz [not null, default: `now()`]
+
+  voided_at timestamptz
+  voided_by_user_id bigint
+  void_reason varchar(500)
+
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (store_id, sold_at)
+    (customer_id, sold_at)
+    payment_status
+    sale_status
+  }
+
+  Note: 'Checks: subtotal_vnd >= 0, discount_vnd >= 0, total_vnd >= 0, 0 <= paid_vnd <= total_vnd. DEBT/PARTIAL requires customer_id.'
+}
+
+Table sale_items {
+  id bigint [pk, increment]
+  sale_id bigint [not null]
+  product_id bigint [not null]
+
+  product_name_snapshot varchar(255) [not null]
+  unit_snapshot varchar(50) [not null]
+
+  quantity numeric(15,3) [not null]
+  unit_price_vnd bigint [not null]
+  line_total_vnd bigint [not null]
+
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    sale_id
+    product_id
+  }
+
+  Note: 'Historical snapshot. Product rename, repricing or archive must not alter this record.'
 }
 
 Table debts {
-  id uuid [pk]
-  shop_id uuid [not null]
-  invoice_id uuid [not null, unique]
-  customer_name text [not null]
-  customer_phone text
+  id bigint [pk, increment]
+  sale_id bigint [not null, unique]
+  customer_id bigint [not null]
+
   original_vnd bigint [not null]
   outstanding_vnd bigint [not null]
-  created_at timestamptz [not null]
-  updated_at timestamptz [not null]
+
+  status DebtStatus [not null, default: 'OPEN']
+
+  created_at timestamptz [not null, default: `now()`]
+  settled_at timestamptz
+
+  indexes {
+    (customer_id, status)
+    status
+  }
+
+  Note: 'Created only for DEBT/PARTIAL sales. outstanding_vnd is a cache; payments are the reconciliation history.'
 }
 
-Table debt_payments {
-  id uuid [pk]
-  debt_id uuid [not null]
-  created_by_user_id uuid [not null]
+Table payments {
+  id bigint [pk, increment]
+  sale_id bigint [not null]
+  debt_id bigint
+
   amount_vnd bigint [not null]
-  created_at timestamptz [not null]
+  payment_method PaymentMethod [not null]
+  type PaymentType [not null]
+
+  transfer_reference varchar(255)
+
+  received_by_user_id bigint [not null]
+  received_at timestamptz [not null, default: `now()`]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (sale_id, received_at)
+    (debt_id, received_at)
+  }
+
+  Note: 'Append-only. Check amount_vnd > 0. Check: type = DEBT_REPAYMENT requires debt_id IS NOT NULL.'
 }
+
+
+// =====================================================
+// EXPENSES
+// =====================================================
+
+Table expenses {
+  id bigint [pk, increment]
+  store_id bigint [not null]
+  created_by_user_id bigint [not null]
+
+  category varchar(150)
+  description varchar(500)
+  amount_vnd bigint [not null]
+
+  payment_method PaymentMethod
+  expense_at timestamptz [not null]
+
+  status ExpenseStatus [not null, default: 'ACTIVE']
+  archived_at timestamptz
+  archived_by_user_id bigint
+
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (store_id, expense_at)
+    (store_id, status)
+  }
+
+  Note: 'Check amount_vnd > 0.'
+}
+
+
+// =====================================================
+// AI TRACE
+// =====================================================
 
 Table ai_requests {
-  id uuid [pk]
-  shop_id uuid [not null]
-  user_id uuid [not null]
-  input_type text [not null, note: 'CHECK: TEXT | AUDIO | IMAGE']
-  mode text [not null, note: 'CHECK: SALE | EXPENSE | INSIGHT | REPLENISHMENT']
-  status text [not null, note: 'CHECK: SUCCEEDED | FAILED']
-  model text
-  model_version text
-  result jsonb
-  error_code text
-  created_at timestamptz [not null]
+  id bigint [pk, increment]
+  store_id bigint [not null]
+  user_id bigint [not null]
+
+  input_type AiInputType [not null]
+  mode AiMode [not null]
+  status AiRequestStatus [not null, default: 'PENDING']
+
+  model varchar(150)
+  model_version varchar(150)
+
+  input_object_key varchar(1000)
+  result_json jsonb
+  error_message varchar(1000)
+
+  delete_input_after timestamptz
+
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (store_id, user_id, created_at)
+    (store_id, status)
+  }
+
+  Note: 'AI team owns detailed processing contract. Store media object key only, never raw audio/image in PostgreSQL.'
 }
 
-Table conversations {
-  id uuid [pk]
-  shop_id uuid [not null]
-  user_id uuid [not null]
-  created_at timestamptz [not null]
-  updated_at timestamptz [not null]
+
+// =====================================================
+// SAFETY & AUDIT
+// =====================================================
+
+Table api_idempotency_keys {
+  id bigint [pk, increment]
+  store_id bigint [not null]
+  user_id bigint [not null]
+
+  operation varchar(100) [not null]
+  idempotency_key varchar(255) [not null]
+  request_hash varchar(128) [not null]
+
+  resource_type varchar(100)
+  resource_id bigint
+
+  response_status integer
+  response_body jsonb
+
+  expires_at timestamptz [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (store_id, operation, idempotency_key) [unique]
+    expires_at
+  }
+
+  Note: 'Prevents duplicate sale/payment creation caused by retry or double-click. Reuse of a key with another request_hash must be rejected.'
 }
 
-Table conversation_messages {
-  id uuid [pk]
-  conversation_id uuid [not null]
-  role text [not null, note: 'CHECK: USER | ASSISTANT']
-  content text [not null]
-  citations jsonb
-  created_at timestamptz [not null]
+Table audit_logs {
+  id bigint [pk, increment]
+  actor_user_id bigint
+  store_id bigint
+
+  action varchar(100) [not null]
+  entity_type varchar(100) [not null]
+  entity_id bigint
+
+  old_data jsonb
+  new_data jsonb
+
+  ip_address varchar(64)
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (store_id, created_at)
+    (entity_type, entity_id)
+    actor_user_id
+  }
+
+  Note: 'Audit archive, void, manual stock adjustment and sensitive ADMIN access.'
 }
+
+
+// =====================================================
+// RELATIONSHIPS
+// =====================================================
 
 Ref: users.id < auth_identities.user_id
-Ref: users.id < sessions.user_id
-Ref: users.id < shops.owner_user_id
-Ref: users.id < admin_audit_logs.admin_user_id
-Ref: shops.id < admin_audit_logs.shop_id
-Ref: shops.id < products.shop_id
-Ref: shops.id < invoices.shop_id
-Ref: users.id < invoices.created_by_user_id
-Ref: invoices.id < invoice_items.invoice_id
-Ref: products.id < invoice_items.product_id
-Ref: shops.id < expenses.shop_id
+Ref: users.id < stores.owner_id
+
+Ref: stores.id < categories.store_id
+Ref: users.id < categories.archived_by_user_id
+
+Ref: stores.id < products.store_id
+Ref: categories.id < products.category_id
+Ref: users.id < products.archived_by_user_id
+
+Ref: stores.id < customers.store_id
+Ref: users.id < customers.archived_by_user_id
+
+Ref: stores.id < sale_drafts.store_id
+Ref: users.id < sale_drafts.created_by_user_id
+Ref: customers.id < sale_drafts.customer_id
+Ref: ai_requests.id < sale_drafts.source_ai_request_id
+Ref: sale_drafts.confirmed_sale_id - sales.id
+
+Ref: sale_drafts.id < sale_draft_items.draft_id
+Ref: products.id < sale_draft_items.product_id
+
+Ref: stores.id < sales.store_id
+Ref: users.id < sales.created_by_user_id
+Ref: users.id < sales.voided_by_user_id
+Ref: customers.id < sales.customer_id
+
+Ref: sales.id < sale_items.sale_id
+Ref: products.id < sale_items.product_id
+
+Ref: sales.id - debts.sale_id
+Ref: customers.id < debts.customer_id
+
+Ref: sales.id < payments.sale_id
+Ref: debts.id < payments.debt_id
+Ref: users.id < payments.received_by_user_id
+
+Ref: stores.id < expenses.store_id
 Ref: users.id < expenses.created_by_user_id
-Ref: shops.id < debts.shop_id
-Ref: invoices.id - debts.invoice_id
-Ref: debts.id < debt_payments.debt_id
-Ref: users.id < debt_payments.created_by_user_id
-Ref: shops.id < ai_requests.shop_id
+Ref: users.id < expenses.archived_by_user_id
+
+Ref: stores.id < ai_requests.store_id
 Ref: users.id < ai_requests.user_id
-Ref: shops.id < conversations.shop_id
-Ref: users.id < conversations.user_id
-Ref: conversations.id < conversation_messages.conversation_id
+
+Ref: stores.id < api_idempotency_keys.store_id
+Ref: users.id < api_idempotency_keys.user_id
+
+Ref: users.id < audit_logs.actor_user_id
+Ref: stores.id < audit_logs.store_id
+
+
+// =====================================================
+// VISUAL GROUPS FOR DBDIAGRAM
+// =====================================================
+
+TableGroup auth_and_tenancy {
+  users
+  auth_identities
+  stores
+}
+
+TableGroup catalog_and_customers {
+  categories
+  products
+  customers
+}
+
+TableGroup drafts_and_sales {
+  sale_drafts
+  sale_draft_items
+  sales
+  sale_items
+}
+
+TableGroup payment_and_expense {
+  debts
+  payments
+  expenses
+}
+
+TableGroup ai_and_audit {
+  ai_requests
+  api_idempotency_keys
+  audit_logs
+}
