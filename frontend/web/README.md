@@ -25,43 +25,77 @@ Biến môi trường (xem `.env.example`):
 | `VITE_API_ENDPOINT` | `http://localhost:8000` | Địa chỉ backend |
 | `VITE_USE_MOCK` | (bật) | Đặt `false` để gọi API thật thay vì dữ liệu mẫu |
 
-## Các trang
+## Trang quản trị (theo `admin-dashboard-mvp-plan.md`)
+
+Giao diện "calm operations": nền trung tính ấm, accent xanh lá (#2F7A43 / #8FD17D), radius 16/10/999, font Geist, icon Phosphor (regular). Token nằm đầu `src/styles/admin.css`, toàn bộ CSS admin nằm trong `.adm` nên không ảnh hưởng trang giới thiệu.
 
 | Đường dẫn | Nội dung |
 | --- | --- |
-| `/` | Trang giới thiệu: tính năng, cách hoạt động, so sánh, bảng giá, hỏi đáp, tải ứng dụng |
-| `/admin/login` | Đăng nhập quản trị |
-| `/admin` | Tổng quan: KPI, đăng ký theo ngày, phân bổ gói, ngành hàng, tài khoản mới |
-| `/admin/accounts` | Quản lý tài khoản: tìm kiếm, lọc, sắp xếp, phân trang, khoá/mở khoá hàng loạt, xem chi tiết, sửa, đổi gói, xoá, xuất CSV |
-| `/admin/logs` | Nhật ký thao tác của quản trị viên |
+| `/` | Trang giới thiệu |
+| `/admin/login` | Đăng nhập (chỉ ADMIN vào được) |
+| `/admin` | Dashboard: 4 KPI · xu hướng hỗ trợ (8 cột) + Cần chú ý (4 cột, chỉ đọc) · cơ sở/OWNER mới + truy cập gần đây của ADMIN |
+| `/admin/customers?tab=owners\|shops` | Tab OWNER / Cơ sở, tìm theo tên, email, SĐT, tên cơ sở; lọc; phân trang. Bấm dòng → drawer chi tiết bên phải (`&owner=` / `&shop=`), mỗi lần mở đều ghi audit |
+| `/admin/ai` | AI Support: hội thoại (240) · chat (gợi ý, tin nhắn, composer + phạm vi) · ngữ cảnh cơ sở (320). Câu trả lời có phạm vi, bằng chứng, giới hạn; task draft chỉ tạo khi ADMIN xác nhận |
+| `/admin/tasks` | Kanban Inbox / Đang điều tra / Chờ phản hồi / Đã xử lý; lọc người phụ trách, mức độ, nguồn, hạn, "Của tôi"; kéo thả; drawer chi tiết + lịch sử; đề xuất AI chỉ để xem lại |
+| `/admin/settings/profile\|appearance\|security\|audit` | Hồ sơ (tên, màu avatar, ngôn ngữ) · Giao diện (sáng/theo hệ thống, mật độ — lưu trên trình duyệt) · Bảo mật & quyền (chỉ đọc) · Nhật ký (luôn bật) |
 
-Các trang `/admin/*` đều cần đăng nhập. Nếu chưa đăng nhập, bạn sẽ được chuyển về `/admin/login`.
+URL cũ vẫn chạy: `/admin/customers/:id` → drawer cơ sở, `/admin/logs` → `/admin/settings/audit`, `/admin/accounts` → `/admin/customers`.
 
-**Tài khoản demo:** `admin@songhloi.vn` / `admin123` (trang đăng nhập có nút "Điền nhanh").
+**Phân quyền:** chưa đăng nhập → `/admin/login`. Tài khoản không phải ADMIN (vd. OWNER) → mọi URL `/admin/*` hiện trang **403**, không có menu quản trị.
 
-Ảnh màn hình ứng dụng trên trang giới thiệu nằm ở `public/screens/{overview,voice,invoices,products}.png` (585×1266), chụp từ bản mockup Expo trong `../mobile`. Muốn đổi ảnh thì ghi đè file cùng tên.
+**Không có:** giả danh / đăng nhập thay OWNER, xem hay sửa hoá đơn/chi phí/công nợ/tồn kho, tự nâng quyền, tắt audit. AI không tự tạo hay di chuyển task.
 
-## Dữ liệu mẫu (mock)
+**Ghi & đồng thời:** tạo task gửi idempotency key (bấm 2 lần hay xác nhận lại cùng đề xuất không tạo trùng). Mỗi lần sửa task gửi `version`; nếu tab/người khác đã sửa trước → báo "Xung đột phiên bản" và tải bản mới. Mọi chuyển trạng thái, gán người, đổi mức độ đều ghi lịch sử + audit.
 
-- `src/mocks/accounts.ts` sinh 48 tài khoản cửa hàng từ seed cố định, nên lần nào cũng ra cùng một bộ dữ liệu. "Hôm nay" của dữ liệu mẫu là ngày `MOCK_TODAY` (16/09/2026) trong `src/config.ts`.
-- `src/services/accountService.ts` và `authService.ts` là các hàm async, có độ trễ giả lập. Mọi thay đổi được lưu vào `localStorage` (khoá `snl_mock_accounts` và `snl_mock_audit`), nên vẫn còn sau khi tải lại trang. Nếu trình duyệt chặn storage, dữ liệu chỉ được giữ trong bộ nhớ.
-- Nút **"Khôi phục dữ liệu mẫu"** (trên thanh trên cùng và ở sidebar) xoá mọi thay đổi và đưa dữ liệu về trạng thái ban đầu.
-- Khi có backend, đặt `VITE_USE_MOCK=false`. Những chỗ cần nối API được đánh dấu `TODO(backend)` trong `src/services/*`. HTTP client dùng chung nằm ở `src/services/api.ts` và tự gửi kèm `Authorization: Bearer <token>`.
-- Kiểu dữ liệu dùng chung nằm trong `src/types.ts`.
+**Responsive:** ≥1280 sidebar 248px · 768–1279 sidebar 72px, cột phụ xuống dưới · <768 sidebar thành drawer, KPI cuộn ngang, bảng thành danh sách, Kanban cuộn ngang có snap. Có skip link, focus rõ, vùng bấm 40px, tôn trọng `prefers-reduced-motion`.
+
+**Tài khoản demo** (trang đăng nhập có nút "Điền"):
+
+| Email | Mật khẩu | Role | Kết quả |
+| --- | --- | --- | --- |
+| `admin@songhloi.vn` | `admin123` | ADMIN | Vào dashboard |
+| `owner@songhloi.vn` | `owner123` | OWNER | Trang 403 |
+
+Ảnh màn hình ứng dụng trên trang giới thiệu nằm ở `public/screens/{overview,voice,invoices,products}.png` (585×1266), chụp từ bản mockup Expo trong `../mobile`.
+
+## Trạng thái dùng chung
+
+`src/components/States.tsx` — `LoadingState`, `EmptyState`, `ErrorState` (nút Thử lại), `ForbiddenState`, `ReadOnlyState`.
+`src/hooks/useAsync.ts` — trả `{ data, error, loading, reload }`.
+
+Kiểm tra nhanh (chế độ mock): thêm `?mock=slow`, `?mock=empty` hoặc `?mock=error` vào URL admin, hoặc chọn ở ô **Dữ liệu mẫu** cuối sidebar. `?mock=normal` để tắt. Khi AI Support lỗi, nội dung câu hỏi được giữ lại để bấm Thử lại.
+
+## Dữ liệu mẫu (mock) — chưa có backend
+
+- `src/types.ts` mô tả hợp đồng API **giả định** (`AdminOverviewView`, `AdminUserItem`, `AdminShopDetailView`, `SupportTask`, `AiMessage`…). Các field của `AdminOverviewView` là giả định, cần khoá lại với backend.
+- `src/mocks/accounts.ts` sinh 48 OWNER / 53 cơ sở; `src/mocks/tasks.ts` sinh 11 support task. Chỉ có dữ liệu hỗ trợ. "Hôm nay" của dữ liệu mẫu là `MOCK_TODAY` (16/09/2026).
+- `src/services/mockStore.ts` là "backend giả" lưu trong `localStorage` (`snl_mock_db`, `snl_mock_tasks`, `snl_mock_ai`, `snl_mock_audit`, `snl_mock_idem`). Nút **Khôi phục dữ liệu mẫu** đưa về ban đầu. Tuỳ chọn cá nhân lưu ở `snl_admin_prefs`.
+- AI Support trong mock là bộ trả lời theo luật (`src/services/aiService.ts`), không gọi model thật.
+- Khi có backend: đặt `VITE_USE_MOCK=false`. Endpoint giả định (đánh dấu `TODO(backend)`):
+  - `POST /auth/login`
+  - `GET /admin/overview?days=`
+  - `GET /admin/users` · `GET /admin/users/{id}`
+  - `GET /admin/shops` · `GET /admin/shops/{id}`
+  - `GET /admin/support-tasks` · `POST /admin/support-tasks` (header `Idempotency-Key`) · `PATCH /admin/support-tasks/{id}` (kèm `version`) · `GET /admin/support-tasks/suggestions` · `GET /admin/members`
+  - `GET /admin/ai/conversations` · `POST /admin/ai/conversations[/{id}]/messages` · `DELETE /admin/ai/conversations/{id}`
+  - `GET /admin/audit-logs`
 
 ## Cấu trúc
 
 ```
 src/
-  App.tsx, main.tsx      định tuyến
-  config.ts              USE_MOCK, API_ENDPOINT, hạn mức gói
-  types.ts               kiểu dữ liệu
-  mocks/                 bộ sinh dữ liệu mẫu
-  services/              api, auth, account (mock hoặc API thật)
-  components/            Logo, Modal/Drawer, Toast, Badge, Sparkline…
-  pages/landing/         trang giới thiệu
-  pages/admin/           đăng nhập, layout, tổng quan, tài khoản, nhật ký
-  styles/                CSS thuần dùng biến màu (base, landing, admin)
+  App.tsx, main.tsx          định tuyến
+  config.ts                  USE_MOCK, API_ENDPOINT, hạn mức gói
+  types.ts                   kiểu dữ liệu / hợp đồng API giả định
+  mocks/                     sinh dữ liệu mẫu, task mẫu, giả lập tình huống API
+  services/                  api, auth, account, task, ai, preferences, mockStore
+  components/admin/          ui (Panel, Pill, Avatar, DetailDrawer…), charts
+  components/                States, Pagination, RequireAuth, Modal, Toast
+  pages/landing/             trang giới thiệu
+  pages/admin/               Login, AdminLayout (AppShell), Dashboard, Customers, AiSupport, Tasks, Settings
+  pages/admin/tasks/         TaskFormModal
+  pages/ForbiddenPage        trang 403
+  styles/                    base, landing, admin (token theo plan)
 ```
 
 ## App mobile

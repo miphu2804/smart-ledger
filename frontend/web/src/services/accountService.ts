@@ -1,413 +1,297 @@
 /**
- * Dịch vụ quản lý tài khoản cửa hàng.
+ * Khách hàng (OWNER + cơ sở) và tổng quan cho trang quản trị.
  *
- * - USE_MOCK = true: đọc/ghi dữ liệu mẫu trong localStorage (key `snl_mock_accounts`),
- *   nếu storage bị chặn thì giữ trong bộ nhớ.
- * - USE_MOCK = false: gọi API thật qua `request()` — các chỗ cần nối backend được
- *   đánh dấu TODO(backend).
+ * - USE_MOCK = true: đọc mock store (src/services/mockStore.ts). Tình huống
+ *   chậm/rỗng/lỗi: src/mocks/scenario.ts.
+ * - USE_MOCK = false: gọi Core API. Endpoint theo API contract trong plan
+ *   (/admin/overview, /admin/users, /admin/shops, /admin/shops/{id}) — field
+ *   là GIẢ ĐỊNH, đánh dấu TODO(backend) để khoá lại khi có contract thật.
+ *
+ * Chỉ ĐỌC: không có hàm sửa hoá đơn, chi phí, công nợ, tồn kho; không giả danh OWNER.
  */
-import { BASIC_MONTHLY_QUOTA, MOCK_DELAY_MS, MOCK_TODAY, USE_MOCK } from '../config'
-import { generateMockAccounts, mockNow } from '../mocks/accounts'
-import {
-  INDUSTRIES,
-  PLAN_LABEL,
-  STATUS_LABEL,
-  type Account,
-  type AccountInput,
-  type AccountQuery,
-  type AccountStatus,
-  type AdminStats,
-  type AuditEntry,
-  type LoginMethod,
-  type Paged,
-  type PlanId,
+import { BASIC_MONTHLY_QUOTA, USE_MOCK } from '../config'
+import type { MockBusiness, MockOwner } from '../mocks/accounts'
+import { simulate } from '../mocks/scenario'
+import type {
+  AdminOverviewView,
+  AdminShopDetailView,
+  AdminUserItem,
+  AdminUserQuery,
+  AttentionItem,
+  AuditEntry,
+  CustomerListItem,
+  CustomerQuery,
+  OwnerSummary,
+  Paged,
 } from '../types'
-import { EMAIL_RE, PHONE_RE, normalizeVi, toDateKey } from '../utils/format'
-import { readJSON, removeKey, writeJSON } from '../utils/storage'
-import { getSession } from './authService'
+import { normalizeVi, toDateKey } from '../utils/format'
 import { request, toQueryString } from './api'
+import { audit, clone, db, log, mockNow, resetStore, tasks } from './mockStore'
 
-const ACCOUNTS_KEY = 'snl_mock_accounts'
-const AUDIT_KEY = 'snl_mock_audit'
-const DATA_VERSION = 1
-
-interface Stored<T> {
-  version: number
-  data: T
+export class NotFoundError extends Error {
+  status = 404
 }
 
-let memAccounts: Account[] | null = null
-let memAudit: AuditEntry[] | null = null
+const ownerOf = (b: MockBusiness) => db().owners.find((o) => o.id === b.ownerId)!
 
-const wait = (ms = MOCK_DELAY_MS) => new Promise((r) => setTimeout(r, ms))
-const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T
-
-/* ------------------------------------------------------------------ */
-/* Lưu trữ mock                                                        */
-/* ------------------------------------------------------------------ */
-
-function seedAudit(): AuditEntry[] {
-  return [
-    {
-      id: 'log_seed',
-      at: new Date(`${MOCK_TODAY}T08:00:00`).toISOString(),
-      actor: 'Hệ thống',
-      action: 'Khởi tạo dữ liệu mẫu',
-      detail: 'Tạo 48 tài khoản cửa hàng mẫu cho môi trường demo',
-    },
-  ]
+function ownerSummary(o: MockOwner): OwnerSummary {
+  return { id: o.id, fullName: o.fullName, email: o.email, phone: o.phone, status: o.status }
 }
 
-function loadAccounts(): Account[] {
-  if (memAccounts) return memAccounts
-  const stored = readJSON<Stored<Account[]>>(ACCOUNTS_KEY)
-  if (stored && stored.version === DATA_VERSION && Array.isArray(stored.data)) {
-    memAccounts = stored.data
-  } else {
-    memAccounts = generateMockAccounts()
-    saveAccounts()
+function toShopItem(b: MockBusiness): CustomerListItem {
+  const o = ownerOf(b)
+  return {
+    businessId: b.id,
+    businessName: b.name,
+    industry: b.industry,
+    area: b.area,
+    plan: o.plan,
+    owner: ownerSummary(o),
+    ownerBusinessCount: db().businesses.filter((x) => x.ownerId === o.id).length,
+    createdAt: b.createdAt,
+    lastActiveAt: b.lastActiveAt,
   }
-  return memAccounts
 }
 
-function saveAccounts() {
-  if (memAccounts) writeJSON(ACCOUNTS_KEY, { version: DATA_VERSION, data: memAccounts })
+function toUserItem(o: MockOwner): AdminUserItem {
+  const shops = db().businesses.filter((b) => b.ownerId === o.id)
+  return {
+    ...ownerSummary(o),
+    plan: o.plan,
+    loginMethod: o.loginMethod,
+    shopCount: shops.length,
+    shops: shops.map((s) => ({ id: s.id, name: s.name })),
+    createdAt: o.createdAt,
+    lastLoginAt: o.lastLoginAt,
+  }
 }
 
-function loadAudit(): AuditEntry[] {
-  if (memAudit) return memAudit
-  const stored = readJSON<Stored<AuditEntry[]>>(AUDIT_KEY)
-  memAudit = stored && stored.version === DATA_VERSION ? stored.data : seedAudit()
-  return memAudit
+function matches(term: string, digits: string, text: string, phone: string) {
+  if (!term) return true
+  return normalizeVi(text).includes(term) || (digits.length >= 3 && phone.includes(digits))
 }
 
-function log(action: string, target?: string, detail?: string) {
-  const list = loadAudit()
-  list.unshift({
-    id: `log_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-    at: mockNow().toISOString(),
-    actor: getSession()?.user.email ?? 'admin',
-    action,
-    target,
-    detail,
-  })
-  memAudit = list.slice(0, 300)
-  writeJSON(AUDIT_KEY, { version: DATA_VERSION, data: memAudit })
+function paginate<T>(rows: T[], page = 1, pageSize = 10): Paged<T> {
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize))
+  const safe = Math.min(Math.max(1, page), totalPages)
+  return { items: clone(rows.slice((safe - 1) * pageSize, safe * pageSize)), total: rows.length, page: safe, pageSize, totalPages }
 }
 
-function findOrThrow(id: string): Account {
-  const acc = loadAccounts().find((a) => a.id === id)
-  if (!acc) throw new Error('Không tìm thấy tài khoản.')
-  return acc
-}
-
-function pushActivity(acc: Account, type: Account['activity'][number]['type'], label: string) {
-  acc.activity.unshift({ id: `${acc.id}-act-${Date.now().toString(36)}`, type, label, at: mockNow().toISOString() })
-}
-
-/* ------------------------------------------------------------------ */
-/* Lọc / sắp xếp (dùng chung cho list + export)                        */
-/* ------------------------------------------------------------------ */
-
-function applyQuery(all: Account[], q: AccountQuery): Account[] {
-  const term = normalizeVi(q.search ?? '')
-  const digits = (q.search ?? '').replace(/\D/g, '')
-  let rows = all.filter((a) => {
-    if (q.status && q.status !== 'all' && a.status !== q.status) return false
-    if (q.plan && q.plan !== 'all' && a.plan !== q.plan) return false
-    if (q.industry && q.industry !== 'all' && a.industry !== q.industry) return false
-    if (term) {
-      const hay = normalizeVi(`${a.storeName} ${a.ownerName} ${a.email ?? ''}`)
-      const phoneHit = digits.length >= 3 && a.phone.includes(digits)
-      if (!hay.includes(term) && !phoneHit) return false
-    }
-    return true
-  })
+function queryShops(q: CustomerQuery): CustomerListItem[] {
+  const term = normalizeVi(q.q ?? '')
+  const digits = (q.q ?? '').replace(/\D/g, '')
+  const rows = db()
+    .businesses.map(toShopItem)
+    .filter(
+      (r) =>
+        (!q.status || q.status === 'all' || r.owner.status === q.status) &&
+        (!q.plan || q.plan === 'all' || r.plan === q.plan) &&
+        matches(term, digits, `${r.businessName} ${r.owner.fullName} ${r.owner.email ?? ''}`, r.owner.phone),
+    )
   const by = q.sortBy ?? 'createdAt'
   const dir = q.sortDir === 'asc' ? 1 : -1
-  rows = [...rows].sort((a, b) => {
-    let cmp: number
-    if (by === 'storeName') cmp = a.storeName.localeCompare(b.storeName, 'vi')
-    else if (by === 'ordersThisMonth') cmp = a.ordersThisMonth - b.ordersThisMonth
-    else cmp = new Date(a[by]).getTime() - new Date(b[by]).getTime()
-    return cmp * dir
-  })
-  return rows
-}
-
-function validateInput(input: AccountInput, ignoreId?: string) {
-  const errors: Partial<Record<keyof AccountInput, string>> = {}
-  if (!input.storeName.trim()) errors.storeName = 'Vui lòng nhập tên cửa hàng.'
-  if (!input.ownerName.trim()) errors.ownerName = 'Vui lòng nhập tên chủ cửa hàng.'
-  if (!PHONE_RE.test(input.phone)) errors.phone = 'Số điện thoại gồm 10 chữ số, bắt đầu bằng 0.'
-  else if (loadAccounts().some((a) => a.phone === input.phone && a.id !== ignoreId))
-    errors.phone = 'Số điện thoại này đã được đăng ký.'
-  if (input.email && !EMAIL_RE.test(input.email)) errors.email = 'Email không hợp lệ.'
-  if (!INDUSTRIES.includes(input.industry)) errors.industry = 'Vui lòng chọn ngành hàng.'
-  return errors
-}
-
-export class ValidationError extends Error {
-  fields: Partial<Record<keyof AccountInput, string>>
-  constructor(fields: Partial<Record<keyof AccountInput, string>>) {
-    super('Dữ liệu chưa hợp lệ.')
-    this.fields = fields
-  }
+  return rows.sort((a, b) => (by === 'businessName' ? a.businessName.localeCompare(b.businessName, 'vi') : a[by].localeCompare(b[by])) * dir)
 }
 
 /* ------------------------------------------------------------------ */
-/* API công khai                                                       */
-/* ------------------------------------------------------------------ */
 
-export async function listAccounts(q: AccountQuery = {}): Promise<Paged<Account>> {
-  const page = Math.max(1, q.page ?? 1)
-  const pageSize = q.pageSize ?? 10
-  if (!USE_MOCK) {
-    // TODO(backend): GET /admin/accounts?search=&status=&plan=&industry=&sortBy=&sortDir=&page=&pageSize=
-    return request<Paged<Account>>(`/admin/accounts${toQueryString({ ...q, page, pageSize })}`)
-  }
-  await wait()
-  const rows = applyQuery(loadAccounts(), q)
-  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize))
-  const safePage = Math.min(page, totalPages)
-  return {
-    items: clone(rows.slice((safePage - 1) * pageSize, safePage * pageSize)),
-    total: rows.length,
-    page: safePage,
-    pageSize,
-    totalPages,
-  }
+/** GET /admin/shops?q=&status=&plan=&sortBy=&sortDir=&page=&pageSize= */
+export async function listShops(q: CustomerQuery = {}): Promise<Paged<CustomerListItem>> {
+  if (!USE_MOCK) return request(`/admin/shops${toQueryString({ ...q })}`) // TODO(backend)
+  const { empty } = await simulate()
+  return paginate(empty ? [] : queryShops(q), q.page, q.pageSize)
 }
 
-/** Toàn bộ kết quả theo bộ lọc (không phân trang) — dùng cho Xuất CSV. */
-export async function exportAccounts(q: AccountQuery = {}): Promise<Account[]> {
-  if (!USE_MOCK) {
-    // TODO(backend): GET /admin/accounts/export?... (hoặc trả file CSV trực tiếp)
-    return request<Account[]>(`/admin/accounts/export${toQueryString({ ...q, page: undefined, pageSize: undefined })}`)
-  }
-  await wait(150)
-  return clone(applyQuery(loadAccounts(), q))
+/** GET /admin/users?q=&status=&page=&pageSize= */
+export async function listUsers(q: AdminUserQuery = {}): Promise<Paged<AdminUserItem>> {
+  if (!USE_MOCK) return request(`/admin/users${toQueryString({ ...q })}`) // TODO(backend)
+  const { empty } = await simulate()
+  const term = normalizeVi(q.q ?? '')
+  const digits = (q.q ?? '').replace(/\D/g, '')
+  const rows = empty
+    ? []
+    : db()
+        .owners.map(toUserItem)
+        .filter(
+          (u) =>
+            (!q.status || q.status === 'all' || u.status === q.status) &&
+            matches(term, digits, `${u.fullName} ${u.email ?? ''} ${u.shops.map((s) => s.name).join(' ')}`, u.phone),
+        )
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  return paginate(rows, q.page, q.pageSize)
 }
 
-export async function getAccount(id: string): Promise<Account> {
-  if (!USE_MOCK) {
-    // TODO(backend): GET /admin/accounts/:id
-    return request<Account>(`/admin/accounts/${id}`)
-  }
-  await wait(200)
-  return clone(findOrThrow(id))
+/** Tìm nhanh ở thanh trên cùng — ưu tiên OWNER và cơ sở */
+export async function quickSearch(q: string): Promise<{ users: AdminUserItem[]; shops: CustomerListItem[] }> {
+  const [users, shops] = await Promise.all([listUsers({ q, pageSize: 4 }), listShops({ q, pageSize: 4 })])
+  return { users: users.items, shops: shops.items }
 }
 
-export async function createAccount(input: AccountInput): Promise<Account> {
-  if (!USE_MOCK) {
-    // TODO(backend): POST /admin/accounts
-    return request<Account>('/admin/accounts', { method: 'POST', body: JSON.stringify(input) })
-  }
-  await wait()
-  const errors = validateInput(input)
-  if (Object.keys(errors).length) throw new ValidationError(errors)
-  const list = loadAccounts()
-  const now = mockNow().toISOString()
-  const nextNum = list.reduce((m, a) => Math.max(m, Number(a.id.replace(/\D/g, '')) || 0), 0) + 1
-  const acc: Account = {
-    id: `acc_${String(nextNum).padStart(3, '0')}`,
-    storeName: input.storeName.trim(),
-    ownerName: input.ownerName.trim(),
-    phone: input.phone,
-    email: input.email?.trim() || undefined,
-    industry: input.industry,
-    address: input.address?.trim() || 'Chưa cập nhật',
-    plan: input.plan,
-    status: 'pending',
-    loginMethod: 'phone' as LoginMethod,
-    createdAt: now,
-    lastActiveAt: now,
-    ordersThisMonth: 0,
-    orderQuota: input.plan === 'basic' ? BASIC_MONTHLY_QUOTA : null,
-    voiceOrderRatio: 0,
-    revenue7d: [0, 0, 0, 0, 0, 0, 0],
-    staffCount: 0,
-    productCount: 0,
-    activity: [{ id: `new-${Date.now()}`, type: 'signup', label: 'Tài khoản được tạo bởi quản trị viên', at: now }],
-  }
-  list.unshift(acc)
-  saveAccounts()
-  log('Thêm tài khoản', acc.storeName, `SĐT ${acc.phone} · Gói ${PLAN_LABEL[acc.plan]}`)
-  return clone(acc)
-}
-
-export async function updateAccount(id: string, input: AccountInput): Promise<Account> {
-  if (!USE_MOCK) {
-    // TODO(backend): PATCH /admin/accounts/:id
-    return request<Account>(`/admin/accounts/${id}`, { method: 'PATCH', body: JSON.stringify(input) })
-  }
-  await wait()
-  const acc = findOrThrow(id)
-  const errors = validateInput(input, id)
-  if (Object.keys(errors).length) throw new ValidationError(errors)
-  Object.assign(acc, {
-    storeName: input.storeName.trim(),
-    ownerName: input.ownerName.trim(),
-    phone: input.phone,
-    email: input.email?.trim() || undefined,
-    industry: input.industry,
-    address: input.address?.trim() || acc.address,
-  })
-  if (input.plan !== acc.plan) {
-    acc.plan = input.plan
-    acc.orderQuota = input.plan === 'basic' ? BASIC_MONTHLY_QUOTA : null
-  }
-  saveAccounts()
-  log('Sửa thông tin tài khoản', acc.storeName)
-  return clone(acc)
-}
-
-export async function setAccountStatus(ids: string[], status: AccountStatus, reason?: string): Promise<Account[]> {
-  if (!USE_MOCK) {
-    // TODO(backend): POST /admin/accounts/status { ids, status, reason }
-    return request<Account[]>('/admin/accounts/status', {
-      method: 'POST',
-      body: JSON.stringify({ ids, status, reason }),
-    })
-  }
-  await wait()
-  const changed: Account[] = []
-  for (const id of ids) {
-    const acc = findOrThrow(id)
-    if (acc.status === status) continue
-    acc.status = status
-    acc.lockReason = status === 'locked' ? reason?.trim() || 'Không ghi lý do' : undefined
-    pushActivity(
-      acc,
-      'status',
-      status === 'locked' ? `Tài khoản bị khoá: ${acc.lockReason}` : `Trạng thái chuyển sang “${STATUS_LABEL[status]}”`,
-    )
-    changed.push(acc)
-  }
-  saveAccounts()
-  if (changed.length) {
-    const action = status === 'locked' ? 'Khoá tài khoản' : status === 'active' ? 'Mở khoá tài khoản' : 'Đổi trạng thái'
-    log(
-      changed.length > 1 ? `${action} (${changed.length})` : action,
-      changed.map((a) => a.storeName).join(', '),
-      reason ? `Lý do: ${reason}` : undefined,
-    )
-  }
-  return clone(changed)
-}
-
-export async function changePlan(id: string, plan: PlanId): Promise<Account> {
-  if (!USE_MOCK) {
-    // TODO(backend): POST /admin/accounts/:id/plan { plan }
-    return request<Account>(`/admin/accounts/${id}/plan`, { method: 'POST', body: JSON.stringify({ plan }) })
-  }
-  await wait()
-  const acc = findOrThrow(id)
-  const from = acc.plan
-  acc.plan = plan
-  acc.orderQuota = plan === 'basic' ? BASIC_MONTHLY_QUOTA : null
-  pushActivity(acc, 'plan', `Đổi gói: ${PLAN_LABEL[from]} → ${PLAN_LABEL[plan]}`)
-  saveAccounts()
-  log('Đổi gói dịch vụ', acc.storeName, `${PLAN_LABEL[from]} → ${PLAN_LABEL[plan]}`)
-  return clone(acc)
-}
-
-export async function deleteAccount(id: string): Promise<void> {
-  if (!USE_MOCK) {
-    // TODO(backend): DELETE /admin/accounts/:id
-    return request<void>(`/admin/accounts/${id}`, { method: 'DELETE' })
-  }
-  await wait()
-  const list = loadAccounts()
-  const idx = list.findIndex((a) => a.id === id)
-  if (idx < 0) throw new Error('Không tìm thấy tài khoản.')
-  const [removed] = list.splice(idx, 1)
-  saveAccounts()
-  log('Xoá tài khoản', removed.storeName, `SĐT ${removed.phone}`)
-}
-
-export async function sendPasswordReset(id: string, channel: 'password' | 'otp'): Promise<void> {
-  if (!USE_MOCK) {
-    // TODO(backend): POST /admin/accounts/:id/reset-password | /resend-otp
-    return request<void>(`/admin/accounts/${id}/${channel === 'otp' ? 'resend-otp' : 'reset-password'}`, {
-      method: 'POST',
-    })
-  }
-  await wait(250)
-  const acc = findOrThrow(id)
-  log(channel === 'otp' ? 'Gửi lại mã OTP' : 'Đặt lại mật khẩu', acc.storeName, `Gửi tới ${acc.phone}`)
-}
-
-export async function getStats(): Promise<AdminStats> {
-  if (!USE_MOCK) {
-    // TODO(backend): GET /admin/stats
-    return request<AdminStats>('/admin/stats')
-  }
-  await wait()
-  const all = loadAccounts()
+/**
+ * GET /admin/shops/{id} — thông tin hỗ trợ tối thiểu.
+ * Mỗi lần mở chi tiết đều ghi audit (AC-017).
+ */
+export async function getShopDetail(id: string): Promise<AdminShopDetailView> {
+  if (!USE_MOCK) return request(`/admin/shops/${encodeURIComponent(id)}`) // TODO(backend): Core ghi audit
+  const { empty } = await simulate(300)
+  const b = db().businesses.find((x) => x.id === id)
+  if (!b || empty) throw new NotFoundError('Không tìm thấy cơ sở này. Có thể cơ sở đã bị xoá hoặc đường dẫn không đúng.')
+  const o = ownerOf(b)
+  log('Xem chi tiết cơ sở', b.name, `Mã ${b.id} · OWNER ${o.fullName}`)
   const now = mockNow()
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const DAY = 86_400_000
-
-  const signupsPerDay = Array.from({ length: 14 }, (_, i) => {
-    const d = new Date(todayStart.getTime() - (13 - i) * DAY)
-    const key = toDateKey(d)
-    return { date: key, count: all.filter((a) => toDateKey(new Date(a.createdAt)) === key).length }
+  return clone({
+    business: { id: b.id, name: b.name, industry: b.industry, address: b.address, createdAt: b.createdAt, lastActiveAt: b.lastActiveAt },
+    owner: {
+      ...ownerSummary(o),
+      loginMethod: o.loginMethod,
+      phoneVerified: o.phoneVerified,
+      emailVerified: o.emailVerified,
+      createdAt: o.createdAt,
+      lastLoginAt: o.lastLoginAt,
+      lockReason: o.lockReason,
+    },
+    otherBusinesses: db()
+      .businesses.filter((x) => x.ownerId === o.id && x.id !== b.id)
+      .map((x) => ({ id: x.id, name: x.name, industry: x.industry })),
+    subscription: {
+      plan: o.plan,
+      quotaUsed: b.ordersThisMonth,
+      quotaLimit: o.plan === 'basic' ? BASIC_MONTHLY_QUOTA : null,
+      periodStart: new Date(now.getFullYear(), now.getMonth(), 1).toISOString(),
+      periodEnd: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString(),
+    },
+    usage: { voiceOrderRatio: b.voiceOrderRatio, staffCount: b.staffCount, lastSyncAt: b.lastSyncAt, syncErrors7d: b.syncErrors7d },
+    devices: o.devices,
+    events: b.events.slice(0, 8),
   })
-  const weekAgo = todayStart.getTime() - 6 * DAY
-  const totalOrders = all.reduce((s, a) => s + a.ordersThisMonth, 0)
-  const voiceOrders = all.reduce((s, a) => s + a.ordersThisMonth * a.voiceOrderRatio, 0)
+}
 
-  const industryBreakdown = INDUSTRIES.map((industry) => ({
-    industry,
-    count: all.filter((a) => a.industry === industry).length,
-  }))
-    .filter((x) => x.count > 0)
-    .sort((a, b) => b.count - a.count)
+/** GET /admin/users/{id} — chi tiết OWNER (ghi audit) */
+export async function getUserDetail(
+  id: string,
+): Promise<AdminUserItem & { devices: MockOwner['devices']; lockReason?: string; phoneVerified: boolean; emailVerified: boolean }> {
+  if (!USE_MOCK) return request(`/admin/users/${encodeURIComponent(id)}`) // TODO(backend)
+  const { empty } = await simulate(300)
+  const o = db().owners.find((x) => x.id === id)
+  if (!o || empty) throw new NotFoundError('Không tìm thấy chủ cơ sở này.')
+  log('Xem chi tiết OWNER', o.fullName, `Mã ${o.id}`)
+  return clone({ ...toUserItem(o), devices: o.devices, lockReason: o.lockReason, phoneVerified: o.phoneVerified, emailVerified: o.emailVerified })
+}
 
-  const loginMethods: Record<LoginMethod, number> = { phone: 0, google: 0, facebook: 0, apple: 0 }
-  all.forEach((a) => loginMethods[a.loginMethod]++)
+/** GET /admin/overview?days= */
+export async function getOverview(days = 14): Promise<AdminOverviewView> {
+  if (!USE_MOCK) return request(`/admin/overview?days=${days}`) // TODO(backend)
+  const { empty } = await simulate()
+  const now = mockNow()
+  const DAY = 86_400_000
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - (days - 1) * DAY
+  const prevStart = start - days * DAY
+  const { owners, businesses } = empty ? { owners: [], businesses: [] } : db()
+  const allTasks = empty ? [] : tasks()
+  const inRange = (iso: string, from: number, to = Infinity) => {
+    const t = new Date(iso).getTime()
+    return t >= from && t < to
+  }
+  const openTasks = allTasks.filter((t) => t.status !== 'resolved')
+  const overdue = openTasks.filter((t) => t.dueAt && new Date(t.dueAt) < now)
+
+  const trend = Array.from({ length: days }, (_, i) => {
+    const key = toDateKey(new Date(start + i * DAY))
+    const same = (iso: string) => toDateKey(new Date(iso)) === key
+    return {
+      date: key,
+      newShops: businesses.filter((b) => same(b.createdAt)).length,
+      tasksOpened: allTasks.filter((t) => same(t.createdAt)).length,
+      tasksResolved: allTasks.filter((t) => t.status === 'resolved' && same(t.updatedAt)).length,
+    }
+  })
+
+  const attention: AttentionItem[] = []
+  overdue.forEach((t) =>
+    attention.push({
+      id: `a_${t.id}`,
+      kind: 'overdue_task',
+      title: `${t.code} quá hạn`,
+      detail: t.title,
+      taskId: t.id,
+      shopId: t.shopId,
+      at: t.dueAt!,
+    }),
+  )
+  businesses
+    .filter((b) => b.syncErrors7d > 0)
+    .forEach((b) =>
+      attention.push({
+        id: `a_sync_${b.id}`,
+        kind: 'sync_error',
+        title: b.name,
+        detail: `${b.syncErrors7d} lần đồng bộ thất bại trong 7 ngày`,
+        shopId: b.id,
+        at: b.lastActiveAt,
+      }),
+    )
+  businesses
+    .filter((b) => owners.find((o) => o.id === b.ownerId)?.status === 'pending')
+    .forEach((b) =>
+      attention.push({
+        id: `a_pend_${b.id}`,
+        kind: 'pending_verify',
+        title: b.name,
+        detail: 'Chủ cơ sở chưa xác minh số điện thoại',
+        shopId: b.id,
+        at: b.createdAt,
+      }),
+    )
+  businesses
+    .filter((b) => owners.find((o) => o.id === b.ownerId)?.plan === 'basic' && b.ordersThisMonth >= BASIC_MONTHLY_QUOTA * 0.8)
+    .forEach((b) =>
+      attention.push({
+        id: `a_quota_${b.id}`,
+        kind: 'near_quota',
+        title: b.name,
+        detail: `Đã dùng ${b.ordersThisMonth}/${BASIC_MONTHLY_QUOTA} lượt tạo đơn`,
+        shopId: b.id,
+        at: b.lastActiveAt,
+      }),
+    )
+  const rank = { overdue_task: 0, sync_error: 1, locked: 2, pending_verify: 3, near_quota: 4 }
+  attention.sort((a, b) => rank[a.kind] - rank[b.kind] || b.at.localeCompare(a.at))
 
   return {
-    totalAccounts: all.length,
-    activeAccounts: all.filter((a) => a.status === 'active').length,
-    lockedAccounts: all.filter((a) => a.status === 'locked').length,
-    pendingAccounts: all.filter((a) => a.status === 'pending').length,
-    newAccounts7d: all.filter((a) => new Date(a.createdAt).getTime() >= weekAgo).length,
-    ordersThisMonth: totalOrders,
-    voiceOrderRatio: totalOrders ? voiceOrders / totalOrders : 0,
-    signupsPerDay,
-    planDistribution: {
-      basic: all.filter((a) => a.plan === 'basic').length,
-      pro: all.filter((a) => a.plan === 'pro').length,
-    },
-    industryBreakdown,
-    loginMethods,
-    basicNearQuota: all.filter((a) => a.plan === 'basic' && a.ordersThisMonth >= BASIC_MONTHLY_QUOTA * 0.8).length,
-    newestAccounts: clone(
-      [...all].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5),
-    ),
+    periodDays: days,
+    activeShops: businesses.filter((b) => owners.find((o) => o.id === b.ownerId)?.status === 'active').length,
+    totalShops: businesses.length,
+    newOwners: owners.filter((o) => inRange(o.createdAt, start)).length,
+    newOwnersPrev: owners.filter((o) => inRange(o.createdAt, prevStart, start)).length,
+    openTasks: openTasks.length,
+    overdueTasks: overdue.length,
+    shopsWithSyncErrors: businesses.filter((b) => b.syncErrors7d > 0).length,
+    trend,
+    needsAttention: attention.slice(0, 8),
+    recentShops: empty ? [] : clone(queryShops({ sortBy: 'createdAt', sortDir: 'desc' }).slice(0, 6)),
+    recentAdminAccess: empty
+      ? []
+      : clone(
+          audit()
+            .filter((a) => a.action.startsWith('Xem'))
+            .slice(0, 6),
+        ),
   }
 }
 
+/** GET /admin/audit-logs */
 export async function listAuditLog(): Promise<AuditEntry[]> {
-  if (!USE_MOCK) {
-    // TODO(backend): GET /admin/audit-logs
-    return request<AuditEntry[]>('/admin/audit-logs')
-  }
-  await wait(200)
-  return clone(loadAudit())
+  if (!USE_MOCK) return request('/admin/audit-logs') // TODO(backend)
+  const { empty } = await simulate(200)
+  return empty ? [] : clone(audit())
 }
 
 /** Xoá mọi thay đổi và sinh lại bộ dữ liệu mẫu ban đầu. */
 export async function resetMockData(): Promise<void> {
-  await wait(200)
-  removeKey(ACCOUNTS_KEY)
-  removeKey(AUDIT_KEY)
-  memAccounts = null
-  memAudit = null
-  loadAccounts()
-  loadAudit()
+  await new Promise((r) => setTimeout(r, 200))
+  resetStore()
+  db()
+  tasks()
   log('Khôi phục dữ liệu mẫu')
 }
 

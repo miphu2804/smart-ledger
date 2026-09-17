@@ -71,3 +71,12 @@ export function normalizeVi(s: string): string {
 
 export const PHONE_RE = /^0\d{9}$/
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+
+/** Hạn xử lý: "Còn 4 giờ" / "Quá hạn 3 giờ" */
+export function formatDue(iso: string, now: Date): string {
+  const diff = new Date(iso).getTime() - now.getTime()
+  const abs = Math.abs(diff)
+  const min = Math.round(abs / 60000)
+  const text = min < 60 ? `${Math.max(1, min)} phút` : min < 1440 ? `${Math.round(min / 60)} giờ` : `${Math.round(min / 1440)} ngày`
+  return diff < 0 ? `Quá hạn ${text}` : `Còn ${text}`
+}

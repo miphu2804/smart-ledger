@@ -1,338 +1,337 @@
-import { ArrowRight, Ban, Crown, Mic, ReceiptText, RefreshCw, UserCheck, UserPlus, Users, type LucideIcon } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { Link, useOutletContext } from 'react-router-dom'
-import { Avatar, PlanBadge, StatusBadge } from '../../components/Badges'
-import { getStats, now } from '../../services/accountService'
-import { LOGIN_METHOD_LABEL, type AdminStats, type LoginMethod } from '../../types'
-import { formatDate, formatNumber, formatPercent, formatRelative } from '../../utils/format'
+import {
+  ArrowRight,
+  ArrowUpRight,
+  CloudSlash,
+  Clock,
+  Eye,
+  Gauge,
+  Kanban,
+  Pulse,
+  ShieldCheck,
+  Storefront,
+  UserPlus,
+  Warning,
+  WarningCircle,
+  type Icon,
+} from '@phosphor-icons/react'
+import { useState } from 'react'
+import { Link, useNavigate, useOutletContext } from 'react-router-dom'
+import { LineChart, MiniBars } from '../../components/admin/charts'
+import { Panel, PlanPill, StatusPill } from '../../components/admin/ui'
+import { EmptyState, ErrorState, LoadingState } from '../../components/States'
+import { useAsync } from '../../hooks/useAsync'
+import { getOverview, now } from '../../services/accountService'
+import type { AttentionKind } from '../../types'
+import { formatDate, formatRelative } from '../../utils/format'
 import type { AdminOutletContext } from './AdminLayout'
 
-function Kpi({ icon: Icon, tone, label, value, sub }: { icon: LucideIcon; tone: string; label: string; value: string; sub?: string }) {
-  return (
-    <div className={`kpi tone-${tone}`}>
-      <span className="kpi-icon">
-        <Icon size={20} />
-      </span>
-      <div className="kpi-body">
-        <span className="kpi-label">{label}</span>
-        <strong className="kpi-value">{value}</strong>
-        {sub && <span className="kpi-sub">{sub}</span>}
-      </div>
-    </div>
-  )
+const ATTENTION: Record<AttentionKind, [Icon, string, string]> = {
+  overdue_task: [Clock, 'tone-danger', 'Task quá hạn'],
+  sync_error: [CloudSlash, 'tone-danger', 'Lỗi đồng bộ'],
+  locked: [ShieldCheck, 'tone-warning', 'Bị khoá'],
+  pending_verify: [WarningCircle, 'tone-warning', 'Chưa xác minh'],
+  near_quota: [Gauge, 'tone-info', 'Sắp hết lượt'],
 }
 
-const WEEKDAY = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
-
-function SignupChart({ data }: { data: AdminStats['signupsPerDay'] }) {
-  const max = Math.max(...data.map((d) => d.count), 1)
-  const ticks = Array.from(new Set([0, Math.ceil(max / 2), max])).sort((a, b) => b - a)
-  const total = data.reduce((s, d) => s + d.count, 0)
+function Metric({
+  icon: I,
+  label,
+  value,
+  suffix,
+  foot,
+  tone,
+}: {
+  icon: Icon
+  label: string
+  value: number | string
+  suffix?: string
+  foot: React.ReactNode
+  tone?: string
+}) {
   return (
-    <div className="bar-chart" role="img" aria-label={`Đăng ký mới 14 ngày qua: tổng ${total} tài khoản`}>
-      <div className="bar-y">
-        {ticks.map((t) => (
-          <span key={t}>{t}</span>
-        ))}
+    <div className="panel metric">
+      <div className="metric-top">
+        <span>{label}</span>
+        <span className={`list-icon ${tone ?? ''}`}>
+          <I size={18} aria-hidden="true" />
+        </span>
       </div>
-      <div className="bar-area">
-        <div className="bar-grid" aria-hidden="true">
-          {ticks.map((t) => (
-            <i key={t} />
-          ))}
-        </div>
-        <div className="bar-cols">
-          {data.map((d, i) => {
-            const date = new Date(`${d.date}T00:00:00`)
-            const isToday = i === data.length - 1
-            return (
-              <div key={d.date} className={`bar-col${isToday ? ' is-today' : ''}`}>
-                <div className="bar-track">
-                  <div className="bar" style={{ height: `${(d.count / max) * 100}%` }}>
-                    <span className="bar-tip">
-                      {d.count} tài khoản · {formatDate(date.toISOString())}
-                    </span>
-                  </div>
-                </div>
-                <span className="bar-x">
-                  <b>{date.getDate()}</b>
-                  <small>{isToday ? 'Nay' : WEEKDAY[date.getDay()]}</small>
-                </span>
-              </div>
-            )
-          })}
-        </div>
+      <div className="metric-value">
+        {value}
+        {suffix && <small>{suffix}</small>}
       </div>
+      <div className="metric-foot">{foot}</div>
     </div>
   )
-}
-
-function Donut({ parts }: { parts: { label: string; value: number; color: string }[] }) {
-  const total = parts.reduce((s, p) => s + p.value, 0) || 1
-  const r = 42
-  const c = 2 * Math.PI * r
-  const offsets = parts.map((_, i) => parts.slice(0, i).reduce((s, p) => s + (p.value / total) * c, 0))
-  return (
-    <div className="donut-wrap">
-      <svg viewBox="0 0 110 110" className="donut" role="img" aria-label="Phân bổ gói dịch vụ">
-        <circle cx="55" cy="55" r={r} fill="none" stroke="var(--bg-soft-2)" strokeWidth="14" />
-        {parts.map((p, i) => {
-          const len = (p.value / total) * c
-          return (
-            <circle
-              key={p.label}
-              cx="55"
-              cy="55"
-              r={r}
-              fill="none"
-              stroke={p.color}
-              strokeWidth="14"
-              strokeDasharray={`${Math.max(0, len - 2)} ${c}`}
-              strokeDashoffset={-offsets[i]}
-              transform="rotate(-90 55 55)"
-              strokeLinecap="butt"
-            />
-          )
-        })}
-        <text x="55" y="52" textAnchor="middle" className="donut-num">
-          {total}
-        </text>
-        <text x="55" y="68" textAnchor="middle" className="donut-cap">
-          tài khoản
-        </text>
-      </svg>
-      <ul className="legend">
-        {parts.map((p) => (
-          <li key={p.label}>
-            <i style={{ background: p.color }} />
-            <span>{p.label}</span>
-            <b>{p.value}</b>
-            <small>{formatPercent(p.value / total)}</small>
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
-const LOGIN_COLORS: Record<LoginMethod, string> = {
-  phone: 'var(--primary)',
-  google: 'var(--green)',
-  facebook: 'var(--primary-300)',
-  apple: 'var(--ink)',
 }
 
 export default function DashboardPage() {
   const { dataVersion } = useOutletContext<AdminOutletContext>()
-  const [stats, setStats] = useState<AdminStats | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [reload, setReload] = useState(0)
-
-  useEffect(() => {
-    document.title = 'Tổng quan · Quản trị Sổ Nghe Lời'
-  }, [])
-
-  useEffect(() => {
-    let alive = true
-    setError(null)
-    getStats()
-      .then((s) => alive && setStats(s))
-      .catch((e: unknown) => alive && setError(e instanceof Error ? e.message : 'Không tải được dữ liệu'))
-    return () => {
-      alive = false
-    }
-  }, [dataVersion, reload])
-
-  if (error) {
-    return (
-      <div className="empty">
-        <h3>Không tải được số liệu</h3>
-        <p>{error}</p>
-        <button type="button" className="btn btn-primary" onClick={() => setReload((v) => v + 1)}>
-          <RefreshCw size={16} /> Thử lại
-        </button>
-      </div>
-    )
-  }
-
+  const [days, setDays] = useState(14)
+  const navigate = useNavigate()
+  const { data, error, loading, reload } = useAsync(() => getOverview(days), [days, dataVersion])
   const current = now()
-  const maxIndustry = stats ? Math.max(...stats.industryBreakdown.map((x) => x.count), 1) : 1
+  const openShop = (id?: string) => id && navigate(`/admin/customers?tab=shops&shop=${id}`)
+
+  const header = (
+    <div className="page-bar">
+      <p>Số liệu đến {formatDate(current.toISOString())} · chỉ dữ liệu hỗ trợ, không có doanh thu hay sổ nghiệp vụ</p>
+      <div className="seg-tabs" role="tablist" aria-label="Khoảng thời gian">
+        {[7, 14, 30].map((d) => (
+          <button key={d} type="button" role="tab" aria-selected={days === d} onClick={() => setDays(d)}>
+            {d} ngày
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+
+  if (error)
+    return (
+      <>
+        {header}
+        <div className="panel">
+          <ErrorState error={error} onRetry={reload} title="Không tải được tổng quan" />
+        </div>
+      </>
+    )
+
+  if (!data)
+    return (
+      <>
+        {header}
+        <LoadingState variant="cards" rows={4} label="Đang tải tổng quan…" />
+        <div style={{ height: 16 }} />
+        <LoadingState variant="detail" rows={2} />
+      </>
+    )
+
+  if (data.totalShops === 0)
+    return (
+      <>
+        {header}
+        <div className="panel">
+          <EmptyState icon={Storefront} title="Chưa có cơ sở nào" description="Số liệu sẽ xuất hiện khi chủ cơ sở đăng ký trên ứng dụng." />
+        </div>
+      </>
+    )
+
+  const delta = data.newOwners - data.newOwnersPrev
+  const labels = data.trend.map((t) => t.date)
 
   return (
-    <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>Tổng quan</h1>
-          <p>
-            Số liệu tính đến {formatDate(current.toISOString())} · tháng {current.getMonth() + 1}/{current.getFullYear()}
-          </p>
-        </div>
-        <Link to="/admin/accounts" className="btn btn-primary">
-          <Users size={17} /> Quản lý tài khoản
-        </Link>
+    <div className={loading ? 'dt-loading' : undefined} aria-busy={loading}>
+      {header}
+      <div className="metrics" style={{ marginBottom: 16 }}>
+        <Metric
+          icon={Storefront}
+          label="Cơ sở đang hoạt động"
+          value={data.activeShops}
+          suffix={`/ ${data.totalShops}`}
+          foot={`${Math.round((data.activeShops / data.totalShops) * 100)}% tổng số cơ sở`}
+        />
+        <Metric
+          icon={UserPlus}
+          label={`OWNER mới · ${data.periodDays} ngày`}
+          value={data.newOwners}
+          foot={
+            <>
+              <ArrowUpRight size={14} style={{ transform: delta < 0 ? 'rotate(90deg)' : undefined }} aria-hidden="true" />
+              {delta >= 0 ? '+' : ''}
+              {delta} so với {data.periodDays} ngày trước
+            </>
+          }
+        />
+        <Metric
+          icon={Kanban}
+          label="Task hỗ trợ đang mở"
+          value={data.openTasks}
+          tone={data.overdueTasks ? 'tone-warning' : undefined}
+          foot={
+            data.overdueTasks ? (
+              <span
+                style={{
+                  color: 'var(--danger)',
+                  display: 'inline-flex',
+                  gap: 4,
+                  alignItems: 'center',
+                }}
+              >
+                <Warning size={14} /> {data.overdueTasks} task quá hạn
+              </span>
+            ) : (
+              'Không có task quá hạn'
+            )
+          }
+        />
+        <Metric
+          icon={CloudSlash}
+          label="Cơ sở lỗi đồng bộ"
+          value={data.shopsWithSyncErrors}
+          tone={data.shopsWithSyncErrors ? 'tone-danger' : undefined}
+          foot="Trong 7 ngày gần nhất"
+        />
       </div>
 
-      {!stats ? (
-        <div className="kpi-grid">
-          {Array.from({ length: 6 }, (_, i) => (
-            <div key={i} className="kpi skeleton" />
-          ))}
-        </div>
-      ) : (
-        <>
-          <div className="kpi-grid">
-            <Kpi icon={Users} tone="blue" label="Tổng tài khoản" value={formatNumber(stats.totalAccounts)} sub={`${stats.pendingAccounts} chờ xác minh`} />
-            <Kpi
-              icon={UserCheck}
-              tone="green"
-              label="Đang hoạt động"
-              value={formatNumber(stats.activeAccounts)}
-              sub={`${formatPercent(stats.activeAccounts / Math.max(1, stats.totalAccounts))} tổng số`}
-            />
-            <Kpi icon={Ban} tone="red" label="Bị khoá" value={formatNumber(stats.lockedAccounts)} sub="Cần xem xét định kỳ" />
-            <Kpi icon={UserPlus} tone="purple" label="Đăng ký mới 7 ngày" value={formatNumber(stats.newAccounts7d)} sub="Tính cả hôm nay" />
-            <Kpi
-              icon={ReceiptText}
-              tone="gold"
-              label="Tổng đơn tháng này"
-              value={formatNumber(stats.ordersThisMonth)}
-              sub={`${stats.basicNearQuota} tài khoản Cơ bản sắp hết lượt`}
-            />
-            <Kpi icon={Mic} tone="red-soft" label="Đơn tạo bằng giọng nói" value={formatPercent(stats.voiceOrderRatio, 1)} sub="Theo tổng số đơn tháng này" />
+      <div className="grid-12">
+        <Panel
+          className="col-8"
+          icon={Pulse}
+          title="Tình hình hỗ trợ"
+          subtitle={`${data.periodDays} ngày gần nhất · số task mở mới và đã xử lý`}
+          actions={
+            <Link to="/admin/tasks" className="btn btn-ghost btn-sm">
+              Mở Kanban <ArrowRight size={14} />
+            </Link>
+          }
+        >
+          <LineChart
+            labels={labels}
+            unit=" task"
+            series={[
+              {
+                key: 'opened',
+                label: 'Task mở mới',
+                color: 'var(--chart-1)',
+                values: data.trend.map((t) => t.tasksOpened),
+              },
+              {
+                key: 'resolved',
+                label: 'Task đã xử lý',
+                color: 'var(--chart-2)',
+                values: data.trend.map((t) => t.tasksResolved),
+              },
+            ]}
+          />
+          <div style={{ marginTop: 16 }}>
+            <div className="row-between" style={{ marginBottom: 6 }}>
+              <span className="muted" style={{ fontSize: 12.5 }}>
+                Cơ sở mới mỗi ngày
+              </span>
+              <strong className="num">{data.trend.reduce((a, t) => a + t.newShops, 0)} cơ sở</strong>
+            </div>
+            <MiniBars labels={labels} values={data.trend.map((t) => t.newShops)} label="cơ sở mới" />
           </div>
+        </Panel>
 
-          <div className="dash-grid">
-            <section className="card card-chart">
-              <header className="card-head">
-                <div>
-                  <h2>Đăng ký mới mỗi ngày</h2>
-                  <p>14 ngày gần nhất · tổng {stats.signupsPerDay.reduce((s, d) => s + d.count, 0)} tài khoản</p>
-                </div>
-              </header>
-              <SignupChart data={stats.signupsPerDay} />
-            </section>
-
-            <section className="card card-plan">
-              <header className="card-head">
-                <div>
-                  <h2>Phân bổ gói</h2>
-                  <p>Theo số tài khoản</p>
-                </div>
-              </header>
-              <Donut
-                parts={[
-                  { label: 'Cơ bản', value: stats.planDistribution.basic, color: 'var(--primary)' },
-                  { label: 'Pro', value: stats.planDistribution.pro, color: 'var(--gold)' },
-                ]}
-              />
-              <div className="login-methods">
-                <span className="mini-title">Cách đăng nhập</span>
-                <div className="stack-bar">
-                  {(Object.keys(stats.loginMethods) as LoginMethod[]).map((k) => (
-                    <i
-                      key={k}
-                      style={{ flex: stats.loginMethods[k], background: LOGIN_COLORS[k] }}
-                      title={`${LOGIN_METHOD_LABEL[k]}: ${stats.loginMethods[k]}`}
-                    />
-                  ))}
-                </div>
-                <ul className="legend legend-inline">
-                  {(Object.keys(stats.loginMethods) as LoginMethod[]).map((k) => (
-                    <li key={k}>
-                      <i style={{ background: LOGIN_COLORS[k] }} />
-                      <span>{k === 'phone' ? 'SĐT' : LOGIN_METHOD_LABEL[k]}</span>
-                      <b>{stats.loginMethods[k]}</b>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </section>
-
-            <section className="card card-industry">
-              <header className="card-head">
-                <div>
-                  <h2>Ngành hàng</h2>
-                  <p>Số cửa hàng theo ngành</p>
-                </div>
-              </header>
-              <ul className="hbars">
-                {stats.industryBreakdown.map((x) => (
-                  <li key={x.industry}>
-                    <span className="hbar-label">{x.industry}</span>
-                    <span className="hbar-track">
-                      <i style={{ width: `${(x.count / maxIndustry) * 100}%` }} />
-                    </span>
-                    <b>{x.count}</b>
+        <Panel
+          className="col-4"
+          title="Cần chú ý"
+          subtitle={`${Math.min(5, data.needsAttention.length)} mục ưu tiên · chỉ đọc, không tự tạo task`}
+          bodyClass=""
+        >
+          {data.needsAttention.length === 0 ? (
+            <EmptyState compact icon={ShieldCheck} title="Không có mục cần chú ý" />
+          ) : (
+            <ul className="list">
+              {data.needsAttention.slice(0, 5).map((a) => {
+                const [I, tone, tag] = ATTENTION[a.kind]
+                return (
+                  <li key={a.id}>
+                    <button
+                      type="button"
+                      className="list-item"
+                      onClick={() => (a.taskId ? navigate(`/admin/tasks?task=${a.taskId}`) : openShop(a.shopId))}
+                    >
+                      <span className={`list-icon ${tone}`}>
+                        <I size={16} aria-hidden="true" />
+                      </span>
+                      <div>
+                        <strong>{a.title}</strong>
+                        <span>{a.detail}</span>
+                        <span style={{ fontSize: 11.5 }}>
+                          {tag} · {formatRelative(a.at, current)}
+                        </span>
+                      </div>
+                    </button>
                   </li>
+                )
+              })}
+            </ul>
+          )}
+        </Panel>
+
+        <Panel
+          className="col-8"
+          icon={Storefront}
+          title="Cơ sở & OWNER mới"
+          subtitle="Đăng ký gần đây"
+          bodyClass=""
+          actions={
+            <Link to="/admin/customers" className="btn btn-ghost btn-sm">
+              Xem tất cả <ArrowRight size={14} />
+            </Link>
+          }
+        >
+          <div className="dt-wrap">
+            <table className="dt dt-list">
+              <thead>
+                <tr>
+                  <th>Cơ sở</th>
+                  <th>OWNER</th>
+                  <th className="hide-md">Gói</th>
+                  <th>Trạng thái</th>
+                  <th>Đăng ký</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.recentShops.map((s) => (
+                  <tr key={s.businessId} className="clickable" onClick={() => openShop(s.businessId)}>
+                    <td>
+                      <div className="cell-main">
+                        <span className="shop-mark">
+                          <Storefront size={18} />
+                        </span>
+                        <div>
+                          <Link to={`/admin/customers?tab=shops&shop=${s.businessId}`} onClick={(e) => e.stopPropagation()}>
+                            <strong style={{ color: 'var(--text-primary)' }}>{s.businessName}</strong>
+                          </Link>
+                          <span>{s.industry}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td data-label="OWNER">{s.owner.fullName}</td>
+                    <td data-label="Gói" className="hide-md">
+                      <PlanPill plan={s.plan} />
+                    </td>
+                    <td data-label="Trạng thái">
+                      <StatusPill status={s.owner.status} />
+                    </td>
+                    <td data-label="Đăng ký" className="sub" style={{ whiteSpace: 'nowrap' }}>
+                      {formatRelative(s.createdAt, current)}
+                    </td>
+                  </tr>
                 ))}
-              </ul>
-            </section>
-
-            <section className="card card-newest">
-              <header className="card-head">
-                <div>
-                  <h2>Tài khoản mới nhất</h2>
-                  <p>5 cửa hàng đăng ký gần đây</p>
-                </div>
-                <Link to="/admin/accounts?sort=createdAt-desc" className="btn btn-ghost btn-sm">
-                  Xem tất cả <ArrowRight size={15} />
-                </Link>
-              </header>
-              <div className="table-wrap">
-                <table className="table table-compact">
-                  <thead>
-                    <tr>
-                      <th>Cửa hàng</th>
-                      <th>Ngành hàng</th>
-                      <th>Gói</th>
-                      <th>Trạng thái</th>
-                      <th>Ngày tạo</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {stats.newestAccounts.map((a) => (
-                      <tr key={a.id}>
-                        <td data-label="Cửa hàng">
-                          <div className="cell-store">
-                            <Avatar name={a.storeName} seed={a.id} size={34} />
-                            <div>
-                              <strong>{a.storeName}</strong>
-                              <span>{a.ownerName}</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td data-label="Ngành hàng">{a.industry}</td>
-                        <td data-label="Gói">
-                          <PlanBadge plan={a.plan} />
-                        </td>
-                        <td data-label="Trạng thái">
-                          <StatusBadge status={a.status} />
-                        </td>
-                        <td data-label="Ngày tạo">
-                          <span className="cell-date">
-                            {formatDate(a.createdAt)}
-                            <small>{formatRelative(a.createdAt, current)}</small>
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="card card-tip">
-              <Crown size={20} />
-              <div>
-                <strong>Gói Pro chưa mở bán</strong>
-                <p>
-                  Gói Pro đang “Sắp ra mắt”; {stats.planDistribution.pro} tài khoản Pro hiện có dùng để thử nghiệm. Trang “Gói dịch vụ” sẽ mở khi chốt giá.
-                </p>
-              </div>
-            </section>
+              </tbody>
+            </table>
           </div>
-        </>
-      )}
+        </Panel>
+
+        <Panel className="col-4" title="Truy cập gần đây của ADMIN" subtitle="Audit khi mở chi tiết khách hàng" bodyClass="panel-body">
+          {data.recentAdminAccess.length === 0 ? (
+            <EmptyState compact icon={Eye} title="Chưa có lượt xem" description="Mỗi lần mở chi tiết OWNER/cơ sở sẽ được ghi ở đây." />
+          ) : (
+            <ol className="tl">
+              {data.recentAdminAccess.map((a) => (
+                <li key={a.id}>
+                  <span className="tl-dot">
+                    <Eye size={14} />
+                  </span>
+                  <div>
+                    <p>
+                      <strong>{a.actor}</strong> {a.action.toLowerCase()} <strong>{a.target}</strong>
+                    </p>
+                    <time dateTime={a.at}>{formatRelative(a.at, current)}</time>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+          <Link to="/admin/settings/audit" className="btn btn-ghost btn-sm" style={{ marginTop: 4 }}>
+            Toàn bộ nhật ký <ArrowRight size={14} />
+          </Link>
+        </Panel>
+      </div>
     </div>
   )
 }
