@@ -1,9 +1,50 @@
 /**
- * Bộ sinh dữ liệu tài khoản mẫu — có seed cố định nên mỗi lần sinh ra đều giống nhau.
- * Dùng cho chế độ USE_MOCK (xem src/config.ts).
+ * Bộ sinh dữ liệu mẫu cho trang quản trị (seed cố định → lần nào cũng giống nhau).
+ *
+ * Mô hình mock "database": OWNER (chủ cơ sở) và BUSINESS (cơ sở). Một OWNER có thể
+ * có nhiều cơ sở. Dữ liệu CHỈ gồm thông tin phục vụ hỗ trợ — không sinh hoá đơn,
+ * chi phí, công nợ, tồn kho hay doanh thu.
  */
 import { BASIC_MONTHLY_QUOTA, MOCK_TODAY } from '../config'
-import type { Account, AccountStatus, ActivityItem, Industry, LoginMethod, PlanId } from '../types'
+import type { AccountStatus, DeviceInfo, Industry, LoginMethod, PlanId, Platform, SupportEvent } from '../types'
+
+export interface MockOwner {
+  id: string
+  fullName: string
+  phone: string
+  email?: string
+  status: AccountStatus
+  lockReason?: string
+  loginMethod: LoginMethod
+  phoneVerified: boolean
+  emailVerified: boolean
+  plan: PlanId
+  createdAt: string
+  lastLoginAt: string
+  devices: DeviceInfo[]
+}
+
+export interface MockBusiness {
+  id: string
+  ownerId: string
+  name: string
+  industry: Industry
+  address: string
+  area: string
+  createdAt: string
+  lastActiveAt: string
+  ordersThisMonth: number
+  voiceOrderRatio: number
+  staffCount: number
+  lastSyncAt: string | null
+  syncErrors7d: number
+  events: SupportEvent[]
+}
+
+export interface MockDb {
+  owners: MockOwner[]
+  businesses: MockBusiness[]
+}
 
 /* ---------- PRNG có seed (mulberry32) ---------- */
 export function createRng(seed: number) {
@@ -27,24 +68,20 @@ export function createRng(seed: number) {
 const DAY = 86_400_000
 const TODAY_START = new Date(`${MOCK_TODAY}T00:00:00`)
 const RANGE_START = new Date('2026-03-01T00:00:00')
-
-/** Dữ liệu seed được sinh với mốc 10:00 ngày MOCK_TODAY. */
 const SEED_CLOCK_MS = 10 * 3_600_000
 
 /**
  * "Bây giờ" theo đồng hồ mẫu: luôn là ngày MOCK_TODAY, giờ lấy theo giờ thật
- * (nhưng không sớm hơn 10:00 để không có mốc thời gian "ở tương lai").
+ * (không sớm hơn 10:00 để không có mốc thời gian "ở tương lai").
  */
 export function mockNow(): Date {
   const real = new Date()
-  const d = new Date(TODAY_START)
   const ms = ((real.getHours() * 60 + real.getMinutes()) * 60 + real.getSeconds()) * 1000
-  d.setTime(TODAY_START.getTime() + Math.max(ms, SEED_CLOCK_MS))
-  return d
+  return new Date(TODAY_START.getTime() + Math.max(ms, SEED_CLOCK_MS))
 }
 
-/* ---------- Danh sách cửa hàng mẫu ---------- */
-type Seed = [store: string, owner: string, industry: Industry]
+/* ---------- Danh sách cơ sở mẫu ---------- */
+type Seed = [business: string, owner: string, industry: Industry]
 
 const STORES: Seed[] = [
   ['Tiệm tạp hoá cô Thỏ', 'Nguyễn Thị Lan', 'Tạp hóa'],
@@ -95,6 +132,12 @@ const STORES: Seed[] = [
   ['Hoa cưới Tường Vi', 'Mạc Tường Vi', 'Hoa - Quà tặng'],
   ['Bỉm sữa Mẹ Kem', 'Tăng Kim Yến', 'Mẹ & Bé'],
   ['Rau củ Đà Lạt anh Khôi', 'Nguyễn Đăng Khôi', 'Nông sản & Thực phẩm'],
+  // OWNER có nhiều cơ sở
+  ['Quầy nước cô Thỏ (chợ Hoà Hưng)', 'Nguyễn Thị Lan', 'Đồ uống'],
+  ['Cà phê Mộc — chi nhánh 2', 'Lê Minh Khoa', 'Đồ uống'],
+  ['Bánh mì Hoà Hưng — xe đẩy', 'Phạm Văn Hoà', 'Đồ ăn'],
+  ['Trà sữa Mây Gò Vấp', 'Võ Ngọc Mai', 'Đồ uống'],
+  ['Nail Xinh 2', 'Trương Thuỳ Linh', 'Cắt tóc & làm móng'],
 ]
 
 const ADDRESSES = [
@@ -115,42 +158,18 @@ const ADDRESSES = [
   'Phường 1, Đà Lạt, Lâm Đồng',
 ]
 
-const PHONE_PREFIXES = ['032', '033', '034', '035', '036', '037', '038', '039', '056', '058', '070', '076', '077', '078', '079', '081', '083', '084', '085', '086', '088', '089', '090', '091', '093', '094', '096', '097', '098']
+const PHONE_PREFIXES = ['032', '033', '034', '035', '036', '037', '038', '039', '056', '070', '076', '077', '078', '079', '081', '083', '084', '085', '086', '088', '089', '090', '091', '093', '094', '096', '097', '098']
 
 const LOCK_REASONS = [
   'Nghi ngờ tạo đơn ảo hàng loạt',
-  'Chủ cửa hàng yêu cầu tạm khoá',
+  'Chủ cơ sở yêu cầu tạm khoá',
   'Vi phạm điều khoản sử dụng',
   'Đăng nhập bất thường từ nhiều thiết bị',
 ]
 
-/** Món mẫu theo ngành để tạo nhật ký hoạt động. [tên, giá] */
-const SAMPLE_ITEMS: Record<Industry, [string, number][]> = {
-  'Đồ ăn': [['bánh mì thịt', 15000], ['cơm tấm sườn', 35000], ['bún bò', 40000], ['xôi gà', 25000]],
-  'Đồ uống': [['cà phê sữa', 20000], ['trà đá', 3000], ['trà sữa trân châu', 25000], ['nước mía', 12000]],
-  'Tạp hóa': [['mì gói', 5000], ['nước suối', 5000], ['trứng (chục)', 35000], ['đường 1kg', 28000]],
-  'Nông sản & Thực phẩm': [['ổi', 30000], ['xoài cát', 45000], ['rau muống', 8000], ['thịt ba chỉ', 150000]],
-  'Thời trang': [['áo thun', 120000], ['dép lê', 60000], ['quần short', 150000]],
-  'Cắt tóc & làm móng': [['cắt tóc nam', 60000], ['sơn gel', 120000], ['gội đầu', 40000]],
-  'Mỹ phẩm': [['son dưỡng', 85000], ['sữa rửa mặt', 150000], ['kem chống nắng', 220000]],
-  'Mẹ & Bé': [['bỉm size M', 240000], ['sữa bột', 450000], ['khăn sữa', 45000]],
-  'Hoa - Quà tặng': [['bó hoa hồng', 250000], ['gấu bông', 180000], ['thiếp chúc mừng', 20000]],
-  'Khác': [['vá xe', 30000], ['giặt ủi 1kg', 20000], ['bút bi', 5000]],
-}
-
-/** Doanh thu/ngày tham khảo theo ngành (VND). */
-const REVENUE_SCALE: Record<Industry, [number, number]> = {
-  'Đồ ăn': [900_000, 3_200_000],
-  'Đồ uống': [500_000, 2_400_000],
-  'Tạp hóa': [800_000, 3_500_000],
-  'Nông sản & Thực phẩm': [600_000, 2_800_000],
-  'Thời trang': [300_000, 2_500_000],
-  'Cắt tóc & làm móng': [400_000, 1_800_000],
-  'Mỹ phẩm': [300_000, 2_000_000],
-  'Mẹ & Bé': [500_000, 2_600_000],
-  'Hoa - Quà tặng': [300_000, 2_200_000],
-  'Khác': [200_000, 1_200_000],
-}
+const ANDROID_MODELS = ['Samsung Galaxy A15', 'Xiaomi Redmi Note 13', 'OPPO A58', 'Vivo Y36', 'Realme C67']
+const IOS_MODELS = ['iPhone 11', 'iPhone 13', 'iPhone 15', 'iPad (thế hệ 10)']
+const APP_VERSIONS = ['1.4.2', '1.4.2', '1.4.1', '1.3.8']
 
 function slugify(s: string): string {
   return s
@@ -163,156 +182,136 @@ function slugify(s: string): string {
     .replace(/^\.|\.$/g, '')
 }
 
-const round1000 = (n: number) => Math.round(n / 1000) * 1000
+const iso = (t: number) => new Date(t).toISOString()
 
-function buildActivity(
-  rng: ReturnType<typeof createRng>,
-  id: string,
-  industry: Industry,
-  createdAt: Date,
-  lastActive: Date,
-  status: AccountStatus,
-  voiceRatio: number,
-): ActivityItem[] {
-  const items: ActivityItem[] = []
-  const add = (type: ActivityItem['type'], label: string, at: Date) =>
-    items.push({ id: `${id}-act-${items.length}`, type, label, at: at.toISOString() })
-
-  if (status !== 'pending') {
-    let t = lastActive.getTime()
-    const n = rng.int(4, 6)
-    for (let i = 0; i < n && t > createdAt.getTime(); i++) {
-      const roll = rng.next()
-      const [name, price] = rng.pick(SAMPLE_ITEMS[industry])
-      const qty = rng.int(1, 3)
-      if (roll < 0.6) {
-        const voice = rng.chance(voiceRatio)
-        add(
-          voice ? 'order_voice' : 'order_pos',
-          voice
-            ? `Tạo đơn bằng giọng nói: “bán ${qty} ${name}” · ${(qty * price).toLocaleString('vi-VN')}đ`
-            : `Tạo đơn bằng Chọn hàng nhanh: ${qty} × ${name}`,
-          new Date(t),
-        )
-      } else if (roll < 0.72) {
-        add('product', `Cập nhật tồn kho: ${name}`, new Date(t))
-      } else if (roll < 0.82) {
-        add('expense', `Thêm chi phí nhập hàng ${(round1000(price * rng.int(8, 30))).toLocaleString('vi-VN')}đ`, new Date(t))
-      } else if (roll < 0.9) {
-        add('debt', `Ghi nợ cho khách quen ${(qty * price).toLocaleString('vi-VN')}đ`, new Date(t))
-      } else {
-        add('login', 'Đăng nhập trên thiết bị di động', new Date(t))
-      }
-      t -= rng.int(20, 60 * 26) * 60_000
-    }
-  }
-  add('signup', 'Tạo tài khoản', createdAt)
-  return items
-}
-
-export function generateMockAccounts(seed = 20260916): Account[] {
+export function generateMockDb(seed = 20260916): MockDb {
   const rng = createRng(seed)
-  const now = new Date(TODAY_START.getTime() + SEED_CLOCK_MS)
-  const monthStart = new Date(TODAY_START.getFullYear(), TODAY_START.getMonth(), 1)
+  const now = TODAY_START.getTime() + SEED_CLOCK_MS
   const span = TODAY_START.getTime() - RANGE_START.getTime()
   const usedPhones = new Set<string>()
+  const owners = new Map<string, MockOwner>()
+  const businesses: MockBusiness[] = []
 
-  return STORES.map(([storeName, ownerName, industry], i): Account => {
-    const id = `acc_${String(i + 1).padStart(3, '0')}`
+  STORES.forEach(([name, ownerName, industry], i) => {
+    let owner = owners.get(ownerName)
+    const isNewOwner = !owner
+    if (!owner) {
+      // 16 OWNER đầu rải trong 14 ngày gần nhất để biểu đồ đăng ký có số liệu
+      let created =
+        i < 16
+          ? TODAY_START.getTime() - rng.int(0, 13) * DAY + rng.int(6, 21) * 3_600_000 + rng.int(0, 59) * 60_000
+          : RANGE_START.getTime() + rng.next() * (span - 14 * DAY)
+      if (created > now) created = now - rng.int(10, 120) * 60_000
 
-    // 16 tài khoản đầu rải đều trong 14 ngày gần nhất để biểu đồ có số liệu,
-    // phần còn lại rải ngẫu nhiên từ 01/03/2026.
-    const createdAt =
-      i < 16
-        ? new Date(TODAY_START.getTime() - rng.int(0, 13) * DAY + rng.int(6, 21) * 3_600_000 + rng.int(0, 59) * 60_000)
-        : new Date(RANGE_START.getTime() + rng.next() * (span - 14 * DAY))
-    if (createdAt > now) createdAt.setTime(now.getTime() - rng.int(10, 120) * 60_000)
+      const roll = rng.next()
+      const status: AccountStatus = i < 16 && roll < 0.3 ? 'pending' : roll < 0.1 ? 'locked' : roll < 0.16 ? 'pending' : 'active'
+      const loginMethod = rng.pick<LoginMethod>(['phone', 'phone', 'phone', 'google', 'google', 'facebook', 'apple'])
 
-    const statusRoll = rng.next()
-    const status: AccountStatus =
-      i < 16 && statusRoll < 0.3 ? 'pending' : statusRoll < 0.1 ? 'locked' : statusRoll < 0.16 ? 'pending' : 'active'
+      let phone = ''
+      do phone = rng.pick(PHONE_PREFIXES) + String(rng.int(0, 9_999_999)).padStart(7, '0')
+      while (usedPhones.has(phone))
+      usedPhones.add(phone)
 
-    const plan: PlanId = status !== 'pending' && rng.chance(0.22) ? 'pro' : 'basic'
+      const slug = slugify(ownerName)
+      const email =
+        loginMethod === 'google'
+          ? `${slug}${rng.int(1, 99)}@gmail.com`
+          : loginMethod === 'apple'
+            ? `${slug.split('.').pop()}${rng.int(100, 999)}@icloud.com`
+            : rng.chance(0.45)
+              ? `${slug}@gmail.com`
+              : undefined
 
-    const loginMethod: LoginMethod = rng.pick<LoginMethod>(['phone', 'phone', 'phone', 'google', 'google', 'facebook', 'apple'])
+      let lastLogin: number
+      if (status === 'pending') lastLogin = created + rng.int(1, 15) * 60_000
+      else if (status === 'locked') lastLogin = now - rng.int(3, 20) * DAY
+      else lastLogin = now - (rng.chance(0.7) ? rng.int(5, 600) * 60_000 : rng.int(1, 9) * DAY)
+      lastLogin = Math.min(Math.max(lastLogin, created + 5 * 60_000), now - 3 * 60_000)
 
-    let phone = ''
-    do {
-      phone = rng.pick(PHONE_PREFIXES) + String(rng.int(0, 9_999_999)).padStart(7, '0')
-    } while (usedPhones.has(phone))
-    usedPhones.add(phone)
+      const platform = rng.pick<Platform>(['android', 'android', 'android', 'ios', 'ios', 'web'])
+      const devices: DeviceInfo[] =
+        status === 'pending'
+          ? []
+          : Array.from({ length: rng.chance(0.25) ? 2 : 1 }, (_, k) => {
+              const p: Platform = k === 0 ? platform : rng.pick<Platform>(['android', 'ios', 'web'])
+              return {
+                id: `dev_${String(i + 1).padStart(3, '0')}_${k}`,
+                platform: p,
+                model: p === 'android' ? rng.pick(ANDROID_MODELS) : p === 'ios' ? rng.pick(IOS_MODELS) : 'Chrome trên Windows',
+                appVersion: p === 'web' ? 'web' : rng.pick(APP_VERSIONS),
+                lastSeenAt: iso(k === 0 ? lastLogin : lastLogin - rng.int(1, 6) * DAY),
+              }
+            })
 
-    const slug = slugify(ownerName)
-    const email =
-      loginMethod === 'google'
-        ? `${slug}${rng.int(1, 99)}@gmail.com`
-        : loginMethod === 'apple'
-          ? `${slug.split('.').pop()}${rng.int(100, 999)}@icloud.com`
-          : rng.chance(0.4)
-            ? `${slug}@gmail.com`
-            : undefined
-
-    // Hoạt động gần nhất
-    let lastActiveAt: Date
-    if (status === 'pending') lastActiveAt = new Date(createdAt.getTime() + rng.int(1, 15) * 60_000)
-    else if (status === 'locked') lastActiveAt = new Date(now.getTime() - rng.int(3, 20) * DAY)
-    else lastActiveAt = new Date(now.getTime() - (rng.chance(0.7) ? rng.int(5, 600) * 60_000 : rng.int(1, 9) * DAY))
-    if (lastActiveAt < createdAt) lastActiveAt = new Date(createdAt.getTime() + 5 * 60_000)
-    if (lastActiveAt > now) lastActiveAt = new Date(now.getTime() - 3 * 60_000)
-
-    // Số đơn tháng này (tính theo số ngày hoạt động trong tháng)
-    const activeFrom = createdAt > monthStart ? createdAt : monthStart
-    const activeDays = Math.max(0, Math.ceil((now.getTime() - activeFrom.getTime()) / DAY))
-    let ordersThisMonth = 0
-    if (status === 'active') {
-      const perDay = plan === 'pro' ? rng.int(12, 34) : rng.int(3, 15)
-      ordersThisMonth = Math.round(perDay * activeDays * (0.8 + rng.next() * 0.4))
-      if (plan === 'basic') ordersThisMonth = Math.min(ordersThisMonth, BASIC_MONTHLY_QUOTA)
-    } else if (status === 'locked') {
-      ordersThisMonth = rng.int(0, 40)
+      owner = {
+        id: `own_${String(owners.size + 1).padStart(3, '0')}`,
+        fullName: ownerName,
+        phone,
+        email,
+        status,
+        lockReason: status === 'locked' ? rng.pick(LOCK_REASONS) : undefined,
+        loginMethod,
+        phoneVerified: status !== 'pending',
+        emailVerified: Boolean(email) && (loginMethod === 'google' || loginMethod === 'apple' || rng.chance(0.5)),
+        plan: status !== 'pending' && rng.chance(0.22) ? 'pro' : 'basic',
+        createdAt: iso(created),
+        lastLoginAt: iso(lastLogin),
+        devices,
+      }
+      owners.set(ownerName, owner)
     }
-    // Mẫu "chủ quán đang dùng": Lượt tạo đơn tháng này 142/200
-    if (i === 0) ordersThisMonth = 142
 
-    const voiceOrderRatio = status === 'pending' ? 0 : Math.round((0.35 + rng.next() * 0.55) * 100) / 100
+    const ownerCreated = new Date(owner.createdAt).getTime()
+    const bCreated = isNewOwner ? ownerCreated + 2 * 60_000 : Math.min(now - DAY, ownerCreated + rng.int(10, 60) * DAY)
+    const lastLogin = new Date(owner.lastLoginAt).getTime()
+    const lastActive = owner.status === 'pending' ? bCreated + 60_000 : Math.max(bCreated + 60_000, lastLogin - rng.int(0, 90) * 60_000)
+    const active = owner.status === 'active'
+    const monthStart = new Date(TODAY_START.getFullYear(), TODAY_START.getMonth(), 1).getTime()
+    const activeDays = Math.max(0, Math.ceil((now - Math.max(bCreated, monthStart)) / DAY))
+    let orders = 0
+    if (active) orders = Math.round((owner.plan === 'pro' ? rng.int(12, 34) : rng.int(2, 7)) * activeDays * (0.8 + rng.next() * 0.4))
+    else if (owner.status === 'locked') orders = rng.int(0, 40)
+    if (i === 0) orders = 142 // "Lượt tạo đơn tháng này 142/200" như prototype
 
-    const [lo, hi] = REVENUE_SCALE[industry]
-    const base = lo + rng.next() * (hi - lo)
-    const revenue7d =
-      status === 'pending'
-        ? [0, 0, 0, 0, 0, 0, 0]
-        : Array.from({ length: 7 }, (_, d) => {
-            const daysAgo = 6 - d
-            const day = new Date(TODAY_START.getTime() - daysAgo * DAY)
-            if (day < new Date(createdAt.toDateString())) return 0
-            if (status === 'locked' && daysAgo < 3) return 0
-            const weekend = day.getDay() === 0 || day.getDay() === 6 ? 1.25 : 1
-            const partial = daysAgo === 0 ? 0.45 : 1 // hôm nay mới tới 10h
-            return round1000(base * weekend * partial * (0.7 + rng.next() * 0.6))
-          })
+    const address = rng.pick(ADDRESSES)
+    const id = `biz_${String(i + 1).padStart(3, '0')}`
+    const syncErrors = active && rng.chance(0.2) ? rng.int(1, 6) : 0
+    const events: SupportEvent[] = []
+    const ev = (type: SupportEvent['type'], label: string, at: number) =>
+      events.push({ id: `${id}_ev_${events.length}`, type, label, at: iso(at) })
+    if (owner.status !== 'pending') {
+      ev('sync', 'Đồng bộ dữ liệu thành công', lastActive)
+      if (syncErrors) ev('sync_error', `Đồng bộ thất bại ${syncErrors} lần (mất kết nối mạng)`, lastActive - rng.int(2, 30) * 3_600_000)
+      ev('login', `Đăng nhập trên ${owner.devices[0] ? PLATFORM_NAME[owner.devices[0].platform] : 'thiết bị'}`, lastLogin)
+      if (rng.chance(0.3)) ev('login_failed', 'Nhập sai mã OTP 3 lần', lastLogin - rng.int(1, 3) * 3_600_000)
+      if (rng.chance(0.4)) ev('app_update', `Cập nhật ứng dụng lên ${owner.devices[0]?.appVersion ?? '1.4.2'}`, lastLogin - rng.int(1, 8) * DAY)
+      if (owner.plan === 'pro') ev('plan', 'Chuyển sang gói Pro (dùng thử)', bCreated + rng.int(1, 5) * DAY)
+      if (owner.status === 'locked') ev('status', `Tài khoản bị khoá: ${owner.lockReason}`, lastLogin + rng.int(1, 3) * 3_600_000)
+    } else {
+      ev('otp', 'Đã gửi mã OTP, chưa xác minh', bCreated + 30_000)
+    }
+    ev('signup', isNewOwner ? 'Đăng ký tài khoản & tạo cơ sở' : 'Tạo thêm cơ sở', bCreated)
+    events.sort((a, b) => b.at.localeCompare(a.at))
 
-    const account: Account = {
+    businesses.push({
       id,
-      storeName,
-      ownerName,
-      phone,
-      email,
+      ownerId: owner.id,
+      name,
       industry,
-      address: rng.pick(ADDRESSES),
-      plan,
-      status,
-      lockReason: status === 'locked' ? rng.pick(LOCK_REASONS) : undefined,
-      loginMethod,
-      createdAt: createdAt.toISOString(),
-      lastActiveAt: lastActiveAt.toISOString(),
-      ordersThisMonth,
-      orderQuota: plan === 'basic' ? BASIC_MONTHLY_QUOTA : null,
-      voiceOrderRatio,
-      revenue7d,
-      staffCount: plan === 'pro' ? rng.int(2, 6) : rng.int(0, 2),
-      productCount: status === 'pending' ? 0 : rng.int(8, 120),
-      activity: buildActivity(rng, id, industry, createdAt, lastActiveAt, status, voiceOrderRatio),
-    }
-    return account
+      address,
+      area: address.split(',').pop()!.trim(),
+      createdAt: iso(bCreated),
+      lastActiveAt: iso(Math.min(lastActive, now - 60_000)),
+      ordersThisMonth: owner.plan === 'basic' ? Math.min(orders, BASIC_MONTHLY_QUOTA) : orders,
+      voiceOrderRatio: owner.status === 'pending' ? 0 : Math.round((0.35 + rng.next() * 0.55) * 100) / 100,
+      staffCount: owner.plan === 'pro' ? rng.int(2, 6) : rng.int(0, 2),
+      lastSyncAt: owner.status === 'pending' ? null : iso(lastActive),
+      syncErrors7d: syncErrors,
+      events,
+    })
   })
+
+  return { owners: [...owners.values()], businesses }
 }
+
+const PLATFORM_NAME: Record<Platform, string> = { android: 'Android', ios: 'iOS', web: 'trình duyệt' }

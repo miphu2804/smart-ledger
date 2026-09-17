@@ -3,8 +3,7 @@
  * TODO(backend): thống nhất định dạng lỗi & đường dẫn với nhóm backend.
  */
 import { API_ENDPOINT } from '../config'
-import { readJSON } from '../utils/storage'
-import type { AuthSession } from '../types'
+import { getSession } from './authService'
 
 export class ApiError extends Error {
   status: number
@@ -15,8 +14,7 @@ export class ApiError extends Error {
 }
 
 function currentToken(): string | null {
-  const s = readJSON<AuthSession>('snl_admin_session') ?? readJSON<AuthSession>('snl_admin_session', 'session')
-  return s?.token ?? null
+  return getSession()?.accessToken ?? null
 }
 
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -37,6 +35,8 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     } catch {
       /* body không phải JSON */
     }
+    // 401: phiên hết hạn -> về trang đăng nhập; 403 do trang tự hiển thị
+    if (res.status === 401 && typeof window !== 'undefined') window.location.assign('/admin/login')
     throw new ApiError(res.status, message)
   }
   if (res.status === 204) return undefined as T
