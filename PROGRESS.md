@@ -33,3 +33,10 @@
 **Flow explained:** `Business requirements → product requirements → technical design → API contract → sprint issues`.
 
 **Check:** Validated Markdown whitespace, DBML, and draw.io sources; visually inspected the architecture export.
+### [2026-09-18 UTC+07:00] — [Docs] Align Phase 1 ERD and technical design
+
+**Done:** Updated the Phase 1 ERD, its description, and technical design to use Firebase Phone/Google, `store_id`, persisted sale drafts, sales/payments/debts, simple stock, AI trace, idempotency, archive/void lifecycle, `BIGINT` VND, and UTC timestamps.
+
+**Changed files:** `docs/architecture/diagrams/src/erd.dbml`, `docs/architecture/erd-description.md`, and `docs/architecture/technical-design.md`.
+
+**Check:** Ran `git diff --check`; DBML remains a logical schema and PostgreSQL constraints/indexes must be implemented in Flyway migrations.
