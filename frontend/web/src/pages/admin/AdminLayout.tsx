@@ -79,7 +79,6 @@ function useResolvedTheme(theme: 'light' | 'system') {
 }
 
 export default function AdminLayout() {
-  const session = getSession()
   const prefs = usePreferences()
   const theme = useResolvedTheme(prefs.theme)
   const navigate = useNavigate()
@@ -210,16 +209,6 @@ export default function AdminLayout() {
               <SidebarSimple size={20} aria-hidden="true" />
               <span className="sb-item-label">Thu gọn</span>
             </button>
-            <div className="sb-user">
-              <MeAvatar size={32} />
-              <div>
-                <strong>{prefs.displayName}</strong>
-                <span>{session?.user.role}</span>
-              </div>
-              <button type="button" className="icon-btn icon-btn-sm" onClick={onLogout} aria-label="Đăng xuất" title="Đăng xuất">
-                <SignOut size={18} />
-              </button>
-            </div>
           </div>
         </aside>
         <div className="sb-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />
