@@ -53,10 +53,18 @@ POSTGRES__URL=postgresql://<user>:<password>@<supabase-host>:5432/postgres?sslmo
 REDIS__URL=rediss://default:<password>@<redis-cloud-host>:<port>
 ```
 
+Đăng nhập GHCR trên VM để pull image private (một lần, dùng PAT scope
+`read:packages`):
+
+```bash
+echo <GITHUB_PAT> | docker login ghcr.io -u <github-username> --password-stdin
+```
+
 Chạy app-only (không start postgres/redis container):
 
 ```bash
-docker compose up -d --build ai
+docker compose pull ai
+docker compose up -d ai
 docker compose logs ai   # mong đợi "postgres connected" / "redis connected"
 curl -s localhost:8001/health
 ```
@@ -86,8 +94,16 @@ Kiểm tra `https://staging.<PUBLIC_IP>.sslip.io/health` trả `{"status":"ok"}`
 
 ## Deploy tự động
 
-`.github/workflows/deploy-staging.yml` SSH vào VM, `git pull` nhánh `staging`
-rồi `docker compose up -d --build ai` sau mỗi push vào `staging`.
+`.github/workflows/deploy-staging.yml` theo pipeline build-once-deploy-same:
+
+```text
+push vào staging → ci (ruff + pytest) → build image multi-arch
+(amd64 + arm64) → push GHCR :staging + :<sha> → ssh vào VM →
+docker compose pull ai → up -d → health check
+```
+
+Test fail thì không build; build fail thì không deploy. Image dùng chung
+digest cho mọi môi trường — staging pull đúng image CI đã test.
 
 Secrets cần tạo trong GitHub Environment `staging`:
 
@@ -100,12 +116,17 @@ Secrets cần tạo trong GitHub Environment `staging`:
 Secret chỉ nằm trong GitHub Environment hoặc secret manager — không commit
 `POSTGRES__URL`/`REDIS__URL` thật vào repo.
 
+Lưu ý GHCR: repo private trên Free plan giới hạn 500MB storage và 1GB
+egress/tháng — định kỳ xóa tag cũ, giữ `:staging` và vài tag `:<sha>` gần nhất.
+
 ## Rollback
 
+Image tag `:<sha>` là immutable — rollback bằng cách trỏ `AI_IMAGE_TAG`
+trong `.env` về sha trước rồi pull lại:
+
 ```bash
-cd ~/smart-ledger
-git reset --hard <sha-trước-deploy>
-docker compose up -d --build ai
+sed -i 's/^AI_IMAGE_TAG=.*/AI_IMAGE_TAG=<sha-trước>/' .env
+docker compose pull ai && docker compose up -d ai
 ```
 
 ## Khi Core (Java) sẵn sàng

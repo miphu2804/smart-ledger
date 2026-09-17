@@ -34,6 +34,7 @@ services:
       - redis-data:/data
 
   ai:
+    image: ghcr.io/miphu2804/smart-ledger-ai:${AI_IMAGE_TAG:-staging}
     build:
       context: ./backend/ai
     restart: unless-stopped
