@@ -1,3 +1,13 @@
+### [2026-09-18 00:15 UTC+07:00] — [Ops] Staging environment split for backend
+
+**Done:** Part of #8 (OPS-001). Split `compose.yaml` into two modes: `docker compose --profile infra up` runs local Postgres + Redis + AI for dev; `docker compose up ai` runs the AI service alone against managed `POSTGRES__URL`/`REDIS__URL` (Supabase, Redis Cloud) on the staging VM. Added `deploy-staging.yml` to SSH-deploy to an Oracle Free VM on push to `staging`, plus a staging runbook covering VM/Supabase/Redis Cloud setup, Caddy TLS, keep-alive cron, GitHub Environment secrets, and rollback.
+
+**Changed files:** `compose.yaml`, `.env.example`, `README.md`, `backend/ai/README.md`, `docs/ops/staging.md`, `docs/README.md`, `.github/workflows/deploy-staging.yml`, `PROGRESS.md`
+
+**Flow explained:** Dev keeps the full local stack via the `infra` profile. Staging runs only application containers and connects to managed backing services over TLS, matching the production shape (managed DB + Redis) while staying on free tier. AI port binds `127.0.0.1` so only Caddy exposes it.
+
+**Check:** `docker compose config` valid in both modes; `docker compose config --services` shows `ai` only by default and `postgres redis ai` with `--profile infra`.
+
 ### [2026-09-17 21:00 UTC+07:00] — [Docs] Document release merge flow and align branch rules
 
 **Done:** Updated `CONTRIBUTING.md` to require squash merges into `staging` and merge commits for `staging` → `main` releases, citing the GitLab Flow production-branch pattern. Resolved the `PROGRESS.md` convention as newest-first. Repo rules now match: `staging-squash` (squash only), `main-release-merge` (merge only), and `required_linear_history` disabled on `main` so release merge commits are allowed. Merged #28 to `main` via merge commit `ecf9f83`.

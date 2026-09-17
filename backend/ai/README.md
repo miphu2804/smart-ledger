@@ -27,7 +27,7 @@ From the repository root. Starts PostgreSQL, Redis, and this service. Langfuse i
 
 ```bash
 cp .env.example .env
-docker compose up --build
+docker compose --profile infra up --build
 ```
 
 - AI: `http://localhost:8001/health`
@@ -36,7 +36,7 @@ docker compose up --build
 To run this app on the host against Compose Postgres and Redis:
 
 ```bash
-docker compose up postgres redis
+docker compose --profile infra up postgres redis
 uv sync --group dev
 cp .env.example .env
 uv run python -m src.main

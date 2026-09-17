@@ -1,0 +1,29 @@
+name: Deploy staging
+
+on:
+  push:
+    branches: [staging]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Deploy to staging VM over SSH
+        env:
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_USER: ${{ secrets.STAGING_USER }}
+          STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s' "$STAGING_SSH_KEY" > ~/.ssh/staging_key
+          chmod 600 ~/.ssh/staging_key
+          ssh-keyscan -H "$STAGING_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/staging_key "$STAGING_USER@$STAGING_HOST" '
+            set -e
+            cd ~/smart-ledger
+            git fetch origin staging
+            git reset --hard origin/staging
+            docker compose up -d --build ai
+            curl -sf localhost:${AI_PORT:-8001}/health
+          '
