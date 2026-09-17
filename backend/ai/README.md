@@ -26,6 +26,7 @@ Host and port come from `SERVER__HOST` and `SERVER__PORT`.
 From the repository root. Starts PostgreSQL, Redis, and this service. Langfuse is not part of the default stack.
 
 ```bash
+cp .env.example .env
 docker compose up --build
 ```
 

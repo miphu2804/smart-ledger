@@ -36,6 +36,7 @@ cd backend/ai && uv sync --group dev && uv run python -m src.main
 Default stack is PostgreSQL, Redis, and AI. Langfuse is not enabled.
 
 ```bash
+cp .env.example .env
 docker compose up --build
 ```
 
