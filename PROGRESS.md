@@ -1,3 +1,16 @@
+### [2026-09-20 17:26 UTC+07:00] — [Docs] Finalize Phase 1 ERD and core validation rules
+
+**Done:** Scoped product barcode uniqueness to `(store_id, barcode)`, moved `store_id` to `notification_events`, converted `auth_identities` to 1:N, and documented tenant consistency and payment-debt validation rules.
+
+**Changed files:**
+- `docs/architecture/diagrams/src/erd.dbml` — updated product barcode index, notification tables, and auth identities
+- `docs/architecture/diagrams/src/erd.dbdiagram` — synchronized store-notification relationship
+- `docs/architecture/erd-description.md` — added core business validation rules and updated entity descriptions
+
+**Flow explained:** Barcodes are unique per store; notifications and auth identities support multi-recipient and multi-provider flows; business integrity is enforced at service layer.
+
+**Check:** Verified DBML schema syntax and cross-document references.
+
 ### [2026-09-16 00:00 UTC+07:00] — [Fix] Pin setup-uv action version
 
 **Done:** Replaced unresolved `astral-sh/setup-uv@v10` with `v10.1.0` so CI can resolve the action.

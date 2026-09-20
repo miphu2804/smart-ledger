@@ -1,10 +1,17 @@
 // =====================================================
 // SMART LEDGER — PHASE 1 ERD
+// =====================================================
 //
 // ID: BIGINT IDENTITY → Java Long
-// Money: BIGINT VND (50.000đ = 50000)
+// Money: BIGINT VND
 // Time: TIMESTAMPTZ, stored in UTC
-// Quantity: NUMERIC(15,3), supports kg/liter/item
+// Quantity: NUMERIC(15,3)
+//
+// =====================================================
+
+
+// =====================================================
+// ENUMS
 // =====================================================
 
 Enum SystemRole {
@@ -89,6 +96,20 @@ Enum AiRequestStatus {
   FAILED
 }
 
+Enum ChatRole {
+  USER
+  ASSISTANT
+}
+
+Enum NotificationType {
+  AI_REVIEW_REQUIRED
+  SALE_CONFIRMED
+  PAYMENT_RECEIVED
+  DEBT_REMINDER
+  LOW_STOCK
+  SYSTEM
+}
+
 
 // =====================================================
 // AUTH & TENANCY
@@ -117,18 +138,26 @@ Table users {
   Note: 'No password_hash. Phone and Google authentication are handled by Firebase.'
 }
 
+
 Table auth_identities {
   id bigint [pk, increment]
-  user_id bigint [not null, unique]
 
-  provider varchar(30) [not null, default: 'FIREBASE']
-  provider_subject varchar(255) [not null, unique] // Firebase UID
+  user_id bigint [not null]
+
+  provider varchar(30) [not null]
+  provider_subject varchar(255) [not null]
 
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 
-  Note: 'Firebase Account Linking makes Phone and Google belong to one Firebase UID.'
+  indexes {
+    user_id
+    (provider, provider_subject) [unique]
+  }
+
+  Note: 'One user may have multiple authentication identities. provider_subject is the provider-specific identifier.'
 }
+
 
 Table stores {
   id bigint [pk, increment]
@@ -173,9 +202,8 @@ Table categories {
   indexes {
     (store_id, status)
   }
-
-  Note: 'PostgreSQL migration: UNIQUE(store_id, lower(name)) WHERE archived_at IS NULL.'
 }
+
 
 Table products {
   id bigint [pk, increment]
@@ -203,10 +231,8 @@ Table products {
   indexes {
     (store_id, status)
     category_id
-    barcode
+    (store_id, barcode) [unique]
   }
-
-  Note: 'Simple stock only; no inventory ledger in Phase 1. Soft delete only. PostgreSQL migration: unique active product name per store.'
 }
 
 
@@ -232,13 +258,11 @@ Table customers {
     (store_id, normalized_phone)
     (store_id, status)
   }
-
-  Note: 'Minimal customer directory for debt tracking, not a full CRM. PostgreSQL migration: unique active normalized phone per store when phone is not null.'
 }
 
 
 // =====================================================
-// DRAFTS — DO NOT AFFECT REVENUE, DEBT OR STOCK
+// SALE DRAFTS
 // =====================================================
 
 Table sale_drafts {
@@ -263,6 +287,7 @@ Table sale_drafts {
 
   expires_at timestamptz [not null]
   expired_at timestamptz
+
   confirmed_sale_id bigint [unique]
   confirmed_at timestamptz
   cancelled_at timestamptz
@@ -275,8 +300,9 @@ Table sale_drafts {
     source_ai_request_id
   }
 
-  Note: 'Draft expires 7 days after its last meaningful business edit. It can be confirmed exactly once.'
+  Note: 'Draft does not affect revenue, debt or stock until confirmation.'
 }
+
 
 Table sale_draft_items {
   id bigint [pk, increment]
@@ -301,13 +327,11 @@ Table sale_draft_items {
     draft_id
     product_id
   }
-
-  Note: 'Check: product_id IS NOT NULL OR raw_product_name is present. AI-uncertain items must be reviewed before confirmation.'
 }
 
 
 // =====================================================
-// CONFIRMED SALES, PAYMENTS & DEBTS
+// CONFIRMED SALES
 // =====================================================
 
 Table sales {
@@ -342,9 +366,8 @@ Table sales {
     payment_status
     sale_status
   }
-
-  Note: 'Checks: subtotal_vnd >= 0, discount_vnd >= 0, total_vnd >= 0, 0 <= paid_vnd <= total_vnd. DEBT/PARTIAL requires customer_id.'
 }
+
 
 Table sale_items {
   id bigint [pk, increment]
@@ -364,9 +387,12 @@ Table sale_items {
     sale_id
     product_id
   }
-
-  Note: 'Historical snapshot. Product rename, repricing or archive must not alter this record.'
 }
+
+
+// =====================================================
+// DEBTS & PAYMENTS
+// =====================================================
 
 Table debts {
   id bigint [pk, increment]
@@ -385,9 +411,8 @@ Table debts {
     (customer_id, status)
     status
   }
-
-  Note: 'Created only for DEBT/PARTIAL sales. outstanding_vnd is a cache; payments are the reconciliation history.'
 }
+
 
 Table payments {
   id bigint [pk, increment]
@@ -408,8 +433,6 @@ Table payments {
     (sale_id, received_at)
     (debt_id, received_at)
   }
-
-  Note: 'Append-only. Check amount_vnd > 0. Check: type = DEBT_REPAYMENT requires debt_id IS NOT NULL.'
 }
 
 
@@ -429,6 +452,9 @@ Table expenses {
   payment_method PaymentMethod
   expense_at timestamptz [not null]
 
+  // AI origin
+  source_ai_request_id bigint
+
   status ExpenseStatus [not null, default: 'ACTIVE']
   archived_at timestamptz
   archived_by_user_id bigint
@@ -439,9 +465,8 @@ Table expenses {
   indexes {
     (store_id, expense_at)
     (store_id, status)
+    source_ai_request_id
   }
-
-  Note: 'Check amount_vnd > 0.'
 }
 
 
@@ -474,17 +499,139 @@ Table ai_requests {
     (store_id, user_id, created_at)
     (store_id, status)
   }
-
-  Note: 'AI team owns detailed processing contract. Store media object key only, never raw audio/image in PostgreSQL.'
 }
 
 
 // =====================================================
-// SAFETY & AUDIT
+// CHAT HISTORY
+// =====================================================
+
+// Một conversation = một cuộc hội thoại riêng.
+// Việc hiển thị "Today / Yesterday / Previous 7 days / Older"
+// được xử lý bằng last_message_at ở FE.
+
+Table chat_conversations {
+  id bigint [pk, increment]
+
+  user_id bigint [not null]
+  store_id bigint [not null]
+
+  title varchar(255)
+
+  started_at timestamptz [not null, default: `now()`]
+  last_message_at timestamptz [not null, default: `now()`]
+
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, store_id, last_message_at)
+    store_id
+  }
+
+  Note: 'A conversation is explicitly separated by creating a new chat, not by time.'
+}
+
+
+Table chat_messages {
+  id bigint [pk, increment]
+
+  conversation_id bigint [not null]
+
+  role ChatRole [not null]
+  content text [not null]
+
+  // Link to AI processing when the message comes from AI
+  ai_request_id bigint
+
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (conversation_id, created_at)
+    ai_request_id
+  }
+}
+
+
+// =====================================================
+// NOTIFICATIONS
+// =====================================================
+
+// notification_events = "CHUYỆN GÌ ĐÃ XẢY RA?"
+// Chỉ lưu nội dung sự kiện một lần.
+//
+// Ví dụ:
+// AI_REVIEW_REQUIRED
+// "AI phát hiện một khoản chi chưa chắc chắn"
+
+Table notification_events {
+  id bigint [pk, increment]
+
+  store_id bigint
+
+  type NotificationType [not null]
+
+  title varchar(255) [not null]
+  body varchar(1000) [not null]
+
+  // Entity liên quan
+  // Ví dụ:
+  // SALE -> sales.id
+  // EXPENSE -> expenses.id
+  // AI_REQUEST -> ai_requests.id
+  entity_type varchar(100)
+  entity_id bigint
+
+  // Additional payload cho FE
+  data_json jsonb
+
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (store_id, created_at)
+    (type, created_at)
+    (entity_type, entity_id)
+  }
+
+  Note: 'Stores the notification event/content once. store_id associates the event with a store if applicable.'
+}
+
+
+// notification_recipients = "AI NHẬN THÔNG BÁO?"
+// Mỗi user có một record riêng.
+//
+// Cùng một notification_event:
+//     OWNER A -> read_at = NULL
+//     OWNER B -> read_at = 10:30
+//     ADMIN   -> read_at = 10:35
+
+Table notification_recipients {
+  id bigint [pk, increment]
+
+  notification_event_id bigint [not null]
+  user_id bigint [not null]
+
+  read_at timestamptz
+
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, created_at)
+    (user_id, read_at)
+    (notification_event_id, user_id) [unique]
+  }
+
+  Note: 'One row per recipient. read_at is independent for each user.'
+}
+
+
+// =====================================================
+// API IDEMPOTENCY
 // =====================================================
 
 Table api_idempotency_keys {
   id bigint [pk, increment]
+
   store_id bigint [not null]
   user_id bigint [not null]
 
@@ -505,12 +652,16 @@ Table api_idempotency_keys {
     (store_id, operation, idempotency_key) [unique]
     expires_at
   }
-
-  Note: 'Prevents duplicate sale/payment creation caused by retry or double-click. Reuse of a key with another request_hash must be rejected.'
 }
+
+
+// =====================================================
+// AUDIT LOG
+// =====================================================
 
 Table audit_logs {
   id bigint [pk, increment]
+
   actor_user_id bigint
   store_id bigint
 
@@ -522,6 +673,7 @@ Table audit_logs {
   new_data jsonb
 
   ip_address varchar(64)
+
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
@@ -529,8 +681,6 @@ Table audit_logs {
     (entity_type, entity_id)
     actor_user_id
   }
-
-  Note: 'Audit archive, void, manual stock adjustment and sensitive ADMIN access.'
 }
 
 
@@ -538,8 +688,13 @@ Table audit_logs {
 // RELATIONSHIPS
 // =====================================================
 
+// ---------- AUTH ----------
+
 Ref: users.id < auth_identities.user_id
 Ref: users.id < stores.owner_id
+
+
+// ---------- CATALOG ----------
 
 Ref: stores.id < categories.store_id
 Ref: users.id < categories.archived_by_user_id
@@ -551,14 +706,21 @@ Ref: users.id < products.archived_by_user_id
 Ref: stores.id < customers.store_id
 Ref: users.id < customers.archived_by_user_id
 
+
+// ---------- SALE DRAFT ----------
+
 Ref: stores.id < sale_drafts.store_id
 Ref: users.id < sale_drafts.created_by_user_id
 Ref: customers.id < sale_drafts.customer_id
 Ref: ai_requests.id < sale_drafts.source_ai_request_id
+
 Ref: sale_drafts.confirmed_sale_id - sales.id
 
 Ref: sale_drafts.id < sale_draft_items.draft_id
 Ref: products.id < sale_draft_items.product_id
+
+
+// ---------- SALES ----------
 
 Ref: stores.id < sales.store_id
 Ref: users.id < sales.created_by_user_id
@@ -568,6 +730,9 @@ Ref: customers.id < sales.customer_id
 Ref: sales.id < sale_items.sale_id
 Ref: products.id < sale_items.product_id
 
+
+// ---------- DEBT & PAYMENT ----------
+
 Ref: sales.id - debts.sale_id
 Ref: customers.id < debts.customer_id
 
@@ -575,22 +740,51 @@ Ref: sales.id < payments.sale_id
 Ref: debts.id < payments.debt_id
 Ref: users.id < payments.received_by_user_id
 
+
+// ---------- EXPENSE ----------
+
 Ref: stores.id < expenses.store_id
 Ref: users.id < expenses.created_by_user_id
 Ref: users.id < expenses.archived_by_user_id
+Ref: ai_requests.id < expenses.source_ai_request_id
+
+
+// ---------- AI ----------
 
 Ref: stores.id < ai_requests.store_id
 Ref: users.id < ai_requests.user_id
 
+
+// ---------- CHAT ----------
+
+Ref: users.id < chat_conversations.user_id
+Ref: stores.id < chat_conversations.store_id
+
+Ref: chat_conversations.id < chat_messages.conversation_id
+Ref: ai_requests.id < chat_messages.ai_request_id
+
+
+// ---------- NOTIFICATION ----------
+
+Ref: stores.id < notification_events.store_id
+Ref: notification_events.id < notification_recipients.notification_event_id
+Ref: users.id < notification_recipients.user_id
+
+
+// ---------- IDEMPOTENCY ----------
+
 Ref: stores.id < api_idempotency_keys.store_id
 Ref: users.id < api_idempotency_keys.user_id
+
+
+// ---------- AUDIT ----------
 
 Ref: users.id < audit_logs.actor_user_id
 Ref: stores.id < audit_logs.store_id
 
 
 // =====================================================
-// VISUAL GROUPS FOR DBDIAGRAM
+// VISUAL GROUPS
 // =====================================================
 
 TableGroup auth_and_tenancy {
@@ -618,8 +812,18 @@ TableGroup payment_and_expense {
   expenses
 }
 
-TableGroup ai_and_audit {
+TableGroup ai_and_chat {
   ai_requests
+  chat_conversations
+  chat_messages
+}
+
+TableGroup notification {
+  notification_events
+  notification_recipients
+}
+
+TableGroup safety_and_audit {
   api_idempotency_keys
   audit_logs
 }

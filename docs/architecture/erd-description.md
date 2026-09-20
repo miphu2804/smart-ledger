@@ -13,7 +13,7 @@ A sale record in this MVP is an internal business record. It is **not an electro
 ### Authentication
 
 - **users**: Stores user profiles and system roles (`OWNER`, `ADMIN`).
-- **auth_identities**: Links a user to one Firebase UID. Firebase manages Phone and Google authentication.
+- **auth_identities**: Stores authentication methods/identities linked to a user. Supports multiple provider identities (e.g. Firebase UID, Google, Phone).
 
 ### Stores, Products, and Customers
 
@@ -46,11 +46,16 @@ Drafts do not affect revenue, stock, payments, or debts until confirmed.
 - **api_idempotency_keys**: Prevents duplicate sale or payment creation caused by retry or double-click.
 - **audit_logs**: Records important business actions and sensitive ADMIN access.
 
+### Notifications
+
+- **notification_events**: Stores notification events, optional store link, entity reference, and payload.
+- **notification_recipients**: Stores per-user recipient read status for each notification event.
+
 ## 3. Main Relationships
 
-- A **user** has one **auth identity**.
+- A **user** can have one or more **auth identities**.
 - A **user** can own multiple **stores**.
-- A **store** can have multiple **categories**, **products**, **customers**, **sales**, **drafts**, and **expenses**.
+- A **store** can have multiple **categories**, **products**, **customers**, **sales**, **drafts**, **expenses**, and **notification events**.
 - A **category** can contain multiple **products**.
 - A **customer** can have multiple **sales** and **debts**.
 - A **sale draft** contains multiple **sale draft items**.
@@ -59,6 +64,7 @@ Drafts do not affect revenue, stock, payments, or debts until confirmed.
 - A **sale** can have multiple **payments**.
 - A **sale** can have zero or one **debt**.
 - A **debt** can have multiple debt repayment **payments**.
+- A **notification event** can have multiple **notification recipients**.
 - An **AI request** can be linked to a sale draft created from AI voice input.
 
 ## 4. Main Data Flow
@@ -135,3 +141,19 @@ Confirmed Sale or Cancelled Draft
 - AI media is stored as an object key/reference, not as raw media in PostgreSQL.
 - Idempotency keys prevent duplicate business records when mobile requests are retried.
 - Electronic invoices, full inventory management, CRM, OCR documents, and store staff roles are deferred to later phases.
+
+## 6. Core Business Validation Rules
+
+To keep the ERD clean in Phase 1 without nested composite foreign keys, Core service is responsible for validating the following business constraints:
+
+1. **Tenant Consistency (Store Isolation)**:
+   - Core must ensure all related entities in a transaction belong to the same `store_id` (e.g., `products.store_id == sales.store_id`, `customers.store_id == sales.store_id`, `categories.store_id == products.store_id`, `sale_drafts.store_id == products.store_id`).
+2. **Product Barcode Scope**:
+   - `(store_id, barcode)` is unique per store; null barcodes are permitted for untracked/custom items.
+3. **Payment & Debt Integrity**:
+   - For `payments.type = 'INITIAL'`: `debt_id` must be `NULL`.
+   - For `payments.type = 'DEBT_REPAYMENT'`: `debt_id` must be NOT NULL, and `debt.sale_id` must equal `payments.sale_id`.
+4. **Debt & Customer Integrity**:
+   - `debts.customer_id` must match `sales.customer_id`.
+   - `sales.payment_status` in (`DEBT`, `PARTIAL`) requires a corresponding `debts` record; `sales.payment_status = 'PAID'` must not create an open debt record.
+
