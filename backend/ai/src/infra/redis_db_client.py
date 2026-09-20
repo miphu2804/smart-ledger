@@ -17,15 +17,21 @@ class RedisDBClient:
         if url is None or not url.strip():
             logger.info("redis unconfigured")
             return
+        client = None
         try:
-            self.client = redis.Redis.from_url(
+            client = redis.Redis.from_url(
                 url,
                 socket_connect_timeout=3,
                 socket_timeout=3,
             )
+            if client.ping() is not True:
+                raise RuntimeError("redis ping did not return True")
+            self.client = client
             logger.info("redis connected")
         except Exception:
             logger.warning("redis connect failed", exc_info=True)
+            if client is not None:
+                client.close()
             self.client = None
 
     def check_health(self) -> None:

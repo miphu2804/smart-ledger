@@ -29,11 +29,11 @@ Python 3.11+, [uv](https://docs.astral.sh/uv/). See [backend/ai/README.md](backe
 cd backend/ai && uv sync --group dev && uv run python -m src.main
 ```
 
-`GET /health` is liveness. Postgres and Redis clients connect at process start. Internal `/internal/v1` routes are not implemented.
+`GET /health` is liveness. Postgres and Redis clients connect at process start. AI exposes `POST /internal/v1/agent/chat` for Core; internal service authentication is not implemented yet.
 
 ## Local Compose
 
-Default stack is PostgreSQL, Redis, and AI. Langfuse is not enabled.
+Default stack is PostgreSQL, Redis, and AI. Langfuse is not enabled. Set `POSTGRES_PASSWORD` in the shell or a Compose `--env-file` before starting the stack.
 
 ```bash
 docker compose up --build

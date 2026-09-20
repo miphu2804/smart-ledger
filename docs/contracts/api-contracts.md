@@ -23,21 +23,18 @@
 - FE gửi `Authorization: Bearer <identity-token>`.
 - Endpoint nghiệp vụ của OWNER gửi thêm `X-Shop-Id: <uuid>`; Core kiểm tra tiệm thuộc OWNER.
 - Dashboard chỉ gọi `/api/v1/admin/*`; Core lấy phạm vi từ quyền ADMIN, không tin `X-Shop-Id` để mở rộng quyền.
-- Core gọi AI bằng service credential và truyền `shopId` đã xác thực; AI không tin `shopId` trực tiếp từ client.
 - Tiền là số nguyên VND. Mọi thời gian là ISO 8601 UTC.
+- Payload API dùng snake_case.
 
-## 0. Hợp đồng lỗi
+## 0. Hợp đồng lỗi tối thiểu
 
 ```json
 {
-  "code": "string",
-  "message": "string",
-  "details": [{ "field": "string", "issue": "string" }],
-  "traceId": "string"
+  "detail": "string"
 }
 ```
 
-`code`, `message`, `traceId` luôn có. `details` khi lỗi theo trường. 401 → đăng xuất.
+Endpoint AI nội bộ trả `503` với `detail: "ai_unavailable"` khi model chưa cấu hình hoặc lời gọi model thất bại. Các endpoint chỉ mở rộng payload lỗi khi có yêu cầu cụ thể.
 
 ## 1. Auth và tiệm
 
@@ -49,7 +46,7 @@
 | `GET` | `/api/v1/shops/current` | — | `ShopView` |
 | `PATCH` | `/api/v1/shops/current` | `{ name?, phone?, address?, industries? }` | `ShopView` |
 
-`SessionView`: `{ user, role: OWNER|ADMIN, shops, needsOnboarding }`. Với ADMIN, `shops` rỗng và `needsOnboarding` là `false`. Core quyết định role từ dữ liệu server; request đăng nhập không được truyền hoặc tự nâng role ADMIN.
+`SessionView`: `{ user, role: OWNER|ADMIN, shops, needs_onboarding }`. Với ADMIN, `shops` rỗng và `needs_onboarding` là `false`. Core quyết định role từ dữ liệu server; request đăng nhập không được truyền hoặc tự nâng role ADMIN.
 
 Core xác thực token bằng adapter tương ứng rồi upsert `auth_identities(provider, provider_subject)`. Không lưu access token thô.
 
@@ -74,9 +71,9 @@ Body:
 
 ```json
 {
-  "customerName": "An",
-  "customerPhone": "0901234567",
-  "items": [{ "productId": null, "name": "Ổi", "qty": 1, "unitPrice": 30000 }],
+  "customer_name": "An",
+  "customer_phone": "0901234567",
+  "items": [{ "product_id": null, "name": "Ổi", "qty": 1, "unit_price": 30000 }],
   "kind": "AI",
   "status": "PAID",
   "paid": 30000
@@ -91,7 +88,7 @@ Core trừ tồn hàng `tracked` và ghi nợ trong cùng transaction khi `statu
 |---|---|---|
 | `GET` | `/api/v1/invoices?period=` | `period`: `today` \| `yesterday` \| `week` \| `month` |
 | `GET` | `/api/v1/invoices/{id}` | chi tiết |
-| `PATCH` | `/api/v1/invoices/{id}` | `{ customerName?, items }` |
+| `PATCH` | `/api/v1/invoices/{id}` | `{ customer_name?, items }` |
 | `DELETE` | `/api/v1/invoices/{id}` | xóa cứng MVP; `OQ-002` |
 
 Phủ `FR-004`, `FR-005`, `FR-014`.
@@ -104,11 +101,11 @@ Phủ `FR-004`, `FR-005`, `FR-014`.
 | `POST` | `/api/v1/expenses` | `{ name, amount }` | `ExpenseView` |
 | `DELETE` | `/api/v1/expenses/{id}` | — | 204 |
 | `GET` | `/api/v1/debts` | — | `DebtView[]` |
-| `POST` | `/api/v1/debts/{id}/payments` | `{ amount }` | `{ paidOff, debt? }` |
+| `POST` | `/api/v1/debts/{id}/payments` | `{ amount }` | `{ paid_off, debt? }` |
 | `DELETE` | `/api/v1/debts/{id}` | — | 204 |
 | `GET` | `/api/v1/reports/summary?period=` | — | `SummaryView` |
 
-`period` giống hóa đơn. `SummaryView` gồm `revenue`, `expense`, `profit` (ước tính), `orderCount`, `outstandingDebt`, `series`, `bestSellers`.
+`period` giống hóa đơn. `SummaryView` gồm `revenue`, `expense`, `profit` (ước tính), `order_count`, `outstanding_debt`, `series`, `best_sellers`.
 
 Phủ `FR-006`, `FR-015`, `FR-016`.
 
@@ -120,21 +117,21 @@ AI chỉ tạo bản nháp/gợi ý. Các endpoint này không ghi invoice, expe
 |---|---|---|---|
 | `POST` | `/api/v1/ai/drafts` | JSON `{ type: TEXT, mode, text }` hoặc multipart `type=AUDIO|IMAGE`, `mode=SALE|EXPENSE`, `file` | `DraftView` |
 | `GET` | `/api/v1/replenishment?period=` | — | `ReplenishmentView[]` |
-| `POST` | `/api/v1/insights/chat` | `{ conversationId?, message, period? }` | `InsightMessageView` |
+| `POST` | `/api/v1/insights/chat` | `{ conversation_id?, message, period? }` | `InsightMessageView` |
 
 `DraftView`:
 
 ```json
 {
-  "requestId": "uuid",
+  "request_id": "uuid",
   "transcript": "bán hai cà phê sữa",
   "mode": "SALE",
   "items": [
     {
-      "productId": "uuid-or-null",
+      "product_id": "uuid-or-null",
       "name": "Cà phê sữa",
       "qty": 2,
-      "unitPrice": 25000,
+      "unit_price": 25000,
       "confidence": 0.94
     }
   ],
@@ -142,7 +139,7 @@ AI chỉ tạo bản nháp/gợi ý. Các endpoint này không ghi invoice, expe
 }
 ```
 
-`ReplenishmentView` gồm `productId`, `productName`, `suggestedQty`, `period`, `reason`. `InsightMessageView` gồm `conversationId`, `messageId`, `answer`, `period`, `citations`, `insufficientData`.
+`ReplenishmentView` gồm `product_id`, `product_name`, `suggested_qty`, `period`, `reason`. `InsightMessageView` gồm `conversation_id`, `message_id`, `answer`, `period`, `citations`, `insufficient_data`.
 
 Phủ `FR-007`, `FR-008`, `FR-017`–`FR-021`.
 
@@ -150,17 +147,19 @@ Phủ `FR-007`, `FR-008`, `FR-017`–`FR-021`.
 
 | Method | Đường | Trách nhiệm |
 |---|---|---|
+| `POST` | `/internal/v1/agent/chat` | Chat assistant có tools; trả `{ request_id, answer, model, model_version }` |
 | `POST` | `/internal/v1/drafts/parse` | Text/voice/image → `DraftView` |
-| `POST` | `/internal/v1/rag/search` | Truy xuất vector có filter `shopId` |
+| `POST` | `/internal/v1/rag/search` | Truy xuất vector có filter `shop_id` |
 | `POST` | `/internal/v1/recommendations/replenishment` | Tạo gợi ý nhập hàng có lý do |
 | `POST` | `/internal/v1/insights/chat` | Trả lời có citation và phạm vi thời gian |
 
 Yêu cầu chung:
 
-- timeout AI trả `503 ai_unavailable`; Core không retry đồng bộ quá một lần;
-- mọi response có `requestId`, `model`, `modelVersion`;
+- timeout hoặc lỗi model trả `503` với `{ "detail": "ai_unavailable" }`; Core không retry đồng bộ quá một lần;
+- response thành công có `request_id`, `model`, `model_version`;
 - AI không có endpoint tạo/sửa/xóa dữ liệu nghiệp vụ;
-- Core và AI cùng kiểm tra `shopId`; test chéo shop là bắt buộc.
+- Core và AI cùng kiểm tra `shop_id`; test chéo shop là bắt buộc;
+- service credential cho Core ↔ AI chưa được triển khai; `/internal/v1` phải được giới hạn ở mạng nội bộ và không công khai cho FE.
 
 ## 7. Dashboard quản trị
 

@@ -17,11 +17,15 @@ FROM python:3.11-slim-bookworm AS runtime
 
 WORKDIR /app
 
+RUN groupadd --system app && useradd --system --gid app --home /app --no-create-home app
+
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 
-COPY --from=builder /app/.venv /app/.venv
-COPY --from=builder /app/src /app/src
+COPY --from=builder --chown=app:app /app/.venv /app/.venv
+COPY --from=builder --chown=app:app /app/src /app/src
+
+USER app
 
 EXPOSE 8001
 
