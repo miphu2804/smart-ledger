@@ -3,7 +3,7 @@
  * TODO(backend): thống nhất định dạng lỗi & đường dẫn với nhóm backend.
  */
 import { API_ENDPOINT } from '../config'
-import { getSession } from './authService'
+import { clearSession, getSession } from './authService'
 
 export class ApiError extends Error {
   status: number
@@ -35,8 +35,12 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     } catch {
       /* body không phải JSON */
     }
-    // 401: phiên hết hạn -> về trang đăng nhập; 403 do trang tự hiển thị
-    if (res.status === 401 && typeof window !== 'undefined') window.location.assign('/admin/login')
+    // 401: phiên hết hạn -> xoá phiên rồi về trang đăng nhập (không xoá thì LoginPage thấy phiên cũ và đẩy ngược về /admin).
+    // Không gọi logout() ở đây: nó gọi backend, gặp 401 nữa sẽ lặp. 403 do trang tự hiển thị.
+    if (res.status === 401) {
+      clearSession()
+      if (typeof window !== 'undefined' && window.location.pathname !== '/admin/login') window.location.assign('/admin/login')
+    }
     throw new ApiError(res.status, message)
   }
   if (res.status === 204) return undefined as T
