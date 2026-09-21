@@ -3,11 +3,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Logo, useToast } from '../../src/components/brand';
+import { Logo } from '../../src/components/brand';
 import { AreaChart, BarChart } from '../../src/components/charts';
 import { Button, Card, Chips, IconBtn, IconName, Row, Screen, SectionTitle, T } from '../../src/components/ui';
 import { aiSuggestions } from '../../src/data/mock';
 import { vnd } from '../../src/lib/format';
+import { buildNotifications } from '../../src/lib/notifications';
 import { bestSellers, daily, hourly, inPeriod, Period, summary } from '../../src/lib/stats';
 import { useApp } from '../../src/store/AppStore';
 import { colors, shadow } from '../../src/theme';
@@ -16,7 +17,6 @@ type P = Extract<Period, 'today' | 'yesterday' | 'month'>;
 
 export default function Home() {
   const app = useApp();
-  const toast = useToast();
   const [period, setPeriod] = useState<P>('today');
   const [showProfit, setShowProfit] = useState(false);
 
@@ -35,6 +35,10 @@ export default function Home() {
   const lowStock = app.products.filter((p) => p.tracked && p.stock <= 6);
   const delta = prev && prev.revenue ? (s.revenue - prev.revenue) / prev.revenue : null;
   const firstName = app.user.name.split(' ').slice(-1)[0];
+  const unreadNotifs = useMemo(() => {
+    const read = new Set(app.readNotifs);
+    return buildNotifications(app).filter((n) => !read.has(n.id)).length;
+  }, [app.invoices, app.products, app.expenses, app.debts, app.readNotifs]);
 
   return (
     <Screen>
@@ -42,12 +46,7 @@ export default function Home() {
         <View style={{ flex: 1 }}>
           <Logo size={30} subtitle={false} />
         </View>
-        <IconBtn
-          name="bell"
-          dot
-          onPress={() => toast(`${lowStock.length} mặt hàng sắp hết · ${app.debts.length} khách đang nợ`)}
-          label="Thông báo"
-        />
+        <IconBtn name="bell" dot={unreadNotifs > 0} onPress={() => router.push('/notifications')} label="Thông báo" />
       </Row>
 
       <T w="extrabold" size={21} style={{ marginTop: 14, lineHeight: 28 }}>

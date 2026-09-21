@@ -22,6 +22,8 @@ interface State {
   cart: Record<string, number>;
   draft: Draft | null;
   guideDismissed: boolean;
+  /** id các thông báo đã đọc */
+  readNotifs: string[];
 }
 
 function initialState(): State {
@@ -38,6 +40,7 @@ function initialState(): State {
     cart: {},
     draft: null,
     guideDismissed: false,
+    readNotifs: [],
   };
 }
 
@@ -59,6 +62,8 @@ function useStoreValue() {
       updateProfile: (user: Partial<State['user']>, store: Partial<State['store']>) =>
         patch((st) => ({ user: { ...st.user, ...user }, store: { ...st.store, ...store } })),
       dismissGuide: () => patch(() => ({ guideDismissed: true })),
+      markNotifsRead: (ids: string[]) =>
+        patch((st) => ({ readNotifs: Array.from(new Set([...st.readNotifs, ...ids])) })),
       resetMock: () => setS({ ...initialState(), loggedIn: true }),
 
       // --- giỏ hàng POS ---
