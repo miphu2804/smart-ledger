@@ -81,3 +81,33 @@ export interface ChatMessage {
   from: 'user' | 'ai';
   text: string;
 }
+
+// ---- Phiên đăng nhập & tiệm — khớp `AuthSessionResponse` của Core (backend/core, nhánh feat/auth-session) ----
+// Lưu ý: Core đang trả camelCase và id kiểu số (Long); docs/contracts/api-contracts.md ghi snake_case và uuid.
+// Đang bám theo code của Core; nếu backend đổi (SNAKE_CASE…) thì chỉ cần sửa các kiểu dưới đây và sessionApi.
+
+export interface SessionUser {
+  id: number | string;
+  displayName: string;
+  email?: string | null;
+  phone?: string | null; // E.164 lấy từ claim phone_number của Firebase, ví dụ +84901234567
+  avatarUrl?: string | null;
+}
+
+export interface ShopView {
+  id: number | string;
+  name: string;
+  /** Core lưu một ngành (`industry`); docs ghi `industries` — chấp nhận cả hai cho tới khi chốt */
+  industry?: string | null;
+  industries?: string[] | null;
+  phone?: string | null;
+  address?: string | null;
+  status?: 'ACTIVE' | 'INACTIVE';
+}
+
+export interface SessionView {
+  user: SessionUser;
+  role: 'OWNER' | 'ADMIN';
+  shops: ShopView[];
+  needsOnboarding: boolean;
+}

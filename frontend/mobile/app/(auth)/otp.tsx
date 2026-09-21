@@ -3,7 +3,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useToast } from '../../src/components/brand';
 import { Button, Header, Progress, Screen, T } from '../../src/components/ui';
+import { USE_MOCK } from '../../src/config';
 import { MOCK_OTP } from '../../src/data/mock';
+import { confirmPhoneLogin, startPhoneLogin } from '../../src/lib/auth';
+import { errorMessage, isDisplayNameRequired } from '../../src/lib/errors';
 import { useApp } from '../../src/store/AppStore';
 import { colors, font } from '../../src/theme';
 
@@ -14,7 +17,7 @@ export default function Otp() {
   const [loading, setLoading] = useState(false);
   const [left, setLeft] = useState(30);
   const input = useRef<TextInput>(null);
-  const { login } = useApp();
+  const { signIn } = useApp();
   const toast = useToast();
 
   useEffect(() => {
@@ -22,20 +25,36 @@ export default function Otp() {
     return () => clearInterval(t);
   }, []);
 
-  const verify = (c = code) => {
-    if (c.length < 6) return;
+  const verify = async (c = code) => {
+    if (c.length < 6 || loading) return;
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      if (c !== MOCK_OTP) {
-        setError('Mã OTP không đúng. Thử lại với 123456');
-        setCode('');
+    setError('');
+    try {
+      await confirmPhoneLogin(c); // Firebase xác thực mã OTP
+      const session = await signIn(); // đổi ID token lấy phiên ở Core (POST /auth/session)
+      router.replace(session.needsOnboarding ? '/(auth)/setup' : '/(tabs)');
+    } catch (e) {
+      if (isDisplayNameRequired(e)) {
+        // Firebase đã xác thực nhưng Core chưa có tài khoản → hỏi tên rồi mở phiên
+        router.replace('/(auth)/profile');
         return;
       }
-      const isNew = !phone.startsWith('09');
-      login(phone, isNew);
-      router.replace(isNew ? '/(auth)/setup' : '/(tabs)');
-    }, 600);
+      setCode('');
+      setError(errorMessage(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resend = async () => {
+    try {
+      await startPhoneLogin(phone);
+      setLeft(30);
+      setError('');
+      toast(USE_MOCK ? `Đã gửi lại mã OTP (mã demo: ${MOCK_OTP})` : 'Đã gửi lại mã OTP');
+    } catch (e) {
+      setError(errorMessage(e));
+    }
   };
 
   const pretty = phone.replace(/^0/, '').replace(/(\d{2,3})(\d{3})(\d{3,4})/, '$1 $2 $3');
@@ -105,10 +124,7 @@ export default function Otp() {
               w="bold"
               size={13}
               color={colors.primary}
-              onPress={() => {
-                setLeft(30);
-                toast('Đã gửi lại mã OTP (mã demo: 123456)');
-              }}
+              onPress={resend}
             >
               Gửi lại
             </T>
@@ -116,17 +132,19 @@ export default function Otp() {
         )}
       </View>
 
-      <Pressable
-        onPress={() => {
-          setCode(MOCK_OTP);
-          verify(MOCK_OTP);
-        }}
-        style={styles.fill}
-      >
-        <T w="semibold" size={12} color={colors.gold}>
-          Điền nhanh mã demo 123456
-        </T>
-      </Pressable>
+      {USE_MOCK ? (
+        <Pressable
+          onPress={() => {
+            setCode(MOCK_OTP);
+            verify(MOCK_OTP);
+          }}
+          style={styles.fill}
+        >
+          <T w="semibold" size={12} color={colors.gold}>
+            Điền nhanh mã demo {MOCK_OTP}
+          </T>
+        </Pressable>
+      ) : null}
     </Screen>
   );
 }

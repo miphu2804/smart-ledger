@@ -1,6 +1,25 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { router } from 'expo-router';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { USE_MOCK } from '../config';
 import { generateExpenses, generateInvoices, mockDebts, mockProducts, mockStaff, mockStore, mockUser } from '../data/mock';
-import type { Debt, Expense, Invoice, InvoiceEffects, InvoiceSource, LineItem, PayMethod, Product, Staff } from '../data/types';
+import type {
+  Debt,
+  Expense,
+  Invoice,
+  InvoiceEffects,
+  InvoiceSource,
+  LineItem,
+  PayMethod,
+  Product,
+  SessionView,
+  Staff,
+} from '../data/types';
+import { ApiError, setActiveShop, setUnauthorizedHandler } from '../lib/api';
+import { authClient, AuthError } from '../lib/auth';
+import { fromE164VN } from '../lib/auth/phone';
+import { debugLog } from '../lib/debug';
+import { describeError, isDisplayNameRequired } from '../lib/errors';
+import { sessionApi } from '../lib/sessionApi';
 
 /** Đơn nháp đang chờ thanh toán (từ màn Giọng nói / POS / Nhập tay). */
 export interface Draft {
@@ -10,8 +29,14 @@ export interface Draft {
 }
 
 interface State {
+  /** false cho tới khi SDK Firebase khôi phục xong phiên đã lưu — màn splash chờ cờ này */
+  authReady: boolean;
+  /** Firebase còn đăng nhập nhưng Core chưa có tài khoản (thoát app giữa chừng ở bước nhập tên) */
+  needsProfile: boolean;
   loggedIn: boolean;
   onboarded: boolean;
+  /** id tiệm đang dùng (gửi qua header X-Shop-Id); null khi chưa có / đang mock */
+  shopId: string | null;
   user: typeof mockUser;
   store: typeof mockStore;
   products: Product[];
@@ -28,8 +53,11 @@ interface State {
 
 function initialState(): State {
   return {
+    authReady: false,
+    needsProfile: false,
     loggedIn: false,
     onboarded: true,
+    shopId: null,
     user: { ...mockUser },
     store: { ...mockStore },
     products: mockProducts.map((p) => ({ ...p })),
@@ -44,27 +72,100 @@ function initialState(): State {
   };
 }
 
+/** Đổ SessionView (từ Core hoặc mock) vào state. Ở chế độ thật, không để dữ liệu mẫu (email, Facebook, địa chỉ…) lẫn vào tài khoản. */
+function sessionPatch(st: State, s: SessionView): Partial<State> {
+  const shop = s.shops[0];
+  const industries = shop?.industries ?? (shop?.industry ? [shop.industry] : null);
+  return {
+    loggedIn: true,
+    needsProfile: false,
+    onboarded: !s.needsOnboarding,
+    shopId: shop ? String(shop.id) : null,
+    user: {
+      ...st.user,
+      name: s.user.displayName || (USE_MOCK ? st.user.name : 'Bạn'),
+      phone: s.user.phone ? fromE164VN(s.user.phone) : USE_MOCK ? st.user.phone : '',
+      email: USE_MOCK ? st.user.email : (s.user.email ?? ''),
+      facebook: USE_MOCK ? st.user.facebook : '',
+    },
+    store: shop
+      ? {
+          ...st.store,
+          name: shop.name,
+          address: shop.address ?? (USE_MOCK ? st.store.address : ''),
+          industries: industries ?? st.store.industries,
+        }
+      : st.store,
+  };
+}
+
 let seq = 5000;
 const uid = (p: string) => `${p}${++seq}`;
 
 function useStoreValue() {
   const [s, setS] = useState<State>(initialState);
   const patch = useCallback((fn: (s: State) => Partial<State>) => setS((prev) => ({ ...prev, ...fn(prev) })), []);
+  // Bản đồng bộ của s.loggedIn để các callback bất đồng bộ (Firebase, 401) đọc được giá trị mới nhất
+  const loggedInRef = useRef(false);
 
   const actions = useMemo(
     () => ({
       // --- auth / hồ sơ ---
-      login: (phone: string, isNew: boolean) =>
-        patch((st) => ({ loggedIn: true, onboarded: !isNew, user: { ...st.user, phone: phone || st.user.phone } })),
-      logout: () => patch(() => ({ loggedIn: false })),
-      finishOnboarding: (storeName: string, industries: string[]) =>
-        patch((st) => ({ onboarded: true, store: { ...st.store, name: storeName || st.store.name, industries } })),
+      /**
+       * Gọi SAU khi Firebase đã xác thực xong (màn OTP): đổi ID token lấy phiên ở Core (POST /auth/session),
+       * rồi vào app. Trả SessionView để màn hình biết đi tiếp: needsOnboarding → tạo tiệm, ngược lại → Trang chủ.
+       */
+      signIn: async (displayName?: string): Promise<SessionView> => {
+        try {
+          const session = await sessionApi.create(displayName);
+          if (session.role !== 'OWNER') throw new AuthError('not-owner');
+          loggedInRef.current = true;
+          patch((st) => sessionPatch(st, session));
+          debugLog('session', 'signIn ✓', `role=${session.role}`, `needsOnboarding=${session.needsOnboarding}`);
+          return session;
+        } catch (e) {
+          debugLog('session', 'signIn ✗', describeError(e));
+          // Tài khoản mới chưa gửi tên: giữ phiên Firebase để màn "Bạn tên gì?" gửi lại kèm displayName.
+          // Lỗi khác: không để Firebase đã đăng nhập mà app chưa có phiên → đăng xuất hẳn.
+          if (!isDisplayNameRequired(e)) await authClient.signOut().catch(() => undefined);
+          throw e;
+        }
+      },
+      logout: async () => {
+        loggedInRef.current = false;
+        patch(() => ({ loggedIn: false, needsProfile: false, shopId: null }));
+        await authClient.signOut().catch(() => undefined);
+      },
+      /** 401 từ Core hoặc Firebase báo hết phiên: đăng xuất và đưa về màn đăng nhập (hợp đồng: 401 → đăng xuất). */
+      forceSignOut: async () => {
+        const wasLoggedIn = loggedInRef.current;
+        debugLog('session', 'forceSignOut', wasLoggedIn ? '(đang đăng nhập → về màn đăng nhập)' : '(chưa đăng nhập)');
+        loggedInRef.current = false;
+        patch(() => ({ loggedIn: false, needsProfile: false, shopId: null }));
+        await authClient.signOut().catch(() => undefined);
+        if (wasLoggedIn) {
+          try {
+            router.replace('/(auth)/welcome');
+          } catch {
+            /* navigator chưa sẵn sàng */
+          }
+        }
+      },
+      /** Tạo tiệm lần đầu (POST /shops). Lỗi được ném ra để màn hình hiển thị. */
+      finishOnboarding: async (storeName: string, industries: string[]) => {
+        const shop = await sessionApi.createShop({ name: storeName.trim(), industries });
+        patch((st) => ({
+          onboarded: true,
+          shopId: String(shop.id),
+          store: { ...st.store, name: shop.name || st.store.name, industries },
+        }));
+      },
       updateProfile: (user: Partial<State['user']>, store: Partial<State['store']>) =>
         patch((st) => ({ user: { ...st.user, ...user }, store: { ...st.store, ...store } })),
       dismissGuide: () => patch(() => ({ guideDismissed: true })),
       markNotifsRead: (ids: string[]) =>
         patch((st) => ({ readNotifs: Array.from(new Set([...st.readNotifs, ...ids])) })),
-      resetMock: () => setS({ ...initialState(), loggedIn: true }),
+      resetMock: () => setS((prev) => ({ ...initialState(), loggedIn: true, authReady: true, shopId: prev.shopId })),
 
       // --- giỏ hàng POS ---
       addToCart: (productId: string, delta = 1) =>
@@ -202,6 +303,55 @@ function useStoreValue() {
     }),
     [patch],
   );
+
+  useEffect(() => {
+    loggedInRef.current = s.loggedIn;
+  }, [s.loggedIn]);
+  useEffect(() => {
+    setActiveShop(s.shopId);
+  }, [s.shopId]);
+
+  // Khởi động: chờ SDK khôi phục phiên Firebase đã lưu; còn đăng nhập thì lấy lại phiên ở Core (GET /me).
+  useEffect(() => {
+    setUnauthorizedHandler(() => void actions.forceSignOut());
+    const ready = () => patch(() => ({ authReady: true }));
+    const fallback = setTimeout(ready, 8000); // SDK không phản hồi thì vẫn cho vào màn đăng nhập
+    let first = true;
+    const unsubscribe = authClient.onAuthStateChanged(async (signedIn) => {
+      if (first) {
+        first = false;
+        clearTimeout(fallback);
+        debugLog('session', 'khởi động: Firebase', signedIn ? 'còn đăng nhập → gọi /me' : 'chưa đăng nhập');
+        if (signedIn) {
+          try {
+            const session = await sessionApi.me();
+            if (session.role !== 'OWNER') throw new AuthError('not-owner');
+            loggedInRef.current = true;
+            patch((st) => sessionPatch(st, session));
+            debugLog('session', '/me ✓', `role=${session.role}`, `needsOnboarding=${session.needsOnboarding}`);
+          } catch (e) {
+            debugLog('session', '/me ✗', describeError(e));
+            if (e instanceof ApiError && e.status === 404 && e.code === 'auth_profile_not_found') {
+              // Firebase còn đăng nhập nhưng Core chưa có tài khoản → vào lại bước nhập tên
+              patch(() => ({ needsProfile: true }));
+            } else if (e instanceof AuthError || (e instanceof ApiError && e.status === 403)) {
+              // Sai vai trò hoặc tài khoản bị khoá → đăng xuất hẳn
+              await authClient.signOut().catch(() => undefined);
+            }
+            // 401 đã được handler xử lý; lỗi mạng thì giữ phiên Firebase, lần mở sau thử lại
+          }
+        }
+        ready();
+      } else if (!signedIn && loggedInRef.current) {
+        void actions.forceSignOut(); // phiên bị thu hồi / hết hiệu lực ở phía Firebase
+      }
+    });
+    return () => {
+      clearTimeout(fallback);
+      unsubscribe();
+      setUnauthorizedHandler(null);
+    };
+  }, [actions, patch]);
 
   return { ...s, ...actions };
 }

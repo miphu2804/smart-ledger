@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Button, Field, Header, Progress, Screen, T } from '../../src/components/ui';
 import { industryList } from '../../src/data/mock';
+import { errorMessage } from '../../src/lib/errors';
 import { useApp } from '../../src/store/AppStore';
 import { colors } from '../../src/theme';
 
@@ -11,20 +12,38 @@ export default function Setup() {
   const { finishOnboarding } = useApp();
   const [name, setName] = useState('');
   const [picked, setPicked] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
   const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
 
   return (
     <Screen
       footer={
-        <Button
-          title="Bắt đầu bán hàng"
-          icon="arrow-right"
-          disabled={!name.trim() || !picked.length}
-          onPress={() => {
-            finishOnboarding(name, picked);
-            router.replace('/(tabs)');
-          }}
-        />
+        <>
+          {err ? (
+            <T size={12} color={colors.red} style={{ marginBottom: 8, textAlign: 'center' }}>
+              {err}
+            </T>
+          ) : null}
+          <Button
+            title="Bắt đầu bán hàng"
+            icon="arrow-right"
+            disabled={!name.trim() || !picked.length}
+            loading={busy}
+            onPress={async () => {
+              setBusy(true);
+              setErr('');
+              try {
+                await finishOnboarding(name, picked); // tạo tiệm (POST /shops)
+                router.replace('/(tabs)');
+              } catch (e) {
+                setErr(errorMessage(e));
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+        </>
       }
     >
       <Header title="" back={false} />
