@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { generateExpenses, generateInvoices, mockDebts, mockProducts, mockStaff, mockStore, mockUser } from '../data/mock';
-import type { Debt, Expense, Invoice, InvoiceSource, LineItem, PayMethod, Product, Staff } from '../data/types';
+import type { Debt, Expense, Invoice, InvoiceEffects, InvoiceSource, LineItem, PayMethod, Product, Staff } from '../data/types';
 
 /** Đơn nháp đang chờ thanh toán (từ màn Giọng nói / POS / Nhập tay). */
 export interface Draft {
@@ -101,9 +101,13 @@ function useStoreValue() {
             status: input.method === 'debt' ? 'debt' : 'paid',
             transcript: input.transcript,
           };
+          const effects: InvoiceEffects = { stock: [] };
           const products = st.products.map((p) => {
             const li = input.items.find((i) => i.productId === p.id);
-            return li && p.tracked ? { ...p, stock: Math.max(0, p.stock - li.qty) } : p;
+            if (!li || !p.tracked) return p;
+            const qty = Math.min(p.stock, li.qty);
+            if (qty > 0) effects.stock.push({ productId: p.id, qty });
+            return { ...p, stock: p.stock - qty };
           });
           let debts = st.debts;
           if (input.method === 'debt') {
@@ -112,16 +116,18 @@ function useStoreValue() {
             const note = `Mua ${input.items.map((i) => `${i.qty} ${i.name}`).join(', ')}`;
             const ex = st.debts.find((d) => d.name.toLowerCase() === name.toLowerCase());
             const entry = { at: inv.createdAt, amount: total, note };
+            const debtId = ex ? ex.id : uid('d');
+            effects.debt = { debtId, amount: total };
             debts = ex
               ? st.debts.map((d) =>
                   d === ex ? { ...d, total: d.total + total, lastDate: inv.createdAt, history: [entry, ...d.history] } : d,
                 )
               : [
-                  { id: uid('d'), name, phone: input.phone ?? '', total, paid: 0, lastDate: inv.createdAt, history: [entry] },
+                  { id: debtId, name, phone: input.phone ?? '', total, paid: 0, lastDate: inv.createdAt, history: [entry] },
                   ...st.debts,
                 ];
           }
-          return { invoices: [inv, ...st.invoices], products, debts, cart: {}, draft: null };
+          return { invoices: [{ ...inv, effects }, ...st.invoices], products, debts, cart: {}, draft: null };
         });
         return id;
       },
@@ -130,7 +136,32 @@ function useStoreValue() {
           invoices: st.invoices.map((i) => (i.id === id ? { ...i, items, customer: customer ?? i.customer } : i)),
         })),
       cancelInvoice: (id: string) =>
-        patch((st) => ({ invoices: st.invoices.map((i) => (i.id === id ? { ...i, status: 'cancelled' } : i)) })),
+        patch((st) => {
+          const inv = st.invoices.find((i) => i.id === id);
+          // Đã huỷ rồi thì không hoàn tác kho / nợ lần nữa
+          if (!inv || inv.status === 'cancelled') return {};
+          const fx = inv.effects;
+          const products = fx?.stock.length
+            ? st.products.map((p) => {
+                const s = fx.stock.find((x) => x.productId === p.id);
+                return s ? { ...p, stock: p.stock + s.qty } : p;
+              })
+            : st.products;
+          const debtFx = fx?.debt;
+          const debts = debtFx
+            ? st.debts.map((d) => {
+                if (d.id !== debtFx.debtId) return d;
+                const total = Math.max(0, d.total - debtFx.amount);
+                const entry = { at: new Date().toISOString(), amount: -debtFx.amount, note: `Huỷ đơn ${inv.code}` };
+                return { ...d, total, paid: Math.min(d.paid, total), history: [entry, ...d.history] };
+              })
+            : st.debts;
+          return {
+            invoices: st.invoices.map((i) => (i.id === id ? { ...i, status: 'cancelled' as const } : i)),
+            products,
+            debts,
+          };
+        }),
 
       // --- hàng hoá ---
       addProduct: (p: Omit<Product, 'id'>) => {

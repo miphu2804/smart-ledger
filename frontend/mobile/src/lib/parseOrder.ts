@@ -161,7 +161,6 @@ export function parseExpense(text: string): ParsedExpense {
   const money = parseMoney(n);
   const title = text
     .replace(/\s*(hết|het)?\s*\d+(?:[.,]\d+)?\s*(nghìn|ngàn|nghin|ngan|k|tr|triệu|trieu|đồng|d)\b/i, '')
-    .replace(/^(trả tiền|trả|mua|nhập)\s+/i, (m) => m)
     .trim();
   return { title: title.charAt(0).toUpperCase() + title.slice(1), amount: money?.value ?? 0 };
 }
