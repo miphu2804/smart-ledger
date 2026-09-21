@@ -4,29 +4,48 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Logo, useToast } from '../../src/components/brand';
 import { Button, Field, Row, Screen, T } from '../../src/components/ui';
+import { USE_MOCK } from '../../src/config';
+import { startPhoneLogin } from '../../src/lib/auth';
+import { errorMessage } from '../../src/lib/errors';
 import { useApp } from '../../src/store/AppStore';
 import { colors, shadow } from '../../src/theme';
 
 export default function Welcome() {
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
-  const { login } = useApp();
+  const [loading, setLoading] = useState(false);
+  const { signIn } = useApp();
   const toast = useToast();
 
   const digits = phone.replace(/\D/g, '');
   const valid = /^0?\d{9}$/.test(digits);
 
-  const submit = () => {
+  const submit = async () => {
     if (!valid) {
       setError('Số điện thoại gồm 10 số, ví dụ 0901 234 567');
       return;
     }
-    router.push({ pathname: '/(auth)/otp', params: { phone: digits.startsWith('0') ? digits : `0${digits}` } });
+    if (loading) return;
+    const local = digits.startsWith('0') ? digits : `0${digits}`;
+    setLoading(true);
+    try {
+      await startPhoneLogin(local); // gửi SMS OTP (Firebase; bản mock thì không gửi gì)
+      router.push({ pathname: '/(auth)/otp', params: { phone: local } });
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const social = (name: string) => {
+  // Google / Facebook / Apple: chưa tích hợp. Bản mock giữ đăng nhập giả để demo; bản thật chỉ dùng số điện thoại.
+  const social = async (name: string) => {
+    if (!USE_MOCK) {
+      toast(`Đăng nhập bằng ${name} sắp có — hiện vui lòng dùng số điện thoại`);
+      return;
+    }
     toast(`Đã đăng nhập bằng ${name} (giả lập)`);
-    login('', false);
+    await signIn();
     router.replace('/(tabs)');
   };
 
@@ -69,7 +88,13 @@ export default function Welcome() {
         onSubmitEditing={submit}
         error={error}
       />
-      <Button title="Tiếp tục" onPress={submit} disabled={!digits.length} />
+      <Button title="Tiếp tục" onPress={submit} disabled={!digits.length} loading={loading} />
+
+      <Pressable onPress={() => router.push('/(auth)/email')} style={{ alignSelf: 'center', marginTop: 14 }} hitSlop={8}>
+        <T w="semibold" size={13} color={colors.primary}>
+          Đăng nhập bằng email và mật khẩu
+        </T>
+      </Pressable>
 
       <Row style={{ marginVertical: 22 }}>
         <View style={styles.line} />
@@ -85,14 +110,16 @@ export default function Welcome() {
         <SocialBtn icon="apple" color={colors.white} bg="#111" onPress={() => social('Apple')} />
       </Row>
 
-      <View style={styles.demo}>
-        <T w="bold" size={12} color={colors.gold}>
-          Chế độ demo
-        </T>
-        <T size={12} color={colors.muted} style={{ marginTop: 2 }}>
-          Nhập số bất kỳ (10 số), mã OTP là 123456. Số bắt đầu bằng 09 → vào thẳng tiệm mẫu; số khác → đi qua bước tạo tiệm.
-        </T>
-      </View>
+      {USE_MOCK ? (
+        <View style={styles.demo}>
+          <T w="bold" size={12} color={colors.gold}>
+            Chế độ demo
+          </T>
+          <T size={12} color={colors.muted} style={{ marginTop: 2 }}>
+            Nhập số bất kỳ (10 số), mã OTP là 123456. Số bắt đầu bằng 09 → vào thẳng tiệm mẫu; số khác → đi qua bước tạo tiệm.
+          </T>
+        </View>
+      ) : null}
 
       <Row style={{ justifyContent: 'center', marginTop: 20 }} gap={6}>
         <FontAwesome name="lock" size={12} color={colors.faint} />

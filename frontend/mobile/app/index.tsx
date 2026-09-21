@@ -6,16 +6,27 @@ import { T } from '../src/components/ui';
 import { useApp } from '../src/store/AppStore';
 import { colors } from '../src/theme';
 
-/** Splash — tự chuyển sang đăng nhập (hoặc Trang chủ nếu đã đăng nhập) */
+/** Splash — chờ Firebase khôi phục phiên đã lưu, rồi chuyển sang đăng nhập (hoặc Trang chủ nếu còn đăng nhập) */
 export default function Splash() {
-  const { loggedIn } = useApp();
+  const { loggedIn, authReady, needsProfile, onboarded } = useApp();
   const fade = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.spring(fade, { toValue: 1, useNativeDriver: true, friction: 6 }).start();
-    const t = setTimeout(() => router.replace(loggedIn ? '/(tabs)' : '/(auth)/welcome'), 1400);
+  }, [fade]);
+
+  useEffect(() => {
+    if (!authReady) return;
+    const target = loggedIn
+      ? onboarded
+        ? '/(tabs)'
+        : '/(auth)/setup' // đã có tài khoản nhưng chưa tạo tiệm
+      : needsProfile
+        ? '/(auth)/profile' // Firebase còn đăng nhập, Core chưa có tài khoản
+        : '/(auth)/welcome';
+    const t = setTimeout(() => router.replace(target), 1400);
     return () => clearTimeout(t);
-  }, [fade, loggedIn]);
+  }, [authReady, loggedIn, needsProfile, onboarded]);
 
   return (
     <View style={styles.wrap}>
