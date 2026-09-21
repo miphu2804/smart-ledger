@@ -35,7 +35,15 @@ let memorySession: AuthSession | null = null
 
 function persist(session: AuthSession, remember: boolean) {
   memorySession = session
-  // "Ghi nhớ đăng nhập" -> localStorage; không ghi nhớ -> sessionStorage (mất khi đóng tab).
+  if (!USE_MOCK) {
+    // Chế độ thật: accessToken chỉ nằm trong bộ nhớ, KHÔNG ghi localStorage/sessionStorage để script chèn vào
+    // trang (XSS) không đọc được token. Tải lại trang là phải xác thực lại.
+    // TODO(backend): khi có cơ chế phiên phía server (cookie HttpOnly hoặc /me) thì khôi phục ở đây.
+    removeKey(SESSION_KEY)
+    removeKey(SESSION_KEY, 'session')
+    return
+  }
+  // Mock (token giả): "Ghi nhớ đăng nhập" -> localStorage; không ghi nhớ -> sessionStorage (mất khi đóng tab).
   const ok = writeJSON(SESSION_KEY, session, remember ? 'local' : 'session')
   if (ok) removeKey(SESSION_KEY, remember ? 'session' : 'local')
 }
@@ -65,7 +73,10 @@ export async function login(email: string, password: string, remember = true): P
 }
 
 export function getSession(): AuthSession | null {
-  const s = readJSON<AuthSession>(SESSION_KEY) ?? readJSON<AuthSession>(SESSION_KEY, 'session') ?? memorySession
+  // Chế độ thật không đọc storage: token chỉ tồn tại trong bộ nhớ (xem persist)
+  const s = USE_MOCK
+    ? (readJSON<AuthSession>(SESSION_KEY) ?? readJSON<AuthSession>(SESSION_KEY, 'session') ?? memorySession)
+    : memorySession
   // Bỏ qua phiên định dạng cũ (không có role)
   return s?.accessToken && s.user?.role ? s : null
 }
@@ -78,12 +89,17 @@ export function hasRole(role: Role): boolean {
   return getSession()?.user.role === role
 }
 
+/** Xoá phiên phía trình duyệt, không gọi backend (dùng khi token bị từ chối — 401 — hoặc khi đăng xuất). */
+export function clearSession(): void {
+  memorySession = null
+  removeKey(SESSION_KEY)
+  removeKey(SESSION_KEY, 'session')
+}
+
 export async function logout(): Promise<void> {
   if (!USE_MOCK) {
     // TODO(backend): POST /auth/logout (thu hồi token)
     await request<void>('/auth/logout', { method: 'POST' }).catch(() => undefined)
   }
-  memorySession = null
-  removeKey(SESSION_KEY)
-  removeKey(SESSION_KEY, 'session')
+  clearSession()
 }
