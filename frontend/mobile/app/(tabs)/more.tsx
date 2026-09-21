@@ -39,7 +39,7 @@ export default function More() {
               {app.store.name}
             </T>
             <T size={12} color={colors.faint}>
-              {app.user.name} · {app.user.phone}
+              {app.user.name} · {app.user.phone || app.user.email}
             </T>
           </View>
           <IconBtn
@@ -153,6 +153,14 @@ export default function More() {
           subtitle="Dùng khi test xong muốn làm lại"
           onPress={() => setConfirmReset(true)}
         />
+        {__DEV__ ? (
+          <ListRow
+            icon="activity"
+            title="Chẩn đoán kết nối (dev)"
+            subtitle="Kiểm tra Core, token Firebase, nhật ký"
+            onPress={() => router.push('/debug')}
+          />
+        ) : null}
         <ListRow
           icon="log-out"
           iconColor={colors.red}
@@ -177,7 +185,7 @@ export default function More() {
         onCancel={() => setConfirmLogout(false)}
         onConfirm={() => {
           setConfirmLogout(false);
-          app.logout();
+          void app.logout(); // đăng xuất Firebase + xoá phiên
           router.replace('/(auth)/welcome');
         }}
       />
