@@ -1,3 +1,13 @@
+### [2026-09-21 21:35 UTC+07:00] — [Chore] Validate Java Core in CI
+
+**Done:** Added Core CI jobs for Java 21 Maven verification and Docker image build. Docker build runs only after Core tests pass and does not require Firebase credentials.
+
+**Changed files:** `.github/workflows/ci.yml`, `PROGRESS.md`.
+
+**Flow explained:** Pull requests and pushes to integration branches run the existing AI job alongside Core tests; a passing Core test job unlocks a Dockerfile build check.
+
+**Check:** `mvn --batch-mode --no-transfer-progress verify` passed 11 tests; `docker build -t smartledger-core:ci -f Dockerfile .` passed from `backend/core`.
+
 ### [2026-09-21 21:20 UTC+07:00] — [Chore] Dockerize Java Core service
 
 **Done:** Added a multi-stage Java 21 Core image and wired Core into Compose. Core receives its database settings through Compose, waits for PostgreSQL health, and reads Firebase credentials only from a read-only local bind mount; no credentials are committed.
