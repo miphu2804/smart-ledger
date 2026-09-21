@@ -10,7 +10,7 @@ import type { LineItem, PayMethod } from '../src/data/types';
 import { vnd } from '../src/lib/format';
 import { itemsTotal, methodLabel } from '../src/lib/stats';
 import { useApp } from '../src/store/AppStore';
-import { colors } from '../src/theme';
+import { colors, font } from '../src/theme';
 
 const METHODS: { key: PayMethod; icon: IconName }[] = [
   { key: 'cash', icon: 'dollar-sign' },
@@ -193,6 +193,21 @@ export default function Checkout() {
               onChange={(k) => setGiven(Number(k))}
               options={quick.map((v) => ({ key: String(v), label: v === total ? 'Đủ tiền' : vnd(v) }))}
             />
+            <Field
+              label="Hoặc nhập số tiền khách đưa"
+              placeholder="VD: 150.000"
+              keyboardType="number-pad"
+              maxLength={13}
+              value={given === null ? '' : vnd(given, false)}
+              onChangeText={(t) => {
+                const digits = t.replace(/\D/g, '');
+                setGiven(digits ? Number(digits) : null);
+                setErr('');
+              }}
+              error={given !== null && change < 0 ? `Còn thiếu ${vnd(-change)}` : undefined}
+              inputStyle={{ fontFamily: font.bold }}
+              style={{ marginTop: 14, marginBottom: 0 }}
+            />
             {given !== null ? (
               <Row style={{ marginTop: 14 }}>
                 <T size={13} color={colors.muted} style={{ flex: 1 }}>
@@ -293,7 +308,11 @@ function Success({ id, total, method, change }: { id: string; total: number; met
               variant="outline"
               small
               style={{ flex: 1, height: 44 }}
-              onPress={() => router.replace(`/invoice/${id}`)}
+              onPress={() => {
+                // Bỏ các màn bán hàng (giọng nói / POS / thanh toán) khỏi stack để "quay lại" từ hoá đơn về trang chủ
+                router.dismissTo('/(tabs)');
+                router.push(`/invoice/${id}`);
+              }}
             />
             <Button
               title="Về trang chủ"
