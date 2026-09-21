@@ -65,6 +65,9 @@ src/
   data/mock.ts          dữ liệu mẫu + bộ sinh hoá đơn/chi phí theo ngày hiện tại
   store/AppStore.tsx    state toàn app (context) + mọi action
   lib/                  format tiền/ngày, thống kê, bộ nhận diện đơn giả lập
+  lib/auth/             đăng nhập: giao diện AuthClient, mock, Firebase (native + web)
+  lib/api.ts            client gọi Core (Bearer Firebase ID token, X-Shop-Id, lỗi chuẩn)
+  lib/sessionApi.ts     /auth/session, /me, /shops
   components/           UI kit, biểu đồ, logo, toast, QR minh hoạ
 ```
 
@@ -73,5 +76,76 @@ src/
 1. Copy `.env.example` thành `.env`, đặt `EXPO_PUBLIC_USE_MOCK=false` và `EXPO_PUBLIC_API_ENDPOINT`.
 2. Thay các action trong `src/store/AppStore.tsx` bằng lời gọi API (giữ nguyên kiểu trong `src/data/types.ts`).
 3. Thay `parseOrder()` bằng API nhận diện giọng nói / ngôn ngữ tự nhiên thật; giao diện đã có sẵn bước xác nhận trước khi lưu.
+
+## Gắn Firebase (đăng nhập + xác thực số điện thoại)
+
+Code đã nối sẵn theo `docs/contracts/api-contracts.md`: Firebase xác thực SĐT → app gửi Firebase ID token (`Authorization: Bearer …`) tới `POST /api/v1/auth/session` → nhận `SessionView` (role, tiệm, `needsOnboarding`). Với `EXPO_PUBLIC_USE_MOCK=true` app chạy như cũ (OTP `123456`); với `false` app dùng Firebase + Core thật. Chỉ cần cài gói và điền cấu hình:
+
+1. **Firebase Console** → Authentication → Sign-in method → bật **Phone**.
+   - Settings → *SMS region policy*: cho phép Việt Nam (+84).
+   - *Phone numbers for testing*: thêm số test + mã cố định để dev không tốn SMS.
+   - Settings → *Authorized domains*: thêm domain của bản web (localhost có sẵn).
+2. **Thêm app** trong Project settings → Your apps:
+   - **Web** → lấy 4 giá trị điền vào `.env` (`EXPO_PUBLIC_FIREBASE_API_KEY`, `_AUTH_DOMAIN`, `_PROJECT_ID`, `_APP_ID`).
+   - **Android** (package `vn.teamhexa.songheloi`) → tải `google-services.json`; thêm **SHA-1 và SHA-256** của keystore dùng để build (`npx eas-cli credentials -p android`).
+   - **iOS** (bundle `vn.teamhexa.songheloi`) → tải `GoogleService-Info.plist`; upload **APNs key** ở Cloud Messaging để xác minh SMS không cần reCAPTCHA.
+   - Đặt hai file trên vào thư mục `frontend/mobile/`.
+3. **Cài gói** (trong `frontend/mobile`):
+   ```bash
+   npx expo install @react-native-firebase/app @react-native-firebase/auth expo-build-properties
+   npm install firebase          # chỉ cho bản web
+   ```
+4. **`app.json`**: thêm `"googleServicesFile": "./google-services.json"` vào `android`, `"googleServicesFile": "./GoogleService-Info.plist"` vào `ios`, và vào `plugins`:
+   ```json
+   "@react-native-firebase/app",
+   "@react-native-firebase/auth",
+   ["expo-build-properties", { "ios": { "useFrameworks": "static" } }]
+   ```
+5. **`.env`** (copy từ `.env.example`): `EXPO_PUBLIC_USE_MOCK=false`, `EXPO_PUBLIC_API_ENDPOINT=<URL Core>`, cùng 4 biến Firebase web. Core chưa có API thì thêm `EXPO_PUBLIC_MOCK_CORE=true`: đăng nhập Firebase thật nhưng `/auth/session`, `/me`, `/shops` giả lập (số bắt đầu `09` vào thẳng tiệm mẫu, số khác đi qua bước tạo tiệm). Đổi `.env` xong phải chạy lại `npx expo start --clear` (Metro cache giá trị cũ).
+6. **Chạy**:
+   - Web: `npm run web` — dùng Firebase JS SDK + reCAPTCHA vô hình.
+   - Android/iOS: **không chạy trên Expo Go** (React Native Firebase cần code native). Tạo development build: `npx eas-cli build:configure`, rồi `npx eas-cli build --profile development --platform android` (thêm `"developmentClient": true` cho profile `development` trong `eas.json`), cài bản build và chạy `npx expo start --dev-client`. iOS cần tài khoản Apple Developer.
+
+Nơi code: `src/lib/auth/` (giao diện `AuthClient`; `mock.ts`, `firebase.ts` cho native, `firebase.web.ts` cho web), `src/lib/api.ts` (Bearer + `X-Shop-Id` + lỗi `{code,message,traceId}`, 401 → đăng xuất), `src/lib/sessionApi.ts` (`/auth/session`, `/me`, `/shops`), luồng đăng nhập trong `src/store/AppStore.tsx` (`signIn`, `logout`, khởi động chờ Firebase khôi phục phiên).
+
+### Nối Core thật (nhánh `feat/auth-session`)
+
+Luồng: Firebase xác thực SĐT → FE gửi **Firebase ID token** (`Authorization: Bearer …`) xuống Core → Core xác thực bằng Firebase Admin SDK, tạo/tìm tài khoản, trả phiên.
+
+1. Đăng nhập lần đầu: `POST /api/v1/auth/session` với `{ displayName }`. Core **bắt buộc** `displayName` cho tài khoản mới (thiếu → 400) nên app có màn “Bạn tên gì?” (`app/(auth)/profile.tsx`). Các lần sau không cần gửi.
+2. Mở lại app: Firebase tự khôi phục phiên → `GET /api/v1/me`. `404 auth_profile_not_found` (Firebase còn đăng nhập nhưng Core chưa có tài khoản) → app vào lại màn nhập tên. `401` → đăng xuất. `403 account_disabled` → đăng xuất và báo tài khoản bị khoá.
+3. `needsOnboarding = true` (chưa có tiệm) → màn tạo tiệm. Core chưa có `POST /shops` nên tạm dùng `EXPO_PUBLIC_MOCK_SHOPS=true`.
+
+`.env` để chạy với Core thật (Core chạy bằng `docker compose up` thì cổng mặc định là `8000`):
+
+```
+EXPO_PUBLIC_USE_MOCK=false
+EXPO_PUBLIC_MOCK_CORE=false
+EXPO_PUBLIC_MOCK_SHOPS=true
+EXPO_PUBLIC_API_ENDPOINT=http://<IP LAN của máy chạy Core>:8000   # máy ảo Android: http://10.0.2.2:8000
+```
+
+Core cần `FIREBASE_PROJECT_ID` trùng project của `google-services.json` và file service account (xem `backend/core/.env.example`). Điện thoại và máy chạy Core phải cùng mạng.
+
+### Đăng nhập bằng email + mật khẩu
+
+Màn đầu có liên kết “Đăng nhập bằng email và mật khẩu” (`app/(auth)/email.tsx`): chọn **Tạo tài khoản** để tự đăng ký (Firebase `createUserWithEmailAndPassword`, không cần ai thêm user trong Console) hoặc **Đăng nhập**. Cần bật Email/Password ở Firebase Console → Authentication → Sign-in method. Sau khi Firebase xác thực, luồng giống số điện thoại: gửi Firebase ID token xuống Core (`POST /auth/session`). Core nhận token của mọi provider, tài khoản email không có số điện thoại. Tiện để thử API khi không có SMS hay điện thoại thật.
+
+## Debug
+
+- **Log:** chỉ chạy ở bản dev (`__DEV__`), mọi thứ có tiền tố `[api]`, `[auth]`, `[session]`. Không ghi token, mật khẩu, SĐT/email đầy đủ. Xem ở terminal đang chạy `npx expo start --dev-client` (bấm `j` mở React Native DevTools), hoặc:
+  ```bash
+  adb logcat -s ReactNativeJS
+  ```
+- **Màn “Chẩn đoán kết nối”** (Khác → Chẩn đoán kết nối, chỉ có ở bản dev): hiện chế độ (mock/thật), `API_ENDPOINT`, trạng thái Firebase, nút **Kiểm tra kết nối Core** (gọi `/v3/api-docs` không cần token), **Xem token** (aud/iss/hạn dùng; Core cần `FIREBASE_PROJECT_ID` trùng `aud`), **Gọi GET /me**, và nhật ký gần đây.
+- **Chạy bản web để thử nhanh (không cần build APK):** `npm run web`, đăng nhập bằng email. Trình duyệt bị CORS chặn khi gọi Core (Core chưa bật CORS) nên chạy thêm proxy dev ở một terminal khác rồi trỏ app vào proxy:
+  ```bash
+  node scripts/dev-cors-proxy.js
+  ```
+  và đặt `EXPO_PUBLIC_API_ENDPOINT=http://127.0.0.1:8010` trong `.env` (chạy lại `npm run web -- --clear` sau khi đổi). Chỉ Firebase mà chưa cần Core thì đặt `EXPO_PUBLIC_MOCK_CORE=true`, không cần proxy. Web không thử được: adapter native, đăng nhập SĐT trên máy thật, mạng Android.
+- **Timeout:** mọi lời gọi Core tự dừng sau 15 giây (`ApiError` code `timeout`) thay vì quay vô hạn khi sai IP hoặc tường lửa chặn.
+- **Lỗi thường gặp:** `network` = không tới được Core (IP, tường lửa, Android chặn HTTP); `timeout` = tường lửa thả gói; `401 unauthorized` = token không khớp project của Core; `400 validation_failed` ở `/auth/session` = tài khoản mới cần `displayName` (bình thường); `provider-disabled` = chưa bật phương thức đăng nhập trong Firebase Console.
+
+Chưa làm: đăng nhập Google/Facebook/Apple (bản thật hiện báo “sắp có”), Zalo (Firebase không có sẵn provider — cần Core cấp custom token), và các action dữ liệu trong `AppStore` (sản phẩm, hoá đơn…) vẫn là dữ liệu mẫu cho tới khi Core có API. Core chưa có `POST /shops` (đặt `EXPO_PUBLIC_MOCK_SHOPS=true` để test tiếp). Docs ghi payload snake_case và id uuid, nhưng Core đang trả camelCase và id số; FE bám theo code của Core (sửa ở `src/data/types.ts` nếu backend đổi).
 
 Ghi chú: mã QR chuyển khoản, tỉ lệ thuế 1,5% trên hoá đơn và gói Pro đều chỉ để minh hoạ.
