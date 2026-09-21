@@ -24,6 +24,14 @@ export interface LineItem {
 export type PayMethod = 'cash' | 'transfer' | 'debt';
 export type InvoiceSource = 'voice' | 'pos' | 'manual';
 
+/** Tác động của đơn lên kho / sổ nợ lúc tạo — lưu lại để huỷ đơn hoàn tác đúng số đã áp dụng. */
+export interface InvoiceEffects {
+  /** Số lượng thực tế đã trừ khỏi kho (chỉ mặt hàng theo dõi tồn kho) */
+  stock: { productId: string; qty: number }[];
+  /** Khoản nợ đã cộng vào sổ nợ của khách (đơn ghi nợ) */
+  debt?: { debtId: string; amount: number };
+}
+
 export interface Invoice {
   id: string;
   code: string;
@@ -35,6 +43,8 @@ export interface Invoice {
   staffId: string;
   status: 'paid' | 'debt' | 'cancelled';
   transcript?: string;
+  /** Chỉ có ở đơn tạo trong phiên này; dữ liệu mẫu ban đầu không có */
+  effects?: InvoiceEffects;
 }
 
 export type ExpenseCategory = 'nguyenlieu' | 'dien' | 'matbang' | 'luong' | 'khac';

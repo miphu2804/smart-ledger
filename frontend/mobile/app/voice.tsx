@@ -33,6 +33,7 @@ export default function Voice() {
   const [edit, setEdit] = useState(false);
   const [pending, setPending] = useState<LineItem[]>([]);
   const [newPrice, setNewPrice] = useState('');
+  const [priceErr, setPriceErr] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [transcripts, setTranscripts] = useState<string[]>([]);
 
@@ -97,11 +98,16 @@ export default function Voice() {
     setText('');
   };
 
-  const resolvePending = (accept: boolean) => {
+  const resolvePending = (action: 'catalog' | 'once' | 'skip') => {
     const [first, ...rest] = pending;
     if (!first) return;
     const price = parseInt(newPrice.replace(/\D/g, ''), 10) || 0;
-    if (accept && price) {
+    // Thiếu giá bán thì giữ nguyên hộp thoại, không để mất món; chỉ "Bỏ qua" mới được bỏ món.
+    if (action !== 'skip' && !price) {
+      setPriceErr(`Nhập giá bán cho “${first.name}” để thêm vào đơn`);
+      return;
+    }
+    if (action === 'catalog') {
       const id = app.addProduct({
         name: first.name,
         price,
@@ -113,12 +119,13 @@ export default function Voice() {
       });
       mergeItems([{ ...first, productId: id, price }]);
       push('ai', `Đã thêm “${first.name}” (${vnd(price)}) vào danh mục và vào đơn.`);
-    } else if (!accept && price) {
+    } else if (action === 'once') {
       mergeItems([{ ...first, price }]);
       push('ai', `Đã ghi “${first.name}” vào đơn này (không lưu vào danh mục).`);
     } else {
       push('ai', `Đã bỏ qua “${first.name}”.`);
     }
+    setPriceErr('');
     setPending(rest);
     setNewPrice(rest[0]?.price ? String(rest[0].price) : '');
   };
@@ -321,8 +328,8 @@ export default function Voice() {
         message="Sản phẩm này chưa có trong danh mục. Thêm vào để lần sau chọn nhanh hơn."
         confirm="Có, thêm"
         cancel="Chỉ đơn này"
-        onCancel={() => resolvePending(false)}
-        onConfirm={() => resolvePending(true)}
+        onCancel={() => resolvePending('once')}
+        onConfirm={() => resolvePending('catalog')}
       >
         <View style={{ marginTop: 12 }}>
           <Field
@@ -330,15 +337,14 @@ export default function Voice() {
             keyboardType="number-pad"
             placeholder="VD: 12000"
             value={newPrice}
-            onChangeText={setNewPrice}
+            error={priceErr || undefined}
+            onChangeText={(t) => {
+              setNewPrice(t);
+              setPriceErr('');
+            }}
           />
         </View>
-        <Pressable
-          onPress={() => {
-            setNewPrice('');
-            resolvePending(false);
-          }}
-        >
+        <Pressable onPress={() => resolvePending('skip')}>
           <T size={12} color={colors.faint} style={{ textAlign: 'center' }}>
             Bỏ qua món này
           </T>
