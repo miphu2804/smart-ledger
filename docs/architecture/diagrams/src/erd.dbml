@@ -24,7 +24,7 @@ Enum UserStatus {
   DISABLED
 }
 
-Enum StoreStatus {
+Enum ShopStatus {
   ACTIVE
   INACTIVE
 }
@@ -142,24 +142,23 @@ Table users {
 Table auth_identities {
   id bigint [pk, increment]
 
-  user_id bigint [not null]
+  user_id bigint [not null, unique]
 
-  provider varchar(30) [not null]
+  provider varchar(30) [not null, default: 'FIREBASE']
   provider_subject varchar(255) [not null]
 
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
-    user_id
     (provider, provider_subject) [unique]
   }
 
-  Note: 'One user may have multiple authentication identities. provider_subject is the provider-specific identifier.'
+  Note: 'One application user maps to one Firebase account. provider_subject stores the Firebase UID. Google, Facebook and Phone are linked providers under the same Firebase account.'
 }
 
 
-Table stores {
+Table shops {
   id bigint [pk, increment]
   owner_id bigint [not null]
 
@@ -168,7 +167,7 @@ Table stores {
   phone varchar(30)
   address varchar(500)
 
-  status StoreStatus [not null, default: 'ACTIVE']
+  status ShopStatus [not null, default: 'ACTIVE']
 
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
@@ -178,7 +177,7 @@ Table stores {
     status
   }
 
-  Note: 'One OWNER can own multiple stores. One store has one OWNER in Phase 1.'
+  Note: 'One OWNER can own multiple shops. One shop has one OWNER in Phase 1.'
 }
 
 
@@ -188,7 +187,7 @@ Table stores {
 
 Table categories {
   id bigint [pk, increment]
-  store_id bigint [not null]
+  shop_id bigint [not null]
 
   name varchar(150) [not null]
   status CatalogStatus [not null, default: 'ACTIVE']
@@ -200,14 +199,14 @@ Table categories {
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (store_id, status)
+    (shop_id, status)
   }
 }
 
 
 Table products {
   id bigint [pk, increment]
-  store_id bigint [not null]
+  shop_id bigint [not null]
   category_id bigint
 
   name varchar(255) [not null]
@@ -229,9 +228,9 @@ Table products {
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (store_id, status)
+    (shop_id, status)
     category_id
-    (store_id, barcode) [unique]
+    (shop_id, barcode) [unique]
   }
 }
 
@@ -242,7 +241,7 @@ Table products {
 
 Table customers {
   id bigint [pk, increment]
-  store_id bigint [not null]
+  shop_id bigint [not null]
 
   name varchar(150) [not null]
   normalized_phone varchar(30)
@@ -255,8 +254,8 @@ Table customers {
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (store_id, normalized_phone)
-    (store_id, status)
+    (shop_id, normalized_phone)
+    (shop_id, status)
   }
 }
 
@@ -267,7 +266,7 @@ Table customers {
 
 Table sale_drafts {
   id bigint [pk, increment]
-  store_id bigint [not null]
+  shop_id bigint [not null]
   created_by_user_id bigint [not null]
   customer_id bigint
 
@@ -296,7 +295,7 @@ Table sale_drafts {
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (store_id, created_by_user_id, status, expires_at)
+    (shop_id, created_by_user_id, status, expires_at)
     source_ai_request_id
   }
 
@@ -336,7 +335,7 @@ Table sale_draft_items {
 
 Table sales {
   id bigint [pk, increment]
-  store_id bigint [not null]
+  shop_id bigint [not null]
   created_by_user_id bigint [not null]
   customer_id bigint
 
@@ -361,7 +360,7 @@ Table sales {
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (store_id, sold_at)
+    (shop_id, sold_at)
     (customer_id, sold_at)
     payment_status
     sale_status
@@ -442,7 +441,7 @@ Table payments {
 
 Table expenses {
   id bigint [pk, increment]
-  store_id bigint [not null]
+  shop_id bigint [not null]
   created_by_user_id bigint [not null]
 
   category varchar(150)
@@ -463,8 +462,8 @@ Table expenses {
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (store_id, expense_at)
-    (store_id, status)
+    (shop_id, expense_at)
+    (shop_id, status)
     source_ai_request_id
   }
 }
@@ -476,7 +475,7 @@ Table expenses {
 
 Table ai_requests {
   id bigint [pk, increment]
-  store_id bigint [not null]
+  shop_id bigint [not null]
   user_id bigint [not null]
 
   input_type AiInputType [not null]
@@ -496,8 +495,8 @@ Table ai_requests {
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (store_id, user_id, created_at)
-    (store_id, status)
+    (shop_id, user_id, created_at)
+    (shop_id, status)
   }
 }
 
@@ -514,7 +513,7 @@ Table chat_conversations {
   id bigint [pk, increment]
 
   user_id bigint [not null]
-  store_id bigint [not null]
+  shop_id bigint [not null]
 
   title varchar(255)
 
@@ -525,8 +524,8 @@ Table chat_conversations {
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (user_id, store_id, last_message_at)
-    store_id
+    (user_id, shop_id, last_message_at)
+    shop_id
   }
 
   Note: 'A conversation is explicitly separated by creating a new chat, not by time.'
@@ -567,7 +566,7 @@ Table chat_messages {
 Table notification_events {
   id bigint [pk, increment]
 
-  store_id bigint
+  shop_id bigint
 
   type NotificationType [not null]
 
@@ -588,12 +587,12 @@ Table notification_events {
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (store_id, created_at)
+    (shop_id, created_at)
     (type, created_at)
     (entity_type, entity_id)
   }
 
-  Note: 'Stores the notification event/content once. store_id associates the event with a store if applicable.'
+  Note: 'Stores the notification event/content once. shop_id associates the event with a shop if applicable.'
 }
 
 
@@ -632,7 +631,7 @@ Table notification_recipients {
 Table api_idempotency_keys {
   id bigint [pk, increment]
 
-  store_id bigint [not null]
+  shop_id bigint [not null]
   user_id bigint [not null]
 
   operation varchar(100) [not null]
@@ -649,7 +648,7 @@ Table api_idempotency_keys {
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (store_id, operation, idempotency_key) [unique]
+    (shop_id, operation, idempotency_key) [unique]
     expires_at
   }
 }
@@ -663,7 +662,7 @@ Table audit_logs {
   id bigint [pk, increment]
 
   actor_user_id bigint
-  store_id bigint
+  shop_id bigint
 
   action varchar(100) [not null]
   entity_type varchar(100) [not null]
@@ -677,7 +676,7 @@ Table audit_logs {
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (store_id, created_at)
+    (shop_id, created_at)
     (entity_type, entity_id)
     actor_user_id
   }
@@ -691,25 +690,25 @@ Table audit_logs {
 // ---------- AUTH ----------
 
 Ref: users.id < auth_identities.user_id
-Ref: users.id < stores.owner_id
+Ref: users.id < shops.owner_id
 
 
 // ---------- CATALOG ----------
 
-Ref: stores.id < categories.store_id
+Ref: shops.id < categories.shop_id
 Ref: users.id < categories.archived_by_user_id
 
-Ref: stores.id < products.store_id
+Ref: shops.id < products.shop_id
 Ref: categories.id < products.category_id
 Ref: users.id < products.archived_by_user_id
 
-Ref: stores.id < customers.store_id
+Ref: shops.id < customers.shop_id
 Ref: users.id < customers.archived_by_user_id
 
 
 // ---------- SALE DRAFT ----------
 
-Ref: stores.id < sale_drafts.store_id
+Ref: shops.id < sale_drafts.shop_id
 Ref: users.id < sale_drafts.created_by_user_id
 Ref: customers.id < sale_drafts.customer_id
 Ref: ai_requests.id < sale_drafts.source_ai_request_id
@@ -722,7 +721,7 @@ Ref: products.id < sale_draft_items.product_id
 
 // ---------- SALES ----------
 
-Ref: stores.id < sales.store_id
+Ref: shops.id < sales.shop_id
 Ref: users.id < sales.created_by_user_id
 Ref: users.id < sales.voided_by_user_id
 Ref: customers.id < sales.customer_id
@@ -743,7 +742,7 @@ Ref: users.id < payments.received_by_user_id
 
 // ---------- EXPENSE ----------
 
-Ref: stores.id < expenses.store_id
+Ref: shops.id < expenses.shop_id
 Ref: users.id < expenses.created_by_user_id
 Ref: users.id < expenses.archived_by_user_id
 Ref: ai_requests.id < expenses.source_ai_request_id
@@ -751,14 +750,14 @@ Ref: ai_requests.id < expenses.source_ai_request_id
 
 // ---------- AI ----------
 
-Ref: stores.id < ai_requests.store_id
+Ref: shops.id < ai_requests.shop_id
 Ref: users.id < ai_requests.user_id
 
 
 // ---------- CHAT ----------
 
 Ref: users.id < chat_conversations.user_id
-Ref: stores.id < chat_conversations.store_id
+Ref: shops.id < chat_conversations.shop_id
 
 Ref: chat_conversations.id < chat_messages.conversation_id
 Ref: ai_requests.id < chat_messages.ai_request_id
@@ -766,21 +765,21 @@ Ref: ai_requests.id < chat_messages.ai_request_id
 
 // ---------- NOTIFICATION ----------
 
-Ref: stores.id < notification_events.store_id
+Ref: shops.id < notification_events.shop_id
 Ref: notification_events.id < notification_recipients.notification_event_id
 Ref: users.id < notification_recipients.user_id
 
 
 // ---------- IDEMPOTENCY ----------
 
-Ref: stores.id < api_idempotency_keys.store_id
+Ref: shops.id < api_idempotency_keys.shop_id
 Ref: users.id < api_idempotency_keys.user_id
 
 
 // ---------- AUDIT ----------
 
 Ref: users.id < audit_logs.actor_user_id
-Ref: stores.id < audit_logs.store_id
+Ref: shops.id < audit_logs.shop_id
 
 
 // =====================================================
@@ -790,7 +789,7 @@ Ref: stores.id < audit_logs.store_id
 TableGroup auth_and_tenancy {
   users
   auth_identities
-  stores
+  shops
 }
 
 TableGroup catalog_and_customers {
