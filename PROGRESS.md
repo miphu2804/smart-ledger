@@ -1,3 +1,11 @@
+### [2026-09-24 01:01 UTC+07:00] — [CI] Verify compact summary artifact
+
+**Done:** The final PR run passed AI, Core, and summary jobs. Downloaded `ci-summary` and verified the board reports 12 Python tests and 11 Java tests, with zero failures, errors, or skips.
+
+**Changed files:** `PROGRESS.md`.
+
+**Check:** GitHub Actions run `35899451138` passed; one 261-byte `ci-summary` artifact was attached.
+
 ### [2026-09-24 00:58 UTC+07:00] — [CI] Publish compact test summary artifact
 
 **Done:** Added one compact Markdown board to the Actions run summary and as a downloadable artifact. It shows each backend job result and test totals, failures, errors, and skips.
