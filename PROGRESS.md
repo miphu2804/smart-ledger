@@ -1,3 +1,11 @@
+### [2026-09-24 00:50 UTC+07:00] — [CI] Confirm Java and Python checks on PR #38
+
+**Done:** GitHub Actions passed the AI job and Core Maven `verify`; Core ran 11 tests with no failures. The release source check skipped as expected because PR #38 targets `staging`.
+
+**Changed files:** `PROGRESS.md`.
+
+**Check:** PR #38 checks passed.
+
 ### [2026-09-24 00:45 UTC+07:00] — [CI] Validate Java and Python; guard release source
 
 **Done:** Added Core Java 21 Maven verification alongside the existing AI Python lint, format, and test checks. Added a source-branch check for PRs into `main`, allowing same-repository `staging` and `hotfix/*` branches.
