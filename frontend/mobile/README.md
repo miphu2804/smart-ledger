@@ -43,16 +43,19 @@ npm run export:web      # build web tĩnh ra dist/
 | `/ai` | Trợ lý AI (trả lời từ dữ liệu mẫu: doanh thu, bán chạy, nhập hàng, lời lãi, công nợ) |
 | `/printer` | Kết nối máy in K80/K58 (giả lập, IP `192.168.x.x` → thành công) |
 
-## Thử nhận diện đơn
+## Tính năng Giọng nói On-Device (Voice POS Engine)
 
-Ô “Nhập tên hàng + giá” ở màn Bán hàng chạy bộ nhận diện rule-based trong `src/lib/parseOrder.ts`. Ví dụ:
+Ứng dụng tích hợp bộ xử lý giọng nói và bóc tách đơn hàng on-device (`src/sst/`):
+- **Cơ chế Nhấn & Giữ (Hold-to-Talk):** Bấm giữ nút mic để nói liên tục và thả tay để chốt đơn ngay lập tức.
+- **Khử từ đệm & cà lăm:** Tự động loại bỏ *à ừm, cho cho em, 2 2 ly*.
+- **So khớp thực đơn thông minh (Fuzzy Matching):** Khớp với danh mục món của quán, hỗ trợ alias và tính điểm tin cậy.
+- **Phân giải biến thể (Disambiguation):** Tự động bật popup chọn loại cụ thể khi khách gọi món chung chung (như *bạc xỉu đá / nóng*, *sting dâu / vàng*).
+- **Tự động ghi nhận chi tiêu:** Tự động phát hiện các câu chi tiền (như *"chi 20k mua đá"*) để lưu vào Sổ chi tiêu.
 
-- `2 ly cà phê sữa 50 nghìn, thêm 1 trà đá`
-- `bán 3 bánh mì 45k, 2 coca`
-- `lấy 1 chục trứng với 2 gói mì`
-- `bán 1 hộp sữa chua nếp cẩm 12k` → món chưa có, app hỏi có thêm vào danh mục không
-
-Nút “Nói để lên đơn” lần lượt phát các câu mẫu trong `voiceSamples` (`src/data/mock.ts`).
+### Thử nghiệm:
+1. Mở tab **Bán hàng** (`/voice`).
+2. Nhấn giữ nút **"Nhấn & Giữ để nói"** và nói: *"cho 2 bánh mì ốp la 1 bạc xỉu với chi 20k mua đá"*.
+3. Hoặc gõ trực tiếp vào ô nhập văn bản để kiểm tra tốc độ bóc tách (< 2ms).
 
 ## Cấu trúc
 
