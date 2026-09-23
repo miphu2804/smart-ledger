@@ -1,3 +1,13 @@
+### [2026-09-24 00:53 UTC+07:00] — [CI] Run release source guard from base branch
+
+**Done:** Moved the main source-branch policy into a separate `pull_request_target` workflow. It reads PR metadata without checking out or running proposed code, allowing same-repository `staging` and `hotfix/*` only.
+
+**Changed files:** `.github/workflows/ci.yml`, `.github/workflows/release-policy.yml`, `PROGRESS.md`.
+
+**Flow explained:** Once this workflow is present on `main`, configure `Release policy / Release source branch` as a required check in the `main` ruleset.
+
+**Check:** Pending.
+
 ### [2026-09-24 00:50 UTC+07:00] — [CI] Confirm Java and Python checks on PR #38
 
 **Done:** GitHub Actions passed the AI job and Core Maven `verify`; Core ran 11 tests with no failures. The release source check skipped as expected because PR #38 targets `staging`.
