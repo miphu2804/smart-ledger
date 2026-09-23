@@ -4,7 +4,7 @@
 
 This ERD describes the PostgreSQL database for **SmartLedger Phase 1**, an AI-assisted bookkeeping system for small businesses.
 
-The database manages authentication, stores, products, customers, sale drafts, confirmed sales, payments, debts, expenses, AI request traces, idempotency, and audit logs.
+The database manages authentication, shops, products, customers, sale drafts, confirmed sales, payments, debts, expenses, AI request traces, idempotency, and audit logs.
 
 A sale record in this MVP is an internal business record. It is **not an electronic invoice**.
 
@@ -13,13 +13,13 @@ A sale record in this MVP is an internal business record. It is **not an electro
 ### Authentication
 
 - **users**: Stores user profiles and system roles (`OWNER`, `ADMIN`).
-- **auth_identities**: Stores authentication methods/identities linked to a user. Supports multiple provider identities (e.g. Firebase UID, Google, Phone).
+- **auth_identities**: Stores one Firebase UID per application user. Phone and Google sign-in methods are linked to that Firebase account.
 
-### Stores, Products, and Customers
+### Shops, Products, and Customers
 
-- **stores**: Stores business information. One OWNER can own multiple stores.
-- **categories**: Stores product categories for each store.
-- **products**: Stores store-specific products, selling price, cost price, unit, and simple stock quantity.
+- **shops**: Stores business information. One OWNER can own multiple shops.
+- **categories**: Stores product categories for each shop.
+- **products**: Stores shop-specific products, selling price, cost price, unit, and simple stock quantity.
 - **customers**: Stores a minimal customer directory for debt tracking.
 
 ### Drafts
@@ -38,7 +38,7 @@ Drafts do not affect revenue, stock, payments, or debts until confirmed.
 
 ### Expenses
 
-- **expenses**: Stores confirmed operating expenses of a store.
+- **expenses**: Stores confirmed operating expenses of a shop.
 
 ### AI and System Safety
 
@@ -48,14 +48,14 @@ Drafts do not affect revenue, stock, payments, or debts until confirmed.
 
 ### Notifications
 
-- **notification_events**: Stores notification events, optional store link, entity reference, and payload.
+- **notification_events**: Stores notification events, optional shop link, entity reference, and payload.
 - **notification_recipients**: Stores per-user recipient read status for each notification event.
 
 ## 3. Main Relationships
 
-- A **user** can have one or more **auth identities**.
-- A **user** can own multiple **stores**.
-- A **store** can have multiple **categories**, **products**, **customers**, **sales**, **drafts**, **expenses**, and **notification events**.
+- A **user** has one **auth identity** in Phase 1.
+- A **user** can own multiple **shops**.
+- A **shop** can have multiple **categories**, **products**, **customers**, **sales**, **drafts**, **expenses**, and **notification events**.
 - A **category** can contain multiple **products**.
 - A **customer** can have multiple **sales** and **debts**.
 - A **sale draft** contains multiple **sale draft items**.
@@ -132,7 +132,7 @@ Confirmed Sale or Cancelled Draft
 - Monetary values use BIGINT VND.
 - Quantity uses NUMERIC(15,3) to support items, kilograms, and liters.
 - Timestamps use TIMESTAMPTZ and are stored in UTC.
-- Store-specific data is separated by store_id.
+- Shop-specific data is separated by `shop_id`.
 - Product, category, customer, and expense records use archive instead of physical deletion.
 - Sale item snapshots preserve historical product names, prices, and units.
 - payments is append-only payment history.
@@ -146,14 +146,16 @@ Confirmed Sale or Cancelled Draft
 
 To keep the ERD clean in Phase 1 without nested composite foreign keys, Core service is responsible for validating the following business constraints:
 
-1. **Tenant Consistency (Store Isolation)**:
-   - Core must ensure all related entities in a transaction belong to the same `store_id` (e.g., `products.store_id == sales.store_id`, `customers.store_id == sales.store_id`, `categories.store_id == products.store_id`, `sale_drafts.store_id == products.store_id`).
+1. **Tenant Consistency (Shop Isolation)**:
+   - Core must ensure all related entities in a transaction belong to the same `shop_id` (e.g., `products.shop_id == sales.shop_id`, `customers.shop_id == sales.shop_id`, `categories.shop_id == products.shop_id`, `sale_drafts.shop_id == products.shop_id`).
 2. **Product Barcode Scope**:
-   - `(store_id, barcode)` is unique per store; null barcodes are permitted for untracked/custom items.
-3. **Payment & Debt Integrity**:
+   - `(shop_id, barcode)` is unique per shop; null barcodes are permitted for untracked/custom items.
+3. **Draft Item Integrity**:
+   - Before persisting a draft item, Core requires either a product belonging to the draft's shop or a non-blank custom-item name and unit. An unresolved item cannot be confirmed until the user reviews it.
+4. **Payment & Debt Integrity**:
    - For `payments.type = 'INITIAL'`: `debt_id` must be `NULL`.
    - For `payments.type = 'DEBT_REPAYMENT'`: `debt_id` must be NOT NULL, and `debt.sale_id` must equal `payments.sale_id`.
-4. **Debt & Customer Integrity**:
+5. **Debt & Customer Integrity**:
+   - `sales.payment_status` in (`DEBT`, `PARTIAL`) requires a non-null `sales.customer_id` before confirmation.
    - `debts.customer_id` must match `sales.customer_id`.
    - `sales.payment_status` in (`DEBT`, `PARTIAL`) requires a corresponding `debts` record; `sales.payment_status = 'PAID'` must not create an open debt record.
-

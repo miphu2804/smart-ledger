@@ -145,16 +145,12 @@ Table auth_identities {
   user_id bigint [not null, unique]
 
   provider varchar(30) [not null, default: 'FIREBASE']
-  provider_subject varchar(255) [not null]
+  provider_subject varchar(255) [not null, unique]
 
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 
-  indexes {
-    (provider, provider_subject) [unique]
-  }
-
-  Note: 'One application user maps to one Firebase account. provider_subject stores the Firebase UID. Google, Facebook and Phone are linked providers under the same Firebase account.'
+  Note: 'One application user maps to one Firebase account. provider_subject stores the Firebase UID. Phone and Google are linked sign-in methods under that account.'
 }
 
 
@@ -326,6 +322,8 @@ Table sale_draft_items {
     draft_id
     product_id
   }
+
+  Note: 'Core requires a product from the same shop or a non-blank custom-item name and unit before persisting a draft item.'
 }
 
 
@@ -365,6 +363,8 @@ Table sales {
     payment_status
     sale_status
   }
+
+  Note: 'DEBT and PARTIAL sales require customer_id; Core validates this before confirmation and creates the matching debt in the same transaction.'
 }
 
 
@@ -689,7 +689,7 @@ Table audit_logs {
 
 // ---------- AUTH ----------
 
-Ref: users.id < auth_identities.user_id
+Ref: users.id - auth_identities.user_id
 Ref: users.id < shops.owner_id
 
 

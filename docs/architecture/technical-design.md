@@ -5,7 +5,7 @@
 | Trạng thái | đề xuất |
 | Chủ sở hữu | Chủ kỹ thuật |
 | Người rà soát | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-09-18 |
+| Cập nhật lần cuối | 2026-09-23 |
 
 ## Tài liệu liên quan
 
@@ -18,7 +18,7 @@
 
 Kiến trúc trong sơ đồ là **đích MVP**: Mobile dành cho OWNER và dashboard web dành cho ADMIN cùng gọi Core; Core sở hữu API công khai và điều phối AI; PostgreSQL lưu sổ nghiệp vụ; Redis, Qdrant, Langfuse và LiteLLM hỗ trợ AI.
 
-**Đã xác minh:** FE ngoài repo có màn đăng nhập, danh mục, POS, câu bán hàng, thu/chi/nợ và báo cáo. FE mock hiện dùng Firebase ID token, `X-Shop-Id`, STT giả lập và parser cục bộ; header này phải đổi sang target `X-Store-Id` trước khi tích hợp Core. Core là Java; AI là Python FastAPI. Runtime AI hiện chỉ có `GET /health`, chưa có API nghiệp vụ.
+**Đã xác minh:** FE ngoài repo có màn đăng nhập, danh mục, POS, câu bán hàng, thu/chi/nợ và báo cáo. FE mock hiện dùng Firebase ID token, `X-Shop-Id`, STT giả lập và parser cục bộ. Core là Java; AI là Python FastAPI. Trên `staging`, Core đã có migration auth/shops và AI có `GET /health` cùng `/internal/v1/agent/chat` cơ bản; agent chưa có công cụ đọc dữ liệu shop.
 
 **Chưa xác minh:** FE chưa có tích hợp chạy thật cho image analysis, RAG, recommendation và insight chat. Các phần này thuộc đích MVP nhưng chỉ được nghiệm thu khi có luồng UI/API và `AC-010`–`AC-014`.
 
@@ -32,7 +32,7 @@ Kiến trúc trong sơ đồ là **đích MVP**: Mobile dành cho OWNER và dash
 | AI | Voice/text parse, image analysis, RAG, recommendation, insight chat; chỉ trả đề xuất |
 | PostgreSQL | Dữ liệu nghiệp vụ, trace AI tối thiểu, idempotency và audit |
 | Redis | Cache/giới hạn tốc độ/tác vụ ngắn hạn; không là nguồn dữ liệu chuẩn |
-| Qdrant | Vector cho RAG, luôn lọc theo `store_id` |
+| Qdrant | Vector cho RAG, luôn lọc theo `shop_id` |
 | LiteLLM | Chọn model và quản lý khóa model ở phía server |
 | Langfuse | Trace AI; không ghi audio/ảnh hoặc dữ liệu nhạy cảm thô mặc định |
 
@@ -40,12 +40,12 @@ Chỉ Core có API công khai. FE không gọi AI, PostgreSQL, Redis, Qdrant, Li
 
 ## 3. Luồng chính
 
-1. OWNER đăng nhập mobile qua Firebase Phone hoặc Google; Core xác thực Firebase ID token, tìm hoặc tạo user/identity và trả các store do OWNER sở hữu.
-2. Mọi request nghiệp vụ gửi `X-Store-Id`; Core kiểm tra store thuộc OWNER và từ chối ADMIN trên các endpoint ghi sổ.
+1. OWNER đăng nhập mobile qua Firebase Phone hoặc Google; Core xác thực Firebase ID token, tìm hoặc tạo user/identity và trả các shop do OWNER sở hữu.
+2. Mọi request nghiệp vụ gửi `X-Shop-Id`; Core kiểm tra shop thuộc OWNER và từ chối ADMIN trên các endpoint ghi sổ.
 3. Người bán lên giỏ bằng POS, text, voice hoặc ảnh. Core gửi input AI khi cần.
 4. AI trả **bản nháp**; Core lưu `sale_drafts` và `sale_draft_items`; FE cho sửa trước khi chốt.
 5. Khi confirm draft, Core chạy một transaction tạo `sales`, `sale_items`, `payments` và `debts` khi chưa thu đủ; chỉ sale đã chốt mới vào báo cáo.
-6. Replenishment và insight chat đọc dữ liệu theo store; kết quả có giải thích/căn cứ và không tự sửa sổ.
+6. Replenishment và insight chat đọc dữ liệu theo shop; kết quả có giải thích/căn cứ và không tự sửa sổ.
 
 Nếu AI lỗi hoặc timeout, người dùng vẫn có thể nhập tay/POS. AI không được tạo sale, payment, debt hoặc expense trực tiếp.
 
@@ -55,8 +55,8 @@ Luồng ADMIN: dashboard web gọi `/api/v1/admin/*`; Core kiểm tra role ADMIN
 
 [ERD](diagrams/src/erd.dbml) là schema logic tối thiểu. Migration thực tế phải bảo đảm:
 
-- mọi dữ liệu nghiệp vụ và AI gắn `store_id`;
-- `users.system_role` chỉ nhận `OWNER|ADMIN`; mỗi store có một `owner_id`, và một OWNER có thể sở hữu nhiều store;
+- mọi dữ liệu nghiệp vụ và AI gắn `shop_id`;
+- `users.system_role` chỉ nhận `OWNER|ADMIN`; mỗi shop có một `owner_id`, và một OWNER có thể sở hữu nhiều shop;
 - truy cập nhạy cảm của ADMIN, archive và void ghi `audit_logs`;
 - confirm draft và thu nợ là transaction; `payments` là lịch sử append-only;
 - tiền lưu bằng số nguyên VND, quantity dùng `numeric(15,3)`, ID dùng `BIGINT` và time dùng `TIMESTAMPTZ` theo UTC;
@@ -64,7 +64,7 @@ Luồng ADMIN: dashboard web gọi `/api/v1/admin/*`; Core kiểm tra role ADMIN
 - product/category/customer/expense archive thay vì xóa vật lý; sale đã chốt chỉ có thể `VOIDED` theo quy tắc nghiệp vụ;
 - `api_idempotency_keys` ngăn retry hoặc double-click tạo trùng sale/payment;
 - AI proposal, model/version và object key của media được lưu đủ để điều tra; không lưu media thô mặc định;
-- Qdrant collection bắt buộc có filter `store_id`.
+- Qdrant collection bắt buộc có filter `shop_id`.
 
 Schema PostgreSQL được quản lý bằng migration SQL có phiên bản trong Git. Không sửa schema trực tiếp trên Supabase Dashboard. Migration phải chạy được trên PostgreSQL chuẩn; extension, trigger hoặc API riêng của Supabase chỉ được dùng khi có quyết định kỹ thuật riêng.
 
@@ -73,9 +73,9 @@ Schema PostgreSQL được quản lý bằng migration SQL có phiên bản tron
 - MVP hỗ trợ Firebase Phone và Google. Firebase Account Linking gộp các cách đăng nhập của cùng người dùng vào một Firebase UID; Core lưu UID đó trong `auth_identities`.
 - Core không lưu password hoặc token thô. ERD hiện không có Core refresh-token/session table; mọi request dùng Firebase ID token đã được Core xác thực.
 - Core mặc định tài khoản tự đăng ký là OWNER; role ADMIN chỉ được cấp bằng thao tác vận hành có kiểm soát, không nhận role từ request hoặc claim do client tự tạo.
-- `POST /api/v1/auth/session`, `GET /api/v1/me`, `POST /api/v1/stores` không cần `X-Store-Id`; endpoint nghiệp vụ còn lại cần token và store thuộc OWNER.
-- `/api/v1/admin/*` chỉ nhận ADMIN, không dùng `X-Store-Id` từ client để mở rộng quyền và không có endpoint ghi sổ nghiệp vụ.
-- Chưa được dùng dữ liệu thật trước khi test 401/403 và cô lập chéo store.
+- `POST /api/v1/auth/session`, `GET /api/v1/me`, `POST /api/v1/shops` không cần `X-Shop-Id`; endpoint nghiệp vụ còn lại cần token và shop thuộc OWNER.
+- `/api/v1/admin/*` chỉ nhận ADMIN, không dùng `X-Shop-Id` từ client để mở rộng quyền và không có endpoint ghi sổ nghiệp vụ.
+- Chưa được dùng dữ liệu thật trước khi test 401/403 và cô lập chéo shop.
 
 ## 6. Cấu hình môi trường
 
@@ -97,9 +97,9 @@ Host và port thuộc cấu hình môi trường, không phải API contract.
 
 | Nhóm | Bằng chứng bắt buộc |
 |---|---|
-| Core | migration từ DB rỗng trên local và Supabase staging; contract test FE ↔ Core; confirm draft/payment rollback và idempotency; test chéo store |
-| AI | contract test Core ↔ AI; timeout/fallback; output schema; filter `store_id` |
-| FE | OWNER: login → chọn store → tạo/chốt → báo cáo; ADMIN: login → tra cứu cơ sở → xem tổng quan; test role guard và trạng thái loading/error/empty |
+| Core | migration từ DB rỗng trên local và Supabase staging; contract test FE ↔ Core; confirm draft/payment rollback và idempotency; test chéo shop |
+| AI | contract test Core ↔ AI; timeout/fallback; output schema; filter `shop_id` |
+| FE | OWNER: login → chọn shop → tạo/chốt → báo cáo; ADMIN: login → tra cứu cơ sở → xem tổng quan; test role guard và trạng thái loading/error/empty |
 | Ops | CI kiểm migration; staging dùng Supabase project riêng; deploy production cần phê duyệt |
 
 ## 8. Rủi ro
