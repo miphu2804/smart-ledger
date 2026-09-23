@@ -1,3 +1,13 @@
+### [2026-09-24 00:58 UTC+07:00] — [CI] Publish compact test summary artifact
+
+**Done:** Added one compact Markdown board to the Actions run summary and as a downloadable artifact. It shows each backend job result and test totals, failures, errors, and skips.
+
+**Changed files:** `.github/workflows/ci.yml`, `PROGRESS.md`.
+
+**Flow explained:** A final job runs after AI and Core even when either fails, then uploads one `ci-summary` artifact retained for 14 days.
+
+**Check:** Pending.
+
 ### [2026-09-24 00:53 UTC+07:00] — [CI] Run release source guard from base branch
 
 **Done:** Moved the main source-branch policy into a separate `pull_request_target` workflow. It reads PR metadata without checking out or running proposed code, allowing same-repository `staging` and `hotfix/*` only.

@@ -8,6 +8,11 @@ on:
 jobs:
   ai:
     runs-on: ubuntu-latest
+    outputs:
+      tests: ${{ steps.test-results.outputs.tests }}
+      failures: ${{ steps.test-results.outputs.failures }}
+      errors: ${{ steps.test-results.outputs.errors }}
+      skipped: ${{ steps.test-results.outputs.skipped }}
     defaults:
       run:
         working-directory: backend/ai
@@ -19,10 +24,37 @@ jobs:
       - run: uv sync --group dev
       - run: uv run ruff check
       - run: uv run ruff format --check
-      - run: uv run pytest
+      - run: uv run pytest --junitxml=pytest-results.xml
+      - name: Capture test counts
+        id: test-results
+        if: always()
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          from pathlib import Path
+          from xml.etree import ElementTree
+
+          report = Path("pytest-results.xml")
+          counts = {name: "n/a" for name in ("tests", "failures", "errors", "skipped")}
+          if report.exists():
+              root = ElementTree.parse(report).getroot()
+              suites = [root] if root.tag == "testsuite" else root.findall(".//testsuite")
+              if not suites:
+                  suites = [root]
+              counts = {
+                  name: str(sum(int(suite.get(name, "0")) for suite in suites))
+                  for name in counts
+              }
+          for name, value in counts.items():
+              print(f"{name}={value}")
+          PY
 
   core:
     runs-on: ubuntu-latest
+    outputs:
+      tests: ${{ steps.test-results.outputs.tests }}
+      failures: ${{ steps.test-results.outputs.failures }}
+      errors: ${{ steps.test-results.outputs.errors }}
+      skipped: ${{ steps.test-results.outputs.skipped }}
     defaults:
       run:
         working-directory: backend/core
@@ -34,3 +66,60 @@ jobs:
           java-version: "21"
           cache: maven
       - run: bash ./mvnw --batch-mode --no-transfer-progress verify
+      - name: Capture test counts
+        id: test-results
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          from pathlib import Path
+          from xml.etree import ElementTree
+
+          reports = sorted(Path("target/surefire-reports").glob("TEST-*.xml"))
+          totals = {name: 0 for name in ("tests", "failures", "errors", "skipped")}
+          if not reports:
+              totals = {name: "n/a" for name in totals}
+          else:
+              for report in reports:
+                  suite = ElementTree.parse(report).getroot()
+                  for name in totals:
+                      totals[name] += int(suite.get(name, "0"))
+          for name, value in totals.items():
+              print(f"{name}={value}")
+          PY
+
+  summary:
+    name: CI result summary
+    if: always()
+    needs: [ai, core]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build compact report
+        env:
+          AI_RESULT: ${{ needs.ai.result }}
+          AI_TESTS: ${{ needs.ai.outputs.tests }}
+          AI_FAILURES: ${{ needs.ai.outputs.failures }}
+          AI_ERRORS: ${{ needs.ai.outputs.errors }}
+          AI_SKIPPED: ${{ needs.ai.outputs.skipped }}
+          CORE_RESULT: ${{ needs.core.result }}
+          CORE_TESTS: ${{ needs.core.outputs.tests }}
+          CORE_FAILURES: ${{ needs.core.outputs.failures }}
+          CORE_ERRORS: ${{ needs.core.outputs.errors }}
+          CORE_SKIPPED: ${{ needs.core.outputs.skipped }}
+        run: |
+          {
+            echo "# CI results"
+            echo
+            echo "| Suite | Result | Tests | Failures | Errors | Skipped |"
+            echo "|---|---:|---:|---:|---:|---:|"
+            printf '| AI (Python) | %s | %s | %s | %s | %s |\n' \
+              "$AI_RESULT" "${AI_TESTS:-n/a}" "${AI_FAILURES:-n/a}" "${AI_ERRORS:-n/a}" "${AI_SKIPPED:-n/a}"
+            printf '| Core (Java) | %s | %s | %s | %s | %s |\n' \
+              "$CORE_RESULT" "${CORE_TESTS:-n/a}" "${CORE_FAILURES:-n/a}" "${CORE_ERRORS:-n/a}" "${CORE_SKIPPED:-n/a}"
+          } > ci-summary.md
+          cat ci-summary.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ci-summary
+          path: ci-summary.md
+          if-no-files-found: error
+          retention-days: 14
