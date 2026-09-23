@@ -59,6 +59,7 @@ feat/*, fix/*, chore/*, docs/*  →  staging  →  main (production)
 - Open normal feature, fix, chore, and documentation pull requests against `staging`.
 - A merge into `staging` may deploy automatically to the staging environment after required checks pass.
 - After `staging` passes its checks, open a `staging` → `main` pull request for the production release.
+- Merge release pull requests with a merge commit, never squash: squashing disconnects `staging` history from `main` and forces a manual resync. This follows the production-branch pattern in [GitLab Flow](https://about.gitlab.com/topics/version-control/what-is-gitlab-flow/) and [branch-per-environment strategies](https://docs.gitlab.com/user/project/repository/branches/strategies/).
 - Production deployment requires a tag or manual approval; merging to `main` alone must not bypass this gate.
 - Start hotfixes from `main`, open the pull request against `main`, then synchronize the same fix back to `staging`.
 - Do not push directly, force-push, or manually merge into `main` or `staging`.
@@ -114,7 +115,7 @@ Each pull request should identify related documentation or API contracts, assump
 - Rebase a personal branch onto the latest target branch when appropriate.
 - If a pushed branch is rebased, use `--force-with-lease`, never `--force`.
 - Do not rebase or force-push shared branches.
-- Use squash merge for normal feature, fix, and refactor pull requests.
+- Use squash merge for pull requests into `staging`; use a merge commit for release pull requests into `main` (see "Target branch").
 - Do not bypass review, CI, branch protection, or required checks.
 
 ## Progress log
@@ -126,7 +127,7 @@ After each completed substantive change, update [`PROGRESS.md`](PROGRESS.md) at 
 - **Flow explained:** behavior or flow that changed;
 - **Check:** checks that were run, if any.
 
-`PROGRESS.md` is an append-only log, not the source of truth for project scope.
+`PROGRESS.md` is a newest-first log, not the source of truth for project scope.
 
 ## Blockers
 
