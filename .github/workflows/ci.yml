@@ -168,7 +168,7 @@ jobs:
             printf '| Mobile web | %s | n/a | n/a | n/a | n/a |\n' "$MOBILE_RESULT"
           } > ci-summary.md
           cat ci-summary.md >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ci-summary
           path: ci-summary.md
