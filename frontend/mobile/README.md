@@ -92,10 +92,9 @@ Code đã nối sẵn theo `docs/contracts/api-contracts.md`: Firebase xác th�
    - **Android** (package `vn.teamhexa.songheloi`) → tải `google-services.json`; thêm **SHA-1 và SHA-256** của keystore dùng để build (`npx eas-cli credentials -p android`).
    - **iOS** (bundle `vn.teamhexa.songheloi`) → tải `GoogleService-Info.plist`; upload **APNs key** ở Cloud Messaging để xác minh SMS không cần reCAPTCHA.
    - Đặt hai file trên vào thư mục `frontend/mobile/`.
-3. **Cài gói** (trong `frontend/mobile`):
+3. **Cài gói native** (trong `frontend/mobile`; Firebase JS SDK cho web đã có trong dependencies):
    ```bash
    npx expo install @react-native-firebase/app @react-native-firebase/auth expo-build-properties
-   npm install firebase          # chỉ cho bản web
    ```
 4. **`app.json`**: thêm `"googleServicesFile": "./google-services.json"` vào `android`, `"googleServicesFile": "./GoogleService-Info.plist"` vào `ios`, và vào `plugins`:
    ```json
@@ -151,3 +150,13 @@ Màn đầu có liên kết “Đăng nhập bằng email và mật khẩu” (`
 Chưa làm: đăng nhập Google/Facebook/Apple (bản thật hiện báo “sắp có”), Zalo (Firebase không có sẵn provider — cần Core cấp custom token), và các action dữ liệu trong `AppStore` (sản phẩm, hoá đơn…) vẫn là dữ liệu mẫu cho tới khi Core có API. Core chưa có `POST /shops` (đặt `EXPO_PUBLIC_MOCK_SHOPS=true` để test tiếp). Docs ghi payload snake_case và id uuid, nhưng Core đang trả camelCase và id số; FE bám theo code của Core (sửa ở `src/data/types.ts` nếu backend đổi).
 
 Ghi chú: mã QR chuyển khoản, tỉ lệ thuế 1,5% trên hoá đơn và gói Pro đều chỉ để minh hoạ.
+
+## Vercel preview trên trình duyệt
+
+`vercel.json` đã cấu hình Expo export ra `dist/` và chuyển các đường dẫn Expo Router về SPA entry. Khi tạo project Vercel:
+
+1. Chọn thư mục gốc `frontend/mobile`.
+2. Đặt production branch là `main`; pull request và nhánh `staging` sẽ có preview deployment.
+3. Bật `EXPO_PUBLIC_USE_MOCK=true` trong Preview environment để dùng OTP mẫu `123456` và dữ liệu mẫu. Bản preview không cần Firebase hoặc backend secrets.
+
+Muốn thử Firebase trên web thì cần thêm Firebase web app config vào Preview variables (`EXPO_PUBLIC_FIREBASE_API_KEY`, `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`, `EXPO_PUBLIC_FIREBASE_PROJECT_ID`, `EXPO_PUBLIC_FIREBASE_APP_ID`), thêm preview domain vào Firebase Authorized domains, và bật HTTPS/CORS cho Core nếu gọi API thật. Các biến `EXPO_PUBLIC_*` được đóng vào bundle trình duyệt, vì vậy không đặt service-account keys ở đây. Preview web giúp kiểm tra giao diện responsive và luồng mock; nó không thay thế kiểm tra native trên iOS/Android.
