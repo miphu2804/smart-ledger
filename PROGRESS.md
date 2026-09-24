@@ -1,3 +1,11 @@
+### [2026-09-24 23:32 UTC+07:00] — [Mobile] Simplify AI chat conversation UI
+
+**Done:** Removed avatars from assistant and user messages and widened message bubbles for the chat content.
+
+**Changed files:** `frontend/mobile/app/ai.tsx`, `PROGRESS.md`.
+
+**Check:** Opened the AI chat route on the iPhone 17 Pro Max simulator and confirmed the avatar-free layout. `git diff --check` passed.
+
 ### [2026-09-24 21:18 UTC+07:00] — [Release] Prepare branch histories for production release
 
 **Done:** Prepared the history sync needed to release `staging` into `main`, keeping the mobile tree from `staging` across the 39 overlapping additions. Added the missing required `container-images` check.
