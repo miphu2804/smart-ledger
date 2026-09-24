@@ -2,9 +2,9 @@
 
 | Siêu dữ liệu | Giá trị |
 |---|---|
-| Trạng thái | đề xuất — Core theo FE; AI theo kiến trúc MVP |
+| Trạng thái | đích MVP; các endpoint đã triển khai được đánh dấu riêng bên dưới |
 | Chủ sở hữu | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-09-15 |
+| Cập nhật lần cuối | 2026-09-24 |
 
 ## Tài liệu liên quan
 
@@ -18,15 +18,19 @@
 - Không dùng cổng trong sơ đồ kiến trúc làm hợp đồng API.
 - Redis, Qdrant, Langfuse và LiteLLM không có API công khai. FE không gọi trực tiếp các thành phần này.
 
+**Trạng thái code tại `staging`:** Core mới có `POST /api/v1/auth/session` và `GET /api/v1/me`; AI có `GET /health` và năm endpoint `/internal/v1/agent/*` (chat, list, detail, rename, delete). Các đường Core còn lại trong tài liệu là hợp đồng đích, chưa có controller. Core chưa proxy tới AI; web admin dùng mock theo mặc định và client API thật của web chưa khớp hợp đồng này.
+
 ## Quy ước request
 
 - FE gửi `Authorization: Bearer <identity-token>`.
-- Endpoint nghiệp vụ của OWNER gửi thêm `X-Shop-Id: <uuid>`; Core kiểm tra tiệm thuộc OWNER.
+- Endpoint nghiệp vụ của OWNER theo đích MVP gửi thêm `X-Shop-Id: <shop-id>`; Core phải kiểm tra tiệm thuộc OWNER. Chưa có endpoint nghiệp vụ để xác minh kiểm tra này. ID shop trong migration Core hiện là `BIGINT`.
 - Dashboard chỉ gọi `/api/v1/admin/*`; Core lấy phạm vi từ quyền ADMIN, không tin `X-Shop-Id` để mở rộng quyền.
 - Tiền là số nguyên VND. Mọi thời gian là ISO 8601 UTC.
-- Payload API dùng snake_case.
+- Endpoint AI dùng snake_case. Hai endpoint Core đã triển khai dùng camelCase trong JSON (`displayName`, `needsOnboarding`, `avatarUrl`); hợp đồng cho các endpoint Core chưa triển khai cần chốt quy ước trước khi code.
 
-## 0. Hợp đồng lỗi tối thiểu
+## 0. Hợp đồng lỗi hiện có
+
+Core trả `{ "code": "string", "message": "string", "details": [{ "field": "string", "issue": "string" }], "traceId": "string" }` (bỏ `details` khi rỗng). AI dùng dạng FastAPI:
 
 ```json
 {
@@ -34,21 +38,21 @@
 }
 ```
 
-Endpoint AI nội bộ trả `503` với `detail: "ai_unavailable"` khi model chưa cấu hình hoặc lời gọi model thất bại. Các endpoint chỉ mở rộng payload lỗi khi có yêu cầu cụ thể.
+Endpoint AI nội bộ trả `503` với `detail: "ai_unavailable"` khi model chưa cấu hình hoặc lời gọi model thất bại. Không áp dụng payload lỗi AI cho Core.
 
 ## 1. Auth và tiệm
 
 | Method | Đường | Body / query | Trả về |
 |---|---|---|---|
-| `POST` | `/api/v1/auth/session` | `{ provider: PHONE|GOOGLE|ZALO }` + Bearer token của provider | `SessionView` |
-| `GET` | `/api/v1/me` | — | `SessionView` |
+| `POST` | `/api/v1/auth/session` | Firebase ID token + `{ displayName? }`; `displayName` bắt buộc khi tạo tài khoản lần đầu | `SessionView` — đã triển khai |
+| `GET` | `/api/v1/me` | Firebase ID token | `SessionView` — đã triển khai |
 | `POST` | `/api/v1/shops` | `{ name, phone?, address?, industries? }` | `ShopView` |
 | `GET` | `/api/v1/shops/current` | — | `ShopView` |
 | `PATCH` | `/api/v1/shops/current` | `{ name?, phone?, address?, industries? }` | `ShopView` |
 
-`SessionView`: `{ user, role: OWNER|ADMIN, shops, needs_onboarding }`. Với ADMIN, `shops` rỗng và `needs_onboarding` là `false`. Core quyết định role từ dữ liệu server; request đăng nhập không được truyền hoặc tự nâng role ADMIN.
+`SessionView` hiện có: `{ user, role: OWNER|ADMIN, shops, needsOnboarding }`; `user` và `shops` dùng ID số `BIGINT`. Với ADMIN, `shops` rỗng và `needsOnboarding` là `false`. Core quyết định role từ dữ liệu server; request đăng nhập không được truyền hoặc tự nâng role ADMIN.
 
-Core xác thực token bằng adapter tương ứng rồi upsert `auth_identities(provider, provider_subject)`. Không lưu access token thô.
+Core xác thực Firebase ID token rồi tìm/tạo tài khoản theo UID trong `auth_identities`. Không lưu access token thô. Firebase Phone đã có client mobile; nút Google chưa kết nối, Zalo chưa được tích hợp. Ba endpoint shop ở bảng trên chưa được triển khai.
 
 Phủ `FR-010`, `FR-011`, `FR-022`.
 

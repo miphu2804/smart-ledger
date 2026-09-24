@@ -102,7 +102,7 @@ Code đã nối sẵn theo `docs/contracts/api-contracts.md`: Firebase xác th�
    "@react-native-firebase/auth",
    ["expo-build-properties", { "ios": { "useFrameworks": "static" } }]
    ```
-5. **`.env`** (copy từ `.env.example`): `EXPO_PUBLIC_USE_MOCK=false`, `EXPO_PUBLIC_API_ENDPOINT=<URL Core>`, cùng 4 biến Firebase web. Core chưa có API thì thêm `EXPO_PUBLIC_MOCK_CORE=true`: đăng nhập Firebase thật nhưng `/auth/session`, `/me`, `/shops` giả lập (số bắt đầu `09` vào thẳng tiệm mẫu, số khác đi qua bước tạo tiệm). Đổi `.env` xong phải chạy lại `npx expo start --clear` (Metro cache giá trị cũ).
+5. **`.env`** (copy từ `.env.example`): `EXPO_PUBLIC_USE_MOCK=false`, `EXPO_PUBLIC_API_ENDPOINT=<URL Core>`, cùng 4 biến Firebase web. Nếu chưa kết nối Core, đặt `EXPO_PUBLIC_MOCK_CORE=true` để giả lập `/auth/session`, `/me`, `/shops`. Core hiện có `/auth/session` và `/me` nhưng chưa có `/shops`; để thử hai endpoint thật và giả lập riêng bước tạo tiệm, đặt `EXPO_PUBLIC_MOCK_SHOPS=true`. Đổi `.env` xong phải chạy lại `npx expo start --clear` (Metro cache giá trị cũ).
 6. **Chạy**:
    - Web: `npm run web` — dùng Firebase JS SDK + reCAPTCHA vô hình.
    - Android/iOS: **không chạy trên Expo Go** (React Native Firebase cần code native). Tạo development build: `npx eas-cli build:configure`, rồi `npx eas-cli build --profile development --platform android` (thêm `"developmentClient": true` cho profile `development` trong `eas.json`), cài bản build và chạy `npx expo start --dev-client`. iOS cần tài khoản Apple Developer.

@@ -5,22 +5,22 @@
 | Trạng thái | đề xuất |
 | Chủ sở hữu | Chủ kỹ thuật |
 | Người rà soát | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-09-23 |
+| Cập nhật lần cuối | 2026-09-24 |
 
 ## Tài liệu liên quan
 
 - [BRD](../product/business-requirements.md) và [PRD](../product/product-requirements.md): nguồn `BO/BR → FR/NFR → AC`.
 - [Sơ đồ kiến trúc MVP](diagrams/src/architecture.mmd); bản vẽ [drawio](diagrams/src/architecture.drawio), [SVG](diagrams/images/architecture.svg), [PNG](diagrams/images/architecture.png).
 - [Hợp đồng API](../contracts/api-contracts.md): FE ↔ Core và Core ↔ AI.
-- Nguồn đối chiếu FE: [orei1i/EXE201/frontend](https://github.com/orei1i/EXE201/tree/main/frontend), kiểm tra 2026-09-15.
+- Nguồn đối chiếu hiện tại: [`frontend/mobile`](../../frontend/mobile/README.md), [`frontend/web`](../../frontend/web/README.md), [`backend/core`](../../backend/core/src/main/java/com/smartledger/core/controller/AuthController.java) và [`backend/ai`](../../backend/ai/src/agent/routers.py). FE EXE201 là nguồn lịch sử khi soạn phạm vi ban đầu.
 
 ## 1. Phạm vi
 
 Kiến trúc trong sơ đồ là **đích MVP**: Mobile dành cho OWNER và dashboard web dành cho ADMIN cùng gọi Core; Core sở hữu API công khai và điều phối AI; PostgreSQL lưu sổ nghiệp vụ và lịch sử Agent chat; Redis, Qdrant, Langfuse và LiteLLM hỗ trợ AI.
 
-**Đã xác minh:** FE ngoài repo có màn đăng nhập, danh mục, POS, câu bán hàng, thu/chi/nợ và báo cáo. FE mock hiện dùng Firebase ID token, `X-Shop-Id`, STT giả lập và parser cục bộ. Core là Java; AI là Python FastAPI. Trên `staging`, Core đã có migration auth/shops và AI có `GET /health` cùng `/internal/v1/agent/chat` cơ bản; agent chưa có công cụ đọc dữ liệu shop.
+**Đã xác minh trong code tại `staging`:** Mobile và web dashboard đều nằm trong repo. Mobile mặc định dùng dữ liệu mẫu trong bộ nhớ; parser text chạy cục bộ, voice chưa thu âm. Khi tắt mock, luồng đăng nhập mobile có thể gửi Firebase ID token tới Core; phần lớn action nghiệp vụ vẫn dùng dữ liệu mẫu và tạo shop vẫn cần mock vì Core chưa có endpoint shop. Web dashboard mặc định dùng mock/localStorage; luồng API thật còn giả định `/auth/login` và các endpoint admin chưa có. Core Java mới triển khai `POST /api/v1/auth/session`, `GET /api/v1/me` và migration auth/shops. AI FastAPI có `GET /health`, chat và CRUD hội thoại tại `/internal/v1/agent/*`, lưu lịch sử trong PostgreSQL; agent chưa có công cụ đọc dữ liệu shop. Core chưa gọi AI.
 
-**Chưa xác minh:** FE chưa có tích hợp chạy thật cho image analysis, recommendation, insight chat và lịch sử Agent. Các phần này thuộc đích MVP nhưng chỉ được nghiệm thu khi có luồng UI/API và `AC-010`–`AC-014`, `AC-018`–`AC-021`.
+**Chưa xác minh:** Chưa có luồng FE → Core → AI chạy thật cho image analysis, recommendation, insight chat hoặc lịch sử Agent. Các phần này thuộc đích MVP nhưng chỉ được nghiệm thu khi có luồng UI/API và `AC-010`–`AC-014`, `AC-018`–`AC-023`.
 
 ## 2. Thành phần và quyền sở hữu
 

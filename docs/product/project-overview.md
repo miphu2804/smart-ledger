@@ -4,13 +4,13 @@
 |---|---|
 | Trạng thái | tạm thời — Core theo FE; AI theo kiến trúc MVP đã chốt |
 | Chủ sở hữu | Chủ sản phẩm |
-| Cập nhật lần cuối | 2026-09-15 |
+| Cập nhật lần cuối | 2026-09-24 |
 | Tên tiếng Anh | So Nghe Loi — AI Voice POS |
 
 ## Tài liệu liên quan
 
 - Nguồn ý tưởng: brief `songheloi` trên Drive EXE101.
-- Nguồn luồng Core/FE: [orei1i/EXE201/frontend](https://github.com/orei1i/EXE201/tree/main/frontend) (đã đọc trên `main`).
+- Nguồn luồng Core/FE ban đầu: [orei1i/EXE201/frontend](https://github.com/orei1i/EXE201/tree/main/frontend), kiểm tra 2026-09-15. Code hiện tại nằm trong [`frontend/mobile`](../../frontend/mobile/README.md), [`frontend/web`](../../frontend/web/README.md) và `backend/`.
 - [Yêu cầu kinh doanh](business-requirements.md): mục tiêu, phạm vi, quy tắc kinh doanh, rủi ro và quyết định cần phê duyệt.
 - [Yêu cầu sản phẩm](product-requirements.md): hành vi sản phẩm có thể quan sát và nghiệm thu.
 - [Thiết kế kỹ thuật](../architecture/technical-design.md): cách hệ thống hiện thực yêu cầu sản phẩm đã duyệt.
@@ -30,7 +30,7 @@
 
 Sổ Nghe Lời có hai giao diện theo vai trò. `OWNER` dùng ứng dụng mobile để vận hành tiệm: danh mục, bán hàng, thu/chi/nợ, báo cáo và gợi ý. `ADMIN` dùng web dashboard để tìm và xem cơ sở khách hàng, theo dõi tình trạng hỗ trợ và số liệu nền tảng; không trực tiếp sửa sổ bán hàng của chủ tiệm.
 
-FE hiện mới có đường mic giả lập và parser cục bộ. Đích MVP bổ sung AI service cho voice/text, ảnh, gợi ý và hỏi đáp; mọi kết quả AI là bản nháp hoặc gợi ý, không tự ghi sổ.
+Mobile hiện dùng parser cục bộ và chưa thu âm từ mic; dữ liệu nghiệp vụ mặc định là mock. Web dashboard cũng mặc định dùng mock. AI đã có chat nội bộ và lưu lịch sử, nhưng chưa có đường FE → Core → AI. Đích MVP bổ sung AI service cho voice/text, ảnh, gợi ý và hỏi đáp; mọi kết quả AI là bản nháp hoặc gợi ý, không tự ghi sổ.
 
 ## 2. Vấn đề
 
@@ -92,7 +92,7 @@ Không coi “bảng tổng hợp cuối ngày” là cách thay thế việc l�
 
 ## 9. Nguồn và giới hạn
 
-- Nguồn Core/FE: FE EXE201, kiểm tra 2026-09-15. README FE còn ghi “mock, chưa gọi API”; code đang gọi Core `/api/v1` — lấy code làm nguồn.
+- Nguồn lịch sử Core/FE: FE EXE201, kiểm tra 2026-09-15. Trong repo hiện tại, mobile có client cho phiên Firebase ↔ Core nhưng action nghiệp vụ vẫn dùng mock; web admin dùng mock và client API thật chưa tương thích Core. Xem [thiết kế kỹ thuật](../architecture/technical-design.md) để phân biệt hiện trạng với đích MVP.
 - Nguồn phạm vi AI: sơ đồ kiến trúc MVP do nhóm chốt. FE chưa chứng minh tích hợp AI chạy thật; PRD và issue là nguồn nghiệm thu.
 - Nguồn pháp lý tham chiếu tại 2026-09-14: [Nghị định 254/2026/NĐ-CP](https://vanban.chinhphu.vn/?docid=218689&pageid=27160), hiệu lực từ 2026-07-01.
 - Đây là mô tả sản phẩm, không phải tư vấn pháp lý. Business rules về hóa đơn phải có người chịu trách nhiệm pháp lý/thuế phê duyệt trước khi productize.
