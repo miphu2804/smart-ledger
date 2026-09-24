@@ -82,15 +82,17 @@ Luồng hỗ trợ: ADMIN đăng nhập dashboard web, tìm OWNER hoặc cơ s�
 | `FR-016` | `BO-005`, `BR-008` | Người bán xem khách còn nợ, thu thêm, và xóa khoản nợ trên UI. | P0 — MVP |
 | `FR-017` | `BR-003`, `BR-011` | Người bán gửi ảnh; hệ thống trả dữ liệu nhận diện thành bản nháp có thể sửa hoặc hủy. | P1 — MVP; loại ảnh đầu tiên chốt trong issue |
 | `FR-018` | `BR-003`, `BR-012` | Mỗi đề xuất AI lưu trạng thái, model/version và kết quả đủ để điều tra lỗi; không tự tạo bản ghi nghiệp vụ. | P0 — MVP |
-| `FR-019` | — | Đã loại khỏi MVP; giữ mã để không tái sử dụng. | Loại khỏi MVP |
+| `FR-019` | `BO-003`, `BR-011`, `BR-012` | RAG chỉ truy xuất dữ liệu của shop đang chọn và trả căn cứ cho recommendation/chat. | P1 — MVP |
 | `FR-020` | `BO-003`, `BR-011` | Người bán hỏi về số liệu vận hành; insight chat trả câu trả lời kèm kỳ/phạm vi dữ liệu và không tư vấn thuế. | P1 — MVP |
 | `FR-021` | `BR-002`, `BR-003` | Khi AI timeout/lỗi, người bán thấy thông báo và tiếp tục bằng text/POS thủ công. | P0 — MVP |
 | `FR-022` | `BR-013`, `BR-014` | ADMIN đăng nhập dashboard web và chỉ vào được khu vực quản trị; OWNER không truy cập được dashboard quản trị. | P0 — MVP |
 | `FR-023` | `BR-013`, `BR-014` | ADMIN tìm kiếm, xem danh sách và chi tiết OWNER/cơ sở khách hàng để hỗ trợ; không có thao tác sửa trực tiếp dữ liệu sổ nghiệp vụ. | P0 — MVP |
 | `FR-024` | `BO-003`, `BR-013`, `BR-014` | ADMIN xem tổng quan hỗ trợ cấp hệ thống bằng số liệu tổng hợp tối thiểu; không xem nội dung chi tiết ngoài phạm vi hỗ trợ được cấp. | P1 — MVP |
-| `FR-025` | `BO-003`, `BR-012` | OWNER tạo chat riêng với assistant, xem, đổi tên và tiếp tục chat qua các phiên; lịch sử chỉ dùng trong đúng hội thoại và shop, được giữ đến khi OWNER xóa. MVP không tự xóa chat theo TTL. | P1 — MVP |
+| `FR-025` | `BR-001`, `BR-002` | Sau khi OWNER chủ động đăng nhập trên mobile, Home có phần giới thiệu tùy chọn ba bước về trợ lý, bán hàng/đơn hàng và tổng quan/quản lý tiệm. Người dùng có thể đi tiếp, quay lại, bỏ qua/đóng hoặc mở Chatbot/Giọng nói trực tiếp ở bước đầu. Phần giới thiệu không bật lại khi chỉ khôi phục phiên; trợ lý vẫn truy cập được từ mascot nổi. | P1 — MVP |
+| `FR-026` | `BO-003`, `BR-002`, `BR-004` | Trên các tab chính, OWNER có thể chạm mascot nổi để chọn Chatbot, Giọng nói hoặc Gợi ý mở phân tích Hôm nay; giữ để vào Giọng nói trực tiếp và kéo mascot trong vùng an toàn. | P1 — MVP |
+| `FR-027` | `BO-003`, `BR-012` | OWNER tạo chat riêng với assistant, xem, đổi tên và tiếp tục chat qua các phiên; lịch sử chỉ dùng trong đúng hội thoại và shop, được giữ đến khi OWNER xóa. MVP không tự xóa chat theo TTL. | P1 — MVP |
 
-`FR-001`–`FR-009` giữ nguyên mã. `FR-007` và `FR-019` không bị tái sử dụng cho yêu cầu khác.
+`FR-001`–`FR-009` giữ nguyên mã. `FR-007` không bị tái sử dụng cho yêu cầu khác.
 
 ## 5. Trạng thái bản ghi bán hàng
 
@@ -129,7 +131,7 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 | `NFR-004` | `BR-INV-005` | Nếu có hóa đơn điện tử, retry không được tạo trùng và mọi thất bại phải còn trong hàng chờ đối soát có thể quan sát. |
 | `NFR-005` | `BR-005` | Báo cáo không được trình bày lãi/chi/thuế như số liệu kê khai. |
 | `NFR-006` | `BR-003` | AI không được tự ghi đơn/chi phí hoặc thay đổi dữ liệu; người dùng phải xác nhận. |
-| `NFR-007` | `BR-012` | Truy xuất dữ liệu, vector nếu có sử dụng, cache và trace AI phải cô lập theo `shop_id`; test chéo shop phải trả 403 hoặc không có dữ liệu. |
+| `NFR-007` | `BR-012` | Truy xuất, vector, cache và trace AI phải cô lập theo `shop_id`; test chéo shop phải trả 403 hoặc không có dữ liệu. |
 | `NFR-008` | `BR-012` | Không gửi token, số điện thoại hoặc media thô vào trace; dữ liệu gửi model phải theo cấu hình đã duyệt. |
 | `NFR-009` | `BR-014` | ADMIN không thể tự cấp role từ client. Mọi truy cập dữ liệu khách hàng và hành động nhạy cảm của ADMIN phải được ghi audit gồm người thực hiện, mục tiêu, hành động và thời điểm. |
 
@@ -148,16 +150,18 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 | `AC-009` | Không áp dụng sau quyết định chỉ có OWNER và ADMIN; giữ mã để không tái sử dụng ID. | `FR-012` |
 | `AC-010` | Output voice/text/image chỉ tạo bản nháp; hủy bản nháp không tạo invoice hoặc expense. | `FR-017`, `FR-018`, `NFR-006` |
 | `AC-011` | AI timeout/lỗi không làm mất input; người dùng chuyển sang text/POS và hoàn tất giao dịch. | `FR-021` |
-| `AC-012` | Insight chat hoặc gợi ý ở shop A không trả dữ liệu của shop B. | `FR-007`, `FR-020`, `NFR-007` |
-| `AC-013` | Gợi ý nhập hàng nêu mặt hàng, số lượng gợi ý, kỳ dữ liệu và lý do; không tự tạo phiếu nhập. | `FR-007`, `NFR-007` |
+| `AC-012` | Truy vấn cùng một câu ở shop A không trả sản phẩm, giao dịch hoặc vector của shop B. | `FR-019`, `NFR-007` |
+| `AC-013` | Gợi ý nhập hàng nêu mặt hàng, số lượng gợi ý, kỳ dữ liệu và lý do; không tự tạo phiếu nhập. | `FR-007`, `FR-019` |
 | `AC-014` | Insight chat trả kỳ/phạm vi dữ liệu hoặc nói rõ không đủ dữ liệu; không trình bày lãi/thuế như kê khai. | `FR-020`, `NFR-005` |
 | `AC-015` | OWNER mở URL dashboard quản trị nhận 403 hoặc được đưa về đăng nhập; ADMIN đăng nhập hợp lệ vào được dashboard. | `FR-022`, `NFR-003` |
 | `AC-016` | ADMIN tìm và xem được OWNER/cơ sở khách hàng nhưng không có hoặc không gọi được API sửa hóa đơn, chi phí, công nợ và tồn kho. | `FR-023`, `NFR-003` |
 | `AC-017` | Khi ADMIN xem chi tiết cơ sở khách hàng, hệ thống tạo bản ghi audit đúng người, cơ sở, hành động và thời điểm; số tổng quan khớp nguồn dữ liệu kiểm thử. | `FR-024`, `NFR-009` |
-| `AC-018` | OWNER mở lại một chat sau phiên đăng nhập mới; lịch sử còn nguyên và assistant tiếp tục bằng ngữ cảnh chỉ lấy từ chat đó. | `FR-025` |
-| `AC-019` | OWNER không xem, đổi tên, tiếp tục hoặc nhận lịch sử của chat thuộc user/shop khác; chat mới không nhận lịch sử từ chat cũ. | `FR-025`, `NFR-007` |
-| `AC-020` | Sau khi OWNER xóa chat, chat không còn trong danh sách, không mở/tiếp tục được và tin nhắn không được đưa vào ngữ cảnh assistant. | `FR-025` |
-| `AC-021` | OWNER đổi tên chat bằng tiêu đề 1–255 ký tự; tên mới hiển thị trong danh sách sau khi tải lại. Tiêu đề rỗng hoặc vượt giới hạn bị từ chối. | `FR-025` |
+| `AC-018` | Sau đăng nhập chủ động, OWNER thấy bước trợ lý; “Tiếp” lần lượt hiện bán hàng/đơn hàng rồi tổng quan/quản lý tiệm, “Quay lại” về bước trước, “Bắt đầu”/“Để sau”/đóng vào Home. Chọn Chatbot/Giọng nói ở bước đầu mở đúng màn. Quay lại Home trong cùng phiên hoặc khôi phục phiên không tự mở lại phần giới thiệu. | `FR-025` |
+| `AC-019` | Trên tab chính, chạm mascot hiện ba lựa chọn Chatbot, Giọng nói và Gợi ý trong khung nhìn; mỗi lựa chọn mở đúng màn, Gợi ý mở phân tích kỳ Hôm nay. Kéo mascot sang vị trí khác vẫn mở được menu; giữ khoảng 500 ms mở Giọng nói trực tiếp. | `FR-026` |
+| `AC-020` | OWNER mở lại một chat sau phiên đăng nhập mới; lịch sử còn nguyên và assistant tiếp tục bằng ngữ cảnh chỉ lấy từ chat đó. | `FR-027` |
+| `AC-021` | OWNER không xem, đổi tên, tiếp tục hoặc nhận lịch sử của chat thuộc user/shop khác; chat mới không nhận lịch sử từ chat cũ. | `FR-027`, `NFR-007` |
+| `AC-022` | Sau khi OWNER xóa chat, chat không còn trong danh sách, không mở/tiếp tục được và tin nhắn không được đưa vào ngữ cảnh assistant. | `FR-027` |
+| `AC-023` | OWNER đổi tên chat bằng tiêu đề 1–255 ký tự; tên mới hiển thị trong danh sách sau khi tải lại. Tiêu đề rỗng hoặc vượt giới hạn bị từ chối. | `FR-027` |
 | `AC-INV-001` | Không thể kích hoạt hóa đơn điện tử khi hồ sơ áp dụng hoặc quy tắc pháp lý chưa được phê duyệt/hoàn tất. | `FR-INV-001` |
 | `AC-INV-002` | Mỗi giao dịch thuộc diện lập hóa đơn có một trạng thái đối soát và không biến mất khi nhà cung cấp lỗi. | `FR-INV-003`, `FR-INV-005`, `NFR-004` |
 

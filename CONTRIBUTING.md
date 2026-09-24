@@ -79,7 +79,9 @@ git switch -c feat/<short-description>
 - Pull requests into `staging` and `main` must pass configured checks before merge.
 - Deploy the same tested commit or artifact from staging to production; environment-specific values belong in secrets or environment configuration.
 - Run database migrations on staging before production. Destructive migrations require an explicit rollback or recovery plan.
-- Initial GitHub Actions should validate documentation links and diagram sources. Add Core/FE lint, tests, build, and migration smoke tests when those runtimes are introduced.
+- Required CI checks are `ai` (lint and tests), `core` (Maven verify plus Flyway migration against a fresh PostgreSQL service), and `mobile-web` (TypeScript and Expo web export).
+- The Vercel mobile project uses `frontend/mobile` as its root and deploys pull requests and `staging` as previews; `main` is the production branch. Vercel must be connected to the repository before preview URLs are available.
+- CI verifies migrations from an empty database. Staging/prod database separation, backup/restore, and rollback still require provisioned environments and an operational smoke check before production release.
 
 ### Pull request title
 
