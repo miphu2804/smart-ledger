@@ -90,7 +90,7 @@ export default function Welcome() {
       />
       <Button title="Tiếp tục" onPress={submit} disabled={!digits.length} loading={loading} />
 
-      <Pressable onPress={() => router.push('/(auth)/email')} style={{ alignSelf: 'center', marginTop: 14 }} hitSlop={8}>
+      <Pressable onPress={() => router.push('/(auth)/email')} style={{ alignSelf: 'center', marginTop: 14, minHeight: 44, justifyContent: 'center' }} hitSlop={8}>
         <T w="semibold" size={13} color={colors.primary}>
           Đăng nhập bằng email và mật khẩu
         </T>
@@ -123,7 +123,7 @@ export default function Welcome() {
 
       <Row style={{ justifyContent: 'center', marginTop: 20 }} gap={6}>
         <FontAwesome name="lock" size={12} color={colors.faint} />
-        <T size={11} color={colors.faint}>
+          <T size={12} color={colors.faint}>
           An toàn & bảo mật
         </T>
       </Row>
@@ -145,6 +145,7 @@ function SocialBtn({
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
       accessibilityLabel={`Đăng nhập với ${icon}`}
       style={({ pressed }) => [styles.social, { backgroundColor: bg }, shadow(1), pressed && { opacity: 0.8 }]}
     >
@@ -160,18 +161,20 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderRadius: 16,
     borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    ...shadow(2),
+    ...shadow(1),
   },
   bubbleAi: {
     alignSelf: 'flex-end',
-    backgroundColor: colors.primary,
+    backgroundColor: colors.ink,
     borderBottomLeftRadius: 16,
     borderBottomRightRadius: 4,
     marginTop: 10,
   },
   line: { flex: 1, height: 1, backgroundColor: colors.border },
-  social: { width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center' },
-  demo: { marginTop: 24, backgroundColor: colors.goldSoft, borderRadius: 14, padding: 12 },
+  social: { width: 50, height: 50, borderRadius: 14, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  demo: { marginTop: 24, backgroundColor: colors.white, borderColor: colors.border, borderWidth: 1, borderRadius: 14, padding: 12 },
 });

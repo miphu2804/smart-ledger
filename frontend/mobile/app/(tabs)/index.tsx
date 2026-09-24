@@ -1,405 +1,302 @@
 import { Feather } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Logo } from '../../src/components/brand';
-import { AreaChart, BarChart } from '../../src/components/charts';
-import { Button, Card, Chips, IconBtn, IconName, Row, Screen, SectionTitle, T } from '../../src/components/ui';
-import { aiSuggestions } from '../../src/data/mock';
-import { vnd } from '../../src/lib/format';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { LogoMark } from '../../src/components/brand';
+import { Button, Card, IconBtn, IconName, Row, Screen, SectionTitle, T } from '../../src/components/ui';
+import { ddmm, vnd } from '../../src/lib/format';
 import { buildNotifications } from '../../src/lib/notifications';
-import { bestSellers, daily, hourly, inPeriod, Period, summary } from '../../src/lib/stats';
+import { bestSellers, periodLabel, summary, type Period } from '../../src/lib/stats';
 import { useApp } from '../../src/store/AppStore';
-import { colors, shadow } from '../../src/theme';
+import { colors } from '../../src/theme';
 
-type P = Extract<Period, 'today' | 'yesterday' | 'month'>;
+type HomePeriod = Extract<Period, 'today' | 'yesterday' | 'month'>;
+
+const weekdayNames = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
 
 export default function Home() {
   const app = useApp();
-  const [period, setPeriod] = useState<P>('today');
-  const [showProfit, setShowProfit] = useState(false);
+  const [period, setPeriod] = useState<HomePeriod>('today');
+  const now = new Date();
 
-  const s = useMemo(() => summary(app.invoices, app.products, period), [app.invoices, app.products, period]);
-  const prev = useMemo(
+  const totals = useMemo(() => summary(app.invoices, app.products, period), [app.invoices, app.products, period]);
+  const previousDay = useMemo(
     () => (period === 'today' ? summary(app.invoices, app.products, 'yesterday') : null),
     [app.invoices, app.products, period],
   );
-  const chart = useMemo(
-    () => (period === 'month' ? daily(app.invoices, 7) : hourly(app.invoices, period)),
-    [app.invoices, period],
-  );
-  const top = useMemo(() => bestSellers(app.invoices, period).slice(0, 4), [app.invoices, period]);
-  const spend = app.expenses.filter((e) => inPeriod(e.createdAt, period)).reduce((a, e) => a + e.amount, 0);
-  const debtLeft = app.debts.reduce((a, d) => a + d.total - d.paid, 0);
-  const lowStock = app.products.filter((p) => p.tracked && p.stock <= 6);
-  const delta = prev && prev.revenue ? (s.revenue - prev.revenue) / prev.revenue : null;
-  const firstName = app.user.name.split(' ').slice(-1)[0];
-  const unreadNotifs = useMemo(() => {
+  const topSellers = useMemo(() => bestSellers(app.invoices, period).slice(0, 4), [app.invoices, period]);
+  const totalDebt = app.debts.reduce((total, debt) => total + Math.max(0, debt.total - debt.paid), 0);
+  const lowStock = app.products.filter((product) => product.tracked && product.stock <= 6).sort((a, b) => a.stock - b.stock);
+  const revenueChange = previousDay?.revenue ? (totals.revenue - previousDay.revenue) / previousDay.revenue : null;
+  const unreadNotifications = useMemo(() => {
     const read = new Set(app.readNotifs);
-    return buildNotifications(app).filter((n) => !read.has(n.id)).length;
+    return buildNotifications(app).filter((notification) => !read.has(notification.id)).length;
   }, [app.invoices, app.products, app.expenses, app.debts, app.readNotifs]);
+  const periodName = periodLabel[period];
+  const topSeller = topSellers[0];
 
   return (
     <Screen>
-      <Row style={{ paddingTop: 10, paddingBottom: 6 }}>
+      <Row style={styles.topBar}>
+        <LogoMark size={42} bg={colors.ink} fg={colors.white} accent={colors.accent} />
         <View style={{ flex: 1 }}>
-          <Logo size={30} subtitle={false} />
+          <T w="bold" size={17} numberOfLines={1}>
+            {app.store.name}
+          </T>
+          <T size={12} color={colors.muted}>
+            Bản demo · dữ liệu giả lập
+          </T>
         </View>
-        <IconBtn name="bell" dot={unreadNotifs > 0} onPress={() => router.push('/notifications')} label="Thông báo" />
+        <IconBtn
+          name="bell"
+          dot={unreadNotifications > 0}
+          onPress={() => router.push('/notifications')}
+          label="Thông báo"
+        />
       </Row>
 
-      <T w="extrabold" size={21} style={{ marginTop: 14, lineHeight: 28 }}>
-        Xin chào {firstName},{'\n'}hôm nay bạn muốn làm gì?
+      <T size={12} color={colors.muted} style={{ marginTop: 14 }}>
+        {weekdayNames[now.getDay()]}, {ddmm(now)}
+      </T>
+      <T w="extrabold" size={30} style={{ marginTop: 2, lineHeight: 38 }}>
+        Tổng quan
       </T>
 
-      {!app.guideDismissed ? (
-        <Card style={{ marginTop: 16 }}>
-          <Row>
-            <View style={{ flex: 1 }}>
-              <T w="bold" size={16}>
-                3 cách bán hàng cực dễ 👋
-              </T>
-              <T size={12} color={colors.faint}>
-                Chọn cách bạn thấy quen tay nhất
-              </T>
-            </View>
-            <IconBtn name="x" size={28} bg={colors.bg} onPress={app.dismissGuide} label="Ẩn hướng dẫn" />
-          </Row>
-          <GuideRow
-            icon="mic"
-            title="Nói để lên đơn"
-            desc="Bạn nói, AI tự ghi đơn"
-            cta="Nói"
-            onPress={() => router.push('/voice')}
-          />
-          <GuideRow
-            icon="grid"
-            title="Chọn hàng nhanh"
-            desc="Bấm chọn từ danh sách"
-            cta="Chọn"
-            onPress={() => router.push('/pos')}
-          />
-          <GuideRow
-            icon="package"
-            title="Thêm hàng vào kho"
-            desc="Quản lý sản phẩm của bạn"
-            cta="Mở"
-            onPress={() => router.push('/products')}
-          />
-        </Card>
-      ) : null}
-
-      <Chips<P>
-        style={{ marginTop: 18 }}
-        value={period}
-        onChange={setPeriod}
-        options={[
-          { key: 'today', label: 'Hôm nay' },
-          { key: 'yesterday', label: 'Hôm qua' },
-          { key: 'month', label: 'Tháng này' },
-        ]}
-      />
-
-      <Card style={{ marginTop: 12 }} onPress={() => router.push('/(tabs)/invoices')}>
-        <Row>
-          <View style={{ flex: 1 }}>
-            <T w="bold" size={13} color={colors.primary}>
-              {s.count} đơn · {Math.round(s.voiceRatio * 100)}% bằng giọng nói
-            </T>
-            <T w="extrabold" size={30} style={{ marginTop: 2 }}>
-              {vnd(s.revenue)}
-            </T>
-            {delta !== null ? (
-              <Row gap={4}>
-                <Feather
-                  name={delta >= 0 ? 'trending-up' : 'trending-down'}
-                  size={13}
-                  color={delta >= 0 ? colors.green : colors.red}
-                />
-                <T w="semibold" size={12} color={delta >= 0 ? colors.green : colors.red}>
-                  {delta >= 0 ? '+' : ''}
-                  {Math.round(delta * 100)}% so với hôm qua
-                </T>
-              </Row>
-            ) : null}
-          </View>
-          <View style={styles.roundIcon}>
-            <Feather name="file-text" size={18} color={colors.white} />
-          </View>
-        </Row>
-      </Card>
-
-      <Card style={{ marginTop: 12 }}>
-        <Row style={{ marginBottom: 12 }}>
-          <T w="bold" size={17} style={{ flex: 1 }}>
-            Doanh thu
-          </T>
-          <T size={11} color={colors.faint}>
-            {period === 'month' ? '7 ngày gần nhất' : 'theo khung giờ'}
-          </T>
-        </Row>
-        {period === 'month' ? <BarChart data={chart} /> : <AreaChart data={chart} />}
-      </Card>
-
-      <Row style={{ marginTop: 12, alignItems: 'stretch' }}>
-        <Card style={{ flex: 1 }} onPress={() => router.push('/(tabs)/expenses')}>
-          <Row gap={4}>
-            <T size={12} color={colors.muted}>
-              Chi {period === 'month' ? 'tháng này' : period === 'today' ? 'hôm nay' : 'hôm qua'}
-            </T>
-            <Feather name="chevron-right" size={13} color={colors.faint} />
-          </Row>
-          <T w="extrabold" size={20} color={colors.gold} style={{ marginTop: 6 }}>
-            {vnd(spend)}
-          </T>
-        </Card>
-        <Card style={{ flex: 1 }} onPress={() => setShowProfit((v) => !v)}>
-          <Row gap={4}>
-            <T size={12} color={colors.muted} style={{ flex: 1 }}>
-              Lãi gộp ước tính
-            </T>
-            <Feather name={showProfit ? 'eye' : 'eye-off'} size={14} color={colors.faint} />
-          </Row>
-          <T w="extrabold" size={20} color={colors.green} style={{ marginTop: 6 }}>
-            {showProfit ? vnd(s.profit) : '••••••'}
-          </T>
-        </Card>
-      </Row>
-
-      <SectionTitle title="AI gợi ý cho tiệm" action="Hỏi AI" onAction={() => router.push('/ai')} />
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ gap: 10 }}
-        style={{ marginHorizontal: -16, paddingHorizontal: 16 }}
+      <Card
+        style={{ marginTop: 14 }}
+        onPress={() => router.push({ pathname: '/(tabs)/invoices', params: { period } })}
       >
-        {aiSuggestions.map((a, i) => (
-          <LinearGradient
-            key={a.id}
-            colors={i === 0 ? ['#2858D8', '#5B8DEF'] : i === 1 ? ['#C8860A', '#E0A21F'] : ['#7A5AF0', '#9C84F5']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.aiCard, i === aiSuggestions.length - 1 && { marginRight: 32 }]}
-          >
-            <Row gap={8}>
-              <View style={styles.aiIcon}>
-                <Feather name={a.icon as IconName} size={14} color={colors.white} />
-              </View>
-              <T w="bold" size={13} color={colors.white} style={{ flex: 1 }} numberOfLines={1}>
-                {a.title}
+        <Row style={{ justifyContent: 'space-between' }}>
+          <T w="bold" size={13} color={colors.primary}>
+            Doanh thu · {periodName}
+          </T>
+          {revenueChange !== null ? (
+            <Row gap={4}>
+              <Feather
+                name={revenueChange >= 0 ? 'trending-up' : 'trending-down'}
+                size={14}
+                color={revenueChange >= 0 ? colors.green : colors.red}
+              />
+              <T w="semibold" size={12} color={revenueChange >= 0 ? colors.green : colors.red}>
+                {revenueChange >= 0 ? '+' : ''}
+                {Math.round(revenueChange * 100)}% so với hôm qua
               </T>
             </Row>
-            <T size={12} color="rgba(255,255,255,0.9)" style={{ marginTop: 8, lineHeight: 17 }}>
-              {a.body}
+          ) : null}
+        </Row>
+        <T
+          w="extrabold"
+          size={totals.count ? 32 : 18}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          style={{ marginTop: 3, lineHeight: totals.count ? 40 : 28 }}
+        >
+          {totals.count ? vnd(totals.revenue) : 'Chưa có đơn trong kỳ'}
+        </T>
+        <Row style={styles.financeRow} gap={14}>
+          <View style={styles.financeItem}>
+            <T w="bold" size={17} numberOfLines={1} adjustsFontSizeToFit>
+              {totals.count} đơn
             </T>
-          </LinearGradient>
-        ))}
-      </ScrollView>
+            <T size={12} color={colors.muted}>
+              Đã chốt trong kỳ
+            </T>
+          </View>
+          <View style={styles.financeDivider} />
+          <View style={styles.financeItem}>
+            <T w="bold" size={17} numberOfLines={1} adjustsFontSizeToFit>
+              {vnd(totalDebt)}
+            </T>
+            <T size={12} color={colors.muted}>
+              Còn nợ toàn tiệm
+            </T>
+          </View>
+        </Row>
+      </Card>
 
-      <SectionTitle title="Quản lý tiệm" />
-      <View style={styles.grid}>
-        <MgmtTile
-          icon="package"
-          title="Hàng hoá"
-          sub={`${app.products.length} sản phẩm`}
-          onPress={() => router.push('/products')}
-        />
-        <MgmtTile icon="users" title="Nhân viên" sub={`${app.staff.length} người`} onPress={() => router.push('/staff')} />
-        <MgmtTile icon="book-open" title="Sổ nợ" sub={vnd(debtLeft)} dot={debtLeft > 0} onPress={() => router.push('/debts')} />
-        <MgmtTile icon="bar-chart-2" title="Bán chạy" sub="Xếp hạng món" onPress={() => router.push('/bestsellers')} />
+      <View style={styles.periodSelector}>
+        {(['today', 'yesterday', 'month'] as const).map((option) => {
+          const active = period === option;
+          return (
+            <Pressable
+              key={option}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              onPress={() => setPeriod(option)}
+              style={[styles.periodOption, active && styles.periodOptionActive]}
+            >
+              <T w={active ? 'bold' : 'semibold'} size={14} color={active ? colors.ink : colors.muted}>
+                {periodLabel[option]}
+              </T>
+            </Pressable>
+          );
+        })}
       </View>
 
-      {debtLeft > 0 ? (
-        <Pressable onPress={() => router.push('/debts')} style={styles.debtBanner}>
-          <Feather name="alert-circle" size={15} color={colors.gold} />
-          <T w="semibold" size={12.5} color={colors.gold} style={{ flex: 1 }}>
-            Còn {vnd(debtLeft)} khách chưa trả
-          </T>
-          <T w="bold" size={12} color={colors.gold}>
-            Xem →
-          </T>
-        </Pressable>
-      ) : null}
-
-      {lowStock.length ? (
-        <Card style={{ marginTop: 12, backgroundColor: colors.redSoft }}>
-          <Row gap={8}>
-            <Feather name="alert-triangle" size={15} color={colors.red} />
-            <T w="bold" size={13} color={colors.red}>
-              {lowStock.length} mặt hàng sắp hết
-            </T>
-          </Row>
-          <T size={12} color={colors.muted} style={{ marginTop: 4 }}>
-            {lowStock.map((p) => `${p.name} (còn ${p.stock})`).join(' · ')}
+      <SectionTitle title="Cần xử lý" />
+      {totalDebt > 0 || lowStock.length > 0 ? (
+        <Card style={{ paddingVertical: 4 }}>
+          {totalDebt > 0 ? (
+            <PriorityRow
+              icon="book-open"
+              title="Còn nợ toàn tiệm"
+              subtitle="Tổng số dư còn lại của khách"
+              amount={vnd(totalDebt)}
+              onPress={() => router.push('/debts')}
+              last={lowStock.length === 0}
+            />
+          ) : null}
+          {lowStock.length > 0 ? (
+            <PriorityRow
+              icon="alert-triangle"
+              title={`${lowStock.length} mặt hàng sắp hết`}
+              subtitle={lowStock.slice(0, 2).map((product) => `${product.name} còn ${product.stock}`).join(' · ')}
+              onPress={() => router.push('/products')}
+              last
+            />
+          ) : null}
+        </Card>
+      ) : (
+        <Card style={{ paddingVertical: 15 }}>
+          <T size={14} color={colors.muted}>
+            Chưa có việc cần xử lý ngay
           </T>
         </Card>
-      ) : null}
+      )}
 
-      <SectionTitle title="Hàng hoá bán chạy" action="Xem tất cả" onAction={() => router.push('/bestsellers')} />
-      <Card style={{ paddingVertical: 6 }}>
-        {top.length ? (
-          top.map((t, i) => (
+      <SectionTitle title="Bán hàng" />
+      <Button
+        title="Nói để lên đơn"
+        icon="mic"
+        onPress={() => router.push('/voice')}
+        style={{ marginBottom: 8 }}
+      />
+      <Button title="Chọn hàng trên POS" icon="grid" variant="outline" onPress={() => router.push('/pos')} />
+
+      <SectionTitle title="Gợi ý từ dữ liệu" />
+      <Card style={{ backgroundColor: colors.primaryTint }}>
+        <Row style={{ alignItems: 'flex-start' }} gap={10}>
+          <View style={styles.suggestionIcon}>
+            <Feather name="trending-up" size={16} color={colors.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <T w="semibold" size={14} style={{ lineHeight: 21 }}>
+              {topSeller
+                ? `${topSeller.name} bán nhiều nhất trong kỳ này (${topSeller.qty} sản phẩm).`
+                : 'Chưa đủ dữ liệu đơn đã chốt trong kỳ để đưa ra gợi ý.'}
+            </T>
+            <T size={12} color={colors.muted} style={{ marginTop: 5 }}>
+              Nguồn: {totals.count} đơn đã chốt · {periodName}
+            </T>
+          </View>
+        </Row>
+      </Card>
+
+      <SectionTitle title="Bán chạy" action="Xem tất cả" onAction={() => router.push('/bestsellers')} />
+      <Card style={{ paddingVertical: 4, marginBottom: 88 }}>
+        {topSellers.length ? (
+          topSellers.map((seller, index) => (
             <Row
-              key={t.name}
-              style={[{ paddingVertical: 11 }, i < top.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }]}
+              key={seller.productId ?? seller.name}
+              style={[styles.sellerRow, index < topSellers.length - 1 && styles.rowBorder]}
             >
-              <T w="bold" size={13} color={colors.faint} style={{ width: 18 }}>
-                {i + 1}
+              <T w="bold" size={12} color={colors.muted} style={{ width: 22 }}>
+                {index + 1}
               </T>
-              <T w="semibold" size={14} style={{ flex: 1 }}>
-                {t.name}
+              <T w="semibold" size={14} style={{ flex: 1 }} numberOfLines={1}>
+                {seller.name}
               </T>
               <T w="bold" size={14} color={colors.primary}>
-                x{t.qty}
+                {seller.qty} sp
               </T>
             </Row>
           ))
         ) : (
-          <T size={13} color={colors.faint} style={{ paddingVertical: 14, textAlign: 'center' }}>
-            Chưa có đơn trong khoảng này
+          <T size={13} color={colors.muted} style={{ paddingVertical: 13, textAlign: 'center' }}>
+            Chưa có đơn trong kỳ
           </T>
         )}
       </Card>
-
-      <Button
-        title="Nói để lên đơn"
-        icon="mic"
-        variant="gold"
-        onPress={() => router.push('/voice')}
-        style={{ marginTop: 20, marginBottom: 56 }}
-      />
     </Screen>
   );
 }
 
-function GuideRow({
+function PriorityRow({
   icon,
   title,
-  desc,
-  cta,
+  subtitle,
+  amount,
   onPress,
+  last,
 }: {
   icon: IconName;
   title: string;
-  desc: string;
-  cta: string;
+  subtitle: string;
+  amount?: string;
   onPress: () => void;
+  last?: boolean;
 }) {
+  const isDebt = icon === 'book-open';
+  const tone = isDebt ? colors.gold : colors.red;
+  const toneBg = isDebt ? colors.goldSoft : colors.redSoft;
+
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.guide, pressed && { opacity: 0.8 }]}>
-      <View style={styles.guideIcon}>
-        <Feather name={icon} size={18} color={colors.white} />
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={[styles.priorityRow, !last && styles.rowBorder]}
+    >
+      <View style={[styles.priorityIcon, { backgroundColor: toneBg }]}>
+        <Feather name={icon} size={17} color={tone} />
       </View>
       <View style={{ flex: 1 }}>
-        <T w="bold" size={14}>
+        <T w="semibold" size={14}>
           {title}
         </T>
-        <T size={11.5} color={colors.faint}>
-          {desc}
+        <T size={12} color={colors.muted} numberOfLines={1}>
+          {subtitle}
         </T>
       </View>
-      <View style={styles.guideCta}>
-        <T w="bold" size={12} color={colors.white}>
-          {cta}
+      {amount ? (
+        <T w="bold" size={13} color={tone} style={{ marginRight: 3 }}>
+          {amount}
         </T>
-      </View>
-    </Pressable>
-  );
-}
-
-function MgmtTile({
-  icon,
-  title,
-  sub,
-  onPress,
-  dot,
-}: {
-  icon: IconName;
-  title: string;
-  sub: string;
-  onPress: () => void;
-  dot?: boolean;
-}) {
-  return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.tile, pressed && { opacity: 0.8 }]}>
-      <View style={styles.tileIcon}>
-        <Feather name={icon} size={20} color={colors.white} />
-      </View>
-      <T w="bold" size={13.5} style={{ marginTop: 10 }}>
-        {title}
-      </T>
-      <T size={11} color={colors.faint} numberOfLines={1}>
-        {sub}
-      </T>
-      {dot ? <View style={styles.dot} /> : null}
+      ) : null}
+      <Feather name="chevron-right" size={17} color={colors.disabled} />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  roundIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  guide: {
+  topBar: { paddingTop: 6, paddingBottom: 2, gap: 10 },
+  periodSelector: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.primaryTint,
+    backgroundColor: '#F1F0ED',
     borderRadius: 14,
-    padding: 10,
+    padding: 4,
     marginTop: 10,
   },
-  guideIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
+  periodOption: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 11 },
+  periodOptionActive: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.border },
+  financeRow: {
+    alignItems: 'stretch',
+    marginTop: 11,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  financeItem: { flex: 1, justifyContent: 'center', minHeight: 44 },
+  financeDivider: { width: 1, backgroundColor: colors.border },
+  priorityRow: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
+  priorityIcon: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  suggestionIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  guideCta: { backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 7 },
-  aiCard: { width: 250, borderRadius: 18, padding: 14 },
-  aiIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  tile: {
-    width: '48%',
-    flexGrow: 1,
-    backgroundColor: colors.white,
-    borderRadius: 18,
-    padding: 14,
-    alignItems: 'center',
-    ...shadow(1),
-  },
-  tileIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 13,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dot: { position: 'absolute', top: 12, right: 12, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.red },
-  debtBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 12,
-    backgroundColor: colors.goldSoft,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
+  sellerRow: { minHeight: 52, paddingVertical: 8 },
 });

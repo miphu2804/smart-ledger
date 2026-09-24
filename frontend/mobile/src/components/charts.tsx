@@ -75,7 +75,7 @@ export function AreaChart({ data, height = 150, color = colors.primary }: { data
               alignItems: 'center',
             }}
           >
-            <T size={10} color="#AFC0DA">
+            <T size={12} color={colors.white}>
               {data[active].label}
             </T>
             <T w="bold" size={12} color={colors.white}>
@@ -99,7 +99,7 @@ export function AreaChart({ data, height = 150, color = colors.primary }: { data
         {data.map((d, i) => (
           <T
             key={d.label + i}
-            size={10}
+            size={12}
             color={i === active ? colors.primary : colors.faint}
             w={i === active ? 'bold' : 'medium'}
           >
@@ -141,7 +141,7 @@ export function BarChart({
               onPress={() => onSelect?.(i)}
             >
               {active ? (
-                <T w="bold" size={10} color={color} style={{ marginBottom: 4 }}>
+                <T w="bold" size={12} color={color} style={{ marginBottom: 4 }}>
                   {compact(d.value)}
                 </T>
               ) : null}
@@ -162,7 +162,7 @@ export function BarChart({
         {data.map((d, i) => (
           <T
             key={d.label + i}
-            size={10}
+            size={12}
             color={i === activeIdx ? colors.ink : colors.faint}
             style={{ flex: 1, textAlign: 'center' }}
           >
@@ -170,27 +170,6 @@ export function BarChart({
           </T>
         ))}
       </View>
-    </View>
-  );
-}
-
-/** Sóng âm động khi đang ghi âm */
-export function Waveform({ active, color = colors.red, bars = 28 }: { active: boolean; color?: string; bars?: number }) {
-  const [tick, setTick] = useState(0);
-  React.useEffect(() => {
-    if (!active) return;
-    const t = setInterval(() => setTick((x) => x + 1), 110);
-    return () => clearInterval(t);
-  }, [active]);
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 48, gap: 3 }}>
-      {Array.from({ length: bars }).map((_, i) => {
-        const base = Math.abs(Math.sin((i + 1) * 1.7));
-        const h = active ? 8 + Math.abs(Math.sin(tick * 0.9 + i * 0.8)) * 34 * (0.4 + base * 0.6) : 6;
-        return (
-          <View key={i} style={{ width: 3, height: h, borderRadius: 2, backgroundColor: color, opacity: active ? 0.9 : 0.35 }} />
-        );
-      })}
     </View>
   );
 }

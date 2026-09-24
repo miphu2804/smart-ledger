@@ -42,7 +42,7 @@ export function Logo({ size = 34, subtitle = true }: { size?: number; subtitle?:
           </T>
         </T>
         {subtitle ? (
-          <T size={10} color={colors.faint}>
+          <T size={12} color={colors.faint}>
             Bán hàng chỉ cần nói
           </T>
         ) : null}

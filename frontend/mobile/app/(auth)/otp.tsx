@@ -140,7 +140,7 @@ export default function Otp() {
           }}
           style={styles.fill}
         >
-          <T w="semibold" size={12} color={colors.gold}>
+          <T w="semibold" size={12} color={colors.muted}>
             Điền nhanh mã demo {MOCK_OTP}
           </T>
         </Pressable>
@@ -165,7 +165,11 @@ const styles = StyleSheet.create({
   fill: {
     alignSelf: 'center',
     marginTop: 28,
-    backgroundColor: colors.goldSoft,
+    minHeight: 44,
+    justifyContent: 'center',
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 10,

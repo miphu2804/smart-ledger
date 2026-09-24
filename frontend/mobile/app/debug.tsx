@@ -155,7 +155,7 @@ export default function Debug() {
       <Card style={{ paddingVertical: 8 }}>
         {events.length ? (
           events.slice(0, 40).map((ev, i) => (
-            <T key={`${ev.at}-${i}`} size={11} color={colors.muted} selectable style={{ paddingVertical: 2, lineHeight: 15 }}>
+            <T key={`${ev.at}-${i}`} size={12} color={colors.muted} selectable style={{ paddingVertical: 2, lineHeight: 17 }}>
               {hhmmss(ev.at)} [{ev.tag}] {ev.text}
             </T>
           ))

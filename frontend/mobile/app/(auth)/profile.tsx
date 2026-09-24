@@ -68,7 +68,7 @@ export default function Profile() {
           await logout();
           router.replace('/(auth)/welcome');
         }}
-        style={{ alignSelf: 'center', marginTop: 20 }}
+        style={{ alignSelf: 'center', marginTop: 20, minHeight: 44, justifyContent: 'center' }}
       >
         <T size={13} color={colors.faint}>
           Dùng số điện thoại khác

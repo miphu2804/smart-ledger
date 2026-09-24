@@ -1,5 +1,4 @@
 import { Feather } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import React, { useState } from 'react';
 import { Linking, Pressable, StyleSheet, View } from 'react-native';
 import { useToast } from '../src/components/brand';
@@ -38,26 +37,26 @@ export default function Debts() {
   return (
     <Screen>
       <Header title="Quản lý nợ" subtitle="Theo dõi khách chưa thanh toán" />
-      <LinearGradient colors={['#C8860A', '#E0A21F']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+      <View style={styles.hero}>
         <Row>
           <View style={{ flex: 1 }}>
-            <T size={12} color="#FFF0CF">
+            <T size={12} color={colors.muted}>
               Tổng còn nợ
             </T>
-            <T w="extrabold" size={30} color={colors.white}>
+            <T w="extrabold" size={30} color={colors.gold}>
               {vnd(totalLeft)}
             </T>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
-            <T size={12} color="#FFF0CF">
+            <T size={12} color={colors.muted}>
               Số khách nợ
             </T>
-            <T w="extrabold" size={26} color={colors.white}>
+            <T w="extrabold" size={26}>
               {owing.length}
             </T>
           </View>
         </Row>
-      </LinearGradient>
+      </View>
 
       <Chips<F>
         style={{ marginTop: 16, marginBottom: 12 }}
@@ -91,7 +90,7 @@ export default function Debts() {
                   <T w="bold" size={15}>
                     {d.name}
                   </T>
-                  <T size={11.5} color={colors.faint}>
+                  <T size={12} color={colors.faint}>
                     {d.phone || 'Chưa có SĐT'} · {relDay(new Date(d.lastDate))}
                   </T>
                 </View>
@@ -154,7 +153,7 @@ function DebtSheet({ debt, onClose }: { debt: Debt | null; onClose: () => void }
           <T w="extrabold" size={28} color={left ? colors.gold : colors.green}>
             {vnd(left)}
           </T>
-          <T size={11.5} color={colors.faint}>
+          <T size={12} color={colors.faint}>
             Tổng {vnd(debt.total)} · đã trả {vnd(debt.paid)}
           </T>
         </View>
@@ -237,7 +236,7 @@ function DebtSheet({ debt, onClose }: { debt: Debt | null; onClose: () => void }
               <T w="semibold" size={13}>
                 {h.note}
               </T>
-              <T size={11} color={colors.faint}>
+              <T size={12} color={colors.faint}>
                 {ddmm(d)} · {hhmm(d)}
               </T>
             </View>
@@ -253,8 +252,8 @@ function DebtSheet({ debt, onClose }: { debt: Debt | null; onClose: () => void }
 }
 
 const styles = StyleSheet.create({
-  hero: { borderRadius: 22, padding: 18 },
-  card: { backgroundColor: colors.white, borderRadius: 18, padding: 14, marginBottom: 10, ...shadow(1) },
+  hero: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.border, borderRadius: 18, padding: 18, ...shadow(1) },
+  card: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.border, borderRadius: 18, padding: 14, marginBottom: 10, ...shadow(1) },
   payBox: { marginTop: 16, backgroundColor: colors.bg, borderRadius: 16, padding: 12 },
   hist: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
   histIcon: {

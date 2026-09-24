@@ -106,7 +106,7 @@ export default function InvoiceDetail() {
           <T w="extrabold" size={16}>
             {app.store.name}
           </T>
-          <T size={11.5} color={colors.faint}>
+          <T size={12} color={colors.faint}>
             {app.store.address}
           </T>
         </View>
@@ -154,7 +154,7 @@ export default function InvoiceDetail() {
               <T w="semibold" size={14}>
                 {it.name}
               </T>
-              <T size={11} color={colors.faint}>
+              <T size={12} color={colors.faint}>
                 {vnd(it.price)} × {it.qty}
               </T>
             </View>

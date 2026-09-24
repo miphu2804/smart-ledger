@@ -75,7 +75,7 @@ export default function Checkout() {
       footer={
         <Row>
           <View style={{ flex: 1 }}>
-            <T size={11} color={colors.faint}>
+            <T size={12} color={colors.faint}>
               Khách cần trả
             </T>
             <T w="extrabold" size={22} color={colors.primary}>
@@ -120,7 +120,7 @@ export default function Checkout() {
               <T w="semibold" size={14}>
                 {it.name}
               </T>
-              <T size={11} color={colors.faint}>
+              <T size={12} color={colors.faint}>
                 {vnd(it.price)} × {it.qty}
               </T>
             </View>
@@ -146,7 +146,7 @@ export default function Checkout() {
         {app.draft?.transcript ? (
           <View style={styles.transcript}>
             <Feather name="mic" size={12} color={colors.primary} />
-            <T size={11.5} color={colors.muted} style={{ flex: 1, fontStyle: 'italic' }}>
+            <T size={12} color={colors.muted} style={{ flex: 1, fontStyle: 'italic' }}>
               “{app.draft.transcript}”
             </T>
           </View>
@@ -172,7 +172,7 @@ export default function Checkout() {
                 on && m.key === 'debt' && { borderColor: colors.gold, backgroundColor: colors.goldSoft },
               ]}
             >
-              <Feather name={m.icon} size={20} color={on ? (m.key === 'debt' ? colors.gold : colors.primary) : colors.faint} />
+              <Feather name={m.icon} size={20} color={on ? (m.key === 'debt' ? colors.gold : colors.accentInk) : colors.faint} />
               <T w={on ? 'bold' : 'semibold'} size={12} color={on ? colors.ink : colors.muted} style={{ marginTop: 6 }}>
                 {methodLabel[m.key]}
               </T>
@@ -238,7 +238,7 @@ export default function Checkout() {
             <T w="extrabold" size={20} color={colors.primary} style={{ marginTop: 6 }}>
               {vnd(total)}
             </T>
-            <T size={11} color={colors.faint} style={{ marginTop: 4, textAlign: 'center' }}>
+            <T size={12} color={colors.faint} style={{ marginTop: 4, textAlign: 'center' }}>
               Mã QR minh hoạ — bản chính thức sẽ tạo VietQR thật
             </T>
           </View>
@@ -362,13 +362,13 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.white,
   },
-  methodOn: { borderColor: colors.primary, backgroundColor: colors.primaryTint },
+  methodOn: { borderColor: colors.accent, backgroundColor: colors.primaryTint },
   qr: { padding: 12, borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white },
   check: {
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: colors.green,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },

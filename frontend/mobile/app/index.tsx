@@ -37,15 +37,15 @@ export default function Splash() {
           transform: [{ scale: fade.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }],
         }}
       >
-        <LogoMark size={112} bg={colors.white} fg={colors.primary} />
+        <LogoMark size={112} bg={colors.white} fg={colors.ink} />
         <T w="extrabold" size={34} color={colors.white} style={{ marginTop: 22 }}>
           Sổ Nghe Lời
         </T>
-        <T size={14} color="#C9D6F7" style={{ marginTop: 6 }}>
+        <T size={14} color={colors.white} style={{ marginTop: 6, opacity: 0.82 }}>
           Sổ bán hàng thông minh — chỉ cần nói
         </T>
       </Animated.View>
-      <T size={11} color="#9DB3EE" style={styles.footer}>
+      <T size={12} color={colors.white} style={styles.footer}>
         Team HEXA · EXE201
       </T>
     </View>
@@ -53,6 +53,6 @@ export default function Splash() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-  footer: { position: 'absolute', bottom: 36 },
+  wrap: { flex: 1, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
+  footer: { position: 'absolute', bottom: 36, opacity: 0.7 },
 });
