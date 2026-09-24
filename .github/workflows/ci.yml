@@ -50,6 +50,20 @@ jobs:
 
   core:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: smartledger
+          POSTGRES_USER: smartledger
+          POSTGRES_PASSWORD: smartledger
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U smartledger -d smartledger"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     outputs:
       tests: ${{ steps.test-results.outputs.tests }}
       failures: ${{ steps.test-results.outputs.failures }}
@@ -66,6 +80,23 @@ jobs:
           java-version: "21"
           cache: maven
       - run: bash ./mvnw --batch-mode --no-transfer-progress verify
+      - name: Migrate a fresh PostgreSQL database
+        run: |
+          docker run --rm --network host \
+            --volume "$GITHUB_WORKSPACE/backend/core/src/main/resources/db/migration:/flyway/sql:ro" \
+            flyway/flyway:13.7.0 \
+            -url=jdbc:postgresql://127.0.0.1:5432/smartledger \
+            -user=smartledger \
+            -password=smartledger \
+            -locations=filesystem:/flyway/sql \
+            -connectRetries=10 \
+            migrate
+      - name: Verify Core tables exist
+        run: |
+          table_count="$(docker run --rm --network host -e PGPASSWORD=smartledger postgres:16 \
+            psql -h 127.0.0.1 -U smartledger -d smartledger -Atc \
+            "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename IN ('users', 'auth_identities', 'shops')")"
+          test "$table_count" = "3"
       - name: Capture test counts
         id: test-results
         if: always()
@@ -87,10 +118,28 @@ jobs:
               print(f"{name}={value}")
           PY
 
+  mobile-web:
+    runs-on: ubuntu-latest
+    env:
+      EXPO_PUBLIC_USE_MOCK: "true"
+    defaults:
+      run:
+        working-directory: frontend/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/mobile/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run export:web
+
   summary:
     name: CI result summary
     if: always()
-    needs: [ai, core]
+    needs: [ai, core, mobile-web]
     runs-on: ubuntu-latest
     steps:
       - name: Build compact report
@@ -105,6 +154,7 @@ jobs:
           CORE_FAILURES: ${{ needs.core.outputs.failures }}
           CORE_ERRORS: ${{ needs.core.outputs.errors }}
           CORE_SKIPPED: ${{ needs.core.outputs.skipped }}
+          MOBILE_RESULT: "${{ needs['mobile-web'].result }}"
         run: |
           {
             echo "# CI results"
@@ -115,6 +165,7 @@ jobs:
               "$AI_RESULT" "${AI_TESTS:-n/a}" "${AI_FAILURES:-n/a}" "${AI_ERRORS:-n/a}" "${AI_SKIPPED:-n/a}"
             printf '| Core (Java) | %s | %s | %s | %s | %s |\n' \
               "$CORE_RESULT" "${CORE_TESTS:-n/a}" "${CORE_FAILURES:-n/a}" "${CORE_ERRORS:-n/a}" "${CORE_SKIPPED:-n/a}"
+            printf '| Mobile web | %s | n/a | n/a | n/a | n/a |\n' "$MOBILE_RESULT"
           } > ci-summary.md
           cat ci-summary.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
