@@ -4,6 +4,16 @@ Internal AI API used by Core. This scaffold serves `/health` (liveness) and `POS
 
 Frontend must not call this service.
 
+## Chat history schema
+
+Run Core's Flyway migrations first so `users` and `shops` exist, then apply the versioned AI migration:
+
+```bash
+psql "$POSTGRES_URL" -v ON_ERROR_STOP=1 -f migrations/001_create_chat_history.sql
+```
+
+The AI service does not create or migrate tables at startup. `ai_request_id` remains nullable; its foreign key is deferred until the `ai_requests` table is installed.
+
 ## Setup
 
 ```bash

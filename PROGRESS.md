@@ -1,3 +1,13 @@
+### [2026-09-24 UTC+07:00] — [AI] Add PostgreSQL-backed agent chat history
+
+**Done:** Implemented Agent conversation persistence, history context, and conversation management against the chat history ERD.
+
+**Changed files:** AI PostgreSQL migration, repository, service, internal API, tests, and related API/technical documentation.
+
+**Flow explained:** Chat turns are committed atomically; later turns load up to 20 scoped messages; OWNER can list, rename, view, and delete conversations.
+
+**Check:** Ruff and format passed; 15 AI tests passed; PostgreSQL 16 migration and end-to-end persistence/scope/delete check passed.
+
 ### [2026-09-23 22:12 UTC+07:00] — [Docs] Reconcile Phase 1 ERD with staging schema
 
 **Done:** Aligned the ERD, diagram, description, and technical design with Core's `shops`/`shop_id` schema and one Firebase identity per user. Documented validation for custom draft items and debt sales that require a customer. Preserved all earlier progress entries while merging the latest `staging` into the ERD branch.
