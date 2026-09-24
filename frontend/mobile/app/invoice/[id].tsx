@@ -73,7 +73,7 @@ export default function InvoiceDetail() {
               icon="printer"
               variant="green"
               style={{ flex: 1 }}
-              onPress={() => toast('Đã gửi lệnh in (giả lập)')}
+              onPress={() => toast('Chưa kết nối máy in. Vui lòng thử lại sau.', 'err')}
             />
             <Button
               title="Sửa"

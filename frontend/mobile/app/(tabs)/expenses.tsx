@@ -248,10 +248,10 @@ function AddExpenseSheet({ visible, onClose }: { visible: boolean; onClose: () =
             style={{ textAlign: 'center', minHeight: 40, marginTop: 6 }}
             color={heard ? colors.ink : colors.faint}
           >
-            {heard || 'Bản demo · VD: “Nhập bánh mì với nguyên liệu hết 850 nghìn”'}
+            {heard || 'Ví dụ: “Nhập bánh mì với nguyên liệu hết 850 nghìn”'}
           </T>
           <Button
-            title={rec ? 'Đang phát câu mẫu…' : title ? 'Thử câu khác' : 'Thử câu nói mẫu'}
+            title={rec ? 'Đang áp dụng câu gợi ý…' : title ? 'Thử câu khác' : 'Dùng câu gợi ý'}
             icon="mic"
             variant="gold"
             onPress={startRec}

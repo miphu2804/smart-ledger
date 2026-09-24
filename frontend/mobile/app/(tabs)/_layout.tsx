@@ -4,6 +4,7 @@ import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconName, T } from '../../src/components/ui';
+import { ZenRing } from '../../src/components/ZenRing';
 import { colors } from '../../src/theme';
 
 type TabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>['tabBar']>>[0];
@@ -51,13 +52,16 @@ function TabBar({ state, navigation }: TabBarProps) {
 
 export default function TabsLayout() {
   return (
-    <Tabs screenOptions={{ headerShown: false }} tabBar={(p) => <TabBar {...p} />}>
-      <Tabs.Screen name="index" />
-      <Tabs.Screen name="invoices" />
-      <Tabs.Screen name="sales" />
-      <Tabs.Screen name="more" />
-      <Tabs.Screen name="expenses" options={{ href: null }} />
-    </Tabs>
+    <View style={{ flex: 1 }}>
+      <Tabs screenOptions={{ headerShown: false }} tabBar={(p) => <TabBar {...p} />}>
+        <Tabs.Screen name="index" />
+        <Tabs.Screen name="invoices" />
+        <Tabs.Screen name="sales" />
+        <Tabs.Screen name="more" />
+        <Tabs.Screen name="expenses" options={{ href: null }} />
+      </Tabs>
+      <ZenRing />
+    </View>
   );
 }
 

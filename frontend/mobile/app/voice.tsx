@@ -142,7 +142,7 @@ export default function Voice() {
       <View style={{ paddingHorizontal: 16 }}>
         <Header
           title="Bán hàng"
-          subtitle={`Bản demo · ${app.store.name}`}
+          subtitle={app.store.name}
           right={
             <Pressable onPress={checkout} disabled={!items.length} hitSlop={8} style={styles.headerAction}>
               <T w="bold" size={14} color={items.length ? colors.primary : colors.disabled}>
@@ -168,7 +168,7 @@ export default function Voice() {
               Đơn này bạn bán hàng gì?
             </T>
             <T size={13} color={colors.faint} style={{ marginTop: 6, textAlign: 'center', lineHeight: 19 }}>
-              Giọng nói dùng câu mẫu trong bản demo.{'\n'}Bạn cũng có thể nhập nội dung bên dưới.
+              Chọn câu gợi ý hoặc nhập nội dung bán hàng bên dưới.
             </T>
             <T w="bold" size={12} color={colors.muted} style={{ marginTop: 22, marginBottom: 8 }}>
               THỬ GÕ NHANH
@@ -279,7 +279,7 @@ export default function Voice() {
         {recording ? (
           <>
             <Button
-              title="Đang phát câu mẫu… chạm để dừng"
+              title="Đang áp dụng câu gợi ý… chạm để dừng"
               icon="mic"
               variant="voice"
               onPress={() => finishRecording(voiceSamples[(sampleCursor - 1) % voiceSamples.length])}
@@ -287,7 +287,7 @@ export default function Voice() {
           </>
         ) : (
           <>
-            <Button title="Thử giọng nói (demo)" icon="mic" variant="gold" onPress={startRecording} />
+            <Button title="Dùng câu gợi ý" icon="mic" variant="gold" onPress={startRecording} />
             <Button
               title="Chọn hàng"
               icon="grid"

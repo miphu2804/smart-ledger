@@ -170,7 +170,7 @@ function DebtSheet({ debt, onClose }: { debt: Debt | null; onClose: () => void }
               name="message-circle"
               bg={colors.primarySoft}
               color={colors.primary}
-              onPress={() => toast(`Đã gửi tin nhắc nợ tới ${debt.phone} (giả lập)`)}
+              onPress={() => Linking.openURL(`sms:${debt.phone}`).catch(() => toast('Không thể mở ứng dụng tin nhắn', 'err'))}
               label="Nhắc nợ"
             />
           </Row>

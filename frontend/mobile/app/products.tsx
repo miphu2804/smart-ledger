@@ -190,7 +190,7 @@ function ProductForm({ value, onClose }: { value: Product | 'new' | null; onClos
       setCat('food');
       setTracked(true);
       setMode('manual');
-      toast('AI đã nhận diện sản phẩm từ ảnh (giả lập)');
+      toast('Đã điền thông tin gợi ý. Hãy kiểm tra trước khi lưu.');
     }, 1400);
   };
 

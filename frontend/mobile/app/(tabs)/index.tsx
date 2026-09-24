@@ -1,22 +1,24 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { ReportPeriodTabs, type ReportPeriod } from '../../src/components/ReportPeriodTabs';
+import { AssistantIntroModal } from '../../src/components/AssistantIntroModal';
 import { LogoMark } from '../../src/components/brand';
-import { Button, Card, IconBtn, IconName, Row, Screen, SectionTitle, T } from '../../src/components/ui';
-import { ddmm, vnd } from '../../src/lib/format';
+import { Button, Card, IconBtn, IconName, Row, Screen, T } from '../../src/components/ui';
+import { vnd } from '../../src/lib/format';
 import { buildNotifications } from '../../src/lib/notifications';
-import { bestSellers, periodLabel, summary, type Period } from '../../src/lib/stats';
+import { bestSellers, periodLabel, summary } from '../../src/lib/stats';
 import { useApp } from '../../src/store/AppStore';
 import { colors } from '../../src/theme';
 
-type HomePeriod = Extract<Period, 'today' | 'yesterday' | 'month'>;
-
-const weekdayNames = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+const weekdayNames = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
 
 export default function Home() {
   const app = useApp();
-  const [period, setPeriod] = useState<HomePeriod>('today');
+  const { width } = useWindowDimensions();
+  const compactRevenueHeader = width < 390;
+  const [period, setPeriod] = useState<ReportPeriod>('today');
   const now = new Date();
 
   const totals = useMemo(() => summary(app.invoices, app.products, period), [app.invoices, app.products, period]);
@@ -26,7 +28,9 @@ export default function Home() {
   );
   const topSellers = useMemo(() => bestSellers(app.invoices, period).slice(0, 4), [app.invoices, period]);
   const totalDebt = app.debts.reduce((total, debt) => total + Math.max(0, debt.total - debt.paid), 0);
+  const debtorCount = app.debts.filter((debt) => debt.total > debt.paid).length;
   const lowStock = app.products.filter((product) => product.tracked && product.stock <= 6).sort((a, b) => a.stock - b.stock);
+  const priorityCount = Number(totalDebt > 0) + Number(lowStock.length > 0);
   const revenueChange = previousDay?.revenue ? (totals.revenue - previousDay.revenue) / previousDay.revenue : null;
   const unreadNotifications = useMemo(() => {
     const read = new Set(app.readNotifs);
@@ -34,17 +38,22 @@ export default function Home() {
   }, [app.invoices, app.products, app.expenses, app.debts, app.readNotifs]);
   const periodName = periodLabel[period];
   const topSeller = topSellers[0];
+  const openAssistant = (path: '/voice' | '/ai') => {
+    app.dismissGuide();
+    router.push(path);
+  };
 
   return (
-    <Screen>
+    <>
+    <Screen bg={colors.white}>
       <Row style={styles.topBar}>
-        <LogoMark size={42} bg={colors.ink} fg={colors.white} accent={colors.accent} />
+        <LogoMark size={42} />
         <View style={{ flex: 1 }}>
           <T w="bold" size={17} numberOfLines={1}>
             {app.store.name}
           </T>
           <T size={12} color={colors.muted}>
-            Bản demo · dữ liệu giả lập
+            Sổ bán hàng của bạn
           </T>
         </View>
         <IconBtn
@@ -55,44 +64,50 @@ export default function Home() {
         />
       </Row>
 
-      <T size={12} color={colors.muted} style={{ marginTop: 14 }}>
-        {weekdayNames[now.getDay()]}, {ddmm(now)}
+      <T w="bold" size={12} color={colors.muted} style={styles.date}>
+        {`${weekdayNames[now.getDay()]}, ${now.getDate()} tháng ${now.getMonth() + 1}`.toLocaleUpperCase('vi-VN')}
       </T>
-      <T w="extrabold" size={30} style={{ marginTop: 2, lineHeight: 38 }}>
+      <T w="extrabold" size={32} style={{ marginTop: 3, lineHeight: 42 }}>
         Tổng quan
       </T>
 
       <Card
-        style={{ marginTop: 14 }}
-        onPress={() => router.push({ pathname: '/(tabs)/invoices', params: { period } })}
+        style={{ marginTop: 18 }}
+        onPress={() => router.push({ pathname: '/analytics', params: { period } })}
+        accessibilityLabel={`Xem phân tích doanh thu ${periodName}`}
       >
-        <Row style={{ justifyContent: 'space-between' }}>
-          <T w="bold" size={13} color={colors.primary}>
-            Doanh thu · {periodName}
+        <Row style={[styles.revenueHeader, compactRevenueHeader && styles.revenueHeaderCompact]} gap={compactRevenueHeader ? 0 : 8}>
+          <T w="bold" size={12} color={colors.muted} numberOfLines={1} style={styles.revenueLabel}>
+            DOANH THU {periodName.toUpperCase()}
           </T>
-          {revenueChange !== null ? (
-            <Row gap={4}>
-              <Feather
-                name={revenueChange >= 0 ? 'trending-up' : 'trending-down'}
-                size={14}
-                color={revenueChange >= 0 ? colors.green : colors.red}
-              />
-              <T w="semibold" size={12} color={revenueChange >= 0 ? colors.green : colors.red}>
-                {revenueChange >= 0 ? '+' : ''}
-                {Math.round(revenueChange * 100)}% so với hôm qua
-              </T>
-            </Row>
-          ) : null}
+          <View style={compactRevenueHeader ? styles.compactComparisonSlot : undefined}>
+            {revenueChange !== null ? (
+              <Row gap={4} style={[styles.changeBadge, { backgroundColor: revenueChange >= 0 ? colors.greenSoft : colors.redSoft }]}>
+                <Feather
+                  name={revenueChange >= 0 ? 'trending-up' : 'trending-down'}
+                  size={14}
+                  color={revenueChange >= 0 ? colors.green : colors.red}
+                />
+                <T w="semibold" size={12} color={revenueChange >= 0 ? colors.green : colors.red} numberOfLines={1} adjustsFontSizeToFit>
+                  {revenueChange >= 0 ? '+' : ''}
+                  {Math.round(revenueChange * 100)}% so với hôm qua
+                </T>
+              </Row>
+            ) : null}
+          </View>
         </Row>
-        <T
-          w="extrabold"
-          size={totals.count ? 32 : 18}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          style={{ marginTop: 3, lineHeight: totals.count ? 40 : 28 }}
-        >
-          {totals.count ? vnd(totals.revenue) : 'Chưa có đơn trong kỳ'}
-        </T>
+        <Row style={{ marginTop: 8 }} gap={8}>
+          <T
+            w="extrabold"
+            size={totals.count ? 34 : 18}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            style={{ flex: 1, lineHeight: totals.count ? 44 : 28 }}
+          >
+            {totals.count ? vnd(totals.revenue) : 'Chưa có đơn trong kỳ'}
+          </T>
+          <Feather name="arrow-up-right" size={18} color={colors.faint} />
+        </Row>
         <Row style={styles.financeRow} gap={14}>
           <View style={styles.financeItem}>
             <T w="bold" size={17} numberOfLines={1} adjustsFontSizeToFit>
@@ -114,34 +129,18 @@ export default function Home() {
         </Row>
       </Card>
 
-      <View style={styles.periodSelector}>
-        {(['today', 'yesterday', 'month'] as const).map((option) => {
-          const active = period === option;
-          return (
-            <Pressable
-              key={option}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-              onPress={() => setPeriod(option)}
-              style={[styles.periodOption, active && styles.periodOptionActive]}
-            >
-              <T w={active ? 'bold' : 'semibold'} size={14} color={active ? colors.ink : colors.muted}>
-                {periodLabel[option]}
-              </T>
-            </Pressable>
-          );
-        })}
+      <View style={{ marginTop: 14 }}>
+        <ReportPeriodTabs value={period} onChange={setPeriod} />
       </View>
 
-      <SectionTitle title="Cần xử lý" />
-      {totalDebt > 0 || lowStock.length > 0 ? (
+      <HomeSectionHeading title="Ưu tiên hôm nay" side={priorityCount ? `${priorityCount} việc cần xem` : 'Đã xong'} />
+      {priorityCount ? (
         <Card style={{ paddingVertical: 4 }}>
           {totalDebt > 0 ? (
             <PriorityRow
               icon="book-open"
-              title="Còn nợ toàn tiệm"
-              subtitle="Tổng số dư còn lại của khách"
-              amount={vnd(totalDebt)}
+              title="Thu khoản còn nợ"
+              subtitle={`${debtorCount} khách · ${vnd(totalDebt)} chưa thu`}
               onPress={() => router.push('/debts')}
               last={lowStock.length === 0}
             />
@@ -149,7 +148,7 @@ export default function Home() {
           {lowStock.length > 0 ? (
             <PriorityRow
               icon="alert-triangle"
-              title={`${lowStock.length} mặt hàng sắp hết`}
+              title="Kiểm tra hàng sắp hết"
               subtitle={lowStock.slice(0, 2).map((product) => `${product.name} còn ${product.stock}`).join(' · ')}
               onPress={() => router.push('/products')}
               last
@@ -164,35 +163,33 @@ export default function Home() {
         </Card>
       )}
 
-      <SectionTitle title="Bán hàng" />
-      <Button
-        title="Nói để lên đơn"
-        icon="mic"
-        onPress={() => router.push('/voice')}
-        style={{ marginBottom: 8 }}
-      />
-      <Button title="Chọn hàng trên POS" icon="grid" variant="outline" onPress={() => router.push('/pos')} />
+      <HomeSectionHeading title="Bán hàng" />
+      <Button title="Chọn hàng" icon="grid" onPress={() => router.push('/(tabs)/sales')} />
 
-      <SectionTitle title="Gợi ý từ dữ liệu" />
-      <Card style={{ backgroundColor: colors.primaryTint }}>
+      <Card style={{ backgroundColor: colors.primaryTint, marginTop: 22 }}>
         <Row style={{ alignItems: 'flex-start' }} gap={10}>
           <View style={styles.suggestionIcon}>
-            <Feather name="trending-up" size={16} color={colors.primary} />
+            <Feather name="star" size={17} color={colors.primary} />
           </View>
           <View style={{ flex: 1 }}>
-            <T w="semibold" size={14} style={{ lineHeight: 21 }}>
+            <T w="bold" size={14} style={{ marginBottom: 4 }}>Gợi ý từ dữ liệu đã chốt</T>
+            <T size={13} color={colors.muted} style={{ lineHeight: 20 }}>
               {topSeller
-                ? `${topSeller.name} bán nhiều nhất trong kỳ này (${topSeller.qty} sản phẩm).`
+                ? `${topSeller.name} bán nhiều nhất trong kỳ (${topSeller.qty} sản phẩm). Xem số liệu trước khi chuẩn bị thêm.`
                 : 'Chưa đủ dữ liệu đơn đã chốt trong kỳ để đưa ra gợi ý.'}
             </T>
-            <T size={12} color={colors.muted} style={{ marginTop: 5 }}>
+            <T size={12} color={colors.faint} style={{ marginTop: 5 }}>
               Nguồn: {totals.count} đơn đã chốt · {periodName}
             </T>
           </View>
         </Row>
       </Card>
 
-      <SectionTitle title="Bán chạy" action="Xem tất cả" onAction={() => router.push('/bestsellers')} />
+      <HomeSectionHeading
+        title={`Bán chạy ${periodName.toLowerCase()}`}
+        side="Xem tất cả ›"
+        onPress={() => router.push({ pathname: '/bestsellers', params: { period } })}
+      />
       <Card style={{ paddingVertical: 4, marginBottom: 88 }}>
         {topSellers.length ? (
           topSellers.map((seller, index) => (
@@ -218,6 +215,30 @@ export default function Home() {
         )}
       </Card>
     </Screen>
+    <AssistantIntroModal
+      visible={!app.guideDismissed}
+      onDismiss={app.dismissGuide}
+      onVoice={() => openAssistant('/voice')}
+      onChat={() => openAssistant('/ai')}
+    />
+    </>
+  );
+}
+
+function HomeSectionHeading({ title, side, onPress }: { title: string; side?: string; onPress?: () => void }) {
+  return (
+    <Row style={styles.sectionHeading} gap={8}>
+      <T w="bold" size={19} style={{ flex: 1 }} numberOfLines={1}>
+        {title}
+      </T>
+      {side && onPress ? (
+        <Pressable onPress={onPress} accessibilityRole="button" style={styles.sectionAction}>
+          <T w="semibold" size={12} color={colors.primary}>{side}</T>
+        </Pressable>
+      ) : side ? (
+        <T w="semibold" size={12} color={colors.muted}>{side}</T>
+      ) : null}
+    </Row>
   );
 }
 
@@ -225,43 +246,32 @@ function PriorityRow({
   icon,
   title,
   subtitle,
-  amount,
   onPress,
   last,
 }: {
   icon: IconName;
   title: string;
   subtitle: string;
-  amount?: string;
   onPress: () => void;
   last?: boolean;
 }) {
-  const isDebt = icon === 'book-open';
-  const tone = isDebt ? colors.gold : colors.red;
-  const toneBg = isDebt ? colors.goldSoft : colors.redSoft;
-
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       style={[styles.priorityRow, !last && styles.rowBorder]}
     >
-      <View style={[styles.priorityIcon, { backgroundColor: toneBg }]}>
-        <Feather name={icon} size={17} color={tone} />
+      <View style={styles.priorityIcon}>
+        <Feather name={icon} size={19} color={colors.white} />
       </View>
       <View style={{ flex: 1 }}>
-        <T w="semibold" size={14}>
+        <T w="bold" size={14}>
           {title}
         </T>
-        <T size={12} color={colors.muted} numberOfLines={1}>
+        <T size={12} color={colors.muted} numberOfLines={1} style={{ marginTop: 2 }}>
           {subtitle}
         </T>
       </View>
-      {amount ? (
-        <T w="bold" size={13} color={tone} style={{ marginRight: 3 }}>
-          {amount}
-        </T>
-      ) : null}
       <Feather name="chevron-right" size={17} color={colors.disabled} />
     </Pressable>
   );
@@ -269,26 +279,25 @@ function PriorityRow({
 
 const styles = StyleSheet.create({
   topBar: { paddingTop: 6, paddingBottom: 2, gap: 10 },
-  periodSelector: {
-    flexDirection: 'row',
-    backgroundColor: '#F1F0ED',
-    borderRadius: 14,
-    padding: 4,
-    marginTop: 10,
-  },
-  periodOption: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 11 },
-  periodOptionActive: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.border },
+  date: { marginTop: 22, letterSpacing: 0.6 },
+  revenueHeader: { minHeight: 30, justifyContent: 'space-between' },
+  revenueHeaderCompact: { minHeight: 54, alignItems: 'stretch', flexDirection: 'column' },
+  revenueLabel: { letterSpacing: 0.5, lineHeight: 18, flexShrink: 1 },
+  compactComparisonSlot: { minHeight: 30, alignItems: 'flex-end', justifyContent: 'center' },
+  changeBadge: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 5, flexShrink: 1 },
   financeRow: {
     alignItems: 'stretch',
-    marginTop: 11,
-    paddingTop: 10,
+    marginTop: 14,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
   financeItem: { flex: 1, justifyContent: 'center', minHeight: 44 },
   financeDivider: { width: 1, backgroundColor: colors.border },
-  priorityRow: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
-  priorityIcon: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  sectionHeading: { marginTop: 24, marginBottom: 10, minHeight: 40, alignItems: 'center' },
+  sectionAction: { minHeight: 44, justifyContent: 'center' },
+  priorityRow: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
+  priorityIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   suggestionIcon: {
     width: 32,

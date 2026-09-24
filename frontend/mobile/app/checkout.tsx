@@ -339,7 +339,7 @@ function Success({ id, total, method, change }: { id: string; total: number; met
           {methodLabel[method]}
           {change > 0 ? ` · Thối lại ${vnd(change)}` : ''}
         </T>
-        <Pressable onPress={() => toast('Đã gửi lệnh in tới máy in K80 (giả lập)')} style={styles.print}>
+        <Pressable onPress={() => toast('Chưa kết nối máy in. Vui lòng thử lại sau.', 'err')} style={styles.print}>
           <Feather name="printer" size={16} color={colors.green} />
           <T w="bold" size={13} color={colors.green}>
             In hoá đơn

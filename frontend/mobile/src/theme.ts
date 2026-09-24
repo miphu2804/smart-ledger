@@ -41,22 +41,24 @@ export const font = {
 
 export const radius = { sm: 10, md: 14, lg: 18, xl: 20, pill: 999 };
 
-export const shadow = (level: 1 | 2 | 3 = 1): ViewStyle =>
+export const shadow = (level: 0 | 1 | 2 | 3 = 1): ViewStyle =>
   Platform.select<ViewStyle>({
     web: {
       boxShadow:
-        level === 1
-          ? '0 1px 3px rgba(42,41,38,0.025), 0 8px 18px rgba(42,41,38,0.045)'
+        level === 0
+          ? '0 1px 3px rgba(42,41,38,0.06)'
+          : level === 1
+          ? '0 2px 4px rgba(42,41,38,0.06), 0 10px 22px rgba(42,41,38,0.09)'
           : level === 2
-            ? '0 3px 9px rgba(42,41,38,0.08)'
-            : '0 5px 12px rgba(26,25,22,0.10)',
+            ? '0 3px 9px rgba(42,41,38,0.12)'
+            : '0 6px 16px rgba(26,25,22,0.16)',
     } as ViewStyle,
     default: {
       shadowColor: '#2A2926',
-      shadowOpacity: level === 1 ? 0.045 : level === 2 ? 0.08 : 0.1,
-      shadowRadius: level === 1 ? 10 : level === 2 ? 9 : 12,
-      shadowOffset: { width: 0, height: level === 1 ? 4 : level === 2 ? 3 : 5 },
-      elevation: level === 1 ? 1 : level === 2 ? 3 : 4,
+      shadowOpacity: level === 0 ? 0.06 : level === 1 ? 0.12 : level === 2 ? 0.16 : 0.18,
+      shadowRadius: level === 0 ? 3 : level === 1 ? 12 : level === 2 ? 13 : 15,
+      shadowOffset: { width: 0, height: level === 0 ? 1 : level === 1 ? 5 : level === 2 ? 6 : 7 },
+      elevation: level === 0 ? 1 : level === 1 ? 4 : level === 2 ? 5 : 6,
     },
   })!;
 

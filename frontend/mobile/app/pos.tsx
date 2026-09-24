@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useToast } from '../src/components/brand';
-import { Badge, Button, Chips, EmptyState, Field, Header, IconBtn, Row, Sheet, Stepper, T, Tile } from '../src/components/ui';
+import { Badge, Button, Chips, EmptyState, Field, Header, Row, Sheet, Stepper, T, Tile } from '../src/components/ui';
 import { categoryMeta } from '../src/data/mock';
 import type { LineItem } from '../src/data/types';
 import { normalizeText, vnd } from '../src/lib/format';
@@ -12,7 +12,7 @@ import { itemsTotal } from '../src/lib/stats';
 import { useApp } from '../src/store/AppStore';
 import { colors, shadow } from '../src/theme';
 
-export default function Pos() {
+export default function Pos({ inTab = false }: { inTab?: boolean }) {
   const app = useApp();
   const toast = useToast();
   const insets = useSafeAreaInsets();
@@ -52,19 +52,7 @@ export default function Pos() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top }}>
       <View style={{ paddingHorizontal: 16 }}>
-        <Header
-          title="Chọn hàng (POS)"
-          subtitle={`${app.products.length} sản phẩm`}
-          right={
-            <IconBtn
-              name="maximize"
-              bg={colors.primary}
-              color={colors.white}
-              onPress={() => toast('Quét mã vạch — sẽ có ở bản chính thức')}
-              label="Quét mã"
-            />
-          }
-        />
+        <Header title={inTab ? 'Bán hàng' : 'Chọn hàng'} subtitle={`${app.products.length} sản phẩm`} back={!inTab} big={inTab} />
         <Field placeholder="Tìm hàng…" value={q} onChangeText={setQ} style={{ marginBottom: 10 }} />
         <Chips value={cat} onChange={setCat} options={cats.map((c) => ({ key: c, label: categoryMeta[c] ?? c }))} />
       </View>
@@ -124,7 +112,7 @@ export default function Pos() {
         }}
       />
 
-      <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+      <View style={[styles.bar, { paddingBottom: inTab ? 12 : Math.max(insets.bottom, 12) }]}>
         <Pressable
           onPress={() => count && setCartOpen(true)}
           style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { LayoutChangeEvent, Pressable, View } from 'react-native';
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Stop } from 'react-native-svg';
-import { compact } from '../lib/format';
+import { compact, vnd } from '../lib/format';
 import { colors } from '../theme';
 import { T } from './ui';
 
@@ -139,6 +139,9 @@ export function BarChart({
               key={d.label + i}
               style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', height }}
               onPress={() => onSelect?.(i)}
+              disabled={!onSelect}
+              accessibilityRole={onSelect ? 'button' : undefined}
+              accessibilityLabel={`${d.label}: ${vnd(d.value)}`}
             >
               {active ? (
                 <T w="bold" size={12} color={color} style={{ marginBottom: 4 }}>

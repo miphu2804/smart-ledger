@@ -80,12 +80,12 @@ export default function Staff() {
         </T>
         <Chips scroll={false} value={role} onChange={setRole} options={ROLES.map((r) => ({ key: r, label: r }))} />
         <Button
-          title="Thêm & gửi lời mời"
+          title="Thêm nhân viên"
           style={{ marginTop: 16 }}
           disabled={!name.trim() || phone.replace(/\D/g, '').length < 9}
           onPress={() => {
             app.addStaff(name.trim(), role, phone);
-            toast(`Đã gửi lời mời tới ${phone} (giả lập)`);
+            toast('Đã thêm nhân viên');
             setName('');
             setPhone('');
             setOpen(false);

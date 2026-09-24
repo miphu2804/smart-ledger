@@ -28,7 +28,7 @@ export default function Ai() {
     {
       id: 'hi',
       from: 'ai',
-      text: `Chào ${app.user.name.split(' ').slice(-1)[0]}! Đây là trợ lý mô phỏng với dữ liệu mẫu của ${app.store.name}. Bạn muốn hỏi gì về việc buôn bán hôm nay?`,
+      text: `Chào ${app.user.name.split(' ').slice(-1)[0]}! Bạn muốn hỏi gì về việc buôn bán hôm nay?`,
     },
   ]);
 
@@ -47,7 +47,7 @@ export default function Ai() {
     if (/nhap|het hang|ton kho/.test(n)) {
       const low = app.products.filter((p) => p.tracked && p.stock <= 6);
       const top = bestSellers(app.invoices, 'week').slice(0, 3);
-      return `Dữ liệu mẫu 7 ngày qua:\n${low.map((p) => `• ${p.name}: còn ${p.stock}, cần kiểm tra tồn`).join('\n') || '• Chưa có mặt hàng dưới ngưỡng cảnh báo'}\n\n${top.length ? `Bán chạy: ${top.map((t) => t.name).join(', ')}.` : 'Chưa có đơn đã chốt trong kỳ.'} Chưa đủ dữ liệu để tính số lượng cần nhập.`;
+      return `Trong 7 ngày qua:\n${low.map((p) => `• ${p.name}: còn ${p.stock}, cần kiểm tra tồn`).join('\n') || '• Chưa có mặt hàng dưới ngưỡng cảnh báo'}\n\n${top.length ? `Bán chạy: ${top.map((t) => t.name).join(', ')}.` : 'Chưa có đơn đã chốt trong kỳ.'} Chưa đủ dữ liệu để tính số lượng cần nhập.`;
     }
     if (/chay|ban nhieu|top/.test(n)) {
       const top = bestSellers(app.invoices, 'week').slice(0, 5);
@@ -89,7 +89,7 @@ export default function Ai() {
       <View style={{ paddingHorizontal: 16 }}>
         <Header
           title="Trợ lý AI"
-          subtitle="Bản demo · trả lời từ dữ liệu mẫu"
+          subtitle="Hỏi về doanh thu, hàng hoá và công nợ"
           right={
             <View style={styles.badge}>
               <Feather name="star" size={16} color={colors.ink} />

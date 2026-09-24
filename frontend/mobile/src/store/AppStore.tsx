@@ -67,7 +67,7 @@ function initialState(): State {
     staff: mockStaff.map((s) => ({ ...s })),
     cart: {},
     draft: null,
-    guideDismissed: false,
+    guideDismissed: true,
     readNotifs: [],
   };
 }
@@ -120,7 +120,7 @@ function useStoreValue() {
           const session = await sessionApi.create(displayName);
           if (session.role !== 'OWNER') throw new AuthError('not-owner');
           loggedInRef.current = true;
-          patch((st) => sessionPatch(st, session));
+          patch((st) => ({ ...sessionPatch(st, session), guideDismissed: false }));
           debugLog('session', 'signIn ✓', `role=${session.role}`, `needsOnboarding=${session.needsOnboarding}`);
           return session;
         } catch (e) {

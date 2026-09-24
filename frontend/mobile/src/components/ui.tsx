@@ -143,7 +143,7 @@ export function IconBtn({
       hitSlop={Math.max(6, (44 - size) / 2)}
       style={({ pressed }) => [
         { width: size, height: size, borderRadius: 12, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' },
-        bg === colors.white && shadow(1),
+        bg === colors.white && shadow(0),
         pressed && { opacity: 0.7 },
       ]}
     >
@@ -158,16 +158,19 @@ export function Card({
   children,
   style,
   onPress,
+  accessibilityLabel,
 }: {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   onPress?: () => void;
+  accessibilityLabel?: string;
 }) {
   if (onPress)
     return (
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
         style={({ pressed }) => [styles.card, style, pressed && { opacity: 0.85 }]}
       >
         {children}

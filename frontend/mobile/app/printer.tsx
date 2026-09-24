@@ -15,9 +15,8 @@ export default function Printer() {
   const test = () => {
     setState('testing');
     setTimeout(() => {
-      const ok = ip.startsWith('192.168.');
-      setState(ok ? 'ok' : 'fail');
-      toast(ok ? 'Đã in trang thử (giả lập)' : 'Không kết nối được máy in', ok ? 'ok' : 'err');
+      setState('fail');
+      toast('Chưa kết nối máy in. Vui lòng thử lại sau.', 'err');
     }, 1200);
   };
 
