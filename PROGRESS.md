@@ -1,3 +1,13 @@
+### [2026-09-24 17:43 UTC+07:00] — [AI] Verify persisted chat CRUD before merge
+
+**Done:** Manually called the live AI HTTP service with two short model requests and verified create, list, detail, rename, continue, delete, scope isolation, and post-delete behavior against disposable PostgreSQL 16 and Redis. The staging database was not used.
+
+**Changed files:** AI conversation API integration coverage, the AI CI PostgreSQL service, and the PRD chat requirement mapping.
+
+**Flow explained:** CI runs the real-PostgreSQL CRUD check as an AI API/database integration test. Authenticated Core-to-AI E2E remains a later CI step after that product flow exists.
+
+**Check:** Manual HTTP flow passed; AI suite passed 24 tests; Ruff and format checks passed. Local Core Maven verification could not start because Java is unavailable; the PR's Core CI job must pass before merge.
+
 ### [2026-09-24 01:01 UTC+07:00] — [CI] Verify compact summary artifact
 
 **Done:** The final PR run passed AI, Core, and summary jobs. Downloaded `ci-summary` and verified the board reports 12 Python tests and 11 Java tests, with zero failures, errors, or skips.
@@ -43,6 +53,16 @@
 **Flow explained:** The `release-source` check is only required for pull requests targeting `main`; it must be configured as a required check in the `main` ruleset after this workflow reaches `main`.
 
 **Check:** AI Ruff check and format check passed; Python tests passed (12). Local Core verification could not start because no Java runtime is installed; GitHub Actions validation pending. Workflow YAML parsed; `git diff --check` passed.
+
+### [2026-09-24 UTC+07:00] — [AI] Add PostgreSQL-backed agent chat history
+
+**Done:** Implemented Agent conversation persistence, history context, and conversation management against the chat history ERD.
+
+**Changed files:** AI PostgreSQL migration, repository, service, internal API, tests, and related API/technical documentation.
+
+**Flow explained:** Chat turns are committed atomically; later turns load up to 20 scoped messages; OWNER can list, rename, view, and delete conversations.
+
+**Check:** Ruff and format passed; 15 AI tests passed; PostgreSQL 16 migration and end-to-end persistence/scope/delete check passed.
 
 ### [2026-09-23 22:12 UTC+07:00] — [Docs] Reconcile Phase 1 ERD with staging schema
 

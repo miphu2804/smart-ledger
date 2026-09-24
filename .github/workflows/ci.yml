@@ -8,6 +8,22 @@ on:
 jobs:
   ai:
     runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: smartledger_test
+          POSTGRES_USER: smartledger
+          POSTGRES_PASSWORD: smartledger
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U smartledger -d smartledger_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_TEST_URL: postgresql://smartledger:smartledger@localhost:5432/smartledger_test
     outputs:
       tests: ${{ steps.test-results.outputs.tests }}
       failures: ${{ steps.test-results.outputs.failures }}

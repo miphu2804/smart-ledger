@@ -111,13 +111,18 @@ Phủ `FR-006`, `FR-015`, `FR-016`.
 
 ## 5. AI qua Core
 
-AI chỉ tạo bản nháp/gợi ý. Các endpoint này không ghi invoice, expense hoặc tồn kho.
+AI chỉ tạo bản nháp/gợi ý và câu trả lời chat. Các endpoint này không ghi invoice, expense hoặc tồn kho.
 
 | Method | Đường | Input | Trả về |
 |---|---|---|---|
 | `POST` | `/api/v1/ai/drafts` | JSON `{ type: TEXT, mode, text }` hoặc multipart `type=AUDIO|IMAGE`, `mode=SALE|EXPENSE`, `file` | `DraftView` |
 | `GET` | `/api/v1/replenishment?period=` | — | `ReplenishmentView[]` |
 | `POST` | `/api/v1/insights/chat` | `{ conversation_id?, message, period? }` | `InsightMessageView` |
+| `POST` | `/api/v1/agent/chat` | `{ conversation_id?, message }` | `AgentChatMessageView` |
+| `GET` | `/api/v1/agent/conversations` | `X-Shop-Id` | `AgentConversationSummary[]` |
+| `GET` | `/api/v1/agent/conversations/{conversation_id}` | `X-Shop-Id` | `AgentConversationView` |
+| `PATCH` | `/api/v1/agent/conversations/{conversation_id}` | `{ title }` (1–255 ký tự, không rỗng) | `AgentConversationSummary` |
+| `DELETE` | `/api/v1/agent/conversations/{conversation_id}` | `X-Shop-Id` | `204 No Content` |
 
 `DraftView`:
 
@@ -141,15 +146,22 @@ AI chỉ tạo bản nháp/gợi ý. Các endpoint này không ghi invoice, expe
 
 `ReplenishmentView` gồm `product_id`, `product_name`, `suggested_qty`, `period`, `reason`. `InsightMessageView` gồm `conversation_id`, `message_id`, `answer`, `period`, `citations`, `insufficient_data`.
 
-Phủ `FR-007`, `FR-008`, `FR-017`–`FR-021`.
+`AgentChatMessageView` gồm `conversation_id`, `message_id`, `answer`. `AgentConversationSummary` gồm `conversation_id`, `title`, `last_message_at`. `AgentConversationView` gồm summary và `messages[]` với `message_id`, `role` (`USER` hoặc `ASSISTANT`), `content`, `created_at`. ID hội thoại và tin nhắn là `BIGINT` như ERD.
+
+Các endpoint Agent yêu cầu OWNER đã xác thực và `X-Shop-Id` hợp lệ. Core lấy user từ danh tính đã xác thực; FE không gửi `user_id` để tự xác định quyền. Danh sách, xem, chat và xóa đều giới hạn theo user/shop đang xác thực.
+
+Phủ `FR-007`, `FR-008`, `FR-017`, `FR-018`, `FR-020`, `FR-021`, `FR-025`.
 
 ## 6. Core ↔ AI nội bộ
 
 | Method | Đường | Trách nhiệm |
 |---|---|---|
-| `POST` | `/internal/v1/agent/chat` | Chat assistant có tools; trả `{ request_id, answer, model, model_version }` |
+| `POST` | `/internal/v1/agent/chat` | Input `{ user_id, shop_id, conversation_id?, message }`; trả `{ conversation_id, message_id, request_id, answer, model, model_version }` |
+| `GET` | `/internal/v1/agent/conversations` | Nhận `user_id`, `shop_id`; trả danh sách hội thoại |
+| `GET` | `/internal/v1/agent/conversations/{conversation_id}` | Nhận `user_id`, `shop_id`; trả hội thoại và tin nhắn |
+| `PATCH` | `/internal/v1/agent/conversations/{conversation_id}` | Nhận `user_id`, `shop_id`, `title`; trả summary đã đổi tên |
+| `DELETE` | `/internal/v1/agent/conversations/{conversation_id}` | Nhận `user_id`, `shop_id`; xóa hội thoại |
 | `POST` | `/internal/v1/drafts/parse` | Text/voice/image → `DraftView` |
-| `POST` | `/internal/v1/rag/search` | Truy xuất vector có filter `shop_id` |
 | `POST` | `/internal/v1/recommendations/replenishment` | Tạo gợi ý nhập hàng có lý do |
 | `POST` | `/internal/v1/insights/chat` | Trả lời có citation và phạm vi thời gian |
 
@@ -159,6 +171,8 @@ Yêu cầu chung:
 - response thành công có `request_id`, `model`, `model_version`;
 - AI không có endpoint tạo/sửa/xóa dữ liệu nghiệp vụ;
 - Core và AI cùng kiểm tra `shop_id`; test chéo shop là bắt buộc;
+- Core chuyển `user_id` đã xác thực; AI truy vấn theo cả `user_id` và `shop_id`. Hội thoại không tồn tại hoặc không thuộc phạm vi trả `404 conversation_not_found`;
+- chat được giữ qua các phiên đến khi OWNER xóa; xóa chat loại tin nhắn khỏi lịch sử và ngữ cảnh assistant. MVP không áp TTL tự động;
 - service credential cho Core ↔ AI chưa được triển khai; `/internal/v1` phải được giới hạn ở mạng nội bộ và không công khai cho FE.
 
 ## 7. Dashboard quản trị
