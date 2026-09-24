@@ -1,12 +1,12 @@
 ### [2026-09-24 21:18 UTC+07:00] — [Release] Prepare branch histories for production release
 
-**Done:** Prepared the history sync needed to release `staging` into `main`; the merge keeps the mobile tree from `staging` across the 39 overlapping additions.
+**Done:** Prepared the history sync needed to release `staging` into `main`, keeping the mobile tree from `staging` across the 39 overlapping additions. Added the missing required `container-images` check.
 
-**Changed files:** `PROGRESS.md`; no application source changes in this history sync.
+**Changed files:** `.github/workflows/ci.yml`, `CONTRIBUTING.md`, and `PROGRESS.md`; no application source changes.
 
-**Flow explained:** Including `main` in the staging release history lets the required `staging` → `main` release PR merge without repeating the mobile add/add conflicts.
+**Flow explained:** Including `main` in the staging release history lets the required `staging` → `main` release PR merge without repeating mobile add/add conflicts. CI now builds the custom Docker Compose images for the required `container-images` status.
 
-**Check:** The merged mobile tree matches `origin/staging` and the web tree matches `origin/main`. CI for `c9bcf43` passed; this sync PR's required checks are pending.
+**Check:** The merged mobile tree matches `origin/staging` and the web tree matches `origin/main`. CI for `c9bcf43` passed; the new image job and this sync PR's checks are pending.
 
 ### [2026-09-24 17:43 UTC+07:00] — [AI] Verify persisted chat CRUD before merge
 
