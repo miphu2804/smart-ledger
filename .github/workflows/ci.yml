@@ -7,16 +7,197 @@ on:
 
 jobs:
   ai:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: smartledger_test
+          POSTGRES_USER: smartledger
+          POSTGRES_PASSWORD: smartledger
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U smartledger -d smartledger_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_TEST_URL: postgresql://smartledger:smartledger@localhost:5432/smartledger_test
+    outputs:
+      tests: ${{ steps.test-results.outputs.tests }}
+      failures: ${{ steps.test-results.outputs.failures }}
+      errors: ${{ steps.test-results.outputs.errors }}
+      skipped: ${{ steps.test-results.outputs.skipped }}
     defaults:
       run:
         working-directory: backend/ai
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.1.0
         with:
           python-version: "3.11"
       - run: uv sync --group dev
       - run: uv run ruff check
       - run: uv run ruff format --check
-      - run: uv run pytest
+      - run: uv run pytest --junitxml=pytest-results.xml
+      - name: Capture test counts
+        id: test-results
+        if: always()
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          from pathlib import Path
+          from xml.etree import ElementTree
+
+          report = Path("pytest-results.xml")
+          counts = {name: "n/a" for name in ("tests", "failures", "errors", "skipped")}
+          if report.exists():
+              root = ElementTree.parse(report).getroot()
+              suites = [root] if root.tag == "testsuite" else root.findall(".//testsuite")
+              if not suites:
+                  suites = [root]
+              counts = {
+                  name: str(sum(int(suite.get(name, "0")) for suite in suites))
+                  for name in counts
+              }
+          for name, value in counts.items():
+              print(f"{name}={value}")
+          PY
+
+  core:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: smartledger
+          POSTGRES_USER: smartledger
+          POSTGRES_PASSWORD: smartledger
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U smartledger -d smartledger"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    outputs:
+      tests: ${{ steps.test-results.outputs.tests }}
+      failures: ${{ steps.test-results.outputs.failures }}
+      errors: ${{ steps.test-results.outputs.errors }}
+      skipped: ${{ steps.test-results.outputs.skipped }}
+    defaults:
+      run:
+        working-directory: backend/core
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - run: bash ./mvnw --batch-mode --no-transfer-progress verify
+      - name: Migrate a fresh PostgreSQL database
+        run: |
+          docker run --rm --network host \
+            --volume "$GITHUB_WORKSPACE/backend/core/src/main/resources/db/migration:/flyway/sql:ro" \
+            flyway/flyway:13.7.0 \
+            -url=jdbc:postgresql://127.0.0.1:5432/smartledger \
+            -user=smartledger \
+            -password=smartledger \
+            -locations=filesystem:/flyway/sql \
+            -connectRetries=10 \
+            migrate
+      - name: Verify Core tables exist
+        run: |
+          table_count="$(docker run --rm --network host -e PGPASSWORD=smartledger postgres:16 \
+            psql -h 127.0.0.1 -U smartledger -d smartledger -Atc \
+            "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename IN ('users', 'auth_identities', 'shops')")"
+          test "$table_count" = "3"
+      - name: Capture test counts
+        id: test-results
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          from pathlib import Path
+          from xml.etree import ElementTree
+
+          reports = sorted(Path("target/surefire-reports").glob("TEST-*.xml"))
+          totals = {name: 0 for name in ("tests", "failures", "errors", "skipped")}
+          if not reports:
+              totals = {name: "n/a" for name in totals}
+          else:
+              for report in reports:
+                  suite = ElementTree.parse(report).getroot()
+                  for name in totals:
+                      totals[name] += int(suite.get(name, "0"))
+          for name, value in totals.items():
+              print(f"{name}={value}")
+          PY
+
+  mobile-web:
+    runs-on: ubuntu-24.04
+    env:
+      EXPO_PUBLIC_USE_MOCK: "true"
+    defaults:
+      run:
+        working-directory: frontend/mobile
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/mobile/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run export:web
+
+  container-images:
+    runs-on: ubuntu-24.04
+    env:
+      POSTGRES_PASSWORD: ci-only-password
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build custom service images
+        run: docker compose build
+
+  summary:
+    name: CI result summary
+    if: always()
+    needs: [ai, core, mobile-web, container-images]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Build compact report
+        env:
+          AI_RESULT: ${{ needs.ai.result }}
+          AI_TESTS: ${{ needs.ai.outputs.tests }}
+          AI_FAILURES: ${{ needs.ai.outputs.failures }}
+          AI_ERRORS: ${{ needs.ai.outputs.errors }}
+          AI_SKIPPED: ${{ needs.ai.outputs.skipped }}
+          CORE_RESULT: ${{ needs.core.result }}
+          CORE_TESTS: ${{ needs.core.outputs.tests }}
+          CORE_FAILURES: ${{ needs.core.outputs.failures }}
+          CORE_ERRORS: ${{ needs.core.outputs.errors }}
+          CORE_SKIPPED: ${{ needs.core.outputs.skipped }}
+          MOBILE_RESULT: "${{ needs['mobile-web'].result }}"
+          CONTAINER_RESULT: "${{ needs['container-images'].result }}"
+        run: |
+          {
+            echo "# CI results"
+            echo
+            echo "| Suite | Result | Tests | Failures | Errors | Skipped |"
+            echo "|---|---:|---:|---:|---:|---:|"
+            printf '| AI (Python) | %s | %s | %s | %s | %s |\n' \
+              "$AI_RESULT" "${AI_TESTS:-n/a}" "${AI_FAILURES:-n/a}" "${AI_ERRORS:-n/a}" "${AI_SKIPPED:-n/a}"
+            printf '| Core (Java) | %s | %s | %s | %s | %s |\n' \
+              "$CORE_RESULT" "${CORE_TESTS:-n/a}" "${CORE_FAILURES:-n/a}" "${CORE_ERRORS:-n/a}" "${CORE_SKIPPED:-n/a}"
+            printf '| Mobile web | %s | n/a | n/a | n/a | n/a |\n' "$MOBILE_RESULT"
+            printf '| Container images | %s | n/a | n/a | n/a | n/a |\n' "$CONTAINER_RESULT"
+          } > ci-summary.md
+          cat ci-summary.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ci-summary
+          path: ci-summary.md
+          if-no-files-found: error
+          retention-days: 14

@@ -15,9 +15,8 @@ export default function Printer() {
   const test = () => {
     setState('testing');
     setTimeout(() => {
-      const ok = ip.startsWith('192.168.');
-      setState(ok ? 'ok' : 'fail');
-      toast(ok ? 'Đã in trang thử (giả lập)' : 'Không kết nối được máy in', ok ? 'ok' : 'err');
+      setState('fail');
+      toast('Chưa kết nối máy in. Vui lòng thử lại sau.', 'err');
     }, 1200);
   };
 
@@ -77,7 +76,7 @@ export default function Printer() {
         <T w="extrabold" size={13} style={{ textAlign: 'center' }}>
           TIỆM TẠP HOÁ CÔ THỎ
         </T>
-        <T size={10} color={colors.muted} style={{ textAlign: 'center' }}>
+        <T size={12} color={colors.muted} style={{ textAlign: 'center' }}>
           12 Hoà Hưng, Q.10
         </T>
         <View style={styles.dash} />
@@ -87,10 +86,10 @@ export default function Printer() {
           ['Nước suối x3', '15.000'],
         ].map(([a, b]) => (
           <Row key={a}>
-            <T size={11} style={{ flex: 1 }}>
+            <T size={12} style={{ flex: 1 }}>
               {a}
             </T>
-            <T size={11}>{b}</T>
+            <T size={12}>{b}</T>
           </Row>
         ))}
         <View style={styles.dash} />

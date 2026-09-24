@@ -1,4 +1,5 @@
 import { Feather } from '@expo/vector-icons';
+import { useLocalSearchParams } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { BarChart } from '../src/components/charts';
@@ -17,7 +18,10 @@ const RANK = [
 
 export default function BestSellers() {
   const { invoices, products } = useApp();
-  const [period, setPeriod] = useState<Period>('month');
+  const { period: requestedPeriod } = useLocalSearchParams<{ period?: string }>();
+  const [period, setPeriod] = useState<Period>(
+    requestedPeriod === 'today' || requestedPeriod === 'yesterday' || requestedPeriod === 'week' ? requestedPeriod : 'month',
+  );
   const [sort, setSort] = useState<Sort>('qty');
   const list = useMemo(() => {
     const l = bestSellers(invoices, period);
@@ -36,6 +40,7 @@ export default function BestSellers() {
         onChange={setPeriod}
         options={[
           { key: 'today', label: 'Hôm nay' },
+          { key: 'yesterday', label: 'Hôm qua' },
           { key: 'week', label: '7 ngày' },
           { key: 'month', label: 'Tháng này' },
           { key: 'all', label: 'Tất cả' },
