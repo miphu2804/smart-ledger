@@ -20,7 +20,7 @@ docker compose             Oracle Free VM (ARM)         AWS
 ```
 
 Nguyên tắc: cùng engine ở mọi môi trường (PostgreSQL, Redis), chỉ đổi host qua
-`POSTGRES__URL`/`REDIS__URL`. Compose không start database trên staging — các
+`POSTGRES_URL`/`REDIS_URL`. Compose không start database trên staging — các
 service `postgres`/`redis` thuộc profile `infra` chỉ dành cho dev.
 
 ## Chuẩn bị tài nguyên
@@ -42,15 +42,19 @@ sudo usermod -aG docker $USER && newgrp docker
 
 git clone https://github.com/miphu2804/smart-ledger.git && cd smart-ledger
 git switch staging
-cp .env.example .env
 ```
 
-Sửa `.env` trên VM (không commit):
+Tạo `.env` trên VM (không commit, giới hạn quyền đọc):
+
+```dotenv
+AI_PORT=8001
+AI_IMAGE_TAG=staging
+POSTGRES_URL=postgresql://<user>:<password>@<supabase-host>:5432/postgres?sslmode=require
+REDIS_URL=rediss://default:<password>@<redis-cloud-host>:<port>
+```
 
 ```bash
-AI_PORT=8001
-POSTGRES__URL=postgresql://<user>:<password>@<supabase-host>:5432/postgres?sslmode=require
-REDIS__URL=rediss://default:<password>@<redis-cloud-host>:<port>
+chmod 600 .env
 ```
 
 Đăng nhập GHCR trên VM để pull image private (một lần, dùng PAT scope
@@ -105,16 +109,20 @@ docker compose pull ai → up -d → health check
 Test fail thì không build; build fail thì không deploy. Image dùng chung
 digest cho mọi môi trường — staging pull đúng image CI đã test.
 
-Secrets cần tạo trong GitHub Environment `staging`:
+Tạo GitHub Environment `staging` và thêm các secrets sau. Workflow kiểm tra đủ
+secrets trước khi build/push image:
 
 | Secret | Giá trị |
 |---|---|
 | `STAGING_HOST` | Public IP hoặc domain của VM |
 | `STAGING_USER` | `ubuntu` |
 | `STAGING_SSH_KEY` | Private key SSH vào VM |
+| `STAGING_KNOWN_HOSTS` | Host key đã xác minh ngoài CI, dùng để xác thực SSH server |
 
-Secret chỉ nằm trong GitHub Environment hoặc secret manager — không commit
-`POSTGRES__URL`/`REDIS__URL` thật vào repo.
+Giữ secrets SSH trong GitHub Environment và các URL managed database trong
+`.env` chỉ có trên VM — không commit giá trị thật hoặc truyền chúng vào build.
+Xác minh fingerprint host key qua console của nhà cung cấp VM trước khi đưa
+known-hosts entry vào environment.
 
 Lưu ý GHCR: repo private trên Free plan giới hạn 500MB storage và 1GB
 egress/tháng — định kỳ xóa tag cũ, giữ `:staging` và vài tag `:<sha>` gần nhất.
@@ -128,6 +136,13 @@ trong `.env` về sha trước rồi pull lại:
 sed -i 's/^AI_IMAGE_TAG=.*/AI_IMAGE_TAG=<sha-trước>/' .env
 docker compose pull ai && docker compose up -d ai
 ```
+
+## Backup và restore
+
+Backup/restore chưa được cấu hình hoặc smoke-tested cho staging. Trước khi
+coi OPS #8 hoàn tất hoặc dùng dữ liệu quan trọng, chọn cơ chế backup cho managed
+database, phục hồi vào database cô lập, rồi xác nhận ứng dụng đọc được dữ liệu.
+Không thử restore trên database đang chạy.
 
 ## Khi Core (Java) sẵn sàng
 

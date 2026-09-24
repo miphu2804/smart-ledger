@@ -5,7 +5,7 @@
 | Trạng thái | đề xuất |
 | Chủ sở hữu | Chủ kỹ thuật |
 | Người rà soát | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-09-15 |
+| Cập nhật lần cuối | 2026-09-23 |
 
 ## Tài liệu liên quan
 
@@ -18,7 +18,7 @@
 
 Kiến trúc trong sơ đồ là **đích MVP**: Mobile dành cho OWNER và dashboard web dành cho ADMIN cùng gọi Core; Core sở hữu API công khai và điều phối AI; PostgreSQL lưu sổ nghiệp vụ; Redis, Qdrant, Langfuse và LiteLLM hỗ trợ AI.
 
-**Đã xác minh:** FE ngoài repo có màn đăng nhập, danh mục, POS, câu bán hàng, thu/chi/nợ và báo cáo. FE hiện dùng Firebase ID token, `X-Shop-Id`, STT giả lập và parser cục bộ. Core là Java; AI là Python FastAPI. Runtime AI hiện chỉ có `GET /health`, chưa có API nghiệp vụ.
+**Đã xác minh:** FE ngoài repo có màn đăng nhập, danh mục, POS, câu bán hàng, thu/chi/nợ và báo cáo. FE mock hiện dùng Firebase ID token, `X-Shop-Id`, STT giả lập và parser cục bộ. Core là Java; AI là Python FastAPI. Trên `staging`, Core đã có migration auth/shops và AI có `GET /health` cùng `/internal/v1/agent/chat` cơ bản; agent chưa có công cụ đọc dữ liệu shop.
 
 **Chưa xác minh:** FE chưa có tích hợp chạy thật cho image analysis, RAG, recommendation và insight chat. Các phần này thuộc đích MVP nhưng chỉ được nghiệm thu khi có luồng UI/API và `AC-010`–`AC-014`.
 
@@ -28,9 +28,9 @@ Kiến trúc trong sơ đồ là **đích MVP**: Mobile dành cho OWNER và dash
 |---|---|
 | Mobile/FE | Giao diện OWNER: thu input, hiển thị bản nháp, bắt buộc người dùng xác nhận, chỉ gọi Core |
 | Dashboard web | Giao diện ADMIN: tra cứu OWNER/cơ sở khách hàng và xem tổng quan hỗ trợ; không sửa sổ nghiệp vụ |
-| Core | Auth/session, kiểm soát OWNER/ADMIN, API quản trị và audit, sản phẩm, checkout, thu/chi/nợ, báo cáo, replenishment, điều phối AI |
+| Core | Xác minh Firebase ID token, kiểm soát OWNER/ADMIN, API quản trị và audit, sản phẩm, draft, sale/payment/debt, chi phí, báo cáo, replenishment và điều phối AI |
 | AI | Voice/text parse, image analysis, RAG, recommendation, insight chat; chỉ trả đề xuất |
-| PostgreSQL | Dữ liệu nghiệp vụ, hội thoại và audit AI tối thiểu |
+| PostgreSQL | Dữ liệu nghiệp vụ, trace AI tối thiểu, idempotency và audit |
 | Redis | Cache/giới hạn tốc độ/tác vụ ngắn hạn; không là nguồn dữ liệu chuẩn |
 | Qdrant | Vector cho RAG, luôn lọc theo `shop_id` |
 | LiteLLM | Chọn model và quản lý khóa model ở phía server |
@@ -40,36 +40,38 @@ Chỉ Core có API công khai. FE không gọi AI, PostgreSQL, Redis, Qdrant, Li
 
 ## 3. Luồng chính
 
-1. OWNER đăng nhập mobile qua nhà cung cấp định danh; Core xác thực token, tạo phiên ứng dụng và trả tiệm do OWNER sở hữu.
-2. Mọi request nghiệp vụ gửi `X-Shop-Id`; Core kiểm tra tiệm thuộc OWNER và từ chối ADMIN trên các endpoint ghi sổ.
+1. OWNER đăng nhập mobile qua Firebase Phone hoặc Google; Core xác thực Firebase ID token, tìm hoặc tạo user/identity và trả các shop do OWNER sở hữu.
+2. Mọi request nghiệp vụ gửi `X-Shop-Id`; Core kiểm tra shop thuộc OWNER và từ chối ADMIN trên các endpoint ghi sổ.
 3. Người bán lên giỏ bằng POS, text, voice hoặc ảnh. Core gửi input AI khi cần.
-4. AI trả **bản nháp**; FE cho sửa; chỉ `POST /api/v1/invoices` mới chốt giao dịch.
-5. Core ghi invoice, items, tồn và nợ trong một transaction; báo cáo chỉ đọc dữ liệu đã chốt.
+4. AI trả **bản nháp**; Core lưu `sale_drafts` và `sale_draft_items`; FE cho sửa trước khi chốt.
+5. Khi confirm draft, Core chạy một transaction tạo `sales`, `sale_items`, `payments` và `debts` khi chưa thu đủ; chỉ sale đã chốt mới vào báo cáo.
 6. Replenishment và insight chat đọc dữ liệu theo shop; kết quả có giải thích/căn cứ và không tự sửa sổ.
 
-Nếu AI lỗi hoặc timeout, người dùng vẫn có thể nhập tay/POS. AI không được tạo invoice hay expense trực tiếp.
+Nếu AI lỗi hoặc timeout, người dùng vẫn có thể nhập tay/POS. AI không được tạo sale, payment, debt hoặc expense trực tiếp.
 
-Luồng ADMIN: dashboard web gọi `/api/v1/admin/*`; Core kiểm tra role ADMIN, chỉ trả dữ liệu hỗ trợ đã cho phép và ghi `admin_audit_logs` cho truy cập nhạy cảm. Dashboard không có luồng giả danh OWNER hoặc gọi endpoint ghi sổ.
+Luồng ADMIN: dashboard web gọi `/api/v1/admin/*`; Core kiểm tra role ADMIN, chỉ trả dữ liệu hỗ trợ đã cho phép và ghi `audit_logs` cho truy cập nhạy cảm. Dashboard không có luồng giả danh OWNER hoặc gọi endpoint ghi sổ.
 
 ## 4. Dữ liệu và ràng buộc
 
 [ERD](diagrams/src/erd.dbml) là schema logic tối thiểu. Migration thực tế phải bảo đảm:
 
 - mọi dữ liệu nghiệp vụ và AI gắn `shop_id`;
-- `users.role` chỉ nhận `OWNER|ADMIN`; mỗi shop có một `owner_user_id` trong MVP;
-- truy cập nhạy cảm của ADMIN ghi `admin_audit_logs`;
-- checkout là một transaction;
-- tiền lưu bằng số nguyên VND;
-- token chỉ lưu dạng hash khi Core tự phát hành session;
-- AI proposal và model/version được audit đủ để điều tra, không lưu media thô mặc định;
+- `users.system_role` chỉ nhận `OWNER|ADMIN`; mỗi shop có một `owner_id`, và một OWNER có thể sở hữu nhiều shop;
+- truy cập nhạy cảm của ADMIN, archive và void ghi `audit_logs`;
+- confirm draft và thu nợ là transaction; `payments` là lịch sử append-only;
+- tiền lưu bằng số nguyên VND, quantity dùng `numeric(15,3)`, ID dùng `BIGINT` và time dùng `TIMESTAMPTZ` theo UTC;
+- `paid_vnd` và `outstanding_vnd` là cache có thể đối soát từ `payments`;
+- product/category/customer/expense archive thay vì xóa vật lý; sale đã chốt chỉ có thể `VOIDED` theo quy tắc nghiệp vụ;
+- `api_idempotency_keys` ngăn retry hoặc double-click tạo trùng sale/payment;
+- AI proposal, model/version và object key của media được lưu đủ để điều tra; không lưu media thô mặc định;
 - Qdrant collection bắt buộc có filter `shop_id`.
 
 Schema PostgreSQL được quản lý bằng migration SQL có phiên bản trong Git. Không sửa schema trực tiếp trên Supabase Dashboard. Migration phải chạy được trên PostgreSQL chuẩn; extension, trigger hoặc API riêng của Supabase chỉ được dùng khi có quyết định kỹ thuật riêng.
 
 ## 5. Auth và phân quyền
 
-- MVP hỗ trợ Google, số điện thoại OTP và Zalo qua adapter định danh; Core chuẩn hóa thành `auth_identities(provider, provider_subject)`.
-- FE hiện chỉ chứng minh luồng Firebase phone; Google và Zalo cần issue tích hợp riêng.
+- MVP hỗ trợ Firebase Phone và Google. Firebase Account Linking gộp các cách đăng nhập của cùng người dùng vào một Firebase UID; Core lưu UID đó trong `auth_identities`.
+- Core không lưu password hoặc token thô. ERD hiện không có Core refresh-token/session table; mọi request dùng Firebase ID token đã được Core xác thực.
 - Core mặc định tài khoản tự đăng ký là OWNER; role ADMIN chỉ được cấp bằng thao tác vận hành có kiểm soát, không nhận role từ request hoặc claim do client tự tạo.
 - `POST /api/v1/auth/session`, `GET /api/v1/me`, `POST /api/v1/shops` không cần `X-Shop-Id`; endpoint nghiệp vụ còn lại cần token và shop thuộc OWNER.
 - `/api/v1/admin/*` chỉ nhận ADMIN, không dùng `X-Shop-Id` từ client để mở rộng quyền và không có endpoint ghi sổ nghiệp vụ.
@@ -80,7 +82,7 @@ Schema PostgreSQL được quản lý bằng migration SQL có phiên bản tron
 | Thành phần | Cấu hình tối thiểu |
 |---|---|
 | FE | `API_BASE_URL` |
-| Core | `DATABASE_URL`, `REDIS_URL`, `AI_BASE_URL`, cấu hình auth |
+| Core | `DATABASE_URL`, `REDIS_URL`, `AI_BASE_URL`, cấu hình Firebase Admin |
 | AI | `POSTGRES__URL`, `REDIS__URL`, `QDRANT__URL`, `LITELLM__URL`, `LANGFUSE__*` |
 
 Host và port thuộc cấu hình môi trường, không phải API contract.
@@ -95,7 +97,7 @@ Host và port thuộc cấu hình môi trường, không phải API contract.
 
 | Nhóm | Bằng chứng bắt buộc |
 |---|---|
-| Core | migration từ DB rỗng trên local và Supabase staging; contract test FE ↔ Core; checkout rollback; test chéo shop |
+| Core | migration từ DB rỗng trên local và Supabase staging; contract test FE ↔ Core; confirm draft/payment rollback và idempotency; test chéo shop |
 | AI | contract test Core ↔ AI; timeout/fallback; output schema; filter `shop_id` |
 | FE | OWNER: login → chọn shop → tạo/chốt → báo cáo; ADMIN: login → tra cứu cơ sở → xem tổng quan; test role guard và trạng thái loading/error/empty |
 | Ops | CI kiểm migration; staging dùng Supabase project riêng; deploy production cần phê duyệt |
@@ -103,6 +105,6 @@ Host và port thuộc cấu hình môi trường, không phải API contract.
 ## 8. Rủi ro
 
 - Khối lượng năm AI service trong 2–3 tuần là rủi ro chính; backlog phải chia theo vertical slice và ưu tiên luồng voice/text → bản nháp → chốt.
-- Xóa cứng invoice/expense làm mất audit; `OQ-002` phải chốt trước pilot dữ liệu thật.
-- Zalo auth và nhà cung cấp model phụ thuộc dịch vụ ngoài; cần adapter và fallback, không khóa domain vào SDK.
+- Xóa vật lý dữ liệu nghiệp vụ hoặc chỉnh số dư mà không có payment/audit làm mất khả năng truy vết; archive/void và transaction phải được kiểm thử trước pilot dữ liệu thật.
+- Firebase Phone/Google và nhà cung cấp model phụ thuộc dịch vụ ngoài; cần kiểm thử adapter, timeout và fallback trước nghiệm thu.
 - Dashboard ADMIN làm tăng phạm vi dữ liệu có thể đọc; endpoint phải tối thiểu, có audit và không triển khai giả danh người dùng trong MVP.
