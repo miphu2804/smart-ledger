@@ -7,7 +7,7 @@ on:
 
 jobs:
   ai:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       tests: ${{ steps.test-results.outputs.tests }}
       failures: ${{ steps.test-results.outputs.failures }}
@@ -49,7 +49,7 @@ jobs:
           PY
 
   core:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:16
@@ -119,7 +119,7 @@ jobs:
           PY
 
   mobile-web:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       EXPO_PUBLIC_USE_MOCK: "true"
     defaults:
@@ -140,7 +140,7 @@ jobs:
     name: CI result summary
     if: always()
     needs: [ai, core, mobile-web]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Build compact report
         env:
