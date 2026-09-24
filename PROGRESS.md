@@ -286,3 +286,19 @@
 **Flow explained:** Dev keeps the full local stack via the `infra` profile. Staging runs only application containers and connects to managed backing services over TLS, matching the production shape (managed DB + Redis, registry-pulled images). AI port binds `127.0.0.1` so only Caddy exposes it.
 
 **Check:** `docker compose config` valid in both modes; `docker compose config --services` shows `ai` only by default and `postgres redis ai` with `--profile infra`. Full stack verified locally (postgres/redis connected, `/health` 200); app-only mode runs `ai` alone with clear connect-failure logs. GHCR push and SSH deploy unverified until the workflow runs (needs `STAGING_*` secrets).
+
+### [2026-09-24 18:06 UTC+07:00] — [Ops] Add ordered staging database migrations
+
+**Done:** Synced OPS PR #33 with current `staging`, corrected AI database settings to `POSTGRES_URL`/`REDIS_URL`, and added ordered Core Flyway then AI chat migrations before restarting the staging AI service. Added SSH secret preflight and pinned host-key verification.
+
+**Changed files:** `compose.yaml`, `.github/workflows/deploy-staging.yml`, `docs/ops/staging.md`, `README.md`, `backend/ai/README.md`, `docs/README.md`, `PROGRESS.md`.
+
+**Check:** Local Compose config renders AI-only, local infra, and migration profiles. A disposable PostgreSQL 16 database accepted Core Flyway v1 and the AI chat migration; `users`, `shops`, `chat_conversations`, `chat_messages`, and `flyway_schema_history` were present. Workflow YAML and shell scripts parsed; `git diff --check` passed. GitHub PR checks and remote staging deployment are still pending.
+
+### [2026-09-24 18:31 UTC+07:00] — [Ops] Deploy Core and AI runtimes to staging
+
+**Done:** Added a multi-stage Core image, a backend Compose profile, immutable SHA deployment for Core + AI, Firebase service-account transfer to a Git-ignored read-only mount, and health checks after the ordered migrations. Added multi-arch image builds to CI so staging images are checked before merge. Updated the staging runbook and rollback steps.
+
+**Changed files:** `.dockerignore`, `.gitignore`, `docker/core.Dockerfile`, `compose.yaml`, `.github/workflows/ci.yml`, `.github/workflows/deploy-staging.yml`, `docs/ops/staging.md`, `PROGRESS.md`.
+
+**Check:** Compose default/infra/migrations/backend profiles render; deployment workflow YAML and embedded shell/Python syntax pass; `git diff --check` passes. Local Docker Core image build exceeded the runner's five-minute RPC limit and was stopped; the new multi-arch GitHub CI job will verify it. Staging secrets/VM/database, Firebase service account, Vercel project linkage, and backup/restore smoke remain unconfigured or unverified.

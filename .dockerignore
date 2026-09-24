@@ -1,0 +1,6 @@
+**
+!backend/
+!backend/core/
+!backend/core/pom.xml
+!backend/core/src/
+!backend/core/src/**

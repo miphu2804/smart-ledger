@@ -5,7 +5,12 @@ on:
     branches: [staging]
 
 env:
-  IMAGE: ghcr.io/${{ github.repository }}-ai
+  AI_IMAGE: ghcr.io/${{ github.repository }}-ai
+  CORE_IMAGE: ghcr.io/${{ github.repository }}-core
+
+concurrency:
+  group: staging-deployment
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -25,15 +30,55 @@ jobs:
           STAGING_USER: ${{ secrets.STAGING_USER }}
           STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
           STAGING_KNOWN_HOSTS: ${{ secrets.STAGING_KNOWN_HOSTS }}
+          STAGING_FIREBASE_PROJECT_ID: ${{ secrets.STAGING_FIREBASE_PROJECT_ID }}
+          STAGING_FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.STAGING_FIREBASE_SERVICE_ACCOUNT_JSON }}
         run: |
           missing=0
-          for name in STAGING_HOST STAGING_USER STAGING_SSH_KEY STAGING_KNOWN_HOSTS; do
+          for name in STAGING_HOST STAGING_USER STAGING_SSH_KEY STAGING_KNOWN_HOSTS STAGING_FIREBASE_PROJECT_ID STAGING_FIREBASE_SERVICE_ACCOUNT_JSON; do
             if [[ -z "${!name}" ]]; then
               echo "::error::$name is required in the staging environment"
               missing=1
             fi
           done
           exit "$missing"
+      - name: Validate Firebase service account secret
+        env:
+          STAGING_FIREBASE_PROJECT_ID: ${{ secrets.STAGING_FIREBASE_PROJECT_ID }}
+          STAGING_FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.STAGING_FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+
+          account = json.loads(os.environ["STAGING_FIREBASE_SERVICE_ACCOUNT_JSON"])
+          if account.get("type") != "service_account":
+              raise SystemExit("Firebase credential must be a service account JSON")
+          if account.get("project_id") != os.environ["STAGING_FIREBASE_PROJECT_ID"]:
+              raise SystemExit("Firebase service account project_id must match STAGING_FIREBASE_PROJECT_ID")
+          PY
+      - name: Check staging VM and database configuration
+        env:
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_USER: ${{ secrets.STAGING_USER }}
+          STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          STAGING_KNOWN_HOSTS: ${{ secrets.STAGING_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s' "$STAGING_SSH_KEY" > ~/.ssh/staging_key
+          printf '%s\n' "$STAGING_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/staging_key ~/.ssh/known_hosts
+          ssh -i ~/.ssh/staging_key -o StrictHostKeyChecking=yes "$STAGING_USER@$STAGING_HOST" '
+            set -eu
+            cd ~/smart-ledger
+            test -f .env
+            docker compose version >/dev/null
+            for name in POSTGRES_URL REDIS_URL DATABASE_URL DATABASE_USERNAME DATABASE_PASSWORD FIREBASE_PROJECT_ID FLYWAY_URL FLYWAY_USER FLYWAY_PASSWORD; do
+              if ! grep -Eq "^${name}=.+$" .env; then
+                echo "::error::Missing $name in staging VM .env"
+                exit 1
+              fi
+            done
+          '
 
   build:
     needs: [ci, validate-config]
@@ -50,15 +95,25 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push ai image
+      - name: Build and push Core image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/core.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.CORE_IMAGE }}:staging
+            ${{ env.CORE_IMAGE }}:${{ github.sha }}
+      - name: Build and push AI image
         uses: docker/build-push-action@v7
         with:
           context: backend/ai
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE }}:staging
-            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.AI_IMAGE }}:staging
+            ${{ env.AI_IMAGE }}:${{ github.sha }}
 
   deploy:
     needs: build
@@ -71,18 +126,65 @@ jobs:
           STAGING_USER: ${{ secrets.STAGING_USER }}
           STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
           STAGING_KNOWN_HOSTS: ${{ secrets.STAGING_KNOWN_HOSTS }}
+          STAGING_FIREBASE_PROJECT_ID: ${{ secrets.STAGING_FIREBASE_PROJECT_ID }}
+          STAGING_FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.STAGING_FIREBASE_SERVICE_ACCOUNT_JSON }}
         run: |
           mkdir -p ~/.ssh
           printf '%s' "$STAGING_SSH_KEY" > ~/.ssh/staging_key
           printf '%s\n' "$STAGING_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/staging_key
           chmod 600 ~/.ssh/known_hosts
-          ssh -i ~/.ssh/staging_key -o StrictHostKeyChecking=yes "$STAGING_USER@$STAGING_HOST" '
-            set -e
+          printf '%s' "$STAGING_FIREBASE_SERVICE_ACCOUNT_JSON" | ssh -i ~/.ssh/staging_key -o StrictHostKeyChecking=yes "$STAGING_USER@$STAGING_HOST" '
+            set -eu
             cd ~/smart-ledger
-            git fetch origin staging
-            git reset --hard origin/staging
-            docker compose pull ai
-            docker compose up -d ai
-            curl -fsS "http://$(docker compose port ai 8001)/health"
+            umask 077
+            mkdir -p .secrets
+            chmod 700 .secrets
+            cat > .secrets/firebase-service-account.json
+            chmod 644 .secrets/firebase-service-account.json
           '
+          ssh -i ~/.ssh/staging_key -o StrictHostKeyChecking=yes "$STAGING_USER@$STAGING_HOST" bash -s -- "$GITHUB_SHA" "$STAGING_FIREBASE_PROJECT_ID" <<'REMOTE'
+          set -euo pipefail
+          deploy_sha="$1"
+          export FIREBASE_PROJECT_ID="$2"
+          cd ~/smart-ledger
+          git fetch origin staging
+          if [[ "$(git rev-parse origin/staging)" != "$deploy_sha" ]]; then
+            echo "Skipping stale staging deployment $deploy_sha"
+            exit 0
+          fi
+          git reset --hard "$deploy_sha"
+          docker compose --profile migrations run --rm migrate-core
+          docker compose --profile migrations run --rm migrate-ai
+          export CORE_IMAGE_TAG="$deploy_sha" AI_IMAGE_TAG="$deploy_sha"
+          docker compose --profile backend pull core ai
+          docker compose --profile backend up -d core ai
+
+          for service_url in http://127.0.0.1:8080/v3/api-docs http://127.0.0.1:8001/health; do
+            ready=0
+            for attempt in $(seq 1 60); do
+              if curl --fail --silent --output /dev/null "$service_url"; then
+                ready=1
+                break
+              fi
+              sleep 2
+            done
+            if [[ "$ready" != 1 ]]; then
+              echo "Health check failed: $service_url"
+              exit 1
+            fi
+          done
+
+          for name in CORE_IMAGE_TAG AI_IMAGE_TAG; do
+            if grep -q "^${name}=" .env; then
+              sed -i "s/^${name}=.*/${name}=$deploy_sha/" .env
+            else
+              printf '%s=%s\n' "$name" "$deploy_sha" >> .env
+            fi
+          done
+          if grep -q '^FIREBASE_PROJECT_ID=' .env; then
+            sed -i "s/^FIREBASE_PROJECT_ID=.*/FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID/" .env
+          else
+            printf 'FIREBASE_PROJECT_ID=%s\n' "$FIREBASE_PROJECT_ID" >> .env
+          fi
+          REMOTE

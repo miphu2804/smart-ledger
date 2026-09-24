@@ -53,6 +53,60 @@ services:
         condition: service_healthy
         required: false
 
+  core:
+    profiles: ["backend"]
+    image: ghcr.io/miphu2804/smart-ledger-core:${CORE_IMAGE_TAG:-staging}
+    build:
+      context: .
+      dockerfile: docker/core.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${CORE_PORT:-8080}:8080"
+    environment:
+      SERVER_PORT: 8080
+      DATABASE_URL: ${DATABASE_URL:-jdbc:postgresql://postgres:5432/${POSTGRES_DB:-smartledger}}
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-${POSTGRES_USER:-smartledger}}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-${POSTGRES_PASSWORD:-local-only}}
+      FLYWAY_ENABLED: "false"
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase-service-account.json
+    volumes:
+      - ./.secrets/firebase-service-account.json:/run/secrets/firebase-service-account.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+
+  migrate-core:
+    profiles: ["migrations"]
+    image: flyway/flyway:13.7.0
+    command: migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+    volumes:
+      - ./backend/core/src/main/resources/db/migration:/flyway/sql:ro
+    environment:
+      FLYWAY_URL: ${FLYWAY_URL:-}
+      FLYWAY_USER: ${FLYWAY_USER:-}
+      FLYWAY_PASSWORD: ${FLYWAY_PASSWORD:-}
+
+  migrate-ai:
+    profiles: ["migrations"]
+    image: postgres:16-alpine
+    entrypoint: ["sh", "-ec"]
+    command:
+      - 'exec psql "$$POSTGRES_URL" -v ON_ERROR_STOP=1 -f /migrations/001_create_chat_history.sql'
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+    volumes:
+      - ./backend/ai/migrations:/migrations:ro
+    environment:
+      POSTGRES_URL: ${POSTGRES_URL:-}
+
 volumes:
   postgres-data:
   redis-data:
