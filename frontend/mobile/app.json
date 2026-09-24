@@ -4,34 +4,46 @@
     "slug": "so-nghe-loi",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/brand-mascot-icon.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/brand-mascot-icon.png",
+      "backgroundColor": "#FFFCF8",
+      "resizeMode": "contain"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "vn.teamhexa.songheloi"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#2858D8",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#FFFCF8",
+        "foregroundImage": "./assets/brand-mascot-icon.png"
       },
+      "googleServicesFile": "./google-services.json",
       "predictiveBackGestureEnabled": false,
       "package": "vn.teamhexa.songheloi"
     },
     "web": {
-      "favicon": "./assets/favicon.png",
+      "favicon": "./assets/brand-mascot-icon.png",
       "bundler": "metro",
       "output": "single"
     },
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth"
     ],
     "scheme": "songheloi",
     "experiments": {
       "typedRoutes": false
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d202d7d3-688d-4b70-93d9-584efd347b25"
+      }
     }
   }
 }

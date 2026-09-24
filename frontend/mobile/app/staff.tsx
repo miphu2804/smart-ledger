@@ -44,13 +44,13 @@ export default function Staff() {
                 color={s.role === 'Chủ tiệm' ? colors.gold : colors.primary}
                 bg={s.role === 'Chủ tiệm' ? colors.goldSoft : colors.primarySoft}
               />
-              <T size={11} color={colors.faint}>
+              <T size={12} color={colors.faint}>
                 {sales[s.id]?.count ?? 0} đơn tháng này
               </T>
             </Row>
           </View>
           <View style={{ alignItems: 'flex-end', gap: 6 }}>
-            <T size={10} color={colors.faint}>
+            <T size={12} color={colors.faint}>
               Doanh thu
             </T>
             <T w="extrabold" size={14} color={colors.primary}>
@@ -67,7 +67,7 @@ export default function Staff() {
             Thêm nhân viên mới
           </T>
         </Row>
-        <T size={11.5} color={colors.faint} style={{ marginTop: 3 }}>
+        <T size={12} color={colors.faint} style={{ marginTop: 3 }}>
           Giao ca, phân quyền, theo dõi doanh thu
         </T>
       </Pressable>
@@ -80,12 +80,12 @@ export default function Staff() {
         </T>
         <Chips scroll={false} value={role} onChange={setRole} options={ROLES.map((r) => ({ key: r, label: r }))} />
         <Button
-          title="Thêm & gửi lời mời"
+          title="Thêm nhân viên"
           style={{ marginTop: 16 }}
           disabled={!name.trim() || phone.replace(/\D/g, '').length < 9}
           onPress={() => {
             app.addStaff(name.trim(), role, phone);
-            toast(`Đã gửi lời mời tới ${phone} (giả lập)`);
+            toast('Đã thêm nhân viên');
             setName('');
             setPhone('');
             setOpen(false);

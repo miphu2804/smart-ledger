@@ -58,11 +58,12 @@ feat/*, fix/*, chore/*, docs/*  →  staging  →  main (production)
 
 - Open normal feature, fix, chore, and documentation pull requests against `staging`.
 - A merge into `staging` may deploy automatically to the staging environment after required checks pass.
-- After `staging` passes its checks, open a `staging` → `main` pull request for the production release.
+- After `staging` passes its checks, open a `staging` → `main` pull request for the production release. For this release only, the two branch histories conflict in `frontend/mobile`; use the short-lived `release/staging-to-main-2026-09-24` branch, created from `main` with `staging` merged in and the mobile conflicts resolved from `staging`. Delete it after the release.
+- Merge release pull requests with a merge commit, never squash: squashing disconnects `staging` history from `main` and forces a manual resync. This follows the production-branch pattern in [GitLab Flow](https://about.gitlab.com/topics/version-control/what-is-gitlab-flow/) and [branch-per-environment strategies](https://docs.gitlab.com/user/project/repository/branches/strategies/).
 - Production deployment requires a tag or manual approval; merging to `main` alone must not bypass this gate.
 - Start hotfixes from `main`, open the pull request against `main`, then synchronize the same fix back to `staging`.
 - Do not push directly, force-push, or manually merge into `main` or `staging`.
-- Do not introduce a long-lived `dev` or `release` branch without an explicit workflow change.
+- Do not introduce a long-lived `dev` or `release` branch without an explicit workflow change. The release-source policy permits only the named temporary branch for this release.
 
 Create a feature or fix branch from `staging`:
 
@@ -78,7 +79,9 @@ git switch -c feat/<short-description>
 - Pull requests into `staging` and `main` must pass configured checks before merge.
 - Deploy the same tested commit or artifact from staging to production; environment-specific values belong in secrets or environment configuration.
 - Run database migrations on staging before production. Destructive migrations require an explicit rollback or recovery plan.
-- Initial GitHub Actions should validate documentation links and diagram sources. Add Core/FE lint, tests, build, and migration smoke tests when those runtimes are introduced.
+- Required CI checks are `ai` (lint and tests), `core` (Maven verify plus Flyway migration against a fresh PostgreSQL service), `container-images` (Docker Compose build of custom service images), and `mobile-web` (TypeScript and Expo web export).
+- The Vercel mobile project uses `frontend/mobile` as its root and deploys pull requests and `staging` as previews; `main` is the production branch. Vercel must be connected to the repository before preview URLs are available.
+- CI verifies migrations from an empty database. Staging/prod database separation, backup/restore, and rollback still require provisioned environments and an operational smoke check before production release.
 
 ### Pull request title
 
@@ -114,7 +117,7 @@ Each pull request should identify related documentation or API contracts, assump
 - Rebase a personal branch onto the latest target branch when appropriate.
 - If a pushed branch is rebased, use `--force-with-lease`, never `--force`.
 - Do not rebase or force-push shared branches.
-- Use squash merge for normal feature, fix, and refactor pull requests.
+- Use squash merge for pull requests into `staging`; use a merge commit for release pull requests into `main` (see "Target branch").
 - Do not bypass review, CI, branch protection, or required checks.
 
 ## Progress log
@@ -126,7 +129,7 @@ After each completed substantive change, update [`PROGRESS.md`](PROGRESS.md) at 
 - **Flow explained:** behavior or flow that changed;
 - **Check:** checks that were run, if any.
 
-`PROGRESS.md` is an append-only log, not the source of truth for project scope.
+`PROGRESS.md` is a newest-first log, not the source of truth for project scope.
 
 ## Blockers
 

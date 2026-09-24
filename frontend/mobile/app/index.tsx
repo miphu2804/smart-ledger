@@ -6,16 +6,27 @@ import { T } from '../src/components/ui';
 import { useApp } from '../src/store/AppStore';
 import { colors } from '../src/theme';
 
-/** Splash — tự chuyển sang đăng nhập (hoặc Trang chủ nếu đã đăng nhập) */
+/** Splash — chờ Firebase khôi phục phiên đã lưu, rồi chuyển sang đăng nhập (hoặc Trang chủ nếu còn đăng nhập) */
 export default function Splash() {
-  const { loggedIn } = useApp();
+  const { loggedIn, authReady, needsProfile, onboarded } = useApp();
   const fade = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.spring(fade, { toValue: 1, useNativeDriver: true, friction: 6 }).start();
-    const t = setTimeout(() => router.replace(loggedIn ? '/(tabs)' : '/(auth)/welcome'), 1400);
+  }, [fade]);
+
+  useEffect(() => {
+    if (!authReady) return;
+    const target = loggedIn
+      ? onboarded
+        ? '/(tabs)'
+        : '/(auth)/setup' // đã có tài khoản nhưng chưa tạo tiệm
+      : needsProfile
+        ? '/(auth)/profile' // Firebase còn đăng nhập, Core chưa có tài khoản
+        : '/(auth)/welcome';
+    const t = setTimeout(() => router.replace(target), 1400);
     return () => clearTimeout(t);
-  }, [fade, loggedIn]);
+  }, [authReady, loggedIn, needsProfile, onboarded]);
 
   return (
     <View style={styles.wrap}>
@@ -26,15 +37,15 @@ export default function Splash() {
           transform: [{ scale: fade.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }],
         }}
       >
-        <LogoMark size={112} bg={colors.white} fg={colors.primary} />
-        <T w="extrabold" size={34} color={colors.white} style={{ marginTop: 22 }}>
+        <LogoMark size={112} />
+        <T w="extrabold" size={34} color={colors.ink} style={{ marginTop: 22 }}>
           Sổ Nghe Lời
         </T>
-        <T size={14} color="#C9D6F7" style={{ marginTop: 6 }}>
+        <T size={14} color={colors.muted} style={{ marginTop: 6 }}>
           Sổ bán hàng thông minh — chỉ cần nói
         </T>
       </Animated.View>
-      <T size={11} color="#9DB3EE" style={styles.footer}>
+      <T size={12} color={colors.muted} style={styles.footer}>
         Team HEXA · EXE201
       </T>
     </View>
@@ -42,6 +53,6 @@ export default function Splash() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-  footer: { position: 'absolute', bottom: 36 },
+  wrap: { flex: 1, backgroundColor: '#FFFCF8', alignItems: 'center', justifyContent: 'center' },
+  footer: { position: 'absolute', bottom: 36, opacity: 0.7 },
 });

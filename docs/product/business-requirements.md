@@ -33,7 +33,7 @@
 
 ## 1. Bối cảnh và mục tiêu
 
-Sổ Nghe Lời giúp người bán rất nhỏ ghi nhận bán hàng, chi phí và công nợ với ít thao tác, rồi dùng sổ đó để xem báo cáo và gợi ý vận hành. Luồng Core/FE lấy từ FE hiện có; voice, ảnh, RAG, recommendation và insight chat lấy từ kiến trúc MVP đã chốt. Mở rộng hóa đơn điện tử chỉ được triển khai khi quy tắc tuân thủ đã được phê duyệt.
+Sổ Nghe Lời giúp người bán rất nhỏ ghi nhận bán hàng, chi phí và công nợ với ít thao tác, rồi dùng sổ đó để xem báo cáo và gợi ý vận hành. Luồng Core/FE lấy từ FE hiện có; voice, ảnh, recommendation và insight chat lấy từ kiến trúc MVP đã chốt. Mở rộng hóa đơn điện tử chỉ được triển khai khi quy tắc tuân thủ đã được phê duyệt.
 
 | ID | Kết quả kinh doanh | Cách đo dự kiến |
 |---|---|---|
@@ -89,7 +89,7 @@ Hóa đơn điện tử là initiative kế tiếp, không mặc nhiên thuộc 
 | `BR-009` | Dữ liệu bán hàng, chi phí và nợ gắn với cửa hàng và OWNER đã đăng nhập. |
 | `BR-010` | Tiền mặt, chuyển khoản và ghi nợ là cách ghi nhận trạng thái thu; sản phẩm không thu hộ hay quyết toán ngân hàng. |
 | `BR-011` | Gợi ý và câu trả lời AI phải nêu căn cứ đủ để người bán hiểu; không được trình bày như quyết định kế toán hoặc thuế. |
-| `BR-012` | Input, vector, trace và output AI phải được cô lập theo cửa hàng và không làm lộ dữ liệu nhạy cảm sang nhà cung cấp ngoài cấu hình đã duyệt. |
+| `BR-012` | Input, dữ liệu vector nếu có sử dụng, truy xuất dữ liệu, trace và output AI phải được cô lập theo cửa hàng và không làm lộ dữ liệu nhạy cảm sang nhà cung cấp ngoài cấu hình đã duyệt. |
 | `BR-013` | ADMIN chỉ dùng web dashboard để hỗ trợ cơ sở khách hàng; không dùng mobile như OWNER và không trực tiếp sửa sổ bán hàng trong MVP. |
 | `BR-014` | Mọi lần ADMIN xem dữ liệu hoặc thực hiện hành động hỗ trợ phải được phân quyền và lưu audit. |
 
@@ -150,11 +150,11 @@ Copy UI viện dẫn nghị định trên màn bản ghi bán hàng **không** b
 |---|---|---|
 | `BO-001`, `BR-001`, `BR-002` | `FR-001`, `FR-002`, `FR-008`, `FR-013`, `FR-014` | tạm thời — MVP đã chấp nhận |
 | `BO-002`, `BR-003`, `BR-004`, `BR-006` | `FR-003`–`FR-005`, `NFR-001`, `NFR-003` | tạm thời — MVP đã chấp nhận |
-| `BO-003`, `BR-004`, `BR-005`, `BR-011` | `FR-006`, `FR-007`, `FR-019`, `FR-020` | tạm thời — đích MVP |
+| `BO-003`, `BR-004`, `BR-005`, `BR-011` | `FR-006`, `FR-007`, `FR-020`, `FR-025` | tạm thời — đích MVP |
 | `BO-005`, `BR-005`, `BR-008` | `FR-015`, `FR-016`, `FR-006` | tạm thời — MVP đã chấp nhận |
 | `BR-007` | `FR-009`, `FR-013` | tạm thời — MVP đã chấp nhận |
 | `BR-009` | `FR-010`, `FR-011`, `NFR-003` | tạm thời — MVP đã chấp nhận; không tuyên bố sẵn sàng sản xuất |
 | `BR-013`, `BR-014` | `FR-022`–`FR-024`, `NFR-009` | tạm thời — admin web dashboard trong MVP |
 | `BR-010` | `FR-014` | tạm thời — MVP đã chấp nhận |
-| `BR-002`, `BR-003`, `BR-011`, `BR-012` | `FR-008`, `FR-017`–`FR-021`, `NFR-006`–`NFR-008` | tạm thời — đích MVP; chưa có FE/runtime để chứng minh |
+| `BR-002`, `BR-003`, `BR-011`, `BR-012` | `FR-008`, `FR-017`, `FR-018`, `FR-020`, `FR-021`, `FR-025`, `NFR-006`–`NFR-008` | tạm thời — đích MVP; chưa có FE/runtime để chứng minh |
 | `BO-004`, `BR-INV-001`–`BR-INV-008` | `FR-INV-001`–`FR-INV-007` | Hoãn, chờ `OQ-INV-001`–`OQ-INV-005` và phê duyệt pháp lý |

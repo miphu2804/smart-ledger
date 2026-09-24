@@ -17,8 +17,8 @@ export function InvoiceCard({ inv }: { inv: Invoice }) {
       style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }, cancelled && { opacity: 0.55 }]}
     >
       <Row>
-        <View style={[styles.icon, inv.source === 'pos' && { backgroundColor: colors.goldSoft }]}>
-          <Feather name={icon} size={17} color={inv.source === 'pos' ? colors.gold : colors.primary} />
+        <View style={[styles.icon, inv.source === 'pos' && { backgroundColor: colors.purpleSoft }]}>
+          <Feather name={icon} size={17} color={inv.source === 'pos' ? colors.purple : colors.primary} />
         </View>
         <View style={{ flex: 1 }}>
           <Row gap={6}>
@@ -27,13 +27,13 @@ export function InvoiceCard({ inv }: { inv: Invoice }) {
             </T>
             <Badge
               text={sourceLabel[inv.source]}
-              color={inv.source === 'pos' ? colors.gold : colors.primary}
-              bg={inv.source === 'pos' ? colors.goldSoft : colors.primarySoft}
+              color={inv.source === 'pos' ? colors.purple : colors.primary}
+              bg={inv.source === 'pos' ? colors.purpleSoft : colors.primarySoft}
             />
             {inv.status === 'debt' ? <Badge text="Ghi nợ" color={colors.red} bg={colors.redSoft} /> : null}
-            {cancelled ? <Badge text="Đã huỷ" color={colors.muted} bg="#EEF1F5" /> : null}
+            {cancelled ? <Badge text="Đã huỷ" color={colors.muted} bg={colors.border} /> : null}
           </Row>
-          <T size={11.5} color={colors.faint} numberOfLines={1} style={{ marginTop: 2 }}>
+          <T size={12} color={colors.faint} numberOfLines={1} style={{ marginTop: 2 }}>
             {inv.items.map((i) => `${i.name} x${i.qty}`).join(', ')}
           </T>
         </View>
@@ -41,7 +41,7 @@ export function InvoiceCard({ inv }: { inv: Invoice }) {
       </Row>
       <View style={styles.sep} />
       <Row>
-        <T size={11.5} color={colors.faint} style={{ flex: 1 }}>
+        <T size={12} color={colors.faint} style={{ flex: 1 }}>
           {inv.code} · {relDay(new Date(inv.createdAt))} · {hhmm(new Date(inv.createdAt))}
         </T>
         <T
@@ -58,7 +58,7 @@ export function InvoiceCard({ inv }: { inv: Invoice }) {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: colors.white, borderRadius: 18, padding: 14, marginBottom: 10, ...shadow(1) },
+  card: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.border, borderRadius: 18, padding: 14, marginBottom: 10, ...shadow(1) },
   icon: {
     width: 38,
     height: 38,

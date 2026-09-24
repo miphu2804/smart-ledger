@@ -62,6 +62,6 @@ export default function RootLayout() {
 }
 
 const webFrame = {
-  outer: { flex: 1, backgroundColor: '#DCE4F5', alignItems: 'center' as const },
+  outer: { flex: 1, backgroundColor: '#E8E4DC', alignItems: 'center' as const },
   inner: { flex: 1, width: '100%' as const, maxWidth: 440, backgroundColor: colors.bg, overflow: 'hidden' as const },
 };

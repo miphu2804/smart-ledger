@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useToast } from '../src/components/brand';
-import { Badge, Button, Chips, EmptyState, Field, Header, IconBtn, Row, Sheet, Stepper, T, Tile } from '../src/components/ui';
+import { Badge, Button, Chips, EmptyState, Field, Header, Row, Sheet, Stepper, T, Tile } from '../src/components/ui';
 import { categoryMeta } from '../src/data/mock';
 import type { LineItem } from '../src/data/types';
 import { normalizeText, vnd } from '../src/lib/format';
@@ -12,7 +12,7 @@ import { itemsTotal } from '../src/lib/stats';
 import { useApp } from '../src/store/AppStore';
 import { colors, shadow } from '../src/theme';
 
-export default function Pos() {
+export default function Pos({ inTab = false }: { inTab?: boolean }) {
   const app = useApp();
   const toast = useToast();
   const insets = useSafeAreaInsets();
@@ -52,19 +52,7 @@ export default function Pos() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top }}>
       <View style={{ paddingHorizontal: 16 }}>
-        <Header
-          title="Chọn hàng (POS)"
-          subtitle={`${app.products.length} sản phẩm`}
-          right={
-            <IconBtn
-              name="maximize"
-              bg={colors.primary}
-              color={colors.white}
-              onPress={() => toast('Quét mã vạch — sẽ có ở bản chính thức')}
-              label="Quét mã"
-            />
-          }
-        />
+        <Header title={inTab ? 'Bán hàng' : 'Chọn hàng'} subtitle={`${app.products.length} sản phẩm`} back={!inTab} big={inTab} />
         <Field placeholder="Tìm hàng…" value={q} onChangeText={setQ} style={{ marginBottom: 10 }} />
         <Chips value={cat} onChange={setCat} options={cats.map((c) => ({ key: c, label: categoryMeta[c] ?? c }))} />
       </View>
@@ -108,31 +96,23 @@ export default function Pos() {
               <T w="semibold" size={13.5} numberOfLines={1} style={{ marginTop: 10 }}>
                 {p.name}
               </T>
-              <Row style={{ marginTop: 4 }}>
-                <View style={{ flex: 1 }}>
-                  <T w="extrabold" size={14} color={colors.primary}>
-                    {vnd(p.price)}
-                  </T>
-                  {p.tracked ? (
-                    <T size={10.5} color={p.stock <= 6 ? colors.red : colors.faint}>
-                      {p.stock ? `Còn ${p.stock}` : 'Hết hàng'}
-                    </T>
-                  ) : (
-                    <T size={10.5} color={colors.faint}>
-                      Bán theo yêu cầu
-                    </T>
-                  )}
-                </View>
+              <Row style={{ marginTop: 4, alignItems: 'flex-end' }}>
+                <T w="extrabold" size={14} color={colors.primary} style={{ flex: 1 }}>
+                  {vnd(p.price)}
+                </T>
                 <View style={[styles.plus, out && { backgroundColor: colors.disabled }]}>
-                  <Feather name="plus" size={16} color={colors.white} />
+                  <Feather name="plus" size={16} color={colors.accentInk} />
                 </View>
               </Row>
+              <T size={12} color={p.tracked && p.stock <= 6 ? colors.red : colors.faint} numberOfLines={1} style={{ marginTop: 3 }}>
+                {p.tracked ? (p.stock ? `Còn ${p.stock}` : 'Hết hàng') : 'Bán theo yêu cầu'}
+              </T>
             </Pressable>
           );
         }}
       />
 
-      <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+      <View style={[styles.bar, { paddingBottom: inTab ? 12 : Math.max(insets.bottom, 12) }]}>
         <Pressable
           onPress={() => count && setCartOpen(true)}
           style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}
@@ -141,14 +121,14 @@ export default function Pos() {
             <Feather name="shopping-cart" size={20} color={colors.primary} />
             {count ? (
               <View style={styles.cartBadge}>
-                <T w="bold" size={10} color={colors.white}>
+                <T w="bold" size={12} color={colors.accentInk}>
                   {count}
                 </T>
               </View>
             ) : null}
           </View>
           <View>
-            <T size={11} color={colors.faint}>
+            <T size={12} color={colors.faint}>
               {count ? `${cartItems.length} món · Xem đơn ▴` : 'Chưa có món nào'}
             </T>
             <T w="extrabold" size={20}>
@@ -172,7 +152,7 @@ export default function Pos() {
                 </T>
                 {!it.productId ? <Badge text="Ngoài DM" color={colors.gold} bg={colors.goldSoft} /> : null}
               </Row>
-              <T size={11.5} color={colors.faint}>
+              <T size={12} color={colors.faint}>
                 {vnd(it.price)}
               </T>
             </View>
@@ -236,11 +216,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderRadius: 18,
     padding: 12,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.border,
     ...shadow(1),
   },
-  cardOn: { borderColor: colors.primary },
+  cardOn: { borderColor: colors.accent, backgroundColor: colors.primaryTint },
   tileWrap: { alignItems: 'flex-start' },
   qty: {
     position: 'absolute',
@@ -260,7 +240,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 10,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },

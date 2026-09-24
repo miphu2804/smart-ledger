@@ -133,7 +133,7 @@ function NotifRow({
           <T w={unread ? 'bold' : 'semibold'} size={14} style={{ flex: 1 }} numberOfLines={1}>
             {n.title}
           </T>
-          <T size={11} color={colors.faint}>
+          <T size={12} color={colors.faint}>
             {hhmm(new Date(n.at))}
           </T>
         </Row>

@@ -123,7 +123,7 @@ export function IconBtn({
   onPress,
   color = colors.ink,
   bg = colors.white,
-  size = 38,
+  size = 44,
   label,
   dot,
 }: {
@@ -140,10 +140,10 @@ export function IconBtn({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      hitSlop={6}
+      hitSlop={Math.max(6, (44 - size) / 2)}
       style={({ pressed }) => [
         { width: size, height: size, borderRadius: 12, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' },
-        bg === colors.white && shadow(1),
+        bg === colors.white && shadow(0),
         pressed && { opacity: 0.7 },
       ]}
     >
@@ -158,14 +158,21 @@ export function Card({
   children,
   style,
   onPress,
+  accessibilityLabel,
 }: {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   onPress?: () => void;
+  accessibilityLabel?: string;
 }) {
   if (onPress)
     return (
-      <Pressable onPress={onPress} style={({ pressed }) => [styles.card, style, pressed && { opacity: 0.85 }]}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        style={({ pressed }) => [styles.card, style, pressed && { opacity: 0.85 }]}
+      >
         {children}
       </Pressable>
     );
@@ -179,8 +186,8 @@ export function SectionTitle({ title, action, onAction }: { title: string; actio
         {title}
       </T>
       {action ? (
-        <Pressable onPress={onAction} hitSlop={8}>
-          <T w="semibold" size={13} color={colors.primary}>
+        <Pressable onPress={onAction} accessibilityRole="button" style={styles.sectionAction}>
+          <T w="semibold" size={14} color={colors.primary}>
             {action}
           </T>
         </Pressable>
@@ -218,10 +225,10 @@ export function Button({
       accessibilityRole="button"
       style={({ pressed }) => [
         styles.btn,
-        small && { height: 38, paddingHorizontal: 14, borderRadius: 12 },
+        small && { height: 44, paddingHorizontal: 14, borderRadius: 12 },
         { backgroundColor: v.bg, borderColor: v.border ?? v.bg },
         (variant === 'primary' || variant === 'gold' || variant === 'voice') && !disabled && shadow(3),
-        disabled && { backgroundColor: '#E9EDF3', borderColor: '#E9EDF3' },
+        disabled && { backgroundColor: '#EEEBE4', borderColor: '#EEEBE4' },
         pressed && { transform: [{ scale: 0.98 }], opacity: 0.92 },
         style,
       ]}
@@ -233,7 +240,7 @@ export function Button({
           {icon ? (
             <Feather name={icon} size={small ? 15 : 18} color={disabled ? colors.disabled : v.fg} style={{ marginRight: 8 }} />
           ) : null}
-          <T w="bold" size={small ? 13 : 15} color={disabled ? colors.disabled : v.fg}>
+          <T w="bold" size={small ? 14 : 15} color={disabled ? colors.disabled : v.fg}>
             {title}
           </T>
         </>
@@ -243,14 +250,14 @@ export function Button({
 }
 
 const btnVariants: Record<BtnVariant, { bg: string; fg: string; border?: string }> = {
-  primary: { bg: colors.primary, fg: colors.white },
-  gold: { bg: colors.gold, fg: colors.white },
-  voice: { bg: colors.red, fg: colors.white },
-  outline: { bg: colors.white, fg: colors.primary, border: colors.border },
+  primary: { bg: colors.ink, fg: colors.white },
+  gold: { bg: colors.ink, fg: colors.white },
+  voice: { bg: colors.ink, fg: colors.white },
+  outline: { bg: colors.white, fg: colors.ink, border: colors.border },
   soft: { bg: colors.primarySoft, fg: colors.primary },
   ghost: { bg: 'transparent', fg: colors.muted },
   danger: { bg: colors.redSoft, fg: colors.red },
-  green: { bg: colors.greenSoft, fg: colors.green, border: '#BFE5CB' },
+  green: { bg: colors.greenSoft, fg: colors.green, border: '#C9E4B9' },
 };
 
 // ---------------------------------------------------------------- Chips / Segmented
@@ -273,9 +280,11 @@ export function Chips<K extends string>({
       <Pressable
         key={o.key}
         onPress={() => onChange(o.key)}
-        style={[styles.chip, active ? { backgroundColor: colors.primary, borderColor: colors.primary } : null]}
+        accessibilityRole="button"
+        accessibilityState={{ selected: active }}
+        style={[styles.chip, active ? { backgroundColor: colors.accent, borderColor: colors.accent } : null]}
       >
-        <T w={active ? 'bold' : 'semibold'} size={13} color={active ? colors.white : colors.muted}>
+        <T w={active ? 'bold' : 'semibold'} size={14} color={active ? colors.accentInk : colors.muted}>
           {o.label}
         </T>
       </Pressable>
@@ -349,7 +358,7 @@ export function Badge({
       }}
     >
       {icon ? <Feather name={icon} size={10} color={color} style={{ marginRight: 3 }} /> : null}
-      <T w="bold" size={10} color={color}>
+      <T w="bold" size={12} color={color}>
         {text}
       </T>
     </View>
@@ -423,9 +432,11 @@ export function Toggle({ value, onChange }: { value: boolean; onChange: (v: bool
       onPress={() => onChange(!value)}
       accessibilityRole="switch"
       accessibilityState={{ checked: value }}
-      style={{ width: 44, height: 26, borderRadius: 13, padding: 3, backgroundColor: value ? colors.primary : '#D5DBE5' }}
+      style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}
     >
-      <View style={[{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.white }, value && { marginLeft: 18 }]} />
+      <View style={{ width: 44, height: 26, borderRadius: 13, padding: 3, backgroundColor: value ? colors.primary : '#D5D0C7' }}>
+        <View style={[{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.white }, value && { marginLeft: 18 }]} />
+      </View>
     </Pressable>
   );
 }
@@ -601,7 +612,7 @@ export function ListRow({
           {title}
         </T>
         {subtitle ? (
-          <T size={11.5} color={colors.faint}>
+          <T size={12} color={colors.faint}>
             {subtitle}
           </T>
         ) : null}
@@ -614,7 +625,15 @@ export function ListRow({
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', paddingTop: 10, paddingBottom: 14 },
-  card: { backgroundColor: colors.card, borderRadius: radius.lg, padding: 16, ...shadow(1) },
+  card: {
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    ...shadow(1),
+  },
+  sectionAction: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
   btn: {
     height: 52,
     borderRadius: 16,
@@ -626,7 +645,7 @@ const styles = StyleSheet.create({
   },
   chip: {
     paddingHorizontal: 14,
-    height: 34,
+    height: 44,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: colors.border,
