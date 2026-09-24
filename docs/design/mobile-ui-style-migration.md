@@ -2,6 +2,8 @@
 
 **Trạng thái:** quyết định visual cho nhánh `feat/mobile-minimal-ui`, ngày 2026-09-24; chưa phải bộ nhận diện production đã duyệt. Tài liệu này chỉ định hướng giao diện `OWNER`; yêu cầu sản phẩm và tiêu chí nghiệm thu vẫn nằm trong [BRD](../product/business-requirements.md) và [PRD](../product/product-requirements.md).
 
+**Cập nhật trạng thái 2026-09-24:** nhánh mobile đã được tích hợp vào `staging`. Các mốc nhánh và câu “staging chưa có app mobile” bên dưới là ghi chép tại thời điểm lập kế hoạch, không mô tả checkout hiện tại.
+
 ## Nguồn và mức độ chắc chắn
 
 | Nguồn | Đã kiểm chứng từ file | Cách dùng |
@@ -103,4 +105,4 @@ Voice mode ưu tiên màn hình tập trung, có nút đóng rõ ràng, chỉ b�
 | 4. Màn còn lại | Chuyển từng màn bán hàng, lịch sử, chi phí, công nợ, sản phẩm, báo cáo sang token mới; giữ route, phép tính, xác nhận và trạng thái rỗng/lỗi. Loại entry nhân viên khỏi bản MVP sau khi rà nguồn hiện hành. | So trước/sau theo từng luồng, không đổi nghiệp vụ chỉ vì restyle. |
 | 5. Nghiệm thu | So web mobile ở `320–430px`, kiểm tra tương phản, vùng chạm, các CTA và đường điều hướng mock; iOS/Android, font scale và các AC tích hợp chỉ nghiệm thu khi có thiết bị và backend. | Có bằng chứng runtime cho luồng mock; ghi riêng các kiểm tra chưa chạy. |
 
-**Chưa kiểm chứng:** thời điểm tích hợp nhánh vào `staging`; mức màu/shadow thực tế và font scale trên iOS/Android; quyền microphone và waveform phản ứng với âm lượng thật trong giai đoạn AI sau. Prototype HTML chỉ chứng minh ý tưởng bố cục/tương tác, không chứng minh các tích hợp đó.
+**Chưa kiểm chứng:** mức màu/shadow thực tế và font scale trên iOS/Android; quyền microphone và waveform phản ứng với âm lượng thật trong giai đoạn AI sau. Prototype HTML chỉ chứng minh ý tưởng bố cục/tương tác, không chứng minh các tích hợp đó.
