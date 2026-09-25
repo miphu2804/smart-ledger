@@ -90,7 +90,7 @@ Core trừ tồn hàng `tracked` và ghi nợ trong cùng transaction khi `statu
 
 | Method | Đường | Ghi chú |
 |---|---|---|
-| `GET` | `/api/v1/invoices?period=` | `period`: `today` \| `yesterday` \| `week` \| `month` |
+| `GET` | `/api/v1/invoices?period=` | `period`: `today` \| `yesterday` \| `this_week` \| `week` \| `month` |
 | `GET` | `/api/v1/invoices/{id}` | chi tiết |
 | `PATCH` | `/api/v1/invoices/{id}` | `{ customer_name?, items }` |
 | `DELETE` | `/api/v1/invoices/{id}` | xóa cứng MVP; `OQ-002` |
@@ -109,7 +109,7 @@ Phủ `FR-004`, `FR-005`, `FR-014`.
 | `DELETE` | `/api/v1/debts/{id}` | — | 204 |
 | `GET` | `/api/v1/reports/summary?period=` | — | `SummaryView` |
 
-`period` giống hóa đơn. `SummaryView` gồm `revenue`, `expense`, `profit` (ước tính), `order_count`, `outstanding_debt`, `series`, `best_sellers`.
+`period` giống hóa đơn: `week` là 7 ngày gần nhất tính cả hôm nay; `this_week` là tuần lịch từ thứ Hai tới hiện tại, cùng múi giờ với `today`. `SummaryView` gồm `revenue`, `expense`, `profit` (ước tính), `order_count`, `outstanding_debt`, `series`, `best_sellers`.
 
 Phủ `FR-006`, `FR-015`, `FR-016`.
 
