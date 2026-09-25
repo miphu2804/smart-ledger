@@ -1,11 +1,11 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddItemSheet } from '../src/components/AddItemSheet';
 import { useToast } from '../src/components/brand';
-import { Button, Dialog, Field, Header, IconBtn, Row, Stepper, T } from '../src/components/ui';
+import { Button, Dialog, Field, Row, Stepper, T } from '../src/components/ui';
 import { voiceSamples } from '../src/data/mock';
 import type { LineItem } from '../src/data/types';
 import { vnd } from '../src/lib/format';
@@ -27,6 +27,7 @@ export default function Voice() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [items, setItems] = useState<LineItem[]>([]);
   const [recording, setRecording] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(true);
   const [partial, setPartial] = useState('');
   const [text, setText] = useState('');
   const [edit, setEdit] = useState(false);
@@ -34,7 +35,9 @@ export default function Voice() {
   const [newPrice, setNewPrice] = useState('');
   const [priceErr, setPriceErr] = useState('');
   const [addOpen, setAddOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
   const [transcripts, setTranscripts] = useState<string[]>([]);
+  const [hasVoiceInput, setHasVoiceInput] = useState(false);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
   useEffect(() => {
@@ -55,23 +58,21 @@ export default function Voice() {
       return next;
     });
 
-  const handleUtterance = (utter: string) => {
+  const handleUtterance = (utter: string, source: 'voice' | 'manual') => {
     push('user', utter);
-    setTranscripts((t) => [...t, utter]);
+    if (source === 'voice') {
+      setTranscripts((t) => [...t, utter]);
+      setHasVoiceInput(true);
+    }
     const { items: found, unknown } = parseOrder(utter, app.products);
-    setTimeout(() => {
-      if (found.length) {
-        mergeItems(found);
-        push('ai', `Đã ghi ${found.map((f) => `${f.qty} ${f.name}`).join(', ')}.`);
-      }
-      if (unknown.length) {
-        setPending(unknown);
-        setNewPrice(unknown[0].price ? String(unknown[0].price) : '');
-        push('ai', `“${unknown[0].name}” chưa có trong danh mục. Bạn có muốn thêm vào không?`);
-      }
-      if (!found.length && !unknown.length)
-        push('ai', 'Mình chưa nhận ra tên hàng. Bạn thử lại nhé, ví dụ “2 ly cà phê sữa”.');
-    }, 350);
+    if (found.length) mergeItems(found);
+    if (unknown.length) {
+      setPending(unknown);
+      setNewPrice(unknown[0].price ? String(unknown[0].price) : '');
+      push('ai', `“${unknown[0].name}” chưa có trong danh mục. Bạn có muốn thêm vào không?`);
+    }
+    if (!found.length && !unknown.length)
+      push('ai', 'Mình chưa nhận ra tên hàng. Bạn thử lại nhé, ví dụ “2 ly cà phê sữa”.');
   };
 
   const startRecording = () => {
@@ -86,14 +87,23 @@ export default function Voice() {
 
   const finishRecording = (full: string) => {
     timers.current.forEach(clearTimeout);
+    timers.current = [];
     setRecording(false);
     setPartial('');
-    handleUtterance(full);
+    handleUtterance(full, 'voice');
+  };
+
+  const stopRecording = () => {
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+    setRecording(false);
+    setPartial('');
   };
 
   const sendText = () => {
     if (!text.trim()) return;
-    handleUtterance(text.trim());
+    stopRecording();
+    handleUtterance(text.trim(), 'manual');
     setText('');
   };
 
@@ -133,75 +143,52 @@ export default function Voice() {
   const count = items.reduce((a, i) => a + i.qty, 0);
 
   const checkout = () => {
-    app.setDraft({ items, source: 'voice', transcript: transcripts.join(' · ') });
+    app.setDraft({ items, source: hasVoiceInput ? 'voice' : 'manual', transcript: hasVoiceInput ? transcripts.join(' · ') : undefined });
     router.push('/checkout');
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top }}>
-      <View style={{ paddingHorizontal: 16 }}>
-        <Header
-          title="Bán hàng"
-          subtitle={app.store.name}
-          right={
-            <Pressable onPress={checkout} disabled={!items.length} hitSlop={8} style={styles.headerAction}>
-              <T w="bold" size={14} color={items.length ? colors.primary : colors.disabled}>
-                Lưu đơn
-              </T>
-            </Pressable>
-          }
-        />
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View style={styles.header}>
+        <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Quay lại" style={styles.backButton}>
+          <Feather name="chevron-left" size={26} color={colors.ink} />
+        </Pressable>
+        <View style={styles.headerTitle}>
+          <View style={styles.voiceBadge}>
+            <Feather name="mic" size={17} color={colors.primary} />
+            <T w="bold" size={14} color={colors.primary}>Chế độ Voice</T>
+          </View>
+          <T size={12} color={colors.muted} style={{ marginTop: 5 }}>Nói hoặc nhập để tạo đơn</T>
+        </View>
+        <View style={{ width: 44 }} />
       </View>
 
       <ScrollView
         ref={scroll}
         style={{ flex: 1 }}
-        contentContainerStyle={{ padding: 16, paddingBottom: 24, flexGrow: 1 }}
+        contentContainerStyle={styles.chatContent}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         {!msgs.length && !recording ? (
           <View style={styles.empty}>
-            <View style={styles.emptyIcon}>
-              <Feather name="mic" size={30} color={colors.ink} />
-            </View>
-            <T w="extrabold" size={20} style={{ marginTop: 16, textAlign: 'center' }}>
-              Đơn này bạn bán hàng gì?
-            </T>
-            <T size={13} color={colors.faint} style={{ marginTop: 6, textAlign: 'center', lineHeight: 19 }}>
-              Chọn câu gợi ý hoặc nhập nội dung bán hàng bên dưới.
-            </T>
-            <T w="bold" size={12} color={colors.muted} style={{ marginTop: 22, marginBottom: 8 }}>
-              THỬ GÕ NHANH
-            </T>
-            {['2 ly cà phê sữa 50 nghìn', 'bán 3 bánh mì, 2 coca', 'bán 1 hộp sữa chua nếp cẩm 12k'].map((s) => (
-              <Pressable key={s} onPress={() => handleUtterance(s)} style={styles.sample}>
-                <T w="semibold" size={13} color={colors.primary}>
-                  “{s}”
-                </T>
-              </Pressable>
-            ))}
+            <Feather name="mic" size={24} color={colors.primary} />
+            <T w="bold" size={18} style={{ marginTop: 12 }}>Bắt đầu đơn hàng</T>
+            <T size={13} color={colors.muted} style={styles.emptyHint}>Chọn câu gợi ý hoặc nhập tên hàng bên dưới.</T>
           </View>
         ) : null}
 
         {msgs.map((m) => (
           <View key={m.id} style={[styles.bubble, m.from === 'user' ? styles.user : styles.ai]}>
-            {m.from === 'ai' ? (
-              <Row gap={5} style={{ marginBottom: 3 }}>
-                <Feather name="star" size={12} color={colors.primary} />
-                <T w="bold" size={12} color={colors.primary}>
-                  Sổ Nghe Lời
-                </T>
-              </Row>
-            ) : null}
-            <T size={13.5} color={m.from === 'user' ? colors.white : colors.ink} style={{ lineHeight: 19 }}>
+            <T size={14} color={colors.ink} style={{ lineHeight: 20 }}>
               {m.text}
             </T>
           </View>
         ))}
 
         {recording ? (
-          <View style={[styles.bubble, styles.user, { opacity: 0.75 }]}>
-            <T size={13.5} color={colors.white}>
+          <View style={[styles.bubble, styles.user]}>
+            <T size={14} color={colors.ink}>
               {partial || '…'}
             </T>
           </View>
@@ -209,32 +196,23 @@ export default function Voice() {
 
         {items.length ? (
           <View style={styles.order}>
-            <Row style={{ marginBottom: 6 }}>
-              <Feather name="star" size={13} color={colors.primary} />
-              <T w="bold" size={13} color={colors.primary} style={{ flex: 1 }}>
-                Sổ Nghe Lời đã ghi được
-              </T>
-              <T size={12} color={colors.faint}>
-                {items.length} món ·{' '}
-              </T>
-              <Pressable onPress={() => setEdit((e) => !e)} hitSlop={8} style={styles.editAction}>
-                <Row gap={3}>
-                  <Feather name={edit ? 'check' : 'edit-2'} size={12} color={colors.primary} />
-                  <T w="bold" size={12} color={colors.primary}>
-                    {edit ? 'Xong' : 'Sửa'}
-                  </T>
-                </Row>
+            <View style={styles.orderHeader}>
+              <T w="bold" size={16} style={{ flex: 1 }}>Đơn hàng gồm {items.length} món</T>
+              <Pressable onPress={() => setEdit((e) => !e)} accessibilityRole="button" accessibilityLabel={edit ? 'Xong chỉnh sửa đơn' : 'Sửa đơn hàng'} style={styles.editAction}>
+                <Feather name={edit ? 'check' : 'edit-2'} size={15} color={colors.primary} />
+                <T w="bold" size={12} color={colors.primary}>{edit ? 'Xong' : 'Sửa'}</T>
               </Pressable>
-            </Row>
+            </View>
             {items.map((it, idx) => (
               <Row key={`${it.productId ?? it.name}`} style={styles.line}>
+                <View style={styles.productTile}>
+                  <T w="bold" size={16} color={colors.primary}>{it.name.charAt(0).toUpperCase()}</T>
+                </View>
                 <View style={{ flex: 1 }}>
                   <T w="semibold" size={14}>
                     {it.name}
                   </T>
-                  <T size={12} color={colors.faint}>
-                    {vnd(it.price)} × {it.qty}
-                  </T>
+                  <T size={12} color={colors.muted}>{vnd(it.price)}</T>
                 </View>
                 {edit ? (
                   <Stepper
@@ -246,9 +224,7 @@ export default function Voice() {
                     }
                   />
                 ) : (
-                  <T w="bold" size={15} color={colors.primary}>
-                    {vnd(it.price * it.qty)}
-                  </T>
+                  <T w="bold" size={15}>{it.qty}</T>
                 )}
               </Row>
             ))}
@@ -262,61 +238,83 @@ export default function Voice() {
                 style={{ marginTop: 10 }}
               />
             ) : null}
-            <Row style={{ marginTop: 12 }}>
-              <T w="semibold" size={14} color={colors.muted} style={{ flex: 1 }}>
-                Tổng cộng · {count} món
-              </T>
-              <T w="extrabold" size={22} color={colors.primary}>
-                {vnd(total)}
-              </T>
+            <Row style={styles.totalRow}>
+              <T w="semibold" size={13} color={colors.muted} style={{ flex: 1 }}>Tạm tính · {count} món</T>
+              <T w="bold" size={16} color={colors.primary}>{vnd(total)}</T>
             </Row>
-            <Button title={`Tạo đơn · ${vnd(total)}`} icon="check" onPress={checkout} style={{ marginTop: 12 }} />
+          </View>
+        ) : null}
+        {items.length ? (
+          <View style={styles.confirmation}>
+            <T size={14} style={{ lineHeight: 20 }}>Bạn kiểm tra đơn nhé. Cần chỉnh sửa thì báo tôi.</T>
+            <Button title="Tiếp tục thanh toán" icon="arrow-right" onPress={checkout} style={{ marginTop: 12 }} />
+            <Pressable onPress={() => setCancelOpen(true)} accessibilityRole="button" style={styles.cancelDraft}>
+              <T w="semibold" size={13} color={colors.muted}>Hủy bản nháp</T>
+            </Pressable>
           </View>
         ) : null}
       </ScrollView>
 
       <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-        {recording ? (
-          <>
-            <Button
-              title="Đang áp dụng câu gợi ý… chạm để dừng"
-              icon="mic"
-              variant="voice"
-              onPress={() => finishRecording(voiceSamples[(sampleCursor - 1) % voiceSamples.length])}
+        {voiceOpen ? (
+          <View style={styles.voicePanel}>
+            <T w="bold" size={18}>{recording ? 'Đang chạy câu gợi ý…' : 'Chế độ Voice'}</T>
+            <T size={13} color={colors.muted} style={styles.voiceHint}>
+              {recording ? partial || 'Đang chuẩn bị câu gợi ý…' : 'Bản demo chưa dùng micro. Chọn câu gợi ý để thử tạo đơn.'}
+            </T>
+            <View style={styles.waveform} accessibilityLabel={recording ? 'Đang chạy câu gợi ý' : 'Voice demo chưa hoạt động'}>
+              {[18, 34, 54, 32, 42, 60, 38, 22].map((height, i) => (
+                <View key={i} style={[styles.waveBar, { height, opacity: recording ? 0.85 : 0.35 }]} />
+              ))}
+            </View>
+            <View style={styles.voiceActions}>
+              <Pressable onPress={startRecording} disabled={recording} accessibilityRole="button" accessibilityLabel="Thử câu bán hàng mẫu" style={styles.demoButton}>
+                <Feather name="play" size={15} color={colors.primary} />
+                <T w="bold" size={13} color={colors.primary}>{recording ? 'Đang chạy…' : 'Thử câu gợi ý'}</T>
+              </Pressable>
+              <Pressable onPress={() => router.push('/pos')} accessibilityRole="button" style={styles.posButton}>
+                <T w="bold" size={13} color={colors.muted}>Chọn hàng</T>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+        <View style={styles.composerRow}>
+          <Pressable
+            onPress={() => {
+              if (voiceOpen) {
+                stopRecording();
+                setVoiceOpen(false);
+              } else {
+                Keyboard.dismiss();
+                setVoiceOpen(true);
+              }
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={voiceOpen ? 'Đóng bảng Voice' : 'Mở bảng Voice'}
+            style={styles.modeButton}
+          >
+            <Feather name={voiceOpen ? 'x' : 'mic'} size={22} color={colors.ink} />
+          </Pressable>
+          <View style={styles.composer}>
+            <TextInput
+              value={text}
+              onChangeText={setText}
+              onFocus={() => {
+                stopRecording();
+                setVoiceOpen(false);
+              }}
+              onSubmitEditing={sendText}
+              placeholder="Nhập tên hàng hoặc yêu cầu…"
+              placeholderTextColor={colors.faint}
+              accessibilityLabel="Nhập nội dung đơn hàng"
+              style={styles.input}
+              returnKeyType="send"
             />
-          </>
-        ) : (
-          <>
-            <Button title="Dùng câu gợi ý" icon="mic" variant="gold" onPress={startRecording} />
-            <Button
-              title="Chọn hàng"
-              icon="grid"
-              variant="green"
-              small
-              onPress={() => router.push('/pos')}
-              style={{ marginTop: 8, height: 44 }}
-            />
-          </>
-        )}
-        <Row style={styles.inputRow}>
-          <TextInput
-            value={text}
-            onChangeText={setText}
-            onSubmitEditing={sendText}
-            placeholder="Nhập tên hàng + giá"
-            placeholderTextColor={colors.faint}
-            style={styles.input}
-            returnKeyType="send"
-          />
-          <IconBtn
-            name="send"
-            bg={text.trim() ? colors.primary : colors.primarySoft}
-            color={text.trim() ? colors.white : colors.primaryLight}
-            size={44}
-            onPress={sendText}
-            label="Gửi"
-          />
-        </Row>
+            <Pressable onPress={sendText} disabled={!text.trim()} accessibilityRole="button" accessibilityLabel="Gửi nội dung" style={[styles.sendButton, !text.trim() && styles.sendDisabled]}>
+              <Feather name="arrow-up" size={20} color={text.trim() ? colors.white : colors.muted} />
+            </Pressable>
+          </View>
+        </View>
       </View>
 
       <Dialog
@@ -349,6 +347,24 @@ export default function Voice() {
         </Pressable>
       </Dialog>
 
+      <Dialog
+        visible={cancelOpen}
+        icon="alert-circle"
+        title="Hủy bản nháp này?"
+        message="Các món đã nhập trên màn này sẽ bị xóa. Chưa có đơn nào được tạo."
+        confirm="Hủy bản nháp"
+        cancel="Giữ đơn"
+        onCancel={() => setCancelOpen(false)}
+        onConfirm={() => {
+          setItems([]);
+          setMsgs([]);
+          setTranscripts([]);
+          setHasVoiceInput(false);
+          setEdit(false);
+          setCancelOpen(false);
+        }}
+      />
+
       <AddItemSheet
         visible={addOpen}
         onClose={() => setAddOpen(false)}
@@ -357,45 +373,41 @@ export default function Voice() {
           toast(`Đã thêm ${li.name}`);
         }}
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 20 },
-  emptyIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 24,
-    backgroundColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sample: {
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  bubble: { maxWidth: '84%', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 10 },
-  user: { alignSelf: 'flex-end', backgroundColor: colors.ink, borderBottomRightRadius: 5 },
-  ai: { alignSelf: 'flex-start', backgroundColor: colors.white, borderColor: colors.border, borderWidth: 1, borderBottomLeftRadius: 5 },
-  order: { backgroundColor: colors.white, borderRadius: 18, borderColor: colors.border, borderWidth: 1, padding: 16, marginTop: 4, ...shadow(1) },
-  line: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
-  bottom: {
-    backgroundColor: colors.white,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  inputRow: { marginTop: 10, backgroundColor: colors.bg, borderRadius: 14, paddingLeft: 14, paddingRight: 6, height: 48 },
-  headerAction: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
-  editAction: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
-  input: { flex: 1, fontFamily: font.medium, fontSize: 14, color: colors.ink, height: '100%', outlineStyle: 'none' } as never,
+  header: { minHeight: 80, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center' },
+  backButton: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', ...shadow(0) },
+  headerTitle: { flex: 1, alignItems: 'center' },
+  voiceBadge: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: colors.primarySoft, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7 },
+  chatContent: { flexGrow: 1, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 22 },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 24 },
+  emptyHint: { marginTop: 6, textAlign: 'center', lineHeight: 19 },
+  bubble: { maxWidth: '88%', borderRadius: 18, paddingHorizontal: 15, paddingVertical: 12, marginBottom: 12 },
+  user: { alignSelf: 'flex-end', backgroundColor: colors.primarySoft, borderBottomRightRadius: 6 },
+  ai: { alignSelf: 'flex-start', backgroundColor: colors.white, borderBottomLeftRadius: 6, ...shadow(0) },
+  order: { alignSelf: 'flex-start', width: '100%', backgroundColor: colors.white, borderRadius: 20, padding: 16, marginBottom: 12, ...shadow(1) },
+  orderHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  editAction: { minWidth: 44, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
+  line: { gap: 10, paddingVertical: 5, marginBottom: 6, minHeight: 54, backgroundColor: colors.bg, borderRadius: 14, paddingHorizontal: 10 },
+  productTile: { width: 42, height: 42, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primarySoft },
+  totalRow: { paddingTop: 8, marginTop: 4, borderTopWidth: 1, borderTopColor: colors.border },
+  confirmation: { alignSelf: 'flex-start', backgroundColor: colors.white, borderRadius: 18, padding: 15, maxWidth: '100%', ...shadow(0) },
+  cancelDraft: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  bottom: { backgroundColor: colors.white, paddingHorizontal: 16, paddingTop: 14, borderTopLeftRadius: 22, borderTopRightRadius: 22, ...shadow(1) },
+  voicePanel: { alignItems: 'center', paddingBottom: 12 },
+  voiceHint: { marginTop: 5, textAlign: 'center', lineHeight: 19, minHeight: 38 },
+  waveform: { height: 68, flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  waveBar: { width: 7, borderRadius: 9, backgroundColor: colors.primary },
+  voiceActions: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 4 },
+  demoButton: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 12, borderRadius: 14, backgroundColor: colors.primarySoft },
+  posButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
+  composerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingBottom: 2 },
+  modeButton: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border },
+  composer: { flex: 1, minHeight: 52, flexDirection: 'row', alignItems: 'center', paddingLeft: 12, paddingRight: 4, backgroundColor: colors.bg, borderRadius: 16, borderWidth: 1, borderColor: colors.border },
+  input: { flex: 1, fontFamily: font.medium, fontSize: 14, color: colors.ink, height: 46, outlineStyle: 'none' } as never,
+  sendButton: { width: 44, height: 44, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary },
+  sendDisabled: { backgroundColor: colors.border },
 });
