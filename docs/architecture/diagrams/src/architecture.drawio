@@ -179,11 +179,6 @@
             <mxGeometry height="54" width="203" x="768" y="218" as="geometry" />
           </mxCell>
         </UserObject>
-        <UserObject label="RAG service" mermaidId="n:ai_rag" mermaidBaseStyle="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=light-dark(#ECECFF,#1f2020);strokeColor=light-dark(#9370DB,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" mermaidBaseValue="RAG service" id="21">
-          <mxCell parent="17" style="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=light-dark(#ECECFF,#1f2020);strokeColor=light-dark(#9370DB,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" vertex="1">
-            <mxGeometry height="54" width="145" x="573" y="218" as="geometry" />
-          </mxCell>
-        </UserObject>
         <UserObject label="Recommendation service" mermaidId="n:ai_rec" mermaidBaseStyle="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=light-dark(#ECECFF,#1f2020);strokeColor=light-dark(#9370DB,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" mermaidBaseValue="Recommendation service" id="22">
           <mxCell parent="17" style="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=light-dark(#ECECFF,#1f2020);strokeColor=light-dark(#9370DB,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" vertex="1">
             <mxGeometry height="54" width="239" x="284" y="218" as="geometry" />
@@ -212,17 +207,6 @@
                 <mxPoint x="870" y="124" />
                 <mxPoint x="870" y="159" />
                 <mxPoint x="870" y="193" />
-              </Array>
-            </mxGeometry>
-          </mxCell>
-        </UserObject>
-        <UserObject label="" mermaidId="e:ai_hub-&gt;ai_rag#0" mermaidBaseStyle="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);exitX=0;exitY=0.69;entryX=0.5;entryY=0;" mermaidBaseValue="" id="41">
-          <mxCell edge="1" parent="17" source="18" style="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#333333,#cccccc);exitX=0;exitY=0.69;entryX=0.5;entryY=0;" target="21">
-            <mxGeometry relative="1" as="geometry">
-              <Array as="points">
-                <mxPoint x="646" y="124" />
-                <mxPoint x="646" y="159" />
-                <mxPoint x="646" y="193" />
               </Array>
             </mxGeometry>
           </mxCell>
