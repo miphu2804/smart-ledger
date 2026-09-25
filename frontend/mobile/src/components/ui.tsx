@@ -268,7 +268,7 @@ export function Chips<K extends string>({
   scroll = true,
   style,
 }: {
-  options: { key: K; label: string }[];
+  options: { key: K; label: string; icon?: IconName }[];
   value: K;
   onChange: (k: K) => void;
   scroll?: boolean;
@@ -284,6 +284,7 @@ export function Chips<K extends string>({
         accessibilityState={{ selected: active }}
         style={[styles.chip, active ? { backgroundColor: colors.accent, borderColor: colors.accent } : null]}
       >
+        {o.icon ? <Feather name={o.icon} size={15} color={active ? colors.accentInk : colors.muted} /> : null}
         <T w={active ? 'bold' : 'semibold'} size={14} color={active ? colors.accentInk : colors.muted}>
           {o.label}
         </T>
@@ -644,6 +645,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   chip: {
+    flexDirection: 'row',
+    gap: 6,
     paddingHorizontal: 14,
     height: 44,
     borderRadius: 10,

@@ -72,7 +72,7 @@ export default function Profile() {
         </T>
         <Pressable onPress={() => setPick(true)} style={styles.picker}>
           <T w="semibold" size={14} color={chosen.length ? colors.ink : colors.primary} style={{ flex: 1 }} numberOfLines={1}>
-            {chosen.length ? chosen.map((c) => `${c.emoji} ${c.name}`).join(', ') : 'Chưa chọn ngành'}
+            {chosen.length ? chosen.map((c) => c.name).join(', ') : 'Chưa chọn ngành'}
           </T>
           <T w="bold" color={colors.primary}>
             ›
@@ -107,7 +107,7 @@ export default function Profile() {
                 style={[styles.ind, on && { borderColor: colors.accent, backgroundColor: colors.accent }]}
               >
                 <T size={13} w={on ? 'bold' : 'semibold'} color={on ? colors.accentInk : colors.ink}>
-                  {i.emoji} {i.name}
+                  {i.name}
                 </T>
               </Pressable>
             );
