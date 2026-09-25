@@ -94,6 +94,8 @@ function sessionPatch(st: State, s: SessionView): Partial<State> {
           name: shop.name,
           address: shop.address ?? (USE_MOCK ? st.store.address : ''),
           industries: industries ?? st.store.industries,
+          bankName: USE_MOCK ? st.store.bankName : '',
+          bankAccount: USE_MOCK ? st.store.bankAccount : '',
         }
       : st.store,
   };
