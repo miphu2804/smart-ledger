@@ -4,6 +4,8 @@ import com.smartledger.core.dto.request.AuthSessionRequest;
 import com.smartledger.core.dto.response.AuthSessionResponse;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.AuthSessionService;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -34,10 +36,10 @@ public class AuthController {
     @Operation(
             summary = "Open a SmartLedger session from a Firebase ID token",
             description = "Creates a local OWNER account only on the first sign-in of a Firebase UID.")
-    @ApiResponse(responseCode = "200", description = "Local account created or returned")
-    @ApiResponse(responseCode = "400", description = "A first sign-in is missing displayName")
-    @ApiResponse(responseCode = "401", description = "Firebase ID token is invalid or missing")
-    @ApiResponse(responseCode = "403", description = "Account is disabled")
+    @ApiResponse(
+            responseCode = "200",
+            description = "Local account created or returned",
+            content = @Content(schema = @Schema(implementation = AuthSessionResponse.class)))
     public ResponseEntity<AuthSessionResponse> openSession(
             @AuthenticationPrincipal VerifiedFirebaseToken firebaseToken,
             @Valid @RequestBody(required = false) AuthSessionRequest request) {
@@ -49,10 +51,10 @@ public class AuthController {
 
     @GetMapping("/me")
     @Operation(summary = "Get the current SmartLedger user and accessible shops")
-    @ApiResponse(responseCode = "200", description = "Current local account")
-    @ApiResponse(responseCode = "401", description = "Firebase ID token is invalid or missing")
-    @ApiResponse(responseCode = "403", description = "Account is disabled")
-    @ApiResponse(responseCode = "404", description = "No local SmartLedger profile exists yet")
+    @ApiResponse(
+            responseCode = "200",
+            description = "Current local account",
+            content = @Content(schema = @Schema(implementation = AuthSessionResponse.class)))
     public AuthSessionResponse getCurrentSession(@AuthenticationPrincipal VerifiedFirebaseToken firebaseToken) {
         return authSessionService.getCurrentSession(firebaseToken);
     }

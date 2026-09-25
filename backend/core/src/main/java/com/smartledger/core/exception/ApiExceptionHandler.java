@@ -14,15 +14,15 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
-    @ExceptionHandler(DisplayNameRequiredException.class)
-    ResponseEntity<ApiErrorResponse> handleMissingDisplayName(
-            DisplayNameRequiredException exception,
+    @ExceptionHandler(BusinessException.class)
+    ResponseEntity<ApiErrorResponse> handleBusinessException(
+            BusinessException exception,
             HttpServletRequest request) {
         return error(
-                HttpStatus.BAD_REQUEST,
-                "validation_failed",
+                exception.getErrorCode().getHttpStatus(),
+                exception.getErrorCode().getCode(),
                 exception.getMessage(),
-                List.of(new ApiErrorDetail("displayName", "is required for a new account")),
+                exception.getDetails(),
                 request);
     }
 
@@ -49,30 +49,6 @@ public class ApiExceptionHandler {
                 HttpStatus.BAD_REQUEST,
                 "invalid_request",
                 "The request body must be valid JSON.",
-                List.of(),
-                request);
-    }
-
-    @ExceptionHandler(AccountDisabledException.class)
-    ResponseEntity<ApiErrorResponse> handleDisabledAccount(
-            AccountDisabledException exception,
-            HttpServletRequest request) {
-        return error(
-                HttpStatus.FORBIDDEN,
-                "account_disabled",
-                exception.getMessage(),
-                List.of(),
-                request);
-    }
-
-    @ExceptionHandler(AuthProfileNotFoundException.class)
-    ResponseEntity<ApiErrorResponse> handleMissingProfile(
-            AuthProfileNotFoundException exception,
-            HttpServletRequest request) {
-        return error(
-                HttpStatus.NOT_FOUND,
-                "auth_profile_not_found",
-                exception.getMessage(),
                 List.of(),
                 request);
     }

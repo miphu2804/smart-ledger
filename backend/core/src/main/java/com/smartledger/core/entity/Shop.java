@@ -1,5 +1,6 @@
 package com.smartledger.core.entity;
 
+import com.smartledger.core.enums.ShopStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -7,10 +8,18 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import java.time.OffsetDateTime;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "shops")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Shop {
 
     @Id
@@ -36,34 +45,66 @@ public class Shop {
     @Column(nullable = false, length = 20)
     private ShopStatus status;
 
-    protected Shop() {
+    @Column(name = "created_at", nullable = false)
+    private OffsetDateTime createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private OffsetDateTime updatedAt;
+
+    @Column(name = "archived_at")
+    private OffsetDateTime archivedAt;
+
+    @Column(name = "inactive_reason", length = 500)
+    private String inactiveReason;
+
+    @Column(name = "archived_reason", length = 500)
+    private String archivedReason;
+
+    public static Shop create(Long ownerId, String name, String industry, String phone, String address) {
+        Shop shop = new Shop();
+        shop.ownerId = ownerId;
+        shop.name = name;
+        shop.industry = industry;
+        shop.phone = phone;
+        shop.address = address;
+        shop.status = ShopStatus.ACTIVE;
+        return shop;
     }
 
-    public Long getId() {
-        return id;
+    public void update(String name, String industry, String phone, String address) {
+        this.name = name;
+        this.industry = industry;
+        this.phone = phone;
+        this.address = address;
     }
 
-    public Long getOwnerId() {
-        return ownerId;
+    public void archive(String reason) {
+        status = ShopStatus.ARCHIVED;
+        archivedAt = OffsetDateTime.now();
+        archivedReason = reason;
+        inactiveReason = null;
     }
 
-    public String getName() {
-        return name;
+    public void deactivate(String reason) {
+        status = ShopStatus.INACTIVE;
+        inactiveReason = reason;
     }
 
-    public String getIndustry() {
-        return industry;
+    public void activate() {
+        status = ShopStatus.ACTIVE;
+        inactiveReason = null;
     }
 
-    public String getPhone() {
-        return phone;
+    @PrePersist
+    void onCreate() {
+        OffsetDateTime now = OffsetDateTime.now();
+        createdAt = now;
+        updatedAt = now;
     }
 
-    public String getAddress() {
-        return address;
+    @PreUpdate
+    void onUpdate() {
+        updatedAt = OffsetDateTime.now();
     }
 
-    public ShopStatus getStatus() {
-        return status;
-    }
 }

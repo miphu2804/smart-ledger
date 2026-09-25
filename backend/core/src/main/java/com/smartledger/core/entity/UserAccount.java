@@ -1,5 +1,7 @@
 package com.smartledger.core.entity;
 
+import com.smartledger.core.enums.SystemRole;
+import com.smartledger.core.enums.UserStatus;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -12,10 +14,15 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 import org.springframework.util.StringUtils;
 
 @Entity
 @Table(name = "users")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class UserAccount {
 
     @Id
@@ -47,9 +54,6 @@ public class UserAccount {
 
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
-
-    protected UserAccount() {
-    }
 
     public static UserAccount createOwner(String displayName, VerifiedFirebaseToken firebaseToken) {
         UserAccount user = new UserAccount();
@@ -84,31 +88,4 @@ public class UserAccount {
         updatedAt = OffsetDateTime.now();
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public String getDisplayName() {
-        return displayName;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public String getPhone() {
-        return phone;
-    }
-
-    public String getAvatarUrl() {
-        return avatarUrl;
-    }
-
-    public SystemRole getSystemRole() {
-        return systemRole;
-    }
-
-    public UserStatus getStatus() {
-        return status;
-    }
 }

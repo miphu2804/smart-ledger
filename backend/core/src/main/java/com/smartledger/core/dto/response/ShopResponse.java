@@ -1,6 +1,6 @@
 package com.smartledger.core.dto.response;
 
-import com.smartledger.core.entity.ShopStatus;
+import com.smartledger.core.enums.ShopStatus;
 
 public record ShopResponse(
         Long id,
@@ -8,5 +8,7 @@ public record ShopResponse(
         String industry,
         String phone,
         String address,
-        ShopStatus status) {
+        ShopStatus status,
+        String inactiveReason,
+        String archivedReason) {
 }

@@ -1,6 +1,6 @@
 package com.smartledger.core.dto.response;
 
-import com.smartledger.core.entity.SystemRole;
+import com.smartledger.core.enums.SystemRole;
 import java.util.List;
 
 public record AuthSessionResponse(

@@ -10,12 +10,13 @@ import static org.mockito.Mockito.when;
 import com.smartledger.core.dto.response.AuthSessionResponse;
 import com.smartledger.core.entity.AuthIdentity;
 import com.smartledger.core.entity.UserAccount;
-import com.smartledger.core.exception.AuthProfileNotFoundException;
-import com.smartledger.core.exception.DisplayNameRequiredException;
+import com.smartledger.core.enums.ErrorCode;
+import com.smartledger.core.exception.BusinessException;
 import com.smartledger.core.repository.AuthIdentityRepository;
 import com.smartledger.core.repository.ShopRepository;
 import com.smartledger.core.repository.UserAccountRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
+import com.smartledger.core.service.impl.AuthSessionServiceImpl;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -26,7 +27,7 @@ class AuthSessionServiceTest {
     private final AuthIdentityRepository authIdentityRepository = Mockito.mock(AuthIdentityRepository.class);
     private final UserAccountRepository userAccountRepository = Mockito.mock(UserAccountRepository.class);
     private final ShopRepository shopRepository = Mockito.mock(ShopRepository.class);
-    private final AuthSessionService service = new AuthSessionService(
+    private final AuthSessionService service = new AuthSessionServiceImpl(
             authIdentityRepository,
             userAccountRepository,
             shopRepository);
@@ -71,7 +72,10 @@ class AuthSessionServiceTest {
         when(authIdentityRepository.findWithUserByProviderSubject(firebaseToken.uid())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.openSession(firebaseToken, "   "))
-                .isInstanceOf(DisplayNameRequiredException.class);
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.DISPLAY_NAME_REQUIRED));
 
         verify(userAccountRepository, never()).save(any());
         verify(authIdentityRepository, never()).save(any());
@@ -83,7 +87,10 @@ class AuthSessionServiceTest {
         when(authIdentityRepository.findWithUserByProviderSubject(firebaseToken.uid())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.getCurrentSession(firebaseToken))
-                .isInstanceOf(AuthProfileNotFoundException.class);
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.AUTH_PROFILE_NOT_FOUND));
     }
 
     private VerifiedFirebaseToken firebaseToken() {

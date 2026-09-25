@@ -1,4 +1,4 @@
-package com.smartledger.core.entity;
+package com.smartledger.core.enums;
 
 public enum UserStatus {
     ACTIVE,
