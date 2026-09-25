@@ -19,6 +19,8 @@ export const mockStore = {
   name: 'Tiệm tạp hoá cô Thỏ',
   address: '12 Hoà Hưng, Q.10, TP.HCM',
   industries: ['grocery', 'drink'] as string[],
+  bankName: 'Vietcombank',
+  bankAccount: '0123456789',
   plan: 'basic' as 'basic' | 'pro',
   quota: 200,
 };

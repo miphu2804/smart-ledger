@@ -157,10 +157,14 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+    env:
+      POSTGRES_PASSWORD: ci-only-password
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
+      - name: Build custom service images
+        run: docker compose build
       - name: Build Core image for staging platforms
         uses: docker/build-push-action@v7
         with:
@@ -194,7 +198,7 @@ jobs:
           CORE_ERRORS: ${{ needs.core.outputs.errors }}
           CORE_SKIPPED: ${{ needs.core.outputs.skipped }}
           MOBILE_RESULT: "${{ needs['mobile-web'].result }}"
-          CONTAINER_RESULT: ${{ needs['container-images'].result }}
+          CONTAINER_RESULT: "${{ needs['container-images'].result }}"
         run: |
           {
             echo "# CI results"

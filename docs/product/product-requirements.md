@@ -14,7 +14,7 @@
 - [Thiết kế kỹ thuật](../architecture/technical-design.md): hiện thực MVP.
 - [Hợp đồng API](../contracts/api-contracts.md): FE ↔ Core và Core ↔ AI.
 - [Sơ đồ kiến trúc MVP](../architecture/diagrams/src/architecture.mmd): Mobile, Core, Data, AI và AI infrastructure.
-- Nguồn luồng Core/FE: [orei1i/EXE201/frontend](https://github.com/orei1i/EXE201/tree/main/frontend), kiểm tra 2026-09-15.
+- Nguồn luồng Core/FE ban đầu: [orei1i/EXE201/frontend](https://github.com/orei1i/EXE201/tree/main/frontend), kiểm tra 2026-09-15. Hiện trạng triển khai được ghi trong [thiết kế kỹ thuật](../architecture/technical-design.md).
 
 ## 0. Tra nhanh shorthand
 
@@ -169,7 +169,7 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 
 - `OQ-001` đã chốt: STT thật thuộc đích MVP; FE hiện mới giả lập.
 - `FR-017`: phải chốt loại ảnh đầu tiên trong issue trước khi viết parser.
-- `FR-010`/`NFR-003`: FE hiện chứng minh OTP điện thoại; Google và Zalo chưa được tích hợp.
+- `FR-010`/`NFR-003`: mobile có client Firebase Phone/Email và luồng phiên Core tùy chọn, nhưng mặc định chạy mock; chưa có bằng chứng nghiệm thu OTP với môi trường Firebase thật. Nút Google chưa kết nối, Zalo chưa được tích hợp; web admin cũng đang dùng mock.
 - MVP chỉ có hai vai trò `OWNER` và `ADMIN`; quản lý nhân viên/thành viên (`FR-012`) đã bị loại khỏi phạm vi.
 - Toàn bộ `FR-INV-*` bị hoãn cho đến khi `OQ-INV-001`–`OQ-INV-005` trong BRD được giải quyết.
 - Máy in và gói dịch vụ ngoài PRD MVP.

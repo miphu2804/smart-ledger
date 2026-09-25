@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { ReportPeriodTabs, type ReportPeriod } from '../../src/components/ReportPeriodTabs';
 import { AssistantIntroModal } from '../../src/components/AssistantIntroModal';
 import { LogoMark } from '../../src/components/brand';
-import { Button, Card, IconBtn, IconName, Row, Screen, T } from '../../src/components/ui';
+import { Card, IconBtn, IconName, Row, Screen, T } from '../../src/components/ui';
 import { vnd } from '../../src/lib/format';
 import { buildNotifications } from '../../src/lib/notifications';
 import { bestSellers, periodLabel, summary } from '../../src/lib/stats';
@@ -162,9 +162,6 @@ export default function Home() {
           </T>
         </Card>
       )}
-
-      <HomeSectionHeading title="Bán hàng" />
-      <Button title="Chọn hàng" icon="grid" onPress={() => router.push('/(tabs)/sales')} />
 
       <Card style={{ backgroundColor: colors.primaryTint, marginTop: 22 }}>
         <Row style={{ alignItems: 'flex-start' }} gap={10}>

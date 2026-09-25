@@ -1,3 +1,31 @@
+### [2026-09-25 22:58 UTC+07:00] — [Mobile] Clean up duplicate navigation and add transfer account
+
+**Done:** Removed the home "Chọn hàng" shortcut that duplicated the Sales tab, moved Expenses to a stack screen with a back button, dropped the mock printer notification (printers are outside MVP), and let owners set the bank account shown for transfer payments.
+
+**Changed files:** `frontend/mobile/app/(tabs)/index.tsx`, `frontend/mobile/app/(tabs)/_layout.tsx`, `frontend/mobile/app/expenses.tsx` (moved from `app/(tabs)/`), `frontend/mobile/app/checkout.tsx`, `frontend/mobile/app/profile.tsx`, `frontend/mobile/src/data/mock.ts`, `frontend/mobile/src/lib/notifications.ts`, `frontend/mobile/src/store/AppStore.tsx`, `PROGRESS.md`.
+
+**Flow explained:** Khác → Chi phí now opens above the tabs and returns with back. Checkout transfer shows the account from shop info, or links to shop info when none is set; real accounts never inherit the mock sample account. The account is kept in app state only, like the shop address.
+
+**Check:** Typecheck and Expo web export passed; `git diff --check` passed. Home and Expenses were checked on the iPhone 17 Pro simulator in mock mode; the transfer account flow was checked on the web build.
+
+### [2026-09-24 23:32 UTC+07:00] — [Mobile] Simplify AI chat conversation UI
+
+**Done:** Removed avatars from assistant and user messages and widened message bubbles for the chat content.
+
+**Changed files:** `frontend/mobile/app/ai.tsx`, `PROGRESS.md`.
+
+**Check:** Opened the AI chat route on the iPhone 17 Pro Max simulator and confirmed the avatar-free layout. `git diff --check` passed.
+
+### [2026-09-24 21:18 UTC+07:00] — [Release] Prepare branch histories for production release
+
+**Done:** Prepared the history sync needed to release `staging` into `main`, keeping the mobile tree from `staging` across the 39 overlapping additions. Added the missing required `container-images` check.
+
+**Changed files:** `.github/workflows/ci.yml`, `CONTRIBUTING.md`, and `PROGRESS.md`; no application source changes.
+
+**Flow explained:** Including `main` in the staging release history lets the required `staging` → `main` release PR merge without repeating mobile add/add conflicts. CI now builds the custom Docker Compose images for the required `container-images` status.
+
+**Check:** The merged mobile tree matches `origin/staging` and the web tree matches `origin/main`. CI for `c9bcf43` passed; the new image job and this sync PR's checks are pending.
+
 ### [2026-09-24 17:43 UTC+07:00] — [AI] Verify persisted chat CRUD before merge
 
 **Done:** Manually called the live AI HTTP service with two short model requests and verified create, list, detail, rename, continue, delete, scope isolation, and post-delete behavior against disposable PostgreSQL 16 and Redis. The staging database was not used.
@@ -302,3 +330,12 @@
 **Changed files:** `.dockerignore`, `.gitignore`, `docker/core.Dockerfile`, `compose.yaml`, `.github/workflows/ci.yml`, `.github/workflows/deploy-staging.yml`, `docs/ops/staging.md`, `PROGRESS.md`.
 
 **Check:** Compose default/infra/migrations/backend profiles render; deployment workflow YAML and embedded shell/Python syntax pass; `git diff --check` passes. Local Docker Core image build exceeded the runner's five-minute RPC limit and was stopped; the new multi-arch GitHub CI job will verify it. Staging secrets/VM/database, Firebase service account, Vercel project linkage, and backup/restore smoke remain unconfigured or unverified.
+### [2026-09-24 22:32 UTC+07:00] — [Docs] Reconcile implementation status with code
+
+**Done:** Reviewed project documentation against the `staging` checkout and corrected stale descriptions of frontend location, mock behavior, Core auth, AI conversation routes, API payloads, and mobile integration status. Kept proposed MVP requirements separate from implemented endpoints.
+
+**Changed files:** `README.md`, `backend/ai/README.md`, `frontend/mobile/README.md`, `docs/architecture/technical-design.md`, `docs/contracts/api-contracts.md`, `docs/design/mobile-ui-style-migration.md`, `docs/product/project-overview.md`, `docs/product/product-requirements.md`, and `PROGRESS.md`.
+
+**Flow explained:** The current mobile and web apps use mock business data by default. Mobile can call Core's Firebase session endpoints; Core has no shop or ledger API and does not proxy AI. AI persists internal Agent conversations. The remaining API and architecture sections describe the MVP target.
+
+**Check:** Compared documented routes and payloads with Core controllers/DTOs, AI routers/schemas, and frontend config/services; `git diff --check` passed; all local links in changed Markdown files resolved. No runtime behavior changed.
