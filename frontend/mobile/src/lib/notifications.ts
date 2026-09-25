@@ -142,7 +142,7 @@ export function buildNotifications(
       title: `Đã ghi chi: ${e.title}`,
       body: `${vnd(e.amount)}${e.source === 'voice' ? ' · ghi bằng giọng nói' : ''}`,
       at: e.createdAt,
-      href: '/(tabs)/expenses',
+      href: '/expenses',
     });
   }
 
