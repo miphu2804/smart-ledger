@@ -8,6 +8,7 @@ import { useToast } from '../src/components/brand';
 import { Button, Dialog, Field, Row, Stepper, T } from '../src/components/ui';
 import { voiceSamples } from '../src/data/mock';
 import type { LineItem } from '../src/data/types';
+import { useMicLevel } from '../src/hooks/useMicLevel';
 import { vnd } from '../src/lib/format';
 import { parseOrder } from '../src/lib/parseOrder';
 import { itemsTotal } from '../src/lib/stats';
@@ -38,6 +39,7 @@ export default function Voice() {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [transcripts, setTranscripts] = useState<string[]>([]);
   const [hasVoiceInput, setHasVoiceInput] = useState(false);
+  const { status: micStatus, levels } = useMicLevel(voiceOpen);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
   useEffect(() => {
@@ -258,13 +260,15 @@ export default function Voice() {
       <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         {voiceOpen ? (
           <View style={styles.voicePanel}>
-            <T w="bold" size={18}>{recording ? 'Đang chạy câu gợi ý…' : 'Chế độ Voice'}</T>
-            <T size={13} color={colors.muted} style={styles.voiceHint}>
-              {recording ? partial || 'Đang chuẩn bị câu gợi ý…' : 'Bản demo chưa dùng micro. Chọn câu gợi ý để thử tạo đơn.'}
+            <T w="bold" size={18}>
+              {recording ? 'Đang chạy câu gợi ý…' : micStatus === 'listening' ? 'Đang nghe…' : micStatus === 'starting' ? 'Đang bật micro…' : micStatus === 'denied' ? 'Chưa cấp quyền micro' : 'Micro không khả dụng'}
             </T>
-            <View style={styles.waveform} accessibilityLabel={recording ? 'Đang chạy câu gợi ý' : 'Voice demo chưa hoạt động'}>
-              {[18, 34, 54, 32, 42, 60, 38, 22].map((height, i) => (
-                <View key={i} style={[styles.waveBar, { height, opacity: recording ? 0.85 : 0.35 }]} />
+            <T size={13} color={colors.muted} style={styles.voiceHint}>
+              {recording ? partial || 'Đang chuẩn bị câu gợi ý…' : micStatus === 'listening' ? 'Sóng theo giọng nói; tạo đơn bằng chữ hoặc câu mẫu.' : micStatus === 'denied' ? 'Cấp quyền micro để xem sóng âm. Bạn vẫn có thể nhập chữ.' : micStatus === 'starting' ? 'Đang xin quyền và kết nối micro…' : 'Bạn vẫn có thể nhập chữ hoặc thử câu gợi ý.'}
+            </T>
+            <View style={styles.waveform} accessibilityLabel={micStatus === 'listening' ? 'Sóng phản ứng theo âm lượng micro' : 'Không có tín hiệu micro'}>
+              {levels.map((level, i) => (
+                <View key={i} style={[styles.waveBar, { height: 8 + level * 52, opacity: micStatus === 'listening' ? 0.4 + level * 0.6 : 0.3 }]} />
               ))}
             </View>
             <View style={styles.voiceActions}>
