@@ -224,8 +224,8 @@ function AddExpenseSheet({ visible, onClose }: { visible: boolean; onClose: () =
         value={mode}
         onChange={setMode}
         options={[
-          { key: 'voice', label: '🎙 Nói' },
-          { key: 'manual', label: '⌨️ Nhập tay' },
+          { key: 'voice', label: 'Nói', icon: 'mic' },
+          { key: 'manual', label: 'Nhập tay', icon: 'edit-3' },
         ]}
       />
       {mode === 'voice' ? (

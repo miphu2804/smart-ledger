@@ -27,10 +27,10 @@ npm run export:web      # build web tĩnh ra dist/
 | --- | --- |
 | `/` | Splash |
 | `/(auth)/welcome`, `/otp`, `/setup` | Đăng nhập SĐT, OTP, tạo tiệm |
-| `/(tabs)` | Trang chủ: doanh thu hôm nay/hôm qua/tháng, việc cần xử lý, gợi ý và bán chạy |
-| `/analytics` | Phân tích theo kỳ: doanh thu, diễn biến theo giờ/tuần, chi phí, lãi gộp ước tính, bán chạy, công nợ |
+| `/(tabs)` | Trang chủ: doanh thu hôm nay/tuần này/tháng này, việc cần xử lý, gợi ý và bán chạy |
+| `/analytics` | Phân tích theo kỳ: doanh thu, diễn biến theo giờ/ngày trong tuần/tuần trong tháng, chi phí, lãi gộp ước tính, bán chạy, công nợ |
 | `/(tabs)/invoices` | Hoá đơn: lọc theo thời gian, nguồn (AI/POS/nhập tay), ghi nợ, đã huỷ, tìm kiếm |
-| `/(tabs)/sales` | Bán hàng: vào thẳng danh mục, chọn món và xem giỏ; Zen ring mở Chatbot, Giọng nói hoặc Gợi ý phân tích nhanh |
+| `/(tabs)/sales` | Bán hàng: vào thẳng danh mục, chọn món và xem giỏ; Zen ring (kéo thả, dính cạnh trái/phải, giữ vị trí qua các tab) mở Chatbot, Giọng nói hoặc Gợi ý phân tích nhanh |
 | `/(tabs)/expenses` | Chi phí theo tháng, cơ cấu chi, thêm chi phí bằng giọng nói / nhập tay |
 | `/(tabs)/more` | Khác: hồ sơ, báo cáo, hàng hoá, chi phí, công nợ và đăng xuất |
 | `/voice` | Nhập đơn bằng văn bản hoặc câu gợi ý, hỏi thêm món lạ vào danh mục, sửa số lượng; chưa thu âm từ mic |
