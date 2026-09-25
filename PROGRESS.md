@@ -116,6 +116,26 @@
 
 **Check:** DBML and diagram agree on 20 tables and 44 relationships; `git diff --check` passed; AI Ruff check and format check passed; `uv run pytest -q` passed 12 tests with one upstream deprecation warning. Remote PR review and checks remain pending.
 
+### [2026-09-21 21:35 UTC+07:00] — [Chore] Validate Java Core in CI
+
+**Done:** Added Core CI jobs for Java 21 Maven verification and Docker image build. Docker build runs only after Core tests pass and does not require Firebase credentials.
+
+**Changed files:** `.github/workflows/ci.yml`, `PROGRESS.md`.
+
+**Flow explained:** Pull requests and pushes to integration branches run the existing AI job alongside Core tests; a passing Core test job unlocks a Dockerfile build check.
+
+**Check:** `mvn --batch-mode --no-transfer-progress verify` passed 11 tests; `docker build -t smartledger-core:ci -f Dockerfile .` passed from `backend/core`.
+
+### [2026-09-21 21:20 UTC+07:00] — [Chore] Dockerize Java Core service
+
+**Done:** Added a multi-stage Java 21 Core image and wired Core into Compose. Core receives its database settings through Compose, waits for PostgreSQL health, and reads Firebase credentials only from a read-only local bind mount; no credentials are committed.
+
+**Changed files:** `backend/core/Dockerfile`, `backend/core/.dockerignore`, `backend/core/.env.example`, `compose.yaml`, `PROGRESS.md`.
+
+**Flow explained:** A developer creates a Git-ignored root `.env` with local ports and the local Firebase credential path, then runs `docker compose up --build`. Inside the Docker network, Core and AI connect to PostgreSQL at `postgres:5432`; the host may map that port to another unused local port.
+
+**Check:** Maven tests passed (11 tests). `docker compose config` and `docker compose build core` passed. Local Compose startup completed; PostgreSQL became healthy, Flyway applied V1, and Core returned `200` from `/v3/api-docs` on port 8000.
+
 ### [2026-09-20 17:26 UTC+07:00] — [Docs] Finalize Phase 1 ERD and core validation rules
 
 **Done:** Scoped product barcode uniqueness to `(store_id, barcode)`, moved `store_id` to `notification_events`, converted `auth_identities` to 1:N, and documented tenant consistency and payment-debt validation rules.
