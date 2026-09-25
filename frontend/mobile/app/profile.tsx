@@ -16,6 +16,8 @@ export default function Profile() {
   const [store, setStore] = useState(app.store.name);
   const [address, setAddress] = useState(app.store.address);
   const [industries, setIndustries] = useState<string[]>(app.store.industries);
+  const [bankName, setBankName] = useState(app.store.bankName);
+  const [bankAccount, setBankAccount] = useState(app.store.bankAccount);
   const [pick, setPick] = useState(false);
 
   const emailErr = email && !/^\S+@\S+\.\S+$/.test(email) ? 'Email chưa đúng định dạng' : '';
@@ -28,7 +30,13 @@ export default function Profile() {
           title="Lưu thay đổi"
           disabled={!name.trim() || !store.trim() || !!emailErr}
           onPress={() => {
-            app.updateProfile({ name: name.trim(), email, facebook: fb }, { name: store.trim(), address, industries });
+            app.updateProfile({ name: name.trim(), email, facebook: fb }, {
+              name: store.trim(),
+              address,
+              industries,
+              bankName: bankName.trim(),
+              bankAccount: bankAccount.replace(/\s/g, ''),
+            });
             toast('Đã lưu thông tin');
             router.back();
           }}
@@ -70,6 +78,22 @@ export default function Profile() {
             ›
           </T>
         </Pressable>
+      </Card>
+      <Card style={{ marginTop: 12 }}>
+        <T w="bold" size={12} color={colors.faint} style={styles.section}>
+          NHẬN CHUYỂN KHOẢN
+        </T>
+        <Field label="Ngân hàng" placeholder="VD: Vietcombank" value={bankName} onChangeText={setBankName} />
+        <Field
+          label="Số tài khoản"
+          placeholder="VD: 0123456789"
+          keyboardType="number-pad"
+          value={bankAccount}
+          onChangeText={setBankAccount}
+        />
+        <T size={12} color={colors.faint}>
+          Hiện khi khách chọn chuyển khoản lúc thanh toán
+        </T>
       </Card>
 
       <Sheet visible={pick} onClose={() => setPick(false)} title="Chọn ngành hàng">
