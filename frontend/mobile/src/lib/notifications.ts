@@ -160,25 +160,14 @@ export function buildNotifications(
   });
 
   // --- Hệ thống (mock)
-  list.push(
-    {
-      id: 'sys-printer',
-      category: 'system',
-      icon: 'printer',
-      title: 'Chưa kết nối máy in',
-      body: 'Kết nối máy in nhiệt để in hoá đơn cho khách.',
-      at: atToday(now, 5),
-      href: '/printer',
-    },
-    {
-      id: 'sys-backup',
-      category: 'system',
-      icon: 'cloud',
-      title: 'Đã sao lưu dữ liệu',
-      body: 'Dữ liệu bán hàng hôm qua đã được sao lưu an toàn.',
-      at: yesterdayAt(now, 23, 30),
-    },
-  );
+  list.push({
+    id: 'sys-backup',
+    category: 'system',
+    icon: 'cloud',
+    title: 'Đã sao lưu dữ liệu',
+    body: 'Dữ liệu bán hàng hôm qua đã được sao lưu an toàn.',
+    at: yesterdayAt(now, 23, 30),
+  });
 
   return list.sort((a, b) => b.at.localeCompare(a.at));
 }
