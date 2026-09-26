@@ -1,7 +1,7 @@
 /**
  * DỮ LIỆU MẪU (mock) — toàn bộ app đọc từ đây qua AppStore.
  * Hoá đơn / chi phí được sinh theo ngày hiện tại (seed cố định) để màn hình
- * "Hôm nay / Hôm qua / Tháng này" lúc nào cũng có số liệu khi demo.
+ * "Hôm nay / Hôm qua / Tuần này / Tháng này" lúc nào cũng có số liệu khi demo.
  * Khi nối API thật: xem src/config.ts — thay action trong AppStore, giữ nguyên kiểu dữ liệu.
  */
 import type { Debt, Expense, Invoice, LineItem, Product, Staff } from './types';
@@ -19,21 +19,23 @@ export const mockStore = {
   name: 'Tiệm tạp hoá cô Thỏ',
   address: '12 Hoà Hưng, Q.10, TP.HCM',
   industries: ['grocery', 'drink'] as string[],
+  bankName: 'Vietcombank',
+  bankAccount: '0123456789',
   plan: 'basic' as 'basic' | 'pro',
   quota: 200,
 };
 
 export const industryList = [
-  { id: 'food', name: 'Đồ ăn', emoji: '🍱' },
-  { id: 'drink', name: 'Đồ uống', emoji: '🧋' },
-  { id: 'grocery', name: 'Tạp hóa', emoji: '🛒' },
-  { id: 'nongsan', name: 'Nông sản & Thực phẩm', emoji: '🌾' },
-  { id: 'thoitrang', name: 'Thời trang', emoji: '👔' },
-  { id: 'cattoc', name: 'Cắt tóc & làm móng', emoji: '💇' },
-  { id: 'mypham', name: 'Mỹ phẩm', emoji: '💅' },
-  { id: 'mebe', name: 'Mẹ & Bé', emoji: '🍼' },
-  { id: 'hoaqua', name: 'Hoa - Quà tặng', emoji: '💐' },
-  { id: 'other', name: 'Khác', emoji: '🔖' },
+  { id: 'food', name: 'Đồ ăn', icon: 'package' as const },
+  { id: 'drink', name: 'Đồ uống', icon: 'coffee' as const },
+  { id: 'grocery', name: 'Tạp hóa', icon: 'shopping-cart' as const },
+  { id: 'nongsan', name: 'Nông sản & Thực phẩm', icon: 'feather' as const },
+  { id: 'thoitrang', name: 'Thời trang', icon: 'tag' as const },
+  { id: 'cattoc', name: 'Cắt tóc & làm móng', icon: 'scissors' as const },
+  { id: 'mypham', name: 'Mỹ phẩm', icon: 'heart' as const },
+  { id: 'mebe', name: 'Mẹ & Bé', icon: 'smile' as const },
+  { id: 'hoaqua', name: 'Hoa - Quà tặng', icon: 'gift' as const },
+  { id: 'other', name: 'Khác', icon: 'bookmark' as const },
 ];
 
 export const mockProducts: Product[] = [

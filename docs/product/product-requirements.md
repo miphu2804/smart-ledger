@@ -14,7 +14,7 @@
 - [Thiết kế kỹ thuật](../architecture/technical-design.md): hiện thực MVP.
 - [Hợp đồng API](../contracts/api-contracts.md): FE ↔ Core và Core ↔ AI.
 - [Sơ đồ kiến trúc MVP](../architecture/diagrams/src/architecture.mmd): Mobile, Core, Data, AI và AI infrastructure.
-- Nguồn luồng Core/FE: [orei1i/EXE201/frontend](https://github.com/orei1i/EXE201/tree/main/frontend), kiểm tra 2026-09-15.
+- Nguồn luồng Core/FE ban đầu: [orei1i/EXE201/frontend](https://github.com/orei1i/EXE201/tree/main/frontend), kiểm tra 2026-09-15. Hiện trạng triển khai được ghi trong [thiết kế kỹ thuật](../architecture/technical-design.md).
 
 ## 0. Tra nhanh shorthand
 
@@ -89,7 +89,7 @@ Luồng hỗ trợ: ADMIN đăng nhập dashboard web, tìm OWNER hoặc cơ s�
 | `FR-023` | `BR-013`, `BR-014` | ADMIN tìm kiếm, xem danh sách và chi tiết OWNER/cơ sở khách hàng để hỗ trợ; không có thao tác sửa trực tiếp dữ liệu sổ nghiệp vụ. | P0 — MVP |
 | `FR-024` | `BO-003`, `BR-013`, `BR-014` | ADMIN xem tổng quan hỗ trợ cấp hệ thống bằng số liệu tổng hợp tối thiểu; không xem nội dung chi tiết ngoài phạm vi hỗ trợ được cấp. | P1 — MVP |
 | `FR-025` | `BR-001`, `BR-002` | Sau khi OWNER chủ động đăng nhập trên mobile, Home có phần giới thiệu tùy chọn ba bước về trợ lý, bán hàng/đơn hàng và tổng quan/quản lý tiệm. Người dùng có thể đi tiếp, quay lại, bỏ qua/đóng hoặc mở Chatbot/Giọng nói trực tiếp ở bước đầu. Phần giới thiệu không bật lại khi chỉ khôi phục phiên; trợ lý vẫn truy cập được từ mascot nổi. | P1 — MVP |
-| `FR-026` | `BO-003`, `BR-002`, `BR-004` | Trên các tab chính, OWNER có thể chạm mascot nổi để chọn Chatbot, Giọng nói hoặc Gợi ý mở phân tích Hôm nay; giữ để vào Giọng nói trực tiếp và kéo mascot trong vùng an toàn. | P1 — MVP |
+| `FR-026` | `BO-003`, `BR-002`, `BR-004` | Trên các tab chính, OWNER có thể chạm mascot nổi để chọn Chatbot, Giọng nói hoặc Gợi ý mở phân tích Hôm nay; giữ để vào Giọng nói trực tiếp và kéo mascot trong vùng an toàn; thả tay thì mascot dính về cạnh trái hoặc phải và giữ nguyên vị trí khi đổi tab. | P1 — MVP |
 | `FR-027` | `BO-003`, `BR-012` | OWNER tạo chat riêng với assistant, xem, đổi tên và tiếp tục chat qua các phiên; lịch sử chỉ dùng trong đúng hội thoại và shop, được giữ đến khi OWNER xóa. MVP không tự xóa chat theo TTL. | P1 — MVP |
 
 `FR-001`–`FR-009` giữ nguyên mã. `FR-007` không bị tái sử dụng cho yêu cầu khác.
@@ -157,7 +157,7 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 | `AC-016` | ADMIN tìm và xem được OWNER/cơ sở khách hàng nhưng không có hoặc không gọi được API sửa hóa đơn, chi phí, công nợ và tồn kho. | `FR-023`, `NFR-003` |
 | `AC-017` | Khi ADMIN xem chi tiết cơ sở khách hàng, hệ thống tạo bản ghi audit đúng người, cơ sở, hành động và thời điểm; số tổng quan khớp nguồn dữ liệu kiểm thử. | `FR-024`, `NFR-009` |
 | `AC-018` | Sau đăng nhập chủ động, OWNER thấy bước trợ lý; “Tiếp” lần lượt hiện bán hàng/đơn hàng rồi tổng quan/quản lý tiệm, “Quay lại” về bước trước, “Bắt đầu”/“Để sau”/đóng vào Home. Chọn Chatbot/Giọng nói ở bước đầu mở đúng màn. Quay lại Home trong cùng phiên hoặc khôi phục phiên không tự mở lại phần giới thiệu. | `FR-025` |
-| `AC-019` | Trên tab chính, chạm mascot hiện ba lựa chọn Chatbot, Giọng nói và Gợi ý trong khung nhìn; mỗi lựa chọn mở đúng màn, Gợi ý mở phân tích kỳ Hôm nay. Kéo mascot sang vị trí khác vẫn mở được menu; giữ khoảng 500 ms mở Giọng nói trực tiếp. | `FR-026` |
+| `AC-019` | Trên tab chính, chạm mascot hiện ba lựa chọn Chatbot, Giọng nói và Gợi ý trong khung nhìn; mỗi lựa chọn mở đúng màn, Gợi ý mở phân tích kỳ Hôm nay. Kéo mascot sang vị trí khác thì thả tay dính vào cạnh trái/phải, giữ đúng vị trí đó ở các tab chính (trừ khi phải nhích lên tránh thanh giỏ ở Bán hàng) và vẫn mở được menu; giữ khoảng 500 ms mở Giọng nói trực tiếp. | `FR-026` |
 | `AC-020` | OWNER mở lại một chat sau phiên đăng nhập mới; lịch sử còn nguyên và assistant tiếp tục bằng ngữ cảnh chỉ lấy từ chat đó. | `FR-027` |
 | `AC-021` | OWNER không xem, đổi tên, tiếp tục hoặc nhận lịch sử của chat thuộc user/shop khác; chat mới không nhận lịch sử từ chat cũ. | `FR-027`, `NFR-007` |
 | `AC-022` | Sau khi OWNER xóa chat, chat không còn trong danh sách, không mở/tiếp tục được và tin nhắn không được đưa vào ngữ cảnh assistant. | `FR-027` |
@@ -169,7 +169,7 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 
 - `OQ-001` đã chốt: STT thật thuộc đích MVP; FE hiện mới giả lập.
 - `FR-017`: phải chốt loại ảnh đầu tiên trong issue trước khi viết parser.
-- `FR-010`/`NFR-003`: FE hiện chứng minh OTP điện thoại; Google và Zalo chưa được tích hợp.
+- `FR-010`/`NFR-003`: mobile có client Firebase Phone/Email và luồng phiên Core tùy chọn, nhưng mặc định chạy mock; chưa có bằng chứng nghiệm thu OTP với môi trường Firebase thật. Nút Google chưa kết nối, Zalo chưa được tích hợp; web admin cũng đang dùng mock.
 - MVP chỉ có hai vai trò `OWNER` và `ADMIN`; quản lý nhân viên/thành viên (`FR-012`) đã bị loại khỏi phạm vi.
 - Toàn bộ `FR-INV-*` bị hoãn cho đến khi `OQ-INV-001`–`OQ-INV-005` trong BRD được giải quyết.
 - Máy in và gói dịch vụ ngoài PRD MVP.

@@ -82,7 +82,7 @@ export default function Products() {
           onChange={setTab}
           options={[
             { key: 'all', label: 'Tất cả' },
-            { key: 'low', label: '⚠ Sắp hết' },
+            { key: 'low', label: 'Sắp hết', icon: 'alert-triangle' },
             ...categories.map((c) => ({ key: String(c.id), label: c.name })),
           ]}
         />
@@ -292,8 +292,8 @@ function ProductForm({
           value={mode}
           onChange={setMode}
           options={[
-            { key: 'manual', label: '⌨️ Nhập tay' },
-            { key: 'ai', label: '📷 Chụp ảnh (AI)' },
+            { key: 'manual', label: 'Nhập tay', icon: 'edit-3' },
+            { key: 'ai', label: 'Chụp ảnh (AI)', icon: 'camera' },
           ]}
         />
       ) : null}

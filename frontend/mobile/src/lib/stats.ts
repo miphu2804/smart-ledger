@@ -1,11 +1,12 @@
 import type { Expense, Invoice, LineItem, Product } from '../data/types';
 import { sameDay, startOfDay } from './format';
 
-export type Period = 'today' | 'yesterday' | 'week' | 'month' | 'all';
+export type Period = 'today' | 'yesterday' | 'thisWeek' | 'week' | 'month' | 'all';
 
 export const periodLabel: Record<Period, string> = {
   today: 'Hôm nay',
   yesterday: 'Hôm qua',
+  thisWeek: 'Tuần này',
   week: '7 ngày',
   month: 'Tháng này',
   all: 'Tất cả',
@@ -23,6 +24,12 @@ export function inPeriod(iso: string, p: Period, now = new Date()) {
       const y = new Date(now);
       y.setDate(now.getDate() - 1);
       return sameDay(d, y);
+    }
+    case 'thisWeek': {
+      // Tuần lịch bắt đầu từ thứ Hai (giờ máy), tính tới hiện tại.
+      const from = startOfDay(now);
+      from.setDate(from.getDate() - ((now.getDay() + 6) % 7));
+      return d >= from;
     }
     case 'week': {
       const from = startOfDay(now);

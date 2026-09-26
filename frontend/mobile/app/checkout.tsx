@@ -258,7 +258,17 @@ export default function Checkout() {
             )}
           </>
         ) : null}
-        {method === 'transfer' ? (
+        {method === 'transfer' && !app.store.bankAccount ? (
+          <Pressable onPress={() => router.push('/profile')} accessibilityRole="button" style={{ alignItems: 'center', paddingVertical: 8 }}>
+            <T size={13} color={colors.muted} style={{ textAlign: 'center' }}>
+              Chưa có tài khoản nhận tiền.
+            </T>
+            <T w="bold" size={13} color={colors.primary} style={{ marginTop: 4 }}>
+              Thêm ở Thông tin tiệm ›
+            </T>
+          </Pressable>
+        ) : null}
+        {method === 'transfer' && app.store.bankAccount ? (
           <View style={{ alignItems: 'center' }}>
             <View style={styles.qr}>
               <FakeQR seed={`${total}-${items.length}`} size={170} />
@@ -267,7 +277,7 @@ export default function Checkout() {
               {app.user.name.toUpperCase()}
             </T>
             <T size={12} color={colors.faint}>
-              Vietcombank · 0123 456 789 (tài khoản mẫu)
+              {app.store.bankName ? `${app.store.bankName} · ` : ''}{app.store.bankAccount}
             </T>
             <T w="extrabold" size={20} color={colors.primary} style={{ marginTop: 6 }}>
               {vnd(total)}
