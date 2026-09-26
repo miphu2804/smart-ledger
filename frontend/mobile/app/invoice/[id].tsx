@@ -1,13 +1,13 @@
 import { Feather } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
-import React, { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { AddItemSheet } from '../../src/components/AddItemSheet';
+import { useLocalSearchParams } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useToast } from '../../src/components/brand';
-import { Badge, Button, Card, Dialog, EmptyState, Field, Header, Row, Screen, Stepper, T } from '../../src/components/ui';
-import type { LineItem } from '../../src/data/types';
+import { Badge, Button, Card, EmptyState, Header, Row, Screen, T } from '../../src/components/ui';
+import type { SaleView } from '../../src/data/types';
+import { errorMessage } from '../../src/lib/errors';
 import { ddmm, hhmm, vnd } from '../../src/lib/format';
-import { itemsTotal, methodLabel, sourceLabel } from '../../src/lib/stats';
+import { saleApi } from '../../src/lib/salesApi';
 import { useApp } from '../../src/store/AppStore';
 import { colors } from '../../src/theme';
 
@@ -18,79 +18,83 @@ export default function InvoiceDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const app = useApp();
   const toast = useToast();
-  const inv = app.invoices.find((i) => i.id === id);
-  const [editing, setEditing] = useState(false);
-  const [items, setItems] = useState<LineItem[]>(inv?.items ?? []);
-  const [customer, setCustomer] = useState(inv?.customer ?? '');
-  const [addOpen, setAddOpen] = useState(false);
-  const [cancelOpen, setCancelOpen] = useState(false);
+  const [sale, setSale] = useState<SaleView | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  if (!inv) {
+  const saleId = Number(id);
+
+  const load = useCallback(async () => {
+    if (!Number.isFinite(saleId)) {
+      setError('Mã hoá đơn không hợp lệ');
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      setSale(await saleApi.getById(saleId));
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [saleId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (loading) {
     return (
       <Screen>
         <Header title="Hoá đơn" />
-        <EmptyState icon="file-text" title="Không tìm thấy hoá đơn" />
+        <View style={{ paddingTop: 60, alignItems: 'center' }}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
       </Screen>
     );
   }
 
-  const shown = editing ? items : inv.items;
-  const total = itemsTotal(shown);
-  const d = new Date(inv.createdAt);
-  const staff = app.staff.find((s) => s.id === inv.staffId);
-  const cancelled = inv.status === 'cancelled';
+  if (error || !sale) {
+    return (
+      <Screen>
+        <Header title="Hoá đơn" />
+        <EmptyState icon="file-text" title="Không tìm thấy hoá đơn" hint={error || undefined} />
+        {error ? <Button title="Thử lại" variant="outline" onPress={load} /> : null}
+      </Screen>
+    );
+  }
+
+  const total = sale.totalVnd;
+  const d = new Date(sale.soldAt);
+  const cancelled = sale.saleStatus === 'VOIDED';
+  const notSupported = () => toast('Chưa hỗ trợ — hoá đơn đã xác nhận không thể sửa/huỷ ở bản này', 'err');
 
   return (
     <Screen
       footer={
-        editing ? (
-          <Row>
-            <Button
-              title="Huỷ sửa"
-              variant="outline"
-              style={{ flex: 1 }}
-              onPress={() => {
-                setItems(inv.items);
-                setCustomer(inv.customer ?? '');
-                setEditing(false);
-              }}
-            />
-            <Button
-              title="Lưu thay đổi"
-              style={{ flex: 1 }}
-              disabled={!items.length}
-              onPress={() => {
-                app.updateInvoice(inv.id, items, customer);
-                setEditing(false);
-                toast('Đã cập nhật hoá đơn');
-              }}
-            />
-          </Row>
-        ) : cancelled ? null : (
-          <Row>
-            <Button
-              title="In"
-              icon="printer"
-              variant="green"
-              style={{ flex: 1 }}
-              onPress={() => toast('Chưa kết nối máy in. Vui lòng thử lại sau.', 'err')}
-            />
-            <Button
-              title="Sửa"
-              icon="edit-2"
-              variant="outline"
-              style={{ flex: 1 }}
-              onPress={() => {
-                setItems(inv.items);
-                setEditing(true);
-              }}
-            />
-            <Button title="Huỷ" icon="x-circle" variant="danger" style={{ flex: 1 }} onPress={() => setCancelOpen(true)} />
-          </Row>
+        cancelled ? null : (
+          <>
+            <Row>
+              <Button
+                title="In"
+                icon="printer"
+                variant="green"
+                style={{ flex: 1 }}
+                onPress={() => toast('Chưa kết nối máy in. Vui lòng thử lại sau.', 'err')}
+              />
+              <Button title="Sửa" icon="edit-2" variant="outline" style={{ flex: 1 }} disabled onPress={notSupported} />
+              <Button title="Huỷ" icon="x-circle" variant="danger" style={{ flex: 1 }} disabled onPress={notSupported} />
+            </Row>
+            <T size={11} color={colors.faint} style={{ textAlign: 'center', marginTop: 8 }}>
+              Chưa hỗ trợ sửa/huỷ hoá đơn đã xác nhận
+            </T>
+          </>
         )
       }
     >
-      <Header title={`Hoá đơn ${inv.code}`} subtitle={`${ddmm(d)}/${d.getFullYear()} · ${hhmm(d)}`} />
+      <Header title={`Hoá đơn #${sale.id}`} subtitle={`${ddmm(d)}/${d.getFullYear()} · ${hhmm(d)}`} />
 
       {cancelled ? (
         <View style={styles.cancelled}>
@@ -115,77 +119,55 @@ export default function InvoiceDetail() {
           <T size={12} color={colors.muted} style={{ flex: 1 }}>
             Khách hàng
           </T>
-          {editing ? null : (
-            <T w="semibold" size={13}>
-              {inv.customer}
-            </T>
-          )}
-        </Row>
-        {editing ? <Field value={customer} onChangeText={setCustomer} placeholder="Tên khách" style={{ marginTop: 8 }} /> : null}
-        <Row style={{ marginTop: 6 }}>
-          <T size={12} color={colors.muted} style={{ flex: 1 }}>
-            Nguồn tạo
+          <T w="semibold" size={13}>
+            {sale.customerName || 'Khách lẻ'}
           </T>
-          <Badge text={sourceLabel[inv.source]} icon={inv.source === 'voice' ? 'mic' : undefined} />
         </Row>
-        <Row style={{ marginTop: 6 }}>
+        {sale.customerPhone ? (
+          <Row style={{ marginTop: 6 }}>
+            <T size={12} color={colors.muted} style={{ flex: 1 }}>
+              Số điện thoại
+            </T>
+            <T w="semibold" size={13}>
+              {sale.customerPhone}
+            </T>
+          </Row>
+        ) : null}
+        <Row style={{ marginTop: 6, marginBottom: 12 }}>
           <T size={12} color={colors.muted} style={{ flex: 1 }}>
             Thanh toán
           </T>
-          <Badge
-            text={methodLabel[inv.method]}
-            color={inv.method === 'debt' ? colors.gold : colors.green}
-            bg={inv.method === 'debt' ? colors.goldSoft : colors.greenSoft}
-          />
-        </Row>
-        <Row style={{ marginTop: 6, marginBottom: 12 }}>
-          <T size={12} color={colors.muted} style={{ flex: 1 }}>
-            Nhân viên
-          </T>
-          <T w="semibold" size={13}>
-            {staff?.name ?? '—'}
-          </T>
+          <Badge text={sale.paidVnd >= sale.totalVnd ? 'Đã thanh toán đủ' : 'Chưa thanh toán đủ'} color={colors.green} bg={colors.greenSoft} />
         </Row>
         <View style={styles.dash} />
 
-        {shown.map((it, idx) => (
-          <Row key={`${it.productId ?? it.name}-${idx}`} style={{ paddingVertical: 10 }}>
+        {sale.items.map((it) => (
+          <Row key={it.id} style={{ paddingVertical: 10 }}>
             <View style={{ flex: 1 }}>
               <T w="semibold" size={14}>
-                {it.name}
+                {it.productName}
               </T>
               <T size={12} color={colors.faint}>
-                {vnd(it.price)} × {it.qty}
+                {vnd(it.unitPriceVnd)} × {it.quantity}
               </T>
             </View>
-            {editing ? (
-              <Stepper
-                value={it.qty}
-                onChange={(q) =>
-                  setItems((cur) =>
-                    q <= 0 ? cur.filter((_, i) => i !== idx) : cur.map((x, i) => (i === idx ? { ...x, qty: q } : x)),
-                  )
-                }
-              />
-            ) : (
-              <T w="bold" size={14}>
-                {vnd(it.price * it.qty)}
-              </T>
-            )}
+            <T w="bold" size={14}>
+              {vnd(it.lineTotalVnd)}
+            </T>
           </Row>
         ))}
-        {editing ? (
-          <Button
-            title="Thêm món"
-            icon="plus"
-            variant="soft"
-            small
-            onPress={() => setAddOpen(true)}
-            style={{ marginBottom: 10 }}
-          />
-        ) : null}
         <View style={styles.dash} />
-        <Row style={{ marginTop: 12 }}>
+        {sale.discountVnd > 0 ? (
+          <Row style={{ marginTop: 12 }}>
+            <T size={12} color={colors.muted} style={{ flex: 1 }}>
+              Giảm giá
+            </T>
+            <T size={12} color={colors.muted}>
+              -{vnd(sale.discountVnd)}
+            </T>
+          </Row>
+        ) : null}
+        <Row style={{ marginTop: 8 }}>
           <T size={12} color={colors.muted} style={{ flex: 1 }}>
             Thuế ước tính 1,5% (tham khảo)
           </T>
@@ -202,55 +184,6 @@ export default function InvoiceDetail() {
           </T>
         </Row>
       </Card>
-
-      {inv.transcript ? (
-        <Card style={{ marginTop: 12 }}>
-          <Row gap={6} style={{ marginBottom: 6 }}>
-            <Feather name="mic" size={14} color={colors.primary} />
-            <T w="bold" size={13} color={colors.primary}>
-              Câu nói gốc
-            </T>
-          </Row>
-          <T size={13} color={colors.muted} style={{ fontStyle: 'italic', lineHeight: 19 }}>
-            “{inv.transcript}”
-          </T>
-        </Card>
-      ) : null}
-
-      {inv.method === 'debt' && !cancelled ? (
-        <Pressable onPress={() => router.push('/debts')} style={styles.debt}>
-          <Feather name="book-open" size={15} color={colors.gold} />
-          <T w="semibold" size={12.5} color={colors.gold} style={{ flex: 1 }}>
-            Đơn này đang được ghi nợ cho {inv.customer}
-          </T>
-        </Pressable>
-      ) : null}
-
-      <AddItemSheet
-        visible={addOpen}
-        onClose={() => setAddOpen(false)}
-        onPick={(li) =>
-          setItems((cur) => {
-            const ex = cur.find((x) => x.productId === li.productId);
-            return ex ? cur.map((x) => (x === ex ? { ...x, qty: x.qty + 1 } : x)) : [...cur, li];
-          })
-        }
-      />
-      <Dialog
-        visible={cancelOpen}
-        danger
-        icon="x-circle"
-        title="Huỷ hoá đơn này?"
-        message="Hoá đơn vẫn được lưu để đối chiếu nhưng không tính vào doanh thu."
-        confirm="Huỷ đơn"
-        cancel="Giữ lại"
-        onCancel={() => setCancelOpen(false)}
-        onConfirm={() => {
-          app.cancelInvoice(inv.id);
-          setCancelOpen(false);
-          toast('Đã huỷ hoá đơn');
-        }}
-      />
     </Screen>
   );
 }
@@ -266,14 +199,5 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
-  },
-  debt: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 12,
-    backgroundColor: colors.goldSoft,
-    borderRadius: 14,
-    padding: 12,
   },
 });
