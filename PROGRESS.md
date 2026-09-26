@@ -1,3 +1,41 @@
+### [2026-09-26 10:18 UTC+07:00] — [Mobile] Group Voice quantity and delete controls under Sửa
+
+**Done:** Voice draft lines show their quantity in view mode. “Sửa” exposes separate decrease, increase, and whole-line delete controls; decrease stops at one. “Thêm món” hides during editing, and the POS route is labeled “Mở POS” to distinguish it from adding to the current draft. The empty state keeps enough height for its add button when a removal message follows it.
+
+**Changed files:** `frontend/mobile/app/voice.tsx`, `frontend/mobile/README.md`, `docs/product/product-requirements.md`, `docs/design/mobile-ui-style-migration.md`, `PROGRESS.md`.
+
+**Check:** Web UI: adding Nước ngọt showed ×1 and 12.000đ; editing showed increase/decrease/delete and hid “Thêm món”; increasing to two showed 24.000đ, decreasing restored 12.000đ, and deleting the last line restored the empty add action and removed checkout. The removal message initially overlapped that action; after the spacing fix, the add action reopened the catalog and added Nước ngọt again. Typecheck, web export, and `git diff --check` passed. Live microphone behavior remains unverified without a rebuilt development client and microphone permission.
+
+### [2026-09-26 10:09 UTC+07:00] — [Mobile] Add and remove items in the Voice draft
+
+**Done:** Put “Thêm món” on the Voice draft and empty state, added a visible delete action to each draft line, and interpret typed `xóa/bỏ/loại [tên món]` as removing a whole line. The existing quantity editor remains available.
+
+**Changed files:** `frontend/mobile/app/voice.tsx`, `frontend/mobile/README.md`, `docs/product/product-requirements.md`, `docs/design/mobile-ui-style-migration.md`, `PROGRESS.md`.
+
+**Flow explained:** Catalog picks merge into the draft; deleting a line updates item count and subtotal. Deleting the final line hides checkout but keeps catalog entry available. Removal commands are handled before the mock order parser so they cannot add an item by mistake.
+
+**Check:** Web UI: adding Nước ngọt showed one item and 12.000đ; adding Trà đá showed two items and 15.000đ; deleting Trà đá returned to one item and 12.000đ; deleting the last item removed checkout while retaining “Thêm món”; typing `bỏ coca khỏi đơn` removed Nước ngọt. Typecheck, web export, and `git diff --check` passed. Live speech-to-text remains outside this mock flow.
+
+### [2026-09-26 09:58 UTC+07:00] — [Mobile] Keep Voice usable on an older development client
+
+**Done:** Handle the specific missing `ExpoAudio` native module error so an older development client shows “Micro không khả dụng” instead of failing to load `/voice`. Added the iOS Firebase config file path and documented the native rebuild step for waveform support.
+
+**Changed files:** `frontend/mobile/src/hooks/useMicLevel.ts`, `frontend/mobile/app.json`, `frontend/mobile/README.md`, `PROGRESS.md`.
+
+**Flow explained:** An old development client can still create orders by text; the microphone waveform requires a newly built client containing `ExpoAudio`.
+
+**Check:** On the existing iPhone 17 Pro Max simulator client, `/voice` opened without the route error and `1 coca` produced a one-item draft. Typecheck, web export, `git diff --check`, and iOS autolinking discovery of the `ExpoAudio` pod passed. Native prebuild stopped because `frontend/mobile/GoogleService-Info.plist` is absent; live microphone behavior remains unverified.
+
+### [2026-09-26 09:41 UTC+07:00] — [Mobile] Voice conversation layout and microphone waveform
+
+**Done:** Reworked `/voice` into a conversation layout without assistant avatars, kept a rounded text composer beside the close control, and made the waveform respond to microphone level when permission is granted. Rebased the feature branch onto the latest `staging`.
+
+**Changed files:** `frontend/mobile/app/voice.tsx`, `frontend/mobile/src/hooks/useMicLevel.ts`, `frontend/mobile/app.json`, `frontend/mobile/package.json`, `frontend/mobile/package-lock.json`, `frontend/mobile/README.md`, `docs/design/mobile-ui-style-migration.md`, `docs/product/project-overview.md`, `PROGRESS.md`.
+
+**Flow explained:** Opening Voice requests microphone access for the local waveform. Closing Voice or leaving the foreground stops the stream. Text entry and sample orders remain available without microphone access; speech-to-text and audio ordering are not implemented.
+
+**Check:** `npm ci`, web export, typecheck after export, and `git diff --check` passed. The Voice close control was checked in the web UI before rebasing. Microphone access was not granted for testing, so waveform response to live speech and iOS/Android behavior remain unverified.
+
 ### [2026-09-25 23:59 UTC+07:00] — [Mobile] Week period, report loading skeleton, AssistiveTouch-style ZenRing
 
 **Done:** Report tabs are now `Hôm nay / Tuần này / Tháng này` (calendar week, Monday to now) and sit above the revenue card with a sliding indicator. Analytics shows a 7-column day chart for the week; Best sellers accepts the new period. The revenue card, suggestion and best-seller sections show same-size skeletons while a report loads, then reveal with a count-up (mock latency 700 ms in `useReport`; an already-loaded period switches instantly). ZenRing docks to the left/right edge after a drag, keeps one saved `{side, y}` across tabs (nudged up on Sales to clear the cart), dims when idle, and its menu fans out with a scrim and a hold-to-talk progress ring. Priority icons are amber for debt and red for low stock; the bell has no container; user-facing emoji were replaced with Feather icons. Docs updated: design spec, PRD `FR-026`/`AC-019`, API contract (`this_week`), mobile README.

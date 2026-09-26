@@ -8,11 +8,24 @@ Stack: Expo SDK 57 · React Native 0.86 · expo-router · TypeScript · react-na
 
 ```bash
 npm install
-npx expo start          # quét QR bằng Expo Go (bản hỗ trợ SDK 57)
+npx expo start --dev-client  # mở bằng development client đã build cho native
 npm run web             # hoặc bấm w: chạy trên trình duyệt (khung giới hạn 440px)
 npm run typecheck
 npm run export:web      # build web tĩnh ra dist/
 ```
+
+### Development client iOS cho Voice
+
+`expo-audio` có mã native. Sau khi kéo nhánh có Voice waveform, cần **build và cài lại development client**; reload JavaScript trên bản cũ không thể thêm module native. Bản cũ chỉ hiển thị “Micro không khả dụng” và vẫn cho nhập chữ. Trước bản sửa này, nó báo `Cannot find native module 'ExpoAudio'`; cảnh báo route `/voice` thiếu default export là hệ quả của lỗi import.
+
+Trước khi build, đặt `GoogleService-Info.plist` của Firebase vào `frontend/mobile/` vì plugin Firebase đang bật và `app.json` trỏ tới file đó. Sau đó chạy trong `frontend/mobile/`:
+
+```bash
+npx expo run:ios --device "iPhone 17 Pro Max"
+npx expo start --dev-client
+```
+
+Chỉ cần build lại khi thêm hoặc đổi thư viện/config native; sửa TypeScript thông thường chỉ cần reload. Nếu chưa có file Firebase, prebuild iOS dừng ở lỗi `Path to GoogleService-Info.plist is not defined`/thiếu file trước khi biên dịch `ExpoAudio`.
 
 ## Xem thử với dữ liệu mẫu
 
@@ -33,7 +46,7 @@ npm run export:web      # build web tĩnh ra dist/
 | `/(tabs)/sales` | Bán hàng: vào thẳng danh mục, chọn món và xem giỏ; Zen ring (kéo thả, dính cạnh trái/phải, giữ vị trí qua các tab) mở Chatbot, Giọng nói hoặc Gợi ý phân tích nhanh |
 | `/(tabs)/expenses` | Chi phí theo tháng, cơ cấu chi, thêm chi phí bằng giọng nói / nhập tay |
 | `/(tabs)/more` | Khác: hồ sơ, báo cáo, hàng hoá, chi phí, công nợ và đăng xuất |
-| `/voice` | Nhập đơn bằng văn bản hoặc câu gợi ý, hỏi thêm món lạ vào danh mục, sửa số lượng; chưa thu âm từ mic |
+| `/voice` | Waveform theo âm lượng micro khi được cấp quyền; nhập đơn bằng văn bản hoặc câu gợi ý, thêm món từ danh mục, xóa món bằng nút hoặc câu nhập, và sửa số lượng. Chưa có chuyển giọng nói thành text. |
 | `/pos` | Chọn hàng nhanh dạng lưới, giỏ hàng, món ngoài danh mục |
 | `/checkout` | Thanh toán: tiền mặt (tiền thối), chuyển khoản (QR minh hoạ), ghi nợ |
 | `/invoice/[id]` | Chi tiết hoá đơn: in, sửa, huỷ |
@@ -47,14 +60,16 @@ npm run export:web      # build web tĩnh ra dist/
 
 ## Thử nhận diện đơn
 
-Ô “Nhập tên hàng + giá” ở màn `/voice` chạy bộ nhận diện rule-based trong `src/lib/parseOrder.ts`. Ví dụ:
+Ô “Nhập tên hàng hoặc yêu cầu…” ở màn `/voice` chạy bộ nhận diện rule-based trong `src/lib/parseOrder.ts`. Ví dụ:
 
 - `2 ly cà phê sữa 50 nghìn, thêm 1 trà đá`
 - `bán 3 bánh mì 45k, 2 coca`
 - `lấy 1 chục trứng với 2 gói mì`
 - `bán 1 hộp sữa chua nếp cẩm 12k` → món chưa có, app hỏi có thêm vào danh mục không
 
-Nút “Dùng câu gợi ý” lần lượt điền các câu trong `voiceSamples` (`src/data/mock.ts`); chưa nhận âm thanh từ mic.
+Nút “Thử câu gợi ý” lần lượt điền các câu trong `voiceSamples` (`src/data/mock.ts`). Micro chỉ cấp mức âm lượng cho waveform khi màn Voice mở; app không lưu audio hoặc dùng audio để tạo đơn. Nếu không cấp quyền micro, nhập text và chọn hàng vẫn dùng được.
+
+Trong bản nháp Voice, “Thêm món” mở danh mục. Nhấn “Sửa” để tăng/giảm số lượng hoặc xóa cả dòng bằng nút “Xóa”; ở số lượng 1, nút giảm bị vô hiệu hóa để tránh xóa nhầm. “Thêm món” ẩn trong lúc sửa và hiện lại khi nhấn “Xong”. Có thể gõ `xóa coca` hoặc `bỏ coca khỏi đơn`; lệnh này xóa cả dòng, không thêm món mới. Xóa dòng cuối sẽ ẩn thao tác thanh toán cho đến khi thêm món khác.
 
 ## Cấu trúc
 

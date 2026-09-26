@@ -13,6 +13,7 @@
     },
     "ios": {
       "supportsTablet": true,
+      "googleServicesFile": "./GoogleService-Info.plist",
       "bundleIdentifier": "vn.teamhexa.songheloi"
     },
     "android": {
@@ -33,7 +34,15 @@
       "expo-router",
       "expo-font",
       "@react-native-firebase/app",
-      "@react-native-firebase/auth"
+      "@react-native-firebase/auth",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Cho phép Sổ Nghe Lời dùng micro để hiển thị độ lớn giọng nói.",
+          "enableBackgroundRecording": false,
+          "enableBackgroundPlayback": false
+        }
+      ]
     ],
     "scheme": "songheloi",
     "experiments": {

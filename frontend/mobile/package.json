@@ -9,6 +9,7 @@
     "@react-native-firebase/app": "^26.4.0",
     "@react-native-firebase/auth": "^26.4.0",
     "expo": "~57.0.23",
+    "expo-audio": "~57.0.5",
     "expo-constants": "~57.0.18",
     "expo-dev-client": "~57.0.19",
     "expo-font": "~57.0.4",

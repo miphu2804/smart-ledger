@@ -30,7 +30,7 @@
 
 Sổ Nghe Lời có hai giao diện theo vai trò. `OWNER` dùng ứng dụng mobile để vận hành tiệm: danh mục, bán hàng, thu/chi/nợ, báo cáo và gợi ý. `ADMIN` dùng web dashboard để tìm và xem cơ sở khách hàng, theo dõi tình trạng hỗ trợ và số liệu nền tảng; không trực tiếp sửa sổ bán hàng của chủ tiệm.
 
-Mobile hiện dùng parser cục bộ và chưa thu âm từ mic; dữ liệu nghiệp vụ mặc định là mock. Web dashboard cũng mặc định dùng mock. AI đã có chat nội bộ và lưu lịch sử, nhưng chưa có đường FE → Core → AI. Đích MVP bổ sung AI service cho voice/text, ảnh, gợi ý và hỏi đáp; mọi kết quả AI là bản nháp hoặc gợi ý, không tự ghi sổ.
+Mobile hiện dùng parser cục bộ; micro chỉ cấp mức âm lượng cho waveform, chưa có chuyển giọng nói thành text hoặc lưu bản ghi âm. Dữ liệu nghiệp vụ mặc định là mock. Web dashboard cũng mặc định dùng mock. AI đã có chat nội bộ và lưu lịch sử, nhưng chưa có đường FE → Core → AI. Đích MVP bổ sung AI service cho voice/text, ảnh, gợi ý và hỏi đáp; mọi kết quả AI là bản nháp hoặc gợi ý, không tự ghi sổ.
 
 ## 2. Vấn đề
 

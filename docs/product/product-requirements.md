@@ -66,7 +66,7 @@ Luồng hỗ trợ: ADMIN đăng nhập dashboard web, tìm OWNER hoặc cơ s�
 |---|---|---|---|
 | `FR-001` | `BO-001`, `BR-002` | Người bán có thể nhập một câu giao dịch tiếng Việt bằng text. | P0 — MVP |
 | `FR-002` | `BO-001`, `BO-002`, `BR-002`, `BR-007` | Sau khi nhập câu, sản phẩm hiện các dòng gồm tên, số lượng, đơn giá, thành tiền; khớp danh mục khi nhận ra; đánh dấu món chưa có trong danh mục. | P0 — MVP |
-| `FR-003` | `BR-003` | Giỏ luôn được hiển thị để người bán kiểm tra và sửa trước khi chốt thanh toán. | P0 — MVP |
+| `FR-003` | `BR-003` | Giỏ luôn được hiển thị để người bán kiểm tra, thêm hoặc xóa món và sửa số lượng/giá trước khi chốt thanh toán. | P0 — MVP |
 | `FR-004` | `BR-003`, `BR-006` | Chỉ thao tác chốt thanh toán mới tạo bản ghi bán hàng chính thức; giỏ chưa chốt không vào báo cáo. | P0 — MVP |
 | `FR-005` | `BR-006` | Người bán xem lịch sử, sửa bản ghi, và (trên MVP) xóa sau khi xác nhận trên UI. Xóa cứng là đánh đổi thí điểm, xem `OQ-002`. | P0 — MVP |
 | `FR-006` | `BO-003`, `BO-005`, `BR-004`, `BR-005` | Người bán xem theo kỳ: doanh thu, số đơn, bán chạy, chi phí, lãi ước tính, nợ còn. UI phải cho thấy lãi/chi là ước tính. | P0 — MVP |
@@ -162,6 +162,7 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 | `AC-021` | OWNER không xem, đổi tên, tiếp tục hoặc nhận lịch sử của chat thuộc user/shop khác; chat mới không nhận lịch sử từ chat cũ. | `FR-027`, `NFR-007` |
 | `AC-022` | Sau khi OWNER xóa chat, chat không còn trong danh sách, không mở/tiếp tục được và tin nhắn không được đưa vào ngữ cảnh assistant. | `FR-027` |
 | `AC-023` | OWNER đổi tên chat bằng tiêu đề 1–255 ký tự; tên mới hiển thị trong danh sách sau khi tải lại. Tiêu đề rỗng hoặc vượt giới hạn bị từ chối. | `FR-027` |
+| `AC-024` | Trên màn Voice, người bán thêm một món từ danh mục vào bản nháp. Chế độ “Sửa” cho tăng/giảm số lượng (tối thiểu 1) và xóa cả dòng; ngoài chế độ này chỉ hiển thị số lượng. Người bán cũng có thể xóa bằng câu “xóa/bỏ [tên món]”. Số món và tạm tính cập nhật; xóa món cuối làm mất nút thanh toán và không tạo hóa đơn. | `FR-003`, `FR-004` |
 | `AC-INV-001` | Không thể kích hoạt hóa đơn điện tử khi hồ sơ áp dụng hoặc quy tắc pháp lý chưa được phê duyệt/hoàn tất. | `FR-INV-001` |
 | `AC-INV-002` | Mỗi giao dịch thuộc diện lập hóa đơn có một trạng thái đối soát và không biến mất khi nhà cung cấp lỗi. | `FR-INV-003`, `FR-INV-005`, `NFR-004` |
 
