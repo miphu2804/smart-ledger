@@ -1,8 +1,18 @@
 # SmartLedger AI
 
-Internal AI API used by Core. This scaffold serves `/health` (liveness). Postgres and Redis clients connect at process start and log status. `/internal/v1` routes are not implemented yet. There are no invoice or expense endpoints.
+Internal AI API used by Core. This scaffold serves `/health` (liveness) and `POST /internal/v1/agent/chat`. Postgres and Redis clients connect at process start and log status. Internal service authentication is not implemented yet. There are no invoice or expense endpoints.
 
 Frontend must not call this service.
+
+## Chat history schema
+
+Run Core's Flyway migrations first so `users` and `shops` exist, then apply the versioned AI migration:
+
+```bash
+psql "$POSTGRES_URL" -v ON_ERROR_STOP=1 -f migrations/001_create_chat_history.sql
+```
+
+The AI service does not create or migrate tables at startup. `ai_request_id` remains nullable; its foreign key is deferred until the `ai_requests` table is installed.
 
 ## Setup
 
@@ -17,21 +27,20 @@ cp .env.example .env
 uv run python -m src.main
 ```
 
-Host and port come from `SERVER__HOST` and `SERVER__PORT`.
+Host and port come from `SERVER_HOST` and `SERVER_PORT`.
 
 `GET /health` returns `{"status": "ok"}` and does not check dependencies.
 
 ## Local Compose
 
-From the repository root. Starts PostgreSQL, Redis, and this service. Langfuse is not part of the default stack.
+From the repository root. Starts PostgreSQL, Redis, and this service. Langfuse is not part of the default stack. Set `POSTGRES_PASSWORD` in the shell or a Compose `--env-file` first.
 
 ```bash
-cp .env.example .env
 docker compose up --build
 ```
 
 - AI: `http://localhost:8001/health`
-- Compose ports: repo-root `.env.example`
+- Compose ports use the defaults in `compose.yaml` and can be overridden with shell environment variables.
 
 To run this app on the host against Compose Postgres and Redis:
 

@@ -4,7 +4,6 @@ import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useToast } from '../../src/components/brand';
 import { Button, Header, Progress, Screen, T } from '../../src/components/ui';
 import { USE_MOCK } from '../../src/config';
-import { MOCK_OTP } from '../../src/data/mock';
 import { confirmPhoneLogin, startPhoneLogin } from '../../src/lib/auth';
 import { errorMessage, isDisplayNameRequired } from '../../src/lib/errors';
 import { useApp } from '../../src/store/AppStore';
@@ -51,7 +50,7 @@ export default function Otp() {
       await startPhoneLogin(phone);
       setLeft(30);
       setError('');
-      toast(USE_MOCK ? `Đã gửi lại mã OTP (mã demo: ${MOCK_OTP})` : 'Đã gửi lại mã OTP');
+      toast(USE_MOCK ? 'Mã xác nhận hiện tại vẫn có hiệu lực' : 'Đã gửi lại mã OTP');
     } catch (e) {
       setError(errorMessage(e));
     }
@@ -131,20 +130,6 @@ export default function Otp() {
           </T>
         )}
       </View>
-
-      {USE_MOCK ? (
-        <Pressable
-          onPress={() => {
-            setCode(MOCK_OTP);
-            verify(MOCK_OTP);
-          }}
-          style={styles.fill}
-        >
-          <T w="semibold" size={12} color={colors.gold}>
-            Điền nhanh mã demo {MOCK_OTP}
-          </T>
-        </Pressable>
-      ) : null}
     </Screen>
   );
 }
@@ -162,12 +147,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   hidden: { position: 'absolute', opacity: 0, width: '100%', height: '100%', fontFamily: font.medium },
-  fill: {
-    alignSelf: 'center',
-    marginTop: 28,
-    backgroundColor: colors.goldSoft,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
 });

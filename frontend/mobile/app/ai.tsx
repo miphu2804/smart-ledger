@@ -7,7 +7,7 @@ import type { ChatMessage } from '../src/data/types';
 import { normalizeText, vnd } from '../src/lib/format';
 import { bestSellers, monthExpenses, summary } from '../src/lib/stats';
 import { useApp } from '../src/store/AppStore';
-import { colors, font, shadow } from '../src/theme';
+import { colors, font } from '../src/theme';
 
 const QUICK = [
   'Hôm nay bán được bao nhiêu?',
@@ -28,7 +28,7 @@ export default function Ai() {
     {
       id: 'hi',
       from: 'ai',
-      text: `Chào ${app.user.name.split(' ').slice(-1)[0]}! Mình là trợ lý của ${app.store.name}. Bạn muốn hỏi gì về việc buôn bán hôm nay?`,
+      text: `Chào ${app.user.name.split(' ').slice(-1)[0]}! Bạn muốn hỏi gì về việc buôn bán hôm nay?`,
     },
   ]);
 
@@ -47,7 +47,7 @@ export default function Ai() {
     if (/nhap|het hang|ton kho/.test(n)) {
       const low = app.products.filter((p) => p.tracked && p.stock <= 6);
       const top = bestSellers(app.invoices, 'week').slice(0, 3);
-      return `Dựa trên 7 ngày qua:\n${low.map((p) => `• ${p.name}: còn ${p.stock}, nên nhập thêm`).join('\n') || '• Tồn kho đang ổn'}\n\nBán chạy nhất tuần: ${top.map((t) => t.name).join(', ')} — nên chuẩn bị dư khoảng 15–20% vào cuối tuần.`;
+      return `Trong 7 ngày qua:\n${low.map((p) => `• ${p.name}: còn ${p.stock}, cần kiểm tra tồn`).join('\n') || '• Chưa có mặt hàng dưới ngưỡng cảnh báo'}\n\n${top.length ? `Bán chạy: ${top.map((t) => t.name).join(', ')}.` : 'Chưa có đơn đã chốt trong kỳ.'} Chưa đủ dữ liệu để tính số lượng cần nhập.`;
     }
     if (/chay|ban nhieu|top/.test(n)) {
       const top = bestSellers(app.invoices, 'week').slice(0, 5);
@@ -65,8 +65,10 @@ export default function Ai() {
     if (/hom nay|bao nhieu|doanh thu/.test(n)) {
       const s = summary(app.invoices, app.products, 'today');
       const y = summary(app.invoices, app.products, 'yesterday');
-      const diff = y.revenue ? Math.round(((s.revenue - y.revenue) / y.revenue) * 100) : 0;
-      return `Hôm nay tiệm có ${s.count} đơn, doanh thu ${vnd(s.revenue)} (${diff >= 0 ? '+' : ''}${diff}% so với hôm qua). ${Math.round(s.voiceRatio * 100)}% đơn được tạo bằng giọng nói.`;
+      const comparison = y.revenue
+        ? ` (${s.revenue >= y.revenue ? '+' : ''}${Math.round(((s.revenue - y.revenue) / y.revenue) * 100)}% so với hôm qua)`
+        : '';
+      return `Hôm nay tiệm có ${s.count} đơn, doanh thu ${vnd(s.revenue)}${comparison}. ${Math.round(s.voiceRatio * 100)}% đơn được tạo bằng giọng nói.`;
     }
     return 'Mình chưa hiểu câu hỏi này 😅. Bạn thử hỏi về doanh thu, món bán chạy, nhập hàng, lời lãi hoặc công nợ nhé.';
   };
@@ -87,10 +89,10 @@ export default function Ai() {
       <View style={{ paddingHorizontal: 16 }}>
         <Header
           title="Trợ lý AI"
-          subtitle="Hỏi bằng tiếng Việt tự nhiên"
+          subtitle="Hỏi về doanh thu, hàng hoá và công nợ"
           right={
             <View style={styles.badge}>
-              <Feather name="star" size={16} color={colors.white} />
+              <Feather name="star" size={16} color={colors.ink} />
             </View>
           }
         />
@@ -98,14 +100,14 @@ export default function Ai() {
       <ScrollView ref={scroll} style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
         {msgs.map((m) => (
           <View key={m.id} style={[styles.bubble, m.from === 'user' ? styles.user : styles.ai]}>
-            <T size={13.5} color={m.from === 'user' ? colors.white : colors.ink} style={{ lineHeight: 20 }}>
+            <T size={14} color={m.from === 'user' ? colors.white : colors.ink} style={{ lineHeight: 20 }}>
               {m.text}
             </T>
           </View>
         ))}
         {typing ? (
           <View style={[styles.bubble, styles.ai]}>
-            <T size={13.5} color={colors.faint}>
+            <T size={14} color={colors.faint}>
               Đang xem sổ…
             </T>
           </View>
@@ -115,7 +117,7 @@ export default function Ai() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 10 }}>
           {QUICK.map((q) => (
             <Pressable key={q} onPress={() => send(q)} style={styles.quick}>
-              <T w="semibold" size={12} color={colors.orange}>
+              <T w="semibold" size={12} color={colors.ink}>
                 {q}
               </T>
             </Pressable>
@@ -133,9 +135,9 @@ export default function Ai() {
           />
           <IconBtn
             name="send"
-            bg={text.trim() ? colors.orange : '#FFE4CC'}
-            color={colors.white}
-            size={36}
+            bg={text.trim() ? colors.ink : colors.border}
+            color={text.trim() ? colors.white : colors.muted}
+            size={44}
             onPress={() => send(text)}
             label="Gửi"
           />
@@ -150,13 +152,13 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: colors.orange,
+    backgroundColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   bubble: { maxWidth: '86%', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 10 },
-  user: { alignSelf: 'flex-end', backgroundColor: colors.orange, borderBottomRightRadius: 5 },
-  ai: { alignSelf: 'flex-start', backgroundColor: colors.white, borderBottomLeftRadius: 5, ...shadow(1) },
+  user: { alignSelf: 'flex-end', backgroundColor: colors.ink, borderBottomRightRadius: 5 },
+  ai: { alignSelf: 'flex-start', backgroundColor: colors.white, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: 5 },
   bottom: {
     backgroundColor: colors.white,
     paddingHorizontal: 16,
@@ -164,7 +166,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  quick: { backgroundColor: '#FFF1E4', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 },
-  inputRow: { backgroundColor: colors.bg, borderRadius: 14, paddingLeft: 14, paddingRight: 6, height: 48 },
+  quick: { backgroundColor: colors.white, borderColor: colors.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, minHeight: 44, justifyContent: 'center' },
+  inputRow: { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border, borderRadius: 14, paddingLeft: 14, paddingRight: 6, minHeight: 52 },
   input: { flex: 1, fontFamily: font.medium, fontSize: 14, color: colors.ink, height: '100%', outlineStyle: 'none' } as never,
 });

@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import React, { useCallback, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { InvoiceCard } from '../../src/components/InvoiceCard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,10 +14,20 @@ type Src = 'all' | 'voice' | 'pos' | 'manual' | 'debt' | 'cancelled';
 export default function Invoices() {
   const { invoices } = useApp();
   const insets = useSafeAreaInsets();
-  const [period, setPeriod] = useState<Period>('today');
+  const { period: queryPeriod } = useLocalSearchParams<{ period?: string }>();
+  const initialPeriod: Period = queryPeriod === 'yesterday' || queryPeriod === 'month' ? queryPeriod : 'today';
+  const [period, setPeriod] = useState<Period>(initialPeriod);
   const [src, setSrc] = useState<Src>('all');
   const [q, setQ] = useState('');
   const [searching, setSearching] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (queryPeriod === 'today' || queryPeriod === 'yesterday' || queryPeriod === 'month') {
+        setPeriod(queryPeriod);
+      }
+    }, [queryPeriod]),
+  );
 
   const list = useMemo(() => {
     const nq = normalizeText(q);
@@ -104,7 +115,7 @@ export default function Invoices() {
           );
         }}
         ListEmptyComponent={
-          <EmptyState icon="file-text" title="Chưa có hoá đơn" hint="Bấm nút Bán hàng ở giữa để tạo đơn đầu tiên" />
+          <EmptyState icon="file-text" title="Chưa có hoá đơn" hint="Chọn Bán hàng để tạo đơn đầu tiên" />
         }
       />
     </View>

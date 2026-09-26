@@ -14,12 +14,12 @@ npm run typecheck
 npm run export:web      # build web tĩnh ra dist/
 ```
 
-## Tài khoản demo
+## Xem thử với dữ liệu mẫu
 
-- Nhập **số điện thoại bất kỳ (10 số)**, mã OTP là **123456** (có nút “Điền nhanh”).
+- Nhập **số điện thoại bất kỳ (10 số)**, mã OTP là **123456**. Giao diện không hiển thị mã thử này.
 - Số bắt đầu bằng `09` → vào thẳng tiệm mẫu “Tiệm tạp hoá cô Thỏ”. Số khác → đi qua bước tạo tiệm (tên + ngành hàng).
-- Google / Facebook / Apple: đăng nhập giả lập, vào thẳng Trang chủ.
-- Muốn làm lại từ đầu: **Khác → Khôi phục dữ liệu mẫu**. Tải lại app (reload) cũng reset dữ liệu.
+- Sau khi đăng nhập, Home mở phần giới thiệu ba bước về trợ lý, bán hàng và quản lý tiệm. Chọn Chatbot/Giọng nói ở bước đầu để vào thẳng màn tương ứng, hoặc dùng Tiếp/Quay lại, Bắt đầu, đóng/“Để sau”; phần giới thiệu không hiện lại trong phiên đó.
+- Tải lại app (reload) để đưa dữ liệu trong bộ nhớ về trạng thái ban đầu.
 
 ## Màn hình
 
@@ -27,11 +27,13 @@ npm run export:web      # build web tĩnh ra dist/
 | --- | --- |
 | `/` | Splash |
 | `/(auth)/welcome`, `/otp`, `/setup` | Đăng nhập SĐT, OTP, tạo tiệm |
-| `/(tabs)` | Trang chủ: doanh thu hôm nay/hôm qua/tháng, biểu đồ, AI gợi ý, quản lý tiệm, bán chạy |
+| `/(tabs)` | Trang chủ: doanh thu hôm nay/hôm qua/tháng, việc cần xử lý, gợi ý và bán chạy |
+| `/analytics` | Phân tích theo kỳ: doanh thu, diễn biến theo giờ/tuần, chi phí, lãi gộp ước tính, bán chạy, công nợ |
 | `/(tabs)/invoices` | Hoá đơn: lọc theo thời gian, nguồn (AI/POS/nhập tay), ghi nợ, đã huỷ, tìm kiếm |
+| `/(tabs)/sales` | Bán hàng: vào thẳng danh mục, chọn món và xem giỏ; Zen ring mở Chatbot, Giọng nói hoặc Gợi ý phân tích nhanh |
 | `/(tabs)/expenses` | Chi phí theo tháng, cơ cấu chi, thêm chi phí bằng giọng nói / nhập tay |
-| `/(tabs)/more` | Khác: hồ sơ, gói Cơ bản (hạn mức 200 đơn) / Pro, menu quản lý, đăng xuất |
-| `/voice` | **Nói để lên đơn** — ghi âm giả lập, AI tách món, hỏi thêm món lạ vào danh mục, sửa số lượng |
+| `/(tabs)/more` | Khác: hồ sơ, báo cáo, hàng hoá, chi phí, công nợ và đăng xuất |
+| `/voice` | Nhập đơn bằng văn bản hoặc câu gợi ý, hỏi thêm món lạ vào danh mục, sửa số lượng; chưa thu âm từ mic |
 | `/pos` | Chọn hàng nhanh dạng lưới, giỏ hàng, món ngoài danh mục |
 | `/checkout` | Thanh toán: tiền mặt (tiền thối), chuyển khoản (QR minh hoạ), ghi nợ |
 | `/invoice/[id]` | Chi tiết hoá đơn: in, sửa, huỷ |
@@ -41,18 +43,18 @@ npm run export:web      # build web tĩnh ra dist/
 | `/staff` | Nhân viên, doanh thu theo người, thêm / tạm khoá |
 | `/profile` | Sửa thông tin cá nhân & tiệm |
 | `/ai` | Trợ lý AI (trả lời từ dữ liệu mẫu: doanh thu, bán chạy, nhập hàng, lời lãi, công nợ) |
-| `/printer` | Kết nối máy in K80/K58 (giả lập, IP `192.168.x.x` → thành công) |
+| `/printer` | Màn cấu hình máy in K80/K58; chưa có kết nối thiết bị |
 
 ## Thử nhận diện đơn
 
-Ô “Nhập tên hàng + giá” ở màn Bán hàng chạy bộ nhận diện rule-based trong `src/lib/parseOrder.ts`. Ví dụ:
+Ô “Nhập tên hàng + giá” ở màn `/voice` chạy bộ nhận diện rule-based trong `src/lib/parseOrder.ts`. Ví dụ:
 
 - `2 ly cà phê sữa 50 nghìn, thêm 1 trà đá`
 - `bán 3 bánh mì 45k, 2 coca`
 - `lấy 1 chục trứng với 2 gói mì`
 - `bán 1 hộp sữa chua nếp cẩm 12k` → món chưa có, app hỏi có thêm vào danh mục không
 
-Nút “Nói để lên đơn” lần lượt phát các câu mẫu trong `voiceSamples` (`src/data/mock.ts`).
+Nút “Dùng câu gợi ý” lần lượt điền các câu trong `voiceSamples` (`src/data/mock.ts`); chưa nhận âm thanh từ mic.
 
 ## Cấu trúc
 
@@ -90,10 +92,9 @@ Code đã nối sẵn theo `docs/contracts/api-contracts.md`: Firebase xác th�
    - **Android** (package `vn.teamhexa.songheloi`) → tải `google-services.json`; thêm **SHA-1 và SHA-256** của keystore dùng để build (`npx eas-cli credentials -p android`).
    - **iOS** (bundle `vn.teamhexa.songheloi`) → tải `GoogleService-Info.plist`; upload **APNs key** ở Cloud Messaging để xác minh SMS không cần reCAPTCHA.
    - Đặt hai file trên vào thư mục `frontend/mobile/`.
-3. **Cài gói** (trong `frontend/mobile`):
+3. **Cài gói native** (trong `frontend/mobile`; Firebase JS SDK cho web đã có trong dependencies):
    ```bash
    npx expo install @react-native-firebase/app @react-native-firebase/auth expo-build-properties
-   npm install firebase          # chỉ cho bản web
    ```
 4. **`app.json`**: thêm `"googleServicesFile": "./google-services.json"` vào `android`, `"googleServicesFile": "./GoogleService-Info.plist"` vào `ios`, và vào `plugins`:
    ```json
@@ -137,7 +138,7 @@ Màn đầu có liên kết “Đăng nhập bằng email và mật khẩu” (`
   ```bash
   adb logcat -s ReactNativeJS
   ```
-- **Màn “Chẩn đoán kết nối”** (Khác → Chẩn đoán kết nối, chỉ có ở bản dev): hiện chế độ (mock/thật), `API_ENDPOINT`, trạng thái Firebase, nút **Kiểm tra kết nối Core** (gọi `/v3/api-docs` không cần token), **Xem token** (aud/iss/hạn dùng; Core cần `FIREBASE_PROJECT_ID` trùng `aud`), **Gọi GET /me**, và nhật ký gần đây.
+- **Màn “Chẩn đoán kết nối”** (`/debug`, chỉ dùng nội bộ ở bản dev): hiện chế độ (mock/thật), `API_ENDPOINT`, trạng thái Firebase, nút **Kiểm tra kết nối Core** (gọi `/v3/api-docs` không cần token), **Xem token** (aud/iss/hạn dùng; Core cần `FIREBASE_PROJECT_ID` trùng `aud`), **Gọi GET /me**, và nhật ký gần đây. Màn này không nằm trong menu Khác.
 - **Chạy bản web để thử nhanh (không cần build APK):** `npm run web`, đăng nhập bằng email. Trình duyệt bị CORS chặn khi gọi Core (Core chưa bật CORS) nên chạy thêm proxy dev ở một terminal khác rồi trỏ app vào proxy:
   ```bash
   node scripts/dev-cors-proxy.js
@@ -149,3 +150,13 @@ Màn đầu có liên kết “Đăng nhập bằng email và mật khẩu” (`
 Chưa làm: đăng nhập Google/Facebook/Apple (bản thật hiện báo “sắp có”), Zalo (Firebase không có sẵn provider — cần Core cấp custom token), và các action dữ liệu trong `AppStore` (sản phẩm, hoá đơn…) vẫn là dữ liệu mẫu cho tới khi Core có API. Core chưa có `POST /shops` (đặt `EXPO_PUBLIC_MOCK_SHOPS=true` để test tiếp). Docs ghi payload snake_case và id uuid, nhưng Core đang trả camelCase và id số; FE bám theo code của Core (sửa ở `src/data/types.ts` nếu backend đổi).
 
 Ghi chú: mã QR chuyển khoản, tỉ lệ thuế 1,5% trên hoá đơn và gói Pro đều chỉ để minh hoạ.
+
+## Vercel preview trên trình duyệt
+
+`vercel.json` đã cấu hình Expo export ra `dist/` và chuyển các đường dẫn Expo Router về SPA entry. Khi tạo project Vercel:
+
+1. Chọn thư mục gốc `frontend/mobile`.
+2. Đặt production branch là `main`; pull request và nhánh `staging` sẽ có preview deployment.
+3. Bật `EXPO_PUBLIC_USE_MOCK=true` trong Preview environment để dùng OTP mẫu `123456` và dữ liệu mẫu. Bản preview không cần Firebase hoặc backend secrets.
+
+Muốn thử Firebase trên web thì cần thêm Firebase web app config vào Preview variables (`EXPO_PUBLIC_FIREBASE_API_KEY`, `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`, `EXPO_PUBLIC_FIREBASE_PROJECT_ID`, `EXPO_PUBLIC_FIREBASE_APP_ID`), thêm preview domain vào Firebase Authorized domains, và bật HTTPS/CORS cho Core nếu gọi API thật. Các biến `EXPO_PUBLIC_*` được đóng vào bundle trình duyệt, vì vậy không đặt service-account keys ở đây. Preview web giúp kiểm tra giao diện responsive và luồng mock; nó không thay thế kiểm tra native trên iOS/Android.

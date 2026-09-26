@@ -377,11 +377,11 @@ export function generateExpenses(): Expense[] {
 }
 
 export const expenseCategoryMeta: Record<string, { label: string; color: string; bg: string }> = {
-  nguyenlieu: { label: 'Nguyên liệu', color: '#C8860A', bg: '#FFF4D6' },
-  dien: { label: 'Điện nước', color: '#2858D8', bg: '#E9EEFC' },
-  matbang: { label: 'Mặt bằng', color: '#7A5AF0', bg: '#F1EDFF' },
-  luong: { label: 'Lương', color: '#2E9E4F', bg: '#EAF7EE' },
-  khac: { label: 'Khác', color: '#5A6675', bg: '#EEF1F5' },
+  nguyenlieu: { label: 'Nguyên liệu', color: '#355A25', bg: '#E7F6DC' },
+  dien: { label: 'Điện nước', color: '#4E6745', bg: '#E8F0E4' },
+  matbang: { label: 'Mặt bằng', color: '#5F6858', bg: '#E7EAE4' },
+  luong: { label: 'Lương', color: '#497055', bg: '#E9F1E8' },
+  khac: { label: 'Khác', color: '#6B675E', bg: '#EEEBE4' },
 };
 
 export const categoryMeta: Record<string, string> = {

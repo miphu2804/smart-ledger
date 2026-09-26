@@ -100,7 +100,7 @@ export default function Products() {
         style={[styles.fab, shadow(3), { bottom: insets.bottom + 24 }]}
         accessibilityLabel="Thêm sản phẩm"
       >
-        <Feather name="plus" size={26} color={colors.white} />
+        <Feather name="plus" size={26} color={colors.accentInk} />
       </Pressable>
       <ProductForm value={form} onClose={() => setForm(null)} />
     </View>
@@ -122,7 +122,7 @@ function Stat({
 }) {
   return (
     <View style={[styles.stat, { backgroundColor: bg, flex }]}>
-      <T size={10.5} color={colors.faint}>
+      <T size={12} color={colors.faint}>
         {label}
       </T>
       <T w="extrabold" size={16} color={color} numberOfLines={1}>
@@ -190,7 +190,7 @@ function ProductForm({ value, onClose }: { value: Product | 'new' | null; onClos
       setCat('food');
       setTracked(true);
       setMode('manual');
-      toast('AI đã nhận diện sản phẩm từ ảnh (giả lập)');
+      toast('Đã điền thông tin gợi ý. Hãy kiểm tra trước khi lưu.');
     }, 1400);
   };
 
@@ -259,7 +259,7 @@ function ProductForm({ value, onClose }: { value: Product | 'new' | null; onClos
               <T w="semibold" size={14}>
                 Theo dõi tồn kho
               </T>
-              <T size={11.5} color={colors.faint}>
+              <T size={12} color={colors.faint}>
                 Tắt nếu làm theo yêu cầu (trà đá, bánh mì…)
               </T>
             </View>
@@ -300,7 +300,7 @@ function ProductForm({ value, onClose }: { value: Product | 'new' | null; onClos
 }
 
 const styles = StyleSheet.create({
-  stat: { borderRadius: 14, padding: 10, ...shadow(1) },
+  stat: { borderRadius: 14, padding: 10, borderWidth: 1, borderColor: colors.border, ...shadow(1) },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -309,6 +309,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 12,
     marginBottom: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
     ...shadow(1),
   },
   fab: {
@@ -317,7 +319,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },

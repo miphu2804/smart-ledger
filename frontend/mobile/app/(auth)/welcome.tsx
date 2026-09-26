@@ -4,18 +4,15 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Logo, useToast } from '../../src/components/brand';
 import { Button, Field, Row, Screen, T } from '../../src/components/ui';
-import { USE_MOCK } from '../../src/config';
 import { startPhoneLogin } from '../../src/lib/auth';
 import { errorMessage } from '../../src/lib/errors';
-import { useApp } from '../../src/store/AppStore';
 import { colors, shadow } from '../../src/theme';
 
 export default function Welcome() {
+  const toast = useToast();
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signIn } = useApp();
-  const toast = useToast();
 
   const digits = phone.replace(/\D/g, '');
   const valid = /^0?\d{9}$/.test(digits);
@@ -38,37 +35,13 @@ export default function Welcome() {
     }
   };
 
-  // Google / Facebook / Apple: chưa tích hợp. Bản mock giữ đăng nhập giả để demo; bản thật chỉ dùng số điện thoại.
-  const social = async (name: string) => {
-    if (!USE_MOCK) {
-      toast(`Đăng nhập bằng ${name} sắp có — hiện vui lòng dùng số điện thoại`);
-      return;
-    }
-    toast(`Đã đăng nhập bằng ${name} (giả lập)`);
-    await signIn();
-    router.replace('/(tabs)');
-  };
-
   return (
     <Screen>
       <View style={{ paddingTop: 24 }}>
-        <Logo size={38} />
+        <Logo size={54} />
       </View>
 
-      <View style={styles.hero}>
-        <View style={styles.bubble}>
-          <T size={13} color={colors.primary} w="semibold">
-            🎙️ “Bán 2 ly cà phê sữa, 1 ổ bánh mì”
-          </T>
-        </View>
-        <View style={[styles.bubble, styles.bubbleAi]}>
-          <T size={12} color={colors.white} w="semibold">
-            ✓ Đã ghi 2 món · 65.000đ
-          </T>
-        </View>
-      </View>
-
-      <T w="extrabold" size={30} style={{ marginTop: 8 }}>
+      <T w="extrabold" size={30} style={{ marginTop: 48 }}>
         Xin chào!
       </T>
       <T size={14} color={colors.muted} style={{ marginTop: 6, marginBottom: 22, lineHeight: 21 }}>
@@ -90,40 +63,29 @@ export default function Welcome() {
       />
       <Button title="Tiếp tục" onPress={submit} disabled={!digits.length} loading={loading} />
 
-      <Pressable onPress={() => router.push('/(auth)/email')} style={{ alignSelf: 'center', marginTop: 14 }} hitSlop={8}>
+      <Pressable onPress={() => router.push('/(auth)/email')} style={{ alignSelf: 'center', marginTop: 14, minHeight: 44, justifyContent: 'center' }} hitSlop={8}>
         <T w="semibold" size={13} color={colors.primary}>
           Đăng nhập bằng email và mật khẩu
         </T>
       </Pressable>
 
-      <Row style={{ marginVertical: 22 }}>
+      <Row style={styles.divider} gap={10}>
         <View style={styles.line} />
-        <T size={12} color={colors.faint}>
-          hoặc đăng nhập với
-        </T>
+        <T size={12} color={colors.faint}>Cách đăng nhập khác</T>
         <View style={styles.line} />
       </Row>
-
-      <Row style={{ justifyContent: 'center', gap: 16 }}>
-        <SocialBtn icon="google" color="#EA4335" bg={colors.white} onPress={() => social('Google')} />
-        <SocialBtn icon="facebook" color={colors.white} bg="#1877F2" onPress={() => social('Facebook')} />
-        <SocialBtn icon="apple" color={colors.white} bg="#111" onPress={() => social('Apple')} />
+      <Row gap={8}>
+        <SocialBtn name="Google" icon="google" color="#EA4335" onPress={() => toast('Google chưa được kết nối. Hãy dùng số điện thoại hoặc email.', 'err')} />
+        <SocialBtn name="Facebook" icon="facebook" color="#1877F2" onPress={() => toast('Facebook chưa được kết nối. Hãy dùng số điện thoại hoặc email.', 'err')} />
+        <SocialBtn name="Apple" icon="apple" color={colors.ink} onPress={() => toast('Apple chưa được kết nối. Hãy dùng số điện thoại hoặc email.', 'err')} />
       </Row>
-
-      {USE_MOCK ? (
-        <View style={styles.demo}>
-          <T w="bold" size={12} color={colors.gold}>
-            Chế độ demo
-          </T>
-          <T size={12} color={colors.muted} style={{ marginTop: 2 }}>
-            Nhập số bất kỳ (10 số), mã OTP là 123456. Số bắt đầu bằng 09 → vào thẳng tiệm mẫu; số khác → đi qua bước tạo tiệm.
-          </T>
-        </View>
-      ) : null}
+      <T size={11} color={colors.faint} style={styles.socialNote}>
+        Các phương thức này chưa được kết nối.
+      </T>
 
       <Row style={{ justifyContent: 'center', marginTop: 20 }} gap={6}>
         <FontAwesome name="lock" size={12} color={colors.faint} />
-        <T size={11} color={colors.faint}>
+          <T size={12} color={colors.faint}>
           An toàn & bảo mật
         </T>
       </Row>
@@ -131,47 +93,32 @@ export default function Welcome() {
   );
 }
 
-function SocialBtn({
-  icon,
-  color,
-  bg,
-  onPress,
-}: {
+function SocialBtn({ name, icon, color, onPress }: {
+  name: string;
   icon: 'google' | 'facebook' | 'apple';
   color: string;
-  bg: string;
   onPress: () => void;
 }) {
   return (
     <Pressable
       onPress={onPress}
-      accessibilityLabel={`Đăng nhập với ${icon}`}
-      style={({ pressed }) => [styles.social, { backgroundColor: bg }, shadow(1), pressed && { opacity: 0.8 }]}
+      accessibilityRole="button"
+      accessibilityLabel={`${name} chưa được kết nối`}
+      style={({ pressed }) => [styles.social, pressed && { opacity: 0.75 }]}
     >
-      <FontAwesome name={icon} size={20} color={color} />
+      <FontAwesome name={icon} size={18} color={color} />
+      <T w="bold" size={12}>{name}</T>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  hero: { height: 120, justifyContent: 'center', marginTop: 20 },
-  bubble: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    borderBottomLeftRadius: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    ...shadow(2),
-  },
-  bubbleAi: {
-    alignSelf: 'flex-end',
-    backgroundColor: colors.primary,
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 4,
-    marginTop: 10,
-  },
+  divider: { marginTop: 12, marginBottom: 12 },
   line: { flex: 1, height: 1, backgroundColor: colors.border },
-  social: { width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center' },
-  demo: { marginTop: 24, backgroundColor: colors.goldSoft, borderRadius: 14, padding: 12 },
+  social: {
+    flex: 1, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white,
+    ...shadow(0),
+  },
+  socialNote: { textAlign: 'center', marginTop: 9 },
 });

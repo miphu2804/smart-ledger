@@ -1,9 +1,7 @@
 import { Feather } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useToast } from '../../src/components/brand';
-import { Waveform } from '../../src/components/charts';
 import {
   Button,
   Card,
@@ -68,10 +66,10 @@ export default function Expenses() {
           const on = m.m === month;
           return (
             <Pressable key={m.m} onPress={() => setMonth(m.m)} style={[styles.month, on && styles.monthOn]}>
-              <T size={11} color={on ? '#FFE8B8' : colors.faint}>
+              <T size={12} color={on ? colors.accentInk : colors.faint}>
                 {m.label}
               </T>
-              <T w="extrabold" size={15} color={on ? colors.white : colors.ink}>
+              <T w="extrabold" size={15} color={on ? colors.accentInk : colors.ink}>
                 {compact(m.total)}
               </T>
             </Pressable>
@@ -79,32 +77,32 @@ export default function Expenses() {
         })}
       </ScrollView>
 
-      <LinearGradient colors={['#C8860A', '#E0A21F']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-        <T size={12} color="#FFF0CF">
+      <Card style={styles.hero}>
+        <T size={12} color={colors.muted}>
           Chi phí {months[month].label}
         </T>
-        <T w="extrabold" size={32} color={colors.white}>
+        <T w="extrabold" size={32}>
           {vnd(total)}
         </T>
         <View style={styles.heroSplit}>
           <View style={{ flex: 1 }}>
-            <T size={11} color="#FFF0CF">
+            <T size={12} color={colors.muted}>
               Doanh thu
             </T>
-            <T w="bold" size={14} color={colors.white}>
+            <T w="bold" size={14}>
               {vnd(revenue)}
             </T>
           </View>
           <View style={{ flex: 1 }}>
-            <T size={11} color="#FFF0CF">
-              Còn lại (thu − chi)
+            <T size={12} color={colors.muted}>
+              Thu − chi, chưa trừ vốn
             </T>
-            <T w="bold" size={14} color={colors.white}>
+            <T w="bold" size={14}>
               {vnd(revenue - total)}
             </T>
           </View>
         </View>
-      </LinearGradient>
+      </Card>
 
       {byCat.length ? (
         <Card style={{ marginTop: 12 }}>
@@ -147,10 +145,10 @@ export default function Expenses() {
                     {e.title}
                   </T>
                   <Row gap={6}>
-                    <T size={11} color={colors.faint}>
+                    <T size={12} color={colors.faint}>
                       {ddmm(d)} · {hhmm(d)} · {meta.label}
                     </T>
-                    {e.source === 'voice' ? <Feather name="mic" size={11} color={colors.primary} /> : null}
+                    {e.source === 'voice' ? <Feather name="mic" size={12} color={colors.primary} /> : null}
                   </Row>
                 </View>
                 <T w="bold" size={14} color={colors.red}>
@@ -160,10 +158,10 @@ export default function Expenses() {
             );
           })
         ) : (
-          <EmptyState icon="credit-card" title="Chưa có khoản chi" hint="Ghi chi phí để biết lãi thật của tiệm" />
+          <EmptyState icon="credit-card" title="Chưa có khoản chi" hint="Ghi khoản chi để theo dõi chênh lệch ước tính" />
         )}
       </Card>
-      <T size={11} color={colors.faint} style={{ textAlign: 'center', marginTop: 8, marginBottom: 70 }}>
+      <T size={12} color={colors.faint} style={{ textAlign: 'center', marginTop: 8, marginBottom: 70 }}>
         Nhấn giữ một khoản chi để xoá
       </T>
 
@@ -244,17 +242,16 @@ function AddExpenseSheet({ visible, onClose }: { visible: boolean; onClose: () =
       />
       {mode === 'voice' ? (
         <View style={styles.voiceBox}>
-          <Waveform active={rec} color={colors.gold} />
           <T
             w="semibold"
             size={14}
             style={{ textAlign: 'center', minHeight: 40, marginTop: 6 }}
             color={heard ? colors.ink : colors.faint}
           >
-            {heard || 'VD: “Nhập bánh mì với nguyên liệu hết 850 nghìn”'}
+            {heard || 'Ví dụ: “Nhập bánh mì với nguyên liệu hết 850 nghìn”'}
           </T>
           <Button
-            title={rec ? 'Đang nghe…' : title ? 'Nói lại' : 'Chạm để nói'}
+            title={rec ? 'Đang áp dụng câu gợi ý…' : title ? 'Thử câu khác' : 'Dùng câu gợi ý'}
             icon="mic"
             variant="gold"
             onPress={startRec}
@@ -291,9 +288,9 @@ function AddExpenseSheet({ visible, onClose }: { visible: boolean; onClose: () =
 
 const styles = StyleSheet.create({
   month: { width: 76, backgroundColor: colors.white, borderRadius: 14, padding: 10, borderWidth: 1, borderColor: colors.border },
-  monthOn: { backgroundColor: colors.gold, borderColor: colors.gold },
+  monthOn: { backgroundColor: colors.accent, borderColor: colors.accent },
   hero: { marginTop: 12, borderRadius: 22, padding: 18 },
-  heroSplit: { flexDirection: 'row', marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.25)' },
+  heroSplit: { flexDirection: 'row', marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border },
   stack: { flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'hidden', gap: 2 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
@@ -317,5 +314,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  voiceBox: { marginTop: 14, backgroundColor: colors.goldSoft, borderRadius: 18, padding: 14 },
+  voiceBox: { marginTop: 14, backgroundColor: colors.white, borderRadius: 18, padding: 14, borderWidth: 1, borderColor: colors.border },
 });

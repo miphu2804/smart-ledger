@@ -37,7 +37,7 @@ export default function Profile() {
     >
       <Header title="Chỉnh sửa thông tin" subtitle="Tài khoản & thông tin tiệm" />
       <Card>
-        <T w="bold" size={11} color={colors.faint} style={styles.section}>
+        <T w="bold" size={12} color={colors.faint} style={styles.section}>
           THÔNG TIN CÁ NHÂN
         </T>
         <Field label="Họ và tên" value={name} onChangeText={setName} />
@@ -54,7 +54,7 @@ export default function Profile() {
         <Field label="Link Facebook" placeholder="facebook.com/tenban" autoCapitalize="none" value={fb} onChangeText={setFb} />
       </Card>
       <Card style={{ marginTop: 12 }}>
-        <T w="bold" size={11} color={colors.faint} style={styles.section}>
+        <T w="bold" size={12} color={colors.faint} style={styles.section}>
           THÔNG TIN TIỆM
         </T>
         <Field label="Tên tiệm" value={store} onChangeText={setStore} />
@@ -80,9 +80,9 @@ export default function Profile() {
               <Pressable
                 key={i.id}
                 onPress={() => setIndustries((cur) => (on ? cur.filter((x) => x !== i.id) : [...cur, i.id]))}
-                style={[styles.ind, on && { borderColor: colors.primary, backgroundColor: colors.primaryTint }]}
+                style={[styles.ind, on && { borderColor: colors.accent, backgroundColor: colors.accent }]}
               >
-                <T size={13} w={on ? 'bold' : 'semibold'} color={on ? colors.primary : colors.ink}>
+                <T size={13} w={on ? 'bold' : 'semibold'} color={on ? colors.accentInk : colors.ink}>
                   {i.emoji} {i.name}
                 </T>
               </Pressable>
@@ -106,5 +106,5 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     paddingHorizontal: 14,
   },
-  ind: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 12, borderWidth: 1.5, borderColor: colors.border },
+  ind: { paddingHorizontal: 12, minHeight: 44, justifyContent: 'center', borderRadius: 12, borderWidth: 1.5, borderColor: colors.border },
 });

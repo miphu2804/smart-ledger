@@ -5,11 +5,10 @@ import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddItemSheet } from '../src/components/AddItemSheet';
 import { useToast } from '../src/components/brand';
-import { Waveform } from '../src/components/charts';
 import { Button, Dialog, Field, Header, IconBtn, Row, Stepper, T } from '../src/components/ui';
 import { voiceSamples } from '../src/data/mock';
 import type { LineItem } from '../src/data/types';
-import { hhmm, vnd } from '../src/lib/format';
+import { vnd } from '../src/lib/format';
 import { parseOrder } from '../src/lib/parseOrder';
 import { itemsTotal } from '../src/lib/stats';
 import { useApp } from '../src/store/AppStore';
@@ -71,7 +70,7 @@ export default function Voice() {
         push('ai', `“${unknown[0].name}” chưa có trong danh mục. Bạn có muốn thêm vào không?`);
       }
       if (!found.length && !unknown.length)
-        push('ai', 'Mình chưa nghe rõ tên hàng. Bạn nói lại giúp mình nhé, ví dụ “2 ly cà phê sữa”.');
+        push('ai', 'Mình chưa nhận ra tên hàng. Bạn thử lại nhé, ví dụ “2 ly cà phê sữa”.');
     }, 350);
   };
 
@@ -143,9 +142,9 @@ export default function Voice() {
       <View style={{ paddingHorizontal: 16 }}>
         <Header
           title="Bán hàng"
-          subtitle={`Hôm nay, ${hhmm(new Date())} · ${app.store.name}`}
+          subtitle={app.store.name}
           right={
-            <Pressable onPress={checkout} disabled={!items.length} hitSlop={8}>
+            <Pressable onPress={checkout} disabled={!items.length} hitSlop={8} style={styles.headerAction}>
               <T w="bold" size={14} color={items.length ? colors.primary : colors.disabled}>
                 Lưu đơn
               </T>
@@ -163,13 +162,13 @@ export default function Voice() {
         {!msgs.length && !recording ? (
           <View style={styles.empty}>
             <View style={styles.emptyIcon}>
-              <Feather name="mic" size={30} color={colors.gold} />
+              <Feather name="mic" size={30} color={colors.ink} />
             </View>
             <T w="extrabold" size={20} style={{ marginTop: 16, textAlign: 'center' }}>
               Đơn này bạn bán hàng gì?
             </T>
             <T size={13} color={colors.faint} style={{ marginTop: 6, textAlign: 'center', lineHeight: 19 }}>
-              Nói hoặc gõ như bình thường,{'\n'}Sổ Nghe Lời tính tiền nhanh cho bạn.
+              Chọn câu gợi ý hoặc nhập nội dung bán hàng bên dưới.
             </T>
             <T w="bold" size={12} color={colors.muted} style={{ marginTop: 22, marginBottom: 8 }}>
               THỬ GÕ NHANH
@@ -188,8 +187,8 @@ export default function Voice() {
           <View key={m.id} style={[styles.bubble, m.from === 'user' ? styles.user : styles.ai]}>
             {m.from === 'ai' ? (
               <Row gap={5} style={{ marginBottom: 3 }}>
-                <Feather name="star" size={11} color={colors.primary} />
-                <T w="bold" size={10.5} color={colors.primary}>
+                <Feather name="star" size={12} color={colors.primary} />
+                <T w="bold" size={12} color={colors.primary}>
                   Sổ Nghe Lời
                 </T>
               </Row>
@@ -215,10 +214,10 @@ export default function Voice() {
               <T w="bold" size={13} color={colors.primary} style={{ flex: 1 }}>
                 Sổ Nghe Lời đã ghi được
               </T>
-              <T size={11} color={colors.faint}>
+              <T size={12} color={colors.faint}>
                 {items.length} món ·{' '}
               </T>
-              <Pressable onPress={() => setEdit((e) => !e)} hitSlop={8}>
+              <Pressable onPress={() => setEdit((e) => !e)} hitSlop={8} style={styles.editAction}>
                 <Row gap={3}>
                   <Feather name={edit ? 'check' : 'edit-2'} size={12} color={colors.primary} />
                   <T w="bold" size={12} color={colors.primary}>
@@ -233,7 +232,7 @@ export default function Voice() {
                   <T w="semibold" size={14}>
                     {it.name}
                   </T>
-                  <T size={11} color={colors.faint}>
+                  <T size={12} color={colors.faint}>
                     {vnd(it.price)} × {it.qty}
                   </T>
                 </View>
@@ -279,9 +278,8 @@ export default function Voice() {
       <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         {recording ? (
           <>
-            <Waveform active />
             <Button
-              title="Đang nghe… chạm để dừng"
+              title="Đang áp dụng câu gợi ý… chạm để dừng"
               icon="mic"
               variant="voice"
               onPress={() => finishRecording(voiceSamples[(sampleCursor - 1) % voiceSamples.length])}
@@ -289,7 +287,7 @@ export default function Voice() {
           </>
         ) : (
           <>
-            <Button title="Nói để lên đơn" icon="mic" variant="gold" onPress={startRecording} />
+            <Button title="Dùng câu gợi ý" icon="mic" variant="gold" onPress={startRecording} />
             <Button
               title="Chọn hàng"
               icon="grid"
@@ -314,7 +312,7 @@ export default function Voice() {
             name="send"
             bg={text.trim() ? colors.primary : colors.primarySoft}
             color={text.trim() ? colors.white : colors.primaryLight}
-            size={36}
+            size={44}
             onPress={sendText}
             label="Gửi"
           />
@@ -369,7 +367,7 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 24,
-    backgroundColor: colors.goldSoft,
+    backgroundColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -381,20 +379,23 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 1,
     borderColor: colors.border,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   bubble: { maxWidth: '84%', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 10 },
-  user: { alignSelf: 'flex-end', backgroundColor: colors.primary, borderBottomRightRadius: 5 },
-  ai: { alignSelf: 'flex-start', backgroundColor: colors.white, borderBottomLeftRadius: 5, ...shadow(1) },
-  order: { backgroundColor: colors.white, borderRadius: 20, padding: 16, marginTop: 4, ...shadow(2) },
+  user: { alignSelf: 'flex-end', backgroundColor: colors.ink, borderBottomRightRadius: 5 },
+  ai: { alignSelf: 'flex-start', backgroundColor: colors.white, borderColor: colors.border, borderWidth: 1, borderBottomLeftRadius: 5 },
+  order: { backgroundColor: colors.white, borderRadius: 18, borderColor: colors.border, borderWidth: 1, padding: 16, marginTop: 4, ...shadow(1) },
   line: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
   bottom: {
     backgroundColor: colors.white,
     paddingHorizontal: 16,
     paddingTop: 12,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    ...shadow(2),
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   inputRow: { marginTop: 10, backgroundColor: colors.bg, borderRadius: 14, paddingLeft: 14, paddingRight: 6, height: 48 },
+  headerAction: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
+  editAction: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
   input: { flex: 1, fontFamily: font.medium, fontSize: 14, color: colors.ink, height: '100%', outlineStyle: 'none' } as never,
 });

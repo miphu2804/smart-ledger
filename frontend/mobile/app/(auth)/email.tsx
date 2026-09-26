@@ -108,7 +108,7 @@ export default function EmailAuth() {
         style={{ marginTop: 6 }}
       />
 
-      <Pressable onPress={() => router.back()} style={{ alignSelf: 'center', marginTop: 20 }} hitSlop={8}>
+      <Pressable onPress={() => router.back()} style={{ alignSelf: 'center', marginTop: 20, minHeight: 44, justifyContent: 'center' }} hitSlop={8}>
         <T size={13} color={colors.faint}>
           Dùng số điện thoại
         </T>

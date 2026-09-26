@@ -1,32 +1,18 @@
 import { Feather } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
 import React, { createContext, useCallback, useContext, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, View } from 'react-native';
-import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import { Animated, Image, Pressable, StyleSheet, View } from 'react-native';
 import { colors, shadow } from '../theme';
 import { T } from './ui';
 
-/** Logo: micro trong khung bo tròn + chấm vàng “đang nghe” */
-export function LogoMark({
-  size = 36,
-  bg = colors.primary,
-  fg = colors.white,
-  accent = colors.goldBright,
-}: {
-  size?: number;
-  bg?: string;
-  fg?: string;
-  accent?: string;
-}) {
+/** Tạm dùng mascot người dùng cung cấp làm dấu hiệu thương hiệu. */
+export function LogoMark({ size = 36 }: { size?: number }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 260 260">
-      <Rect width={260} height={260} rx={66} fill={bg} />
-      <Rect x={98} y={44} width={64} height={112} rx={32} fill={fg} />
-      <Path d="M66 118 a64 64 0 0 0 128 0" fill="none" stroke={fg} strokeWidth={18} strokeLinecap="round" />
-      <Rect x={121} y={180} width={18} height={30} fill={fg} />
-      <Rect x={88} y={202} width={84} height={18} rx={9} fill={fg} />
-      <Circle cx={196} cy={60} r={14} fill={accent} />
-    </Svg>
+    <Image
+      source={require('../../assets/brand-mascot-icon.png')}
+      resizeMode="cover"
+      style={{ width: size, height: size, borderRadius: size * 0.22 }}
+    />
   );
 }
 
@@ -42,7 +28,7 @@ export function Logo({ size = 34, subtitle = true }: { size?: number; subtitle?:
           </T>
         </T>
         {subtitle ? (
-          <T size={10} color={colors.faint}>
+          <T size={12} color={colors.faint}>
             Bán hàng chỉ cần nói
           </T>
         ) : null}
