@@ -1,0 +1,30 @@
+name: Release policy
+
+on:
+  pull_request_target:
+    branches:
+      - main
+
+permissions: {}
+
+jobs:
+  release-source:
+    name: Release source branch
+    runs-on: ubuntu-latest
+    steps:
+      # Read pull request metadata only; never check out or run code from the PR.
+      - name: Require staging or a hotfix branch
+        env:
+          BASE_REPO: ${{ github.repository }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          if [[ "$HEAD_REPO" != "$BASE_REPO" ]]; then
+            echo "::error::Release pull requests must come from a branch in $BASE_REPO."
+            exit 1
+          fi
+
+          if [[ "$HEAD_BRANCH" != "staging" && "$HEAD_BRANCH" != hotfix/* ]]; then
+            echo "::error::Pull requests into main must come from staging or hotfix/*; got $HEAD_BRANCH."
+            exit 1
+          fi

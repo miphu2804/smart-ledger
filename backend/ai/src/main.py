@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from src.agent.repository import AgentConversationRepository
 from src.agent.routers import router as agent_router
 from src.agent.service import AgentService
 from src.app_config import app_config
@@ -25,7 +26,8 @@ async def lifespan(app: FastAPI):
     app.state.postgres = postgres
     app.state.redis = redis
     chat_model = build_chat_model(app_config)
-    app.state.agent = AgentService(chat_model) if chat_model is not None else None
+    conversations = AgentConversationRepository(postgres)
+    app.state.agent = AgentService(chat_model, conversations)
     yield
     postgres.close()
     redis.close()
