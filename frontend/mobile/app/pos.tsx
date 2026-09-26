@@ -1,12 +1,13 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useToast } from '../src/components/brand';
 import { Badge, Button, Chips, EmptyState, Field, Header, Row, Sheet, Stepper, T, Tile } from '../src/components/ui';
-import { categoryMeta } from '../src/data/mock';
-import type { LineItem } from '../src/data/types';
+import type { CategoryView, LineItem, ProductView } from '../src/data/types';
+import { categoryApi, productApi } from '../src/lib/catalogApi';
+import { errorMessage } from '../src/lib/errors';
 import { normalizeText, vnd } from '../src/lib/format';
 import { itemsTotal } from '../src/lib/stats';
 import { useApp } from '../src/store/AppStore';
@@ -24,27 +25,65 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
   const [cName, setCName] = useState('');
   const [cPrice, setCPrice] = useState('');
 
+  const [products, setProducts] = useState<ProductView[]>([]);
+  const [categories, setCategories] = useState<CategoryView[]>([]);
+  const [cart, setCart] = useState<Record<number, number>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [ps, cs] = await Promise.all([productApi.list(), categoryApi.list()]);
+      setProducts(ps);
+      setCategories(cs);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const addToCart = (id: number, delta = 1) =>
+    setCart((cur) => {
+      const q2 = Math.max(0, (cur[id] ?? 0) + delta);
+      const next = { ...cur, [id]: q2 };
+      if (!q2) delete next[id];
+      return next;
+    });
+
   const list = useMemo(
     () =>
-      app.products.filter(
-        (p) => (cat === 'all' || p.category === cat) && (!q || normalizeText(p.name).includes(normalizeText(q))),
-      ),
-    [app.products, cat, q],
+      products.filter((p) => {
+        if (cat !== 'all') {
+          if (cat === 'none' ? p.categoryId != null : String(p.categoryId ?? '') !== cat) return false;
+        }
+        return !q || normalizeText(p.name).includes(normalizeText(q));
+      }),
+    [products, cat, q],
   );
 
   const cartItems: LineItem[] = [
-    ...Object.entries(app.cart).flatMap(([id, qty]) => {
-      const p = app.products.find((x) => x.id === id);
-      return p ? [{ productId: id, name: p.name, price: p.price, qty }] : [];
+    ...Object.entries(cart).flatMap(([id, qty]) => {
+      const p = products.find((x) => x.id === Number(id));
+      return p ? [{ productId: p.id, name: p.name, price: p.sellingPriceVnd, qty }] : [];
     }),
     ...custom,
   ];
   const total = itemsTotal(cartItems);
   const count = cartItems.reduce((a, i) => a + i.qty, 0);
-  const cats = ['all', ...Array.from(new Set(app.products.map((p) => p.category)))];
+  const hasUncategorized = products.some((p) => p.categoryId == null);
+  const cats = ['all', ...(hasUncategorized ? ['none'] : []), ...categories.map((c) => String(c.id))];
+  const catLabel = (c: string) => (c === 'all' ? 'Tất cả' : c === 'none' ? 'Chưa phân loại' : categories.find((x) => String(x.id) === c)?.name ?? c);
 
   const pay = () => {
     app.setDraft({ items: cartItems, source: 'pos' });
+    setCart({});
     setCustom([]);
     router.push('/checkout');
   };
@@ -52,65 +91,77 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top }}>
       <View style={{ paddingHorizontal: 16 }}>
-        <Header title={inTab ? 'Bán hàng' : 'Chọn hàng'} subtitle={`${app.products.length} sản phẩm`} back={!inTab} big={inTab} />
+        <Header title={inTab ? 'Bán hàng' : 'Chọn hàng'} subtitle={`${products.length} sản phẩm`} back={!inTab} big={inTab} />
         <Field placeholder="Tìm hàng…" value={q} onChangeText={setQ} style={{ marginBottom: 10 }} />
-        <Chips value={cat} onChange={setCat} options={cats.map((c) => ({ key: c, label: categoryMeta[c] ?? c }))} />
+        <Chips value={cat} onChange={setCat} options={cats.map((c) => ({ key: c, label: catLabel(c) }))} />
       </View>
 
-      <FlatList
-        data={list}
-        numColumns={2}
-        keyExtractor={(p) => p.id}
-        columnWrapperStyle={{ gap: 12 }}
-        contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 30 }}
-        ListEmptyComponent={
-          <EmptyState icon="search" title="Không tìm thấy hàng" hint="Thử từ khoá khác hoặc thêm món ngoài danh mục" />
-        }
-        ListFooterComponent={
-          <Button
-            title="Thêm món ngoài danh mục"
-            icon="plus"
-            variant="outline"
-            onPress={() => setCustomOpen(true)}
-            style={{ marginTop: 4 }}
-          />
-        }
-        renderItem={({ item: p }) => {
-          const inCart = app.cart[p.id] ?? 0;
-          const out = p.tracked && p.stock <= inCart;
-          return (
-            <Pressable
-              onPress={() => (out ? toast(`${p.name} đã hết hàng`, 'err') : app.addToCart(p.id))}
-              style={({ pressed }) => [styles.card, inCart > 0 && styles.cardOn, pressed && { transform: [{ scale: 0.97 }] }]}
-            >
-              <View style={styles.tileWrap}>
-                <Tile name={p.name} text={p.name[0]} size={56} />
-                {inCart ? (
-                  <View style={styles.qty}>
-                    <T w="extrabold" size={12} color={colors.white}>
-                      {inCart}
-                    </T>
-                  </View>
-                ) : null}
-              </View>
-              <T w="semibold" size={13.5} numberOfLines={1} style={{ marginTop: 10 }}>
-                {p.name}
-              </T>
-              <Row style={{ marginTop: 4, alignItems: 'flex-end' }}>
-                <T w="extrabold" size={14} color={colors.primary} style={{ flex: 1 }}>
-                  {vnd(p.price)}
-                </T>
-                <View style={[styles.plus, out && { backgroundColor: colors.disabled }]}>
-                  <Feather name="plus" size={16} color={colors.accentInk} />
+      {loading ? (
+        <View style={{ paddingTop: 60, alignItems: 'center' }}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      ) : error ? (
+        <View style={{ paddingHorizontal: 16 }}>
+          <EmptyState icon="alert-triangle" title="Không tải được danh sách hàng" hint={error} />
+          <Button title="Thử lại" variant="outline" onPress={load} />
+        </View>
+      ) : (
+        <FlatList
+          data={list}
+          numColumns={2}
+          keyExtractor={(p) => String(p.id)}
+          columnWrapperStyle={{ gap: 12 }}
+          contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 30 }}
+          ListEmptyComponent={
+            <EmptyState icon="search" title="Không tìm thấy hàng" hint="Thử từ khoá khác hoặc thêm món ngoài danh mục" />
+          }
+          ListFooterComponent={
+            <Button
+              title="Thêm món ngoài danh mục"
+              icon="plus"
+              variant="outline"
+              onPress={() => setCustomOpen(true)}
+              style={{ marginTop: 4 }}
+            />
+          }
+          renderItem={({ item: p }) => {
+            const inCart = cart[p.id] ?? 0;
+            const stock = p.stockQuantity ?? 0;
+            const out = p.tracked && stock <= inCart;
+            return (
+              <Pressable
+                onPress={() => (out ? toast(`${p.name} đã hết hàng`, 'err') : addToCart(p.id))}
+                style={({ pressed }) => [styles.card, inCart > 0 && styles.cardOn, pressed && { transform: [{ scale: 0.97 }] }]}
+              >
+                <View style={styles.tileWrap}>
+                  <Tile name={p.name} text={p.name[0]} size={56} />
+                  {inCart ? (
+                    <View style={styles.qty}>
+                      <T w="extrabold" size={12} color={colors.white}>
+                        {inCart}
+                      </T>
+                    </View>
+                  ) : null}
                 </View>
-              </Row>
-              <T size={12} color={p.tracked && p.stock <= 6 ? colors.red : colors.faint} numberOfLines={1} style={{ marginTop: 3 }}>
-                {p.tracked ? (p.stock ? `Còn ${p.stock}` : 'Hết hàng') : 'Bán theo yêu cầu'}
-              </T>
-            </Pressable>
-          );
-        }}
-      />
+                <T w="semibold" size={13.5} numberOfLines={1} style={{ marginTop: 10 }}>
+                  {p.name}
+                </T>
+                <Row style={{ marginTop: 4, alignItems: 'flex-end' }}>
+                  <T w="extrabold" size={14} color={colors.primary} style={{ flex: 1 }}>
+                    {vnd(p.sellingPriceVnd)}
+                  </T>
+                  <View style={[styles.plus, out && { backgroundColor: colors.disabled }]}>
+                    <Feather name="plus" size={16} color={colors.accentInk} />
+                  </View>
+                </Row>
+                <T size={12} color={p.tracked && stock <= 6 ? colors.red : colors.faint} numberOfLines={1} style={{ marginTop: 3 }}>
+                  {p.tracked ? (stock ? `Còn ${stock}` : 'Hết hàng') : 'Bán theo yêu cầu'}
+                </T>
+              </Pressable>
+            );
+          }}
+        />
+      )}
 
       <View style={[styles.bar, { paddingBottom: inTab ? 12 : Math.max(insets.bottom, 12) }]}>
         <Pressable
@@ -142,7 +193,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
       <Sheet visible={cartOpen} onClose={() => setCartOpen(false)} title="Đơn đang chọn">
         {cartItems.map((it) => (
           <Row
-            key={it.productId ?? it.name}
+            key={`${it.productId ?? it.name}`}
             style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}
           >
             <View style={{ flex: 1 }}>
@@ -159,7 +210,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
             <Stepper
               value={it.qty}
               onChange={(v) => {
-                if (it.productId) app.addToCart(it.productId, v - it.qty);
+                if (typeof it.productId === 'number') addToCart(it.productId, v - it.qty);
                 else setCustom((c) => (v <= 0 ? c.filter((x) => x !== it) : c.map((x) => (x === it ? { ...x, qty: v } : x))));
                 if (count - it.qty + v <= 0) setCartOpen(false);
               }}
@@ -172,7 +223,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
             variant="danger"
             small
             onPress={() => {
-              app.clearCart();
+              setCart({});
               setCustom([]);
               setCartOpen(false);
             }}
