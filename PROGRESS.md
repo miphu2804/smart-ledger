@@ -1,3 +1,13 @@
+### [2026-09-26 09:41 UTC+07:00] — [Mobile] Voice conversation layout and microphone waveform
+
+**Done:** Reworked `/voice` into a conversation layout without assistant avatars, kept a rounded text composer beside the close control, and made the waveform respond to microphone level when permission is granted. Rebased the feature branch onto the latest `staging`.
+
+**Changed files:** `frontend/mobile/app/voice.tsx`, `frontend/mobile/src/hooks/useMicLevel.ts`, `frontend/mobile/app.json`, `frontend/mobile/package.json`, `frontend/mobile/package-lock.json`, `frontend/mobile/README.md`, `docs/design/mobile-ui-style-migration.md`, `docs/product/project-overview.md`, `PROGRESS.md`.
+
+**Flow explained:** Opening Voice requests microphone access for the local waveform. Closing Voice or leaving the foreground stops the stream. Text entry and sample orders remain available without microphone access; speech-to-text and audio ordering are not implemented.
+
+**Check:** `npm ci`, web export, typecheck after export, and `git diff --check` passed. The Voice close control was checked in the web UI before rebasing. Microphone access was not granted for testing, so waveform response to live speech and iOS/Android behavior remain unverified.
+
 ### [2026-09-25 23:59 UTC+07:00] — [Mobile] Week period, report loading skeleton, AssistiveTouch-style ZenRing
 
 **Done:** Report tabs are now `Hôm nay / Tuần này / Tháng này` (calendar week, Monday to now) and sit above the revenue card with a sliding indicator. Analytics shows a 7-column day chart for the week; Best sellers accepts the new period. The revenue card, suggestion and best-seller sections show same-size skeletons while a report loads, then reveal with a count-up (mock latency 700 ms in `useReport`; an already-loaded period switches instantly). ZenRing docks to the left/right edge after a drag, keeps one saved `{side, y}` across tabs (nudged up on Sales to clear the cart), dims when idle, and its menu fans out with a scrim and a hold-to-talk progress ring. Priority icons are amber for debt and red for low stock; the bell has no container; user-facing emoji were replaced with Feather icons. Docs updated: design spec, PRD `FR-026`/`AC-019`, API contract (`this_week`), mobile README.
