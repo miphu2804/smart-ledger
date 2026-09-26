@@ -69,7 +69,7 @@ Chỉ cần build lại khi thêm hoặc đổi thư viện/config native; sửa
 
 Nút “Thử câu gợi ý” lần lượt điền các câu trong `voiceSamples` (`src/data/mock.ts`). Micro chỉ cấp mức âm lượng cho waveform khi màn Voice mở; app không lưu audio hoặc dùng audio để tạo đơn. Nếu không cấp quyền micro, nhập text và chọn hàng vẫn dùng được.
 
-Trong bản nháp Voice, “Thêm món” mở danh mục; biểu tượng thùng rác cạnh dòng xóa món đó. Có thể gõ `xóa coca` hoặc `bỏ coca khỏi đơn`; lệnh này xóa cả dòng, không thêm món mới. Xóa dòng cuối sẽ ẩn thao tác thanh toán cho đến khi thêm món khác.
+Trong bản nháp Voice, “Thêm món” mở danh mục. Nhấn “Sửa” để tăng/giảm số lượng hoặc xóa cả dòng bằng nút “Xóa”; ở số lượng 1, nút giảm bị vô hiệu hóa để tránh xóa nhầm. “Thêm món” ẩn trong lúc sửa và hiện lại khi nhấn “Xong”. Có thể gõ `xóa coca` hoặc `bỏ coca khỏi đơn`; lệnh này xóa cả dòng, không thêm món mới. Xóa dòng cuối sẽ ẩn thao tác thanh toán cho đến khi thêm món khác.
 
 ## Cấu trúc
 

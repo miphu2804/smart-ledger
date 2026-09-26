@@ -5,7 +5,7 @@ import { Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleS
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddItemSheet } from '../src/components/AddItemSheet';
 import { useToast } from '../src/components/brand';
-import { Button, Dialog, Field, Row, Stepper, T } from '../src/components/ui';
+import { Button, Dialog, Field, Row, T } from '../src/components/ui';
 import { voiceSamples } from '../src/data/mock';
 import type { LineItem } from '../src/data/types';
 import { useMicLevel } from '../src/hooks/useMicLevel';
@@ -62,6 +62,7 @@ export default function Voice() {
 
   const removeItem = (item: LineItem) => {
     setItems((cur) => cur.filter((x) => (item.productId ? x.productId !== item.productId : x.name !== item.name)));
+    if (items.length === 1) setEdit(false);
     push('ai', `Đã xóa “${item.name}” khỏi đơn.`);
   };
 
@@ -223,35 +224,49 @@ export default function Voice() {
               </Pressable>
             </View>
             {items.map((it, idx) => (
-              <Row key={`${it.productId ?? it.name}`} style={styles.line}>
-                <View style={styles.productTile}>
-                  <T w="bold" size={16} color={colors.primary}>{it.name.charAt(0).toUpperCase()}</T>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <T w="semibold" size={14}>
-                    {it.name}
-                  </T>
-                  <T size={12} color={colors.muted}>{vnd(it.price)}</T>
-                </View>
+              <View key={`${it.productId ?? it.name}`} style={styles.line}>
+                <Row gap={10}>
+                  <View style={styles.productTile}>
+                    <T w="bold" size={16} color={colors.primary}>{it.name.charAt(0).toUpperCase()}</T>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <T w="semibold" size={14}>{it.name}</T>
+                    <T size={12} color={colors.muted}>{vnd(it.price)}</T>
+                  </View>
+                  {!edit ? <T w="bold" size={15}>×{it.qty}</T> : null}
+                </Row>
                 {edit ? (
-                  <Stepper
-                    value={it.qty}
-                    onChange={(q) => {
-                      if (q <= 0) removeItem(it);
-                      else setItems((cur) => cur.map((x, i) => (i === idx ? { ...x, qty: q } : x)));
-                    }}
-                  />
-                ) : (
-                  <Row gap={4}>
-                    <T w="bold" size={15}>{it.qty}</T>
+                  <Row style={styles.lineEditor}>
+                    <Row gap={6}>
+                      <Pressable
+                        onPress={() => setItems((cur) => cur.map((x, i) => (i === idx ? { ...x, qty: x.qty - 1 } : x)))}
+                        disabled={it.qty <= 1}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Giảm số lượng ${it.name}`}
+                        accessibilityState={{ disabled: it.qty <= 1 }}
+                        style={[styles.qtyAction, it.qty <= 1 && styles.qtyActionDisabled]}
+                      >
+                        <Feather name="minus" size={18} color={it.qty <= 1 ? colors.disabled : colors.primary} />
+                      </Pressable>
+                      <T w="bold" size={15} style={styles.qtyValue}>{it.qty}</T>
+                      <Pressable
+                        onPress={() => setItems((cur) => cur.map((x, i) => (i === idx ? { ...x, qty: x.qty + 1 } : x)))}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Tăng số lượng ${it.name}`}
+                        style={styles.qtyAction}
+                      >
+                        <Feather name="plus" size={18} color={colors.primary} />
+                      </Pressable>
+                    </Row>
                     <Pressable onPress={() => removeItem(it)} accessibilityRole="button" accessibilityLabel={`Xóa ${it.name} khỏi đơn`} style={styles.removeAction}>
-                      <Feather name="trash-2" size={17} color={colors.red} />
+                      <Feather name="trash-2" size={16} color={colors.red} />
+                      <T w="semibold" size={13} color={colors.red}>Xóa</T>
                     </Pressable>
                   </Row>
-                )}
-              </Row>
+                ) : null}
+              </View>
             ))}
-            <Button title="Thêm món" icon="plus" variant="soft" small onPress={() => setAddOpen(true)} style={{ marginTop: 10 }} />
+            {!edit ? <Button title="Thêm món" icon="plus" variant="soft" small onPress={() => setAddOpen(true)} style={{ marginTop: 10 }} /> : null}
             <Row style={styles.totalRow}>
               <T w="semibold" size={13} color={colors.muted} style={{ flex: 1 }}>Tạm tính · {count} món</T>
               <T w="bold" size={16} color={colors.primary}>{vnd(total)}</T>
@@ -289,7 +304,7 @@ export default function Voice() {
                 <T w="bold" size={13} color={colors.primary}>{recording ? 'Đang chạy…' : 'Thử câu gợi ý'}</T>
               </Pressable>
               <Pressable onPress={() => router.push('/pos')} accessibilityRole="button" style={styles.posButton}>
-                <T w="bold" size={13} color={colors.muted}>Chọn hàng</T>
+                <T w="bold" size={13} color={colors.muted}>Mở POS</T>
               </Pressable>
             </View>
           </View>
@@ -400,7 +415,7 @@ const styles = StyleSheet.create({
   voiceBadge: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: colors.primarySoft, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7 },
   chatContent: { flexGrow: 1, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 22 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 24 },
-  emptyCompact: { flex: 0, paddingVertical: 16 },
+  emptyCompact: { flexGrow: 0, flexShrink: 0, minHeight: 150, paddingVertical: 16 },
   emptyHint: { marginTop: 6, textAlign: 'center', lineHeight: 19 },
   bubble: { maxWidth: '88%', borderRadius: 18, paddingHorizontal: 15, paddingVertical: 12, marginBottom: 12 },
   user: { alignSelf: 'flex-end', backgroundColor: colors.primarySoft, borderBottomRightRadius: 6 },
@@ -408,9 +423,13 @@ const styles = StyleSheet.create({
   order: { alignSelf: 'flex-start', width: '100%', backgroundColor: colors.white, borderRadius: 20, padding: 16, marginBottom: 12, ...shadow(1) },
   orderHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   editAction: { minWidth: 44, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
-  line: { gap: 10, paddingVertical: 5, marginBottom: 6, minHeight: 54, backgroundColor: colors.bg, borderRadius: 14, paddingHorizontal: 10 },
+  line: { paddingVertical: 6, marginBottom: 6, minHeight: 54, backgroundColor: colors.bg, borderRadius: 14, paddingHorizontal: 10 },
   productTile: { width: 42, height: 42, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primarySoft },
-  removeAction: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: colors.redSoft },
+  lineEditor: { justifyContent: 'space-between', marginTop: 6 },
+  qtyAction: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: colors.primarySoft },
+  qtyActionDisabled: { backgroundColor: colors.border },
+  qtyValue: { minWidth: 24, textAlign: 'center' },
+  removeAction: { minWidth: 74, height: 44, flexDirection: 'row', gap: 5, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: colors.redSoft },
   totalRow: { paddingTop: 8, marginTop: 4, borderTopWidth: 1, borderTopColor: colors.border },
   confirmation: { alignSelf: 'flex-start', backgroundColor: colors.white, borderRadius: 18, padding: 15, maxWidth: '100%', ...shadow(0) },
   cancelDraft: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 4 },

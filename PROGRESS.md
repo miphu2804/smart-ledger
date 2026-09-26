@@ -1,3 +1,11 @@
+### [2026-09-26 10:18 UTC+07:00] — [Mobile] Group Voice quantity and delete controls under Sửa
+
+**Done:** Voice draft lines show their quantity in view mode. “Sửa” exposes separate decrease, increase, and whole-line delete controls; decrease stops at one. “Thêm món” hides during editing, and the POS route is labeled “Mở POS” to distinguish it from adding to the current draft. The empty state keeps enough height for its add button when a removal message follows it.
+
+**Changed files:** `frontend/mobile/app/voice.tsx`, `frontend/mobile/README.md`, `docs/product/product-requirements.md`, `docs/design/mobile-ui-style-migration.md`, `PROGRESS.md`.
+
+**Check:** Web UI: adding Nước ngọt showed ×1 and 12.000đ; editing showed increase/decrease/delete and hid “Thêm món”; increasing to two showed 24.000đ, decreasing restored 12.000đ, and deleting the last line restored the empty add action and removed checkout. The removal message initially overlapped that action; after the spacing fix, the add action reopened the catalog and added Nước ngọt again. Typecheck, web export, and `git diff --check` passed. Live microphone behavior remains unverified without a rebuilt development client and microphone permission.
+
 ### [2026-09-26 10:09 UTC+07:00] — [Mobile] Add and remove items in the Voice draft
 
 **Done:** Put “Thêm món” on the Voice draft and empty state, added a visible delete action to each draft line, and interpret typed `xóa/bỏ/loại [tên món]` as removing a whole line. The existing quantity editor remains available.

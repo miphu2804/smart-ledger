@@ -162,7 +162,7 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 | `AC-021` | OWNER không xem, đổi tên, tiếp tục hoặc nhận lịch sử của chat thuộc user/shop khác; chat mới không nhận lịch sử từ chat cũ. | `FR-027`, `NFR-007` |
 | `AC-022` | Sau khi OWNER xóa chat, chat không còn trong danh sách, không mở/tiếp tục được và tin nhắn không được đưa vào ngữ cảnh assistant. | `FR-027` |
 | `AC-023` | OWNER đổi tên chat bằng tiêu đề 1–255 ký tự; tên mới hiển thị trong danh sách sau khi tải lại. Tiêu đề rỗng hoặc vượt giới hạn bị từ chối. | `FR-027` |
-| `AC-024` | Trên màn Voice, người bán thêm một món từ danh mục vào bản nháp, xóa một món bằng điều khiển hoặc câu “xóa/bỏ [tên món]”; số món và tạm tính cập nhật. Xóa món cuối làm mất nút thanh toán và không tạo hóa đơn. | `FR-003`, `FR-004` |
+| `AC-024` | Trên màn Voice, người bán thêm một món từ danh mục vào bản nháp. Chế độ “Sửa” cho tăng/giảm số lượng (tối thiểu 1) và xóa cả dòng; ngoài chế độ này chỉ hiển thị số lượng. Người bán cũng có thể xóa bằng câu “xóa/bỏ [tên món]”. Số món và tạm tính cập nhật; xóa món cuối làm mất nút thanh toán và không tạo hóa đơn. | `FR-003`, `FR-004` |
 | `AC-INV-001` | Không thể kích hoạt hóa đơn điện tử khi hồ sơ áp dụng hoặc quy tắc pháp lý chưa được phê duyệt/hoàn tất. | `FR-INV-001` |
 | `AC-INV-002` | Mỗi giao dịch thuộc diện lập hóa đơn có một trạng thái đối soát và không biến mất khi nhà cung cấp lỗi. | `FR-INV-003`, `FR-INV-005`, `NFR-004` |
 
