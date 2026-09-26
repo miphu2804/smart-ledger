@@ -3,12 +3,23 @@
  * Khi có backend AI thật, thay parseOrder()/parseExpense() bằng lời gọi API
  * và trả về đúng kiểu ParsedOrder / ParsedExpense.
  */
-import type { LineItem, Product } from '../data/types';
+import type { LineItem } from '../data/types';
 
 export interface ParsedOrder {
   items: LineItem[];
   /** Món không có trong danh mục — UI sẽ hỏi có thêm vào danh mục không */
   unknown: LineItem[];
+}
+
+/**
+ * Hình dạng tối thiểu mà bộ nhận diện cần — đủ cho cả `Product` mẫu (mock) và `ProductView` thật (Core),
+ * gọi nơi dùng tự map sang shape này (xem `app/voice.tsx`).
+ */
+export interface ParseableProduct {
+  id: string | number;
+  name: string;
+  price: number;
+  aliases?: string[];
 }
 
 export interface ParsedExpense {
@@ -108,8 +119,8 @@ function parseQty(seg: string): { qty: number; rest: string } {
   return { qty: 1, rest: seg };
 }
 
-function matchProduct(seg: string, products: Product[]): Product | undefined {
-  let best: { p: Product; len: number } | undefined;
+function matchProduct(seg: string, products: ParseableProduct[]): ParseableProduct | undefined {
+  let best: { p: ParseableProduct; len: number } | undefined;
   for (const p of products) {
     const keys = [p.name.replace(/\(.*?\)/g, ''), ...(p.aliases ?? [])].map(normalize).filter(Boolean);
     for (const k of keys) {
@@ -131,7 +142,7 @@ function cleanName(seg: string, original: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export function parseOrder(text: string, products: Product[]): ParsedOrder {
+export function parseOrder(text: string, products: ParseableProduct[]): ParsedOrder {
   const segments = normalize(text)
     .split(/,|\s(?:voi|them|va|kem|cung)\s|\snha\b|\snhe\b/)
     .map((s) => s.trim())
