@@ -115,7 +115,9 @@ Luồng: Firebase xác thực SĐT → FE gửi **Firebase ID token** (`Authoriz
 
 1. Đăng nhập lần đầu: `POST /api/v1/auth/session` với `{ displayName }`. Core **bắt buộc** `displayName` cho tài khoản mới (thiếu → 400) nên app có màn “Bạn tên gì?” (`app/(auth)/profile.tsx`). Các lần sau không cần gửi.
 2. Mở lại app: Firebase tự khôi phục phiên → `GET /api/v1/me`. `404 auth_profile_not_found` (Firebase còn đăng nhập nhưng Core chưa có tài khoản) → app vào lại màn nhập tên. `401` → đăng xuất. `403 account_disabled` → đăng xuất và báo tài khoản bị khoá.
-3. `needsOnboarding = true` (chưa có tiệm) → màn tạo tiệm. Core chưa có `POST /shops` nên tạm dùng `EXPO_PUBLIC_MOCK_SHOPS=true`.
+3. `needsOnboarding = true` (chưa có tiệm) → màn tạo tiệm, gọi `POST /shops` thật (Core lưu một `industry` dạng chuỗi — các ngành đã chọn được nối bằng ", "). `EXPO_PUBLIC_MOCK_SHOPS=true` chỉ còn dùng khi Core giả lập.
+
+Nhánh backend đã gộp thêm `feat/core-business`: Core giờ có thêm Category, Product, SaleDraft, Sale, Payment (`/api/v1/categories`, `/products`, `/sale-drafts`, `/sales`, `.../payments`, đều cần header `X-Shop-Id`). **Frontend chưa nối các API này** — hoá đơn/kho hàng trong app vẫn là dữ liệu mẫu. `SaleDraft` hiện chỉ xác nhận khi trả đủ tiền (`full_payment_required` nếu chưa đủ) — chưa thấy hỗ trợ ghi nợ như màn Thanh toán của mobile đang có; cần chốt với backend trước khi nối.
 
 `.env` để chạy với Core thật (Core chạy bằng `docker compose up` thì cổng mặc định là `8000`):
 

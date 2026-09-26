@@ -1,13 +1,15 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddItemSheet } from '../src/components/AddItemSheet';
 import { useToast } from '../src/components/brand';
 import { Button, Dialog, Field, Header, IconBtn, Row, Stepper, T } from '../src/components/ui';
 import { voiceSamples } from '../src/data/mock';
-import type { LineItem } from '../src/data/types';
+import type { LineItem, ProductView } from '../src/data/types';
+import { productApi } from '../src/lib/catalogApi';
+import { errorMessage } from '../src/lib/errors';
 import { vnd } from '../src/lib/format';
 import { parseOrder } from '../src/lib/parseOrder';
 import { itemsTotal } from '../src/lib/stats';
@@ -32,9 +34,30 @@ export default function Voice() {
   const [edit, setEdit] = useState(false);
   const [pending, setPending] = useState<LineItem[]>([]);
   const [newPrice, setNewPrice] = useState('');
+  const [newUnit, setNewUnit] = useState('cái');
   const [priceErr, setPriceErr] = useState('');
+  const [catalogBusy, setCatalogBusy] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [transcripts, setTranscripts] = useState<string[]>([]);
+
+  const [products, setProducts] = useState<ProductView[]>([]);
+
+  const loadProducts = useCallback(async () => {
+    try {
+      setProducts(await productApi.list());
+    } catch (e) {
+      toast(`Không tải được danh mục hàng: ${errorMessage(e)}`, 'err');
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
+  // Danh sách rút gọn cho bộ nhận diện giọng nói (tên/giá) — xem `parseOrder`
+  const parseableProducts = useMemo(
+    () => products.map((p) => ({ id: p.id, name: p.name, price: p.sellingPriceVnd })),
+    [products],
+  );
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
   useEffect(() => {
@@ -58,7 +81,7 @@ export default function Voice() {
   const handleUtterance = (utter: string) => {
     push('user', utter);
     setTranscripts((t) => [...t, utter]);
-    const { items: found, unknown } = parseOrder(utter, app.products);
+    const { items: found, unknown } = parseOrder(utter, parseableProducts);
     setTimeout(() => {
       if (found.length) {
         mergeItems(found);
@@ -97,36 +120,41 @@ export default function Voice() {
     setText('');
   };
 
-  const resolvePending = (action: 'catalog' | 'once' | 'skip') => {
+  const resolvePending = async (action: 'catalog' | 'skip') => {
     const [first, ...rest] = pending;
-    if (!first) return;
+    if (!first || catalogBusy) return;
     const price = parseInt(newPrice.replace(/\D/g, ''), 10) || 0;
     // Thiếu giá bán thì giữ nguyên hộp thoại, không để mất món; chỉ "Bỏ qua" mới được bỏ món.
-    if (action !== 'skip' && !price) {
+    if (action === 'catalog' && !price) {
       setPriceErr(`Nhập giá bán cho “${first.name}” để thêm vào đơn`);
       return;
     }
     if (action === 'catalog') {
-      const id = app.addProduct({
-        name: first.name,
-        price,
-        cost: Math.round(price * 0.6),
-        stock: 0,
-        tracked: false,
-        category: 'other',
-        aliases: [first.name],
-      });
-      mergeItems([{ ...first, productId: id, price }]);
-      push('ai', `Đã thêm “${first.name}” (${vnd(price)}) vào danh mục và vào đơn.`);
-    } else if (action === 'once') {
-      mergeItems([{ ...first, price }]);
-      push('ai', `Đã ghi “${first.name}” vào đơn này (không lưu vào danh mục).`);
+      setCatalogBusy(true);
+      try {
+        // Core không hỗ trợ món ngoài danh mục — phải tạo Product thật trước khi thêm vào đơn.
+        const created = await productApi.create({
+          name: first.name,
+          unit: newUnit.trim() || 'cái',
+          sellingPriceVnd: price,
+          tracked: false,
+          stockQuantity: null,
+        });
+        setProducts((cur) => [...cur, created]);
+        mergeItems([{ productId: created.id, name: created.name, price: created.sellingPriceVnd, qty: first.qty }]);
+        push('ai', `Đã thêm “${first.name}” (${vnd(price)}) vào danh mục và vào đơn.`);
+      } catch (e) {
+        push('ai', `Không thêm được “${first.name}” vào danh mục: ${errorMessage(e)}`);
+      } finally {
+        setCatalogBusy(false);
+      }
     } else {
       push('ai', `Đã bỏ qua “${first.name}”.`);
     }
     setPriceErr('');
     setPending(rest);
     setNewPrice(rest[0]?.price ? String(rest[0].price) : '');
+    setNewUnit('cái');
   };
 
   const total = itemsTotal(items);
@@ -323,10 +351,10 @@ export default function Voice() {
         visible={pending.length > 0}
         icon="star"
         title={`Thêm “${pending[0]?.name ?? ''}” vào danh mục?`}
-        message="Sản phẩm này chưa có trong danh mục. Thêm vào để lần sau chọn nhanh hơn."
-        confirm="Có, thêm"
-        cancel="Chỉ đơn này"
-        onCancel={() => resolvePending('once')}
+        message="Sản phẩm này chưa có trong danh mục. Core cần món có trong danh mục thật mới bán được."
+        confirm="Thêm vào danh mục"
+        cancel="Bỏ qua"
+        onCancel={() => resolvePending('skip')}
         onConfirm={() => resolvePending('catalog')}
       >
         <View style={{ marginTop: 12 }}>
@@ -341,17 +369,14 @@ export default function Voice() {
               setPriceErr('');
             }}
           />
+          <Field label="Đơn vị" placeholder="VD: cái, ly, phần" value={newUnit} onChangeText={setNewUnit} />
         </View>
-        <Pressable onPress={() => resolvePending('skip')}>
-          <T size={12} color={colors.faint} style={{ textAlign: 'center' }}>
-            Bỏ qua món này
-          </T>
-        </Pressable>
       </Dialog>
 
       <AddItemSheet
         visible={addOpen}
         onClose={() => setAddOpen(false)}
+        products={products}
         onPick={(li) => {
           mergeItems([li]);
           toast(`Đã thêm ${li.name}`);

@@ -8,6 +8,12 @@ const CORE_MESSAGES: Record<string, string> = {
   unauthorized: 'Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.',
   validation_failed: 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại.',
   invalid_request: 'Yêu cầu không hợp lệ. Vui lòng thử lại.',
+  product_stock_insufficient: 'Không đủ hàng trong kho',
+  full_payment_required: 'Cần thanh toán đủ số tiền',
+  draft_item_invalid: 'Có món không còn trong danh mục hoặc thuộc tiệm khác',
+  product_barcode_conflict: 'Mã vạch này đã dùng cho sản phẩm khác',
+  product_category_invalid: 'Danh mục không hợp lệ hoặc đã ẩn',
+  shop_inactive: 'Tiệm đang tạm khoá',
 };
 
 /** Thông báo lỗi tiếng Việt để hiện cho người dùng (từ AuthError / ApiError / lỗi bất ngờ). */

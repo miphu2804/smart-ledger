@@ -83,7 +83,7 @@ export function daily(invoices: Invoice[], days = 7, now = new Date()) {
 }
 
 export function bestSellers(invoices: Invoice[], p: Period) {
-  const map = new Map<string, { name: string; qty: number; revenue: number; productId?: string }>();
+  const map = new Map<string | number, { name: string; qty: number; revenue: number; productId?: string | number }>();
   activeInvoices(invoices, p).forEach((inv) =>
     inv.items.forEach((li) => {
       const key = li.productId ?? li.name;
