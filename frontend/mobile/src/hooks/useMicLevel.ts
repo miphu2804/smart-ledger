@@ -1,4 +1,3 @@
-import { requestRecordingPermissionsAsync, useAudioStream } from 'expo-audio';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 
@@ -6,7 +5,22 @@ type MicStatus = 'idle' | 'starting' | 'listening' | 'denied' | 'unavailable';
 
 const EMPTY_LEVELS = [0, 0, 0, 0, 0, 0, 0, 0];
 
-export function useMicLevel(enabled: boolean) {
+const expoAudio = (() => {
+  try {
+    return require('expo-audio') as typeof import('expo-audio');
+  } catch (error) {
+    if (Platform.OS === 'web' || !(error instanceof Error) || !error.message.includes("Cannot find native module 'ExpoAudio'")) throw error;
+    return null;
+  }
+})();
+
+function useUnavailableMicLevel(_enabled: boolean) {
+  return { status: 'unavailable' as MicStatus, levels: EMPTY_LEVELS };
+}
+
+export const useMicLevel = expoAudio ? useAvailableMicLevel : useUnavailableMicLevel;
+
+function useAvailableMicLevel(enabled: boolean) {
   const [status, setStatus] = useState<MicStatus>('idle');
   const [levels, setLevels] = useState(EMPTY_LEVELS);
   const [foreground, setForeground] = useState(AppState.currentState === 'active');
@@ -26,7 +40,7 @@ export function useMicLevel(enabled: boolean) {
     setLevels((previous) => [...previous.slice(1), level]);
   }, []);
 
-  const { stream } = useAudioStream({
+  const { stream } = expoAudio!.useAudioStream({
     encoding: 'float32',
     onBuffer: (buffer) => readLevel(new Float32Array(buffer.data)),
   });
@@ -111,7 +125,7 @@ export function useMicLevel(enabled: boolean) {
     let nativeStarted = false;
     const start = async () => {
       try {
-        const permission = await requestRecordingPermissionsAsync();
+        const permission = await expoAudio!.requestRecordingPermissionsAsync();
         if (cancelled) return;
         if (!permission.granted) {
           setStatus('denied');

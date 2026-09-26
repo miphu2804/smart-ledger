@@ -13,6 +13,7 @@
     },
     "ios": {
       "supportsTablet": true,
+      "googleServicesFile": "./GoogleService-Info.plist",
       "bundleIdentifier": "vn.teamhexa.songheloi"
     },
     "android": {

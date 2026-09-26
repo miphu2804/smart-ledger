@@ -1,3 +1,13 @@
+### [2026-09-26 09:58 UTC+07:00] — [Mobile] Keep Voice usable on an older development client
+
+**Done:** Handle the specific missing `ExpoAudio` native module error so an older development client shows “Micro không khả dụng” instead of failing to load `/voice`. Added the iOS Firebase config file path and documented the native rebuild step for waveform support.
+
+**Changed files:** `frontend/mobile/src/hooks/useMicLevel.ts`, `frontend/mobile/app.json`, `frontend/mobile/README.md`, `PROGRESS.md`.
+
+**Flow explained:** An old development client can still create orders by text; the microphone waveform requires a newly built client containing `ExpoAudio`.
+
+**Check:** On the existing iPhone 17 Pro Max simulator client, `/voice` opened without the route error and `1 coca` produced a one-item draft. Typecheck, web export, `git diff --check`, and iOS autolinking discovery of the `ExpoAudio` pod passed. Native prebuild stopped because `frontend/mobile/GoogleService-Info.plist` is absent; live microphone behavior remains unverified.
+
 ### [2026-09-26 09:41 UTC+07:00] — [Mobile] Voice conversation layout and microphone waveform
 
 **Done:** Reworked `/voice` into a conversation layout without assistant avatars, kept a rounded text composer beside the close control, and made the waveform respond to microphone level when permission is granted. Rebased the feature branch onto the latest `staging`.

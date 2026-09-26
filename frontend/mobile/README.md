@@ -8,11 +8,24 @@ Stack: Expo SDK 57 · React Native 0.86 · expo-router · TypeScript · react-na
 
 ```bash
 npm install
-npx expo start          # quét QR bằng Expo Go (bản hỗ trợ SDK 57)
+npx expo start --dev-client  # mở bằng development client đã build cho native
 npm run web             # hoặc bấm w: chạy trên trình duyệt (khung giới hạn 440px)
 npm run typecheck
 npm run export:web      # build web tĩnh ra dist/
 ```
+
+### Development client iOS cho Voice
+
+`expo-audio` có mã native. Sau khi kéo nhánh có Voice waveform, cần **build và cài lại development client**; reload JavaScript trên bản cũ không thể thêm module native. Bản cũ chỉ hiển thị “Micro không khả dụng” và vẫn cho nhập chữ. Trước bản sửa này, nó báo `Cannot find native module 'ExpoAudio'`; cảnh báo route `/voice` thiếu default export là hệ quả của lỗi import.
+
+Trước khi build, đặt `GoogleService-Info.plist` của Firebase vào `frontend/mobile/` vì plugin Firebase đang bật và `app.json` trỏ tới file đó. Sau đó chạy trong `frontend/mobile/`:
+
+```bash
+npx expo run:ios --device "iPhone 17 Pro Max"
+npx expo start --dev-client
+```
+
+Chỉ cần build lại khi thêm hoặc đổi thư viện/config native; sửa TypeScript thông thường chỉ cần reload. Nếu chưa có file Firebase, prebuild iOS dừng ở lỗi `Path to GoogleService-Info.plist is not defined`/thiếu file trước khi biên dịch `ExpoAudio`.
 
 ## Xem thử với dữ liệu mẫu
 
