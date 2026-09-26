@@ -10,7 +10,7 @@ import { voiceSamples } from '../src/data/mock';
 import type { LineItem } from '../src/data/types';
 import { useMicLevel } from '../src/hooks/useMicLevel';
 import { vnd } from '../src/lib/format';
-import { parseOrder } from '../src/lib/parseOrder';
+import { normalize, parseOrder } from '../src/lib/parseOrder';
 import { itemsTotal } from '../src/lib/stats';
 import { useApp } from '../src/store/AppStore';
 import { colors, font, shadow } from '../src/theme';
@@ -60,11 +60,27 @@ export default function Voice() {
       return next;
     });
 
+  const removeItem = (item: LineItem) => {
+    setItems((cur) => cur.filter((x) => (item.productId ? x.productId !== item.productId : x.name !== item.name)));
+    push('ai', `Đã xóa “${item.name}” khỏi đơn.`);
+  };
+
   const handleUtterance = (utter: string, source: 'voice' | 'manual') => {
     push('user', utter);
     if (source === 'voice') {
       setTranscripts((t) => [...t, utter]);
       setHasVoiceInput(true);
+    }
+    const removeMatch = normalize(utter).match(/^(?:xoa|bo|loai)\s+(.*)/);
+    if (removeMatch) {
+      const query = removeMatch[1].replace(/^mon\s+/, '').replace(/\s+(?:khoi|ra)\s+don(?:\s+hang)?$/, '').trim();
+      const parsed = parseOrder(query, app.products);
+      const item = items.find((current) =>
+        parsed.items.some((found) => found.productId === current.productId) || normalize(current.name) === query,
+      );
+      if (item) removeItem(item);
+      else push('ai', 'Mình chưa thấy món đó trong đơn. Bạn có thể xóa bằng nút thùng rác cạnh món.');
+      return;
     }
     const { items: found, unknown } = parseOrder(utter, app.products);
     if (found.length) mergeItems(found);
@@ -172,11 +188,12 @@ export default function Voice() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {!msgs.length && !recording ? (
-          <View style={styles.empty}>
+        {!items.length && !recording ? (
+          <View style={[styles.empty, msgs.length > 0 && styles.emptyCompact]}>
             <Feather name="mic" size={24} color={colors.primary} />
-            <T w="bold" size={18} style={{ marginTop: 12 }}>Bắt đầu đơn hàng</T>
-            <T size={13} color={colors.muted} style={styles.emptyHint}>Chọn câu gợi ý hoặc nhập tên hàng bên dưới.</T>
+            <T w="bold" size={18} style={{ marginTop: 12 }}>{msgs.length ? 'Đơn hàng đang trống' : 'Bắt đầu đơn hàng'}</T>
+            <T size={13} color={colors.muted} style={styles.emptyHint}>Thêm món từ danh mục hoặc nhập tên hàng bên dưới.</T>
+            <Button title="Thêm món từ danh mục" icon="plus" variant="soft" small onPress={() => setAddOpen(true)} style={{ marginTop: 16 }} />
           </View>
         ) : null}
 
@@ -219,27 +236,22 @@ export default function Voice() {
                 {edit ? (
                   <Stepper
                     value={it.qty}
-                    onChange={(q) =>
-                      setItems((cur) =>
-                        q <= 0 ? cur.filter((_, i) => i !== idx) : cur.map((x, i) => (i === idx ? { ...x, qty: q } : x)),
-                      )
-                    }
+                    onChange={(q) => {
+                      if (q <= 0) removeItem(it);
+                      else setItems((cur) => cur.map((x, i) => (i === idx ? { ...x, qty: q } : x)));
+                    }}
                   />
                 ) : (
-                  <T w="bold" size={15}>{it.qty}</T>
+                  <Row gap={4}>
+                    <T w="bold" size={15}>{it.qty}</T>
+                    <Pressable onPress={() => removeItem(it)} accessibilityRole="button" accessibilityLabel={`Xóa ${it.name} khỏi đơn`} style={styles.removeAction}>
+                      <Feather name="trash-2" size={17} color={colors.red} />
+                    </Pressable>
+                  </Row>
                 )}
               </Row>
             ))}
-            {edit ? (
-              <Button
-                title="Thêm món"
-                icon="plus"
-                variant="soft"
-                small
-                onPress={() => setAddOpen(true)}
-                style={{ marginTop: 10 }}
-              />
-            ) : null}
+            <Button title="Thêm món" icon="plus" variant="soft" small onPress={() => setAddOpen(true)} style={{ marginTop: 10 }} />
             <Row style={styles.totalRow}>
               <T w="semibold" size={13} color={colors.muted} style={{ flex: 1 }}>Tạm tính · {count} món</T>
               <T w="bold" size={16} color={colors.primary}>{vnd(total)}</T>
@@ -388,6 +400,7 @@ const styles = StyleSheet.create({
   voiceBadge: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: colors.primarySoft, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7 },
   chatContent: { flexGrow: 1, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 22 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 24 },
+  emptyCompact: { flex: 0, paddingVertical: 16 },
   emptyHint: { marginTop: 6, textAlign: 'center', lineHeight: 19 },
   bubble: { maxWidth: '88%', borderRadius: 18, paddingHorizontal: 15, paddingVertical: 12, marginBottom: 12 },
   user: { alignSelf: 'flex-end', backgroundColor: colors.primarySoft, borderBottomRightRadius: 6 },
@@ -397,6 +410,7 @@ const styles = StyleSheet.create({
   editAction: { minWidth: 44, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
   line: { gap: 10, paddingVertical: 5, marginBottom: 6, minHeight: 54, backgroundColor: colors.bg, borderRadius: 14, paddingHorizontal: 10 },
   productTile: { width: 42, height: 42, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primarySoft },
+  removeAction: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: colors.redSoft },
   totalRow: { paddingTop: 8, marginTop: 4, borderTopWidth: 1, borderTopColor: colors.border },
   confirmation: { alignSelf: 'flex-start', backgroundColor: colors.white, borderRadius: 18, padding: 15, maxWidth: '100%', ...shadow(0) },
   cancelDraft: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 4 },

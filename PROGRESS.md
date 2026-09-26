@@ -1,3 +1,13 @@
+### [2026-09-26 10:09 UTC+07:00] — [Mobile] Add and remove items in the Voice draft
+
+**Done:** Put “Thêm món” on the Voice draft and empty state, added a visible delete action to each draft line, and interpret typed `xóa/bỏ/loại [tên món]` as removing a whole line. The existing quantity editor remains available.
+
+**Changed files:** `frontend/mobile/app/voice.tsx`, `frontend/mobile/README.md`, `docs/product/product-requirements.md`, `docs/design/mobile-ui-style-migration.md`, `PROGRESS.md`.
+
+**Flow explained:** Catalog picks merge into the draft; deleting a line updates item count and subtotal. Deleting the final line hides checkout but keeps catalog entry available. Removal commands are handled before the mock order parser so they cannot add an item by mistake.
+
+**Check:** Web UI: adding Nước ngọt showed one item and 12.000đ; adding Trà đá showed two items and 15.000đ; deleting Trà đá returned to one item and 12.000đ; deleting the last item removed checkout while retaining “Thêm món”; typing `bỏ coca khỏi đơn` removed Nước ngọt. Typecheck, web export, and `git diff --check` passed. Live speech-to-text remains outside this mock flow.
+
 ### [2026-09-26 09:58 UTC+07:00] — [Mobile] Keep Voice usable on an older development client
 
 **Done:** Handle the specific missing `ExpoAudio` native module error so an older development client shows “Micro không khả dụng” instead of failing to load `/voice`. Added the iOS Firebase config file path and documented the native rebuild step for waveform support.

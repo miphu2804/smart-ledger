@@ -46,7 +46,7 @@ Chỉ cần build lại khi thêm hoặc đổi thư viện/config native; sửa
 | `/(tabs)/sales` | Bán hàng: vào thẳng danh mục, chọn món và xem giỏ; Zen ring (kéo thả, dính cạnh trái/phải, giữ vị trí qua các tab) mở Chatbot, Giọng nói hoặc Gợi ý phân tích nhanh |
 | `/(tabs)/expenses` | Chi phí theo tháng, cơ cấu chi, thêm chi phí bằng giọng nói / nhập tay |
 | `/(tabs)/more` | Khác: hồ sơ, báo cáo, hàng hoá, chi phí, công nợ và đăng xuất |
-| `/voice` | Waveform theo âm lượng micro khi được cấp quyền; nhập đơn bằng văn bản hoặc câu gợi ý, hỏi thêm món lạ vào danh mục và sửa số lượng. Chưa có chuyển giọng nói thành text. |
+| `/voice` | Waveform theo âm lượng micro khi được cấp quyền; nhập đơn bằng văn bản hoặc câu gợi ý, thêm món từ danh mục, xóa món bằng nút hoặc câu nhập, và sửa số lượng. Chưa có chuyển giọng nói thành text. |
 | `/pos` | Chọn hàng nhanh dạng lưới, giỏ hàng, món ngoài danh mục |
 | `/checkout` | Thanh toán: tiền mặt (tiền thối), chuyển khoản (QR minh hoạ), ghi nợ |
 | `/invoice/[id]` | Chi tiết hoá đơn: in, sửa, huỷ |
@@ -68,6 +68,8 @@ Chỉ cần build lại khi thêm hoặc đổi thư viện/config native; sửa
 - `bán 1 hộp sữa chua nếp cẩm 12k` → món chưa có, app hỏi có thêm vào danh mục không
 
 Nút “Thử câu gợi ý” lần lượt điền các câu trong `voiceSamples` (`src/data/mock.ts`). Micro chỉ cấp mức âm lượng cho waveform khi màn Voice mở; app không lưu audio hoặc dùng audio để tạo đơn. Nếu không cấp quyền micro, nhập text và chọn hàng vẫn dùng được.
+
+Trong bản nháp Voice, “Thêm món” mở danh mục; biểu tượng thùng rác cạnh dòng xóa món đó. Có thể gõ `xóa coca` hoặc `bỏ coca khỏi đơn`; lệnh này xóa cả dòng, không thêm món mới. Xóa dòng cuối sẽ ẩn thao tác thanh toán cho đến khi thêm món khác.
 
 ## Cấu trúc
 
