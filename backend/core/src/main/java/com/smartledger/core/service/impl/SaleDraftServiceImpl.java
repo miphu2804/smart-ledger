@@ -6,6 +6,8 @@ import com.smartledger.core.dto.response.SaleDraftItemResponse;
 import com.smartledger.core.dto.response.SaleDraftResponse;
 import com.smartledger.core.dto.response.SaleResponse;
 import com.smartledger.core.entity.Product;
+import com.smartledger.core.entity.Customer;
+import com.smartledger.core.entity.Debt;
 import com.smartledger.core.entity.Sale;
 import com.smartledger.core.entity.SaleDraft;
 import com.smartledger.core.entity.SaleDraftItem;
@@ -17,6 +19,8 @@ import com.smartledger.core.enums.DraftStatus;
 import com.smartledger.core.enums.ErrorCode;
 import com.smartledger.core.exception.BusinessException;
 import com.smartledger.core.repository.PaymentRepository;
+import com.smartledger.core.repository.CustomerRepository;
+import com.smartledger.core.repository.DebtRepository;
 import com.smartledger.core.repository.ProductRepository;
 import com.smartledger.core.repository.SaleDraftItemRepository;
 import com.smartledger.core.repository.SaleDraftRepository;
@@ -44,11 +48,14 @@ public class SaleDraftServiceImpl implements SaleDraftService {
     private final SaleRepository saleRepository;
     private final SaleItemRepository saleItemRepository;
     private final PaymentRepository paymentRepository;
+    private final CustomerRepository customerRepository;
+    private final DebtRepository debtRepository;
 
     public SaleDraftServiceImpl(ShopService shopService, SaleDraftRepository draftRepository,
             SaleDraftItemRepository draftItemRepository, ProductRepository productRepository,
             SaleRepository saleRepository, SaleItemRepository saleItemRepository,
-            PaymentRepository paymentRepository) {
+            PaymentRepository paymentRepository, CustomerRepository customerRepository,
+            DebtRepository debtRepository) {
         this.shopService = shopService;
         this.draftRepository = draftRepository;
         this.draftItemRepository = draftItemRepository;
@@ -56,6 +63,8 @@ public class SaleDraftServiceImpl implements SaleDraftService {
         this.saleRepository = saleRepository;
         this.saleItemRepository = saleItemRepository;
         this.paymentRepository = paymentRepository;
+        this.customerRepository = customerRepository;
+        this.debtRepository = debtRepository;
     }
 
     @Override
@@ -122,10 +131,7 @@ public class SaleDraftServiceImpl implements SaleDraftService {
                     saleItemRepository.findAllBySaleIdOrderByIdAsc(existing.getId()));
         }
         requireEditable(draft);
-        if (!draft.getInitialPaidVnd().equals(draft.getEstimatedTotalVnd())
-                || draft.getInitialPaymentMethod() == null) {
-            throw new BusinessException(ErrorCode.FULL_PAYMENT_REQUIRED);
-        }
+        Customer customer = customerForConfirmation(draft, shop.getId());
 
         List<SaleDraftItem> draftItems = draftItemRepository.findAllByDraftIdOrderByIdAsc(draft.getId());
         if (draftItems.isEmpty()) {
@@ -152,13 +158,34 @@ public class SaleDraftServiceImpl implements SaleDraftService {
             product.deductStock(item.getQuantity());
         }
 
-        Sale sale = saleRepository.saveAndFlush(Sale.fromPaidDraft(draft, subtotal));
+        Sale sale = saleRepository.saveAndFlush(Sale.fromDraft(draft, subtotal, customer));
         List<SaleItem> saleItems = saleItemRepository.saveAll(draftItems.stream()
                 .map(item -> SaleItem.fromDraftItem(sale.getId(), item)).toList());
-        paymentRepository.save(Payment.initial(sale.getId(), sale.getTotalVnd(),
-                draft.getInitialPaymentMethod(), shop.getOwnerId()));
+        if (draft.getInitialPaidVnd() > 0) {
+            paymentRepository.save(Payment.initial(sale.getId(), draft.getInitialPaidVnd(),
+                    draft.getInitialPaymentMethod(), shop.getOwnerId()));
+        }
+        if (draft.getInitialPaidVnd() < draft.getEstimatedTotalVnd()) {
+            debtRepository.save(Debt.open(sale.getId(), customer.getId(),
+                    draft.getEstimatedTotalVnd() - draft.getInitialPaidVnd()));
+        }
         draft.confirm(sale.getId());
         return SaleServiceImpl.toResponse(sale, saleItems);
+    }
+
+    private Customer customerForConfirmation(SaleDraft draft, Long shopId) {
+        if (draft.getCustomerId() != null) {
+            return customerRepository.findByIdAndShopIdAndStatus(draft.getCustomerId(), shopId, CatalogStatus.ACTIVE)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND));
+        }
+        if (draft.getInitialPaidVnd() < draft.getEstimatedTotalVnd()) {
+            if (!StringUtils.hasText(draft.getCustomerName())) {
+                throw new BusinessException(ErrorCode.CUSTOMER_REQUIRED_FOR_DEBT);
+            }
+            return customerRepository.save(Customer.create(shopId, draft.getCustomerName(),
+                    Customer.normalizePhone(draft.getCustomerPhone())));
+        }
+        return null;
     }
 
     private SaleDraft requireDraft(Long shopId, String draftId, boolean lock) {
@@ -178,6 +205,9 @@ public class SaleDraftServiceImpl implements SaleDraftService {
         List<PreparedItem> items = new ArrayList<>();
         Set<Long> productIds = new HashSet<>();
         long subtotal = 0;
+        Customer customer = request.customerId() == null ? null
+                : customerRepository.findByIdAndShopIdAndStatus(request.customerId(), shopId, CatalogStatus.ACTIVE)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND));
         try {
             for (SaleDraftItemRequest item : request.items()) {
                 if (!productIds.add(item.productId())) {
@@ -201,14 +231,17 @@ public class SaleDraftServiceImpl implements SaleDraftService {
                     || (paid == 0 && request.initialPaymentMethod() != null)) {
                 throw new BusinessException(ErrorCode.DRAFT_PAYMENT_INVALID);
             }
-            return new PreparedDraft(items, discount, total, paid);
+            return new PreparedDraft(items, discount, total, paid, customer);
         } catch (ArithmeticException exception) {
             throw new BusinessException(ErrorCode.DRAFT_TOTAL_INVALID);
         }
     }
 
     private void apply(SaleDraft draft, SaleDraftWriteRequest request, PreparedDraft prepared) {
-        draft.replace(normalize(request.customerName()), normalize(request.customerPhone()),
+        Customer customer = prepared.customer();
+        draft.replace(customer == null ? null : customer.getId(),
+                customer == null ? normalize(request.customerName()) : customer.getName(),
+                customer == null ? normalize(request.customerPhone()) : customer.getNormalizedPhone(),
                 prepared.discountVnd(), prepared.totalVnd(), prepared.paidVnd(), request.initialPaymentMethod());
     }
 
@@ -222,7 +255,8 @@ public class SaleDraftServiceImpl implements SaleDraftService {
                 draft.getCustomerPhone(), draft.getDiscountVnd(), draft.getEstimatedTotalVnd(),
                 draft.getInitialPaidVnd(), draft.getInitialPaymentMethod(),
                 draft.isExpired() ? DraftStatus.EXPIRED : draft.getStatus(), draft.getExpiresAt(),
-                draft.getConfirmedSaleId(), items.stream().map(this::toItemResponse).toList());
+                draft.getConfirmedSaleId(), items.stream().map(this::toItemResponse).toList(),
+                draft.getCustomerId());
     }
 
     private SaleDraftItemResponse toItemResponse(SaleDraftItem item) {
@@ -237,6 +271,7 @@ public class SaleDraftServiceImpl implements SaleDraftService {
     private record PreparedItem(Product product, BigDecimal quantity, long unitPriceVnd, long lineTotalVnd) {
     }
 
-    private record PreparedDraft(List<PreparedItem> items, long discountVnd, long totalVnd, long paidVnd) {
+    private record PreparedDraft(List<PreparedItem> items, long discountVnd, long totalVnd, long paidVnd,
+            Customer customer) {
     }
 }

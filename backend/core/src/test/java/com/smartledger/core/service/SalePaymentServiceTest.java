@@ -92,7 +92,7 @@ class SalePaymentServiceTest {
 
     private Sale sale() {
         SaleDraft draft = SaleDraft.create(7L, 42L);
-        draft.replace(null, null, 0, 25000, 25000, PaymentMethod.CASH);
+        draft.replace(null, null, null, 0, 25000, 25000, PaymentMethod.CASH);
         Sale sale = Sale.fromPaidDraft(draft, 25000L);
         ReflectionTestUtils.setField(sale, "id", 15L);
         return sale;
