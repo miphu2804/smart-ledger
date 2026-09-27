@@ -1,5 +1,6 @@
 package com.smartledger.core.service.impl;
 
+import com.smartledger.core.dto.request.ProductPatchRequest;
 import com.smartledger.core.dto.request.ProductWriteRequest;
 import com.smartledger.core.dto.response.ProductResponse;
 import com.smartledger.core.entity.Product;
@@ -39,7 +40,7 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     public ProductResponse create(VerifiedFirebaseToken firebaseToken, String shopId, ProductWriteRequest request) {
         Shop shop = shopService.requireOwnedActiveShop(firebaseToken, shopId);
-        validateReferencesAndStock(shop.getId(), null, request);
+        validateReferencesAndStock(shop.getId(), null, request, true, true);
         Product product = Product.create(shop.getId());
         replaceFields(product, request);
         return toResponse(productRepository.save(product));
@@ -62,16 +63,34 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional
-    public ProductResponse replace(
+    public ProductResponse patch(
             VerifiedFirebaseToken firebaseToken,
             String shopId,
             String productId,
-            ProductWriteRequest request) {
+            ProductPatchRequest request) {
         Shop shop = shopService.requireOwnedActiveShop(firebaseToken, shopId);
         Product product = requireActiveProduct(shop.getId(), productId);
-        validateReferencesAndStock(shop.getId(), product.getId(), request);
-        replaceFields(product, request);
+        ProductWriteRequest merged = merge(product, request);
+        validateReferencesAndStock(shop.getId(), product.getId(), merged,
+                request.hasField("categoryId"), request.hasField("barcode"));
+        replaceFields(product, merged);
         return toResponse(product);
+    }
+
+    private ProductWriteRequest merge(Product product, ProductPatchRequest request) {
+        boolean tracked = request.hasField("tracked") ? request.getTracked() : product.isTracked();
+        BigDecimal stock = request.hasField("stockQuantity") ? request.getStockQuantity()
+                : request.hasField("tracked") && !tracked ? null : product.getStockQuantity();
+        return new ProductWriteRequest(
+                request.hasField("categoryId") ? request.getCategoryId() : product.getCategoryId(),
+                request.hasField("name") ? request.getName() : product.getName(),
+                request.hasField("barcode") ? request.getBarcode() : product.getBarcode(),
+                request.hasField("imageUrl") ? request.getImageUrl() : product.getImageUrl(),
+                request.hasField("unit") ? request.getUnit() : product.getUnit(),
+                request.hasField("sellingPriceVnd") ? request.getSellingPriceVnd() : product.getSellingPriceVnd(),
+                request.hasField("costPriceVnd") ? request.getCostPriceVnd() : product.getCostPriceVnd(),
+                tracked,
+                stock);
     }
 
     @Override
@@ -102,14 +121,15 @@ public class ProductServiceImpl implements ProductService {
                 List.of(new ApiErrorDetail("productId", "must be a positive integer")));
     }
 
-    private void validateReferencesAndStock(Long shopId, Long currentProductId, ProductWriteRequest request) {
-        if (request.categoryId() != null && !categoryRepository.existsByIdAndShopIdAndStatus(
+    private void validateReferencesAndStock(Long shopId, Long currentProductId, ProductWriteRequest request,
+            boolean validateCategory, boolean validateBarcode) {
+        if (validateCategory && request.categoryId() != null && !categoryRepository.existsByIdAndShopIdAndStatus(
                 request.categoryId(), shopId, CatalogStatus.ACTIVE)) {
             throw new BusinessException(ErrorCode.PRODUCT_CATEGORY_INVALID);
         }
 
         String barcode = normalizeOptional(request.barcode());
-        if (barcode != null) {
+        if (validateBarcode && barcode != null) {
             boolean duplicate = currentProductId == null
                     ? productRepository.existsByShopIdAndBarcode(shopId, barcode)
                     : productRepository.existsByShopIdAndBarcodeAndIdNot(shopId, barcode, currentProductId);

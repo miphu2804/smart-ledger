@@ -1,5 +1,6 @@
 package com.smartledger.core.service;
 
+import com.smartledger.core.dto.request.ProductPatchRequest;
 import com.smartledger.core.dto.request.ProductWriteRequest;
 import com.smartledger.core.dto.response.ProductResponse;
 import com.smartledger.core.security.VerifiedFirebaseToken;
@@ -12,8 +13,8 @@ public interface ProductService {
 
     ProductResponse getById(VerifiedFirebaseToken firebaseToken, String shopId, String productId);
 
-    ProductResponse replace(VerifiedFirebaseToken firebaseToken, String shopId, String productId,
-            ProductWriteRequest request);
+    ProductResponse patch(VerifiedFirebaseToken firebaseToken, String shopId, String productId,
+            ProductPatchRequest request);
 
     void archive(VerifiedFirebaseToken firebaseToken, String shopId, String productId);
 }
