@@ -14,6 +14,16 @@
 
 **Check:** `ruff check`, `ruff format --check` passed; `pytest` 43 passed, 3 skipped (PostgreSQL tests need `POSTGRES_TEST_URL`). A live run with the configured model resolved "2 cf sua" to the catalog product and price, left an ambiguous "bac xiu" and an unknown "banh mi" unresolved with warnings, and mapped two expenses with amounts. Not run: the PostgreSQL catalog tests.
 
+### [2026-09-28 18:57 UTC+07:00] — [Tooling] Review feature PRs on staging
+
+**Done:** Enabled automatic CodeRabbit review for pull requests targeting `staging`; reviews of the default branch remain enabled.
+
+**Changed files:** `.coderabbit.yaml` — created; `PROGRESS.md` — updated.
+
+**Flow explained:** CodeRabbit reads the root configuration from the PR branch and includes `staging` among eligible base branches.
+
+**Check:** Parsed YAML and confirmed the expected settings; `git diff --check` passed. Live GitHub App review is unverified until the configuration is pushed in a PR targeting `staging`.
+
 ### [2026-09-28 17:28 UTC+07:00] — [Docs] Vietnamese code review rule
 
 **Done:** Added a Code review section to `AGENTS.md`: review summaries and PR review comments are written in Vietnamese, and review comments carry no verified/inferred markers. `CLAUDE.md` picks this up through `@AGENTS.md`.
