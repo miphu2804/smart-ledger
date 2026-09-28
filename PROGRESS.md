@@ -1,3 +1,16 @@
+### [2026-09-28 19:20 UTC+07:00] — [AI] Shop catalog and text-to-draft parsing
+
+**Done:** AI reads the active product catalog of one shop (AI-007, #37) and turns Vietnamese sale or expense text into a `DraftView` (AI-008, #60). The model sees the shop catalog as `id | name | unit` and returns `product_id` with a confidence; code keeps an ID only when it belongs to that catalog and confidence is at least 0.7, and always takes name and price from the catalog. Unsure or unknown items keep `product_id: null` with a Vietnamese warning. No HTTP route yet; `/internal/v1/drafts/parse` belongs to #3.
+
+**Changed files:**
+- `backend/ai/src/drafts/__init__.py`, `catalog.py`, `schemas.py`, `service.py`, `prompt_template.py` — created
+- `backend/ai/tests/unit_tests/test_draft_service.py`, `tests/integration_tests/test_product_catalog.py`, `tests/fixtures/core_products.sql` — created
+- `PROGRESS.md` — modified
+
+**Flow explained:** `DraftService.parse` loads the catalog (SALE only), asks the model for structured `LlmDraft` output, then `resolve_items` validates each item against the catalog and builds warnings. `tests/fixtures/core_products.sql` copies the Core V4 `products` table until CORE-003 (#12) reaches `staging`.
+
+**Check:** `ruff check`, `ruff format --check` passed; `pytest` 43 passed, 3 skipped (PostgreSQL tests need `POSTGRES_TEST_URL`). A live run with the configured model resolved "2 cf sua" to the catalog product and price, left an ambiguous "bac xiu" and an unknown "banh mi" unresolved with warnings, and mapped two expenses with amounts. Not run: the PostgreSQL catalog tests.
+
 ### [2026-09-28 17:28 UTC+07:00] — [Docs] Vietnamese code review rule
 
 **Done:** Added a Code review section to `AGENTS.md`: review summaries and PR review comments are written in Vietnamese, and review comments carry no verified/inferred markers. `CLAUDE.md` picks this up through `@AGENTS.md`.
