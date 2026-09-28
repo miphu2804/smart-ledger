@@ -26,7 +26,9 @@
 
 ### [2026-09-28 18:50 UTC+07:00] — [Docs] DraftView product_id is BIGINT
 
-**Done:** `DraftView.items[].product_id` in the API contract is now a `BIGINT` product ID or `null`, matching `products.id` in the ERD and Core migrations, instead of `uuid-or-null`.
+### [2026-09-28 18:50 UTC+07:00] — [Docs] DraftView product_id is BIGINT, warnings are codes
+
+**Done:** `DraftView.items[].product_id` in the API contract is now a `BIGINT` product ID or `null`, matching `products.id` in the ERD and Core migrations, instead of `uuid-or-null`. `warnings` are now `{ code, item_index }` objects (`PRODUCT_AMBIGUOUS`, `PRODUCT_NOT_FOUND`, `AMOUNT_MISSING`, `NO_ITEMS`) so FE owns the user-facing wording.
 
 **Changed files:**
 - `docs/contracts/api-contracts.md`, `PROGRESS.md` — modified
