@@ -179,10 +179,10 @@ function Hero() {
       <div className="lp-container lp-hero-grid">
         <div className="lp-hero-copy">
           <span className="lp-eyebrow">
-            <i className="pulse-dot" /> Miệng nói, sổ ghi.
+            <i className="pulse-dot" /> Sổ bán hàng AI cho quán nhỏ
           </span>
           <h1>
-            Nói là <span className="hl">ghi sổ</span>.
+            Miệng nói, <span className="hl">sổ ghi</span>.
             <br />
             <span className="lp-hero-sub">Khỏi cần máy POS.</span>
           </h1>
@@ -761,7 +761,7 @@ function Footer() {
       <div className="lp-container lp-footer-grid">
         <div className="lp-footer-brand">
           <Logo tagline />
-          <p>Sổ bán hàng AI cho quán nhỏ Việt Nam. Nói là ghi sổ.</p>
+          <p>Sổ bán hàng AI cho quán nhỏ Việt Nam. Miệng nói, sổ ghi.</p>
         </div>
         <nav className="lp-footer-col" aria-label="Sản phẩm">
           <h4>Sản phẩm</h4>
