@@ -213,6 +213,7 @@ function Hero() {
 
         <div className="lp-hero-visual">
           <div className="lp-hero-ring" aria-hidden="true" />
+          <img src="/brand/mascot.png" alt="" className="hero-mascot" aria-hidden="true" />
           <PhoneFrame src="/screens/overview.png" alt="Màn hình Tổng quan của ứng dụng Sổ Nghe Lời" className="phone-hero" eager />
           <VoiceCard />
           <div className="saved-chip" aria-hidden="true">
@@ -789,7 +790,7 @@ function Footer() {
 
 export default function LandingPage() {
   useEffect(() => {
-    document.title = 'Sổ Nghe Lời — Nói là ghi sổ'
+    document.title = 'Sổ Nghe Lời — Miệng nói, sổ ghi.'
   }, [])
   return (
     <div className="lp">
