@@ -1,6 +1,6 @@
 ### [2026-09-28 19:20 UTC+07:00] — [AI] Shop catalog and text-to-draft parsing
 
-**Done:** AI reads the active product catalog of one shop (AI-007, #37) and turns Vietnamese sale or expense text into a `DraftView` (AI-008, #60). The model sees the shop catalog as `id | name | unit` and returns `product_id` with a confidence; code keeps an ID only when it belongs to that catalog and confidence is at least 0.7, and always takes name and price from the catalog. Unsure or unknown items keep `product_id: null` with a Vietnamese warning. No HTTP route yet; `/internal/v1/drafts/parse` belongs to #3.
+**Done:** AI reads the active product catalog of one shop (AI-007, #37) and turns Vietnamese sale or expense text into a `DraftView` (AI-008, #60). The model sees the shop catalog as `id | name | unit` and returns `product_id` with a confidence; code keeps an ID only when it belongs to that catalog and confidence is at least 0.7, and always takes name and price from the catalog. Unsure or unknown items keep `product_id: null` with a warning code (`PRODUCT_AMBIGUOUS`, `PRODUCT_NOT_FOUND`); FE owns the wording. No HTTP route yet; `/internal/v1/drafts/parse` belongs to #3.
 
 **Changed files:**
 - `backend/ai/src/drafts/__init__.py`, `catalog.py`, `schemas.py`, `service.py`, `prompt_template.py` — created

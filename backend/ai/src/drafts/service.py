@@ -4,7 +4,14 @@ from langchain_core.language_models import BaseChatModel
 
 from src.drafts.catalog import CatalogProduct, ProductCatalogRepository
 from src.drafts.prompt_template import DRAFT_SYSTEM_PROMPT
-from src.drafts.schemas import DraftItem, DraftMode, DraftView, LlmDraft, LlmDraftItem
+from src.drafts.schemas import (
+    DraftItem,
+    DraftMode,
+    DraftView,
+    DraftWarning,
+    LlmDraft,
+    LlmDraftItem,
+)
 
 MIN_CONFIDENCE = 0.7
 
@@ -13,13 +20,13 @@ def resolve_items(
     mode: DraftMode,
     llm_items: list[LlmDraftItem],
     products: list[CatalogProduct],
-) -> tuple[list[DraftItem], list[str]]:
+) -> tuple[list[DraftItem], list[DraftWarning]]:
     """Trust only catalog data for SALE items; unmatched items stay unresolved."""
     catalog = {product.id: product for product in products}
     items: list[DraftItem] = []
-    warnings: list[str] = []
+    warnings: list[DraftWarning] = []
 
-    for llm_item in llm_items:
+    for index, llm_item in enumerate(llm_items):
         unresolved = DraftItem(
             product_id=None,
             name=llm_item.name,
@@ -34,20 +41,16 @@ def resolve_items(
                 )
             )
             if llm_item.amount_vnd is None:
-                warnings.append(f"Thiếu số tiền cho khoản chi '{llm_item.name}'.")
+                warnings.append(DraftWarning(code="AMOUNT_MISSING", item_index=index))
             continue
 
         product = catalog.get(llm_item.product_id)
         if llm_item.confidence < MIN_CONFIDENCE:
             items.append(unresolved)
-            warnings.append(
-                f"Chưa chắc '{llm_item.name}' là món nào, vui lòng chọn lại."
-            )
+            warnings.append(DraftWarning(code="PRODUCT_AMBIGUOUS", item_index=index))
         elif product is None:
             items.append(unresolved)
-            warnings.append(
-                f"Không tìm thấy '{llm_item.name}' trong danh mục của cửa hàng."
-            )
+            warnings.append(DraftWarning(code="PRODUCT_NOT_FOUND", item_index=index))
         else:
             items.append(
                 unresolved.model_copy(
@@ -88,7 +91,7 @@ class DraftService:
         )
         items, warnings = resolve_items(mode, llm_draft.items, products)
         if not items:
-            warnings.append("Không nhận ra món nào trong câu.")
+            warnings.append(DraftWarning(code="NO_ITEMS"))
 
         model_name = getattr(self.model, "model_name", "")
         return DraftView(

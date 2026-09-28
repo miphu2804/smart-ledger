@@ -38,11 +38,23 @@ class DraftItem(BaseModel):
     confidence: float
 
 
+DraftWarningCode = Literal[
+    "PRODUCT_AMBIGUOUS", "PRODUCT_NOT_FOUND", "AMOUNT_MISSING", "NO_ITEMS"
+]
+
+
+class DraftWarning(BaseModel):
+    """Machine-readable warning; the client owns the user-facing wording."""
+
+    code: DraftWarningCode
+    item_index: int | None = None
+
+
 class DraftView(BaseModel):
     request_id: str
     transcript: str
     mode: DraftMode
     items: list[DraftItem]
-    warnings: list[str]
+    warnings: list[DraftWarning]
     model: str
     model_version: str

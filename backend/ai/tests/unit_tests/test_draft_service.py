@@ -1,7 +1,7 @@
 import pytest
 
 from src.drafts.catalog import CatalogProduct
-from src.drafts.schemas import LlmDraft, LlmDraftItem
+from src.drafts.schemas import DraftWarning, LlmDraft, LlmDraftItem
 from src.drafts.service import DraftService, resolve_items
 
 
@@ -85,7 +85,7 @@ def test_parse_foreign_id_sets_null_and_warns() -> None:
     assert result.items[0].product_id is None
     assert result.items[0].unit_price is None
     assert result.items[0].name == "unknown item"
-    assert any("Không tìm thấy 'unknown item'" in w for w in result.warnings)
+    assert result.warnings == [DraftWarning(code="PRODUCT_NOT_FOUND", item_index=0)]
 
 
 def test_parse_null_id_sets_null_and_warns() -> None:
@@ -111,7 +111,7 @@ def test_parse_null_id_sets_null_and_warns() -> None:
     assert len(result.items) == 1
     assert result.items[0].product_id is None
     assert result.items[0].unit_price is None
-    assert any("Không tìm thấy 'some item'" in w for w in result.warnings)
+    assert result.warnings == [DraftWarning(code="PRODUCT_NOT_FOUND", item_index=0)]
 
 
 def test_parse_low_confidence_sets_null_and_warns() -> None:
@@ -138,7 +138,7 @@ def test_parse_low_confidence_sets_null_and_warns() -> None:
     assert result.items[0].product_id is None
     assert result.items[0].unit_price is None
     assert result.items[0].name == "Cà phê sữa"
-    assert any("Chưa chắc 'Cà phê sữa' là món nào" in w for w in result.warnings)
+    assert result.warnings == [DraftWarning(code="PRODUCT_AMBIGUOUS", item_index=0)]
 
 
 def test_parse_catalog_asked_with_correct_shop_id() -> None:
@@ -243,7 +243,7 @@ def test_parse_expense_missing_amount_warns() -> None:
     result = service.parse(shop_id=5, mode="EXPENSE", text="xăng")
 
     assert [(item.name, item.unit_price) for item in result.items] == [("xăng", None)]
-    assert any("Thiếu số tiền cho khoản chi 'xăng'" in w for w in result.warnings)
+    assert result.warnings == [DraftWarning(code="AMOUNT_MISSING", item_index=0)]
 
 
 def test_parse_empty_items_adds_warning() -> None:
@@ -255,7 +255,7 @@ def test_parse_empty_items_adds_warning() -> None:
     result = service.parse(shop_id=5, mode="SALE", text="...")
 
     assert len(result.items) == 0
-    assert any("Không nhận ra món nào trong câu" in w for w in result.warnings)
+    assert result.warnings == [DraftWarning(code="NO_ITEMS")]
 
 
 def test_parse_model_none_raises_error() -> None:
@@ -316,8 +316,7 @@ def test_resolve_items_sale_valid_id_low_confidence() -> None:
     assert len(items) == 1
     assert items[0].product_id is None
     assert items[0].unit_price is None
-    assert len(warnings) == 1
-    assert "Chưa chắc" in warnings[0]
+    assert warnings == [DraftWarning(code="PRODUCT_AMBIGUOUS", item_index=0)]
 
 
 def test_resolve_items_sale_foreign_id() -> None:
@@ -331,8 +330,7 @@ def test_resolve_items_sale_foreign_id() -> None:
     assert len(items) == 1
     assert items[0].product_id is None
     assert items[0].unit_price is None
-    assert len(warnings) == 1
-    assert "Không tìm thấy" in warnings[0]
+    assert warnings == [DraftWarning(code="PRODUCT_NOT_FOUND", item_index=0)]
 
 
 def test_resolve_items_sale_null_id() -> None:
@@ -346,8 +344,7 @@ def test_resolve_items_sale_null_id() -> None:
     assert len(items) == 1
     assert items[0].product_id is None
     assert items[0].unit_price is None
-    assert len(warnings) == 1
-    assert "Không tìm thấy" in warnings[0]
+    assert warnings == [DraftWarning(code="PRODUCT_NOT_FOUND", item_index=0)]
 
 
 def test_resolve_items_expense_with_amount() -> None:
@@ -387,8 +384,7 @@ def test_resolve_items_expense_without_amount() -> None:
 
     assert len(items) == 1
     assert items[0].unit_price is None
-    assert len(warnings) == 1
-    assert "Thiếu số tiền" in warnings[0]
+    assert warnings == [DraftWarning(code="AMOUNT_MISSING", item_index=0)]
 
 
 def test_resolve_items_sale_ambiguous_without_id_asks_to_choose() -> None:
@@ -401,4 +397,4 @@ def test_resolve_items_sale_ambiguous_without_id_asks_to_choose() -> None:
     items, warnings = resolve_items("SALE", llm_items, products)
 
     assert items[0].product_id is None
-    assert warnings == ["Chưa chắc 'bac xiu' là món nào, vui lòng chọn lại."]
+    assert warnings == [DraftWarning(code="PRODUCT_AMBIGUOUS", item_index=0)]
