@@ -24,6 +24,17 @@
 
 **Check:** Parsed YAML and confirmed the expected settings; `git diff --check` passed. Live GitHub App review is unverified until the configuration is pushed in a PR targeting `staging`.
 
+### [2026-09-28 18:50 UTC+07:00] — [Docs] DraftView product_id is BIGINT
+
+**Done:** `DraftView.items[].product_id` in the API contract is now a `BIGINT` product ID or `null`, matching `products.id` in the ERD and Core migrations, instead of `uuid-or-null`.
+
+**Changed files:**
+- `docs/contracts/api-contracts.md`, `PROGRESS.md` — modified
+
+**Flow explained:** AI reads `products.id` from the shop catalog and returns it in the draft; Core parses item IDs as positive integers, so a UUID would be rejected.
+
+**Check:** Re-read the contract section; `git diff --check` passed.
+
 ### [2026-09-28 17:28 UTC+07:00] — [Docs] Vietnamese code review rule
 
 **Done:** Added a Code review section to `AGENTS.md`: review summaries and PR review comments are written in Vietnamese, and review comments carry no verified/inferred markers. `CLAUDE.md` picks this up through `@AGENTS.md`.

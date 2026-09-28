@@ -137,7 +137,7 @@ AI chỉ tạo bản nháp/gợi ý và câu trả lời chat. Các endpoint nà
   "mode": "SALE",
   "items": [
     {
-      "product_id": "uuid-or-null",
+      "product_id": 12,
       "name": "Cà phê sữa",
       "qty": 2,
       "unit_price": 25000,
@@ -147,6 +147,8 @@ AI chỉ tạo bản nháp/gợi ý và câu trả lời chat. Các endpoint nà
   "warnings": []
 }
 ```
+
+`product_id` là `BIGINT` của `products.id` theo ERD, hoặc `null` khi không khớp hoặc khớp mơ hồ; khi đó `warnings` nêu lý do.
 
 `ReplenishmentView` gồm `product_id`, `product_name`, `suggested_qty`, `period`, `reason`. `InsightMessageView` gồm `conversation_id`, `message_id`, `answer`, `period`, `citations`, `insufficient_data`.
 
