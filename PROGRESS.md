@@ -3,7 +3,10 @@
 **Done:** AI reads the active product catalog of one shop (AI-007, #37) and turns Vietnamese sale or expense text into a `DraftView` (AI-008, #60). The model sees the shop catalog as `id | name | unit` and returns `product_id` with a confidence; code keeps an ID only when it belongs to that catalog and confidence is at least 0.7, and always takes name and price from the catalog. Unsure or unknown items keep `product_id: null` with a warning code (`PRODUCT_AMBIGUOUS`, `PRODUCT_NOT_FOUND`); FE owns the wording. No HTTP route yet; `/internal/v1/drafts/parse` belongs to #3.
 
 **Changed files:**
-- `backend/ai/src/drafts/__init__.py`, `catalog.py`, `schemas.py`, `service.py`, `prompt_template.py` — created
+- `backend/ai/src/drafts/__init__.py`, `catalog.py`, `schemas.py`, `service.py` — created
+- `backend/ai/src/prompt_templates.py` — created (all system prompts, static text first for prompt caching)
+- `backend/ai/src/agent/prompt_template.py` — deleted (moved into `src/prompt_templates.py`)
+- `backend/ai/src/agent/service.py` — modified
 - `backend/ai/tests/unit_tests/test_draft_service.py`, `tests/integration_tests/test_product_catalog.py`, `tests/fixtures/core_products.sql` — created
 - `PROGRESS.md` — modified
 

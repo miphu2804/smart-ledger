@@ -15,7 +15,7 @@ class ProductCatalogRepository:
     def __init__(self, postgres: PostgreDBClient) -> None:
         self.postgres = postgres
 
-    def list_active(self, shop_id: int) -> list[CatalogProduct]:
+    def list_active_products(self, shop_id: int) -> list[CatalogProduct]:
         with self.postgres.transaction() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(

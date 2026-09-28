@@ -81,7 +81,7 @@ def postgres_catalog_client() -> Iterator[tuple[PostgreDBClient, int, int, int, 
             setup_connection.close()
 
 
-def test_list_active_returns_shop_products(
+def test_list_active_products_returns_shop_products(
     postgres_catalog_client: tuple[PostgreDBClient, int, int, int, int],
 ) -> None:
     postgres, shop_a_id, shop_b_id, user_a_id, user_b_id = postgres_catalog_client
@@ -131,7 +131,7 @@ def test_list_active_returns_shop_products(
             )
             bac_xiu_active_id = cursor.fetchone()[0]
 
-    products_a = repository.list_active(shop_a_id)
+    products_a = repository.list_active_products(shop_a_id)
 
     assert len(products_a) == 2
     assert all(isinstance(p, CatalogProduct) for p in products_a)
@@ -152,15 +152,15 @@ def test_list_active_returns_shop_products(
     assert bac_xiu.unit == "cup"
     assert bac_xiu.selling_price_vnd == 27000
 
-    assert [p.id for p in repository.list_active(shop_b_id)] == [coffee_b_id]
+    assert [p.id for p in repository.list_active_products(shop_b_id)] == [coffee_b_id]
 
 
-def test_list_active_unknown_shop_returns_empty(
+def test_list_active_products_unknown_shop_returns_empty(
     postgres_catalog_client: tuple[PostgreDBClient, int, int, int, int],
 ) -> None:
     postgres, shop_a_id, shop_b_id, user_a_id, user_b_id = postgres_catalog_client
     repository = ProductCatalogRepository(postgres)
 
-    products = repository.list_active(999999)
+    products = repository.list_active_products(999999)
 
     assert products == []

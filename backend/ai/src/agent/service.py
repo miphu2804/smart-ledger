@@ -3,9 +3,9 @@ from dataclasses import dataclass
 from langchain.agents import create_agent
 from langchain_core.language_models import BaseChatModel
 
-from src.agent.prompt_template import SHOP_AGENT_SYSTEM_PROMPT
 from src.agent.repository import AgentConversationRepository
 from src.agent.tools import get_all_tools
+from src.prompt_templates import SHOP_AGENT_SYSTEM_PROMPT
 
 
 @dataclass(frozen=True)

@@ -3,7 +3,6 @@ from uuid import uuid4
 from langchain_core.language_models import BaseChatModel
 
 from src.drafts.catalog import CatalogProduct, ProductCatalogRepository
-from src.drafts.prompt_template import DRAFT_SYSTEM_PROMPT
 from src.drafts.schemas import (
     DraftItem,
     DraftMode,
@@ -12,6 +11,7 @@ from src.drafts.schemas import (
     LlmDraft,
     LlmDraftItem,
 )
+from src.prompt_templates import DRAFT_SYSTEM_PROMPT
 
 MIN_CONFIDENCE = 0.7
 
@@ -78,9 +78,10 @@ class DraftService:
         if self.model is None:
             raise RuntimeError("draft model unavailable")
 
-        products = self.catalog.list_active(shop_id) if mode == "SALE" else []
+        products = self.catalog.list_active_products(shop_id) if mode == "SALE" else []
         system_prompt = DRAFT_SYSTEM_PROMPT.format(
             mode=mode,
+            shop_id=shop_id,
             catalog_lines="\n".join(f"{p.id} | {p.name} | {p.unit}" for p in products),
         )
         llm_draft = self.model.with_structured_output(LlmDraft).invoke(

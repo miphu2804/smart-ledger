@@ -10,7 +10,7 @@ class FakeCatalog:
         self.products = products
         self.last_shop_id = None
 
-    def list_active(self, shop_id: int) -> list[CatalogProduct]:
+    def list_active_products(self, shop_id: int) -> list[CatalogProduct]:
         self.last_shop_id = shop_id
         return self.products
 
