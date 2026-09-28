@@ -1,3 +1,13 @@
+### [2026-09-28 18:57 UTC+07:00] — [Tooling] Review feature PRs on staging
+
+**Done:** Enabled automatic CodeRabbit review for pull requests targeting `staging`; reviews of the default branch remain enabled.
+
+**Changed files:** `.coderabbit.yaml` — created; `PROGRESS.md` — updated.
+
+**Flow explained:** CodeRabbit reads the root configuration from the PR branch and includes `staging` among eligible base branches.
+
+**Check:** Parsed YAML and confirmed the expected settings; `git diff --check` passed. Live GitHub App review is unverified until the configuration is pushed in a PR targeting `staging`.
+
 ### [2026-09-28 17:28 UTC+07:00] — [Docs] Vietnamese code review rule
 
 **Done:** Added a Code review section to `AGENTS.md`: review summaries and PR review comments are written in Vietnamese, and review comments carry no verified/inferred markers. `CLAUDE.md` picks this up through `@AGENTS.md`.
