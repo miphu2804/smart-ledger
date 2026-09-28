@@ -179,7 +179,7 @@ function Hero() {
       <div className="lp-container lp-hero-grid">
         <div className="lp-hero-copy">
           <span className="lp-eyebrow">
-            <i className="pulse-dot" /> Sổ bán hàng AI cho quán nhỏ
+            <i className="pulse-dot" /> Miệng nói, sổ ghi.
           </span>
           <h1>
             Nói là <span className="hl">ghi sổ</span>.
