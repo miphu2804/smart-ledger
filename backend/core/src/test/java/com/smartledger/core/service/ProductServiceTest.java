@@ -155,7 +155,7 @@ class ProductServiceTest {
     @Test
     void patchKeepsFieldsThatWereNotSent() {
         Product product = product();
-        when(productRepository.findByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
                 .thenReturn(Optional.of(product));
         ProductPatchRequest request = new ProductPatchRequest();
         request.setSellingPriceVnd(30000L);
@@ -167,12 +167,28 @@ class ProductServiceTest {
         assertThat(response.categoryId()).isEqualTo(10L);
         assertThat(response.barcode()).isEqualTo("123456");
         assertThat(response.stockQuantity()).isEqualByComparingTo("10.000");
+        verify(productRepository).findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE);
+    }
+
+    @Test
+    void patchMergesAgainstTheStockReadUnderTheCheckoutLock() {
+        Product product = product();
+        product.deductStock(new BigDecimal("3.000"));
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+                .thenReturn(Optional.of(product));
+        ProductPatchRequest request = new ProductPatchRequest();
+        request.setName("Cà phê mới");
+
+        ProductResponse response = service.patch(token(), "7", "3", request);
+
+        assertThat(response.stockQuantity()).isEqualByComparingTo("7.000");
+        verify(productRepository, never()).findByIdAndShopIdAndStatus(any(), any(), any());
     }
 
     @Test
     void patchCanClearOptionalFieldsWithExplicitNull() {
         Product product = product();
-        when(productRepository.findByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
                 .thenReturn(Optional.of(product));
         ProductPatchRequest request = new ProductPatchRequest();
         request.setCategoryId(null);
@@ -190,7 +206,7 @@ class ProductServiceTest {
     @Test
     void disablingStockTrackingClearsExistingStock() {
         Product product = product();
-        when(productRepository.findByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
                 .thenReturn(Optional.of(product));
         ProductPatchRequest request = new ProductPatchRequest();
         request.setTracked(false);
@@ -204,7 +220,7 @@ class ProductServiceTest {
     @Test
     void trackedProductCannotClearItsStock() {
         Product product = product();
-        when(productRepository.findByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
                 .thenReturn(Optional.of(product));
         ProductPatchRequest request = new ProductPatchRequest();
         request.setStockQuantity(null);
@@ -217,7 +233,7 @@ class ProductServiceTest {
     @Test
     void rejectsDuplicateBarcodeOnPatch() {
         Product product = product();
-        when(productRepository.findByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
                 .thenReturn(Optional.of(product));
         when(productRepository.existsByShopIdAndBarcodeAndIdNot(7L, "654321", 3L)).thenReturn(true);
 
@@ -253,7 +269,7 @@ class ProductServiceTest {
     @Test
     void archivesWithoutDeletingAndRecordsTheOwner() {
         Product product = product();
-        when(productRepository.findByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
                 .thenReturn(Optional.of(product));
 
         service.archive(token(), "7", "3");
@@ -261,6 +277,7 @@ class ProductServiceTest {
         assertThat(product.getStatus()).isEqualTo(CatalogStatus.ARCHIVED);
         assertThat(product.getArchivedAt()).isNotNull();
         assertThat(product.getArchivedByUserId()).isEqualTo(42L);
+        verify(productRepository).findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE);
         verify(productRepository, never()).delete(any());
     }
 

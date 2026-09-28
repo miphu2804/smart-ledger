@@ -69,7 +69,7 @@ public class ProductServiceImpl implements ProductService {
             String productId,
             ProductPatchRequest request) {
         Shop shop = shopService.requireOwnedActiveShop(firebaseToken, shopId);
-        Product product = requireActiveProduct(shop.getId(), productId);
+        Product product = requireLockedActiveProduct(shop.getId(), productId);
         ProductWriteRequest merged = merge(product, request);
         validateReferencesAndStock(shop.getId(), product.getId(), merged,
                 request.hasField("categoryId"), request.hasField("barcode"));
@@ -97,12 +97,18 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     public void archive(VerifiedFirebaseToken firebaseToken, String shopId, String productId) {
         Shop shop = shopService.requireOwnedActiveShop(firebaseToken, shopId);
-        Product product = requireActiveProduct(shop.getId(), productId);
+        Product product = requireLockedActiveProduct(shop.getId(), productId);
         product.archive(shop.getOwnerId());
     }
 
     private Product requireActiveProduct(Long shopId, String productId) {
         return productRepository.findByIdAndShopIdAndStatus(
+                        parseProductId(productId), shopId, CatalogStatus.ACTIVE)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+    }
+
+    private Product requireLockedActiveProduct(Long shopId, String productId) {
+        return productRepository.findLockedByIdAndShopIdAndStatus(
                         parseProductId(productId), shopId, CatalogStatus.ACTIVE)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
     }
