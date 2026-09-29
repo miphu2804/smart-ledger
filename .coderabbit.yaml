@@ -1,9 +1,7 @@
 language: "vi-VN"
 
 tone_instructions: >
-  Write all review summaries and inline comments in Vietnamese.
-  Keep code identifiers, file paths, API names, test names, and error codes unchanged.
-  State the problem, impact scenario, and fix or decision needed.
+  Use Vietnamese for all generated review prose, including summaries, walkthroughs, architecture/risk sections, and inline comments. Keep code identifiers, paths, API/test names, and error codes unchanged. State the problem, impact, and fix/decision.
 
 reviews:
   auto_review:
