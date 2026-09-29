@@ -79,6 +79,7 @@ public class ShopServiceImpl implements ShopService {
             String shopId,
             ArchiveShopRequest request) {
         Shop shop = requireOwnedVisibleShop(firebaseToken, shopId, "shopId");
+        ensureShopIsActive(shop);
         shop.archive(normalizeRequired(request.archivedReason()));
     }
 

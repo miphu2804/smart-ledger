@@ -11,6 +11,7 @@ import com.smartledger.core.exception.BusinessException;
 import com.smartledger.core.repository.ExpenseRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.ExpenseService;
+import com.smartledger.core.service.IdempotencyService;
 import com.smartledger.core.service.ShopService;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -23,16 +24,26 @@ import org.springframework.util.StringUtils;
 public class ExpenseServiceImpl implements ExpenseService {
     private final ShopService shopService;
     private final ExpenseRepository expenseRepository;
+    private final IdempotencyService idempotencyService;
 
-    public ExpenseServiceImpl(ShopService shopService, ExpenseRepository expenseRepository) {
+    public ExpenseServiceImpl(ShopService shopService, ExpenseRepository expenseRepository,
+            IdempotencyService idempotencyService) {
         this.shopService = shopService;
         this.expenseRepository = expenseRepository;
+        this.idempotencyService = idempotencyService;
     }
 
     @Override
     @Transactional
-    public ExpenseResponse create(VerifiedFirebaseToken token, String shopId, ExpenseWriteRequest request) {
+    public ExpenseResponse create(VerifiedFirebaseToken token, String shopId, String idempotencyKey,
+            ExpenseWriteRequest request) {
         Shop shop = shopService.requireOwnedActiveShop(token, shopId);
+        return idempotencyService.execute(shop.getId(), shop.getOwnerId(), "EXPENSE_CREATE",
+                idempotencyKey, request, "EXPENSE", ExpenseResponse::id, ExpenseResponse.class,
+                () -> createOnce(shop, request));
+    }
+
+    private ExpenseResponse createOnce(Shop shop, ExpenseWriteRequest request) {
         Expense expense = Expense.manual(shop.getId(), shop.getOwnerId(), normalize(request.category()),
                 request.description().trim(), request.amountVnd(), request.paymentMethod(),
                 utcOrNow(request.expenseAt()));

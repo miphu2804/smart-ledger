@@ -15,6 +15,7 @@ import com.smartledger.core.repository.PaymentRepository;
 import com.smartledger.core.repository.SaleRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.DebtService;
+import com.smartledger.core.service.IdempotencyService;
 import com.smartledger.core.service.ShopService;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -27,13 +28,16 @@ public class DebtServiceImpl implements DebtService {
     private final DebtRepository debtRepository;
     private final SaleRepository saleRepository;
     private final PaymentRepository paymentRepository;
+    private final IdempotencyService idempotencyService;
 
     public DebtServiceImpl(ShopService shopService, DebtRepository debtRepository,
-            SaleRepository saleRepository, PaymentRepository paymentRepository) {
+            SaleRepository saleRepository, PaymentRepository paymentRepository,
+            IdempotencyService idempotencyService) {
         this.shopService = shopService;
         this.debtRepository = debtRepository;
         this.saleRepository = saleRepository;
         this.paymentRepository = paymentRepository;
+        this.idempotencyService = idempotencyService;
     }
 
     @Override
@@ -55,9 +59,17 @@ public class DebtServiceImpl implements DebtService {
     @Override
     @Transactional
     public DebtRepaymentResponse repay(VerifiedFirebaseToken token, String shopId, String debtId,
+            String idempotencyKey,
             DebtRepaymentRequest request) {
         Shop shop = shopService.requireOwnedActiveShop(token, shopId);
         Long id = BusinessIdParser.parse(debtId, "debtId", ErrorCode.INVALID_DEBT_ID);
+        return idempotencyService.execute(shop.getId(), shop.getOwnerId(), "DEBT_REPAYMENT",
+                idempotencyKey, new Object[] { id, request }, "PAYMENT",
+                response -> response.payment().id(), DebtRepaymentResponse.class,
+                () -> repayOnce(shop, id, request));
+    }
+
+    private DebtRepaymentResponse repayOnce(Shop shop, Long id, DebtRepaymentRequest request) {
         Debt debt = debtRepository.findLockedByIdAndShopId(id, shop.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.DEBT_NOT_FOUND));
         Sale sale = saleRepository.findByIdAndShopId(debt.getSaleId(), shop.getId())

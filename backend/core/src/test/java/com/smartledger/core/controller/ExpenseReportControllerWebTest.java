@@ -54,12 +54,13 @@ class ExpenseReportControllerWebTest {
 
     @Test
     void createExpenseAndReadSummary() throws Exception {
-        when(expenseService.create(any(), eq("7"), any())).thenReturn(new ExpenseResponse(9L, 7L,
+        when(expenseService.create(any(), eq("7"), eq("expense-one"), any())).thenReturn(new ExpenseResponse(9L, 7L,
                 "Rent", "Monthly rent", 200_000L, null, OffsetDateTime.parse("2026-09-28T03:00:00Z"),
                 ExpenseStatus.ACTIVE, null, null));
         mvc.perform(post("/api/v1/expenses")
                         .header("Authorization", "Bearer valid-token")
                         .header("X-Shop-Id", "7")
+                        .header("Idempotency-Key", "expense-one")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"description\":\"Monthly rent\",\"amountVnd\":200000}"))
                 .andExpect(status().isCreated())
@@ -92,6 +93,18 @@ class ExpenseReportControllerWebTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"amountVnd\":null}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void reportsMissingRequiredHeadersInTheStandardErrorShape() throws Exception {
+        mvc.perform(post("/api/v1/expenses")
+                        .header("Authorization", "Bearer valid-token")
+                        .header("X-Shop-Id", "7")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"description\":\"Rent\",\"amountVnd\":10000}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("missing_required_header"))
+                .andExpect(jsonPath("$.details[0].field").value("Idempotency-Key"));
     }
 
     @Test

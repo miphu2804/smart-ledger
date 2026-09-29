@@ -92,6 +92,8 @@ Hóa đơn điện tử là initiative kế tiếp, không mặc nhiên thuộc 
 | `BR-012` | Input, dữ liệu vector nếu có sử dụng, truy xuất dữ liệu, trace và output AI phải được cô lập theo cửa hàng và không làm lộ dữ liệu nhạy cảm sang nhà cung cấp ngoài cấu hình đã duyệt. |
 | `BR-013` | ADMIN chỉ dùng web dashboard để hỗ trợ cơ sở khách hàng; không dùng mobile như OWNER và không trực tiếp sửa sổ bán hàng trong MVP. |
 | `BR-014` | Mọi lần ADMIN xem dữ liệu hoặc thực hiện hành động hỗ trợ phải được phân quyền và lưu audit. |
+| `BR-015` | OWNER không thể lưu trữ một tiệm đang bị ADMIN tạm ngưng; lý do tạm ngưng phải còn để OWNER biết cách liên hệ hỗ trợ. |
+| `BR-016` | Gửi lại cùng một yêu cầu ghi nhận trả nợ hoặc chi phí do mạng lỗi không được tạo thêm một bản ghi thu/chi. |
 
 `BR-003` giữ nguyên ý: người bán quyết định số liệu được ghi.
 
@@ -156,5 +158,7 @@ Copy UI viện dẫn nghị định trên màn bản ghi bán hàng **không** b
 | `BR-009` | `FR-010`, `FR-011`, `NFR-003` | tạm thời — MVP đã chấp nhận; không tuyên bố sẵn sàng sản xuất |
 | `BR-013`, `BR-014` | `FR-022`–`FR-024`, `NFR-009` | tạm thời — admin web dashboard trong MVP |
 | `BR-010` | `FR-014` | tạm thời — MVP đã chấp nhận |
+| `BR-015` | `FR-011`, `AC-025` | tạm thời — cần kiểm chứng với FE |
+| `BR-016` | `FR-015`, `FR-016`, `AC-024` | tạm thời — thử trên DB local trước migration |
 | `BR-002`, `BR-003`, `BR-011`, `BR-012` | `FR-008`, `FR-017`, `FR-018`, `FR-020`, `FR-021`, `FR-025`, `NFR-006`–`NFR-008` | tạm thời — đích MVP; chưa có FE/runtime để chứng minh |
 | `BO-004`, `BR-INV-001`–`BR-INV-008` | `FR-INV-001`–`FR-INV-007` | Hoãn, chờ `OQ-INV-001`–`OQ-INV-005` và phê duyệt pháp lý |

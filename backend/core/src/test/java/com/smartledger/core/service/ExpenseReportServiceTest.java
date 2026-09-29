@@ -26,6 +26,7 @@ import com.smartledger.core.repository.SaleRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.impl.ExpenseServiceImpl;
 import com.smartledger.core.service.impl.ReportServiceImpl;
+import java.util.function.Supplier;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -41,7 +42,9 @@ class ExpenseReportServiceTest {
     private final SaleRepository saleRepository = Mockito.mock(SaleRepository.class);
     private final PaymentRepository paymentRepository = Mockito.mock(PaymentRepository.class);
     private final DebtRepository debtRepository = Mockito.mock(DebtRepository.class);
-    private final ExpenseService expenseService = new ExpenseServiceImpl(shopService, expenseRepository);
+    private final IdempotencyService idempotencyService = Mockito.mock(IdempotencyService.class);
+    private final ExpenseService expenseService = new ExpenseServiceImpl(shopService, expenseRepository,
+            idempotencyService);
     private final ReportService reportService = new ReportServiceImpl(shopService, saleRepository,
             paymentRepository, expenseRepository, debtRepository);
     private final VerifiedFirebaseToken token = new VerifiedFirebaseToken("uid", null, false, null, null, null);
@@ -51,6 +54,8 @@ class ExpenseReportServiceTest {
         Shop shop = Shop.create(42L, "Shop", null, null, null);
         ReflectionTestUtils.setField(shop, "id", 7L);
         when(shopService.requireOwnedActiveShop(any(), eq("7"))).thenReturn(shop);
+        when(idempotencyService.execute(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(8)).get());
     }
 
     @Test
@@ -62,7 +67,7 @@ class ExpenseReportServiceTest {
         });
         OffsetDateTime when = OffsetDateTime.parse("2026-09-28T10:00:00+07:00");
 
-        var response = expenseService.create(token, "7",
+        var response = expenseService.create(token, "7", "expense-one",
                 new ExpenseWriteRequest("  Rent  ", "  Monthly rent  ", 200_000L, PaymentMethod.TRANSFER, when));
 
         assertThat(response.id()).isEqualTo(9L);

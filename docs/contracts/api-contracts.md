@@ -40,6 +40,10 @@ Core trả `{ "code": "string", "message": "string", "details": [{ "field": "str
 
 Endpoint AI nội bộ trả `503` với `detail: "ai_unavailable"` khi model chưa cấu hình hoặc lời gọi model thất bại. Không áp dụng payload lỗi AI cho Core.
 
+**Bản Core trên `feat/core-business` (chưa tích hợp staging):** `POST /api/v1/debts/{debtId}/payments` và `POST /api/v1/expenses` yêu cầu `Idempotency-Key` (1–255 ký tự) cùng `X-Shop-Id`. FE tạo key mới cho một lần xác nhận, giữ nguyên key khi retry chính yêu cầu đó. Cùng key và nội dung trả lại response `201` ban đầu, không ghi thêm; cùng key nhưng nội dung khác trả `409 idempotency_key_conflict`, key quá hạn trả `409 idempotency_key_expired`. Thời hạn mặc định thử nghiệm là 30 ngày; không tự xóa key quá hạn. Flyway `V7` tạo bảng `api_idempotency_keys`; đã kiểm thử trên DB PostgreSQL sạch nhưng chưa xác nhận deploy staging.
+
+Core trả `400 missing_required_header` khi thiếu header bắt buộc, `409 product_barcode_conflict` nếu unique constraint barcode bị tranh chấp, và lỗi ràng buộc DB chưa nhận diện theo dạng chuẩn `500 internal_error` không lộ chi tiết nội bộ. OWNER không thể archive shop đang `INACTIVE` (`403 shop_inactive`).
+
 ## 1. Auth và tiệm
 
 | Method | Đường | Body / query | Trả về |

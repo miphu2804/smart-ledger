@@ -30,6 +30,7 @@ import com.smartledger.core.repository.SaleRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.impl.CustomerServiceImpl;
 import com.smartledger.core.service.impl.DebtServiceImpl;
+import java.util.function.Supplier;
 import java.util.Optional;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,9 +44,10 @@ class CustomerDebtServiceTest {
     private final DebtRepository debtRepository = Mockito.mock(DebtRepository.class);
     private final SaleRepository saleRepository = Mockito.mock(SaleRepository.class);
     private final PaymentRepository paymentRepository = Mockito.mock(PaymentRepository.class);
+    private final IdempotencyService idempotencyService = Mockito.mock(IdempotencyService.class);
     private final CustomerService customerService = new CustomerServiceImpl(shopService, customerRepository);
     private final DebtService debtService = new DebtServiceImpl(shopService, debtRepository,
-            saleRepository, paymentRepository);
+            saleRepository, paymentRepository, idempotencyService);
     private final VerifiedFirebaseToken token = new VerifiedFirebaseToken("uid", null, false, null, null, null);
 
     @BeforeEach
@@ -53,6 +55,8 @@ class CustomerDebtServiceTest {
         Shop shop = Shop.create(42L, "Shop", null, null, null);
         ReflectionTestUtils.setField(shop, "id", 7L);
         when(shopService.requireOwnedActiveShop(any(), eq("7"))).thenReturn(shop);
+        when(idempotencyService.execute(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(8)).get());
     }
 
     @Test
@@ -129,7 +133,7 @@ class CustomerDebtServiceTest {
             return payment;
         });
 
-        var partial = debtService.repay(token, "7", "11",
+        var partial = debtService.repay(token, "7", "11", "repayment-one",
                 new DebtRepaymentRequest(5_000L, PaymentMethod.CASH, null));
         assertThat(partial.debt().outstandingVnd()).isEqualTo(15_000L);
         assertThat(partial.debt().status()).isEqualTo(DebtStatus.OPEN);
@@ -137,7 +141,7 @@ class CustomerDebtServiceTest {
         assertThat(sale.getPaidVnd()).isEqualTo(5_000L);
         assertThat(sale.getPaymentStatus()).isEqualTo(PaymentStatus.PARTIAL);
 
-        var finalPayment = debtService.repay(token, "7", "11",
+        var finalPayment = debtService.repay(token, "7", "11", "repayment-two",
                 new DebtRepaymentRequest(15_000L, PaymentMethod.CASH, null));
         assertThat(finalPayment.debt().outstandingVnd()).isZero();
         assertThat(finalPayment.debt().status()).isEqualTo(DebtStatus.SETTLED);
@@ -153,7 +157,7 @@ class CustomerDebtServiceTest {
         when(debtRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(debt));
         when(saleRepository.findByIdAndShopId(15L, 7L)).thenReturn(Optional.of(unpaidSale()));
 
-        assertThatThrownBy(() -> debtService.repay(token, "7", "11",
+        assertThatThrownBy(() -> debtService.repay(token, "7", "11", "overpayment",
                 new DebtRepaymentRequest(20_001L, PaymentMethod.CASH, null)))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.DEBT_PAYMENT_INVALID));
@@ -168,7 +172,7 @@ class CustomerDebtServiceTest {
         when(debtRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(debt));
         when(saleRepository.findByIdAndShopId(15L, 7L)).thenReturn(Optional.of(unpaidSale()));
 
-        assertThatThrownBy(() -> debtService.repay(token, "7", "11",
+        assertThatThrownBy(() -> debtService.repay(token, "7", "11", "settled-payment",
                 new DebtRepaymentRequest(1L, PaymentMethod.CASH, null)))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.DEBT_ALREADY_SETTLED));

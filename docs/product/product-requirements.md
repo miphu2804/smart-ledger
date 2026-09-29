@@ -74,12 +74,12 @@ Luồng hỗ trợ: ADMIN đăng nhập dashboard web, tìm OWNER hoặc cơ s�
 | `FR-008` | `BR-002`, `OQ-001` | Người bán nói để lên đơn/ghi chi; hệ thống chuyển giọng nói thành text và bản nháp để kiểm tra. | P0 — MVP |
 | `FR-009` | `BO-002`, `BR-007` | Người bán tạo, sửa, xóa mặt hàng (tên, giá, nhóm, tồn, theo dõi tồn) để tăng độ chính xác khớp câu và POS. | P0 — MVP |
 | `FR-010` | `BR-009` | OWNER đăng nhập trên mobile và ADMIN đăng nhập trên web bằng Google, số điện thoại OTP hoặc Zalo; các identity cùng người dùng không tạo dữ liệu trùng. | P0 — MVP thí điểm, chưa tuyên bố sẵn sàng sản xuất |
-| `FR-011` | `BR-009` | OWNER tạo/xem/sửa hồ sơ tiệm (tên, ngành, liên hệ). Dữ liệu nghiệp vụ gắn với tiệm do OWNER sở hữu. | P0 — MVP |
+| `FR-011` | `BR-009`, `BR-015` | OWNER tạo/xem/sửa hồ sơ tiệm (tên, ngành, liên hệ). Dữ liệu nghiệp vụ gắn với tiệm do OWNER sở hữu; không thể lưu trữ tiệm đang bị ADMIN tạm ngưng. | P0 — MVP |
 | `FR-012` | `BR-009` | Đã loại khỏi MVP: không có vai trò nhân viên hoặc quản lý thành viên trong mô hình hai vai trò. Giữ mã để không tái sử dụng ID. | Loại khỏi MVP |
 | `FR-013` | `BO-001`, `BR-001`, `BR-007` | Người bán chọn hàng từ danh mục, chỉnh số lượng, thêm món nhanh để lập giỏ. | P0 — MVP |
 | `FR-014` | `BR-010` | Khi chốt, người bán chọn tiền mặt, chuyển khoản, hoặc ghi nợ; có thể thu một phần. Chuyển khoản là ghi nhận, không phải cổng thanh toán. | P0 — MVP |
-| `FR-015` | `BO-005`, `BR-005`, `BR-008` | Người bán tạo, xem, xóa khoản chi (tên, số tiền); có thể điền từ câu chi phí. | P0 — MVP |
-| `FR-016` | `BO-005`, `BR-008` | Người bán xem khách còn nợ, thu thêm, và xóa khoản nợ trên UI. | P0 — MVP |
+| `FR-015` | `BO-005`, `BR-005`, `BR-008`, `BR-016` | Người bán tạo, xem, xóa khoản chi (tên, số tiền); có thể điền từ câu chi phí. Retry cùng một lần tạo không được ghi chi phí hai lần. | P0 — MVP |
+| `FR-016` | `BO-005`, `BR-008`, `BR-016` | Người bán xem khách còn nợ, thu thêm, và xóa khoản nợ trên UI. Retry cùng một lần trả nợ không được ghi payment hai lần. | P0 — MVP |
 | `FR-017` | `BR-003`, `BR-011` | Người bán gửi ảnh; hệ thống trả dữ liệu nhận diện thành bản nháp có thể sửa hoặc hủy. | P1 — MVP; loại ảnh đầu tiên chốt trong issue |
 | `FR-018` | `BR-003`, `BR-012` | Mỗi đề xuất AI lưu trạng thái, model/version và kết quả đủ để điều tra lỗi; không tự tạo bản ghi nghiệp vụ. | P0 — MVP |
 | `FR-019` | `BO-003`, `BR-011`, `BR-012` | RAG chỉ truy xuất dữ liệu của shop đang chọn và trả căn cứ cho recommendation/chat. | P1 — MVP |
@@ -162,6 +162,8 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 | `AC-021` | OWNER không xem, đổi tên, tiếp tục hoặc nhận lịch sử của chat thuộc user/shop khác; chat mới không nhận lịch sử từ chat cũ. | `FR-027`, `NFR-007` |
 | `AC-022` | Sau khi OWNER xóa chat, chat không còn trong danh sách, không mở/tiếp tục được và tin nhắn không được đưa vào ngữ cảnh assistant. | `FR-027` |
 | `AC-023` | OWNER đổi tên chat bằng tiêu đề 1–255 ký tự; tên mới hiển thị trong danh sách sau khi tải lại. Tiêu đề rỗng hoặc vượt giới hạn bị từ chối. | `FR-027` |
+| `AC-024` | Gửi lại yêu cầu trả nợ hoặc tạo chi phí với cùng `Idempotency-Key` và nội dung trả cùng kết quả, không tạo thêm bản ghi; dùng key đó cho nội dung khác bị từ chối. | `FR-015`, `FR-016` |
+| `AC-025` | OWNER không lưu trữ được shop đang `INACTIVE`; lý do tạm ngưng vẫn còn để xem trong hồ sơ shop. | `FR-011` |
 | `AC-INV-001` | Không thể kích hoạt hóa đơn điện tử khi hồ sơ áp dụng hoặc quy tắc pháp lý chưa được phê duyệt/hoàn tất. | `FR-INV-001` |
 | `AC-INV-002` | Mỗi giao dịch thuộc diện lập hóa đơn có một trạng thái đối soát và không biến mất khi nhà cung cấp lỗi. | `FR-INV-003`, `FR-INV-005`, `NFR-004` |
 
