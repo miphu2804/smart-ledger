@@ -156,6 +156,8 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       POSTGRES_PASSWORD: ci-only-password
+      FIREBASE_PROJECT_ID: ci-placeholder
+      FIREBASE_CREDENTIALS_PATH: ./backend/core/.env.example
     steps:
       - uses: actions/checkout@v7
       - name: Build custom service images

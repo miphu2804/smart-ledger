@@ -1,0 +1,11 @@
+.git
+.gitignore
+.idea
+target
+*.iml
+
+# Local configuration and credentials must never enter a container image.
+.env
+.env.*
+!.env.example
+*.json

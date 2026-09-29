@@ -24,11 +24,24 @@ function monthWeeks(invoices: Invoice[], now = new Date()) {
   return weeks;
 }
 
+const weekdayShort = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+const weekdayLong = ['Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy', 'Chủ nhật'];
+
+/** Doanh thu từng ngày trong tuần lịch hiện tại (T2 → CN); ngày chưa tới có giá trị 0. */
+function weekDays(invoices: Invoice[], now = new Date()) {
+  const days = weekdayShort.map((label) => ({ label, value: 0 }));
+  invoices.forEach((invoice) => {
+    if (invoice.status === 'cancelled' || !inPeriod(invoice.createdAt, 'thisWeek', now)) return;
+    days[(new Date(invoice.createdAt).getDay() + 6) % 7].value += invoiceTotal(invoice);
+  });
+  return days;
+}
+
 export default function Analytics() {
   const app = useApp();
   const { period: requestedPeriod } = useLocalSearchParams<{ period?: string }>();
   const [period, setPeriod] = useState<ReportPeriod>(
-    requestedPeriod === 'yesterday' || requestedPeriod === 'month' ? requestedPeriod : 'today',
+    requestedPeriod === 'thisWeek' || requestedPeriod === 'month' ? requestedPeriod : 'today',
   );
   const [selectedBar, setSelectedBar] = useState<number | null>(null);
 
@@ -38,7 +51,7 @@ export default function Analytics() {
   const estimatedCost = totals.revenue - totals.profit;
   const debtLeft = app.debts.reduce((sum, debt) => sum + Math.max(0, debt.total - debt.paid), 0);
   const leaders = bestSellers(app.invoices, period).slice(0, 3);
-  const trend = period === 'month' ? monthWeeks(app.invoices) : hourly(app.invoices, period);
+  const trend = period === 'month' ? monthWeeks(app.invoices) : period === 'thisWeek' ? weekDays(app.invoices) : hourly(app.invoices, period);
   const defaultBar = trend.reduce((best, item, index) => (item.value > trend[best].value ? index : best), 0);
   const activeBar = selectedBar !== null && selectedBar < trend.length ? selectedBar : defaultBar;
   const periodName = periodLabel[period];
@@ -83,7 +96,7 @@ export default function Analytics() {
       <Card>
         <Row style={{ justifyContent: 'space-between', marginBottom: 12 }}>
           <T size={12} color={colors.muted}>
-            {period === 'month' ? 'Theo tuần trong tháng' : 'Theo giờ trong ngày'}
+            {period === 'month' ? 'Theo tuần trong tháng' : period === 'thisWeek' ? 'Theo ngày trong tuần' : 'Theo giờ trong ngày'}
           </T>
           <Feather name="bar-chart-2" size={15} color={colors.primary} />
         </Row>
@@ -91,7 +104,7 @@ export default function Analytics() {
           <>
             <BarChart data={trend} height={126} selected={activeBar} onSelect={setSelectedBar} highlightLast={false} />
             <T size={12} color={colors.muted} style={{ marginTop: 12 }}>
-              {period === 'month' ? `Ngày ${trend[activeBar].label}` : `Khung ${trend[activeBar].label}`} · {vnd(trend[activeBar].value)}
+              {period === 'month' ? `Ngày ${trend[activeBar].label}` : period === 'thisWeek' ? weekdayLong[activeBar] : `Khung ${trend[activeBar].label}`} · {vnd(trend[activeBar].value)}
             </T>
           </>
         ) : (

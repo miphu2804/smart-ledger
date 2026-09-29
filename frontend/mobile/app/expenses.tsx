@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useToast } from '../../src/components/brand';
+import { useToast } from '../src/components/brand';
 import {
   Button,
   Card,
@@ -9,20 +9,21 @@ import {
   Dialog,
   EmptyState,
   Field,
+  Header,
   Row,
   Screen,
   SectionTitle,
   Sheet,
   T,
   Tile,
-} from '../../src/components/ui';
-import { expenseCategoryMeta, expenseVoiceSamples } from '../../src/data/mock';
-import type { ExpenseCategory } from '../../src/data/types';
-import { compact, ddmm, hhmm, vnd } from '../../src/lib/format';
-import { parseExpense } from '../../src/lib/parseOrder';
-import { monthExpenses, monthRevenue } from '../../src/lib/stats';
-import { useApp } from '../../src/store/AppStore';
-import { colors, shadow } from '../../src/theme';
+} from '../src/components/ui';
+import { expenseCategoryMeta, expenseVoiceSamples } from '../src/data/mock';
+import type { ExpenseCategory } from '../src/data/types';
+import { compact, ddmm, hhmm, vnd } from '../src/lib/format';
+import { parseExpense } from '../src/lib/parseOrder';
+import { monthExpenses, monthRevenue } from '../src/lib/stats';
+import { useApp } from '../src/store/AppStore';
+import { colors } from '../src/theme';
 
 export default function Expenses() {
   const app = useApp();
@@ -45,21 +46,8 @@ export default function Expenses() {
   }, [list]);
 
   return (
-    <Screen
-      overlay={
-        <Pressable onPress={() => setAdding(true)} style={[styles.addBtn, shadow(2)]}>
-          <View style={styles.addIcon}>
-            <Feather name="plus" size={18} color={colors.white} />
-          </View>
-          <T w="bold" size={14} color={colors.primary}>
-            Thêm chi phí
-          </T>
-        </Pressable>
-      }
-    >
-      <T w="extrabold" size={26} style={{ paddingTop: 10, paddingBottom: 14 }}>
-        Chi phí
-      </T>
+    <Screen footer={<Button title="Thêm chi phí" icon="plus" onPress={() => setAdding(true)} />}>
+      <Header title="Chi phí" subtitle="Các khoản chi đã ghi" />
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
         {months.map((m) => {
@@ -236,8 +224,8 @@ function AddExpenseSheet({ visible, onClose }: { visible: boolean; onClose: () =
         value={mode}
         onChange={setMode}
         options={[
-          { key: 'voice', label: '🎙 Nói' },
-          { key: 'manual', label: '⌨️ Nhập tay' },
+          { key: 'voice', label: 'Nói', icon: 'mic' },
+          { key: 'manual', label: 'Nhập tay', icon: 'edit-3' },
         ]}
       />
       {mode === 'voice' ? (
@@ -294,25 +282,5 @@ const styles = StyleSheet.create({
   stack: { flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'hidden', gap: 2 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  addBtn: {
-    position: 'absolute',
-    left: 16,
-    bottom: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: colors.primarySoft,
-    borderRadius: 26,
-    padding: 5,
-    paddingRight: 16,
-  },
-  addIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   voiceBox: { marginTop: 14, backgroundColor: colors.white, borderRadius: 18, padding: 14, borderWidth: 1, borderColor: colors.border },
 });

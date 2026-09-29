@@ -1,8 +1,17 @@
 import { Feather } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Header, IconBtn, Row, T } from '../src/components/ui';
+import { Header, T } from '../src/components/ui';
 import type { ChatMessage } from '../src/data/types';
 import { normalizeText, vnd } from '../src/lib/format';
 import { bestSellers, monthExpenses, summary } from '../src/lib/stats';
@@ -10,12 +19,12 @@ import { useApp } from '../src/store/AppStore';
 import { colors, font } from '../src/theme';
 
 const QUICK = [
-  'Hôm nay bán được bao nhiêu?',
-  'Món nào bán chạy nhất tuần này?',
-  'Nên nhập thêm hàng gì?',
-  'Tháng này lời bao nhiêu?',
-  'Ai đang nợ tiền?',
-];
+  { label: 'Doanh thu hôm nay?', icon: 'trending-up' },
+  { label: 'Món bán chạy tuần này', icon: 'award' },
+  { label: 'Nên nhập thêm hàng gì?', icon: 'package' },
+  { label: 'Tháng này lời bao nhiêu?', icon: 'dollar-sign' },
+  { label: 'Ai đang nợ tiền?', icon: 'users' },
+] as const;
 
 /** Trợ lý AI — câu trả lời GIẢ LẬP tính từ dữ liệu mẫu trong app. */
 export default function Ai() {
@@ -74,99 +83,199 @@ export default function Ai() {
   };
 
   const send = (q: string) => {
-    if (!q.trim()) return;
-    setMsgs((m) => [...m, { id: `u${Date.now()}`, from: 'user', text: q.trim() }]);
+    const message = q.trim();
+    if (!message || typing) return;
+    setMsgs((m) => [...m, { id: `u${Date.now()}`, from: 'user', text: message }]);
     setText('');
     setTyping(true);
     setTimeout(() => {
       setTyping(false);
-      setMsgs((m) => [...m, { id: `a${Date.now()}`, from: 'ai', text: answer(q) }]);
+      setMsgs((m) => [...m, { id: `a${Date.now()}`, from: 'ai', text: answer(message) }]);
     }, 700);
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top }}>
-      <View style={{ paddingHorizontal: 16 }}>
-        <Header
-          title="Trợ lý AI"
-          subtitle="Hỏi về doanh thu, hàng hoá và công nợ"
-          right={
-            <View style={styles.badge}>
-              <Feather name="star" size={16} color={colors.ink} />
-            </View>
-          }
-        />
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <View style={[styles.headerWrap, { paddingTop: insets.top }]}>
+        <Header title="Trợ lý AI" subtitle="Hỏi về doanh thu, hàng hoá và công nợ" />
       </View>
-      <ScrollView ref={scroll} style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
-        {msgs.map((m) => (
-          <View key={m.id} style={[styles.bubble, m.from === 'user' ? styles.user : styles.ai]}>
-            <T size={14} color={m.from === 'user' ? colors.white : colors.ink} style={{ lineHeight: 20 }}>
-              {m.text}
+
+      <ScrollView
+        ref={scroll}
+        style={styles.chat}
+        contentContainerStyle={[styles.chatContent, msgs.length === 1 && styles.welcomeContent]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.messages}>
+          {msgs.map((m) => {
+            const isUser = m.from === 'user';
+            return (
+              <View key={m.id} style={[styles.messageRow, isUser && styles.userMessageRow]}>
+                <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
+                  {!isUser ? (
+                    <T w="bold" size={10} color={colors.primary} style={styles.sender}>
+                      TRỢ LÝ
+                    </T>
+                  ) : null}
+                  <T size={14} color={isUser ? colors.white : colors.ink} style={styles.messageText}>
+                    {m.text}
+                  </T>
+                </View>
+              </View>
+            );
+          })}
+          {typing ? (
+            <View style={styles.messageRow}>
+              <View style={[styles.bubble, styles.assistantBubble, styles.typingBubble]}>
+                <T size={13} color={colors.muted}>
+                  Đang trả lời…
+                </T>
+                <Feather name="more-horizontal" size={17} color={colors.primary} />
+              </View>
+            </View>
+          ) : null}
+        </View>
+
+        {msgs.length === 1 && !typing ? (
+          <View style={styles.suggestionSection}>
+            <T w="bold" size={11} color={colors.muted} style={styles.suggestionHeading}>
+              CÂU HỎI GỢI Ý
             </T>
-          </View>
-        ))}
-        {typing ? (
-          <View style={[styles.bubble, styles.ai]}>
-            <T size={14} color={colors.faint}>
-              Đang xem sổ…
-            </T>
+            <View style={styles.suggestionGrid}>
+              {QUICK.map((q) => (
+                <Pressable
+                  key={q.label}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Hỏi trợ lý: ${q.label}`}
+                  onPress={() => send(q.label)}
+                  style={({ pressed }) => [styles.suggestion, pressed && styles.pressed]}
+                >
+                  <Feather name={q.icon} size={16} color={colors.primary} />
+                  <T w="semibold" size={12} color={colors.ink} style={styles.suggestionText}>
+                    {q.label}
+                  </T>
+                  <Feather name="arrow-up-right" size={14} color={colors.faint} />
+                </Pressable>
+              ))}
+            </View>
           </View>
         ) : null}
       </ScrollView>
-      <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 10 }}>
-          {QUICK.map((q) => (
-            <Pressable key={q} onPress={() => send(q)} style={styles.quick}>
-              <T w="semibold" size={12} color={colors.ink}>
-                {q}
-              </T>
-            </Pressable>
-          ))}
-        </ScrollView>
-        <Row style={styles.inputRow}>
+
+      <View style={[styles.composerWrap, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        <View style={styles.composer}>
           <TextInput
             value={text}
             onChangeText={setText}
             onSubmitEditing={() => send(text)}
             placeholder="Hỏi trợ lý…"
             placeholderTextColor={colors.faint}
+            accessibilityLabel="Tin nhắn cho trợ lý"
             style={styles.input}
             returnKeyType="send"
           />
-          <IconBtn
-            name="send"
-            bg={text.trim() ? colors.ink : colors.border}
-            color={text.trim() ? colors.white : colors.muted}
-            size={44}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Mở nhập bằng giọng nói"
+            hitSlop={6}
+            onPress={() => router.push('/voice')}
+            style={({ pressed }) => [styles.actionButton, styles.voiceButton, pressed && styles.pressed]}
+          >
+            <Feather name="mic" size={19} color={colors.primary} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Gửi tin nhắn"
+            disabled={!text.trim() || typing}
+            hitSlop={4}
             onPress={() => send(text)}
-            label="Gửi"
-          />
-        </Row>
+            style={({ pressed }) => [
+              styles.actionButton,
+              styles.sendButton,
+              (!text.trim() || typing) && styles.sendDisabled,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Feather name="arrow-up" size={20} color={text.trim() && !typing ? colors.white : colors.muted} />
+          </Pressable>
+        </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  badge: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: colors.border,
+  screen: { flex: 1, backgroundColor: colors.bg },
+  headerWrap: { paddingHorizontal: 16 },
+  chat: { flex: 1 },
+  chatContent: { flexGrow: 1, paddingHorizontal: 16, paddingTop: 20, paddingBottom: 16 },
+  welcomeContent: { justifyContent: 'center' },
+  messages: { gap: 12 },
+  messageRow: { flexDirection: 'row', alignItems: 'flex-end' },
+  userMessageRow: { justifyContent: 'flex-end' },
+  bubble: { maxWidth: '90%', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 11 },
+  assistantBubble: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderBottomLeftRadius: 5,
+  },
+  userBubble: { backgroundColor: colors.primary, borderBottomRightRadius: 5 },
+  sender: { letterSpacing: 0.5, marginBottom: 4 },
+  messageText: { lineHeight: 20 },
+  typingBubble: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  suggestionSection: { marginTop: 24 },
+  suggestionHeading: { letterSpacing: 0.7, marginBottom: 10, marginLeft: 2 },
+  suggestionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  suggestion: {
+    width: '48%',
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    borderRadius: 14,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  suggestionText: { flex: 1, lineHeight: 16 },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
+  composerWrap: { paddingHorizontal: 16, paddingTop: 10, backgroundColor: colors.bg },
+  composer: {
+    minHeight: 60,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    padding: 6,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 18,
+  },
+  input: {
+    flex: 1,
+    height: 46,
+    paddingHorizontal: 10,
+    fontFamily: font.medium,
+    fontSize: 14,
+    color: colors.ink,
+    outlineStyle: 'none',
+  } as never,
+  actionButton: {
+    width: 44,
+    height: 44,
+    borderWidth: 0,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  bubble: { maxWidth: '86%', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 10 },
-  user: { alignSelf: 'flex-end', backgroundColor: colors.ink, borderBottomRightRadius: 5 },
-  ai: { alignSelf: 'flex-start', backgroundColor: colors.white, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: 5 },
-  bottom: {
-    backgroundColor: colors.white,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  quick: { backgroundColor: colors.white, borderColor: colors.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, minHeight: 44, justifyContent: 'center' },
-  inputRow: { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border, borderRadius: 14, paddingLeft: 14, paddingRight: 6, minHeight: 52 },
-  input: { flex: 1, fontFamily: font.medium, fontSize: 14, color: colors.ink, height: '100%', outlineStyle: 'none' } as never,
+  voiceButton: { backgroundColor: 'transparent' },
+  sendButton: { backgroundColor: colors.primary },
+  sendDisabled: { backgroundColor: colors.border },
 });

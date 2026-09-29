@@ -1,3 +1,4 @@
+import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -67,7 +68,7 @@ export default function Setup() {
           const on = picked.includes(it.id);
           return (
             <Pressable key={it.id} onPress={() => toggle(it.id)} style={[styles.item, on && styles.itemOn]}>
-              <T size={24}>{it.emoji}</T>
+              <Feather name={it.icon} size={24} color={on ? colors.primary : colors.muted} />
               <T
                 w={on ? 'bold' : 'semibold'}
                 size={12}

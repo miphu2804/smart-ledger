@@ -80,7 +80,7 @@ export default function Invoices() {
           onChange={setSrc}
           options={[
             { key: 'all', label: 'Mọi loại' },
-            { key: 'voice', label: '🎙 Đọc đơn AI' },
+            { key: 'voice', label: 'Đọc đơn AI', icon: 'mic' },
             { key: 'pos', label: 'POS' },
             { key: 'manual', label: 'Nhập tay' },
             { key: 'debt', label: 'Ghi nợ' },
