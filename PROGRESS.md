@@ -18,6 +18,27 @@
 
 **Check:** Core Maven `verify` passed 119 tests with no failures/errors. Local HTTP smoke test on port 8080 replayed an expense with the same ID, rejected changed content with 409, and archived the test expense. OpenAPI listed both required headers; `docker compose config --quiet` passed. Docker image build could not run because Docker Engine was unavailable. No commit or push made.
 
+### [2026-09-28 18:57 UTC+07:00] — [Tooling] Review feature PRs on staging
+
+**Done:** Enabled automatic CodeRabbit review for pull requests targeting `staging`; reviews of the default branch remain enabled.
+
+**Changed files:** `.coderabbit.yaml` — created; `PROGRESS.md` — updated.
+
+**Flow explained:** CodeRabbit reads the root configuration from the PR branch and includes `staging` among eligible base branches.
+
+**Check:** Parsed YAML and confirmed the expected settings; `git diff --check` passed. Live GitHub App review is unverified until the configuration is pushed in a PR targeting `staging`.
+
+### [2026-09-28 17:28 UTC+07:00] — [Docs] Vietnamese code review rule
+
+**Done:** Added a Code review section to `AGENTS.md`: review summaries and PR review comments are written in Vietnamese, and review comments carry no verified/inferred markers. `CLAUDE.md` picks this up through `@AGENTS.md`.
+
+**Changed files:**
+- `AGENTS.md`, `PROGRESS.md` — modified
+
+**Flow explained:** Agents reviewing a branch or PR write their findings in Vietnamese as problem, scenario, and fix or decision needed.
+
+**Check:** Re-read `AGENTS.md`; `git diff --check` passed.
+
 ### [2026-09-28 UTC+07:00] — [Fix] Serialize product edits with checkout stock updates
 
 **Done:** Product PATCH and archive now acquire the same product row lock used when confirming a sale. Added a regression test that patches product metadata after a stock deduction without restoring the old quantity.
