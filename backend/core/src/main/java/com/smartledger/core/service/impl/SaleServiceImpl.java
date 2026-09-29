@@ -52,7 +52,8 @@ public class SaleServiceImpl implements SaleService {
         return new SaleResponse(sale.getId(), sale.getShopId(), sale.getCustomerNameSnapshot(),
                 sale.getCustomerPhoneSnapshot(), sale.getSubtotalVnd(), sale.getDiscountVnd(),
                 sale.getTotalVnd(), sale.getPaidVnd(), sale.getSaleStatus(), sale.getPaymentStatus(),
-                sale.getSoldAt(), items.stream().map(SaleServiceImpl::toItemResponse).toList());
+                sale.getSoldAt(), items.stream().map(SaleServiceImpl::toItemResponse).toList(),
+                sale.getCustomerId(), sale.getTotalVnd() - sale.getPaidVnd());
     }
 
     private static SaleItemResponse toItemResponse(SaleItem item) {

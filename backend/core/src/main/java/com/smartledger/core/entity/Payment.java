@@ -66,6 +66,20 @@ public class Payment {
         return payment;
     }
 
+    public static Payment debtRepayment(Long saleId, Long debtId, long amountVnd,
+            PaymentMethod method, String transferReference, Long userId) {
+        Payment payment = new Payment();
+        payment.saleId = saleId;
+        payment.debtId = debtId;
+        payment.amountVnd = amountVnd;
+        payment.paymentMethod = method;
+        payment.type = PaymentType.DEBT_REPAYMENT;
+        payment.transferReference = transferReference;
+        payment.receivedByUserId = userId;
+        payment.receivedAt = OffsetDateTime.now(ZoneOffset.UTC);
+        return payment;
+    }
+
     @PrePersist
     void onCreate() {
         createdAt = OffsetDateTime.now(ZoneOffset.UTC);

@@ -9,5 +9,13 @@ public record SaleDraftResponse(
         Long id, Long shopId, String customerName, String customerPhone,
         Long discountVnd, Long estimatedTotalVnd, Long initialPaidVnd,
         PaymentMethod initialPaymentMethod, DraftStatus status, OffsetDateTime expiresAt,
-        Long confirmedSaleId, List<SaleDraftItemResponse> items) {
+        Long confirmedSaleId, List<SaleDraftItemResponse> items, Long customerId) {
+
+    public SaleDraftResponse(Long id, Long shopId, String customerName, String customerPhone,
+            Long discountVnd, Long estimatedTotalVnd, Long initialPaidVnd,
+            PaymentMethod initialPaymentMethod, DraftStatus status, OffsetDateTime expiresAt,
+            Long confirmedSaleId, List<SaleDraftItemResponse> items) {
+        this(id, shopId, customerName, customerPhone, discountVnd, estimatedTotalVnd, initialPaidVnd,
+                initialPaymentMethod, status, expiresAt, confirmedSaleId, items, null);
+    }
 }

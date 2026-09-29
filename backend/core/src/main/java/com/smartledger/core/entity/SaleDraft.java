@@ -98,8 +98,9 @@ public class SaleDraft {
         return draft;
     }
 
-    public void replace(String customerName, String customerPhone, long discountVnd,
+    public void replace(Long customerId, String customerName, String customerPhone, long discountVnd,
             long estimatedTotalVnd, long initialPaidVnd, PaymentMethod paymentMethod) {
+        this.customerId = customerId;
         this.customerName = customerName;
         this.customerPhone = customerPhone;
         this.discountVnd = discountVnd;

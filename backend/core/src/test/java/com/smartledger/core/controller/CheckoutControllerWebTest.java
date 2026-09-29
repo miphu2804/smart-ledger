@@ -93,7 +93,8 @@ class CheckoutControllerWebTest {
     void confirmCreatesSaleWith201() throws Exception {
         when(draftService.confirm(any(), eq("7"), eq("11"))).thenReturn(new SaleResponse(
                 15L, 7L, null, null, 25000L, 0L, 25000L, 25000L,
-                SaleStatus.CONFIRMED, PaymentStatus.PAID, OffsetDateTime.now(ZoneOffset.UTC), List.of()));
+                SaleStatus.CONFIRMED, PaymentStatus.PAID, OffsetDateTime.now(ZoneOffset.UTC), List.of(),
+                null, 0L));
 
         mvc.perform(post("/api/v1/sale-drafts/11/confirm")
                         .header("Authorization", "Bearer valid-token")

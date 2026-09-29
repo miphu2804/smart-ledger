@@ -74,7 +74,7 @@ public class SaleDraftController {
     }
 
     @PostMapping("/{draftId}/confirm")
-    @Operation(summary = "Confirm a fully paid draft and record the sale, payment and stock change")
+    @Operation(summary = "Confirm a draft and record the sale, stock change, payment and optional debt")
     public ResponseEntity<SaleResponse> confirm(@AuthenticationPrincipal VerifiedFirebaseToken token,
             @RequestHeader("X-Shop-Id") String shopId, @PathVariable String draftId) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.confirm(token, shopId, draftId));

@@ -80,20 +80,34 @@ public class Sale {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
-    public static Sale fromPaidDraft(SaleDraft draft, long subtotalVnd) {
+    public static Sale fromDraft(SaleDraft draft, long subtotalVnd, Customer customer) {
         Sale sale = new Sale();
         sale.shopId = draft.getShopId();
         sale.createdByUserId = draft.getCreatedByUserId();
-        sale.customerNameSnapshot = draft.getCustomerName();
-        sale.customerPhoneSnapshot = draft.getCustomerPhone();
+        sale.customerId = customer == null ? null : customer.getId();
+        sale.customerNameSnapshot = customer == null ? draft.getCustomerName() : customer.getName();
+        sale.customerPhoneSnapshot = customer == null ? draft.getCustomerPhone() : customer.getNormalizedPhone();
         sale.subtotalVnd = subtotalVnd;
         sale.discountVnd = draft.getDiscountVnd();
         sale.totalVnd = draft.getEstimatedTotalVnd();
         sale.paidVnd = draft.getInitialPaidVnd();
         sale.saleStatus = SaleStatus.CONFIRMED;
-        sale.paymentStatus = PaymentStatus.PAID;
+        sale.paymentStatus = sale.paidVnd.equals(sale.totalVnd) ? PaymentStatus.PAID
+                : sale.paidVnd == 0 ? PaymentStatus.DEBT : PaymentStatus.PARTIAL;
         sale.soldAt = OffsetDateTime.now(ZoneOffset.UTC);
         return sale;
+    }
+
+    public static Sale fromPaidDraft(SaleDraft draft, long subtotalVnd) {
+        return fromDraft(draft, subtotalVnd, null);
+    }
+
+    public void recordRepayment(long amountVnd) {
+        paidVnd = Math.addExact(paidVnd, amountVnd);
+        if (paidVnd > totalVnd) {
+            throw new IllegalArgumentException("Repayment exceeds the sale total");
+        }
+        paymentStatus = paidVnd.equals(totalVnd) ? PaymentStatus.PAID : PaymentStatus.PARTIAL;
     }
 
     @PrePersist

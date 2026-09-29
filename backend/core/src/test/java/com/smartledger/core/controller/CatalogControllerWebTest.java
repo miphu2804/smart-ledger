@@ -6,11 +6,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.smartledger.core.config.SecurityConfiguration;
+import com.smartledger.core.dto.request.ProductPatchRequest;
 import com.smartledger.core.dto.response.CategoryResponse;
 import com.smartledger.core.dto.response.ProductResponse;
 import com.smartledger.core.enums.CatalogStatus;
@@ -23,6 +26,7 @@ import com.smartledger.core.security.FirebaseTokenVerifier;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.CategoryService;
 import com.smartledger.core.service.ProductService;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -140,6 +144,73 @@ class CatalogControllerWebTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("validation_failed"));
+    }
+
+    @Test
+    void productPatchAcceptsOnlyTheFieldsBeingChanged() throws Exception {
+        when(productService.patch(any(), eq("7"), eq("5"), any()))
+                .thenReturn(new ProductResponse(5L, 7L, null, "Cà phê", null, null, "ly",
+                        30000L, null, false, null, CatalogStatus.ACTIVE, null, null));
+
+        mvc.perform(patch("/api/v1/products/5")
+                        .header("Authorization", "Bearer valid-token")
+                        .header("X-Shop-Id", "7")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sellingPriceVnd\":30000}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sellingPriceVnd").value(30000));
+
+        ArgumentCaptor<ProductPatchRequest> request = ArgumentCaptor.forClass(ProductPatchRequest.class);
+        verify(productService).patch(any(), eq("7"), eq("5"), request.capture());
+        org.assertj.core.api.Assertions.assertThat(request.getValue().hasField("sellingPriceVnd")).isTrue();
+        org.assertj.core.api.Assertions.assertThat(request.getValue().hasField("name")).isFalse();
+    }
+
+    @Test
+    void productPatchDistinguishesExplicitNullFromOmittedField() throws Exception {
+        mvc.perform(patch("/api/v1/products/5")
+                        .header("Authorization", "Bearer valid-token")
+                        .header("X-Shop-Id", "7")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"categoryId\":null}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<ProductPatchRequest> request = ArgumentCaptor.forClass(ProductPatchRequest.class);
+        verify(productService).patch(any(), eq("7"), eq("5"), request.capture());
+        org.assertj.core.api.Assertions.assertThat(request.getValue().hasField("categoryId")).isTrue();
+        org.assertj.core.api.Assertions.assertThat(request.getValue().getCategoryId()).isNull();
+        org.assertj.core.api.Assertions.assertThat(request.getValue().hasField("barcode")).isFalse();
+    }
+
+    @Test
+    void productPatchRejectsBlankName() throws Exception {
+        mvc.perform(patch("/api/v1/products/5")
+                        .header("Authorization", "Bearer valid-token")
+                        .header("X-Shop-Id", "7")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"  \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_failed"));
+    }
+
+    @Test
+    void productPatchRejectsNullForRequiredField() throws Exception {
+        mvc.perform(patch("/api/v1/products/5")
+                        .header("Authorization", "Bearer valid-token")
+                        .header("X-Shop-Id", "7")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":null}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void productPutIsNoLongerAvailable() throws Exception {
+        mvc.perform(put("/api/v1/products/5")
+                        .header("Authorization", "Bearer valid-token")
+                        .header("X-Shop-Id", "7")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isMethodNotAllowed());
     }
 
     @Test

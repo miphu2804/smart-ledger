@@ -1,5 +1,6 @@
 package com.smartledger.core.controller;
 
+import com.smartledger.core.dto.request.ProductPatchRequest;
 import com.smartledger.core.dto.request.ProductWriteRequest;
 import com.smartledger.core.dto.response.ProductResponse;
 import com.smartledger.core.security.VerifiedFirebaseToken;
@@ -20,7 +21,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -69,16 +70,16 @@ public class ProductController {
         return productService.getById(firebaseToken, shopId, productId);
     }
 
-    @PutMapping("/{productId}")
-    @Operation(summary = "Replace an active product in the selected shop")
+    @PatchMapping("/{productId}")
+    @Operation(summary = "Partially update an active product in the selected shop")
     @ApiResponse(responseCode = "200", description = "Product updated",
             content = @Content(schema = @Schema(implementation = ProductResponse.class)))
-    public ProductResponse replace(
+    public ProductResponse patch(
             @AuthenticationPrincipal VerifiedFirebaseToken firebaseToken,
             @RequestHeader("X-Shop-Id") String shopId,
             @Parameter(description = "Product ID", example = "1") @PathVariable String productId,
-            @Valid @RequestBody ProductWriteRequest request) {
-        return productService.replace(firebaseToken, shopId, productId, request);
+            @Valid @RequestBody ProductPatchRequest request) {
+        return productService.patch(firebaseToken, shopId, productId, request);
     }
 
     @DeleteMapping("/{productId}")

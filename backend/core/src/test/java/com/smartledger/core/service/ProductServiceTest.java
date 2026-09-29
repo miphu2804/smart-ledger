@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.smartledger.core.dto.request.ProductPatchRequest;
 import com.smartledger.core.dto.request.ProductWriteRequest;
 import com.smartledger.core.dto.response.ProductResponse;
 import com.smartledger.core.entity.Product;
@@ -152,27 +153,93 @@ class ProductServiceTest {
     }
 
     @Test
-    void fullReplacementCanClearOptionalFields() {
+    void patchKeepsFieldsThatWereNotSent() {
         Product product = product();
-        when(productRepository.findByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
                 .thenReturn(Optional.of(product));
+        ProductPatchRequest request = new ProductPatchRequest();
+        request.setSellingPriceVnd(30000L);
 
-        ProductResponse response = service.replace(token(), "7", "3", request(null, null, false, null));
+        ProductResponse response = service.patch(token(), "7", "3", request);
+
+        assertThat(response.sellingPriceVnd()).isEqualTo(30000L);
+        assertThat(response.name()).isEqualTo("Cà phê");
+        assertThat(response.categoryId()).isEqualTo(10L);
+        assertThat(response.barcode()).isEqualTo("123456");
+        assertThat(response.stockQuantity()).isEqualByComparingTo("10.000");
+        verify(productRepository).findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE);
+    }
+
+    @Test
+    void patchMergesAgainstTheStockReadUnderTheCheckoutLock() {
+        Product product = product();
+        product.deductStock(new BigDecimal("3.000"));
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+                .thenReturn(Optional.of(product));
+        ProductPatchRequest request = new ProductPatchRequest();
+        request.setName("Cà phê mới");
+
+        ProductResponse response = service.patch(token(), "7", "3", request);
+
+        assertThat(response.stockQuantity()).isEqualByComparingTo("7.000");
+        verify(productRepository, never()).findByIdAndShopIdAndStatus(any(), any(), any());
+    }
+
+    @Test
+    void patchCanClearOptionalFieldsWithExplicitNull() {
+        Product product = product();
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+                .thenReturn(Optional.of(product));
+        ProductPatchRequest request = new ProductPatchRequest();
+        request.setCategoryId(null);
+        request.setBarcode(null);
+        request.setCostPriceVnd(null);
+
+        ProductResponse response = service.patch(token(), "7", "3", request);
 
         assertThat(response.categoryId()).isNull();
         assertThat(response.barcode()).isNull();
+        assertThat(response.costPriceVnd()).isNull();
+        assertThat(response.stockQuantity()).isEqualByComparingTo("10.000");
+    }
+
+    @Test
+    void disablingStockTrackingClearsExistingStock() {
+        Product product = product();
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+                .thenReturn(Optional.of(product));
+        ProductPatchRequest request = new ProductPatchRequest();
+        request.setTracked(false);
+
+        ProductResponse response = service.patch(token(), "7", "3", request);
+
+        assertThat(response.tracked()).isFalse();
         assertThat(response.stockQuantity()).isNull();
     }
 
     @Test
-    void rejectsDuplicateBarcodeOnReplacement() {
+    void trackedProductCannotClearItsStock() {
         Product product = product();
-        when(productRepository.findByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+                .thenReturn(Optional.of(product));
+        ProductPatchRequest request = new ProductPatchRequest();
+        request.setStockQuantity(null);
+
+        assertThatThrownBy(() -> service.patch(token(), "7", "3", request))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_STOCK_REQUIRED));
+    }
+
+    @Test
+    void rejectsDuplicateBarcodeOnPatch() {
+        Product product = product();
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
                 .thenReturn(Optional.of(product));
         when(productRepository.existsByShopIdAndBarcodeAndIdNot(7L, "654321", 3L)).thenReturn(true);
 
-        assertThatThrownBy(() -> service.replace(token(), "7", "3",
-                request(null, "654321", false, null)))
+        ProductPatchRequest request = new ProductPatchRequest();
+        request.setBarcode("654321");
+        assertThatThrownBy(() -> service.patch(token(), "7", "3", request))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_BARCODE_CONFLICT));
         assertThat(product.getBarcode()).isEqualTo("123456");
@@ -180,7 +247,7 @@ class ProductServiceTest {
 
     @Test
     void rejectsArchivedOrMissingProductForUpdateAndArchive() {
-        assertThatThrownBy(() -> service.replace(token(), "7", "3", request(null, null, false, null)))
+        assertThatThrownBy(() -> service.patch(token(), "7", "3", new ProductPatchRequest()))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_NOT_FOUND));
         assertThatThrownBy(() -> service.archive(token(), "7", "3"))
@@ -202,7 +269,7 @@ class ProductServiceTest {
     @Test
     void archivesWithoutDeletingAndRecordsTheOwner() {
         Product product = product();
-        when(productRepository.findByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
                 .thenReturn(Optional.of(product));
 
         service.archive(token(), "7", "3");
@@ -210,6 +277,7 @@ class ProductServiceTest {
         assertThat(product.getStatus()).isEqualTo(CatalogStatus.ARCHIVED);
         assertThat(product.getArchivedAt()).isNotNull();
         assertThat(product.getArchivedByUserId()).isEqualTo(42L);
+        verify(productRepository).findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE);
         verify(productRepository, never()).delete(any());
     }
 
