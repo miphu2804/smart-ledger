@@ -2,7 +2,7 @@
 
 ## Repository Layout
 
-Documentation-first MVP. **Verified:** BRD/PRD remain provisional and architecture remains a proposal. Core is Java under `backend/core`. AI is a Python FastAPI scaffold with `/health`; business APIs are not implemented. Hosting is not finalized.
+Documentation-first MVP. **Verified in the current code:** BRD/PRD remain provisional and architecture describes the MVP target. Java Core implements Firebase session and current-user endpoints plus the auth/shop migration; shop and ledger APIs are not implemented. Python AI implements `/health` and internal Agent chat with persistent conversation management; Core does not call AI yet. Mobile and admin web default to mock data. Production readiness has not been verified.
 
 ```text
 smart-ledger/
@@ -15,7 +15,7 @@ smart-ledger/
 │   ├── product/          # product description, BRD, PRD
 │   ├── architecture/     # overview, technical design, ADRs
 │   └── contracts/        # HTTP/wire contracts
-├── frontend/             # FE app; chỉ gọi Core public API
+├── frontend/             # mobile OWNER + web ADMIN; mock by default
 ├── backend/
 │   ├── core/             # Core public API (Java), DB owner
 │   └── ai/               # Internal AI API (Python FastAPI)
@@ -29,7 +29,7 @@ Python 3.11+, [uv](https://docs.astral.sh/uv/). See [backend/ai/README.md](backe
 cd backend/ai && uv sync --group dev && uv run python -m src.main
 ```
 
-`GET /health` is liveness. Postgres and Redis clients connect at process start. AI exposes `POST /internal/v1/agent/chat` for Core; internal service authentication is not implemented yet.
+`GET /health` is liveness. Postgres and Redis clients connect at process start. AI exposes chat and conversation CRUD under `/internal/v1/agent/*`; internal service authentication is not implemented yet. See [API contracts](docs/contracts/api-contracts.md) for current routes and MVP targets.
 
 ## Local Compose
 

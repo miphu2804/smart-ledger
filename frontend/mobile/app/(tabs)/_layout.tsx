@@ -18,8 +18,7 @@ const TABS: Record<string, { label: string; icon: IconName }> = {
 
 function TabBar({ state, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
-  const selectedName = state.routes[state.index]?.name;
-  const selectedTab = selectedName === 'expenses' ? 'more' : selectedName;
+  const selectedTab = state.routes[state.index]?.name;
 
   return (
     <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
@@ -58,7 +57,6 @@ export default function TabsLayout() {
         <Tabs.Screen name="invoices" />
         <Tabs.Screen name="sales" />
         <Tabs.Screen name="more" />
-        <Tabs.Screen name="expenses" options={{ href: null }} />
       </Tabs>
       <ZenRing />
     </View>

@@ -20,7 +20,7 @@ export default function BestSellers() {
   const { invoices, products } = useApp();
   const { period: requestedPeriod } = useLocalSearchParams<{ period?: string }>();
   const [period, setPeriod] = useState<Period>(
-    requestedPeriod === 'today' || requestedPeriod === 'yesterday' || requestedPeriod === 'week' ? requestedPeriod : 'month',
+    requestedPeriod === 'today' || requestedPeriod === 'yesterday' || requestedPeriod === 'thisWeek' ? requestedPeriod : 'month',
   );
   const [sort, setSort] = useState<Sort>('qty');
   const list = useMemo(() => {
@@ -41,7 +41,7 @@ export default function BestSellers() {
         options={[
           { key: 'today', label: 'Hôm nay' },
           { key: 'yesterday', label: 'Hôm qua' },
-          { key: 'week', label: '7 ngày' },
+          { key: 'thisWeek', label: 'Tuần này' },
           { key: 'month', label: 'Tháng này' },
           { key: 'all', label: 'Tất cả' },
         ]}
