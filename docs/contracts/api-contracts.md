@@ -4,7 +4,7 @@
 |---|---|
 | Trạng thái | đích MVP; các endpoint đã triển khai được đánh dấu riêng bên dưới |
 | Chủ sở hữu | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-09-24 |
+| Cập nhật lần cuối | 2026-09-28 |
 
 ## Tài liệu liên quan
 
