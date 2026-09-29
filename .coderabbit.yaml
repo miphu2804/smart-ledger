@@ -1,3 +1,10 @@
+language: "vi-VN"
+
+tone_instructions: >
+  Write all review summaries and inline comments in Vietnamese.
+  Keep code identifiers, file paths, API names, test names, and error codes unchanged.
+  State the problem, impact scenario, and fix or decision needed.
+
 reviews:
   auto_review:
     enabled: true
