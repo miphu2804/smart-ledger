@@ -386,6 +386,7 @@ export function ZenRing() {
             <MascotBadge size={RING_SIZE} />
             <Svg pointerEvents="none" width={HOLD_SIZE} height={HOLD_SIZE} style={styles.holdRing}>
               <AnimatedCircle
+                collapsable={undefined as any}
                 cx={HOLD_SIZE / 2}
                 cy={HOLD_SIZE / 2}
                 r={HOLD_RADIUS}

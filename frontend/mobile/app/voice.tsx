@@ -5,11 +5,12 @@ import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddItemSheet } from '../src/components/AddItemSheet';
 import { useToast } from '../src/components/brand';
+import { Waveform } from '../src/components/charts';
 import { Button, Dialog, Field, Header, IconBtn, Row, Stepper, T } from '../src/components/ui';
 import { voiceSamples } from '../src/data/mock';
 import type { LineItem } from '../src/data/types';
-import { vnd } from '../src/lib/format';
-import { parseOrder } from '../src/lib/parseOrder';
+import { hhmm, vnd } from '../src/lib/format';
+import { DisambiguationItem, parseOrder } from '../src/lib/parseOrder';
 import { itemsTotal } from '../src/lib/stats';
 import { useApp } from '../src/store/AppStore';
 import { colors, font, shadow } from '../src/theme';
@@ -23,6 +24,8 @@ export default function Voice() {
   const insets = useSafeAreaInsets();
   const scroll = useRef<ScrollView>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const recognitionRef = useRef<any>(null);
+  const fullTranscriptRef = useRef('');
 
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [items, setItems] = useState<LineItem[]>([]);
@@ -31,6 +34,7 @@ export default function Voice() {
   const [text, setText] = useState('');
   const [edit, setEdit] = useState(false);
   const [pending, setPending] = useState<LineItem[]>([]);
+  const [disambigItem, setDisambigItem] = useState<DisambiguationItem | null>(null);
   const [newPrice, setNewPrice] = useState('');
   const [priceErr, setPriceErr] = useState('');
   const [addOpen, setAddOpen] = useState(false);
@@ -56,45 +60,172 @@ export default function Voice() {
     });
 
   const handleUtterance = (utter: string) => {
-    push('user', utter);
-    setTranscripts((t) => [...t, utter]);
-    const { items: found, unknown } = parseOrder(utter, app.products);
+    // Chạy bộ bóc tách thông minh on-device
+    const { items: found, unknown, missingQuantityItems, disambiguations, expenses, normalizedText } = parseOrder(
+      utter,
+      app.products
+    );
+
+    const userText = normalizedText || utter;
+    push('user', userText);
+    setTranscripts((t) => [...t, userText]);
+
     setTimeout(() => {
+      const responseParts: string[] = [];
+
+      // 1. Các món ghi nhận thành công có số lượng
       if (found.length) {
         mergeItems(found);
-        push('ai', `Đã ghi ${found.map((f) => `${f.qty} ${f.name}`).join(', ')}.`);
+        responseParts.push(`Đã ghi ${found.map((f) => `${f.qty} ${f.name}`).join(', ')}.`);
       }
+
+      // 2. Món có tên nhưng thiếu số lượng
+      if (missingQuantityItems && missingQuantityItems.length > 0) {
+        responseParts.push(
+          `Bạn đã gọi món “${missingQuantityItems.join(', ')}” nhưng chưa có số lượng. Mời bạn nói lại số lượng nhé (ví dụ: “1 ${missingQuantityItems[0]}”).`
+        );
+      }
+
+      // 3. Món có nhiều biến thể cần chọn (Disambiguation)
+      if (disambiguations && disambiguations.length > 0) {
+        setDisambigItem(disambiguations[0]);
+        responseParts.push(`Món “${disambiguations[0].rawName}” có nhiều biến thể. Vui lòng chọn loại bạn muốn bán.`);
+      }
+
+      // 4. Món chưa có trong danh mục
       if (unknown.length) {
         setPending(unknown);
         setNewPrice(unknown[0].price ? String(unknown[0].price) : '');
-        push('ai', `“${unknown[0].name}” chưa có trong danh mục. Bạn có muốn thêm vào không?`);
+        responseParts.push(`“${unknown[0].name}” chưa có trong danh mục. Bạn có muốn thêm vào không?`);
       }
-      if (!found.length && !unknown.length)
-        push('ai', 'Mình chưa nhận ra tên hàng. Bạn thử lại nhé, ví dụ “2 ly cà phê sữa”.');
-    }, 350);
+
+      // 5. Khoản chi phát hiện được
+      if (expenses && expenses.length > 0) {
+        expenses.forEach((e) => {
+          app.addExpense({
+            title: e.title,
+            amount: e.amount,
+            category: 'khac',
+            source: 'voice',
+          });
+        });
+        responseParts.push(`Đã ghi nhận khoản chi: ${expenses.map((e) => `${e.title} (${vnd(e.amount)})`).join(', ')}.`);
+      }
+
+      // 6. Không nhận diện được thông tin nào
+      if (
+        !found.length &&
+        !unknown.length &&
+        (!missingQuantityItems || !missingQuantityItems.length) &&
+        (!disambiguations || !disambiguations.length) &&
+        (!expenses || !expenses.length)
+      ) {
+        responseParts.push(
+          'Mình chưa nhận diện được món hàng. Bạn thử nói lại kèm số lượng nhé, ví dụ: “2 ly cà phê sữa” hoặc “1 bánh mì ốp la”.',
+        );
+      }
+
+      if (responseParts.length > 0) {
+        push('ai', responseParts.join('\n'));
+      }
+    }, 250);
   };
 
   const startRecording = () => {
+    if (recording) return;
+    fullTranscriptRef.current = '';
+    setPartial('');
+    setRecording(true);
+
+    // Khởi động Web Speech API trên trình duyệt nếu có
+    const SpeechRecognition =
+      typeof window !== 'undefined'
+        ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+        : null;
+
+    if (SpeechRecognition) {
+      try {
+        const reco = new SpeechRecognition();
+        reco.lang = 'vi-VN';
+        reco.continuous = true;
+        reco.interimResults = true;
+
+        reco.onresult = (event: any) => {
+          let accumulated = '';
+          for (let i = 0; i < event.results.length; i++) {
+            accumulated += event.results[i][0].transcript + ' ';
+          }
+          const raw = accumulated.trim();
+          if (raw) {
+            // Chuẩn hóa phát âm ngay trên giao diện hiển thị (vd: xì tin -> sting, tai gơ -> bia tiger)
+            const cleaned = raw
+              .replace(/(?<!\p{L})(xì\s*ting|tin\s*dâu|xiting|siting|xì\s*tin|xi\s*tin|xitin)(?!\p{L})/gui, 'Sting')
+              .replace(/(?<!\p{L})(tai\s*gơ|taigo|bia\s*tai\s*gơ)(?!\p{L})/gui, 'Bia Tiger');
+            setPartial(cleaned);
+            fullTranscriptRef.current = raw;
+          }
+        };
+
+        reco.onerror = (err: any) => {
+          console.warn('[SpeechRecognition Error]:', err);
+        };
+
+        recognitionRef.current = reco;
+        reco.start();
+        return;
+      } catch (e) {
+        console.warn('SpeechRecognition init failed:', e);
+      }
+    }
+
+    // Giả lập giọng nói khi test hoặc thiết bị chưa có Web Speech API
     const sample = voiceSamples[sampleCursor++ % voiceSamples.length];
     const words = sample.split(' ');
-    setRecording(true);
-    setPartial('');
+    fullTranscriptRef.current = sample;
     timers.current.forEach(clearTimeout);
-    timers.current = words.map((_, i) => setTimeout(() => setPartial(words.slice(0, i + 1).join(' ')), 220 * (i + 1)));
-    timers.current.push(setTimeout(() => finishRecording(sample), 220 * words.length + 600));
+    timers.current = words.map((_, i) =>
+      setTimeout(() => setPartial(words.slice(0, i + 1).join(' ')), 200 * (i + 1)),
+    );
   };
 
-  const finishRecording = (full: string) => {
+  const finishRecording = (manualText?: string) => {
+    if (!recording && !manualText) return;
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+      recognitionRef.current = null;
+    }
+
     timers.current.forEach(clearTimeout);
     setRecording(false);
+
+    const finalText = manualText || fullTranscriptRef.current || partial;
     setPartial('');
-    handleUtterance(full);
+
+    if (finalText && finalText.trim() && !finalText.includes('Đang nghe…')) {
+      handleUtterance(finalText.trim());
+    }
   };
 
   const sendText = () => {
     if (!text.trim()) return;
     handleUtterance(text.trim());
     setText('');
+  };
+
+  const selectDisambiguation = (option: { product_id: string; name: string; unit_price_vnd: number }) => {
+    if (!disambigItem) return;
+    const itemToAdd: LineItem = {
+      productId: option.product_id,
+      name: option.name,
+      price: option.unit_price_vnd,
+      qty: disambigItem.qty,
+    };
+    mergeItems([itemToAdd]);
+    push('ai', `Đã chọn “${option.name}” × ${disambigItem.qty} (${vnd(option.unit_price_vnd * disambigItem.qty)}).`);
+    setDisambigItem(null);
   };
 
   const resolvePending = (action: 'catalog' | 'once' | 'skip') => {
@@ -141,8 +272,8 @@ export default function Voice() {
     <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top }}>
       <View style={{ paddingHorizontal: 16 }}>
         <Header
-          title="Bán hàng"
-          subtitle={app.store.name}
+          title="Bán hàng Giọng nói"
+          subtitle={`Hôm nay, ${hhmm(new Date())} · ${app.store.name}`}
           right={
             <Pressable onPress={checkout} disabled={!items.length} hitSlop={8} style={styles.headerAction}>
               <T w="bold" size={14} color={items.length ? colors.primary : colors.disabled}>
@@ -168,12 +299,12 @@ export default function Voice() {
               Đơn này bạn bán hàng gì?
             </T>
             <T size={13} color={colors.faint} style={{ marginTop: 6, textAlign: 'center', lineHeight: 19 }}>
-              Chọn câu gợi ý hoặc nhập nội dung bán hàng bên dưới.
+              Nhấn giữ mic để nói, chọn câu gợi ý hoặc nhập bên dưới.
             </T>
             <T w="bold" size={12} color={colors.muted} style={{ marginTop: 22, marginBottom: 8 }}>
               THỬ GÕ NHANH
             </T>
-            {['2 ly cà phê sữa 50 nghìn', 'bán 3 bánh mì, 2 coca', 'bán 1 hộp sữa chua nếp cẩm 12k'].map((s) => (
+            {['2 ly cà phê sữa 50 nghìn', 'bán 3 bánh mì, 2 coca', 'cho 1 bạc xỉu với chi 20k mua đá'].map((s) => (
               <Pressable key={s} onPress={() => handleUtterance(s)} style={styles.sample}>
                 <T w="semibold" size={13} color={colors.primary}>
                   “{s}”
@@ -200,9 +331,9 @@ export default function Voice() {
         ))}
 
         {recording ? (
-          <View style={[styles.bubble, styles.user, { opacity: 0.75 }]}>
+          <View style={[styles.bubble, styles.user, { opacity: 0.85 }]}>
             <T size={13.5} color={colors.white}>
-              {partial || '…'}
+              {partial || 'Đang lắng nghe…'}
             </T>
           </View>
         ) : null}
@@ -227,7 +358,7 @@ export default function Voice() {
               </Pressable>
             </Row>
             {items.map((it, idx) => (
-              <Row key={`${it.productId ?? it.name}`} style={styles.line}>
+              <Row key={`${it.productId ?? it.name}-${idx}`} style={styles.line}>
                 <View style={{ flex: 1 }}>
                   <T w="semibold" size={14}>
                     {it.name}
@@ -276,34 +407,28 @@ export default function Voice() {
       </ScrollView>
 
       <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-        {recording ? (
-          <>
-            <Button
-              title="Đang áp dụng câu gợi ý… chạm để dừng"
-              icon="mic"
-              variant="voice"
-              onPress={() => finishRecording(voiceSamples[(sampleCursor - 1) % voiceSamples.length])}
-            />
-          </>
-        ) : (
-          <>
-            <Button title="Dùng câu gợi ý" icon="mic" variant="gold" onPress={startRecording} />
-            <Button
-              title="Chọn hàng"
-              icon="grid"
-              variant="green"
-              small
-              onPress={() => router.push('/pos')}
-              style={{ marginTop: 8, height: 44 }}
-            />
-          </>
-        )}
+        {recording ? <Waveform active /> : null}
+        <Button
+          title={recording ? 'Đang nghe… Thả tay để chốt đơn' : 'Nhấn & Giữ để nói'}
+          icon="mic"
+          variant={recording ? 'voice' : 'gold'}
+          onPressIn={startRecording}
+          onPressOut={() => finishRecording()}
+        />
+        <Button
+          title="Chọn hàng"
+          icon="grid"
+          variant="green"
+          small
+          onPress={() => router.push('/pos')}
+          style={{ marginTop: 8, height: 44 }}
+        />
         <Row style={styles.inputRow}>
           <TextInput
             value={text}
             onChangeText={setText}
             onSubmitEditing={sendText}
-            placeholder="Nhập tên hàng + giá"
+            placeholder="Nhập tên hàng + giá (hoặc nhấn giữ mic)"
             placeholderTextColor={colors.faint}
             style={styles.input}
             returnKeyType="send"
@@ -319,6 +444,38 @@ export default function Voice() {
         </Row>
       </View>
 
+      {/* Dialog chọn biến thể món (Disambiguation) */}
+      <Dialog
+        visible={disambigItem !== null}
+        icon="star"
+        title={`Chọn loại “${disambigItem?.rawName ?? ''}”`}
+        message="Món này có nhiều biến thể trong thực đơn. Vui lòng chọn loại bạn muốn bán:"
+        confirm="Đóng"
+        cancel="Bỏ qua"
+        onConfirm={() => setDisambigItem(null)}
+        onCancel={() => setDisambigItem(null)}
+      >
+        <View style={{ marginTop: 8, gap: 8 }}>
+          {disambigItem?.options.map((opt) => (
+            <Pressable
+              key={opt.product_id}
+              onPress={() => selectDisambiguation(opt)}
+              style={styles.disambigBtn}
+            >
+              <Row style={{ justifyContent: 'space-between' }}>
+                <T w="bold" size={14} color={colors.primary}>
+                  {opt.name}
+                </T>
+                <T w="semibold" size={13} color={colors.ink}>
+                  {vnd(opt.unit_price_vnd)}
+                </T>
+              </Row>
+            </Pressable>
+          ))}
+        </View>
+      </Dialog>
+
+      {/* Dialog thêm món mới chưa có trong thực đơn */}
       <Dialog
         visible={pending.length > 0}
         icon="star"
@@ -387,6 +544,16 @@ const styles = StyleSheet.create({
   ai: { alignSelf: 'flex-start', backgroundColor: colors.white, borderColor: colors.border, borderWidth: 1, borderBottomLeftRadius: 5 },
   order: { backgroundColor: colors.white, borderRadius: 18, borderColor: colors.border, borderWidth: 1, padding: 16, marginTop: 4, ...shadow(1) },
   line: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
+  disambigBtn: {
+    backgroundColor: colors.bg,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
   bottom: {
     backgroundColor: colors.white,
     paddingHorizontal: 16,
@@ -399,3 +566,4 @@ const styles = StyleSheet.create({
   editAction: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
   input: { flex: 1, fontFamily: font.medium, fontSize: 14, color: colors.ink, height: '100%', outlineStyle: 'none' } as never,
 });
+

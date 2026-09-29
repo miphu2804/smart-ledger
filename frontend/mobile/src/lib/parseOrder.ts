@@ -1,14 +1,44 @@
 /**
- * Bộ "nhận diện" giao dịch tiếng Việt GIẢ LẬP (rule-based) để demo UI.
- * Khi có backend AI thật, thay parseOrder()/parseExpense() bằng lời gọi API
- * và trả về đúng kiểu ParsedOrder / ParsedExpense.
+ * Bộ nhận diện & bóc tách giao dịch On-Device cho SmartLedger Mobile.
+ * Tích hợp trực tiếp từ sst_feature Engine:
+ * - Chuẩn hóa ngữ âm, khử từ đệm, khử cà lăm (ClientTextNormalizer)
+ * - Trích xuất số lượng, đơn vị, danh sách món & khoản chi (ClientOrderExtractor)
+ * - So khớp thực đơn thông minh & gợi ý biến thể Disambiguation (ClientFuzzyMatcher)
  */
 import type { LineItem, Product } from '../data/types';
+import { ClientTextNormalizer } from '../sst/order_parser/normalizer';
+import { ClientOrderExtractor } from '../sst/order_parser/extractor';
+import { ClientFuzzyMatcher } from '../sst/order_parser/fuzzy_matcher';
+import type { ProductItem, DisambiguationOption } from '../sst/types';
+
+export interface DisambiguationItem {
+  rawName: string;
+  qty: number;
+  unit?: string | null;
+  options: DisambiguationOption[];
+}
+
+export interface ParsedExpenseItem {
+  title: string;
+  amount: number;
+  category: string;
+}
 
 export interface ParsedOrder {
+  /** Các món đã khớp chính xác vào danh mục thực đơn và có số lượng */
   items: LineItem[];
-  /** Món không có trong danh mục — UI sẽ hỏi có thêm vào danh mục không */
+  /** Các món chưa có trong danh mục — UI hỏi người dùng thêm giá / thêm vào thực đơn */
   unknown: LineItem[];
+  /** Các món đã nói tên nhưng chưa cung cấp số lượng */
+  missingQuantityItems?: string[];
+  /** Các món có nhiều biến thể (ví dụ: Bạc xỉu -> Bạc xỉu đá / nóng, Sting -> Sting dâu / vàng) */
+  disambiguations?: DisambiguationItem[];
+  /** Khoản chi phát hiện được trong câu nói (ví dụ: "chi 20k mua đá") */
+  expenses?: ParsedExpenseItem[];
+  /** Câu đã được khử từ đệm, cà lăm và chuẩn hóa ngữ âm */
+  normalizedText?: string;
+  /** Loại giao dịch (SALE, EXPENSE, MIXED) */
+  intent?: string;
 }
 
 export interface ParsedExpense {
@@ -16,151 +46,123 @@ export interface ParsedExpense {
   amount: number;
 }
 
-export function normalize(s: string) {
-  return s
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/[^a-z0-9.,\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+const normalizer = new ClientTextNormalizer();
+const extractor = new ClientOrderExtractor();
+const matcher = new ClientFuzzyMatcher();
+
+/**
+ * Chuyển đổi danh sách Product của Mobile Store sang ProductItem cho Engine
+ */
+export function convertProductsToEngineFormat(products: Product[]): ProductItem[] {
+  return products.map((p) => ({
+    id: p.id,
+    shop_id: 'default',
+    name: p.name,
+    price_vnd: p.price,
+    category: p.category || 'other',
+    unit: 'phần',
+    aliases: p.aliases || [],
+  }));
 }
 
-const NUM_WORDS: Record<string, number> = {
-  mot: 1,
-  hai: 2,
-  ba: 3,
-  bon: 4,
-  tu: 4,
-  nam: 5,
-  sau: 6,
-  bay: 7,
-  tam: 8,
-  chin: 9,
-  muoi: 10,
-};
-const UNITS = [
-  'ly',
-  'o',
-  'chai',
-  'lon',
-  'goi',
-  'bich',
-  'ky',
-  'kg',
-  'ki',
-  'hop',
-  'cai',
-  'phan',
-  'to',
-  'dia',
-  'bo',
-  'coc',
-  'trai',
-  'qua',
-  'thung',
-];
-const FILLER = [
-  'cho',
-  'co',
-  'chu',
-  'anh',
-  'chi',
-  'em',
-  'ban',
-  'lay',
-  'mua',
-  'nha',
-  'nhe',
-  'di',
-  'them',
-  'khach',
-  'minh',
-  'toi',
-  'con',
-  'a',
-  'ha',
-];
-
-function parseMoney(seg: string): { value: number; rest: string } | null {
-  const m = seg.match(/(\d+(?:[.,]\d+)?)\s*(nghin|ngan|k|tr|trieu|d|dong)\b/);
-  if (!m) return null;
-  const num = parseFloat(m[1].replace(',', '.'));
-  const unit = m[2];
-  const value = unit === 'tr' || unit === 'trieu' ? num * 1_000_000 : unit === 'd' || unit === 'dong' ? num : num * 1000;
-  return { value: Math.round(value), rest: seg.replace(m[0], ' ') };
-}
-
-function parseQty(seg: string): { qty: number; rest: string } {
-  const digit = seg.match(/(^|\s)(\d{1,3})(?=\s)/);
-  if (digit) return { qty: parseInt(digit[2], 10), rest: seg.replace(digit[0], ' ') };
-  const words = seg.split(' ');
-  for (let i = 0; i < words.length; i++) {
-    const n = NUM_WORDS[words[i]];
-    // "nam" chỉ tính là số khi đứng trước đơn vị (tránh "cô Năm")
-    if (n && (words[i] !== 'nam' || UNITS.includes(words[i + 1] ?? ''))) {
-      words.splice(i, 1);
-      return { qty: n, rest: words.join(' ') };
-    }
-  }
-  if (/\bchuc\b/.test(seg)) return { qty: 1, rest: seg };
-  return { qty: 1, rest: seg };
-}
-
-function matchProduct(seg: string, products: Product[]): Product | undefined {
-  let best: { p: Product; len: number } | undefined;
-  for (const p of products) {
-    const keys = [p.name.replace(/\(.*?\)/g, ''), ...(p.aliases ?? [])].map(normalize).filter(Boolean);
-    for (const k of keys) {
-      if (` ${seg} `.includes(` ${k} `) && (!best || k.length > best.len)) best = { p, len: k.length };
-    }
-  }
-  return best?.p;
-}
-
-function cleanName(seg: string, original: string) {
-  const words = seg
-    .split(' ')
-    .filter((w) => w && !UNITS.includes(w) && !FILLER.includes(w) && !/^\d/.test(w) && !(w in NUM_WORDS));
-  if (!words.length) return '';
-  // Lấy lại chữ có dấu từ câu gốc nếu được
-  const origWords = original.split(/\s+/);
-  const mapped = words.map((w) => origWords.find((o) => normalize(o) === w) ?? w);
-  const s = mapped.join(' ');
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
+/**
+ * Bóc tách đơn hàng thông minh bằng on-device NLP Engine
+ */
 export function parseOrder(text: string, products: Product[]): ParsedOrder {
-  const segments = normalize(text)
-    .split(/,|\s(?:voi|them|va|kem|cung)\s|\snha\b|\snhe\b/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  if (!text || !text.trim()) {
+    return { items: [], unknown: [], missingQuantityItems: [], disambiguations: [], expenses: [] };
+  }
+
+  // 1. Chuẩn hóa & Khử từ đệm / cà lăm / lỗi phát âm ASR (vd: xì tin -> sting, tai gơ -> bia tiger)
+  const normalizedText = normalizer.normalize(text);
+
+  // 2. Bóc tách số lượng, đơn vị, tên món và khoản chi
+  const extraction = extractor.extract(normalizedText);
+
+  // 3. Chuyển đổi danh mục sản phẩm của quán
+  const engineProducts = convertProductsToEngineFormat(products);
+
+  // 4. So khớp thực đơn với thuật toán Fuzzy Matching & Disambiguation
+  const matchedItems = extraction.items.map((it) => matcher.matchItem(it, engineProducts));
+
   const items: LineItem[] = [];
   const unknown: LineItem[] = [];
-  for (const raw of segments) {
-    const money = parseMoney(raw);
-    const afterMoney = money ? money.rest : raw;
-    const { qty, rest } = parseQty(` ${afterMoney} `);
-    const p = matchProduct(rest, products);
-    const unitPrice = money ? Math.round(money.value / Math.max(qty, 1)) : undefined;
-    if (p) {
-      const ex = items.find((i) => i.productId === p.id);
-      if (ex) ex.qty += qty;
-      else items.push({ productId: p.id, name: p.name, price: unitPrice ?? p.price, qty });
+  const disambiguations: DisambiguationItem[] = [];
+  const missingQuantityItems: string[] = [];
+
+  for (let idx = 0; idx < extraction.items.length; idx++) {
+    const extItem = extraction.items[idx];
+    const m = matchedItems[idx];
+
+    // Trường hợp món được gọi tên nhưng KHÔNG có số lượng (vd: "cà phê sữa", "cho bánh mì ốp la")
+    if (!extItem.has_quantity) {
+      const displayName = m.matched_name || m.raw_input_name.charAt(0).toUpperCase() + m.raw_input_name.slice(1);
+      missingQuantityItems.push(displayName);
+      continue;
+    }
+
+    if (m.needs_disambiguation && m.disambiguation_options.length > 0) {
+      // Món cần chọn biến thể (ví dụ: "Bạc xỉu" -> [Bạc xỉu đá, Bạc xỉu nóng])
+      disambiguations.push({
+        rawName: m.raw_input_name,
+        qty: m.quantity,
+        unit: m.unit,
+        options: m.disambiguation_options,
+      });
+    } else if (m.product_id && m.matched_name) {
+      // Khớp chính xác hoặc khớp mờ có độ tin cậy cao
+      const ex = items.find((i) => i.productId === m.product_id);
+      if (ex) {
+        ex.qty += m.quantity;
+      } else {
+        items.push({
+          productId: m.product_id,
+          name: m.matched_name,
+          price: m.unit_price_vnd,
+          qty: m.quantity,
+        });
+      }
     } else {
-      const name = cleanName(rest.trim(), text);
-      if (name) unknown.push({ name, price: unitPrice ?? 0, qty });
+      // Món chưa có trong danh mục quán
+      const displayName = m.raw_input_name.charAt(0).toUpperCase() + m.raw_input_name.slice(1);
+      unknown.push({
+        name: displayName,
+        price: m.unit_price_vnd || 0,
+        qty: m.quantity,
+      });
     }
   }
-  return { items, unknown };
+
+  // 5. Khoản chi phát hiện được
+  const expenses: ParsedExpenseItem[] = extraction.expenses.map((e) => ({
+    title: e.notes || `Chi ${e.category}`,
+    amount: e.amount_vnd,
+    category: e.category,
+  }));
+
+  return {
+    items,
+    unknown,
+    missingQuantityItems,
+    disambiguations,
+    expenses,
+    normalizedText,
+    intent: extraction.intent,
+  };
 }
 
+/**
+ * Trích xuất khoản chi từ câu nói
+ */
 export function parseExpense(text: string): ParsedExpense {
-  const n = normalize(text);
-  const money = parseMoney(n);
-  const title = text
-    .replace(/\s*(hết|het)?\s*\d+(?:[.,]\d+)?\s*(nghìn|ngàn|nghin|ngan|k|tr|triệu|trieu|đồng|d)\b/i, '')
-    .trim();
-  return { title: title.charAt(0).toUpperCase() + title.slice(1), amount: money?.value ?? 0 };
+  const norm = normalizer.normalize(text);
+  const extraction = extractor.extract(norm);
+  if (extraction.expenses.length > 0) {
+    const first = extraction.expenses[0];
+    return {
+      title: first.notes || text,
+      amount: first.amount_vnd,
+    };
+  }
+  return { title: text, amount: 0 };
 }
