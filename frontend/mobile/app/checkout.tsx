@@ -1,18 +1,26 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { AddItemSheet } from '../src/components/AddItemSheet';
 import { useToast } from '../src/components/brand';
 import { FakeQR } from '../src/components/FakeQR';
-import { Button, Card, Chips, EmptyState, Field, Header, IconName, Row, Screen, Stepper, T } from '../src/components/ui';
-import type { LineItem, PayMethod } from '../src/data/types';
+import { Badge, Button, Card, Chips, EmptyState, Field, Header, IconName, Row, Screen, Stepper, T } from '../src/components/ui';
+import type { LineItem, ProductView } from '../src/data/types';
+import { productApi } from '../src/lib/catalogApi';
+import { errorMessage } from '../src/lib/errors';
 import { vnd } from '../src/lib/format';
+import { saleDraftApi } from '../src/lib/salesApi';
 import { itemsTotal, methodLabel } from '../src/lib/stats';
 import { useApp } from '../src/store/AppStore';
 import { colors, font } from '../src/theme';
 
-const METHODS: { key: PayMethod; icon: IconName }[] = [
+/**
+ * Ghi nợ đã có lại (xem AGENTS.md): Core chấp nhận trả một phần/không trả khi xác nhận đơn, miễn có khách.
+ * App chưa có UI chọn khách có sẵn nên luôn gửi `customerName`/`customerPhone` để Core tự tạo khách mới —
+ * bắt buộc phải có tên khách khi chọn Ghi nợ, nếu không Core trả lỗi `customer_required_for_debt`.
+ */
+const METHODS: { key: 'cash' | 'transfer' | 'debt'; icon: IconName }[] = [
   { key: 'cash', icon: 'dollar-sign' },
   { key: 'transfer', icon: 'smartphone' },
   { key: 'debt', icon: 'book-open' },
@@ -22,22 +30,39 @@ export default function Checkout() {
   const app = useApp();
   const toast = useToast();
   const [items, setItems] = useState<LineItem[]>(app.draft?.items ?? []);
-  const [method, setMethod] = useState<PayMethod>('cash');
+  const [method, setMethod] = useState<'cash' | 'transfer' | 'debt'>('cash');
   const [customer, setCustomer] = useState('');
   const [phone, setPhone] = useState('');
   const [given, setGiven] = useState<number | null>(null);
+  /** Khách trả trước khi ghi nợ — trống/0 nghĩa là ghi nợ toàn bộ */
+  const [debtUpfront, setDebtUpfront] = useState<number | null>(null);
   const [edit, setEdit] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  const [doneId, setDoneId] = useState<string | null>(null);
+  const [doneId, setDoneId] = useState<number | null>(null);
+  const [doneTotal, setDoneTotal] = useState(0);
   const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [products, setProducts] = useState<ProductView[]>([]);
+
+  const loadProducts = useCallback(async () => {
+    try {
+      setProducts(await productApi.list());
+    } catch {
+      /* "Thêm món" trong lúc sửa đơn sẽ tạm trống nếu lỗi — không chặn thanh toán vì lỗi này */
+    }
+  }, []);
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
 
   const total = itemsTotal(items);
   const change = given !== null ? given - total : 0;
   const quick = Array.from(new Set([total, Math.ceil(total / 50000) * 50000, Math.ceil(total / 100000) * 100000, 200000, 500000]))
     .filter((v) => v >= total)
     .slice(0, 4);
+  const hasInvalidItems = items.some((it) => typeof it.productId !== 'number');
 
-  if (doneId) return <Success id={doneId} total={total} method={method} change={method === 'cash' && given ? change : 0} />;
+  if (doneId != null) return <Success id={doneId} total={doneTotal} method={method} change={method === 'cash' && given ? change : 0} />;
 
   if (!app.draft && !items.length) {
     return (
@@ -49,25 +74,45 @@ export default function Checkout() {
     );
   }
 
-  const complete = () => {
-    if (!items.length) return;
-    if (method === 'debt' && !customer.trim()) {
-      setErr('Nhập tên khách để ghi nợ');
+  const debtUpfrontAmount = Math.min(debtUpfront ?? 0, total);
+
+  const complete = async () => {
+    if (!items.length || busy) return;
+    setErr('');
+    if (hasInvalidItems) {
+      setErr('Có món ngoài danh mục — cần thêm vào danh mục hàng hoá thật trước khi thanh toán.');
       return;
     }
     if (method === 'cash' && given !== null && given < total) {
       setErr('Tiền khách đưa chưa đủ');
       return;
     }
-    const id = app.createInvoice({
-      items,
-      customer,
-      phone,
-      method,
-      source: app.draft?.source ?? 'manual',
-      transcript: app.draft?.transcript,
-    });
-    setDoneId(id);
+    if (method === 'debt' && !customer.trim()) {
+      setErr('Cần nhập tên khách để ghi nợ');
+      return;
+    }
+    setBusy(true);
+    try {
+      const draft = await saleDraftApi.create({
+        customerName: customer.trim() || undefined,
+        customerPhone: phone.trim() || undefined,
+        items: items.map((it) => ({
+          productId: it.productId as number,
+          quantity: it.qty,
+          unitPriceVnd: it.price,
+        })),
+        initialPaidVnd: method === 'debt' ? debtUpfrontAmount : total,
+        initialPaymentMethod: method === 'debt' ? (debtUpfrontAmount > 0 ? 'CASH' : null) : method === 'cash' ? 'CASH' : 'TRANSFER',
+      });
+      const sale = await saleDraftApi.confirm(draft.id);
+      app.setDraft(null);
+      setDoneTotal(sale.totalVnd);
+      setDoneId(sale.id);
+    } catch (e) {
+      setErr(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -83,10 +128,11 @@ export default function Checkout() {
             </T>
           </View>
           <Button
-            title={method === 'debt' ? 'Ghi nợ' : 'Hoàn tất'}
+            title="Hoàn tất"
             icon="check"
+            loading={busy}
             onPress={complete}
-            disabled={!items.length}
+            disabled={!items.length || busy}
             style={{ paddingHorizontal: 26 }}
           />
         </Row>
@@ -117,9 +163,14 @@ export default function Checkout() {
         {items.map((it, idx) => (
           <Row key={`${it.productId ?? it.name}-${idx}`} style={styles.line}>
             <View style={{ flex: 1 }}>
-              <T w="semibold" size={14}>
-                {it.name}
-              </T>
+              <Row gap={6}>
+                <T w="semibold" size={14}>
+                  {it.name}
+                </T>
+                {typeof it.productId !== 'number' ? (
+                  <Badge text="Ngoài danh mục" color={colors.red} bg={colors.redSoft} />
+                ) : null}
+              </Row>
               <T size={12} color={colors.faint}>
                 {vnd(it.price)} × {it.qty}
               </T>
@@ -166,13 +217,9 @@ export default function Checkout() {
                 setMethod(m.key);
                 setErr('');
               }}
-              style={[
-                styles.method,
-                on && styles.methodOn,
-                on && m.key === 'debt' && { borderColor: colors.gold, backgroundColor: colors.goldSoft },
-              ]}
+              style={[styles.method, on && styles.methodOn]}
             >
-              <Feather name={m.icon} size={20} color={on ? (m.key === 'debt' ? colors.gold : colors.accentInk) : colors.faint} />
+              <Feather name={m.icon} size={20} color={on ? colors.accentInk : colors.faint} />
               <T w={on ? 'bold' : 'semibold'} size={12} color={on ? colors.ink : colors.muted} style={{ marginTop: 6 }}>
                 {methodLabel[m.key]}
               </T>
@@ -254,31 +301,45 @@ export default function Checkout() {
           </View>
         ) : null}
         {method === 'debt' ? (
-          <View>
-            <T size={12} color={colors.gold} style={{ marginBottom: 10 }}>
-              Đơn sẽ được ghi vào Sổ nợ của khách
+          <>
+            <T w="semibold" size={12} color={colors.muted} style={{ marginBottom: 8 }}>
+              Khách trả trước (không bắt buộc)
             </T>
-          </View>
+            <Field
+              placeholder="0"
+              keyboardType="number-pad"
+              maxLength={13}
+              value={debtUpfront === null ? '' : vnd(debtUpfront, false)}
+              onChangeText={(t) => {
+                const digits = t.replace(/\D/g, '');
+                setDebtUpfront(digits ? Math.min(Number(digits), total) : null);
+                setErr('');
+              }}
+              inputStyle={{ fontFamily: font.bold }}
+              style={{ marginBottom: 0 }}
+            />
+            <T size={12} color={colors.faint} style={{ marginTop: 10 }}>
+              Còn lại {vnd(total - debtUpfrontAmount)} sẽ được ghi vào sổ nợ
+            </T>
+          </>
         ) : null}
         <Field
-          label={method === 'debt' ? 'Tên khách (bắt buộc)' : 'Tên khách (không bắt buộc)'}
+          label={method === 'debt' ? 'Tên khách' : 'Tên khách (không bắt buộc)'}
           placeholder="VD: Chị Ba"
           value={customer}
           onChangeText={(t) => {
             setCustomer(t);
             setErr('');
           }}
-          style={{ marginTop: method === 'cash' ? 16 : 12 }}
+          style={{ marginTop: method === 'cash' || method === 'debt' ? 16 : 12 }}
         />
-        {method === 'debt' ? (
-          <Field
-            label="Số điện thoại"
-            placeholder="09xx xxx xxx"
-            keyboardType="phone-pad"
-            value={phone}
-            onChangeText={setPhone}
-          />
-        ) : null}
+        <Field
+          label="Số điện thoại (không bắt buộc)"
+          placeholder="09xx xxx xxx"
+          keyboardType="phone-pad"
+          value={phone}
+          onChangeText={setPhone}
+        />
         {err ? (
           <T size={12} color={colors.red}>
             {err}
@@ -289,6 +350,7 @@ export default function Checkout() {
       <AddItemSheet
         visible={addOpen}
         onClose={() => setAddOpen(false)}
+        products={products}
         onPick={(li) => {
           setItems((cur) => {
             const ex = cur.find((x) => x.productId === li.productId);
@@ -301,7 +363,17 @@ export default function Checkout() {
   );
 }
 
-function Success({ id, total, method, change }: { id: string; total: number; method: PayMethod; change: number }) {
+function Success({
+  id,
+  total,
+  method,
+  change,
+}: {
+  id: number;
+  total: number;
+  method: 'cash' | 'transfer' | 'debt';
+  change: number;
+}) {
   const toast = useToast();
   const scale = useRef(new Animated.Value(0.4)).current;
   useEffect(() => {
@@ -340,7 +412,7 @@ function Success({ id, total, method, change }: { id: string; total: number; met
           <Feather name="check" size={46} color={colors.white} />
         </Animated.View>
         <T w="extrabold" size={24} style={{ marginTop: 22 }}>
-          {method === 'debt' ? 'Đã ghi nợ!' : 'Đã lưu đơn!'}
+          Đã lưu đơn!
         </T>
         <T w="extrabold" size={36} color={colors.primary} style={{ marginTop: 6 }}>
           {vnd(total)}

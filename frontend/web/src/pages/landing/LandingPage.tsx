@@ -182,7 +182,7 @@ function Hero() {
             <i className="pulse-dot" /> Sổ bán hàng AI cho quán nhỏ
           </span>
           <h1>
-            Nói là <span className="hl">ghi sổ</span>.
+            Miệng nói, <span className="hl">sổ ghi</span>.
             <br />
             <span className="lp-hero-sub">Khỏi cần máy POS.</span>
           </h1>
@@ -213,6 +213,7 @@ function Hero() {
 
         <div className="lp-hero-visual">
           <div className="lp-hero-ring" aria-hidden="true" />
+          <img src="/brand/mascot.png" alt="" className="hero-mascot" aria-hidden="true" />
           <PhoneFrame src="/screens/overview.png" alt="Màn hình Tổng quan của ứng dụng Sổ Nghe Lời" className="phone-hero" eager />
           <VoiceCard />
           <div className="saved-chip" aria-hidden="true">
@@ -760,7 +761,7 @@ function Footer() {
       <div className="lp-container lp-footer-grid">
         <div className="lp-footer-brand">
           <Logo tagline />
-          <p>Sổ bán hàng AI cho quán nhỏ Việt Nam. Nói là ghi sổ.</p>
+          <p>Sổ bán hàng AI cho quán nhỏ Việt Nam. Miệng nói, sổ ghi.</p>
         </div>
         <nav className="lp-footer-col" aria-label="Sản phẩm">
           <h4>Sản phẩm</h4>
@@ -789,7 +790,7 @@ function Footer() {
 
 export default function LandingPage() {
   useEffect(() => {
-    document.title = 'Sổ Nghe Lời — Nói là ghi sổ'
+    document.title = 'Sổ Nghe Lời — Miệng nói, sổ ghi.'
   }, [])
   return (
     <div className="lp">
