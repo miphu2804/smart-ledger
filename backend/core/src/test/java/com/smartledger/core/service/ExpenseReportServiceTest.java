@@ -26,12 +26,15 @@ import com.smartledger.core.repository.SaleRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.impl.ExpenseServiceImpl;
 import com.smartledger.core.service.impl.ReportServiceImpl;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -152,13 +155,26 @@ class ExpenseReportServiceTest {
 
     @Test
     void acceptsYearForExpenseListAndReportSummary() {
+        OffsetDateTime before = OffsetDateTime.now(ZoneOffset.UTC);
         var expenses = expenseService.list(token, "7", "year");
         var summary = reportService.summary(token, "7", "year");
+        OffsetDateTime after = OffsetDateTime.now(ZoneOffset.UTC);
 
         assertThat(expenses).isEmpty();
         assertThat(summary.period()).isEqualTo("year");
+
+        OffsetDateTime expectedFromInclusive = LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")).withDayOfYear(1)
+                .atStartOfDay(ZoneId.of("Asia/Ho_Chi_Minh"))
+                .toOffsetDateTime()
+                .withOffsetSameInstant(ZoneOffset.UTC);
+
+        ArgumentCaptor<OffsetDateTime> fromCaptor = ArgumentCaptor.forClass(OffsetDateTime.class);
+        ArgumentCaptor<OffsetDateTime> toCaptor = ArgumentCaptor.forClass(OffsetDateTime.class);
         verify(expenseRepository, Mockito.times(2))
                 .findAllByShopIdAndStatusAndExpenseAtGreaterThanEqualAndExpenseAtLessThanOrderByExpenseAtDescIdDesc(
-                        eq(7L), eq(ExpenseStatus.ACTIVE), any(), any());
+                        eq(7L), eq(ExpenseStatus.ACTIVE), fromCaptor.capture(), toCaptor.capture());
+
+        assertThat(fromCaptor.getAllValues()).allSatisfy(from -> assertThat(from).isEqualTo(expectedFromInclusive));
+        assertThat(toCaptor.getAllValues()).allSatisfy(to -> assertThat(to).isBetween(before, after));
     }
 }
