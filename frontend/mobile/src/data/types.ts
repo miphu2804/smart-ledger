@@ -192,4 +192,52 @@ export interface SaleView {
   paymentStatus: 'PAID' | 'DEBT' | 'PARTIAL';
   soldAt: string;
   items: SaleItemView[];
+  customerId: number | null;
+  outstandingVnd: number;
+}
+
+// ---- Công nợ, khách hàng, khoản chi thật — khớp Core (backend/core), xem AGENTS.md ----
+
+export interface DebtView {
+  id: number;
+  saleId: number;
+  customerId: number;
+  originalVnd: number;
+  outstandingVnd: number;
+  status: 'OPEN' | 'SETTLED';
+  createdAt: string;
+  settledAt: string | null;
+}
+
+export interface CustomerView {
+  id: number;
+  shopId: number;
+  name: string;
+  phone: string | null;
+  status: 'ACTIVE' | 'ARCHIVED';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaymentView {
+  id: number;
+  saleId: number;
+  amountVnd: number;
+  paymentMethod: 'CASH' | 'TRANSFER';
+  type: 'INITIAL' | 'DEBT_REPAYMENT';
+  receivedAt: string;
+}
+
+export interface ExpenseView {
+  id: number;
+  shopId: number;
+  /** Free-text ở Core — app gửi/đọc key cố định của `ExpenseCategory` (xem src/data/mock.ts) */
+  category: string | null;
+  description: string;
+  amountVnd: number;
+  paymentMethod: 'CASH' | 'TRANSFER' | null;
+  expenseAt: string;
+  status: 'ACTIVE' | 'ARCHIVED';
+  createdAt: string;
+  updatedAt: string;
 }

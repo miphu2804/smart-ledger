@@ -9,11 +9,21 @@ const CORE_MESSAGES: Record<string, string> = {
   validation_failed: 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại.',
   invalid_request: 'Yêu cầu không hợp lệ. Vui lòng thử lại.',
   product_stock_insufficient: 'Không đủ hàng trong kho',
-  full_payment_required: 'Cần thanh toán đủ số tiền',
   draft_item_invalid: 'Có món không còn trong danh mục hoặc thuộc tiệm khác',
   product_barcode_conflict: 'Mã vạch này đã dùng cho sản phẩm khác',
   product_category_invalid: 'Danh mục không hợp lệ hoặc đã ẩn',
   shop_inactive: 'Tiệm đang tạm khoá',
+  invalid_customer_id: 'Khách hàng không hợp lệ',
+  customer_not_found: 'Không tìm thấy khách hàng này',
+  customer_required_for_debt: 'Cần có tên khách để ghi nợ',
+  invalid_debt_id: 'Khoản nợ không hợp lệ',
+  debt_not_found: 'Không tìm thấy khoản nợ này',
+  debt_already_settled: 'Khoản nợ này đã được trả hết',
+  debt_payment_invalid: 'Số tiền trả không hợp lệ hoặc vượt quá số nợ còn lại',
+  invalid_expense_id: 'Khoản chi không hợp lệ',
+  expense_not_found: 'Không tìm thấy khoản chi này',
+  expense_update_required: 'Cần thay đổi ít nhất một trường',
+  invalid_report_period: 'Khoảng thời gian báo cáo không hợp lệ',
 };
 
 /** Thông báo lỗi tiếng Việt để hiện cho người dùng (từ AuthError / ApiError / lỗi bất ngờ). */

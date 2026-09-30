@@ -1,10 +1,11 @@
-import type { SaleDraftView, SaleView } from '../data/types';
+import type { PaymentView, SaleDraftView, SaleView } from '../data/types';
 import { apiRequest } from './api';
 
 /**
  * Bán hàng thật (Core `/sale-drafts`, `/sales` — cần header X-Shop-Id, xem AGENTS.md).
- * Luồng bắt buộc: tạo draft với `initialPaidVnd = total` + `initialPaymentMethod`, rồi `confirm` ngay
- * (đã bỏ ghi nợ — Core chỉ xác nhận đơn khi khách trả đủ tiền, lỗi `full_payment_required` nếu chưa đủ).
+ * Luồng bắt buộc: tạo draft rồi `confirm` ngay. `confirm` nhận `initialPaidVnd` bất kỳ từ 0 tới tổng đơn —
+ * trả ít hơn tổng thì cần có khách (`customerId` có sẵn hoặc `customerName` để Core tự tạo khách mới),
+ * nếu không sẽ lỗi `customer_required_for_debt`.
  */
 
 export interface SaleDraftItemRequest {
@@ -16,6 +17,7 @@ export interface SaleDraftItemRequest {
 export interface SaleDraftWriteRequest {
   customerName?: string | null;
   customerPhone?: string | null;
+  customerId?: number | null;
   discountVnd?: number | null;
   initialPaidVnd?: number | null;
   initialPaymentMethod?: 'CASH' | 'TRANSFER' | null;
@@ -40,4 +42,10 @@ export const saleDraftApi = {
 export const saleApi = {
   list: (): Promise<SaleView[]> => apiRequest<SaleView[]>('/sales', { withShop: true }),
   getById: (id: number): Promise<SaleView> => apiRequest<SaleView>(`/sales/${id}`, { withShop: true }),
+};
+
+export const paymentApi = {
+  /** Lịch sử trả tiền (append-only) của một đơn — dùng để dựng "Lịch sử" của một khoản nợ */
+  listForSale: (saleId: number): Promise<PaymentView[]> =>
+    apiRequest<PaymentView[]>(`/sales/${saleId}/payments`, { withShop: true }),
 };

@@ -15,20 +15,27 @@ import { itemsTotal, methodLabel } from '../src/lib/stats';
 import { useApp } from '../src/store/AppStore';
 import { colors, font } from '../src/theme';
 
-/** Đã bỏ Ghi nợ — Core chỉ xác nhận đơn khi khách trả đủ tiền ngay (xem AGENTS.md) */
-const METHODS: { key: 'cash' | 'transfer'; icon: IconName }[] = [
+/**
+ * Ghi nợ đã có lại (xem AGENTS.md): Core chấp nhận trả một phần/không trả khi xác nhận đơn, miễn có khách.
+ * App chưa có UI chọn khách có sẵn nên luôn gửi `customerName`/`customerPhone` để Core tự tạo khách mới —
+ * bắt buộc phải có tên khách khi chọn Ghi nợ, nếu không Core trả lỗi `customer_required_for_debt`.
+ */
+const METHODS: { key: 'cash' | 'transfer' | 'debt'; icon: IconName }[] = [
   { key: 'cash', icon: 'dollar-sign' },
   { key: 'transfer', icon: 'smartphone' },
+  { key: 'debt', icon: 'book-open' },
 ];
 
 export default function Checkout() {
   const app = useApp();
   const toast = useToast();
   const [items, setItems] = useState<LineItem[]>(app.draft?.items ?? []);
-  const [method, setMethod] = useState<'cash' | 'transfer'>('cash');
+  const [method, setMethod] = useState<'cash' | 'transfer' | 'debt'>('cash');
   const [customer, setCustomer] = useState('');
   const [phone, setPhone] = useState('');
   const [given, setGiven] = useState<number | null>(null);
+  /** Khách trả trước khi ghi nợ — trống/0 nghĩa là ghi nợ toàn bộ */
+  const [debtUpfront, setDebtUpfront] = useState<number | null>(null);
   const [edit, setEdit] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [doneId, setDoneId] = useState<number | null>(null);
@@ -67,6 +74,8 @@ export default function Checkout() {
     );
   }
 
+  const debtUpfrontAmount = Math.min(debtUpfront ?? 0, total);
+
   const complete = async () => {
     if (!items.length || busy) return;
     setErr('');
@@ -76,6 +85,10 @@ export default function Checkout() {
     }
     if (method === 'cash' && given !== null && given < total) {
       setErr('Tiền khách đưa chưa đủ');
+      return;
+    }
+    if (method === 'debt' && !customer.trim()) {
+      setErr('Cần nhập tên khách để ghi nợ');
       return;
     }
     setBusy(true);
@@ -88,8 +101,8 @@ export default function Checkout() {
           quantity: it.qty,
           unitPriceVnd: it.price,
         })),
-        initialPaidVnd: total,
-        initialPaymentMethod: method === 'cash' ? 'CASH' : 'TRANSFER',
+        initialPaidVnd: method === 'debt' ? debtUpfrontAmount : total,
+        initialPaymentMethod: method === 'debt' ? (debtUpfrontAmount > 0 ? 'CASH' : null) : method === 'cash' ? 'CASH' : 'TRANSFER',
       });
       const sale = await saleDraftApi.confirm(draft.id);
       app.setDraft(null);
@@ -287,15 +300,38 @@ export default function Checkout() {
             </T>
           </View>
         ) : null}
+        {method === 'debt' ? (
+          <>
+            <T w="semibold" size={12} color={colors.muted} style={{ marginBottom: 8 }}>
+              Khách trả trước (không bắt buộc)
+            </T>
+            <Field
+              placeholder="0"
+              keyboardType="number-pad"
+              maxLength={13}
+              value={debtUpfront === null ? '' : vnd(debtUpfront, false)}
+              onChangeText={(t) => {
+                const digits = t.replace(/\D/g, '');
+                setDebtUpfront(digits ? Math.min(Number(digits), total) : null);
+                setErr('');
+              }}
+              inputStyle={{ fontFamily: font.bold }}
+              style={{ marginBottom: 0 }}
+            />
+            <T size={12} color={colors.faint} style={{ marginTop: 10 }}>
+              Còn lại {vnd(total - debtUpfrontAmount)} sẽ được ghi vào sổ nợ
+            </T>
+          </>
+        ) : null}
         <Field
-          label="Tên khách (không bắt buộc)"
+          label={method === 'debt' ? 'Tên khách' : 'Tên khách (không bắt buộc)'}
           placeholder="VD: Chị Ba"
           value={customer}
           onChangeText={(t) => {
             setCustomer(t);
             setErr('');
           }}
-          style={{ marginTop: method === 'cash' ? 16 : 12 }}
+          style={{ marginTop: method === 'cash' || method === 'debt' ? 16 : 12 }}
         />
         <Field
           label="Số điện thoại (không bắt buộc)"
@@ -327,7 +363,17 @@ export default function Checkout() {
   );
 }
 
-function Success({ id, total, method, change }: { id: number; total: number; method: 'cash' | 'transfer'; change: number }) {
+function Success({
+  id,
+  total,
+  method,
+  change,
+}: {
+  id: number;
+  total: number;
+  method: 'cash' | 'transfer' | 'debt';
+  change: number;
+}) {
   const toast = useToast();
   const scale = useRef(new Animated.Value(0.4)).current;
   useEffect(() => {

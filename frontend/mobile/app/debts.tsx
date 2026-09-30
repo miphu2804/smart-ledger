@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
-import React, { useState } from 'react';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Linking, Pressable, StyleSheet, View } from 'react-native';
 import { useToast } from '../src/components/brand';
 import {
   Badge,
@@ -17,22 +17,63 @@ import {
   T,
   Tile,
 } from '../src/components/ui';
-import type { Debt } from '../src/data/types';
-import { ddmm, hhmm, relDay, vnd } from '../src/lib/format';
-import { useApp } from '../src/store/AppStore';
+import type { CustomerView, DebtView, PaymentView } from '../src/data/types';
+import { customerApi } from '../src/lib/customerApi';
+import { debtApi } from '../src/lib/debtApi';
+import { errorMessage } from '../src/lib/errors';
+import { ddmm, hhmm, initials, relDay, vnd } from '../src/lib/format';
+import { paymentApi } from '../src/lib/salesApi';
 import { colors, shadow } from '../src/theme';
 
 type F = 'open' | 'done' | 'all';
 
+/** Nợ đã gắn tên/SĐT khách (join client-side — Core không trả kèm tên khách trong `/debts`) */
+type DebtCard = DebtView & { name: string; phone: string };
+
 export default function Debts() {
-  const app = useApp();
+  const [debts, setDebts] = useState<DebtView[]>([]);
+  const [customers, setCustomers] = useState<CustomerView[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [filter, setFilter] = useState<F>('open');
-  const [openId, setOpenId] = useState<string | null>(null);
-  const left = (d: Debt) => d.total - d.paid;
-  const owing = app.debts.filter((d) => left(d) > 0);
-  const totalLeft = owing.reduce((a, d) => a + left(d), 0);
-  const list = app.debts.filter((d) => (filter === 'open' ? left(d) > 0 : filter === 'done' ? left(d) <= 0 : true));
-  const selected = app.debts.find((d) => d.id === openId) ?? null;
+  const [openId, setOpenId] = useState<number | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [ds, cs] = await Promise.all([debtApi.list(), customerApi.list()]);
+      setDebts(ds);
+      setCustomers(cs);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const customerMap = useMemo(() => new Map(customers.map((c) => [c.id, c])), [customers]);
+  const list = useMemo<DebtCard[]>(
+    () =>
+      debts.map((d) => {
+        const c = customerMap.get(d.customerId);
+        return { ...d, name: c?.name ?? 'Khách lẻ', phone: c?.phone ?? '' };
+      }),
+    [debts, customerMap],
+  );
+
+  const owing = list.filter((d) => d.status === 'OPEN');
+  const totalLeft = owing.reduce((a, d) => a + d.outstandingVnd, 0);
+  const filtered = list.filter((d) =>
+    filter === 'open' ? d.status === 'OPEN' : filter === 'done' ? d.status === 'SETTLED' : true,
+  );
+  const selected = list.find((d) => d.id === openId) ?? null;
+
+  const updateDebt = (updated: DebtView) => setDebts((cur) => cur.map((d) => (d.id === updated.id ? updated : d)));
 
   return (
     <Screen>
@@ -69,10 +110,20 @@ export default function Debts() {
         ]}
       />
 
-      {list.length ? (
-        list.map((d) => {
-          const l = left(d);
-          const status = l <= 0 ? 'done' : d.paid > 0 ? 'partial' : 'unpaid';
+      {loading ? (
+        <View style={{ paddingTop: 60, alignItems: 'center' }}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      ) : error ? (
+        <>
+          <EmptyState icon="alert-triangle" title="Không tải được danh sách" hint={error} />
+          <Button title="Thử lại" variant="outline" onPress={load} />
+        </>
+      ) : filtered.length ? (
+        filtered.map((d) => {
+          const l = d.outstandingVnd;
+          const paid = d.originalVnd - d.outstandingVnd;
+          const status = d.status === 'SETTLED' ? 'done' : paid > 0 ? 'partial' : 'unpaid';
           return (
             <Pressable
               key={d.id}
@@ -82,7 +133,7 @@ export default function Debts() {
               <Row>
                 <Tile
                   name={d.name}
-                  text={d.name.split(' ').slice(-1)[0][0]}
+                  text={initials(d.name)}
                   size={42}
                   palette={l > 0 ? [colors.redSoft, colors.red] : [colors.greenSoft, colors.green]}
                 />
@@ -91,7 +142,7 @@ export default function Debts() {
                     {d.name}
                   </T>
                   <T size={12} color={colors.faint}>
-                    {d.phone || 'Chưa có SĐT'} · {relDay(new Date(d.lastDate))}
+                    {d.phone || 'Chưa có SĐT'} · {relDay(new Date(d.createdAt))}
                   </T>
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: 4 }}>
@@ -107,9 +158,9 @@ export default function Debts() {
                   )}
                 </View>
               </Row>
-              {d.paid > 0 && l > 0 ? (
+              {paid > 0 && l > 0 ? (
                 <View style={{ marginTop: 10 }}>
-                  <Progress value={d.paid / d.total} color={colors.green} track={colors.greenSoft} />
+                  <Progress value={paid / d.originalVnd} color={colors.green} track={colors.greenSoft} />
                 </View>
               ) : null}
             </Pressable>
@@ -119,29 +170,83 @@ export default function Debts() {
         <EmptyState icon="smile" title="Không có khoản nợ nào" hint="Khi thanh toán chọn “Ghi nợ”, khách sẽ hiện ở đây" />
       )}
 
-      <DebtSheet debt={selected} onClose={() => setOpenId(null)} />
+      <DebtSheet debt={selected} onClose={() => setOpenId(null)} onRepay={updateDebt} />
     </Screen>
   );
 }
 
-function DebtSheet({ debt, onClose }: { debt: Debt | null; onClose: () => void }) {
-  const app = useApp();
+function DebtSheet({
+  debt,
+  onClose,
+  onRepay,
+}: {
+  debt: DebtCard | null;
+  onClose: () => void;
+  onRepay: (debt: DebtView) => void;
+}) {
   const toast = useToast();
   const [amount, setAmount] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [payments, setPayments] = useState<PaymentView[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  useEffect(() => {
+    setAmount('');
+    if (!debt) {
+      setPayments([]);
+      return;
+    }
+    let cancelled = false;
+    setHistoryLoading(true);
+    paymentApi
+      .listForSale(debt.saleId)
+      .then((ps) => {
+        if (!cancelled) setPayments(ps);
+      })
+      .catch(() => {
+        if (!cancelled) setPayments([]);
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [debt?.id, debt?.saleId]);
+
   if (!debt)
     return (
       <Sheet visible={false} onClose={onClose}>
         {null}
       </Sheet>
     );
-  const left = Math.max(0, debt.total - debt.paid);
+
+  const left = debt.outstandingVnd;
+  const paidTotal = debt.originalVnd - debt.outstandingVnd;
   const num = parseInt(amount.replace(/\D/g, ''), 10) || 0;
 
-  const pay = (v: number) => {
-    app.payDebt(debt.id, v);
-    setAmount('');
-    toast(v >= left ? `${debt.name} đã trả hết nợ` : `Đã ghi nhận ${debt.name} trả ${vnd(v)}`);
+  const pay = async (v: number) => {
+    if (!v || v > left || busy) return;
+    setBusy(true);
+    try {
+      const res = await debtApi.repay(debt.id, { amountVnd: v, paymentMethod: 'CASH' });
+      onRepay(res.debt);
+      setAmount('');
+      toast(v >= left ? `${debt.name} đã trả hết nợ` : `Đã ghi nhận ${debt.name} trả ${vnd(v)}`);
+    } catch (e) {
+      toast(errorMessage(e), 'err');
+    } finally {
+      setBusy(false);
+    }
   };
+
+  // Dòng đầu là khoản nợ gốc (giờ tạo debt); các lần trả nợ thật (DEBT_REPAYMENT) nối sau — mới nhất lên trước
+  const history = [
+    { at: debt.createdAt, amount: debt.originalVnd, note: 'Ghi nợ ban đầu' },
+    ...payments
+      .filter((p) => p.type === 'DEBT_REPAYMENT')
+      .map((p) => ({ at: p.receivedAt, amount: -p.amountVnd, note: 'Khách trả nợ' })),
+  ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 
   return (
     <Sheet visible onClose={onClose} title={debt.name}>
@@ -154,7 +259,7 @@ function DebtSheet({ debt, onClose }: { debt: Debt | null; onClose: () => void }
             {vnd(left)}
           </T>
           <T size={12} color={colors.faint}>
-            Tổng {vnd(debt.total)} · đã trả {vnd(debt.paid)}
+            Tổng {vnd(debt.originalVnd)} · đã trả {vnd(paidTotal)}
           </T>
         </View>
         {debt.phone ? (
@@ -193,10 +298,11 @@ function DebtSheet({ debt, onClose }: { debt: Debt | null; onClose: () => void }
               variant="outline"
               small
               style={{ flex: 1, height: 44 }}
-              disabled={!num || num >= left}
+              disabled={!num || num >= left || busy}
+              loading={busy}
               onPress={() => pay(num)}
             />
-            <Button title="Trả hết" small style={{ flex: 1, height: 44 }} onPress={() => pay(left)} />
+            <Button title="Trả hết" small style={{ flex: 1, height: 44 }} disabled={busy} loading={busy} onPress={() => pay(left)} />
           </Row>
         </View>
       ) : (
@@ -205,48 +311,45 @@ function DebtSheet({ debt, onClose }: { debt: Debt | null; onClose: () => void }
           <T w="bold" size={14} color={colors.green} style={{ marginTop: 6 }}>
             Khách đã trả đủ
           </T>
-          <Button
-            title="Xoá khỏi sổ nợ"
-            variant="ghost"
-            small
-            onPress={() => {
-              app.removeDebt(debt.id);
-              onClose();
-            }}
-          />
         </View>
       )}
 
       <T w="bold" size={14} style={{ marginTop: 18, marginBottom: 6 }}>
         Lịch sử
       </T>
-      {debt.history.map((h, i) => {
-        const d = new Date(h.at);
-        const payment = h.amount < 0;
-        return (
-          <Row key={i} style={styles.hist}>
-            <View style={[styles.histIcon, payment && { backgroundColor: colors.greenSoft }]}>
-              <Feather
-                name={payment ? 'arrow-down-left' : 'shopping-bag'}
-                size={14}
-                color={payment ? colors.green : colors.gold}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <T w="semibold" size={13}>
-                {h.note}
+      {historyLoading ? (
+        <View style={{ paddingVertical: 16, alignItems: 'center' }}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      ) : (
+        history.map((h, i) => {
+          const d = new Date(h.at);
+          const payment = h.amount < 0;
+          return (
+            <Row key={i} style={styles.hist}>
+              <View style={[styles.histIcon, payment && { backgroundColor: colors.greenSoft }]}>
+                <Feather
+                  name={payment ? 'arrow-down-left' : 'shopping-bag'}
+                  size={14}
+                  color={payment ? colors.green : colors.gold}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <T w="semibold" size={13}>
+                  {h.note}
+                </T>
+                <T size={12} color={colors.faint}>
+                  {ddmm(d)} · {hhmm(d)}
+                </T>
+              </View>
+              <T w="bold" size={13} color={payment ? colors.green : colors.gold}>
+                {payment ? '−' : '+'}
+                {vnd(Math.abs(h.amount))}
               </T>
-              <T size={12} color={colors.faint}>
-                {ddmm(d)} · {hhmm(d)}
-              </T>
-            </View>
-            <T w="bold" size={13} color={payment ? colors.green : colors.gold}>
-              {payment ? '−' : '+'}
-              {vnd(Math.abs(h.amount))}
-            </T>
-          </Row>
-        );
-      })}
+            </Row>
+          );
+        })
+      )}
     </Sheet>
   );
 }

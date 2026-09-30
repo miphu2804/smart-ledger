@@ -40,7 +40,7 @@ export const productApi = {
   create: (input: ProductWriteRequest): Promise<ProductView> =>
     apiRequest<ProductView>('/products', { method: 'POST', body: input, withShop: true }),
   update: (id: number, input: ProductWriteRequest): Promise<ProductView> =>
-    apiRequest<ProductView>(`/products/${id}`, { method: 'PUT', body: input, withShop: true }),
+    apiRequest<ProductView>(`/products/${id}`, { method: 'PATCH', body: input, withShop: true }),
   /** DELETE — archive */
   archive: (id: number): Promise<void> => apiRequest<void>(`/products/${id}`, { method: 'DELETE', withShop: true }),
 };
