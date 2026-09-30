@@ -1,10 +1,10 @@
 import { Feather } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import React, { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useToast } from '../src/components/brand';
-import { Badge, Button, Chips, EmptyState, Field, Header, Row, Sheet, Stepper, T, Tile } from '../src/components/ui';
+import { Button, Chips, EmptyState, Field, Header, Row, Sheet, Stepper, T, Tile } from '../src/components/ui';
 import type { CategoryView, LineItem, ProductView } from '../src/data/types';
 import { categoryApi, productApi } from '../src/lib/catalogApi';
 import { errorMessage } from '../src/lib/errors';
@@ -21,9 +21,11 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
   const [q, setQ] = useState('');
   const [cartOpen, setCartOpen] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
-  const [custom, setCustom] = useState<LineItem[]>([]);
   const [cName, setCName] = useState('');
   const [cPrice, setCPrice] = useState('');
+  const [cUnit, setCUnit] = useState('cái');
+  const [cBusy, setCBusy] = useState(false);
+  const [cErr, setCErr] = useState('');
 
   const [products, setProducts] = useState<ProductView[]>([]);
   const [categories, setCategories] = useState<CategoryView[]>([]);
@@ -45,9 +47,11 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
   const addToCart = (id: number, delta = 1) =>
     setCart((cur) => {
@@ -68,13 +72,10 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
     [products, cat, q],
   );
 
-  const cartItems: LineItem[] = [
-    ...Object.entries(cart).flatMap(([id, qty]) => {
-      const p = products.find((x) => x.id === Number(id));
-      return p ? [{ productId: p.id, name: p.name, price: p.sellingPriceVnd, qty }] : [];
-    }),
-    ...custom,
-  ];
+  const cartItems: LineItem[] = Object.entries(cart).flatMap(([id, qty]) => {
+    const p = products.find((x) => x.id === Number(id));
+    return p ? [{ productId: p.id, name: p.name, price: p.sellingPriceVnd, qty }] : [];
+  });
   const total = itemsTotal(cartItems);
   const count = cartItems.reduce((a, i) => a + i.qty, 0);
   const hasUncategorized = products.some((p) => p.categoryId == null);
@@ -84,8 +85,34 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
   const pay = () => {
     app.setDraft({ items: cartItems, source: 'pos' });
     setCart({});
-    setCustom([]);
     router.push('/checkout');
+  };
+
+  const addCustomItem = async () => {
+    const price = parseInt(cPrice.replace(/\D/g, ''), 10) || 0;
+    if (!cName.trim() || !price || cBusy) return;
+    setCErr('');
+    setCBusy(true);
+    try {
+      // Core không hỗ trợ món ngoài danh mục — phải tạo Product thật (không theo dõi tồn kho) rồi thêm vào giỏ theo id.
+      const created = await productApi.create({
+        name: cName.trim(),
+        unit: cUnit.trim() || 'cái',
+        sellingPriceVnd: price,
+        tracked: false,
+        stockQuantity: null,
+      });
+      setProducts((cur) => [...cur, created]);
+      addToCart(created.id, 1);
+      setCName('');
+      setCPrice('');
+      setCUnit('cái');
+      setCustomOpen(false);
+    } catch (e) {
+      setCErr(errorMessage(e));
+    } finally {
+      setCBusy(false);
+    }
   };
 
   return (
@@ -197,12 +224,9 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
             style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}
           >
             <View style={{ flex: 1 }}>
-              <Row gap={6}>
-                <T w="semibold" size={14}>
-                  {it.name}
-                </T>
-                {!it.productId ? <Badge text="Ngoài DM" color={colors.gold} bg={colors.goldSoft} /> : null}
-              </Row>
+              <T w="semibold" size={14}>
+                {it.name}
+              </T>
               <T size={12} color={colors.faint}>
                 {vnd(it.price)}
               </T>
@@ -211,7 +235,6 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
               value={it.qty}
               onChange={(v) => {
                 if (typeof it.productId === 'number') addToCart(it.productId, v - it.qty);
-                else setCustom((c) => (v <= 0 ? c.filter((x) => x !== it) : c.map((x) => (x === it ? { ...x, qty: v } : x))));
                 if (count - it.qty + v <= 0) setCartOpen(false);
               }}
             />
@@ -224,7 +247,6 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
             small
             onPress={() => {
               setCart({});
-              setCustom([]);
               setCartOpen(false);
             }}
           />
@@ -246,15 +268,17 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
       <Sheet visible={customOpen} onClose={() => setCustomOpen(false)} title="Món ngoài danh mục">
         <Field label="Tên món" placeholder="VD: Bánh bao" value={cName} onChangeText={setCName} />
         <Field label="Giá bán (đ)" placeholder="VD: 12000" keyboardType="number-pad" value={cPrice} onChangeText={setCPrice} />
+        <Field label="Đơn vị" placeholder="VD: cái, ly, phần" value={cUnit} onChangeText={setCUnit} />
+        {cErr ? (
+          <T size={12} color={colors.red} style={{ marginBottom: 8 }}>
+            {cErr}
+          </T>
+        ) : null}
         <Button
           title="Thêm vào đơn"
-          disabled={!cName.trim() || !parseInt(cPrice, 10)}
-          onPress={() => {
-            setCustom((c) => [...c, { name: cName.trim(), price: parseInt(cPrice.replace(/\D/g, ''), 10), qty: 1 }]);
-            setCName('');
-            setCPrice('');
-            setCustomOpen(false);
-          }}
+          disabled={!cName.trim() || !parseInt(cPrice, 10) || cBusy}
+          loading={cBusy}
+          onPress={addCustomItem}
         />
       </Sheet>
     </View>

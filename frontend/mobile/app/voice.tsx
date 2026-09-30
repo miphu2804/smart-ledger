@@ -144,7 +144,8 @@ export default function Voice() {
         mergeItems([{ productId: created.id, name: created.name, price: created.sellingPriceVnd, qty: first.qty }]);
         push('ai', `Đã thêm “${first.name}” (${vnd(price)}) vào danh mục và vào đơn.`);
       } catch (e) {
-        push('ai', `Không thêm được “${first.name}” vào danh mục: ${errorMessage(e)}`);
+        setPriceErr(`Không thêm được “${first.name}” vào danh mục: ${errorMessage(e)}`);
+        return;
       } finally {
         setCatalogBusy(false);
       }

@@ -117,7 +117,7 @@ Luồng: Firebase xác thực SĐT → FE gửi **Firebase ID token** (`Authoriz
 2. Mở lại app: Firebase tự khôi phục phiên → `GET /api/v1/me`. `404 auth_profile_not_found` (Firebase còn đăng nhập nhưng Core chưa có tài khoản) → app vào lại màn nhập tên. `401` → đăng xuất. `403 account_disabled` → đăng xuất và báo tài khoản bị khoá.
 3. `needsOnboarding = true` (chưa có tiệm) → màn tạo tiệm, gọi `POST /shops` thật (Core lưu một `industry` dạng chuỗi — các ngành đã chọn được nối bằng ", "). `EXPO_PUBLIC_MOCK_SHOPS=true` chỉ còn dùng khi Core giả lập.
 
-Nhánh backend đã gộp thêm `feat/core-business`: Core giờ có thêm Category, Product, SaleDraft, Sale, Payment (`/api/v1/categories`, `/products`, `/sale-drafts`, `/sales`, `.../payments`, đều cần header `X-Shop-Id`). **Frontend chưa nối các API này** — hoá đơn/kho hàng trong app vẫn là dữ liệu mẫu. `SaleDraft` hiện chỉ xác nhận khi trả đủ tiền (`full_payment_required` nếu chưa đủ) — chưa thấy hỗ trợ ghi nợ như màn Thanh toán của mobile đang có; cần chốt với backend trước khi nối.
+Nhánh backend đã gộp thêm `feat/core-business`: Core giờ có thêm Category, Product, SaleDraft, Sale, Payment (`/api/v1/categories`, `/products`, `/sale-drafts`, `/sales`, `.../payments`, đều cần header `X-Shop-Id`). **Frontend chưa nối các API này** — hoá đơn/kho hàng trong app vẫn là dữ liệu mẫu. `SaleDraft.confirm` chấp nhận `initialPaidVnd` bất kỳ từ 0 tới tổng đơn — trả thiếu thì Core (`SaleDraftServiceImpl.confirm`/`customerForConfirmation`) tự tạo một `Debt` cho khách (cần có `customerId` có sẵn hoặc `customerName` để Core tạo khách mới, thiếu cả hai thì lỗi `customer_required_for_debt`); khớp với màn Thanh toán ghi nợ của mobile.
 
 `.env` để chạy với Core thật (Core chạy bằng `docker compose up` thì cổng mặc định là `8000`):
 

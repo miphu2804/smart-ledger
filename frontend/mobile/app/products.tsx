@@ -228,7 +228,7 @@ function ProductForm({
   const save = async () => {
     setErr('');
     const priceNum = num(price);
-    const costNum = num(cost) || Math.round(priceNum * 0.7);
+    const costNum = cost.trim() === '' ? null : num(cost);
     const payload: ProductWriteRequest = {
       categoryId: catKey === 'none' ? null : Number(catKey),
       name: name.trim(),

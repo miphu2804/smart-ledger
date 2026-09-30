@@ -18,13 +18,13 @@ import {
   Tile,
 } from '../src/components/ui';
 import { expenseCategoryMeta, expenseVoiceSamples } from '../src/data/mock';
-import type { Expense, ExpenseCategory, ExpenseView } from '../src/data/types';
+import type { Expense, ExpenseCategory, ExpenseView, SaleView } from '../src/data/types';
 import { errorMessage } from '../src/lib/errors';
 import { compact, ddmm, hhmm, vnd } from '../src/lib/format';
 import { expenseApi } from '../src/lib/expenseApi';
 import { parseExpense } from '../src/lib/parseOrder';
-import { monthExpenses, monthRevenue } from '../src/lib/stats';
-import { useApp } from '../src/store/AppStore';
+import { saleApi } from '../src/lib/salesApi';
+import { monthExpenses } from '../src/lib/stats';
 import { colors } from '../src/theme';
 
 /** Thông tin hiển thị (nhãn/màu) của một loại chi — dùng cho cả key hợp lệ và chuỗi lạ (fallback) */
@@ -32,8 +32,14 @@ function catMeta(key: string) {
   return expenseCategoryMeta[key] ?? { label: key, color: colors.muted, bg: colors.border };
 }
 
+/** Đơn `soldAt` có rơi vào tháng cách hiện tại `offset` tháng không — dùng để lọc doanh thu theo tháng như `monthExpenses`. */
+function inMonthOffset(iso: string, offset: number, now: Date) {
+  const m = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+  const d = new Date(iso);
+  return d.getMonth() === m.getMonth() && d.getFullYear() === m.getFullYear();
+}
+
 export default function Expenses() {
-  const app = useApp();
   const toast = useToast();
   const [month, setMonth] = useState(0);
   const [adding, setAdding] = useState(false);
@@ -41,6 +47,7 @@ export default function Expenses() {
   const now = new Date();
 
   const [expenses, setExpenses] = useState<ExpenseView[]>([]);
+  const [sales, setSales] = useState<SaleView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -48,7 +55,9 @@ export default function Expenses() {
     setLoading(true);
     setError('');
     try {
-      setExpenses(await expenseApi.list());
+      const [es, ss] = await Promise.all([expenseApi.list(), saleApi.list()]);
+      setExpenses(es);
+      setSales(ss);
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -82,7 +91,11 @@ export default function Expenses() {
   });
   const list = monthExpenses(mapped, month);
   const total = list.reduce((a, e) => a + e.amount, 0);
-  const revenue = monthRevenue(app.invoices, month);
+  // Doanh thu tính từ `saleApi.list()` (đơn đã xác nhận qua checkout thật), loại đơn đã huỷ — checkout không còn
+  // ghi vào `app.invoices` (dữ liệu mẫu cũ) nên không thể lấy doanh thu từ đó nữa.
+  const revenue = sales
+    .filter((s) => s.saleStatus !== 'VOIDED' && inMonthOffset(s.soldAt, month, now))
+    .reduce((a, s) => a + s.totalVnd, 0);
   const byCat = useMemo(() => {
     const map: Record<string, number> = {};
     list.forEach((e) => (map[e.category] = (map[e.category] ?? 0) + e.amount));

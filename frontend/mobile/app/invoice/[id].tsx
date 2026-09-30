@@ -137,7 +137,11 @@ export default function InvoiceDetail() {
           <T size={12} color={colors.muted} style={{ flex: 1 }}>
             Thanh toán
           </T>
-          <Badge text={sale.paidVnd >= sale.totalVnd ? 'Đã thanh toán đủ' : 'Chưa thanh toán đủ'} color={colors.green} bg={colors.greenSoft} />
+          <Badge
+            text={sale.paidVnd >= sale.totalVnd ? 'Đã thanh toán đủ' : 'Chưa thanh toán đủ'}
+            color={sale.paidVnd >= sale.totalVnd ? colors.green : sale.paidVnd > 0 ? colors.gold : colors.red}
+            bg={sale.paidVnd >= sale.totalVnd ? colors.greenSoft : sale.paidVnd > 0 ? colors.goldSoft : colors.redSoft}
+          />
         </Row>
         <View style={styles.dash} />
 

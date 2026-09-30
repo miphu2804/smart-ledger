@@ -231,6 +231,7 @@ function DebtSheet({
     try {
       const res = await debtApi.repay(debt.id, { amountVnd: v, paymentMethod: 'CASH' });
       onRepay(res.debt);
+      setPayments((cur) => [...cur, res.payment]);
       setAmount('');
       toast(v >= left ? `${debt.name} đã trả hết nợ` : `Đã ghi nhận ${debt.name} trả ${vnd(v)}`);
     } catch (e) {
