@@ -1,6 +1,9 @@
-import { API_ENDPOINT } from '../config';
+import { API_ENDPOINT, USE_MOCK } from '../config';
 import { authClient } from './auth';
+import { ApiError } from './apiError';
+import type { ApiErrorDetail } from './apiError';
 import { debugLog } from './debug';
+import { mockCoreRequest } from './mockCore';
 
 /**
  * Client gọi Core (backend/core, Spring Boot):
@@ -11,26 +14,12 @@ import { debugLog } from './debug';
  *   401 → đăng xuất.
  * - Quá thời gian chờ (mặc định 15 giây) → ApiError status 0, code 'timeout' (không để app quay vô hạn khi
  *   sai IP hoặc tường lửa chặn).
+ * - EXPO_PUBLIC_USE_MOCK=true (xem src/config.ts): các endpoint nghiệp vụ (danh mục/sản phẩm, đơn nháp, bán
+ *   hàng, công nợ, khách hàng, chi phí) được `mockCore.ts` phục vụ từ dữ liệu mẫu trong bộ nhớ — KHÔNG gọi
+ *   mạng — để màn hình xem trước dùng được khi chưa có Core thật chạy.
  */
-export interface ApiErrorDetail {
-  field: string;
-  issue?: string;
-}
-
-export class ApiError extends Error {
-  readonly status: number;
-  readonly code: string;
-  readonly traceId?: string;
-  readonly details: ApiErrorDetail[];
-  constructor(status: number, code: string, message: string, traceId?: string, details: ApiErrorDetail[] = []) {
-    super(message);
-    this.name = 'ApiError';
-    this.status = status;
-    this.code = code;
-    this.traceId = traceId;
-    this.details = details;
-  }
-}
+export { ApiError };
+export type { ApiErrorDetail };
 
 const DEFAULT_TIMEOUT_MS = 15000;
 
@@ -60,6 +49,14 @@ export async function apiRequest<T>(
   } = {},
 ): Promise<T> {
   const method = opts.method ?? (opts.body === undefined ? 'GET' : 'POST');
+
+  if (USE_MOCK) {
+    debugLog('api', '→ (mock)', method, path);
+    const data = mockCoreRequest<T>(path, method, opts.body);
+    debugLog('api', '✓ (mock)', method, path);
+    return data;
+  }
+
   const started = Date.now();
   const took = () => `${Date.now() - started}ms`;
   debugLog('api', '→', method, path);
