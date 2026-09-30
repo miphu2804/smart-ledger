@@ -68,7 +68,7 @@ public class ExpenseServiceImpl implements ExpenseService {
     public ExpenseResponse patch(VerifiedFirebaseToken token, String shopId, String expenseId,
             ExpensePatchRequest request) {
         Shop shop = shopService.requireOwnedActiveShop(token, shopId);
-        Expense expense = requireActiveExpense(shop.getId(), expenseId);
+        Expense expense = requireLockedActiveExpense(shop.getId(), expenseId);
         if (request.getProvidedFields().isEmpty()) {
             throw new BusinessException(ErrorCode.EXPENSE_UPDATE_REQUIRED);
         }
@@ -85,12 +85,18 @@ public class ExpenseServiceImpl implements ExpenseService {
     @Transactional
     public void archive(VerifiedFirebaseToken token, String shopId, String expenseId) {
         Shop shop = shopService.requireOwnedActiveShop(token, shopId);
-        requireActiveExpense(shop.getId(), expenseId).archive(shop.getOwnerId());
+        requireLockedActiveExpense(shop.getId(), expenseId).archive(shop.getOwnerId());
     }
 
     private Expense requireActiveExpense(Long shopId, String expenseId) {
         Long id = BusinessIdParser.parse(expenseId, "expenseId", ErrorCode.INVALID_EXPENSE_ID);
         return expenseRepository.findByIdAndShopIdAndStatus(id, shopId, ExpenseStatus.ACTIVE)
+                .orElseThrow(() -> new BusinessException(ErrorCode.EXPENSE_NOT_FOUND));
+    }
+
+    private Expense requireLockedActiveExpense(Long shopId, String expenseId) {
+        Long id = BusinessIdParser.parse(expenseId, "expenseId", ErrorCode.INVALID_EXPENSE_ID);
+        return expenseRepository.findLockedByIdAndShopIdAndStatus(id, shopId, ExpenseStatus.ACTIVE)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EXPENSE_NOT_FOUND));
     }
 

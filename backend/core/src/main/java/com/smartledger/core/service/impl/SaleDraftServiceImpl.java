@@ -174,11 +174,21 @@ public class SaleDraftServiceImpl implements SaleDraftService {
     }
 
     private Customer customerForConfirmation(SaleDraft draft, Long shopId) {
+        boolean customerRequired = draft.getInitialPaidVnd() < draft.getEstimatedTotalVnd();
         if (draft.getCustomerId() != null) {
+            // A fully paid draft only needs the customer for its name/phone snapshot, which `apply()`
+            // already copied onto the draft at creation time — so a customer archived since then must
+            // not block confirming a sale that opens no debt. A partially/unpaid draft still needs the
+            // live customer because the resulting Debt links to its ID.
             return customerRepository.findByIdAndShopIdAndStatus(draft.getCustomerId(), shopId, CatalogStatus.ACTIVE)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND));
+                    .orElseGet(() -> {
+                        if (customerRequired) {
+                            throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND);
+                        }
+                        return null;
+                    });
         }
-        if (draft.getInitialPaidVnd() < draft.getEstimatedTotalVnd()) {
+        if (customerRequired) {
             if (!StringUtils.hasText(draft.getCustomerName())) {
                 throw new BusinessException(ErrorCode.CUSTOMER_REQUIRED_FOR_DEBT);
             }
