@@ -96,7 +96,12 @@ export const sessionApi = {
   /** GET /me: khôi phục phiên khi mở lại app (Firebase còn đăng nhập). */
   me: async (): Promise<SessionView> => (USE_MOCK_CORE ? mockMe() : apiRequest<SessionView>('/me')),
 
-  /** POST /shops: tạo tiệm lần đầu. Core chưa có → dùng USE_MOCK_SHOPS (tiệm chỉ lưu ở máy) cho tới khi backend thêm. */
+  /**
+   * POST /shops: tạo tiệm lần đầu. Core lưu MỘT ngành dạng chuỗi (`industry`), không phải mảng như UI cho chọn
+   * nhiều — nối các ngành đã chọn bằng ", ". USE_MOCK_SHOPS chỉ còn dùng khi test với Core giả lập.
+   */
   createShop: async (input: { name: string; industries: string[] }): Promise<ShopView> =>
-    USE_MOCK_SHOPS ? mockCreateShop(input) : apiRequest<ShopView>('/shops', { method: 'POST', body: input }),
+    USE_MOCK_SHOPS
+      ? mockCreateShop(input)
+      : apiRequest<ShopView>('/shops', { method: 'POST', body: { name: input.name, industry: input.industries.join(', ') } }),
 };

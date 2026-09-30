@@ -131,19 +131,12 @@ button {
   display: inline-grid;
   place-items: center;
   flex: none;
-  color: #fff;
-  background: linear-gradient(145deg, var(--primary-300) 0%, var(--primary) 70%);
-  box-shadow: 0 6px 14px -6px rgba(40, 88, 216, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
-.logo-mark-dot {
-  position: absolute;
-  top: 16%;
-  right: 16%;
-  width: 18%;
-  height: 18%;
-  border-radius: 50%;
-  background: var(--gold);
-  box-shadow: 0 0 0 2px var(--primary-300);
+.logo-mark img {
+  width: 112%;
+  height: 112%;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 5px rgba(26, 25, 22, 0.25));
 }
 .logo-text {
   display: flex;

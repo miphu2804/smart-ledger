@@ -1,30 +1,30 @@
 import { Feather } from '@expo/vector-icons';
 import React from 'react';
 import { Pressable, StyleSheet } from 'react-native';
-import type { LineItem } from '../data/types';
+import type { LineItem, ProductView } from '../data/types';
 import { vnd } from '../lib/format';
-import { useApp } from '../store/AppStore';
 import { colors } from '../theme';
 import { Sheet, T } from './ui';
 
-/** Chọn thêm món từ danh mục */
+/** Chọn thêm món từ danh mục thật (Core) — bên gọi truyền danh sách sản phẩm đã fetch. */
 export function AddItemSheet({
   visible,
   onClose,
   onPick,
+  products,
 }: {
   visible: boolean;
   onClose: () => void;
   onPick: (li: LineItem) => void;
+  products: ProductView[];
 }) {
-  const { products } = useApp();
   return (
     <Sheet visible={visible} onClose={onClose} title="Thêm món">
       {products.map((p) => (
         <Pressable
           key={p.id}
           onPress={() => {
-            onPick({ productId: p.id, name: p.name, price: p.price, qty: 1 });
+            onPick({ productId: p.id, name: p.name, price: p.sellingPriceVnd, qty: 1 });
             onClose();
           }}
           style={({ pressed }) => [styles.pick, pressed && { backgroundColor: colors.primaryTint }]}
@@ -33,7 +33,7 @@ export function AddItemSheet({
             {p.name}
           </T>
           <T w="bold" size={13} color={colors.primary}>
-            {vnd(p.price)}
+            {vnd(p.sellingPriceVnd)}
           </T>
           <Feather name="plus-circle" size={18} color={colors.primary} />
         </Pressable>
