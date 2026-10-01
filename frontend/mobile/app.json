@@ -13,7 +13,8 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "vn.teamhexa.songheloi"
+      "bundleIdentifier": "vn.teamhexa.songheloi",
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
       "adaptiveIcon": {
@@ -32,8 +33,9 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "@react-native-firebase/app",
-      "@react-native-firebase/auth"
+      ["@react-native-firebase/app", { "ios": { "disableSPM": true } }],
+      "@react-native-firebase/auth",
+      ["expo-build-properties", { "ios": { "useFrameworks": "static", "usePrecompiledModules": false } }]
     ],
     "scheme": "songheloi",
     "experiments": {

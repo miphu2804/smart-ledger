@@ -96,12 +96,13 @@ Code đã nối sẵn theo `docs/contracts/api-contracts.md`: Firebase xác th�
    ```bash
    npx expo install @react-native-firebase/app @react-native-firebase/auth expo-build-properties
    ```
-4. **`app.json`**: thêm `"googleServicesFile": "./google-services.json"` vào `android`, `"googleServicesFile": "./GoogleService-Info.plist"` vào `ios`, và vào `plugins`:
+4. **`app.json`** đã cấu hình sẵn `googleServicesFile` cho `android`/`ios` và các plugin:
    ```json
-   "@react-native-firebase/app",
+   ["@react-native-firebase/app", { "ios": { "disableSPM": true } }],
    "@react-native-firebase/auth",
-   ["expo-build-properties", { "ios": { "useFrameworks": "static" } }]
+   ["expo-build-properties", { "ios": { "useFrameworks": "static", "usePrecompiledModules": false } }]
    ```
+   `disableSPM` tránh lỗi `pod install` khi Firebase cài qua SPM cùng static frameworks; `usePrecompiledModules: false` tránh app crash lúc mở vì thiếu `FirebaseCoreInternal.framework`. Thư mục `ios/` được sinh từ `app.json` (gitignore), nên đừng sửa tay trong đó.
 5. **`.env`** (copy từ `.env.example`): `EXPO_PUBLIC_USE_MOCK=false`, `EXPO_PUBLIC_API_ENDPOINT=<URL Core>`, cùng 4 biến Firebase web. Nếu chưa kết nối Core, đặt `EXPO_PUBLIC_MOCK_CORE=true` để giả lập `/auth/session`, `/me`, `/shops`. Core hiện có `/auth/session` và `/me` nhưng chưa có `/shops`; để thử hai endpoint thật và giả lập riêng bước tạo tiệm, đặt `EXPO_PUBLIC_MOCK_SHOPS=true`. Đổi `.env` xong phải chạy lại `npx expo start --clear` (Metro cache giá trị cũ).
 6. **Chạy**:
    - Web: `npm run web` — dùng Firebase JS SDK + reCAPTCHA vô hình.
