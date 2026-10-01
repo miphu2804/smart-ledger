@@ -133,20 +133,21 @@ function parseMoney(seg: string): { value: number; rest: string } | null {
   return { value: Math.round(value), rest: seg.replace(m[0], ' ') };
 }
 
-function parseQty(seg: string): { qty: number; rest: string } {
+function parseQty(seg: string): { qty: number; rest: string; explicit: boolean } {
   const digit = seg.match(/(^|\s)(\d{1,3})(?=\s)/);
-  if (digit) return { qty: parseInt(digit[2], 10), rest: seg.replace(digit[0], ' ') };
+  if (digit) return { qty: parseInt(digit[2], 10), rest: seg.replace(digit[0], ' '), explicit: true };
   const words = seg.split(' ');
   for (let i = 0; i < words.length; i++) {
     const n = NUM_WORDS[words[i]];
     // "nam" chỉ tính là số khi đứng trước đơn vị (tránh "cô Năm")
     if (n && (words[i] !== 'nam' || UNITS.includes(words[i + 1] ?? ''))) {
       words.splice(i, 1);
-      return { qty: n, rest: words.join(' ') };
+      return { qty: n, rest: words.join(' '), explicit: true };
     }
   }
-  if (/\bchuc\b/.test(seg)) return { qty: 1, rest: seg };
-  return { qty: 1, rest: seg };
+  if (/\bchuc\b/.test(seg)) return { qty: 1, rest: seg, explicit: true };
+  // Không tìm thấy số lượng nào — mặc định 1 nhưng đánh dấu không tường minh
+  return { qty: 1, rest: seg, explicit: false };
 }
 
 function matchProduct(seg: string, products: ParseableProduct[]): ParseableProduct | undefined {
@@ -219,12 +220,14 @@ export function parseOrder(text: string, products: ParseableProduct[]): ParsedOr
       }
     } else {
       // Kiểm tra có nhắc tên hàng không số lượng không
-      const { qty, rest } = parseQty(seg);
+      const { qty, rest, explicit } = parseQty(seg);
       const name = cleanName(rest, text);
       if (name) {
-        if (qty === 1 && !parseQty(seg).rest.match(/\d/)) {
+        if (!explicit) {
+          // Người dùng không nói số lượng rõ ràng (VD: "cà phê sữa", "cơm chiên Dương Châu" đơn thuần)
           missingQuantityItems.push(name);
         } else {
+          // Có từ số lượng rõ ràng (VD: "một đĩa cơm chiên", "2 ly trà sữa") → thêm vào unknown
           unknown.push({ name, price: 0, qty });
         }
       }

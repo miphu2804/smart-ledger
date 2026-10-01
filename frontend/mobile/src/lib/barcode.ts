@@ -16,26 +16,28 @@ export interface BarcodeDetectionResult {
 export function playScanSuccessSound() {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return;
   try {
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
     osc.type = 'sine';
-    // Classic 1.8kHz crisp POS scanner beep
-    osc.frequency.setValueAtTime(1760, ctx.currentTime);
+    // Classic loud, crisp POS scanner beep (2000Hz)
+    osc.frequency.setValueAtTime(2000, ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(2200, ctx.currentTime + 0.04);
 
-    gain.gain.setValueAtTime(0.2, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.09);
+    gain.gain.setValueAtTime(0.4, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
 
     osc.connect(gain);
     gain.connect(ctx.destination);
 
-    osc.start();
-    osc.stop(ctx.currentTime + 0.1);
-    setTimeout(() => ctx.close().catch(() => {}), 200);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.08);
+    setTimeout(() => ctx.close().catch(() => {}), 150);
   } catch {
     // AudioContext blocked by browser autoplay policy until user gesture
   }

@@ -326,7 +326,7 @@ function ProductForm({
           <Row gap={8} style={{ alignItems: 'flex-end', marginBottom: 14 }}>
             <Field
               label="Mã vạch (EAN-13, UPC...)"
-              placeholder="VD: 8934563138164"
+              placeholder="VD: 8934563138165"
               value={barcode}
               onChangeText={setBarcode}
               style={{ flex: 1, marginBottom: 0 }}

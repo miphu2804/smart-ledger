@@ -402,7 +402,9 @@ export default function Checkout() {
       <BarcodeScannerModal
         visible={scannerOpen}
         onClose={() => setScannerOpen(false)}
+        products={products}
         onProductScanned={handleProductScanned}
+        onProductCreated={(p) => setProducts((cur) => [...cur, p])}
       />
     </Screen>
   );

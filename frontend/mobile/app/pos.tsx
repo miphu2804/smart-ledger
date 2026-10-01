@@ -131,7 +131,6 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
     }
     addToCart(product.id, 1);
     toast(`Đã thêm ${product.name}`);
-    setScannerOpen(false);
   };
 
   return (
@@ -332,7 +331,15 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
       <BarcodeScannerModal
         visible={scannerOpen}
         onClose={() => setScannerOpen(false)}
-        onProductScanned={handleBarcodeScanned}
+        products={products}
+        cartItems={cartItems}
+        onAddToCart={(p, delta) => addToCart(p.id, delta)}
+        onClearCart={() => setCart({})}
+        onCheckout={() => {
+          setScannerOpen(false);
+          pay();
+        }}
+        onProductCreated={(p) => setProducts((cur) => [...cur, p])}
       />
     </View>
   );
