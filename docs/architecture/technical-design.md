@@ -16,7 +16,7 @@
 
 ## 1. Phạm vi
 
-Kiến trúc trong sơ đồ là **đích MVP**: Mobile dành cho OWNER và dashboard web dành cho ADMIN cùng gọi Core; Core sở hữu API công khai và điều phối AI; PostgreSQL lưu sổ nghiệp vụ và lịch sử Agent chat; Redis, Qdrant, Langfuse và LiteLLM hỗ trợ AI.
+Kiến trúc trong sơ đồ là **đích MVP**: Mobile dành cho OWNER và dashboard web dành cho ADMIN cùng gọi Core; Core sở hữu API công khai và điều phối AI; PostgreSQL lưu sổ nghiệp vụ, lịch sử Agent chat và vector (pgvector); Redis, Langfuse và LiteLLM hỗ trợ AI.
 
 **Đã xác minh trong code tại `staging`:** Mobile và web dashboard đều nằm trong repo. Mobile mặc định dùng dữ liệu mẫu trong bộ nhớ; parser text chạy cục bộ, voice chưa thu âm. Khi tắt mock, luồng đăng nhập mobile có thể gửi Firebase ID token tới Core; phần lớn action nghiệp vụ vẫn dùng dữ liệu mẫu và tạo shop vẫn cần mock vì Core chưa có endpoint shop. Web dashboard mặc định dùng mock/localStorage; luồng API thật còn giả định `/auth/login` và các endpoint admin chưa có. Core Java mới triển khai `POST /api/v1/auth/session`, `GET /api/v1/me` và migration auth/shops. AI FastAPI có `GET /health`, chat và CRUD hội thoại tại `/internal/v1/agent/*`, lưu lịch sử trong PostgreSQL; agent chưa có công cụ đọc dữ liệu shop. Core chưa gọi AI.
 
@@ -30,13 +30,12 @@ Kiến trúc trong sơ đồ là **đích MVP**: Mobile dành cho OWNER và dash
 | Dashboard web | Giao diện ADMIN: tra cứu OWNER/cơ sở khách hàng và xem tổng quan hỗ trợ; không sửa sổ nghiệp vụ |
 | Core | Xác minh Firebase ID token, kiểm soát OWNER/ADMIN, API quản trị và audit, sản phẩm, draft, sale/payment/debt, chi phí, báo cáo, replenishment và điều phối AI |
 | AI | Voice/text parse, image analysis, recommendation, insight chat và Agent chat; chỉ trả đề xuất/câu trả lời |
-| PostgreSQL | Dữ liệu nghiệp vụ, trace AI tối thiểu, idempotency và audit |
+| PostgreSQL | Dữ liệu nghiệp vụ, trace AI tối thiểu, idempotency, audit và vector qua `pgvector` ([ADR-0001](adr/0001-vector-store-pgvector.md)) |
 | Redis | Cache/giới hạn tốc độ/tác vụ ngắn hạn; không là nguồn dữ liệu chuẩn |
-| Qdrant | Vector store cho các capability AI cần truy xuất tương đồng; use case cụ thể chưa chốt trong MVP |
 | LiteLLM | Chọn model và quản lý khóa model ở phía server |
 | Langfuse | Trace AI; không ghi audio/ảnh hoặc dữ liệu nhạy cảm thô mặc định |
 
-Chỉ Core có API công khai. FE không gọi AI, PostgreSQL, Redis, Qdrant, LiteLLM hoặc Langfuse trực tiếp.
+Chỉ Core có API công khai. FE không gọi AI, PostgreSQL, Redis, LiteLLM hoặc Langfuse trực tiếp.
 
 ## 3. Luồng chính
 
@@ -64,7 +63,7 @@ Luồng ADMIN: dashboard web gọi `/api/v1/admin/*`; Core kiểm tra role ADMIN
 - product/category/customer/expense archive thay vì xóa vật lý; sale đã chốt chỉ có thể `VOIDED` theo quy tắc nghiệp vụ;
 - `api_idempotency_keys` ngăn retry hoặc double-click tạo trùng sale/payment;
 - AI proposal, model/version và object key của media được lưu đủ để điều tra; không lưu media thô mặc định;
-- nếu dùng Qdrant, mọi vector và truy vấn phải được giới hạn theo `shop_id`;
+- bảng vector (`pgvector`) có cột `shop_id` và mọi truy vấn tương đồng lọc theo `shop_id` trong cùng câu SQL;
 
 Schema PostgreSQL được quản lý bằng migration SQL có phiên bản trong Git. Không sửa schema trực tiếp trên Supabase Dashboard. Migration phải chạy được trên PostgreSQL chuẩn; extension, trigger hoặc API riêng của Supabase chỉ được dùng khi có quyết định kỹ thuật riêng.
 
@@ -83,12 +82,13 @@ Schema PostgreSQL được quản lý bằng migration SQL có phiên bản tron
 |---|---|
 | FE | `API_BASE_URL` |
 | Core | `DATABASE_URL`, `REDIS_URL`, `AI_BASE_URL`, cấu hình Firebase Admin |
-| AI | `POSTGRES__URL`, `REDIS__URL`, `QDRANT__URL` (khi bật capability vector), `LITELLM__URL`, `LANGFUSE__*` |
+| AI | `POSTGRES__URL`, `REDIS__URL`, `LITELLM__URL`, `LANGFUSE__*` |
 
 Host và port thuộc cấu hình môi trường, không phải API contract.
 
-- Local: PostgreSQL/Supabase local; reset từ migration và seed.
-- Dev/staging dùng chung: một Supabase project riêng, không chứa dữ liệu production.
+- Dev và staging dùng chung một Supabase project và một Redis Cloud database, không chứa dữ liệu production; không có PostgreSQL hay Redis container local. Test tự động dùng PostgreSQL tạm (`POSTGRES_TEST_URL`).
+- Sơ đồ môi trường và CI/CD: [environments.mmd](diagrams/src/environments.mmd) ([SVG](diagrams/images/environments.svg)).
+- Production: một Supabase project và một Redis Cloud database khác; credential staging và production không dùng chung file hay biến. Cách chạy Compose xem [README](../../README.md#local-compose).
 - Runtime dùng connection pooler; migration, `pg_dump` và `pg_restore` dùng kết nối PostgreSQL phù hợp cho tác vụ dài.
 - Secret chỉ nằm trong GitHub Environment hoặc secret manager; không commit `DATABASE_URL`.
 - Khi chuyển sang Amazon RDS/Aurora PostgreSQL: tạo DB mới, chạy toàn bộ migration, chuyển dữ liệu bằng công cụ PostgreSQL/AWS phù hợp, kiểm tra rồi mới đổi `DATABASE_URL`.

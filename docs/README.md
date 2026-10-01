@@ -12,6 +12,8 @@ The documents in this directory are the source of truth for project scope and sy
 | [Technical design](architecture/technical-design.md) | MVP components, data, flows, verification |
 | [API contracts](contracts/api-contracts.md) | FE ↔ Core and Core ↔ AI contracts |
 | [Architecture diagram](architecture/diagrams/src/architecture.mmd) | MVP target system boundary |
+| [ADR-0001: pgvector vector store](architecture/adr/0001-vector-store-pgvector.md) | Accepted: embeddings in Supabase PostgreSQL instead of Qdrant |
+| [Environments diagram](architecture/diagrams/src/environments.mmd) | Clients, backend, Supabase staging/production, CI/CD; dashed edges are planned |
 | [ERD description](architecture/erd-description.md) | Database entities, relationships & OCR flows |
 
 Preserve traceability as `BO/BR → FR/NFR → AC`. A component in the target diagram is not complete until its observable behavior and acceptance criteria pass.
