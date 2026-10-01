@@ -2,6 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BarcodeScannerModal } from '../src/components/BarcodeScannerModal';
 import { useToast } from '../src/components/brand';
 import {
   Badge,
@@ -19,6 +20,7 @@ import {
 } from '../src/components/ui';
 import { categoryMeta } from '../src/data/mock';
 import type { Category, Product } from '../src/data/types';
+import { formatBarcode } from '../src/lib/barcode';
 import { normalizeText, vnd } from '../src/lib/format';
 import { useApp } from '../src/store/AppStore';
 import { colors, shadow } from '../src/theme';
@@ -37,7 +39,11 @@ export default function Products() {
       app.products.filter((p) => {
         if (tab === 'low' && !(p.tracked && p.stock <= 6)) return false;
         if (tab !== 'all' && tab !== 'low' && p.category !== tab) return false;
-        return !q || normalizeText(p.name).includes(normalizeText(q));
+        return (
+          !q ||
+          normalizeText(p.name).includes(normalizeText(q)) ||
+          (p.barcode && p.barcode.toLowerCase().includes(q.toLowerCase().trim()))
+        );
       }),
     [app.products, tab, q],
   );
@@ -53,7 +59,7 @@ export default function Products() {
           <Stat label="Giá trị tồn (vốn)" value={vnd(stockValue)} color={colors.primary} flex={2} />
           <Stat label="Sắp hết" value={String(low)} color={colors.gold} bg={colors.goldSoft} />
         </Row>
-        <Field placeholder="Tìm sản phẩm…" value={q} onChangeText={setQ} style={{ marginTop: 12, marginBottom: 10 }} />
+        <Field placeholder="Tìm theo tên hoặc mã vạch…" value={q} onChangeText={setQ} style={{ marginTop: 12, marginBottom: 10 }} />
         <Chips<Tab>
           value={tab}
           onChange={setTab}
@@ -73,9 +79,18 @@ export default function Products() {
           <Pressable onPress={() => setForm(p)} style={({ pressed }) => [styles.row, pressed && { opacity: 0.8 }]}>
             <Tile name={p.name} text={p.name[0]} size={42} />
             <View style={{ flex: 1 }}>
-              <T w="semibold" size={14}>
-                {p.name}
-              </T>
+              <Row gap={6} style={{ alignItems: 'center' }}>
+                <T w="semibold" size={14} style={{ flex: 1 }} numberOfLines={1}>
+                  {p.name}
+                </T>
+                {p.barcode ? (
+                  <Badge
+                    text={`Mã: ${p.barcode.slice(-4)}`}
+                    color={colors.muted}
+                    bg={colors.border}
+                  />
+                ) : null}
+              </Row>
               <Row gap={6} style={{ marginTop: 3 }}>
                 <T w="bold" size={13} color={colors.primary}>
                   {vnd(p.price)}
@@ -139,12 +154,14 @@ function ProductForm({ value, onClose }: { value: Product | 'new' | null; onClos
   const p = value && value !== 'new' ? value : null;
   const [mode, setMode] = useState<'manual' | 'ai'>('manual');
   const [name, setName] = useState('');
+  const [barcode, setBarcode] = useState('');
   const [price, setPrice] = useState('');
   const [cost, setCost] = useState('');
   const [stock, setStock] = useState('');
   const [tracked, setTracked] = useState(true);
   const [cat, setCat] = useState<Category>('grocery');
   const [scanning, setScanning] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
   const [lastKey, setLastKey] = useState<string | null>(null);
 
@@ -153,6 +170,7 @@ function ProductForm({ value, onClose }: { value: Product | 'new' | null; onClos
   if (key !== lastKey) {
     setLastKey(key);
     setName(p?.name ?? '');
+    setBarcode(p?.barcode ?? '');
     setPrice(p ? String(p.price) : '');
     setCost(p ? String(p.cost) : '');
     setStock(p ? String(p.stock) : '');
@@ -167,6 +185,7 @@ function ProductForm({ value, onClose }: { value: Product | 'new' | null; onClos
   const save = () => {
     const data = {
       name: name.trim(),
+      barcode: barcode.trim() || undefined,
       price: num(price),
       cost: num(cost) || Math.round(num(price) * 0.7),
       stock: tracked ? num(stock) : 0,
@@ -184,6 +203,7 @@ function ProductForm({ value, onClose }: { value: Product | 'new' | null; onClos
     setTimeout(() => {
       setScanning(false);
       setName('Sữa chua nếp cẩm');
+      setBarcode('8935049500999');
       setPrice('12000');
       setCost('7000');
       setStock('24');
@@ -224,6 +244,25 @@ function ProductForm({ value, onClose }: { value: Product | 'new' | null; onClos
       ) : (
         <>
           <Field label="Tên sản phẩm" placeholder="VD: Nước suối" value={name} onChangeText={setName} />
+          
+          <Row gap={8} style={{ alignItems: 'flex-end', marginBottom: 14 }}>
+            <Field
+              label="Mã vạch (EAN-13, UPC...)"
+              placeholder="VD: 8934563138164"
+              value={barcode}
+              onChangeText={setBarcode}
+              style={{ flex: 1, marginBottom: 0 }}
+            />
+            <Button
+              title="Quét"
+              icon="camera"
+              variant="soft"
+              small
+              onPress={() => setScannerOpen(true)}
+              style={{ height: 48 }}
+            />
+          </Row>
+
           <Row style={{ alignItems: 'flex-start' }}>
             <Field
               label="Giá bán (đ)"
@@ -280,6 +319,16 @@ function ProductForm({ value, onClose }: { value: Product | 'new' | null; onClos
           ) : null}
         </>
       )}
+
+      <BarcodeScannerModal
+        visible={scannerOpen}
+        mode="input"
+        onClose={() => setScannerOpen(false)}
+        onBarcodeScanned={(code) => {
+          setBarcode(code);
+          setScannerOpen(false);
+        }}
+      />
       <Dialog
         visible={confirmDel}
         danger

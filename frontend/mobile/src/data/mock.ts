@@ -58,6 +58,7 @@ export const mockProducts: Product[] = [
     tracked: true,
     category: 'drink',
     aliases: ['nuoc suoi', 'lavie', 'aquafina'],
+    barcode: '8934588012112',
   },
   {
     id: 'p3',
@@ -128,6 +129,7 @@ export const mockProducts: Product[] = [
     tracked: true,
     category: 'grocery',
     aliases: ['mi goi', 'mì', 'mì tôm', 'hảo hảo'],
+    barcode: '8934563138164',
   },
   {
     id: 'p7',
@@ -148,6 +150,7 @@ export const mockProducts: Product[] = [
     tracked: true,
     category: 'drink',
     aliases: ['coca', 'pepsi', '7up', 'nuoc ngot'],
+    barcode: '8935049500544',
   },
   {
     id: 'p_sting',
@@ -158,6 +161,7 @@ export const mockProducts: Product[] = [
     tracked: true,
     category: 'drink',
     aliases: ['sting', 'xì tin', 'xi tin', 'xiting', 'siting', 'sting dâu', 'sting vàng'],
+    barcode: '8934588193057',
   },
   {
     id: 'p_tiger',
@@ -168,6 +172,7 @@ export const mockProducts: Product[] = [
     tracked: true,
     category: 'drink',
     aliases: ['bia tiger', 'tiger', 'bia', 'lon tiger', 'chai tiger', 'bia tai gơ'],
+    barcode: '8888010101015',
   },
   {
     id: 'p9',
@@ -188,6 +193,7 @@ export const mockProducts: Product[] = [
     tracked: true,
     category: 'grocery',
     aliases: ['duong', 'đường'],
+    barcode: '8935001700012',
   },
   {
     id: 'p11',
@@ -198,6 +204,7 @@ export const mockProducts: Product[] = [
     tracked: true,
     category: 'drink',
     aliases: ['bia', 'tiger', 'sài gòn'],
+    barcode: '8934822201012',
   },
   {
     id: 'p12',
@@ -218,6 +225,7 @@ export const mockProducts: Product[] = [
     tracked: true,
     category: 'grocery',
     aliases: ['dau an', 'dầu ăn'],
+    barcode: '8934561000012',
   },
   {
     id: 'p14',
@@ -228,6 +236,7 @@ export const mockProducts: Product[] = [
     tracked: true,
     category: 'other',
     aliases: ['thuoc la', 'thuốc'],
+    barcode: '8934602001015',
   },
 ];
 

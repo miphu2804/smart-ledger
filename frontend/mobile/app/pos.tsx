@@ -3,8 +3,9 @@ import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BarcodeScannerModal } from '../src/components/BarcodeScannerModal';
 import { useToast } from '../src/components/brand';
-import { Badge, Button, Chips, EmptyState, Field, Header, Row, Sheet, Stepper, T, Tile } from '../src/components/ui';
+import { Badge, Button, Chips, EmptyState, Field, Header, IconBtn, Row, Sheet, Stepper, T, Tile } from '../src/components/ui';
 import { categoryMeta } from '../src/data/mock';
 import type { LineItem } from '../src/data/types';
 import { normalizeText, vnd } from '../src/lib/format';
@@ -20,6 +21,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
   const [q, setQ] = useState('');
   const [cartOpen, setCartOpen] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [custom, setCustom] = useState<LineItem[]>([]);
   const [cName, setCName] = useState('');
   const [cPrice, setCPrice] = useState('');
@@ -27,7 +29,11 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
   const list = useMemo(
     () =>
       app.products.filter(
-        (p) => (cat === 'all' || p.category === cat) && (!q || normalizeText(p.name).includes(normalizeText(q))),
+        (p) =>
+          (cat === 'all' || p.category === cat) &&
+          (!q ||
+            normalizeText(p.name).includes(normalizeText(q)) ||
+            (p.barcode && p.barcode.toLowerCase().includes(q.toLowerCase().trim()))),
       ),
     [app.products, cat, q],
   );
@@ -52,8 +58,36 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top }}>
       <View style={{ paddingHorizontal: 16 }}>
-        <Header title={inTab ? 'Bán hàng' : 'Chọn hàng'} subtitle={`${app.products.length} sản phẩm`} back={!inTab} big={inTab} />
-        <Field placeholder="Tìm hàng…" value={q} onChangeText={setQ} style={{ marginBottom: 10 }} />
+        <Header
+          title={inTab ? 'Bán hàng' : 'Chọn hàng'}
+          subtitle={`${app.products.length} sản phẩm`}
+          back={!inTab}
+          big={inTab}
+          right={
+            <Button
+              title="Quét mã"
+              icon="camera"
+              variant="soft"
+              small
+              onPress={() => setScannerOpen(true)}
+            />
+          }
+        />
+        <Row gap={8} style={{ marginBottom: 10 }}>
+          <Field
+            placeholder="Tìm theo tên hoặc mã vạch…"
+            value={q}
+            onChangeText={setQ}
+            style={{ flex: 1, marginBottom: 0 }}
+          />
+          <Pressable
+            onPress={() => setScannerOpen(true)}
+            style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.8 }]}
+            accessibilityLabel="Quét mã vạch"
+          >
+            <Feather name="camera" size={20} color={colors.accentInk} />
+          </Pressable>
+        </Row>
         <Chips value={cat} onChange={setCat} options={cats.map((c) => ({ key: c, label: categoryMeta[c] ?? c }))} />
       </View>
 
@@ -206,11 +240,26 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
           }}
         />
       </Sheet>
+
+      <BarcodeScannerModal
+        visible={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  scanBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   card: {
     flex: 1,
     backgroundColor: colors.white,

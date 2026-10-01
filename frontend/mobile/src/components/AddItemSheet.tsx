@@ -12,14 +12,31 @@ export function AddItemSheet({
   visible,
   onClose,
   onPick,
+  onScanBarcode,
 }: {
   visible: boolean;
   onClose: () => void;
   onPick: (li: LineItem) => void;
+  onScanBarcode?: () => void;
 }) {
   const { products } = useApp();
   return (
     <Sheet visible={visible} onClose={onClose} title="Thêm món">
+      {onScanBarcode && (
+        <Pressable
+          onPress={() => {
+            onClose();
+            onScanBarcode();
+          }}
+          style={({ pressed }) => [styles.scanPick, pressed && { opacity: 0.8 }]}
+        >
+          <Feather name="camera" size={18} color={colors.accentInk} />
+          <T w="bold" size={14} color={colors.accentInk} style={{ flex: 1 }}>
+            Quét mã vạch sản phẩm
+          </T>
+          <Feather name="chevron-right" size={18} color={colors.accentInk} />
+        </Pressable>
+      )}
       {products.map((p) => (
         <Pressable
           key={p.id}
@@ -43,6 +60,18 @@ export function AddItemSheet({
 }
 
 const styles = StyleSheet.create({
+  scanPick: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: colors.primarySoft,
+    borderRadius: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: colors.accent,
+  },
   pick: {
     flexDirection: 'row',
     alignItems: 'center',

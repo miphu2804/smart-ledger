@@ -3,10 +3,11 @@ import { router } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { AddItemSheet } from '../src/components/AddItemSheet';
+import { BarcodeScannerModal } from '../src/components/BarcodeScannerModal';
 import { useToast } from '../src/components/brand';
 import { FakeQR } from '../src/components/FakeQR';
 import { Button, Card, Chips, EmptyState, Field, Header, IconName, Row, Screen, Stepper, T } from '../src/components/ui';
-import type { LineItem, PayMethod } from '../src/data/types';
+import type { LineItem, PayMethod, Product } from '../src/data/types';
 import { vnd } from '../src/lib/format';
 import { itemsTotal, methodLabel } from '../src/lib/stats';
 import { useApp } from '../src/store/AppStore';
@@ -28,8 +29,19 @@ export default function Checkout() {
   const [given, setGiven] = useState<number | null>(null);
   const [edit, setEdit] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [doneId, setDoneId] = useState<string | null>(null);
   const [err, setErr] = useState('');
+
+  const handleProductScanned = (product: Product, _barcode?: string, qty: number = 1) => {
+    setItems((cur) => {
+      const idx = cur.findIndex((i) => i.productId === product.id);
+      if (idx >= 0) {
+        return cur.map((x, i) => (i === idx ? { ...x, qty: x.qty + qty } : x));
+      }
+      return [...cur, { productId: product.id, name: product.name, price: product.price, qty }];
+    });
+  };
 
   const total = itemsTotal(items);
   const change = given !== null ? given - total : 0;
@@ -108,11 +120,21 @@ export default function Checkout() {
           <T w="bold" size={15} style={{ flex: 1 }}>
             Món trong đơn
           </T>
-          <Pressable onPress={() => setEdit((e) => !e)} hitSlop={8}>
-            <T w="bold" size={13} color={colors.primary}>
-              {edit ? 'Xong' : 'Sửa'}
-            </T>
-          </Pressable>
+          <Row gap={12}>
+            <Pressable onPress={() => setScannerOpen(true)} hitSlop={8}>
+              <Row gap={4} style={{ alignItems: 'center' }}>
+                <Feather name="camera" size={14} color={colors.primary} />
+                <T w="bold" size={13} color={colors.primary}>
+                  Quét mã
+                </T>
+              </Row>
+            </Pressable>
+            <Pressable onPress={() => setEdit((e) => !e)} hitSlop={8}>
+              <T w="bold" size={13} color={colors.primary}>
+                {edit ? 'Xong' : 'Sửa'}
+              </T>
+            </Pressable>
+          </Row>
         </Row>
         {items.map((it, idx) => (
           <Row key={`${it.productId ?? it.name}-${idx}`} style={styles.line}>
@@ -141,7 +163,24 @@ export default function Checkout() {
           </Row>
         ))}
         {edit ? (
-          <Button title="Thêm món" icon="plus" variant="soft" small onPress={() => setAddOpen(true)} style={{ marginTop: 10 }} />
+          <Row gap={8} style={{ marginTop: 10 }}>
+            <Button
+              title="Quét mã vạch"
+              icon="camera"
+              variant="soft"
+              small
+              onPress={() => setScannerOpen(true)}
+              style={{ flex: 1 }}
+            />
+            <Button
+              title="Thêm món"
+              icon="plus"
+              variant="soft"
+              small
+              onPress={() => setAddOpen(true)}
+              style={{ flex: 1 }}
+            />
+          </Row>
         ) : null}
         {app.draft?.transcript ? (
           <View style={styles.transcript}>
@@ -289,6 +328,7 @@ export default function Checkout() {
       <AddItemSheet
         visible={addOpen}
         onClose={() => setAddOpen(false)}
+        onScanBarcode={() => setScannerOpen(true)}
         onPick={(li) => {
           setItems((cur) => {
             const ex = cur.find((x) => x.productId === li.productId);
@@ -296,6 +336,12 @@ export default function Checkout() {
           });
           toast(`Đã thêm ${li.name}`);
         }}
+      />
+
+      <BarcodeScannerModal
+        visible={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onProductScanned={handleProductScanned}
       />
     </Screen>
   );
