@@ -29,12 +29,15 @@ import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.impl.ExpenseServiceImpl;
 import com.smartledger.core.service.impl.ReportServiceImpl;
 import java.util.function.Supplier;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -96,7 +99,7 @@ class ExpenseReportServiceTest {
         Expense expense = Expense.manual(7L, 42L, "Rent", "Monthly rent", 200_000L,
                 PaymentMethod.CASH, OffsetDateTime.now(ZoneOffset.UTC));
         ReflectionTestUtils.setField(expense, "id", 9L);
-        when(expenseRepository.findByIdAndShopIdAndStatus(9L, 7L, ExpenseStatus.ACTIVE))
+        when(expenseRepository.findLockedByIdAndShopIdAndStatus(9L, 7L, ExpenseStatus.ACTIVE))
                 .thenReturn(Optional.of(expense));
         ExpensePatchRequest patch = new ExpensePatchRequest();
         patch.setAmountVnd(210_000L);
@@ -115,7 +118,7 @@ class ExpenseReportServiceTest {
     void rejectsEmptyPatch() {
         Expense expense = Expense.manual(7L, 42L, null, "Fuel", 10_000L,
                 null, OffsetDateTime.now(ZoneOffset.UTC));
-        when(expenseRepository.findByIdAndShopIdAndStatus(9L, 7L, ExpenseStatus.ACTIVE))
+        when(expenseRepository.findLockedByIdAndShopIdAndStatus(9L, 7L, ExpenseStatus.ACTIVE))
                 .thenReturn(Optional.of(expense));
 
         assertThatThrownBy(() -> expenseService.patch(token, "7", "9", new ExpensePatchRequest()))
@@ -233,13 +236,22 @@ class ExpenseReportServiceTest {
 
     @Test
     void acceptsYearForExpenseListAndReportSummary() {
+        OffsetDateTime before = OffsetDateTime.now(ZoneOffset.UTC);
         var expenses = expenseService.list(token, "7", "year");
         var summary = reportService.summary(token, "7", "year");
+        OffsetDateTime after = OffsetDateTime.now(ZoneOffset.UTC);
 
         assertThat(expenses).isEmpty();
         assertThat(summary.period()).isEqualTo("year");
+        OffsetDateTime expectedFrom = LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")).withDayOfYear(1)
+                .atStartOfDay(ZoneId.of("Asia/Ho_Chi_Minh")).toOffsetDateTime()
+                .withOffsetSameInstant(ZoneOffset.UTC);
+        ArgumentCaptor<OffsetDateTime> from = ArgumentCaptor.forClass(OffsetDateTime.class);
+        ArgumentCaptor<OffsetDateTime> to = ArgumentCaptor.forClass(OffsetDateTime.class);
         verify(expenseRepository, Mockito.times(2))
                 .findAllByShopIdAndStatusAndExpenseAtGreaterThanEqualAndExpenseAtLessThanOrderByExpenseAtDescIdDesc(
-                        eq(7L), eq(ExpenseStatus.ACTIVE), any(), any());
+                        eq(7L), eq(ExpenseStatus.ACTIVE), from.capture(), to.capture());
+        assertThat(from.getAllValues()).allSatisfy(value -> assertThat(value).isEqualTo(expectedFrom));
+        assertThat(to.getAllValues()).allSatisfy(value -> assertThat(value).isBetween(before, after));
     }
 }

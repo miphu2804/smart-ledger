@@ -23,6 +23,8 @@ import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
@@ -44,12 +46,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /** Real services/auth mapping/idempotency with real PostgreSQL transactions.
- * Hibernate creates ONLY a generated schema; no audit migration or user DB changes. */
+ * Flyway migrates ONLY a generated test schema; no user DB changes. */
 @DataJpaTest(showSql = false, properties = {"spring.flyway.enabled=true", "spring.jpa.hibernate.ddl-auto=validate"})
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({AuditLogServiceImpl.class, AuditLogQueryServiceImpl.class, ShopServiceImpl.class,
         CategoryServiceImpl.class, ProductServiceImpl.class, SaleDraftServiceImpl.class, DebtServiceImpl.class,
-        SaleVoidServiceImpl.class, ExpenseServiceImpl.class, IdempotencyServiceImpl.class,
+        SaleVoidServiceImpl.class, SaleServiceImpl.class, PaymentServiceImpl.class,
+        ExpenseServiceImpl.class, CustomerServiceImpl.class, IdempotencyServiceImpl.class,
         IdempotencyKeyRepository.class, AuditLogPostgresTest.PostgresConfig.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @EnabledIfEnvironmentVariable(named = "CORE_TEST_POSTGRES_URL", matches = "jdbc:postgresql:.+")
@@ -63,7 +66,10 @@ class AuditLogPostgresTest {
     @Autowired private SaleDraftService drafts;
     @Autowired private DebtService debts;
     @Autowired private SaleVoidService voids;
+    @Autowired private SaleService sales;
+    @Autowired private PaymentService payments;
     @Autowired private ExpenseService expenses;
+    @Autowired private CustomerService customers;
     @Autowired private AuditLogService audit;
     @Autowired private AuditLogQueryService query;
     @Autowired private AuditLogRepository auditRepository;
@@ -86,7 +92,6 @@ class AuditLogPostgresTest {
 
     @BeforeEach
     void seedTrustedActorsAndShop() {
-        // This JDBC-only table mirrors the existing idempotency repository contract; not a migration.
         owner = token("owner");
         other = token("other");
         ownerId = saveUser(owner);
@@ -157,6 +162,207 @@ class AuditLogPostgresTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM api_idempotency_keys WHERE shop_id=? AND idempotency_key='retry-after-failure'", Integer.class, Long.valueOf(shop))).isZero();
         voids.voidSale(owner, shop, fixture.saleId(), "retry-after-failure", new SaleVoidRequest("Returned", true, PaymentMethod.CASH, null));
         assertThat(count(AuditAction.SALE_VOIDED)).isEqualTo(1);
+    }
+
+    @Test
+    void lateCheckoutFailureRollsBackEveryBusinessWriteAndCanBeRetried() {
+        var product = products.create(owner, shop, new ProductWriteRequest(null, "Checkout product", null, null,
+                "piece", 50_000L, null, true, BigDecimal.TEN));
+        var draft = drafts.create(owner, shop, new SaleDraftWriteRequest("New checkout customer", null, 0L,
+                40_000L, PaymentMethod.CASH,
+                List.of(new SaleDraftItemRequest(product.id(), BigDecimal.valueOf(2), 50_000L, null, null)), null));
+        long auditBefore = total();
+        Map<String, Long> rowsBefore = businessRowCounts();
+        // SALE_CONFIRMED is inserted after stock, customer, sale/items, payment and debt writes.
+        // The database rejects that insert, not a mock. Reads below run after the service transaction ends.
+        jdbc.execute("ALTER TABLE audit_logs ADD CONSTRAINT test_reject_checkout CHECK (shop_id <> "
+                + Long.valueOf(shop) + " OR action <> 'SALE_CONFIRMED')");
+        try {
+            assertThatThrownBy(() -> drafts.confirm(owner, shop, draft.id().toString()))
+                    .isInstanceOf(DataIntegrityViolationException.class)
+                    .hasStackTraceContaining("test_reject_checkout");
+        } finally {
+            jdbc.execute("ALTER TABLE audit_logs DROP CONSTRAINT test_reject_checkout");
+        }
+        assertCheckoutRolledBack(draft.id(), product.id(), auditBefore);
+        assertThat(businessRowCounts()).isEqualTo(rowsBefore);
+
+        var sale = drafts.confirm(owner, shop, draft.id().toString());
+        assertThat(sale.paidVnd()).isEqualTo(40_000L);
+        assertThat(sale.outstandingVnd()).isEqualTo(60_000L);
+        assertThat(drafts.confirm(owner, shop, draft.id().toString()).id()).isEqualTo(sale.id());
+        assertThat(rowsInShop("sales")).isEqualTo(1);
+        assertThat(rowsInShop("customers")).isEqualTo(1);
+        assertThat(rowsForShopSales("sale_items")).isEqualTo(1);
+        assertThat(rowsForShopSales("payments")).isEqualTo(1);
+        assertThat(rowsForShopSales("debts")).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT outstanding_vnd FROM debts WHERE sale_id=?", Long.class, sale.id()))
+                .isEqualTo(60_000L);
+        assertThat(jdbc.queryForObject("SELECT stock_quantity FROM products WHERE id=?", BigDecimal.class, product.id()))
+                .isEqualByComparingTo("8");
+        assertThat(count(AuditAction.SALE_CONFIRMED)).isEqualTo(1);
+        assertThat(count(AuditAction.STOCK_ADJUSTED)).isEqualTo(1);
+    }
+
+    @Test
+    void laterProductFailureRollsBackEarlierStockChangeAndCustomer() {
+        var first = products.create(owner, shop, new ProductWriteRequest(null, "First product", null, null,
+                "piece", 50_000L, null, true, BigDecimal.TEN));
+        var second = products.create(owner, shop, new ProductWriteRequest(null, "Insufficient product", null, null,
+                "piece", 50_000L, null, true, BigDecimal.ONE));
+        var draft = drafts.create(owner, shop, new SaleDraftWriteRequest("New customer", null, 0L,
+                40_000L, PaymentMethod.CASH, List.of(
+                        new SaleDraftItemRequest(first.id(), BigDecimal.valueOf(2), 50_000L, null, null),
+                        new SaleDraftItemRequest(second.id(), BigDecimal.valueOf(2), 50_000L, null, null)), null));
+        long auditBefore = total();
+        Map<String, Long> rowsBefore = businessRowCounts();
+        assertThatThrownBy(() -> drafts.confirm(owner, shop, draft.id().toString()))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_STOCK_INSUFFICIENT));
+        assertCheckoutRolledBack(draft.id(), first.id(), auditBefore);
+        assertThat(businessRowCounts()).isEqualTo(rowsBefore);
+        assertThat(jdbc.queryForObject("SELECT stock_quantity FROM products WHERE id=?", BigDecimal.class, second.id()))
+                .isEqualByComparingTo("1");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM sale_draft_items WHERE draft_id=?", Integer.class, draft.id()))
+                .isEqualTo(2);
+    }
+
+    private void assertCheckoutRolledBack(Long draftId, Long productId, long auditBefore) {
+        assertThat(total()).isEqualTo(auditBefore);
+        assertThat(rowsInShop("sales")).isZero();
+        assertThat(rowsInShop("customers")).isZero();
+        for (String table : List.of("sale_items", "payments", "debts", "sale_refunds")) {
+            assertThat(rowsForShopSales(table)).as(table).isZero();
+        }
+        assertThat(rowsInShop("api_idempotency_keys")).isZero(); // confirm uses draftId, not a key
+        assertThat(jdbc.queryForObject("SELECT stock_quantity FROM products WHERE id=?", BigDecimal.class, productId))
+                .isEqualByComparingTo("10");
+        Map<String, Object> draft = jdbc.queryForMap(
+                "SELECT status, confirmed_sale_id, confirmed_at FROM sale_drafts WHERE id=?", draftId);
+        assertThat(draft.get("status")).isEqualTo("DRAFT");
+        assertThat(draft.get("confirmed_sale_id")).isNull();
+        assertThat(draft.get("confirmed_at")).isNull();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM sale_draft_items WHERE draft_id=?", Integer.class, draftId))
+                .isPositive();
+    }
+
+    private long rowsInShop(String table) {
+        return jdbc.queryForObject("SELECT count(*) FROM " + table + " WHERE shop_id=?", Long.class, Long.valueOf(shop));
+    }
+
+    private Map<String, Long> businessRowCounts() {
+        var counts = new java.util.HashMap<String, Long>();
+        for (String table : List.of("customers", "sale_drafts", "sale_draft_items", "sales", "sale_items",
+                "payments", "debts", "sale_refunds", "api_idempotency_keys", "audit_logs")) {
+            counts.put(table, jdbc.queryForObject("SELECT count(*) FROM " + table, Long.class));
+        }
+        return counts;
+    }
+
+    private long rowsForShopSales(String table) {
+        return jdbc.queryForObject("SELECT count(*) FROM " + table
+                + " WHERE sale_id IN (SELECT id FROM sales WHERE shop_id=?)", Long.class, Long.valueOf(shop));
+    }
+
+    @Test
+    void foreignOwnerCannotReadOrMutateCatalogOrCheckout() {
+        Fixture fixture = sale(40_000L, false);
+        String productId = fixture.productId().toString();
+        String categoryId = jdbc.queryForObject("SELECT category_id FROM products WHERE id=?", Long.class,
+                fixture.productId()).toString();
+        String draftId = jdbc.queryForObject("SELECT id FROM sale_drafts WHERE confirmed_sale_id=?", Long.class,
+                Long.valueOf(fixture.saleId())).toString();
+        String paymentId = payments.listForSale(owner, shop, fixture.saleId()).getFirst().id().toString();
+        var categoryRequest = new CategoryWriteRequest("Changed");
+        var productRequest = new ProductWriteRequest(null, "Changed", null, null, "piece", 1L, null, false, null);
+        var patch = new ProductPatchRequest();
+        patch.setName("Changed");
+        var draftRequest = new SaleDraftWriteRequest("Other customer", null, 0L, 0L, null,
+                List.of(new SaleDraftItemRequest(null, BigDecimal.ONE, 1L, "Custom", "piece")), null);
+        var voidRequest = new SaleVoidRequest("Returned", true, PaymentMethod.CASH, null);
+        Map<String, Object> before = checkoutSnapshot(fixture);
+        List<Runnable> operations = List.of(
+                () -> categories.create(other, shop, categoryRequest),
+                () -> categories.list(other, shop),
+                () -> categories.getById(other, shop, categoryId),
+                () -> categories.replace(other, shop, categoryId, categoryRequest),
+                () -> categories.archive(other, shop, categoryId),
+                () -> products.create(other, shop, productRequest),
+                () -> products.list(other, shop),
+                () -> products.getById(other, shop, productId),
+                () -> products.patch(other, shop, productId, patch),
+                () -> products.archive(other, shop, productId),
+                () -> drafts.create(other, shop, draftRequest),
+                () -> drafts.list(other, shop),
+                () -> drafts.getById(other, shop, draftId),
+                () -> drafts.replace(other, shop, draftId, draftRequest),
+                () -> drafts.cancel(other, shop, draftId),
+                () -> drafts.confirm(other, shop, draftId),
+                () -> sales.list(other, shop),
+                () -> sales.getById(other, shop, fixture.saleId()),
+                () -> payments.listForSale(other, shop, fixture.saleId()),
+                () -> payments.getById(other, shop, fixture.saleId(), paymentId),
+                () -> voids.voidSale(other, shop, fixture.saleId(), "foreign-void", voidRequest),
+                () -> voids.getRefund(other, shop, fixture.saleId()));
+        for (int index = 0; index < operations.size(); index++) {
+            Runnable operation = operations.get(index);
+            assertThatThrownBy(operation::run).as("foreign-owner operation %s", index)
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.SHOP_ACCESS_DENIED));
+        }
+        assertThat(checkoutSnapshot(fixture)).isEqualTo(before);
+    }
+
+    @Test
+    void foreignRecordIdsAreRejectedEvenWhenBothShopsBelongToOwner() {
+        Fixture fixture = sale(40_000L, false);
+        String secondShop = shops.create(owner, new ShopCreateRequest("Second shop", "Retail", null, null)).id().toString();
+        String productId = fixture.productId().toString();
+        String categoryId = jdbc.queryForObject("SELECT category_id FROM products WHERE id=?", Long.class,
+                fixture.productId()).toString();
+        String draftId = jdbc.queryForObject("SELECT id FROM sale_drafts WHERE confirmed_sale_id=?", Long.class,
+                Long.valueOf(fixture.saleId())).toString();
+        String paymentId = payments.listForSale(owner, shop, fixture.saleId()).getFirst().id().toString();
+        Map<String, Object> before = checkoutSnapshot(fixture);
+        assertError(() -> categories.getById(owner, secondShop, categoryId), ErrorCode.CATEGORY_NOT_FOUND);
+        assertError(() -> products.getById(owner, secondShop, productId), ErrorCode.PRODUCT_NOT_FOUND);
+        assertError(() -> drafts.getById(owner, secondShop, draftId), ErrorCode.DRAFT_NOT_FOUND);
+        assertError(() -> drafts.confirm(owner, secondShop, draftId), ErrorCode.DRAFT_NOT_FOUND);
+        assertError(() -> sales.getById(owner, secondShop, fixture.saleId()), ErrorCode.SALE_NOT_FOUND);
+        assertError(() -> payments.listForSale(owner, secondShop, fixture.saleId()), ErrorCode.SALE_NOT_FOUND);
+        assertError(() -> payments.getById(owner, secondShop, fixture.saleId(), paymentId), ErrorCode.SALE_NOT_FOUND);
+        assertError(() -> voids.getRefund(owner, secondShop, fixture.saleId()), ErrorCode.SALE_NOT_FOUND);
+        assertError(() -> voids.voidSale(owner, secondShop, fixture.saleId(), "wrong-shop-void",
+                new SaleVoidRequest("Returned", true, PaymentMethod.CASH, null)), ErrorCode.SALE_NOT_FOUND);
+        assertError(() -> drafts.create(owner, secondShop, new SaleDraftWriteRequest("Customer", null, 0L, 0L,
+                null, List.of(new SaleDraftItemRequest(fixture.productId(), BigDecimal.ONE, 50_000L)), null)),
+                ErrorCode.DRAFT_ITEM_INVALID);
+        assertThat(checkoutSnapshot(fixture)).isEqualTo(before);
+        assertThat(sales.list(owner, secondShop)).isEmpty();
+        assertThat(drafts.list(owner, secondShop)).isEmpty();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM api_idempotency_keys WHERE shop_id=?", Long.class,
+                Long.valueOf(secondShop))).isZero();
+    }
+
+    private void assertError(Runnable operation, ErrorCode error) {
+        assertThatThrownBy(operation::run).isInstanceOfSatisfying(BusinessException.class,
+                exception -> assertThat(exception.getErrorCode()).isEqualTo(error));
+    }
+
+    private Map<String, Object> checkoutSnapshot(Fixture fixture) {
+        var snapshot = new java.util.HashMap<String, Object>();
+        for (String table : List.of("categories", "products", "customers", "sale_drafts", "sales", "api_idempotency_keys")) {
+            snapshot.put(table, rowsInShop(table));
+        }
+        for (String table : List.of("sale_items", "payments", "debts", "sale_refunds")) {
+            snapshot.put(table, rowsForShopSales(table));
+        }
+        snapshot.put("audit", total());
+        snapshot.put("stock", jdbc.queryForObject("SELECT stock_quantity FROM products WHERE id=?", BigDecimal.class,
+                fixture.productId()));
+        snapshot.put("sale", jdbc.queryForMap("SELECT sale_status, paid_vnd FROM sales WHERE id=?", Long.valueOf(fixture.saleId())));
+        snapshot.put("debt", jdbc.queryForMap("SELECT status, outstanding_vnd FROM debts WHERE id=?", Long.valueOf(fixture.debtId())));
+        return snapshot;
     }
 
     @Test
@@ -317,6 +523,124 @@ class AuditLogPostgresTest {
         assertThatThrownBy(() -> event.getMetadata().put("token", "secret")).isInstanceOf(UnsupportedOperationException.class);
         assertThat(java.util.Arrays.stream(AuditLogRepository.class.getMethods()).map(java.lang.reflect.Method::getName))
                 .noneMatch(name -> name.startsWith("delete") || name.startsWith("save") || name.startsWith("update"));
+    }
+
+    @Test
+    void paidCheckoutWithArchivedCustomerPreservesSnapshotWithoutOpeningDebt() {
+        var customer = customers.create(owner, shop, new CustomerWriteRequest("Snapshot customer", "0901234567"));
+        var draft = customDraftForCustomer(customer.id(), 100_000L);
+        customers.archive(owner, shop, customer.id().toString());
+
+        var result = drafts.confirm(owner, shop, draft.id().toString());
+        assertThat(result.customerId()).isNull();
+        assertThat(result.customerName()).isEqualTo("Snapshot customer");
+        assertThat(result.customerPhone()).isEqualTo("0901234567");
+        assertThat(result.paymentStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM debts WHERE sale_id=?", Long.class, result.id())).isZero();
+        assertThat(jdbc.queryForObject("SELECT sum(amount_vnd) FROM payments WHERE sale_id=?", Long.class,
+                result.id())).isEqualTo(100_000L);
+        assertThat(drafts.confirm(owner, shop, draft.id().toString()).id()).isEqualTo(result.id());
+        assertThat(count(AuditAction.SALE_CONFIRMED)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM customers WHERE shop_id=?", Long.class,
+                Long.valueOf(shop))).isEqualTo(1);
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {0, 40_000})
+    void debtCheckoutWithArchivedCustomerLeavesNoBusinessWrites(long paid) {
+        var customer = customers.create(owner, shop, new CustomerWriteRequest("Snapshot customer", "0901234567"));
+        var draft = customDraftForCustomer(customer.id(), paid);
+        customers.archive(owner, shop, customer.id().toString());
+        long before = total();
+
+        assertThatThrownBy(() -> drafts.confirm(owner, shop, draft.id().toString()))
+                .isInstanceOfSatisfying(BusinessException.class, error ->
+                        assertThat(error.getErrorCode()).isEqualTo(ErrorCode.CUSTOMER_NOT_FOUND));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM sales WHERE shop_id=?", Long.class,
+                Long.valueOf(shop))).isZero();
+        assertThat(jdbc.queryForObject("SELECT status FROM sale_drafts WHERE id=?", String.class,
+                draft.id())).isEqualTo("DRAFT");
+        assertThat(total()).isEqualTo(before);
+    }
+
+    private com.smartledger.core.dto.response.SaleDraftResponse customDraftForCustomer(Long customerId, long paid) {
+        return drafts.create(owner, shop, new SaleDraftWriteRequest(null, null, 0L, paid,
+                paid == 0 ? null : PaymentMethod.CASH,
+                List.of(new SaleDraftItemRequest(null, BigDecimal.ONE, 100_000L, "Custom", "piece")), customerId));
+    }
+
+    @Test
+    void concurrentExpensePatchesPreserveBothChangesAndAccurateAudit() throws Exception {
+        var expense = expenses.create(owner, shop, "patch-race", new ExpenseWriteRequest(null, "Original", 10_000L, null, null));
+        var amount = new ExpensePatchRequest();
+        amount.setAmountVnd(20_000L);
+        var description = new ExpensePatchRequest();
+        description.setDescription("Updated description");
+        var executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+        var second = new java.util.concurrent.atomic.AtomicReference<java.util.concurrent.Future<?>>();
+        try {
+            new TransactionTemplate(transactions).executeWithoutResult(status -> {
+                expenses.patch(owner, shop, expense.id().toString(), amount);
+                int holderPid = jdbc.queryForObject("SELECT pg_backend_pid()", Integer.class);
+                second.set(executor.submit(() -> expenses.patch(owner, shop, expense.id().toString(), description)));
+                awaitExpenseLock(holderPid);
+            });
+            second.get().get(15, java.util.concurrent.TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+            executor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS);
+        }
+        var result = expenses.getById(owner, shop, expense.id().toString());
+        assertThat(result.amountVnd()).isEqualTo(20_000L);
+        assertThat(result.description()).isEqualTo("Updated description");
+        assertThat(count(AuditAction.EXPENSE_UPDATED)).isEqualTo(2);
+        var metadata = jdbc.queryForMap("SELECT metadata->>'beforeAmountVnd' AS before_amount, metadata->>'afterAmountVnd' AS after_amount FROM audit_logs WHERE shop_id=? AND action='EXPENSE_UPDATED' ORDER BY id DESC LIMIT 1", Long.valueOf(shop));
+        assertThat(metadata).containsEntry("before_amount", "20000").containsEntry("after_amount", "20000");
+    }
+
+    @Test
+    void expensePatchWaitingForArchiveCannotResurrectOrAuditArchivedExpense() throws Exception {
+        var expense = expenses.create(owner, shop, "archive-race", new ExpenseWriteRequest(null, "Original", 10_000L, null, null));
+        var patch = new ExpensePatchRequest();
+        patch.setAmountVnd(20_000L);
+        var executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+        var second = new java.util.concurrent.atomic.AtomicReference<java.util.concurrent.Future<?>>();
+        try {
+            new TransactionTemplate(transactions).executeWithoutResult(status -> {
+                expenses.archive(owner, shop, expense.id().toString());
+                int holderPid = jdbc.queryForObject("SELECT pg_backend_pid()", Integer.class);
+                second.set(executor.submit(() -> expenses.patch(owner, shop, expense.id().toString(), patch)));
+                awaitExpenseLock(holderPid);
+            });
+            assertThatThrownBy(() -> second.get().get(15, java.util.concurrent.TimeUnit.SECONDS))
+                    .isInstanceOf(java.util.concurrent.ExecutionException.class)
+                    .hasCauseInstanceOf(BusinessException.class)
+                    .satisfies(error -> assertThat(((BusinessException) error.getCause()).getErrorCode())
+                            .isEqualTo(ErrorCode.EXPENSE_NOT_FOUND));
+        } finally {
+            executor.shutdownNow();
+            executor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS);
+        }
+        var row = jdbc.queryForMap("SELECT status, amount_vnd FROM expenses WHERE id=?", expense.id());
+        assertThat(row).containsEntry("status", "ARCHIVED").containsEntry("amount_vnd", 10_000L);
+        assertThat(count(AuditAction.EXPENSE_ARCHIVED)).isEqualTo(1);
+        assertThat(count(AuditAction.EXPENSE_UPDATED)).isZero();
+    }
+
+    private void awaitExpenseLock(int holderPid) {
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(8);
+        while (System.nanoTime() < deadline) {
+            // Observe a real PostgreSQL lock wait instead of relying on thread timing/sleep alone.
+            jdbc.execute("SELECT pg_stat_clear_snapshot()");
+            Long blocked = jdbc.queryForObject("SELECT count(*) FROM pg_stat_activity WHERE ? = ANY(pg_blocking_pids(pid)) AND query ILIKE '%expenses%'", Long.class, holderPid);
+            if (blocked != null && blocked > 0) { return; }
+            try { Thread.sleep(20); }
+            catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("Interrupted while waiting for expense lock", error);
+            }
+        }
+        throw new AssertionError("Second expense writer did not wait for the first transaction's row lock");
     }
 
     private Fixture sale(long paid, boolean custom) {

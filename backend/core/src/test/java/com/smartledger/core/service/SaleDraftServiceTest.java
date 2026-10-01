@@ -42,6 +42,8 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -494,6 +496,49 @@ class SaleDraftServiceTest {
         assertThat(response.items().getFirst().productName()).isEqualTo("Mon moi");
         verify(draftItemRepository).deleteAllByDraftId(11L);
         verify(productRepository, never()).findByIdAndShopIdAndStatus(any(), any(), any());
+    }
+
+    @Test
+    void paidDraftCanConfirmWithArchivedCustomerUsingItsExistingSnapshot() {
+        SaleDraft draft = draft(25000L, PaymentMethod.CASH);
+        draft.replace(22L, "Snapshot customer", "0901234567", 0, 25000, 25000, PaymentMethod.CASH);
+        when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
+        when(draftItemRepository.findAllByDraftIdOrderByIdAsc(11L)).thenReturn(List.of(
+                SaleDraftItem.createCustom(11L, "Custom", "piece", BigDecimal.ONE, 25000L, 25000L)));
+        when(saleRepository.saveAndFlush(any(Sale.class))).thenAnswer(invocation -> {
+            Sale sale = invocation.getArgument(0);
+            ReflectionTestUtils.setField(sale, "id", 15L);
+            return sale;
+        });
+        when(saleItemRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.confirm(token, "7", "11");
+
+        assertThat(result.customerId()).isNull();
+        assertThat(result.customerName()).isEqualTo("Snapshot customer");
+        assertThat(result.customerPhone()).isEqualTo("0901234567");
+        assertThat(result.paymentStatus()).isEqualTo(PaymentStatus.PAID);
+        verify(customerRepository).findByIdAndShopIdAndStatus(22L, 7L, CatalogStatus.ACTIVE);
+        verify(customerRepository, never()).save(any());
+        verify(debtRepository, never()).save(any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {0, 10000})
+    void unpaidOrPartialDraftCannotConfirmWithArchivedSelectedCustomer(long paid) {
+        SaleDraft draft = draft(paid, paid == 0 ? null : PaymentMethod.CASH);
+        draft.replace(22L, "Snapshot customer", "0901234567", 0, 25000, paid,
+                paid == 0 ? null : PaymentMethod.CASH);
+        when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
+
+        assertThatThrownBy(() -> service.confirm(token, "7", "11"))
+                .isInstanceOfSatisfying(BusinessException.class, error ->
+                        assertThat(error.getErrorCode()).isEqualTo(ErrorCode.CUSTOMER_NOT_FOUND));
+        verify(saleRepository, never()).saveAndFlush(any());
+        verify(customerRepository, never()).save(any());
+        verify(debtRepository, never()).save(any());
+        verify(paymentRepository, never()).save(any());
+        verify(auditLogService, never()).recordOwner(any(), any(), any(), any(), any(), any());
     }
 
     private Product product(BigDecimal stock) {
