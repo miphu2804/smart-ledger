@@ -267,6 +267,16 @@ function useStoreValue() {
         }),
 
       // --- hàng hoá ---
+      findProductByBarcode: (rawBarcode: string): Product | undefined => {
+        const code = rawBarcode.trim();
+        if (!code) return undefined;
+        return s.products.find(
+          (p) =>
+            p.barcode === code ||
+            p.id.toLowerCase() === code.toLowerCase() ||
+            (p.barcode && p.barcode.replace(/\D/g, '') === code.replace(/\D/g, ''))
+        );
+      },
       addProduct: (p: Omit<Product, 'id'>) => {
         const id = uid('p');
         patch((st) => ({ products: [{ ...p, id }, ...st.products] }));
