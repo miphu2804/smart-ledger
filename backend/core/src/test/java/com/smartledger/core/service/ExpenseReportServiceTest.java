@@ -13,6 +13,7 @@ import com.smartledger.core.entity.Debt;
 import com.smartledger.core.entity.Expense;
 import com.smartledger.core.entity.Payment;
 import com.smartledger.core.entity.Sale;
+import com.smartledger.core.entity.SaleRefund;
 import com.smartledger.core.entity.Shop;
 import com.smartledger.core.enums.ErrorCode;
 import com.smartledger.core.enums.ExpenseStatus;
@@ -23,6 +24,7 @@ import com.smartledger.core.repository.DebtRepository;
 import com.smartledger.core.repository.ExpenseRepository;
 import com.smartledger.core.repository.PaymentRepository;
 import com.smartledger.core.repository.SaleRepository;
+import com.smartledger.core.repository.SaleRefundRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.impl.ExpenseServiceImpl;
 import com.smartledger.core.service.impl.ReportServiceImpl;
@@ -42,11 +44,12 @@ class ExpenseReportServiceTest {
     private final SaleRepository saleRepository = Mockito.mock(SaleRepository.class);
     private final PaymentRepository paymentRepository = Mockito.mock(PaymentRepository.class);
     private final DebtRepository debtRepository = Mockito.mock(DebtRepository.class);
+    private final SaleRefundRepository refundRepository = Mockito.mock(SaleRefundRepository.class);
     private final IdempotencyService idempotencyService = Mockito.mock(IdempotencyService.class);
     private final ExpenseService expenseService = new ExpenseServiceImpl(shopService, expenseRepository,
             idempotencyService);
     private final ReportService reportService = new ReportServiceImpl(shopService, saleRepository,
-            paymentRepository, expenseRepository, debtRepository);
+            paymentRepository, expenseRepository, debtRepository, refundRepository);
     private final VerifiedFirebaseToken token = new VerifiedFirebaseToken("uid", null, false, null, null, null);
 
     @BeforeEach
@@ -120,7 +123,7 @@ class ExpenseReportServiceTest {
     }
 
     @Test
-    void reportSeparatesConfirmedRevenueFromAllPaymentsReceivedInPeriod() {
+    void reportSeparatesSaleRevenueFromAllPaymentsReceivedInPeriod() {
         Sale newSale = Mockito.mock(Sale.class);
         when(newSale.getTotalVnd()).thenReturn(100_000L);
         Payment initial = Mockito.mock(Payment.class);
@@ -130,9 +133,9 @@ class ExpenseReportServiceTest {
         Expense expense = Expense.manual(7L, 42L, null, "Rent", 15_000L,
                 null, OffsetDateTime.now(ZoneOffset.UTC));
         Debt debt = Debt.open(15L, 9L, 60_000L);
-        when(saleRepository.findAllByShopIdAndSaleStatusAndSoldAtGreaterThanEqualAndSoldAtLessThan(
-                eq(7L), eq(SaleStatus.CONFIRMED), any(), any())).thenReturn(List.of(newSale));
-        when(paymentRepository.findReceivedByShopAndPeriod(eq(7L), eq(SaleStatus.CONFIRMED), any(), any()))
+        when(saleRepository.findAllByShopIdAndSoldAtGreaterThanEqualAndSoldAtLessThan(
+                eq(7L), any(), any())).thenReturn(List.of(newSale));
+        when(paymentRepository.findReceivedByShopAndPeriod(eq(7L), any(), any()))
                 .thenReturn(List.of(initial, oldDebtRepayment));
         when(expenseRepository
                 .findAllByShopIdAndStatusAndExpenseAtGreaterThanEqualAndExpenseAtLessThanOrderByExpenseAtDescIdDesc(
@@ -141,11 +144,83 @@ class ExpenseReportServiceTest {
 
         var summary = reportService.summary(token, "7", "today");
 
-        assertThat(summary.confirmedRevenueVnd()).isEqualTo(100_000L);
+        assertThat(summary.grossRevenueVnd()).isEqualTo(100_000L);
+        assertThat(summary.voidedRevenueVnd()).isZero();
+        assertThat(summary.netRevenueVnd()).isEqualTo(100_000L);
         assertThat(summary.collectedVnd()).isEqualTo(70_000L);
         assertThat(summary.expenseVnd()).isEqualTo(15_000L);
         assertThat(summary.currentOutstandingDebtVnd()).isEqualTo(60_000L);
         assertThat(summary.orderCount()).isEqualTo(1L);
+    }
+
+    @Test
+    void reportKeepsHistoricalReceiptsAndShowsRefundOnItsOwnDate() {
+        Sale soldEarlier = Mockito.mock(Sale.class);
+        when(soldEarlier.getTotalVnd()).thenReturn(100_000L);
+        Payment payment = Mockito.mock(Payment.class);
+        when(payment.getAmountVnd()).thenReturn(40_000L);
+        SaleRefund refund = SaleRefund.record(15L, 40_000L, PaymentMethod.CASH, null, 42L);
+        when(saleRepository.findAllByShopIdAndSaleStatusAndVoidedAtGreaterThanEqualAndVoidedAtLessThan(
+                eq(7L), eq(SaleStatus.VOIDED), any(), any())).thenReturn(List.of(soldEarlier));
+        when(paymentRepository.findReceivedByShopAndPeriod(eq(7L), any(), any()))
+                .thenReturn(List.of(payment));
+        when(refundRepository.findRefundedByShopAndPeriod(eq(7L), any(), any()))
+                .thenReturn(List.of(refund));
+
+        var summary = reportService.summary(token, "7", "today");
+
+        assertThat(summary.grossRevenueVnd()).isZero();
+        assertThat(summary.netRevenueVnd()).isEqualTo(-100_000L);
+        assertThat(summary.voidedRevenueVnd()).isEqualTo(100_000L);
+        assertThat(summary.collectedVnd()).isEqualTo(40_000L);
+        assertThat(summary.refundedVnd()).isEqualTo(40_000L);
+        assertThat(summary.voidedOrderCount()).isEqualTo(1);
+    }
+
+    @Test
+    void samePeriodSaleAndVoidKeepGrossAndCancelledRevenueSeparate() {
+        Sale sale = Mockito.mock(Sale.class);
+        when(sale.getTotalVnd()).thenReturn(100_000L);
+        when(saleRepository.findAllByShopIdAndSoldAtGreaterThanEqualAndSoldAtLessThan(
+                eq(7L), any(), any())).thenReturn(List.of(sale));
+        when(saleRepository.findAllByShopIdAndSaleStatusAndVoidedAtGreaterThanEqualAndVoidedAtLessThan(
+                eq(7L), eq(SaleStatus.VOIDED), any(), any())).thenReturn(List.of(sale));
+
+        var summary = reportService.summary(token, "7", "today");
+
+        assertThat(summary.grossRevenueVnd()).isEqualTo(100_000L);
+        assertThat(summary.voidedRevenueVnd()).isEqualTo(100_000L);
+        assertThat(summary.netRevenueVnd()).isZero();
+        assertThat(summary.orderCount()).isEqualTo(1);
+        assertThat(summary.voidedOrderCount()).isEqualTo(1);
+    }
+
+    @Test
+    void priorPeriodVoidCanExceedNewSalesWithoutClampingNetRevenue() {
+        Sale newSale = Mockito.mock(Sale.class);
+        when(newSale.getTotalVnd()).thenReturn(50_000L);
+        Sale voidedSale = Mockito.mock(Sale.class);
+        when(voidedSale.getTotalVnd()).thenReturn(100_000L);
+        when(saleRepository.findAllByShopIdAndSoldAtGreaterThanEqualAndSoldAtLessThan(
+                eq(7L), any(), any())).thenReturn(List.of(newSale));
+        when(saleRepository.findAllByShopIdAndSaleStatusAndVoidedAtGreaterThanEqualAndVoidedAtLessThan(
+                eq(7L), eq(SaleStatus.VOIDED), any(), any())).thenReturn(List.of(voidedSale));
+
+        var summary = reportService.summary(token, "7", "today");
+
+        assertThat(summary.grossRevenueVnd()).isEqualTo(50_000L);
+        assertThat(summary.voidedRevenueVnd()).isEqualTo(100_000L);
+        assertThat(summary.netRevenueVnd()).isEqualTo(-50_000L);
+        assertThat(summary.netRevenueVnd()).isEqualTo(summary.grossRevenueVnd() - summary.voidedRevenueVnd());
+    }
+
+    @Test
+    void emptyPeriodReturnsZeroForAllThreeRevenueMetrics() {
+        var summary = reportService.summary(token, "7", "today");
+
+        assertThat(summary.grossRevenueVnd()).isZero();
+        assertThat(summary.voidedRevenueVnd()).isZero();
+        assertThat(summary.netRevenueVnd()).isZero();
     }
 
     @Test

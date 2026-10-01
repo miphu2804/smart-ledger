@@ -12,6 +12,7 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -80,7 +81,7 @@ public class Shop {
 
     public void archive(String reason) {
         status = ShopStatus.ARCHIVED;
-        archivedAt = OffsetDateTime.now();
+        archivedAt = OffsetDateTime.now(ZoneOffset.UTC);
         archivedReason = reason;
         inactiveReason = null;
     }
@@ -97,14 +98,14 @@ public class Shop {
 
     @PrePersist
     void onCreate() {
-        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         createdAt = now;
         updatedAt = now;
     }
 
     @PreUpdate
     void onUpdate() {
-        updatedAt = OffsetDateTime.now();
+        updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 
 }

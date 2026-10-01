@@ -66,3 +66,26 @@ From `backend/core`:
 ```
 
 On macOS/Linux, use `./mvnw test`. If startup fails, check the PostgreSQL connection, Firebase credentials, and Flyway error in the Core logs.
+
+For the real PostgreSQL repayment/void concurrency and rollback tests, point these **test-only** variables at a disposable PostgreSQL database:
+
+```powershell
+$env:CORE_TEST_POSTGRES_URL = 'jdbc:postgresql://localhost:55432/core_test'
+$env:CORE_TEST_POSTGRES_USERNAME = 'test_user'
+$env:CORE_TEST_POSTGRES_PASSWORD = 'test_password'
+.\mvnw.cmd '-Dtest=DebtVoidPostgresTest' test
+```
+
+The test creates and removes only a randomly named `core_void_test_*` schema, requires permission to create schemas, and does not run Flyway. It uses real business services and transactions, with auth/idempotency stubbed. Without `CORE_TEST_POSTGRES_URL`, these five PostgreSQL tests are skipped; unit/web tests still run normally.
+
+## Time display
+
+No extra IntelliJ, JVM or Docker timezone setting is required. Core uses UTC internally; API timestamps include Vietnam's `+07:00` offset, and report periods follow the Vietnam calendar. Clients should parse the offset, not add seven hours. Date/time inputs must include an offset (`Z` or `+07:00`).
+
+Optionally display PostgreSQL `TIMESTAMPTZ` values in Vietnam time in your SQL client's connection:
+
+```sql
+SET TIME ZONE 'Asia/Ho_Chi_Minh';
+```
+
+This affects only that connection's display, not stored data or teammates' connections. Reapply after reconnecting, or use the SQL client's session initialization setting.

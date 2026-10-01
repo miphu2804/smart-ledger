@@ -33,7 +33,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -149,18 +151,28 @@ public class SaleDraftServiceImpl implements SaleDraftService {
             throw new BusinessException(ErrorCode.DRAFT_TOTAL_INVALID);
         }
 
-        // Lock products in a stable order so concurrent checkouts cannot oversell or deadlock.
+        for (SaleDraftItem item : draftItems) {
+            if (item.getProductId() == null && (!StringUtils.hasText(item.getProductNameSnapshot())
+                    || !StringUtils.hasText(item.getUnitSnapshot()))) {
+                throw new BusinessException(ErrorCode.DRAFT_ITEM_INVALID);
+            }
+        }
+        Map<Long, Boolean> stockDeducted = new HashMap<>();
+        // Lock catalog products in a stable order; custom items have no stock to deduct.
         for (SaleDraftItem item : draftItems.stream()
+                .filter(item -> item.getProductId() != null)
                 .sorted(java.util.Comparator.comparing(SaleDraftItem::getProductId)).toList()) {
             Product product = productRepository.findLockedByIdAndShopIdAndStatus(
                             item.getProductId(), shop.getId(), CatalogStatus.ACTIVE)
                     .orElseThrow(() -> new BusinessException(ErrorCode.DRAFT_ITEM_INVALID));
+            stockDeducted.put(item.getProductId(), product.isTracked());
             product.deductStock(item.getQuantity());
         }
 
         Sale sale = saleRepository.saveAndFlush(Sale.fromDraft(draft, subtotal, customer));
         List<SaleItem> saleItems = saleItemRepository.saveAll(draftItems.stream()
-                .map(item -> SaleItem.fromDraftItem(sale.getId(), item)).toList());
+                .map(item -> SaleItem.fromDraftItem(sale.getId(), item,
+                        Boolean.TRUE.equals(stockDeducted.get(item.getProductId())))).toList());
         if (draft.getInitialPaidVnd() > 0) {
             paymentRepository.save(Payment.initial(sale.getId(), draft.getInitialPaidVnd(),
                     draft.getInitialPaymentMethod(), shop.getOwnerId()));
@@ -210,16 +222,28 @@ public class SaleDraftServiceImpl implements SaleDraftService {
                         .orElseThrow(() -> new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND));
         try {
             for (SaleDraftItemRequest item : request.items()) {
-                if (!productIds.add(item.productId())) {
-                    throw new BusinessException(ErrorCode.DRAFT_ITEM_DUPLICATE);
+                Product product = null;
+                String customName = null;
+                String customUnit = null;
+                if (item.productId() == null) {
+                    customName = normalize(item.productName());
+                    customUnit = normalize(item.unit());
+                    if (customName == null || customUnit == null) {
+                        throw new BusinessException(ErrorCode.DRAFT_ITEM_INVALID);
+                    }
+                } else {
+                    if (!productIds.add(item.productId())) {
+                        throw new BusinessException(ErrorCode.DRAFT_ITEM_DUPLICATE);
+                    }
+                    product = productRepository.findByIdAndShopIdAndStatus(
+                                    item.productId(), shopId, CatalogStatus.ACTIVE)
+                            .orElseThrow(() -> new BusinessException(ErrorCode.DRAFT_ITEM_INVALID));
                 }
-                Product product = productRepository.findByIdAndShopIdAndStatus(
-                                item.productId(), shopId, CatalogStatus.ACTIVE)
-                        .orElseThrow(() -> new BusinessException(ErrorCode.DRAFT_ITEM_INVALID));
                 long lineTotal = BigDecimal.valueOf(item.unitPriceVnd()).multiply(item.quantity())
                         .setScale(0, RoundingMode.HALF_UP).longValueExact();
                 subtotal = Math.addExact(subtotal, lineTotal);
-                items.add(new PreparedItem(product, item.quantity(), item.unitPriceVnd(), lineTotal));
+                items.add(new PreparedItem(product, customName, customUnit, item.quantity(),
+                        item.unitPriceVnd(), lineTotal));
             }
             long discount = request.discountVnd() == null ? 0 : request.discountVnd();
             long total = Math.subtractExact(subtotal, discount);
@@ -246,8 +270,11 @@ public class SaleDraftServiceImpl implements SaleDraftService {
     }
 
     private List<SaleDraftItem> toItems(Long draftId, List<PreparedItem> prepared) {
-        return prepared.stream().map(item -> SaleDraftItem.create(draftId, item.product(), item.quantity(),
-                item.unitPriceVnd(), item.lineTotalVnd())).toList();
+        return prepared.stream().map(item -> item.product() == null
+                ? SaleDraftItem.createCustom(draftId, item.customName(), item.customUnit(), item.quantity(),
+                        item.unitPriceVnd(), item.lineTotalVnd())
+                : SaleDraftItem.create(draftId, item.product(), item.quantity(), item.unitPriceVnd(),
+                        item.lineTotalVnd())).toList();
     }
 
     private SaleDraftResponse toResponse(SaleDraft draft, List<SaleDraftItem> items) {
@@ -268,7 +295,8 @@ public class SaleDraftServiceImpl implements SaleDraftService {
         return StringUtils.hasText(value) ? value.trim() : null;
     }
 
-    private record PreparedItem(Product product, BigDecimal quantity, long unitPriceVnd, long lineTotalVnd) {
+    private record PreparedItem(Product product, String customName, String customUnit,
+            BigDecimal quantity, long unitPriceVnd, long lineTotalVnd) {
     }
 
     private record PreparedDraft(List<PreparedItem> items, long discountVnd, long totalVnd, long paidVnd,

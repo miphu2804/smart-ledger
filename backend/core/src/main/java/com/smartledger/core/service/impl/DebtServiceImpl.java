@@ -9,6 +9,7 @@ import com.smartledger.core.entity.Payment;
 import com.smartledger.core.entity.Sale;
 import com.smartledger.core.entity.Shop;
 import com.smartledger.core.enums.ErrorCode;
+import com.smartledger.core.enums.SaleStatus;
 import com.smartledger.core.exception.BusinessException;
 import com.smartledger.core.repository.DebtRepository;
 import com.smartledger.core.repository.PaymentRepository;
@@ -70,10 +71,17 @@ public class DebtServiceImpl implements DebtService {
     }
 
     private DebtRepaymentResponse repayOnce(Shop shop, Long id, DebtRepaymentRequest request) {
+        Long saleId = debtRepository.findSaleIdByIdAndShopId(id, shop.getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.DEBT_NOT_FOUND));
+        // Read only the ID before waiting, so no stale Debt enters the persistence context.
+        // Lock sale before debt, matching the void flow to avoid lock inversion.
+        Sale sale = saleRepository.findLockedByIdAndShopId(saleId, shop.getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.SALE_NOT_FOUND));
+        if (sale.getSaleStatus() != SaleStatus.CONFIRMED) {
+            throw new BusinessException(ErrorCode.SALE_ALREADY_VOIDED);
+        }
         Debt debt = debtRepository.findLockedByIdAndShopId(id, shop.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.DEBT_NOT_FOUND));
-        Sale sale = saleRepository.findByIdAndShopId(debt.getSaleId(), shop.getId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.SALE_NOT_FOUND));
         debt.repay(request.amountVnd());
         sale.recordRepayment(request.amountVnd());
         Payment payment = paymentRepository.save(Payment.debtRepayment(sale.getId(), debt.getId(),
@@ -88,6 +96,6 @@ public class DebtServiceImpl implements DebtService {
     private DebtResponse toResponse(Debt debt) {
         return new DebtResponse(debt.getId(), debt.getSaleId(), debt.getCustomerId(),
                 debt.getOriginalVnd(), debt.getOutstandingVnd(), debt.getStatus(),
-                debt.getCreatedAt(), debt.getSettledAt());
+                debt.getCreatedAt(), debt.getSettledAt(), debt.getVoidedAt(), debt.getCancelledVnd());
     }
 }

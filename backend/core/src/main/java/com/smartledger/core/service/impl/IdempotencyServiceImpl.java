@@ -2,6 +2,8 @@ package com.smartledger.core.service.impl;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.datatype.jsr310.ser.OffsetDateTimeSerializer;
 import com.smartledger.core.enums.ErrorCode;
 import com.smartledger.core.exception.BusinessException;
 import com.smartledger.core.repository.IdempotencyKeyRepository;
@@ -24,12 +26,17 @@ import org.springframework.util.StringUtils;
 public class IdempotencyServiceImpl implements IdempotencyService {
     private final IdempotencyKeyRepository repository;
     private final ObjectMapper objectMapper;
+    private final ObjectMapper requestHashMapper;
     private final int ttlDays;
 
     public IdempotencyServiceImpl(IdempotencyKeyRepository repository, ObjectMapper objectMapper,
             @Value("${smartledger.idempotency.ttl-days:30}") int ttlDays) {
         this.repository = repository;
         this.objectMapper = objectMapper;
+        // Display formatting must not change hashes already stored for expense retries.
+        SimpleModule hashTimeModule = new SimpleModule("IdempotencyRequestHashTime");
+        hashTimeModule.addSerializer(OffsetDateTime.class, OffsetDateTimeSerializer.INSTANCE);
+        this.requestHashMapper = objectMapper.copy().registerModule(hashTimeModule);
         if (ttlDays < 1) {
             throw new IllegalArgumentException("Idempotency retention must be at least one day");
         }
@@ -70,7 +77,7 @@ public class IdempotencyServiceImpl implements IdempotencyService {
 
     private String sha256(Object request) {
         try {
-            byte[] bytes = objectMapper.writeValueAsBytes(request);
+            byte[] bytes = requestHashMapper.writeValueAsBytes(request);
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
         } catch (JsonProcessingException | NoSuchAlgorithmException exception) {
             throw new IllegalStateException("Cannot hash idempotent request", exception);
