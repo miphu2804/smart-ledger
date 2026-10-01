@@ -2,10 +2,10 @@
 
 | Siêu dữ liệu | Giá trị |
 |---|---|
-| Trạng thái | tạm thời — Core theo FE; AI theo kiến trúc MVP đã chốt |
+| Trạng thái | Core: hành vi đã chốt dưới đây; AI/dashboard và FE: cần nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; người rà soát kỹ thuật |
-| Cập nhật lần cuối | 2026-09-15 |
+| Cập nhật lần cuối | 2026-10-02 |
 
 ## Tài liệu liên quan
 
@@ -68,18 +68,18 @@ Luồng hỗ trợ: ADMIN đăng nhập dashboard web, tìm OWNER hoặc cơ s�
 | `FR-002` | `BO-001`, `BO-002`, `BR-002`, `BR-007` | Sau khi nhập câu, sản phẩm hiện các dòng gồm tên, số lượng, đơn giá, thành tiền; khớp danh mục khi nhận ra; đánh dấu món chưa có trong danh mục. | P0 — MVP |
 | `FR-003` | `BR-003` | Giỏ luôn được hiển thị để người bán kiểm tra và sửa trước khi chốt thanh toán. | P0 — MVP |
 | `FR-004` | `BR-003`, `BR-006` | Chỉ thao tác chốt thanh toán mới tạo bản ghi bán hàng chính thức; giỏ chưa chốt không vào báo cáo. | P0 — MVP |
-| `FR-005` | `BR-006` | Người bán xem lịch sử, sửa bản ghi, và (trên MVP) xóa sau khi xác nhận trên UI. Xóa cứng là đánh đổi thí điểm, xem `OQ-002`. | P0 — MVP |
-| `FR-006` | `BO-003`, `BO-005`, `BR-004`, `BR-005` | Người bán xem theo kỳ: doanh thu, số đơn, bán chạy, chi phí, lãi ước tính, nợ còn. UI phải cho thấy lãi/chi là ước tính. | P0 — MVP |
+| `FR-005` | `BR-006`, `BR-016` | Người bán xem lịch sử, chỉ sửa/hủy draft còn hiệu lực. Sale đã confirm không sửa/xóa cứng; hủy toàn bộ có lý do, hoàn số đã thu, hủy nợ còn lại và chọn rõ có hoàn tồn hay không; lưu lịch sử sale/payment/refund. | P0 — MVP |
+| `FR-006` | `BO-003`, `BO-005`, `BR-004`, `BR-005` | Core summary tách doanh thu bán hàng, doanh thu bị hủy, doanh thu ròng, số đơn tạo/hủy, tiền đã thu, tiền hoàn và chi phí theo kỳ; nợ còn là số dư hiện tại. Bán chạy, chuỗi số liệu và lãi ước tính vẫn là đích MVP chưa có trong summary; không coi dòng tiền ròng là lợi nhuận. | P0 — MVP |
 | `FR-007` | `BO-003`, `BR-004`, `BR-005`, `BR-011` | Người bán xem gợi ý nhập hàng có giải thích từ dữ liệu đã chốt. | P1 — MVP |
 | `FR-008` | `BR-002`, `OQ-001` | Người bán nói để lên đơn/ghi chi; hệ thống chuyển giọng nói thành text và bản nháp để kiểm tra. | P0 — MVP |
-| `FR-009` | `BO-002`, `BR-007` | Người bán tạo, sửa, xóa mặt hàng (tên, giá, nhóm, tồn, theo dõi tồn) để tăng độ chính xác khớp câu và POS. | P0 — MVP |
+| `FR-009` | `BO-002`, `BR-007` | Người bán tạo, cập nhật từng trường và archive mặt hàng (tên, giá, nhóm, tồn, theo dõi tồn). Category thuộc shop dùng nhóm sản phẩm, không phân loại shop. Archive không xóa snapshot sale; không archive category khi còn product active. | P0 — MVP |
 | `FR-010` | `BR-009` | OWNER đăng nhập trên mobile và ADMIN đăng nhập trên web bằng Google, số điện thoại OTP hoặc Zalo; các identity cùng người dùng không tạo dữ liệu trùng. | P0 — MVP thí điểm, chưa tuyên bố sẵn sàng sản xuất |
-| `FR-011` | `BR-009`, `BR-015` | OWNER tạo/xem/sửa hồ sơ tiệm (tên, ngành, liên hệ). Dữ liệu nghiệp vụ gắn với tiệm do OWNER sở hữu; không thể lưu trữ tiệm đang bị ADMIN tạm ngưng. | P0 — MVP |
+| `FR-011` | `BR-009`, `BR-015` | OWNER tạo/xem/sửa hồ sơ tiệm (tên, ngành, liên hệ), archive tiệm ACTIVE kèm lý do. ADMIN được tạm ngưng/kích hoạt shop; INACTIVE phải có lý do. OWNER vẫn xem được hồ sơ và lý do INACTIVE nhưng không dùng API nghiệp vụ hay archive; shop ARCHIVED không còn hiển thị cho OWNER. | P0 — MVP |
 | `FR-012` | `BR-009` | Đã loại khỏi MVP: không có vai trò nhân viên hoặc quản lý thành viên trong mô hình hai vai trò. Giữ mã để không tái sử dụng ID. | Loại khỏi MVP |
 | `FR-013` | `BO-001`, `BR-001`, `BR-007` | Người bán chọn hàng từ danh mục, chỉnh số lượng, thêm món nhanh để lập giỏ. | P0 — MVP |
 | `FR-014` | `BR-010` | Khi chốt, người bán chọn tiền mặt, chuyển khoản, hoặc ghi nợ; có thể thu một phần. Chuyển khoản là ghi nhận, không phải cổng thanh toán. | P0 — MVP |
-| `FR-015` | `BO-005`, `BR-005`, `BR-008`, `BR-016` | Người bán tạo, xem, xóa khoản chi (tên, số tiền); có thể điền từ câu chi phí. Retry cùng một lần tạo không được ghi chi phí hai lần. | P0 — MVP |
-| `FR-016` | `BO-005`, `BR-008`, `BR-016` | Người bán xem khách còn nợ, thu thêm, và xóa khoản nợ trên UI. Retry cùng một lần trả nợ không được ghi payment hai lần. | P0 — MVP |
+| `FR-015` | `BO-005`, `BR-005`, `BR-008`, `BR-016` | Người bán tạo, xem, cập nhật từng trường và archive khoản chi (mô tả, số tiền, nhóm chi, phương thức chi, thời điểm). Retry cùng một lần tạo không ghi hai lần; điền từ câu chi phí thuộc luồng AI cần tích hợp. | P0 — MVP |
+| `FR-016` | `BO-005`, `BR-006`, `BR-008`, `BR-016` | Người bán quản lý khách theo ID, xem lịch sử nợ và thu thêm bằng payment append-only; không xóa nợ độc lập hoặc sửa số dư trực tiếp. Hủy sale chỉ hủy số còn nợ và giữ nợ đã trả đủ. Retry trả nợ không ghi payment hai lần. | P0 — MVP |
 | `FR-017` | `BR-003`, `BR-011` | Người bán gửi ảnh; hệ thống trả dữ liệu nhận diện thành bản nháp có thể sửa hoặc hủy. | P1 — MVP; loại ảnh đầu tiên chốt trong issue |
 | `FR-018` | `BR-003`, `BR-012` | Mỗi đề xuất AI lưu trạng thái, model/version và kết quả đủ để điều tra lỗi; không tự tạo bản ghi nghiệp vụ. | P0 — MVP |
 | `FR-019` | `BO-003`, `BR-011`, `BR-012` | RAG chỉ truy xuất dữ liệu của shop đang chọn và trả căn cứ cho recommendation/chat. | P1 — MVP |
@@ -96,10 +96,12 @@ Luồng hỗ trợ: ADMIN đăng nhập dashboard web, tìm OWNER hoặc cơ s�
 
 ## 5. Trạng thái bản ghi bán hàng
 
-- `cart` (giỏ): đề xuất trên thiết bị, chưa dùng cho báo cáo.
-- `PAID`: đã thu đủ.
-- `DEBT`: chưa thu hoặc chưa thu hết, còn nợ.
-- `PARTIAL`: đã thu một phần.
+- Giỏ trên thiết bị và draft `DRAFT` chưa xác nhận không dùng cho báo cáo. Draft còn có `CONFIRMED`, `CANCELLED`, `EXPIRED`; hết hiệu lực sau một tháng từ lúc tạo.
+- `saleStatus`: `CONFIRMED` hoặc `VOIDED`. Hủy không xóa sale/item/payment.
+- `paymentStatus`: `PAID` đã thu đủ; `DEBT` chưa thu đồng nào; `PARTIAL` đã thu lớn hơn 0 nhưng chưa đủ. Sau void, trạng thái này và số đã thu vẫn là lịch sử, không có nghĩa khách còn nghĩa vụ trả nợ.
+- Nợ `OPEN` còn dư; `SETTLED` đã trả đủ; `VOIDED` đã hủy số dư còn lại kèm thời điểm/số tiền hủy. Không đổi nợ đã `SETTLED` thành `VOIDED`.
+
+Khách cùng tên/số điện thoại không tự gộp: chọn `customerId` để dùng cùng hồ sơ. Draft có thể thiếu khách; confirm bán thiếu phải chọn khách active cùng shop hoặc có tên để tạo khách mới, phone tùy chọn. Món tùy ý cần tên/đơn vị/giá/số lượng, không tự tạo product hay tồn kho.
 
 Nguồn lên đơn (`AI` / `POS` / `MANUAL`) chỉ là nhãn nguồn, không thay bước chốt.
 
@@ -145,7 +147,7 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 | `AC-004` | Báo cáo kỳ không tính giỏ chưa chốt. | `FR-006`, `NFR-005` |
 | `AC-005` | Chủ tiệm thêm một mặt hàng rồi chọn được trên POS và khớp được khi gõ tên gần đúng. | `FR-009`, `FR-013` |
 | `AC-006` | Chốt ghi nợ với tên khách tạo khoản nợ; thu thêm làm giảm số còn lại. | `FR-014`, `FR-016` |
-| `AC-007` | Tạo một khoản chi; báo cáo kỳ tăng chi và giảm lãi ước tính tương ứng. | `FR-015`, `FR-006` |
+| `AC-007` | Tạo khoản chi làm tăng chi phí kỳ tương ứng; archive loại chi khỏi tổng. Phần giảm lãi ước tính chỉ nghiệm thu khi có chỉ số lợi nhuận; summary Core hiện chưa trả lợi nhuận. | `FR-015`, `FR-006` |
 | `AC-008` | Với audio tiếng Việt thuộc bộ test, hệ thống trả transcript và bản nháp; người dùng sửa rồi chốt qua cùng luồng text. | `FR-008`, `FR-003` |
 | `AC-009` | Không áp dụng sau quyết định chỉ có OWNER và ADMIN; giữ mã để không tái sử dụng ID. | `FR-012` |
 | `AC-010` | Output voice/text/image chỉ tạo bản nháp; hủy bản nháp không tạo invoice hoặc expense. | `FR-017`, `FR-018`, `NFR-006` |
@@ -162,8 +164,15 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 | `AC-021` | OWNER không xem, đổi tên, tiếp tục hoặc nhận lịch sử của chat thuộc user/shop khác; chat mới không nhận lịch sử từ chat cũ. | `FR-027`, `NFR-007` |
 | `AC-022` | Sau khi OWNER xóa chat, chat không còn trong danh sách, không mở/tiếp tục được và tin nhắn không được đưa vào ngữ cảnh assistant. | `FR-027` |
 | `AC-023` | OWNER đổi tên chat bằng tiêu đề 1–255 ký tự; tên mới hiển thị trong danh sách sau khi tải lại. Tiêu đề rỗng hoặc vượt giới hạn bị từ chối. | `FR-027` |
-| `AC-024` | Gửi lại yêu cầu trả nợ hoặc tạo chi phí với cùng `Idempotency-Key` và nội dung trả cùng kết quả, không tạo thêm bản ghi; dùng key đó cho nội dung khác bị từ chối. | `FR-015`, `FR-016` |
-| `AC-025` | OWNER không lưu trữ được shop đang `INACTIVE`; lý do tạm ngưng vẫn còn để xem trong hồ sơ shop. | `FR-011` |
+| `AC-024` | Retry trả nợ/tạo chi phí/void sale với cùng key, người dùng và nội dung trả kết quả ban đầu, không lặp tác động. Key khác nội dung bị từ chối; confirm lại cùng draft trả cùng saleId không trừ tồn/tạo payment lần nữa. | `FR-004`, `FR-005`, `FR-015`, `FR-016` |
+| `AC-025` | OWNER không lưu trữ được shop đang `INACTIVE`; GET shop vẫn trả lý do, API nghiệp vụ bị chặn. Chỉ ADMIN đổi ACTIVE/INACTIVE; OWNER không tự mở khóa, shop ARCHIVED trả 404 cho OWNER. | `FR-011`, `NFR-003` |
+| `AC-026` | Hủy đơn 100.000đ đã thu đủ: sale VOIDED, một refund 100.000đ, giữ nguyên payment/item và lịch sử số đã thu; không có PATCH/DELETE sale chính thức. | `FR-005`, `BR-006` |
+| `AC-027` | Hủy đơn 100.000đ đã thu 40.000đ: refund 40.000đ, hủy nợ 60.000đ với audit, outstanding = 0. Chưa thu thì refund null, không tạo refund row. | `FR-005`, `FR-016` |
+| `AC-028` | Hủy sau khi khách đã trả đủ giữ debt SETTLED/settledAt; audit hủy nợ vẫn null. Khoản hoàn gồm cả tiền thu lúc chốt và tiền trả nợ sau đó. Không nhận thêm trả nợ sau void. | `FR-005`, `FR-016` |
+| `AC-029` | Thiếu/null restockItems bị từ chối. true chỉ hoàn lượng đã trừ theo snapshot; false không đổi kho; món tùy ý không có tồn. Snapshot cũ chưa biết hoặc product không còn theo dõi tồn khiến yêu cầu hoàn tồn bị từ chối toàn bộ. | `FR-005`, `FR-009` |
+| `AC-030` | Lỗi confirm/repay/void không để lại sale/payment/refund/nợ/tồn hoặc reservation idempotency một phần. Trả nợ và void đồng thời không deadlock do khóa ngược thứ tự, không hoàn hoặc thu tiền hai lần; test chéo shop không lộ/ghi dữ liệu shop khác. | `FR-004`, `FR-005`, `FR-016`, `NFR-003` |
+| `AC-031` | Báo cáo giữ thu tiền ở kỳ receivedAt, hoàn ở kỳ refundedAt và điều chỉnh doanh thu ở kỳ voidedAt. gross − voided = net, có thể âm khi hủy đơn kỳ trước; nợ hiện tại không bị lọc kỳ. Ranh giới kỳ theo giờ Việt Nam. | `FR-006`, `NFR-005` |
+| `AC-032` | Confirm thiếu tiền mà không có customerId/tên khách bị từ chối; phone không bắt buộc/trùng không tự gộp. Custom item với productId null cần tên/đơn vị, confirm giữ snapshot và không tạo/trừ tồn product. | `FR-003`, `FR-004`, `FR-013`, `FR-014`, `FR-016` |
 | `AC-INV-001` | Không thể kích hoạt hóa đơn điện tử khi hồ sơ áp dụng hoặc quy tắc pháp lý chưa được phê duyệt/hoàn tất. | `FR-INV-001` |
 | `AC-INV-002` | Mỗi giao dịch thuộc diện lập hóa đơn có một trạng thái đối soát và không biến mất khi nhà cung cấp lỗi. | `FR-INV-003`, `FR-INV-005`, `NFR-004` |
 
@@ -171,8 +180,9 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 
 - `OQ-001` đã chốt: STT thật thuộc đích MVP; FE hiện mới giả lập.
 - `FR-017`: phải chốt loại ảnh đầu tiên trong issue trước khi viết parser.
-- `FR-010`/`NFR-003`: mobile có client Firebase Phone/Email và luồng phiên Core tùy chọn, nhưng mặc định chạy mock; chưa có bằng chứng nghiệm thu OTP với môi trường Firebase thật. Nút Google chưa kết nối, Zalo chưa được tích hợp; web admin cũng đang dùng mock.
+- `FR-010`/`NFR-003`: mô tả mobile Phone/Email, Google/Zalo và admin mock là snapshot FE trước đây, không phải nghiệm thu mới. Core nhận Firebase ID token và ánh xạ UID; chưa có bằng chứng nghiệm thu provider/UI với Firebase thật trong lượt này.
 - MVP chỉ có hai vai trò `OWNER` và `ADMIN`; quản lý nhân viên/thành viên (`FR-012`) đã bị loại khỏi phạm vi.
 - Toàn bộ `FR-INV-*` bị hoãn cho đến khi `OQ-INV-001`–`OQ-INV-005` trong BRD được giải quyết.
 - Máy in và gói dịch vụ ngoài PRD MVP.
-- Sau khi PRD được duyệt chính thức, cập nhật Thiết kế kỹ thuật và Hợp đồng API bằng ánh xạ từ từng `FR-*`/`NFR-*`/`AC-*`.
+- `OQ-002` đã chốt hủy toàn bộ có dấu vết theo BRD. Hoàn tiền/trả hàng từng phần và điều chỉnh kho độc lập chưa triển khai.
+- [Thiết kế kỹ thuật](../architecture/technical-design.md) ghi phạm vi Core đã kiểm chứng; API AI/dashboard, audit_logs, bán chạy/series/lợi nhuận vẫn cần tích hợp. AC ở trên là điều kiện nghiệm thu sản phẩm, không tự đánh dấu FE/staging/production đã đạt.

@@ -2,10 +2,10 @@
 
 | Siêu dữ liệu | Giá trị |
 |---|---|
-| Trạng thái | tạm thời — Core theo FE; AI theo kiến trúc MVP đã chốt |
+| Trạng thái | Core: quy tắc dưới đây đã chốt; AI/dashboard: đích MVP, cần nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ kinh doanh/sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; chủ thuế cho `BR-INV-*` |
-| Cập nhật lần cuối | 2026-09-15 |
+| Cập nhật lần cuối | 2026-10-02 (nghiệp vụ Core; không rà soát lại căn cứ pháp lý) |
 
 ## Tài liệu liên quan
 
@@ -81,9 +81,9 @@ Hóa đơn điện tử là initiative kế tiếp, không mặc nhiên thuộc 
 | `BR-001` | Sản phẩm ưu tiên cửa hàng rất nhỏ có quy trình bán hàng đơn giản và không bắt người dùng học nghiệp vụ POS/kế toán phức tạp. |
 | `BR-002` | Người bán phải có thể ghi nhận giao dịch bằng ngôn ngữ tự nhiên hoặc nhập/chọn tay. |
 | `BR-003` | Dữ liệu do hệ thống hoặc AI đề xuất không được trở thành giao dịch chính thức trước khi người bán kiểm tra và chốt thanh toán. |
-| `BR-004` | Báo cáo chỉ sử dụng bản ghi bán hàng và chi phí đã chốt, không dùng giỏ chưa thanh toán. |
+| `BR-004` | Báo cáo không dùng draft chưa xác nhận; tách doanh thu bán hàng, doanh thu bị hủy và doanh thu ròng. Thu tiền và hoàn tiền ghi nhận theo thời điểm phát sinh, không loại khoản thu cũ khi sale bị hủy. |
 | `BR-005` | Mọi ước tính về chi phí, lợi nhuận hoặc thuế phải được phân biệt rõ với số liệu kế toán/kê khai chính thức. |
-| `BR-006` | Sản phẩm phải bảo vệ dữ liệu doanh thu và giảm rủi ro sửa/xóa nhầm lịch sử. |
+| `BR-006` | Sale đã chốt và payment không được xóa cứng hoặc sửa trực tiếp; sai sót xử lý bằng hủy sale có dấu vết, hoàn toàn bộ số đã thu và hủy nghĩa vụ nợ còn lại. Không coi khoản nợ bị hủy là tiền hoàn. |
 | `BR-007` | Cửa hàng có danh mục mặt hàng và giá làm cơ sở lên đơn nhanh và khớp câu bán hàng. |
 | `BR-008` | Sổ chi phí và công nợ là ghi nhận vận hành, không phải sổ kế toán. |
 | `BR-009` | Dữ liệu bán hàng, chi phí và nợ gắn với cửa hàng và OWNER đã đăng nhập. |
@@ -93,9 +93,19 @@ Hóa đơn điện tử là initiative kế tiếp, không mặc nhiên thuộc 
 | `BR-013` | ADMIN chỉ dùng web dashboard để hỗ trợ cơ sở khách hàng; không dùng mobile như OWNER và không trực tiếp sửa sổ bán hàng trong MVP. |
 | `BR-014` | Mọi lần ADMIN xem dữ liệu hoặc thực hiện hành động hỗ trợ phải được phân quyền và lưu audit. |
 | `BR-015` | OWNER không thể lưu trữ một tiệm đang bị ADMIN tạm ngưng; lý do tạm ngưng phải còn để OWNER biết cách liên hệ hỗ trợ. |
-| `BR-016` | Gửi lại cùng một yêu cầu ghi nhận trả nợ hoặc chi phí do mạng lỗi không được tạo thêm một bản ghi thu/chi. |
+| `BR-016` | Gửi lại cùng một yêu cầu trả nợ, tạo chi phí hoặc hủy sale do mạng lỗi không được ghi thu/chi, hoàn tiền hay hoàn tồn lần nữa. Xác nhận lại cùng draft không được tạo sale/payment hoặc trừ tồn lần nữa. |
 
 `BR-003` giữ nguyên ý: người bán quyết định số liệu được ghi.
+
+### Quyết định Core đã chốt — 2026-10-02
+
+- Hủy **toàn bộ** sale đã confirm, không xóa lịch sử. Đơn 100.000đ đã thu 40.000đ: ghi hoàn 40.000đ, hủy 60.000đ còn nợ; không ghi 60.000đ vào khoản hoàn tiền. Chưa thu tiền thì không tạo bản ghi refund.
+- Nợ còn mở chuyển `VOIDED`, lưu thời điểm và số dư bị hủy. Nợ đã `SETTLED` giữ nguyên trạng thái và thời điểm trả đủ, kể cả khi sale bị hủy sau đó.
+- OWNER phải chọn rõ có hoàn tồn hay không. Chỉ hoàn lượng thực sự đã trừ theo snapshot lúc chốt; món tùy ý không có product không tạo tồn. Không tự suy đoán tồn cho lịch sử chưa có snapshot.
+- Sale/payment/refund/nợ/tồn và kết quả chống ghi trùng phải nhất quán trong một transaction; lỗi ở bất kỳ bước nào không được để lại thay đổi một phần.
+- Khách được định danh bằng `customerId`, không bằng tên/số điện thoại. Tên/số điện thoại có thể trùng; không tự gộp khách. Confirm bán thiếu phải chọn khách hợp lệ hoặc có tên khách để tạo mới; số điện thoại không bắt buộc. Draft và đơn thu đủ có thể không có khách.
+- Hủy sale kỳ trước có thể làm doanh thu ròng kỳ hiện tại âm. Nợ còn lại trên tổng quan là số dư hiện tại của toàn shop, không phải số dư cuối kỳ.
+- Hoàn tiền/trả hàng từng phần, điều chỉnh kho độc lập và audit tổng quát là các phần chưa triển khai; không suy ra đã hoàn thành từ luồng hủy toàn bộ. Chi tiết hành vi/AC nằm trong [PRD](product-requirements.md), không coi kết quả kiểm thử Core là nghiệm thu FE hoặc production.
 
 ## 5. Quy tắc kinh doanh cho sáng kiến hóa đơn điện tử
 
@@ -130,7 +140,7 @@ Copy UI viện dẫn nghị định trên màn bản ghi bán hàng **không** b
 - Phân loại sai đối tượng/nghiệp vụ có thể dẫn đến lập thiếu, lập trễ hoặc lập sai hóa đơn.
 - Sự cố mạng/nhà cung cấp không được làm mất dấu nghĩa vụ cần xử lý.
 - Dữ liệu người mua, số điện thoại và doanh thu là dữ liệu nhạy cảm cần chính sách truy cập, lưu giữ và audit.
-- Xóa cứng bản ghi trên MVP làm giảm khả năng truy vết so với `BR-006`; đây là đánh đổi thí điểm, không phải mức sản xuất.
+- FE cần bỏ luồng xóa cứng sale/nợ độc lập và tích hợp hủy có dấu vết theo `BR-006`; chưa có bằng chứng nghiệm thu FE hoặc production cho thay đổi này.
 - Hóa đơn điện tử phụ thuộc nhà cung cấp dịch vụ, đăng ký của người bán và quy trình vận hành ngoài ứng dụng.
 
 ## 8. Quyết định còn mở
@@ -138,7 +148,7 @@ Copy UI viện dẫn nghị định trên màn bản ghi bán hàng **không** b
 | ID | Câu hỏi | Chủ đề xuất | Trạng thái |
 |---|---|---|---|
 | `OQ-001` | Voice/STT có phải điều kiện bắt buộc để MVP kiểm chứng giá trị khác biệt không? | Chủ sản phẩm | Đã chốt: có trong đích MVP; FE hiện mới giả lập nên cần nghiệm thu runtime. |
-| `OQ-002` | Xóa cứng bản ghi bán hàng/chi phí có đủ cho thí điểm, hay cần hủy có dấu vết trước dữ liệu thật? | Chủ sản phẩm + chủ kỹ thuật | Mở |
+| `OQ-002` | Xóa cứng hay hủy có dấu vết? | Chủ sản phẩm + chủ kỹ thuật | Đã chốt Core ngày 2026-10-02: sale void + hoàn toàn bộ số đã thu, payment append-only; expense archive. Hoàn từng phần và tích hợp FE chưa nghiệm thu. |
 | `OQ-003` | Khi nào chuyển khớp câu bán hàng từ ứng dụng sang dịch vụ AI? | Chủ kỹ thuật | Đã chốt: trong MVP; giữ parser FE làm fallback trong giai đoạn tích hợp. |
 | `OQ-INV-001` | Hóa đơn điện tử thuộc MVP, thí điểm riêng hay giai đoạn sau? | Chủ sản phẩm | Mở |
 | `OQ-INV-002` | Nhóm người bán đầu tiên có hồ sơ pháp lý và ngưỡng doanh thu nào? | Chủ kinh doanh + chủ thuế | Mở |
@@ -151,14 +161,14 @@ Copy UI viện dẫn nghị định trên màn bản ghi bán hàng **không** b
 | Nguồn BRD | PRD | Trạng thái |
 |---|---|---|
 | `BO-001`, `BR-001`, `BR-002` | `FR-001`, `FR-002`, `FR-008`, `FR-013`, `FR-014` | tạm thời — MVP đã chấp nhận |
-| `BO-002`, `BR-003`, `BR-004`, `BR-006` | `FR-003`–`FR-005`, `NFR-001`, `NFR-003` | tạm thời — MVP đã chấp nhận |
-| `BO-003`, `BR-004`, `BR-005`, `BR-011` | `FR-006`, `FR-007`, `FR-020`, `FR-025` | tạm thời — đích MVP |
+| `BO-002`, `BR-003`, `BR-006` | `FR-003`–`FR-005`, `FR-016`, `NFR-001`, `NFR-003`, `AC-026`–`AC-030` | Core có confirm/void có dấu vết; FE/staging cần nghiệm thu |
+| `BO-003`, `BR-004`, `BR-005`, `BR-011` | `FR-006`, `FR-007`, `FR-020`, `FR-025`, `AC-031` | Core summary đã có; AI và các chỉ số nâng cao vẫn là đích MVP |
 | `BO-005`, `BR-005`, `BR-008` | `FR-015`, `FR-016`, `FR-006` | tạm thời — MVP đã chấp nhận |
 | `BR-007` | `FR-009`, `FR-013` | tạm thời — MVP đã chấp nhận |
 | `BR-009` | `FR-010`, `FR-011`, `NFR-003` | tạm thời — MVP đã chấp nhận; không tuyên bố sẵn sàng sản xuất |
 | `BR-013`, `BR-014` | `FR-022`–`FR-024`, `NFR-009` | tạm thời — admin web dashboard trong MVP |
 | `BR-010` | `FR-014` | tạm thời — MVP đã chấp nhận |
 | `BR-015` | `FR-011`, `AC-025` | tạm thời — cần kiểm chứng với FE |
-| `BR-016` | `FR-015`, `FR-016`, `AC-024` | tạm thời — thử trên DB local trước migration |
+| `BR-016` | `FR-005`, `FR-015`, `FR-016`, `AC-024`, `AC-030` | Core đã triển khai; cần nghiệm thu FE/staging |
 | `BR-002`, `BR-003`, `BR-011`, `BR-012` | `FR-008`, `FR-017`, `FR-018`, `FR-020`, `FR-021`, `FR-025`, `NFR-006`–`NFR-008` | tạm thời — đích MVP; chưa có FE/runtime để chứng minh |
 | `BO-004`, `BR-INV-001`–`BR-INV-008` | `FR-INV-001`–`FR-INV-007` | Hoãn, chờ `OQ-INV-001`–`OQ-INV-005` và phê duyệt pháp lý |
