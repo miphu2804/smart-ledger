@@ -115,7 +115,9 @@ Luồng: Firebase xác thực SĐT → FE gửi **Firebase ID token** (`Authoriz
 
 1. Đăng nhập lần đầu: `POST /api/v1/auth/session` với `{ displayName }`. Core **bắt buộc** `displayName` cho tài khoản mới (thiếu → 400) nên app có màn “Bạn tên gì?” (`app/(auth)/profile.tsx`). Các lần sau không cần gửi.
 2. Mở lại app: Firebase tự khôi phục phiên → `GET /api/v1/me`. `404 auth_profile_not_found` (Firebase còn đăng nhập nhưng Core chưa có tài khoản) → app vào lại màn nhập tên. `401` → đăng xuất. `403 account_disabled` → đăng xuất và báo tài khoản bị khoá.
-3. `needsOnboarding = true` (chưa có tiệm) → màn tạo tiệm. Core chưa có `POST /shops` nên tạm dùng `EXPO_PUBLIC_MOCK_SHOPS=true`.
+3. `needsOnboarding = true` (chưa có tiệm) → màn tạo tiệm, gọi `POST /shops` thật (Core lưu một `industry` dạng chuỗi — các ngành đã chọn được nối bằng ", "). `EXPO_PUBLIC_MOCK_SHOPS=true` chỉ còn dùng khi Core giả lập.
+
+Nhánh backend đã gộp thêm `feat/core-business`: Core giờ có thêm Category, Product, SaleDraft, Sale, Payment (`/api/v1/categories`, `/products`, `/sale-drafts`, `/sales`, `.../payments`, đều cần header `X-Shop-Id`). Frontend đã nối đủ các API này (danh mục/sản phẩm, POS/checkout tạo đơn nháp rồi xác nhận, hoá đơn, công nợ, chi phí) — không còn dùng dữ liệu mẫu khi chạy với Core thật. `SaleDraft.confirm` chấp nhận `initialPaidVnd` bất kỳ từ 0 tới tổng đơn — trả thiếu thì Core (`SaleDraftServiceImpl.confirm`/`customerForConfirmation`) tự tạo một `Debt` cho khách (cần có `customerId` có sẵn hoặc `customerName` để Core tạo khách mới, thiếu cả hai thì lỗi `customer_required_for_debt`); khớp với màn Thanh toán ghi nợ của mobile. `EXPO_PUBLIC_USE_MOCK=true` bật chế độ xem trước không cần Core thật — `src/lib/mockCore.ts` giả lập các endpoint trên trong bộ nhớ.
 
 `.env` để chạy với Core thật (Core chạy bằng `docker compose up` thì cổng mặc định là `8000`):
 

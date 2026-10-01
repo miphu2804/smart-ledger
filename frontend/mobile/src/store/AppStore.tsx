@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { USE_MOCK } from '../config';
 import { generateExpenses, generateInvoices, mockDebts, mockProducts, mockStaff, mockStore, mockUser } from '../data/mock';
 import type {
@@ -319,7 +319,7 @@ function useStoreValue() {
   useEffect(() => {
     loggedInRef.current = s.loggedIn;
   }, [s.loggedIn]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     setActiveShop(s.shopId);
   }, [s.shopId]);
 

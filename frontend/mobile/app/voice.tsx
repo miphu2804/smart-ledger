@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddItemSheet } from '../src/components/AddItemSheet';
@@ -8,9 +8,11 @@ import { useToast } from '../src/components/brand';
 import { Waveform } from '../src/components/charts';
 import { Button, Dialog, Field, Header, IconBtn, Row, Stepper, T } from '../src/components/ui';
 import { voiceSamples } from '../src/data/mock';
-import type { LineItem } from '../src/data/types';
+import type { LineItem, ProductView } from '../src/data/types';
+import { productApi } from '../src/lib/catalogApi';
+import { errorMessage } from '../src/lib/errors';
 import { hhmm, vnd } from '../src/lib/format';
-import { DisambiguationItem, parseOrder } from '../src/lib/parseOrder';
+import { type ParsedExpenseItem, parseOrder } from '../src/lib/parseOrder';
 import { itemsTotal } from '../src/lib/stats';
 import { useApp } from '../src/store/AppStore';
 import { colors, font, shadow } from '../src/theme';
@@ -34,11 +36,37 @@ export default function Voice() {
   const [text, setText] = useState('');
   const [edit, setEdit] = useState(false);
   const [pending, setPending] = useState<LineItem[]>([]);
-  const [disambigItem, setDisambigItem] = useState<DisambiguationItem | null>(null);
   const [newPrice, setNewPrice] = useState('');
+  const [newUnit, setNewUnit] = useState('cái');
   const [priceErr, setPriceErr] = useState('');
+  const [catalogBusy, setCatalogBusy] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [transcripts, setTranscripts] = useState<string[]>([]);
+  /**
+   * Khoản chi nhận diện được — hiển thị bản nháp để xác nhận.
+   * NFR-006/AC-010: Không ghi ngay, người dùng phải bấm "Lưu chi phí".
+   */
+  const [pendingExpenses, setPendingExpenses] = useState<ParsedExpenseItem[]>([]);
+
+  const [products, setProducts] = useState<ProductView[]>([]);
+
+  const loadProducts = useCallback(async () => {
+    try {
+      setProducts(await productApi.list());
+    } catch (e) {
+      toast(`Không tải được danh mục hàng: ${errorMessage(e)}`, 'err');
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
+
+  // Danh sách rút gọn cho bộ nhận diện giọng nói (tên/giá) — xem `parseOrder`
+  const parseableProducts = useMemo(
+    () => products.map((p) => ({ id: p.id, name: p.name, price: p.sellingPriceVnd })),
+    [products],
+  );
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
   useEffect(() => {
@@ -60,15 +88,9 @@ export default function Voice() {
     });
 
   const handleUtterance = (utter: string) => {
-    // Chạy bộ bóc tách thông minh on-device
-    const { items: found, unknown, missingQuantityItems, disambiguations, expenses, normalizedText } = parseOrder(
-      utter,
-      app.products
-    );
-
-    const userText = normalizedText || utter;
-    push('user', userText);
-    setTranscripts((t) => [...t, userText]);
+    push('user', utter);
+    setTranscripts((t) => [...t, utter]);
+    const { items: found, unknown, missingQuantityItems, expenses } = parseOrder(utter, parseableProducts);
 
     setTimeout(() => {
       const responseParts: string[] = [];
@@ -82,46 +104,34 @@ export default function Voice() {
       // 2. Món có tên nhưng thiếu số lượng
       if (missingQuantityItems && missingQuantityItems.length > 0) {
         responseParts.push(
-          `Bạn đã gọi món “${missingQuantityItems.join(', ')}” nhưng chưa có số lượng. Mời bạn nói lại số lượng nhé (ví dụ: “1 ${missingQuantityItems[0]}”).`
+          `Bạn đã gọi món "${missingQuantityItems.join(', ')}" nhưng chưa có số lượng. Mời bạn nói lại số lượng nhé (ví dụ: "1 ${missingQuantityItems[0]}").`,
         );
       }
 
-      // 3. Món có nhiều biến thể cần chọn (Disambiguation)
-      if (disambiguations && disambiguations.length > 0) {
-        setDisambigItem(disambiguations[0]);
-        responseParts.push(`Món “${disambiguations[0].rawName}” có nhiều biến thể. Vui lòng chọn loại bạn muốn bán.`);
-      }
-
-      // 4. Món chưa có trong danh mục
+      // 3. Món chưa có trong danh mục
       if (unknown.length) {
         setPending(unknown);
         setNewPrice(unknown[0].price ? String(unknown[0].price) : '');
-        responseParts.push(`“${unknown[0].name}” chưa có trong danh mục. Bạn có muốn thêm vào không?`);
+        responseParts.push(`"${unknown[0].name}" chưa có trong danh mục. Bạn có muốn thêm vào không?`);
       }
 
-      // 5. Khoản chi phát hiện được
+      // 4. Khoản chi phát hiện được — hiển thị bản nháp, KHÔNG ghi ngay (NFR-006/AC-010)
       if (expenses && expenses.length > 0) {
-        expenses.forEach((e) => {
-          app.addExpense({
-            title: e.title,
-            amount: e.amount,
-            category: 'khac',
-            source: 'voice',
-          });
-        });
-        responseParts.push(`Đã ghi nhận khoản chi: ${expenses.map((e) => `${e.title} (${vnd(e.amount)})`).join(', ')}.`);
+        setPendingExpenses((cur) => [...cur, ...expenses]);
+        responseParts.push(
+          `Mình nghe thấy khoản chi: ${expenses.map((e) => `${e.title} (${vnd(e.amount)})`).join(', ')}. Bấm "Lưu chi phí" để xác nhận.`,
+        );
       }
 
-      // 6. Không nhận diện được thông tin nào
+      // 5. Không nhận diện được thông tin nào
       if (
         !found.length &&
         !unknown.length &&
         (!missingQuantityItems || !missingQuantityItems.length) &&
-        (!disambiguations || !disambiguations.length) &&
         (!expenses || !expenses.length)
       ) {
         responseParts.push(
-          'Mình chưa nhận diện được món hàng. Bạn thử nói lại kèm số lượng nhé, ví dụ: “2 ly cà phê sữa” hoặc “1 bánh mì ốp la”.',
+          'Mình chưa nhận diện được món hàng. Bạn thử nói lại kèm số lượng nhé, ví dụ: "2 ly cà phê sữa" hoặc "1 bánh mì ốp la".',
         );
       }
 
@@ -179,6 +189,7 @@ export default function Voice() {
     }
 
     // Giả lập giọng nói khi test hoặc thiết bị chưa có Web Speech API
+    // ⚠️ Chỉ dùng để demo UI — không xử lý đơn từ sample khi không có mic thật.
     const sample = voiceSamples[sampleCursor++ % voiceSamples.length];
     const words = sample.split(' ');
     fullTranscriptRef.current = sample;
@@ -201,7 +212,8 @@ export default function Voice() {
     timers.current.forEach(clearTimeout);
     setRecording(false);
 
-    const finalText = manualText || fullTranscriptRef.current || partial;
+    // Chỉ xử lý nếu có Web Speech API thật (fullTranscriptRef không phải từ sample)
+    const finalText = manualText || (recognitionRef.current ? fullTranscriptRef.current : '') || partial;
     setPartial('');
 
     if (finalText && finalText.trim() && !finalText.includes('Đang nghe…')) {
@@ -215,49 +227,55 @@ export default function Voice() {
     setText('');
   };
 
-  const selectDisambiguation = (option: { product_id: string; name: string; unit_price_vnd: number }) => {
-    if (!disambigItem) return;
-    const itemToAdd: LineItem = {
-      productId: option.product_id,
-      name: option.name,
-      price: option.unit_price_vnd,
-      qty: disambigItem.qty,
-    };
-    mergeItems([itemToAdd]);
-    push('ai', `Đã chọn “${option.name}” × ${disambigItem.qty} (${vnd(option.unit_price_vnd * disambigItem.qty)}).`);
-    setDisambigItem(null);
-  };
-
-  const resolvePending = (action: 'catalog' | 'once' | 'skip') => {
+  const resolvePending = async (action: 'catalog' | 'skip') => {
     const [first, ...rest] = pending;
-    if (!first) return;
+    if (!first || catalogBusy) return;
     const price = parseInt(newPrice.replace(/\D/g, ''), 10) || 0;
     // Thiếu giá bán thì giữ nguyên hộp thoại, không để mất món; chỉ "Bỏ qua" mới được bỏ món.
-    if (action !== 'skip' && !price) {
-      setPriceErr(`Nhập giá bán cho “${first.name}” để thêm vào đơn`);
+    if (action === 'catalog' && !price) {
+      setPriceErr(`Nhập giá bán cho "${first.name}" để thêm vào đơn`);
       return;
     }
     if (action === 'catalog') {
-      const id = app.addProduct({
-        name: first.name,
-        price,
-        cost: Math.round(price * 0.6),
-        stock: 0,
-        tracked: false,
-        category: 'other',
-        aliases: [first.name],
-      });
-      mergeItems([{ ...first, productId: id, price }]);
-      push('ai', `Đã thêm “${first.name}” (${vnd(price)}) vào danh mục và vào đơn.`);
-    } else if (action === 'once') {
-      mergeItems([{ ...first, price }]);
-      push('ai', `Đã ghi “${first.name}” vào đơn này (không lưu vào danh mục).`);
+      setCatalogBusy(true);
+      try {
+        // Core không hỗ trợ món ngoài danh mục — phải tạo Product thật trước khi thêm vào đơn.
+        const created = await productApi.create({
+          name: first.name,
+          unit: newUnit.trim() || 'cái',
+          sellingPriceVnd: price,
+          tracked: false,
+          stockQuantity: null,
+        });
+        setProducts((cur) => [...cur, created]);
+        mergeItems([{ productId: created.id, name: created.name, price: created.sellingPriceVnd, qty: first.qty }]);
+        push('ai', `Đã thêm "${first.name}" (${vnd(price)}) vào danh mục và vào đơn.`);
+      } catch (e) {
+        setPriceErr(`Không thêm được "${first.name}" vào danh mục: ${errorMessage(e)}`);
+        return;
+      } finally {
+        setCatalogBusy(false);
+      }
     } else {
-      push('ai', `Đã bỏ qua “${first.name}”.`);
+      push('ai', `Đã bỏ qua "${first.name}".`);
     }
     setPriceErr('');
     setPending(rest);
     setNewPrice(rest[0]?.price ? String(rest[0].price) : '');
+    setNewUnit('cái');
+  };
+
+  const confirmExpenses = () => {
+    pendingExpenses.forEach((e) => {
+      app.addExpense({
+        title: e.title,
+        amount: e.amount,
+        category: 'khac',
+        source: 'voice',
+      });
+    });
+    push('ai', `Đã lưu ${pendingExpenses.length} khoản chi: ${pendingExpenses.map((e) => `${e.title} (${vnd(e.amount)})`).join(', ')}.`);
+    setPendingExpenses([]);
   };
 
   const total = itemsTotal(items);
@@ -307,7 +325,7 @@ export default function Voice() {
             {['2 ly cà phê sữa 50 nghìn', 'bán 3 bánh mì, 2 coca', 'cho 1 bạc xỉu với chi 20k mua đá'].map((s) => (
               <Pressable key={s} onPress={() => handleUtterance(s)} style={styles.sample}>
                 <T w="semibold" size={13} color={colors.primary}>
-                  “{s}”
+                  "{s}"
                 </T>
               </Pressable>
             ))}
@@ -335,6 +353,47 @@ export default function Voice() {
             <T size={13.5} color={colors.white}>
               {partial || 'Đang lắng nghe…'}
             </T>
+          </View>
+        ) : null}
+
+        {/* Bản nháp khoản chi — chờ xác nhận (NFR-006/AC-010) */}
+        {pendingExpenses.length > 0 ? (
+          <View style={styles.expenseDraft}>
+            <Row gap={6} style={{ marginBottom: 8 }}>
+              <Feather name="alert-circle" size={14} color={colors.gold} />
+              <T w="bold" size={13} color={colors.gold}>
+                Khoản chi chờ xác nhận
+              </T>
+            </Row>
+            {pendingExpenses.map((e, i) => (
+              <Row key={i} style={{ paddingVertical: 4 }}>
+                <T size={13} style={{ flex: 1 }}>
+                  {e.title}
+                </T>
+                <T w="bold" size={13} color={colors.ink}>
+                  {vnd(e.amount)}
+                </T>
+              </Row>
+            ))}
+            <Row gap={8} style={{ marginTop: 10 }}>
+              <Button
+                title="Bỏ qua"
+                variant="ghost"
+                small
+                onPress={() => {
+                  push('ai', 'Đã bỏ qua khoản chi.');
+                  setPendingExpenses([]);
+                }}
+                style={{ flex: 1 }}
+              />
+              <Button
+                title="Lưu chi phí"
+                variant="soft"
+                small
+                onPress={confirmExpenses}
+                style={{ flex: 1 }}
+              />
+            </Row>
           </View>
         ) : null}
 
@@ -444,46 +503,15 @@ export default function Voice() {
         </Row>
       </View>
 
-      {/* Dialog chọn biến thể món (Disambiguation) */}
-      <Dialog
-        visible={disambigItem !== null}
-        icon="star"
-        title={`Chọn loại “${disambigItem?.rawName ?? ''}”`}
-        message="Món này có nhiều biến thể trong thực đơn. Vui lòng chọn loại bạn muốn bán:"
-        confirm="Đóng"
-        cancel="Bỏ qua"
-        onConfirm={() => setDisambigItem(null)}
-        onCancel={() => setDisambigItem(null)}
-      >
-        <View style={{ marginTop: 8, gap: 8 }}>
-          {disambigItem?.options.map((opt) => (
-            <Pressable
-              key={opt.product_id}
-              onPress={() => selectDisambiguation(opt)}
-              style={styles.disambigBtn}
-            >
-              <Row style={{ justifyContent: 'space-between' }}>
-                <T w="bold" size={14} color={colors.primary}>
-                  {opt.name}
-                </T>
-                <T w="semibold" size={13} color={colors.ink}>
-                  {vnd(opt.unit_price_vnd)}
-                </T>
-              </Row>
-            </Pressable>
-          ))}
-        </View>
-      </Dialog>
-
       {/* Dialog thêm món mới chưa có trong thực đơn */}
       <Dialog
         visible={pending.length > 0}
         icon="star"
-        title={`Thêm “${pending[0]?.name ?? ''}” vào danh mục?`}
-        message="Sản phẩm này chưa có trong danh mục. Thêm vào để lần sau chọn nhanh hơn."
-        confirm="Có, thêm"
-        cancel="Chỉ đơn này"
-        onCancel={() => resolvePending('once')}
+        title={`Thêm "${pending[0]?.name ?? ''}" vào danh mục?`}
+        message="Sản phẩm này chưa có trong danh mục. Core cần món có trong danh mục thật mới bán được."
+        confirm="Thêm vào danh mục"
+        cancel="Bỏ qua"
+        onCancel={() => resolvePending('skip')}
         onConfirm={() => resolvePending('catalog')}
       >
         <View style={{ marginTop: 12 }}>
@@ -498,17 +526,14 @@ export default function Voice() {
               setPriceErr('');
             }}
           />
+          <Field label="Đơn vị" placeholder="VD: cái, ly, phần" value={newUnit} onChangeText={setNewUnit} />
         </View>
-        <Pressable onPress={() => resolvePending('skip')}>
-          <T size={12} color={colors.faint} style={{ textAlign: 'center' }}>
-            Bỏ qua món này
-          </T>
-        </Pressable>
       </Dialog>
 
       <AddItemSheet
         visible={addOpen}
         onClose={() => setAddOpen(false)}
+        products={products}
         onPick={(li) => {
           mergeItems([li]);
           toast(`Đã thêm ${li.name}`);
@@ -543,17 +568,16 @@ const styles = StyleSheet.create({
   user: { alignSelf: 'flex-end', backgroundColor: colors.ink, borderBottomRightRadius: 5 },
   ai: { alignSelf: 'flex-start', backgroundColor: colors.white, borderColor: colors.border, borderWidth: 1, borderBottomLeftRadius: 5 },
   order: { backgroundColor: colors.white, borderRadius: 18, borderColor: colors.border, borderWidth: 1, padding: 16, marginTop: 4, ...shadow(1) },
-  line: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
-  disambigBtn: {
-    backgroundColor: colors.bg,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+  expenseDraft: {
+    backgroundColor: colors.goldSoft,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: colors.border,
-    minHeight: 44,
-    justifyContent: 'center',
+    borderColor: colors.gold,
+    padding: 14,
+    marginTop: 4,
+    marginBottom: 8,
   },
+  line: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
   bottom: {
     backgroundColor: colors.white,
     paddingHorizontal: 16,
@@ -566,4 +590,3 @@ const styles = StyleSheet.create({
   editAction: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
   input: { flex: 1, fontFamily: font.medium, fontSize: 14, color: colors.ink, height: '100%', outlineStyle: 'none' } as never,
 });
-

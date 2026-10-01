@@ -11,7 +11,8 @@ ENV UV_COMPILE_BYTECODE=1 \
 COPY pyproject.toml uv.lock ./
 COPY src ./src
 
-RUN uv sync --frozen --no-dev
+# The runtime copies src directly, so avoid building the local package and its hatchling backend.
+RUN uv sync --frozen --no-dev --no-install-project
 
 FROM python:3.11-slim-bookworm AS runtime
 
