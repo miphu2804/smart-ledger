@@ -1,5 +1,7 @@
 package com.smartledger.core.service.impl;
 
+import com.smartledger.core.enums.AuditAction;
+import com.smartledger.core.service.AuditLogService;
 import com.smartledger.core.dto.request.DebtRepaymentRequest;
 import com.smartledger.core.dto.response.DebtRepaymentResponse;
 import com.smartledger.core.dto.response.DebtResponse;
@@ -19,12 +21,14 @@ import com.smartledger.core.service.DebtService;
 import com.smartledger.core.service.IdempotencyService;
 import com.smartledger.core.service.ShopService;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Service
 public class DebtServiceImpl implements DebtService {
+    private final AuditLogService auditLogService;
     private final ShopService shopService;
     private final DebtRepository debtRepository;
     private final SaleRepository saleRepository;
@@ -33,7 +37,8 @@ public class DebtServiceImpl implements DebtService {
 
     public DebtServiceImpl(ShopService shopService, DebtRepository debtRepository,
             SaleRepository saleRepository, PaymentRepository paymentRepository,
-            IdempotencyService idempotencyService) {
+            IdempotencyService idempotencyService, AuditLogService auditLogService) {
+        this.auditLogService = auditLogService;
         this.shopService = shopService;
         this.debtRepository = debtRepository;
         this.saleRepository = saleRepository;
@@ -67,10 +72,10 @@ public class DebtServiceImpl implements DebtService {
         return idempotencyService.execute(shop.getId(), shop.getOwnerId(), "DEBT_REPAYMENT",
                 idempotencyKey, new Object[] { id, request }, "PAYMENT",
                 response -> response.payment().id(), DebtRepaymentResponse.class,
-                () -> repayOnce(shop, id, request));
+                () -> repayOnce(shop, id, idempotencyKey, request));
     }
 
-    private DebtRepaymentResponse repayOnce(Shop shop, Long id, DebtRepaymentRequest request) {
+    private DebtRepaymentResponse repayOnce(Shop shop, Long id, String idempotencyKey, DebtRepaymentRequest request) {
         Long saleId = debtRepository.findSaleIdByIdAndShopId(id, shop.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.DEBT_NOT_FOUND));
         // Read only the ID before waiting, so no stale Debt enters the persistence context.
@@ -82,12 +87,16 @@ public class DebtServiceImpl implements DebtService {
         }
         Debt debt = debtRepository.findLockedByIdAndShopId(id, shop.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.DEBT_NOT_FOUND));
+        Long beforeBalance = debt.getOutstandingVnd();
         debt.repay(request.amountVnd());
         sale.recordRepayment(request.amountVnd());
         Payment payment = paymentRepository.save(Payment.debtRepayment(sale.getId(), debt.getId(),
                 request.amountVnd(), request.paymentMethod(),
                 StringUtils.hasText(request.transferReference()) ? request.transferReference().trim() : null,
                 shop.getOwnerId()));
+        auditLogService.recordOwner(shop, AuditAction.DEBT_REPAYMENT_RECORDED, debt.getId(), null, idempotencyKey,
+                Map.of("saleId", sale.getId(), "paymentId", payment.getId(), "amountVnd", request.amountVnd(),
+                        "beforeBalanceVnd", beforeBalance, "afterBalanceVnd", debt.getOutstandingVnd()));
         return new DebtRepaymentResponse(toResponse(debt), new PaymentResponse(payment.getId(),
                 payment.getSaleId(), payment.getAmountVnd(), payment.getPaymentMethod(),
                 payment.getType(), payment.getReceivedAt()));

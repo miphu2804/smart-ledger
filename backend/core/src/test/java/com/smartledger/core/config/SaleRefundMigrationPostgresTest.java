@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.smartledger.core.entity.AuthIdentity;
+import com.smartledger.core.entity.AuditLog;
 import com.smartledger.core.entity.Category;
 import com.smartledger.core.entity.Customer;
 import com.smartledger.core.entity.Debt;
@@ -17,6 +18,7 @@ import com.smartledger.core.entity.SaleItem;
 import com.smartledger.core.entity.SaleRefund;
 import com.smartledger.core.entity.Shop;
 import com.smartledger.core.entity.UserAccount;
+import com.smartledger.core.enums.AuditAction;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -56,7 +58,7 @@ class SaleRefundMigrationPostgresTest {
 
     @Test
     void freshMigrationsMatchEveryEntityAndSecondRunDoesNothing() {
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(9);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(10);
         validateEntitySchema();
         assertThat(flyway(null).migrate().migrationsExecuted).isZero();
         assertThat(flyway(null).validateWithResult().validationSuccessful).isTrue();
@@ -65,7 +67,7 @@ class SaleRefundMigrationPostgresTest {
     @Test
     void upgradeFromV8PreservesMoneySettledDebtAndUnknownStockHistory() throws SQLException {
         migrateAndSeedV8();
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(2);
         validateEntitySchema();
 
         assertThat(scalar("SELECT stock_deducted FROM sale_items WHERE id = 1")).isNull();
@@ -99,7 +101,7 @@ class SaleRefundMigrationPostgresTest {
                 VALUES (1, 40000, 'CASH', 1, TIMESTAMPTZ '2026-09-02T10:00:00Z');
                 """);
 
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(2);
         validateEntitySchema();
         assertThat(scalar("SELECT stock_deducted FROM sale_items WHERE id = 1")).isEqualTo("t");
         assertThat(scalar("SELECT amount_vnd FROM sale_refunds WHERE sale_id = 1")).isEqualTo("40000");
@@ -156,7 +158,7 @@ class SaleRefundMigrationPostgresTest {
                 .isEqualTo("8");
         // Correct the test row explicitly, then retry without Flyway repair.
         execute("UPDATE sale_refunds SET sale_id = 1 WHERE sale_id = 999");
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(2);
     }
 
     @Test
@@ -173,6 +175,97 @@ class SaleRefundMigrationPostgresTest {
                 .isEqualTo("VOIDED:0");
         assertThat(scalar("SELECT count(*) FROM information_schema.columns WHERE table_schema = '" + schema
                 + "' AND table_name = 'debts' AND column_name = 'voided_at'")).isEqualTo("0");
+    }
+
+    @Test
+    void v10PreservesHibernateAuditRowsAndBlocksAllMutationPaths() throws SQLException {
+        migrateAndSeedV8();
+        flyway("9").migrate();
+        createHibernateAuditTable();
+        execute(auditInsert("'{}'::jsonb"));
+        String original = scalar("SELECT row_to_json(a)::text FROM audit_logs a");
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        validateEntitySchema();
+        assertThat(scalar("SELECT row_to_json(a)::text FROM audit_logs a")).isEqualTo(original);
+        rejected("UPDATE audit_logs SET reason = 'Changed'", "55000", "append-only");
+        rejected("DELETE FROM audit_logs", "55000", "append-only");
+        rejected("TRUNCATE audit_logs", "55000", "append-only");
+        assertThat(scalar("SELECT row_to_json(a)::text FROM audit_logs a")).isEqualTo(original);
+        execute(auditInsert("'{}'::jsonb"));
+        assertThat(scalar("SELECT count(distinct id) FROM audit_logs")).isEqualTo("2");
+        assertThat(scalar("SELECT count(*) FROM pg_indexes WHERE schemaname = '" + schema
+                + "' AND indexname IN ('idx_audit_logs_shop_time', 'idx_audit_logs_entity', 'idx_audit_logs_actor')"))
+                .isEqualTo("3");
+        assertThat(flyway(null).migrate().migrationsExecuted).isZero();
+    }
+
+    @Test
+    void v10AcceptsEveryCurrentActionAndRejectsBrokenAuditReferencesAndContext() throws SQLException {
+        migrateAndSeedV8();
+        flyway(null).migrate();
+        String valid = auditInsert("'{}'::jsonb");
+        rejected(valid.replace("1, 'OWNER', 1", "999, 'OWNER', 1"), "23503", "fk_audit_logs_actor");
+        rejected(valid.replace("1, 'OWNER', 1", "1, 'OWNER', 999"), "23503", "fk_audit_logs_shop");
+        rejected(valid.replace("'OWNER'", "'OTHER'"), "23514", "ck_audit_logs_actor_role");
+        rejected(valid.replace("'SUCCESS'", "'FAILURE'"), "23514", "ck_audit_logs_outcome");
+        rejected(valid.replace("'SHOP_UPDATED'", "'UNKNOWN'"), "23514", "ck_audit_logs_action_target");
+        rejected(valid.replace("'SHOP', 1", "'DEBT', 1"), "23514", "ck_audit_logs_action_target");
+        rejected(valid.replace("'SHOP', 1", "'SHOP', 0"), "23514", "ck_audit_logs_ids");
+        rejected(valid.replace("'00000000-0000-0000-0000-000000000001'", "'untrusted-id'"),
+                "23514", "ck_audit_logs_request_id");
+        rejected(auditInsert("'[]'::jsonb"), "23514", "ck_audit_logs_metadata");
+        rejected(auditInsert("'null'::jsonb"), "23514", "ck_audit_logs_metadata");
+        rejected(auditInsert("NULL"), "23502", "metadata");
+        assertThat(scalar("SELECT count(*) FROM audit_logs")).isEqualTo("0");
+        for (AuditAction action : AuditAction.values()) {
+            execute(valid.replace("'SHOP_UPDATED'", "'" + action.name() + "'")
+                    .replace("'SHOP', 1", "'" + action.entityType() + "', 1"));
+        }
+        assertThat(scalar("SELECT count(*) FROM audit_logs")).isEqualTo(Integer.toString(AuditAction.values().length));
+    }
+
+    @Test
+    void v10InvalidExistingAuditDataRollsBackWithoutDeletingAndCanBeRetried() throws SQLException {
+        migrateAndSeedV8();
+        flyway("9").migrate();
+        createHibernateAuditTable();
+        execute(auditInsert("'[]'::jsonb"));
+        assertThatThrownBy(() -> flyway(null).migrate()).isInstanceOf(FlywayException.class);
+        assertThat(scalar("SELECT metadata::text FROM audit_logs")).isEqualTo("[]");
+        assertThat(scalar("SELECT max(version::integer) FROM flyway_schema_history WHERE success AND version IS NOT NULL"))
+                .isEqualTo("9");
+        assertThat(scalar("SELECT count(*) FROM pg_constraint WHERE conrelid = 'audit_logs'::regclass AND conname = 'fk_audit_logs_actor'"))
+                .isEqualTo("0");
+        // Only this isolated fixture is explicitly corrected; migration never repairs data itself.
+        execute("UPDATE audit_logs SET metadata = '{}'::jsonb");
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(scalar("SELECT count(*) FROM audit_logs")).isEqualTo("1");
+        rejected("DELETE FROM audit_logs", "55000", "append-only");
+        validateEntitySchema();
+    }
+
+    private String auditInsert(String metadata) {
+        return "INSERT INTO audit_logs (actor_user_id, actor_role, shop_id, action, entity_type, entity_id, outcome, "
+                + "request_id, metadata, created_at) VALUES (1, 'OWNER', 1, 'SHOP_UPDATED', 'SHOP', 1, 'SUCCESS', "
+                + "'00000000-0000-0000-0000-000000000001', " + metadata + ", TIMESTAMPTZ '2026-10-01T10:00:00Z')";
+    }
+
+    private void createHibernateAuditTable() {
+        var source = new DriverManagerDataSource(System.getenv("CORE_TEST_POSTGRES_URL"),
+                System.getenv("CORE_TEST_POSTGRES_USERNAME"), System.getenv("CORE_TEST_POSTGRES_PASSWORD"));
+        var properties = new Properties();
+        properties.setProperty("currentSchema", schema);
+        source.setConnectionProperties(properties);
+        var registry = new StandardServiceRegistryBuilder()
+                .applySetting("hibernate.connection.datasource", source)
+                .applySetting("hibernate.default_schema", schema)
+                .applySetting("hibernate.hbm2ddl.auto", "update").build();
+        try {
+            try (var factory = new MetadataSources(registry).addAnnotatedClass(AuditLog.class)
+                    .buildMetadata().buildSessionFactory()) {
+                assertThat(factory.isOpen()).isTrue();
+            }
+        } finally { StandardServiceRegistryBuilder.destroy(registry); }
     }
 
     private void migrateAndSeedV8() throws SQLException {
@@ -233,7 +326,7 @@ class SaleRefundMigrationPostgresTest {
                 .build();
         try {
             var metadata = new MetadataSources(registry);
-            for (var entity : new Class<?>[] {AuthIdentity.class, Category.class, Customer.class, Debt.class,
+            for (var entity : new Class<?>[] {AuditLog.class, AuthIdentity.class, Category.class, Customer.class, Debt.class,
                     Expense.class, Payment.class, Product.class, Sale.class, SaleDraft.class,
                     SaleDraftItem.class, SaleItem.class, SaleRefund.class, Shop.class, UserAccount.class}) {
                 metadata.addAnnotatedClass(entity);

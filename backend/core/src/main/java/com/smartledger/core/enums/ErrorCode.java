@@ -59,7 +59,8 @@ public enum ErrorCode {
     SALE_REFUND_METHOD_INVALID(HttpStatus.BAD_REQUEST, "sale_refund_method_invalid", "Do not provide a refund method for a sale with no payment."),
     SALE_RESTOCK_UNAVAILABLE(HttpStatus.CONFLICT, "sale_restock_unavailable", "Stock cannot be safely restored for this sale item; void without restocking and adjust inventory separately."),
     INVALID_PAYMENT_ID(HttpStatus.BAD_REQUEST, "invalid_payment_id", "Payment ID must be a positive integer."),
-    PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "payment_not_found", "This payment is unavailable.");
+    PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "payment_not_found", "This payment is unavailable."),
+    INVALID_AUDIT_QUERY(HttpStatus.BAD_REQUEST, "invalid_audit_query", "Use a nonnegative page, size 1-100, positive entity ID and an increasing time range.");
 
     private final HttpStatus httpStatus;
     private final String code;

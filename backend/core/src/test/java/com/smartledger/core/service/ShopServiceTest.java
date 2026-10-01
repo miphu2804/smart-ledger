@@ -33,7 +33,8 @@ class ShopServiceTest {
 
     private final AuthIdentityRepository authIdentityRepository = Mockito.mock(AuthIdentityRepository.class);
     private final ShopRepository shopRepository = Mockito.mock(ShopRepository.class);
-    private final ShopService service = new ShopServiceImpl(authIdentityRepository, shopRepository);
+    private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
+    private final ShopService service = new ShopServiceImpl(authIdentityRepository, shopRepository, auditLogService);
 
     @Test
     void createsAnActiveShopForTheCurrentOwner() {

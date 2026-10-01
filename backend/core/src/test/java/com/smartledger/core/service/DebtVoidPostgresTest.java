@@ -32,6 +32,7 @@ import com.smartledger.core.repository.SaleRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.impl.DebtServiceImpl;
 import com.smartledger.core.service.impl.SaleVoidServiceImpl;
+import com.smartledger.core.service.impl.AuditLogServiceImpl;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -73,7 +74,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @DataJpaTest(showSql = false, properties = {"spring.flyway.enabled=false", "spring.jpa.hibernate.ddl-auto=create",
         "spring.jpa.show-sql=false", "spring.jpa.properties.hibernate.format_sql=false"})
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({DebtServiceImpl.class, SaleVoidServiceImpl.class, DebtVoidPostgresTest.PostgresConfig.class})
+@Import({DebtServiceImpl.class, SaleVoidServiceImpl.class, AuditLogServiceImpl.class, DebtVoidPostgresTest.PostgresConfig.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @EnabledIfEnvironmentVariable(named = "CORE_TEST_POSTGRES_URL", matches = "jdbc:postgresql:.+")
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)

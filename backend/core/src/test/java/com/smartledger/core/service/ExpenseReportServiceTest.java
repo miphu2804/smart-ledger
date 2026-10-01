@@ -46,8 +46,9 @@ class ExpenseReportServiceTest {
     private final DebtRepository debtRepository = Mockito.mock(DebtRepository.class);
     private final SaleRefundRepository refundRepository = Mockito.mock(SaleRefundRepository.class);
     private final IdempotencyService idempotencyService = Mockito.mock(IdempotencyService.class);
+    private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
     private final ExpenseService expenseService = new ExpenseServiceImpl(shopService, expenseRepository,
-            idempotencyService);
+            idempotencyService, auditLogService);
     private final ReportService reportService = new ReportServiceImpl(shopService, saleRepository,
             paymentRepository, expenseRepository, debtRepository, refundRepository);
     private final VerifiedFirebaseToken token = new VerifiedFirebaseToken("uid", null, false, null, null, null);

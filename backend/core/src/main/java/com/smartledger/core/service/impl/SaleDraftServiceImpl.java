@@ -1,5 +1,7 @@
 package com.smartledger.core.service.impl;
 
+import com.smartledger.core.enums.AuditAction;
+import com.smartledger.core.service.AuditLogService;
 import com.smartledger.core.dto.request.SaleDraftItemRequest;
 import com.smartledger.core.dto.request.SaleDraftWriteRequest;
 import com.smartledger.core.dto.response.SaleDraftItemResponse;
@@ -43,6 +45,7 @@ import org.springframework.util.StringUtils;
 
 @Service
 public class SaleDraftServiceImpl implements SaleDraftService {
+    private final AuditLogService auditLogService;
     private final ShopService shopService;
     private final SaleDraftRepository draftRepository;
     private final SaleDraftItemRepository draftItemRepository;
@@ -57,7 +60,8 @@ public class SaleDraftServiceImpl implements SaleDraftService {
             SaleDraftItemRepository draftItemRepository, ProductRepository productRepository,
             SaleRepository saleRepository, SaleItemRepository saleItemRepository,
             PaymentRepository paymentRepository, CustomerRepository customerRepository,
-            DebtRepository debtRepository) {
+            DebtRepository debtRepository, AuditLogService auditLogService) {
+        this.auditLogService = auditLogService;
         this.shopService = shopService;
         this.draftRepository = draftRepository;
         this.draftItemRepository = draftItemRepository;
@@ -158,6 +162,8 @@ public class SaleDraftServiceImpl implements SaleDraftService {
             }
         }
         Map<Long, Boolean> stockDeducted = new HashMap<>();
+        Map<Long, BigDecimal> beforeStocks = new HashMap<>();
+        Map<Long, BigDecimal> afterStocks = new HashMap<>();
         // Lock catalog products in a stable order; custom items have no stock to deduct.
         for (SaleDraftItem item : draftItems.stream()
                 .filter(item -> item.getProductId() != null)
@@ -166,7 +172,9 @@ public class SaleDraftServiceImpl implements SaleDraftService {
                             item.getProductId(), shop.getId(), CatalogStatus.ACTIVE)
                     .orElseThrow(() -> new BusinessException(ErrorCode.DRAFT_ITEM_INVALID));
             stockDeducted.put(item.getProductId(), product.isTracked());
+            if (product.isTracked()) { beforeStocks.put(product.getId(), product.getStockQuantity()); }
             product.deductStock(item.getQuantity());
+            if (product.isTracked()) { afterStocks.put(product.getId(), product.getStockQuantity()); }
         }
 
         Sale sale = saleRepository.saveAndFlush(Sale.fromDraft(draft, subtotal, customer));
@@ -182,6 +190,16 @@ public class SaleDraftServiceImpl implements SaleDraftService {
                     draft.getEstimatedTotalVnd() - draft.getInitialPaidVnd()));
         }
         draft.confirm(sale.getId());
+        auditLogService.recordOwner(shop, AuditAction.SALE_CONFIRMED, sale.getId(), null, null,
+                Map.of("draftId", draft.getId(), "totalVnd", sale.getTotalVnd(), "paidVnd", sale.getPaidVnd(),
+                        "outstandingVnd", sale.getTotalVnd() - sale.getPaidVnd(), "itemCount", saleItems.size()));
+        for (SaleDraftItem item : draftItems) {
+            if (Boolean.TRUE.equals(stockDeducted.get(item.getProductId()))) {
+                auditLogService.recordOwner(shop, AuditAction.STOCK_ADJUSTED, item.getProductId(), null, null,
+                        Map.of("source", "SALE_CONFIRM", "saleId", sale.getId(), "quantity", item.getQuantity(),
+                                "beforeStock", beforeStocks.get(item.getProductId()), "afterStock", afterStocks.get(item.getProductId())));
+            }
+        }
         return SaleServiceImpl.toResponse(sale, saleItems);
     }
 

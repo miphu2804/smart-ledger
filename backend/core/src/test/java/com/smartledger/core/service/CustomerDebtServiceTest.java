@@ -46,9 +46,10 @@ class CustomerDebtServiceTest {
     private final SaleRepository saleRepository = Mockito.mock(SaleRepository.class);
     private final PaymentRepository paymentRepository = Mockito.mock(PaymentRepository.class);
     private final IdempotencyService idempotencyService = Mockito.mock(IdempotencyService.class);
+    private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
     private final CustomerService customerService = new CustomerServiceImpl(shopService, customerRepository);
     private final DebtService debtService = new DebtServiceImpl(shopService, debtRepository,
-            saleRepository, paymentRepository, idempotencyService);
+            saleRepository, paymentRepository, idempotencyService, auditLogService);
     private final VerifiedFirebaseToken token = new VerifiedFirebaseToken("uid", null, false, null, null, null);
 
     @BeforeEach

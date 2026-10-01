@@ -1,5 +1,7 @@
 package com.smartledger.core.service.impl;
 
+import com.smartledger.core.enums.AuditAction;
+import com.smartledger.core.service.AuditLogService;
 import com.smartledger.core.dto.request.SaleVoidRequest;
 import com.smartledger.core.dto.response.SaleRefundResponse;
 import com.smartledger.core.dto.response.SaleVoidResponse;
@@ -25,12 +27,14 @@ import com.smartledger.core.service.SaleVoidService;
 import com.smartledger.core.service.ShopService;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Service
 public class SaleVoidServiceImpl implements SaleVoidService {
+    private final AuditLogService auditLogService;
     private final ShopService shopService;
     private final SaleRepository saleRepository;
     private final SaleItemRepository saleItemRepository;
@@ -43,7 +47,8 @@ public class SaleVoidServiceImpl implements SaleVoidService {
     public SaleVoidServiceImpl(ShopService shopService, SaleRepository saleRepository,
             SaleItemRepository saleItemRepository, DebtRepository debtRepository,
             PaymentRepository paymentRepository, ProductRepository productRepository,
-            SaleRefundRepository refundRepository, IdempotencyService idempotencyService) {
+            SaleRefundRepository refundRepository, IdempotencyService idempotencyService, AuditLogService auditLogService) {
+        this.auditLogService = auditLogService;
         this.shopService = shopService;
         this.saleRepository = saleRepository;
         this.saleItemRepository = saleItemRepository;
@@ -62,10 +67,10 @@ public class SaleVoidServiceImpl implements SaleVoidService {
         Long id = BusinessIdParser.parse(saleId, "saleId", ErrorCode.INVALID_SALE_ID);
         return idempotencyService.execute(shop.getId(), shop.getOwnerId(), "SALE_VOID",
                 idempotencyKey, new Object[] { id, request }, "SALE", response -> response.sale().id(),
-                SaleVoidResponse.class, () -> voidOnce(shop, id, request));
+                SaleVoidResponse.class, () -> voidOnce(shop, id, idempotencyKey, request));
     }
 
-    private SaleVoidResponse voidOnce(Shop shop, Long id, SaleVoidRequest request) {
+    private SaleVoidResponse voidOnce(Shop shop, Long id, String idempotencyKey, SaleVoidRequest request) {
         Sale sale = saleRepository.findLockedByIdAndShopId(id, shop.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.SALE_NOT_FOUND));
         if (sale.getSaleStatus() != SaleStatus.CONFIRMED) {
@@ -93,6 +98,7 @@ public class SaleVoidServiceImpl implements SaleVoidService {
         long cancelledDebt = debt == null ? 0 : debt.getOutstandingVnd();
         List<SaleItem> items = saleItemRepository.findAllBySaleIdOrderByIdAsc(id);
         boolean stockRestocked = false;
+        int restoredItemCount = 0;
         if (Boolean.TRUE.equals(request.restockItems())) {
             // Product locks follow the same stable ID order as checkout confirmation.
             for (SaleItem item : items.stream().sorted(Comparator.comparing(
@@ -103,19 +109,35 @@ public class SaleVoidServiceImpl implements SaleVoidService {
                 if (Boolean.TRUE.equals(item.getStockDeducted())) {
                     Product product = productRepository.findLockedByIdAndShopId(item.getProductId(), shop.getId())
                             .orElseThrow(() -> new BusinessException(ErrorCode.SALE_RESTOCK_UNAVAILABLE));
+                    var beforeStock = product.getStockQuantity();
                     product.restoreStock(item.getQuantity());
+                    auditLogService.recordOwner(shop, AuditAction.STOCK_RESTORED_ON_VOID, product.getId(), null, idempotencyKey,
+                            Map.of("saleId", id, "quantity", item.getQuantity(), "beforeStock", beforeStock,
+                                    "afterStock", product.getStockQuantity()));
                     stockRestocked = true;
+                    restoredItemCount++;
                 }
             }
         }
 
         if (debt != null) {
             debt.voidRemaining();
+            if (cancelledDebt > 0) {
+                auditLogService.recordOwner(shop, AuditAction.DEBT_VOIDED, debt.getId(), null, idempotencyKey,
+                        Map.of("saleId", id, "cancelledDebtVnd", cancelledDebt));
+            }
         }
         SaleRefund refund = received == 0 ? null : refundRepository.save(SaleRefund.record(id, received,
                 request.refundMethod(), StringUtils.hasText(request.transferReference())
                         ? request.transferReference().trim() : null, shop.getOwnerId()));
         sale.voidSale(shop.getOwnerId(), request.reason().trim());
+        if (refund != null) {
+            auditLogService.recordOwner(shop, AuditAction.SALE_REFUND_RECORDED, refund.getId(), null, idempotencyKey,
+                    Map.of("saleId", id, "amountVnd", refund.getAmountVnd(), "paymentMethod", refund.getRefundMethod()));
+        }
+        auditLogService.recordOwner(shop, AuditAction.SALE_VOIDED, id, request.reason(), idempotencyKey,
+                Map.of("receivedVnd", received, "refundedVnd", received, "cancelledDebtVnd", cancelledDebt,
+                        "restockItems", request.restockItems(), "restoredItemCount", restoredItemCount));
         return new SaleVoidResponse(SaleServiceImpl.toResponse(sale, items),
                 refund == null ? null : toResponse(refund), cancelledDebt, stockRestocked);
     }
