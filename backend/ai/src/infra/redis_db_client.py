@@ -34,22 +34,6 @@ class RedisDBClient:
                 client.close()
             self.client = None
 
-    def check_health(self) -> None:
-        if self.client is not None:
-            if self.client.ping() is not True:
-                raise RuntimeError("redis ping did not return True")
-            return
-        url = self.connection_string
-        if url is None or not url.strip():
-            raise RuntimeError("redis url missing")
-        with redis.Redis.from_url(
-            url,
-            socket_connect_timeout=3,
-            socket_timeout=3,
-        ) as client:
-            if client.ping() is not True:
-                raise RuntimeError("redis ping did not return True")
-
     def close(self) -> None:
         if self.client is not None:
             self.client.close()
