@@ -33,7 +33,8 @@ class ProductServiceTest {
     private final ShopService shopService = Mockito.mock(ShopService.class);
     private final ProductRepository productRepository = Mockito.mock(ProductRepository.class);
     private final CategoryRepository categoryRepository = Mockito.mock(CategoryRepository.class);
-    private final ProductService service = new ProductServiceImpl(shopService, productRepository, categoryRepository);
+    private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
+    private final ProductService service = new ProductServiceImpl(shopService, productRepository, categoryRepository, auditLogService);
 
     @BeforeEach
     void authorizeShop() {

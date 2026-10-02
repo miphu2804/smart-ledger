@@ -42,6 +42,8 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -56,9 +58,10 @@ class SaleDraftServiceTest {
     private final PaymentRepository paymentRepository = Mockito.mock(PaymentRepository.class);
     private final CustomerRepository customerRepository = Mockito.mock(CustomerRepository.class);
     private final DebtRepository debtRepository = Mockito.mock(DebtRepository.class);
+    private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
     private final SaleDraftService service = new SaleDraftServiceImpl(shopService, draftRepository,
             draftItemRepository, productRepository, saleRepository, saleItemRepository,
-            paymentRepository, customerRepository, debtRepository);
+            paymentRepository, customerRepository, debtRepository, auditLogService);
     private final VerifiedFirebaseToken token = new VerifiedFirebaseToken("uid", null, false, null, null, null);
 
     @BeforeEach
@@ -93,6 +96,59 @@ class SaleDraftServiceTest {
     }
 
     @Test
+    void createsCustomItemWithNameAndUnitSnapshotWithoutLookingUpAProduct() {
+        when(draftRepository.save(any(SaleDraft.class))).thenAnswer(invocation -> {
+            SaleDraft draft = invocation.getArgument(0);
+            ReflectionTestUtils.setField(draft, "id", 11L);
+            return draft;
+        });
+        when(draftItemRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        SaleDraftWriteRequest request = new SaleDraftWriteRequest(null, null, 0L, 20000L,
+                PaymentMethod.CASH, List.of(new SaleDraftItemRequest(null, BigDecimal.ONE, 20000L,
+                        "  Mon tu chon  ", "  phan  ")));
+
+        var response = service.create(token, "7", request);
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().getFirst().productId()).isNull();
+        assertThat(response.items().getFirst().productName()).isEqualTo("Mon tu chon");
+        assertThat(response.items().getFirst().unit()).isEqualTo("phan");
+        verify(productRepository, never()).findByIdAndShopIdAndStatus(any(), any(), any());
+    }
+
+    @Test
+    void rejectsCustomItemWithoutNameOrUnit() {
+        for (SaleDraftItemRequest item : List.of(
+                new SaleDraftItemRequest(null, BigDecimal.ONE, 20000L, " ", "phan"),
+                new SaleDraftItemRequest(null, BigDecimal.ONE, 20000L, "Mon", " "))) {
+            SaleDraftWriteRequest request = new SaleDraftWriteRequest(null, null, 0L, 20000L,
+                    PaymentMethod.CASH, List.of(item));
+            assertThatThrownBy(() -> service.create(token, "7", request))
+                    .isInstanceOfSatisfying(BusinessException.class, exception ->
+                            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.DRAFT_ITEM_INVALID));
+        }
+        verify(draftRepository, never()).save(any());
+    }
+
+    @Test
+    void rejectsCatalogItemThatAlsoSendsCustomNameOrUnit() {
+        // The product exists and is ACTIVE, so only the mixed-item rule can reject these requests.
+        when(productRepository.findByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+                .thenReturn(Optional.of(product(new BigDecimal("5.000"))));
+        for (SaleDraftItemRequest item : List.of(
+                new SaleDraftItemRequest(3L, BigDecimal.ONE, 20000L, "Bia thung", null),
+                new SaleDraftItemRequest(3L, BigDecimal.ONE, 20000L, null, "thung"))) {
+            SaleDraftWriteRequest request = new SaleDraftWriteRequest(null, null, 0L, 20000L,
+                    PaymentMethod.CASH, List.of(item));
+            assertThatThrownBy(() -> service.create(token, "7", request))
+                    .isInstanceOfSatisfying(BusinessException.class, exception ->
+                            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.DRAFT_ITEM_INVALID));
+        }
+        verify(productRepository, never()).findByIdAndShopIdAndStatus(any(), any(), any());
+        verify(draftRepository, never()).save(any());
+    }
+
+    @Test
     void confirmingFullPaymentCreatesSaleItemsPaymentAndDeductsStock() {
         Product product = product(new BigDecimal("5.000"));
         SaleDraft draft = draft(25000L, PaymentMethod.CASH);
@@ -123,6 +179,62 @@ class SaleDraftServiceTest {
         assertThat(payment.getValue().getAmountVnd()).isEqualTo(25000L);
         assertThat(payment.getValue().getReceivedByUserId()).isEqualTo(42L);
         verify(debtRepository, never()).save(any());
+    }
+
+    @Test
+    void confirmingMixedDraftSavesCustomSaleItemWithoutDeductingCustomStock() {
+        Product product = product(new BigDecimal("5.000"));
+        SaleDraft draft = SaleDraft.create(7L, 42L);
+        ReflectionTestUtils.setField(draft, "id", 11L);
+        draft.replace(null, null, null, 0L, 45000L, 45000L, PaymentMethod.CASH);
+        SaleDraftItem catalogItem = SaleDraftItem.create(11L, product, BigDecimal.ONE, 25000L, 25000L);
+        SaleDraftItem customItem = SaleDraftItem.createCustom(11L, "Mon tu chon", "phan",
+                BigDecimal.ONE, 20000L, 20000L);
+        when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
+        when(draftItemRepository.findAllByDraftIdOrderByIdAsc(11L))
+                .thenReturn(List.of(catalogItem, customItem));
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+                .thenReturn(Optional.of(product));
+        when(saleRepository.saveAndFlush(any(Sale.class))).thenAnswer(invocation -> {
+            Sale sale = invocation.getArgument(0);
+            ReflectionTestUtils.setField(sale, "id", 15L);
+            return sale;
+        });
+        when(saleItemRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = service.confirm(token, "7", "11");
+
+        assertThat(response.items()).hasSize(2);
+        assertThat(response.items().get(1).productId()).isNull();
+        assertThat(response.items().get(1).productName()).isEqualTo("Mon tu chon");
+        assertThat(response.items().get(1).unit()).isEqualTo("phan");
+        assertThat(response.totalVnd()).isEqualTo(45000L);
+        assertThat(product.getStockQuantity()).isEqualByComparingTo("4.000");
+        verify(productRepository).findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE);
+        verify(paymentRepository).save(any(Payment.class));
+    }
+
+    @Test
+    void confirmingCustomOnlyDraftDoesNotLockAnyProduct() {
+        SaleDraft draft = draft(25000L, PaymentMethod.CASH);
+        SaleDraftItem item = SaleDraftItem.createCustom(11L, "Mon tu chon", "phan",
+                BigDecimal.ONE, 25000L, 25000L);
+        when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
+        when(draftItemRepository.findAllByDraftIdOrderByIdAsc(11L)).thenReturn(List.of(item));
+        when(saleRepository.saveAndFlush(any(Sale.class))).thenAnswer(invocation -> {
+            Sale sale = invocation.getArgument(0);
+            ReflectionTestUtils.setField(sale, "id", 15L);
+            return sale;
+        });
+        when(saleItemRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = service.confirm(token, "7", "11");
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().getFirst().productId()).isNull();
+        assertThat(response.items().getFirst().productName()).isEqualTo("Mon tu chon");
+        verify(productRepository, never()).findLockedByIdAndShopIdAndStatus(any(), any(), any());
+        verify(paymentRepository).save(any(Payment.class));
     }
 
     @Test
@@ -384,6 +496,67 @@ class SaleDraftServiceTest {
         assertThat(response.items()).hasSize(1);
         verify(draftItemRepository).deleteAllByDraftId(11L);
         verify(saleRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void replacesCatalogItemWithCustomItemWithoutLookingUpAProduct() {
+        SaleDraft draft = draft(25000L, PaymentMethod.CASH);
+        when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
+        when(draftItemRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        SaleDraftWriteRequest request = new SaleDraftWriteRequest(null, null, 0L, 25000L,
+                PaymentMethod.CASH, List.of(new SaleDraftItemRequest(null, BigDecimal.ONE, 25000L,
+                        "Mon moi", "phan")));
+
+        var response = service.replace(token, "7", "11", request);
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().getFirst().productId()).isNull();
+        assertThat(response.items().getFirst().productName()).isEqualTo("Mon moi");
+        verify(draftItemRepository).deleteAllByDraftId(11L);
+        verify(productRepository, never()).findByIdAndShopIdAndStatus(any(), any(), any());
+    }
+
+    @Test
+    void paidDraftCanConfirmWithArchivedCustomerUsingItsExistingSnapshot() {
+        SaleDraft draft = draft(25000L, PaymentMethod.CASH);
+        draft.replace(22L, "Snapshot customer", "0901234567", 0, 25000, 25000, PaymentMethod.CASH);
+        when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
+        when(draftItemRepository.findAllByDraftIdOrderByIdAsc(11L)).thenReturn(List.of(
+                SaleDraftItem.createCustom(11L, "Custom", "piece", BigDecimal.ONE, 25000L, 25000L)));
+        when(saleRepository.saveAndFlush(any(Sale.class))).thenAnswer(invocation -> {
+            Sale sale = invocation.getArgument(0);
+            ReflectionTestUtils.setField(sale, "id", 15L);
+            return sale;
+        });
+        when(saleItemRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.confirm(token, "7", "11");
+
+        assertThat(result.customerId()).isNull();
+        assertThat(result.customerName()).isEqualTo("Snapshot customer");
+        assertThat(result.customerPhone()).isEqualTo("0901234567");
+        assertThat(result.paymentStatus()).isEqualTo(PaymentStatus.PAID);
+        verify(customerRepository).findByIdAndShopIdAndStatus(22L, 7L, CatalogStatus.ACTIVE);
+        verify(customerRepository, never()).save(any());
+        verify(debtRepository, never()).save(any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {0, 10000})
+    void unpaidOrPartialDraftCannotConfirmWithArchivedSelectedCustomer(long paid) {
+        SaleDraft draft = draft(paid, paid == 0 ? null : PaymentMethod.CASH);
+        draft.replace(22L, "Snapshot customer", "0901234567", 0, 25000, paid,
+                paid == 0 ? null : PaymentMethod.CASH);
+        when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
+
+        assertThatThrownBy(() -> service.confirm(token, "7", "11"))
+                .isInstanceOfSatisfying(BusinessException.class, error ->
+                        assertThat(error.getErrorCode()).isEqualTo(ErrorCode.CUSTOMER_NOT_FOUND));
+        verify(saleRepository, never()).saveAndFlush(any());
+        verify(customerRepository, never()).save(any());
+        verify(debtRepository, never()).save(any());
+        verify(paymentRepository, never()).save(any());
+        verify(auditLogService, never()).recordOwner(any(), any(), any(), any(), any(), any());
     }
 
     private Product product(BigDecimal stock) {

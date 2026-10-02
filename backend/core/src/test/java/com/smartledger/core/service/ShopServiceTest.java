@@ -33,7 +33,8 @@ class ShopServiceTest {
 
     private final AuthIdentityRepository authIdentityRepository = Mockito.mock(AuthIdentityRepository.class);
     private final ShopRepository shopRepository = Mockito.mock(ShopRepository.class);
-    private final ShopService service = new ShopServiceImpl(authIdentityRepository, shopRepository);
+    private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
+    private final ShopService service = new ShopServiceImpl(authIdentityRepository, shopRepository, auditLogService);
 
     @Test
     void createsAnActiveShopForTheCurrentOwner() {
@@ -162,6 +163,22 @@ class ShopServiceTest {
 
         ShopResponse response = service.getById(firebaseToken(), "7");
         assertThat(response.inactiveReason()).isEqualTo("Subscription expired");
+    }
+
+    @Test
+    void ownerCannotArchiveAnInactiveShopOrEraseTheAdminReason() {
+        UserAccount owner = owner();
+        authenticateAs(owner);
+        Shop shop = Shop.create(owner.getId(), "Tiệm Thảo", "Grocery", null, null);
+        shop.deactivate("Policy review");
+        when(shopRepository.findByIdAndOwnerId(eq(7L), any())).thenReturn(Optional.of(shop));
+
+        assertThatThrownBy(() -> service.archiveById(firebaseToken(), "7",
+                new ArchiveShopRequest("No longer operating")))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.SHOP_INACTIVE));
+        assertThat(shop.getStatus()).isEqualTo(ShopStatus.INACTIVE);
+        assertThat(shop.getInactiveReason()).isEqualTo("Policy review");
     }
 
     @Test

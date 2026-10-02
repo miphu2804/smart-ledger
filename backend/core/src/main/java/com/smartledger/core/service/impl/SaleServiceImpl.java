@@ -5,6 +5,7 @@ import com.smartledger.core.dto.response.SaleResponse;
 import com.smartledger.core.entity.Sale;
 import com.smartledger.core.entity.SaleItem;
 import com.smartledger.core.entity.Shop;
+import com.smartledger.core.enums.SaleStatus;
 import com.smartledger.core.enums.ErrorCode;
 import com.smartledger.core.exception.BusinessException;
 import com.smartledger.core.repository.SaleItemRepository;
@@ -53,7 +54,9 @@ public class SaleServiceImpl implements SaleService {
                 sale.getCustomerPhoneSnapshot(), sale.getSubtotalVnd(), sale.getDiscountVnd(),
                 sale.getTotalVnd(), sale.getPaidVnd(), sale.getSaleStatus(), sale.getPaymentStatus(),
                 sale.getSoldAt(), items.stream().map(SaleServiceImpl::toItemResponse).toList(),
-                sale.getCustomerId(), sale.getTotalVnd() - sale.getPaidVnd());
+                sale.getCustomerId(), sale.getSaleStatus() == SaleStatus.VOIDED
+                        ? 0L : sale.getTotalVnd() - sale.getPaidVnd(),
+                sale.getVoidedAt(), sale.getVoidedByUserId(), sale.getVoidReason());
     }
 
     private static SaleItemResponse toItemResponse(SaleItem item) {

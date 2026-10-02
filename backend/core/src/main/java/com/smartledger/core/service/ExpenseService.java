@@ -7,7 +7,8 @@ import com.smartledger.core.security.VerifiedFirebaseToken;
 import java.util.List;
 
 public interface ExpenseService {
-    ExpenseResponse create(VerifiedFirebaseToken token, String shopId, ExpenseWriteRequest request);
+    ExpenseResponse create(VerifiedFirebaseToken token, String shopId, String idempotencyKey,
+            ExpenseWriteRequest request);
 
     List<ExpenseResponse> list(VerifiedFirebaseToken token, String shopId, String period);
 

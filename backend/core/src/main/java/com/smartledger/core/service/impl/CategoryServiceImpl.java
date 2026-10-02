@@ -1,5 +1,7 @@
 package com.smartledger.core.service.impl;
 
+import com.smartledger.core.enums.AuditAction;
+import com.smartledger.core.service.AuditLogService;
 import com.smartledger.core.dto.request.CategoryWriteRequest;
 import com.smartledger.core.dto.response.CategoryResponse;
 import com.smartledger.core.entity.Category;
@@ -14,17 +16,20 @@ import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.CategoryService;
 import com.smartledger.core.service.ShopService;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class CategoryServiceImpl implements CategoryService {
+    private final AuditLogService auditLogService;
     private final ShopService shopService;
     private final CategoryRepository categoryRepository;
     private final ProductRepository productRepository;
 
     public CategoryServiceImpl(ShopService shopService, CategoryRepository categoryRepository,
-            ProductRepository productRepository) {
+            ProductRepository productRepository, AuditLogService auditLogService) {
+        this.auditLogService = auditLogService;
         this.shopService = shopService;
         this.categoryRepository = categoryRepository;
         this.productRepository = productRepository;
@@ -34,7 +39,9 @@ public class CategoryServiceImpl implements CategoryService {
     @Transactional
     public CategoryResponse create(VerifiedFirebaseToken firebaseToken, String shopId, CategoryWriteRequest request) {
         Shop shop = shopService.requireOwnedActiveShop(firebaseToken, shopId);
-        return toResponse(categoryRepository.save(Category.create(shop.getId(), request.name().trim())));
+        Category category = categoryRepository.save(Category.create(shop.getId(), request.name().trim()));
+        auditLogService.recordOwner(shop, AuditAction.CATEGORY_CREATED, category.getId(), null, null, Map.of());
+        return toResponse(category);
     }
 
     @Override
@@ -59,6 +66,8 @@ public class CategoryServiceImpl implements CategoryService {
         Shop shop = shopService.requireOwnedActiveShop(firebaseToken, shopId);
         Category category = requireActiveCategory(shop.getId(), categoryId);
         category.rename(request.name().trim());
+        auditLogService.recordOwner(shop, AuditAction.CATEGORY_UPDATED, category.getId(), null, null,
+                Map.of("changedFields", List.of("name")));
         return toResponse(category);
     }
 
@@ -72,6 +81,7 @@ public class CategoryServiceImpl implements CategoryService {
             throw new BusinessException(ErrorCode.CATEGORY_HAS_PRODUCTS);
         }
         category.archive(shop.getOwnerId());
+        auditLogService.recordOwner(shop, AuditAction.CATEGORY_ARCHIVED, category.getId(), null, null, Map.of());
     }
 
     private Category requireActiveCategory(Long shopId, String categoryId) {

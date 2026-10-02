@@ -74,6 +74,20 @@ public class SaleDraftItem {
         return item;
     }
 
+    public static SaleDraftItem createCustom(Long draftId, String productName, String unit,
+            BigDecimal quantity, long unitPriceVnd, long lineTotalVnd) {
+        SaleDraftItem item = new SaleDraftItem();
+        item.draftId = draftId;
+        item.rawProductName = productName;
+        item.productNameSnapshot = productName;
+        item.unitSnapshot = unit;
+        item.quantity = quantity;
+        item.unitPriceVnd = unitPriceVnd;
+        item.lineTotalVnd = lineTotalVnd;
+        item.needsReview = false;
+        return item;
+    }
+
     @PrePersist
     void onCreate() {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);

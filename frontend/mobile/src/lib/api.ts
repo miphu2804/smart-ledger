@@ -9,7 +9,8 @@ import { mockCoreRequest } from './mockCore';
  * Client gọi Core (backend/core, Spring Boot):
  * - Base `${API_ENDPOINT}/api/v1`. Mọi request gửi `Authorization: Bearer <Firebase ID token>`; Core tự xác thực
  *   token bằng Firebase Admin SDK. Token lấy mới mỗi request (SDK tự làm mới khi gần hết hạn, app không tự lưu).
- * - Endpoint nghiệp vụ của OWNER gửi thêm `X-Shop-Id` (bật bằng `withShop`).
+ * - Endpoint nghiệp vụ của OWNER gửi thêm `X-Shop-Id` (bật bằng `withShop`). POST ghi tiền gửi thêm
+ *   `Idempotency-Key` (`idempotencyKey`, sinh/giữ key ở `idempotency.ts`).
  * - Lỗi của Core: `{ code, message, details?, traceId }` (details: `[{ field, issue }]`). Lỗi của AI service: `{ detail }`.
  *   401 → đăng xuất.
  * - Quá thời gian chờ (mặc định 15 giây) → ApiError status 0, code 'timeout' (không để app quay vô hạn khi
@@ -46,6 +47,8 @@ export async function apiRequest<T>(
     /** false = 401 chỉ ném lỗi, không tự đăng xuất (dùng cho bước đổi token lấy phiên lúc đăng nhập) */
     handle401?: boolean;
     timeoutMs?: number;
+    /** Header Idempotency-Key — bắt buộc với POST /expenses và POST /debts/{id}/payments */
+    idempotencyKey?: string;
   } = {},
 ): Promise<T> {
   const method = opts.method ?? (opts.body === undefined ? 'GET' : 'POST');
@@ -73,6 +76,7 @@ export async function apiRequest<T>(
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(opts.withShop && activeShopId ? { 'X-Shop-Id': activeShopId } : {}),
+        ...(opts.idempotencyKey ? { 'Idempotency-Key': opts.idempotencyKey } : {}),
       },
       body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
       signal: ctrl.signal,

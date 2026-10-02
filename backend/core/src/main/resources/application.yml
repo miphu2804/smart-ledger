@@ -21,6 +21,10 @@ ai:
   base-url: ${AI_BASE_URL:http://localhost:8001}
   internal-token: ${INTERNAL_API_TOKEN:}
 
+smartledger:
+  idempotency:
+    ttl-days: ${IDEMPOTENCY_TTL_DAYS:30}
+
 springdoc:
   api-docs:
     path: /v3/api-docs
