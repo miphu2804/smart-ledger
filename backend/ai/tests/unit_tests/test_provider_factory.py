@@ -38,3 +38,13 @@ def test_build_chat_model_returns_none_for_unknown_provider() -> None:
     config = AppConfig(MODEL_PROVIDER="unknown")
 
     assert build_chat_model(config) is None
+
+
+def test_build_chat_model_uses_responses_api_with_configured_reasoning() -> None:
+    config = AppConfig(OPENAI_API_KEY="sk-test", MODEL_REASONING_EFFORT="high")
+
+    model = build_chat_model(config)
+    payload = model._get_request_payload([("user", "hi")])
+
+    assert model.use_responses_api is True
+    assert payload["reasoning"] == {"effort": "high"}

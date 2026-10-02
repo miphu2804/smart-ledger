@@ -39,14 +39,18 @@ class UserMessagesChatModel(FakeListChatModel):
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client(internal_headers: dict[str, str]) -> TestClient:
     app.state.fake_conversations = Mock(spec=AgentConversationRepository)
-    app.state.fake_conversations.recent_messages.return_value = []
+    app.state.fake_conversations.context_for.return_value = {
+        "summary": None,
+        "summary_through_message_id": None,
+        "messages": [],
+    }
     app.state.fake_conversations.save_exchange.return_value = (101, 502)
     app.state.agent = AgentService(
         FakeChatModel(responses=["trả lời"]), app.state.fake_conversations
     )
-    return TestClient(app)
+    return TestClient(app, headers=internal_headers, raise_server_exceptions=False)
 
 
 def chat(
@@ -214,7 +218,7 @@ def test_conversation_rename_endpoint_accepts_and_trims_valid_titles(
 
 
 def test_chat_hides_conversation_owned_by_another_scope(client: TestClient) -> None:
-    app.state.fake_conversations.recent_messages.side_effect = ConversationNotFoundError
+    app.state.fake_conversations.context_for.side_effect = ConversationNotFoundError
 
     response = chat(client, conversation_id=101)
 
