@@ -14,7 +14,8 @@ from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
 from src.agent.service import AgentService
-from src.sql.executor import ReadOnlySqlExecutor, SqlToolError
+from src.sql.executor import ReadOnlySqlExecutor, SqlQueryError
+from src.sql.guard import UnsafeSqlError
 
 BACKEND_ROOT = Path(__file__).resolve().parents[3]
 CORE_MIGRATIONS = BACKEND_ROOT / "core/src/main/resources/db/migration"
@@ -201,10 +202,10 @@ def test_shop_profile_shows_only_the_current_shop_without_owner_contact(
 def test_shop_a_cannot_reach_shop_b(reader_db: ReaderDatabase, query: str) -> None:
     text = query.format(shop_b=reader_db.shop_b, base=reader_db.base_schema)
 
-    with pytest.raises(SqlToolError) as error:
+    with pytest.raises((UnsafeSqlError, SqlQueryError)) as error:
         reader_db.executor().run(reader_db.shop_a, text)
 
-    assert error.value.code in {"unsafe_sql", "sql_error"}
+    assert error.value.code in {"UNSAFE_TABLE", "UNSAFE_FUNCTION", "SQL_ERROR"}
 
 
 def test_errors_raised_by_a_filter_do_not_leak_other_shops(
@@ -212,13 +213,13 @@ def test_errors_raised_by_a_filter_do_not_leak_other_shops(
 ) -> None:
     # Without security_barrier the planner may run the cast on shop B's rows first,
     # and the cast error would quote shop B's product name.
-    with pytest.raises(SqlToolError) as error:
+    with pytest.raises(SqlQueryError) as error:
         reader_db.executor().run(
             reader_db.shop_a,
             "SELECT name FROM v_products WHERE CAST(name AS bigint) > 0",
         )
 
-    assert error.value.code == "sql_error"
+    assert error.value.code == "SQL_ERROR"
     assert "invalid input syntax" in error.value.message
     assert SHOP_B_SECRET not in error.value.message
 
@@ -284,10 +285,10 @@ def test_slow_query_hits_the_statement_timeout(reader_db: ReaderDatabase) -> Non
         "WHERE i < 100000000) SELECT count(*) FROM n"
     )
 
-    with pytest.raises(SqlToolError) as error:
+    with pytest.raises(SqlQueryError) as error:
         reader_db.executor(timeout_ms=200).run(reader_db.shop_a, query)
 
-    assert error.value.code == "sql_timeout"
+    assert error.value.code == "QUERY_TIMEOUT"
 
 
 def test_rows_are_capped_and_marked_truncated(reader_db: ReaderDatabase) -> None:
@@ -346,4 +347,4 @@ def test_chat_turn_answers_after_a_timed_out_query(reader_db: ReaderDatabase) ->
     assert result.answer == "Mình chưa lấy được dữ liệu lúc này."
     tool_message = model.seen_calls[-1][-1]
     assert tool_message.type == "tool"
-    assert tool_message.content.startswith("ERROR sql_timeout")
+    assert tool_message.content.startswith("Error[QUERY_TIMEOUT]")

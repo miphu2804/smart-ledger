@@ -10,6 +10,8 @@ and that rendering is parsed and checked again, so a construct the parser misrea
 reach the database unchecked.
 """
 
+import re
+
 import sqlglot
 from sqlglot import exp
 from sqlglot.errors import SqlglotError
@@ -117,12 +119,17 @@ ALLOWED_ROOTS: tuple[type[exp.Expression], ...] = (exp.Select, exp.SetOperation)
 
 
 class UnsafeSqlError(ValueError):
-    """The model's SQL was rejected; `code` is safe to show to the model."""
+    """The model's SQL was rejected; `code` and `detail` are safe to show the model."""
 
     def __init__(self, code: str, detail: str = "") -> None:
         super().__init__(f"{code}: {detail}" if detail else code)
         self.code = code
         self.detail = detail
+
+
+def _plain(text: str) -> str:
+    # sqlglot underlines the failing token with ANSI escapes; keep one clean line.
+    return re.sub(r"\x1b\[[0-9;]*m", "", text).splitlines()[0][:200]
 
 
 def validate_and_wrap(sql: str, row_limit: int) -> str:
@@ -134,14 +141,14 @@ def validate_and_wrap(sql: str, row_limit: int) -> str:
     if not isinstance(row_limit, int) or row_limit < 1:
         raise ValueError("row_limit must be a positive integer")
     if not sql or not sql.strip():
-        raise UnsafeSqlError("empty_sql")
+        raise UnsafeSqlError("EMPTY_SQL", "no SQL statement given")
     if len(sql) > MAX_SQL_CHARS:
-        raise UnsafeSqlError("sql_too_long", f"limit {MAX_SQL_CHARS} characters")
+        raise UnsafeSqlError("SQL_TOO_LONG", f"keep it under {MAX_SQL_CHARS} chars")
 
     rendered = _render(_check(_parse(sql)))
     # Re-check what will actually run, and require the rendering to be stable.
     if _render(_check(_parse(rendered))) != rendered:
-        raise UnsafeSqlError("unsupported_syntax", "query does not round-trip")
+        raise UnsafeSqlError("UNSUPPORTED_SYNTAX", "rewrite the query more simply")
     return f"SELECT * FROM ({rendered}) AS q LIMIT {row_limit}"
 
 
@@ -153,28 +160,32 @@ def _parse(sql: str) -> exp.Expression:
             if statement is not None
         ]
     except (SqlglotError, RecursionError, ValueError) as error:
-        raise UnsafeSqlError("parse_error", str(error).splitlines()[0][:200]) from None
+        raise UnsafeSqlError("PARSE_ERROR", _plain(str(error))) from None
     if not statements:
-        raise UnsafeSqlError("empty_sql")
+        raise UnsafeSqlError("EMPTY_SQL", "no SQL statement given")
     if len(statements) > 1:
-        raise UnsafeSqlError("multiple_statements")
+        raise UnsafeSqlError("MULTIPLE_STATEMENTS", "send exactly one SELECT")
     return statements[0]
 
 
 def _check(tree: exp.Expression) -> exp.Expression:
     if not isinstance(tree, ALLOWED_ROOTS):
-        raise UnsafeSqlError("not_select", type(tree).__name__)
+        raise UnsafeSqlError("NOT_SELECT", "only a single SELECT is allowed")
     # Unquoted identifiers fold to lower case as in Postgres, so `PRODUCTS` equals
     # `products` while a quoted `"V_PRODUCTS"` does not match `v_products`.
     tree = normalize_identifiers(tree, dialect=DIALECT)
 
     for node in tree.walk():
         if isinstance(node, FORBIDDEN_NODES):
-            raise UnsafeSqlError("forbidden_clause", type(node).__name__)
+            raise UnsafeSqlError(
+                "UNSAFE_CLAUSE", f"{type(node).__name__.upper()} is not allowed"
+            )
         if isinstance(node, FORBIDDEN_LITERALS):
-            raise UnsafeSqlError("forbidden_literal", type(node).__name__)
+            raise UnsafeSqlError("UNSAFE_LITERAL", "use a plain 'quoted' string")
         if isinstance(node, exp.Func) and not isinstance(node, ALLOWED_FUNCTIONS):
-            raise UnsafeSqlError("forbidden_function", _function_name(node))
+            raise UnsafeSqlError(
+                "UNSAFE_FUNCTION", f"{_function_name(node)} is not allowed"
+            )
         if isinstance(node, exp.Cast):
             _check_cast(node)
 
@@ -185,13 +196,15 @@ def _check(tree: exp.Expression) -> exp.Expression:
 def _function_name(node: exp.Func) -> str:
     if isinstance(node, exp.Anonymous):
         return str(node.name)
-    return node.sql_name()
+    return node.sql_name().lower()
 
 
 def _check_cast(node: exp.Cast) -> None:
     target = node.to
     if not isinstance(target, exp.DataType) or target.this not in ALLOWED_CAST_TYPES:
-        raise UnsafeSqlError("forbidden_cast", target.sql(dialect=DIALECT))
+        raise UnsafeSqlError(
+            "UNSAFE_CAST", f"cast to {target.sql(dialect=DIALECT)} is not allowed"
+        )
 
 
 def _check_tables(tree: exp.Expression) -> None:
@@ -200,7 +213,7 @@ def _check_tables(tree: exp.Expression) -> None:
     try:
         scopes = list(traverse_scope(tree))
     except (SqlglotError, RecursionError, ValueError) as error:
-        raise UnsafeSqlError("unsupported_syntax", str(error)[:200]) from None
+        raise UnsafeSqlError("UNSUPPORTED_SYNTAX", _plain(str(error))) from None
     for scope in scopes:
         for table in scope.tables:
             checked.add(id(table))
@@ -215,17 +228,22 @@ def _check_tables(tree: exp.Expression) -> None:
 
 def _check_view(table: exp.Table) -> None:
     if not isinstance(table.this, exp.Identifier):
-        raise UnsafeSqlError("forbidden_table", table.sql(dialect=DIALECT))
+        raise UnsafeSqlError("UNSAFE_TABLE", _table_message(table))
     if table.args.get("catalog") is not None:
-        raise UnsafeSqlError("forbidden_table", table.sql(dialect=DIALECT))
+        raise UnsafeSqlError("UNSAFE_TABLE", _table_message(table))
     schema = table.args.get("db")
     if schema is not None and schema.name != VIEW_SCHEMA:
-        raise UnsafeSqlError("forbidden_table", table.sql(dialect=DIALECT))
+        raise UnsafeSqlError("UNSAFE_TABLE", _table_message(table))
     if table.name not in ALLOWED_VIEWS:
-        raise UnsafeSqlError("forbidden_table", table.sql(dialect=DIALECT))
+        raise UnsafeSqlError("UNSAFE_TABLE", _table_message(table))
     # The executor resolves the views through its search_path; dropping the qualifier
     # keeps the check and the run independent of the deployed schema name.
     table.set("db", None)
+
+
+def _table_message(table: exp.Table) -> str:
+    views = ", ".join(sorted(ALLOWED_VIEWS))
+    return f"{table.sql(dialect=DIALECT)} is not allowed; use only {views}"
 
 
 def _render(tree: exp.Expression) -> str:

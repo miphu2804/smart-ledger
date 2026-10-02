@@ -54,7 +54,7 @@ def test_rejects_statements_other_than_select(sql: str) -> None:
     ],
 )
 def test_rejects_several_statements(sql: str) -> None:
-    assert rejected(sql) in {"multiple_statements", "forbidden_function"}
+    assert rejected(sql) in {"MULTIPLE_STATEMENTS", "UNSAFE_FUNCTION"}
 
 
 @pytest.mark.parametrize(
@@ -83,7 +83,7 @@ def test_rejects_several_statements(sql: str) -> None:
     ],
 )
 def test_rejects_functions_outside_the_allowlist(sql: str) -> None:
-    assert rejected(sql) in {"forbidden_function", "forbidden_table", "parse_error"}
+    assert rejected(sql) in {"UNSAFE_FUNCTION", "UNSAFE_TABLE", "PARSE_ERROR"}
 
 
 @pytest.mark.parametrize(
@@ -98,7 +98,7 @@ def test_rejects_functions_outside_the_allowlist(sql: str) -> None:
     ],
 )
 def test_rejects_casts_to_system_types(sql: str) -> None:
-    assert rejected(sql) == "forbidden_cast"
+    assert rejected(sql) == "UNSAFE_CAST"
 
 
 @pytest.mark.parametrize(
@@ -136,7 +136,7 @@ def test_rejects_casts_to_system_types(sql: str) -> None:
     ],
 )
 def test_rejects_tables_outside_the_views(sql: str) -> None:
-    assert rejected(sql) == "forbidden_table"
+    assert rejected(sql) == "UNSAFE_TABLE"
 
 
 @pytest.mark.parametrize(
@@ -151,7 +151,7 @@ def test_rejects_tables_outside_the_views(sql: str) -> None:
     ],
 )
 def test_rejects_locking_into_and_parameters(sql: str) -> None:
-    assert rejected(sql) == "forbidden_clause"
+    assert rejected(sql) == "UNSAFE_CLAUSE"
 
 
 @pytest.mark.parametrize(
@@ -164,13 +164,13 @@ def test_rejects_locking_into_and_parameters(sql: str) -> None:
     ],
 )
 def test_rejects_escape_string_forms(sql: str) -> None:
-    assert rejected(sql) == "forbidden_literal"
+    assert rejected(sql) == "UNSAFE_LITERAL"
 
 
 def test_backslash_does_not_end_a_standard_string() -> None:
     # Postgres keeps the backslash literal, so set_config here is real code.
     sql = r"SELECT 'a\' , set_config('smartledger.shop_id', '2', true) --'"
-    assert rejected(sql) == "forbidden_function"
+    assert rejected(sql) == "UNSAFE_FUNCTION"
 
 
 @pytest.mark.parametrize(
@@ -178,11 +178,11 @@ def test_backslash_does_not_end_a_standard_string() -> None:
     ["", "   ", ";", "-- only a comment", "/* x */", "SELECT FROM WHERE (("],
 )
 def test_rejects_empty_or_broken_sql(sql: str) -> None:
-    assert rejected(sql) in {"empty_sql", "parse_error", "not_select"}
+    assert rejected(sql) in {"EMPTY_SQL", "PARSE_ERROR", "NOT_SELECT"}
 
 
 def test_rejects_overlong_sql() -> None:
-    assert rejected("SELECT 1 " + " " * 5000) == "sql_too_long"
+    assert rejected("SELECT 1 " + " " * 5000) == "SQL_TOO_LONG"
 
 
 @pytest.mark.parametrize(
@@ -260,5 +260,18 @@ def test_error_code_is_safe_to_report() -> None:
     with pytest.raises(UnsafeSqlError) as error:
         validate_and_wrap("SELECT set_config('a', 'b', true)", 10)
 
-    assert error.value.code == "forbidden_function"
-    assert re.fullmatch(r"[a-z_]+", error.value.code)
+    assert error.value.code == "UNSAFE_FUNCTION"
+    assert re.fullmatch(r"[A-Z_]+", error.value.code)
+
+
+def test_error_detail_names_the_problem_without_terminal_escapes() -> None:
+    with pytest.raises(UnsafeSqlError) as function_error:
+        validate_and_wrap("SELECT set_config('a', 'b', true)", 10)
+    with pytest.raises(UnsafeSqlError) as table_error:
+        validate_and_wrap("SELECT * FROM products", 10)
+    with pytest.raises(UnsafeSqlError) as parse_error:
+        validate_and_wrap("SELECT FROM WHERE ((", 10)
+
+    assert function_error.value.detail == "set_config is not allowed"
+    assert table_error.value.detail.startswith("products is not allowed; use only")
+    assert "\x1b" not in parse_error.value.detail

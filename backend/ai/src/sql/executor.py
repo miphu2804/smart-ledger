@@ -4,6 +4,10 @@ Each run opens its own connection (separate from the chat-history connection), s
 READ ONLY transaction, binds the shop from the authenticated request, caps run time and
 rows, and always rolls back. The shop id is a bound parameter supplied by the caller;
 nothing the model writes can set it.
+
+Errors: `UnsafeSqlError` (guard) and `SqlQueryError` (database rejected or timed out
+the query) are meant to go back to the model; `SqlUnavailableError` is infrastructure
+and should fail the turn.
 """
 
 import datetime as dt
@@ -14,7 +18,7 @@ from decimal import Decimal
 import psycopg
 from psycopg import errors, sql
 
-from src.sql.guard import VIEW_SCHEMA, UnsafeSqlError, validate_and_wrap
+from src.sql.guard import VIEW_SCHEMA, validate_and_wrap
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +33,20 @@ class SqlResult:
     truncated: bool
 
 
-class SqlToolError(Exception):
-    """A query that could not run; `code` and `message` are safe to show the model."""
+class SqlQueryError(Exception):
+    """The database rejected or cancelled the query.
+
+    `code` and `message` are safe to show the model, which can rewrite the query.
+    """
 
     def __init__(self, code: str, message: str = "") -> None:
         super().__init__(f"{code}: {message}" if message else code)
         self.code = code
         self.message = message
+
+
+class SqlUnavailableError(RuntimeError):
+    """The reader database cannot be reached; the chat turn fails as ai_unavailable."""
 
 
 class ReadOnlySqlExecutor:
@@ -56,21 +67,17 @@ class ReadOnlySqlExecutor:
     def run(self, shop_id: int, query: str) -> SqlResult:
         if not isinstance(shop_id, int) or isinstance(shop_id, bool) or shop_id < 1:
             raise ValueError("shop_id must be a positive integer")
-        try:
-            # One extra row tells whether the result was cut at row_limit.
-            wrapped = validate_and_wrap(query, self.row_limit + 1)
-        except UnsafeSqlError as error:
-            raise SqlToolError(
-                "unsafe_sql", f"{error.code} {error.detail}".strip()
-            ) from None
+        # One extra row tells whether the result was cut at row_limit. UnsafeSqlError
+        # propagates to the caller unchanged.
+        wrapped = validate_and_wrap(query, self.row_limit + 1)
 
         try:
             connection = psycopg.connect(
                 self.connection_string, connect_timeout=CONNECT_TIMEOUT_SECONDS
             )
-        except psycopg.Error:
-            logger.warning("sql reader connect failed", exc_info=True)
-            raise SqlToolError("sql_unavailable", "database unavailable") from None
+        except psycopg.Error as error:
+            logger.warning("sql reader connect failed: %s", type(error).__name__)
+            raise SqlUnavailableError("sql reader unavailable") from None
 
         try:
             connection.read_only = True
@@ -80,11 +87,14 @@ class ReadOnlySqlExecutor:
                 columns = [column.name for column in cursor.description or []]
                 rows = cursor.fetchall()
         except errors.QueryCanceled:
-            raise SqlToolError(
-                "sql_timeout", f"query exceeded {self.timeout_ms} ms"
+            raise SqlQueryError(
+                "QUERY_TIMEOUT", f"query exceeded {self.timeout_ms} ms; simplify it"
             ) from None
+        except (psycopg.OperationalError, psycopg.InterfaceError) as error:
+            logger.warning("sql reader failed: %s", type(error).__name__)
+            raise SqlUnavailableError("sql reader unavailable") from None
         except psycopg.Error as error:
-            raise SqlToolError("sql_error", _error_message(error)) from None
+            raise SqlQueryError("SQL_ERROR", _error_message(error)) from None
         finally:
             try:
                 connection.rollback()

@@ -45,6 +45,11 @@ class AppConfig(BaseSettings):
     # background summarization model; unset falls back to MODEL_NAME
     SUMMARY_MODEL_NAME: str | None = None
 
+    # agent guardrails (src/agent/guardrails.py), per chat turn
+    AGENT_MAX_INPUT_CHARS: int = Field(default=2000, gt=0)
+    AGENT_MODEL_CALL_LIMIT: int = Field(default=4, gt=0)
+    AGENT_TOOL_CALL_LIMIT: int = Field(default=3, gt=0)
+
     # openai
     OPENAI_API_KEY: str | None = None
     OPENAI_BASE_URL: str | None = None

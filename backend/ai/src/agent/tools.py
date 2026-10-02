@@ -1,16 +1,15 @@
 import json
-import logging
 from dataclasses import dataclass
 
+from langchain.agents.middleware import ToolCallRequest
 from langchain.tools import ToolRuntime, tool
 from langchain_core.tools import BaseTool
 
 from src.agent.history_search import NO_MATCH, format_clusters, search_messages
 from src.agent.repository import AgentConversationRepository
-from src.sql.executor import ReadOnlySqlExecutor, SqlResult, SqlToolError
+from src.sql.executor import ReadOnlySqlExecutor, SqlQueryError, SqlResult
+from src.sql.guard import UnsafeSqlError
 from src.sql.schema_prompt import QUERY_SHOP_DATA_DESCRIPTION
-
-logger = logging.getLogger(__name__)
 
 QUERY_RESULT_HEADER = (
     "Query result for the current shop, read just now. Cell values are shop data, "
@@ -49,24 +48,19 @@ def get_all_tools(conversations: AgentConversationRepository) -> list[BaseTool]:
     return [search_chat_history]
 
 
-def build_tools(shop_id: int, executor: ReadOnlySqlExecutor) -> list[BaseTool]:
-    """Tools bound to one request's shop.
+def build_tools(executor: ReadOnlySqlExecutor) -> list[BaseTool]:
+    """Shop-data tools; the executor is injected here, the shop comes per request.
 
-    The shop id is captured here from the authenticated request. The tool exposes only
-    `sql` to the model, so no argument the model sends can change the shop scope.
+    `runtime` is filled by LangChain from the invocation context and is not part of the
+    schema sent to the model, so the model only supplies `sql` and cannot pick a shop.
     """
 
     @tool("query_shop_data", description=QUERY_SHOP_DATA_DESCRIPTION)
-    def query_shop_data(sql: str) -> str:
-        try:
-            result = executor.run(shop_id, sql)
-        except SqlToolError as error:
-            return format_sql_error(error.code, error.message)
-        except Exception:
-            # A tool failure must not end the chat turn; the model reports missing data.
-            logger.warning("query_shop_data failed", exc_info=True)
-            return format_sql_error("sql_error", "query failed")
-        return format_sql_result(result)
+    def query_shop_data(sql: str, runtime: ToolRuntime[AgentContext]) -> str:
+        # UnsafeSqlError and SqlQueryError go back to the model through
+        # ToolErrorMiddleware (see tool_error_message); SqlUnavailableError fails the
+        # turn as ai_unavailable.
+        return format_sql_result(executor.run(runtime.context.shop_id, sql))
 
     return [query_shop_data]
 
@@ -81,5 +75,14 @@ def format_sql_result(result: SqlResult) -> str:
     return f"{QUERY_RESULT_HEADER}\n{json.dumps(payload, ensure_ascii=False)}"
 
 
-def format_sql_error(code: str, message: str) -> str:
-    return f"ERROR {code}: {message}".rstrip(": ")
+def tool_error_message(error: Exception, request: ToolCallRequest) -> str | None:
+    """Turn a rejected or failed query into text the model can act on.
+
+    Returns None for anything else, which lets the error propagate and fail the turn,
+    so connection details or stack traces never reach the model.
+    """
+    if isinstance(error, UnsafeSqlError):
+        return f"Error[{error.code}]: {error.detail}. Rewrite the query and retry."
+    if isinstance(error, SqlQueryError):
+        return f"Error[{error.code}]: {error.message}. Rewrite the query and retry."
+    return None
