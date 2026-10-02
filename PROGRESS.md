@@ -1,3 +1,19 @@
+### [2026-10-02 23:58 UTC+07:00] — [Feature] Core proxies the agent API to AI
+
+**Done:** Core forwards `/api/v1/agent/*` (chat, list, detail, rename, delete) to AI `/internal/v1/agent/*` with `X-Internal-Token`, taking `user_id` and `shop_id` from the verified owner's shop. AI `404` maps to `conversation_not_found`; timeouts, connection failures and other AI errors map to `503 ai_unavailable`. The AI read timeout is 40 s, below the mobile 45 s chat timeout. Follow-up to the entry below: `AgentService` now requires `guardrail_limits: GuardrailLimits` instead of an optional middleware list, so a caller cannot run the agent without guardrails, and `LEAK_PATTERN` takes view names from `SqlGuard`; AI test placeholder data is English.
+
+**Check:** AI `ruff` clean, `pytest` 233 passed / 22 skipped, and the 48 integration tests pass with `POSTGRES_TEST_URL`; Core `mvn test` 122 passed (Docker, Temurin 21). No end-to-end mobile → Core → AI chat with a live model was run.
+
+### [2026-10-02 23:35 UTC+07:00] — [Refactor] Split the AI agent service by use case
+
+**Done:** `AgentService` now owns only one chat turn. The rolling-summary workflow moved to `ChatSummaryFolder` in `src/agent/summary.py`, next to the pure fold planning it uses. The four conversation list/detail/rename/delete forwarding methods are gone: those routes call `AgentConversationRepository` directly. The two tool factories are now `build_history_tools` and `build_shop_data_tools`, and the agent's guardrails are assembled in `main.py` instead of being read from global config inside the service. No HTTP contract or migration changed.
+
+**Changed files:** `backend/ai/src/agent/{service,summary,routers,tools}.py`, `backend/ai/src/main.py` — modified; `backend/ai/tests/unit_tests/{test_agent_service,test_agent_guardrails,test_shop_data_tool}.py`, `backend/ai/tests/integration_tests/{test_agent_chat,test_agent_conversations,test_internal_auth}.py` — modified; `PROGRESS.md` — updated.
+
+**Flow explained:** `AgentService(model, conversations, sql_executor=None, guardrails=None)` keeps `chat` and `_context_messages`; the summary model is no longer a constructor dependency and the service reads no global settings, so `main.py` builds the middleware with `build_guardrails(app_config.AGENT_*)` and passes it in. `ChatSummaryFolder(summary_model, conversations).fold(conversation_id, user_id, shop_id)` holds the batch loop and `_rewrite_summary`, while `plan_fold`, `split_into_batches` and `FoldPlan` stay pure. `main.py` puts `conversations`, `agent` and `summary_folder` on app state; the chat route resolves the folder for the post-reply background fold, and the conversation routes resolve the repository. Fold behavior, watermark chaining, and the 404/503 mapping are unchanged; the conversation routes no longer 503 when the chat model is absent, a state that was unreachable in production because `app.state.agent` is always an `AgentService`.
+
+**Check:** `uv run ruff check` and `uv run ruff format --check` clean; `uv run pytest`: 255 passed with `POSTGRES_TEST_URL` against a temporary local PostgreSQL 16 (233 passed, 22 skipped without it), matching the pre-refactor baseline. No live model call was made.
+
 ### [2026-10-02 22:35 UTC+07:00] — [Refactor] Unify AI prompts in English and simplify the SQL guard, executor and guardrails
 
 **Done:** All prompt text moved into one package, `backend/ai/src/prompt_templates/`, and rewritten in English as short numbered rules for a small model; the agent still always answers the owner in Vietnamese. The custom exceptions `UnsafeSqlError`, `SqlQueryError` and `SqlUnavailableError`, the `SqlResult` dataclass, the `GuardrailSettings` protocol, `InputLengthGuard`, `OutputGuard` and `ToolErrorMiddleware` are gone. No change to the HTTP contract, the migration or the guard's rules.
