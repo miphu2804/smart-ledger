@@ -15,6 +15,7 @@ import { Header, T } from '../src/components/ui';
 import type { ChatMessage } from '../src/data/types';
 import { normalizeText, vnd } from '../src/lib/format';
 import { bestSellers, monthExpenses, summary } from '../src/lib/stats';
+import { useCoreData } from '../src/lib/useCoreData';
 import { useApp } from '../src/store/AppStore';
 import { colors, font } from '../src/theme';
 
@@ -26,9 +27,13 @@ const QUICK = [
   { label: 'Ai đang nợ tiền?', icon: 'users' },
 ] as const;
 
-/** Trợ lý AI — câu trả lời GIẢ LẬP tính từ dữ liệu mẫu trong app. */
+/** Trợ lý AI — câu trả lời GIẢ LẬP (theo từ khoá), số liệu tính từ dữ liệu thật của tiệm trên Core. */
 export default function Ai() {
-  const app = useApp();
+  const app = useApp(); // chỉ để lấy tên người dùng; số liệu lấy từ Core
+  const core = useCoreData({ invoices: true, products: true, debts: true, expenses: true });
+  // `answer` chạy trong setTimeout sau khi gửi; dùng ref để luôn đọc dữ liệu mới nhất thay vì bản chụp lúc bấm gửi.
+  const coreRef = useRef(core);
+  coreRef.current = core;
   const insets = useSafeAreaInsets();
   const scroll = useRef<ScrollView>(null);
   const [text, setText] = useState('');
@@ -48,36 +53,50 @@ export default function Ai() {
 
   const answer = (q: string): string => {
     const n = normalizeText(q);
+    const { invoices, products, debts, expenses, loading, error } = coreRef.current;
+    // Câu hỏi cần số liệu mà dữ liệu chưa tải xong / tải lỗi thì không được trả lời từ mảng rỗng như thể tiệm chưa có gì.
+    const notReady = loading
+      ? 'Dữ liệu của tiệm đang được tải, bạn hỏi lại sau vài giây nhé.'
+      : error
+        ? `Mình chưa tải được dữ liệu của tiệm (${error}). Bạn kiểm tra kết nối rồi hỏi lại nhé.`
+        : '';
     if (/no|thieu|chua tra/.test(n)) {
-      const owing = app.debts.filter((d) => d.total > d.paid);
+      if (notReady) return notReady;
+      const owing = debts.filter((d) => d.total > d.paid);
       if (!owing.length) return 'Hiện không có khách nào nợ 🎉';
       return `Đang có ${owing.length} khách nợ:\n${owing.map((d) => `• ${d.name}: ${vnd(d.total - d.paid)}`).join('\n')}\nBạn có thể nhắn nhắc nợ trong mục Sổ nợ.`;
     }
     if (/nhap|het hang|ton kho/.test(n)) {
-      const low = app.products.filter((p) => p.tracked && p.stock <= 6);
-      const top = bestSellers(app.invoices, 'week').slice(0, 3);
+      if (notReady) return notReady;
+      const low = products.filter((p) => p.tracked && p.stock <= 6);
+      const top = bestSellers(invoices, 'week').slice(0, 3);
       return `Trong 7 ngày qua:\n${low.map((p) => `• ${p.name}: còn ${p.stock}, cần kiểm tra tồn`).join('\n') || '• Chưa có mặt hàng dưới ngưỡng cảnh báo'}\n\n${top.length ? `Bán chạy: ${top.map((t) => t.name).join(', ')}.` : 'Chưa có đơn đã chốt trong kỳ.'} Chưa đủ dữ liệu để tính số lượng cần nhập.`;
     }
     if (/chay|ban nhieu|top/.test(n)) {
-      const top = bestSellers(app.invoices, 'week').slice(0, 5);
-      return `Top 5 món bán chạy 7 ngày qua:\n${top.map((t, i) => `${i + 1}. ${t.name} — ${t.qty} phần (${vnd(t.revenue)})`).join('\n')}`;
+      if (notReady) return notReady;
+      const top = bestSellers(invoices, 'week').slice(0, 5);
+      if (!top.length) return 'Chưa có đơn đã chốt trong 7 ngày qua nên chưa có món bán chạy.';
+      return `Top ${top.length} món bán chạy 7 ngày qua:\n${top.map((t, i) => `${i + 1}. ${t.name} — ${t.qty} phần (${vnd(t.revenue)})`).join('\n')}`;
     }
     if (/loi|lai|chi phi/.test(n)) {
-      const s = summary(app.invoices, app.products, 'month');
-      const exp = monthExpenses(app.expenses, 0).reduce((a, e) => a + e.amount, 0);
-      return `Tháng này:\n• Doanh thu: ${vnd(s.revenue)}\n• Lãi gộp (trừ giá vốn): ${vnd(s.profit)}\n• Chi phí khác: ${vnd(exp)}\n→ Ước tính còn lại: ${vnd(s.profit - exp)}\n(Số liệu tham khảo, dựa trên giá vốn bạn đã nhập.)`;
+      if (notReady) return notReady;
+      const s = summary(invoices, products, 'month');
+      const exp = monthExpenses(expenses, 0).reduce((a, e) => a + e.amount, 0);
+      return `Tháng này:\n• Doanh thu: ${vnd(s.revenue)}\n• Lãi gộp (trừ giá vốn): ${vnd(s.profit)}\n• Chi phí khác: ${vnd(exp)}\n→ Ước tính còn lại: ${vnd(s.profit - exp)}\n(Số liệu tham khảo: món chưa có giá vốn được tính ước 60% giá bán.)`;
     }
     if (/hom qua/.test(n)) {
-      const s = summary(app.invoices, app.products, 'yesterday');
+      if (notReady) return notReady;
+      const s = summary(invoices, products, 'yesterday');
       return `Hôm qua tiệm có ${s.count} đơn, doanh thu ${vnd(s.revenue)}.`;
     }
     if (/hom nay|bao nhieu|doanh thu/.test(n)) {
-      const s = summary(app.invoices, app.products, 'today');
-      const y = summary(app.invoices, app.products, 'yesterday');
+      if (notReady) return notReady;
+      const s = summary(invoices, products, 'today');
+      const y = summary(invoices, products, 'yesterday');
       const comparison = y.revenue
         ? ` (${s.revenue >= y.revenue ? '+' : ''}${Math.round(((s.revenue - y.revenue) / y.revenue) * 100)}% so với hôm qua)`
         : '';
-      return `Hôm nay tiệm có ${s.count} đơn, doanh thu ${vnd(s.revenue)}${comparison}. ${Math.round(s.voiceRatio * 100)}% đơn được tạo bằng giọng nói.`;
+      return `Hôm nay tiệm có ${s.count} đơn, doanh thu ${vnd(s.revenue)}${comparison}.`;
     }
     return 'Mình chưa hiểu câu hỏi này 😅. Bạn thử hỏi về doanh thu, món bán chạy, nhập hàng, lời lãi hoặc công nợ nhé.';
   };
