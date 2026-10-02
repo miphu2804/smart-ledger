@@ -117,10 +117,25 @@ class SaleDraftServiceTest {
     }
 
     @Test
-    void rejectsCustomItemWithoutNameOrUnitOrMixedWithCatalogProduct() {
+    void rejectsCustomItemWithoutNameOrUnit() {
         for (SaleDraftItemRequest item : List.of(
                 new SaleDraftItemRequest(null, BigDecimal.ONE, 20000L, " ", "phan"),
-                new SaleDraftItemRequest(null, BigDecimal.ONE, 20000L, "Mon", " "),
+                new SaleDraftItemRequest(null, BigDecimal.ONE, 20000L, "Mon", " "))) {
+            SaleDraftWriteRequest request = new SaleDraftWriteRequest(null, null, 0L, 20000L,
+                    PaymentMethod.CASH, List.of(item));
+            assertThatThrownBy(() -> service.create(token, "7", request))
+                    .isInstanceOfSatisfying(BusinessException.class, exception ->
+                            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.DRAFT_ITEM_INVALID));
+        }
+        verify(draftRepository, never()).save(any());
+    }
+
+    @Test
+    void rejectsCatalogItemThatAlsoSendsCustomNameOrUnit() {
+        // The product exists and is ACTIVE, so only the mixed-item rule can reject these requests.
+        when(productRepository.findByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+                .thenReturn(Optional.of(product(new BigDecimal("5.000"))));
+        for (SaleDraftItemRequest item : List.of(
                 new SaleDraftItemRequest(3L, BigDecimal.ONE, 20000L, "Bia thung", null),
                 new SaleDraftItemRequest(3L, BigDecimal.ONE, 20000L, null, "thung"))) {
             SaleDraftWriteRequest request = new SaleDraftWriteRequest(null, null, 0L, 20000L,
@@ -129,6 +144,7 @@ class SaleDraftServiceTest {
                     .isInstanceOfSatisfying(BusinessException.class, exception ->
                             assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.DRAFT_ITEM_INVALID));
         }
+        verify(productRepository, never()).findByIdAndShopIdAndStatus(any(), any(), any());
         verify(draftRepository, never()).save(any());
     }
 
