@@ -3,10 +3,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from src.agent.guardrails import GuardrailLimits
 from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
 from src.agent.routers import agent_failure_handler, conversation_not_found_handler
 from src.agent.routers import router as agent_router
 from src.agent.service import AgentService
+from src.agent.summary import ChatSummaryFolder
 from src.app_config import app_config
 from src.infra.postgre_db_client import PostgreDBClient
 from src.infra.redis_db_client import RedisDBClient
@@ -42,12 +44,18 @@ async def lifespan(app: FastAPI):
     chat_model = build_chat_model(app_config)
     summary_model = build_summary_model(app_config)
     conversations = AgentConversationRepository(postgres)
+    app.state.conversations = conversations
     app.state.agent = AgentService(
         chat_model,
         conversations,
-        summary_model,
+        guardrail_limits=GuardrailLimits(
+            max_input_chars=app_config.AGENT_MAX_INPUT_CHARS,
+            model_call_limit=app_config.AGENT_MODEL_CALL_LIMIT,
+            tool_call_limit=app_config.AGENT_TOOL_CALL_LIMIT,
+        ),
         sql_executor=build_sql_executor(),
     )
+    app.state.summary_folder = ChatSummaryFolder(summary_model, conversations)
     yield
     postgres.close()
     redis.close()

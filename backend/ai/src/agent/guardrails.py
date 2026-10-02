@@ -28,6 +28,7 @@ the read-only role and the shop-scoped views already bound what a query can do.
 """
 
 import re
+from dataclasses import dataclass
 from typing import Any
 
 from langchain.agents.middleware import (
@@ -39,6 +40,8 @@ from langchain.agents.middleware import (
     hook_config,
 )
 from langchain_core.messages import AIMessage, HumanMessage
+
+from src.sql.guard import SqlGuard
 
 INPUT_TOO_LONG_REPLY = (
     "Tin nhắn dài quá {limit} ký tự nên mình chưa đọc được. "
@@ -61,10 +64,12 @@ SECRET_PATTERN = (
 MODEL_LIMIT_NOTICE = "Model call limits exceeded"
 
 # Internals the answer must never show: the view schema and names, the scope setting
-# and its functions, raw tool error codes or a SQL query.
+# and its functions, raw tool error codes or a SQL query. The view names come from
+# SqlGuard, so a view added there is covered here without a second edit.
+_VIEW_NAMES = "|".join(re.escape(view) for view in sorted(SqlGuard.ALLOWED_VIEWS))
 LEAK_PATTERN = re.compile(
-    r"ai_read\.|smartledger\.shop_id|set_config|current_setting|Error\[|"
-    r"\bv_(?:products|categories|shop_profile)\b|"
+    rf"{re.escape(SqlGuard.VIEW_SCHEMA)}\.|smartledger\.shop_id|set_config|"
+    rf"current_setting|Error\[|\b(?:{_VIEW_NAMES})\b|"
     r"\bselect\b[\s\S]{1,400}?\bfrom\b",
     re.IGNORECASE,
 )
@@ -108,11 +113,18 @@ class AgentGuardrails(AgentMiddleware):
         return {"messages": [AIMessage(content=replacement, id=last.id)]}
 
 
-def build_guardrails(
-    max_input_chars: int, model_call_limit: int, tool_call_limit: int
-) -> list[AgentMiddleware]:
+@dataclass(frozen=True)
+class GuardrailLimits:
+    """Per-turn guardrail limits; the composition root supplies them from config."""
+
+    max_input_chars: int
+    model_call_limit: int
+    tool_call_limit: int
+
+
+def build_guardrails(limits: GuardrailLimits) -> list[AgentMiddleware]:
     return [
-        AgentGuardrails(max_input_chars),
+        AgentGuardrails(limits.max_input_chars),
         PIIMiddleware("credit_card", strategy="mask", apply_to_input=True),
         PIIMiddleware(
             "api_key",
@@ -120,6 +132,8 @@ def build_guardrails(
             strategy="redact",
             apply_to_input=True,
         ),
-        ModelCallLimitMiddleware(run_limit=model_call_limit, exit_behavior="end"),
-        ToolCallLimitMiddleware(run_limit=tool_call_limit),
+        ModelCallLimitMiddleware(
+            run_limit=limits.model_call_limit, exit_behavior="end"
+        ),
+        ToolCallLimitMiddleware(run_limit=limits.tool_call_limit),
     ]

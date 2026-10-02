@@ -12,6 +12,7 @@ from langchain_core.language_models.fake_chat_models import FakeMessagesListChat
 from langchain_core.messages import AIMessage
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
+from tests.support import TEST_GUARDRAIL_LIMITS
 
 from src.agent.service import AgentService
 from src.sql.executor import ReadOnlySqlExecutor
@@ -335,16 +336,21 @@ def test_chat_turn_answers_after_a_timed_out_query(reader_db: ReaderDatabase) ->
                     {"name": "query_shop_data", "args": {"sql": slow}, "id": "c1"}
                 ],
             ),
-            AIMessage(content="Mình chưa lấy được dữ liệu lúc này."),
+            AIMessage(content="No shop data right now."),
         ]
     )
     agent = AgentService(
-        model, MemoryConversations(), sql_executor=reader_db.executor(timeout_ms=200)
+        model,
+        MemoryConversations(),
+        sql_executor=reader_db.executor(timeout_ms=200),
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
 
-    result = agent.chat(user_id=1, shop_id=reader_db.shop_a, message="đếm thử")
+    result = agent.chat(
+        user_id=1, shop_id=reader_db.shop_a, message="count the products"
+    )
 
-    assert result.answer == "Mình chưa lấy được dữ liệu lúc này."
+    assert result.answer == "No shop data right now."
     tool_message = model.seen_calls[-1][-1]
     assert tool_message.type == "tool"
     assert tool_message.content.startswith("Error[QUERY_TIMEOUT]")

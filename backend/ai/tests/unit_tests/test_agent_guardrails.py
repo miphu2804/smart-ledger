@@ -8,10 +8,10 @@ from src.agent.guardrails import (
     INPUT_TOO_LONG_REPLY,
     LEAK_REPLY,
     AgentGuardrails,
+    GuardrailLimits,
     build_guardrails,
 )
 from src.agent.service import AgentService
-from src.app_config import app_config
 
 MAX_INPUT_CHARS = 200
 MODEL_CALL_LIMIT = 4
@@ -77,15 +77,13 @@ class CountingExecutor:
         return {"columns": ["n"], "rows": [[1]], "truncated": False}
 
 
-@pytest.fixture(autouse=True)
-def guardrail_limits(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(app_config, "AGENT_MAX_INPUT_CHARS", MAX_INPUT_CHARS)
-    monkeypatch.setattr(app_config, "AGENT_MODEL_CALL_LIMIT", MODEL_CALL_LIMIT)
-    monkeypatch.setattr(app_config, "AGENT_TOOL_CALL_LIMIT", TOOL_CALL_LIMIT)
-
-
 def service(model, conversations=None, executor=None) -> AgentService:
-    return AgentService(model, conversations or Conversations(), sql_executor=executor)
+    return AgentService(
+        model,
+        conversations or Conversations(),
+        GuardrailLimits(MAX_INPUT_CHARS, MODEL_CALL_LIMIT, TOOL_CALL_LIMIT),
+        sql_executor=executor,
+    )
 
 
 def answering(text: str) -> RecordingModel:
@@ -115,7 +113,7 @@ def test_only_the_latest_message_counts_toward_the_input_limit() -> None:
     )
 
     result = service(model, conversations).chat(
-        user_id=3, shop_id=15, conversation_id=41, message="giá gạo?"
+        user_id=3, shop_id=15, conversation_id=41, message="rice price?"
     )
 
     assert result.answer == "ok"
@@ -146,7 +144,7 @@ def test_secrets_are_redacted_before_the_model_and_in_history() -> None:
 def test_card_numbers_are_masked_before_the_model() -> None:
     model = answering("ok")
 
-    service(model).chat(user_id=3, shop_id=15, message=f"thẻ {CARD} nhé")
+    service(model).chat(user_id=3, shop_id=15, message=f"my card is {CARD}")
 
     sent = model.seen_calls[0][-1].content
     assert CARD not in sent
@@ -170,26 +168,26 @@ def test_shop_phone_in_tool_results_is_not_redacted() -> None:
                     }
                 ],
             ),
-            AIMessage(content="Số của tiệm là 0901234567."),
+            AIMessage(content="The shop number is 0901234567."),
         ]
     )
 
     result = service(model, executor=PhoneExecutor()).chat(
-        user_id=3, shop_id=15, message="số điện thoại tiệm?"
+        user_id=3, shop_id=15, message="shop phone number?"
     )
 
     assert "0901234567" in model.seen_calls[-1][-1].content
-    assert result.answer == "Số của tiệm là 0901234567."
+    assert result.answer == "The shop number is 0901234567."
 
 
 @pytest.mark.parametrize(
     "answer",
     [
-        "Mình đã chạy SELECT name FROM v_products WHERE status = 'ACTIVE'.",
-        "Dữ liệu lấy từ ai_read.v_products.",
-        "Lỗi Error[UNSAFE_TABLE] khi đọc dữ liệu.",
-        "Mình cần set_config để đổi tiệm.",
-        "Giá trị smartledger.shop_id là 15.",
+        "I ran SELECT name FROM v_products WHERE status = 'ACTIVE'.",
+        "The data comes from ai_read.v_products.",
+        "Got Error[UNSAFE_TABLE] while reading the data.",
+        "I need set_config to switch shops.",
+        "The smartledger.shop_id value is 15.",
     ],
 )
 def test_answers_that_leak_internals_are_replaced(answer: str) -> None:
@@ -234,7 +232,7 @@ def test_limits_stop_a_model_that_keeps_calling_tools() -> None:
 
 
 def test_build_guardrails_has_no_tool_error_middleware() -> None:
-    names = [type(m).__name__ for m in build_guardrails(200, 4, 3)]
+    names = [type(m).__name__ for m in build_guardrails(GuardrailLimits(200, 4, 3))]
 
     assert names == [
         "AgentGuardrails",

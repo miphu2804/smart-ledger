@@ -24,7 +24,7 @@ class AgentContext:
     conversation_id: int | None = None
 
 
-def get_all_tools(conversations: AgentConversationRepository) -> list[BaseTool]:
+def build_history_tools(conversations: AgentConversationRepository) -> list[BaseTool]:
     @tool
     def search_chat_history(query: str, runtime: ToolRuntime[AgentContext]) -> str:
         """Search earlier messages by key words when the memory lacks an exact detail.
@@ -44,7 +44,7 @@ def get_all_tools(conversations: AgentConversationRepository) -> list[BaseTool]:
     return [search_chat_history]
 
 
-def build_tools(executor: ReadOnlySqlExecutor) -> list[BaseTool]:
+def build_shop_data_tools(executor: ReadOnlySqlExecutor) -> list[BaseTool]:
     """Shop-data tools; the executor is injected here, the shop comes per request.
 
     `runtime` is filled by LangChain from the invocation context and is not part of the
