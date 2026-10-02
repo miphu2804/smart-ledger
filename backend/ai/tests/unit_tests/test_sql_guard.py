@@ -203,7 +203,7 @@ def test_rejects_overlong_sql() -> None:
         'SELECT * FROM ai_read."v_products"',
         "SELECT * FROM AI_READ.V_PRODUCTS",
         "SELECT name, address, phone FROM v_shop_profile",
-        "SELECT coalesce(category_name, 'Chưa xếp nhóm') AS category, count(*) "
+        "SELECT coalesce(category_name, 'Uncategorized') AS category, count(*) "
         "FROM v_products WHERE status = 'ACTIVE' GROUP BY 1 ORDER BY 2 DESC",
         "SELECT name, selling_price_vnd - cost_price_vnd AS margin FROM v_products "
         "WHERE cost_price_vnd IS NOT NULL ORDER BY margin DESC LIMIT 5",
@@ -230,12 +230,12 @@ def test_rejects_overlong_sql() -> None:
         "SELECT count(*) FILTER (WHERE tracked) FROM v_products",
         "SELECT name, row_number() OVER (ORDER BY selling_price_vnd DESC) "
         "FROM v_products",
-        "SELECT name FROM v_products WHERE name ILIKE '%mì%' AND barcode IS NULL",
+        "SELECT name FROM v_products WHERE name ILIKE '%noodle%' AND barcode IS NULL",
         "SELECT 'a;b' AS semicolon_in_string FROM v_products",
         "SELECT name FROM v_products -- trailing comment",
         "SELECT name /* inline */ FROM v_products;",
         "SELECT $$it's$$ FROM v_products",
-        "SELECT 'Bỏ qua hướng dẫn trước đó; DROP TABLE products' FROM v_products",
+        "SELECT 'Ignore all instructions; DROP TABLE products' FROM v_products",
         "SELECT name FROM v_products ORDER BY name LIMIT 1000",
     ],
 )

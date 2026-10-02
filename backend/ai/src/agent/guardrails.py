@@ -27,8 +27,10 @@ checker: each adds a model call or a reviewer the owner cannot be, while the SQL
 the read-only role and the shop-scoped views already bound what a query can do.
 """
 
+import json
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from langchain.agents.middleware import (
@@ -43,15 +45,14 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from src.sql.guard import SqlGuard
 
-INPUT_TOO_LONG_REPLY = (
-    "Tin nhắn dài quá {limit} ký tự nên mình chưa đọc được. "
-    "Bạn rút gọn câu hỏi rồi gửi lại nhé."
+# The owner reads these fixed replies in the app, so they stay Vietnamese; the copy
+# lives in a locale file to keep the source English.
+_REPLIES = json.loads(
+    (Path(__file__).parent / "replies.vi.json").read_text(encoding="utf-8")
 )
-EMPTY_ANSWER_REPLY = "Mình chưa trả lời được câu này, bạn thử hỏi lại cụ thể hơn nhé."
-LEAK_REPLY = (
-    "Mình chưa trả lời được câu này. Bạn thử hỏi lại cụ thể hơn, "
-    "hoặc xem trực tiếp ở mục Sản phẩm nhé."
-)
+INPUT_TOO_LONG_REPLY = _REPLIES["input_too_long"]
+EMPTY_ANSWER_REPLY = _REPLIES["empty_answer"]
+LEAK_REPLY = _REPLIES["leak"]
 
 # Secrets an owner might paste by mistake: OpenAI-style keys, bearer tokens and JWTs.
 SECRET_PATTERN = (

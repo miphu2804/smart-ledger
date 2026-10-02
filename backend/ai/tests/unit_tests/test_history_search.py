@@ -22,45 +22,46 @@ def ids(clusters: list[list[dict]]) -> list[list[int]]:
 
 
 def test_normalize_drops_vietnamese_diacritics_including_d_stroke() -> None:
-    assert normalize("Chị Lan nợ ĐỒNG") == "chi lan no dong"
+    assert normalize("Ch\u1ecb Lan n\u1ee3 \u0110\u1ed2NG") == "chi lan no dong"
 
 
 def test_search_matches_a_query_typed_without_diacritics() -> None:
     messages = [
-        message(1, "Bán thêm 3 gói mì."),
-        message(2, "Chị Lan nợ 235.000 đồng tiền gạo."),
-        message(3, "Đã ghi nhận.", "ASSISTANT"),
-        message(4, "Bán thêm 5 gói mì."),
+        message(1, "Sold 3 more packs of noodles."),
+        # Escaped accented text: the owner wrote it with diacritics, the query has none.
+        message(2, "Ch\u1ecb Lan n\u1ee3 235.000 \u0111\u1ed3ng."),
+        message(3, "Noted.", "ASSISTANT"),
+        message(4, "Sold 5 more packs of noodles."),
     ]
 
     assert ids(search_messages(messages, "chi lan no")) == [[1, 2, 3]]
 
 
 def test_search_ranks_by_shared_words_and_keeps_the_best_hits() -> None:
-    messages = [message(index, "mì") for index in range(1, 20)]
-    messages[9] = message(10, "chị Lan mua mì")
+    messages = [message(index, "noodles") for index in range(1, 20)]
+    messages[9] = message(10, "Lan buys noodles")
 
-    clusters = search_messages(messages, "chị Lan mì", max_hits=1)
+    clusters = search_messages(messages, "Lan noodles", max_hits=1)
 
     assert ids(clusters) == [[9, 10, 11]]
 
 
 def test_search_merges_neighbouring_hits_into_one_cluster() -> None:
     messages = [
-        message(1, "Lan nợ tiền gạo"),
-        message(2, "Đã ghi nhận.", "ASSISTANT"),
-        message(3, "Lan trả 100.000"),
-        message(4, "Đã ghi nhận.", "ASSISTANT"),
-        message(5, "Bán mì"),
-        message(6, "Bán mì"),
-        message(7, "Lan hẹn trả 15/10"),
+        message(1, "Lan owes for rice"),
+        message(2, "Noted.", "ASSISTANT"),
+        message(3, "Lan paid 100.000"),
+        message(4, "Noted.", "ASSISTANT"),
+        message(5, "Sold noodles"),
+        message(6, "Sold noodles"),
+        message(7, "Lan will pay on 15/10"),
     ]
 
     assert ids(search_messages(messages, "Lan")) == [[1, 2, 3, 4], [6, 7]]
 
 
 def test_search_matches_whole_words_only() -> None:
-    messages = [message(1, "Trời nóng quá"), message(2, "Không nói gì")]
+    messages = [message(1, "Nothing new"), message(2, "Not today")]
 
     assert search_messages(messages, "no") == []
 
