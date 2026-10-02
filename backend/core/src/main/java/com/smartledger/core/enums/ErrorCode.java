@@ -50,7 +50,9 @@ public enum ErrorCode {
     INVALID_SALE_ID(HttpStatus.BAD_REQUEST, "invalid_sale_id", "Sale ID must be a positive integer."),
     SALE_NOT_FOUND(HttpStatus.NOT_FOUND, "sale_not_found", "This sale is unavailable."),
     INVALID_PAYMENT_ID(HttpStatus.BAD_REQUEST, "invalid_payment_id", "Payment ID must be a positive integer."),
-    PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "payment_not_found", "This payment is unavailable.");
+    PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "payment_not_found", "This payment is unavailable."),
+    CONVERSATION_NOT_FOUND(HttpStatus.NOT_FOUND, "conversation_not_found", "This conversation is unavailable."),
+    AI_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "ai_unavailable", "The assistant is unavailable. Please try again.");
 
     private final HttpStatus httpStatus;
     private final String code;
