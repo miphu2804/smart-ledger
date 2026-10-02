@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,6 +19,12 @@ class AppConfig(BaseSettings):
 
     # postgres
     POSTGRES_URL: str | None = None
+
+    # read-only login granted ai_sql_reader (migration 004); unset disables the
+    # agent's shop-data tool while chat keeps working
+    AI_SQL_READER_URL: str | None = None
+    SQL_TIMEOUT_MS: int = Field(default=3000, gt=0)
+    SQL_ROW_LIMIT: int = Field(default=100, gt=0)
 
     # redis
     REDIS_URL: str | None = None

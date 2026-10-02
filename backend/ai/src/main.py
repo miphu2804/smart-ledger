@@ -11,11 +11,24 @@ from src.app_config import app_config
 from src.infra.postgre_db_client import PostgreDBClient
 from src.infra.redis_db_client import RedisDBClient
 from src.providers.factory import build_chat_model, build_summary_model
+from src.sql.executor import ReadOnlySqlExecutor
 
 logging.basicConfig(
     level=getattr(logging, app_config.LOG_LEVEL.upper(), logging.INFO),
     format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
 )
+
+
+def build_sql_executor() -> ReadOnlySqlExecutor | None:
+    url = app_config.AI_SQL_READER_URL
+    if url is None or not url.strip():
+        logging.getLogger(__name__).info("sql reader unconfigured; shop-data tool off")
+        return None
+    return ReadOnlySqlExecutor(
+        url,
+        timeout_ms=app_config.SQL_TIMEOUT_MS,
+        row_limit=app_config.SQL_ROW_LIMIT,
+    )
 
 
 @asynccontextmanager
@@ -29,7 +42,12 @@ async def lifespan(app: FastAPI):
     chat_model = build_chat_model(app_config)
     summary_model = build_summary_model(app_config)
     conversations = AgentConversationRepository(postgres)
-    app.state.agent = AgentService(chat_model, conversations, summary_model)
+    app.state.agent = AgentService(
+        chat_model,
+        conversations,
+        summary_model,
+        sql_executor=build_sql_executor(),
+    )
     yield
     postgres.close()
     redis.close()

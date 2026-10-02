@@ -71,6 +71,9 @@ services:
       # Empty fails closed: every /internal/v1 route returns 401. Set it in the shell or a
       # Compose --env-file to exercise the internal API locally.
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-}
+      # Read-only login granted ai_sql_reader (backend/ai/migrations/004); empty turns the
+      # agent's shop-data tool off.
+      AI_SQL_READER_URL: ${AI_SQL_READER_URL:-}
     depends_on:
       postgres:
         condition: service_healthy

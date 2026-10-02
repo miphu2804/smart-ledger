@@ -2,6 +2,7 @@ import logging
 from dataclasses import dataclass
 
 from langchain.agents import create_agent
+from langchain.agents.middleware import ToolCallLimitMiddleware
 from langchain_core.language_models import BaseChatModel
 
 from src.agent.prompt_template import (
@@ -13,9 +14,16 @@ from src.agent.prompt_template import (
 )
 from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
 from src.agent.summary import plan_fold
-from src.agent.tools import AgentContext, get_all_tools
+from src.agent.tools import AgentContext, build_tools, get_all_tools
+from src.sql.executor import ReadOnlySqlExecutor
+from src.sql.schema_prompt import SQL_AGENT_PROMPT
 
 logger = logging.getLogger(__name__)
+
+# Tool calls per chat turn; further calls are refused and the model has to answer.
+MAX_TOOL_CALLS = 3
+# Graph steps per turn, a backstop in case the model keeps calling refused tools.
+RECURSION_LIMIT = 25
 
 
 @dataclass(frozen=True)
@@ -33,18 +41,23 @@ class AgentService:
         model: BaseChatModel | None,
         conversations: AgentConversationRepository,
         summary_model: BaseChatModel | None = None,
+        sql_executor: ReadOnlySqlExecutor | None = None,
     ) -> None:
         self.model = model
         self.summary_model = summary_model
         self.conversations = conversations
-        self.agent = (
-            create_agent(
-                model=model,
-                tools=get_all_tools(conversations),
-                context_schema=AgentContext,
-            )
-            if model is not None
-            else None
+        self.sql_executor = sql_executor
+
+    def _build_agent(self, shop_id: int):
+        # Built per request so the shop-data tool closes over this request's shop.
+        tools = get_all_tools(self.conversations)
+        if self.sql_executor is not None:
+            tools = [*tools, *build_tools(shop_id, self.sql_executor)]
+        return create_agent(
+            model=self.model,
+            tools=tools,
+            context_schema=AgentContext,
+            middleware=[ToolCallLimitMiddleware(run_limit=MAX_TOOL_CALLS)],
         )
 
     def chat(
@@ -54,7 +67,7 @@ class AgentService:
         message: str,
         conversation_id: int | None = None,
     ) -> AgentChatResult:
-        if self.agent is None or self.model is None:
+        if self.model is None:
             raise RuntimeError("agent model unavailable")
 
         context = (
@@ -62,11 +75,12 @@ class AgentService:
             if conversation_id is not None
             else {"summary": None, "messages": []}
         )
-        result = self.agent.invoke(
+        result = self._build_agent(shop_id).invoke(
             {"messages": self._context_messages(context, message)},
             context=AgentContext(
                 user_id=user_id, shop_id=shop_id, conversation_id=conversation_id
             ),
+            config={"recursion_limit": RECURSION_LIMIT},
         )
         last = result["messages"][-1]
         model_name = getattr(self.model, "model_name", "")
@@ -88,16 +102,18 @@ class AgentService:
             model_version=version,
         )
 
-    @staticmethod
-    def _context_messages(context: dict, message: str) -> list[dict]:
-        # Summary first, then every message after the watermark verbatim, so a fold that
-        # has not run yet never hides messages from the model.
+    def _context_messages(self, context: dict, message: str) -> list[dict]:
+        # Static prompts first so the prefix stays cacheable, then the summary, then
+        # every message after the watermark verbatim, so a fold that has not run yet
+        # never hides messages from the model.
         messages: list[dict] = [
             {
                 "role": "system",
                 "content": SHOP_AGENT_SYSTEM_PROMPT,
             }
         ]
+        if self.sql_executor is not None:
+            messages.append({"role": "system", "content": SQL_AGENT_PROMPT})
         if context["summary"]:
             messages.append(
                 {

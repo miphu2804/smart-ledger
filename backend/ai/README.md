@@ -1,6 +1,6 @@
 # SmartLedger AI
 
-Internal AI API intended for Core; Core does not call it yet. The service exposes `/health`, `POST /internal/v1/agent/chat`, and list/detail/rename/delete routes under `/internal/v1/agent/conversations`. Chat history is stored in PostgreSQL. Postgres and Redis clients connect at process start and log status. Every `/internal/v1` route requires the shared `X-Internal-Token` header. There are no invoice or expense endpoints.
+Internal AI API intended for Core; Core does not call it yet. The service exposes `/health`, `POST /internal/v1/agent/chat`, and list/detail/rename/delete routes under `/internal/v1/agent/conversations`. The agent can read the current shop's profile, categories and products through a read-only SQL tool. Chat history is stored in PostgreSQL. Postgres and Redis clients connect at process start and log status. Every `/internal/v1` route requires the shared `X-Internal-Token` header. There are no invoice or expense endpoints.
 
 Frontend must not call this service.
 
@@ -11,6 +11,7 @@ Run Core's Flyway migrations first so `users` and `shops` exist, then apply the 
 ```bash
 psql "$POSTGRES_URL" -v ON_ERROR_STOP=1 -f migrations/001_create_chat_history.sql
 psql "$POSTGRES_URL" -v ON_ERROR_STOP=1 -f migrations/003_add_chat_summary.sql
+psql "$POSTGRES_URL" -v ON_ERROR_STOP=1 -f migrations/004_create_ai_read_views.sql
 ```
 
 The AI service does not create or migrate tables at startup. `ai_request_id` remains nullable; its foreign key is deferred until the `ai_requests` table is installed. Version `002` is reserved for the pgvector work and is not part of this service yet.
@@ -30,6 +31,31 @@ Each turn sends the stored summary followed by every message not yet folded into
 Folded messages stay in `chat_messages`. When the summary lacks an exact figure, name, date or wording, the agent calls `search_chat_history`, which matches the query words against the folded messages of the current conversation, ignoring Vietnamese diacritics, and returns up to five hits with the message before and after each. The tool takes only the query; the conversation, user and shop come from the request context, so the model cannot read another shop's history.
 
 The OpenAI client uses the Responses API because reasoning models reject function tools on `/v1/chat/completions`. An `OPENAI_BASE_URL` proxy must therefore serve `/v1/responses`. `MODEL_REASONING_EFFORT` (default `high`) sets the reasoning effort for both the chat and summary models.
+
+## Shop data tool (read-only SQL)
+
+When `AI_SQL_READER_URL` is set, the agent gets a `query_shop_data` tool that runs one model-written `SELECT` against the current shop's profile, categories and products. Without it the agent still chats, only without that tool. There is no SQL HTTP endpoint.
+
+Five layers keep the query inside the current shop and read-only:
+
+1. **Role.** Migration `004` creates the `NOLOGIN` group role `ai_sql_reader`, which has only `USAGE` on schema `ai_read` and `SELECT` on its three views, and no grant on Core's tables.
+2. **Views.** `ai_read.v_shop_profile`, `v_categories` and `v_products` filter on the transaction setting `smartledger.shop_id` and do not expose `shop_id`; an unset setting returns no rows. They are `security_barrier` views, so a failing filter cannot quote another shop's row in its error.
+3. **Guard.** `src/sql/guard.py` parses the SQL with `sqlglot` and accepts exactly one `SELECT` (with `WITH` and `UNION`) over those views. Functions and cast types come from an allowlist, so `set_config`, `current_setting`, `pg_*` and `dblink` are rejected along with `information_schema`, `pg_catalog`, base tables, `FOR UPDATE`, `SELECT INTO`, DML, DDL, `SET` and `COPY`. The statement that runs is the guard's own rendering, wrapped as `SELECT * FROM (...) q LIMIT n`.
+4. **Execution.** `src/sql/executor.py` opens a separate connection per query, starts a `READ ONLY` transaction, sets `smartledger.shop_id` from the authenticated request as a bound parameter, applies `SQL_TIMEOUT_MS` (default 3000) and `SQL_ROW_LIMIT` (default 100), cuts text cells at 200 characters and always rolls back. The tool closes over the request's shop id; the model only passes `sql`.
+5. **Output.** Results reach the model as data with a header saying so, and errors come back as `ERROR <code>` (`unsafe_sql`, `sql_timeout`, `sql_error`, `sql_unavailable`) so the turn still answers. At most three tool calls run per turn.
+
+Run migration `004` as a user with `CREATEROLE` (first run only) and the `search_path` that holds Core's tables, then create the login the service uses. Keep the password in the environment's secrets, never in Git:
+
+```sql
+CREATE ROLE smartledger_ai_reader LOGIN PASSWORD '<secret>' IN ROLE ai_sql_reader;
+ALTER ROLE smartledger_ai_reader SET default_transaction_read_only = on;
+```
+
+```bash
+AI_SQL_READER_URL=postgresql://smartledger_ai_reader:<secret>@<host>:5432/<db>
+```
+
+Phase 1 covers only the shop profile, categories and products. Sales, expenses, debts and customers are not exposed yet.
 
 ## Internal authentication
 
