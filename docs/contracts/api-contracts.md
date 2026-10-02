@@ -31,7 +31,7 @@
 
 ## 0. Hợp đồng lỗi và chống ghi trùng
 
-Core trả `{ code, message, details?: [{ field, issue }], traceId }`; bỏ details khi rỗng. Thiếu/sai token trả `401 unauthorized`; chưa có profile Core trả `404 auth_profile_not_found` (mở session trước); shop khác chủ trả `403 shop_access_denied`; shop INACTIVE trả `403 shop_inactive` kèm lý do. Thiếu header bắt buộc trả `400 missing_required_header`; validation body trả `400 validation_failed`. Unique barcode tranh chấp trả `409 product_barcode_conflict`; lỗi DB chưa nhận diện trả `500 internal_error`, không lộ chi tiết nội bộ.
+Core trả `{ code, message, details?: [{ field, issue }], traceId }`; bỏ details khi rỗng. Thiếu/sai token trả `401 unauthorized`; chưa có profile Core trả `404 auth_profile_not_found` (mở session trước); shop khác chủ trả `403 shop_access_denied`; shop INACTIVE trả `403 shop_inactive` kèm lý do. Thiếu header bắt buộc trả `400 missing_required_header`; validation body và query/path param sai kiểu (ví dụ enum lạ, thời điểm không đúng ISO 8601) trả `400 validation_failed` với `details[].field` là tên param. Unique barcode tranh chấp trả `409 product_barcode_conflict`; hai request mở phiên lần đầu cùng lúc cho một tài khoản Firebase trả `409 auth_session_conflict` cho request thua, FE gọi lại `POST /auth/session`; lỗi DB chưa nhận diện trả `500 internal_error`, không lộ chi tiết nội bộ.
 
 **Bắt buộc `Idempotency-Key` (1–255 ký tự, không rỗng; được trim khi lưu)** trên đúng ba POST: `/debts/{debtId}/payments`, `/expenses`, `/sales/{saleId}/void`. FE tạo key mới cho một hành động, giữ nguyên khi retry cùng body/path. Phạm vi key là shop + operation; cùng người dùng/nội dung trả response `201` ban đầu, không lặp tác động. Khác người dùng/nội dung trả `409 idempotency_key_conflict`; key hết hạn trả `409 idempotency_key_expired`; rỗng/quá dài trả `400 invalid_idempotency_key`. TTL mặc định 30 ngày, chưa có job dọn key; không tự xóa key quá hạn. Lỗi nghiệp vụ rollback cả reservation, có thể sửa request rồi retry với key chưa được commit.
 
@@ -53,7 +53,7 @@ V7 tạo bảng key. Confirm draft chống trùng bằng draftId, không yêu c�
 
 `ShopResponse = { id, name, industry, phone, address, status, inactiveReason, archivedReason }`. name/industry bắt buộc khi tạo. PATCH phải có ít nhất một giá trị cập nhật; null như bỏ qua, phone/address rỗng có thể xóa nội dung. OWNER chỉ sửa/archive shop ACTIVE; archivedReason không rỗng, tối đa 500 ký tự. INACTIVE vẫn GET được hồ sơ/lý do nhưng các API nghiệp vụ bị chặn; ARCHIVED GET trả `404 shop_not_found` và bị loại khỏi danh sách phiên.
 
-ADMIN đặt INACTIVE phải có inactiveReason không rỗng; đặt ACTIVE xóa lý do đó. Endpoint status không nhận ARCHIVED và không mở lại shop đã archive. OWNER gọi status trả `403 admin_access_required`. Chưa có audit_logs tổng quát cho API này.
+ADMIN đặt INACTIVE phải có inactiveReason không rỗng; đặt ACTIVE xóa lý do đó. Endpoint status không nhận ARCHIVED và không mở lại shop đã archive. OWNER gọi status trả `403 admin_access_required`. Đổi trạng thái ghi audit `SHOP_INACTIVATED`/`SHOP_REACTIVATED` với actor là ADMIN (xem [Lịch sử audit của tiệm](#lịch-sử-audit-của-tiệm)).
 
 Core ánh xạ `auth_identities.provider_subject` bằng Firebase UID. Provider linking diễn ra ở Firebase; kiểm thử UI/provider thật không được suy ra từ việc Core xác thực token.
 
@@ -145,7 +145,7 @@ Ví dụ trộn catalog/món tùy ý:
 ```
 
 - items không rỗng; quantity > 0; unitPriceVnd ≥ 0 (giá bán của dòng do request chọn, không bắt buộc bằng giá catalog). lineTotalVnd làm tròn HALF_UP về VND; tổng sau discount phải > 0.
-- Bỏ/null productId phải có productName/unit không rỗng (max 255/50); không tự tạo Product hoặc tồn kho. Catalog cần product ACTIVE cùng shop, snapshot tên/đơn vị lấy từ product. Lặp catalog product trả `400 draft_item_duplicate`; món tùy ý là dòng độc lập.
+- Bỏ/null productId phải có productName/unit không rỗng (max 255/50); không tự tạo Product hoặc tồn kho. Catalog cần product ACTIVE cùng shop, snapshot tên/đơn vị lấy từ product; gửi kèm productName/unit cho item có productId trả `400 draft_item_invalid`. Lặp catalog product trả `400 draft_item_duplicate`; món tùy ý là dòng độc lập.
 - discountVnd/initialPaidVnd tùy chọn mặc định 0, không âm. initialPaidVnd là số thực thu, không phải tiền khách đưa trước khi trả tiền thừa, và không vượt tổng. > 0 bắt buộc initialPaymentMethod CASH|TRANSFER; = 0 thì method phải null/bỏ qua, sai trả `400 draft_payment_invalid`.
 - customerId hoặc customerName/customerPhone tùy chọn. customerId phải ACTIVE cùng shop; tên/phone snapshot lấy từ hồ sơ này. Không có ID: draft có thể chưa có khách; confirm còn nợ cần tên không rỗng (`400 customer_required_for_debt`), phone tùy chọn. Core tạo khách mới khi confirm bán thiếu, không tự tìm khách trùng tên/phone. Thu đủ có thể không có khách.
 - Draft chỉ sửa/hủy khi DRAFT còn hiệu lực; hết hạn sau một tháng từ lúc tạo, không gia hạn khi sửa. Canceled/expired vẫn đọc được; thao tác không hợp lệ trả `409 draft_not_editable`.
@@ -230,6 +230,20 @@ Tiền thu ròng có thể tính collectedVnd − refundedVnd; không có field 
 
 Phủ `FR-006`, `FR-015`, `FR-016`, `AC-007`, `AC-024`, `AC-031`.
 
+### Lịch sử audit của tiệm
+
+| Method | Path | Request | Response |
+|---|---|---|---|
+| `GET` | `/api/v1/audit-logs` | Query `action?`, `entityId?`, `from?`, `to?`, `page=0`, `size=20` | `200 AuditLogPageResponse` |
+
+Chỉ đọc, bắt buộc Bearer token và `X-Shop-Id` của shop ACTIVE do OWNER sở hữu; không có API tạo/sửa/xóa audit. Kết quả mới nhất trước (createdAt, id giảm dần). `from` inclusive, `to` exclusive, ISO 8601 có offset; `size` 1–100, `page` từ 0, `entityId` dương, `from` phải trước `to`, sai các ràng buộc này trả `400 invalid_audit_query`. `action` không thuộc danh sách dưới hoặc param sai kiểu trả `400 validation_failed`.
+
+`AuditLogPageResponse = { content: AuditLogResponse[], page, size, totalElements, totalPages }`; `AuditLogResponse = { id, shopId, actorUserId, actorRole, action, entityType, entityId, outcome, reason, requestId, idempotencyKey, metadata, createdAt }`. outcome luôn `SUCCESS`: chỉ ghi thao tác thành công, cùng transaction nghiệp vụ; thao tác lỗi/rollback không để lại audit. metadata chỉ chứa key được khai báo cho từng action (số tiền, tồn trước/sau, trường đã đổi), không chứa tên/SĐT khách, token hay IP.
+
+action: `SALE_CONFIRMED`, `SALE_VOIDED`, `SALE_REFUND_RECORDED`, `DEBT_REPAYMENT_RECORDED`, `DEBT_VOIDED`, `STOCK_ADJUSTED`, `STOCK_RESTORED_ON_VOID`, `EXPENSE_CREATED`, `EXPENSE_UPDATED`, `EXPENSE_ARCHIVED`, `PRODUCT_CREATED`, `PRODUCT_UPDATED`, `PRODUCT_ARCHIVED`, `CATEGORY_CREATED`, `CATEGORY_UPDATED`, `CATEGORY_ARCHIVED`, `SHOP_CREATED`, `SHOP_UPDATED`, `SHOP_ARCHIVED`, `SHOP_INACTIVATED`, `SHOP_REACTIVATED`.
+
+Bảng `audit_logs` append-only (V10, trigger chặn UPDATE/DELETE/TRUNCATE). Chưa có `FR`/`AC` riêng cho lịch sử audit của OWNER; endpoint này không thay thế yêu cầu audit truy cập của ADMIN (`BR-014`, `NFR-009`, `AC-017`).
+
 ## 5. AI qua Core — hợp đồng đích, chưa triển khai trong Core
 
 AI chỉ tạo bản nháp/gợi ý và câu trả lời chat. Các endpoint này không ghi invoice, expense hoặc tồn kho.
@@ -300,7 +314,7 @@ Yêu cầu chung:
 
 ## 7. Dashboard quản trị — hợp đồng đích
 
-Các GET dashboard này chưa có controller Core; không nhầm với API ADMIN đổi trạng thái shop tại mục 1. Yêu cầu audit_logs chưa được hiện thực trong Core.
+Các GET dashboard này chưa có controller Core; không nhầm với API ADMIN đổi trạng thái shop tại mục 1. Core đã ghi audit_logs cho thao tác ghi thành công (xem [Lịch sử audit của tiệm](#lịch-sử-audit-của-tiệm)), nhưng chưa ghi audit khi ADMIN xem dữ liệu; `NFR-009`/`AC-017` vẫn chưa đạt.
 
 Các endpoint dưới đây chỉ đọc, yêu cầu role `ADMIN` và ghi audit khi truy cập dữ liệu chi tiết. OWNER nhận `403 forbidden`.
 
