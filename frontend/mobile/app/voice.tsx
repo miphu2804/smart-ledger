@@ -11,6 +11,7 @@ import { voiceSamples } from '../src/data/mock';
 import type { LineItem, ProductView } from '../src/data/types';
 import { productApi } from '../src/lib/catalogApi';
 import { errorMessage } from '../src/lib/errors';
+import { expenseApi } from '../src/lib/expenseApi';
 import { hhmm, vnd } from '../src/lib/format';
 import { type ParsedExpenseItem, parseOrder } from '../src/lib/parseOrder';
 import { itemsTotal } from '../src/lib/stats';
@@ -47,6 +48,7 @@ export default function Voice() {
    * NFR-006/AC-010: Không ghi ngay, người dùng phải bấm "Lưu chi phí".
    */
   const [pendingExpenses, setPendingExpenses] = useState<ParsedExpenseItem[]>([]);
+  const [expenseBusy, setExpenseBusy] = useState(false);
 
   const [products, setProducts] = useState<ProductView[]>([]);
 
@@ -265,17 +267,31 @@ export default function Voice() {
     setNewUnit('cái');
   };
 
-  const confirmExpenses = () => {
-    pendingExpenses.forEach((e) => {
-      app.addExpense({
-        title: e.title,
-        amount: e.amount,
-        category: 'khac',
-        source: 'voice',
-      });
-    });
-    push('ai', `Đã lưu ${pendingExpenses.length} khoản chi: ${pendingExpenses.map((e) => `${e.title} (${vnd(e.amount)})`).join(', ')}.`);
-    setPendingExpenses([]);
+  // Lưu từng khoản lên Core. Khoản nào lỗi thì dừng và giữ lại (cùng các khoản sau nó) để bấm lưu lại; chỉ báo "đã lưu"
+  // cho những khoản Core đã nhận thật.
+  const confirmExpenses = async () => {
+    if (expenseBusy || !pendingExpenses.length) return;
+    setExpenseBusy(true);
+    const saved: ParsedExpenseItem[] = [];
+    let failure = '';
+    for (const e of pendingExpenses) {
+      try {
+        await expenseApi.create({ category: e.category, description: e.title, amountVnd: e.amount });
+        saved.push(e);
+      } catch (err) {
+        failure = errorMessage(err);
+        break;
+      }
+    }
+    setExpenseBusy(false);
+    if (saved.length) {
+      push('ai', `Đã lưu ${saved.length} khoản chi: ${saved.map((e) => `${e.title} (${vnd(e.amount)})`).join(', ')}.`);
+    }
+    if (failure) {
+      push('ai', `Không lưu được khoản chi: ${failure}. Bạn bấm "Lưu chi phí" để thử lại.`);
+    }
+    // Khoản đã lưu luôn đứng đầu danh sách chờ; các khoản nói thêm trong lúc lưu nằm phía sau nên được giữ nguyên.
+    setPendingExpenses((cur) => cur.slice(saved.length));
   };
 
   const total = itemsTotal(items);
@@ -380,6 +396,7 @@ export default function Voice() {
                 title="Bỏ qua"
                 variant="ghost"
                 small
+                disabled={expenseBusy}
                 onPress={() => {
                   push('ai', 'Đã bỏ qua khoản chi.');
                   setPendingExpenses([]);
@@ -390,6 +407,8 @@ export default function Voice() {
                 title="Lưu chi phí"
                 variant="soft"
                 small
+                loading={expenseBusy}
+                disabled={expenseBusy}
                 onPress={confirmExpenses}
                 style={{ flex: 1 }}
               />
