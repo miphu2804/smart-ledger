@@ -1,5 +1,7 @@
 package com.smartledger.core.service.impl;
 
+import com.smartledger.core.enums.AuditAction;
+import com.smartledger.core.service.AuditLogService;
 import com.smartledger.core.dto.request.SaleDraftItemRequest;
 import com.smartledger.core.dto.request.SaleDraftWriteRequest;
 import com.smartledger.core.dto.response.SaleDraftItemResponse;
@@ -33,7 +35,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +45,7 @@ import org.springframework.util.StringUtils;
 
 @Service
 public class SaleDraftServiceImpl implements SaleDraftService {
+    private final AuditLogService auditLogService;
     private final ShopService shopService;
     private final SaleDraftRepository draftRepository;
     private final SaleDraftItemRepository draftItemRepository;
@@ -55,7 +60,8 @@ public class SaleDraftServiceImpl implements SaleDraftService {
             SaleDraftItemRepository draftItemRepository, ProductRepository productRepository,
             SaleRepository saleRepository, SaleItemRepository saleItemRepository,
             PaymentRepository paymentRepository, CustomerRepository customerRepository,
-            DebtRepository debtRepository) {
+            DebtRepository debtRepository, AuditLogService auditLogService) {
+        this.auditLogService = auditLogService;
         this.shopService = shopService;
         this.draftRepository = draftRepository;
         this.draftItemRepository = draftItemRepository;
@@ -149,18 +155,32 @@ public class SaleDraftServiceImpl implements SaleDraftService {
             throw new BusinessException(ErrorCode.DRAFT_TOTAL_INVALID);
         }
 
-        // Lock products in a stable order so concurrent checkouts cannot oversell or deadlock.
+        for (SaleDraftItem item : draftItems) {
+            if (item.getProductId() == null && (!StringUtils.hasText(item.getProductNameSnapshot())
+                    || !StringUtils.hasText(item.getUnitSnapshot()))) {
+                throw new BusinessException(ErrorCode.DRAFT_ITEM_INVALID);
+            }
+        }
+        Map<Long, Boolean> stockDeducted = new HashMap<>();
+        Map<Long, BigDecimal> beforeStocks = new HashMap<>();
+        Map<Long, BigDecimal> afterStocks = new HashMap<>();
+        // Lock catalog products in a stable order; custom items have no stock to deduct.
         for (SaleDraftItem item : draftItems.stream()
+                .filter(item -> item.getProductId() != null)
                 .sorted(java.util.Comparator.comparing(SaleDraftItem::getProductId)).toList()) {
             Product product = productRepository.findLockedByIdAndShopIdAndStatus(
                             item.getProductId(), shop.getId(), CatalogStatus.ACTIVE)
                     .orElseThrow(() -> new BusinessException(ErrorCode.DRAFT_ITEM_INVALID));
+            stockDeducted.put(item.getProductId(), product.isTracked());
+            if (product.isTracked()) { beforeStocks.put(product.getId(), product.getStockQuantity()); }
             product.deductStock(item.getQuantity());
+            if (product.isTracked()) { afterStocks.put(product.getId(), product.getStockQuantity()); }
         }
 
         Sale sale = saleRepository.saveAndFlush(Sale.fromDraft(draft, subtotal, customer));
         List<SaleItem> saleItems = saleItemRepository.saveAll(draftItems.stream()
-                .map(item -> SaleItem.fromDraftItem(sale.getId(), item)).toList());
+                .map(item -> SaleItem.fromDraftItem(sale.getId(), item,
+                        Boolean.TRUE.equals(stockDeducted.get(item.getProductId())))).toList());
         if (draft.getInitialPaidVnd() > 0) {
             paymentRepository.save(Payment.initial(sale.getId(), draft.getInitialPaidVnd(),
                     draft.getInitialPaymentMethod(), shop.getOwnerId()));
@@ -170,16 +190,24 @@ public class SaleDraftServiceImpl implements SaleDraftService {
                     draft.getEstimatedTotalVnd() - draft.getInitialPaidVnd()));
         }
         draft.confirm(sale.getId());
+        auditLogService.recordOwner(shop, AuditAction.SALE_CONFIRMED, sale.getId(), null, null,
+                Map.of("draftId", draft.getId(), "totalVnd", sale.getTotalVnd(), "paidVnd", sale.getPaidVnd(),
+                        "outstandingVnd", sale.getTotalVnd() - sale.getPaidVnd(), "itemCount", saleItems.size()));
+        for (SaleDraftItem item : draftItems) {
+            if (Boolean.TRUE.equals(stockDeducted.get(item.getProductId()))) {
+                auditLogService.recordOwner(shop, AuditAction.STOCK_ADJUSTED, item.getProductId(), null, null,
+                        Map.of("source", "SALE_CONFIRM", "saleId", sale.getId(), "quantity", item.getQuantity(),
+                                "beforeStock", beforeStocks.get(item.getProductId()), "afterStock", afterStocks.get(item.getProductId())));
+            }
+        }
         return SaleServiceImpl.toResponse(sale, saleItems);
     }
 
     private Customer customerForConfirmation(SaleDraft draft, Long shopId) {
         boolean customerRequired = draft.getInitialPaidVnd() < draft.getEstimatedTotalVnd();
         if (draft.getCustomerId() != null) {
-            // A fully paid draft only needs the customer for its name/phone snapshot, which `apply()`
-            // already copied onto the draft at creation time — so a customer archived since then must
-            // not block confirming a sale that opens no debt. A partially/unpaid draft still needs the
-            // live customer because the resulting Debt links to its ID.
+            // Fully paid sales keep the draft's customer snapshot even if that customer was archived.
+            // A new debt must still link to an active customer in this shop.
             return customerRepository.findByIdAndShopIdAndStatus(draft.getCustomerId(), shopId, CatalogStatus.ACTIVE)
                     .orElseGet(() -> {
                         if (customerRequired) {
@@ -220,16 +248,32 @@ public class SaleDraftServiceImpl implements SaleDraftService {
                         .orElseThrow(() -> new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND));
         try {
             for (SaleDraftItemRequest item : request.items()) {
-                if (!productIds.add(item.productId())) {
-                    throw new BusinessException(ErrorCode.DRAFT_ITEM_DUPLICATE);
+                Product product = null;
+                String customName = null;
+                String customUnit = null;
+                if (item.productId() == null) {
+                    customName = normalize(item.productName());
+                    customUnit = normalize(item.unit());
+                    if (customName == null || customUnit == null) {
+                        throw new BusinessException(ErrorCode.DRAFT_ITEM_INVALID);
+                    }
+                } else {
+                    // A catalog item takes its name/unit snapshot from the product; never drop client text silently.
+                    if (StringUtils.hasText(item.productName()) || StringUtils.hasText(item.unit())) {
+                        throw new BusinessException(ErrorCode.DRAFT_ITEM_INVALID);
+                    }
+                    if (!productIds.add(item.productId())) {
+                        throw new BusinessException(ErrorCode.DRAFT_ITEM_DUPLICATE);
+                    }
+                    product = productRepository.findByIdAndShopIdAndStatus(
+                                    item.productId(), shopId, CatalogStatus.ACTIVE)
+                            .orElseThrow(() -> new BusinessException(ErrorCode.DRAFT_ITEM_INVALID));
                 }
-                Product product = productRepository.findByIdAndShopIdAndStatus(
-                                item.productId(), shopId, CatalogStatus.ACTIVE)
-                        .orElseThrow(() -> new BusinessException(ErrorCode.DRAFT_ITEM_INVALID));
                 long lineTotal = BigDecimal.valueOf(item.unitPriceVnd()).multiply(item.quantity())
                         .setScale(0, RoundingMode.HALF_UP).longValueExact();
                 subtotal = Math.addExact(subtotal, lineTotal);
-                items.add(new PreparedItem(product, item.quantity(), item.unitPriceVnd(), lineTotal));
+                items.add(new PreparedItem(product, customName, customUnit, item.quantity(),
+                        item.unitPriceVnd(), lineTotal));
             }
             long discount = request.discountVnd() == null ? 0 : request.discountVnd();
             long total = Math.subtractExact(subtotal, discount);
@@ -256,8 +300,11 @@ public class SaleDraftServiceImpl implements SaleDraftService {
     }
 
     private List<SaleDraftItem> toItems(Long draftId, List<PreparedItem> prepared) {
-        return prepared.stream().map(item -> SaleDraftItem.create(draftId, item.product(), item.quantity(),
-                item.unitPriceVnd(), item.lineTotalVnd())).toList();
+        return prepared.stream().map(item -> item.product() == null
+                ? SaleDraftItem.createCustom(draftId, item.customName(), item.customUnit(), item.quantity(),
+                        item.unitPriceVnd(), item.lineTotalVnd())
+                : SaleDraftItem.create(draftId, item.product(), item.quantity(), item.unitPriceVnd(),
+                        item.lineTotalVnd())).toList();
     }
 
     private SaleDraftResponse toResponse(SaleDraft draft, List<SaleDraftItem> items) {
@@ -278,7 +325,8 @@ public class SaleDraftServiceImpl implements SaleDraftService {
         return StringUtils.hasText(value) ? value.trim() : null;
     }
 
-    private record PreparedItem(Product product, BigDecimal quantity, long unitPriceVnd, long lineTotalVnd) {
+    private record PreparedItem(Product product, String customName, String customUnit,
+            BigDecimal quantity, long unitPriceVnd, long lineTotalVnd) {
     }
 
     private record PreparedDraft(List<PreparedItem> items, long discountVnd, long totalVnd, long paidVnd,

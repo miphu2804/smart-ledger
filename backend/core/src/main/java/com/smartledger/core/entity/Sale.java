@@ -2,6 +2,8 @@ package com.smartledger.core.entity;
 
 import com.smartledger.core.enums.PaymentStatus;
 import com.smartledger.core.enums.SaleStatus;
+import com.smartledger.core.enums.ErrorCode;
+import com.smartledger.core.exception.BusinessException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -103,11 +105,24 @@ public class Sale {
     }
 
     public void recordRepayment(long amountVnd) {
+        if (saleStatus != SaleStatus.CONFIRMED) {
+            throw new BusinessException(ErrorCode.SALE_ALREADY_VOIDED);
+        }
         paidVnd = Math.addExact(paidVnd, amountVnd);
         if (paidVnd > totalVnd) {
             throw new IllegalArgumentException("Repayment exceeds the sale total");
         }
         paymentStatus = paidVnd.equals(totalVnd) ? PaymentStatus.PAID : PaymentStatus.PARTIAL;
+    }
+
+    public void voidSale(Long userId, String reason) {
+        if (saleStatus != SaleStatus.CONFIRMED) {
+            throw new BusinessException(ErrorCode.SALE_ALREADY_VOIDED);
+        }
+        saleStatus = SaleStatus.VOIDED;
+        voidedAt = OffsetDateTime.now(ZoneOffset.UTC);
+        voidedByUserId = userId;
+        voidReason = reason;
     }
 
     @PrePersist

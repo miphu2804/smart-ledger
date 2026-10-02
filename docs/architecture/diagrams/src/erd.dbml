@@ -4,7 +4,9 @@
 //
 // ID: BIGINT IDENTITY → Java Long
 // Money: BIGINT VND
-// Time: TIMESTAMPTZ, stored in UTC
+// Time: TIMESTAMPTZ, UTC internally; Core JSON displays +07:00
+// Core schema: Flyway V1-V9; planned AI/notification/audit tables are not Core migrations.
+// Report periods use Asia/Ho_Chi_Minh; this logical ERD does not imply runtime completion.
 // Quantity: NUMERIC(15,3)
 //
 // =====================================================
@@ -27,6 +29,7 @@ Enum UserStatus {
 Enum ShopStatus {
   ACTIVE
   INACTIVE
+  ARCHIVED
 }
 
 Enum CatalogStatus {
@@ -58,6 +61,7 @@ Enum PaymentMethod {
 Enum DebtStatus {
   OPEN
   SETTLED
+  VOIDED
 }
 
 Enum DraftStatus {
@@ -164,6 +168,9 @@ Table shops {
   address varchar(500)
 
   status ShopStatus [not null, default: 'ACTIVE']
+  archived_at timestamptz
+  inactive_reason varchar(500)
+  archived_reason varchar(500)
 
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
@@ -253,6 +260,8 @@ Table customers {
     (shop_id, normalized_phone)
     (shop_id, status)
   }
+
+  Note: 'Name and phone are not unique. Use customer_id to share one debt history; do not automatically merge matching names/phones.'
 }
 
 
@@ -323,7 +332,7 @@ Table sale_draft_items {
     product_id
   }
 
-  Note: 'Core requires a product from the same shop or a non-blank custom-item name and unit before persisting a draft item.'
+  Note: 'Core accepts a same-shop catalog product or a custom item with product_id null, a non-blank name and unit. Custom items do not deduct product stock.'
 }
 
 
@@ -364,14 +373,15 @@ Table sales {
     sale_status
   }
 
-  Note: 'DEBT and PARTIAL sales require customer_id; Core validates this before confirmation and creates the matching debt in the same transaction.'
+  Note: 'Confirmed DEBT/PARTIAL sales require customer_id and a matching debt. Void preserves paid_vnd and payment_status as collection history; remaining debt is cancelled separately, and refund records money actually returned.'
 }
 
 
 Table sale_items {
   id bigint [pk, increment]
   sale_id bigint [not null]
-  product_id bigint [not null]
+  product_id bigint
+  stock_deducted boolean
 
   product_name_snapshot varchar(255) [not null]
   unit_snapshot varchar(50) [not null]
@@ -386,12 +396,33 @@ Table sale_items {
     sale_id
     product_id
   }
+
+  Note: 'product_id is null for a custom item; name/unit snapshots remain required. stock_deducted is true only when stock was deducted at confirmation, false for custom/untracked items. NULL means unknown historical stock movement; never assume false or automatically restock.'
 }
 
 
 // =====================================================
-// DEBTS & PAYMENTS
+// DEBTS, PAYMENTS & REFUNDS
 // =====================================================
+
+Table sale_refunds {
+  id bigint [pk, increment]
+  sale_id bigint [not null, unique]
+
+  amount_vnd bigint [not null]
+  refund_method PaymentMethod [not null]
+  transfer_reference varchar(255)
+
+  refunded_by_user_id bigint [not null]
+  refunded_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    refunded_at
+  }
+
+  Note: 'V9: at most one full refund per sale, amount_vnd > 0. Refund is all collected money, including later repayments; cancelled unpaid debt is not a refund. A zero-paid void creates no refund row. No partial refunds.'
+}
+
 
 Table debts {
   id bigint [pk, increment]
@@ -405,11 +436,15 @@ Table debts {
 
   created_at timestamptz [not null, default: `now()`]
   settled_at timestamptz
+  voided_at timestamptz
+  cancelled_vnd bigint
 
   indexes {
     (customer_id, status)
     status
   }
+
+  Note: 'V9 lifecycle: OPEN has outstanding > 0 and no settled/void audit; SETTLED has outstanding = 0 and settled_at, with voided_at/cancelled_vnd NULL. VOIDED has outstanding = 0, settled_at NULL, voided_at and 0 < cancelled_vnd <= original_vnd. Voiding a settled debt keeps SETTLED.'
 }
 
 
@@ -739,6 +774,9 @@ Ref: sales.id < payments.sale_id
 Ref: debts.id < payments.debt_id
 Ref: users.id < payments.received_by_user_id
 
+Ref: sales.id - sale_refunds.sale_id
+Ref: users.id < sale_refunds.refunded_by_user_id
+
 
 // ---------- EXPENSE ----------
 
@@ -808,6 +846,7 @@ TableGroup drafts_and_sales {
 TableGroup payment_and_expense {
   debts
   payments
+  sale_refunds
   expenses
 }
 

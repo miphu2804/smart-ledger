@@ -9,5 +9,6 @@ public record SaleResponse(
         Long id, Long shopId, String customerName, String customerPhone,
         Long subtotalVnd, Long discountVnd, Long totalVnd, Long paidVnd,
         SaleStatus saleStatus, PaymentStatus paymentStatus, OffsetDateTime soldAt,
-        List<SaleItemResponse> items, Long customerId, Long outstandingVnd) {
+        List<SaleItemResponse> items, Long customerId, Long outstandingVnd,
+        OffsetDateTime voidedAt, Long voidedByUserId, String voidReason) {
 }
