@@ -1,5 +1,3 @@
-from types import SimpleNamespace
-
 import pytest
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, HumanMessage
@@ -9,18 +7,15 @@ from src.agent.guardrails import (
     EMPTY_ANSWER_REPLY,
     INPUT_TOO_LONG_REPLY,
     LEAK_REPLY,
-    InputLengthGuard,
-    OutputGuard,
+    AgentGuardrails,
     build_guardrails,
 )
 from src.agent.service import AgentService
-from src.sql.executor import SqlResult
+from src.app_config import app_config
 
-SETTINGS = SimpleNamespace(
-    AGENT_MAX_INPUT_CHARS=200,
-    AGENT_MODEL_CALL_LIMIT=4,
-    AGENT_TOOL_CALL_LIMIT=3,
-)
+MAX_INPUT_CHARS = 200
+MODEL_CALL_LIMIT = 4
+TOOL_CALL_LIMIT = 3
 API_KEY = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz012345"
 JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.c2lnbmF0dXJlLXZhbHVl"
 BEARER = "Bearer abcdefghijklmnopqrstuvwxyz0123456789"
@@ -77,18 +72,20 @@ class CountingExecutor:
     def __init__(self) -> None:
         self.calls = 0
 
-    def run(self, shop_id: int, sql: str) -> SqlResult:
+    def run(self, shop_id: int, sql: str) -> dict:
         self.calls += 1
-        return SqlResult(columns=["n"], rows=[[1]], truncated=False)
+        return {"columns": ["n"], "rows": [[1]], "truncated": False}
+
+
+@pytest.fixture(autouse=True)
+def guardrail_limits(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app_config, "AGENT_MAX_INPUT_CHARS", MAX_INPUT_CHARS)
+    monkeypatch.setattr(app_config, "AGENT_MODEL_CALL_LIMIT", MODEL_CALL_LIMIT)
+    monkeypatch.setattr(app_config, "AGENT_TOOL_CALL_LIMIT", TOOL_CALL_LIMIT)
 
 
 def service(model, conversations=None, executor=None) -> AgentService:
-    return AgentService(
-        model,
-        conversations or Conversations(),
-        sql_executor=executor,
-        guardrails=build_guardrails(SETTINGS),
-    )
+    return AgentService(model, conversations or Conversations(), sql_executor=executor)
 
 
 def answering(text: str) -> RecordingModel:
@@ -100,10 +97,10 @@ def test_too_long_input_ends_the_run_without_a_model_call() -> None:
     conversations = Conversations()
 
     result = service(model, conversations).chat(
-        user_id=3, shop_id=15, message="x" * 201
+        user_id=3, shop_id=15, message="x" * (MAX_INPUT_CHARS + 1)
     )
 
-    assert result.answer == INPUT_TOO_LONG_REPLY.format(limit=200)
+    assert result.answer == INPUT_TOO_LONG_REPLY.format(limit=MAX_INPUT_CHARS)
     assert model.seen_calls == []
     assert conversations.saved_exchange["assistant_message"] == result.answer
 
@@ -126,7 +123,7 @@ def test_only_the_latest_message_counts_toward_the_input_limit() -> None:
 
 
 def test_input_guard_reads_the_last_human_message() -> None:
-    guard = InputLengthGuard(max_chars=5)
+    guard = AgentGuardrails(max_input_chars=5)
     state = {"messages": [HumanMessage("a" * 100), HumanMessage("short")]}
 
     assert guard.before_agent(state, None) is None
@@ -159,7 +156,7 @@ def test_card_numbers_are_masked_before_the_model() -> None:
 def test_shop_phone_in_tool_results_is_not_redacted() -> None:
     class PhoneExecutor:
         def run(self, shop_id, sql):
-            return SqlResult(columns=["phone"], rows=[["0901234567"]], truncated=False)
+            return {"columns": ["phone"], "rows": [["0901234567"]], "truncated": False}
 
     model = RecordingModel(
         responses=[
@@ -216,7 +213,7 @@ def test_normal_vietnamese_answer_passes_through() -> None:
 
 
 def test_output_guard_keeps_the_answer_id_when_replacing() -> None:
-    update = OutputGuard().after_agent(
+    update = AgentGuardrails(MAX_INPUT_CHARS).after_agent(
         {"messages": [AIMessage(content="SELECT id FROM v_products", id="a1")]}, None
     )
 
@@ -231,6 +228,18 @@ def test_limits_stop_a_model_that_keeps_calling_tools() -> None:
 
     result = service(model, executor=executor).chat(user_id=3, shop_id=15, message="m")
 
-    assert len(model.seen_calls) == SETTINGS.AGENT_MODEL_CALL_LIMIT
-    assert executor.calls == SETTINGS.AGENT_TOOL_CALL_LIMIT
+    assert len(model.seen_calls) == MODEL_CALL_LIMIT
+    assert executor.calls == TOOL_CALL_LIMIT
     assert result.answer == EMPTY_ANSWER_REPLY
+
+
+def test_build_guardrails_has_no_tool_error_middleware() -> None:
+    names = [type(m).__name__ for m in build_guardrails(200, 4, 3)]
+
+    assert names == [
+        "AgentGuardrails",
+        "PIIMiddleware",
+        "PIIMiddleware",
+        "ModelCallLimitMiddleware",
+        "ToolCallLimitMiddleware",
+    ]

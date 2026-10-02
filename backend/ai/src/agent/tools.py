@@ -1,15 +1,18 @@
 import json
+import re
 from dataclasses import dataclass
 
-from langchain.agents.middleware import ToolCallRequest
 from langchain.tools import ToolRuntime, tool
 from langchain_core.tools import BaseTool
 
 from src.agent.history_search import NO_MATCH, format_clusters, search_messages
 from src.agent.repository import AgentConversationRepository
 from src.prompt_templates import QUERY_RESULT_HEADER
-from src.sql.executor import ReadOnlySqlExecutor, SqlQueryError, SqlResult
-from src.sql.guard import UnsafeSqlError
+from src.sql.executor import ReadOnlySqlExecutor
+
+# The guard and the executor raise ValueError("CODE: reason") for a query the model can
+# fix. Any other ValueError is a bug and must not reach the model.
+MODEL_ERROR = re.compile(r"([A-Z][A-Z_]*): (.*)", re.DOTALL)
 
 
 @dataclass(frozen=True)
@@ -51,32 +54,23 @@ def build_tools(executor: ReadOnlySqlExecutor) -> list[BaseTool]:
     @tool("query_shop_data")
     def query_shop_data(sql: str, runtime: ToolRuntime[AgentContext]) -> str:
         """Run one read-only SELECT on the shop's views. Returns JSON or Error[CODE]."""
-        # UnsafeSqlError and SqlQueryError go back to the model through
-        # ToolErrorMiddleware (see tool_error_message); SqlUnavailableError fails the
-        # turn as ai_unavailable.
-        return format_sql_result(executor.run(runtime.context.shop_id, sql))
+        # A rejected or failed query goes back to the model as text so it can rewrite
+        # the query. Anything else, such as an unreachable reader database, propagates
+        # and the router answers 503 ai_unavailable.
+        try:
+            result = executor.run(runtime.context.shop_id, sql)
+        except ValueError as error:
+            match = MODEL_ERROR.fullmatch(str(error))
+            if match is None:
+                raise
+            code, reason = match.groups()
+            return f"Error[{code}]: {reason}. Rewrite the query and retry."
+        payload = {
+            "columns": result["columns"],
+            "rows": result["rows"],
+            "row_count": len(result["rows"]),
+            "truncated": result["truncated"],
+        }
+        return f"{QUERY_RESULT_HEADER}\n{json.dumps(payload, ensure_ascii=False)}"
 
     return [query_shop_data]
-
-
-def format_sql_result(result: SqlResult) -> str:
-    payload = {
-        "columns": result.columns,
-        "rows": result.rows,
-        "row_count": len(result.rows),
-        "truncated": result.truncated,
-    }
-    return f"{QUERY_RESULT_HEADER}\n{json.dumps(payload, ensure_ascii=False)}"
-
-
-def tool_error_message(error: Exception, request: ToolCallRequest) -> str | None:
-    """Turn a rejected or failed query into text the model can act on.
-
-    Returns None for anything else, which lets the error propagate and fail the turn,
-    so connection details or stack traces never reach the model.
-    """
-    if isinstance(error, UnsafeSqlError):
-        return f"Error[{error.code}]: {error.detail}. Rewrite the query and retry."
-    if isinstance(error, SqlQueryError):
-        return f"Error[{error.code}]: {error.message}. Rewrite the query and retry."
-    return None

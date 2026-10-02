@@ -1,9 +1,7 @@
 import logging
-from collections.abc import Sequence
 from dataclasses import dataclass
 
 from langchain.agents import create_agent
-from langchain.agents.middleware import AgentMiddleware
 from langchain_core.language_models import BaseChatModel
 
 from src.agent.guardrails import build_guardrails, latest_human
@@ -40,12 +38,10 @@ class AgentService:
         conversations: AgentConversationRepository,
         summary_model: BaseChatModel | None = None,
         sql_executor: ReadOnlySqlExecutor | None = None,
-        guardrails: Sequence[AgentMiddleware] | None = None,
     ) -> None:
         self.model = model
         self.summary_model = summary_model
         self.conversations = conversations
-        self.sql_executor = sql_executor
         tools = get_all_tools(conversations)
         # The system prompt is static so providers can cache it; the shop scope arrives
         # per request through AgentContext and never appears in the prompt.
@@ -59,8 +55,10 @@ class AgentService:
                 tools=tools,
                 system_prompt=system_prompt,
                 context_schema=AgentContext,
-                middleware=list(
-                    build_guardrails(app_config) if guardrails is None else guardrails
+                middleware=build_guardrails(
+                    app_config.AGENT_MAX_INPUT_CHARS,
+                    app_config.AGENT_MODEL_CALL_LIMIT,
+                    app_config.AGENT_TOOL_CALL_LIMIT,
                 ),
             )
             if model is not None

@@ -3,13 +3,22 @@ import re
 import pytest
 import sqlglot
 
-from src.sql.guard import UnsafeSqlError, validate_and_wrap
+from src.sql.guard import SqlGuard
+
+
+def validate_and_wrap(sql: str, row_limit: int = 100) -> str:
+    return SqlGuard(row_limit).validate_and_wrap(sql)
+
+
+def rejection(sql: str, row_limit: int = 100) -> str:
+    """The `CODE: detail` text of the ValueError the guard raises."""
+    with pytest.raises(ValueError) as error:
+        validate_and_wrap(sql, row_limit)
+    return str(error.value)
 
 
 def rejected(sql: str) -> str:
-    with pytest.raises(UnsafeSqlError) as error:
-        validate_and_wrap(sql, 100)
-    return error.value.code
+    return rejection(sql).split(":", 1)[0]
 
 
 @pytest.mark.parametrize(
@@ -253,25 +262,21 @@ def test_wrap_drops_the_view_schema_and_keeps_strings_intact() -> None:
 
 def test_row_limit_must_be_positive() -> None:
     with pytest.raises(ValueError):
-        validate_and_wrap("SELECT 1", 0)
+        SqlGuard(0)
 
 
 def test_error_code_is_safe_to_report() -> None:
-    with pytest.raises(UnsafeSqlError) as error:
-        validate_and_wrap("SELECT set_config('a', 'b', true)", 10)
+    message = rejection("SELECT set_config('a', 'b', true)", 10)
 
-    assert error.value.code == "UNSAFE_FUNCTION"
-    assert re.fullmatch(r"[A-Z_]+", error.value.code)
+    assert re.fullmatch(r"[A-Z_]+: .+", message)
+    assert message.startswith("UNSAFE_FUNCTION: ")
 
 
 def test_error_detail_names_the_problem_without_terminal_escapes() -> None:
-    with pytest.raises(UnsafeSqlError) as function_error:
-        validate_and_wrap("SELECT set_config('a', 'b', true)", 10)
-    with pytest.raises(UnsafeSqlError) as table_error:
-        validate_and_wrap("SELECT * FROM products", 10)
-    with pytest.raises(UnsafeSqlError) as parse_error:
-        validate_and_wrap("SELECT FROM WHERE ((", 10)
+    function_error = rejection("SELECT set_config('a', 'b', true)", 10)
+    table_error = rejection("SELECT * FROM products", 10)
+    parse_error = rejection("SELECT FROM WHERE ((", 10)
 
-    assert function_error.value.detail == "set_config is not allowed"
-    assert table_error.value.detail.startswith("products is not allowed; use only")
-    assert "\x1b" not in parse_error.value.detail
+    assert function_error == "UNSAFE_FUNCTION: set_config is not allowed"
+    assert table_error.startswith("UNSAFE_TABLE: products is not allowed; use only")
+    assert "\x1b" not in parse_error
