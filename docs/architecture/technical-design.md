@@ -22,7 +22,7 @@ Kiến trúc trong sơ đồ là **đích MVP**: Mobile dành cho OWNER và dash
 
 **Snapshot cũ ngày 2026-09-24:** Mobile/web có mock, parser text cục bộ và client auth chưa tích hợp toàn luồng; AI có health/Agent chat CRUD lưu PostgreSQL. Lượt này không kiểm chứng lại FE/AI hoặc nhánh staging mới nhất; không dùng snapshot đó để khẳng định Core hiện chỉ có auth.
 
-**Còn là đích MVP/chưa triển khai trong Core:** proxy AI (voice/image/recommendation/insight/Agent), API dashboard đọc tổng quan, audit_logs tổng quát, notification và báo cáo bán chạy/series/lợi nhuận. Hoàn tiền/trả hàng từng phần và ledger điều chỉnh kho độc lập chưa triển khai. Năng lực end-to-end chỉ được nghiệm thu qua AC tương ứng trong [PRD](../product/product-requirements.md).
+**Còn là đích MVP/chưa triển khai trong Core:** proxy AI (voice/image/recommendation/insight/Agent), API dashboard đọc tổng quan, audit khi ADMIN xem dữ liệu, notification và báo cáo bán chạy/series/lợi nhuận. Hoàn tiền/trả hàng từng phần và ledger điều chỉnh kho độc lập chưa triển khai. Năng lực end-to-end chỉ được nghiệm thu qua AC tương ứng trong [PRD](../product/product-requirements.md).
 
 ## 2. Thành phần và quyền sở hữu
 
@@ -54,7 +54,7 @@ Lỗi confirm/repay/void rollback toàn bộ thay đổi, kể cả reservation 
 
 Luồng text/voice/image → AI proposal → draft, replenishment và insight vẫn là đích: AI không được tự tạo sale/payment/debt/expense. Core chưa gọi AI; timeout/fallback cần nghiệm thu khi tích hợp.
 
-Luồng ADMIN hiện có: `PATCH /api/v1/shops/{shopId}/status` (ngoài prefix admin), tạm ngưng/kích hoạt kèm lý do. Dashboard `/api/v1/admin/*` và audit_logs còn là yêu cầu đích; không tuyên bố đã đạt BR-014/NFR-009. ADMIN không giả danh OWNER hay sửa sổ nghiệp vụ.
+Luồng ADMIN hiện có: `PATCH /api/v1/shops/{shopId}/status` (ngoài prefix admin), tạm ngưng/kích hoạt kèm lý do. Đổi trạng thái ghi audit `SHOP_INACTIVATED`/`SHOP_REACTIVATED` với actor ADMIN. Dashboard `/api/v1/admin/*` và audit khi ADMIN xem dữ liệu còn là yêu cầu đích; không tuyên bố đã đạt BR-014/NFR-009. ADMIN không giả danh OWNER hay sửa sổ nghiệp vụ.
 
 ## 4. Dữ liệu và ràng buộc
 
@@ -70,7 +70,7 @@ Luồng ADMIN hiện có: `PATCH /api/v1/shops/{shopId}/status` (ngoài prefix a
 - Idempotency chỉ phủ POST expense, debt repayment và sale void: reserve/action/replay result chung transaction; key theo shop + operation, hash có body và path ID khi có. TTL mặc định 30 ngày, chưa có cleanup job. POST tạo danh mục/khách/draft/shop chưa được bảo vệ key; confirm chống trùng bằng draft ID.
 - PATCH/archive product khóa dòng cùng cách checkout, tránh ghi đè tồn khi chạy đồng thời. Repay/void thống nhất thứ tự khóa sale → debt → product để tránh lock inversion.
 
-Audit_logs cho truy cập ADMIN, trace AI/media và cô lập vector theo shop vẫn là yêu cầu đích, chưa có migration/API tương ứng trong Core. Void audit trong sales/debts/refunds không thay thế audit_logs tổng quát.
+V10 tạo `audit_logs` append-only (trigger chặn UPDATE/DELETE/TRUNCATE); Core ghi audit cho thao tác ghi thành công của OWNER/ADMIN cùng transaction nghiệp vụ và OWNER đọc qua `GET /api/v1/audit-logs` (xem [API contract](../contracts/api-contracts.md#lịch-sử-audit-của-tiệm)). Audit khi ADMIN xem dữ liệu (`NFR-009`/`AC-017`), trace AI/media và cô lập vector theo shop vẫn là yêu cầu đích, chưa có trong Core.
 
 Schema PostgreSQL được quản lý bằng migration SQL có phiên bản trong Git. Không sửa schema trực tiếp trên Supabase Dashboard. Migration phải chạy được trên PostgreSQL chuẩn; extension, trigger hoặc API riêng của Supabase chỉ được dùng khi có quyết định kỹ thuật riêng.
 

@@ -4,7 +4,7 @@
 
 This ERD describes the target PostgreSQL database for **SmartLedger Phase 1**, an AI-assisted bookkeeping system for small businesses. It includes planned tables and relationships that are not yet in Core's Flyway migrations.
 
-The logical ERD includes authentication, shops, products, customers, drafts, sales, payments, refunds, debts, expenses, AI request traces, idempotency, and audit logs. Core migrations V1–V9 implement the business tables and idempotency; AI/notification/audit tables remain target design from Core's perspective. This does not assert deployment or completion of other teams' services.
+The logical ERD includes authentication, shops, products, customers, drafts, sales, payments, refunds, debts, expenses, AI request traces, idempotency, and audit logs. Core migrations V1–V10 implement the business tables, idempotency and audit logs; AI/notification tables remain target design from Core's perspective. This does not assert deployment or completion of other teams' services.
 
 Business decisions are owned by the [BRD](../product/business-requirements.md) and [PRD](../product/product-requirements.md); endpoint/JSON details are owned by the [API contract](../contracts/api-contracts.md). Reviewed against the Core working tree on 2026-10-02.
 
@@ -47,7 +47,7 @@ Drafts do not affect revenue, stock, payments, or debts until confirmed.
 
 - **ai_requests**: Planned table for AI request status, model/version, result, errors, and media object references; not yet created by Core migrations.
 - **api_idempotency_keys**: Protects exactly expense creation, debt repayment, and sale void. Confirmation replays by draft ID instead. Other create operations are not covered; default TTL is 30 days and no cleanup job exists.
-- **audit_logs**: Planned table for important business actions and sensitive ADMIN access; not yet created by Core migrations.
+- **audit_logs**: Created by V10 as append-only history of successful OWNER/ADMIN writes (actor, shop, action, target, safe metadata, request ID); UPDATE/DELETE/TRUNCATE are rejected by triggers. Audit of sensitive ADMIN read access is still planned.
 
 ### Notifications
 

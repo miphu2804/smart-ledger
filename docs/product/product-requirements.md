@@ -185,4 +185,4 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 - Toàn bộ `FR-INV-*` bị hoãn cho đến khi `OQ-INV-001`–`OQ-INV-005` trong BRD được giải quyết.
 - Máy in và gói dịch vụ ngoài PRD MVP.
 - `OQ-002` đã chốt hủy toàn bộ có dấu vết theo BRD. Hoàn tiền/trả hàng từng phần và điều chỉnh kho độc lập chưa triển khai.
-- [Thiết kế kỹ thuật](../architecture/technical-design.md) ghi phạm vi Core đã kiểm chứng; API AI/dashboard, audit_logs, bán chạy/series/lợi nhuận vẫn cần tích hợp. AC ở trên là điều kiện nghiệm thu sản phẩm, không tự đánh dấu FE/staging/production đã đạt.
+- [Thiết kế kỹ thuật](../architecture/technical-design.md) ghi phạm vi Core đã kiểm chứng; API AI/dashboard, audit khi ADMIN xem dữ liệu, bán chạy/series/lợi nhuận vẫn cần tích hợp; audit_logs cho thao tác ghi đã có trong Core (V10). AC ở trên là điều kiện nghiệm thu sản phẩm, không tự đánh dấu FE/staging/production đã đạt.
