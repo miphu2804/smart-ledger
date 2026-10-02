@@ -12,6 +12,8 @@ import com.smartledger.core.entity.AuditLog;
 import com.smartledger.core.entity.Shop;
 import com.smartledger.core.enums.AuditAction;
 import com.smartledger.core.enums.ErrorCode;
+import com.smartledger.core.enums.PaymentMethod;
+import com.smartledger.core.enums.ShopStatus;
 import com.smartledger.core.enums.SystemRole;
 import com.smartledger.core.exception.BusinessException;
 import com.smartledger.core.repository.AuditLogRepository;
@@ -96,6 +98,33 @@ class AuditLogServiceTest {
                     null, java.util.UUID.randomUUID().toString(), null, Map.of("afterStock", number)))
                     .isInstanceOf(IllegalArgumentException.class);
         }
+    }
+
+    @Test
+    void acceptsEveryCurrentPaymentMethodAndShopStatus() {
+        for (PaymentMethod method : PaymentMethod.values()) {
+            var event = AuditLog.success(7L, 42L, SystemRole.OWNER, AuditAction.EXPENSE_CREATED, 8L,
+                    null, java.util.UUID.randomUUID().toString(), null,
+                    Map.of("amountVnd", 1_000L, "paymentMethod", method));
+            assertThat(event.getMetadata()).containsEntry("paymentMethod", method.name());
+        }
+        for (ShopStatus status : ShopStatus.values()) {
+            var event = AuditLog.success(7L, 42L, SystemRole.ADMIN, AuditAction.SHOP_INACTIVATED, 7L,
+                    null, java.util.UUID.randomUUID().toString(), null,
+                    Map.of("beforeStatus", status, "afterStatus", status));
+            assertThat(event.getMetadata()).containsEntry("afterStatus", status.name());
+        }
+    }
+
+    @Test
+    void readsAStoredRowEvenIfItsMetadataNoLongerPassesWriteValidation() {
+        var event = AuditLog.success(7L, 42L, SystemRole.OWNER, AuditAction.SALE_VOIDED, 15L,
+                null, java.util.UUID.randomUUID().toString(), null, Map.of("refundedVnd", 1L));
+        ReflectionTestUtils.setField(event, "metadata", new HashMap<>(Map.of("retiredKey", "legacy")));
+
+        assertThat(event.getMetadata()).containsEntry("retiredKey", "legacy");
+        assertThatThrownBy(() -> event.getMetadata().put("refundedVnd", 1L))
+                .isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test

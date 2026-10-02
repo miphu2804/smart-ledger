@@ -1,6 +1,8 @@
 package com.smartledger.core.entity;
 
 import com.smartledger.core.enums.AuditAction;
+import com.smartledger.core.enums.PaymentMethod;
+import com.smartledger.core.enums.ShopStatus;
 import com.smartledger.core.enums.SystemRole;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -14,11 +16,13 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -36,6 +40,8 @@ import org.hibernate.type.SqlTypes;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class AuditLog {
+    private static final Set<String> PAYMENT_METHODS = enumNames(PaymentMethod.values());
+    private static final Set<String> SHOP_STATUSES = enumNames(ShopStatus.values());
     private static final Set<String> BOOLEAN_KEYS = Set.of("restockItems", "tracked", "beforeTracked", "afterTracked");
     private static final Set<String> FIELD_NAMES = Set.of("name", "industry", "phone", "address", "categoryId",
             "barcode", "imageUrl", "unit", "sellingPriceVnd", "costPriceVnd", "tracked", "stockQuantity",
@@ -117,11 +123,11 @@ public class AuditLog {
             } else if (BOOLEAN_KEYS.contains(key)) {
                 valid = normalized instanceof Boolean;
             } else if (key.equals("paymentMethod")) {
-                valid = normalized == null || Set.of("CASH", "TRANSFER").contains(normalized);
+                valid = normalized == null || PAYMENT_METHODS.contains(normalized);
             } else if (key.equals("source")) {
                 valid = normalized != null && Set.of("CATALOG_EDIT", "SALE_CONFIRM").contains(normalized);
             } else if (key.equals("beforeStatus") || key.equals("afterStatus")) {
-                valid = normalized != null && Set.of("ACTIVE", "INACTIVE", "ARCHIVED").contains(normalized);
+                valid = normalized != null && SHOP_STATUSES.contains(normalized);
             } else {
                 // JSONB may hydrate decimal numbers as Double rather than BigDecimal.
                 valid = normalized == null || normalized instanceof Long || normalized instanceof Integer
@@ -138,7 +144,12 @@ public class AuditLog {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
+    private static Set<String> enumNames(Enum<?>[] values) {
+        return Arrays.stream(values).map(Enum::name).collect(Collectors.toUnmodifiableSet());
+    }
+
+    /** Validated once on write; stored rows are append-only and must stay readable as recorded. */
     public Map<String, Object> getMetadata() {
-        return safeMetadata(action, metadata);
+        return metadata == null ? Map.of() : Collections.unmodifiableMap(metadata);
     }
 }
