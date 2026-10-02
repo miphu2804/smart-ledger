@@ -7,11 +7,11 @@ from langchain_core.language_models.fake_chat_models import (
 )
 from langchain_core.messages import AIMessage
 
-from src.agent.prompt_template import SHOP_AGENT_SYSTEM_PROMPT
 from src.agent.repository import ConversationNotFoundError
 from src.agent.service import AgentService
 from src.agent.summary import FOLD_TRIGGER_MESSAGES, KEEP_RECENT_MESSAGES
 from src.agent.tools import get_all_tools
+from src.prompt_templates import SHOP_AGENT_SYSTEM_PROMPT
 
 
 class RecordingChatModel(FakeListChatModel):

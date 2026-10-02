@@ -7,19 +7,19 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.language_models import BaseChatModel
 
 from src.agent.guardrails import build_guardrails, latest_human
-from src.agent.prompt_template import (
+from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
+from src.agent.summary import plan_fold
+from src.agent.tools import AgentContext, build_tools, get_all_tools
+from src.app_config import app_config
+from src.prompt_templates import (
     CHAT_SUMMARY_CONTEXT,
     CHAT_SUMMARY_EMPTY,
     CHAT_SUMMARY_INPUT,
     CHAT_SUMMARY_PROMPT,
     SHOP_AGENT_SYSTEM_PROMPT,
+    SQL_AGENT_PROMPT,
 )
-from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
-from src.agent.summary import plan_fold
-from src.agent.tools import AgentContext, build_tools, get_all_tools
-from src.app_config import app_config
 from src.sql.executor import ReadOnlySqlExecutor
-from src.sql.schema_prompt import SQL_AGENT_PROMPT
 
 logger = logging.getLogger(__name__)
 
