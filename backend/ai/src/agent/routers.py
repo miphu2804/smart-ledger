@@ -6,14 +6,13 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
-    HTTPException,
     Query,
     Request,
     Response,
 )
 from fastapi.responses import JSONResponse
 
-from src.agent.repository import ConversationNotFoundError
+from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
 from src.agent.schemas import (
     AgentChatRequest,
     AgentChatResponse,
@@ -22,6 +21,7 @@ from src.agent.schemas import (
     AgentConversationView,
 )
 from src.agent.service import AgentService
+from src.agent.summary import ChatSummaryFolder
 from src.security import require_internal_token
 
 logger = logging.getLogger(__name__)
@@ -34,19 +34,27 @@ router = APIRouter(
 
 
 def get_agent(request: Request) -> AgentService:
-    agent: AgentService | None = getattr(request.app.state, "agent", None)
-    if agent is None:
-        raise HTTPException(status_code=503, detail="ai_unavailable")
-    return agent
+    return request.app.state.agent
+
+
+def get_summary_folder(request: Request) -> ChatSummaryFolder:
+    return request.app.state.summary_folder
+
+
+def get_conversations(request: Request) -> AgentConversationRepository:
+    return request.app.state.conversations
 
 
 AgentServiceDep = Annotated[AgentService, Depends(get_agent)]
+SummaryFolderDep = Annotated[ChatSummaryFolder, Depends(get_summary_folder)]
+ConversationsDep = Annotated[AgentConversationRepository, Depends(get_conversations)]
 
 
 @router.post("/chat", response_model=AgentChatResponse)
 def agent_chat(
     payload: AgentChatRequest,
     agent: AgentServiceDep,
+    summary_folder: SummaryFolderDep,
     background_tasks: BackgroundTasks,
 ):
     result = agent.chat(
@@ -58,7 +66,7 @@ def agent_chat(
     # Folding only rewrites memory of older messages, so it runs after the reply and
     # the next turn sees the new summary.
     background_tasks.add_task(
-        agent.fold_summary,
+        summary_folder.fold,
         result.conversation_id,
         payload.user_id,
         payload.shop_id,
@@ -75,21 +83,21 @@ def agent_chat(
 
 @router.get("/conversations", response_model=list[AgentConversationSummary])
 def list_agent_conversations(
-    agent: AgentServiceDep,
+    conversations: ConversationsDep,
     user_id: int = Query(gt=0),
     shop_id: int = Query(gt=0),
 ):
-    return agent.list_conversations(user_id=user_id, shop_id=shop_id)
+    return conversations.list_conversations(user_id=user_id, shop_id=shop_id)
 
 
 @router.get("/conversations/{conversation_id}", response_model=AgentConversationView)
 def get_agent_conversation(
     conversation_id: int,
-    agent: AgentServiceDep,
+    conversations: ConversationsDep,
     user_id: int = Query(gt=0),
     shop_id: int = Query(gt=0),
 ):
-    return agent.get_conversation(
+    return conversations.get_conversation(
         conversation_id=conversation_id,
         user_id=user_id,
         shop_id=shop_id,
@@ -102,9 +110,9 @@ def get_agent_conversation(
 def rename_agent_conversation(
     conversation_id: int,
     payload: AgentConversationRenameRequest,
-    agent: AgentServiceDep,
+    conversations: ConversationsDep,
 ):
-    return agent.rename_conversation(
+    return conversations.rename_conversation(
         conversation_id=conversation_id,
         user_id=payload.user_id,
         shop_id=payload.shop_id,
@@ -115,11 +123,11 @@ def rename_agent_conversation(
 @router.delete("/conversations/{conversation_id}", status_code=204)
 def delete_agent_conversation(
     conversation_id: int,
-    agent: AgentServiceDep,
+    conversations: ConversationsDep,
     user_id: int = Query(gt=0),
     shop_id: int = Query(gt=0),
 ) -> Response:
-    agent.delete_conversation(
+    conversations.delete_conversation(
         conversation_id=conversation_id,
         user_id=user_id,
         shop_id=shop_id,

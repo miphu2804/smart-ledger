@@ -1,8 +1,10 @@
 import pytest
 
+from src.agent.summary import ChatSummaryFolder
 from src.app_config import app_config
 from src.infra.postgre_db_client import PostgreDBClient
 from src.infra.redis_db_client import RedisDBClient
+from src.main import app
 
 TEST_INTERNAL_TOKEN = "test-internal-token"
 
@@ -25,3 +27,15 @@ def internal_api_token(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def internal_headers() -> dict[str, str]:
     return {"X-Internal-Token": TEST_INTERNAL_TOKEN}
+
+
+@pytest.fixture
+def wire_agent_state():
+    """Point the app at a test agent and its conversation store."""
+
+    def _wire(agent, conversations) -> None:
+        app.state.agent = agent
+        app.state.conversations = conversations
+        app.state.summary_folder = ChatSummaryFolder(None, conversations)
+
+    return _wire

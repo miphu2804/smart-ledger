@@ -18,9 +18,9 @@
 - Không dùng cổng trong sơ đồ kiến trúc làm hợp đồng API.
 - Redis, Qdrant, Langfuse và LiteLLM không có API công khai. FE không gọi trực tiếp các thành phần này.
 
-**Đã đối chiếu:** controller/DTO/service và migration Core trong working tree `feat/core-business`, ngày 2026-10-02. Các mục 1–4 là API Core hiện có, không phải bằng chứng đã deploy staging hay tích hợp FE. Hiện trạng triển khai/kiểm thử nằm trong [thiết kế kỹ thuật](../architecture/technical-design.md). Core chưa có proxy AI hoặc dashboard đọc tổng quan; mục 5–7 giữ hợp đồng đích, không đánh dấu đã triển khai.
+**Đã đối chiếu:** controller/DTO/service và migration Core trong working tree `feat/core-business`, ngày 2026-10-02. Các mục 1–4 là API Core hiện có, không phải bằng chứng đã deploy staging hay tích hợp FE. Hiện trạng triển khai/kiểm thử nằm trong [thiết kế kỹ thuật](../architecture/technical-design.md). Core đã có proxy Agent (mục 5) nhưng chưa có dashboard đọc tổng quan; mục 6–7 giữ hợp đồng đích, không đánh dấu đã triển khai.
 
-**AI nhập từ staging:** AI có `GET /health` và năm endpoint `/internal/v1/agent/*` (chat, list, detail, rename, delete), cùng tóm tắt chat cuốn chiếu và tìm lịch sử. Mọi đường `/internal/v1/*` bắt buộc `X-Internal-Token`; thiếu/sai token hoặc AI chưa cấu hình `INTERNAL_API_TOKEN` trả `401`, riêng `/health` vẫn công khai. Core chưa triển khai proxy AI: tích hợp sau này phải gửi service credential này và kiểm tra scope user/shop. Không coi việc nhập code AI là nghiệm thu luồng FE → Core → AI; web admin vẫn dùng mock theo mặc định.
+**AI nhập từ staging:** AI có `GET /health` và năm endpoint `/internal/v1/agent/*` (chat, list, detail, rename, delete), cùng tóm tắt chat cuốn chiếu và tìm lịch sử. Mọi đường `/internal/v1/*` bắt buộc `X-Internal-Token`; thiếu/sai token hoặc AI chưa cấu hình `INTERNAL_API_TOKEN` trả `401`, riêng `/health` vẫn công khai. Core proxy `/api/v1/agent/*` sang các đường này, gửi `X-Internal-Token` và lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực; AI `404` thành `conversation_not_found`, lỗi hoặc quá thời gian khác thành `503 ai_unavailable`. Không coi việc nhập code AI là nghiệm thu luồng FE → Core → AI; web admin vẫn dùng mock theo mặc định.
 
 ## Quy ước request
 
@@ -313,6 +313,17 @@ Yêu cầu chung:
 - Core chuyển `user_id` đã xác thực; AI truy vấn theo cả `user_id` và `shop_id`. Hội thoại không tồn tại hoặc không thuộc phạm vi trả `404 conversation_not_found`;
 - chat được giữ qua các phiên đến khi OWNER xóa; xóa chat loại tin nhắn khỏi lịch sử và ngữ cảnh assistant. MVP không áp TTL tự động;
 - Core gọi `/internal/v1/*` với header `X-Internal-Token` mang giá trị `INTERNAL_API_TOKEN` của môi trường. Thiếu header hoặc sai giá trị trả `401` với `{ "detail": "unauthorized" }`. Khi AI chưa cấu hình token thì mọi đường `/internal/v1/*` trả `401` (fail closed), riêng `/health` vẫn trả lời bình thường;
+
+### Công cụ đọc dữ liệu tiệm của agent
+
+Agent có tool nội bộ `query_shop_data` để trả lời câu hỏi về hồ sơ tiệm, nhóm hàng và sản phẩm. Đây không phải endpoint: **không có** `POST /internal/v1/agent/sql`, Core và FE chỉ nối `/internal/v1/agent/chat`, request và response của chat không đổi.
+
+- Model chỉ truyền `sql`; `shop_id` lấy từ request đã xác thực và tới tool qua runtime context của LangChain, không nằm trong schema tool hay system prompt, nên model không đổi được phạm vi tiệm.
+- Truy vấn chạy bằng role chỉ đọc `ai_sql_reader` trên ba view của schema `ai_read`: `v_shop_profile`, `v_categories`, `v_products`. View tự lọc theo tiệm của transaction và không có cột `shop_id`; role không có quyền trên bảng gốc.
+- SQL phải qua bộ kiểm tra AST: đúng một câu `SELECT` (cho phép `WITH`, `UNION`), chỉ dùng hàm và kiểu cast trong allowlist. Transaction `READ ONLY`, `statement_timeout` mặc định 3000 ms, tối đa 100 dòng, luôn rollback; mỗi lượt chat gọi model tối đa 4 lần và tool tối đa 3 lần.
+- Truy vấn bị bộ kiểm tra hoặc database từ chối, hoặc quá thời gian, trả về model dạng `Error[CODE]: lý do` (ví dụ `UNSAFE_FUNCTION`, `QUERY_TIMEOUT`, `SQL_ERROR`) để model viết lại câu truy vấn; lượt chat vẫn trả lời. Database đọc không kết nối được thì lượt chat trả `503 ai_unavailable`. Khi AI chưa cấu hình `AI_SQL_READER_URL`, agent vẫn chat nhưng không có tool này.
+- Guardrail tất định quanh agent: tin nhắn mới dài quá 2000 ký tự được trả lời ngắn bằng tiếng Việt, không gọi model; số thẻ được che và khóa API/token bị xóa khỏi tin nhắn trước khi gửi model và trước khi lưu; câu trả lời rỗng hoặc lộ chi tiết nội bộ (tên view, SQL, mã lỗi) được thay bằng câu trả lời an toàn. Hợp đồng request/response của `/internal/v1/agent/chat` không đổi.
+- Giai đoạn 1 chưa đọc doanh thu, chi phí, công nợ hay khách hàng. Chi tiết vận hành nằm trong [README của AI](../../backend/ai/README.md#shop-data-tool-read-only-sql).
 
 ### Ngữ cảnh chat và bản tóm tắt cuốn chiếu
 

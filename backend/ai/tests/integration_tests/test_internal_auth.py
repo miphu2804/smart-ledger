@@ -3,6 +3,7 @@ from unittest.mock import Mock
 import pytest
 from fastapi.testclient import TestClient
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
+from tests.support import TEST_GUARDRAIL_LIMITS
 
 from src.agent.repository import AgentConversationRepository
 from src.agent.service import AgentService
@@ -12,7 +13,7 @@ from src.main import app
 CHAT = "/internal/v1/agent/chat"
 CONVERSATIONS = "/internal/v1/agent/conversations"
 SCOPE = {"user_id": 7, "shop_id": 12}
-PAYLOAD = {**SCOPE, "message": "doanh thu hôm nay?"}
+PAYLOAD = {**SCOPE, "message": "today's revenue?"}
 
 
 class EchoChatModel(FakeListChatModel):
@@ -21,18 +22,21 @@ class EchoChatModel(FakeListChatModel):
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client(wire_agent_state) -> TestClient:
     # Deliberately without default credentials: every test states its own token.
-    app.state.fake_conversations = Mock(spec=AgentConversationRepository)
-    app.state.fake_conversations.context_for.return_value = {
+    conversations = Mock(spec=AgentConversationRepository)
+    conversations.context_for.return_value = {
         "summary": None,
         "summary_through_message_id": None,
         "messages": [],
     }
-    app.state.fake_conversations.save_exchange.return_value = (101, 502)
-    app.state.agent = AgentService(
-        EchoChatModel(responses=["trả lời"]), app.state.fake_conversations
+    conversations.save_exchange.return_value = (101, 502)
+    agent = AgentService(
+        EchoChatModel(responses=["answer"]),
+        conversations,
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
+    wire_agent_state(agent, conversations)
     return TestClient(app)
 
 
@@ -46,7 +50,11 @@ def test_health_needs_no_token(client: TestClient) -> None:
         ("post", CHAT, {"json": PAYLOAD}),
         ("get", CONVERSATIONS, {"params": SCOPE}),
         ("get", f"{CONVERSATIONS}/101", {"params": SCOPE}),
-        ("patch", f"{CONVERSATIONS}/101", {"json": {**SCOPE, "title": "Ca sáng"}}),
+        (
+            "patch",
+            f"{CONVERSATIONS}/101",
+            {"json": {**SCOPE, "title": "Morning shift"}},
+        ),
         ("delete", f"{CONVERSATIONS}/101", {"params": SCOPE}),
     ],
 )
@@ -85,7 +93,7 @@ def test_internal_route_accepts_the_configured_token(
     response = client.post(CHAT, json=PAYLOAD, headers=internal_headers)
 
     assert response.status_code == 200
-    assert response.json()["answer"] == "trả lời"
+    assert response.json()["answer"] == "answer"
 
 
 def test_missing_token_is_rejected_before_the_agent_is_consulted(

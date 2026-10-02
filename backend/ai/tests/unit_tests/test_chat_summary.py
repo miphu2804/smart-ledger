@@ -8,7 +8,7 @@ from src.agent.summary import (
 )
 
 
-def history(count: int, content: str = "ghi chú") -> list[dict]:
+def history(count: int, content: str = "note") -> list[dict]:
     return [
         {"message_id": index + 1, "role": "USER", "content": content}
         for index in range(count)
@@ -61,7 +61,7 @@ def test_backlog_is_split_into_several_batches() -> None:
 
 def test_split_keeps_oversized_message_in_its_own_batch() -> None:
     oversized = {"message_id": 1, "role": "USER", "content": "x" * 40000}
-    following = {"message_id": 2, "role": "USER", "content": "ngắn"}
+    following = {"message_id": 2, "role": "USER", "content": "short"}
 
     batches = split_into_batches([oversized, following])
 

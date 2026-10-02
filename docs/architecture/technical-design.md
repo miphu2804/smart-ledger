@@ -18,7 +18,7 @@
 
 Kiến trúc trong sơ đồ là **đích MVP**: Mobile dành cho OWNER và dashboard web dành cho ADMIN cùng gọi Core; Core sở hữu API công khai và điều phối AI; PostgreSQL lưu sổ nghiệp vụ và lịch sử Agent chat; Redis, Qdrant, Langfuse và LiteLLM hỗ trợ AI.
 
-**Đã đối chiếu ngày 2026-10-02 trong working tree `feat/core-business`:** Core có Firebase auth/session/me, Shop/Category/Product/Customer CRUD, draft → confirm → sale/payment, debt repayment, expense, report summary, sale void và full refund; schema Core có Flyway V1–V9. Đây là phạm vi code hiện tại, không phải xác nhận đã push, deploy staging, tích hợp FE hay production-ready.
+**Đã đối chiếu ngày 2026-10-02 trong working tree `feat/core-business`:** Core có Firebase auth/session/me, Shop/Category/Product/Customer CRUD, draft → confirm → sale/payment, debt repayment, expense, report summary, sale void và full refund; schema Core có Flyway V1–V9. Đây là phạm vi code hiện tại, không phải xác nhận đã push, deploy staging, tích hợp FE hay production-ready. Core proxy `/api/v1/agent/*` sang AI `/internal/v1/agent/*` kèm `X-Internal-Token`, lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực; chưa chạy kiểm thử đầu-cuối mobile → Core → AI với model thật.
 
 **Snapshot cũ ngày 2026-09-24:** Mobile/web có mock, parser text cục bộ và client auth chưa tích hợp toàn luồng; AI có health/Agent chat CRUD lưu PostgreSQL. Lượt này không kiểm chứng lại FE/AI hoặc nhánh staging mới nhất; không dùng snapshot đó để khẳng định Core hiện chỉ có auth.
 
@@ -52,7 +52,7 @@ Chỉ Core có API công khai. FE không gọi AI, PostgreSQL, Redis, Qdrant, Li
 
 Lỗi confirm/repay/void rollback toàn bộ thay đổi, kể cả reservation idempotency. Sale đã confirm không có đường PATCH/DELETE; chỉ hủy toàn bộ có dấu vết. restockItems bắt buộc; hoàn tồn dựa snapshot, không suy từ tracked hiện tại. Snapshot NULL lịch sử không đủ để hoàn tự động; món tùy ý không tạo tồn.
 
-Luồng text/voice/image → AI proposal → draft, replenishment và insight vẫn là đích: AI không được tự tạo sale/payment/debt/expense. Core chưa gọi AI; timeout/fallback cần nghiệm thu khi tích hợp.
+Luồng text/voice/image → AI proposal → draft, replenishment và insight vẫn là đích: AI không được tự tạo sale/payment/debt/expense. Core mới gọi AI cho chat trợ lý (proxy Agent), chưa gọi cho luồng proposal; timeout/fallback cần nghiệm thu khi tích hợp.
 
 Luồng ADMIN hiện có: `PATCH /api/v1/shops/{shopId}/status` (ngoài prefix admin), tạm ngưng/kích hoạt kèm lý do. Đổi trạng thái ghi audit `SHOP_INACTIVATED`/`SHOP_REACTIVATED` với actor ADMIN. Dashboard `/api/v1/admin/*` và audit khi ADMIN xem dữ liệu còn là yêu cầu đích; không tuyên bố đã đạt BR-014/NFR-009. ADMIN không giả danh OWNER hay sửa sổ nghiệp vụ.
 
