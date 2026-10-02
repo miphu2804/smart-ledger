@@ -244,7 +244,7 @@ Chỉ đọc, bắt buộc Bearer token và `X-Shop-Id` của shop ACTIVE do OWN
 
 action: `SALE_CONFIRMED`, `SALE_VOIDED`, `SALE_REFUND_RECORDED`, `DEBT_REPAYMENT_RECORDED`, `DEBT_VOIDED`, `STOCK_ADJUSTED`, `STOCK_RESTORED_ON_VOID`, `EXPENSE_CREATED`, `EXPENSE_UPDATED`, `EXPENSE_ARCHIVED`, `PRODUCT_CREATED`, `PRODUCT_UPDATED`, `PRODUCT_ARCHIVED`, `CATEGORY_CREATED`, `CATEGORY_UPDATED`, `CATEGORY_ARCHIVED`, `SHOP_CREATED`, `SHOP_UPDATED`, `SHOP_ARCHIVED`, `SHOP_INACTIVATED`, `SHOP_REACTIVATED`.
 
-Bảng `audit_logs` append-only (V10, trigger chặn UPDATE/DELETE/TRUNCATE). Chưa có `FR`/`AC` riêng cho lịch sử audit của OWNER; endpoint này không thay thế yêu cầu audit truy cập của ADMIN (`BR-014`, `NFR-009`, `AC-017`).
+Bảng `audit_logs` append-only (V10, trigger chặn UPDATE/DELETE/TRUNCATE). Truy vết: `BR-017` trong [BRD](../product/business-requirements.md), `FR-028`/`FR-029` và `AC-033`–`AC-039` trong [PRD](../product/product-requirements.md#8-tiêu-chí-nghiệm-thu-cốt-lõi). Nghiệm thu lịch sử OWNER qua API/DB không đồng nghĩa đã tích hợp màn hình FE; endpoint này không thay thế yêu cầu audit truy cập của ADMIN (`BR-014`, `NFR-009`, `AC-017`).
 
 ## 5. AI qua Core — hợp đồng đích, chưa triển khai trong Core
 

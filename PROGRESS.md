@@ -1,3 +1,15 @@
+### [2026-10-02 UTC+07:00] — [Docs] Add OWNER audit requirements and acceptance traceability
+
+**Done:** Added `BR-017`, `FR-028`/`FR-029` and `AC-033`–`AC-039` for existing transactional success audit and OWNER-only history. Corrected the outdated BRD statement that general audit was not implemented and replaced the API contract's missing-FR/AC note with links to the canonical requirements.
+
+**Changed files:** Approved `docs/product/business-requirements.md`, `docs/product/product-requirements.md`, `docs/contracts/api-contracts.md` and this new root progress entry. No Core/FE code, entity, migration, CI or legal/tax requirement change. Earlier progress entries remain unchanged.
+
+**Flow explained:** Traceability now connects business audit integrity to recording/query behavior and acceptance criteria for actor/context, full void effects, rollback/replay, shop authorization, filters/pagination, append-only storage and metadata privacy/legacy readability. Replay guarantees remain limited to the existing protected flows, not every create API. OWNER audit history is separate from deferred ADMIN support-read/security/failure auditing and FE screens; business tables remain the source of money/debt/stock totals.
+
+**Check:** Reran four existing audit/web/migration suites with Java 21 and a disposable PostgreSQL 16 database: 44 tests passed, zero failures/errors/skips (20 audit PostgreSQL, 9 migration, 10 audit service, 5 audit web). Confirmed new IDs/references and document links, unchanged legal/tax sections, code/schema alignment and clean diff whitespace. Existing suites plus source inspection support the criteria; no new tests were added for every HTTP authorization/method or ordering-boundary combination. No existing local database or real Firebase credential was used.
+
+**Remaining boundaries:** Requirements and API/DB evidence do not establish FE/staging/production acceptance or completion of ADMIN audit `NFR-009`/`AC-017`. The separately identified FE unknown-result idempotency risk remains unchanged. This documentation change is local only: no commit, push, PR comment resolution or merge was performed.
+
 ### [2026-10-02 UTC+07:00] — [Integration] Synchronize latest staging and preserve Core review fixes
 
 **Done:** Fast-forwarded local `feat/core-business` from `635c80f` to remote `dde20d9`, preserving the eight newer review-fix commits, then merged staging `8af60b7`. Resolved only the two document conflicts without replacing either branch's history. This checkpoint supersedes the earlier integration entry's outdated frontend-header and pending API-contract wording notes.

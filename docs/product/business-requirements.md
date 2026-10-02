@@ -62,6 +62,7 @@ Chủ sở hữu sản phẩm phải chốt target định lượng sau pilot; t
 - Ghi nhận bán hàng bằng câu tiếng Việt (gõ hoặc đường mic UI) hoặc chọn hàng POS, rồi xác nhận khi thanh toán.
 - Ghi nhận cách thu: tiền mặt, chuyển khoản, ghi nợ / trả một phần — là trạng thái thu, không phải cổng thanh toán.
 - Lịch sử bản ghi bán hàng; sổ chi phí; sổ nợ và thu nợ.
+- Lịch sử audit chỉ đọc cho OWNER để truy vết các thao tác ghi Core đã chốt của tiệm; không thay thế sổ tiền, nợ hoặc tồn kho.
 - Báo cáo doanh thu, số đơn, bán chạy, chi phí và lãi ước tính theo kỳ.
 - STT/parser AI, đề xuất từ ảnh, gợi ý nhập hàng và hỏi đáp insight có căn cứ.
 
@@ -94,6 +95,7 @@ Hóa đơn điện tử là initiative kế tiếp, không mặc nhiên thuộc 
 | `BR-014` | Mọi lần ADMIN xem dữ liệu hoặc thực hiện hành động hỗ trợ phải được phân quyền và lưu audit. |
 | `BR-015` | OWNER không thể lưu trữ một tiệm đang bị ADMIN tạm ngưng; lý do tạm ngưng phải còn để OWNER biết cách liên hệ hỗ trợ. |
 | `BR-016` | Gửi lại cùng một yêu cầu trả nợ, tạo chi phí hoặc hủy sale do mạng lỗi không được ghi thu/chi, hoàn tiền hay hoàn tồn lần nữa. Xác nhận lại cùng draft không được tạo sale/payment hoặc trừ tồn lần nữa. |
+| `BR-017` | Các thao tác ghi Core đã chốt về sale, thu/hoàn tiền, nợ, tồn, chi phí, danh mục và hồ sơ/trạng thái tiệm phải có audit thành công cùng giao dịch nghiệp vụ: đúng người thực hiện, tiệm, hành động, đối tượng và thời điểm. Audit chỉ bổ sung, không sửa/xóa lịch sử; lỗi/rollback hoặc replay các luồng được chống ghi trùng theo BR-016 không tạo audit thành công mới. OWNER chỉ tra cứu lịch sử của tiệm ACTIVE mình sở hữu; dữ liệu phụ được giới hạn, không ghi token hoặc thông tin liên hệ khách. Audit không thay thế các bản ghi nghiệp vụ làm nguồn số liệu. |
 
 `BR-003` giữ nguyên ý: người bán quyết định số liệu được ghi.
 
@@ -105,7 +107,8 @@ Hóa đơn điện tử là initiative kế tiếp, không mặc nhiên thuộc 
 - Sale/payment/refund/nợ/tồn và kết quả chống ghi trùng phải nhất quán trong một transaction; lỗi ở bất kỳ bước nào không được để lại thay đổi một phần.
 - Khách được định danh bằng `customerId`, không bằng tên/số điện thoại. Tên/số điện thoại có thể trùng; không tự gộp khách. Confirm bán thiếu phải chọn khách hợp lệ hoặc có tên khách để tạo mới; số điện thoại không bắt buộc. Draft và đơn thu đủ có thể không có khách.
 - Hủy sale kỳ trước có thể làm doanh thu ròng kỳ hiện tại âm. Nợ còn lại trên tổng quan là số dư hiện tại của toàn shop, không phải số dư cuối kỳ.
-- Hoàn tiền/trả hàng từng phần, điều chỉnh kho độc lập và audit tổng quát là các phần chưa triển khai; không suy ra đã hoàn thành từ luồng hủy toàn bộ. Chi tiết hành vi/AC nằm trong [PRD](product-requirements.md), không coi kết quả kiểm thử Core là nghiệm thu FE hoặc production.
+- Audit thành công cho các thao tác ghi Core đã có và lịch sử chỉ đọc của OWNER thuộc `BR-017`; nhóm hành động cụ thể nằm trong [API contract](../contracts/api-contracts.md#lịch-sử-audit-của-tiệm). Không yêu cầu log mọi GET của OWNER. Audit lỗi/bảo mật và audit khi ADMIN xem dữ liệu hỗ trợ chưa triển khai; không coi lịch sử OWNER là hoàn tất `BR-014`.
+- Hoàn tiền/trả hàng từng phần và điều chỉnh kho độc lập chưa triển khai; không suy ra đã hoàn thành từ luồng hủy toàn bộ. Chi tiết hành vi/AC nằm trong [PRD](product-requirements.md), không coi kết quả kiểm thử Core là nghiệm thu FE hoặc production.
 
 ## 5. Quy tắc kinh doanh cho sáng kiến hóa đơn điện tử
 
@@ -170,5 +173,6 @@ Copy UI viện dẫn nghị định trên màn bản ghi bán hàng **không** b
 | `BR-010` | `FR-014` | tạm thời — MVP đã chấp nhận |
 | `BR-015` | `FR-011`, `AC-025` | tạm thời — cần kiểm chứng với FE |
 | `BR-016` | `FR-005`, `FR-015`, `FR-016`, `AC-024`, `AC-030` | Core đã triển khai; cần nghiệm thu FE/staging |
+| `BO-002`, `BO-005`, `BR-009`, `BR-016`, `BR-017` | `FR-028`, `FR-029`, `NFR-003`, `AC-033`–`AC-039` | Audit Core đã triển khai; nghiệm thu API/DB tách riêng tích hợp FE/staging và audit truy cập hỗ trợ của ADMIN |
 | `BR-002`, `BR-003`, `BR-011`, `BR-012` | `FR-008`, `FR-017`, `FR-018`, `FR-020`, `FR-021`, `FR-025`, `NFR-006`–`NFR-008` | tạm thời — đích MVP; chưa có FE/runtime để chứng minh |
 | `BO-004`, `BR-INV-001`–`BR-INV-008` | `FR-INV-001`–`FR-INV-007` | Hoãn, chờ `OQ-INV-001`–`OQ-INV-005` và phê duyệt pháp lý |
