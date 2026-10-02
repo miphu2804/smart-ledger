@@ -73,12 +73,15 @@ class AuditLogControllerWebTest {
 
     @Test
     void unknownActionAndMalformedTimeAreRejected() throws Exception {
-        mvc.perform(get("/api/v1/audit-logs").header("Authorization", "Bearer valid").header("X-Shop-Id", "7")
-                        .param("action", "ANYTHING"))
-                .andExpect(status().isBadRequest());
-        mvc.perform(get("/api/v1/audit-logs").header("Authorization", "Bearer valid").header("X-Shop-Id", "7")
-                        .param("from", "not-a-date"))
-                .andExpect(status().isBadRequest());
+        for (String[] param : new String[][] { { "action", "ANYTHING" }, { "from", "not-a-date" },
+                { "entityId", "abc" }, { "page", "first" } }) {
+            mvc.perform(get("/api/v1/audit-logs").header("Authorization", "Bearer valid").header("X-Shop-Id", "7")
+                            .param(param[0], param[1]))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("validation_failed"))
+                    .andExpect(jsonPath("$.details[0].field").value(param[0]))
+                    .andExpect(jsonPath("$.traceId").isNotEmpty());
+        }
         verifyNoInteractions(service);
     }
 

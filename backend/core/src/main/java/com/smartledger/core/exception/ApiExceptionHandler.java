@@ -1,8 +1,11 @@
 package com.smartledger.core.exception;
 
+import com.smartledger.core.enums.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,10 +19,15 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
+    private static final Map<String, ErrorCode> UNIQUE_CONSTRAINTS = Map.of(
+            "uq_products_shop_barcode", ErrorCode.PRODUCT_BARCODE_CONFLICT,
+            "uq_auth_identities_provider_subject", ErrorCode.AUTH_SESSION_CONFLICT,
+            "uq_auth_identities_user_id", ErrorCode.AUTH_SESSION_CONFLICT);
 
     @ExceptionHandler(BusinessException.class)
     ResponseEntity<ApiErrorResponse> handleBusinessException(
@@ -67,25 +75,46 @@ public class ApiExceptionHandler {
                 List.of(new ApiErrorDetail(exception.getHeaderName(), "is required")), request);
     }
 
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    ResponseEntity<ApiErrorResponse> handleTypeMismatch(
+            MethodArgumentTypeMismatchException exception, HttpServletRequest request) {
+        return error(HttpStatus.BAD_REQUEST, "validation_failed", "The request contains invalid parameters.",
+                List.of(new ApiErrorDetail(exception.getName(), "has an invalid value")), request);
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<ApiErrorResponse> handleDataIntegrity(
             DataIntegrityViolationException exception, HttpServletRequest request) {
-        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
-            if (cause instanceof org.hibernate.exception.ConstraintViolationException violation
-                    && "uq_products_shop_barcode".equalsIgnoreCase(violation.getConstraintName())) {
-                return error(HttpStatus.CONFLICT, "product_barcode_conflict",
-                        "Barcode already belongs to a product in this shop.", List.of(), request);
-            }
-            if (cause instanceof SQLException sqlException && "23505".equals(sqlException.getSQLState())
-                    && sqlException.getMessage() != null
-                    && sqlException.getMessage().contains("uq_products_shop_barcode")) {
-                return error(HttpStatus.CONFLICT, "product_barcode_conflict",
-                        "Barcode already belongs to a product in this shop.", List.of(), request);
-            }
+        ErrorCode errorCode = mappedConstraint(exception);
+        if (errorCode != null) {
+            return error(errorCode.getHttpStatus(), errorCode.getCode(), errorCode.getMessage(), List.of(), request);
         }
         log.error("Unmapped database constraint violation", exception);
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "internal_error", "Unexpected server error.",
                 List.of(), request);
+    }
+
+    /** Two concurrent writes can both pass an application-level check; the unique constraint is the real
+     * guard, so its name tells which retryable business conflict happened. Anything else stays a 500. */
+    private ErrorCode mappedConstraint(Throwable exception) {
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (cause instanceof org.hibernate.exception.ConstraintViolationException violation
+                    && violation.getConstraintName() != null) {
+                ErrorCode errorCode = UNIQUE_CONSTRAINTS.get(violation.getConstraintName().toLowerCase(Locale.ROOT));
+                if (errorCode != null) {
+                    return errorCode;
+                }
+            }
+            if (cause instanceof SQLException sqlException && "23505".equals(sqlException.getSQLState())
+                    && sqlException.getMessage() != null) {
+                for (Map.Entry<String, ErrorCode> entry : UNIQUE_CONSTRAINTS.entrySet()) {
+                    if (sqlException.getMessage().contains("\"" + entry.getKey() + "\"")) {
+                        return entry.getValue();
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     @ExceptionHandler(PessimisticLockingFailureException.class)

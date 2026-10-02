@@ -30,4 +30,36 @@ class ApiExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
         assertThat(response.getBody().code()).isEqualTo("internal_error");
     }
+
+    @Test
+    void mapsAConcurrentFirstSessionToARetryableAuthConflict() {
+        SQLException sqlCause = new SQLException(
+                "duplicate key value violates unique constraint \"uq_auth_identities_provider_subject\"", "23505");
+        var response = handler.handleDataIntegrity(new DataIntegrityViolationException("write failed", sqlCause),
+                new MockHttpServletRequest());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody().code()).isEqualTo("auth_session_conflict");
+    }
+
+    @Test
+    void mapsAHibernateConstraintNameWithoutRelyingOnTheMessage() {
+        var violation = new org.hibernate.exception.ConstraintViolationException(
+                "insert failed", new SQLException("duplicate", "23505"), "UQ_PRODUCTS_SHOP_BARCODE");
+        var response = handler.handleDataIntegrity(new DataIntegrityViolationException("write failed", violation),
+                new MockHttpServletRequest());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody().code()).isEqualTo("product_barcode_conflict");
+    }
+
+    @Test
+    void doesNotTreatAnotherUniqueConstraintAsABusinessConflict() {
+        SQLException sqlCause = new SQLException(
+                "duplicate key value violates unique constraint \"uq_sale_refunds_sale_id\"", "23505");
+        var response = handler.handleDataIntegrity(new DataIntegrityViolationException("write failed", sqlCause),
+                new MockHttpServletRequest());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+    }
 }

@@ -16,6 +16,7 @@ public enum ErrorCode {
     SHOP_INACTIVE_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "shop_inactive_reason_required", "An inactive reason is required."),
     SHOP_STATUS_CHANGE_INVALID(HttpStatus.BAD_REQUEST, "shop_status_change_invalid", "Only ACTIVE or INACTIVE is allowed for this operation."),
     SHOP_ACCESS_DENIED(HttpStatus.FORBIDDEN, "shop_access_denied", "You cannot access this shop."),
+    AUTH_SESSION_CONFLICT(HttpStatus.CONFLICT, "auth_session_conflict", "This account is being set up by another request; open the session again."),
     ADMIN_ACCESS_REQUIRED(HttpStatus.FORBIDDEN, "admin_access_required", "Only an admin can perform this operation."),
     SHOP_NOT_FOUND(HttpStatus.NOT_FOUND, "shop_not_found", "This shop is unavailable."),
     SHOP_INACTIVE(HttpStatus.FORBIDDEN, "shop_inactive", "This shop is inactive."),
