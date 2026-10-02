@@ -4,7 +4,7 @@
 |---|---|
 | Trạng thái | đích MVP; các endpoint đã triển khai được đánh dấu riêng bên dưới |
 | Chủ sở hữu | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-09-24 |
+| Cập nhật lần cuối | 2026-09-28 |
 
 ## Tài liệu liên quan
 
@@ -137,16 +137,34 @@ AI chỉ tạo bản nháp/gợi ý và câu trả lời chat. Các endpoint nà
   "mode": "SALE",
   "items": [
     {
-      "product_id": "uuid-or-null",
+      "product_id": 12,
       "name": "Cà phê sữa",
       "qty": 2,
       "unit_price": 25000,
       "confidence": 0.94
+    },
+    {
+      "product_id": null,
+      "name": "bạc xỉu",
+      "qty": 1,
+      "unit_price": null,
+      "confidence": 0.55
     }
   ],
-  "warnings": []
+  "warnings": [{ "code": "PRODUCT_AMBIGUOUS", "item_index": 1 }]
 }
 ```
+
+`product_id` là `BIGINT` của `products.id` theo ERD, hoặc `null` khi không khớp hoặc khớp mơ hồ; khi đó `warnings` nêu lý do.
+
+`warnings[].code` là mã máy đọc; FE tự hiển thị câu chữ cho người dùng. `item_index` trỏ vào `items`, là `null` với cảnh báo cho cả bản nháp.
+
+| `code` | Ý nghĩa |
+|---|---|
+| `PRODUCT_AMBIGUOUS` | Có món nhưng chưa chắc là sản phẩm nào; người dùng chọn lại |
+| `PRODUCT_NOT_FOUND` | Món không có trong danh mục của cửa hàng |
+| `AMOUNT_MISSING` | Khoản chi thiếu số tiền |
+| `NO_ITEMS` | Không nhận ra món hoặc khoản chi nào |
 
 `ReplenishmentView` gồm `product_id`, `product_name`, `suggested_qty`, `period`, `reason`. `InsightMessageView` gồm `conversation_id`, `message_id`, `answer`, `period`, `citations`, `insufficient_data`.
 

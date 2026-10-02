@@ -1,3 +1,19 @@
+### [2026-09-28 19:20 UTC+07:00] — [AI] Shop catalog and text-to-draft parsing
+
+**Done:** AI reads the active product catalog of one shop (AI-007, #37) and turns Vietnamese sale or expense text into a `DraftView` (AI-008, #60). The model sees the shop catalog as `id | name | unit` and returns `product_id` with a confidence; code keeps an ID only when it belongs to that catalog and confidence is at least 0.7, and always takes name and price from the catalog. Unsure or unknown items keep `product_id: null` with a warning code (`PRODUCT_AMBIGUOUS`, `PRODUCT_NOT_FOUND`); FE owns the wording. No HTTP route yet; `/internal/v1/drafts/parse` belongs to #3.
+
+**Changed files:**
+- `backend/ai/src/drafts/__init__.py`, `catalog.py`, `schemas.py`, `service.py` — created
+- `backend/ai/src/prompt_templates.py` — created (all system prompts, static text first for prompt caching)
+- `backend/ai/src/agent/prompt_template.py` — deleted (moved into `src/prompt_templates.py`)
+- `backend/ai/src/agent/service.py` — modified
+- `backend/ai/tests/unit_tests/test_draft_service.py`, `tests/integration_tests/test_product_catalog.py`, `tests/fixtures/core_products.sql` — created
+- `PROGRESS.md` — modified
+
+**Flow explained:** `DraftService.parse` loads the catalog (SALE only), asks the model for structured `LlmDraft` output, then `resolve_items` validates each item against the catalog and builds warnings. `tests/fixtures/core_products.sql` copies the Core V4 `products` table until CORE-003 (#12) reaches `staging`.
+
+**Check:** `ruff check`, `ruff format --check` passed; `pytest` 43 passed, 3 skipped (PostgreSQL tests need `POSTGRES_TEST_URL`). A live run with the configured model resolved "2 cf sua" to the catalog product and price, left an ambiguous "bac xiu" and an unknown "banh mi" unresolved with warnings, and mapped two expenses with amounts. Not run: the PostgreSQL catalog tests.
+
 ### [2026-09-28 18:57 UTC+07:00] — [Tooling] Review feature PRs on staging
 
 **Done:** Enabled automatic CodeRabbit review for pull requests targeting `staging`; reviews of the default branch remain enabled.
@@ -7,6 +23,17 @@
 **Flow explained:** CodeRabbit reads the root configuration from the PR branch and includes `staging` among eligible base branches.
 
 **Check:** Parsed YAML and confirmed the expected settings; `git diff --check` passed. Live GitHub App review is unverified until the configuration is pushed in a PR targeting `staging`.
+
+### [2026-09-28 18:50 UTC+07:00] — [Docs] DraftView product_id is BIGINT, warnings are codes
+
+**Done:** `DraftView.items[].product_id` in the API contract is now a `BIGINT` product ID or `null`, matching `products.id` in the ERD and Core migrations, instead of `uuid-or-null`. `warnings` are now `{ code, item_index }` objects (`PRODUCT_AMBIGUOUS`, `PRODUCT_NOT_FOUND`, `AMOUNT_MISSING`, `NO_ITEMS`) so FE owns the user-facing wording.
+
+**Changed files:**
+- `docs/contracts/api-contracts.md`, `PROGRESS.md` — modified
+
+**Flow explained:** AI reads `products.id` from the shop catalog and returns it in the draft; Core parses item IDs as positive integers, so a UUID would be rejected.
+
+**Check:** Re-read the contract section; `git diff --check` passed.
 
 ### [2026-09-28 17:28 UTC+07:00] — [Docs] Vietnamese code review rule
 
