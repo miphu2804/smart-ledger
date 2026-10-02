@@ -64,6 +64,13 @@ services:
       REDIS_URL: redis://redis:6379/0
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      # The image excludes .env, so model settings come from here; empty uses app_config defaults.
+      MODEL_NAME: ${MODEL_NAME:-}
+      SUMMARY_MODEL_NAME: ${SUMMARY_MODEL_NAME:-}
+      MODEL_REASONING_EFFORT: ${MODEL_REASONING_EFFORT:-}
+      # Empty fails closed: every /internal/v1 route returns 401. Set it in the shell or a
+      # Compose --env-file to exercise the internal API locally.
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy

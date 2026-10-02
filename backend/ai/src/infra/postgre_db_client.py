@@ -36,23 +36,6 @@ class PostgreDBClient:
             with self.connection.transaction():
                 yield self.connection
 
-    def check_health(self) -> None:
-        if self.connection is not None:
-            with self.transaction() as connection:
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT 1")
-                    if cursor.fetchone() != (1,):
-                        raise RuntimeError("postgres ping did not return 1")
-            return
-        url = self.connection_string
-        if url is None or not url.strip():
-            raise RuntimeError("postgres url missing")
-        with psycopg.connect(url, connect_timeout=3) as connection:
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT 1")
-                if cursor.fetchone() != (1,):
-                    raise RuntimeError("postgres ping did not return 1")
-
     def close(self) -> None:
         with self._lock:
             if self.connection is not None:

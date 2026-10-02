@@ -18,7 +18,7 @@
 - Không dùng cổng trong sơ đồ kiến trúc làm hợp đồng API.
 - Redis, Qdrant, Langfuse và LiteLLM không có API công khai. FE không gọi trực tiếp các thành phần này.
 
-**Trạng thái code tại `staging`:** Core mới có `POST /api/v1/auth/session` và `GET /api/v1/me`; AI có `GET /health` và năm endpoint `/internal/v1/agent/*` (chat, list, detail, rename, delete). Các đường Core còn lại trong tài liệu là hợp đồng đích, chưa có controller. Core chưa proxy tới AI; web admin dùng mock theo mặc định và client API thật của web chưa khớp hợp đồng này.
+**Trạng thái code tại `staging`:** Core mới có `POST /api/v1/auth/session` và `GET /api/v1/me`; AI có `GET /health` và năm endpoint `/internal/v1/agent/*` (chat, list, detail, rename, delete). Các đường Core còn lại trong tài liệu là hợp đồng đích, chưa có controller. Core chưa proxy tới AI; web admin dùng mock theo mặc định và client API thật của web chưa khớp hợp đồng này. AI đã bắt buộc `X-Internal-Token` cho mọi đường `/internal/v1/*`, còn Core thì chưa gửi header này, nên sau khi deploy Core sẽ nhận `401` cho tới khi Core được cập nhật.
 
 ## Quy ước request
 
@@ -177,7 +177,11 @@ Yêu cầu chung:
 - Core và AI cùng kiểm tra `shop_id`; test chéo shop là bắt buộc;
 - Core chuyển `user_id` đã xác thực; AI truy vấn theo cả `user_id` và `shop_id`. Hội thoại không tồn tại hoặc không thuộc phạm vi trả `404 conversation_not_found`;
 - chat được giữ qua các phiên đến khi OWNER xóa; xóa chat loại tin nhắn khỏi lịch sử và ngữ cảnh assistant. MVP không áp TTL tự động;
-- service credential cho Core ↔ AI chưa được triển khai; `/internal/v1` phải được giới hạn ở mạng nội bộ và không công khai cho FE.
+- Core gọi `/internal/v1/*` với header `X-Internal-Token` mang giá trị `INTERNAL_API_TOKEN` của môi trường. Thiếu header hoặc sai giá trị trả `401` với `{ "detail": "unauthorized" }`. Khi AI chưa cấu hình token thì mọi đường `/internal/v1/*` trả `401` (fail closed), riêng `/health` vẫn trả lời bình thường;
+
+### Ngữ cảnh chat và bản tóm tắt cuốn chiếu
+
+AI gửi cho model bản tóm tắt đã lưu, rồi tới mọi tin nhắn chưa được gộp vào bản tóm tắt. Một tin chỉ rời ngữ cảnh sau khi đã nằm trong bản tóm tắt, nên không mất thông tin. Việc gộp chạy nền sau khi trả lời và chỉ gọi model tóm tắt khi số tin chưa gộp vượt ngưỡng, nên phần lớn lượt không phát sinh thêm chi phí. Bản tóm tắt thuộc hội thoại nên bị xóa cùng hội thoại. Hợp đồng này không đổi request hay response của `/internal/v1/agent/chat`.
 
 ## 7. Dashboard quản trị
 

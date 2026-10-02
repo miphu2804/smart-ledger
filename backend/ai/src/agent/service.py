@@ -1,11 +1,21 @@
+import logging
 from dataclasses import dataclass
 
 from langchain.agents import create_agent
 from langchain_core.language_models import BaseChatModel
 
-from src.agent.prompt_template import SHOP_AGENT_SYSTEM_PROMPT
-from src.agent.repository import AgentConversationRepository
-from src.agent.tools import get_all_tools
+from src.agent.prompt_template import (
+    CHAT_SUMMARY_CONTEXT,
+    CHAT_SUMMARY_EMPTY,
+    CHAT_SUMMARY_INPUT,
+    CHAT_SUMMARY_PROMPT,
+    SHOP_AGENT_SYSTEM_PROMPT,
+)
+from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
+from src.agent.summary import plan_fold
+from src.agent.tools import AgentContext, get_all_tools
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -18,17 +28,21 @@ class AgentChatResult:
 
 
 class AgentService:
-    context_message_limit = 20
-
     def __init__(
         self,
         model: BaseChatModel | None,
         conversations: AgentConversationRepository,
+        summary_model: BaseChatModel | None = None,
     ) -> None:
         self.model = model
+        self.summary_model = summary_model
         self.conversations = conversations
         self.agent = (
-            create_agent(model=model, tools=get_all_tools())
+            create_agent(
+                model=model,
+                tools=get_all_tools(conversations),
+                context_schema=AgentContext,
+            )
             if model is not None
             else None
         )
@@ -43,30 +57,16 @@ class AgentService:
         if self.agent is None or self.model is None:
             raise RuntimeError("agent model unavailable")
 
-        history = (
-            self.conversations.recent_messages(
-                conversation_id,
-                user_id,
-                shop_id,
-                self.context_message_limit,
-            )
+        context = (
+            self.conversations.context_for(conversation_id, user_id, shop_id)
             if conversation_id is not None
-            else []
+            else {"summary": None, "messages": []}
         )
         result = self.agent.invoke(
-            {
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": SHOP_AGENT_SYSTEM_PROMPT.format(shop_id=shop_id),
-                    },
-                    *[
-                        {"role": entry["role"].lower(), "content": entry["content"]}
-                        for entry in history
-                    ],
-                    {"role": "user", "content": message},
-                ],
-            }
+            {"messages": self._context_messages(context, message)},
+            context=AgentContext(
+                user_id=user_id, shop_id=shop_id, conversation_id=conversation_id
+            ),
         )
         last = result["messages"][-1]
         model_name = getattr(self.model, "model_name", "")
@@ -87,6 +87,97 @@ class AgentService:
             model=model_name,
             model_version=version,
         )
+
+    @staticmethod
+    def _context_messages(context: dict, message: str) -> list[dict]:
+        # Summary first, then every message after the watermark verbatim, so a fold that
+        # has not run yet never hides messages from the model.
+        messages: list[dict] = [
+            {
+                "role": "system",
+                "content": SHOP_AGENT_SYSTEM_PROMPT,
+            }
+        ]
+        if context["summary"]:
+            messages.append(
+                {
+                    "role": "system",
+                    "content": CHAT_SUMMARY_CONTEXT.format(summary=context["summary"]),
+                }
+            )
+        messages.extend(
+            {"role": entry["role"].lower(), "content": entry["content"]}
+            for entry in context["messages"]
+        )
+        messages.append({"role": "user", "content": message})
+        return messages
+
+    def fold_summary(self, conversation_id: int, user_id: int, shop_id: int) -> bool:
+        """Fold messages that left the verbatim window into the stored summary.
+
+        Runs as a background task after the reply was already sent, so it never raises:
+        a model or database failure leaves the stored summary untouched, and the next
+        turn retries it. Returns whether any fold was persisted.
+        """
+        if self.summary_model is None:
+            return False
+        try:
+            context = self.conversations.context_for(conversation_id, user_id, shop_id)
+        except ConversationNotFoundError:
+            # The owner deleted the conversation while this task was queued.
+            return False
+
+        plan = plan_fold(context["messages"])
+        if not plan.messages:
+            return False
+
+        summary = context["summary"]
+        watermark = context["summary_through_message_id"]
+        folded = False
+        for batch in plan.batches:
+            rewritten = self._rewrite_summary(summary, batch)
+            if rewritten is None:
+                break
+            batch_through_id = batch[-1]["message_id"]
+            if not self.conversations.save_summary(
+                conversation_id=conversation_id,
+                user_id=user_id,
+                shop_id=shop_id,
+                summary=rewritten,
+                through_id=batch_through_id,
+                expected_through_id=watermark,
+            ):
+                # A concurrent fold advanced the watermark first, so this is stale.
+                break
+            summary = rewritten
+            watermark = batch_through_id
+            folded = True
+        return folded
+
+    def _rewrite_summary(self, summary: str | None, batch: list[dict]) -> str | None:
+        if self.summary_model is None:
+            return None
+        transcript = "\n".join(
+            f"{entry['role']}: {entry['content']}" for entry in batch
+        )
+        try:
+            response = self.summary_model.invoke(
+                [
+                    {"role": "system", "content": CHAT_SUMMARY_PROMPT},
+                    {
+                        "role": "user",
+                        "content": CHAT_SUMMARY_INPUT.format(
+                            summary=summary or CHAT_SUMMARY_EMPTY,
+                            messages=transcript,
+                        ),
+                    },
+                ]
+            )
+        except Exception:
+            logger.warning("chat summary model failed", exc_info=True)
+            return None
+        rewritten = response.text.strip()
+        return rewritten or None
 
     def list_conversations(self, user_id: int, shop_id: int) -> list[dict]:
         return self.conversations.list_conversations(user_id, shop_id)
