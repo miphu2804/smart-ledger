@@ -4,7 +4,7 @@
 |---|---|
 | Trạng thái | đích MVP; các endpoint đã triển khai được đánh dấu riêng bên dưới |
 | Chủ sở hữu | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-09-24 |
+| Cập nhật lần cuối | 2026-10-02 |
 
 ## Tài liệu liên quan
 
@@ -18,7 +18,7 @@
 - Không dùng cổng trong sơ đồ kiến trúc làm hợp đồng API.
 - Redis, Qdrant, Langfuse và LiteLLM không có API công khai. FE không gọi trực tiếp các thành phần này.
 
-**Trạng thái code tại `staging`:** Core mới có `POST /api/v1/auth/session` và `GET /api/v1/me`; AI có `GET /health` và năm endpoint `/internal/v1/agent/*` (chat, list, detail, rename, delete). Các đường Core còn lại trong tài liệu là hợp đồng đích, chưa có controller. Core chưa proxy tới AI; web admin dùng mock theo mặc định và client API thật của web chưa khớp hợp đồng này. AI đã bắt buộc `X-Internal-Token` cho mọi đường `/internal/v1/*`, còn Core thì chưa gửi header này, nên sau khi deploy Core sẽ nhận `401` cho tới khi Core được cập nhật.
+**Trạng thái code tại `staging`:** Core mới có `POST /api/v1/auth/session` và `GET /api/v1/me`; AI có `GET /health` và năm endpoint `/internal/v1/agent/*` (chat, list, detail, rename, delete); agent đọc được hồ sơ tiệm, nhóm hàng và sản phẩm qua tool chỉ đọc, không có endpoint SQL riêng. Các đường Core còn lại trong tài liệu là hợp đồng đích, chưa có controller. Core chưa proxy tới AI; web admin dùng mock theo mặc định và client API thật của web chưa khớp hợp đồng này. AI đã bắt buộc `X-Internal-Token` cho mọi đường `/internal/v1/*`, còn Core thì chưa gửi header này, nên sau khi deploy Core sẽ nhận `401` cho tới khi Core được cập nhật.
 
 ## Quy ước request
 
@@ -178,6 +178,17 @@ Yêu cầu chung:
 - Core chuyển `user_id` đã xác thực; AI truy vấn theo cả `user_id` và `shop_id`. Hội thoại không tồn tại hoặc không thuộc phạm vi trả `404 conversation_not_found`;
 - chat được giữ qua các phiên đến khi OWNER xóa; xóa chat loại tin nhắn khỏi lịch sử và ngữ cảnh assistant. MVP không áp TTL tự động;
 - Core gọi `/internal/v1/*` với header `X-Internal-Token` mang giá trị `INTERNAL_API_TOKEN` của môi trường. Thiếu header hoặc sai giá trị trả `401` với `{ "detail": "unauthorized" }`. Khi AI chưa cấu hình token thì mọi đường `/internal/v1/*` trả `401` (fail closed), riêng `/health` vẫn trả lời bình thường;
+
+### Công cụ đọc dữ liệu tiệm của agent
+
+Agent có tool nội bộ `query_shop_data` để trả lời câu hỏi về hồ sơ tiệm, nhóm hàng và sản phẩm. Đây không phải endpoint: **không có** `POST /internal/v1/agent/sql`, Core và FE chỉ nối `/internal/v1/agent/chat`, request và response của chat không đổi.
+
+- Model chỉ truyền `sql`; `shop_id` lấy từ request đã xác thực và tới tool qua runtime context của LangChain, không nằm trong schema tool hay system prompt, nên model không đổi được phạm vi tiệm.
+- Truy vấn chạy bằng role chỉ đọc `ai_sql_reader` trên ba view của schema `ai_read`: `v_shop_profile`, `v_categories`, `v_products`. View tự lọc theo tiệm của transaction và không có cột `shop_id`; role không có quyền trên bảng gốc.
+- SQL phải qua bộ kiểm tra AST: đúng một câu `SELECT` (cho phép `WITH`, `UNION`), chỉ dùng hàm và kiểu cast trong allowlist. Transaction `READ ONLY`, `statement_timeout` mặc định 3000 ms, tối đa 100 dòng, luôn rollback; mỗi lượt chat gọi model tối đa 4 lần và tool tối đa 3 lần.
+- Truy vấn bị bộ kiểm tra hoặc database từ chối, hoặc quá thời gian, trả về model dạng `Error[CODE]: lý do` (ví dụ `UNSAFE_FUNCTION`, `QUERY_TIMEOUT`, `SQL_ERROR`) để model viết lại câu truy vấn; lượt chat vẫn trả lời. Database đọc không kết nối được thì lượt chat trả `503 ai_unavailable`. Khi AI chưa cấu hình `AI_SQL_READER_URL`, agent vẫn chat nhưng không có tool này.
+- Guardrail tất định quanh agent: tin nhắn mới dài quá 2000 ký tự được trả lời ngắn bằng tiếng Việt, không gọi model; số thẻ được che và khóa API/token bị xóa khỏi tin nhắn trước khi gửi model và trước khi lưu; câu trả lời rỗng hoặc lộ chi tiết nội bộ (tên view, SQL, mã lỗi) được thay bằng câu trả lời an toàn. Hợp đồng request/response của `/internal/v1/agent/chat` không đổi.
+- Giai đoạn 1 chưa đọc doanh thu, chi phí, công nợ hay khách hàng. Chi tiết vận hành nằm trong [README của AI](../../backend/ai/README.md#shop-data-tool-read-only-sql).
 
 ### Ngữ cảnh chat và bản tóm tắt cuốn chiếu
 
