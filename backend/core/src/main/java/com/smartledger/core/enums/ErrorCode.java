@@ -46,7 +46,7 @@ public enum ErrorCode {
     INVALID_DRAFT_ID(HttpStatus.BAD_REQUEST, "invalid_draft_id", "Draft ID must be a positive integer."),
     DRAFT_NOT_FOUND(HttpStatus.NOT_FOUND, "draft_not_found", "This draft is unavailable."),
     DRAFT_NOT_EDITABLE(HttpStatus.CONFLICT, "draft_not_editable", "Only a current draft can be changed."),
-    DRAFT_ITEM_INVALID(HttpStatus.BAD_REQUEST, "draft_item_invalid", "A draft item needs an active product in this shop or a custom name and unit."),
+    DRAFT_ITEM_INVALID(HttpStatus.BAD_REQUEST, "draft_item_invalid", "A draft item needs either an active product in this shop or a custom name and unit, not both."),
     DRAFT_ITEM_DUPLICATE(HttpStatus.BAD_REQUEST, "draft_item_duplicate", "A product may appear only once in a draft."),
     DRAFT_TOTAL_INVALID(HttpStatus.BAD_REQUEST, "draft_total_invalid", "Draft total or discount is invalid."),
     DRAFT_PAYMENT_INVALID(HttpStatus.BAD_REQUEST, "draft_payment_invalid", "Initial payment cannot exceed the draft total; provide a payment method only when the paid amount is greater than zero."),

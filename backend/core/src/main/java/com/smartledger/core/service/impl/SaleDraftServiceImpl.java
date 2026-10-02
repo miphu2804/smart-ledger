@@ -258,6 +258,10 @@ public class SaleDraftServiceImpl implements SaleDraftService {
                         throw new BusinessException(ErrorCode.DRAFT_ITEM_INVALID);
                     }
                 } else {
+                    // A catalog item takes its name/unit snapshot from the product; never drop client text silently.
+                    if (StringUtils.hasText(item.productName()) || StringUtils.hasText(item.unit())) {
+                        throw new BusinessException(ErrorCode.DRAFT_ITEM_INVALID);
+                    }
                     if (!productIds.add(item.productId())) {
                         throw new BusinessException(ErrorCode.DRAFT_ITEM_DUPLICATE);
                     }

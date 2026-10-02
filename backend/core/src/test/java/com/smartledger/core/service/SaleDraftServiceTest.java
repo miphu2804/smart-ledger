@@ -117,10 +117,12 @@ class SaleDraftServiceTest {
     }
 
     @Test
-    void rejectsCustomItemWithoutNameOrUnit() {
+    void rejectsCustomItemWithoutNameOrUnitOrMixedWithCatalogProduct() {
         for (SaleDraftItemRequest item : List.of(
                 new SaleDraftItemRequest(null, BigDecimal.ONE, 20000L, " ", "phan"),
-                new SaleDraftItemRequest(null, BigDecimal.ONE, 20000L, "Mon", " "))) {
+                new SaleDraftItemRequest(null, BigDecimal.ONE, 20000L, "Mon", " "),
+                new SaleDraftItemRequest(3L, BigDecimal.ONE, 20000L, "Bia thung", null),
+                new SaleDraftItemRequest(3L, BigDecimal.ONE, 20000L, null, "thung"))) {
             SaleDraftWriteRequest request = new SaleDraftWriteRequest(null, null, 0L, 20000L,
                     PaymentMethod.CASH, List.of(item));
             assertThatThrownBy(() -> service.create(token, "7", request))
