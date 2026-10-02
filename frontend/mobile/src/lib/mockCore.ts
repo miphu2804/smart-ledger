@@ -72,7 +72,7 @@ function seed(): void {
     shopId: SHOP_ID,
     categoryId: categoryIdByLegacyKey.get(p.category) ?? null,
     name: p.name,
-    barcode: null,
+    barcode: (p as any).barcode ?? null,
     imageUrl: null,
     unit: 'cái',
     sellingPriceVnd: p.price,

@@ -201,6 +201,8 @@ type BtnVariant = 'primary' | 'gold' | 'outline' | 'soft' | 'ghost' | 'danger' |
 export function Button({
   title,
   onPress,
+  onPressIn,
+  onPressOut,
   variant = 'primary',
   icon,
   disabled,
@@ -210,6 +212,8 @@ export function Button({
 }: {
   title: string;
   onPress?: () => void;
+  onPressIn?: () => void;
+  onPressOut?: () => void;
   variant?: BtnVariant;
   icon?: IconName;
   disabled?: boolean;
@@ -221,6 +225,8 @@ export function Button({
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
       disabled={disabled || loading}
       accessibilityRole="button"
       style={({ pressed }) => [

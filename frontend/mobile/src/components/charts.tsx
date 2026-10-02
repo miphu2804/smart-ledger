@@ -176,3 +176,25 @@ export function BarChart({
     </View>
   );
 }
+
+/** Sóng âm động khi đang ghi âm */
+export function Waveform({ active, color = colors.red, bars = 28 }: { active: boolean; color?: string; bars?: number }) {
+  const [tick, setTick] = useState(0);
+  React.useEffect(() => {
+    if (!active) return;
+    const t = setInterval(() => setTick((x) => x + 1), 110);
+    return () => clearInterval(t);
+  }, [active]);
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 48, gap: 3 }}>
+      {Array.from({ length: bars }).map((_, i) => {
+        const base = Math.abs(Math.sin((i + 1) * 1.7));
+        const h = active ? 8 + Math.abs(Math.sin(tick * 0.9 + i * 0.8)) * 34 * (0.4 + base * 0.6) : 6;
+        return (
+          <View key={i} style={{ width: 3, height: h, borderRadius: 2, backgroundColor: color, opacity: active ? 0.9 : 0.35 }} />
+        );
+      })}
+    </View>
+  );
+}
+

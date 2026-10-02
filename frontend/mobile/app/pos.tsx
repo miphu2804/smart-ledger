@@ -3,6 +3,7 @@ import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BarcodeScannerModal } from '../src/components/BarcodeScannerModal';
 import { useToast } from '../src/components/brand';
 import { Button, Chips, EmptyState, Field, Header, Row, Sheet, Stepper, T, Tile } from '../src/components/ui';
 import type { CategoryView, LineItem, ProductView } from '../src/data/types';
@@ -21,6 +22,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
   const [q, setQ] = useState('');
   const [cartOpen, setCartOpen] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [cName, setCName] = useState('');
   const [cPrice, setCPrice] = useState('');
   const [cUnit, setCUnit] = useState('cái');
@@ -67,7 +69,11 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
         if (cat !== 'all') {
           if (cat === 'none' ? p.categoryId != null : String(p.categoryId ?? '') !== cat) return false;
         }
-        return !q || normalizeText(p.name).includes(normalizeText(q));
+        return (
+          !q ||
+          normalizeText(p.name).includes(normalizeText(q)) ||
+          (p.barcode && p.barcode.toLowerCase().includes(q.toLowerCase().trim()))
+        );
       }),
     [products, cat, q],
   );
@@ -80,7 +86,8 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
   const count = cartItems.reduce((a, i) => a + i.qty, 0);
   const hasUncategorized = products.some((p) => p.categoryId == null);
   const cats = ['all', ...(hasUncategorized ? ['none'] : []), ...categories.map((c) => String(c.id))];
-  const catLabel = (c: string) => (c === 'all' ? 'Tất cả' : c === 'none' ? 'Chưa phân loại' : categories.find((x) => String(x.id) === c)?.name ?? c);
+  const catLabel = (c: string) =>
+    c === 'all' ? 'Tất cả' : c === 'none' ? 'Chưa phân loại' : categories.find((x) => String(x.id) === c)?.name ?? c;
 
   const pay = () => {
     app.setDraft({ items: cartItems, source: 'pos' });
@@ -115,11 +122,50 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
     }
   };
 
+  const handleBarcodeScanned = (product: ProductView) => {
+    const stock = product.stockQuantity ?? 0;
+    const inCart = cart[product.id] ?? 0;
+    if (product.tracked && stock <= inCart) {
+      toast(`${product.name} đã hết hàng`, 'err');
+      return;
+    }
+    addToCart(product.id, 1);
+    toast(`Đã thêm ${product.name}`);
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top }}>
       <View style={{ paddingHorizontal: 16 }}>
-        <Header title={inTab ? 'Bán hàng' : 'Chọn hàng'} subtitle={`${products.length} sản phẩm`} back={!inTab} big={inTab} />
-        <Field placeholder="Tìm hàng…" value={q} onChangeText={setQ} style={{ marginBottom: 10 }} />
+        <Header
+          title={inTab ? 'Bán hàng' : 'Chọn hàng'}
+          subtitle={`${products.length} sản phẩm`}
+          back={!inTab}
+          big={inTab}
+          right={
+            <Button
+              title="Quét mã"
+              icon="camera"
+              variant="soft"
+              small
+              onPress={() => setScannerOpen(true)}
+            />
+          }
+        />
+        <Row gap={8} style={{ marginBottom: 10 }}>
+          <Field
+            placeholder="Tìm theo tên hoặc mã vạch…"
+            value={q}
+            onChangeText={setQ}
+            style={{ flex: 1, marginBottom: 0 }}
+          />
+          <Pressable
+            onPress={() => setScannerOpen(true)}
+            style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.8 }]}
+            accessibilityLabel="Quét mã vạch"
+          >
+            <Feather name="camera" size={20} color={colors.accentInk} />
+          </Pressable>
+        </Row>
         <Chips value={cat} onChange={setCat} options={cats.map((c) => ({ key: c, label: catLabel(c) }))} />
       </View>
 
@@ -281,11 +327,35 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
           onPress={addCustomItem}
         />
       </Sheet>
+
+      <BarcodeScannerModal
+        visible={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        products={products}
+        cartItems={cartItems}
+        onAddToCart={(p, delta) => addToCart(p.id, delta)}
+        onClearCart={() => setCart({})}
+        onCheckout={() => {
+          setScannerOpen(false);
+          pay();
+        }}
+        onProductCreated={(p) => setProducts((cur) => [...cur, p])}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  scanBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   card: {
     flex: 1,
     backgroundColor: colors.white,

@@ -13,7 +13,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "vn.teamhexa.songheloi"
+      "bundleIdentifier": "vn.teamhexa.songheloi",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Sổ Nghe Lời cần quyền truy cập Camera để quét mã vạch sản phẩm và chụp ảnh hàng hoá.",
+        "NSMicrophoneUsageDescription": "Sổ Nghe Lời cần quyền truy cập Microphone để tạo đơn hàng bằng giọng nói."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -22,7 +26,11 @@
       },
       "googleServicesFile": "./google-services.json",
       "predictiveBackGestureEnabled": false,
-      "package": "vn.teamhexa.songheloi"
+      "package": "vn.teamhexa.songheloi",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/brand-mascot-icon.png",
@@ -32,6 +40,13 @@
     "plugins": [
       "expo-router",
       "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Sổ Nghe Lời cần quyền truy cập Camera để quét mã vạch sản phẩm và chụp ảnh hàng hoá.",
+          "microphonePermission": "Sổ Nghe Lời cần quyền truy cập Microphone để tạo đơn hàng bằng giọng nói."
+        }
+      ],
       "@react-native-firebase/app",
       "@react-native-firebase/auth"
     ],

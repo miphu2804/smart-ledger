@@ -1,3 +1,4 @@
+/** Chọn thêm món từ danh mục thật (Core) — bên gọi truyền danh sách sản phẩm đã fetch. */
 import { Feather } from '@expo/vector-icons';
 import React from 'react';
 import { Pressable, StyleSheet } from 'react-native';
@@ -6,7 +7,6 @@ import { vnd } from '../lib/format';
 import { colors } from '../theme';
 import { Sheet, T } from './ui';
 
-/** Chọn thêm món từ danh mục thật (Core) — bên gọi truyền danh sách sản phẩm đã fetch. */
 export function AddItemSheet({
   visible,
   onClose,

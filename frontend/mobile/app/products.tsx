@@ -2,6 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BarcodeScannerModal } from '../src/components/BarcodeScannerModal';
 import { useToast } from '../src/components/brand';
 import {
   Badge,
@@ -60,7 +61,10 @@ export default function Products() {
       products.filter((p) => {
         if (tab === 'low' && !(p.tracked && (p.stockQuantity ?? 0) <= 6)) return false;
         if (tab !== 'all' && tab !== 'low' && String(p.categoryId ?? '') !== tab) return false;
-        return !q || normalizeText(p.name).includes(normalizeText(q));
+        return (
+          !q ||
+          normalizeText(p.name).includes(normalizeText(q))
+        );
       }),
     [products, tab, q],
   );
@@ -76,7 +80,7 @@ export default function Products() {
           <Stat label="Giá trị tồn (vốn)" value={vnd(stockValue)} color={colors.primary} flex={2} />
           <Stat label="Sắp hết" value={String(low)} color={colors.gold} bg={colors.goldSoft} />
         </Row>
-        <Field placeholder="Tìm sản phẩm…" value={q} onChangeText={setQ} style={{ marginTop: 12, marginBottom: 10 }} />
+        <Field placeholder="Tìm theo tên hoặc mã vạch…" value={q} onChangeText={setQ} style={{ marginTop: 12, marginBottom: 10 }} />
         <Chips<Tab>
           value={tab}
           onChange={setTab}
@@ -197,6 +201,8 @@ function ProductForm({
   const [tracked, setTracked] = useState(true);
   const [catKey, setCatKey] = useState('none');
   const [scanning, setScanning] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [barcode, setBarcode] = useState('');
   const [confirmDel, setConfirmDel] = useState(false);
   const [lastKey, setLastKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -211,6 +217,7 @@ function ProductForm({
     setLastKey(key);
     setName(p?.name ?? '');
     setUnit(p?.unit ?? '');
+    setBarcode(p?.barcode ?? '');
     setPrice(p ? String(p.sellingPriceVnd) : '');
     setCost(p?.costPriceVnd != null ? String(p.costPriceVnd) : '');
     setStock(p?.stockQuantity != null ? String(Math.round(p.stockQuantity)) : '');
@@ -233,6 +240,7 @@ function ProductForm({
       categoryId: catKey === 'none' ? null : Number(catKey),
       name: name.trim(),
       unit: unit.trim(),
+      barcode: barcode.trim() || undefined,
       sellingPriceVnd: priceNum,
       costPriceVnd: costNum,
       tracked,
@@ -274,6 +282,7 @@ function ProductForm({
       setScanning(false);
       setName('Sữa chua nếp cẩm');
       setUnit('hộp');
+      setBarcode('8935049500999');
       setPrice('12000');
       setCost('7000');
       setStock('24');
@@ -313,6 +322,25 @@ function ProductForm({
       ) : (
         <>
           <Field label="Tên sản phẩm" placeholder="VD: Nước suối" value={name} onChangeText={setName} />
+
+          <Row gap={8} style={{ alignItems: 'flex-end', marginBottom: 14 }}>
+            <Field
+              label="Mã vạch (EAN-13, UPC...)"
+              placeholder="VD: 8934563138165"
+              value={barcode}
+              onChangeText={setBarcode}
+              style={{ flex: 1, marginBottom: 0 }}
+            />
+            <Button
+              title="Quét"
+              icon="camera"
+              variant="soft"
+              small
+              onPress={() => setScannerOpen(true)}
+              style={{ height: 48 }}
+            />
+          </Row>
+
           <Row style={{ alignItems: 'flex-start' }}>
             <Field
               label="Giá bán (đ)"
@@ -406,6 +434,16 @@ function ProductForm({
           ) : null}
         </>
       )}
+
+      <BarcodeScannerModal
+        visible={scannerOpen}
+        mode="input"
+        onClose={() => setScannerOpen(false)}
+        onBarcodeScanned={(code) => {
+          setBarcode(code);
+          setScannerOpen(false);
+        }}
+      />
       <Dialog
         visible={confirmDel}
         danger

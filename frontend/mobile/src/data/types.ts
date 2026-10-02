@@ -12,6 +12,8 @@ export interface Product {
   category: Category;
   /** Các cách người bán hay gọi tên món — giúp bộ nhận diện giả lập */
   aliases?: string[];
+  /** Mã vạch sản phẩm (EAN-13, UPC, Code 128...) để quét bán hàng */
+  barcode?: string;
 }
 
 export interface LineItem {
