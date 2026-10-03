@@ -58,7 +58,7 @@ export async function apiRequest<T>(
 
   if (USE_MOCK) {
     debugLog('api', '→ (mock)', method, path);
-    const raw = mockCoreRequest<T>(path, method, opts.body);
+    const raw = mockCoreRequest<T>(path, method, opts.body, opts.idempotencyKey);
     const data = raw === undefined ? raw : (JSON.parse(JSON.stringify(raw)) as T);
     debugLog('api', '✓ (mock)', method, path);
     return data;

@@ -18,6 +18,7 @@ import type {
 } from '../data/types';
 import { ApiError } from './apiError';
 import { normalizeText, vnd } from './format';
+import { canonicalJson } from './idempotency';
 
 /**
  * Core giả lập cho chế độ xem trước (EXPO_PUBLIC_USE_MOCK=true, xem src/config.ts) khi chưa có Core
@@ -272,6 +273,19 @@ function createSaleDraft(body: SaleDraftWriteBody): SaleDraftView {
   };
   saleDrafts.push(draft);
   return draft;
+}
+
+function getSaleDraft(id: number): SaleDraftView {
+  const draft = saleDrafts.find((d) => d.id === id);
+  if (!draft) throw apiErr(404, 'draft_not_found', 'This draft is unavailable.');
+  return draft;
+}
+
+/** Chỉ huỷ được nháp còn DRAFT — nháp đã chốt/đã huỷ thì Core trả 409 `draft_not_editable`. */
+function cancelSaleDraft(id: number): void {
+  const draft = getSaleDraft(id);
+  if (draft.status !== 'DRAFT') throw apiErr(409, 'draft_not_editable', 'Only a current draft can be changed.');
+  draft.status = 'CANCELLED';
 }
 
 function confirmSaleDraft(id: number): SaleView {
@@ -610,6 +624,36 @@ function deleteAgentConversation(id: number): void {
 }
 
 // ---------------------------------------------------------------------------
+// Idempotency-Key — mô phỏng IdempotencyServiceImpl của Core thật
+// ---------------------------------------------------------------------------
+
+const idempotentResults = new Map<string, { hash: string; response: unknown }>();
+
+/**
+ * Cùng key + cùng nội dung → trả lại kết quả cũ, không chạy lại; cùng key khác nội dung → 409; thiếu/sai key → 400.
+ * Lỗi nghiệp vụ ném ra từ `action` thì chưa lưu gì (Core rollback cả việc giữ key), nên có thể sửa rồi gửi lại với key đó.
+ */
+function idempotent<T>(operation: string, key: string | undefined, body: unknown, action: () => T): T {
+  if (key === undefined) throw apiErr(400, 'missing_required_header', 'The Idempotency-Key header is required.');
+  const normalized = key.trim();
+  if (!normalized || key.length > 255) {
+    throw apiErr(400, 'invalid_idempotency_key', 'Idempotency-Key must be 1 to 255 characters.');
+  }
+  const id = `${operation}|${normalized}`;
+  const hash = canonicalJson(body);
+  const stored = idempotentResults.get(id);
+  if (stored) {
+    if (stored.hash !== hash) {
+      throw apiErr(409, 'idempotency_key_conflict', 'This Idempotency-Key was already used for a different request.');
+    }
+    return JSON.parse(JSON.stringify(stored.response)) as T;
+  }
+  const response = action();
+  idempotentResults.set(id, { hash, response: JSON.parse(JSON.stringify(response)) });
+  return response;
+}
+
+// ---------------------------------------------------------------------------
 // Định tuyến — nhận đúng path/method mà catalogApi/salesApi/debtApi/customerApi/expenseApi gửi
 // ---------------------------------------------------------------------------
 
@@ -618,7 +662,7 @@ function deleteAgentConversation(id: number): void {
  * app thực sự dùng (xem catalogApi/salesApi/debtApi/customerApi/expenseApi) mới được xử lý; endpoint
  * khác ném lỗi rõ ràng thay vì âm thầm thất bại hoặc gọi mạng thật.
  */
-export function mockCoreRequest<T>(path: string, method: string, body: unknown): T {
+export function mockCoreRequest<T>(path: string, method: string, body: unknown, idempotencyKey?: string): T {
   const segments = path.split('/').filter(Boolean);
 
   if (path === '/categories') {
@@ -640,6 +684,14 @@ export function mockCoreRequest<T>(path: string, method: string, body: unknown):
   }
 
   if (path === '/sale-drafts' && method === 'POST') return createSaleDraft(body as SaleDraftWriteBody) as unknown as T;
+  if (segments[0] === 'sale-drafts' && segments.length === 2) {
+    const id = Number(segments[1]);
+    if (method === 'GET') return getSaleDraft(id) as unknown as T;
+    if (method === 'DELETE') {
+      cancelSaleDraft(id);
+      return undefined as T;
+    }
+  }
   if (segments[0] === 'sale-drafts' && segments.length === 3 && segments[2] === 'confirm' && method === 'POST') {
     return confirmSaleDraft(Number(segments[1])) as unknown as T;
   }
@@ -656,12 +708,16 @@ export function mockCoreRequest<T>(path: string, method: string, body: unknown):
 
   if (path === '/debts' && method === 'GET') return listDebts() as unknown as T;
   if (segments[0] === 'debts' && segments.length === 3 && segments[2] === 'payments' && method === 'POST') {
-    return repayDebt(Number(segments[1]), body as DebtRepaymentBody) as unknown as T;
+    return idempotent(`POST ${path}`, idempotencyKey, body, () =>
+      repayDebt(Number(segments[1]), body as DebtRepaymentBody),
+    ) as unknown as T;
   }
 
   if (path === '/expenses') {
     if (method === 'GET') return listExpenses() as unknown as T;
-    if (method === 'POST') return createExpense(body as ExpenseWriteBody) as unknown as T;
+    if (method === 'POST') {
+      return idempotent('POST /expenses', idempotencyKey, body, () => createExpense(body as ExpenseWriteBody)) as unknown as T;
+    }
   }
   if (segments[0] === 'expenses' && segments.length === 2 && method === 'DELETE') {
     archiveExpense(Number(segments[1]));
