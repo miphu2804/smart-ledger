@@ -1,3 +1,9 @@
+# Dev and staging share the staging Supabase database and Redis Cloud database;
+# there are no local PostgreSQL or Redis containers. Run with
+#   docker compose --env-file .env.staging --env-file backend/core/.env up --build
+# `.env.staging` supplies database credentials; `backend/core/.env` supplies
+# FIREBASE_PROJECT_ID and the host path of the service-account key to mount.
+# AI reads its own settings (model, API keys) from `backend/ai/.env`.
 services:
   core:
     build:
@@ -7,9 +13,9 @@ services:
       - "${CORE_PORT:-8000}:8080"
     environment:
       SERVER_PORT: 8080
-      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-smartledger}
-      DATABASE_USERNAME: ${POSTGRES_USER:-smartledger}
-      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DATABASE_USERNAME: ${DATABASE_USERNAME:?DATABASE_USERNAME is required}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD is required}
       AI_BASE_URL: http://ai:8001
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-}
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:?FIREBASE_PROJECT_ID is required}
@@ -17,71 +23,18 @@ services:
       FIREBASE_AUTH_EMULATOR_HOST: ${FIREBASE_AUTH_EMULATOR_HOST:-}
     volumes:
       - type: bind
-        source: ${FIREBASE_CREDENTIALS_PATH:?FIREBASE_CREDENTIALS_PATH is required}
+        source: ${GOOGLE_APPLICATION_CREDENTIALS:?GOOGLE_APPLICATION_CREDENTIALS is required}
         target: /run/secrets/firebase-service-account.json
         read_only: true
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-smartledger}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      POSTGRES_DB: ${POSTGRES_DB:-smartledger}
-    ports:
-      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER:-smartledger} -d ${POSTGRES_DB:-smartledger}",
-        ]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    volumes:
-      - redis-data:/data
 
   ai:
     build:
       context: ./backend/ai
     ports:
       - "${AI_PORT:-8001}:8001"
+    env_file:
+      - path: backend/ai/.env
+        required: false
     environment:
-      POSTGRES_URL: postgresql://${POSTGRES_USER:-smartledger}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-smartledger}
-      REDIS_URL: redis://redis:6379/0
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
-      # The image excludes .env, so model settings come from here; empty uses app_config defaults.
-      MODEL_NAME: ${MODEL_NAME:-}
-      SUMMARY_MODEL_NAME: ${SUMMARY_MODEL_NAME:-}
-      MODEL_REASONING_EFFORT: ${MODEL_REASONING_EFFORT:-}
-      # Empty fails closed: every /internal/v1 route returns 401. Set it in the shell or a
-      # Compose --env-file to exercise the internal API locally.
-      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-}
-      # Read-only login granted ai_sql_reader (backend/ai/migrations/004); empty turns the
-      # agent's shop-data tool off.
-      AI_SQL_READER_URL: ${AI_SQL_READER_URL:-}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-volumes:
-  postgres-data:
-  redis-data:
+      POSTGRES_URL: ${POSTGRES_URL:?POSTGRES_URL is required}
+      REDIS_URL: ${REDIS_URL:-}

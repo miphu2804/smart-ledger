@@ -10,6 +10,7 @@ Run Core's Flyway migrations first so `users` and `shops` exist, then apply the 
 
 ```bash
 psql "$POSTGRES_URL" -v ON_ERROR_STOP=1 -f migrations/001_create_chat_history.sql
+psql "$POSTGRES_URL" -v ON_ERROR_STOP=1 -f migrations/002_enable_pgvector.sql
 psql "$POSTGRES_URL" -v ON_ERROR_STOP=1 -f migrations/003_add_chat_summary.sql
 psql "$POSTGRES_URL" -v ON_ERROR_STOP=1 -f migrations/004_create_ai_read_views.sql
 ```
@@ -86,21 +87,21 @@ Host and port come from `SERVER_HOST` and `SERVER_PORT`.
 
 ## Local Compose
 
-From the repository root. Starts PostgreSQL, Redis, and this service. Langfuse is not part of the default stack. Set `POSTGRES_PASSWORD` in the shell or a Compose `--env-file` first.
+From the repository root. Starts Core and this service against the shared staging Supabase and Redis Cloud databases; there are no local PostgreSQL or Redis containers. Langfuse is not part of the default stack. See the root [README](../../README.md#local-compose) for the env files.
 
 ```bash
-docker compose up --build
+docker compose --env-file .env.staging --env-file backend/core/.env up --build
 ```
 
 - AI: `http://localhost:8001/health`
 - Compose ports use the defaults in `compose.yaml` and can be overridden with shell environment variables.
 
-To run this app on the host against Compose Postgres and Redis:
+To run this app on the host, export `POSTGRES_URL` and `REDIS_URL` from the repo-root `.env.staging` (dev shares the staging databases). `AppConfig` reads them from the process environment, which takes precedence over the local `.env`:
 
 ```bash
-docker compose up postgres redis
 uv sync --group dev
 cp .env.example .env
+set -a && source ../../.env.staging && set +a
 uv run python -m src.main
 ```
 

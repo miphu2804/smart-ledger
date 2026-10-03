@@ -23,12 +23,10 @@ flowchart TB
     subgraph data["Data"]
         direction TB
         data_access["Data access"]
-        postgres[("PostgreSQL")]
+        postgres[("PostgreSQL + pgvector")]
         redis["Redis"]
-        qdrant["Qdrant"]
         data_access --> postgres
         data_access --> redis
-        data_access --> qdrant
     end
 
     subgraph ai_infra["AI infrastructure"]
