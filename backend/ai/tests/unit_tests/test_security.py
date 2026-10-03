@@ -44,6 +44,6 @@ def test_unconfigured_token_fails_closed(monkeypatch) -> None:
 def test_non_ascii_token_is_rejected_instead_of_raising() -> None:
     # hmac.compare_digest refuses non-ASCII str, so a caller must not reach it as str.
     with pytest.raises(HTTPException) as rejected:
-        require_internal_token("tokén-không-hợp-lệ")
+        require_internal_token("tok\u00e9n-invalid")
 
     assert rejected.value.status_code == 401
