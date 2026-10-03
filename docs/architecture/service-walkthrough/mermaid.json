@@ -1,0 +1,7 @@
+{
+  "theme": "neutral",
+  "flowchart": { "useMaxWidth": false, "curve": "basis" },
+  "class": { "useMaxWidth": false },
+  "sequence": { "useMaxWidth": false },
+  "state": { "useMaxWidth": false }
+}
