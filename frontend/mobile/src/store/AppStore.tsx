@@ -138,6 +138,11 @@ function useStoreValue() {
         patch(() => ({ loggedIn: false, needsProfile: false, shopId: null }));
         await authClient.signOut().catch(() => undefined);
       },
+      enterDevApp: () => {
+        if (!__DEV__) return;
+        loggedInRef.current = true;
+        patch(() => ({ authReady: true, loggedIn: true, onboarded: true, needsProfile: false, guideDismissed: true }));
+      },
       /** 401 từ Core hoặc Firebase báo hết phiên: đăng xuất và đưa về màn đăng nhập (hợp đồng: 401 → đăng xuất). */
       forceSignOut: async () => {
         const wasLoggedIn = loggedInRef.current;

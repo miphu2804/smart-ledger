@@ -51,12 +51,12 @@ export default function EmailAuth() {
     <Screen>
       <Header title="" />
       <T w="extrabold" size={26} style={{ marginTop: 4 }}>
-        {mode === 'login' ? 'Đăng nhập bằng email' : 'Tạo tài khoản'}
+        {mode === 'login' ? 'Dùng email' : 'Tạo tài khoản'}
       </T>
       <T size={14} color={colors.muted} style={{ marginTop: 6, marginBottom: 18, lineHeight: 21 }}>
         {mode === 'login'
-          ? 'Dùng email và mật khẩu đã đăng ký'
-          : 'Chưa có tài khoản? Nhập email và đặt mật khẩu (từ 6 ký tự) để tạo mới'}
+          ? 'Nhập email và mật khẩu.'
+          : 'Nhập email và tạo mật khẩu từ 6 ký tự.'}
       </T>
 
       <Chips<Mode>
@@ -108,7 +108,7 @@ export default function EmailAuth() {
         style={{ marginTop: 6 }}
       />
 
-      <Pressable onPress={() => router.back()} style={{ alignSelf: 'center', marginTop: 20, minHeight: 44, justifyContent: 'center' }} hitSlop={8}>
+      <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/(auth)/welcome'))} style={{ alignSelf: 'center', marginTop: 20, minHeight: 44, justifyContent: 'center' }} hitSlop={8}>
         <T size={13} color={colors.faint}>
           Dùng số điện thoại
         </T>

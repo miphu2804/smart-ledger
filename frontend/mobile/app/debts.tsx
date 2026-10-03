@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, View } from 'react-native';
 import { useToast } from '../src/components/brand';
 import {
   Badge,
@@ -10,6 +10,7 @@ import {
   Field,
   Header,
   IconBtn,
+  LoadingState,
   Progress,
   Row,
   Screen,
@@ -21,6 +22,7 @@ import type { CustomerView, DebtView, PaymentView } from '../src/data/types';
 import { customerApi } from '../src/lib/customerApi';
 import { debtApi } from '../src/lib/debtApi';
 import { errorMessage } from '../src/lib/errors';
+import { triggerFeedback } from '../src/lib/feedback';
 import { ddmm, hhmm, initials, relDay, vnd } from '../src/lib/format';
 import { paymentApi } from '../src/lib/salesApi';
 import { colors, shadow } from '../src/theme';
@@ -77,7 +79,7 @@ export default function Debts() {
 
   return (
     <Screen>
-      <Header title="Quản lý nợ" subtitle="Theo dõi khách chưa thanh toán" />
+      <Header title="Công nợ" subtitle="Các khoản khách chưa trả" />
       <View style={styles.hero}>
         <Row>
           <View style={{ flex: 1 }}>
@@ -111,9 +113,7 @@ export default function Debts() {
       />
 
       {loading ? (
-        <View style={{ paddingTop: 60, alignItems: 'center' }}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
+        <LoadingState label="Đang tải công nợ…" />
       ) : error ? (
         <>
           <EmptyState icon="alert-triangle" title="Không tải được danh sách" hint={error} />
@@ -167,7 +167,12 @@ export default function Debts() {
           );
         })
       ) : (
-        <EmptyState icon="smile" title="Không có khoản nợ nào" hint="Khi thanh toán chọn “Ghi nợ”, khách sẽ hiện ở đây" />
+        <EmptyState
+          icon={filter === 'open' ? 'check-circle' : 'book-open'}
+          tone={filter === 'open' ? 'success' : 'neutral'}
+          title={filter === 'open' ? 'Không có công nợ đang mở' : filter === 'done' ? 'Chưa có khoản đã trả' : 'Chưa có công nợ'}
+          hint={filter === 'open' ? 'Các khoản chưa trả sẽ hiện ở đây' : undefined}
+        />
       )}
 
       <DebtSheet debt={selected} onClose={() => setOpenId(null)} onRepay={updateDebt} />
@@ -233,8 +238,10 @@ function DebtSheet({
       onRepay(res.debt);
       setPayments((cur) => [...cur, res.payment]);
       setAmount('');
+      if (v >= left) triggerFeedback('success');
       toast(v >= left ? `${debt.name} đã trả hết nợ` : `Đã ghi nhận ${debt.name} trả ${vnd(v)}`);
     } catch (e) {
+      triggerFeedback('error');
       toast(errorMessage(e), 'err');
     } finally {
       setBusy(false);
@@ -319,9 +326,7 @@ function DebtSheet({
         Lịch sử
       </T>
       {historyLoading ? (
-        <View style={{ paddingVertical: 16, alignItems: 'center' }}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
+        <LoadingState label="Đang tải lịch sử…" compact />
       ) : (
         history.map((h, i) => {
           const d = new Date(h.at);
