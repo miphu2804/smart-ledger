@@ -162,29 +162,18 @@
 /* ---------- Hero ---------- */
 .lp-hero {
   position: relative;
-  padding: 56px 0 96px;
+  padding: 72px 0 104px;
   overflow: hidden;
+  border-bottom: 1px solid var(--border);
 }
 .lp-hero-bg {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background:
-    radial-gradient(600px 420px at 85% 20%, rgba(143, 219, 110, 0.25), transparent 70%),
-    radial-gradient(520px 380px at 72% 70%, rgba(200, 138, 45, 0.12), transparent 70%),
-    radial-gradient(700px 500px at 0% 0%, rgba(243, 250, 239, 0.9), transparent 70%),
-    linear-gradient(180deg, #f7faf2 0%, #fff 100%);
-  mask-image: linear-gradient(180deg, #000 70%, transparent 100%);
-  -webkit-mask-image: linear-gradient(180deg, #000 70%, transparent 100%);
+  background: #f7f6f2;
 }
 .lp-hero-bg::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: radial-gradient(rgba(47, 107, 31, 0.1) 1px, transparent 1px);
-  background-size: 22px 22px;
-  mask-image: radial-gradient(ellipse 60% 60% at 70% 40%, #000 20%, transparent 75%);
-  -webkit-mask-image: radial-gradient(ellipse 60% 60% at 70% 40%, #000 20%, transparent 75%);
+  content: none;
 }
 .lp-hero-grid {
   position: relative;
@@ -199,10 +188,11 @@
   align-items: center;
   gap: 10px;
   padding: 7px 14px 7px 12px;
-  border-radius: 999px;
-  background: #fff;
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-xs);
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
   font-size: 13px;
   font-weight: 700;
   color: var(--primary);
@@ -246,14 +236,7 @@
   white-space: nowrap;
 }
 .lp-hero h1 .hl::after {
-  content: '';
-  position: absolute;
-  left: -2%;
-  right: -2%;
-  bottom: -0.08em;
-  height: 0.28em;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 20' preserveAspectRatio='none'%3E%3Cpath d='M3 14C40 5 120 3 197 9' fill='none' stroke='%23C8860A' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E")
-    no-repeat center / 100% 100%;
+  content: none;
 }
 .lp-hero-sub {
   color: var(--muted);
@@ -270,9 +253,8 @@
   font-style: normal;
   font-weight: 700;
   color: var(--ink);
-  background: var(--gold-soft);
-  padding: 1px 6px;
-  border-radius: 6px;
+  background: transparent;
+  padding: 0;
   white-space: nowrap;
 }
 .lp-hero-cta {
@@ -306,7 +288,7 @@
   position: relative;
   display: flex;
   justify-content: center;
-  padding: 10px 0 10px 40px;
+  padding: 0;
   min-height: 560px;
 }
 .lp-hero-ring {
@@ -362,10 +344,8 @@
   flex: none;
   padding: 10px;
   border-radius: 46px;
-  background: linear-gradient(145deg, #3a3630, #1a1916);
-  box-shadow:
-    var(--shadow-lg),
-    inset 0 0 0 1.5px rgba(255, 255, 255, 0.12);
+  background: #1a1916;
+  box-shadow: 0 20px 50px -30px rgba(26, 25, 22, 0.55);
 }
 .phone-screen {
   position: relative;
@@ -390,9 +370,9 @@
   background: #12100c;
 }
 .phone-hero {
-  width: 290px;
-  transform: rotate(2deg);
-  margin-left: 60px;
+  width: 300px;
+  transform: none;
+  margin-left: 0;
 }
 
 .voice-card {

@@ -10,10 +10,15 @@ from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from psycopg import sql
+from tests.support import TEST_GUARDRAIL_LIMITS
 
 from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
 from src.agent.service import AgentService
-from src.agent.summary import FOLD_TRIGGER_MESSAGES, KEEP_RECENT_MESSAGES
+from src.agent.summary import (
+    FOLD_TRIGGER_MESSAGES,
+    KEEP_RECENT_MESSAGES,
+    ChatSummaryFolder,
+)
 from src.infra.postgre_db_client import PostgreDBClient
 from src.main import app
 
@@ -122,9 +127,20 @@ def postgres_agent_client(
             options=f"-c search_path={schema_name}",
         )
         agent = AgentService(
-            ConversationEchoModel(responses=[]), AgentConversationRepository(postgres)
+            ConversationEchoModel(responses=[]),
+            AgentConversationRepository(postgres),
+            guardrail_limits=TEST_GUARDRAIL_LIMITS,
         )
         monkeypatch.setattr(app.state, "agent", agent, raising=False)
+        monkeypatch.setattr(
+            app.state, "conversations", agent.conversations, raising=False
+        )
+        monkeypatch.setattr(
+            app.state,
+            "summary_folder",
+            ChatSummaryFolder(None, agent.conversations),
+            raising=False,
+        )
         client = TestClient(app, headers=internal_headers)
         yield client, user_id, shop_id, agent.conversations
     finally:
@@ -150,12 +166,12 @@ def test_conversation_crud_uses_postgres(
 
     created = client.post(
         "/internal/v1/agent/chat",
-        json={**scope, "message": "doanh thu hôm nay?"},
+        json={**scope, "message": "today's revenue?"},
     )
 
     assert created.status_code == 200
     conversation_id = created.json()["conversation_id"]
-    assert created.json()["answer"] == "doanh thu hôm nay?"
+    assert created.json()["answer"] == "today's revenue?"
 
     listed = client.get("/internal/v1/agent/conversations", params=scope)
     detail = client.get(
@@ -165,17 +181,17 @@ def test_conversation_crud_uses_postgres(
     assert [conversation["conversation_id"] for conversation in listed.json()] == [
         conversation_id
     ]
-    assert detail.json()["title"] == "doanh thu hôm nay?"
+    assert detail.json()["title"] == "today's revenue?"
     assert [
         (message["role"], message["content"]) for message in detail.json()["messages"]
     ] == [
-        ("USER", "doanh thu hôm nay?"),
-        ("ASSISTANT", "doanh thu hôm nay?"),
+        ("USER", "today's revenue?"),
+        ("ASSISTANT", "today's revenue?"),
     ]
 
     renamed = client.patch(
         f"/internal/v1/agent/conversations/{conversation_id}",
-        json={**scope, "title": "  Ca sáng  "},
+        json={**scope, "title": "  Morning shift  "},
     )
     renamed_list = client.get("/internal/v1/agent/conversations", params=scope)
     renamed_detail = client.get(
@@ -183,16 +199,16 @@ def test_conversation_crud_uses_postgres(
     )
 
     assert renamed.status_code == 200
-    assert renamed.json()["title"] == "Ca sáng"
-    assert renamed_list.json()[0]["title"] == "Ca sáng"
-    assert renamed_detail.json()["title"] == "Ca sáng"
+    assert renamed.json()["title"] == "Morning shift"
+    assert renamed_list.json()[0]["title"] == "Morning shift"
+    assert renamed_detail.json()["title"] == "Morning shift"
 
     continued = client.post(
         "/internal/v1/agent/chat",
         json={
             **scope,
             "conversation_id": conversation_id,
-            "message": "còn hôm qua?",
+            "message": "and yesterday?",
         },
     )
     continued_detail = client.get(
@@ -201,7 +217,7 @@ def test_conversation_crud_uses_postgres(
 
     assert continued.status_code == 200
     assert continued.json()["conversation_id"] == conversation_id
-    assert continued.json()["answer"] == "doanh thu hôm nay? | còn hôm qua?"
+    assert continued.json()["answer"] == "today's revenue? | and yesterday?"
     assert len(continued_detail.json()["messages"]) == 4
 
     deleted = client.delete(
@@ -216,7 +232,7 @@ def test_conversation_crud_uses_postgres(
         json={
             **scope,
             "conversation_id": conversation_id,
-            "message": "tin nhắn sau khi xóa",
+            "message": "message after delete",
         },
     )
 
@@ -354,10 +370,13 @@ def test_fold_summary_persists_memory_and_chat_reuses_it(
         responses=[f"1. Customers and debts: {FACT_IN_FIRST_MESSAGE}"]
     )
     chat_model = RecordingEchoModel(responses=[])
-    agent = AgentService(chat_model, conversations, summary_model)
+    agent = AgentService(
+        chat_model, conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS
+    )
+    folder = ChatSummaryFolder(summary_model, conversations)
     before = conversations.context_for(conversation_id, user_id, shop_id)
 
-    assert agent.fold_summary(conversation_id, user_id, shop_id) is True
+    assert folder.fold(conversation_id, user_id, shop_id) is True
 
     stored = conversations.context_for(conversation_id, user_id, shop_id)
     assert len(before["messages"]) == total
@@ -395,13 +414,11 @@ def test_fold_summary_retries_after_a_failed_batch(
 ) -> None:
     _, user_id, shop_id, conversations = postgres_agent_client
     conversation_id = seed_conversation(conversations, user_id, shop_id, 16)
-    agent = AgentService(
-        RecordingEchoModel(responses=[]),
-        conversations,
-        FailingSummaryModel(responses=["ignored"]),
+    folder = ChatSummaryFolder(
+        FailingSummaryModel(responses=["ignored"]), conversations
     )
 
-    assert agent.fold_summary(conversation_id, user_id, shop_id) is False
+    assert folder.fold(conversation_id, user_id, shop_id) is False
 
     stored = conversations.context_for(conversation_id, user_id, shop_id)
     assert stored["summary"] is None

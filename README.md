@@ -1,6 +1,57 @@
 # SmartLedger
 
-## Repository Layout
+AI voice POS for small shops (So Nghe Loi): say a sentence and the AI records items, quantities, and prices. Product overview: [docs/product/project-overview.md](docs/product/project-overview.md).
+
+## Setup
+
+Install dependencies once per service. Requirements: Docker (optional), JDK 21, Python 3.11+ with [uv](https://docs.astral.sh/uv/), Node.js 20+.
+
+```bash
+# AI (Python)
+cd backend/ai && uv sync --group dev && cp -n .env.example .env
+
+# Core (Java): downloads Maven dependencies via the wrapper
+cd backend/core && bash ./mvnw dependency:go-offline && cp -n .env.example .env
+
+# Mobile (Expo)
+cd frontend/mobile && npm install
+
+# Web admin (Vite)
+cd frontend/web && npm install
+```
+
+Fill in `backend/core/.env` and `backend/ai/.env` from their `.env.example`; database credentials come from the root `.env.staging` (see [Local Compose](#local-compose)). Frontends default to mock data and need no backend.
+
+## Run
+
+```bash
+# AI, :8001
+cd backend/ai && uv run python -m src.main
+
+# Core, :8080. Spring does not read .env, so export it into the shell first
+cd backend/core && set -a && source ../../.env.staging && source .env && set +a && bash ./mvnw spring-boot:run
+
+# Mobile
+cd frontend/mobile && npx expo start
+
+# Web admin, :5173
+cd frontend/web && npm run dev
+
+# AI + Core in Docker (Core :8000, AI :8001)
+docker compose --env-file .env.staging --env-file backend/core/.env up --build
+```
+
+The first Core start applies Flyway migrations to the database in `DATABASE_URL`.
+
+Checks before a PR (same as CI):
+
+```bash
+cd backend/ai && uv run ruff check && uv run ruff format --check && uv run pytest
+cd backend/core && bash ./mvnw verify
+cd frontend/mobile && npm run typecheck && npm run export:web
+```
+
+## Layout
 
 Documentation-first MVP. **Verified in the current code:** BRD/PRD remain provisional and architecture describes the MVP target. Java Core implements Firebase session and current-user endpoints plus the auth/shop migration; shop and ledger APIs are not implemented. Python AI implements `/health` and internal Agent chat with persistent conversation management; Core does not call AI yet. Mobile and admin web default to mock data. Production readiness has not been verified.
 
@@ -10,7 +61,7 @@ smart-ledger/
 ├── AGENTS.md
 ├── CLAUDE.md
 ├── PROGRESS.md
-├── compose.yaml         # local Postgres + Redis + AI
+├── compose.yaml         # Core + AI (Supabase + Redis Cloud)
 ├── docs/
 │   ├── product/          # product description, BRD, PRD
 │   ├── architecture/     # overview, technical design, ADRs
@@ -33,11 +84,13 @@ cd backend/ai && uv sync --group dev && uv run python -m src.main
 
 ## Local Compose
 
-Default stack is PostgreSQL, Redis, and AI. Langfuse is not enabled. Set `POSTGRES_PASSWORD` in the shell or a Compose `--env-file` before starting the stack.
+Dev and staging share the staging Supabase project and Redis Cloud database; production uses a separate Supabase project and Redis Cloud database. There are no local PostgreSQL or Redis containers. Credentials live in Git-ignored files at the repository root: `.env.staging` and `.env.production` each define `DATABASE_URL` (JDBC), `DATABASE_USERNAME`, `DATABASE_PASSWORD` for Core and `POSTGRES_URL`, `REDIS_URL` for AI (use `rediss://` when TLS is enabled on Redis Cloud). Service settings stay in each service's own file: `backend/core/.env` supplies `FIREBASE_PROJECT_ID` and `GOOGLE_APPLICATION_CREDENTIALS` (absolute host path of the service-account key, mounted read-only into the container), and Compose loads `backend/ai/.env` for model and API keys. Default stack is Core and AI; Langfuse is not enabled.
 
 ```bash
-docker compose up --build
+docker compose --env-file .env.staging --env-file backend/core/.env up --build
 ```
+
+Do not run the app with the production bootstrap credentials; production values belong in the `production` environment's secret store. Automated tests use a disposable PostgreSQL (`POSTGRES_TEST_URL`, CI service container), never Supabase.
 
 ## References
 

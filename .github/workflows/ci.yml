@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-24.04
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg17
         env:
           POSTGRES_DB: smartledger_test
           POSTGRES_USER: smartledger
@@ -164,9 +164,13 @@ jobs:
   container-images:
     runs-on: ubuntu-24.04
     env:
-      POSTGRES_PASSWORD: ci-only-password
+      DATABASE_URL: jdbc:postgresql://ci-placeholder:5432/ci
+      DATABASE_USERNAME: ci-placeholder
+      DATABASE_PASSWORD: ci-placeholder
+      POSTGRES_URL: postgresql://ci-placeholder:5432/ci
+      REDIS_URL: redis://ci-placeholder:6379/0
       FIREBASE_PROJECT_ID: ci-placeholder
-      FIREBASE_CREDENTIALS_PATH: ./backend/core/.env.example
+      GOOGLE_APPLICATION_CREDENTIALS: ./backend/core/.env.example
     steps:
       - uses: actions/checkout@v7
       - name: Build custom service images

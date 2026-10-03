@@ -6,12 +6,17 @@ from langchain_core.language_models.fake_chat_models import (
     FakeMessagesListChatModel,
 )
 from langchain_core.messages import AIMessage
+from tests.support import TEST_GUARDRAIL_LIMITS
 
-from src.agent.prompt_template import SHOP_AGENT_SYSTEM_PROMPT
 from src.agent.repository import ConversationNotFoundError
 from src.agent.service import AgentService
-from src.agent.summary import FOLD_TRIGGER_MESSAGES, KEEP_RECENT_MESSAGES
-from src.agent.tools import get_all_tools
+from src.agent.summary import (
+    FOLD_TRIGGER_MESSAGES,
+    KEEP_RECENT_MESSAGES,
+    ChatSummaryFolder,
+)
+from src.agent.tools import build_history_tools
+from src.prompt_templates import SHOP_AGENT_SYSTEM_PROMPT
 
 
 class RecordingChatModel(FakeListChatModel):
@@ -114,21 +119,21 @@ class FakeConversationRepository:
 def test_chat_builds_system_prompt_and_persists_exchange() -> None:
     model = RecordingChatModel(responses=["ok"])
     conversations = FakeConversationRepository()
-    agent = AgentService(model, conversations)
+    agent = AgentService(model, conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS)
 
-    result = agent.chat(user_id=3, shop_id=15, message="doanh thu hôm nay?")
+    result = agent.chat(user_id=3, shop_id=15, message="today's revenue?")
 
     assert result.answer == "ok"
     assert result.conversation_id == 41
     assert result.message_id == 72
     assert model.seen_messages[0].type == "system"
     assert model.seen_messages[0].content == SHOP_AGENT_SYSTEM_PROMPT
-    assert model.seen_messages[-1].content == "doanh thu hôm nay?"
+    assert model.seen_messages[-1].content == "today's revenue?"
     assert conversations.saved_exchange == {
         "user_id": 3,
         "shop_id": 15,
         "conversation_id": None,
-        "user_message": "doanh thu hôm nay?",
+        "user_message": "today's revenue?",
         "assistant_message": "ok",
     }
 
@@ -137,17 +142,17 @@ def test_chat_adds_scoped_conversation_history_to_model_context() -> None:
     model = RecordingChatModel(responses=["ok"])
     conversations = FakeConversationRepository(
         [
-            {"message_id": 1, "role": "USER", "content": "xin chào"},
-            {"message_id": 2, "role": "ASSISTANT", "content": "chào bạn"},
+            {"message_id": 1, "role": "USER", "content": "hello"},
+            {"message_id": 2, "role": "ASSISTANT", "content": "hi there"},
         ]
     )
-    agent = AgentService(model, conversations)
+    agent = AgentService(model, conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS)
 
     agent.chat(
         user_id=3,
         shop_id=15,
         conversation_id=41,
-        message="doanh thu hôm nay?",
+        message="today's revenue?",
     )
 
     assert conversations.context_request == (41, 3, 15)
@@ -158,15 +163,19 @@ def test_chat_adds_scoped_conversation_history_to_model_context() -> None:
         "human",
     ]
     assert [message.content for message in model.seen_messages[1:]] == [
-        "xin chào",
-        "chào bạn",
-        "doanh thu hôm nay?",
+        "hello",
+        "hi there",
+        "today's revenue?",
     ]
 
 
 def test_chat_does_not_save_exchange_when_model_fails() -> None:
     conversations = FakeConversationRepository()
-    agent = AgentService(ErrorChatModel(responses=[]), conversations)
+    agent = AgentService(
+        ErrorChatModel(responses=[]),
+        conversations,
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
+    )
 
     with pytest.raises(RuntimeError, match="down"):
         agent.chat(user_id=3, shop_id=15, message="m")
@@ -177,13 +186,13 @@ def test_chat_does_not_save_exchange_when_model_fails() -> None:
 def test_chat_injects_stored_summary_after_system_prompt() -> None:
     model = RecordingChatModel(responses=["ok"])
     conversations = FakeConversationRepository(
-        history=[{"message_id": 9, "role": "USER", "content": "còn nợ không?"}],
+        history=[{"message_id": 9, "role": "USER", "content": "any debt left?"}],
         summary="1. Customers and debts: Lan owes 200000",
         summary_through_message_id=8,
     )
-    agent = AgentService(model, conversations)
+    agent = AgentService(model, conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS)
 
-    agent.chat(user_id=3, shop_id=15, conversation_id=41, message="doanh thu hôm nay?")
+    agent.chat(user_id=3, shop_id=15, conversation_id=41, message="today's revenue?")
 
     assert [message.type for message in model.seen_messages] == [
         "system",
@@ -194,16 +203,20 @@ def test_chat_injects_stored_summary_after_system_prompt() -> None:
     assert model.seen_messages[0].content == SHOP_AGENT_SYSTEM_PROMPT
     assert "Lan owes 200000" in model.seen_messages[1].content
     assert [message.content for message in model.seen_messages[2:]] == [
-        "còn nợ không?",
-        "doanh thu hôm nay?",
+        "any debt left?",
+        "today's revenue?",
     ]
 
 
 def test_chat_omits_summary_message_when_none_is_stored() -> None:
     model = RecordingChatModel(responses=["ok"])
-    agent = AgentService(model, FakeConversationRepository(summary=None))
+    agent = AgentService(
+        model,
+        FakeConversationRepository(summary=None),
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
+    )
 
-    agent.chat(user_id=3, shop_id=15, message="doanh thu hôm nay?")
+    agent.chat(user_id=3, shop_id=15, message="today's revenue?")
 
     assert [message.type for message in model.seen_messages] == ["system", "human"]
 
@@ -211,9 +224,9 @@ def test_chat_omits_summary_message_when_none_is_stored() -> None:
 def test_fold_summary_does_nothing_while_history_fits_the_window() -> None:
     summary_model = RecordingSummaryModel(responses=["rewritten"])
     conversations = FakeConversationRepository(history=history(FOLD_TRIGGER_MESSAGES))
-    agent = AgentService(None, conversations, summary_model)
+    folder = ChatSummaryFolder(summary_model, conversations)
 
-    assert agent.fold_summary(41, 3, 15) is False
+    assert folder.fold(41, 3, 15) is False
     assert summary_model.seen_prompts == []
     assert conversations.saved_summaries == []
 
@@ -223,9 +236,9 @@ def test_fold_summary_rewrites_and_advances_watermark() -> None:
     conversations = FakeConversationRepository(
         history=history(FOLD_TRIGGER_MESSAGES + 2), summary_through_message_id=None
     )
-    agent = AgentService(None, conversations, summary_model)
+    folder = ChatSummaryFolder(summary_model, conversations)
 
-    assert agent.fold_summary(41, 3, 15) is True
+    assert folder.fold(41, 3, 15) is True
     assert conversations.saved_summaries == [
         {
             "conversation_id": 41,
@@ -242,11 +255,11 @@ def test_fold_summary_sends_the_early_fact_to_the_summary_model() -> None:
     summary_model = RecordingSummaryModel(responses=["rewritten"])
     backlog = history(FOLD_TRIGGER_MESSAGES + 2)
     backlog[0]["content"] = "Lan owes 200000 VND"
-    agent = AgentService(
-        None, FakeConversationRepository(history=backlog), summary_model
+    folder = ChatSummaryFolder(
+        summary_model, FakeConversationRepository(history=backlog)
     )
 
-    agent.fold_summary(41, 3, 15)
+    folder.fold(41, 3, 15)
 
     prompt = summary_model.seen_prompts[0]
     assert prompt[0].type == "system"
@@ -261,9 +274,9 @@ def test_fold_summary_keeps_the_previous_summary_in_the_prompt() -> None:
         summary="1. Customers and debts: Lan owes 200000",
         summary_through_message_id=5,
     )
-    agent = AgentService(None, conversations, summary_model)
+    folder = ChatSummaryFolder(summary_model, conversations)
 
-    agent.fold_summary(41, 3, 15)
+    folder.fold(41, 3, 15)
 
     assert "Lan owes 200000" in summary_model.seen_prompts[0][1].content
     assert conversations.saved_summaries[0]["expected_through_id"] == 5
@@ -273,9 +286,9 @@ def test_fold_summary_skips_everything_when_the_summary_model_fails() -> None:
     conversations = FakeConversationRepository(
         history=history(FOLD_TRIGGER_MESSAGES + 2)
     )
-    agent = AgentService(None, conversations, ErrorSummaryModel(responses=["x"]))
+    folder = ChatSummaryFolder(ErrorSummaryModel(responses=["x"]), conversations)
 
-    assert agent.fold_summary(41, 3, 15) is False
+    assert folder.fold(41, 3, 15) is False
     assert conversations.saved_summaries == []
     assert conversations.summary is None
     assert conversations.summary_through_message_id is None
@@ -286,38 +299,38 @@ def test_fold_summary_drops_the_rewrite_when_a_concurrent_fold_won() -> None:
     conversations = FakeConversationRepository(
         history=history(FOLD_TRIGGER_MESSAGES + 2), save_summary_applies=False
     )
-    agent = AgentService(None, conversations, summary_model)
+    folder = ChatSummaryFolder(summary_model, conversations)
 
-    assert agent.fold_summary(41, 3, 15) is False
+    assert folder.fold(41, 3, 15) is False
     assert len(conversations.saved_summaries) == 1
     assert conversations.summary_through_message_id is None
 
 
 def test_fold_summary_ignores_a_deleted_conversation() -> None:
     conversations = FakeConversationRepository(missing=True)
-    agent = AgentService(
-        None, conversations, RecordingSummaryModel(responses=["rewritten"])
+    folder = ChatSummaryFolder(
+        RecordingSummaryModel(responses=["rewritten"]), conversations
     )
 
-    assert agent.fold_summary(41, 3, 15) is False
+    assert folder.fold(41, 3, 15) is False
 
 
 def test_fold_summary_does_nothing_without_a_summary_model() -> None:
     conversations = FakeConversationRepository(
         history=history(FOLD_TRIGGER_MESSAGES + 2)
     )
-    agent = AgentService(None, conversations, None)
+    folder = ChatSummaryFolder(None, conversations)
 
-    assert agent.fold_summary(41, 3, 15) is False
+    assert folder.fold(41, 3, 15) is False
     assert conversations.context_request is None
 
 
 def test_fold_summary_batches_a_long_backlog_and_chains_watermarks() -> None:
     summary_model = RecordingSummaryModel(responses=["rewritten"])
     conversations = FakeConversationRepository(history=history(200, "x" * 400))
-    agent = AgentService(None, conversations, summary_model)
+    folder = ChatSummaryFolder(summary_model, conversations)
 
-    assert agent.fold_summary(41, 3, 15) is True
+    assert folder.fold(41, 3, 15) is True
     assert len(conversations.saved_summaries) > 1
     through_ids = [saved["through_id"] for saved in conversations.saved_summaries]
     assert through_ids == sorted(through_ids)
@@ -358,7 +371,7 @@ def test_chat_searches_folded_history_within_the_request_scope() -> None:
             "created_at": datetime(2026, 10, 1),
         }
     ]
-    agent = AgentService(model, conversations)
+    agent = AgentService(model, conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS)
 
     result = agent.chat(user_id=3, shop_id=15, conversation_id=41, message="Lan?")
 
@@ -372,7 +385,7 @@ def test_chat_searches_folded_history_within_the_request_scope() -> None:
 def test_search_tool_does_not_query_a_new_conversation() -> None:
     model = search_then_answer("Lan")
     conversations = FakeConversationRepository()
-    agent = AgentService(model, conversations)
+    agent = AgentService(model, conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS)
 
     agent.chat(user_id=3, shop_id=15, message="Lan?")
 
@@ -381,7 +394,7 @@ def test_search_tool_does_not_query_a_new_conversation() -> None:
 
 
 def test_search_tool_exposes_only_the_query_to_the_model() -> None:
-    (search_tool,) = get_all_tools(FakeConversationRepository())
+    (search_tool,) = build_history_tools(FakeConversationRepository())
 
     assert list(search_tool.tool_call_schema.model_json_schema()["properties"]) == [
         "query"

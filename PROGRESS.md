@@ -1,3 +1,57 @@
+### [2026-10-03 23:24 UTC+07:00] — Merge staging vào Core: Agent proxy/pgvector, giữ nghiệp vụ và audit
+
+**Done:**
+- Hoàn tất hợp nhất `origin/staging` tại `7509434` vào `feat/core-business` từ `0d24520` theo phê duyệt của chủ Core; không merge trực tiếp vào staging.
+- Giải quyết đúng 5 file conflict: `ErrorCode.java`, `application.yml`, `docs/architecture/technical-design.md`, `docs/contracts/api-contracts.md`, `PROGRESS.md`. Giữ mã lỗi/audit Core và nhận cấu hình/mã lỗi Agent từ staging; đối chiếu docs để phân biệt Agent hiện có với proposal/insight/ADMIN dashboard vẫn là đích.
+- Giữ nguyên 80 entry tiến độ hợp nhất từ hai phía, không sửa nội dung entry cũ. Toàn bộ file đã tự merge, bao gồm FE/AI, giữ nguyên blob trong index ban đầu; không tự sửa code của các module này.
+- Không chỉnh entity, không sửa hay tạo migration; Core vẫn dùng V1–V10. Giữ các luồng tiền, nợ, void/refund, tồn kho, idempotency và audit OWNER đã có.
+
+**Verification:**
+- Maven Java 21 `clean verify` cùng JaCoCo: **357 tests, 0 failures, 0 errors, 0 skipped**; gồm **99 contract cases**, **11 Agent proxy cases**, **34 PostgreSQL cases** (migration 9, audit/checkout rollback 20, debt/void concurrency 5) trên PostgreSQL 16 tạm, không truy cập DB nghiệp vụ local hay Supabase.
+- CI PostgreSQL report gate đạt và **6 gate tests** đạt. JaCoCo tổng: line **1616/1793 (90.13%)**, branch **439/563 (77.98%)**; không thêm ngưỡng coverage hay plugin vào pom.
+- Docker build Core thành công; chạy image với PostgreSQL tạm và Firebase ADC giả chỉ để kiểm tra startup. Flyway áp dụng đủ 10 migrations, Hibernate validate/startup đạt; Swagger HTTP 200 và OpenAPI **49 operations**, có audit OWNER và 5 Agent operations. GET products/audit/Agent không token đều trả **401**.
+- Không còn conflict marker; `git diff --check` và link file local trong hai docs đạt. Fetch lại xác nhận staging vẫn tại `7509434`, remote Core vẫn tại `0d24520`, không có commit mới bị ghi đè.
+
+**Boundaries / follow-up:**
+- Chưa kiểm thử đăng nhập Firebase thật, model AI hay E2E FE → Core → AI; kết quả trên không thay nghiệm thu staging. Không chạy lại toàn bộ suite FE/AI; các module này nhận nguyên trạng staging và cần CI/owner kiểm tra.
+- Chưa chạy static analysis/CVE scan (pom chưa cấu hình các plugin này).
+- Kiểm tra staged diff toàn repo báo một blank line cuối file `frontend/mobile/src/components/MascotBadge.tsx:25`, đã có nguyên trạng ở staging. Staged diff của đúng 5 file giải quyết conflict không có lỗi whitespace; giữ nguyên FE, không tự sửa ngoài phạm vi.
+- `backend/core/README.md` còn hướng dẫn Compose local cũ, trong khi root README/Compose từ staging dùng dịch vụ DB/Redis bên ngoài; cần cập nhật riêng khi được duyệt, không mở rộng phạm vi sửa trong merge này.
+- Chuẩn bị merge commit và push thường lên `feat/core-business`; không force push, không tự merge PR vào staging.
+
+### [2026-10-03 07:54 UTC+07:00] — [UI/UX] Floating Cart Bar Elevation, Free-floating 3D Robot Mascot & Realistic Product Photos
+
+**Done:**
+1. **Floating Cart Bar (POS / Sales Tab)**:
+   - Elevated position (`bottom: insets.bottom + 104px`) to prevent collision with bottom TabBar.
+   - Conditional rendering (`count > 0`) with smooth spring entry/exit animation (`Animated.spring`, `translateY` + `scale` + `opacity`).
+   - Dynamic ScrollView `paddingBottom` (`190px` when active, `96px` when empty).
+2. **Free-Floating 3D Assistant Mascot (ZenRing)**:
+   - Replaced old badge with transparent 3D mascot (`bubblelogo.png`) floating freely without white circular bounding box or clipping.
+   - Enlarged `RING_SIZE` from `64px` to `72px`.
+   - Decreased idle fade (`IDLE_OPACITY: 0.85`), keeping the robot crisp and bright.
+3. **Voice Screen Refinements (Đọc đơn)**:
+   - Updated manual input button and inline keyboard icon to keyboard symbol (`MaterialCommunityIcons: keyboard-outline`).
+   - Sổ Nghe Lời chat avatar mapped to glossy 3D robot.
+   - Voice button calm breathing animations with soft ambient ripples.
+4. **Realistic Product Photos**:
+   - Created `src/lib/productImages.ts` mapping Vietnamese grocery, beverage, and retail items to realistic product photos.
+   - Replaced generic placeholder icons/letters in Voice order notebook, POS Grid & List cards, Cart Sheet, and Checkout review with real product photos.
+5. **Safe Navigation**:
+   - Guarded all `router.back()` calls with `router.canGoBack()` fallback to prevent unhandled `GO_BACK` exceptions.
+
+**Changed files:**
+- `frontend/mobile/src/lib/productImages.ts` — created product image resolver
+- `frontend/mobile/assets/bubblelogo.png` — added transparent 3D mascot asset
+- `frontend/mobile/assets/glossy-robot-notebook.png` — added robot mascot asset
+- `frontend/mobile/src/components/MascotBadge.tsx` — updated to free-floating mascot
+- `frontend/mobile/src/components/ZenRing.tsx` — updated size, opacity, and transparent ring container
+- `frontend/mobile/app/voice.tsx` — updated keyboard icon, product photos, safe goBack
+- `frontend/mobile/app/pos.tsx` — elevated floating cart bar, product photos, safe goBack
+- `frontend/mobile/app/checkout.tsx` — product photos in order review
+- `frontend/mobile/app/profile.tsx` & `frontend/mobile/app/(auth)/email.tsx` — safe goBack
+- `PROGRESS.md` — logged entry
+
 ### [2026-10-02 UTC+07:00] — [Docs] Add OWNER audit requirements and acceptance traceability
 
 **Done:** Added `BR-017`, `FR-028`/`FR-029` and `AC-033`–`AC-039` for existing transactional success audit and OWNER-only history. Corrected the outdated BRD statement that general audit was not implemented and replaced the API contract's missing-FR/AC note with links to the canonical requirements.
@@ -70,25 +124,6 @@
 
 **Remaining verification:** Coverage/static-analysis/dependency-security plugins are not configured, so these gates were not run. Existing Commons Logging/open-in-view warnings remain. Real Firebase, FE integration, remote CI and staging/production migration/backup readiness are not established by this local run. No commit or push was made; `.idea/` and ignored local secrets/build artifacts are excluded from the proposed push. Fetch/recheck the remote branch before the requested push/PR.
 
-### [2026-09-29 UTC+07:00] — [Feature] Add Flyway V7 for API idempotency keys
-
-**Done:** Added the `api_idempotency_keys` migration matching the Core repository and existing local test table. Updated the API contract to reflect the migration.
-
-**Changed files:** `backend/core/src/main/resources/db/migration/V7__create_api_idempotency_keys.sql`, `docs/contracts/api-contracts.md`, `PROGRESS.md`.
-
-**Flow explained:** A fresh PostgreSQL database now creates the idempotency table with shop/user references, a unique `(shop_id, operation, idempotency_key)` constraint, expiry check and index. An existing matching local test table is preserved.
-
-**Check:** Core Maven `verify` passed 119 tests and `docker compose build core` succeeded. Core started with Flyway enabled against an isolated clean PostgreSQL 16 database; V1–V7 all succeeded and the expected constraints/index exist. V7 ran against the pre-existing local table inside a rolled-back transaction without changing its two rows. The local database itself remains at Flyway V4; its pending V5/V6 upgrade was not applied or verified here.
-
-### [2026-09-29 UTC+07:00] — [Fix] Guard retry writes and shop archive; normalize selected API errors
-
-**Done:** Added idempotency handling for debt repayments and expense creation, blocked OWNER archive of an ADMIN-inactivated shop, and normalized missing-header and barcode-race errors. Updated BR/FR/AC and API contract for these provisional Core behaviors. Added a Core local-run README.
-
-**Changed files:** Core controllers, services, repository, error handling, configuration, tests and `backend/core/README.md`; `docs/product/business-requirements.md`, `docs/product/product-requirements.md`, `docs/contracts/api-contracts.md`, `PROGRESS.md`.
-
-**Flow explained:** Both POST endpoints now require `Idempotency-Key`; the same shop/operation/key/request returns the original response without a second write, while a changed request conflicts. The key and business write share one transaction. Default key expiry is 30 days. The `api_idempotency_keys` table was created **only in the local `smartledger` PostgreSQL DB** for testing; no Flyway migration was added, so this is not ready for a fresh DB or deployment.
-
-**Check:** Core Maven `verify` passed 119 tests with no failures/errors. Local HTTP smoke test on port 8080 replayed an expense with the same ID, rejected changed content with 409, and archived the test expense. OpenAPI listed both required headers; `docker compose config --quiet` passed. Docker image build could not run because Docker Engine was unavailable. No commit or push made.
 ### [2026-10-02 19:59 UTC+07:00] — [Refactor] Pass model settings to the AI container and simplify AI error handling
 
 **Done:** The `ai` Compose service now receives `MODEL_NAME`, `SUMMARY_MODEL_NAME` and `MODEL_REASONING_EFFORT`, and the default `MODEL_NAME` is `gpt-5.6-luna`, because the image excludes `.env` and the old `gpt-4o-mini` default does not accept `reasoning_effort`. Removed the unused `ProviderResult` and both unused `check_health` methods, and replaced the five per-route `try/except` blocks with two app-level exception handlers.
@@ -108,6 +143,170 @@
 **Flow explained:** `context_for` returns the summary plus every message above `summary_through_message_id`, and `chat()` injects the summary as a second system message. `fold_summary` runs as a FastAPI background task after the reply: it folds only once the unfolded window exceeds 60 messages, keeps the newest 50 verbatim, splits a longer backlog into roughly 3000-token batches, and advances the watermark with `WHERE summary_through_message_id IS NOT DISTINCT FROM <value it read>`, so a concurrent fold drops the later writer instead of losing messages. `SUMMARY_MODEL_NAME` selects the summarization model and falls back to `MODEL_NAME`. Auth is one router-level dependency; `/health` is unaffected. `search_chat_history` scores folded messages by shared diacritic-free words and receives its scope from `AgentContext` through `ToolRuntime`; `ChatOpenAI` uses the Responses API because `gpt-5.6-luna` rejects tools on chat completions. The shop prompt no longer carries the shop id, admits missing data instead of estimating, and names the source of a figure; the summary prompt copies figures verbatim under fixed English headings; every prompt is written in English. Both models run with `MODEL_REASONING_EFFORT=high` by default. The chat router now logs the cause behind a 503. Core does not send the header yet, so a staging deploy needs the Core update first.
 
 **Check:** `ruff check` and `ruff format --check` clean. `uv run pytest`: 75 passed with `POSTGRES_TEST_URL` against `postgres:16`, covering migration 003, the watermark guard, cross-scope rejection, a fold whose fact survives into a later turn, and the search tool's scope. Live `uvicorn` with `gpt-5.6-luna`: `/health` 200 without a token; chat 401 without or with a wrong token, 422 for a blank message, 404 for another shop's conversation; a 63rd message folded 18 messages in the background and a later turn recalled the folded fact; with a deliberately vague summary the agent called `search_chat_history` and answered the exact amount and date, also for a query typed without diacritics.
+
+### [2026-10-02 17:40 UTC+07:00] — [UI/UX] 3D Metallic Action Cards, Sharp White-to-Grey Gradient & AI Processor Icon
+
+**Done:** Updated "Đơn hàng mới" 4 action buttons on tab Tổng quan:
+1. **Longer Rectangular Cards (3D Shape)**: Increased card height to ~68px (`minHeight: 68`, `borderRadius: 14`), providing a comfortable rectangular form factor for title, abstract script, icon, and trailing chevron.
+2. **Sharp White-to-Grey 3D Shading**: Built with `LinearGradient` from silvery light grey down to metallic dark grey (`['#27292C', '#17181A', '#0D0E10']`), crisp 3D top-rim highlight border (`borderTopColor: 'rgba(255, 255, 255, 0.36)'`), and depth drop shadow.
+3. **Larger Icons with Fine Strokes**: Increased icon optical size to `24px` while keeping strokes fine (`strokeWidth: 1.6`), ensuring high sharpness without thickening borders.
+4. **AI Processor Chip Icon**: Replaced assistant headset with a high-tech AI microchip icon featuring circuit connector pins and an internal neural spark core.
+5. **Trailing `>` Affordance**: Added chevron `›` on the right side of each card (`Feather` `chevron-right` with subtle contrast).
+6. **Abstract Script Subtitles**: Added concise 3-6 word abstract explanations beneath large titles (half size ~10.5px):
+   - Đọc đơn: *Lên đơn bằng giọng nói*
+   - Chọn hàng: *Chọn sản phẩm thủ công*
+   - Quét mã: *Nhận diện mã vạch nhanh*
+   - Trợ lý AI: *Phân tích và gợi ý thông minh*
+
+**Changed files:**
+- `frontend/mobile/src/components/icons.tsx` — updated ActionIcon with size 24, stroke 1.6, and high-tech AI processor chip
+- `frontend/mobile/app/(tabs)/index.tsx` — implemented 3D rectangular cards with LinearGradient, trailing chevrons, and abstract script subtitles
+- `PROGRESS.md` — logged entry
+
+**Check:** `npm run typecheck` passed (0 errors); `npm run export:web` passed (code 0).
+
+### [2026-10-02 17:08 UTC+07:00] — [UI/UX] Floating Bubble Navigation, Authoritative Status Bar Rule & Minimalist Outline Actions
+
+**Done:** Refined the UI following user feedback:
+1. **Authoritative Status Bar Rule**: Fixed rule applied — `Tổng quan` (`index`) is ALWAYS `light` (white text/icons for time, battery, wifi, signals), and all other tabs (`invoices`, `sales`, `more`) are ALWAYS `dark` (black text/icons). Single authoritative controller in `(tabs)/_layout.tsx` with dynamic key flushing; removed all conflicting `<StatusBar>` instances from child tab screens.
+2. **Floating Bubble Navigation**: Redesigned bottom navigation into a floating bubble capsule:
+   - Bar: solid white background (`#FFFFFF`), capsule shape (`borderRadius: 32`), thin delicate border (`#ECEAE4`), clean elevation shadow.
+   - Indicator: soft dark bubble (`#262522`, `borderRadius: 26`), lighter and softer than harsh solid black.
+   - Bubble elastic physics: on press, bubble squashes/softens (`scaleX: 1.05`, `scaleY: 0.95`); on release, springs back. On tab transition, indicator stretches in flight (`scaleX: 1.10`, `scaleY: 0.94`) and springs into shape at the target tab. Reduced motion preserved.
+3. **“Đơn hàng mới” Minimalist Outline Actions**:
+   - Eliminated solid card backgrounds and container boxes. The 4 actions (Đọc đơn, Chọn hàng, Quét mã, Trợ lý) now blend directly into the deep black header background (`backgroundColor: 'transparent'`).
+   - Clean, thin white outline border (`borderWidth: 1`, `borderColor: 'rgba(255, 255, 255, 0.18)'`, moderate `borderRadius: 13`).
+   - Fine outline icons (stroke ~1.7) placed directly inline next to labels without circle/square containers:
+     - Đọc đơn: fine outline microphone with subtle grill detailing.
+     - Chọn hàng: fine outline goods/cart.
+     - Quét mã: scanner frame with barcode strips and laser beam.
+     - Trợ lý: human assistant headset / support operator symbol, avoiding generic AI sparkles.
+
+**Changed files:**
+- `frontend/mobile/src/components/icons.tsx` — updated ActionIcon with fine outline stroke (1.7) and assistant headset icon
+- `frontend/mobile/app/(tabs)/_layout.tsx` — implemented solid white capsule floating bar, soft dark bubble indicator with elastic stretch/squash spring physics, authoritative status bar rule
+- `frontend/mobile/app/(tabs)/index.tsx` — updated "Đơn hàng mới" to transparent outline cards directly on black, refined collapsed quick actions, removed local StatusBar
+- `frontend/mobile/app/(tabs)/invoices.tsx` — removed redundant local StatusBar
+- `frontend/mobile/app/(tabs)/more.tsx` — removed redundant local StatusBar
+- `frontend/mobile/app/pos.tsx` — conditioned StatusBar to only render when not embedded in tab
+- `PROGRESS.md` — logged entry
+
+**Check:** `npm run typecheck` passed (0 errors); `npm run export:web` passed (code 0).
+
+### [2026-10-02 16:50 UTC+07:00] — [UI/UX] Visual System Overhaul: Icon Family, Floating Navigation, Action Cards & Header 2-Tier Hierarchy
+
+**Done:** Implemented the UI/UX visual system overhaul requested:
+1. **Icon Design System**: Created `frontend/mobile/src/components/icons.tsx` with unified SVG geometric rounded icons (`viewBox="0 0 24 24"`, stroke ~2.2-2.3, balanced optical weights):
+   - `TabIcon`: 4 bottom tabs with paired geometric representations — INACTIVE outline (lighter weight) vs ACTIVE solid/filled (high contrast).
+   - `ActionIcon`: `mic`, `scan`, `cart`, `assistant`, `chevron`, `bell`.
+2. **Bottom Navigation**: Renamed tab `Tiện ích` → `Quản lý` in `_layout.tsx` and `more.tsx`. Connected moving single active indicator with dark/translucent surface, tactile micro-bounce spring animation (~1.09) on tab press, and reduced motion support.
+3. **Status Bar Synchronization**: Synchronized native status bar appearance dynamically across all tabs — `light` style for dark header on `Tổng quan` (`index`), `dark` style for light backgrounds on `invoices`, `sales`/`pos`, and `more` (`Quản lý`).
+4. **ActionCard Component**: Created reusable `ActionCard` (`minHeight: 74-80`, `flexDirection: 'row'`, `alignItems: 'center'`, left visual anchor, middle title + optional subtitle, trailing chevron affordance, subtle border/elevation, dark/light surface variants, press scale spring animation).
+5. **Tổng quan — "Đơn hàng mới"**: Replaced giant buttons with a 4-action functional grid: Đọc đơn (`/voice`), Quét mã (`BarcodeScannerModal`), Chọn hàng (`/pos`), and Trợ lý (`/ai`).
+6. **Tổng quan — Collapsed Header**: Redesigned collapsed header into 2 clear horizontal tiers: Tier 1 (Context on left, prominent right-aligned revenue `xxx.xxxđ` without squeezing); Tier 2 (4 compact quick action chips with touch target >= 44). Smooth non-clipping transition between expanded and collapsed states.
+
+**Changed files:**
+- `frontend/mobile/src/components/icons.tsx` — created unified TabIcon and ActionIcon system
+- `frontend/mobile/src/components/ui.tsx` — added ActionCard primitive with dark/light themes
+- `frontend/mobile/app/(tabs)/_layout.tsx` — updated to TabIcon, Quản lý label, dynamic status bar, and refined bounce
+- `frontend/mobile/app/(tabs)/more.tsx` — renamed title to Quản lý, added StatusBar dark
+- `frontend/mobile/app/(tabs)/invoices.tsx` — added StatusBar dark
+- `frontend/mobile/app/pos.tsx` — added StatusBar dark
+- `frontend/mobile/app/(tabs)/index.tsx` — implemented 4-action grid for "Đơn hàng mới" and 2-tier collapsed header with prominent revenue
+- `PROGRESS.md` — logged entry
+
+**Check:** `npm run typecheck` passed (0 errors); `npm run export:web` passed (code 0).
+
+### [2026-10-02 15:55 UTC+07:00] — [UI/UX] Mobile UI/UX overhaul across all screens
+
+**Done:** Completed mobile UI/UX overhaul: bottom navigation floating bar with animated single-indicator, collapsible headers, standardized Feather icons, natural merchant wording, destructive action confirmations, haptic/feedback integration, and reduced motion coverage.
+
+**Changed files:**
+- `frontend/mobile/app/*`, `frontend/mobile/src/*` — UI/UX overhaul, animations, feedback, and destructive states
+- `docs/design/mobile-wording-review.md` — mobile wording review table updated
+- `PROGRESS.md` — updated
+
+**Flow explained:** Navigation uses a floating bar with active tab indicator spring motion. Long screens (Home, Invoices, Products) implement collapsible headers. Destructive operations (delete product, remove expense, clear POS cart, logout) are guarded with consistent confirmation dialogs. Primary actions and status confirmations provide tactile/sound feedback while respecting accessibility reduced motion preferences.
+
+**Check:** `npm run typecheck` passed (0 errors); `npm run export:web` passed; `git diff --check` passed.
+
+### [2026-10-01 UTC+07:00] — [Config] Run Core and AI locally against staging with Firebase
+
+**Done:** Database credentials live only in the repo-root `.env.staging`/`.env.production`; `backend/core/.env` keeps Firebase settings and `backend/ai/.env` keeps model settings. Compose reads `backend/core/.env` for the Firebase project and key path and loads `backend/ai/.env` through `env_file`, replacing the root `.env` and `FIREBASE_CREDENTIALS_PATH`. Mobile iOS dev build is configured through `app.json` (`disableSPM`, `usePrecompiledModules: false`, iOS `googleServicesFile`). Correction to the 2026-09-30 config entry: `AppConfig` does not load `.env.<APP_ENV>`; the code reads only the process environment and `backend/ai/.env`, so hosts export `.env.staging` before starting AI.
+
+**Changed files:** `compose.yaml`, `.github/workflows/ci.yml`, `README.md`, `backend/ai/README.md`, `backend/ai/.env.example`, `frontend/mobile/app.json`, `frontend/mobile/package.json`, `frontend/mobile/package-lock.json`, `frontend/mobile/.gitignore`, `frontend/mobile/README.md`, `PROGRESS.md`.
+
+**Flow explained:** `docker compose --env-file .env.staging --env-file backend/core/.env up --build` starts Core (:8000) and AI (:8001) against staging Supabase. On the host, `set -a && source ../../.env.staging && source .env && set +a` precedes `mvnw spring-boot:run`. The first Flyway run on staging needed a one-off baseline at version 0 because Supabase's `rls_auto_enable` function makes `public` non-empty; production will hit the same on its first migration.
+
+**Check:** Core on staging applied V1–V6 and started; Compose stack up with Core `/v3/api-docs` 200 and AI `/health` 200. iOS simulator: `expo prebuild --clean` generates both Podfile settings, clean build launches, email sign-up created the Firebase user, `POST /auth/session` 200 and `POST /shops` 201, rows present in staging `users`, `auth_identities`, `shops`. AI ruff and tests (23 passed, 1 skipped) and mobile typecheck pass. Redis in `.env.staging` still points at localhost; AI logs a warning and continues. Real-number phone OTP returns `auth/internal-error` and is unverified.
+
+### [2026-09-30 UTC+07:00] — [Config] AI loads per-environment credentials (ADR-0001 option A)
+
+**Done:** Team chose pgvector only (ADR-0001 option A). `AppConfig` now loads the Git-ignored repo-root `.env.<APP_ENV>` (`staging` by default, or `production`) and then the local `backend/ai/.env`; an invalid `APP_ENV` fails at import. Removed `QDRANT_URL`.
+
+**Changed files:** `backend/ai/src/app_config.py`, `backend/ai/.env.example`, `backend/ai/README.md`, `PROGRESS.md`.
+
+**Flow explained:** Precedence is process environment, then local `.env`, then `.env.<APP_ENV>`; empty values are ignored. Containers have no such files and keep reading Compose environment variables.
+
+**Check:** Default config resolved `POSTGRES_URL` to the staging Supabase pooler and `check_health()` succeeded against it; environment variables override the file; `APP_ENV=dev` raises `ValueError`. AI tests 23 passed, 1 skipped (no `POSTGRES_TEST_URL`); `ruff check` and `ruff format --check` clean. `.env.staging` still has no `REDIS_URL`.
+
+### [2026-09-30 UTC+07:00] — [Architecture] Propose pgvector instead of Qdrant (ADR-0001)
+
+**Done:** Added ADR-0001 (Proposed) to store embeddings in Supabase PostgreSQL with `pgvector`; removed Qdrant from the technical design and architecture diagram. Added AI migration `002_enable_pgvector.sql` and switched the AI CI database image to `pgvector/pgvector:pg17` to match Supabase PostgreSQL 17.
+
+**Changed files:** `docs/architecture/adr/0001-vector-store-pgvector.md`, `docs/architecture/technical-design.md`, `docs/architecture/diagrams/src/architecture.mmd`, `docs/README.md`, `backend/ai/migrations/002_enable_pgvector.sql`, `backend/ai/README.md`, `.github/workflows/ci.yml`, `PROGRESS.md`.
+
+**Check:** Migration applied twice on `pgvector/pgvector:pg17` (idempotent, `vector` 0.8.6, distance query works); AI tests 24 passed on that image. Staging Supabase has `vector` 0.8.2 available but not yet enabled; the migration has not been run there. `architecture.drawio`/`.svg`/`.png` still show Qdrant.
+
+### [2026-09-30 UTC+07:00] — [Ops] Dev shares staging Supabase and Redis Cloud; production separate (#8)
+
+**Done:** Removed the local PostgreSQL and Redis containers from `compose.yaml`; Core and AI now read database and `REDIS_URL` credentials only from env, pointing at Supabase and Redis Cloud. Added `docs/architecture/diagrams/src/environments.mmd` (clients, backend, Supabase, Redis Cloud, CI/CD). Dev and staging share the staging Supabase project via `.env.staging`; production has its own project in `.env.production` (both Git-ignored). Trimmed this log to the 20 newest entries; older entries remain in Git history.
+
+**Changed files:** `compose.yaml`, `.github/workflows/ci.yml` (placeholder DB values for `docker compose build`), `README.md`, `backend/ai/README.md`, `backend/ai/.env.example`, `CONTRIBUTING.md`, `docs/architecture/technical-design.md`, `PROGRESS.md`.
+
+**Flow explained:** `docker compose --env-file .env --env-file .env.staging up --build` starts Redis, Core, and AI against the staging Supabase pooler; a missing variable fails interpolation before any container starts. Automated tests keep using a disposable PostgreSQL (`POSTGRES_TEST_URL`, CI service container).
+
+**Check:** `docker compose config` with `.env.staging` lists only `redis`, `ai`, `core`, both apps resolving to the staging Supabase pooler. Starting the stack against Supabase, a deploy workflow, and GitHub Environment secrets are not done.
+
+### [2026-09-29 UTC+07:00] — [Feature] Add Flyway V7 for API idempotency keys
+
+**Done:** Added the `api_idempotency_keys` migration matching the Core repository and existing local test table. Updated the API contract to reflect the migration.
+
+**Changed files:** `backend/core/src/main/resources/db/migration/V7__create_api_idempotency_keys.sql`, `docs/contracts/api-contracts.md`, `PROGRESS.md`.
+
+**Flow explained:** A fresh PostgreSQL database now creates the idempotency table with shop/user references, a unique `(shop_id, operation, idempotency_key)` constraint, expiry check and index. An existing matching local test table is preserved.
+
+**Check:** Core Maven `verify` passed 119 tests and `docker compose build core` succeeded. Core started with Flyway enabled against an isolated clean PostgreSQL 16 database; V1–V7 all succeeded and the expected constraints/index exist. V7 ran against the pre-existing local table inside a rolled-back transaction without changing its two rows. The local database itself remains at Flyway V4; its pending V5/V6 upgrade was not applied or verified here.
+
+### [2026-09-29 UTC+07:00] — [Fix] Guard retry writes and shop archive; normalize selected API errors
+
+**Done:** Added idempotency handling for debt repayments and expense creation, blocked OWNER archive of an ADMIN-inactivated shop, and normalized missing-header and barcode-race errors. Updated BR/FR/AC and API contract for these provisional Core behaviors. Added a Core local-run README.
+
+**Changed files:** Core controllers, services, repository, error handling, configuration, tests and `backend/core/README.md`; `docs/product/business-requirements.md`, `docs/product/product-requirements.md`, `docs/contracts/api-contracts.md`, `PROGRESS.md`.
+
+**Flow explained:** Both POST endpoints now require `Idempotency-Key`; the same shop/operation/key/request returns the original response without a second write, while a changed request conflicts. The key and business write share one transaction. Default key expiry is 30 days. The `api_idempotency_keys` table was created **only in the local `smartledger` PostgreSQL DB** for testing; no Flyway migration was added, so this is not ready for a fresh DB or deployment.
+
+**Check:** Core Maven `verify` passed 119 tests with no failures/errors. Local HTTP smoke test on port 8080 replayed an expense with the same ID, rejected changed content with 409, and archived the test expense. OpenAPI listed both required headers; `docker compose config --quiet` passed. Docker image build could not run because Docker Engine was unavailable. No commit or push made.
+
+### [2026-09-28 UTC+07:00] — [Fix] Serialize product edits with checkout stock updates
+
+**Done:** Product PATCH and archive now acquire the same product row lock used when confirming a sale. Added a regression test that patches product metadata after a stock deduction without restoring the old quantity.
+
+**Changed files:** `backend/core/src/main/java/com/smartledger/core/service/impl/ProductServiceImpl.java`, `backend/core/src/test/java/com/smartledger/core/service/ProductServiceTest.java`, `PROGRESS.md`.
+
+**Flow explained:** Mutating an active product waits for concurrent checkout stock changes before reading and merging its fields. Ordinary product reads remain unlocked. No entity or migration changed.
+
+**Check:** Targeted Product/Sale Draft tests and the full Core Maven test suite passed (111 tests, 0 failures/errors); `git diff --check` passed. A live PostgreSQL concurrency test has not been run.
+
+### [2026-09-28 UTC+07:00] — [Feature] Add shop expenses and period summary
+
+**Done:** Added shop-scoped manual expense create/list/detail/patch/archive APIs, a period summary for confirmed revenue, payments received, active expenses, current debt and order count, plus Flyway V6 for expenses.
+
+**Changed files:** `backend/core` expense/report controllers, DTOs, entity, enum, repositories, services, error codes and tests; `backend/core/src/main/resources/db/migration/V6__create_expenses.sql`; `PROGRESS.md`.
+
+**Flow explained:** An OWNER records expenses for an owned ACTIVE shop. Reports use the Vietnam calendar for `today`, `yesterday`, `this_week`, `week`, `month` and `year`; revenue sums confirmed sale totals after discounts, while collected cash sums payments received in the selected period. Archived expenses and voided sales are excluded. Current debt is a shop-wide balance, not a period flow. This summary does not yet include estimated profit or best sellers from the wider PRD.
+
+**Check:** `mvnw.cmd verify` passed 110 tests. V1–V6 SQL succeeded in an isolated PostgreSQL schema; V5–V6 also succeeded against the existing local schema in a rolled-back transaction, preserving eight expense rows. Local API/DB checks covered period totals, draft exclusion, voided sales, cross-period debt repayment, archive, inactive shop access and Vietnam day boundaries. Docker image build was not rerun because Docker Engine was unavailable.
 
 ### [2026-09-28 18:57 UTC+07:00] — [Tooling] Review feature PRs on staging
 
@@ -129,26 +328,6 @@
 **Flow explained:** Agents reviewing a branch or PR write their findings in Vietnamese as problem, scenario, and fix or decision needed.
 
 **Check:** Re-read `AGENTS.md`; `git diff --check` passed.
-
-### [2026-09-28 UTC+07:00] — [Fix] Serialize product edits with checkout stock updates
-
-**Done:** Product PATCH and archive now acquire the same product row lock used when confirming a sale. Added a regression test that patches product metadata after a stock deduction without restoring the old quantity.
-
-**Changed files:** `backend/core/src/main/java/com/smartledger/core/service/impl/ProductServiceImpl.java`, `backend/core/src/test/java/com/smartledger/core/service/ProductServiceTest.java`, `PROGRESS.md`.
-
-**Flow explained:** Mutating an active product waits for concurrent checkout stock changes before reading and merging its fields. Ordinary product reads remain unlocked. No entity or migration changed.
-
-**Check:** Targeted Product/Sale Draft tests and the full Core Maven test suite passed (111 tests, 0 failures/errors); `git diff --check` passed. A live PostgreSQL concurrency test has not been run.
-
-### [2026-09-28 UTC+07:00] — [Feature] Add shop expenses and period summary
-
-**Done:** Added shop-scoped manual expense create/list/detail/patch/archive APIs, a period summary for confirmed revenue, payments received, active expenses, current debt and order count, plus Flyway V6 for expenses.
-
-**Changed files:** `backend/core` expense/report controllers, DTOs, entity, enum, repositories, services, error codes and tests; `backend/core/src/main/resources/db/migration/V6__create_expenses.sql`; `PROGRESS.md`.
-
-**Flow explained:** An OWNER records expenses for an owned ACTIVE shop. Reports use the Vietnam calendar for `today`, `yesterday`, `this_week`, `week`, `month` and `year`; revenue sums confirmed sale totals after discounts, while collected cash sums payments received in the selected period. Archived expenses and voided sales are excluded. Current debt is a shop-wide balance, not a period flow. This summary does not yet include estimated profit or best sellers from the wider PRD.
-
-**Check:** `mvnw.cmd verify` passed 110 tests. V1–V6 SQL succeeded in an isolated PostgreSQL schema; V5–V6 also succeeded against the existing local schema in a rolled-back transaction, preserving eight expense rows. Local API/DB checks covered period totals, draft exclusion, voided sales, cross-period debt repayment, archive, inactive shop access and Vietnam day boundaries. Docker image build was not rerun because Docker Engine was unavailable.
 
 ### [2026-09-28 00:11 UTC+07:00] — [Feature] Add customer directory and debt repayment flow
 
@@ -227,6 +406,26 @@
 **Done:** Restored V3 with both `inactive_reason` and `archived_reason`, matching the schema already installed locally. Removed the redundant V4 source migration.
 
 **Flow explained:** V3 was applied before its later rename/refactor; Flyway requires its original version, description, and SQL checksum to remain stable. Both reason fields therefore remain grouped in the applied V3 history.
+
+### [2026-09-24 UTC+07:00] — [AI] Add PostgreSQL-backed agent chat history
+
+**Done:** Implemented Agent conversation persistence, history context, and conversation management against the chat history ERD.
+
+**Changed files:** AI PostgreSQL migration, repository, service, internal API, tests, and related API/technical documentation.
+
+**Flow explained:** Chat turns are committed atomically; later turns load up to 20 scoped messages; OWNER can list, rename, view, and delete conversations.
+
+**Check:** Ruff and format passed; 15 AI tests passed; PostgreSQL 16 migration and end-to-end persistence/scope/delete check passed.
+
+### [2026-09-24 UTC+07:00] — [Feature] Restore mobile shadows and Zen ring
+
+**Done:** Increased native/web card and CTA depth and added a draggable Zen ring across the four mobile tabs. Tap opens demo Voice/Agent chat choices; hold opens Voice directly. Updated the visual reference to describe the implemented demo behavior.
+
+**Changed files:** `frontend/mobile/src/theme.ts`, `src/components/ui.tsx`, `src/components/ZenRing.tsx`, `app/(tabs)/_layout.tsx`, `app/(tabs)/index.tsx`, `app/_layout.tsx`, `docs/design/mobile-ui-style-migration.md`, and `PROGRESS.md`.
+
+**Flow explained:** The ring stays above tab screens, is clamped above the tab bar and safe areas, and disappears on child screens. Voice/chat remain sample-data demos; business writes and audio capture are unchanged.
+
+**Check:** TypeScript and web export passed. In the web demo, card shadow rendered, ring menu and Voice navigation worked, dragging moved the ring, and a 500 ms hold opened Voice. An iOS simulator screenshot showed the card shadows and ring; Android remains unverified.
 
 ### [2026-09-24 23:55 UTC+07:00] — [Fix] Preserve applied Flyway V3 and add archive reason as V4
 
@@ -457,26 +656,6 @@
 **Flow explained:** The `release-source` check is only required for pull requests targeting `main`; it must be configured as a required check in the `main` ruleset after this workflow reaches `main`.
 
 **Check:** AI Ruff check and format check passed; Python tests passed (12). Local Core verification could not start because no Java runtime is installed; GitHub Actions validation pending. Workflow YAML parsed; `git diff --check` passed.
-
-### [2026-09-24 UTC+07:00] — [AI] Add PostgreSQL-backed agent chat history
-
-**Done:** Implemented Agent conversation persistence, history context, and conversation management against the chat history ERD.
-
-**Changed files:** AI PostgreSQL migration, repository, service, internal API, tests, and related API/technical documentation.
-
-**Flow explained:** Chat turns are committed atomically; later turns load up to 20 scoped messages; OWNER can list, rename, view, and delete conversations.
-
-**Check:** Ruff and format passed; 15 AI tests passed; PostgreSQL 16 migration and end-to-end persistence/scope/delete check passed.
-
-### [2026-09-24 UTC+07:00] — [Feature] Restore mobile shadows and Zen ring
-
-**Done:** Increased native/web card and CTA depth and added a draggable Zen ring across the four mobile tabs. Tap opens demo Voice/Agent chat choices; hold opens Voice directly. Updated the visual reference to describe the implemented demo behavior.
-
-**Changed files:** `frontend/mobile/src/theme.ts`, `src/components/ui.tsx`, `src/components/ZenRing.tsx`, `app/(tabs)/_layout.tsx`, `app/(tabs)/index.tsx`, `app/_layout.tsx`, `docs/design/mobile-ui-style-migration.md`, and `PROGRESS.md`.
-
-**Flow explained:** The ring stays above tab screens, is clamped above the tab bar and safe areas, and disappears on child screens. Voice/chat remain sample-data demos; business writes and audio capture are unchanged.
-
-**Check:** TypeScript and web export passed. In the web demo, card shadow rendered, ring menu and Voice navigation worked, dragging moved the ring, and a 500 ms hold opened Voice. An iOS simulator screenshot showed the card shadows and ring; Android remains unverified.
 
 ### [2026-09-23 22:27 UTC+07:00] — [Refactor] Use shop ID paths for shop management
 
