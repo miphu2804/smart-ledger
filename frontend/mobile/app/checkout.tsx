@@ -11,9 +11,10 @@ import type { LineItem, ProductView } from '../src/data/types';
 import { productApi } from '../src/lib/catalogApi';
 import { errorMessage } from '../src/lib/errors';
 import { vnd } from '../src/lib/format';
+import { createCheckoutSession } from '../src/lib/checkoutSession';
 import { triggerFeedback } from '../src/lib/feedback';
 import { getProductImage } from '../src/lib/productImages';
-import { saleDraftApi } from '../src/lib/salesApi';
+import { saleApi, saleDraftApi } from '../src/lib/salesApi';
 import { itemsTotal, methodLabel } from '../src/lib/stats';
 import { useReducedMotion } from '../src/motion';
 import { useApp } from '../src/store/AppStore';
@@ -48,6 +49,16 @@ export default function Checkout() {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [products, setProducts] = useState<ProductView[]>([]);
+  // Nhớ nháp đơn giữa các lần bấm: thử lại sau lỗi mạng không được chốt thêm một đơn nữa (xem checkoutSession.ts).
+  const [checkout] = useState(() =>
+    createCheckoutSession({
+      createDraft: saleDraftApi.create,
+      getDraft: saleDraftApi.getById,
+      cancelDraft: saleDraftApi.cancel,
+      confirmDraft: saleDraftApi.confirm,
+      getSale: saleApi.getById,
+    }),
+  );
 
   const loadProducts = useCallback(async () => {
     try {
@@ -108,7 +119,7 @@ export default function Checkout() {
     }
     setBusy(true);
     try {
-      const draft = await saleDraftApi.create({
+      const { sale, recovered, sameCart } = await checkout.submit({
         customerName: customer.trim() || undefined,
         customerPhone: phone.trim() || undefined,
         items: items.map((it) => ({
@@ -119,10 +130,16 @@ export default function Checkout() {
         initialPaidVnd: method === 'debt' ? debtUpfrontAmount : total,
         initialPaymentMethod: method === 'debt' ? (debtUpfrontAmount > 0 ? 'CASH' : null) : method === 'cash' ? 'CASH' : 'TRANSFER',
       });
-      const sale = await saleDraftApi.confirm(draft.id);
       app.setDraft(null);
       setDoneTotal(sale.totalVnd);
       setDoneId(sale.id);
+      if (recovered) {
+        toast(
+          sameCart
+            ? 'Đơn này đã được ghi ở lần bấm trước nên không tạo thêm.'
+            : 'Đơn của lần bấm trước đã được ghi nên không tạo thêm đơn mới. Kiểm tra lại ở mục Hoá đơn.',
+        );
+      }
     } catch (e) {
       triggerFeedback('error');
       setErr(errorMessage(e));

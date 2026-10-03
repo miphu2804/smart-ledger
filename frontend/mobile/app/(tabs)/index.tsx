@@ -5,13 +5,13 @@ import { Animated, Image, ImageSourcePropType, ImageStyle, Pressable, StyleSheet
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ReportPeriodTabs, type ReportPeriod } from '../../src/components/ReportPeriodTabs';
 import { AssistantIntroModal } from '../../src/components/AssistantIntroModal';
-import { Card, Row, T } from '../../src/components/ui';
+import { Button, Card, EmptyState, Row, T } from '../../src/components/ui';
 import { BarcodeScannerModal } from '../../src/components/BarcodeScannerModal';
 import { CountUp, Reveal, Skeleton } from '../../src/components/reveal';
 import { vnd } from '../../src/lib/format';
 import { buildNotifications, notifCategoryMeta } from '../../src/lib/notifications';
-import { periodLabel } from '../../src/lib/stats';
-import { useReport } from '../../src/lib/useReport';
+import { bestSellers, periodLabel, summary } from '../../src/lib/stats';
+import { useCoreData } from '../../src/lib/useCoreData';
 import { useApp } from '../../src/store/AppStore';
 import { colors } from '../../src/theme';
 
@@ -70,18 +70,31 @@ export default function Home() {
   }, [headerScrollDistance, isCollapsed, scrollY]);
   const now = new Date();
 
-  const report = useReport(period);
-  const totals = report?.totals;
-  const previousDay = report?.previousDay;
-  const topSellers = report?.topSellers ?? [];
-  const totalDebt = app.debts.reduce((total, debt) => total + Math.max(0, debt.total - debt.paid), 0);
-  const debtorCount = app.debts.filter((debt) => debt.total > debt.paid).length;
-  const lowStock = app.products.filter((product) => product.tracked && product.stock <= 6).sort((a, b) => a.stock - b.stock);
+  const { invoices, products, debts, expenses, loading, error, reload } = useCoreData({
+    invoices: true,
+    products: true,
+    debts: true,
+    expenses: true,
+  });
+
+  // `loading` chỉ true ở lần tải đầu (xem useCoreData) nên các lần tải lại khi focus giữ số cũ, không nháy.
+  const ready = !loading && !error;
+
+  // Báo cáo của kỳ đang chọn, tính từ dữ liệu Core; `undefined` khi chưa tải xong (hiện skeleton, không hiện số 0 giả).
+  const totals = useMemo(() => (ready ? summary(invoices, products, period) : undefined), [ready, invoices, products, period]);
+  const previousDay = useMemo(
+    () => (ready && period === 'today' ? summary(invoices, products, 'yesterday') : null),
+    [ready, invoices, products, period],
+  );
+  const topSellers = useMemo(() => (ready ? bestSellers(invoices, period).slice(0, 4) : []), [ready, invoices, period]);
+  const totalDebt = debts.reduce((total, debt) => total + Math.max(0, debt.total - debt.paid), 0);
+  const debtorCount = debts.filter((debt) => debt.total > debt.paid).length;
+  const lowStock = products.filter((product) => product.tracked && product.stock <= 6).sort((a, b) => a.stock - b.stock);
   const priorityCount = Number(totalDebt > 0) + Number(lowStock.length > 0);
   const revenueChange = totals && previousDay?.revenue ? (totals.revenue - previousDay.revenue) / previousDay.revenue : null;
   const notifications = useMemo(
-    () => buildNotifications({ invoices: app.invoices, products: app.products, expenses: app.expenses, debts: app.debts }),
-    [app.invoices, app.products, app.expenses, app.debts],
+    () => (ready ? buildNotifications({ invoices, products, expenses, debts }) : []),
+    [ready, invoices, products, expenses, debts],
   );
   const readNotifications = useMemo(() => new Set(app.readNotifs), [app.readNotifs]);
   const unreadNotifications = notifications.filter((notification) => !readNotifications.has(notification.id)).length;
@@ -170,8 +183,23 @@ export default function Home() {
             <View style={styles.periodTabs}>
               <ReportPeriodTabs value={period} onChange={setPeriod} />
             </View>
-            <HomeSectionHeading title="Ưu tiên hôm nay" side={priorityCount ? `${priorityCount} việc cần xem` : 'Đã xong'} />
-            {priorityCount ? (
+            {error ? (
+              <View style={{ marginTop: 14, marginBottom: 88 }}>
+                <EmptyState icon="alert-triangle" title="Không tải được số liệu tổng quan" hint={error} />
+                <Button title="Thử lại" variant="outline" onPress={reload} />
+              </View>
+            ) : (
+            <>
+            <HomeSectionHeading
+              title="Ưu tiên hôm nay"
+              side={!ready ? undefined : priorityCount ? `${priorityCount} việc cần xem` : 'Đã xong'}
+            />
+            {!ready ? (
+              <Card style={{ paddingVertical: 15, gap: 8 }}>
+                <Skeleton width="55%" height={14} />
+                <Skeleton width="80%" height={12} />
+              </Card>
+            ) : priorityCount ? (
               <Card style={{ paddingVertical: 4 }}>
                 {totalDebt > 0 ? (
                   <PriorityRow
@@ -237,7 +265,7 @@ export default function Home() {
               onPress={() => router.push({ pathname: '/bestsellers', params: { period } })}
             />
             <Card style={{ paddingVertical: 4 }}>
-              {!report ? (
+              {!ready ? (
                 [0, 1, 2].map((row) => (
                   <Row key={row} style={[styles.sellerRow, row < 2 && styles.rowBorder]}>
                     <Skeleton width="60%" height={14} />
@@ -293,6 +321,8 @@ export default function Home() {
                 );
               })}
             </Card>
+            </>
+            )}
           </View>
         </Animated.ScrollView>
 
@@ -370,7 +400,7 @@ export default function Home() {
                 <View style={styles.financeDivider} />
                 <View style={styles.financeItem}>
                   <Tab1Icon name="shopDebt" size={25} style={styles.financeIcon} />
-                  <T w="bold" size={16}>{vnd(totalDebt)}</T>
+                  <T w="bold" size={16}>{ready ? vnd(totalDebt) : '—'}</T>
                   <T size={11.5} color={colors.muted}>Còn nợ toàn tiệm</T>
                 </View>
               </Row>

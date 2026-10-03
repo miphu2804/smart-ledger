@@ -1,5 +1,4 @@
 import type { IconName } from '../components/ui';
-import { aiSuggestions } from '../data/mock';
 import type { Debt, Expense, Invoice, Product } from '../data/types';
 import { vnd } from './format';
 import { inPeriod, invoiceTotal, methodLabel, summary } from './stats';
@@ -37,13 +36,6 @@ function atToday(now: Date, hour: number, minute = 0) {
   const d = new Date(now);
   d.setHours(hour, minute, 0, 0);
   return (d > now ? now : d).toISOString();
-}
-
-function yesterdayAt(now: Date, hour: number, minute = 0) {
-  const d = new Date(now);
-  d.setDate(d.getDate() - 1);
-  d.setHours(hour, minute, 0, 0);
-  return d.toISOString();
 }
 
 /**
@@ -95,12 +87,15 @@ export function buildNotifications(
   // --- Đơn hàng: vài đơn mới nhất + đơn bị huỷ trong 7 ngày
   const sorted = [...data.invoices].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   for (const inv of sorted.filter((i) => i.status !== 'cancelled').slice(0, RECENT_ORDERS)) {
+    // Đơn lấy từ Core không biết tiền mặt hay chuyển khoản (methodKnown === false) → chỉ nói "Đã thanh toán", không đoán phương thức.
+    const payment =
+      inv.status === 'debt' ? 'Ghi nợ' : inv.methodKnown === false ? 'Đã thanh toán' : methodLabel[inv.method];
     list.push({
       id: `inv-${inv.id}`,
       category: 'order',
       icon: inv.source === 'voice' ? 'mic' : 'shopping-bag',
       title: `Đơn ${inv.code} · ${vnd(invoiceTotal(inv))}`,
-      body: `${inv.status === 'debt' ? 'Ghi nợ' : methodLabel[inv.method]} · ${inv.customer ?? 'Khách lẻ'} · ${inv.items
+      body: `${payment} · ${inv.customer ?? 'Khách lẻ'} · ${inv.items
         .map((i) => `${i.qty} ${i.name}`)
         .join(', ')}`,
       at: inv.createdAt,
@@ -146,28 +141,8 @@ export function buildNotifications(
     });
   }
 
-  // --- Gợi ý AI
-  aiSuggestions.forEach((a, i) => {
-    list.push({
-      id: `ai-${a.id}`,
-      category: 'ai',
-      icon: a.icon as IconName,
-      title: a.title,
-      body: a.body,
-      at: atToday(now, 6, 30 - i),
-      href: '/ai',
-    });
-  });
-
-  // --- Hệ thống (mock)
-  list.push({
-    id: 'sys-backup',
-    category: 'system',
-    icon: 'cloud',
-    title: 'Đã sao lưu dữ liệu',
-    body: 'Dữ liệu bán hàng hôm qua đã được sao lưu an toàn.',
-    at: yesterdayAt(now, 23, 30),
-  });
+  // Không còn thông báo "Gợi ý AI" và "Hệ thống" dựng sẵn: trước đây là nội dung cố định (vd. "chiếm 58%",
+  // "đã sao lưu dữ liệu") không đến từ dữ liệu hay hệ thống nào. Thêm lại khi AI service / sao lưu thật có nguồn tin.
 
   return list.sort((a, b) => b.at.localeCompare(a.at));
 }

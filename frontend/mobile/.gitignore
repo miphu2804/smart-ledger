@@ -34,6 +34,9 @@ yarn-error.*
 # local env files
 .env*.local
 
+# Firebase client config (lấy từ Firebase Console, repo công khai nên không commit)
+google-services.json
+
 # typescript
 *.tsbuildinfo
 
