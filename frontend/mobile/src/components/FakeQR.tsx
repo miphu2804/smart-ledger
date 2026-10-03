@@ -28,7 +28,7 @@ export function FakeQR({ seed, size = 160 }: { seed: string; size?: number }) {
     <React.Fragment key={`e${x}${y}`}>
       <Rect x={x * cell} y={y * cell} width={7 * cell} height={7 * cell} fill={colors.ink} rx={cell} />
       <Rect x={(x + 1) * cell} y={(y + 1) * cell} width={5 * cell} height={5 * cell} fill="#fff" rx={cell * 0.6} />
-      <Rect x={(x + 2) * cell} y={(y + 2) * cell} width={3 * cell} height={3 * cell} fill={colors.accentInk} rx={cell * 0.5} />
+      <Rect x={(x + 2) * cell} y={(y + 2) * cell} width={3 * cell} height={3 * cell} fill={colors.ink} rx={cell * 0.5} />
     </React.Fragment>
   );
   return (

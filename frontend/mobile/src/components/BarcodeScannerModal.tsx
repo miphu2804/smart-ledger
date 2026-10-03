@@ -44,7 +44,9 @@ import {
   triggerScanHaptic,
 } from '../lib/barcode';
 import { productApi } from '../lib/catalogApi';
+import { triggerFeedback } from '../lib/feedback';
 import { vnd } from '../lib/format';
+import { useReducedMotion } from '../motion';
 import { colors, font, shadow } from '../theme';
 import { T } from './ui';
 
@@ -123,6 +125,7 @@ export function BarcodeScannerModal({
   mode = 'order',
 }: BarcodeScannerModalProps) {
   const insets = useSafeAreaInsets();
+  const reducedMotion = useReducedMotion();
   const [permission, requestPermission] = useCameraPermissions();
 
   // Camera settings
@@ -210,6 +213,10 @@ export function BarcodeScannerModal({
   const toggleFlash = () => {
     triggerScanHaptic();
     setTorch((prev) => !prev);
+    if (reducedMotion) {
+      flashScaleAnim.setValue(1);
+      return;
+    }
     Animated.sequence([
       Animated.timing(flashScaleAnim, {
         toValue: 1.28,
@@ -231,6 +238,7 @@ export function BarcodeScannerModal({
     triggerScanHaptic();
     setFacing((f) => (f === 'environment' ? 'user' : 'environment'));
     rotateAnim.setValue(0);
+    if (reducedMotion) return;
     Animated.spring(rotateAnim, {
       toValue: 1,
       friction: 5,
@@ -367,6 +375,7 @@ export function BarcodeScannerModal({
       });
       isFreshScanRef.current = true;
     } else {
+      triggerFeedback('warning');
       setUnknownCode(code);
     }
   };
@@ -374,7 +383,6 @@ export function BarcodeScannerModal({
   // ── Xác nhận số lượng từ popup (Khoá số lượng và lưu vào đơn) ────────────
   const handleConfirmPopup = () => {
     if (!popupProduct) return;
-    triggerScanHaptic();
     const { product, qty, isExisting, barcode } = popupProduct;
     const safeQty = Math.max(1, qty);
 
@@ -420,13 +428,11 @@ export function BarcodeScannerModal({
   };
 
   const handleCancelPopup = () => {
-    triggerScanHaptic();
     setPopupProduct(null);
   };
 
   // ── Mở popup cấu hình sản phẩm mới từ mã chưa có ─────────────────────────
   const handleOpenConfig = (code: string) => {
-    triggerScanHaptic();
     setConfigModalCode(code);
     setConfigName('');
     setConfigPrice('');
@@ -436,7 +442,6 @@ export function BarcodeScannerModal({
   };
 
   const handleCloseConfig = () => {
-    triggerScanHaptic();
     setConfigModalCode(null);
     setConfigErr('');
   };
@@ -444,7 +449,7 @@ export function BarcodeScannerModal({
   const handleSaveConfig = async () => {
     const trimmedName = configName.trim();
     if (!trimmedName) {
-      setConfigErr('Vui lòng nhập tên sản phẩm');
+      setConfigErr('Vui lòng nhập tên mặt hàng');
       return;
     }
     const priceNum = parseInt(configPrice.replace(/\D/g, ''), 10) || 0;
@@ -512,11 +517,13 @@ export function BarcodeScannerModal({
         }
         onProductScanned?.(createdProduct, configModalCode ?? '', configQty);
       }
+      triggerFeedback('success');
 
       setConfigModalCode(null);
       setUnknownCode(null);
     } catch (e: any) {
-      setConfigErr(e?.message || 'Không thể lưu sản phẩm');
+      triggerFeedback('error');
+      setConfigErr(e?.message || 'Không thể lưu mặt hàng');
     } finally {
       setConfigBusy(false);
     }
@@ -524,7 +531,6 @@ export function BarcodeScannerModal({
 
   // ── Khi bấm vào 1 sản phẩm trong đơn hàng tạm (Phần 2) để thay đổi số lượng ─
   const handleTapItemToEdit = (item: LineItem) => {
-    triggerScanHaptic();
     const product = catalog.find((p) => p.id === item.productId || p.name === item.name);
     if (!product) return;
 
@@ -538,7 +544,6 @@ export function BarcodeScannerModal({
 
   // ── Xoá một sản phẩm khỏi đơn hàng (qua swipe left) ───────────────────────
   const handleDeleteItem = (productId: string | number) => {
-    triggerScanHaptic();
     const product = catalog.find((p) => p.id === productId);
     const currentItem = displayItems.find((i) => i.productId === productId);
     if (!currentItem) return;
@@ -551,7 +556,6 @@ export function BarcodeScannerModal({
   };
 
   const handleClearAll = () => {
-    triggerScanHaptic();
     if (onClearCart) {
       onClearCart();
     } else {
@@ -562,7 +566,6 @@ export function BarcodeScannerModal({
 
   // ── Bàn phím số POS: Điều khiển số lượng của popup ───────────────────────
   const handleKeypadPress = (char: string) => {
-    triggerScanHaptic();
     if (!popupProduct) return;
 
     let newQty: number;
@@ -579,7 +582,6 @@ export function BarcodeScannerModal({
   };
 
   const handleKeypadBackspace = () => {
-    triggerScanHaptic();
     if (!popupProduct) return;
 
     const curStr = String(popupProduct.qty);
@@ -593,7 +595,6 @@ export function BarcodeScannerModal({
   };
 
   const handleKeypadClear = () => {
-    triggerScanHaptic();
     if (!popupProduct) return;
     setPopupProduct((prev) => (prev ? { ...prev, qty: 1 } : null));
     isFreshScanRef.current = true;
@@ -661,7 +662,7 @@ export function BarcodeScannerModal({
                   Cần cấp quyền Camera
                 </T>
                 <Pressable onPress={() => requestPermission()} style={S.permBtn}>
-                  <T w="bold" size={13} color={colors.accentInk}>Cấp quyền</T>
+                  <T w="bold" size={13} color={colors.brandInk}>Cấp quyền</T>
                 </Pressable>
               </View>
             )
@@ -752,17 +753,17 @@ export function BarcodeScannerModal({
                     Mã <T w="bold" color={colors.primaryDeep}>{unknownCode}</T> chưa có
                   </T>
                   <T size={11.5} color={colors.muted}>
-                    Chạm để cấu hình sản phẩm
+                    Chạm để thêm mặt hàng
                   </T>
                 </View>
               </View>
 
               <View style={S.unknownBannerActions}>
                 <View style={S.configActionBtn}>
-                  <T w="bold" size={12.5} color={colors.accentInk}>
-                    Cấu hình
+                  <T w="bold" size={12.5} color={colors.brandInk}>
+                    Thêm
                   </T>
-                  <Feather name="chevron-right" size={15} color={colors.accentInk} />
+                  <Feather name="chevron-right" size={15} color={colors.brandInk} />
                 </View>
 
                 <Pressable
@@ -788,7 +789,7 @@ export function BarcodeScannerModal({
             {/* Header */}
             <View style={S.configHeader}>
               <View style={{ flex: 1 }}>
-                <T w="bold" size={16} color={colors.ink}>Cấu hình sản phẩm</T>
+                <T w="bold" size={16} color={colors.ink}>Thêm mặt hàng</T>
                 <View style={S.barcodeBadge}>
                   <BarcodeIcon size={12} color={colors.primary} />
                   <T w="semibold" size={12} color={colors.primaryDeep}>{configModalCode}</T>
@@ -806,7 +807,7 @@ export function BarcodeScannerModal({
             {/* Form Fields */}
             <View style={S.configForm}>
               <View style={S.inputField}>
-                <T size={12} color={colors.muted} w="semibold">Tên sản phẩm *</T>
+                <T size={12} color={colors.muted} w="semibold">Tên mặt hàng *</T>
                 <TextInput
                   value={configName}
                   onChangeText={(t) => {
@@ -854,7 +855,6 @@ export function BarcodeScannerModal({
                   <View style={S.popupStepper}>
                     <Pressable
                       onPress={() => {
-                        triggerScanHaptic();
                         setConfigQty((q) => Math.max(1, q - 1));
                       }}
                       style={S.popupStepBtn}
@@ -867,7 +867,6 @@ export function BarcodeScannerModal({
                     </View>
                     <Pressable
                       onPress={() => {
-                        triggerScanHaptic();
                         setConfigQty((q) => q + 1);
                       }}
                       style={S.popupStepBtn}
@@ -903,10 +902,10 @@ export function BarcodeScannerModal({
                   configBusy && { opacity: 0.6 },
                 ]}
               >
-                <T w="extrabold" size={15.5} color={colors.accentInk}>
+                <T w="extrabold" size={15.5} color={colors.brandInk}>
                   {configBusy ? 'Đang lưu...' : mode === 'order' ? 'Lưu & Thêm' : 'Lưu'}
                 </T>
-                <Feather name="check" size={18} color={colors.accentInk} />
+                <Feather name="check" size={18} color={colors.brandInk} />
               </Pressable>
             </View>
           </View>
@@ -943,7 +942,6 @@ export function BarcodeScannerModal({
               <View style={S.popupStepper}>
                 <Pressable
                   onPress={() => {
-                    triggerScanHaptic();
                     setPopupProduct((prev) =>
                       prev ? { ...prev, qty: Math.max(1, prev.qty - 1) } : null
                     );
@@ -963,7 +961,6 @@ export function BarcodeScannerModal({
 
                 <Pressable
                   onPress={() => {
-                    triggerScanHaptic();
                     setPopupProduct((prev) =>
                       prev ? { ...prev, qty: prev.qty + 1 } : null
                     );
@@ -992,7 +989,7 @@ export function BarcodeScannerModal({
                 pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] },
               ]}
             >
-              <T w="extrabold" size={15.5} color={colors.accentInk}>
+              <T w="extrabold" size={15.5} color={colors.brandInk}>
                 {popupProduct.isExisting ? 'Xong' : 'Thêm'}
               </T>
             </Pressable>
@@ -1052,7 +1049,6 @@ export function BarcodeScannerModal({
 
                 <Pressable
                   onPress={() => {
-                    triggerScanHaptic();
                     if (onCheckout) onCheckout();
                     else onClose();
                   }}
@@ -1061,8 +1057,8 @@ export function BarcodeScannerModal({
                     pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] },
                   ]}
                 >
-                  <T w="extrabold" size={16} color={colors.accentInk}>Thanh toán</T>
-                  <Feather name="arrow-right" size={18} color={colors.accentInk} />
+                  <T w="extrabold" size={16} color={colors.brandInk}>Thanh toán</T>
+                  <Feather name="arrow-right" size={18} color={colors.brandInk} />
                 </Pressable>
               </View>
             </View>
@@ -1281,7 +1277,7 @@ const S = StyleSheet.create({
 
   permBtn: {
     marginTop: 12,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.brand,
     paddingHorizontal: 20,
     paddingVertical: 9,
     borderRadius: 12,
@@ -1378,7 +1374,7 @@ const S = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.brand,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 10,
@@ -1521,7 +1517,7 @@ const S = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.brand,
     borderRadius: 14,
     height: 48,
     ...shadow(1),
@@ -1635,7 +1631,7 @@ const S = StyleSheet.create({
     flex: 2.4,
     height: 48,
     borderRadius: 12,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.brand,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

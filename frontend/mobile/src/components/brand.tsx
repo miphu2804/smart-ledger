@@ -2,6 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
 import React, { createContext, useCallback, useContext, useRef, useState } from 'react';
 import { Animated, Image, Pressable, StyleSheet, View } from 'react-native';
+import { useReducedMotion } from '../motion';
 import { colors, shadow } from '../theme';
 import { T } from './ui';
 
@@ -29,7 +30,7 @@ export function Logo({ size = 34, subtitle = true }: { size?: number; subtitle?:
         </T>
         {subtitle ? (
           <T size={12} color={colors.faint}>
-            Bán hàng chỉ cần nói
+            Sổ bán hàng của bạn
           </T>
         ) : null}
       </View>
@@ -37,21 +38,21 @@ export function Logo({ size = 34, subtitle = true }: { size?: number; subtitle?:
   );
 }
 
-/** Nút nổi "Trợ lý AI" */
+/** Nút nổi mở trợ lý. */
 export function AIFab({ bottom = 96 }: { bottom?: number }) {
   const path = usePathname();
   if (path.startsWith('/ai')) return null;
   return (
     <Pressable
       onPress={() => router.push('/ai')}
-      accessibilityLabel="Mở trợ lý AI"
+      accessibilityLabel="Mở trợ lý"
       style={({ pressed }) => [styles.fab, { bottom }, shadow(2), pressed && { opacity: 0.85 }]}
     >
       <View style={styles.fabIcon}>
-        <Feather name="star" size={16} color={colors.white} />
+        <Feather name="message-circle" size={16} color={colors.white} />
       </View>
       <T w="bold" size={13} color={colors.orange} style={{ marginRight: 4 }}>
-        Trợ lý AI
+        Trợ lý
       </T>
     </Pressable>
   );
@@ -65,16 +66,26 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [msg, setMsg] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null);
   const anim = useRef(new Animated.Value(0)).current;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reducedMotion = useReducedMotion();
   const show = useCallback(
     (text: string, kind: 'ok' | 'err' = 'ok') => {
       setMsg({ text, kind });
       if (timer.current) clearTimeout(timer.current);
-      Animated.timing(anim, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+      if (reducedMotion) {
+        anim.setValue(1);
+      } else {
+        Animated.timing(anim, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+      }
       timer.current = setTimeout(() => {
-        Animated.timing(anim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => setMsg(null));
+        if (reducedMotion) {
+          anim.setValue(0);
+          setMsg(null);
+        } else {
+          Animated.timing(anim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => setMsg(null));
+        }
       }, 2200);
     },
-    [anim],
+    [anim, reducedMotion],
   );
   return (
     <ToastCtx.Provider value={show}>

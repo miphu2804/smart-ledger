@@ -50,8 +50,8 @@ export default function Ai() {
     const n = normalizeText(q);
     if (/no|thieu|chua tra/.test(n)) {
       const owing = app.debts.filter((d) => d.total > d.paid);
-      if (!owing.length) return 'Hiện không có khách nào nợ 🎉';
-      return `Đang có ${owing.length} khách nợ:\n${owing.map((d) => `• ${d.name}: ${vnd(d.total - d.paid)}`).join('\n')}\nBạn có thể nhắn nhắc nợ trong mục Sổ nợ.`;
+      if (!owing.length) return 'Không có công nợ đang mở.';
+      return `Đang có ${owing.length} khách nợ:\n${owing.map((d) => `• ${d.name}: ${vnd(d.total - d.paid)}`).join('\n')}\nXem chi tiết trong mục Công nợ.`;
     }
     if (/nhap|het hang|ton kho/.test(n)) {
       const low = app.products.filter((p) => p.tracked && p.stock <= 6);
@@ -77,9 +77,9 @@ export default function Ai() {
       const comparison = y.revenue
         ? ` (${s.revenue >= y.revenue ? '+' : ''}${Math.round(((s.revenue - y.revenue) / y.revenue) * 100)}% so với hôm qua)`
         : '';
-      return `Hôm nay tiệm có ${s.count} đơn, doanh thu ${vnd(s.revenue)}${comparison}. ${Math.round(s.voiceRatio * 100)}% đơn được tạo bằng giọng nói.`;
+      return `Hôm nay tiệm có ${s.count} đơn, doanh thu ${vnd(s.revenue)}${comparison}. ${Math.round(s.voiceRatio * 100)}% đơn đến từ Đọc đơn.`;
     }
-    return 'Mình chưa hiểu câu hỏi này 😅. Bạn thử hỏi về doanh thu, món bán chạy, nhập hàng, lời lãi hoặc công nợ nhé.';
+    return 'Chưa hiểu câu hỏi. Hãy thử hỏi về doanh thu, món bán chạy, nhập hàng, lời lãi hoặc công nợ.';
   };
 
   const send = (q: string) => {
@@ -100,7 +100,7 @@ export default function Ai() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={[styles.headerWrap, { paddingTop: insets.top }]}>
-        <Header title="Trợ lý AI" subtitle="Hỏi về doanh thu, hàng hoá và công nợ" />
+        <Header title="Trợ lý" subtitle="Hỏi về bán hàng, kho và công nợ" />
       </View>
 
       <ScrollView
@@ -224,7 +224,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderBottomLeftRadius: 5,
   },
-  userBubble: { backgroundColor: colors.primary, borderBottomRightRadius: 5 },
+  userBubble: { backgroundColor: colors.brand, borderBottomRightRadius: 5 },
   sender: { letterSpacing: 0.5, marginBottom: 4 },
   messageText: { lineHeight: 20 },
   typingBubble: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -276,6 +276,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   voiceButton: { backgroundColor: 'transparent' },
-  sendButton: { backgroundColor: colors.primary },
-  sendDisabled: { backgroundColor: colors.border },
+  sendButton: { backgroundColor: colors.brand },
+  sendDisabled: { backgroundColor: colors.brandSoft },
 });
