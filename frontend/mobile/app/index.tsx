@@ -1,8 +1,7 @@
 import { router } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
-import { LogoMark } from '../src/components/brand';
-import { T } from '../src/components/ui';
+import { BrandWordmark, LogoMark } from '../src/components/brand';
 import { useReducedMotion } from '../src/motion';
 import { useApp } from '../src/store/AppStore';
 import { colors } from '../src/theme';
@@ -41,17 +40,14 @@ export default function Splash() {
         }}
       >
         <LogoMark size={112} />
-        <T w="extrabold" size={34} color={colors.ink} style={{ marginTop: 22 }}>
-          Sổ Nghe Lời
-        </T>
-        <T size={14} color={colors.muted} style={{ marginTop: 6 }}>
-          Bán hàng gọn hơn mỗi ngày
-        </T>
+        <View style={{ marginTop: 22 }}>
+          <BrandWordmark size={36} align="center" showSub={true} />
+        </View>
       </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: '#FFFCF8', alignItems: 'center', justifyContent: 'center' },
+  wrap: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
 });
