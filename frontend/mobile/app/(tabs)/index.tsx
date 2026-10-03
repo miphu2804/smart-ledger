@@ -5,12 +5,12 @@ import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { ReportPeriodTabs, type ReportPeriod } from '../../src/components/ReportPeriodTabs';
 import { AssistantIntroModal } from '../../src/components/AssistantIntroModal';
 import { LogoMark } from '../../src/components/brand';
-import { Card, IconBtn, IconName, Row, Screen, T } from '../../src/components/ui';
+import { Button, Card, EmptyState, IconBtn, IconName, Row, Screen, T } from '../../src/components/ui';
 import { CountUp, Reveal, Skeleton } from '../../src/components/reveal';
 import { vnd } from '../../src/lib/format';
 import { buildNotifications } from '../../src/lib/notifications';
-import { periodLabel } from '../../src/lib/stats';
-import { useReport } from '../../src/lib/useReport';
+import { bestSellers, periodLabel, summary } from '../../src/lib/stats';
+import { useCoreData } from '../../src/lib/useCoreData';
 import { useApp } from '../../src/store/AppStore';
 import { colors } from '../../src/theme';
 
@@ -23,19 +23,33 @@ export default function Home() {
   const [period, setPeriod] = useState<ReportPeriod>('today');
   const now = new Date();
 
-  const report = useReport(period);
-  const totals = report?.totals;
-  const previousDay = report?.previousDay;
-  const topSellers = report?.topSellers ?? [];
-  const totalDebt = app.debts.reduce((total, debt) => total + Math.max(0, debt.total - debt.paid), 0);
-  const debtorCount = app.debts.filter((debt) => debt.total > debt.paid).length;
-  const lowStock = app.products.filter((product) => product.tracked && product.stock <= 6).sort((a, b) => a.stock - b.stock);
+  const { invoices, products, debts, expenses, loading, error, reload } = useCoreData({
+    invoices: true,
+    products: true,
+    debts: true,
+    expenses: true,
+  });
+
+  // `loading` chỉ true ở lần tải đầu (xem useCoreData) nên các lần tải lại khi focus giữ số cũ, không nháy.
+  const ready = !loading && !error;
+
+  // Báo cáo của kỳ đang chọn, tính từ dữ liệu Core; `undefined` khi chưa tải xong (hiện skeleton, không hiện số 0 giả).
+  const totals = useMemo(() => (ready ? summary(invoices, products, period) : undefined), [ready, invoices, products, period]);
+  const previousDay = useMemo(
+    () => (ready && period === 'today' ? summary(invoices, products, 'yesterday') : null),
+    [ready, invoices, products, period],
+  );
+  const topSellers = useMemo(() => (ready ? bestSellers(invoices, period).slice(0, 4) : []), [ready, invoices, period]);
+  const totalDebt = debts.reduce((total, debt) => total + Math.max(0, debt.total - debt.paid), 0);
+  const debtorCount = debts.filter((debt) => debt.total > debt.paid).length;
+  const lowStock = products.filter((product) => product.tracked && product.stock <= 6).sort((a, b) => a.stock - b.stock);
   const priorityCount = Number(totalDebt > 0) + Number(lowStock.length > 0);
   const revenueChange = totals && previousDay?.revenue ? (totals.revenue - previousDay.revenue) / previousDay.revenue : null;
   const unreadNotifications = useMemo(() => {
+    if (!ready) return 0;
     const read = new Set(app.readNotifs);
-    return buildNotifications(app).filter((notification) => !read.has(notification.id)).length;
-  }, [app.invoices, app.products, app.expenses, app.debts, app.readNotifs]);
+    return buildNotifications({ invoices, products, expenses, debts }).filter((notification) => !read.has(notification.id)).length;
+  }, [ready, invoices, products, expenses, debts, app.readNotifs]);
   const periodName = periodLabel[period];
   const topSeller = topSellers[0];
   const openAssistant = (path: '/voice' | '/ai') => {
@@ -76,152 +90,169 @@ export default function Home() {
         <ReportPeriodTabs value={period} onChange={setPeriod} />
       </View>
 
-      <Card
-        style={{ marginTop: 14 }}
-        onPress={() => router.push({ pathname: '/analytics', params: { period } })}
-        accessibilityLabel={`Xem phân tích doanh thu ${periodName}`}
-      >
-        <Row style={[styles.revenueHeader, compactRevenueHeader && styles.revenueHeaderCompact]} gap={compactRevenueHeader ? 0 : 8}>
-          <T w="bold" size={12} color={colors.muted} numberOfLines={1} style={styles.revenueLabel}>
-            DOANH THU {periodName.toUpperCase()}
-          </T>
-          <View style={compactRevenueHeader ? styles.compactComparisonSlot : undefined}>
-            {revenueChange !== null ? (
-              <Reveal delay={140}>
-              <Row gap={4} style={[styles.changeBadge, { backgroundColor: revenueChange >= 0 ? colors.greenSoft : colors.redSoft }]}>
-                <Feather
-                  name={revenueChange >= 0 ? 'trending-up' : 'trending-down'}
-                  size={14}
-                  color={revenueChange >= 0 ? colors.green : colors.red}
-                />
-                <T w="semibold" size={12} color={revenueChange >= 0 ? colors.green : colors.red} numberOfLines={1} adjustsFontSizeToFit>
-                  {revenueChange >= 0 ? '+' : ''}
-                  {Math.round(revenueChange * 100)}% so với hôm qua
-                </T>
-              </Row>
-              </Reveal>
-            ) : null}
-          </View>
-        </Row>
-        <Row style={{ marginTop: 8 }} gap={8}>
-          <View style={styles.revenueValue}>
-            {!totals ? (
-              <Skeleton width={190} height={34} radius={10} />
-            ) : totals.count ? (
-              <Reveal>
-                <CountUp value={totals.revenue} format={vnd} w="extrabold" size={34} numberOfLines={1} adjustsFontSizeToFit style={{ lineHeight: 44 }} />
-              </Reveal>
-            ) : (
-              <Reveal>
-                <T w="extrabold" size={18} numberOfLines={1} style={{ lineHeight: 28 }}>Chưa có đơn trong kỳ</T>
-              </Reveal>
-            )}
-          </View>
-          <Feather name="arrow-up-right" size={18} color={colors.faint} />
-        </Row>
-        <Row style={styles.financeRow} gap={14}>
-          <FinanceItem value={totals && `${totals.count} đơn`} label="Đã chốt trong kỳ" delay={70} />
-          <View style={styles.financeDivider} />
-          <FinanceItem value={totals && vnd(totalDebt)} label="Còn nợ toàn tiệm" delay={110} />
-        </Row>
-      </Card>
-
-      <HomeSectionHeading title="Ưu tiên hôm nay" side={priorityCount ? `${priorityCount} việc cần xem` : 'Đã xong'} />
-      {priorityCount ? (
-        <Card style={{ paddingVertical: 4 }}>
-          {totalDebt > 0 ? (
-            <PriorityRow
-              icon="book-open"
-              tone="warning"
-              title="Thu khoản còn nợ"
-              subtitle={`${debtorCount} khách · ${vnd(totalDebt)} chưa thu`}
-              onPress={() => router.push('/debts')}
-              last={lowStock.length === 0}
-            />
-          ) : null}
-          {lowStock.length > 0 ? (
-            <PriorityRow
-              icon="alert-triangle"
-              tone="danger"
-              title="Kiểm tra hàng sắp hết"
-              subtitle={lowStock.slice(0, 2).map((product) => `${product.name} còn ${product.stock}`).join(' · ')}
-              onPress={() => router.push('/products')}
-              last
-            />
-          ) : null}
-        </Card>
+      {error ? (
+        <View style={{ marginTop: 14, marginBottom: 88 }}>
+          <EmptyState icon="alert-triangle" title="Không tải được số liệu tổng quan" hint={error} />
+          <Button title="Thử lại" variant="outline" onPress={reload} />
+        </View>
       ) : (
-        <Card style={{ paddingVertical: 15 }}>
-          <T size={14} color={colors.muted}>
-            Chưa có việc cần xử lý ngay
-          </T>
-        </Card>
-      )}
-
-      <Card style={{ backgroundColor: colors.primaryTint, marginTop: 22 }}>
-        <Row style={{ alignItems: 'flex-start' }} gap={10}>
-          <View style={styles.suggestionIcon}>
-            <Feather name="star" size={17} color={colors.primary} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <T w="bold" size={14} style={{ marginBottom: 4 }}>Gợi ý từ dữ liệu đã chốt</T>
-            {totals ? (
-              <Reveal>
-                <T size={13} color={colors.muted} style={{ lineHeight: 20 }}>
-                  {topSeller
-                    ? `${topSeller.name} bán nhiều nhất trong kỳ (${topSeller.qty} sản phẩm). Xem số liệu trước khi chuẩn bị thêm.`
-                    : 'Chưa đủ dữ liệu đơn đã chốt trong kỳ để đưa ra gợi ý.'}
-                </T>
-                <T size={12} color={colors.faint} style={{ marginTop: 5 }}>
-                  Nguồn: {totals.count} đơn đã chốt · {periodName}
-                </T>
-              </Reveal>
-            ) : (
-              <View style={{ gap: 8, paddingTop: 4 }}>
-                <Skeleton width="100%" height={12} />
-                <Skeleton width="72%" height={12} />
-                <Skeleton width="45%" height={10} style={{ marginTop: 3 }} />
+        <>
+          <Card
+            style={{ marginTop: 14 }}
+            onPress={() => router.push({ pathname: '/analytics', params: { period } })}
+            accessibilityLabel={`Xem phân tích doanh thu ${periodName}`}
+          >
+            <Row style={[styles.revenueHeader, compactRevenueHeader && styles.revenueHeaderCompact]} gap={compactRevenueHeader ? 0 : 8}>
+              <T w="bold" size={12} color={colors.muted} numberOfLines={1} style={styles.revenueLabel}>
+                DOANH THU {periodName.toUpperCase()}
+              </T>
+              <View style={compactRevenueHeader ? styles.compactComparisonSlot : undefined}>
+                {revenueChange !== null ? (
+                  <Reveal delay={140}>
+                  <Row gap={4} style={[styles.changeBadge, { backgroundColor: revenueChange >= 0 ? colors.greenSoft : colors.redSoft }]}>
+                    <Feather
+                      name={revenueChange >= 0 ? 'trending-up' : 'trending-down'}
+                      size={14}
+                      color={revenueChange >= 0 ? colors.green : colors.red}
+                    />
+                    <T w="semibold" size={12} color={revenueChange >= 0 ? colors.green : colors.red} numberOfLines={1} adjustsFontSizeToFit>
+                      {revenueChange >= 0 ? '+' : ''}
+                      {Math.round(revenueChange * 100)}% so với hôm qua
+                    </T>
+                  </Row>
+                  </Reveal>
+                ) : null}
               </View>
-            )}
-          </View>
-        </Row>
-      </Card>
+            </Row>
+            <Row style={{ marginTop: 8 }} gap={8}>
+              <View style={styles.revenueValue}>
+                {!totals ? (
+                  <Skeleton width={190} height={34} radius={10} />
+                ) : totals.count ? (
+                  <Reveal>
+                    <CountUp value={totals.revenue} format={vnd} w="extrabold" size={34} numberOfLines={1} adjustsFontSizeToFit style={{ lineHeight: 44 }} />
+                  </Reveal>
+                ) : (
+                  <Reveal>
+                    <T w="extrabold" size={18} numberOfLines={1} style={{ lineHeight: 28 }}>Chưa có đơn trong kỳ</T>
+                  </Reveal>
+                )}
+              </View>
+              <Feather name="arrow-up-right" size={18} color={colors.faint} />
+            </Row>
+            <Row style={styles.financeRow} gap={14}>
+              <FinanceItem value={totals && `${totals.count} đơn`} label="Đã chốt trong kỳ" delay={70} />
+              <View style={styles.financeDivider} />
+              <FinanceItem value={totals && vnd(totalDebt)} label="Còn nợ toàn tiệm" delay={110} />
+            </Row>
+          </Card>
 
-      <HomeSectionHeading
-        title={`Bán chạy ${periodName.toLowerCase()}`}
-        side="Xem tất cả ›"
-        onPress={() => router.push({ pathname: '/bestsellers', params: { period } })}
-      />
-      <Card style={{ paddingVertical: 4, marginBottom: 88 }}>
-        {!report ? (
-          [0, 1, 2].map((row) => (
-            <Row key={row} style={[styles.sellerRow, row < 2 && styles.rowBorder]}>
-              <Skeleton width="60%" height={14} />
+          <HomeSectionHeading
+            title="Ưu tiên hôm nay"
+            side={!ready ? undefined : priorityCount ? `${priorityCount} việc cần xem` : 'Đã xong'}
+          />
+          {!ready ? (
+            <Card style={{ paddingVertical: 15, gap: 8 }}>
+              <Skeleton width="55%" height={14} />
+              <Skeleton width="80%" height={12} />
+            </Card>
+          ) : priorityCount ? (
+            <Card style={{ paddingVertical: 4 }}>
+              {totalDebt > 0 ? (
+                <PriorityRow
+                  icon="book-open"
+                  tone="warning"
+                  title="Thu khoản còn nợ"
+                  subtitle={`${debtorCount} khách · ${vnd(totalDebt)} chưa thu`}
+                  onPress={() => router.push('/debts')}
+                  last={lowStock.length === 0}
+                />
+              ) : null}
+              {lowStock.length > 0 ? (
+                <PriorityRow
+                  icon="alert-triangle"
+                  tone="danger"
+                  title="Kiểm tra hàng sắp hết"
+                  subtitle={lowStock.slice(0, 2).map((product) => `${product.name} còn ${product.stock}`).join(' · ')}
+                  onPress={() => router.push('/products')}
+                  last
+                />
+              ) : null}
+            </Card>
+          ) : (
+            <Card style={{ paddingVertical: 15 }}>
+              <T size={14} color={colors.muted}>
+                Chưa có việc cần xử lý ngay
+              </T>
+            </Card>
+          )}
+
+          <Card style={{ backgroundColor: colors.primaryTint, marginTop: 22 }}>
+            <Row style={{ alignItems: 'flex-start' }} gap={10}>
+              <View style={styles.suggestionIcon}>
+                <Feather name="star" size={17} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <T w="bold" size={14} style={{ marginBottom: 4 }}>Gợi ý từ dữ liệu đã chốt</T>
+                {totals ? (
+                  <Reveal>
+                    <T size={13} color={colors.muted} style={{ lineHeight: 20 }}>
+                      {topSeller
+                        ? `${topSeller.name} bán nhiều nhất trong kỳ (${topSeller.qty} sản phẩm). Xem số liệu trước khi chuẩn bị thêm.`
+                        : 'Chưa đủ dữ liệu đơn đã chốt trong kỳ để đưa ra gợi ý.'}
+                    </T>
+                    <T size={12} color={colors.faint} style={{ marginTop: 5 }}>
+                      Nguồn: {totals.count} đơn đã chốt · {periodName}
+                    </T>
+                  </Reveal>
+                ) : (
+                  <View style={{ gap: 8, paddingTop: 4 }}>
+                    <Skeleton width="100%" height={12} />
+                    <Skeleton width="72%" height={12} />
+                    <Skeleton width="45%" height={10} style={{ marginTop: 3 }} />
+                  </View>
+                )}
+              </View>
             </Row>
-          ))
-        ) : topSellers.length ? (
-          topSellers.map((seller, index) => (
-            <Row
-              key={seller.productId ?? seller.name}
-              style={[styles.sellerRow, index < topSellers.length - 1 && styles.rowBorder]}
-            >
-              <T w="bold" size={12} color={colors.muted} style={{ width: 22 }}>
-                {index + 1}
+          </Card>
+
+          <HomeSectionHeading
+            title={`Bán chạy ${periodName.toLowerCase()}`}
+            side="Xem tất cả ›"
+            onPress={() => router.push({ pathname: '/bestsellers', params: { period } })}
+          />
+          <Card style={{ paddingVertical: 4, marginBottom: 88 }}>
+            {!ready ? (
+              [0, 1, 2].map((row) => (
+                <Row key={row} style={[styles.sellerRow, row < 2 && styles.rowBorder]}>
+                  <Skeleton width="60%" height={14} />
+                </Row>
+              ))
+            ) : topSellers.length ? (
+              topSellers.map((seller, index) => (
+                <Row
+                  key={seller.productId ?? seller.name}
+                  style={[styles.sellerRow, index < topSellers.length - 1 && styles.rowBorder]}
+                >
+                  <T w="bold" size={12} color={colors.muted} style={{ width: 22 }}>
+                    {index + 1}
+                  </T>
+                  <T w="semibold" size={14} style={{ flex: 1 }} numberOfLines={1}>
+                    {seller.name}
+                  </T>
+                  <T w="bold" size={14} color={colors.primary}>
+                    {seller.qty} sp
+                  </T>
+                </Row>
+              ))
+            ) : (
+              <T size={13} color={colors.muted} style={{ paddingVertical: 13, textAlign: 'center' }}>
+                Chưa có đơn trong kỳ
               </T>
-              <T w="semibold" size={14} style={{ flex: 1 }} numberOfLines={1}>
-                {seller.name}
-              </T>
-              <T w="bold" size={14} color={colors.primary}>
-                {seller.qty} sp
-              </T>
-            </Row>
-          ))
-        ) : (
-          <T size={13} color={colors.muted} style={{ paddingVertical: 13, textAlign: 'center' }}>
-            Chưa có đơn trong kỳ
-          </T>
-        )}
-      </Card>
+            )}
+          </Card>
+        </>
+      )}
     </Screen>
     <AssistantIntroModal
       visible={!app.guideDismissed}
