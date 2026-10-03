@@ -9,8 +9,9 @@ NO_MATCH = "No earlier message in this conversation matches the query."
 
 def normalize(text: str) -> str:
     # Shop owners often type Vietnamese without diacritics, so matching ignores them.
-    # "đ" is a separate letter, not "d" plus a combining mark, so NFD leaves it intact.
-    decomposed = unicodedata.normalize("NFD", text.lower().replace("đ", "d"))
+    # U+0111 (d with stroke) is a separate letter, not "d" plus a combining mark, so
+    # NFD leaves it intact.
+    decomposed = unicodedata.normalize("NFD", text.lower().replace("\u0111", "d"))
     return "".join(char for char in decomposed if not unicodedata.combining(char))
 
 

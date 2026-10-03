@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useToast } from '../src/components/brand';
 import {
   Button,
@@ -10,6 +10,7 @@ import {
   EmptyState,
   Field,
   Header,
+  LoadingState,
   Row,
   Screen,
   SectionTitle,
@@ -20,6 +21,7 @@ import {
 import { expenseCategoryMeta, expenseVoiceSamples } from '../src/data/mock';
 import type { Expense, ExpenseCategory, ExpenseView, SaleView } from '../src/data/types';
 import { errorMessage } from '../src/lib/errors';
+import { triggerFeedback } from '../src/lib/feedback';
 import { compact, ddmm, hhmm, vnd } from '../src/lib/format';
 import { expenseApi } from '../src/lib/expenseApi';
 import { parseExpense } from '../src/lib/parseOrder';
@@ -106,7 +108,10 @@ export default function Expenses() {
     try {
       await expenseApi.archive(id);
       setExpenses((cur) => cur.filter((e) => e.id !== id));
+      triggerFeedback('success');
+      toast('Đã xoá khoản chi');
     } catch (e) {
+      triggerFeedback('error');
       toast(errorMessage(e), 'err');
     }
   };
@@ -116,9 +121,7 @@ export default function Expenses() {
       <Header title="Chi phí" subtitle="Các khoản chi đã ghi" />
 
       {loading ? (
-        <View style={{ paddingTop: 60, alignItems: 'center' }}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
+        <LoadingState label="Đang tải chi phí…" />
       ) : error ? (
         <>
           <EmptyState icon="alert-triangle" title="Không tải được danh sách" hint={error} />
@@ -130,11 +133,15 @@ export default function Expenses() {
             {months.map((m) => {
               const on = m.m === month;
               return (
-                <Pressable key={m.m} onPress={() => setMonth(m.m)} style={[styles.month, on && styles.monthOn]}>
-                  <T size={12} color={on ? colors.accentInk : colors.faint}>
+                <Pressable
+                  key={m.m}
+                  onPress={() => setMonth(m.m)}
+                  style={({ pressed }) => [styles.month, on && styles.monthOn, pressed && styles.monthPressed]}
+                >
+                  <T size={12} color={on ? colors.ink : colors.faint}>
                     {m.label}
                   </T>
-                  <T w="extrabold" size={15} color={on ? colors.accentInk : colors.ink}>
+                  <T w="extrabold" size={15} color={colors.ink}>
                     {compact(m.total)}
                   </T>
                 </Pressable>
@@ -312,10 +319,12 @@ function AddExpenseSheet({
         paymentMethod: undefined,
         expenseAt: undefined,
       });
+      triggerFeedback('success');
       toast(`Đã ghi chi phí ${vnd(amt)}`);
       onSaved();
       onClose();
     } catch (e) {
+      triggerFeedback('error');
       setErr(errorMessage(e));
     } finally {
       setBusy(false);
@@ -329,7 +338,7 @@ function AddExpenseSheet({
         value={mode}
         onChange={setMode}
         options={[
-          { key: 'voice', label: 'Nói', icon: 'mic' },
+          { key: 'voice', label: 'Gợi ý nhanh', icon: 'message-circle' },
           { key: 'manual', label: 'Nhập tay', icon: 'edit-3' },
         ]}
       />
@@ -344,8 +353,8 @@ function AddExpenseSheet({
             {heard || 'Ví dụ: “Nhập bánh mì với nguyên liệu hết 850 nghìn”'}
           </T>
           <Button
-            title={rec ? 'Đang áp dụng câu gợi ý…' : title ? 'Thử câu khác' : 'Dùng câu gợi ý'}
-            icon="mic"
+            title={rec ? 'Đang điền…' : title ? 'Điền câu khác' : 'Điền gợi ý'}
+            icon="arrow-down"
             variant="gold"
             onPress={startRec}
             disabled={rec}
@@ -392,7 +401,8 @@ function AddExpenseSheet({
 
 const styles = StyleSheet.create({
   month: { width: 76, backgroundColor: colors.white, borderRadius: 14, padding: 10, borderWidth: 1, borderColor: colors.border },
-  monthOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  monthOn: { backgroundColor: 'rgba(26,25,22,0.035)', borderColor: colors.ink },
+  monthPressed: { opacity: 0.8, transform: [{ scale: 0.97 }] },
   hero: { marginTop: 12, borderRadius: 22, padding: 18 },
   heroSplit: { flexDirection: 'row', marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border },
   stack: { flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'hidden', gap: 2 },

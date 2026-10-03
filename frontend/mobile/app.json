@@ -4,11 +4,11 @@
     "slug": "so-nghe-loi",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/brand-mascot-icon.png",
+    "icon": "./assets/brand-logo.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/brand-mascot-icon.png",
-      "backgroundColor": "#FFFCF8",
+      "image": "./assets/brand-logo.png",
+      "backgroundColor": "#F7F6F2",
       "resizeMode": "contain"
     },
     "ios": {
@@ -21,8 +21,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#FFFCF8",
-        "foregroundImage": "./assets/brand-mascot-icon.png"
+        "backgroundColor": "#F7F6F2",
+        "foregroundImage": "./assets/brand-logo.png"
       },
       "googleServicesFile": "./google-services.json",
       "predictiveBackGestureEnabled": false,
@@ -33,7 +33,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/brand-mascot-icon.png",
+      "favicon": "./assets/brand-logo.png",
       "bundler": "metro",
       "output": "single"
     },

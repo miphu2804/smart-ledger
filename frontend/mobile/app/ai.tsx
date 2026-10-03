@@ -11,13 +11,14 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Dialog, EmptyState, Field, Header, IconBtn, Row, Sheet, T } from '../src/components/ui';
+import { AgentAvatar } from '../src/components/AgentAvatar';
+import { Dialog, EmptyState, Field, IconBtn, Row, Sheet, T } from '../src/components/ui';
 import type { AgentConversationSummary, AgentConversationView, AgentMessageView, ChatMessage } from '../src/data/types';
 import { agentApi } from '../src/lib/agentApi';
 import { ApiError } from '../src/lib/api';
 import { hhmm, relDay } from '../src/lib/format';
 import { useApp } from '../src/store/AppStore';
-import { colors, font } from '../src/theme';
+import { colors, font, shadow } from '../src/theme';
 
 // Giai đoạn 1 trợ lý chỉ đọc hồ sơ tiệm, nhóm hàng và sản phẩm; doanh thu/công nợ xem ở màn khác.
 const QUICK = [
@@ -96,7 +97,7 @@ export default function Ai() {
   };
 
   useEffect(() => {
-    const t = setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 50);
+    const t = setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 60);
     return () => clearTimeout(t);
   }, [msgs, typing]);
 
@@ -128,28 +129,41 @@ export default function Ai() {
       style={styles.screen}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View style={[styles.headerWrap, { paddingTop: insets.top }]}>
-        <Header
-          title="Trợ lý AI"
-          subtitle="Hỏi về tiệm, nhóm hàng và sản phẩm"
-          right={
-            <Row gap={8}>
-              <IconBtn
-                name="edit"
-                label="Cuộc trò chuyện mới"
-                color={typing ? colors.faint : colors.ink}
-                onPress={() => !typing && startNew()}
-              />
-              <IconBtn name="clock" label="Lịch sử trò chuyện" color={typing ? colors.faint : colors.ink} onPress={openHistory} />
+      <View style={[styles.headerWrap, { paddingTop: insets.top + 4 }]}>
+        <Row style={{ alignItems: 'center' }} gap={10}>
+          <Pressable
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
+            style={styles.backBtn}
+            accessibilityLabel="Quay lại"
+          >
+            <Feather name="chevron-left" size={20} color={colors.ink} />
+          </Pressable>
+          <AgentAvatar emotion={typing ? 'idea' : 'happy'} size={40} badge />
+          <View style={{ flex: 1 }}>
+            <T w="extrabold" size={17} color={colors.ink}>
+              Trợ lý Sổ Nghe Lời
+            </T>
+            <Row gap={5} style={{ alignItems: 'center', marginTop: 1 }}>
+              <View style={styles.onlineDot} />
+              <T size={11.5} color={colors.muted}>
+                Sẵn sàng giải đáp dữ liệu tiệm
+              </T>
             </Row>
-          }
-        />
+          </View>
+          <IconBtn
+            name="edit"
+            label="Cuộc trò chuyện mới"
+            color={typing ? colors.faint : colors.ink}
+            onPress={() => !typing && startNew()}
+          />
+          <IconBtn name="clock" label="Lịch sử trò chuyện" color={typing ? colors.faint : colors.ink} onPress={openHistory} />
+        </Row>
       </View>
 
       <ScrollView
         ref={scroll}
         style={styles.chat}
-        contentContainerStyle={[styles.chatContent, msgs.length === 1 && styles.welcomeContent]}
+        contentContainerStyle={styles.chatContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -158,58 +172,69 @@ export default function Ai() {
             const isUser = m.from === 'user';
             return (
               <View key={m.id} style={[styles.messageRow, isUser && styles.userMessageRow]}>
+                {!isUser ? (
+                  <AgentAvatar emotion={'default'} size={34} style={{ marginTop: 2 }} />
+                ) : null}
                 <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
                   {!isUser ? (
-                    <T w="bold" size={10} color={colors.primary} style={styles.sender}>
-                      TRỢ LÝ
-                    </T>
+                    <Row style={styles.assistantBubbleHeader}>
+                      <Row gap={3} style={{ alignItems: 'center' }}>
+                        <View style={{ width: 2, height: 7, backgroundColor: colors.brand, borderRadius: 1 }} />
+                        <View style={{ width: 2, height: 11, backgroundColor: colors.brand, borderRadius: 1 }} />
+                        <View style={{ width: 2, height: 6, backgroundColor: colors.brand, borderRadius: 1 }} />
+                        <T w="bold" size={11.5} color={colors.brand} style={{ marginLeft: 3 }}>
+                          Trợ lý AI
+                        </T>
+                      </Row>
+                    </Row>
                   ) : null}
-                  <T size={14} color={isUser ? colors.white : colors.ink} style={styles.messageText}>
+                  <T size={13.5} color={isUser ? colors.white : colors.ink} style={styles.messageText}>
                     {m.text}
                   </T>
                 </View>
               </View>
             );
           })}
+
           {typing ? (
             <View style={styles.messageRow}>
+              <AgentAvatar emotion="idea" size={34} style={{ marginTop: 2 }} />
               <View style={[styles.bubble, styles.assistantBubble, styles.typingBubble]}>
-                <T size={13} color={colors.muted}>
-                  Đang trả lời…
+                <T size={12.5} color={colors.muted}>
+                  Đang phân tích số liệu…
                 </T>
-                <Feather name="more-horizontal" size={17} color={colors.primary} />
+                <Feather name="more-horizontal" size={16} color={colors.brand} />
               </View>
             </View>
           ) : null}
         </View>
-
-        {msgs.length === 1 && !typing ? (
-          <View style={styles.suggestionSection}>
-            <T w="bold" size={11} color={colors.muted} style={styles.suggestionHeading}>
-              CÂU HỎI GỢI Ý
-            </T>
-            <View style={styles.suggestionGrid}>
-              {QUICK.map((q) => (
-                <Pressable
-                  key={q.label}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Hỏi trợ lý: ${q.label}`}
-                  onPress={() => send(q.label)}
-                  style={({ pressed }) => [styles.suggestion, pressed && styles.pressed]}
-                >
-                  <Feather name={q.icon} size={16} color={colors.primary} />
-                  <T w="semibold" size={12} color={colors.ink} style={styles.suggestionText}>
-                    {q.label}
-                  </T>
-                  <Feather name="arrow-up-right" size={14} color={colors.faint} />
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        ) : null}
       </ScrollView>
 
-      <View style={[styles.composerWrap, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+      {/* Suggestion Chips & Composer Bar (Đề xuất nằm ngay sát trên thanh nhập) */}
+      <View style={[styles.composerWrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+        {!typing ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickChipsScroll}
+            style={styles.quickChipsWrapper}
+            keyboardShouldPersistTaps="handled"
+          >
+            {QUICK.map((q) => (
+              <Pressable
+                key={q.label}
+                onPress={() => send(q.label)}
+                style={({ pressed }) => [styles.quickChip, pressed && styles.pressed]}
+              >
+                <Feather name={q.icon} size={13} color={colors.brand} />
+                <T w="semibold" size={12} color={colors.ink}>
+                  {q.label}
+                </T>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : null}
+
         {error ? (
           <View style={styles.errorCard} accessibilityRole="alert">
             <View style={styles.errorHeader}>
@@ -258,7 +283,7 @@ export default function Ai() {
             value={text}
             onChangeText={setText}
             onSubmitEditing={() => send(text)}
-            placeholder="Hỏi trợ lý…"
+            placeholder="Nhập câu hỏi cho trợ lý…"
             placeholderTextColor={colors.faint}
             accessibilityLabel="Tin nhắn cho trợ lý"
             style={styles.input}
@@ -271,7 +296,7 @@ export default function Ai() {
             onPress={() => router.push('/voice')}
             style={({ pressed }) => [styles.actionButton, styles.voiceButton, pressed && styles.pressed]}
           >
-            <Feather name="mic" size={19} color={colors.primary} />
+            <Feather name="mic" size={18} color={colors.brand} />
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -286,7 +311,7 @@ export default function Ai() {
               pressed && styles.pressed,
             ]}
           >
-            <Feather name="arrow-up" size={20} color={text.trim() && !typing ? colors.white : colors.muted} />
+            <Feather name="arrow-up" size={18} color={text.trim() && !typing ? colors.white : colors.muted} />
           </Pressable>
         </View>
       </View>
@@ -468,43 +493,153 @@ function HistorySheet({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  headerWrap: { paddingHorizontal: 16 },
-  chat: { flex: 1 },
-  chatContent: { flexGrow: 1, paddingHorizontal: 16, paddingTop: 20, paddingBottom: 16 },
-  welcomeContent: { justifyContent: 'center' },
-  messages: { gap: 12 },
-  messageRow: { flexDirection: 'row', alignItems: 'flex-end' },
-  userMessageRow: { justifyContent: 'flex-end' },
-  bubble: { maxWidth: '90%', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 11 },
-  assistantBubble: {
+  headerWrap: {
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    backgroundColor: colors.bg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
-    borderBottomLeftRadius: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow(0),
   },
-  userBubble: { backgroundColor: colors.primary, borderBottomRightRadius: 5 },
-  sender: { letterSpacing: 0.5, marginBottom: 4 },
-  messageText: { lineHeight: 20 },
-  typingBubble: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  suggestionSection: { marginTop: 24 },
-  suggestionHeading: { letterSpacing: 0.7, marginBottom: 10, marginLeft: 2 },
-  suggestionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  suggestion: {
-    width: '48%',
-    minHeight: 56,
+  onlineDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: colors.data.revenue,
+  },
+  chat: { flex: 1 },
+  chatContent: {
+    flexGrow: 1,
+    paddingHorizontal: 14,
+    paddingTop: 16,
+    paddingBottom: 16,
+  },
+  messages: { gap: 12 },
+  messageRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    width: '100%',
+  },
+  userMessageRow: {
+    justifyContent: 'flex-end',
+    alignSelf: 'flex-end',
+  },
+  bubble: {
+    borderRadius: 18,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+  },
+  assistantBubble: {
+    flex: 1,
+    minWidth: 0,
+    maxWidth: '86%',
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderTopLeftRadius: 4,
+    ...shadow(1),
+  },
+  assistantBubbleHeader: {
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  userBubble: {
+    maxWidth: '82%',
+    backgroundColor: colors.brand,
+    borderBottomRightRadius: 4,
+  },
+  messageText: {
+    lineHeight: 20.5,
+    flexWrap: 'wrap',
+  },
+  typingBubble: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    maxWidth: '75%',
+  },
+  pressed: {
+    opacity: 0.72,
+    transform: [{ scale: 0.985 }],
+  },
+  quickChipsWrapper: {
+    marginBottom: 7,
+  },
+  quickChipsScroll: {
+    paddingHorizontal: 2,
+    paddingVertical: 2,
+    gap: 6,
+  },
+  quickChip: {
+    height: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     paddingHorizontal: 11,
-    paddingVertical: 9,
-    borderRadius: 14,
+    borderRadius: 15,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
+    ...shadow(0),
   },
-  suggestionText: { flex: 1, lineHeight: 16 },
-  pressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
-  composerWrap: { paddingHorizontal: 16, paddingTop: 10, backgroundColor: colors.bg },
+  composerWrap: {
+    paddingHorizontal: 14,
+    paddingTop: 6,
+    backgroundColor: colors.bg,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+  },
+  composer: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 18,
+    ...shadow(1),
+  },
+  input: {
+    flex: 1,
+    height: 40,
+    paddingHorizontal: 10,
+    fontFamily: font.medium,
+    fontSize: 13.5,
+    color: colors.ink,
+    outlineStyle: 'none',
+  } as never,
+  actionButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  voiceButton: {
+    backgroundColor: colors.brandSoft,
+  },
+  sendButton: {
+    backgroundColor: colors.brand,
+  },
+  sendDisabled: {
+    backgroundColor: colors.brandSoft,
+    opacity: 0.7,
+  },
   errorCard: {
     gap: 6,
     marginBottom: 10,
@@ -527,37 +662,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  composer: {
-    minHeight: 60,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    padding: 6,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 18,
-  },
-  input: {
-    flex: 1,
-    height: 46,
-    paddingHorizontal: 10,
-    fontFamily: font.medium,
-    fontSize: 14,
-    color: colors.ink,
-    outlineStyle: 'none',
-  } as never,
-  actionButton: {
-    width: 44,
-    height: 44,
-    borderWidth: 0,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  voiceButton: { backgroundColor: 'transparent' },
-  sendButton: { backgroundColor: colors.primary },
-  sendDisabled: { backgroundColor: colors.border },
   historyError: { marginBottom: 10 },
   historyRow: {
     flexDirection: 'row',

@@ -4,6 +4,7 @@
  * with robust pure-JS fallback for 1D barcodes (EAN-13, UPC, Code 128).
  */
 import { Platform } from 'react-native';
+import { triggerFeedback } from './feedback';
 
 export interface BarcodeDetectionResult {
   rawValue: string;
@@ -45,13 +46,7 @@ export function playScanSuccessSound() {
 
 /** Trigger vibration feedback if available */
 export function triggerScanHaptic() {
-  if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.vibrate) {
-    try {
-      navigator.vibrate(60);
-    } catch {
-      /* ignore */
-    }
-  }
+  triggerFeedback('selection');
 }
 
 /** Format barcode string for clear, readable display */
