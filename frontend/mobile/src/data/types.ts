@@ -48,6 +48,10 @@ export interface Invoice {
   transcript?: string;
   /** Chỉ có ở đơn tạo trong phiên này; dữ liệu mẫu ban đầu không có */
   effects?: InvoiceEffects;
+  /** Tổng tiền đơn sau giảm giá (Core `totalVnd`) — có thì ưu tiên hơn tổng các dòng, xem `invoiceTotal` */
+  total?: number;
+  /** false = không biết hình thức thanh toán (đơn lấy từ Core: danh sách đơn không kèm phương thức) */
+  methodKnown?: boolean;
 }
 
 export type ExpenseCategory = 'nguyenlieu' | 'dien' | 'matbang' | 'luong' | 'khac';
