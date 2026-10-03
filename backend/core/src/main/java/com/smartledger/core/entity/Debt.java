@@ -49,6 +49,12 @@ public class Debt {
     @Column(name = "settled_at")
     private OffsetDateTime settledAt;
 
+    @Column(name = "voided_at")
+    private OffsetDateTime voidedAt;
+
+    @Column(name = "cancelled_vnd")
+    private Long cancelledVnd;
+
     public static Debt open(Long saleId, Long customerId, long outstandingVnd) {
         if (outstandingVnd <= 0) {
             throw new IllegalArgumentException("An open debt requires a positive balance");
@@ -74,6 +80,16 @@ public class Debt {
             status = DebtStatus.SETTLED;
             settledAt = OffsetDateTime.now(ZoneOffset.UTC);
         }
+    }
+
+    public void voidRemaining() {
+        if (status != DebtStatus.OPEN || outstandingVnd <= 0) {
+            return;
+        }
+        cancelledVnd = outstandingVnd;
+        voidedAt = OffsetDateTime.now(ZoneOffset.UTC);
+        outstandingVnd = 0L;
+        status = DebtStatus.VOIDED;
     }
 
     @PrePersist

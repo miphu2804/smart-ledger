@@ -1,5 +1,8 @@
 import type { DebtView, PaymentView } from '../data/types';
 import { apiRequest } from './api';
+import { createIdempotentSender } from './idempotency';
+
+const repaySender = createIdempotentSender();
 
 /**
  * Công nợ thật (Core `/debts` — cần header X-Shop-Id, xem AGENTS.md).
@@ -20,7 +23,14 @@ export interface DebtRepaymentResponse {
 export const debtApi = {
   list: (): Promise<DebtView[]> => apiRequest<DebtView[]>('/debts', { withShop: true }),
   getById: (id: number): Promise<DebtView> => apiRequest<DebtView>(`/debts/${id}`, { withShop: true }),
-  /** Ghi nhận một lần trả (append-only), trả về nợ + payment vừa tạo */
+  /** Ghi nhận một lần trả (append-only), trả về nợ + payment vừa tạo. Bấm lại sau lỗi mạng dùng lại key cũ. */
   repay: (id: number, input: DebtRepaymentRequest): Promise<DebtRepaymentResponse> =>
-    apiRequest<DebtRepaymentResponse>(`/debts/${id}/payments`, { method: 'POST', body: input, withShop: true }),
+    repaySender.send({ id, input }, (idempotencyKey) =>
+      apiRequest<DebtRepaymentResponse>(`/debts/${id}/payments`, {
+        method: 'POST',
+        body: input,
+        withShop: true,
+        idempotencyKey,
+      }),
+    ),
 };

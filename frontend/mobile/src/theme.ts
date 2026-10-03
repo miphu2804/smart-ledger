@@ -1,15 +1,23 @@
 import { Platform, TextStyle, ViewStyle } from 'react-native';
 
 export const colors = {
-  // Green is the single action accent; darker green is used for readable text/icons.
+  // Brand balance: purple for overview identity, charcoal for primary actions, green for helpful accents.
+  brand: '#482AAC',
+  brandPressed: '#3A218E',
+  brandSoft: '#EFEAFF',
+  brandTint: '#F8F5FF',
+  brandBorder: '#D8CDF8',
+  brandInk: '#FFFFFF',
   accent: '#8FDB6E',
   accentHover: '#7CC85C',
   accentInk: '#16350C',
-  primary: '#2F6B1F',
-  primaryLight: '#7CC85C',
-  primaryDeep: '#16350C',
-  primarySoft: '#E7F6DC',
-  primaryTint: '#F3FAEF',
+  primary: '#262522',
+  primaryLight: '#4A4740',
+  primaryDeep: '#1A1916',
+  primarySoft: '#F1EFEA',
+  primaryTint: '#FAF9F6',
+  neutralControl: '#E6E2DA',
+  neutralControlPressed: '#D8D3C9',
   gold: '#8A5A12',
   goldBright: '#C88A2D',
   goldSoft: '#F8E9C8',
@@ -17,18 +25,40 @@ export const colors = {
   redSoft: '#F8D9D4',
   green: '#2F6B1F',
   greenSoft: '#E7F6DC',
-  purple: '#2157A4',
-  purpleSoft: '#E4F0FF',
-  orange: '#2F6B1F',
+  purple: '#482AAC',
+  purpleSoft: '#EFEAFF',
+  orange: '#8A5A12',
   ink: '#1A1916',
+  inkSecondary: '#3D3A34',
   text: '#1A1916',
   muted: '#6B675E',
   faint: '#756F65',
   disabled: '#B5B0A6',
   border: '#E8E4DC',
+  borderLight: '#F0ECE4',
   bg: '#F7F6F2',
+  pageBg: '#F7F6F2',
   card: '#FFFFFF',
+  cardBg: '#FFFFFF',
   white: '#FFFFFF',
+  data: {
+    revenue: '#2F8F46',
+    revenueSoft: '#E7F6DC',
+    expense: '#C45A37',
+    expenseSoft: '#FBE6DD',
+    order: '#2F6FDB',
+    orderSoft: '#E7EFFF',
+    profit: '#482AAC',
+    profitSoft: '#EFEAFF',
+    customer: '#138B9E',
+    customerSoft: '#DFF5F7',
+    product: '#B7791F',
+    productSoft: '#F8E9C8',
+    debt: '#8A5A12',
+    debtSoft: '#F8E9C8',
+    stock: '#9B2C1F',
+    stockSoft: '#F8D9D4',
+  },
 };
 
 export const font = {
@@ -48,17 +78,17 @@ export const shadow = (level: 0 | 1 | 2 | 3 = 1): ViewStyle =>
         level === 0
           ? '0 1px 3px rgba(42,41,38,0.06)'
           : level === 1
-          ? '0 2px 4px rgba(42,41,38,0.06), 0 10px 22px rgba(42,41,38,0.09)'
+          ? '0 1px 2px rgba(42,41,38,0.07)'
           : level === 2
             ? '0 3px 9px rgba(42,41,38,0.12)'
             : '0 6px 16px rgba(26,25,22,0.16)',
     } as ViewStyle,
     default: {
       shadowColor: '#2A2926',
-      shadowOpacity: level === 0 ? 0.06 : level === 1 ? 0.12 : level === 2 ? 0.16 : 0.18,
-      shadowRadius: level === 0 ? 3 : level === 1 ? 12 : level === 2 ? 13 : 15,
-      shadowOffset: { width: 0, height: level === 0 ? 1 : level === 1 ? 5 : level === 2 ? 6 : 7 },
-      elevation: level === 0 ? 1 : level === 1 ? 4 : level === 2 ? 5 : 6,
+      shadowOpacity: level === 0 ? 0.04 : level === 1 ? 0.06 : level === 2 ? 0.13 : 0.16,
+      shadowRadius: level === 0 ? 2 : level === 1 ? 2 : level === 2 ? 10 : 14,
+      shadowOffset: { width: 0, height: level <= 1 ? 1 : level === 2 ? 5 : 7 },
+      elevation: level === 0 ? 0 : level === 1 ? 1 : level === 2 ? 4 : 6,
     },
   })!;
 

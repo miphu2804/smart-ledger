@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -30,6 +31,7 @@ import com.smartledger.core.repository.SaleRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.impl.CustomerServiceImpl;
 import com.smartledger.core.service.impl.DebtServiceImpl;
+import java.util.function.Supplier;
 import java.util.Optional;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,9 +45,11 @@ class CustomerDebtServiceTest {
     private final DebtRepository debtRepository = Mockito.mock(DebtRepository.class);
     private final SaleRepository saleRepository = Mockito.mock(SaleRepository.class);
     private final PaymentRepository paymentRepository = Mockito.mock(PaymentRepository.class);
+    private final IdempotencyService idempotencyService = Mockito.mock(IdempotencyService.class);
+    private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
     private final CustomerService customerService = new CustomerServiceImpl(shopService, customerRepository);
     private final DebtService debtService = new DebtServiceImpl(shopService, debtRepository,
-            saleRepository, paymentRepository);
+            saleRepository, paymentRepository, idempotencyService, auditLogService);
     private final VerifiedFirebaseToken token = new VerifiedFirebaseToken("uid", null, false, null, null, null);
 
     @BeforeEach
@@ -53,6 +57,8 @@ class CustomerDebtServiceTest {
         Shop shop = Shop.create(42L, "Shop", null, null, null);
         ReflectionTestUtils.setField(shop, "id", 7L);
         when(shopService.requireOwnedActiveShop(any(), eq("7"))).thenReturn(shop);
+        when(idempotencyService.execute(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(8)).get());
     }
 
     @Test
@@ -122,22 +128,29 @@ class CustomerDebtServiceTest {
         ReflectionTestUtils.setField(debt, "id", 11L);
         Sale sale = unpaidSale();
         when(debtRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(debt));
-        when(saleRepository.findByIdAndShopId(15L, 7L)).thenReturn(Optional.of(sale));
+        when(debtRepository.findSaleIdByIdAndShopId(11L, 7L)).thenReturn(Optional.of(15L));
+        when(saleRepository.findLockedByIdAndShopId(15L, 7L)).thenReturn(Optional.of(sale));
         when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> {
             Payment payment = invocation.getArgument(0);
             ReflectionTestUtils.setField(payment, "id", 21L);
             return payment;
         });
 
-        var partial = debtService.repay(token, "7", "11",
+        var partial = debtService.repay(token, "7", "11", "repayment-one",
                 new DebtRepaymentRequest(5_000L, PaymentMethod.CASH, null));
         assertThat(partial.debt().outstandingVnd()).isEqualTo(15_000L);
         assertThat(partial.debt().status()).isEqualTo(DebtStatus.OPEN);
         assertThat(partial.payment().type()).isEqualTo(PaymentType.DEBT_REPAYMENT);
         assertThat(sale.getPaidVnd()).isEqualTo(5_000L);
         assertThat(sale.getPaymentStatus()).isEqualTo(PaymentStatus.PARTIAL);
+        var locks = inOrder(debtRepository, saleRepository);
+        locks.verify(debtRepository).findSaleIdByIdAndShopId(11L, 7L);
+        locks.verify(saleRepository).findLockedByIdAndShopId(15L, 7L);
+        locks.verify(debtRepository).findLockedByIdAndShopId(11L, 7L);
+        assertThat(partial.debt().voidedAt()).isNull();
+        assertThat(partial.debt().cancelledVnd()).isNull();
 
-        var finalPayment = debtService.repay(token, "7", "11",
+        var finalPayment = debtService.repay(token, "7", "11", "repayment-two",
                 new DebtRepaymentRequest(15_000L, PaymentMethod.CASH, null));
         assertThat(finalPayment.debt().outstandingVnd()).isZero();
         assertThat(finalPayment.debt().status()).isEqualTo(DebtStatus.SETTLED);
@@ -151,9 +164,10 @@ class CustomerDebtServiceTest {
     void overpaymentDoesNotCreatePaymentOrChangeBalance() {
         Debt debt = Debt.open(15L, 9L, 20_000L);
         when(debtRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(debt));
-        when(saleRepository.findByIdAndShopId(15L, 7L)).thenReturn(Optional.of(unpaidSale()));
+        when(debtRepository.findSaleIdByIdAndShopId(11L, 7L)).thenReturn(Optional.of(15L));
+        when(saleRepository.findLockedByIdAndShopId(15L, 7L)).thenReturn(Optional.of(unpaidSale()));
 
-        assertThatThrownBy(() -> debtService.repay(token, "7", "11",
+        assertThatThrownBy(() -> debtService.repay(token, "7", "11", "overpayment",
                 new DebtRepaymentRequest(20_001L, PaymentMethod.CASH, null)))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.DEBT_PAYMENT_INVALID));
@@ -166,13 +180,54 @@ class CustomerDebtServiceTest {
         Debt debt = Debt.open(15L, 9L, 20_000L);
         debt.repay(20_000L);
         when(debtRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(debt));
-        when(saleRepository.findByIdAndShopId(15L, 7L)).thenReturn(Optional.of(unpaidSale()));
+        when(debtRepository.findSaleIdByIdAndShopId(11L, 7L)).thenReturn(Optional.of(15L));
+        when(saleRepository.findLockedByIdAndShopId(15L, 7L)).thenReturn(Optional.of(unpaidSale()));
 
-        assertThatThrownBy(() -> debtService.repay(token, "7", "11",
+        assertThatThrownBy(() -> debtService.repay(token, "7", "11", "settled-payment",
                 new DebtRepaymentRequest(1L, PaymentMethod.CASH, null)))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.DEBT_ALREADY_SETTLED));
         verifyNoInteractions(paymentRepository);
+    }
+
+    @Test
+    void voidedSaleRejectsRepaymentWithoutRecordingPayment() {
+        Sale sale = unpaidSale();
+        sale.voidSale(42L, "Cancelled");
+        when(debtRepository.findSaleIdByIdAndShopId(11L, 7L)).thenReturn(Optional.of(15L));
+        when(saleRepository.findLockedByIdAndShopId(15L, 7L)).thenReturn(Optional.of(sale));
+
+        assertThatThrownBy(() -> debtService.repay(token, "7", "11", "voided-repayment",
+                new DebtRepaymentRequest(1L, PaymentMethod.CASH, null)))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.SALE_ALREADY_VOIDED));
+        verifyNoInteractions(paymentRepository);
+    }
+
+    @Test
+    void debtReadsExposeCancellationAudit() {
+        Debt debt = Debt.open(15L, 9L, 60_000L);
+        ReflectionTestUtils.setField(debt, "id", 11L);
+        debt.repay(20_000L);
+        debt.voidRemaining();
+        when(debtRepository.findByIdAndShopId(11L, 7L)).thenReturn(Optional.of(debt));
+        when(debtRepository.findAllByShopIdOrderByIdDesc(7L)).thenReturn(List.of(debt));
+
+        var response = debtService.getById(token, "7", "11");
+
+        assertThat(response.cancelledVnd()).isEqualTo(40_000L);
+        assertThat(response.voidedAt()).isEqualTo(debt.getVoidedAt());
+        assertThat(response.settledAt()).isNull();
+        assertThat(debtService.list(token, "7")).containsExactly(response);
+    }
+
+    @Test
+    void missingOrForeignDebtIsRejectedBeforeLockingAnySale() {
+        assertThatThrownBy(() -> debtService.repay(token, "7", "11", "foreign-debt",
+                new DebtRepaymentRequest(1L, PaymentMethod.CASH, null)))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.DEBT_NOT_FOUND));
+        verifyNoInteractions(saleRepository, paymentRepository);
     }
 
     private Sale unpaidSale() {

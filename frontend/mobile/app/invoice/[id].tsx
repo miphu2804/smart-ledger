@@ -1,9 +1,8 @@
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { useToast } from '../../src/components/brand';
-import { Badge, Button, Card, EmptyState, Header, Row, Screen, T } from '../../src/components/ui';
+import { StyleSheet, View } from 'react-native';
+import { Badge, Button, Card, EmptyState, Header, LoadingState, Row, Screen, T } from '../../src/components/ui';
 import type { SaleView } from '../../src/data/types';
 import { errorMessage } from '../../src/lib/errors';
 import { ddmm, hhmm, vnd } from '../../src/lib/format';
@@ -11,13 +10,9 @@ import { saleApi } from '../../src/lib/salesApi';
 import { useApp } from '../../src/store/AppStore';
 import { colors } from '../../src/theme';
 
-/** Tỉ lệ thuế MINH HOẠ — cần cấu hình theo quy định hiện hành cho từng ngành hàng. */
-const TAX_RATE = 0.015;
-
 export default function InvoiceDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const app = useApp();
-  const toast = useToast();
   const [sale, setSale] = useState<SaleView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -26,7 +21,7 @@ export default function InvoiceDetail() {
 
   const load = useCallback(async () => {
     if (!Number.isFinite(saleId)) {
-      setError('Mã hoá đơn không hợp lệ');
+      setError('Mã đơn không hợp lệ');
       setLoading(false);
       return;
     }
@@ -48,10 +43,8 @@ export default function InvoiceDetail() {
   if (loading) {
     return (
       <Screen>
-        <Header title="Hoá đơn" />
-        <View style={{ paddingTop: 60, alignItems: 'center' }}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
+        <Header title="Đơn hàng" />
+        <LoadingState label="Đang tải đơn…" />
       </Screen>
     );
   }
@@ -59,8 +52,8 @@ export default function InvoiceDetail() {
   if (error || !sale) {
     return (
       <Screen>
-        <Header title="Hoá đơn" />
-        <EmptyState icon="file-text" title="Không tìm thấy hoá đơn" hint={error || undefined} />
+        <Header title="Đơn hàng" />
+        <EmptyState icon="file-text" title="Không tìm thấy đơn" hint={error || undefined} />
         {error ? <Button title="Thử lại" variant="outline" onPress={load} /> : null}
       </Screen>
     );
@@ -69,38 +62,16 @@ export default function InvoiceDetail() {
   const total = sale.totalVnd;
   const d = new Date(sale.soldAt);
   const cancelled = sale.saleStatus === 'VOIDED';
-  const notSupported = () => toast('Chưa hỗ trợ — hoá đơn đã xác nhận không thể sửa/huỷ ở bản này', 'err');
 
   return (
-    <Screen
-      footer={
-        cancelled ? null : (
-          <>
-            <Row>
-              <Button
-                title="In"
-                icon="printer"
-                variant="green"
-                style={{ flex: 1 }}
-                onPress={() => toast('Chưa kết nối máy in. Vui lòng thử lại sau.', 'err')}
-              />
-              <Button title="Sửa" icon="edit-2" variant="outline" style={{ flex: 1 }} disabled onPress={notSupported} />
-              <Button title="Huỷ" icon="x-circle" variant="danger" style={{ flex: 1 }} disabled onPress={notSupported} />
-            </Row>
-            <T size={11} color={colors.faint} style={{ textAlign: 'center', marginTop: 8 }}>
-              Chưa hỗ trợ sửa/huỷ hoá đơn đã xác nhận
-            </T>
-          </>
-        )
-      }
-    >
-      <Header title={`Hoá đơn #${sale.id}`} subtitle={`${ddmm(d)}/${d.getFullYear()} · ${hhmm(d)}`} />
+    <Screen>
+      <Header title={`Đơn #${sale.id}`} subtitle={`${ddmm(d)}/${d.getFullYear()} · ${hhmm(d)}`} />
 
       {cancelled ? (
         <View style={styles.cancelled}>
           <Feather name="slash" size={15} color={colors.red} />
           <T w="bold" size={13} color={colors.red}>
-            Hoá đơn đã huỷ — không tính vào doanh thu
+            Đơn đã huỷ — không tính vào doanh thu
           </T>
         </View>
       ) : null}
@@ -138,7 +109,7 @@ export default function InvoiceDetail() {
             Thanh toán
           </T>
           <Badge
-            text={sale.paidVnd >= sale.totalVnd ? 'Đã thanh toán đủ' : 'Chưa thanh toán đủ'}
+            text={sale.paidVnd >= sale.totalVnd ? 'Đã thu đủ' : 'Chưa thu đủ'}
             color={sale.paidVnd >= sale.totalVnd ? colors.green : sale.paidVnd > 0 ? colors.gold : colors.red}
             bg={sale.paidVnd >= sale.totalVnd ? colors.greenSoft : sale.paidVnd > 0 ? colors.goldSoft : colors.redSoft}
           />
@@ -171,14 +142,6 @@ export default function InvoiceDetail() {
             </T>
           </Row>
         ) : null}
-        <Row style={{ marginTop: 8 }}>
-          <T size={12} color={colors.muted} style={{ flex: 1 }}>
-            Thuế ước tính 1,5% (tham khảo)
-          </T>
-          <T size={12} color={colors.muted}>
-            {vnd(Math.round(total * TAX_RATE))}
-          </T>
-        </Row>
         <Row style={{ marginTop: 8 }}>
           <T w="bold" size={15} style={{ flex: 1 }}>
             Tổng cộng

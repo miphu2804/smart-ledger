@@ -138,6 +138,11 @@ function useStoreValue() {
         patch(() => ({ loggedIn: false, needsProfile: false, shopId: null }));
         await authClient.signOut().catch(() => undefined);
       },
+      enterDevApp: () => {
+        if (!__DEV__) return;
+        loggedInRef.current = true;
+        patch(() => ({ authReady: true, loggedIn: true, onboarded: true, needsProfile: false, guideDismissed: true }));
+      },
       /** 401 từ Core hoặc Firebase báo hết phiên: đăng xuất và đưa về màn đăng nhập (hợp đồng: 401 → đăng xuất). */
       forceSignOut: async () => {
         const wasLoggedIn = loggedInRef.current;
@@ -267,6 +272,16 @@ function useStoreValue() {
         }),
 
       // --- hàng hoá ---
+      findProductByBarcode: (rawBarcode: string): Product | undefined => {
+        const code = rawBarcode.trim();
+        if (!code) return undefined;
+        return s.products.find(
+          (p) =>
+            p.barcode === code ||
+            p.id.toLowerCase() === code.toLowerCase() ||
+            (p.barcode && p.barcode.replace(/\D/g, '') === code.replace(/\D/g, ''))
+        );
+      },
       addProduct: (p: Omit<Product, 'id'>) => {
         const id = uid('p');
         patch((st) => ({ products: [{ ...p, id }, ...st.products] }));

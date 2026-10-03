@@ -49,8 +49,10 @@ public class DebtController {
     @PostMapping("/{debtId}/payments")
     @Operation(summary = "Record an append-only debt repayment and update the outstanding balance")
     public ResponseEntity<DebtRepaymentResponse> repay(@AuthenticationPrincipal VerifiedFirebaseToken token,
-            @RequestHeader("X-Shop-Id") String shopId, @PathVariable String debtId,
+            @RequestHeader("X-Shop-Id") String shopId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey, @PathVariable String debtId,
             @Valid @RequestBody DebtRepaymentRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(service.repay(token, shopId, debtId, request));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(service.repay(token, shopId, debtId, idempotencyKey, request));
     }
 }

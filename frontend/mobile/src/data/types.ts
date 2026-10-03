@@ -12,6 +12,8 @@ export interface Product {
   category: Category;
   /** Các cách người bán hay gọi tên món — giúp bộ nhận diện giả lập */
   aliases?: string[];
+  /** Mã vạch sản phẩm (EAN-13, UPC, Code 128...) để quét bán hàng */
+  barcode?: string;
 }
 
 export interface LineItem {
@@ -81,6 +83,35 @@ export interface ChatMessage {
   id: string;
   from: 'user' | 'ai';
   text: string;
+}
+
+// ---- Trợ lý AI (Agent chat) — khớp docs/contracts/api-contracts.md §5, AI dùng snake_case ----
+export interface AgentChatRequest {
+  conversation_id?: number | null;
+  message: string;
+}
+
+export interface AgentChatMessageView {
+  conversation_id: number;
+  message_id: number;
+  answer: string;
+}
+
+export interface AgentConversationSummary {
+  conversation_id: number;
+  title: string | null;
+  last_message_at: string;
+}
+
+export interface AgentMessageView {
+  message_id: number;
+  role: 'USER' | 'ASSISTANT';
+  content: string;
+  created_at: string;
+}
+
+export interface AgentConversationView extends AgentConversationSummary {
+  messages: AgentMessageView[];
 }
 
 // ---- Phiên đăng nhập & tiệm — khớp `AuthSessionResponse` của Core (backend/core, nhánh feat/auth-session) ----
