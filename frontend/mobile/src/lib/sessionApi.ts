@@ -4,6 +4,7 @@ import type { SessionView, ShopView } from '../data/types';
 import { ApiError, apiRequest } from './api';
 import { authClient } from './auth';
 import { fromE164VN } from './auth/phone';
+import { industriesToCore, type ShopChanges } from './shopProfile';
 
 /**
  * Phiên đăng nhập với Core (backend/core, nhánh feat/auth-session):
@@ -82,6 +83,20 @@ function mockCreateShop(input: { name: string; industries: string[] }): ShopView
   return shop;
 }
 
+/** Giống Core: chỉ đổi các trường được gửi; địa chỉ rỗng là xoá địa chỉ. */
+function mockUpdateShop(changes: ShopChanges): ShopView {
+  const acc = mockAccounts.get(mockKey());
+  if (!acc?.shop) throw new ApiError(404, 'shop_not_found', 'This shop is unavailable.');
+  const shop = acc.shop;
+  acc.shop = {
+    ...shop,
+    name: changes.name ?? shop.name,
+    address: changes.address === undefined ? shop.address : changes.address || null,
+    industries: changes.industries ?? shop.industries,
+  };
+  return acc.shop;
+}
+
 export const sessionApi = {
   /** POST /auth/session. Gửi `displayName` khi Core đòi (tài khoản mới). Lỗi: 400 (thiếu tên), 401, 403 account_disabled. */
   create: async (displayName?: string): Promise<SessionView> =>
@@ -103,5 +118,22 @@ export const sessionApi = {
   createShop: async (input: { name: string; industries: string[] }): Promise<ShopView> =>
     USE_MOCK_SHOPS
       ? mockCreateShop(input)
-      : apiRequest<ShopView>('/shops', { method: 'POST', body: { name: input.name, industry: input.industries.join(', ') } }),
+      : apiRequest<ShopView>('/shops', { method: 'POST', body: { name: input.name, industry: industriesToCore(input.industries) } }),
+
+  /**
+   * PATCH /shops/{shopId}: sửa tên, ngành, địa chỉ của tiệm (OWNER, tiệm ACTIVE). ID nằm trong đường dẫn nên không cần header
+   * X-Shop-Id. Chỉ gửi các trường có trong `changes`: Core bỏ qua trường vắng/null và trả `400 shop_update_required` khi
+   * không có trường nào; địa chỉ rỗng xoá địa chỉ. Trả về tiệm sau khi sửa (đã cắt khoảng trắng).
+   */
+  updateShop: async (shopId: string, changes: ShopChanges): Promise<ShopView> =>
+    USE_MOCK_SHOPS
+      ? mockUpdateShop(changes)
+      : apiRequest<ShopView>(`/shops/${encodeURIComponent(shopId)}`, {
+          method: 'PATCH',
+          body: {
+            ...(changes.name !== undefined && { name: changes.name }),
+            ...(changes.industries !== undefined && { industry: industriesToCore(changes.industries) }),
+            ...(changes.address !== undefined && { address: changes.address }),
+          },
+        }),
 };
