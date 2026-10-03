@@ -16,7 +16,7 @@ import { useApp } from '../../src/store/AppStore';
 import { colors } from '../../src/theme';
 
 const weekdayNames = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
-const HEADER_COLLAPSED = 114;
+const HEADER_COLLAPSED = 115;
 const overviewHeaderPurple = '#482AAC';
 type Tab1IconName =
   | 'logo'
@@ -49,7 +49,7 @@ export default function Home() {
   const app = useApp();
   const insets = useSafeAreaInsets();
   const { height: viewportHeight } = useWindowDimensions();
-  const headerExpanded = Math.min(540, Math.max(500, viewportHeight * 0.62));
+  const headerExpanded = Math.min(500, Math.max(500, viewportHeight * 0.62));
   const headerScrollDistance = headerExpanded - HEADER_COLLAPSED;
   const scrollY = useRef(new Animated.Value(0)).current;
   const bellShake = useRef(new Animated.Value(0)).current;
@@ -59,7 +59,7 @@ export default function Home() {
 
   useEffect(() => {
     const id = scrollY.addListener(({ value }) => {
-      const threshold = headerScrollDistance * 0.52;
+      const threshold = headerScrollDistance * 0.90;
       if (value >= threshold && !isCollapsed) {
         setIsCollapsed(true);
       } else if (value < threshold && isCollapsed) {
@@ -114,49 +114,37 @@ export default function Home() {
     }, [playBellShake]),
   );
 
+  const startTransition = headerScrollDistance * 0.80;
+  const endTransition = headerScrollDistance * 1.02;
+
   const headerHeight = scrollY.interpolate({
     inputRange: [0, headerScrollDistance],
     outputRange: [headerExpanded, HEADER_COLLAPSED],
     extrapolate: 'clamp',
   });
   const expandedOpacity = scrollY.interpolate({
-    inputRange: [0, headerScrollDistance * 0.44, headerScrollDistance * 0.72],
-    outputRange: [1, 0.2, 0],
+    inputRange: [0, startTransition, endTransition],
+    outputRange: [1, 1, 0],
     extrapolate: 'clamp',
   });
   const expandedTranslate = scrollY.interpolate({
     inputRange: [0, headerScrollDistance],
-    outputRange: [0, -18],
+    outputRange: [0, -headerScrollDistance * 0.75],
     extrapolate: 'clamp',
   });
   const compactOpacity = scrollY.interpolate({
-    inputRange: [headerScrollDistance * 0.42, headerScrollDistance * 0.8, headerScrollDistance],
-    outputRange: [0, 0.7, 1],
+    inputRange: [0, startTransition, endTransition],
+    outputRange: [0, 0, 1],
     extrapolate: 'clamp',
   });
   const compactTranslate = scrollY.interpolate({
-    inputRange: [headerScrollDistance * 0.42, headerScrollDistance],
-    outputRange: [10, 0],
+    inputRange: [0, startTransition, endTransition],
+    outputRange: [8, 8, 0],
     extrapolate: 'clamp',
   });
   const dividerOpacity = scrollY.interpolate({
-    inputRange: [0, headerScrollDistance],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
-  });
-  const headerLayerTranslate = scrollY.interpolate({
-    inputRange: [0, headerScrollDistance * 0.72],
-    outputRange: [0, 34],
-    extrapolate: 'clamp',
-  });
-  const headerLayerOpacity = scrollY.interpolate({
-    inputRange: [0, headerScrollDistance * 0.48, headerScrollDistance * 0.78],
-    outputRange: [1, 0.7, 0],
-    extrapolate: 'clamp',
-  });
-  const headerBaseOpacity = scrollY.interpolate({
-    inputRange: [0, headerScrollDistance * 0.5],
-    outputRange: [0, 1],
+    inputRange: [0, startTransition, endTransition],
+    outputRange: [0, 0, 1],
     extrapolate: 'clamp',
   });
   const bellRotate = bellShake.interpolate({
@@ -172,438 +160,434 @@ export default function Home() {
           style={[styles.topBlackUnderlay, { height: 800 + insets.top + 24 }]}
         />
         <Animated.ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingTop: headerExpanded + insets.top }]}
-        showsVerticalScrollIndicator={false}
-        scrollEventThrottle={16}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
-      >
-      <View style={styles.contentSheet}>
-      <View style={styles.periodTabs}>
-        <ReportPeriodTabs value={period} onChange={setPeriod} />
-      </View>
-      <HomeSectionHeading title="Ưu tiên hôm nay" side={priorityCount ? `${priorityCount} việc cần xem` : 'Đã xong'} />
-      {priorityCount ? (
-        <Card style={{ paddingVertical: 4 }}>
-          {totalDebt > 0 ? (
-            <PriorityRow
-              icon="collectDebt"
-              tone="warning"
-              title="Thu khoản còn nợ"
-              subtitle={`${debtorCount} khách · ${vnd(totalDebt)} chưa thu`}
-              onPress={() => router.push('/debts')}
-              last={lowStock.length === 0}
-            />
-          ) : null}
-          {lowStock.length > 0 ? (
-            <PriorityRow
-              icon="lowStock"
-              tone="danger"
-              title="Kiểm tra hàng sắp hết"
-              subtitle={lowStock.slice(0, 2).map((product) => `${product.name} còn ${product.stock}`).join(' · ')}
-              onPress={() => router.push('/products')}
-              last
-            />
-          ) : null}
-        </Card>
-      ) : (
-        <Card style={{ paddingVertical: 15 }}>
-          <T size={14} color={colors.muted}>
-            Chưa có việc cần xử lý ngay
-          </T>
-        </Card>
-      )}
-
-      <View style={styles.suggestion}>
-        <Row style={{ alignItems: 'flex-start' }} gap={10}>
-          <View style={styles.suggestionIcon}>
-            <Tab1Icon name="dataSuggestion" size={24} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <T w="bold" size={14} style={{ marginBottom: 4 }}>Gợi ý từ dữ liệu đã chốt</T>
-            {totals ? (
-              <Reveal>
-                <T size={13} color={colors.muted} style={{ lineHeight: 20 }}>
-                  {topSeller
-                    ? `${topSeller.name} bán nhiều nhất trong kỳ, đã bán ${topSeller.qty}. Xem số liệu trước khi chuẩn bị thêm.`
-                    : 'Chưa đủ dữ liệu đơn đã chốt trong kỳ để đưa ra gợi ý.'}
-                </T>
-                <T size={12} color={colors.faint} style={{ marginTop: 5 }}>
-                  Nguồn: {totals.count} đơn đã chốt · {periodName}
-                </T>
-              </Reveal>
-            ) : (
-              <View style={{ gap: 8, paddingTop: 4 }}>
-                <Skeleton width="100%" height={12} />
-                <Skeleton width="72%" height={12} />
-                <Skeleton width="45%" height={10} style={{ marginTop: 3 }} />
-              </View>
-            )}
-          </View>
-        </Row>
-      </View>
-
-      <HomeSectionHeading
-        title={`Bán chạy ${periodName.toLowerCase()}`}
-        side="Xem tất cả ›"
-        onPress={() => router.push({ pathname: '/bestsellers', params: { period } })}
-      />
-      <Card style={{ paddingVertical: 4 }}>
-        {!report ? (
-          [0, 1, 2].map((row) => (
-            <Row key={row} style={[styles.sellerRow, row < 2 && styles.rowBorder]}>
-              <Skeleton width="60%" height={14} />
-            </Row>
-          ))
-        ) : topSellers.length ? (
-          topSellers.map((seller, index) => (
-            <Row
-              key={seller.productId ?? seller.name}
-              style={[styles.sellerRow, index < topSellers.length - 1 && styles.rowBorder]}
-            >
-              <T w="bold" size={12} color={colors.muted} style={{ width: 22 }}>
-                {index + 1}
-              </T>
-              <T w="semibold" size={14} style={{ flex: 1 }} numberOfLines={1}>
-                {seller.name}
-              </T>
-              <T w="bold" size={14} color={colors.primary}>
-                {seller.qty} phần
-              </T>
-            </Row>
-          ))
-        ) : (
-          <T size={13} color={colors.muted} style={{ paddingVertical: 13, textAlign: 'center' }}>
-            Chưa có đơn trong kỳ
-          </T>
-        )}
-      </Card>
-
-      <HomeSectionHeading title="Thông báo" side="Xem tất cả ›" onPress={() => router.push('/notifications')} />
-      <Card style={{ paddingVertical: 4, marginBottom: 88 }}>
-        {notifications.slice(0, 3).map((notification, index) => {
-          const meta = notifCategoryMeta[notification.category];
-          const unread = !readNotifications.has(notification.id);
-          return (
-            <Pressable
-              key={notification.id}
-              onPress={() => {
-                app.markNotifsRead([notification.id]);
-                if (notification.href) router.push(notification.href);
-              }}
-              style={({ pressed }) => [styles.notificationRow, index < Math.min(3, notifications.length) - 1 && styles.rowBorder, pressed && styles.pressed]}
-            >
-              <View style={[styles.notificationIcon, { backgroundColor: notification.urgent ? colors.redSoft : meta.bg }]}>
-                <Feather name={notification.icon ?? meta.icon} size={17} color={notification.urgent ? colors.red : meta.color} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <T w={unread ? 'bold' : 'semibold'} size={13.5} numberOfLines={1}>{notification.title}</T>
-                <T size={12} color={colors.muted} numberOfLines={1} style={{ marginTop: 2 }}>{notification.body}</T>
-              </View>
-              {unread ? <View style={styles.notificationDot} /> : null}
-            </Pressable>
-          );
-        })}
-      </Card>
-      </View>
-      </Animated.ScrollView>
-
-      <Animated.View
-        pointerEvents="box-none"
-        style={[
-          styles.collapsingHeader,
-          { height: Animated.add(headerHeight, insets.top) },
-        ]}
-      >
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.headerBaseLayer, { opacity: headerBaseOpacity }]} />
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            StyleSheet.absoluteFill,
-            styles.headerRoundedLayer,
-            {
-              opacity: headerLayerOpacity,
-              transform: [{ translateY: headerLayerTranslate }],
-            },
-          ]}
-        />
-        <Animated.View
-          style={[styles.expandedHeader, { top: insets.top + 10, opacity: expandedOpacity, transform: [{ translateY: expandedTranslate }] }]}
+          style={styles.scroll}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: headerExpanded + insets.top }]}
+          showsVerticalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
         >
-          <Row style={styles.brandRow}>
-            <Tab1Icon name="logo" size={42} style={styles.logoIcon} />
-            <View style={{ flex: 1 }}>
-              <T w="bold" size={17} color={colors.white} numberOfLines={1}>{app.store.name}</T>
-              <T size={12} color="#B8B5AE">Sổ bán hàng của bạn</T>
+          <View style={styles.contentSheet}>
+            <View style={styles.periodTabs}>
+              <ReportPeriodTabs value={period} onChange={setPeriod} />
             </View>
-            <Pressable
-              onPress={() => router.push('/notifications')}
-              accessibilityRole="button"
-              accessibilityLabel="Thông báo"
-              style={({ pressed }) => [styles.headerIconButton, pressed && styles.pressed]}
-            >
-              <Animated.View style={{ transform: [{ rotate: bellRotate }] }}>
-                <Feather name="bell" size={24} color={colors.white} />
-              </Animated.View>
-              {unreadNotifications > 0 ? <View style={styles.headerIconDot} /> : null}
-            </Pressable>
-          </Row>
-          <Row style={styles.overviewMeta}>
-            <T w="extrabold" size={21} color={colors.white}>Tổng quan</T>
-            <T w="bold" size={10.5} color="#B8B5AE">
-              {`${weekdayNames[now.getDay()]}, ${now.getDate()} tháng ${now.getMonth() + 1}`.toLocaleUpperCase('vi-VN')}
-            </T>
-          </Row>
-          <Card
-            style={styles.expandedRevenueCard}
-            onPress={() => router.push({ pathname: '/analytics', params: { period } })}
-            accessibilityLabel={`Xem phân tích doanh thu ${periodName}`}
-          >
-            <Row style={styles.revenueHeader} gap={8}>
-              <Row gap={7} style={{ flex: 1 }}>
-                <Tab1Icon name="revenue" size={24} />
-                <T w="bold" size={12} color={colors.muted} numberOfLines={1}>DOANH THU {periodName.toUpperCase()}</T>
-              </Row>
-              {revenueChange !== null ? (
-                <T w="bold" size={11.5} color={revenueChange >= 0 ? colors.green : colors.red}>
-                  {revenueChange >= 0 ? '+' : ''}{Math.round(revenueChange * 100)}% so với hôm qua
-                </T>
-              ) : null}
-            </Row>
-            {!totals ? (
-              <Skeleton width={190} height={34} radius={10} style={{ marginTop: 8 }} />
-            ) : totals.count ? (
-              <CountUp value={totals.revenue} format={vnd} w="extrabold" size={34} numberOfLines={1} adjustsFontSizeToFit style={styles.expandedRevenueValue} />
+            <HomeSectionHeading title="Ưu tiên hôm nay" side={priorityCount ? `${priorityCount} việc cần xem` : 'Đã xong'} />
+            {priorityCount ? (
+              <Card style={{ paddingVertical: 4 }}>
+                {totalDebt > 0 ? (
+                  <PriorityRow
+                    icon="collectDebt"
+                    tone="warning"
+                    title="Thu khoản còn nợ"
+                    subtitle={`${debtorCount} khách · ${vnd(totalDebt)} chưa thu`}
+                    onPress={() => router.push('/debts')}
+                    last={lowStock.length === 0}
+                  />
+                ) : null}
+                {lowStock.length > 0 ? (
+                  <PriorityRow
+                    icon="lowStock"
+                    tone="danger"
+                    title="Kiểm tra hàng sắp hết"
+                    subtitle={lowStock.slice(0, 2).map((product) => `${product.name} còn ${product.stock}`).join(' · ')}
+                    onPress={() => router.push('/products')}
+                    last
+                  />
+                ) : null}
+              </Card>
             ) : (
-              <T w="extrabold" size={18} style={{ marginTop: 10 }}>Chưa có đơn trong kỳ</T>
+              <Card style={{ paddingVertical: 15 }}>
+                <T size={14} color={colors.muted}>
+                  Chưa có việc cần xử lý ngay
+                </T>
+              </Card>
             )}
-            <Row style={styles.financeRow} gap={14}>
-              <View style={styles.financeItem}>
-                <Tab1Icon name="closedOrders" size={25} style={styles.financeIcon} />
-                <T w="bold" size={16}>{totals ? `${totals.count} đơn` : '—'}</T>
-                <T size={11.5} color={colors.muted}>Đã chốt trong kỳ</T>
+
+            <View style={styles.suggestion}>
+              <Row style={{ alignItems: 'flex-start' }} gap={10}>
+                <View style={styles.suggestionIcon}>
+                  <Tab1Icon name="dataSuggestion" size={24} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <T w="bold" size={14} style={{ marginBottom: 4 }}>Gợi ý từ dữ liệu đã chốt</T>
+                  {totals ? (
+                    <Reveal>
+                      <T size={13} color={colors.muted} style={{ lineHeight: 20 }}>
+                        {topSeller
+                          ? `${topSeller.name} bán nhiều nhất trong kỳ, đã bán ${topSeller.qty}. Xem số liệu trước khi chuẩn bị thêm.`
+                          : 'Chưa đủ dữ liệu đơn đã chốt trong kỳ để đưa ra gợi ý.'}
+                      </T>
+                      <T size={12} color={colors.faint} style={{ marginTop: 5 }}>
+                        Nguồn: {totals.count} đơn đã chốt · {periodName}
+                      </T>
+                    </Reveal>
+                  ) : (
+                    <View style={{ gap: 8, paddingTop: 4 }}>
+                      <Skeleton width="100%" height={12} />
+                      <Skeleton width="72%" height={12} />
+                      <Skeleton width="45%" height={10} style={{ marginTop: 3 }} />
+                    </View>
+                  )}
+                </View>
+              </Row>
+            </View>
+
+            <HomeSectionHeading
+              title={`Bán chạy ${periodName.toLowerCase()}`}
+              side="Xem tất cả ›"
+              onPress={() => router.push({ pathname: '/bestsellers', params: { period } })}
+            />
+            <Card style={{ paddingVertical: 4 }}>
+              {!report ? (
+                [0, 1, 2].map((row) => (
+                  <Row key={row} style={[styles.sellerRow, row < 2 && styles.rowBorder]}>
+                    <Skeleton width="60%" height={14} />
+                  </Row>
+                ))
+              ) : topSellers.length ? (
+                topSellers.map((seller, index) => (
+                  <Row
+                    key={seller.productId ?? seller.name}
+                    style={[styles.sellerRow, index < topSellers.length - 1 && styles.rowBorder]}
+                  >
+                    <T w="bold" size={12} color={colors.muted} style={{ width: 22 }}>
+                      {index + 1}
+                    </T>
+                    <T w="semibold" size={14} style={{ flex: 1 }} numberOfLines={1}>
+                      {seller.name}
+                    </T>
+                    <T w="bold" size={14} color={colors.primary}>
+                      {seller.qty} phần
+                    </T>
+                  </Row>
+                ))
+              ) : (
+                <T size={13} color={colors.muted} style={{ paddingVertical: 13, textAlign: 'center' }}>
+                  Chưa có đơn trong kỳ
+                </T>
+              )}
+            </Card>
+
+            <HomeSectionHeading title="Thông báo" side="Xem tất cả ›" onPress={() => router.push('/notifications')} />
+            <Card style={{ paddingVertical: 4, marginBottom: 88 }}>
+              {notifications.slice(0, 3).map((notification, index) => {
+                const meta = notifCategoryMeta[notification.category];
+                const unread = !readNotifications.has(notification.id);
+                return (
+                  <Pressable
+                    key={notification.id}
+                    onPress={() => {
+                      app.markNotifsRead([notification.id]);
+                      if (notification.href) router.push(notification.href);
+                    }}
+                    style={({ pressed }) => [styles.notificationRow, index < Math.min(3, notifications.length) - 1 && styles.rowBorder, pressed && styles.pressed]}
+                  >
+                    <View style={[styles.notificationIcon, { backgroundColor: notification.urgent ? colors.redSoft : meta.bg }]}>
+                      <Feather name={notification.icon ?? meta.icon} size={17} color={notification.urgent ? colors.red : meta.color} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <T w={unread ? 'bold' : 'semibold'} size={13.5} numberOfLines={1}>{notification.title}</T>
+                      <T size={12} color={colors.muted} numberOfLines={1} style={{ marginTop: 2 }}>{notification.body}</T>
+                    </View>
+                    {unread ? <View style={styles.notificationDot} /> : null}
+                  </Pressable>
+                );
+              })}
+            </Card>
+          </View>
+        </Animated.ScrollView>
+
+        <Animated.View
+          pointerEvents="box-none"
+          style={[
+            styles.collapsingHeader,
+            { height: Animated.add(headerHeight, insets.top) },
+          ]}
+        >
+          <Animated.View
+            pointerEvents={isCollapsed ? 'none' : 'auto'}
+            style={[
+              styles.expandedHeader,
+              {
+                top: insets.top + 10,
+                opacity: expandedOpacity,
+                transform: [{ translateY: expandedTranslate }],
+              },
+            ]}
+          >
+            <Row style={styles.brandRow}>
+              <Tab1Icon name="logo" size={42} style={styles.logoIcon} />
+              <View style={{ flex: 1 }}>
+                <T w="bold" size={17} color={colors.white} numberOfLines={1}>{app.store.name}</T>
+                <T size={12} color="#B8B5AE">Sổ bán hàng của bạn</T>
               </View>
-              <View style={styles.financeDivider} />
-              <View style={styles.financeItem}>
-                <Tab1Icon name="shopDebt" size={25} style={styles.financeIcon} />
-                <T w="bold" size={16}>{vnd(totalDebt)}</T>
-                <T size={11.5} color={colors.muted}>Còn nợ toàn tiệm</T>
-              </View>
+              <Pressable
+                onPress={() => router.push('/notifications')}
+                accessibilityRole="button"
+                accessibilityLabel="Thông báo"
+                style={({ pressed }) => [styles.headerIconButton, pressed && styles.pressed]}
+              >
+                <Animated.View style={{ transform: [{ rotate: bellRotate }] }}>
+                  <Feather name="bell" size={24} color={colors.white} />
+                </Animated.View>
+                {unreadNotifications > 0 ? <View style={styles.headerIconDot} /> : null}
+              </Pressable>
             </Row>
-          </Card>
-          <View style={styles.expandedSalesSection}>
-            <Row style={styles.expandedSalesHeading}>
-              <T w="bold" size={15.5} color={colors.white}>
-                Đơn hàng mới
+            <Row style={styles.overviewMeta}>
+              <T w="extrabold" size={21} color={colors.white}>Tổng quan</T>
+              <T w="bold" size={10.5} color="#B8B5AE">
+                {`${weekdayNames[now.getDay()]}, ${now.getDate()} tháng ${now.getMonth() + 1}`.toLocaleUpperCase('vi-VN')}
               </T>
             </Row>
-            <View style={styles.expandedActionGrid}>
+            <Card
+              style={styles.expandedRevenueCard}
+              onPress={() => router.push({ pathname: '/analytics', params: { period } })}
+              accessibilityLabel={`Xem phân tích doanh thu ${periodName}`}
+            >
+              <Row style={styles.revenueHeader} gap={8}>
+                <Row gap={7} style={{ flex: 1 }}>
+                  <Tab1Icon name="revenue" size={24} />
+                  <T w="bold" size={12} color={colors.muted} numberOfLines={1}>DOANH THU {periodName.toUpperCase()}</T>
+                </Row>
+                {revenueChange !== null ? (
+                  <T w="bold" size={11.5} color={revenueChange >= 0 ? colors.green : colors.red}>
+                    {revenueChange >= 0 ? '+' : ''}{Math.round(revenueChange * 100)}% so với hôm qua
+                  </T>
+                ) : null}
+              </Row>
+              {!totals ? (
+                <Skeleton width={190} height={34} radius={10} style={{ marginTop: 8 }} />
+              ) : totals.count ? (
+                <CountUp value={totals.revenue} format={vnd} w="extrabold" size={34} numberOfLines={1} adjustsFontSizeToFit style={styles.expandedRevenueValue} />
+              ) : (
+                <T w="extrabold" size={18} style={{ marginTop: 10 }}>Chưa có đơn trong kỳ</T>
+              )}
+              <Row style={styles.financeRow} gap={14}>
+                <View style={styles.financeItem}>
+                  <Tab1Icon name="closedOrders" size={25} style={styles.financeIcon} />
+                  <T w="bold" size={16}>{totals ? `${totals.count} đơn` : '—'}</T>
+                  <T size={11.5} color={colors.muted}>Đã chốt trong kỳ</T>
+                </View>
+                <View style={styles.financeDivider} />
+                <View style={styles.financeItem}>
+                  <Tab1Icon name="shopDebt" size={25} style={styles.financeIcon} />
+                  <T w="bold" size={16}>{vnd(totalDebt)}</T>
+                  <T size={11.5} color={colors.muted}>Còn nợ toàn tiệm</T>
+                </View>
+              </Row>
+            </Card>
+            <View style={styles.expandedSalesSection}>
+              <Row style={styles.expandedSalesHeading}>
+                <T w="bold" size={15.5} color={colors.white}>
+                  Đơn hàng mới
+                </T>
+              </Row>
+              <View style={styles.expandedActionGrid}>
+                <Pressable
+                  onPress={() => openAssistant('/voice')}
+                  style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Đọc đơn"
+                >
+                  <Tab1Icon name="readOrder" size={30} />
+                  <View style={styles.actionTextCol}>
+                    <T w="bold" size={14.5} color="#FFFFFF" numberOfLines={1}>
+                      Đọc đơn
+                    </T>
+                    <T size={10.5} color="rgba(255, 255, 255, 0.58)" numberOfLines={1} style={{ marginTop: 2 }}>
+                      Giọng nói
+                    </T>
+                  </View>
+                  <Feather name="chevron-right" size={14} color="rgba(255, 255, 255, 0.35)" />
+                </Pressable>
+
+                <Pressable
+                  onPress={() => router.push('/pos')}
+                  style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Chọn hàng"
+                >
+                  <Tab1Icon name="selectGoods" size={30} />
+                  <View style={styles.actionTextCol}>
+                    <T w="bold" size={14.5} color="#FFFFFF" numberOfLines={1}>
+                      Chọn hàng
+                    </T>
+                    <T size={10.5} color="rgba(255, 255, 255, 0.58)" numberOfLines={1} style={{ marginTop: 2 }}>
+                      Thủ công
+                    </T>
+                  </View>
+                  <Feather name="chevron-right" size={14} color="rgba(255, 255, 255, 0.35)" />
+                </Pressable>
+
+                <Pressable
+                  onPress={() => setScannerOpen(true)}
+                  style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Quét mã"
+                >
+                  <Tab1Icon name="scanCode" size={30} />
+                  <View style={styles.actionTextCol}>
+                    <T w="bold" size={14.5} color="#FFFFFF" numberOfLines={1}>
+                      Quét mã
+                    </T>
+                    <T size={10.5} color="rgba(255, 255, 255, 0.58)" numberOfLines={1} style={{ marginTop: 2 }}>
+                      Mã vạch / QR
+                    </T>
+                  </View>
+                  <Feather name="chevron-right" size={14} color="rgba(255, 255, 255, 0.35)" />
+                </Pressable>
+
+                <Pressable
+                  onPress={() => openAssistant('/ai')}
+                  style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Trợ lý AI"
+                >
+                  <Tab1Icon name="assistant" size={30} />
+                  <View style={styles.actionTextCol}>
+                    <T w="bold" size={14.5} color="#FFFFFF" numberOfLines={1}>
+                      Trợ lý AI
+                    </T>
+                    <T size={10.5} color="rgba(255, 255, 255, 0.58)" numberOfLines={1} style={{ marginTop: 2 }}>
+                      Gợi ý bán
+                    </T>
+                  </View>
+                  <Feather name="chevron-right" size={14} color="rgba(255, 255, 255, 0.35)" />
+                </Pressable>
+              </View>
+            </View>
+          </Animated.View>
+
+          <Animated.View
+            pointerEvents={isCollapsed ? 'auto' : 'none'}
+            style={[
+              styles.compactHeader,
+              {
+                top: insets.top + 6,
+                opacity: compactOpacity,
+                transform: [{ translateY: compactTranslate }],
+              },
+            ]}
+          >
+            {/* Tier 1: Context on left + Prominent Revenue on right */}
+            <View style={styles.compactTier1}>
+              <View style={styles.compactContext}>
+                <T w="bold" size={16} color={colors.white} numberOfLines={1}>
+                  Tổng quan
+                </T>
+                <T size={11} color="#A8A59E" numberOfLines={1} style={{ marginTop: 2 }}>
+                  {periodName} · {totals ? `${totals.count} đơn` : 'Đang tải'}
+                </T>
+              </View>
+
+              <Pressable
+                onPress={() => router.push({ pathname: '/analytics', params: { period } })}
+                accessibilityRole="button"
+                accessibilityLabel={`Xem phân tích doanh thu ${periodName}`}
+                style={({ pressed }) => [styles.compactRevenueBox, pressed && styles.pressed]}
+              >
+                <View style={styles.compactRevenueMeta}>
+                  <T w="bold" size={10} color="#A8A59E">
+                    DOANH THU
+                  </T>
+                  {revenueChange !== null ? (
+                    <T w="bold" size={10} color={revenueChange >= 0 ? colors.accent : '#F2A39A'}>
+                      {revenueChange >= 0 ? '+' : ''}{Math.round(revenueChange * 100)}%
+                    </T>
+                  ) : null}
+                </View>
+                {!totals ? (
+                  <Skeleton width={110} height={20} radius={6} style={{ marginTop: 2 }} />
+                ) : totals.count ? (
+                  <CountUp
+                    value={totals.revenue}
+                    format={vnd}
+                    w="extrabold"
+                    size={20}
+                    color={colors.white}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    style={styles.compactRevenueValue}
+                  />
+                ) : (
+                  <T w="bold" size={15} color={colors.white} numberOfLines={1} style={{ marginTop: 2 }}>
+                    0 đ
+                  </T>
+                )}
+              </Pressable>
+            </View>
+
+            {/* Tier 2: 4 quick actions */}
+            <View style={styles.compactTier2}>
               <Pressable
                 onPress={() => openAssistant('/voice')}
-                style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
+                style={({ pressed }) => [styles.compactActionBtn, pressed && styles.compactActionBtnPressed]}
                 accessibilityRole="button"
                 accessibilityLabel="Đọc đơn"
               >
-                <Tab1Icon name="readOrder" size={30} />
-                <View style={styles.actionTextCol}>
-                  <T w="bold" size={14.5} color="#FFFFFF" numberOfLines={1}>
-                    Đọc đơn
-                  </T>
-                  <T size={10.5} color="rgba(255, 255, 255, 0.58)" numberOfLines={1} style={{ marginTop: 2 }}>
-                    Giọng nói
-                  </T>
-                </View>
-                <Feather name="chevron-right" size={14} color="rgba(255, 255, 255, 0.35)" />
-              </Pressable>
-
-              <Pressable
-                onPress={() => router.push('/pos')}
-                style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
-                accessibilityRole="button"
-                accessibilityLabel="Chọn hàng"
-              >
-                <Tab1Icon name="selectGoods" size={30} />
-                <View style={styles.actionTextCol}>
-                  <T w="bold" size={14.5} color="#FFFFFF" numberOfLines={1}>
-                    Chọn hàng
-                  </T>
-                  <T size={10.5} color="rgba(255, 255, 255, 0.58)" numberOfLines={1} style={{ marginTop: 2 }}>
-                    Thủ công
-                  </T>
-                </View>
-                <Feather name="chevron-right" size={14} color="rgba(255, 255, 255, 0.35)" />
+                <Tab1Icon name="readOrder" size={20} />
+                <T w="semibold" size={11} color="#FFFFFF" numberOfLines={1}>
+                  Đọc đơn
+                </T>
               </Pressable>
 
               <Pressable
                 onPress={() => setScannerOpen(true)}
-                style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
+                style={({ pressed }) => [styles.compactActionBtn, pressed && styles.compactActionBtnPressed]}
                 accessibilityRole="button"
                 accessibilityLabel="Quét mã"
               >
-                <Tab1Icon name="scanCode" size={30} />
-                <View style={styles.actionTextCol}>
-                  <T w="bold" size={14.5} color="#FFFFFF" numberOfLines={1}>
-                    Quét mã
-                  </T>
-                  <T size={10.5} color="rgba(255, 255, 255, 0.58)" numberOfLines={1} style={{ marginTop: 2 }}>
-                    Mã vạch / QR
-                  </T>
-                </View>
-                <Feather name="chevron-right" size={14} color="rgba(255, 255, 255, 0.35)" />
+                <Tab1Icon name="scanCode" size={20} />
+                <T w="semibold" size={11} color="#FFFFFF" numberOfLines={1}>
+                  Quét mã
+                </T>
+              </Pressable>
+
+              <Pressable
+                onPress={() => router.push('/pos')}
+                style={({ pressed }) => [styles.compactActionBtn, pressed && styles.compactActionBtnPressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Chọn hàng"
+              >
+                <Tab1Icon name="selectGoods" size={20} />
+                <T w="semibold" size={11} color="#FFFFFF" numberOfLines={1}>
+                  Chọn hàng
+                </T>
               </Pressable>
 
               <Pressable
                 onPress={() => openAssistant('/ai')}
-                style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
+                style={({ pressed }) => [styles.compactActionBtn, pressed && styles.compactActionBtnPressed]}
                 accessibilityRole="button"
-                accessibilityLabel="Trợ lý AI"
+                accessibilityLabel="Trợ lý"
               >
-                <Tab1Icon name="assistant" size={30} />
-                <View style={styles.actionTextCol}>
-                  <T w="bold" size={14.5} color="#FFFFFF" numberOfLines={1}>
-                    Trợ lý AI
-                  </T>
-                  <T size={10.5} color="rgba(255, 255, 255, 0.58)" numberOfLines={1} style={{ marginTop: 2 }}>
-                    Gợi ý bán
-                  </T>
-                </View>
-                <Feather name="chevron-right" size={14} color="rgba(255, 255, 255, 0.35)" />
+                <Tab1Icon name="assistant" size={20} />
+                <T w="semibold" size={11} color="#FFFFFF" numberOfLines={1}>
+                  Trợ lý
+                </T>
               </Pressable>
             </View>
-          </View>
+          </Animated.View>
+          <Animated.View pointerEvents="none" style={[styles.headerDivider, { opacity: dividerOpacity }]} />
         </Animated.View>
-
-        <Animated.View
-          pointerEvents={isCollapsed ? 'auto' : 'none'}
-          style={[
-            styles.compactHeader,
-            {
-              top: insets.top + 6,
-              opacity: compactOpacity,
-              transform: [{ translateY: compactTranslate }],
-            },
-          ]}
-        >
-          {/* Tier 1: Context on left + Prominent Revenue on right */}
-          <View style={styles.compactTier1}>
-            <View style={styles.compactContext}>
-              <T w="bold" size={16} color={colors.white} numberOfLines={1}>
-                Tổng quan
-              </T>
-              <T size={11} color="#A8A59E" numberOfLines={1} style={{ marginTop: 2 }}>
-                {periodName} · {totals ? `${totals.count} đơn` : 'Đang tải'}
-              </T>
-            </View>
-
-            <Pressable
-              onPress={() => router.push({ pathname: '/analytics', params: { period } })}
-              accessibilityRole="button"
-              accessibilityLabel={`Xem phân tích doanh thu ${periodName}`}
-              style={({ pressed }) => [styles.compactRevenueBox, pressed && styles.pressed]}
-            >
-              <View style={styles.compactRevenueMeta}>
-                <T w="bold" size={10} color="#A8A59E">
-                  DOANH THU
-                </T>
-                {revenueChange !== null ? (
-                  <T w="bold" size={10} color={revenueChange >= 0 ? colors.accent : '#F2A39A'}>
-                    {revenueChange >= 0 ? '+' : ''}{Math.round(revenueChange * 100)}%
-                  </T>
-                ) : null}
-              </View>
-              {!totals ? (
-                <Skeleton width={110} height={20} radius={6} style={{ marginTop: 2 }} />
-              ) : totals.count ? (
-                <CountUp
-                  value={totals.revenue}
-                  format={vnd}
-                  w="extrabold"
-                  size={20}
-                  color={colors.white}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  style={styles.compactRevenueValue}
-                />
-              ) : (
-                <T w="bold" size={15} color={colors.white} numberOfLines={1} style={{ marginTop: 2 }}>
-                  0 đ
-                </T>
-              )}
-            </Pressable>
-          </View>
-
-          {/* Tier 2: 4 quick actions */}
-          <View style={styles.compactTier2}>
-            <Pressable
-              onPress={() => openAssistant('/voice')}
-              style={({ pressed }) => [styles.compactActionBtn, pressed && styles.compactActionBtnPressed]}
-              accessibilityRole="button"
-              accessibilityLabel="Đọc đơn"
-            >
-              <Tab1Icon name="readOrder" size={20} />
-              <T w="semibold" size={11} color="#FFFFFF" numberOfLines={1}>
-                Đọc đơn
-              </T>
-            </Pressable>
-
-            <Pressable
-              onPress={() => setScannerOpen(true)}
-              style={({ pressed }) => [styles.compactActionBtn, pressed && styles.compactActionBtnPressed]}
-              accessibilityRole="button"
-              accessibilityLabel="Quét mã"
-            >
-              <Tab1Icon name="scanCode" size={20} />
-              <T w="semibold" size={11} color="#FFFFFF" numberOfLines={1}>
-                Quét mã
-              </T>
-            </Pressable>
-
-            <Pressable
-              onPress={() => router.push('/pos')}
-              style={({ pressed }) => [styles.compactActionBtn, pressed && styles.compactActionBtnPressed]}
-              accessibilityRole="button"
-              accessibilityLabel="Chọn hàng"
-            >
-              <Tab1Icon name="selectGoods" size={20} />
-              <T w="semibold" size={11} color="#FFFFFF" numberOfLines={1}>
-                Chọn hàng
-              </T>
-            </Pressable>
-
-            <Pressable
-              onPress={() => openAssistant('/ai')}
-              style={({ pressed }) => [styles.compactActionBtn, pressed && styles.compactActionBtnPressed]}
-              accessibilityRole="button"
-              accessibilityLabel="Trợ lý"
-            >
-              <Tab1Icon name="assistant" size={20} />
-              <T w="semibold" size={11} color="#FFFFFF" numberOfLines={1}>
-                Trợ lý
-              </T>
-            </Pressable>
-          </View>
-        </Animated.View>
-        <Animated.View pointerEvents="none" style={[styles.headerDivider, { opacity: dividerOpacity }]} />
-      </Animated.View>
-    </View>
-    <BarcodeScannerModal
-      visible={scannerOpen}
-      onClose={() => setScannerOpen(false)}
-      onProductScanned={(product) => {
-        setScannerOpen(false);
-        router.push({ pathname: '/pos', params: { autoAdd: product.id } });
-      }}
-      onCheckout={() => {
-        setScannerOpen(false);
-        router.push('/checkout');
-      }}
-    />
-    <AssistantIntroModal
-      visible={!app.guideDismissed}
-      onDismiss={app.dismissGuide}
-      onVoice={() => openAssistant('/voice')}
-      onChat={() => openAssistant('/ai')}
-    />
+      </View>
+      <BarcodeScannerModal
+        visible={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onProductScanned={(product) => {
+          setScannerOpen(false);
+          router.push({ pathname: '/pos', params: { autoAdd: product.id } });
+        }}
+        onCheckout={() => {
+          setScannerOpen(false);
+          router.push('/checkout');
+        }}
+      />
+      <AssistantIntroModal
+        visible={!app.guideDismissed}
+        onDismiss={app.dismissGuide}
+        onVoice={() => openAssistant('/voice')}
+        onChat={() => openAssistant('/ai')}
+      />
     </>
   );
 }
@@ -713,16 +697,10 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 20,
-    backgroundColor: 'transparent',
+    backgroundColor: overviewHeaderPurple,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
     overflow: 'hidden',
-  },
-  headerBaseLayer: {
-    backgroundColor: overviewHeaderPurple,
-  },
-  headerRoundedLayer: {
-    backgroundColor: overviewHeaderPurple,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
   },
   expandedHeader: { position: 'absolute', left: 16, right: 16 },
   brandRow: { minHeight: 46, gap: 10 },

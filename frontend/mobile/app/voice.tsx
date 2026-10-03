@@ -7,6 +7,8 @@ import {
   Animated,
   Easing,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -40,34 +42,33 @@ type Msg = {
 };
 
 const voiceTheme = {
-  primary: '#482AAC', // 🟣 Purple — Brand / AI / Tech
-  primaryDark: '#361E87',
-  primarySoft: '#F0ECFA',
-  primaryBorder: '#D2C7F3',
-  pageBg: '#F8F9FD',
-  cardBg: '#FFFFFF',
-  border: '#E8ECF2',
-  borderLight: '#F1F4F9',
-  muted: '#6B7280',
-  faint: '#9CA3AF',
-  ink: '#111827',
-  inkSecondary: '#374151',
-  green: '#416E38', // 🟢 Business Green — Sales / Growth / Success
-  greenSoft: '#EDF4EB',
-  amber: '#F8DF69', // 🟡 Coin Yellow — Revenue / POS / Accent
-  amberSoft: '#FEFCE8',
-  amberFg: '#92400E',
-  red: '#EF4444',
-  redSoft: '#FEE2E2',
+  primary: colors.brand,
+  primaryDark: colors.brandPressed,
+  primarySoft: colors.brandSoft,
+  primaryBorder: colors.brandBorder,
+  pageBg: colors.bg,
+  cardBg: colors.card,
+  border: colors.border,
+  borderLight: colors.borderLight,
+  muted: colors.muted,
+  faint: colors.faint,
+  ink: colors.ink,
+  inkSecondary: colors.inkSecondary,
+  green: colors.data.revenue,
+  greenSoft: colors.data.revenueSoft,
+  amber: colors.goldBright,
+  amberSoft: colors.data.debtSoft,
+  amberFg: colors.data.debt,
+  red: colors.red,
+  redSoft: colors.redSoft,
 };
 
-
 const productThumbTones = [
-  { bg: '#FFF7ED', fg: '#EA580C', icon: 'coffee' as const },
-  { bg: '#FEE2E2', fg: '#DC2626', icon: 'zap' as const },
-  { bg: '#EFF6FF', fg: '#2563EB', icon: 'droplet' as const },
-  { bg: '#ECFDF5', fg: '#059669', icon: 'shopping-bag' as const },
-  { bg: '#F5F3FF', fg: '#7C3AED', icon: 'package' as const },
+  { bg: '#EFEDE7', fg: '#4B463F', icon: 'coffee' as const },
+  { bg: '#F8E9C8', fg: '#78510C', icon: 'zap' as const },
+  { bg: '#E8E6DD', fg: '#4D5148', icon: 'droplet' as const },
+  { bg: '#EFF2E7', fg: '#45513E', icon: 'shopping-bag' as const },
+  { bg: '#EAF1E1', fg: '#355A25', icon: 'package' as const },
 ];
 
 const voiceAssets = {
@@ -387,6 +388,14 @@ export default function Voice() {
     return () => clearTimeout(t);
   }, [msgs, items, partial]);
 
+  useEffect(() => {
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const sub = Keyboard.addListener(hideEvent, () => {
+      setShowManualInput(false);
+    });
+    return () => sub.remove();
+  }, []);
+
   const push = (from: Msg['from'], t: string, emotion?: Msg['emotion']) => {
     setMsgs((m) => [
       ...m,
@@ -605,7 +614,10 @@ export default function Voice() {
   };
 
   return (
-    <View style={styles.screen}>
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <StatusBar style="dark" />
 
       {/* Top Header Bar */}
@@ -644,10 +656,10 @@ export default function Voice() {
               pressed && { opacity: 0.8 },
             ]}
           >
-            <Feather name="save" size={15} color={voiceTheme.primary} />
             <T w="bold" size={13} color={voiceTheme.primary}>
-              Lưu đơn
+              Tiếp tục
             </T>
+            <Feather name="arrow-right" size={14} color={voiceTheme.primary} />
           </Pressable>
         </Row>
       </View>
@@ -901,80 +913,104 @@ export default function Voice() {
           </View>
         </View>
 
-        {showManualInput ? (
-          <View style={styles.inlineInputCard}>
-            <View style={styles.inlineInputKeyboardIcon}>
-              <MaterialCommunityIcons name="keyboard-outline" size={17} color={voiceTheme.primary} />
-            </View>
+        {/* Nút Thanh toán to tách biệt ở ngoài cuốn sổ */}
+        <Pressable
+          onPress={checkout}
+          disabled={!items.length}
+          style={({ pressed }) => [
+            styles.bigCheckoutBtn,
+            !items.length && styles.bigCheckoutDisabled,
+            pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },
+          ]}
+        >
+          <Row gap={8} style={{ alignItems: 'center', justifyContent: 'center' }}>
+            <Feather name="credit-card" size={18} color={items.length ? colors.white : voiceTheme.muted} />
+            <T w="extrabold" size={16} color={items.length ? colors.white : voiceTheme.muted}>
+              Thanh toán
+            </T>
+            <Feather name="arrow-right" size={18} color={items.length ? colors.white : voiceTheme.muted} />
+          </Row>
+        </Pressable>
+      </ScrollView>
+
+      {showManualInput ? (
+        <View style={styles.manualDock}>
+          <View style={styles.manualInputCard}>
             <TextInput
               value={manualText}
               onChangeText={setManualText}
               onSubmitEditing={sendManualText}
-              placeholder="Nhập món, số lượng hoặc giá..."
+              onBlur={() => setShowManualInput(false)}
+              placeholder="Nhập món và số lượng (VD: 2 cà phê sữa)..."
               placeholderTextColor="#9CA3AF"
-              style={styles.inlineTextInput}
+              style={styles.manualTextInput}
               returnKeyType="send"
               autoFocus
             />
             <Pressable
               onPress={sendManualText}
-              style={({ pressed }) => [styles.inlineSendBtn, pressed && { opacity: 0.8 }]}
+              disabled={!manualText.trim()}
+              style={({ pressed }) => [
+                styles.manualSendBtn,
+                !manualText.trim() && { opacity: 0.4 },
+                pressed && { opacity: 0.8 },
+              ]}
             >
-              <Feather name="send" size={14} color={colors.white} />
+              <Feather name="arrow-up" size={16} color={colors.white} />
             </Pressable>
           </View>
-        ) : null}
-      </ScrollView>
+        </View>
+      ) : (
+        /* Bottom Voice Recording Dock (Khung ghi âm đáy màn hình đúng bố cục) */
+        <View style={[styles.bottomDock, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+          {/* Top Sheet Notch */}
+          <View style={styles.dockNotch} />
 
-      {/* Bottom Voice Recording Dock (Khung ghi âm đáy màn hình đúng bố cục) */}
-      <View style={[styles.bottomDock, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-        {/* Top Sheet Notch */}
-        <View style={styles.dockNotch} />
+          {/* 3 Columns: [Nhập tay]  |  [Central Voice Orb + Waves]  |  [Xoá đơn] */}
+          <Row style={styles.dockControlsRow}>
+            {/* Left Button: Nhập tay */}
+            <Pressable
+              onPress={() => {
+                triggerFeedback('selection');
+                setShowManualInput(true);
+              }}
+              style={({ pressed }) => [styles.dockActionCard, pressed && { opacity: 0.75 }]}
+            >
+              <MaterialCommunityIcons name="keyboard-outline" size={20} color={voiceTheme.primary} />
+              <T w="bold" size={11.5} color={voiceTheme.inkSecondary} style={{ marginTop: 4 }}>
+                Nhập tay
+              </T>
+            </Pressable>
 
-        {/* 3 Columns: [Nhập tay]  |  [Central Voice Orb + Waves]  |  [Xoá đơn] */}
-        <Row style={styles.dockControlsRow}>
-          {/* Left Button: Nhập tay */}
-          <Pressable
-            onPress={() => {
-              triggerFeedback('selection');
-              setShowManualInput((s) => !s);
-            }}
-            style={({ pressed }) => [styles.dockActionCard, pressed && { opacity: 0.75 }]}
-          >
-            <MaterialCommunityIcons name="keyboard-outline" size={20} color={voiceTheme.primary} />
-            <T w="bold" size={11.5} color={voiceTheme.inkSecondary} style={{ marginTop: 4 }}>
-              Nhập tay
-            </T>
-          </Pressable>
+            {/* Center: Large Glowing Voice Orb with Waves */}
+            <CentralVoiceOrb
+              recording={recording}
+              signalLevel={micSignalLevel}
+              onPressIn={startRecording}
+              onPressOut={() => finishRecording()}
+            />
 
-          {/* Center: Large Glowing Voice Orb with Waves */}
-          <CentralVoiceOrb
-            recording={recording}
-            signalLevel={micSignalLevel}
-            onPressIn={startRecording}
-            onPressOut={() => finishRecording()}
-          />
+            {/* Right Button: Xoá đơn */}
+            <Pressable
+              onPress={() => {
+                triggerFeedback('selection');
+                if (items.length > 0) setConfirmClear(true);
+              }}
+              style={({ pressed }) => [styles.dockActionCard, pressed && { opacity: 0.75 }]}
+            >
+              <Feather name="trash-2" size={18} color={voiceTheme.primary} />
+              <T w="bold" size={11.5} color={voiceTheme.inkSecondary} style={{ marginTop: 4 }}>
+                Xoá đơn
+              </T>
+            </Pressable>
+          </Row>
 
-          {/* Right Button: Xoá đơn */}
-          <Pressable
-            onPress={() => {
-              triggerFeedback('selection');
-              if (items.length > 0) setConfirmClear(true);
-            }}
-            style={({ pressed }) => [styles.dockActionCard, pressed && { opacity: 0.75 }]}
-          >
-            <Feather name="trash-2" size={18} color={voiceTheme.primary} />
-            <T w="bold" size={11.5} color={voiceTheme.inkSecondary} style={{ marginTop: 4 }}>
-              Xoá đơn
-            </T>
-          </Pressable>
-        </Row>
-
-        {/* Subtitle text under Voice Orb */}
-        <T w="medium" size={12.5} color={voiceTheme.muted} style={styles.dockSubtitleText}>
-          {recording ? 'Đang lắng nghe… Thả tay để xử lý' : 'Nhấn để ghi âm đơn hàng'}
-        </T>
-      </View>
+          {/* Subtitle text under Voice Orb */}
+          <T w="medium" size={12.5} color={voiceTheme.muted} style={styles.dockSubtitleText}>
+            {recording ? 'Đang lắng nghe… Thả tay để xử lý' : 'Nhấn để ghi âm đơn hàng'}
+          </T>
+        </View>
+      )}
 
       {/* Dialog thêm món mới chưa có trong danh mục */}
       <Dialog
@@ -1029,19 +1065,19 @@ export default function Voice() {
           toast(`Đã thêm ${li.name}`);
         }}
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#F3F4F9',
+    backgroundColor: voiceTheme.pageBg,
   },
   headerShell: {
     paddingHorizontal: 16,
     paddingBottom: 8,
-    backgroundColor: '#F3F4F9',
+    backgroundColor: voiceTheme.pageBg,
   },
   headerLogoImage: {
     width: 34,
@@ -1086,15 +1122,18 @@ const styles = StyleSheet.create({
   },
   aiMessageRow: {
     alignItems: 'flex-start',
+    width: '100%',
   },
   aiBubbleCard: {
+    flex: 1,
+    minWidth: 0,
     backgroundColor: voiceTheme.cardBg,
     borderRadius: 18,
     borderTopLeftRadius: 4,
     paddingHorizontal: 13,
     paddingVertical: 9,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: voiceTheme.border,
     ...shadow(1),
   },
   aiBubbleHeader: {
@@ -1104,52 +1143,58 @@ const styles = StyleSheet.create({
   },
   userBubbleRow: {
     justifyContent: 'flex-end',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     alignSelf: 'flex-end',
+    maxWidth: '92%',
   },
   userBubbleCard: {
+    flexShrink: 1,
     backgroundColor: voiceTheme.primarySoft,
     borderRadius: 16,
     borderTopRightRadius: 4,
     paddingHorizontal: 12,
     paddingVertical: 7,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'baseline',
   },
   userAvatarDisc: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#E0E7FF',
+    backgroundColor: voiceTheme.primaryBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
-  // Inline Input Card
-  inlineInputCard: {
-    backgroundColor: voiceTheme.cardBg,
-    borderRadius: 16,
+  // Manual Input Dock (Thanh phụ kiện bàn phím đồng bộ)
+  manualDock: {
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  manualInputCard: {
+    height: 44,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: voiceTheme.border,
+    borderColor: '#E5E7EB',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    marginBottom: 12,
-    ...shadow(0),
+    paddingHorizontal: 14,
+    gap: 8,
   },
-  inlineInputKeyboardIcon: {
-    padding: 6,
-  },
-  inlineTextInput: {
+  manualTextInput: {
     flex: 1,
     height: 38,
-    fontSize: 13.5,
+    fontSize: 14,
     fontFamily: font.medium,
     color: voiceTheme.ink,
     outlineStyle: 'none',
   } as never,
-  inlineSendBtn: {
+  manualSendBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
@@ -1334,6 +1379,21 @@ const styles = StyleSheet.create({
     borderTopColor: '#F1F5F9',
     alignItems: 'baseline',
     justifyContent: 'space-between',
+  },
+  bigCheckoutBtn: {
+    marginTop: 6,
+    marginBottom: 14,
+    backgroundColor: voiceTheme.primary,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow(2),
+  },
+  bigCheckoutDisabled: {
+    backgroundColor: '#E2E8F0',
+    opacity: 0.75,
   },
 
   // Bottom Voice Recording Dock

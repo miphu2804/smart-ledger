@@ -50,7 +50,7 @@ function ManagementRow({ image, icon, iconTone = 'brand', title, subtitle, right
         ) : null}
       </View>
       {right}
-      <Feather name="chevron-right" size={16} color="#948EA5" />
+      <Feather name="chevron-right" size={16} color={colors.disabled} />
     </Pressable>
   );
 }
@@ -62,13 +62,12 @@ export default function More() {
   const contact = app.user.phone || app.user.email;
 
   return (
-    <Screen bg="#F6F3FF" padded={false} contentStyle={styles.content}>
-      <View style={styles.topGlow} pointerEvents="none" />
+    <Screen bg={colors.bg} padded={false} contentStyle={styles.content}>
       <View style={styles.header}>
         <T w="extrabold" size={24} color={colors.ink}>
           Quản lý
         </T>
-        <T w="medium" size={13} color="#746F92" style={styles.headerSubtitle}>
+        <T w="medium" size={13} color={colors.muted} style={styles.headerSubtitle}>
           Quản lý cửa hàng của bạn
         </T>
       </View>
@@ -93,11 +92,11 @@ export default function More() {
               {app.user.name} · {contact}
             </T>
           </View>
-          <Feather name="chevron-right" size={18} color="#948EA5" />
+          <Feather name="chevron-right" size={18} color={colors.disabled} />
         </Row>
       </Pressable>
 
-      <T w="bold" size={13} color="#746F92" style={styles.sectionTitle}>
+      <T w="bold" size={12.5} color={colors.muted} style={styles.sectionTitle}>
         QUẢN LÝ KINH DOANH
       </T>
       <View style={styles.groupCard}>
@@ -128,7 +127,7 @@ export default function More() {
         />
       </View>
 
-      <T w="bold" size={13} color="#746F92" style={styles.sectionTitle}>
+      <T w="bold" size={12.5} color={colors.muted} style={styles.sectionTitle}>
         TÀI KHOẢN & ỨNG DỤNG
       </T>
       <View style={styles.groupCard}>
@@ -140,6 +139,7 @@ export default function More() {
         />
         <ManagementRow
           image={managementIcons.logout}
+          iconTone="danger"
           title="Đăng xuất"
           subtitle="Thoát khỏi tài khoản hiện tại"
           onPress={() => setConfirmLogout(true)}
@@ -148,10 +148,10 @@ export default function More() {
       </View>
 
       <View style={styles.footerMark}>
-        <T w="bold" size={12.5} color="#746F92">
+        <T w="bold" size={12.5} color={colors.muted}>
           Sổ Nghe Lời
         </T>
-        <T size={11.5} color="#8C87A6" style={{ marginTop: 2 }}>
+        <T size={11.5} color={colors.faint} style={{ marginTop: 2 }}>
           Phiên bản 1.0.0
         </T>
       </View>
@@ -181,15 +181,6 @@ const styles = StyleSheet.create({
     paddingBottom: 96,
     position: 'relative',
   },
-  topGlow: {
-    position: 'absolute',
-    top: -86,
-    right: -72,
-    width: 230,
-    height: 230,
-    borderRadius: 115,
-    backgroundColor: 'rgba(72,42,172,0.10)',
-  },
   header: {
     paddingTop: 16,
     paddingBottom: 16,
@@ -198,11 +189,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   storeCard: {
-    backgroundColor: 'rgba(255,255,255,0.94)',
+    backgroundColor: colors.card,
     borderRadius: 18,
     padding: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.82)',
+    borderColor: colors.border,
     ...shadow(1),
   },
   cardPressed: {
@@ -213,11 +204,11 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 14,
-    backgroundColor: '#2F8F46',
+    backgroundColor: colors.brand,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2.5,
-    borderColor: '#E8F6E8',
+    borderWidth: 2,
+    borderColor: colors.brandSoft,
   },
   sectionTitle: {
     marginTop: 18,
@@ -226,11 +217,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   groupCard: {
-    backgroundColor: 'rgba(255,255,255,0.96)',
+    backgroundColor: colors.card,
     borderRadius: 18,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.86)',
+    borderColor: colors.border,
     overflow: 'hidden',
     ...shadow(1),
   },
@@ -243,7 +234,7 @@ const styles = StyleSheet.create({
   },
   rowBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: '#F0ECF5',
+    borderBottomColor: colors.borderLight,
   },
   rowPressed: {
     opacity: 0.72,

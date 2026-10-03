@@ -18,39 +18,39 @@ import { useApp } from '../src/store/AppStore';
 import { colors, font, shadow } from '../src/theme';
 
 const salesColors = {
-  primary: '#5E2BFF', // Royal Violet / Purple như trong thiết kế
-  primarySoft: '#F3E8FF',
-  primaryTint: '#FAF7FF',
-  primaryBorder: '#DDD6FE',
-  pageBg: '#F8F9FD',
-  cardBg: '#FFFFFF',
-  border: '#E8ECF2',
-  borderLight: '#F1F4F9',
-  muted: '#6B7280',
-  faint: '#9CA3AF',
-  ink: '#111827',
-  inkSecondary: '#374151',
-  stockGreen: '#059669',
-  stockGreenBg: '#ECFDF5',
-  stockGreenBorder: '#A7F3D0',
+  primary: colors.brand, // #482AAC
+  primarySoft: colors.brandSoft,
+  primaryTint: colors.brandTint,
+  primaryBorder: colors.brandBorder,
+  pageBg: colors.bg,
+  cardBg: colors.card,
+  border: colors.border,
+  borderLight: colors.borderLight,
+  muted: colors.muted,
+  faint: colors.faint,
+  ink: colors.ink,
+  inkSecondary: colors.inkSecondary,
+  stockGreen: colors.data.revenue,
+  stockGreenBg: colors.data.revenueSoft,
+  stockGreenBorder: '#C2E7B0',
 };
 
 const productTones = [
-  { bg: '#EBF5FF', fg: '#2563EB', badgeBg: '#FFFFFF', badgeFg: '#059669' }, // Light Ice Blue
-  { bg: '#FFF7ED', fg: '#D97706', badgeBg: '#FFFFFF', badgeFg: '#059669' }, // Warm Amber
-  { bg: '#FFF1F2', fg: '#E11D48', badgeBg: '#FFFFFF', badgeFg: '#059669' }, // Light Peach
-  { bg: '#EFF6FF', fg: '#3B82F6', badgeBg: '#FFFFFF', badgeFg: '#059669' }, // Sky Blue
-  { bg: '#F0FDF4', fg: '#16A34A', badgeBg: '#FFFFFF', badgeFg: '#059669' }, // Light Green
-  { bg: '#F5F3FF', fg: '#7C3AED', badgeBg: '#FFFFFF', badgeFg: '#059669' }, // Light Violet
+  { bg: '#EFEDE7', fg: '#4B463F', badgeBg: '#FFFFFF', badgeFg: colors.data.revenue },
+  { bg: '#F8E9C8', fg: '#78510C', badgeBg: '#FFFFFF', badgeFg: colors.data.revenue },
+  { bg: '#E8E6DD', fg: '#4D5148', badgeBg: '#FFFFFF', badgeFg: colors.data.revenue },
+  { bg: '#EFF2E7', fg: '#45513E', badgeBg: '#FFFFFF', badgeFg: colors.data.revenue },
+  { bg: '#F8E2DE', fg: '#862B20', badgeBg: '#FFFFFF', badgeFg: colors.data.revenue },
+  { bg: '#EAF1E1', fg: '#355A25', badgeBg: '#FFFFFF', badgeFg: colors.data.revenue },
 ];
 
 function categoryMeta(label: string): { icon: React.ComponentProps<typeof Feather>['name']; color: string } {
   const key = normalizeText(label);
-  if (key.includes('uong') || key.includes('drink')) return { icon: 'coffee', color: '#3B82F6' };
-  if (key.includes('an') || key.includes('food')) return { icon: 'coffee', color: '#475569' };
-  if (key.includes('tap') || key.includes('grocery')) return { icon: 'shopping-bag', color: '#EF4444' };
-  if (key.includes('thuc') || key.includes('nong')) return { icon: 'package', color: '#10B981' };
-  return { icon: 'archive', color: '#6366F1' };
+  if (key.includes('uong') || key.includes('drink')) return { icon: 'coffee', color: colors.brand };
+  if (key.includes('an') || key.includes('food')) return { icon: 'coffee', color: colors.muted };
+  if (key.includes('tap') || key.includes('grocery')) return { icon: 'shopping-bag', color: colors.data.expense };
+  if (key.includes('thuc') || key.includes('nong')) return { icon: 'package', color: colors.data.revenue };
+  return { icon: 'archive', color: colors.brand };
 }
 
 function PosCategoryChips({
@@ -101,25 +101,41 @@ function PosActionButton({
   label,
   onPress,
   compact,
+  tone = 'purple',
 }: {
   icon: React.ComponentProps<typeof Feather>['name'];
   label: string;
   onPress: () => void;
   compact?: boolean;
+  tone?: 'purple' | 'gold';
 }) {
+  const isPurple = tone === 'purple';
   return (
     <Pressable
       onPress={() => {
         triggerFeedback('selection');
         onPress();
       }}
-      style={({ pressed }) => [compact ? styles.actionCompact : styles.actionHero, pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }]}
+      style={({ pressed }) => [
+        compact
+          ? isPurple
+            ? styles.actionCompactPurple
+            : styles.actionCompactGold
+          : isPurple
+            ? styles.actionHeroPurple
+            : styles.actionHeroGold,
+        pressed && { opacity: 0.84, transform: [{ scale: 0.97 }] },
+      ]}
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <Feather name={icon} size={compact ? 17 : 16} color={salesColors.primary} />
+      <Feather
+        name={icon}
+        size={compact ? 17 : 16}
+        color={isPurple ? '#F8DF69' : colors.brand}
+      />
       {!compact ? (
-        <T w="bold" size={13} color={salesColors.ink} numberOfLines={1}>
+        <T w="bold" size={13} color={isPurple ? colors.white : colors.ink} numberOfLines={1}>
           {label}
         </T>
       ) : null}
@@ -427,12 +443,12 @@ function ProductCard({ product: p, inCart, viewMode, onAdd, onSubtract, onOutOfS
 
       {/* Info Area */}
       <View style={styles.infoContainer}>
-        <T w="bold" size={13.5} numberOfLines={2} ellipsizeMode="tail" style={styles.productName}>
+        <T w="semibold" size={12.5} numberOfLines={2} ellipsizeMode="tail" style={styles.productName}>
           {p.name}
         </T>
 
         <Row style={styles.priceRow}>
-          <T w="extrabold" size={16.5} color={salesColors.primary}>
+          <T w="extrabold" size={15.5} color={salesColors.primary}>
             {vnd(p.sellingPriceVnd)}
           </T>
 
@@ -655,8 +671,8 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
         pinned={
           <Row gap={8} style={styles.pinnedHeader}>
             <PosSearchBox value={q} onChangeText={setQ} compact />
-            <PosActionButton icon="maximize" label="Quét mã" compact onPress={() => setScannerOpen(true)} />
-            <PosActionButton icon="mic" label="Đọc đơn" compact onPress={() => router.push('/voice')} />
+            <PosActionButton tone="gold" icon="maximize" label="Quét mã" compact onPress={() => setScannerOpen(true)} />
+            <PosActionButton tone="purple" icon="mic" label="Đọc đơn" compact onPress={() => router.push('/voice')} />
           </Row>
         }
       >
@@ -675,8 +691,8 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
                 {products.length} sản phẩm
               </T>
             </View>
-            <PosActionButton icon="maximize" label="Quét mã" onPress={() => setScannerOpen(true)} />
-            <PosActionButton icon="mic" label="Đọc đơn" onPress={() => router.push('/voice')} />
+            <PosActionButton tone="gold" icon="maximize" label="Quét mã" onPress={() => setScannerOpen(true)} />
+            <PosActionButton tone="purple" icon="mic" label="Đọc đơn" onPress={() => router.push('/voice')} />
           </Row>
 
           <PosSearchBox
@@ -701,7 +717,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
         <Animated.ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
-            paddingHorizontal: 16,
+            paddingHorizontal: 10,
             paddingTop: insets.top + headerHeight + 10,
             paddingBottom: inTab ? (insets.bottom + (count > 0 ? 190 : 96)) : (insets.bottom + (count > 0 ? 110 : 28)),
           }}
@@ -775,8 +791,8 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
               ))}
             </View>
           ) : (
-            <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
-              <View style={{ flex: 1, gap: 10 }}>
+            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
+              <View style={{ flex: 1, gap: 8 }}>
                 {leftCol.map((p) => (
                   <ProductCard
                     key={p.id}
@@ -789,7 +805,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
                   />
                 ))}
               </View>
-              <View style={{ flex: 1, gap: 10 }}>
+              <View style={{ flex: 1, gap: 8 }}>
                 {rightCol.map((p) => (
                   <ProductCard
                     key={p.id}
@@ -1037,27 +1053,53 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 2,
   },
-  actionHero: {
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: salesColors.cardBg,
+  actionHeroPurple: {
+    height: 38,
+    borderRadius: 13,
+    backgroundColor: colors.brand,
     borderWidth: 1,
-    borderColor: salesColors.primaryBorder,
+    borderColor: colors.brandPressed,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 12,
     flexDirection: 'row',
     gap: 6,
+    ...shadow(1),
   },
-  actionCompact: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: salesColors.cardBg,
-    borderWidth: 1,
-    borderColor: salesColors.primaryBorder,
+  actionHeroGold: {
+    height: 38,
+    borderRadius: 13,
+    backgroundColor: colors.goldSoft,
+    borderWidth: 1.2,
+    borderColor: colors.goldBright,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    gap: 6,
+    ...shadow(1),
+  },
+  actionCompactPurple: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    backgroundColor: colors.brand,
+    borderWidth: 1,
+    borderColor: colors.brandPressed,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow(1),
+  },
+  actionCompactGold: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    backgroundColor: colors.goldSoft,
+    borderWidth: 1.2,
+    borderColor: colors.goldBright,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow(1),
   },
   searchBox: {
     height: 42,
@@ -1161,7 +1203,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: salesColors.cardBg,
-    borderRadius: 18,
+    borderRadius: 13,
     borderWidth: 1,
     borderColor: salesColors.border,
     overflow: 'hidden',
@@ -1176,14 +1218,16 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     width: '100%',
-    height: 138,
+    height: 172,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-    borderRadius: 14,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
     overflow: 'hidden',
     backgroundColor: '#F3F4F6',
-    margin: 4,
     alignSelf: 'stretch',
   },
   productGridImage: {
@@ -1230,14 +1274,15 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   infoContainer: {
-    paddingHorizontal: 10,
-    paddingTop: 6,
+    paddingHorizontal: 9,
+    paddingTop: 8,
     paddingBottom: 10,
   },
   productName: {
-    lineHeight: 18,
+    fontSize: 12.5,
+    lineHeight: 16.5,
     color: salesColors.ink,
-    minHeight: 36,
+    minHeight: 33,
   },
   priceRow: {
     marginTop: 6,
@@ -1284,7 +1329,7 @@ const styles = StyleSheet.create({
   },
   listCard: {
     backgroundColor: salesColors.cardBg,
-    borderRadius: 16,
+    borderRadius: 13,
     borderWidth: 1,
     borderColor: salesColors.border,
     padding: 10,
@@ -1385,20 +1430,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#1E1B4B',
+    backgroundColor: colors.brand,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 26,
     borderWidth: 1.5,
-    borderColor: 'rgba(139, 92, 246, 0.35)',
-    ...shadow(4),
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+    ...shadow(3),
     zIndex: 35,
   },
   cartIcon: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1409,7 +1454,7 @@ const styles = StyleSheet.create({
     minWidth: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: '#F8DF69',
+    backgroundColor: colors.goldBright,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 3,
@@ -1417,7 +1462,7 @@ const styles = StyleSheet.create({
   cartDivider: {
     width: 1,
     height: 28,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.20)',
   },
   checkoutBtn: {
     height: 40,
@@ -1429,9 +1474,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkoutBtnActive: {
-    backgroundColor: '#F8DF69',
+    backgroundColor: colors.goldBright,
   },
   checkoutBtnDisabled: {
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
 });

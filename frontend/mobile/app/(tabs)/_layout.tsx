@@ -8,7 +8,7 @@ import { T } from '../../src/components/ui';
 import { ZenRing } from '../../src/components/ZenRing';
 import { triggerFeedback } from '../../src/lib/feedback';
 import { useReducedMotion } from '../../src/motion';
-import { colors, shadow } from '../../src/theme';
+import { colors } from '../../src/theme';
 
 type TabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>['tabBar']>>[0];
 
@@ -181,13 +181,13 @@ function TabBar({ state, navigation }: TabBarProps) {
                   name={meta.icon}
                   variant={focused ? 'filled' : 'outline'}
                   size={23}
-                  color={focused ? '#FFFFFF' : '#78746B'}
+                  color={focused ? colors.brandInk : colors.muted}
                 />
               </Animated.View>
               <T
                 w={focused ? 'bold' : 'medium'}
                 size={11.5}
-                color={focused ? '#FFFFFF' : '#78746B'}
+                color={focused ? colors.brandInk : colors.muted}
                 style={{ marginTop: 2.5 }}
               >
                 {meta.label}
@@ -203,7 +203,7 @@ function TabBar({ state, navigation }: TabBarProps) {
 
 export default function TabsLayout() {
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <Tabs screenOptions={{ headerShown: false, animation: 'fade' }} tabBar={(p) => <TabBar {...p} />}>
         <Tabs.Screen name="index" />
         <Tabs.Screen name="invoices" />
@@ -227,18 +227,18 @@ const styles = StyleSheet.create({
   bar: {
     height: 64,
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderWidth: 1,
-    borderColor: '#ECEAE4',
+    borderColor: colors.border,
     borderRadius: 32,
     paddingHorizontal: 4,
     position: 'relative',
     ...(Platform.select({
       web: {
-        boxShadow: '0 8px 24px rgba(24, 22, 18, 0.08), 0 2px 6px rgba(24, 22, 18, 0.03)',
+        boxShadow: '0 8px 24px rgba(26, 25, 22, 0.08), 0 2px 6px rgba(26, 25, 22, 0.03)',
       } as ViewStyle,
       default: {
-        shadowColor: '#1A1814',
+        shadowColor: '#1A1916',
         shadowOpacity: 0.08,
         shadowRadius: 14,
         shadowOffset: { width: 0, height: 4 },
@@ -252,9 +252,9 @@ const styles = StyleSheet.create({
     top: 5,
     height: 52,
     borderRadius: 26,
-    backgroundColor: '#262522',
+    backgroundColor: colors.brand,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.12)',
   },
   tab: { flex: 1, minHeight: 62, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
 });
