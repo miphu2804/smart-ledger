@@ -1,4 +1,10 @@
+language: "vi-VN"
+
+tone_instructions: >
+  Use Vietnamese for all generated review prose, including summaries, walkthroughs, architecture/risk sections, and inline comments. Keep code identifiers, paths, API/test names, and error codes unchanged. State the problem, impact, and fix/decision.
+
 reviews:
+  high_level_summary: false
   auto_review:
     enabled: true
     base_branches:

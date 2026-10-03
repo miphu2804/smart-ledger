@@ -9,7 +9,7 @@ import { colors } from '../theme';
 import { MascotBadge } from './MascotBadge';
 import { T } from './ui';
 
-const RING_SIZE = 64;
+const RING_SIZE = 72;
 const DOCK = 8;
 const MENU_WIDTH = 224;
 const MENU_ITEM_HEIGHT = 60;
@@ -21,7 +21,7 @@ const EDGE = 12;
 const HOLD_MS = 500;
 const HOLD_DELAY_MS = 150;
 const IDLE_MS = 3000;
-const IDLE_OPACITY = 0.55;
+const IDLE_OPACITY = 0.85;
 const SNAP_LOOKAHEAD_MS = 200;
 const HOLD_SIZE = RING_SIZE + 12;
 const HOLD_RADIUS = RING_SIZE / 2 + 3;
@@ -300,9 +300,9 @@ export function ZenRing() {
     menuBottomLimit,
   );
   const menuActions = [
-    { title: 'Chatbot', subtitle: 'Hỏi về việc bán hàng', icon: 'message-circle' as const, onPress: openChat },
-    { title: 'Giọng nói', subtitle: 'Lên đơn bằng giọng nói', icon: 'mic' as const, onPress: openVoice },
-    { title: 'Gợi ý', subtitle: 'Xem phân tích nhanh', icon: 'bar-chart-2' as const, onPress: openInsights },
+    { title: 'Hỏi đáp', subtitle: 'Hỏi về việc bán hàng', icon: 'message-circle' as const, onPress: openChat },
+    { title: 'Đọc đơn', subtitle: 'Lên đơn bằng lời nói', icon: 'mic' as const, onPress: openVoice },
+    { title: 'Báo cáo', subtitle: 'Xem số liệu hôm nay', icon: 'bar-chart-2' as const, onPress: openInsights },
   ];
   const slideX = menuSide === 'left' ? 36 : menuSide === 'right' ? -36 : 0;
   const slideY = menuSide === 'below' ? -20 : 0;
@@ -349,7 +349,7 @@ export function ZenRing() {
                         onHoverOut={() => setHoveredAction(null)}
                         onPress={action.onPress}
                       >
-                        <View style={styles.menuIcon}><Feather name={action.icon} size={19} color={colors.accentInk} /></View>
+                        <View style={styles.menuIcon}><Feather name={action.icon} size={19} color={colors.brand} /></View>
                         <View style={{ flex: 1 }}>
                           <T w="bold" size={15}>{action.title}</T>
                           <T size={12} color={colors.muted}>{action.subtitle}</T>
@@ -363,16 +363,16 @@ export function ZenRing() {
           ) : null}
           {showHint && !isSales ? (
             <View pointerEvents="none" style={[styles.hint, { left: hintLeft, top: point.current.y + 13 }]}>
-              <T w="semibold" size={12} color={colors.muted}>Giữ để nói</T>
+              <T w="semibold" size={12} color={colors.muted}>Giữ để đọc đơn</T>
             </View>
           ) : null}
           <Animated.View
             {...pan.panHandlers}
             accessible
             accessibilityRole="button"
-            accessibilityLabel="Mascot trợ lý AI"
-            accessibilityHint="Chạm để chọn Chatbot, Giọng nói hoặc Gợi ý. Giữ để mở Giọng nói. Có thể kéo đến vị trí khác."
-            accessibilityActions={[{ name: 'activate', label: 'Mở tùy chọn AI' }, { name: 'longpress', label: 'Mở Giọng nói' }]}
+            accessibilityLabel="Trợ lý bán hàng"
+            accessibilityHint="Chạm để mở Hỏi đáp, Đọc đơn hoặc Báo cáo. Giữ để Đọc đơn. Có thể kéo sang vị trí khác."
+            accessibilityActions={[{ name: 'activate', label: 'Mở trợ lý' }, { name: 'longpress', label: 'Mở Đọc đơn' }]}
             onAccessibilityAction={(event) => {
               if (event.nativeEvent.actionName === 'longpress') openVoice();
               else toggleMenu();
@@ -384,21 +384,23 @@ export function ZenRing() {
             ]}
           >
             <MascotBadge size={RING_SIZE} />
-            <Svg pointerEvents="none" width={HOLD_SIZE} height={HOLD_SIZE} style={styles.holdRing}>
-              <AnimatedCircle
-                cx={HOLD_SIZE / 2}
-                cy={HOLD_SIZE / 2}
-                r={HOLD_RADIUS}
-                stroke={colors.primary}
-                strokeWidth={3}
-                strokeLinecap="round"
-                fill="none"
-                strokeDasharray={HOLD_LENGTH}
-                strokeDashoffset={hold.interpolate({ inputRange: [0, 1], outputRange: [HOLD_LENGTH, 0] })}
-                rotation={-90}
-                origin={`${HOLD_SIZE / 2}, ${HOLD_SIZE / 2}`}
-              />
-            </Svg>
+            {Platform.OS === 'web' ? null : (
+              <Svg pointerEvents="none" width={HOLD_SIZE} height={HOLD_SIZE} style={styles.holdRing}>
+                <AnimatedCircle
+                  cx={HOLD_SIZE / 2}
+                  cy={HOLD_SIZE / 2}
+                  r={HOLD_RADIUS}
+                  stroke={colors.primary}
+                  strokeWidth={3}
+                  strokeLinecap="round"
+                  fill="none"
+                  strokeDasharray={HOLD_LENGTH}
+                  strokeDashoffset={hold.interpolate({ inputRange: [0, 1], outputRange: [HOLD_LENGTH, 0] })}
+                  rotation={-90}
+                  origin={`${HOLD_SIZE / 2}, ${HOLD_SIZE / 2}`}
+                />
+              </Svg>
+            )}
           </Animated.View>
         </>
       ) : null}
@@ -426,8 +428,8 @@ const hoverShadow = Platform.select<ViewStyle>({
 const styles = StyleSheet.create({
   overlay: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, zIndex: 10 },
   ring: {
-    position: 'absolute', left: 0, top: 0, width: RING_SIZE, height: RING_SIZE, borderRadius: RING_SIZE / 2,
-    backgroundColor: colors.white,
+    position: 'absolute', left: 0, top: 0, width: RING_SIZE, height: RING_SIZE,
+    backgroundColor: 'transparent',
     alignItems: 'center', justifyContent: 'center', ...ringShadow,
   },
   ringDragging: dragShadow,

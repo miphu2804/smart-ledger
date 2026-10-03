@@ -1,3 +1,122 @@
+### [2026-10-03 07:54 UTC+07:00] — [UI/UX] Floating Cart Bar Elevation, Free-floating 3D Robot Mascot & Realistic Product Photos
+
+**Done:**
+1. **Floating Cart Bar (POS / Sales Tab)**:
+   - Elevated position (`bottom: insets.bottom + 104px`) to prevent collision with bottom TabBar.
+   - Conditional rendering (`count > 0`) with smooth spring entry/exit animation (`Animated.spring`, `translateY` + `scale` + `opacity`).
+   - Dynamic ScrollView `paddingBottom` (`190px` when active, `96px` when empty).
+2. **Free-Floating 3D Assistant Mascot (ZenRing)**:
+   - Replaced old badge with transparent 3D mascot (`bubblelogo.png`) floating freely without white circular bounding box or clipping.
+   - Enlarged `RING_SIZE` from `64px` to `72px`.
+   - Decreased idle fade (`IDLE_OPACITY: 0.85`), keeping the robot crisp and bright.
+3. **Voice Screen Refinements (Đọc đơn)**:
+   - Updated manual input button and inline keyboard icon to keyboard symbol (`MaterialCommunityIcons: keyboard-outline`).
+   - Sổ Nghe Lời chat avatar mapped to glossy 3D robot.
+   - Voice button calm breathing animations with soft ambient ripples.
+4. **Realistic Product Photos**:
+   - Created `src/lib/productImages.ts` mapping Vietnamese grocery, beverage, and retail items to realistic product photos.
+   - Replaced generic placeholder icons/letters in Voice order notebook, POS Grid & List cards, Cart Sheet, and Checkout review with real product photos.
+5. **Safe Navigation**:
+   - Guarded all `router.back()` calls with `router.canGoBack()` fallback to prevent unhandled `GO_BACK` exceptions.
+
+**Changed files:**
+- `frontend/mobile/src/lib/productImages.ts` — created product image resolver
+- `frontend/mobile/assets/bubblelogo.png` — added transparent 3D mascot asset
+- `frontend/mobile/assets/glossy-robot-notebook.png` — added robot mascot asset
+- `frontend/mobile/src/components/MascotBadge.tsx` — updated to free-floating mascot
+- `frontend/mobile/src/components/ZenRing.tsx` — updated size, opacity, and transparent ring container
+- `frontend/mobile/app/voice.tsx` — updated keyboard icon, product photos, safe goBack
+- `frontend/mobile/app/pos.tsx` — elevated floating cart bar, product photos, safe goBack
+- `frontend/mobile/app/checkout.tsx` — product photos in order review
+- `frontend/mobile/app/profile.tsx` & `frontend/mobile/app/(auth)/email.tsx` — safe goBack
+- `PROGRESS.md` — logged entry
+
+### [2026-10-02 17:40 UTC+07:00] — [UI/UX] 3D Metallic Action Cards, Sharp White-to-Grey Gradient & AI Processor Icon
+
+**Done:** Updated "Đơn hàng mới" 4 action buttons on tab Tổng quan:
+1. **Longer Rectangular Cards (3D Shape)**: Increased card height to ~68px (`minHeight: 68`, `borderRadius: 14`), providing a comfortable rectangular form factor for title, abstract script, icon, and trailing chevron.
+2. **Sharp White-to-Grey 3D Shading**: Built with `LinearGradient` from silvery light grey down to metallic dark grey (`['#27292C', '#17181A', '#0D0E10']`), crisp 3D top-rim highlight border (`borderTopColor: 'rgba(255, 255, 255, 0.36)'`), and depth drop shadow.
+3. **Larger Icons with Fine Strokes**: Increased icon optical size to `24px` while keeping strokes fine (`strokeWidth: 1.6`), ensuring high sharpness without thickening borders.
+4. **AI Processor Chip Icon**: Replaced assistant headset with a high-tech AI microchip icon featuring circuit connector pins and an internal neural spark core.
+5. **Trailing `>` Affordance**: Added chevron `›` on the right side of each card (`Feather` `chevron-right` with subtle contrast).
+6. **Abstract Script Subtitles**: Added concise 3-6 word abstract explanations beneath large titles (half size ~10.5px):
+   - Đọc đơn: *Lên đơn bằng giọng nói*
+   - Chọn hàng: *Chọn sản phẩm thủ công*
+   - Quét mã: *Nhận diện mã vạch nhanh*
+   - Trợ lý AI: *Phân tích và gợi ý thông minh*
+
+**Changed files:**
+- `frontend/mobile/src/components/icons.tsx` — updated ActionIcon with size 24, stroke 1.6, and high-tech AI processor chip
+- `frontend/mobile/app/(tabs)/index.tsx` — implemented 3D rectangular cards with LinearGradient, trailing chevrons, and abstract script subtitles
+- `PROGRESS.md` — logged entry
+
+**Check:** `npm run typecheck` passed (0 errors); `npm run export:web` passed (code 0).
+
+### [2026-10-02 17:08 UTC+07:00] — [UI/UX] Floating Bubble Navigation, Authoritative Status Bar Rule & Minimalist Outline Actions
+
+**Done:** Refined the UI following user feedback:
+1. **Authoritative Status Bar Rule**: Fixed rule applied — `Tổng quan` (`index`) is ALWAYS `light` (white text/icons for time, battery, wifi, signals), and all other tabs (`invoices`, `sales`, `more`) are ALWAYS `dark` (black text/icons). Single authoritative controller in `(tabs)/_layout.tsx` with dynamic key flushing; removed all conflicting `<StatusBar>` instances from child tab screens.
+2. **Floating Bubble Navigation**: Redesigned bottom navigation into a floating bubble capsule:
+   - Bar: solid white background (`#FFFFFF`), capsule shape (`borderRadius: 32`), thin delicate border (`#ECEAE4`), clean elevation shadow.
+   - Indicator: soft dark bubble (`#262522`, `borderRadius: 26`), lighter and softer than harsh solid black.
+   - Bubble elastic physics: on press, bubble squashes/softens (`scaleX: 1.05`, `scaleY: 0.95`); on release, springs back. On tab transition, indicator stretches in flight (`scaleX: 1.10`, `scaleY: 0.94`) and springs into shape at the target tab. Reduced motion preserved.
+3. **“Đơn hàng mới” Minimalist Outline Actions**:
+   - Eliminated solid card backgrounds and container boxes. The 4 actions (Đọc đơn, Chọn hàng, Quét mã, Trợ lý) now blend directly into the deep black header background (`backgroundColor: 'transparent'`).
+   - Clean, thin white outline border (`borderWidth: 1`, `borderColor: 'rgba(255, 255, 255, 0.18)'`, moderate `borderRadius: 13`).
+   - Fine outline icons (stroke ~1.7) placed directly inline next to labels without circle/square containers:
+     - Đọc đơn: fine outline microphone with subtle grill detailing.
+     - Chọn hàng: fine outline goods/cart.
+     - Quét mã: scanner frame with barcode strips and laser beam.
+     - Trợ lý: human assistant headset / support operator symbol, avoiding generic AI sparkles.
+
+**Changed files:**
+- `frontend/mobile/src/components/icons.tsx` — updated ActionIcon with fine outline stroke (1.7) and assistant headset icon
+- `frontend/mobile/app/(tabs)/_layout.tsx` — implemented solid white capsule floating bar, soft dark bubble indicator with elastic stretch/squash spring physics, authoritative status bar rule
+- `frontend/mobile/app/(tabs)/index.tsx` — updated "Đơn hàng mới" to transparent outline cards directly on black, refined collapsed quick actions, removed local StatusBar
+- `frontend/mobile/app/(tabs)/invoices.tsx` — removed redundant local StatusBar
+- `frontend/mobile/app/(tabs)/more.tsx` — removed redundant local StatusBar
+- `frontend/mobile/app/pos.tsx` — conditioned StatusBar to only render when not embedded in tab
+- `PROGRESS.md` — logged entry
+
+**Check:** `npm run typecheck` passed (0 errors); `npm run export:web` passed (code 0).
+
+### [2026-10-02 16:50 UTC+07:00] — [UI/UX] Visual System Overhaul: Icon Family, Floating Navigation, Action Cards & Header 2-Tier Hierarchy
+
+**Done:** Implemented the UI/UX visual system overhaul requested:
+1. **Icon Design System**: Created `frontend/mobile/src/components/icons.tsx` with unified SVG geometric rounded icons (`viewBox="0 0 24 24"`, stroke ~2.2-2.3, balanced optical weights):
+   - `TabIcon`: 4 bottom tabs with paired geometric representations — INACTIVE outline (lighter weight) vs ACTIVE solid/filled (high contrast).
+   - `ActionIcon`: `mic`, `scan`, `cart`, `assistant`, `chevron`, `bell`.
+2. **Bottom Navigation**: Renamed tab `Tiện ích` → `Quản lý` in `_layout.tsx` and `more.tsx`. Connected moving single active indicator with dark/translucent surface, tactile micro-bounce spring animation (~1.09) on tab press, and reduced motion support.
+3. **Status Bar Synchronization**: Synchronized native status bar appearance dynamically across all tabs — `light` style for dark header on `Tổng quan` (`index`), `dark` style for light backgrounds on `invoices`, `sales`/`pos`, and `more` (`Quản lý`).
+4. **ActionCard Component**: Created reusable `ActionCard` (`minHeight: 74-80`, `flexDirection: 'row'`, `alignItems: 'center'`, left visual anchor, middle title + optional subtitle, trailing chevron affordance, subtle border/elevation, dark/light surface variants, press scale spring animation).
+5. **Tổng quan — "Đơn hàng mới"**: Replaced giant buttons with a 4-action functional grid: Đọc đơn (`/voice`), Quét mã (`BarcodeScannerModal`), Chọn hàng (`/pos`), and Trợ lý (`/ai`).
+6. **Tổng quan — Collapsed Header**: Redesigned collapsed header into 2 clear horizontal tiers: Tier 1 (Context on left, prominent right-aligned revenue `xxx.xxxđ` without squeezing); Tier 2 (4 compact quick action chips with touch target >= 44). Smooth non-clipping transition between expanded and collapsed states.
+
+**Changed files:**
+- `frontend/mobile/src/components/icons.tsx` — created unified TabIcon and ActionIcon system
+- `frontend/mobile/src/components/ui.tsx` — added ActionCard primitive with dark/light themes
+- `frontend/mobile/app/(tabs)/_layout.tsx` — updated to TabIcon, Quản lý label, dynamic status bar, and refined bounce
+- `frontend/mobile/app/(tabs)/more.tsx` — renamed title to Quản lý, added StatusBar dark
+- `frontend/mobile/app/(tabs)/invoices.tsx` — added StatusBar dark
+- `frontend/mobile/app/pos.tsx` — added StatusBar dark
+- `frontend/mobile/app/(tabs)/index.tsx` — implemented 4-action grid for "Đơn hàng mới" and 2-tier collapsed header with prominent revenue
+- `PROGRESS.md` — logged entry
+
+**Check:** `npm run typecheck` passed (0 errors); `npm run export:web` passed (code 0).
+
+### [2026-10-02 15:55 UTC+07:00] — [UI/UX] Mobile UI/UX overhaul across all screens
+
+**Done:** Completed mobile UI/UX overhaul: bottom navigation floating bar with animated single-indicator, collapsible headers, standardized Feather icons, natural merchant wording, destructive action confirmations, haptic/feedback integration, and reduced motion coverage.
+
+**Changed files:**
+- `frontend/mobile/app/*`, `frontend/mobile/src/*` — UI/UX overhaul, animations, feedback, and destructive states
+- `docs/design/mobile-wording-review.md` — mobile wording review table updated
+- `PROGRESS.md` — updated
+
+**Flow explained:** Navigation uses a floating bar with active tab indicator spring motion. Long screens (Home, Invoices, Products) implement collapsible headers. Destructive operations (delete product, remove expense, clear POS cart, logout) are guarded with consistent confirmation dialogs. Primary actions and status confirmations provide tactile/sound feedback while respecting accessibility reduced motion preferences.
+
+**Check:** `npm run typecheck` passed (0 errors); `npm run export:web` passed; `git diff --check` passed.
+
 ### [2026-10-01 UTC+07:00] — [Config] Run Core and AI locally against staging with Firebase
 
 **Done:** Database credentials live only in the repo-root `.env.staging`/`.env.production`; `backend/core/.env` keeps Firebase settings and `backend/ai/.env` keeps model settings. Compose reads `backend/core/.env` for the Firebase project and key path and loads `backend/ai/.env` through `env_file`, replacing the root `.env` and `FIREBASE_CREDENTIALS_PATH`. Mobile iOS dev build is configured through `app.json` (`disableSPM`, `usePrecompiledModules: false`, iOS `googleServicesFile`). Correction to the 2026-09-30 config entry: `AppConfig` does not load `.env.<APP_ENV>`; the code reads only the process environment and `backend/ai/.env`, so hosts export `.env.staging` before starting AI.

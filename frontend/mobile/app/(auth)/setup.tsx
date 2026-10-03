@@ -53,7 +53,7 @@ export default function Setup() {
         Tiệm của bạn tên gì?
       </T>
       <T size={14} color={colors.muted} style={{ marginTop: 6, marginBottom: 18 }}>
-        Tên sẽ hiện trên hoá đơn và báo cáo
+        Tên sẽ hiện trên đơn hàng và báo cáo
       </T>
       <Field placeholder="VD: Tiệm tạp hoá cô Thỏ" value={name} onChangeText={setName} />
 
@@ -61,7 +61,7 @@ export default function Setup() {
         Bạn bán gì?
       </T>
       <T size={12} color={colors.faint} style={{ marginBottom: 12 }}>
-        Chọn một hoặc nhiều ngành — AI sẽ gợi ý danh mục phù hợp
+        Chọn một hoặc nhiều ngành để gợi ý danh mục phù hợp
       </T>
       <View style={styles.grid}>
         {industryList.map((it) => {
@@ -98,5 +98,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 8,
   },
-  itemOn: { borderColor: colors.primary, backgroundColor: colors.primaryTint },
+  itemOn: { borderColor: colors.brand, backgroundColor: colors.brandTint },
 });

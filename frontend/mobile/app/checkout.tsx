@@ -1,8 +1,9 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Image, Pressable, StyleSheet, View } from 'react-native';
 import { AddItemSheet } from '../src/components/AddItemSheet';
+import { BarcodeScannerModal } from '../src/components/BarcodeScannerModal';
 import { useToast } from '../src/components/brand';
 import { FakeQR } from '../src/components/FakeQR';
 import { Badge, Button, Card, Chips, EmptyState, Field, Header, IconName, Row, Screen, Stepper, T } from '../src/components/ui';
@@ -10,8 +11,11 @@ import type { LineItem, ProductView } from '../src/data/types';
 import { productApi } from '../src/lib/catalogApi';
 import { errorMessage } from '../src/lib/errors';
 import { vnd } from '../src/lib/format';
+import { triggerFeedback } from '../src/lib/feedback';
+import { getProductImage } from '../src/lib/productImages';
 import { saleDraftApi } from '../src/lib/salesApi';
 import { itemsTotal, methodLabel } from '../src/lib/stats';
+import { useReducedMotion } from '../src/motion';
 import { useApp } from '../src/store/AppStore';
 import { colors, font } from '../src/theme';
 
@@ -38,6 +42,7 @@ export default function Checkout() {
   const [debtUpfront, setDebtUpfront] = useState<number | null>(null);
   const [edit, setEdit] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [doneId, setDoneId] = useState<number | null>(null);
   const [doneTotal, setDoneTotal] = useState(0);
   const [err, setErr] = useState('');
@@ -55,6 +60,16 @@ export default function Checkout() {
     loadProducts();
   }, [loadProducts]);
 
+  const handleProductScanned = (product: ProductView, _barcode?: string, qty: number = 1) => {
+    setItems((cur) => {
+      const idx = cur.findIndex((i) => i.productId === product.id);
+      if (idx >= 0) {
+        return cur.map((x, i) => (i === idx ? { ...x, qty: x.qty + qty } : x));
+      }
+      return [...cur, { productId: product.id, name: product.name, price: product.sellingPriceVnd, qty }];
+    });
+  };
+
   const total = itemsTotal(items);
   const change = given !== null ? given - total : 0;
   const quick = Array.from(new Set([total, Math.ceil(total / 50000) * 50000, Math.ceil(total / 100000) * 100000, 200000, 500000]))
@@ -68,8 +83,8 @@ export default function Checkout() {
     return (
       <Screen>
         <Header title="Thanh toán" />
-        <EmptyState icon="shopping-bag" title="Chưa có đơn để thanh toán" hint="Hãy nói hoặc chọn hàng trước" />
-        <Button title="Bán hàng" icon="mic" variant="gold" onPress={() => router.replace('/voice')} />
+        <EmptyState icon="shopping-bag" title="Chưa có đơn" hint="Đọc đơn hoặc chọn hàng trước" />
+        <Button title="Đọc đơn" icon="mic" variant="gold" onPress={() => router.replace('/voice')} />
       </Screen>
     );
   }
@@ -109,6 +124,7 @@ export default function Checkout() {
       setDoneTotal(sale.totalVnd);
       setDoneId(sale.id);
     } catch (e) {
+      triggerFeedback('error');
       setErr(errorMessage(e));
     } finally {
       setBusy(false);
@@ -142,10 +158,10 @@ export default function Checkout() {
         title="Thanh toán"
         subtitle={
           app.draft?.source === 'voice'
-            ? 'Đơn tạo bằng giọng nói'
+            ? 'Nguồn: Đọc đơn'
             : app.draft?.source === 'pos'
-              ? 'Đơn chọn từ POS'
-              : 'Đơn nhập tay'
+              ? 'Nguồn: Bán hàng'
+              : 'Nguồn: Nhập tay'
         }
       />
 
@@ -154,15 +170,32 @@ export default function Checkout() {
           <T w="bold" size={15} style={{ flex: 1 }}>
             Món trong đơn
           </T>
-          <Pressable onPress={() => setEdit((e) => !e)} hitSlop={8}>
-            <T w="bold" size={13} color={colors.primary}>
-              {edit ? 'Xong' : 'Sửa'}
-            </T>
-          </Pressable>
+          <Row gap={12}>
+            <Pressable onPress={() => setScannerOpen(true)} hitSlop={8}>
+              <Row gap={4} style={{ alignItems: 'center' }}>
+                <Feather name="camera" size={14} color={colors.primary} />
+                <T w="bold" size={13} color={colors.primary}>
+                  Quét mã
+                </T>
+              </Row>
+            </Pressable>
+            <Pressable onPress={() => setEdit((e) => !e)} hitSlop={8}>
+              <T w="bold" size={13} color={colors.primary}>
+                {edit ? 'Xong' : 'Sửa'}
+              </T>
+            </Pressable>
+          </Row>
         </Row>
         {items.map((it, idx) => (
-          <Row key={`${it.productId ?? it.name}-${idx}`} style={styles.line}>
-            <View style={{ flex: 1 }}>
+          <Row key={`${it.productId ?? it.name}-${idx}`} style={[styles.line, { alignItems: 'center' }]}>
+            <View style={styles.checkoutThumbWrap}>
+              <Image
+                source={{ uri: getProductImage(it.name) }}
+                style={styles.checkoutThumb}
+                resizeMode="cover"
+              />
+            </View>
+            <View style={{ flex: 1, marginLeft: 10 }}>
               <Row gap={6}>
                 <T w="semibold" size={14}>
                   {it.name}
@@ -192,13 +225,30 @@ export default function Checkout() {
           </Row>
         ))}
         {edit ? (
-          <Button title="Thêm món" icon="plus" variant="soft" small onPress={() => setAddOpen(true)} style={{ marginTop: 10 }} />
+          <Row gap={8} style={{ marginTop: 10 }}>
+            <Button
+              title="Quét mã"
+              icon="camera"
+              variant="soft"
+              small
+              onPress={() => setScannerOpen(true)}
+              style={{ flex: 1 }}
+            />
+            <Button
+              title="Thêm món"
+              icon="plus"
+              variant="soft"
+              small
+              onPress={() => setAddOpen(true)}
+              style={{ flex: 1 }}
+            />
+          </Row>
         ) : null}
         {app.draft?.transcript ? (
           <View style={styles.transcript}>
             <Feather name="mic" size={12} color={colors.primary} />
             <T size={12} color={colors.muted} style={{ flex: 1, fontStyle: 'italic' }}>
-              “{app.draft.transcript}”
+              "{app.draft.transcript}"
             </T>
           </View>
         ) : null}
@@ -217,9 +267,9 @@ export default function Checkout() {
                 setMethod(m.key);
                 setErr('');
               }}
-              style={[styles.method, on && styles.methodOn]}
+              style={({ pressed }) => [styles.method, on && styles.methodOn, pressed && styles.methodPressed]}
             >
-              <Feather name={m.icon} size={20} color={on ? colors.accentInk : colors.faint} />
+              <Feather name={m.icon} size={20} color={on ? colors.ink : colors.faint} />
               <T w={on ? 'bold' : 'semibold'} size={12} color={on ? colors.ink : colors.muted} style={{ marginTop: 6 }}>
                 {methodLabel[m.key]}
               </T>
@@ -359,6 +409,14 @@ export default function Checkout() {
           toast(`Đã thêm ${li.name}`);
         }}
       />
+
+      <BarcodeScannerModal
+        visible={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        products={products}
+        onProductScanned={handleProductScanned}
+        onProductCreated={(p) => setProducts((cur) => [...cur, p])}
+      />
     </Screen>
   );
 }
@@ -374,30 +432,32 @@ function Success({
   method: 'cash' | 'transfer' | 'debt';
   change: number;
 }) {
-  const toast = useToast();
+  const reducedMotion = useReducedMotion();
   const scale = useRef(new Animated.Value(0.4)).current;
   useEffect(() => {
-    Animated.spring(scale, { toValue: 1, friction: 4, useNativeDriver: true }).start();
-  }, [scale]);
+    if (reducedMotion) scale.setValue(1);
+    else Animated.spring(scale, { toValue: 1, friction: 4, useNativeDriver: true }).start();
+    triggerFeedback('success');
+  }, [reducedMotion, scale]);
   return (
     <Screen
       footer={
         <>
-          <Button title="Tạo đơn mới" icon="mic" variant="gold" onPress={() => router.replace('/voice')} />
+          <Button title="Đơn mới" icon="mic" variant="gold" onPress={() => router.replace('/voice')} />
           <Row style={{ marginTop: 8 }}>
             <Button
-              title="Xem hoá đơn"
+              title="Xem đơn"
               variant="outline"
               small
               style={{ flex: 1, height: 44 }}
               onPress={() => {
-                // Bỏ các màn bán hàng (giọng nói / POS / thanh toán) khỏi stack để "quay lại" từ hoá đơn về trang chủ
+                // Bỏ các màn bán hàng khỏi stack để quay lại từ chi tiết đơn về Tổng quan.
                 router.dismissTo('/(tabs)');
                 router.push(`/invoice/${id}`);
               }}
             />
             <Button
-              title="Về trang chủ"
+              title="Về Tổng quan"
               variant="outline"
               small
               style={{ flex: 1, height: 44 }}
@@ -421,12 +481,6 @@ function Success({
           {methodLabel[method]}
           {change > 0 ? ` · Thối lại ${vnd(change)}` : ''}
         </T>
-        <Pressable onPress={() => toast('Chưa kết nối máy in. Vui lòng thử lại sau.', 'err')} style={styles.print}>
-          <Feather name="printer" size={16} color={colors.green} />
-          <T w="bold" size={13} color={colors.green}>
-            In hoá đơn
-          </T>
-        </Pressable>
       </View>
     </Screen>
   );
@@ -434,7 +488,20 @@ function Success({
 
 const styles = StyleSheet.create({
   line: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
-  transcript: { flexDirection: 'row', gap: 6, marginTop: 12, backgroundColor: colors.primaryTint, borderRadius: 10, padding: 10 },
+  checkoutThumbWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  checkoutThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  transcript: { flexDirection: 'row', gap: 6, marginTop: 12, backgroundColor: colors.brandTint, borderRadius: 10, padding: 10 },
   method: {
     flex: 1,
     alignItems: 'center',
@@ -444,24 +511,15 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.white,
   },
-  methodOn: { borderColor: colors.accent, backgroundColor: colors.primaryTint },
+  methodOn: { borderColor: colors.ink, backgroundColor: 'rgba(26,25,22,0.035)' },
+  methodPressed: { opacity: 0.82, transform: [{ scale: 0.97 }] },
   qr: { padding: 12, borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white },
   check: {
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.green,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  print: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 24,
-    backgroundColor: colors.greenSoft,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
   },
 });

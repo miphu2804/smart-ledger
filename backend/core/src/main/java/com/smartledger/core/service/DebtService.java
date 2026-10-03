@@ -11,6 +11,6 @@ public interface DebtService {
 
     DebtResponse getById(VerifiedFirebaseToken token, String shopId, String debtId);
 
-    DebtRepaymentResponse repay(VerifiedFirebaseToken token, String shopId, String debtId,
+    DebtRepaymentResponse repay(VerifiedFirebaseToken token, String shopId, String debtId, String idempotencyKey,
             DebtRepaymentRequest request);
 }

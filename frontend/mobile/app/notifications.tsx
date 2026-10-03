@@ -6,6 +6,7 @@ import { Badge, Card, Chips, EmptyState, Header, Row, Screen, T } from '../src/c
 import { hhmm, relDay } from '../src/lib/format';
 import { buildNotifications, NOTIF_CATEGORIES, Notif, NotifCategory, notifCategoryMeta } from '../src/lib/notifications';
 import { useApp } from '../src/store/AppStore';
+import { triggerFeedback } from '../src/lib/feedback';
 import { colors } from '../src/theme';
 
 type Filter = 'all' | 'unread' | NotifCategory;
@@ -40,6 +41,7 @@ export default function Notifications() {
 
   const open = (n: Notif) => {
     app.markNotifsRead([n.id]);
+    triggerFeedback('selection');
     if (n.href) router.push(n.href);
   };
 
@@ -47,10 +49,19 @@ export default function Notifications() {
     <Screen>
       <Header
         title="Thông báo"
-        subtitle={unread.length ? `${unread.length} thông báo chưa đọc` : 'Bạn đã đọc hết thông báo'}
+        subtitle={unread.length ? `${unread.length} thông báo chưa đọc` : 'Không có thông báo mới'}
         right={
           unread.length ? (
-            <Pressable onPress={() => app.markNotifsRead(unread.map((n) => n.id))} hitSlop={8} style={styles.readAll}>
+            <Pressable
+              onPress={() => {
+                app.markNotifsRead(unread.map((n) => n.id));
+                triggerFeedback('selection');
+              }}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Đọc hết thông báo"
+              style={({ pressed }) => [styles.readAll, pressed && { opacity: 0.75 }]}
+            >
               <Feather name="check-circle" size={14} color={colors.primary} />
               <T w="bold" size={12.5} color={colors.primary}>
                 Đọc hết

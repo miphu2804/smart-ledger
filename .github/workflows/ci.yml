@@ -95,7 +95,16 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: maven
-      - run: bash ./mvnw --batch-mode --no-transfer-progress verify
+      - name: Verify Core with PostgreSQL tests enabled
+        env:
+          CORE_TEST_POSTGRES_URL: jdbc:postgresql://127.0.0.1:5432/smartledger
+          CORE_TEST_POSTGRES_USERNAME: smartledger
+          CORE_TEST_POSTGRES_PASSWORD: smartledger
+        run: bash ./mvnw --batch-mode --no-transfer-progress verify
+      - name: Require PostgreSQL test execution
+        run: |
+          python3 scripts/test_verify_postgres_tests.py
+          python3 scripts/verify_postgres_tests.py target/surefire-reports
       - name: Migrate a fresh PostgreSQL database
         run: |
           docker run --rm --network host \

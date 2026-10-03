@@ -1,5 +1,7 @@
 package com.smartledger.core.service.impl;
 
+import com.smartledger.core.enums.AuditAction;
+import com.smartledger.core.service.AuditLogService;
 import com.smartledger.core.dto.request.ProductPatchRequest;
 import com.smartledger.core.dto.request.ProductWriteRequest;
 import com.smartledger.core.dto.response.ProductResponse;
@@ -16,12 +18,14 @@ import com.smartledger.core.service.ProductService;
 import com.smartledger.core.service.ShopService;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Service
 public class ProductServiceImpl implements ProductService {
+    private final AuditLogService auditLogService;
 
     private final ShopService shopService;
     private final ProductRepository productRepository;
@@ -30,7 +34,8 @@ public class ProductServiceImpl implements ProductService {
     public ProductServiceImpl(
             ShopService shopService,
             ProductRepository productRepository,
-            CategoryRepository categoryRepository) {
+            CategoryRepository categoryRepository, AuditLogService auditLogService) {
+        this.auditLogService = auditLogService;
         this.shopService = shopService;
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
@@ -43,7 +48,11 @@ public class ProductServiceImpl implements ProductService {
         validateReferencesAndStock(shop.getId(), null, request, true, true);
         Product product = Product.create(shop.getId());
         replaceFields(product, request);
-        return toResponse(productRepository.save(product));
+        product = productRepository.save(product);
+        auditLogService.recordOwner(shop, AuditAction.PRODUCT_CREATED, product.getId(), null, null,
+                AuditLogService.metadata("sellingPriceVnd", product.getSellingPriceVnd(), "costPriceVnd",
+                        product.getCostPriceVnd(), "tracked", product.isTracked(), "stockQuantity", product.getStockQuantity()));
+        return toResponse(product);
     }
 
     @Override
@@ -73,7 +82,21 @@ public class ProductServiceImpl implements ProductService {
         ProductWriteRequest merged = merge(product, request);
         validateReferencesAndStock(shop.getId(), product.getId(), merged,
                 request.hasField("categoryId"), request.hasField("barcode"));
+        Long beforePrice = product.getSellingPriceVnd();
+        BigDecimal beforeStock = product.getStockQuantity();
+        boolean beforeTracked = product.isTracked();
         replaceFields(product, merged);
+        auditLogService.recordOwner(shop, AuditAction.PRODUCT_UPDATED, product.getId(), null, null,
+                Map.of("beforeSellingPriceVnd", beforePrice, "afterSellingPriceVnd", product.getSellingPriceVnd(),
+                        "changedFields", request.getProvidedFields().stream().sorted().toList()));
+        boolean stockChanged = beforeStock == null ? product.getStockQuantity() != null
+                : product.getStockQuantity() == null || beforeStock.compareTo(product.getStockQuantity()) != 0;
+        if (stockChanged || beforeTracked != product.isTracked()) {
+            auditLogService.recordOwner(shop, AuditAction.STOCK_ADJUSTED, product.getId(), null, null,
+                    AuditLogService.metadata("source", "CATALOG_EDIT", "beforeStock", beforeStock,
+                            "afterStock", product.getStockQuantity(), "beforeTracked", beforeTracked,
+                            "afterTracked", product.isTracked()));
+        }
         return toResponse(product);
     }
 
@@ -99,6 +122,7 @@ public class ProductServiceImpl implements ProductService {
         Shop shop = shopService.requireOwnedActiveShop(firebaseToken, shopId);
         Product product = requireLockedActiveProduct(shop.getId(), productId);
         product.archive(shop.getOwnerId());
+        auditLogService.recordOwner(shop, AuditAction.PRODUCT_ARCHIVED, product.getId(), null, null, Map.of());
     }
 
     private Product requireActiveProduct(Long shopId, String productId) {

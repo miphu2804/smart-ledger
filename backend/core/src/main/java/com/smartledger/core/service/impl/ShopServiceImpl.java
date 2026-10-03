@@ -1,5 +1,7 @@
 package com.smartledger.core.service.impl;
 
+import com.smartledger.core.enums.AuditAction;
+import com.smartledger.core.service.AuditLogService;
 import com.smartledger.core.dto.request.ArchiveShopRequest;
 import com.smartledger.core.dto.request.ShopCreateRequest;
 import com.smartledger.core.dto.request.ShopStatusUpdateRequest;
@@ -19,17 +21,21 @@ import com.smartledger.core.repository.ShopRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.ShopService;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Service
 public class ShopServiceImpl implements ShopService {
+    private final AuditLogService auditLogService;
 
     private final AuthIdentityRepository authIdentityRepository;
     private final ShopRepository shopRepository;
 
-    public ShopServiceImpl(AuthIdentityRepository authIdentityRepository, ShopRepository shopRepository) {
+    public ShopServiceImpl(AuthIdentityRepository authIdentityRepository, ShopRepository shopRepository,
+            AuditLogService auditLogService) {
+        this.auditLogService = auditLogService;
         this.authIdentityRepository = authIdentityRepository;
         this.shopRepository = shopRepository;
     }
@@ -44,7 +50,9 @@ public class ShopServiceImpl implements ShopService {
                 request.industry().trim(),
                 normalizeOptional(request.phone()),
                 normalizeOptional(request.address()));
-        return toResponse(shopRepository.save(shop));
+        shop = shopRepository.save(shop);
+        auditLogService.recordOwner(shop, AuditAction.SHOP_CREATED, shop.getId(), null, null, Map.of());
+        return toResponse(shop);
     }
 
     @Override
@@ -69,6 +77,11 @@ public class ShopServiceImpl implements ShopService {
                 request.industry() == null ? shop.getIndustry() : normalizeRequired(request.industry()),
                 request.phone() == null ? shop.getPhone() : normalizeOptional(request.phone()),
                 request.address() == null ? shop.getAddress() : normalizeOptional(request.address()));
+        auditLogService.recordOwner(shop, AuditAction.SHOP_UPDATED, shop.getId(), null, null,
+                Map.of("changedFields", java.util.stream.Stream.of(
+                        request.name() == null ? null : "name", request.industry() == null ? null : "industry",
+                        request.phone() == null ? null : "phone", request.address() == null ? null : "address")
+                        .filter(java.util.Objects::nonNull).toList()));
         return toResponse(shop);
     }
 
@@ -79,7 +92,10 @@ public class ShopServiceImpl implements ShopService {
             String shopId,
             ArchiveShopRequest request) {
         Shop shop = requireOwnedVisibleShop(firebaseToken, shopId, "shopId");
+        ensureShopIsActive(shop);
         shop.archive(normalizeRequired(request.archivedReason()));
+        auditLogService.recordOwner(shop, AuditAction.SHOP_ARCHIVED, shop.getId(), shop.getArchivedReason(), null,
+                Map.of("beforeStatus", ShopStatus.ACTIVE, "afterStatus", ShopStatus.ARCHIVED));
     }
 
     @Override
@@ -88,13 +104,14 @@ public class ShopServiceImpl implements ShopService {
             VerifiedFirebaseToken firebaseToken,
             String shopId,
             ShopStatusUpdateRequest request) {
-        requireActiveAdmin(firebaseToken);
+        UserAccount admin = requireActiveAdmin(firebaseToken);
         Shop shop = shopRepository.findById(parseShopId(shopId, "shopId"))
                 .orElseThrow(() -> new BusinessException(ErrorCode.SHOP_NOT_FOUND));
         if (shop.getStatus() == ShopStatus.ARCHIVED) {
             throw new BusinessException(ErrorCode.SHOP_NOT_FOUND);
         }
 
+        ShopStatus before = shop.getStatus();
         if (request.status() == ShopStatus.INACTIVE) {
             shop.deactivate(normalizeInactiveReason(request.inactiveReason()));
         } else if (request.status() == ShopStatus.ACTIVE) {
@@ -102,6 +119,10 @@ public class ShopServiceImpl implements ShopService {
         } else {
             throw new BusinessException(ErrorCode.SHOP_STATUS_CHANGE_INVALID);
         }
+        auditLogService.record(shop.getId(), admin.getId(), admin.getSystemRole(),
+                request.status() == ShopStatus.INACTIVE ? AuditAction.SHOP_INACTIVATED : AuditAction.SHOP_REACTIVATED,
+                shop.getId(), shop.getInactiveReason(), null,
+                Map.of("beforeStatus", before, "afterStatus", shop.getStatus()));
         return toResponse(shop);
     }
 
@@ -139,10 +160,12 @@ public class ShopServiceImpl implements ShopService {
         return user;
     }
 
-    private void requireActiveAdmin(VerifiedFirebaseToken firebaseToken) {
-        if (requireActiveUser(firebaseToken).getSystemRole() != SystemRole.ADMIN) {
+    private UserAccount requireActiveAdmin(VerifiedFirebaseToken firebaseToken) {
+        UserAccount user = requireActiveUser(firebaseToken);
+        if (user.getSystemRole() != SystemRole.ADMIN) {
             throw new BusinessException(ErrorCode.ADMIN_ACCESS_REQUIRED);
         }
+        return user;
     }
 
     private UserAccount requireActiveUser(VerifiedFirebaseToken firebaseToken) {

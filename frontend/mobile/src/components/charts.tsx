@@ -8,7 +8,7 @@ import { T } from './ui';
 type Point = { label: string; value: number };
 
 /** Biểu đồ vùng (area) giống màn "Doanh thu" trong prototype. Chạm để xem giá trị. */
-export function AreaChart({ data, height = 150, color = colors.primary }: { data: Point[]; height?: number; color?: string }) {
+export function AreaChart({ data, height = 150, color = colors.data.revenue }: { data: Point[]; height?: number; color?: string }) {
   const [w, setW] = useState(0);
   const [sel, setSel] = useState<number | null>(null);
   const max = Math.max(1, ...data.map((d) => d.value)) * 1.15;
@@ -115,7 +115,7 @@ export function AreaChart({ data, height = 150, color = colors.primary }: { data
 export function BarChart({
   data,
   height = 120,
-  color = colors.primary,
+  color = colors.data.revenue,
   highlightLast = true,
   onSelect,
   selected,
@@ -154,7 +154,7 @@ export function BarChart({
                   maxWidth: 30,
                   height: Math.max(4, (d.value / max) * (height - 22)),
                   borderRadius: 8,
-                  backgroundColor: active ? color : colors.primarySoft,
+                  backgroundColor: active ? color : colors.data.revenueSoft,
                 }}
               />
             </Pressable>
@@ -176,3 +176,25 @@ export function BarChart({
     </View>
   );
 }
+
+/** Sóng âm động khi đang ghi âm */
+export function Waveform({ active, color = colors.red, bars = 28 }: { active: boolean; color?: string; bars?: number }) {
+  const [tick, setTick] = useState(0);
+  React.useEffect(() => {
+    if (!active) return;
+    const t = setInterval(() => setTick((x) => x + 1), 110);
+    return () => clearInterval(t);
+  }, [active]);
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 48, gap: 3 }}>
+      {Array.from({ length: bars }).map((_, i) => {
+        const base = Math.abs(Math.sin((i + 1) * 1.7));
+        const h = active ? 8 + Math.abs(Math.sin(tick * 0.9 + i * 0.8)) * 34 * (0.4 + base * 0.6) : 6;
+        return (
+          <View key={i} style={{ width: 3, height: h, borderRadius: 2, backgroundColor: color, opacity: active ? 0.9 : 0.35 }} />
+        );
+      })}
+    </View>
+  );
+}
+

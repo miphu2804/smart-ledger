@@ -21,11 +21,11 @@ const steps: readonly {
     tone: colors.primary,
     gradient: ['#8FDB6E', '#CDEFB8', '#F3FAEF'],
     description:
-      'Mascot nhỏ ở góc màn hình là lối tắt đến trợ lý của tiệm. Bạn có thể nói hoặc gõ như đang nhắn tin, trợ lý sẽ giúp lên đơn và trả lời về số liệu bán hàng.',
+      'Mascot ở góc màn hình mở nhanh Hỏi đáp, Đọc đơn và Báo cáo.',
     tips: [
-      { title: 'Chạm để chọn', body: 'Chạm mascot để mở menu Chatbot, Giọng nói hoặc Gợi ý.' },
-      { title: 'Nhấn giữ để nói ngay', body: 'Giữ mascot để vào thẳng màn hình Giọng nói, không cần qua menu.' },
-      { title: 'Kéo đến chỗ thuận tay', body: 'Nếu mascot che nội dung, kéo nó sang vị trí khác trên màn hình.' },
+      { title: 'Chạm để mở', body: 'Mở Hỏi đáp, Đọc đơn hoặc Báo cáo.' },
+      { title: 'Giữ để đọc đơn', body: 'Đi thẳng tới màn Đọc đơn.' },
+      { title: 'Kéo đến chỗ thuận tay', body: 'Kéo mascot sang cạnh khác nếu che nội dung.' },
     ],
   },
   {
@@ -34,11 +34,11 @@ const steps: readonly {
     tone: colors.gold,
     gradient: ['#F2C77A', '#F8E9C8', '#FFF8EA'],
     description:
-      'Có hai cách lên đơn: chọn món ở tab Bán hàng, hoặc đọc đơn cho trợ lý, ví dụ “bán 3 bánh mì, 2 coca”. Trợ lý sẽ tách tên món và số lượng để bạn kiểm tra trước khi chốt.',
+      'Chọn món ở tab Bán hàng hoặc đọc đơn. Luôn kiểm tra giỏ trước khi thanh toán.',
     tips: [
-      { title: 'Chọn món, kiểm tra giỏ', body: 'Thêm món vào giỏ, xem lại số lượng rồi bấm chốt đơn.' },
-      { title: 'Chọn cách thanh toán', body: 'Tiền mặt, Chuyển khoản, hoặc Ghi nợ kèm tên khách quen.' },
-      { title: 'Xem lại ở Đơn hàng', body: 'Tìm lại đơn theo mã, tên khách hoặc tên món bất cứ lúc nào.' },
+      { title: 'Kiểm tra giỏ', body: 'Xem lại món, số lượng và giá trước khi thanh toán.' },
+      { title: 'Chọn cách thu', body: 'Tiền mặt, chuyển khoản hoặc ghi nợ.' },
+      { title: 'Xem lại đơn', body: 'Tìm theo mã, khách hoặc tên món.' },
     ],
   },
   {
@@ -47,11 +47,11 @@ const steps: readonly {
     tone: colors.purple,
     gradient: ['#8DB8F2', '#E4F0FF', '#F5F9FF'],
     description:
-      'Tab Tổng quan là trang đầu tiên mỗi khi mở app. Nhìn một lần là biết tiệm đã bán được bao nhiêu và việc nào cần xử lý trước.',
+      'Xem nhanh doanh thu, việc cần xử lý và mặt hàng bán chạy.',
     tips: [
       { title: 'Doanh thu theo kỳ', body: 'Đổi kỳ xem và so sánh với ngày trước để thấy tiệm đang tăng hay giảm.' },
       { title: 'Việc cần xử lý', body: 'App nhắc khi còn công nợ chưa thu hoặc có món sắp hết hàng.' },
-      { title: 'Món bán chạy', body: 'Danh sách món bán nhiều nhất giúp bạn biết nên nhập thêm gì.' },
+      { title: 'Món bán chạy', body: 'Xem mặt hàng bán nhiều nhất trong kỳ.' },
     ],
   },
   {
@@ -60,11 +60,11 @@ const steps: readonly {
     tone: colors.red,
     gradient: ['#E9B8A8', '#F8E2DE', '#FFF5F2'],
     description:
-      'Tab Khác gom các công cụ quản lý tiệm vào một chỗ, để bạn cập nhật hàng hoá, chi phí và công nợ mà không phải tìm ở nhiều nơi.',
+      'Tiện ích gom hàng hoá, chi phí, công nợ và báo cáo vào một chỗ.',
     tips: [
-      { title: 'Hàng hoá & Kho hàng', body: 'Thêm món, sửa giá và theo dõi tồn kho ở cùng một màn hình.' },
-      { title: 'Chi phí và Quản lý nợ', body: 'Ghi các khoản chi hằng ngày; đánh dấu khách trả một phần hoặc trả hết.' },
-      { title: 'Phân tích bán hàng', body: 'Xem diễn biến doanh thu, thu chi trong kỳ và tình hình công nợ.' },
+      { title: 'Hàng hoá', body: 'Thêm món, sửa giá và theo dõi tồn kho.' },
+      { title: 'Chi phí và công nợ', body: 'Ghi khoản chi và theo dõi tiền khách còn nợ.' },
+      { title: 'Báo cáo', body: 'Xem doanh thu, thu chi và mặt hàng bán chạy.' },
     ],
   },
 ];
@@ -179,8 +179,8 @@ export function AssistantIntroModal({
 
                 {index === 0 ? (
                   <View style={styles.tryRow}>
-                    <Button title="Thử Chatbot" icon="message-circle" variant="ghost" small onPress={onChat} style={styles.tryButton} />
-                    <Button title="Thử Giọng nói" icon="mic" variant="ghost" small onPress={onVoice} style={styles.tryButton} />
+                    <Button title="Hỏi đáp" icon="message-circle" variant="ghost" small onPress={onChat} style={styles.tryButton} />
+                    <Button title="Đọc đơn" icon="mic" variant="ghost" small onPress={onVoice} style={styles.tryButton} />
                   </View>
                 ) : null}
               </ScrollView>
@@ -213,7 +213,7 @@ export function AssistantIntroModal({
                 </Pressable>
               ) : null}
               <Button
-                title={isLast ? 'Bắt đầu dùng' : 'Tiếp tục'}
+                title={isLast ? 'Bắt đầu' : 'Tiếp tục'}
                 onPress={() => (isLast ? onDismiss() : goToStep(step + 1))}
                 style={styles.primary}
               />

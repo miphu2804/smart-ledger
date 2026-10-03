@@ -1,7 +1,9 @@
 import { Feather } from '@expo/vector-icons';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BarcodeScannerModal } from '../src/components/BarcodeScannerModal';
+import { CollapsibleHeader } from '../src/components/CollapsibleHeader';
 import { useToast } from '../src/components/brand';
 import {
   Badge,
@@ -11,6 +13,7 @@ import {
   EmptyState,
   Field,
   Header,
+  LoadingState,
   Row,
   Sheet,
   T,
@@ -21,7 +24,8 @@ import type { CategoryView, ProductView } from '../src/data/types';
 import { categoryApi, productApi, ProductWriteRequest } from '../src/lib/catalogApi';
 import { errorMessage } from '../src/lib/errors';
 import { normalizeText, vnd } from '../src/lib/format';
-import { colors, shadow } from '../src/theme';
+import { triggerFeedback } from '../src/lib/feedback';
+import { colors } from '../src/theme';
 
 /** 'all' | 'low' | id danh mục dạng chuỗi (Chips cần K extends string) */
 type Tab = 'all' | 'low' | string;
@@ -36,6 +40,7 @@ export default function Products() {
   const [categories, setCategories] = useState<CategoryView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -60,23 +65,37 @@ export default function Products() {
       products.filter((p) => {
         if (tab === 'low' && !(p.tracked && (p.stockQuantity ?? 0) <= 6)) return false;
         if (tab !== 'all' && tab !== 'low' && String(p.categoryId ?? '') !== tab) return false;
-        return !q || normalizeText(p.name).includes(normalizeText(q));
+        return (
+          !q ||
+          normalizeText(p.name).includes(normalizeText(q))
+        );
       }),
     [products, tab, q],
   );
   const stockValue = products.reduce((a, p) => a + (p.tracked ? (p.stockQuantity ?? 0) * (p.costPriceVnd ?? 0) : 0), 0);
   const low = products.filter((p) => p.tracked && (p.stockQuantity ?? 0) <= 6).length;
+  const headerHeight = 260;
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top }}>
-      <View style={{ paddingHorizontal: 16 }}>
-        <Header title="Hàng hoá" subtitle="Sản phẩm & tồn kho — cùng một nơi" />
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <CollapsibleHeader
+        scrollY={scrollY}
+        topInset={insets.top}
+        expandedHeight={headerHeight}
+        pinned={
+          <Header
+            title="Hàng hoá"
+            subtitle="Giá bán và tồn kho"
+            right={<Button title="Thêm" icon="plus" small onPress={() => setForm('new')} />}
+          />
+        }
+      >
         <Row style={{ alignItems: 'stretch' }}>
           <Stat label="Mặt hàng" value={String(products.length)} />
           <Stat label="Giá trị tồn (vốn)" value={vnd(stockValue)} color={colors.primary} flex={2} />
           <Stat label="Sắp hết" value={String(low)} color={colors.gold} bg={colors.goldSoft} />
         </Row>
-        <Field placeholder="Tìm sản phẩm…" value={q} onChangeText={setQ} style={{ marginTop: 12, marginBottom: 10 }} />
+        <Field placeholder="Tìm theo tên hoặc mã vạch…" value={q} onChangeText={setQ} style={{ marginTop: 12, marginBottom: 10 }} />
         <Chips<Tab>
           value={tab}
           onChange={setTab}
@@ -86,22 +105,32 @@ export default function Products() {
             ...categories.map((c) => ({ key: String(c.id), label: c.name })),
           ]}
         />
-      </View>
+      </CollapsibleHeader>
       {loading ? (
-        <View style={{ paddingTop: 60, alignItems: 'center' }}>
-          <ActivityIndicator color={colors.primary} />
+        <View style={{ paddingTop: insets.top + headerHeight }}>
+          <LoadingState label="Đang tải hàng hoá…" />
         </View>
       ) : error ? (
-        <View style={{ paddingHorizontal: 16 }}>
+        <View style={{ paddingHorizontal: 16, paddingTop: insets.top + headerHeight }}>
           <EmptyState icon="alert-triangle" title="Không tải được danh sách" hint={error} />
           <Button title="Thử lại" variant="outline" onPress={load} />
         </View>
       ) : (
-        <FlatList
+        <Animated.FlatList
           data={list}
           keyExtractor={(p) => String(p.id)}
-          contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
-          ListEmptyComponent={<EmptyState icon="package" title="Không có sản phẩm" hint="Bấm + để thêm sản phẩm mới" />}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: insets.top + headerHeight + 6, paddingBottom: 100 }}
+          showsVerticalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
+          ListEmptyComponent={
+            <EmptyState
+              icon={q ? 'search' : tab === 'low' ? 'check-circle' : 'package'}
+              tone={tab === 'low' && !q ? 'success' : 'neutral'}
+              title={q ? 'Không tìm thấy mặt hàng' : tab === 'low' ? 'Không có mặt hàng sắp hết' : 'Chưa có mặt hàng'}
+              hint={q ? 'Thử tên hoặc mã vạch khác' : tab === 'low' ? 'Tồn kho đang ở mức ổn định' : 'Nhấn Thêm để tạo mặt hàng đầu tiên'}
+            />
+          }
           renderItem={({ item: p }) => (
             <Pressable onPress={() => setForm(p)} style={({ pressed }) => [styles.row, pressed && { opacity: 0.8 }]}>
               <Tile name={p.name} text={p.name[0]} size={42} />
@@ -129,13 +158,6 @@ export default function Products() {
           )}
         />
       )}
-      <Pressable
-        onPress={() => setForm('new')}
-        style={[styles.fab, shadow(3), { bottom: insets.bottom + 24 }]}
-        accessibilityLabel="Thêm sản phẩm"
-      >
-        <Feather name="plus" size={26} color={colors.accentInk} />
-      </Pressable>
       <ProductForm
         value={form}
         categories={categories}
@@ -197,6 +219,8 @@ function ProductForm({
   const [tracked, setTracked] = useState(true);
   const [catKey, setCatKey] = useState('none');
   const [scanning, setScanning] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [barcode, setBarcode] = useState('');
   const [confirmDel, setConfirmDel] = useState(false);
   const [lastKey, setLastKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -211,6 +235,7 @@ function ProductForm({
     setLastKey(key);
     setName(p?.name ?? '');
     setUnit(p?.unit ?? '');
+    setBarcode(p?.barcode ?? '');
     setPrice(p ? String(p.sellingPriceVnd) : '');
     setCost(p?.costPriceVnd != null ? String(p.costPriceVnd) : '');
     setStock(p?.stockQuantity != null ? String(Math.round(p.stockQuantity)) : '');
@@ -233,6 +258,7 @@ function ProductForm({
       categoryId: catKey === 'none' ? null : Number(catKey),
       name: name.trim(),
       unit: unit.trim(),
+      barcode: barcode.trim() || undefined,
       sellingPriceVnd: priceNum,
       costPriceVnd: costNum,
       tracked,
@@ -242,10 +268,12 @@ function ProductForm({
     try {
       if (p) await productApi.update(p.id, payload);
       else await productApi.create(payload);
-      toast(p ? 'Đã cập nhật sản phẩm' : `Đã thêm "${payload.name}"`);
+      triggerFeedback('success');
+      toast(p ? 'Đã cập nhật mặt hàng' : `Đã thêm "${payload.name}"`);
       onSaved();
       onClose();
     } catch (e) {
+      triggerFeedback('error');
       setErr(errorMessage(e));
     } finally {
       setBusy(false);
@@ -274,6 +302,7 @@ function ProductForm({
       setScanning(false);
       setName('Sữa chua nếp cẩm');
       setUnit('hộp');
+      setBarcode('8935049500999');
       setPrice('12000');
       setCost('7000');
       setStock('24');
@@ -284,7 +313,7 @@ function ProductForm({
   };
 
   return (
-    <Sheet visible={!!value} onClose={onClose} title={isNew ? 'Thêm sản phẩm' : 'Sửa sản phẩm'}>
+    <Sheet visible={!!value} onClose={onClose} title={isNew ? 'Thêm mặt hàng' : 'Sửa mặt hàng'}>
       {isNew ? (
         <Chips<'manual' | 'ai'>
           scroll={false}
@@ -293,18 +322,18 @@ function ProductForm({
           onChange={setMode}
           options={[
             { key: 'manual', label: 'Nhập tay', icon: 'edit-3' },
-            { key: 'ai', label: 'Chụp ảnh (AI)', icon: 'camera' },
+            { key: 'ai', label: 'Chụp ảnh', icon: 'camera' },
           ]}
         />
       ) : null}
       {mode === 'ai' ? (
         <View style={styles.scan}>
-          <Feather name="camera" size={34} color={colors.primary} />
+          <Feather name="camera" size={34} color={colors.brand} />
           <T w="semibold" size={13} color={colors.muted} style={{ textAlign: 'center', marginTop: 8 }}>
-            Chụp bao bì hoặc bảng giá — AI sẽ điền tên, giá giúp bạn
+            Chụp bao bì hoặc bảng giá để điền nhanh thông tin. Hãy kiểm tra trước khi lưu.
           </T>
           <Button
-            title={scanning ? 'Đang nhận diện…' : 'Chụp ảnh mẫu'}
+            title={scanning ? 'Đang nhận diện…' : 'Chụp ảnh'}
             loading={scanning}
             onPress={aiScan}
             style={{ marginTop: 14, alignSelf: 'stretch' }}
@@ -312,7 +341,26 @@ function ProductForm({
         </View>
       ) : (
         <>
-          <Field label="Tên sản phẩm" placeholder="VD: Nước suối" value={name} onChangeText={setName} />
+          <Field label="Tên mặt hàng" placeholder="VD: Nước suối" value={name} onChangeText={setName} />
+
+          <Row gap={8} style={{ alignItems: 'flex-end', marginBottom: 14 }}>
+            <Field
+              label="Mã vạch (EAN-13, UPC...)"
+              placeholder="VD: 8934563138165"
+              value={barcode}
+              onChangeText={setBarcode}
+              style={{ flex: 1, marginBottom: 0 }}
+            />
+            <Button
+              title="Quét"
+              icon="camera"
+              variant="soft"
+              small
+              onPress={() => setScannerOpen(true)}
+              style={{ height: 48 }}
+            />
+          </Row>
+
           <Row style={{ alignItems: 'flex-start' }}>
             <Field
               label="Giá bán (đ)"
@@ -362,8 +410,8 @@ function ProductForm({
           ) : (
             <Pressable onPress={() => setAddingCat(true)} style={{ marginBottom: 12 }}>
               <Row gap={4}>
-                <Feather name="plus-circle" size={14} color={colors.primary} />
-                <T w="semibold" size={12.5} color={colors.primary}>
+                <Feather name="plus-circle" size={14} color={colors.brand} />
+                <T w="semibold" size={12.5} color={colors.brand}>
                   Thêm danh mục mới
                 </T>
               </Row>
@@ -389,7 +437,7 @@ function ProductForm({
             </T>
           ) : null}
           <Button
-            title={isNew ? 'Thêm sản phẩm' : 'Lưu thay đổi'}
+            title={isNew ? 'Thêm mặt hàng' : 'Lưu thay đổi'}
             disabled={!valid || busy}
             loading={busy}
             onPress={save}
@@ -397,7 +445,7 @@ function ProductForm({
           />
           {p ? (
             <Button
-              title="Xoá sản phẩm"
+              title="Xoá mặt hàng"
               variant="ghost"
               icon="trash-2"
               onPress={() => setConfirmDel(true)}
@@ -406,12 +454,22 @@ function ProductForm({
           ) : null}
         </>
       )}
+
+      <BarcodeScannerModal
+        visible={scannerOpen}
+        mode="input"
+        onClose={() => setScannerOpen(false)}
+        onBarcodeScanned={(code) => {
+          setBarcode(code);
+          setScannerOpen(false);
+        }}
+      />
       <Dialog
         visible={confirmDel}
         danger
         icon="trash-2"
         title={`Xoá "${p?.name ?? ''}"?`}
-        message="Hoá đơn cũ vẫn giữ nguyên, chỉ xoá khỏi danh mục bán hàng."
+        message="Đơn cũ vẫn giữ nguyên, chỉ xoá khỏi danh mục bán hàng."
         confirm="Xoá"
         onCancel={() => setConfirmDel(false)}
         onConfirm={async () => {
@@ -419,10 +477,12 @@ function ProductForm({
           setConfirmDel(false);
           try {
             await productApi.archive(p.id);
-            toast('Đã xoá sản phẩm');
+            triggerFeedback('success');
+            toast('Đã xoá mặt hàng');
             onSaved();
             onClose();
           } catch (e) {
+            triggerFeedback('error');
             toast(errorMessage(e), 'err');
           }
         }}
@@ -432,37 +492,25 @@ function ProductForm({
 }
 
 const styles = StyleSheet.create({
-  stat: { borderRadius: 14, padding: 10, borderWidth: 1, borderColor: colors.border, ...shadow(1) },
+  stat: { paddingVertical: 10, paddingHorizontal: 8, borderBottomWidth: 1, borderColor: colors.border },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     backgroundColor: colors.white,
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 8,
-    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
     borderColor: colors.border,
-    ...shadow(1),
-  },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   trackRow: { marginTop: 16, marginBottom: 12, padding: 12, borderRadius: 14, backgroundColor: colors.bg },
   scan: {
     alignItems: 'center',
     borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: colors.primaryLight,
+    borderColor: '#D8CDF8',
     borderRadius: 18,
     padding: 22,
-    backgroundColor: colors.primaryTint,
+    backgroundColor: colors.brandTint,
   },
 });
