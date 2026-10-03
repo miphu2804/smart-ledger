@@ -4,7 +4,7 @@
 |---|---|
 | Trạng thái | đích MVP; các endpoint đã triển khai được đánh dấu riêng bên dưới |
 | Chủ sở hữu | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-10-02 |
+| Cập nhật lần cuối | 2026-10-04 |
 
 ## Tài liệu liên quan
 
@@ -16,18 +16,18 @@
 - API công khai cho mobile OWNER và dashboard web ADMIN nằm dưới `/api/v1`; base URL do môi trường cấu hình.
 - API Core ↔ AI nằm dưới `/internal/v1` và không công khai cho FE.
 - Không dùng cổng trong sơ đồ kiến trúc làm hợp đồng API.
-- Redis, Qdrant, Langfuse và LiteLLM không có API công khai. FE không gọi trực tiếp các thành phần này.
+- Redis, Langfuse và LiteLLM không có API công khai. FE không gọi trực tiếp các thành phần này.
 
-**Đã đối chiếu:** controller/DTO/service và migration Core trong working tree `feat/core-business`, ngày 2026-10-02. Các mục 1–4 là API Core hiện có, không phải bằng chứng đã deploy staging hay tích hợp FE. Hiện trạng triển khai/kiểm thử nằm trong [thiết kế kỹ thuật](../architecture/technical-design.md). Core đã có proxy Agent (mục 5) nhưng chưa có dashboard đọc tổng quan; mục 6–7 giữ hợp đồng đích, không đánh dấu đã triển khai.
+**Hiện trạng (đối chiếu code nhánh `staging` ngày 2026-10-04):** mục 1–4 là API Core đã có. Bảng mục 5–6 có cột Trạng thái cho từng endpoint: các route Agent đã có, parse/recommendation/insight là đích. Mục 7 là hợp đồng đích. Có trong code không đồng nghĩa đã deploy staging hay nghiệm thu FE; hiện trạng triển khai/kiểm thử nằm trong [thiết kế kỹ thuật](../architecture/technical-design.md#1-phạm-vi).
 
-**AI nhập từ staging:** AI có `GET /health` và năm endpoint `/internal/v1/agent/*` (chat, list, detail, rename, delete), cùng tóm tắt chat cuốn chiếu và tìm lịch sử. Mọi đường `/internal/v1/*` bắt buộc `X-Internal-Token`; thiếu/sai token hoặc AI chưa cấu hình `INTERNAL_API_TOKEN` trả `401`, riêng `/health` vẫn công khai. Core proxy `/api/v1/agent/*` sang các đường này, gửi `X-Internal-Token` và lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực; AI `404` thành `conversation_not_found`, lỗi hoặc quá thời gian khác thành `503 ai_unavailable`. Không coi việc nhập code AI là nghiệm thu luồng FE → Core → AI; web admin vẫn dùng mock theo mặc định.
+**AI và proxy Agent:** AI có `GET /health` và năm endpoint `/internal/v1/agent/*` (chat, list, detail, rename, delete), cùng tóm tắt chat cuốn chiếu và tìm lịch sử. Mọi đường `/internal/v1/*` bắt buộc `X-Internal-Token`; thiếu/sai token hoặc AI chưa cấu hình `INTERNAL_API_TOKEN` trả `401`, riêng `/health` vẫn công khai. Core proxy `/api/v1/agent/*` sang các đường này, gửi `X-Internal-Token` và lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực; AI `404` thành `conversation_not_found`, lỗi hoặc quá thời gian khác thành `503 ai_unavailable`. Chưa có nghiệm thu đầu-cuối luồng FE → Core → AI với model thật.
 
 ## Quy ước request
 
 - Core dùng `Authorization: Bearer <Firebase ID token>`, không cấp access/refresh token riêng.
 - Auth/me và các API shop dùng ID trong path, không cần `X-Shop-Id`. Category/Product/Customer/Draft/Sale/Payment/Debt/Expense/Report bắt buộc `X-Shop-Id` của shop `ACTIVE` thuộc OWNER đang hoạt động. ADMIN không dùng API ghi sổ.
 - Ngoại lệ quản trị hiện có: `PATCH /api/v1/shops/{shopId}/status` chỉ ADMIN. Các API dashboard `/api/v1/admin/*` vẫn là đích.
-- JSON Core dùng camelCase; ID là số `BIGINT`, tiền là số nguyên VND; quantity dùng `numeric(15,3)`. API AI giữ snake_case.
+- JSON Core dùng camelCase; ID là số `BIGINT`, tiền là số nguyên VND; quantity dùng `numeric(15,3)`. API AI và các route `/api/v1/agent/*` Core chuyển tiếp giữ snake_case.
 - Core/DB xử lý thời điểm UTC/`TIMESTAMPTZ`; timestamp JSON Core dùng ISO 8601 với offset Việt Nam `+07:00`. Timestamp đầu vào cần offset (`Z` hoặc `+07:00`); kỳ báo cáo theo `Asia/Ho_Chi_Minh`.
 - Body JSON dùng `Content-Type: application/json`; dấu `?` bên dưới chỉ field tùy chọn, không mặc nhiên cho phép explicit null.
 
@@ -246,20 +246,20 @@ action: `SALE_CONFIRMED`, `SALE_VOIDED`, `SALE_REFUND_RECORDED`, `DEBT_REPAYMENT
 
 Bảng `audit_logs` append-only (V10, trigger chặn UPDATE/DELETE/TRUNCATE). Truy vết: `BR-017` trong [BRD](../product/business-requirements.md), `FR-028`/`FR-029` và `AC-033`–`AC-039` trong [PRD](../product/product-requirements.md#8-tiêu-chí-nghiệm-thu-cốt-lõi). Nghiệm thu lịch sử OWNER qua API/DB không đồng nghĩa đã tích hợp màn hình FE; endpoint này không thay thế yêu cầu audit truy cập của ADMIN (`BR-014`, `NFR-009`, `AC-017`).
 
-## 5. AI qua Core — hợp đồng đích, chưa triển khai trong Core
+## 5. AI qua Core
 
 AI chỉ tạo bản nháp/gợi ý và câu trả lời chat. Các endpoint này không ghi invoice, expense hoặc tồn kho.
 
-| Method | Đường | Input | Trả về |
-|---|---|---|---|
-| `POST` | `/api/v1/ai/drafts` | JSON `{ type: TEXT, mode, text }` hoặc multipart `type=AUDIO\|IMAGE`, `mode=SALE\|EXPENSE`, `file` | `DraftView` |
-| `GET` | `/api/v1/replenishment?period=` | — | `ReplenishmentView[]` |
-| `POST` | `/api/v1/insights/chat` | `{ conversation_id?, message, period? }` | `InsightMessageView` |
-| `POST` | `/api/v1/agent/chat` | `{ conversation_id?, message }` | `AgentChatMessageView` |
-| `GET` | `/api/v1/agent/conversations` | `X-Shop-Id` | `AgentConversationSummary[]` |
-| `GET` | `/api/v1/agent/conversations/{conversation_id}` | `X-Shop-Id` | `AgentConversationView` |
-| `PATCH` | `/api/v1/agent/conversations/{conversation_id}` | `{ title }` (1–255 ký tự, không rỗng) | `AgentConversationSummary` |
-| `DELETE` | `/api/v1/agent/conversations/{conversation_id}` | `X-Shop-Id` | `204 No Content` |
+| Method | Đường | Input | Trả về | Trạng thái |
+|---|---|---|---|---|
+| `POST` | `/api/v1/ai/drafts` | JSON `{ type: TEXT, mode, text }` hoặc multipart `type=AUDIO\|IMAGE`, `mode=SALE\|EXPENSE`, `file` | `DraftView` | Đích |
+| `GET` | `/api/v1/replenishment?period=` | — | `ReplenishmentView[]` | Đích |
+| `POST` | `/api/v1/insights/chat` | `{ conversation_id?, message, period? }` | `InsightMessageView` | Đích |
+| `POST` | `/api/v1/agent/chat` | `{ conversation_id?, message }` | `AgentChatMessageView` | Đã có |
+| `GET` | `/api/v1/agent/conversations` | `X-Shop-Id` | `AgentConversationSummary[]` | Đã có |
+| `GET` | `/api/v1/agent/conversations/{conversation_id}` | `X-Shop-Id` | `AgentConversationView` | Đã có |
+| `PATCH` | `/api/v1/agent/conversations/{conversation_id}` | `{ title }` (1–255 ký tự, không rỗng) | `AgentConversationSummary` | Đã có |
+| `DELETE` | `/api/v1/agent/conversations/{conversation_id}` | `X-Shop-Id` | `204 No Content` | Đã có |
 
 `DraftView`:
 
@@ -287,22 +287,20 @@ AI chỉ tạo bản nháp/gợi ý và câu trả lời chat. Các endpoint nà
 
 Các endpoint Agent yêu cầu OWNER đã xác thực và `X-Shop-Id` hợp lệ. Core lấy user từ danh tính đã xác thực; FE không gửi `user_id` để tự xác định quyền. Danh sách, xem, chat và xóa đều giới hạn theo user/shop đang xác thực.
 
-Phủ `FR-007`, `FR-008`, `FR-017`, `FR-018`, `FR-020`, `FR-021`, `FR-025`.
+Phủ `FR-007`, `FR-008`, `FR-017`, `FR-018`, `FR-020`, `FR-021`, `FR-027`.
 
 ## 6. Core ↔ AI nội bộ
 
-Các đường Agent đã được mô tả ở snapshot AI trước đây; lượt này không kiểm chứng lại runtime AI. Các đường parse/recommendation/insight và tích hợp Core vẫn là hợp đồng đích.
-
-| Method | Đường | Trách nhiệm |
-|---|---|---|
-| `POST` | `/internal/v1/agent/chat` | Input `{ user_id, shop_id, conversation_id?, message }`; trả `{ conversation_id, message_id, request_id, answer, model, model_version }` |
-| `GET` | `/internal/v1/agent/conversations` | Nhận `user_id`, `shop_id`; trả danh sách hội thoại |
-| `GET` | `/internal/v1/agent/conversations/{conversation_id}` | Nhận `user_id`, `shop_id`; trả hội thoại và tin nhắn |
-| `PATCH` | `/internal/v1/agent/conversations/{conversation_id}` | Nhận `user_id`, `shop_id`, `title`; trả summary đã đổi tên |
-| `DELETE` | `/internal/v1/agent/conversations/{conversation_id}` | Nhận `user_id`, `shop_id`; xóa hội thoại |
-| `POST` | `/internal/v1/drafts/parse` | Text/voice/image → `DraftView` |
-| `POST` | `/internal/v1/recommendations/replenishment` | Tạo gợi ý nhập hàng có lý do |
-| `POST` | `/internal/v1/insights/chat` | Trả lời có citation và phạm vi thời gian |
+| Method | Đường | Trách nhiệm | Trạng thái |
+|---|---|---|---|
+| `POST` | `/internal/v1/agent/chat` | Body `{ user_id, shop_id, conversation_id?, message }`; trả `{ conversation_id, message_id, request_id, answer, model, model_version }` | Đã có |
+| `GET` | `/internal/v1/agent/conversations` | Query `user_id`, `shop_id`; trả danh sách hội thoại | Đã có |
+| `GET` | `/internal/v1/agent/conversations/{conversation_id}` | Query `user_id`, `shop_id`; trả hội thoại và tin nhắn | Đã có |
+| `PATCH` | `/internal/v1/agent/conversations/{conversation_id}` | Body `{ user_id, shop_id, title }`; trả summary đã đổi tên | Đã có |
+| `DELETE` | `/internal/v1/agent/conversations/{conversation_id}` | Query `user_id`, `shop_id`; xóa hội thoại, trả `204` | Đã có |
+| `POST` | `/internal/v1/drafts/parse` | Text/voice/image → `DraftView` | Đích |
+| `POST` | `/internal/v1/recommendations/replenishment` | Tạo gợi ý nhập hàng có lý do | Đích |
+| `POST` | `/internal/v1/insights/chat` | Trả lời có citation và phạm vi thời gian | Đích |
 
 Yêu cầu chung:
 

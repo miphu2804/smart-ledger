@@ -4,9 +4,9 @@
 
 This ERD describes the target PostgreSQL database for **SmartLedger Phase 1**, an AI-assisted bookkeeping system for small businesses. It includes planned tables and relationships that are not yet in Core's Flyway migrations.
 
-The logical ERD includes authentication, shops, products, customers, drafts, sales, payments, refunds, debts, expenses, AI request traces, idempotency, and audit logs. Core migrations V1–V10 implement the business tables, idempotency and audit logs; AI/notification tables remain target design from Core's perspective. This does not assert deployment or completion of other teams' services.
+The logical ERD includes authentication, shops, products, customers, drafts, sales, payments, refunds, debts, expenses, Agent chat history, AI request traces, idempotency, and audit logs. Core migrations V1–V10 implement the business tables, idempotency and audit logs; AI migrations `001`–`004` in `backend/ai/migrations` create the chat tables, enable `pgvector` and add read-only views for the Agent. `ai_requests` and the notification tables remain target design. This does not assert deployment.
 
-Business decisions are owned by the [BRD](../product/business-requirements.md) and [PRD](../product/product-requirements.md); endpoint/JSON details are owned by the [API contract](../contracts/api-contracts.md). Reviewed against the Core working tree on 2026-10-02.
+Business decisions are owned by the [BRD](../product/business-requirements.md) and [PRD](../product/product-requirements.md); endpoint/JSON details are owned by the [API contract](../contracts/api-contracts.md). Reviewed against the `staging` branch on 2026-10-04.
 
 A sale record in this MVP is an internal business record. It is **not an electronic invoice**.
 
@@ -45,7 +45,10 @@ Drafts do not affect revenue, stock, payments, or debts until confirmed.
 
 ### AI and System Safety
 
-- **ai_requests**: Planned table for AI request status, model/version, result, errors, and media object references; not yet created by Core migrations.
+- **chat_conversations**: Agent conversations per user and shop, created by AI migration `001`. Migration `003` adds `summary` and `summary_through_message_id` for the rolling summary.
+- **chat_messages**: USER/ASSISTANT messages of a conversation; folded messages stay for history search. `ai_request_id` has no foreign key until `ai_requests` exists.
+- **ai_read views**: AI migration `004` creates `ai_read.v_shop_profile`, `v_categories` and `v_products` for the Agent's read-only shop-data tool; they are views, not tables.
+- **ai_requests**: Planned table for AI request status, model/version, result, errors, and media object references; not yet created by any migration.
 - **api_idempotency_keys**: Protects exactly expense creation, debt repayment, and sale void. Confirmation replays by draft ID instead. Other create operations are not covered; default TTL is 30 days and no cleanup job exists.
 - **audit_logs**: Created by V10 as append-only history of successful OWNER/ADMIN writes (actor, shop, action, target, safe metadata, request ID); UPDATE/DELETE/TRUNCATE are rejected by triggers. Audit of sensitive ADMIN read access is still planned.
 

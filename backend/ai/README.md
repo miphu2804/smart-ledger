@@ -1,6 +1,6 @@
 # SmartLedger AI
 
-Internal AI API intended for Core; Core does not call it yet. The service exposes `/health`, `POST /internal/v1/agent/chat`, and list/detail/rename/delete routes under `/internal/v1/agent/conversations`. The agent can read the current shop's profile, categories and products through a read-only SQL tool. Chat history is stored in PostgreSQL. Postgres and Redis clients connect at process start and log status. Every `/internal/v1` route requires the shared `X-Internal-Token` header. There are no invoice or expense endpoints.
+Internal AI API called only by Core, which proxies its public `/api/v1/agent/*` routes here. The service exposes `/health`, `POST /internal/v1/agent/chat`, and list/detail/rename/delete routes under `/internal/v1/agent/conversations`. The agent can read the current shop's profile, categories and products through a read-only SQL tool. Chat history is stored in PostgreSQL. Postgres and Redis clients connect at process start and log status. Every `/internal/v1` route requires the shared `X-Internal-Token` header. There are no invoice or expense endpoints.
 
 Frontend must not call this service.
 
@@ -15,7 +15,7 @@ psql "$POSTGRES_URL" -v ON_ERROR_STOP=1 -f migrations/003_add_chat_summary.sql
 psql "$POSTGRES_URL" -v ON_ERROR_STOP=1 -f migrations/004_create_ai_read_views.sql
 ```
 
-The AI service does not create or migrate tables at startup. `ai_request_id` remains nullable; its foreign key is deferred until the `ai_requests` table is installed. Version `002` is reserved for the pgvector work and is not part of this service yet.
+The AI service does not create or migrate tables at startup. `ai_request_id` remains nullable; its foreign key is deferred until the `ai_requests` table is installed. Version `002` only enables the `vector` extension ([ADR-0001](../../docs/architecture/adr/0001-vector-store-pgvector.md)); no table uses embeddings yet.
 
 ## Chat context and rolling summary
 
@@ -66,7 +66,7 @@ Phase 1 covers only the shop profile, categories and products. Sales, expenses, 
 
 ## Internal authentication
 
-`INTERNAL_API_TOKEN` is the credential shared with Core. Callers send it in the `X-Internal-Token` header; a missing or wrong value returns `401 unauthorized`. An unset or blank token fails closed, so every `/internal/v1` route returns `401` while `/health` keeps answering. Keep the staging and production values in those environments' secrets, and remember that Core does not send the header yet.
+`INTERNAL_API_TOKEN` is the credential shared with Core. Callers send it in the `X-Internal-Token` header; a missing or wrong value returns `401 unauthorized`. An unset or blank token fails closed, so every `/internal/v1` route returns `401` while `/health` keeps answering. Core sends the header from its own `INTERNAL_API_TOKEN`, so both services must hold the same value. Keep the staging and production values in those environments' secrets.
 
 ## Setup
 
