@@ -2,56 +2,113 @@ import { Feather } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
 import React, { createContext, useCallback, useContext, useRef, useState } from 'react';
 import { Animated, Image, Pressable, StyleSheet, View } from 'react-native';
+import { useReducedMotion } from '../motion';
 import { colors, shadow } from '../theme';
 import { T } from './ui';
 
-/** Tạm dùng mascot người dùng cung cấp làm dấu hiệu thương hiệu. */
+/** Logo icon thương hiệu Sổ Nghe Lời */
 export function LogoMark({ size = 36 }: { size?: number }) {
   return (
     <Image
-      source={require('../../assets/brand-mascot-icon.png')}
-      resizeMode="cover"
-      style={{ width: size, height: size, borderRadius: size * 0.22 }}
+      source={require('../../assets/brand-logo.png')}
+      resizeMode="contain"
+      style={{ width: size, height: size }}
     />
   );
 }
 
-export function Logo({ size = 34, subtitle = true }: { size?: number; subtitle?: boolean }) {
+/** Chữ thương hiệu "Sổ Nghe Lời" với dấu chấm vàng trên chữ 'i' và phụ đề "AI VOICE POS" */
+export function BrandWordmark({
+  size = 32,
+  align = 'center',
+  showSub = true,
+}: {
+  size?: number;
+  align?: 'left' | 'center' | 'right';
+  showSub?: boolean;
+}) {
+  const dotSize = Math.max(Math.round(size * 0.16), 4);
+  const dotTop = Math.round(size * 0.12);
+  const dotRight = Math.round(size * 0.04);
+  const subSize = Math.max(Math.round(size * 0.3), 10);
+  const subSpacing = Math.max(Math.round(size * 0.16), 3);
+
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
-      <LogoMark size={size} />
-      <View>
-        <T w="extrabold" size={size * 0.55}>
-          Sổ Nghe{' '}
-          <T w="extrabold" size={size * 0.55} color={colors.primary}>
-            Lời
-          </T>
+    <View style={{ alignItems: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start' }}>
+      {/* Hàng chữ chính: Sổ Nghe Lờ + ı với dấu chấm vàng */}
+      <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+        <T w="extrabold" size={size} color="#111827" style={{ letterSpacing: -size * 0.02 }}>
+          Sổ Nghe Lờ
         </T>
-        {subtitle ? (
-          <T size={12} color={colors.faint}>
-            Bán hàng chỉ cần nói
+        <View style={{ position: 'relative', alignItems: 'center' }}>
+          <View
+            style={{
+              position: 'absolute',
+              top: dotTop,
+              right: dotRight,
+              width: dotSize,
+              height: dotSize,
+              borderRadius: dotSize / 2,
+              backgroundColor: '#F5BE18',
+            }}
+          />
+          <T w="extrabold" size={size} color="#111827" style={{ letterSpacing: -size * 0.02 }}>
+            {'\u0131'}
           </T>
-        ) : null}
+        </View>
       </View>
+
+      {/* Dòng phụ: AI VOICE POS */}
+      {showSub ? (
+        <T
+          w="semibold"
+          size={subSize}
+          color="#6B7280"
+          style={{
+            letterSpacing: subSpacing,
+            marginTop: Math.max(Math.round(size * 0.1), 3),
+            textTransform: 'uppercase',
+          }}
+        >
+          AI VOICE POS
+        </T>
+      ) : null}
     </View>
   );
 }
 
-/** Nút nổi "Trợ lý AI" */
+export function Logo({
+  size = 40,
+  showSub = true,
+  subtitle,
+}: {
+  size?: number;
+  showSub?: boolean;
+  subtitle?: boolean;
+}) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+      <LogoMark size={size} />
+      <BrandWordmark size={size * 0.62} align="left" showSub={showSub && subtitle !== false} />
+    </View>
+  );
+}
+
+/** Nút nổi mở trợ lý. */
 export function AIFab({ bottom = 96 }: { bottom?: number }) {
   const path = usePathname();
   if (path.startsWith('/ai')) return null;
   return (
     <Pressable
       onPress={() => router.push('/ai')}
-      accessibilityLabel="Mở trợ lý AI"
+      accessibilityLabel="Mở trợ lý"
       style={({ pressed }) => [styles.fab, { bottom }, shadow(2), pressed && { opacity: 0.85 }]}
     >
       <View style={styles.fabIcon}>
-        <Feather name="star" size={16} color={colors.white} />
+        <Feather name="message-circle" size={16} color={colors.white} />
       </View>
       <T w="bold" size={13} color={colors.orange} style={{ marginRight: 4 }}>
-        Trợ lý AI
+        Trợ lý
       </T>
     </Pressable>
   );
@@ -65,16 +122,26 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [msg, setMsg] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null);
   const anim = useRef(new Animated.Value(0)).current;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reducedMotion = useReducedMotion();
   const show = useCallback(
     (text: string, kind: 'ok' | 'err' = 'ok') => {
       setMsg({ text, kind });
       if (timer.current) clearTimeout(timer.current);
-      Animated.timing(anim, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+      if (reducedMotion) {
+        anim.setValue(1);
+      } else {
+        Animated.timing(anim, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+      }
       timer.current = setTimeout(() => {
-        Animated.timing(anim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => setMsg(null));
+        if (reducedMotion) {
+          anim.setValue(0);
+          setMsg(null);
+        } else {
+          Animated.timing(anim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => setMsg(null));
+        }
       }, 2200);
     },
-    [anim],
+    [anim, reducedMotion],
   );
   return (
     <ToastCtx.Provider value={show}>

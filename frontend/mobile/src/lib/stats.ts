@@ -117,4 +117,4 @@ export function monthRevenue(invoices: Invoice[], monthOffset: number, now = new
 }
 
 export const methodLabel = { cash: 'Tiền mặt', transfer: 'Chuyển khoản', debt: 'Ghi nợ' } as const;
-export const sourceLabel = { voice: 'Đọc đơn AI', pos: 'POS', manual: 'Nhập tay' } as const;
+export const sourceLabel = { voice: 'Đọc đơn', pos: 'Bán hàng', manual: 'Nhập tay' } as const;

@@ -202,8 +202,8 @@ def test_empty_answer_gets_a_fallback() -> None:
     assert result.answer == EMPTY_ANSWER_REPLY
 
 
-def test_normal_vietnamese_answer_passes_through() -> None:
-    answer = "Gạo ST25 đang bán 30.000đ/kg, còn 12 kg (tiệm hiện tại, dữ liệu lúc hỏi)."
+def test_normal_answer_passes_through() -> None:
+    answer = "ST25 rice sells for 30.000 VND/kg, 12 kg left (this shop, as of now)."
 
     result = service(answering(answer)).chat(user_id=3, shop_id=15, message="m")
 

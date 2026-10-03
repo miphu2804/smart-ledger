@@ -8,7 +8,7 @@ import { T } from './ui';
 type Point = { label: string; value: number };
 
 /** Biểu đồ vùng (area) giống màn "Doanh thu" trong prototype. Chạm để xem giá trị. */
-export function AreaChart({ data, height = 150, color = colors.primary }: { data: Point[]; height?: number; color?: string }) {
+export function AreaChart({ data, height = 150, color = colors.data.revenue }: { data: Point[]; height?: number; color?: string }) {
   const [w, setW] = useState(0);
   const [sel, setSel] = useState<number | null>(null);
   const max = Math.max(1, ...data.map((d) => d.value)) * 1.15;
@@ -115,7 +115,7 @@ export function AreaChart({ data, height = 150, color = colors.primary }: { data
 export function BarChart({
   data,
   height = 120,
-  color = colors.primary,
+  color = colors.data.revenue,
   highlightLast = true,
   onSelect,
   selected,
@@ -154,7 +154,7 @@ export function BarChart({
                   maxWidth: 30,
                   height: Math.max(4, (d.value / max) * (height - 22)),
                   borderRadius: 8,
-                  backgroundColor: active ? color : colors.primarySoft,
+                  backgroundColor: active ? color : colors.data.revenueSoft,
                 }}
               />
             </Pressable>

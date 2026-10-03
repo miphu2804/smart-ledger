@@ -1,22 +1,26 @@
 import React from 'react';
-import { Image, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 
-/** Use the round badge in the user's original image without changing the asset. */
 export function MascotBadge({ size }: { size: number }) {
-  const scale = size / 224;
   return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, overflow: 'hidden' }}>
+    <View style={[styles.container, { width: size, height: size }]}>
       <Image
-        source={require('../../assets/assistant-mascot-badge.png')}
-        resizeMode="stretch"
+        source={require('../../assets/bubblelogo.png')}
+        resizeMode="contain"
         style={{
-          position: 'absolute',
-          width: 334 * scale,
-          height: 312 * scale,
-          left: -72 * scale,
-          top: -40 * scale,
+          width: size,
+          height: size,
         }}
       />
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
+
+

@@ -10,7 +10,7 @@ export const notifCategoryMeta: Record<NotifCategory, { label: string; icon: Ico
   stock: { label: 'Kho hàng', icon: 'package', color: '#E0504F', bg: '#FFEEEE' },
   debt: { label: 'Công nợ', icon: 'book-open', color: '#C8860A', bg: '#FFF4D6' },
   finance: { label: 'Thu chi', icon: 'pie-chart', color: '#2E9E4F', bg: '#EAF7EE' },
-  ai: { label: 'Gợi ý AI', icon: 'zap', color: '#7A5AF0', bg: '#F1EDFF' },
+  ai: { label: 'Gợi ý', icon: 'zap', color: '#7A5AF0', bg: '#F1EDFF' },
   system: { label: 'Hệ thống', icon: 'settings', color: '#5A6675', bg: '#EEF1F5' },
 };
 

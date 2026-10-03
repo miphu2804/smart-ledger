@@ -35,7 +35,7 @@ export default function BestSellers() {
 
   return (
     <Screen>
-      <Header title="Hàng bán chạy" subtitle="Biết món nào nên nhập thêm" />
+      <Header title="Hàng bán chạy" subtitle="Theo số lượng và doanh thu" />
       <Chips<Period>
         value={period}
         onChange={setPeriod}
@@ -72,7 +72,7 @@ export default function BestSellers() {
             <T w="bold" size={14} style={{ marginBottom: 10 }}>
               Doanh thu 7 ngày
             </T>
-            <BarChart data={week} height={110} />
+            <BarChart data={week} height={110} color={colors.data.revenue} />
           </Card>
 
           <SectionTitle title={`Xếp hạng (${list.length} món)`} />
@@ -93,27 +93,27 @@ export default function BestSellers() {
                       <T w="semibold" size={14} style={{ flex: 1 }} numberOfLines={1}>
                         {l.name}
                       </T>
-                      <T w="extrabold" size={14} color={colors.primary}>
+                      <T w="extrabold" size={14} color={colors.data.revenue}>
                         {sort === 'qty' ? `x${l.qty}` : vnd(l.revenue)}
                       </T>
                     </Row>
                     <View style={{ marginTop: 6 }}>
-                      <Progress value={v / max} color={i < 3 ? colors.primary : colors.primaryLight} />
+                      <Progress value={v / max} color={i < 3 ? colors.data.product : colors.data.revenue} track={colors.primarySoft} />
                     </View>
                   </View>
                 </View>
               );
             })
           ) : (
-            <EmptyState icon="bar-chart-2" title="Chưa có dữ liệu" />
+            <EmptyState icon="bar-chart-2" title="Chưa có mặt hàng bán trong kỳ" />
           )}
 
           {slow.length ? (
             <Card style={{ marginTop: 16, backgroundColor: colors.purpleSoft }}>
               <Row gap={8}>
-                <Feather name="star" size={14} color={colors.purple} />
+                <Feather name="trending-down" size={14} color={colors.purple} />
                 <T w="bold" size={13} color={colors.purple}>
-                  AI gợi ý · hàng bán chậm
+                  Hàng bán chậm
                 </T>
               </Row>
               <T size={12.5} color={colors.muted} style={{ marginTop: 6, lineHeight: 18 }}>

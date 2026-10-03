@@ -1,0 +1,59 @@
+%% SmartLedger — environments, databases, and CI/CD
+%% Solid edges exist today; dashed edges are planned and not yet implemented.
+%% Rendered: ../images/environments.svg
+flowchart LR
+    subgraph clients["Clients"]
+        direction TB
+        mobile["Mobile app · Expo · OWNER"]
+        web["Web · Vite · landing / ADMIN"]
+    end
+
+    firebase["Firebase Auth"]
+
+    subgraph dev["Dev machine · docker compose"]
+        direction TB
+        core_dev["Core · Spring Boot :8000<br/>Flyway on startup"]
+        ai_dev["AI · FastAPI :8001"]
+        core_dev -->|"HTTP"| ai_dev
+    end
+
+    subgraph supabase["Supabase"]
+        direction TB
+        db_staging[("Staging project<br/>dev + staging, test data")]
+        db_prod[("Production project<br/>real data")]
+    end
+
+    subgraph redis_cloud["Redis Cloud"]
+        direction TB
+        redis_staging[("Staging database<br/>dev + staging")]
+        redis_prod[("Production database")]
+    end
+
+    subgraph github["GitHub"]
+        direction TB
+        repo["Repository<br/>feature → staging → main"]
+        ci["Actions CI<br/>ai · core · container-images · mobile-web"]
+        pg_ci[("Disposable PostgreSQL<br/>tests + migrations V1…Vn")]
+        env_staging["Environment: staging<br/>secrets"]
+        env_prod["Environment: production<br/>secrets + approval"]
+        repo -->|"PR to staging / main"| ci
+        ci --> pg_ci
+    end
+
+    vercel["Vercel<br/>mobile web preview / production"]
+
+    mobile -->|"sign in"| firebase
+    mobile -->|"HTTP + Firebase token"| core_dev
+    web -.->|"HTTP"| core_dev
+    core_dev -->|"verify token"| firebase
+
+    core_dev -->|".env.staging"| db_staging
+    ai_dev -->|".env.staging"| db_staging
+    ai_dev -->|".env.staging"| redis_staging
+
+    repo -->|"staging = preview, main = production"| vercel
+    vercel --> mobile
+
+    env_staging -.->|"deploy + Flyway after merge to staging"| db_staging
+    env_prod -.->|"deploy + Flyway after approved merge to main"| db_prod
+    env_prod -.->|"REDIS_URL"| redis_prod

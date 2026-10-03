@@ -61,8 +61,107 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function pastIso(days: number, hours: number, minutes = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  d.setHours(hours, minutes, 0, 0);
+  return d.toISOString();
+}
+
 function apiErr(status: number, code: string, message: string): ApiError {
   return new ApiError(status, code, message);
+}
+
+function makeSaleItem(product: ProductView, quantity: number): SaleItemView {
+  return {
+    id: nextDraftItemId++,
+    productId: product.id,
+    productName: product.name,
+    unit: product.unit,
+    quantity,
+    unitPriceVnd: product.sellingPriceVnd,
+    lineTotalVnd: Math.round(product.sellingPriceVnd * quantity),
+  };
+}
+
+function addMockSale({
+  customerName,
+  customerPhone,
+  soldAt,
+  itemSpecs,
+  paidVnd,
+  method = 'CASH',
+}: {
+  customerName: string | null;
+  customerPhone?: string | null;
+  soldAt: string;
+  itemSpecs: Array<[number, number]>;
+  paidVnd?: number;
+  method?: PaymentView['paymentMethod'];
+}): void {
+  const items = itemSpecs.map(([productIndex, quantity]) => makeSaleItem(products[productIndex], quantity));
+  const subtotalVnd = items.reduce((sum, item) => sum + item.lineTotalVnd, 0);
+  const totalVnd = subtotalVnd;
+  const resolvedPaid = paidVnd ?? totalVnd;
+  const outstandingVnd = Math.max(0, totalVnd - resolvedPaid);
+  const paymentStatus: SaleView['paymentStatus'] = outstandingVnd === 0 ? 'PAID' : resolvedPaid > 0 ? 'PARTIAL' : 'DEBT';
+  let customerId: number | null = null;
+
+  if (customerName && outstandingVnd > 0) {
+    const customer: CustomerView = {
+      id: nextCustomerId++,
+      shopId: SHOP_ID,
+      name: customerName,
+      phone: customerPhone ?? null,
+      status: 'ACTIVE',
+      createdAt: soldAt,
+      updatedAt: soldAt,
+    };
+    customers.push(customer);
+    customerId = customer.id;
+  }
+
+  const sale: SaleView = {
+    id: nextSaleId++,
+    shopId: SHOP_ID,
+    customerName,
+    customerPhone: customerPhone ?? null,
+    subtotalVnd,
+    discountVnd: 0,
+    totalVnd,
+    paidVnd: resolvedPaid,
+    saleStatus: 'CONFIRMED',
+    paymentStatus,
+    soldAt,
+    items,
+    customerId,
+    outstandingVnd,
+  };
+  sales.push(sale);
+
+  if (resolvedPaid > 0) {
+    payments.push({
+      id: nextPaymentId++,
+      saleId: sale.id,
+      amountVnd: resolvedPaid,
+      paymentMethod: method,
+      type: 'INITIAL',
+      receivedAt: soldAt,
+    });
+  }
+
+  if (customerId != null && outstandingVnd > 0) {
+    debts.push({
+      id: nextDebtId++,
+      saleId: sale.id,
+      customerId,
+      originalVnd: outstandingVnd,
+      outstandingVnd,
+      status: 'OPEN',
+      createdAt: soldAt,
+      settledAt: null,
+    });
+  }
 }
 
 function seed(): void {
@@ -90,6 +189,47 @@ function seed(): void {
     createdAt: now,
     updatedAt: now,
   }));
+  addMockSale({
+    customerName: null,
+    soldAt: pastIso(0, 8, 35),
+    itemSpecs: [[19, 2], [20, 3], [12, 1]],
+    method: 'CASH',
+  });
+  addMockSale({
+    customerName: 'Chị Hạnh',
+    customerPhone: '0908123456',
+    soldAt: pastIso(0, 10, 20),
+    itemSpecs: [[0, 4], [13, 1], [21, 2]],
+    paidVnd: 40000,
+    method: 'TRANSFER',
+  });
+  addMockSale({
+    customerName: null,
+    soldAt: pastIso(0, 15, 5),
+    itemSpecs: [[3, 1], [9, 2]],
+    method: 'CASH',
+  });
+  addMockSale({
+    customerName: 'Anh Minh',
+    customerPhone: '0912345678',
+    soldAt: pastIso(1, 17, 42),
+    itemSpecs: [[2, 1], [4, 1], [14, 2]],
+    paidVnd: 0,
+  });
+  addMockSale({
+    customerName: null,
+    soldAt: pastIso(3, 9, 12),
+    itemSpecs: [[16, 1], [17, 1], [18, 3]],
+    method: 'CASH',
+  });
+  addMockSale({
+    customerName: 'Cô Mai',
+    customerPhone: '0987654321',
+    soldAt: pastIso(7, 14, 18),
+    itemSpecs: [[10, 1], [11, 2]],
+    paidVnd: 120000,
+    method: 'TRANSFER',
+  });
   // Khách hàng/công nợ/đơn hàng/chi phí bắt đầu trống — dữ liệu mẫu cũ (Debt/Invoice) ghi lẫn lịch sử mua và
   // trả nợ, không map 1-1 sang originalVnd/outstandingVnd/Payment của Core nên không cố chuyển đổi (xem báo cáo).
 }
