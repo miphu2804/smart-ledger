@@ -9,7 +9,6 @@ import { apiRequest } from './api';
 /**
  * Trợ lý AI qua Core (`/api/v1/agent/*`, docs/contracts/api-contracts.md §5) — cần header X-Shop-Id.
  * Core lấy user từ token và chuyển tiếp sang AI; FE không gửi user_id hay shop_id trong body.
- * Lưu ý: Core chưa có proxy `/api/v1/agent/*` — khi tắt mock, các hàm này nhận lỗi từ Core cho tới khi có.
  * Chat chờ tới 45 giây vì model có thể gọi công cụ đọc dữ liệu tiệm trước khi trả lời.
  */
 const CHAT_TIMEOUT_MS = 45000;

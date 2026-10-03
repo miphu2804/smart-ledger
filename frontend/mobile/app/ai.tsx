@@ -11,10 +11,11 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Header, T } from '../src/components/ui';
-import type { ChatMessage } from '../src/data/types';
+import { Dialog, EmptyState, Field, Header, IconBtn, Row, Sheet, T } from '../src/components/ui';
+import type { AgentConversationSummary, AgentConversationView, AgentMessageView, ChatMessage } from '../src/data/types';
 import { agentApi } from '../src/lib/agentApi';
 import { ApiError } from '../src/lib/api';
+import { hhmm, relDay } from '../src/lib/format';
 import { useApp } from '../src/store/AppStore';
 import { colors, font } from '../src/theme';
 
@@ -37,6 +38,33 @@ function chatErrorMessage(err: unknown): string {
   return 'Chưa gửi được tin nhắn cho trợ lý.';
 }
 
+/** Lỗi khi xem/đổi tên/xoá lịch sử → câu báo tiếng Việt. */
+function historyErrorMessage(err: unknown, fallback = 'Chưa tải được lịch sử trò chuyện.'): string {
+  if (err instanceof ApiError) {
+    if (err.code === 'conversation_not_found') return 'Cuộc trò chuyện này không còn.';
+    if (err.code === 'network') return 'Không kết nối được máy chủ. Vui lòng kiểm tra mạng.';
+    if (err.code === 'ai_unavailable' || err.status === 503) return 'Trợ lý AI đang tạm lỗi, thử lại sau.';
+  }
+  return fallback;
+}
+
+function welcome(name: string): ChatMessage {
+  return { id: 'hi', from: 'ai', text: `Chào ${name.split(' ').slice(-1)[0]}! Bạn muốn hỏi gì về tiệm và hàng hoá?` };
+}
+
+function toChatMessage(m: AgentMessageView): ChatMessage {
+  return { id: `${m.role === 'USER' ? 'u' : 'a'}${m.message_id}`, from: m.role === 'USER' ? 'user' : 'ai', text: m.content };
+}
+
+function conversationTitle(c: AgentConversationSummary): string {
+  return c.title?.trim() || 'Cuộc trò chuyện chưa đặt tên';
+}
+
+function lastActive(iso: string): string {
+  const d = new Date(iso);
+  return `${relDay(d)} · ${hhmm(d)}`;
+}
+
 /** Trợ lý AI — gửi qua agentApi (Core `/api/v1/agent/chat`; khi bật mock thì mockCore trả lời giả). */
 export default function Ai() {
   const app = useApp();
@@ -46,13 +74,26 @@ export default function Ai() {
   const [typing, setTyping] = useState(false);
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [msgs, setMsgs] = useState<ChatMessage[]>([
-    {
-      id: 'hi',
-      from: 'ai',
-      text: `Chào ${app.user.name.split(' ').slice(-1)[0]}! Bạn muốn hỏi gì về tiệm và hàng hoá?`,
-    },
-  ]);
+  const [msgs, setMsgs] = useState<ChatMessage[]>(() => [welcome(app.user.name)]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  const startNew = () => {
+    setConversationId(null);
+    setMsgs([welcome(app.user.name)]);
+    setError(null);
+  };
+
+  // Khoá đổi hội thoại khi đang chờ trả lời, kẻo câu trả lời cũ bị nối vào hội thoại vừa mở.
+  const openHistory = () => {
+    if (!typing) setHistoryOpen(true);
+  };
+
+  const showConversation = (view: AgentConversationView) => {
+    setConversationId(view.conversation_id);
+    setMsgs([welcome(app.user.name), ...view.messages.map(toChatMessage)]);
+    setError(null);
+    setHistoryOpen(false);
+  };
 
   useEffect(() => {
     const t = setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 50);
@@ -88,7 +129,21 @@ export default function Ai() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={[styles.headerWrap, { paddingTop: insets.top }]}>
-        <Header title="Trợ lý AI" subtitle="Hỏi về tiệm, nhóm hàng và sản phẩm" />
+        <Header
+          title="Trợ lý AI"
+          subtitle="Hỏi về tiệm, nhóm hàng và sản phẩm"
+          right={
+            <Row gap={8}>
+              <IconBtn
+                name="edit"
+                label="Cuộc trò chuyện mới"
+                color={typing ? colors.faint : colors.ink}
+                onPress={() => !typing && startNew()}
+              />
+              <IconBtn name="clock" label="Lịch sử trò chuyện" color={typing ? colors.faint : colors.ink} onPress={openHistory} />
+            </Row>
+          }
+        />
       </View>
 
       <ScrollView
@@ -235,7 +290,179 @@ export default function Ai() {
           </Pressable>
         </View>
       </View>
+
+      <HistorySheet
+        visible={historyOpen}
+        activeId={conversationId}
+        onClose={() => setHistoryOpen(false)}
+        onOpen={showConversation}
+        onActiveGone={startNew}
+      />
     </KeyboardAvoidingView>
+  );
+}
+
+/** Lịch sử trò chuyện: tải danh sách mỗi lần mở, mở/đổi tên/xoá hội thoại. */
+function HistorySheet({
+  visible,
+  activeId,
+  onClose,
+  onOpen,
+  onActiveGone,
+}: {
+  visible: boolean;
+  activeId: number | null;
+  onClose: () => void;
+  onOpen: (view: AgentConversationView) => void;
+  /** Hội thoại đang hiện trên màn chat đã bị xoá hoặc không còn. */
+  onActiveGone: () => void;
+}) {
+  const [history, setHistory] = useState<AgentConversationSummary[] | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<AgentConversationSummary | null>(null);
+  const [renameText, setRenameText] = useState('');
+  const [deleting, setDeleting] = useState<AgentConversationSummary | null>(null);
+  const [opening, setOpening] = useState<number | null>(null);
+
+  const loadHistory = async () => {
+    try {
+      setHistory(await agentApi.listConversations());
+    } catch (err) {
+      setHistoryError(historyErrorMessage(err));
+    }
+  };
+
+  useEffect(() => {
+    if (!visible) return;
+    setHistoryError(null);
+    void loadHistory();
+  }, [visible]);
+
+  // Mỗi lần chỉ mở một hội thoại, kẻo phản hồi về sau ghi đè hội thoại người dùng bấm sau cùng.
+  const openConversation = async (c: AgentConversationSummary) => {
+    if (opening !== null) return;
+    setOpening(c.conversation_id);
+    setHistoryError(null);
+    try {
+      onOpen(await agentApi.getConversation(c.conversation_id));
+    } catch (err) {
+      setHistoryError(historyErrorMessage(err, 'Chưa mở được cuộc trò chuyện.'));
+      const gone = err instanceof ApiError && err.code === 'conversation_not_found';
+      if (gone && c.conversation_id === activeId) onActiveGone();
+      void loadHistory();
+    } finally {
+      setOpening(null);
+    }
+  };
+
+  const saveRename = async () => {
+    const title = renameText.trim();
+    if (!renaming || !title) return;
+    const target = renaming;
+    setRenaming(null);
+    try {
+      const updated = await agentApi.rename(target.conversation_id, title.slice(0, 255));
+      setHistory((list) => list?.map((c) => (c.conversation_id === updated.conversation_id ? updated : c)) ?? null);
+    } catch (err) {
+      setHistoryError(historyErrorMessage(err, 'Chưa đổi tên được cuộc trò chuyện.'));
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    const target = deleting;
+    setDeleting(null);
+    try {
+      await agentApi.remove(target.conversation_id);
+      setHistory((list) => list?.filter((c) => c.conversation_id !== target.conversation_id) ?? null);
+      if (target.conversation_id === activeId) onActiveGone();
+    } catch (err) {
+      setHistoryError(historyErrorMessage(err, 'Chưa xoá được cuộc trò chuyện.'));
+    }
+  };
+
+  return (
+    <Sheet visible={visible} onClose={onClose} title="Lịch sử trò chuyện">
+      {historyError ? (
+        <T size={13} color={colors.red} style={styles.historyError} accessibilityRole="alert">
+          {historyError}
+        </T>
+      ) : null}
+      {history === null && !historyError ? (
+        <T size={13} color={colors.muted}>
+          Đang tải…
+        </T>
+      ) : null}
+      {history?.length === 0 ? (
+        <EmptyState icon="message-circle" title="Chưa có cuộc trò chuyện" hint="Hỏi trợ lý một câu để bắt đầu." />
+      ) : null}
+      {history?.map((c) => (
+        <View key={c.conversation_id} style={styles.historyRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Mở ${conversationTitle(c)}`}
+            onPress={() => openConversation(c)}
+            style={({ pressed }) => [styles.historyMain, pressed && styles.pressed]}
+          >
+            <T w="semibold" size={14} numberOfLines={1} color={c.conversation_id === activeId ? colors.primary : colors.ink}>
+              {conversationTitle(c)}
+            </T>
+            <T size={12} color={colors.faint}>
+              {opening === c.conversation_id ? 'Đang mở…' : lastActive(c.last_message_at)}
+            </T>
+          </Pressable>
+          <IconBtn
+            name="edit-2"
+            size={36}
+            bg={colors.bg}
+            label={`Đổi tên ${conversationTitle(c)}`}
+            onPress={() => {
+              setRenameText(c.title ?? '');
+              setRenaming(c);
+            }}
+          />
+          <IconBtn
+            name="trash-2"
+            size={36}
+            bg={colors.bg}
+            color={colors.red}
+            label={`Xoá ${conversationTitle(c)}`}
+            onPress={() => setDeleting(c)}
+          />
+        </View>
+      ))}
+
+      {/* Dialog nằm trong Sheet: iOS không mở được Modal ngang hàng khi Sheet đang hiện. */}
+      <Dialog
+        visible={renaming !== null}
+        icon="edit-2"
+        title="Đổi tên cuộc trò chuyện"
+        confirm="Lưu"
+        cancel="Huỷ"
+        onCancel={() => setRenaming(null)}
+        onConfirm={saveRename}
+      >
+        <Field
+          value={renameText}
+          onChangeText={setRenameText}
+          placeholder="Tên cuộc trò chuyện"
+          maxLength={255}
+          autoFocus
+          style={styles.renameField}
+        />
+      </Dialog>
+
+      <Dialog
+        visible={deleting !== null}
+        danger
+        icon="trash-2"
+        title={`Xoá "${deleting ? conversationTitle(deleting) : ''}"?`}
+        message="Trợ lý sẽ không còn nhớ nội dung cuộc trò chuyện này."
+        confirm="Xoá"
+        onCancel={() => setDeleting(null)}
+        onConfirm={confirmDelete}
+      />
+    </Sheet>
   );
 }
 
@@ -331,4 +558,15 @@ const styles = StyleSheet.create({
   voiceButton: { backgroundColor: 'transparent' },
   sendButton: { backgroundColor: colors.primary },
   sendDisabled: { backgroundColor: colors.border },
+  historyError: { marginBottom: 10 },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  historyMain: { flex: 1, gap: 2 },
+  renameField: { marginTop: 14, marginBottom: 0 },
 });
