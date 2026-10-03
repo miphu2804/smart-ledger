@@ -223,6 +223,8 @@ export default function Ai() {
             {QUICK.map((q) => (
               <Pressable
                 key={q.label}
+                accessibilityRole="button"
+                accessibilityLabel={`Hỏi trợ lý: ${q.label}`}
                 onPress={() => send(q.label)}
                 style={({ pressed }) => [styles.quickChip, pressed && styles.pressed]}
               >
