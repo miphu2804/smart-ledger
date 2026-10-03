@@ -1,3 +1,16 @@
+### [2026-10-04 00:57 UTC+07:00] — [Docs] Sync documentation with staging code and add a reading guide
+
+**Done:**
+- Added a "How to read the docs" guide, a target-versus-implemented rule and a "which document to update" table to `docs/README.md`; implementation status now lives only in technical design §1 and per-endpoint status in the API contract.
+- Corrected docs that described Core as auth-only, AI as uncalled, Agent routes as target-only, Flyway as V1–V9, AI env names with `__`, a Compose `postgres` service and an all-mock mobile app.
+- Removed Qdrant from the architecture drawio/SVG/PNG, added chat summary columns and current migration ranges to `erd.dbml`, and mapped `FR-019`, `FR-026`, `FR-027` in the BRD hand-off table.
+
+**Changed files:** `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `backend/{ai,core}/README.md`, `frontend/{README.md,mobile/README.md,mobile/.env.example,web/README.md}`, `docs/README.md`, `docs/product/{project-overview,business-requirements,product-requirements}.md`, `docs/architecture/{technical-design,erd-description}.md`, `docs/architecture/adr/0001-vector-store-pgvector.md`, `docs/architecture/diagrams/{src/architecture.drawio,src/erd.dbml,images/architecture.svg,images/architecture.png}`, `docs/contracts/api-contracts.md`, `docs/design/*.md`; deleted `docs/architecture/diagrams/assets/icons-sources.md` (it credited logos the diagram does not contain).
+
+**Flow explained:** No code or behavior change.
+
+**Check:** Relative links and anchors across all tracked Markdown resolve; `erd.dbml` converts with `@dbml/cli`; the diagram re-export was inspected visually.
+
 ### [2026-10-03 07:54 UTC+07:00] — [UI/UX] Floating Cart Bar Elevation, Free-floating 3D Robot Mascot & Realistic Product Photos
 
 **Done:**

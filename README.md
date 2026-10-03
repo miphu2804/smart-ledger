@@ -53,7 +53,7 @@ cd frontend/mobile && npm run typecheck && npm run export:web
 
 ## Layout
 
-Documentation-first MVP. **Verified in the current code:** BRD/PRD remain provisional and architecture describes the MVP target. Java Core implements Firebase session and current-user endpoints plus the auth/shop migration; shop and ledger APIs are not implemented. Python AI implements `/health` and internal Agent chat with persistent conversation management; Core does not call AI yet. Mobile and admin web default to mock data. Production readiness has not been verified.
+Documentation-first MVP: BRD/PRD remain provisional and the architecture diagram describes the MVP target. Java Core implements Firebase sessions, shops, catalog, customers, sale drafts, sales, payments, debts, expenses, report summary, OWNER audit history, and proxies Agent chat to AI. Python AI implements `/health` and internal Agent chat with persistent conversations and a read-only shop-data tool. Voice/image parsing, replenishment, insight chat, and the admin dashboard APIs are not implemented. Mobile and admin web default to mock data; mobile can call the real Core, admin web cannot yet. Production readiness has not been verified. Implementation status lives in [Technical design §1](docs/architecture/technical-design.md#1-phạm-vi).
 
 ```text
 smart-ledger/
@@ -62,35 +62,33 @@ smart-ledger/
 ├── CLAUDE.md
 ├── PROGRESS.md
 ├── compose.yaml         # Core + AI (Supabase + Redis Cloud)
-├── docs/
+├── docs/                 # source of truth; start at docs/README.md
 │   ├── product/          # product description, BRD, PRD
-│   ├── architecture/     # overview, technical design, ADRs
-│   └── contracts/        # HTTP/wire contracts
+│   ├── architecture/     # technical design, ERD, ADRs, diagrams
+│   ├── contracts/        # HTTP/wire contracts
+│   ├── design/           # mobile UI direction and wording
+│   └── development/      # release runbooks
 ├── frontend/             # mobile OWNER + web ADMIN; mock by default
 ├── backend/
 │   ├── core/             # Core public API (Java), DB owner
 │   └── ai/               # Internal AI API (Python FastAPI)
 ```
 
-## AI scaffold
+## AI service
 
 Python 3.11+, [uv](https://docs.astral.sh/uv/). See [backend/ai/README.md](backend/ai/README.md).
 
-```bash
-cd backend/ai && uv sync --group dev && uv run python -m src.main
-```
-
-`GET /health` is liveness. Postgres and Redis clients connect at process start. AI exposes chat and conversation CRUD under `/internal/v1/agent/*`; internal service authentication is not implemented yet. See [API contracts](docs/contracts/api-contracts.md) for current routes and MVP targets.
+`GET /health` is liveness. AI exposes chat and conversation CRUD under `/internal/v1/agent/*`, guarded by the `X-Internal-Token` header; only Core calls it. See [API contracts](docs/contracts/api-contracts.md) for current routes and MVP targets.
 
 ## Local Compose
 
-Dev and staging share the staging Supabase project and Redis Cloud database; production uses a separate Supabase project and Redis Cloud database. There are no local PostgreSQL or Redis containers. Credentials live in Git-ignored files at the repository root: `.env.staging` and `.env.production` each define `DATABASE_URL` (JDBC), `DATABASE_USERNAME`, `DATABASE_PASSWORD` for Core and `POSTGRES_URL`, `REDIS_URL` for AI (use `rediss://` when TLS is enabled on Redis Cloud). Service settings stay in each service's own file: `backend/core/.env` supplies `FIREBASE_PROJECT_ID` and `GOOGLE_APPLICATION_CREDENTIALS` (absolute host path of the service-account key, mounted read-only into the container), and Compose loads `backend/ai/.env` for model and API keys. Default stack is Core and AI; Langfuse is not enabled.
+Dev and staging share the staging Supabase project and Redis Cloud database; production uses a separate Supabase project and Redis Cloud database. There are no local PostgreSQL or Redis containers. Credentials live in Git-ignored files at the repository root: `.env.staging` and `.env.production` each define `DATABASE_URL` (JDBC), `DATABASE_USERNAME`, `DATABASE_PASSWORD` for Core and `POSTGRES_URL`, `REDIS_URL` for AI (use `rediss://` when TLS is enabled on Redis Cloud). Service settings stay in each service's own file: `backend/core/.env` supplies `FIREBASE_PROJECT_ID` and `GOOGLE_APPLICATION_CREDENTIALS` (absolute host path of the service-account key, mounted read-only into the container), and Compose loads `backend/ai/.env` for model and API keys. Core calls AI at `AI_BASE_URL` (Compose sets `http://ai:8001`) with the shared `INTERNAL_API_TOKEN`: put the same value in `backend/ai/.env` and in one of the `--env-file` files; a missing or mismatched value makes every Agent call fail (`401` from AI, `503 ai_unavailable` from Core). Default stack is Core and AI; Langfuse is not enabled.
 
 ```bash
 docker compose --env-file .env.staging --env-file backend/core/.env up --build
 ```
 
-Do not run the app with the production bootstrap credentials; production values belong in the `production` environment's secret store. Automated tests use a disposable PostgreSQL (`POSTGRES_TEST_URL`, CI service container), never Supabase.
+Do not run the app with the production bootstrap credentials; production values belong in the `production` environment's secret store. Automated tests use a disposable PostgreSQL (CI service containers), never Supabase: AI integration tests read `POSTGRES_TEST_URL`, Core PostgreSQL tests read `CORE_TEST_POSTGRES_URL` (see [Core README](backend/core/README.md#run-tests)).
 
 ## References
 
@@ -99,7 +97,7 @@ Do not run the app with the production bootstrap credentials; production values 
 | [Documentation Index](docs/README.md) | Map, lifecycle, and source-of-truth rules |
 | [Project overview](docs/product/project-overview.md) | Product, audience, and boundaries |
 | [Architecture diagram](docs/architecture/diagrams/src/architecture.mmd) | MVP target system boundary |
-| [Technical design](docs/architecture/technical-design.md) | Proposed MVP design, pending review |
+| [Technical design](docs/architecture/technical-design.md) | MVP design and verification, pending review |
 | [Progress log](PROGRESS.md) | Append-only completion log |
 | [`AGENTS.md`](AGENTS.md) | Canonical project instructions for coding agents |
 | [`CLAUDE.md`](CLAUDE.md) | Imports `AGENTS.md` for Claude |

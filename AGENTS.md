@@ -2,7 +2,7 @@
 
 ## Scope
 
-SmartLedger is currently a documentation-first MVP. Core is Java under `backend/core` — do not modify it. AI is a Python FastAPI scaffold with `/health`; do not assume business APIs, commands, or product behavior already exist.
+SmartLedger is currently a documentation-first MVP. Core is Java under `backend/core` — do not modify it. AI is a Python FastAPI service under `backend/ai` that serves internal Agent chat to Core; do not assume APIs, commands, or product behavior beyond what [`docs/contracts/api-contracts.md`](docs/contracts/api-contracts.md) marks as implemented.
 
 ## Before changing anything
 

@@ -5,7 +5,7 @@
 | Trạng thái | đích MVP; Core hiện có được phân biệt với phần chưa tích hợp |
 | Chủ sở hữu | Chủ kỹ thuật |
 | Người rà soát | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-10-02 |
+| Cập nhật lần cuối | 2026-10-04 |
 
 ## Tài liệu liên quan
 
@@ -18,11 +18,18 @@
 
 Kiến trúc trong sơ đồ là **đích MVP**: Mobile dành cho OWNER và dashboard web dành cho ADMIN cùng gọi Core; Core sở hữu API công khai và điều phối AI; PostgreSQL lưu sổ nghiệp vụ, lịch sử Agent chat và vector (pgvector); Redis, Langfuse và LiteLLM hỗ trợ AI.
 
-**Đã đối chiếu ngày 2026-10-02 trong working tree `feat/core-business`:** Core có Firebase auth/session/me, Shop/Category/Product/Customer CRUD, draft → confirm → sale/payment, debt repayment, expense, report summary, sale void và full refund; schema Core có Flyway V1–V9. Đây là phạm vi code hiện tại, không phải xác nhận đã push, deploy staging, tích hợp FE hay production-ready. Core proxy `/api/v1/agent/*` sang AI `/internal/v1/agent/*` kèm `X-Internal-Token`, lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực; chưa chạy kiểm thử đầu-cuối mobile → Core → AI với model thật.
+Mục này là nơi duy nhất ghi hiện trạng triển khai; tài liệu khác liên kết tới đây thay vì chép lại. Trạng thái từng endpoint nằm trong [hợp đồng API](../contracts/api-contracts.md).
 
-**Snapshot cũ ngày 2026-09-24:** Mobile/web có mock, parser text cục bộ và client auth chưa tích hợp toàn luồng; AI có health/Agent chat CRUD lưu PostgreSQL. Lượt này không kiểm chứng lại FE/AI hoặc nhánh staging mới nhất; không dùng snapshot đó để khẳng định Core hiện chỉ có auth.
+**Đối chiếu với code nhánh `staging` ngày 2026-10-04:**
 
-**Còn là đích MVP/chưa triển khai trong Core:** proxy AI (voice/image/recommendation/insight/Agent), API dashboard đọc tổng quan, audit khi ADMIN xem dữ liệu, notification và báo cáo bán chạy/series/lợi nhuận. Hoàn tiền/trả hàng từng phần và ledger điều chỉnh kho độc lập chưa triển khai. Năng lực end-to-end chỉ được nghiệm thu qua AC tương ứng trong [PRD](../product/product-requirements.md).
+- **Core:** Firebase auth/session/me, Shop/Category/Product/Customer CRUD, draft → confirm → sale/payment, debt repayment, expense, report summary, sale void và full refund, audit thao tác ghi và lịch sử audit cho OWNER; schema Flyway V1–V10. Core proxy `/api/v1/agent/*` sang AI `/internal/v1/agent/*` kèm `X-Internal-Token`, lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực.
+- **AI:** `/health` và Agent chat (chat, list, detail, rename, delete) lưu PostgreSQL, tóm tắt cuốn chiếu, tìm lịch sử và tool đọc dữ liệu tiệm chỉ đọc; migration AI `001`–`004`.
+- **Mobile:** mặc định dùng mock; khi tắt mock gọi Firebase và các API Core ở trên. Nhận diện đơn vẫn dùng parser rule-based trên máy; mic chỉ nhận giọng nói trên web.
+- **Web admin:** chỉ chạy mock; Core chưa có API dashboard tương ứng.
+
+Đây là phạm vi code, không phải xác nhận đã deploy staging, nghiệm thu FE hay production-ready; chưa có kiểm thử đầu-cuối mobile → Core → AI với model thật.
+
+**Còn là đích MVP/chưa triển khai:** luồng AI proposal (text/voice/image → bản nháp), recommendation và insight chat; API dashboard đọc tổng quan, audit khi ADMIN xem dữ liệu, notification và báo cáo bán chạy/series/lợi nhuận. Hoàn tiền/trả hàng từng phần và ledger điều chỉnh kho độc lập chưa triển khai. Năng lực end-to-end chỉ được nghiệm thu qua AC tương ứng trong [PRD](../product/product-requirements.md).
 
 ## 2. Thành phần và quyền sở hữu
 
@@ -30,7 +37,7 @@ Kiến trúc trong sơ đồ là **đích MVP**: Mobile dành cho OWNER và dash
 |---|---|
 | Mobile/FE | Giao diện OWNER: thu input, hiển thị bản nháp, bắt buộc người dùng xác nhận, chỉ gọi Core |
 | Dashboard web | Giao diện ADMIN: tra cứu OWNER/cơ sở khách hàng và xem tổng quan hỗ trợ; không sửa sổ nghiệp vụ |
-| Core | Hiện có auth, shop/catalog/customer, draft/sale/payment/debt/refund, expense và summary; ADMIN chỉ có đổi trạng thái shop. Dashboard/audit/replenishment/điều phối AI là trách nhiệm đích chưa hoàn thành |
+| Core | Hiện có auth, shop/catalog/customer, draft/sale/payment/debt/refund, expense, summary, audit và proxy Agent sang AI; ADMIN chỉ có đổi trạng thái shop. Dashboard, audit truy cập của ADMIN, replenishment và điều phối luồng AI proposal là trách nhiệm đích chưa hoàn thành |
 | AI | Voice/text parse, image analysis, recommendation, insight chat và Agent chat; chỉ trả đề xuất/câu trả lời |
 | PostgreSQL | Dữ liệu nghiệp vụ và idempotency Core; vector qua `pgvector` ([ADR-0001](adr/0001-vector-store-pgvector.md)); trace AI/audit/notification theo ERD đích, không mặc nhiên là migration Core |
 | Redis | Cache/giới hạn tốc độ/tác vụ ngắn hạn; không là nguồn dữ liệu chuẩn |
@@ -64,7 +71,7 @@ Luồng ADMIN hiện có: `PATCH /api/v1/shops/{shopId}/status` (ngoài prefix a
 - Money là BIGINT VND, quantity numeric(15,3), ID BIGINT; thời điểm TIMESTAMPTZ/UTC trong Core. JSON timestamp hiển thị +07:00 và kỳ báo cáo theo Asia/Ho_Chi_Minh.
 - Product/category/customer/expense archive, không xóa lịch sử. Shop INACTIVE vẫn cho OWNER xem lý do nhưng chặn nghiệp vụ; ARCHIVED không hiển thị cho OWNER.
 - Payments append-only; paid_vnd đối soát bằng tổng payment. Debt original_vnd = tổng payment trả nợ + outstanding_vnd + COALESCE(cancelled_vnd, 0). Refund là dòng tiền ra riêng, không trừ/xóa payment.
-- V8 cho sale_items.product_id null nhưng giữ FK khi có ID; V9 thêm sale_refunds (unique sale_id, sale/user FK, amount/method check, index refunded_at), stock_deducted nullable và audit/lifecycle nợ VOIDED. Không sửa V1–V8, không đoán snapshot tồn hay audit cũ.
+- V8 cho sale_items.product_id null nhưng giữ FK khi có ID; V9 thêm sale_refunds (unique sale_id, sale/user FK, amount/method check, index refunded_at), stock_deducted nullable và audit/lifecycle nợ VOIDED. Không sửa migration đã phát hành, không đoán snapshot tồn hay audit cũ.
 - Nợ SETTLED giữ nguyên sau sale void; chỉ nợ OPEN còn dư chuyển VOIDED kèm cancelled_vnd/voided_at. Chưa thu thì không tạo refund row.
 - Idempotency chỉ phủ POST expense, debt repayment và sale void: reserve/action/replay result chung transaction; key theo shop + operation, hash có body và path ID khi có. TTL mặc định 30 ngày, chưa có cleanup job. POST tạo danh mục/khách/draft/shop chưa được bảo vệ key; confirm chống trùng bằng draft ID.
 - PATCH/archive product khóa dòng cùng cách checkout, tránh ghi đè tồn khi chạy đồng thời. Repay/void thống nhất thứ tự khóa sale → debt → product để tránh lock inversion.
@@ -88,12 +95,12 @@ Schema PostgreSQL được quản lý bằng migration SQL có phiên bản tron
 | Thành phần | Cấu hình tối thiểu |
 |---|---|
 | FE | `API_BASE_URL` |
-| Core hiện tại | `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, `FIREBASE_PROJECT_ID`, credential Firebase Admin; `SERVER_PORT` tùy chọn; Redis/AI chưa là cấu hình bắt buộc |
-| AI | `POSTGRES__URL`, `REDIS__URL`, `LITELLM__URL`, `LANGFUSE__*` |
+| Core hiện tại | `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, `FIREBASE_PROJECT_ID`, credential Firebase Admin, `AI_BASE_URL`, `INTERNAL_API_TOKEN`; `SERVER_PORT`, `IDEMPOTENCY_TTL_DAYS` tùy chọn; Core không dùng Redis |
+| AI hiện tại | `POSTGRES_URL`, `REDIS_URL`, `INTERNAL_API_TOKEN`, `MODEL_*`, `OPENAI_API_KEY`; `AI_SQL_READER_URL` tùy chọn cho tool đọc dữ liệu tiệm. `LITELLM_URL`, `LANGFUSE_*` đã khai báo nhưng code chưa dùng. Danh sách đầy đủ: [`backend/ai/.env.example`](../../backend/ai/.env.example) |
 
 Host và port thuộc cấu hình môi trường, không phải API contract. [Core README](../../backend/core/README.md) là nơi hướng dẫn chạy IntelliJ/Maven/Docker và Firebase Emulator; không nhân bản hướng dẫn vận hành tại đây.
 
-- Dev và staging dùng chung một Supabase project và một Redis Cloud database, không chứa dữ liệu production; không có PostgreSQL hay Redis container local. Test tự động dùng PostgreSQL tạm (`POSTGRES_TEST_URL`).
+- Dev và staging dùng chung một Supabase project và một Redis Cloud database, không chứa dữ liệu production; không có PostgreSQL hay Redis container local. Test tự động dùng PostgreSQL tạm: AI đọc `POSTGRES_TEST_URL`, Core đọc `CORE_TEST_POSTGRES_*`.
 - Sơ đồ môi trường và CI/CD: [environments.mmd](diagrams/src/environments.mmd) ([SVG](diagrams/images/environments.svg)).
 - Production: một Supabase project và một Redis Cloud database khác; credential staging và production không dùng chung file hay biến. Cách chạy Compose xem [README](../../README.md#local-compose).
 - Runtime dùng connection pooler; migration, `pg_dump` và `pg_restore` dùng kết nối PostgreSQL phù hợp cho tác vụ dài.
@@ -102,11 +109,11 @@ Host và port thuộc cấu hình môi trường, không phải API contract. [C
 
 ## 7. Kiểm chứng trước merge
 
-Đối chiếu code/schema không thay thế chạy lại hệ thống. Suite Core có test controller, service, validation, timestamp, concurrency và migration (SaleRefundMigrationPostgresTest, DebtVoidPostgresTest). Test PostgreSQL là opt-in: Maven mặc định có thể skip; phải bật môi trường test DB để kiểm chứng V1–V9, upgrade/rollback và khóa đồng thời. Lượt cập nhật docs này không chạy lại Maven/Docker hoặc kiểm chứng deploy staging/FE/AI.
+Đối chiếu code/schema không thay thế chạy lại hệ thống. Suite Core có test controller, service, validation, timestamp, concurrency và migration (SaleRefundMigrationPostgresTest, DebtVoidPostgresTest). Test PostgreSQL là opt-in: Maven skip khi thiếu `CORE_TEST_POSTGRES_URL` (job `core` của CI có đặt biến này); phải bật môi trường test DB để kiểm chứng V1–V10, upgrade/rollback và khóa đồng thời.
 
 | Nhóm | Bằng chứng bắt buộc |
 |---|---|
-| Core | V1–V9 từ DB rỗng/upgrade; controller contract theo mục 1–4; confirm/repay/void rollback, replay và cạnh tranh khóa; test chéo shop. DB local kiểm thử không thay nghiệm thu Supabase staging hoặc FE |
+| Core | V1–V10 từ DB rỗng/upgrade; controller contract theo mục 1–4; confirm/repay/void rollback, replay và cạnh tranh khóa; test chéo shop. DB local kiểm thử không thay nghiệm thu Supabase staging hoặc FE |
 | AI | contract test Core ↔ AI; timeout/fallback; output schema; truy xuất đúng phạm vi `shop_id` |
 | FE | OWNER: login → chọn shop → tạo/chốt → báo cáo; ADMIN: login → tra cứu cơ sở → xem tổng quan; test role guard và trạng thái loading/error/empty |
 | Ops | CI kiểm migration; staging dùng Supabase project riêng; deploy production cần phê duyệt |
