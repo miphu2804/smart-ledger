@@ -1,9 +1,11 @@
+import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useToast } from '../src/components/brand';
 import { Button, Card, Field, Header, Screen, Sheet, T } from '../src/components/ui';
 import { industryList } from '../src/data/mock';
+import { triggerFeedback } from '../src/lib/feedback';
 import { useApp } from '../src/store/AppStore';
 import { colors } from '../src/theme';
 
@@ -37,8 +39,9 @@ export default function Profile() {
               bankName: bankName.trim(),
               bankAccount: bankAccount.replace(/\s/g, ''),
             });
-            toast('Đã lưu thông tin');
-            router.back();
+            triggerFeedback('success');
+            if (router.canGoBack()) router.back();
+            else router.replace('/(tabs)/more');
           }}
         />
       }
@@ -74,9 +77,7 @@ export default function Profile() {
           <T w="semibold" size={14} color={chosen.length ? colors.ink : colors.primary} style={{ flex: 1 }} numberOfLines={1}>
             {chosen.length ? chosen.map((c) => c.name).join(', ') : 'Chưa chọn ngành'}
           </T>
-          <T w="bold" color={colors.primary}>
-            ›
-          </T>
+          <Feather name="chevron-right" size={18} color={colors.disabled} />
         </Pressable>
       </Card>
       <Card style={{ marginTop: 12 }}>
@@ -104,9 +105,9 @@ export default function Profile() {
               <Pressable
                 key={i.id}
                 onPress={() => setIndustries((cur) => (on ? cur.filter((x) => x !== i.id) : [...cur, i.id]))}
-                style={[styles.ind, on && { borderColor: colors.accent, backgroundColor: colors.accent }]}
+                style={[styles.ind, on && styles.indOn]}
               >
-                <T size={13} w={on ? 'bold' : 'semibold'} color={on ? colors.accentInk : colors.ink}>
+                <T size={13} w={on ? 'bold' : 'semibold'} color={colors.ink}>
                   {i.name}
                 </T>
               </Pressable>
@@ -130,5 +131,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     paddingHorizontal: 14,
   },
-  ind: { paddingHorizontal: 12, minHeight: 44, justifyContent: 'center', borderRadius: 12, borderWidth: 1.5, borderColor: colors.border },
+  ind: { paddingHorizontal: 12, minHeight: 44, justifyContent: 'center', borderRadius: 22, borderWidth: 1, borderColor: colors.border },
+  indOn: { borderColor: colors.ink, backgroundColor: 'rgba(26,25,22,0.035)' },
 });

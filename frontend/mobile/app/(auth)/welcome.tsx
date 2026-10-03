@@ -6,10 +6,12 @@ import { Logo, useToast } from '../../src/components/brand';
 import { Button, Field, Row, Screen, T } from '../../src/components/ui';
 import { startPhoneLogin } from '../../src/lib/auth';
 import { errorMessage } from '../../src/lib/errors';
+import { useApp } from '../../src/store/AppStore';
 import { colors, shadow } from '../../src/theme';
 
 export default function Welcome() {
   const toast = useToast();
+  const app = useApp();
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -42,10 +44,10 @@ export default function Welcome() {
       </View>
 
       <T w="extrabold" size={30} style={{ marginTop: 48 }}>
-        Xin chào!
+        Đăng nhập
       </T>
       <T size={14} color={colors.muted} style={{ marginTop: 6, marginBottom: 22, lineHeight: 21 }}>
-        Nhập số điện thoại để bắt đầu bán hàng cùng Sổ Nghe Lời
+        Dùng số điện thoại để vào sổ bán hàng.
       </T>
 
       <Field
@@ -65,13 +67,26 @@ export default function Welcome() {
 
       <Pressable onPress={() => router.push('/(auth)/email')} style={{ alignSelf: 'center', marginTop: 14, minHeight: 44, justifyContent: 'center' }} hitSlop={8}>
         <T w="semibold" size={13} color={colors.primary}>
-          Đăng nhập bằng email và mật khẩu
+          Dùng email
         </T>
       </Pressable>
 
+      {__DEV__ ? (
+        <Button
+          title="Vào app"
+          icon="arrow-right"
+          variant="soft"
+          onPress={() => {
+            app.enterDevApp();
+            router.replace('/(tabs)');
+          }}
+          style={{ marginTop: 6 }}
+        />
+      ) : null}
+
       <Row style={styles.divider} gap={10}>
         <View style={styles.line} />
-        <T size={12} color={colors.faint}>Cách đăng nhập khác</T>
+        <T size={12} color={colors.faint}>Hoặc tiếp tục với</T>
         <View style={styles.line} />
       </Row>
       <Row gap={8}>

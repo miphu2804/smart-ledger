@@ -1,149 +1,121 @@
-### [2026-10-02 23:58 UTC+07:00] — [Feature] Core proxies the agent API to AI
+### [2026-10-03 07:54 UTC+07:00] — [UI/UX] Floating Cart Bar Elevation, Free-floating 3D Robot Mascot & Realistic Product Photos
+
+**Done:**
+1. **Floating Cart Bar (POS / Sales Tab)**:
+   - Elevated position (`bottom: insets.bottom + 104px`) to prevent collision with bottom TabBar.
+   - Conditional rendering (`count > 0`) with smooth spring entry/exit animation (`Animated.spring`, `translateY` + `scale` + `opacity`).
+   - Dynamic ScrollView `paddingBottom` (`190px` when active, `96px` when empty).
+2. **Free-Floating 3D Assistant Mascot (ZenRing)**:
+   - Replaced old badge with transparent 3D mascot (`bubblelogo.png`) floating freely without white circular bounding box or clipping.
+   - Enlarged `RING_SIZE` from `64px` to `72px`.
+   - Decreased idle fade (`IDLE_OPACITY: 0.85`), keeping the robot crisp and bright.
+3. **Voice Screen Refinements (Đọc đơn)**:
+   - Updated manual input button and inline keyboard icon to keyboard symbol (`MaterialCommunityIcons: keyboard-outline`).
+   - Sổ Nghe Lời chat avatar mapped to glossy 3D robot.
+   - Voice button calm breathing animations with soft ambient ripples.
+4. **Realistic Product Photos**:
+   - Created `src/lib/productImages.ts` mapping Vietnamese grocery, beverage, and retail items to realistic product photos.
+   - Replaced generic placeholder icons/letters in Voice order notebook, POS Grid & List cards, Cart Sheet, and Checkout review with real product photos.
+5. **Safe Navigation**:
+   - Guarded all `router.back()` calls with `router.canGoBack()` fallback to prevent unhandled `GO_BACK` exceptions.
+
+**Changed files:**
+- `frontend/mobile/src/lib/productImages.ts` — created product image resolver
+- `frontend/mobile/assets/bubblelogo.png` — added transparent 3D mascot asset
+- `frontend/mobile/assets/glossy-robot-notebook.png` — added robot mascot asset
+- `frontend/mobile/src/components/MascotBadge.tsx` — updated to free-floating mascot
+- `frontend/mobile/src/components/ZenRing.tsx` — updated size, opacity, and transparent ring container
+- `frontend/mobile/app/voice.tsx` — updated keyboard icon, product photos, safe goBack
+- `frontend/mobile/app/pos.tsx` — elevated floating cart bar, product photos, safe goBack
+- `frontend/mobile/app/checkout.tsx` — product photos in order review
+- `frontend/mobile/app/profile.tsx` & `frontend/mobile/app/(auth)/email.tsx` — safe goBack
+- `PROGRESS.md` — logged entry
+
+### [2026-10-02 17:40 UTC+07:00] — [UI/UX] 3D Metallic Action Cards, Sharp White-to-Grey Gradient & AI Processor Icon
+
+**Done:** Updated "Đơn hàng mới" 4 action buttons on tab Tổng quan:
+1. **Longer Rectangular Cards (3D Shape)**: Increased card height to ~68px (`minHeight: 68`, `borderRadius: 14`), providing a comfortable rectangular form factor for title, abstract script, icon, and trailing chevron.
+2. **Sharp White-to-Grey 3D Shading**: Built with `LinearGradient` from silvery light grey down to metallic dark grey (`['#27292C', '#17181A', '#0D0E10']`), crisp 3D top-rim highlight border (`borderTopColor: 'rgba(255, 255, 255, 0.36)'`), and depth drop shadow.
+3. **Larger Icons with Fine Strokes**: Increased icon optical size to `24px` while keeping strokes fine (`strokeWidth: 1.6`), ensuring high sharpness without thickening borders.
+4. **AI Processor Chip Icon**: Replaced assistant headset with a high-tech AI microchip icon featuring circuit connector pins and an internal neural spark core.
+5. **Trailing `>` Affordance**: Added chevron `›` on the right side of each card (`Feather` `chevron-right` with subtle contrast).
+6. **Abstract Script Subtitles**: Added concise 3-6 word abstract explanations beneath large titles (half size ~10.5px):
+   - Đọc đơn: *Lên đơn bằng giọng nói*
+   - Chọn hàng: *Chọn sản phẩm thủ công*
+   - Quét mã: *Nhận diện mã vạch nhanh*
+   - Trợ lý AI: *Phân tích và gợi ý thông minh*
+
+**Changed files:**
+- `frontend/mobile/src/components/icons.tsx` — updated ActionIcon with size 24, stroke 1.6, and high-tech AI processor chip
+- `frontend/mobile/app/(tabs)/index.tsx` — implemented 3D rectangular cards with LinearGradient, trailing chevrons, and abstract script subtitles
+- `PROGRESS.md` — logged entry
+
+**Check:** `npm run typecheck` passed (0 errors); `npm run export:web` passed (code 0).
+
+### [2026-10-02 17:08 UTC+07:00] — [UI/UX] Floating Bubble Navigation, Authoritative Status Bar Rule & Minimalist Outline Actions
+
+**Done:** Refined the UI following user feedback:
+1. **Authoritative Status Bar Rule**: Fixed rule applied — `Tổng quan` (`index`) is ALWAYS `light` (white text/icons for time, battery, wifi, signals), and all other tabs (`invoices`, `sales`, `more`) are ALWAYS `dark` (black text/icons). Single authoritative controller in `(tabs)/_layout.tsx` with dynamic key flushing; removed all conflicting `<StatusBar>` instances from child tab screens.
+2. **Floating Bubble Navigation**: Redesigned bottom navigation into a floating bubble capsule:
+   - Bar: solid white background (`#FFFFFF`), capsule shape (`borderRadius: 32`), thin delicate border (`#ECEAE4`), clean elevation shadow.
+   - Indicator: soft dark bubble (`#262522`, `borderRadius: 26`), lighter and softer than harsh solid black.
+   - Bubble elastic physics: on press, bubble squashes/softens (`scaleX: 1.05`, `scaleY: 0.95`); on release, springs back. On tab transition, indicator stretches in flight (`scaleX: 1.10`, `scaleY: 0.94`) and springs into shape at the target tab. Reduced motion preserved.
+3. **“Đơn hàng mới” Minimalist Outline Actions**:
+   - Eliminated solid card backgrounds and container boxes. The 4 actions (Đọc đơn, Chọn hàng, Quét mã, Trợ lý) now blend directly into the deep black header background (`backgroundColor: 'transparent'`).
+   - Clean, thin white outline border (`borderWidth: 1`, `borderColor: 'rgba(255, 255, 255, 0.18)'`, moderate `borderRadius: 13`).
+   - Fine outline icons (stroke ~1.7) placed directly inline next to labels without circle/square containers:
+     - Đọc đơn: fine outline microphone with subtle grill detailing.
+     - Chọn hàng: fine outline goods/cart.
+     - Quét mã: scanner frame with barcode strips and laser beam.
+     - Trợ lý: human assistant headset / support operator symbol, avoiding generic AI sparkles.
+
+**Changed files:**
+- `frontend/mobile/src/components/icons.tsx` — updated ActionIcon with fine outline stroke (1.7) and assistant headset icon
+- `frontend/mobile/app/(tabs)/_layout.tsx` — implemented solid white capsule floating bar, soft dark bubble indicator with elastic stretch/squash spring physics, authoritative status bar rule
+- `frontend/mobile/app/(tabs)/index.tsx` — updated "Đơn hàng mới" to transparent outline cards directly on black, refined collapsed quick actions, removed local StatusBar
+- `frontend/mobile/app/(tabs)/invoices.tsx` — removed redundant local StatusBar
+- `frontend/mobile/app/(tabs)/more.tsx` — removed redundant local StatusBar
+- `frontend/mobile/app/pos.tsx` — conditioned StatusBar to only render when not embedded in tab
+- `PROGRESS.md` — logged entry
+
+**Check:** `npm run typecheck` passed (0 errors); `npm run export:web` passed (code 0).
+
+### [2026-10-02 16:50 UTC+07:00] — [UI/UX] Visual System Overhaul: Icon Family, Floating Navigation, Action Cards & Header 2-Tier Hierarchy
+
+**Done:** Implemented the UI/UX visual system overhaul requested:
+1. **Icon Design System**: Created `frontend/mobile/src/components/icons.tsx` with unified SVG geometric rounded icons (`viewBox="0 0 24 24"`, stroke ~2.2-2.3, balanced optical weights):
+   - `TabIcon`: 4 bottom tabs with paired geometric representations — INACTIVE outline (lighter weight) vs ACTIVE solid/filled (high contrast).
+   - `ActionIcon`: `mic`, `scan`, `cart`, `assistant`, `chevron`, `bell`.
+2. **Bottom Navigation**: Renamed tab `Tiện ích` → `Quản lý` in `_layout.tsx` and `more.tsx`. Connected moving single active indicator with dark/translucent surface, tactile micro-bounce spring animation (~1.09) on tab press, and reduced motion support.
+3. **Status Bar Synchronization**: Synchronized native status bar appearance dynamically across all tabs — `light` style for dark header on `Tổng quan` (`index`), `dark` style for light backgrounds on `invoices`, `sales`/`pos`, and `more` (`Quản lý`).
+4. **ActionCard Component**: Created reusable `ActionCard` (`minHeight: 74-80`, `flexDirection: 'row'`, `alignItems: 'center'`, left visual anchor, middle title + optional subtitle, trailing chevron affordance, subtle border/elevation, dark/light surface variants, press scale spring animation).
+5. **Tổng quan — "Đơn hàng mới"**: Replaced giant buttons with a 4-action functional grid: Đọc đơn (`/voice`), Quét mã (`BarcodeScannerModal`), Chọn hàng (`/pos`), and Trợ lý (`/ai`).
+6. **Tổng quan — Collapsed Header**: Redesigned collapsed header into 2 clear horizontal tiers: Tier 1 (Context on left, prominent right-aligned revenue `xxx.xxxđ` without squeezing); Tier 2 (4 compact quick action chips with touch target >= 44). Smooth non-clipping transition between expanded and collapsed states.
+
+**Changed files:**
+- `frontend/mobile/src/components/icons.tsx` — created unified TabIcon and ActionIcon system
+- `frontend/mobile/src/components/ui.tsx` — added ActionCard primitive with dark/light themes
+- `frontend/mobile/app/(tabs)/_layout.tsx` — updated to TabIcon, Quản lý label, dynamic status bar, and refined bounce
+- `frontend/mobile/app/(tabs)/more.tsx` — renamed title to Quản lý, added StatusBar dark
+- `frontend/mobile/app/(tabs)/invoices.tsx` — added StatusBar dark
+- `frontend/mobile/app/pos.tsx` — added StatusBar dark
+- `frontend/mobile/app/(tabs)/index.tsx` — implemented 4-action grid for "Đơn hàng mới" and 2-tier collapsed header with prominent revenue
+- `PROGRESS.md` — logged entry
 
-**Done:** Core forwards `/api/v1/agent/*` (chat, list, detail, rename, delete) to AI `/internal/v1/agent/*` with `X-Internal-Token`, taking `user_id` and `shop_id` from the verified owner's shop. AI `404` maps to `conversation_not_found`; timeouts, connection failures and other AI errors map to `503 ai_unavailable`. The AI read timeout is 40 s, below the mobile 45 s chat timeout. Follow-up to the entry below: `AgentService` now requires `guardrail_limits: GuardrailLimits` instead of an optional middleware list, so a caller cannot run the agent without guardrails, and `LEAK_PATTERN` takes view names from `SqlGuard`; AI test placeholder data is English.
+**Check:** `npm run typecheck` passed (0 errors); `npm run export:web` passed (code 0).
 
-**Check:** AI `ruff` clean, `pytest` 233 passed / 22 skipped, and the 48 integration tests pass with `POSTGRES_TEST_URL`; Core `mvn test` 122 passed (Docker, Temurin 21). No end-to-end mobile → Core → AI chat with a live model was run.
+### [2026-10-02 15:55 UTC+07:00] — [UI/UX] Mobile UI/UX overhaul across all screens
 
-### [2026-10-02 23:35 UTC+07:00] — [Refactor] Split the AI agent service by use case
+**Done:** Completed mobile UI/UX overhaul: bottom navigation floating bar with animated single-indicator, collapsible headers, standardized Feather icons, natural merchant wording, destructive action confirmations, haptic/feedback integration, and reduced motion coverage.
 
-**Done:** `AgentService` now owns only one chat turn. The rolling-summary workflow moved to `ChatSummaryFolder` in `src/agent/summary.py`, next to the pure fold planning it uses. The four conversation list/detail/rename/delete forwarding methods are gone: those routes call `AgentConversationRepository` directly. The two tool factories are now `build_history_tools` and `build_shop_data_tools`, and the agent's guardrails are assembled in `main.py` instead of being read from global config inside the service. No HTTP contract or migration changed.
+**Changed files:**
+- `frontend/mobile/app/*`, `frontend/mobile/src/*` — UI/UX overhaul, animations, feedback, and destructive states
+- `docs/design/mobile-wording-review.md` — mobile wording review table updated
+- `PROGRESS.md` — updated
 
-**Changed files:** `backend/ai/src/agent/{service,summary,routers,tools}.py`, `backend/ai/src/main.py` — modified; `backend/ai/tests/unit_tests/{test_agent_service,test_agent_guardrails,test_shop_data_tool}.py`, `backend/ai/tests/integration_tests/{test_agent_chat,test_agent_conversations,test_internal_auth}.py` — modified; `PROGRESS.md` — updated.
+**Flow explained:** Navigation uses a floating bar with active tab indicator spring motion. Long screens (Home, Invoices, Products) implement collapsible headers. Destructive operations (delete product, remove expense, clear POS cart, logout) are guarded with consistent confirmation dialogs. Primary actions and status confirmations provide tactile/sound feedback while respecting accessibility reduced motion preferences.
 
-**Flow explained:** `AgentService(model, conversations, sql_executor=None, guardrails=None)` keeps `chat` and `_context_messages`; the summary model is no longer a constructor dependency and the service reads no global settings, so `main.py` builds the middleware with `build_guardrails(app_config.AGENT_*)` and passes it in. `ChatSummaryFolder(summary_model, conversations).fold(conversation_id, user_id, shop_id)` holds the batch loop and `_rewrite_summary`, while `plan_fold`, `split_into_batches` and `FoldPlan` stay pure. `main.py` puts `conversations`, `agent` and `summary_folder` on app state; the chat route resolves the folder for the post-reply background fold, and the conversation routes resolve the repository. Fold behavior, watermark chaining, and the 404/503 mapping are unchanged; the conversation routes no longer 503 when the chat model is absent, a state that was unreachable in production because `app.state.agent` is always an `AgentService`.
-
-**Check:** `uv run ruff check` and `uv run ruff format --check` clean; `uv run pytest`: 255 passed with `POSTGRES_TEST_URL` against a temporary local PostgreSQL 16 (233 passed, 22 skipped without it), matching the pre-refactor baseline. No live model call was made.
-
-### [2026-10-02 22:35 UTC+07:00] — [Refactor] Unify AI prompts in English and simplify the SQL guard, executor and guardrails
-
-**Done:** All prompt text moved into one package, `backend/ai/src/prompt_templates/`, and rewritten in English as short numbered rules for a small model; the agent still always answers the owner in Vietnamese. The custom exceptions `UnsafeSqlError`, `SqlQueryError` and `SqlUnavailableError`, the `SqlResult` dataclass, the `GuardrailSettings` protocol, `InputLengthGuard`, `OutputGuard` and `ToolErrorMiddleware` are gone. No change to the HTTP contract, the migration or the guard's rules.
-
-**Changed files:** `backend/ai/src/prompt_templates/{__init__,shop_agent,sql_agent,chat_summary}.py` — created; `backend/ai/src/agent/prompt_template.py`, `backend/ai/src/sql/schema_prompt.py` — deleted; `backend/ai/src/sql/{guard,executor}.py`, `backend/ai/src/agent/{guardrails,tools,service}.py`, `backend/ai/README.md`, `backend/ai/tests/unit_tests/{test_sql_guard,test_shop_data_tool,test_agent_guardrails,test_agent_service}.py`, `backend/ai/tests/integration_tests/test_sql_reader.py`, `PROGRESS.md` — updated.
-
-**Flow explained:** `SqlGuard(row_limit).validate_and_wrap(sql)` holds the allowlists as class constants and raises `ValueError("CODE: detail")`. `ReadOnlySqlExecutor.run` returns a plain dict and raises `ValueError("QUERY_TIMEOUT: ...")` or `ValueError("SQL_ERROR: ...")`; `psycopg.OperationalError` and `InterfaceError` propagate, so the router still answers `503 ai_unavailable`. The `query_shop_data` tool catches a `ValueError` that starts with an upper-case code and returns `Error[CODE]: reason. Rewrite the query and retry.` as text; any other exception fails the turn. `AgentGuardrails` is one `AgentMiddleware` with `before_agent` (input length) and `after_agent` (empty or leaking answer); `build_guardrails(max_input_chars, model_call_limit, tool_call_limit)` returns it with the PII and call-limit middleware. The schema moved from the tool description into the system prompt, and the tool descriptions are one line.
-
-**Check:** `uv run ruff check` and `uv run ruff format --check` clean; `uv run pytest`: 255 passed with `POSTGRES_TEST_URL` against a temporary local PostgreSQL 16.14 (233 passed, 22 skipped without it). Combined system prompt 4856 chars before, 4563 after; tool description 845 before, 74 after. No live model call was made, so the new prompts are untested against a real model.
-
-### [2026-10-02 22:19 UTC+07:00] — [Feature] Read-only text-to-SQL tool for the shop agent and mobile chat wiring
-
-**Done:** Closes AI-010 (#76) on the AI and mobile side. The agent gains a `query_shop_data` tool that runs one model-written `SELECT` over three shop-scoped views (shop profile, categories, products) as the read-only role `ai_sql_reader`; there is no SQL HTTP endpoint. Deterministic LangChain middleware guardrails wrap the agent. The mobile assistant screen now sends messages through `agentApi` instead of a local regex mock.
-
-**Changed files:** `backend/ai/migrations/004_create_ai_read_views.sql`, `backend/ai/src/sql/{__init__,guard,executor,schema_prompt}.py`, `backend/ai/src/agent/guardrails.py`, `backend/ai/tests/unit_tests/{test_sql_guard,test_shop_data_tool,test_agent_guardrails}.py`, `backend/ai/tests/integration_tests/test_sql_reader.py`, `frontend/mobile/src/lib/agentApi.ts` — created; `backend/ai/src/agent/{service,tools,prompt_template}.py`, `backend/ai/src/{app_config,main}.py`, `backend/ai/{pyproject.toml,uv.lock,.env.example,README.md}`, `compose.yaml`, `frontend/mobile/app/ai.tsx`, `frontend/mobile/src/data/types.ts`, `frontend/mobile/src/lib/mockCore.ts`, `docs/contracts/api-contracts.md`, `docs/architecture/technical-design.md`, `PROGRESS.md` — updated.
-
-**Flow explained:** The views filter on the transaction setting `smartledger.shop_id`, hide `shop_id` and are `security_barrier`. The tool reads the shop from `ToolRuntime[AgentContext]`, so the model only passes `sql`. `SqlGuard` (sqlglot AST) accepts one `SELECT`/`WITH`/`UNION` over the views with allowlisted functions and casts, re-parses its own rendering, and wraps it in `LIMIT`. The executor opens its own connection, runs `READ ONLY` with a bound shop id, `statement_timeout` 3000 ms and 100 rows, and always rolls back. Guard and database errors return to the model as `Error[CODE]` through `ToolErrorMiddleware`; an unreachable reader fails the turn as `503 ai_unavailable`. Guardrails: input length, `PIIMiddleware` (card mask, key/token redaction on input, stored redacted), model 4 / tool 3 call limits, and an output check for empty or leaking answers. Migration number `004` is used because `002` is reserved for pgvector. Core still has no `/api/v1/agent/*` proxy, so the mobile client works only in mock mode until that lands.
-
-**Check:** `uv run ruff check`, `uv run ruff format --check` clean; `uv run pytest`: 253 passed with `POSTGRES_TEST_URL` against local PostgreSQL 16.14 (two shops with the same product name, cross-shop attempts, reader role privileges, `security_barrier` error leak, statement timeout, chat turn after a timeout). Mobile `npm run typecheck` and `npm run export:web` passed; mock `/agent/*` endpoints exercised in Node. No live model call was made.
-
-### [2026-10-02 UTC+07:00] — [Docs] Add OWNER audit requirements and acceptance traceability
-
-**Done:** Added `BR-017`, `FR-028`/`FR-029` and `AC-033`–`AC-039` for existing transactional success audit and OWNER-only history. Corrected the outdated BRD statement that general audit was not implemented and replaced the API contract's missing-FR/AC note with links to the canonical requirements.
-
-**Changed files:** Approved `docs/product/business-requirements.md`, `docs/product/product-requirements.md`, `docs/contracts/api-contracts.md` and this new root progress entry. No Core/FE code, entity, migration, CI or legal/tax requirement change. Earlier progress entries remain unchanged.
-
-**Flow explained:** Traceability now connects business audit integrity to recording/query behavior and acceptance criteria for actor/context, full void effects, rollback/replay, shop authorization, filters/pagination, append-only storage and metadata privacy/legacy readability. Replay guarantees remain limited to the existing protected flows, not every create API. OWNER audit history is separate from deferred ADMIN support-read/security/failure auditing and FE screens; business tables remain the source of money/debt/stock totals.
-
-**Check:** Reran four existing audit/web/migration suites with Java 21 and a disposable PostgreSQL 16 database: 44 tests passed, zero failures/errors/skips (20 audit PostgreSQL, 9 migration, 10 audit service, 5 audit web). Confirmed new IDs/references and document links, unchanged legal/tax sections, code/schema alignment and clean diff whitespace. Existing suites plus source inspection support the criteria; no new tests were added for every HTTP authorization/method or ordering-boundary combination. No existing local database or real Firebase credential was used.
-
-**Remaining boundaries:** Requirements and API/DB evidence do not establish FE/staging/production acceptance or completion of ADMIN audit `NFR-009`/`AC-017`. The separately identified FE unknown-result idempotency risk remains unchanged. This documentation change is local only: no commit, push, PR comment resolution or merge was performed.
-
-### [2026-10-02 UTC+07:00] — [Integration] Synchronize latest staging and preserve Core review fixes
-
-**Done:** Fast-forwarded local `feat/core-business` from `635c80f` to remote `dde20d9`, preserving the eight newer review-fix commits, then merged staging `8af60b7`. Resolved only the two document conflicts without replacing either branch's history. This checkpoint supersedes the earlier integration entry's outdated frontend-header and pending API-contract wording notes.
-
-**Changed files:** Manual edits are limited to `PROGRESS.md` and `docs/contracts/api-contracts.md`, explicitly approved for this merge. AI and `compose.yaml` are imported unchanged from staging. Core, frontend and CI are unchanged from remote Core `dde20d9`; no entity or Flyway V1-V10 change is introduced. Existing progress entries from both branches remain verbatim; `.idea/`, local secrets and build artifacts are excluded.
-
-**Flow explained:** The contract preserves implemented Core business/audit APIs while incorporating staging's AI rolling summaries, history search and mandatory `X-Internal-Token` for internal routes. The AI health endpoint stays public; Core has no AI proxy yet. The newer Core fixes retain precise database-conflict responses, centralized audit actions and rejection of mixed catalog/custom draft items. Imported FE now supplies financial idempotency headers, but its ten-minute in-memory key lifetime is not a safe guarantee for retries with an unknown result after timeout/restart.
-
-**Check:** Java 21 Maven clean verify with JaCoCo passed 346 tests, zero failures/errors/skips, including 99 contract cases, 34 required PostgreSQL migration/business/rollback/concurrency cases and two PostgreSQL timestamp mapping cases. The six CI-gate tests and the gate against actual PostgreSQL reports passed. Overall line coverage is 90.6%, branch coverage 77.9%. Built the Core Docker image and started it against a disposable PostgreSQL 16 database with synthetic credentials: Flyway V1-V10 succeeded, Hibernate validation passed, runtime UID is 10001, OpenAPI exposes 44 operations and returns HTTP 200, and a protected API without a token returns 401. Compose configuration validation with explicit synthetic environment values passed. Code-preservation comparisons, conflict-marker and whitespace checks passed; no existing local DB or real Firebase credential was used.
-
-**Remaining boundaries:** Push updates existing PR #73, not a new PR or a direct staging push. Staging merge remains gated on new-head CI, review and the FE unknown-result idempotency policy; this merge does not fix that FE risk or prove live FE/Firebase/AI integration. Static-analysis/CVE plugins are not configured and were not installed/run. Imported AI code was checked for equality with staging, not locally exercised against live model providers. Older progress entries remain historical checkpoints, not current deployment claims.
-
-### [2026-10-02 UTC+07:00] — [Integration] Merge staging into Core and verify business contracts
-
-**Done:** Resolved all 43 Core conflicts while integrating staging `3333227` into `feat/core-business`. Preserved current idempotency, custom sale items, full void/refund, debt cancellation, event-time reports and transactional audit. Incorporated staging's expense write locks, paid-draft archived-customer handling and precise year-boundary assertions. Included the previously prepared Core contract/checkout rollback tests and PostgreSQL CI execution gate.
-
-**Changed files:** Core expense repository/service, draft confirmation service, expense/report and draft unit tests, `AuditLogPostgresTest`, new `CoreBusinessContractWebTest`, two Core CI-verification scripts, the approved Core step additions in `.github/workflows/ci.yml`, and this new progress entry. Frontend, release-policy and contribution updates are imported unchanged from staging, not manually edited. Existing entities and Flyway V1-V10 are unchanged relative to pre-merge Core; no new migration, secret, IDE file or build artifact is included.
-
-**Flow explained:** Expense PATCH/archive serialize on the same active row; unrelated PATCH fields cannot overwrite an earlier committed change and a writer waiting for archive is rejected rather than resurrecting the row. A fully paid draft whose selected customer was archived may confirm using the draft's name/phone snapshot with sale.customerId null and no new debt/customer; unpaid/partial drafts still require an active selected customer. Barcode handling keeps Core's stricter constraint recognition rather than mapping every database failure to 409. Contract checks cover 22 Category/Product/Draft/Sale/Payment/Refund operations; CI now enables real PostgreSQL suites and fails if reports are missing, skipped, failing or missing required checkout rollback methods.
-
-**Check:** Maven clean verify with JaCoCo and all opt-in PostgreSQL tests enabled passed 340 Java tests, 0 failures/errors/skips, including 99 contract cases and 34 real PostgreSQL cases (20 audit/business, 5 repayment/void, 9 migration). New deterministic PostgreSQL concurrency tests observe actual lock waits and verify merged PATCH values/audit plus archive rejection. Checkout late-write failure/retry, earlier stock-change rollback and cross-shop tests pass. Six Python gate tests pass; the gate passes on actual PostgreSQL reports; CI YAML/wiring checks and diff whitespace checks pass. Overall line coverage is 90.4%, branch coverage 77.4%. Tests used a disposable PostgreSQL 16 database, not an existing local DB or real Firebase credentials.
-
-**Remaining boundaries:** Remote CI and live FE/Firebase integration are not established by local tests. Imported FE still omits required Idempotency-Key for expense creation and debt repayment; the FE owner must align these requests without weakening Core protections. Additional BRD/PRD/API-contract wording for archived-customer confirmation awaits separate permission to edit docs. Static-analysis and dependency-CVE scan plugins are not configured and were not installed/run. Shared history is preserved without rebase/force-push; the scoped pre-merge stash is retained as a recovery copy and `.idea/` is untouched.
-
-### [2026-10-02 UTC+07:00] — [Feature] Add approved Flyway V10 for Core audit history
-
-**Done:** Added `V10__create_audit_logs.sql` after explicit migration approval, superseding the no-migration boundary in the entry below. The migration creates or adopts the compatible local Hibernate table, adds actor/shop references, context/action/JSON checks and query indexes, and rejects UPDATE/DELETE/TRUNCATE through append-only triggers. It does not modify V1-V9 or delete/backfill historical audit data.
-
-**Changed files:** Core V10 migration, `SaleRefundMigrationPostgresTest`, `AuditLogPostgresTest`, and this new `PROGRESS.md` entry. The audit implementation and tests described below are included in the same feature delivery; other modules/docs/default runtime configuration remain unchanged.
-
-**Flow explained:** Flyway now supplies the audit schema before Hibernate `validate`. Existing valid Hibernate-created rows and identity sequence are preserved; invalid references/context/JSON shape stop migration and all V10 DDL rolls back. Audit business integration tests now use the actual V1-V10 migrated schema rather than Hibernate-created tables or a hand-written idempotency fixture. DB triggers protect append-only DML, but a schema owner/superuser can disable them; separate restricted application and migration DB roles are still required for production hardening.
-
-**Check:** Core Maven clean verify with JaCoCo and all opt-in PostgreSQL tests enabled passed 229 tests with 0 failures/errors/skips. The 9 migration tests cover fresh schema and all entity mappings, V8 upgrades, adoption of real Hibernate-created audit rows, every current action/target mapping, invalid audit context/references, blocked UPDATE/DELETE/TRUNCATE, atomic failure/retry and no-op reruns. The 11 audit PostgreSQL business tests pass with Flyway enabled and Hibernate validation, including concurrent replay and full rollback. Audit line coverage remains 96.9%. Tests ran only against a disposable PostgreSQL 16 DB; no existing local database or Firebase credentials were used.
-
-**Remaining boundaries:** Local configurations previously disabling Flyway should use `FLYWAY_ENABLED=true` and `SPRING_JPA_HIBERNATE_DDL_AUTO=validate` when adopting V10. Existing manually created invalid rows need review before migration can succeed; no automated repair is supplied. Docs/API-contract alignment, ADMIN support-read/failure/security auditing, remote CI, real Firebase/FE integration and production role/backup/retention readiness remain unverified or deferred. Older progress entries are preserved as historical checkpoints.
-
-### [2026-10-02 UTC+07:00] — [Feature] Add transactional Core audit history without migration
-
-**Done:** Added success-only audit events for sale confirmation/void/refund, debt repayment/cancellation, stock changes/restoration, expense writes, product/category/shop writes and existing ADMIN shop status actions. Added an OWNER-scoped, paginated/filterable `GET /api/v1/audit-logs` endpoint. No audit write/update/delete API is exposed.
-
-**Changed files:** New Core `AuditLog` entity, `AuditAction` enum, append-only repository fragment, writer/query service interfaces and implementations, response DTOs/controller and audit unit/web/PostgreSQL tests; existing Core services, error code and regression tests; this new `PROGRESS.md` entry. Existing business entities, migrations V1-V9, default configuration, `pom.xml`, docs and other project modules are unchanged.
-
-**Flow explained:** Success events join the business transaction; failed business/audit writes roll back money, debt, stock, audit and idempotency reservations together. Confirm and idempotent repayment/expense/void replays do not duplicate events. Actor/shop come from authorized server-side context, including the real ADMIN actor for status changes. Metadata accepts only whitelisted fields/types and excludes raw request/entity snapshots, customer contact values, credentials and transfer references. UTC timestamps and trusted server request IDs group related events. OWNER audit reads require an owned ACTIVE shop and do not create new events; unsupported ADMIN support/dashboard reads are not invented.
-
-**Check:** Reran Maven `clean verify` with JaCoCo and all opt-in PostgreSQL tests enabled against a disposable PostgreSQL 16 database: 226 tests, 0 failures/errors/skips. Audit line coverage is 96.9% (125 covered, 4 missed lines). Tests cover real audit INSERT failures and full transaction rollback, same-key serial/concurrent replay, cross-shop access denial, correct ADMIN attribution, decimal JSONB hydration, unpaid/custom-item voids, SETTLED debt preservation, catalog/expense/shop changes, bounded filters/pagination and absence of audit mutation endpoints. Existing migration/concurrency regression tests also passed. Staged diff/whitespace and sensitive-key-pattern checks passed; no generated reports, local secrets or `.idea/` files are included.
-
-**Remaining boundaries:** No audit Flyway migration or DB-role UPDATE/DELETE restriction was created; append-only is currently enforced by the application entity/repository/API. A fresh/default Flyway + Hibernate-validate startup is not ready for this new entity until its schema is supplied. Local-only manual testing can use `FLYWAY_ENABLED=false` and `SPRING_JPA_HIBERNATE_DDL_AUTO=update`; existing local DBs were not modified by this verification. Migration tests validate the already-migrated business entities, not pending `AuditLog`. Docs/API-contract alignment, failure/security-event auditing, ADMIN support-read auditing, remote CI and staging/production readiness remain unverified or deferred. This entry is added with explicit approval; earlier progress entries are preserved.
-
-### [2026-10-02 UTC+07:00] — [Feature] Verify Core sale void and refund before audit-log work
-
-**Done:** Completed custom sale items, full sale cancellation/refund, remaining-debt cancellation audit, consistent repayment/void lock order, explicit restock selection, event-time revenue/cash reporting, UTC storage with Vietnam API display, and forward-only Flyway V8/V9. Aligned the approved BRD/PRD, API contract and ERD/technical descriptions with Core. General-purpose audit logging remains the next phase; it is not implemented by these debt audit fields.
-
-**Changed files:** Core sale/debt/report DTOs, entities, repositories, services, timestamp configuration, tests and `backend/core/README.md`; `backend/core/src/main/resources/db/migration/V8__allow_custom_sale_items.sql` and `V9__add_sale_refunds_and_debt_void_audit.sql`; `docs/product/business-requirements.md`, `docs/product/product-requirements.md`, `docs/contracts/api-contracts.md`, `docs/architecture/diagrams/src/erd.dbml`, `docs/architecture/erd-description.md`, `docs/architecture/technical-design.md`; `PROGRESS.md`. Existing V1-V7 migrations are unchanged.
-
-**Flow explained:** Custom draft items require a name/unit but no product reference and never create or change catalog stock. Voiding a confirmed sale preserves sale/items/payments, refunds all money actually received, cancels only remaining OPEN debt, and preserves SETTLED history. Required `restockItems` controls full stock restoration using the deduction snapshot; unknown historical snapshots cannot be guessed. Repayment and void lock sale before debt/products, and same-key void retries replay one result. Reports distinguish gross/voided/net revenue from collected/refunded cash by each event's timestamp. Idempotency currently covers repayment, expense creation and sale void; other create endpoints are not covered. Partial returns/refunds and the inventory movement ledger remain deferred.
-
-**Check:** Reran Core `clean verify` with the opt-in PostgreSQL tests enabled against an isolated PostgreSQL 16 database: 202 tests, 0 failures/errors/skips. This includes migration upgrade/rollback constraints and repayment/void concurrency tests. Built the Core Docker image and started it with Flyway enabled and Hibernate schema validation; V1-V9 all succeeded. A separate Firebase Auth emulator and disposable DB passed 16 HTTP smoke assertions covering authentication, confirm replay, partial-payment sale, repayment, full refund/debt cancellation, required restock validation, one-time stock restoration, retained payments, report totals, +07:00 timestamps, cross-shop denial and custom items. SQL independently confirmed refund 60,000 VND, cancelled debt 40,000 VND and two unchanged payments totalling 60,000 VND for the checked sale. OpenAPI exposes 43 operations and marks `X-Shop-Id`, `Idempotency-Key`, `reason` and `restockItems` as required for void. `git diff --check` passed. No business code was changed during this verification; no real Firebase secret or existing local DB was used.
-
-**Remaining verification:** Coverage/static-analysis/dependency-security plugins are not configured, so these gates were not run. Existing Commons Logging/open-in-view warnings remain. Real Firebase, FE integration, remote CI and staging/production migration/backup readiness are not established by this local run. No commit or push was made; `.idea/` and ignored local secrets/build artifacts are excluded from the proposed push. Fetch/recheck the remote branch before the requested push/PR.
-
-### [2026-09-29 UTC+07:00] — [Feature] Add Flyway V7 for API idempotency keys
-
-**Done:** Added the `api_idempotency_keys` migration matching the Core repository and existing local test table. Updated the API contract to reflect the migration.
-
-**Changed files:** `backend/core/src/main/resources/db/migration/V7__create_api_idempotency_keys.sql`, `docs/contracts/api-contracts.md`, `PROGRESS.md`.
-
-**Flow explained:** A fresh PostgreSQL database now creates the idempotency table with shop/user references, a unique `(shop_id, operation, idempotency_key)` constraint, expiry check and index. An existing matching local test table is preserved.
-
-**Check:** Core Maven `verify` passed 119 tests and `docker compose build core` succeeded. Core started with Flyway enabled against an isolated clean PostgreSQL 16 database; V1–V7 all succeeded and the expected constraints/index exist. V7 ran against the pre-existing local table inside a rolled-back transaction without changing its two rows. The local database itself remains at Flyway V4; its pending V5/V6 upgrade was not applied or verified here.
-
-### [2026-09-29 UTC+07:00] — [Fix] Guard retry writes and shop archive; normalize selected API errors
-
-**Done:** Added idempotency handling for debt repayments and expense creation, blocked OWNER archive of an ADMIN-inactivated shop, and normalized missing-header and barcode-race errors. Updated BR/FR/AC and API contract for these provisional Core behaviors. Added a Core local-run README.
-
-**Changed files:** Core controllers, services, repository, error handling, configuration, tests and `backend/core/README.md`; `docs/product/business-requirements.md`, `docs/product/product-requirements.md`, `docs/contracts/api-contracts.md`, `PROGRESS.md`.
-
-**Flow explained:** Both POST endpoints now require `Idempotency-Key`; the same shop/operation/key/request returns the original response without a second write, while a changed request conflicts. The key and business write share one transaction. Default key expiry is 30 days. The `api_idempotency_keys` table was created **only in the local `smartledger` PostgreSQL DB** for testing; no Flyway migration was added, so this is not ready for a fresh DB or deployment.
-
-**Check:** Core Maven `verify` passed 119 tests with no failures/errors. Local HTTP smoke test on port 8080 replayed an expense with the same ID, rejected changed content with 409, and archived the test expense. OpenAPI listed both required headers; `docker compose config --quiet` passed. Docker image build could not run because Docker Engine was unavailable. No commit or push made.
-### [2026-10-02 19:59 UTC+07:00] — [Refactor] Pass model settings to the AI container and simplify AI error handling
-
-**Done:** The `ai` Compose service now receives `MODEL_NAME`, `SUMMARY_MODEL_NAME` and `MODEL_REASONING_EFFORT`, and the default `MODEL_NAME` is `gpt-5.6-luna`, because the image excludes `.env` and the old `gpt-4o-mini` default does not accept `reasoning_effort`. Removed the unused `ProviderResult` and both unused `check_health` methods, and replaced the five per-route `try/except` blocks with two app-level exception handlers.
-
-**Changed files:** `compose.yaml`, `backend/ai/src/app_config.py`, `backend/ai/src/agent/routers.py`, `backend/ai/src/main.py`, `backend/ai/src/infra/postgre_db_client.py`, `backend/ai/src/infra/redis_db_client.py`, `backend/ai/tests/integration_tests/test_agent_chat.py` — modified; `backend/ai/src/providers/base.py` — deleted.
-
-**Flow explained:** `ConversationNotFoundError` still maps to `404 conversation_not_found` and any other failure to `503 ai_unavailable` with the cause logged; the mapping moved from each route to `main.py`. An uncaught exception that previously surfaced as `500` now returns `503 ai_unavailable`.
-
-**Check:** `ruff check` and `ruff format --check` clean; `uv run pytest`: 75 passed against `postgres:16`. `docker compose up --build ai` ran `gpt-5.6-luna` with `high` reasoning; chat returned 401 without the token and 200 in 4.0s with it, called from inside the container because the OrbStack host port forward reset connections.
-
-### [2026-10-02 18:40 UTC+07:00] — [Feature] Rolling chat summary, history search and internal service auth
-
-**Done:** Closes AI-009. Chat now sends the stored summary followed by every message not yet folded into it, and a background task folds older messages into that summary, so a message leaves the model context only after it is written into the summary. The agent's first tool, `search_chat_history`, recovers exact details from folded messages that the summary condensed. Every `/internal/v1/*` route now requires the shared `X-Internal-Token` header and fails closed when no token is configured.
-
-**Changed files:** `backend/ai/migrations/003_add_chat_summary.sql`, `backend/ai/src/security.py`, `backend/ai/src/agent/summary.py`, `backend/ai/src/agent/history_search.py` — created; `backend/ai/src/agent/tools.py`, `backend/ai/src/agent/service.py`, `backend/ai/src/agent/repository.py`, `backend/ai/src/agent/routers.py`, `backend/ai/src/agent/prompt_template.py`, `backend/ai/src/app_config.py`, `backend/ai/src/main.py`, `backend/ai/src/providers/factory.py`, `backend/ai/tests/`, `backend/ai/README.md`, `backend/ai/.env.example`, `compose.yaml`, `docs/contracts/api-contracts.md`, `PROGRESS.md` — updated.
-
-**Flow explained:** `context_for` returns the summary plus every message above `summary_through_message_id`, and `chat()` injects the summary as a second system message. `fold_summary` runs as a FastAPI background task after the reply: it folds only once the unfolded window exceeds 60 messages, keeps the newest 50 verbatim, splits a longer backlog into roughly 3000-token batches, and advances the watermark with `WHERE summary_through_message_id IS NOT DISTINCT FROM <value it read>`, so a concurrent fold drops the later writer instead of losing messages. `SUMMARY_MODEL_NAME` selects the summarization model and falls back to `MODEL_NAME`. Auth is one router-level dependency; `/health` is unaffected. `search_chat_history` scores folded messages by shared diacritic-free words and receives its scope from `AgentContext` through `ToolRuntime`; `ChatOpenAI` uses the Responses API because `gpt-5.6-luna` rejects tools on chat completions. The shop prompt no longer carries the shop id, admits missing data instead of estimating, and names the source of a figure; the summary prompt copies figures verbatim under fixed English headings; every prompt is written in English. Both models run with `MODEL_REASONING_EFFORT=high` by default. The chat router now logs the cause behind a 503. Core does not send the header yet, so a staging deploy needs the Core update first.
-
-**Check:** `ruff check` and `ruff format --check` clean. `uv run pytest`: 75 passed with `POSTGRES_TEST_URL` against `postgres:16`, covering migration 003, the watermark guard, cross-scope rejection, a fold whose fact survives into a later turn, and the search tool's scope. Live `uvicorn` with `gpt-5.6-luna`: `/health` 200 without a token; chat 401 without or with a wrong token, 422 for a blank message, 404 for another shop's conversation; a 63rd message folded 18 messages in the background and a later turn recalled the folded fact; with a deliberately vague summary the agent called `search_chat_history` and answered the exact amount and date, also for a query typed without diacritics.
+**Check:** `npm run typecheck` passed (0 errors); `npm run export:web` passed; `git diff --check` passed.
 
 ### [2026-09-28 18:57 UTC+07:00] — [Tooling] Review feature PRs on staging
 

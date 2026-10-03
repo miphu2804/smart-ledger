@@ -6,7 +6,7 @@ export default function NotFound() {
   return (
     <Screen>
       <EmptyState icon="compass" title="Không tìm thấy trang" hint="Trang này không tồn tại" />
-      <Button title="Về trang chủ" onPress={() => router.replace('/')} />
+      <Button title="Về trang đầu" onPress={() => router.replace('/')} />
     </Screen>
   );
 }

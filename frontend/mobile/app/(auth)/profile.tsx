@@ -49,7 +49,7 @@ export default function Profile() {
         Bạn tên gì?
       </T>
       <T size={14} color={colors.muted} style={{ marginTop: 6, marginBottom: 18 }}>
-        Tên này hiện trong hồ sơ và trên hoá đơn của bạn
+        Tên này hiện trong hồ sơ và đơn hàng
       </T>
       <Field
         placeholder="VD: Nguyễn Thị Lan"

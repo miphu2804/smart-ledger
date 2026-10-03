@@ -2,8 +2,9 @@ import { Feather } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useToast } from '../src/components/brand';
-import { Badge, Button, Chips, Field, Header, Row, Screen, Sheet, T, Tile, Toggle } from '../src/components/ui';
+import { Badge, Button, Card, Chips, Field, Header, Row, Screen, Sheet, T, Tile, Toggle } from '../src/components/ui';
 import { compact } from '../src/lib/format';
+import { triggerFeedback } from '../src/lib/feedback';
 import { activeInvoices, invoiceTotal } from '../src/lib/stats';
 import { useApp } from '../src/store/AppStore';
 import { colors, shadow } from '../src/theme';
@@ -32,43 +33,53 @@ export default function Staff() {
     <Screen>
       <Header title="Nhân viên" subtitle={`${app.staff.filter((s) => s.active).length} nhân viên hoạt động`} />
       {app.staff.map((s) => (
-        <View key={s.id} style={[styles.card, !s.active && { opacity: 0.55 }]}>
-          <Tile name={s.name} text={s.name.split(' ').slice(-1)[0][0]} size={42} />
-          <View style={{ flex: 1 }}>
-            <T w="bold" size={14}>
-              {s.name}
-            </T>
-            <Row gap={6} style={{ marginTop: 2 }}>
-              <Badge
-                text={s.role}
-                color={s.role === 'Chủ tiệm' ? colors.gold : colors.primary}
-                bg={s.role === 'Chủ tiệm' ? colors.goldSoft : colors.primarySoft}
-              />
-              <T size={12} color={colors.faint}>
-                {sales[s.id]?.count ?? 0} đơn tháng này
+        <Card key={s.id} style={[{ marginBottom: 10 }, !s.active && { opacity: 0.55 }]}>
+          <Row>
+            <Tile name={s.name} text={s.name.split(' ').slice(-1)[0][0]} size={42} />
+            <View style={{ flex: 1 }}>
+              <T w="bold" size={14}>
+                {s.name}
               </T>
-            </Row>
-          </View>
-          <View style={{ alignItems: 'flex-end', gap: 6 }}>
-            <T size={12} color={colors.faint}>
-              Doanh thu
-            </T>
-            <T w="extrabold" size={14} color={colors.primary}>
-              {compact(sales[s.id]?.rev ?? 0)} đ
-            </T>
-            {s.role !== 'Chủ tiệm' ? <Toggle value={s.active} onChange={() => app.toggleStaff(s.id)} /> : null}
-          </View>
-        </View>
+              <Row gap={6} style={{ marginTop: 2 }}>
+                <Badge
+                  text={s.role}
+                  color={s.role === 'Chủ tiệm' ? colors.gold : colors.primary}
+                  bg={s.role === 'Chủ tiệm' ? colors.goldSoft : colors.primarySoft}
+                />
+                <T size={12} color={colors.faint}>
+                  {sales[s.id]?.count ?? 0} đơn tháng này
+                </T>
+              </Row>
+            </View>
+            <View style={{ alignItems: 'flex-end', gap: 6 }}>
+              <T size={12} color={colors.faint}>
+                Doanh thu
+              </T>
+              <T w="extrabold" size={14} color={colors.primary}>
+                {compact(sales[s.id]?.rev ?? 0)} đ
+              </T>
+              {s.role !== 'Chủ tiệm' ? (
+                <Toggle
+                  value={s.active}
+                  onChange={() => {
+                    app.toggleStaff(s.id);
+                    triggerFeedback('selection');
+                  }}
+                />
+              ) : null}
+            </View>
+          </Row>
+        </Card>
       ))}
       <Pressable onPress={() => setOpen(true)} style={styles.add}>
         <Row gap={6}>
           <Feather name="plus" size={16} color={colors.primary} />
           <T w="bold" size={14} color={colors.primary}>
-            Thêm nhân viên mới
+            Thêm nhân viên
           </T>
         </Row>
         <T size={12} color={colors.faint} style={{ marginTop: 3 }}>
-          Giao ca, phân quyền, theo dõi doanh thu
+          Giao ca, phân quyền và theo dõi doanh thu
         </T>
       </Pressable>
 
@@ -85,6 +96,7 @@ export default function Staff() {
           disabled={!name.trim() || phone.replace(/\D/g, '').length < 9}
           onPress={() => {
             app.addStaff(name.trim(), role, phone);
+            triggerFeedback('success');
             toast('Đã thêm nhân viên');
             setName('');
             setPhone('');

@@ -1,19 +1,21 @@
 import { router } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
-import { LogoMark } from '../src/components/brand';
-import { T } from '../src/components/ui';
+import { BrandWordmark, LogoMark } from '../src/components/brand';
+import { useReducedMotion } from '../src/motion';
 import { useApp } from '../src/store/AppStore';
 import { colors } from '../src/theme';
 
 /** Splash — chờ Firebase khôi phục phiên đã lưu, rồi chuyển sang đăng nhập (hoặc Trang chủ nếu còn đăng nhập) */
 export default function Splash() {
   const { loggedIn, authReady, needsProfile, onboarded } = useApp();
+  const reducedMotion = useReducedMotion();
   const fade = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.spring(fade, { toValue: 1, useNativeDriver: true, friction: 6 }).start();
-  }, [fade]);
+    if (reducedMotion) fade.setValue(1);
+    else Animated.spring(fade, { toValue: 1, useNativeDriver: true, friction: 6 }).start();
+  }, [fade, reducedMotion]);
 
   useEffect(() => {
     if (!authReady) return;
@@ -38,21 +40,14 @@ export default function Splash() {
         }}
       >
         <LogoMark size={112} />
-        <T w="extrabold" size={34} color={colors.ink} style={{ marginTop: 22 }}>
-          Sổ Nghe Lời
-        </T>
-        <T size={14} color={colors.muted} style={{ marginTop: 6 }}>
-          Sổ bán hàng thông minh — chỉ cần nói
-        </T>
+        <View style={{ marginTop: 22 }}>
+          <BrandWordmark size={36} align="center" showSub={true} />
+        </View>
       </Animated.View>
-      <T size={12} color={colors.muted} style={styles.footer}>
-        Team HEXA · EXE201
-      </T>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: '#FFFCF8', alignItems: 'center', justifyContent: 'center' },
-  footer: { position: 'absolute', bottom: 36, opacity: 0.7 },
+  wrap: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
 });

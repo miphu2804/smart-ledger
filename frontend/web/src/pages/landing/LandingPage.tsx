@@ -38,8 +38,6 @@ import '../../styles/landing.css'
 const NAV = [
   { href: '#tinh-nang', label: 'Tính năng' },
   { href: '#cach-hoat-dong', label: 'Cách hoạt động' },
-  { href: '#so-sanh', label: 'So sánh' },
-  { href: '#bang-gia', label: 'Bảng giá' },
   { href: '#hoi-dap', label: 'Hỏi đáp' },
 ]
 
@@ -127,51 +125,6 @@ function PhoneFrame({ src, alt, className = '', eager = false }: { src: string; 
   )
 }
 
-function VoiceCard() {
-  return (
-    <div className="voice-card" aria-label="Ví dụ: câu nói được AI tách thành món hàng">
-      <div className="vc-head">
-        <span className="vc-mic">
-          <Mic size={16} strokeWidth={2.5} />
-        </span>
-        <span className="vc-listening">Đang nghe…</span>
-        <span className="vc-wave" aria-hidden="true">
-          {Array.from({ length: 9 }, (_, i) => (
-            <i key={i} style={{ animationDelay: `${(i * 0.11) % 0.9}s` }} />
-          ))}
-        </span>
-      </div>
-      <p className="vc-transcript">“bán 2 ly cà phê sữa, 1 bánh mì thịt”</p>
-      <div className="vc-divider">
-        <span>
-          <Sparkles size={13} /> AI nhận diện
-        </span>
-      </div>
-      <ul className="vc-lines">
-        <li style={{ animationDelay: '0.5s' }}>
-          <span className="vc-item">Cà phê sữa</span>
-          <span className="vc-qty">× 2</span>
-          <span className="vc-price">40.000đ</span>
-        </li>
-        <li style={{ animationDelay: '0.8s' }}>
-          <span className="vc-item">Bánh mì thịt</span>
-          <span className="vc-qty">× 1</span>
-          <span className="vc-price">15.000đ</span>
-        </li>
-      </ul>
-      <div className="vc-total" style={{ animationDelay: '1.1s' }}>
-        <div>
-          <small>Tổng cộng</small>
-          <strong>55.000đ</strong>
-        </div>
-        <span className="vc-save">
-          <Check size={15} strokeWidth={3} /> Lưu đơn
-        </span>
-      </div>
-    </div>
-  )
-}
-
 function Hero() {
   return (
     <section className="lp-hero" id="top">
@@ -179,16 +132,14 @@ function Hero() {
       <div className="lp-container lp-hero-grid">
         <div className="lp-hero-copy">
           <span className="lp-eyebrow">
-            <i className="pulse-dot" /> Sổ bán hàng AI cho quán nhỏ
+            Sổ bán hàng cho quán nhỏ
           </span>
           <h1>
-            Miệng nói, <span className="hl">sổ ghi</span>.
-            <br />
-            <span className="lp-hero-sub">Khỏi cần máy POS.</span>
+            Nói một câu,
+            <br /> có ngay đơn <span className="hl">để kiểm tra.</span>
           </h1>
           <p className="lp-lead">
-            Bán xong, nói một câu như <em>“bán 1 ký ổi 30 nghìn”</em> — Sổ Nghe Lời tự tách món, số lượng, giá và giờ bán. Bạn chỉ
-            cần xem lại rồi bấm lưu. Cuối ngày biết ngay bán được bao nhiêu, món nào đắt hàng.
+            Sổ Nghe Lời biến câu nói hoặc nội dung bạn gõ thành bản nháp đơn bán. Bạn xem lại, sửa nếu cần rồi mới xác nhận ghi vào sổ.
           </p>
           <div className="lp-hero-cta">
             <a href="#download" className="btn btn-primary btn-lg">
@@ -200,7 +151,7 @@ function Hero() {
           </div>
           <ul className="lp-hero-points">
             <li>
-              <CheckCircle2 size={16} /> Miễn phí 200 đơn mỗi tháng
+              <CheckCircle2 size={16} /> Luôn xem lại trước khi ghi sổ
             </li>
             <li>
               <CheckCircle2 size={16} /> Hiểu tiếng Việt đời thường
@@ -212,21 +163,7 @@ function Hero() {
         </div>
 
         <div className="lp-hero-visual">
-          <div className="lp-hero-ring" aria-hidden="true" />
-          <img src="/brand/mascot.png" alt="" className="hero-mascot" aria-hidden="true" />
           <PhoneFrame src="/screens/overview.png" alt="Màn hình Tổng quan của ứng dụng Sổ Nghe Lời" className="phone-hero" eager />
-          <VoiceCard />
-          <div className="saved-chip" aria-hidden="true">
-            <span className="saved-icon">
-              <Check size={14} strokeWidth={3} />
-            </span>
-            <div>
-              <strong>Đã lưu vào sổ</strong>
-              <small>
-                <span className="tag-ai">Đọc đơn AI</span> 10:24
-              </small>
-            </div>
-          </div>
         </div>
       </div>
     </section>
