@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
+from tests.support import TEST_GUARDRAIL_LIMITS
 
 from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
 from src.agent.service import AgentService
@@ -39,19 +40,26 @@ class UserMessagesChatModel(FakeListChatModel):
 
 
 @pytest.fixture
-def client() -> TestClient:
-    app.state.fake_conversations = Mock(spec=AgentConversationRepository)
-    app.state.fake_conversations.recent_messages.return_value = []
-    app.state.fake_conversations.save_exchange.return_value = (101, 502)
-    app.state.agent = AgentService(
-        FakeChatModel(responses=["trả lời"]), app.state.fake_conversations
+def client(internal_headers: dict[str, str], wire_agent_state) -> TestClient:
+    conversations = Mock(spec=AgentConversationRepository)
+    conversations.context_for.return_value = {
+        "summary": None,
+        "summary_through_message_id": None,
+        "messages": [],
+    }
+    conversations.save_exchange.return_value = (101, 502)
+    agent = AgentService(
+        FakeChatModel(responses=["answer"]),
+        conversations,
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
-    return TestClient(app)
+    wire_agent_state(agent, conversations)
+    return TestClient(app, headers=internal_headers, raise_server_exceptions=False)
 
 
 def chat(
     client: TestClient,
-    message: str = "doanh thu hôm nay?",
+    message: str = "today's revenue?",
     conversation_id: int | None = None,
 ):
     payload = {"user_id": 7, "shop_id": 12, "message": message}
@@ -65,16 +73,16 @@ def test_agent_chat_returns_persisted_message_ids(client: TestClient) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["answer"] == "trả lời"
+    assert body["answer"] == "answer"
     assert body["conversation_id"] == 101
     assert body["message_id"] == 502
     assert body["request_id"]
-    app.state.fake_conversations.save_exchange.assert_called_once_with(
+    app.state.conversations.save_exchange.assert_called_once_with(
         user_id=7,
         shop_id=12,
         conversation_id=None,
-        user_message="doanh thu hôm nay?",
-        assistant_message="trả lời",
+        user_message="today's revenue?",
+        assistant_message="answer",
     )
 
 
@@ -89,33 +97,37 @@ def test_agent_chat_endpoint_rejects_blank_messages(
 
 def test_agent_chat_endpoint_strips_message_whitespace(client: TestClient) -> None:
     app.state.agent = AgentService(
-        UserMessagesChatModel(responses=[]), app.state.fake_conversations
+        UserMessagesChatModel(responses=[]),
+        app.state.conversations,
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
 
-    response = chat(client, message="  doanh thu hôm nay?  ")
+    response = chat(client, message="  today's revenue?  ")
 
     assert response.status_code == 200
-    assert response.json()["answer"] == "doanh thu hôm nay?"
+    assert response.json()["answer"] == "today's revenue?"
 
 
 def test_agent_chat_does_not_reuse_messages_between_conversations(
     client: TestClient,
 ) -> None:
     app.state.agent = AgentService(
-        UserMessagesChatModel(responses=[]), app.state.fake_conversations
+        UserMessagesChatModel(responses=[]),
+        app.state.conversations,
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
 
-    first = chat(client, message="tin đầu")
+    first = chat(client, message="first message")
     second = chat(client, message="tin sau")
 
     assert first.status_code == 200
-    assert first.json()["answer"] == "tin đầu"
+    assert first.json()["answer"] == "first message"
     assert second.status_code == 200
     assert second.json()["answer"] == "tin sau"
-    assert app.state.fake_conversations.save_exchange.call_count == 2
+    assert app.state.conversations.save_exchange.call_count == 2
     assert all(
         call.kwargs["conversation_id"] is None
-        for call in app.state.fake_conversations.save_exchange.call_args_list
+        for call in app.state.conversations.save_exchange.call_args_list
     )
 
 
@@ -123,24 +135,24 @@ def test_conversation_can_be_renamed_listed_and_deleted(client: TestClient) -> N
     timestamp = datetime.now(UTC)
     summary = {
         "conversation_id": 101,
-        "title": "Ca sáng",
+        "title": "Morning shift",
         "last_message_at": timestamp,
     }
-    app.state.fake_conversations.rename_conversation.return_value = summary
-    app.state.fake_conversations.list_conversations.return_value = [summary]
-    app.state.fake_conversations.get_conversation.return_value = {
+    app.state.conversations.rename_conversation.return_value = summary
+    app.state.conversations.list_conversations.return_value = [summary]
+    app.state.conversations.get_conversation.return_value = {
         **summary,
         "messages": [
             {
                 "message_id": 501,
                 "role": "USER",
-                "content": "doanh thu hôm nay?",
+                "content": "today's revenue?",
                 "created_at": timestamp,
             },
             {
                 "message_id": 502,
                 "role": "ASSISTANT",
-                "content": "trả lời",
+                "content": "answer",
                 "created_at": timestamp,
             },
         ],
@@ -148,7 +160,7 @@ def test_conversation_can_be_renamed_listed_and_deleted(client: TestClient) -> N
 
     renamed = client.patch(
         "/internal/v1/agent/conversations/101",
-        json={"user_id": 7, "shop_id": 12, "title": "Ca sáng"},
+        json={"user_id": 7, "shop_id": 12, "title": "Morning shift"},
     )
     listed = client.get(
         "/internal/v1/agent/conversations",
@@ -164,17 +176,19 @@ def test_conversation_can_be_renamed_listed_and_deleted(client: TestClient) -> N
     )
 
     assert renamed.status_code == 200
-    assert renamed.json()["title"] == "Ca sáng"
-    assert listed.json()[0]["title"] == "Ca sáng"
+    assert renamed.json()["title"] == "Morning shift"
+    assert listed.json()[0]["title"] == "Morning shift"
     assert [message["role"] for message in detail.json()["messages"]] == [
         "USER",
         "ASSISTANT",
     ]
     assert deleted.status_code == 204
-    app.state.fake_conversations.rename_conversation.assert_called_once_with(
-        101, 7, 12, "Ca sáng"
+    app.state.conversations.rename_conversation.assert_called_once_with(
+        conversation_id=101, user_id=7, shop_id=12, title="Morning shift"
     )
-    app.state.fake_conversations.delete_conversation.assert_called_once_with(101, 7, 12)
+    app.state.conversations.delete_conversation.assert_called_once_with(
+        conversation_id=101, user_id=7, shop_id=12
+    )
 
 
 @pytest.mark.parametrize("title", ["", "  \t\n  ", "x" * 256])
@@ -191,15 +205,15 @@ def test_conversation_rename_endpoint_rejects_invalid_titles(
 
 @pytest.mark.parametrize(
     ("title", "expected_title"),
-    [("  Ca sáng  ", "Ca sáng"), ("x" * 255, "x" * 255)],
+    [("  Morning shift  ", "Morning shift"), ("x" * 255, "x" * 255)],
 )
 def test_conversation_rename_endpoint_accepts_and_trims_valid_titles(
     client: TestClient, title: str, expected_title: str
 ) -> None:
-    app.state.fake_conversations.rename_conversation.side_effect = (
-        lambda conversation_id, user_id, shop_id, normalized_title: {
+    app.state.conversations.rename_conversation.side_effect = (
+        lambda conversation_id, user_id, shop_id, title: {
             "conversation_id": conversation_id,
-            "title": normalized_title,
+            "title": title,
             "last_message_at": datetime.now(UTC),
         }
     )
@@ -214,7 +228,7 @@ def test_conversation_rename_endpoint_accepts_and_trims_valid_titles(
 
 
 def test_chat_hides_conversation_owned_by_another_scope(client: TestClient) -> None:
-    app.state.fake_conversations.recent_messages.side_effect = ConversationNotFoundError
+    app.state.conversations.context_for.side_effect = ConversationNotFoundError
 
     response = chat(client, conversation_id=101)
 
@@ -233,7 +247,9 @@ def test_agent_chat_returns_503_when_agent_missing(client: TestClient) -> None:
 
 def test_agent_chat_returns_503_on_model_error(client: TestClient) -> None:
     app.state.agent = AgentService(
-        ErrorChatModel(responses=[]), app.state.fake_conversations
+        ErrorChatModel(responses=[]),
+        app.state.conversations,
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
 
     response = chat(client)

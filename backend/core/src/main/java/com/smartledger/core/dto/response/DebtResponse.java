@@ -5,5 +5,6 @@ import java.time.OffsetDateTime;
 
 public record DebtResponse(
         Long id, Long saleId, Long customerId, Long originalVnd, Long outstandingVnd,
-        DebtStatus status, OffsetDateTime createdAt, OffsetDateTime settledAt) {
+        DebtStatus status, OffsetDateTime createdAt, OffsetDateTime settledAt,
+        OffsetDateTime voidedAt, Long cancelledVnd) {
 }

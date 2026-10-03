@@ -26,8 +26,11 @@ public class SaleItem {
     @Column(name = "sale_id", nullable = false)
     private Long saleId;
 
-    @Column(name = "product_id", nullable = false)
+    @Column(name = "product_id")
     private Long productId;
+
+    @Column(name = "stock_deducted")
+    private Boolean stockDeducted;
 
     @Column(name = "product_name_snapshot", nullable = false, length = 255)
     private String productNameSnapshot;
@@ -48,9 +51,14 @@ public class SaleItem {
     private OffsetDateTime createdAt;
 
     public static SaleItem fromDraftItem(Long saleId, SaleDraftItem draftItem) {
+        return fromDraftItem(saleId, draftItem, false);
+    }
+
+    public static SaleItem fromDraftItem(Long saleId, SaleDraftItem draftItem, boolean stockDeducted) {
         SaleItem item = new SaleItem();
         item.saleId = saleId;
         item.productId = draftItem.getProductId();
+        item.stockDeducted = stockDeducted;
         item.productNameSnapshot = draftItem.getProductNameSnapshot();
         item.unitSnapshot = draftItem.getUnitSnapshot();
         item.quantity = draftItem.getQuantity();

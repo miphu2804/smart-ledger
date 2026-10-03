@@ -1,5 +1,10 @@
 import { categoryMeta, mockProducts as legacyProducts } from '../data/mock';
 import type {
+  AgentChatMessageView,
+  AgentChatRequest,
+  AgentConversationSummary,
+  AgentConversationView,
+  AgentMessageView,
   CategoryView,
   CustomerView,
   DebtView,
@@ -12,13 +17,14 @@ import type {
   SaleView,
 } from '../data/types';
 import { ApiError } from './apiError';
+import { normalizeText, vnd } from './format';
 
 /**
  * Core giả lập cho chế độ xem trước (EXPO_PUBLIC_USE_MOCK=true, xem src/config.ts) khi chưa có Core
  * thật chạy — `apiRequest` (src/lib/api.ts) gọi thẳng vào đây thay vì `fetch` mạng.
  *
  * Dữ liệu lưu trong bộ nhớ (mất khi tải lại app/reload Metro) và chỉ mô phỏng đúng các endpoint mà
- * app thực sự gọi qua catalogApi/salesApi/debtApi/customerApi/expenseApi. Logic xác nhận đơn nháp
+ * app thực sự gọi qua catalogApi/salesApi/debtApi/customerApi/expenseApi/agentApi. Logic xác nhận đơn nháp
  * (`confirmSaleDraft`) cố tình bám sát Core thật — xem
  * backend/core/src/main/java/com/smartledger/core/service/impl/SaleDraftServiceImpl.java#confirm —
  * để hành vi giống nhau: kiểm tra tồn kho, mở nợ khi trả thiếu, bắt buộc có khách khi ghi nợ.
@@ -636,6 +642,114 @@ function archiveExpense(id: number): void {
 }
 
 // ---------------------------------------------------------------------------
+// Trợ lý AI (Agent chat) — hội thoại lưu trong bộ nhớ, câu trả lời giả tính từ danh mục mẫu
+// ---------------------------------------------------------------------------
+
+/** Câu chứa chuỗi này giả lập AI lỗi (503 ai_unavailable) để thử thông báo lỗi ở màn /ai. */
+export const MOCK_AI_FAILURE_TRIGGER = '#ai-loi';
+
+interface MockConversation {
+  conversation_id: number;
+  title: string | null;
+  last_message_at: string;
+  messages: AgentMessageView[];
+}
+
+let agentConversations: MockConversation[] = [];
+let nextConversationId = 1;
+let nextAgentMessageId = 1;
+
+function mockAgentAnswer(question: string): string {
+  const q = normalizeText(question);
+  const active = products.filter((p) => p.status === 'ACTIVE');
+  const scope = '(Số liệu giả lập từ danh mục mẫu của tiệm hiện tại.)';
+  if (/gia von/.test(q)) {
+    const missing = active.filter((p) => p.costPriceVnd == null);
+    if (!missing.length) return `Món nào cũng đã có giá vốn. ${scope}`;
+    return `Chưa nhập giá vốn:\n${missing.slice(0, 20).map((p) => `• ${p.name}`).join('\n')}\n${scope}`;
+  }
+  if (/dat nhat|mac nhat/.test(q)) {
+    const top = [...active].sort((a, b) => b.sellingPriceVnd - a.sellingPriceVnd).slice(0, 5);
+    return `Năm món giá cao nhất:\n${top.map((p, i) => `${i + 1}. ${p.name} — ${vnd(p.sellingPriceVnd)}`).join('\n')}\n${scope}`;
+  }
+  if (/het hang|sap het|ton kho|con bao nhieu|nhap/.test(q)) {
+    const low = active.filter((p) => p.tracked && (p.stockQuantity ?? 0) <= 6);
+    if (!low.length) return `Chưa có mặt hàng nào dưới ngưỡng 6. ${scope}`;
+    return `Các món sắp hết:\n${low.map((p) => `• ${p.name}: còn ${p.stockQuantity} ${p.unit}`).join('\n')}\n${scope}`;
+  }
+  const matched = active.filter((p) => {
+    const name = normalizeText(p.name);
+    return name.length > 2 && (q.includes(name) || name.split(' ').some((word) => word.length > 2 && q.includes(word)));
+  });
+  if (matched.length) {
+    return `${matched
+      .slice(0, 5)
+      .map((p) => `• ${p.name}: ${vnd(p.sellingPriceVnd)}/${p.unit}${p.tracked ? `, còn ${p.stockQuantity}` : ''}`)
+      .join('\n')}\n${scope}`;
+  }
+  if (/bao nhieu (mon|mat hang|san pham)|may mon/.test(q)) {
+    return `Tiệm đang bán ${active.length} mặt hàng trong ${listCategories().length} nhóm. ${scope}`;
+  }
+  return 'Mình chưa đủ dữ liệu để trả lời câu này. Ở bản xem trước, bạn thử hỏi giá hoặc tồn kho của một món nhé.';
+}
+
+function agentSummary(c: MockConversation): AgentConversationSummary {
+  return { conversation_id: c.conversation_id, title: c.title, last_message_at: c.last_message_at };
+}
+
+function findConversation(id: number): MockConversation {
+  const conversation = agentConversations.find((c) => c.conversation_id === id);
+  if (!conversation) throw apiErr(404, 'conversation_not_found', 'Không tìm thấy cuộc trò chuyện.');
+  return conversation;
+}
+
+function agentChat(body: AgentChatRequest): AgentChatMessageView {
+  const message = body.message?.trim() ?? '';
+  if (!message) throw apiErr(422, 'validation_error', 'Tin nhắn không được để trống.');
+  if (message.includes(MOCK_AI_FAILURE_TRIGGER)) {
+    throw apiErr(503, 'ai_unavailable', 'Trợ lý AI tạm thời không phản hồi.');
+  }
+  const now = nowIso();
+  let conversation: MockConversation;
+  if (body.conversation_id != null) {
+    conversation = findConversation(body.conversation_id);
+  } else {
+    conversation = { conversation_id: nextConversationId++, title: message.slice(0, 255), last_message_at: now, messages: [] };
+    agentConversations.push(conversation);
+  }
+  const answer = mockAgentAnswer(message);
+  conversation.messages.push({ message_id: nextAgentMessageId++, role: 'USER', content: message, created_at: now });
+  const reply: AgentMessageView = { message_id: nextAgentMessageId++, role: 'ASSISTANT', content: answer, created_at: now };
+  conversation.messages.push(reply);
+  conversation.last_message_at = now;
+  return { conversation_id: conversation.conversation_id, message_id: reply.message_id, answer };
+}
+
+function listAgentConversations(): AgentConversationSummary[] {
+  return [...agentConversations]
+    .sort((a, b) => b.last_message_at.localeCompare(a.last_message_at))
+    .map(agentSummary);
+}
+
+function getAgentConversation(id: number): AgentConversationView {
+  const conversation = findConversation(id);
+  return { ...agentSummary(conversation), messages: conversation.messages };
+}
+
+function renameAgentConversation(id: number, body: { title?: string }): AgentConversationSummary {
+  const title = body.title?.trim() ?? '';
+  if (!title || title.length > 255) throw apiErr(422, 'validation_error', 'Tên cuộc trò chuyện dài 1–255 ký tự.');
+  const conversation = findConversation(id);
+  conversation.title = title;
+  return agentSummary(conversation);
+}
+
+function deleteAgentConversation(id: number): void {
+  findConversation(id);
+  agentConversations = agentConversations.filter((c) => c.conversation_id !== id);
+}
+
+// ---------------------------------------------------------------------------
 // Định tuyến — nhận đúng path/method mà catalogApi/salesApi/debtApi/customerApi/expenseApi gửi
 // ---------------------------------------------------------------------------
 
@@ -692,6 +806,18 @@ export function mockCoreRequest<T>(path: string, method: string, body: unknown):
   if (segments[0] === 'expenses' && segments.length === 2 && method === 'DELETE') {
     archiveExpense(Number(segments[1]));
     return undefined as T;
+  }
+
+  if (path === '/agent/chat' && method === 'POST') return agentChat(body as AgentChatRequest) as unknown as T;
+  if (path === '/agent/conversations' && method === 'GET') return listAgentConversations() as unknown as T;
+  if (segments[0] === 'agent' && segments[1] === 'conversations' && segments.length === 3) {
+    const id = Number(segments[2]);
+    if (method === 'GET') return getAgentConversation(id) as unknown as T;
+    if (method === 'PATCH') return renameAgentConversation(id, body as { title?: string }) as unknown as T;
+    if (method === 'DELETE') {
+      deleteAgentConversation(id);
+      return undefined as T;
+    }
   }
 
   throw apiErr(501, 'mock_not_implemented', `Chưa hỗ trợ giả lập cho ${method} ${path} khi EXPO_PUBLIC_USE_MOCK=true.`);

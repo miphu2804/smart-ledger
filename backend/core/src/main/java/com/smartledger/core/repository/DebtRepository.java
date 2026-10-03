@@ -16,8 +16,15 @@ public interface DebtRepository extends JpaRepository<Debt, Long> {
     @Query("select d from Debt d, Sale s where d.saleId = s.id and d.id = :id and s.shopId = :shopId")
     Optional<Debt> findByIdAndShopId(@Param("id") Long id, @Param("shopId") Long shopId);
 
+    @Query("select d.saleId from Debt d, Sale s where d.saleId = s.id and d.id = :id and s.shopId = :shopId")
+    Optional<Long> findSaleIdByIdAndShopId(@Param("id") Long id, @Param("shopId") Long shopId);
+
     @Query("select d from Debt d, Sale s where d.saleId = s.id and d.saleId = :saleId and s.shopId = :shopId")
     Optional<Debt> findBySaleIdAndShopId(@Param("saleId") Long saleId, @Param("shopId") Long shopId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select d from Debt d, Sale s where d.saleId = s.id and d.saleId = :saleId and s.shopId = :shopId")
+    Optional<Debt> findLockedBySaleIdAndShopId(@Param("saleId") Long saleId, @Param("shopId") Long shopId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select d from Debt d, Sale s where d.saleId = s.id and d.id = :id and s.shopId = :shopId")

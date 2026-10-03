@@ -10,6 +10,8 @@ services:
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-smartledger}
       DATABASE_USERNAME: ${POSTGRES_USER:-smartledger}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      AI_BASE_URL: http://ai:8001
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-}
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:?FIREBASE_PROJECT_ID is required}
       GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase-service-account.json
       FIREBASE_AUTH_EMULATOR_HOST: ${FIREBASE_AUTH_EMULATOR_HOST:-}
@@ -64,6 +66,16 @@ services:
       REDIS_URL: redis://redis:6379/0
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      # The image excludes .env, so model settings come from here; empty uses app_config defaults.
+      MODEL_NAME: ${MODEL_NAME:-}
+      SUMMARY_MODEL_NAME: ${SUMMARY_MODEL_NAME:-}
+      MODEL_REASONING_EFFORT: ${MODEL_REASONING_EFFORT:-}
+      # Empty fails closed: every /internal/v1 route returns 401. Set it in the shell or a
+      # Compose --env-file to exercise the internal API locally.
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-}
+      # Read-only login granted ai_sql_reader (backend/ai/migrations/004); empty turns the
+      # agent's shop-data tool off.
+      AI_SQL_READER_URL: ${AI_SQL_READER_URL:-}
     depends_on:
       postgres:
         condition: service_healthy

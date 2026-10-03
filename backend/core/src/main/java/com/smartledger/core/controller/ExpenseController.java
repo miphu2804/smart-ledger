@@ -38,8 +38,11 @@ public class ExpenseController {
     @PostMapping
     @Operation(summary = "Record a manual expense for the selected shop")
     public ResponseEntity<ExpenseResponse> create(@AuthenticationPrincipal VerifiedFirebaseToken token,
-            @RequestHeader("X-Shop-Id") String shopId, @Valid @RequestBody ExpenseWriteRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(service.create(token, shopId, request));
+            @RequestHeader("X-Shop-Id") String shopId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @Valid @RequestBody ExpenseWriteRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(service.create(token, shopId, idempotencyKey, request));
     }
 
     @GetMapping

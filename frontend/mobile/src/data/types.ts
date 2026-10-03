@@ -85,6 +85,35 @@ export interface ChatMessage {
   text: string;
 }
 
+// ---- Trợ lý AI (Agent chat) — khớp docs/contracts/api-contracts.md §5, AI dùng snake_case ----
+export interface AgentChatRequest {
+  conversation_id?: number | null;
+  message: string;
+}
+
+export interface AgentChatMessageView {
+  conversation_id: number;
+  message_id: number;
+  answer: string;
+}
+
+export interface AgentConversationSummary {
+  conversation_id: number;
+  title: string | null;
+  last_message_at: string;
+}
+
+export interface AgentMessageView {
+  message_id: number;
+  role: 'USER' | 'ASSISTANT';
+  content: string;
+  created_at: string;
+}
+
+export interface AgentConversationView extends AgentConversationSummary {
+  messages: AgentMessageView[];
+}
+
 // ---- Phiên đăng nhập & tiệm — khớp `AuthSessionResponse` của Core (backend/core, nhánh feat/auth-session) ----
 // Lưu ý: Core đang trả camelCase và id kiểu số (Long); docs/contracts/api-contracts.md ghi snake_case và uuid.
 // Đang bám theo code của Core; nếu backend đổi (SNAKE_CASE…) thì chỉ cần sửa các kiểu dưới đây và sessionApi.
