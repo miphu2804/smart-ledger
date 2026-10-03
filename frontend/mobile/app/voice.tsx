@@ -735,31 +735,6 @@ export default function Voice() {
           </View>
         </View>
 
-        {/* Manual Inline Input (Toggled via "Nhập tay" button) */}
-        {false ? (
-          <View style={styles.inlineInputCard}>
-            <View style={styles.inlineInputKeyboardIcon}>
-              <Feather name="edit-3" size={15} color={voiceTheme.muted} />
-            </View>
-            <TextInput
-              value={manualText}
-              onChangeText={setManualText}
-              onSubmitEditing={sendManualText}
-              placeholder="Nhập món, số lượng hoặc giá..."
-              placeholderTextColor="#9CA3AF"
-              style={styles.inlineTextInput}
-              returnKeyType="send"
-              autoFocus
-            />
-            <Pressable
-              onPress={sendManualText}
-              style={({ pressed }) => [styles.inlineSendBtn, pressed && { opacity: 0.8 }]}
-            >
-              <Feather name="send" size={14} color={colors.white} />
-            </Pressable>
-          </View>
-        ) : null}
-
         {/* Spiral Notebook Card (Sổ ghi đơn lò xo như trong ảnh mẫu) */}
         <View style={styles.notebookContainer}>
           {/* Decorative Behind Colored Layer (Green & Amber top-right peek) */}
