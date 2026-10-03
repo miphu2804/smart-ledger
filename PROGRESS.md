@@ -1,3 +1,13 @@
+### [2026-10-04 01:55 UTC+07:00] — [Config] EAS phone-test profile to check phone sign-in on a device
+
+**Done:** Add an EAS build profile `phone-test` that builds an APK with real Firebase and a mocked Core session, so phone sign-in can be checked on a device before a Core is deployed. `preview` now builds an APK too. `app.config.js` reads `google-services.json` from the EAS file variable `GOOGLE_SERVICES_JSON`, because the file is git-ignored (the repository is public) and an EAS cloud build never sees it. `.env` is not on EAS either and `USE_MOCK` defaults to true, so the profile sets the `EXPO_PUBLIC_*` flags itself.
+
+**Changed files:** `frontend/mobile/eas.json` — modified; `frontend/mobile/app.config.js` — created; `PROGRESS.md`.
+
+**Flow explained:** On EAS, `GOOGLE_SERVICES_JSON` (a secret file variable in the `preview` environment) gives the path of the file; on a developer machine the variable is absent and `./google-services.json` is used as before. Before sign-in works on a build, the SHA-1 and SHA-256 of that build's keystore (`eas credentials --platform android`) must be added to the Android app in Firebase. After sign-in the business screens call the real API, so they show network errors until a Core is reachable.
+
+**Check:** `eas build --platform android --profile phone-test` finished (build `ac00cc4e-ceb9-48dd-9fe0-022a4266e2c4`); `expo config` resolves `googleServicesFile` both without and with the variable; the SHA-1 and SHA-256 read from the installed APK match the ones in Firebase. The owner reports the APK signed in with a Firebase test phone number on a real Android phone. Not verified: sign-in with a real SMS number, automatic SMS reading, and the Android emulator, whose DNS failed on the development machine until it was started with `-dns-server 8.8.8.8,8.8.4.4`.
+
 ### [2026-10-03 07:54 UTC+07:00] — [UI/UX] Floating Cart Bar Elevation, Free-floating 3D Robot Mascot & Realistic Product Photos
 
 **Done:**
