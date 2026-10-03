@@ -14,3 +14,14 @@ venv/
 
 # CodeGraph generated index
 .codegraph/
+
+# Promo video: generated media and local tooling stay out of git
+marketing/promo-video/node_modules/
+marketing/promo-video/story/clips/
+marketing/promo-video/story/selected/
+marketing/promo-video/story/final/
+marketing/promo-video/out/
+marketing/promo-video/public/audio/
+marketing/promo-video/public/fx/
+marketing/promo-video/public/clips/
+/data/
