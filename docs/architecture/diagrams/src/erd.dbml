@@ -5,7 +5,9 @@
 // ID: BIGINT IDENTITY → Java Long
 // Money: BIGINT VND
 // Time: TIMESTAMPTZ, UTC internally; Core JSON displays +07:00
-// Core schema: Flyway V1-V9; planned AI/notification/audit tables are not Core migrations.
+// Core schema: Flyway V1-V10 (business tables, idempotency, audit_logs).
+// AI schema: backend/ai/migrations 001-004 (chat_conversations, chat_messages, pgvector, ai_read views).
+// ai_requests and notification tables are planned and not created by any migration yet.
 // Report periods use Asia/Ho_Chi_Minh; this logical ERD does not imply runtime completion.
 // Quantity: NUMERIC(15,3)
 //
@@ -551,6 +553,9 @@ Table chat_conversations {
   shop_id bigint [not null]
 
   title varchar(255)
+
+  summary text [note: 'Rolling summary of folded messages (AI migration 003)']
+  summary_through_message_id bigint [note: 'Newest message folded into summary; no FK by design']
 
   started_at timestamptz [not null, default: `now()`]
   last_message_at timestamptz [not null, default: `now()`]
