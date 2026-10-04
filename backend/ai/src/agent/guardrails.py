@@ -43,7 +43,7 @@ from langchain.agents.middleware import (
 )
 from langchain_core.messages import AIMessage, HumanMessage
 
-from src.sql.guard import SqlGuard
+from src.agent.sql_guard import SqlGuard
 
 # The owner reads these fixed replies in the app, so they stay Vietnamese; the copy
 # lives in a locale file to keep the source English.

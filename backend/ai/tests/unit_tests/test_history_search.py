@@ -3,7 +3,6 @@ from datetime import datetime
 from src.agent.history_search import (
     NO_MATCH,
     format_clusters,
-    normalize,
     search_messages,
 )
 
@@ -21,8 +20,10 @@ def ids(clusters: list[list[dict]]) -> list[list[int]]:
     return [[entry["message_id"] for entry in cluster] for cluster in clusters]
 
 
-def test_normalize_drops_vietnamese_diacritics_including_d_stroke() -> None:
-    assert normalize("Ch\u1ecb Lan n\u1ee3 \u0110\u1ed2NG") == "chi lan no dong"
+def test_search_ignores_case_and_diacritics_including_d_stroke() -> None:
+    messages = [message(1, "Ch\u1ecb Lan n\u1ee3 \u0110\u1ed2NG")]
+
+    assert ids(search_messages(messages, "dong")) == [[1]]
 
 
 def test_search_matches_a_query_typed_without_diacritics() -> None:

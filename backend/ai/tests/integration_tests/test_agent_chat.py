@@ -8,7 +8,10 @@ from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from tests.support import TEST_GUARDRAIL_LIMITS
 
-from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
+from src.agent.repository import (
+    AgentConversationRepository,
+    ConversationNotFoundError,
+)
 from src.agent.service import AgentService
 from src.main import app
 

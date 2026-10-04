@@ -1,3 +1,9 @@
+"""Keyword search over the messages already folded into a conversation's summary.
+
+Backs the `search_chat_history` tool: the summary may drop an exact figure, name, date
+or wording that the owner later asks about.
+"""
+
 import re
 import unicodedata
 
@@ -5,18 +11,6 @@ MAX_HITS = 5
 # About 2000 tokens at the 4 characters per token the summary batches assume.
 MAX_RESULT_CHARS = 8000
 NO_MATCH = "No earlier message in this conversation matches the query."
-
-
-def normalize(text: str) -> str:
-    # Shop owners often type Vietnamese without diacritics, so matching ignores them.
-    # U+0111 (d with stroke) is a separate letter, not "d" plus a combining mark, so
-    # NFD leaves it intact.
-    decomposed = unicodedata.normalize("NFD", text.lower().replace("\u0111", "d"))
-    return "".join(char for char in decomposed if not unicodedata.combining(char))
-
-
-def words(text: str) -> set[str]:
-    return set(re.findall(r"\w+", normalize(text)))
 
 
 def search_messages(
@@ -27,31 +21,9 @@ def search_messages(
     Each hit comes with the message before and after it, so a question travels with
     its answer. Overlapping neighbourhoods merge into one cluster, oldest first.
     """
-    query_words = words(query)
-    scored = [
-        (len(query_words & words(message["content"])), position)
-        for position, message in enumerate(messages)
-    ]
-    best = sorted(
-        (item for item in scored if item[0] > 0),
-        key=lambda item: (-item[0], -item[1]),
-    )[:max_hits]
-    positions = sorted(
-        {
-            neighbour
-            for _, position in best
-            for neighbour in (position - 1, position, position + 1)
-            if 0 <= neighbour < len(messages)
-        }
-    )
-
-    clusters: list[list[dict]] = []
-    for index, position in enumerate(positions):
-        if index > 0 and position == positions[index - 1] + 1:
-            clusters[-1].append(messages[position])
-        else:
-            clusters.append([messages[position]])
-    return clusters
+    hits = _best_hits(messages, query, max_hits)
+    positions = _with_neighbours(hits, len(messages))
+    return [[messages[position] for position in run] for run in _runs(positions)]
 
 
 def format_clusters(
@@ -68,3 +40,49 @@ def format_clusters(
         for cluster in clusters
     )
     return text[:max_chars]
+
+
+def _best_hits(messages: list[dict], query: str, max_hits: int) -> list[int]:
+    """Positions of the messages sharing the most query words; the newer wins a tie."""
+    query_words = _words(query)
+    scores = {
+        position: len(query_words & _words(message["content"]))
+        for position, message in enumerate(messages)
+    }
+    matched = [position for position, score in scores.items() if score > 0]
+    matched.sort(key=lambda position: (-scores[position], -position))
+    return matched[:max_hits]
+
+
+def _with_neighbours(positions: list[int], count: int) -> list[int]:
+    return sorted(
+        {
+            neighbour
+            for position in positions
+            for neighbour in (position - 1, position, position + 1)
+            if 0 <= neighbour < count
+        }
+    )
+
+
+def _runs(positions: list[int]) -> list[list[int]]:
+    """Group sorted positions into runs of consecutive numbers."""
+    runs: list[list[int]] = []
+    for position in positions:
+        if runs and position == runs[-1][-1] + 1:
+            runs[-1].append(position)
+        else:
+            runs.append([position])
+    return runs
+
+
+def _words(text: str) -> set[str]:
+    return set(re.findall(r"\w+", _normalize(text)))
+
+
+def _normalize(text: str) -> str:
+    # Shop owners often type Vietnamese without diacritics, so matching ignores them.
+    # U+0111 (d with stroke) is a separate letter, not "d" plus a combining mark, so
+    # NFD leaves it intact.
+    decomposed = unicodedata.normalize("NFD", text.lower().replace("\u0111", "d"))
+    return "".join(char for char in decomposed if not unicodedata.combining(char))

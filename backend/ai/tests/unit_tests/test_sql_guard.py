@@ -3,7 +3,7 @@ import re
 import pytest
 import sqlglot
 
-from src.sql.guard import SqlGuard
+from src.agent.sql_guard import SqlGuard
 
 
 def validate_and_wrap(sql: str, row_limit: int = 100) -> str:

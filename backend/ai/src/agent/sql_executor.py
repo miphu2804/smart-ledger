@@ -17,7 +17,7 @@ from decimal import Decimal
 import psycopg
 from psycopg import errors, sql
 
-from src.sql.guard import SqlGuard
+from src.agent.sql_guard import SqlGuard
 
 
 class ReadOnlySqlExecutor:

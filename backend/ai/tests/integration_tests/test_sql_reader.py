@@ -15,7 +15,7 @@ from psycopg.conninfo import make_conninfo
 from tests.support import TEST_GUARDRAIL_LIMITS
 
 from src.agent.service import AgentService
-from src.sql.executor import ReadOnlySqlExecutor
+from src.agent.sql_executor import ReadOnlySqlExecutor
 
 BACKEND_ROOT = Path(__file__).resolve().parents[3]
 CORE_MIGRATIONS = BACKEND_ROOT / "core/src/main/resources/db/migration"

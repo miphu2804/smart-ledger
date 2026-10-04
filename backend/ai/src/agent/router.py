@@ -12,8 +12,11 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse
 
-from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
-from src.agent.schemas import (
+from src.agent.repository import (
+    AgentConversationRepository,
+    ConversationNotFoundError,
+)
+from src.agent.schema import (
     AgentChatRequest,
     AgentChatResponse,
     AgentConversationRenameRequest,

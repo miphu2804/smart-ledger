@@ -5,17 +5,13 @@ from langchain_core.language_models import BaseChatModel
 
 from src.agent.guardrails import GuardrailLimits, build_guardrails, latest_human
 from src.agent.repository import AgentConversationRepository
-from src.agent.tools import (
-    AgentContext,
-    build_history_tools,
-    build_shop_data_tools,
-)
+from src.agent.sql_executor import ReadOnlySqlExecutor
+from src.agent.tools import AgentContext, AgentTools
 from src.prompt_templates import (
     CHAT_SUMMARY_CONTEXT,
     SHOP_AGENT_SYSTEM_PROMPT,
     SQL_AGENT_PROMPT,
 )
-from src.sql.executor import ReadOnlySqlExecutor
 
 
 @dataclass(frozen=True)
@@ -39,12 +35,11 @@ class AgentService:
     ) -> None:
         self.model = model
         self.conversations = conversations
-        tools = build_history_tools(conversations)
+        tools = AgentTools(conversations, sql_executor).get_all_tools()
         # The system prompt is static so providers can cache it; the shop scope arrives
         # per request through AgentContext and never appears in the prompt.
         system_prompt = SHOP_AGENT_SYSTEM_PROMPT
         if sql_executor is not None:
-            tools = [*tools, *build_shop_data_tools(sql_executor)]
             system_prompt = f"{SHOP_AGENT_SYSTEM_PROMPT}\n\n{SQL_AGENT_PROMPT}"
         self.agent = (
             create_agent(
@@ -70,13 +65,13 @@ class AgentService:
         if self.agent is None:
             raise RuntimeError("agent model unavailable")
 
-        context = (
+        history = (
             self.conversations.context_for(conversation_id, user_id, shop_id)
             if conversation_id is not None
             else {"summary": None, "messages": []}
         )
         result = self.agent.invoke(
-            {"messages": self._context_messages(context, message)},
+            {"messages": self._build_messages(history, message)},
             context=AgentContext(
                 user_id=user_id, shop_id=shop_id, conversation_id=conversation_id
             ),
@@ -106,21 +101,21 @@ class AgentService:
         )
 
     @staticmethod
-    def _context_messages(context: dict, message: str) -> list[dict]:
+    def _build_messages(history: dict, message: str) -> list[dict]:
         # The static system prompt is added by the agent; then the summary, then every
         # message after the watermark verbatim, so a fold that has not run yet never
         # hides messages from the model.
         messages: list[dict] = []
-        if context["summary"]:
+        if history["summary"]:
             messages.append(
                 {
                     "role": "system",
-                    "content": CHAT_SUMMARY_CONTEXT.format(summary=context["summary"]),
+                    "content": CHAT_SUMMARY_CONTEXT.format(summary=history["summary"]),
                 }
             )
         messages.extend(
             {"role": entry["role"].lower(), "content": entry["content"]}
-            for entry in context["messages"]
+            for entry in history["messages"]
         )
         messages.append({"role": "user", "content": message})
         return messages

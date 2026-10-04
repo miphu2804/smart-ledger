@@ -15,7 +15,7 @@ from src.agent.summary import (
     KEEP_RECENT_MESSAGES,
     ChatSummaryFolder,
 )
-from src.agent.tools import build_history_tools
+from src.agent.tools import AgentTools
 from src.prompt_templates import SHOP_AGENT_SYSTEM_PROMPT
 
 
@@ -394,7 +394,7 @@ def test_search_tool_does_not_query_a_new_conversation() -> None:
 
 
 def test_search_tool_exposes_only_the_query_to_the_model() -> None:
-    (search_tool,) = build_history_tools(FakeConversationRepository())
+    (search_tool,) = AgentTools(FakeConversationRepository()).get_all_tools()
 
     assert list(search_tool.tool_call_schema.model_json_schema()["properties"]) == [
         "query"

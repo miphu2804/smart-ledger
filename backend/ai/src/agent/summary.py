@@ -4,7 +4,10 @@ from dataclasses import dataclass
 
 from langchain_core.language_models import BaseChatModel
 
-from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
+from src.agent.repository import (
+    AgentConversationRepository,
+    ConversationNotFoundError,
+)
 from src.prompt_templates import (
     CHAT_SUMMARY_EMPTY,
     CHAT_SUMMARY_INPUT,

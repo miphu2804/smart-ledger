@@ -12,7 +12,10 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from psycopg import sql
 from tests.support import TEST_GUARDRAIL_LIMITS
 
-from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
+from src.agent.repository import (
+    AgentConversationRepository,
+    ConversationNotFoundError,
+)
 from src.agent.service import AgentService
 from src.agent.summary import (
     FOLD_TRIGGER_MESSAGES,
