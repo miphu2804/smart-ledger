@@ -1,3 +1,13 @@
+### [2026-10-04 10:15 UTC+07:00] — [Docs] Refresh docs sync after merging #84–#86
+
+**Done:** Merged `staging` into `docs/sync-docs-with-staging` and updated the docs that #84–#86 made stale. The mobile README now documents the `/profile` save to Core, `useCoreData` and `checkoutSession`, and the EAS profiles with `GOOGLE_SERVICES_JSON`. Technical design §1 says the business screens read and write through Core. CONTRIBUTING now says a dated release branch must also be added to the `release-policy.yml` allow-list.
+
+**Changed files:** `frontend/mobile/README.md`, `docs/architecture/technical-design.md`, `CONTRIBUTING.md`, `PROGRESS.md` (conflict resolved by keeping every entry in time order).
+
+**Flow explained:** No code or behavior change.
+
+**Check:** Relative links and anchors across tracked Markdown resolve; the screen-to-API claims were checked by grepping `app/` for the API clients each screen imports.
+
 ### [2026-10-04 02:40 UTC+07:00] — [Feature] Save the shop profile to Core
 
 **Done:** The "Chỉnh sửa thông tin" screen now saves the shop name, address and industries to Core with `PATCH /api/v1/shops/{shopId}`; before, every field stayed on the device and was lost on another phone or after signing in again. Only the fields that changed are sent, and nothing is sent when none changed, because each update writes a `SHOP_UPDATED` audit row. On a Core error the screen stays open with a Vietnamese message and nothing is reported as saved. Save is blocked while no industry is selected, since Core rejects an empty `industry`. Also fixes reading the industries back: Core keeps the selection as one string such as `food, drink`, and the session mapping turned it into a single entry, so the screen showed "Chưa chọn ngành" after the next sign-in for a shop with several industries. Vietnamese messages added for `shop_update_required`, `shop_access_denied`, `shop_not_found` and `invalid_shop_id`.
@@ -17,6 +27,19 @@
 **Flow explained:** On EAS, `GOOGLE_SERVICES_JSON` (a secret file variable in the `preview` environment) gives the path of the file; on a developer machine the variable is absent and `./google-services.json` is used as before. Before sign-in works on a build, the SHA-1 and SHA-256 of that build's keystore (`eas credentials --platform android`) must be added to the Android app in Firebase. After sign-in the business screens call the real API, so they show network errors until a Core is reachable.
 
 **Check:** `eas build --platform android --profile phone-test` finished (build `ac00cc4e-ceb9-48dd-9fe0-022a4266e2c4`); `expo config` resolves `googleServicesFile` both without and with the variable; the SHA-1 and SHA-256 read from the installed APK match the ones in Firebase. The owner reports the APK signed in with a Firebase test phone number on a real Android phone. Not verified: sign-in with a real SMS number, automatic SMS reading, and the Android emulator, whose DNS failed on the development machine until it was started with `-dns-server 8.8.8.8,8.8.4.4`.
+
+### [2026-10-04 00:57 UTC+07:00] — [Docs] Sync documentation with staging code and add a reading guide
+
+**Done:**
+- Added a "How to read the docs" guide, a target-versus-implemented rule and a "which document to update" table to `docs/README.md`; implementation status now lives only in technical design §1 and per-endpoint status in the API contract.
+- Corrected docs that described Core as auth-only, AI as uncalled, Agent routes as target-only, Flyway as V1–V9, AI env names with `__`, a Compose `postgres` service and an all-mock mobile app.
+- Removed Qdrant from the architecture drawio/SVG/PNG, added chat summary columns and current migration ranges to `erd.dbml`, and mapped `FR-019`, `FR-026`, `FR-027` in the BRD hand-off table.
+
+**Changed files:** `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `backend/{ai,core}/README.md`, `frontend/{README.md,mobile/README.md,mobile/.env.example,web/README.md}`, `docs/README.md`, `docs/product/{project-overview,business-requirements,product-requirements}.md`, `docs/architecture/{technical-design,erd-description}.md`, `docs/architecture/adr/0001-vector-store-pgvector.md`, `docs/architecture/diagrams/{src/architecture.drawio,src/erd.dbml,images/architecture.svg,images/architecture.png}`, `docs/contracts/api-contracts.md`, `docs/design/*.md`; deleted `docs/architecture/diagrams/assets/icons-sources.md` (it credited logos the diagram does not contain).
+
+**Flow explained:** No code or behavior change.
+
+**Check:** Relative links and anchors across all tracked Markdown resolve; `erd.dbml` converts with `@dbml/cli`; the diagram re-export was inspected visually.
 
 ### [2026-10-03 22:25 UTC+07:00] — [Integration] Merge staging UI/UX and agent history into the mobile real-data branch
 
