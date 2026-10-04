@@ -5,7 +5,7 @@ Core is a Java 21 / Spring Boot backend. This README covers how to run it locall
 ## Prerequisites
 
 - JDK 21 for a host/IntelliJ run. The included Maven wrapper downloads the required Maven version; a separate Maven installation is not needed.
-- PostgreSQL and an existing `smartledger` database (or use the Compose PostgreSQL service below).
+- A PostgreSQL database: the shared staging Supabase database from the repo-root `.env.staging`, or your own local `smartledger` database.
 - Firebase project ID and a Firebase service-account JSON file. Keep the JSON outside the repository and do not commit it.
 
 Set these environment variables in the process that launches Core. [`.env.example`](.env.example) is a reference; Spring Boot does not load it automatically.
@@ -18,8 +18,11 @@ Set these environment variables in the process that launches Core. [`.env.exampl
 | `GOOGLE_APPLICATION_CREDENTIALS` | Absolute path to the service-account JSON **on the machine running Core** |
 | `SERVER_PORT` | Optional; defaults to `8080` when running outside Compose |
 | `FIREBASE_AUTH_EMULATOR_HOST` | Optional for local Auth Emulator testing, e.g. `127.0.0.1:9099` without `http://` |
+| `AI_BASE_URL` | Optional; AI service URL for the Agent proxy, defaults to `http://localhost:8001` |
+| `INTERNAL_API_TOKEN` | Shared with AI and sent as `X-Internal-Token`; a missing or mismatched value makes AI return `401`, which Core reports as `503 ai_unavailable` |
+| `IDEMPOTENCY_TTL_DAYS` | Optional; retention of `Idempotency-Key` results, defaults to `30` |
 
-Flyway runs committed migrations at startup and JPA validates the resulting schema. Use the same Firebase project ID for the backend and any locally generated test tokens.
+With `FLYWAY_ENABLED=true` (the default in `application.yml`) Flyway runs committed migrations at startup; JPA then validates the schema. The shared dev/staging database is migrated only from merged code, so set `FLYWAY_ENABLED=false` when you point Core at it (see [Database migrations](../../README.md#database-migrations)). Use the same Firebase project ID for the backend and any locally generated test tokens.
 
 ## Windows PowerShell
 
@@ -43,17 +46,17 @@ If the wrapper is not executable, run `chmod +x mvnw` once. Swagger uses the sam
 
 ## IntelliJ IDEA
 
-Open `backend/core` as a Maven project and use JDK 21. Run `com.smartledger.core.SmartLedgerCoreApplication`. In **Run → Edit Configurations**, add the variables from the table to **Environment variables**; setting them in a separate terminal does not automatically pass them to IntelliJ. Start the PostgreSQL database before running the application.
+Open `backend/core` as a Maven project and use JDK 21. Run `com.smartledger.core.SmartLedgerCoreApplication`. In **Run → Edit Configurations**, add the variables from the table to **Environment variables**; setting them in a separate terminal does not automatically pass them to IntelliJ. Make sure the database in `DATABASE_URL` is reachable before running the application.
 
 ## Docker Compose
 
-Run this from the **repository root** with Docker Desktop/Engine running. Supply `POSTGRES_PASSWORD`, `FIREBASE_PROJECT_ID`, and `FIREBASE_CREDENTIALS_PATH` to Compose (for example via a root-level, uncommitted `.env`). `FIREBASE_CREDENTIALS_PATH` must be an absolute path to the JSON file on the host.
+Run this from the **repository root** with Docker Desktop/Engine running. Compose has no PostgreSQL container: database credentials come from the root `.env.staging`, and `backend/core/.env` supplies `FIREBASE_PROJECT_ID` and `GOOGLE_APPLICATION_CREDENTIALS` as an absolute path to the JSON file on the host. See the root [README](../../README.md#local-compose) for the env files.
 
 ```powershell
-docker compose up --build core postgres
+docker compose --env-file .env.staging --env-file backend/core/.env up --build core
 ```
 
-Compose mounts the service-account JSON read-only and sets its path inside the container. Core listens on container port `8080`; Compose exposes it on host port `8000` by default (`CORE_PORT` changes the host port). Open `http://localhost:8000/swagger-ui/index.html` to check startup. Stop with `Ctrl+C`, then run `docker compose down` from the repository root when finished.
+Omit `core` to start AI as well. Compose mounts the service-account JSON read-only and sets its path inside the container. Core listens on container port `8080`; Compose exposes it on host port `8000` by default (`CORE_PORT` changes the host port). Open `http://localhost:8000/swagger-ui/index.html` to check startup. Stop with `Ctrl+C`, then run `docker compose down` from the repository root when finished.
 
 If the Firebase Auth Emulator runs on the host, configure `FIREBASE_AUTH_EMULATOR_HOST` with an address reachable **from the container**; `127.0.0.1` inside Core means the container, not the host.
 

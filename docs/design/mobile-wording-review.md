@@ -1,6 +1,6 @@
 # Mobile wording review
 
-**Trạng thái:** bản đề xuất chờ Product Owner duyệt. Các thay đổi dưới đây chỉ rút gọn ngôn ngữ giao diện, không thay đổi `BO/BR → FR/NFR → AC`, dữ liệu hay logic nghiệp vụ.
+**Trạng thái:** bản đề xuất; chưa ghi nhận phê duyệt của Product Owner. Đối chiếu `frontend/mobile` trên `staging` ngày 2026-10-04: 40/46 câu đề xuất đã có trong code; tab thứ tư dùng `Quản lý` thay vì `Tiện ích`. Code là nguồn cho câu chữ hiện tại; bảng dưới giữ lại làm ghi chép đề xuất. Các thay đổi dưới đây chỉ rút gọn ngôn ngữ giao diện, không thay đổi `BO/BR → FR/NFR → AC`, dữ liệu hay logic nghiệp vụ.
 
 **Nguồn đã kiểm chứng:** giao diện trong `frontend/mobile` tại thời điểm cập nhật. Brand name, route và API identifier được giữ nguyên.
 

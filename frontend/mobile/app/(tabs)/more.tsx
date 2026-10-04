@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Image, ImageSourcePropType, Pressable, StyleSheet, View } from 'react-native';
 import { Badge, Dialog, Row, Screen, T } from '../../src/components/ui';
 import { vnd } from '../../src/lib/format';
+import { useCoreData } from '../../src/lib/useCoreData';
 import { useApp } from '../../src/store/AppStore';
 import { colors, shadow } from '../../src/theme';
 
@@ -58,7 +59,13 @@ function ManagementRow({ image, icon, iconTone = 'brand', title, subtitle, right
 export default function More() {
   const app = useApp();
   const [confirmLogout, setConfirmLogout] = useState(false);
-  const debtLeft = app.debts.reduce((a, d) => a + d.total - d.paid, 0);
+  const { products, debts, loading, error } = useCoreData({ debts: true, products: true });
+
+  // `loading` chỉ true ở lần tải đầu (xem useCoreData) nên các lần tải lại khi focus giữ số cũ, không nháy.
+  const ready = !loading && !error;
+
+  const debtLeft = ready ? debts.reduce((a, d) => a + Math.max(0, d.total - d.paid), 0) : 0;
+  const productSubtitle = ready ? `${products.length} mặt hàng` : error ? 'Hàng hoá và tồn kho' : 'Đang tải…';
   const contact = app.user.phone || app.user.email;
 
   return (
@@ -109,7 +116,7 @@ export default function More() {
         <ManagementRow
           image={managementIcons.products}
           title="Hàng hoá"
-          subtitle={`${app.products.length} mặt hàng`}
+          subtitle={productSubtitle}
           onPress={() => router.push('/products')}
         />
         <ManagementRow

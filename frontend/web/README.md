@@ -9,7 +9,7 @@ Trang giới thiệu và trang quản trị. Dùng Vite, React 19, TypeScript v�
 Yêu cầu Node.js 20 trở lên.
 
 ```bash
-cd web
+cd frontend/web
 npm install
 npm run dev        # http://localhost:5173
 npm run build      # kiểm tra kiểu (tsc) rồi build ra dist/
@@ -25,7 +25,7 @@ Biến môi trường (xem `.env.example`):
 | `VITE_API_ENDPOINT` | `http://localhost:8000` | Địa chỉ backend |
 | `VITE_USE_MOCK` | (bật) | Đặt `false` để gọi API thật thay vì dữ liệu mẫu |
 
-## Trang quản trị (theo `admin-dashboard-mvp-plan.md`)
+## Trang quản trị
 
 Giao diện "calm operations": nền trung tính ấm, accent xanh lá (#2F7A43 / #8FD17D), radius 16/10/999, font Geist, icon Phosphor (regular). Token nằm đầu `src/styles/admin.css`, toàn bộ CSS admin nằm trong `.adm` nên không ảnh hưởng trang giới thiệu.
 
@@ -71,7 +71,7 @@ Kiểm tra nhanh (chế độ mock): thêm `?mock=slow`, `?mock=empty` hoặc `?
 - `src/mocks/accounts.ts` sinh 48 OWNER / 53 cơ sở; `src/mocks/tasks.ts` sinh 11 support task. Chỉ có dữ liệu hỗ trợ. "Hôm nay" của dữ liệu mẫu là `MOCK_TODAY` (16/09/2026).
 - `src/services/mockStore.ts` là "backend giả" lưu trong `localStorage` (`snl_mock_db`, `snl_mock_tasks`, `snl_mock_ai`, `snl_mock_audit`, `snl_mock_idem`). Nút **Khôi phục dữ liệu mẫu** đưa về ban đầu. Tuỳ chọn cá nhân lưu ở `snl_admin_prefs`.
 - AI Support trong mock là bộ trả lời theo luật (`src/services/aiService.ts`), không gọi model thật.
-- Khi có backend: đặt `VITE_USE_MOCK=false`. Endpoint giả định (đánh dấu `TODO(backend)`):
+- Khi có backend: đặt `VITE_USE_MOCK=false`. Core chưa có các endpoint dưới đây: Core xác thực bằng Firebase ID token qua `POST /api/v1/auth/session` (không có `/auth/login`), và API ADMIN duy nhất hiện có là `PATCH /api/v1/shops/{shopId}/status`. Hợp đồng đích của dashboard nằm trong [API contracts §7](../../docs/contracts/api-contracts.md#7-dashboard-quản-trị--hợp-đồng-đích). Endpoint giả định trong code (đánh dấu `TODO(backend)`):
   - `POST /auth/login`
   - `GET /admin/overview?days=`
   - `GET /admin/users` · `GET /admin/users/{id}`

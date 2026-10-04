@@ -2,7 +2,7 @@
 
 **Trạng thái:** quyết định visual cho nhánh `feat/mobile-minimal-ui`, ngày 2026-09-24; chưa phải bộ nhận diện production đã duyệt. Tài liệu này chỉ định hướng giao diện `OWNER`; yêu cầu sản phẩm và tiêu chí nghiệm thu vẫn nằm trong [BRD](../product/business-requirements.md) và [PRD](../product/product-requirements.md).
 
-**Cập nhật trạng thái 2026-09-24:** nhánh mobile đã được tích hợp vào `staging`. Các mốc nhánh và câu “staging chưa có app mobile” bên dưới là ghi chép tại thời điểm lập kế hoạch, không mô tả checkout hiện tại.
+**Cập nhật trạng thái 2026-10-04:** nhánh mobile đã được tích hợp vào `staging`. Tài liệu này là ghi chép kế hoạch ngày 2026-09-24; các mốc nhánh và câu “staging chưa có app mobile” không mô tả code hiện tại. Giao diện trên `staging` đã khác kế hoạch ở các điểm sau: tab thứ tư là `Quản lý`; menu mascot là `Hỏi đáp` / `Đọc đơn` / `Báo cáo`; modal giới thiệu có bốn bước (Trợ lý, Bán hàng, Tổng quan, Quản lý); `Đọc đơn` nhận giọng nói thật trên web; `Hỏi đáp` gọi Agent chat qua Core khi tắt mock; entry `Nhân viên` đã gỡ khỏi tab Quản lý. Code trong `frontend/mobile` là nguồn cho hiện trạng.
 
 ## Nguồn và mức độ chắc chắn
 

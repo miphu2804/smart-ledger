@@ -36,7 +36,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Rect } from 'react-native-svg';
-import { mockProducts } from '../data/mock';
 import type { LineItem, ProductView } from '../data/types';
 import {
   detectBarcodeFromSource,
@@ -167,33 +166,9 @@ export function BarcodeScannerModal({
   const [configErr, setConfigErr]             = useState('');
   const [extraProducts, setExtraProducts]     = useState<ProductView[]>([]);
 
-  // Danh mục tra cứu kết hợp mockProducts và sản phẩm mới tạo
-  const catalog: ProductView[] = useMemo(() => {
-    const list: ProductView[] = [...products, ...extraProducts];
-    const existingIds = new Set(list.map((p) => p.id));
-    for (const mp of mockProducts) {
-      const numId = parseInt(mp.id.replace(/\D/g, ''), 10) || Math.floor(Math.random() * 9000) + 1000;
-      if (!existingIds.has(numId)) {
-        list.push({
-          id: numId,
-          shopId: 1,
-          categoryId: null,
-          name: mp.name,
-          barcode: mp.barcode ?? null,
-          imageUrl: null,
-          unit: 'cái',
-          sellingPriceVnd: mp.price,
-          costPriceVnd: mp.cost,
-          tracked: mp.tracked,
-          stockQuantity: mp.tracked ? mp.stock : null,
-          status: 'ACTIVE',
-          createdAt: '',
-          updatedAt: '',
-        });
-      }
-    }
-    return list;
-  }, [products, extraProducts]);
+  // Danh mục tra cứu: sản phẩm thật của tiệm (Core, hoặc mockCore khi xem trước) và sản phẩm vừa tạo trong phiên quét.
+  // Không trộn dữ liệu mẫu: mã vạch mẫu sẽ ra "sản phẩm ma" có id không tồn tại ở Core, thêm vào đơn rồi checkout bị từ chối.
+  const catalog: ProductView[] = useMemo(() => [...products, ...extraProducts], [products, extraProducts]);
 
   // Đơn hàng hiển thị ở Phần 2: ưu tiên externalCartItems nếu có
   const displayItems = externalCartItems ?? internalItems;

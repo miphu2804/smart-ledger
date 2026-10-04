@@ -31,6 +31,6 @@ Lưu embedding trong PostgreSQL bằng extension `pgvector`, cùng DB với dữ
 
 ## Hệ quả
 
-- CI dùng image `pgvector/pgvector:pg17` để migration chạy giống Supabase.
+- Job `ai` của CI dùng image `pgvector/pgvector:pg17` để migration chạy giống Supabase; job `core` vẫn dùng `postgres:16` vì migration Core chưa cần extension `vector`.
 - Bỏ Qdrant và `QDRANT__URL` khỏi tài liệu thiết kế.
 - Xem xét lại quyết định khi đo được một trong các điều kiện: p95 truy vấn tương đồng vượt ngưỡng NFR, số vector đạt hàng triệu, hoặc cần hybrid search/quantization mà pgvector không đáp ứng. Khi đó PostgreSQL vẫn là nguồn chuẩn, store chuyên dụng chỉ là bản sao để tìm kiếm.
