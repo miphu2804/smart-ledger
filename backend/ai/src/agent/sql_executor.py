@@ -1,14 +1,15 @@
-"""Run guarded SQL for one shop on the read-only reader connection.
+"""Run guarded SQL for one shop on the app's shared Postgres connection.
 
-Each run opens its own connection (separate from the chat-history connection), starts a
-READ ONLY transaction, binds the shop from the authenticated request, caps run time and
-rows, and always rolls back. The shop id is a bound parameter supplied by the caller;
-nothing the model writes can set it.
+Each run is one READ ONLY transaction that drops to the `ai_sql_reader` role with
+`SET LOCAL ROLE`, binds the shop from the authenticated request, caps run time and
+rows, and always rolls back, so the privileged connection never keeps the lower role or
+the shop scope. The shop id is a bound parameter supplied by the caller; nothing the
+model writes can set it.
 
 Errors: the guard and the database rejecting or timing out a query raise
 `ValueError("CODE: reason")`, which is safe to show the model. Anything else, such as
-an unreachable reader database (`psycopg.OperationalError`), propagates and fails the
-turn.
+an unavailable database (`psycopg.OperationalError`, `RuntimeError`), propagates and
+fails the turn.
 """
 
 import datetime as dt
@@ -18,22 +19,23 @@ import psycopg
 from psycopg import errors, sql
 
 from src.agent.sql_guard import SqlGuard
+from src.infra.postgre_db_client import PostgreDBClient
 
 
 class ReadOnlySqlExecutor:
     MAX_CELL_CHARS = 200
-    CONNECT_TIMEOUT_SECONDS = 3
+    READER_ROLE = "ai_sql_reader"
 
     def __init__(
         self,
-        connection_string: str,
+        postgres: PostgreDBClient,
         timeout_ms: int = 3000,
         row_limit: int = 100,
         view_schema: str = SqlGuard.VIEW_SCHEMA,
     ) -> None:
         if timeout_ms < 1 or row_limit < 1:
             raise ValueError("timeout_ms and row_limit must be positive")
-        self.connection_string = connection_string
+        self.postgres = postgres
         self.timeout_ms = timeout_ms
         self.row_limit = row_limit
         self.view_schema = view_schema
@@ -46,31 +48,25 @@ class ReadOnlySqlExecutor:
             raise ValueError("shop_id must be a positive integer")
         wrapped = self.guard.validate_and_wrap(query)
 
-        connection = psycopg.connect(
-            self.connection_string, connect_timeout=self.CONNECT_TIMEOUT_SECONDS
-        )
         try:
-            connection.read_only = True
-            with connection.cursor() as cursor:
-                self._scope_transaction(cursor, shop_id)
-                cursor.execute(wrapped, prepare=False)
-                columns = [column.name for column in cursor.description or []]
-                rows = cursor.fetchall()
+            with self.postgres.transaction() as connection:
+                with connection.cursor() as cursor:
+                    self._scope_transaction(cursor, shop_id)
+                    cursor.execute(wrapped, prepare=False)
+                    columns = [column.name for column in cursor.description or []]
+                    rows = cursor.fetchall()
+                # `PostgreDBClient.transaction` commits on a clean exit; Rollback makes
+                # it undo the role switch and shop scope instead. psycopg swallows it
+                # at the client's own transaction block.
+                raise psycopg.Rollback
         except errors.QueryCanceled:
             raise ValueError(
                 f"QUERY_TIMEOUT: query exceeded {self.timeout_ms} ms; simplify it"
             ) from None
         except (psycopg.OperationalError, psycopg.InterfaceError):
-            raise  # the reader is unreachable or broken: fail the turn
+            raise  # the database is unreachable or broken: fail the turn
         except psycopg.Error as error:
             raise ValueError(f"SQL_ERROR: {self._error_message(error)}") from None
-        finally:
-            try:
-                connection.rollback()
-            except psycopg.Error:
-                pass
-            finally:
-                connection.close()
 
         return {
             "columns": columns,
@@ -81,7 +77,12 @@ class ReadOnlySqlExecutor:
         }
 
     def _scope_transaction(self, cursor: psycopg.Cursor, shop_id: int) -> None:
-        # All settings are transaction-local (is_local = true) and vanish on rollback.
+        # All settings are transaction-local and vanish on rollback. The role switch
+        # comes first so every later statement already runs with reader privileges.
+        cursor.execute("SET TRANSACTION READ ONLY")
+        cursor.execute(
+            sql.SQL("SET LOCAL ROLE {}").format(sql.Identifier(self.READER_ROLE))
+        )
         search_path = sql.Identifier(self.view_schema).as_string(cursor)
         cursor.execute(
             """

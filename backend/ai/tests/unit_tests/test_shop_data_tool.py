@@ -1,4 +1,5 @@
 import json
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import psycopg
@@ -8,7 +9,6 @@ from langchain_core.messages import AIMessage
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from tests.support import TEST_GUARDRAIL_LIMITS
 
-from src.agent import sql_executor as executor_module
 from src.agent.guardrails import EMPTY_ANSWER_REPLY
 from src.agent.service import AgentService
 from src.agent.sql_executor import ReadOnlySqlExecutor
@@ -301,31 +301,40 @@ def test_result_payload_marks_truncation() -> None:
     }
 
 
-def test_executor_rejects_unsafe_sql_before_connecting(monkeypatch) -> None:
-    def fail_connect(*args, **kwargs):
-        raise AssertionError("must not connect")
+class FakePostgres:
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+        self.transactions = 0
 
-    monkeypatch.setattr(executor_module.psycopg, "connect", fail_connect)
-    executor = ReadOnlySqlExecutor("postgresql://reader@localhost/db")
+    @contextmanager
+    def transaction(self):
+        self.transactions += 1
+        raise self.error or AssertionError("must not open a transaction")
+        yield
+
+
+def test_executor_rejects_unsafe_sql_before_connecting() -> None:
+    postgres = FakePostgres()
+    executor = ReadOnlySqlExecutor(postgres)
 
     with pytest.raises(ValueError, match="^UNSAFE_FUNCTION: "):
         executor.run(15, "SELECT set_config('smartledger.shop_id', '16', true)")
+    assert postgres.transactions == 0
 
 
-def test_executor_lets_an_unreachable_database_propagate(monkeypatch) -> None:
-    def refuse(*args, **kwargs):
-        raise psycopg.OperationalError("connection refused")
+@pytest.mark.parametrize(
+    "error", [psycopg.OperationalError("connection refused"), RuntimeError("down")]
+)
+def test_executor_lets_an_unavailable_database_propagate(error) -> None:
+    executor = ReadOnlySqlExecutor(FakePostgres(error))
 
-    monkeypatch.setattr(executor_module.psycopg, "connect", refuse)
-    executor = ReadOnlySqlExecutor("postgresql://reader:secret@localhost/db")
-
-    with pytest.raises(psycopg.OperationalError):
+    with pytest.raises(type(error)):
         executor.run(15, "SELECT name FROM v_products")
 
 
 @pytest.mark.parametrize("shop_id", [0, -1, True, "15"])
 def test_executor_requires_a_positive_integer_shop(shop_id) -> None:
-    executor = ReadOnlySqlExecutor("postgresql://reader@localhost/db")
+    executor = ReadOnlySqlExecutor(FakePostgres())
 
     with pytest.raises(ValueError):
         executor.run(shop_id, "SELECT 1")

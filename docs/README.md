@@ -40,6 +40,7 @@ Start with the path that matches your task; each step links to the next level of
 | [API contracts](contracts/api-contracts.md) | FE ↔ Core and Core ↔ AI contracts, per-endpoint status |
 | [ERD description](architecture/erd-description.md) and [`erd.dbml`](architecture/diagrams/src/erd.dbml) | Database entities, relationships, data flows and migration alignment |
 | [ADR-0001: pgvector vector store](architecture/adr/0001-vector-store-pgvector.md) | Accepted: embeddings in Supabase PostgreSQL instead of Qdrant |
+| [ADR-0002: SQL reader role](architecture/adr/0002-sql-reader-role.md) | Proposed: tool SQL của Agent dùng chung kết nối PostgreSQL, hạ quyền bằng `SET LOCAL ROLE ai_sql_reader` |
 | [Architecture diagram](architecture/diagrams/src/architecture.mmd) | MVP target system boundary; edit [`architecture.drawio`](architecture/diagrams/src/architecture.drawio) and re-export the [SVG](architecture/diagrams/images/architecture.svg) and [PNG](architecture/diagrams/images/architecture.png) together |
 | [Environments diagram](architecture/diagrams/src/environments.mmd) | Clients, backend, Supabase staging/production, CI/CD; dashed edges are planned |
 | [Service walkthrough](architecture/service-walkthrough/README.md) | Reading notes with diagrams of Core and AI service flows; not a source of truth |

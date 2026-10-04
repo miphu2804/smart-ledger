@@ -1,7 +1,9 @@
 from dataclasses import dataclass
+from typing import Any
 
 from langchain.agents import create_agent
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AnyMessage
 
 from src.agent.guardrails import AgentGuardrails, GuardrailLimits
 from src.agent.repository import AgentConversationRepository
@@ -101,10 +103,12 @@ class AgentService:
         )
 
     @staticmethod
-    def _build_messages(history: dict, message: str) -> list[dict]:
+    def _build_messages(
+        history: dict, message: str
+    ) -> list[AnyMessage | dict[str, Any]]:
         # The static system prompt is added by the agent; then every stored message,
         # oldest first, then the new one.
-        messages: list[dict] = []
+        messages: list[AnyMessage | dict[str, Any]] = []
         messages.extend(
             {"role": entry["role"].lower(), "content": entry["content"]}
             for entry in history["messages"]

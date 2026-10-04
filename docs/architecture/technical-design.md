@@ -96,7 +96,7 @@ Schema PostgreSQL được quản lý bằng migration SQL có phiên bản tron
 |---|---|
 | FE | `API_BASE_URL` |
 | Core hiện tại | `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, `FIREBASE_PROJECT_ID`, credential Firebase Admin, `AI_BASE_URL`, `INTERNAL_API_TOKEN`; `SERVER_PORT`, `IDEMPOTENCY_TTL_DAYS` tùy chọn; Core không dùng Redis |
-| AI hiện tại | `POSTGRES_URL`, `REDIS_URL`, `INTERNAL_API_TOKEN`, `MODEL_*`, `OPENAI_API_KEY`; `AI_SQL_READER_URL` tùy chọn cho tool đọc dữ liệu tiệm. `LITELLM_URL`, `LANGFUSE_*` đã khai báo nhưng code chưa dùng. Danh sách đầy đủ: [`backend/ai/.env.example`](../../backend/ai/.env.example) |
+| AI hiện tại | `POSTGRES_URL`, `REDIS_URL`, `INTERNAL_API_TOKEN`, `MODEL_*`, `OPENAI_API_KEY`; `SQL_TOOL_ENABLED` (mặc định `false`) bật tool đọc dữ liệu tiệm, cần user của `POSTGRES_URL` là member của role `ai_sql_reader` ([ADR-0002](adr/0002-sql-reader-role.md)). `LITELLM_URL`, `LANGFUSE_*` đã khai báo nhưng code chưa dùng. Danh sách đầy đủ: [`backend/ai/.env.example`](../../backend/ai/.env.example) |
 
 Host và port thuộc cấu hình môi trường, không phải API contract. [Core README](../../backend/core/README.md) là nơi hướng dẫn chạy IntelliJ/Maven/Docker và Firebase Emulator; không nhân bản hướng dẫn vận hành tại đây.
 

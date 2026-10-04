@@ -16,6 +16,7 @@ from tests.support import TEST_GUARDRAIL_LIMITS
 
 from src.agent.service import AgentService
 from src.agent.sql_executor import ReadOnlySqlExecutor
+from src.infra.postgre_db_client import PostgreDBClient
 
 BACKEND_ROOT = Path(__file__).resolve().parents[3]
 CORE_MIGRATIONS = BACKEND_ROOT / "core/src/main/resources/db/migration"
@@ -36,7 +37,9 @@ SHOP_B_SECRET = "Shop B private item"
 @dataclass
 class ReaderDatabase:
     admin: psycopg.Connection
+    postgres: PostgreDBClient
     reader_url: str
+    ungranted_url: str
     base_schema: str
     view_schema: str
     shop_a: int
@@ -44,7 +47,7 @@ class ReaderDatabase:
 
     def executor(self, timeout_ms: int = 3000, row_limit: int = 100):
         return ReadOnlySqlExecutor(
-            self.reader_url,
+            self.postgres,
             timeout_ms=timeout_ms,
             row_limit=row_limit,
             view_schema=self.view_schema,
@@ -99,8 +102,10 @@ def reader_db() -> Iterator[ReaderDatabase]:
     base_schema = f"sql_reader_base_{suffix}"
     view_schema = f"ai_read_{suffix}"
     login_role = f"ai_sql_reader_test_{suffix}"
+    ungranted_role = f"ai_sql_ungranted_test_{suffix}"
     password = secrets.token_urlsafe(16)
     admin = psycopg.connect(database_url, autocommit=True)
+    postgres = None
     try:
         admin.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(base_schema)))
         admin.execute(
@@ -131,28 +136,50 @@ def reader_db() -> Iterator[ReaderDatabase]:
                 sql.Identifier(login_role), sql.Literal(password)
             )
         )
-        # Sequential scans make the planner read shop B's rows, so the leak test below
-        # depends on the views and not on an index happening to skip those rows.
-        for setting in ("enable_indexscan", "enable_bitmapscan"):
-            admin.execute(
-                sql.SQL("ALTER ROLE {} SET {} = off").format(
-                    sql.Identifier(login_role), sql.Identifier(setting)
-                )
+        admin.execute(
+            sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(
+                sql.Identifier(ungranted_role), sql.Literal(password)
             )
+        )
         reader_url = make_conninfo(database_url, user=login_role, password=password)
+        ungranted_url = make_conninfo(
+            database_url, user=ungranted_role, password=password
+        )
+        # The executor runs on the app's own connection and drops to ai_sql_reader with
+        # SET LOCAL ROLE, which skips per-role settings, so sequential scans are set on
+        # the session instead. They make the planner read shop B's rows, so the leak
+        # test below depends on the views and not on an index happening to skip them.
+        # The login is a non-superuser member of ai_sql_reader, like production's
+        # POSTGRES_URL user: a superuser could switch to any role and hide a missing
+        # GRANT.
+        postgres = PostgreDBClient()
+        # conftest stubs `connect`, so the connection is attached by hand.
+        postgres.connection = psycopg.connect(
+            reader_url, options="-c enable_indexscan=off -c enable_bitmapscan=off"
+        )
         yield ReaderDatabase(
-            admin, reader_url, base_schema, view_schema, shop_a, shop_b
+            admin,
+            postgres,
+            reader_url,
+            ungranted_url,
+            base_schema,
+            view_schema,
+            shop_a,
+            shop_b,
         )
     finally:
+        if postgres is not None:
+            postgres.connection.close()
         for schema in (view_schema, base_schema):
             admin.execute(
                 sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
                     sql.Identifier(schema)
                 )
             )
-        admin.execute(
-            sql.SQL("DROP ROLE IF EXISTS {}").format(sql.Identifier(login_role))
-        )
+        for role in (login_role, ungranted_role):
+            admin.execute(
+                sql.SQL("DROP ROLE IF EXISTS {}").format(sql.Identifier(role))
+            )
         admin.close()
 
 
@@ -282,6 +309,53 @@ def test_views_return_nothing_without_a_shop_scope(reader_db: ReaderDatabase) ->
         ).fetchone()[0]
 
     assert count == 0
+
+
+def test_executor_runs_with_the_reader_role_not_the_app_user(
+    reader_db: ReaderDatabase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The guard would reject a base-table read, so it is bypassed to prove the role
+    # switch itself, not the guard, is what stops the shared app connection.
+    executor = reader_db.executor()
+    base_query = f"SELECT * FROM {reader_db.base_schema}.shops"
+    monkeypatch.setattr(executor.guard, "validate_and_wrap", lambda query: base_query)
+
+    with pytest.raises(ValueError, match="^SQL_ERROR: permission denied"):
+        executor.run(reader_db.shop_a, "SELECT 1")
+
+
+def test_login_without_the_grant_gets_sql_error(reader_db: ReaderDatabase) -> None:
+    # Reproduces the staging failure: a login that is not a member of ai_sql_reader
+    # cannot switch to it, so the tool reports SQL_ERROR instead of running the query.
+    postgres = PostgreDBClient()
+    postgres.connection = psycopg.connect(reader_db.ungranted_url)
+    try:
+        executor = ReadOnlySqlExecutor(
+            postgres, view_schema=reader_db.view_schema, timeout_ms=3000, row_limit=100
+        )
+        with pytest.raises(ValueError, match="^SQL_ERROR: .*role"):
+            executor.run(reader_db.shop_a, "SELECT name FROM v_products")
+    finally:
+        postgres.connection.close()
+
+
+def test_shared_connection_keeps_neither_role_nor_scope_after_a_run(
+    reader_db: ReaderDatabase,
+) -> None:
+    executor = reader_db.executor()
+    with reader_db.postgres.transaction() as connection:
+        before = connection.execute("SELECT current_user").fetchone()[0]
+        raise psycopg.Rollback
+
+    executor.run(reader_db.shop_a, "SELECT name FROM v_products")
+
+    with reader_db.postgres.transaction() as connection:
+        after = connection.execute(
+            "SELECT current_user, current_setting('smartledger.shop_id', true)"
+        ).fetchone()
+        raise psycopg.Rollback
+    assert after[0] == before
+    assert after[1] in (None, "")
 
 
 def test_slow_query_hits_the_statement_timeout(reader_db: ReaderDatabase) -> None:

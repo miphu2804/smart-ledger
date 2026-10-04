@@ -1,3 +1,18 @@
+### [2026-10-05 00:55 UTC+07:00] — [Refactor] Tool SQL của Agent dùng chung kết nối PostgreSQL
+
+**Done:**
+- `ReadOnlySqlExecutor` nhận `PostgreDBClient`, chạy mỗi truy vấn trong một transaction `READ ONLY` với `SET LOCAL ROLE ai_sql_reader`, luôn rollback.
+- Bỏ `AI_SQL_READER_URL`, thêm cờ `SQL_TOOL_ENABLED` (mặc định `false`).
+- Test: 227 passed (gồm 17 test `test_sql_reader.py` trên Postgres 16 tạm); thêm test chứng minh role được hạ quyền và connection không giữ role/phạm vi sau khi chạy.
+
+**Changed  files:**
+- `backend/ai/src/agent/sql_executor.py`, `src/app_config.py`, `src/main.py` — modified
+- `backend/ai/tests/unit_tests/test_shop_data_tool.py`, `tests/integration_tests/test_sql_reader.py` — modified
+- `backend/ai/.env.example`, `backend/ai/README.md`, `docs/contracts/api-contracts.md`, `docs/README.md` — modified
+- `docs/architecture/adr/0002-sql-reader-role.md` — created (Proposed)
+
+**Flow explained:** Tool `query_shop_data` → `SqlGuard` → `ReadOnlySqlExecutor.run()` → `PostgreDBClient.transaction()` → `SET LOCAL ROLE` + `set_config(shop_id)` → SELECT → rollback.
+
 ### [2026-10-04 10:40 UTC+07:00] — [Config] Keep Flyway off against the shared dev/staging database
 
 **Done:** Compose now passes `FLYWAY_ENABLED` to Core with a default of `false`, and the host run command sets it to `false`, so a developer machine no longer migrates the database it shares with staging. A new README section, "Database migrations", says to develop migrations on a disposable PostgreSQL and to migrate staging only from merged `staging` code, done once by one person until a staging deploy exists.

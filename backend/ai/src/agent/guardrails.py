@@ -55,6 +55,10 @@ SECRET_PATTERN = (
     r"|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"
 )
 
+# AgentMiddleware is invariant in state and context, so the library's own middleware
+# (which declares its own state types) only fits a list of the fully open form.
+Guardrail = AgentMiddleware[Any, Any, Any]
+
 # ModelCallLimitMiddleware's English notice when it ends the run.
 MODEL_LIMIT_NOTICE = "Model call limits exceeded"
 
@@ -76,7 +80,7 @@ class AgentGuardrails:
     def __init__(self, limits: GuardrailLimits) -> None:
         self.limits = limits
 
-    def get_all_guardrails(self) -> list[AgentMiddleware]:
+    def get_all_guardrails(self) -> list[Guardrail]:
         """Return every guardrail in the order `create_agent` should run it.
 
         `before_*` hooks run in list order and `after_*` hooks in reverse, so the leak
@@ -84,7 +88,7 @@ class AgentGuardrails:
         """
         return [*self.check_cost(), *self.check_pii(), *self.check_prompt_injection()]
 
-    def check_cost(self) -> list[AgentMiddleware]:
+    def check_cost(self) -> list[Guardrail]:
         """Bound the work one turn can cause.
 
         An owner message over `max_input_chars` ends the turn before any model call.
@@ -124,7 +128,7 @@ class AgentGuardrails:
             replace_empty_answer,
         ]
 
-    def check_pii(self) -> list[AgentMiddleware]:
+    def check_pii(self) -> list[Guardrail]:
         """Mask card numbers and redact API keys, bearer tokens and JWTs (NFR-008).
 
         Only the owner's input is checked, before the model sees it, and the redacted
@@ -142,7 +146,7 @@ class AgentGuardrails:
             ),
         ]
 
-    def check_prompt_injection(self) -> list[AgentMiddleware]:
+    def check_prompt_injection(self) -> list[Guardrail]:
         """Replace an answer that leaks internals with a safe Vietnamese reply.
 
         Internals are view names, scope settings, tool error codes and SQL. The answer

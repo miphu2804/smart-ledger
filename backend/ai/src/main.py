@@ -23,13 +23,12 @@ logging.basicConfig(
 )
 
 
-def build_sql_executor() -> ReadOnlySqlExecutor | None:
-    url = app_config.AI_SQL_READER_URL
-    if url is None or not url.strip():
-        logging.getLogger(__name__).info("sql reader unconfigured; shop-data tool off")
+def build_sql_executor(postgres: PostgreDBClient) -> ReadOnlySqlExecutor | None:
+    if not app_config.SQL_TOOL_ENABLED:
+        logging.getLogger(__name__).info("SQL_TOOL_ENABLED is off; shop-data tool off")
         return None
     return ReadOnlySqlExecutor(
-        url,
+        postgres,
         timeout_ms=app_config.SQL_TIMEOUT_MS,
         row_limit=app_config.SQL_ROW_LIMIT,
     )
@@ -54,7 +53,7 @@ async def lifespan(app: FastAPI):
             model_call_limit=app_config.AGENT_MODEL_CALL_LIMIT,
             tool_call_limit=app_config.AGENT_TOOL_CALL_LIMIT,
         ),
-        sql_executor=build_sql_executor(),
+        sql_executor=build_sql_executor(postgres),
     )
     yield
     postgres.close()

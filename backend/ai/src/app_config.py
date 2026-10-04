@@ -20,9 +20,10 @@ class AppConfig(BaseSettings):
     # postgres
     POSTGRES_URL: str | None = None
 
-    # read-only login granted ai_sql_reader (migration 004); unset disables the
-    # agent's shop-data tool while chat keeps working
-    AI_SQL_READER_URL: str | None = None
+    # the agent's shop-data tool runs on POSTGRES_URL after SET LOCAL ROLE
+    # ai_sql_reader (migration 004), so that user must be a member of the role; off
+    # keeps chat working without the tool
+    SQL_TOOL_ENABLED: bool = False
     SQL_TIMEOUT_MS: int = Field(default=3000, gt=0)
     SQL_ROW_LIMIT: int = Field(default=100, gt=0)
 
