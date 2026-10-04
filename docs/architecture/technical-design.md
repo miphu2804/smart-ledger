@@ -24,7 +24,7 @@ Mục này là nơi duy nhất ghi hiện trạng triển khai; tài liệu khá
 
 - **Core:** Firebase auth/session/me, Shop/Category/Product/Customer CRUD, draft → confirm → sale/payment, debt repayment, expense, report summary, sale void và full refund, audit thao tác ghi và lịch sử audit cho OWNER; schema Flyway V1–V10. Core proxy `/api/v1/agent/*` sang AI `/internal/v1/agent/*` kèm `X-Internal-Token`, lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực.
 - **AI:** `/health` và Agent chat (chat, list, detail, rename, delete) lưu PostgreSQL, tóm tắt cuốn chiếu, tìm lịch sử và tool đọc dữ liệu tiệm chỉ đọc; migration AI `001`–`004`.
-- **Mobile:** mặc định dùng mock; khi tắt mock gọi Firebase và các API Core ở trên. Nhận diện đơn vẫn dùng parser rule-based trên máy; mic chỉ nhận giọng nói trên web.
+- **Mobile:** mặc định dùng mock; khi tắt mock gọi Firebase và các API Core ở trên. Các màn nghiệp vụ (trang chủ, báo cáo, đơn hàng, hàng hoá, công nợ, chi phí, thanh toán, hồ sơ tiệm) đọc và ghi qua Core; thanh toán, chi phí và trả nợ thử lại bằng cùng `Idempotency-Key`. Nhận diện đơn vẫn dùng parser rule-based trên máy; mic chỉ nhận giọng nói trên web.
 - **Web admin:** chỉ chạy mock; Core chưa có API dashboard tương ứng.
 
 Đây là phạm vi code, không phải xác nhận đã deploy staging, nghiệm thu FE hay production-ready; chưa có kiểm thử đầu-cuối mobile → Core → AI với model thật.

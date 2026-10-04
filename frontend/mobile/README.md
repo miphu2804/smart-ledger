@@ -40,7 +40,7 @@ npm run export:web      # build web tĩnh ra dist/
 | `/products` | Hàng hoá & tồn kho, thêm/sửa/xoá, “chụp ảnh AI” giả lập |
 | `/debts` | Sổ nợ: trả một phần / trả hết, lịch sử, gọi / nhắc nợ |
 | `/bestsellers` | Xếp hạng món bán chạy, gợi ý hàng bán chậm |
-| `/profile` | Sửa thông tin cá nhân & tiệm |
+| `/profile` | Sửa thông tin tiệm (tên, địa chỉ, ngành hàng) lưu lên Core qua `PATCH /api/v1/shops/{shopId}`; họ tên, email, Facebook và tài khoản ngân hàng chỉ lưu trên máy |
 | `/settings` | Âm thanh, rung, đọc lại đơn, tự mở in |
 | `/notifications` | Thông báo trong app |
 | `/ai` | Hỏi đáp với trợ lý qua `src/lib/agentApi.ts` → Core `/api/v1/agent/*`; lịch sử hội thoại. Khi bật mock, `mockCore` trả lời giả |
@@ -75,6 +75,8 @@ src/
   lib/api.ts            client gọi Core (Bearer Firebase ID token, X-Shop-Id, Idempotency-Key, lỗi chuẩn); USE_MOCK → mockCore
   lib/*Api.ts           session, catalog, customer, sales, debt, expense, agent
   lib/mockCore.ts       giả lập các endpoint Core trong bộ nhớ
+  lib/useCoreData.ts    tải đơn, sản phẩm, nợ, chi phí từ Core cho Home, Quản lý, Phân tích, Bán chạy, Thông báo
+  lib/checkoutSession.ts giữ đơn nháp giữa các lần bấm thanh toán để thử lại không ghi trùng sale
   sst/                  nhận dạng giọng nói on-device, chưa được màn nào dùng
   components/           UI kit, biểu đồ, logo, toast, QR minh hoạ
 ```
@@ -106,7 +108,16 @@ Code đã nối sẵn theo `docs/contracts/api-contracts.md`: Firebase xác th�
 5. **`.env`** (copy từ `.env.example`): `EXPO_PUBLIC_USE_MOCK=false`, `EXPO_PUBLIC_API_ENDPOINT=<URL Core>`, cùng 4 biến Firebase web. Để thử riêng Firebase khi chưa chạy Core, đặt `EXPO_PUBLIC_MOCK_CORE=true` (giả lập `/auth/session`, `/me`, `/shops`). Đổi `.env` xong phải chạy lại `npx expo start --clear` (Metro cache giá trị cũ).
 6. **Chạy**:
    - Web: `npm run web` — dùng Firebase JS SDK + reCAPTCHA vô hình.
-   - Android/iOS: **không chạy trên Expo Go** (React Native Firebase cần code native). Tạo development build: `npx eas-cli build:configure`, rồi `npx eas-cli build --profile development --platform android` (thêm `"developmentClient": true` cho profile `development` trong `eas.json`), cài bản build và chạy `npx expo start --dev-client`. iOS cần tài khoản Apple Developer.
+   - Android/iOS: **không chạy trên Expo Go** (React Native Firebase cần code native). Tạo development build: `npx eas-cli build --profile development --platform android`, cài bản build và chạy `npx expo start --dev-client`. iOS cần tài khoản Apple Developer.
+
+Profile trong `eas.json`:
+
+- `development`: development client, cài nội bộ.
+- `preview`: bản cài nội bộ, Android ra APK.
+- `phone-test`: kế thừa `preview`, Firebase thật với phiên Core giả lập (`MOCK_CORE`, `MOCK_SHOPS`) để thử đăng nhập SĐT trên máy thật khi chưa có Core deploy; các màn nghiệp vụ vẫn gọi API thật nên báo lỗi mạng nếu không tới được Core.
+- `production`: tự tăng số build.
+
+`google-services.json` bị gitignore nên build trên EAS không thấy file này. `app.config.js` đọc đường dẫn từ biến môi trường kiểu file `GOOGLE_SERVICES_JSON` (`eas env:create --type file`, hiện đặt trong environment `preview`); ở máy local vẫn dùng `./google-services.json`. `.env` cũng không lên EAS, nên profile phải tự đặt các biến `EXPO_PUBLIC_*`. Mỗi keystore build cần thêm SHA-1/SHA-256 vào Firebase trước khi đăng nhập được.
 
 Nơi code: `src/lib/auth/` (giao diện `AuthClient`; `mock.ts`, `firebase.ts` cho native, `firebase.web.ts` cho web), `src/lib/api.ts` (Bearer + `X-Shop-Id` + lỗi `{code,message,traceId}`, 401 → đăng xuất), `src/lib/sessionApi.ts` (`/auth/session`, `/me`, `/shops`), luồng đăng nhập trong `src/store/AppStore.tsx` (`signIn`, `logout`, khởi động chờ Firebase khôi phục phiên).
 

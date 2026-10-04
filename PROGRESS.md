@@ -1,3 +1,13 @@
+### [2026-10-04 10:15 UTC+07:00] — [Docs] Refresh docs sync after merging #84–#86
+
+**Done:** Merged `staging` into `docs/sync-docs-with-staging` and updated the docs that #84–#86 made stale. The mobile README now documents the `/profile` save to Core, `useCoreData` and `checkoutSession`, and the EAS profiles with `GOOGLE_SERVICES_JSON`. Technical design §1 says the business screens read and write through Core. CONTRIBUTING now says a dated release branch must also be added to the `release-policy.yml` allow-list.
+
+**Changed files:** `frontend/mobile/README.md`, `docs/architecture/technical-design.md`, `CONTRIBUTING.md`, `PROGRESS.md` (conflict resolved by keeping every entry in time order).
+
+**Flow explained:** No code or behavior change.
+
+**Check:** Relative links and anchors across tracked Markdown resolve; the screen-to-API claims were checked by grepping `app/` for the API clients each screen imports.
+
 ### [2026-10-04 02:40 UTC+07:00] — [Feature] Save the shop profile to Core
 
 **Done:** The "Chỉnh sửa thông tin" screen now saves the shop name, address and industries to Core with `PATCH /api/v1/shops/{shopId}`; before, every field stayed on the device and was lost on another phone or after signing in again. Only the fields that changed are sent, and nothing is sent when none changed, because each update writes a `SHOP_UPDATED` audit row. On a Core error the screen stays open with a Vietnamese message and nothing is reported as saved. Save is blocked while no industry is selected, since Core rejects an empty `industry`. Also fixes reading the industries back: Core keeps the selection as one string such as `food, drink`, and the session mapping turned it into a single entry, so the screen showed "Chưa chọn ngành" after the next sign-in for a shop with several industries. Vietnamese messages added for `shop_update_required`, `shop_access_denied`, `shop_not_found` and `invalid_shop_id`.
