@@ -12,7 +12,7 @@ flowchart LR
 
     subgraph dev["Dev machine · docker compose"]
         direction TB
-        core_dev["Core · Spring Boot :8000<br/>Flyway on startup"]
+        core_dev["Core · Spring Boot :8000<br/>Flyway off by default"]
         ai_dev["AI · FastAPI :8001"]
         core_dev -->|"HTTP"| ai_dev
     end
