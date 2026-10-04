@@ -1,3 +1,13 @@
+### [2026-10-04 10:48 UTC+07:00] — [Config] Separate Firebase projects for staging and production
+
+**Done:** Production gets its own Firebase project, as the database already does, so test accounts never mix with real users and production Core accepts only production tokens. Each EAS build profile now names its EAS environment, and `app.config.js` also reads the iOS `GoogleService-Info.plist` from the file variable `GOOGLE_SERVICE_INFO_PLIST`, so a production build takes the production project's files.
+
+**Changed files:** `frontend/mobile/{app.config.js,eas.json,README.md}`, `README.md`, `CONTRIBUTING.md`, `docs/architecture/technical-design.md`, `docs/architecture/diagrams/{src/environments.mmd,images/environments.svg}`, `PROGRESS.md`.
+
+**Flow explained:** Local dev, EAS `development`/`preview`/`phone-test`, Vercel Preview and Core dev/staging use the staging Firebase project. EAS `production`, Vercel Production and Core production use the production project. Without the variables, `app.config.js` falls back to the files in `frontend/mobile/` as before.
+
+**Check:** `app.config.js` resolves the local files without variables and the variable paths with them for Android and iOS; `eas.json` parses; `eas env:set --help` confirms the documented flags; the diagram re-rendered with `mmdc`; relative links and anchors resolve. Not done: creating the production Firebase project and the EAS/Vercel variables, which need console access.
+
 ### [2026-10-04 10:15 UTC+07:00] — [Docs] Refresh docs sync after merging #84–#86
 
 **Done:** Merged `staging` into `docs/sync-docs-with-staging` and updated the docs that #84–#86 made stale. The mobile README now documents the `/profile` save to Core, `useCoreData` and `checkoutSession`, and the EAS profiles with `GOOGLE_SERVICES_JSON`. Technical design §1 says the business screens read and write through Core. CONTRIBUTING now says a dated release branch must also be added to the `release-policy.yml` allow-list.

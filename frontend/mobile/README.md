@@ -83,7 +83,19 @@ src/
 
 ## Gắn Firebase (đăng nhập + xác thực số điện thoại)
 
-Code đã nối sẵn theo `docs/contracts/api-contracts.md`: Firebase xác thực SĐT → app gửi Firebase ID token (`Authorization: Bearer …`) tới `POST /api/v1/auth/session` → nhận `SessionView` (role, tiệm, `needsOnboarding`). Với `EXPO_PUBLIC_USE_MOCK=true` app chạy như cũ (OTP `123456`); với `false` app dùng Firebase + Core thật. Chỉ cần cài gói và điền cấu hình:
+Code đã nối sẵn theo `docs/contracts/api-contracts.md`: Firebase xác thực SĐT → app gửi Firebase ID token (`Authorization: Bearer …`) tới `POST /api/v1/auth/session` → nhận `SessionView` (role, tiệm, `needsOnboarding`). Với `EXPO_PUBLIC_USE_MOCK=true` app chạy như cũ (OTP `123456`); với `false` app dùng Firebase + Core thật. Chỉ cần cài gói và điền cấu hình.
+
+Có hai Firebase project, giống cách tách database: tài khoản test không nằm chung với người dùng thật, và Core production chỉ tin token của project production.
+
+| Nơi chạy | Firebase project | Lấy cấu hình từ |
+| --- | --- | --- |
+| Máy dev, Core dev/staging | staging | `.env`, `google-services.json`, `GoogleService-Info.plist` trong `frontend/mobile/`; `FIREBASE_PROJECT_ID` trong `backend/core/.env` |
+| EAS `development`, `preview`, `phone-test` | staging | Biến của EAS environment `development`/`preview` |
+| Vercel Preview | staging | Preview variables trên Vercel |
+| EAS `production`, Vercel Production, Core production | production | Biến của EAS environment `production`, Production variables trên Vercel, secret production của Core |
+
+Làm các bước dưới đây cho **cả hai** project. Package/bundle `vn.teamhexa.songheloi` được đăng ký ở cả hai; SHA của keystore nào thì thêm vào project mà bản build đó dùng (keystore production và key ký của Google Play vào project production).
+
 
 1. **Firebase Console** → Authentication → Sign-in method → bật **Phone**.
    - Settings → *SMS region policy*: cho phép Việt Nam (+84).
@@ -117,7 +129,16 @@ Profile trong `eas.json`:
 - `phone-test`: kế thừa `preview`, Firebase thật với phiên Core giả lập (`MOCK_CORE`, `MOCK_SHOPS`) để thử đăng nhập SĐT trên máy thật khi chưa có Core deploy; các màn nghiệp vụ vẫn gọi API thật nên báo lỗi mạng nếu không tới được Core.
 - `production`: tự tăng số build.
 
-`google-services.json` bị gitignore nên build trên EAS không thấy file này. `app.config.js` đọc đường dẫn từ biến môi trường kiểu file `GOOGLE_SERVICES_JSON` (`eas env:create --type file`, hiện đặt trong environment `preview`); ở máy local vẫn dùng `./google-services.json`. `.env` cũng không lên EAS, nên profile phải tự đặt các biến `EXPO_PUBLIC_*`. Mỗi keystore build cần thêm SHA-1/SHA-256 vào Firebase trước khi đăng nhập được.
+Mỗi profile ghi rõ `environment` (`development`, `preview`, `production`) nên chỉ đọc biến của EAS environment đó. `google-services.json` và `GoogleService-Info.plist` bị gitignore nên build trên EAS không thấy. `app.config.js` đọc đường dẫn từ biến kiểu file `GOOGLE_SERVICES_JSON` và `GOOGLE_SERVICE_INFO_PLIST`; ở máy local vẫn dùng file trong thư mục. Tạo hai biến này trong từng environment với file của đúng project:
+
+```bash
+# project staging cho development và preview
+npx eas-cli env:set --type file --name GOOGLE_SERVICES_JSON --value ./google-services.json --environment development --environment preview --visibility secret
+# project production: dùng file tải từ Firebase project production
+npx eas-cli env:set --type file --name GOOGLE_SERVICES_JSON --value <đường dẫn file production> --environment production --visibility secret
+```
+
+Làm tương tự với `GOOGLE_SERVICE_INFO_PLIST` khi build iOS. `.env` cũng không lên EAS: environment `production` cần `EXPO_PUBLIC_USE_MOCK=false`, `EXPO_PUBLIC_API_ENDPOINT` của Core production và bốn biến `EXPO_PUBLIC_FIREBASE_*` của project production, nếu không bản production sẽ chạy mock. Mỗi keystore build cần thêm SHA-1/SHA-256 vào Firebase trước khi đăng nhập được.
 
 Nơi code: `src/lib/auth/` (giao diện `AuthClient`; `mock.ts`, `firebase.ts` cho native, `firebase.web.ts` cho web), `src/lib/api.ts` (Bearer + `X-Shop-Id` + lỗi `{code,message,traceId}`, 401 → đăng xuất), `src/lib/sessionApi.ts` (`/auth/session`, `/me`, `/shops`), luồng đăng nhập trong `src/store/AppStore.tsx` (`signIn`, `logout`, khởi động chờ Firebase khôi phục phiên).
 
@@ -140,7 +161,7 @@ EXPO_PUBLIC_MOCK_SHOPS=false
 EXPO_PUBLIC_API_ENDPOINT=http://<IP LAN của máy chạy Core>:8000   # máy ảo Android: http://10.0.2.2:8000
 ```
 
-Core cần `FIREBASE_PROJECT_ID` trùng project của `google-services.json` và file service account (xem `backend/core/.env.example`). Điện thoại và máy chạy Core phải cùng mạng.
+Core cần `FIREBASE_PROJECT_ID` trùng project của `google-services.json` (project staging khi dev) và file service account của cùng project (xem `backend/core/.env.example`). Điện thoại và máy chạy Core phải cùng mạng.
 
 ### Đăng nhập bằng email + mật khẩu
 

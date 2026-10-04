@@ -116,7 +116,7 @@ Host và port thuộc cấu hình môi trường, không phải API contract. [C
 | Core | V1–V10 từ DB rỗng/upgrade; controller contract theo mục 1–4; confirm/repay/void rollback, replay và cạnh tranh khóa; test chéo shop. DB local kiểm thử không thay nghiệm thu Supabase staging hoặc FE |
 | AI | contract test Core ↔ AI; timeout/fallback; output schema; truy xuất đúng phạm vi `shop_id` |
 | FE | OWNER: login → chọn shop → tạo/chốt → báo cáo; ADMIN: login → tra cứu cơ sở → xem tổng quan; test role guard và trạng thái loading/error/empty |
-| Ops | CI kiểm migration; staging dùng Supabase project riêng; deploy production cần phê duyệt |
+| Ops | CI kiểm migration; staging và production dùng Supabase project và Firebase project riêng (dev dùng chung của staging); deploy production cần phê duyệt |
 
 ## 8. Rủi ro
 

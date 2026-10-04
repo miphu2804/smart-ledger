@@ -8,7 +8,11 @@ flowchart LR
         web["Web · Vite · landing / ADMIN"]
     end
 
-    firebase["Firebase Auth"]
+    subgraph firebase_auth["Firebase Auth"]
+        direction TB
+        firebase["Staging project<br/>dev + staging, test accounts"]
+        firebase_prod["Production project<br/>real users"]
+    end
 
     subgraph dev["Dev machine · docker compose"]
         direction TB
@@ -57,3 +61,4 @@ flowchart LR
     env_staging -.->|"deploy + Flyway after merge to staging"| db_staging
     env_prod -.->|"deploy + Flyway after approved merge to main"| db_prod
     env_prod -.->|"REDIS_URL"| redis_prod
+    env_prod -.->|"FIREBASE_PROJECT_ID"| firebase_prod

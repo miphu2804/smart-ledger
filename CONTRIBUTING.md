@@ -81,7 +81,7 @@ git switch -c feat/<short-description>
 - Run database migrations on staging before production. Destructive migrations require an explicit rollback or recovery plan.
 - Required CI checks are `ai` (lint and tests), `core` (Maven verify plus Flyway migration against a fresh PostgreSQL service), `container-images` (Docker Compose build of custom service images), and `mobile-web` (TypeScript and Expo web export).
 - The Vercel mobile project uses `frontend/mobile` as its root and deploys pull requests and `staging` as previews; `main` is the production branch. Vercel must be connected to the repository before preview URLs are available.
-- CI verifies migrations from an empty database. Staging and production use separate Supabase projects with separate credential files and dev shares the staging database (see [Local Compose](README.md#local-compose)); backup/restore, rollback, and moving production credentials into an environment-scoped secret store still require an operational smoke check before production release.
+- CI verifies migrations from an empty database. Staging and production use separate Supabase and Firebase projects with separate credential files, and dev shares the staging ones (see [Local Compose](README.md#local-compose)); backup/restore, rollback, and moving production credentials into an environment-scoped secret store still require an operational smoke check before production release.
 
 ### Pull request title
 
