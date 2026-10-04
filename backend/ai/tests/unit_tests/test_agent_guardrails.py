@@ -9,7 +9,6 @@ from src.agent.guardrails import (
     LEAK_REPLY,
     AgentGuardrails,
     GuardrailLimits,
-    build_guardrails,
 )
 from src.agent.service import AgentService
 
@@ -120,11 +119,17 @@ def test_only_the_latest_message_counts_toward_the_input_limit() -> None:
     assert len(model.seen_calls) == 1
 
 
+def guardrail_named(guardrails: list, name: str):
+    return next(m for m in guardrails if type(m).__name__ == name)
+
+
 def test_input_guard_reads_the_last_human_message() -> None:
-    guard = AgentGuardrails(max_input_chars=5)
+    input_length = guardrail_named(
+        AgentGuardrails(GuardrailLimits(5, 4, 3)).check_cost(), "InputLengthGuard"
+    )
     state = {"messages": [HumanMessage("a" * 100), HumanMessage("short")]}
 
-    assert guard.before_agent(state, None) is None
+    assert input_length.before_agent(state, None) is None
 
 
 def test_secrets_are_redacted_before_the_model_and_in_history() -> None:
@@ -211,7 +216,11 @@ def test_normal_answer_passes_through() -> None:
 
 
 def test_output_guard_keeps_the_answer_id_when_replacing() -> None:
-    update = AgentGuardrails(MAX_INPUT_CHARS).after_agent(
+    leak_check = guardrail_named(
+        AgentGuardrails(GuardrailLimits(200, 4, 3)).check_prompt_injection(),
+        "LeakGuard",
+    )
+    update = leak_check.after_agent(
         {"messages": [AIMessage(content="SELECT id FROM v_products", id="a1")]}, None
     )
 
@@ -231,13 +240,16 @@ def test_limits_stop_a_model_that_keeps_calling_tools() -> None:
     assert result.answer == EMPTY_ANSWER_REPLY
 
 
-def test_build_guardrails_has_no_tool_error_middleware() -> None:
-    names = [type(m).__name__ for m in build_guardrails(GuardrailLimits(200, 4, 3))]
+def test_guardrails_have_no_tool_error_middleware() -> None:
+    guardrails = AgentGuardrails(GuardrailLimits(200, 4, 3)).get_all_guardrails()
+    names = [type(m).__name__ for m in guardrails]
 
     assert names == [
-        "AgentGuardrails",
-        "PIIMiddleware",
-        "PIIMiddleware",
+        "InputLengthGuard",
         "ModelCallLimitMiddleware",
         "ToolCallLimitMiddleware",
+        "EmptyAnswerGuard",
+        "PIIMiddleware",
+        "PIIMiddleware",
+        "LeakGuard",
     ]

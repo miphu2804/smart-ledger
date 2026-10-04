@@ -3,10 +3,11 @@ from dataclasses import dataclass
 from langchain.agents import create_agent
 from langchain_core.language_models import BaseChatModel
 
-from src.agent.guardrails import GuardrailLimits, build_guardrails, latest_human
+from src.agent.guardrails import AgentGuardrails, GuardrailLimits
 from src.agent.repository import AgentConversationRepository
 from src.agent.sql_executor import ReadOnlySqlExecutor
 from src.agent.tools import AgentContext, AgentTools
+from src.agent.utils import get_latest_human_message
 from src.prompt_templates import (
     CHAT_SUMMARY_CONTEXT,
     SHOP_AGENT_SYSTEM_PROMPT,
@@ -49,7 +50,7 @@ class AgentService:
                 context_schema=AgentContext,
                 # The limits arrive from the composition root, so this module reads no
                 # global settings and guardrails cannot be switched off by a caller.
-                middleware=build_guardrails(guardrail_limits),
+                middleware=AgentGuardrails(guardrail_limits).get_all_guardrails(),
             )
             if model is not None
             else None
@@ -79,7 +80,7 @@ class AgentService:
         last = result["messages"][-1]
         # Store the owner's message as the model saw it, after secret redaction, so a
         # pasted key is not replayed to the model with the history on later turns.
-        sent = latest_human(result["messages"])
+        sent = get_latest_human_message(result["messages"])
         user_message = sent.text if sent is not None and sent.text else message
         model_name = getattr(self.model, "model_name", "")
         version = (getattr(last, "response_metadata", None) or {}).get(

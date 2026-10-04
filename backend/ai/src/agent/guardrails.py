@@ -1,30 +1,12 @@
 """Deterministic guardrails for the shop agent, built from LangChain middleware.
 
-`build_guardrails` returns the middleware in the order `create_agent` should run it.
-`before_*` hooks run in list order and `after_*` hooks in reverse, so:
+`AgentGuardrails` groups the middleware by the risk it covers: cost, PII and prompt
+injection. A query the SQL guard or the database rejects needs no middleware: the
+`query_shop_data` tool returns it to the model as `Error[CODE]: ...` text.
 
-1. `AgentGuardrails.before_agent`: a latest owner message longer than
-   `AGENT_MAX_INPUT_CHARS` ends the run with a short Vietnamese reply, before any model
-   call.
-2. `PIIMiddleware` on the owner's input only: card numbers are masked and API keys,
-   bearer tokens and JWTs are redacted before the model sees them (NFR-008). Tool
-   results are left alone because the owner may ask for the shop's own phone number.
-   `redact` and `mask` never raise, unlike `block`, which would fail the turn.
-3. `ModelCallLimitMiddleware` and `ToolCallLimitMiddleware`: at most
-   `AGENT_MODEL_CALL_LIMIT` model calls and `AGENT_TOOL_CALL_LIMIT` tool calls per turn.
-   Calls over the tool limit are refused and the model has to answer; reaching the model
-   limit ends the run, and the output check replaces the English limit notice.
-4. `AgentGuardrails.after_agent`: an empty answer, or one that leaks internals (view
-   names, scope settings, error codes, a SELECT statement), is replaced with a safe
-   Vietnamese reply.
-
-A query the SQL guard or the database rejects needs no middleware: the `query_shop_data`
-tool returns it to the model as `Error[CODE]: ...` text, and any other tool exception
-propagates, so the router answers 503 ai_unavailable.
-
-There is deliberately no model-based safety check, human-in-the-loop step or LLM query
-checker: each adds a model call or a reviewer the owner cannot be, while the SQL guard,
-the read-only role and the shop-scoped views already bound what a query can do.
+There is deliberately no model-based safety check or human review step: each adds a
+model call or a reviewer the owner cannot be, while the SQL guard, the read-only role
+and the shop-scoped views already bound what a query can do.
 """
 
 import json
@@ -39,11 +21,23 @@ from langchain.agents.middleware import (
     ModelCallLimitMiddleware,
     PIIMiddleware,
     ToolCallLimitMiddleware,
-    hook_config,
+    after_agent,
+    before_agent,
 )
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage
 
 from src.agent.sql_guard import SqlGuard
+from src.agent.utils import get_latest_human_message
+
+
+@dataclass(frozen=True)
+class GuardrailLimits:
+    """Per-turn guardrail limits; the composition root supplies them from config."""
+
+    max_input_chars: int
+    model_call_limit: int
+    tool_call_limit: int
+
 
 # The owner reads these fixed replies in the app, so they stay Vietnamese; the copy
 # lives in a locale file to keep the source English.
@@ -76,65 +70,94 @@ LEAK_PATTERN = re.compile(
 )
 
 
-def latest_human(messages: list) -> HumanMessage | None:
-    # History is prepended to the request, so the owner's new message is the last one.
-    for message in reversed(messages):
-        if isinstance(message, HumanMessage):
-            return message
-    return None
+class AgentGuardrails:
+    """The agent's guardrail middleware, grouped by the risk each group covers."""
 
+    def __init__(self, limits: GuardrailLimits) -> None:
+        self.limits = limits
 
-class AgentGuardrails(AgentMiddleware):
-    """Input length check before the agent runs, leak check on its final answer."""
+    def get_all_guardrails(self) -> list[AgentMiddleware]:
+        """Return every guardrail in the order `create_agent` should run it.
 
-    def __init__(self, max_input_chars: int) -> None:
-        super().__init__()
-        self.max_input_chars = max_input_chars
+        `before_*` hooks run in list order and `after_*` hooks in reverse, so the leak
+        check sees the answer before the empty-answer check.
+        """
+        return [*self.check_cost(), *self.check_pii(), *self.check_prompt_injection()]
 
-    @hook_config(can_jump_to=["end"])
-    def before_agent(self, state: AgentState, runtime: Any) -> dict[str, Any] | None:
-        latest = latest_human(state["messages"])
-        if latest is None or len(latest.text) <= self.max_input_chars:
-            return None
-        reply = INPUT_TOO_LONG_REPLY.format(limit=self.max_input_chars)
-        return {"messages": [AIMessage(content=reply)], "jump_to": "end"}
+    def check_cost(self) -> list[AgentMiddleware]:
+        """Bound the work one turn can cause.
 
-    def after_agent(self, state: AgentState, runtime: Any) -> dict[str, Any] | None:
-        last = state["messages"][-1] if state["messages"] else None
-        if not isinstance(last, AIMessage):
-            return {"messages": [AIMessage(content=EMPTY_ANSWER_REPLY)]}
-        text = last.text.strip()
-        if not text or text.startswith(MODEL_LIMIT_NOTICE):
-            replacement = EMPTY_ANSWER_REPLY
-        elif LEAK_PATTERN.search(text):
-            replacement = LEAK_REPLY
-        else:
-            return None
-        # Same id: the messages reducer replaces the answer instead of appending.
-        return {"messages": [AIMessage(content=replacement, id=last.id)]}
+        An owner message over `max_input_chars` ends the turn before any model call.
+        Tool calls over the limit are refused; reaching the model-call limit ends the
+        run. An empty answer, or the English limit notice that run ends with, is
+        replaced with a Vietnamese reply.
+        """
+        max_chars = self.limits.max_input_chars
 
+        @before_agent(can_jump_to=["end"], name="InputLengthGuard")
+        def reject_long_input(state: AgentState, runtime: Any) -> dict[str, Any] | None:
+            latest = get_latest_human_message(state["messages"])
+            if latest is None or len(latest.text) <= max_chars:
+                return None
+            reply = INPUT_TOO_LONG_REPLY.format(limit=max_chars)
+            return {"messages": [AIMessage(content=reply)], "jump_to": "end"}
 
-@dataclass(frozen=True)
-class GuardrailLimits:
-    """Per-turn guardrail limits; the composition root supplies them from config."""
+        @after_agent(name="EmptyAnswerGuard")
+        def replace_empty_answer(
+            state: AgentState, runtime: Any
+        ) -> dict[str, Any] | None:
+            last = state["messages"][-1] if state["messages"] else None
+            if not isinstance(last, AIMessage):
+                return {"messages": [AIMessage(content=EMPTY_ANSWER_REPLY)]}
+            text = last.text.strip()
+            if text and not text.startswith(MODEL_LIMIT_NOTICE):
+                return None
+            # Same id: the messages reducer replaces the answer instead of appending.
+            return {"messages": [AIMessage(content=EMPTY_ANSWER_REPLY, id=last.id)]}
 
-    max_input_chars: int
-    model_call_limit: int
-    tool_call_limit: int
+        return [
+            reject_long_input,
+            ModelCallLimitMiddleware(
+                run_limit=self.limits.model_call_limit, exit_behavior="end"
+            ),
+            ToolCallLimitMiddleware(run_limit=self.limits.tool_call_limit),
+            replace_empty_answer,
+        ]
 
+    def check_pii(self) -> list[AgentMiddleware]:
+        """Mask card numbers and redact API keys, bearer tokens and JWTs (NFR-008).
 
-def build_guardrails(limits: GuardrailLimits) -> list[AgentMiddleware]:
-    return [
-        AgentGuardrails(limits.max_input_chars),
-        PIIMiddleware("credit_card", strategy="mask", apply_to_input=True),
-        PIIMiddleware(
-            "api_key",
-            detector=SECRET_PATTERN,
-            strategy="redact",
-            apply_to_input=True,
-        ),
-        ModelCallLimitMiddleware(
-            run_limit=limits.model_call_limit, exit_behavior="end"
-        ),
-        ToolCallLimitMiddleware(run_limit=limits.tool_call_limit),
-    ]
+        Only the owner's input is checked, before the model sees it, and the redacted
+        text is what gets stored. Tool results are left alone because the owner may
+        ask for the shop's own phone number. `mask` and `redact` never raise, unlike
+        `block`, which would fail the turn.
+        """
+        return [
+            PIIMiddleware("credit_card", strategy="mask", apply_to_input=True),
+            PIIMiddleware(
+                "api_key",
+                detector=SECRET_PATTERN,
+                strategy="redact",
+                apply_to_input=True,
+            ),
+        ]
+
+    def check_prompt_injection(self) -> list[AgentMiddleware]:
+        """Replace an answer that leaks internals with a safe Vietnamese reply.
+
+        Internals are view names, scope settings, tool error codes and SQL. The answer
+        is checked, not the input: injection is ordinary language, so a phrase list
+        would miss real attacks and refuse honest messages, while a leaked internal is
+        the visible result of an injection that worked.
+        """
+
+        @after_agent(name="LeakGuard")
+        def replace_leaking_answer(
+            state: AgentState, runtime: Any
+        ) -> dict[str, Any] | None:
+            last = state["messages"][-1] if state["messages"] else None
+            if not isinstance(last, AIMessage) or not LEAK_PATTERN.search(last.text):
+                return None
+            return {"messages": [AIMessage(content=LEAK_REPLY, id=last.id)]}
+
+        return [replace_leaking_answer]
