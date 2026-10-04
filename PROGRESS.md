@@ -1,3 +1,13 @@
+### [2026-10-04 10:40 UTC+07:00] — [Config] Keep Flyway off against the shared dev/staging database
+
+**Done:** Compose now passes `FLYWAY_ENABLED` to Core with a default of `false`, and the host run command sets it to `false`, so a developer machine no longer migrates the database it shares with staging. A new README section, "Database migrations", says to develop migrations on a disposable PostgreSQL and to migrate staging only from merged `staging` code, done once by one person until a staging deploy exists.
+
+**Changed files:** `compose.yaml`, `README.md`, `CONTRIBUTING.md`, `backend/core/README.md`, `backend/ai/README.md`, `docs/architecture/technical-design.md`, `docs/architecture/diagrams/src/environments.mmd`, `docs/architecture/diagrams/images/environments.svg`, `PROGRESS.md`. No Core or AI code change.
+
+**Flow explained:** With Flyway off, Core still runs Hibernate `validate`, so it starts only when the shared schema matches its entities. A branch that needs an unmerged migration must run against a disposable database. `FLYWAY_ENABLED=true` in the shell or an `--env-file` turns migration back on for the migration owner.
+
+**Check:** `docker compose config` gives `FLYWAY_ENABLED: "false"` by default and `"true"` when it is set in the shell or an env file; the environments diagram re-rendered with `mmdc`; relative links and anchors resolve. Not verified: the current Flyway and AI migration version of the staging database.
+
 ### [2026-10-04 10:15 UTC+07:00] — [Docs] Refresh docs sync after merging #84–#86
 
 **Done:** Merged `staging` into `docs/sync-docs-with-staging` and updated the docs that #84–#86 made stale. The mobile README now documents the `/profile` save to Core, `useCoreData` and `checkoutSession`, and the EAS profiles with `GOOGLE_SERVICES_JSON`. Technical design §1 says the business screens read and write through Core. CONTRIBUTING now says a dated release branch must also be added to the `release-policy.yml` allow-list.

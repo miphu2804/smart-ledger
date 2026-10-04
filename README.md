@@ -28,8 +28,9 @@ Fill in `backend/core/.env` and `backend/ai/.env` from their `.env.example`; dat
 # AI, :8001
 cd backend/ai && uv run python -m src.main
 
-# Core, :8080. Spring does not read .env, so export it into the shell first
-cd backend/core && set -a && source ../../.env.staging && source .env && set +a && bash ./mvnw spring-boot:run
+# Core, :8080. Spring does not read .env, so export it into the shell first.
+# Flyway stays off against the shared database (see Database migrations)
+cd backend/core && set -a && source ../../.env.staging && source .env && set +a && FLYWAY_ENABLED=false bash ./mvnw spring-boot:run
 
 # Mobile
 cd frontend/mobile && npx expo start
@@ -41,7 +42,7 @@ cd frontend/web && npm run dev
 docker compose --env-file .env.staging --env-file backend/core/.env up --build
 ```
 
-The first Core start applies Flyway migrations to the database in `DATABASE_URL`.
+Core does not change the database schema in these commands; see [Database migrations](#database-migrations).
 
 Checks before a PR (same as CI):
 
@@ -89,6 +90,15 @@ docker compose --env-file .env.staging --env-file backend/core/.env up --build
 ```
 
 Do not run the app with the production bootstrap credentials; production values belong in the `production` environment's secret store. Automated tests use a disposable PostgreSQL (CI service containers), never Supabase: AI integration tests read `POSTGRES_TEST_URL`, Core PostgreSQL tests read `CORE_TEST_POSTGRES_URL` (see [Core README](backend/core/README.md#run-tests)).
+
+### Database migrations
+
+Dev and staging share one database, so a migration that runs from a developer machine changes the schema for everyone. Core runs Flyway at startup when `FLYWAY_ENABLED=true` (the Core default); the commands above set it to `false`, and Core then only checks that the schema matches its entities.
+
+- **Never migrate the shared database from a feature branch.** A migration applied there and later edited, or a second branch that uses the same version number, makes Flyway reject the checksum and stops Core for everyone. A column change that is not merged yet breaks the code running on `staging`.
+- **Develop a migration on a disposable database.** Start one with `docker run --rm -p 5432:5432 -e POSTGRES_DB=smartledger -e POSTGRES_USER=smartledger -e POSTGRES_PASSWORD=smartledger pgvector/pgvector:pg17`, point `DATABASE_URL=jdbc:postgresql://localhost:5432/smartledger` (and `POSTGRES_URL` for AI) at it, and run Core with `FLYWAY_ENABLED=true`. CI repeats this on every pull request. A branch whose entities need a migration that staging lacks cannot start against the shared database, because the schema check fails.
+- **Migrate staging only from merged code.** After a pull request with a Core or AI migration merges, one person checks out `origin/staging`, runs Core once with `FLYWAY_ENABLED=true` (for Compose: `FLYWAY_ENABLED=true docker compose --env-file .env.staging --env-file backend/core/.env up --build core`), applies any new AI migration with `psql` as in the [AI README](backend/ai/README.md), and tells the team. This manual step stands in for the staging deploy until one exists.
+- **Never edit a migration that has run on staging**; add a new version instead. Production follows the same steps after the release is approved.
 
 ## References
 

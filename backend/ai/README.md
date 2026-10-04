@@ -6,7 +6,7 @@ Frontend must not call this service.
 
 ## Chat history schema
 
-Run Core's Flyway migrations first so `users` and `shops` exist, then apply the versioned AI migrations in order:
+Run Core's Flyway migrations first so `users` and `shops` exist, then apply the versioned AI migrations in order. On the shared dev/staging database, apply a new migration only after its pull request merges (see [Database migrations](../../README.md#database-migrations)):
 
 ```bash
 psql "$POSTGRES_URL" -v ON_ERROR_STOP=1 -f migrations/001_create_chat_history.sql

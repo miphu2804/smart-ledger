@@ -22,7 +22,7 @@ Set these environment variables in the process that launches Core. [`.env.exampl
 | `INTERNAL_API_TOKEN` | Shared with AI and sent as `X-Internal-Token`; a missing or mismatched value makes AI return `401`, which Core reports as `503 ai_unavailable` |
 | `IDEMPOTENCY_TTL_DAYS` | Optional; retention of `Idempotency-Key` results, defaults to `30` |
 
-Flyway runs committed migrations at startup and JPA validates the resulting schema. Use the same Firebase project ID for the backend and any locally generated test tokens.
+With `FLYWAY_ENABLED=true` (the default in `application.yml`) Flyway runs committed migrations at startup; JPA then validates the schema. The shared dev/staging database is migrated only from merged code, so set `FLYWAY_ENABLED=false` when you point Core at it (see [Database migrations](../../README.md#database-migrations)). Use the same Firebase project ID for the backend and any locally generated test tokens.
 
 ## Windows PowerShell
 

@@ -4,6 +4,9 @@
 # `.env.staging` supplies database credentials; `backend/core/.env` supplies
 # FIREBASE_PROJECT_ID and the host path of the service-account key to mount.
 # AI reads its own settings (model, API keys) from `backend/ai/.env`.
+# Flyway is off by default because the database is shared; only the migration
+# owner runs `FLYWAY_ENABLED=true docker compose ...` from merged `staging` code.
+# See README "Database migrations".
 services:
   core:
     build:
@@ -16,6 +19,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       DATABASE_USERNAME: ${DATABASE_USERNAME:?DATABASE_USERNAME is required}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD is required}
+      FLYWAY_ENABLED: ${FLYWAY_ENABLED:-false}
       AI_BASE_URL: http://ai:8001
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-}
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:?FIREBASE_PROJECT_ID is required}
