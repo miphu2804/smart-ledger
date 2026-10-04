@@ -53,14 +53,7 @@ class Conversations:
         self.saved_exchange: dict | None = None
 
     def context_for(self, conversation_id, user_id, shop_id):
-        return {
-            "summary": None,
-            "summary_through_message_id": None,
-            "messages": self.history,
-        }
-
-    def folded_messages(self, conversation_id, user_id, shop_id):
-        return []
+        return {"messages": self.history}
 
     def save_exchange(self, **kwargs):
         self.saved_exchange = kwargs

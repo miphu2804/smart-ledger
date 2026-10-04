@@ -316,10 +316,7 @@ class ToolCallingChatModel(FakeMessagesListChatModel):
 
 class MemoryConversations:
     def context_for(self, conversation_id, user_id, shop_id):
-        return {"summary": None, "summary_through_message_id": None, "messages": []}
-
-    def folded_messages(self, conversation_id, user_id, shop_id):
-        return []
+        return {"messages": []}
 
     def save_exchange(self, **kwargs):
         return 1, 2

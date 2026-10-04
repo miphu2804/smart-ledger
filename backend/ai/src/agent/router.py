@@ -4,7 +4,6 @@ from typing import Annotated
 
 from fastapi import (
     APIRouter,
-    BackgroundTasks,
     Depends,
     Query,
     Request,
@@ -24,7 +23,6 @@ from src.agent.schema import (
     AgentConversationView,
 )
 from src.agent.service import AgentService
-from src.agent.summary import ChatSummaryFolder
 from src.security import require_internal_token
 
 logger = logging.getLogger(__name__)
@@ -40,16 +38,11 @@ def get_agent(request: Request) -> AgentService:
     return request.app.state.agent
 
 
-def get_summary_folder(request: Request) -> ChatSummaryFolder:
-    return request.app.state.summary_folder
-
-
 def get_conversations(request: Request) -> AgentConversationRepository:
     return request.app.state.conversations
 
 
 AgentServiceDep = Annotated[AgentService, Depends(get_agent)]
-SummaryFolderDep = Annotated[ChatSummaryFolder, Depends(get_summary_folder)]
 ConversationsDep = Annotated[AgentConversationRepository, Depends(get_conversations)]
 
 
@@ -57,22 +50,12 @@ ConversationsDep = Annotated[AgentConversationRepository, Depends(get_conversati
 def agent_chat(
     payload: AgentChatRequest,
     agent: AgentServiceDep,
-    summary_folder: SummaryFolderDep,
-    background_tasks: BackgroundTasks,
 ):
     result = agent.chat(
         user_id=payload.user_id,
         shop_id=payload.shop_id,
         conversation_id=payload.conversation_id,
         message=payload.message,
-    )
-    # Folding only rewrites memory of older messages, so it runs after the reply and
-    # the next turn sees the new summary.
-    background_tasks.add_task(
-        summary_folder.fold,
-        result.conversation_id,
-        payload.user_id,
-        payload.shop_id,
     )
     return AgentChatResponse(
         conversation_id=result.conversation_id,

@@ -9,6 +9,7 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 from tests.support import TEST_GUARDRAIL_LIMITS
 
 from src.agent import sql_executor as executor_module
+from src.agent.guardrails import EMPTY_ANSWER_REPLY
 from src.agent.service import AgentService
 from src.agent.sql_executor import ReadOnlySqlExecutor
 from src.agent.tools import AgentContext, AgentTools
@@ -52,10 +53,7 @@ class FakeConversationRepository:
         self.saved_exchange: dict | None = None
 
     def context_for(self, conversation_id, user_id, shop_id):
-        return {"summary": None, "summary_through_message_id": None, "messages": []}
-
-    def folded_messages(self, conversation_id, user_id, shop_id):
-        return []
+        return {"messages": []}
 
     def save_exchange(self, **kwargs):
         self.saved_exchange = kwargs
@@ -78,9 +76,7 @@ def tool_messages(model: ToolCallingChatModel) -> list:
 
 
 def test_model_facing_schema_has_only_sql() -> None:
-    _, query_tool = AgentTools(
-        FakeConversationRepository(), FakeExecutor()
-    ).get_all_tools()
+    query_tool = AgentTools(FakeExecutor()).get_all_tools()[0]
 
     assert query_tool.name == "query_shop_data"
     schema = query_tool.tool_call_schema.model_json_schema()
@@ -278,17 +274,17 @@ def test_no_executor_means_no_shop_data_tool() -> None:
         model, FakeConversationRepository(), guardrail_limits=TEST_GUARDRAIL_LIMITS
     )
 
-    agent.chat(user_id=3, shop_id=15, message="m")
+    result = agent.chat(user_id=3, shop_id=15, message="m")
 
-    names = [t["function"]["name"] for t in model.bound_tools]
-    assert "query_shop_data" not in names
-    (message,) = tool_messages(model)
-    assert "query_shop_data is not a valid tool" in message.content
+    assert model.bound_tools == []
+    # The model still calls the missing tool, so the guardrail answers with the
+    # fixed empty-answer reply instead of exposing the failure.
+    assert result.answer == EMPTY_ANSWER_REPLY
 
 
 def test_result_payload_marks_truncation() -> None:
     executor = FakeExecutor({"columns": ["id"], "rows": [[1]], "truncated": True})
-    tools = AgentTools(FakeConversationRepository(), executor)
+    tools = AgentTools(executor)
 
     text = tools.query_shop_data(
         "SELECT id FROM v_products",

@@ -46,8 +46,6 @@ class UserMessagesChatModel(FakeListChatModel):
 def client(internal_headers: dict[str, str], wire_agent_state) -> TestClient:
     conversations = Mock(spec=AgentConversationRepository)
     conversations.context_for.return_value = {
-        "summary": None,
-        "summary_through_message_id": None,
         "messages": [],
     }
     conversations.save_exchange.return_value = (101, 502)

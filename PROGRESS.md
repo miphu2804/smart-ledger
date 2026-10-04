@@ -331,3 +331,34 @@
 **Flow explained:** Archived shops are no longer returned by `/api/v1/me`; direct read and update requests treat them as unavailable. Changing a shop to `ARCHIVED` through `PATCH` is rejected so archiving always uses the explicit delete route. No ADMIN suspension status or restore endpoint was added.
 
 **Check:** Core unit tests passed: 20 tests, 0 failures, 0 errors. Flyway will apply V2 on the next Core startup.
+
+## Chat summary minimalization (backend/ai)
+
+**Date:** 2026-10-04
+**Goal:** Minimalize the chat summary flow to a single summarizer: load context, apply the threshold, summarize the backlog in one model call. No batch planning, no incremental fold loop.
+
+**Changed files:** `src/agent/summary.py`, `src/agent/router.py`, `src/main.py`, `tests/conftest.py`, `tests/unit_tests/test_agent_service.py`, `tests/integration_tests/test_agent_conversations.py`; deleted `tests/unit_tests/test_chat_summary.py`.
+
+**Flow explained:** `ChatSummaryFolder` became `ChatSummarizer` with one public method `summary()`: fetch context, return no-op while history fits the verbatim window (`FOLD_TRIGGER_MESSAGES`), otherwise summarize `unfolded[:-KEEP_RECENT_MESSAGES]` in a single call and persist via `save_summary` with the unchanged `expected_through_id` guard. Removed `FoldPlan`, `plan_fold`, `split_into_batches`, `estimate_tokens`, `SUMMARY_BATCH_TOKENS`, `CHARS_PER_TOKEN`. Large backlogs now go to the model in one prompt; batching is deferred until scaling requires it.
+
+**Check:** Unit tests 200 passed; integration `test_agent_conversations.py` 8 passed against local PostgreSQL (`POSTGRES_TEST_URL`).
+
+## Chat summary feature removal (backend/ai)
+
+**Date:** 2026-10-04
+**Goal:** Remove the rolling chat summary entirely. Chat support messages are short and the chat model has a large context (e.g. 200k tokens), so the summarize threshold would never realistically be reached; keep the chat flowing on full stored history.
+
+**Changed files:** Deleted `src/agent/summary.py`, `src/agent/history_search.py`, `src/prompt_templates/chat_summary.py`, `migrations/003_add_chat_summary.sql`, `tests/unit_tests/test_chat_summary.py`, `tests/unit_tests/test_history_search.py`. Edited `src/main.py`, `src/agent/router.py`, `src/agent/service.py`, `src/agent/repository.py`, `src/agent/tools.py`, `src/app_config.py`, `src/providers/factory.py`, `src/prompt_templates/{__init__,shop_agent}.py`, `.env.example`, tests (conftest, agent_service, shop_data_tool, agent_chat, internal_auth, agent_conversations), and `docs/contracts/api-contracts.md`.
+
+**Flow explained:** `context_for` now returns every message of the conversation, oldest first; `_build_messages` sends them all verbatim. `search_chat_history` was removed with the summary because it only ever searched folded rows, which no longer exist. `AgentTools` now takes only the SQL executor. `AgentConversationSummary` (the conversation list DTO) is unrelated and stays. Local databases that already ran migration 003 keep two unused `chat_conversations` columns (`summary`, `summary_through_message_id`), harmless; fresh installs no longer create them.
+
+**Check:** Unit tests 180 passed; integration tests 43 passed against local PostgreSQL. `from src.main import app` imports clean; no leftover references to removed modules.
+
+## Review fixes before commit (backend/ai)
+
+**Date:** 2026-10-04
+**Goal:** Address the Opus 5.5 review findings on the chat summary removal.
+
+**Flow explained:** Removed the stale `CHAT_SUMMARY_*` entries from `prompt_templates/__init__.py`'s `__all__` (star-import broke); rewrote the chat sections of `backend/ai/README.md` to match the removed feature; added `migrations/005_drop_chat_summary.sql` (DROP COLUMN IF EXISTS, no-op on fresh installs); slimmed leftover test fakes in `test_agent_guardrails.py` and `test_sql_reader.py`; added `test_context_for_returns_every_message_in_order`.
+
+**Check:** ruff clean; unit 180 passed; integration 44 passed; star-import of `src.prompt_templates` works.

@@ -5,8 +5,6 @@ from dataclasses import dataclass
 from langchain.tools import ToolRuntime, tool
 from langchain_core.tools import BaseTool
 
-from src.agent.history_search import NO_MATCH, format_clusters, search_messages
-from src.agent.repository import AgentConversationRepository
 from src.agent.sql_executor import ReadOnlySqlExecutor
 from src.prompt_templates import QUERY_RESULT_HEADER
 
@@ -32,38 +30,15 @@ class AgentTools:
     pick a shop or a conversation.
     """
 
-    def __init__(
-        self,
-        conversations: AgentConversationRepository,
-        sql_executor: ReadOnlySqlExecutor | None = None,
-    ) -> None:
-        self.conversations = conversations
+    def __init__(self, sql_executor: ReadOnlySqlExecutor | None = None) -> None:
         self.sql_executor = sql_executor
 
     def get_all_tools(self) -> list[BaseTool]:
+        if self.sql_executor is None:
+            return []
         # `tool` wraps the bound methods here: decorating them in the class body would
         # put `self` into the schema sent to the model.
-        tools = [tool(self.search_chat_history)]
-        if self.sql_executor is not None:
-            tools.append(tool(self.query_shop_data))
-        return tools
-
-    def search_chat_history(
-        self, query: str, runtime: ToolRuntime[AgentContext]
-    ) -> str:
-        """Search earlier messages by key words when the memory lacks an exact detail.
-
-        Query with key words, for example a customer name and an item.
-        """
-        # The ids come from the request context, never from the model, so a crafted
-        # query cannot read another shop's history.
-        scope = runtime.context
-        if scope.conversation_id is None:
-            return NO_MATCH
-        messages = self.conversations.folded_messages(
-            scope.conversation_id, scope.user_id, scope.shop_id
-        )
-        return format_clusters(search_messages(messages, query))
+        return [tool(self.query_shop_data)]
 
     def query_shop_data(self, sql: str, runtime: ToolRuntime[AgentContext]) -> str:
         """Run one read-only SELECT on the shop's views. Returns JSON or Error[CODE]."""

@@ -20,7 +20,7 @@
 
 **Đã đối chiếu:** controller/DTO/service và migration Core trong working tree `feat/core-business`, ngày 2026-10-02. Các mục 1–4 là API Core hiện có, không phải bằng chứng đã deploy staging hay tích hợp FE. Hiện trạng triển khai/kiểm thử nằm trong [thiết kế kỹ thuật](../architecture/technical-design.md). Core đã có proxy Agent (mục 5) nhưng chưa có dashboard đọc tổng quan; mục 6–7 giữ hợp đồng đích, không đánh dấu đã triển khai.
 
-**AI nhập từ staging:** AI có `GET /health` và năm endpoint `/internal/v1/agent/*` (chat, list, detail, rename, delete), cùng tóm tắt chat cuốn chiếu và tìm lịch sử. Mọi đường `/internal/v1/*` bắt buộc `X-Internal-Token`; thiếu/sai token hoặc AI chưa cấu hình `INTERNAL_API_TOKEN` trả `401`, riêng `/health` vẫn công khai. Core proxy `/api/v1/agent/*` sang các đường này, gửi `X-Internal-Token` và lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực; AI `404` thành `conversation_not_found`, lỗi hoặc quá thời gian khác thành `503 ai_unavailable`. Không coi việc nhập code AI là nghiệm thu luồng FE → Core → AI; web admin vẫn dùng mock theo mặc định.
+**AI nhập từ staging:** AI có `GET /health` và năm endpoint `/internal/v1/agent/*` (chat, list, detail, rename, delete). Mọi đường `/internal/v1/*` bắt buộc `X-Internal-Token`; thiếu/sai token hoặc AI chưa cấu hình `INTERNAL_API_TOKEN` trả `401`, riêng `/health` vẫn công khai. Core proxy `/api/v1/agent/*` sang các đường này, gửi `X-Internal-Token` và lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực; AI `404` thành `conversation_not_found`, lỗi hoặc quá thời gian khác thành `503 ai_unavailable`. Không coi việc nhập code AI là nghiệm thu luồng FE → Core → AI; web admin vẫn dùng mock theo mặc định.
 
 ## Quy ước request
 
@@ -283,7 +283,7 @@ AI chỉ tạo bản nháp/gợi ý và câu trả lời chat. Các endpoint nà
 
 `ReplenishmentView` gồm `product_id`, `product_name`, `suggested_qty`, `period`, `reason`. `InsightMessageView` gồm `conversation_id`, `message_id`, `answer`, `period`, `citations`, `insufficient_data`.
 
-`AgentChatMessageView` gồm `conversation_id`, `message_id`, `answer`. `AgentConversationSummary` gồm `conversation_id`, `title`, `last_message_at`. `AgentConversationView` gồm summary và `messages[]` với `message_id`, `role` (`USER` hoặc `ASSISTANT`), `content`, `created_at`. ID hội thoại và tin nhắn là `BIGINT` như ERD.
+`AgentChatMessageView` gồm `conversation_id`, `message_id`, `answer`. `AgentConversationSummary` gồm `conversation_id`, `title`, `last_message_at`. `AgentConversationView` gồm `conversation_id`, `title`, `last_message_at` và `messages[]` với `message_id`, `role` (`USER` hoặc `ASSISTANT`), `content`, `created_at`. ID hội thoại và tin nhắn là `BIGINT` như ERD.
 
 Các endpoint Agent yêu cầu OWNER đã xác thực và `X-Shop-Id` hợp lệ. Core lấy user từ danh tính đã xác thực; FE không gửi `user_id` để tự xác định quyền. Danh sách, xem, chat và xóa đều giới hạn theo user/shop đang xác thực.
 
@@ -325,9 +325,9 @@ Agent có tool nội bộ `query_shop_data` để trả lời câu hỏi về h�
 - Guardrail tất định quanh agent: tin nhắn mới dài quá 2000 ký tự được trả lời ngắn bằng tiếng Việt, không gọi model; số thẻ được che và khóa API/token bị xóa khỏi tin nhắn trước khi gửi model và trước khi lưu; câu trả lời rỗng hoặc lộ chi tiết nội bộ (tên view, SQL, mã lỗi) được thay bằng câu trả lời an toàn. Hợp đồng request/response của `/internal/v1/agent/chat` không đổi.
 - Giai đoạn 1 chưa đọc doanh thu, chi phí, công nợ hay khách hàng. Chi tiết vận hành nằm trong [README của AI](../../backend/ai/README.md#shop-data-tool-read-only-sql).
 
-### Ngữ cảnh chat và bản tóm tắt cuốn chiếu
+### Ngữ cảnh chat
 
-AI gửi cho model bản tóm tắt đã lưu, rồi tới mọi tin nhắn chưa được gộp vào bản tóm tắt. Một tin chỉ rời ngữ cảnh sau khi đã nằm trong bản tóm tắt, nên không mất thông tin. Việc gộp chạy nền sau khi trả lời và chỉ gọi model tóm tắt khi số tin chưa gộp vượt ngưỡng, nên phần lớn lượt không phát sinh thêm chi phí. Bản tóm tắt thuộc hội thoại nên bị xóa cùng hội thoại. Hợp đồng này không đổi request hay response của `/internal/v1/agent/chat`.
+AI gửi cho model toàn bộ tin nhắn của hội thoại theo thứ tự, cùng tin nhắn mới của lượt hiện tại. Model chat có context lớn (ví dụ 200k token) nên với chat hỗ trợ bán hàng, tin nhắn thường không tới ngưỡng tràn; tóm tắt cuốn chiếu và tool tìm lịch sử đã được gỡ để bỏ chi phí và độ phức tạp không cần thiết. Hợp đồng này không đổi request hay response của `/internal/v1/agent/chat`.
 
 ## 7. Dashboard quản trị — hợp đồng đích
 

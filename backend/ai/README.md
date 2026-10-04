@@ -4,7 +4,7 @@ Internal AI API intended for Core; Core does not call it yet. The service expose
 
 Frontend must not call this service.
 
-`src/agent/` holds the shop assistant: router, schemas, agent service, guardrails, conversation history, rolling summary, and the read-only shop-data query (`sql_guard.py`, `sql_executor.py`). Its tools live in `tools.py`: one `AgentTools` method per tool, listed by `get_all_tools()`. Every prompt stays in `src/prompt_templates/`; `src/main.py` wires everything.
+`src/agent/` holds the shop assistant: router, schemas, agent service, guardrails, conversation history, and the read-only shop-data query (`sql_guard.py`, `sql_executor.py`). Its tools live in `tools.py`: one `AgentTools` method per tool, listed by `get_all_tools()`. Every prompt stays in `src/prompt_templates/`; `src/main.py` wires everything.
 
 ## Chat history schema
 
@@ -13,27 +13,19 @@ Run Core's Flyway migrations first so `users` and `shops` exist, then apply the 
 ```bash
 psql "$POSTGRES_URL" -v ON_ERROR_STOP=1 -f migrations/001_create_chat_history.sql
 psql "$POSTGRES_URL" -v ON_ERROR_STOP=1 -f migrations/002_enable_pgvector.sql
-psql "$POSTGRES_URL" -v ON_ERROR_STOP=1 -f migrations/003_add_chat_summary.sql
 psql "$POSTGRES_URL" -v ON_ERROR_STOP=1 -f migrations/004_create_ai_read_views.sql
+psql "$POSTGRES_URL" -v ON_ERROR_STOP=1 -f migrations/005_drop_chat_summary.sql
 ```
 
 The AI service does not create or migrate tables at startup. `ai_request_id` remains nullable; its foreign key is deferred until the `ai_requests` table is installed. Version `002` is reserved for the pgvector work and is not part of this service yet.
 
-## Chat context and rolling summary
+## Chat context
 
-Each turn sends the stored summary followed by every message not yet folded into it. A message therefore leaves the model context only after the summarizer has written it into the summary, and a fold that has not run yet never hides messages.
+Each turn sends every stored message of the conversation, oldest first, followed by the new message. Support messages are short and the chat model's context is large (for example 200k tokens), so a support conversation never approaches the limit: the rolling summary and the `search_chat_history` tool were removed to save their cost and complexity. If conversations ever grow beyond what the context window fits, bring the summarizer back from git history.
 
-- The verbatim window keeps 50 messages and may grow to 60 before a fold happens, so most turns do not call the summarizer at all.
-- A backlog longer than one batch (about 3000 estimated tokens, `len(text) // 4`) is folded in several passes, and each pass is persisted before the next one starts.
-- Summarization runs as a FastAPI background task after the reply, so the current turn is never slowed down. It never raises: a model or database failure leaves the stored summary untouched and the next turn retries it.
-- Concurrent folds cannot lose messages: a fold only advances `summary_through_message_id` from the value it read, so the later writer is dropped.
-- `SUMMARY_MODEL_NAME` selects the summarization model and falls back to `MODEL_NAME`.
+Migration `005` drops the `summary` and `summary_through_message_id` columns that earlier versions added to `chat_conversations`; on databases that never ran `003` it is a no-op.
 
-`summary` and `summary_through_message_id` live on `chat_conversations`, so deleting a conversation removes its summary with it.
-
-Folded messages stay in `chat_messages`. When the summary lacks an exact figure, name, date or wording, the agent calls `search_chat_history`, which matches the query words against the folded messages of the current conversation, ignoring Vietnamese diacritics, and returns up to five hits with the message before and after each. The tool takes only the query; the conversation, user and shop come from the request context, so the model cannot read another shop's history.
-
-The OpenAI client uses the Responses API because reasoning models reject function tools on `/v1/chat/completions`. An `OPENAI_BASE_URL` proxy must therefore serve `/v1/responses`. `MODEL_REASONING_EFFORT` (default `high`) sets the reasoning effort for both the chat and summary models.
+The OpenAI client uses the Responses API because reasoning models reject function tools on `/v1/chat/completions`. An `OPENAI_BASE_URL` proxy must therefore serve `/v1/responses`. `MODEL_REASONING_EFFORT` (default `high`) sets the reasoning effort for the chat model.
 
 ## Shop data tool (read-only SQL)
 
@@ -47,7 +39,7 @@ Five layers keep the query inside the current shop and read-only:
 4. **Execution.** `ReadOnlySqlExecutor` in `src/agent/sql_executor.py` opens a separate connection per query, starts a `READ ONLY` transaction, sets `smartledger.shop_id` from the authenticated request as a bound parameter, applies `SQL_TIMEOUT_MS` (default 3000) and `SQL_ROW_LIMIT` (default 100), cuts text cells at 200 characters and always rolls back. The tool reads the shop from the LangChain runtime context (`ToolRuntime[AgentContext]`); the model only passes `sql`.
 5. **Output.** Results reach the model as data with a header saying so. The guard and the executor raise `ValueError("CODE: reason")` for a query the guard or the database rejects, and the tool returns it as `Error[CODE]: reason` (for example `Error[UNSAFE_FUNCTION]`, `Error[QUERY_TIMEOUT]`, `Error[SQL_ERROR]`) so the model can rewrite it. Any other failure, such as an unreachable reader database (`psycopg.OperationalError`), propagates and fails the turn with `503 ai_unavailable`.
 
-All prompt text lives in `src/prompt_templates/` (`shop_agent.py`, `sql_agent.py`, `chat_summary.py`). It is English and static; the agent always answers the owner in Vietnamese.
+All prompt text lives in `src/prompt_templates/` (`shop_agent.py`, `sql_agent.py`). It is English and static; the agent always answers the owner in Vietnamese.
 
 ### Agent guardrails
 

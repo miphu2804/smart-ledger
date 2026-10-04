@@ -12,10 +12,6 @@ def build_chat_model(config: AppConfig) -> BaseChatModel | None:
     return _build_model(config, config.MODEL_NAME)
 
 
-def build_summary_model(config: AppConfig) -> BaseChatModel | None:
-    return _build_model(config, config.SUMMARY_MODEL_NAME or config.MODEL_NAME)
-
-
 def _build_model(config: AppConfig, model_name: str) -> BaseChatModel | None:
     if config.MODEL_PROVIDER != "openai":
         logger.warning("unknown model provider: %s", config.MODEL_PROVIDER)

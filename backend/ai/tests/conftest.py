@@ -1,6 +1,5 @@
 import pytest
 
-from src.agent.summary import ChatSummaryFolder
 from src.app_config import app_config
 from src.infra.postgre_db_client import PostgreDBClient
 from src.infra.redis_db_client import RedisDBClient
@@ -36,6 +35,5 @@ def wire_agent_state():
     def _wire(agent, conversations) -> None:
         app.state.agent = agent
         app.state.conversations = conversations
-        app.state.summary_folder = ChatSummaryFolder(None, conversations)
 
     return _wire

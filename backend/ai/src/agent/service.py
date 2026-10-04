@@ -9,7 +9,6 @@ from src.agent.sql_executor import ReadOnlySqlExecutor
 from src.agent.tools import AgentContext, AgentTools
 from src.agent.utils import get_latest_human_message
 from src.prompt_templates import (
-    CHAT_SUMMARY_CONTEXT,
     SHOP_AGENT_SYSTEM_PROMPT,
     SQL_AGENT_PROMPT,
 )
@@ -36,7 +35,7 @@ class AgentService:
     ) -> None:
         self.model = model
         self.conversations = conversations
-        tools = AgentTools(conversations, sql_executor).get_all_tools()
+        tools = AgentTools(sql_executor).get_all_tools()
         # The system prompt is static so providers can cache it; the shop scope arrives
         # per request through AgentContext and never appears in the prompt.
         system_prompt = SHOP_AGENT_SYSTEM_PROMPT
@@ -69,7 +68,7 @@ class AgentService:
         history = (
             self.conversations.context_for(conversation_id, user_id, shop_id)
             if conversation_id is not None
-            else {"summary": None, "messages": []}
+            else {"messages": []}
         )
         result = self.agent.invoke(
             {"messages": self._build_messages(history, message)},
@@ -103,17 +102,9 @@ class AgentService:
 
     @staticmethod
     def _build_messages(history: dict, message: str) -> list[dict]:
-        # The static system prompt is added by the agent; then the summary, then every
-        # message after the watermark verbatim, so a fold that has not run yet never
-        # hides messages from the model.
+        # The static system prompt is added by the agent; then every stored message,
+        # oldest first, then the new one.
         messages: list[dict] = []
-        if history["summary"]:
-            messages.append(
-                {
-                    "role": "system",
-                    "content": CHAT_SUMMARY_CONTEXT.format(summary=history["summary"]),
-                }
-            )
         messages.extend(
             {"role": entry["role"].lower(), "content": entry["content"]}
             for entry in history["messages"]

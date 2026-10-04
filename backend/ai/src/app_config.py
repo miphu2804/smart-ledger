@@ -39,11 +39,8 @@ class AppConfig(BaseSettings):
     MODEL_PROVIDER: str = "openai"
     MODEL_NAME: str = "gpt-5.6-luna"
     MODEL_TIMEOUT_SECONDS: float = 20.0
-    # reasoning effort for the chat and summary models: none, low, medium or high
+    # reasoning effort for the chat model: none, low, medium or high
     MODEL_REASONING_EFFORT: str = "high"
-
-    # background summarization model; unset falls back to MODEL_NAME
-    SUMMARY_MODEL_NAME: str | None = None
 
     # agent guardrails (src/agent/guardrails.py), per chat turn
     AGENT_MAX_INPUT_CHARS: int = Field(default=2000, gt=0)

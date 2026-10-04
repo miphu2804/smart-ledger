@@ -12,11 +12,10 @@ from src.agent.router import agent_failure_handler, conversation_not_found_handl
 from src.agent.router import router as agent_router
 from src.agent.service import AgentService
 from src.agent.sql_executor import ReadOnlySqlExecutor
-from src.agent.summary import ChatSummaryFolder
 from src.app_config import app_config
 from src.infra.postgre_db_client import PostgreDBClient
 from src.infra.redis_db_client import RedisDBClient
-from src.providers.factory import build_chat_model, build_summary_model
+from src.providers.factory import build_chat_model
 
 logging.basicConfig(
     level=getattr(logging, app_config.LOG_LEVEL.upper(), logging.INFO),
@@ -45,7 +44,6 @@ async def lifespan(app: FastAPI):
     app.state.postgres = postgres
     app.state.redis = redis
     chat_model = build_chat_model(app_config)
-    summary_model = build_summary_model(app_config)
     conversations = AgentConversationRepository(postgres)
     app.state.conversations = conversations
     app.state.agent = AgentService(
@@ -58,7 +56,6 @@ async def lifespan(app: FastAPI):
         ),
         sql_executor=build_sql_executor(),
     )
-    app.state.summary_folder = ChatSummaryFolder(summary_model, conversations)
     yield
     postgres.close()
     redis.close()
