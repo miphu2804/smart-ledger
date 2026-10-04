@@ -20,6 +20,7 @@ import { fromE164VN } from '../lib/auth/phone';
 import { debugLog } from '../lib/debug';
 import { describeError, isDisplayNameRequired } from '../lib/errors';
 import { sessionApi } from '../lib/sessionApi';
+import { industriesFromCore } from '../lib/shopProfile';
 
 /** Đơn nháp đang chờ thanh toán (từ màn Giọng nói / POS / Nhập tay). */
 export interface Draft {
@@ -75,7 +76,9 @@ function initialState(): State {
 /** Đổ SessionView (từ Core hoặc mock) vào state. Ở chế độ thật, không để dữ liệu mẫu (email, Facebook, địa chỉ…) lẫn vào tài khoản. */
 function sessionPatch(st: State, s: SessionView): Partial<State> {
   const shop = s.shops[0];
-  const industries = shop?.industries ?? (shop?.industry ? [shop.industry] : null);
+  // Core lưu các ngành đã chọn thành MỘT chuỗi "food, drink"; tách lại, nếu không màn hồ sơ không nhận ra ngành nào.
+  const fromCore = industriesFromCore(shop?.industry);
+  const industries = shop?.industries ?? (fromCore.length ? fromCore : null);
   return {
     loggedIn: true,
     needsProfile: false,

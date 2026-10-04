@@ -1,10 +1,11 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { Badge, Card, Chips, EmptyState, Header, Row, Screen, T } from '../src/components/ui';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { Badge, Button, Card, Chips, EmptyState, Header, Row, Screen, T } from '../src/components/ui';
 import { hhmm, relDay } from '../src/lib/format';
 import { buildNotifications, NOTIF_CATEGORIES, Notif, NotifCategory, notifCategoryMeta } from '../src/lib/notifications';
+import { useCoreData } from '../src/lib/useCoreData';
 import { useApp } from '../src/store/AppStore';
 import { triggerFeedback } from '../src/lib/feedback';
 import { colors } from '../src/theme';
@@ -14,10 +15,20 @@ type Filter = 'all' | 'unread' | NotifCategory;
 export default function Notifications() {
   const app = useApp();
   const [filter, setFilter] = useState<Filter>('all');
+  const { invoices, products, debts, expenses, loading, error, reload } = useCoreData({
+    invoices: true,
+    products: true,
+    debts: true,
+    expenses: true,
+  });
 
+  // `loading` chỉ true ở lần tải đầu (xem useCoreData) nên các lần tải lại khi focus giữ danh sách cũ, không nháy.
+  const ready = !loading && !error;
+
+  // Chưa tải xong thì không dựng thông báo (tránh hiện "Chưa có thông báo" sai khi dữ liệu còn rỗng).
   const all = useMemo(
-    () => buildNotifications({ invoices: app.invoices, products: app.products, expenses: app.expenses, debts: app.debts }),
-    [app.invoices, app.products, app.expenses, app.debts],
+    () => (ready ? buildNotifications({ invoices, products, expenses, debts }) : []),
+    [ready, invoices, products, expenses, debts],
   );
   const read = useMemo(() => new Set(app.readNotifs), [app.readNotifs]);
   const unread = all.filter((n) => !read.has(n.id));
@@ -49,9 +60,9 @@ export default function Notifications() {
     <Screen>
       <Header
         title="Thông báo"
-        subtitle={unread.length ? `${unread.length} thông báo chưa đọc` : 'Không có thông báo mới'}
+        subtitle={!ready ? undefined : unread.length ? `${unread.length} thông báo chưa đọc` : 'Không có thông báo mới'}
         right={
-          unread.length ? (
+          ready && unread.length ? (
             <Pressable
               onPress={() => {
                 app.markNotifsRead(unread.map((n) => n.id));
@@ -81,7 +92,16 @@ export default function Notifications() {
         ]}
       />
 
-      {groups.length ? (
+      {error ? (
+        <View>
+          <EmptyState icon="alert-triangle" title="Không tải được thông báo" hint={error} />
+          <Button title="Thử lại" variant="outline" onPress={reload} />
+        </View>
+      ) : !ready ? (
+        <View style={{ paddingTop: 60, alignItems: 'center' }}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      ) : groups.length ? (
         groups.map((g) => (
           <View key={g.day}>
             <T w="bold" size={13} color={colors.muted} style={{ marginTop: 18, marginBottom: 8 }}>

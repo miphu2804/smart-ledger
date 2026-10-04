@@ -13,7 +13,7 @@ export const periodLabel: Record<Period, string> = {
 };
 
 export const itemsTotal = (items: LineItem[]) => items.reduce((a, i) => a + i.price * i.qty, 0);
-export const invoiceTotal = (inv: Invoice) => itemsTotal(inv.items);
+export const invoiceTotal = (inv: Invoice) => inv.total ?? itemsTotal(inv.items);
 
 export function inPeriod(iso: string, p: Period, now = new Date()) {
   const d = new Date(iso);
@@ -49,7 +49,9 @@ export function activeInvoices(invoices: Invoice[], p: Period) {
 
 export function summary(invoices: Invoice[], products: Product[], p: Period) {
   const list = activeInvoices(invoices, p);
-  const costOf = (li: LineItem) => (products.find((x) => x.id === li.productId)?.cost ?? li.price * 0.6) * li.qty;
+  // So khớp bằng chuỗi: Product.id là string còn LineItem.productId có thể là number (id thật từ Core).
+  const costOf = (li: LineItem) =>
+    (products.find((x) => li.productId != null && String(x.id) === String(li.productId))?.cost ?? li.price * 0.6) * li.qty;
   const revenue = list.reduce((a, i) => a + invoiceTotal(i), 0);
   const cost = list.reduce((a, i) => a + i.items.reduce((b, li) => b + costOf(li), 0), 0);
   const voice = list.filter((i) => i.source === 'voice').length;

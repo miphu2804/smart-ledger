@@ -25,6 +25,7 @@ import { voiceSamples } from '../src/data/mock';
 import type { LineItem, ProductView } from '../src/data/types';
 import { productApi } from '../src/lib/catalogApi';
 import { errorMessage } from '../src/lib/errors';
+import { expenseApi } from '../src/lib/expenseApi';
 import { triggerFeedback } from '../src/lib/feedback';
 import { abbr, hashIndex, hhmm, vnd } from '../src/lib/format';
 import { type ParsedExpenseItem, parseOrder } from '../src/lib/parseOrder';
@@ -314,33 +315,19 @@ export default function Voice() {
   const recognitionRef = useRef<any>(null);
   const fullTranscriptRef = useRef('');
 
-  const [msgs, setMsgs] = useState<Msg[]>([
+  // Hội thoại và đơn bắt đầu trống: đoạn chat mẫu "Đã ghi 8 Sting" cùng món id 101/102 không có trong Core, nên nói
+  // đã ghi khi chưa ghi gì và chốt đơn với chúng sẽ lỗi hoặc bán nhầm hàng khác.
+  const [msgs, setMsgs] = useState<Msg[]>(() => [
     {
       id: 1,
       from: 'ai',
-      text: 'Đã thêm “Cà phê sữa nghìn” (4.565đ)\nvào danh mục và vào đơn.',
-      time: '05:31',
+      text: 'Nhấn giữ nút ghi âm rồi đọc đơn, ví dụ “2 cà phê sữa, 1 bánh mì”. Mình sẽ ghi vào đơn bên dưới.',
+      time: hhmm(new Date()),
       emotion: 'holding_tablet',
-    },
-    {
-      id: 2,
-      from: 'user',
-      text: '8 sting',
-      time: '05:31',
-    },
-    {
-      id: 3,
-      from: 'ai',
-      text: 'Đã ghi 8 Sting.',
-      time: '05:31',
-      emotion: 'happy',
     },
   ]);
 
-  const [items, setItems] = useState<LineItem[]>([
-    { productId: 101, name: 'Cà phê sữa nghìn', price: 4565, qty: 2 },
-    { productId: 102, name: 'Sting', price: 12000, qty: 8 },
-  ]);
+  const [items, setItems] = useState<LineItem[]>([]);
 
   const [recording, setRecording] = useState(false);
   const [partial, setPartial] = useState('');
@@ -355,7 +342,11 @@ export default function Voice() {
   const [addOpen, setAddOpen] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [transcripts, setTranscripts] = useState<string[]>([]);
+  /**
+   * Khoản chi nghe được trong lời nói. NFR-006/AC-010: không ghi ngay, người dùng phải bấm "Lưu chi phí".
+   */
   const [pendingExpenses, setPendingExpenses] = useState<ParsedExpenseItem[]>([]);
+  const [expenseBusy, setExpenseBusy] = useState(false);
   const [products, setProducts] = useState<ProductView[]>([]);
 
   const loadProducts = useCallback(async () => {
@@ -588,6 +579,34 @@ export default function Voice() {
     setPending(rest);
     setNewPrice(rest[0]?.price ? String(rest[0].price) : '');
     setNewUnit('cái');
+  };
+
+  // Lưu từng khoản lên Core. Khoản nào lỗi thì dừng và giữ lại (cùng các khoản sau nó) để bấm lưu lại; chỉ báo "đã lưu"
+  // cho những khoản Core đã nhận thật.
+  const confirmExpenses = async () => {
+    if (expenseBusy || !pendingExpenses.length) return;
+    triggerFeedback('selection');
+    setExpenseBusy(true);
+    const saved: ParsedExpenseItem[] = [];
+    let failure = '';
+    for (const e of pendingExpenses) {
+      try {
+        await expenseApi.create({ category: e.category, description: e.title, amountVnd: e.amount });
+        saved.push(e);
+      } catch (err) {
+        failure = errorMessage(err);
+        break;
+      }
+    }
+    setExpenseBusy(false);
+    if (saved.length) {
+      push('ai', `Đã lưu ${saved.length} khoản chi: ${saved.map((e) => `${e.title} (${vnd(e.amount)})`).join(', ')}.`, 'happy');
+    }
+    if (failure) {
+      push('ai', `Không lưu được khoản chi: ${failure}. Bạn bấm "Lưu chi phí" để thử lại.`, 'sorry');
+    }
+    // Khoản đã lưu luôn đứng đầu danh sách chờ; các khoản nói thêm trong lúc lưu nằm phía sau nên được giữ nguyên.
+    setPendingExpenses((cur) => cur.slice(saved.length));
   };
 
   const total = itemsTotal(items);
@@ -887,6 +906,50 @@ export default function Voice() {
             </View>
           </View>
         </View>
+
+        {/* Khoản chi nghe được: chờ người dùng xác nhận mới ghi lên Core */}
+        {pendingExpenses.length > 0 ? (
+          <View style={styles.expenseCard}>
+            <Row gap={8} style={{ alignItems: 'center' }}>
+              <Feather name="credit-card" size={15} color={voiceTheme.amberFg} />
+              <T w="extrabold" size={14} color={voiceTheme.ink} style={{ flex: 1 }}>
+                Khoản chi chờ lưu
+              </T>
+            </Row>
+            {pendingExpenses.map((e, idx) => (
+              <Row key={`${e.title}-${idx}`} style={styles.expenseRow}>
+                <T size={13.5} color={voiceTheme.ink} numberOfLines={1} style={{ flex: 1 }}>
+                  {e.title}
+                </T>
+                <T w="bold" size={13.5} color={voiceTheme.ink}>
+                  {vnd(e.amount)}
+                </T>
+              </Row>
+            ))}
+            <Row gap={8} style={{ marginTop: 10 }}>
+              <Button
+                title="Bỏ qua"
+                variant="ghost"
+                small
+                disabled={expenseBusy}
+                onPress={() => {
+                  push('ai', 'Đã bỏ qua khoản chi.');
+                  setPendingExpenses([]);
+                }}
+                style={{ flex: 1 }}
+              />
+              <Button
+                title="Lưu chi phí"
+                variant="soft"
+                small
+                loading={expenseBusy}
+                disabled={expenseBusy}
+                onPress={confirmExpenses}
+                style={{ flex: 1 }}
+              />
+            </Row>
+          </View>
+        ) : null}
 
         {/* Nút Thanh toán to tách biệt ở ngoài cuốn sổ */}
         <Pressable
@@ -1354,6 +1417,21 @@ const styles = StyleSheet.create({
     borderTopColor: '#F1F5F9',
     alignItems: 'baseline',
     justifyContent: 'space-between',
+  },
+  expenseCard: {
+    marginTop: 12,
+    backgroundColor: voiceTheme.cardBg,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: voiceTheme.border,
+    padding: 14,
+  },
+  expenseRow: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: voiceTheme.borderLight,
+    alignItems: 'center',
+    gap: 8,
   },
   bigCheckoutBtn: {
     marginTop: 6,

@@ -3,6 +3,7 @@ import { authClient } from './auth';
 import { ApiError } from './apiError';
 import type { ApiErrorDetail } from './apiError';
 import { debugLog } from './debug';
+import { resetAllIdempotentSenders } from './idempotency';
 import { mockCoreRequest } from './mockCore';
 
 /**
@@ -34,6 +35,8 @@ export function setUnauthorizedHandler(fn: (() => void) | null) {
 
 /** Tiệm đang chọn — gửi qua header X-Shop-Id khi `withShop: true`. */
 export function setActiveShop(id: string | null) {
+  // Đổi tiệm hoặc đăng xuất: key đang giữ của tiệm/tài khoản trước không được dùng lại cho tiệm/tài khoản sau.
+  if (id !== activeShopId) resetAllIdempotentSenders();
   activeShopId = id;
 }
 
@@ -55,7 +58,7 @@ export async function apiRequest<T>(
 
   if (USE_MOCK) {
     debugLog('api', '→ (mock)', method, path);
-    const raw = mockCoreRequest<T>(path, method, opts.body);
+    const raw = mockCoreRequest<T>(path, method, opts.body, opts.idempotencyKey);
     const data = raw === undefined ? raw : (JSON.parse(JSON.stringify(raw)) as T);
     debugLog('api', '✓ (mock)', method, path);
     return data;
