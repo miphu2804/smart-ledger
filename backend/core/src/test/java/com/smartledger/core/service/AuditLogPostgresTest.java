@@ -50,6 +50,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @DataJpaTest(showSql = false, properties = {"spring.flyway.enabled=true", "spring.jpa.hibernate.ddl-auto=validate"})
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({AuditLogServiceImpl.class, AuditLogQueryServiceImpl.class, ShopServiceImpl.class,
+        AdminAccessAuditService.class,
         CategoryServiceImpl.class, ProductServiceImpl.class, SaleDraftServiceImpl.class, DebtServiceImpl.class,
         SaleVoidServiceImpl.class, SaleServiceImpl.class, PaymentServiceImpl.class,
         ExpenseServiceImpl.class, CustomerServiceImpl.class, IdempotencyServiceImpl.class,
