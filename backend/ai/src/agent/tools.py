@@ -1,18 +1,29 @@
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from typing import Literal
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.tools import BaseTool
 
 from src.agent.history_search import NO_MATCH, format_clusters, search_messages
 from src.agent.repository import AgentConversationRepository
-from src.prompt_templates import QUERY_RESULT_HEADER
+from src.prompt_templates import QUERY_RESULT_HEADER, RESTOCK_RESULT_HEADER
+from src.restock.service import RestockService
 from src.sql.executor import ReadOnlySqlExecutor
 
 # The guard and the executor raise ValueError("CODE: reason") for a query the model can
 # fix. Any other ValueError is a bug and must not reach the model.
 MODEL_ERROR = re.compile(r"([A-Z][A-Z_]*): (.*)", re.DOTALL)
+
+
+def _model_error(error: ValueError) -> str:
+    """Return `Error[CODE]: reason.` for a fixable error, re-raise anything else."""
+    match = MODEL_ERROR.fullmatch(str(error))
+    if match is None:
+        raise error
+    code, reason = match.groups()
+    return f"Error[{code}]: {reason}."
 
 
 @dataclass(frozen=True)
@@ -60,11 +71,7 @@ def build_shop_data_tools(executor: ReadOnlySqlExecutor) -> list[BaseTool]:
         try:
             result = executor.run(runtime.context.shop_id, sql)
         except ValueError as error:
-            match = MODEL_ERROR.fullmatch(str(error))
-            if match is None:
-                raise
-            code, reason = match.groups()
-            return f"Error[{code}]: {reason}. Rewrite the query and retry."
+            return f"{_model_error(error)} Rewrite the query and retry."
         payload = {
             "columns": result["columns"],
             "rows": result["rows"],
@@ -74,3 +81,34 @@ def build_shop_data_tools(executor: ReadOnlySqlExecutor) -> list[BaseTool]:
         return f"{QUERY_RESULT_HEADER}\n{json.dumps(payload, ensure_ascii=False)}"
 
     return [query_shop_data]
+
+
+def build_restock_tools(restock: RestockService) -> list[BaseTool]:
+    """Restock tools; the service is injected here, the shop comes per request.
+
+    `period` is a closed set and `runtime` is filled by LangChain, so the model cannot
+    pick a shop or a free-form window.
+    """
+
+    @tool("suggest_restock")
+    def suggest_restock(
+        period: Literal["last_7_days", "last_30_days"],
+        runtime: ToolRuntime[AgentContext],
+    ) -> str:
+        """Suggest what to restock from confirmed sales. Returns JSON or Error[CODE]."""
+        # A failed query goes back to the model as text, like query_shop_data.
+        try:
+            result = restock.suggest(runtime.context.shop_id, period)
+        except ValueError as error:
+            return (
+                f"{_model_error(error)} Tell the owner the suggestion is unavailable."
+            )
+        payload = {
+            "period": result.period,
+            "days": result.days,
+            "truncated": result.truncated,
+            "suggestions": [asdict(suggestion) for suggestion in result.suggestions],
+        }
+        return f"{RESTOCK_RESULT_HEADER}\n{json.dumps(payload, ensure_ascii=False)}"
+
+    return [suggest_restock]

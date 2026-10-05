@@ -20,12 +20,13 @@ import { hhmm, relDay } from '../src/lib/format';
 import { useApp } from '../src/store/AppStore';
 import { colors, font, shadow } from '../src/theme';
 
-// Giai đoạn 1 trợ lý chỉ đọc hồ sơ tiệm, nhóm hàng và sản phẩm; doanh thu/công nợ xem ở màn khác.
+// Trợ lý đọc hồ sơ tiệm, sản phẩm và đơn bán; chi phí và công nợ xem ở màn khác.
 const QUICK = [
+  { label: 'Gợi ý nhập hàng 7 ngày qua', icon: 'shopping-cart' },
+  { label: 'Doanh thu 7 ngày qua?', icon: 'trending-up' },
   { label: 'Món nào sắp hết hàng?', icon: 'package' },
   { label: 'Năm món đắt nhất?', icon: 'award' },
   { label: 'Tiệm có bao nhiêu mặt hàng?', icon: 'grid' },
-  { label: 'Món nào chưa nhập giá vốn?', icon: 'dollar-sign' },
 ] as const;
 
 /** Lỗi gửi tin → câu báo tiếng Việt. Câu đã gõ được trả lại ô nhập để gửi lại (FR-021, AC-011). */

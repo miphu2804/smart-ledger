@@ -8,13 +8,16 @@ from src.agent.repository import AgentConversationRepository
 from src.agent.tools import (
     AgentContext,
     build_history_tools,
+    build_restock_tools,
     build_shop_data_tools,
 )
 from src.prompt_templates import (
     CHAT_SUMMARY_CONTEXT,
+    RESTOCK_PROMPT,
     SHOP_AGENT_SYSTEM_PROMPT,
     SQL_AGENT_PROMPT,
 )
+from src.restock.service import RestockService
 from src.sql.executor import ReadOnlySqlExecutor
 
 
@@ -36,16 +39,22 @@ class AgentService:
         conversations: AgentConversationRepository,
         guardrail_limits: GuardrailLimits,
         sql_executor: ReadOnlySqlExecutor | None = None,
+        restock: RestockService | None = None,
     ) -> None:
         self.model = model
         self.conversations = conversations
         tools = build_history_tools(conversations)
         # The system prompt is static so providers can cache it; the shop scope arrives
-        # per request through AgentContext and never appears in the prompt.
-        system_prompt = SHOP_AGENT_SYSTEM_PROMPT
+        # per request through AgentContext and never appears in the prompt. Each
+        # optional capability appends its own tool and prompt section.
+        prompt_parts = [SHOP_AGENT_SYSTEM_PROMPT]
         if sql_executor is not None:
             tools = [*tools, *build_shop_data_tools(sql_executor)]
-            system_prompt = f"{SHOP_AGENT_SYSTEM_PROMPT}\n\n{SQL_AGENT_PROMPT}"
+            prompt_parts.append(SQL_AGENT_PROMPT)
+        if restock is not None:
+            tools = [*tools, *build_restock_tools(restock)]
+            prompt_parts.append(RESTOCK_PROMPT)
+        system_prompt = "\n\n".join(prompt_parts)
         self.agent = (
             create_agent(
                 model=model,

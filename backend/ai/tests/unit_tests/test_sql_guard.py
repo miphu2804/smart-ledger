@@ -116,6 +116,8 @@ def test_rejects_casts_to_system_types(sql: str) -> None:
         "SELECT * FROM products",
         "SELECT * FROM shops",
         "SELECT * FROM users",
+        "SELECT id FROM sales",
+        "SELECT id FROM sale_items",
         "SELECT * FROM public.products",
         'SELECT * FROM "products"',
         'SELECT * FROM public."shops"',
@@ -227,6 +229,11 @@ def test_rejects_overlong_sql() -> None:
         "length(name), upper(name), cast(id AS text), id::bigint, "
         "updated_at::date FROM v_products",
         "SELECT name FROM v_products WHERE updated_at > now() - interval '7 days'",
+        "SELECT sum(total_vnd) FROM v_sales WHERE sold_at > now() - interval '7 days'",
+        "SELECT date_trunc('day', sold_at AT TIME ZONE 'Asia/Ho_Chi_Minh') AS day, "
+        "sum(total_vnd) FROM v_sales GROUP BY 1",
+        "SELECT p.name, sum(si.quantity) FROM v_sale_items si JOIN v_products p "
+        "ON p.id = si.product_id GROUP BY 1",
         "SELECT count(*) FILTER (WHERE tracked) FROM v_products",
         "SELECT name, row_number() OVER (ORDER BY selling_price_vnd DESC) "
         "FROM v_products",

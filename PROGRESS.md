@@ -1,3 +1,18 @@
+### [2026-10-05 21:28 UTC+07:00] — [AI] Restock suggestions and sales questions through agent chat
+
+**Done:** AI-011 (#102) on branch `feat/ai-restock-insight`. Migration `005` adds the shop-scoped, read-only views `ai_read.v_sales` and `v_sale_items` (no customer snapshot, no `void_reason`); `SqlGuard` allows them and the SQL prompt answers sales questions with a stated period. New package `src/restock/`: `policy.py` turns confirmed sales into `suggested_qty = ceil(sold/days*COVER_DAYS - stock)` with a fixed Vietnamese reason, `service.py` loads them through the read-only executor. The agent tool `suggest_restock(period)` takes the shop from `AgentContext`; the mobile assistant gets "Gợi ý nhập hàng 7 ngày qua" and "Doanh thu 7 ngày qua?" chips. `COVER_DAYS = 7` and the periods `last_7_days`/`last_30_days` are provisional defaults awaiting product-owner sign-off.
+
+**Changed files:**
+- `backend/ai/migrations/005_add_sales_read_views.sql` — created
+- `backend/ai/src/sql/guard.py`, `src/prompt_templates/sql_agent.py`, `shop_agent.py`, `__init__.py` — modified
+- `backend/ai/src/prompt_templates/restock.py`, `src/restock/policy.py`, `src/restock/service.py` — created
+- `backend/ai/src/agent/tools.py`, `src/agent/service.py`, `src/main.py` — modified
+- `backend/ai/tests/unit_tests/test_restock_policy.py`, `test_restock_service.py`, `test_restock_tool.py` — created; `test_sql_guard.py`, `tests/integration_tests/test_sql_reader.py` — modified
+- `frontend/mobile/app/ai.tsx` — modified
+- `backend/ai/README.md`, `docs/contracts/api-contracts.md`, `docs/architecture/technical-design.md`, `docs/architecture/erd-description.md` — modified
+
+**Flow explained:** Mobile chip → Core `/api/v1/agent/chat` → AI agent → `suggest_restock` → `RestockService` runs one fixed `SELECT` through `SqlGuard` and `ReadOnlySqlExecutor` (shop scope, read-only, timeout, row cap) → `policy.suggest` computes the quantities → the agent copies them verbatim. Free-form sales questions go through `query_shop_data` over the new views. Not verified: integration tests against Postgres (need `POSTGRES_TEST_URL`), migration `005` on a dev database, and end-to-end FE → Core → AI with a real model.
+
 ### [2026-10-05 14:10 UTC+07:00] — [Core] Allow browser calls from listed origins (CORS)
 
 **Done:** Core enables Spring Security CORS with a `CorsConfigurationSource` built from `smartledger.cors.allowed-origins` (env `CORS_ALLOWED_ORIGINS`, comma-separated, wildcard patterns such as `https://smart-ledger-*.vercel.app`). Empty means no browser origin is allowed. Preflight passes without a token; credentials stay off because auth uses a bearer header. Edited `backend/core` with the owner's explicit approval.
