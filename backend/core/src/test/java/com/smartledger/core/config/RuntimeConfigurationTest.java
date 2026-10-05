@@ -11,6 +11,12 @@ class RuntimeConfigurationTest {
             .withInitializer(new ConfigDataApplicationContextInitializer());
 
     @Test
+    void corsDefaultsToNoAllowedOrigins() {
+        runner.run(context -> assertThat(context.getEnvironment()
+                .getProperty("smartledger.cors.allowed-origins")).isEmpty());
+    }
+
+    @Test
     void acceptsHostedRuntimePort() {
         runner.withPropertyValues("PORT=9080").run(context ->
                 assertThat(context.getEnvironment().getProperty("server.port", Integer.class)).isEqualTo(9080));

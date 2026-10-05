@@ -63,6 +63,7 @@ smart-ledger/
 ├── CLAUDE.md
 ├── PROGRESS.md
 ├── compose.yaml         # Core + AI (Supabase + Redis Cloud)
+├── supabase/            # AI schema migrations (Supabase CLI)
 ├── docs/                 # source of truth; start at docs/README.md
 │   ├── product/          # product description, BRD, PRD
 │   ├── architecture/     # technical design, ERD, ADRs, diagrams
@@ -97,7 +98,7 @@ Dev and staging share one database, so a migration that runs from a developer ma
 
 - **Never migrate the shared database from a feature branch.** A migration applied there and later edited, or a second branch that uses the same version number, makes Flyway reject the checksum and stops Core for everyone. A column change that is not merged yet breaks the code running on `staging`.
 - **Develop a migration on a disposable database.** Start one with `docker run --rm -p 5432:5432 -e POSTGRES_DB=smartledger -e POSTGRES_USER=smartledger -e POSTGRES_PASSWORD=smartledger pgvector/pgvector:pg17`, point `DATABASE_URL=jdbc:postgresql://localhost:5432/smartledger` (and `POSTGRES_URL` for AI) at it, and run Core with `FLYWAY_ENABLED=true`. CI repeats this on every pull request. A branch whose entities need a migration that staging lacks cannot start against the shared database, because the schema check fails.
-- **Migrate staging only from merged code.** After a pull request with a Core or AI migration merges, one person checks out `origin/staging`, runs Core once with `FLYWAY_ENABLED=true` (for Compose: `FLYWAY_ENABLED=true docker compose --env-file .env.staging --env-file backend/core/.env up --build core`), applies any new AI migration with `psql` as in the [AI README](backend/ai/README.md), and tells the team. This manual step stands in for the staging deploy until one exists.
+- **Migrate staging only from merged code.** After a pull request with a Core or AI migration merges, one person checks out `origin/staging`, runs Core once with `FLYWAY_ENABLED=true` (for Compose: `FLYWAY_ENABLED=true docker compose --env-file .env.staging --env-file backend/core/.env up --build core`), pushes the AI migrations with `npx supabase@2.119.0 db push --db-url "$POSTGRES_URL"` as in the [AI README](backend/ai/README.md#chat-history-schema), and tells the team. This manual step stands in for the staging deploy until one exists.
 - **Never edit a migration that has run on staging**; add a new version instead. Production follows the same steps after the release is approved.
 
 ## References

@@ -5,7 +5,7 @@
 | Trạng thái | đích MVP; Core hiện có được phân biệt với phần chưa tích hợp |
 | Chủ sở hữu | Chủ kỹ thuật |
 | Người rà soát | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-10-04 |
+| Cập nhật lần cuối | 2026-10-05 |
 
 ## Tài liệu liên quan
 
@@ -23,13 +23,14 @@ Mục này là nơi duy nhất ghi hiện trạng triển khai; tài liệu khá
 **Đối chiếu với code nhánh `staging` ngày 2026-10-04:**
 
 - **Core:** Firebase auth/session/me, Shop/Category/Product/Customer CRUD, draft → confirm → sale/payment, debt repayment, expense, report summary, sale void và full refund, audit thao tác ghi và lịch sử audit cho OWNER; schema Flyway V1–V10. Core proxy `/api/v1/agent/*` sang AI `/internal/v1/agent/*` kèm `X-Internal-Token`, lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực.
-- **AI:** `/health` và Agent chat (chat, list, detail, rename, delete) lưu PostgreSQL, tóm tắt cuốn chiếu, tìm lịch sử và tool đọc dữ liệu tiệm chỉ đọc; migration AI `001`–`004`.
+- **AI:** `/health` và Agent chat (chat, list, detail, rename, delete) lưu PostgreSQL, tóm tắt cuốn chiếu, tìm lịch sử và tool đọc dữ liệu tiệm chỉ đọc; schema AI là một baseline Supabase CLI trong `supabase/migrations/`.
+- **AI — gợi ý nhập hàng và câu hỏi doanh số:** hai view chỉ đọc `v_sales` và `v_sale_items` cho câu hỏi doanh số; agent có tool `suggest_restock` trả gợi ý nhập hàng từ đơn `CONFIRMED`. `COVER_DAYS` (hiện là 7 ngày) và hai kỳ `last_7_days`/`last_30_days` là mặc định chờ PO duyệt, chưa phải yêu cầu đã chốt; xem [README AI](../../backend/ai/README.md#restock-suggestions).
 - **Mobile:** mặc định dùng mock; khi tắt mock gọi Firebase và các API Core ở trên. Các màn nghiệp vụ (trang chủ, báo cáo, đơn hàng, hàng hoá, công nợ, chi phí, thanh toán, hồ sơ tiệm) đọc và ghi qua Core; thanh toán, chi phí và trả nợ thử lại bằng cùng `Idempotency-Key`. Nhận diện đơn vẫn dùng parser rule-based trên máy; mic chỉ nhận giọng nói trên web.
 - **Web admin:** chỉ chạy mock; Core chưa có API dashboard tương ứng.
 
 Đây là phạm vi code, không phải xác nhận đã deploy staging, nghiệm thu FE hay production-ready; chưa có kiểm thử đầu-cuối mobile → Core → AI với model thật.
 
-**Còn là đích MVP/chưa triển khai:** luồng AI proposal (text/voice/image → bản nháp), recommendation và insight chat; API dashboard đọc tổng quan, audit khi ADMIN xem dữ liệu, notification và báo cáo bán chạy/series/lợi nhuận. Hoàn tiền/trả hàng từng phần và ledger điều chỉnh kho độc lập chưa triển khai. Năng lực end-to-end chỉ được nghiệm thu qua AC tương ứng trong [PRD](../product/product-requirements.md).
+**Còn là đích MVP/chưa triển khai:** luồng AI proposal (text/voice/image → bản nháp); danh sách gợi ý nhập hàng trên màn tổng quan kèm API nhập kho cộng dồn (#103); API dashboard đọc tổng quan, audit khi ADMIN xem dữ liệu, notification và báo cáo bán chạy/series/lợi nhuận. Trên nhánh `feat/ai-restock-insight`, gợi ý nhập hàng và câu hỏi số liệu đã trả lời được qua `/api/v1/agent/chat`, nhưng chưa nghiệm thu đầu-cuối và chưa deploy staging. Hoàn tiền/trả hàng từng phần và ledger điều chỉnh kho độc lập chưa triển khai. Năng lực end-to-end chỉ được nghiệm thu qua AC tương ứng trong [PRD](../product/product-requirements.md).
 
 ## 2. Thành phần và quyền sở hữu
 
@@ -37,7 +38,7 @@ Mục này là nơi duy nhất ghi hiện trạng triển khai; tài liệu khá
 |---|---|
 | Mobile/FE | Giao diện OWNER: thu input, hiển thị bản nháp, bắt buộc người dùng xác nhận, chỉ gọi Core |
 | Dashboard web | Giao diện ADMIN: tra cứu OWNER/cơ sở khách hàng và xem tổng quan hỗ trợ; không sửa sổ nghiệp vụ |
-| Core | Hiện có auth, shop/catalog/customer, draft/sale/payment/debt/refund, expense, summary, audit và proxy Agent sang AI; ADMIN chỉ có đổi trạng thái shop. Dashboard, audit truy cập của ADMIN, replenishment và điều phối luồng AI proposal là trách nhiệm đích chưa hoàn thành |
+| Core | Hiện có auth, shop/catalog/customer, draft/sale/payment/debt/refund, expense, summary, audit và proxy Agent sang AI; ADMIN chỉ có đổi trạng thái shop. Dashboard, audit truy cập của ADMIN, gợi ý nhập hàng trên tổng quan kèm nhập kho (#103) và điều phối luồng AI proposal là trách nhiệm đích chưa hoàn thành |
 | AI | Voice/text parse, image analysis, recommendation, insight chat và Agent chat; chỉ trả đề xuất/câu trả lời |
 | PostgreSQL | Dữ liệu nghiệp vụ và idempotency Core; vector qua `pgvector` ([ADR-0001](adr/0001-vector-store-pgvector.md)); trace AI/audit/notification theo ERD đích, không mặc nhiên là migration Core |
 | Redis | Cache/giới hạn tốc độ/tác vụ ngắn hạn; không là nguồn dữ liệu chuẩn |
@@ -58,7 +59,7 @@ Chỉ Core có API công khai. FE không gọi AI, PostgreSQL, Redis, LiteLLM ho
 
 Lỗi confirm/repay/void rollback toàn bộ thay đổi, kể cả reservation idempotency. Sale đã confirm không có đường PATCH/DELETE; chỉ hủy toàn bộ có dấu vết. restockItems bắt buộc; hoàn tồn dựa snapshot, không suy từ tracked hiện tại. Snapshot NULL lịch sử không đủ để hoàn tự động; món tùy ý không tạo tồn.
 
-Luồng text/voice/image → AI proposal → draft, replenishment và insight vẫn là đích: AI không được tự tạo sale/payment/debt/expense. Core mới gọi AI cho chat trợ lý (proxy Agent), chưa gọi cho luồng proposal; timeout/fallback cần nghiệm thu khi tích hợp.
+Luồng text/voice/image → AI proposal → draft vẫn là đích: AI không được tự tạo sale/payment/debt/expense. Core mới gọi AI cho chat trợ lý (proxy Agent), chưa gọi cho luồng proposal; timeout/fallback cần nghiệm thu khi tích hợp.
 
 Luồng ADMIN hiện có: `PATCH /api/v1/shops/{shopId}/status` (ngoài prefix admin), tạm ngưng/kích hoạt kèm lý do. Đổi trạng thái ghi audit `SHOP_INACTIVATED`/`SHOP_REACTIVATED` với actor ADMIN. Dashboard `/api/v1/admin/*` và audit khi ADMIN xem dữ liệu còn là yêu cầu đích; không tuyên bố đã đạt BR-014/NFR-009. ADMIN không giả danh OWNER hay sửa sổ nghiệp vụ.
 
@@ -79,7 +80,7 @@ Luồng ADMIN hiện có: `PATCH /api/v1/shops/{shopId}/status` (ngoài prefix a
 
 V10 tạo `audit_logs` append-only (trigger chặn UPDATE/DELETE/TRUNCATE); Core ghi audit cho thao tác ghi thành công của OWNER/ADMIN cùng transaction nghiệp vụ và OWNER đọc qua `GET /api/v1/audit-logs` (xem [API contract](../contracts/api-contracts.md#lịch-sử-audit-của-tiệm)). Audit khi ADMIN xem dữ liệu (`NFR-009`/`AC-017`), trace AI/media và cô lập vector theo shop vẫn là yêu cầu đích, chưa có trong Core.
 
-Schema PostgreSQL được quản lý bằng migration SQL có phiên bản trong Git. Không sửa schema trực tiếp trên Supabase Dashboard. Dev và staging dùng chung DB nên chỉ chạy migration từ code đã merge vào `staging`; máy dev chạy Core với `FLYWAY_ENABLED=false` (xem [Database migrations](../../README.md#database-migrations)). Migration phải chạy được trên PostgreSQL chuẩn; extension, trigger hoặc API riêng của Supabase chỉ được dùng khi có quyết định kỹ thuật riêng.
+Schema PostgreSQL được quản lý bằng migration SQL có phiên bản trong Git. Không sửa schema trực tiếp trên Supabase Dashboard. Dev và staging dùng chung DB nên chỉ chạy migration từ code đã merge vào `staging`; Core dùng Flyway, AI dùng Supabase CLI (`supabase db push`); máy dev chạy Core với `FLYWAY_ENABLED=false` (xem [Database migrations](../../README.md#database-migrations)). Migration phải chạy được trên PostgreSQL chuẩn; extension, trigger hoặc API riêng của Supabase chỉ được dùng khi có quyết định kỹ thuật riêng.
 
 ## 5. Auth và phân quyền
 

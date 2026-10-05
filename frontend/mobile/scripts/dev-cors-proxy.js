@@ -9,13 +9,16 @@
  *   node scripts/dev-cors-proxy.js
  *   rồi đặt EXPO_PUBLIC_API_ENDPOINT=http://127.0.0.1:8010 trong .env và chạy `npm run web`.
  *
- * Biến môi trường: CORE_URL (mặc định http://localhost:8000), PORT (mặc định 8010).
+ * Biến môi trường: CORE_URL (mặc định http://localhost:8000; Core staging: https://core-staging-01d2.up.railway.app),
+ * PORT (mặc định 8010).
  * Chỉ lắng nghe ở 127.0.0.1 nên máy khác trong mạng không dùng được.
  */
 const http = require('http');
+const https = require('https');
 
 const TARGET = new URL(process.env.CORE_URL || 'http://localhost:8000');
 const PORT = Number(process.env.PORT || 8010);
+const client = TARGET.protocol === 'https:' ? https : http;
 
 http
   .createServer((req, res) => {
@@ -36,8 +39,8 @@ http
 
     const headers = { ...req.headers, host: TARGET.host };
     delete headers.origin; // Core không cấu hình CORS nên không cần Origin
-    const upstream = http.request(
-      { hostname: TARGET.hostname, port: TARGET.port || 80, path: req.url, method: req.method, headers },
+    const upstream = client.request(
+      { hostname: TARGET.hostname, port: TARGET.port || undefined, path: req.url, method: req.method, headers },
       (up) => {
         res.writeHead(up.statusCode || 502, { ...up.headers, ...cors });
         up.pipe(res);

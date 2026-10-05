@@ -1,3 +1,42 @@
+### [2026-10-05 23:40 UTC+07:00] — [AI] Move AI schema to a Supabase CLI baseline
+
+**Done:** Folded AI migrations `001`–`005` into one baseline, `supabase/migrations/20261005000000_ai_baseline.sql`, under a `supabase/` project from `supabase init`. Staging now gets the AI schema with `npx supabase@2.119.0 db push --db-url "$POSTGRES_URL"` instead of running each file with `psql`. Every statement stays safe to re-run, so the first push also succeeds on a database that already has the old files applied. Core keeps Flyway; CI tests keep a disposable PostgreSQL.
+
+**Changed files:**
+- `supabase/config.toml`, `supabase/.gitignore`, `supabase/migrations/20261005000000_ai_baseline.sql` — created
+- `backend/ai/migrations/001`–`005` — deleted
+- `backend/ai/tests/support.py`, `tests/integration_tests/test_agent_conversations.py`, `test_sql_reader.py` — modified
+- `README.md`, `backend/ai/README.md`, `backend/ai/src/app_config.py`, `docs/architecture/technical-design.md`, `docs/architecture/erd-description.md`, `docs/architecture/diagrams/src/erd.dbml`, `docs/development/ci-cd.md` — modified
+
+**Flow explained:** Core Flyway creates the business tables → `supabase db push` applies the AI files that `supabase_migrations.schema_migrations` does not list yet. Verified on disposable pgvector databases: 287 AI tests pass; `db push` succeeds on a fresh database and on one that already had `001`–`005`, a second push is a no-op, and `pg_dump` matches the old schema except for the column order of `chat_conversations`. Not run on Supabase staging.
+
+### [2026-10-05 21:28 UTC+07:00] — [AI] Restock suggestions and sales questions through agent chat
+
+**Done:** AI-011 (#102) on branch `feat/ai-restock-insight`. Migration `005` adds the shop-scoped, read-only views `ai_read.v_sales` and `v_sale_items` (no customer snapshot, no `void_reason`); `SqlGuard` allows them and the SQL prompt answers sales questions with a stated period. New package `src/restock/`: `policy.py` turns confirmed sales into `suggested_qty = ceil(sold/days*COVER_DAYS - stock)` with a fixed Vietnamese reason, `service.py` loads them through the read-only executor. The agent tool `suggest_restock(period)` takes the shop from `AgentContext`; the mobile assistant gets "Gợi ý nhập hàng 7 ngày qua" and "Doanh thu 7 ngày qua?" chips. `COVER_DAYS = 7` and the periods `last_7_days`/`last_30_days` are provisional defaults awaiting product-owner sign-off.
+
+**Changed files:**
+- `backend/ai/migrations/005_add_sales_read_views.sql` — created
+- `backend/ai/src/sql/guard.py`, `src/prompt_templates/sql_agent.py`, `shop_agent.py`, `__init__.py` — modified
+- `backend/ai/src/prompt_templates/restock.py`, `src/restock/policy.py`, `src/restock/service.py` — created
+- `backend/ai/src/agent/tools.py`, `src/agent/service.py`, `src/main.py` — modified
+- `backend/ai/tests/unit_tests/test_restock_policy.py`, `test_restock_service.py`, `test_restock_tool.py` — created; `test_sql_guard.py`, `tests/integration_tests/test_sql_reader.py` — modified
+- `frontend/mobile/app/ai.tsx` — modified
+- `backend/ai/README.md`, `docs/contracts/api-contracts.md`, `docs/architecture/technical-design.md`, `docs/architecture/erd-description.md` — modified
+
+**Flow explained:** Mobile chip → Core `/api/v1/agent/chat` → AI agent → `suggest_restock` → `RestockService` runs one fixed `SELECT` through `SqlGuard` and `ReadOnlySqlExecutor` (shop scope, read-only, timeout, row cap) → `policy.suggest` computes the quantities → the agent copies them verbatim. Free-form sales questions go through `query_shop_data` over the new views. Not verified: integration tests against Postgres (need `POSTGRES_TEST_URL`), migration `005` on a dev database, and end-to-end FE → Core → AI with a real model.
+
+### [2026-10-05 14:10 UTC+07:00] — [Core] Allow browser calls from listed origins (CORS)
+
+**Done:** Core enables Spring Security CORS with a `CorsConfigurationSource` built from `smartledger.cors.allowed-origins` (env `CORS_ALLOWED_ORIGINS`, comma-separated, wildcard patterns such as `https://smart-ledger-*.vercel.app`). Empty means no browser origin is allowed. Preflight passes without a token; credentials stay off because auth uses a bearer header. Edited `backend/core` with the owner's explicit approval.
+
+**Changed files:**
+- `backend/core/src/main/java/com/smartledger/core/config/SecurityConfiguration.java` — modified
+- `backend/core/src/main/resources/application.yml` — modified
+- `backend/core/src/test/java/com/smartledger/core/config/CorsWebTest.java` — created
+- `docs/development/ci-cd.md`, `frontend/mobile/README.md` — modified
+
+**Flow explained:** Browser → OPTIONS preflight → `CorsFilter` inside the security chain answers before the bearer filter. **Check:** `mvnw test` 359 tests pass, `CorsWebTest` 2/2 (allowed origin 200, unknown origin 403). Not verified: a call from a Vercel preview to Core staging.
+
 ### [2026-10-05 13:38 UTC+07:00] — [Core] Audited ADMIN dashboard API and shared audit migration
 
 **Done:** Added seven ADMIN support endpoints for overview, OWNER search/detail, shop search/detail, shop status history and the current ADMIN's access history. Authorization requires a verified Firebase UID linked to an ACTIVE ADMIN profile in the database. Added forward migration V11 to extend the existing `audit_logs`; no separate ADMIN audit table and no changes to V1–V10. Core changes and this progress entry were explicitly approved by the owner.
@@ -7,6 +46,17 @@
 **Flow explained:** Lists mask contacts; successful support reads are audited in the same transaction. Audit failure returns `503 admin_audit_unavailable` and rolls back the operation. ADMIN history uses explicit action/target and actor whitelists; OWNER queries exclude ADMIN read events. Shop inactivation/reactivation writes one shared event. V11 permits absent shop/target IDs only for corresponding ADMIN reads while retaining scoped business events, existing history, foreign keys and append-only guards.
 
 **Check:** Fast-forwarded from staging `d076729` to `e9151cb` without conflicts, preserving pending Core changes. Post-sync `mvnw.cmd -q clean verify` passed 402 tests across 35 suites, zero failures/errors/skips, with disposable PostgreSQL 16. Coverage includes real V1–V11 migrations, fresh schema/entity validation, V10 upgrade, manually adjusted constraints, rejected invalid scopes/roles/targets, rollback and retained audit history. Earlier local Firebase Emulator calls returned 200 for all seven ADMIN APIs and recorded each administrative action. `git diff --check` passed. Migration was not run on staging/production; real Firebase/FE UAT and separately approved documentation alignment remain pending.
+
+### [2026-10-05 13:23 UTC+07:00] — [Mobile] Point the dev machine at Core staging on Railway
+
+**Done:** Mobile dev now calls the deployed Core staging (`https://core-staging-01d2.up.railway.app`) instead of a Core started with Docker Compose on the dev machine. `dev-cors-proxy.js` picks `https` or `http` from `CORE_URL`, so the web build can reach the HTTPS staging Core.
+
+**Changed files:**
+- `frontend/mobile/.env.example` — modified (staging endpoint preset)
+- `frontend/mobile/README.md` — modified ("Nối Core thật", `dev-client`, web proxy)
+- `frontend/mobile/scripts/dev-cors-proxy.js` — modified (HTTPS upstream)
+
+**Flow explained:** The Railway domain belongs to the `core` service in the staging environment and does not change between deploys. A local backend is only needed while changing backend code. **Check:** `/v3/api-docs` returned 200 through the proxy and `/api/v1/me` returned 401 with `Access-Control-Allow-Origin`. Not verified: a Firebase sign-in from the app against staging (needs the app's Firebase project to match Core staging's `FIREBASE_PROJECT_ID`).
 
 ### [2026-10-05 13:00 UTC+07:00] — [Core] Read the Firebase service account from an env variable
 

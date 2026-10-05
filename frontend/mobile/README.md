@@ -113,7 +113,7 @@ Code đã nối sẵn theo `docs/contracts/api-contracts.md`: Firebase xác th�
 Profile trong `eas.json`:
 
 - `development`: development client, cài nội bộ.
-- `dev-client`: kế thừa `development`, nhưng dùng environment `preview` để nhận biến file `GOOGLE_SERVICES_JSON` và ra APK. Dùng để thử đăng nhập Firebase và gọi Core chạy ngay trên máy bạn từ emulator Android: cài APK vào emulator, đặt trong `.env` `EXPO_PUBLIC_API_ENDPOINT=http://10.0.2.2:8000` (địa chỉ máy chủ nhìn từ emulator) cùng `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS` đều `false`, rồi chạy `npx expo start --dev-client --android`. JS nạp từ Metro nên đổi địa chỉ Core chỉ cần sửa `.env` và chạy lại Metro, không phải build lại APK. Cùng keystore với `phone-test` nên cài đè được lên bản đó và dùng chung SHA đã đăng ký trong Firebase.
+- `dev-client`: kế thừa `development`, nhưng dùng environment `preview` để nhận biến file `GOOGLE_SERVICES_JSON` và ra APK. Dùng để thử đăng nhập Firebase và gọi Core thật từ emulator Android: cài APK vào emulator, đặt trong `.env` `EXPO_PUBLIC_API_ENDPOINT` theo [Nối Core thật](#nối-core-thật) cùng `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS` đều `false`, rồi chạy `npx expo start --dev-client --android`. JS nạp từ Metro nên đổi địa chỉ Core chỉ cần sửa `.env` và chạy lại Metro, không phải build lại APK. Cùng keystore với `phone-test` nên cài đè được lên bản đó và dùng chung SHA đã đăng ký trong Firebase.
 - `preview`: bản cài nội bộ, Android ra APK.
 - `phone-test`: kế thừa `preview`, Firebase thật với phiên Core giả lập (`MOCK_CORE`, `MOCK_SHOPS`) để thử đăng nhập SĐT trên máy thật khi chưa có Core deploy; các màn nghiệp vụ vẫn gọi API thật nên báo lỗi mạng nếu không tới được Core.
 - `production`: tự tăng số build.
@@ -132,16 +132,20 @@ Luồng: Firebase xác thực SĐT → FE gửi **Firebase ID token** (`Authoriz
 
 Các API nghiệp vụ (danh mục/sản phẩm, khách, POS/checkout tạo đơn nháp rồi xác nhận, đơn hàng, công nợ, chi phí, báo cáo, trợ lý) đều cần header `X-Shop-Id`; hợp đồng nằm trong [API contracts](../../docs/contracts/api-contracts.md). Frontend gọi đủ các API này khi chạy với Core thật. `SaleDraft.confirm` chấp nhận `initialPaidVnd` bất kỳ từ 0 tới tổng đơn — trả thiếu thì Core (`SaleDraftServiceImpl.confirm`/`customerForConfirmation`) tự tạo một `Debt` cho khách (cần có `customerId` có sẵn hoặc `customerName` để Core tạo khách mới, thiếu cả hai thì lỗi `customer_required_for_debt`); khớp với màn Thanh toán ghi nợ của mobile. `EXPO_PUBLIC_USE_MOCK=true` bật chế độ xem trước không cần Core thật — `src/lib/mockCore.ts` giả lập các endpoint trên trong bộ nhớ.
 
-`.env` để chạy với Core thật (Core chạy bằng `docker compose up` thì cổng mặc định là `8000`):
+Khi dev mobile, app gọi Core staging trên Railway (bản deploy từ nhánh `staging`, xem [CI/CD](../../docs/development/ci-cd.md)), nên máy dev không cần chạy backend hay Docker. Domain Railway gắn với service và environment, không đổi sau mỗi lần deploy. `.env`:
 
 ```
 EXPO_PUBLIC_USE_MOCK=false
 EXPO_PUBLIC_MOCK_CORE=false
 EXPO_PUBLIC_MOCK_SHOPS=false
-EXPO_PUBLIC_API_ENDPOINT=http://<IP LAN của máy chạy Core>:8000   # máy ảo Android: http://10.0.2.2:8000
+EXPO_PUBLIC_API_ENDPOINT=https://core-staging-01d2.up.railway.app
 ```
 
-Core cần `FIREBASE_PROJECT_ID` trùng project của `google-services.json` và file service account (xem `backend/core/.env.example`). Điện thoại và máy chạy Core phải cùng mạng.
+- Dữ liệu tạo từ app nằm trong database staging, dùng chung với cả nhóm và môi trường UAT.
+- App gọi bản Core đã merge vào `staging`; API chưa merge thì chưa gọi được.
+- Firebase của app (`google-services.json`, biến `EXPO_PUBLIC_FIREBASE_*`) phải cùng project với `FIREBASE_PROJECT_ID` của Core staging, nếu không Core trả `401`.
+
+Chỉ chạy Core trên máy khi đang sửa backend (xem [README gốc](../../README.md#run)); khi đó đặt `EXPO_PUBLIC_API_ENDPOINT=http://<IP LAN của máy chạy Core>:8000` (máy ảo Android: `http://10.0.2.2:8000`, cổng `8000` khi chạy bằng Compose). Core cần `FIREBASE_PROJECT_ID` trùng project của `google-services.json` và file service account (xem `backend/core/.env.example`). Điện thoại và máy chạy Core phải cùng mạng.
 
 ### Đăng nhập bằng email + mật khẩu
 
@@ -154,11 +158,11 @@ Màn đầu có liên kết “Đăng nhập bằng email và mật khẩu” (`
   adb logcat -s ReactNativeJS
   ```
 - **Màn “Chẩn đoán kết nối”** (`/debug`, chỉ dùng nội bộ ở bản dev): hiện chế độ (mock/thật), `API_ENDPOINT`, trạng thái Firebase, nút **Kiểm tra kết nối Core** (gọi `/v3/api-docs` không cần token), **Xem token** (aud/iss/hạn dùng; Core cần `FIREBASE_PROJECT_ID` trùng `aud`), **Gọi GET /me**, và nhật ký gần đây. Màn này không nằm trong tab Quản lý.
-- **Chạy bản web để thử nhanh (không cần build APK):** `npm run web`, đăng nhập bằng email. Trình duyệt bị CORS chặn khi gọi Core (Core chưa bật CORS) nên chạy thêm proxy dev ở một terminal khác rồi trỏ app vào proxy:
+- **Chạy bản web để thử nhanh (không cần build APK):** `npm run web`, đăng nhập bằng email. Core chỉ nhận origin trong `CORS_ALLOWED_ORIGINS` (xem [CI/CD](../../docs/development/ci-cd.md)), nên `localhost` của máy dev bị chặn; chạy thêm proxy dev ở một terminal khác rồi trỏ app vào proxy:
   ```bash
-  node scripts/dev-cors-proxy.js
+  CORE_URL=https://core-staging-01d2.up.railway.app node scripts/dev-cors-proxy.js
   ```
-  và đặt `EXPO_PUBLIC_API_ENDPOINT=http://127.0.0.1:8010` trong `.env` (chạy lại `npm run web -- --clear` sau khi đổi). Chỉ Firebase mà chưa cần Core thì đặt `EXPO_PUBLIC_MOCK_CORE=true`, không cần proxy. Web không thử được: adapter native, đăng nhập SĐT trên máy thật, mạng Android.
+  và đặt `EXPO_PUBLIC_API_ENDPOINT=http://127.0.0.1:8010` trong `.env` (chạy lại `npm run web -- --clear` sau khi đổi). Bỏ `CORE_URL` thì proxy trỏ về Core trên máy (`http://localhost:8000`). Chỉ Firebase mà chưa cần Core thì đặt `EXPO_PUBLIC_MOCK_CORE=true`, không cần proxy. Web không thử được: adapter native, đăng nhập SĐT trên máy thật, mạng Android.
 - **Timeout:** mọi lời gọi Core tự dừng sau 15 giây (`ApiError` code `timeout`) thay vì quay vô hạn khi sai IP hoặc tường lửa chặn.
 - **Lỗi thường gặp:** `network` = không tới được Core (IP, tường lửa, Android chặn HTTP); `timeout` = tường lửa thả gói; `401 unauthorized` = token không khớp project của Core; `400 validation_failed` ở `/auth/session` = tài khoản mới cần `displayName` (bình thường); `provider-disabled` = chưa bật phương thức đăng nhập trong Firebase Console.
 
@@ -168,10 +172,6 @@ Ghi chú: mã QR chuyển khoản, tỉ lệ thuế 1,5% trên hoá đơn và g�
 
 ## Vercel preview trên trình duyệt
 
-`vercel.json` đã cấu hình Expo export ra `dist/` và chuyển các đường dẫn Expo Router về SPA entry. Khi tạo project Vercel:
+`vercel.json` cấu hình Expo export ra `dist/` và chuyển các đường dẫn Expo Router về SPA entry. CI build web và tải lên Vercel (job `deploy-web`): mỗi PR có URL preview, `staging` có alias cố định, `main` là production. Biến `EXPO_PUBLIC_*` đặt ở GitHub Environment `vercel-preview`/`vercel-staging`/`vercel-production`, không đặt trên Vercel; xem [CI/CD](../../docs/development/ci-cd.md#mobile-web-trên-vercel).
 
-1. Chọn thư mục gốc `frontend/mobile`.
-2. Đặt production branch là `main`; pull request và nhánh `staging` sẽ có preview deployment.
-3. Bật `EXPO_PUBLIC_USE_MOCK=true` trong Preview environment để dùng OTP mẫu `123456` và dữ liệu mẫu. Bản preview không cần Firebase hoặc backend secrets.
-
-Muốn thử Firebase trên web thì cần thêm Firebase web app config vào Preview variables (`EXPO_PUBLIC_FIREBASE_API_KEY`, `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`, `EXPO_PUBLIC_FIREBASE_PROJECT_ID`, `EXPO_PUBLIC_FIREBASE_APP_ID`), thêm preview domain vào Firebase Authorized domains, và bật HTTPS/CORS cho Core nếu gọi API thật. Các biến `EXPO_PUBLIC_*` được đóng vào bundle trình duyệt, vì vậy không đặt service-account keys ở đây. Preview web giúp kiểm tra giao diện responsive và luồng mock; nó không thay thế kiểm tra native trên iOS/Android.
+Các biến `EXPO_PUBLIC_*` được đóng vào bundle trình duyệt, vì vậy không đặt service-account keys ở đó. Preview web giúp kiểm tra giao diện responsive và luồng với Core staging; nó không thay thế kiểm tra native trên iOS/Android.
