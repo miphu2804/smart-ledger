@@ -28,6 +28,19 @@ const CORE_MESSAGES: Record<string, string> = {
   expense_not_found: 'Không tìm thấy khoản chi này',
   expense_update_required: 'Cần thay đổi ít nhất một trường',
   invalid_report_period: 'Khoảng thời gian báo cáo không hợp lệ',
+  invalid_sale_id: 'Mã đơn không hợp lệ',
+  sale_not_found: 'Không tìm thấy đơn này',
+  sale_already_voided: 'Đơn này đã được huỷ trước đó',
+  sale_payment_mismatch: 'Số tiền đã thu của đơn không khớp lịch sử thanh toán nên chưa thể huỷ. Hãy liên hệ hỗ trợ.',
+  sale_refund_method_required: 'Chọn hình thức hoàn tiền cho khách',
+  sale_refund_method_invalid: 'Đơn này chưa thu tiền nên không cần hoàn tiền',
+  sale_refund_not_found: 'Đơn này không có khoản hoàn tiền',
+  sale_restock_unavailable:
+    'Không thể tự hoàn hàng về kho cho đơn này. Hãy tắt mục "Hoàn hàng về kho", huỷ đơn rồi chỉnh kho thủ công.',
+  // Chung cho các thao tác ghi tiền có Idempotency-Key (huỷ đơn, trả nợ, ghi chi phí)
+  idempotency_key_expired: 'Lần gửi trước đã quá lâu. Hãy kiểm tra lại kết quả rồi thao tác lại nếu cần.',
+  idempotency_key_conflict: 'Yêu cầu này bị trùng mã với một yêu cầu khác. Vui lòng thử lại.',
+  resource_busy: 'Hệ thống đang bận xử lý đơn này. Vui lòng thử lại sau ít giây.',
 };
 
 /** Thông báo lỗi tiếng Việt để hiện cho người dùng (từ AuthError / ApiError / lỗi bất ngờ). */

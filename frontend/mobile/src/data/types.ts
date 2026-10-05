@@ -231,6 +231,26 @@ export interface SaleView {
   outstandingVnd: number;
 }
 
+/** Hoàn tiền của một đơn đã huỷ (`SaleRefundResponse`). Một đơn có tối đa một khoản hoàn, bằng toàn bộ tiền đã thu. */
+export interface SaleRefundView {
+  id: number;
+  saleId: number;
+  amountVnd: number;
+  refundMethod: 'CASH' | 'TRANSFER';
+  transferReference: string | null;
+  refundedByUserId: number;
+  refundedAt: string;
+}
+
+/** Kết quả `POST /sales/{id}/void` (`SaleVoidResponse`); `refund` là null khi đơn chưa thu đồng nào. */
+export interface SaleVoidView {
+  sale: SaleView;
+  refund: SaleRefundView | null;
+  /** Số nợ còn dư bị huỷ cùng đơn (không phải tiền hoàn) */
+  cancelledDebtVnd: number;
+  stockRestocked: boolean;
+}
+
 // ---- Công nợ, khách hàng, khoản chi thật — khớp Core (backend/core), xem AGENTS.md ----
 
 export interface DebtView {
@@ -239,9 +259,12 @@ export interface DebtView {
   customerId: number;
   originalVnd: number;
   outstandingVnd: number;
-  status: 'OPEN' | 'SETTLED';
+  /** `VOIDED`: đơn gốc bị huỷ nên số dư nợ bị huỷ theo (dư nợ 0, `cancelledVnd` là số bị huỷ); không còn là nợ phải thu */
+  status: 'OPEN' | 'SETTLED' | 'VOIDED';
   createdAt: string;
   settledAt: string | null;
+  voidedAt?: string | null;
+  cancelledVnd?: number | null;
 }
 
 export interface CustomerView {

@@ -62,6 +62,8 @@ export function productToLegacy(p: ProductView): Product {
 export function debtsToLegacy(debts: DebtView[], customers: CustomerView[]): Debt[] {
   const byCustomer = new Map<number, Debt>();
   for (const d of debts) {
+    // Nợ của đơn đã huỷ (VOIDED) không còn là khoản phải thu: tính vào sẽ coi phần đã hoàn lại cho khách là "đã trả".
+    if (d.status === 'VOIDED') continue;
     const last = d.settledAt ?? d.createdAt;
     const cur = byCustomer.get(d.customerId);
     if (cur) {

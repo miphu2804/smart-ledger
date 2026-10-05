@@ -1,5 +1,11 @@
-import type { PaymentView, SaleDraftView, SaleView } from '../data/types';
-import { apiRequest } from './api';
+import type { PaymentView, SaleDraftView, SaleRefundView, SaleView, SaleVoidView } from '../data/types';
+import { ApiError, apiRequest } from './api';
+import { createIdempotentSender } from './idempotency';
+import type { SaleVoidRequest } from './saleVoid';
+
+// Mỗi loại thao tác ghi tiền một bộ gửi: mất mạng rồi bấm lại cùng nội dung dùng lại Idempotency-Key cũ nên Core
+// không huỷ và hoàn tiền hai lần (xem idempotency.ts).
+const voidSender = createIdempotentSender();
 
 /**
  * Bán hàng thật (Core `/sale-drafts`, `/sales` — cần header X-Shop-Id, xem AGENTS.md).
@@ -42,6 +48,23 @@ export const saleDraftApi = {
 export const saleApi = {
   list: (): Promise<SaleView[]> => apiRequest<SaleView[]>('/sales', { withShop: true }),
   getById: (id: number): Promise<SaleView> => apiRequest<SaleView>(`/sales/${id}`, { withShop: true }),
+  /**
+   * POST /sales/{id}/void: huỷ cả đơn, hoàn toàn bộ tiền đã thu, huỷ nợ còn dư, tuỳ chọn hoàn hàng về kho (xem saleVoid.ts).
+   * Cần Idempotency-Key; lỗi mạng/timeout/5xx giữ key để bấm lại không huỷ hai lần. Đơn đã huỷ → 409 sale_already_voided.
+   */
+  void: (id: number, input: SaleVoidRequest): Promise<SaleVoidView> =>
+    voidSender.send({ saleId: id, ...input }, (idempotencyKey) =>
+      apiRequest<SaleVoidView>(`/sales/${id}/void`, { method: 'POST', body: input, withShop: true, idempotencyKey }),
+    ),
+  /** GET /sales/{id}/refund: khoản hoàn của đơn đã huỷ; `null` khi đơn chưa thu đồng nào nên không có khoản hoàn (404 sale_refund_not_found). */
+  getRefund: async (id: number): Promise<SaleRefundView | null> => {
+    try {
+      return await apiRequest<SaleRefundView>(`/sales/${id}/refund`, { withShop: true });
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404 && e.code === 'sale_refund_not_found') return null;
+      throw e;
+    }
+  },
 };
 
 export const paymentApi = {

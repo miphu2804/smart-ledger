@@ -61,7 +61,8 @@ export default function Debts() {
   const customerMap = useMemo(() => new Map(customers.map((c) => [c.id, c])), [customers]);
   const list = useMemo<DebtCard[]>(
     () =>
-      debts.map((d) => {
+      // Bỏ nợ của đơn đã huỷ (VOIDED): dư nợ 0 nhưng không phải "đã trả", và khách không còn nợ khoản đó.
+      debts.filter((d) => d.status !== 'VOIDED').map((d) => {
         const c = customerMap.get(d.customerId);
         return { ...d, name: c?.name ?? 'Khách lẻ', phone: c?.phone ?? '' };
       }),
