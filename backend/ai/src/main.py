@@ -13,6 +13,7 @@ from src.app_config import app_config
 from src.infra.postgre_db_client import PostgreDBClient
 from src.infra.redis_db_client import RedisDBClient
 from src.providers.factory import build_chat_model, build_summary_model
+from src.restock.service import RestockService
 from src.sql.executor import ReadOnlySqlExecutor
 
 logging.basicConfig(
@@ -45,6 +46,7 @@ async def lifespan(app: FastAPI):
     summary_model = build_summary_model(app_config)
     conversations = AgentConversationRepository(postgres)
     app.state.conversations = conversations
+    executor = build_sql_executor()
     app.state.agent = AgentService(
         chat_model,
         conversations,
@@ -53,7 +55,8 @@ async def lifespan(app: FastAPI):
             model_call_limit=app_config.AGENT_MODEL_CALL_LIMIT,
             tool_call_limit=app_config.AGENT_TOOL_CALL_LIMIT,
         ),
-        sql_executor=build_sql_executor(),
+        sql_executor=executor,
+        restock=RestockService(executor) if executor else None,
     )
     app.state.summary_folder = ChatSummaryFolder(summary_model, conversations)
     yield
