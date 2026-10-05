@@ -216,3 +216,11 @@ jobs:
           path: ci-summary.md
           if-no-files-found: error
           retention-days: 14
+
+  # Hands off to the CD workflow after a push to `staging` or `main` passes every CI job.
+  deploy:
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+    needs: [ai, core, mobile-web, container-images]
+    uses: ./.github/workflows/cd.yml

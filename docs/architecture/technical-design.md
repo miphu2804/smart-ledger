@@ -101,7 +101,7 @@ Schema PostgreSQL được quản lý bằng migration SQL có phiên bản tron
 Host và port thuộc cấu hình môi trường, không phải API contract. [Core README](../../backend/core/README.md) là nơi hướng dẫn chạy IntelliJ/Maven/Docker và Firebase Emulator; không nhân bản hướng dẫn vận hành tại đây.
 
 - Dev và staging dùng chung một Supabase project và một Redis Cloud database, không chứa dữ liệu production; không có PostgreSQL hay Redis container local. Test tự động dùng PostgreSQL tạm: AI đọc `POSTGRES_TEST_URL`, Core đọc `CORE_TEST_POSTGRES_*`.
-- Sơ đồ môi trường và CI/CD: [environments.mmd](diagrams/src/environments.mmd) ([SVG](diagrams/images/environments.svg)).
+- Sơ đồ môi trường và CI/CD: [ci-cd.drawio](diagrams/src/ci-cd.drawio) ([SVG](diagrams/images/ci-cd.svg)).
 - Production: một Supabase project và một Redis Cloud database khác; credential staging và production không dùng chung file hay biến. Cách chạy Compose xem [README](../../README.md#local-compose).
 - Runtime dùng connection pooler; migration, `pg_dump` và `pg_restore` dùng kết nối PostgreSQL phù hợp cho tác vụ dài.
 - Môi trường dùng chung: secret ở GitHub Environment/secret manager. Local: file env/service-account không commit; mount credential vào container và đặt GOOGLE_APPLICATION_CREDENTIALS. Emulator chỉ dùng để test local, không dùng token emulator cho production.
