@@ -80,6 +80,8 @@ export default function InvoiceDetail() {
         .getRefund(saleId)
         .then((r) => alive && setRefund(r))
         .catch(() => alive && setRefund(null));
+    } else {
+      setRefund(null);
     }
     return () => {
       alive = false;
@@ -109,6 +111,8 @@ export default function InvoiceDetail() {
   const d = new Date(sale.soldAt);
   const cancelled = sale.saleStatus === 'VOIDED';
   const needsRefundMethod = sale.paidVnd > 0;
+  // Màn hình có thể được dùng lại cho đơn khác: không bao giờ hiện khoản hoàn của đơn khác.
+  const shownRefund = refund && refund.saleId === sale.id ? refund : null;
 
   const openVoid = () => {
     setReason('');
@@ -167,10 +171,10 @@ export default function InvoiceDetail() {
             <T w="bold" size={13} color={colors.red}>
               Đơn đã huỷ — không tính vào doanh thu
             </T>
-            {refund ? (
+            {shownRefund ? (
               <T size={12} color={colors.red} style={{ marginTop: 3 }}>
-                Đã hoàn {vnd(refund.amountVnd)} · {refundMethodLabel[refund.refundMethod]}
-                {refund.transferReference ? ` · Mã GD ${refund.transferReference}` : ''}
+                Đã hoàn {vnd(shownRefund.amountVnd)} · {refundMethodLabel[shownRefund.refundMethod]}
+                {shownRefund.transferReference ? ` · Mã GD ${shownRefund.transferReference}` : ''}
               </T>
             ) : null}
           </View>
