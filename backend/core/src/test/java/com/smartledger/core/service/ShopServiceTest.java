@@ -34,7 +34,8 @@ class ShopServiceTest {
     private final AuthIdentityRepository authIdentityRepository = Mockito.mock(AuthIdentityRepository.class);
     private final ShopRepository shopRepository = Mockito.mock(ShopRepository.class);
     private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
-    private final ShopService service = new ShopServiceImpl(authIdentityRepository, shopRepository, auditLogService);
+    private final AdminAccessAuditService adminAccessAuditService = Mockito.mock(AdminAccessAuditService.class);
+    private final ShopService service = new ShopServiceImpl(authIdentityRepository, shopRepository, auditLogService, adminAccessAuditService);
 
     @Test
     void createsAnActiveShopForTheCurrentOwner() {
@@ -199,9 +200,11 @@ class ShopServiceTest {
     @Test
     void allowsAdminToInactivateAndReactivateAnActiveShop() {
         UserAccount admin = owner();
+        ReflectionTestUtils.setField(admin, "id", 42L);
         ReflectionTestUtils.setField(admin, "systemRole", SystemRole.ADMIN);
         authenticateAs(admin);
         Shop shop = Shop.create(99L, "Tiệm Thảo", "Grocery", null, null);
+        ReflectionTestUtils.setField(shop, "id", 7L);
         when(shopRepository.findById(7L)).thenReturn(Optional.of(shop));
 
         ShopResponse inactive = service.updateStatus(
@@ -219,6 +222,9 @@ class ShopServiceTest {
 
         assertThat(active.status()).isEqualTo(ShopStatus.ACTIVE);
         assertThat(active.inactiveReason()).isNull();
+        verify(adminAccessAuditService).recordShopStatus(42L, 7L, ShopStatus.ACTIVE, ShopStatus.INACTIVE, "Subscription expired");
+        verify(adminAccessAuditService).recordShopStatus(42L, 7L, ShopStatus.INACTIVE, ShopStatus.ACTIVE, null);
+        Mockito.verifyNoInteractions(auditLogService); // Status audit is written once through the shared repository.
     }
 
     @Test
@@ -236,6 +242,7 @@ class ShopServiceTest {
                                 .isEqualTo(ErrorCode.ADMIN_ACCESS_REQUIRED));
 
         verify(shopRepository, never()).findById(any());
+        Mockito.verifyNoInteractions(adminAccessAuditService);
     }
 
     private void authenticateAs(UserAccount user) {

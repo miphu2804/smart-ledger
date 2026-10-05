@@ -1,3 +1,13 @@
+### [2026-10-05 13:38 UTC+07:00] — [Core] Audited ADMIN dashboard API and shared audit migration
+
+**Done:** Added seven ADMIN support endpoints for overview, OWNER search/detail, shop search/detail, shop status history and the current ADMIN's access history. Authorization requires a verified Firebase UID linked to an ACTIVE ADMIN profile in the database. Added forward migration V11 to extend the existing `audit_logs`; no separate ADMIN audit table and no changes to V1–V10. Core changes and this progress entry were explicitly approved by the owner.
+
+**Changed files:** `backend/core` ADMIN controller/configuration, response DTOs, guard, repository, services and tests; shared audit entity/actions/query/request context; shop status service/tests; `V11__extend_audit_logs_for_admin_dashboard.sql`; Core README; `PROGRESS.md`.
+
+**Flow explained:** Lists mask contacts; successful support reads are audited in the same transaction. Audit failure returns `503 admin_audit_unavailable` and rolls back the operation. ADMIN history uses explicit action/target and actor whitelists; OWNER queries exclude ADMIN read events. Shop inactivation/reactivation writes one shared event. V11 permits absent shop/target IDs only for corresponding ADMIN reads while retaining scoped business events, existing history, foreign keys and append-only guards.
+
+**Check:** Fast-forwarded from staging `d076729` to `e9151cb` without conflicts, preserving pending Core changes. Post-sync `mvnw.cmd -q clean verify` passed 402 tests across 35 suites, zero failures/errors/skips, with disposable PostgreSQL 16. Coverage includes real V1–V11 migrations, fresh schema/entity validation, V10 upgrade, manually adjusted constraints, rejected invalid scopes/roles/targets, rollback and retained audit history. Earlier local Firebase Emulator calls returned 200 for all seven ADMIN APIs and recorded each administrative action. `git diff --check` passed. Migration was not run on staging/production; real Firebase/FE UAT and separately approved documentation alignment remain pending.
+
 ### [2026-10-05 13:00 UTC+07:00] — [Core] Read the Firebase service account from an env variable
 
 **Done:** `core` crashed on Railway staging with "Your default credentials were not found" because Railway cannot mount the key file `GoogleCredentials.getApplicationDefault()` needs. `FirebaseAdminConfiguration` now builds credentials from `firebase.service-account-json` (env `FIREBASE_SERVICE_ACCOUNT_JSON`) when set and otherwise falls back to Application Default Credentials, so local and Compose setups are unchanged. Edited `backend/core` with the owner's explicit approval, despite the AGENTS.md rule.
