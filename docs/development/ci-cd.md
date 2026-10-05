@@ -1,6 +1,6 @@
 # CI/CD backend lên Railway
 
-Tài liệu này mô tả đường đi của một thay đổi từ nhánh feature tới Railway cho `backend/core` và `backend/ai`. CI nằm ở [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml); CD (deploy Railway) nằm ở [`.github/workflows/cd.yml`](../../.github/workflows/cd.yml), được job `deploy` của CI gọi sau khi mọi job CI pass; quy tắc nhánh và review nằm ở [CONTRIBUTING](../../CONTRIBUTING.md). Mobile web deploy qua Vercel, không đi qua luồng này.
+Tài liệu này mô tả đường đi của một thay đổi từ nhánh feature tới Railway cho `backend/core` và `backend/ai`. CI nằm ở [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml); deploy Railway là job `deploy` trong cùng file, chạy sau khi mọi job CI pass; quy tắc nhánh và review nằm ở [CONTRIBUTING](../../CONTRIBUTING.md). Mobile web deploy qua Vercel, không đi qua luồng này.
 
 ## Luồng tổng quát
 
@@ -11,7 +11,7 @@ Nguồn sơ đồ: [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio); 
 ## Từng bước
 
 1. **PR vào `staging`:** CI chạy test, kiểm migration trên PostgreSQL tạm và build image. Job `deploy` bị bỏ qua vì sự kiện là `pull_request`.
-2. **Merge vào `staging`:** CI chạy lại trên commit đã merge. Khi `ai`, `core`, `mobile-web`, `container-images` đều pass, CI gọi workflow CD, job `deploy` dùng environment `railway-staging` và deploy lên Railway staging. Không cần duyệt.
+2. **Merge vào `staging`:** CI chạy lại trên commit đã merge. Khi `ai`, `core`, `mobile-web`, `container-images` đều pass, job `deploy` dùng environment `railway-staging` và deploy lên Railway staging. Không cần duyệt.
 3. **PR `staging` → `main`:** chỉ mở sau khi đã kiểm tra trên staging (xem [Target branch](../../CONTRIBUTING.md#target-branch)).
 4. **Merge vào `main`:** CI chạy lại; job `deploy` dừng ở trạng thái *Waiting*. Người duyệt mở run trên tab Actions → **Review deployments** → Approve. Chỉ sau khi duyệt, job mới nhận `RAILWAY_TOKEN` của production và deploy.
 

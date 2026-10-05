@@ -217,10 +217,64 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # Hands off to the CD workflow after a push to `staging` or `main` passes every CI job.
+  # Deploys backend services to Railway after a push to `staging` or `main` passes every CI job.
+  # Each GitHub environment holds its own environment-scoped Railway project token and branch
+  # policy; `railway-production` requires approval. The environment is set on this job, not in a
+  # called workflow, so its secret reaches the job.
   deploy:
     if: github.event_name == 'push'
+    needs: [ai, core, mobile-web, container-images]
     permissions:
       contents: read
-    needs: [ai, core, mobile-web, container-images]
-    uses: ./.github/workflows/cd.yml
+    runs-on: ubuntu-24.04
+    environment: ${{ github.ref_name == 'main' && 'railway-production' || 'railway-staging' }}
+    concurrency:
+      group: deploy-${{ github.ref_name }}
+      cancel-in-progress: false
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install Railway CLI
+        run: npm install --global @railway/cli@5.63.1
+      # AI first: Core calls AI, so the new Core should not start against an old AI.
+      - name: Deploy ai
+        id: deploy_ai
+        run: railway up backend/ai --path-as-root --service ai --ci
+      - name: Deploy core
+        id: deploy_core
+        run: railway up backend/core --path-as-root --service core --ci
+      - name: Build deploy report
+        if: always()
+        env:
+          AI_OUTCOME: ${{ steps.deploy_ai.outcome }}
+          CORE_OUTCOME: ${{ steps.deploy_core.outcome }}
+          TARGET_ENV: ${{ github.ref_name == 'main' && 'railway-production' || 'railway-staging' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          {
+            echo "# Deploy results"
+            echo
+            echo "| Item | Value |"
+            echo "|---|---|"
+            echo "| Environment | $TARGET_ENV |"
+            echo "| Branch | ${GITHUB_REF_NAME} |"
+            echo "| Commit | ${GITHUB_SHA::7} |"
+            echo "| Triggered by | ${GITHUB_ACTOR} |"
+            echo "| Run | $RUN_URL |"
+            echo
+            echo "| Service | Result |"
+            echo "|---|---|"
+            echo "| ai | $AI_OUTCOME |"
+            echo "| core | $CORE_OUTCOME |"
+          } > deploy-summary.md
+          cat deploy-summary.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: deploy-summary-${{ github.ref_name }}
+          path: deploy-summary.md
+          if-no-files-found: error
+          retention-days: 14

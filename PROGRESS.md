@@ -1,3 +1,14 @@
+### [2026-10-05 12:00 UTC+07:00] — [CI/CD] Inline the Railway deploy job into ci.yml
+
+**Done:** Deleted `.github/workflows/cd.yml` and moved its `deploy` job into `ci.yml` with `environment:` set on the job itself. The reusable-workflow version received an empty `RAILWAY_TOKEN` (`secrets.RAILWAY_TOKEN` evaluated to `null` in the run debug log) even though the `railway-staging` environment secret existed. Updated `docs/development/ci-cd.md`.
+
+**Changed files:**
+- `.github/workflows/ci.yml` — modified
+- `.github/workflows/cd.yml` — deleted
+- `docs/development/ci-cd.md` — modified
+
+**Flow explained:** `deploy` still runs only on a push to `staging` or `main` after `ai`, `core`, `mobile-web` and `container-images` pass; the environment branch policy and the `railway-production` approval apply as before. Unverified until the first run on `staging` shows `RAILWAY_TOKEN: ***`.
+
 ### [2026-10-05 11:20 UTC+07:00] — [CI/CD] Split CD workflow and merge environments into the ci-cd diagram
 
 **Done:** Moved the Railway deploy into `.github/workflows/cd.yml`, called from `ci.yml` after `ai`, `core`, `mobile-web` and `container-images` all pass on a push to `staging` or `main`; it writes a `deploy-summary-<branch>` artifact. Merged the environments diagram into `ci-cd.drawio` (dev machine, per-provider infra boxes, CI PostgreSQL) and removed `environments.mmd`/`.svg`. Added `docs/architecture/diagrams/README.md` with the diagram guide.
