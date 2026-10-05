@@ -349,7 +349,7 @@ jobs:
         if: github.event_name == 'push' && github.ref_name == 'staging'
         env:
           STAGING_ALIAS: ${{ vars.VERCEL_STAGING_ALIAS }}
-        run: vercel alias set "${{ steps.deploy.outputs.url }}" "$STAGING_ALIAS" --token="$VERCEL_TOKEN"
+        run: vercel alias set "${{ steps.deploy.outputs.url }}" "$STAGING_ALIAS" --scope="$VERCEL_ORG_ID" --token="$VERCEL_TOKEN"
       - name: Report URL
         if: always() && steps.deploy.outputs.url != ''
         env:
