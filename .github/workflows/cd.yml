@@ -19,6 +19,8 @@ jobs:
       RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Install Railway CLI
         run: npm install --global @railway/cli@5.63.1
       # AI first: Core calls AI, so the new Core should not start against an old AI.
