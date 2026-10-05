@@ -1,6 +1,6 @@
 # CI/CD backend lên Railway
 
-Tài liệu này mô tả đường đi của một thay đổi từ nhánh feature tới Railway cho `backend/core` và `backend/ai`. CI nằm ở [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml); deploy Railway là job `deploy` trong cùng file, chạy sau khi mọi job CI pass; quy tắc nhánh và review nằm ở [CONTRIBUTING](../../CONTRIBUTING.md). Mobile web deploy qua Vercel, không đi qua luồng này.
+Tài liệu này mô tả đường đi của một thay đổi từ nhánh feature tới Railway cho `backend/core` và `backend/ai`. CI nằm ở [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml); deploy Railway là job `deploy` trong cùng file, chạy sau khi mọi job CI pass; quy tắc nhánh và review nằm ở [CONTRIBUTING](../../CONTRIBUTING.md). Mobile web deploy lên Vercel bằng job `deploy-web` trong cùng file, xem [Mobile web trên Vercel](#mobile-web-trên-vercel).
 
 ## Luồng tổng quát
 
@@ -26,7 +26,11 @@ Mọi job CI đều phải pass mới deploy, kể cả `mobile-web`. Mỗi lầ
 | `railway-staging` | `staging` | Không | `RAILWAY_TOKEN`: project token của Railway environment staging |
 | `railway-production` | `main` | Có | `RAILWAY_TOKEN`: project token của Railway environment production |
 
-`Preview` và `Production` là environment do Vercel tự tạo cho mobile web; không đặt secret backend ở đó.
+| `vercel-preview` | Mọi nhánh (PR) | Không | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` |
+| `vercel-staging` | `staging` | Không | Như trên |
+| `vercel-production` | `main` | Có | Như trên |
+
+Không đặt secret backend trong các environment `vercel-*`.
 
 Mỗi Railway project token chỉ deploy được vào đúng một Railway environment, nên job chạy với `railway-staging` không thể deploy lên production.
 
@@ -41,3 +45,20 @@ Mỗi Railway project token chỉ deploy được vào đúng một Railway envi
 - Không chạy migration database. Flyway vẫn tắt mặc định; người phụ trách migration chạy tay theo [Database migrations](../../README.md#database-migrations), trên staging trước production.
 - Không lọc theo thư mục: mỗi lần push vào `staging` hoặc `main` đều deploy lại cả `ai` và `core`, kể cả khi chỉ sửa mobile.
 - Rollback: chọn bản deploy trước trên Railway dashboard → **Redeploy**; chưa có bước tự động.
+
+## Mobile web trên Vercel
+
+Job `deploy-web` build `frontend/mobile` ngay trên runner (`vercel build`) rồi tải bản đã build lên Vercel (`vercel deploy --prebuilt`). Vercel không tự build từ Git (`git.deploymentEnabled: false` trong `frontend/mobile/vercel.json`), nên mỗi commit chỉ deploy một lần và GitHub là nơi duy nhất giữ cấu hình web.
+
+| Sự kiện | Environment | Kết quả |
+|---|---|---|
+| PR (nhánh trong repo) | `vercel-preview` | URL preview riêng, bot comment vào PR |
+| Push `staging` | `vercel-staging` | Deploy preview rồi gán alias `VERCEL_STAGING_ALIAS` |
+| Push `main` | `vercel-production` | Deploy production sau khi duyệt |
+
+- Chỉ cần job `mobile-web` pass; web không chờ backend deploy.
+- PR từ fork không có secret nên không có preview.
+- Biến `EXPO_PUBLIC_*` đóng vào bundle lúc build, nên đặt ở **Variables** (không phải Secrets) của từng environment: `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS`, `EXPO_PUBLIC_API_ENDPOINT`, `EXPO_PUBLIC_FIREBASE_API_KEY`, `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`, `EXPO_PUBLIC_FIREBASE_PROJECT_ID`, `EXPO_PUBLIC_FIREBASE_APP_ID`; `vercel-staging` thêm `VERCEL_STAGING_ALIAS`. Đổi biến xong phải chạy lại job thì web mới nhận.
+- Bỏ trống `EXPO_PUBLIC_USE_MOCK` thì app chạy mock (`src/config.ts` chỉ tắt mock khi giá trị là `false`).
+- Gọi Core thật từ trình duyệt cần origin của web nằm trong `CORS_ALLOWED_ORIGINS` của Core và domain web nằm trong Firebase Authorized domains.
+- `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` lấy ở Vercel Project Settings → General; `VERCEL_TOKEN` tạo ở Account Settings → Tokens, giới hạn scope vào team của project.

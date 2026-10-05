@@ -278,3 +278,70 @@ jobs:
           path: deploy-summary.md
           if-no-files-found: error
           retention-days: 14
+
+  # Builds the mobile web bundle on the runner and uploads it to Vercel, so each GitHub
+  # environment owns its EXPO_PUBLIC_* values (baked in at build time) and Vercel token.
+  # Pull requests get a preview URL, `staging` gets a fixed alias, `main` goes to production.
+  # Vercel's own Git deployments are off in frontend/mobile/vercel.json to avoid double deploys.
+  deploy-web:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: [mobile-web]
+    permissions:
+      contents: read
+      pull-requests: write
+    runs-on: ubuntu-24.04
+    environment: ${{ github.event_name == 'pull_request' && 'vercel-preview' || (github.ref_name == 'main' && 'vercel-production' || 'vercel-staging') }}
+    concurrency:
+      group: deploy-web-${{ github.head_ref || github.ref_name }}
+      cancel-in-progress: true
+    defaults:
+      run:
+        working-directory: frontend/mobile
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TARGET: ${{ github.ref_name == 'main' && github.event_name == 'push' && 'production' || 'preview' }}
+      EXPO_PUBLIC_USE_MOCK: ${{ vars.EXPO_PUBLIC_USE_MOCK }}
+      EXPO_PUBLIC_MOCK_CORE: ${{ vars.EXPO_PUBLIC_MOCK_CORE }}
+      EXPO_PUBLIC_MOCK_SHOPS: ${{ vars.EXPO_PUBLIC_MOCK_SHOPS }}
+      EXPO_PUBLIC_API_ENDPOINT: ${{ vars.EXPO_PUBLIC_API_ENDPOINT }}
+      EXPO_PUBLIC_FIREBASE_API_KEY: ${{ vars.EXPO_PUBLIC_FIREBASE_API_KEY }}
+      EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+      EXPO_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_PROJECT_ID }}
+      EXPO_PUBLIC_FIREBASE_APP_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_APP_ID }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/mobile/package-lock.json
+      - name: Install Vercel CLI
+        run: npm install --global vercel@62.2.0
+      - run: vercel pull --yes --environment="$VERCEL_TARGET" --token="$VERCEL_TOKEN"
+      # Job env wins over values pulled from Vercel, so GitHub stays the source of EXPO_PUBLIC_*.
+      - run: vercel build ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN"
+      - name: Deploy
+        id: deploy
+        run: |
+          url=$(vercel deploy --prebuilt ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Alias staging
+        if: github.event_name == 'push' && github.ref_name == 'staging'
+        env:
+          STAGING_ALIAS: ${{ vars.VERCEL_STAGING_ALIAS }}
+        run: vercel alias set "${{ steps.deploy.outputs.url }}" "$STAGING_ALIAS" --token="$VERCEL_TOKEN"
+      - name: Report URL
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: ${{ steps.deploy.outputs.url }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          echo "Web deploy: $URL" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$PR" ]; then
+            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --edit-last --create-if-none \
+              --body "Web preview (commit ${GITHUB_SHA::7}): $URL"
+          fi
