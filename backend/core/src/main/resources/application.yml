@@ -24,7 +24,9 @@ ai:
 
 smartledger:
   cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+    # Default covers the Vercel web build (per-deployment preview URLs and the staging alias);
+    # set CORS_ALLOWED_ORIGINS to override, e.g. for a production domain.
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:https://smart-ledger-*-miphu2804s-projects.vercel.app,https://smart-ledger-staging.vercel.app}
   idempotency:
     ttl-days: ${IDEMPOTENCY_TTL_DAYS:30}
 
