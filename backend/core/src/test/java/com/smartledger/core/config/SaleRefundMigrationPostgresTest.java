@@ -19,6 +19,7 @@ import com.smartledger.core.entity.SaleRefund;
 import com.smartledger.core.entity.Shop;
 import com.smartledger.core.entity.UserAccount;
 import com.smartledger.core.enums.AuditAction;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -32,6 +33,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 /** Opt-in real PostgreSQL migration tests; only generated schemas are touched. */
@@ -58,7 +60,7 @@ class SaleRefundMigrationPostgresTest {
 
     @Test
     void freshMigrationsMatchEveryEntityAndSecondRunDoesNothing() {
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(10);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(11);
         validateEntitySchema();
         assertThat(flyway(null).migrate().migrationsExecuted).isZero();
         assertThat(flyway(null).validateWithResult().validationSuccessful).isTrue();
@@ -67,7 +69,7 @@ class SaleRefundMigrationPostgresTest {
     @Test
     void upgradeFromV8PreservesMoneySettledDebtAndUnknownStockHistory() throws SQLException {
         migrateAndSeedV8();
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(2);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(3);
         validateEntitySchema();
 
         assertThat(scalar("SELECT stock_deducted FROM sale_items WHERE id = 1")).isNull();
@@ -101,7 +103,7 @@ class SaleRefundMigrationPostgresTest {
                 VALUES (1, 40000, 'CASH', 1, TIMESTAMPTZ '2026-09-02T10:00:00Z');
                 """);
 
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(2);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(3);
         validateEntitySchema();
         assertThat(scalar("SELECT stock_deducted FROM sale_items WHERE id = 1")).isEqualTo("t");
         assertThat(scalar("SELECT amount_vnd FROM sale_refunds WHERE sale_id = 1")).isEqualTo("40000");
@@ -158,7 +160,7 @@ class SaleRefundMigrationPostgresTest {
                 .isEqualTo("8");
         // Correct the test row explicitly, then retry without Flyway repair.
         execute("UPDATE sale_refunds SET sale_id = 1 WHERE sale_id = 999");
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(2);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(3);
     }
 
     @Test
@@ -184,7 +186,7 @@ class SaleRefundMigrationPostgresTest {
         createHibernateAuditTable();
         execute(auditInsert("'{}'::jsonb"));
         String original = scalar("SELECT row_to_json(a)::text FROM audit_logs a");
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(flyway("10").migrate().migrationsExecuted).isEqualTo(1);
         validateEntitySchema();
         assertThat(scalar("SELECT row_to_json(a)::text FROM audit_logs a")).isEqualTo(original);
         rejected("UPDATE audit_logs SET reason = 'Changed'", "55000", "append-only");
@@ -196,13 +198,13 @@ class SaleRefundMigrationPostgresTest {
         assertThat(scalar("SELECT count(*) FROM pg_indexes WHERE schemaname = '" + schema
                 + "' AND indexname IN ('idx_audit_logs_shop_time', 'idx_audit_logs_entity', 'idx_audit_logs_actor')"))
                 .isEqualTo("3");
-        assertThat(flyway(null).migrate().migrationsExecuted).isZero();
+        assertThat(flyway("10").migrate().migrationsExecuted).isZero();
     }
 
     @Test
-    void v10AcceptsEveryCurrentActionAndRejectsBrokenAuditReferencesAndContext() throws SQLException {
+    void v10AcceptsCommittedBusinessActionsAndRejectsUnmigratedAdminReads() throws SQLException {
         migrateAndSeedV8();
-        flyway(null).migrate();
+        flyway("10").migrate();
         String valid = auditInsert("'{}'::jsonb");
         rejected(valid.replace("1, 'OWNER', 1", "999, 'OWNER', 1"), "23503", "fk_audit_logs_actor");
         rejected(valid.replace("1, 'OWNER', 1", "1, 'OWNER', 999"), "23503", "fk_audit_logs_shop");
@@ -218,10 +220,17 @@ class SaleRefundMigrationPostgresTest {
         rejected(auditInsert("NULL"), "23502", "metadata");
         assertThat(scalar("SELECT count(*) FROM audit_logs")).isEqualTo("0");
         for (AuditAction action : AuditAction.values()) {
-            execute(valid.replace("'SHOP_UPDATED'", "'" + action.name() + "'")
-                    .replace("'SHOP', 1", "'" + action.entityType() + "', 1"));
+            String statement = valid.replace("'SHOP_UPDATED'", "'" + action.name() + "'")
+                    .replace("'SHOP', 1", "'" + action.entityType() + "', 1");
+            if (action.isAdminRead()) {
+                // V10 remains immutable; V11 extends its whitelist separately.
+                rejected(statement.replace("'OWNER'", "'ADMIN'"), "23514", "ck_audit_logs_action_target");
+            } else {
+                execute(statement);
+            }
         }
-        assertThat(scalar("SELECT count(*) FROM audit_logs")).isEqualTo(Integer.toString(AuditAction.values().length));
+        assertThat(scalar("SELECT count(*) FROM audit_logs")).isEqualTo(Long.toString(
+                java.util.Arrays.stream(AuditAction.values()).filter(action -> !action.isAdminRead()).count()));
     }
 
     @Test
@@ -230,7 +239,7 @@ class SaleRefundMigrationPostgresTest {
         flyway("9").migrate();
         createHibernateAuditTable();
         execute(auditInsert("'[]'::jsonb"));
-        assertThatThrownBy(() -> flyway(null).migrate()).isInstanceOf(FlywayException.class);
+        assertThatThrownBy(() -> flyway("10").migrate()).isInstanceOf(FlywayException.class);
         assertThat(scalar("SELECT metadata::text FROM audit_logs")).isEqualTo("[]");
         assertThat(scalar("SELECT max(version::integer) FROM flyway_schema_history WHERE success AND version IS NOT NULL"))
                 .isEqualTo("9");
@@ -238,10 +247,121 @@ class SaleRefundMigrationPostgresTest {
                 .isEqualTo("0");
         // Only this isolated fixture is explicitly corrected; migration never repairs data itself.
         execute("UPDATE audit_logs SET metadata = '{}'::jsonb");
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(flyway("10").migrate().migrationsExecuted).isEqualTo(1);
         assertThat(scalar("SELECT count(*) FROM audit_logs")).isEqualTo("1");
         rejected("DELETE FROM audit_logs", "55000", "append-only");
         validateEntitySchema();
+    }
+
+    @Test
+    void v11PreservesV10HistorySupportsAllActionsAndKeepsAppendOnlyGuards() throws SQLException {
+        migrateAndSeedV8();
+        flyway("10").migrate();
+        execute(auditInsert("'{}'::jsonb"));
+        execute("ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_action_check CHECK (action = 'SHOP_UPDATED')");
+        String before = scalar("SELECT row_to_json(a)::text FROM audit_logs a");
+
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(scalar("SELECT row_to_json(a)::text FROM audit_logs a")).isEqualTo(before);
+        assertThat(scalar("SELECT count(*) FROM pg_constraint WHERE conrelid='audit_logs'::regclass AND conname='audit_logs_action_check'"))
+                .isEqualTo("0");
+        for (AuditAction action : AuditAction.values()) {
+            if (action.isAdminRead()) {
+                execute(adminReadInsert(action));
+            } else {
+                execute(auditInsert("'{}'::jsonb").replace("'SHOP_UPDATED'", "'" + action.name() + "'")
+                        .replace("'SHOP', 1", "'" + action.entityType() + "', 1"));
+            }
+        }
+        assertThat(scalar("SELECT count(*) FROM audit_logs")).isEqualTo(Integer.toString(AuditAction.values().length + 1));
+        assertThat(scalar("SELECT amount_vnd FROM payments WHERE id=1")).isEqualTo("40000");
+        assertThat(scalar("SELECT outstanding_vnd FROM debts WHERE id=1")).isEqualTo("60000");
+        assertThat(scalar("SELECT stock_quantity FROM products WHERE id=1")).isEqualTo("7.000");
+        for (String mutation : new String[] {"UPDATE audit_logs SET reason='changed'", "DELETE FROM audit_logs", "TRUNCATE audit_logs"}) {
+            rejected(mutation, "55000", "append-only");
+        }
+        assertThat(scalar("SELECT count(*) FROM information_schema.tables WHERE table_schema='" + schema + "' AND table_name='admin_access_logs'"))
+                .isEqualTo("0");
+        validateEntitySchema();
+        assertThat(flyway(null).migrate().migrationsExecuted).isZero();
+        assertThat(flyway(null).validateWithResult().validationSuccessful).isTrue();
+    }
+
+    @Test
+    void v11RejectsUnscopedBusinessWrongAdminRolesAndWrongTargets() throws SQLException {
+        migrateAndSeedV8();
+        flyway(null).migrate();
+        String business = auditInsert("'{}'::jsonb");
+        rejected(business.replace("1, 'OWNER', 1", "1, 'OWNER', NULL"), "23514", "ck_audit_logs_action_target");
+        rejected(business.replace("'SHOP', 1", "'SHOP', NULL"), "23514", "ck_audit_logs_action_target");
+        String overview = adminReadInsert(AuditAction.ADMIN_OVERVIEW_VIEWED);
+        rejected(overview.replace("'ADMIN'", "'OWNER'"), "23514", "ck_audit_logs_action_target");
+        rejected(overview.replace("'SYSTEM'", "'SHOP'"), "23514", "ck_audit_logs_action_target");
+        rejected(overview.replace("1, 'ADMIN', NULL", "1, 'ADMIN', 1"), "23514", "ck_audit_logs_action_target");
+        rejected(overview.replace("'SUCCESS'", "'FAILURE'"), "23514", "ck_audit_logs_outcome");
+        rejected(overview.replace("'ADMIN_OVERVIEW_VIEWED'", "'ADMIN_UNKNOWN'"), "23514", "ck_audit_logs_action_target");
+        String owner = adminReadInsert(AuditAction.ADMIN_OWNER_VIEWED);
+        rejected(owner.replace("'OWNER', 1", "'OWNER', NULL"), "23514", "ck_audit_logs_action_target");
+        rejected(owner.replace("'OWNER', 1", "'OWNER', 0"), "23514", "ck_audit_logs_ids");
+        String shop = adminReadInsert(AuditAction.ADMIN_SHOP_VIEWED);
+        rejected(shop.replace("'SHOP', 1", "'SHOP', 2"), "23514", "ck_audit_logs_action_target");
+        rejected(shop.replace("1, 'ADMIN', 1", "1, 'ADMIN', NULL"), "23514", "ck_audit_logs_action_target");
+        rejected(shop.replace("1, 'ADMIN', 1", "1, 'ADMIN', 999").replace("'SHOP', 1", "'SHOP', 999"),
+                "23503", "fk_audit_logs_shop");
+        rejected(overview.replace("1, 'ADMIN', NULL", "999, 'ADMIN', NULL"), "23503", "fk_audit_logs_actor");
+        rejected(overview.replace("'{}'::jsonb", "'[]'::jsonb"), "23514", "ck_audit_logs_metadata");
+        assertThat(scalar("SELECT count(*) FROM audit_logs")).isEqualTo("0");
+    }
+
+    @Test
+    void v11CanAdoptManuallyAdjustedV10ConstraintsWithoutLosingAdminHistory() throws Exception {
+        migrateAndSeedV8();
+        flyway("10").migrate();
+        execute(auditInsert("'{}'::jsonb"));
+        var sql = new ClassPathResource("db/migration/V11__extend_audit_logs_for_admin_dashboard.sql")
+                .getContentAsString(StandardCharsets.UTF_8);
+        try (var connection = scopedConnection(); var statement = connection.createStatement()) {
+            connection.setAutoCommit(false);
+            statement.execute(sql);
+            connection.commit();
+        }
+        execute(adminReadInsert(AuditAction.ADMIN_OVERVIEW_VIEWED));
+        String before = scalar("SELECT json_agg(a ORDER BY id)::text FROM audit_logs a");
+        assertThat(scalar("SELECT max(version::integer) FROM flyway_schema_history WHERE success AND version IS NOT NULL")).isEqualTo("10");
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(scalar("SELECT json_agg(a ORDER BY id)::text FROM audit_logs a")).isEqualTo(before);
+        assertThat(flyway(null).migrate().migrationsExecuted).isZero();
+    }
+
+    @Test
+    void v11InvalidExistingAdminEventRollsBackWithoutErasingHistory() throws SQLException {
+        migrateAndSeedV8();
+        flyway("10").migrate();
+        execute("""
+                ALTER TABLE audit_logs ALTER COLUMN shop_id DROP NOT NULL;
+                ALTER TABLE audit_logs ALTER COLUMN entity_id DROP NOT NULL;
+                ALTER TABLE audit_logs DROP CONSTRAINT ck_audit_logs_action_target;
+                """);
+        execute(adminReadInsert(AuditAction.ADMIN_OVERVIEW_VIEWED).replace("'ADMIN'", "'OWNER'"));
+        String before = scalar("SELECT row_to_json(a)::text FROM audit_logs a");
+        String idsBefore = scalar("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='audit_logs'::regclass AND conname='ck_audit_logs_ids'");
+
+        assertThatThrownBy(() -> flyway(null).migrate()).isInstanceOf(FlywayException.class);
+        assertThat(scalar("SELECT row_to_json(a)::text FROM audit_logs a")).isEqualTo(before);
+        assertThat(scalar("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='audit_logs'::regclass AND conname='ck_audit_logs_ids'"))
+                .isEqualTo(idsBefore);
+        assertThat(scalar("SELECT count(*) FROM pg_constraint WHERE conrelid='audit_logs'::regclass AND conname='ck_audit_logs_action_target'"))
+                .isEqualTo("0");
+        assertThat(scalar("SELECT max(version::integer) FROM flyway_schema_history WHERE success AND version IS NOT NULL")).isEqualTo("10");
+        rejected("DELETE FROM audit_logs", "55000", "append-only");
+    }
+
+    private String adminReadInsert(AuditAction action) {
+        boolean shop = action == AuditAction.ADMIN_SHOP_VIEWED || action == AuditAction.ADMIN_SHOP_STATUS_HISTORY_VIEWED;
+        boolean target = shop || action == AuditAction.ADMIN_OWNER_VIEWED;
+        return "INSERT INTO audit_logs (actor_user_id, actor_role, shop_id, action, entity_type, entity_id, outcome, request_id, metadata) VALUES (1, 'ADMIN', "
+                + (shop ? "1" : "NULL") + ", '" + action.name() + "', '" + action.entityType() + "', "
+                + (target ? "1" : "NULL") + ", 'SUCCESS', '" + UUID.randomUUID() + "', '{}'::jsonb)";
     }
 
     private String auditInsert(String metadata) {

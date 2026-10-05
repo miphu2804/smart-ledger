@@ -3,6 +3,8 @@ package com.smartledger.core.repository;
 import com.smartledger.core.entity.AuditLog;
 import com.smartledger.core.enums.AuditAction;
 import java.time.OffsetDateTime;
+import java.util.Arrays;
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
@@ -14,11 +16,13 @@ public interface AuditLogRepository extends Repository<AuditLog, Long>, AuditLog
             OffsetDateTime from, OffsetDateTime to, Pageable pageable) {
         return findWindow(shopId, action, entityId,
                 from == null ? OffsetDateTime.parse("0001-01-01T00:00:00Z") : from,
-                to == null ? OffsetDateTime.parse("9999-12-31T23:59:59Z") : to, pageable);
+                to == null ? OffsetDateTime.parse("9999-12-31T23:59:59Z") : to,
+                Arrays.stream(AuditAction.values()).filter(a -> !a.isAdminRead()).toList(), pageable);
     }
 
     @Query("""
             select a from AuditLog a where a.shopId = :shopId
+            and a.action in :ownerActions
             and (:action is null or a.action = :action)
             and (:entityId is null or a.entityId = :entityId)
             and a.createdAt >= :from and a.createdAt < :to
@@ -26,5 +30,5 @@ public interface AuditLogRepository extends Repository<AuditLog, Long>, AuditLog
             """)
     Page<AuditLog> findWindow(@Param("shopId") Long shopId, @Param("action") AuditAction action,
             @Param("entityId") Long entityId, @Param("from") OffsetDateTime from,
-            @Param("to") OffsetDateTime to, Pageable pageable);
+            @Param("to") OffsetDateTime to, @Param("ownerActions") List<AuditAction> ownerActions, Pageable pageable);
 }
