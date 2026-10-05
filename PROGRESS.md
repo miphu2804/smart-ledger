@@ -1,3 +1,11 @@
+### [2026-10-05 11:20 UTC+07:00] — [CI/CD] Split CD workflow and merge environments into the ci-cd diagram
+
+**Done:** Moved the Railway deploy into `.github/workflows/cd.yml`, called from `ci.yml` after `ai`, `core`, `mobile-web` and `container-images` all pass on a push to `staging` or `main`; it writes a `deploy-summary-<branch>` artifact. Merged the environments diagram into `ci-cd.drawio` (dev machine, per-provider infra boxes, CI PostgreSQL) and removed `environments.mmd`/`.svg`. Added `docs/architecture/diagrams/README.md` with the diagram guide.
+
+**Changed files:** `.github/workflows/ci.yml`, `.github/workflows/cd.yml`, `docs/development/ci-cd.md`, `docs/architecture/diagrams/src/ci-cd.drawio`, `docs/architecture/diagrams/images/ci-cd.svg`, `docs/architecture/diagrams/README.md`, `docs/README.md`, `docs/architecture/technical-design.md`, `docs/architecture/diagrams/src/environments.mmd` (deleted), `docs/architecture/diagrams/images/environments.svg` (deleted), `PROGRESS.md`.
+
+**Flow explained:** `workflow_call` keeps the pushed ref, so the `railway-staging`/`railway-production` branch policies still apply; a `workflow_run` trigger would run on the default branch and break them. `mobile-web` now also gates deploy. Not verified: the called workflow on GitHub (first push to `staging`), Railway ports, the Vercel edge status.
+
 ### [2026-10-04 10:40 UTC+07:00] — [Config] Keep Flyway off against the shared dev/staging database
 
 **Done:** Compose now passes `FLYWAY_ENABLED` to Core with a default of `false`, and the host run command sets it to `false`, so a developer machine no longer migrates the database it shares with staging. A new README section, "Database migrations", says to develop migrations on a disposable PostgreSQL and to migrate staging only from merged `staging` code, done once by one person until a staging deploy exists.
