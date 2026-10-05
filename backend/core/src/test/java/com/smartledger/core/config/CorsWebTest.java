@@ -18,7 +18,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = AgentController.class,
-        properties = "smartledger.cors.allowed-origins=https://smart-ledger-*.vercel.app")
+        properties = "smartledger.cors.allowed-origins=https://smart-ledger-git-staging.vercel.app")
 @Import({SecurityConfiguration.class, BearerTokenAuthenticationFilter.class,
         RestAuthenticationEntryPoint.class, ApiExceptionHandler.class})
 class CorsWebTest {
@@ -45,6 +45,14 @@ class CorsWebTest {
     void preflightFromUnknownOriginIsRejected() throws Exception {
         mvc.perform(options("/api/v1/agent/chat")
                         .header("Origin", "https://evil.example.com")
+                        .header("Access-Control-Request-Method", "POST"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void preflightFromUnlistedPreviewIsRejected() throws Exception {
+        mvc.perform(options("/api/v1/agent/chat")
+                        .header("Origin", "https://smart-ledger-git-other.vercel.app")
                         .header("Access-Control-Request-Method", "POST"))
                 .andExpect(status().isForbidden());
     }

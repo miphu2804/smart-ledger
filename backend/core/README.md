@@ -1,4 +1,4 @@
-# SmartLedger Core — local setup
+# SmartLedger Core — setup
 
 Core is a Java 21 / Spring Boot backend. This README covers how to run it locally on Windows, macOS/Linux, in IntelliJ IDEA, or with Docker Compose. For product behavior and API details, see the [documentation index](../../docs/README.md) and [API contracts](../../docs/contracts/api-contracts.md).
 
@@ -16,7 +16,10 @@ Set these environment variables in the process that launches Core. [`.env.exampl
 | `DATABASE_USERNAME`, `DATABASE_PASSWORD` | PostgreSQL credentials |
 | `FIREBASE_PROJECT_ID` | Firebase project used by this backend |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Absolute path to the service-account JSON **on the machine running Core** |
-| `SERVER_PORT` | Optional; defaults to `8080` when running outside Compose |
+| `SERVER_PORT`, `PORT` | Optional; `SERVER_PORT` takes precedence, then the hosted runtime's `PORT`, then `8080` |
+| `CORS_ALLOWED_ORIGINS` | Exact browser origins, comma-separated; empty by default (no cross-origin browser access) |
+| `OPENAPI_ENABLED`, `SWAGGER_UI_ENABLED` | Both default to `true` for local/staging; set both to `false` on production |
+| `FLYWAY_ENABLED` | `false` for the shared dev/staging database; `true` for a disposable database or an authorized migration run |
 | `FIREBASE_AUTH_EMULATOR_HOST` | Optional for local Auth Emulator testing, e.g. `127.0.0.1:9099` without `http://` |
 | `AI_BASE_URL` | Optional; AI service URL for the Agent proxy, defaults to `http://localhost:8001` |
 | `INTERNAL_API_TOKEN` | Shared with AI and sent as `X-Internal-Token`; a missing or mismatched value makes AI return `401`, which Core reports as `503 ai_unavailable` |
@@ -60,6 +63,63 @@ Omit `core` to start AI as well. Compose mounts the service-account JSON read-on
 
 If the Firebase Auth Emulator runs on the host, configure `FIREBASE_AUTH_EMULATOR_HOST` with an address reachable **from the container**; `127.0.0.1` inside Core means the container, not the host.
 
+Compose forwards `CORS_ALLOWED_ORIGINS`, `OPENAPI_ENABLED` and `SWAGGER_UI_ENABLED` from its env files into Core. Set the actual FE origins in the env file selected for that environment and recreate the Core container after changing them. Host/IntelliJ and hosted runtimes use the same variables directly.
+
+## Browser access and deployment checks
+
+For a browser calling Core directly, set `CORS_ALLOWED_ORIGINS` in the process running Core. For example, with Expo web on port `8081`:
+
+```powershell
+$env:CORS_ALLOWED_ORIGINS = 'http://localhost:8081,http://127.0.0.1:8081'
+```
+
+For staging/production, use only the actual FE HTTPS origins, for example `https://your-staging-app.vercel.app`. An origin contains a scheme, hostname and optional port, **not** a path or trailing slash. Wildcards and wildcard preview domains are rejected. Add a preview origin explicitly only when needed. A local proxy is not a substitute for deployed CORS configuration.
+
+CORS allows `Authorization`, `Content-Type`, `X-Shop-Id` and `Idempotency-Key` headers. Authentication still uses a bearer token, not cross-site cookies: allowing an origin does not grant a role or access to a shop. Native clients and tools such as PowerShell still require the normal authentication/authorization checks even though CORS is a browser restriction.
+
+The following GET endpoints do not require a token and return a health status, without component details or credentials. The aggregate endpoint also lists the available probe group names:
+
+| Endpoint | Purpose |
+|---|---|
+| `/actuator/health/liveness` | Process availability; does not check PostgreSQL or AI |
+| `/actuator/health/readiness` | Readiness state plus PostgreSQL connectivity; returns `503` when not ready |
+| `/actuator/health` | Aggregate health status |
+
+Point a deployment health check at `/actuator/health/readiness`. Health is the only exposed Actuator endpoint; other management endpoints are not exposed. Health does **not** verify Firebase sign-in, schema completeness or the entire business flow. AI availability is not a Core readiness dependency.
+
+Keep environment configuration separate: the existing Firebase project `smart-ledger-c2892` is for dev/staging; `smartledger-production` is for production; the Auth Emulator is local-only. Each hosted environment needs its own database credentials, matching Firebase project/service account, FE origin and (when using AI) internal token. Do not set `FIREBASE_AUTH_EMULATOR_HOST` on a real staging/production runtime. Keep service-account JSON and database passwords outside Git and out of FE configuration. Do not point local tests at the production database.
+
+On production, explicitly set `OPENAPI_ENABLED=false` and `SWAGGER_UI_ENABLED=false`; this disables `/v3/api-docs`, its Swagger configuration endpoint and the Swagger UI. Keep both `true` on staging for API testing. These settings do not change business authentication or health checks. There is no automatic environment detection: loading a production database env file alone does not turn documentation off. With multiple Compose `--env-file` arguments, the later file and process environment can override earlier values; avoid loading local/staging Swagger settings over production settings.
+
+After startup, test real Firebase tokens (valid, wrong project and expired), OWNER/ADMIN permissions and cross-shop denial, then run the FE business flow with mocks disabled. A passing health check or mocked web test alone does not complete CORE-004 acceptance.
+
+## Read-only staging auth smoke check
+
+Use [scripts/verify_staging_auth.ps1](scripts/verify_staging_auth.ps1) in Windows PowerShell 5.1 or PowerShell 7. It makes **GET requests only**, uses no production credentials and does not sign up users, create sessions or change business data. Choose the actual HTTPS **staging** origin explicitly; the script cannot determine whether a domain belongs to production. Never run it against production as a substitute for staging UAT.
+
+Prepare two different existing OWNER profiles with their own ACTIVE shops and one existing ADMIN profile. Provision these fixtures through the team's approved process first; this script does not create them. Put the following variables in the process that runs the script:
+
+| Variable | Value |
+|---|---|
+| `CORE_STAGING_URL` | Core HTTPS origin, without `/api/v1`, credentials or query parameters |
+| `CORE_STAGING_FIREBASE_PROJECT_ID` | Expected staging project ID, normally `smart-ledger-c2892` |
+| `CORE_STAGING_SHOP_A_ID`, `CORE_STAGING_SHOP_B_ID` | Different ACTIVE shop IDs belonging to OWNER A and OWNER B |
+| `CORE_STAGING_OWNER_A_TOKEN`, `CORE_STAGING_OWNER_B_TOKEN`, `CORE_STAGING_ADMIN_TOKEN` | Fresh real Firebase **ID tokens** for those staging users |
+| `CORE_STAGING_WRONG_PROJECT_TOKEN` | Fresh, genuinely issued Firebase ID token from another project (use a separate non-production test project) |
+| `CORE_STAGING_EXPIRED_TOKEN` | Genuinely issued staging ID token expired for at least ten minutes; do not edit a JWT to manufacture this fixture |
+
+Obtain tokens locally using the Firebase SDK. Do not paste tokens into chat, source code, committed env files or command-line arguments. The backend's service-account JSON is not an ID token. You may populate a token variable from your local SDK result, e.g. `$env:CORE_STAGING_OWNER_A_TOKEN = $login.idToken`; clear the five token variables when finished and close the test terminal. The script neither prints tokens nor dumps response bodies.
+
+From `backend/core`, after setting all the variables:
+
+```powershell
+.\scripts\verify_staging_auth.ps1
+```
+
+Missing/invalid fixtures, unexpected status/error contracts, network failures or redirects fail the run instead of reporting success. JWT payload decoding checks fixture metadata only; the script does not verify signatures locally, so fake tokens are not evidence for the real Firebase matrix. There are 54 read-only checks: readiness, token rejection, roles, own-shop access and cross-shop/ADMIN denial across nine OWNER read APIs. Successful output does **not** prove FE integration, create/confirm/repay/void/expense writes, ADMIN status changes or provider UI behavior. Keep those as separate UAT checks. A private service-account file outside the repo is normal; do not commit it to make this script work.
+
+The tool's offline guards can be checked with `.\scripts\test_verify_staging_auth.ps1`. This uses synthetic fixtures and an in-memory transport, makes no network calls and is **not** a real staging/Firebase acceptance run.
+
 ## Run tests
 
 From `backend/core`:
@@ -96,6 +156,8 @@ ADMIN and OWNER events share the existing `audit_logs`; ADMIN reads are separate
 For a fresh disposable local database, use `FLYWAY_ENABLED=true` and `SPRING_JPA_HIBERNATE_DDL_AUTO=validate` to apply V1–V11 and validate the entity mappings. A Flyway-managed database already at V10 can apply V11, including one whose audit constraints were adjusted locally. Follow the repository's merged-code migration policy for shared environments. Do not enable Flyway blindly on a Hibernate-created database without migration history: V10 rejects pre-existing ADMIN read events. Use a fresh local database or a separately reviewed adoption plan, preserving the original database. The migration does not baseline or repair migration history.
 
 If V11 validation fails, PostgreSQL rolls back its schema changes; review the offending records before retrying. Recovery uses a forward fix retaining audit history. Restoring V10 constraints or older readers that cannot handle `ADMIN_*` events is unsafe after these records exist. Integrated Firebase/FE UAT and document alignment remain pending.
+
+To run **all** Core tests, including migration, audit/checkout rollback and real PostgreSQL readiness coverage, keep the three test-only variables above and run `.\mvnw.cmd verify` (or `./mvnw verify`). The migration/audit suites manage their own randomly named schemas; use a disposable database with schema-creation permission. The readiness test checks connectivity with valid and deliberately invalid test credentials, so an expected database-health warning can appear in the logs.
 
 ## Time display
 

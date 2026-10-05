@@ -59,7 +59,7 @@ Mỗi giá trị chỉ nhập một lần; chỗ nào dùng lại thì khai báo
 | `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` | Supabase của environment tương ứng (JDBC URL) |
 | `FIREBASE_PROJECT_ID`, `FIREBASE_SERVICE_ACCOUNT_JSON` | Firebase project của environment tương ứng |
 | `FLYWAY_ENABLED` | `false` |
-| `CORS_ALLOWED_ORIGINS` | Không bắt buộc. Mặc định cho phép `https://smart-ledger-*-miphu2804s-projects.vercel.app` và `https://smart-ledger-staging.vercel.app`; đặt biến để thay danh sách (phân tách bằng dấu phẩy, nhận wildcard), vd. thêm domain production |
+| `CORS_ALLOWED_ORIGINS` | Mặc định rỗng: không cho phép truy cập cross-origin từ trình duyệt. Khi web gọi Core trực tiếp, đặt các origin chính xác, phân tách bằng dấu phẩy, vd. `https://smart-ledger-staging.vercel.app`; không nhận wildcard, path hoặc dấu `/` cuối. Khai báo riêng từng origin preview/staging/production được phép và recreate/redeploy Core sau khi đổi biến. |
 
 **Service `ai`:**
 
