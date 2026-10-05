@@ -41,7 +41,7 @@ Start with the path that matches your task; each step links to the next level of
 | [ERD description](architecture/erd-description.md) and [`erd.dbml`](architecture/diagrams/src/erd.dbml) | Database entities, relationships, data flows and migration alignment |
 | [ADR-0001: pgvector vector store](architecture/adr/0001-vector-store-pgvector.md) | Accepted: embeddings in Supabase PostgreSQL instead of Qdrant |
 | [Architecture diagram](architecture/diagrams/src/architecture.mmd) | MVP target system boundary; edit [`architecture.drawio`](architecture/diagrams/src/architecture.drawio) and re-export the [SVG](architecture/diagrams/images/architecture.svg) and [PNG](architecture/diagrams/images/architecture.png) together |
-| [Environments diagram](architecture/diagrams/src/environments.mmd) | Clients, backend, Supabase staging/production, CI/CD; dashed edges are planned |
+| [CI/CD and environments diagram](architecture/diagrams/images/ci-cd.svg) | CI/CD, Railway runtime, clients, dev machine, Supabase/Redis staging and production; edit [`ci-cd.drawio`](architecture/diagrams/src/ci-cd.drawio) and re-export the SVG; dashed edges are planned |
 | [Service walkthrough](architecture/service-walkthrough/README.md) | Reading notes with diagrams of Core and AI service flows; not a source of truth |
 | [Mobile UI style and migration](design/mobile-ui-style-migration.md) | Visual direction and implementation checks for the mobile app |
 | [Mobile wording review](design/mobile-wording-review.md) | Proposed UI wording, icon and feedback mapping pending product approval |
