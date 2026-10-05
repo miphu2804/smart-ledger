@@ -34,7 +34,7 @@ Mỗi Railway project token chỉ deploy được vào đúng một Railway envi
 
 - Một project, hai environment `staging` và `production`, mỗi environment có service `core` và `ai`. Tên service phải khớp với `--service` trong workflow.
 - Workflow gửi code bằng `railway up backend/<service> --path-as-root`, nên **Root Directory** của service để trống và **không** bật auto-deploy từ GitHub (tránh deploy hai lần).
-- Biến môi trường của service (database, Firebase, `INTERNAL_API_TOKEN`, model key…) cấu hình trên Railway theo từng environment; GitHub chỉ giữ token để deploy.
+- Biến môi trường của service (database, Firebase, `INTERNAL_API_TOKEN`, model key…) cấu hình trên Railway theo từng environment; GitHub chỉ giữ token để deploy. Railway không mount file, nên Core nhận khóa Firebase Admin qua `FIREBASE_SERVICE_ACCOUNT_JSON` (toàn bộ JSON của service account, dùng service account riêng cho từng environment); khi biến trống, Core dùng `GOOGLE_APPLICATION_CREDENTIALS` như khi chạy local.
 
 ## Những gì luồng này chưa làm
 

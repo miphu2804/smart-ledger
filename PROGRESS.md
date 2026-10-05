@@ -1,3 +1,17 @@
+### [2026-10-05 13:00 UTC+07:00] — [Core] Read the Firebase service account from an env variable
+
+**Done:** `core` crashed on Railway staging with "Your default credentials were not found" because Railway cannot mount the key file `GoogleCredentials.getApplicationDefault()` needs. `FirebaseAdminConfiguration` now builds credentials from `firebase.service-account-json` (env `FIREBASE_SERVICE_ACCOUNT_JSON`) when set and otherwise falls back to Application Default Credentials, so local and Compose setups are unchanged. Edited `backend/core` with the owner's explicit approval, despite the AGENTS.md rule.
+
+**Changed files:**
+- `backend/core/src/main/java/com/smartledger/core/config/FirebaseAdminConfiguration.java` — modified
+- `backend/core/src/main/java/com/smartledger/core/config/FirebaseProperties.java` — modified
+- `backend/core/src/main/resources/application.yml` — modified
+- `backend/core/.env.example` — modified
+- `backend/core/src/test/java/com/smartledger/core/config/FirebaseAdminConfigurationTest.java` — created
+- `docs/development/ci-cd.md` — modified
+
+**Flow explained:** the unit test generates an RSA key, builds a service-account JSON and checks `firebaseApp` initializes without any key file; it passed with `FirebaseAdminTokenVerifierTest`. Unverified on Railway until `FIREBASE_SERVICE_ACCOUNT_JSON` is set and the service restarts.
+
 ### [2026-10-05 12:00 UTC+07:00] — [CI/CD] Inline the Railway deploy job into ci.yml
 
 **Done:** Deleted `.github/workflows/cd.yml` and moved its `deploy` job into `ci.yml` with `environment:` set on the job itself. The reusable-workflow version received an empty `RAILWAY_TOKEN` (`secrets.RAILWAY_TOKEN` evaluated to `null` in the run debug log) even though the `railway-staging` environment secret existed. Updated `docs/development/ci-cd.md`.
