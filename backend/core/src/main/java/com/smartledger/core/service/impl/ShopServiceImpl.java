@@ -2,6 +2,7 @@ package com.smartledger.core.service.impl;
 
 import com.smartledger.core.enums.AuditAction;
 import com.smartledger.core.service.AuditLogService;
+import com.smartledger.core.service.AdminAccessAuditService;
 import com.smartledger.core.dto.request.ArchiveShopRequest;
 import com.smartledger.core.dto.request.ShopCreateRequest;
 import com.smartledger.core.dto.request.ShopStatusUpdateRequest;
@@ -29,13 +30,15 @@ import org.springframework.util.StringUtils;
 @Service
 public class ShopServiceImpl implements ShopService {
     private final AuditLogService auditLogService;
+    private final AdminAccessAuditService adminAccessAuditService;
 
     private final AuthIdentityRepository authIdentityRepository;
     private final ShopRepository shopRepository;
 
     public ShopServiceImpl(AuthIdentityRepository authIdentityRepository, ShopRepository shopRepository,
-            AuditLogService auditLogService) {
+            AuditLogService auditLogService, AdminAccessAuditService adminAccessAuditService) {
         this.auditLogService = auditLogService;
+        this.adminAccessAuditService = adminAccessAuditService;
         this.authIdentityRepository = authIdentityRepository;
         this.shopRepository = shopRepository;
     }
@@ -119,10 +122,9 @@ public class ShopServiceImpl implements ShopService {
         } else {
             throw new BusinessException(ErrorCode.SHOP_STATUS_CHANGE_INVALID);
         }
-        auditLogService.record(shop.getId(), admin.getId(), admin.getSystemRole(),
-                request.status() == ShopStatus.INACTIVE ? AuditAction.SHOP_INACTIVATED : AuditAction.SHOP_REACTIVATED,
-                shop.getId(), shop.getInactiveReason(), null,
-                Map.of("beforeStatus", before, "afterStatus", shop.getStatus()));
+        // One existing status event serves both OWNER and ADMIN views; never duplicate the write.
+        adminAccessAuditService.recordShopStatus(admin.getId(), shop.getId(), before,
+                shop.getStatus(), shop.getInactiveReason());
         return toResponse(shop);
     }
 

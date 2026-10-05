@@ -28,7 +28,8 @@ public class AuditLogQueryServiceImpl implements AuditLogQueryService {
     @Transactional(readOnly = true)
     public AuditLogPageResponse list(VerifiedFirebaseToken token, String shopId, AuditAction action,
             Long entityId, OffsetDateTime from, OffsetDateTime to, int page, int size) {
-        if (page < 0 || size < 1 || size > 100 || (long) page * size > Integer.MAX_VALUE
+        if (action != null && action.isAdminRead()
+                || page < 0 || size < 1 || size > 100 || (long) page * size > Integer.MAX_VALUE
                 || entityId != null && entityId <= 0 || from != null && to != null && !from.isBefore(to)) {
             throw new BusinessException(ErrorCode.INVALID_AUDIT_QUERY);
         }

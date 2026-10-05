@@ -14,7 +14,9 @@ import type {
   SaleDraftItemView,
   SaleDraftView,
   SaleItemView,
+  SaleRefundView,
   SaleView,
+  SaleVoidView,
 } from '../data/types';
 import { ApiError } from './apiError';
 import { normalizeText, vnd } from './format';
@@ -43,6 +45,8 @@ let payments: PaymentView[] = [];
 let customers: CustomerView[] = [];
 let debts: DebtView[] = [];
 let expenses: ExpenseView[] = [];
+/** Khoản hoàn của đơn đã huỷ, theo saleId (mỗi đơn tối đa một khoản) */
+const refunds = new Map<number, SaleRefundView>();
 
 let nextCategoryId = 1;
 let nextProductId = 1;
@@ -53,6 +57,7 @@ let nextPaymentId = 1;
 let nextCustomerId = 1;
 let nextDebtId = 1;
 let nextExpenseId = 1;
+let nextRefundId = 1;
 
 /** Khách gắn với một đơn nháp qua `customerId` có sẵn — không có trong `SaleDraftView` nên lưu riêng ở đây. */
 const draftCustomerId = new Map<number, number | null>();
@@ -560,6 +565,97 @@ function listPaymentsForSale(saleId: number): PaymentView[] {
   return payments.filter((p) => p.saleId === saleId);
 }
 
+interface SaleVoidBody {
+  reason?: string | null;
+  restockItems?: boolean | null;
+  refundMethod?: 'CASH' | 'TRANSFER' | null;
+  transferReference?: string | null;
+}
+
+/**
+ * Huỷ cả đơn, bám SaleVoidServiceImpl#voidSale của Core thật: hoàn TOÀN BỘ tiền đã thu, huỷ nợ OPEN còn dư, tuỳ chọn hoàn
+ * kho; mọi kiểm tra chạy trước khi đổi dữ liệu nên lỗi thì không đổi gì. Khác Core ở một điểm: mock không giữ ảnh chụp
+ * "đã trừ kho" của từng dòng, nên coi dòng nào có sản phẩm đang theo dõi tồn là đã trừ kho.
+ */
+function voidSale(id: number, body: SaleVoidBody): SaleVoidView {
+  const reason = body.reason?.trim();
+  if (!reason || reason.length > 500) throw apiErr(400, 'validation_failed', 'reason must contain 1 to 500 characters.');
+  if (typeof body.restockItems !== 'boolean') {
+    throw apiErr(400, 'validation_failed', 'Choose whether returned items should be restocked.');
+  }
+  if (body.refundMethod != null && body.refundMethod !== 'CASH' && body.refundMethod !== 'TRANSFER') {
+    throw apiErr(400, 'validation_failed', 'refundMethod must be CASH or TRANSFER.');
+  }
+  if (body.transferReference != null && body.transferReference.length > 255) {
+    throw apiErr(400, 'validation_failed', 'transferReference must not exceed 255 characters.');
+  }
+
+  const sale = sales.find((s) => s.id === id);
+  if (!sale) throw apiErr(404, 'sale_not_found', 'This sale is unavailable.');
+  if (sale.saleStatus !== 'CONFIRMED') throw apiErr(409, 'sale_already_voided', 'This sale has already been voided.');
+
+  const received = payments.filter((p) => p.saleId === id).reduce((sum, p) => sum + p.amountVnd, 0);
+  if (received !== sale.paidVnd) {
+    throw apiErr(409, 'sale_payment_mismatch', 'Sale payments do not match the recorded paid amount.');
+  }
+  if (received > 0 && !body.refundMethod) {
+    throw apiErr(400, 'sale_refund_method_required', 'A refund method is required when the sale has received payment.');
+  }
+  if (received === 0 && body.refundMethod) {
+    throw apiErr(400, 'sale_refund_method_invalid', 'Do not provide a refund method for a sale with no payment.');
+  }
+
+  const restores: Array<{ product: ProductView; quantity: number }> = [];
+  if (body.restockItems) {
+    for (const item of sale.items) {
+      const product = products.find((p) => p.id === item.productId);
+      if (!product) {
+        throw apiErr(409, 'sale_restock_unavailable', 'Stock cannot be safely restored for this sale item; void without restocking.');
+      }
+      if (product.tracked && product.stockQuantity != null) restores.push({ product, quantity: item.quantity });
+    }
+  }
+
+  const now = nowIso();
+  for (const { product, quantity } of restores) {
+    product.stockQuantity = (product.stockQuantity ?? 0) + quantity;
+    product.updatedAt = now;
+  }
+  const debt = debts.find((d) => d.saleId === id);
+  let cancelledDebtVnd = 0;
+  if (debt && debt.status === 'OPEN') {
+    cancelledDebtVnd = debt.outstandingVnd;
+    debt.status = 'VOIDED';
+    debt.voidedAt = now;
+    debt.cancelledVnd = cancelledDebtVnd;
+    debt.outstandingVnd = 0;
+  }
+  let refund: SaleRefundView | null = null;
+  if (received > 0) {
+    refund = {
+      id: nextRefundId++,
+      saleId: id,
+      amountVnd: received,
+      refundMethod: body.refundMethod as 'CASH' | 'TRANSFER',
+      transferReference: body.transferReference?.trim() || null,
+      refundedByUserId: 1,
+      refundedAt: now,
+    };
+    refunds.set(id, refund);
+  }
+  // Như Core: đơn đã huỷ có dư nợ 0 nhưng giữ nguyên số đã thu và trạng thái thanh toán để xem lại lịch sử.
+  sale.saleStatus = 'VOIDED';
+  sale.outstandingVnd = 0;
+  return { sale, refund, cancelledDebtVnd, stockRestocked: restores.length > 0 };
+}
+
+function getRefund(saleId: number): SaleRefundView {
+  if (!sales.some((s) => s.id === saleId)) throw apiErr(404, 'sale_not_found', 'This sale is unavailable.');
+  const refund = refunds.get(saleId);
+  if (!refund) throw apiErr(404, 'sale_refund_not_found', 'No refund exists for this sale.');
+  return refund;
+}
+
 // ---------------------------------------------------------------------------
 // Khách hàng
 // ---------------------------------------------------------------------------
@@ -585,6 +681,7 @@ function listDebts(): DebtView[] {
 function repayDebt(id: number, body: DebtRepaymentBody): { debt: DebtView; payment: PaymentView } {
   const debt = debts.find((d) => d.id === id);
   if (!debt) throw apiErr(404, 'debt_not_found', 'This debt is unavailable.');
+  if (debt.status === 'VOIDED') throw apiErr(409, 'sale_already_voided', 'This sale has already been voided.');
   if (debt.status !== 'OPEN') throw apiErr(409, 'debt_already_settled', 'This debt has already been settled.');
   if (body.amountVnd <= 0 || body.amountVnd > debt.outstandingVnd) {
     throw apiErr(400, 'debt_payment_invalid', 'Repayment amount is invalid or exceeds the remaining debt.');
@@ -842,6 +939,14 @@ export function mockCoreRequest<T>(path: string, method: string, body: unknown, 
   }
   if (segments[0] === 'sales' && segments.length === 3 && segments[2] === 'payments' && method === 'GET') {
     return listPaymentsForSale(Number(segments[1])) as unknown as T;
+  }
+  if (segments[0] === 'sales' && segments.length === 3 && segments[2] === 'void' && method === 'POST') {
+    return idempotent(`POST ${path}`, idempotencyKey, body, () =>
+      voidSale(Number(segments[1]), body as SaleVoidBody),
+    ) as unknown as T;
+  }
+  if (segments[0] === 'sales' && segments.length === 3 && segments[2] === 'refund' && method === 'GET') {
+    return getRefund(Number(segments[1])) as unknown as T;
   }
 
   if (path === '/customers' && method === 'GET') return listCustomers() as unknown as T;

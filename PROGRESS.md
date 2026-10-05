@@ -1,3 +1,56 @@
+### [2026-10-05 13:38 UTC+07:00] — [Core] Audited ADMIN dashboard API and shared audit migration
+
+**Done:** Added seven ADMIN support endpoints for overview, OWNER search/detail, shop search/detail, shop status history and the current ADMIN's access history. Authorization requires a verified Firebase UID linked to an ACTIVE ADMIN profile in the database. Added forward migration V11 to extend the existing `audit_logs`; no separate ADMIN audit table and no changes to V1–V10. Core changes and this progress entry were explicitly approved by the owner.
+
+**Changed files:** `backend/core` ADMIN controller/configuration, response DTOs, guard, repository, services and tests; shared audit entity/actions/query/request context; shop status service/tests; `V11__extend_audit_logs_for_admin_dashboard.sql`; Core README; `PROGRESS.md`.
+
+**Flow explained:** Lists mask contacts; successful support reads are audited in the same transaction. Audit failure returns `503 admin_audit_unavailable` and rolls back the operation. ADMIN history uses explicit action/target and actor whitelists; OWNER queries exclude ADMIN read events. Shop inactivation/reactivation writes one shared event. V11 permits absent shop/target IDs only for corresponding ADMIN reads while retaining scoped business events, existing history, foreign keys and append-only guards.
+
+**Check:** Fast-forwarded from staging `d076729` to `e9151cb` without conflicts, preserving pending Core changes. Post-sync `mvnw.cmd -q clean verify` passed 402 tests across 35 suites, zero failures/errors/skips, with disposable PostgreSQL 16. Coverage includes real V1–V11 migrations, fresh schema/entity validation, V10 upgrade, manually adjusted constraints, rejected invalid scopes/roles/targets, rollback and retained audit history. Earlier local Firebase Emulator calls returned 200 for all seven ADMIN APIs and recorded each administrative action. `git diff --check` passed. Migration was not run on staging/production; real Firebase/FE UAT and separately approved documentation alignment remain pending.
+
+### [2026-10-05 13:00 UTC+07:00] — [Core] Read the Firebase service account from an env variable
+
+**Done:** `core` crashed on Railway staging with "Your default credentials were not found" because Railway cannot mount the key file `GoogleCredentials.getApplicationDefault()` needs. `FirebaseAdminConfiguration` now builds credentials from `firebase.service-account-json` (env `FIREBASE_SERVICE_ACCOUNT_JSON`) when set and otherwise falls back to Application Default Credentials, so local and Compose setups are unchanged. Edited `backend/core` with the owner's explicit approval, despite the AGENTS.md rule.
+
+**Changed files:**
+- `backend/core/src/main/java/com/smartledger/core/config/FirebaseAdminConfiguration.java` — modified
+- `backend/core/src/main/java/com/smartledger/core/config/FirebaseProperties.java` — modified
+- `backend/core/src/main/resources/application.yml` — modified
+- `backend/core/.env.example` — modified
+- `backend/core/src/test/java/com/smartledger/core/config/FirebaseAdminConfigurationTest.java` — created
+- `docs/development/ci-cd.md` — modified
+
+**Flow explained:** the unit test generates an RSA key, builds a service-account JSON and checks `firebaseApp` initializes without any key file; it passed with `FirebaseAdminTokenVerifierTest`. Unverified on Railway until `FIREBASE_SERVICE_ACCOUNT_JSON` is set and the service restarts.
+
+### [2026-10-05 12:45 UTC+07:00] — [Config] EAS dev client profile to run the app on an emulator against a local Core
+
+**Done:** Added the `dev-client` profile to `frontend/mobile/eas.json` (extends `development`, `environment: preview`, Android APK). The EAS `development` environment has no variables, so a build from the old `development` profile has no `google-services.json` and Firebase phone sign-in cannot start on Android. `dev-client` takes `GOOGLE_SERVICES_JSON` from the `preview` environment. The resulting dev client loads its JavaScript from Metro, so pointing the app at a Core running on the developer machine needs only `EXPO_PUBLIC_API_ENDPOINT=http://10.0.2.2:8000` in `.env` and a Metro restart, not a new APK. The mobile README lists the profile and uses it in the Android build step.
+
+**Changed files:** `frontend/mobile/eas.json`, `frontend/mobile/README.md`, `PROGRESS.md` — modified.
+
+**Flow explained:** `eas build --profile dev-client` produces a debug dev client signed with the default EAS keystore, the same one `phone-test` used, so its SHA-1/SHA-256 are already registered in Firebase and the APK installs over a `phone-test` build. The three `EXPO_PUBLIC_MOCK*` flags and `USE_MOCK` must be `false` in `.env` for the app to call a real Core.
+
+**Check:** `eas build --platform android --profile dev-client` finished (build `e53593c4`, APK). `eas env:list` shows `GOOGLE_SERVICES_JSON` only in `preview`. `adb install -r` of this APK over the installed `phone-test` build succeeded, which confirms one keystore for both. On a Pixel 9 emulator (Android 16, API 36) with Core and AI from Compose against the shared staging Supabase, a Firebase phone sign-in with a test number reached `POST /auth/session` and `POST /shops`, and the sale and void calls returned 2xx. Not verified: another EAS account, iOS, a physical device with this profile; the `production` profile is unchanged.
+
+### [2026-10-05 12:00 UTC+07:00] — [CI/CD] Inline the Railway deploy job into ci.yml
+
+**Done:** Deleted `.github/workflows/cd.yml` and moved its `deploy` job into `ci.yml` with `environment:` set on the job itself. The reusable-workflow version received an empty `RAILWAY_TOKEN` (`secrets.RAILWAY_TOKEN` evaluated to `null` in the run debug log) even though the `railway-staging` environment secret existed. Updated `docs/development/ci-cd.md`.
+
+**Changed files:**
+- `.github/workflows/ci.yml` — modified
+- `.github/workflows/cd.yml` — deleted
+- `docs/development/ci-cd.md` — modified
+
+**Flow explained:** `deploy` still runs only on a push to `staging` or `main` after `ai`, `core`, `mobile-web` and `container-images` pass; the environment branch policy and the `railway-production` approval apply as before. Unverified until the first run on `staging` shows `RAILWAY_TOKEN: ***`.
+
+### [2026-10-05 11:20 UTC+07:00] — [CI/CD] Split CD workflow and merge environments into the ci-cd diagram
+
+**Done:** Moved the Railway deploy into `.github/workflows/cd.yml`, called from `ci.yml` after `ai`, `core`, `mobile-web` and `container-images` all pass on a push to `staging` or `main`; it writes a `deploy-summary-<branch>` artifact. Merged the environments diagram into `ci-cd.drawio` (dev machine, per-provider infra boxes, CI PostgreSQL) and removed `environments.mmd`/`.svg`. Added `docs/architecture/diagrams/README.md` with the diagram guide.
+
+**Changed files:** `.github/workflows/ci.yml`, `.github/workflows/cd.yml`, `docs/development/ci-cd.md`, `docs/architecture/diagrams/src/ci-cd.drawio`, `docs/architecture/diagrams/images/ci-cd.svg`, `docs/architecture/diagrams/README.md`, `docs/README.md`, `docs/architecture/technical-design.md`, `docs/architecture/diagrams/src/environments.mmd` (deleted), `docs/architecture/diagrams/images/environments.svg` (deleted), `PROGRESS.md`.
+
+**Flow explained:** `workflow_call` keeps the pushed ref, so the `railway-staging`/`railway-production` branch policies still apply; a `workflow_run` trigger would run on the default branch and break them. `mobile-web` now also gates deploy. Not verified: the called workflow on GitHub (first push to `staging`), Railway ports, the Vercel edge status.
+
 ### [2026-10-05 04:22 UTC+07:00] — [Core] Prepare staging integration and verify deployment boundaries
 
 **Done:** Added exact-origin CORS for Core business APIs, public status-only health probes, hosted `PORT` support, and environment-controlled OpenAPI/Swagger settings. Compose forwards the CORS/documentation variables. Fixed servlet ERROR redispatch so disabled documentation preserves HTTP 404 instead of becoming 401; normal requests, including direct `/error` access, still require authentication. Added a read-only staging auth smoke script and offline guard tests. Work is on `chore/staging-intgration`. This is integration groundwork, not CORE-004 acceptance or production readiness.
@@ -27,6 +80,16 @@
 **Flow explained:** No code or behavior change.
 
 **Check:** Relative links and anchors across tracked Markdown resolve; the screen-to-API claims were checked by grepping `app/` for the API clients each screen imports.
+
+### [2026-10-04 03:00 UTC+07:00] — [Feature] Void a sale and record the refund from the order screen
+
+**Done:** The order detail screen has a "Huỷ đơn" button that voids a confirmed sale with `POST /api/v1/sales/{saleId}/void`, and a voided sale shows the refund read with `GET /api/v1/sales/{saleId}/refund`. The form asks for a reason, whether to return the items to stock and, when money was collected, how it is refunded (cash or bank transfer, with an optional transfer reference). Core refunds everything collected, including debt repayments made after the sale, cancels the remaining debt and does not move money itself, so the form says so. The request carries an `Idempotency-Key`: after a network failure or timeout the same form sends the same key, so a retry cannot void or refund twice. An already voided sale (409 `sale_already_voided`) reloads the screen instead of showing an error. The debt of a voided sale (`VOIDED`) is no longer counted as owed or as paid on the debts screen and in the totals. Vietnamese messages added for the sale, refund and idempotency error codes.
+
+**Changed files:** `frontend/mobile/src/lib/saleVoid.ts` — created; `frontend/mobile/app/invoice/[id].tsx`, `frontend/mobile/app/debts.tsx`, `frontend/mobile/src/lib/{salesApi,mockCore,coreAdapters,errors}.ts`, `frontend/mobile/src/data/types.ts` — modified; `PROGRESS.md`.
+
+**Flow explained:** `buildVoidRequest` turns the form into the body Core accepts: the reason is required, a refund method is sent only when money was collected (Core rejects it for an unpaid sale), and the transfer reference only for a transfer. `saleApi.void` goes through the shared idempotent sender. The mock Core now implements the void and refund endpoints with the same rules, so the screen can be tried without a Core. The mock keeps no per-line "stock deducted" snapshot, so it treats every line of a tracked product as deducted.
+
+**Check:** `tsc --noEmit` clean; 52 scratch cases (not in the repo) cover the form rules, the request path, body and key reuse after a failure, the refund and debt arithmetic in the mock for a paid, a partly paid, an unpaid and a repaid-then-voided sale, stock restoring once and not on a replay, and the VOIDED debt being left out of the totals. In the browser with the mock Core: validation messages for a missing reason and refund method; voiding a partly paid order showed the refund and transfer reference, the overview revenue fell by the order total and the owed amount by the cancelled debt, and the debts screen dropped that customer; an unpaid order showed no refund choice. Not verified: a real Core with Firebase sign-in, the UI after a network failure or a 503, a sale whose stock cannot be restored, and a phone.
 
 ### [2026-10-04 02:40 UTC+07:00] — [Feature] Save the shop profile to Core
 

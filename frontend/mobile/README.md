@@ -108,11 +108,12 @@ Code đã nối sẵn theo `docs/contracts/api-contracts.md`: Firebase xác th�
 5. **`.env`** (copy từ `.env.example`): `EXPO_PUBLIC_USE_MOCK=false`, `EXPO_PUBLIC_API_ENDPOINT=<URL Core>`, cùng 4 biến Firebase web. Để thử riêng Firebase khi chưa chạy Core, đặt `EXPO_PUBLIC_MOCK_CORE=true` (giả lập `/auth/session`, `/me`, `/shops`). Đổi `.env` xong phải chạy lại `npx expo start --clear` (Metro cache giá trị cũ).
 6. **Chạy**:
    - Web: `npm run web` — dùng Firebase JS SDK + reCAPTCHA vô hình.
-   - Android/iOS: **không chạy trên Expo Go** (React Native Firebase cần code native). Tạo development build: `npx eas-cli build --profile development --platform android`, cài bản build và chạy `npx expo start --dev-client`. iOS cần tài khoản Apple Developer.
+   - Android/iOS: **không chạy trên Expo Go** (React Native Firebase cần code native). Tạo development build: `npx eas-cli build --profile dev-client --platform android` (profile `development` không nhận được `GOOGLE_SERVICES_JSON`, xem bên dưới), cài bản build và chạy `npx expo start --dev-client`. iOS cần tài khoản Apple Developer.
 
 Profile trong `eas.json`:
 
 - `development`: development client, cài nội bộ.
+- `dev-client`: kế thừa `development`, nhưng dùng environment `preview` để nhận biến file `GOOGLE_SERVICES_JSON` và ra APK. Dùng để thử đăng nhập Firebase và gọi Core chạy ngay trên máy bạn từ emulator Android: cài APK vào emulator, đặt trong `.env` `EXPO_PUBLIC_API_ENDPOINT=http://10.0.2.2:8000` (địa chỉ máy chủ nhìn từ emulator) cùng `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS` đều `false`, rồi chạy `npx expo start --dev-client --android`. JS nạp từ Metro nên đổi địa chỉ Core chỉ cần sửa `.env` và chạy lại Metro, không phải build lại APK. Cùng keystore với `phone-test` nên cài đè được lên bản đó và dùng chung SHA đã đăng ký trong Firebase.
 - `preview`: bản cài nội bộ, Android ra APK.
 - `phone-test`: kế thừa `preview`, Firebase thật với phiên Core giả lập (`MOCK_CORE`, `MOCK_SHOPS`) để thử đăng nhập SĐT trên máy thật khi chưa có Core deploy; các màn nghiệp vụ vẫn gọi API thật nên báo lỗi mạng nếu không tới được Core.
 - `production`: tự tăng số build.
