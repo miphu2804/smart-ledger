@@ -327,12 +327,31 @@ jobs:
         run: |
           url=$(vercel deploy --prebuilt ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN")
           echo "url=$url" >> "$GITHUB_OUTPUT"
+      # Fails the job when the deployed web would not reach Core: page down, env not baked in,
+      # or Core rejecting this origin's CORS preflight.
+      - name: Smoke test
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$URL/")" = 200
+          echo "page: 200"
+          if [ "$EXPO_PUBLIC_USE_MOCK" != "false" ]; then echo "mock build, skipping Core checks"; exit 0; fi
+          grep -rqF "$EXPO_PUBLIC_API_ENDPOINT" .vercel/output/static
+          echo "bundle: API endpoint baked in"
+          allow=$(curl -s -o /dev/null -D - -X OPTIONS "$EXPO_PUBLIC_API_ENDPOINT/api/v1/auth/session" \
+            -H "Origin: $URL" -H "Access-Control-Request-Method: POST" \
+            -H "Access-Control-Request-Headers: authorization,content-type" \
+            | tr -d '\r' | awk -F': ' 'tolower($1)=="access-control-allow-origin"{print $2}')
+          if [ "$allow" != "$URL" ]; then echo "::error::Core CORS does not allow $URL"; exit 1; fi
+          echo "cors: Core allows $URL"
       - name: Alias staging
         if: github.event_name == 'push' && github.ref_name == 'staging'
         env:
           STAGING_ALIAS: ${{ vars.VERCEL_STAGING_ALIAS }}
         run: vercel alias set "${{ steps.deploy.outputs.url }}" "$STAGING_ALIAS" --token="$VERCEL_TOKEN"
       - name: Report URL
+        if: always() && steps.deploy.outputs.url != ''
         env:
           GH_TOKEN: ${{ github.token }}
           URL: ${{ steps.deploy.outputs.url }}
