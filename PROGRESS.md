@@ -1,3 +1,26 @@
+### [2026-10-05 14:10 UTC+07:00] — [Core] Allow browser calls from listed origins (CORS)
+
+**Done:** Core enables Spring Security CORS with a `CorsConfigurationSource` built from `smartledger.cors.allowed-origins` (env `CORS_ALLOWED_ORIGINS`, comma-separated, wildcard patterns such as `https://smart-ledger-*.vercel.app`). Empty means no browser origin is allowed. Preflight passes without a token; credentials stay off because auth uses a bearer header. Edited `backend/core` with the owner's explicit approval.
+
+**Changed files:**
+- `backend/core/src/main/java/com/smartledger/core/config/SecurityConfiguration.java` — modified
+- `backend/core/src/main/resources/application.yml` — modified
+- `backend/core/src/test/java/com/smartledger/core/config/CorsWebTest.java` — created
+- `docs/development/ci-cd.md`, `frontend/mobile/README.md` — modified
+
+**Flow explained:** Browser → OPTIONS preflight → `CorsFilter` inside the security chain answers before the bearer filter. **Check:** `mvnw test` 359 tests pass, `CorsWebTest` 2/2 (allowed origin 200, unknown origin 403). Not verified: a call from a Vercel preview to Core staging.
+
+### [2026-10-05 13:23 UTC+07:00] — [Mobile] Point the dev machine at Core staging on Railway
+
+**Done:** Mobile dev now calls the deployed Core staging (`https://core-staging-01d2.up.railway.app`) instead of a Core started with Docker Compose on the dev machine. `dev-cors-proxy.js` picks `https` or `http` from `CORE_URL`, so the web build can reach the HTTPS staging Core.
+
+**Changed files:**
+- `frontend/mobile/.env.example` — modified (staging endpoint preset)
+- `frontend/mobile/README.md` — modified ("Nối Core thật", `dev-client`, web proxy)
+- `frontend/mobile/scripts/dev-cors-proxy.js` — modified (HTTPS upstream)
+
+**Flow explained:** The Railway domain belongs to the `core` service in the staging environment and does not change between deploys. A local backend is only needed while changing backend code. **Check:** `/v3/api-docs` returned 200 through the proxy and `/api/v1/me` returned 401 with `Access-Control-Allow-Origin`. Not verified: a Firebase sign-in from the app against staging (needs the app's Firebase project to match Core staging's `FIREBASE_PROJECT_ID`).
+
 ### [2026-10-05 13:00 UTC+07:00] — [Core] Read the Firebase service account from an env variable
 
 **Done:** `core` crashed on Railway staging with "Your default credentials were not found" because Railway cannot mount the key file `GoogleCredentials.getApplicationDefault()` needs. `FirebaseAdminConfiguration` now builds credentials from `firebase.service-account-json` (env `FIREBASE_SERVICE_ACCOUNT_JSON`) when set and otherwise falls back to Application Default Credentials, so local and Compose setups are unchanged. Edited `backend/core` with the owner's explicit approval, despite the AGENTS.md rule.

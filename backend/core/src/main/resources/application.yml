@@ -23,6 +23,8 @@ ai:
   internal-token: ${INTERNAL_API_TOKEN:}
 
 smartledger:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}
   idempotency:
     ttl-days: ${IDEMPOTENCY_TTL_DAYS:30}
 
