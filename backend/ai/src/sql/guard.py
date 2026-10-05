@@ -25,7 +25,9 @@ from sqlglot.optimizer.scope import traverse_scope
 class SqlGuard:
     DIALECT = "postgres"
     VIEW_SCHEMA = "ai_read"
-    ALLOWED_VIEWS = frozenset({"v_shop_profile", "v_categories", "v_products"})
+    ALLOWED_VIEWS = frozenset(
+        {"v_shop_profile", "v_categories", "v_products", "v_sales", "v_sale_items"}
+    )
     MAX_SQL_CHARS = 4000
 
     # sqlglot maps Postgres functions to typed nodes; `Anonymous` (any function sqlglot

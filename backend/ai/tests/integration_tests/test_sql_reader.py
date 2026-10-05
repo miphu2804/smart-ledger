@@ -141,28 +141,6 @@ def seed_sale(
     return sale_id
 
 
-def fetch_as_reader(
-    reader_db: ReaderDatabase, shop_id: int | None, query: str
-) -> tuple[list[str], list[tuple]]:
-    # Straight to the reader role, mirroring the executor's session settings. The
-    # SQL guard does not recognise the sales views yet, and these tests are about the
-    # views and their grants, not about the guard.
-    with psycopg.connect(reader_db.reader_url, autocommit=True) as reader:
-        schema = sql.Identifier(reader_db.view_schema).as_string(reader)
-        reader.execute(
-            "SELECT set_config('search_path', %s, false), "
-            "set_config('standard_conforming_strings', 'on', false)",
-            (schema,),
-        )
-        if shop_id is not None:
-            reader.execute(
-                "SELECT set_config('smartledger.shop_id', %s, false)", (str(shop_id),)
-            )
-        cursor = reader.execute(query)
-        columns = [column.name for column in cursor.description]
-        return columns, cursor.fetchall()
-
-
 @pytest.fixture
 def reader_db() -> Iterator[ReaderDatabase]:
     database_url = os.getenv("POSTGRES_TEST_URL")
@@ -261,32 +239,29 @@ def test_same_product_name_in_two_shops_stays_in_the_current_shop(
 
 
 def test_sales_views_show_only_the_current_shop(reader_db: ReaderDatabase) -> None:
-    sales_columns, sales_rows = fetch_as_reader(
-        reader_db, reader_db.shop_a, "SELECT total_vnd, sale_status FROM v_sales"
-    )
-    _, item_rows = fetch_as_reader(
-        reader_db, reader_db.shop_a, "SELECT product_name FROM v_sale_items"
-    )
-    _, other_rows = fetch_as_reader(
-        reader_db, reader_db.shop_b, "SELECT total_vnd, sale_status FROM v_sales"
+    executor = reader_db.executor()
+    sales = executor.run(reader_db.shop_a, "SELECT total_vnd, sale_status FROM v_sales")
+    items = executor.run(reader_db.shop_a, "SELECT product_name FROM v_sale_items")
+    other_sales = executor.run(
+        reader_db.shop_b, "SELECT total_vnd, sale_status FROM v_sales"
     )
 
-    assert sales_columns == ["total_vnd", "sale_status"]
-    assert set(sales_rows) == {
+    assert sales["columns"] == ["total_vnd", "sale_status"]
+    assert {tuple(row) for row in sales["rows"]} == {
         (SHOP_A_CONFIRMED_VND, "CONFIRMED"),
         (SHOP_A_VOIDED_VND, "VOIDED"),
     }
-    assert set(item_rows) == {(SHOP_A_SALE_ITEM,)}
-    assert set(other_rows) == {
+    assert {tuple(row) for row in items["rows"]} == {(SHOP_A_SALE_ITEM,)}
+    assert {tuple(row) for row in other_sales["rows"]} == {
         (SHOP_B_CONFIRMED_VND, "CONFIRMED"),
         (SHOP_B_VOIDED_VND, "VOIDED"),
     }
 
 
 def test_sales_view_hides_pii_and_free_text(reader_db: ReaderDatabase) -> None:
-    columns, _ = fetch_as_reader(reader_db, reader_db.shop_a, "SELECT * FROM v_sales")
+    result = reader_db.executor().run(reader_db.shop_a, "SELECT * FROM v_sales")
 
-    assert columns == [
+    assert result["columns"] == [
         "id",
         "sale_status",
         "payment_status",
@@ -297,16 +272,24 @@ def test_sales_view_hides_pii_and_free_text(reader_db: ReaderDatabase) -> None:
         "sold_at",
         "voided_at",
     ]
-    assert "shop_id" not in columns
+    assert "shop_id" not in result["columns"]
 
 
 def test_sales_views_return_nothing_without_a_shop_scope(
     reader_db: ReaderDatabase,
 ) -> None:
-    _, sales = fetch_as_reader(reader_db, None, "SELECT count(*) FROM v_sales")
-    _, items = fetch_as_reader(reader_db, None, "SELECT count(*) FROM v_sale_items")
+    # The executor requires a shop id, so this goes straight to the reader role, like
+    # `test_views_return_nothing_without_a_shop_scope`.
+    views = sql.Identifier(reader_db.view_schema)
+    with psycopg.connect(reader_db.reader_url, autocommit=True) as reader:
+        sales = reader.execute(
+            sql.SQL("SELECT count(*) FROM {}.v_sales").format(views)
+        ).fetchone()[0]
+        items = reader.execute(
+            sql.SQL("SELECT count(*) FROM {}.v_sale_items").format(views)
+        ).fetchone()[0]
 
-    assert (sales, items) == ([(0,)], [(0,)])
+    assert (sales, items) == (0, 0)
 
 
 def test_shop_profile_shows_only_the_current_shop_without_owner_contact(
