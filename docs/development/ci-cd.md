@@ -67,7 +67,7 @@ Mỗi giá trị chỉ nhập một lần; chỗ nào dùng lại thì khai báo
 |---|---|
 | `INTERNAL_API_TOKEN` | `${{shared.INTERNAL_API_TOKEN}}` |
 | `POSTGRES_URL` | Supabase của environment tương ứng (`postgresql://…`) |
-| `AI_SQL_READER_URL` | Login chỉ đọc `ai_sql_reader` (migration AI 004); bỏ trống thì agent không đọc được dữ liệu shop |
+| `AI_SQL_READER_URL` | Login chỉ đọc `ai_sql_reader` (AI baseline trong `supabase/migrations/`); bỏ trống thì agent không đọc được dữ liệu shop |
 | `REDIS_URL` | Redis Cloud của environment tương ứng |
 | `OPENAI_API_KEY` | Key của nhà cung cấp model |
 
@@ -77,7 +77,7 @@ Mỗi giá trị chỉ nhập một lần; chỗ nào dùng lại thì khai báo
 
 ## Những gì luồng này chưa làm
 
-- Không chạy migration database. Flyway vẫn tắt mặc định; người phụ trách migration chạy tay theo [Database migrations](../../README.md#database-migrations), trên staging trước production.
+- Không chạy migration database. Flyway vẫn tắt mặc định và `supabase db push` chưa nằm trong CI; người phụ trách migration chạy tay theo [Database migrations](../../README.md#database-migrations), trên staging trước production.
 - Không lọc theo thư mục: mỗi lần push vào `staging` hoặc `main` đều deploy lại cả `ai` và `core`, kể cả khi chỉ sửa mobile.
 - Rollback: chọn bản deploy trước trên Railway dashboard → **Redeploy**; chưa có bước tự động.
 

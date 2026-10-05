@@ -1,3 +1,15 @@
+### [2026-10-05 23:40 UTC+07:00] — [AI] Move AI schema to a Supabase CLI baseline
+
+**Done:** Folded AI migrations `001`–`005` into one baseline, `supabase/migrations/20261005000000_ai_baseline.sql`, under a `supabase/` project from `supabase init`. Staging now gets the AI schema with `npx supabase@2.119.0 db push --db-url "$POSTGRES_URL"` instead of running each file with `psql`. Every statement stays safe to re-run, so the first push also succeeds on a database that already has the old files applied. Core keeps Flyway; CI tests keep a disposable PostgreSQL.
+
+**Changed files:**
+- `supabase/config.toml`, `supabase/.gitignore`, `supabase/migrations/20261005000000_ai_baseline.sql` — created
+- `backend/ai/migrations/001`–`005` — deleted
+- `backend/ai/tests/support.py`, `tests/integration_tests/test_agent_conversations.py`, `test_sql_reader.py` — modified
+- `README.md`, `backend/ai/README.md`, `backend/ai/src/app_config.py`, `docs/architecture/technical-design.md`, `docs/architecture/erd-description.md`, `docs/architecture/diagrams/src/erd.dbml`, `docs/development/ci-cd.md` — modified
+
+**Flow explained:** Core Flyway creates the business tables → `supabase db push` applies the AI files that `supabase_migrations.schema_migrations` does not list yet. Verified on disposable pgvector databases: 287 AI tests pass; `db push` succeeds on a fresh database and on one that already had `001`–`005`, a second push is a no-op, and `pg_dump` matches the old schema except for the column order of `chat_conversations`. Not run on Supabase staging.
+
 ### [2026-10-05 21:28 UTC+07:00] — [AI] Restock suggestions and sales questions through agent chat
 
 **Done:** AI-011 (#102) on branch `feat/ai-restock-insight`. Migration `005` adds the shop-scoped, read-only views `ai_read.v_sales` and `v_sale_items` (no customer snapshot, no `void_reason`); `SqlGuard` allows them and the SQL prompt answers sales questions with a stated period. New package `src/restock/`: `policy.py` turns confirmed sales into `suggested_qty = ceil(sold/days*COVER_DAYS - stock)` with a fixed Vietnamese reason, `service.py` loads them through the read-only executor. The agent tool `suggest_restock(period)` takes the shop from `AgentContext`; the mobile assistant gets "Gợi ý nhập hàng 7 ngày qua" and "Doanh thu 7 ngày qua?" chips. `COVER_DAYS = 7` and the periods `last_7_days`/`last_30_days` are provisional defaults awaiting product-owner sign-off.

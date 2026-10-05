@@ -6,17 +6,16 @@ Frontend must not call this service.
 
 ## Chat history schema
 
-Run Core's Flyway migrations first so `users` and `shops` exist, then apply the versioned AI migrations in order. On the shared dev/staging database, apply a new migration only after its pull request merges (see [Database migrations](../../README.md#database-migrations)):
+The AI schema (chat history, the `vector` extension and the `ai_read` views) lives in the Supabase CLI migrations at [`supabase/migrations/`](../../supabase/migrations/); the first file is a baseline that folds the earlier AI migrations together. It reads Core's tables, so run Core's Flyway migrations first. On the shared dev/staging database, push only after the pull request merges (see [Database migrations](../../README.md#database-migrations)). From the repository root:
 
 ```bash
-psql "$POSTGRES_URL" -v ON_ERROR_STOP=1 -f migrations/001_create_chat_history.sql
-psql "$POSTGRES_URL" -v ON_ERROR_STOP=1 -f migrations/002_enable_pgvector.sql
-psql "$POSTGRES_URL" -v ON_ERROR_STOP=1 -f migrations/003_add_chat_summary.sql
-psql "$POSTGRES_URL" -v ON_ERROR_STOP=1 -f migrations/004_create_ai_read_views.sql
-psql "$POSTGRES_URL" -v ON_ERROR_STOP=1 -f migrations/005_add_sales_read_views.sql
+set -a && . ./.env.staging && set +a
+npx supabase@2.119.0 db push --db-url "$POSTGRES_URL"
 ```
 
-The AI service does not create or migrate tables at startup. `ai_request_id` remains nullable; its foreign key is deferred until the `ai_requests` table is installed. Version `002` only enables the `vector` extension ([ADR-0001](../../docs/architecture/adr/0001-vector-store-pgvector.md)); no table uses embeddings yet.
+`db push` applies only the files not yet recorded in `supabase_migrations.schema_migrations`. Every baseline statement is safe to re-run, so it also applies over a database that already had the old `backend/ai/migrations` files. Add a change as a new file (`npx supabase@2.119.0 migration new <name>`); never edit a file that has been pushed.
+
+The AI service does not create or migrate tables at startup. `ai_request_id` remains nullable; its foreign key is deferred until the `ai_requests` table is installed. The baseline only enables the `vector` extension ([ADR-0001](../../docs/architecture/adr/0001-vector-store-pgvector.md)); no table uses embeddings yet.
 
 ## Chat context and rolling summary
 
@@ -40,8 +39,8 @@ When `AI_SQL_READER_URL` is set, the agent gets a `query_shop_data` tool that ru
 
 Five layers keep the query inside the current shop and read-only:
 
-1. **Role.** Migration `004` creates the `NOLOGIN` group role `ai_sql_reader`, which has only `USAGE` on schema `ai_read` and `SELECT` on its five views, and no grant on Core's tables.
-2. **Views.** `ai_read.v_shop_profile`, `v_categories` and `v_products` filter on the transaction setting `smartledger.shop_id` and do not expose `shop_id`; an unset setting returns no rows. They are `security_barrier` views, so a failing filter cannot quote another shop's row in its error. Migration `005` adds `v_sales` and `v_sale_items` under the same rule; they deliberately leave out customer snapshots (PII) and the free-text `void_reason`.
+1. **Role.** The baseline creates the `NOLOGIN` group role `ai_sql_reader`, which has only `USAGE` on schema `ai_read` and `SELECT` on its five views, and no grant on Core's tables.
+2. **Views.** `ai_read.v_shop_profile`, `v_categories` and `v_products` filter on the transaction setting `smartledger.shop_id` and do not expose `shop_id`; an unset setting returns no rows. They are `security_barrier` views, so a failing filter cannot quote another shop's row in its error. `v_sales` and `v_sale_items` follow the same rule and deliberately leave out customer snapshots (PII) and the free-text `void_reason`.
 3. **Guard.** `SqlGuard` in `src/sql/guard.py` parses the SQL with `sqlglot` and accepts exactly one `SELECT` (with `WITH` and `UNION`) over those views. Functions and cast types come from an allowlist, so `set_config`, `current_setting`, `pg_*` and `dblink` are rejected along with `information_schema`, `pg_catalog`, base tables, `FOR UPDATE`, `SELECT INTO`, DML, DDL, `SET` and `COPY`. The statement that runs is the guard's own rendering, wrapped as `SELECT * FROM (...) q LIMIT n`.
 4. **Execution.** `ReadOnlySqlExecutor` in `src/sql/executor.py` opens a separate connection per query, starts a `READ ONLY` transaction, sets `smartledger.shop_id` from the authenticated request as a bound parameter, applies `SQL_TIMEOUT_MS` (default 3000) and `SQL_ROW_LIMIT` (default 100), cuts text cells at 200 characters and always rolls back. The tool reads the shop from the LangChain runtime context (`ToolRuntime[AgentContext]`); the model only passes `sql`.
 5. **Output.** Results reach the model as data with a header saying so. The guard and the executor raise `ValueError("CODE: reason")` for a query the guard or the database rejects, and the tool returns it as `Error[CODE]: reason` (for example `Error[UNSAFE_FUNCTION]`, `Error[QUERY_TIMEOUT]`, `Error[SQL_ERROR]`) so the model can rewrite it. Any other failure, such as an unreachable reader database (`psycopg.OperationalError`), propagates and fails the turn with `503 ai_unavailable`.
@@ -52,7 +51,7 @@ All prompt text lives in `src/prompt_templates/` (`shop_agent.py`, `sql_agent.py
 
 `build_guardrails` in `src/agent/guardrails.py` builds the agent's LangChain middleware, in order: `AgentGuardrails`, one middleware with an input-length check on the owner's latest message (`AGENT_MAX_INPUT_CHARS`, default 2000) that ends the turn with a short Vietnamese reply before any model call; `PIIMiddleware` that masks card numbers and redacts API keys, bearer tokens and JWTs in the owner's message before the model sees it (the redacted text is what gets stored); model and tool call limits per turn (`AGENT_MODEL_CALL_LIMIT` 4, `AGENT_TOOL_CALL_LIMIT` 3); and the same `AgentGuardrails` output check after the run, which replaces an empty answer, or one that leaks view names, scope settings, error codes or SQL, with a safe Vietnamese reply. All checks are deterministic: there is no model-based safety check, human approval step or LLM query checker, because each adds a model call and the guard plus the read-only role already bound what a query can do.
 
-Run migration `004` as a user with `CREATEROLE` (first run only) and the `search_path` that holds Core's tables, then create the login the service uses. Keep the password in the environment's secrets, never in Git:
+Push the baseline as a user with `CREATEROLE` (first run only) and the `search_path` that holds Core's tables, then create the login the service uses. Keep the password in the environment's secrets, never in Git:
 
 ```sql
 CREATE ROLE smartledger_ai_reader LOGIN PASSWORD '<secret>' IN ROLE ai_sql_reader;

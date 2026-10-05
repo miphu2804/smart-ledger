@@ -45,9 +45,9 @@ Drafts do not affect revenue, stock, payments, or debts until confirmed.
 
 ### AI and System Safety
 
-- **chat_conversations**: Agent conversations per user and shop, created by AI migration `001`. Migration `003` adds `summary` and `summary_through_message_id` for the rolling summary.
+- **chat_conversations**: Agent conversations per user and shop, created by the AI baseline in `supabase/migrations/`, with `summary` and `summary_through_message_id` for the rolling summary.
 - **chat_messages**: USER/ASSISTANT messages of a conversation; folded messages stay for history search. `ai_request_id` has no foreign key until `ai_requests` exists.
-- **ai_read views**: AI migration `004` creates `ai_read.v_shop_profile`, `v_categories` and `v_products` for the Agent's read-only shop-data tool; migration `005` adds `v_sales` and `v_sale_items` for confirmed-sales questions and restock suggestions. They are views, not tables.
+- **ai_read views**: the AI baseline creates `ai_read.v_shop_profile`, `v_categories` and `v_products` for the Agent's read-only shop-data tool, and `v_sales` and `v_sale_items` for confirmed-sales questions and restock suggestions. They are views, not tables.
 - **ai_requests**: Planned table for AI request status, model/version, result, errors, and media object references; not yet created by any migration.
 - **api_idempotency_keys**: Protects exactly expense creation, debt repayment, and sale void. Confirmation replays by draft ID instead. Other create operations are not covered; default TTL is 30 days and no cleanup job exists.
 - **audit_logs**: Created by V10 as append-only history of successful OWNER/ADMIN writes (actor, shop, action, target, safe metadata, request ID); UPDATE/DELETE/TRUNCATE are rejected by triggers. Audit of sensitive ADMIN read access is still planned.

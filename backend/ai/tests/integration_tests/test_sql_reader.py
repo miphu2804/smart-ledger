@@ -1,10 +1,8 @@
 import os
-import re
 import secrets
 import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass
-from pathlib import Path
 
 import psycopg
 import pytest
@@ -12,23 +10,15 @@ from langchain_core.language_models.fake_chat_models import FakeMessagesListChat
 from langchain_core.messages import AIMessage
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
-from tests.support import TEST_GUARDRAIL_LIMITS
+from tests.support import (
+    TEST_GUARDRAIL_LIMITS,
+    apply_ai_baseline,
+    apply_core_migrations,
+)
 
 from src.agent.service import AgentService
 from src.sql.executor import ReadOnlySqlExecutor
 
-BACKEND_ROOT = Path(__file__).resolve().parents[3]
-CORE_MIGRATIONS = BACKEND_ROOT / "core/src/main/resources/db/migration"
-CORE_MIGRATION_FILES = [
-    "V1__create_auth_and_shops.sql",
-    "V2__add_shop_archive.sql",
-    "V3__add_shop_inactive_reason.sql",
-    "V4__create_catalog_and_paid_sales.sql",
-]
-VIEW_MIGRATIONS = [
-    BACKEND_ROOT / "ai/migrations/004_create_ai_read_views.sql",
-    BACKEND_ROOT / "ai/migrations/005_add_sales_read_views.sql",
-]
 # Escaped so the source stays ASCII: an upper-case accented letter (lower() keeps it
 # under the C locale) and d with stroke (NFD keeps it) both must fold.
 SHARED_NAME = "G\u1ea0O ST25 \u0111\u01b0\u1eddng"
@@ -58,15 +48,6 @@ class ReaderDatabase:
             row_limit=row_limit,
             view_schema=self.view_schema,
         )
-
-
-def apply_view_migration(
-    connection: psycopg.Connection, view_schema: str, migration: Path
-) -> None:
-    # The views go to a per-test schema so parallel runs and a developer's real
-    # `ai_read` schema are never touched; the role name is shared across the cluster.
-    text = re.sub(r"\bai_read\b", view_schema, migration.read_text())
-    connection.execute(text, prepare=False)
 
 
 def seed_shop(
@@ -158,12 +139,10 @@ def reader_db() -> Iterator[ReaderDatabase]:
         admin.execute(
             sql.SQL("SET search_path TO {}").format(sql.Identifier(base_schema))
         )
-        for name in CORE_MIGRATION_FILES:
-            admin.execute((CORE_MIGRATIONS / name).read_text(), prepare=False)
-        for migration in VIEW_MIGRATIONS:
-            apply_view_migration(admin, view_schema, migration)
-            # Re-running each migration must succeed (idempotent, role already present).
-            apply_view_migration(admin, view_schema, migration)
+        apply_core_migrations(admin)
+        apply_ai_baseline(admin, view_schema)
+        # Re-running the baseline must succeed (idempotent, role already present).
+        apply_ai_baseline(admin, view_schema)
 
         owner_id = admin.execute(
             "INSERT INTO users (display_name, email, phone) "
