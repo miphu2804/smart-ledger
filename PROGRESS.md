@@ -12,6 +12,16 @@
 
 **Flow explained:** the unit test generates an RSA key, builds a service-account JSON and checks `firebaseApp` initializes without any key file; it passed with `FirebaseAdminTokenVerifierTest`. Unverified on Railway until `FIREBASE_SERVICE_ACCOUNT_JSON` is set and the service restarts.
 
+### [2026-10-05 12:45 UTC+07:00] — [Config] EAS dev client profile to run the app on an emulator against a local Core
+
+**Done:** Added the `dev-client` profile to `frontend/mobile/eas.json` (extends `development`, `environment: preview`, Android APK). The EAS `development` environment has no variables, so a build from the old `development` profile has no `google-services.json` and Firebase phone sign-in cannot start on Android. `dev-client` takes `GOOGLE_SERVICES_JSON` from the `preview` environment. The resulting dev client loads its JavaScript from Metro, so pointing the app at a Core running on the developer machine needs only `EXPO_PUBLIC_API_ENDPOINT=http://10.0.2.2:8000` in `.env` and a Metro restart, not a new APK. The mobile README lists the profile and uses it in the Android build step.
+
+**Changed files:** `frontend/mobile/eas.json`, `frontend/mobile/README.md`, `PROGRESS.md` — modified.
+
+**Flow explained:** `eas build --profile dev-client` produces a debug dev client signed with the default EAS keystore, the same one `phone-test` used, so its SHA-1/SHA-256 are already registered in Firebase and the APK installs over a `phone-test` build. The three `EXPO_PUBLIC_MOCK*` flags and `USE_MOCK` must be `false` in `.env` for the app to call a real Core.
+
+**Check:** `eas build --platform android --profile dev-client` finished (build `e53593c4`, APK). `eas env:list` shows `GOOGLE_SERVICES_JSON` only in `preview`. `adb install -r` of this APK over the installed `phone-test` build succeeded, which confirms one keystore for both. On a Pixel 9 emulator (Android 16, API 36) with Core and AI from Compose against the shared staging Supabase, a Firebase phone sign-in with a test number reached `POST /auth/session` and `POST /shops`, and the sale and void calls returned 2xx. Not verified: another EAS account, iOS, a physical device with this profile; the `production` profile is unchanged.
+
 ### [2026-10-05 12:00 UTC+07:00] — [CI/CD] Inline the Railway deploy job into ci.yml
 
 **Done:** Deleted `.github/workflows/cd.yml` and moved its `deploy` job into `ci.yml` with `environment:` set on the job itself. The reusable-workflow version received an empty `RAILWAY_TOKEN` (`secrets.RAILWAY_TOKEN` evaluated to `null` in the run debug log) even though the `railway-staging` environment secret existed. Updated `docs/development/ci-cd.md`.

@@ -14,6 +14,13 @@
         "buildType": "apk"
       }
     },
+    "dev-client": {
+      "extends": "development",
+      "environment": "preview",
+      "android": {
+        "buildType": "apk"
+      }
+    },
     "phone-test": {
       "extends": "preview",
       "environment": "preview",
