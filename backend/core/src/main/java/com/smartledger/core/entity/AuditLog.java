@@ -42,7 +42,7 @@ import org.hibernate.type.SqlTypes;
 public class AuditLog {
     private static final Set<String> PAYMENT_METHODS = enumNames(PaymentMethod.values());
     private static final Set<String> SHOP_STATUSES = enumNames(ShopStatus.values());
-    private static final Set<String> BOOLEAN_KEYS = Set.of("restockItems", "tracked", "beforeTracked", "afterTracked");
+    private static final Set<String> BOOLEAN_KEYS = Set.of("restockItems", "tracked", "beforeTracked", "afterTracked", "queryPresent");
     private static final Set<String> FIELD_NAMES = Set.of("name", "industry", "phone", "address", "categoryId",
             "barcode", "imageUrl", "unit", "sellingPriceVnd", "costPriceVnd", "tracked", "stockQuantity",
             "category", "description", "amountVnd", "paymentMethod", "expenseAt");
@@ -53,13 +53,13 @@ public class AuditLog {
     private Long actorUserId;
     @Enumerated(EnumType.STRING) @Column(name = "actor_role", nullable = false, length = 20, updatable = false)
     private SystemRole actorRole;
-    @Column(name = "shop_id", nullable = false, updatable = false)
+    @Column(name = "shop_id", updatable = false)
     private Long shopId;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 100, updatable = false)
     private AuditAction action;
     @Column(name = "entity_type", nullable = false, length = 100, updatable = false)
     private String entityType;
-    @Column(name = "entity_id", nullable = false, updatable = false)
+    @Column(name = "entity_id", updatable = false)
     private Long entityId;
     @Column(nullable = false, length = 20, updatable = false)
     private String outcome;
@@ -83,10 +83,24 @@ public class AuditLog {
 
     public static AuditLog success(Long shopId, Long actorId, SystemRole actorRole, AuditAction action,
             Long entityId, String reason, String requestId, String key, Map<String, Object> metadata) {
-        if (shopId == null || shopId <= 0 || actorId == null || actorId <= 0 || entityId == null || entityId <= 0
-                || actorRole == null || action == null || requestId == null
+        if (actorId == null || actorId <= 0 || actorRole == null || action == null || requestId == null
                 || !requestId.matches("[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}")) {
             throw new IllegalArgumentException("Audit requires trusted actor, shop, target and server request ID");
+        }
+        if (action.isAdminRead()) {
+            boolean shopTarget = action == AuditAction.ADMIN_SHOP_VIEWED || action == AuditAction.ADMIN_SHOP_STATUS_HISTORY_VIEWED;
+            boolean needsTarget = shopTarget || action == AuditAction.ADMIN_OWNER_VIEWED;
+            if (actorRole != SystemRole.ADMIN || needsTarget != (entityId != null)
+                    || entityId != null && entityId <= 0 || shopTarget && !entityId.equals(shopId)
+                    || !shopTarget && shopId != null || reason != null || key != null
+                    || metadata == null || !metadata.keySet().equals(action.metadataKeys())
+                    || !(metadata.get("resultCount") instanceof Integer count) || count < 0
+                    || !(metadata.get("queryPresent") instanceof Boolean queryPresent)
+                    || queryPresent && action != AuditAction.ADMIN_OWNERS_SEARCHED && action != AuditAction.ADMIN_SHOPS_SEARCHED) {
+                throw new IllegalArgumentException("Invalid administrative read audit context");
+            }
+        } else if (shopId == null || shopId <= 0 || entityId == null || entityId <= 0) {
+            throw new IllegalArgumentException("Business audit requires a real shop and target");
         }
         if ((reason != null && reason.length() > 500) || (key != null && key.length() > 255)) {
             throw new IllegalArgumentException("Audit context exceeds its limit");
