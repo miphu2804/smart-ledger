@@ -4,9 +4,9 @@
 
 This ERD describes the target PostgreSQL database for **SmartLedger Phase 1**, an AI-assisted bookkeeping system for small businesses. It includes planned tables and relationships that are not yet in Core's Flyway migrations.
 
-The logical ERD includes authentication, shops, products, customers, drafts, sales, payments, refunds, debts, expenses, Agent chat history, AI request traces, idempotency, and audit logs. Core migrations V1–V10 implement the business tables, idempotency and audit logs; AI migrations `001`–`004` in `backend/ai/migrations` create the chat tables, enable `pgvector` and add read-only views for the Agent; migration `005` on branch `feat/ai-restock-insight` adds the `v_sales` and `v_sale_items` views. `ai_requests` and the notification tables remain target design. This does not assert deployment.
+The logical ERD includes authentication, shops, products, customers, drafts, sales, payments, refunds, debts, expenses, Agent chat history, AI request traces, idempotency, and audit logs. Core migrations V1–V11 implement the business tables, idempotency and shared OWNER/ADMIN audit logs; AI migrations `001`–`004` in `backend/ai/migrations` create the chat tables, enable `pgvector` and add read-only views for the Agent; migration `005` on branch `feat/ai-restock-insight` adds the `v_sales` and `v_sale_items` views. `ai_requests` and the notification tables remain target design. This does not assert deployment.
 
-Business decisions are owned by the [BRD](../product/business-requirements.md) and [PRD](../product/product-requirements.md); endpoint/JSON details are owned by the [API contract](../contracts/api-contracts.md). Reviewed against the `staging` branch on 2026-10-04.
+Business decisions are owned by the [BRD](../product/business-requirements.md) and [PRD](../product/product-requirements.md); endpoint/JSON details are owned by the [API contract](../contracts/api-contracts.md). Core audit/schema alignment reviewed against `staging` commit `b1de421c461d59473b3bb73aae103027afd67a89` on 2026-10-06; AI sections retain their previous snapshot and are outside this review.
 
 A sale record in this MVP is an internal business record. It is **not an electronic invoice**.
 
@@ -50,7 +50,7 @@ Drafts do not affect revenue, stock, payments, or debts until confirmed.
 - **ai_read views**: the AI baseline creates `ai_read.v_shop_profile`, `v_categories` and `v_products` for the Agent's read-only shop-data tool, and `v_sales` and `v_sale_items` for confirmed-sales questions and restock suggestions. They are views, not tables.
 - **ai_requests**: Planned table for AI request status, model/version, result, errors, and media object references; not yet created by any migration.
 - **api_idempotency_keys**: Protects exactly expense creation, debt repayment, and sale void. Confirmation replays by draft ID instead. Other create operations are not covered; default TTL is 30 days and no cleanup job exists.
-- **audit_logs**: Created by V10 as append-only history of successful OWNER/ADMIN writes (actor, shop, action, target, safe metadata, request ID); UPDATE/DELETE/TRUNCATE are rejected by triggers. Audit of sensitive ADMIN read access is still planned.
+- **audit_logs**: V10 creates append-only history of successful OWNER/ADMIN writes; V11 extends the same table for ADMIN support reads. Stores actor_user_id/actor_role, action/entity_type, optional entity_id/shop_id where the event permits, outcome SUCCESS, optional reason/idempotency_key, server request_id, safe metadata and created_at. UPDATE/DELETE/TRUNCATE are rejected by triggers. There is no admin_access_logs table; differing visibility is enforced by action/actor-scoped queries and explicit API projections, not by a second physical store.
 
 ### Notifications
 
@@ -73,6 +73,7 @@ Drafts do not affect revenue, stock, payments, or debts until confirmed.
 - A **debt** can have multiple debt repayment **payments**.
 - A **notification event** can have multiple **notification recipients**.
 - A planned **AI request** can be linked to a sale draft created from AI voice input once that flow is implemented.
+- Every **audit log** references an actor **user** with an actor-role snapshot. A shop FK is optional only for scoped ADMIN read events that do not target a shop; business audit always requires a shop and entity target. The polymorphic entity_id has no generic entity FK; entity_type/action/target checks constrain its meaning.
 
 ## 4. Main Data Flow
 
@@ -128,6 +129,12 @@ Restock uses the historical stock_deducted snapshot, not today's tracked flag al
 
 Reports retain collection at payment.received_at, refunds at sale_refunds.refunded_at, and cancelled revenue at sales.voided_at. Voiding a previous-period sale may make current net revenue negative; see the API contract for the metric/window definitions.
 
+### ADMIN Support Read and Audit Flow
+
+Firebase token verification → active DB ADMIN profile → support projection query → audit insert → transaction commit → response. Each successful dashboard GET is audited, including empty searches; these transactions cannot be read-only. Audit persistence failure refuses protected output with 503 admin_audit_unavailable. Validation/permission/not-found failures do not create SUCCESS events; failure/security audit is a separate scope.
+
+OWNER audit queries exclude all ADMIN_* read actions. ADMIN access history selects only the authenticated actor and administrative action/target whitelist, with no raw business metadata. Shop status history selects only ADMIN SHOP_INACTIVATED/SHOP_REACTIVATED events; the existing status event serves both authorized views without duplication. Access-history reads select their page before recording the read itself. Query strings and contact data are not captured in read audit: metadata contains only queryPresent/resultCount. API details are in the [ADMIN contract](../contracts/api-contracts.md#7-dashboard-quản-trị--đã-có-trong-core).
+
 ### Planned AI Draft Flow (not yet implemented in Core)
 ```text
 Text / Audio / Image Input
@@ -157,6 +164,7 @@ Confirmed Sale or Cancelled Draft
 - Drafts do not affect reports, stock, revenue, or debt until confirmed.
 - AI media is stored as an object key/reference, not as raw media in PostgreSQL.
 - Idempotency reservation, business mutations, and saved replay result commit/rollback together for expense creation, debt repayment, and sale void. Sale draft confirmation returns the existing sale on retry without using this table.
+- Audit is evidence, not a replacement for money/debt/inventory source tables. Administrative GET retries are new audited accesses, not idempotent money-operation replays. old_data/new_data/ip_address are retained nullable legacy schema columns; Core does not populate full snapshots or IP headers in them.
 - Electronic invoices, full inventory management, CRM, OCR documents, and store staff roles are deferred to later phases.
 
 ## 6. Core Business Validation Rules
@@ -188,3 +196,6 @@ To keep the ERD clean in Phase 1 without nested composite foreign keys, Core ser
 - V9 adds sale_refunds (sale/user FKs, unique sale_id, positive amount/method checks, refund-time index), nullable sale_items.stock_deducted, and nullable debts.voided_at/cancelled_vnd with lifecycle checks. Existing sales void fields are reused, not recreated.
 - Existing historical stock snapshots remain NULL; do not invent stock deductions. Existing OPEN/SETTLED data remains intact. V9 can adopt valid Hibernate-created local columns/refund tables, but orphan/invalid refund or unaudited legacy VOIDED rows stop the migration rather than being silently repaired.
 - V1–V8 are not rewritten. Use forward migrations for later changes; shared databases require backup/recovery planning. Local Hibernate development schema is not proof that Flyway constraints or shared deployments have passed.
+- V10 creates audit_logs with actor-role/outcome/request-ID/JSON-object/action-target checks, actor/shop FKs (ON DELETE RESTRICT), indexes on (shop_id, created_at, id), (entity_type, entity_id), actor_user_id, and statement-level triggers rejecting UPDATE/DELETE/TRUNCATE, including bulk/zero-row attempts. Metadata key/type allowlisting belongs to Core on write; the DB check requires a JSON object, not every application key rule. Schema owners/superusers can disable triggers, so production application-role isolation remains necessary.
+- V11 changes shop_id/entity_id nullability and replaces ID/action-target checks without rewriting V10 or historical rows. Existing business actions still require non-null shop/target. Only ADMIN read actions permit global/list null targets; ADMIN_OWNER_VIEWED requires a positive owner target and null shop; ADMIN_SHOP_VIEWED/ADMIN_SHOP_STATUS_HISTORY_VIEWED require entity_id = shop_id. Read events require actor_role ADMIN and null reason/idempotency_key. Global/list actions and entity types are defined in the API contract.
+- V11 retains V10 FKs, role/outcome/request/metadata checks, indexes and append-only triggers; it does not add a second audit table. Invalid existing rows stop validation/roll back migration. Recovery preserves audit data and uses a reviewed forward fix; do not restore V10 NOT NULL/action checks after ADMIN read rows exist, drop history, or use Flyway repair to bypass invalid data. Apply shared-DB migrations only through the approved [migration workflow](../../README.md#database-migrations).

@@ -1,3 +1,16 @@
+### [2026-10-06 02:23 UTC+07:00] — [Docs] Align Core/mobile and ADMIN support documentation
+
+**Done:** Completed the Core/mobile documentation alignment for DOCS-001 (#101), plus a separately reviewed ADMIN documentation extension. Compared against staging commit `b1de421c461d59473b3bb73aae103027afd67a89`. Clarified Firebase JSON-over-ADC precedence, CORS/Flyway configuration, direct DEBT-to-PAID repayment, mobile-local report estimates and quick product creation. Documented the seven ADMIN support GETs and shared audit schema V10/V11; preserved existing requirement IDs and added AC-040 through AC-043.
+
+**Changed files:**
+- `docs/architecture/technical-design.md`, `docs/architecture/service-walkthrough/README.md`, `docs/architecture/service-walkthrough/03-sales/state-sale-debt.svg`, `frontend/mobile/README.md` — Core/mobile alignment.
+- `docs/contracts/api-contracts.md`, `docs/product/business-requirements.md`, `docs/product/product-requirements.md`, `docs/architecture/erd-description.md`, `docs/architecture/diagrams/src/erd.dbml` — ADMIN contract, traceability and migration alignment; technical design also distinguishes implemented Core APIs from pending web integration.
+- `PROGRESS.md` — new entry only; earlier entries retained.
+
+**Flow explained:** ADMIN reads only support projections, not OWNER ledgers/business audit; successful reads commit with audit or refuse protected output with `503 admin_audit_unavailable`. OWNER and ADMIN histories have separate action/actor scopes over the existing append-only `audit_logs`, with no `admin_access_logs` table. The ADMIN extension is outside DOCS-001's original Core/mobile-only checklist and must be identified separately in review. Details added to BR-014/FR-023/FR-024 require Product Owner approval before dashboard acceptance; pushing documentation does not establish web/staging UAT or production readiness.
+
+**Check:** `git diff --check`; 73 relative file links/anchors; seven routes, nine DTO projections and eight ADMIN action filters compared with Core; 16 audit columns/types, V10/V11 nullability, FKs and indexes compared with migrations; DBML CLI parsing/export to PostgreSQL SQL; sale/debt SVG rendered and visually inspected. AI contracts/tables, legal sections and Part 1-only files remained unchanged during Part 2. No code, migrations, secrets or IDE files changed; no Maven, DB migration or UAT run in this documentation pass. Remote staging was rechecked before commit and still matched `b1de421c461d`.
+
 ### [2026-10-05 23:40 UTC+07:00] — [AI] Move AI schema to a Supabase CLI baseline
 
 **Done:** Folded AI migrations `001`–`005` into one baseline, `supabase/migrations/20261005000000_ai_baseline.sql`, under a `supabase/` project from `supabase init`. Staging now gets the AI schema with `npx supabase@2.119.0 db push --db-url "$POSTGRES_URL"` instead of running each file with `psql`. Every statement stays safe to re-run, so the first push also succeeds on a database that already has the old files applied. Core keeps Flyway; CI tests keep a disposable PostgreSQL.
