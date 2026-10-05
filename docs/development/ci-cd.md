@@ -36,6 +36,41 @@ Mỗi Railway project token chỉ deploy được vào đúng một Railway envi
 - Workflow gửi code bằng `railway up backend/<service> --path-as-root`, nên **Root Directory** của service để trống và **không** bật auto-deploy từ GitHub (tránh deploy hai lần).
 - Biến môi trường của service (database, Firebase, `INTERNAL_API_TOKEN`, model key…) cấu hình trên Railway theo từng environment; GitHub chỉ giữ token để deploy. Railway không mount file, nên Core nhận khóa Firebase Admin qua `FIREBASE_SERVICE_ACCOUNT_JSON` (toàn bộ JSON của service account, dùng service account riêng cho từng environment); khi biến trống, Core dùng `GOOGLE_APPLICATION_CREDENTIALS` như khi chạy local.
 
+### Biến của service trên Railway
+
+Mỗi giá trị chỉ nhập một lần; chỗ nào dùng lại thì khai báo bằng [reference variable](https://docs.railway.com/guides/variables#reference-variables) để Railway tự điền theo environment đang deploy. Nhờ vậy staging và production có cùng cấu hình, chỉ khác giá trị, và đổi một secret không phải sửa nhiều nơi.
+
+**Shared Variables** (Project Settings → Shared Variables, đặt riêng cho từng environment):
+
+| Biến | Giá trị |
+|---|---|
+| `INTERNAL_API_TOKEN` | Chuỗi ngẫu nhiên, khác nhau giữa staging và production |
+
+**Service `core`:**
+
+| Biến | Giá trị |
+|---|---|
+| `AI_BASE_URL` | `http://${{ai.RAILWAY_PRIVATE_DOMAIN}}:8001` |
+| `INTERNAL_API_TOKEN` | `${{shared.INTERNAL_API_TOKEN}}` |
+| `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` | Supabase của environment tương ứng (JDBC URL) |
+| `FIREBASE_PROJECT_ID`, `FIREBASE_SERVICE_ACCOUNT_JSON` | Firebase project của environment tương ứng |
+| `FLYWAY_ENABLED` | `false` |
+| `CORS_ALLOWED_ORIGINS` | Origin của web build trên Vercel, cách nhau bằng dấu phẩy, nhận wildcard (vd. `https://smart-ledger-*.vercel.app`); bỏ trống thì trình duyệt không gọi được Core |
+
+**Service `ai`:**
+
+| Biến | Giá trị |
+|---|---|
+| `INTERNAL_API_TOKEN` | `${{shared.INTERNAL_API_TOKEN}}` |
+| `POSTGRES_URL` | Supabase của environment tương ứng (`postgresql://…`) |
+| `AI_SQL_READER_URL` | Login chỉ đọc `ai_sql_reader` (migration AI 004); bỏ trống thì agent không đọc được dữ liệu shop |
+| `REDIS_URL` | Redis Cloud của environment tương ứng |
+| `OPENAI_API_KEY` | Key của nhà cung cấp model |
+
+- `ai` không mở public domain; `core` gọi qua private network. Port `8001` là `SERVER_PORT` mặc định của AI, không phải `PORT` do Railway cấp, nên đổi `SERVER_PORT` của `ai` thì phải sửa `AI_BASE_URL` theo.
+- Biến có giá trị mặc định cho local (`AI_BASE_URL` mặc định `http://localhost:8001`), nên thiếu biến trên Railway thì deploy vẫn báo thành công nhưng Core không gọi được AI. Sau khi đổi biến, kiểm tra một lượt chat qua Core trên staging.
+- Secret backend chỉ đặt trên Railway. Project Vercel của mobile web chỉ nhận `EXPO_PUBLIC_*`.
+
 ## Những gì luồng này chưa làm
 
 - Không chạy migration database. Flyway vẫn tắt mặc định; người phụ trách migration chạy tay theo [Database migrations](../../README.md#database-migrations), trên staging trước production.
