@@ -23,8 +23,8 @@ Mục này là nơi duy nhất ghi hiện trạng triển khai; tài liệu khá
 **Đối chiếu với code nhánh `staging` ngày 2026-10-04:**
 
 - **Core:** Firebase auth/session/me, Shop/Category/Product/Customer CRUD, draft → confirm → sale/payment, debt repayment, expense, report summary, sale void và full refund, audit thao tác ghi và lịch sử audit cho OWNER; schema Flyway V1–V10. Core proxy `/api/v1/agent/*` sang AI `/internal/v1/agent/*` kèm `X-Internal-Token`, lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực.
-- **AI:** `/health` và Agent chat (chat, list, detail, rename, delete) lưu PostgreSQL, tóm tắt cuốn chiếu, tìm lịch sử và tool đọc dữ liệu tiệm chỉ đọc; migration AI `001`–`004`.
-- **AI — nhánh `feat/ai-restock-insight`, chưa merge vào `staging`:** migration `005` thêm hai view chỉ đọc `v_sales` và `v_sale_items` cho câu hỏi doanh số; agent thêm tool `suggest_restock` trả gợi ý nhập hàng từ đơn `CONFIRMED`. `COVER_DAYS` (hiện là 7 ngày) và hai kỳ `last_7_days`/`last_30_days` là mặc định chờ PO duyệt, chưa phải yêu cầu đã chốt; xem [README AI](../../backend/ai/README.md#restock-suggestions).
+- **AI:** `/health` và Agent chat (chat, list, detail, rename, delete) lưu PostgreSQL, tóm tắt cuốn chiếu, tìm lịch sử và tool đọc dữ liệu tiệm chỉ đọc; schema AI là một baseline Supabase CLI trong `supabase/migrations/`.
+- **AI — gợi ý nhập hàng và câu hỏi doanh số:** hai view chỉ đọc `v_sales` và `v_sale_items` cho câu hỏi doanh số; agent có tool `suggest_restock` trả gợi ý nhập hàng từ đơn `CONFIRMED`. `COVER_DAYS` (hiện là 7 ngày) và hai kỳ `last_7_days`/`last_30_days` là mặc định chờ PO duyệt, chưa phải yêu cầu đã chốt; xem [README AI](../../backend/ai/README.md#restock-suggestions).
 - **Mobile:** mặc định dùng mock; khi tắt mock gọi Firebase và các API Core ở trên. Các màn nghiệp vụ (trang chủ, báo cáo, đơn hàng, hàng hoá, công nợ, chi phí, thanh toán, hồ sơ tiệm) đọc và ghi qua Core; thanh toán, chi phí và trả nợ thử lại bằng cùng `Idempotency-Key`. Nhận diện đơn vẫn dùng parser rule-based trên máy; mic chỉ nhận giọng nói trên web.
 - **Web admin:** chỉ chạy mock; Core chưa có API dashboard tương ứng.
 
@@ -80,7 +80,7 @@ Luồng ADMIN hiện có: `PATCH /api/v1/shops/{shopId}/status` (ngoài prefix a
 
 V10 tạo `audit_logs` append-only (trigger chặn UPDATE/DELETE/TRUNCATE); Core ghi audit cho thao tác ghi thành công của OWNER/ADMIN cùng transaction nghiệp vụ và OWNER đọc qua `GET /api/v1/audit-logs` (xem [API contract](../contracts/api-contracts.md#lịch-sử-audit-của-tiệm)). Audit khi ADMIN xem dữ liệu (`NFR-009`/`AC-017`), trace AI/media và cô lập vector theo shop vẫn là yêu cầu đích, chưa có trong Core.
 
-Schema PostgreSQL được quản lý bằng migration SQL có phiên bản trong Git. Không sửa schema trực tiếp trên Supabase Dashboard. Dev và staging dùng chung DB nên chỉ chạy migration từ code đã merge vào `staging`; máy dev chạy Core với `FLYWAY_ENABLED=false` (xem [Database migrations](../../README.md#database-migrations)). Migration phải chạy được trên PostgreSQL chuẩn; extension, trigger hoặc API riêng của Supabase chỉ được dùng khi có quyết định kỹ thuật riêng.
+Schema PostgreSQL được quản lý bằng migration SQL có phiên bản trong Git. Không sửa schema trực tiếp trên Supabase Dashboard. Dev và staging dùng chung DB nên chỉ chạy migration từ code đã merge vào `staging`; Core dùng Flyway, AI dùng Supabase CLI (`supabase db push`); máy dev chạy Core với `FLYWAY_ENABLED=false` (xem [Database migrations](../../README.md#database-migrations)). Migration phải chạy được trên PostgreSQL chuẩn; extension, trigger hoặc API riêng của Supabase chỉ được dùng khi có quyết định kỹ thuật riêng.
 
 ## 5. Auth và phân quyền
 

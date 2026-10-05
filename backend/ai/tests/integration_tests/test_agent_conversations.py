@@ -1,7 +1,6 @@
 import os
 import uuid
 from collections.abc import Iterator
-from pathlib import Path
 
 import psycopg
 import pytest
@@ -10,7 +9,11 @@ from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from psycopg import sql
-from tests.support import TEST_GUARDRAIL_LIMITS
+from tests.support import (
+    TEST_GUARDRAIL_LIMITS,
+    apply_ai_baseline,
+    apply_core_migrations,
+)
 
 from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
 from src.agent.service import AgentService
@@ -22,12 +25,6 @@ from src.agent.summary import (
 from src.infra.postgre_db_client import PostgreDBClient
 from src.main import app
 
-BACKEND_ROOT = Path(__file__).resolve().parents[3]
-CORE_MIGRATION = (
-    BACKEND_ROOT / "core/src/main/resources/db/migration/V1__create_auth_and_shops.sql"
-)
-CHAT_MIGRATION = BACKEND_ROOT / "ai/migrations/001_create_chat_history.sql"
-SUMMARY_MIGRATION = BACKEND_ROOT / "ai/migrations/003_add_chat_summary.sql"
 FACT_IN_FIRST_MESSAGE = "Lan owes 200000 VND"
 
 
@@ -104,9 +101,8 @@ def postgres_agent_client(
         setup_connection.execute(
             sql.SQL("SET search_path TO {}").format(sql.Identifier(schema_name))
         )
-        setup_connection.execute(CORE_MIGRATION.read_text(), prepare=False)
-        setup_connection.execute(CHAT_MIGRATION.read_text(), prepare=False)
-        setup_connection.execute(SUMMARY_MIGRATION.read_text(), prepare=False)
+        apply_core_migrations(setup_connection)
+        apply_ai_baseline(setup_connection, schema_name)
 
         user_id = setup_connection.execute(
             "INSERT INTO users (display_name) VALUES (%s) RETURNING id",
