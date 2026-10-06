@@ -34,9 +34,9 @@ npm run export:web      # build web tĩnh ra dist/
 | `/(tabs)/more` | Quản lý: hồ sơ, báo cáo, hàng hoá, chi phí, công nợ, cài đặt và đăng xuất |
 | `/expenses` | Chi phí theo tháng, cơ cấu chi, thêm chi phí bằng giọng nói / nhập tay |
 | `/voice` | Đọc đơn: nhập văn bản hoặc giữ nút mic, hỏi thêm món lạ vào danh mục, sửa số lượng. Mic chỉ nhận giọng nói trên web (Web Speech API `vi-VN`); trên native nút mic phát lại câu mẫu |
-| `/pos` | Chọn hàng nhanh dạng lưới, giỏ hàng, món ngoài danh mục |
+| `/pos` | Chọn hàng nhanh dạng lưới, giỏ hàng, thêm nhanh mặt hàng vào danh mục |
 | `/checkout` | Thanh toán: tiền mặt (tiền thối), chuyển khoản (QR minh hoạ), ghi nợ |
-| `/invoice/[id]` | Chi tiết hoá đơn: in, sửa, huỷ |
+| `/invoice/[id]` | Chi tiết đơn bán nội bộ: xem đơn, void toàn bộ và xem khoản hoàn; chưa có in/sửa sale |
 | `/products` | Hàng hoá & tồn kho, thêm/sửa/xoá, “chụp ảnh AI” giả lập |
 | `/debts` | Sổ nợ: trả một phần / trả hết, lịch sử, gọi / nhắc nợ |
 | `/bestsellers` | Xếp hạng món bán chạy, gợi ý hàng bán chậm |
@@ -130,7 +130,9 @@ Luồng: Firebase xác thực SĐT → FE gửi **Firebase ID token** (`Authoriz
 2. Mở lại app: Firebase tự khôi phục phiên → `GET /api/v1/me`. `404 auth_profile_not_found` (Firebase còn đăng nhập nhưng Core chưa có tài khoản) → app vào lại màn nhập tên. `401` → đăng xuất. `403 account_disabled` → đăng xuất và báo tài khoản bị khoá.
 3. `needsOnboarding = true` (chưa có tiệm) → màn tạo tiệm, gọi `POST /shops` thật (Core lưu một `industry` dạng chuỗi — các ngành đã chọn được nối bằng ", ").
 
-Các API nghiệp vụ (danh mục/sản phẩm, khách, POS/checkout tạo đơn nháp rồi xác nhận, đơn hàng, công nợ, chi phí, báo cáo, trợ lý) đều cần header `X-Shop-Id`; hợp đồng nằm trong [API contracts](../../docs/contracts/api-contracts.md). Frontend gọi đủ các API này khi chạy với Core thật. `SaleDraft.confirm` chấp nhận `initialPaidVnd` bất kỳ từ 0 tới tổng đơn — trả thiếu thì Core (`SaleDraftServiceImpl.confirm`/`customerForConfirmation`) tự tạo một `Debt` cho khách (cần có `customerId` có sẵn hoặc `customerName` để Core tạo khách mới, thiếu cả hai thì lỗi `customer_required_for_debt`); khớp với màn Thanh toán ghi nợ của mobile. `EXPO_PUBLIC_USE_MOCK=true` bật chế độ xem trước không cần Core thật — `src/lib/mockCore.ts` giả lập các endpoint trên trong bộ nhớ.
+Các API nghiệp vụ (danh mục/sản phẩm, khách, POS/checkout tạo đơn nháp rồi xác nhận, đơn hàng, công nợ, chi phí, trợ lý) đều cần header `X-Shop-Id`; hợp đồng nằm trong [API contracts](../../docs/contracts/api-contracts.md). Khi chạy với Core thật, mobile dùng các client `src/lib/*Api.ts` cho những luồng đã nối; Home/Analytics chưa gọi `/api/v1/reports/summary` (xem [Chỉ số trên Home/Analytics](#chỉ-số-trên-homeanalytics)). `SaleDraft.confirm` chấp nhận `initialPaidVnd` bất kỳ từ 0 tới tổng đơn — trả thiếu thì Core (`SaleDraftServiceImpl.confirm`/`customerForConfirmation`) tự tạo một `Debt` cho khách (cần có `customerId` có sẵn hoặc `customerName` để Core tạo khách mới, thiếu cả hai thì lỗi `customer_required_for_debt`); khớp với màn Thanh toán ghi nợ của mobile. `EXPO_PUBLIC_USE_MOCK=true` bật chế độ xem trước không cần Core thật — `src/lib/mockCore.ts` giả lập các endpoint trên trong bộ nhớ.
+
+Checkout mobile hiện yêu cầu mỗi món có `productId`. Luồng “Món ngoài danh mục” tạo nhanh một Product với `tracked=false` rồi thêm vào giỏ; chưa dùng custom item `productId=null` dù Core đã hỗ trợ.
 
 Khi dev mobile, app gọi Core staging trên Railway (bản deploy từ nhánh `staging`, xem [CI/CD](../../docs/development/ci-cd.md)), nên máy dev không cần chạy backend hay Docker. Domain Railway gắn với service và environment, không đổi sau mỗi lần deploy. `.env`:
 
@@ -146,6 +148,16 @@ EXPO_PUBLIC_API_ENDPOINT=https://core-staging-01d2.up.railway.app
 - Firebase của app (`google-services.json`, biến `EXPO_PUBLIC_FIREBASE_*`) phải cùng project với `FIREBASE_PROJECT_ID` của Core staging, nếu không Core trả `401`.
 
 Chỉ chạy Core trên máy khi đang sửa backend (xem [README gốc](../../README.md#run)); khi đó đặt `EXPO_PUBLIC_API_ENDPOINT=http://<IP LAN của máy chạy Core>:8000` (máy ảo Android: `http://10.0.2.2:8000`, cổng `8000` khi chạy bằng Compose). Core cần `FIREBASE_PROJECT_ID` trùng project của `google-services.json` và file service account (xem `backend/core/.env.example`). Điện thoại và máy chạy Core phải cùng mạng.
+
+### Chỉ số trên Home/Analytics
+
+Home và Analytics lấy danh sách sale/product/debt/expense qua [`useCoreData.ts`](src/lib/useCoreData.ts), chuyển dữ liệu bằng [`coreAdapters.ts`](src/lib/coreAdapters.ts), rồi tính chỉ số trên thiết bị bằng [`stats.ts`](src/lib/stats.ts). Đây không phải response của Core summary:
+
+- Đơn dùng `soldAt` làm thời điểm bán; loại các đơn hiện đã `VOIDED` và lọc kỳ theo giờ thiết bị. Hủy một đơn kỳ trước có thể làm số liệu kỳ bán cũ thay đổi, không tạo điều chỉnh ở kỳ `voidedAt` như Core.
+- Doanh thu là tổng giá trị các đơn còn lại, không tách `grossRevenueVnd`, `voidedRevenueVnd`, `netRevenueVnd` hoặc dòng tiền theo `receivedAt`/`refundedAt`.
+- Lãi gộp là doanh thu trừ giá vốn **ước tính**, chưa trừ khoản chi vận hành. Giá vốn lấy từ danh mục hiện có; thiếu `costPriceVnd` thì adapter ước tính 60% giá bán danh mục, còn dòng không khớp product dùng 60% đơn giá dòng. Đây không phải snapshot giá vốn lịch sử hoặc lợi nhuận chính thức.
+
+Định nghĩa summary chuẩn của Core nằm trong [API contract — Tổng quan theo kỳ](../../docs/contracts/api-contracts.md#tổng-quan-theo-kỳ). Việc nối FE sang summary cần task tích hợp và nghiệm thu riêng; sửa tài liệu này không chứng minh báo cáo mobile đã tương đương Core hay đã đạt `FR-006`/`AC-031`.
 
 ### Đăng nhập bằng email + mật khẩu
 
@@ -168,7 +180,7 @@ Màn đầu có liên kết “Đăng nhập bằng email và mật khẩu” (`
 
 Chưa làm: đăng nhập Google/Facebook/Apple (bản thật hiện báo “sắp có”), Zalo (Firebase không có sẵn provider — cần Core cấp custom token), nhận diện đơn bằng AI (màn Đọc đơn vẫn dùng `parseOrder()` trên máy).
 
-Ghi chú: mã QR chuyển khoản, tỉ lệ thuế 1,5% trên hoá đơn và gói Pro đều chỉ để minh hoạ.
+Ghi chú: mã QR chuyển khoản chỉ để minh hoạ, không xác nhận giao dịch ngân hàng.
 
 ## Vercel preview trên trình duyệt
 

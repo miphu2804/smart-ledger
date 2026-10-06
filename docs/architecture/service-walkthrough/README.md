@@ -1,6 +1,6 @@
 # Service walkthrough
 
-Diagrams read from the Core (`backend/core/.../service`) and AI (`backend/ai/src`) code as of this commit.
+Core diagrams reviewed against `staging` commit [`b1de421c461d59473b3bb73aae103027afd67a89`](https://github.com/miphu2804/smart-ledger/tree/b1de421c461d59473b3bb73aae103027afd67a89) on 2026-10-06. AI diagrams are outside this review and remain unchanged.
 These are reading notes, not a source of truth — scope and behavior stay in `docs/product/` and `docs/contracts/`.
 
 | Folder | Diagrams |
@@ -227,7 +227,8 @@ stateDiagram-v2
         [*] --> PAID : paid == total
         [*] --> PARTIAL : 0 < paid < total
         [*] --> DEBT : paid == 0
-        DEBT --> PARTIAL : recordRepayment()
+        DEBT --> PARTIAL : partial repayment
+        DEBT --> PAID : fully repaid in one payment
         PARTIAL --> PAID : fully repaid
     }
     state "Debt.status" as D {
