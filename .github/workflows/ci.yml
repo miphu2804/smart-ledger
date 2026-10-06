@@ -354,7 +354,13 @@ jobs:
           URL: ${{ steps.preview.outputs.url || steps.deploy.outputs.url }}
         run: |
           set -euo pipefail
-          test "$(curl -s -o /dev/null -w '%{http_code}' "$URL/")" = 200
+          # A fresh alias can take a few seconds to route, so retry before failing.
+          for attempt in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$URL/")
+            [ "$code" = 200 ] && break
+            sleep 5
+          done
+          test "$code" = 200
           echo "page: 200"
           if [ "$EXPO_PUBLIC_USE_MOCK" != "false" ]; then echo "mock build, skipping Core checks"; exit 0; fi
           grep -rqF "$EXPO_PUBLIC_API_ENDPOINT" .vercel/output/static
