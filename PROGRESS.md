@@ -1,3 +1,13 @@
+### [2026-10-07 01:35 UTC+07:00] — [Feature] Create the account right after the first phone sign-in
+
+**Done:** A new user who signs in with a phone number now gets an account as soon as the OTP is correct: the app calls `POST /api/v1/auth/session` without a name, receives the 400 that Core returns for a first sign-in, immediately repeats the call with the default name "Chủ tiệm", and goes on to create the shop. The "Bạn tên gì?" screen no longer appears on this path. Email sign-in, and reopening the app while Firebase is signed in but Core has no account, still use it. Core is unchanged. Core has no endpoint to rename a user, so a name changed on the Hồ sơ screen stays on the device.
+
+**Changed files:** `frontend/mobile/src/lib/openSession.ts` — created; `frontend/mobile/app/(auth)/otp.tsx`, `frontend/mobile/app/(auth)/profile.tsx` (comment only), `frontend/mobile/README.md`, `PROGRESS.md` — modified.
+
+**Flow explained:** `openSession(signIn)` runs `signIn()` and, only when the error is the 400 that asks for `displayName` (`isDisplayNameRequired`), runs `signIn("Chủ tiệm")` once. Every other error (401, 403 `account_disabled`, no network) is thrown unchanged, and a second failure is not retried, so the OTP screen still falls back to the name screen if Core keeps asking for a name.
+
+**Check:** `tsc --noEmit` clean. 12 scratch cases (not in the repo) use the real `errors.ts` and `ApiError`: an existing account (one call, no name), a new account (second call with the default name), five other errors passed through with no second call, a failing second call, and Core still asking for a name. The earlier 110 scratch cases still pass. In the web build with the mock Core, a number that is not a known account went from OTP to the shop setup screen, with `signIn ✗ HTTP 400` then `signIn ✓ needsOnboarding=true` in the log and no name screen. Not verified: a real phone number against the real Core and Firebase; an account left behind by a half-finished sign-in.
+
 ### [2026-10-06 11:48 UTC+07:00] — [AI] Cap the shop catalog read and map database errors
 
 **Done:** Review fixes on `feat/ai-shop-catalog-37` for AI-007 (#37). `ProductCatalogRepository` now caps every read with a transaction-local `statement_timeout` (default 3000 ms, mirroring `ReadOnlySqlExecutor`), so a blocked query cannot hold `PostgreDBClient`'s single connection lock and stall chat. Every database failure and timeout becomes `CatalogUnavailableError` for #3/#60 to map to manual entry. `shop_id` and `product_id` are typed `int | None` and return early (empty list / `False`) instead of relying on SQL NULL semantics.

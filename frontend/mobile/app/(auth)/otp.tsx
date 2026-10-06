@@ -6,6 +6,7 @@ import { Button, Header, Progress, Screen, T } from '../../src/components/ui';
 import { USE_MOCK } from '../../src/config';
 import { confirmPhoneLogin, startPhoneLogin } from '../../src/lib/auth';
 import { errorMessage, isDisplayNameRequired } from '../../src/lib/errors';
+import { openSession } from '../../src/lib/openSession';
 import { useApp } from '../../src/store/AppStore';
 import { colors, font } from '../../src/theme';
 
@@ -30,11 +31,12 @@ export default function Otp() {
     setError('');
     try {
       await confirmPhoneLogin(c); // Firebase xác thực mã OTP
-      const session = await signIn(); // đổi ID token lấy phiên ở Core (POST /auth/session)
+      // Đổi ID token lấy phiên ở Core (POST /auth/session). Số điện thoại mới thì tạo luôn tài khoản bằng tên mặc định.
+      const session = await openSession(signIn);
       router.replace(session.needsOnboarding ? '/(auth)/setup' : '/(tabs)');
     } catch (e) {
       if (isDisplayNameRequired(e)) {
-        // Firebase đã xác thực nhưng Core chưa có tài khoản → hỏi tên rồi mở phiên
+        // Core vẫn đòi tên sau khi đã gửi tên mặc định (không nên xảy ra) → quay về màn nhập tên
         router.replace('/(auth)/profile');
         return;
       }

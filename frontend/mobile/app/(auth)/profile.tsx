@@ -8,8 +8,9 @@ import { useApp } from '../../src/store/AppStore';
 import { colors } from '../../src/theme';
 
 /**
- * Đăng nhập lần đầu: Firebase đã xác thực số điện thoại nhưng Core chưa có tài khoản → hỏi tên rồi mở phiên
- * (POST /auth/session { displayName }). Số điện thoại không kèm tên nên Core bắt buộc phải có bước này.
+ * Hỏi tên rồi mở phiên (POST /auth/session { displayName }) khi Firebase đã xác thực nhưng Core chưa có tài khoản.
+ * Đăng nhập bằng số điện thoại không đi qua màn này nữa: màn OTP tự tạo tài khoản bằng tên mặc định (`openSession`).
+ * Màn này còn dùng cho đăng nhập email và khi mở lại app mà Firebase còn phiên, Core chưa có tài khoản.
  */
 export default function Profile() {
   const { signIn, logout } = useApp();
