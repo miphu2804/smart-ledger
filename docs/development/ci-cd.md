@@ -59,7 +59,7 @@ Mỗi giá trị chỉ nhập một lần; chỗ nào dùng lại thì khai báo
 | `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` | Supabase của environment tương ứng (JDBC URL) |
 | `FIREBASE_PROJECT_ID`, `FIREBASE_SERVICE_ACCOUNT_JSON` | Firebase project của environment tương ứng |
 | `FLYWAY_ENABLED` | `false` |
-| `CORS_ALLOWED_ORIGINS` | Mặc định rỗng: không cho phép truy cập cross-origin từ trình duyệt. Khi web gọi Core trực tiếp, đặt các origin chính xác, phân tách bằng dấu phẩy, vd. `https://smart-ledger-staging.vercel.app`; không nhận wildcard, path hoặc dấu `/` cuối. Khai báo riêng từng origin preview/staging/production được phép và recreate/redeploy Core sau khi đổi biến. |
+| `CORS_ALLOWED_ORIGINS` | Mặc định rỗng: không cho phép truy cập cross-origin từ trình duyệt. Khi web gọi Core trực tiếp, đặt các origin chính xác, phân tách bằng dấu phẩy, vd. `https://smart-ledger-staging.vercel.app`; không nhận wildcard, path hoặc dấu `/` cuối. Khai báo riêng từng origin preview/staging/production được phép, gồm 10 alias preview `https://smart-ledger-preview-00.vercel.app` … `-09` trên staging, và recreate/redeploy Core sau khi đổi biến. |
 
 **Service `ai`:**
 
@@ -87,7 +87,7 @@ Job `deploy-web` build `frontend/mobile` ngay trên runner (`vercel build`) rồ
 
 | Sự kiện | Environment | Kết quả |
 |---|---|---|
-| PR (nhánh trong repo) | `vercel-preview` | URL preview riêng, bot comment vào PR |
+| PR (nhánh trong repo) | `vercel-preview` | Gán alias `smart-ledger-preview-0N.vercel.app` với `N` là chữ số cuối của số PR, bot comment alias vào PR |
 | Push `staging` | `vercel-staging` | Deploy preview rồi gán alias `VERCEL_STAGING_ALIAS` |
 | Push `main` | `vercel-production` | Deploy production sau khi duyệt |
 
@@ -95,5 +95,5 @@ Job `deploy-web` build `frontend/mobile` ngay trên runner (`vercel build`) rồ
 - PR từ fork không có secret nên không có preview.
 - Biến `EXPO_PUBLIC_*` đóng vào bundle lúc build, nên đặt ở **Variables** (không phải Secrets) của từng environment: `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS`, `EXPO_PUBLIC_API_ENDPOINT`, `EXPO_PUBLIC_FIREBASE_API_KEY`, `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`, `EXPO_PUBLIC_FIREBASE_PROJECT_ID`, `EXPO_PUBLIC_FIREBASE_APP_ID`; `vercel-staging` thêm `VERCEL_STAGING_ALIAS`. Đổi biến xong phải chạy lại job thì web mới nhận.
 - Bỏ trống `EXPO_PUBLIC_USE_MOCK` thì app chạy mock (`src/config.ts` chỉ tắt mock khi giá trị là `false`).
-- Gọi Core thật từ trình duyệt cần origin của web nằm trong `CORS_ALLOWED_ORIGINS` của Core và domain web nằm trong Firebase Authorized domains.
+- Gọi Core thật từ trình duyệt cần origin của web nằm trong `CORS_ALLOWED_ORIGINS` của Core và domain web nằm trong Firebase Authorized domains. URL riêng của mỗi deploy có hash ngẫu nhiên nên không khai báo được; preview dùng 10 alias cố định `smart-ledger-preview-00` … `-09`. Hai PR mở cùng lúc có cùng chữ số cuối sẽ ghi đè alias của nhau; chạy lại job để lấy lại slot.
 - `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` lấy ở Vercel Project Settings → General; `VERCEL_TOKEN` tạo ở Account Settings → Tokens, giới hạn scope vào team của project.
