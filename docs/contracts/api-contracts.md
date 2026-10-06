@@ -4,7 +4,7 @@
 |---|---|
 | Trạng thái | đích MVP; các endpoint đã triển khai được đánh dấu riêng bên dưới |
 | Chủ sở hữu | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-10-05 |
+| Cập nhật lần cuối | 2026-10-06 |
 
 ## Tài liệu liên quan
 
@@ -18,7 +18,7 @@
 - Không dùng cổng trong sơ đồ kiến trúc làm hợp đồng API.
 - Redis, Langfuse và LiteLLM không có API công khai. FE không gọi trực tiếp các thành phần này.
 
-**Hiện trạng (đối chiếu code nhánh `staging` ngày 2026-10-04):** mục 1–4 là API Core đã có. Bảng mục 5–6 có cột Trạng thái cho từng endpoint: các route Agent đã có, parse và danh sách gợi ý nhập hàng có cấu trúc là đích. Mục 7 là hợp đồng đích. Có trong code không đồng nghĩa đã deploy staging hay nghiệm thu FE; hiện trạng triển khai/kiểm thử nằm trong [thiết kế kỹ thuật](../architecture/technical-design.md#1-phạm-vi).
+**Hiện trạng Core (đối chiếu `staging` tại `b1de421c461d59473b3bb73aae103027afd67a89`, ngày 2026-10-06):** mục 1–4 và 7 là API Core đã có. Bảng mục 5–6 giữ trạng thái từng endpoint từ lần rà soát AI trước; lượt này không rà soát lại AI. Có trong code không đồng nghĩa đã deploy staging hay nghiệm thu FE; hiện trạng triển khai/kiểm thử nằm trong [thiết kế kỹ thuật](../architecture/technical-design.md#1-phạm-vi).
 
 **AI và proxy Agent:** AI có `GET /health` và năm endpoint `/internal/v1/agent/*` (chat, list, detail, rename, delete), cùng tóm tắt chat cuốn chiếu và tìm lịch sử. Mọi đường `/internal/v1/*` bắt buộc `X-Internal-Token`; thiếu/sai token hoặc AI chưa cấu hình `INTERNAL_API_TOKEN` trả `401`, riêng `/health` vẫn công khai. Core proxy `/api/v1/agent/*` sang các đường này, gửi `X-Internal-Token` và lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực; AI `404` thành `conversation_not_found`, lỗi hoặc quá thời gian khác thành `503 ai_unavailable`. Chưa có nghiệm thu đầu-cuối luồng FE → Core → AI với model thật.
 
@@ -26,7 +26,7 @@
 
 - Core dùng `Authorization: Bearer <Firebase ID token>`, không cấp access/refresh token riêng.
 - Auth/me và các API shop dùng ID trong path, không cần `X-Shop-Id`. Category/Product/Customer/Draft/Sale/Payment/Debt/Expense/Report bắt buộc `X-Shop-Id` của shop `ACTIVE` thuộc OWNER đang hoạt động. ADMIN không dùng API ghi sổ.
-- Ngoại lệ quản trị hiện có: `PATCH /api/v1/shops/{shopId}/status` chỉ ADMIN. Các API dashboard `/api/v1/admin/*` vẫn là đích.
+- Quản trị: `PATCH /api/v1/shops/{shopId}/status` và các GET `/api/v1/admin/*` chỉ ADMIN đang hoạt động; dashboard dùng ID/filter riêng, không yêu cầu `X-Shop-Id` và không mở quyền API OWNER.
 - JSON Core dùng camelCase; ID là số `BIGINT`, tiền là số nguyên VND; quantity dùng `numeric(15,3)`. API AI và các route `/api/v1/agent/*` Core chuyển tiếp giữ snake_case.
 - Core/DB xử lý thời điểm UTC/`TIMESTAMPTZ`; timestamp JSON Core dùng ISO 8601 với offset Việt Nam `+07:00`. Timestamp đầu vào cần offset (`Z` hoặc `+07:00`); kỳ báo cáo theo `Asia/Ho_Chi_Minh`.
 - Body JSON dùng `Content-Type: application/json`; dấu `?` bên dưới chỉ field tùy chọn, không mặc nhiên cho phép explicit null.
@@ -55,7 +55,7 @@ V7 tạo bảng key. Confirm draft chống trùng bằng draftId, không yêu c�
 
 `ShopResponse = { id, name, industry, phone, address, status, inactiveReason, archivedReason }`. name/industry bắt buộc khi tạo. PATCH phải có ít nhất một giá trị cập nhật; null như bỏ qua, phone/address rỗng có thể xóa nội dung. OWNER chỉ sửa/archive shop ACTIVE; archivedReason không rỗng, tối đa 500 ký tự. INACTIVE vẫn GET được hồ sơ/lý do nhưng các API nghiệp vụ bị chặn; ARCHIVED GET trả `404 shop_not_found` và bị loại khỏi danh sách phiên.
 
-ADMIN đặt INACTIVE phải có inactiveReason không rỗng; đặt ACTIVE xóa lý do đó. Endpoint status không nhận ARCHIVED và không mở lại shop đã archive. OWNER gọi status trả `403 admin_access_required`. Đổi trạng thái ghi audit `SHOP_INACTIVATED`/`SHOP_REACTIVATED` với actor là ADMIN (xem [Lịch sử audit của tiệm](#lịch-sử-audit-của-tiệm)).
+ADMIN đặt INACTIVE phải có inactiveReason không rỗng; đặt ACTIVE xóa lý do đó. Endpoint status không nhận ARCHIVED và không mở lại shop đã archive. OWNER gọi status trả `403 admin_access_required`. Đổi trạng thái ghi một audit `SHOP_INACTIVATED`/`SHOP_REACTIVATED` với actor ADMIN, beforeStatus/afterStatus và lý do; event này phục vụ cả lịch sử tiệm và projection ADMIN, không ghi trùng. Không ghi được audit trả `503 admin_audit_unavailable`, rollback thay đổi trạng thái/lý do (xem [Dashboard quản trị](#7-dashboard-quản-trị--đã-có-trong-core)).
 
 Core ánh xạ `auth_identities.provider_subject` bằng Firebase UID. Provider linking diễn ra ở Firebase; kiểm thử UI/provider thật không được suy ra từ việc Core xác thực token.
 
@@ -238,13 +238,13 @@ Phủ `FR-006`, `FR-015`, `FR-016`, `AC-007`, `AC-024`, `AC-031`.
 |---|---|---|---|
 | `GET` | `/api/v1/audit-logs` | Query `action?`, `entityId?`, `from?`, `to?`, `page=0`, `size=20` | `200 AuditLogPageResponse` |
 
-Chỉ đọc, bắt buộc Bearer token và `X-Shop-Id` của shop ACTIVE do OWNER sở hữu; không có API tạo/sửa/xóa audit. Kết quả mới nhất trước (createdAt, id giảm dần). `from` inclusive, `to` exclusive, ISO 8601 có offset; `size` 1–100, `page` từ 0, `entityId` dương, `from` phải trước `to`, sai các ràng buộc này trả `400 invalid_audit_query`. `action` không thuộc danh sách dưới hoặc param sai kiểu trả `400 validation_failed`.
+Chỉ đọc, bắt buộc Bearer token và `X-Shop-Id` của shop ACTIVE do OWNER sở hữu; không có API tạo/sửa/xóa audit. Kết quả mới nhất trước (createdAt, id giảm dần). `from` inclusive, `to` exclusive, ISO 8601 có offset; `size` 1–100, `page` từ 0 và page × size không quá 2.147.483.647, `entityId` dương, `from` phải trước `to`, sai các ràng buộc này trả `400 invalid_audit_query`. Enum action không tồn tại hoặc param sai kiểu trả `400 validation_failed`; action đọc ADMIN đã biết (`ADMIN_*`) trả `400 invalid_audit_query`. Kết quả luôn loại event đọc ADMIN, nhưng vẫn có event ADMIN đổi trạng thái tiệm theo danh sách bên dưới.
 
 `AuditLogPageResponse = { content: AuditLogResponse[], page, size, totalElements, totalPages }`; `AuditLogResponse = { id, shopId, actorUserId, actorRole, action, entityType, entityId, outcome, reason, requestId, idempotencyKey, metadata, createdAt }`. outcome luôn `SUCCESS`: chỉ ghi thao tác thành công, cùng transaction nghiệp vụ; thao tác lỗi/rollback không để lại audit. metadata chỉ chứa key được khai báo cho từng action (số tiền, tồn trước/sau, trường đã đổi), không chứa tên/SĐT khách, token hay IP.
 
 action: `SALE_CONFIRMED`, `SALE_VOIDED`, `SALE_REFUND_RECORDED`, `DEBT_REPAYMENT_RECORDED`, `DEBT_VOIDED`, `STOCK_ADJUSTED`, `STOCK_RESTORED_ON_VOID`, `EXPENSE_CREATED`, `EXPENSE_UPDATED`, `EXPENSE_ARCHIVED`, `PRODUCT_CREATED`, `PRODUCT_UPDATED`, `PRODUCT_ARCHIVED`, `CATEGORY_CREATED`, `CATEGORY_UPDATED`, `CATEGORY_ARCHIVED`, `SHOP_CREATED`, `SHOP_UPDATED`, `SHOP_ARCHIVED`, `SHOP_INACTIVATED`, `SHOP_REACTIVATED`.
 
-Bảng `audit_logs` append-only (V10, trigger chặn UPDATE/DELETE/TRUNCATE). Truy vết: `BR-017` trong [BRD](../product/business-requirements.md), `FR-028`/`FR-029` và `AC-033`–`AC-039` trong [PRD](../product/product-requirements.md#8-tiêu-chí-nghiệm-thu-cốt-lõi). Nghiệm thu lịch sử OWNER qua API/DB không đồng nghĩa đã tích hợp màn hình FE; endpoint này không thay thế yêu cầu audit truy cập của ADMIN (`BR-014`, `NFR-009`, `AC-017`).
+Bảng `audit_logs` append-only (V10, trigger chặn UPDATE/DELETE/TRUNCATE; V11 bổ sung action đọc ADMIN). Truy vết: `BR-017` trong [BRD](../product/business-requirements.md), `FR-028`/`FR-029` và `AC-033`–`AC-039` trong [PRD](../product/product-requirements.md#8-tiêu-chí-nghiệm-thu-cốt-lõi). Nghiệm thu lịch sử OWNER qua API/DB không đồng nghĩa đã tích hợp màn hình FE; audit truy cập ADMIN có [contract riêng](#7-dashboard-quản-trị--đã-có-trong-core), không mở endpoint OWNER cho ADMIN.
 
 ## 5. AI qua Core
 
@@ -326,19 +326,73 @@ Agent có tool nội bộ `query_shop_data` để trả lời câu hỏi về h�
 
 AI gửi cho model bản tóm tắt đã lưu, rồi tới mọi tin nhắn chưa được gộp vào bản tóm tắt. Một tin chỉ rời ngữ cảnh sau khi đã nằm trong bản tóm tắt, nên không mất thông tin. Việc gộp chạy nền sau khi trả lời và chỉ gọi model tóm tắt khi số tin chưa gộp vượt ngưỡng, nên phần lớn lượt không phát sinh thêm chi phí. Bản tóm tắt thuộc hội thoại nên bị xóa cùng hội thoại. Hợp đồng này không đổi request hay response của `/internal/v1/agent/chat`.
 
-## 7. Dashboard quản trị — hợp đồng đích
+## 7. Dashboard quản trị — đã có trong Core
 
-Các GET dashboard này chưa có controller Core; không nhầm với API ADMIN đổi trạng thái shop tại mục 1. Core đã ghi audit_logs cho thao tác ghi thành công (xem [Lịch sử audit của tiệm](#lịch-sử-audit-của-tiệm)), nhưng chưa ghi audit khi ADMIN xem dữ liệu; `NFR-009`/`AC-017` vẫn chưa đạt.
+Cả 7 GET dưới đây đã có controller/service Core. Yêu cầu Firebase ID token hợp lệ và profile DB `ADMIN`/`ACTIVE`; role không lấy từ client hoặc claim tự tạo. Không cần `X-Shop-Id`; header này và param `actorUserId` không đổi phạm vi truy cập. Response thành công có `Cache-Control: no-store`. Dashboard web còn cần tích hợp theo contract này, không suy ra đã nghiệm thu từ việc API tồn tại.
 
-Các endpoint dưới đây chỉ đọc, yêu cầu role `ADMIN` và ghi audit khi truy cập dữ liệu chi tiết. OWNER nhận `403 forbidden`.
-
-| Method | Đường | Body / query | Trả về |
+| Method | Đường | Query | Response |
 |---|---|---|---|
-| `GET` | `/api/v1/admin/overview` | — | `AdminOverviewView` |
-| `GET` | `/api/v1/admin/users?query=&page=` | tìm theo tên, email hoặc số điện thoại | `AdminUserPage` |
-| `GET` | `/api/v1/admin/shops?query=&page=` | tìm theo tên hoặc thông tin liên hệ | `AdminShopPage` |
-| `GET` | `/api/v1/admin/shops/{id}` | — | `AdminShopDetailView` |
+| `GET` | `/api/v1/admin/overview` | `fromDate?`, `toDate?` | `200 Overview` |
+| `GET` | `/api/v1/admin/users` | `query?`, `status?`, `page=0`, `size=20` | `200 AdminPageResponse<OwnerSummary>` |
+| `GET` | `/api/v1/admin/users/{userId}` | — | `200 OwnerDetail` |
+| `GET` | `/api/v1/admin/shops` | `query?`, `status?`, `ownerId?`, `page=0`, `size=20` | `200 AdminPageResponse<ShopSummary>` |
+| `GET` | `/api/v1/admin/shops/{shopId}` | — | `200 ShopDetail` |
+| `GET` | `/api/v1/admin/shops/{shopId}/status-history` | `page=0`, `size=20` | `200 AdminPageResponse<ShopStatusEvent>` |
+| `GET` | `/api/v1/admin/access-logs` | `action?`, `shopId?`, `from?`, `to?`, `page=0`, `size=20` | `200 AdminPageResponse<AccessLog>` |
 
-`AdminOverviewView` chỉ gồm số liệu tổng hợp tối thiểu phục vụ hỗ trợ. `AdminShopDetailView` không trả token, secret hoặc dữ liệu sổ chi tiết ngoài phạm vi hỗ trợ. MVP không có giả danh OWNER và không có endpoint ADMIN sửa hóa đơn, chi phí, công nợ hoặc tồn kho.
+### Bộ lọc và phân trang
 
-Phủ `FR-022`–`FR-024`, `NFR-003`, `NFR-009`.
+- `page` từ 0, `size` 1–100; page × size không quá 2.147.483.647. Path ID, `ownerId`, `shopId` phải dương. Query được trim, tối đa 150 ký tự; trống/bỏ qua không giới hạn tìm kiếm. Tìm substring literal, không phân biệt hoa/thường; `%`, `_`, `!` là ký tự tìm kiếm, không phải toán tử wildcard.
+- Users chỉ trả OWNER; `status` là `ACTIVE|DISABLED`. Tìm theo displayName/email/phone. `shopCount` gồm mọi trạng thái tiệm. User không tồn tại hoặc là ADMIN trả `404 owner_not_found` ở API chi tiết.
+- Shops trả cả `ACTIVE|INACTIVE|ARCHIVED`, lọc thêm `ownerId`. Tìm theo tên/phone tiệm và displayName/email/phone của chủ; không tìm industry/address. Shop không tồn tại trả `404 shop_not_found` ở chi tiết/status-history; ownerId không khớp ở danh sách trả trang rỗng.
+- `AdminPageResponse<T> = { items: T[], page, size, totalElements, totalPages }`, không dùng `content`. Tổng bằng 0 thì items rỗng, totalPages = 0; page vượt trang cuối vẫn trả items rỗng và giữ tổng. Users/shops sắp createdAt rồi id giảm dần; các lịch sử sắp createdAt rồi id giảm dần.
+- Overview nhận **cả hai ngày hoặc không ngày nào**, định dạng `YYYY-MM-DD`. Mặc định 30 ngày gồm hôm nay; fromDate ≤ toDate, tối đa 366 ngày tính cả hai đầu, năm 1–9998. Kỳ theo `Asia/Ho_Chi_Minh`: đầu fromDate inclusive đến đầu ngày sau toDate exclusive. Chỉ `createdInPeriod` lọc theo kỳ; total và số từng trạng thái là hiện tại, không phải lịch sử cuối kỳ. Không nhận contract `days=` của mock web.
+- Access logs: `from` inclusive, `to` exclusive, ISO 8601 có offset; có thể bỏ một/cả hai đầu, năm trong 1–9999, from phải trước to khi cùng có. Không áp giới hạn 366 ngày của overview cho access logs. Không có filter actor để đọc lịch sử ADMIN khác.
+
+### Projection trả về
+
+Tên dưới đây khớp DTO Core; thông tin liên hệ có thể null. ID là số, timestamp theo quy ước Core ở đầu tài liệu.
+
+```text
+Overview = { asOf, timezone, fromDate, toDate, owners, shops }
+owners = { total, active, disabled, createdInPeriod }
+shops = { total, active, inactive, archived, createdInPeriod }
+OwnerSummary = { id, displayName, maskedEmail, maskedPhone, status, createdAt, shopCount }
+OwnerDetail = { id, displayName, email, phone, status, createdAt, updatedAt, shopCount }
+OwnerContact = { id, displayName, email, phone, status }
+ShopSummary = { id, ownerId, ownerDisplayName, name, industry, maskedPhone, status, createdAt }
+ShopDetail = { id, name, industry, phone, address, status, inactiveReason, archivedReason,
+               archivedAt, createdAt, updatedAt, owner: OwnerContact }
+ShopStatusEvent = { id, actorUserId, beforeStatus, afterStatus, reason, requestId, createdAt }
+AccessLog = { id, actorUserId, actorRole, action, targetType, targetId, shopId, outcome,
+              requestId, occurredAt, beforeStatus, afterStatus, reason }
+```
+
+Danh sách che email thành `***@***`, phone thành `***` + ba ký tự cuối (phone dài không quá 4 ký tự chỉ `***`; thiếu liên hệ trả null). Chi tiết OWNER/tiệm có liên hệ đầy đủ phục vụ hỗ trợ; tiệm của OWNER DISABLED vẫn được tra cứu. Không trả Firebase UID/identity, token, secret, sale/payment/refund/debt/expense/product hoặc audit nghiệp vụ OWNER. Overview chỉ có số lượng, không doanh thu/lợi nhuận/trend/quota/task. Không có giả danh OWNER, API ADMIN sửa sổ, `/admin/audit-logs`, `/auth/login` hoặc token Core riêng.
+
+### Audit ADMIN và ranh giới lịch sử
+
+Dùng chung `audit_logs` V10/V11, **không có bảng `admin_access_logs`**. Mỗi GET thành công ghi một event trong cùng transaction, kể cả tìm kiếm/trang rỗng. Metadata đọc chỉ có `{ queryPresent: boolean, resultCount: integer }`: resultCount là số items trả trong trang, hoặc 1 cho overview/chi tiết; không lưu query/filter/response thô. reason và idempotencyKey của event đọc luôn null. GET không chống trùng bằng key: retry là một lần truy cập mới và có event mới, không phải replay thao tác tiền.
+
+| `action` trong access-logs | `action` lưu trong DB | `targetType` | `targetId` / `shopId` |
+|---|---|---|---|
+| `OVERVIEW_VIEWED` | `ADMIN_OVERVIEW_VIEWED` | `SYSTEM` | null / null |
+| `OWNERS_SEARCHED` | `ADMIN_OWNERS_SEARCHED` | `OWNER_LIST` | null / null |
+| `OWNER_VIEWED` | `ADMIN_OWNER_VIEWED` | `OWNER` | userId / null |
+| `SHOPS_SEARCHED` | `ADMIN_SHOPS_SEARCHED` | `SHOP_LIST` | null / null, kể cả tìm có ownerId |
+| `SHOP_VIEWED` | `ADMIN_SHOP_VIEWED` | `SHOP` | shopId / shopId |
+| `SHOP_STATUS_HISTORY_VIEWED` | `ADMIN_SHOP_STATUS_HISTORY_VIEWED` | `SHOP` | shopId / shopId |
+| `ACCESS_LOGS_VIEWED` | `ADMIN_ACCESS_LOGS_VIEWED` | `ADMIN_ACCESS_LOG_LIST` | null / null |
+| `SHOP_STATUS_UPDATED` | `SHOP_INACTIVATED` hoặc `SHOP_REACTIVATED` | `SHOP` | shopId / shopId |
+
+Access logs chỉ đọc actor ADMIN hiện tại và whitelist action/target trên, outcome `SUCCESS`; không trả raw metadata, idempotencyKey hoặc lý do hủy sale/nợ. beforeStatus/afterStatus/reason chỉ có giá trị với event đổi trạng thái tiệm, null cho event đọc. Query `shopId` chỉ khớp event gắn đúng shop, không kéo vào event tìm kiếm toàn hệ thống. Đọc access logs chọn trang trước rồi mới ghi `ADMIN_ACCESS_LOGS_VIEWED`; event của lần đọc hiện tại không nằm trong response đó.
+
+Status history chỉ trả `SHOP_INACTIVATED`/`SHOP_REACTIVATED` có actor_role ADMIN và shop/target đúng path; ADMIN có thể thấy lịch sử đổi trạng thái do ADMIN khác, nhưng không xem access logs của họ. Event đổi trạng thái tiệm dùng chung với lịch sử OWNER, không tạo bản ghi kép. OWNER audit loại tất cả event đọc `ADMIN_*` ngay cả khi event có shopId.
+
+### Lỗi và nghiệm thu
+
+Thiếu/sai token: `401 unauthorized`; OWNER: `403 admin_access_required`; ADMIN DISABLED: `403 account_disabled`; UID chưa có profile: `404 auth_profile_not_found`, không tự provision/nâng role. Filter/ID/range/page không hợp lệ: `400 invalid_admin_query`; sai kiểu/ngày/enum action hoặc status lạ: `400 validation_failed`. Action filter dùng enum cột đầu bảng trên, không dùng `ADMIN_*` hoặc action tiền/nợ.
+
+Không lưu được audit ADMIN (hoặc không đọc được access history): `503 admin_audit_unavailable`, không trả dữ liệu được bảo vệ. Đổi trạng thái tiệm ở mục 1 rollback cả trạng thái/lý do và audit khi ghi audit thất bại. Request bị từ chối/validation/không tìm thấy không tạo audit SUCCESS; chưa có contract audit FAILURE/bảo mật. V10 giữ trigger chặn UPDATE/DELETE/TRUNCATE; V11 không sửa lịch sử hay bỏ bảo vệ đó. Không suy ra DB đã chạy V11 từ việc service khởi động.
+
+Phủ `BR-013`/`BR-014` → `FR-022`–`FR-024`, `NFR-003`/`NFR-009` → `AC-015`–`AC-017`, `AC-040`–`AC-043`. Kiểm chứng API/DB tách riêng Firebase thật, dashboard web và UAT staging; không coi mock web là bằng chứng nghiệm thu.

@@ -5,7 +5,7 @@
 | Trạng thái | đích MVP; Core hiện có được phân biệt với phần chưa tích hợp |
 | Chủ sở hữu | Chủ kỹ thuật |
 | Người rà soát | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-10-05 |
+| Cập nhật lần cuối | 2026-10-06 |
 
 ## Tài liệu liên quan
 
@@ -20,17 +20,17 @@ Kiến trúc trong sơ đồ là **đích MVP**: Mobile dành cho OWNER và dash
 
 Mục này là nơi duy nhất ghi hiện trạng triển khai; tài liệu khác liên kết tới đây thay vì chép lại. Trạng thái từng endpoint nằm trong [hợp đồng API](../contracts/api-contracts.md).
 
-**Đối chiếu với code nhánh `staging` ngày 2026-10-04:**
+**Core/mobile đối chiếu `staging` tại `b1de421c461d59473b3bb73aae103027afd67a89` ngày 2026-10-06; các mục AI giữ snapshot trước, không rà soát lại trong lượt này:**
 
-- **Core:** Firebase auth/session/me, Shop/Category/Product/Customer CRUD, draft → confirm → sale/payment, debt repayment, expense, report summary, sale void và full refund, audit thao tác ghi và lịch sử audit cho OWNER; schema Flyway V1–V10. Core proxy `/api/v1/agent/*` sang AI `/internal/v1/agent/*` kèm `X-Internal-Token`, lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực.
+- **Core:** Firebase auth/session/me, Shop/Category/Product/Customer CRUD, draft → confirm → sale/payment, debt repayment, expense, report summary, sale void và full refund, audit thao tác ghi và lịch sử audit cho OWNER; 7 GET hỗ trợ ADMIN, audit đọc ADMIN và đổi trạng thái tiệm; schema Flyway V1–V11. Core proxy `/api/v1/agent/*` sang AI `/internal/v1/agent/*` kèm `X-Internal-Token`, lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực.
 - **AI:** `/health` và Agent chat (chat, list, detail, rename, delete) lưu PostgreSQL, tóm tắt cuốn chiếu, tìm lịch sử và tool đọc dữ liệu tiệm chỉ đọc; schema AI là một baseline Supabase CLI trong `supabase/migrations/`.
 - **AI — gợi ý nhập hàng và câu hỏi doanh số:** hai view chỉ đọc `v_sales` và `v_sale_items` cho câu hỏi doanh số; agent có tool `suggest_restock` trả gợi ý nhập hàng từ đơn `CONFIRMED`. `COVER_DAYS` (hiện là 7 ngày) và hai kỳ `last_7_days`/`last_30_days` là mặc định chờ PO duyệt, chưa phải yêu cầu đã chốt; xem [README AI](../../backend/ai/README.md#restock-suggestions).
-- **Mobile:** mặc định dùng mock; khi tắt mock gọi Firebase và các API Core ở trên. Các màn nghiệp vụ (trang chủ, báo cáo, đơn hàng, hàng hoá, công nợ, chi phí, thanh toán, hồ sơ tiệm) đọc và ghi qua Core; thanh toán, chi phí và trả nợ thử lại bằng cùng `Idempotency-Key`. Nhận diện đơn vẫn dùng parser rule-based trên máy; mic chỉ nhận giọng nói trên web.
-- **Web admin:** chỉ chạy mock; Core chưa có API dashboard tương ứng.
+- **Mobile** (đối chiếu `staging` tại `b1de421c461d`, ngày 2026-10-06): mặc định dùng mock; khi tắt mock gọi Firebase và Core cho đơn hàng, hàng hoá, công nợ, chi phí, thanh toán và hồ sơ tiệm. Home/Analytics tải danh sách dữ liệu từ Core rồi tính chỉ số cục bộ, chưa gọi `/api/v1/reports/summary`; lãi là ước tính, không tương đương báo cáo gross/voided/net của Core (xem [Chỉ số trên Home/Analytics](../../frontend/mobile/README.md#chỉ-số-trên-homeanalytics)). Confirm chống trùng theo draft ID; tạo chi phí, trả nợ và void dùng `Idempotency-Key`. Nhận diện đơn vẫn dùng parser rule-based trên máy; mic chỉ nhận giọng nói trên web.
+- **Web admin:** mặc định mock; nhánh gọi thật chưa khớp auth/DTO/query của Core (còn `/auth/login`, `overview?days=`, `/admin/audit-logs` và các field giả định). Core đã có API hỗ trợ tối thiểu theo [contract ADMIN](../contracts/api-contracts.md#7-dashboard-quản-trị--đã-có-trong-core); chưa có bằng chứng web → Firebase → Core đã tích hợp/nghiệm thu.
 
 Đây là phạm vi code, không phải xác nhận đã deploy staging, nghiệm thu FE hay production-ready; chưa có kiểm thử đầu-cuối mobile → Core → AI với model thật.
 
-**Còn là đích MVP/chưa triển khai:** luồng AI proposal (text/voice/image → bản nháp); danh sách gợi ý nhập hàng trên màn tổng quan kèm API nhập kho cộng dồn (#103); API dashboard đọc tổng quan, audit khi ADMIN xem dữ liệu, notification và báo cáo bán chạy/series/lợi nhuận. Trên nhánh `feat/ai-restock-insight`, gợi ý nhập hàng và câu hỏi số liệu đã trả lời được qua `/api/v1/agent/chat`, nhưng chưa nghiệm thu đầu-cuối và chưa deploy staging. Hoàn tiền/trả hàng từng phần và ledger điều chỉnh kho độc lập chưa triển khai. Năng lực end-to-end chỉ được nghiệm thu qua AC tương ứng trong [PRD](../product/product-requirements.md).
+**Còn là đích MVP/chưa triển khai:** luồng AI proposal (text/voice/image → bản nháp); danh sách gợi ý nhập hàng trên màn tổng quan kèm API nhập kho cộng dồn (#103); notification và báo cáo bán chạy/series/lợi nhuận. Trên nhánh `feat/ai-restock-insight`, gợi ý nhập hàng và câu hỏi số liệu đã trả lời được qua `/api/v1/agent/chat`, nhưng chưa nghiệm thu đầu-cuối và chưa deploy staging. Hoàn tiền/trả hàng từng phần và ledger điều chỉnh kho độc lập chưa triển khai. Dashboard web vẫn cần tích hợp contract ADMIN đã có; API/audit không phải nghiệm thu giao diện. Năng lực end-to-end chỉ được nghiệm thu qua AC tương ứng trong [PRD](../product/product-requirements.md).
 
 ## 2. Thành phần và quyền sở hữu
 
@@ -38,9 +38,9 @@ Mục này là nơi duy nhất ghi hiện trạng triển khai; tài liệu khá
 |---|---|
 | Mobile/FE | Giao diện OWNER: thu input, hiển thị bản nháp, bắt buộc người dùng xác nhận, chỉ gọi Core |
 | Dashboard web | Giao diện ADMIN: tra cứu OWNER/cơ sở khách hàng và xem tổng quan hỗ trợ; không sửa sổ nghiệp vụ |
-| Core | Hiện có auth, shop/catalog/customer, draft/sale/payment/debt/refund, expense, summary, audit và proxy Agent sang AI; ADMIN chỉ có đổi trạng thái shop. Dashboard, audit truy cập của ADMIN, gợi ý nhập hàng trên tổng quan kèm nhập kho (#103) và điều phối luồng AI proposal là trách nhiệm đích chưa hoàn thành |
+| Core | Hiện có auth, shop/catalog/customer, draft/sale/payment/debt/refund, expense, summary, audit và proxy Agent sang AI; ADMIN có đọc tổng quan/hồ sơ/lịch sử hỗ trợ và đổi trạng thái shop, đều có audit. Gợi ý nhập hàng trên tổng quan kèm nhập kho (#103) và điều phối luồng AI proposal là trách nhiệm đích chưa hoàn thành |
 | AI | Voice/text parse, image analysis, recommendation, insight chat và Agent chat; chỉ trả đề xuất/câu trả lời |
-| PostgreSQL | Dữ liệu nghiệp vụ và idempotency Core; vector qua `pgvector` ([ADR-0001](adr/0001-vector-store-pgvector.md)); trace AI/audit/notification theo ERD đích, không mặc nhiên là migration Core |
+| PostgreSQL | Dữ liệu nghiệp vụ, idempotency và audit_logs Core; vector qua `pgvector` ([ADR-0001](adr/0001-vector-store-pgvector.md)); trace AI/notification theo ERD đích, không mặc nhiên là migration Core |
 | Redis | Cache/giới hạn tốc độ/tác vụ ngắn hạn; không là nguồn dữ liệu chuẩn |
 | LiteLLM | Chọn model và quản lý khóa model ở phía server |
 | Langfuse | Trace AI; không ghi audio/ảnh hoặc dữ liệu nhạy cảm thô mặc định |
@@ -61,7 +61,9 @@ Lỗi confirm/repay/void rollback toàn bộ thay đổi, kể cả reservation 
 
 Luồng text/voice/image → AI proposal → draft vẫn là đích: AI không được tự tạo sale/payment/debt/expense. Core mới gọi AI cho chat trợ lý (proxy Agent), chưa gọi cho luồng proposal; timeout/fallback cần nghiệm thu khi tích hợp.
 
-Luồng ADMIN hiện có: `PATCH /api/v1/shops/{shopId}/status` (ngoài prefix admin), tạm ngưng/kích hoạt kèm lý do. Đổi trạng thái ghi audit `SHOP_INACTIVATED`/`SHOP_REACTIVATED` với actor ADMIN. Dashboard `/api/v1/admin/*` và audit khi ADMIN xem dữ liệu còn là yêu cầu đích; không tuyên bố đã đạt BR-014/NFR-009. ADMIN không giả danh OWNER hay sửa sổ nghiệp vụ.
+Luồng ADMIN hiện có: xác minh token → profile ADMIN/ACTIVE trong DB → đọc projection hỗ trợ → ghi audit → commit → trả response. 7 GET `/api/v1/admin/*` gồm overview, danh sách/chi tiết OWNER, danh sách/chi tiết tiệm, lịch sử trạng thái tiệm và lịch sử truy cập của chính ADMIN. Các GET này dùng transaction có khả năng ghi, isolation REPEATABLE_READ, không dùng readOnly vì phải lưu audit. Không lưu được audit trả 503 admin_audit_unavailable, không trả profile được bảo vệ. Chi tiết query/DTO/phạm vi nằm trong [contract ADMIN](../contracts/api-contracts.md#7-dashboard-quản-trị--đã-có-trong-core).
+
+`PATCH /api/v1/shops/{shopId}/status` vẫn nằm ngoài prefix admin; tạm ngưng/kích hoạt kèm lý do, ghi một event SHOP_INACTIVATED/SHOP_REACTIVATED dùng chung cho lịch sử OWNER và projection ADMIN. Thay đổi trạng thái và audit cùng transaction, lỗi audit rollback. ADMIN không giả danh OWNER hay sửa sổ; triển khai Core không tự chứng minh web/staging đạt BR-014/NFR-009.
 
 ## 4. Dữ liệu và ràng buộc
 
@@ -78,7 +80,9 @@ Luồng ADMIN hiện có: `PATCH /api/v1/shops/{shopId}/status` (ngoài prefix a
 - PATCH/archive product khóa dòng cùng cách checkout, tránh ghi đè tồn khi chạy đồng thời. Repay/void thống nhất thứ tự khóa sale → debt → product để tránh lock inversion.
 - Bảng vector (`pgvector`) có `shop_id` và mọi truy vấn tương đồng lọc theo `shop_id` trong cùng câu SQL.
 
-V10 tạo `audit_logs` append-only (trigger chặn UPDATE/DELETE/TRUNCATE); Core ghi audit cho thao tác ghi thành công của OWNER/ADMIN cùng transaction nghiệp vụ và OWNER đọc qua `GET /api/v1/audit-logs` (xem [API contract](../contracts/api-contracts.md#lịch-sử-audit-của-tiệm)). Audit khi ADMIN xem dữ liệu (`NFR-009`/`AC-017`), trace AI/media và cô lập vector theo shop vẫn là yêu cầu đích, chưa có trong Core.
+V10 tạo `audit_logs` append-only (trigger chặn UPDATE/DELETE/TRUNCATE); Core ghi audit cho thao tác ghi thành công của OWNER/ADMIN cùng transaction nghiệp vụ và OWNER đọc qua `GET /api/v1/audit-logs` (xem [API contract](../contracts/api-contracts.md#lịch-sử-audit-của-tiệm)). V11 mở rộng chính bảng này cho 7 action đọc ADMIN, cho phép shop_id/entity_id null ở đúng event toàn hệ thống/danh sách/hồ sơ OWNER; event nghiệp vụ vẫn cần shop và đối tượng thật. V11 thay check ID/action-target, giữ FK, các check còn lại và trigger V10; không tạo admin_access_logs hay viết lại lịch sử (xem [migration alignment](erd-description.md#7-migration-alignment)). Trace AI/media và cô lập vector theo shop vẫn là phạm vi AI đích, không được nghiệm thu trong lượt này.
+
+Phân tách audit ở projection và whitelist: OWNER không đọc ADMIN_*; ADMIN access logs chỉ đọc action hỗ trợ của actor hiện tại, không raw metadata tiền/nợ/tồn. Status history của tiệm chỉ đọc event ADMIN đổi trạng thái, có thể gồm ADMIN khác. Audit đọc lưu queryPresent/resultCount thay vì query/response hoặc liên hệ thô; đọc lịch sử ADMIN cũng tạo event, còn đọc lịch sử OWNER thì không.
 
 Schema PostgreSQL được quản lý bằng migration SQL có phiên bản trong Git. Không sửa schema trực tiếp trên Supabase Dashboard. Dev và staging dùng chung DB nên chỉ chạy migration từ code đã merge vào `staging`; Core dùng Flyway, AI dùng Supabase CLI (`supabase db push`); máy dev chạy Core với `FLYWAY_ENABLED=false` (xem [Database migrations](../../README.md#database-migrations)). Migration phải chạy được trên PostgreSQL chuẩn; extension, trigger hoặc API riêng của Supabase chỉ được dùng khi có quyết định kỹ thuật riêng.
 
@@ -87,8 +91,8 @@ Schema PostgreSQL được quản lý bằng migration SQL có phiên bản tron
 - Provider Phone/Google là đích đăng nhập đã mô tả trong PRD; Core nhận Firebase ID token, không chứng minh UI/provider đã tích hợp chỉ từ kiểm thử backend. Firebase Account Linking gộp các cách đăng nhập của cùng người dùng vào một Firebase UID; Core lưu UID đó trong `auth_identities`.
 - Core không lưu password hoặc token thô. ERD hiện không có Core refresh-token/session table; mọi request dùng Firebase ID token đã được Core xác thực.
 - Core mặc định tài khoản tự đăng ký là OWNER; role ADMIN chỉ được cấp bằng thao tác vận hành có kiểm soát, không nhận role từ request hoặc claim do client tự tạo.
-- Auth/me và mọi API Shop dùng ID path, không cần X-Shop-Id; endpoint nghiệp vụ còn lại cần token/X-Shop-Id của shop ACTIVE thuộc OWNER. Shop status chỉ ADMIN; đây là ngoại lệ ngoài prefix admin, không trao quyền sửa sổ.
-- Hợp đồng đích /api/v1/admin/* chỉ nhận ADMIN, không dùng X-Shop-Id để mở rộng quyền; dashboard/audit chưa triển khai trong Core.
+- Auth/me và mọi API Shop dùng ID path, không cần X-Shop-Id; endpoint nghiệp vụ OWNER còn lại cần token/X-Shop-Id của shop ACTIVE thuộc OWNER. Shop status chỉ ADMIN; đây là ngoại lệ ngoài prefix admin, không trao quyền sửa sổ.
+- /api/v1/admin/* kiểm tra ADMIN/ACTIVE trước xử lý query và kiểm tra lại trong service; không dùng X-Shop-Id để mở rộng quyền. Các response thành công đặt Cache-Control: no-store; danh sách che liên hệ, chi tiết phục vụ hỗ trợ có liên hệ đầy đủ nhưng không Firebase identity hoặc dữ liệu sổ. ADMIN đọc được hồ sơ INACTIVE/ARCHIVED, không có quyền mở API nghiệp vụ của OWNER.
 - Chưa được dùng dữ liệu thật trước khi test 401/403 và cô lập chéo shop.
 
 ## 6. Cấu hình môi trường
@@ -96,10 +100,12 @@ Schema PostgreSQL được quản lý bằng migration SQL có phiên bản tron
 | Thành phần | Cấu hình tối thiểu |
 |---|---|
 | FE | `API_BASE_URL` |
-| Core hiện tại | `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, `FIREBASE_PROJECT_ID`, credential Firebase Admin, `AI_BASE_URL`, `INTERNAL_API_TOKEN`; `SERVER_PORT`, `IDEMPOTENCY_TTL_DAYS` tùy chọn; Core không dùng Redis |
+| Core hiện tại | `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, `FIREBASE_PROJECT_ID`; credential qua `FIREBASE_SERVICE_ACCOUNT_JSON` hoặc Application Default Credentials (ADC, local thường dùng `GOOGLE_APPLICATION_CREDENTIALS`); `CORS_ALLOWED_ORIGINS`, `FLYWAY_ENABLED`, `AI_BASE_URL`, `INTERNAL_API_TOKEN`; `SERVER_PORT`, `IDEMPOTENCY_TTL_DAYS` tùy chọn; Core không dùng Redis |
 | AI hiện tại | `POSTGRES_URL`, `REDIS_URL`, `INTERNAL_API_TOKEN`, `MODEL_*`, `OPENAI_API_KEY`; `AI_SQL_READER_URL` tùy chọn cho tool đọc dữ liệu tiệm. `LITELLM_URL`, `LANGFUSE_*` đã khai báo nhưng code chưa dùng. Danh sách đầy đủ: [`backend/ai/.env.example`](../../backend/ai/.env.example) |
 
 Host và port thuộc cấu hình môi trường, không phải API contract. [Core README](../../backend/core/README.md) là nơi hướng dẫn chạy IntelliJ/Maven/Docker và Firebase Emulator; không nhân bản hướng dẫn vận hành tại đây.
+
+Khi `FIREBASE_SERVICE_ACCOUNT_JSON` có giá trị không rỗng, Core dùng JSON đó trước ADC; khi trống, Core dùng ADC. Cấu hình Railway theo từng environment, CORS allowlist và cách cấp secret nằm trong [CI/CD — Biến của service trên Railway](../development/ci-cd.md#biến-của-service-trên-railway). `FLYWAY_ENABLED` kiểm soát migration lúc startup; việc chạy migration trên DB dùng chung phải theo [quy trình migration](../../README.md#database-migrations).
 
 - Dev và staging dùng chung một Supabase project và một Redis Cloud database, không chứa dữ liệu production; không có PostgreSQL hay Redis container local. Test tự động dùng PostgreSQL tạm: AI đọc `POSTGRES_TEST_URL`, Core đọc `CORE_TEST_POSTGRES_*`.
 - Sơ đồ môi trường và CI/CD: [ci-cd.drawio](diagrams/src/ci-cd.drawio) ([SVG](diagrams/images/ci-cd.svg)).
@@ -110,11 +116,11 @@ Host và port thuộc cấu hình môi trường, không phải API contract. [C
 
 ## 7. Kiểm chứng trước merge
 
-Đối chiếu code/schema không thay thế chạy lại hệ thống. Suite Core có test controller, service, validation, timestamp, concurrency và migration (SaleRefundMigrationPostgresTest, DebtVoidPostgresTest). Test PostgreSQL là opt-in: Maven skip khi thiếu `CORE_TEST_POSTGRES_URL` (job `core` của CI có đặt biến này); phải bật môi trường test DB để kiểm chứng V1–V10, upgrade/rollback và khóa đồng thời.
+Đối chiếu code/schema không thay thế chạy lại hệ thống. Suite Core có test controller, service, validation, timestamp, concurrency và migration (SaleRefundMigrationPostgresTest, DebtVoidPostgresTest, AdminDashboardControllerWebTest, AdminDashboardPostgresTest). Test PostgreSQL là opt-in: Maven skip khi thiếu `CORE_TEST_POSTGRES_URL` (job `core` của CI có đặt biến này); phải bật môi trường test DB để kiểm chứng V1–V11, upgrade/rollback và khóa đồng thời. Lượt đồng bộ tài liệu này không chạy lại Maven/UAT.
 
 | Nhóm | Bằng chứng bắt buộc |
 |---|---|
-| Core | V1–V10 từ DB rỗng/upgrade; controller contract theo mục 1–4; confirm/repay/void rollback, replay và cạnh tranh khóa; test chéo shop. DB local kiểm thử không thay nghiệm thu Supabase staging hoặc FE |
+| Core | V1–V11 từ DB rỗng/upgrade; controller contract theo mục 1–4 và 7; confirm/repay/void rollback, replay và cạnh tranh khóa; test chéo shop, ADMIN projection/actor scope và audit fail-closed/rollback. DB local kiểm thử không thay nghiệm thu Supabase staging hoặc FE |
 | AI | contract test Core ↔ AI; timeout/fallback; output schema; truy xuất đúng phạm vi `shop_id` |
 | FE | OWNER: login → chọn shop → tạo/chốt → báo cáo; ADMIN: login → tra cứu cơ sở → xem tổng quan; test role guard và trạng thái loading/error/empty |
 | Ops | CI kiểm migration; staging dùng Supabase project riêng; deploy production cần phê duyệt |

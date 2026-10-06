@@ -5,7 +5,7 @@
 | Trạng thái | Core: hành vi đã chốt dưới đây; AI/dashboard và FE: cần nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; người rà soát kỹ thuật |
-| Cập nhật lần cuối | 2026-10-02 |
+| Cập nhật lần cuối | 2026-10-06 |
 
 ## Tài liệu liên quan
 
@@ -86,8 +86,8 @@ Luồng hỗ trợ: ADMIN đăng nhập dashboard web, tìm OWNER hoặc cơ s�
 | `FR-020` | `BO-003`, `BR-011` | Người bán hỏi về số liệu vận hành; insight chat trả câu trả lời kèm kỳ/phạm vi dữ liệu và không tư vấn thuế. | P1 — MVP |
 | `FR-021` | `BR-002`, `BR-003` | Khi AI timeout/lỗi, người bán thấy thông báo và tiếp tục bằng text/POS thủ công. | P0 — MVP |
 | `FR-022` | `BR-013`, `BR-014` | ADMIN đăng nhập dashboard web và chỉ vào được khu vực quản trị; OWNER không truy cập được dashboard quản trị. | P0 — MVP |
-| `FR-023` | `BR-013`, `BR-014` | ADMIN tìm kiếm, xem danh sách và chi tiết OWNER/cơ sở khách hàng để hỗ trợ; không có thao tác sửa trực tiếp dữ liệu sổ nghiệp vụ. | P0 — MVP |
-| `FR-024` | `BO-003`, `BR-013`, `BR-014` | ADMIN xem tổng quan hỗ trợ cấp hệ thống bằng số liệu tổng hợp tối thiểu; không xem nội dung chi tiết ngoài phạm vi hỗ trợ được cấp. | P1 — MVP |
+| `FR-023` | `BR-013`, `BR-014` | ADMIN tìm OWNER/tiệm theo thông tin hồ sơ, lọc trạng thái và phân trang; danh sách che liên hệ, chi tiết trả liên hệ phục vụ hỗ trợ. Xem được tiệm INACTIVE/ARCHIVED và lịch sử ADMIN tạm ngưng/kích hoạt. Không đọc sổ sale/payment/refund/debt/expense/product hay audit nghiệp vụ OWNER, không sửa trực tiếp sổ. | P0 — MVP; tích hợp web cần nghiệm thu |
+| `FR-024` | `BO-003`, `BR-013`, `BR-014` | ADMIN xem số lượng OWNER/tiệm theo trạng thái hiện tại và số tạo mới trong kỳ ngày Việt Nam. Tổng quan không có doanh thu, lợi nhuận, chuỗi số liệu hoặc tác vụ hỗ trợ; số trạng thái không phải snapshot lịch sử cuối kỳ. | P1 — MVP; tích hợp web cần nghiệm thu |
 | `FR-025` | `BR-001`, `BR-002` | Sau khi OWNER chủ động đăng nhập trên mobile, Home có phần giới thiệu tùy chọn ba bước về trợ lý, bán hàng/đơn hàng và tổng quan/quản lý tiệm. Người dùng có thể đi tiếp, quay lại, bỏ qua/đóng hoặc mở Chatbot/Giọng nói trực tiếp ở bước đầu. Phần giới thiệu không bật lại khi chỉ khôi phục phiên; trợ lý vẫn truy cập được từ mascot nổi. | P1 — MVP |
 | `FR-026` | `BO-003`, `BR-002`, `BR-004` | Trên các tab chính, OWNER có thể chạm mascot nổi để chọn Chatbot, Giọng nói hoặc Gợi ý mở phân tích Hôm nay; giữ để vào Giọng nói trực tiếp và kéo mascot trong vùng an toàn; thả tay thì mascot dính về cạnh trái hoặc phải và giữ nguyên vị trí khi đổi tab. | P1 — MVP |
 | `FR-027` | `BO-003`, `BR-012` | OWNER tạo chat riêng với assistant, xem, đổi tên và tiếp tục chat qua các phiên; lịch sử chỉ dùng trong đúng hội thoại và shop, được giữ đến khi OWNER xóa. MVP không tự xóa chat theo TTL. | P1 — MVP |
@@ -137,7 +137,7 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 | `NFR-006` | `BR-003` | AI không được tự ghi đơn/chi phí hoặc thay đổi dữ liệu; người dùng phải xác nhận. |
 | `NFR-007` | `BR-012` | Truy xuất, vector, cache và trace AI phải cô lập theo `shop_id`; test chéo shop phải trả 403 hoặc không có dữ liệu. |
 | `NFR-008` | `BR-012` | Không gửi token, số điện thoại hoặc media thô vào trace; dữ liệu gửi model phải theo cấu hình đã duyệt. |
-| `NFR-009` | `BR-014` | ADMIN không thể tự cấp role từ client. Mọi truy cập dữ liệu khách hàng và hành động nhạy cảm của ADMIN phải được ghi audit gồm người thực hiện, mục tiêu, hành động và thời điểm. |
+| `NFR-009` | `BR-014` | ADMIN không thể tự cấp role từ client; quyền lấy từ profile ACTIVE trong DB sau xác thực Firebase. Mọi GET dashboard thành công, kể cả tìm kiếm/trang rỗng, và thao tác đổi trạng thái tiệm ghi audit trong cùng transaction trước khi trả dữ liệu. Không ghi được audit thì từ chối trả dữ liệu/rollback thay đổi. ADMIN chỉ xem lịch sử truy cập của chính mình bằng projection hỗ trợ, không trả metadata nghiệp vụ; metadata audit đọc chỉ ghi sự hiện diện của query và số kết quả, không lưu query hoặc liên hệ thô. |
 
 ## 8. Tiêu chí nghiệm thu cốt lõi
 
@@ -159,7 +159,7 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 | `AC-014` | Insight chat trả kỳ/phạm vi dữ liệu hoặc nói rõ không đủ dữ liệu; không trình bày lãi/thuế như kê khai. | `FR-020`, `NFR-005` |
 | `AC-015` | OWNER mở URL dashboard quản trị nhận 403 hoặc được đưa về đăng nhập; ADMIN đăng nhập hợp lệ vào được dashboard. | `FR-022`, `NFR-003` |
 | `AC-016` | ADMIN tìm và xem được OWNER/cơ sở khách hàng nhưng không có hoặc không gọi được API sửa hóa đơn, chi phí, công nợ và tồn kho. | `FR-023`, `NFR-003` |
-| `AC-017` | Khi ADMIN xem chi tiết cơ sở khách hàng, hệ thống tạo bản ghi audit đúng người, cơ sở, hành động và thời điểm; số tổng quan khớp nguồn dữ liệu kiểm thử. | `FR-024`, `NFR-009` |
+| `AC-017` | Mỗi GET dashboard thành công tạo một audit đúng actor ADMIN, action/target, requestId và thời điểm; event toàn hệ thống/danh sách không gán tiệm giả, event xem tiệm gắn đúng shop. Tìm kiếm/trang rỗng cũng có event. Số tổng quan khớp fixture kiểm thử; cần nghiệm thu riêng thao tác từ web thật. | `FR-023`, `FR-024`, `NFR-009` |
 | `AC-018` | Sau đăng nhập chủ động, OWNER thấy bước trợ lý; “Tiếp” lần lượt hiện bán hàng/đơn hàng rồi tổng quan/quản lý tiệm, “Quay lại” về bước trước, “Bắt đầu”/“Để sau”/đóng vào Home. Chọn Chatbot/Giọng nói ở bước đầu mở đúng màn. Quay lại Home trong cùng phiên hoặc khôi phục phiên không tự mở lại phần giới thiệu. | `FR-025` |
 | `AC-019` | Trên tab chính, chạm mascot hiện ba lựa chọn Chatbot, Giọng nói và Gợi ý trong khung nhìn; mỗi lựa chọn mở đúng màn, Gợi ý mở phân tích kỳ Hôm nay. Kéo mascot sang vị trí khác thì thả tay dính vào cạnh trái/phải, giữ đúng vị trí đó ở các tab chính (trừ khi phải nhích lên tránh thanh giỏ ở Bán hàng) và vẫn mở được menu; giữ khoảng 500 ms mở Giọng nói trực tiếp. | `FR-026` |
 | `AC-020` | OWNER mở lại một chat sau phiên đăng nhập mới; lịch sử còn nguyên và assistant tiếp tục bằng ngữ cảnh chỉ lấy từ chat đó. | `FR-027` |
@@ -182,6 +182,10 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 | `AC-037` | Lịch sử được sắp createdAt rồi id giảm dần; action/entityId lọc đúng, khoảng thời gian gồm from nhưng không gồm to. Page bắt đầu 0, size mặc định 20 và trong 1–100; không có event khớp trả trang rỗng. Ràng buộc page/size/entityId/khoảng thời gian không hợp lệ trả 400 invalid_audit_query; param sai kiểu hoặc action lạ trả 400 validation_failed theo format lỗi chung. | `FR-029` |
 | `AC-038` | Không có API POST/PUT/PATCH/DELETE để tạo/sửa/xóa audit. UPDATE/DELETE/TRUNCATE audit_logs bị trigger V10 từ chối và giữ nguyên lịch sử; đọc lịch sử OWNER không tạo thêm event hoặc thay đổi nghiệp vụ. Trigger không thay thế việc phân quyền DB, schema owner/superuser không được coi là application role an toàn cho production. | `FR-028`, `FR-029` |
 | `AC-039` | Metadata chỉ nhận key/kiểu được phép khi ghi; không chứa token, mật khẩu, tên/SĐT khách, transferReference hoặc full request/entity snapshot. Khi đọc, metadata lịch sử có key đã ngừng dùng vẫn đọc được mà không validate lại theo whitelist mới. DB giữ thời điểm, API trả offset +07:00 theo quy ước Core; không có API đổi actor hoặc timestamp audit. | `FR-028`, `FR-029` |
+| `AC-040` | Cả 7 GET ADMIN từ chối token thiếu/sai bằng 401; OWNER bị 403 admin_access_required, ADMIN DISABLED bị 403 account_disabled, UID chưa có profile bị 404 auth_profile_not_found. Header role/X-Shop-Id hoặc actorUserId do client gửi không nâng quyền hay mở rộng lịch sử; chi tiết user chỉ trả OWNER, không trả hồ sơ ADMIN khác. | `FR-022`, `FR-023`, `NFR-003`, `NFR-009` |
+| `AC-041` | Danh sách che email/SĐT; chi tiết OWNER/tiệm có liên hệ đầy đủ nhưng không có Firebase identity/token hoặc sổ tiền/nợ/tồn. Query tìm literal, không phân biệt hoa/thường, ký tự %/_ không mở rộng wildcard; lọc và phân trang đúng theo contract. Overview nhận hai ngày hoặc không ngày, mặc định 30 ngày gồm hôm nay, tối đa 366 ngày; chỉ createdInPeriod lọc kỳ, tổng/trạng thái là hiện tại. | `FR-023`, `FR-024`, `NFR-003` |
+| `AC-042` | Access logs chỉ có event đọc hỗ trợ và đổi trạng thái tiệm của ADMIN hiện tại; không lộ event ADMIN khác hoặc metadata/lý do hoàn tiền/hủy nợ. Đọc access logs được audit sau khi chọn trang, nên event của lần đọc này không nằm trong trang vừa trả. Status history chỉ gồm SHOP_INACTIVATED/SHOP_REACTIVATED do ADMIN. OWNER audit loại ADMIN_* và filter một action đọc ADMIN trả 400 invalid_audit_query; event đổi trạng thái dùng chung, không nhân đôi. | `FR-023`, `FR-029`, `NFR-003`, `NFR-009` |
+| `AC-043` | Cố ý làm ghi audit ADMIN thất bại: trả 503 admin_audit_unavailable, không trả profile được bảo vệ; đổi trạng thái tiệm rollback cả trạng thái/lý do và audit. Request validation/404/403 không tạo audit SUCCESS. Audit đọc chỉ lưu queryPresent/resultCount, không lưu query, liên hệ, token hoặc full payload; giữ trigger append-only và không tạo bảng admin_access_logs. | `FR-011`, `FR-023`, `FR-024`, `NFR-009` |
 | `AC-INV-001` | Không thể kích hoạt hóa đơn điện tử khi hồ sơ áp dụng hoặc quy tắc pháp lý chưa được phê duyệt/hoàn tất. | `FR-INV-001` |
 | `AC-INV-002` | Mỗi giao dịch thuộc diện lập hóa đơn có một trạng thái đối soát và không biến mất khi nhà cung cấp lỗi. | `FR-INV-003`, `FR-INV-005`, `NFR-004` |
 
@@ -195,4 +199,4 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 - Máy in và gói dịch vụ ngoài PRD MVP.
 - `OQ-002` đã chốt hủy toàn bộ có dấu vết theo BRD. Hoàn tiền/trả hàng từng phần và điều chỉnh kho độc lập chưa triển khai.
 - `FR-028`/`FR-029`, `AC-033`–`AC-039` là phạm vi audit Core thành công và lịch sử chỉ đọc của OWNER; không bao gồm màn hình FE, audit lỗi/bảo mật hoặc audit khi ADMIN xem dữ liệu theo `NFR-009`/`AC-017`. Kiểm thử API/DB không tự nghiệm thu các phần ngoài phạm vi đó.
-- [Thiết kế kỹ thuật](../architecture/technical-design.md) ghi phạm vi Core đã kiểm chứng; API AI/dashboard, audit khi ADMIN xem dữ liệu, bán chạy/series/lợi nhuận vẫn cần tích hợp; audit_logs cho thao tác ghi đã có trong Core (V10). AC ở trên là điều kiện nghiệm thu sản phẩm, không tự đánh dấu FE/staging/production đã đạt.
+- `FR-022`–`FR-024`, `NFR-009`, `AC-015`–`AC-017` và `AC-040`–`AC-043` phủ hỗ trợ ADMIN theo BR-013/BR-014. [Thiết kế kỹ thuật](../architecture/technical-design.md) phân biệt API/audit Core đã có với dashboard web chưa tích hợp; contract không bao gồm các số liệu/tác vụ mock của web. Các AC là điều kiện kiểm chứng, chưa đánh dấu web/staging/production đã đạt.
