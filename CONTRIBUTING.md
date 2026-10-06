@@ -80,7 +80,7 @@ git switch -c feat/<short-description>
 - Deploy the same tested commit or artifact from staging to production; environment-specific values belong in secrets or environment configuration.
 - Run database migrations on staging before production, and only from code merged into `staging`; never from a feature branch, because dev shares the staging database (see [Database migrations](README.md#database-migrations)). Destructive migrations require an explicit rollback or recovery plan.
 - Required CI checks are `ai` (lint and tests), `core` (Maven verify plus Flyway migration against a fresh PostgreSQL service), `container-images` (Docker Compose build of custom service images), and `mobile-web` (TypeScript and Expo web export).
-- The mobile web is built in CI and uploaded to Vercel by the `deploy-web` job: pull requests get a preview URL, `staging` a fixed alias, and `main` production. See [CI/CD](docs/development/ci-cd.md#mobile-web-trên-vercel).
+- The mobile web is built in CI and uploaded to Vercel by the `deploy-web` job: pull requests get a preview URL, `staging` a fixed alias, and `main` production. See [CI/CD](docs/development/ci-cd.md#mobile-web-on-vercel).
 - CI verifies migrations from an empty database. Staging and production use separate Supabase projects with separate credential files and dev shares the staging database (see [Local Compose](README.md#local-compose)); backup/restore, rollback, and moving production credentials into an environment-scoped secret store still require an operational smoke check before production release.
 
 ### Pull request title
