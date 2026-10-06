@@ -20,6 +20,8 @@
 
 **Hiện trạng Core (đối chiếu `staging` tại `b1de421c461d59473b3bb73aae103027afd67a89`, ngày 2026-10-06):** mục 1–4 và 7 là API Core đã có. Bảng mục 5–6 giữ trạng thái từng endpoint từ lần rà soát AI trước; lượt này không rà soát lại AI. Có trong code không đồng nghĩa đã deploy staging hay nghiệm thu FE; hiện trạng triển khai/kiểm thử nằm trong [thiết kế kỹ thuật](../architecture/technical-design.md#1-phạm-vi).
 
+**Bổ sung Core ngày 2026-10-06 trên `feat/core-stock-in` (base staging `99ed97a9d03656fe782ae43c81526e68a8c0cc08`):** endpoint stock-in, contract PATCH product và ba report nâng cao dưới đây có trong nhánh này, chưa xác nhận đã merge/deploy staging. Mobile chưa được sửa để dùng các contract mới.
+
 **AI và proxy Agent:** AI có `GET /health` và năm endpoint `/internal/v1/agent/*` (chat, list, detail, rename, delete), cùng tóm tắt chat cuốn chiếu và tìm lịch sử. Mọi đường `/internal/v1/*` bắt buộc `X-Internal-Token`; thiếu/sai token hoặc AI chưa cấu hình `INTERNAL_API_TOKEN` trả `401`, riêng `/health` vẫn công khai. Core proxy `/api/v1/agent/*` sang các đường này, gửi `X-Internal-Token` và lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực; AI `404` thành `conversation_not_found`, lỗi hoặc quá thời gian khác thành `503 ai_unavailable`. Chưa có nghiệm thu đầu-cuối luồng FE → Core → AI với model thật.
 
 ## Quy ước request
@@ -35,7 +37,7 @@
 
 Core trả `{ code, message, details?: [{ field, issue }], traceId }`; bỏ details khi rỗng. Thiếu/sai token trả `401 unauthorized`; chưa có profile Core trả `404 auth_profile_not_found` (mở session trước); shop khác chủ trả `403 shop_access_denied`; shop INACTIVE trả `403 shop_inactive` kèm lý do. Thiếu header bắt buộc trả `400 missing_required_header`; validation body và query/path param sai kiểu (ví dụ enum lạ, thời điểm không đúng ISO 8601) trả `400 validation_failed` với `details[].field` là tên param. Unique barcode tranh chấp trả `409 product_barcode_conflict`; hai request mở phiên lần đầu cùng lúc cho một tài khoản Firebase trả `409 auth_session_conflict` cho request thua, FE gọi lại `POST /auth/session`; lỗi DB chưa nhận diện trả `500 internal_error`, không lộ chi tiết nội bộ. Deadlock hoặc không lấy được khóa DB trả `503 resource_busy`: FE gửi lại đúng request, giữ nguyên `Idempotency-Key` nếu có.
 
-**Bắt buộc `Idempotency-Key` (1–255 ký tự, không rỗng; được trim khi lưu)** trên đúng ba POST: `/debts/{debtId}/payments`, `/expenses`, `/sales/{saleId}/void`. FE tạo key mới cho một hành động, giữ nguyên khi retry cùng body/path. Phạm vi key là shop + operation; cùng người dùng/nội dung trả response `201` ban đầu, không lặp tác động. Khác người dùng/nội dung trả `409 idempotency_key_conflict`; key hết hạn trả `409 idempotency_key_expired`; rỗng/quá dài trả `400 invalid_idempotency_key`. TTL mặc định 30 ngày, chưa có job dọn key; không tự xóa key quá hạn. Lỗi nghiệp vụ rollback cả reservation, có thể sửa request rồi retry với key chưa được commit.
+**Bắt buộc `Idempotency-Key` (1–255 ký tự, không rỗng; được trim khi lưu)** trên đúng bốn POST: `/debts/{debtId}/payments`, `/expenses`, `/sales/{saleId}/void`, `/products/{productId}/stock-in`. FE tạo key mới cho một hành động, giữ nguyên khi retry cùng body/path. Phạm vi key là shop + operation; cùng người dùng/nội dung trả response ban đầu (`200` cho stock-in, `201` cho ba luồng còn lại), không lặp tác động. Khác người dùng/nội dung trả `409 idempotency_key_conflict`; key hết hạn trả `409 idempotency_key_expired`; rỗng/quá dài trả `400 invalid_idempotency_key`. TTL mặc định 30 ngày, chưa có job dọn key; không tự xóa key quá hạn. Lỗi nghiệp vụ rollback cả reservation, có thể sửa request rồi retry với key chưa được commit.
 
 V7 tạo bảng key. Confirm draft chống trùng bằng draftId, không yêu cầu key. Các POST tạo customer/category/product/draft/shop chưa có bảo vệ key; không coi idempotency đã phủ toàn bộ API. GET không cần key.
 
@@ -87,11 +89,18 @@ name không rỗng, tối đa 150 ký tự; không unique. Category nhóm produc
 | `GET` | `/api/v1/products` | — | `200 ProductResponse[]` |
 | `GET` | `/api/v1/products/{productId}` | — | `200 ProductResponse` |
 | `PATCH` | `/api/v1/products/{productId}` | Các field tùy chọn như dưới | `200 ProductResponse` |
+| `POST` | `/api/v1/products/{productId}/stock-in` | `{ quantity, reason? }` + `Idempotency-Key` | `200 ProductResponse` (đã có trên nhánh stock-in) |
 | `DELETE` | `/api/v1/products/{productId}` | — | `204` |
 
 Create: `{ categoryId?, name, barcode?, imageUrl?, unit, sellingPriceVnd, costPriceVnd?, tracked, stockQuantity? }`. name/unit không rỗng (max 255/50), sellingPriceVnd và costPriceVnd nếu có ≥ 0; barcode/imageUrl max 100/1000. categoryId nếu có phải ACTIVE cùng shop. tracked=true bắt buộc stockQuantity ≥ 0; tracked=false không nhận stockQuantity khác null. Barcode unique trong shop kể cả product đã archive; shop khác có thể dùng cùng barcode, null/rỗng không có barcode.
 
-PATCH: bỏ field giữ nguyên; explicit null chỉ cho categoryId/barcode/imageUrl/costPriceVnd/stockQuantity theo ràng buộc tồn. Không cho null name/unit/sellingPriceVnd/tracked. Đổi sang tracked=false xóa tồn; đổi false→true phải cung cấp tồn. PATCH/archive khóa dòng product để không ghi đè tồn khi checkout đồng thời.
+PATCH chỉ nhận `{ categoryId?, name?, barcode?, imageUrl?, unit?, sellingPriceVnd?, costPriceVnd?, tracked? }`: bỏ field giữ nguyên; explicit null chỉ cho categoryId/barcode/imageUrl/costPriceVnd. Không cho null name/unit/sellingPriceVnd/tracked. **Không nhận stockQuantity kể cả null**, trả `400 invalid_request` kèm chi tiết field và thông báo dùng stock-in. Đổi false→true khởi tạo tồn 0, true→true giữ tồn hiện tại; tracked=false xóa tồn. PATCH/archive khóa dòng product để không ghi đè tồn khi checkout/void/stock-in đồng thời. Create và response vẫn giữ stockQuantity.
+
+Stock-in chỉ cho OWNER hoạt động, shop ACTIVE thuộc OWNER và product ACTIVE cùng shop có tracked=true. quantity bắt buộc > 0, tối đa 12 chữ số nguyên và 3 thập phân; reason tùy chọn/null, tối đa 500 ký tự, trim và trống thành null. Body không hợp lệ trả `400 validation_failed`; productId không dương/sai định dạng trả `400 invalid_product_id`; product thiếu/khác shop/ARCHIVED trả `404 product_not_found`; không theo dõi tồn trả `409 product_stock_in_unavailable`. Tổng tồn vượt `999999999999.999` trả `409 product_stock_overflow`, không đổi dữ liệu.
+
+Core reserve key với operation `PRODUCT_STOCK_IN` rồi khóa dòng product; tồn mới = tồn hiện tại + quantity. Hash gồm product ID, quantity chuẩn hóa (5/5.000 tương đương), reason đã chuẩn hóa. Retry cùng request trả **snapshot ProductResponse lúc nhập**, không phải số tồn hiện tại sau thao tác khác. Ghi một audit `STOCK_ADJUSTED` với source `STOCK_IN`, quantity/beforeStock/afterStock, reason và key; cộng tồn/audit/kết quả replay cùng transaction. Không tạo expense/payment/debt/sale, không cập nhật giá vốn; không có phiếu nhập/ledger mới hay nhập âm/kiểm kê. Gợi ý AI không tự gọi thao tác ghi.
+
+**Phối hợp mobile trước tích hợp:** bỏ stockQuantity khỏi DTO/payload PATCH kể cả lúc tắt theo dõi; false→true nhận tồn 0 rồi gọi stock-in khi OWNER nhập hàng. Bổ sung API/UI nhập quantity/reason, giữ key khi retry và refresh product từ kết quả hoặc GET mới. Mock cũng phải theo contract mới; lượt này không sửa FE và chưa nghiệm thu end-to-end.
 
 `ProductResponse = { id, shopId, categoryId, name, barcode, imageUrl, unit, sellingPriceVnd, costPriceVnd, tracked, stockQuantity, status, createdAt, updatedAt }`.
 
@@ -109,7 +118,7 @@ name không rỗng (max 150), phone tùy chọn (max 30), được chuẩn hóa.
 
 `CustomerResponse = { id, shopId, name, phone, status, createdAt, updatedAt }`.
 
-Phủ `FR-009`, `FR-013`, `FR-016`.
+Phủ `FR-009`, `FR-013`, `FR-016`, `FR-030`, `AC-044`–`AC-048`.
 
 ## 3. Bản nháp → Sale → Payment → Void/Refund
 
@@ -201,6 +210,9 @@ Phủ `FR-003`–`FR-005`, `FR-013`, `FR-014`, `FR-016`, `AC-024`–`AC-032`.
 | `GET` | `/api/v1/debts/{debtId}` | — | `200 DebtResponse` |
 | `POST` | `/api/v1/debts/{debtId}/payments` | Repayment + Idempotency-Key | `201 DebtRepaymentResponse` |
 | `GET` | `/api/v1/reports/summary` | period tùy chọn, mặc định today | `200 ReportSummaryResponse` |
+| `GET` | `/api/v1/reports/top-products` | `period?`, `limit=10`, `sortBy=NET_REVENUE` | `200 TopProductsReportResponse` |
+| `GET` | `/api/v1/reports/sales-series` | `period?`, `granularity=DAY` | `200 SalesSeriesReportResponse` |
+| `GET` | `/api/v1/reports/profit-estimate` | `period?` | `200 ProfitEstimateReportResponse` |
 
 Expense create: `{ category?, description, amountVnd, paymentMethod?, expenseAt? }`; description không rỗng max 500, category max 150, amountVnd > 0, method CASH|TRANSFER nếu có. expenseAt mặc định hiện tại. PATCH giữ field bỏ qua; category/paymentMethod cho explicit null, description/amountVnd/expenseAt không null; request không có field trả `400 expense_update_required`.
 
@@ -228,9 +240,39 @@ period: `today`, `yesterday`, `this_week` (thứ Hai tới hiện tại), `week`
 | expenseVnd | Expense ACTIVE theo expenseAt; sửa/archive expense có thể thay đổi số kỳ cũ |
 | currentOutstandingDebtVnd | Tổng số dư nợ hiện tại của toàn shop, không lọc kỳ, không phải số dư cuối kỳ |
 
-Tiền thu ròng có thể tính collectedVnd − refundedVnd; không có field netCollected/profit riêng. Summary không trả confirmedRevenueVnd, series, best_sellers hay lợi nhuận ước tính; các chỉ số nâng cao vẫn là đích FR-006 cần triển khai sau.
+Tiền thu ròng có thể tính collectedVnd − refundedVnd; summary không có field netCollected/profit và giữ nguyên response để tương thích. Ba endpoint sau dùng cùng period/cửa sổ với summary, bắt buộc token OWNER và `X-Shop-Id` ACTIVE thuộc OWNER.
 
-Phủ `FR-006`, `FR-015`, `FR-016`, `AC-007`, `AC-024`, `AC-031`.
+### Bán chạy, chuỗi ngày và lãi ước tính
+
+`top-products`: `limit` 1–100; `sortBy=NET_REVENUE|QUANTITY`, mặc định NET_REVENUE. Response:
+
+```text
+TopProductsReportResponse = { period, fromInclusive, toExclusive, sortBy, items }
+TopProduct = { itemKey, productId, productName, unit, source, grossQuantity, voidedQuantity,
+               netQuantity, grossRevenueVnd, voidedRevenueVnd, netRevenueVnd }
+```
+
+Catalog group theo `productId` và vẫn có sau khi product archive; custom (`productId=null`) group không phân biệt hoa/thường theo tên + đơn vị snapshot đã trim, source=`CUSTOM`. `itemKey` là khóa opaque ổn định trong response, FE không tự phân tích. Gross lấy item của sale theo soldAt, voided lấy item của sale void theo voidedAt, net = gross − voided và có thể âm. Revenue từng dòng là phần `sale.totalVnd` sau discount được phân bổ theo tỷ lệ `lineTotalVnd`; phần dư làm tròn được gán cho item ID nhỏ nhất của sale nên tổng dòng luôn khớp tổng sale. Tie-break sau metric giảm dần là itemKey tăng dần.
+
+`sales-series`: MVP chỉ nhận `granularity=DAY`. Response `SalesSeriesReportResponse = { period, fromInclusive, toExclusive, granularity, items }`, mỗi item `{ date, grossRevenueVnd, voidedRevenueVnd, netRevenueVnd, orderCount, voidedOrderCount }`. `date` là ngày `Asia/Ho_Chi_Minh`; Core fill đủ mọi ngày trong kỳ, kể cả bucket 0. Sale cộng tại soldAt, void trừ tại voidedAt; không gộp payment/refund/expense vào series doanh thu.
+
+`profit-estimate` response:
+
+```text
+ProfitEstimateReportResponse = {
+  period, fromInclusive, toExclusive,
+  grossRevenueVnd, voidedRevenueVnd, netRevenueVnd,
+  grossEstimatedCogsVnd, voidedEstimatedCogsVnd, netEstimatedCogsVnd,
+  estimatedGrossProfitVnd, expenseVnd, estimatedOperatingProfitVnd,
+  isComplete, unknownCostItemCount, unknownCostRevenueVnd
+}
+```
+
+Khi confirm catalog item, Core snapshot `estimated_cost_vnd = round_HALF_UP(costPriceVnd × quantity)` là tổng giá vốn dòng. Product không có cost, custom item và lịch sử trước V12 giữ NULL; không backfill từ giá hiện tại hoặc đoán 60%. Net COGS = gross COGS theo soldAt − voided COGS theo voidedAt; gross profit = net revenue − net COGS; operating profit = gross profit − Expense ACTIVE theo expenseAt. `isComplete=false` khi có bất kỳ item-event liên quan thiếu cost; `unknownCostItemCount` đếm các contribution bán/void thiếu cost và `unknownCostRevenueVnd` là tổng tuyệt đối revenue đã phân bổ chịu ảnh hưởng, không phải khoản trừ ròng. Các số profit đều là ước tính vận hành, không phải số kế toán/thuế.
+
+`period` lạ trả `400 invalid_report_period`; limit ngoài 1–100 trả `400 invalid_report_query`; enum sort/granularity sai trả `400 validation_failed`.
+
+Phủ `FR-006`, `FR-015`, `FR-016`, `AC-007`, `AC-024`, `AC-031`, `AC-049`–`AC-052`.
 
 ### Lịch sử audit của tiệm
 
@@ -243,6 +285,8 @@ Chỉ đọc, bắt buộc Bearer token và `X-Shop-Id` của shop ACTIVE do OWN
 `AuditLogPageResponse = { content: AuditLogResponse[], page, size, totalElements, totalPages }`; `AuditLogResponse = { id, shopId, actorUserId, actorRole, action, entityType, entityId, outcome, reason, requestId, idempotencyKey, metadata, createdAt }`. outcome luôn `SUCCESS`: chỉ ghi thao tác thành công, cùng transaction nghiệp vụ; thao tác lỗi/rollback không để lại audit. metadata chỉ chứa key được khai báo cho từng action (số tiền, tồn trước/sau, trường đã đổi), không chứa tên/SĐT khách, token hay IP.
 
 action: `SALE_CONFIRMED`, `SALE_VOIDED`, `SALE_REFUND_RECORDED`, `DEBT_REPAYMENT_RECORDED`, `DEBT_VOIDED`, `STOCK_ADJUSTED`, `STOCK_RESTORED_ON_VOID`, `EXPENSE_CREATED`, `EXPENSE_UPDATED`, `EXPENSE_ARCHIVED`, `PRODUCT_CREATED`, `PRODUCT_UPDATED`, `PRODUCT_ARCHIVED`, `CATEGORY_CREATED`, `CATEGORY_UPDATED`, `CATEGORY_ARCHIVED`, `SHOP_CREATED`, `SHOP_UPDATED`, `SHOP_ARCHIVED`, `SHOP_INACTIVATED`, `SHOP_REACTIVATED`.
+
+`STOCK_ADJUSTED` dùng source `SALE_CONFIRM` khi bán, `CATALOG_EDIT` khi đổi theo dõi tồn, `STOCK_IN` khi nhập kho. Với stock-in: entityType PRODUCT/entityId product, metadata chỉ quantity/beforeStock/afterStock/source; reason/key ở field audit riêng. Replay không tạo thêm event.
 
 Bảng `audit_logs` append-only (V10, trigger chặn UPDATE/DELETE/TRUNCATE; V11 bổ sung action đọc ADMIN). Truy vết: `BR-017` trong [BRD](../product/business-requirements.md), `FR-028`/`FR-029` và `AC-033`–`AC-039` trong [PRD](../product/product-requirements.md#8-tiêu-chí-nghiệm-thu-cốt-lõi). Nghiệm thu lịch sử OWNER qua API/DB không đồng nghĩa đã tích hợp màn hình FE; audit truy cập ADMIN có [contract riêng](#7-dashboard-quản-trị--đã-có-trong-core), không mở endpoint OWNER cho ADMIN.
 

@@ -162,6 +162,7 @@ public class SaleDraftServiceImpl implements SaleDraftService {
             }
         }
         Map<Long, Boolean> stockDeducted = new HashMap<>();
+        Map<Long, Long> estimatedCosts = new HashMap<>();
         Map<Long, BigDecimal> beforeStocks = new HashMap<>();
         Map<Long, BigDecimal> afterStocks = new HashMap<>();
         // Lock catalog products in a stable order; custom items have no stock to deduct.
@@ -172,6 +173,7 @@ public class SaleDraftServiceImpl implements SaleDraftService {
                             item.getProductId(), shop.getId(), CatalogStatus.ACTIVE)
                     .orElseThrow(() -> new BusinessException(ErrorCode.DRAFT_ITEM_INVALID));
             stockDeducted.put(item.getProductId(), product.isTracked());
+            estimatedCosts.put(item.getProductId(), estimateCost(product, item.getQuantity()));
             if (product.isTracked()) { beforeStocks.put(product.getId(), product.getStockQuantity()); }
             product.deductStock(item.getQuantity());
             if (product.isTracked()) { afterStocks.put(product.getId(), product.getStockQuantity()); }
@@ -180,7 +182,8 @@ public class SaleDraftServiceImpl implements SaleDraftService {
         Sale sale = saleRepository.saveAndFlush(Sale.fromDraft(draft, subtotal, customer));
         List<SaleItem> saleItems = saleItemRepository.saveAll(draftItems.stream()
                 .map(item -> SaleItem.fromDraftItem(sale.getId(), item,
-                        Boolean.TRUE.equals(stockDeducted.get(item.getProductId())))).toList());
+                        Boolean.TRUE.equals(stockDeducted.get(item.getProductId())),
+                        estimatedCosts.get(item.getProductId()))).toList());
         if (draft.getInitialPaidVnd() > 0) {
             paymentRepository.save(Payment.initial(sale.getId(), draft.getInitialPaidVnd(),
                     draft.getInitialPaymentMethod(), shop.getOwnerId()));
@@ -201,6 +204,18 @@ public class SaleDraftServiceImpl implements SaleDraftService {
             }
         }
         return SaleServiceImpl.toResponse(sale, saleItems);
+    }
+
+    private Long estimateCost(Product product, BigDecimal quantity) {
+        if (product.getCostPriceVnd() == null) {
+            return null;
+        }
+        try {
+            return BigDecimal.valueOf(product.getCostPriceVnd()).multiply(quantity)
+                    .setScale(0, RoundingMode.HALF_UP).longValueExact();
+        } catch (ArithmeticException exception) {
+            throw new BusinessException(ErrorCode.DRAFT_TOTAL_INVALID);
+        }
     }
 
     private Customer customerForConfirmation(SaleDraft draft, Long shopId) {

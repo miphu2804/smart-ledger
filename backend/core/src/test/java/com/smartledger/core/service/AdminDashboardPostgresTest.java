@@ -36,7 +36,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** Real Flyway V1-V11 in a UUID-named temporary schema; no manual schema fixture. */
+/** Real Flyway V1-V12 in a UUID-named temporary schema; no manual schema fixture. */
 @DataJpaTest(showSql = false, properties = {"spring.flyway.enabled=true", "spring.jpa.hibernate.ddl-auto=validate"})
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({AdminDashboardServiceImpl.class, AdminAccessGuard.class, AdminDashboardRepository.class,
