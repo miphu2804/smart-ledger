@@ -6,6 +6,8 @@ on:
     branches: [main, staging]
 
 jobs:
+  ### Test: lint, tests and builds on every pull request and push ###
+
   ai:
     runs-on: ubuntu-24.04
     services:
@@ -176,6 +178,8 @@ jobs:
       - name: Build custom service images
         run: docker compose build
 
+  ### Report: one table of test results per run ###
+
   summary:
     name: CI result summary
     if: always()
@@ -217,6 +221,8 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  ### Deploy backend: Railway `ai` and `core` after a push to `staging` or `main` ###
+
   # Deploys backend services to Railway after a push to `staging` or `main` passes every CI job.
   # Each GitHub environment holds its own environment-scoped Railway project token and branch
   # policy; `railway-production` requires approval. The environment is set on this job, not in a
@@ -239,6 +245,20 @@ jobs:
           persist-credentials: false
       - name: Install Railway CLI
         run: npm install --global @railway/cli@5.63.1
+      # GitHub owns the browser origins Core allows, so a manual edit on Railway cannot drift or
+      # crash Core: Core refuses to start on any whitespace, wildcard or path inside an origin.
+      # Skipped while the environment variable is unset, leaving the Railway value untouched.
+      - name: Sync core CORS origins
+        if: vars.CORS_ALLOWED_ORIGINS != ''
+        env:
+          CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
+        run: |
+          set -euo pipefail
+          if [[ "$CORS_ALLOWED_ORIGINS" =~ [[:space:]*] ]]; then
+            echo "::error::CORS_ALLOWED_ORIGINS must be comma-separated origins without spaces or wildcards"
+            exit 1
+          fi
+          railway variable set "CORS_ALLOWED_ORIGINS=$CORS_ALLOWED_ORIGINS" --service core --skip-deploys
       # AI first: Core calls AI, so the new Core should not start against an old AI.
       - name: Deploy ai
         id: deploy_ai
@@ -278,6 +298,8 @@ jobs:
           path: deploy-summary.md
           if-no-files-found: error
           retention-days: 14
+
+  ### Deploy web: Vercel preview per pull request, staging alias, production ###
 
   # Builds the mobile web bundle on the runner and uploads it to Vercel, so each GitHub
   # environment owns its EXPO_PUBLIC_* values (baked in at build time) and Vercel token.
@@ -327,14 +349,40 @@ jobs:
         run: |
           url=$(vercel deploy --prebuilt ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN")
           echo "url=$url" >> "$GITHUB_OUTPUT"
+      # A per-deploy URL carries a random hash, so Core CORS and Firebase cannot list it. Each PR
+      # takes the fixed alias of its number's last digit (00-09); PRs sharing a digit overwrite
+      # each other, and re-running the job takes the slot back.
+      - name: Alias preview
+        id: preview
+        if: github.event_name == 'pull_request'
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          alias="smart-ledger-preview-0$((PR % 10)).vercel.app"
+          api=https://api.vercel.com
+          auth="Authorization: Bearer $VERCEL_TOKEN"
+          id=$(curl -fsS -H "$auth" "$api/v13/deployments/${URL#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
+          curl -fsS -X POST -H "$auth" -H "Content-Type: application/json" \
+            -d "$(jq -n --arg alias "$alias" '{alias: $alias}')" \
+            "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID"
+          echo "url=https://$alias" >> "$GITHUB_OUTPUT"
+          echo "alias: https://$alias -> $URL"
       # Fails the job when the deployed web would not reach Core: page down, env not baked in,
       # or Core rejecting this origin's CORS preflight.
       - name: Smoke test
         env:
-          URL: ${{ steps.deploy.outputs.url }}
+          URL: ${{ steps.preview.outputs.url || steps.deploy.outputs.url }}
         run: |
           set -euo pipefail
-          test "$(curl -s -o /dev/null -w '%{http_code}' "$URL/")" = 200
+          # A fresh alias can take a few seconds to route, so retry before failing.
+          for attempt in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$URL/")
+            [ "$code" = 200 ] && break
+            sleep 5
+          done
+          test "$code" = 200
           echo "page: 200"
           if [ "$EXPO_PUBLIC_USE_MOCK" != "false" ]; then echo "mock build, skipping Core checks"; exit 0; fi
           grep -rqF "$EXPO_PUBLIC_API_ENDPOINT" .vercel/output/static
@@ -365,7 +413,7 @@ jobs:
         if: always() && steps.deploy.outputs.url != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          URL: ${{ steps.deploy.outputs.url }}
+          URL: ${{ steps.preview.outputs.url || steps.deploy.outputs.url }}
           PR: ${{ github.event.pull_request.number }}
         run: |
           echo "Web deploy: $URL" >> "$GITHUB_STEP_SUMMARY"
