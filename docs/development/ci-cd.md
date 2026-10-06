@@ -1,99 +1,113 @@
-# CI/CD backend lên Railway
+# CI/CD to Railway and Vercel
 
-Tài liệu này mô tả đường đi của một thay đổi từ nhánh feature tới Railway cho `backend/core` và `backend/ai`. CI nằm ở [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml); deploy Railway là job `deploy` trong cùng file, chạy sau khi mọi job CI pass; quy tắc nhánh và review nằm ở [CONTRIBUTING](../../CONTRIBUTING.md). Mobile web deploy lên Vercel bằng job `deploy-web` trong cùng file, xem [Mobile web trên Vercel](#mobile-web-trên-vercel).
+This document traces a change from a feature branch to Railway for `backend/core` and `backend/ai`, and to Vercel for the mobile web. Everything runs in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), split into `###` sections: **Test**, **Report**, **Deploy backend** (job `deploy`, after every CI job passes) and **Deploy web** (job `deploy-web`, see [Mobile web on Vercel](#mobile-web-on-vercel)). Branch and review rules live in [CONTRIBUTING](../../CONTRIBUTING.md).
 
-## Luồng tổng quát
+## Overview
 
-![Luồng CI/CD backend](../architecture/diagrams/images/ci-cd.svg)
+![Backend CI/CD flow](../architecture/diagrams/images/ci-cd.svg)
 
-Nguồn sơ đồ: [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio); sửa bằng draw.io rồi export lại SVG (`drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/ci-cd.svg docs/architecture/diagrams/src/ci-cd.drawio`). Số màu xanh là pipeline deploy, số màu cam là luồng request lúc chạy.
+Diagram source: [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio); edit it in draw.io, then re-export the SVG (`drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/ci-cd.svg docs/architecture/diagrams/src/ci-cd.drawio`). Blue numbers are the deploy pipeline; orange numbers are the runtime request flow.
 
-## Từng bước
+## Steps
 
-1. **PR vào `staging`:** CI chạy test, kiểm migration trên PostgreSQL tạm và build image. Job `deploy` bị bỏ qua vì sự kiện là `pull_request`.
-2. **Merge vào `staging`:** CI chạy lại trên commit đã merge. Khi `ai`, `core`, `mobile-web`, `container-images` đều pass, job `deploy` dùng environment `railway-staging` và deploy lên Railway staging. Không cần duyệt.
-3. **PR `staging` → `main`:** chỉ mở sau khi đã kiểm tra trên staging (xem [Target branch](../../CONTRIBUTING.md#target-branch)).
-4. **Merge vào `main`:** CI chạy lại; job `deploy` dừng ở trạng thái *Waiting*. Người duyệt mở run trên tab Actions → **Review deployments** → Approve. Chỉ sau khi duyệt, job mới nhận `RAILWAY_TOKEN` của production và deploy.
+1. **PR into `staging`:** CI runs the tests, checks migrations on a throwaway PostgreSQL and builds the images. Job `deploy` is skipped because the event is `pull_request`.
+2. **Merge into `staging`:** CI runs again on the merged commit. When `ai`, `core`, `mobile-web` and `container-images` all pass, job `deploy` uses environment `railway-staging` and deploys to Railway staging. No approval is needed.
+3. **PR `staging` → `main`:** open it only after checking staging (see [Target branch](../../CONTRIBUTING.md#target-branch)).
+4. **Merge into `main`:** CI runs again; job `deploy` waits in *Waiting*. A reviewer opens the run in the Actions tab → **Review deployments** → Approve. Only then does the job receive the production `RAILWAY_TOKEN` and deploy.
 
-Mọi job CI đều phải pass mới deploy, kể cả `mobile-web`. Mỗi lần deploy có artifact `deploy-summary-<branch>` (environment, commit, kết quả `ai`/`core`) và bảng tóm tắt ở trang run.
+Every CI job must pass before a deploy, including `mobile-web`. Each deploy uploads a `deploy-summary-<branch>` artifact (environment, commit, `ai`/`core` result) and a summary table on the run page.
 
-## Cấu hình liên quan
+## Configuration
 
 ### GitHub Environments
 
-| Environment | Nhánh được phép | Duyệt | Secret |
-|---|---|---|---|
-| `railway-staging` | `staging` | Không | `RAILWAY_TOKEN`: project token của Railway environment staging |
-| `railway-production` | `main` | Có | `RAILWAY_TOKEN`: project token của Railway environment production |
+| Environment | Allowed branches | Approval | Secrets | Variables |
+|---|---|---|---|---|
+| `railway-staging` | `staging` | No | `RAILWAY_TOKEN`: project token of the Railway staging environment | `CORS_ALLOWED_ORIGINS` |
+| `railway-production` | `main` | Yes | `RAILWAY_TOKEN`: project token of the Railway production environment | `CORS_ALLOWED_ORIGINS` (optional) |
+| `vercel-preview` | Any branch (PR) | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `EXPO_PUBLIC_*` |
+| `vercel-staging` | `staging` | No | Same as above | `EXPO_PUBLIC_*`, `VERCEL_STAGING_ALIAS` |
+| `vercel-production` | `main` | Yes | Same as above | `EXPO_PUBLIC_*` |
 
-| `vercel-preview` | Mọi nhánh (PR) | Không | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` |
-| `vercel-staging` | `staging` | Không | Như trên |
-| `vercel-production` | `main` | Có | Như trên |
+Do not put backend secrets in the `vercel-*` environments.
 
-Không đặt secret backend trong các environment `vercel-*`.
-
-Mỗi Railway project token chỉ deploy được vào đúng một Railway environment, nên job chạy với `railway-staging` không thể deploy lên production.
+Each Railway project token can deploy to exactly one Railway environment, so a job running with `railway-staging` cannot deploy to production.
 
 ### Railway
 
-- Một project, hai environment `staging` và `production`, mỗi environment có service `core` và `ai`. Tên service phải khớp với `--service` trong workflow.
-- Workflow gửi code bằng `railway up backend/<service> --path-as-root`, nên **Root Directory** của service để trống và **không** bật auto-deploy từ GitHub (tránh deploy hai lần).
-- Biến môi trường của service (database, Firebase, `INTERNAL_API_TOKEN`, model key…) cấu hình trên Railway theo từng environment; GitHub chỉ giữ token để deploy. Railway không mount file, nên Core nhận khóa Firebase Admin qua `FIREBASE_SERVICE_ACCOUNT_JSON` (toàn bộ JSON của service account, dùng service account riêng cho từng environment); khi biến trống, Core dùng `GOOGLE_APPLICATION_CREDENTIALS` như khi chạy local.
+- One project with two environments, `staging` and `production`, each with services `core` and `ai`. Service names must match `--service` in the workflow.
+- The workflow uploads code with `railway up backend/<service> --path-as-root`, so each service's **Root Directory** stays empty and GitHub auto-deploy stays **off** (otherwise every commit deploys twice).
+- Service variables (database, Firebase, `INTERNAL_API_TOKEN`, model key…) are set on Railway per environment; GitHub keeps only the deploy token and `CORS_ALLOWED_ORIGINS`. Railway does not mount files, so Core receives the Firebase Admin key through `FIREBASE_SERVICE_ACCOUNT_JSON` (the full service-account JSON, one service account per environment); when it is empty, Core falls back to `GOOGLE_APPLICATION_CREDENTIALS` as in local runs.
 
-### Biến của service trên Railway
+### Railway service variables
 
-Mỗi giá trị chỉ nhập một lần; chỗ nào dùng lại thì khai báo bằng [reference variable](https://docs.railway.com/guides/variables#reference-variables) để Railway tự điền theo environment đang deploy. Nhờ vậy staging và production có cùng cấu hình, chỉ khác giá trị, và đổi một secret không phải sửa nhiều nơi.
+Enter each value once and reuse it with a [reference variable](https://docs.railway.com/guides/variables#reference-variables), so Railway fills it in for the environment being deployed. Staging and production then share one configuration with different values, and rotating a secret touches one place.
 
-**Shared Variables** (Project Settings → Shared Variables, đặt riêng cho từng environment):
+**Shared Variables** (Project Settings → Shared Variables, set per environment):
 
-| Biến | Giá trị |
+| Variable | Value |
 |---|---|
-| `INTERNAL_API_TOKEN` | Chuỗi ngẫu nhiên, khác nhau giữa staging và production |
+| `INTERNAL_API_TOKEN` | Random string, different for staging and production |
 
 **Service `core`:**
 
-| Biến | Giá trị |
+| Variable | Value |
 |---|---|
 | `AI_BASE_URL` | `http://${{ai.RAILWAY_PRIVATE_DOMAIN}}:8001` |
 | `INTERNAL_API_TOKEN` | `${{shared.INTERNAL_API_TOKEN}}` |
-| `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` | Supabase của environment tương ứng (JDBC URL) |
-| `FIREBASE_PROJECT_ID`, `FIREBASE_SERVICE_ACCOUNT_JSON` | Firebase project của environment tương ứng |
+| `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` | Supabase of the matching environment (JDBC URL) |
+| `FIREBASE_PROJECT_ID`, `FIREBASE_SERVICE_ACCOUNT_JSON` | Firebase project of the matching environment |
 | `FLYWAY_ENABLED` | `false` |
-| `CORS_ALLOWED_ORIGINS` | Mặc định rỗng: không cho phép truy cập cross-origin từ trình duyệt. Khi web gọi Core trực tiếp, đặt các origin chính xác, phân tách bằng dấu phẩy, vd. `https://smart-ledger-staging.vercel.app`; không nhận wildcard, path hoặc dấu `/` cuối. Khai báo riêng từng origin preview/staging/production được phép, gồm 10 alias preview `https://smart-ledger-preview-00.vercel.app` … `-09` trên staging, và recreate/redeploy Core sau khi đổi biến. |
+| `CORS_ALLOWED_ORIGINS` | Managed from GitHub, see [Core CORS origins](#core-cors-origins). Do not edit it on Railway. |
 
 **Service `ai`:**
 
-| Biến | Giá trị |
+| Variable | Value |
 |---|---|
 | `INTERNAL_API_TOKEN` | `${{shared.INTERNAL_API_TOKEN}}` |
-| `POSTGRES_URL` | Supabase của environment tương ứng (`postgresql://…`) |
-| `AI_SQL_READER_URL` | Login chỉ đọc `ai_sql_reader` (AI baseline trong `supabase/migrations/`); bỏ trống thì agent không đọc được dữ liệu shop |
-| `REDIS_URL` | Redis Cloud của environment tương ứng |
-| `OPENAI_API_KEY` | Key của nhà cung cấp model |
+| `POSTGRES_URL` | Supabase of the matching environment (`postgresql://…`) |
+| `AI_SQL_READER_URL` | Read-only `ai_sql_reader` login (AI baseline in `supabase/migrations/`); when empty, the agent cannot read shop data |
+| `REDIS_URL` | Redis Cloud of the matching environment |
+| `OPENAI_API_KEY` | Model provider key |
 
-- `ai` không mở public domain; `core` gọi qua private network. Port `8001` là `SERVER_PORT` mặc định của AI, không phải `PORT` do Railway cấp, nên đổi `SERVER_PORT` của `ai` thì phải sửa `AI_BASE_URL` theo.
-- Biến có giá trị mặc định cho local (`AI_BASE_URL` mặc định `http://localhost:8001`), nên thiếu biến trên Railway thì deploy vẫn báo thành công nhưng Core không gọi được AI. Sau khi đổi biến, kiểm tra một lượt chat qua Core trên staging.
-- Secret backend chỉ đặt trên Railway. Project Vercel của mobile web chỉ nhận `EXPO_PUBLIC_*`.
+- `ai` has no public domain; `core` calls it over the private network. Port `8001` is AI's default `SERVER_PORT`, not the `PORT` Railway assigns, so changing `SERVER_PORT` on `ai` requires updating `AI_BASE_URL`.
+- Variables have local defaults (`AI_BASE_URL` defaults to `http://localhost:8001`), so a missing variable on Railway still reports a successful deploy while Core cannot reach AI. After changing variables, run one chat through Core on staging.
+- Backend secrets live only on Railway. The mobile web Vercel project receives only `EXPO_PUBLIC_*`.
 
-## Những gì luồng này chưa làm
+### Core CORS origins
 
-- Không chạy migration database. Flyway vẫn tắt mặc định và `supabase db push` chưa nằm trong CI; người phụ trách migration chạy tay theo [Database migrations](../../README.md#database-migrations), trên staging trước production.
-- Không lọc theo thư mục: mỗi lần push vào `staging` hoặc `main` đều deploy lại cả `ai` và `core`, kể cả khi chỉ sửa mobile.
-- Rollback: chọn bản deploy trước trên Railway dashboard → **Redeploy**; chưa có bước tự động.
+Core accepts browser calls only from the exact origins in `CORS_ALLOWED_ORIGINS`: comma-separated, `http(s)` only, no wildcard, path, trailing `/` or whitespace. Core **refuses to start** on any invalid entry, so a stray line break pasted on Railway takes staging down.
 
-## Mobile web trên Vercel
+The value is kept in the **Variables** of GitHub environments `railway-staging` and `railway-production`. Before deploying Core, step `Sync core CORS origins` rejects whitespace or wildcards and writes the value to Railway service `core`. When the GitHub variable is unset, the step is skipped and the Railway value stays as is. A change takes effect on the next push to the branch, or by re-running the `deploy` job.
 
-Job `deploy-web` build `frontend/mobile` ngay trên runner (`vercel build`) rồi tải bản đã build lên Vercel (`vercel deploy --prebuilt`). Vercel không tự build từ Git (`git.deploymentEnabled: false` trong `frontend/mobile/vercel.json`), nên mỗi commit chỉ deploy một lần và GitHub là nơi duy nhất giữ cấu hình web.
+Staging value:
 
-| Sự kiện | Environment | Kết quả |
+```text
+https://smart-ledger-staging.vercel.app,https://smart-ledger-preview-00.vercel.app,…,https://smart-ledger-preview-09.vercel.app
+```
+
+The ten `smart-ledger-preview-0N` origins belong to pull-request previews (see below); the same domains must also be listed in Firebase Authorized domains for sign-in to work.
+
+## What this flow does not do yet
+
+- No database migrations. Flyway stays off by default and `supabase db push` is not in CI; the migration owner runs them by hand following [Database migrations](../../README.md#database-migrations), on staging before production.
+- No path filtering: every push to `staging` or `main` redeploys both `ai` and `core`, even for a mobile-only change.
+- Rollback: pick the previous deploy on the Railway dashboard → **Redeploy**; there is no automated step.
+
+## Mobile web on Vercel
+
+Job `deploy-web` builds `frontend/mobile` on the runner (`vercel build`) and uploads the build to Vercel (`vercel deploy --prebuilt`). Vercel does not build from Git (`git.deploymentEnabled: false` in `frontend/mobile/vercel.json`), so each commit deploys once and GitHub is the only place holding web configuration.
+
+| Event | Environment | Result |
 |---|---|---|
-| PR (nhánh trong repo) | `vercel-preview` | Gán alias `smart-ledger-preview-0N.vercel.app` với `N` là chữ số cuối của số PR, bot comment alias vào PR |
-| Push `staging` | `vercel-staging` | Deploy preview rồi gán alias `VERCEL_STAGING_ALIAS` |
-| Push `main` | `vercel-production` | Deploy production sau khi duyệt |
+| PR (branch in this repo) | `vercel-preview` | Aliased to `smart-ledger-preview-0N.vercel.app`, where `N` is the last digit of the PR number; the bot comments the alias on the PR |
+| Push `staging` | `vercel-staging` | Preview deploy, then aliased to `VERCEL_STAGING_ALIAS` |
+| Push `main` | `vercel-production` | Production deploy after approval |
 
-- Chỉ cần job `mobile-web` pass; web không chờ backend deploy.
-- PR từ fork không có secret nên không có preview.
-- Biến `EXPO_PUBLIC_*` đóng vào bundle lúc build, nên đặt ở **Variables** (không phải Secrets) của từng environment: `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS`, `EXPO_PUBLIC_API_ENDPOINT`, `EXPO_PUBLIC_FIREBASE_API_KEY`, `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`, `EXPO_PUBLIC_FIREBASE_PROJECT_ID`, `EXPO_PUBLIC_FIREBASE_APP_ID`; `vercel-staging` thêm `VERCEL_STAGING_ALIAS`. Đổi biến xong phải chạy lại job thì web mới nhận.
-- Bỏ trống `EXPO_PUBLIC_USE_MOCK` thì app chạy mock (`src/config.ts` chỉ tắt mock khi giá trị là `false`).
-- Gọi Core thật từ trình duyệt cần origin của web nằm trong `CORS_ALLOWED_ORIGINS` của Core và domain web nằm trong Firebase Authorized domains. URL riêng của mỗi deploy có hash ngẫu nhiên nên không khai báo được; preview dùng 10 alias cố định `smart-ledger-preview-00` … `-09`. Hai PR mở cùng lúc có cùng chữ số cuối sẽ ghi đè alias của nhau; chạy lại job để lấy lại slot.
-- `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` lấy ở Vercel Project Settings → General; `VERCEL_TOKEN` tạo ở Account Settings → Tokens, giới hạn scope vào team của project.
+- Only job `mobile-web` must pass; the web does not wait for the backend deploy.
+- PRs from forks get no secrets, so they get no preview.
+- `EXPO_PUBLIC_*` values are baked into the bundle at build time, so set them as **Variables** (not Secrets) of each environment: `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS`, `EXPO_PUBLIC_API_ENDPOINT`, `EXPO_PUBLIC_FIREBASE_API_KEY`, `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`, `EXPO_PUBLIC_FIREBASE_PROJECT_ID`, `EXPO_PUBLIC_FIREBASE_APP_ID`. Re-run the job after changing one so the web picks it up.
+- An empty `EXPO_PUBLIC_USE_MOCK` runs the app on mocks (`src/config.ts` turns mocks off only for `false`).
+- Calling the real Core from a browser needs the web origin in Core's [`CORS_ALLOWED_ORIGINS`](#core-cors-origins) and the web domain in Firebase Authorized domains. Each deploy URL carries a random hash and cannot be listed, so previews use ten fixed aliases, `smart-ledger-preview-00` … `-09`. Two open PRs sharing a last digit overwrite each other's alias; re-run the job to take the slot back.
+- The smoke test fails the job when the deployed web would not reach Core: page not returning 200, API endpoint missing from the bundle, or Core rejecting the origin's CORS preflight. Mock builds skip the Core checks.
+- `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` come from Vercel Project Settings → General; create `VERCEL_TOKEN` under Account Settings → Tokens, scoped to the project's team.

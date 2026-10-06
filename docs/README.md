@@ -46,7 +46,7 @@ Start with the path that matches your task; each step links to the next level of
 | [Mobile UI style and migration](design/mobile-ui-style-migration.md) | Visual direction and implementation checks for the mobile app |
 | [Mobile wording review](design/mobile-wording-review.md) | Proposed UI wording, icon and feedback mapping pending product approval |
 | [Mobile iOS device release](development/mobile-ios-device-release.md) | Build and install a Release configuration on a connected iPhone |
-| [CI/CD backend lên Railway](development/ci-cd.md) | Flow from feature branch to Railway staging/production, GitHub and Railway environment setup |
+| [CI/CD to Railway and Vercel](development/ci-cd.md) | Flow from feature branch to Railway and Vercel, GitHub environments, Railway variables and Core CORS origins |
 
 ## Which document to update
 

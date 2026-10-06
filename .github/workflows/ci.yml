@@ -6,6 +6,8 @@ on:
     branches: [main, staging]
 
 jobs:
+  ### Test: lint, tests and builds on every pull request and push ###
+
   ai:
     runs-on: ubuntu-24.04
     services:
@@ -176,6 +178,8 @@ jobs:
       - name: Build custom service images
         run: docker compose build
 
+  ### Report: one table of test results per run ###
+
   summary:
     name: CI result summary
     if: always()
@@ -217,6 +221,8 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  ### Deploy backend: Railway `ai` and `core` after a push to `staging` or `main` ###
+
   # Deploys backend services to Railway after a push to `staging` or `main` passes every CI job.
   # Each GitHub environment holds its own environment-scoped Railway project token and branch
   # policy; `railway-production` requires approval. The environment is set on this job, not in a
@@ -239,6 +245,20 @@ jobs:
           persist-credentials: false
       - name: Install Railway CLI
         run: npm install --global @railway/cli@5.63.1
+      # GitHub owns the browser origins Core allows, so a manual edit on Railway cannot drift or
+      # crash Core: Core refuses to start on any whitespace, wildcard or path inside an origin.
+      # Skipped while the environment variable is unset, leaving the Railway value untouched.
+      - name: Sync core CORS origins
+        if: vars.CORS_ALLOWED_ORIGINS != ''
+        env:
+          CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
+        run: |
+          set -euo pipefail
+          if [[ "$CORS_ALLOWED_ORIGINS" =~ [[:space:]*] ]]; then
+            echo "::error::CORS_ALLOWED_ORIGINS must be comma-separated origins without spaces or wildcards"
+            exit 1
+          fi
+          railway variable set "CORS_ALLOWED_ORIGINS=$CORS_ALLOWED_ORIGINS" --service core --skip-deploys
       # AI first: Core calls AI, so the new Core should not start against an old AI.
       - name: Deploy ai
         id: deploy_ai
@@ -278,6 +298,8 @@ jobs:
           path: deploy-summary.md
           if-no-files-found: error
           retention-days: 14
+
+  ### Deploy web: Vercel preview per pull request, staging alias, production ###
 
   # Builds the mobile web bundle on the runner and uploads it to Vercel, so each GitHub
   # environment owns its EXPO_PUBLIC_* values (baked in at build time) and Vercel token.
