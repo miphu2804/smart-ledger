@@ -1,8 +1,13 @@
 from contextlib import contextmanager
 
+import pytest
 from tests.support import CORE_MIGRATIONS, REPO_ROOT
 
-from src.catalog import CatalogProduct, ProductCatalogRepository
+from src.catalog import (
+    CatalogProduct,
+    CatalogUnavailableError,
+    ProductCatalogRepository,
+)
 
 
 class FakeCursor:
@@ -45,6 +50,15 @@ class FakePostgres:
         yield FakeConnection(self.cursor)
 
 
+class FailingPostgres:
+    """A client whose connection is gone, as after a dropped database link."""
+
+    @contextmanager
+    def transaction(self):
+        raise RuntimeError("postgres unavailable")
+        yield  # pragma: no cover
+
+
 def test_list_active_products_maps_rows_and_keeps_the_shop_filter() -> None:
     postgres = FakePostgres([(12, "Cà phê sữa", "cup", 25000)])
     repository = ProductCatalogRepository(postgres)
@@ -54,7 +68,8 @@ def test_list_active_products_maps_rows_and_keeps_the_shop_filter() -> None:
     assert products == [
         CatalogProduct(id=12, name="Cà phê sữa", unit="cup", selling_price_vnd=25000)
     ]
-    query, params = postgres.cursor.executed[0]
+    assert any("statement_timeout" in query for query, _ in postgres.cursor.executed)
+    query, params = postgres.cursor.executed[-1]
     assert "shop_id = %s" in query
     assert "status = 'ACTIVE'" in query
     assert params == (7,)
@@ -67,11 +82,36 @@ def test_is_active_product_true_only_when_the_row_is_found() -> None:
     assert found.is_active_product(7, 12) is True
     assert missing.is_active_product(7, 12) is False
 
-    query, params = missing.postgres.cursor.executed[0]
+    query, params = missing.postgres.cursor.executed[-1]
     assert "shop_id = %s" in query
     assert "id = %s" in query
     assert "status = 'ACTIVE'" in query
     assert params == (7, 12)
+
+
+def test_missing_ids_fail_closed_without_querying() -> None:
+    postgres = FakePostgres([(12, "Cà phê sữa", "cup", 25000)])
+    repository = ProductCatalogRepository(postgres)
+
+    assert repository.list_active_products(None) == []
+    assert repository.is_active_product(None, 12) is False
+    assert repository.is_active_product(7, None) is False
+
+    assert postgres.cursor.executed == []
+
+
+def test_database_failures_become_catalog_unavailable() -> None:
+    repository = ProductCatalogRepository(FailingPostgres())
+
+    with pytest.raises(CatalogUnavailableError):
+        repository.list_active_products(7)
+    with pytest.raises(CatalogUnavailableError):
+        repository.is_active_product(7, 12)
+
+
+def test_timeout_must_be_positive() -> None:
+    with pytest.raises(ValueError):
+        ProductCatalogRepository(FakePostgres([]), timeout_ms=0)
 
 
 def test_catalog_product_id_is_int_matching_the_core_bigint_contract() -> None:

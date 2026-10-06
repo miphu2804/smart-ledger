@@ -8,13 +8,16 @@ import pytest
 from psycopg import sql
 from tests.support import apply_core_migrations
 
-from src.catalog import ProductCatalogRepository
+from src.catalog import CatalogUnavailableError, ProductCatalogRepository
 from src.infra.postgre_db_client import PostgreDBClient
 
 
 @dataclass
 class CatalogDatabase:
     admin: psycopg.Connection
+    database_url: str
+    schema: str
+    postgres: PostgreDBClient
     repository: ProductCatalogRepository
     shop_a: int
     shop_b: int
@@ -87,6 +90,9 @@ def catalog_db() -> Iterator[CatalogDatabase]:
         )
         yield CatalogDatabase(
             admin=admin,
+            database_url=database_url,
+            schema=schema,
+            postgres=postgres,
             repository=ProductCatalogRepository(postgres),
             shop_a=shop_a,
             shop_b=shop_b,
@@ -156,11 +162,34 @@ def test_unavailable_database_raises_and_writes_nothing(
 ) -> None:
     offline = ProductCatalogRepository(PostgreDBClient())
 
-    with pytest.raises(RuntimeError, match="postgres unavailable"):
+    with pytest.raises(CatalogUnavailableError):
         offline.list_active_products(catalog_db.shop_a)
-    with pytest.raises(RuntimeError, match="postgres unavailable"):
+    with pytest.raises(CatalogUnavailableError):
         offline.is_active_product(catalog_db.shop_a, catalog_db.shop_a_coffee)
 
     # The failed reads leave the Core tables untouched.
     assert catalog_db.admin.execute("SELECT count(*) FROM products").fetchone()[0] == 4
     assert catalog_db.admin.execute("SELECT count(*) FROM sales").fetchone()[0] == 0
+
+
+def test_locked_catalog_times_out_as_unavailable(
+    catalog_db: CatalogDatabase,
+) -> None:
+    # A table lock makes the SELECT block; statement_timeout must cancel it instead
+    # of holding the shared connection until the client gives up.
+    blocker = psycopg.connect(catalog_db.database_url)
+    try:
+        blocker.execute(
+            sql.SQL("SET search_path TO {}").format(sql.Identifier(catalog_db.schema))
+        )
+        blocker.execute("LOCK TABLE products IN ACCESS EXCLUSIVE MODE")
+
+        repository = ProductCatalogRepository(catalog_db.postgres, timeout_ms=200)
+        with pytest.raises(CatalogUnavailableError):
+            repository.list_active_products(catalog_db.shop_a)
+    finally:
+        blocker.rollback()
+        blocker.close()
+
+    # The shared connection survives the cancelled query and still serves the catalog.
+    assert catalog_db.repository.list_active_products(catalog_db.shop_a)
