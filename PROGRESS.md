@@ -1,3 +1,16 @@
+### [2026-10-06 11:33 UTC+07:00] — [AI] Shop-scoped product catalog for drafts (AI-007)
+
+**Done:** AI-007 (#37) on branch `feat/ai-shop-catalog-37`, targeting `staging`. New `src/catalog.py` adds `ProductCatalogRepository`: `list_active_products(shop_id)` reads only `status = 'ACTIVE'` products of the Core-verified shop, and `is_active_product(shop_id, product_id)` rejects a product of another shop, an archived product, an unknown id and a missing shop id. Every query filters `shop_id` in SQL with a bound parameter and only reads; database errors and timeouts propagate so #3 can fall back to manual entry. Finalized the Core–AI ID type: `DraftView.items[].product_id` is the `BIGINT` of `products.id` (was `uuid-or-null`) in `docs/contracts/api-contracts.md`.
+
+**Changed files:**
+- `backend/ai/src/catalog.py` — created
+- `backend/ai/tests/unit_tests/test_catalog_repository.py`, `tests/integration_tests/test_product_catalog.py` — created
+- `docs/contracts/api-contracts.md`, `PROGRESS.md` — modified
+
+**Flow explained:** Core authenticates the owner and passes its `shop_id` → `ProductCatalogRepository` loads that shop's ACTIVE catalog for #60 or checks one model-supplied `product_id` under the same shop filter → a request scoped to shop A can never list or validate a shop B product.
+
+**Check:** Full AI suite green against a disposable pgvector PostgreSQL 16 with the real Core V1–V4 migrations: 294 passed. New tests: 3 unit (SQL keeps the shop/ACTIVE filter and binds params; product id type is `int` and matches the contract BIGINT) and 4 integration (shop A/B isolation with a duplicate product name, archived/cross-shop/unknown rejection, missing or unknown shop returns nothing, unavailable database raises without writing). `ruff check` and `ruff format --check` pass. Not verified: end-to-end Core → AI draft parse (#60/#3) and a real model.
+
 ### [2026-10-05 23:40 UTC+07:00] — [AI] Move AI schema to a Supabase CLI baseline
 
 **Done:** Folded AI migrations `001`–`005` into one baseline, `supabase/migrations/20261005000000_ai_baseline.sql`, under a `supabase/` project from `supabase init`. Staging now gets the AI schema with `npx supabase@2.119.0 db push --db-url "$POSTGRES_URL"` instead of running each file with `psql`. Every statement stays safe to re-run, so the first push also succeeds on a database that already has the old files applied. Core keeps Flyway; CI tests keep a disposable PostgreSQL.
