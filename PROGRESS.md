@@ -1,3 +1,26 @@
+### [2026-10-06 11:48 UTC+07:00] — [AI] Cap the shop catalog read and map database errors
+
+**Done:** Review fixes on `feat/ai-shop-catalog-37` for AI-007 (#37). `ProductCatalogRepository` now caps every read with a transaction-local `statement_timeout` (default 3000 ms, mirroring `ReadOnlySqlExecutor`), so a blocked query cannot hold `PostgreDBClient`'s single connection lock and stall chat. Every database failure and timeout becomes `CatalogUnavailableError` for #3/#60 to map to manual entry. `shop_id` and `product_id` are typed `int | None` and return early (empty list / `False`) instead of relying on SQL NULL semantics.
+
+**Changed files:** `backend/ai/src/catalog.py`, `backend/ai/tests/unit_tests/test_catalog_repository.py`, `backend/ai/tests/integration_tests/test_product_catalog.py`, `PROGRESS.md`.
+
+**Flow explained:** Core passes the authenticated `shop_id` → `_fetch` sets `statement_timeout` for the transaction, runs the shop-scoped SELECT, and raises one domain error on any database failure → the caller falls back to manual text/POS without leaking another shop's data.
+
+**Check:** Full AI suite green against a disposable pgvector PostgreSQL 16 with the real Core V1–V4 migrations: 298 passed (was 294). New coverage: a table lock makes `list_active_products` block and the 200 ms `statement_timeout` cancels it (asserts `CatalogUnavailableError`, then the shared connection still serves the catalog), missing or null ids return nothing without a query, database failures map to `CatalogUnavailableError`, and `timeout_ms` must be positive. `ruff check` and `ruff format --check` pass. Not verified: the end-to-end Core fallback path (#3) and a real model.
+
+### [2026-10-06 11:33 UTC+07:00] — [AI] Shop-scoped product catalog for drafts (AI-007)
+
+**Done:** AI-007 (#37) on branch `feat/ai-shop-catalog-37`, targeting `staging`. New `src/catalog.py` adds `ProductCatalogRepository`: `list_active_products(shop_id)` reads only `status = 'ACTIVE'` products of the Core-verified shop, and `is_active_product(shop_id, product_id)` rejects a product of another shop, an archived product, an unknown id and a missing shop id. Every query filters `shop_id` in SQL with a bound parameter and only reads; database errors and timeouts propagate so #3 can fall back to manual entry. Finalized the Core–AI ID type: `DraftView.items[].product_id` is the `BIGINT` of `products.id` (was `uuid-or-null`) in `docs/contracts/api-contracts.md`.
+
+**Changed files:**
+- `backend/ai/src/catalog.py` — created
+- `backend/ai/tests/unit_tests/test_catalog_repository.py`, `tests/integration_tests/test_product_catalog.py` — created
+- `docs/contracts/api-contracts.md`, `PROGRESS.md` — modified
+
+**Flow explained:** Core authenticates the owner and passes its `shop_id` → `ProductCatalogRepository` loads that shop's ACTIVE catalog for #60 or checks one model-supplied `product_id` under the same shop filter → a request scoped to shop A can never list or validate a shop B product.
+
+**Check:** Full AI suite green against a disposable pgvector PostgreSQL 16 with the real Core V1–V4 migrations: 294 passed. New tests: 3 unit (SQL keeps the shop/ACTIVE filter and binds params; product id type is `int` and matches the contract BIGINT) and 4 integration (shop A/B isolation with a duplicate product name, archived/cross-shop/unknown rejection, missing or unknown shop returns nothing, unavailable database raises without writing). `ruff check` and `ruff format --check` pass. Not verified: end-to-end Core → AI draft parse (#60/#3) and a real model.
+
 ### [2026-10-06 02:23 UTC+07:00] — [Docs] Align Core/mobile and ADMIN support documentation
 
 **Done:** Completed the Core/mobile documentation alignment for DOCS-001 (#101), plus a separately reviewed ADMIN documentation extension. Compared against staging commit `b1de421c461d59473b3bb73aae103027afd67a89`. Clarified Firebase JSON-over-ADC precedence, CORS/Flyway configuration, direct DEBT-to-PAID repayment, mobile-local report estimates and quick product creation. Documented the seven ADMIN support GETs and shared audit schema V10/V11; preserved existing requirement IDs and added AC-040 through AC-043.
