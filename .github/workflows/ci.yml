@@ -369,11 +369,31 @@ jobs:
             "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID"
           echo "url=https://$alias" >> "$GITHUB_OUTPUT"
           echo "alias: https://$alias -> $URL"
+      # Runs before the smoke test so the test checks the fixed alias that Core CORS lists,
+      # not the per-deploy hash URL.
+      - name: Alias staging
+        id: staging
+        if: github.event_name == 'push' && github.ref_name == 'staging'
+        env:
+          STAGING_ALIAS: ${{ vars.VERCEL_STAGING_ALIAS }}
+          URL: ${{ steps.deploy.outputs.url }}
+        # Calls the REST API directly: `vercel alias set` first loads the token's user, which
+        # fails with "User not found" for this team token even though deploys succeed.
+        run: |
+          set -euo pipefail
+          api=https://api.vercel.com
+          auth="Authorization: Bearer $VERCEL_TOKEN"
+          id=$(curl -fsS -H "$auth" "$api/v13/deployments/${URL#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
+          curl -fsS -X POST -H "$auth" -H "Content-Type: application/json" \
+            -d "$(jq -n --arg alias "$STAGING_ALIAS" '{alias: $alias}')" \
+            "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID"
+          echo "url=https://$STAGING_ALIAS" >> "$GITHUB_OUTPUT"
+          echo "alias: https://$STAGING_ALIAS -> $URL"
       # Fails the job when the deployed web would not reach Core: page down, env not baked in,
       # or Core rejecting this origin's CORS preflight.
       - name: Smoke test
         env:
-          URL: ${{ steps.preview.outputs.url || steps.deploy.outputs.url }}
+          URL: ${{ steps.preview.outputs.url || steps.staging.outputs.url || steps.deploy.outputs.url }}
         run: |
           set -euo pipefail
           # A fresh alias can take a few seconds to route, so retry before failing.
@@ -393,27 +413,11 @@ jobs:
             | tr -d '\r' | awk -F': ' 'tolower($1)=="access-control-allow-origin"{print $2}')
           if [ "$allow" != "$URL" ]; then echo "::error::Core CORS does not allow $URL"; exit 1; fi
           echo "cors: Core allows $URL"
-      - name: Alias staging
-        if: github.event_name == 'push' && github.ref_name == 'staging'
-        env:
-          STAGING_ALIAS: ${{ vars.VERCEL_STAGING_ALIAS }}
-          URL: ${{ steps.deploy.outputs.url }}
-        # Calls the REST API directly: `vercel alias set` first loads the token's user, which
-        # fails with "User not found" for this team token even though deploys succeed.
-        run: |
-          set -euo pipefail
-          api=https://api.vercel.com
-          auth="Authorization: Bearer $VERCEL_TOKEN"
-          id=$(curl -fsS -H "$auth" "$api/v13/deployments/${URL#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
-          curl -fsS -X POST -H "$auth" -H "Content-Type: application/json" \
-            -d "$(jq -n --arg alias "$STAGING_ALIAS" '{alias: $alias}')" \
-            "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID"
-          echo "alias: https://$STAGING_ALIAS -> $URL"
       - name: Report URL
         if: always() && steps.deploy.outputs.url != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          URL: ${{ steps.preview.outputs.url || steps.deploy.outputs.url }}
+          URL: ${{ steps.preview.outputs.url || steps.staging.outputs.url || steps.deploy.outputs.url }}
           PR: ${{ github.event.pull_request.number }}
         run: |
           echo "Web deploy: $URL" >> "$GITHUB_STEP_SUMMARY"
