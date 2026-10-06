@@ -47,6 +47,14 @@ public class IdempotencyServiceImpl implements IdempotencyService {
     @Transactional(propagation = Propagation.MANDATORY)
     public <T> T execute(Long shopId, Long userId, String operation, String key, Object request,
             String resourceType, Function<T, Long> resourceId, Class<T> responseType, Supplier<T> action) {
+        return execute(shopId, userId, operation, key, request, resourceType, resourceId, responseType, 201, action);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public <T> T execute(Long shopId, Long userId, String operation, String key, Object request,
+            String resourceType, Function<T, Long> resourceId, Class<T> responseType, int responseStatus,
+            Supplier<T> action) {
         if (!StringUtils.hasText(key) || key.length() > 255) {
             throw new BusinessException(ErrorCode.INVALID_IDEMPOTENCY_KEY);
         }
@@ -71,7 +79,7 @@ public class IdempotencyServiceImpl implements IdempotencyService {
 
         T response = action.get();
         repository.complete(shopId, operation, normalizedKey, resourceType,
-                resourceId.apply(response), 201, toJson(response));
+                resourceId.apply(response), responseStatus, toJson(response));
         return response;
     }
 

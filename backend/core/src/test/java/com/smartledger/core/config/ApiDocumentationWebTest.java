@@ -5,10 +5,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.smartledger.core.controller.AuthController;
+import com.smartledger.core.controller.ProductController;
 import com.smartledger.core.exception.RestAuthenticationEntryPoint;
 import com.smartledger.core.security.BearerTokenAuthenticationFilter;
 import com.smartledger.core.security.FirebaseTokenVerifier;
 import com.smartledger.core.service.AuthSessionService;
+import com.smartledger.core.service.ProductService;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,7 +30,7 @@ class ApiDocumentationWebTest {
     @Configuration(proxyBeanMethods = false)
     @EnableAutoConfiguration(exclude = {DataSourceAutoConfiguration.class, HibernateJpaAutoConfiguration.class,
             FlywayAutoConfiguration.class})
-    @Import({SecurityConfiguration.class, OpenApiConfiguration.class, AuthController.class,
+    @Import({SecurityConfiguration.class, OpenApiConfiguration.class, AuthController.class, ProductController.class,
             BearerTokenAuthenticationFilter.class, RestAuthenticationEntryPoint.class})
     static class TestApplication { }
 
@@ -36,6 +38,7 @@ class ApiDocumentationWebTest {
         @Autowired protected MockMvc mvc;
         @MockitoBean protected FirebaseTokenVerifier verifier;
         @MockitoBean protected AuthSessionService service;
+        @MockitoBean protected ProductService products;
         @MockitoBean(name = "dbHealthIndicator") protected HealthIndicator database;
 
         @Test
@@ -50,6 +53,17 @@ class ApiDocumentationWebTest {
     @SpringBootTest(classes = TestApplication.class, properties = {"OPENAPI_ENABLED=true", "SWAGGER_UI_ENABLED=true"})
     @AutoConfigureMockMvc
     class Enabled extends SecurityChecks {
+        @Test
+        void productSchemasSeparateInitialStockFromPatchAndDocumentStockIn() throws Exception {
+            mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.paths['/api/v1/products/{productId}/stock-in'].post.responses['200']").exists())
+                    .andExpect(jsonPath("$.components.schemas.ProductStockInRequest.required[0]").value("quantity"))
+                    .andExpect(jsonPath("$.components.schemas.ProductPatchRequest.properties.stockQuantity").doesNotExist())
+                    .andExpect(jsonPath("$.components.schemas.ProductWriteRequest.properties.stockQuantity").exists())
+                    .andExpect(jsonPath("$.components.schemas.ProductResponse.properties.stockQuantity").exists());
+            verifyNoInteractions(products);
+        }
+
         @Test
         void openApiAndSwaggerAreAvailableForStaging() throws Exception {
             mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())

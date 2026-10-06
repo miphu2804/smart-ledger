@@ -5,7 +5,7 @@
 // ID: BIGINT IDENTITY → Java Long
 // Money: BIGINT VND
 // Time: TIMESTAMPTZ, UTC internally; Core JSON displays +07:00
-// Core schema: Flyway V1-V11 (business tables, idempotency, shared OWNER/ADMIN audit_logs).
+// Core schema: Flyway V1-V12 (business tables, idempotency, shared OWNER/ADMIN audit_logs, cost snapshot).
 // Core audit alignment: staging b1de421c461d, 2026-10-06; AI sections unchanged.
 // AI schema: supabase/migrations AI baseline (chat_conversations, chat_messages, pgvector, ai_read views).
 // ai_requests and notification tables are planned and not created by any migration yet.
@@ -392,6 +392,7 @@ Table sale_items {
   quantity numeric(15,3) [not null]
   unit_price_vnd bigint [not null]
   line_total_vnd bigint [not null]
+  estimated_cost_vnd bigint
 
   created_at timestamptz [not null, default: `now()`]
 
@@ -400,7 +401,7 @@ Table sale_items {
     product_id
   }
 
-  Note: 'product_id is null for a custom item; name/unit snapshots remain required. stock_deducted is true only when stock was deducted at confirmation, false for custom/untracked items. NULL means unknown historical stock movement; never assume false or automatically restock.'
+  Note: 'product_id is null for a custom item; name/unit snapshots remain required. stock_deducted is true only when stock was deducted at confirmation, false for custom/untracked items. Its NULL means unknown historical stock movement. estimated_cost_vnd is total snapshotted catalog cost for the line; NULL means unknown/custom/history before V12 and must not be replaced with current Product cost or a guessed fallback.'
 }
 
 

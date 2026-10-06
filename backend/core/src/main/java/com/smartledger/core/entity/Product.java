@@ -25,6 +25,8 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Product {
+    private static final BigDecimal MAX_STOCK = new BigDecimal("999999999999.999");
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -120,6 +122,20 @@ public class Product {
             throw new BusinessException(ErrorCode.PRODUCT_STOCK_INSUFFICIENT);
         }
         stockQuantity = stockQuantity.subtract(quantity);
+    }
+
+    public void addStock(BigDecimal quantity) {
+        if (quantity == null || quantity.signum() <= 0) {
+            throw new IllegalArgumentException("Stock-in quantity must be positive");
+        }
+        if (!tracked || stockQuantity == null) {
+            throw new BusinessException(ErrorCode.PRODUCT_STOCK_IN_UNAVAILABLE);
+        }
+        BigDecimal result = stockQuantity.add(quantity);
+        if (result.compareTo(MAX_STOCK) > 0) {
+            throw new BusinessException(ErrorCode.PRODUCT_STOCK_OVERFLOW);
+        }
+        stockQuantity = result;
     }
 
     public void restoreStock(BigDecimal quantity) {

@@ -25,6 +25,7 @@ import com.smartledger.core.repository.ExpenseRepository;
 import com.smartledger.core.repository.PaymentRepository;
 import com.smartledger.core.repository.SaleRepository;
 import com.smartledger.core.repository.SaleRefundRepository;
+import com.smartledger.core.repository.ReportAggregationRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.impl.ExpenseServiceImpl;
 import com.smartledger.core.service.impl.ReportServiceImpl;
@@ -48,12 +49,13 @@ class ExpenseReportServiceTest {
     private final PaymentRepository paymentRepository = Mockito.mock(PaymentRepository.class);
     private final DebtRepository debtRepository = Mockito.mock(DebtRepository.class);
     private final SaleRefundRepository refundRepository = Mockito.mock(SaleRefundRepository.class);
+    private final ReportAggregationRepository aggregationRepository = Mockito.mock(ReportAggregationRepository.class);
     private final IdempotencyService idempotencyService = Mockito.mock(IdempotencyService.class);
     private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
     private final ExpenseService expenseService = new ExpenseServiceImpl(shopService, expenseRepository,
             idempotencyService, auditLogService);
     private final ReportService reportService = new ReportServiceImpl(shopService, saleRepository,
-            paymentRepository, expenseRepository, debtRepository, refundRepository);
+            paymentRepository, expenseRepository, debtRepository, refundRepository, aggregationRepository);
     private final VerifiedFirebaseToken token = new VerifiedFirebaseToken("uid", null, false, null, null, null);
 
     @BeforeEach

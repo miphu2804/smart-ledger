@@ -114,6 +114,7 @@ class CoreBusinessContractWebTest {
         when(products.list(TOKEN, "7")).thenReturn(List.of(product));
         when(products.getById(TOKEN, "7", "5")).thenReturn(product);
         when(products.patch(eq(TOKEN), eq("7"), eq("5"), any())).thenReturn(product);
+        when(products.stockIn(eq(TOKEN), eq("7"), eq("5"), eq("contract-stock-in"), any())).thenReturn(product);
         var draft = new SaleDraftResponse(11L, 7L, "Customer", null, 0L, 100_000L, 40_000L,
                 PaymentMethod.CASH, DraftStatus.DRAFT, AT.plusMonths(1), null, List.of(
                 new SaleDraftItemResponse(30L, 5L, "Tea", "cup", BigDecimal.ONE, 50_000L, 50_000L),
@@ -168,6 +169,7 @@ class CoreBusinessContractWebTest {
                 new Operation("GET", "/api/v1/products", null, 200, "[" + PRODUCT_JSON + "]"),
                 new Operation("GET", "/api/v1/products/5", null, 200, PRODUCT_JSON),
                 new Operation("PATCH", "/api/v1/products/5", "{\"sellingPriceVnd\":50000}", 200, PRODUCT_JSON),
+                new Operation("POST", "/api/v1/products/5/stock-in", "{\"quantity\":2.125,\"reason\":\"Delivery\"}", 200, PRODUCT_JSON),
                 new Operation("DELETE", "/api/v1/products/5", null, 204, null),
                 new Operation("POST", "/api/v1/sale-drafts", DRAFT_BODY, 201, DRAFT_JSON),
                 new Operation("GET", "/api/v1/sale-drafts", null, 200, "[" + DRAFT_JSON + "]"),
@@ -187,6 +189,7 @@ class CoreBusinessContractWebTest {
     private MockHttpServletRequestBuilder call(Operation op) {
         var call = request(HttpMethod.valueOf(op.method()), op.path());
         if (op.path().endsWith("/void")) { call.header("Idempotency-Key", "contract-void"); }
+        if (op.path().endsWith("/stock-in")) { call.header("Idempotency-Key", "contract-stock-in"); }
         if (op.body() != null) { call.contentType(MediaType.APPLICATION_JSON).content(op.body()); }
         return call;
     }
@@ -229,6 +232,15 @@ class CoreBusinessContractWebTest {
 
     static Stream<Arguments> businessErrors() {
         return Stream.of(
+                Arguments.of("POST", "/api/v1/products/5/stock-in", "{\"quantity\":1}", ErrorCode.PRODUCT_STOCK_IN_UNAVAILABLE),
+                Arguments.of("POST", "/api/v1/products/5/stock-in", "{\"quantity\":1}", ErrorCode.PRODUCT_STOCK_OVERFLOW),
+                Arguments.of("POST", "/api/v1/products/5/stock-in", "{\"quantity\":1}", ErrorCode.PRODUCT_NOT_FOUND),
+                Arguments.of("POST", "/api/v1/products/5/stock-in", "{\"quantity\":1}", ErrorCode.SHOP_ACCESS_DENIED),
+                Arguments.of("POST", "/api/v1/products/5/stock-in", "{\"quantity\":1}", ErrorCode.SHOP_INACTIVE),
+                Arguments.of("POST", "/api/v1/products/5/stock-in", "{\"quantity\":1}", ErrorCode.INVALID_PRODUCT_ID),
+                Arguments.of("POST", "/api/v1/products/5/stock-in", "{\"quantity\":1}", ErrorCode.INVALID_IDEMPOTENCY_KEY),
+                Arguments.of("POST", "/api/v1/products/5/stock-in", "{\"quantity\":1}", ErrorCode.IDEMPOTENCY_KEY_CONFLICT),
+                Arguments.of("POST", "/api/v1/products/5/stock-in", "{\"quantity\":1}", ErrorCode.IDEMPOTENCY_KEY_EXPIRED),
                 Arguments.of("GET", "/api/v1/categories/3", null, ErrorCode.CATEGORY_NOT_FOUND),
                 Arguments.of("GET", "/api/v1/products/5", null, ErrorCode.PRODUCT_NOT_FOUND),
                 Arguments.of("GET", "/api/v1/sale-drafts/11", null, ErrorCode.DRAFT_NOT_FOUND),
@@ -252,6 +264,7 @@ class CoreBusinessContractWebTest {
         // Configure all affected entry points: this test checks HTTP mapping, not service policy.
         when(categories.getById(TOKEN, "7", "3")).thenThrow(failure);
         when(products.getById(TOKEN, "7", "5")).thenThrow(failure);
+        when(products.stockIn(eq(TOKEN), eq("7"), eq("5"), eq("contract-stock-in"), any())).thenThrow(failure);
         when(drafts.getById(TOKEN, "7", "11")).thenThrow(failure);
         when(drafts.replace(eq(TOKEN), eq("7"), eq("11"), any())).thenThrow(failure);
         doThrow(failure).when(drafts).cancel(TOKEN, "7", "11");
@@ -272,6 +285,16 @@ class CoreBusinessContractWebTest {
 
     static Stream<Arguments> invalidBodies() {
         return Stream.of(
+                Arguments.of("POST", "/api/v1/products/5/stock-in", "{}", "validation_failed"),
+                Arguments.of("POST", "/api/v1/products/5/stock-in", "{\"quantity\":null}", "validation_failed"),
+                Arguments.of("POST", "/api/v1/products/5/stock-in", "{\"quantity\":0}", "validation_failed"),
+                Arguments.of("POST", "/api/v1/products/5/stock-in", "{\"quantity\":-1}", "validation_failed"),
+                Arguments.of("POST", "/api/v1/products/5/stock-in", "{\"quantity\":0.0001}", "validation_failed"),
+                Arguments.of("POST", "/api/v1/products/5/stock-in", "{\"quantity\":1000000000000}", "validation_failed"),
+                Arguments.of("POST", "/api/v1/products/5/stock-in", "{\"quantity\":1,\"reason\":\"" + "a".repeat(501) + "\"}", "validation_failed"),
+                Arguments.of("PATCH", "/api/v1/products/5", "{\"stockQuantity\":10}", "invalid_request"),
+                Arguments.of("PATCH", "/api/v1/products/5", "{\"stockQuantity\":null}", "invalid_request"),
+                Arguments.of("PATCH", "/api/v1/products/5", "{\"name\":\"Tea\",\"stockQuantity\":10}", "invalid_request"),
                 Arguments.of("PUT", "/api/v1/categories/3", "{\"name\":\" \"}", "validation_failed"),
                 Arguments.of("PUT", "/api/v1/sale-drafts/11", "{\"items\":[]}", "validation_failed"),
                 Arguments.of("POST", "/api/v1/sale-drafts", "{\"items\":[{\"quantity\":0,\"unitPriceVnd\":1}]}", "validation_failed"),
@@ -318,6 +341,27 @@ class CoreBusinessContractWebTest {
                         .header("X-Shop-Id", "7").contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isMethodNotAllowed());
         verifyNoInteractions(categories, products, drafts, sales, payments, voids);
+    }
+
+    @Test
+    void stockInRequiresIdempotencyKeyBeforeInvokingBusinessService() throws Exception {
+        mvc.perform(request(HttpMethod.POST, "/api/v1/products/5/stock-in")
+                        .header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":10}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("missing_required_header"))
+                .andExpect(jsonPath("$.details[0].field").value("Idempotency-Key"));
+        verifyNoInteractions(categories, products, drafts, sales, payments, voids);
+    }
+
+    @Test
+    void legacyStockPatchExplainsTheReplacementEndpoint() throws Exception {
+        mvc.perform(request(HttpMethod.PATCH, "/api/v1/products/5")
+                        .header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"stockQuantity\":null}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("invalid_request"))
+                .andExpect(jsonPath("$.message").value("stockQuantity cannot be patched; use the stock-in endpoint."))
+                .andExpect(jsonPath("$.details[0].field").value("stockQuantity"));
+        verifyNoInteractions(products);
     }
 
     @Test

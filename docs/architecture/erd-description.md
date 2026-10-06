@@ -4,7 +4,7 @@
 
 This ERD describes the target PostgreSQL database for **SmartLedger Phase 1**, an AI-assisted bookkeeping system for small businesses. It includes planned tables and relationships that are not yet in Core's Flyway migrations.
 
-The logical ERD includes authentication, shops, products, customers, drafts, sales, payments, refunds, debts, expenses, Agent chat history, AI request traces, idempotency, and audit logs. Core migrations V1–V11 implement the business tables, idempotency and shared OWNER/ADMIN audit logs; AI migrations `001`–`004` in `backend/ai/migrations` create the chat tables, enable `pgvector` and add read-only views for the Agent; migration `005` on branch `feat/ai-restock-insight` adds the `v_sales` and `v_sale_items` views. `ai_requests` and the notification tables remain target design. This does not assert deployment.
+The logical ERD includes authentication, shops, products, customers, drafts, sales, payments, refunds, debts, expenses, Agent chat history, AI request traces, idempotency, and audit logs. Core migrations V1–V12 implement the business tables, idempotency, shared OWNER/ADMIN audit logs, and the nullable sale-item estimated-cost snapshot; AI migrations `001`–`004` in `backend/ai/migrations` create the chat tables, enable `pgvector` and add read-only views for the Agent; migration `005` on branch `feat/ai-restock-insight` adds the `v_sales` and `v_sale_items` views. `ai_requests` and the notification tables remain target design. This does not assert deployment.
 
 Business decisions are owned by the [BRD](../product/business-requirements.md) and [PRD](../product/product-requirements.md); endpoint/JSON details are owned by the [API contract](../contracts/api-contracts.md). Core audit/schema alignment reviewed against `staging` commit `b1de421c461d59473b3bb73aae103027afd67a89` on 2026-10-06; AI sections retain their previous snapshot and are outside this review.
 
@@ -21,7 +21,7 @@ A sale record in this MVP is an internal business record. It is **not an electro
 
 - **shops**: Stores business information. One OWNER can own multiple shops. `ACTIVE` shops can operate; `INACTIVE` shops can carry an `inactive_reason` for the OWNER, while `ARCHIVED` shops record `archived_at` and may have an `archived_reason`.
 - **categories**: Groups products within a shop, not shops by business industry. Cannot archive while active products remain.
-- **products**: Stores shop-specific products, selling price, cost price, unit, and simple stock quantity.
+- **products**: Stores shop-specific products, selling price, cost price, unit, and simple stock quantity. On `feat/core-stock-in`, stock-in adds a positive quantity to the locked current balance; PATCH no longer accepts an absolute stock_quantity. Enabling tracking initializes zero, keeping tracking preserves the balance, and disabling tracking clears it. Initial stock on creation is unchanged.
 - **customers**: Stores a minimal customer directory for debt tracking. Names and normalized phone numbers are not unique; customer ID identifies the shared history. Phone is optional; Core never automatically merges matching names/phones.
 
 ### Drafts
@@ -34,7 +34,7 @@ Drafts do not affect revenue, stock, payments, or debts until confirmed.
 ### Sales, Payments, and Debts
 
 - **sales**: Stores CONFIRMED/VOIDED sale history and void time, user, and reason. Voiding does not erase the collection history in paid_vnd/payment_status.
-- **sale_items**: Stores product references when available, quantities, name/unit/price snapshots, and line totals. Custom sale items retain a null `product_id` and do not deduct catalog stock. Nullable `stock_deducted` snapshots whether confirmation actually deducted stock: true/false for new items, NULL for unknown historical movement.
+- **sale_items**: Stores product references when available, quantities, name/unit/price snapshots, line totals and nullable `estimated_cost_vnd`. Confirmed catalog items snapshot `costPriceVnd × quantity`, rounded HALF_UP to VND; custom items, products without cost and history before V12 remain NULL and are never backfilled from today's product. Nullable `stock_deducted` snapshots whether confirmation actually deducted stock: true/false for new items, NULL for unknown historical movement.
 - **payments**: Append-only history of initial collection and subsequent repayments; never delete or rewrite payments to represent refunds.
 - **sale_refunds**: Zero or one full refund per sale, with positive amount, CASH/TRANSFER method, optional transfer reference, refunding user, and timestamp. Amount is the money actually collected, not the sale total or cancelled debt; zero-paid void has no refund row.
 - **debts**: Stores original/outstanding debt and OPEN/SETTLED/VOIDED status. V9 adds nullable voided_at/cancelled_vnd to preserve the time and amount of unpaid debt cancelled by sale void. Already SETTLED debts retain settled_at/status and have no void audit.
@@ -49,7 +49,7 @@ Drafts do not affect revenue, stock, payments, or debts until confirmed.
 - **chat_messages**: USER/ASSISTANT messages of a conversation; folded messages stay for history search. `ai_request_id` has no foreign key until `ai_requests` exists.
 - **ai_read views**: the AI baseline creates `ai_read.v_shop_profile`, `v_categories` and `v_products` for the Agent's read-only shop-data tool, and `v_sales` and `v_sale_items` for confirmed-sales questions and restock suggestions. They are views, not tables.
 - **ai_requests**: Planned table for AI request status, model/version, result, errors, and media object references; not yet created by any migration.
-- **api_idempotency_keys**: Protects exactly expense creation, debt repayment, and sale void. Confirmation replays by draft ID instead. Other create operations are not covered; default TTL is 30 days and no cleanup job exists.
+- **api_idempotency_keys**: Protects expense creation, debt repayment, sale void, and product stock-in. Stock-in uses operation PRODUCT_STOCK_IN, resource PRODUCT and response_status 200; its hash includes product ID, canonical quantity and normalized reason. Confirmation replays by draft ID instead. Other create operations are not covered; default TTL is 30 days and no cleanup job exists.
 - **audit_logs**: V10 creates append-only history of successful OWNER/ADMIN writes; V11 extends the same table for ADMIN support reads. Stores actor_user_id/actor_role, action/entity_type, optional entity_id/shop_id where the event permits, outcome SUCCESS, optional reason/idempotency_key, server request_id, safe metadata and created_at. UPDATE/DELETE/TRUNCATE are rejected by triggers. There is no admin_access_logs table; differing visibility is enforced by action/actor-scoped queries and explicit API projections, not by a second physical store.
 
 ### Notifications
@@ -163,7 +163,7 @@ Confirmed Sale or Cancelled Draft
 - paid_vnd equals the sum of all sale payments and remains collection history after void. For debt, original_vnd = debt-repayment payments + outstanding_vnd + COALESCE(cancelled_vnd, 0); initial payments are not part of the debt's original balance. Refunds are a separate outgoing-money history, not negative payments.
 - Drafts do not affect reports, stock, revenue, or debt until confirmed.
 - AI media is stored as an object key/reference, not as raw media in PostgreSQL.
-- Idempotency reservation, business mutations, and saved replay result commit/rollback together for expense creation, debt repayment, and sale void. Sale draft confirmation returns the existing sale on retry without using this table.
+- Idempotency reservation, business mutations, and saved replay result commit/rollback together for expense creation, debt repayment, sale void, and stock-in. Sale draft confirmation returns the existing sale on retry without using this table.
 - Audit is evidence, not a replacement for money/debt/inventory source tables. Administrative GET retries are new audited accesses, not idempotent money-operation replays. old_data/new_data/ip_address are retained nullable legacy schema columns; Core does not populate full snapshots or IP headers in them.
 - Electronic invoices, full inventory management, CRM, OCR documents, and store staff roles are deferred to later phases.
 
@@ -192,6 +192,7 @@ To keep the ERD clean in Phase 1 without nested composite foreign keys, Core ser
 
 ## 7. Migration Alignment
 
+- Stock-in on `feat/core-stock-in` reuses products, api_idempotency_keys (V7) and STOCK_ADJUSTED in audit_logs (V10/V11). No new column/table/migration or DBML structure change: STOCK_IN is an application metadata source, not a new DB enum. This branch does not assert staging/mobile deployment.
 - V8 only permits NULL sale_items.product_id for custom items while keeping the FK for non-null values; it does not create catalog products.
 - V9 adds sale_refunds (sale/user FKs, unique sale_id, positive amount/method checks, refund-time index), nullable sale_items.stock_deducted, and nullable debts.voided_at/cancelled_vnd with lifecycle checks. Existing sales void fields are reused, not recreated.
 - Existing historical stock snapshots remain NULL; do not invent stock deductions. Existing OPEN/SETTLED data remains intact. V9 can adopt valid Hibernate-created local columns/refund tables, but orphan/invalid refund or unaudited legacy VOIDED rows stop the migration rather than being silently repaired.

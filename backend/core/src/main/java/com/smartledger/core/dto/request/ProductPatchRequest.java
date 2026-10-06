@@ -1,14 +1,15 @@
 package com.smartledger.core.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSetter;
 import com.fasterxml.jackson.annotation.Nulls;
-import jakarta.validation.constraints.Digits;
+import com.fasterxml.jackson.core.JsonLocation;
+import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
-import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.Set;
 import lombok.Getter;
@@ -44,10 +45,6 @@ public class ProductPatchRequest {
     private Long costPriceVnd;
 
     private Boolean tracked;
-
-    @PositiveOrZero
-    @Digits(integer = 12, fraction = 3)
-    private BigDecimal stockQuantity;
 
     public boolean hasField(String field) {
         return providedFields.contains(field);
@@ -101,9 +98,12 @@ public class ProductPatchRequest {
         tracked = value;
     }
 
-    @JsonSetter("stockQuantity")
-    public void setStockQuantity(BigDecimal value) {
-        providedFields.add("stockQuantity");
-        stockQuantity = value;
+    @JsonAnySetter
+    public void rejectRemovedStockField(String field, Object value) throws UnrecognizedPropertyException {
+        // Preserve existing handling of other unknown fields, but never silently accept an old stock write.
+        if ("stockQuantity".equals(field)) {
+            throw new UnrecognizedPropertyException(null, "stockQuantity cannot be patched", JsonLocation.NA,
+                    ProductPatchRequest.class, field, null);
+        }
     }
 }

@@ -34,7 +34,9 @@ class ProductServiceTest {
     private final ProductRepository productRepository = Mockito.mock(ProductRepository.class);
     private final CategoryRepository categoryRepository = Mockito.mock(CategoryRepository.class);
     private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
-    private final ProductService service = new ProductServiceImpl(shopService, productRepository, categoryRepository, auditLogService);
+    private final IdempotencyService idempotencyService = Mockito.mock(IdempotencyService.class);
+    private final ProductService service = new ProductServiceImpl(shopService, productRepository, categoryRepository,
+            auditLogService, idempotencyService);
 
     @BeforeEach
     void authorizeShop() {
@@ -219,16 +221,28 @@ class ProductServiceTest {
     }
 
     @Test
-    void trackedProductCannotClearItsStock() {
+    void enablingStockTrackingStartsAtZeroWithoutAnAbsoluteStockUpdate() {
+        Product product = product();
+        product.replace(null, "Tea", null, null, "cup", 25000L, null, false, null);
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+                .thenReturn(Optional.of(product));
+        ProductPatchRequest request = new ProductPatchRequest();
+        request.setTracked(true);
+
+        ProductResponse response = service.patch(token(), "7", "3", request);
+
+        assertThat(response.tracked()).isTrue();
+        assertThat(response.stockQuantity()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    void keepingStockTrackingEnabledDoesNotResetStock() {
         Product product = product();
         when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
                 .thenReturn(Optional.of(product));
         ProductPatchRequest request = new ProductPatchRequest();
-        request.setStockQuantity(null);
-
-        assertThatThrownBy(() -> service.patch(token(), "7", "3", request))
-                .isInstanceOfSatisfying(BusinessException.class, exception ->
-                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_STOCK_REQUIRED));
+        request.setTracked(true);
+        assertThat(service.patch(token(), "7", "3", request).stockQuantity()).isEqualByComparingTo("10.000");
     }
 
     @Test
