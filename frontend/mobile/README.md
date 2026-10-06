@@ -33,7 +33,7 @@ npm run export:web      # build web tĩnh ra dist/
 | `/(tabs)/sales` | Bán hàng: vào thẳng danh mục, chọn món và xem giỏ; Zen ring (kéo thả, dính cạnh trái/phải, giữ vị trí qua các tab) mở Hỏi đáp, Đọc đơn hoặc Báo cáo hôm nay |
 | `/(tabs)/more` | Quản lý: hồ sơ, báo cáo, hàng hoá, chi phí, công nợ, cài đặt và đăng xuất |
 | `/expenses` | Chi phí theo tháng, cơ cấu chi, thêm chi phí bằng giọng nói / nhập tay |
-| `/voice` | Đọc đơn: nhập văn bản hoặc giữ nút mic, hỏi thêm món lạ vào danh mục, sửa số lượng. Mic chỉ nhận giọng nói trên web (Web Speech API `vi-VN`); trên native nút mic phát lại câu mẫu |
+| `/voice` | Đọc đơn: nhập văn bản hoặc giữ nút mic, hỏi thêm món lạ vào danh mục, sửa số lượng. Mic: web dùng Web Speech API (`vi-VN`); Android dùng model sherpa-onnx chạy trên máy (xem “Nhận dạng giọng nói trên Android”), không còn câu mẫu giả. Không có gì hỗ trợ thì app báo rõ và dùng nút Nhập tay |
 | `/pos` | Chọn hàng nhanh dạng lưới, giỏ hàng, thêm nhanh mặt hàng vào danh mục |
 | `/checkout` | Thanh toán: tiền mặt (tiền thối), chuyển khoản (QR minh hoạ), ghi nợ |
 | `/invoice/[id]` | Chi tiết đơn bán nội bộ: xem đơn, void toàn bộ và xem khoản hoàn; chưa có in/sửa sale |
@@ -58,7 +58,16 @@ npm run export:web      # build web tĩnh ra dist/
 - `lấy 1 chục trứng với 2 gói mì`
 - `bán 1 hộp sữa chua nếp cẩm 12k` → món chưa có, app hỏi có thêm vào danh mục không
 
-Nút “Dùng câu gợi ý” lần lượt điền các câu trong `voiceSamples` (`src/data/mock.ts`). Câu nhận được từ mic cũng đi qua cùng `parseOrder()`; app chưa gọi AI để nhận diện đơn. `src/sst/` là module nhận dạng giọng nói on-device chưa được màn nào dùng.
+Chữ nhận được từ mic (hay gõ tay) đi qua `parseOrder()` (`src/lib/parseOrder.ts`); app chưa gọi AI để nhận diện đơn. `parseOrder` chỉ tách món ở dấu phẩy và các từ nối (`và`, `với`, `thêm`, `kèm`, `cùng`, `nha`, `nhé`). Model giọng nói xuất câu liền, không dấu câu, nên “hai cà phê sữa một bánh mì thịt” bị gộp thành một món; nói có từ nối (“hai cà phê sữa **và** một bánh mì thịt”) thì tách đúng. `src/sst/` là khung cũ chưa chạy model thật và chưa màn nào dùng; nhận dạng giọng nói đang chạy nằm ở `src/lib/speech/`.
+
+### Nhận dạng giọng nói trên Android
+
+Màn Đọc đơn nhận giọng nói trên Android bằng model tiếng Việt streaming Zipformer chạy ngay trên máy (thư viện `react-native-sherpa-onnx`, kèm đọc mic native). Code ở `src/lib/speech/` (`sherpaEngine.ts`; phần thuần để kiểm thử ở `core.ts`).
+
+- **Cần bản dev client mới:** thư viện có mô-đun native, nên phải build lại dev client (`npx eas-cli build --profile dev-client --platform android`) sau khi cài. Bản cũ chưa có mô-đun thì màn Đọc đơn báo “chưa hỗ trợ ghi âm giọng nói” thay vì sập.
+- **Model không nằm trong git** (49 MB). File ở `assets/models/` (xem `assets/models/README.md`); app tải về bộ nhớ của app ở lần đầu mở màn Đọc đơn từ `EXPO_PUBLIC_STT_MODEL_URL`. Khi phát triển chạy `node scripts/serve-stt-model.js` để phục vụ thư mục đó, rồi đặt `EXPO_PUBLIC_STT_MODEL_URL=http://10.0.2.2:8090/` (emulator) hoặc `http://<IP máy tính>:8090/` (điện thoại thật, cần mở cổng 8090 trên tường lửa).
+- **Quyền micro:** app xin quyền khi mở màn Đọc đơn. Khi giữ nút mic có thanh “Mức mic” đo từ micro thật; không ra chữ thì app báo “micro không thu được âm thanh” hoặc “có tiếng nhưng chưa nhận ra chữ”.
+- **Chưa kiểm tra / chưa làm:** iOS; hotword từ menu (`bpe.model`); tinh chỉnh thời gian ngắt câu; Android 15+ yêu cầu thư viện native căn lề 16 KB khi đưa lên Google Play (cần kiểm tra các file `.so` của sherpa-onnx).
 
 ## Cấu trúc
 
@@ -77,7 +86,8 @@ src/
   lib/mockCore.ts       giả lập các endpoint Core trong bộ nhớ
   lib/useCoreData.ts    tải đơn, sản phẩm, nợ, chi phí từ Core cho Home, Quản lý, Phân tích, Bán chạy, Thông báo
   lib/checkoutSession.ts giữ đơn nháp giữa các lần bấm thanh toán để thử lại không ghi trùng sale
-  sst/                  nhận dạng giọng nói on-device, chưa được màn nào dùng
+  lib/speech/           nhận dạng giọng nói trên máy (Android): tải model, đọc mic, sherpa-onnx; core.ts là phần thuần
+  sst/                  khung nhận dạng giọng nói cũ (chưa chạy model thật), chưa được màn nào dùng
   components/           UI kit, biểu đồ, logo, toast, QR minh hoạ
 ```
 

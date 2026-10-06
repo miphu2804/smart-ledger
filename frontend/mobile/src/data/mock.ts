@@ -569,15 +569,6 @@ export const mockDebts: Debt[] = [
   },
 ];
 
-/** Câu nói mẫu dùng cho màn "Nói để lên đơn" (giả lập nhận diện giọng nói). */
-export const voiceSamples = [
-  'Cho cô 2 ổ bánh mì thịt, 1 ly cà phê sữa đá với 3 chai nước suối nha',
-  'Bán 1 ký ổi 30 nghìn',
-  '2 ly cà phê sữa 50 nghìn, thêm 1 trà đá',
-  'Lấy 1 chục trứng với 2 gói mì',
-  'Bán 1 hộp sữa chua nếp cẩm 12 nghìn',
-];
-
 export const expenseVoiceSamples = [
   'Nhập bánh mì với nguyên liệu hết 850 nghìn',
   'Trả tiền điện tháng này 420 nghìn',

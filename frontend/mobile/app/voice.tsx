@@ -21,13 +21,13 @@ import { AddItemSheet } from '../src/components/AddItemSheet';
 
 import { useToast } from '../src/components/brand';
 import { Button, Dialog, Field, Row, T } from '../src/components/ui';
-import { voiceSamples } from '../src/data/mock';
 import type { LineItem, ProductView } from '../src/data/types';
 import { productApi } from '../src/lib/catalogApi';
 import { errorMessage } from '../src/lib/errors';
 import { expenseApi } from '../src/lib/expenseApi';
 import { triggerFeedback } from '../src/lib/feedback';
 import { abbr, hashIndex, hhmm, vnd } from '../src/lib/format';
+import { type PrepareProgress, type SpeechSession, speechEngine } from '../src/lib/speech';
 import { type ParsedExpenseItem, parseOrder } from '../src/lib/parseOrder';
 import { itemsTotal } from '../src/lib/stats';
 import { getProductImage } from '../src/lib/productImages';
@@ -292,7 +292,17 @@ function CentralVoiceOrb({
   );
 }
 
-let sampleCursor = 0;
+/** Trình duyệt có Web Speech API không (chỉ web; trên Android dùng `speechEngine` chạy model ngay trên máy). */
+function hasWebSpeech(): boolean {
+  return typeof window !== 'undefined' && !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+}
+
+/** Trạng thái model giọng nói trên máy (chỉ dùng khi không có Web Speech). */
+interface SttStatus {
+  state: 'idle' | 'preparing' | 'ready' | 'error';
+  percent: number;
+  message: string;
+}
 
 function inferAgentEmotion(text: string): Msg['emotion'] {
   const s = text.toLowerCase();
@@ -314,6 +324,12 @@ export default function Voice() {
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const recognitionRef = useRef<any>(null);
   const fullTranscriptRef = useRef('');
+  const sessionRef = useRef<SpeechSession | null>(null);
+  /** Người dùng đã thả nút trước khi micro kịp bật (hộp thoại xin quyền, nạp model...): bỏ phiên vừa mở xong. */
+  const releasedRef = useRef(false);
+  /** Mức mic lớn nhất trong lần ghi này, để báo "micro không thu được tiếng" khi không nhận ra chữ nào. */
+  const peakLevelRef = useRef(0);
+  const mountedRef = useRef(true);
 
   // Hội thoại và đơn bắt đầu trống: đoạn chat mẫu "Đã ghi 8 Sting" cùng món id 101/102 không có trong Core, nên nói
   // đã ghi khi chưa ghi gì và chốt đơn với chúng sẽ lỗi hoặc bán nhầm hàng khác.
@@ -331,6 +347,10 @@ export default function Voice() {
 
   const [recording, setRecording] = useState(false);
   const [partial, setPartial] = useState('');
+  /** Đang thu bằng micro native (không phải Web Speech) và mức âm đo được 0..1. */
+  const [nativeListening, setNativeListening] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
+  const [stt, setStt] = useState<SttStatus>({ state: 'idle', percent: 0, message: '' });
   const [manualText, setManualText] = useState('');
   const [showManualInput, setShowManualInput] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -365,13 +385,41 @@ export default function Voice() {
     () => products.map((p) => ({ id: p.id, name: p.name, price: p.sellingPriceVnd })),
     [products],
   );
+  // Tải model giọng nói (lần đầu) và nạp vào bộ nhớ ngay khi mở màn hình, để lúc giữ nút mic là dùng được liền.
+  const prepareSpeech = useCallback(() => {
+    if (hasWebSpeech() || !speechEngine.supported) return;
+    setStt({ state: 'preparing', percent: 0, message: '' });
+    speechEngine
+      .prepare((p: PrepareProgress) => {
+        if (mountedRef.current) setStt((s) => ({ ...s, state: 'preparing', percent: p.percent }));
+      })
+      .then(() => mountedRef.current && setStt({ state: 'ready', percent: 100, message: '' }))
+      .catch((e) => {
+        if (mountedRef.current) setStt({ state: 'error', percent: 0, message: e instanceof Error ? e.message : String(e) });
+      });
+    // Xin quyền micro từ bây giờ để hộp thoại hệ thống không hiện giữa lúc đang giữ nút.
+    speechEngine.requestPermission().catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    mountedRef.current = true;
+    prepareSpeech();
+    return () => {
+      mountedRef.current = false;
+      const session = sessionRef.current;
+      sessionRef.current = null;
+      if (session) void session.stop().catch(() => undefined);
+    };
+  }, [prepareSpeech]);
+
   const micSignalLevel = useMemo(() => {
     if (!recording) return 0.2;
+    // Micro native: dùng mức âm đo thật. Web Speech không cho biết mức âm nên vẫn ước lượng theo chữ nhận được.
+    if (nativeListening) return 0.2 + 0.8 * micLevel;
     if (!partial.trim()) return 0.46;
     const recentWords = partial.trim().split(/\s+/).slice(-5).join('');
     const hash = recentWords.split('').reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
     return Math.min(1, 0.42 + (hash % 58) / 100);
-  }, [partial, recording]);
+  }, [partial, recording, nativeListening, micLevel]);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
   useEffect(() => {
@@ -462,6 +510,22 @@ export default function Voice() {
 
   const startRecording = () => {
     if (recording) return;
+    const webSpeech = hasWebSpeech();
+    // Không còn câu mẫu giả: không có Web Speech và không có bộ nhận dạng trên máy thì báo rõ, không giả vờ nghe.
+    if (!webSpeech && !speechEngine.supported) {
+      toast('Bản app này chưa hỗ trợ ghi âm giọng nói. Hãy dùng nút Nhập tay.', 'err');
+      return;
+    }
+    if (!webSpeech && !speechEngine.isReady()) {
+      toast(
+        stt.state === 'preparing'
+          ? `Đang tải model giọng nói (${stt.percent}%), thử lại sau ít giây.`
+          : stt.message || 'Model giọng nói chưa sẵn sàng.',
+        'err',
+      );
+      if (stt.state !== 'preparing') prepareSpeech();
+      return;
+    }
     triggerFeedback('selection');
     fullTranscriptRef.current = '';
     setPartial('');
@@ -506,18 +570,84 @@ export default function Voice() {
       }
     }
 
-    const sample = voiceSamples[sampleCursor++ % voiceSamples.length];
-    const words = sample.split(' ');
-    fullTranscriptRef.current = sample;
-    timers.current.forEach(clearTimeout);
-    timers.current = words.map((_, i) =>
-      setTimeout(() => setPartial(words.slice(0, i + 1).join(' ')), 200 * (i + 1)),
-    );
+    if (webSpeech) {
+      setRecording(false);
+      toast('Không bật được nhận dạng giọng nói của trình duyệt. Hãy dùng nút Nhập tay.', 'err');
+      return;
+    }
+
+    // Android: thu micro thật và nhận dạng bằng model chạy trên máy (xem src/lib/speech).
+    releasedRef.current = false;
+    peakLevelRef.current = 0;
+    setMicLevel(0);
+    speechEngine
+      .start({
+        onPartial: (text) => {
+          setPartial(text);
+          fullTranscriptRef.current = text;
+        },
+        onLevel: (level) => {
+          peakLevelRef.current = Math.max(peakLevelRef.current, level);
+          setMicLevel(level);
+        },
+        onError: (message) => toast(message, 'err'),
+      })
+      .then((session) => {
+        if (releasedRef.current || !mountedRef.current) {
+          // Đã thả nút (hoặc rời màn hình) trong lúc micro còn đang bật: bỏ phiên này.
+          void session.stop().catch(() => undefined);
+          return;
+        }
+        sessionRef.current = session;
+        setNativeListening(true);
+      })
+      .catch((e) => {
+        if (!mountedRef.current) return;
+        setRecording(false);
+        setPartial('');
+        toast(e instanceof Error ? e.message : String(e), 'err');
+      });
   };
 
   const finishRecording = (manualTxt?: string) => {
     if (!recording && !manualTxt) return;
     triggerFeedback('selection');
+
+    if (!manualTxt) {
+      releasedRef.current = true;
+      const session = sessionRef.current;
+      if (session) {
+        sessionRef.current = null;
+        setNativeListening(false);
+        setRecording(false);
+        setMicLevel(0);
+        const shown = partial;
+        const peak = peakLevelRef.current;
+        session
+          .stop()
+          .then((text) => {
+            if (!mountedRef.current) return;
+            setPartial('');
+            const finalText = (text || shown).trim();
+            if (finalText) {
+              handleUtterance(finalText);
+              return;
+            }
+            toast(
+              peak < 0.05
+                ? 'Micro không thu được âm thanh (mức mic gần bằng 0). Kiểm tra micro của máy hoặc emulator.'
+                : 'Có tiếng nhưng chưa nhận ra chữ nào. Hãy nói to, rõ và gần micro hơn.',
+              'err',
+            );
+          })
+          .catch((e) => {
+            if (!mountedRef.current) return;
+            setPartial('');
+            toast(`Không xử lý được giọng nói: ${e instanceof Error ? e.message : String(e)}`, 'err');
+          });
+        return;
+      }
+    }
 
     if (recognitionRef.current) {
       try {
@@ -750,6 +880,18 @@ export default function Voice() {
                   <Feather name="mic" size={14} color={voiceTheme.primary} />
                 </View>
               </Row>
+            ) : null}
+
+            {/* Mức mic thật: thanh không nhúc nhích khi nói nghĩa là micro không thu được tiếng */}
+            {recording && nativeListening ? (
+              <View style={styles.micMeterRow} accessibilityLabel={`Mức micro ${Math.round(micLevel * 100)} phần trăm`}>
+                <T size={11} color={voiceTheme.muted}>
+                  Mức mic
+                </T>
+                <View style={styles.micMeter}>
+                  <View style={[styles.micMeterFill, { width: `${Math.round(micLevel * 100)}%` }]} />
+                </View>
+              </View>
             ) : null}
           </View>
         </View>
@@ -1045,8 +1187,21 @@ export default function Voice() {
 
           {/* Subtitle text under Voice Orb */}
           <T w="medium" size={12.5} color={voiceTheme.muted} style={styles.dockSubtitleText}>
-            {recording ? 'Đang lắng nghe… Thả tay để xử lý' : 'Nhấn để ghi âm đơn hàng'}
+            {recording
+              ? 'Đang lắng nghe… Thả tay để xử lý'
+              : stt.state === 'preparing'
+                ? `Đang tải model giọng nói… ${stt.percent}%`
+                : stt.state === 'error'
+                  ? `Chưa dùng được giọng nói: ${stt.message}`
+                  : 'Nhấn để ghi âm đơn hàng'}
           </T>
+          {!recording && stt.state === 'error' ? (
+            <Pressable onPress={prepareSpeech} style={{ alignSelf: 'center', minHeight: 44, justifyContent: 'center' }} hitSlop={8}>
+              <T w="bold" size={12.5} color={voiceTheme.primary}>
+                Thử lại
+              </T>
+            </Pressable>
+          ) : null}
         </View>
       )}
 
@@ -1488,6 +1643,26 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 6,
     marginBottom: 2,
+  },
+  micMeterRow: {
+    alignSelf: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+    marginRight: 38,
+  },
+  micMeter: {
+    width: 120,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+    overflow: 'hidden',
+  },
+  micMeterFill: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: voiceTheme.primary,
   },
 
   // Central Orb Styles
