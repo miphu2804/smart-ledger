@@ -1,0 +1,275 @@
+name: Mobile release
+
+# Manual Android build. It stays out of ci.yml so the Android toolchain (JDK, SDK, NDK, Gradle) is only
+# downloaded when someone starts a build, and so a change here cannot break the CI/CD gates of the backend and web.
+# Run it from the Actions tab (Use workflow from = the branch to build) or with `gh workflow run`.
+# See docs/development/ci-cd.md#android-build.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: GitHub environment to build for; it picks the Firebase config and the allowed branch
+        type: choice
+        required: true
+        default: android-dev
+        options: [android-dev, android-staging, android-production]
+      runner:
+        description: auto uses a free self-hosted machine when one is online, otherwise a GitHub-hosted runner
+        type: choice
+        required: true
+        default: auto
+        options: [auto, github-hosted, self-hosted]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-release-${{ inputs.environment }}-${{ github.ref_name }}
+  cancel-in-progress: false
+
+# Single source of the toolchain: the hosted setup installs these versions and the self-hosted preflight checks them.
+env:
+  NODE_MAJOR: "22"
+  JAVA_MAJOR: "17"
+  ANDROID_PLATFORM: "36"
+  ANDROID_BUILD_TOOLS: 36.0.0
+  ANDROID_NDK: 27.1.12297006
+
+jobs:
+  ### Gate: branch policy and a green CI run, before any runner is used ###
+
+  gate:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Check the branch matches the environment
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$REF_TYPE" != branch ]; then
+            echo "::error::Run this workflow from a branch, not a tag."; exit 1
+          fi
+          case "$ENVIRONMENT" in
+            android-production) want=main ;;
+            android-staging) want=staging ;;
+            *) want="" ;;
+          esac
+          if [ -n "$want" ] && [ "$REF_NAME" != "$want" ]; then
+            echo "::error::$ENVIRONMENT builds only from $want, got $REF_NAME."; exit 1
+          fi
+      # android-dev builds from any branch of this repository, so a pull request can be tested before it merges.
+      - name: Require a green CI run for the commit
+        if: inputs.environment != 'android-dev'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          passed=$(gh run list --repo "$REPO" --workflow ci.yml --commit "$SHA" --status success --json databaseId --jq length)
+          if [ "$passed" -eq 0 ]; then
+            echo "::error::No successful CI run for ${SHA::7}. Wait for CI to pass, or re-run it."; exit 1
+          fi
+
+  ### Pick the runner: a free self-hosted machine, else GitHub-hosted ###
+
+  select-runner:
+    runs-on: ubuntu-24.04
+    outputs:
+      runs_on: ${{ steps.pick.outputs.runs_on }}
+      reason: ${{ steps.pick.outputs.reason }}
+    steps:
+      # Listing runners needs a token with Administration: read; the default GITHUB_TOKEN cannot do it, so without
+      # RUNNERS_READ_TOKEN `auto` always resolves to GitHub-hosted.
+      - name: Pick the runner
+        id: pick
+        env:
+          CHOICE: ${{ inputs.runner }}
+          REPO: ${{ github.repository }}
+          RUNNERS_READ_TOKEN: ${{ secrets.RUNNERS_READ_TOKEN }}
+        run: |
+          hosted='["ubuntu-24.04"]'
+          selfhosted='["self-hosted","android-build"]'
+          pick() { echo "runs_on=$1" >> "$GITHUB_OUTPUT"; echo "reason=$2" >> "$GITHUB_OUTPUT"; echo "Runner: $2"; exit 0; }
+          [ "$CHOICE" = github-hosted ] && pick "$hosted" "chosen: github-hosted"
+          [ "$CHOICE" = self-hosted ] && pick "$selfhosted" "chosen: self-hosted"
+          [ -n "$RUNNERS_READ_TOKEN" ] || pick "$hosted" "auto: RUNNERS_READ_TOKEN not set, fell back to github-hosted"
+          if ! free=$(GH_TOKEN="$RUNNERS_READ_TOKEN" gh api "repos/$REPO/actions/runners" --paginate \
+            --jq '.runners[] | select(.status=="online" and .busy==false and any(.labels[]; .name=="android-build")) | .name' 2>&1); then
+            pick "$hosted" "auto: runner list failed, fell back to github-hosted"
+          fi
+          if [ -n "$free" ]; then
+            pick "$selfhosted" "auto: self-hosted online ($(echo "$free" | head -1))"
+          fi
+          pick "$hosted" "auto: no free self-hosted runner, fell back to github-hosted"
+
+  ### Build ###
+
+  build:
+    needs: [gate, select-runner]
+    runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      # Baked into the bundle at build time, so they are Variables of each environment, not Secrets.
+      EXPO_PUBLIC_USE_MOCK: ${{ vars.EXPO_PUBLIC_USE_MOCK }}
+      EXPO_PUBLIC_MOCK_CORE: ${{ vars.EXPO_PUBLIC_MOCK_CORE }}
+      EXPO_PUBLIC_MOCK_SHOPS: ${{ vars.EXPO_PUBLIC_MOCK_SHOPS }}
+      EXPO_PUBLIC_API_ENDPOINT: ${{ vars.EXPO_PUBLIC_API_ENDPOINT }}
+      EXPO_PUBLIC_FIREBASE_API_KEY: ${{ vars.EXPO_PUBLIC_FIREBASE_API_KEY }}
+      EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+      EXPO_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_PROJECT_ID }}
+      EXPO_PUBLIC_FIREBASE_APP_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_APP_ID }}
+      # Gradle needs more than its 2 GB default: with it the daemon ran out of Metaspace and stalled.
+      GRADLE_JVM_ARGS: -Xmx6g -XX:MaxMetaspaceSize=1g
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Resolve build settings
+        id: cfg
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          # Play needs an AAB with every ABI; staging ships a universal APK so it also runs on emulators and
+          # old phones; dev stays arm64-only for a fast build on a real phone.
+          case "$ENVIRONMENT" in
+            android-production) { echo "format=aab"; echo "abis=armeabi-v7a,arm64-v8a,x86,x86_64"; } >> "$GITHUB_OUTPUT" ;;
+            android-staging) { echo "format=apk"; echo "abis=armeabi-v7a,arm64-v8a,x86,x86_64"; } >> "$GITHUB_OUTPUT" ;;
+            *) { echo "format=apk"; echo "abis=arm64-v8a"; } >> "$GITHUB_OUTPUT" ;;
+          esac
+          echo "TIMINGS=$RUNNER_TEMP/timings.txt" >> "$GITHUB_ENV"
+          echo "start=$(date +%s)" > "$RUNNER_TEMP/timings.txt"
+
+      # GitHub-hosted runners are clean VMs, so the toolchain is installed (and cached) on every run.
+      - uses: actions/setup-node@v7
+        if: runner.environment == 'github-hosted'
+        with:
+          node-version: ${{ env.NODE_MAJOR }}
+          cache: npm
+          cache-dependency-path: frontend/mobile/package-lock.json
+      - uses: actions/setup-java@v6
+        if: runner.environment == 'github-hosted'
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_MAJOR }}
+      - uses: android-actions/setup-android@v4
+        if: runner.environment == 'github-hosted'
+        with:
+          packages: platform-tools platforms;android-${{ env.ANDROID_PLATFORM }} build-tools;${{ env.ANDROID_BUILD_TOOLS }} ndk;${{ env.ANDROID_NDK }}
+      - uses: gradle/actions/setup-gradle@v6
+        if: runner.environment == 'github-hosted'
+
+      # A self-hosted machine keeps its toolchain and Gradle/npm caches on disk. Pulling GitHub's cache or the NDK over
+      # a home connection is slower than the build itself, so it only verifies versions and never downloads.
+      - name: Preflight the self-hosted toolchain
+        if: runner.environment == 'self-hosted'
+        env:
+          EXPECT_NODE_MAJOR: ${{ env.NODE_MAJOR }}
+          EXPECT_JAVA_MAJOR: ${{ env.JAVA_MAJOR }}
+          EXPECT_PLATFORM: ${{ env.ANDROID_PLATFORM }}
+          EXPECT_BUILD_TOOLS: ${{ env.ANDROID_BUILD_TOOLS }}
+          EXPECT_NDK: ${{ env.ANDROID_NDK }}
+        run: node .github/scripts/android-preflight.mjs
+      - name: Mark setup done
+        run: echo "setup=$(date +%s)" >> "$TIMINGS"
+
+      - name: Install JavaScript dependencies
+        working-directory: frontend/mobile
+        run: npm ci
+      - name: Mark install done
+        run: echo "install=$(date +%s)" >> "$TIMINGS"
+
+      # app.config.js reads the Firebase file from the path in GOOGLE_SERVICES_JSON. The file is gitignored (public
+      # repo), so it is written from the environment secret to a temp path and never lands in the workspace.
+      - name: Write google-services.json
+        env:
+          ANDROID_GOOGLE_SERVICES_JSON: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -z "$ANDROID_GOOGLE_SERVICES_JSON" ]; then
+            echo "::error::Secret ANDROID_GOOGLE_SERVICES_JSON is empty in environment ${{ inputs.environment }}."; exit 1
+          fi
+          printf '%s' "$ANDROID_GOOGLE_SERVICES_JSON" > "$RUNNER_TEMP/google-services.json"
+          echo "GOOGLE_SERVICES_JSON=$RUNNER_TEMP/google-services.json" >> "$GITHUB_ENV"
+
+      # --clean regenerates android/ so a leftover from a previous build on a self-hosted machine cannot leak in.
+      - name: Generate the native project
+        working-directory: frontend/mobile
+        run: npx expo prebuild --platform android --no-install --clean
+      - name: Mark prebuild done
+        run: echo "prebuild=$(date +%s)" >> "$TIMINGS"
+
+      - name: Build
+        id: build
+        working-directory: frontend/mobile/android
+        env:
+          FORMAT: ${{ steps.cfg.outputs.format }}
+          ABIS: ${{ steps.cfg.outputs.abis }}
+        run: |
+          task=assembleRelease
+          [ "$FORMAT" = aab ] && task=bundleRelease
+          ./gradlew "$task" "-PreactNativeArchitectures=$ABIS" "-Dorg.gradle.jvmargs=$GRADLE_JVM_ARGS"
+      - name: Mark build done
+        run: echo "gradle=$(date +%s)" >> "$TIMINGS"
+
+      - name: Collect the artifact
+        id: package
+        env:
+          FORMAT: ${{ steps.cfg.outputs.format }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          if [ "$FORMAT" = aab ]; then
+            built=frontend/mobile/android/app/build/outputs/bundle/release/app-release.aab
+          else
+            built=frontend/mobile/android/app/build/outputs/apk/release/app-release.apk
+          fi
+          [ -f "$built" ] || { echo "::error::Gradle finished but $built does not exist."; exit 1; }
+          branch=$(echo "$REF_NAME" | tr -c 'A-Za-z0-9\n' '-')
+          name="smart-ledger-${ENVIRONMENT#android-}-${branch}-${SHA::7}.$FORMAT"
+          mkdir -p "$RUNNER_TEMP/android-out"
+          cp "$built" "$RUNNER_TEMP/android-out/$name"
+          echo "path=$RUNNER_TEMP/android-out/$name" >> "$GITHUB_OUTPUT"
+      - name: Mark packaged
+        run: echo "package=$(date +%s)" >> "$TIMINGS"
+
+      - name: Write the build summary
+        if: always()
+        env:
+          STEPS_JSON: ${{ toJSON(steps) }}
+          SUMMARY_DIR: ${{ runner.temp }}/android-summary
+          ARTIFACT_PATH: ${{ steps.package.outputs.path }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUNNER_REASON: ${{ needs.select-runner.outputs.reason }}
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          FORMAT: ${{ steps.cfg.outputs.format }}
+          ABIS: ${{ steps.cfg.outputs.abis }}
+        run: node .github/scripts/android-summary.mjs
+
+      - uses: actions/upload-artifact@v7
+        if: steps.package.outcome == 'success'
+        with:
+          name: android-${{ inputs.environment }}-${{ github.run_number }}
+          path: ${{ runner.temp }}/android-out/*
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: android-build-summary-${{ inputs.environment }}-${{ github.run_number }}
+          path: ${{ runner.temp }}/android-summary/*
+          if-no-files-found: error
+          retention-days: 14
