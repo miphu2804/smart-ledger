@@ -47,3 +47,7 @@ google-services.json
 # Firebase native config (per-developer download)
 GoogleService-Info.plist
 google-services.json
+
+# Speech model (about 49 MB): kept out of the public repo, see assets/models/README.md
+/assets/models/*
+!/assets/models/README.md

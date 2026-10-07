@@ -1,0 +1,15 @@
+diff --git a/node_modules/react-native-sherpa-onnx/android/src/main/java/com/sherpaonnx/SherpaOnnxOnlineSttHelper.kt b/node_modules/react-native-sherpa-onnx/android/src/main/java/com/sherpaonnx/SherpaOnnxOnlineSttHelper.kt
+index 76e0e5c..be52233 100644
+--- a/node_modules/react-native-sherpa-onnx/android/src/main/java/com/sherpaonnx/SherpaOnnxOnlineSttHelper.kt
++++ b/node_modules/react-native-sherpa-onnx/android/src/main/java/com/sherpaonnx/SherpaOnnxOnlineSttHelper.kt
+@@ -176,7 +176,9 @@ internal class SherpaOnnxOnlineSttHelper(
+         numThreads = numThreads ?: 1,
+         debug = debug ?: false,
+         provider = provider ?: "cpu",
+-        modelType = "zipformer"
++        // Để trống: sherpa-onnx tự nhận zipformer hay zipformer2 từ metadata của file encoder. Cố định "zipformer"
++        // làm model zipformer2 sập khi nạp ('attention_dims' does not exist in the metadata).
++        modelType = ""
+       )
+       "paraformer" -> OnlineModelConfig(
+         paraformer = OnlineParaformerModelConfig(

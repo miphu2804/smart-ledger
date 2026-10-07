@@ -30,3 +30,9 @@ export const FIREBASE_WEB_CONFIG = {
   projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID ?? '',
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID ?? '',
 };
+
+/**
+ * Nhận dạng giọng nói trên Android (model sherpa-onnx chạy trên máy). App tải các file model từ địa chỉ này về bộ nhớ
+ * của app ở lần đầu mở màn Đọc đơn (xem assets/models/README.md). Phải kết thúc bằng `/`; để trống thì mic báo chưa có model.
+ */
+export const STT_MODEL_URL = process.env.EXPO_PUBLIC_STT_MODEL_URL ?? '';
