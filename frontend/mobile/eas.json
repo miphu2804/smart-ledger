@@ -9,7 +9,26 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "dev-client": {
+      "extends": "development",
+      "environment": "preview",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "phone-test": {
+      "extends": "preview",
+      "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_USE_MOCK": "false",
+        "EXPO_PUBLIC_MOCK_CORE": "true",
+        "EXPO_PUBLIC_MOCK_SHOPS": "true"
+      }
     },
     "production": {
       "autoIncrement": true

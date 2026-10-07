@@ -1,11 +1,12 @@
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { ReportPeriodTabs, type ReportPeriod } from '../src/components/ReportPeriodTabs';
 import { BarChart } from '../src/components/charts';
-import { Button, Card, Header, Row, Screen, SectionTitle, T } from '../src/components/ui';
+import { Button, Card, EmptyState, Header, Row, Screen, SectionTitle, T } from '../src/components/ui';
 import type { Invoice } from '../src/data/types';
+import { useCoreData } from '../src/lib/useCoreData';
 import { vnd } from '../src/lib/format';
 import { bestSellers, hourly, inPeriod, invoiceTotal, periodLabel, summary } from '../src/lib/stats';
 import { useApp } from '../src/store/AppStore';
@@ -38,27 +39,33 @@ function weekDays(invoices: Invoice[], now = new Date()) {
 }
 
 export default function Analytics() {
-  const app = useApp();
+  const app = useApp(); // chỉ để lấy tên tiệm; số liệu lấy từ Core
+  const { invoices, products, debts, expenses: allExpenses, loading, error, reload } = useCoreData({
+    invoices: true,
+    products: true,
+    debts: true,
+    expenses: true,
+  });
   const { period: requestedPeriod } = useLocalSearchParams<{ period?: string }>();
   const [period, setPeriod] = useState<ReportPeriod>(
     requestedPeriod === 'thisWeek' || requestedPeriod === 'month' ? requestedPeriod : 'today',
   );
   const [selectedBar, setSelectedBar] = useState<number | null>(null);
 
-  const totals = summary(app.invoices, app.products, period);
-  const expenses = app.expenses.filter((expense) => inPeriod(expense.createdAt, period));
+  const totals = summary(invoices, products, period);
+  const expenses = allExpenses.filter((expense) => inPeriod(expense.createdAt, period));
   const expenseTotal = expenses.reduce((sum, expense) => sum + expense.amount, 0);
   const estimatedCost = totals.revenue - totals.profit;
-  const debtLeft = app.debts.reduce((sum, debt) => sum + Math.max(0, debt.total - debt.paid), 0);
-  const leaders = bestSellers(app.invoices, period).slice(0, 3);
-  const trend = period === 'month' ? monthWeeks(app.invoices) : period === 'thisWeek' ? weekDays(app.invoices) : hourly(app.invoices, period);
+  const debtLeft = debts.reduce((sum, debt) => sum + Math.max(0, debt.total - debt.paid), 0);
+  const leaders = bestSellers(invoices, period).slice(0, 3);
+  const trend = period === 'month' ? monthWeeks(invoices) : period === 'thisWeek' ? weekDays(invoices) : hourly(invoices, period);
   const defaultBar = trend.reduce((best, item, index) => (item.value > trend[best].value ? index : best), 0);
   const activeBar = selectedBar !== null && selectedBar < trend.length ? selectedBar : defaultBar;
   const periodName = periodLabel[period];
 
-  return (
-    <Screen contentStyle={{ paddingBottom: 48 }}>
-      <Header title="Phân tích bán hàng" subtitle={app.store.name} />
+  const top = (
+    <>
+      <Header title="Báo cáo" subtitle={app.store.name} />
       <ReportPeriodTabs
         value={period}
         onChange={(next) => {
@@ -66,6 +73,33 @@ export default function Analytics() {
           setSelectedBar(null);
         }}
       />
+    </>
+  );
+
+  // Không hiện số liệu khi chưa tải xong hoặc tải lỗi — tránh hiện doanh thu 0đ như thể tiệm chưa có đơn nào.
+  if (loading) {
+    return (
+      <Screen contentStyle={{ paddingBottom: 48 }}>
+        {top}
+        <View style={{ paddingTop: 60, alignItems: 'center' }}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </Screen>
+    );
+  }
+  if (error) {
+    return (
+      <Screen contentStyle={{ paddingBottom: 48 }}>
+        {top}
+        <EmptyState icon="alert-triangle" title="Không tải được số liệu bán hàng" hint={error} />
+        <Button title="Thử lại" variant="outline" onPress={reload} />
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen contentStyle={{ paddingBottom: 48 }}>
+      {top}
 
       <Card style={{ marginTop: 12 }}>
         <T w="bold" size={12} color={colors.muted} style={styles.eyebrow}>
@@ -92,17 +126,17 @@ export default function Analytics() {
         </Row>
       </Card>
 
-      <SectionTitle title="Diễn biến doanh thu" />
+      <SectionTitle title="Doanh thu theo ngày" />
       <Card>
         <Row style={{ justifyContent: 'space-between', marginBottom: 12 }}>
           <T size={12} color={colors.muted}>
             {period === 'month' ? 'Theo tuần trong tháng' : period === 'thisWeek' ? 'Theo ngày trong tuần' : 'Theo giờ trong ngày'}
           </T>
-          <Feather name="bar-chart-2" size={15} color={colors.primary} />
+          <Feather name="bar-chart-2" size={15} color={colors.data.revenue} />
         </Row>
         {totals.count ? (
           <>
-            <BarChart data={trend} height={126} selected={activeBar} onSelect={setSelectedBar} highlightLast={false} />
+            <BarChart data={trend} height={126} color={colors.data.revenue} selected={activeBar} onSelect={setSelectedBar} highlightLast={false} />
             <T size={12} color={colors.muted} style={{ marginTop: 12 }}>
               {period === 'month' ? `Ngày ${trend[activeBar].label}` : period === 'thisWeek' ? weekdayLong[activeBar] : `Khung ${trend[activeBar].label}`} · {vnd(trend[activeBar].value)}
             </T>
@@ -116,14 +150,14 @@ export default function Analytics() {
 
       <SectionTitle title="Thu chi trong kỳ" />
       <Card style={{ paddingVertical: 6 }}>
-        <MetricRow label="Doanh thu" value={vnd(totals.revenue)} />
-        <MetricRow label="Giá vốn ước tính" value={vnd(estimatedCost)} />
-        <MetricRow label="Chi phí đã ghi" value={vnd(expenseTotal)} />
+        <MetricRow label="Doanh thu" value={vnd(totals.revenue)} color={colors.data.revenue} />
+        <MetricRow label="Giá vốn ước tính" value={vnd(estimatedCost)} color={colors.data.product} />
+        <MetricRow label="Chi phí đã ghi" value={vnd(expenseTotal)} color={colors.data.expense} />
         <View style={styles.metricDivider} />
         <MetricRow
           label="Lãi gộp ước tính"
           value={vnd(totals.profit)}
-          color={totals.profit >= 0 ? colors.primary : colors.red}
+          color={totals.profit >= 0 ? colors.data.profit : colors.red}
           strong
         />
         <T size={12} color={colors.faint} style={styles.note}>
@@ -138,9 +172,9 @@ export default function Analytics() {
             <T w="bold" size={12} color={colors.faint} style={{ width: 22 }}>{index + 1}</T>
             <View style={{ flex: 1 }}>
               <T w="semibold" size={14} numberOfLines={1}>{item.name}</T>
-              <T size={12} color={colors.muted}>{item.qty} sản phẩm</T>
+              <T size={12} color={colors.muted}>Đã bán {item.qty}</T>
             </View>
-            <T w="bold" size={13} color={colors.primary}>{vnd(item.revenue)}</T>
+            <T w="bold" size={13} color={colors.data.revenue}>{vnd(item.revenue)}</T>
           </Row>
         )) : (
           <T size={14} color={colors.muted} style={styles.empty}>Chưa có mặt hàng bán trong kỳ</T>

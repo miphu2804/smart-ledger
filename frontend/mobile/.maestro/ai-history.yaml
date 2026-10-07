@@ -1,0 +1,53 @@
+# Lịch sử trò chuyện ở app/ai.tsx: Dialog đổi tên/xoá mở được trong Sheet, xoá hội thoại đang mở thì về hội thoại mới,
+# bấm mở hai lần vẫn vào đúng hội thoại. Cần Metro chạy với EXPO_PUBLIC_USE_MOCK=true (xem .maestro/README.md).
+# Gửi tin bằng câu gợi ý và đặt tên không dấu vì inputText của Maestro trên iOS không gõ được tiếng Việt có dấu.
+appId: vn.teamhexa.songheloi
+---
+- runFlow: login-to-ai.yaml
+
+# Hai hội thoại để danh sách có hai mục.
+- tapOn: 'Hỏi trợ lý: Năm món đắt nhất\?'
+- extendedWaitUntil:
+    visible: Năm món giá cao nhất[\s\S]*
+    timeout: 10000
+- tapOn: Cuộc trò chuyện mới
+- assertNotVisible: Năm món đắt nhất\?
+- tapOn: 'Hỏi trợ lý: Tiệm có bao nhiêu mặt hàng\?'
+- extendedWaitUntil:
+    visible: Tiệm đang bán.*
+    timeout: 10000
+
+# 1. Đổi tên: Dialog phải hiện trên Sheet.
+- tapOn: Lịch sử trò chuyện
+- extendedWaitUntil:
+    visible: Mở Năm món đắt nhất\?
+    timeout: 10000
+- tapOn: Đổi tên Tiệm có bao nhiêu mặt hàng\?
+- assertVisible: Đổi tên cuộc trò chuyện
+# Ô tên tự focus với con trỏ cuối chữ; chạm vào ô sẽ đưa con trỏ ra giữa và xoá thiếu.
+- eraseText: 60
+- inputText: Hoi so mon
+- tapOn: Lưu
+- extendedWaitUntil:
+    visible: Mở Hoi so mon
+    timeout: 10000
+
+# 2. Xoá hội thoại đang mở: Dialog hiện trên Sheet, xoá xong màn chat về hội thoại mới.
+- tapOn: Xoá Hoi so mon
+- assertVisible: Xoá "Hoi so mon"\?
+- tapOn: Xoá
+- extendedWaitUntil:
+    notVisible: Mở Hoi so mon
+    timeout: 10000
+- assertVisible: Mở Năm món đắt nhất\?
+
+# 3. Bấm mở hai lần liên tiếp: vào đúng hội thoại, không lẫn nội dung hội thoại khác.
+- tapOn: Mở Năm món đắt nhất\?
+- tapOn:
+    text: Mở Năm món đắt nhất\?
+    optional: true
+- extendedWaitUntil:
+    notVisible: Đóng
+    timeout: 10000
+- assertVisible: Năm món giá cao nhất[\s\S]*
+- assertNotVisible: Tiệm đang bán.*

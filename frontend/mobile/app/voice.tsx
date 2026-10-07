@@ -1,21 +1,321 @@
-import { Feather } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Animated,
+  Easing,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddItemSheet } from '../src/components/AddItemSheet';
+
 import { useToast } from '../src/components/brand';
-import { Button, Dialog, Field, Header, IconBtn, Row, Stepper, T } from '../src/components/ui';
-import { voiceSamples } from '../src/data/mock';
-import type { LineItem } from '../src/data/types';
-import { vnd } from '../src/lib/format';
-import { parseOrder } from '../src/lib/parseOrder';
+import { Button, Dialog, Field, Row, T } from '../src/components/ui';
+import type { LineItem, ProductView } from '../src/data/types';
+import { productApi } from '../src/lib/catalogApi';
+import { debugLog } from '../src/lib/debug';
+import { errorMessage } from '../src/lib/errors';
+import { expenseApi } from '../src/lib/expenseApi';
+import { triggerFeedback } from '../src/lib/feedback';
+import { abbr, hashIndex, hhmm, vnd } from '../src/lib/format';
+import { type PrepareProgress, type SpeechSession, speechEngine } from '../src/lib/speech';
+import { type ParsedExpenseItem, parseOrder } from '../src/lib/parseOrder';
 import { itemsTotal } from '../src/lib/stats';
+import { getProductImage } from '../src/lib/productImages';
 import { useApp } from '../src/store/AppStore';
 import { colors, font, shadow } from '../src/theme';
 
-type Msg = { id: number; from: 'user' | 'ai'; text: string };
-let sampleCursor = 0;
+type Msg = {
+  id: number;
+  from: 'user' | 'ai';
+  text: string;
+  time: string;
+  emotion?: 'happy' | 'holding_tablet' | 'excited' | 'wink' | 'question' | 'sorry' | 'thanks';
+};
+
+const voiceTheme = {
+  primary: colors.brand,
+  primaryDark: colors.brandPressed,
+  primarySoft: colors.brandSoft,
+  primaryBorder: colors.brandBorder,
+  pageBg: colors.bg,
+  cardBg: colors.card,
+  border: colors.border,
+  borderLight: colors.borderLight,
+  muted: colors.muted,
+  faint: colors.faint,
+  ink: colors.ink,
+  inkSecondary: colors.inkSecondary,
+  green: colors.data.revenue,
+  greenSoft: colors.data.revenueSoft,
+  amber: colors.goldBright,
+  amberSoft: colors.data.debtSoft,
+  amberFg: colors.data.debt,
+  red: colors.red,
+  redSoft: colors.redSoft,
+};
+
+const productThumbTones = [
+  { bg: '#EFEDE7', fg: '#4B463F', icon: 'coffee' as const },
+  { bg: '#F8E9C8', fg: '#78510C', icon: 'zap' as const },
+  { bg: '#E8E6DD', fg: '#4D5148', icon: 'droplet' as const },
+  { bg: '#EFF2E7', fg: '#45513E', icon: 'shopping-bag' as const },
+  { bg: '#EAF1E1', fg: '#355A25', icon: 'package' as const },
+];
+
+const voiceAssets = {
+  agentDefault: require('../assets/voice/agent-default.png'),
+  agentHappy: require('../assets/voice/agent-happy.png'),
+  agentIdea: require('../assets/voice/agent-idea.png'),
+  agentQuestion: require('../assets/voice/agent-question.png'),
+  agentSorry: require('../assets/voice/agent-sorry.png'),
+  agentThanks: require('../assets/voice/agent-thanks.png'),
+  agentWink: require('../assets/voice/agent-wink.png'),
+  readOrderLogo: require('../assets/voice/read-order-logo.png'),
+  recordButton: require('../assets/voice/record-button.png'),
+};
+
+
+/** 3D Robot Mascot (Sổ Nghe Lời Assistant on Left) */
+function BotAvatar({ emotion = 'holding_tablet', size = 68 }: { emotion?: Msg['emotion']; size?: number }) {
+  const source =
+    emotion === 'happy'
+      ? voiceAssets.agentHappy
+      : emotion === 'excited'
+        ? voiceAssets.agentIdea
+        : emotion === 'wink'
+          ? voiceAssets.agentWink
+          : emotion === 'question'
+            ? voiceAssets.agentQuestion
+            : emotion === 'sorry'
+              ? voiceAssets.agentSorry
+              : emotion === 'thanks'
+                ? voiceAssets.agentThanks
+                : voiceAssets.agentDefault;
+  return (
+    <View style={[styles.mascotWrap, { width: size, height: size }]}>
+      <Image source={source} style={{ width: size, height: size }} resizeMode="contain" />
+    </View>
+  );
+}
+
+/** Acoustic Soundwave Emission System (Cung sóng âm cong Xanh bên trái & Vàng bên phải đúng ảnh mẫu) */
+/** Clean, Elegant Voice Button with Calm Breathing & Soft Ambient Ripples */
+function CentralVoiceOrb({
+  recording,
+  signalLevel,
+  onPressIn,
+  onPressOut,
+}: {
+  recording: boolean;
+  signalLevel: number;
+  onPressIn: () => void;
+  onPressOut: () => void;
+}) {
+  // Smooth breathing & soft voice pulsation (êm dịu, không giật, không nhanh)
+  const breatheAnim = useRef(new Animated.Value(1)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const ripple1Anim = useRef(new Animated.Value(0)).current;
+  const ripple2Anim = useRef(new Animated.Value(0)).current;
+
+  // Idle slow soothing breath (nhịp thở chậm 1.8s)
+  useEffect(() => {
+    let breatheLoop: Animated.CompositeAnimation;
+    if (!recording) {
+      breatheLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(breatheAnim, {
+            toValue: 1.025,
+            duration: 1800,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+          Animated.timing(breatheAnim, {
+            toValue: 0.985,
+            duration: 1800,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+      breatheLoop.start();
+    } else {
+      breatheAnim.setValue(1);
+    }
+    return () => {
+      if (breatheLoop) breatheLoop.stop();
+    };
+  }, [recording, breatheAnim]);
+
+  // Active gentle pulse + soft ambient ripple loops
+  useEffect(() => {
+    let pulseLoop: Animated.CompositeAnimation;
+    let r1Loop: Animated.CompositeAnimation;
+    let r2Loop: Animated.CompositeAnimation;
+
+    if (recording) {
+      // Gentle, calm oscillation
+      const targetScale = 1.035 + Math.min(0.04, signalLevel * 0.05);
+      pulseLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: targetScale,
+            duration: 650,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 0.975,
+            duration: 650,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+
+      const createRipple = (anim: Animated.Value, delay: number) =>
+        Animated.loop(
+          Animated.sequence([
+            Animated.delay(delay),
+            Animated.timing(anim, {
+              toValue: 1,
+              duration: 1500,
+              easing: Easing.out(Easing.quad),
+              useNativeDriver: true,
+            }),
+            Animated.timing(anim, { toValue: 0, duration: 0, useNativeDriver: true }),
+          ]),
+        );
+
+      r1Loop = createRipple(ripple1Anim, 0);
+      r2Loop = createRipple(ripple2Anim, 750);
+
+      pulseLoop.start();
+      r1Loop.start();
+      r2Loop.start();
+    } else {
+      pulseAnim.setValue(1);
+      ripple1Anim.setValue(0);
+      ripple2Anim.setValue(0);
+    }
+
+    return () => {
+      if (pulseLoop) pulseLoop.stop();
+      if (r1Loop) r1Loop.stop();
+      if (r2Loop) r2Loop.stop();
+    };
+  }, [recording, signalLevel, pulseAnim, ripple1Anim, ripple2Anim]);
+
+  const combinedScale = recording ? pulseAnim : breatheAnim;
+
+  // Soft Ripple Transforms
+  const ripple1Scale = ripple1Anim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.45] });
+  const ripple1Opacity = ripple1Anim.interpolate({ inputRange: [0, 0.2, 0.8, 1], outputRange: [0.35, 0.25, 0.06, 0] });
+
+  const ripple2Scale = ripple2Anim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.45] });
+  const ripple2Opacity = ripple2Anim.interpolate({ inputRange: [0, 0.2, 0.8, 1], outputRange: [0.35, 0.25, 0.06, 0] });
+
+  return (
+    <View style={styles.centralOrbContainer}>
+      {/* Soft Ambient Expanding Ripple Rings */}
+      {recording ? (
+        <>
+          <Animated.View
+            style={[
+              styles.softRippleRing,
+              {
+                transform: [{ scale: ripple1Scale }],
+                opacity: ripple1Opacity,
+              },
+            ]}
+          />
+          <Animated.View
+            style={[
+              styles.softRippleRing,
+              {
+                transform: [{ scale: ripple2Scale }],
+                opacity: ripple2Opacity,
+              },
+            ]}
+          />
+        </>
+      ) : null}
+
+      {/* Main 3D Logo Button with Calm Breathing Animation */}
+      <Pressable
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        style={({ pressed }) => [
+          styles.orbHitArea,
+          pressed && { transform: [{ scale: 0.94 }] },
+        ]}
+      >
+        <Animated.View
+          style={[
+            styles.pulsingLogoWrap,
+            {
+              transform: [{ scale: combinedScale }],
+            },
+          ]}
+        >
+          {/* Subtle Ambient Glow */}
+          <View
+            style={[
+              styles.logoAmbientGlow,
+              recording && {
+                backgroundColor: 'rgba(72, 42, 172, 0.16)',
+                shadowColor: voiceTheme.primary,
+                shadowOpacity: 0.35,
+                shadowRadius: 16,
+              },
+            ]}
+          />
+
+          {/* 3D Brand Logo Icon */}
+          <Image
+            source={voiceAssets.recordButton}
+            style={styles.logoRecordImage}
+            resizeMode="contain"
+          />
+        </Animated.View>
+      </Pressable>
+    </View>
+  );
+}
+
+/** Trình duyệt có Web Speech API không (chỉ web; trên Android dùng `speechEngine` chạy model ngay trên máy). */
+function hasWebSpeech(): boolean {
+  return typeof window !== 'undefined' && !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+}
+
+/** Trạng thái model giọng nói trên máy (chỉ dùng khi không có Web Speech). */
+interface SttStatus {
+  state: 'idle' | 'preparing' | 'ready' | 'error';
+  percent: number;
+  message: string;
+}
+
+function inferAgentEmotion(text: string): Msg['emotion'] {
+  const s = text.toLowerCase();
+  if (s.includes('?') || s.includes('chưa') || s.includes('muốn') || s.includes('thử nói lại')) return 'question';
+  if (s.includes('không') || s.includes('lỗi') || s.includes('xin lỗi')) return 'sorry';
+  if (s.includes('đã thêm') || s.includes('gợi ý') || s.includes('sáng kiến')) return 'excited';
+  if (s.includes('đã ghi') || s.includes('xong')) return 'happy';
+  if (s.includes('cảm ơn')) return 'thanks';
+  return 'holding_tablet';
+}
+
+
 
 export default function Voice() {
   const app = useApp();
@@ -23,18 +323,104 @@ export default function Voice() {
   const insets = useSafeAreaInsets();
   const scroll = useRef<ScrollView>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const recognitionRef = useRef<any>(null);
+  const fullTranscriptRef = useRef('');
+  const sessionRef = useRef<SpeechSession | null>(null);
+  /** Người dùng đã thả nút trước khi micro kịp bật (hộp thoại xin quyền, nạp model...): bỏ phiên vừa mở xong. */
+  const releasedRef = useRef(false);
+  /** Mức mic lớn nhất trong lần ghi này, để báo "micro không thu được tiếng" khi không nhận ra chữ nào. */
+  const peakLevelRef = useRef(0);
+  const mountedRef = useRef(true);
 
-  const [msgs, setMsgs] = useState<Msg[]>([]);
+  // Hội thoại và đơn bắt đầu trống: đoạn chat mẫu "Đã ghi 8 Sting" cùng món id 101/102 không có trong Core, nên nói
+  // đã ghi khi chưa ghi gì và chốt đơn với chúng sẽ lỗi hoặc bán nhầm hàng khác.
+  const [msgs, setMsgs] = useState<Msg[]>(() => [
+    {
+      id: 1,
+      from: 'ai',
+      text: 'Nhấn giữ nút ghi âm rồi đọc đơn, ví dụ “2 cà phê sữa, 1 bánh mì”. Mình sẽ ghi vào đơn bên dưới.',
+      time: hhmm(new Date()),
+      emotion: 'holding_tablet',
+    },
+  ]);
+
   const [items, setItems] = useState<LineItem[]>([]);
+
   const [recording, setRecording] = useState(false);
   const [partial, setPartial] = useState('');
-  const [text, setText] = useState('');
-  const [edit, setEdit] = useState(false);
+  /** Đang thu bằng micro native (không phải Web Speech) và mức âm đo được 0..1. */
+  const [nativeListening, setNativeListening] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
+  const [stt, setStt] = useState<SttStatus>({ state: 'idle', percent: 0, message: '' });
+  const [manualText, setManualText] = useState('');
+  const [showManualInput, setShowManualInput] = useState(false);
+  const [editMode, setEditMode] = useState(false);
   const [pending, setPending] = useState<LineItem[]>([]);
   const [newPrice, setNewPrice] = useState('');
+  const [newUnit, setNewUnit] = useState('cái');
   const [priceErr, setPriceErr] = useState('');
+  const [catalogBusy, setCatalogBusy] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
   const [transcripts, setTranscripts] = useState<string[]>([]);
+  /**
+   * Khoản chi nghe được trong lời nói. NFR-006/AC-010: không ghi ngay, người dùng phải bấm "Lưu chi phí".
+   */
+  const [pendingExpenses, setPendingExpenses] = useState<ParsedExpenseItem[]>([]);
+  const [expenseBusy, setExpenseBusy] = useState(false);
+  const [products, setProducts] = useState<ProductView[]>([]);
+
+  const loadProducts = useCallback(async () => {
+    try {
+      setProducts(await productApi.list());
+    } catch (e) {
+      toast(`Không tải được danh mục hàng: ${errorMessage(e)}`, 'err');
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
+
+  const parseableProducts = useMemo(
+    () => products.map((p) => ({ id: p.id, name: p.name, price: p.sellingPriceVnd })),
+    [products],
+  );
+  // Tải model giọng nói (lần đầu) và nạp vào bộ nhớ ngay khi mở màn hình, để lúc giữ nút mic là dùng được liền.
+  const prepareSpeech = useCallback(() => {
+    if (hasWebSpeech() || !speechEngine.supported) return;
+    setStt({ state: 'preparing', percent: 0, message: '' });
+    speechEngine
+      .prepare((p: PrepareProgress) => {
+        if (mountedRef.current) setStt((s) => ({ ...s, state: 'preparing', percent: p.percent }));
+      })
+      .then(() => mountedRef.current && setStt({ state: 'ready', percent: 100, message: '' }))
+      .catch((e) => {
+        if (mountedRef.current) setStt({ state: 'error', percent: 0, message: e instanceof Error ? e.message : String(e) });
+      });
+    // Xin quyền micro từ bây giờ để hộp thoại hệ thống không hiện giữa lúc đang giữ nút.
+    speechEngine.requestPermission().catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    mountedRef.current = true;
+    prepareSpeech();
+    return () => {
+      mountedRef.current = false;
+      const session = sessionRef.current;
+      sessionRef.current = null;
+      if (session) void session.stop().catch(() => undefined);
+    };
+  }, [prepareSpeech]);
+
+  const micSignalLevel = useMemo(() => {
+    if (!recording) return 0.2;
+    // Micro native: dùng mức âm đo thật. Web Speech không cho biết mức âm nên vẫn ước lượng theo chữ nhận được.
+    if (nativeListening) return 0.2 + 0.8 * micLevel;
+    if (!partial.trim()) return 0.46;
+    const recentWords = partial.trim().split(/\s+/).slice(-5).join('');
+    const hash = recentWords.split('').reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+    return Math.min(1, 0.42 + (hash % 58) / 100);
+  }, [partial, recording, nativeListening, micLevel]);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
   useEffect(() => {
@@ -42,7 +428,26 @@ export default function Voice() {
     return () => clearTimeout(t);
   }, [msgs, items, partial]);
 
-  const push = (from: Msg['from'], t: string) => setMsgs((m) => [...m, { id: Date.now() + Math.random(), from, text: t }]);
+  useEffect(() => {
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const sub = Keyboard.addListener(hideEvent, () => {
+      setShowManualInput(false);
+    });
+    return () => sub.remove();
+  }, []);
+
+  const push = (from: Msg['from'], t: string, emotion?: Msg['emotion']) => {
+    setMsgs((m) => [
+      ...m,
+      {
+        id: Date.now() + Math.random(),
+        from,
+        text: t,
+        time: hhmm(new Date()),
+        emotion: emotion || (from === 'ai' ? inferAgentEmotion(t) : undefined),
+      },
+    ]);
+  };
 
   const mergeItems = (add: LineItem[]) =>
     setItems((cur) => {
@@ -58,275 +463,763 @@ export default function Voice() {
   const handleUtterance = (utter: string) => {
     push('user', utter);
     setTranscripts((t) => [...t, utter]);
-    const { items: found, unknown } = parseOrder(utter, app.products);
+    const { items: found, unknown, missingQuantityItems, expenses } = parseOrder(utter, parseableProducts);
+    // Chỉ chạy ở bản dev (debugLog tự bỏ qua ở bản phát hành): cho thấy model nghe ra gì và tách được mấy món
+    debugLog(
+      'voice',
+      `nghe: "${utter}" → ${found.length} món trong kho, ${unknown.length} món mới, ${missingQuantityItems?.length ?? 0} thiếu số lượng, ${expenses?.length ?? 0} khoản chi`,
+    );
+
     setTimeout(() => {
+      const responseParts: string[] = [];
+
       if (found.length) {
         mergeItems(found);
-        push('ai', `Đã ghi ${found.map((f) => `${f.qty} ${f.name}`).join(', ')}.`);
+        responseParts.push(`Đã ghi ${found.map((f) => `${f.qty} ${f.name}`).join(', ')}.`);
       }
+
+      if (missingQuantityItems && missingQuantityItems.length > 0) {
+        responseParts.push(
+          `Bạn đã gọi món "${missingQuantityItems.join(', ')}" nhưng chưa có số lượng. Mời bạn nói lại số lượng nhé (ví dụ: "1 ${missingQuantityItems[0]}").`,
+        );
+      }
+
       if (unknown.length) {
         setPending(unknown);
         setNewPrice(unknown[0].price ? String(unknown[0].price) : '');
-        push('ai', `“${unknown[0].name}” chưa có trong danh mục. Bạn có muốn thêm vào không?`);
+        responseParts.push(`"${unknown[0].name}" chưa có trong danh mục. Bạn có muốn thêm vào không?`);
       }
-      if (!found.length && !unknown.length)
-        push('ai', 'Mình chưa nhận ra tên hàng. Bạn thử lại nhé, ví dụ “2 ly cà phê sữa”.');
-    }, 350);
+
+      if (expenses && expenses.length > 0) {
+        setPendingExpenses((cur) => [...cur, ...expenses]);
+        responseParts.push(
+          `Mình nghe thấy khoản chi: ${expenses.map((e) => `${e.title} (${vnd(e.amount)})`).join(', ')}. Bấm "Lưu chi phí" để xác nhận.`,
+        );
+      }
+
+      if (
+        !found.length &&
+        !unknown.length &&
+        (!missingQuantityItems || !missingQuantityItems.length) &&
+        (!expenses || !expenses.length)
+      ) {
+        responseParts.push(
+          'Mình chưa nhận diện được món hàng. Bạn thử nói lại kèm số lượng nhé, ví dụ: "2 ly cà phê sữa" hoặc "1 bánh mì ốp la".',
+        );
+      }
+
+      if (responseParts.length > 0) {
+        push('ai', responseParts.join('\n'));
+      }
+    }, 250);
   };
 
   const startRecording = () => {
-    const sample = voiceSamples[sampleCursor++ % voiceSamples.length];
-    const words = sample.split(' ');
-    setRecording(true);
+    if (recording) return;
+    const webSpeech = hasWebSpeech();
+    // Không còn câu mẫu giả: không có Web Speech và không có bộ nhận dạng trên máy thì báo rõ, không giả vờ nghe.
+    if (!webSpeech && !speechEngine.supported) {
+      toast('Bản app này chưa hỗ trợ ghi âm giọng nói. Hãy dùng nút Nhập tay.', 'err');
+      return;
+    }
+    if (!webSpeech && !speechEngine.isReady()) {
+      toast(
+        stt.state === 'preparing'
+          ? `Đang tải model giọng nói (${stt.percent}%), thử lại sau ít giây.`
+          : stt.message || 'Model giọng nói chưa sẵn sàng.',
+        'err',
+      );
+      if (stt.state !== 'preparing') prepareSpeech();
+      return;
+    }
+    triggerFeedback('selection');
+    fullTranscriptRef.current = '';
     setPartial('');
-    timers.current.forEach(clearTimeout);
-    timers.current = words.map((_, i) => setTimeout(() => setPartial(words.slice(0, i + 1).join(' ')), 220 * (i + 1)));
-    timers.current.push(setTimeout(() => finishRecording(sample), 220 * words.length + 600));
+    setRecording(true);
+
+    const SpeechRecognition =
+      typeof window !== 'undefined'
+        ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+        : null;
+
+    if (SpeechRecognition) {
+      try {
+        const reco = new SpeechRecognition();
+        reco.lang = 'vi-VN';
+        reco.continuous = true;
+        reco.interimResults = true;
+
+        reco.onresult = (event: any) => {
+          let accumulated = '';
+          for (let i = 0; i < event.results.length; i++) {
+            accumulated += event.results[i][0].transcript + ' ';
+          }
+          const raw = accumulated.trim();
+          if (raw) {
+            const cleaned = raw
+              .replace(/(?<!\p{L})(xì\s*ting|tin\s*dâu|xiting|siting|xì\s*tin|xi\s*tin|xitin)(?!\p{L})/gui, 'Sting')
+              .replace(/(?<!\p{L})(tai\s*gơ|taigo|bia\s*tai\s*gơ)(?!\p{L})/gui, 'Bia Tiger');
+            setPartial(cleaned);
+            fullTranscriptRef.current = raw;
+          }
+        };
+
+        reco.onerror = (err: any) => {
+          console.warn('[SpeechRecognition Error]:', err);
+        };
+
+        recognitionRef.current = reco;
+        reco.start();
+        return;
+      } catch (e) {
+        console.warn('SpeechRecognition init failed:', e);
+      }
+    }
+
+    if (webSpeech) {
+      setRecording(false);
+      toast('Không bật được nhận dạng giọng nói của trình duyệt. Hãy dùng nút Nhập tay.', 'err');
+      return;
+    }
+
+    // Android: thu micro thật và nhận dạng bằng model chạy trên máy (xem src/lib/speech).
+    releasedRef.current = false;
+    peakLevelRef.current = 0;
+    setMicLevel(0);
+    speechEngine
+      .start({
+        onPartial: (text) => {
+          setPartial(text);
+          fullTranscriptRef.current = text;
+        },
+        onLevel: (level) => {
+          peakLevelRef.current = Math.max(peakLevelRef.current, level);
+          setMicLevel(level);
+        },
+        onError: (message) => toast(message, 'err'),
+      })
+      .then((session) => {
+        if (releasedRef.current || !mountedRef.current) {
+          // Đã thả nút (hoặc rời màn hình) trong lúc micro còn đang bật: bỏ phiên này.
+          void session.stop().catch(() => undefined);
+          return;
+        }
+        sessionRef.current = session;
+        setNativeListening(true);
+      })
+      .catch((e) => {
+        if (!mountedRef.current) return;
+        setRecording(false);
+        setPartial('');
+        toast(e instanceof Error ? e.message : String(e), 'err');
+      });
   };
 
-  const finishRecording = (full: string) => {
+  const finishRecording = (manualTxt?: string) => {
+    if (!recording && !manualTxt) return;
+    triggerFeedback('selection');
+
+    if (!manualTxt) {
+      releasedRef.current = true;
+      const session = sessionRef.current;
+      if (session) {
+        sessionRef.current = null;
+        setNativeListening(false);
+        setRecording(false);
+        setMicLevel(0);
+        const shown = partial;
+        const peak = peakLevelRef.current;
+        session
+          .stop()
+          .then((text) => {
+            if (!mountedRef.current) return;
+            setPartial('');
+            const finalText = (text || shown).trim();
+            if (finalText) {
+              handleUtterance(finalText);
+              return;
+            }
+            toast(
+              peak < 0.05
+                ? 'Micro không thu được âm thanh (mức mic gần bằng 0). Kiểm tra micro của máy hoặc emulator.'
+                : 'Có tiếng nhưng chưa nhận ra chữ nào. Hãy nói to, rõ và gần micro hơn.',
+              'err',
+            );
+          })
+          .catch((e) => {
+            if (!mountedRef.current) return;
+            setPartial('');
+            toast(`Không xử lý được giọng nói: ${e instanceof Error ? e.message : String(e)}`, 'err');
+          });
+        return;
+      }
+    }
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch { }
+      recognitionRef.current = null;
+    }
+
     timers.current.forEach(clearTimeout);
     setRecording(false);
+
+    const finalText = manualTxt || (recognitionRef.current ? fullTranscriptRef.current : '') || partial;
     setPartial('');
-    handleUtterance(full);
+
+    if (finalText && finalText.trim() && !finalText.includes('Đang nghe…')) {
+      handleUtterance(finalText.trim());
+    }
   };
 
-  const sendText = () => {
-    if (!text.trim()) return;
-    handleUtterance(text.trim());
-    setText('');
+  const sendManualText = () => {
+    if (!manualText.trim()) return;
+    triggerFeedback('selection');
+    handleUtterance(manualText.trim());
+    setManualText('');
+    setShowManualInput(false);
   };
 
-  const resolvePending = (action: 'catalog' | 'once' | 'skip') => {
+  const resolvePending = async (action: 'catalog' | 'skip') => {
     const [first, ...rest] = pending;
-    if (!first) return;
+    if (!first || catalogBusy) return;
     const price = parseInt(newPrice.replace(/\D/g, ''), 10) || 0;
-    // Thiếu giá bán thì giữ nguyên hộp thoại, không để mất món; chỉ "Bỏ qua" mới được bỏ món.
-    if (action !== 'skip' && !price) {
-      setPriceErr(`Nhập giá bán cho “${first.name}” để thêm vào đơn`);
+    if (action === 'catalog' && !price) {
+      setPriceErr(`Nhập giá bán cho "${first.name}" để thêm vào đơn`);
       return;
     }
     if (action === 'catalog') {
-      const id = app.addProduct({
-        name: first.name,
-        price,
-        cost: Math.round(price * 0.6),
-        stock: 0,
-        tracked: false,
-        category: 'other',
-        aliases: [first.name],
-      });
-      mergeItems([{ ...first, productId: id, price }]);
-      push('ai', `Đã thêm “${first.name}” (${vnd(price)}) vào danh mục và vào đơn.`);
-    } else if (action === 'once') {
-      mergeItems([{ ...first, price }]);
-      push('ai', `Đã ghi “${first.name}” vào đơn này (không lưu vào danh mục).`);
+      setCatalogBusy(true);
+      try {
+        const created = await productApi.create({
+          name: first.name,
+          unit: newUnit.trim() || 'cái',
+          sellingPriceVnd: price,
+          tracked: false,
+          stockQuantity: null,
+        });
+        setProducts((cur) => [...cur, created]);
+        mergeItems([{ productId: created.id, name: created.name, price: created.sellingPriceVnd, qty: first.qty }]);
+        push('ai', `Đã thêm "${first.name}" (${vnd(price)}) vào danh mục và vào đơn.`, 'excited');
+      } catch (e) {
+        setPriceErr(`Không thêm được "${first.name}" vào danh mục: ${errorMessage(e)}`);
+        return;
+      } finally {
+        setCatalogBusy(false);
+      }
     } else {
-      push('ai', `Đã bỏ qua “${first.name}”.`);
+      push('ai', `Đã bỏ qua "${first.name}".`);
     }
     setPriceErr('');
     setPending(rest);
     setNewPrice(rest[0]?.price ? String(rest[0].price) : '');
+    setNewUnit('cái');
+  };
+
+  // Lưu từng khoản lên Core. Khoản nào lỗi thì dừng và giữ lại (cùng các khoản sau nó) để bấm lưu lại; chỉ báo "đã lưu"
+  // cho những khoản Core đã nhận thật.
+  const confirmExpenses = async () => {
+    if (expenseBusy || !pendingExpenses.length) return;
+    triggerFeedback('selection');
+    setExpenseBusy(true);
+    const saved: ParsedExpenseItem[] = [];
+    let failure = '';
+    for (const e of pendingExpenses) {
+      try {
+        await expenseApi.create({ category: e.category, description: e.title, amountVnd: e.amount });
+        saved.push(e);
+      } catch (err) {
+        failure = errorMessage(err);
+        break;
+      }
+    }
+    setExpenseBusy(false);
+    if (saved.length) {
+      push('ai', `Đã lưu ${saved.length} khoản chi: ${saved.map((e) => `${e.title} (${vnd(e.amount)})`).join(', ')}.`, 'happy');
+    }
+    if (failure) {
+      push('ai', `Không lưu được khoản chi: ${failure}. Bạn bấm "Lưu chi phí" để thử lại.`, 'sorry');
+    }
+    // Khoản đã lưu luôn đứng đầu danh sách chờ; các khoản nói thêm trong lúc lưu nằm phía sau nên được giữ nguyên.
+    setPendingExpenses((cur) => cur.slice(saved.length));
   };
 
   const total = itemsTotal(items);
-  const count = items.reduce((a, i) => a + i.qty, 0);
+  const totalCount = items.reduce((a, i) => a + i.qty, 0);
 
   const checkout = () => {
+    triggerFeedback('selection');
     app.setDraft({ items, source: 'voice', transcript: transcripts.join(' · ') });
     router.push('/checkout');
   };
 
+  const removeItem = (idx: number) => {
+    triggerFeedback('selection');
+    setItems((cur) => cur.filter((_, i) => i !== idx));
+  };
+
+  const updateItemQty = (idx: number, delta: number) => {
+    triggerFeedback('selection');
+    setItems((cur) =>
+      cur
+        .map((x, i) => (i === idx ? { ...x, qty: x.qty + delta } : x))
+        .filter((x) => x.qty > 0),
+    );
+  };
+
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top }}>
-      <View style={{ paddingHorizontal: 16 }}>
-        <Header
-          title="Bán hàng"
-          subtitle={app.store.name}
-          right={
-            <Pressable onPress={checkout} disabled={!items.length} hitSlop={8} style={styles.headerAction}>
-              <T w="bold" size={14} color={items.length ? colors.primary : colors.disabled}>
-                Lưu đơn
-              </T>
-            </Pressable>
-          }
-        />
-      </View>
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <StatusBar style="dark" />
 
-      <ScrollView
-        ref={scroll}
-        style={{ flex: 1 }}
-        contentContainerStyle={{ padding: 16, paddingBottom: 24, flexGrow: 1 }}
-        keyboardShouldPersistTaps="handled"
-      >
-        {!msgs.length && !recording ? (
-          <View style={styles.empty}>
-            <View style={styles.emptyIcon}>
-              <Feather name="mic" size={30} color={colors.ink} />
+      {/* Top Header Bar */}
+      <View style={[styles.headerShell, { paddingTop: insets.top + 6 }]}>
+        <Row gap={12} style={{ alignItems: 'center' }}>
+          <Pressable
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
+            style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.75 }]}
+            accessibilityLabel="Quay lại"
+          >
+            <Feather name="chevron-left" size={20} color={voiceTheme.ink} />
+          </Pressable>
+
+          <Row gap={10} style={{ flex: 1, alignItems: 'center' }}>
+            <Image
+              source={voiceAssets.readOrderLogo}
+              style={styles.headerLogoImage}
+              resizeMode="contain"
+            />
+            <View style={{ flex: 1 }}>
+              <T w="extrabold" size={18.5} color={voiceTheme.ink}>
+                Đọc đơn
+              </T>
+              <T w="medium" size={12} color={voiceTheme.muted} style={{ marginTop: 1 }} numberOfLines={1}>
+                Hôm nay, {hhmm(new Date())} · {app.store.name}
+              </T>
             </View>
-            <T w="extrabold" size={20} style={{ marginTop: 16, textAlign: 'center' }}>
-              Đơn này bạn bán hàng gì?
-            </T>
-            <T size={13} color={colors.faint} style={{ marginTop: 6, textAlign: 'center', lineHeight: 19 }}>
-              Chọn câu gợi ý hoặc nhập nội dung bán hàng bên dưới.
-            </T>
-            <T w="bold" size={12} color={colors.muted} style={{ marginTop: 22, marginBottom: 8 }}>
-              THỬ GÕ NHANH
-            </T>
-            {['2 ly cà phê sữa 50 nghìn', 'bán 3 bánh mì, 2 coca', 'bán 1 hộp sữa chua nếp cẩm 12k'].map((s) => (
-              <Pressable key={s} onPress={() => handleUtterance(s)} style={styles.sample}>
-                <T w="semibold" size={13} color={colors.primary}>
-                  “{s}”
-                </T>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
+          </Row>
 
-        {msgs.map((m) => (
-          <View key={m.id} style={[styles.bubble, m.from === 'user' ? styles.user : styles.ai]}>
-            {m.from === 'ai' ? (
-              <Row gap={5} style={{ marginBottom: 3 }}>
-                <Feather name="star" size={12} color={colors.primary} />
-                <T w="bold" size={12} color={colors.primary}>
-                  Sổ Nghe Lời
-                </T>
-              </Row>
-            ) : null}
-            <T size={13.5} color={m.from === 'user' ? colors.white : colors.ink} style={{ lineHeight: 19 }}>
-              {m.text}
+          <Pressable
+            onPress={checkout}
+            disabled={!items.length}
+            style={({ pressed }) => [
+              styles.saveOrderPill,
+              !items.length && { opacity: 0.4 },
+              pressed && { opacity: 0.8 },
+            ]}
+          >
+            <T w="bold" size={13} color={voiceTheme.primary}>
+              Tiếp tục
             </T>
-          </View>
-        ))}
-
-        {recording ? (
-          <View style={[styles.bubble, styles.user, { opacity: 0.75 }]}>
-            <T size={13.5} color={colors.white}>
-              {partial || '…'}
-            </T>
-          </View>
-        ) : null}
-
-        {items.length ? (
-          <View style={styles.order}>
-            <Row style={{ marginBottom: 6 }}>
-              <Feather name="star" size={13} color={colors.primary} />
-              <T w="bold" size={13} color={colors.primary} style={{ flex: 1 }}>
-                Sổ Nghe Lời đã ghi được
-              </T>
-              <T size={12} color={colors.faint}>
-                {items.length} món ·{' '}
-              </T>
-              <Pressable onPress={() => setEdit((e) => !e)} hitSlop={8} style={styles.editAction}>
-                <Row gap={3}>
-                  <Feather name={edit ? 'check' : 'edit-2'} size={12} color={colors.primary} />
-                  <T w="bold" size={12} color={colors.primary}>
-                    {edit ? 'Xong' : 'Sửa'}
-                  </T>
-                </Row>
-              </Pressable>
-            </Row>
-            {items.map((it, idx) => (
-              <Row key={`${it.productId ?? it.name}`} style={styles.line}>
-                <View style={{ flex: 1 }}>
-                  <T w="semibold" size={14}>
-                    {it.name}
-                  </T>
-                  <T size={12} color={colors.faint}>
-                    {vnd(it.price)} × {it.qty}
-                  </T>
-                </View>
-                {edit ? (
-                  <Stepper
-                    value={it.qty}
-                    onChange={(q) =>
-                      setItems((cur) =>
-                        q <= 0 ? cur.filter((_, i) => i !== idx) : cur.map((x, i) => (i === idx ? { ...x, qty: q } : x)),
-                      )
-                    }
-                  />
-                ) : (
-                  <T w="bold" size={15} color={colors.primary}>
-                    {vnd(it.price * it.qty)}
-                  </T>
-                )}
-              </Row>
-            ))}
-            {edit ? (
-              <Button
-                title="Thêm món"
-                icon="plus"
-                variant="soft"
-                small
-                onPress={() => setAddOpen(true)}
-                style={{ marginTop: 10 }}
-              />
-            ) : null}
-            <Row style={{ marginTop: 12 }}>
-              <T w="semibold" size={14} color={colors.muted} style={{ flex: 1 }}>
-                Tổng cộng · {count} món
-              </T>
-              <T w="extrabold" size={22} color={colors.primary}>
-                {vnd(total)}
-              </T>
-            </Row>
-            <Button title={`Tạo đơn · ${vnd(total)}`} icon="check" onPress={checkout} style={{ marginTop: 12 }} />
-          </View>
-        ) : null}
-      </ScrollView>
-
-      <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-        {recording ? (
-          <>
-            <Button
-              title="Đang áp dụng câu gợi ý… chạm để dừng"
-              icon="mic"
-              variant="voice"
-              onPress={() => finishRecording(voiceSamples[(sampleCursor - 1) % voiceSamples.length])}
-            />
-          </>
-        ) : (
-          <>
-            <Button title="Dùng câu gợi ý" icon="mic" variant="gold" onPress={startRecording} />
-            <Button
-              title="Chọn hàng"
-              icon="grid"
-              variant="green"
-              small
-              onPress={() => router.push('/pos')}
-              style={{ marginTop: 8, height: 44 }}
-            />
-          </>
-        )}
-        <Row style={styles.inputRow}>
-          <TextInput
-            value={text}
-            onChangeText={setText}
-            onSubmitEditing={sendText}
-            placeholder="Nhập tên hàng + giá"
-            placeholderTextColor={colors.faint}
-            style={styles.input}
-            returnKeyType="send"
-          />
-          <IconBtn
-            name="send"
-            bg={text.trim() ? colors.primary : colors.primarySoft}
-            color={text.trim() ? colors.white : colors.primaryLight}
-            size={44}
-            onPress={sendText}
-            label="Gửi"
-          />
+            <Feather name="arrow-right" size={14} color={voiceTheme.primary} />
+          </Pressable>
         </Row>
       </View>
 
+      {/* Scrollable Main Body */}
+      <ScrollView
+        ref={scroll}
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Hero Section: Mascot Robot on Left + Chat Conversation on Right */}
+        <View style={styles.heroRow}>
+          {/* Chat Stream Bubbles */}
+          <View style={styles.chatCol}>
+            {msgs.map((m) =>
+              m.from === 'ai' ? (
+                <Row key={m.id} gap={8} style={styles.aiMessageRow}>
+                  <BotAvatar emotion={m.emotion} size={44} />
+                  <View style={styles.aiBubbleCard}>
+                    <Row style={styles.aiBubbleHeader}>
+                      <Row gap={4} style={{ alignItems: 'center' }}>
+                        <Row gap={1.5} style={{ alignItems: 'center' }}>
+                          <View style={{ width: 2, height: 7, backgroundColor: voiceTheme.primary, borderRadius: 1 }} />
+                          <View style={{ width: 2, height: 11, backgroundColor: voiceTheme.primary, borderRadius: 1 }} />
+                          <View style={{ width: 2, height: 6, backgroundColor: voiceTheme.primary, borderRadius: 1 }} />
+                        </Row>
+                        <T w="bold" size={12.5} color={voiceTheme.primary}>
+                          Sổ Nghe Lời
+                        </T>
+                      </Row>
+                      <T size={11} color={voiceTheme.faint}>
+                        {m.time}
+                      </T>
+                    </Row>
+                    <T size={13} color={voiceTheme.ink} style={{ lineHeight: 18 }}>
+                      {m.text}
+                    </T>
+                  </View>
+                </Row>
+              ) : (
+                <Row key={m.id} gap={6} style={styles.userBubbleRow}>
+                  <View style={styles.userBubbleCard}>
+                    <T w="semibold" size={13} color={voiceTheme.inkSecondary}>
+                      {m.text}
+                    </T>
+                    <T size={10.5} color={voiceTheme.faint} style={{ marginLeft: 6 }}>
+                      {m.time}
+                    </T>
+                  </View>
+                  <View style={styles.userAvatarDisc}>
+                    <Feather name="user" size={14} color={voiceTheme.primary} />
+                  </View>
+                </Row>
+              ),
+            )}
+
+            {/* Listening Indicator */}
+            {recording ? (
+              <Row gap={6} style={styles.userBubbleRow}>
+                <View style={[styles.userBubbleCard, { backgroundColor: voiceTheme.primarySoft }]}>
+                  <ActivityIndicator size="small" color={voiceTheme.primary} style={{ marginRight: 4 }} />
+                  <T w="bold" size={13} color={voiceTheme.primary}>
+                    {partial || 'Đang lắng nghe…'}
+                  </T>
+                </View>
+                <View style={styles.userAvatarDisc}>
+                  <Feather name="mic" size={14} color={voiceTheme.primary} />
+                </View>
+              </Row>
+            ) : null}
+
+            {/* Mức mic thật: thanh không nhúc nhích khi nói nghĩa là micro không thu được tiếng */}
+            {recording && nativeListening ? (
+              <View style={styles.micMeterRow} accessibilityLabel={`Mức micro ${Math.round(micLevel * 100)} phần trăm`}>
+                <T size={11} color={voiceTheme.muted}>
+                  Mức mic
+                </T>
+                <View style={styles.micMeter}>
+                  <View style={[styles.micMeterFill, { width: `${Math.round(micLevel * 100)}%` }]} />
+                </View>
+              </View>
+            ) : null}
+          </View>
+        </View>
+
+        {/* Spiral Notebook Card (Sổ ghi đơn lò xo như trong ảnh mẫu) */}
+        <View style={styles.notebookContainer}>
+          {/* Decorative Behind Colored Layer (Green & Amber top-right peek) */}
+          <View style={styles.notebookBehindLayerGreen} />
+          <View style={styles.notebookBehindLayerAmber} />
+
+          {/* Main White Sheet */}
+          <View style={styles.notebookSheet}>
+            {/* Left Spiral Rings Column */}
+            <View style={styles.spiralRingsCol}>
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <View key={i} style={styles.spiralRingWrap}>
+                  <View style={styles.spiralHole} />
+                  <View style={styles.spiralCoilLoop} />
+                </View>
+              ))}
+            </View>
+
+            {/* Inner Notebook Content */}
+            <View style={styles.notebookInner}>
+              {/* Notebook Header */}
+              <Row style={styles.notebookHeaderRow}>
+                <Row gap={8} style={{ alignItems: 'center' }}>
+                  <View style={styles.cartIconBadge}>
+                    <Feather name="shopping-cart" size={15} color={voiceTheme.primary} />
+                  </View>
+                  <View>
+                    <T w="extrabold" size={15} color={voiceTheme.ink}>
+                      Đơn đang đọc
+                    </T>
+                    <T size={12} color={voiceTheme.muted}>
+                      {items.length} món · {totalCount} món
+                    </T>
+                  </View>
+                </Row>
+
+                <Pressable
+                  onPress={() => setEditMode((e) => !e)}
+                  style={({ pressed }) => [styles.editPillBtn, pressed && { opacity: 0.75 }]}
+                >
+                  <Feather name={editMode ? 'check' : 'edit-2'} size={12} color={voiceTheme.amberFg} />
+                  <T w="bold" size={12} color={voiceTheme.amberFg}>
+                    {editMode ? 'Xong' : 'Sửa'}
+                  </T>
+                </Pressable>
+              </Row>
+
+              {/* Items List inside Notebook */}
+              {items.length === 0 ? (
+                <View style={styles.emptyItemsNotice}>
+                  <T size={13} color={voiceTheme.muted} style={{ textAlign: 'center' }}>
+                    Chưa có món nào trong đơn.
+                  </T>
+                </View>
+              ) : (
+                items.map((it, idx) => {
+                  const imageSrc = getProductImage(it.name);
+
+                  return (
+                    <Row key={`${it.productId ?? it.name}-${idx}`} style={styles.notebookItemRow}>
+                      {/* Product Thumbnail Photo */}
+                      <View style={styles.itemThumb}>
+                        <Image
+                          source={{ uri: imageSrc }}
+                          style={styles.itemThumbImage}
+                          resizeMode="cover"
+                        />
+                      </View>
+
+                      {/* Product Name & Unit Price */}
+                      <View style={styles.itemInfoCol}>
+                        <T w="bold" size={14} color={voiceTheme.ink} numberOfLines={1}>
+                          {it.name}
+                        </T>
+                        <T size={12} color={voiceTheme.muted} style={{ marginTop: 1 }}>
+                          {vnd(it.price)}
+                        </T>
+                      </View>
+
+                      {/* Stepper Capsule */}
+                      <View style={styles.stepperWrap}>
+                        <Pressable
+                          hitSlop={6}
+                          onPress={() => updateItemQty(idx, -1)}
+                          style={styles.stepBtn}
+                        >
+                          <Feather name="minus" size={12} color={voiceTheme.inkSecondary} />
+                        </Pressable>
+                        <T w="bold" size={13} color={voiceTheme.ink} style={styles.stepQtyText}>
+                          {it.qty}
+                        </T>
+                        <Pressable
+                          hitSlop={6}
+                          onPress={() => updateItemQty(idx, 1)}
+                          style={styles.stepBtn}
+                        >
+                          <Feather name="plus" size={12} color={voiceTheme.inkSecondary} />
+                        </Pressable>
+                      </View>
+
+                      {/* Line Subtotal */}
+                      <T w="extrabold" size={14.5} color={voiceTheme.ink} style={styles.lineSubtotal}>
+                        {vnd(it.price * it.qty)}
+                      </T>
+
+                      {/* Trash Delete Action */}
+                      <Pressable
+                        hitSlop={8}
+                        onPress={() => removeItem(idx)}
+                        style={styles.deleteItemBtn}
+                      >
+                        <Feather name="trash-2" size={14} color={voiceTheme.faint} />
+                      </Pressable>
+                    </Row>
+                  );
+                })
+              )}
+
+              {/* "+ Thêm món khác >" Card */}
+              <Pressable
+                onPress={() => {
+                  triggerFeedback('selection');
+                  setAddOpen(true);
+                }}
+                style={({ pressed }) => [styles.addMoreRowBtn, pressed && { opacity: 0.75 }]}
+              >
+                <View style={styles.addMoreIconWrap}>
+                  <Feather name="plus" size={14} color={voiceTheme.primary} />
+                </View>
+                <T w="bold" size={13.5} color={voiceTheme.primary} style={{ flex: 1 }}>
+                  Thêm món khác
+                </T>
+                <Feather name="chevron-right" size={16} color={voiceTheme.primary} />
+              </Pressable>
+
+              {/* Notebook Footer Grand Total */}
+              <Row style={styles.notebookFooterTotal}>
+                <Row gap={4} style={{ alignItems: 'baseline' }}>
+                  <T w="extrabold" size={15} color={voiceTheme.ink}>
+                    Tổng cộng
+                  </T>
+                  <T size={13} color={voiceTheme.muted}>
+                    · {totalCount} món
+                  </T>
+                </Row>
+                <T w="extrabold" size={26} color={voiceTheme.primary}>
+                  {vnd(total)}
+                </T>
+              </Row>
+            </View>
+          </View>
+        </View>
+
+        {/* Khoản chi nghe được: chờ người dùng xác nhận mới ghi lên Core */}
+        {pendingExpenses.length > 0 ? (
+          <View style={styles.expenseCard}>
+            <Row gap={8} style={{ alignItems: 'center' }}>
+              <Feather name="credit-card" size={15} color={voiceTheme.amberFg} />
+              <T w="extrabold" size={14} color={voiceTheme.ink} style={{ flex: 1 }}>
+                Khoản chi chờ lưu
+              </T>
+            </Row>
+            {pendingExpenses.map((e, idx) => (
+              <Row key={`${e.title}-${idx}`} style={styles.expenseRow}>
+                <T size={13.5} color={voiceTheme.ink} numberOfLines={1} style={{ flex: 1 }}>
+                  {e.title}
+                </T>
+                <T w="bold" size={13.5} color={voiceTheme.ink}>
+                  {vnd(e.amount)}
+                </T>
+              </Row>
+            ))}
+            <Row gap={8} style={{ marginTop: 10 }}>
+              <Button
+                title="Bỏ qua"
+                variant="ghost"
+                small
+                disabled={expenseBusy}
+                onPress={() => {
+                  push('ai', 'Đã bỏ qua khoản chi.');
+                  setPendingExpenses([]);
+                }}
+                style={{ flex: 1 }}
+              />
+              <Button
+                title="Lưu chi phí"
+                variant="soft"
+                small
+                loading={expenseBusy}
+                disabled={expenseBusy}
+                onPress={confirmExpenses}
+                style={{ flex: 1 }}
+              />
+            </Row>
+          </View>
+        ) : null}
+
+        {/* Nút Thanh toán to tách biệt ở ngoài cuốn sổ */}
+        <Pressable
+          onPress={checkout}
+          disabled={!items.length}
+          style={({ pressed }) => [
+            styles.bigCheckoutBtn,
+            !items.length && styles.bigCheckoutDisabled,
+            pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },
+          ]}
+        >
+          <Row gap={8} style={{ alignItems: 'center', justifyContent: 'center' }}>
+            <Feather name="credit-card" size={18} color={items.length ? colors.white : voiceTheme.muted} />
+            <T w="extrabold" size={16} color={items.length ? colors.white : voiceTheme.muted}>
+              Thanh toán
+            </T>
+            <Feather name="arrow-right" size={18} color={items.length ? colors.white : voiceTheme.muted} />
+          </Row>
+        </Pressable>
+      </ScrollView>
+
+      {showManualInput ? (
+        <View style={styles.manualDock}>
+          <View style={styles.manualInputCard}>
+            <TextInput
+              value={manualText}
+              onChangeText={setManualText}
+              onSubmitEditing={sendManualText}
+              onBlur={() => setShowManualInput(false)}
+              placeholder="Nhập món và số lượng (VD: 2 cà phê sữa)..."
+              placeholderTextColor="#9CA3AF"
+              style={styles.manualTextInput}
+              returnKeyType="send"
+              autoFocus
+            />
+            <Pressable
+              onPress={sendManualText}
+              disabled={!manualText.trim()}
+              style={({ pressed }) => [
+                styles.manualSendBtn,
+                !manualText.trim() && { opacity: 0.4 },
+                pressed && { opacity: 0.8 },
+              ]}
+            >
+              <Feather name="arrow-up" size={16} color={colors.white} />
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        /* Bottom Voice Recording Dock (Khung ghi âm đáy màn hình đúng bố cục) */
+        <View style={[styles.bottomDock, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+          {/* Top Sheet Notch */}
+          <View style={styles.dockNotch} />
+
+          {/* 3 Columns: [Nhập tay]  |  [Central Voice Orb + Waves]  |  [Xoá đơn] */}
+          <Row style={styles.dockControlsRow}>
+            {/* Left Button: Nhập tay */}
+            <Pressable
+              onPress={() => {
+                triggerFeedback('selection');
+                setShowManualInput(true);
+              }}
+              style={({ pressed }) => [styles.dockActionCard, pressed && { opacity: 0.75 }]}
+            >
+              <MaterialCommunityIcons name="keyboard-outline" size={20} color={voiceTheme.primary} />
+              <T w="bold" size={11.5} color={voiceTheme.inkSecondary} style={{ marginTop: 4 }}>
+                Nhập tay
+              </T>
+            </Pressable>
+
+            {/* Center: Large Glowing Voice Orb with Waves */}
+            <CentralVoiceOrb
+              recording={recording}
+              signalLevel={micSignalLevel}
+              onPressIn={startRecording}
+              onPressOut={() => finishRecording()}
+            />
+
+            {/* Right Button: Xoá đơn */}
+            <Pressable
+              onPress={() => {
+                triggerFeedback('selection');
+                if (items.length > 0) setConfirmClear(true);
+              }}
+              style={({ pressed }) => [styles.dockActionCard, pressed && { opacity: 0.75 }]}
+            >
+              <Feather name="trash-2" size={18} color={voiceTheme.primary} />
+              <T w="bold" size={11.5} color={voiceTheme.inkSecondary} style={{ marginTop: 4 }}>
+                Xoá đơn
+              </T>
+            </Pressable>
+          </Row>
+
+          {/* Subtitle text under Voice Orb */}
+          <T w="medium" size={12.5} color={voiceTheme.muted} style={styles.dockSubtitleText}>
+            {recording
+              ? 'Đang lắng nghe… Thả tay để xử lý'
+              : stt.state === 'preparing'
+                ? `Đang tải model giọng nói… ${stt.percent}%`
+                : stt.state === 'error'
+                  ? `Chưa dùng được giọng nói: ${stt.message}`
+                  : 'Nhấn để ghi âm đơn hàng'}
+          </T>
+          {!recording && stt.state === 'error' ? (
+            <Pressable onPress={prepareSpeech} style={{ alignSelf: 'center', minHeight: 44, justifyContent: 'center' }} hitSlop={8}>
+              <T w="bold" size={12.5} color={voiceTheme.primary}>
+                Thử lại
+              </T>
+            </Pressable>
+          ) : null}
+        </View>
+      )}
+
+      {/* Dialog thêm món mới chưa có trong danh mục */}
       <Dialog
         visible={pending.length > 0}
-        icon="star"
-        title={`Thêm “${pending[0]?.name ?? ''}” vào danh mục?`}
-        message="Sản phẩm này chưa có trong danh mục. Thêm vào để lần sau chọn nhanh hơn."
-        confirm="Có, thêm"
-        cancel="Chỉ đơn này"
-        onCancel={() => resolvePending('once')}
+        icon="package"
+        title={`Thêm "${pending[0]?.name ?? ''}" vào danh mục?`}
+        message="Mặt hàng này chưa có trong danh mục. Hãy thêm trước khi bán."
+        confirm="Thêm vào danh mục"
+        cancel="Bỏ qua"
+        onCancel={() => resolvePending('skip')}
         onConfirm={() => resolvePending('catalog')}
       >
         <View style={{ marginTop: 12 }}>
@@ -341,61 +1234,573 @@ export default function Voice() {
               setPriceErr('');
             }}
           />
+          <Field label="Đơn vị" placeholder="VD: cái, ly, phần" value={newUnit} onChangeText={setNewUnit} />
         </View>
-        <Pressable onPress={() => resolvePending('skip')}>
-          <T size={12} color={colors.faint} style={{ textAlign: 'center' }}>
-            Bỏ qua món này
-          </T>
-        </Pressable>
       </Dialog>
+
+      {/* Dialog xác nhận xoá đơn */}
+      <Dialog
+        visible={confirmClear}
+        danger
+        icon="trash-2"
+        title="Xoá các món trong đơn?"
+        message="Các món đã ghi âm sẽ bị xoá khỏi đơn hiện tại."
+        confirm="Xoá hết"
+        cancel="Giữ lại"
+        onConfirm={() => {
+          setItems([]);
+          setConfirmClear(false);
+          toast('Đã xoá đơn');
+        }}
+        onCancel={() => setConfirmClear(false)}
+      />
 
       <AddItemSheet
         visible={addOpen}
         onClose={() => setAddOpen(false)}
+        products={products}
         onPick={(li) => {
           mergeItems([li]);
           toast(`Đã thêm ${li.name}`);
         }}
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 20 },
-  emptyIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 24,
-    backgroundColor: colors.border,
+  screen: {
+    flex: 1,
+    backgroundColor: voiceTheme.pageBg,
+  },
+  headerShell: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    backgroundColor: voiceTheme.pageBg,
+  },
+  headerLogoImage: {
+    width: 34,
+    height: 34,
+  },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: voiceTheme.cardBg,
+    borderWidth: 1,
+    borderColor: voiceTheme.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow(0),
+  },
+  saveOrderPill: {
+    height: 38,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: voiceTheme.primarySoft,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  scrollContent: {
+    paddingHorizontal: 14,
+    paddingTop: 4,
+    paddingBottom: 160,
+  },
+
+  // Hero Section
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 10,
+  },
+  chatCol: {
+    flex: 1,
+    gap: 8,
+  },
+  aiMessageRow: {
+    alignItems: 'flex-start',
+    width: '100%',
+  },
+  aiBubbleCard: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: voiceTheme.cardBg,
+    borderRadius: 18,
+    borderTopLeftRadius: 4,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderColor: voiceTheme.border,
+    ...shadow(1),
+  },
+  aiBubbleHeader: {
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  userBubbleRow: {
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    alignSelf: 'flex-end',
+    maxWidth: '92%',
+  },
+  userBubbleCard: {
+    flexShrink: 1,
+    backgroundColor: voiceTheme.primarySoft,
+    borderRadius: 16,
+    borderTopRightRadius: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'baseline',
+  },
+  userAvatarDisc: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: voiceTheme.primaryBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sample: {
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    marginBottom: 8,
+
+  // Manual Input Dock (Thanh phụ kiện bàn phím đồng bộ)
+  manualDock: {
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  manualInputCard: {
+    height: 44,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: colors.border,
-    minHeight: 44,
+    borderColor: '#E5E7EB',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    gap: 8,
+  },
+  manualTextInput: {
+    flex: 1,
+    height: 38,
+    fontSize: 14,
+    fontFamily: font.medium,
+    color: voiceTheme.ink,
+    outlineStyle: 'none',
+  } as never,
+  manualSendBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: voiceTheme.primary,
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  bubble: { maxWidth: '84%', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 10 },
-  user: { alignSelf: 'flex-end', backgroundColor: colors.ink, borderBottomRightRadius: 5 },
-  ai: { alignSelf: 'flex-start', backgroundColor: colors.white, borderColor: colors.border, borderWidth: 1, borderBottomLeftRadius: 5 },
-  order: { backgroundColor: colors.white, borderRadius: 18, borderColor: colors.border, borderWidth: 1, padding: 16, marginTop: 4, ...shadow(1) },
-  line: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
-  bottom: {
-    backgroundColor: colors.white,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+
+  // Spiral Notebook Card
+  notebookContainer: {
+    position: 'relative',
+    marginTop: 6,
+    marginBottom: 12,
   },
-  inputRow: { marginTop: 10, backgroundColor: colors.bg, borderRadius: 14, paddingLeft: 14, paddingRight: 6, height: 48 },
-  headerAction: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
-  editAction: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
-  input: { flex: 1, fontFamily: font.medium, fontSize: 14, color: colors.ink, height: '100%', outlineStyle: 'none' } as never,
+  notebookBehindLayerGreen: {
+    position: 'absolute',
+    top: -4,
+    left: 10,
+    right: 4,
+    height: 24,
+    borderRadius: 22,
+    backgroundColor: '#86EFAC',
+    opacity: 0.8,
+  },
+  notebookBehindLayerAmber: {
+    position: 'absolute',
+    top: -2,
+    left: 6,
+    right: 2,
+    height: 20,
+    borderRadius: 22,
+    backgroundColor: '#FDE047',
+    opacity: 0.9,
+  },
+  notebookSheet: {
+    backgroundColor: voiceTheme.cardBg,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: voiceTheme.border,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    ...shadow(2),
+  },
+  spiralRingsCol: {
+    width: 24,
+    backgroundColor: '#F8FAFC',
+    borderRightWidth: 1,
+    borderRightColor: '#EEF2F6',
+    alignItems: 'center',
+    paddingVertical: 18,
+    justifyContent: 'space-between',
+  },
+  spiralRingWrap: {
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  spiralHole: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#CBD5E1',
+  },
+  spiralCoilLoop: {
+    position: 'absolute',
+    left: 2,
+    width: 16,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#94A3B8',
+    backgroundColor: 'transparent',
+  },
+  notebookInner: {
+    flex: 1,
+    padding: 14,
+  },
+  notebookHeaderRow: {
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    marginBottom: 6,
+  },
+  cartIconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: voiceTheme.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editPillBtn: {
+    backgroundColor: voiceTheme.amberSoft,
+    borderRadius: 10,
+    paddingHorizontal: 9,
+    paddingVertical: 4.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  emptyItemsNotice: {
+    paddingVertical: 18,
+  },
+  notebookItemRow: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
+    alignItems: 'center',
+    gap: 8,
+  },
+  itemThumb: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  itemThumbImage: {
+    width: '100%',
+    height: '100%',
+  },
+  itemInfoCol: {
+    flex: 1,
+  },
+  stepperWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    paddingVertical: 2,
+  },
+  stepBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow(0),
+  },
+  stepQtyText: {
+    minWidth: 20,
+    textAlign: 'center',
+  },
+  lineSubtotal: {
+    minWidth: 68,
+    textAlign: 'right',
+  },
+  deleteItemBtn: {
+    padding: 5,
+  },
+  addMoreRowBtn: {
+    marginTop: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: voiceTheme.primaryBorder,
+    backgroundColor: '#FAF7FF',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  addMoreIconWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    backgroundColor: voiceTheme.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notebookFooterTotal: {
+    marginTop: 14,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+  },
+  expenseCard: {
+    marginTop: 12,
+    backgroundColor: voiceTheme.cardBg,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: voiceTheme.border,
+    padding: 14,
+  },
+  expenseRow: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: voiceTheme.borderLight,
+    alignItems: 'center',
+    gap: 8,
+  },
+  bigCheckoutBtn: {
+    marginTop: 6,
+    marginBottom: 14,
+    backgroundColor: voiceTheme.primary,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow(2),
+  },
+  bigCheckoutDisabled: {
+    backgroundColor: '#E2E8F0',
+    opacity: 0.75,
+  },
+
+  // Bottom Voice Recording Dock
+  bottomDock: {
+    backgroundColor: '#EDEAF8',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    ...shadow(3),
+  },
+  dockNotch: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#CBD5E1',
+    alignSelf: 'center',
+    marginBottom: 6,
+  },
+  dockControlsRow: {
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 6,
+  },
+  dockActionCard: {
+    width: 62,
+    height: 62,
+    borderRadius: 16,
+    backgroundColor: voiceTheme.cardBg,
+    borderWidth: 1,
+    borderColor: voiceTheme.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow(1),
+  },
+  dockSubtitleText: {
+    textAlign: 'center',
+    marginTop: 6,
+    marginBottom: 2,
+  },
+  micMeterRow: {
+    alignSelf: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+    marginRight: 38,
+  },
+  micMeter: {
+    width: 120,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+    overflow: 'hidden',
+  },
+  micMeterFill: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: voiceTheme.primary,
+  },
+
+  // Central Orb Styles
+  centralOrbContainer: {
+    width: 140,
+    height: 104,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  softRippleRing: {
+    position: 'absolute',
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    backgroundColor: 'rgba(72, 42, 172, 0.10)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(72, 42, 172, 0.22)',
+  },
+  orbHitArea: {
+    width: 90,
+    height: 90,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    zIndex: 10,
+  },
+  pulsingLogoWrap: {
+    width: 86,
+    height: 86,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  logoRecordImage: {
+    width: 86,
+    height: 86,
+  },
+  logoAmbientGlow: {
+    position: 'absolute',
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    backgroundColor: 'rgba(72, 42, 172, 0.08)',
+    shadowColor: voiceTheme.primary,
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 2 },
+  },
+
+
+
+  // Mascot Mini Details
+  mascotWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  mascotHead: {
+    width: 54,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: voiceTheme.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    ...shadow(2),
+  },
+  mascotVisor: {
+    width: 34,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#1E1B4B',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mascotEyeCurved: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#FFFFFF',
+  },
+  mascotEarLeft: {
+    position: 'absolute',
+    left: -6,
+    top: 12,
+    width: 6,
+    height: 14,
+    borderRadius: 3,
+    backgroundColor: voiceTheme.primary,
+  },
+  mascotEarRight: {
+    position: 'absolute',
+    right: -6,
+    top: 12,
+    width: 6,
+    height: 14,
+    borderRadius: 3,
+    backgroundColor: voiceTheme.primary,
+  },
+  mascotAntennaLeft: {
+    position: 'absolute',
+    top: -6,
+    left: 18,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: voiceTheme.amber,
+  },
+  mascotAntennaRight: {
+    position: 'absolute',
+    top: -6,
+    right: 18,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: voiceTheme.amber,
+  },
+  mascotTabletMini: {
+    position: 'absolute',
+    bottom: -6,
+    right: -4,
+    width: 28,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: voiceTheme.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow(1),
+  },
 });

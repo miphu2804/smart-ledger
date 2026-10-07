@@ -4,7 +4,12 @@
 //
 // ID: BIGINT IDENTITY → Java Long
 // Money: BIGINT VND
-// Time: TIMESTAMPTZ, stored in UTC
+// Time: TIMESTAMPTZ, UTC internally; Core JSON displays +07:00
+// Core schema: Flyway V1-V12 (business tables, idempotency, shared OWNER/ADMIN audit_logs, cost snapshot).
+// Core audit alignment: staging b1de421c461d, 2026-10-06; AI sections unchanged.
+// AI schema: supabase/migrations AI baseline (chat_conversations, chat_messages, pgvector, ai_read views).
+// ai_requests and notification tables are planned and not created by any migration yet.
+// Report periods use Asia/Ho_Chi_Minh; this logical ERD does not imply runtime completion.
 // Quantity: NUMERIC(15,3)
 //
 // =====================================================
@@ -27,6 +32,7 @@ Enum UserStatus {
 Enum ShopStatus {
   ACTIVE
   INACTIVE
+  ARCHIVED
 }
 
 Enum CatalogStatus {
@@ -58,6 +64,7 @@ Enum PaymentMethod {
 Enum DebtStatus {
   OPEN
   SETTLED
+  VOIDED
 }
 
 Enum DraftStatus {
@@ -164,6 +171,9 @@ Table shops {
   address varchar(500)
 
   status ShopStatus [not null, default: 'ACTIVE']
+  archived_at timestamptz
+  inactive_reason varchar(500)
+  archived_reason varchar(500)
 
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
@@ -253,6 +263,8 @@ Table customers {
     (shop_id, normalized_phone)
     (shop_id, status)
   }
+
+  Note: 'Name and phone are not unique. Use customer_id to share one debt history; do not automatically merge matching names/phones.'
 }
 
 
@@ -323,7 +335,7 @@ Table sale_draft_items {
     product_id
   }
 
-  Note: 'Core requires a product from the same shop or a non-blank custom-item name and unit before persisting a draft item.'
+  Note: 'Core accepts a same-shop catalog product or a custom item with product_id null, a non-blank name and unit. Custom items do not deduct product stock.'
 }
 
 
@@ -364,14 +376,15 @@ Table sales {
     sale_status
   }
 
-  Note: 'DEBT and PARTIAL sales require customer_id; Core validates this before confirmation and creates the matching debt in the same transaction.'
+  Note: 'Confirmed DEBT/PARTIAL sales require customer_id and a matching debt. Void preserves paid_vnd and payment_status as collection history; remaining debt is cancelled separately, and refund records money actually returned.'
 }
 
 
 Table sale_items {
   id bigint [pk, increment]
   sale_id bigint [not null]
-  product_id bigint [not null]
+  product_id bigint
+  stock_deducted boolean
 
   product_name_snapshot varchar(255) [not null]
   unit_snapshot varchar(50) [not null]
@@ -379,6 +392,7 @@ Table sale_items {
   quantity numeric(15,3) [not null]
   unit_price_vnd bigint [not null]
   line_total_vnd bigint [not null]
+  estimated_cost_vnd bigint
 
   created_at timestamptz [not null, default: `now()`]
 
@@ -386,12 +400,33 @@ Table sale_items {
     sale_id
     product_id
   }
+
+  Note: 'product_id is null for a custom item; name/unit snapshots remain required. stock_deducted is true only when stock was deducted at confirmation, false for custom/untracked items. Its NULL means unknown historical stock movement. estimated_cost_vnd is total snapshotted catalog cost for the line; NULL means unknown/custom/history before V12 and must not be replaced with current Product cost or a guessed fallback.'
 }
 
 
 // =====================================================
-// DEBTS & PAYMENTS
+// DEBTS, PAYMENTS & REFUNDS
 // =====================================================
+
+Table sale_refunds {
+  id bigint [pk, increment]
+  sale_id bigint [not null, unique]
+
+  amount_vnd bigint [not null]
+  refund_method PaymentMethod [not null]
+  transfer_reference varchar(255)
+
+  refunded_by_user_id bigint [not null]
+  refunded_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    refunded_at
+  }
+
+  Note: 'V9: at most one full refund per sale, amount_vnd > 0. Refund is all collected money, including later repayments; cancelled unpaid debt is not a refund. A zero-paid void creates no refund row. No partial refunds.'
+}
+
 
 Table debts {
   id bigint [pk, increment]
@@ -405,11 +440,15 @@ Table debts {
 
   created_at timestamptz [not null, default: `now()`]
   settled_at timestamptz
+  voided_at timestamptz
+  cancelled_vnd bigint
 
   indexes {
     (customer_id, status)
     status
   }
+
+  Note: 'V9 lifecycle: OPEN has outstanding > 0 and no settled/void audit; SETTLED has outstanding = 0 and settled_at, with voided_at/cancelled_vnd NULL. VOIDED has outstanding = 0, settled_at NULL, voided_at and 0 < cancelled_vnd <= original_vnd. Voiding a settled debt keeps SETTLED.'
 }
 
 
@@ -516,6 +555,9 @@ Table chat_conversations {
   shop_id bigint [not null]
 
   title varchar(255)
+
+  summary text [note: 'Rolling summary of folded messages (AI baseline)']
+  summary_through_message_id bigint [note: 'Newest message folded into summary; no FK by design']
 
   started_at timestamptz [not null, default: `now()`]
   last_message_at timestamptz [not null, default: `now()`]
@@ -661,25 +703,34 @@ Table api_idempotency_keys {
 Table audit_logs {
   id bigint [pk, increment]
 
-  actor_user_id bigint
-  shop_id bigint
+  actor_user_id bigint [not null]
+  actor_role varchar(20) [not null, note: 'OWNER or ADMIN; actor role snapshot, V10']
+  shop_id bigint [note: 'Nullable only for supported ADMIN non-shop reads (V11); business events require a shop']
 
   action varchar(100) [not null]
   entity_type varchar(100) [not null]
-  entity_id bigint
+  entity_id bigint [note: 'Positive target for business/detail events; null for permitted ADMIN global/list reads (V11)']
 
-  old_data jsonb
-  new_data jsonb
+  outcome varchar(20) [not null, note: 'SUCCESS only (V10)']
+  reason varchar(500)
+  request_id varchar(36) [not null, note: 'Server-generated lowercase UUID; format checked by V10']
+  idempotency_key varchar(255)
+  metadata jsonb [not null, default: `'{}'::jsonb`, note: 'JSON object; Core allowlists keys/types. ADMIN reads store only queryPresent/resultCount']
 
-  ip_address varchar(64)
+  old_data jsonb [note: 'Retained nullable legacy column; Core does not populate snapshots']
+  new_data jsonb [note: 'Retained nullable legacy column; Core does not populate snapshots']
+
+  ip_address varchar(64) [note: 'Retained nullable legacy column; Core does not capture IP headers']
 
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (shop_id, created_at)
+    (shop_id, created_at, id)
     (entity_type, entity_id)
     actor_user_id
   }
+
+  Note: 'V10/V11 shared append-only table, no admin_access_logs. Actor/shop FKs use ON DELETE RESTRICT. DB checks constrain action/entity/target combinations, positive IDs, role, SUCCESS outcome, UUID request_id and metadata object; UPDATE/DELETE/TRUNCATE triggers reject mutation. V11 permits null shop/target only for whitelisted ADMIN reads; business events still require both. OWNER and ADMIN APIs expose different scoped projections; see ERD description migration alignment and API contract.'
 }
 
 
@@ -738,6 +789,9 @@ Ref: customers.id < debts.customer_id
 Ref: sales.id < payments.sale_id
 Ref: debts.id < payments.debt_id
 Ref: users.id < payments.received_by_user_id
+
+Ref: sales.id - sale_refunds.sale_id
+Ref: users.id < sale_refunds.refunded_by_user_id
 
 
 // ---------- EXPENSE ----------
@@ -808,6 +862,7 @@ TableGroup drafts_and_sales {
 TableGroup payment_and_expense {
   debts
   payments
+  sale_refunds
   expenses
 }
 

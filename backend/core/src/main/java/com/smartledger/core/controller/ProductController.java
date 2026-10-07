@@ -1,0 +1,111 @@
+package com.smartledger.core.controller;
+
+import com.smartledger.core.dto.request.ProductPatchRequest;
+import com.smartledger.core.dto.request.ProductStockInRequest;
+import com.smartledger.core.dto.request.ProductWriteRequest;
+import com.smartledger.core.dto.response.ProductResponse;
+import com.smartledger.core.security.VerifiedFirebaseToken;
+import com.smartledger.core.service.ProductService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import java.util.List;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/v1/products")
+@Tag(name = "Products")
+@SecurityRequirement(name = "bearerAuth")
+public class ProductController {
+
+    private final ProductService productService;
+
+    public ProductController(ProductService productService) {
+        this.productService = productService;
+    }
+
+    @PostMapping
+    @Operation(summary = "Create a product in the selected shop")
+    @ApiResponse(responseCode = "201", description = "Product created",
+            content = @Content(schema = @Schema(implementation = ProductResponse.class)))
+    public ResponseEntity<ProductResponse> create(
+            @AuthenticationPrincipal VerifiedFirebaseToken firebaseToken,
+            @RequestHeader("X-Shop-Id") String shopId,
+            @Valid @RequestBody ProductWriteRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(productService.create(firebaseToken, shopId, request));
+    }
+
+    @GetMapping
+    @Operation(summary = "List active products in the selected shop")
+    @ApiResponse(responseCode = "200", description = "Active products")
+    public List<ProductResponse> list(
+            @AuthenticationPrincipal VerifiedFirebaseToken firebaseToken,
+            @RequestHeader("X-Shop-Id") String shopId) {
+        return productService.list(firebaseToken, shopId);
+    }
+
+    @GetMapping("/{productId}")
+    @Operation(summary = "Get an active product in the selected shop")
+    @ApiResponse(responseCode = "200", description = "Product",
+            content = @Content(schema = @Schema(implementation = ProductResponse.class)))
+    public ProductResponse getById(
+            @AuthenticationPrincipal VerifiedFirebaseToken firebaseToken,
+            @RequestHeader("X-Shop-Id") String shopId,
+            @Parameter(description = "Product ID", example = "1") @PathVariable String productId) {
+        return productService.getById(firebaseToken, shopId, productId);
+    }
+
+    @PatchMapping("/{productId}")
+    @Operation(summary = "Partially update an active product in the selected shop",
+            description = "stockQuantity is not accepted (400). Enabling tracking starts at zero; use stock-in to add stock.")
+    @ApiResponse(responseCode = "200", description = "Product updated",
+            content = @Content(schema = @Schema(implementation = ProductResponse.class)))
+    public ProductResponse patch(
+            @AuthenticationPrincipal VerifiedFirebaseToken firebaseToken,
+            @RequestHeader("X-Shop-Id") String shopId,
+            @Parameter(description = "Product ID", example = "1") @PathVariable String productId,
+            @Valid @RequestBody ProductPatchRequest request) {
+        return productService.patch(firebaseToken, shopId, productId, request);
+    }
+
+    @PostMapping("/{productId}/stock-in")
+    @Operation(summary = "Add stock to an active tracked product",
+            description = "Positive quantity, up to 12 integer and 3 fractional digits. Retry with the same key and normalized payload replays the original response without adding stock again.")
+    @ApiResponse(responseCode = "200", description = "Stock added or original result replayed",
+            content = @Content(schema = @Schema(implementation = ProductResponse.class)))
+    public ProductResponse stockIn(
+            @AuthenticationPrincipal VerifiedFirebaseToken firebaseToken,
+            @RequestHeader("X-Shop-Id") String shopId,
+            @PathVariable String productId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @Valid @RequestBody ProductStockInRequest request) {
+        return productService.stockIn(firebaseToken, shopId, productId, idempotencyKey, request);
+    }
+
+    @DeleteMapping("/{productId}")
+    @Operation(summary = "Archive a product in the selected shop")
+    @ApiResponse(responseCode = "204", description = "Product archived")
+    public ResponseEntity<Void> archive(
+            @AuthenticationPrincipal VerifiedFirebaseToken firebaseToken,
+            @RequestHeader("X-Shop-Id") String shopId,
+            @Parameter(description = "Product ID", example = "1") @PathVariable String productId) {
+        productService.archive(firebaseToken, shopId, productId);
+        return ResponseEntity.noContent().build();
+    }
+}

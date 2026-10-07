@@ -70,7 +70,7 @@ export default function Printer() {
       ) : null}
 
       <T w="bold" size={14} style={{ marginTop: 20, marginBottom: 8 }}>
-        Mẫu hoá đơn
+        Mẫu in
       </T>
       <View style={[styles.paper, paper === 'k58' && { width: 210 }]}>
         <T w="extrabold" size={13} style={{ textAlign: 'center' }}>

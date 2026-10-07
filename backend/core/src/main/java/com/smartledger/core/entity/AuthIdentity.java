@@ -12,9 +12,15 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "auth_identities")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class AuthIdentity {
 
     public static final String FIREBASE_PROVIDER = "FIREBASE";
@@ -39,9 +45,6 @@ public class AuthIdentity {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
-    protected AuthIdentity() {
-    }
-
     public static AuthIdentity forFirebase(UserAccount user, String firebaseUid) {
         AuthIdentity identity = new AuthIdentity();
         identity.user = user;
@@ -52,17 +55,14 @@ public class AuthIdentity {
 
     @PrePersist
     void onCreate() {
-        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         createdAt = now;
         updatedAt = now;
     }
 
     @PreUpdate
     void onUpdate() {
-        updatedAt = OffsetDateTime.now();
+        updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 
-    public UserAccount getUser() {
-        return user;
-    }
 }

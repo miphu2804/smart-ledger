@@ -34,9 +34,20 @@ yarn-error.*
 # local env files
 .env*.local
 
+# Firebase client config (lấy từ Firebase Console, repo công khai nên không commit)
+google-services.json
+
 # typescript
 *.tsbuildinfo
 
 # generated native folders
 /ios
 /android
+
+# Firebase native config (per-developer download)
+GoogleService-Info.plist
+google-services.json
+
+# Speech model (about 49 MB): kept out of the public repo, see assets/models/README.md
+/assets/models/*
+!/assets/models/README.md

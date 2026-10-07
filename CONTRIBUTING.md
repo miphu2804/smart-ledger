@@ -58,7 +58,7 @@ feat/*, fix/*, chore/*, docs/*  →  staging  →  main (production)
 
 - Open normal feature, fix, chore, and documentation pull requests against `staging`.
 - A merge into `staging` may deploy automatically to the staging environment after required checks pass.
-- After `staging` passes its checks, open a `staging` → `main` pull request for the production release. For this release only, the two branch histories conflict in `frontend/mobile`; use the short-lived `release/staging-to-main-2026-09-24` branch, created from `main` with `staging` merged in and the mobile conflicts resolved from `staging`. Delete it after the release.
+- After `staging` passes its checks, open a `staging` → `main` pull request for the production release. If the two histories conflict, resolve them on a short-lived `release/staging-to-main-<date>` branch created from `main` with `staging` merged in, add that exact branch name to the allow-list in `.github/workflows/release-policy.yml`, and delete the branch after the release.
 - Merge release pull requests with a merge commit, never squash: squashing disconnects `staging` history from `main` and forces a manual resync. This follows the production-branch pattern in [GitLab Flow](https://about.gitlab.com/topics/version-control/what-is-gitlab-flow/) and [branch-per-environment strategies](https://docs.gitlab.com/user/project/repository/branches/strategies/).
 - Production deployment requires a tag or manual approval; merging to `main` alone must not bypass this gate.
 - Start hotfixes from `main`, open the pull request against `main`, then synchronize the same fix back to `staging`.
@@ -78,10 +78,10 @@ git switch -c feat/<short-description>
 
 - Pull requests into `staging` and `main` must pass configured checks before merge.
 - Deploy the same tested commit or artifact from staging to production; environment-specific values belong in secrets or environment configuration.
-- Run database migrations on staging before production. Destructive migrations require an explicit rollback or recovery plan.
+- Run database migrations on staging before production, and only from code merged into `staging`; never from a feature branch, because dev shares the staging database (see [Database migrations](README.md#database-migrations)). Destructive migrations require an explicit rollback or recovery plan.
 - Required CI checks are `ai` (lint and tests), `core` (Maven verify plus Flyway migration against a fresh PostgreSQL service), `container-images` (Docker Compose build of custom service images), and `mobile-web` (TypeScript and Expo web export).
-- The Vercel mobile project uses `frontend/mobile` as its root and deploys pull requests and `staging` as previews; `main` is the production branch. Vercel must be connected to the repository before preview URLs are available.
-- CI verifies migrations from an empty database. Staging/prod database separation, backup/restore, and rollback still require provisioned environments and an operational smoke check before production release.
+- The mobile web is built in CI and uploaded to Vercel by the `deploy-web` job: pull requests get a preview URL, `staging` a fixed alias, and `main` production. See [CI/CD](docs/development/ci-cd.md#mobile-web-on-vercel).
+- CI verifies migrations from an empty database. Staging and production use separate Supabase projects with separate credential files and dev shares the staging database (see [Local Compose](README.md#local-compose)); backup/restore, rollback, and moving production credentials into an environment-scoped secret store still require an operational smoke check before production release.
 
 ### Pull request title
 

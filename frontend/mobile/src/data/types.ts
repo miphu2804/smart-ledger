@@ -12,10 +12,13 @@ export interface Product {
   category: Category;
   /** Các cách người bán hay gọi tên món — giúp bộ nhận diện giả lập */
   aliases?: string[];
+  /** Mã vạch sản phẩm (EAN-13, UPC, Code 128...) để quét bán hàng */
+  barcode?: string;
 }
 
 export interface LineItem {
-  productId?: string;
+  /** string = id sản phẩm mẫu (mock); number = id Product thật (Core) — xem AGENTS.md */
+  productId?: string | number;
   name: string;
   price: number;
   qty: number;
@@ -45,6 +48,10 @@ export interface Invoice {
   transcript?: string;
   /** Chỉ có ở đơn tạo trong phiên này; dữ liệu mẫu ban đầu không có */
   effects?: InvoiceEffects;
+  /** Tổng tiền đơn sau giảm giá (Core `totalVnd`) — có thì ưu tiên hơn tổng các dòng, xem `invoiceTotal` */
+  total?: number;
+  /** false = không biết hình thức thanh toán (đơn lấy từ Core: danh sách đơn không kèm phương thức) */
+  methodKnown?: boolean;
 }
 
 export type ExpenseCategory = 'nguyenlieu' | 'dien' | 'matbang' | 'luong' | 'khac';
@@ -82,6 +89,35 @@ export interface ChatMessage {
   text: string;
 }
 
+// ---- Trợ lý AI (Agent chat) — khớp docs/contracts/api-contracts.md §5, AI dùng snake_case ----
+export interface AgentChatRequest {
+  conversation_id?: number | null;
+  message: string;
+}
+
+export interface AgentChatMessageView {
+  conversation_id: number;
+  message_id: number;
+  answer: string;
+}
+
+export interface AgentConversationSummary {
+  conversation_id: number;
+  title: string | null;
+  last_message_at: string;
+}
+
+export interface AgentMessageView {
+  message_id: number;
+  role: 'USER' | 'ASSISTANT';
+  content: string;
+  created_at: string;
+}
+
+export interface AgentConversationView extends AgentConversationSummary {
+  messages: AgentMessageView[];
+}
+
 // ---- Phiên đăng nhập & tiệm — khớp `AuthSessionResponse` của Core (backend/core, nhánh feat/auth-session) ----
 // Lưu ý: Core đang trả camelCase và id kiểu số (Long); docs/contracts/api-contracts.md ghi snake_case và uuid.
 // Đang bám theo code của Core; nếu backend đổi (SNAKE_CASE…) thì chỉ cần sửa các kiểu dưới đây và sessionApi.
@@ -102,7 +138,9 @@ export interface ShopView {
   industries?: string[] | null;
   phone?: string | null;
   address?: string | null;
-  status?: 'ACTIVE' | 'INACTIVE';
+  status?: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+  inactiveReason?: string | null;
+  archivedReason?: string | null;
 }
 
 export interface SessionView {
@@ -110,4 +148,154 @@ export interface SessionView {
   role: 'OWNER' | 'ADMIN';
   shops: ShopView[];
   needsOnboarding: boolean;
+}
+
+// ---- Danh mục hàng hoá & bán hàng thật — khớp Core (backend/core), xem AGENTS.md/hợp đồng API ----
+
+export interface CategoryView {
+  id: number;
+  shopId: number;
+  name: string;
+  status: 'ACTIVE' | 'ARCHIVED';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProductView {
+  id: number;
+  shopId: number;
+  categoryId: number | null;
+  name: string;
+  barcode: string | null;
+  imageUrl: string | null;
+  unit: string;
+  sellingPriceVnd: number;
+  costPriceVnd: number | null;
+  tracked: boolean;
+  /** BigDecimal ở Core — có thể có phần thập phân; UI hiện tại chỉ cần số nguyên */
+  stockQuantity: number | null;
+  status: 'ACTIVE' | 'ARCHIVED';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaleDraftItemView {
+  id: number;
+  productId: number;
+  productName: string;
+  unit: string;
+  quantity: number;
+  unitPriceVnd: number;
+  lineTotalVnd: number;
+}
+
+export interface SaleDraftView {
+  id: number;
+  shopId: number;
+  customerName: string | null;
+  customerPhone: string | null;
+  discountVnd: number;
+  estimatedTotalVnd: number;
+  initialPaidVnd: number | null;
+  initialPaymentMethod: 'CASH' | 'TRANSFER' | null;
+  status: 'DRAFT' | 'CONFIRMED' | 'CANCELLED' | 'EXPIRED';
+  expiresAt: string;
+  confirmedSaleId: number | null;
+  items: SaleDraftItemView[];
+}
+
+export interface SaleItemView {
+  id: number;
+  productId: number;
+  productName: string;
+  unit: string;
+  quantity: number;
+  unitPriceVnd: number;
+  lineTotalVnd: number;
+}
+
+export interface SaleView {
+  id: number;
+  shopId: number;
+  customerName: string | null;
+  customerPhone: string | null;
+  subtotalVnd: number;
+  discountVnd: number;
+  totalVnd: number;
+  paidVnd: number;
+  saleStatus: 'CONFIRMED' | 'VOIDED';
+  paymentStatus: 'PAID' | 'DEBT' | 'PARTIAL';
+  soldAt: string;
+  items: SaleItemView[];
+  customerId: number | null;
+  outstandingVnd: number;
+}
+
+/** Hoàn tiền của một đơn đã huỷ (`SaleRefundResponse`). Một đơn có tối đa một khoản hoàn, bằng toàn bộ tiền đã thu. */
+export interface SaleRefundView {
+  id: number;
+  saleId: number;
+  amountVnd: number;
+  refundMethod: 'CASH' | 'TRANSFER';
+  transferReference: string | null;
+  refundedByUserId: number;
+  refundedAt: string;
+}
+
+/** Kết quả `POST /sales/{id}/void` (`SaleVoidResponse`); `refund` là null khi đơn chưa thu đồng nào. */
+export interface SaleVoidView {
+  sale: SaleView;
+  refund: SaleRefundView | null;
+  /** Số nợ còn dư bị huỷ cùng đơn (không phải tiền hoàn) */
+  cancelledDebtVnd: number;
+  stockRestocked: boolean;
+}
+
+// ---- Công nợ, khách hàng, khoản chi thật — khớp Core (backend/core), xem AGENTS.md ----
+
+export interface DebtView {
+  id: number;
+  saleId: number;
+  customerId: number;
+  originalVnd: number;
+  outstandingVnd: number;
+  /** `VOIDED`: đơn gốc bị huỷ nên số dư nợ bị huỷ theo (dư nợ 0, `cancelledVnd` là số bị huỷ); không còn là nợ phải thu */
+  status: 'OPEN' | 'SETTLED' | 'VOIDED';
+  createdAt: string;
+  settledAt: string | null;
+  voidedAt?: string | null;
+  cancelledVnd?: number | null;
+}
+
+export interface CustomerView {
+  id: number;
+  shopId: number;
+  name: string;
+  phone: string | null;
+  status: 'ACTIVE' | 'ARCHIVED';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaymentView {
+  id: number;
+  saleId: number;
+  amountVnd: number;
+  paymentMethod: 'CASH' | 'TRANSFER';
+  type: 'INITIAL' | 'DEBT_REPAYMENT';
+  receivedAt: string;
+}
+
+export interface ExpenseView {
+  id: number;
+  shopId: number;
+  /** Free-text ở Core — app gửi/đọc key cố định của `ExpenseCategory` (xem src/data/mock.ts) */
+  category: string | null;
+  description: string;
+  amountVnd: number;
+  paymentMethod: 'CASH' | 'TRANSFER' | null;
+  expenseAt: string;
+  status: 'ACTIVE' | 'ARCHIVED';
+  createdAt: string;
+  updatedAt: string;
 }
