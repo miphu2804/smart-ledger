@@ -183,6 +183,7 @@ function PosCollapsibleHeader({
   expandedHeight,
   collapsedHeight,
   pinned,
+  onBodyHeight,
   children,
 }: {
   scrollY: Animated.Value;
@@ -190,6 +191,7 @@ function PosCollapsibleHeader({
   expandedHeight: number;
   collapsedHeight: number;
   pinned: React.ReactNode;
+  onBodyHeight: (height: number) => void;
   children: React.ReactNode;
 }) {
   const distance = Math.max(1, expandedHeight - collapsedHeight);
@@ -220,6 +222,7 @@ function PosCollapsibleHeader({
         {pinned}
       </Animated.View>
       <Animated.View
+        onLayout={(e) => onBodyHeight(e.nativeEvent.layout.height)}
         style={[
           styles.posHeaderBody,
           { top: topInset + 4, opacity: bodyOpacity, transform: [{ translateY: bodyTranslate }] },
@@ -529,6 +532,9 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const scrollY = useRef(new Animated.Value(0)).current;
+  // Chiều cao thật của phần thân header (tiêu đề + ô tìm + danh mục). Chữ hệ thống to hơn (iOS, cỡ chữ lớn) làm thân cao hơn
+  // số cố định nên thanh danh mục bị cắt; đo ra để header luôn vừa nội dung.
+  const [headerBodyHeight, setHeaderBodyHeight] = useState(0);
   const cartBarAnim = useRef(new Animated.Value(0)).current;
 
   const load = useCallback(async () => {
@@ -619,7 +625,8 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
     router.push('/checkout');
   };
 
-  const headerHeight = 152;
+  // 4 = khoảng cách từ mép trên, 6 = khoảng đệm dưới của posHeaderBody; 152 là chiều cao tối thiểu trước khi đo xong.
+  const headerHeight = Math.max(152, Math.ceil(headerBodyHeight) + 10);
   const collapsedHeaderHeight = 56;
 
   const addCustomItem = async () => {
@@ -668,6 +675,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
         topInset={insets.top}
         expandedHeight={headerHeight}
         collapsedHeight={collapsedHeaderHeight}
+        onBodyHeight={setHeaderBodyHeight}
         pinned={
           <Row gap={8} style={styles.pinnedHeader}>
             <PosSearchBox value={q} onChangeText={setQ} compact />
@@ -1023,7 +1031,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 14,
     right: 14,
-    bottom: 6,
   },
   posHeaderPinned: {
     position: 'absolute',
