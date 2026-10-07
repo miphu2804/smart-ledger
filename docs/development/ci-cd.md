@@ -1,6 +1,6 @@
 # CI/CD to Railway and Vercel
 
-This document traces a change from a feature branch to Railway for `backend/core` and `backend/ai`, and to Vercel for the mobile web. Everything runs in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), split into `###` sections: **Test**, **Report**, **Deploy backend** (job `deploy`, after every CI job passes) and **Deploy web** (job `deploy-web`, see [Mobile web on Vercel](#mobile-web-on-vercel)). Branch and review rules live in [CONTRIBUTING](../../CONTRIBUTING.md).
+This document traces a change from a feature branch to Railway for `backend/core` and `backend/ai`, and to Vercel for the mobile web. Everything runs in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), split into `###` sections: **Test**, **Report**, **Deploy backend** (job `deploy`, after every CI job passes) and **Deploy web** (job `deploy-web`, see [Mobile web on Vercel](#mobile-web-on-vercel)). Branch and review rules live in [CONTRIBUTING](../../CONTRIBUTING.md). The Android app is built by a separate manual workflow, [`mobile-release.yml`](../../.github/workflows/mobile-release.yml); see [Android build](#android-build).
 
 ## Overview
 
@@ -28,6 +28,9 @@ Every CI job must pass before a deploy, including `mobile-web`. Each deploy uplo
 | `vercel-preview` | Any branch (PR) | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `EXPO_PUBLIC_*` |
 | `vercel-staging` | `staging` | No | Same as above | `EXPO_PUBLIC_*`, `VERCEL_STAGING_ALIAS` |
 | `vercel-production` | `main` | Yes | Same as above | `EXPO_PUBLIC_*` |
+| `android-dev` | Any branch | No | `ANDROID_GOOGLE_SERVICES_JSON`: Firebase config of the dev/staging project | `EXPO_PUBLIC_*` |
+| `android-staging` | `staging` | No | `ANDROID_GOOGLE_SERVICES_JSON`: Firebase config of the staging project | `EXPO_PUBLIC_*` |
+| `android-production` | `main` | Yes | `ANDROID_GOOGLE_SERVICES_JSON`: Firebase config of the production project | `EXPO_PUBLIC_*` |
 
 Do not put backend secrets in the `vercel-*` environments.
 
@@ -116,3 +119,58 @@ Job `deploy-web` builds `frontend/mobile` on the runner (`vercel build`) and upl
 - Calling the real Core from a browser needs the web origin in Core's [`CORS_ALLOWED_ORIGINS`](#core-cors-origins) and the web domain in Firebase Authorized domains. Each deploy URL carries a random hash and cannot be listed, so previews use ten fixed aliases, `smart-ledger-preview-00` … `-09`. Two open PRs sharing a last digit overwrite each other's alias; re-run the job to take the slot back.
 - The smoke test fails the job when the deployed web would not reach Core: page not returning 200, API endpoint missing from the bundle, or Core rejecting the origin's CORS preflight. Mock builds skip the Core checks.
 - `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` come from Vercel Project Settings → General; create `VERCEL_TOKEN` under Account Settings → Tokens, scoped to the project's team.
+
+## Android build
+
+[`mobile-release.yml`](../../.github/workflows/mobile-release.yml) builds the Android app only when someone starts it (`workflow_dispatch`); no push or pull request triggers it. It lives outside `ci.yml` so the Android toolchain is downloaded only when needed and a change here cannot affect the backend and web gates. The Expo cloud build (`eas build`) is not used because the free plan queues builds behind paid ones ([Expo build queues](https://github.com/expo/fyi/blob/main/eas-build-queues.md)).
+
+### Run a build
+
+Actions tab → **Mobile release** → **Run workflow**, choose the branch in *Use workflow from*, then the inputs; or `gh workflow run mobile-release.yml --ref <branch> -f environment=android-dev -f runner=auto`.
+
+| Environment | Builds from | Output | ABIs |
+|---|---|---|---|
+| `android-dev` | Any branch of this repository, including a pull request branch | APK | `arm64-v8a` |
+| `android-staging` | `staging`, after a green CI run on the commit | APK | all four |
+| `android-production` | `main`, after a green CI run and approval | AAB | all four |
+
+Job `gate` rejects a wrong branch or a commit without a successful `ci.yml` run before any runner starts. Only people with write access can run a workflow, and forks cannot.
+
+### Runners
+
+Job `select-runner` resolves input `runner`:
+
+| Input | Result |
+|---|---|
+| `github-hosted` | `ubuntu-24.04` |
+| `self-hosted` | A machine labelled `android-build`; the job waits if none is free |
+| `auto` | A free online `android-build` machine, otherwise `ubuntu-24.04` |
+
+`auto` lists runners through the GitHub API, which the default `GITHUB_TOKEN` cannot do. Create a fine-grained token with repository permission **Administration: read** and store it as repository secret `RUNNERS_READ_TOKEN`; without it `auto` always falls back to GitHub-hosted, and the reason is written in the build summary.
+
+A GitHub-hosted runner installs Node, JDK, SDK, NDK and Gradle with caching on every run. A self-hosted machine already holds them and its Gradle and npm caches, so the job only runs `.github/scripts/android-preflight.mjs`, which fails with a clear message when a version differs from the pinned block at the top of the workflow. It never downloads: pulling GitHub's cache or the roughly 1 GB NDK over a home connection is slower than the build.
+
+To add a machine: install Node 22, JDK 17, and the Android SDK with platform 36, build-tools 36.0.0 and NDK 27.1.12297006; set `ANDROID_HOME`; register a runner (repository Settings → Actions → Runners) with the label `android-build`.
+
+- Keep the repository's workflow triggers to `workflow_dispatch` and `push` on trusted branches for any job that can run on self-hosted; never `pull_request` from forks, because the job executes the branch's code on a teammate's machine.
+- A self-hosted job runs whatever the chosen branch contains, so `android-dev` secrets must hold only dev-level values.
+- Windows and Linux machines use the same label and script. Windows is untested: the C++ build of React Native's New Architecture can hit the 260-character path limit, so enable long paths and keep the runner's work folder short.
+
+### Configuration
+
+Each `android-*` environment needs:
+
+- Secret `ANDROID_GOOGLE_SERVICES_JSON`: the content of `google-services.json` for that environment's Firebase project. The job writes it to a temp path and points `GOOGLE_SERVICES_JSON` at it, which [`app.config.js`](../../frontend/mobile/app.config.js) already reads.
+- Variables `EXPO_PUBLIC_*`, the same list as [Mobile web on Vercel](#mobile-web-on-vercel).
+- Deployment branches and approval as in the table under [GitHub Environments](#github-environments).
+
+### Result
+
+Every run uploads `android-build-summary-<environment>-<run number>` (`.md` and `.json`: runner and why it was chosen, commit, toolchain, time per phase, step outcomes, artifact size and SHA-256), also on failure, and the same table on the run page. A successful run also uploads `android-<environment>-<run number>`, the APK or AAB named `smart-ledger-<environment>-<branch>-<commit>`; artifacts are kept 14 days.
+
+### Measured and not yet verified
+
+- Measured on an Apple M4 Pro (12 cores) with a warm Gradle cache, 4 ABIs, a placeholder Firebase file: prebuild 1 s and `assembleRelease` 4 min 3 s. The first build on a machine was blocked for over 30 minutes downloading the NDK over a slow connection, and Gradle stalled with the default 2 GB heap and 512 MB Metaspace; the workflow passes `-Xmx6g -XX:MaxMetaspaceSize=1g`.
+- Not yet run on GitHub: the workflow, the runner fallback and the hosted run time are untested. The roughly 12–20 minutes expected on `ubuntu-24.04` is an estimate.
+- All builds are signed with the debug keystore that the Expo template uses for release builds, so the production AAB cannot be uploaded to Google Play yet. Release signing and the Play upload are not part of this workflow.
+- iOS is not built here (see [mobile-ios-device-release.md](mobile-ios-device-release.md)).

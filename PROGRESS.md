@@ -1,3 +1,13 @@
+### [2026-10-07 22:25 UTC+07:00] — [Feature] Add a manual Android release workflow
+
+**Done:** Added `mobile-release.yml`, a `workflow_dispatch` build of the Android app that replaces the Expo cloud queue. The environment input picks `android-dev` (arm64 APK, any branch), `android-staging` (4-ABI APK, `staging` after green CI) or `android-production` (4-ABI AAB, `main` after green CI and approval). The runner input picks GitHub-hosted, a self-hosted machine labelled `android-build`, or `auto` (a free self-hosted machine, otherwise GitHub-hosted). Every run uploads a build summary artifact (runner and why, toolchain, per-phase seconds, step outcomes, artifact size and SHA-256). Documented in `docs/development/ci-cd.md`.
+
+**Changed files:** `.github/workflows/mobile-release.yml` — created; `.github/scripts/android-preflight.mjs` — created; `.github/scripts/android-summary.mjs` — created; `docs/development/ci-cd.md` — modified; `PROGRESS.md`.
+
+**Flow explained:** `gate` checks the branch and the CI run → `select-runner` resolves the runner → `build` installs the toolchain (hosted) or runs the preflight (self-hosted), writes `google-services.json` from the environment secret, runs `expo prebuild` and Gradle, then uploads the artifact and summary.
+
+**Check:** Script syntax and YAML parsed; preflight and summary scripts exercised locally with sample input. A local release build on an M4 Pro took 4 min 3 s with a warm cache. **Not verified:** the workflow has not run on GitHub, `gh run list --commit` and the `setup-android` `packages` input, Windows runners, and hosted run time. All builds are debug-signed, so the AAB cannot go to Google Play yet.
+
 ### [2026-10-07 20:05 UTC+07:00] — [Fix] Keep the Đơn hàng summary figures on one line on narrow screens
 
 **Done:** Follow-up to the entry above. A report with the sample data ("3 đơn", "265.000đ") showed the revenue figure wrapping ("265.000" / "đ") and the label "Tổng doanh thu" breaking onto two lines on a phone. That screenshot came from a build without the previous change, but the card is narrow (about 84 dp for the figure beside a 40 dp icon and a chevron on a 390 dp phone), so shrink-to-fit alone was too fragile. The card now gives the revenue half more width than the order-count half, uses 34 dp icons, drops the decorative chevron on the revenue half (the whole half is still pressable), lets the text shrink with `minWidth: 0`, and starts long figures at a smaller font size by their length so they stay on one line even where `adjustsFontSizeToFit` is ignored.
