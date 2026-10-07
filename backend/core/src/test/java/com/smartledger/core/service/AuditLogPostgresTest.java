@@ -423,9 +423,8 @@ class AuditLogPostgresTest {
         rename.setName("Private new product name");
         products.patch(owner, shop, product.id().toString(), rename);
         assertThat(count(AuditAction.STOCK_ADJUSTED)).isZero();
-        var adjust = new ProductPatchRequest();
-        adjust.setStockQuantity(new BigDecimal("12.125"));
-        products.patch(owner, shop, product.id().toString(), adjust);
+        products.stockIn(owner, shop, product.id().toString(), "catalog-stock-in",
+                new ProductStockInRequest(new BigDecimal("2.125"), null));
         var event = query.list(owner, shop, AuditAction.STOCK_ADJUSTED, product.id(), null, null, 0, 20).content().getFirst();
         assertThat(new BigDecimal(event.metadata().get("afterStock").toString())).isEqualByComparingTo("12.125");
         categories.replace(owner, shop, category.id().toString(), new CategoryWriteRequest("Private category name"));
@@ -435,7 +434,7 @@ class AuditLogPostgresTest {
         products.archive(owner, shop, product.id().toString());
         categories.archive(owner, shop, category.id().toString());
         assertThat(count(AuditAction.PRODUCT_CREATED)).isEqualTo(1);
-        assertThat(count(AuditAction.PRODUCT_UPDATED)).isEqualTo(2);
+        assertThat(count(AuditAction.PRODUCT_UPDATED)).isEqualTo(1);
         assertThat(count(AuditAction.PRODUCT_ARCHIVED)).isEqualTo(1);
         assertThat(count(AuditAction.CATEGORY_UPDATED)).isEqualTo(1);
         assertThat(count(AuditAction.CATEGORY_ARCHIVED)).isEqualTo(1);
@@ -629,19 +628,240 @@ class AuditLogPostgresTest {
     }
 
     private void awaitExpenseLock(int holderPid) {
+        awaitRowLock(holderPid, "expenses");
+    }
+
+    private void awaitRowLock(int holderPid, String table) {
         long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(8);
         while (System.nanoTime() < deadline) {
             // Observe a real PostgreSQL lock wait instead of relying on thread timing/sleep alone.
             jdbc.execute("SELECT pg_stat_clear_snapshot()");
-            Long blocked = jdbc.queryForObject("SELECT count(*) FROM pg_stat_activity WHERE ? = ANY(pg_blocking_pids(pid)) AND query ILIKE '%expenses%'", Long.class, holderPid);
+            Long blocked = jdbc.queryForObject("SELECT count(*) FROM pg_stat_activity WHERE ? = ANY(pg_blocking_pids(pid)) AND query ILIKE ?", Long.class, holderPid, "%" + table + "%");
             if (blocked != null && blocked > 0) { return; }
             try { Thread.sleep(20); }
             catch (InterruptedException error) {
                 Thread.currentThread().interrupt();
-                throw new AssertionError("Interrupted while waiting for expense lock", error);
+                throw new AssertionError("Interrupted while waiting for " + table + " lock", error);
             }
         }
-        throw new AssertionError("Second expense writer did not wait for the first transaction's row lock");
+        throw new AssertionError("Second " + table + " writer did not wait for the first transaction's row lock");
+    }
+
+    @Test
+    void stockInCanonicalReplayReturnsOriginalSnapshotWithoutDuplicatingAuditOrMoney() {
+        var product = stockProduct();
+        var first = stockIn(product.id(), "stock-retry", "2.125", " Delivery ");
+        stockIn(product.id(), "stock-next", "1", null);
+        var replay = stockIn(product.id(), "stock-retry", "2.125", "Delivery");
+        assertThat(replay.stockQuantity()).isEqualByComparingTo(first.stockQuantity());
+        assertThat(replay.updatedAt().toInstant()).isEqualTo(first.updatedAt().toInstant());
+        assertThat(products.getById(owner, shop, product.id().toString()).stockQuantity())
+                .isEqualByComparingTo("13.125");
+        assertThat(first.updatedAt().isBefore(first.createdAt())).isFalse();
+        assertThat(count(AuditAction.STOCK_ADJUSTED)).isEqualTo(2);
+        assertThat(rowsInShop("api_idempotency_keys")).isEqualTo(2);
+        assertThat(jdbc.queryForMap("SELECT operation, response_status, resource_type, resource_id FROM api_idempotency_keys WHERE shop_id=? AND idempotency_key='stock-retry'", Long.valueOf(shop)))
+                .containsEntry("operation", "PRODUCT_STOCK_IN").containsEntry("response_status", 200)
+                .containsEntry("resource_type", "PRODUCT").containsEntry("resource_id", product.id());
+        var event = query.list(owner, shop, AuditAction.STOCK_ADJUSTED, product.id(), null, null, 0, 20)
+                .content().stream().filter(e -> "stock-retry".equals(e.idempotencyKey())).findFirst().orElseThrow();
+        assertThat(event.reason()).isEqualTo("Delivery");
+        assertThat(event.metadata()).containsEntry("source", "STOCK_IN");
+        assertThat(new BigDecimal(event.metadata().get("quantity").toString())).isEqualByComparingTo("2.125");
+        for (String table : List.of("sales", "expenses", "customers")) { assertThat(rowsInShop(table)).as(table).isZero(); }
+        for (String table : List.of("sale_items", "payments", "sale_refunds", "debts")) {
+            assertThat(rowsForShopSales(table)).as(table).isZero();
+        }
+        // Numeric scale and blank reason do not create a different logical request.
+        stockIn(product.id(), "scale-retry", "5", null);
+        stockIn(product.id(), "scale-retry", "5.000", "  ");
+        assertThat(count(AuditAction.STOCK_ADJUSTED)).isEqualTo(3);
+    }
+
+    @Test
+    void stockInKeyCannotBeReusedForOtherQuantityReasonOrProductAndExpiredKeyCannotAddAgain() {
+        var product = stockProduct();
+        var second = stockProduct();
+        stockIn(product.id(), "stock-key", "2", "Delivery");
+        for (var attempt : List.of(new ProductStockInRequest(BigDecimal.ONE, "Delivery"),
+                new ProductStockInRequest(BigDecimal.valueOf(2), "Changed"))) {
+            assertThatThrownBy(() -> products.stockIn(owner, shop, product.id().toString(), "stock-key", attempt))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.IDEMPOTENCY_KEY_CONFLICT));
+        }
+        assertThatThrownBy(() -> stockIn(second.id(), "stock-key", "2", "Delivery"))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.IDEMPOTENCY_KEY_CONFLICT));
+        jdbc.update("UPDATE api_idempotency_keys SET created_at=now()-interval '31 days', expires_at=now()-interval '1 minute' WHERE shop_id=? AND idempotency_key='stock-key'", Long.valueOf(shop));
+        assertThatThrownBy(() -> stockIn(product.id(), "stock-key", "2", "Delivery"))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.IDEMPOTENCY_KEY_EXPIRED));
+        assertThat(products.getById(owner, shop, product.id().toString()).stockQuantity()).isEqualByComparingTo("12");
+        assertThat(products.getById(owner, shop, second.id().toString()).stockQuantity()).isEqualByComparingTo("10");
+        assertThat(count(AuditAction.STOCK_ADJUSTED)).isEqualTo(1);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"audit", "idempotency"})
+    void stockInLateWriteFailureRollsBackStockAuditAndKeyAndAllowsSameKeyRetry(String failure) {
+        var product = stockProduct();
+        long before = total();
+        String table = failure.equals("audit") ? "audit_logs" : "api_idempotency_keys";
+        String predicate = failure.equals("audit")
+                ? "action <> 'STOCK_ADJUSTED' OR metadata->>'source' <> 'STOCK_IN'"
+                : "response_status IS NULL OR response_status <> 200";
+        jdbc.execute("ALTER TABLE " + table + " ADD CONSTRAINT test_reject_stock_in CHECK (shop_id <> "
+                + Long.valueOf(shop) + " OR (" + predicate + "))");
+        try {
+            assertThatThrownBy(() -> stockIn(product.id(), "retry-stock-failure", "2.125", null))
+                    .isInstanceOf(DataIntegrityViolationException.class).hasStackTraceContaining("test_reject_stock_in");
+        } finally {
+            jdbc.execute("ALTER TABLE " + table + " DROP CONSTRAINT test_reject_stock_in");
+        }
+        assertThat(total()).isEqualTo(before);
+        assertThat(rowsInShop("api_idempotency_keys")).isZero();
+        assertThat(products.getById(owner, shop, product.id().toString()).stockQuantity()).isEqualByComparingTo("10");
+        assertThat(stockIn(product.id(), "retry-stock-failure", "2.125", null).stockQuantity()).isEqualByComparingTo("12.125");
+        assertThat(count(AuditAction.STOCK_ADJUSTED)).isEqualTo(1);
+    }
+
+    @Test
+    void stockInEnforcesRealOwnerShopProductAndTrackingState() {
+        var product = stockProduct();
+        var request = new ProductStockInRequest(BigDecimal.ONE, null);
+        assertThatThrownBy(() -> products.stockIn(other, shop, product.id().toString(), "foreign", request))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.SHOP_ACCESS_DENIED));
+        String otherShop = shops.create(other, new ShopCreateRequest("Other", "Retail", null, null)).id().toString();
+        assertThatThrownBy(() -> products.stockIn(other, otherShop, product.id().toString(), "foreign-product", request))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_NOT_FOUND));
+        jdbc.update("UPDATE users SET system_role='ADMIN' WHERE id=?", otherId);
+        assertThatThrownBy(() -> products.stockIn(other, shop, product.id().toString(), "admin", request))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.SHOP_ACCESS_DENIED));
+        shops.updateStatus(other, shop, new ShopStatusUpdateRequest(ShopStatus.INACTIVE, "Test"));
+        assertThatThrownBy(() -> stockIn(product.id(), "inactive", "1", null))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.SHOP_INACTIVE));
+        shops.updateStatus(other, shop, new ShopStatusUpdateRequest(ShopStatus.ACTIVE, null));
+        var untracked = new ProductPatchRequest();
+        untracked.setTracked(false);
+        products.patch(owner, shop, product.id().toString(), untracked);
+        assertThatThrownBy(() -> stockIn(product.id(), "untracked", "1", null))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_STOCK_IN_UNAVAILABLE));
+        var tracked = new ProductPatchRequest();
+        tracked.setTracked(true);
+        assertThat(products.patch(owner, shop, product.id().toString(), tracked).stockQuantity()).isEqualByComparingTo("0");
+        assertThat(stockIn(product.id(), "now-tracked", "1", null).stockQuantity()).isEqualByComparingTo("1");
+        products.archive(owner, shop, product.id().toString());
+        assertThatThrownBy(() -> stockIn(product.id(), "archived", "1", null))
+                .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_NOT_FOUND));
+        assertThat(rowsInShop("api_idempotency_keys")).isEqualTo(1);
+    }
+
+    @Test
+    void stockInOverflowIsRejectedBeforeDatabaseWriteAndNumericBoundaryIsExact() {
+        var product = products.create(owner, shop, new ProductWriteRequest(null, "Max", null, null,
+                "piece", 50_000L, null, true, new BigDecimal("999999999999.998")));
+        stockIn(product.id(), "boundary", "0.001", null);
+        long before = total();
+        assertThatThrownBy(() -> stockIn(product.id(), "overflow", "0.001", null))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_STOCK_OVERFLOW));
+        assertThat(total()).isEqualTo(before);
+        assertThat(rowsInShop("api_idempotency_keys")).isEqualTo(1);
+        assertThat(products.getById(owner, shop, product.id().toString()).stockQuantity()).isEqualByComparingTo("999999999999.999");
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void concurrentStockInRetriesOrDifferentReceiptsDoNotLoseOrDuplicateStock(boolean sameKey) throws Exception {
+        var product = stockProduct();
+        var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+        var ready = new java.util.concurrent.CyclicBarrier(2);
+        try {
+            var first = executor.submit(() -> { ready.await(10, java.util.concurrent.TimeUnit.SECONDS);
+                return stockIn(product.id(), "first-stock", "2", null); });
+            var second = executor.submit(() -> { ready.await(10, java.util.concurrent.TimeUnit.SECONDS);
+                return stockIn(product.id(), sameKey ? "first-stock" : "second-stock", "2.000", null); });
+            var result = first.get(20, java.util.concurrent.TimeUnit.SECONDS);
+            var otherResult = second.get(20, java.util.concurrent.TimeUnit.SECONDS);
+            if (sameKey) { assertThat(otherResult).isEqualTo(result); }
+        } finally {
+            executor.shutdownNow(); executor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS);
+        }
+        assertThat(products.getById(owner, shop, product.id().toString()).stockQuantity()).isEqualByComparingTo(sameKey ? "12" : "14");
+        assertThat(count(AuditAction.STOCK_ADJUSTED)).isEqualTo(sameKey ? 1 : 2);
+        assertThat(rowsInShop("api_idempotency_keys")).isEqualTo(sameKey ? 1 : 2);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"checkout", "void", "patch"})
+    void checkoutVoidAndCatalogPatchWaitForStockInAndPreserveAllStockChanges(String operation) throws Exception {
+        Long id;
+        Runnable second;
+        if (operation.equals("void")) {
+            Fixture sale = sale(0, false); id = sale.productId();
+            second = () -> voids.voidSale(owner, shop, sale.saleId(), "stock-void", new SaleVoidRequest("Returned", true, null, null));
+        } else {
+            var product = stockProduct(); id = product.id();
+            if (operation.equals("checkout")) {
+                var draft = drafts.create(owner, shop, new SaleDraftWriteRequest("Customer", null, 0L, 0L, null,
+                        List.of(new SaleDraftItemRequest(id, BigDecimal.valueOf(2), 50_000L, null, null)), null));
+                second = () -> drafts.confirm(owner, shop, draft.id().toString());
+            } else {
+                var patch = new ProductPatchRequest(); patch.setName("Renamed"); patch.setTracked(true);
+                second = () -> products.patch(owner, shop, id.toString(), patch);
+            }
+        }
+        var executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+        var pending = new java.util.concurrent.atomic.AtomicReference<java.util.concurrent.Future<?>>();
+        try {
+            new TransactionTemplate(transactions).executeWithoutResult(status -> {
+                stockIn(id, "held-stock", "5", null);
+                int holderPid = jdbc.queryForObject("SELECT pg_backend_pid()", Integer.class);
+                pending.set(executor.submit(second));
+                awaitRowLock(holderPid, "products");
+            });
+            pending.get().get(15, java.util.concurrent.TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow(); executor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS);
+        }
+        var result = products.getById(owner, shop, id.toString());
+        assertThat(result.stockQuantity()).isEqualByComparingTo(operation.equals("checkout") ? "13" : "15");
+        if (operation.equals("patch")) { assertThat(result.name()).isEqualTo("Renamed"); }
+    }
+
+    @Test
+    void stockInWaitingForArchiveCannotResurrectProductOrLeaveKeyAndAudit() throws Exception {
+        var product = stockProduct();
+        var executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+        var pending = new java.util.concurrent.atomic.AtomicReference<java.util.concurrent.Future<?>>();
+        try {
+            new TransactionTemplate(transactions).executeWithoutResult(status -> {
+                products.archive(owner, shop, product.id().toString());
+                int holderPid = jdbc.queryForObject("SELECT pg_backend_pid()", Integer.class);
+                pending.set(executor.submit(() -> stockIn(product.id(), "archive-stock", "5", null)));
+                awaitRowLock(holderPid, "products");
+            });
+            assertThatThrownBy(() -> pending.get().get(15, java.util.concurrent.TimeUnit.SECONDS))
+                    .isInstanceOf(java.util.concurrent.ExecutionException.class)
+                    .hasCauseInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e.getCause()).getErrorCode()).isEqualTo(ErrorCode.PRODUCT_NOT_FOUND));
+        } finally {
+            executor.shutdownNow(); executor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS);
+        }
+        assertThat(jdbc.queryForMap("SELECT status, stock_quantity FROM products WHERE id=?", product.id()))
+                .containsEntry("status", "ARCHIVED").containsEntry("stock_quantity", new BigDecimal("10.000"));
+        assertThat(count(AuditAction.STOCK_ADJUSTED)).isZero();
+        assertThat(rowsInShop("api_idempotency_keys")).isZero();
+    }
+
+    private com.smartledger.core.dto.response.ProductResponse stockProduct() {
+        return products.create(owner, shop, new ProductWriteRequest(null, "Stock", null, null,
+                "piece", 50_000L, 20_000L, true, BigDecimal.TEN));
+    }
+
+    private com.smartledger.core.dto.response.ProductResponse stockIn(Long productId, String key, String quantity, String reason) {
+        return products.stockIn(owner, shop, productId.toString(), key,
+                new ProductStockInRequest(new BigDecimal(quantity), reason));
     }
 
     private Fixture sale(long paid, boolean custom) {

@@ -10,6 +10,35 @@
 **Flow explained:** #3 endpoint (not yet built) → `DraftService.parse` → `ProductCatalogRepository.list_active_products(shop_id)` → model proposes lines from the catalog in the prompt → `matching` rejects foreign, ambiguous, unknown and low-confidence ids and prices from the catalog → `DraftResult` (DraftView without `request_id`). Nothing is written.
 
 **Check:** 24 new unit tests; full AI suite 292 passed, 43 skipped (Postgres integration needs `POSTGRES_TEST_URL`; the live set is opt-in). Opt-in live set against the configured OpenAI model: 13 passed (typos, no diacritics, abbreviations, ignored spoken price, ambiguous "ca phe", unknown product, four expense amounts, expense without amount). `ruff check` and `ruff format --check` pass. Not verified: the `/internal/v1/drafts/parse` endpoint and Core fallback (#3).
+### [2026-10-07 01:34 UTC+07:00] — [Docs] Correct V12 cost snapshot ERD mapping
+
+**Done:** Corrected the V12 `estimated_cost_vnd` DBML mapping after review: it belongs only to `sale_items`, not `sale_draft_items`.
+
+**Changed files:** `docs/architecture/diagrams/src/erd.dbml` and this append-only entry only.
+
+**Flow explained:** A draft has no immutable confirmed-sale cost snapshot. The nullable snapshot is written only when a draft becomes a confirmed sale item; historical/custom/unknown-cost sale items remain NULL.
+
+**Check:** Cross-checked the corrected table/column against `V12__snapshot_sale_item_estimated_cost.sql`, `SaleItem` JPA mapping and ERD description; `git diff --check` passes. No Core code, migration, database or generated diagram asset changed.
+
+### [2026-10-07 01:21 UTC+07:00] — [Core] Add immutable cost snapshots and advanced sales reports
+
+**Done:** Added nullable `sale_items.estimated_cost_vnd` through Flyway V12 and snapshot it once when a draft is confirmed, without backfilling or deriving historical cost from the current Product. Added `GET /api/v1/reports/top-products`, `GET /api/v1/reports/sales-series` and `GET /api/v1/reports/profit-estimate`; kept `/api/v1/reports/summary` backward-compatible. Reports use Vietnam report windows, separate sale/void event dates, stable catalog/custom grouping, zero-filled daily buckets and explicit completeness metadata for unknown historical costs. No frontend or AI changes, no commit/push, and no local/staging/production database was modified.
+
+**Changed files:** Core SaleItem mapping and draft-confirm snapshot logic; V12 migration; report controller/service/repository, enums and response DTOs; migration, service, contract and PostgreSQL aggregation tests; Core README. Updated BRD/PRD traceability (`BR-005` → `FR-006` → `AC-049..052`), API contract, technical design, ERD description/DBML and this append-only entry. Existing stock-in work on this branch remains unchanged and is tested together.
+
+**Flow explained:** Confirm draft → copy each known catalog item's current total estimated cost into the immutable sale line; custom/unknown cost remains `NULL` → report queries aggregate by shop and `[fromInclusive, toExclusive)` in `Asia/Ho_Chi_Minh` → sale revenue/COGS belong to `soldAt`, reversals belong to `voidedAt` → responses expose gross, voided and net values plus unknown-cost counts/revenue so the UI cannot present an incomplete estimate as accounting profit. Multi-line discounts are allocated proportionally with the final line absorbing the rounding remainder, preserving the exact sale total. Expenses reduce only `estimatedOperatingProfitVnd`.
+
+**Check:** Full `mvnw.cmd clean org.jacoco:jacoco-maven-plugin:0.8.14:prepare-agent verify org.jacoco:jacoco-maven-plugin:0.8.14:report` against a disposable PostgreSQL 16 container: **521 tests, 0 failures, 0 errors, 0 skipped; build success**. JaCoCo Core coverage: 93.86% instructions, 92.84% lines and 79.60% branches. PostgreSQL coverage includes fresh V1–V12 and V8→V12 upgrades, nullable legacy cost, exact multi-line discount allocation, immutable cost after Product price changes, custom/catalog grouping, void timing and zero-filled series. Existing Core regression, rollback and concurrency suites pass. Mobile integration/UAT is not included; the current mobile-local estimate must not be treated as these official Core reports until FE adopts the new contract.
+
+### [2026-10-06 21:36 UTC+07:00] — [Core] Add idempotent cumulative stock-in
+
+**Done:** Implemented `POST /api/v1/products/{productId}/stock-in` on `feat/core-stock-in`, based on staging `99ed97a9d03656fe782ae43c81526e68a8c0cc08`. Positive fractional quantities add to the locked current stock; OWNER/shop/product state and NUMERIC(15,3) bounds are enforced. Removed stockQuantity from Product PATCH, including explicit null; enabling tracking starts at zero, keeping tracking preserves stock, disabling clears it. Create/response stock fields remain. No new table or migration; no frontend, AI or Compose changes and no commit/push in this step.
+
+**Changed files:** Core Product controller/request/service/entity, error handling, idempotency response-status overload and audit metadata source; new ProductStockInRequest and ProductStockInServiceTest; existing product/contract/OpenAPI/idempotency/PostgreSQL tests and Core README. Updated BRD/PRD (BR-018 → FR-030 → AC-044..048), API contract, technical design, ERD description and this entry. Earlier progress entries retained.
+
+**Flow explained:** Authenticate OWNER and active owned shop → reserve PRODUCT_STOCK_IN key (product ID + canonical quantity + trimmed/blank-normalized reason) → lock active tracked product → add quantity → append STOCK_ADJUSTED/source STOCK_IN with quantity/beforeStock/afterStock → flush → store original ProductResponse with status 200 → commit. Replay returns the original snapshot without adding stock/audit again; different committed payload or expired key is rejected. Any late audit/idempotency-write failure rolls everything back. Stock-in creates no expense/payment/debt/sale and does not change cost price.
+
+**Check:** Tests-first regression cases failed on the old behavior, then passed after implementation. Full `mvnw.cmd clean org.jacoco:jacoco-maven-plugin:0.8.14:prepare-agent verify org.jacoco:jacoco-maven-plugin:0.8.14:report` against a disposable PostgreSQL 16 container: **514 tests, 0 failures, 0 errors, 0 skipped; build success**. JaCoCo Core line coverage 92.63%, branch coverage 79.77%; ProductServiceImpl line coverage 99.21%. Includes actual V1–V11 migrations/validation, parallel receipts/retries, observed PostgreSQL lock waits with checkout/void/PATCH/archive, real DB-rejected audit/idempotency writes and rollback, key conflicts/expiry, ownership/state guards, overflow and generated OpenAPI schema coverage. `git diff --check` clean. No staging/production database used. Firebase/Swagger manual and mobile UAT remain unverified; mobile must stop sending stockQuantity in PATCH, add stock-in UI/API/retry handling and align mocks before integration. CI already runs the PostgreSQL-enabled suite; no workflow changed. Existing untracked `.idea/` preserved.
 
 ### [2026-10-06 11:48 UTC+07:00] — [AI] Cap the shop catalog read and map database errors
 
@@ -33,6 +62,19 @@
 **Flow explained:** Core authenticates the owner and passes its `shop_id` → `ProductCatalogRepository` loads that shop's ACTIVE catalog for #60 or checks one model-supplied `product_id` under the same shop filter → a request scoped to shop A can never list or validate a shop B product.
 
 **Check:** Full AI suite green against a disposable pgvector PostgreSQL 16 with the real Core V1–V4 migrations: 294 passed. New tests: 3 unit (SQL keeps the shop/ACTIVE filter and binds params; product id type is `int` and matches the contract BIGINT) and 4 integration (shop A/B isolation with a duplicate product name, archived/cross-shop/unknown rejection, missing or unknown shop returns nothing, unavailable database raises without writing). `ruff check` and `ruff format --check` pass. Not verified: end-to-end Core → AI draft parse (#60/#3) and a real model.
+
+### [2026-10-06 02:23 UTC+07:00] — [Docs] Align Core/mobile and ADMIN support documentation
+
+**Done:** Completed the Core/mobile documentation alignment for DOCS-001 (#101), plus a separately reviewed ADMIN documentation extension. Compared against staging commit `b1de421c461d59473b3bb73aae103027afd67a89`. Clarified Firebase JSON-over-ADC precedence, CORS/Flyway configuration, direct DEBT-to-PAID repayment, mobile-local report estimates and quick product creation. Documented the seven ADMIN support GETs and shared audit schema V10/V11; preserved existing requirement IDs and added AC-040 through AC-043.
+
+**Changed files:**
+- `docs/architecture/technical-design.md`, `docs/architecture/service-walkthrough/README.md`, `docs/architecture/service-walkthrough/03-sales/state-sale-debt.svg`, `frontend/mobile/README.md` — Core/mobile alignment.
+- `docs/contracts/api-contracts.md`, `docs/product/business-requirements.md`, `docs/product/product-requirements.md`, `docs/architecture/erd-description.md`, `docs/architecture/diagrams/src/erd.dbml` — ADMIN contract, traceability and migration alignment; technical design also distinguishes implemented Core APIs from pending web integration.
+- `PROGRESS.md` — new entry only; earlier entries retained.
+
+**Flow explained:** ADMIN reads only support projections, not OWNER ledgers/business audit; successful reads commit with audit or refuse protected output with `503 admin_audit_unavailable`. OWNER and ADMIN histories have separate action/actor scopes over the existing append-only `audit_logs`, with no `admin_access_logs` table. The ADMIN extension is outside DOCS-001's original Core/mobile-only checklist and must be identified separately in review. Details added to BR-014/FR-023/FR-024 require Product Owner approval before dashboard acceptance; pushing documentation does not establish web/staging UAT or production readiness.
+
+**Check:** `git diff --check`; 73 relative file links/anchors; seven routes, nine DTO projections and eight ADMIN action filters compared with Core; 16 audit columns/types, V10/V11 nullability, FKs and indexes compared with migrations; DBML CLI parsing/export to PostgreSQL SQL; sale/debt SVG rendered and visually inspected. AI contracts/tables, legal sections and Part 1-only files remained unchanged during Part 2. No code, migrations, secrets or IDE files changed; no Maven, DB migration or UAT run in this documentation pass. Remote staging was rechecked before commit and still matched `b1de421c461d`.
 
 ### [2026-10-05 23:40 UTC+07:00] — [AI] Move AI schema to a Supabase CLI baseline
 

@@ -5,7 +5,7 @@
 | Trạng thái | Core: quy tắc dưới đây đã chốt; AI/dashboard: đích MVP, cần nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ kinh doanh/sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; chủ thuế cho `BR-INV-*` |
-| Cập nhật lần cuối | 2026-10-02 (nghiệp vụ Core; không rà soát lại căn cứ pháp lý) |
+| Cập nhật lần cuối | 2026-10-06 (đồng bộ hỗ trợ ADMIN; không rà soát lại căn cứ pháp lý) |
 
 ## Tài liệu liên quan
 
@@ -83,7 +83,7 @@ Hóa đơn điện tử là initiative kế tiếp, không mặc nhiên thuộc 
 | `BR-002` | Người bán phải có thể ghi nhận giao dịch bằng ngôn ngữ tự nhiên hoặc nhập/chọn tay. |
 | `BR-003` | Dữ liệu do hệ thống hoặc AI đề xuất không được trở thành giao dịch chính thức trước khi người bán kiểm tra và chốt thanh toán. |
 | `BR-004` | Báo cáo không dùng draft chưa xác nhận; tách doanh thu bán hàng, doanh thu bị hủy và doanh thu ròng. Thu tiền và hoàn tiền ghi nhận theo thời điểm phát sinh, không loại khoản thu cũ khi sale bị hủy. |
-| `BR-005` | Mọi ước tính về chi phí, lợi nhuận hoặc thuế phải được phân biệt rõ với số liệu kế toán/kê khai chính thức. |
+| `BR-005` | Mọi ước tính về chi phí, lợi nhuận hoặc thuế phải được phân biệt rõ với số liệu kế toán/kê khai chính thức. Lãi ước tính dùng giá vốn được snapshot khi confirm sale; không dùng giá vốn Product hiện tại để viết lại lịch sử và không tự đoán giá vốn thiếu. Báo cáo phải chỉ rõ khi dữ liệu giá vốn chưa đầy đủ. |
 | `BR-006` | Sale đã chốt và payment không được xóa cứng hoặc sửa trực tiếp; sai sót xử lý bằng hủy sale có dấu vết, hoàn toàn bộ số đã thu và hủy nghĩa vụ nợ còn lại. Không coi khoản nợ bị hủy là tiền hoàn. |
 | `BR-007` | Cửa hàng có danh mục mặt hàng và giá làm cơ sở lên đơn nhanh và khớp câu bán hàng. |
 | `BR-008` | Sổ chi phí và công nợ là ghi nhận vận hành, không phải sổ kế toán. |
@@ -92,12 +92,19 @@ Hóa đơn điện tử là initiative kế tiếp, không mặc nhiên thuộc 
 | `BR-011` | Gợi ý và câu trả lời AI phải nêu căn cứ đủ để người bán hiểu; không được trình bày như quyết định kế toán hoặc thuế. |
 | `BR-012` | Input, dữ liệu vector nếu có sử dụng, truy xuất dữ liệu, trace và output AI phải được cô lập theo cửa hàng và không làm lộ dữ liệu nhạy cảm sang nhà cung cấp ngoài cấu hình đã duyệt. |
 | `BR-013` | ADMIN chỉ dùng web dashboard để hỗ trợ cơ sở khách hàng; không dùng mobile như OWNER và không trực tiếp sửa sổ bán hàng trong MVP. |
-| `BR-014` | Mọi lần ADMIN xem dữ liệu hoặc thực hiện hành động hỗ trợ phải được phân quyền và lưu audit. |
+| `BR-014` | ADMIN chỉ đọc thông tin tối thiểu để hỗ trợ: danh sách che thông tin liên hệ, chi tiết hồ sơ có liên hệ đầy đủ khi được phân quyền, tổng quan số lượng và lịch sử trạng thái tiệm. Không mở sổ tiền/nợ/tồn hoặc audit nghiệp vụ OWNER. Mọi truy cập thành công và hành động hỗ trợ phải lưu audit; không trả dữ liệu được bảo vệ khi không lưu được audit. ADMIN chỉ xem lịch sử truy cập của chính mình, không dùng quyền hỗ trợ để xem lịch sử ADMIN khác. |
 | `BR-015` | OWNER không thể lưu trữ một tiệm đang bị ADMIN tạm ngưng; lý do tạm ngưng phải còn để OWNER biết cách liên hệ hỗ trợ. |
-| `BR-016` | Gửi lại cùng một yêu cầu trả nợ, tạo chi phí hoặc hủy sale do mạng lỗi không được ghi thu/chi, hoàn tiền hay hoàn tồn lần nữa. Xác nhận lại cùng draft không được tạo sale/payment hoặc trừ tồn lần nữa. |
+| `BR-016` | Gửi lại cùng một yêu cầu trả nợ, tạo chi phí, hủy sale hoặc nhập kho do mạng lỗi không được ghi thu/chi, hoàn tiền, hoàn tồn hay cộng tồn lần nữa. Xác nhận lại cùng draft không được tạo sale/payment hoặc trừ tồn lần nữa. |
 | `BR-017` | Các thao tác ghi Core đã chốt về sale, thu/hoàn tiền, nợ, tồn, chi phí, danh mục và hồ sơ/trạng thái tiệm phải có audit thành công cùng giao dịch nghiệp vụ: đúng người thực hiện, tiệm, hành động, đối tượng và thời điểm. Audit chỉ bổ sung, không sửa/xóa lịch sử; lỗi/rollback hoặc replay các luồng được chống ghi trùng theo BR-016 không tạo audit thành công mới. OWNER chỉ tra cứu lịch sử của tiệm ACTIVE mình sở hữu; dữ liệu phụ được giới hạn, không ghi token hoặc thông tin liên hệ khách. Audit không thay thế các bản ghi nghiệp vụ làm nguồn số liệu. |
+| `BR-018` | OWNER nhập kho bằng lượng tăng thêm dương cho sản phẩm ACTIVE có theo dõi tồn trong tiệm ACTIVE mình sở hữu. Sửa thông tin sản phẩm không ghi đè số tồn tuyệt đối; nhập kho không tự tạo nghĩa vụ tiền/nợ hay đổi giá vốn. |
 
 `BR-003` giữ nguyên ý: người bán quyết định số liệu được ghi.
+
+### Nhập kho đơn giản đã chốt — 2026-10-06
+
+- Theo `BR-018`, tồn mới bằng tồn hiện tại cộng số lượng nhập dương. Bật theo dõi từ không theo dõi khởi tạo 0, sau đó nhập kho riêng; tắt theo dõi giữ hành vi xóa số tồn. Tồn ban đầu khi tạo sản phẩm vẫn được phép nhập.
+- Nhập kho và bán/hủy đơn phải nhất quán khi đồng thời; cộng tồn, audit và kết quả chống ghi trùng cùng commit/rollback. Không suy ra mua hàng, chi tiền, công nợ nhà cung cấp hoặc cập nhật giá vốn từ thao tác này.
+- Gợi ý AI không tự nhập kho. Không bổ sung sổ phiếu nhập, ledger điều chỉnh tồn, nhập âm/kiểm kê hoặc hoàn tiền/trả hàng từng phần. Cần phối hợp FE theo contract mới, chưa coi kiểm thử Core là nghiệm thu mobile/staging.
 
 ### Quyết định Core đã chốt — 2026-10-02
 
@@ -107,8 +114,14 @@ Hóa đơn điện tử là initiative kế tiếp, không mặc nhiên thuộc 
 - Sale/payment/refund/nợ/tồn và kết quả chống ghi trùng phải nhất quán trong một transaction; lỗi ở bất kỳ bước nào không được để lại thay đổi một phần.
 - Khách được định danh bằng `customerId`, không bằng tên/số điện thoại. Tên/số điện thoại có thể trùng; không tự gộp khách. Confirm bán thiếu phải chọn khách hợp lệ hoặc có tên khách để tạo mới; số điện thoại không bắt buộc. Draft và đơn thu đủ có thể không có khách.
 - Hủy sale kỳ trước có thể làm doanh thu ròng kỳ hiện tại âm. Nợ còn lại trên tổng quan là số dư hiện tại của toàn shop, không phải số dư cuối kỳ.
-- Audit thành công cho các thao tác ghi Core đã có và lịch sử chỉ đọc của OWNER thuộc `BR-017`; nhóm hành động cụ thể nằm trong [API contract](../contracts/api-contracts.md#lịch-sử-audit-của-tiệm). Không yêu cầu log mọi GET của OWNER. Audit lỗi/bảo mật và audit khi ADMIN xem dữ liệu hỗ trợ chưa triển khai; không coi lịch sử OWNER là hoàn tất `BR-014`.
+- Audit thành công cho các thao tác ghi Core đã có và lịch sử chỉ đọc của OWNER thuộc `BR-017`; nhóm hành động cụ thể nằm trong [API contract](../contracts/api-contracts.md#lịch-sử-audit-của-tiệm). Không yêu cầu log mọi GET của OWNER. Lịch sử OWNER không thay thế audit truy cập hỗ trợ của ADMIN theo `BR-014`; audit lỗi/bảo mật là phạm vi riêng, chưa được nghiệm thu.
 - Hoàn tiền/trả hàng từng phần và điều chỉnh kho độc lập chưa triển khai; không suy ra đã hoàn thành từ luồng hủy toàn bộ. Chi tiết hành vi/AC nằm trong [PRD](product-requirements.md), không coi kết quả kiểm thử Core là nghiệm thu FE hoặc production.
+
+### Đồng bộ phạm vi hỗ trợ ADMIN — 2026-10-06
+
+- `BR-013`/`BR-014` giới hạn dashboard ở hồ sơ OWNER/tiệm, số lượng hỗ trợ và lịch sử tạm ngưng/kích hoạt. Không bổ sung doanh thu hệ thống, sổ nghiệp vụ, giả danh OWNER, gói dịch vụ hoặc quản lý tác vụ hỗ trợ từ dữ liệu mock của web.
+- Audit ADMIN và OWNER dùng chung lưu trữ append-only nhưng khác phạm vi đọc: OWNER không thấy event đọc `ADMIN_*`; ADMIN không thấy event tiền/nợ/tồn của OWNER. Event ADMIN đổi trạng thái tiệm có thể xuất hiện ở cả hai góc nhìn đúng quyền, không tạo hai event cho cùng thao tác.
+- Quy ước API/nhóm event nằm trong [hợp đồng dashboard](../contracts/api-contracts.md#7-dashboard-quản-trị--đã-có-trong-core). Hiện trạng và phần tích hợp web còn thiếu nằm trong [thiết kế kỹ thuật](../architecture/technical-design.md#1-phạm-vi); đồng bộ tài liệu không phải nghiệm thu dashboard hoặc môi trường thật.
 
 ## 5. Quy tắc kinh doanh cho sáng kiến hóa đơn điện tử
 
@@ -165,14 +178,15 @@ Copy UI viện dẫn nghị định trên màn bản ghi bán hàng **không** b
 |---|---|---|
 | `BO-001`, `BR-001`, `BR-002` | `FR-001`, `FR-002`, `FR-008`, `FR-013`, `FR-014` | tạm thời — MVP đã chấp nhận |
 | `BO-002`, `BR-003`, `BR-006` | `FR-003`–`FR-005`, `FR-016`, `NFR-001`, `NFR-003`, `AC-026`–`AC-030` | Core có confirm/void có dấu vết; FE/staging cần nghiệm thu |
-| `BO-003`, `BR-004`, `BR-005`, `BR-011` | `FR-006`, `FR-007`, `FR-020`, `FR-025`, `AC-031` | Core summary đã có; AI và các chỉ số nâng cao vẫn là đích MVP |
+| `BO-003`, `BR-004`, `BR-005`, `BR-011` | `FR-006`, `FR-007`, `FR-020`, `FR-025`, `AC-031`, `AC-049`–`AC-052` | Core summary và ba báo cáo nâng cao đã có trên nhánh Core; FE/AI và staging vẫn cần nghiệm thu |
 | `BO-005`, `BR-005`, `BR-008` | `FR-015`, `FR-016`, `FR-006` | tạm thời — MVP đã chấp nhận |
 | `BR-007` | `FR-009`, `FR-013` | tạm thời — MVP đã chấp nhận |
+| `BO-002`, `BR-007`, `BR-009`, `BR-016`, `BR-017`, `BR-018` | `FR-009`, `FR-030`, `AC-044`–`AC-048` | Nhập kho Core; FE/staging cần nghiệm thu |
 | `BR-009` | `FR-010`, `FR-011`, `NFR-003` | tạm thời — MVP đã chấp nhận; không tuyên bố sẵn sàng sản xuất |
-| `BR-013`, `BR-014` | `FR-022`–`FR-024`, `NFR-009` | tạm thời — admin web dashboard trong MVP |
+| `BR-013`, `BR-014` | `FR-022`–`FR-024`, `NFR-003`, `NFR-009`, `AC-015`–`AC-017`, `AC-040`–`AC-043` | Core có API hỗ trợ/audit; dashboard web và staging cần nghiệm thu riêng |
 | `BR-010` | `FR-014` | tạm thời — MVP đã chấp nhận |
 | `BR-015` | `FR-011`, `AC-025` | tạm thời — cần kiểm chứng với FE |
-| `BR-016` | `FR-005`, `FR-015`, `FR-016`, `AC-024`, `AC-030` | Core đã triển khai; cần nghiệm thu FE/staging |
+| `BR-016` | `FR-005`, `FR-015`, `FR-016`, `FR-030`, `AC-024`, `AC-030`, `AC-046`–`AC-047` | Core đã triển khai; cần nghiệm thu FE/staging |
 | `BO-002`, `BO-005`, `BR-009`, `BR-016`, `BR-017` | `FR-028`, `FR-029`, `NFR-003`, `AC-033`–`AC-039` | Audit Core đã triển khai; nghiệm thu API/DB tách riêng tích hợp FE/staging và audit truy cập hỗ trợ của ADMIN |
 | `BR-002`, `BR-003`, `BR-011`, `BR-012` | `FR-008`, `FR-017`, `FR-018`, `FR-020`, `FR-021`, `FR-025`, `NFR-006`–`NFR-008` | tạm thời — đích MVP; chưa có FE/runtime để chứng minh |
 | `BO-003`, `BR-011`, `BR-012` | `FR-019`, `AC-012` | tạm thời — đích MVP; mới bật extension `pgvector`, chưa có truy xuất vector |

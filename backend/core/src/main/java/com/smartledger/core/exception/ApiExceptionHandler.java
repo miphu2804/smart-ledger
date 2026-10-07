@@ -1,5 +1,7 @@
 package com.smartledger.core.exception;
 
+import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
+import com.smartledger.core.dto.request.ProductPatchRequest;
 import com.smartledger.core.enums.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
 import java.sql.SQLException;
@@ -60,6 +62,13 @@ public class ApiExceptionHandler {
     ResponseEntity<ApiErrorResponse> handleUnreadableRequest(
             HttpMessageNotReadableException exception,
             HttpServletRequest request) {
+        if (exception.getMostSpecificCause() instanceof UnrecognizedPropertyException unknown
+                && unknown.getReferringClass() == ProductPatchRequest.class
+                && "stockQuantity".equals(unknown.getPropertyName())) {
+            return error(HttpStatus.BAD_REQUEST, "invalid_request",
+                    "stockQuantity cannot be patched; use the stock-in endpoint.",
+                    List.of(new ApiErrorDetail("stockQuantity", "is not accepted in product PATCH")), request);
+        }
         return error(
                 HttpStatus.BAD_REQUEST,
                 "invalid_request",

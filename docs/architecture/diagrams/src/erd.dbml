@@ -5,7 +5,8 @@
 // ID: BIGINT IDENTITY → Java Long
 // Money: BIGINT VND
 // Time: TIMESTAMPTZ, UTC internally; Core JSON displays +07:00
-// Core schema: Flyway V1-V10 (business tables, idempotency, audit_logs).
+// Core schema: Flyway V1-V12 (business tables, idempotency, shared OWNER/ADMIN audit_logs, cost snapshot).
+// Core audit alignment: staging b1de421c461d, 2026-10-06; AI sections unchanged.
 // AI schema: supabase/migrations AI baseline (chat_conversations, chat_messages, pgvector, ai_read views).
 // ai_requests and notification tables are planned and not created by any migration yet.
 // Report periods use Asia/Ho_Chi_Minh; this logical ERD does not imply runtime completion.
@@ -391,6 +392,7 @@ Table sale_items {
   quantity numeric(15,3) [not null]
   unit_price_vnd bigint [not null]
   line_total_vnd bigint [not null]
+  estimated_cost_vnd bigint
 
   created_at timestamptz [not null, default: `now()`]
 
@@ -399,7 +401,7 @@ Table sale_items {
     product_id
   }
 
-  Note: 'product_id is null for a custom item; name/unit snapshots remain required. stock_deducted is true only when stock was deducted at confirmation, false for custom/untracked items. NULL means unknown historical stock movement; never assume false or automatically restock.'
+  Note: 'product_id is null for a custom item; name/unit snapshots remain required. stock_deducted is true only when stock was deducted at confirmation, false for custom/untracked items. Its NULL means unknown historical stock movement. estimated_cost_vnd is total snapshotted catalog cost for the line; NULL means unknown/custom/history before V12 and must not be replaced with current Product cost or a guessed fallback.'
 }
 
 
@@ -701,25 +703,34 @@ Table api_idempotency_keys {
 Table audit_logs {
   id bigint [pk, increment]
 
-  actor_user_id bigint
-  shop_id bigint
+  actor_user_id bigint [not null]
+  actor_role varchar(20) [not null, note: 'OWNER or ADMIN; actor role snapshot, V10']
+  shop_id bigint [note: 'Nullable only for supported ADMIN non-shop reads (V11); business events require a shop']
 
   action varchar(100) [not null]
   entity_type varchar(100) [not null]
-  entity_id bigint
+  entity_id bigint [note: 'Positive target for business/detail events; null for permitted ADMIN global/list reads (V11)']
 
-  old_data jsonb
-  new_data jsonb
+  outcome varchar(20) [not null, note: 'SUCCESS only (V10)']
+  reason varchar(500)
+  request_id varchar(36) [not null, note: 'Server-generated lowercase UUID; format checked by V10']
+  idempotency_key varchar(255)
+  metadata jsonb [not null, default: `'{}'::jsonb`, note: 'JSON object; Core allowlists keys/types. ADMIN reads store only queryPresent/resultCount']
 
-  ip_address varchar(64)
+  old_data jsonb [note: 'Retained nullable legacy column; Core does not populate snapshots']
+  new_data jsonb [note: 'Retained nullable legacy column; Core does not populate snapshots']
+
+  ip_address varchar(64) [note: 'Retained nullable legacy column; Core does not capture IP headers']
 
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (shop_id, created_at)
+    (shop_id, created_at, id)
     (entity_type, entity_id)
     actor_user_id
   }
+
+  Note: 'V10/V11 shared append-only table, no admin_access_logs. Actor/shop FKs use ON DELETE RESTRICT. DB checks constrain action/entity/target combinations, positive IDs, role, SUCCESS outcome, UUID request_id and metadata object; UPDATE/DELETE/TRUNCATE triggers reject mutation. V11 permits null shop/target only for whitelisted ADMIN reads; business events still require both. OWNER and ADMIN APIs expose different scoped projections; see ERD description migration alignment and API contract.'
 }
 
 

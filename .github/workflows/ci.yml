@@ -312,7 +312,11 @@ jobs:
       contents: read
       pull-requests: write
     runs-on: ubuntu-24.04
-    environment: ${{ github.event_name == 'pull_request' && 'vercel-preview' || (github.ref_name == 'main' && 'vercel-production' || 'vercel-staging') }}
+    # `url` links the GitHub Deployments sidebar to the fixed domains; previews get none because
+    # their alias depends on the PR number and is already commented on the PR.
+    environment:
+      name: ${{ github.event_name == 'pull_request' && 'vercel-preview' || (github.ref_name == 'main' && 'vercel-production' || 'vercel-staging') }}
+      url: ${{ github.event_name == 'pull_request' && '' || (github.ref_name == 'main' && 'https://smart-ledger-prod.vercel.app' || 'https://smart-ledger-staging.vercel.app') }}
     concurrency:
       group: deploy-web-${{ github.head_ref || github.ref_name }}
       cancel-in-progress: true
