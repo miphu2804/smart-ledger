@@ -10,8 +10,14 @@ import { errorMessage } from '../../src/lib/errors';
 import { triggerFeedback } from '../../src/lib/feedback';
 import { hashIndex, hhmm, normalizeText, relDay, vnd } from '../../src/lib/format';
 import { saleApi } from '../../src/lib/salesApi';
-import { inPeriod, Period } from '../../src/lib/stats';
+import { inPeriod, Period, periodLabel } from '../../src/lib/stats';
 import { colors, font, shadow, tilePalette } from '../../src/theme';
+
+/**
+ * Cỡ chữ của số trên thẻ tổng theo độ dài chữ. `adjustsFontSizeToFit` co chữ nhưng không đủ tin cậy trên mọi nền tảng
+ * (web bỏ qua) và thẻ này hẹp trên điện thoại nhỏ, nên số dài ("17.555.000đ") bắt đầu từ cỡ nhỏ hơn để luôn nằm một dòng.
+ */
+const figureSize = (text: string) => (text.length >= 12 ? 14 : text.length >= 10 ? 15.5 : 17.5);
 
 function formatGroupDateTitle(date: Date): string {
   const now = new Date();
@@ -74,18 +80,25 @@ export default function Invoices() {
 
   const filteredSales = useMemo(() => {
     const nq = normalizeText(q);
-    return sales.filter((s) => {
-      if (!inPeriod(s.soldAt, period)) return false;
-      if (nq) {
-        const hay = normalizeText(`${s.id} ${s.customerName ?? ''} ${s.items.map((x) => x.productName).join(' ')}`);
-        if (!hay.includes(nq)) return false;
-      }
-      return true;
-    });
+    return sales
+      .filter((s) => {
+        if (!inPeriod(s.soldAt, period)) return false;
+        if (nq) {
+          const hay = normalizeText(`${s.id} ${s.customerName ?? ''} ${s.items.map((x) => x.productName).join(' ')}`);
+          if (!hay.includes(nq)) return false;
+        }
+        return true;
+      })
+      // Core trả theo mã đơn; đơn có giờ bán cũ hơn mà mã lớn hơn (dữ liệu nhập tay/mẫu) làm nhóm ngày bị đảo. Mới nhất trước.
+      .sort((a, b) => new Date(b.soldAt).getTime() - new Date(a.soldAt).getTime());
   }, [sales, period, q]);
 
   const total = filteredSales.filter((s) => s.saleStatus !== 'VOIDED').reduce((a, s) => a + s.totalVnd, 0);
   const count = filteredSales.length;
+  // Số trên thẻ là của khoảng thời gian đang lọc; chỉ "Tất cả" mới là tổng, nên nhãn đổi theo bộ lọc
+  const scopeName = period === 'all' ? null : periodLabel[period].toLowerCase();
+  const countLabel = scopeName ? `Đơn ${scopeName}` : 'Tổng đơn hàng';
+  const revenueLabel = scopeName ? `Doanh thu ${scopeName}` : 'Tổng doanh thu';
 
   // Group sales by date
   const groupedSections = useMemo(() => {
@@ -244,19 +257,19 @@ export default function Invoices() {
                 setPeriod('all');
                 setQ('');
               }}
-              style={({ pressed }) => [styles.summaryMetricBtn, pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }]}
+              style={({ pressed }) => [styles.summaryMetricBtn, styles.summaryMetricCount, pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }]}
               accessibilityRole="button"
-              accessibilityLabel={`Tổng đơn hàng: ${count} đơn. Bấm để xem tất cả`}
+              accessibilityLabel={`${countLabel}: ${count} đơn. Bấm để xem tất cả`}
             >
               <View style={styles.summaryIconPurple}>
-                <Feather name="shopping-bag" size={18} color={colors.brand} />
+                <Feather name="shopping-bag" size={17} color={colors.brand} />
               </View>
-              <View style={{ flex: 1 }}>
-                <T w="extrabold" size={17.5} color={colors.ink}>
+              <View style={styles.summaryText}>
+                <T w="extrabold" size={figureSize(`${count} đơn`)} color={colors.ink} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
                   {count} đơn
                 </T>
-                <T size={12} color={colors.muted} style={{ marginTop: 1 }}>
-                  Tổng đơn hàng
+                <T size={12} color={colors.muted} style={{ marginTop: 1 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                  {countLabel}
                 </T>
               </View>
             </Pressable>
@@ -270,22 +283,21 @@ export default function Invoices() {
                 triggerFeedback('selection');
                 router.push('/analytics');
               }}
-              style={({ pressed }) => [styles.summaryMetricBtn, pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }]}
+              style={({ pressed }) => [styles.summaryMetricBtn, styles.summaryMetricRevenue, pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }]}
               accessibilityRole="button"
-              accessibilityLabel={`Tổng doanh thu: ${vnd(total)}. Bấm để xem báo cáo chi tiết`}
+              accessibilityLabel={`${revenueLabel}: ${vnd(total)}. Bấm để xem báo cáo chi tiết`}
             >
               <View style={styles.summaryIconYellow}>
-                <Feather name="database" size={17} color={colors.data.debt} />
+                <Feather name="database" size={16} color={colors.data.debt} />
               </View>
-              <View style={{ flex: 1 }}>
-                <T w="extrabold" size={17.5} color={colors.ink}>
+              <View style={styles.summaryText}>
+                <T w="extrabold" size={figureSize(vnd(total))} color={colors.ink} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
                   {vnd(total)}
                 </T>
-                <T size={12} color={colors.muted} style={{ marginTop: 1 }}>
-                  Tổng doanh thu
+                <T size={12} color={colors.muted} style={{ marginTop: 1 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                  {revenueLabel}
                 </T>
               </View>
-              <Feather name="chevron-right" size={16} color={colors.disabled} />
             </Pressable>
           </View>
 
@@ -497,24 +509,28 @@ const styles = StyleSheet.create({
     ...shadow(1),
   },
   summaryMetricBtn: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     paddingVertical: 2,
   },
+  // Số tiền dài hơn số đơn nên ô doanh thu được chia nhiều chỗ hơn
+  summaryMetricCount: { flex: 0.8 },
+  summaryMetricRevenue: { flex: 1.2 },
+  // minWidth 0 để chữ trong ô flex được phép co lại thay vì đẩy xuống dòng
+  summaryText: { flex: 1, minWidth: 0 },
   summaryIconPurple: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     backgroundColor: colors.brandSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   summaryIconYellow: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     backgroundColor: colors.data.debtSoft,
     alignItems: 'center',
     justifyContent: 'center',
