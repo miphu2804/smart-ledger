@@ -1,3 +1,13 @@
+### [2026-10-07 20:05 UTC+07:00] — [Fix] Keep the Đơn hàng summary figures on one line on narrow screens
+
+**Done:** Follow-up to the entry above. A report with the sample data ("3 đơn", "265.000đ") showed the revenue figure wrapping ("265.000" / "đ") and the label "Tổng doanh thu" breaking onto two lines on a phone. That screenshot came from a build without the previous change, but the card is narrow (about 84 dp for the figure beside a 40 dp icon and a chevron on a 390 dp phone), so shrink-to-fit alone was too fragile. The card now gives the revenue half more width than the order-count half, uses 34 dp icons, drops the decorative chevron on the revenue half (the whole half is still pressable), lets the text shrink with `minWidth: 0`, and starts long figures at a smaller font size by their length so they stay on one line even where `adjustsFontSizeToFit` is ignored.
+
+**Changed files:** `frontend/mobile/app/(tabs)/invoices.tsx`, `PROGRESS.md`.
+
+**Flow explained:** `figureSize()` picks 17.5, 15.5 or 14 by the length of the text ("3 đơn", "265.000đ", "1.146.000đ") → the figure and its label are single-line texts inside a `flex: 1, minWidth: 0` container → the revenue half has `flex: 1.2` and the count half `flex: 0.8`.
+
+**Check:** `tsc --noEmit` clean. On an Android emulator with the sample data, at 375 dp and system font scale 1.0 both figures and both labels sit on one line under Hôm nay ("3 đơn", "265.000đ", "Đơn hôm nay", "Doanh thu hôm nay") and under Tất cả ("6 đơn", "1.146.000đ", "Tổng đơn hàng", "Tổng doanh thu"); at 343 dp with font scale 1.3 the Tất cả card still fits on one line (the small label shrinks). **Not verified:** a real iPhone or Expo Go on iOS.
+
 ### [2026-10-07 19:30 UTC+07:00] — [Fix] Keep the Bán hàng category chips visible and label the Đơn hàng summary by period
 
 **Done:** On the Bán hàng tab the category chips ("Tất cả", "Chưa phân loại"…) were cut in half by the header. The header had a fixed height of 152 while its content (title row, search box, chips) needs more, and the header clips what overflows; it is worse with a larger system font (reported from an iPhone running Expo Go). The header now measures its content with `onLayout` and sizes itself to it, with 152 as the minimum. On the Đơn hàng tab the two summary figures wrapped ("17.555.00" / "0đ"); they now stay on one line and shrink to fit. The card also said "Tổng đơn hàng" and "Tổng doanh thu" for every filter although the numbers follow the selected period; it now says "Đơn hôm nay" and "Doanh thu hôm nay" and so on, and only "Tất cả" keeps "Tổng". Orders are sorted newest first: Core returns them by id, and a sale with an older sale time but a larger id reversed the day groups.

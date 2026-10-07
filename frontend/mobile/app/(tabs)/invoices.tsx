@@ -13,6 +13,12 @@ import { saleApi } from '../../src/lib/salesApi';
 import { inPeriod, Period, periodLabel } from '../../src/lib/stats';
 import { colors, font, shadow, tilePalette } from '../../src/theme';
 
+/**
+ * Cỡ chữ của số trên thẻ tổng theo độ dài chữ. `adjustsFontSizeToFit` co chữ nhưng không đủ tin cậy trên mọi nền tảng
+ * (web bỏ qua) và thẻ này hẹp trên điện thoại nhỏ, nên số dài ("17.555.000đ") bắt đầu từ cỡ nhỏ hơn để luôn nằm một dòng.
+ */
+const figureSize = (text: string) => (text.length >= 12 ? 14 : text.length >= 10 ? 15.5 : 17.5);
+
 function formatGroupDateTitle(date: Date): string {
   const now = new Date();
   const diffDays = Math.floor(
@@ -251,15 +257,15 @@ export default function Invoices() {
                 setPeriod('all');
                 setQ('');
               }}
-              style={({ pressed }) => [styles.summaryMetricBtn, pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }]}
+              style={({ pressed }) => [styles.summaryMetricBtn, styles.summaryMetricCount, pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }]}
               accessibilityRole="button"
               accessibilityLabel={`${countLabel}: ${count} đơn. Bấm để xem tất cả`}
             >
               <View style={styles.summaryIconPurple}>
-                <Feather name="shopping-bag" size={18} color={colors.brand} />
+                <Feather name="shopping-bag" size={17} color={colors.brand} />
               </View>
-              <View style={{ flex: 1 }}>
-                <T w="extrabold" size={17.5} color={colors.ink} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+              <View style={styles.summaryText}>
+                <T w="extrabold" size={figureSize(`${count} đơn`)} color={colors.ink} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
                   {count} đơn
                 </T>
                 <T size={12} color={colors.muted} style={{ marginTop: 1 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
@@ -277,22 +283,21 @@ export default function Invoices() {
                 triggerFeedback('selection');
                 router.push('/analytics');
               }}
-              style={({ pressed }) => [styles.summaryMetricBtn, pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }]}
+              style={({ pressed }) => [styles.summaryMetricBtn, styles.summaryMetricRevenue, pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }]}
               accessibilityRole="button"
               accessibilityLabel={`${revenueLabel}: ${vnd(total)}. Bấm để xem báo cáo chi tiết`}
             >
               <View style={styles.summaryIconYellow}>
-                <Feather name="database" size={17} color={colors.data.debt} />
+                <Feather name="database" size={16} color={colors.data.debt} />
               </View>
-              <View style={{ flex: 1 }}>
-                <T w="extrabold" size={17.5} color={colors.ink} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+              <View style={styles.summaryText}>
+                <T w="extrabold" size={figureSize(vnd(total))} color={colors.ink} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
                   {vnd(total)}
                 </T>
                 <T size={12} color={colors.muted} style={{ marginTop: 1 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
                   {revenueLabel}
                 </T>
               </View>
-              <Feather name="chevron-right" size={16} color={colors.disabled} />
             </Pressable>
           </View>
 
@@ -504,24 +509,28 @@ const styles = StyleSheet.create({
     ...shadow(1),
   },
   summaryMetricBtn: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     paddingVertical: 2,
   },
+  // Số tiền dài hơn số đơn nên ô doanh thu được chia nhiều chỗ hơn
+  summaryMetricCount: { flex: 0.8 },
+  summaryMetricRevenue: { flex: 1.2 },
+  // minWidth 0 để chữ trong ô flex được phép co lại thay vì đẩy xuống dòng
+  summaryText: { flex: 1, minWidth: 0 },
   summaryIconPurple: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     backgroundColor: colors.brandSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   summaryIconYellow: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     backgroundColor: colors.data.debtSoft,
     alignItems: 'center',
     justifyContent: 'center',
