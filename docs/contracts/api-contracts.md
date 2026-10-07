@@ -270,6 +270,7 @@ AI chỉ tạo bản nháp/gợi ý và câu trả lời chat. Các endpoint nà
     {
       "product_id": 12,
       "name": "Cà phê sữa",
+      "unit": "ly",
       "qty": 2,
       "unit_price": 25000,
       "confidence": 0.94
@@ -279,7 +280,7 @@ AI chỉ tạo bản nháp/gợi ý và câu trả lời chat. Các endpoint nà
 }
 ```
 
-`product_id` là `BIGINT` của `products.id` theo ERD, hoặc `null` khi không khớp hoặc khớp mơ hồ; khi đó `warnings` nêu lý do.
+`product_id` là `BIGINT` của `products.id` theo ERD, hoặc `null` khi không khớp, khớp mơ hồ, độ tin cậy thấp hoặc id do model trả không thuộc danh mục ACTIVE của shop; khi đó `unit`, `unit_price` cũng `null` và `warnings` nêu lý do bằng tiếng Việt. Với `SALE`, `name`, `unit`, `unit_price` lấy từ danh mục của shop, không lấy giá từ model hay từ câu người dùng nói. Với `EXPENSE`, mỗi khoản chi là một dòng `product_id: null`, `unit: null`, `qty: 1`, `name` là mô tả và `unit_price` là số tiền VND, hoặc `null` kèm warning khi chưa rõ số tiền. Bước parse text đã có trong AI (`DraftService`, xem [README của AI](../../backend/ai/README.md#text-drafts)); endpoint và audio vẫn là đích của #3.
 
 `AgentChatMessageView` gồm `conversation_id`, `message_id`, `answer`. `AgentConversationSummary` gồm `conversation_id`, `title`, `last_message_at`. `AgentConversationView` gồm summary và `messages[]` với `message_id`, `role` (`USER` hoặc `ASSISTANT`), `content`, `created_at`. ID hội thoại và tin nhắn là `BIGINT` như ERD.
 
