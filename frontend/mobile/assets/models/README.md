@@ -23,8 +23,9 @@ Xin file `models.zip` từ nhóm, giải nén các file trong thư mục `models
 
 ## App lấy model bằng cách nào
 
-App **không đóng gói** model vào APK. Lần đầu mở màn Đọc đơn, app tải 4 file bắt buộc về bộ nhớ của app rồi dùng lại
-(kiểm tra bằng kích thước file). Địa chỉ tải đặt trong `.env`:
+Mặc định app **không đóng gói** model vào APK. Lần đầu mở màn Đọc đơn, app tải 4 file bắt buộc về bộ nhớ của app rồi
+dùng lại (kiểm tra bằng kích thước file). Muốn APK chạy offline (ví dụ bản prototype) thì nhúng model vào APK, xem mục
+"Nhúng model vào APK" ở cuối. Địa chỉ tải đặt trong `.env`:
 
 ```
 EXPO_PUBLIC_STT_MODEL_URL=http://<IP máy tính>:8090/
@@ -42,3 +43,10 @@ thật dùng IP trong Wi-Fi). Script chỉ phục vụ các file trong thư mụ
 
 Khi phát hành, đưa 4 file lên một nơi tải được (ví dụ file đính kèm của một GitHub Release) và đặt
 `EXPO_PUBLIC_STT_MODEL_URL` trỏ tới đó. Đổi model thì tăng `STT_MODEL_VERSION` trong `src/lib/speech/core.ts` để app tải lại.
+
+## Nhúng model vào APK
+
+Plugin `plugins/withBundledSttModel.js` (đăng ký trong `app.json`) chép 4 file bắt buộc ở thư mục này vào
+`android/app/src/main/assets/models/stt-model-<STT_MODEL_VERSION>/` mỗi lần `expo prebuild`. Thư mục `android/` đã sinh sẵn
+thì chạy `node plugins/withBundledSttModel.js` rồi build. App tự nhận model nhúng và bỏ qua bước tải; model nhúng làm APK
+nặng thêm khoảng 49 MB. Máy build thiếu file model thì plugin chỉ cảnh báo, APK vẫn build được và quay về cách tải ở trên.

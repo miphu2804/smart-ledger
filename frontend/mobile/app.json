@@ -43,6 +43,7 @@
       "expo-font",
       ["@react-native-firebase/app", { "ios": { "disableSPM": true } }],
       "@react-native-firebase/auth",
+      "./plugins/withBundledSttModel",
       ["expo-build-properties", { "ios": { "useFrameworks": "static", "usePrecompiledModules": false } }],
       [
         "expo-camera",

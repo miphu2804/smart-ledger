@@ -23,6 +23,7 @@ import { useToast } from '../src/components/brand';
 import { Button, Dialog, Field, Row, T } from '../src/components/ui';
 import type { LineItem, ProductView } from '../src/data/types';
 import { productApi } from '../src/lib/catalogApi';
+import { debugLog } from '../src/lib/debug';
 import { errorMessage } from '../src/lib/errors';
 import { expenseApi } from '../src/lib/expenseApi';
 import { triggerFeedback } from '../src/lib/feedback';
@@ -463,6 +464,11 @@ export default function Voice() {
     push('user', utter);
     setTranscripts((t) => [...t, utter]);
     const { items: found, unknown, missingQuantityItems, expenses } = parseOrder(utter, parseableProducts);
+    // Chỉ chạy ở bản dev (debugLog tự bỏ qua ở bản phát hành): cho thấy model nghe ra gì và tách được mấy món
+    debugLog(
+      'voice',
+      `nghe: "${utter}" → ${found.length} món trong kho, ${unknown.length} món mới, ${missingQuantityItems?.length ?? 0} thiếu số lượng, ${expenses?.length ?? 0} khoản chi`,
+    );
 
     setTimeout(() => {
       const responseParts: string[] = [];

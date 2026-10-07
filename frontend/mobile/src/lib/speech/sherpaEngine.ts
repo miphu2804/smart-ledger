@@ -104,6 +104,20 @@ async function ensureModelFiles(): Promise<string> {
   return dir.replace(/^file:\/\//, '');
 }
 
+/**
+ * Thư mục model nằm sẵn trong APK (`assets/models/<tên>`), do plugin `plugins/withBundledSttModel.js` chép vào lúc build.
+ * Thư viện chép nó ra bộ nhớ app ở lần mở đầu rồi dùng lại; bản build không nhúng model thì rơi về cách tải qua mạng.
+ */
+const BUNDLED_MODEL_DIR = `stt-model-${STT_MODEL_VERSION}`;
+
+async function hasBundledModel(): Promise<boolean> {
+  try {
+    return (await loadRoot().listAssetModels()).some((m) => m.folder === BUNDLED_MODEL_DIR);
+  } catch {
+    return false;
+  }
+}
+
 function prepare(onProgress?: (p: PrepareProgress) => void): Promise<void> {
   if (!supported) return Promise.reject(new Error('Bản app này chưa có mô-đun giọng nói. Cài bản dev client mới.'));
   if (onProgress) progressListeners.add(onProgress);
@@ -113,11 +127,15 @@ function prepare(onProgress?: (p: PrepareProgress) => void): Promise<void> {
   }
   if (!preparing) {
     preparing = (async () => {
-      const dir = await ensureModelFiles();
+      const bundled = await hasBundledModel();
+      debugLog('stt', bundled ? 'dùng model nhúng trong APK' : 'không có model nhúng, dùng model tải về');
+      const modelPath = bundled
+        ? loadRoot().assetModelPath(`models/${BUNDLED_MODEL_DIR}`)
+        : loadRoot().fileModelPath(await ensureModelFiles());
       report({ stage: 'load', percent: 100 });
       const started = Date.now();
       engine = await loadStt().createStreamingSTT({
-        modelPath: loadRoot().fileModelPath(dir),
+        modelPath,
         modelType: 'transducer',
         enableEndpoint: true,
         decodingMethod: 'greedy_search',
