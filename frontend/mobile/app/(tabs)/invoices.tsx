@@ -10,7 +10,7 @@ import { errorMessage } from '../../src/lib/errors';
 import { triggerFeedback } from '../../src/lib/feedback';
 import { hashIndex, hhmm, normalizeText, relDay, vnd } from '../../src/lib/format';
 import { saleApi } from '../../src/lib/salesApi';
-import { inPeriod, Period } from '../../src/lib/stats';
+import { inPeriod, Period, periodLabel } from '../../src/lib/stats';
 import { colors, font, shadow, tilePalette } from '../../src/theme';
 
 function formatGroupDateTitle(date: Date): string {
@@ -74,18 +74,25 @@ export default function Invoices() {
 
   const filteredSales = useMemo(() => {
     const nq = normalizeText(q);
-    return sales.filter((s) => {
-      if (!inPeriod(s.soldAt, period)) return false;
-      if (nq) {
-        const hay = normalizeText(`${s.id} ${s.customerName ?? ''} ${s.items.map((x) => x.productName).join(' ')}`);
-        if (!hay.includes(nq)) return false;
-      }
-      return true;
-    });
+    return sales
+      .filter((s) => {
+        if (!inPeriod(s.soldAt, period)) return false;
+        if (nq) {
+          const hay = normalizeText(`${s.id} ${s.customerName ?? ''} ${s.items.map((x) => x.productName).join(' ')}`);
+          if (!hay.includes(nq)) return false;
+        }
+        return true;
+      })
+      // Core trả theo mã đơn; đơn có giờ bán cũ hơn mà mã lớn hơn (dữ liệu nhập tay/mẫu) làm nhóm ngày bị đảo. Mới nhất trước.
+      .sort((a, b) => new Date(b.soldAt).getTime() - new Date(a.soldAt).getTime());
   }, [sales, period, q]);
 
   const total = filteredSales.filter((s) => s.saleStatus !== 'VOIDED').reduce((a, s) => a + s.totalVnd, 0);
   const count = filteredSales.length;
+  // Số trên thẻ là của khoảng thời gian đang lọc; chỉ "Tất cả" mới là tổng, nên nhãn đổi theo bộ lọc
+  const scopeName = period === 'all' ? null : periodLabel[period].toLowerCase();
+  const countLabel = scopeName ? `Đơn ${scopeName}` : 'Tổng đơn hàng';
+  const revenueLabel = scopeName ? `Doanh thu ${scopeName}` : 'Tổng doanh thu';
 
   // Group sales by date
   const groupedSections = useMemo(() => {
@@ -246,17 +253,17 @@ export default function Invoices() {
               }}
               style={({ pressed }) => [styles.summaryMetricBtn, pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }]}
               accessibilityRole="button"
-              accessibilityLabel={`Tổng đơn hàng: ${count} đơn. Bấm để xem tất cả`}
+              accessibilityLabel={`${countLabel}: ${count} đơn. Bấm để xem tất cả`}
             >
               <View style={styles.summaryIconPurple}>
                 <Feather name="shopping-bag" size={18} color={colors.brand} />
               </View>
               <View style={{ flex: 1 }}>
-                <T w="extrabold" size={17.5} color={colors.ink}>
+                <T w="extrabold" size={17.5} color={colors.ink} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
                   {count} đơn
                 </T>
-                <T size={12} color={colors.muted} style={{ marginTop: 1 }}>
-                  Tổng đơn hàng
+                <T size={12} color={colors.muted} style={{ marginTop: 1 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                  {countLabel}
                 </T>
               </View>
             </Pressable>
@@ -272,17 +279,17 @@ export default function Invoices() {
               }}
               style={({ pressed }) => [styles.summaryMetricBtn, pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }]}
               accessibilityRole="button"
-              accessibilityLabel={`Tổng doanh thu: ${vnd(total)}. Bấm để xem báo cáo chi tiết`}
+              accessibilityLabel={`${revenueLabel}: ${vnd(total)}. Bấm để xem báo cáo chi tiết`}
             >
               <View style={styles.summaryIconYellow}>
                 <Feather name="database" size={17} color={colors.data.debt} />
               </View>
               <View style={{ flex: 1 }}>
-                <T w="extrabold" size={17.5} color={colors.ink}>
+                <T w="extrabold" size={17.5} color={colors.ink} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
                   {vnd(total)}
                 </T>
-                <T size={12} color={colors.muted} style={{ marginTop: 1 }}>
-                  Tổng doanh thu
+                <T size={12} color={colors.muted} style={{ marginTop: 1 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                  {revenueLabel}
                 </T>
               </View>
               <Feather name="chevron-right" size={16} color={colors.disabled} />
