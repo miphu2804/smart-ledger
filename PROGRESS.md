@@ -1,3 +1,16 @@
+### [2026-10-07 11:04 UTC+07:00] — [AI] Parse text or transcript into a DraftView (AI-008)
+
+**Done:** AI-008 (#60) on branch `feat/ai-draft-parse-60`, targeting `staging`. New package `src/drafts/`: `DraftService.parse(shop_id, mode, text)` reads the shop's ACTIVE catalog (SALE only), asks the model for lines through structured output, and `matching.py` keeps a `product_id` only when it is in that catalog, not ambiguous and at or above `MIN_MATCH_CONFIDENCE` (0.7, provisional); name, unit and price then come from the catalog. Every other line stays open with `product_id: null` and a Vietnamese warning. EXPENSE lines are `qty: 1` with the amount in `unit_price`. Model, output or catalog failures raise `DraftUnavailableError` for #3 to map to `503 ai_unavailable`. Contract `DraftView` items gain `unit` and the EXPENSE mapping.
+
+**Changed files:**
+- `backend/ai/src/drafts/__init__.py`, `matching.py`, `service.py`, `src/prompt_templates/draft_parse.py` — created
+- `backend/ai/src/prompt_templates/__init__.py`, `backend/ai/README.md`, `docs/contracts/api-contracts.md`, `PROGRESS.md` — modified
+- `backend/ai/tests/unit_tests/test_draft_matching.py`, `test_draft_service.py`, `tests/integration_tests/test_draft_parse_live.py` — created
+
+**Flow explained:** #3 endpoint (not yet built) → `DraftService.parse` → `ProductCatalogRepository.list_active_products(shop_id)` → model proposes lines from the catalog in the prompt → `matching` rejects foreign, ambiguous, unknown and low-confidence ids and prices from the catalog → `DraftResult` (DraftView without `request_id`). Nothing is written.
+
+**Check:** 24 new unit tests; full AI suite 292 passed, 43 skipped (Postgres integration needs `POSTGRES_TEST_URL`; the live set is opt-in). Opt-in live set against the configured OpenAI model: 13 passed (typos, no diacritics, abbreviations, ignored spoken price, ambiguous "ca phe", unknown product, four expense amounts, expense without amount). `ruff check` and `ruff format --check` pass. Not verified: the `/internal/v1/drafts/parse` endpoint and Core fallback (#3).
+
 ### [2026-10-07 01:34 UTC+07:00] — [Docs] Correct V12 cost snapshot ERD mapping
 
 **Done:** Corrected the V12 `estimated_cost_vnd` DBML mapping after review: it belongs only to `sale_items`, not `sale_draft_items`.
