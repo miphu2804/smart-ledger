@@ -139,7 +139,7 @@ public class AuditLog {
             } else if (key.equals("paymentMethod")) {
                 valid = normalized == null || PAYMENT_METHODS.contains(normalized);
             } else if (key.equals("source")) {
-                valid = normalized != null && Set.of("CATALOG_EDIT", "SALE_CONFIRM").contains(normalized);
+                valid = normalized != null && Set.of("CATALOG_EDIT", "SALE_CONFIRM", "STOCK_IN").contains(normalized);
             } else if (key.equals("beforeStatus") || key.equals("afterStatus")) {
                 valid = normalized != null && SHOP_STATUSES.contains(normalized);
             } else {

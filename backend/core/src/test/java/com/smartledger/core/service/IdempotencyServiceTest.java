@@ -69,6 +69,16 @@ class IdempotencyServiceTest {
     }
 
     @Test
+    void stockInStoresTheActualHttpStatusInsteadOfTheLegacyCreatedStatus() {
+        when(repository.reserve(eq(7L), eq(42L), eq("PRODUCT_STOCK_IN"), eq("stock-key"), any(), any()))
+                .thenReturn(true);
+        service.execute(7L, 42L, "PRODUCT_STOCK_IN", "stock-key", new Object[] {3L, 10},
+                "PRODUCT", TestResponse::id, TestResponse.class, 200, () -> new TestResponse(3L, 1));
+        verify(repository).complete(7L, "PRODUCT_STOCK_IN", "stock-key", "PRODUCT", 3L, 200,
+                "{\"id\":3,\"count\":1}");
+    }
+
+    @Test
     void rejectsMissingOrOversizedKeysBeforeAccessingTheRepository() {
         for (String key : new String[] { " ", "x".repeat(256) }) {
             assertThatThrownBy(() -> service.execute(7L, 42L, "EXPENSE_CREATE", key,

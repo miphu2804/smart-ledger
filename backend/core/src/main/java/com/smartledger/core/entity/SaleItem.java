@@ -47,6 +47,9 @@ public class SaleItem {
     @Column(name = "line_total_vnd", nullable = false)
     private Long lineTotalVnd;
 
+    @Column(name = "estimated_cost_vnd")
+    private Long estimatedCostVnd;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
@@ -55,6 +58,11 @@ public class SaleItem {
     }
 
     public static SaleItem fromDraftItem(Long saleId, SaleDraftItem draftItem, boolean stockDeducted) {
+        return fromDraftItem(saleId, draftItem, stockDeducted, null);
+    }
+
+    public static SaleItem fromDraftItem(Long saleId, SaleDraftItem draftItem, boolean stockDeducted,
+            Long estimatedCostVnd) {
         SaleItem item = new SaleItem();
         item.saleId = saleId;
         item.productId = draftItem.getProductId();
@@ -64,6 +72,7 @@ public class SaleItem {
         item.quantity = draftItem.getQuantity();
         item.unitPriceVnd = draftItem.getUnitPriceVnd();
         item.lineTotalVnd = draftItem.getLineTotalVnd();
+        item.estimatedCostVnd = estimatedCostVnd;
         return item;
     }
 

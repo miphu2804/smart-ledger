@@ -17,6 +17,7 @@ import com.smartledger.core.entity.Product;
 import com.smartledger.core.entity.Sale;
 import com.smartledger.core.entity.SaleDraft;
 import com.smartledger.core.entity.SaleDraftItem;
+import com.smartledger.core.entity.SaleItem;
 import com.smartledger.core.entity.Shop;
 import com.smartledger.core.enums.CatalogStatus;
 import com.smartledger.core.enums.DraftStatus;
@@ -178,6 +179,10 @@ class SaleDraftServiceTest {
         assertThat(payment.getValue().getType()).isEqualTo(PaymentType.INITIAL);
         assertThat(payment.getValue().getAmountVnd()).isEqualTo(25000L);
         assertThat(payment.getValue().getReceivedByUserId()).isEqualTo(42L);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<SaleItem>> saleItems = ArgumentCaptor.forClass(List.class);
+        verify(saleItemRepository).saveAll(saleItems.capture());
+        assertThat(saleItems.getValue().getFirst().getEstimatedCostVnd()).isEqualTo(10_000L);
         verify(debtRepository, never()).save(any());
     }
 
@@ -210,6 +215,11 @@ class SaleDraftServiceTest {
         assertThat(response.items().get(1).unit()).isEqualTo("phan");
         assertThat(response.totalVnd()).isEqualTo(45000L);
         assertThat(product.getStockQuantity()).isEqualByComparingTo("4.000");
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<SaleItem>> saleItems = ArgumentCaptor.forClass(List.class);
+        verify(saleItemRepository).saveAll(saleItems.capture());
+        assertThat(saleItems.getValue()).extracting(SaleItem::getEstimatedCostVnd)
+                .containsExactly(10_000L, null);
         verify(productRepository).findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE);
         verify(paymentRepository).save(any(Payment.class));
     }
@@ -562,7 +572,7 @@ class SaleDraftServiceTest {
     private Product product(BigDecimal stock) {
         Product product = Product.create(7L);
         ReflectionTestUtils.setField(product, "id", 3L);
-        product.replace(null, "Cà phê", null, null, "ly", 25000L, null, true, stock);
+        product.replace(null, "Cà phê", null, null, "ly", 25000L, 10000L, true, stock);
         return product;
     }
 
