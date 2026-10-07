@@ -3,6 +3,7 @@ package com.smartledger.core.service.impl;
 import com.smartledger.core.enums.AuditAction;
 import com.smartledger.core.service.AuditLogService;
 import com.smartledger.core.dto.request.ProductPatchRequest;
+import com.smartledger.core.dto.request.ProductStockInRequest;
 import com.smartledger.core.dto.request.ProductWriteRequest;
 import com.smartledger.core.dto.response.ProductResponse;
 import com.smartledger.core.entity.Product;
@@ -15,6 +16,7 @@ import com.smartledger.core.repository.CategoryRepository;
 import com.smartledger.core.repository.ProductRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.ProductService;
+import com.smartledger.core.service.IdempotencyService;
 import com.smartledger.core.service.ShopService;
 import java.math.BigDecimal;
 import java.util.List;
@@ -30,15 +32,18 @@ public class ProductServiceImpl implements ProductService {
     private final ShopService shopService;
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
+    private final IdempotencyService idempotencyService;
 
     public ProductServiceImpl(
             ShopService shopService,
             ProductRepository productRepository,
-            CategoryRepository categoryRepository, AuditLogService auditLogService) {
+            CategoryRepository categoryRepository, AuditLogService auditLogService,
+            IdempotencyService idempotencyService) {
         this.auditLogService = auditLogService;
         this.shopService = shopService;
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
+        this.idempotencyService = idempotencyService;
     }
 
     @Override
@@ -102,8 +107,7 @@ public class ProductServiceImpl implements ProductService {
 
     private ProductWriteRequest merge(Product product, ProductPatchRequest request) {
         boolean tracked = request.hasField("tracked") ? request.getTracked() : product.isTracked();
-        BigDecimal stock = request.hasField("stockQuantity") ? request.getStockQuantity()
-                : request.hasField("tracked") && !tracked ? null : product.getStockQuantity();
+        BigDecimal stock = !tracked ? null : !product.isTracked() ? BigDecimal.ZERO : product.getStockQuantity();
         return new ProductWriteRequest(
                 request.hasField("categoryId") ? request.getCategoryId() : product.getCategoryId(),
                 request.hasField("name") ? request.getName() : product.getName(),
@@ -114,6 +118,29 @@ public class ProductServiceImpl implements ProductService {
                 request.hasField("costPriceVnd") ? request.getCostPriceVnd() : product.getCostPriceVnd(),
                 tracked,
                 stock);
+    }
+
+    @Override
+    @Transactional
+    public ProductResponse stockIn(VerifiedFirebaseToken firebaseToken, String shopId, String productId,
+            String idempotencyKey, ProductStockInRequest request) {
+        Shop shop = shopService.requireOwnedActiveShop(firebaseToken, shopId);
+        Long id = parseProductId(productId);
+        ProductStockInRequest normalized = new ProductStockInRequest(
+                request.quantity().stripTrailingZeros(), normalizeOptional(request.reason()));
+        // Reserve before locking the product; retries replay without changing stock or auditing again.
+        return idempotencyService.execute(shop.getId(), shop.getOwnerId(), "PRODUCT_STOCK_IN", idempotencyKey,
+                new Object[] {id, normalized}, "PRODUCT", ProductResponse::id, ProductResponse.class, 200, () -> {
+                    Product product = requireLockedActiveProduct(shop.getId(), id.toString());
+                    BigDecimal before = product.getStockQuantity();
+                    product.addStock(normalized.quantity());
+                    auditLogService.recordOwner(shop, AuditAction.STOCK_ADJUSTED, product.getId(),
+                            normalized.reason(), idempotencyKey.trim(), AuditLogService.metadata(
+                                    "source", "STOCK_IN", "quantity", normalized.quantity(),
+                                    "beforeStock", before, "afterStock", product.getStockQuantity()));
+                    productRepository.flush();
+                    return toResponse(product);
+                });
     }
 
     @Override

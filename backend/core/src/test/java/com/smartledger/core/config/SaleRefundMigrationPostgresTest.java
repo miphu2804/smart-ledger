@@ -60,7 +60,7 @@ class SaleRefundMigrationPostgresTest {
 
     @Test
     void freshMigrationsMatchEveryEntityAndSecondRunDoesNothing() {
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(11);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(12);
         validateEntitySchema();
         assertThat(flyway(null).migrate().migrationsExecuted).isZero();
         assertThat(flyway(null).validateWithResult().validationSuccessful).isTrue();
@@ -69,12 +69,14 @@ class SaleRefundMigrationPostgresTest {
     @Test
     void upgradeFromV8PreservesMoneySettledDebtAndUnknownStockHistory() throws SQLException {
         migrateAndSeedV8();
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(3);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(4);
         validateEntitySchema();
 
         assertThat(scalar("SELECT stock_deducted FROM sale_items WHERE id = 1")).isNull();
+        assertThat(scalar("SELECT estimated_cost_vnd FROM sale_items WHERE id = 1")).isNull();
         assertThat(scalar("SELECT product_id FROM sale_items WHERE id = 2")).isNull();
         assertThat(scalar("SELECT stock_deducted FROM sale_items WHERE id = 2")).isNull();
+        assertThat(scalar("SELECT estimated_cost_vnd FROM sale_items WHERE id = 2")).isNull();
         assertThat(scalar("SELECT stock_quantity FROM products WHERE id = 1")).isEqualTo("7.000");
         assertThat(scalar("SELECT amount_vnd FROM payments WHERE id = 1")).isEqualTo("40000");
         assertThat(scalar("SELECT status || ':' || outstanding_vnd FROM debts WHERE id = 1"))
@@ -103,7 +105,7 @@ class SaleRefundMigrationPostgresTest {
                 VALUES (1, 40000, 'CASH', 1, TIMESTAMPTZ '2026-09-02T10:00:00Z');
                 """);
 
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(3);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(4);
         validateEntitySchema();
         assertThat(scalar("SELECT stock_deducted FROM sale_items WHERE id = 1")).isEqualTo("t");
         assertThat(scalar("SELECT amount_vnd FROM sale_refunds WHERE sale_id = 1")).isEqualTo("40000");
@@ -160,7 +162,7 @@ class SaleRefundMigrationPostgresTest {
                 .isEqualTo("8");
         // Correct the test row explicitly, then retry without Flyway repair.
         execute("UPDATE sale_refunds SET sale_id = 1 WHERE sale_id = 999");
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(3);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(4);
     }
 
     @Test
@@ -187,7 +189,7 @@ class SaleRefundMigrationPostgresTest {
         execute(auditInsert("'{}'::jsonb"));
         String original = scalar("SELECT row_to_json(a)::text FROM audit_logs a");
         assertThat(flyway("10").migrate().migrationsExecuted).isEqualTo(1);
-        validateEntitySchema();
+        validateAuditEntitySchema();
         assertThat(scalar("SELECT row_to_json(a)::text FROM audit_logs a")).isEqualTo(original);
         rejected("UPDATE audit_logs SET reason = 'Changed'", "55000", "append-only");
         rejected("DELETE FROM audit_logs", "55000", "append-only");
@@ -250,7 +252,7 @@ class SaleRefundMigrationPostgresTest {
         assertThat(flyway("10").migrate().migrationsExecuted).isEqualTo(1);
         assertThat(scalar("SELECT count(*) FROM audit_logs")).isEqualTo("1");
         rejected("DELETE FROM audit_logs", "55000", "append-only");
-        validateEntitySchema();
+        validateAuditEntitySchema();
     }
 
     @Test
@@ -261,7 +263,7 @@ class SaleRefundMigrationPostgresTest {
         execute("ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_action_check CHECK (action = 'SHOP_UPDATED')");
         String before = scalar("SELECT row_to_json(a)::text FROM audit_logs a");
 
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(flyway("11").migrate().migrationsExecuted).isEqualTo(1);
         assertThat(scalar("SELECT row_to_json(a)::text FROM audit_logs a")).isEqualTo(before);
         assertThat(scalar("SELECT count(*) FROM pg_constraint WHERE conrelid='audit_logs'::regclass AND conname='audit_logs_action_check'"))
                 .isEqualTo("0");
@@ -282,6 +284,7 @@ class SaleRefundMigrationPostgresTest {
         }
         assertThat(scalar("SELECT count(*) FROM information_schema.tables WHERE table_schema='" + schema + "' AND table_name='admin_access_logs'"))
                 .isEqualTo("0");
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
         validateEntitySchema();
         assertThat(flyway(null).migrate().migrationsExecuted).isZero();
         assertThat(flyway(null).validateWithResult().validationSuccessful).isTrue();
@@ -328,8 +331,10 @@ class SaleRefundMigrationPostgresTest {
         execute(adminReadInsert(AuditAction.ADMIN_OVERVIEW_VIEWED));
         String before = scalar("SELECT json_agg(a ORDER BY id)::text FROM audit_logs a");
         assertThat(scalar("SELECT max(version::integer) FROM flyway_schema_history WHERE success AND version IS NOT NULL")).isEqualTo("10");
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(flyway("11").migrate().migrationsExecuted).isEqualTo(1);
         assertThat(scalar("SELECT json_agg(a ORDER BY id)::text FROM audit_logs a")).isEqualTo(before);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        validateEntitySchema();
         assertThat(flyway(null).migrate().migrationsExecuted).isZero();
     }
 
@@ -452,6 +457,27 @@ class SaleRefundMigrationPostgresTest {
                 metadata.addAnnotatedClass(entity);
             }
             try (var factory = metadata.buildMetadata().buildSessionFactory()) {
+                assertThat(factory.isOpen()).isTrue();
+            }
+        } finally {
+            StandardServiceRegistryBuilder.destroy(registry);
+        }
+    }
+
+    private void validateAuditEntitySchema() {
+        var source = new DriverManagerDataSource(System.getenv("CORE_TEST_POSTGRES_URL"),
+                System.getenv("CORE_TEST_POSTGRES_USERNAME"), System.getenv("CORE_TEST_POSTGRES_PASSWORD"));
+        var properties = new Properties();
+        properties.setProperty("currentSchema", schema);
+        source.setConnectionProperties(properties);
+        var registry = new StandardServiceRegistryBuilder()
+                .applySetting("hibernate.connection.datasource", source)
+                .applySetting("hibernate.default_schema", schema)
+                .applySetting("hibernate.hbm2ddl.auto", "validate")
+                .build();
+        try {
+            try (var factory = new MetadataSources(registry).addAnnotatedClass(AuditLog.class)
+                    .buildMetadata().buildSessionFactory()) {
                 assertThat(factory.isOpen()).isTrue();
             }
         } finally {

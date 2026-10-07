@@ -12,7 +12,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.smartledger.core.config.SecurityConfiguration;
 import com.smartledger.core.dto.response.ExpenseResponse;
 import com.smartledger.core.dto.response.ReportSummaryResponse;
+import com.smartledger.core.dto.response.ProfitEstimateReportResponse;
+import com.smartledger.core.dto.response.SalesSeriesReportResponse;
+import com.smartledger.core.dto.response.SalesSeriesReportResponse.DailySales;
+import com.smartledger.core.dto.response.TopProductsReportResponse;
+import com.smartledger.core.dto.response.TopProductsReportResponse.TopProduct;
 import com.smartledger.core.enums.ExpenseStatus;
+import com.smartledger.core.enums.ReportGranularity;
+import com.smartledger.core.enums.ReportItemSource;
+import com.smartledger.core.enums.TopProductSort;
 import com.smartledger.core.exception.ApiExceptionHandler;
 import com.smartledger.core.exception.RestAuthenticationEntryPoint;
 import com.smartledger.core.security.BearerTokenAuthenticationFilter;
@@ -21,6 +29,9 @@ import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.ExpenseService;
 import com.smartledger.core.service.ReportService;
 import java.time.OffsetDateTime;
+import java.time.LocalDate;
+import java.math.BigDecimal;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -136,5 +147,35 @@ class ExpenseReportControllerWebTest {
                 .andExpect(jsonPath("$.collectedVnd").value(20000))
                 .andExpect(jsonPath("$.refundedVnd").value(40000))
                 .andExpect(jsonPath("$.confirmedRevenueVnd").doesNotExist());
+    }
+
+    @Test
+    void exposesTopProductsSeriesAndProfitEstimateContracts() throws Exception {
+        OffsetDateTime from = OffsetDateTime.parse("2026-09-30T17:00:00Z");
+        OffsetDateTime to = OffsetDateTime.parse("2026-10-06T03:00:00Z");
+        when(reportService.topProducts(any(), eq("7"), eq("month"), eq(10),
+                eq(TopProductSort.NET_REVENUE))).thenReturn(new TopProductsReportResponse("month", from, to,
+                TopProductSort.NET_REVENUE, List.of(new TopProduct("PRODUCT:3", 3L, "Ca phe", "ly",
+                        ReportItemSource.CATALOG, new BigDecimal("4.000"), BigDecimal.ONE,
+                        new BigDecimal("3.000"), 100_000L, 25_000L, 75_000L))));
+        when(reportService.salesSeries(any(), eq("7"), eq("month"), eq(ReportGranularity.DAY)))
+                .thenReturn(new SalesSeriesReportResponse("month", from, to, ReportGranularity.DAY,
+                        List.of(new DailySales(LocalDate.parse("2026-10-01"), 100_000L, 0, 100_000L, 2, 0))));
+        when(reportService.profitEstimate(any(), eq("7"), eq("month")))
+                .thenReturn(new ProfitEstimateReportResponse("month", from, to, 100_000L, 0, 100_000L,
+                        60_000L, 0, 60_000L, 40_000L, 10_000L, 30_000L, true, 0, 0));
+
+        mvc.perform(get("/api/v1/reports/top-products").header("Authorization", "Bearer valid-token")
+                        .header("X-Shop-Id", "7").param("period", "month"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].source").value("CATALOG"))
+                .andExpect(jsonPath("$.items[0].netRevenueVnd").value(75000));
+        mvc.perform(get("/api/v1/reports/sales-series").header("Authorization", "Bearer valid-token")
+                        .header("X-Shop-Id", "7").param("period", "month"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.granularity").value("DAY"))
+                .andExpect(jsonPath("$.items[0].date").value("2026-10-01"));
+        mvc.perform(get("/api/v1/reports/profit-estimate").header("Authorization", "Bearer valid-token")
+                        .header("X-Shop-Id", "7").param("period", "month"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.estimatedOperatingProfitVnd").value(30000))
+                .andExpect(jsonPath("$.isComplete").value(true));
     }
 }

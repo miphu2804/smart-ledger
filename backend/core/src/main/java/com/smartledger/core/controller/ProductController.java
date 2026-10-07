@@ -1,6 +1,7 @@
 package com.smartledger.core.controller;
 
 import com.smartledger.core.dto.request.ProductPatchRequest;
+import com.smartledger.core.dto.request.ProductStockInRequest;
 import com.smartledger.core.dto.request.ProductWriteRequest;
 import com.smartledger.core.dto.response.ProductResponse;
 import com.smartledger.core.security.VerifiedFirebaseToken;
@@ -71,7 +72,8 @@ public class ProductController {
     }
 
     @PatchMapping("/{productId}")
-    @Operation(summary = "Partially update an active product in the selected shop")
+    @Operation(summary = "Partially update an active product in the selected shop",
+            description = "stockQuantity is not accepted (400). Enabling tracking starts at zero; use stock-in to add stock.")
     @ApiResponse(responseCode = "200", description = "Product updated",
             content = @Content(schema = @Schema(implementation = ProductResponse.class)))
     public ProductResponse patch(
@@ -80,6 +82,20 @@ public class ProductController {
             @Parameter(description = "Product ID", example = "1") @PathVariable String productId,
             @Valid @RequestBody ProductPatchRequest request) {
         return productService.patch(firebaseToken, shopId, productId, request);
+    }
+
+    @PostMapping("/{productId}/stock-in")
+    @Operation(summary = "Add stock to an active tracked product",
+            description = "Positive quantity, up to 12 integer and 3 fractional digits. Retry with the same key and normalized payload replays the original response without adding stock again.")
+    @ApiResponse(responseCode = "200", description = "Stock added or original result replayed",
+            content = @Content(schema = @Schema(implementation = ProductResponse.class)))
+    public ProductResponse stockIn(
+            @AuthenticationPrincipal VerifiedFirebaseToken firebaseToken,
+            @RequestHeader("X-Shop-Id") String shopId,
+            @PathVariable String productId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @Valid @RequestBody ProductStockInRequest request) {
+        return productService.stockIn(firebaseToken, shopId, productId, idempotencyKey, request);
     }
 
     @DeleteMapping("/{productId}")

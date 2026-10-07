@@ -74,6 +74,16 @@ When the read-only executor is configured, the agent also gets a `suggest_restoc
 - The service runs one fixed `SELECT` through the same guard and read-only executor as `query_shop_data`, so the shop scope, statement timeout and row cap apply unchanged. The candidate list is capped at the fastest-selling rows the row cap returns, and the result flags when that cap was hit so the agent can say the list is partial.
 - `RestockSuggestion.reason` is a fixed Vietnamese sentence built from the period's sales and the current stock; the agent copies `suggested_qty`, `unit` and `reason` verbatim rather than recomputing them.
 
+## Text drafts
+
+`DraftService.parse(shop_id, mode, text)` in `src/drafts/service.py` turns an owner's text or STT transcript into a `DraftView` without `request_id`, which the endpoint assigns. It changes nothing: no sale, expense or stock is written. The endpoint `/internal/v1/drafts/parse` and audio belong to #3; this module is the text step it calls.
+
+- `SALE` loads the shop's ACTIVE catalog through `ProductCatalogRepository`, puts `id | name | unit` into the prompt, and the model returns lines with `product_id`, `qty`, `confidence` and an `ambiguous` flag through structured output.
+- `src/drafts/matching.py` then decides, without I/O: an id outside the shop catalog, an ambiguous line, no match, or `confidence` below `MIN_MATCH_CONFIDENCE` (0.7, a provisional default) leaves `product_id`, `unit` and `unit_price` as `null` and adds a Vietnamese warning. A kept line takes name, unit and price from the catalog row; a price the owner says is ignored.
+- `EXPENSE` skips the catalog. Each expense is one line with `qty = 1`, the description in `name` and the amount in `unit_price`; a missing amount stays `null` with a warning.
+- Every model failure, invalid model output, missing model or catalog failure raises `DraftUnavailableError`, which the endpoint maps to `503 ai_unavailable` so Core falls back to manual entry.
+- The Vietnamese text set (typos, no diacritics, abbreviations, ambiguous and unknown items) runs against the configured real model only when asked: `RUN_LIVE_MODEL_TESTS=1 uv run pytest tests/integration_tests/test_draft_parse_live.py`.
+
 ## Internal authentication
 
 `INTERNAL_API_TOKEN` is the credential shared with Core. Callers send it in the `X-Internal-Token` header; a missing or wrong value returns `401 unauthorized`. An unset or blank token fails closed, so every `/internal/v1` route returns `401` while `/health` keeps answering. Core sends the header from its own `INTERNAL_API_TOKEN`, so both services must hold the same value. Keep the staging and production values in those environments' secrets.
