@@ -119,57 +119,6 @@ button {
   border: 0;
 }
 
-/* ---------- Logo ---------- */
-.logo {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--ink);
-}
-.logo-mark {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-  flex: none;
-}
-.logo-mark img {
-  width: 112%;
-  height: 112%;
-  object-fit: contain;
-  filter: drop-shadow(0 3px 5px rgba(26, 25, 22, 0.25));
-}
-.logo-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.1;
-}
-.logo-name {
-  font-weight: 800;
-  font-size: 19px;
-  letter-spacing: -0.02em;
-  white-space: nowrap;
-}
-.logo-name b {
-  color: var(--primary);
-  font-weight: 800;
-}
-.logo-sm .logo-name {
-  font-size: 16px;
-}
-.logo-tagline {
-  font-size: 11px;
-  color: var(--muted);
-  font-weight: 500;
-  margin-top: 2px;
-}
-.logo-inverted,
-.logo-inverted .logo-name b {
-  color: #fff;
-}
-.logo-inverted .logo-tagline {
-  color: rgba(255, 255, 255, 0.7);
-}
-
 /* ---------- Buttons ---------- */
 .btn {
   display: inline-flex;

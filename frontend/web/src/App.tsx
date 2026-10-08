@@ -9,6 +9,8 @@ import SettingsPage from './pages/admin/SettingsPage'
 import TasksPage from './pages/admin/TasksPage'
 import NotFound from './pages/NotFound'
 import LandingPage from './pages/landing/LandingPage'
+import DataDeletionPage from './pages/legal/DataDeletionPage'
+import PrivacyPage from './pages/legal/PrivacyPage'
 
 /** URL cũ /admin/customers/:id → mở drawer chi tiết cơ sở */
 function LegacyCustomerRedirect() {
@@ -20,6 +22,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/data-deletion" element={<DataDeletionPage />} />
       <Route path="/admin/login" element={<LoginPage />} />
       <Route
         path="/admin"
