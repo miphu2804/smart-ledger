@@ -28,7 +28,7 @@ Every CI job must pass before a deploy, including `mobile-web`. Each deploy uplo
 | `vercel-preview` | Any branch (PR) | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `EXPO_PUBLIC_*` |
 | `vercel-staging` | `staging` | No | Same as above | `EXPO_PUBLIC_*`, `VERCEL_STAGING_ALIAS` |
 | `vercel-production` | `main` | Yes | Same as above | `EXPO_PUBLIC_*` |
-| `android-dev` | Any branch | No | `ANDROID_GOOGLE_SERVICES_JSON`: Firebase config of the dev/staging project | `EXPO_PUBLIC_*` |
+| `android-dev` | Any branch except `main` and `staging` | No | `ANDROID_GOOGLE_SERVICES_JSON`: Firebase config of the dev/staging project | `EXPO_PUBLIC_*` |
 | `android-staging` | `staging` | No | `ANDROID_GOOGLE_SERVICES_JSON`: Firebase config of the staging project | `EXPO_PUBLIC_*` |
 | `android-production` | `main` | Yes | `ANDROID_GOOGLE_SERVICES_JSON`: Firebase config of the production project | `EXPO_PUBLIC_*` |
 
@@ -130,7 +130,7 @@ Actions tab → **Mobile release** → **Run workflow**, choose the branch in *U
 
 | Environment | Builds from | Output | ABIs |
 |---|---|---|---|
-| `android-dev` | Any branch of this repository, including a pull request branch | APK | `arm64-v8a` |
+| `android-dev` | Any branch except `main` and `staging`, including a pull request branch | APK | `arm64-v8a` |
 | `android-staging` | `staging`, after a green CI run on the commit | APK | all four |
 | `android-production` | `main`, after a green CI run and approval | AAB | all four |
 
