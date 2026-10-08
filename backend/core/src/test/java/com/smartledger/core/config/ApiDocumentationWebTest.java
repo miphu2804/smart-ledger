@@ -10,6 +10,7 @@ import com.smartledger.core.exception.RestAuthenticationEntryPoint;
 import com.smartledger.core.security.BearerTokenAuthenticationFilter;
 import com.smartledger.core.security.FirebaseTokenVerifier;
 import com.smartledger.core.service.AuthSessionService;
+import com.smartledger.core.service.MediaService;
 import com.smartledger.core.service.ProductService;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -38,6 +39,7 @@ class ApiDocumentationWebTest {
         @Autowired protected MockMvc mvc;
         @MockitoBean protected FirebaseTokenVerifier verifier;
         @MockitoBean protected AuthSessionService service;
+        @MockitoBean protected MediaService media;
         @MockitoBean protected ProductService products;
         @MockitoBean(name = "dbHealthIndicator") protected HealthIndicator database;
 

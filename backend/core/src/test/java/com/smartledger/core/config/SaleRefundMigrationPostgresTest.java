@@ -9,6 +9,7 @@ import com.smartledger.core.entity.Category;
 import com.smartledger.core.entity.Customer;
 import com.smartledger.core.entity.Debt;
 import com.smartledger.core.entity.Expense;
+import com.smartledger.core.entity.MediaCleanupJob;
 import com.smartledger.core.entity.Payment;
 import com.smartledger.core.entity.Product;
 import com.smartledger.core.entity.Sale;
@@ -25,6 +26,9 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Properties;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.FlywayException;
 import org.hibernate.boot.MetadataSources;
@@ -60,7 +64,7 @@ class SaleRefundMigrationPostgresTest {
 
     @Test
     void freshMigrationsMatchEveryEntityAndSecondRunDoesNothing() {
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(12);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(13);
         validateEntitySchema();
         assertThat(flyway(null).migrate().migrationsExecuted).isZero();
         assertThat(flyway(null).validateWithResult().validationSuccessful).isTrue();
@@ -69,7 +73,7 @@ class SaleRefundMigrationPostgresTest {
     @Test
     void upgradeFromV8PreservesMoneySettledDebtAndUnknownStockHistory() throws SQLException {
         migrateAndSeedV8();
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(4);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(5);
         validateEntitySchema();
 
         assertThat(scalar("SELECT stock_deducted FROM sale_items WHERE id = 1")).isNull();
@@ -105,7 +109,7 @@ class SaleRefundMigrationPostgresTest {
                 VALUES (1, 40000, 'CASH', 1, TIMESTAMPTZ '2026-09-02T10:00:00Z');
                 """);
 
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(4);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(5);
         validateEntitySchema();
         assertThat(scalar("SELECT stock_deducted FROM sale_items WHERE id = 1")).isEqualTo("t");
         assertThat(scalar("SELECT amount_vnd FROM sale_refunds WHERE sale_id = 1")).isEqualTo("40000");
@@ -162,7 +166,7 @@ class SaleRefundMigrationPostgresTest {
                 .isEqualTo("8");
         // Correct the test row explicitly, then retry without Flyway repair.
         execute("UPDATE sale_refunds SET sale_id = 1 WHERE sale_id = 999");
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(4);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(5);
     }
 
     @Test
@@ -224,15 +228,16 @@ class SaleRefundMigrationPostgresTest {
         for (AuditAction action : AuditAction.values()) {
             String statement = valid.replace("'SHOP_UPDATED'", "'" + action.name() + "'")
                     .replace("'SHOP', 1", "'" + action.entityType() + "', 1");
-            if (action.isAdminRead()) {
-                // V10 remains immutable; V11 extends its whitelist separately.
+            if (action.isAdminRead() || action.isUserProfileAction()) {
+                // V10 remains immutable; V11/V13 extend their whitelists separately.
                 rejected(statement.replace("'OWNER'", "'ADMIN'"), "23514", "ck_audit_logs_action_target");
             } else {
                 execute(statement);
             }
         }
         assertThat(scalar("SELECT count(*) FROM audit_logs")).isEqualTo(Long.toString(
-                java.util.Arrays.stream(AuditAction.values()).filter(action -> !action.isAdminRead()).count()));
+                java.util.Arrays.stream(AuditAction.values())
+                        .filter(action -> !action.isAdminRead() && !action.isUserProfileAction()).count()));
     }
 
     @Test
@@ -268,6 +273,9 @@ class SaleRefundMigrationPostgresTest {
         assertThat(scalar("SELECT count(*) FROM pg_constraint WHERE conrelid='audit_logs'::regclass AND conname='audit_logs_action_check'"))
                 .isEqualTo("0");
         for (AuditAction action : AuditAction.values()) {
+            if (action.isUserProfileAction()) {
+                continue;
+            }
             if (action.isAdminRead()) {
                 execute(adminReadInsert(action));
             } else {
@@ -275,7 +283,7 @@ class SaleRefundMigrationPostgresTest {
                         .replace("'SHOP', 1", "'" + action.entityType() + "', 1"));
             }
         }
-        assertThat(scalar("SELECT count(*) FROM audit_logs")).isEqualTo(Integer.toString(AuditAction.values().length + 1));
+        assertThat(scalar("SELECT count(*) FROM audit_logs")).isEqualTo(Integer.toString(AuditAction.values().length));
         assertThat(scalar("SELECT amount_vnd FROM payments WHERE id=1")).isEqualTo("40000");
         assertThat(scalar("SELECT outstanding_vnd FROM debts WHERE id=1")).isEqualTo("60000");
         assertThat(scalar("SELECT stock_quantity FROM products WHERE id=1")).isEqualTo("7.000");
@@ -284,7 +292,9 @@ class SaleRefundMigrationPostgresTest {
         }
         assertThat(scalar("SELECT count(*) FROM information_schema.tables WHERE table_schema='" + schema + "' AND table_name='admin_access_logs'"))
                 .isEqualTo("0");
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(2);
+        execute(userProfileInsert(AuditAction.USER_AVATAR_UPDATED));
+        assertThat(scalar("SELECT count(*) FROM media_cleanup_jobs")).isEqualTo("0");
         validateEntitySchema();
         assertThat(flyway(null).migrate().migrationsExecuted).isZero();
         assertThat(flyway(null).validateWithResult().validationSuccessful).isTrue();
@@ -333,7 +343,7 @@ class SaleRefundMigrationPostgresTest {
         assertThat(scalar("SELECT max(version::integer) FROM flyway_schema_history WHERE success AND version IS NOT NULL")).isEqualTo("10");
         assertThat(flyway("11").migrate().migrationsExecuted).isEqualTo(1);
         assertThat(scalar("SELECT json_agg(a ORDER BY id)::text FROM audit_logs a")).isEqualTo(before);
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(2);
         validateEntitySchema();
         assertThat(flyway(null).migrate().migrationsExecuted).isZero();
     }
@@ -367,6 +377,60 @@ class SaleRefundMigrationPostgresTest {
         return "INSERT INTO audit_logs (actor_user_id, actor_role, shop_id, action, entity_type, entity_id, outcome, request_id, metadata) VALUES (1, 'ADMIN', "
                 + (shop ? "1" : "NULL") + ", '" + action.name() + "', '" + action.entityType() + "', "
                 + (target ? "1" : "NULL") + ", 'SUCCESS', '" + UUID.randomUUID() + "', '{}'::jsonb)";
+    }
+
+    @Test
+    void concurrentMediaReservationsAllowOnlyOnePendingUpload() throws Exception {
+        migrateAndSeedV8();
+        flyway(null).migrate();
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> reserveMediaKey(ready, start));
+            var second = executor.submit(() -> reserveMediaKey(ready, start));
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            assertThat((first.get(5, TimeUnit.SECONDS) ? 1 : 0) + (second.get(5, TimeUnit.SECONDS) ? 1 : 0))
+                    .isEqualTo(1);
+        }
+        assertThat(scalar("SELECT count(*) FROM api_idempotency_keys WHERE operation = 'PRODUCT_IMAGE_UPLOAD'"))
+                .isEqualTo("1");
+        assertThat(scalar("SELECT response_body IS NULL FROM api_idempotency_keys WHERE operation = 'PRODUCT_IMAGE_UPLOAD'"))
+                .isEqualTo("t");
+    }
+
+    @Test
+    void v13AddsMediaSchemaAndOnlyAllowsAvatarAuditForItsActor() throws SQLException {
+        migrateAndSeedV8();
+        flyway("12").migrate();
+
+        assertThat(flyway("13").migrate().migrationsExecuted).isEqualTo(1);
+        execute(userProfileInsert(AuditAction.USER_AVATAR_UPDATED));
+        execute("""
+                INSERT INTO media_cleanup_jobs (public_id, asset_type, status, attempt_count, next_attempt_at, created_at)
+                VALUES ('smartledger/local/users/1/avatar/example', 'USER_AVATAR', 'PENDING', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """);
+
+        rejected(userProfileInsert(AuditAction.USER_AVATAR_UPDATED).replace("'USER', 1", "'USER', 2"),
+                "23514", "ck_audit_logs_action_target");
+        rejected("""
+                INSERT INTO media_cleanup_jobs (public_id, asset_type, status, attempt_count, next_attempt_at, created_at)
+                VALUES ('bad', 'UNKNOWN', 'PENDING', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """, "23514", "ck_media_cleanup_jobs_asset_type");
+        rejected("""
+                INSERT INTO media_cleanup_jobs (public_id, asset_type, status, attempt_count, next_attempt_at, created_at)
+                VALUES ('bad', 'PRODUCT_IMAGE', 'COMPLETED', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """, "23514", "ck_media_cleanup_jobs_completion");
+        assertThat(scalar("SELECT image_public_id IS NULL FROM products WHERE id = 1")).isEqualTo("t");
+        assertThat(scalar("SELECT logo_public_id IS NULL FROM shops WHERE id = 1")).isEqualTo("t");
+        assertThat(scalar("SELECT avatar_public_id IS NULL FROM users WHERE id = 1")).isEqualTo("t");
+    }
+
+    private String userProfileInsert(AuditAction action) {
+        return "INSERT INTO audit_logs (actor_user_id, actor_role, shop_id, action, entity_type, entity_id, outcome, request_id, metadata) VALUES "
+                + "(1, 'OWNER', NULL, '" + action.name() + "', 'USER', 1, 'SUCCESS', '" + UUID.randomUUID()
+                + "', '{\"changedFields\":[\"avatarUrl\"]}'::jsonb)";
     }
 
     private String auditInsert(String metadata) {
@@ -452,7 +516,7 @@ class SaleRefundMigrationPostgresTest {
         try {
             var metadata = new MetadataSources(registry);
             for (var entity : new Class<?>[] {AuditLog.class, AuthIdentity.class, Category.class, Customer.class, Debt.class,
-                    Expense.class, Payment.class, Product.class, Sale.class, SaleDraft.class,
+                    Expense.class, MediaCleanupJob.class, Payment.class, Product.class, Sale.class, SaleDraft.class,
                     SaleDraftItem.class, SaleItem.class, SaleRefund.class, Shop.class, UserAccount.class}) {
                 metadata.addAnnotatedClass(entity);
             }
@@ -495,6 +559,21 @@ class SaleRefundMigrationPostgresTest {
     private String refundInsert(long saleId, long amount, String method, long userId) {
         return "INSERT INTO sale_refunds (sale_id, amount_vnd, refund_method, refunded_by_user_id, refunded_at) VALUES ("
                 + saleId + ", " + amount + ", '" + method + "', " + userId + ", now())";
+    }
+
+    private boolean reserveMediaKey(CountDownLatch ready, CountDownLatch start) throws Exception {
+        ready.countDown();
+        if (!start.await(5, TimeUnit.SECONDS)) {
+            throw new IllegalStateException("Concurrent reservation did not start");
+        }
+        try (var connection = scopedConnection(); var statement = connection.prepareStatement("""
+                INSERT INTO api_idempotency_keys
+                    (shop_id, user_id, operation, idempotency_key, request_hash, expires_at)
+                VALUES (1, 1, 'PRODUCT_IMAGE_UPLOAD', 'same-key', 'same-file-hash', CURRENT_TIMESTAMP + INTERVAL '30 days')
+                ON CONFLICT (shop_id, operation, idempotency_key) DO NOTHING
+                """)) {
+            return statement.executeUpdate() == 1;
+        }
     }
 
     private void execute(String sql) throws SQLException {

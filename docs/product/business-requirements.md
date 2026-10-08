@@ -5,7 +5,7 @@
 | Trạng thái | Core: quy tắc dưới đây đã chốt; AI/dashboard: đích MVP, cần nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ kinh doanh/sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; chủ thuế cho `BR-INV-*` |
-| Cập nhật lần cuối | 2026-10-06 (đồng bộ hỗ trợ ADMIN; không rà soát lại căn cứ pháp lý) |
+| Cập nhật lần cuối | 2026-10-07 (bổ sung media Core/Cloudinary; không rà soát lại căn cứ pháp lý) |
 
 ## Tài liệu liên quan
 
@@ -97,6 +97,7 @@ Hóa đơn điện tử là initiative kế tiếp, không mặc nhiên thuộc 
 | `BR-016` | Gửi lại cùng một yêu cầu trả nợ, tạo chi phí, hủy sale hoặc nhập kho do mạng lỗi không được ghi thu/chi, hoàn tiền, hoàn tồn hay cộng tồn lần nữa. Xác nhận lại cùng draft không được tạo sale/payment hoặc trừ tồn lần nữa. |
 | `BR-017` | Các thao tác ghi Core đã chốt về sale, thu/hoàn tiền, nợ, tồn, chi phí, danh mục và hồ sơ/trạng thái tiệm phải có audit thành công cùng giao dịch nghiệp vụ: đúng người thực hiện, tiệm, hành động, đối tượng và thời điểm. Audit chỉ bổ sung, không sửa/xóa lịch sử; lỗi/rollback hoặc replay các luồng được chống ghi trùng theo BR-016 không tạo audit thành công mới. OWNER chỉ tra cứu lịch sử của tiệm ACTIVE mình sở hữu; dữ liệu phụ được giới hạn, không ghi token hoặc thông tin liên hệ khách. Audit không thay thế các bản ghi nghiệp vụ làm nguồn số liệu. |
 | `BR-018` | OWNER nhập kho bằng lượng tăng thêm dương cho sản phẩm ACTIVE có theo dõi tồn trong tiệm ACTIVE mình sở hữu. Sửa thông tin sản phẩm không ghi đè số tồn tuyệt đối; nhập kho không tự tạo nghĩa vụ tiền/nợ hay đổi giá vốn. |
+| `BR-019` | OWNER có thể lưu một ảnh chính cho Product, logo cho Shop và avatar hồ sơ. Core là bên duy nhất gọi kho media có credential; client không nhận secret hoặc provider public ID. Thay/xóa ảnh không làm mất dữ liệu nghiệp vụ: dữ liệu mới và job dọn asset cũ cùng commit, việc dọn được retry sau commit. Avatar là media authenticated, còn ảnh Product/logo có URL giao hàng công khai. |
 
 `BR-003` giữ nguyên ý: người bán quyết định số liệu được ghi.
 
@@ -105,6 +106,14 @@ Hóa đơn điện tử là initiative kế tiếp, không mặc nhiên thuộc 
 - Theo `BR-018`, tồn mới bằng tồn hiện tại cộng số lượng nhập dương. Bật theo dõi từ không theo dõi khởi tạo 0, sau đó nhập kho riêng; tắt theo dõi giữ hành vi xóa số tồn. Tồn ban đầu khi tạo sản phẩm vẫn được phép nhập.
 - Nhập kho và bán/hủy đơn phải nhất quán khi đồng thời; cộng tồn, audit và kết quả chống ghi trùng cùng commit/rollback. Không suy ra mua hàng, chi tiền, công nợ nhà cung cấp hoặc cập nhật giá vốn từ thao tác này.
 - Gợi ý AI không tự nhập kho. Không bổ sung sổ phiếu nhập, ledger điều chỉnh tồn, nhập âm/kiểm kê hoặc hoàn tiền/trả hàng từng phần. Cần phối hợp FE theo contract mới, chưa coi kiểm thử Core là nghiệm thu mobile/staging.
+
+### Media hồ sơ và danh mục đã chốt — 2026-10-07
+
+- Core nhận multipart JPEG/PNG tối đa 5 MiB, kích thước 1–2048 px; không tin MIME hoặc tên file do client gửi. `imageUrl`, `logoUrl`, `avatarUrl` chỉ là giá trị đọc; không PATCH URL tự do.
+- Product image và Shop logo yêu cầu `Idempotency-Key` khi upload. Core commit reservation trước khi gọi provider: retry cùng key/nội dung sau khi hoàn tất trả kết quả ban đầu, còn request trùng khi upload đang chạy trả `409 media_upload_in_progress` và không tạo asset thứ hai. PENDING có lease ngắn, mặc định 300 giây; sau lease, cùng key/nội dung có thể retry nếu process trước đã chết. Avatar chưa có idempotency bền vững vì bảng key hiện là shop-scoped; FE không được tự retry upload avatar mù quáng sau khi đóng ứng dụng cho đến khi có contract riêng.
+- `imagePublicId`, `logoPublicId`, `avatarPublicId` chỉ lưu nội bộ. Xóa/thay tạo `media_cleanup_jobs` trong cùng transaction; worker chỉ chạy khi media được bật. Khi Cloudinary tắt/không sẵn sàng, thao tác ghi media trả `503 media_unavailable`; đăng nhập/`GET /me` vẫn thành công và avatar trả null thay vì chặn session.
+- Không archive Product/Shop để xóa media; archive giữ lịch sử và URL hiện có. Core không hứa dọn asset mới upload nếu transaction DB thất bại trước khi tạo bản ghi; đó là rủi ro vận hành cần quan sát/dọn provider riêng cho đến khi có outbox upload hoàn chỉnh.
+- Core khóa lại và kiểm tra Product/Shop/User vẫn ACTIVE trong transaction ghi sau upload. Nếu tiệm bị INACTIVE/ARCHIVED hoặc user bị DISABLED trong lúc provider đang xử lý, Core rollback cập nhật tham chiếu/audit; asset mới có thể cần dọn vận hành như rủi ro upload nêu trên.
 
 ### Quyết định Core đã chốt — 2026-10-02
 
@@ -182,6 +191,7 @@ Copy UI viện dẫn nghị định trên màn bản ghi bán hàng **không** b
 | `BO-005`, `BR-005`, `BR-008` | `FR-015`, `FR-016`, `FR-006` | tạm thời — MVP đã chấp nhận |
 | `BR-007` | `FR-009`, `FR-013` | tạm thời — MVP đã chấp nhận |
 | `BO-002`, `BR-007`, `BR-009`, `BR-016`, `BR-017`, `BR-018` | `FR-009`, `FR-030`, `AC-044`–`AC-048` | Nhập kho Core; FE/staging cần nghiệm thu |
+| `BR-007`, `BR-009`, `BR-017`, `BR-019` | `FR-011`, `FR-031`, `NFR-003`, `NFR-010`, `AC-053`–`AC-054` | Media Core có trên nhánh; FE/staging và migration shared DB cần nghiệm thu |
 | `BR-009` | `FR-010`, `FR-011`, `NFR-003` | tạm thời — MVP đã chấp nhận; không tuyên bố sẵn sàng sản xuất |
 | `BR-013`, `BR-014` | `FR-022`–`FR-024`, `NFR-003`, `NFR-009`, `AC-015`–`AC-017`, `AC-040`–`AC-043` | Core có API hỗ trợ/audit; dashboard web và staging cần nghiệm thu riêng |
 | `BR-010` | `FR-014` | tạm thời — MVP đã chấp nhận |

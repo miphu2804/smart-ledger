@@ -6,6 +6,7 @@ import com.smartledger.core.dto.request.ShopStatusUpdateRequest;
 import com.smartledger.core.dto.request.ShopUpdateRequest;
 import com.smartledger.core.dto.response.ShopResponse;
 import com.smartledger.core.security.VerifiedFirebaseToken;
+import com.smartledger.core.service.MediaService;
 import com.smartledger.core.service.ShopService;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -16,6 +17,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -25,7 +27,10 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/v1/shops")
@@ -34,9 +39,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class ShopController {
 
     private final ShopService shopService;
+    private final MediaService mediaService;
 
-    public ShopController(ShopService shopService) {
+    public ShopController(ShopService shopService, MediaService mediaService) {
         this.shopService = shopService;
+        this.mediaService = mediaService;
     }
 
     @PostMapping
@@ -76,6 +83,28 @@ public class ShopController {
             @PathVariable String shopId,
             @Valid @RequestBody ShopUpdateRequest request) {
         return shopService.updateById(firebaseToken, shopId, request);
+    }
+
+    @PostMapping(path = "/{shopId}/logo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload the logo for an active shop")
+    @ApiResponse(responseCode = "200", description = "Logo uploaded or idempotent response replayed",
+            content = @Content(schema = @Schema(implementation = ShopResponse.class)))
+    public ShopResponse uploadLogo(
+            @AuthenticationPrincipal VerifiedFirebaseToken firebaseToken,
+            @PathVariable String shopId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestPart("image") MultipartFile image) {
+        return mediaService.uploadShopLogo(firebaseToken, shopId, idempotencyKey, image);
+    }
+
+    @DeleteMapping("/{shopId}/logo")
+    @Operation(summary = "Remove the shop logo; provider cleanup is retried asynchronously")
+    @ApiResponse(responseCode = "204", description = "Logo removed or already absent")
+    public ResponseEntity<Void> deleteLogo(
+            @AuthenticationPrincipal VerifiedFirebaseToken firebaseToken,
+            @PathVariable String shopId) {
+        mediaService.deleteShopLogo(firebaseToken, shopId);
+        return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/{shopId}/status")

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 class ApiExceptionHandlerTest {
     private final ApiExceptionHandler handler = new ApiExceptionHandler();
@@ -61,5 +62,14 @@ class ApiExceptionHandlerTest {
                 new MockHttpServletRequest());
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    @Test
+    void mapsMultipartLimitsToThePublicImageTooLargeError() {
+        var response = handler.handleMaxUploadSizeExceeded(
+                new MaxUploadSizeExceededException(5L * 1024 * 1024), new MockHttpServletRequest());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE);
+        assertThat(response.getBody().code()).isEqualTo("image_too_large");
     }
 }

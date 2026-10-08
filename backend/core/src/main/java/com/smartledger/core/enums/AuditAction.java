@@ -25,6 +25,7 @@ public enum AuditAction {
     SHOP_ARCHIVED("SHOP", "beforeStatus", "afterStatus"),
     SHOP_INACTIVATED("SHOP", "beforeStatus", "afterStatus"),
     SHOP_REACTIVATED("SHOP", "beforeStatus", "afterStatus"),
+    USER_AVATAR_UPDATED("USER", "changedFields"),
     ADMIN_OVERVIEW_VIEWED("SYSTEM", "queryPresent", "resultCount"),
     ADMIN_OWNERS_SEARCHED("OWNER_LIST", "queryPresent", "resultCount"),
     ADMIN_OWNER_VIEWED("OWNER", "queryPresent", "resultCount"),
@@ -44,4 +45,5 @@ public enum AuditAction {
     public String entityType() { return entityType; }
     public Set<String> metadataKeys() { return metadataKeys; }
     public boolean isAdminRead() { return name().startsWith("ADMIN_"); }
+    public boolean isUserProfileAction() { return this == USER_AVATAR_UPDATED; }
 }

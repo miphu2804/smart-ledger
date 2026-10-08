@@ -42,6 +42,9 @@ public class UserAccount {
     @Column(name = "avatar_url", length = 1000)
     private String avatarUrl;
 
+    @Column(name = "avatar_public_id", length = 500)
+    private String avatarPublicId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "system_role", nullable = false, length = 20)
     private SystemRole systemRole;
@@ -72,9 +75,20 @@ public class UserAccount {
         if (StringUtils.hasText(firebaseToken.phoneNumber())) {
             phone = firebaseToken.phoneNumber();
         }
-        if (StringUtils.hasText(firebaseToken.avatarUrl())) {
+        if (avatarPublicId == null && StringUtils.hasText(firebaseToken.avatarUrl())) {
             avatarUrl = firebaseToken.avatarUrl();
         }
+    }
+
+    /** The provider URL is derived per response; only the private media handle is durable. */
+    public void replaceCloudinaryAvatar(String avatarPublicId) {
+        this.avatarUrl = null;
+        this.avatarPublicId = avatarPublicId;
+    }
+
+    public void clearCloudinaryAvatar() {
+        avatarUrl = null;
+        avatarPublicId = null;
     }
 
     @PrePersist
