@@ -1,3 +1,13 @@
+### [2026-10-09 00:05 UTC+07:00] — [Fix] Align PostgreSQL CI gate regression tests
+
+**Done:** Corrected the outdated checkout-specific error expectation that failed PR #131 after the PostgreSQL gate was extended for notifications. Added negative coverage for a removed required notification or V15 migration test.
+
+**Changed files:** `backend/core/scripts/test_verify_postgres_tests.py` and this new progress entry. Existing progress entries remain unchanged; no business code, migration, workflow, FE/AI, secret or IDE files are modified.
+
+**Flow explained:** The gate still rejects missing required test methods; its self-test now expects the current `required tests missing` message. This fixes the gate's regression test rather than weakening PostgreSQL verification.
+
+**Check:** Reproduced the previous failure with real Python in a disposable, network-disabled container using a read-only Core mount. After the fix, `scripts/test_verify_postgres_tests.py` passes 7/7 tests (including both new subcases), and `scripts/verify_postgres_tests.py target/surefire-reports` passes against the existing Maven reports. The previous GitHub CI run independently passed all 617 Maven tests with zero failures/errors/skips; Maven was not rerun for this Python-test-only change. The new CI run must still complete, including the fresh-database migration steps skipped in the failed run. No user's local/staging/production DB was used.
+
 ### [2026-10-08 23:45 UTC+07:00] — [Feature] Add OWNER in-app notifications and per-product stock thresholds
 
 **Done:** Core adds an OWNER inbox, unread count and atomic single/batch read APIs. Product create/PATCH supports nullable lowStockThreshold. Stock alerts have LOW/OUT episodes; sale void and ADMIN shop-status changes notify the OWNER. Read retries preserve the first readAt, and pages reject offsets exceeding Integer.MAX_VALUE.
