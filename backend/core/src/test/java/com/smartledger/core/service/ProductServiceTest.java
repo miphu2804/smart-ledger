@@ -59,6 +59,18 @@ class ProductServiceTest {
     }
 
     @Test
+    void rejectsRawProductImageUrlOnCreate() {
+        ProductWriteRequest request = new ProductWriteRequest(null, "Cà phê", null,
+                "https://untrusted.example/image.png", "ly", 25000L, 10000L, false, null);
+
+        assertThatThrownBy(() -> service.create(token(), "7", request))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_IMAGE_URL_UNSUPPORTED));
+
+        verify(productRepository, never()).save(any());
+    }
+
+    @Test
     void rejectsCategoryOutsideTheSelectedShopOrArchived() {
         ProductWriteRequest request = request(10L, null, false, null);
 

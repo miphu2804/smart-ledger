@@ -45,7 +45,7 @@ public class AuditLog {
     private static final Set<String> BOOLEAN_KEYS = Set.of("restockItems", "tracked", "beforeTracked", "afterTracked", "queryPresent");
     private static final Set<String> FIELD_NAMES = Set.of("name", "industry", "phone", "address", "categoryId",
             "barcode", "imageUrl", "unit", "sellingPriceVnd", "costPriceVnd", "tracked", "stockQuantity",
-            "category", "description", "amountVnd", "paymentMethod", "expenseAt");
+            "logoUrl", "avatarUrl", "category", "description", "amountVnd", "paymentMethod", "expenseAt");
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -98,6 +98,11 @@ public class AuditLog {
                     || !(metadata.get("queryPresent") instanceof Boolean queryPresent)
                     || queryPresent && action != AuditAction.ADMIN_OWNERS_SEARCHED && action != AuditAction.ADMIN_SHOPS_SEARCHED) {
                 throw new IllegalArgumentException("Invalid administrative read audit context");
+            }
+        } else if (action.isUserProfileAction()) {
+            if (shopId != null || !actorId.equals(entityId) || metadata == null
+                    || !metadata.keySet().equals(action.metadataKeys())) {
+                throw new IllegalArgumentException("Invalid user profile audit context");
             }
         } else if (shopId == null || shopId <= 0 || entityId == null || entityId <= 0) {
             throw new IllegalArgumentException("Business audit requires a real shop and target");

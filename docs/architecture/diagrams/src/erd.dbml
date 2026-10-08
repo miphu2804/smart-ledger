@@ -5,7 +5,7 @@
 // ID: BIGINT IDENTITY → Java Long
 // Money: BIGINT VND
 // Time: TIMESTAMPTZ, UTC internally; Core JSON displays +07:00
-// Core schema: Flyway V1-V12 (business tables, idempotency, shared OWNER/ADMIN audit_logs, cost snapshot).
+// Core schema: Flyway V1-V14 (business tables, idempotency, shared OWNER/ADMIN audit_logs, cost snapshot, media outbox and upload leases).
 // Core audit alignment: staging b1de421c461d, 2026-10-06; AI sections unchanged.
 // AI schema: supabase/migrations AI baseline (chat_conversations, chat_messages, pgvector, ai_read views).
 // ai_requests and notification tables are planned and not created by any migration yet.
@@ -129,6 +129,7 @@ Table users {
   email varchar(255)
   phone varchar(30)
   avatar_url varchar(1000)
+  avatar_public_id varchar(500) [note: 'V13 internal Cloudinary authenticated asset reference; never returned directly']
 
   system_role SystemRole [not null, default: 'OWNER']
   status UserStatus [not null, default: 'ACTIVE']
@@ -169,6 +170,8 @@ Table shops {
   industry varchar(100) [not null]
   phone varchar(30)
   address varchar(500)
+  logo_url varchar(1000)
+  logo_public_id varchar(500) [note: 'V13 internal Cloudinary public asset reference; never returned directly']
 
   status ShopStatus [not null, default: 'ACTIVE']
   archived_at timestamptz
@@ -218,6 +221,7 @@ Table products {
   name varchar(255) [not null]
   barcode varchar(100)
   image_url varchar(1000)
+  image_public_id varchar(500) [note: 'V13 internal Cloudinary public asset reference; never returned directly']
   unit varchar(50) [not null]
 
   selling_price_vnd bigint [not null]
@@ -700,16 +704,54 @@ Table api_idempotency_keys {
 // AUDIT LOG
 // =====================================================
 
+Table media_upload_keys {
+  id bigint [pk, increment]
+  scope_key varchar(100) [not null, note: 'SHOP:<id> for Product/logo, USER:<id> for avatar']
+  user_id bigint [not null]
+  operation varchar(100) [not null]
+  idempotency_key varchar(255) [not null]
+  request_hash varchar(128) [not null]
+  public_id varchar(500) [not null, note: 'Internal provider identifier']
+  lease_token uuid [not null, note: 'Fences expired/reclaimed attempts']
+  expires_at timestamptz [not null]
+  response_body jsonb [note: 'NULL means PENDING; completed avatar snapshot has no signed URL']
+
+  indexes {
+    (scope_key, operation, idempotency_key) [unique]
+    public_id
+  }
+
+  Note: 'V14 durable media upload reservation and replay. Independent of monetary V7 idempotency; user FK ON DELETE RESTRICT.'
+}
+
+Table media_cleanup_jobs {
+  id bigint [pk, increment]
+  public_id varchar(500) [not null, note: 'Internal Cloudinary identifier; no business FK by design']
+  asset_type varchar(30) [not null, note: 'PRODUCT_IMAGE | SHOP_LOGO | USER_AVATAR']
+  status varchar(20) [not null, default: 'PENDING', note: 'PENDING | COMPLETED']
+  attempt_count integer [not null, default: 0]
+  next_attempt_at timestamptz [not null]
+  last_error varchar(500)
+  created_at timestamptz [not null, default: `now()`]
+  completed_at timestamptz
+
+  indexes {
+    (status, next_attempt_at, id)
+  }
+
+  Note: 'V13 post-commit deletion outbox for replaced or removed provider assets. No FK lets a job survive after its owner field is cleared.'
+}
+
 Table audit_logs {
   id bigint [pk, increment]
 
   actor_user_id bigint [not null]
   actor_role varchar(20) [not null, note: 'OWNER or ADMIN; actor role snapshot, V10']
-  shop_id bigint [note: 'Nullable only for supported ADMIN non-shop reads (V11); business events require a shop']
+  shop_id bigint [note: 'Nullable only for supported ADMIN non-shop reads (V11) and USER_AVATAR_UPDATED (V13); business events require a shop']
 
   action varchar(100) [not null]
   entity_type varchar(100) [not null]
-  entity_id bigint [note: 'Positive target for business/detail events; null for permitted ADMIN global/list reads (V11)']
+  entity_id bigint [note: 'Positive target for business/detail events and avatar actor (V13); null for permitted ADMIN global/list reads (V11)']
 
   outcome varchar(20) [not null, note: 'SUCCESS only (V10)']
   reason varchar(500)
@@ -730,7 +772,7 @@ Table audit_logs {
     actor_user_id
   }
 
-  Note: 'V10/V11 shared append-only table, no admin_access_logs. Actor/shop FKs use ON DELETE RESTRICT. DB checks constrain action/entity/target combinations, positive IDs, role, SUCCESS outcome, UUID request_id and metadata object; UPDATE/DELETE/TRUNCATE triggers reject mutation. V11 permits null shop/target only for whitelisted ADMIN reads; business events still require both. OWNER and ADMIN APIs expose different scoped projections; see ERD description migration alignment and API contract.'
+  Note: 'V10/V11/V13 shared append-only table, no admin_access_logs. Actor/shop FKs use ON DELETE RESTRICT. DB checks constrain action/entity/target combinations, positive IDs, role, SUCCESS outcome, UUID request_id and metadata object; UPDATE/DELETE/TRUNCATE triggers reject mutation. V11 permits null shop/target only for whitelisted ADMIN reads; V13 permits USER_AVATAR_UPDATED only when entity_id equals actor_user_id and shop/reason/key are null. OWNER and ADMIN APIs expose different scoped projections; see ERD description migration alignment and API contract.'
 }
 
 
@@ -828,6 +870,7 @@ Ref: users.id < notification_recipients.user_id
 
 Ref: shops.id < api_idempotency_keys.shop_id
 Ref: users.id < api_idempotency_keys.user_id
+Ref: users.id < media_upload_keys.user_id [delete: restrict]
 
 
 // ---------- AUDIT ----------
@@ -879,5 +922,7 @@ TableGroup notification {
 
 TableGroup safety_and_audit {
   api_idempotency_keys
+  media_upload_keys
+  media_cleanup_jobs
   audit_logs
 }

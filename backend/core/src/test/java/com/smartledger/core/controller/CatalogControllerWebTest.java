@@ -25,6 +25,7 @@ import com.smartledger.core.security.BearerTokenAuthenticationFilter;
 import com.smartledger.core.security.FirebaseTokenVerifier;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.CategoryService;
+import com.smartledger.core.service.MediaService;
 import com.smartledger.core.service.ProductService;
 import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,6 +52,9 @@ class CatalogControllerWebTest {
 
     @MockitoBean
     private ProductService productService;
+
+    @MockitoBean
+    private MediaService mediaService;
 
     @BeforeEach
     void validToken() {

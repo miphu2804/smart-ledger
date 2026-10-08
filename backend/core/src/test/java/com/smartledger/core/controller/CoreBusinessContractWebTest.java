@@ -53,6 +53,7 @@ class CoreBusinessContractWebTest {
     @MockitoBean private FirebaseTokenVerifier tokenVerifier;
     @MockitoBean private CategoryService categories;
     @MockitoBean private ProductService products;
+    @MockitoBean private MediaService media;
     @MockitoBean private SaleDraftService drafts;
     @MockitoBean private SaleService sales;
     @MockitoBean private PaymentService payments;

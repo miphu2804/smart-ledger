@@ -5,7 +5,7 @@
 | Trạng thái | Core: hành vi đã chốt dưới đây; AI/dashboard và FE: cần nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; người rà soát kỹ thuật |
-| Cập nhật lần cuối | 2026-10-06 |
+| Cập nhật lần cuối | 2026-10-08 |
 
 ## Tài liệu liên quan
 
@@ -94,6 +94,7 @@ Luồng hỗ trợ: ADMIN đăng nhập dashboard web, tìm OWNER hoặc cơ s�
 | `FR-028` | `BO-002`, `BO-005`, `BR-016`, `BR-017` | Core ghi audit thành công cùng transaction cho các thao tác sale, thu/hoàn tiền, nợ, tồn, chi phí, category/product và hồ sơ/trạng thái shop đã triển khai. Mỗi event lưu actor/role, shop, action, đối tượng, thời điểm, requestId và context được phép; các event của cùng request dùng chung requestId. Không có audit thành công khi rollback hoặc ghi thêm event khi replay các luồng theo BR-016; không mở rộng idempotency sang mọi API tạo mới. | P0 — Core MVP; tích hợp FE/staging cần nghiệm thu |
 | `FR-029` | `BR-009`, `BR-017` | OWNER tra cứu lịch sử audit chỉ đọc của shop ACTIVE mình sở hữu, mới nhất trước, lọc theo action/đối tượng/khoảng thời gian và phân trang. Không có API tạo/sửa/xóa audit hoặc quyền đọc shop khác. Quy ước request/response và nhóm hành động nằm trong [API contract](../contracts/api-contracts.md#lịch-sử-audit-của-tiệm). | P0 — Core MVP; tích hợp FE/staging cần nghiệm thu |
 | `FR-030` | `BO-002`, `BR-007`, `BR-009`, `BR-016`, `BR-017`, `BR-018` | OWNER nhập kho cho product ACTIVE tracked=true trong shop ACTIVE mình sở hữu bằng số lượng dương, tối đa 12 chữ số nguyên và 3 chữ số thập phân; lý do tùy chọn tối đa 500 ký tự. Core cộng vào tồn hiện tại dưới khóa, yêu cầu Idempotency-Key và ghi STOCK_ADJUSTED/source STOCK_IN cùng transaction; không tự ghi chi phí/thu tiền/nợ hoặc đổi giá vốn. | P0 — Core; cần phối hợp FE/nghiệm thu staging |
+| `FR-031` | `BR-007`, `BR-009`, `BR-017`, `BR-019` | OWNER upload/xóa một ảnh chính Product, logo Shop và avatar của chính mình qua Core. Cả ba upload dùng Idempotency-Key; URL read-only, không trả public ID. Product/logo công khai; avatar authenticated và giữ fallback Firebase, DELETE trở về fallback. Đổi/xóa enqueue dọn asset cũ sau commit, không xóa Product/Shop. | P1 — Core trên nhánh; cần tích hợp FE/nghiệm thu staging |
 
 `FR-001`–`FR-009` giữ nguyên mã. `FR-007` không bị tái sử dụng cho yêu cầu khác.
 
@@ -139,6 +140,7 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 | `NFR-007` | `BR-012` | Truy xuất, vector, cache và trace AI phải cô lập theo `shop_id`; test chéo shop phải trả 403 hoặc không có dữ liệu. |
 | `NFR-008` | `BR-012` | Không gửi token, số điện thoại hoặc media thô vào trace; dữ liệu gửi model phải theo cấu hình đã duyệt. |
 | `NFR-009` | `BR-014` | ADMIN không thể tự cấp role từ client; quyền lấy từ profile ACTIVE trong DB sau xác thực Firebase. Mọi GET dashboard thành công, kể cả tìm kiếm/trang rỗng, và thao tác đổi trạng thái tiệm ghi audit trong cùng transaction trước khi trả dữ liệu. Không ghi được audit thì từ chối trả dữ liệu/rollback thay đổi. ADMIN chỉ xem lịch sử truy cập của chính mình bằng projection hỗ trợ, không trả metadata nghiệp vụ; metadata audit đọc chỉ ghi sự hiện diện của query và số kết quả, không lưu query hoặc liên hệ thô. |
+| `NFR-010` | `BR-019` | Credential Cloudinary chỉ có ở Core/runtime secret store, không có trong FE, response, audit metadata hay log nghiệp vụ. Core kiểm tra bytes JPEG/PNG, dung lượng và kích thước trước upload. Khi media disabled/unavailable, write media trả lỗi rõ ràng nhưng auth/session không thất bại chỉ vì avatar đã lưu. |
 
 ## 8. Tiêu chí nghiệm thu cốt lõi
 
@@ -196,6 +198,8 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 | `AC-050` | Top products trả catalog theo productId dù product đã archive, custom theo tên + đơn vị snapshot chuẩn hóa; có gross/voided/net quantity và revenue, discount sale được phân bổ không làm tổng dòng lệch tổng sale. Xếp mặc định NET_REVENUE hoặc QUANTITY, tie-break itemKey ổn định, limit 1–100; dữ liệu chỉ thuộc shop đang xác thực. | `FR-006`, `NFR-003` |
 | `AC-051` | Sales series granularity DAY trả đủ từng ngày Việt Nam trong kỳ, ngày không giao dịch bằng 0. Sale cộng theo soldAt, void kể cả sale kỳ trước trừ theo voidedAt; bucket và netRevenue có thể âm, orderCount/voidedOrderCount giữ riêng. | `FR-006`, `BR-004` |
 | `AC-052` | Profit estimate trả gross/voided/net revenue và estimated COGS, estimatedGrossProfit, expense, estimatedOperatingProfit. Có cost thiếu thì isComplete=false và trả unknownCostItemCount/unknownCostRevenueVnd; không tự đoán. Expense ACTIVE dùng expenseAt, không trộn receivedAt/refundedAt vào doanh thu/lãi; shop khác không đọc được. | `FR-006`, `FR-015`, `NFR-003`, `NFR-005` |
+| `AC-053` | OWNER đúng quyền upload JPEG/PNG hợp lệ ≤5 MiB và 1–2048 px cho Product ACTIVE/Shop ACTIVE/avatar chính mình; response chỉ trả DTO với URL, không có secret/public ID. MIME/đuôi giả, file rỗng/quá lớn/sai kích thước bị từ chối. OWNER khác shop, ADMIN dùng API OWNER, token thiếu/sai bị chặn theo quyền Core. | `FR-031`, `NFR-003`, `NFR-010` |
+| `AC-054` | Cả ba upload commit reservation trước provider; key theo shop hoặc user. Cùng key/file PENDING trả 409 media_upload_in_progress; hết MEDIA_UPLOAD_LEASE_SECONDS (mặc định 300) được claim lại nguyên tử với token mới, token cũ không được ghi/giải phóng lượt mới. Completed retry trả snapshot/audit chỉ một lần, avatar tạo lại URL delivery; file khác bị từ chối. Ghi khóa entity/trạng thái/lease, shop INACTIVE trả lý do nếu có. Cleanup khóa job, không xóa asset còn gắn entity/đang upload, không hồi sinh COMPLETED. Media disabled: có reference trả 503, không có reference DELETE vẫn 204; session không thất bại. Custom avatar giữ fallback Firebase và DELETE trở về fallback. | `FR-031`, `NFR-010` |
 | `AC-INV-001` | Không thể kích hoạt hóa đơn điện tử khi hồ sơ áp dụng hoặc quy tắc pháp lý chưa được phê duyệt/hoàn tất. | `FR-INV-001` |
 | `AC-INV-002` | Mỗi giao dịch thuộc diện lập hóa đơn có một trạng thái đối soát và không biến mất khi nhà cung cấp lỗi. | `FR-INV-003`, `FR-INV-005`, `NFR-004` |
 
@@ -211,3 +215,4 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 - `FR-028`/`FR-029`, `AC-033`–`AC-039` là phạm vi audit Core thành công và lịch sử chỉ đọc của OWNER; không bao gồm màn hình FE, audit lỗi/bảo mật hoặc audit khi ADMIN xem dữ liệu theo `NFR-009`/`AC-017`. Kiểm thử API/DB không tự nghiệm thu các phần ngoài phạm vi đó.
 - `FR-022`–`FR-024`, `NFR-009`, `AC-015`–`AC-017` và `AC-040`–`AC-043` phủ hỗ trợ ADMIN theo BR-013/BR-014. [Thiết kế kỹ thuật](../architecture/technical-design.md) phân biệt API/audit Core đã có với dashboard web chưa tích hợp; contract không bao gồm các số liệu/tác vụ mock của web. Các AC là điều kiện kiểm chứng, chưa đánh dấu web/staging/production đã đạt.
 - `FR-006`, `AC-049`–`AC-052` phủ báo cáo nâng cao Core và V12; không đồng nghĩa Home/Analytics mobile đã bỏ phép tính cục bộ hoặc staging đã chạy migration/nghiệm thu.
+- `FR-031`, `AC-053`–`AC-054` và V13/V14 là Core/contract trên nhánh; mobile/web chưa gọi endpoint upload. Outbox chỉ dọn asset cũ đã commit; asset mới upload trước rollback vẫn cần quy trình dọn vận hành. Chưa xác nhận UAT production.

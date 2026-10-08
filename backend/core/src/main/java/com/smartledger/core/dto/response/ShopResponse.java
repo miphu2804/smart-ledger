@@ -8,6 +8,7 @@ public record ShopResponse(
         String industry,
         String phone,
         String address,
+        String logoUrl,
         ShopStatus status,
         String inactiveReason,
         String archivedReason) {

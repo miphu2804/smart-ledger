@@ -49,6 +49,9 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional
     public ProductResponse create(VerifiedFirebaseToken firebaseToken, String shopId, ProductWriteRequest request) {
+        if (StringUtils.hasText(request.imageUrl())) {
+            throw new BusinessException(ErrorCode.PRODUCT_IMAGE_URL_UNSUPPORTED);
+        }
         Shop shop = shopService.requireOwnedActiveShop(firebaseToken, shopId);
         validateReferencesAndStock(shop.getId(), null, request, true, true);
         Product product = Product.create(shop.getId());
@@ -82,6 +85,9 @@ public class ProductServiceImpl implements ProductService {
             String shopId,
             String productId,
             ProductPatchRequest request) {
+        if (request.hasField("imageUrl")) {
+            throw new BusinessException(ErrorCode.PRODUCT_IMAGE_URL_UNSUPPORTED);
+        }
         Shop shop = shopService.requireOwnedActiveShop(firebaseToken, shopId);
         Product product = requireLockedActiveProduct(shop.getId(), productId);
         ProductWriteRequest merged = merge(product, request);

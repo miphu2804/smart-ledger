@@ -73,7 +73,13 @@ public class ShopServiceImpl implements ShopService {
         if (!request.hasChanges()) {
             throw new BusinessException(ErrorCode.SHOP_UPDATE_REQUIRED);
         }
-        Shop shop = requireOwnedVisibleShop(firebaseToken, shopId, "shopId");
+        Shop visibleShop = requireOwnedVisibleShop(firebaseToken, shopId, "shopId");
+        ensureShopIsActive(visibleShop);
+        Shop shop = shopRepository.findLockedByIdAndOwnerId(visibleShop.getId(), visibleShop.getOwnerId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.SHOP_ACCESS_DENIED));
+        if (shop.getStatus() == ShopStatus.ARCHIVED) {
+            throw new BusinessException(ErrorCode.SHOP_NOT_FOUND);
+        }
         ensureShopIsActive(shop);
         shop.update(
                 request.name() == null ? shop.getName() : normalizeRequired(request.name()),
@@ -94,7 +100,13 @@ public class ShopServiceImpl implements ShopService {
             VerifiedFirebaseToken firebaseToken,
             String shopId,
             ArchiveShopRequest request) {
-        Shop shop = requireOwnedVisibleShop(firebaseToken, shopId, "shopId");
+        Shop visibleShop = requireOwnedVisibleShop(firebaseToken, shopId, "shopId");
+        ensureShopIsActive(visibleShop);
+        Shop shop = shopRepository.findLockedByIdAndOwnerId(visibleShop.getId(), visibleShop.getOwnerId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.SHOP_ACCESS_DENIED));
+        if (shop.getStatus() == ShopStatus.ARCHIVED) {
+            throw new BusinessException(ErrorCode.SHOP_NOT_FOUND);
+        }
         ensureShopIsActive(shop);
         shop.archive(normalizeRequired(request.archivedReason()));
         auditLogService.recordOwner(shop, AuditAction.SHOP_ARCHIVED, shop.getId(), shop.getArchivedReason(), null,
@@ -108,7 +120,7 @@ public class ShopServiceImpl implements ShopService {
             String shopId,
             ShopStatusUpdateRequest request) {
         UserAccount admin = requireActiveAdmin(firebaseToken);
-        Shop shop = shopRepository.findById(parseShopId(shopId, "shopId"))
+        Shop shop = shopRepository.findLockedById(parseShopId(shopId, "shopId"))
                 .orElseThrow(() -> new BusinessException(ErrorCode.SHOP_NOT_FOUND));
         if (shop.getStatus() == ShopStatus.ARCHIVED) {
             throw new BusinessException(ErrorCode.SHOP_NOT_FOUND);
@@ -235,6 +247,7 @@ public class ShopServiceImpl implements ShopService {
                 shop.getIndustry(),
                 shop.getPhone(),
                 shop.getAddress(),
+                shop.getLogoUrl(),
                 shop.getStatus(),
                 shop.getInactiveReason(),
                 shop.getArchivedReason());

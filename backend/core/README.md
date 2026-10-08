@@ -24,8 +24,25 @@ Set these environment variables in the process that launches Core. [`.env.exampl
 | `AI_BASE_URL` | Optional; AI service URL for the Agent proxy, defaults to `http://localhost:8001` |
 | `INTERNAL_API_TOKEN` | Shared with AI and sent as `X-Internal-Token`; a missing or mismatched value makes AI return `401`, which Core reports as `503 ai_unavailable` |
 | `IDEMPOTENCY_TTL_DAYS` | Optional; retention of `Idempotency-Key` results, defaults to `30` |
+| `CLOUDINARY_ENABLED` | `false` by default; set `true` only when all Cloudinary variables below are present |
+| `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | Server-only Cloudinary credential; never commit or put in mobile/web variables |
+| `CLOUDINARY_PUBLIC_ID_PREFIX` | Required when media is enabled; relative namespace such as `smartledger/local`, `smartledger/staging`, or `smartledger/prod` |
+| `MEDIA_UPLOAD_LEASE_SECONDS` | PENDING Product/logo/avatar upload lease, defaults to `300`; an expired lease can be safely claimed again with the same key/file |
+| `CLOUDINARY_CLEANUP_FIXED_DELAY_MS` | Optional cleanup worker delay; defaults to `60000` ms and is useful as a short value only in local testing |
 
 With `FLYWAY_ENABLED=true` (the default in `application.yml`) Flyway runs committed migrations at startup; JPA then validates the schema. The shared dev/staging database is migrated only from merged code, so set `FLYWAY_ENABLED=false` when you point Core at it (see [Database migrations](../../README.md#database-migrations)). Use the same Firebase project ID for the backend and any locally generated test tokens.
+
+## Cloudinary media
+
+Core uploads one Product image and one Shop logo as public media, and one user avatar as authenticated media. The client calls Core multipart endpoints; it never receives `CLOUDINARY_API_SECRET` or a provider public ID. Core accepts JPEG/PNG only, validates bytes rather than the filename/MIME, limits files to 5 MiB and dimensions to 2048×2048.
+
+Set `CLOUDINARY_ENABLED=true` only together with cloud name, API key, API secret and a prefix. Startup deliberately fails when one is missing or the prefix is unsafe. Use separate credentials or at least prefixes for local/staging/production; for example `smartledger/local`, `smartledger/staging`, `smartledger/prod`. When disabled, media writes return `503 media_unavailable`, the cleanup worker is absent, and session endpoints still work even for an account that has a stored avatar reference.
+
+Replacing or deleting a Product image/logo/avatar commits a `media_cleanup_jobs` row alongside the database change. The worker locks PENDING jobs with `FOR UPDATE SKIP LOCKED`, checks current references and active uploads, then deletes the old asset. Its per-job transaction remains open during deletion; competing workers skip it. Retry updates only PENDING jobs. New assets uploaded before a database rollback may still require operational cleanup.
+
+All three uploads require `Idempotency-Key`. V14 adds `media_upload_keys` with SHOP scope for Product/logo and USER scope for avatar. An active duplicate receives `409 media_upload_in_progress`; a completed request replays its snapshot. Avatar replay regenerates the delivery URL. Expired upload leases are reclaimed atomically with a new token; old uploaders cannot complete or release a newer reservation. Final writes lock/recheck the entity and lease before changing references/audit. Deterministic public IDs use `overwrite=true` to retry identical bytes. Monetary idempotency remains in `api_idempotency_keys`.
+
+Firebase `avatar_url` remains a fallback and keeps syncing. DELETE removes only the custom Cloudinary avatar; later sessions return the fallback. When Cloudinary is disabled, DELETE with a reference returns `503`; an absent custom reference remains a `204` no-op. Apply V13/V14 using the reviewed migration workflow before deploying to a shared database. Apply V13 audit CHECK validation during reduced or stopped writes. See the [API contract](../../docs/contracts/api-contracts.md#1-auth-và-tiệm).
 
 ## Windows PowerShell
 
@@ -63,7 +80,7 @@ Omit `core` to start AI as well. Compose mounts the service-account JSON read-on
 
 If the Firebase Auth Emulator runs on the host, configure `FIREBASE_AUTH_EMULATOR_HOST` with an address reachable **from the container**; `127.0.0.1` inside Core means the container, not the host.
 
-Compose forwards `CORS_ALLOWED_ORIGINS`, `OPENAPI_ENABLED` and `SWAGGER_UI_ENABLED` from its env files into Core. Set the actual FE origins in the env file selected for that environment and recreate the Core container after changing them. Host/IntelliJ and hosted runtimes use the same variables directly.
+Compose forwards `CORS_ALLOWED_ORIGINS`, `OPENAPI_ENABLED`, `SWAGGER_UI_ENABLED` and the Cloudinary variables into Core. Set the FE origins and Cloudinary values in the selected environment and recreate the Core container after changing them. Host/IntelliJ and hosted runtimes use the same variables directly.
 
 ## Browser access and deployment checks
 
@@ -149,11 +166,11 @@ With the same disposable PostgreSQL variables, run:
 .\mvnw.cmd '-Dtest=AdminDashboardControllerWebTest,AdminAccessAuditServiceTest,AdminDashboardPostgresTest' test
 ```
 
-`AdminDashboardPostgresTest` applies the actual V1–V12 Flyway migrations inside a generated `core_admin_test_*` schema, then removes that schema. It exercises the migrated schema without manual constraint fixtures. No additional audit table is created. Do not point test variables at staging or production.
+`AdminDashboardPostgresTest` applies the actual V1–V14 Flyway migrations inside a generated `core_admin_test_*` schema, then removes that schema. It exercises the migrated schema without manual constraint fixtures. No additional audit table is created. Do not point test variables at staging or production.
 
 ADMIN and OWNER events share the existing `audit_logs`; ADMIN reads are separated by their `ADMIN_*` actions and API whitelists. Shop status changes reuse the existing `SHOP_INACTIVATED`/`SHOP_REACTIVATED` event once. V11 extends action/target constraints and allows missing shop/target IDs only for the corresponding ADMIN reads; business events still require both IDs. Existing history, V10 foreign keys and append-only triggers are preserved. Failed audit persistence returns `503 admin_audit_unavailable` and rolls back the operation.
 
-For a fresh disposable local database, use `FLYWAY_ENABLED=true` and `SPRING_JPA_HIBERNATE_DDL_AUTO=validate` to apply V1–V12 and validate the entity mappings. A Flyway-managed database already at V10 can apply V11/V12 in order. Follow the repository's merged-code migration policy for shared environments. Do not enable Flyway blindly on a Hibernate-created database without migration history: V10 rejects pre-existing ADMIN read events. Use a fresh local database or a separately reviewed adoption plan, preserving the original database. The migrations do not baseline or repair migration history.
+For a fresh disposable local database, use `FLYWAY_ENABLED=true` and `SPRING_JPA_HIBERNATE_DDL_AUTO=validate` to apply V1–V14 and validate the entity mappings. A Flyway-managed database already at V10 can apply V11/V12/V13/V14 in order. Follow the repository's merged-code migration policy for shared environments. Do not enable Flyway blindly on a Hibernate-created database without migration history: V10 rejects pre-existing ADMIN read events. Use a fresh local database or a separately reviewed adoption plan, preserving the original database. The migrations do not baseline or repair migration history.
 
 If V11 validation fails, PostgreSQL rolls back its schema changes; review the offending records before retrying. Recovery uses a forward fix retaining audit history. Restoring V10 constraints or older readers that cannot handle `ADMIN_*` events is unsafe after these records exist. Integrated Firebase/FE UAT and document alignment remain pending.
 
@@ -169,7 +186,7 @@ With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
 .\mvnw.cmd '-Dtest=ProductStockInServiceTest,ProductServiceTest,CoreBusinessContractWebTest,ApiDocumentationWebTest,IdempotencyServiceTest,AuditLogPostgresTest' test
 ```
 
-`AuditLogPostgresTest` applies V1–V12 in a generated `core_audit_test_*` schema and removes only that schema. It checks concurrent receipts/retries and contention with checkout/void/PATCH/archive, audit/idempotency-write rollback, authorization and numeric overflow. Do not use shared/staging/production databases. Manual Swagger checks and mobile UAT remain separate.
+`AuditLogPostgresTest` applies V1–V14 in a generated `core_audit_test_*` schema and removes only that schema. It checks concurrent receipts/retries and contention with checkout/void/PATCH/archive, audit/idempotency-write rollback, authorization and numeric overflow. Do not use shared/staging/production databases. Manual Swagger checks and mobile UAT remain separate.
 
 ### Advanced report development tests
 
@@ -181,7 +198,17 @@ With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
 .\mvnw.cmd '-Dtest=AdvancedReportServiceTest,ExpenseReportControllerWebTest,ReportAggregationPostgresTest,SaleDraftServiceTest' test
 ```
 
-`ReportAggregationPostgresTest` applies V1–V12 in a generated `core_report_test_*` schema and removes only that schema. It verifies the nullable/nonnegative snapshot constraint, discounted item revenue, catalog/custom grouping, a prior-period void, daily event buckets and incomplete profit estimates. Mobile still computes its existing local analytics until FE integrates these endpoints; Core tests are not FE/staging UAT.
+`ReportAggregationPostgresTest` applies V1–V14 in a generated `core_report_test_*` schema and removes only that schema. It verifies the nullable/nonnegative snapshot constraint, discounted item revenue, catalog/custom grouping, a prior-period void, daily event buckets and incomplete profit estimates. Mobile still computes its existing local analytics until FE integrates these endpoints; Core tests are not FE/staging UAT.
+
+### Cloudinary media development tests
+
+Run the unit/web contract tests without any Cloudinary network credential:
+
+```powershell
+.\mvnw.cmd '-Dtest=CloudinaryMediaConfigurationTest,MediaControllerWebTest,MediaServiceTest,MediaWriteTransactionServiceTest,MediaCleanupWorkerTest,MediaCleanupWorkerConfigurationTest,ImageUploadValidatorTest,MediaPublicIdFactoryTest,MediaIdempotencyReplayTest,MediaPersistenceModelTest,SaleRefundMigrationPostgresTest' test
+```
+
+Set `CORE_TEST_POSTGRES_*` only to a disposable PostgreSQL database to run the V13/V14 migration assertions and media concurrency tests. To smoke-test a real provider locally, set `CLOUDINARY_ENABLED=true`, all four Cloudinary values, `FLYWAY_ENABLED=false` and use a schema already created by local `ddl-auto=update`; do **not** point a feature branch at shared staging with `update`. Upload a small JPEG/PNG through Swagger, verify only the returned URL, replace it, then verify a `media_cleanup_jobs` row becomes COMPLETED. Local `CLOUDINARY_CLEANUP_FIXED_DELAY_MS=5000` can shorten the test wait. Do not paste Cloudinary API secrets or delivery URLs with authenticated signatures into source, tickets, or chat.
 
 ## Time display
 
