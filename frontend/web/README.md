@@ -24,6 +24,8 @@ Biến môi trường (xem `.env.example`):
 | --- | --- | --- |
 | `VITE_API_ENDPOINT` | `http://localhost:8000` | Địa chỉ backend |
 | `VITE_USE_MOCK` | (bật) | Đặt `false` để gọi API thật thay vì dữ liệu mẫu |
+| `VITE_CONTACT_EMAIL` | (trống) | Email nhận yêu cầu về dữ liệu cá nhân, hiện trên `/privacy` và `/data-deletion`. Để trống thì hai trang hiện chỗ trống thay vì địa chỉ giả |
+| `VITE_LEGAL_DRAFT` | `true` | Hai trang pháp lý hiện nhãn "Bản nháp" cho đến khi chủ sản phẩm duyệt; đặt `false` lúc build để gỡ nhãn |
 
 ## Trang quản trị
 
@@ -32,6 +34,8 @@ Giao diện "calm operations": nền trung tính ấm, accent xanh lá (#2F7A43 
 | Đường dẫn | Nội dung |
 | --- | --- |
 | `/` | Trang giới thiệu |
+| `/privacy` | Chính sách quyền riêng tư (bản nháp, chờ duyệt) |
+| `/data-deletion` | Hướng dẫn xoá dữ liệu người dùng (Meta yêu cầu cho Facebook Login) |
 | `/admin/login` | Đăng nhập (chỉ ADMIN vào được) |
 | `/admin` | Dashboard: 4 KPI · xu hướng hỗ trợ (8 cột) + Cần chú ý (4 cột, chỉ đọc) · cơ sở/OWNER mới + truy cập gần đây của ADMIN |
 | `/admin/customers?tab=owners\|shops` | Tab OWNER / Cơ sở, tìm theo tên, email, SĐT, tên cơ sở; lọc; phân trang. Bấm dòng → drawer chi tiết bên phải (`&owner=` / `&shop=`), mỗi lần mở đều ghi audit |
@@ -56,7 +60,25 @@ URL cũ vẫn chạy: `/admin/customers/:id` → drawer cơ sở, `/admin/logs` 
 | `admin@songhloi.vn` | `admin123` | ADMIN | Vào dashboard |
 | `owner@songhloi.vn` | `owner123` | OWNER | Trang 403 |
 
-Ảnh màn hình ứng dụng trên trang giới thiệu nằm ở `public/screens/{overview,voice,invoices,products}.png` (585×1266), chụp từ bản mockup Expo trong `../mobile`.
+## Trang giới thiệu và trang pháp lý
+
+Giao diện theo app mobile mới: tím thương hiệu `#482AAC`, nền kem `#F7F6F2`, xanh lá `#8FDB6E` làm điểm nhấn. Token nằm trong `.lp` của `src/styles/landing.css` nên không ảnh hưởng trang quản trị. Nội dung chỉ nói những gì app đã có; máy in, gói trả phí và hoá đơn điện tử không thuộc MVP nên không được quảng cáo ở đây.
+
+**Hình ảnh** nằm trong `public/`:
+
+| Đường dẫn | Nguồn |
+| --- | --- |
+| `screens/{home,voice,checkout,orders,pos,reports,products}.webp` | Ảnh chụp app mobile ở chế độ mock (`EXPO_PUBLIC_USE_MOCK=true`), viewport 390×844, tỉ lệ 2x. Dữ liệu trong ảnh là dữ liệu mẫu; ẩn mascot nổi khi chụp để không đè nội dung |
+| `brand/logo.webp`, `favicon.png`, `apple-touch-icon.png` | `frontend/mobile/assets/brand-logo.png` (icon của app) |
+| `brand/robot.webp`, `brand/agent-*.webp` | `frontend/mobile/assets/bubblelogo.png`, `assets/voice/agent-*.png` |
+| `brand/icons/*.webp` | Icon 3D trong `frontend/mobile/assets/tab1-overview` và `tab4-management` |
+| `brand/app-icon-1024.png` | Icon 1024×1024 cho trang cài đặt app Meta (Facebook Login), dựng từ `bubblelogo.png` |
+
+Chụp lại ảnh khi giao diện app đổi: chạy app ở chế độ mock (`npx expo start --web` trong `../mobile` với ba biến `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS` đặt `true`), mở bằng trình duyệt cỡ 390×844 rồi lưu WebP.
+
+**Trang pháp lý** (`src/pages/legal/`) chưa được duyệt theo [AGENTS.md](../../AGENTS.md). Trước khi công khai: điền `VITE_CONTACT_EMAIL`, chủ sản phẩm duyệt nội dung (kể cả cam kết xử lý yêu cầu xoá trong `DELETION_DAYS`, `src/pages/legal/legalConfig.ts`) rồi đặt `VITE_LEGAL_DRAFT=false`.
+
+**Triển khai:** CI hiện chỉ đưa bản web của `../mobile` lên Vercel; web này chưa có luồng deploy. `vercel.json` chuyển mọi đường dẫn về `index.html` để `/privacy`, `/data-deletion` mở trực tiếp được khi dùng một dự án Vercel riêng (Root Directory `frontend/web`).
 
 ## Trạng thái dùng chung
 
@@ -91,7 +113,8 @@ src/
   services/                  api, auth, account, task, ai, preferences, mockStore
   components/admin/          ui (Panel, Pill, Avatar, DetailDrawer…), charts
   components/                States, Pagination, RequireAuth, Modal, Toast
-  pages/landing/             trang giới thiệu
+  pages/landing/             trang giới thiệu, chân trang dùng chung
+  pages/legal/               chính sách quyền riêng tư, hướng dẫn xoá dữ liệu
   pages/admin/               Login, AdminLayout (AppShell), Dashboard, Customers, AiSupport, Tasks, Settings
   pages/admin/tasks/         TaskFormModal
   pages/ForbiddenPage        trang 403
