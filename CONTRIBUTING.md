@@ -60,7 +60,7 @@ feat/*, fix/*, chore/*, docs/*  →  staging  →  main (production)
 - A merge into `staging` may deploy automatically to the staging environment after required checks pass.
 - After `staging` passes its checks, open a `staging` → `main` pull request for the production release. If the two histories conflict, resolve them on a short-lived `release/staging-to-main-<date>` branch created from `main` with `staging` merged in, add that exact branch name to the allow-list in `.github/workflows/release-policy.yml`, and delete the branch after the release. The `Release source branch` check on that pull request reads `release-policy.yml` from `main`, which still names the previous branch, so it fails; it is not a required check and does not block the merge.
 - Merge release pull requests with a merge commit, never squash: squashing disconnects `staging` history from `main` and forces a manual resync. This follows the production-branch pattern in [GitLab Flow](https://about.gitlab.com/topics/version-control/what-is-gitlab-flow/) and [branch-per-environment strategies](https://docs.gitlab.com/user/project/repository/branches/strategies/).
-- Production deployment requires a tag or manual approval; merging to `main` alone must not bypass this gate.
+- Production deployment requires manual approval; merging to `main` alone must not bypass this gate. A person tags the release afterwards.
 - Start hotfixes from `main`, open the pull request against `main`, then synchronize the same fix back to `staging`.
 - Do not push directly, force-push, or manually merge into `main` or `staging`.
 - Do not introduce a long-lived `dev` or `release` branch without an explicit workflow change. The release-source policy permits only the named temporary branch for this release.

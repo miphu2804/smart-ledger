@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: GitHub environment to build for; it picks the Firebase config and must match the branch (main, staging, any other)
+        description: Must be android-production on main, android-staging on staging and android-dev on any other branch; it picks the Firebase config
         type: choice
         required: true
         default: android-dev
