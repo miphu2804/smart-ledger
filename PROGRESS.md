@@ -1,3 +1,13 @@
+### [2026-10-08 23:11 UTC+07:00] — [Fix] Mobile run mode comes only from env; env examples grouped
+
+**Done:** The mobile app no longer has code defaults for `EXPO_PUBLIC_API_ENDPOINT`, `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE` and `EXPO_PUBLIC_MOCK_SHOPS`. A missing endpoint or a flag that is not `true`/`false` stops the app at launch with the variable name, so a build cannot silently run in mock mode. The mobile example now defaults to real Firebase and Core staging. The CI `mobile-web` job sets the mock flags explicitly. All `.env.example` files are grouped into `### Group ###` sections without inline guidance; the Core example gains `AI_BASE_URL`, `INTERNAL_API_TOKEN`, `SPRING_JPA_HIBERNATE_DDL_AUTO=validate`, `FIREBASE_AUTH_EMULATOR_HOST` and `CLOUDINARY_CLEANUP_FIXED_DELAY_MS`, which Core already reads.
+
+**Changed files:** `frontend/mobile/src/config.ts`, `frontend/mobile/.env.example`, `frontend/mobile/README.md`, `.github/workflows/ci.yml`, `docs/development/ci-cd.md`, `backend/core/.env.example`, `backend/ai/.env.example`, `frontend/web/.env.example`, `PROGRESS.md`.
+
+**Flow explained:** Validation runs in `config.ts` at runtime, not in `app.config.js`, because `expo export` evaluates the app config before it loads `.env`. Each variable is read as `process.env.EXPO_PUBLIC_X` so Expo still inlines it at build time.
+
+**Check:** Flag cases (missing, `true`, `false`, invalid) behave as described; `expo export --platform web` succeeds with the endpoint inlined; `tsc` shows only the existing `sherpaEngine.ts` errors. GitHub Android/Vercel environments already set the three flags to `false`. **Not verified:** EAS (expo.dev) profile env.
+
 ### [2026-10-08 16:10 UTC+07:00] — [Fix] Harden Cloudinary media retries and cleanup after review
 
 **Done:** All three uploads now use durable SHOP/USER reservations with atomic lease reclaim and UUID fencing; stale uploaders cannot commit or release a newer attempt. Avatar preserves the Firebase fallback and returns a snapshot from the locked profile. Media-disabled DELETE rejects changes with `503`, while an absent custom image stays a `204` no-op. Inactive shop errors include their reason. Cleanup uses locked jobs and asset-reference checks, pending-only retry, and an explicitly mapped scheduler delay.
