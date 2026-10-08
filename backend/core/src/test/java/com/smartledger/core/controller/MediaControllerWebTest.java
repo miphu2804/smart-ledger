@@ -73,7 +73,7 @@ class MediaControllerWebTest {
     @Test
     void shopLogoAndAvatarExposeOnlyThePublicDeliveryUrl() throws Exception {
         when(media.uploadShopLogo(any(), eq("7"), eq("shop-key"), any())).thenReturn(shop());
-        when(media.uploadAvatar(any(), any())).thenReturn(new UserResponse(
+        when(media.uploadAvatar(any(), eq("avatar-key"), any())).thenReturn(new UserResponse(
                 1L, "Thảo", null, null, "https://cdn.example/avatar.png"));
         MockMultipartFile image = new MockMultipartFile("image", "image.png", MediaType.IMAGE_PNG_VALUE,
                 new byte[] {1});
@@ -83,8 +83,12 @@ class MediaControllerWebTest {
                         .header("Idempotency-Key", "shop-key"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.logoUrl").value("https://cdn.example/logo.png"));
         mvc.perform(multipart("/api/v1/me/avatar").file(image)
+                        .header("Idempotency-Key", "avatar-key")
                         .header("Authorization", "Bearer valid-token"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.avatarUrl").value("https://cdn.example/avatar.png"));
+        mvc.perform(multipart("/api/v1/me/avatar").file(image)
+                        .header("Authorization", "Bearer valid-token"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

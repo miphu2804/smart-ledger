@@ -28,6 +28,8 @@ cloudinary:
   api-key: ${CLOUDINARY_API_KEY:}
   api-secret: ${CLOUDINARY_API_SECRET:}
   public-id-prefix: ${CLOUDINARY_PUBLIC_ID_PREFIX:}
+  cleanup:
+    fixed-delay-ms: ${CLOUDINARY_CLEANUP_FIXED_DELAY_MS:60000}
 
 ai:
   base-url: ${AI_BASE_URL:http://localhost:8001}

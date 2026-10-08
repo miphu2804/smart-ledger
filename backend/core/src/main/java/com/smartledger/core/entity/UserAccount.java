@@ -75,19 +75,17 @@ public class UserAccount {
         if (StringUtils.hasText(firebaseToken.phoneNumber())) {
             phone = firebaseToken.phoneNumber();
         }
-        if (avatarPublicId == null && StringUtils.hasText(firebaseToken.avatarUrl())) {
+        if (StringUtils.hasText(firebaseToken.avatarUrl())) {
             avatarUrl = firebaseToken.avatarUrl();
         }
     }
 
     /** The provider URL is derived per response; only the private media handle is durable. */
     public void replaceCloudinaryAvatar(String avatarPublicId) {
-        this.avatarUrl = null;
         this.avatarPublicId = avatarPublicId;
     }
 
     public void clearCloudinaryAvatar() {
-        avatarUrl = null;
         avatarPublicId = null;
     }
 

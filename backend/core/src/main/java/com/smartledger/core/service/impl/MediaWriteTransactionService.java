@@ -13,6 +13,11 @@ import com.smartledger.core.enums.UserStatus;
 import com.smartledger.core.exception.BusinessException;
 import com.smartledger.core.enums.ErrorCode;
 import com.smartledger.core.media.StoredMedia;
+import com.smartledger.core.media.MediaStorage;
+import com.smartledger.core.exception.ApiErrorDetail;
+import com.smartledger.core.dto.response.UserResponse;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.util.StringUtils;
 import com.smartledger.core.repository.ProductRepository;
 import com.smartledger.core.repository.ShopRepository;
 import com.smartledger.core.repository.UserAccountRepository;
@@ -33,15 +38,20 @@ public class MediaWriteTransactionService {
     private final MediaIdempotencyReplay idempotency;
     private final MediaCleanupJobService cleanupJobs;
     private final AuditLogService audit;
+    private final MediaStorage storage;
+    private final JdbcTemplate jdbc;
 
     public MediaWriteTransactionService(ProductRepository products, ShopRepository shops, UserAccountRepository users,
-            MediaIdempotencyReplay idempotency, MediaCleanupJobService cleanupJobs, AuditLogService audit) {
+            MediaIdempotencyReplay idempotency, MediaCleanupJobService cleanupJobs, AuditLogService audit,
+            MediaStorage storage, JdbcTemplate jdbc) {
         this.products = products;
         this.shops = shops;
         this.users = users;
         this.idempotency = idempotency;
         this.cleanupJobs = cleanupJobs;
         this.audit = audit;
+        this.storage = storage;
+        this.jdbc = jdbc;
     }
 
     @Transactional
@@ -49,6 +59,8 @@ public class MediaWriteTransactionService {
             MediaIdempotencyReplay.Reservation<ProductResponse> reservation,
             StoredMedia stored) {
         Shop lockedShop = lockActiveShop(shop);
+        idempotency.lockPending(lockedShop.getId(), lockedShop.getOwnerId(), "PRODUCT_IMAGE_UPLOAD", reservation);
+        lockAsset(stored.publicId());
         Product product = products.findLockedByIdAndShopIdAndStatus(productId, lockedShop.getId(), CatalogStatus.ACTIVE)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
         enqueueReplacement(product.getImagePublicId(), stored.publicId(), MediaAssetType.PRODUCT_IMAGE);
@@ -58,7 +70,7 @@ public class MediaWriteTransactionService {
         products.flush();
         ProductResponse response = productResponse(product);
         idempotency.complete(lockedShop.getId(), lockedShop.getOwnerId(), "PRODUCT_IMAGE_UPLOAD", reservation,
-                "PRODUCT", ProductResponse::id, 200, response);
+                response);
         return response;
     }
 
@@ -70,6 +82,7 @@ public class MediaWriteTransactionService {
         if (product.getImageUrl() == null && product.getImagePublicId() == null) {
             return;
         }
+        storage.ensureAvailable();
         enqueueReplacement(product.getImagePublicId(), null, MediaAssetType.PRODUCT_IMAGE);
         product.clearImage();
         audit.recordOwner(lockedShop, AuditAction.PRODUCT_UPDATED, product.getId(), null, null,
@@ -80,6 +93,8 @@ public class MediaWriteTransactionService {
     public ShopResponse saveShopLogo(Shop shop, MediaIdempotencyReplay.Reservation<ShopResponse> reservation,
             StoredMedia stored) {
         Shop locked = lockActiveShop(shop);
+        idempotency.lockPending(locked.getId(), locked.getOwnerId(), "SHOP_LOGO_UPLOAD", reservation);
+        lockAsset(stored.publicId());
         enqueueReplacement(locked.getLogoPublicId(), stored.publicId(), MediaAssetType.SHOP_LOGO);
         locked.replaceCloudinaryLogo(stored.secureUrl(), stored.publicId());
         audit.recordOwner(locked, AuditAction.SHOP_UPDATED, locked.getId(), null, reservation.key(),
@@ -87,7 +102,7 @@ public class MediaWriteTransactionService {
         shops.flush();
         ShopResponse response = shopResponse(locked);
         idempotency.complete(locked.getId(), locked.getOwnerId(), "SHOP_LOGO_UPLOAD", reservation,
-                "SHOP", ShopResponse::id, 200, response);
+                response);
         return response;
     }
 
@@ -97,6 +112,7 @@ public class MediaWriteTransactionService {
         if (locked.getLogoUrl() == null && locked.getLogoPublicId() == null) {
             return;
         }
+        storage.ensureAvailable();
         enqueueReplacement(locked.getLogoPublicId(), null, MediaAssetType.SHOP_LOGO);
         locked.clearLogo();
         audit.recordOwner(locked, AuditAction.SHOP_UPDATED, locked.getId(), null, null,
@@ -104,16 +120,23 @@ public class MediaWriteTransactionService {
     }
 
     @Transactional
-    public String saveAvatar(UserAccount user, StoredMedia stored) {
+    public SavedAvatar saveAvatar(UserAccount user, MediaIdempotencyReplay.Reservation<SavedAvatar> reservation,
+            StoredMedia stored) {
         UserAccount locked = users.findLockedById(user.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_PROFILE_NOT_FOUND));
         ensureUserIsActive(locked);
+        idempotency.lockPending(null, locked.getId(), "USER_AVATAR_UPLOAD", reservation);
+        lockAsset(stored.publicId());
         enqueueReplacement(locked.getAvatarPublicId(), stored.publicId(), MediaAssetType.USER_AVATAR);
         locked.replaceCloudinaryAvatar(stored.publicId());
         audit.record(null, locked.getId(), locked.getSystemRole(), AuditAction.USER_AVATAR_UPDATED, locked.getId(),
                 null, null, Map.of("changedFields", List.of("avatarUrl")));
         users.flush();
-        return locked.getAvatarPublicId();
+        SavedAvatar response = new SavedAvatar(locked.getId(), locked.getDisplayName(), locked.getEmail(),
+                locked.getPhone(), locked.getAvatarPublicId());
+        idempotency.complete(null, locked.getId(), "USER_AVATAR_UPLOAD", reservation,
+                response);
+        return response;
     }
 
     @Transactional
@@ -121,9 +144,10 @@ public class MediaWriteTransactionService {
         UserAccount locked = users.findLockedById(user.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_PROFILE_NOT_FOUND));
         ensureUserIsActive(locked);
-        if (locked.getAvatarUrl() == null && locked.getAvatarPublicId() == null) {
+        if (locked.getAvatarPublicId() == null) {
             return;
         }
+        storage.ensureAvailable();
         enqueueReplacement(locked.getAvatarPublicId(), null, MediaAssetType.USER_AVATAR);
         locked.clearCloudinaryAvatar();
         audit.record(null, locked.getId(), locked.getSystemRole(), AuditAction.USER_AVATAR_UPDATED, locked.getId(),
@@ -143,7 +167,9 @@ public class MediaWriteTransactionService {
             throw new BusinessException(ErrorCode.SHOP_NOT_FOUND);
         }
         if (locked.getStatus() == ShopStatus.INACTIVE) {
-            throw new BusinessException(ErrorCode.SHOP_INACTIVE);
+            throw new BusinessException(ErrorCode.SHOP_INACTIVE,
+                    StringUtils.hasText(locked.getInactiveReason())
+                            ? List.of(new ApiErrorDetail("inactiveReason", locked.getInactiveReason())) : List.of());
         }
         return locked;
     }
@@ -151,6 +177,17 @@ public class MediaWriteTransactionService {
     private void ensureUserIsActive(UserAccount user) {
         if (user.getStatus() == UserStatus.DISABLED) {
             throw new BusinessException(ErrorCode.ACCOUNT_DISABLED);
+        }
+    }
+
+    private void lockAsset(String publicId) {
+        jdbc.queryForList("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", publicId);
+    }
+
+    /** Internal replay snapshot; signed delivery URLs are regenerated on every response. */
+    public record SavedAvatar(Long id, String displayName, String email, String phone, String publicId) {
+        public UserResponse response(MediaStorage storage) {
+            return new UserResponse(id, displayName, email, phone, storage.authenticatedUrl(publicId));
         }
     }
 

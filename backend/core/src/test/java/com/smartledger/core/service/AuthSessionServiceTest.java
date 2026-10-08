@@ -109,7 +109,7 @@ class AuthSessionServiceTest {
         AuthSessionResponse session = service.getCurrentSession(firebaseToken);
 
         assertThat(session.user().avatarUrl()).contains("authenticated").contains("s--signature--");
-        assertThat(user.getAvatarUrl()).isNull();
+        assertThat(user.getAvatarUrl()).isEqualTo("https://example.test/avatar.png");
         verify(mediaStorage).authenticatedUrl("users/1/avatar/opaque");
     }
 

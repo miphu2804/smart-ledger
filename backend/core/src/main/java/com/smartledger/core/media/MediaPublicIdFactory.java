@@ -8,7 +8,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
-import java.util.UUID;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.stereotype.Component;
@@ -41,13 +40,8 @@ public class MediaPublicIdFactory {
         };
     }
 
-    /** Avatar retries need a user-scoped idempotency table, which is introduced with the later migration. */
-    public String createAvatar(Long userId, String imageSha256) {
-        if (!properties.isEnabled() || !StringUtils.hasText(properties.getApiSecret())) {
-            throw new BusinessException(ErrorCode.MEDIA_UNAVAILABLE);
-        }
-        return prefix() + "/users/" + userId + "/avatar/" + hmac("USER_AVATAR:" + userId + ":" + imageSha256 + ":"
-                + UUID.randomUUID());
+    public String createAvatar(Long userId, String idempotencyKey, String imageSha256) {
+        return create(MediaAssetType.USER_AVATAR, null, userId, idempotencyKey, imageSha256);
     }
 
     private String prefix() {

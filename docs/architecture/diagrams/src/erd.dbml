@@ -5,7 +5,7 @@
 // ID: BIGINT IDENTITY → Java Long
 // Money: BIGINT VND
 // Time: TIMESTAMPTZ, UTC internally; Core JSON displays +07:00
-// Core schema: Flyway V1-V13 (business tables, idempotency, shared OWNER/ADMIN audit_logs, cost snapshot, media outbox).
+// Core schema: Flyway V1-V14 (business tables, idempotency, shared OWNER/ADMIN audit_logs, cost snapshot, media outbox and upload leases).
 // Core audit alignment: staging b1de421c461d, 2026-10-06; AI sections unchanged.
 // AI schema: supabase/migrations AI baseline (chat_conversations, chat_messages, pgvector, ai_read views).
 // ai_requests and notification tables are planned and not created by any migration yet.
@@ -704,6 +704,26 @@ Table api_idempotency_keys {
 // AUDIT LOG
 // =====================================================
 
+Table media_upload_keys {
+  id bigint [pk, increment]
+  scope_key varchar(100) [not null, note: 'SHOP:<id> for Product/logo, USER:<id> for avatar']
+  user_id bigint [not null]
+  operation varchar(100) [not null]
+  idempotency_key varchar(255) [not null]
+  request_hash varchar(128) [not null]
+  public_id varchar(500) [not null, note: 'Internal provider identifier']
+  lease_token uuid [not null, note: 'Fences expired/reclaimed attempts']
+  expires_at timestamptz [not null]
+  response_body jsonb [note: 'NULL means PENDING; completed avatar snapshot has no signed URL']
+
+  indexes {
+    (scope_key, operation, idempotency_key) [unique]
+    public_id
+  }
+
+  Note: 'V14 durable media upload reservation and replay. Independent of monetary V7 idempotency; user FK ON DELETE RESTRICT.'
+}
+
 Table media_cleanup_jobs {
   id bigint [pk, increment]
   public_id varchar(500) [not null, note: 'Internal Cloudinary identifier; no business FK by design']
@@ -850,6 +870,7 @@ Ref: users.id < notification_recipients.user_id
 
 Ref: shops.id < api_idempotency_keys.shop_id
 Ref: users.id < api_idempotency_keys.user_id
+Ref: users.id < media_upload_keys.user_id [delete: restrict]
 
 
 // ---------- AUDIT ----------
@@ -901,5 +922,7 @@ TableGroup notification {
 
 TableGroup safety_and_audit {
   api_idempotency_keys
+  media_upload_keys
+  media_cleanup_jobs
   audit_logs
 }

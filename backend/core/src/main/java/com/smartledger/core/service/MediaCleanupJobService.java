@@ -9,5 +9,6 @@ public interface MediaCleanupJobService {
     void enqueue(String publicId, MediaAssetType assetType);
     List<MediaCleanupJob> dueJobs(OffsetDateTime now);
     void complete(Long jobId);
+    void process(Long jobId);
     void retry(Long jobId, String error, OffsetDateTime nextAttemptAt);
 }

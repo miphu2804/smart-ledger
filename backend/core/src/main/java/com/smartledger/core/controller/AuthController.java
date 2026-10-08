@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -73,8 +74,9 @@ public class AuthController {
             content = @Content(schema = @Schema(implementation = UserResponse.class)))
     public UserResponse uploadAvatar(
             @AuthenticationPrincipal VerifiedFirebaseToken firebaseToken,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
             @RequestPart("image") MultipartFile image) {
-        return mediaService.uploadAvatar(firebaseToken, image);
+        return mediaService.uploadAvatar(firebaseToken, idempotencyKey, image);
     }
 
     @DeleteMapping("/me/avatar")

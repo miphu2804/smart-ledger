@@ -7,6 +7,11 @@ import com.smartledger.core.exception.BusinessException;
 public class UnavailableMediaStorage implements MediaStorage {
 
     @Override
+    public void ensureAvailable() {
+        throw new BusinessException(ErrorCode.MEDIA_UNAVAILABLE);
+    }
+
+    @Override
     public StoredMedia upload(MediaUpload upload) {
         throw new BusinessException(ErrorCode.MEDIA_UNAVAILABLE);
     }

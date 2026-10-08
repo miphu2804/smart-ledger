@@ -4,14 +4,14 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartledger.core.enums.ErrorCode;
 import com.smartledger.core.exception.BusinessException;
-import com.smartledger.core.repository.IdempotencyKeyRepository;
+import com.smartledger.core.repository.MediaUploadKeyRepository;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.HexFormat;
 import java.util.Optional;
-import java.util.function.Function;
+import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -24,12 +24,12 @@ import org.springframework.util.StringUtils;
  */
 @Component
 public class MediaIdempotencyReplay {
-    private final IdempotencyKeyRepository repository;
+    private final MediaUploadKeyRepository repository;
     private final ObjectMapper objectMapper;
     private final int ttlDays;
     private final int uploadLeaseSeconds;
 
-    public MediaIdempotencyReplay(IdempotencyKeyRepository repository, ObjectMapper objectMapper,
+    public MediaIdempotencyReplay(MediaUploadKeyRepository repository, ObjectMapper objectMapper,
             @Value("${smartledger.idempotency.ttl-days:30}") int ttlDays,
             @Value("${smartledger.media.upload-lease-seconds:300}") int uploadLeaseSeconds) {
         if (ttlDays <= 0 || uploadLeaseSeconds <= 0) {
@@ -51,26 +51,27 @@ public class MediaIdempotencyReplay {
         String requestHash = hash(request);
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         OffsetDateTime pendingExpiresAt = now.plusSeconds(uploadLeaseSeconds);
-        if (repository.reserve(shopId, userId, operation, normalizedKey, requestHash, pendingExpiresAt)) {
-            return Reservation.pending(normalizedKey, requestHash);
+        UUID leaseToken = UUID.randomUUID();
+        String scope = scope(shopId, userId);
+        if (repository.reserve(scope, userId, operation, normalizedKey, requestHash, request.publicId(), leaseToken, pendingExpiresAt)) {
+            return new Reservation<>(normalizedKey, requestHash, null, leaseToken);
         }
         // A failed request may release its short-lived reservation between our INSERT conflict and
         // SELECT. Retry the reservation once rather than surfacing that harmless race as a 500.
-        Optional<IdempotencyKeyRepository.StoredResult> existing = repository.findOptional(shopId, operation,
+        Optional<MediaUploadKeyRepository.StoredResult> existing = repository.findOptional(scope, operation,
                 normalizedKey);
-        if (existing.isEmpty() && repository.reserve(shopId, userId, operation, normalizedKey, requestHash,
-                pendingExpiresAt)) {
-            return Reservation.pending(normalizedKey, requestHash);
+        if (existing.isEmpty() && repository.reserve(scope, userId, operation, normalizedKey, requestHash,
+                request.publicId(), leaseToken, pendingExpiresAt)) {
+            return new Reservation<>(normalizedKey, requestHash, null, leaseToken);
         }
-        IdempotencyKeyRepository.StoredResult stored = existing.orElseThrow(
+        MediaUploadKeyRepository.StoredResult stored = existing.orElseThrow(
                 () -> new BusinessException(ErrorCode.MEDIA_UPLOAD_IN_PROGRESS));
         if (!stored.userId().equals(userId) || !stored.requestHash().equals(requestHash)) {
             throw new BusinessException(ErrorCode.IDEMPOTENCY_KEY_CONFLICT);
         }
         if (stored.responseBody() == null && !stored.expiresAt().isAfter(now)) {
-            repository.releasePending(shopId, userId, operation, normalizedKey, requestHash);
-            if (repository.reserve(shopId, userId, operation, normalizedKey, requestHash, pendingExpiresAt)) {
-                return Reservation.pending(normalizedKey, requestHash);
+            if (repository.reclaim(scope, operation, normalizedKey, stored.leaseToken(), leaseToken, pendingExpiresAt)) {
+                return new Reservation<>(normalizedKey, requestHash, null, leaseToken);
             }
             throw new BusinessException(ErrorCode.MEDIA_UPLOAD_IN_PROGRESS);
         }
@@ -85,15 +86,23 @@ public class MediaIdempotencyReplay {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public <T> void complete(Long shopId, Long userId, String operation, Reservation<T> reservation,
-            String resourceType, Function<T, Long> resourceId, int responseStatus, T response) {
-        repository.completePending(shopId, userId, operation, reservation.key(), reservation.requestHash(),
-                resourceType, resourceId.apply(response), responseStatus, toJson(response),
+            T response) {
+        repository.completePending(scope(shopId, userId), operation, reservation.key(), reservation.leaseToken(), toJson(response),
                 OffsetDateTime.now(ZoneOffset.UTC).plusDays(ttlDays));
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void release(Long shopId, Long userId, String operation, Reservation<?> reservation) {
-        repository.releasePending(shopId, userId, operation, reservation.key(), reservation.requestHash());
+        repository.releasePending(scope(shopId, userId), operation, reservation.key(), reservation.leaseToken());
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void lockPending(Long shopId, Long userId, String operation, Reservation<?> reservation) {
+        repository.lockPending(scope(shopId, userId), operation, reservation.key(), reservation.leaseToken());
+    }
+
+    private String scope(Long shopId, Long userId) {
+        return shopId == null ? "USER:" + userId : "SHOP:" + shopId;
     }
 
     private String hash(MediaUploadRequest request) {
@@ -121,13 +130,13 @@ public class MediaIdempotencyReplay {
         }
     }
 
-    public record Reservation<T>(String key, String requestHash, T replay) {
+    public record Reservation<T>(String key, String requestHash, T replay, UUID leaseToken) {
         public static <T> Reservation<T> pending(String key, String requestHash) {
-            return new Reservation<>(key, requestHash, null);
+            return new Reservation<>(key, requestHash, null, UUID.randomUUID());
         }
 
         public static <T> Reservation<T> replay(String key, String requestHash, T response) {
-            return new Reservation<>(key, requestHash, response);
+            return new Reservation<>(key, requestHash, response, null);
         }
 
         public boolean isReplay() {

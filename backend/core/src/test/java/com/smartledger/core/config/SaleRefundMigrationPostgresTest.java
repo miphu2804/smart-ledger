@@ -64,7 +64,7 @@ class SaleRefundMigrationPostgresTest {
 
     @Test
     void freshMigrationsMatchEveryEntityAndSecondRunDoesNothing() {
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(13);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(14);
         validateEntitySchema();
         assertThat(flyway(null).migrate().migrationsExecuted).isZero();
         assertThat(flyway(null).validateWithResult().validationSuccessful).isTrue();
@@ -73,7 +73,7 @@ class SaleRefundMigrationPostgresTest {
     @Test
     void upgradeFromV8PreservesMoneySettledDebtAndUnknownStockHistory() throws SQLException {
         migrateAndSeedV8();
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(5);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(6);
         validateEntitySchema();
 
         assertThat(scalar("SELECT stock_deducted FROM sale_items WHERE id = 1")).isNull();
@@ -109,7 +109,7 @@ class SaleRefundMigrationPostgresTest {
                 VALUES (1, 40000, 'CASH', 1, TIMESTAMPTZ '2026-09-02T10:00:00Z');
                 """);
 
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(5);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(6);
         validateEntitySchema();
         assertThat(scalar("SELECT stock_deducted FROM sale_items WHERE id = 1")).isEqualTo("t");
         assertThat(scalar("SELECT amount_vnd FROM sale_refunds WHERE sale_id = 1")).isEqualTo("40000");
@@ -166,7 +166,7 @@ class SaleRefundMigrationPostgresTest {
                 .isEqualTo("8");
         // Correct the test row explicitly, then retry without Flyway repair.
         execute("UPDATE sale_refunds SET sale_id = 1 WHERE sale_id = 999");
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(5);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(6);
     }
 
     @Test
@@ -292,7 +292,7 @@ class SaleRefundMigrationPostgresTest {
         }
         assertThat(scalar("SELECT count(*) FROM information_schema.tables WHERE table_schema='" + schema + "' AND table_name='admin_access_logs'"))
                 .isEqualTo("0");
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(2);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(3);
         execute(userProfileInsert(AuditAction.USER_AVATAR_UPDATED));
         assertThat(scalar("SELECT count(*) FROM media_cleanup_jobs")).isEqualTo("0");
         validateEntitySchema();
@@ -343,7 +343,7 @@ class SaleRefundMigrationPostgresTest {
         assertThat(scalar("SELECT max(version::integer) FROM flyway_schema_history WHERE success AND version IS NOT NULL")).isEqualTo("10");
         assertThat(flyway("11").migrate().migrationsExecuted).isEqualTo(1);
         assertThat(scalar("SELECT json_agg(a ORDER BY id)::text FROM audit_logs a")).isEqualTo(before);
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(2);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(3);
         validateEntitySchema();
         assertThat(flyway(null).migrate().migrationsExecuted).isZero();
     }
@@ -394,9 +394,9 @@ class SaleRefundMigrationPostgresTest {
             assertThat((first.get(5, TimeUnit.SECONDS) ? 1 : 0) + (second.get(5, TimeUnit.SECONDS) ? 1 : 0))
                     .isEqualTo(1);
         }
-        assertThat(scalar("SELECT count(*) FROM api_idempotency_keys WHERE operation = 'PRODUCT_IMAGE_UPLOAD'"))
+        assertThat(scalar("SELECT count(*) FROM media_upload_keys WHERE operation = 'PRODUCT_IMAGE_UPLOAD'"))
                 .isEqualTo("1");
-        assertThat(scalar("SELECT response_body IS NULL FROM api_idempotency_keys WHERE operation = 'PRODUCT_IMAGE_UPLOAD'"))
+        assertThat(scalar("SELECT response_body IS NULL FROM media_upload_keys WHERE operation = 'PRODUCT_IMAGE_UPLOAD'"))
                 .isEqualTo("t");
     }
 
@@ -516,7 +516,7 @@ class SaleRefundMigrationPostgresTest {
         try {
             var metadata = new MetadataSources(registry);
             for (var entity : new Class<?>[] {AuditLog.class, AuthIdentity.class, Category.class, Customer.class, Debt.class,
-                    Expense.class, MediaCleanupJob.class, Payment.class, Product.class, Sale.class, SaleDraft.class,
+                    Expense.class, MediaCleanupJob.class, com.smartledger.core.entity.MediaUploadKey.class, Payment.class, Product.class, Sale.class, SaleDraft.class,
                     SaleDraftItem.class, SaleItem.class, SaleRefund.class, Shop.class, UserAccount.class}) {
                 metadata.addAnnotatedClass(entity);
             }
@@ -567,10 +567,11 @@ class SaleRefundMigrationPostgresTest {
             throw new IllegalStateException("Concurrent reservation did not start");
         }
         try (var connection = scopedConnection(); var statement = connection.prepareStatement("""
-                INSERT INTO api_idempotency_keys
-                    (shop_id, user_id, operation, idempotency_key, request_hash, expires_at)
-                VALUES (1, 1, 'PRODUCT_IMAGE_UPLOAD', 'same-key', 'same-file-hash', CURRENT_TIMESTAMP + INTERVAL '30 days')
-                ON CONFLICT (shop_id, operation, idempotency_key) DO NOTHING
+                INSERT INTO media_upload_keys
+                    (scope_key, user_id, operation, idempotency_key, request_hash, public_id, lease_token, expires_at)
+                VALUES ('SHOP:1', 1, 'PRODUCT_IMAGE_UPLOAD', 'same-key', 'same-file-hash', 'media-test',
+                    gen_random_uuid(), CURRENT_TIMESTAMP + INTERVAL '300 seconds')
+                ON CONFLICT (scope_key, operation, idempotency_key) DO NOTHING
                 """)) {
             return statement.executeUpdate() == 1;
         }

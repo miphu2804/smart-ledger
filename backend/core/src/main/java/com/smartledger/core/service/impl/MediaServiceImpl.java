@@ -111,14 +111,23 @@ public class MediaServiceImpl implements MediaService {
     }
 
     @Override
-    public UserResponse uploadAvatar(VerifiedFirebaseToken token, MultipartFile image) {
+    public UserResponse uploadAvatar(VerifiedFirebaseToken token, String idempotencyKey, MultipartFile image) {
         UserAccount user = activeUser(token);
         ValidatedImage validated = images.read(image);
-        String publicId = publicIds.createAvatar(user.getId(), validated.sha256());
-        StoredMedia uploaded = store(publicId, validated, MediaDeliveryType.AUTHENTICATED);
-        String storedPublicId = writes.saveAvatar(user, uploaded);
-        return new UserResponse(user.getId(), user.getDisplayName(), user.getEmail(), user.getPhone(),
-                storage.authenticatedUrl(storedPublicId));
+        String publicId = publicIds.createAvatar(user.getId(), idempotencyKey, validated.sha256());
+        var request = new MediaUploadRequest(publicId, validated.sha256());
+        var reservation = replay.reserve(null, user.getId(), "USER_AVATAR_UPLOAD", idempotencyKey, request,
+                MediaWriteTransactionService.SavedAvatar.class);
+        if (reservation.isReplay()) return reservation.replay().response(storage);
+        MediaWriteTransactionService.SavedAvatar saved;
+        try {
+            StoredMedia uploaded = store(publicId, validated, MediaDeliveryType.AUTHENTICATED);
+            saved = writes.saveAvatar(user, reservation, uploaded);
+        } catch (RuntimeException exception) {
+            replay.release(null, user.getId(), "USER_AVATAR_UPLOAD", reservation);
+            throw exception;
+        }
+        return saved.response(storage);
     }
 
     @Override

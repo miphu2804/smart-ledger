@@ -1,106 +1,65 @@
 package com.smartledger.core.media;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.smartledger.core.dto.response.ProductResponse;
+import com.smartledger.core.repository.MediaUploadKeyRepository;
 import com.smartledger.core.enums.ErrorCode;
 import com.smartledger.core.exception.BusinessException;
-import com.smartledger.core.repository.IdempotencyKeyRepository;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.math.BigDecimal;
-import java.util.HexFormat;
 import java.util.Optional;
+import java.util.UUID;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
 class MediaIdempotencyReplayTest {
     private final ObjectMapper mapper = new ObjectMapper();
-    private final IdempotencyKeyRepository repository = Mockito.mock(IdempotencyKeyRepository.class);
+    private final MediaUploadKeyRepository repository = mock(MediaUploadKeyRepository.class);
     private final MediaIdempotencyReplay replay = new MediaIdempotencyReplay(repository, mapper, 30, 300);
+    private final MediaUploadRequest request = new MediaUploadRequest("public-id", "file-hash");
 
-    @Test
-    void returnsACompletedReservationBeforeCloudinaryCanBeCalledWhenTheKeyAndPayloadMatch() throws Exception {
-        MediaUploadRequest request = new MediaUploadRequest("shops/7/products/9/hash", "a".repeat(64));
-        ProductResponse response = mapper.readValue("""
-                {"id":9,"shopId":7,"name":"Mì","unit":"gói","sellingPriceVnd":10000,
-                 "tracked":false,"status":"ACTIVE"}
-                """, ProductResponse.class);
-        when(repository.reserve(any(), any(), any(), any(), any(), any())).thenReturn(false);
-        when(repository.findOptional(any(), any(), any())).thenReturn(Optional.of(new IdempotencyKeyRepository.StoredResult(
-                1L, hash(request), mapper.writeValueAsString(response), OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(5))));
-
-        assertThat(replay.reserve(7L, 1L, "PRODUCT_IMAGE_UPLOAD", "request-key", request, ProductResponse.class)
-                .replay()).isEqualTo(response);
+    @Test void rejectsPendingAndConflictingRequests() throws Exception {
+        when(repository.findOptional(any(), any(), any())).thenReturn(Optional.of(stored(null, false)));
+        assertThatThrownBy(() -> replay.reserve(7L, 1L, "UPLOAD", "key", request, String.class))
+                .isInstanceOfSatisfying(BusinessException.class, ex -> assertThat(ex.getErrorCode())
+                        .isEqualTo(ErrorCode.MEDIA_UPLOAD_IN_PROGRESS));
+        assertThatThrownBy(() -> replay.reserve(7L, 2L, "UPLOAD", "key", request, String.class))
+                .isInstanceOfSatisfying(BusinessException.class, ex -> assertThat(ex.getErrorCode())
+                        .isEqualTo(ErrorCode.IDEMPOTENCY_KEY_CONFLICT));
     }
 
-    @Test
-    void rejectsAConflictingPayloadBeforeTheRemoteUpload() {
-        MediaUploadRequest request = new MediaUploadRequest("shops/7/products/9/new", "b".repeat(64));
-        when(repository.reserve(any(), any(), any(), any(), any(), any())).thenReturn(false);
-        when(repository.findOptional(any(), any(), any())).thenReturn(Optional.of(new IdempotencyKeyRepository.StoredResult(
-                1L, "another-hash", "{}", OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(5))));
-
-        assertThatThrownBy(() -> replay.reserve(7L, 1L, "PRODUCT_IMAGE_UPLOAD", "request-key", request,
-                ProductResponse.class)).isInstanceOfSatisfying(BusinessException.class,
-                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.IDEMPOTENCY_KEY_CONFLICT));
+    @Test void returnsCompletedSnapshot() throws Exception {
+        when(repository.findOptional(any(), any(), any())).thenReturn(Optional.of(stored("\"saved\"", false)));
+        assertThat(replay.reserve(7L, 1L, "UPLOAD", "key", request, String.class).replay()).isEqualTo("saved");
     }
 
-    @Test
-    void rejectsASecondConcurrentRequestWhileTheFirstReservationIsPending() {
-        MediaUploadRequest request = new MediaUploadRequest("shops/7/products/9/new", "b".repeat(64));
-        when(repository.reserve(any(), any(), any(), any(), any(), any())).thenReturn(false);
-        when(repository.findOptional(any(), any(), any())).thenReturn(Optional.of(new IdempotencyKeyRepository.StoredResult(
-                1L, hashUnchecked(request), null, OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(5))));
-
-        assertThatThrownBy(() -> replay.reserve(7L, 1L, "PRODUCT_IMAGE_UPLOAD", "request-key", request,
-                ProductResponse.class)).isInstanceOfSatisfying(BusinessException.class,
-                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.MEDIA_UPLOAD_IN_PROGRESS));
+    @Test void reclaimsWithCompareAndSetInsteadOfDeletingTheOldLease() throws Exception {
+        var old = stored(null, true);
+        when(repository.findOptional(any(), any(), any())).thenReturn(Optional.of(old));
+        when(repository.reclaim(any(), any(), any(), any(), any(), any())).thenReturn(true);
+        var result = replay.reserve(7L, 1L, "UPLOAD", "key", request, String.class);
+        assertThat(result.leaseToken()).isNotEqualTo(old.leaseToken());
+        verify(repository).reclaim(eq("SHOP:7"), eq("UPLOAD"), eq("key"), eq(old.leaseToken()),
+                eq(result.leaseToken()), any());
+        replay.release(7L, 1L, "UPLOAD", result);
+        verify(repository).releasePending("SHOP:7", "UPLOAD", "key", result.leaseToken());
     }
 
-    @Test
-    void completesOnlyThePendingReservationOwnedByTheSameRequest() {
-        ProductResponse response = new ProductResponse(9L, 7L, null, "Mì", null, null, "gói", 10000L,
-                null, false, BigDecimal.ZERO, com.smartledger.core.enums.CatalogStatus.ACTIVE, null, null);
-        MediaIdempotencyReplay.Reservation<ProductResponse> reservation =
-                MediaIdempotencyReplay.Reservation.pending("request-key", "request-hash");
-
-        replay.complete(7L, 1L, "PRODUCT_IMAGE_UPLOAD", reservation, "PRODUCT", ProductResponse::id, 200, response);
-
-        verify(repository).completePending(eq(7L), eq(1L), eq("PRODUCT_IMAGE_UPLOAD"), eq("request-key"),
-                eq("request-hash"), eq("PRODUCT"), eq(9L), eq(200), any(), any());
+    @Test void avatarReservationIsUserScopedAndNeverNeedsAShop() {
+        when(repository.reserve(any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(true);
+        var result = replay.reserve(null, 5L, "USER_AVATAR_UPLOAD", "key", request, String.class);
+        verify(repository).reserve(eq("USER:5"), eq(5L), eq("USER_AVATAR_UPLOAD"), eq("key"), any(),
+                eq("public-id"), eq(result.leaseToken()), any());
+        replay.lockPending(null, 5L, "USER_AVATAR_UPLOAD", result);
+        verify(repository).lockPending("USER:5", "USER_AVATAR_UPLOAD", "key", result.leaseToken());
     }
 
-    @Test
-    void reclaimsAnExpiredPendingReservationForTheSameUserAndFile() {
-        MediaUploadRequest request = new MediaUploadRequest("shops/7/products/9/new", "b".repeat(64));
-        when(repository.reserve(any(), any(), any(), any(), any(), any())).thenReturn(false, true);
-        when(repository.findOptional(any(), any(), any())).thenReturn(Optional.of(new IdempotencyKeyRepository.StoredResult(
-                1L, hashUnchecked(request), null, OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1))));
-
-        assertThat(replay.reserve(7L, 1L, "PRODUCT_IMAGE_UPLOAD", "request-key", request, ProductResponse.class)
-                .isReplay()).isFalse();
-        verify(repository).releasePending(7L, 1L, "PRODUCT_IMAGE_UPLOAD", "request-key", hashUnchecked(request));
-    }
-
-    private String hash(MediaUploadRequest request) throws Exception {
-        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+    private MediaUploadKeyRepository.StoredResult stored(String body, boolean expired) throws Exception {
+        String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                 .digest(mapper.writeValueAsBytes(request)));
-    }
-
-    private String hashUnchecked(MediaUploadRequest request) {
-        try {
-            return hash(request);
-        } catch (Exception exception) {
-            throw new AssertionError(exception);
-        }
+        return new MediaUploadKeyRepository.StoredResult(1L, hash, body,
+                OffsetDateTime.now().plusSeconds(expired ? -1 : 300), UUID.randomUUID());
     }
 }

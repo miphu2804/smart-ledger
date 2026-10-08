@@ -30,8 +30,11 @@ class MediaPersistenceModelTest {
 
         user.syncFirebaseProfile(token("https://firebase.example/new-avatar.png"));
 
-        assertThat(user.getAvatarUrl()).isNull();
+        assertThat(user.getAvatarUrl()).isEqualTo("https://firebase.example/new-avatar.png");
         assertThat(user.getAvatarPublicId()).isEqualTo("users/1/avatar/v1");
+        user.clearCloudinaryAvatar();
+        assertThat(user.getAvatarPublicId()).isNull();
+        assertThat(user.getAvatarUrl()).isEqualTo("https://firebase.example/new-avatar.png");
     }
 
     @Test

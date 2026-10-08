@@ -95,20 +95,24 @@ class MediaServiceTest {
         when(user.getEmail()).thenReturn("owner@example.test");
         when(identities.findWithUserByProviderSubject("uid")).thenReturn(Optional.of(identity));
         when(images.read(file)).thenReturn(image);
-        when(publicIds.createAvatar(5L, "hash")).thenReturn("users/5/avatar/opaque");
+        when(publicIds.createAvatar(5L, "avatar-key", "hash")).thenReturn("users/5/avatar/opaque");
+        when(replay.reserve(org.mockito.ArgumentMatchers.isNull(), eq(5L), eq("USER_AVATAR_UPLOAD"),
+                eq("avatar-key"), any(), eq(MediaWriteTransactionService.SavedAvatar.class)))
+                .thenReturn(MediaIdempotencyReplay.Reservation.pending("avatar-key", "hash"));
         when(storage.upload(any())).thenReturn(new StoredMedia("users/5/avatar/opaque", "provider-private-url"));
-        when(writes.saveAvatar(eq(user), any())).thenReturn("users/5/avatar/opaque");
+        when(writes.saveAvatar(eq(user), any(), any())).thenReturn(new MediaWriteTransactionService.SavedAvatar(
+                5L, "Thảo", "owner@example.test", null, "users/5/avatar/opaque"));
         when(storage.authenticatedUrl("users/5/avatar/opaque"))
                 .thenReturn("https://cdn.example/image/authenticated/s--signature--/avatar.png");
 
-        var response = service.uploadAvatar(token, file);
+        var response = service.uploadAvatar(token, "avatar-key", file);
 
         ArgumentCaptor<com.smartledger.core.media.MediaUpload> upload =
                 ArgumentCaptor.forClass(com.smartledger.core.media.MediaUpload.class);
         verify(storage).upload(upload.capture());
         assertThat(upload.getValue().deliveryType()).isEqualTo(MediaDeliveryType.AUTHENTICATED);
         assertThat(response.avatarUrl()).contains("authenticated").contains("s--signature--");
-        verify(publicIds).createAvatar(5L, "hash");
+        verify(publicIds).createAvatar(5L, "avatar-key", "hash");
         verify(storage).authenticatedUrl("users/5/avatar/opaque");
     }
 }

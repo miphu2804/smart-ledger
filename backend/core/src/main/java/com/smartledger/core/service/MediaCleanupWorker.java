@@ -1,9 +1,6 @@
 package com.smartledger.core.service;
 
 import com.smartledger.core.entity.MediaCleanupJob;
-import com.smartledger.core.enums.MediaAssetType;
-import com.smartledger.core.media.MediaDeliveryType;
-import com.smartledger.core.media.MediaStorage;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import org.slf4j.Logger;
@@ -18,11 +15,8 @@ import org.springframework.stereotype.Component;
 public class MediaCleanupWorker {
     private static final Logger log = LoggerFactory.getLogger(MediaCleanupWorker.class);
     private final MediaCleanupJobService jobs;
-    private final MediaStorage storage;
-
-    public MediaCleanupWorker(MediaCleanupJobService jobs, MediaStorage storage) {
+    public MediaCleanupWorker(MediaCleanupJobService jobs) {
         this.jobs = jobs;
-        this.storage = storage;
     }
 
     @Scheduled(fixedDelayString = "${cloudinary.cleanup.fixed-delay-ms:60000}")
@@ -30,8 +24,7 @@ public class MediaCleanupWorker {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         for (MediaCleanupJob job : jobs.dueJobs(now)) {
             try {
-                storage.delete(job.getPublicId(), deliveryType(job.getAssetType()));
-                jobs.complete(job.getId());
+                jobs.process(job.getId());
             } catch (RuntimeException exception) {
                 int minutes = Math.min(60, 1 << Math.min(job.getAttemptCount(), 6));
                 log.warn("Media cleanup failed jobId={} assetType={}", job.getId(), job.getAssetType());
@@ -40,9 +33,4 @@ public class MediaCleanupWorker {
         }
     }
 
-    private static MediaDeliveryType deliveryType(MediaAssetType assetType) {
-        return assetType == MediaAssetType.USER_AVATAR
-                ? MediaDeliveryType.AUTHENTICATED
-                : MediaDeliveryType.PUBLIC;
-    }
 }

@@ -13,6 +13,6 @@ public interface MediaService {
     ShopResponse uploadShopLogo(VerifiedFirebaseToken token, String shopId, String idempotencyKey,
             MultipartFile image);
     void deleteShopLogo(VerifiedFirebaseToken token, String shopId);
-    UserResponse uploadAvatar(VerifiedFirebaseToken token, MultipartFile image);
+    UserResponse uploadAvatar(VerifiedFirebaseToken token, String idempotencyKey, MultipartFile image);
     void deleteAvatar(VerifiedFirebaseToken token);
 }
