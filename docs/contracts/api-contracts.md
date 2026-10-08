@@ -4,7 +4,7 @@
 |---|---|
 | Trạng thái | đích MVP; các endpoint đã triển khai được đánh dấu riêng bên dưới |
 | Chủ sở hữu | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-10-07 |
+| Cập nhật lần cuối | 2026-10-08 |
 
 ## Tài liệu liên quan
 
@@ -101,9 +101,9 @@ name không rỗng, tối đa 150 ký tự; không unique. Category nhóm produc
 | `POST` | `/api/v1/products/{productId}/stock-in` | `{ quantity, reason? }` + `Idempotency-Key` | `200 ProductResponse` (đã có trên nhánh stock-in) |
 | `DELETE` | `/api/v1/products/{productId}` | — | `204` |
 
-Create: `{ categoryId?, name, barcode?, unit, sellingPriceVnd, costPriceVnd?, tracked, stockQuantity? }`. `imageUrl` không phải input mới và giá trị URL thô khác rỗng bị từ chối; dùng POST image sau khi tạo Product. name/unit không rỗng (max 255/50), sellingPriceVnd và costPriceVnd nếu có ≥ 0; barcode max 100. categoryId nếu có phải ACTIVE cùng shop. tracked=true bắt buộc stockQuantity ≥ 0; tracked=false không nhận stockQuantity khác null. Barcode unique trong shop kể cả product đã archive; shop khác có thể dùng cùng barcode, null/rỗng không có barcode.
+Create: `{ categoryId?, name, barcode?, unit, sellingPriceVnd, costPriceVnd?, tracked, stockQuantity?, lowStockThreshold? }`. `imageUrl` không phải input mới và giá trị URL thô khác rỗng bị từ chối; dùng POST image sau khi tạo Product. name/unit không rỗng (max 255/50), sellingPriceVnd và costPriceVnd nếu có ≥ 0; barcode max 100. categoryId nếu có phải ACTIVE cùng shop. tracked=true bắt buộc stockQuantity ≥ 0; tracked=false không nhận stockQuantity khác null. Barcode unique trong shop kể cả product đã archive; shop khác có thể dùng cùng barcode, null/rỗng không có barcode.
 
-PATCH chỉ nhận `{ categoryId?, name?, barcode?, unit?, sellingPriceVnd?, costPriceVnd?, tracked? }`: bỏ field giữ nguyên; explicit null chỉ cho categoryId/barcode/costPriceVnd. `imageUrl` (kể cả null) trả `400 product_image_url_unsupported`; dùng endpoint image. Không cho null name/unit/sellingPriceVnd/tracked. **Không nhận stockQuantity kể cả null**, trả `400 invalid_request` kèm chi tiết field và thông báo dùng stock-in. Đổi false→true khởi tạo tồn 0, true→true giữ tồn hiện tại; tracked=false xóa tồn. PATCH/archive khóa dòng product để không ghi đè tồn khi checkout/void/stock-in đồng thời. Create và response vẫn giữ stockQuantity.
+PATCH chỉ nhận `{ categoryId?, name?, barcode?, unit?, sellingPriceVnd?, costPriceVnd?, tracked?, lowStockThreshold? }`: bỏ field giữ nguyên; explicit null chỉ cho categoryId/barcode/costPriceVnd/lowStockThreshold. `imageUrl` (kể cả null) trả `400 product_image_url_unsupported`; dùng endpoint image. Không cho null name/unit/sellingPriceVnd/tracked. **Không nhận stockQuantity kể cả null**, trả `400 invalid_request` kèm chi tiết field và thông báo dùng stock-in. Đổi false→true khởi tạo tồn 0, true→true giữ tồn hiện tại; tracked=false xóa tồn. PATCH/archive khóa dòng product để không ghi đè tồn khi checkout/void/stock-in đồng thời. Create và response vẫn giữ stockQuantity.
 
 Stock-in chỉ cho OWNER hoạt động, shop ACTIVE thuộc OWNER và product ACTIVE cùng shop có tracked=true. quantity bắt buộc > 0, tối đa 12 chữ số nguyên và 3 thập phân; reason tùy chọn/null, tối đa 500 ký tự, trim và trống thành null. Body không hợp lệ trả `400 validation_failed`; productId không dương/sai định dạng trả `400 invalid_product_id`; product thiếu/khác shop/ARCHIVED trả `404 product_not_found`; không theo dõi tồn trả `409 product_stock_in_unavailable`. Tổng tồn vượt `999999999999.999` trả `409 product_stock_overflow`, không đổi dữ liệu.
 
@@ -111,7 +111,9 @@ Core reserve key với operation `PRODUCT_STOCK_IN` rồi khóa dòng product; t
 
 **Phối hợp mobile trước tích hợp:** bỏ stockQuantity khỏi DTO/payload PATCH kể cả lúc tắt theo dõi; false→true nhận tồn 0 rồi gọi stock-in khi OWNER nhập hàng. Bổ sung API/UI nhập quantity/reason, giữ key khi retry và refresh product từ kết quả hoặc GET mới. Mock cũng phải theo contract mới; lượt này không sửa FE và chưa nghiệm thu end-to-end.
 
-`ProductResponse = { id, shopId, categoryId, name, barcode, imageUrl, unit, sellingPriceVnd, costPriceVnd, tracked, stockQuantity, status, createdAt, updatedAt }`.
+`ProductResponse = { id, shopId, categoryId, name, barcode, imageUrl, unit, sellingPriceVnd, costPriceVnd, tracked, stockQuantity, status, createdAt, updatedAt, lowStockThreshold }`.
+
+`lowStockThreshold` nullable, không âm, tối đa 12 chữ số nguyên và 3 thập phân. Create bỏ/null không đặt ngưỡng; PATCH bỏ giữ nguyên, null tắt LOW_STOCK. tracked=false có thể lưu ngưỡng nhưng không cảnh báo; bật tracking khởi tạo tồn 0 và OUT_OF_STOCK. Ngưỡng 0 chỉ cảnh báo hết hàng. Thay đổi sản phẩm/tồn reconcile notification cùng transaction theo mục 8; không tự áp ngưỡng 6 của UI.
 
 Media Product/logo chỉ cho OWNER của shop ACTIVE. Transaction ghi khóa lại và kiểm tra Shop/Product còn ACTIVE; avatar kiểm tra user ACTIVE; lỗi shop INACTIVE kèm `inactiveReason` khi có lý do. DELETE no-op `204` khi chưa có ảnh tùy chỉnh, kể cả media disabled; có reference thì media disabled trả `503 media_unavailable` và không đổi DB/audit/job. Khi enabled, DELETE enqueue xóa asset cũ sau commit; archive không xóa media. Avatar chỉ cho chính user ACTIVE; URL authenticated được tạo khi response. `avatar_url` giữ fallback Firebase và tiếp tục sync; DELETE avatar chỉ bỏ `avatar_public_id`, lần đọc tiếp theo trở về fallback. Có avatar Cloudinary nhưng media disabled thì session vẫn thành công với avatarUrl null. Lỗi input: `400 image_required`, `413 image_too_large`, `415 image_type_invalid`, `400 image_dimensions_invalid`.
 
@@ -454,3 +456,24 @@ Thiếu/sai token: `401 unauthorized`; OWNER: `403 admin_access_required`; ADMIN
 Không lưu được audit ADMIN (hoặc không đọc được access history): `503 admin_audit_unavailable`, không trả dữ liệu được bảo vệ. Đổi trạng thái tiệm ở mục 1 rollback cả trạng thái/lý do và audit khi ghi audit thất bại. Request bị từ chối/validation/không tìm thấy không tạo audit SUCCESS; chưa có contract audit FAILURE/bảo mật. V10 giữ trigger chặn UPDATE/DELETE/TRUNCATE; V11 không sửa lịch sử hay bỏ bảo vệ đó. Không suy ra DB đã chạy V11 từ việc service khởi động.
 
 Phủ `BR-013`/`BR-014` → `FR-022`–`FR-024`, `NFR-003`/`NFR-009` → `AC-015`–`AC-017`, `AC-040`–`AC-043`. Kiểm chứng API/DB tách riêng Firebase thật, dashboard web và UAT staging; không coi mock web là bằng chứng nghiệm thu.
+
+
+## 8. Notification OWNER — đã có trên `feat/app-notifications`
+
+Phủ `BR-020`, `FR-032`, `AC-055`–`AC-058`. Cần V15 trước runtime dùng `ddl-auto=validate`; chưa chứng minh FE hoặc staging UAT. Đây là inbox trong app, không phải FCM/push.
+
+| Method | Đường | Query/body | Response |
+|---|---|---|---|
+| `GET` | `/api/v1/me/notifications` | `shopId?`, `type?`, `unreadOnly=false`, `page=0`, `size=20` | `200 NotificationPageResponse` |
+| `GET` | `/api/v1/me/notifications/unread-count` | `shopId?`, `type?` | `200 { unreadCount }` |
+| `PATCH` | `/api/v1/me/notifications/{notificationId}/read` | Không body | `204` |
+| `PATCH` | `/api/v1/me/notifications/read` | `{ "ids": [1, 2] }` | `204` |
+
+- Bearer token bắt buộc; không yêu cầu `X-Shop-Id` hoặc `Idempotency-Key`. Actor lấy từ profile OWNER ACTIVE trong DB, không từ header/client. UID chưa có profile trả 404 auth_profile_not_found; ADMIN 403 shop_access_denied; user DISABLED 403 account_disabled.
+- Bỏ shopId đọc các tiệm hợp lệ của OWNER. Filter shopId phải dương: sai giá trị 400 invalid_shop_id, không sở hữu/không tồn tại 403 shop_access_denied; ARCHIVED 404 shop_not_found. Cả list/count/read đều cần recipient đúng user và tiệm còn do user sở hữu. INACTIVE chỉ cho SHOP_INACTIVATED/SHOP_REACTIVATED; ARCHIVED bị loại hoàn toàn.
+- type gồm LOW_STOCK, OUT_OF_STOCK, SALE_VOIDED, SHOP_INACTIVATED, SHOP_REACTIVATED; enum lạ/param sai kiểu trả 400 validation_failed. page ≥0, size 1–100, `(long)page * size ≤2147483647`; vượt giới hạn trả 400 invalid_notification_query. Thứ tự event createdAt rồi id giảm dần; chưa đọc là readAt=null. Trang và tổng phần tử dùng cùng snapshot/filter.
+- `NotificationPageResponse = { items, page, size, totalElements, totalPages }`; `NotificationResponse = { id, shopId, type, title, body, targetType, targetId, createdAt, readAt, resolvedAt }`. id là notification_event ID, không phải recipient ID. targetType PRODUCT/SALE/SHOP tương ứng type; timestamp +07:00. Không trả dataJson hoặc dedupKey.
+- Batch nhận 1–100 ID dương, không null; validation body sai trả 400 validation_failed. ID trùng được gộp; ID không nhìn thấy/không tồn tại trả 404 notification_not_found, toàn batch rollback. ID đơn không dương trả 400 invalid_notification_query. Retry/multiple devices không thay readAt đầu tiên; không cập nhật thông báo mới ngoài danh sách đã gửi.
+- LOW_STOCK/OUT_OF_STOCK tạo theo chu kỳ: giữ một cảnh báo mở cùng mức; đổi mức resolve cũ rồi tạo mới; hồi tồn/tắt tracking/archive resolve mà không xóa lịch sử. resolvedAt không tự đặt readAt, nên cảnh báo đã kết thúc vẫn có thể chưa đọc. Body chứa snapshot tồn lúc phát sinh, không phải tồn hiện tại.
+- Confirm/void/stock-in/Product create/PATCH/archive reconcile trong transaction nghiệp vụ, dưới khóa nguồn. Void tạo một SALE_VOIDED; ADMIN đổi ACTIVE↔INACTIVE tạo một thông báo trạng thái cho mỗi lần chuyển, gửi lại cùng trạng thái không tạo mới. Notification lỗi rollback cả nghiệp vụ/audit/idempotency; replay không tạo thêm event hoặc recipient. Không phát thông báo SALE_CONFIRMED/PAYMENT_RECEIVED/DEBT_REMINDER/AI_REVIEW_REQUIRED trong phạm vi này.
+- FE cần gọi inbox/count/read thật và bổ sung nhập ngưỡng Product; không coi mock badge hiện tại là tích hợp. Không có API tạo/sửa nội dung/xóa notification hoặc đánh dấu toàn bộ vô điều kiện. Nội dung void/status không chứa tiền, khách hoặc lý do nhạy cảm; mở hồ sơ tiệm đúng quyền để xem lý do INACTIVE.

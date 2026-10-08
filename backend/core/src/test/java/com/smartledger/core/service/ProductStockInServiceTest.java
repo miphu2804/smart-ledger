@@ -37,7 +37,7 @@ class ProductStockInServiceTest {
     private final IdempotencyKeyRepository keys = mock(IdempotencyKeyRepository.class);
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
     private final ProductService service = new ProductServiceImpl(shops, products, categories, audit,
-            new IdempotencyServiceImpl(keys, mapper, 30));
+            new IdempotencyServiceImpl(keys, mapper, 30), mock(NotificationEventService.class));
     private final VerifiedFirebaseToken token = new VerifiedFirebaseToken("owner", null, false, null, null, null);
     private Product product;
 

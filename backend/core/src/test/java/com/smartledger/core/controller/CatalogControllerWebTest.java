@@ -218,6 +218,40 @@ class CatalogControllerWebTest {
     }
 
     @Test
+    void productThresholdAcceptsDecimalsAndExplicitNull() throws Exception {
+        mvc.perform(patch("/api/v1/products/5")
+                        .header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"lowStockThreshold\":2.500}"))
+                .andExpect(status().isOk());
+        mvc.perform(patch("/api/v1/products/5")
+                        .header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"lowStockThreshold\":null}"))
+                .andExpect(status().isOk());
+        ArgumentCaptor<ProductPatchRequest> requests = ArgumentCaptor.forClass(ProductPatchRequest.class);
+        verify(productService, org.mockito.Mockito.times(2)).patch(any(), eq("7"), eq("5"), requests.capture());
+        org.assertj.core.api.Assertions.assertThat(requests.getAllValues().getFirst().getLowStockThreshold())
+                .isEqualByComparingTo("2.5");
+        org.assertj.core.api.Assertions.assertThat(requests.getAllValues().getLast().hasField("lowStockThreshold")).isTrue();
+        org.assertj.core.api.Assertions.assertThat(requests.getAllValues().getLast().getLowStockThreshold()).isNull();
+    }
+
+    @Test
+    void productThresholdRejectsNegativeOverflowAndExcessPrecisionOnCreateAndPatch() throws Exception {
+        for (String value : java.util.List.of("-1", "1000000000000", "0.0001")) {
+            mvc.perform(patch("/api/v1/products/5")
+                            .header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7")
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"lowStockThreshold\":" + value + "}"))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("validation_failed"));
+            mvc.perform(post("/api/v1/products")
+                            .header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"name\":\"Coffee\",\"unit\":\"cup\",\"sellingPriceVnd\":10000,\"tracked\":false,\"lowStockThreshold\":" + value + "}"))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("validation_failed"));
+        }
+        org.mockito.Mockito.verifyNoInteractions(productService);
+    }
+
+    @Test
     void productListReturns403WhenShopIsNotAccessible() throws Exception {
         when(productService.list(any(), eq("8")))
                 .thenThrow(new BusinessException(ErrorCode.SHOP_ACCESS_DENIED));

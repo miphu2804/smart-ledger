@@ -35,7 +35,8 @@ class ShopServiceTest {
     private final ShopRepository shopRepository = Mockito.mock(ShopRepository.class);
     private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
     private final AdminAccessAuditService adminAccessAuditService = Mockito.mock(AdminAccessAuditService.class);
-    private final ShopService service = new ShopServiceImpl(authIdentityRepository, shopRepository, auditLogService, adminAccessAuditService);
+    private final ShopService service = new ShopServiceImpl(authIdentityRepository, shopRepository, auditLogService,
+            adminAccessAuditService, Mockito.mock(NotificationEventService.class));
 
     @Test
     void createsAnActiveShopForTheCurrentOwner() {

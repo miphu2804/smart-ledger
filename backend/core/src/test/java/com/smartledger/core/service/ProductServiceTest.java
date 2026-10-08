@@ -36,7 +36,7 @@ class ProductServiceTest {
     private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
     private final IdempotencyService idempotencyService = Mockito.mock(IdempotencyService.class);
     private final ProductService service = new ProductServiceImpl(shopService, productRepository, categoryRepository,
-            auditLogService, idempotencyService);
+            auditLogService, idempotencyService, Mockito.mock(NotificationEventService.class));
 
     @BeforeEach
     void authorizeShop() {

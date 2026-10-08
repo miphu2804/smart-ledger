@@ -14,7 +14,7 @@ public enum AuditAction {
     EXPENSE_CREATED("EXPENSE", "amountVnd", "paymentMethod"),
     EXPENSE_UPDATED("EXPENSE", "beforeAmountVnd", "afterAmountVnd", "changedFields"),
     EXPENSE_ARCHIVED("EXPENSE", "amountVnd"),
-    PRODUCT_CREATED("PRODUCT", "sellingPriceVnd", "costPriceVnd", "tracked", "stockQuantity"),
+    PRODUCT_CREATED("PRODUCT", "sellingPriceVnd", "costPriceVnd", "tracked", "stockQuantity", "lowStockThreshold"),
     PRODUCT_UPDATED("PRODUCT", "beforeSellingPriceVnd", "afterSellingPriceVnd", "changedFields"),
     PRODUCT_ARCHIVED("PRODUCT"),
     CATEGORY_CREATED("CATEGORY"),

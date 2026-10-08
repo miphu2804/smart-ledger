@@ -65,6 +65,17 @@ public class Product {
     @Column(name = "stock_quantity", precision = 15, scale = 3)
     private BigDecimal stockQuantity;
 
+    @Column(name = "low_stock_threshold", precision = 15, scale = 3)
+    private BigDecimal lowStockThreshold;
+
+    public void setLowStockThreshold(BigDecimal threshold) {
+        if (threshold != null && (threshold.signum() < 0 || threshold.compareTo(MAX_STOCK) > 0
+                || threshold.stripTrailingZeros().scale() > 3)) {
+            throw new IllegalArgumentException("Low-stock threshold must fit nonnegative NUMERIC(15,3)");
+        }
+        lowStockThreshold = threshold;
+    }
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private CatalogStatus status;

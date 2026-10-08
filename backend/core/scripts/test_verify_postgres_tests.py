@@ -63,8 +63,26 @@ class PostgresGateTest(unittest.TestCase):
         suite = ElementTree.parse(report).getroot()
         suite.remove(suite.find("testcase"))
         ElementTree.ElementTree(suite).write(report)
-        with self.assertRaisesRegex(SystemExit, "required checkout tests missing"):
+        with self.assertRaisesRegex(SystemExit, "required tests missing"):
             verify(self.reports)
+
+    def test_rejects_removed_notification_or_migration_test(self):
+        for name in (
+            "com.smartledger.core.service.NotificationPostgresTest",
+            "com.smartledger.core.config.SaleRefundMigrationPostgresTest",
+        ):
+            with self.subTest(suite=name):
+                report = self.reports / f"TEST-{name}.xml"
+                suite = ElementTree.parse(report).getroot()
+                case = suite.find("testcase")
+                suite.remove(case)
+                ElementTree.ElementTree(suite).write(report)
+                with self.assertRaisesRegex(SystemExit, "required tests missing") as raised:
+                    verify(self.reports)
+                self.assertIn(name, str(raised.exception))
+                self.assertIn(case.get("name"), str(raised.exception))
+                suite.append(case)
+                ElementTree.ElementTree(suite).write(report)
 
 
 if __name__ == "__main__":

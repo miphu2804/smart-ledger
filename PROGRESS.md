@@ -1,3 +1,33 @@
+### [2026-10-09 00:21 UTC+07:00] — [Fix] Address notification migration review
+
+**Done:** V15 explicitly installs the product threshold CHECK as NOT VALID, then validates it before the atomic migration completes. Corrected NotificationPostgresTest Javadoc to describe actual V1–V15 Flyway migrations.
+
+**Changed files:** Core V15, SaleRefundMigrationPostgresTest, NotificationPostgresTest and this new entry. V1–V14, business APIs, FE/AI, workflow and previous progress entries are unchanged.
+
+**Flow explained:** Existing invalid thresholds still fail validation and roll back the migration; fresh/upgrade/local-adoption/retry tests now assert the CHECK is validated, and the failed-upgrade test asserts no CHECK remains after rollback. V15 remains atomic. A PostgreSQL 16 probe confirms ACCESS EXCLUSIVE is retained after VALIDATE until transaction end; the SQL comment states this is not an online/zero-downtime optimization. Migration still needs a controlled maintenance window; genuine lighter-lock validation would require a separately reviewed transaction boundary.
+
+**Check:** Full mvnw.cmd clean verify on disposable PostgreSQL 16: 617 tests, 0 failures/errors/skips, BUILD SUCCESS. Migration suite 18/18 and notification PostgreSQL suite 15/15 pass. Python CI gate self-tests 7/7 and report verification against fresh Maven reports pass. No migration ran on the user's local/staging/production DB; production-sized lock-duration benchmarking remains unverified. PR #131 will be updated and the review thread answered/resolved after push; CI must rerun, and merge remains with the user.
+
+### [2026-10-09 00:05 UTC+07:00] — [Fix] Align PostgreSQL CI gate regression tests
+
+**Done:** Corrected the outdated checkout-specific error expectation that failed PR #131 after the PostgreSQL gate was extended for notifications. Added negative coverage for a removed required notification or V15 migration test.
+
+**Changed files:** `backend/core/scripts/test_verify_postgres_tests.py` and this new progress entry. Existing progress entries remain unchanged; no business code, migration, workflow, FE/AI, secret or IDE files are modified.
+
+**Flow explained:** The gate still rejects missing required test methods; its self-test now expects the current `required tests missing` message. This fixes the gate's regression test rather than weakening PostgreSQL verification.
+
+**Check:** Reproduced the previous failure with real Python in a disposable, network-disabled container using a read-only Core mount. After the fix, `scripts/test_verify_postgres_tests.py` passes 7/7 tests (including both new subcases), and `scripts/verify_postgres_tests.py target/surefire-reports` passes against the existing Maven reports. The previous GitHub CI run independently passed all 617 Maven tests with zero failures/errors/skips; Maven was not rerun for this Python-test-only change. The new CI run must still complete, including the fresh-database migration steps skipped in the failed run. No user's local/staging/production DB was used.
+
+### [2026-10-08 23:45 UTC+07:00] — [Feature] Add OWNER in-app notifications and per-product stock thresholds
+
+**Done:** Core adds an OWNER inbox, unread count and atomic single/batch read APIs. Product create/PATCH supports nullable lowStockThreshold. Stock alerts have LOW/OUT episodes; sale void and ADMIN shop-status changes notify the OWNER. Read retries preserve the first readAt, and pages reject offsets exceeding Integer.MAX_VALUE.
+
+**Changed files:** Core notification entities/repositories/services/controller/DTOs, Product and business-flow hooks, tests, PostgreSQL verification script and README; new V15__add_owner_notifications.sql; BRD BR-020, PRD FR-032/AC-055–058, API contract, technical design, ERD description/DBML and this entry. No FE/AI, secret, .idea or earlier migration changes. Existing progress entries are retained unchanged.
+
+**Flow explained:** Under the existing source lock, reconcile/append the event and OWNER recipient in the same business transaction; rollback or replay creates no new event. V15 enforces source/recipient uniqueness and one open stock alert per product. Resolving preserves history, not read state. Inbox/count/read require both the recipient and current ownership; INACTIVE shops expose only status notifications, ARCHIVED shops are hidden. No default threshold or historical-event backfill occurs.
+
+**Check:** Full mvnw.cmd clean verify against disposable PostgreSQL 16: 617 tests, 0 failures/errors/skips; focused migration/notification suite 60/60. V1–V15 fresh schema passes Hibernate validate; upgrade preserves business data, valid local-table adoption preserves read history, invalid threshold rolls migration back and permits corrected retry. Notification PostgreSQL checks cover concurrency, replay, business-write rollback and recipient/tenant/status isolation. PostgreSQL report gate checked with an equivalent PowerShell verifier (the local Python launcher is unavailable), git diff --check, local Markdown file links and changed-file credential-pattern scan pass. No migration ran on the user's local/staging/production DB. DBML was reconciled manually; no DBML parser or production-sized migration benchmark was run. FE inbox/threshold UI, push/FCM, real Firebase/staging UAT and shared migration remain separate work; this is not production acceptance.
+
 ### [2026-10-08 16:10 UTC+07:00] — [Fix] Harden Cloudinary media retries and cleanup after review
 
 **Done:** All three uploads now use durable SHOP/USER reservations with atomic lease reclaim and UUID fencing; stale uploaders cannot commit or release a newer attempt. Avatar preserves the Firebase fallback and returns a snapshot from the locked profile. Media-disabled DELETE rejects changes with `503`, while an absent custom image stays a `204` no-op. Inactive shop errors include their reason. Cleanup uses locked jobs and asset-reference checks, pending-only retry, and an explicitly mapped scheduler delay.

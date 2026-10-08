@@ -30,5 +30,12 @@ public record ProductWriteRequest(
         Boolean tracked,
         @PositiveOrZero(message = "must not be negative")
         @Digits(integer = 12, fraction = 3, message = "must fit NUMERIC(15,3)")
-        BigDecimal stockQuantity) {
+        BigDecimal stockQuantity,
+        @PositiveOrZero(message = "must not be negative")
+        @Digits(integer = 12, fraction = 3, message = "must fit NUMERIC(15,3)")
+        BigDecimal lowStockThreshold) {
+    public ProductWriteRequest(Long categoryId, String name, String barcode, String imageUrl, String unit,
+            Long sellingPriceVnd, Long costPriceVnd, Boolean tracked, BigDecimal stockQuantity) {
+        this(categoryId, name, barcode, imageUrl, unit, sellingPriceVnd, costPriceVnd, tracked, stockQuantity, null);
+    }
 }

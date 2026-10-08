@@ -4,7 +4,7 @@
 
 This ERD describes the target PostgreSQL database for **SmartLedger Phase 1**, an AI-assisted bookkeeping system for small businesses. It includes planned tables and relationships that are not yet in Core's Flyway migrations.
 
-The logical ERD includes authentication, shops, products, customers, drafts, sales, payments, refunds, debts, expenses, media cleanup jobs, Agent chat history, AI request traces, idempotency, and audit logs. Core migrations V1–V14 implement the business tables, idempotency, shared OWNER/ADMIN audit logs, nullable sale-item estimated-cost snapshot, and Cloudinary media references/outbox; AI migrations `001`–`004` in `backend/ai/migrations` create the chat tables, enable `pgvector` and add read-only views for the Agent; migration `005` on branch `feat/ai-restock-insight` adds the `v_sales` and `v_sale_items` views. `ai_requests` and the notification tables remain target design. This does not assert deployment.
+The logical ERD includes authentication, shops, products, customers, drafts, sales, payments, refunds, debts, expenses, media cleanup jobs, Agent chat history, AI request traces, idempotency, and audit logs. Core migrations V1–V15 implement the business tables, idempotency, shared OWNER/ADMIN audit logs, nullable sale-item estimated-cost snapshot, and Cloudinary media references/outbox; AI migrations `001`–`004` in `backend/ai/migrations` create the chat tables, enable `pgvector` and add read-only views for the Agent; migration `005` on branch `feat/ai-restock-insight` adds the `v_sales` and `v_sale_items` views. V15 adds OWNER notification events/recipients and nullable product thresholds; `ai_requests` remains target design. This does not assert deployment.
 
 Business decisions are owned by the [BRD](../product/business-requirements.md) and [PRD](../product/product-requirements.md); endpoint/JSON details are owned by the [API contract](../contracts/api-contracts.md). Core audit/schema alignment reviewed against `staging` commit `b1de421c461d59473b3bb73aae103027afd67a89` on 2026-10-06; AI sections retain their previous snapshot and are outside this review.
 
@@ -56,8 +56,8 @@ Drafts do not affect revenue, stock, payments, or debts until confirmed.
 
 ### Notifications
 
-- **notification_events**: Planned table for notification events, optional shop link, entity reference, and payload.
-- **notification_recipients**: Planned table for per-user recipient read status for each notification event.
+- **notification_events**: V15 shop-scoped OWNER events with one of five supported types, title/body, polymorphic PRODUCT/SALE/SHOP target, internal JSON-object payload, required dedup_key, optional resolved_at and created_at. Unique (shop_id, dedup_key) identifies a source episode; a partial unique index permits at most one unresolved LOW_STOCK/OUT_OF_STOCK per product. Only stock alerts may resolve; resolution cannot precede creation. A shop-status target must equal shop_id. Content is a historical snapshot, not current stock or an audit record.
+- **notification_recipients**: V15 per-user read state with event/user FKs, unique (notification_event_id, user_id), created_at and nullable read_at. Read time cannot precede creation. Core preserves the first read time under locks and checks both recipient identity and current shop ownership/status on every API. Resolved stock alerts remain history and may still be unread. All current events are addressed to the shop's OWNER; ADMIN has no inbox access.
 
 ## 3. Main Relationships
 
@@ -194,6 +194,10 @@ To keep the ERD clean in Phase 1 without nested composite foreign keys, Core ser
    - VOIDED: outstanding = 0, settled_at NULL, voided_at present, 0 < cancelled_vnd <= original_vnd.
    - One positive full refund at most per sale; zero collected means no refund row. FK/unique/check constraints supplement service-level same-shop and monetary validation.
 
+### OWNER Notification Flow
+
+A business transaction holds the source product/sale/shop lock → reconcile/open/resolve the stock episode or append void/status event → insert its OWNER recipient → commit together with business data and audit. Failed transactions and idempotent replays create no new events. Per-product low_stock_threshold is nullable NUMERIC(15,3), nonnegative; null disables low-stock alerts but tracked stock=0 still creates OUT_OF_STOCK. Threshold changes, checkout, stock-in, restock on void, tracking changes and product archive reconcile the lifecycle. Reading/marking the inbox does not mutate the business source or audit; status/ownership filters apply equally to pages, counts and read updates. Contract and AC are linked from the product documents.
+
 ## 7. Migration Alignment
 
 - Stock-in on `feat/core-stock-in` reuses products, api_idempotency_keys (V7) and STOCK_ADJUSTED in audit_logs (V10/V11). No new column/table/migration or DBML structure change: STOCK_IN is an application metadata source, not a new DB enum. This branch does not assert staging/mobile deployment.
@@ -206,3 +210,7 @@ To keep the ERD clean in Phase 1 without nested composite foreign keys, Core ser
 - V11 retains V10 FKs, role/outcome/request/metadata checks, indexes and append-only triggers; it does not add a second audit table. Invalid existing rows stop validation/roll back migration. Recovery preserves audit data and uses a reviewed forward fix; do not restore V10 NOT NULL/action checks after ADMIN read rows exist, drop history, or use Flyway repair to bypass invalid data. Apply shared-DB migrations only through the approved [migration workflow](../../README.md#database-migrations).
 - V13 adds nullable `products.image_public_id`, `shops.logo_url/logo_public_id`, `users.avatar_public_id` and `media_cleanup_jobs`. It validates fixed asset/status values, nonnegative retry count, status/completion consistency and indexes due jobs by `(status, next_attempt_at, id)`. Existing URL-only rows stay intact; no provider ID or media is invented. V13 replaces only the V11 action-target check to allow `USER_AVATAR_UPDATED` when `entity_id = actor_user_id`, shop/reason/key are null; existing V10 append-only guards and all other V11 rules remain. Invalid pre-existing local rows stop the migration/roll back; do not repair history or baseline a shared database from a feature branch.
 - V14 adds `media_upload_keys` for scoped reservations and UUID lease fencing without modifying V13 or V7. Fresh and upgrade migration checks run only on disposable PostgreSQL. V13 audit CHECK validation must be planned during reduced/stopped writes; no shared migration is run from this feature branch.
+
+
+- V15 is additive and forward-only: products.low_stock_threshold plus notification_events/notification_recipients, FKs, source/recipient uniqueness, one-open-stock partial uniqueness, lifecycle/type/target/JSON/read-time checks and inbox indexes. Existing products keep NULL; no notification/history backfill occurs. Valid Hibernate-created local notification tables/thresholds may be adopted without deleting rows; incompatible schema/data fails rather than being repaired silently. Test adoption only on a disposable copy first. New/small-table indexes are transactional; stop writes during adoption and schedule CHECK validation. No production-sized locking benchmark has been performed.
+- V15 recovery retains additive columns/tables when rolling back the application; preserve notification/read history and correct shared schema/data with a reviewed forward migration. Do not rewrite V1–V14, drop history, baseline a shared database or use Flyway repair to bypass invalid rows. Apply only from merged code under the existing migration workflow; feature tests do not run shared migrations.
