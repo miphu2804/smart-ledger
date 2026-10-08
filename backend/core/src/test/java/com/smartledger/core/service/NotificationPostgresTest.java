@@ -33,7 +33,7 @@ import org.springframework.test.context.*;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.*;
 
-/** Real services and PostgreSQL locks in an isolated schema. Notification DDL is test-only, not a migration. */
+/** Real services and PostgreSQL locks in an isolated schema migrated by the actual V1–V15 Flyway scripts. */
 @DataJpaTest(showSql = false, properties = {"spring.flyway.enabled=true", "spring.jpa.hibernate.ddl-auto=validate"})
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({NotificationEventServiceImpl.class, NotificationServiceImpl.class,

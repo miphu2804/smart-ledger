@@ -1,3 +1,13 @@
+### [2026-10-09 00:21 UTC+07:00] — [Fix] Address notification migration review
+
+**Done:** V15 explicitly installs the product threshold CHECK as NOT VALID, then validates it before the atomic migration completes. Corrected NotificationPostgresTest Javadoc to describe actual V1–V15 Flyway migrations.
+
+**Changed files:** Core V15, SaleRefundMigrationPostgresTest, NotificationPostgresTest and this new entry. V1–V14, business APIs, FE/AI, workflow and previous progress entries are unchanged.
+
+**Flow explained:** Existing invalid thresholds still fail validation and roll back the migration; fresh/upgrade/local-adoption/retry tests now assert the CHECK is validated, and the failed-upgrade test asserts no CHECK remains after rollback. V15 remains atomic. A PostgreSQL 16 probe confirms ACCESS EXCLUSIVE is retained after VALIDATE until transaction end; the SQL comment states this is not an online/zero-downtime optimization. Migration still needs a controlled maintenance window; genuine lighter-lock validation would require a separately reviewed transaction boundary.
+
+**Check:** Full mvnw.cmd clean verify on disposable PostgreSQL 16: 617 tests, 0 failures/errors/skips, BUILD SUCCESS. Migration suite 18/18 and notification PostgreSQL suite 15/15 pass. Python CI gate self-tests 7/7 and report verification against fresh Maven reports pass. No migration ran on the user's local/staging/production DB; production-sized lock-duration benchmarking remains unverified. PR #131 will be updated and the review thread answered/resolved after push; CI must rerun, and merge remains with the user.
+
 ### [2026-10-09 00:05 UTC+07:00] — [Fix] Align PostgreSQL CI gate regression tests
 
 **Done:** Corrected the outdated checkout-specific error expectation that failed PR #131 after the PostgreSQL gate was extended for notifications. Added negative coverage for a removed required notification or V15 migration test.

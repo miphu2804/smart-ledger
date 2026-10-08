@@ -4,8 +4,12 @@
 SET LOCAL lock_timeout = '5s';
 
 ALTER TABLE products ADD COLUMN IF NOT EXISTS low_stock_threshold NUMERIC(15,3);
+-- Validate existing rows explicitly before this atomic migration completes.
+-- Flyway retains the ADD COLUMN/CONSTRAINT ACCESS EXCLUSIVE lock until commit;
+-- NOT VALID + VALIDATE in this transaction is not an online/zero-downtime scan.
 ALTER TABLE products ADD CONSTRAINT ck_products_low_stock_threshold
-    CHECK (low_stock_threshold IS NULL OR low_stock_threshold >= 0);
+    CHECK (low_stock_threshold IS NULL OR low_stock_threshold >= 0) NOT VALID;
+ALTER TABLE products VALIDATE CONSTRAINT ck_products_low_stock_threshold;
 
 -- IF NOT EXISTS permits adoption of a local Hibernate-created schema. Existing
 -- rows are validated, never repaired/deleted. Stop writes during adoption/index

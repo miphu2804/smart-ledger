@@ -63,9 +63,10 @@ class SaleRefundMigrationPostgresTest {
     }
 
     @Test
-    void freshMigrationsMatchEveryEntityAndSecondRunDoesNothing() {
+    void freshMigrationsMatchEveryEntityAndSecondRunDoesNothing() throws SQLException {
         assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(15);
         validateCurrentEntitySchema(testDataSource());
+        assertThresholdConstraintValidated();
         assertThat(flyway(null).migrate().migrationsExecuted).isZero();
         assertThat(flyway(null).validateWithResult().validationSuccessful).isTrue();
     }
@@ -498,6 +499,7 @@ class SaleRefundMigrationPostgresTest {
         flyway("14").migrate();
         assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
         validateCurrentEntitySchema(testDataSource());
+        assertThresholdConstraintValidated();
         assertThat(scalar("SELECT low_stock_threshold FROM products WHERE id = 1")).isNull();
         assertThat(scalar("SELECT stock_quantity FROM products WHERE id = 1")).isEqualTo("7.000");
         assertThat(scalar("SELECT amount_vnd FROM payments WHERE id = 1")).isEqualTo("40000");
@@ -523,6 +525,7 @@ class SaleRefundMigrationPostgresTest {
                 """);
         assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
         validateCurrentEntitySchema(testDataSource());
+        assertThresholdConstraintValidated();
         assertThat(scalar("SELECT low_stock_threshold FROM products WHERE id = 1")).isEqualTo("3.125");
         assertThat(scalar("SELECT read_at = TIMESTAMPTZ '2026-10-01T11:00:00Z' FROM notification_recipients"))
                 .isEqualTo("t");
@@ -546,9 +549,17 @@ class SaleRefundMigrationPostgresTest {
         assertThat(scalar("SELECT count(*) FROM information_schema.tables WHERE table_schema='" + schema
                 + "' AND table_name='notification_events'")).isEqualTo("0");
         assertThat(scalar("SELECT low_stock_threshold FROM products WHERE id = 1")).isEqualTo("-1.000");
+        assertThat(scalar("SELECT count(*) FROM pg_constraint WHERE conrelid = 'products'::regclass"
+                + " AND conname = 'ck_products_low_stock_threshold'")).isEqualTo("0");
         execute("UPDATE products SET low_stock_threshold = NULL WHERE id = 1");
         assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
         validateCurrentEntitySchema(testDataSource());
+        assertThresholdConstraintValidated();
+    }
+
+    private void assertThresholdConstraintValidated() throws SQLException {
+        assertThat(scalar("SELECT convalidated FROM pg_constraint WHERE conrelid = 'products'::regclass"
+                + " AND conname = 'ck_products_low_stock_threshold'")).isEqualTo("t");
     }
 
     private void createLocalNotificationTables() throws SQLException {
