@@ -24,7 +24,7 @@ jobs:
             exit 1
           fi
 
-          if [[ "$HEAD_BRANCH" != "staging" && "$HEAD_BRANCH" != "release/staging-to-main-2026-10-07" && "$HEAD_BRANCH" != hotfix/* ]]; then
-            echo "::error::Pull requests into main must come from staging, hotfix/*, or release/staging-to-main-2026-10-07; got $HEAD_BRANCH."
+          if [[ "$HEAD_BRANCH" != "staging" && "$HEAD_BRANCH" != "release/staging-to-main-2026-10-08" && "$HEAD_BRANCH" != hotfix/* ]]; then
+            echo "::error::Pull requests into main must come from staging, hotfix/*, or release/staging-to-main-2026-10-08; got $HEAD_BRANCH."
             exit 1
           fi

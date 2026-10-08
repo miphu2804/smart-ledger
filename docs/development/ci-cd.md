@@ -109,7 +109,7 @@ Job `deploy-web` builds `frontend/mobile` on the runner (`vercel build`) and upl
 |---|---|---|
 | PR (branch in this repo) | `vercel-preview` | Aliased to `smart-ledger-preview-0N.vercel.app`, where `N` is the last digit of the PR number; the bot comments the alias on the PR |
 | Push `staging` | `vercel-staging` | Preview deploy, then aliased to `VERCEL_STAGING_ALIAS`; the GitHub Deployments link is `https://smart-ledger-staging.vercel.app` |
-| Push `main` | `vercel-production` | Production deploy after approval; the GitHub Deployments link is `https://smart-ledger-prod.vercel.app` |
+| Push `main` | `vercel-production` | Production deploy after approval; the smoke test and the GitHub Deployments link use `https://smart-ledger-prod.vercel.app` |
 
 - The `url` of `vercel-staging` and `vercel-production` is set on job `deploy-web` in `ci.yml` and fixed to the two domains above, so the repository's Deployments panel links to them. `vercel-preview` has no `url`: its alias depends on the PR number and is already commented on the PR. If a domain changes in Vercel (Project → Settings → Domains), update `ci.yml` too.
 - Only job `mobile-web` must pass; the web does not wait for the backend deploy.
