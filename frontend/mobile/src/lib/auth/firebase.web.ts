@@ -47,6 +47,19 @@ function freshVerifier({ m, auth }: Loaded) {
 }
 
 export const firebaseAuth: AuthClient = {
+  /** Web dùng cửa sổ popup của Firebase (cần địa chỉ redirect của Firebase trong cấu hình Facebook Login). */
+  async signInWithFacebook() {
+    const { m, auth } = load();
+    debugLog('auth', 'signInWithFacebook (web) →');
+    try {
+      // Mặc định chỉ có public_profile (xem ghi chú ở firebase.ts về quyền email)
+      await m.signInWithPopup(auth, new m.FacebookAuthProvider());
+      debugLog('auth', 'signInWithFacebook (web) ✓');
+    } catch (e) {
+      throw mapFirebaseError(e);
+    }
+  },
+
   async sendOtp(phone) {
     const sdk = load();
     debugLog('auth', 'sendOtp →', maskId(phone));

@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import { debugLog, maskId } from '../debug';
 import { mapFirebaseError } from './firebaseErrors';
 import { AuthClient, AuthError } from './types';
@@ -30,7 +31,46 @@ function load(): Loaded {
   }
 }
 
+/**
+ * Facebook SDK nạp lười để bản dev client cũ (chưa có mô-đun native của Facebook) không sập ngay khi mở app.
+ * `extra.facebookConfigured` do app.config.js đặt khi có FACEBOOK_APP_ID và FACEBOOK_CLIENT_TOKEN lúc build.
+ */
+function loadFacebook(): any {
+  if (!(Constants.expoConfig?.extra as { facebookConfigured?: boolean } | undefined)?.facebookConfigured) {
+    throw new AuthError(
+      'not-configured',
+      'Bản build này chưa cấu hình đăng nhập Facebook: cần FACEBOOK_APP_ID và FACEBOOK_CLIENT_TOKEN lúc build (xem README, mục “Đăng nhập Facebook”)',
+    );
+  }
+  try {
+    return require('react-native-fbsdk-next');
+  } catch {
+    throw new AuthError('not-configured', 'Bản build này chưa có Facebook SDK: cần build lại development build (xem README, mục “Đăng nhập Facebook”)');
+  }
+}
+
 export const firebaseAuth: AuthClient = {
+  async signInWithFacebook() {
+    const { m, auth } = load();
+    const fb = loadFacebook();
+    debugLog('auth', 'signInWithFacebook →');
+    try {
+      // Chỉ xin public_profile: Meta tự cấp cho mọi app nên không cần xét duyệt. `email` phải thêm vào trường hợp sử dụng
+      // trong Meta Dashboard và có thể kéo theo xét duyệt khi mở cho người ngoài; chưa thêm thì Facebook báo "Invalid Scopes: email".
+      const result = await fb.LoginManager.logInWithPermissions(['public_profile']);
+      if (result?.isCancelled) throw new AuthError('cancelled');
+      const token = await fb.AccessToken.getCurrentAccessToken();
+      if (!token?.accessToken) throw new AuthError('unknown', 'Facebook không trả về mã đăng nhập. Vui lòng thử lại');
+      const provider = m.FacebookAuthProvider ?? m.default?.FacebookAuthProvider;
+      const credential = provider.credential(token.accessToken);
+      if (typeof m.signInWithCredential === 'function') await m.signInWithCredential(auth, credential);
+      else await auth.signInWithCredential(credential);
+      debugLog('auth', 'signInWithFacebook ✓');
+    } catch (e) {
+      throw mapFirebaseError(e);
+    }
+  },
+
   async sendOtp(phone) {
     const { m, auth } = load();
     debugLog('auth', 'sendOtp →', maskId(phone));
@@ -89,6 +129,12 @@ export const firebaseAuth: AuthClient = {
     const { m, auth } = load();
     if (typeof m.signOut === 'function') await m.signOut(auth);
     else await auth.signOut();
+    // Facebook SDK giữ phiên riêng; không đăng xuất thì lần sau không hỏi lại tài khoản. Lỗi ở đây không được chặn đăng xuất.
+    try {
+      loadFacebook().LoginManager.logOut();
+    } catch {
+      /* chưa có Facebook SDK trong bản build này */
+    }
   },
 
   currentEmail() {

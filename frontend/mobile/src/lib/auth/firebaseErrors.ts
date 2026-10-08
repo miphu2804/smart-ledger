@@ -33,6 +33,14 @@ export function mapFirebaseError(e: unknown): AuthError {
       return new AuthError('weak-password');
     case 'operation-not-allowed':
       return new AuthError('provider-disabled');
+    // Email của tài khoản Facebook đã gắn với cách đăng nhập khác trong Firebase (cài đặt "một tài khoản cho mỗi email")
+    case 'account-exists-with-different-credential':
+      return new AuthError('account-exists');
+    // Người dùng đóng cửa sổ đăng nhập (popup trên web)
+    case 'popup-closed-by-user':
+    case 'cancelled-popup-request':
+    case 'user-cancelled':
+      return new AuthError('cancelled');
     case 'too-many-requests':
     case 'quota-exceeded':
       return new AuthError('too-many-requests');

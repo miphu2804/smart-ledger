@@ -176,6 +176,18 @@ Home và Analytics lấy danh sách sale/product/debt/expense qua [`useCoreData.
 
 Màn đầu có liên kết “Đăng nhập bằng email và mật khẩu” (`app/(auth)/email.tsx`): chọn **Tạo tài khoản** để tự đăng ký (Firebase `createUserWithEmailAndPassword`, không cần ai thêm user trong Console) hoặc **Đăng nhập**. Cần bật Email/Password ở Firebase Console → Authentication → Sign-in method. Sau khi Firebase xác thực, luồng giống số điện thoại: gửi Firebase ID token xuống Core (`POST /auth/session`). Core nhận token của mọi provider, tài khoản email không có số điện thoại. Tiện để thử API khi không có SMS hay điện thoại thật.
 
+### Đăng nhập bằng Facebook
+
+Nút Facebook ở màn đầu (`app/(auth)/welcome.tsx`) đăng nhập bằng Facebook SDK (`react-native-fbsdk-next`) rồi đổi mã truy cập sang tài khoản Firebase (`FacebookAuthProvider.credential` + `signInWithCredential`, ở `src/lib/auth/firebase.ts`). Sau đó luồng giống email: gửi Firebase ID token xuống Core (`POST /auth/session`); tài khoản mới (Core đòi `displayName`) đi qua màn "Bạn tên gì?" rồi màn tạo tiệm. Core chỉ lưu Firebase UID nên không cần sửa. Trên web dùng cửa sổ popup của Firebase; bản mock đăng nhập vào một người dùng mẫu (`facebook.demo@example.com`).
+
+Cấu hình một lần (người quản trị app Facebook và Firebase làm):
+
+1. **Meta for Developers:** tạo app, thêm sản phẩm Facebook Login. Lấy **App ID** (Cài đặt ứng dụng → Cơ bản), **App Secret** (cùng trang) và **Client Token** (Cài đặt ứng dụng → Nâng cao → Bảo mật). Thêm nền tảng **Android**: tên gói `vn.teamhexa.songheloi`, tên lớp `vn.teamhexa.songheloi.MainActivity`, **key hash** của khoá ký (Base64 của SHA-1: khoá EAS `QU+neYI9yeNs0x2cI7KScGEbywI=`, khoá debug `Xo8WBi6jzSxKDVR4drqm84yr9iU=`; bản đưa lên Google Play cần thêm key hash của khoá Google). Chỉ người có vai trò trong app mới đăng nhập được khi app ở chế độ Development; muốn người khác dùng phải chuyển sang Live.
+2. **Firebase Console → Authentication → Sign-in method:** bật **Facebook**, dán App ID và App Secret. Thêm địa chỉ redirect Firebase hiển thị (`<project>.firebaseapp.com/__/auth/handler`) vào Facebook Login → Valid OAuth Redirect URIs.
+3. **Build:** `app.config.js` chỉ thêm plugin Facebook khi có `FACEBOOK_APP_ID` và `FACEBOOK_CLIENT_TOKEN` (đặt trong `.env` khi chạy `npx expo prebuild --platform android`, hoặc làm biến môi trường EAS). Hai giá trị này không đưa vào repo công khai và **App Secret không bao giờ đặt trong app hay `.env`**. Thư viện có mã native nên phải build lại dev client/APK, **không chạy trên Expo Go**; thiếu cấu hình thì bấm nút báo lỗi rõ ràng thay vì sập. Thư mục `android/` đã sinh sẵn thì chạy lại prebuild sau khi đổi hai biến.
+
+Giới hạn: mỗi cách đăng nhập là một tài khoản Firebase riêng, nên cùng một người đăng nhập bằng cách khác sẽ thành người dùng khác trong Core trừ khi liên kết ở Firebase (chưa làm). Nếu email Facebook đã dùng ở cách đăng nhập khác, Firebase có thể trả `account-exists-with-different-credential` và app báo người dùng dùng cách cũ. Chưa kiểm tra: iOS, và đăng nhập Facebook thật trên máy.
+
 ## Debug
 
 - **Log:** chỉ chạy ở bản dev (`__DEV__`), mọi thứ có tiền tố `[api]`, `[auth]`, `[session]`. Không ghi token, mật khẩu, SĐT/email đầy đủ. Xem ở terminal đang chạy `npx expo start --dev-client` (bấm `j` mở React Native DevTools), hoặc:
@@ -191,7 +203,7 @@ Màn đầu có liên kết “Đăng nhập bằng email và mật khẩu” (`
 - **Timeout:** mọi lời gọi Core tự dừng sau 15 giây (`ApiError` code `timeout`) thay vì quay vô hạn khi sai IP hoặc tường lửa chặn.
 - **Lỗi thường gặp:** `network` = không tới được Core (IP, tường lửa, Android chặn HTTP); `timeout` = tường lửa thả gói; `401 unauthorized` = token không khớp project của Core; `400 validation_failed` ở `/auth/session` = tài khoản mới cần `displayName` (bình thường); `provider-disabled` = chưa bật phương thức đăng nhập trong Firebase Console.
 
-Chưa làm: đăng nhập Google/Facebook/Apple (bản thật hiện báo “sắp có”), Zalo (Firebase không có sẵn provider — cần Core cấp custom token), nhận diện đơn bằng AI (màn Đọc đơn vẫn dùng `parseOrder()` trên máy).
+Chưa làm: đăng nhập Google/Apple (bản thật hiện báo “sắp có”; Facebook xem mục trên), Zalo (Firebase không có sẵn provider — cần Core cấp custom token), nhận diện đơn bằng AI (màn Đọc đơn vẫn dùng `parseOrder()` trên máy).
 
 Ghi chú: mã QR chuyển khoản chỉ để minh hoạ, không xác nhận giao dịch ngân hàng.
 

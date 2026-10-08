@@ -18,7 +18,14 @@ function loginAs(kind: { phone: string } | { email: string }) {
   notify();
 }
 
+/** Tài khoản Facebook giả lập: bản mock không có Facebook thật, nên luôn đăng nhập vào cùng một người dùng mẫu. */
+const MOCK_FACEBOOK_EMAIL = 'facebook.demo@example.com';
+
 export const mockAuth: AuthClient = {
+  async signInWithFacebook() {
+    await sleep(500);
+    loginAs({ email: MOCK_FACEBOOK_EMAIL });
+  },
   async sendOtp(phoneE164) {
     await sleep(300);
     return {

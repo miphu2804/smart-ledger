@@ -13,6 +13,8 @@ export type AuthErrorCode =
   | 'network'
   | 'not-configured'
   | 'not-owner'
+  | 'cancelled'
+  | 'account-exists'
   | 'unknown';
 
 const MESSAGES: Record<AuthErrorCode, string> = {
@@ -28,6 +30,8 @@ const MESSAGES: Record<AuthErrorCode, string> = {
   network: 'Không có kết nối mạng. Vui lòng kiểm tra và thử lại',
   'not-configured': 'Chưa cấu hình Firebase cho bản build này',
   'not-owner': 'Tài khoản quản trị chỉ đăng nhập trên trang web quản trị',
+  cancelled: 'Bạn đã huỷ đăng nhập',
+  'account-exists': 'Email này đã đăng ký bằng một cách đăng nhập khác (số điện thoại, email hoặc Google). Hãy dùng cách đó để vào app',
   unknown: 'Không đăng nhập được. Vui lòng thử lại',
 };
 
@@ -52,6 +56,11 @@ export interface AuthClient {
   signInWithEmail(email: string, password: string): Promise<void>;
   /** Tự đăng ký tài khoản Firebase bằng email + mật khẩu (không cần thêm user trong Console) và đăng nhập luôn. */
   signUpWithEmail(email: string, password: string): Promise<void>;
+  /**
+   * Đăng nhập bằng Facebook rồi đổi sang tài khoản Firebase. Người dùng đóng hộp thoại Facebook → AuthError('cancelled').
+   * Native cần development build có Facebook SDK (không chạy trên Expo Go); web mở cửa sổ popup của Firebase.
+   */
+  signInWithFacebook(): Promise<void>;
   /** Firebase ID token hiện tại (SDK tự làm mới khi gần hết hạn). null nếu chưa đăng nhập. */
   getIdToken(forceRefresh?: boolean): Promise<string | null>;
   signOut(): Promise<void>;

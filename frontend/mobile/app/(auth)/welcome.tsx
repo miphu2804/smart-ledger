@@ -1,11 +1,12 @@
 import { FontAwesome } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { Logo, useToast } from '../../src/components/brand';
 import { Button, Field, Row, Screen, T } from '../../src/components/ui';
-import { startPhoneLogin } from '../../src/lib/auth';
-import { errorMessage } from '../../src/lib/errors';
+import { AuthError, authClient, startPhoneLogin } from '../../src/lib/auth';
+import { debugLog } from '../../src/lib/debug';
+import { describeError, errorMessage, isDisplayNameRequired } from '../../src/lib/errors';
 import { useApp } from '../../src/store/AppStore';
 import { colors, shadow } from '../../src/theme';
 
@@ -15,6 +16,7 @@ export default function Welcome() {
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [facebookBusy, setFacebookBusy] = useState(false);
 
   const digits = phone.replace(/\D/g, '');
   const valid = /^0?\d{9}$/.test(digits);
@@ -34,6 +36,27 @@ export default function Welcome() {
       setError(errorMessage(e));
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Facebook → Firebase → phiên Core, cùng luồng với email: tài khoản mới (Core đòi tên) đi tiếp qua màn đăng ký.
+  const signInWithFacebook = async () => {
+    if (facebookBusy) return;
+    setFacebookBusy(true);
+    try {
+      await authClient.signInWithFacebook();
+      const session = await app.signIn(); // gửi Firebase ID token xuống Core (POST /auth/session)
+      router.replace(session.needsOnboarding ? '/(auth)/setup' : '/(tabs)');
+    } catch (e) {
+      if (e instanceof AuthError && e.code === 'cancelled') return; // người dùng tự đóng, không phải lỗi
+      debugLog('auth', 'facebook flow ✗', describeError(e));
+      if (isDisplayNameRequired(e)) {
+        router.replace('/(auth)/profile');
+        return;
+      }
+      toast(errorMessage(e), 'err');
+    } finally {
+      setFacebookBusy(false);
     }
   };
 
@@ -91,11 +114,11 @@ export default function Welcome() {
       </Row>
       <Row gap={8}>
         <SocialBtn name="Google" icon="google" color="#EA4335" onPress={() => toast('Google chưa được kết nối. Hãy dùng số điện thoại hoặc email.', 'err')} />
-        <SocialBtn name="Facebook" icon="facebook" color="#1877F2" onPress={() => toast('Facebook chưa được kết nối. Hãy dùng số điện thoại hoặc email.', 'err')} />
+        <SocialBtn name="Facebook" icon="facebook" color="#1877F2" connected busy={facebookBusy} onPress={signInWithFacebook} />
         <SocialBtn name="Apple" icon="apple" color={colors.ink} onPress={() => toast('Apple chưa được kết nối. Hãy dùng số điện thoại hoặc email.', 'err')} />
       </Row>
       <T size={11} color={colors.faint} style={styles.socialNote}>
-        Các phương thức này chưa được kết nối.
+        Google và Apple chưa được kết nối.
       </T>
 
       <Row style={{ justifyContent: 'center', marginTop: 20 }} gap={6}>
@@ -108,20 +131,25 @@ export default function Welcome() {
   );
 }
 
-function SocialBtn({ name, icon, color, onPress }: {
+function SocialBtn({ name, icon, color, onPress, connected = false, busy = false }: {
   name: string;
   icon: 'google' | 'facebook' | 'apple';
   color: string;
   onPress: () => void;
+  /** true = nút đã nối với phương thức đăng nhập thật; false = chỉ báo "chưa được kết nối" */
+  connected?: boolean;
+  busy?: boolean;
 }) {
   return (
     <Pressable
       onPress={onPress}
+      disabled={busy}
       accessibilityRole="button"
-      accessibilityLabel={`${name} chưa được kết nối`}
-      style={({ pressed }) => [styles.social, pressed && { opacity: 0.75 }]}
+      accessibilityLabel={connected ? `Đăng nhập bằng ${name}` : `${name} chưa được kết nối`}
+      accessibilityState={{ busy }}
+      style={({ pressed }) => [styles.social, (pressed || busy) && { opacity: 0.75 }]}
     >
-      <FontAwesome name={icon} size={18} color={color} />
+      {busy ? <ActivityIndicator size="small" color={color} /> : <FontAwesome name={icon} size={18} color={color} />}
       <T w="bold" size={12}>{name}</T>
     </Pressable>
   );
