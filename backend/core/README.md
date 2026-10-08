@@ -166,11 +166,11 @@ With the same disposable PostgreSQL variables, run:
 .\mvnw.cmd '-Dtest=AdminDashboardControllerWebTest,AdminAccessAuditServiceTest,AdminDashboardPostgresTest' test
 ```
 
-`AdminDashboardPostgresTest` applies the actual V1–V14 Flyway migrations inside a generated `core_admin_test_*` schema, then removes that schema. It exercises the migrated schema without manual constraint fixtures. No additional audit table is created. Do not point test variables at staging or production.
+`AdminDashboardPostgresTest` applies the actual V1–V15 Flyway migrations inside a generated `core_admin_test_*` schema, then removes that schema. It exercises the migrated schema without manual constraint fixtures. No additional audit table is created. Do not point test variables at staging or production.
 
 ADMIN and OWNER events share the existing `audit_logs`; ADMIN reads are separated by their `ADMIN_*` actions and API whitelists. Shop status changes reuse the existing `SHOP_INACTIVATED`/`SHOP_REACTIVATED` event once. V11 extends action/target constraints and allows missing shop/target IDs only for the corresponding ADMIN reads; business events still require both IDs. Existing history, V10 foreign keys and append-only triggers are preserved. Failed audit persistence returns `503 admin_audit_unavailable` and rolls back the operation.
 
-For a fresh disposable local database, use `FLYWAY_ENABLED=true` and `SPRING_JPA_HIBERNATE_DDL_AUTO=validate` to apply V1–V14 and validate the entity mappings. A Flyway-managed database already at V10 can apply V11/V12/V13/V14 in order. Follow the repository's merged-code migration policy for shared environments. Do not enable Flyway blindly on a Hibernate-created database without migration history: V10 rejects pre-existing ADMIN read events. Use a fresh local database or a separately reviewed adoption plan, preserving the original database. The migrations do not baseline or repair migration history.
+For a fresh disposable local database, use `FLYWAY_ENABLED=true` and `SPRING_JPA_HIBERNATE_DDL_AUTO=validate` to apply V1–V15 and validate the entity mappings. A Flyway-managed database already at V10 can apply V11/V12/V13/V14/V15 in order. Follow the repository's merged-code migration policy for shared environments. Do not enable Flyway blindly on a Hibernate-created database without migration history: V10 rejects pre-existing ADMIN read events. Use a fresh local database or a separately reviewed adoption plan, preserving the original database. The migrations do not baseline or repair migration history.
 
 If V11 validation fails, PostgreSQL rolls back its schema changes; review the offending records before retrying. Recovery uses a forward fix retaining audit history. Restoring V10 constraints or older readers that cannot handle `ADMIN_*` events is unsafe after these records exist. Integrated Firebase/FE UAT and document alignment remain pending.
 
@@ -186,7 +186,7 @@ With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
 .\mvnw.cmd '-Dtest=ProductStockInServiceTest,ProductServiceTest,CoreBusinessContractWebTest,ApiDocumentationWebTest,IdempotencyServiceTest,AuditLogPostgresTest' test
 ```
 
-`AuditLogPostgresTest` applies V1–V14 in a generated `core_audit_test_*` schema and removes only that schema. It checks concurrent receipts/retries and contention with checkout/void/PATCH/archive, audit/idempotency-write rollback, authorization and numeric overflow. Do not use shared/staging/production databases. Manual Swagger checks and mobile UAT remain separate.
+`AuditLogPostgresTest` applies V1–V15 in a generated `core_audit_test_*` schema and removes only that schema. It checks concurrent receipts/retries and contention with checkout/void/PATCH/archive, audit/idempotency-write rollback, authorization and numeric overflow. Do not use shared/staging/production databases. Manual Swagger checks and mobile UAT remain separate.
 
 ### Advanced report development tests
 
@@ -198,7 +198,7 @@ With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
 .\mvnw.cmd '-Dtest=AdvancedReportServiceTest,ExpenseReportControllerWebTest,ReportAggregationPostgresTest,SaleDraftServiceTest' test
 ```
 
-`ReportAggregationPostgresTest` applies V1–V14 in a generated `core_report_test_*` schema and removes only that schema. It verifies the nullable/nonnegative snapshot constraint, discounted item revenue, catalog/custom grouping, a prior-period void, daily event buckets and incomplete profit estimates. Mobile still computes its existing local analytics until FE integrates these endpoints; Core tests are not FE/staging UAT.
+`ReportAggregationPostgresTest` applies V1–V15 in a generated `core_report_test_*` schema and removes only that schema. It verifies the nullable/nonnegative snapshot constraint, discounted item revenue, catalog/custom grouping, a prior-period void, daily event buckets and incomplete profit estimates. Mobile still computes its existing local analytics until FE integrates these endpoints; Core tests are not FE/staging UAT.
 
 ### Cloudinary media development tests
 
@@ -221,3 +221,21 @@ SET TIME ZONE 'Asia/Ho_Chi_Minh';
 ```
 
 This affects only that connection's display, not stored data or teammates' connections. Reapply after reconnecting, or use the SQL client's session initialization setting.
+
+
+## OWNER in-app notifications
+
+V15 adds nullable `products.low_stock_threshold` and the existing ERD's `notification_events` / `notification_recipients`. Apply it through the reviewed migration workflow before using `ddl-auto=validate` with this code. No historical alerts or default thresholds are backfilled. A valid Hibernate-created local schema may be adopted, but first test a disposable copy with migration history; invalid rows stop migration. Do not baseline/repair a shared database or run feature-branch migrations there. Recovery retains these additive structures and read history; corrections use forward migrations. Stop writes during local-table adoption/index/CHECK validation; production-sized migration locking has not been benchmarked.
+
+Set `lowStockThreshold` via Product create/PATCH (nullable, nonnegative, max 12 integer/3 fractional digits). Omitted PATCH keeps it; explicit null clears it. Tracked stock zero always raises OUT_OF_STOCK; positive stock at/below a configured threshold raises LOW_STOCK. Same-level changes do not repeat an open alert. Level changes, restocking above threshold, tracking disable and archive resolve old alerts; subsequent episodes are new events. A resolved alert remains unread until marked read. Old products are reconciled on the next business write, not by migration or an automatic startup scan.
+
+Bearer OWNER token is required, but no `X-Shop-Id` or idempotency header for:
+
+- `GET /api/v1/me/notifications?shopId=4&page=0&size=20` (optional shop/type/unreadOnly filters).
+- `GET /api/v1/me/notifications/unread-count?shopId=4`.
+- `PATCH /api/v1/me/notifications/{eventId}/read` → 204.
+- `PATCH /api/v1/me/notifications/read` with `{ "ids": [1, 2] }` → atomic 204.
+
+Pages start at 0; size 1–100 and offset <=2147483647. OWNER must be ACTIVE, have a recipient and still own the shop. INACTIVE shops expose only status notifications; ARCHIVED shops are excluded. Retry/parallel reads preserve the first readAt. Any inaccessible ID rejects the whole batch with 404. See [notification contract](../../docs/contracts/api-contracts.md#8-notification-owner--đã-có-trên-featapp-notifications) and PRD AC-055–058.
+
+`NotificationPostgresTest` runs in a generated `core_notification_test_*` schema with actual V1–V15 and Hibernate validation, without a supplemental schema fixture. It covers event lifecycle, notification-write rollback, replay/concurrent checkout/void, read concurrency and cross-shop/status isolation. `SaleRefundMigrationPostgresTest` additionally tests V15 upgrade, local-table adoption and atomic migration failure/retry. Supply all `CORE_TEST_POSTGRES_*` variables pointing only to a disposable PostgreSQL DB. No push delivery/device registration/FCM/email/SMS/debt reminders or notification FE integration is implemented by this change.

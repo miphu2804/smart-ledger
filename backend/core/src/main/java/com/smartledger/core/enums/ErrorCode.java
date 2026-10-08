@@ -74,6 +74,8 @@ public enum ErrorCode {
     SALE_RESTOCK_UNAVAILABLE(HttpStatus.CONFLICT, "sale_restock_unavailable", "Stock cannot be safely restored for this sale item; void without restocking and adjust inventory separately."),
     INVALID_PAYMENT_ID(HttpStatus.BAD_REQUEST, "invalid_payment_id", "Payment ID must be a positive integer."),
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "payment_not_found", "This payment is unavailable."),
+    INVALID_NOTIFICATION_QUERY(HttpStatus.BAD_REQUEST, "invalid_notification_query", "Use page >= 0, size 1-100, offset <= 2147483647 and 1-100 positive notification IDs."),
+    NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "notification_not_found", "This notification is unavailable."),
     INVALID_AUDIT_QUERY(HttpStatus.BAD_REQUEST, "invalid_audit_query", "Use a nonnegative page, size 1-100, positive entity ID and an increasing time range."),
     CONVERSATION_NOT_FOUND(HttpStatus.NOT_FOUND, "conversation_not_found", "This conversation is unavailable."),
     AI_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "ai_unavailable", "The assistant is unavailable. Please try again.");

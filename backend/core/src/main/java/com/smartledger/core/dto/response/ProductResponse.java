@@ -18,5 +18,12 @@ public record ProductResponse(
         BigDecimal stockQuantity,
         CatalogStatus status,
         OffsetDateTime createdAt,
-        OffsetDateTime updatedAt) {
+        OffsetDateTime updatedAt,
+        BigDecimal lowStockThreshold) {
+    public ProductResponse(Long id, Long shopId, Long categoryId, String name, String barcode, String imageUrl,
+            String unit, Long sellingPriceVnd, Long costPriceVnd, boolean tracked, BigDecimal stockQuantity,
+            CatalogStatus status, OffsetDateTime createdAt, OffsetDateTime updatedAt) {
+        this(id, shopId, categoryId, name, barcode, imageUrl, unit, sellingPriceVnd, costPriceVnd,
+                tracked, stockQuantity, status, createdAt, updatedAt, null);
+    }
 }

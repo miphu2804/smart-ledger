@@ -5,7 +5,7 @@
 | Trạng thái | Core: quy tắc dưới đây đã chốt; AI/dashboard: đích MVP, cần nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ kinh doanh/sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; chủ thuế cho `BR-INV-*` |
-| Cập nhật lần cuối | 2026-10-08 (củng cố retry/cleanup media Core; không rà soát lại căn cứ pháp lý) |
+| Cập nhật lần cuối | 2026-10-08 (notification OWNER và ngưỡng tồn; không rà soát lại căn cứ pháp lý) |
 
 ## Tài liệu liên quan
 
@@ -98,6 +98,7 @@ Hóa đơn điện tử là initiative kế tiếp, không mặc nhiên thuộc 
 | `BR-017` | Các thao tác ghi Core đã chốt về sale, thu/hoàn tiền, nợ, tồn, chi phí, danh mục và hồ sơ/trạng thái tiệm phải có audit thành công cùng giao dịch nghiệp vụ: đúng người thực hiện, tiệm, hành động, đối tượng và thời điểm. Audit chỉ bổ sung, không sửa/xóa lịch sử; lỗi/rollback hoặc replay các luồng được chống ghi trùng theo BR-016 không tạo audit thành công mới. OWNER chỉ tra cứu lịch sử của tiệm ACTIVE mình sở hữu; dữ liệu phụ được giới hạn, không ghi token hoặc thông tin liên hệ khách. Audit không thay thế các bản ghi nghiệp vụ làm nguồn số liệu. |
 | `BR-018` | OWNER nhập kho bằng lượng tăng thêm dương cho sản phẩm ACTIVE có theo dõi tồn trong tiệm ACTIVE mình sở hữu. Sửa thông tin sản phẩm không ghi đè số tồn tuyệt đối; nhập kho không tự tạo nghĩa vụ tiền/nợ hay đổi giá vốn. |
 | `BR-019` | OWNER có thể lưu một ảnh chính cho Product, logo cho Shop và avatar hồ sơ. Core là bên duy nhất gọi kho media có credential; client không nhận secret hoặc provider public ID. Retry upload không tạo thêm thay đổi/audit. Thay/xóa ảnh commit dữ liệu và job dọn asset cũ cùng nhau; cleanup retry sau commit và không xóa asset còn được sử dụng. Avatar là authenticated media; Product/logo có URL công khai. Avatar tùy chỉnh ưu tiên hiển thị nhưng giữ fallback Firebase, bỏ avatar tùy chỉnh trở về fallback. |
+| `BR-020` | OWNER có hộp thông báo trong app cho tồn thấp/hết hàng, hủy sale và ADMIN tạm ngưng/kích hoạt tiệm. Ngưỡng tồn thấp tùy từng Product; không tự đặt ngưỡng cho dữ liệu cũ. Thông báo và người nhận commit/rollback cùng nghiệp vụ, retry không tạo trùng; trạng thái đã đọc riêng và giữ lần đọc đầu tiên. Chỉ OWNER hoạt động đọc dữ liệu của mình và tiệm mình sở hữu; tiệm INACTIVE chỉ lộ thông báo trạng thái, ARCHIVED không hiển thị. Notification không thay audit/sổ nghiệp vụ và chưa bao gồm push, email/SMS hay AI reminder. |
 
 `BR-003` giữ nguyên ý: người bán quyết định số liệu được ghi.
 

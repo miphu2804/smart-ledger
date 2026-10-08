@@ -16,6 +16,7 @@ import com.smartledger.core.repository.CategoryRepository;
 import com.smartledger.core.repository.ProductRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.ProductService;
+import com.smartledger.core.service.NotificationEventService;
 import com.smartledger.core.service.IdempotencyService;
 import com.smartledger.core.service.ShopService;
 import java.math.BigDecimal;
@@ -28,6 +29,7 @@ import org.springframework.util.StringUtils;
 @Service
 public class ProductServiceImpl implements ProductService {
     private final AuditLogService auditLogService;
+    private final NotificationEventService notifications;
 
     private final ShopService shopService;
     private final ProductRepository productRepository;
@@ -38,7 +40,8 @@ public class ProductServiceImpl implements ProductService {
             ShopService shopService,
             ProductRepository productRepository,
             CategoryRepository categoryRepository, AuditLogService auditLogService,
-            IdempotencyService idempotencyService) {
+            IdempotencyService idempotencyService, NotificationEventService notifications) {
+        this.notifications = notifications;
         this.auditLogService = auditLogService;
         this.shopService = shopService;
         this.productRepository = productRepository;
@@ -57,9 +60,11 @@ public class ProductServiceImpl implements ProductService {
         Product product = Product.create(shop.getId());
         replaceFields(product, request);
         product = productRepository.save(product);
+        notifications.reconcileStock(shop, product);
         auditLogService.recordOwner(shop, AuditAction.PRODUCT_CREATED, product.getId(), null, null,
                 AuditLogService.metadata("sellingPriceVnd", product.getSellingPriceVnd(), "costPriceVnd",
-                        product.getCostPriceVnd(), "tracked", product.isTracked(), "stockQuantity", product.getStockQuantity()));
+                        product.getCostPriceVnd(), "tracked", product.isTracked(), "stockQuantity", product.getStockQuantity(),
+                        "lowStockThreshold", product.getLowStockThreshold()));
         return toResponse(product);
     }
 
@@ -97,6 +102,7 @@ public class ProductServiceImpl implements ProductService {
         BigDecimal beforeStock = product.getStockQuantity();
         boolean beforeTracked = product.isTracked();
         replaceFields(product, merged);
+        notifications.reconcileStock(shop, product);
         auditLogService.recordOwner(shop, AuditAction.PRODUCT_UPDATED, product.getId(), null, null,
                 Map.of("beforeSellingPriceVnd", beforePrice, "afterSellingPriceVnd", product.getSellingPriceVnd(),
                         "changedFields", request.getProvidedFields().stream().sorted().toList()));
@@ -123,7 +129,8 @@ public class ProductServiceImpl implements ProductService {
                 request.hasField("sellingPriceVnd") ? request.getSellingPriceVnd() : product.getSellingPriceVnd(),
                 request.hasField("costPriceVnd") ? request.getCostPriceVnd() : product.getCostPriceVnd(),
                 tracked,
-                stock);
+                stock,
+                request.hasField("lowStockThreshold") ? request.getLowStockThreshold() : product.getLowStockThreshold());
     }
 
     @Override
@@ -140,6 +147,7 @@ public class ProductServiceImpl implements ProductService {
                     Product product = requireLockedActiveProduct(shop.getId(), id.toString());
                     BigDecimal before = product.getStockQuantity();
                     product.addStock(normalized.quantity());
+                    notifications.reconcileStock(shop, product);
                     auditLogService.recordOwner(shop, AuditAction.STOCK_ADJUSTED, product.getId(),
                             normalized.reason(), idempotencyKey.trim(), AuditLogService.metadata(
                                     "source", "STOCK_IN", "quantity", normalized.quantity(),
@@ -155,6 +163,7 @@ public class ProductServiceImpl implements ProductService {
         Shop shop = shopService.requireOwnedActiveShop(firebaseToken, shopId);
         Product product = requireLockedActiveProduct(shop.getId(), productId);
         product.archive(shop.getOwnerId());
+        notifications.reconcileStock(shop, product);
         auditLogService.recordOwner(shop, AuditAction.PRODUCT_ARCHIVED, product.getId(), null, null, Map.of());
     }
 
@@ -221,6 +230,7 @@ public class ProductServiceImpl implements ProductService {
                 request.costPriceVnd(),
                 request.tracked(),
                 request.stockQuantity());
+        product.setLowStockThreshold(request.lowStockThreshold());
     }
 
     private String normalizeOptional(String value) {
@@ -242,6 +252,7 @@ public class ProductServiceImpl implements ProductService {
                 product.getStockQuantity(),
                 product.getStatus(),
                 product.getCreatedAt(),
-                product.getUpdatedAt());
+                product.getUpdatedAt(),
+                product.getLowStockThreshold());
     }
 }
