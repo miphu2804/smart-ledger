@@ -9,6 +9,7 @@ from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from psycopg import sql
+from psycopg.conninfo import make_conninfo
 from tests.support import (
     TEST_GUARDRAIL_LIMITS,
     apply_ai_baseline,
@@ -17,15 +18,8 @@ from tests.support import (
 
 from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
 from src.agent.service import AgentService
-from src.agent.summary import (
-    FOLD_TRIGGER_MESSAGES,
-    KEEP_RECENT_MESSAGES,
-    ChatSummaryFolder,
-)
 from src.infra.postgre_db_client import PostgreDBClient
 from src.main import app
-
-FACT_IN_FIRST_MESSAGE = "Lan owes 200000 VND"
 
 
 class ConversationEchoModel(FakeListChatModel):
@@ -41,41 +35,20 @@ class ConversationEchoModel(FakeListChatModel):
         )
 
 
-class RecordingEchoModel(ConversationEchoModel):
-    seen_messages: list = []
-
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        self.seen_messages = list(messages)
-        return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
-
-
-class RecordingSummaryModel(FakeListChatModel):
-    seen_prompts: list = []
-
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        self.seen_prompts = [*self.seen_prompts, list(messages)]
-        return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
-
-
-class FailingSummaryModel(FakeListChatModel):
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        raise RuntimeError("summary model down")
-
-
 def seed_conversation(
     conversations: AgentConversationRepository,
     user_id: int,
     shop_id: int,
     exchanges: int,
 ) -> int:
-    """Persist `exchanges` question/answer pairs; the first one carries the fact."""
+    """Persist `exchanges` question/answer pairs numbered from 0."""
     conversation_id = None
     for index in range(exchanges):
         conversation_id, _ = conversations.save_exchange(
             user_id=user_id,
             shop_id=shop_id,
             conversation_id=conversation_id,
-            user_message=FACT_IN_FIRST_MESSAGE if index == 0 else f"question {index}",
+            user_message=f"question {index}",
             assistant_message=f"answer {index}",
         )
     return conversation_id
@@ -117,11 +90,10 @@ def postgres_agent_client(
             (user_id, "E2E shop", "Retail"),
         ).fetchone()[0]
 
-        postgres = PostgreDBClient()
-        postgres.connection = psycopg.connect(
-            database_url,
-            options=f"-c search_path={schema_name}",
+        postgres = PostgreDBClient(
+            make_conninfo(database_url, options=f"-c search_path={schema_name}")
         )
+        postgres.connect()
         agent = AgentService(
             ConversationEchoModel(responses=[]),
             AgentConversationRepository(postgres),
@@ -131,19 +103,13 @@ def postgres_agent_client(
         monkeypatch.setattr(
             app.state, "conversations", agent.conversations, raising=False
         )
-        monkeypatch.setattr(
-            app.state,
-            "summary_folder",
-            ChatSummaryFolder(None, agent.conversations),
-            raising=False,
-        )
         client = TestClient(app, headers=internal_headers)
         yield client, user_id, shop_id, agent.conversations
     finally:
         if client is not None:
             client.close()
-        if postgres is not None and postgres.connection is not None:
-            postgres.connection.close()
+        if postgres is not None:
+            postgres.close()
         try:
             setup_connection.execute(
                 sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
@@ -238,185 +204,57 @@ def test_conversation_crud_uses_postgres(
     assert after_delete_chat.status_code == 404
 
 
-def test_context_for_returns_summary_and_messages_after_watermark(
+def test_recent_messages_returns_the_latest_window_oldest_first(
     postgres_agent_client: tuple[TestClient, int, int, AgentConversationRepository],
 ) -> None:
     _, user_id, shop_id, conversations = postgres_agent_client
-    conversation_id = seed_conversation(conversations, user_id, shop_id, 2)
-    before = conversations.context_for(conversation_id, user_id, shop_id)
-    watermark = before["messages"][1]["message_id"]
+    conversation_id = seed_conversation(conversations, user_id, shop_id, 3)
 
-    saved = conversations.save_summary(
-        conversation_id=conversation_id,
-        user_id=user_id,
-        shop_id=shop_id,
-        summary=FACT_IN_FIRST_MESSAGE,
-        through_id=watermark,
-        expected_through_id=None,
-    )
-    after = conversations.context_for(conversation_id, user_id, shop_id)
+    window = conversations.recent_messages(conversation_id, user_id, shop_id, 4)
 
-    assert before["summary"] is None
-    assert before["summary_through_message_id"] is None
-    assert len(before["messages"]) == 4
-    assert saved is True
-    assert after["summary"] == FACT_IN_FIRST_MESSAGE
-    assert after["summary_through_message_id"] == watermark
-    assert [message["message_id"] for message in after["messages"]] == [
-        message["message_id"] for message in before["messages"][2:]
+    assert [(message["role"], message["content"]) for message in window] == [
+        ("USER", "question 1"),
+        ("ASSISTANT", "answer 1"),
+        ("USER", "question 2"),
+        ("ASSISTANT", "answer 2"),
     ]
 
 
-def test_stale_save_summary_is_rejected(
-    postgres_agent_client: tuple[TestClient, int, int, AgentConversationRepository],
-) -> None:
-    _, user_id, shop_id, conversations = postgres_agent_client
-    conversation_id = seed_conversation(conversations, user_id, shop_id, 2)
-    context = conversations.context_for(conversation_id, user_id, shop_id)
-    first = context["messages"][1]["message_id"]
-    second = context["messages"][3]["message_id"]
-
-    applied = conversations.save_summary(
-        conversation_id=conversation_id,
-        user_id=user_id,
-        shop_id=shop_id,
-        summary="first writer",
-        through_id=first,
-        expected_through_id=None,
-    )
-    stale = conversations.save_summary(
-        conversation_id=conversation_id,
-        user_id=user_id,
-        shop_id=shop_id,
-        summary="stale writer",
-        through_id=second,
-        expected_through_id=None,
-    )
-    stored = conversations.context_for(conversation_id, user_id, shop_id)
-
-    assert applied is True
-    assert stale is False
-    assert stored["summary"] == "first writer"
-    assert stored["summary_through_message_id"] == first
-
-
-def test_summary_scope_is_enforced(
+def test_recent_messages_enforces_the_owner_scope(
     postgres_agent_client: tuple[TestClient, int, int, AgentConversationRepository],
 ) -> None:
     _, user_id, shop_id, conversations = postgres_agent_client
     conversation_id = seed_conversation(conversations, user_id, shop_id, 1)
 
     with pytest.raises(ConversationNotFoundError):
-        conversations.context_for(conversation_id, user_id + 1, shop_id)
+        conversations.recent_messages(conversation_id, user_id + 1, shop_id, 4)
     with pytest.raises(ConversationNotFoundError):
-        conversations.context_for(conversation_id, user_id, shop_id + 1)
-
-    hijacked = conversations.save_summary(
-        conversation_id=conversation_id,
-        user_id=user_id + 1,
-        shop_id=shop_id,
-        summary="hijacked",
-        through_id=1,
-        expected_through_id=None,
-    )
-
-    assert hijacked is False
-    stored = conversations.context_for(conversation_id, user_id, shop_id)
-    assert stored["summary"] is None
+        conversations.recent_messages(conversation_id, user_id, shop_id + 1, 4)
 
 
-def test_folded_messages_returns_only_folded_rows_within_scope(
+def test_chat_sends_only_the_configured_window(
+    monkeypatch: pytest.MonkeyPatch,
     postgres_agent_client: tuple[TestClient, int, int, AgentConversationRepository],
 ) -> None:
-    _, user_id, shop_id, conversations = postgres_agent_client
-    conversation_id = seed_conversation(conversations, user_id, shop_id, 2)
-    before = conversations.folded_messages(conversation_id, user_id, shop_id)
-    context = conversations.context_for(conversation_id, user_id, shop_id)
-    watermark = context["messages"][1]["message_id"]
-    conversations.save_summary(
-        conversation_id=conversation_id,
-        user_id=user_id,
-        shop_id=shop_id,
-        summary="memory",
-        through_id=watermark,
-        expected_through_id=None,
-    )
-
-    folded = conversations.folded_messages(conversation_id, user_id, shop_id)
-
-    assert before == []
-    assert [message["content"] for message in folded] == [
-        FACT_IN_FIRST_MESSAGE,
-        "answer 0",
-    ]
-    assert folded[0]["role"] == "USER"
-    assert folded[0]["created_at"] is not None
-    assert conversations.folded_messages(conversation_id, user_id + 1, shop_id) == []
-    assert conversations.folded_messages(conversation_id, user_id, shop_id + 1) == []
-
-
-def test_fold_summary_persists_memory_and_chat_reuses_it(
-    postgres_agent_client: tuple[TestClient, int, int, AgentConversationRepository],
-) -> None:
-    _, user_id, shop_id, conversations = postgres_agent_client
-    total = FOLD_TRIGGER_MESSAGES + 2
-    folded = total - KEEP_RECENT_MESSAGES
-    conversation_id = seed_conversation(conversations, user_id, shop_id, total // 2)
-    summary_model = RecordingSummaryModel(
-        responses=[f"1. Customers and debts: {FACT_IN_FIRST_MESSAGE}"]
-    )
-    chat_model = RecordingEchoModel(responses=[])
+    client, user_id, shop_id, conversations = postgres_agent_client
+    conversation_id = seed_conversation(conversations, user_id, shop_id, 3)
     agent = AgentService(
-        chat_model, conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS
+        ConversationEchoModel(responses=[]),
+        conversations,
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
+        history_turns=1,
     )
-    folder = ChatSummaryFolder(summary_model, conversations)
-    before = conversations.context_for(conversation_id, user_id, shop_id)
+    monkeypatch.setattr(app.state, "agent", agent)
 
-    assert folder.fold(conversation_id, user_id, shop_id) is True
-
-    stored = conversations.context_for(conversation_id, user_id, shop_id)
-    assert len(before["messages"]) == total
-    assert FACT_IN_FIRST_MESSAGE in summary_model.seen_prompts[0][1].content
-    assert stored["summary"] == f"1. Customers and debts: {FACT_IN_FIRST_MESSAGE}"
-    assert (
-        stored["summary_through_message_id"]
-        == before["messages"][folded - 1]["message_id"]
-    )
-    assert [message["message_id"] for message in stored["messages"]] == [
-        message["message_id"] for message in before["messages"][folded:]
-    ]
-    assert all(
-        FACT_IN_FIRST_MESSAGE not in message["content"]
-        for message in stored["messages"]
+    response = client.post(
+        "/internal/v1/agent/chat",
+        json={
+            "user_id": user_id,
+            "shop_id": shop_id,
+            "conversation_id": conversation_id,
+            "message": "next",
+        },
     )
 
-    agent.chat(
-        user_id=user_id,
-        shop_id=shop_id,
-        conversation_id=conversation_id,
-        message="how much does Lan owe?",
-    )
-
-    system_messages = [
-        message.content
-        for message in chat_model.seen_messages
-        if message.type == "system"
-    ]
-    assert any(FACT_IN_FIRST_MESSAGE in content for content in system_messages)
-
-
-def test_fold_summary_retries_after_a_failed_batch(
-    postgres_agent_client: tuple[TestClient, int, int, AgentConversationRepository],
-) -> None:
-    _, user_id, shop_id, conversations = postgres_agent_client
-    conversation_id = seed_conversation(conversations, user_id, shop_id, 16)
-    folder = ChatSummaryFolder(
-        FailingSummaryModel(responses=["ignored"]), conversations
-    )
-
-    assert folder.fold(conversation_id, user_id, shop_id) is False
-
-    stored = conversations.context_for(conversation_id, user_id, shop_id)
-    assert stored["summary"] is None
-    assert stored["summary_through_message_id"] is None
-    assert len(stored["messages"]) == 32
+    assert response.status_code == 200
+    assert response.json()["answer"] == "question 2 | next"

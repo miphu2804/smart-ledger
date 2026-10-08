@@ -6,8 +6,6 @@ from typing import Literal
 from langchain.tools import ToolRuntime, tool
 from langchain_core.tools import BaseTool
 
-from src.agent.history_search import NO_MATCH, format_clusters, search_messages
-from src.agent.repository import AgentConversationRepository
 from src.prompt_templates import QUERY_RESULT_HEADER, RESTOCK_RESULT_HEADER
 from src.restock.service import RestockService
 from src.sql.executor import ReadOnlySqlExecutor
@@ -32,27 +30,6 @@ class AgentContext:
 
     user_id: int
     shop_id: int
-    conversation_id: int | None = None
-
-
-def build_history_tools(conversations: AgentConversationRepository) -> list[BaseTool]:
-    @tool
-    def search_chat_history(query: str, runtime: ToolRuntime[AgentContext]) -> str:
-        """Search earlier messages by key words when the memory lacks an exact detail.
-
-        Query with key words, for example a customer name and an item.
-        """
-        # The ids come from the request context, never from the model, so a crafted
-        # query cannot read another shop's history.
-        scope = runtime.context
-        if scope.conversation_id is None:
-            return NO_MATCH
-        messages = conversations.folded_messages(
-            scope.conversation_id, scope.user_id, scope.shop_id
-        )
-        return format_clusters(search_messages(messages, query))
-
-    return [search_chat_history]
 
 
 def build_shop_data_tools(executor: ReadOnlySqlExecutor) -> list[BaseTool]:

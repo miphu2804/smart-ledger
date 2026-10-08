@@ -1,19 +1,16 @@
-import logging
+"""Agent flow: chat turns and the owner's conversation history.
+
+Mounted under `/internal/v1` by `main`, which also applies the internal-token check
+and maps errors to the contract's status codes.
+"""
+
 import uuid
 from typing import Annotated
 
-from fastapi import (
-    APIRouter,
-    BackgroundTasks,
-    Depends,
-    Query,
-    Request,
-    Response,
-)
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Query, Request, Response
 
-from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
-from src.agent.schemas import (
+from src.agent.repository import AgentConversationRepository
+from src.agent.schema import (
     AgentChatRequest,
     AgentChatResponse,
     AgentConversationRenameRequest,
@@ -21,24 +18,12 @@ from src.agent.schemas import (
     AgentConversationView,
 )
 from src.agent.service import AgentService
-from src.agent.summary import ChatSummaryFolder
-from src.security import require_internal_token
 
-logger = logging.getLogger(__name__)
-
-router = APIRouter(
-    prefix="/internal/v1/agent",
-    tags=["agent"],
-    dependencies=[Depends(require_internal_token)],
-)
+router = APIRouter(prefix="/agent", tags=["agent"])
 
 
 def get_agent(request: Request) -> AgentService:
     return request.app.state.agent
-
-
-def get_summary_folder(request: Request) -> ChatSummaryFolder:
-    return request.app.state.summary_folder
 
 
 def get_conversations(request: Request) -> AgentConversationRepository:
@@ -46,30 +31,16 @@ def get_conversations(request: Request) -> AgentConversationRepository:
 
 
 AgentServiceDep = Annotated[AgentService, Depends(get_agent)]
-SummaryFolderDep = Annotated[ChatSummaryFolder, Depends(get_summary_folder)]
 ConversationsDep = Annotated[AgentConversationRepository, Depends(get_conversations)]
 
 
 @router.post("/chat", response_model=AgentChatResponse)
-def agent_chat(
-    payload: AgentChatRequest,
-    agent: AgentServiceDep,
-    summary_folder: SummaryFolderDep,
-    background_tasks: BackgroundTasks,
-):
+def agent_chat(payload: AgentChatRequest, agent: AgentServiceDep):
     result = agent.chat(
         user_id=payload.user_id,
         shop_id=payload.shop_id,
         conversation_id=payload.conversation_id,
         message=payload.message,
-    )
-    # Folding only rewrites memory of older messages, so it runs after the reply and
-    # the next turn sees the new summary.
-    background_tasks.add_task(
-        summary_folder.fold,
-        result.conversation_id,
-        payload.user_id,
-        payload.shop_id,
     )
     return AgentChatResponse(
         conversation_id=result.conversation_id,
@@ -133,15 +104,3 @@ def delete_agent_conversation(
         shop_id=shop_id,
     )
     return Response(status_code=204)
-
-
-def conversation_not_found_handler(
-    request: Request, exc: ConversationNotFoundError
-) -> JSONResponse:
-    return JSONResponse(status_code=404, content={"detail": "conversation_not_found"})
-
-
-def agent_failure_handler(request: Request, exc: Exception) -> JSONResponse:
-    # The client only sees ai_unavailable, so the cause has to reach the server log.
-    logger.warning("agent request failed", exc_info=exc)
-    return JSONResponse(status_code=503, content={"detail": "ai_unavailable"})

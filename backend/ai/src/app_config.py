@@ -19,6 +19,10 @@ class AppConfig(BaseSettings):
 
     # postgres
     POSTGRES_URL: str | None = None
+    # most connections the chat-history pool opens. Supabase's session pooler allows
+    # 15 clients in all and Core's Hikari pool takes up to 10 by default, so keep this
+    # small.
+    POSTGRES_POOL_MAX_SIZE: int = Field(default=2, gt=0)
 
     # read-only login granted ai_sql_reader (AI baseline migration); unset disables the
     # agent's shop-data tool while chat keeps working
@@ -29,35 +33,24 @@ class AppConfig(BaseSettings):
     # redis
     REDIS_URL: str | None = None
 
-    # qdrant
-    QDRANT_URL: str | None = None
-
-    # litellm
-    LITELLM_URL: str | None = None
-
     # model provider
     MODEL_PROVIDER: str = "openai"
     MODEL_NAME: str = "gpt-5.6-luna"
     MODEL_TIMEOUT_SECONDS: float = 20.0
-    # reasoning effort for the chat and summary models: none, low, medium or high
+    # reasoning effort for the chat model: none, low, medium or high
     MODEL_REASONING_EFFORT: str = "high"
-
-    # background summarization model; unset falls back to MODEL_NAME
-    SUMMARY_MODEL_NAME: str | None = None
 
     # agent guardrails (src/agent/guardrails.py), per chat turn
     AGENT_MAX_INPUT_CHARS: int = Field(default=2000, gt=0)
     AGENT_MODEL_CALL_LIMIT: int = Field(default=4, gt=0)
     AGENT_TOOL_CALL_LIMIT: int = Field(default=3, gt=0)
 
+    # most recent owner/assistant exchanges sent to the model with each turn
+    AGENT_HISTORY_TURNS: int = Field(default=100, gt=0)
+
     # openai
     OPENAI_API_KEY: str | None = None
     OPENAI_BASE_URL: str | None = None
-
-    # langfuse
-    LANGFUSE_PUBLIC_KEY: str | None = None
-    LANGFUSE_SECRET_KEY: str | None = None
-    LANGFUSE_HOST: str | None = None
 
 
 app_config = AppConfig()

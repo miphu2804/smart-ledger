@@ -560,8 +560,8 @@ Table chat_conversations {
 
   title varchar(255)
 
-  summary text [note: 'Rolling summary of folded messages (AI baseline)']
-  summary_through_message_id bigint [note: 'Newest message folded into summary; no FK by design']
+  summary text [note: 'Unused by code since the chat summary was removed; kept for rollback, dropped by a later migration']
+  summary_through_message_id bigint [note: 'Unused by code; kept for rollback, dropped by a later migration. No FK by design']
 
   started_at timestamptz [not null, default: `now()`]
   last_message_at timestamptz [not null, default: `now()`]

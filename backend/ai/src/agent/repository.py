@@ -36,18 +36,9 @@ class AgentConversationRepository:
     ) -> dict:
         with self.postgres.transaction() as connection:
             with connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    SELECT id, title, last_message_at
-                    FROM chat_conversations
-                    WHERE id = %s AND user_id = %s AND shop_id = %s
-                    """,
-                    (conversation_id, user_id, shop_id),
+                row = self._owned_conversation(
+                    cursor, conversation_id, user_id, shop_id
                 )
-                row = cursor.fetchone()
-                if row is None:
-                    raise ConversationNotFoundError
-
                 cursor.execute(
                     """
                     SELECT id, role, content, created_at
@@ -74,82 +65,28 @@ class AgentConversationRepository:
             ],
         }
 
-    def context_for(
-        self,
-        conversation_id: int,
-        user_id: int,
-        shop_id: int,
-    ) -> dict:
-        """Return the stored summary plus every message not yet folded into it."""
+    def recent_messages(
+        self, conversation_id: int, user_id: int, shop_id: int, limit: int
+    ) -> list[dict]:
+        """Return the conversation's latest `limit` messages, oldest first."""
         with self.postgres.transaction() as connection:
             with connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    SELECT summary, summary_through_message_id
-                    FROM chat_conversations
-                    WHERE id = %s AND user_id = %s AND shop_id = %s
-                    """,
-                    (conversation_id, user_id, shop_id),
-                )
-                row = cursor.fetchone()
-                if row is None:
-                    raise ConversationNotFoundError
-
+                self._owned_conversation(cursor, conversation_id, user_id, shop_id)
                 cursor.execute(
                     """
                     SELECT id, role, content
                     FROM chat_messages
                     WHERE conversation_id = %s
-                      AND id > COALESCE(%s::bigint, 0)
-                    ORDER BY created_at, id
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT %s
                     """,
-                    (conversation_id, row[1]),
-                )
-                message_rows = cursor.fetchall()
-
-        return {
-            "summary": row[0],
-            "summary_through_message_id": row[1],
-            "messages": [
-                {
-                    "message_id": message[0],
-                    "role": str(message[1]),
-                    "content": message[2],
-                }
-                for message in message_rows
-            ],
-        }
-
-    def folded_messages(
-        self, conversation_id: int, user_id: int, shop_id: int
-    ) -> list[dict]:
-        """Return the messages already folded into the summary, oldest first.
-
-        Empty when the conversation has no summary yet or is not owned by this user
-        and shop: the scope check and the watermark live in the same query.
-        """
-        with self.postgres.transaction() as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    SELECT m.id, m.role, m.content, m.created_at
-                    FROM chat_messages m
-                    JOIN chat_conversations c ON c.id = m.conversation_id
-                    WHERE c.id = %s AND c.user_id = %s AND c.shop_id = %s
-                      AND m.id <= c.summary_through_message_id
-                    ORDER BY m.created_at, m.id
-                    """,
-                    (conversation_id, user_id, shop_id),
+                    (conversation_id, limit),
                 )
                 rows = cursor.fetchall()
+
         return [
-            {
-                "message_id": row[0],
-                "role": str(row[1]),
-                "content": row[2],
-                "created_at": row[3],
-            }
-            for row in rows
+            {"message_id": row[0], "role": str(row[1]), "content": row[2]}
+            for row in reversed(rows)
         ]
 
     def save_exchange(
@@ -174,17 +111,9 @@ class AgentConversationRepository:
                     )
                     conversation_id = cursor.fetchone()[0]
                 else:
-                    cursor.execute(
-                        """
-                        SELECT id
-                        FROM chat_conversations
-                        WHERE id = %s AND user_id = %s AND shop_id = %s
-                        FOR UPDATE
-                        """,
-                        (conversation_id, user_id, shop_id),
+                    self._owned_conversation(
+                        cursor, conversation_id, user_id, shop_id, lock=True
                     )
-                    if cursor.fetchone() is None:
-                        raise ConversationNotFoundError
 
                 cursor.execute(
                     """
@@ -212,43 +141,6 @@ class AgentConversationRepository:
                 )
 
         return conversation_id, message_id
-
-    def save_summary(
-        self,
-        conversation_id: int,
-        user_id: int,
-        shop_id: int,
-        summary: str,
-        through_id: int,
-        expected_through_id: int | None,
-    ) -> bool:
-        """Advance the summary watermark, but only from the value the caller read.
-
-        A concurrent fold that already advanced the watermark makes this update match
-        no row, so the later writer is dropped instead of overwriting newer messages.
-        Returns whether the update was applied.
-        """
-        with self.postgres.transaction() as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    UPDATE chat_conversations
-                    SET summary = %s,
-                        summary_through_message_id = %s,
-                        updated_at = now()
-                    WHERE id = %s AND user_id = %s AND shop_id = %s
-                      AND summary_through_message_id IS NOT DISTINCT FROM %s::bigint
-                    """,
-                    (
-                        summary,
-                        through_id,
-                        conversation_id,
-                        user_id,
-                        shop_id,
-                        expected_through_id,
-                    ),
-                )
-                return cursor.rowcount == 1
 
     def rename_conversation(
         self, conversation_id: int, user_id: int, shop_id: int, title: str
@@ -279,18 +171,9 @@ class AgentConversationRepository:
     ) -> None:
         with self.postgres.transaction() as connection:
             with connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    SELECT id
-                    FROM chat_conversations
-                    WHERE id = %s AND user_id = %s AND shop_id = %s
-                    FOR UPDATE
-                    """,
-                    (conversation_id, user_id, shop_id),
+                self._owned_conversation(
+                    cursor, conversation_id, user_id, shop_id, lock=True
                 )
-                if cursor.fetchone() is None:
-                    raise ConversationNotFoundError
-
                 cursor.execute(
                     "DELETE FROM chat_messages WHERE conversation_id = %s",
                     (conversation_id,),
@@ -299,3 +182,28 @@ class AgentConversationRepository:
                     "DELETE FROM chat_conversations WHERE id = %s",
                     (conversation_id,),
                 )
+
+    @staticmethod
+    def _owned_conversation(
+        cursor, conversation_id: int, user_id: int, shop_id: int, lock: bool = False
+    ) -> tuple:
+        """Return the conversation's id, title and last_message_at, or raise.
+
+        Every read and write of one conversation starts here, so another owner's or
+        another shop's conversation is indistinguishable from a missing one. `lock`
+        holds the row until the transaction ends, so a concurrent delete cannot drop
+        the conversation between this check and the caller's write.
+        """
+        cursor.execute(
+            """
+            SELECT id, title, last_message_at
+            FROM chat_conversations
+            WHERE id = %s AND user_id = %s AND shop_id = %s
+            """
+            + ("FOR UPDATE" if lock else ""),
+            (conversation_id, user_id, shop_id),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            raise ConversationNotFoundError
+        return row

@@ -1,20 +1,17 @@
 import pytest
 
-from src.agent.summary import ChatSummaryFolder
 from src.app_config import app_config
-from src.infra.postgre_db_client import PostgreDBClient
-from src.infra.redis_db_client import RedisDBClient
 from src.main import app
 
 TEST_INTERNAL_TOKEN = "test-internal-token"
 
 
 @pytest.fixture(autouse=True)
-def stub_client_lifecycle(monkeypatch) -> None:
-    monkeypatch.setattr(PostgreDBClient, "connect", lambda self: None)
-    monkeypatch.setattr(PostgreDBClient, "close", lambda self: None)
-    monkeypatch.setattr(RedisDBClient, "connect", lambda self: None)
-    monkeypatch.setattr(RedisDBClient, "close", lambda self: None)
+def no_application_database(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A local .env may point at the shared staging databases. Tests that need PostgreSQL
+    # build their own client from POSTGRES_TEST_URL instead.
+    monkeypatch.setattr(app_config, "POSTGRES_URL", None)
+    monkeypatch.setattr(app_config, "REDIS_URL", None)
 
 
 @pytest.fixture(autouse=True)
@@ -36,6 +33,5 @@ def wire_agent_state():
     def _wire(agent, conversations) -> None:
         app.state.agent = agent
         app.state.conversations = conversations
-        app.state.summary_folder = ChatSummaryFolder(None, conversations)
 
     return _wire

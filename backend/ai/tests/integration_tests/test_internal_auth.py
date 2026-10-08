@@ -1,3 +1,4 @@
+import re
 from unittest.mock import Mock
 
 import pytest
@@ -12,8 +13,18 @@ from src.main import app
 
 CHAT = "/internal/v1/agent/chat"
 CONVERSATIONS = "/internal/v1/agent/conversations"
+CONVERSATION = f"{CONVERSATIONS}/{{conversation_id}}"
 SCOPE = {"user_id": 7, "shop_id": 12}
 PAYLOAD = {**SCOPE, "message": "today's revenue?"}
+
+# Read from the app's OpenAPI paths, so a route a later flow mounts is covered without
+# editing here. `app.routes` cannot serve: it holds included routers, not their routes.
+INTERNAL_ROUTES = sorted(
+    (method.upper(), path)
+    for path, operations in app.openapi()["paths"].items()
+    if path.startswith("/internal/v1/")
+    for method in operations
+)
 
 
 class EchoChatModel(FakeListChatModel):
@@ -25,11 +36,7 @@ class EchoChatModel(FakeListChatModel):
 def client(wire_agent_state) -> TestClient:
     # Deliberately without default credentials: every test states its own token.
     conversations = Mock(spec=AgentConversationRepository)
-    conversations.context_for.return_value = {
-        "summary": None,
-        "summary_through_message_id": None,
-        "messages": [],
-    }
+    conversations.recent_messages.return_value = []
     conversations.save_exchange.return_value = (101, 502)
     agent = AgentService(
         EchoChatModel(responses=["answer"]),
@@ -44,24 +51,22 @@ def test_health_needs_no_token(client: TestClient) -> None:
     assert client.get("/health").status_code == 200
 
 
-@pytest.mark.parametrize(
-    ("method", "url", "kwargs"),
-    [
-        ("post", CHAT, {"json": PAYLOAD}),
-        ("get", CONVERSATIONS, {"params": SCOPE}),
-        ("get", f"{CONVERSATIONS}/101", {"params": SCOPE}),
-        (
-            "patch",
-            f"{CONVERSATIONS}/101",
-            {"json": {**SCOPE, "title": "Morning shift"}},
-        ),
-        ("delete", f"{CONVERSATIONS}/101", {"params": SCOPE}),
-    ],
-)
+def test_internal_routes_cover_the_agent_contract() -> None:
+    assert set(INTERNAL_ROUTES) >= {
+        ("POST", CHAT),
+        ("GET", CONVERSATIONS),
+        ("GET", CONVERSATION),
+        ("PATCH", CONVERSATION),
+        ("DELETE", CONVERSATION),
+    }
+
+
+@pytest.mark.parametrize(("method", "path"), INTERNAL_ROUTES)
 def test_internal_routes_reject_a_missing_token(
-    client: TestClient, method: str, url: str, kwargs: dict
+    client: TestClient, method: str, path: str
 ) -> None:
-    response = getattr(client, method)(url, **kwargs)
+    # No body or query: the token check must answer before request validation.
+    response = client.request(method, re.sub(r"\{[^}]+\}", "101", path))
 
     assert response.status_code == 401
     assert response.json()["detail"] == "unauthorized"

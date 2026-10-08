@@ -6,9 +6,10 @@ from dataclasses import dataclass
 import psycopg
 import pytest
 from psycopg import sql
+from psycopg.conninfo import make_conninfo
 from tests.support import apply_core_migrations
 
-from src.catalog import CatalogUnavailableError, ProductCatalogRepository
+from src.drafts.catalog import CatalogUnavailableError, ProductCatalogRepository
 from src.infra.postgre_db_client import PostgreDBClient
 
 
@@ -83,11 +84,10 @@ def catalog_db() -> Iterator[CatalogDatabase]:
             (shop_b,),
         ).fetchone()[0]
 
-        postgres = PostgreDBClient()
-        postgres.connection = psycopg.connect(
-            database_url,
-            options=f"-c search_path={schema}",
+        postgres = PostgreDBClient(
+            make_conninfo(database_url, options=f"-c search_path={schema}")
         )
+        postgres.connect()
         yield CatalogDatabase(
             admin=admin,
             database_url=database_url,
@@ -101,8 +101,8 @@ def catalog_db() -> Iterator[CatalogDatabase]:
             shop_b_coffee=shop_b_coffee,
         )
     finally:
-        if postgres is not None and postgres.connection is not None:
-            postgres.connection.close()
+        if postgres is not None:
+            postgres.close()
         admin.execute(
             sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema))
         )

@@ -1,6 +1,6 @@
 # SmartLedger AI
 
-Internal AI API called only by Core, which proxies its public `/api/v1/agent/*` routes here. The service exposes `/health`, `POST /internal/v1/agent/chat`, and list/detail/rename/delete routes under `/internal/v1/agent/conversations`. The agent can read the current shop's profile, categories, products and confirmed sales through read-only SQL tools. Chat history is stored in PostgreSQL. Postgres and Redis clients connect at process start and log status. Every `/internal/v1` route requires the shared `X-Internal-Token` header. There are no invoice or expense endpoints.
+Internal AI API called only by Core, which proxies its public `/api/v1/agent/*` routes here. The service exposes `/health`, `POST /internal/v1/agent/chat`, and list/detail/rename/delete routes under `/internal/v1/agent/conversations`. The agent can read the current shop's profile, categories, products and confirmed sales through read-only SQL tools. Chat history is stored in PostgreSQL. The Postgres pool and the Redis client connect at process start; a failure is logged and does not stop the service. Every `/internal/v1` route requires the shared `X-Internal-Token` header. There are no invoice or expense endpoints.
 
 Frontend must not call this service.
 
@@ -17,21 +17,15 @@ npx supabase@2.119.0 db push --db-url "$POSTGRES_URL"
 
 The AI service does not create or migrate tables at startup. `ai_request_id` remains nullable; its foreign key is deferred until the `ai_requests` table is installed. The baseline only enables the `vector` extension ([ADR-0001](../../docs/architecture/adr/0001-vector-store-pgvector.md)); no table uses embeddings yet.
 
-## Chat context and rolling summary
+## Chat context
 
-Each turn sends the stored summary followed by every message not yet folded into it. A message therefore leaves the model context only after the summarizer has written it into the summary, and a fold that has not run yet never hides messages.
+Each chat turn sends the static system prompt, then the conversation's latest `AGENT_HISTORY_TURNS` owner and assistant exchanges verbatim (default 100 turns, that is 200 messages, oldest first), then the new owner message. Older messages do not reach the model. Nothing is summarized: there is no summary model, no background fold after a turn and no history search tool. Owners chat little, and the chat model handles a 100-turn window comfortably.
 
-- The verbatim window keeps 50 messages and may grow to 60 before a fold happens, so most turns do not call the summarizer at all.
-- A backlog longer than one batch (about 3000 estimated tokens, `len(text) // 4`) is folded in several passes, and each pass is persisted before the next one starts.
-- Summarization runs as a FastAPI background task after the reply, so the current turn is never slowed down. It never raises: a model or database failure leaves the stored summary untouched and the next turn retries it.
-- Concurrent folds cannot lose messages: a fold only advances `summary_through_message_id` from the value it read, so the later writer is dropped.
-- `SUMMARY_MODEL_NAME` selects the summarization model and falls back to `MODEL_NAME`.
+`AgentConversationRepository.recent_messages(conversation_id, user_id, shop_id, limit)` reads the history. It first checks that the conversation belongs to that user and shop; otherwise the request fails with `404 conversation_not_found`.
 
-`summary` and `summary_through_message_id` live on `chat_conversations`, so deleting a conversation removes its summary with it.
+`chat_conversations.summary` and `summary_through_message_id` still exist, because the AI baseline migration created them. The code neither reads nor writes them. They are kept so the previous release can roll back, and a later migration drops them after this deploy.
 
-Folded messages stay in `chat_messages`. When the summary lacks an exact figure, name, date or wording, the agent calls `search_chat_history`, which matches the query words against the folded messages of the current conversation, ignoring Vietnamese diacritics, and returns up to five hits with the message before and after each. The tool takes only the query; the conversation, user and shop come from the request context, so the model cannot read another shop's history.
-
-The OpenAI client uses the Responses API because reasoning models reject function tools on `/v1/chat/completions`. An `OPENAI_BASE_URL` proxy must therefore serve `/v1/responses`. `MODEL_REASONING_EFFORT` (default `high`) sets the reasoning effort for both the chat and summary models.
+The OpenAI client uses the Responses API because reasoning models reject function tools on `/v1/chat/completions`. An `OPENAI_BASE_URL` proxy must therefore serve `/v1/responses`. `MODEL_REASONING_EFFORT` (default `high`) sets the reasoning effort for the chat model.
 
 ## Shop data tool (read-only SQL)
 
@@ -45,7 +39,7 @@ Five layers keep the query inside the current shop and read-only:
 4. **Execution.** `ReadOnlySqlExecutor` in `src/sql/executor.py` opens a separate connection per query, starts a `READ ONLY` transaction, sets `smartledger.shop_id` from the authenticated request as a bound parameter, applies `SQL_TIMEOUT_MS` (default 3000) and `SQL_ROW_LIMIT` (default 100), cuts text cells at 200 characters and always rolls back. The tool reads the shop from the LangChain runtime context (`ToolRuntime[AgentContext]`); the model only passes `sql`.
 5. **Output.** Results reach the model as data with a header saying so. The guard and the executor raise `ValueError("CODE: reason")` for a query the guard or the database rejects, and the tool returns it as `Error[CODE]: reason` (for example `Error[UNSAFE_FUNCTION]`, `Error[QUERY_TIMEOUT]`, `Error[SQL_ERROR]`) so the model can rewrite it. Any other failure, such as an unreachable reader database (`psycopg.OperationalError`), propagates and fails the turn with `503 ai_unavailable`.
 
-All prompt text lives in `src/prompt_templates/` (`shop_agent.py`, `sql_agent.py`, `restock.py`, `chat_summary.py`). It is English and static; the agent always answers the owner in Vietnamese.
+All prompt text lives in `src/prompt_templates/` (`shop_agent.py`, `sql_agent.py`, `restock.py`, `draft_parse.py`). It is English and static; the agent always answers the owner in Vietnamese.
 
 ### Agent guardrails
 
@@ -78,7 +72,7 @@ When the read-only executor is configured, the agent also gets a `suggest_restoc
 
 `DraftService.parse(shop_id, mode, text)` in `src/drafts/service.py` turns an owner's text or STT transcript into a `DraftView` without `request_id`, which the endpoint assigns. It changes nothing: no sale, expense or stock is written. The endpoint `/internal/v1/drafts/parse` and audio belong to #3; this module is the text step it calls.
 
-- `SALE` loads the shop's ACTIVE catalog through `ProductCatalogRepository`, puts `id | name | unit` into the prompt, and the model returns lines with `product_id`, `qty`, `confidence` and an `ambiguous` flag through structured output.
+- `SALE` loads the shop's ACTIVE catalog through `ProductCatalogRepository` (`src/drafts/catalog.py`), puts `id | name | unit` into the prompt, and the model returns lines with `product_id`, `qty`, `confidence` and an `ambiguous` flag through structured output.
 - `src/drafts/matching.py` then decides, without I/O: an id outside the shop catalog, an ambiguous line, no match, or `confidence` below `MIN_MATCH_CONFIDENCE` (0.7, a provisional default) leaves `product_id`, `unit` and `unit_price` as `null` and adds a Vietnamese warning. A kept line takes name, unit and price from the catalog row; a price the owner says is ignored.
 - `EXPENSE` skips the catalog. Each expense is one line with `qty = 1`, the description in `name` and the amount in `unit_price`; a missing amount stays `null` with a warning.
 - Every model failure, invalid model output, missing model or catalog failure raises `DraftUnavailableError`, which the endpoint maps to `503 ai_unavailable` so Core falls back to manual entry.
@@ -87,6 +81,16 @@ When the read-only executor is configured, the agent also gets a `suggest_restoc
 ## Internal authentication
 
 `INTERNAL_API_TOKEN` is the credential shared with Core. Callers send it in the `X-Internal-Token` header; a missing or wrong value returns `401 unauthorized`. An unset or blank token fails closed, so every `/internal/v1` route returns `401` while `/health` keeps answering. Core sends the header from its own `INTERNAL_API_TOKEN`, so both services must hold the same value. Keep the staging and production values in those environments' secrets.
+
+## Routes and database access
+
+`src/main.py` is the composition root. It builds one `APIRouter` with prefix `/internal/v1` and the `X-Internal-Token` dependency, includes each flow's router under it, and mounts it on the app. Today the only flow router is `src/agent/router.py` (prefix `/agent`) for chat and conversation CRUD. Every `/internal/v1` route inherits the token check. A new flow adds one include line there; the planned `/internal/v1/drafts/parse` is not implemented yet.
+
+`main.py` maps `ConversationNotFoundError` to `404 conversation_not_found` and any other exception to `503 ai_unavailable`, logging the cause. `GET /health` is async, so it still answers when chat turns occupy every worker thread.
+
+The application database (`POSTGRES_URL`: chat history and the catalog) is reached through a `psycopg_pool.ConnectionPool` with at most `POSTGRES_POOL_MAX_SIZE` connections (default 2, min 1). The default is kept low because the Supabase session pooler (port 5432) allows 15 clients in total, and Core sets no Hikari pool size, so Spring's default lets it open up to 10. The pool checks a connection before lending it and replaces broken ones, so requests do not queue on a single connection and a dropped connection recovers without a restart. The read-only shop-data reader (`AI_SQL_READER_URL`) is unchanged: it opens its own short connection per query.
+
+`main.py` also connects a Redis client from `REDIS_URL` and keeps it on `app.state.redis`; no feature reads it yet. `QDRANT_URL`, `LITELLM_URL` and `LANGFUSE_*` are no longer AI settings; Langfuse and LiteLLM are deferred until after the first release.
 
 ## Setup
 

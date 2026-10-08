@@ -51,10 +51,7 @@ class FakeConversationRepository:
     def __init__(self) -> None:
         self.saved_exchange: dict | None = None
 
-    def context_for(self, conversation_id, user_id, shop_id):
-        return {"summary": None, "summary_through_message_id": None, "messages": []}
-
-    def folded_messages(self, conversation_id, user_id, shop_id):
+    def recent_messages(self, conversation_id, user_id, shop_id, limit):
         return []
 
     def save_exchange(self, **kwargs):
@@ -280,8 +277,9 @@ def test_no_executor_means_no_shop_data_tool() -> None:
 
     names = [t["function"]["name"] for t in model.bound_tools]
     assert "query_shop_data" not in names
-    (message,) = tool_messages(model)
-    assert "query_shop_data is not a valid tool" in message.content
+    # With no tool at all the agent has no tool node, so a stray call runs nothing.
+    assert len(model.seen_calls) == 1
+    assert tool_messages(model) == []
 
 
 def test_result_payload_marks_truncation() -> None:

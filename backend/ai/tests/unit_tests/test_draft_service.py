@@ -2,7 +2,7 @@ import pytest
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
 
-from src.catalog import CatalogProduct, CatalogUnavailableError
+from src.drafts.catalog import CatalogProduct, CatalogUnavailableError
 from src.drafts.service import (
     DraftLineOutput,
     DraftOutput,

@@ -2,17 +2,12 @@ from dataclasses import dataclass
 
 from langchain.agents import create_agent
 from langchain_core.language_models import BaseChatModel
+from langchain_core.tools import BaseTool
 
 from src.agent.guardrails import GuardrailLimits, build_guardrails, latest_human
 from src.agent.repository import AgentConversationRepository
-from src.agent.tools import (
-    AgentContext,
-    build_history_tools,
-    build_restock_tools,
-    build_shop_data_tools,
-)
+from src.agent.tools import AgentContext, build_restock_tools, build_shop_data_tools
 from src.prompt_templates import (
-    CHAT_SUMMARY_CONTEXT,
     RESTOCK_PROMPT,
     SHOP_AGENT_SYSTEM_PROMPT,
     SQL_AGENT_PROMPT,
@@ -31,7 +26,7 @@ class AgentChatResult:
 
 
 class AgentService:
-    """One chat turn: load context, run the agent, persist the reply."""
+    """One chat turn: load recent history, run the agent, persist the reply."""
 
     def __init__(
         self,
@@ -40,10 +35,13 @@ class AgentService:
         guardrail_limits: GuardrailLimits,
         sql_executor: ReadOnlySqlExecutor | None = None,
         restock: RestockService | None = None,
+        history_turns: int = 100,
     ) -> None:
         self.model = model
         self.conversations = conversations
-        tools = build_history_tools(conversations)
+        # Each turn stores the owner's message and the reply, so a turn is two messages.
+        self.history_messages = 2 * history_turns
+        tools: list[BaseTool] = []
         # The system prompt is static so providers can cache it; the shop scope arrives
         # per request through AgentContext and never appears in the prompt. Each
         # optional capability appends its own tool and prompt section.
@@ -79,16 +77,18 @@ class AgentService:
         if self.agent is None:
             raise RuntimeError("agent model unavailable")
 
-        context = (
-            self.conversations.context_for(conversation_id, user_id, shop_id)
+        # Owners rarely reach the window, so it bounds the prompt for the odd long
+        # conversation without summarizing anything.
+        history = (
+            self.conversations.recent_messages(
+                conversation_id, user_id, shop_id, self.history_messages
+            )
             if conversation_id is not None
-            else {"summary": None, "messages": []}
+            else []
         )
         result = self.agent.invoke(
-            {"messages": self._context_messages(context, message)},
-            context=AgentContext(
-                user_id=user_id, shop_id=shop_id, conversation_id=conversation_id
-            ),
+            {"messages": self._context_messages(history, message)},
+            context=AgentContext(user_id=user_id, shop_id=shop_id),
         )
         last = result["messages"][-1]
         # Store the owner's message as the model saw it, after secret redaction, so a
@@ -115,21 +115,12 @@ class AgentService:
         )
 
     @staticmethod
-    def _context_messages(context: dict, message: str) -> list[dict]:
-        # The static system prompt is added by the agent; then the summary, then every
-        # message after the watermark verbatim, so a fold that has not run yet never
-        # hides messages from the model.
-        messages: list[dict] = []
-        if context["summary"]:
-            messages.append(
-                {
-                    "role": "system",
-                    "content": CHAT_SUMMARY_CONTEXT.format(summary=context["summary"]),
-                }
-            )
-        messages.extend(
-            {"role": entry["role"].lower(), "content": entry["content"]}
-            for entry in context["messages"]
-        )
-        messages.append({"role": "user", "content": message})
-        return messages
+    def _context_messages(history: list[dict], message: str) -> list[dict]:
+        # The static system prompt is added by the agent; history follows verbatim.
+        return [
+            *(
+                {"role": entry["role"].lower(), "content": entry["content"]}
+                for entry in history
+            ),
+            {"role": "user", "content": message},
+        ]

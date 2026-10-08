@@ -14,12 +14,12 @@ from typing import Literal
 from langchain_core.language_models import BaseChatModel
 from pydantic import BaseModel
 
-from src.catalog import (
+from src.drafts import matching
+from src.drafts.catalog import (
     CatalogProduct,
     CatalogUnavailableError,
     ProductCatalogRepository,
 )
-from src.drafts import matching
 from src.drafts.matching import DraftItem, ProposedLine
 from src.prompt_templates import (
     DRAFT_EMPTY_CATALOG,

@@ -42,11 +42,7 @@ class UserMessagesChatModel(FakeListChatModel):
 @pytest.fixture
 def client(internal_headers: dict[str, str], wire_agent_state) -> TestClient:
     conversations = Mock(spec=AgentConversationRepository)
-    conversations.context_for.return_value = {
-        "summary": None,
-        "summary_through_message_id": None,
-        "messages": [],
-    }
+    conversations.recent_messages.return_value = []
     conversations.save_exchange.return_value = (101, 502)
     agent = AgentService(
         FakeChatModel(responses=["answer"]),
@@ -228,7 +224,7 @@ def test_conversation_rename_endpoint_accepts_and_trims_valid_titles(
 
 
 def test_chat_hides_conversation_owned_by_another_scope(client: TestClient) -> None:
-    app.state.conversations.context_for.side_effect = ConversationNotFoundError
+    app.state.conversations.recent_messages.side_effect = ConversationNotFoundError
 
     response = chat(client, conversation_id=101)
 

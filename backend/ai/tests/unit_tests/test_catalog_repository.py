@@ -3,7 +3,7 @@ from contextlib import contextmanager
 import pytest
 from tests.support import CORE_MIGRATIONS, REPO_ROOT
 
-from src.catalog import (
+from src.drafts.catalog import (
     CatalogProduct,
     CatalogUnavailableError,
     ProductCatalogRepository,

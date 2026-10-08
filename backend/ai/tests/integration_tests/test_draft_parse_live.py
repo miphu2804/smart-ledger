@@ -10,7 +10,7 @@ import os
 import pytest
 
 from src.app_config import app_config
-from src.catalog import CatalogProduct
+from src.drafts.catalog import CatalogProduct
 from src.drafts.service import DraftService
 from src.providers.factory import build_chat_model
 

@@ -64,10 +64,7 @@ class FakeConversationRepository:
     def __init__(self) -> None:
         self.saved_exchange: dict | None = None
 
-    def context_for(self, conversation_id, user_id, shop_id):
-        return {"summary": None, "summary_through_message_id": None, "messages": []}
-
-    def folded_messages(self, conversation_id, user_id, shop_id):
+    def recent_messages(self, conversation_id, user_id, shop_id, limit):
         return []
 
     def save_exchange(self, **kwargs):
