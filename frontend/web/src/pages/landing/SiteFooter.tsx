@@ -1,4 +1,4 @@
-import { BarChart3, UserRound } from 'lucide-react'
+import { UserRound } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import Logo from '../../components/Logo'
 import { CONTACT_EMAIL } from '../legal/legalConfig'
@@ -35,14 +35,6 @@ export default function SiteFooter({ onHome = false }: { onHome?: boolean }) {
             <UserRound size={14} /> Quản trị
           </Link>
         </nav>
-      </div>
-      <div className="lp-container">
-        <div className="lp-footer-bottom">
-          <span>© 2026 Team HEXA · EXE201 · Trường Đại học FPT</span>
-          <span className="lp-footer-made">
-            <BarChart3 size={14} /> Dự án khởi nghiệp sinh viên
-          </span>
-        </div>
       </div>
     </footer>
   )
