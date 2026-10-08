@@ -393,11 +393,13 @@ jobs:
             "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID"
           echo "url=https://$STAGING_ALIAS" >> "$GITHUB_OUTPUT"
           echo "alias: https://$STAGING_ALIAS -> $URL"
+      # `main` is checked at the fixed production domain, the only origin Core CORS lists; the
+      # per-deploy hash URL is never allowed.
       # Fails the job when the deployed web would not reach Core: page down, env not baked in,
       # or Core rejecting this origin's CORS preflight.
       - name: Smoke test
         env:
-          URL: ${{ steps.preview.outputs.url || steps.staging.outputs.url || steps.deploy.outputs.url }}
+          URL: ${{ steps.preview.outputs.url || steps.staging.outputs.url || (github.ref_name == 'main' && 'https://smart-ledger-prod.vercel.app') || steps.deploy.outputs.url }}
         run: |
           set -euo pipefail
           # A fresh alias can take a few seconds to route, so retry before failing.
@@ -421,7 +423,7 @@ jobs:
         if: always() && steps.deploy.outputs.url != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          URL: ${{ steps.preview.outputs.url || steps.staging.outputs.url || steps.deploy.outputs.url }}
+          URL: ${{ steps.preview.outputs.url || steps.staging.outputs.url || (github.ref_name == 'main' && 'https://smart-ledger-prod.vercel.app') || steps.deploy.outputs.url }}
           PR: ${{ github.event.pull_request.number }}
         run: |
           echo "Web deploy: $URL" >> "$GITHUB_STEP_SUMMARY"
