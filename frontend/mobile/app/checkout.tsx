@@ -1,18 +1,31 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Animated, Image, Pressable, StyleSheet, View } from 'react-native';
 import { AddItemSheet } from '../src/components/AddItemSheet';
+import { BarcodeScannerModal } from '../src/components/BarcodeScannerModal';
 import { useToast } from '../src/components/brand';
 import { FakeQR } from '../src/components/FakeQR';
-import { Button, Card, Chips, EmptyState, Field, Header, IconName, Row, Screen, Stepper, T } from '../src/components/ui';
-import type { LineItem, PayMethod } from '../src/data/types';
+import { Badge, Button, Card, Chips, EmptyState, Field, Header, IconName, Row, Screen, Stepper, T } from '../src/components/ui';
+import type { LineItem, ProductView } from '../src/data/types';
+import { productApi } from '../src/lib/catalogApi';
+import { errorMessage } from '../src/lib/errors';
 import { vnd } from '../src/lib/format';
+import { createCheckoutSession } from '../src/lib/checkoutSession';
+import { triggerFeedback } from '../src/lib/feedback';
+import { getProductImage } from '../src/lib/productImages';
+import { saleApi, saleDraftApi } from '../src/lib/salesApi';
 import { itemsTotal, methodLabel } from '../src/lib/stats';
+import { useReducedMotion } from '../src/motion';
 import { useApp } from '../src/store/AppStore';
 import { colors, font } from '../src/theme';
 
-const METHODS: { key: PayMethod; icon: IconName }[] = [
+/**
+ * Ghi nợ đã có lại (xem AGENTS.md): Core chấp nhận trả một phần/không trả khi xác nhận đơn, miễn có khách.
+ * App chưa có UI chọn khách có sẵn nên luôn gửi `customerName`/`customerPhone` để Core tự tạo khách mới —
+ * bắt buộc phải có tên khách khi chọn Ghi nợ, nếu không Core trả lỗi `customer_required_for_debt`.
+ */
+const METHODS: { key: 'cash' | 'transfer' | 'debt'; icon: IconName }[] = [
   { key: 'cash', icon: 'dollar-sign' },
   { key: 'transfer', icon: 'smartphone' },
   { key: 'debt', icon: 'book-open' },
@@ -22,52 +35,117 @@ export default function Checkout() {
   const app = useApp();
   const toast = useToast();
   const [items, setItems] = useState<LineItem[]>(app.draft?.items ?? []);
-  const [method, setMethod] = useState<PayMethod>('cash');
+  const [method, setMethod] = useState<'cash' | 'transfer' | 'debt'>('cash');
   const [customer, setCustomer] = useState('');
   const [phone, setPhone] = useState('');
   const [given, setGiven] = useState<number | null>(null);
+  /** Khách trả trước khi ghi nợ — trống/0 nghĩa là ghi nợ toàn bộ */
+  const [debtUpfront, setDebtUpfront] = useState<number | null>(null);
   const [edit, setEdit] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  const [doneId, setDoneId] = useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [doneId, setDoneId] = useState<number | null>(null);
+  const [doneTotal, setDoneTotal] = useState(0);
   const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [products, setProducts] = useState<ProductView[]>([]);
+  // Nhớ nháp đơn giữa các lần bấm: thử lại sau lỗi mạng không được chốt thêm một đơn nữa (xem checkoutSession.ts).
+  const [checkout] = useState(() =>
+    createCheckoutSession({
+      createDraft: saleDraftApi.create,
+      getDraft: saleDraftApi.getById,
+      cancelDraft: saleDraftApi.cancel,
+      confirmDraft: saleDraftApi.confirm,
+      getSale: saleApi.getById,
+    }),
+  );
+
+  const loadProducts = useCallback(async () => {
+    try {
+      setProducts(await productApi.list());
+    } catch {
+      /* "Thêm món" trong lúc sửa đơn sẽ tạm trống nếu lỗi — không chặn thanh toán vì lỗi này */
+    }
+  }, []);
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
+
+  const handleProductScanned = (product: ProductView, _barcode?: string, qty: number = 1) => {
+    setItems((cur) => {
+      const idx = cur.findIndex((i) => i.productId === product.id);
+      if (idx >= 0) {
+        return cur.map((x, i) => (i === idx ? { ...x, qty: x.qty + qty } : x));
+      }
+      return [...cur, { productId: product.id, name: product.name, price: product.sellingPriceVnd, qty }];
+    });
+  };
 
   const total = itemsTotal(items);
   const change = given !== null ? given - total : 0;
   const quick = Array.from(new Set([total, Math.ceil(total / 50000) * 50000, Math.ceil(total / 100000) * 100000, 200000, 500000]))
     .filter((v) => v >= total)
     .slice(0, 4);
+  const hasInvalidItems = items.some((it) => typeof it.productId !== 'number');
 
-  if (doneId) return <Success id={doneId} total={total} method={method} change={method === 'cash' && given ? change : 0} />;
+  if (doneId != null) return <Success id={doneId} total={doneTotal} method={method} change={method === 'cash' && given ? change : 0} />;
 
   if (!app.draft && !items.length) {
     return (
       <Screen>
         <Header title="Thanh toán" />
-        <EmptyState icon="shopping-bag" title="Chưa có đơn để thanh toán" hint="Hãy nói hoặc chọn hàng trước" />
-        <Button title="Bán hàng" icon="mic" variant="gold" onPress={() => router.replace('/voice')} />
+        <EmptyState icon="shopping-bag" title="Chưa có đơn" hint="Đọc đơn hoặc chọn hàng trước" />
+        <Button title="Đọc đơn" icon="mic" variant="gold" onPress={() => router.replace('/voice')} />
       </Screen>
     );
   }
 
-  const complete = () => {
-    if (!items.length) return;
-    if (method === 'debt' && !customer.trim()) {
-      setErr('Nhập tên khách để ghi nợ');
+  const debtUpfrontAmount = Math.min(debtUpfront ?? 0, total);
+
+  const complete = async () => {
+    if (!items.length || busy) return;
+    setErr('');
+    if (hasInvalidItems) {
+      setErr('Có món ngoài danh mục — cần thêm vào danh mục hàng hoá thật trước khi thanh toán.');
       return;
     }
     if (method === 'cash' && given !== null && given < total) {
       setErr('Tiền khách đưa chưa đủ');
       return;
     }
-    const id = app.createInvoice({
-      items,
-      customer,
-      phone,
-      method,
-      source: app.draft?.source ?? 'manual',
-      transcript: app.draft?.transcript,
-    });
-    setDoneId(id);
+    if (method === 'debt' && !customer.trim()) {
+      setErr('Cần nhập tên khách để ghi nợ');
+      return;
+    }
+    setBusy(true);
+    try {
+      const { sale, recovered, sameCart } = await checkout.submit({
+        customerName: customer.trim() || undefined,
+        customerPhone: phone.trim() || undefined,
+        items: items.map((it) => ({
+          productId: it.productId as number,
+          quantity: it.qty,
+          unitPriceVnd: it.price,
+        })),
+        initialPaidVnd: method === 'debt' ? debtUpfrontAmount : total,
+        initialPaymentMethod: method === 'debt' ? (debtUpfrontAmount > 0 ? 'CASH' : null) : method === 'cash' ? 'CASH' : 'TRANSFER',
+      });
+      app.setDraft(null);
+      setDoneTotal(sale.totalVnd);
+      setDoneId(sale.id);
+      if (recovered) {
+        toast(
+          sameCart
+            ? 'Đơn này đã được ghi ở lần bấm trước nên không tạo thêm.'
+            : 'Đơn của lần bấm trước đã được ghi nên không tạo thêm đơn mới. Kiểm tra lại ở mục Hoá đơn.',
+        );
+      }
+    } catch (e) {
+      triggerFeedback('error');
+      setErr(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -83,10 +161,11 @@ export default function Checkout() {
             </T>
           </View>
           <Button
-            title={method === 'debt' ? 'Ghi nợ' : 'Hoàn tất'}
+            title="Hoàn tất"
             icon="check"
+            loading={busy}
             onPress={complete}
-            disabled={!items.length}
+            disabled={!items.length || busy}
             style={{ paddingHorizontal: 26 }}
           />
         </Row>
@@ -96,10 +175,10 @@ export default function Checkout() {
         title="Thanh toán"
         subtitle={
           app.draft?.source === 'voice'
-            ? 'Đơn tạo bằng giọng nói'
+            ? 'Nguồn: Đọc đơn'
             : app.draft?.source === 'pos'
-              ? 'Đơn chọn từ POS'
-              : 'Đơn nhập tay'
+              ? 'Nguồn: Bán hàng'
+              : 'Nguồn: Nhập tay'
         }
       />
 
@@ -108,18 +187,40 @@ export default function Checkout() {
           <T w="bold" size={15} style={{ flex: 1 }}>
             Món trong đơn
           </T>
-          <Pressable onPress={() => setEdit((e) => !e)} hitSlop={8}>
-            <T w="bold" size={13} color={colors.primary}>
-              {edit ? 'Xong' : 'Sửa'}
-            </T>
-          </Pressable>
+          <Row gap={12}>
+            <Pressable onPress={() => setScannerOpen(true)} hitSlop={8}>
+              <Row gap={4} style={{ alignItems: 'center' }}>
+                <Feather name="camera" size={14} color={colors.primary} />
+                <T w="bold" size={13} color={colors.primary}>
+                  Quét mã
+                </T>
+              </Row>
+            </Pressable>
+            <Pressable onPress={() => setEdit((e) => !e)} hitSlop={8}>
+              <T w="bold" size={13} color={colors.primary}>
+                {edit ? 'Xong' : 'Sửa'}
+              </T>
+            </Pressable>
+          </Row>
         </Row>
         {items.map((it, idx) => (
-          <Row key={`${it.productId ?? it.name}-${idx}`} style={styles.line}>
-            <View style={{ flex: 1 }}>
-              <T w="semibold" size={14}>
-                {it.name}
-              </T>
+          <Row key={`${it.productId ?? it.name}-${idx}`} style={[styles.line, { alignItems: 'center' }]}>
+            <View style={styles.checkoutThumbWrap}>
+              <Image
+                source={{ uri: getProductImage(it.name) }}
+                style={styles.checkoutThumb}
+                resizeMode="cover"
+              />
+            </View>
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Row gap={6}>
+                <T w="semibold" size={14}>
+                  {it.name}
+                </T>
+                {typeof it.productId !== 'number' ? (
+                  <Badge text="Ngoài danh mục" color={colors.red} bg={colors.redSoft} />
+                ) : null}
+              </Row>
               <T size={12} color={colors.faint}>
                 {vnd(it.price)} × {it.qty}
               </T>
@@ -141,13 +242,30 @@ export default function Checkout() {
           </Row>
         ))}
         {edit ? (
-          <Button title="Thêm món" icon="plus" variant="soft" small onPress={() => setAddOpen(true)} style={{ marginTop: 10 }} />
+          <Row gap={8} style={{ marginTop: 10 }}>
+            <Button
+              title="Quét mã"
+              icon="camera"
+              variant="soft"
+              small
+              onPress={() => setScannerOpen(true)}
+              style={{ flex: 1 }}
+            />
+            <Button
+              title="Thêm món"
+              icon="plus"
+              variant="soft"
+              small
+              onPress={() => setAddOpen(true)}
+              style={{ flex: 1 }}
+            />
+          </Row>
         ) : null}
         {app.draft?.transcript ? (
           <View style={styles.transcript}>
             <Feather name="mic" size={12} color={colors.primary} />
             <T size={12} color={colors.muted} style={{ flex: 1, fontStyle: 'italic' }}>
-              “{app.draft.transcript}”
+              "{app.draft.transcript}"
             </T>
           </View>
         ) : null}
@@ -166,13 +284,9 @@ export default function Checkout() {
                 setMethod(m.key);
                 setErr('');
               }}
-              style={[
-                styles.method,
-                on && styles.methodOn,
-                on && m.key === 'debt' && { borderColor: colors.gold, backgroundColor: colors.goldSoft },
-              ]}
+              style={({ pressed }) => [styles.method, on && styles.methodOn, pressed && styles.methodPressed]}
             >
-              <Feather name={m.icon} size={20} color={on ? (m.key === 'debt' ? colors.gold : colors.accentInk) : colors.faint} />
+              <Feather name={m.icon} size={20} color={on ? colors.ink : colors.faint} />
               <T w={on ? 'bold' : 'semibold'} size={12} color={on ? colors.ink : colors.muted} style={{ marginTop: 6 }}>
                 {methodLabel[m.key]}
               </T>
@@ -254,31 +368,45 @@ export default function Checkout() {
           </View>
         ) : null}
         {method === 'debt' ? (
-          <View>
-            <T size={12} color={colors.gold} style={{ marginBottom: 10 }}>
-              Đơn sẽ được ghi vào Sổ nợ của khách
+          <>
+            <T w="semibold" size={12} color={colors.muted} style={{ marginBottom: 8 }}>
+              Khách trả trước (không bắt buộc)
             </T>
-          </View>
+            <Field
+              placeholder="0"
+              keyboardType="number-pad"
+              maxLength={13}
+              value={debtUpfront === null ? '' : vnd(debtUpfront, false)}
+              onChangeText={(t) => {
+                const digits = t.replace(/\D/g, '');
+                setDebtUpfront(digits ? Math.min(Number(digits), total) : null);
+                setErr('');
+              }}
+              inputStyle={{ fontFamily: font.bold }}
+              style={{ marginBottom: 0 }}
+            />
+            <T size={12} color={colors.faint} style={{ marginTop: 10 }}>
+              Còn lại {vnd(total - debtUpfrontAmount)} sẽ được ghi vào sổ nợ
+            </T>
+          </>
         ) : null}
         <Field
-          label={method === 'debt' ? 'Tên khách (bắt buộc)' : 'Tên khách (không bắt buộc)'}
+          label={method === 'debt' ? 'Tên khách' : 'Tên khách (không bắt buộc)'}
           placeholder="VD: Chị Ba"
           value={customer}
           onChangeText={(t) => {
             setCustomer(t);
             setErr('');
           }}
-          style={{ marginTop: method === 'cash' ? 16 : 12 }}
+          style={{ marginTop: method === 'cash' || method === 'debt' ? 16 : 12 }}
         />
-        {method === 'debt' ? (
-          <Field
-            label="Số điện thoại"
-            placeholder="09xx xxx xxx"
-            keyboardType="phone-pad"
-            value={phone}
-            onChangeText={setPhone}
-          />
-        ) : null}
+        <Field
+          label="Số điện thoại (không bắt buộc)"
+          placeholder="09xx xxx xxx"
+          keyboardType="phone-pad"
+          value={phone}
+          onChangeText={setPhone}
+        />
         {err ? (
           <T size={12} color={colors.red}>
             {err}
@@ -289,6 +417,7 @@ export default function Checkout() {
       <AddItemSheet
         visible={addOpen}
         onClose={() => setAddOpen(false)}
+        products={products}
         onPick={(li) => {
           setItems((cur) => {
             const ex = cur.find((x) => x.productId === li.productId);
@@ -297,35 +426,55 @@ export default function Checkout() {
           toast(`Đã thêm ${li.name}`);
         }}
       />
+
+      <BarcodeScannerModal
+        visible={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        products={products}
+        onProductScanned={handleProductScanned}
+        onProductCreated={(p) => setProducts((cur) => [...cur, p])}
+      />
     </Screen>
   );
 }
 
-function Success({ id, total, method, change }: { id: string; total: number; method: PayMethod; change: number }) {
-  const toast = useToast();
+function Success({
+  id,
+  total,
+  method,
+  change,
+}: {
+  id: number;
+  total: number;
+  method: 'cash' | 'transfer' | 'debt';
+  change: number;
+}) {
+  const reducedMotion = useReducedMotion();
   const scale = useRef(new Animated.Value(0.4)).current;
   useEffect(() => {
-    Animated.spring(scale, { toValue: 1, friction: 4, useNativeDriver: true }).start();
-  }, [scale]);
+    if (reducedMotion) scale.setValue(1);
+    else Animated.spring(scale, { toValue: 1, friction: 4, useNativeDriver: true }).start();
+    triggerFeedback('success');
+  }, [reducedMotion, scale]);
   return (
     <Screen
       footer={
         <>
-          <Button title="Tạo đơn mới" icon="mic" variant="gold" onPress={() => router.replace('/voice')} />
+          <Button title="Đơn mới" icon="mic" variant="gold" onPress={() => router.replace('/voice')} />
           <Row style={{ marginTop: 8 }}>
             <Button
-              title="Xem hoá đơn"
+              title="Xem đơn"
               variant="outline"
               small
               style={{ flex: 1, height: 44 }}
               onPress={() => {
-                // Bỏ các màn bán hàng (giọng nói / POS / thanh toán) khỏi stack để "quay lại" từ hoá đơn về trang chủ
+                // Bỏ các màn bán hàng khỏi stack để quay lại từ chi tiết đơn về Tổng quan.
                 router.dismissTo('/(tabs)');
                 router.push(`/invoice/${id}`);
               }}
             />
             <Button
-              title="Về trang chủ"
+              title="Về Tổng quan"
               variant="outline"
               small
               style={{ flex: 1, height: 44 }}
@@ -340,7 +489,7 @@ function Success({ id, total, method, change }: { id: string; total: number; met
           <Feather name="check" size={46} color={colors.white} />
         </Animated.View>
         <T w="extrabold" size={24} style={{ marginTop: 22 }}>
-          {method === 'debt' ? 'Đã ghi nợ!' : 'Đã lưu đơn!'}
+          Đã lưu đơn!
         </T>
         <T w="extrabold" size={36} color={colors.primary} style={{ marginTop: 6 }}>
           {vnd(total)}
@@ -349,12 +498,6 @@ function Success({ id, total, method, change }: { id: string; total: number; met
           {methodLabel[method]}
           {change > 0 ? ` · Thối lại ${vnd(change)}` : ''}
         </T>
-        <Pressable onPress={() => toast('Chưa kết nối máy in. Vui lòng thử lại sau.', 'err')} style={styles.print}>
-          <Feather name="printer" size={16} color={colors.green} />
-          <T w="bold" size={13} color={colors.green}>
-            In hoá đơn
-          </T>
-        </Pressable>
       </View>
     </Screen>
   );
@@ -362,7 +505,20 @@ function Success({ id, total, method, change }: { id: string; total: number; met
 
 const styles = StyleSheet.create({
   line: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
-  transcript: { flexDirection: 'row', gap: 6, marginTop: 12, backgroundColor: colors.primaryTint, borderRadius: 10, padding: 10 },
+  checkoutThumbWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  checkoutThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  transcript: { flexDirection: 'row', gap: 6, marginTop: 12, backgroundColor: colors.brandTint, borderRadius: 10, padding: 10 },
   method: {
     flex: 1,
     alignItems: 'center',
@@ -372,24 +528,15 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.white,
   },
-  methodOn: { borderColor: colors.accent, backgroundColor: colors.primaryTint },
+  methodOn: { borderColor: colors.ink, backgroundColor: 'rgba(26,25,22,0.035)' },
+  methodPressed: { opacity: 0.82, transform: [{ scale: 0.97 }] },
   qr: { padding: 12, borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white },
   check: {
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.green,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  print: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 24,
-    backgroundColor: colors.greenSoft,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
   },
 });

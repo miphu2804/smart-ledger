@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { USE_MOCK } from '../config';
 import { generateExpenses, generateInvoices, mockDebts, mockProducts, mockStaff, mockStore, mockUser } from '../data/mock';
 import type {
@@ -20,6 +20,7 @@ import { fromE164VN } from '../lib/auth/phone';
 import { debugLog } from '../lib/debug';
 import { describeError, isDisplayNameRequired } from '../lib/errors';
 import { sessionApi } from '../lib/sessionApi';
+import { industriesFromCore } from '../lib/shopProfile';
 
 /** Đơn nháp đang chờ thanh toán (từ màn Giọng nói / POS / Nhập tay). */
 export interface Draft {
@@ -75,7 +76,9 @@ function initialState(): State {
 /** Đổ SessionView (từ Core hoặc mock) vào state. Ở chế độ thật, không để dữ liệu mẫu (email, Facebook, địa chỉ…) lẫn vào tài khoản. */
 function sessionPatch(st: State, s: SessionView): Partial<State> {
   const shop = s.shops[0];
-  const industries = shop?.industries ?? (shop?.industry ? [shop.industry] : null);
+  // Core lưu các ngành đã chọn thành MỘT chuỗi "food, drink"; tách lại, nếu không màn hồ sơ không nhận ra ngành nào.
+  const fromCore = industriesFromCore(shop?.industry);
+  const industries = shop?.industries ?? (fromCore.length ? fromCore : null);
   return {
     loggedIn: true,
     needsProfile: false,
@@ -137,6 +140,11 @@ function useStoreValue() {
         loggedInRef.current = false;
         patch(() => ({ loggedIn: false, needsProfile: false, shopId: null }));
         await authClient.signOut().catch(() => undefined);
+      },
+      enterDevApp: () => {
+        if (!__DEV__) return;
+        loggedInRef.current = true;
+        patch(() => ({ authReady: true, loggedIn: true, onboarded: true, needsProfile: false, guideDismissed: true }));
       },
       /** 401 từ Core hoặc Firebase báo hết phiên: đăng xuất và đưa về màn đăng nhập (hợp đồng: 401 → đăng xuất). */
       forceSignOut: async () => {
@@ -267,6 +275,16 @@ function useStoreValue() {
         }),
 
       // --- hàng hoá ---
+      findProductByBarcode: (rawBarcode: string): Product | undefined => {
+        const code = rawBarcode.trim();
+        if (!code) return undefined;
+        return s.products.find(
+          (p) =>
+            p.barcode === code ||
+            p.id.toLowerCase() === code.toLowerCase() ||
+            (p.barcode && p.barcode.replace(/\D/g, '') === code.replace(/\D/g, ''))
+        );
+      },
       addProduct: (p: Omit<Product, 'id'>) => {
         const id = uid('p');
         patch((st) => ({ products: [{ ...p, id }, ...st.products] }));
@@ -309,7 +327,7 @@ function useStoreValue() {
   useEffect(() => {
     loggedInRef.current = s.loggedIn;
   }, [s.loggedIn]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     setActiveShop(s.shopId);
   }, [s.shopId]);
 

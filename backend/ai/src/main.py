@@ -3,18 +3,35 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from src.agent.repository import AgentConversationRepository
+from src.agent.guardrails import GuardrailLimits
+from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
+from src.agent.routers import agent_failure_handler, conversation_not_found_handler
 from src.agent.routers import router as agent_router
 from src.agent.service import AgentService
+from src.agent.summary import ChatSummaryFolder
 from src.app_config import app_config
 from src.infra.postgre_db_client import PostgreDBClient
 from src.infra.redis_db_client import RedisDBClient
-from src.providers.factory import build_chat_model
+from src.providers.factory import build_chat_model, build_summary_model
+from src.restock.service import RestockService
+from src.sql.executor import ReadOnlySqlExecutor
 
 logging.basicConfig(
     level=getattr(logging, app_config.LOG_LEVEL.upper(), logging.INFO),
     format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
 )
+
+
+def build_sql_executor() -> ReadOnlySqlExecutor | None:
+    url = app_config.AI_SQL_READER_URL
+    if url is None or not url.strip():
+        logging.getLogger(__name__).info("sql reader unconfigured; shop-data tool off")
+        return None
+    return ReadOnlySqlExecutor(
+        url,
+        timeout_ms=app_config.SQL_TIMEOUT_MS,
+        row_limit=app_config.SQL_ROW_LIMIT,
+    )
 
 
 @asynccontextmanager
@@ -26,8 +43,22 @@ async def lifespan(app: FastAPI):
     app.state.postgres = postgres
     app.state.redis = redis
     chat_model = build_chat_model(app_config)
+    summary_model = build_summary_model(app_config)
     conversations = AgentConversationRepository(postgres)
-    app.state.agent = AgentService(chat_model, conversations)
+    app.state.conversations = conversations
+    executor = build_sql_executor()
+    app.state.agent = AgentService(
+        chat_model,
+        conversations,
+        guardrail_limits=GuardrailLimits(
+            max_input_chars=app_config.AGENT_MAX_INPUT_CHARS,
+            model_call_limit=app_config.AGENT_MODEL_CALL_LIMIT,
+            tool_call_limit=app_config.AGENT_TOOL_CALL_LIMIT,
+        ),
+        sql_executor=executor,
+        restock=RestockService(executor) if executor else None,
+    )
+    app.state.summary_folder = ChatSummaryFolder(summary_model, conversations)
     yield
     postgres.close()
     redis.close()
@@ -35,6 +66,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=app_config.APP_TITLE, version="0.1.0", lifespan=lifespan)
 app.include_router(agent_router)
+app.add_exception_handler(ConversationNotFoundError, conversation_not_found_handler)
+app.add_exception_handler(Exception, agent_failure_handler)
 
 
 @app.get("/health", tags=["system"])

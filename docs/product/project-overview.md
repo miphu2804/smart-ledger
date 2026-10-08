@@ -4,7 +4,7 @@
 |---|---|
 | Trạng thái | tạm thời — Core theo FE; AI theo kiến trúc MVP đã chốt |
 | Chủ sở hữu | Chủ sản phẩm |
-| Cập nhật lần cuối | 2026-09-24 |
+| Cập nhật lần cuối | 2026-10-04 |
 | Tên tiếng Anh | So Nghe Loi — AI Voice POS |
 
 ## Tài liệu liên quan
@@ -30,7 +30,7 @@
 
 Sổ Nghe Lời có hai giao diện theo vai trò. `OWNER` dùng ứng dụng mobile để vận hành tiệm: danh mục, bán hàng, thu/chi/nợ, báo cáo và gợi ý. `ADMIN` dùng web dashboard để tìm và xem cơ sở khách hàng, theo dõi tình trạng hỗ trợ và số liệu nền tảng; không trực tiếp sửa sổ bán hàng của chủ tiệm.
 
-Mobile hiện dùng parser cục bộ và chưa thu âm từ mic; dữ liệu nghiệp vụ mặc định là mock. Web dashboard cũng mặc định dùng mock. AI đã có chat nội bộ và lưu lịch sử, nhưng chưa có đường FE → Core → AI. Đích MVP bổ sung AI service cho voice/text, ảnh, gợi ý và hỏi đáp; mọi kết quả AI là bản nháp hoặc gợi ý, không tự ghi sổ.
+Đích MVP bổ sung AI service cho voice/text, ảnh, gợi ý và hỏi đáp; mọi kết quả AI là bản nháp hoặc gợi ý, không tự ghi sổ. Phần đã triển khai được ghi tại [thiết kế kỹ thuật §1](../architecture/technical-design.md#1-phạm-vi).
 
 ## 2. Vấn đề
 
@@ -92,7 +92,7 @@ Không coi “bảng tổng hợp cuối ngày” là cách thay thế việc l�
 
 ## 9. Nguồn và giới hạn
 
-- Nguồn lịch sử Core/FE: FE EXE201, kiểm tra 2026-09-15. Trong repo hiện tại, mobile có client cho phiên Firebase ↔ Core nhưng action nghiệp vụ vẫn dùng mock; web admin dùng mock và client API thật chưa tương thích Core. Xem [thiết kế kỹ thuật](../architecture/technical-design.md) để phân biệt hiện trạng với đích MVP.
+- Nguồn lịch sử Core/FE: FE EXE201, kiểm tra 2026-09-15. Xem [thiết kế kỹ thuật §1](../architecture/technical-design.md#1-phạm-vi) để phân biệt hiện trạng với đích MVP.
 - Nguồn phạm vi AI: sơ đồ kiến trúc MVP do nhóm chốt. FE chưa chứng minh tích hợp AI chạy thật; PRD và issue là nguồn nghiệm thu.
 - Nguồn pháp lý tham chiếu tại 2026-09-14: [Nghị định 254/2026/NĐ-CP](https://vanban.chinhphu.vn/?docid=218689&pageid=27160), hiệu lực từ 2026-07-01.
 - Đây là mô tả sản phẩm, không phải tư vấn pháp lý. Business rules về hóa đơn phải có người chịu trách nhiệm pháp lý/thuế phê duyệt trước khi productize.

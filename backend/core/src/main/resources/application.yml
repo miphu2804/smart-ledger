@@ -12,13 +12,41 @@ spring:
       ddl-auto: validate
 
 server:
-  port: ${SERVER_PORT:8080}
+  port: ${SERVER_PORT:${PORT:8080}}
 
 firebase:
   project-id: ${FIREBASE_PROJECT_ID:}
+  service-account-json: ${FIREBASE_SERVICE_ACCOUNT_JSON:}
+
+ai:
+  base-url: ${AI_BASE_URL:http://localhost:8001}
+  internal-token: ${INTERNAL_API_TOKEN:}
+
+smartledger:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+  idempotency:
+    ttl-days: ${IDEMPOTENCY_TTL_DAYS:30}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      show-components: never
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db
 
 springdoc:
   api-docs:
+    enabled: ${OPENAPI_ENABLED:true}
     path: /v3/api-docs
   swagger-ui:
+    enabled: ${SWAGGER_UI_ENABLED:true}
     path: /swagger-ui.html

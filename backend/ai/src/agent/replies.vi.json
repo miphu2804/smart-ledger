@@ -1,0 +1,5 @@
+{
+  "input_too_long": "Tin nhắn dài quá {limit} ký tự nên mình chưa đọc được. Bạn rút gọn câu hỏi rồi gửi lại nhé.",
+  "empty_answer": "Mình chưa trả lời được câu này, bạn thử hỏi lại cụ thể hơn nhé.",
+  "leak": "Mình chưa trả lời được câu này. Bạn thử hỏi lại cụ thể hơn, hoặc xem trực tiếp ở mục Sản phẩm nhé."
+}

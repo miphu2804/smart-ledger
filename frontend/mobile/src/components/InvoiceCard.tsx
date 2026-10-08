@@ -14,7 +14,7 @@ export function InvoiceCard({ inv }: { inv: Invoice }) {
   return (
     <Pressable
       onPress={() => router.push(`/invoice/${inv.id}`)}
-      style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }, cancelled && { opacity: 0.55 }]}
+      style={({ pressed }) => [styles.card, pressed && styles.cardPressed, cancelled && { opacity: 0.55 }]}
     >
       <Row>
         <View style={[styles.icon, inv.source === 'pos' && { backgroundColor: colors.purpleSoft }]}>
@@ -59,6 +59,7 @@ export function InvoiceCard({ inv }: { inv: Invoice }) {
 
 const styles = StyleSheet.create({
   card: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.border, borderRadius: 18, padding: 14, marginBottom: 10, ...shadow(1) },
+  cardPressed: { opacity: 0.88, transform: [{ scale: 0.992 }] },
   icon: {
     width: 38,
     height: 38,

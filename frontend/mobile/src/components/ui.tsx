@@ -1,12 +1,15 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
+  Image,
+  ImageSourcePropType,
   ScrollView,
   StyleProp,
   StyleSheet,
@@ -20,9 +23,23 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { abbr, hashIndex } from '../lib/format';
+import { spring, useReducedMotion } from '../motion';
 import { colors, font, radius, shadow, tilePalette } from '../theme';
 
 export type IconName = React.ComponentProps<typeof Feather>['name'];
+
+function usePressScale(pressedValue: number) {
+  const reducedMotion = useReducedMotion();
+  const scale = useRef(new Animated.Value(1)).current;
+  const animate = (toValue: number) => {
+    if (reducedMotion) {
+      scale.setValue(toValue);
+      return;
+    }
+    Animated.spring(scale, { toValue, ...spring.snappy, useNativeDriver: true }).start();
+  };
+  return { scale, pressIn: () => animate(pressedValue), pressOut: () => animate(1) };
+}
 
 // ---------------------------------------------------------------- Text
 type Weight = 'regular' | 'medium' | 'semibold' | 'bold' | 'extrabold';
@@ -135,19 +152,24 @@ export function IconBtn({
   label?: string;
   dot?: boolean;
 }) {
+  const press = usePressScale(0.88);
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={press.pressIn}
+      onPressOut={press.pressOut}
       accessibilityRole="button"
       accessibilityLabel={label}
       hitSlop={Math.max(6, (44 - size) / 2)}
       style={({ pressed }) => [
         { width: size, height: size, borderRadius: 12, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' },
         bg === colors.white && shadow(0),
-        pressed && { opacity: 0.7 },
+        pressed && { opacity: 0.78 },
       ]}
     >
-      <Feather name={name} size={size * 0.47} color={color} />
+      <Animated.View style={{ transform: [{ scale: press.scale }] }}>
+        <Feather name={name} size={size * 0.47} color={color} />
+      </Animated.View>
       {dot ? <View style={styles.dot} /> : null}
     </Pressable>
   );
@@ -171,12 +193,100 @@ export function Card({
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
-        style={({ pressed }) => [styles.card, style, pressed && { opacity: 0.85 }]}
+        style={({ pressed }) => [styles.card, style, pressed && styles.cardPressed]}
       >
         {children}
       </Pressable>
     );
   return <View style={[styles.card, style]}>{children}</View>;
+}
+
+// ---------------------------------------------------------------- ActionCard
+export interface ActionCardProps {
+  icon: React.ReactNode;
+  title: string;
+  subtitle?: string;
+  trailing?: 'chevron' | React.ReactNode;
+  onPress?: () => void;
+  style?: StyleProp<ViewStyle>;
+  dark?: boolean;
+}
+
+export function ActionCard({
+  icon,
+  title,
+  subtitle,
+  trailing = 'chevron',
+  onPress,
+  style,
+  dark,
+}: ActionCardProps) {
+  const press = usePressScale(0.96);
+
+  const content = (
+    <>
+      <View style={[styles.actionCardIconBox, dark && styles.actionCardIconBoxDark]}>
+        {icon}
+      </View>
+      <View style={styles.actionCardBody}>
+        <T
+          w="semibold"
+          size={15}
+          color={dark ? colors.white : colors.ink}
+          numberOfLines={1}
+        >
+          {title}
+        </T>
+        {subtitle ? (
+          <T
+            size={12}
+            color={dark ? '#A3A099' : colors.muted}
+            numberOfLines={1}
+            style={{ marginTop: 2 }}
+          >
+            {subtitle}
+          </T>
+        ) : null}
+      </View>
+      {trailing === 'chevron' ? (
+        <Feather
+          name="chevron-right"
+          size={16}
+          color={dark ? '#75726B' : colors.disabled}
+        />
+      ) : (
+        trailing
+      )}
+    </>
+  );
+
+  if (onPress) {
+    return (
+      <Pressable
+        onPress={onPress}
+        onPressIn={press.pressIn}
+        onPressOut={press.pressOut}
+        accessibilityRole="button"
+        accessibilityLabel={title + (subtitle ? ` · ${subtitle}` : '')}
+        style={({ pressed }) => [
+          styles.actionCard,
+          dark && styles.actionCardDark,
+          style,
+          pressed && { opacity: 0.88 },
+        ]}
+      >
+        <Animated.View style={[styles.actionCardInner, { transform: [{ scale: press.scale }] }]}>
+          {content}
+        </Animated.View>
+      </Pressable>
+    );
+  }
+
+  return (
+    <View style={[styles.actionCard, dark && styles.actionCardDark, style]}>
+      <View style={styles.actionCardInner}>{content}</View>
+    </View>
+  );
 }
 
 export function SectionTitle({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
@@ -201,6 +311,8 @@ type BtnVariant = 'primary' | 'gold' | 'outline' | 'soft' | 'ghost' | 'danger' |
 export function Button({
   title,
   onPress,
+  onPressIn,
+  onPressOut,
   variant = 'primary',
   icon,
   disabled,
@@ -210,6 +322,8 @@ export function Button({
 }: {
   title: string;
   onPress?: () => void;
+  onPressIn?: () => void;
+  onPressOut?: () => void;
   variant?: BtnVariant;
   icon?: IconName;
   disabled?: boolean;
@@ -218,9 +332,19 @@ export function Button({
   small?: boolean;
 }) {
   const v = btnVariants[variant];
+  const emphasized = variant === 'primary' || variant === 'danger' || variant === 'voice';
+  const press = usePressScale(emphasized ? 0.94 : 0.975);
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={() => {
+        press.pressIn();
+        onPressIn?.();
+      }}
+      onPressOut={() => {
+        press.pressOut();
+        onPressOut?.();
+      }}
       disabled={disabled || loading}
       accessibilityRole="button"
       style={({ pressed }) => [
@@ -229,32 +353,34 @@ export function Button({
         { backgroundColor: v.bg, borderColor: v.border ?? v.bg },
         (variant === 'primary' || variant === 'gold' || variant === 'voice') && !disabled && shadow(3),
         disabled && { backgroundColor: '#EEEBE4', borderColor: '#EEEBE4' },
-        pressed && { transform: [{ scale: 0.98 }], opacity: 0.92 },
+        pressed && (variant === 'ghost' ? { opacity: 0.62 } : { opacity: emphasized ? 0.96 : 0.88 }),
         style,
       ]}
     >
-      {loading ? (
-        <ActivityIndicator color={v.fg} />
-      ) : (
-        <>
-          {icon ? (
-            <Feather name={icon} size={small ? 15 : 18} color={disabled ? colors.disabled : v.fg} style={{ marginRight: 8 }} />
-          ) : null}
-          <T w="bold" size={small ? 14 : 15} color={disabled ? colors.disabled : v.fg}>
-            {title}
-          </T>
-        </>
-      )}
+      <Animated.View style={[styles.buttonContent, { transform: [{ scale: press.scale }] }]}>
+        {loading ? (
+          <ActivityIndicator color={v.fg} />
+        ) : (
+          <>
+            {icon ? (
+              <Feather name={icon} size={small ? 15 : 18} color={disabled ? colors.disabled : v.fg} style={{ marginRight: 8 }} />
+            ) : null}
+            <T w="bold" size={small ? 14 : 15} color={disabled ? colors.disabled : v.fg}>
+              {title}
+            </T>
+          </>
+        )}
+      </Animated.View>
     </Pressable>
   );
 }
 
 const btnVariants: Record<BtnVariant, { bg: string; fg: string; border?: string }> = {
-  primary: { bg: colors.ink, fg: colors.white },
-  gold: { bg: colors.ink, fg: colors.white },
-  voice: { bg: colors.ink, fg: colors.white },
+  primary: { bg: colors.brand, fg: colors.brandInk },
+  gold: { bg: colors.brand, fg: colors.brandInk },
+  voice: { bg: colors.brand, fg: colors.brandInk },
   outline: { bg: colors.white, fg: colors.ink, border: colors.border },
-  soft: { bg: colors.primarySoft, fg: colors.primary },
+  soft: { bg: colors.brandSoft, fg: colors.brand },
   ghost: { bg: 'transparent', fg: colors.muted },
   danger: { bg: colors.redSoft, fg: colors.red },
   green: { bg: colors.greenSoft, fg: colors.green, border: '#C9E4B9' },
@@ -282,10 +408,14 @@ export function Chips<K extends string>({
         onPress={() => onChange(o.key)}
         accessibilityRole="button"
         accessibilityState={{ selected: active }}
-        style={[styles.chip, active ? { backgroundColor: colors.accent, borderColor: colors.accent } : null]}
+        style={({ pressed }) => [
+          styles.chip,
+          active ? styles.chipActive : null,
+          pressed && { opacity: 0.76, transform: [{ scale: 0.98 }] },
+        ]}
       >
-        {o.icon ? <Feather name={o.icon} size={15} color={active ? colors.accentInk : colors.muted} /> : null}
-        <T w={active ? 'bold' : 'semibold'} size={14} color={active ? colors.accentInk : colors.muted}>
+        {o.icon ? <Feather name={o.icon} size={15} color={active ? colors.brand : colors.muted} /> : null}
+        <T w={active ? 'bold' : 'semibold'} size={14} color={active ? colors.brand : colors.muted}>
           {o.label}
         </T>
       </Pressable>
@@ -368,7 +498,7 @@ export function Badge({
 
 export function Progress({
   value,
-  color = colors.primary,
+  color = colors.data.revenue,
   track = colors.primarySoft,
   height = 6,
 }: {
@@ -401,8 +531,11 @@ export function Field({
   prefix,
   style,
   inputStyle,
+  onFocus,
+  onBlur,
   ...rest
 }: TextInputProps & { label?: string; error?: string; prefix?: string; inputStyle?: StyleProp<TextStyle> }) {
+  const [focused, setFocused] = useState(false);
   return (
     <View style={[{ marginBottom: 12 }, style as StyleProp<ViewStyle>]}>
       {label ? (
@@ -410,13 +543,25 @@ export function Field({
           {label}
         </T>
       ) : null}
-      <View style={[styles.inputWrap, error ? { borderColor: colors.red } : null]}>
+      <View style={[styles.inputWrap, focused && styles.inputFocused, error ? { borderColor: colors.red } : null]}>
         {prefix ? (
           <T w="bold" size={15} style={{ marginRight: 8 }}>
             {prefix}
           </T>
         ) : null}
-        <TextInput placeholderTextColor={colors.faint} style={[styles.input, inputStyle]} {...rest} />
+        <TextInput
+          placeholderTextColor={colors.faint}
+          style={[styles.input, inputStyle]}
+          onFocus={(event) => {
+            setFocused(true);
+            onFocus?.(event);
+          }}
+          onBlur={(event) => {
+            setFocused(false);
+            onBlur?.(event);
+          }}
+          {...rest}
+        />
       </View>
       {error ? (
         <T size={12} color={colors.red} style={{ marginTop: 4 }}>
@@ -428,15 +573,26 @@ export function Field({
 }
 
 export function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  const reducedMotion = useReducedMotion();
+  const thumbX = useRef(new Animated.Value(value ? 18 : 0)).current;
+  useEffect(() => {
+    if (reducedMotion) {
+      thumbX.setValue(value ? 18 : 0);
+      return;
+    }
+    Animated.spring(thumbX, { toValue: value ? 18 : 0, ...spring.snappy, useNativeDriver: true }).start();
+  }, [reducedMotion, thumbX, value]);
   return (
     <Pressable
       onPress={() => onChange(!value)}
       accessibilityRole="switch"
       accessibilityState={{ checked: value }}
-      style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}
+      style={({ pressed }) => [{ width: 52, height: 44, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.78 }]}
     >
-      <View style={{ width: 44, height: 26, borderRadius: 13, padding: 3, backgroundColor: value ? colors.primary : '#D5D0C7' }}>
-        <View style={[{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.white }, value && { marginLeft: 18 }]} />
+      <View style={{ width: 44, height: 26, borderRadius: 13, padding: 3, backgroundColor: value ? colors.brand : '#D5D0C7' }}>
+        <Animated.View
+          style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.white, transform: [{ translateX: thumbX }], ...shadow(0) }}
+        />
       </View>
     </Pressable>
   );
@@ -448,14 +604,16 @@ export function Stepper({ value, onChange, min = 0 }: { value: number; onChange:
       <IconBtn
         name={value <= min + 1 && min === 0 ? 'trash-2' : 'minus'}
         size={30}
-        bg={colors.primarySoft}
-        color={value <= 1 ? colors.red : colors.primary}
+        bg={colors.neutralControl}
+        color={value <= 1 ? colors.red : colors.ink}
         onPress={() => onChange(Math.max(min, value - 1))}
       />
-      <T w="bold" size={15} style={{ minWidth: 22, textAlign: 'center' }}>
-        {value}
-      </T>
-      <IconBtn name="plus" size={30} bg={colors.primary} color={colors.white} onPress={() => onChange(value + 1)} />
+      <View style={styles.stepperValue}>
+        <T w="bold" size={15} style={{ textAlign: 'center' }}>
+          {value}
+        </T>
+      </View>
+      <IconBtn name="plus" size={30} bg={colors.neutralControl} color={colors.ink} onPress={() => onChange(value + 1)} />
     </Row>
   );
 }
@@ -477,7 +635,7 @@ export function Sheet({
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Đóng" />
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]} accessibilityViewIsModal>
           <View style={styles.grabber} />
           {title ? (
             <Row style={{ marginBottom: 14 }}>
@@ -498,7 +656,7 @@ export function Sheet({
 
 export function Dialog({
   visible,
-  icon = 'zap',
+  icon = 'help-circle',
   title,
   message,
   confirm = 'Đồng ý',
@@ -522,7 +680,7 @@ export function Dialog({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={[styles.backdrop, { justifyContent: 'center', padding: 24 }]}>
-        <View style={styles.dialog}>
+        <View style={styles.dialog} accessibilityViewIsModal>
           <View style={[styles.dialogIcon, danger && { backgroundColor: colors.red }]}>
             <Feather name={icon} size={20} color={colors.white} />
           </View>
@@ -537,7 +695,7 @@ export function Dialog({
           {children}
           <Row style={{ marginTop: 18 }}>
             <Button title={cancel} variant="outline" onPress={onCancel} style={{ flex: 1 }} small />
-            <Button title={confirm} variant={danger ? 'voice' : 'primary'} onPress={onConfirm} style={{ flex: 1 }} small />
+            <Button title={confirm} variant={danger ? 'danger' : 'primary'} onPress={onConfirm} style={{ flex: 1 }} small />
           </Row>
         </View>
       </View>
@@ -545,7 +703,37 @@ export function Dialog({
   );
 }
 
-export function EmptyState({ icon, title, hint }: { icon: IconName; title: string; hint?: string }) {
+export function LoadingState({ label = 'Đang tải…', compact = false }: { label?: string; compact?: boolean }) {
+  return (
+    <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: compact ? 24 : 56 }}>
+      <ActivityIndicator color={colors.primary} />
+      <T size={12} color={colors.muted} style={{ marginTop: 10 }}>
+        {label}
+      </T>
+    </View>
+  );
+}
+
+export function EmptyState({
+  icon,
+  title,
+  hint,
+  tone,
+}: {
+  icon: IconName;
+  title: string;
+  hint?: string;
+  tone?: 'neutral' | 'warning' | 'error' | 'success';
+}) {
+  const resolvedTone = tone ?? (icon === 'alert-triangle' ? 'error' : 'neutral');
+  const palette =
+    resolvedTone === 'error'
+      ? { fg: colors.red, bg: colors.redSoft }
+      : resolvedTone === 'warning'
+        ? { fg: colors.gold, bg: colors.goldSoft }
+        : resolvedTone === 'success'
+          ? { fg: colors.green, bg: colors.greenSoft }
+          : { fg: colors.primary, bg: colors.primarySoft };
   return (
     <View style={{ alignItems: 'center', paddingVertical: 40 }}>
       <View
@@ -553,12 +741,12 @@ export function EmptyState({ icon, title, hint }: { icon: IconName; title: strin
           width: 64,
           height: 64,
           borderRadius: 20,
-          backgroundColor: colors.primarySoft,
+          backgroundColor: palette.bg,
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        <Feather name={icon} size={28} color={colors.primary} />
+        <Feather name={icon} size={28} color={palette.fg} />
       </View>
       <T w="bold" size={15} style={{ marginTop: 12 }}>
         {title}
@@ -574,6 +762,7 @@ export function EmptyState({ icon, title, hint }: { icon: IconName; title: strin
 
 export function ListRow({
   icon,
+  image,
   iconColor = colors.primary,
   iconBg = colors.primarySoft,
   title,
@@ -582,7 +771,8 @@ export function ListRow({
   onPress,
   last,
 }: {
-  icon: IconName;
+  icon?: IconName;
+  image?: ImageSourcePropType;
   iconColor?: string;
   iconBg?: string;
   title: string;
@@ -594,7 +784,7 @@ export function ListRow({
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.listRow, !last && styles.listRowBorder, pressed && { opacity: 0.7 }]}
+      style={({ pressed }) => [styles.listRow, !last && styles.listRowBorder, pressed && styles.listRowPressed]}
     >
       <View
         style={{
@@ -606,7 +796,11 @@ export function ListRow({
           justifyContent: 'center',
         }}
       >
-        <Feather name={icon} size={17} color={iconColor} />
+        {image ? (
+          <Image source={image} style={{ width: 25, height: 25 }} resizeMode="contain" />
+        ) : icon ? (
+          <Feather name={icon} size={17} color={iconColor} />
+        ) : null}
       </View>
       <View style={{ flex: 1 }}>
         <T w="semibold" size={14}>
@@ -628,12 +822,13 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', paddingTop: 10, paddingBottom: 14 },
   card: {
     backgroundColor: colors.card,
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 16,
-    ...shadow(1),
+    ...shadow(0),
   },
+  cardPressed: { opacity: 0.9, transform: [{ scale: 0.992 }] },
   sectionAction: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
   btn: {
     height: 52,
@@ -644,17 +839,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  buttonContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   chip: {
     flexDirection: 'row',
     gap: 6,
     paddingHorizontal: 14,
     height: 44,
-    borderRadius: 10,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  chipActive: {
+    backgroundColor: colors.brandSoft,
+    borderColor: '#D8CDF8',
   },
   inputWrap: {
     flexDirection: 'row',
@@ -666,6 +866,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     paddingHorizontal: 14,
   },
+  inputFocused: { borderColor: colors.brand, backgroundColor: colors.white },
   input: { flex: 1, fontFamily: font.medium, fontSize: 15, color: colors.ink, height: '100%', outlineStyle: 'none' } as never,
   footer: {
     paddingHorizontal: 16,
@@ -674,7 +875,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  backdrop: { flex: 1, backgroundColor: 'rgba(15,25,45,0.45)', justifyContent: 'flex-end' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(26,25,22,0.44)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: colors.white,
     borderTopLeftRadius: 26,
@@ -683,7 +884,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     maxHeight: '88%',
   },
-  grabber: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: '#D5DBE5', marginBottom: 14 },
+  grabber: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: 14 },
   dialog: { backgroundColor: colors.white, borderRadius: 24, padding: 20, width: '100%', maxWidth: 380, alignSelf: 'center' },
   dialogIcon: {
     width: 42,
@@ -706,4 +907,54 @@ const styles = StyleSheet.create({
   },
   listRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13 },
   listRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  listRowPressed: { opacity: 0.76, transform: [{ scale: 0.995 }] },
+  actionCard: {
+    minHeight: 74,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    justifyContent: 'center',
+    ...shadow(0),
+  },
+  stepperValue: {
+    minWidth: 32,
+    height: 30,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  actionCardDark: {
+    backgroundColor: '#161616',
+    borderColor: '#262626',
+  },
+  actionCardInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  actionCardIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionCardIconBoxDark: {
+    backgroundColor: '#222222',
+    borderWidth: 1,
+    borderColor: '#303030',
+  },
+  actionCardBody: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+  },
 });

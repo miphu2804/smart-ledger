@@ -1,36 +1,27 @@
-import { API_ENDPOINT } from '../config';
+import { API_ENDPOINT, USE_MOCK } from '../config';
 import { authClient } from './auth';
+import { ApiError } from './apiError';
+import type { ApiErrorDetail } from './apiError';
 import { debugLog } from './debug';
+import { resetAllIdempotentSenders } from './idempotency';
+import { mockCoreRequest } from './mockCore';
 
 /**
  * Client gọi Core (backend/core, Spring Boot):
  * - Base `${API_ENDPOINT}/api/v1`. Mọi request gửi `Authorization: Bearer <Firebase ID token>`; Core tự xác thực
  *   token bằng Firebase Admin SDK. Token lấy mới mỗi request (SDK tự làm mới khi gần hết hạn, app không tự lưu).
- * - Endpoint nghiệp vụ của OWNER gửi thêm `X-Shop-Id` (bật bằng `withShop`).
+ * - Endpoint nghiệp vụ của OWNER gửi thêm `X-Shop-Id` (bật bằng `withShop`). POST ghi tiền gửi thêm
+ *   `Idempotency-Key` (`idempotencyKey`, sinh/giữ key ở `idempotency.ts`).
  * - Lỗi của Core: `{ code, message, details?, traceId }` (details: `[{ field, issue }]`). Lỗi của AI service: `{ detail }`.
  *   401 → đăng xuất.
  * - Quá thời gian chờ (mặc định 15 giây) → ApiError status 0, code 'timeout' (không để app quay vô hạn khi
  *   sai IP hoặc tường lửa chặn).
+ * - EXPO_PUBLIC_USE_MOCK=true (xem src/config.ts): các endpoint nghiệp vụ (danh mục/sản phẩm, đơn nháp, bán
+ *   hàng, công nợ, khách hàng, chi phí) được `mockCore.ts` phục vụ từ dữ liệu mẫu trong bộ nhớ — KHÔNG gọi
+ *   mạng — để màn hình xem trước dùng được khi chưa có Core thật chạy.
  */
-export interface ApiErrorDetail {
-  field: string;
-  issue?: string;
-}
-
-export class ApiError extends Error {
-  readonly status: number;
-  readonly code: string;
-  readonly traceId?: string;
-  readonly details: ApiErrorDetail[];
-  constructor(status: number, code: string, message: string, traceId?: string, details: ApiErrorDetail[] = []) {
-    super(message);
-    this.name = 'ApiError';
-    this.status = status;
-    this.code = code;
-    this.traceId = traceId;
-    this.details = details;
-  }
-}
+export { ApiError };
+export type { ApiErrorDetail };
 
 const DEFAULT_TIMEOUT_MS = 15000;
 
@@ -44,6 +35,8 @@ export function setUnauthorizedHandler(fn: (() => void) | null) {
 
 /** Tiệm đang chọn — gửi qua header X-Shop-Id khi `withShop: true`. */
 export function setActiveShop(id: string | null) {
+  // Đổi tiệm hoặc đăng xuất: key đang giữ của tiệm/tài khoản trước không được dùng lại cho tiệm/tài khoản sau.
+  if (id !== activeShopId) resetAllIdempotentSenders();
   activeShopId = id;
 }
 
@@ -57,9 +50,20 @@ export async function apiRequest<T>(
     /** false = 401 chỉ ném lỗi, không tự đăng xuất (dùng cho bước đổi token lấy phiên lúc đăng nhập) */
     handle401?: boolean;
     timeoutMs?: number;
+    /** Header Idempotency-Key — bắt buộc với POST /expenses và POST /debts/{id}/payments */
+    idempotencyKey?: string;
   } = {},
 ): Promise<T> {
   const method = opts.method ?? (opts.body === undefined ? 'GET' : 'POST');
+
+  if (USE_MOCK) {
+    debugLog('api', '→ (mock)', method, path);
+    const raw = mockCoreRequest<T>(path, method, opts.body, opts.idempotencyKey);
+    const data = raw === undefined ? raw : (JSON.parse(JSON.stringify(raw)) as T);
+    debugLog('api', '✓ (mock)', method, path);
+    return data;
+  }
+
   const started = Date.now();
   const took = () => `${Date.now() - started}ms`;
   debugLog('api', '→', method, path);
@@ -75,6 +79,7 @@ export async function apiRequest<T>(
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(opts.withShop && activeShopId ? { 'X-Shop-Id': activeShopId } : {}),
+        ...(opts.idempotencyKey ? { 'Idempotency-Key': opts.idempotencyKey } : {}),
       },
       body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
       signal: ctrl.signal,
