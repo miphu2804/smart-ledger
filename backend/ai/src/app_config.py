@@ -33,6 +33,14 @@ class AppConfig(BaseSettings):
     # redis
     REDIS_URL: str | None = None
 
+    # qdrant, litellm and langfuse: kept for planned integrations, no feature reads
+    # them yet
+    QDRANT_URL: str | None = None
+    LITELLM_URL: str | None = None
+    LANGFUSE_PUBLIC_KEY: str | None = None
+    LANGFUSE_SECRET_KEY: str | None = None
+    LANGFUSE_HOST: str | None = None
+
     # model provider
     MODEL_PROVIDER: str = "openai"
     MODEL_NAME: str = "gpt-5.6-luna"

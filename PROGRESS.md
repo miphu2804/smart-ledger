@@ -1,3 +1,13 @@
+### [2026-10-09 12:10 UTC+07:00] — [Config] Keep the Qdrant, LiteLLM and Langfuse settings in the AI config
+
+**Done:** Restored `QDRANT_URL`, `LITELLM_URL`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and `LANGFUSE_HOST` as optional `AppConfig` settings and `.env.example` entries, so deployments keep their credentials for the planned integrations. No code reads them yet; staging never had clients for them, only these settings.
+
+**Changed files:** AI `src/app_config.py`, `.env.example`, README; this entry.
+
+**Flow explained:** Settings only; nothing reads them, and unset values change nothing.
+
+**Check:** `uv run pytest -q`: 278 passed, 40 skipped; `ruff check` and `ruff format --check` pass on `src/app_config.py`.
+
 ### [2026-10-09 10:35 UTC+07:00] — [Feature] AI guardrails return error codes, retry leaking answers and bound each turn
 
 **Done:** Guardrails no longer answer with fixed Vietnamese text: a turn a guardrail stops raises `GuardrailError(code)`, the composition root answers `422 {"detail": "<code>"}`, and nothing is stored. Codes: `input_too_long` (message over `AGENT_MAX_INPUT_CHARS`), `answer_unavailable` (request or token limit reached, or the answer still rejected after retries) and `answer_timeout` (turn over the time limit). `replies.py` and `replies.vi.json` are deleted, so the AI source holds no owner-facing guardrail copy; the mobile chat screen maps the three codes to its own Vietnamese text. The answer screen is now the agent's Pydantic AI output validator: an empty or leaking answer goes back to the model with `ModelRetry` instead of being replaced, and the request limit bounds the retries. Two limits are new: `AGENT_TURN_TOKEN_LIMIT` (200000 input plus output tokens per turn, `UsageLimits.total_tokens_limit`) and `AGENT_TURN_TIMEOUT_SECONDS` (35, below Core's 40 s read timeout, so a turn Core gave up on is not stored). Each answered turn logs its token usage. Both defaults are provisional until the PO approves them. Not added, by design: tool approval, Ask User and deferred tool calls (they need a resume flow through Core and the app, and the tools are read-only), model-based judges and the prompt injection classifier (a second model call per step, while the SQL guard, read-only role and scoped views already bound the tools), output PII redaction (it would hide the shop's own contact details), `cost_limit` (not enforced for models without price data) and the `pydantic-ai-harness` 0.x package.
