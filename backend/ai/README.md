@@ -1,6 +1,6 @@
 # SmartLedger AI
 
-Internal AI API called only by Core, which proxies its public `/api/v1/agent/*` routes here. The service exposes `/health`, `POST /internal/v1/agent/chat`, and list/detail/rename/delete routes under `/internal/v1/agent/conversations`. The agent can read the current shop's profile, categories, products and confirmed sales through read-only SQL tools. Chat history is stored in PostgreSQL. PostgreSQL connects lazily on the first request that needs it, and the Redis client connects at process start; an unreachable or unreadable database URL is logged, does not stop the service, and makes database routes answer `503 ai_unavailable`. Every `/internal/v1` route requires the shared `X-Internal-Token` header. There are no invoice or expense endpoints.
+Internal AI API called only by Core, which proxies its public `/api/v1/agent/*` routes here. The service exposes `/health`, `POST /internal/v1/agent/chat`, `POST /internal/v1/agent/chat/stream` (not yet proxied by Core, see [Streaming chat](#streaming-chat)), and list/detail/rename/delete routes under `/internal/v1/agent/conversations`. The agent can read the current shop's profile, categories, products and confirmed sales through read-only SQL tools. Chat history is stored in PostgreSQL. PostgreSQL connects lazily on the first request that needs it, and the Redis client connects at process start; an unreachable or unreadable database URL is logged, does not stop the service, and makes database routes answer `503 ai_unavailable`. Every `/internal/v1` route requires the shared `X-Internal-Token` header. There are no invoice or expense endpoints.
 
 Frontend must not call this service.
 
@@ -59,6 +59,16 @@ AI_SQL_READER_URL=postgresql://smartledger_ai_reader:<secret>@<host>:5432/<db>
 ```
 
 Phase 1 covers the shop profile, categories, products and sales (`CONFIRMED` and `VOIDED`). Expenses, debts and customers are not exposed yet.
+
+## Streaming chat
+
+`POST /internal/v1/agent/chat/stream` runs the same turn as `POST /internal/v1/agent/chat` and answers with `text/event-stream`. The request, pre-stream status codes, events and `done` body are defined in the [API contracts](../../docs/contracts/api-contracts.md#stream-trả-lời-chat); this section covers how the service produces them.
+
+- `AgentService.stream_chat` runs the history read and the input check before it yields anything, so a pre-stream failure raises before any byte is sent. The turn then runs through `agent.iter()`, and each model response is read with `stream_text(delta=True)`. `run_stream` is not used: it stops at the first final-looking output and skips later tool calls and the retry loop.
+- Output validators do not see delta text. `AgentGuardrails.screened_prefix` therefore releases only the prefix that no continuation can turn into a `LEAK_PATTERN` match. It holds back a short tail, and anything after a `select` that could still start a `select … from` match, until that match is ruled out or 400 characters have passed. `screen_answer` still runs as the output validator on every complete answer, so a rejected answer is retried.
+- The service sends `reset` when shown text must be discarded: a model response followed by a tool call, or an answer the screen rejected and the model retried. Before `done`, it releases the rest of the final answer; if the text already shown is not a prefix of that answer, it sends `reset` and then the whole answer. The text after the last `reset` therefore equals the stored answer.
+- Nothing is saved unless the run completes. A guardrail stop raises `GuardrailError` from the iterator, with the same codes, timeout and limits as the JSON route. Closing the stream early, for example when the caller disconnects, cancels the run.
+- Core does not proxy this route yet, so FE cannot reach it.
 
 ## Restock suggestions
 

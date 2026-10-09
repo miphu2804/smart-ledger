@@ -1452,3 +1452,13 @@
 **Changed files:** Media idempotency, write-transaction, repository and test code; Cloudinary/Compose configuration; architecture exports and this append-only entry. No mobile, AI, shared database, provider credential or IDE file changed.
 
 **Check:** A disposable PostgreSQL 16 run completed `mvnw.cmd clean verify` with **560 tests, 0 failures, 0 errors, 0 skipped** before the final lease refinement; the targeted Cloudinary configuration, idempotency, service and write-transaction suite then passed **13/13**. `docker compose config --quiet` and `git diff --check` pass. The editable architecture sources and committed SVG/PNG export were regenerated together and visually checked. Manual local upload returned a Cloudinary URL; real staging/production credentials and UAT remain unverified.
+
+### [2026-10-09 20:27 UTC+07:00] — [AI] Document agent chat streaming
+
+**Done:** Documented the planned `POST /internal/v1/agent/chat/stream` route in the API contract and the AI README: pre-stream errors, the `delta`/`reset`/`done`/`error` events, guardrail hold-back, and that Core does not proxy it yet. PRD and AC are unchanged.
+
+**Changed files:** `docs/contracts/api-contracts.md`, `backend/ai/README.md`, `PROGRESS.md`.
+
+**Flow explained:** Core would call `POST /internal/v1/agent/chat/stream`; AI streams only text the answer screen has cleared, ends with `done` (the stored answer) or `error` (a code). A turn that errors or whose caller disconnects is not stored. This entry is docs only; the route code lands in the code checkpoints on the same branch.
+
+**Check:** Docs only. Relative links checked with `ls` (targets exist) and the new anchors checked against their headings; `git diff --check` clean. Code tests are reported by the code checkpoints; none were run for this entry.

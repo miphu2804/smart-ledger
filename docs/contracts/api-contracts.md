@@ -4,7 +4,7 @@
 |---|---|
 | Trạng thái | đích MVP; các endpoint đã triển khai được đánh dấu riêng bên dưới |
 | Chủ sở hữu | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-10-08 |
+| Cập nhật lần cuối | 2026-10-09 |
 
 ## Tài liệu liên quan
 
@@ -24,7 +24,7 @@
 
 **Bổ sung media ngày 2026-10-08 trên nhánh hiện tại:** Core có upload/delete Product image, Shop logo và avatar qua Cloudinary; V13/V14 phải được migrate trước khi runtime dùng các entity mới trên DB shared. Đây chưa phải xác nhận FE/staging đã tích hợp.
 
-**AI và proxy Agent:** AI có `GET /health` và năm endpoint `/internal/v1/agent/*` (chat, list, detail, rename, delete). Mọi đường `/internal/v1/*` bắt buộc `X-Internal-Token`; thiếu/sai token hoặc AI chưa cấu hình `INTERNAL_API_TOKEN` trả `401`, riêng `/health` vẫn công khai. Core proxy `/api/v1/agent/*` sang các đường này, gửi `X-Internal-Token` và lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực; AI `404` thành `conversation_not_found`, lỗi hoặc quá thời gian khác thành `503 ai_unavailable`, kể cả `422` mang mã guardrail của AI (mục 6) vì Core chưa chuyển tiếp mã này. Chưa có nghiệm thu đầu-cuối luồng FE → Core → AI với model thật.
+**AI và proxy Agent:** AI có `GET /health` và sáu endpoint `/internal/v1/agent/*` (chat, chat/stream, list, detail, rename, delete); Core chỉ proxy năm endpoint JSON, còn `chat/stream` chưa được proxy. Mọi đường `/internal/v1/*` bắt buộc `X-Internal-Token`; thiếu/sai token hoặc AI chưa cấu hình `INTERNAL_API_TOKEN` trả `401`, riêng `/health` vẫn công khai. Core proxy `/api/v1/agent/*` sang năm đường JSON này, gửi `X-Internal-Token` và lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực; AI `404` thành `conversation_not_found`, lỗi hoặc quá thời gian khác thành `503 ai_unavailable`, kể cả `422` mang mã guardrail của AI (mục 6) vì Core chưa chuyển tiếp mã này. Chưa có nghiệm thu đầu-cuối luồng FE → Core → AI với model thật.
 
 ## Quy ước request
 
@@ -354,6 +354,7 @@ Phủ `FR-007`, `FR-008`, `FR-017`, `FR-018`, `FR-020`, `FR-021`, `FR-027`.
 | Method | Đường | Trách nhiệm | Trạng thái |
 |---|---|---|---|
 | `POST` | `/internal/v1/agent/chat` | Body `{ user_id, shop_id, conversation_id?, message }`; trả `{ conversation_id, message_id, request_id, answer, model, model_version }` | Đã có |
+| `POST` | `/internal/v1/agent/chat/stream` | Body giống `/internal/v1/agent/chat`; trả `text/event-stream` với các sự kiện `delta`, `reset`, `done`, `error` ([mục Stream](#stream-trả-lời-chat)) | Đã có (AI); Core chưa proxy |
 | `GET` | `/internal/v1/agent/conversations` | Query `user_id`, `shop_id`; trả danh sách hội thoại | Đã có |
 | `GET` | `/internal/v1/agent/conversations/{conversation_id}` | Query `user_id`, `shop_id`; trả hội thoại và tin nhắn | Đã có |
 | `PATCH` | `/internal/v1/agent/conversations/{conversation_id}` | Body `{ user_id, shop_id, title }`; trả summary đã đổi tên | Đã có |
@@ -386,6 +387,23 @@ Agent có tool nội bộ `query_shop_data` để trả lời câu hỏi về h�
 ### Ngữ cảnh chat
 
 Mỗi lượt chat, AI gửi cho model system prompt tĩnh, sau đó là `AGENT_HISTORY_TURNS` lượt trao đổi gần nhất của hội thoại (mặc định 100 lượt, tức 200 tin nhắn OWNER và ASSISTANT), nguyên văn và xếp từ cũ đến mới, rồi tới tin nhắn mới của OWNER. Tin cũ hơn không tới được model và không được tóm tắt. Không còn bản tóm tắt, không gộp nền sau mỗi lượt và không còn tool tìm lịch sử: OWNER ít chat, còn model chat xử lý thoải mái cửa sổ 100 lượt. Hợp đồng này không đổi request hay response của `/internal/v1/agent/chat`.
+
+### Stream trả lời chat
+
+`POST /internal/v1/agent/chat/stream` chạy cùng lượt chat với `POST /internal/v1/agent/chat`: cùng body, cùng `X-Internal-Token`, cùng guardrail. Lỗi xảy ra trước khi stream bắt đầu giữ nguyên mã của route JSON: `401` (`unauthorized`), `404` (`conversation_not_found`), `422` (`input_too_long`) và `503` (`ai_unavailable`, kể cả khi model chưa cấu hình). Sau khi stream bắt đầu, lỗi đi trong sự kiện `error` thay vì HTTP status.
+
+Response thành công có `Content-Type: text/event-stream`. Mỗi sự kiện có tên và `data` là JSON:
+
+- `delta` `{ "text": "..." }`: nối `text` vào phần đã hiển thị.
+- `reset` `{}`: bỏ phần đã hiển thị; một lượt trả lời mới của model theo sau. Xảy ra khi model viết text trước một tool call, hoặc khi answer screen từ chối câu trả lời và model viết lại.
+- `done`: cùng body với response của `/internal/v1/agent/chat` (`conversation_id`, `message_id`, `request_id`, `answer`, `model`, `model_version`). `answer` là câu trả lời đã lưu, thay thế toàn bộ text đã stream.
+- `error` `{ "detail": "<mã>" }`: `answer_unavailable` hoặc `answer_timeout` (guardrail dừng lượt), `conversation_not_found` (hội thoại bị xóa trong lúc lượt đang chạy) hoặc `ai_unavailable`.
+
+Stream kết thúc sau `done` hoặc `error`.
+
+Chỉ text đã qua answer screen mới được gửi. Đoạn cuối ngắn và phần text sau một `select` còn đang chờ được giữ lại cho đến khi answer screen kiểm tra xong. Lượt kết thúc bằng `error`, hoặc caller ngắt kết nối giữa chừng, không được lưu.
+
+Core chưa proxy route stream nên FE chưa gọi được. Hợp đồng công khai `/api/v1/agent/chat` không đổi và hành vi người chủ thấy chưa đổi, nên [PRD](../product/product-requirements.md) và AC không đổi cho đến khi Core proxy route này.
 
 ## 7. Dashboard quản trị — đã có trong Core
 
