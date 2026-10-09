@@ -1,6 +1,6 @@
 # Sổ Nghe Lời — Mobile (Expo)
 
-App OWNER của Sổ Nghe Lời. Mặc định (`EXPO_PUBLIC_USE_MOCK=true`) mọi lời gọi Core đi vào bộ giả lập trong bộ nhớ `src/lib/mockCore.ts` — mở app là test được ngay, không cần backend. Đặt `EXPO_PUBLIC_USE_MOCK=false` để dùng Firebase và Core thật (xem [Nối Core thật](#nối-core-thật)).
+App OWNER của Sổ Nghe Lời. Chế độ chạy lấy hoàn toàn từ env: `EXPO_PUBLIC_API_ENDPOINT`, `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS` bắt buộc đặt (copy `.env.example`), thiếu thì app dừng ngay khi mở (`src/config.ts`). `USE_MOCK=false` dùng Firebase và Core thật (xem [Nối Core thật](#nối-core-thật)); đặt `EXPO_PUBLIC_USE_MOCK=true` để mọi lời gọi Core đi vào bộ giả lập trong bộ nhớ `src/lib/mockCore.ts` — mở app là test được ngay, không cần backend.
 
 Stack: Expo SDK 57 · React Native 0.86 · expo-router · TypeScript · react-native-svg · font Plus Jakarta Sans.
 
