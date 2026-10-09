@@ -550,6 +550,13 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const scrollY = useRef(new Animated.Value(0)).current;
+  // Đổi kiểu xem tạo lại FlatList (key={viewMode}) nên danh sách mới bắt đầu ở đầu và không phát sự kiện cuộn;
+  // đặt lại scrollY để header không còn thu gọn dở. Bấm lại đúng kiểu đang chọn thì danh sách giữ nguyên nên không đặt lại.
+  const changeViewMode = (mode: 'grid' | 'list') => {
+    if (mode === viewMode) return;
+    scrollY.setValue(0);
+    setViewMode(mode);
+  };
   // Chiều cao thật của phần thân header (tiêu đề + ô tìm + danh mục). Chữ hệ thống to hơn (iOS, cỡ chữ lớn) làm thân cao hơn
   // số cố định nên thanh danh mục bị cắt; đo ra để header luôn vừa nội dung.
   const [headerBodyHeight, setHeaderBodyHeight] = useState(0);
@@ -792,7 +799,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
               <Pressable
                 onPress={() => {
                   triggerFeedback('selection');
-                  setViewMode('grid');
+                  changeViewMode('grid');
                 }}
                 style={viewMode === 'grid' ? styles.viewToggleActive : styles.viewToggleBtn}
                 accessibilityLabel="Chế độ lưới"
@@ -802,7 +809,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
               <Pressable
                 onPress={() => {
                   triggerFeedback('selection');
-                  setViewMode('list');
+                  changeViewMode('list');
                 }}
                 style={viewMode === 'list' ? styles.viewToggleActive : styles.viewToggleBtn}
                 accessibilityLabel="Chế độ danh sách"
