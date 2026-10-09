@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Build bản Release app mobile (frontend/mobile) từ code đang checkout và cài lên iPhone thật đang cắm vào Mac (hoặc ghép qua Wi-Fi), để test nhanh.
+# Build a Release of the mobile app (frontend/mobile) from the current checkout and install it on a real iPhone paired
+# with this Mac (cable or Wi-Fi), for quick testing.
 #
-#   ./scripts/ios-device-release.sh                  chọn máy bằng menu (↑/↓ hoặc j/k, Enter; q để thoát)
-#   ./scripts/ios-device-release.sh --device <UDID>  bỏ qua menu (UDID hoặc tên máy)
-#   ./scripts/ios-device-release.sh --clean          sinh lại ios/ từ app.json trước khi build (sau khi đổi plugin/config native)
+#   ./scripts/ios-device-release.sh                  pick the device from a menu (up/down or j/k, Enter; q to quit)
+#   ./scripts/ios-device-release.sh --device <UDID>  skip the menu (UDID or device name)
+#   ./scripts/ios-device-release.sh --clean          regenerate ios/ from app.json first (after native config changes)
 #
-# Bản Release nhúng sẵn JS nên mở app không cần Metro. Luôn tắt mock (Firebase + Core thật); Core mặc định là staging,
-# đổi bằng EXPO_PUBLIC_API_ENDPOINT trong .env hoặc trên dòng lệnh. Muốn build nhánh khác thì git checkout trước.
-# Lần đầu build Expo hỏi chọn Apple Development Team để ký app; iPhone cần bật Developer Mode.
-# Chỉ chạy trên macOS có Xcode (xcrun devicectl cần Xcode 15+).
+# The Release build embeds the JS bundle, so the app runs without Metro. Mocks are always off (real Firebase and Core);
+# Core defaults to staging and can be overridden with EXPO_PUBLIC_API_ENDPOINT in .env or the shell. To build another
+# branch, git checkout it first. Requires macOS with Xcode 15+ (xcrun devicectl) and Developer Mode on the iPhone.
 set -euo pipefail
 
 device=""
@@ -30,7 +30,8 @@ die() { echo "${red}✗ $*${reset}" >&2; exit 1; }
 command -v xcrun >/dev/null || die "Không thấy xcrun — cần macOS có Xcode."
 command -v node >/dev/null || die "Không thấy node."
 
-# Mỗi dòng: udid<TAB>tên<TAB>model<TAB>iOS<TAB>kết nối. Chỉ lấy iPhone/iPad thật đã ghép đôi (paired) với Mac.
+# One line per device: udid<TAB>name<TAB>model<TAB>iOS<TAB>connection. Only real iPhones/iPads paired with this Mac.
+# xcodebuild needs hardwareProperties.udid, not the CoreDevice identifier.
 list_devices() {
   local json
   json="$(mktemp)"
@@ -46,7 +47,7 @@ list_devices() {
   rm -f "$json"
 }
 
-# Menu chọn bằng phím mũi tên; ghi index được chọn vào biến `choice`. Viết cho bash 3.2 mặc định của macOS.
+# Arrow-key menu; stores the selected index in `choice`. Written for the bash 3.2 that ships with macOS.
 pick() {
   local -a items=("$@")
   local n=${#items[@]} cur=0 key rest i
@@ -75,15 +76,15 @@ pick() {
   done
 }
 
-# Code sẽ được build: nhắc nếu có thay đổi chưa commit để người test biết bản trên máy không khớp hẳn với commit.
+# Show what is being built, and warn when uncommitted changes make the installed app differ from the commit.
 branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
 commit="$(git log -1 --format='%h %s' 2>/dev/null || echo '?')"
 echo "${bold}Sổ Nghe Lời — build Release lên iPhone${reset}"
 echo "  Nhánh:  ${cyan}$branch${reset}"
 echo "  Commit: $commit"
 [ -z "$(git status --porcelain -- . 2>/dev/null)" ] || echo "  ${yellow}! Có thay đổi chưa commit trong frontend/mobile — vẫn được build vào app.${reset}"
-# Bản test trên máy thật luôn dùng Firebase và Core thật. Biến môi trường của shell được ưu tiên hơn .env, nên các cờ mock
-# trong .env không bật lại được. Core lấy từ EXPO_PUBLIC_API_ENDPOINT (shell hoặc .env), không có thì dùng Core staging.
+# Device builds always use real Firebase and Core. Expo does not override shell variables with .env values, so the
+# exported mock flags cannot be turned back on by .env.
 export EXPO_PUBLIC_USE_MOCK=false EXPO_PUBLIC_MOCK_CORE=false EXPO_PUBLIC_MOCK_SHOPS=false
 api="${EXPO_PUBLIC_API_ENDPOINT:-$(sed -n 's/^EXPO_PUBLIC_API_ENDPOINT=//p' .env 2>/dev/null | tail -1 || true)}"
 export EXPO_PUBLIC_API_ENDPOINT="${api:-https://core-staging-01d2.up.railway.app}"
@@ -107,7 +108,7 @@ if [ -z "$device" ]; then
   echo
 fi
 
-# Cài lại node_modules khi package-lock.json mới hơn lần cài gần nhất (vừa pull/checkout code khác).
+# Reinstall when package-lock.json is newer than the last install (after a pull or a branch switch).
 if [ ! -f node_modules/.package-lock.json ] || [ package-lock.json -nt node_modules/.package-lock.json ]; then
   echo "${bold}→ npm install${reset}"
   npm install
