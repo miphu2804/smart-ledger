@@ -1,5 +1,5 @@
 import type { IconName } from '../components/ui';
-import type { Debt, Expense, Invoice, Product } from '../data/types';
+import type { Debt, Expense, Invoice, NotificationType, NotificationView, Product } from '../data/types';
 import { vnd } from './format';
 import { inPeriod, invoiceTotal, methodLabel, summary } from './stats';
 
@@ -27,9 +27,13 @@ export interface Notif {
   urgent?: boolean;
   href?: string;
   icon?: IconName;
+  /** Có khi thông báo đến từ inbox Core: ID sự kiện ở Core. Trạng thái đã đọc nằm ở Core (`read`), không nằm trong `readNotifs` của app. */
+  coreId?: number;
+  read?: boolean;
+  /** Cảnh báo tồn đã kết thúc (tồn đã khá hơn hoặc đã tắt theo dõi) */
+  resolved?: boolean;
 }
 
-const LOW_STOCK = 6;
 const RECENT_ORDERS = 6;
 
 function atToday(now: Date, hour: number, minute = 0) {
@@ -39,7 +43,8 @@ function atToday(now: Date, hour: number, minute = 0) {
 }
 
 /**
- * Sinh danh sách thông báo từ dữ liệu hiện có của tiệm (bản mock — chưa có backend đẩy thông báo).
+ * Sinh danh sách thông báo từ dữ liệu hiện có của tiệm: đơn mới, công nợ và thu chi. Kho hàng, đơn bị huỷ và tình trạng tiệm
+ * không tính ở đây nữa mà lấy từ inbox Core (`fromCoreNotification`), vì Core mới biết ngưỡng sắp hết riêng của từng mặt hàng.
  * Kết quả đã sắp xếp mới nhất trước.
  */
 export function buildNotifications(
@@ -47,22 +52,6 @@ export function buildNotifications(
   now = new Date(),
 ): Notif[] {
   const list: Notif[] = [];
-
-  // --- Kho hàng
-  for (const p of data.products) {
-    if (!p.tracked || p.stock > LOW_STOCK) continue;
-    const out = p.stock <= 0;
-    list.push({
-      id: `stock-${p.id}-${out ? 'out' : 'low'}`,
-      category: 'stock',
-      icon: out ? 'x-octagon' : 'alert-triangle',
-      urgent: out,
-      title: out ? `Hết hàng: ${p.name}` : `Sắp hết: ${p.name}`,
-      body: out ? 'Món này đã hết, khách gọi sẽ không bán được. Nhập thêm ngay.' : `Chỉ còn ${p.stock} trong kho. Nên nhập thêm.`,
-      at: atToday(now, 7),
-      href: '/products',
-    });
-  }
 
   // --- Công nợ
   for (const d of data.debts) {
@@ -102,19 +91,6 @@ export function buildNotifications(
       href: `/invoice/${inv.id}`,
     });
   }
-  for (const inv of sorted.filter((i) => i.status === 'cancelled' && inPeriod(i.createdAt, 'week', now))) {
-    list.push({
-      id: `inv-cancel-${inv.id}`,
-      category: 'order',
-      icon: 'x-circle',
-      urgent: true,
-      title: `Đơn ${inv.code} đã bị huỷ`,
-      body: `Giá trị ${vnd(invoiceTotal(inv))} · ${inv.customer ?? 'Khách lẻ'}`,
-      at: inv.createdAt,
-      href: `/invoice/${inv.id}`,
-    });
-  }
-
   // --- Thu chi: tổng kết hôm qua + chi phí hôm nay
   const y = summary(data.invoices, data.products, 'yesterday');
   const ySpend = data.expenses.filter((e) => inPeriod(e.createdAt, 'yesterday', now)).reduce((a, e) => a + e.amount, 0);
@@ -145,4 +121,57 @@ export function buildNotifications(
   // "đã sao lưu dữ liệu") không đến từ dữ liệu hay hệ thống nào. Thêm lại khi AI service / sao lưu thật có nguồn tin.
 
   return list.sort((a, b) => b.at.localeCompare(a.at));
+}
+
+const CORE_CATEGORY: Record<NotificationType, NotifCategory> = {
+  LOW_STOCK: 'stock',
+  OUT_OF_STOCK: 'stock',
+  SALE_VOIDED: 'order',
+  SHOP_INACTIVATED: 'system',
+  SHOP_REACTIVATED: 'system',
+};
+
+/** Đổi một thông báo của inbox Core sang dạng `Notif` mà màn Thông báo và Trang chủ đang dùng. */
+export function fromCoreNotification(n: NotificationView): Notif {
+  const open = n.resolvedAt === null;
+  const icon: Record<NotificationType, IconName> = {
+    LOW_STOCK: 'alert-triangle',
+    OUT_OF_STOCK: 'x-octagon',
+    SALE_VOIDED: 'x-circle',
+    SHOP_INACTIVATED: 'alert-circle',
+    SHOP_REACTIVATED: 'check-circle',
+  };
+  const href = n.targetType === 'PRODUCT' ? '/products' : n.targetType === 'SALE' ? `/invoice/${n.targetId}` : '/profile';
+  return {
+    id: `core-${n.id}`,
+    coreId: n.id,
+    read: n.readAt !== null,
+    resolved: (n.type === 'LOW_STOCK' || n.type === 'OUT_OF_STOCK') && !open,
+    category: CORE_CATEGORY[n.type],
+    icon: icon[n.type],
+    // Chỉ cảnh báo còn mở cần xử lý ngay: hết hàng, hoặc tiệm đang bị tạm ngưng.
+    urgent: open && (n.type === 'OUT_OF_STOCK' || n.type === 'SHOP_INACTIVATED'),
+    title: n.title,
+    body: n.body,
+    at: n.createdAt,
+    href,
+  };
+}
+
+const time = (iso: string) => Date.parse(iso);
+
+/**
+ * Gộp thông báo tính trên máy với thông báo Core đã tải, mới nhất trước. Khi Core còn trang chưa tải (`coreHasMore`), chỉ giữ
+ * thông báo trên máy mới hơn thông báo Core cũ nhất đã tải; nếu không, bấm "Tải thêm" sẽ chèn thông báo cũ hơn vào giữa danh
+ * sách thay vì nối vào cuối.
+ */
+export function mergeNotifications(local: Notif[], core: Notif[], coreHasMore: boolean): Notif[] {
+  const oldestCore = core.length ? Math.min(...core.map((n) => time(n.at))) : null;
+  const kept = coreHasMore && oldestCore !== null ? local.filter((n) => time(n.at) >= oldestCore) : local;
+  return [...kept, ...core].sort((a, b) => time(b.at) - time(a.at));
+}
+
+/** Thông báo Core đọc trạng thái từ Core; thông báo trên máy đọc từ danh sách đã đọc của app. */
+export function isNotifUnread(n: Notif, readLocal: Set<string>): boolean {
+  return n.coreId != null ? !n.read : !readLocal.has(n.id);
 }
