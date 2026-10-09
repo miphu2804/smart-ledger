@@ -174,6 +174,8 @@ export interface ProductView {
   tracked: boolean;
   /** BigDecimal ở Core — có thể có phần thập phân; UI hiện tại chỉ cần số nguyên */
   stockQuantity: number | null;
+  /** Ngưỡng báo sắp hết của riêng mặt hàng; null = không đặt (Core không báo LOW_STOCK, hết hàng vẫn báo OUT_OF_STOCK) */
+  lowStockThreshold: number | null;
   status: 'ACTIVE' | 'ARCHIVED';
   createdAt: string;
   updatedAt: string;
