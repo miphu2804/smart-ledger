@@ -12,6 +12,7 @@ npx expo start          # quét QR bằng Expo Go (bản hỗ trợ SDK 57)
 npm run web             # hoặc bấm w: chạy trên trình duyệt (khung giới hạn 440px)
 npm run typecheck
 npm run export:web      # build web tĩnh ra dist/
+../../scripts/ios-device-release.sh   # chọn iPhone đang cắm vào Mac, build Release từ code đang checkout và cài lên máy
 ```
 
 ## Xem thử với dữ liệu mẫu
