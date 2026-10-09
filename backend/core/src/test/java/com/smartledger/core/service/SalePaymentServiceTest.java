@@ -4,12 +4,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.smartledger.core.entity.Payment;
 import com.smartledger.core.entity.Sale;
 import com.smartledger.core.entity.SaleDraft;
+import com.smartledger.core.entity.SaleDraftItem;
+import com.smartledger.core.entity.SaleItem;
 import com.smartledger.core.entity.Shop;
 import com.smartledger.core.enums.ErrorCode;
 import com.smartledger.core.enums.PaymentMethod;
@@ -20,10 +24,14 @@ import com.smartledger.core.repository.SaleRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.impl.PaymentServiceImpl;
 import com.smartledger.core.service.impl.SaleServiceImpl;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -47,10 +55,79 @@ class SalePaymentServiceTest {
     void listsOnlySalesFromSelectedShop() {
         Sale sale = sale();
         when(saleRepository.findAllByShopIdOrderByIdDesc(7L)).thenReturn(List.of(sale));
-        when(saleItemRepository.findAllBySaleIdOrderByIdAsc(15L)).thenReturn(List.of());
+        when(saleItemRepository.findAllByShopId(7L)).thenReturn(List.of());
 
-        assertThat(saleService.list(token, "7")).extracting(response -> response.id()).containsExactly(15L);
+        var responses = saleService.list(token, "7");
+        assertThat(responses).extracting(response -> response.id()).containsExactly(15L);
+        assertThat(responses.getFirst().items()).isEmpty();
         verify(saleRepository).findAllByShopIdOrderByIdDesc(7L);
+        verify(saleItemRepository).findAllByShopId(7L);
+        verify(saleItemRepository, never()).findAllBySaleIdOrderByIdAsc(any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 20, 100, 10000})
+    void loadsItemsOnceRegardlessOfSaleCount(int count) {
+        var sales = IntStream.rangeClosed(1, count).mapToObj(index -> {
+            Sale sale = sale();
+            ReflectionTestUtils.setField(sale, "id", (long) count - index + 1);
+            return sale;
+        }).toList();
+        var items = IntStream.rangeClosed(1, count).boxed().flatMap(index ->
+                IntStream.rangeClosed(1, 2).mapToObj(line -> {
+                    var draftItem = SaleDraftItem.createCustom((long) index, "Item " + line, "piece",
+                            BigDecimal.ONE, 12500L, 12500L);
+                    var item = SaleItem.fromDraftItem((long) index, draftItem);
+                    ReflectionTestUtils.setField(item, "id", index * 2L + line);
+                    return item;
+                })).toList();
+        when(saleRepository.findAllByShopIdOrderByIdDesc(7L)).thenReturn(sales);
+        when(saleItemRepository.findAllByShopId(7L)).thenReturn(items);
+
+        var responses = saleService.list(token, "7");
+
+        assertThat(responses).hasSize(count);
+        assertThat(responses).extracting(response -> response.id())
+                .containsExactlyElementsOf(sales.stream().map(Sale::getId).toList());
+        for (var response : responses) {
+            assertThat(response.items()).extracting(item -> item.id())
+                    .containsExactly(response.id() * 2 + 1, response.id() * 2 + 2);
+            assertThat(response.items()).extracting(item -> item.productName())
+                    .containsExactly("Item 1", "Item 2");
+        }
+        verify(saleItemRepository).findAllByShopId(7L);
+        verify(saleItemRepository, never()).findAllBySaleIdOrderByIdAsc(any());
+    }
+
+    @Test
+    void emptySaleListDoesNotReadItems() {
+        when(saleRepository.findAllByShopIdOrderByIdDesc(7L)).thenReturn(List.of());
+
+        assertThat(saleService.list(token, "7")).isEmpty();
+
+        verifyNoInteractions(saleItemRepository);
+    }
+
+    @Test
+    void saleListChecksShopAccessBeforeReadingData() {
+        when(shopService.requireOwnedActiveShop(token, "7"))
+                .thenThrow(new BusinessException(ErrorCode.SHOP_ACCESS_DENIED));
+
+        assertThatThrownBy(() -> saleService.list(token, "7"))
+                .isInstanceOfSatisfying(BusinessException.class, error ->
+                        assertThat(error.getErrorCode()).isEqualTo(ErrorCode.SHOP_ACCESS_DENIED));
+
+        verifyNoInteractions(saleRepository, saleItemRepository);
+    }
+
+    @Test
+    void saleDetailKeepsSingleSaleItemQuery() {
+        when(saleRepository.findByIdAndShopId(15L, 7L)).thenReturn(Optional.of(sale()));
+
+        assertThat(saleService.getById(token, "7", "15").id()).isEqualTo(15L);
+
+        verify(saleItemRepository).findAllBySaleIdOrderByIdAsc(15L);
+        verify(saleItemRepository, never()).findAllByShopId(any());
     }
 
     @Test

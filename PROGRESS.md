@@ -1,3 +1,13 @@
+### [2026-10-09 14:15 UTC+07:00] — [Performance] Batch sale and draft list item queries (#134)
+
+**Done:** Removed N+1 item reads from the sale and sale-draft list services on `perf/query-optimization`. Nonempty lists use two data queries regardless of the tested parent count; empty lists use one. Authentication/shop-access queries are excluded from this budget. No API, entity, migration, FE or business-rule change.
+
+**Changed files:** Core `SaleItemRepository`, `SaleDraftItemRepository`, `SaleServiceImpl`, `SaleDraftServiceImpl`, `SalePaymentServiceTest`, `SaleDraftServiceTest`, new `SalesListQueryPostgresTest`, Core README; this entry. Earlier progress entries and the existing untracked `.idea/` remain untouched.
+
+**Flow explained:** Validate ownership and ACTIVE shop → read parents in descending ID order → return immediately if empty; otherwise join items to parents filtered by shop, ordered by parent/item ID → group by parent ID → map responses with an empty list for missing items. Historical snapshots, item ordering and computed draft expiry are preserved. Detail/confirm/void retain their existing single-parent item queries.
+
+**Check:** Verified the targeted unit/PostgreSQL run: 59 tests, no failures/errors/skips. Full `mvnw.cmd clean verify` with all three `CORE_TEST_POSTGRES_*` variables reported 648 tests, no failures/errors/skips, BUILD SUCCESS. Real PostgreSQL 16 fixtures tested each list with 1/20/100/1,337/10,000 parents and five items per parent (up to 50,000 items): two data queries in every case; empty lists: one. A 100-parent control reproduced 101 legacy queries versus two optimized queries. Tests cover tenant/status denial, missing items, archived-product snapshots, expiry and detail-query preservation. `git diff --check` passed. Tests used a dedicated local Docker database; generated query-test schemas were removed and its container stopped. No business/staging/production DB was used. HTTP/FE latency, memory/load characteristics and staging UAT remain unverified; lists are still unpaginated. No commit or push performed in this preparation step.
+
 ### [2026-10-09 12:10 UTC+07:00] — [Config] Keep the Qdrant, LiteLLM and Langfuse settings in the AI config
 
 **Done:** Restored `QDRANT_URL`, `LITELLM_URL`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and `LANGFUSE_HOST` as optional `AppConfig` settings and `.env.example` entries, so deployments keep their credentials for the planned integrations. No code reads them yet; staging never had clients for them, only these settings.

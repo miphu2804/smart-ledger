@@ -40,6 +40,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -92,8 +93,12 @@ public class SaleDraftServiceImpl implements SaleDraftService {
     @Transactional(readOnly = true)
     public List<SaleDraftResponse> list(VerifiedFirebaseToken token, String shopId) {
         Shop shop = shopService.requireOwnedActiveShop(token, shopId);
-        return draftRepository.findAllByShopIdOrderByIdDesc(shop.getId()).stream()
-                .map(draft -> toResponse(draft, draftItemRepository.findAllByDraftIdOrderByIdAsc(draft.getId())))
+        List<SaleDraft> drafts = draftRepository.findAllByShopIdOrderByIdDesc(shop.getId());
+        if (drafts.isEmpty()) return List.of();
+        Map<Long, List<SaleDraftItem>> itemsByDraft = draftItemRepository.findAllByShopId(shop.getId()).stream()
+                .collect(Collectors.groupingBy(SaleDraftItem::getDraftId));
+        return drafts.stream()
+                .map(draft -> toResponse(draft, itemsByDraft.getOrDefault(draft.getId(), List.of())))
                 .toList();
     }
 

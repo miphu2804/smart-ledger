@@ -14,6 +14,8 @@ import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.SaleService;
 import com.smartledger.core.service.ShopService;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,8 +36,12 @@ public class SaleServiceImpl implements SaleService {
     @Transactional(readOnly = true)
     public List<SaleResponse> list(VerifiedFirebaseToken token, String shopId) {
         Shop shop = shopService.requireOwnedActiveShop(token, shopId);
-        return saleRepository.findAllByShopIdOrderByIdDesc(shop.getId()).stream()
-                .map(sale -> toResponse(sale, saleItemRepository.findAllBySaleIdOrderByIdAsc(sale.getId())))
+        List<Sale> sales = saleRepository.findAllByShopIdOrderByIdDesc(shop.getId());
+        if (sales.isEmpty()) return List.of();
+        Map<Long, List<SaleItem>> itemsBySale = saleItemRepository.findAllByShopId(shop.getId()).stream()
+                .collect(Collectors.groupingBy(SaleItem::getSaleId));
+        return sales.stream()
+                .map(sale -> toResponse(sale, itemsBySale.getOrDefault(sale.getId(), List.of())))
                 .toList();
     }
 

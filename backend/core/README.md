@@ -158,6 +158,20 @@ $env:CORE_TEST_POSTGRES_PASSWORD = 'test_password'
 
 The test creates and removes only a randomly named `core_void_test_*` schema, requires permission to create schemas, and does not run Flyway. It uses real business services and transactions, with auth/idempotency stubbed. Without `CORE_TEST_POSTGRES_URL`, PostgreSQL suites are skipped; unit/web tests still run normally.
 
+### Sale and draft list query regression tests
+
+Issue [#134](https://github.com/miphu2804/smart-ledger/issues/134) replaces per-parent item queries in `GET /api/v1/sales` and `GET /api/v1/sale-drafts` with one shop-scoped item query, then groups items by parent ID. Nonempty lists use two data queries; empty lists skip the item query and use one. These counts exclude authentication and shop-access checks. Parent IDs remain descending and item IDs ascending; detail, confirm and void retain their single-parent item queries. No API or schema change is required.
+
+With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
+
+```powershell
+.\mvnw.cmd '-Dtest=SalePaymentServiceTest,SaleDraftServiceTest,SalesListQueryPostgresTest' test
+```
+
+`SalesListQueryPostgresTest` applies V1–V15 and validates mappings in a generated `core_list_query_test_*` schema. Synthetic fixtures roll back after each test, and the suite removes only its generated schema. Hibernate SQL counting exercises the real list services and ownership checks with 1, 20, 100, 1,337 and 10,000 parents, each with five items; it also covers empty lists, missing items, cross-shop denial, inactive shops, archived-product snapshots and computed draft expiry. A control reproduces the old loop with 100 parents (101 data queries) and checks the optimized services use two. Unit tests separately verify batch repository calls with up to 10,000 parents.
+
+Use only a disposable database with schema-creation permission, never a business, shared staging or production database. Without the test URL, the PostgreSQL suite is skipped. This is a SQL-count regression test, not an HTTP/Firebase/FE load benchmark or staging UAT; list responses remain unpaginated and still load the shop's full history.
+
 ### Admin dashboard development tests
 
 With the same disposable PostgreSQL variables, run:

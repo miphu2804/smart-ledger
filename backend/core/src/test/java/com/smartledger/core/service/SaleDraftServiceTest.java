@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.smartledger.core.dto.request.SaleDraftItemRequest;
@@ -41,6 +42,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -71,6 +73,85 @@ class SaleDraftServiceTest {
         Shop shop = Shop.create(42L, "Tiệm Thảo", "Grocery", null, null);
         ReflectionTestUtils.setField(shop, "id", 7L);
         when(shopService.requireOwnedActiveShop(any(), eq("7"))).thenReturn(shop);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 20, 100, 10000})
+    void loadsDraftItemsOnceRegardlessOfDraftCount(int count) {
+        var drafts = IntStream.rangeClosed(1, count).mapToObj(index -> {
+            SaleDraft draft = draft(25000L, PaymentMethod.CASH);
+            ReflectionTestUtils.setField(draft, "id", (long) count - index + 1);
+            return draft;
+        }).toList();
+        var items = IntStream.rangeClosed(1, count).boxed().flatMap(index ->
+                IntStream.rangeClosed(1, 2).mapToObj(line -> {
+                    var item = SaleDraftItem.createCustom((long) index, "Item " + line, "piece",
+                            BigDecimal.ONE, 12500L, 12500L);
+                    ReflectionTestUtils.setField(item, "id", index * 2L + line);
+                    return item;
+                })).toList();
+        when(draftRepository.findAllByShopIdOrderByIdDesc(7L)).thenReturn(drafts);
+        when(draftItemRepository.findAllByShopId(7L)).thenReturn(items);
+
+        var responses = service.list(token, "7");
+
+        assertThat(responses).hasSize(count);
+        assertThat(responses).extracting(response -> response.id())
+                .containsExactlyElementsOf(drafts.stream().map(SaleDraft::getId).toList());
+        for (var response : responses) {
+            assertThat(response.items()).extracting(item -> item.id())
+                    .containsExactly(response.id() * 2 + 1, response.id() * 2 + 2);
+            assertThat(response.items()).extracting(item -> item.productName())
+                    .containsExactly("Item 1", "Item 2");
+        }
+        verify(draftItemRepository).findAllByShopId(7L);
+        verify(draftItemRepository, never()).findAllByDraftIdOrderByIdAsc(any());
+    }
+
+    @Test
+    void emptyDraftListDoesNotReadItems() {
+        when(draftRepository.findAllByShopIdOrderByIdDesc(7L)).thenReturn(List.of());
+
+        assertThat(service.list(token, "7")).isEmpty();
+
+        verifyNoInteractions(draftItemRepository);
+    }
+
+    @Test
+    void draftListPreservesMissingItemsAndLifecycleStates() {
+        var expired = draft(25000L, PaymentMethod.CASH);
+        ReflectionTestUtils.setField(expired, "id", 14L);
+        ReflectionTestUtils.setField(expired, "expiresAt", OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
+        var confirmed = draft(25000L, PaymentMethod.CASH);
+        ReflectionTestUtils.setField(confirmed, "id", 13L);
+        confirmed.confirm(15L);
+        var cancelled = draft(25000L, PaymentMethod.CASH);
+        ReflectionTestUtils.setField(cancelled, "id", 12L);
+        cancelled.cancel();
+        when(draftRepository.findAllByShopIdOrderByIdDesc(7L))
+                .thenReturn(List.of(expired, confirmed, cancelled, draft(25000L, PaymentMethod.CASH)));
+        when(draftItemRepository.findAllByShopId(7L)).thenReturn(List.of());
+
+        var responses = service.list(token, "7");
+
+        assertThat(responses).extracting(response -> response.id()).containsExactly(14L, 13L, 12L, 11L);
+        assertThat(responses).extracting(response -> response.status())
+                .containsExactly(DraftStatus.EXPIRED, DraftStatus.CONFIRMED, DraftStatus.CANCELLED, DraftStatus.DRAFT);
+        assertThat(responses).allSatisfy(response -> assertThat(response.items()).isEmpty());
+        assertThat(expired.getStatus()).isEqualTo(DraftStatus.DRAFT);
+        verify(draftItemRepository, never()).findAllByDraftIdOrderByIdAsc(any());
+    }
+
+    @Test
+    void draftListChecksShopAccessBeforeReadingData() {
+        when(shopService.requireOwnedActiveShop(token, "7"))
+                .thenThrow(new BusinessException(ErrorCode.SHOP_ACCESS_DENIED));
+
+        assertThatThrownBy(() -> service.list(token, "7"))
+                .isInstanceOfSatisfying(BusinessException.class, error ->
+                        assertThat(error.getErrorCode()).isEqualTo(ErrorCode.SHOP_ACCESS_DENIED));
+
+        verifyNoInteractions(draftRepository, draftItemRepository);
     }
 
     @Test
