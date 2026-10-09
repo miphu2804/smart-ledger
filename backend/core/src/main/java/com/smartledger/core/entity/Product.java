@@ -16,6 +16,7 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -46,6 +47,9 @@ public class Product {
     @Column(name = "image_url", length = 1000)
     private String imageUrl;
 
+    @Column(name = "image_public_id", length = 500)
+    private String imagePublicId;
+
     @Column(nullable = false, length = 50)
     private String unit;
 
@@ -60,6 +64,17 @@ public class Product {
 
     @Column(name = "stock_quantity", precision = 15, scale = 3)
     private BigDecimal stockQuantity;
+
+    @Column(name = "low_stock_threshold", precision = 15, scale = 3)
+    private BigDecimal lowStockThreshold;
+
+    public void setLowStockThreshold(BigDecimal threshold) {
+        if (threshold != null && (threshold.signum() < 0 || threshold.compareTo(MAX_STOCK) > 0
+                || threshold.stripTrailingZeros().scale() > 3)) {
+            throw new IllegalArgumentException("Low-stock threshold must fit nonnegative NUMERIC(15,3)");
+        }
+        lowStockThreshold = threshold;
+    }
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -97,12 +112,25 @@ public class Product {
         this.categoryId = categoryId;
         this.name = name;
         this.barcode = barcode;
+        if (!Objects.equals(this.imageUrl, imageUrl)) {
+            imagePublicId = null;
+        }
         this.imageUrl = imageUrl;
         this.unit = unit;
         this.sellingPriceVnd = sellingPriceVnd;
         this.costPriceVnd = costPriceVnd;
         this.tracked = tracked;
         this.stockQuantity = stockQuantity;
+    }
+
+    public void replaceCloudinaryImage(String imageUrl, String imagePublicId) {
+        this.imageUrl = imageUrl;
+        this.imagePublicId = imagePublicId;
+    }
+
+    public void clearImage() {
+        imageUrl = null;
+        imagePublicId = null;
     }
 
     public void archive(Long userId) {

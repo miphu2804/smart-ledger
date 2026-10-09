@@ -34,6 +34,10 @@ function chatErrorMessage(err: unknown): string {
   if (err instanceof ApiError) {
     if (err.code === 'timeout') return 'Trợ lý trả lời quá lâu nên đã dừng chờ.';
     if (err.code === 'network') return 'Không kết nối được máy chủ. Vui lòng kiểm tra mạng.';
+    // Mã guardrail của AI (docs/contracts/api-contracts.md §6): BE chỉ trả mã, câu hiển thị nằm ở FE.
+    if (err.code === 'input_too_long') return 'Tin nhắn dài quá nên trợ lý chưa đọc được. Bạn rút gọn câu hỏi rồi gửi lại nhé.';
+    if (err.code === 'answer_unavailable') return 'Trợ lý chưa trả lời được câu này, bạn thử hỏi lại cụ thể hơn nhé.';
+    if (err.code === 'answer_timeout') return 'Trợ lý trả lời quá lâu nên đã dừng chờ.';
     if (err.code === 'ai_unavailable' || err.status === 503) return 'Trợ lý AI đang tạm lỗi hoặc quá tải.';
     if (err.code === 'conversation_not_found') return 'Cuộc trò chuyện cũ không còn. Gửi lại để bắt đầu cuộc mới.';
   }

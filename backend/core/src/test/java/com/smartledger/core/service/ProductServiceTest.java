@@ -36,7 +36,7 @@ class ProductServiceTest {
     private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
     private final IdempotencyService idempotencyService = Mockito.mock(IdempotencyService.class);
     private final ProductService service = new ProductServiceImpl(shopService, productRepository, categoryRepository,
-            auditLogService, idempotencyService);
+            auditLogService, idempotencyService, Mockito.mock(NotificationEventService.class));
 
     @BeforeEach
     void authorizeShop() {
@@ -56,6 +56,18 @@ class ProductServiceTest {
         assertThat(response.status()).isEqualTo(CatalogStatus.ACTIVE);
         assertThat(response.stockQuantity()).isNull();
         verify(productRepository).save(any(Product.class));
+    }
+
+    @Test
+    void rejectsRawProductImageUrlOnCreate() {
+        ProductWriteRequest request = new ProductWriteRequest(null, "Cà phê", null,
+                "https://untrusted.example/image.png", "ly", 25000L, 10000L, false, null);
+
+        assertThatThrownBy(() -> service.create(token(), "7", request))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_IMAGE_URL_UNSUPPORTED));
+
+        verify(productRepository, never()).save(any());
     }
 
     @Test

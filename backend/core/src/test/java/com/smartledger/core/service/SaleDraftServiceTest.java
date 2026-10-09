@@ -62,7 +62,8 @@ class SaleDraftServiceTest {
     private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
     private final SaleDraftService service = new SaleDraftServiceImpl(shopService, draftRepository,
             draftItemRepository, productRepository, saleRepository, saleItemRepository,
-            paymentRepository, customerRepository, debtRepository, auditLogService);
+            paymentRepository, customerRepository, debtRepository, auditLogService,
+            Mockito.mock(NotificationEventService.class));
     private final VerifiedFirebaseToken token = new VerifiedFirebaseToken("uid", null, false, null, null, null);
 
     @BeforeEach

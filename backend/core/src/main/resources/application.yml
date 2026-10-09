@@ -10,6 +10,10 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
 
 server:
   port: ${SERVER_PORT:${PORT:8080}}
@@ -17,6 +21,15 @@ server:
 firebase:
   project-id: ${FIREBASE_PROJECT_ID:}
   service-account-json: ${FIREBASE_SERVICE_ACCOUNT_JSON:}
+
+cloudinary:
+  enabled: ${CLOUDINARY_ENABLED:false}
+  cloud-name: ${CLOUDINARY_CLOUD_NAME:}
+  api-key: ${CLOUDINARY_API_KEY:}
+  api-secret: ${CLOUDINARY_API_SECRET:}
+  public-id-prefix: ${CLOUDINARY_PUBLIC_ID_PREFIX:}
+  cleanup:
+    fixed-delay-ms: ${CLOUDINARY_CLEANUP_FIXED_DELAY_MS:60000}
 
 ai:
   base-url: ${AI_BASE_URL:http://localhost:8001}
@@ -27,6 +40,8 @@ smartledger:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:}
   idempotency:
     ttl-days: ${IDEMPOTENCY_TTL_DAYS:30}
+  media:
+    upload-lease-seconds: ${MEDIA_UPLOAD_LEASE_SECONDS:300}
 
 management:
   endpoints:

@@ -35,7 +35,8 @@ class ShopServiceTest {
     private final ShopRepository shopRepository = Mockito.mock(ShopRepository.class);
     private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
     private final AdminAccessAuditService adminAccessAuditService = Mockito.mock(AdminAccessAuditService.class);
-    private final ShopService service = new ShopServiceImpl(authIdentityRepository, shopRepository, auditLogService, adminAccessAuditService);
+    private final ShopService service = new ShopServiceImpl(authIdentityRepository, shopRepository, auditLogService,
+            adminAccessAuditService, Mockito.mock(NotificationEventService.class));
 
     @Test
     void createsAnActiveShopForTheCurrentOwner() {
@@ -114,7 +115,9 @@ class ShopServiceTest {
         UserAccount owner = owner();
         authenticateAs(owner);
         Shop shop = Shop.create(owner.getId(), "Old name", "Old industry", "0901", "Old address");
+        ReflectionTestUtils.setField(shop, "id", 7L);
         when(shopRepository.findByIdAndOwnerId(eq(7L), any())).thenReturn(Optional.of(shop));
+        when(shopRepository.findLockedByIdAndOwnerId(7L, owner.getId())).thenReturn(Optional.of(shop));
 
         ShopResponse response = service.updateById(
                 firebaseToken(),
@@ -131,7 +134,9 @@ class ShopServiceTest {
         UserAccount owner = owner();
         authenticateAs(owner);
         Shop shop = Shop.create(owner.getId(), "Tiệm Thảo", "Grocery", null, null);
+        ReflectionTestUtils.setField(shop, "id", 7L);
         when(shopRepository.findByIdAndOwnerId(eq(7L), any())).thenReturn(Optional.of(shop));
+        when(shopRepository.findLockedByIdAndOwnerId(7L, owner.getId())).thenReturn(Optional.of(shop));
 
         service.archiveById(firebaseToken(), "7", new ArchiveShopRequest("No longer operating"));
 
@@ -206,6 +211,7 @@ class ShopServiceTest {
         Shop shop = Shop.create(99L, "Tiệm Thảo", "Grocery", null, null);
         ReflectionTestUtils.setField(shop, "id", 7L);
         when(shopRepository.findById(7L)).thenReturn(Optional.of(shop));
+        when(shopRepository.findLockedById(7L)).thenReturn(Optional.of(shop));
 
         ShopResponse inactive = service.updateStatus(
                 firebaseToken(),

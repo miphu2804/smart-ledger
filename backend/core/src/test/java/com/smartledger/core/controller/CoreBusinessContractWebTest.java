@@ -53,6 +53,7 @@ class CoreBusinessContractWebTest {
     @MockitoBean private FirebaseTokenVerifier tokenVerifier;
     @MockitoBean private CategoryService categories;
     @MockitoBean private ProductService products;
+    @MockitoBean private MediaService media;
     @MockitoBean private SaleDraftService drafts;
     @MockitoBean private SaleService sales;
     @MockitoBean private PaymentService payments;
@@ -67,7 +68,7 @@ class CoreBusinessContractWebTest {
             """;
     private static final String PRODUCT_JSON = """
             {"id":5,"shopId":7,"categoryId":3,"name":"Tea","barcode":null,"imageUrl":null,
-             "unit":"cup","sellingPriceVnd":50000,"costPriceVnd":null,"tracked":true,"stockQuantity":10,
+             "unit":"cup","sellingPriceVnd":50000,"costPriceVnd":null,"tracked":true,"stockQuantity":10,"lowStockThreshold":null,
              "status":"ACTIVE","createdAt":"2026-10-01T21:30:00+07:00","updatedAt":"2026-10-01T21:30:00+07:00"}
             """;
     private static final String ITEMS_JSON = """
