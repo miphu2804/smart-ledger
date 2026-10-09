@@ -4,13 +4,29 @@ import re
 from pathlib import Path
 
 import psycopg
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelRequest,
+    ModelResponse,
+    RetryPromptPart,
+    TextPart,
+    ToolCallPart,
+    ToolReturnPart,
+    UserPromptPart,
+)
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+from sqlalchemy.engine import make_url
 
 from src.agent.guardrails import GuardrailLimits
 
 # Guardrails stay enabled in tests; these limits are wide enough not to change any case
 # that does not target them. Guardrail tests pass their own small limits instead.
 TEST_GUARDRAIL_LIMITS = GuardrailLimits(
-    max_input_chars=100_000, model_call_limit=100, tool_call_limit=100
+    max_input_chars=100_000,
+    model_call_limit=100,
+    tool_call_limit=100,
+    turn_token_limit=10_000_000,
+    turn_timeout_seconds=60,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -35,3 +51,80 @@ def apply_ai_baseline(connection: psycopg.Connection, view_schema: str) -> None:
     # `ai_read` schema are never touched; the role name is shared across the cluster.
     text = re.sub(r"\bai_read\b", view_schema, AI_BASELINE.read_text())
     connection.execute(text, prepare=False)
+
+
+def schema_url(database_url: str, schema: str) -> str:
+    """`database_url` with `schema` first on the search path, for `PostgreDBClient`.
+
+    `POSTGRES_TEST_URL` must be a `postgresql://` URL for this, not a libpq keyword
+    string.
+    """
+    url = make_url(database_url).update_query_dict(
+        {"options": f"-c search_path={schema}"}
+    )
+    return url.render_as_string(hide_password=False)
+
+
+class ScriptedModel(FunctionModel):
+    """A model that replays `responses` in order and records each request it gets.
+
+    A `str` response is a text answer; `tool_call` builds a tool-call response.
+    """
+
+    def __init__(self, *responses: str | ModelResponse) -> None:
+        super().__init__(self._respond, model_name="test-model")
+        self.responses = list(responses)
+        self.requests: list[tuple[list[ModelMessage], AgentInfo]] = []
+
+    def _respond(self, messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        self.requests.append((list(messages), info))
+        if not self.responses:
+            raise AssertionError("unexpected model request")
+        response = self.responses.pop(0)
+        if isinstance(response, str):
+            return ModelResponse(parts=[TextPart(response)])
+        return response
+
+    def tool_names(self, request: int = 0) -> list[str]:
+        """Names of the tools the model was offered on that request."""
+        return [tool.name for tool in self.requests[request][1].function_tools]
+
+
+def tool_call(name: str, args: dict, *more: dict) -> ModelResponse:
+    """A model response calling `name` with `args`, plus a parallel call per `more`."""
+    return ModelResponse(parts=[ToolCallPart(name, call) for call in (args, *more)])
+
+
+def transcript(messages: list[ModelMessage]) -> list[tuple[str, str]]:
+    """The messages as (kind, text) pairs, in the order the model read them."""
+    pairs = []
+    for message in messages:
+        for part in message.parts:
+            if isinstance(part, UserPromptPart):
+                pairs.append(("user", part.content))
+            elif isinstance(part, TextPart):
+                pairs.append(("assistant", part.content))
+            elif isinstance(part, ToolCallPart):
+                pairs.append(("call", part.tool_name))
+            elif isinstance(part, ToolReturnPart):
+                pairs.append(("tool", part.model_response_str()))
+            elif isinstance(part, RetryPromptPart):
+                pairs.append(("retry", part.model_response()))
+    return pairs
+
+
+def tool_results(model: ScriptedModel) -> list[str]:
+    """What the tools returned, as the model read it on its last request."""
+    return [text for kind, text in transcript(model.requests[-1][0]) if kind == "tool"]
+
+
+def echo_user_prompts(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    """A model function that answers with every user prompt it was sent, in order."""
+    prompts = [
+        part.content
+        for message in messages
+        if isinstance(message, ModelRequest)
+        for part in message.parts
+        if isinstance(part, UserPromptPart)
+    ]
+    return ModelResponse(parts=[TextPart(" | ".join(prompts))])

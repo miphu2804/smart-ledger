@@ -12,18 +12,18 @@
 - [BRD](../product/business-requirements.md) và [PRD](../product/product-requirements.md): nguồn `BO/BR → FR/NFR → AC`.
 - [Sơ đồ kiến trúc MVP](diagrams/src/architecture.mmd); bản vẽ [drawio](diagrams/src/architecture.drawio), [SVG](diagrams/images/architecture.svg), [PNG](diagrams/images/architecture.png).
 - [Hợp đồng API](../contracts/api-contracts.md): FE ↔ Core và Core ↔ AI.
-- Nguồn đối chiếu hiện tại: [`frontend/mobile`](../../frontend/mobile/README.md), [`frontend/web`](../../frontend/web/README.md), [`backend/core`](../../backend/core/src/main/java/com/smartledger/core/controller/AuthController.java) và [`backend/ai`](../../backend/ai/src/agent/routers.py). FE EXE201 là nguồn lịch sử khi soạn phạm vi ban đầu.
+- Nguồn đối chiếu hiện tại: [`frontend/mobile`](../../frontend/mobile/README.md), [`frontend/web`](../../frontend/web/README.md), [`backend/core`](../../backend/core/src/main/java/com/smartledger/core/controller/AuthController.java) và [`backend/ai`](../../backend/ai/src/agent/router.py). FE EXE201 là nguồn lịch sử khi soạn phạm vi ban đầu.
 
 ## 1. Phạm vi
 
-Kiến trúc trong sơ đồ là **đích MVP**: Mobile dành cho OWNER và dashboard web dành cho ADMIN cùng gọi Core; Core sở hữu API công khai và điều phối AI; PostgreSQL lưu sổ nghiệp vụ, lịch sử Agent chat và vector (pgvector); Redis, Langfuse và LiteLLM hỗ trợ AI.
+Kiến trúc trong sơ đồ là **đích MVP**: Mobile dành cho OWNER và dashboard web dành cho ADMIN cùng gọi Core; Core sở hữu API công khai và điều phối AI; PostgreSQL lưu sổ nghiệp vụ, lịch sử Agent chat và vector (pgvector); Redis, Langfuse và LiteLLM hỗ trợ AI (hoãn sau bản phát hành đầu tiên theo quyết định ngày 2026-10-07).
 
 Mục này là nơi duy nhất ghi hiện trạng triển khai; tài liệu khác liên kết tới đây thay vì chép lại. Trạng thái từng endpoint nằm trong [hợp đồng API](../contracts/api-contracts.md).
 
 **Core/mobile đối chiếu `staging` tại `b1de421c461d59473b3bb73aae103027afd67a89` ngày 2026-10-06; các mục AI giữ snapshot trước, không rà soát lại trong lượt này:**
 
 - **Core:** Firebase auth/session/me, Shop/Category/Product/Customer CRUD, draft → confirm → sale/payment, debt repayment, expense, report summary, sale void và full refund, audit thao tác ghi và lịch sử audit cho OWNER; 7 GET hỗ trợ ADMIN, audit đọc ADMIN và đổi trạng thái tiệm; schema Flyway V1–V14 trên nhánh Core hiện tại. Core proxy `/api/v1/agent/*` sang AI `/internal/v1/agent/*` kèm `X-Internal-Token`, lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực.
-- **AI:** `/health` và Agent chat (chat, list, detail, rename, delete) lưu PostgreSQL, tóm tắt cuốn chiếu, tìm lịch sử và tool đọc dữ liệu tiệm chỉ đọc; schema AI là một baseline Supabase CLI trong `supabase/migrations/`.
+- **AI:** `/health` và Agent chat (chat, list, detail, rename, delete) lưu PostgreSQL, gửi cho model các lượt trao đổi gần nhất nguyên văn (mặc định 100 lượt, không tóm tắt) và có tool đọc dữ liệu tiệm chỉ đọc; schema AI là một baseline Supabase CLI trong `supabase/migrations/`.
 - **AI — gợi ý nhập hàng và câu hỏi doanh số:** hai view chỉ đọc `v_sales` và `v_sale_items` cho câu hỏi doanh số; agent có tool `suggest_restock` trả gợi ý nhập hàng từ đơn `CONFIRMED`. `COVER_DAYS` (hiện là 7 ngày) và hai kỳ `last_7_days`/`last_30_days` là mặc định chờ PO duyệt, chưa phải yêu cầu đã chốt; xem [README AI](../../backend/ai/README.md#restock-suggestions).
 - **Mobile** (đối chiếu `staging` tại `b1de421c461d`, ngày 2026-10-06): mặc định dùng mock; khi tắt mock gọi Firebase và Core cho đơn hàng, hàng hoá, công nợ, chi phí, thanh toán và hồ sơ tiệm. Home/Analytics tải danh sách dữ liệu từ Core rồi tính chỉ số cục bộ, chưa gọi `/api/v1/reports/summary`; lãi là ước tính, không tương đương báo cáo gross/voided/net của Core (xem [Chỉ số trên Home/Analytics](../../frontend/mobile/README.md#chỉ-số-trên-homeanalytics)). Confirm chống trùng theo draft ID; tạo chi phí, trả nợ và void dùng `Idempotency-Key`. Nhận diện đơn vẫn dùng parser rule-based trên máy; mic chỉ nhận giọng nói trên web.
 - **Web admin:** mặc định mock; nhánh gọi thật chưa khớp auth/DTO/query của Core (còn `/auth/login`, `overview?days=`, `/admin/audit-logs` và các field giả định). Core đã có API hỗ trợ tối thiểu theo [contract ADMIN](../contracts/api-contracts.md#7-dashboard-quản-trị--đã-có-trong-core); chưa có bằng chứng web → Firebase → Core đã tích hợp/nghiệm thu.
@@ -47,9 +47,9 @@ Mục này là nơi duy nhất ghi hiện trạng triển khai; tài liệu khá
 | Core | Hiện có auth, shop/catalog/customer, draft/sale/payment/debt/refund, expense, summary, audit và proxy Agent sang AI; ADMIN có đọc tổng quan/hồ sơ/lịch sử hỗ trợ và đổi trạng thái shop, đều có audit. Nhánh hiện tại thêm nhập kho cộng dồn, snapshot giá vốn V12, ba report nâng cao và media Cloudinary V13/V14 cho Product/Shop/User; UI nhập/gợi ý/báo cáo/media và điều phối AI proposal chưa hoàn thành |
 | AI | Voice/text parse, image analysis, recommendation, insight chat và Agent chat; chỉ trả đề xuất/câu trả lời |
 | PostgreSQL | Dữ liệu nghiệp vụ, idempotency và audit_logs Core; vector qua `pgvector` ([ADR-0001](adr/0001-vector-store-pgvector.md)); V15 lưu inbox/read-state/threshold Core; trace AI theo ERD đích, không mặc nhiên là migration Core |
-| Redis | Cache/giới hạn tốc độ/tác vụ ngắn hạn; không là nguồn dữ liệu chuẩn |
-| LiteLLM | Chọn model và quản lý khóa model ở phía server |
-| Langfuse | Trace AI; không ghi audio/ảnh hoặc dữ liệu nhạy cảm thô mặc định |
+| Redis | Cache/giới hạn tốc độ/tác vụ ngắn hạn; không là nguồn dữ liệu chuẩn. Tính năng dựa trên Redis hoãn sau bản phát hành đầu tiên; AI đã kết nối Redis lúc khởi động nhưng chưa tính năng nào dùng, Core không dùng |
+| LiteLLM | Chọn model và quản lý khóa model ở phía server. Hoãn sau bản phát hành đầu tiên; AI hiện không dùng |
+| Langfuse | Trace AI; không ghi audio/ảnh hoặc dữ liệu nhạy cảm thô mặc định. Hoãn sau bản phát hành đầu tiên; AI hiện không dùng |
 
 Chỉ Core có API công khai. FE không gọi AI, PostgreSQL, Redis, LiteLLM hoặc Langfuse trực tiếp.
 
@@ -109,7 +109,7 @@ Schema PostgreSQL được quản lý bằng migration SQL có phiên bản tron
 |---|---|
 | FE | `API_BASE_URL` |
 | Core hiện tại | `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, `FIREBASE_PROJECT_ID`; credential qua `FIREBASE_SERVICE_ACCOUNT_JSON` hoặc Application Default Credentials (ADC, local thường dùng `GOOGLE_APPLICATION_CREDENTIALS`); `CORS_ALLOWED_ORIGINS`, `FLYWAY_ENABLED`, `AI_BASE_URL`, `INTERNAL_API_TOKEN`; media dùng `CLOUDINARY_ENABLED`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_PUBLIC_ID_PREFIX` (bắt buộc khi enabled), optional `MEDIA_UPLOAD_LEASE_SECONDS` (mặc định 300) và `CLOUDINARY_CLEANUP_FIXED_DELAY_MS`; `SERVER_PORT`, `IDEMPOTENCY_TTL_DAYS` tùy chọn; Core không dùng Redis |
-| AI hiện tại | `POSTGRES_URL`, `REDIS_URL`, `INTERNAL_API_TOKEN`, `MODEL_*`, `OPENAI_API_KEY`; `AI_SQL_READER_URL` tùy chọn cho tool đọc dữ liệu tiệm. `LITELLM_URL`, `LANGFUSE_*` đã khai báo nhưng code chưa dùng. Danh sách đầy đủ: [`backend/ai/.env.example`](../../backend/ai/.env.example) |
+| AI hiện tại | `POSTGRES_URL`, `REDIS_URL`, `INTERNAL_API_TOKEN`, `MODEL_*`, `OPENAI_API_KEY`; `AI_SQL_READER_URL` tùy chọn cho tool đọc dữ liệu tiệm. AI kết nối Redis lúc khởi động nhưng chưa tính năng nào dùng; `LITELLM_URL` và `LANGFUSE_*` đã bỏ khỏi cấu hình AI, hoãn sau bản phát hành đầu tiên. Danh sách đầy đủ: [`backend/ai/.env.example`](../../backend/ai/.env.example) |
 
 Host và port thuộc cấu hình môi trường, không phải API contract. [Core README](../../backend/core/README.md) là nơi hướng dẫn chạy IntelliJ/Maven/Docker và Firebase Emulator; không nhân bản hướng dẫn vận hành tại đây.
 
