@@ -1,8 +1,7 @@
 import asyncio
-import contextlib
 import logging
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator, AsyncIterator
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 
 from pydantic_ai import (
@@ -126,7 +125,7 @@ class AgentService:
         shop_id: int,
         message: str,
         conversation_id: int | None = None,
-    ) -> AsyncIterator[AgentStreamEvent]:
+    ) -> AsyncGenerator[AgentStreamEvent]:
         """Refuse a turn now, so the caller can answer with a status code; the returned
         iterator runs the model and yields the events."""
         context = AgentContext(user_id=user_id, shop_id=shop_id)
@@ -170,9 +169,7 @@ class AgentService:
                 deps=context,
                 usage_limits=self.guardrails.usage_limits,
             )
-        # Token counts per turn, to size AGENT_TURN_TOKEN_LIMIT from real traffic.
-        logger.info("agent turn usage: %s", result.usage)
-        return result.output, result.response.model_name or self.model_name
+        return self._read_result(result)
 
     async def _stream_events(
         self,
@@ -180,7 +177,7 @@ class AgentService:
         history: list[dict],
         context: AgentContext,
         conversation_id: int | None,
-    ) -> AsyncIterator[AgentStreamEvent]:
+    ) -> AsyncGenerator[AgentStreamEvent]:
         events: asyncio.Queue[AgentStreamEvent | Exception] = asyncio.Queue()
         producer = asyncio.create_task(
             self._produce_turn(question, history, context, conversation_id, events)
@@ -196,7 +193,7 @@ class AgentService:
         finally:
             # A closed or disconnected caller cancels the run before it is saved.
             producer.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
+            with suppress(asyncio.CancelledError):
                 await producer
 
     async def _produce_turn(
@@ -213,14 +210,12 @@ class AgentService:
             delivered, result = await self._stream_run(
                 question, history, context, events
             )
-            answer = result.output
+            answer, version = self._read_result(result)
             if not answer.startswith(delivered):
                 events.put_nowait(Reset())
                 delivered = ""
             if answer[len(delivered) :]:
                 events.put_nowait(TextDelta(answer[len(delivered) :]))
-            logger.info("agent turn usage: %s", result.usage)
-            version = result.response.model_name or self.model_name
             saved = await self._save_turn(
                 context, conversation_id, question, answer, version
             )
@@ -272,6 +267,12 @@ class AgentService:
                         events.put_nowait(TextDelta(fresh))
             result = run.result
         return delivered, result
+
+    def _read_result(self, result: AgentRunResult[str]) -> tuple[str, str]:
+        """Log the turn's token use; return the answer and the model version."""
+        # Token counts per turn, to size AGENT_TURN_TOKEN_LIMIT from real traffic.
+        logger.info("agent turn usage: %s", result.usage)
+        return result.output, result.response.model_name or self.model_name
 
     async def _save_turn(
         self,
