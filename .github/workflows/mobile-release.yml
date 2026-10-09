@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: GitHub environment to build for; it picks the Firebase config and the allowed branch
+        description: Must be android-production on main, android-staging on staging and android-dev on any other branch; it picks the Firebase config
         type: choice
         required: true
         default: android-dev
@@ -54,15 +54,16 @@ jobs:
           if [ "$REF_TYPE" != branch ]; then
             echo "::error::Run this workflow from a branch, not a tag."; exit 1
           fi
-          case "$ENVIRONMENT" in
-            android-production) want=main ;;
-            android-staging) want=staging ;;
-            *) want="" ;;
+          # The branch decides the environment, so main can never be built with staging or dev config.
+          case "$REF_NAME" in
+            main) want=android-production ;;
+            staging) want=android-staging ;;
+            *) want=android-dev ;;
           esac
-          if [ -n "$want" ] && [ "$REF_NAME" != "$want" ]; then
-            echo "::error::$ENVIRONMENT builds only from $want, got $REF_NAME."; exit 1
+          if [ "$ENVIRONMENT" != "$want" ]; then
+            echo "::error::Branch $REF_NAME builds only with $want, got $ENVIRONMENT."; exit 1
           fi
-      # android-dev builds from any branch of this repository, so a pull request can be tested before it merges.
+      # Any other branch of this repository builds as android-dev, so a pull request can be tested before it merges.
       - name: Require a green CI run for the commit
         if: inputs.environment != 'android-dev'
         env:

@@ -13,7 +13,8 @@ Diagram source: [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio); edi
 1. **PR into `staging`:** CI runs the tests, checks migrations on a throwaway PostgreSQL and builds the images. Job `deploy` is skipped because the event is `pull_request`.
 2. **Merge into `staging`:** CI runs again on the merged commit. When `ai`, `core`, `mobile-web` and `container-images` all pass, job `deploy` uses environment `railway-staging` and deploys to Railway staging. No approval is needed.
 3. **PR `staging` → `main`:** open it only after checking staging (see [Target branch](../../CONTRIBUTING.md#target-branch)).
-4. **Merge into `main`:** CI runs again; job `deploy` waits in *Waiting*. A reviewer opens the run in the Actions tab → **Review deployments** → Approve. Only then does the job receive the production `RAILWAY_TOKEN` and deploy.
+4. **Merge into `main`:** use a merge commit, never a squash. If `staging` and `main` conflict, release from a `release/staging-to-main-<date>` branch as described in [CONTRIBUTING](../../CONTRIBUTING.md#target-branch). CI runs again on `main`; jobs `deploy` (`railway-production`) and `deploy-web` (`vercel-production`) wait in *Waiting*. A reviewer opens the run in the Actions tab → **Review deployments** → approves both. Only then does a job receive its production token and deploy.
+5. **Check production, then tag:** the web smoke test runs against `https://smart-ledger-prod.vercel.app` and must pass; open the app and sign in. Then create the release on the commit that ran, for example `gh release create vX.Y.Z --target <merge commit> --generate-notes`. Tags are created by a person, not by CI.
 
 Every CI job must pass before a deploy, including `mobile-web`. Each deploy uploads a `deploy-summary-<branch>` artifact (environment, commit, `ai`/`core` result) and a summary table on the run page.
 
@@ -28,7 +29,7 @@ Every CI job must pass before a deploy, including `mobile-web`. Each deploy uplo
 | `vercel-preview` | Any branch (PR) | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `EXPO_PUBLIC_*` |
 | `vercel-staging` | `staging` | No | Same as above | `EXPO_PUBLIC_*`, `VERCEL_STAGING_ALIAS` |
 | `vercel-production` | `main` | Yes | Same as above | `EXPO_PUBLIC_*` |
-| `android-dev` | Any branch | No | `ANDROID_GOOGLE_SERVICES_JSON`: Firebase config of the dev/staging project | `EXPO_PUBLIC_*` |
+| `android-dev` | None; job `gate` pairs it with branches other than `main` and `staging` | No | `ANDROID_GOOGLE_SERVICES_JSON`: Firebase config of the dev/staging project | `EXPO_PUBLIC_*` |
 | `android-staging` | `staging` | No | `ANDROID_GOOGLE_SERVICES_JSON`: Firebase config of the staging project | `EXPO_PUBLIC_*` |
 | `android-production` | `main` | Yes | `ANDROID_GOOGLE_SERVICES_JSON`: Firebase config of the production project | `EXPO_PUBLIC_*` |
 
@@ -101,6 +102,21 @@ https://smart-ledger-staging.vercel.app,https://smart-ledger-preview-00.vercel.a
 
 The ten `smart-ledger-preview-0N` origins belong to pull-request previews (see below); the same domains must also be listed in Firebase Authorized domains for sign-in to work.
 
+## Production environment checklist
+
+Check each item before deploying to a new production environment. A deploy can report success while production still cannot work:
+
+| Check | Where | Symptom when missing |
+|---|---|---|
+| Project token of the **production** Railway environment stored as `RAILWAY_TOKEN` in `railway-production` | Railway → project → Settings → Tokens | Step `Sync core CORS origins` fails with `Invalid RAILWAY_TOKEN`; no backend deploy |
+| Email/Password (and Phone, if used) enabled; the web domain listed under Authorized domains | Firebase Console of the production project → Authentication | Sign-in returns 400 `signInWithPassword`; the app says the sign-in method is not enabled |
+| AI baseline applied to the production database | [Database migrations](../../README.md#database-migrations): run `db push` with `--dry-run` first | Chat returns 503 `ai_unavailable`; the `ai` log shows `relation "chat_conversations" does not exist` |
+| All Core migrations applied | [Database migrations](../../README.md#database-migrations) | Core fails the schema check or queries fail |
+| `CORS_ALLOWED_ORIGINS` set on `railway-production` to `https://smart-ledger-prod.vercel.app` | GitHub environment variable | Smoke test fails with `Core CORS does not allow <URL>`; browser calls to Core are blocked |
+| Supabase Data API off for staging and production | Supabase → Settings → Data API | The `public` tables are readable through the anon key; Core and AI connect directly and do not use it |
+
+A new Firebase project limits SMS to 10 a day until a billing account is attached, which affects phone sign-in only.
+
 ## What this flow does not do yet
 
 - No database migrations. Flyway stays off by default and `supabase db push` is not in CI; the migration owner runs them by hand following [Database migrations](../../README.md#database-migrations), on staging before production.
@@ -132,15 +148,23 @@ Job `deploy-web` builds `frontend/mobile` on the runner (`vercel build`) and upl
 
 ### Run a build
 
-Actions tab → **Mobile release** → **Run workflow**, choose the branch in *Use workflow from*, then the inputs; or `gh workflow run mobile-release.yml --ref <branch> -f environment=android-dev -f runner=auto`.
+Actions tab → **Mobile release** → **Run workflow**, choose the branch in *Use workflow from*, then the inputs; or `gh workflow run mobile-release.yml --ref <branch> -f environment=<environment> -f runner=auto`.
+
+The branch picks the code and the environment picks the config (Firebase file, `EXPO_PUBLIC_*`, approval), and job `gate` allows only one pair per branch:
+
+| Branch | Environment | Points at |
+|---|---|---|
+| `main` | `android-production` | Production Core and Firebase |
+| `staging` | `android-staging` | Staging Core and Firebase |
+| any other branch | `android-dev` | Staging Core and Firebase (the dev environment shares the staging backend) |
 
 | Environment | Builds from | Output | ABIs |
 |---|---|---|---|
-| `android-dev` | Any branch of this repository, including a pull request branch | APK | `arm64-v8a` |
+| `android-dev` | Any branch except `main` and `staging`, including a pull request branch; no CI-green check | APK | `arm64-v8a` |
 | `android-staging` | `staging`, after a green CI run on the commit | APK | all four |
 | `android-production` | `main`, after a green CI run and approval | AAB | all four |
 
-Job `gate` rejects a wrong branch or a commit without a successful `ci.yml` run before any runner starts. Only people with write access can run a workflow, and forks cannot.
+Job `gate` rejects a branch and environment that do not pair as above, or a staging or production commit without a successful `ci.yml` run, before any runner starts. Only people with write access can run a workflow, and forks cannot.
 
 ### Runners
 
@@ -177,6 +201,7 @@ Every run uploads `android-build-summary-<environment>-<run number>` (`.md` and 
 ### Measured and not yet verified
 
 - Measured on an Apple M4 Pro (12 cores) with a warm Gradle cache, 4 ABIs, a placeholder Firebase file: prebuild 1 s and `assembleRelease` 4 min 3 s. The first build on a machine was blocked for over 30 minutes downloading the NDK over a slow connection, and Gradle stalled with the default 2 GB heap and 512 MB Metaspace; the workflow passes `-Xmx6g -XX:MaxMetaspaceSize=1g`.
-- Not yet run on GitHub: the workflow, the runner fallback and the hosted run time are untested. The roughly 12–20 minutes expected on `ubuntu-24.04` is an estimate.
+- Measured on `ubuntu-24.04` (run 37740574672, `android-dev` config built from `main`, before the gate paired environments with branches; `arm64-v8a`, cold cache): setup 34 s, install 13 s, prebuild 2 s, Gradle 654 s, about 11.7 minutes in all, a 94.7 MB APK. The run page showed 13 min 9 s, which adds the gate jobs and the Gradle cache save. The self-hosted M4 Pro is about three times faster.
+- Not yet run: `android-staging` and `android-production` (four ABIs, so slower than the dev build), the `self-hosted` and `auto` runner paths, and the APK on a physical device.
 - All builds are signed with the debug keystore that the Expo template uses for release builds, so the production AAB cannot be uploaded to Google Play yet. Release signing and the Play upload are not part of this workflow.
 - iOS is not built here (see [mobile-ios-device-release.md](mobile-ios-device-release.md)).

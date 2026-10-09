@@ -118,6 +118,16 @@
 
 **Check:** Full `mvnw.cmd clean verify` with disposable PostgreSQL 16: 570 tests, 0 failures/errors/skips; 7 media PostgreSQL checks cover same-key parallel reservation, stale lease, rollback, multiple workers, attached/pending assets and status changes before final write. Fresh/upgrade Flyway and Hibernate validation pass through V14; `git diff --check` and changed Markdown local-file links pass. DBML source was matched to migration; a DBML parser is not installed. Shared databases and live Cloudinary were not used. Remaining limits: new assets uploaded before DB rollback may need operational orphan cleanup; avatar signed authenticated URLs do not yet have delivery TTL; staging/provider/FE UAT remains separate. Schedule V13 CHECK validation during reduced/stopped writes.
 
+### [2026-10-08 15:00 UTC+07:00] — [Feature] First production release, Android environments follow the branch
+
+**Done:** Released `staging` to `main` (PR #127, `v0.2.0`). Production deploy needed a new `RAILWAY_TOKEN`, a smoke test fix (#125) and Firebase Email/Password. Job `gate` in `mobile-release.yml` now pairs `main` with `android-production`, `staging` with `android-staging` and any other branch with `android-dev`. Created `android-staging` and `android-production` (branch policy, `android-production` also needs approval) with `EXPO_PUBLIC_*` copied from the matching `vercel-*` environment. First hosted build (`android-dev`) took about 11.7 minutes.
+
+**Changed files:** `.github/workflows/mobile-release.yml`, `docs/development/ci-cd.md`, `CONTRIBUTING.md`, `PROGRESS.md`.
+
+**Flow explained:** The branch chooses the code and the environment chooses the config, and `gate` allows one pair per branch so a `main` build cannot take staging config. `ci-cd.md` now lists the release steps and the production checklist.
+
+**Check:** gate mapping run for six branch/environment pairs; environments read back through the API. Not verified: the new gate on Actions, `android-staging` and `android-production` builds, the AI baseline on the production database (still missing).
+
 ### [2026-10-08 11:00 UTC+07:00] — [Feature] Landing page rebuilt for the new app, plus privacy policy and data deletion pages
 
 **Done:** The landing page now matches the current mobile app: purple brand, new screenshots of the app (mock data), the notebook-and-robot logo, the robot poses and the 3D icons from the app's own assets. The copy only describes what the app does today, so the printer, the Pro plan with its prices, Apple and Google sign-in, store buttons and the "suggest what to restock" claim are gone (the PRD puts printers and paid plans outside the MVP). Two public pages were added, `/privacy` and `/data-deletion`, which Meta asks for before a Facebook Login app can go live. Both are drafts: they carry a "Bản nháp" banner until the product owner approves them. The 1024×1024 app icon Meta also asks for is in `public/brand/app-icon-1024.png`. The old green-mascot images, the four old screenshots, `favicon.svg` and the unused `.logo*` CSS are removed.
