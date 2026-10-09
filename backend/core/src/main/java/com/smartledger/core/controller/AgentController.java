@@ -10,6 +10,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.CacheControl;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @RestController
 @RequestMapping("/api/v1/agent")
@@ -38,6 +41,18 @@ public class AgentController {
     public AgentChatResponse chat(@AuthenticationPrincipal VerifiedFirebaseToken token,
             @RequestHeader("X-Shop-Id") String shopId, @Valid @RequestBody AgentChatRequest request) {
         return service.chat(token, shopId, request);
+    }
+
+    /** No produces attribute: errors before the first event must still render as JSON. */
+    @PostMapping("/chat/stream")
+    @Operation(summary = "Ask the shop assistant and receive the answer as server-sent events")
+    public ResponseEntity<StreamingResponseBody> chatStream(@AuthenticationPrincipal VerifiedFirebaseToken token,
+            @RequestHeader("X-Shop-Id") String shopId, @Valid @RequestBody AgentChatRequest request) {
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_EVENT_STREAM)
+                .cacheControl(CacheControl.noCache())
+                .header("X-Accel-Buffering", "no")
+                .body(service.chatStream(token, shopId, request));
     }
 
     @GetMapping("/conversations")
