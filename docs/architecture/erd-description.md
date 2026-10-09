@@ -45,8 +45,8 @@ Drafts do not affect revenue, stock, payments, or debts until confirmed.
 
 ### AI and System Safety
 
-- **chat_conversations**: Agent conversations per user and shop, created by the AI baseline in `supabase/migrations/`, with `summary` and `summary_through_message_id` for the rolling summary.
-- **chat_messages**: USER/ASSISTANT messages of a conversation; folded messages stay for history search. `ai_request_id` has no foreign key until `ai_requests` exists.
+- **chat_conversations**: Agent conversations per user and shop, created by the AI baseline in `supabase/migrations/`. The columns `summary` and `summary_through_message_id` are unused by the code: it neither reads nor writes them. They are kept so the previous release can roll back, and a later migration drops them after this deploy.
+- **chat_messages**: USER/ASSISTANT messages of a conversation. Each chat turn reads the latest `AGENT_HISTORY_TURNS` exchanges; no message is folded or searched. `ai_request_id` has no foreign key until `ai_requests` exists.
 - **ai_read views**: the AI baseline creates `ai_read.v_shop_profile`, `v_categories` and `v_products` for the Agent's read-only shop-data tool, and `v_sales` and `v_sale_items` for confirmed-sales questions and restock suggestions. They are views, not tables.
 - **ai_requests**: Planned table for AI request status, model/version, result, errors, and media object references; not yet created by any migration.
 - **api_idempotency_keys**: Protects expense creation, debt repayment, sale void and product stock-in. Stock-in uses operation PRODUCT_STOCK_IN, resource PRODUCT and response_status 200; its hash includes product ID, canonical quantity and normalized reason. Confirmation replays by draft ID instead. Media uploads use the separate V14 table below; monetary idempotency retains its shop-scoped V7 schema. Default completed-key TTL is 30 days and no key cleanup job exists.
