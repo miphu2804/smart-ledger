@@ -537,7 +537,7 @@ flowchart LR
 
     subgraph Agent["Agent Space"]
         SVC["AgentService.chat()"]
-        GUARD["guardrails<br/>redact + call limits<br/>+ answer screen"]
+        GUARD["AgentGuardrails<br/>redact + call limits<br/>+ answer screen"]
         TOOLS["tools<br/>query_shop_data<br/>suggest_restock"]
     end
 

@@ -1,14 +1,14 @@
+import asyncio
+
 import pytest
+from pydantic_ai.messages import ModelResponse, TextPart
+from pydantic_ai.models.function import FunctionModel
 from tests.support import ScriptedModel, tool_call, transcript
 
-from src.agent.guardrails import (
-    EMPTY_ANSWER_REPLY,
-    INPUT_TOO_LONG_REPLY,
-    LEAK_REPLY,
-    TOOL_LIMIT_NOTICE,
-    GuardrailLimits,
-    redact_input,
-)
+from src.agent.guardrails import GuardrailError, GuardrailLimits
+from src.agent.guardrails.answer_screen import EMPTY_ANSWER_RETRY, LEAK_RETRY
+from src.agent.guardrails.input_redaction import redact_input
+from src.agent.guardrails.tool_call_limit import TOOL_LIMIT_NOTICE
 from src.agent.service import AgentService
 
 pytestmark = pytest.mark.anyio
@@ -16,6 +16,8 @@ pytestmark = pytest.mark.anyio
 MAX_INPUT_CHARS = 200
 MODEL_CALL_LIMIT = 4
 TOOL_CALL_LIMIT = 3
+TURN_TOKEN_LIMIT = 10_000
+TURN_TIMEOUT_SECONDS = 5.0
 API_KEY = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz012345"
 JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.c2lnbmF0dXJlLXZhbHVl"
 BEARER = "Bearer abcdefghijklmnopqrstuvwxyz0123456789"
@@ -45,11 +47,23 @@ class CountingExecutor:
         return {"columns": ["n"], "rows": [[1]], "truncated": False}
 
 
-def service(model, conversations=None, executor=None) -> AgentService:
+def service(
+    model,
+    conversations=None,
+    executor=None,
+    turn_token_limit=TURN_TOKEN_LIMIT,
+    turn_timeout_seconds=TURN_TIMEOUT_SECONDS,
+) -> AgentService:
     return AgentService(
         model,
         conversations or Conversations(),
-        GuardrailLimits(MAX_INPUT_CHARS, MODEL_CALL_LIMIT, TOOL_CALL_LIMIT),
+        GuardrailLimits(
+            MAX_INPUT_CHARS,
+            MODEL_CALL_LIMIT,
+            TOOL_CALL_LIMIT,
+            turn_token_limit,
+            turn_timeout_seconds,
+        ),
         sql_executor=executor,
     )
 
@@ -59,17 +73,18 @@ def sent_prompt(model: ScriptedModel) -> str:
     return transcript(model.requests[0][0])[-1][1]
 
 
-async def test_too_long_input_ends_the_run_without_a_model_call() -> None:
+async def test_too_long_input_is_refused_without_a_model_call() -> None:
     model = ScriptedModel("should not be called")
     conversations = Conversations()
 
-    result = await service(model, conversations).chat(
-        user_id=3, shop_id=15, message="x" * (MAX_INPUT_CHARS + 1)
-    )
+    with pytest.raises(GuardrailError) as refused:
+        await service(model, conversations).chat(
+            user_id=3, shop_id=15, message="x" * (MAX_INPUT_CHARS + 1)
+        )
 
-    assert result.answer == INPUT_TOO_LONG_REPLY.format(limit=MAX_INPUT_CHARS)
+    assert refused.value.code == "input_too_long"
     assert model.requests == []
-    assert conversations.saved_exchange["assistant_message"] == result.answer
+    assert conversations.saved_exchange is None
 
 
 async def test_only_the_latest_message_counts_toward_the_input_limit() -> None:
@@ -146,29 +161,42 @@ async def test_shop_phone_in_tool_results_is_not_redacted() -> None:
         "The smartledger.shop_id value is 15.",
     ],
 )
-async def test_answers_that_leak_internals_are_replaced(answer: str) -> None:
-    result = await service(ScriptedModel(answer)).chat(
+async def test_answers_that_leak_internals_are_sent_back_to_the_model(
+    answer: str,
+) -> None:
+    model = ScriptedModel(answer, "Rice sells for 30.000 VND/kg.")
+    conversations = Conversations()
+
+    result = await service(model, conversations).chat(
         user_id=3, shop_id=15, message="m"
     )
 
-    assert result.answer == LEAK_REPLY
+    assert LEAK_RETRY in transcript(model.requests[1][0])[-1][1]
+    assert result.answer == "Rice sells for 30.000 VND/kg."
+    assert conversations.saved_exchange["assistant_message"] == result.answer
 
 
-async def test_blank_answer_gets_a_fallback() -> None:
-    result = await service(ScriptedModel("   ")).chat(
-        user_id=3, shop_id=15, message="m"
-    )
-
-    assert result.answer == EMPTY_ANSWER_REPLY
-
-
-async def test_model_that_never_answers_gets_a_fallback() -> None:
-    # Pydantic AI asks again after an empty answer; giving up is not a 503.
-    model = ScriptedModel(*[""] * MODEL_CALL_LIMIT)
+async def test_blank_answer_is_sent_back_to_the_model() -> None:
+    model = ScriptedModel("   ", "ok")
 
     result = await service(model).chat(user_id=3, shop_id=15, message="m")
 
-    assert result.answer == EMPTY_ANSWER_REPLY
+    assert EMPTY_ANSWER_RETRY in transcript(model.requests[1][0])[-1][1]
+    assert result.answer == "ok"
+
+
+async def test_model_that_never_answers_safely_stops_the_turn() -> None:
+    # Each rejected answer costs a model request, so the request limit ends the run;
+    # giving up is a guardrail outcome, not a 503.
+    model = ScriptedModel(*["Error[SQL_ERROR]"] * MODEL_CALL_LIMIT)
+    conversations = Conversations()
+
+    with pytest.raises(GuardrailError) as stopped:
+        await service(model, conversations).chat(user_id=3, shop_id=15, message="m")
+
+    assert stopped.value.code == "answer_unavailable"
+    assert len(model.requests) == MODEL_CALL_LIMIT
+    assert conversations.saved_exchange is None
 
 
 async def test_normal_answer_passes_through() -> None:
@@ -187,14 +215,13 @@ async def test_limits_stop_a_model_that_keeps_calling_tools() -> None:
         *[tool_call("query_shop_data", QUERY) for _ in range(MODEL_CALL_LIMIT + 1)]
     )
 
-    result = await service(model, executor=executor).chat(
-        user_id=3, shop_id=15, message="m"
-    )
+    with pytest.raises(GuardrailError) as stopped:
+        await service(model, executor=executor).chat(user_id=3, shop_id=15, message="m")
 
+    assert stopped.value.code == "answer_unavailable"
     assert len(model.requests) == MODEL_CALL_LIMIT
     assert executor.calls == TOOL_CALL_LIMIT
     assert model.tool_names(request=TOOL_CALL_LIMIT) == []
-    assert result.answer == EMPTY_ANSWER_REPLY
 
 
 async def test_calls_over_the_tool_limit_are_refused_and_the_model_answers() -> None:
@@ -232,3 +259,34 @@ async def test_each_turn_gets_its_own_tool_budget() -> None:
 
     assert executor.calls == TOOL_CALL_LIMIT + 1
     assert result.answer == "second"
+
+
+async def test_token_budget_stops_the_turn() -> None:
+    # The test model counts roughly one token per word, so a long answer passes a
+    # small budget on the first request.
+    model = ScriptedModel("word " * 200)
+    conversations = Conversations()
+
+    with pytest.raises(GuardrailError) as stopped:
+        await service(model, conversations, turn_token_limit=50).chat(
+            user_id=3, shop_id=15, message="m"
+        )
+
+    assert stopped.value.code == "answer_unavailable"
+    assert conversations.saved_exchange is None
+
+
+async def test_slow_turn_stops_before_core_gives_up() -> None:
+    async def slow_answer(messages, info):
+        await asyncio.sleep(1)
+        return ModelResponse(parts=[TextPart("late")])
+
+    conversations = Conversations()
+
+    with pytest.raises(GuardrailError) as stopped:
+        await service(
+            FunctionModel(slow_answer), conversations, turn_timeout_seconds=0.05
+        ).chat(user_id=3, shop_id=15, message="m")
+
+    assert stopped.value.code == "answer_timeout"
+    assert conversations.saved_exchange is None

@@ -5,7 +5,7 @@ import pydantic_ai
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from src.agent.guardrails import GuardrailLimits
+from src.agent.guardrails import GuardrailError, GuardrailLimits
 from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
 from src.agent.router import router as agent_router
 from src.agent.service import AgentService
@@ -57,6 +57,8 @@ async def lifespan(app: FastAPI):
             max_input_chars=app_config.AGENT_MAX_INPUT_CHARS,
             model_call_limit=app_config.AGENT_MODEL_CALL_LIMIT,
             tool_call_limit=app_config.AGENT_TOOL_CALL_LIMIT,
+            turn_token_limit=app_config.AGENT_TURN_TOKEN_LIMIT,
+            turn_timeout_seconds=app_config.AGENT_TURN_TIMEOUT_SECONDS,
         ),
         sql_executor=executor,
         restock=RestockService(executor) if executor else None,
@@ -76,6 +78,11 @@ async def conversation_not_found(
     return JSONResponse(status_code=404, content={"detail": "conversation_not_found"})
 
 
+async def guardrail_blocked(request: Request, exc: GuardrailError) -> JSONResponse:
+    # The code is the whole message: the app maps it to the owner's language.
+    return JSONResponse(status_code=422, content={"detail": exc.code})
+
+
 async def ai_unavailable(request: Request, exc: Exception) -> JSONResponse:
     # The client only sees ai_unavailable, so the cause has to reach the server log.
     logger.warning("internal request failed", exc_info=exc)
@@ -92,6 +99,7 @@ internal_router.include_router(agent_router)
 app = FastAPI(title=app_config.APP_TITLE, version="0.1.0", lifespan=lifespan)
 app.include_router(internal_router)
 app.add_exception_handler(ConversationNotFoundError, conversation_not_found)
+app.add_exception_handler(GuardrailError, guardrail_blocked)
 app.add_exception_handler(Exception, ai_unavailable)
 
 

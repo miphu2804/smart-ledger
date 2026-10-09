@@ -7,6 +7,7 @@ from pydantic_ai.messages import ModelResponse, TextPart
 from pydantic_ai.models.function import FunctionModel
 from tests.support import TEST_GUARDRAIL_LIMITS, echo_user_prompts
 
+from src.agent.guardrails import GuardrailLimits
 from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
 from src.agent.service import AgentService
 from src.main import app
@@ -211,6 +212,26 @@ def test_chat_hides_conversation_owned_by_another_scope(client: TestClient) -> N
 
     assert response.status_code == 404
     assert response.json()["detail"] == "conversation_not_found"
+
+
+def test_guardrail_stop_returns_its_code(client: TestClient) -> None:
+    app.state.agent = AgentService(
+        FunctionModel(answer),
+        app.state.conversations,
+        guardrail_limits=GuardrailLimits(
+            max_input_chars=5,
+            model_call_limit=1,
+            tool_call_limit=1,
+            turn_token_limit=1000,
+            turn_timeout_seconds=5,
+        ),
+    )
+
+    response = chat(client, message="too long for the limit")
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "input_too_long"}
+    app.state.conversations.save_exchange.assert_not_called()
 
 
 def test_agent_chat_returns_503_when_agent_missing(client: TestClient) -> None:

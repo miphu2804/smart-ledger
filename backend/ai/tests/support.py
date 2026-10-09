@@ -22,7 +22,11 @@ from src.agent.guardrails import GuardrailLimits
 # Guardrails stay enabled in tests; these limits are wide enough not to change any case
 # that does not target them. Guardrail tests pass their own small limits instead.
 TEST_GUARDRAIL_LIMITS = GuardrailLimits(
-    max_input_chars=100_000, model_call_limit=100, tool_call_limit=100
+    max_input_chars=100_000,
+    model_call_limit=100,
+    tool_call_limit=100,
+    turn_token_limit=10_000_000,
+    turn_timeout_seconds=60,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]

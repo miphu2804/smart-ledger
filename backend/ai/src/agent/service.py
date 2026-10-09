@@ -2,7 +2,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 
-from pydantic_ai import Agent, UnexpectedModelBehavior, UsageLimitExceeded, UsageLimits
+from pydantic_ai import Agent, UnexpectedModelBehavior, UsageLimitExceeded
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
@@ -12,14 +12,7 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models import Model
 
-from src.agent.guardrails import (
-    EMPTY_ANSWER_REPLY,
-    INPUT_TOO_LONG_REPLY,
-    GuardrailLimits,
-    ToolCallLimit,
-    redact_input,
-    screen_answer,
-)
+from src.agent.guardrails import AgentGuardrails, GuardrailError, GuardrailLimits
 from src.agent.repository import AgentConversationRepository
 from src.agent.tools import AgentContext, build_restock_tool, build_shop_data_tool
 from src.prompt_templates import (
@@ -56,10 +49,9 @@ class AgentService:
     ) -> None:
         self.model_name = model.model_name if model is not None else ""
         self.conversations = conversations
-        self.limits = guardrail_limits
+        self.guardrails = AgentGuardrails(guardrail_limits)
         # Each turn stores the owner's message and the reply, so a turn is two messages.
         self.history_messages = 2 * history_turns
-        self.usage_limits = UsageLimits(request_limit=guardrail_limits.model_call_limit)
         # The instructions are static so providers can cache them; the shop scope
         # arrives per request through AgentContext and never appears in the prompt.
         # Each optional capability adds its own tool and prompt section.
@@ -77,16 +69,16 @@ class AgentService:
                 deps_type=AgentContext,
                 instructions="\n\n".join(prompt_parts),
                 tools=tools,
-                # Pydantic AI ends the run on a tool's second invalid call by default;
-                # the request limit already bounds the run, so it bounds retries too.
-                retries=guardrail_limits.model_call_limit,
                 # The limits arrive from the composition root, so this module reads no
                 # global settings and guardrails cannot be switched off by a caller.
-                capabilities=[ToolCallLimit(guardrail_limits.tool_call_limit)],
+                retries=self.guardrails.retries,
+                capabilities=self.guardrails.capabilities,
             )
             if model is not None
             else None
         )
+        if self.agent is not None:
+            self.agent.output_validator(self.guardrails.check_answer)
 
     async def chat(
         self,
@@ -114,14 +106,10 @@ class AgentService:
         )
         # Stored as the model sees it, so a pasted key is not replayed with the history
         # on later turns.
-        question = redact_input(message)
-        if len(message) > self.limits.max_input_chars:
-            answer = INPUT_TOO_LONG_REPLY.format(limit=self.limits.max_input_chars)
-            version = self.model_name
-        else:
-            answer, version = await self._answer(
-                question, history, AgentContext(user_id=user_id, shop_id=shop_id)
-            )
+        question = self.guardrails.check_input(message)
+        answer, version = await self._answer(
+            question, history, AgentContext(user_id=user_id, shop_id=shop_id)
+        )
         saved_conversation_id, message_id = await asyncio.to_thread(
             self.conversations.save_exchange,
             user_id=user_id,
@@ -143,20 +131,27 @@ class AgentService:
     ) -> tuple[str, str]:
         """Run the agent; return the screened answer and the model version."""
         try:
-            result = await self.agent.run(
-                question,
-                message_history=self._model_messages(history),
-                deps=context,
-                usage_limits=self.usage_limits,
-            )
+            async with asyncio.timeout(self.guardrails.turn_timeout_seconds):
+                result = await self.agent.run(
+                    question,
+                    message_history=self._model_messages(history),
+                    deps=context,
+                    usage_limits=self.guardrails.usage_limits,
+                )
+        except TimeoutError as error:
+            # Stopped before Core stops waiting, so the turn is not stored behind an
+            # error the owner already saw.
+            logger.warning("agent run passed the turn timeout")
+            raise GuardrailError("answer_timeout") from error
         except (UsageLimitExceeded, UnexpectedModelBehavior) as error:
-            # The model used up its requests or gave no usable answer. Provider errors
-            # are neither, so they still propagate and the router answers 503.
+            # The model used up its requests or never gave an answer the screen
+            # accepts. Provider errors are neither, so they still propagate and the
+            # router answers 503.
             logger.warning("agent run ended without an answer: %s", error)
-            return EMPTY_ANSWER_REPLY, self.model_name
-        return screen_answer(
-            result.output
-        ), result.response.model_name or self.model_name
+            raise GuardrailError("answer_unavailable") from error
+        # Token counts per turn, to size AGENT_TURN_TOKEN_LIMIT from real traffic.
+        logger.info("agent turn usage: %s", result.usage)
+        return result.output, result.response.model_name or self.model_name
 
     @staticmethod
     def _model_messages(history: list[dict]) -> list[ModelMessage]:

@@ -40,10 +40,15 @@ class AppConfig(BaseSettings):
     # reasoning effort for the chat model: none, low, medium or high
     MODEL_REASONING_EFFORT: str = "high"
 
-    # agent guardrails (src/agent/guardrails.py), per chat turn
+    # agent guardrails (src/agent/guardrails/), per chat turn
     AGENT_MAX_INPUT_CHARS: int = Field(default=2000, gt=0)
     AGENT_MODEL_CALL_LIMIT: int = Field(default=4, gt=0)
     AGENT_TOOL_CALL_LIMIT: int = Field(default=3, gt=0)
+    # input plus output tokens across every model request of one turn
+    AGENT_TURN_TOKEN_LIMIT: int = Field(default=200_000, gt=0)
+    # below Core's 40 s read timeout for AI calls, so a turn Core gave up on is not
+    # stored
+    AGENT_TURN_TIMEOUT_SECONDS: float = Field(default=35.0, gt=0)
 
     # most recent owner/assistant exchanges sent to the model with each turn
     AGENT_HISTORY_TURNS: int = Field(default=100, gt=0)
