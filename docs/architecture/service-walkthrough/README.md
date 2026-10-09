@@ -526,17 +526,19 @@ flowchart LR
 
 ### 8.1 Components (composition root: `main.lifespan`)
 
+`main.py` builds one `APIRouter` with prefix `/internal/v1` and the `X-Internal-Token` dependency, includes the agent router under it, and mounts it on the app, so every route under that prefix requires the token.
+
 ```mermaid
 flowchart LR
     subgraph API["API Space"]
+        MAIN["main.py<br/>APIRouter /internal/v1<br/>X-Internal-Token"]
         ROUTER["agent router<br/>/internal/v1/agent"]
     end
 
     subgraph Agent["Agent Space"]
         SVC["AgentService.chat()"]
-        GUARD["AgentGuardrails<br/>+ PII + call limits"]
-        TOOLS["tools<br/>search_chat_history<br/>query_shop_data"]
-        FOLD["ChatSummaryFolder.fold()"]
+        GUARD["AgentGuardrails<br/>redact + call limits<br/>+ answer screen"]
+        TOOLS["tools<br/>query_shop_data<br/>suggest_restock"]
     end
 
     subgraph SQL["SQL Space"]
@@ -550,16 +552,14 @@ flowchart LR
         VIEWS[("ai_read views")]
     end
 
+    MAIN -->|"include_router"| ROUTER
     ROUTER -->|"chat"| SVC
-    ROUTER -.->|"background task"| FOLD
     ROUTER -->|"list / get / rename / delete"| REPO
-    SVC -->|"middleware"| GUARD
+    SVC -->|"before / during / after run"| GUARD
     SVC -->|"tool calls"| TOOLS
-    SVC -->|"context_for / save_exchange"| REPO
-    TOOLS -->|"folded_messages"| REPO
+    SVC -->|"recent_messages / save_exchange"| REPO
     TOOLS -->|"sql"| EXEC --> SG
     EXEC -->|"shop-scoped txn"| VIEWS
-    FOLD -->|"save_summary (CAS)"| REPO
     REPO --> PG
     classDef default fill:#eef4ff,stroke:#5b8def,color:#1f2d3d
     classDef decision fill:#fff4cc,stroke:#d4a017,color:#5c4400
@@ -589,7 +589,6 @@ sequenceDiagram
     participant A as AgentService
     participant G as Guardrails
     participant T as Tools
-    participant F as ChatSummaryFolder
     end
     box rgb(239,230,255) Data
     participant DB as Postgres
@@ -597,21 +596,20 @@ sequenceDiagram
 
     App->>Core: POST /api/v1/agent/chat
     Core->>Core: requireOwnedActiveShop gives user_id, shop_id
-    Core->>R: POST /internal/v1/agent/chat (timeout 40s)
+    Core->>R: POST /internal/v1/agent/chat (timeout 40s, X-Internal-Token)
     R->>A: chat(user_id, shop_id, message, conversation_id)
-    A->>DB: context_for(): summary + messages after watermark
-    A->>G: before_agent: input length, PII redaction
+    A->>DB: recent_messages(): latest AGENT_HISTORY_TURNS exchanges
+    A->>G: redact_input, input length check
     loop up to model / tool call limits
-        A->>T: query_shop_data(sql) or search_chat_history(q)
+        A->>T: query_shop_data(sql) or suggest_restock(period)
         T->>T: SqlGuard: one SELECT on ai_read views, LIMIT n+1
         T->>DB: read-only txn scoped by smartledger.shop_id
         T-->>A: JSON rows or Error[CODE] for the model to retry
     end
-    A->>G: after_agent: replace empty or leaking answers
+    A->>G: screen_answer: replace empty or leaking answers
     A->>DB: save_exchange(redacted user message, answer)
     A-->>R: AgentChatResult
     R-->>Core: conversation_id, message_id, answer, model
-    R-)F: background fold(): summarize older messages
     Core-->>App: AgentChatResponse
     Note over Core: AI error or timeout gives ai_unavailable, 404 gives CONVERSATION_NOT_FOUND
 ```

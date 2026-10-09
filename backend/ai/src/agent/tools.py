@@ -3,11 +3,8 @@ import re
 from dataclasses import asdict, dataclass
 from typing import Literal
 
-from langchain.tools import ToolRuntime, tool
-from langchain_core.tools import BaseTool
+from pydantic_ai import RunContext, Tool
 
-from src.agent.history_search import NO_MATCH, format_clusters, search_messages
-from src.agent.repository import AgentConversationRepository
 from src.prompt_templates import QUERY_RESULT_HEADER, RESTOCK_RESULT_HEADER
 from src.restock.service import RestockService
 from src.sql.executor import ReadOnlySqlExecutor
@@ -32,44 +29,23 @@ class AgentContext:
 
     user_id: int
     shop_id: int
-    conversation_id: int | None = None
 
 
-def build_history_tools(conversations: AgentConversationRepository) -> list[BaseTool]:
-    @tool
-    def search_chat_history(query: str, runtime: ToolRuntime[AgentContext]) -> str:
-        """Search earlier messages by key words when the memory lacks an exact detail.
+def build_shop_data_tool(executor: ReadOnlySqlExecutor) -> Tool[AgentContext]:
+    """Shop-data tool; the executor is injected here, the shop comes per request.
 
-        Query with key words, for example a customer name and an item.
-        """
-        # The ids come from the request context, never from the model, so a crafted
-        # query cannot read another shop's history.
-        scope = runtime.context
-        if scope.conversation_id is None:
-            return NO_MATCH
-        messages = conversations.folded_messages(
-            scope.conversation_id, scope.user_id, scope.shop_id
-        )
-        return format_clusters(search_messages(messages, query))
-
-    return [search_chat_history]
-
-
-def build_shop_data_tools(executor: ReadOnlySqlExecutor) -> list[BaseTool]:
-    """Shop-data tools; the executor is injected here, the shop comes per request.
-
-    `runtime` is filled by LangChain from the invocation context and is not part of the
-    schema sent to the model, so the model only supplies `sql` and cannot pick a shop.
+    `ctx` is filled by Pydantic AI from the run's deps and is not part of the schema
+    sent to the model, which forbids extra arguments, so the model only supplies `sql`
+    and cannot pick a shop.
     """
 
-    @tool("query_shop_data")
-    def query_shop_data(sql: str, runtime: ToolRuntime[AgentContext]) -> str:
+    def query_shop_data(ctx: RunContext[AgentContext], sql: str) -> str:
         """Run one read-only SELECT on the shop's views. Returns JSON or Error[CODE]."""
         # A rejected or failed query goes back to the model as text so it can rewrite
         # the query. Anything else, such as an unreachable reader database, propagates
         # and the router answers 503 ai_unavailable.
         try:
-            result = executor.run(runtime.context.shop_id, sql)
+            result = executor.run(ctx.deps.shop_id, sql)
         except ValueError as error:
             return f"{_model_error(error)} Rewrite the query and retry."
         payload = {
@@ -80,25 +56,24 @@ def build_shop_data_tools(executor: ReadOnlySqlExecutor) -> list[BaseTool]:
         }
         return f"{QUERY_RESULT_HEADER}\n{json.dumps(payload, ensure_ascii=False)}"
 
-    return [query_shop_data]
+    return Tool(query_shop_data, takes_ctx=True)
 
 
-def build_restock_tools(restock: RestockService) -> list[BaseTool]:
-    """Restock tools; the service is injected here, the shop comes per request.
+def build_restock_tool(restock: RestockService) -> Tool[AgentContext]:
+    """Restock tool; the service is injected here, the shop comes per request.
 
-    `period` is a closed set and `runtime` is filled by LangChain, so the model cannot
+    `period` is a closed set and `ctx` is filled by Pydantic AI, so the model cannot
     pick a shop or a free-form window.
     """
 
-    @tool("suggest_restock")
     def suggest_restock(
+        ctx: RunContext[AgentContext],
         period: Literal["last_7_days", "last_30_days"],
-        runtime: ToolRuntime[AgentContext],
     ) -> str:
         """Suggest what to restock from confirmed sales. Returns JSON or Error[CODE]."""
         # A failed query goes back to the model as text, like query_shop_data.
         try:
-            result = restock.suggest(runtime.context.shop_id, period)
+            result = restock.suggest(ctx.deps.shop_id, period)
         except ValueError as error:
             return (
                 f"{_model_error(error)} Tell the owner the suggestion is unavailable."
@@ -111,4 +86,4 @@ def build_restock_tools(restock: RestockService) -> list[BaseTool]:
         }
         return f"{RESTOCK_RESULT_HEADER}\n{json.dumps(payload, ensure_ascii=False)}"
 
-    return [suggest_restock]
+    return Tool(suggest_restock, takes_ctx=True)
