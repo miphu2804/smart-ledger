@@ -9,6 +9,9 @@ import type {
   CustomerView,
   DebtView,
   ExpenseView,
+  NotificationPage,
+  NotificationType,
+  NotificationView,
   PaymentView,
   ProductView,
   SaleDraftItemView,
@@ -47,6 +50,8 @@ let debts: DebtView[] = [];
 let expenses: ExpenseView[] = [];
 /** Khoản hoàn của đơn đã huỷ, theo saleId (mỗi đơn tối đa một khoản) */
 const refunds = new Map<number, SaleRefundView>();
+/** Inbox thông báo của OWNER (mới nhất cuối mảng; endpoint trả mới nhất trước) */
+let notifications: NotificationView[] = [];
 
 let nextCategoryId = 1;
 let nextProductId = 1;
@@ -58,6 +63,7 @@ let nextCustomerId = 1;
 let nextDebtId = 1;
 let nextExpenseId = 1;
 let nextRefundId = 1;
+let nextNotificationId = 1;
 
 /** Khách gắn với một đơn nháp qua `customerId` có sẵn — không có trong `SaleDraftView` nên lưu riêng ở đây. */
 const draftCustomerId = new Map<number, number | null>();
@@ -241,6 +247,160 @@ function seed(): void {
   // trả nợ, không map 1-1 sang originalVnd/outstandingVnd/Payment của Core nên không cố chuyển đổi (xem báo cáo).
 }
 seed();
+
+// ---------------------------------------------------------------------------
+// Inbox thông báo — mô phỏng GET/PATCH /me/notifications (contract mục 8)
+// ---------------------------------------------------------------------------
+
+const NOTIFICATION_TYPES: NotificationType[] = ['LOW_STOCK', 'OUT_OF_STOCK', 'SALE_VOIDED', 'SHOP_INACTIVATED', 'SHOP_REACTIVATED'];
+
+function pushNotification(
+  type: NotificationType,
+  title: string,
+  body: string,
+  targetType: NotificationView['targetType'],
+  targetId: number,
+  createdAt = nowIso(),
+  extra: Partial<Pick<NotificationView, 'readAt' | 'resolvedAt'>> = {},
+): void {
+  notifications.push({
+    id: nextNotificationId++,
+    shopId: SHOP_ID,
+    type,
+    title,
+    body,
+    targetType,
+    targetId,
+    createdAt,
+    readAt: extra.readAt ?? null,
+    resolvedAt: extra.resolvedAt ?? null,
+  });
+}
+
+/**
+ * Dữ liệu đầu: cảnh báo đang mở cho các món tồn thấp, cộng lịch sử cảnh báo đã kết thúc để màn Thông báo có nhiều hơn một trang.
+ * Mock không tự phát thêm cảnh báo tồn khi bạn đổi sản phẩm hay bán hàng (Core thì có); chỉ đơn bị huỷ mới tạo thông báo mới.
+ */
+function seedNotifications(): void {
+  const now = Date.now();
+  const daysAgo = (days: number, hour: number) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() - days);
+    d.setHours(hour, 0, 0, 0);
+    return d;
+  };
+  const draft: Array<Parameters<typeof pushNotification>> = [];
+  products.filter((p) => p.tracked).forEach((p, i) => {
+    const stock = p.stockQuantity ?? 0;
+    // Như Core: hết hàng luôn báo, sắp hết chỉ khi mặt hàng có ngưỡng và tồn chạm ngưỡng đó
+    if (stock <= 0 || (p.lowStockThreshold != null && stock <= p.lowStockThreshold)) {
+      const out = stock <= 0;
+      draft.push([
+        out ? 'OUT_OF_STOCK' : 'LOW_STOCK',
+        out ? 'Sản phẩm đã hết hàng' : 'Sản phẩm sắp hết hàng',
+        out ? `${p.name} đã hết hàng.` : `${p.name} chỉ còn ${stock} ${p.unit}.`,
+        'PRODUCT',
+        p.id,
+        daysAgo(0, 7).toISOString(),
+        {},
+      ]);
+    }
+    const created = daysAgo(2 + (i % 26), 7 + (i % 10));
+    draft.push([
+      'LOW_STOCK',
+      'Sản phẩm sắp hết hàng',
+      `${p.name} chỉ còn ${1 + (i % 5)} ${p.unit}.`,
+      'PRODUCT',
+      p.id,
+      created.toISOString(),
+      { resolvedAt: new Date(created.getTime() + 86400000).toISOString(), readAt: i % 5 === 0 ? null : created.toISOString() },
+    ]);
+  });
+  draft.sort((a, b) => String(a[5]).localeCompare(String(b[5])));
+  for (const args of draft) pushNotification(...args);
+}
+seedNotifications();
+
+type NotificationParams = Map<string, string>;
+
+function badNotificationQuery(message: string): ApiError {
+  return apiErr(400, 'invalid_notification_query', message);
+}
+
+function visibleNotifications(params: NotificationParams): NotificationView[] {
+  const rawShopId = params.get('shopId');
+  const shopId = rawShopId === undefined ? undefined : Number(rawShopId);
+  if (shopId !== undefined && (!Number.isInteger(shopId) || shopId <= 0)) {
+    throw apiErr(400, 'invalid_shop_id', 'shopId must be a positive integer.');
+  }
+  // Mock chỉ có một tiệm của OWNER; tiệm khác không phải của họ nên Core trả 403
+  if (shopId !== undefined && shopId !== SHOP_ID) throw apiErr(403, 'shop_access_denied', 'This shop is not available to the current owner.');
+  const type = params.get('type');
+  if (type !== undefined && !NOTIFICATION_TYPES.includes(type as NotificationType)) {
+    throw apiErr(400, 'validation_failed', 'type is not a notification type.');
+  }
+  const unreadOnly = params.get('unreadOnly');
+  if (unreadOnly !== undefined && unreadOnly !== 'true' && unreadOnly !== 'false') {
+    throw apiErr(400, 'validation_failed', 'unreadOnly must be true or false.');
+  }
+  return notifications.filter((n) => (!type || n.type === type) && (unreadOnly !== 'true' || n.readAt === null));
+}
+
+function listNotifications(params: NotificationParams): NotificationPage {
+  const rows = visibleNotifications(params);
+  const page = params.has('page') ? Number(params.get('page')) : 0;
+  const size = params.has('size') ? Number(params.get('size')) : 20;
+  if (!Number.isInteger(page) || page < 0 || !Number.isInteger(size) || size < 1 || size > 100) {
+    throw badNotificationQuery('page must be 0 or more and size must be between 1 and 100.');
+  }
+  const sorted = [...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id);
+  return {
+    items: sorted.slice(page * size, page * size + size),
+    page,
+    size,
+    totalElements: sorted.length,
+    totalPages: Math.ceil(sorted.length / size),
+  };
+}
+
+/** Như Core: ID không thấy thì 404 và cả lô không đổi; đánh dấu lại không đổi `readAt` đầu tiên. */
+function markNotificationsRead(ids: unknown, single = false): undefined {
+  if (single) {
+    const id = (ids as number[])[0];
+    if (!Number.isInteger(id) || id <= 0) throw badNotificationQuery('Notification id must be positive.');
+  } else if (!Array.isArray(ids) || ids.length < 1 || ids.length > 100 || ids.some((id) => !Number.isInteger(id) || id <= 0)) {
+    throw apiErr(400, 'validation_failed', 'ids must contain 1 to 100 positive notification ids.');
+  }
+  const unique = Array.from(new Set(ids as number[]));
+  const found = unique.map((id) => notifications.find((n) => n.id === id));
+  if (found.some((n) => !n)) throw apiErr(404, 'notification_not_found', 'This notification is unavailable.');
+  const at = nowIso();
+  for (const n of found as NotificationView[]) if (n.readAt === null) n.readAt = at;
+  return undefined;
+}
+
+function handleNotifications(path: string, method: string, body: unknown): unknown {
+  const [pathname, queryText = ''] = path.split('?');
+  const params: NotificationParams = new Map(
+    queryText
+      .split('&')
+      .filter(Boolean)
+      .map((pair) => {
+        const [key, value = ''] = pair.split('=');
+        return [decodeURIComponent(key), decodeURIComponent(value)] as [string, string];
+      }),
+  );
+  const parts = pathname.split('/').filter(Boolean); // ['me', 'notifications', ...]
+  if (parts.length === 2 && method === 'GET') return listNotifications(params);
+  if (parts.length === 3 && parts[2] === 'unread-count' && method === 'GET') {
+    return { unreadCount: visibleNotifications(params).filter((n) => n.readAt === null).length };
+  }
+  if (parts.length === 3 && parts[2] === 'read' && method === 'PATCH') {
+    return markNotificationsRead((body as { ids?: unknown } | undefined)?.ids);
+  }
+  if (parts.length === 4 && parts[3] === 'read' && method === 'PATCH') return markNotificationsRead([Number(parts[2])], true);
+  throw apiErr(404, 'not_found', `Mock Core does not implement ${method} ${path}.`);
+}
 
 function findActiveProduct(id: number): ProductView | undefined {
   return products.find((p) => p.id === id && p.status === 'ACTIVE');
@@ -721,6 +881,7 @@ function voidSale(id: number, body: SaleVoidBody): SaleVoidView {
   // Như Core: đơn đã huỷ có dư nợ 0 nhưng giữ nguyên số đã thu và trạng thái thanh toán để xem lại lịch sử.
   sale.saleStatus = 'VOIDED';
   sale.outstandingVnd = 0;
+  pushNotification('SALE_VOIDED', 'Đơn hàng đã hủy', `Đơn #${sale.id} đã được hủy.`, 'SALE', sale.id);
   return { sale, refund, cancelledDebtVnd, stockRestocked: restores.length > 0 };
 }
 
@@ -975,6 +1136,7 @@ function idempotent<T>(operation: string, key: string | undefined, body: unknown
  * khác ném lỗi rõ ràng thay vì âm thầm thất bại hoặc gọi mạng thật.
  */
 export function mockCoreRequest<T>(path: string, method: string, body: unknown, idempotencyKey?: string): T {
+  if (path.startsWith('/me/notifications')) return handleNotifications(path, method, body) as T;
   const segments = path.split('/').filter(Boolean);
 
   if (path === '/categories') {
