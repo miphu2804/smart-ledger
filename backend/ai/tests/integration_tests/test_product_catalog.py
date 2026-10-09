@@ -6,8 +6,7 @@ from dataclasses import dataclass
 import psycopg
 import pytest
 from psycopg import sql
-from psycopg.conninfo import make_conninfo
-from tests.support import apply_core_migrations
+from tests.support import apply_core_migrations, schema_url
 
 from src.drafts.catalog import CatalogUnavailableError, ProductCatalogRepository
 from src.infra.postgre_db_client import PostgreDBClient
@@ -84,10 +83,7 @@ def catalog_db() -> Iterator[CatalogDatabase]:
             (shop_b,),
         ).fetchone()[0]
 
-        postgres = PostgreDBClient(
-            make_conninfo(database_url, options=f"-c search_path={schema}")
-        )
-        postgres.connect()
+        postgres = PostgreDBClient(schema_url(database_url, schema))
         yield CatalogDatabase(
             admin=admin,
             database_url=database_url,

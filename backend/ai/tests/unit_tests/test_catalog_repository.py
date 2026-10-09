@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 
 import pytest
+from sqlalchemy.dialects import postgresql
 from tests.support import CORE_MIGRATIONS, REPO_ROOT
 
 from src.drafts.catalog import (
@@ -8,55 +9,31 @@ from src.drafts.catalog import (
     CatalogUnavailableError,
     ProductCatalogRepository,
 )
+from src.infra.postgre_db_client import PostgreDBClient
 
 
-class FakeCursor:
+class FakeSession:
+    """Records each statement as PostgreSQL SQL and its params; answers with `rows`."""
+
     def __init__(self, rows: list[tuple]) -> None:
         self.rows = rows
-        self.executed: list[tuple[str, tuple]] = []
+        self.executed: list[tuple[str, dict]] = []
 
-    def execute(self, query: str, params: tuple | None = None) -> None:
-        self.executed.append((query, params))
-
-    def fetchall(self) -> list[tuple]:
+    def execute(self, statement) -> list[tuple]:
+        compiled = statement.compile(dialect=postgresql.dialect())
+        self.executed.append((str(compiled), compiled.params))
         return self.rows
-
-    def fetchone(self) -> tuple | None:
-        return self.rows[0] if self.rows else None
-
-    def __enter__(self) -> "FakeCursor":
-        return self
-
-    def __exit__(self, *exc) -> bool:
-        return False
-
-
-class FakeConnection:
-    def __init__(self, cursor: FakeCursor) -> None:
-        self._cursor = cursor
-
-    def cursor(self) -> FakeCursor:
-        return self._cursor
 
 
 class FakePostgres:
     """Stands in for PostgreDBClient; records the SQL and params a repository sends."""
 
     def __init__(self, rows: list[tuple]) -> None:
-        self.cursor = FakeCursor(rows)
+        self.fake_session = FakeSession(rows)
 
     @contextmanager
-    def transaction(self):
-        yield FakeConnection(self.cursor)
-
-
-class FailingPostgres:
-    """A client whose connection is gone, as after a dropped database link."""
-
-    @contextmanager
-    def transaction(self):
-        raise RuntimeError("postgres unavailable")
-        yield  # pragma: no cover
+    def session(self):
+        yield self.fake_session
 
 
 def test_list_active_products_maps_rows_and_keeps_the_shop_filter() -> None:
@@ -68,11 +45,13 @@ def test_list_active_products_maps_rows_and_keeps_the_shop_filter() -> None:
     assert products == [
         CatalogProduct(id=12, name="Cà phê sữa", unit="cup", selling_price_vnd=25000)
     ]
-    assert any("statement_timeout" in query for query, _ in postgres.cursor.executed)
-    query, params = postgres.cursor.executed[-1]
-    assert "shop_id = %s" in query
-    assert "status = 'ACTIVE'" in query
-    assert params == (7,)
+    (timeout_sql, timeout_params), (query, params) = postgres.fake_session.executed
+    assert "set_config" in timeout_sql
+    assert list(timeout_params.values()) == ["statement_timeout", "3000", True]
+    assert "products.shop_id = %(shop_id_1)s" in query
+    assert "products.status = %(status_1)s" in query
+    assert "ORDER BY products.name, products.id" in query
+    assert params == {"shop_id_1": 7, "status_1": "ACTIVE"}
 
 
 def test_is_active_product_true_only_when_the_row_is_found() -> None:
@@ -82,11 +61,11 @@ def test_is_active_product_true_only_when_the_row_is_found() -> None:
     assert found.is_active_product(7, 12) is True
     assert missing.is_active_product(7, 12) is False
 
-    query, params = missing.postgres.cursor.executed[-1]
-    assert "shop_id = %s" in query
-    assert "id = %s" in query
-    assert "status = 'ACTIVE'" in query
-    assert params == (7, 12)
+    query, params = missing.postgres.fake_session.executed[-1]
+    assert "products.shop_id = %(shop_id_1)s" in query
+    assert "products.id = %(id_1)s" in query
+    assert "products.status = %(status_1)s" in query
+    assert params == {"shop_id_1": 7, "id_1": 12, "status_1": "ACTIVE"}
 
 
 def test_missing_ids_fail_closed_without_querying() -> None:
@@ -97,11 +76,20 @@ def test_missing_ids_fail_closed_without_querying() -> None:
     assert repository.is_active_product(None, 12) is False
     assert repository.is_active_product(7, None) is False
 
-    assert postgres.cursor.executed == []
+    assert postgres.fake_session.executed == []
 
 
-def test_database_failures_become_catalog_unavailable() -> None:
-    repository = ProductCatalogRepository(FailingPostgres())
+@pytest.mark.parametrize(
+    "postgres",
+    [
+        PostgreDBClient(None),
+        # Nothing listens on port 1, so the connection is refused at once.
+        PostgreDBClient("postgresql://reader@127.0.0.1:1/db"),
+    ],
+    ids=["unconfigured", "unreachable"],
+)
+def test_database_failures_become_catalog_unavailable(postgres) -> None:
+    repository = ProductCatalogRepository(postgres)
 
     with pytest.raises(CatalogUnavailableError):
         repository.list_active_products(7)

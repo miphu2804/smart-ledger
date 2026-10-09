@@ -9,11 +9,11 @@ from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from psycopg import sql
-from psycopg.conninfo import make_conninfo
 from tests.support import (
     TEST_GUARDRAIL_LIMITS,
     apply_ai_baseline,
     apply_core_migrations,
+    schema_url,
 )
 
 from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
@@ -90,10 +90,7 @@ def postgres_agent_client(
             (user_id, "E2E shop", "Retail"),
         ).fetchone()[0]
 
-        postgres = PostgreDBClient(
-            make_conninfo(database_url, options=f"-c search_path={schema_name}")
-        )
-        postgres.connect()
+        postgres = PostgreDBClient(schema_url(database_url, schema_name))
         agent = AgentService(
             ConversationEchoModel(responses=[]),
             AgentConversationRepository(postgres),

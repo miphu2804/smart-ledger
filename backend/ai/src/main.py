@@ -38,10 +38,9 @@ def build_sql_executor() -> ReadOnlySqlExecutor | None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     postgres = PostgreDBClient(
-        app_config.POSTGRES_URL, max_size=app_config.POSTGRES_POOL_MAX_SIZE
+        app_config.POSTGRES_URL, pool_size=app_config.POSTGRES_POOL_MAX_SIZE
     )
     redis = RedisDBClient(app_config.REDIS_URL)
-    postgres.connect()
     redis.connect()
     app.state.redis = redis
     chat_model = build_chat_model(app_config)

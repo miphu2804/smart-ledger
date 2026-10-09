@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 import psycopg
+from sqlalchemy.engine import make_url
 
 from src.agent.guardrails import GuardrailLimits
 
@@ -35,3 +36,15 @@ def apply_ai_baseline(connection: psycopg.Connection, view_schema: str) -> None:
     # `ai_read` schema are never touched; the role name is shared across the cluster.
     text = re.sub(r"\bai_read\b", view_schema, AI_BASELINE.read_text())
     connection.execute(text, prepare=False)
+
+
+def schema_url(database_url: str, schema: str) -> str:
+    """`database_url` with `schema` first on the search path, for `PostgreDBClient`.
+
+    `POSTGRES_TEST_URL` must be a `postgresql://` URL for this, not a libpq keyword
+    string.
+    """
+    url = make_url(database_url).update_query_dict(
+        {"options": f"-c search_path={schema}"}
+    )
+    return url.render_as_string(hide_password=False)
