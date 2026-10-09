@@ -401,7 +401,7 @@ Response thành công có `Content-Type: text/event-stream`. Mỗi sự kiện c
 
 Stream kết thúc sau `done` hoặc `error`.
 
-Chỉ text đã qua answer screen mới được gửi. Đoạn cuối ngắn và phần text sau một `select` còn đang chờ được giữ lại cho đến khi answer screen kiểm tra xong. Lượt kết thúc bằng `error`, hoặc caller ngắt kết nối giữa chừng, không được lưu.
+Chỉ text đã qua answer screen mới được gửi. Đoạn cuối ngắn và phần text sau một `select` còn đang chờ được giữ lại cho đến khi answer screen kiểm tra xong. Lượt kết thúc bằng `error`, hoặc caller ngắt kết nối giữa chừng, không được lưu, trừ khi caller ngắt đúng lúc AI đang ghi lượt vào database.
 
 Core chưa proxy route stream nên FE chưa gọi được. Hợp đồng công khai `/api/v1/agent/chat` không đổi và hành vi người chủ thấy chưa đổi, nên [PRD](../product/product-requirements.md) và AC không đổi cho đến khi Core proxy route này.
 
