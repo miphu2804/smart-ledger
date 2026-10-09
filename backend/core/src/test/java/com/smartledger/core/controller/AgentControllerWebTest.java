@@ -3,9 +3,12 @@ package com.smartledger.core.controller;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.smartledger.core.config.SecurityConfiguration;
@@ -26,6 +29,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @WebMvcTest(controllers = AgentController.class)
 @Import({SecurityConfiguration.class, BearerTokenAuthenticationFilter.class,
@@ -78,6 +83,31 @@ class AgentControllerWebTest {
                         .contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"hi\"}"))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.code").value("ai_unavailable"));
+    }
+
+    @Test
+    void chatStreamAnswersAsServerSentEvents() throws Exception {
+        StreamingResponseBody body = out -> out.write("event: delta\ndata: {\"text\":\"ok\"}\n\n".getBytes());
+        when(agentService.chatStream(any(), eq("7"), any())).thenReturn(body);
+        MvcResult started = mvc.perform(post("/api/v1/agent/chat/stream").header("Authorization", "Bearer valid-token")
+                        .header("X-Shop-Id", "7").contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"hi\"}"))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        mvc.perform(asyncDispatch(started))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(content().string("event: delta\ndata: {\"text\":\"ok\"}\n\n"));
+    }
+
+    @Test
+    void chatStreamFailureBeforeTheFirstEventIsJson() throws Exception {
+        when(agentService.chatStream(any(), eq("7"), any()))
+                .thenThrow(new BusinessException(ErrorCode.CONVERSATION_NOT_FOUND));
+        mvc.perform(post("/api/v1/agent/chat/stream").header("Authorization", "Bearer valid-token")
+                        .header("X-Shop-Id", "7").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"conversation_id\":5,\"message\":\"hi\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("conversation_not_found"));
     }
 
     @Test
