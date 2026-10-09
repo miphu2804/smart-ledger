@@ -1,3 +1,16 @@
+### [2026-10-09 14:00 UTC+07:00] — [Feature] Render bold and bullets in assistant chat replies
+
+**Done:** Assistant replies on the mobile `/ai` screen no longer show raw `**bold**` and `- ` markup. New `ChatText` renders `**bold**` and lines starting with `- ` or `* ` as bullets with a hanging indent; any other markdown symbol stays as plain text. `send` in `ai.tsx` now has a ref guard (`sending`) because one tap could fire several `POST /agent/chat` and duplicate message keys. In `mockCore`, the "how many items" branch now runs before product-name matching. The Maestro flows under `frontend/mobile/.maestro` were removed.
+
+**Changed files:**
+- `frontend/mobile/src/components/ChatText.tsx` — created
+- `frontend/mobile/app/ai.tsx`, `frontend/mobile/src/lib/mockCore.ts`, `frontend/mobile/README.md` — modified
+- `frontend/mobile/.maestro/` — deleted
+
+**Flow explained:** AI message text goes through `ChatText`; user messages stay plain. `answer` in the API contract is unchanged (a string); the supported markdown subset is not yet written in `docs/contracts/api-contracts.md`.
+
+**Check:** `tsc --noEmit` clean. A live run on the iPhone 17 Pro simulator against Core staging showed bold amounts, bullets, no `**` and one POST per tap. **Not verified:** accessibility reading of split bullet rows; typecheck after merging the latest `staging`.
+
 ### [2026-10-09 12:10 UTC+07:00] — [Config] Keep the Qdrant, LiteLLM and Langfuse settings in the AI config
 
 **Done:** Restored `QDRANT_URL`, `LITELLM_URL`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and `LANGFUSE_HOST` as optional `AppConfig` settings and `.env.example` entries, so deployments keep their credentials for the planned integrations. No code reads them yet; staging never had clients for them, only these settings.
