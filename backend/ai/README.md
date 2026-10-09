@@ -68,7 +68,7 @@ Phase 1 covers the shop profile, categories, products and sales (`CONFIRMED` and
 - Output validators do not see delta text. `AgentGuardrails.screened_prefix` therefore releases only the prefix that no continuation can turn into a `LEAK_PATTERN` match. It holds back a short tail, and anything after a `select` that could still start a `select … from` match, until that match is ruled out or 400 characters have passed. `screen_answer` still runs as the output validator on every complete answer, so a rejected answer is retried.
 - The service sends `reset` when shown text must be discarded: a model response followed by a tool call, or an answer the screen rejected and the model retried. Before `done`, it releases the rest of the final answer; if the text already shown is not a prefix of that answer, it sends `reset` and then the whole answer. The text after the last `reset` therefore equals the stored answer.
 - Nothing is saved unless the run completes. A guardrail stop raises `GuardrailError` from the iterator, with the same codes, timeout and limits as the JSON route. Closing the stream early, for example when the caller disconnects, cancels the run; a disconnect that lands while the exchange is already being written cannot stop that write.
-- Core does not proxy this route yet, so FE cannot reach it.
+- Core relays this route as `POST /api/v1/agent/chat/stream`; see [Stream trả lời chat](../../docs/contracts/api-contracts.md#stream-trả-lời-chat).
 
 ## Restock suggestions
 
