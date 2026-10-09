@@ -44,7 +44,7 @@ npm run export:web      # build web tĩnh ra dist/
 | `/profile` | Sửa thông tin tiệm (tên, địa chỉ, ngành hàng) lưu lên Core qua `PATCH /api/v1/shops/{shopId}`; họ tên, email, Facebook và tài khoản ngân hàng chỉ lưu trên máy |
 | `/settings` | Âm thanh, rung, đọc lại đơn, tự mở in |
 | `/notifications` | Thông báo trong app |
-| `/ai` | Hỏi đáp với trợ lý qua `src/lib/agentApi.ts` → Core `/api/v1/agent/*`; lịch sử hội thoại. Khi bật mock, `mockCore` trả lời giả |
+| `/ai` | Hỏi đáp với trợ lý qua `src/lib/agentApi.ts` → Core `/api/v1/agent/*`; lịch sử hội thoại. Câu trả lời của trợ lý qua `components/ChatText.tsx`, chỉ render `**đậm**` và dòng bắt đầu bằng `- ` hoặc `* `; ký hiệu markdown khác hiện nguyên chữ. Khi bật mock, `mockCore` trả lời giả |
 | `/printer` | Màn cấu hình máy in K80/K58; chưa có kết nối thiết bị |
 | `/debug` | Chẩn đoán kết nối, chỉ có ở bản dev (xem [Debug](#debug)) |
 

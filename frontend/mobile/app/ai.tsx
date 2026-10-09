@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AgentAvatar } from '../src/components/AgentAvatar';
+import { ChatText } from '../src/components/ChatText';
 import { Dialog, EmptyState, Field, IconBtn, Row, Sheet, T } from '../src/components/ui';
 import type { AgentConversationSummary, AgentConversationView, AgentMessageView, ChatMessage } from '../src/data/types';
 import { agentApi } from '../src/lib/agentApi';
@@ -76,6 +77,7 @@ export default function Ai() {
   const app = useApp();
   const insets = useSafeAreaInsets();
   const scroll = useRef<ScrollView>(null);
+  const sending = useRef(false);
   const [text, setText] = useState('');
   const [typing, setTyping] = useState(false);
   const [conversationId, setConversationId] = useState<number | null>(null);
@@ -108,7 +110,9 @@ export default function Ai() {
 
   const send = async (q: string) => {
     const message = q.trim();
-    if (!message || typing) return;
+    // `typing` là state nên chưa kịp true khi hai lần bấm đến cùng một nhịp: ref chặn gửi trùng.
+    if (!message || typing || sending.current) return;
+    sending.current = true;
     const userMessage: ChatMessage = { id: `u${Date.now()}`, from: 'user', text: message };
     setMsgs((m) => [...m, userMessage]);
     setText('');
@@ -125,6 +129,7 @@ export default function Ai() {
       setText((current) => (current.trim() ? current : message));
       setError(chatErrorMessage(err));
     } finally {
+      sending.current = false;
       setTyping(false);
     }
   };
@@ -193,9 +198,13 @@ export default function Ai() {
                       </Row>
                     </Row>
                   ) : null}
-                  <T size={13.5} color={isUser ? colors.white : colors.ink} style={styles.messageText}>
-                    {m.text}
-                  </T>
+                  {isUser ? (
+                    <T size={13.5} color={colors.white} style={styles.messageText}>
+                      {m.text}
+                    </T>
+                  ) : (
+                    <ChatText text={m.text} />
+                  )}
                 </View>
               </View>
             );
@@ -219,6 +228,7 @@ export default function Ai() {
       <View style={[styles.composerWrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
         {!typing ? (
           <ScrollView
+            testID="quick-chips"
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.quickChipsScroll}
