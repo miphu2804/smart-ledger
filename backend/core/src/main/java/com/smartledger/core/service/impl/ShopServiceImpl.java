@@ -21,6 +21,7 @@ import com.smartledger.core.repository.AuthIdentityRepository;
 import com.smartledger.core.repository.ShopRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.ShopService;
+import com.smartledger.core.service.NotificationEventService;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
@@ -31,12 +32,15 @@ import org.springframework.util.StringUtils;
 public class ShopServiceImpl implements ShopService {
     private final AuditLogService auditLogService;
     private final AdminAccessAuditService adminAccessAuditService;
+    private final NotificationEventService notifications;
 
     private final AuthIdentityRepository authIdentityRepository;
     private final ShopRepository shopRepository;
 
     public ShopServiceImpl(AuthIdentityRepository authIdentityRepository, ShopRepository shopRepository,
-            AuditLogService auditLogService, AdminAccessAuditService adminAccessAuditService) {
+            AuditLogService auditLogService, AdminAccessAuditService adminAccessAuditService,
+            NotificationEventService notifications) {
+        this.notifications = notifications;
         this.auditLogService = auditLogService;
         this.adminAccessAuditService = adminAccessAuditService;
         this.authIdentityRepository = authIdentityRepository;
@@ -137,6 +141,7 @@ public class ShopServiceImpl implements ShopService {
         // One existing status event serves both OWNER and ADMIN views; never duplicate the write.
         adminAccessAuditService.recordShopStatus(admin.getId(), shop.getId(), before,
                 shop.getStatus(), shop.getInactiveReason());
+        notifications.shopStatusChanged(shop, before);
         return toResponse(shop);
     }
 

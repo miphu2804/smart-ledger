@@ -24,6 +24,7 @@ import com.smartledger.core.repository.SaleRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.IdempotencyService;
 import com.smartledger.core.service.SaleVoidService;
+import com.smartledger.core.service.NotificationEventService;
 import com.smartledger.core.service.ShopService;
 import java.util.Comparator;
 import java.util.List;
@@ -35,6 +36,7 @@ import org.springframework.util.StringUtils;
 @Service
 public class SaleVoidServiceImpl implements SaleVoidService {
     private final AuditLogService auditLogService;
+    private final NotificationEventService notifications;
     private final ShopService shopService;
     private final SaleRepository saleRepository;
     private final SaleItemRepository saleItemRepository;
@@ -47,7 +49,9 @@ public class SaleVoidServiceImpl implements SaleVoidService {
     public SaleVoidServiceImpl(ShopService shopService, SaleRepository saleRepository,
             SaleItemRepository saleItemRepository, DebtRepository debtRepository,
             PaymentRepository paymentRepository, ProductRepository productRepository,
-            SaleRefundRepository refundRepository, IdempotencyService idempotencyService, AuditLogService auditLogService) {
+            SaleRefundRepository refundRepository, IdempotencyService idempotencyService, AuditLogService auditLogService,
+            NotificationEventService notifications) {
+        this.notifications = notifications;
         this.auditLogService = auditLogService;
         this.shopService = shopService;
         this.saleRepository = saleRepository;
@@ -99,6 +103,7 @@ public class SaleVoidServiceImpl implements SaleVoidService {
         List<SaleItem> items = saleItemRepository.findAllBySaleIdOrderByIdAsc(id);
         boolean stockRestocked = false;
         int restoredItemCount = 0;
+        Map<Long, Product> restoredProducts = new java.util.TreeMap<>();
         if (Boolean.TRUE.equals(request.restockItems())) {
             // Product locks follow the same stable ID order as checkout confirmation.
             for (SaleItem item : items.stream().sorted(Comparator.comparing(
@@ -111,6 +116,7 @@ public class SaleVoidServiceImpl implements SaleVoidService {
                             .orElseThrow(() -> new BusinessException(ErrorCode.SALE_RESTOCK_UNAVAILABLE));
                     var beforeStock = product.getStockQuantity();
                     product.restoreStock(item.getQuantity());
+                    restoredProducts.put(product.getId(), product);
                     auditLogService.recordOwner(shop, AuditAction.STOCK_RESTORED_ON_VOID, product.getId(), null, idempotencyKey,
                             Map.of("saleId", id, "quantity", item.getQuantity(), "beforeStock", beforeStock,
                                     "afterStock", product.getStockQuantity()));
@@ -119,6 +125,8 @@ public class SaleVoidServiceImpl implements SaleVoidService {
                 }
             }
         }
+
+        restoredProducts.values().forEach(product -> notifications.reconcileStock(shop, product));
 
         if (debt != null) {
             debt.voidRemaining();
@@ -131,6 +139,7 @@ public class SaleVoidServiceImpl implements SaleVoidService {
                 request.refundMethod(), StringUtils.hasText(request.transferReference())
                         ? request.transferReference().trim() : null, shop.getOwnerId()));
         sale.voidSale(shop.getOwnerId(), request.reason().trim());
+        notifications.saleVoided(shop, sale);
         if (refund != null) {
             auditLogService.recordOwner(shop, AuditAction.SALE_REFUND_RECORDED, refund.getId(), null, idempotencyKey,
                     Map.of("saleId", id, "amountVnd", refund.getAmountVnd(), "paymentMethod", refund.getRefundMethod()));

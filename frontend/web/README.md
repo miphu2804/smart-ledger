@@ -68,17 +68,27 @@ Giao diện theo app mobile mới: tím thương hiệu `#482AAC`, nền kem `#F
 
 | Đường dẫn | Nguồn |
 | --- | --- |
-| `screens/{home,voice,checkout,orders,pos,reports,products}.webp` | Ảnh chụp app mobile ở chế độ mock (`EXPO_PUBLIC_USE_MOCK=true`), viewport 390×844, tỉ lệ 2x. Dữ liệu trong ảnh là dữ liệu mẫu; ẩn mascot nổi khi chụp để không đè nội dung |
+| `screens/{home,voice,checkout,orders,pos,reports,products}.webp` | Ảnh chụp app mobile ở chế độ mock (`EXPO_PUBLIC_USE_MOCK=true`), chụp toàn màn hình trên iOS Simulator iPhone 17 Pro Max (440×956 pt), xuất 660×1434. Đã xoá thanh trạng thái (giờ, sóng, pin, Dynamic Island). Dữ liệu trong ảnh là dữ liệu mẫu; ẩn mascot nổi khi chụp để không đè nội dung |
 | `brand/logo.webp`, `favicon.png`, `apple-touch-icon.png` | `frontend/mobile/assets/brand-logo.png` (icon của app) |
 | `brand/robot.webp`, `brand/agent-*.webp` | `frontend/mobile/assets/bubblelogo.png`, `assets/voice/agent-*.png` |
 | `brand/icons/*.webp` | Icon 3D trong `frontend/mobile/assets/tab1-overview` và `tab4-management` |
 | `brand/app-icon-1024.png` | Icon 1024×1024 cho trang cài đặt app Meta (Facebook Login), dựng từ `bubblelogo.png` |
 
-Chụp lại ảnh khi giao diện app đổi: chạy app ở chế độ mock (`npx expo start --web` trong `../mobile` với ba biến `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS` đặt `true`), mở bằng trình duyệt cỡ 390×844 rồi lưu WebP.
+Chụp lại ảnh khi giao diện app đổi: chạy dev build trên simulator ở chế độ mock (`npx expo start --dev-client` trong `../mobile` với ba biến `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS` đặt `true`), chụp bằng `xcrun simctl io booted screenshot`, phủ 186 px trên cùng (thanh trạng thái @3x) bằng hàng điểm ảnh ngay bên dưới, rồi `cwebp -q 82 -resize 660 0`. Giữ đúng tỉ lệ 440:956 để ảnh khớp khung điện thoại trong `landing.css`.
 
 **Trang pháp lý** (`src/pages/legal/`) chưa được duyệt theo [AGENTS.md](../../AGENTS.md). Trước khi công khai: điền `VITE_CONTACT_EMAIL`, chủ sản phẩm duyệt nội dung (kể cả cam kết xử lý yêu cầu xoá trong `DELETION_DAYS`, `src/pages/legal/legalConfig.ts`) rồi đặt `VITE_LEGAL_DRAFT=false`.
 
-**Triển khai:** CI hiện chỉ đưa bản web của `../mobile` lên Vercel; web này chưa có luồng deploy. `vercel.json` chuyển mọi đường dẫn về `index.html` để `/privacy`, `/data-deletion` mở trực tiếp được khi dùng một dự án Vercel riêng (Root Directory `frontend/web`).
+**Triển khai:** web này dùng một dự án Vercel riêng nối thẳng vào repo GitHub (Vercel Git integration), không qua GitHub Actions. CI chỉ build và deploy bản web của `../mobile`. Ba môi trường:
+
+| Môi trường | Nhánh | Địa chỉ |
+| --- | --- | --- |
+| Preview | Mọi nhánh khác và pull request | URL Vercel tự sinh, gắn vào pull request |
+| Staging | `staging` | Domain gán cho nhánh `staging` trong Settings → Domains |
+| Production | `main` | Domain production của dự án |
+
+Thiết lập một lần trên Vercel: New Project → import repo này → Root Directory `frontend/web` (framework Vite tự nhận) → Settings → Git → Production Branch `main` → Settings → Domains thêm domain staging và chọn Git Branch `staging`. Biến môi trường (`VITE_CONTACT_EMAIL`, `VITE_LEGAL_DRAFT`) đặt riêng cho Production và Preview; staging dùng giá trị Preview.
+
+Trong `vercel.json`, `ignoreCommand` bỏ qua build khi commit không đụng tới `frontend/web` (`git diff` thoát mã 0 thì Vercel huỷ build), còn `rewrites` chuyển mọi đường dẫn về `index.html` để `/privacy`, `/data-deletion` mở trực tiếp được.
 
 ## Trạng thái dùng chung
 

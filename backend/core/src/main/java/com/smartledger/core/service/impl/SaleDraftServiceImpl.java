@@ -30,6 +30,7 @@ import com.smartledger.core.repository.SaleItemRepository;
 import com.smartledger.core.repository.SaleRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.SaleDraftService;
+import com.smartledger.core.service.NotificationEventService;
 import com.smartledger.core.service.ShopService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -46,6 +47,7 @@ import org.springframework.util.StringUtils;
 @Service
 public class SaleDraftServiceImpl implements SaleDraftService {
     private final AuditLogService auditLogService;
+    private final NotificationEventService notifications;
     private final ShopService shopService;
     private final SaleDraftRepository draftRepository;
     private final SaleDraftItemRepository draftItemRepository;
@@ -60,7 +62,8 @@ public class SaleDraftServiceImpl implements SaleDraftService {
             SaleDraftItemRepository draftItemRepository, ProductRepository productRepository,
             SaleRepository saleRepository, SaleItemRepository saleItemRepository,
             PaymentRepository paymentRepository, CustomerRepository customerRepository,
-            DebtRepository debtRepository, AuditLogService auditLogService) {
+            DebtRepository debtRepository, AuditLogService auditLogService, NotificationEventService notifications) {
+        this.notifications = notifications;
         this.auditLogService = auditLogService;
         this.shopService = shopService;
         this.draftRepository = draftRepository;
@@ -176,6 +179,7 @@ public class SaleDraftServiceImpl implements SaleDraftService {
             estimatedCosts.put(item.getProductId(), estimateCost(product, item.getQuantity()));
             if (product.isTracked()) { beforeStocks.put(product.getId(), product.getStockQuantity()); }
             product.deductStock(item.getQuantity());
+            notifications.reconcileStock(shop, product);
             if (product.isTracked()) { afterStocks.put(product.getId(), product.getStockQuantity()); }
         }
 

@@ -44,7 +44,7 @@ public class AuditLog {
     private static final Set<String> SHOP_STATUSES = enumNames(ShopStatus.values());
     private static final Set<String> BOOLEAN_KEYS = Set.of("restockItems", "tracked", "beforeTracked", "afterTracked", "queryPresent");
     private static final Set<String> FIELD_NAMES = Set.of("name", "industry", "phone", "address", "categoryId",
-            "barcode", "imageUrl", "unit", "sellingPriceVnd", "costPriceVnd", "tracked", "stockQuantity",
+            "barcode", "imageUrl", "unit", "sellingPriceVnd", "costPriceVnd", "tracked", "stockQuantity", "lowStockThreshold",
             "logoUrl", "avatarUrl", "category", "description", "amountVnd", "paymentMethod", "expenseAt");
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)

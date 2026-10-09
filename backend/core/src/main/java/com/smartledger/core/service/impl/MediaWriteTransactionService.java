@@ -195,7 +195,7 @@ public class MediaWriteTransactionService {
         return new ProductResponse(product.getId(), product.getShopId(), product.getCategoryId(), product.getName(),
                 product.getBarcode(), product.getImageUrl(), product.getUnit(), product.getSellingPriceVnd(),
                 product.getCostPriceVnd(), product.isTracked(), product.getStockQuantity(), product.getStatus(),
-                product.getCreatedAt(), product.getUpdatedAt());
+                product.getCreatedAt(), product.getUpdatedAt(), product.getLowStockThreshold());
     }
 
     private static ShopResponse shopResponse(Shop shop) {

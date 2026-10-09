@@ -63,9 +63,10 @@ class SaleRefundMigrationPostgresTest {
     }
 
     @Test
-    void freshMigrationsMatchEveryEntityAndSecondRunDoesNothing() {
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(14);
-        validateEntitySchema();
+    void freshMigrationsMatchEveryEntityAndSecondRunDoesNothing() throws SQLException {
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(15);
+        validateCurrentEntitySchema(testDataSource());
+        assertThresholdConstraintValidated();
         assertThat(flyway(null).migrate().migrationsExecuted).isZero();
         assertThat(flyway(null).validateWithResult().validationSuccessful).isTrue();
     }
@@ -73,8 +74,8 @@ class SaleRefundMigrationPostgresTest {
     @Test
     void upgradeFromV8PreservesMoneySettledDebtAndUnknownStockHistory() throws SQLException {
         migrateAndSeedV8();
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(6);
-        validateEntitySchema();
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(7);
+        validateCurrentEntitySchema(testDataSource());
 
         assertThat(scalar("SELECT stock_deducted FROM sale_items WHERE id = 1")).isNull();
         assertThat(scalar("SELECT estimated_cost_vnd FROM sale_items WHERE id = 1")).isNull();
@@ -109,8 +110,8 @@ class SaleRefundMigrationPostgresTest {
                 VALUES (1, 40000, 'CASH', 1, TIMESTAMPTZ '2026-09-02T10:00:00Z');
                 """);
 
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(6);
-        validateEntitySchema();
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(7);
+        validateCurrentEntitySchema(testDataSource());
         assertThat(scalar("SELECT stock_deducted FROM sale_items WHERE id = 1")).isEqualTo("t");
         assertThat(scalar("SELECT amount_vnd FROM sale_refunds WHERE sale_id = 1")).isEqualTo("40000");
         assertThat(scalar("SELECT refunded_at = TIMESTAMPTZ '2026-09-02T10:00:00Z' FROM sale_refunds WHERE sale_id = 1"))
@@ -166,7 +167,7 @@ class SaleRefundMigrationPostgresTest {
                 .isEqualTo("8");
         // Correct the test row explicitly, then retry without Flyway repair.
         execute("UPDATE sale_refunds SET sale_id = 1 WHERE sale_id = 999");
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(6);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(7);
     }
 
     @Test
@@ -292,10 +293,10 @@ class SaleRefundMigrationPostgresTest {
         }
         assertThat(scalar("SELECT count(*) FROM information_schema.tables WHERE table_schema='" + schema + "' AND table_name='admin_access_logs'"))
                 .isEqualTo("0");
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(3);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(4);
         execute(userProfileInsert(AuditAction.USER_AVATAR_UPDATED));
         assertThat(scalar("SELECT count(*) FROM media_cleanup_jobs")).isEqualTo("0");
-        validateEntitySchema();
+        validateCurrentEntitySchema(testDataSource());
         assertThat(flyway(null).migrate().migrationsExecuted).isZero();
         assertThat(flyway(null).validateWithResult().validationSuccessful).isTrue();
     }
@@ -343,8 +344,8 @@ class SaleRefundMigrationPostgresTest {
         assertThat(scalar("SELECT max(version::integer) FROM flyway_schema_history WHERE success AND version IS NOT NULL")).isEqualTo("10");
         assertThat(flyway("11").migrate().migrationsExecuted).isEqualTo(1);
         assertThat(scalar("SELECT json_agg(a ORDER BY id)::text FROM audit_logs a")).isEqualTo(before);
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(3);
-        validateEntitySchema();
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(4);
+        validateCurrentEntitySchema(testDataSource());
         assertThat(flyway(null).migrate().migrationsExecuted).isZero();
     }
 
@@ -492,6 +493,94 @@ class SaleRefundMigrationPostgresTest {
                 """);
     }
 
+    @Test
+    void notificationUpgradePreservesExistingBusinessDataWithoutBackfill() throws SQLException {
+        migrateAndSeedV8();
+        flyway("14").migrate();
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        validateCurrentEntitySchema(testDataSource());
+        assertThresholdConstraintValidated();
+        assertThat(scalar("SELECT low_stock_threshold FROM products WHERE id = 1")).isNull();
+        assertThat(scalar("SELECT stock_quantity FROM products WHERE id = 1")).isEqualTo("7.000");
+        assertThat(scalar("SELECT amount_vnd FROM payments WHERE id = 1")).isEqualTo("40000");
+        assertThat(scalar("SELECT count(*) FROM notification_events")).isEqualTo("0");
+        assertThat(scalar("SELECT count(*) FROM notification_recipients")).isEqualTo("0");
+        rejected("UPDATE products SET low_stock_threshold = -1 WHERE id = 1",
+                "23514", "ck_products_low_stock_threshold");
+    }
+
+    @Test
+    void notificationMigrationAdoptsLocalTablesAndPreservesReadHistory() throws SQLException {
+        migrateAndSeedV8();
+        flyway("14").migrate();
+        createLocalNotificationTables();
+        execute("UPDATE products SET low_stock_threshold = 3.125 WHERE id = 1");
+        execute("""
+                INSERT INTO notification_events
+                    (shop_id, type, title, body, entity_type, entity_id, dedup_key, created_at)
+                VALUES (1, 'LOW_STOCK', 'Test', 'History', 'PRODUCT', 1, 'local-history',
+                    TIMESTAMPTZ '2026-10-01T10:00:00Z');
+                INSERT INTO notification_recipients (notification_event_id, user_id, created_at, read_at)
+                VALUES (1, 1, TIMESTAMPTZ '2026-10-01T10:00:00Z', TIMESTAMPTZ '2026-10-01T11:00:00Z');
+                """);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        validateCurrentEntitySchema(testDataSource());
+        assertThresholdConstraintValidated();
+        assertThat(scalar("SELECT low_stock_threshold FROM products WHERE id = 1")).isEqualTo("3.125");
+        assertThat(scalar("SELECT read_at = TIMESTAMPTZ '2026-10-01T11:00:00Z' FROM notification_recipients"))
+                .isEqualTo("t");
+        assertThat(flyway(null).migrate().migrationsExecuted).isZero();
+        rejected("UPDATE notification_events SET entity_type = 'SHOP'", "23514", "ck_notification_event_target");
+        rejected("UPDATE notification_recipients SET user_id = 999", "23503", "fk_notification_recipient_user");
+        rejected("UPDATE notification_events SET resolved_at = created_at - INTERVAL '1 hour'",
+                "23514", "ck_notification_event_resolution");
+    }
+
+    @Test
+    void invalidLocalThresholdFailsNotificationMigrationAtomicallyAndAllowsRetry() throws SQLException {
+        migrateAndSeedV8();
+        flyway("14").migrate();
+        execute("ALTER TABLE products ADD COLUMN low_stock_threshold NUMERIC(15,3);");
+        execute("UPDATE products SET low_stock_threshold = -1 WHERE id = 1");
+        assertThatThrownBy(() -> flyway(null).migrate()).isInstanceOf(FlywayException.class)
+                .hasMessageContaining("ck_products_low_stock_threshold");
+        assertThat(scalar("SELECT max(version::integer) FROM flyway_schema_history WHERE success"))
+                .isEqualTo("14");
+        assertThat(scalar("SELECT count(*) FROM information_schema.tables WHERE table_schema='" + schema
+                + "' AND table_name='notification_events'")).isEqualTo("0");
+        assertThat(scalar("SELECT low_stock_threshold FROM products WHERE id = 1")).isEqualTo("-1.000");
+        assertThat(scalar("SELECT count(*) FROM pg_constraint WHERE conrelid = 'products'::regclass"
+                + " AND conname = 'ck_products_low_stock_threshold'")).isEqualTo("0");
+        execute("UPDATE products SET low_stock_threshold = NULL WHERE id = 1");
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        validateCurrentEntitySchema(testDataSource());
+        assertThresholdConstraintValidated();
+    }
+
+    private void assertThresholdConstraintValidated() throws SQLException {
+        assertThat(scalar("SELECT convalidated FROM pg_constraint WHERE conrelid = 'products'::regclass"
+                + " AND conname = 'ck_products_low_stock_threshold'")).isEqualTo("t");
+    }
+
+    private void createLocalNotificationTables() throws SQLException {
+        execute("""
+                ALTER TABLE products ADD COLUMN low_stock_threshold NUMERIC(15,3);
+                CREATE TABLE notification_events (
+                    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+                    shop_id BIGINT NOT NULL, type VARCHAR(50) NOT NULL,
+                    title VARCHAR(255) NOT NULL, body VARCHAR(1000) NOT NULL,
+                    entity_type VARCHAR(100) NOT NULL, entity_id BIGINT NOT NULL,
+                    data_json JSONB, dedup_key VARCHAR(255) NOT NULL, resolved_at TIMESTAMPTZ,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    CONSTRAINT uq_notification_event_dedup UNIQUE (shop_id, dedup_key));
+                CREATE TABLE notification_recipients (
+                    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+                    notification_event_id BIGINT NOT NULL, user_id BIGINT NOT NULL,
+                    read_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    CONSTRAINT uq_notification_recipient UNIQUE (notification_event_id, user_id));
+                """);
+    }
+
     private Flyway flyway(String target) {
         var config = Flyway.configure().dataSource(System.getenv("CORE_TEST_POSTGRES_URL"),
                 System.getenv("CORE_TEST_POSTGRES_USERNAME"), System.getenv("CORE_TEST_POSTGRES_PASSWORD"))
@@ -502,12 +591,16 @@ class SaleRefundMigrationPostgresTest {
         return config.load();
     }
 
-    private void validateEntitySchema() {
+    private DriverManagerDataSource testDataSource() {
         var source = new DriverManagerDataSource(System.getenv("CORE_TEST_POSTGRES_URL"),
                 System.getenv("CORE_TEST_POSTGRES_USERNAME"), System.getenv("CORE_TEST_POSTGRES_PASSWORD"));
         var properties = new Properties();
         properties.setProperty("currentSchema", schema);
         source.setConnectionProperties(properties);
+        return source;
+    }
+
+    private void validateCurrentEntitySchema(DriverManagerDataSource source) {
         var registry = new StandardServiceRegistryBuilder()
                 .applySetting("hibernate.connection.datasource", source)
                 .applySetting("hibernate.default_schema", schema)
@@ -517,7 +610,8 @@ class SaleRefundMigrationPostgresTest {
             var metadata = new MetadataSources(registry);
             for (var entity : new Class<?>[] {AuditLog.class, AuthIdentity.class, Category.class, Customer.class, Debt.class,
                     Expense.class, MediaCleanupJob.class, com.smartledger.core.entity.MediaUploadKey.class, Payment.class, Product.class, Sale.class, SaleDraft.class,
-                    SaleDraftItem.class, SaleItem.class, SaleRefund.class, Shop.class, UserAccount.class}) {
+                    SaleDraftItem.class, SaleItem.class, SaleRefund.class, Shop.class, UserAccount.class,
+                    com.smartledger.core.entity.NotificationEvent.class, com.smartledger.core.entity.NotificationRecipient.class}) {
                 metadata.addAnnotatedClass(entity);
             }
             try (var factory = metadata.buildMetadata().buildSessionFactory()) {

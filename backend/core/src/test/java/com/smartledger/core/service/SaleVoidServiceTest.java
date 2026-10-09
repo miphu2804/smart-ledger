@@ -55,7 +55,7 @@ class SaleVoidServiceTest {
     private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
     private final SaleVoidService service = new SaleVoidServiceImpl(shopService, saleRepository,
             itemRepository, debtRepository, paymentRepository, productRepository, refundRepository,
-            idempotencyService, auditLogService);
+            idempotencyService, auditLogService, Mockito.mock(NotificationEventService.class));
     private final VerifiedFirebaseToken token = new VerifiedFirebaseToken("uid", null, false, null, null, null);
 
     @BeforeEach
