@@ -1,3 +1,13 @@
+### [2026-10-09 01:05 UTC+07:00] — [Feature] Landing polish, device-ratio screenshots and a Vercel Git project for the landing
+
+**Done:** The phone frame follows a 6.9″ Pro Max (440:956 screen, no notch) and no longer covers the screenshots. All seven app screenshots were retaken on the iOS Simulator in mock mode at that ratio, with the status bar painted out. Opening a FAQ item no longer hides it. Removed the student-project notice, the footer credit line, and everything still marked "Đang hoàn thiện" (the AI assistant feature card, the testing note under features and the AI row in the comparison table). Reading text is larger, centered section titles fit on one line on desktop, and the comparison table stacks its column labels above the values on phones. The landing gets its own Vercel project linked to the repo (preview for branches and PRs, staging for `staging`, production for `main`) with no GitHub Actions job.
+
+**Changed files:** `frontend/web/src/pages/landing/{LandingPage.tsx,SiteFooter.tsx}`, `frontend/web/src/styles/landing.css`, `frontend/web/public/screens/*.webp`, `frontend/web/{vercel.json,README.md}`, `PROGRESS.md`.
+
+**Flow explained:** The FAQ open state moved from a toggled class to `data-open`, because React rewriting `className` dropped the `is-in` class added by the scroll-reveal observer and left the item at `opacity: 0`. Screenshots fill the frame with `object-fit: cover` since they share its ratio. `vercel.json` adds `ignoreCommand: git diff --quiet HEAD^ HEAD -- .`, so the Vercel project only builds when a commit touches `frontend/web`.
+
+**Check:** `npm run typecheck` and `npm run build` pass; `npm run lint` reports only the existing admin warnings. In the browser at 1093 px and 375 px: all 8 phone images are 660×1434 and fill the frame, FAQ items stay visible through open/close, no horizontal overflow, and the removed texts are absent. **Not verified:** the Vercel project itself, which must be created and linked in the Vercel dashboard (steps in `frontend/web/README.md`), and tablet widths.
+
 ### [2026-10-09 00:21 UTC+07:00] — [Fix] Address notification migration review
 
 **Done:** V15 explicitly installs the product threshold CHECK as NOT VALID, then validates it before the atomic migration completes. Corrected NotificationPostgresTest Javadoc to describe actual V1–V15 Flyway migrations.
