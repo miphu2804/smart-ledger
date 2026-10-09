@@ -9,7 +9,7 @@ import { Button, Card, EmptyState, Row, T } from '../../src/components/ui';
 import { BarcodeScannerModal } from '../../src/components/BarcodeScannerModal';
 import { CountUp, Reveal, Skeleton } from '../../src/components/reveal';
 import { vnd } from '../../src/lib/format';
-import { buildNotifications, fromCoreNotification, isNotifUnread, mergeNotifications, notifCategoryMeta } from '../../src/lib/notifications';
+import { buildNotifications, fromCoreNotification, isNotifUnread, mergeNotifications, notifCategoryMeta, totalUnread } from '../../src/lib/notifications';
 import { bestSellers, periodLabel, summary } from '../../src/lib/stats';
 import { useCoreData } from '../../src/lib/useCoreData';
 import { useCoreNotifications } from '../../src/lib/useCoreNotifications';
@@ -96,14 +96,17 @@ export default function Home() {
   // Thông báo: kho hàng, đơn bị huỷ và tình trạng tiệm lấy từ inbox Core (chỉ cần trang đầu để xem trước); đơn mới, công nợ, thu chi tính trên máy.
   const coreNotifications = useCoreNotifications(5);
   const coreNotifs = useMemo(() => coreNotifications.items.map(fromCoreNotification), [coreNotifications.items]);
+  const localNotifications = useMemo(
+    () => (ready ? buildNotifications({ invoices, products, expenses, debts }) : []),
+    [ready, invoices, products, expenses, debts],
+  );
   const notifications = useMemo(
-    () => mergeNotifications(ready ? buildNotifications({ invoices, products, expenses, debts }) : [], coreNotifs, coreNotifications.hasMore),
-    [ready, invoices, products, expenses, debts, coreNotifs, coreNotifications.hasMore],
+    () => mergeNotifications(localNotifications, coreNotifs, coreNotifications.hasMore),
+    [localNotifications, coreNotifs, coreNotifications.hasMore],
   );
   const readNotifications = useMemo(() => new Set(app.readNotifs), [app.readNotifs]);
-  // Core đếm trên toàn bộ inbox; thông báo trên máy chỉ đếm những cái đang có.
-  const unreadNotifications =
-    coreNotifications.unreadCount + notifications.filter((notification) => notification.coreId == null && !readNotifications.has(notification.id)).length;
+  // Đếm thông báo trên máy từ danh sách đầy đủ, không phải danh sách đã gộp (đã ẩn bớt khi Core còn trang chưa tải).
+  const unreadNotifications = totalUnread(localNotifications, readNotifications, coreNotifications.unreadCount);
   const periodName = periodLabel[period];
   const topSeller = topSellers[0];
   const openAssistant = (path: '/voice' | '/ai') => {

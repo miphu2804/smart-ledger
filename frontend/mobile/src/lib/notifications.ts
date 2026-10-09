@@ -171,6 +171,15 @@ export function mergeNotifications(local: Notif[], core: Notif[], coreHasMore: b
   return [...kept, ...core].sort((a, b) => time(b.at) - time(a.at));
 }
 
+/**
+ * Tổng số chưa đọc của hai nguồn. Core đếm trên toàn bộ inbox (kể cả trang chưa tải); thông báo trên máy đếm trên danh sách đầy đủ
+ * `local`, không phải danh sách đã gộp: khi Core còn trang chưa tải, `mergeNotifications` ẩn bớt thông báo máy cũ, nhưng chúng vẫn
+ * chưa đọc và sẽ hiện ra khi tải thêm, nên không được bỏ khỏi số đếm hay khỏi "Đọc hết".
+ */
+export function totalUnread(local: Notif[], readLocal: Set<string>, coreUnread: number): number {
+  return coreUnread + local.filter((n) => !readLocal.has(n.id)).length;
+}
+
 /** Thông báo Core đọc trạng thái từ Core; thông báo trên máy đọc từ danh sách đã đọc của app. */
 export function isNotifUnread(n: Notif, readLocal: Set<string>): boolean {
   return n.coreId != null ? !n.read : !readLocal.has(n.id);

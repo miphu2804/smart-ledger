@@ -328,6 +328,13 @@ function badNotificationQuery(message: string): ApiError {
 }
 
 function visibleNotifications(params: NotificationParams): NotificationView[] {
+  const rawShopId = params.get('shopId');
+  const shopId = rawShopId === undefined ? undefined : Number(rawShopId);
+  if (shopId !== undefined && (!Number.isInteger(shopId) || shopId <= 0)) {
+    throw apiErr(400, 'invalid_shop_id', 'shopId must be a positive integer.');
+  }
+  // Mock chỉ có một tiệm của OWNER; tiệm khác không phải của họ nên Core trả 403
+  if (shopId !== undefined && shopId !== SHOP_ID) throw apiErr(403, 'shop_access_denied', 'This shop is not available to the current owner.');
   const type = params.get('type');
   if (type !== undefined && !NOTIFICATION_TYPES.includes(type as NotificationType)) {
     throw apiErr(400, 'validation_failed', 'type is not a notification type.');

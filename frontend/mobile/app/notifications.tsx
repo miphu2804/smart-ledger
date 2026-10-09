@@ -15,6 +15,7 @@ import {
   Notif,
   NotifCategory,
   notifCategoryMeta,
+  totalUnread,
 } from '../src/lib/notifications';
 import { useCoreData } from '../src/lib/useCoreData';
 import { useCoreNotifications } from '../src/lib/useCoreNotifications';
@@ -53,8 +54,8 @@ export default function Notifications() {
   const all = useMemo(() => mergeNotifications(local, coreNotifs, core.hasMore), [local, coreNotifs, core.hasMore]);
   const read = useMemo(() => new Set(app.readNotifs), [app.readNotifs]);
   const unread = all.filter((n) => isNotifUnread(n, read));
-  // Core đếm trên toàn bộ inbox (kể cả trang chưa tải); thông báo trên máy chỉ đếm những cái đang hiện.
-  const unreadTotal = core.unreadCount + unread.filter((n) => n.coreId == null).length;
+  // Đếm thông báo trên máy từ danh sách đầy đủ `local`, không phải `all` đã bị ẩn bớt khi Core còn trang chưa tải.
+  const unreadTotal = totalUnread(local, read, core.unreadCount);
 
   const shown = filter === 'all' ? all : filter === 'unread' ? unread : all.filter((n) => n.category === filter);
 
@@ -81,7 +82,7 @@ export default function Notifications() {
   };
 
   const readAll = () => {
-    app.markNotifsRead(unread.filter((n) => n.coreId == null).map((n) => n.id));
+    app.markNotifsRead(local.filter((n) => !read.has(n.id)).map((n) => n.id));
     triggerFeedback('selection');
     if (core.unreadCount > 0) core.markAllRead().catch((e) => toast(errorMessage(e), 'err'));
   };
