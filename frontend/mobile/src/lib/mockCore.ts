@@ -292,7 +292,8 @@ function seedNotifications(): void {
   const draft: Array<Parameters<typeof pushNotification>> = [];
   products.filter((p) => p.tracked).forEach((p, i) => {
     const stock = p.stockQuantity ?? 0;
-    if (stock <= 6) {
+    // Như Core: hết hàng luôn báo, sắp hết chỉ khi mặt hàng có ngưỡng và tồn chạm ngưỡng đó
+    if (stock <= 0 || (p.lowStockThreshold != null && stock <= p.lowStockThreshold)) {
       const out = stock <= 0;
       draft.push([
         out ? 'OUT_OF_STOCK' : 'LOW_STOCK',
