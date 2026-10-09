@@ -23,6 +23,22 @@ export function isWholeNumber(text: string): boolean {
   return /^[0-9]+$/.test(text.trim());
 }
 
+/**
+ * Giá trị ngưỡng khi lưu form. Core cho ngưỡng có tối đa 3 chữ số thập phân nhưng ô nhập chỉ nhận số nguyên, nên nếu người
+ * dùng không sửa ô (chữ trong ô còn y như lúc mở form) thì giữ NGUYÊN giá trị đang lưu, không làm tròn: sửa tên hay giá
+ * không được âm thầm đổi ngưỡng cảnh báo. Chỉ khi ô bị sửa mới đọc lại; để trống = bỏ ngưỡng (null).
+ */
+export function resolveThreshold(
+  text: string,
+  initialText: string,
+  original: number | null,
+): { ok: true; value: number | null } | { ok: false } {
+  const typed = text.trim();
+  if (typed === initialText.trim()) return { ok: true, value: original };
+  if (typed === '') return { ok: true, value: null };
+  return isWholeNumber(typed) ? { ok: true, value: parseThreshold(typed) } : { ok: false };
+}
+
 /** Ô ngưỡng chỉ nhận số nguyên không âm; để trống = không đặt ngưỡng (null). Gọi sau khi `isWholeNumber` đã đúng. */
 export function parseThreshold(text: string): number | null {
   const digits = text.replace(/\D/g, '');

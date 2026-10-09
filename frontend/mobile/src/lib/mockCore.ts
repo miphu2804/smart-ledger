@@ -386,7 +386,16 @@ function stockInProduct(id: number, body: StockInBody): ProductView {
     throw apiErr(400, 'validation_failed', 'quantity must be greater than 0.');
   }
   if ((body.reason ?? '').trim().length > 500) throw apiErr(400, 'validation_failed', 'reason must be 500 characters or fewer.');
+  // Core: quantity tối đa 12 chữ số nguyên và 3 chữ số thập phân; đếm theo phần nghìn để khỏi sai số số thực.
+  const thousandths = body.quantity * 1000;
+  if (!Number.isFinite(thousandths) || Math.abs(thousandths - Math.round(thousandths)) > 1e-6 || Math.round(thousandths) > 999999999999999) {
+    throw apiErr(400, 'validation_failed', 'quantity must have at most 12 integer digits and 3 decimal places.');
+  }
   if (!product.tracked) throw apiErr(409, 'product_stock_in_unavailable', 'This product does not track stock.');
+  // Tổng tồn vượt 999999999999.999 thì Core từ chối và không đổi dữ liệu.
+  if (Math.round(((product.stockQuantity ?? 0) + body.quantity) * 1000) > 999999999999999) {
+    throw apiErr(409, 'product_stock_overflow', 'The resulting stock exceeds the supported maximum.');
+  }
   product.stockQuantity = (product.stockQuantity ?? 0) + body.quantity;
   product.updatedAt = nowIso();
   return { ...product };

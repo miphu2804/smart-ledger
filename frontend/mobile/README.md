@@ -17,7 +17,7 @@ npm run export:web      # build web tĩnh ra dist/
 ## Xem thử với dữ liệu mẫu
 
 - Chọn **Đăng nhập bằng email**, tab **Tạo tài khoản**, nhập email và mật khẩu bất kỳ (từ 6 ký tự); màn xác minh email chỉ cần bấm **Tôi đã xác minh**. Nút Facebook đăng nhập thẳng vào người dùng mẫu.
-- Số bắt đầu bằng `09` → vào thẳng tiệm mẫu “Tiệm tạp hoá cô Thỏ”. Số khác → đi qua bước tạo tiệm (tên + ngành hàng).
+- Email nào cũng là người dùng mới: sau khi xác minh sẽ đi qua bước tạo tiệm (tên + ngành hàng). Chỉ nút Facebook (mock) mới vào thẳng tiệm mẫu “Tiệm tạp hoá cô Thỏ”.
 - Sau khi đăng nhập, Home mở phần giới thiệu `src/components/AssistantIntroModal.tsx` (Trợ lý, Bán hàng, Tổng quan, Quản lý); phần giới thiệu không hiện lại trong phiên đó.
 - Tải lại app (reload) để đưa dữ liệu trong bộ nhớ về trạng thái ban đầu.
 

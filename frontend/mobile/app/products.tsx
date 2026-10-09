@@ -25,7 +25,7 @@ import { categoryApi, productApi } from '../src/lib/catalogApi';
 import { errorMessage } from '../src/lib/errors';
 import { normalizeText, vnd } from '../src/lib/format';
 import { triggerFeedback } from '../src/lib/feedback';
-import { buildProductPatch, isWholeNumber, parseThreshold, stockLevel } from '../src/lib/productForm';
+import { buildProductPatch, isWholeNumber, resolveThreshold, stockLevel } from '../src/lib/productForm';
 import { colors } from '../src/theme';
 
 /** 'all' | 'low' | id danh mục dạng chuỗi (Chips cần K extends string) */
@@ -229,6 +229,8 @@ function ProductForm({
   const [cost, setCost] = useState('');
   const [stock, setStock] = useState('');
   const [threshold, setThreshold] = useState('');
+  /** Chữ ngưỡng lúc mở form: còn y nguyên khi lưu thì giữ giá trị gốc, kể cả khi có phần thập phân */
+  const [thresholdInit, setThresholdInit] = useState('');
   /** Tồn đang hiện ở form sửa: lấy từ mặt hàng, cập nhật sau mỗi lần nhập hàng */
   const [stockNow, setStockNow] = useState<number | null>(null);
   const [stockInOpen, setStockInOpen] = useState(false);
@@ -259,7 +261,9 @@ function ProductForm({
     setPrice(p ? String(p.sellingPriceVnd) : '');
     setCost(p?.costPriceVnd != null ? String(p.costPriceVnd) : '');
     setStock(p?.stockQuantity != null ? String(Math.round(p.stockQuantity)) : '');
-    setThreshold(p?.lowStockThreshold != null ? String(Math.round(p.lowStockThreshold)) : '');
+    const thresholdText = p?.lowStockThreshold != null ? String(p.lowStockThreshold) : '';
+    setThreshold(thresholdText);
+    setThresholdInit(thresholdText);
     setStockNow(p?.stockQuantity ?? null);
     setStockInOpen(false);
     setInQty('');
@@ -282,14 +286,15 @@ function ProductForm({
       setErr('Số lượng tồn chỉ gồm chữ số, không có dấu trừ, dấu chấm hay dấu phẩy.');
       return;
     }
-    if (tracked && threshold.trim() !== '' && !isWholeNumber(threshold)) {
+    const resolved = resolveThreshold(threshold, thresholdInit, p?.lowStockThreshold ?? null);
+    if (tracked && !resolved.ok) {
       setErr('Ngưỡng báo sắp hết chỉ gồm chữ số, không có dấu trừ, dấu chấm hay dấu phẩy.');
       return;
     }
     const priceNum = num(price);
     const costNum = cost.trim() === '' ? null : num(cost);
     const categoryId = catKey === 'none' ? null : Number(catKey);
-    const lowStockThreshold = parseThreshold(threshold);
+    const lowStockThreshold = resolved.ok ? resolved.value : null;
     setBusy(true);
     try {
       if (p) {
