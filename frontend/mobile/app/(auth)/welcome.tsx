@@ -3,41 +3,18 @@ import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { Logo, useToast } from '../../src/components/brand';
-import { Button, Field, Row, Screen, T } from '../../src/components/ui';
-import { AuthError, authClient, startPhoneLogin } from '../../src/lib/auth';
+import { Button, Row, Screen, T } from '../../src/components/ui';
+import { AuthError, authClient } from '../../src/lib/auth';
 import { debugLog } from '../../src/lib/debug';
 import { describeError, errorMessage, isDisplayNameRequired } from '../../src/lib/errors';
 import { useApp } from '../../src/store/AppStore';
 import { colors, shadow } from '../../src/theme';
 
+/** Cách đăng nhập: email + mật khẩu và Facebook dùng được; Google và Zalo ghi "Sắp có". Không còn đăng nhập bằng số điện thoại. */
 export default function Welcome() {
   const toast = useToast();
   const app = useApp();
-  const [phone, setPhone] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
   const [facebookBusy, setFacebookBusy] = useState(false);
-
-  const digits = phone.replace(/\D/g, '');
-  const valid = /^0?\d{9}$/.test(digits);
-
-  const submit = async () => {
-    if (!valid) {
-      setError('Số điện thoại gồm 10 số, ví dụ 0901 234 567');
-      return;
-    }
-    if (loading) return;
-    const local = digits.startsWith('0') ? digits : `0${digits}`;
-    setLoading(true);
-    try {
-      await startPhoneLogin(local); // gửi SMS OTP (Firebase; bản mock thì không gửi gì)
-      router.push({ pathname: '/(auth)/otp', params: { phone: local } });
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Facebook → Firebase → phiên Core, cùng luồng với email: tài khoản mới (Core đòi tên) đi tiếp qua màn đăng ký.
   const signInWithFacebook = async () => {
@@ -70,27 +47,19 @@ export default function Welcome() {
         Đăng nhập
       </T>
       <T size={14} color={colors.muted} style={{ marginTop: 6, marginBottom: 22, lineHeight: 21 }}>
-        Dùng số điện thoại để vào sổ bán hàng.
+        Chọn cách vào sổ bán hàng của bạn.
       </T>
 
-      <Field
-        prefix="+84"
-        placeholder="Nhập số điện thoại"
-        keyboardType="phone-pad"
-        value={phone}
-        maxLength={11}
-        onChangeText={(t) => {
-          setPhone(t);
-          setError('');
-        }}
-        onSubmitEditing={submit}
-        error={error}
-      />
-      <Button title="Tiếp tục" onPress={submit} disabled={!digits.length} loading={loading} />
+      <Button title="Đăng nhập bằng email" icon="mail" onPress={() => router.push({ pathname: '/(auth)/email', params: { mode: 'login' } })} />
 
-      <Pressable onPress={() => router.push('/(auth)/email')} style={{ alignSelf: 'center', marginTop: 14, minHeight: 44, justifyContent: 'center' }} hitSlop={8}>
-        <T w="semibold" size={13} color={colors.primary}>
-          Dùng email
+      <Pressable
+        onPress={() => router.push({ pathname: '/(auth)/email', params: { mode: 'register' } })}
+        accessibilityRole="button"
+        style={{ alignSelf: 'center', marginTop: 10, minHeight: 44, justifyContent: 'center' }}
+        hitSlop={8}
+      >
+        <T w="semibold" size={13} color={colors.brand}>
+          Chưa có tài khoản? Tạo tài khoản
         </T>
       </Pressable>
 
@@ -112,18 +81,15 @@ export default function Welcome() {
         <T size={12} color={colors.faint}>Hoặc tiếp tục với</T>
         <View style={styles.line} />
       </Row>
-      <Row gap={8}>
-        <SocialBtn name="Google" icon="google" color="#EA4335" onPress={() => toast('Google chưa được kết nối. Hãy dùng số điện thoại hoặc email.', 'err')} />
-        <SocialBtn name="Facebook" icon="facebook" color="#1877F2" connected busy={facebookBusy} onPress={signInWithFacebook} />
-        <SocialBtn name="Apple" icon="apple" color={colors.ink} onPress={() => toast('Apple chưa được kết nối. Hãy dùng số điện thoại hoặc email.', 'err')} />
+      <Row gap={8} style={{ alignItems: 'stretch' }}>
+        <SocialBtn name="Facebook" icon="facebook" busy={facebookBusy} onPress={signInWithFacebook} />
+        <SocialBtn name="Google" icon="google" soon />
+        <SocialBtn name="Zalo" icon="zalo" soon />
       </Row>
-      <T size={11} color={colors.faint} style={styles.socialNote}>
-        Google và Apple chưa được kết nối.
-      </T>
 
-      <Row style={{ justifyContent: 'center', marginTop: 20 }} gap={6}>
+      <Row style={{ justifyContent: 'center', marginTop: 24 }} gap={6}>
         <FontAwesome name="lock" size={12} color={colors.faint} />
-          <T size={12} color={colors.faint}>
+        <T size={12} color={colors.faint}>
           An toàn & bảo mật
         </T>
       </Row>
@@ -131,26 +97,44 @@ export default function Welcome() {
   );
 }
 
-function SocialBtn({ name, icon, color, onPress, connected = false, busy = false }: {
+type SocialIcon = 'google' | 'facebook' | 'zalo';
+const SOCIAL_COLOR: Record<SocialIcon, string> = { google: '#EA4335', facebook: '#1877F2', zalo: '#0068FF' };
+
+function SocialBtn({ name, icon, onPress, soon = false, busy = false }: {
   name: string;
-  icon: 'google' | 'facebook' | 'apple';
-  color: string;
-  onPress: () => void;
-  /** true = nút đã nối với phương thức đăng nhập thật; false = chỉ báo "chưa được kết nối" */
-  connected?: boolean;
+  icon: SocialIcon;
+  onPress?: () => void;
+  /** true = chưa có: nút mờ, có nhãn "Sắp có" và không bấm được */
+  soon?: boolean;
   busy?: boolean;
 }) {
+  const color = SOCIAL_COLOR[icon];
   return (
     <Pressable
       onPress={onPress}
-      disabled={busy}
+      disabled={soon || busy}
       accessibilityRole="button"
-      accessibilityLabel={connected ? `Đăng nhập bằng ${name}` : `${name} chưa được kết nối`}
-      accessibilityState={{ busy }}
-      style={({ pressed }) => [styles.social, (pressed || busy) && { opacity: 0.75 }]}
+      accessibilityLabel={soon ? `${name}, sắp có` : `Đăng nhập bằng ${name}`}
+      accessibilityState={{ busy, disabled: soon }}
+      style={({ pressed }) => [styles.social, soon && styles.socialSoon, (pressed || busy) && { opacity: 0.75 }]}
     >
-      {busy ? <ActivityIndicator size="small" color={color} /> : <FontAwesome name={icon} size={18} color={color} />}
-      <T w="bold" size={12}>{name}</T>
+      <Row gap={6}>
+        {busy ? (
+          <ActivityIndicator size="small" color={color} />
+        ) : icon === 'zalo' ? (
+          <View style={[styles.zaloMark, { backgroundColor: color }]}>
+            <T w="extrabold" size={11} color={colors.white}>Z</T>
+          </View>
+        ) : (
+          <FontAwesome name={icon} size={18} color={color} />
+        )}
+        <T w="bold" size={12}>{name}</T>
+      </Row>
+      {soon ? (
+        <T size={10} color={colors.faint} style={{ marginTop: 2 }}>
+          Sắp có
+        </T>
+      ) : null}
     </Pressable>
   );
 }
@@ -159,9 +143,10 @@ const styles = StyleSheet.create({
   divider: { marginTop: 12, marginBottom: 12 },
   line: { flex: 1, height: 1, backgroundColor: colors.border },
   social: {
-    flex: 1, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    flex: 1, minHeight: 56, alignItems: 'center', justifyContent: 'center',
     borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white,
     ...shadow(0),
   },
-  socialNote: { textAlign: 'center', marginTop: 9 },
+  socialSoon: { opacity: 0.6, backgroundColor: colors.bg },
+  zaloMark: { width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
 });

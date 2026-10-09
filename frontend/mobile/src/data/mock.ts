@@ -6,8 +6,6 @@
  */
 import type { Debt, Expense, Invoice, LineItem, Product, Staff } from './types';
 
-export const MOCK_OTP = '123456';
-
 export const mockUser = {
   name: 'Nguyễn Thị Lan',
   phone: '0901234567',

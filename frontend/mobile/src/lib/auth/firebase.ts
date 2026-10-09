@@ -9,7 +9,7 @@ import { AuthClient, AuthError } from './types';
  *
  * Gói được nạp lười trong try/catch: chưa cài Firebase thì bản mock / Expo Go vẫn chạy bình thường,
  * và chỉ khi USE_MOCK=false mới báo AuthError('not-configured') kèm hướng dẫn.
- * Hỗ trợ cả API modular (getAuth, signInWithPhoneNumber…) lẫn API namespaced cũ (auth().…).
+ * Hỗ trợ cả API modular (getAuth, signInWithEmailAndPassword…) lẫn API namespaced cũ (auth().…).
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Loaded = { m: any; auth: any };
@@ -71,26 +71,53 @@ export const firebaseAuth: AuthClient = {
     }
   },
 
-  async sendOtp(phone) {
+  async sendPasswordReset(email) {
     const { m, auth } = load();
-    debugLog('auth', 'sendOtp →', maskId(phone));
+    debugLog('auth', 'sendPasswordReset →', maskId(email));
     try {
-      const conf =
-        typeof m.signInWithPhoneNumber === 'function'
-          ? await m.signInWithPhoneNumber(auth, phone)
-          : await auth.signInWithPhoneNumber(phone);
-      return {
-        async confirm(code) {
-          try {
-            await conf.confirm(code);
-            debugLog('auth', 'confirm OTP ✓');
-          } catch (e) {
-            // Android có thể tự xác minh SMS (instant verification): người dùng đã được đăng nhập trước khi kịp nhập mã
-            if (auth.currentUser?.phoneNumber === phone) return;
-            throw mapFirebaseError(e);
-          }
-        },
-      };
+      if (typeof m.sendPasswordResetEmail === 'function') await m.sendPasswordResetEmail(auth, email.trim());
+      else await auth.sendPasswordResetEmail(email.trim());
+      debugLog('auth', 'sendPasswordReset ✓');
+    } catch (e) {
+      // Email chưa có tài khoản: coi như đã gửi, để không lộ email nào đã đăng ký
+      if (String((e as { code?: unknown })?.code ?? '').replace(/^auth\//, '') === 'user-not-found') return;
+      throw mapFirebaseError(e);
+    }
+  },
+
+  async sendEmailVerification() {
+    const { m, auth } = load();
+    const user = auth.currentUser;
+    if (!user) throw new AuthError('unknown');
+    try {
+      if (typeof m.sendEmailVerification === 'function') await m.sendEmailVerification(user);
+      else await user.sendEmailVerification();
+      debugLog('auth', 'sendEmailVerification ✓');
+    } catch (e) {
+      throw mapFirebaseError(e);
+    }
+  },
+
+  needsEmailVerification() {
+    try {
+      const user = load().auth.currentUser;
+      return !!user && !user.emailVerified && (user.providerData ?? []).some((p: { providerId?: string }) => p?.providerId === 'password');
+    } catch {
+      return false;
+    }
+  },
+
+  async refreshEmailVerified() {
+    const { m, auth } = load();
+    const user = auth.currentUser;
+    if (!user) return false;
+    try {
+      if (typeof m.reload === 'function') await m.reload(user);
+      else await user.reload();
+      const fresh = auth.currentUser ?? user;
+      if (fresh.emailVerified) await fresh.getIdToken(true); // đưa cờ email_verified vào token mới
+      debugLog('auth', 'refreshEmailVerified →', !!fresh.emailVerified);
+      return !!fresh.emailVerified;
     } catch (e) {
       throw mapFirebaseError(e);
     }

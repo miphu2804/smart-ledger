@@ -36,3 +36,6 @@ export const FIREBASE_WEB_CONFIG = {
  * của app ở lần đầu mở màn Đọc đơn (xem assets/models/README.md). Phải kết thúc bằng `/`; để trống thì mic báo chưa có model.
  */
 export const STT_MODEL_URL = process.env.EXPO_PUBLIC_STT_MODEL_URL ?? '';
+
+/** Email hỗ trợ hiện ở màn xác minh email; để trống thì không hiện dòng liên hệ. */
+export const SUPPORT_EMAIL = (process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? '').trim();
