@@ -1,3 +1,16 @@
+### [2026-10-09 14:00 UTC+07:00] — [Feature] Render bold and bullets in assistant chat replies
+
+**Done:** Assistant replies on the mobile `/ai` screen no longer show raw `**bold**` and `- ` markup. New `ChatText` renders `**bold**` and lines starting with `- ` or `* ` as bullets with a hanging indent; any other markdown symbol stays as plain text. `send` in `ai.tsx` now has a ref guard (`sending`) because one tap could fire several `POST /agent/chat` and duplicate message keys. In `mockCore`, the "how many items" branch now runs before product-name matching. The Maestro flows under `frontend/mobile/.maestro` were removed.
+
+**Changed files:**
+- `frontend/mobile/src/components/ChatText.tsx` — created
+- `frontend/mobile/app/ai.tsx`, `frontend/mobile/src/lib/mockCore.ts`, `frontend/mobile/README.md` — modified
+- `frontend/mobile/.maestro/` — deleted
+
+**Flow explained:** AI message text goes through `ChatText`; user messages stay plain. `answer` in the API contract is unchanged (a string); the supported markdown subset is not yet written in `docs/contracts/api-contracts.md`.
+
+**Check:** `tsc --noEmit` clean. A live run on the iPhone 17 Pro simulator against Core staging showed bold amounts, bullets, no `**` and one POST per tap. **Not verified:** accessibility reading of split bullet rows; typecheck after merging the latest `staging`.
+
 ### [2026-10-09 16:30 UTC+07:00] — [Fix] Mobile scrolling: virtualized Orders and POS lists, native-driven collapsing headers
 
 **Done:** Scrolling lagged on the Home, Orders, POS and Products screens. The measured cause on the large lists is that Orders and POS built every row at once. With 706 orders on "Tất cả", half of the frames were janky and the median frame took 53 ms; with about 310 products the POS was at 45% janky frames. The Products list, which was already virtualized, stayed near 11% at the same size. Orders now uses a `SectionList` and POS a two-column `FlatList`, so only the rows near the screen are built, and `OrderCard` and the POS product card are memoized so a changed cart or filter does not rebuild every card. The collapsing headers on Home, POS and Products no longer animate `height` from the JS thread: they use `transform` and `opacity` with the native driver, the Home header no longer sets React state on every scroll event, and the Orders screen no longer sends scroll events to JS for a value nothing used. Behaviour and look are unchanged.

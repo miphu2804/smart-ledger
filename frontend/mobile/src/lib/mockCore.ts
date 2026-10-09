@@ -1024,6 +1024,9 @@ function mockAgentAnswer(question: string): string {
     if (!low.length) return `Chưa có mặt hàng nào dưới ngưỡng 6. ${scope}`;
     return `Các món sắp hết:\n${low.map((p) => `• ${p.name}: còn ${p.stockQuantity} ${p.unit}`).join('\n')}\n${scope}`;
   }
+  if (/bao nhieu (mon|mat hang|san pham)|may mon/.test(q)) {
+    return `Tiệm đang bán ${active.length} mặt hàng trong ${listCategories().length} nhóm. ${scope}`;
+  }
   const matched = active.filter((p) => {
     const name = normalizeText(p.name);
     return name.length > 2 && (q.includes(name) || name.split(' ').some((word) => word.length > 2 && q.includes(word)));
@@ -1033,9 +1036,6 @@ function mockAgentAnswer(question: string): string {
       .slice(0, 5)
       .map((p) => `• ${p.name}: ${vnd(p.sellingPriceVnd)}/${p.unit}${p.tracked ? `, còn ${p.stockQuantity}` : ''}`)
       .join('\n')}\n${scope}`;
-  }
-  if (/bao nhieu (mon|mat hang|san pham)|may mon/.test(q)) {
-    return `Tiệm đang bán ${active.length} mặt hàng trong ${listCategories().length} nhóm. ${scope}`;
   }
   return 'Mình chưa đủ dữ liệu để trả lời câu này. Ở bản xem trước, bạn thử hỏi giá hoặc tồn kho của một món nhé.';
 }
