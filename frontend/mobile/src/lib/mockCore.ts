@@ -196,6 +196,8 @@ function seed(): void {
     costPriceVnd: p.cost,
     tracked: p.tracked,
     stockQuantity: p.tracked ? p.stock : null,
+    // Dữ liệu mẫu giữ mốc 6 mà bản mock cũ dùng để báo sắp hết
+    lowStockThreshold: p.tracked ? 6 : null,
     status: 'ACTIVE',
     createdAt: now,
     updatedAt: now,
@@ -434,6 +436,26 @@ interface ProductWriteBody {
   costPriceVnd?: number | null;
   tracked: boolean;
   stockQuantity?: number | null;
+  lowStockThreshold?: number | null;
+}
+
+/** PATCH /products/{id}: không có stockQuantity và imageUrl; hai trường đó có trong kiểu để mock từ chối giống Core. */
+interface ProductPatchBody {
+  categoryId?: number | null;
+  name?: string;
+  barcode?: string | null;
+  unit?: string;
+  sellingPriceVnd?: number;
+  costPriceVnd?: number | null;
+  tracked?: boolean;
+  lowStockThreshold?: number | null;
+  stockQuantity?: number | null;
+  imageUrl?: string | null;
+}
+
+interface StockInBody {
+  quantity: number;
+  reason?: string | null;
 }
 
 function listProducts(): ProductView[] {
@@ -441,6 +463,18 @@ function listProducts(): ProductView[] {
 }
 
 function createProduct(body: ProductWriteBody): ProductView {
+  if (body.imageUrl) {
+    throw apiErr(400, 'product_image_url_unsupported', 'Product images are uploaded through the image endpoint.');
+  }
+  if (body.tracked && (body.stockQuantity == null || body.stockQuantity < 0)) {
+    throw apiErr(400, 'validation_failed', 'stockQuantity is required and must be 0 or more when tracked is true.');
+  }
+  if (!body.tracked && body.stockQuantity != null) {
+    throw apiErr(400, 'validation_failed', 'stockQuantity must be empty when tracked is false.');
+  }
+  if (body.lowStockThreshold != null && body.lowStockThreshold < 0) {
+    throw apiErr(400, 'validation_failed', 'lowStockThreshold must be 0 or more.');
+  }
   const now = nowIso();
   const product: ProductView = {
     id: nextProductId++,
@@ -448,12 +482,13 @@ function createProduct(body: ProductWriteBody): ProductView {
     categoryId: body.categoryId ?? null,
     name: body.name,
     barcode: body.barcode ?? null,
-    imageUrl: body.imageUrl ?? null,
+    imageUrl: null,
     unit: body.unit,
     sellingPriceVnd: body.sellingPriceVnd,
     costPriceVnd: body.costPriceVnd ?? null,
     tracked: body.tracked,
     stockQuantity: body.tracked ? (body.stockQuantity ?? 0) : null,
+    lowStockThreshold: body.lowStockThreshold ?? null,
     status: 'ACTIVE',
     createdAt: now,
     updatedAt: now,
@@ -462,20 +497,60 @@ function createProduct(body: ProductWriteBody): ProductView {
   return product;
 }
 
-function updateProduct(id: number, body: ProductWriteBody): ProductView {
+/** Giống PATCH của Core: bỏ trường = giữ nguyên, tồn chỉ đổi qua stock-in, đổi theo dõi tồn thì tồn về 0 hoặc bị xoá. */
+function updateProduct(id: number, body: ProductPatchBody): ProductView {
   const product = findActiveProduct(id);
   if (!product) throw apiErr(404, 'product_not_found', 'This product is unavailable.');
-  product.categoryId = body.categoryId ?? null;
-  product.name = body.name;
-  product.barcode = body.barcode ?? null;
-  product.imageUrl = body.imageUrl ?? null;
-  product.unit = body.unit;
-  product.sellingPriceVnd = body.sellingPriceVnd;
-  product.costPriceVnd = body.costPriceVnd ?? null;
-  product.tracked = body.tracked;
-  product.stockQuantity = body.tracked ? (body.stockQuantity ?? 0) : null;
+  if (body.stockQuantity !== undefined) {
+    throw apiErr(400, 'invalid_request', 'stockQuantity cannot be changed with PATCH; use stock-in.');
+  }
+  if (body.imageUrl !== undefined) {
+    throw apiErr(400, 'product_image_url_unsupported', 'Product images are uploaded through the image endpoint.');
+  }
+  if (body.name !== undefined && !String(body.name).trim()) throw apiErr(400, 'validation_failed', 'name must not be empty.');
+  if (body.unit !== undefined && !String(body.unit).trim()) throw apiErr(400, 'validation_failed', 'unit must not be empty.');
+  if (body.sellingPriceVnd !== undefined && !(body.sellingPriceVnd >= 0)) {
+    throw apiErr(400, 'validation_failed', 'sellingPriceVnd must be 0 or more.');
+  }
+  if (body.lowStockThreshold != null && body.lowStockThreshold < 0) {
+    throw apiErr(400, 'validation_failed', 'lowStockThreshold must be 0 or more.');
+  }
+  if (body.categoryId !== undefined) product.categoryId = body.categoryId;
+  if (body.name !== undefined) product.name = body.name;
+  if (body.barcode !== undefined) product.barcode = body.barcode;
+  if (body.unit !== undefined) product.unit = body.unit;
+  if (body.sellingPriceVnd !== undefined) product.sellingPriceVnd = body.sellingPriceVnd;
+  if (body.costPriceVnd !== undefined) product.costPriceVnd = body.costPriceVnd;
+  if (body.lowStockThreshold !== undefined) product.lowStockThreshold = body.lowStockThreshold;
+  if (body.tracked !== undefined && body.tracked !== product.tracked) {
+    product.tracked = body.tracked;
+    product.stockQuantity = body.tracked ? 0 : null;
+  }
   product.updatedAt = nowIso();
   return product;
+}
+
+/** POST /products/{id}/stock-in: cộng tồn cho mặt hàng đang theo dõi tồn; trả bản chụp mặt hàng sau khi cộng. */
+function stockInProduct(id: number, body: StockInBody): ProductView {
+  const product = findActiveProduct(id);
+  if (!product) throw apiErr(404, 'product_not_found', 'This product is unavailable.');
+  if (typeof body.quantity !== 'number' || !(body.quantity > 0)) {
+    throw apiErr(400, 'validation_failed', 'quantity must be greater than 0.');
+  }
+  if ((body.reason ?? '').trim().length > 500) throw apiErr(400, 'validation_failed', 'reason must be 500 characters or fewer.');
+  // Core: quantity tối đa 12 chữ số nguyên và 3 chữ số thập phân; đếm theo phần nghìn để khỏi sai số số thực.
+  const thousandths = body.quantity * 1000;
+  if (!Number.isFinite(thousandths) || Math.abs(thousandths - Math.round(thousandths)) > 1e-6 || Math.round(thousandths) > 999999999999999) {
+    throw apiErr(400, 'validation_failed', 'quantity must have at most 12 integer digits and 3 decimal places.');
+  }
+  if (!product.tracked) throw apiErr(409, 'product_stock_in_unavailable', 'This product does not track stock.');
+  // Tổng tồn vượt 999999999999.999 thì Core từ chối và không đổi dữ liệu.
+  if (Math.round(((product.stockQuantity ?? 0) + body.quantity) * 1000) > 999999999999999) {
+    throw apiErr(409, 'product_stock_overflow', 'The resulting stock exceeds the supported maximum.');
+  }
+  product.stockQuantity = (product.stockQuantity ?? 0) + body.quantity;
+  product.updatedAt = nowIso();
+  return { ...product };
 }
 
 function archiveProduct(id: number): void {
@@ -1067,11 +1142,17 @@ export function mockCoreRequest<T>(path: string, method: string, body: unknown, 
   }
   if (segments[0] === 'products' && segments.length === 2) {
     const id = Number(segments[1]);
-    if (method === 'PATCH') return updateProduct(id, body as ProductWriteBody) as unknown as T;
+    if (method === 'PATCH') return updateProduct(id, body as ProductPatchBody) as unknown as T;
     if (method === 'DELETE') {
       archiveProduct(id);
       return undefined as T;
     }
+  }
+
+  if (segments[0] === 'products' && segments.length === 3 && segments[2] === 'stock-in' && method === 'POST') {
+    return idempotent(`POST ${path}`, idempotencyKey, body, () =>
+      stockInProduct(Number(segments[1]), body as StockInBody),
+    ) as unknown as T;
   }
 
   if (path === '/sale-drafts' && method === 'POST') return createSaleDraft(body as SaleDraftWriteBody) as unknown as T;

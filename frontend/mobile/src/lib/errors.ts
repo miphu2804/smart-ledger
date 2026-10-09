@@ -50,12 +50,12 @@ export function errorMessage(e: unknown): string {
   return 'Đã có lỗi xảy ra. Vui lòng thử lại';
 }
 
-/** Mô tả kỹ thuật ngắn cho log / màn chẩn đoán: "HTTP 401 unauthorized trace=…", "AuthError invalid-code". */
+/** Mô tả kỹ thuật ngắn cho log / màn chẩn đoán: "HTTP 401 unauthorized trace=…", "AuthError invalid-credentials". */
 export function describeError(e: unknown): string {
   if (e instanceof ApiError) {
     return `${e.status ? `HTTP ${e.status}` : 'không có phản hồi'} ${e.code}${e.traceId ? ` trace=${e.traceId}` : ''}`;
   }
-  if (e instanceof AuthError) return `AuthError ${e.code}`;
+  if (e instanceof AuthError) return `AuthError ${e.code}${e.detail ? ` (${e.detail})` : ''}`;
   return String(e);
 }
 

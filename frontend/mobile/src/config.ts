@@ -37,6 +37,9 @@ export const FIREBASE_WEB_CONFIG = {
  */
 export const STT_MODEL_URL = process.env.EXPO_PUBLIC_STT_MODEL_URL ?? '';
 
+/** Email hỗ trợ hiện ở màn xác minh email; để trống thì không hiện dòng liên hệ. */
+export const SUPPORT_EMAIL = (process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? '').trim();
+
 function requiredEnv(name: string, value: string | undefined): string {
   if (!value?.trim()) throw new Error(`${name} chưa đặt (xem frontend/mobile/.env.example)`);
   return value;
