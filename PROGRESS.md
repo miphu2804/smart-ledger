@@ -1,3 +1,13 @@
+### [2026-10-09 15:00 UTC+07:00] — [Performance] Batch product locks for confirm and void (#136)
+
+**Done:** Replaced per-product locks in checkout confirmation and restocking void with one ordered, shop-scoped product-lock query on `perf/query-optimization`. Nonempty groups use one product-lock query; empty groups use none. No API, schema, migration, FE or business-rule change.
+
+**Changed files:** Core `ProductRepository`, `SaleDraftServiceImpl`, `SaleVoidServiceImpl`, `SaleDraftServiceTest`, `SaleVoidServiceTest`, new `ProductBatchLockPostgresTest`, Core README; this entry. Earlier progress entries and the existing untracked `.idea/` remain untouched.
+
+**Flow explained:** Confirm collects distinct catalog IDs → locks ACTIVE products ordered by ID in PostgreSQL → rejects incomplete results → preserves stock deduction, cost snapshots, payments/debt, notifications and audit. Void keeps sale → debt locks → validates all deduction snapshots before product locks → locks only deducted products in one ordered query without an ACTIVE filter → restores stock and preserves refund/debt/audit/idempotency behavior. Custom/non-deducted items are not restocked; archived catalog products can still be restored.
+
+**Check:** Full `mvnw.cmd clean verify` with all three `CORE_TEST_POSTGRES_*` variables reported 678 tests, no failures/errors/skips, BUILD SUCCESS. The new PostgreSQL suite passed 21 cases and `DebtVoidPostgresTest` passed all five; actual Hibernate SQL and PostgreSQL plans show ID ordering before row locks. Tests cover reverse-order concurrent confirm/void, insufficient stock, tenant/status filtering, missing products, custom items, unknown snapshots and full rollback after late audit failures. A 100,000-product catalog benchmark measured legacy versus batch confirm locks: selected 1 — 1→1 query, 23.8→24.0 ms; 20 — 20→1 query, 64.5→26.7 ms; 100 — 100→1 query, 226.3→29.6 ms. Times are local medians of three samples after one warmup, include connection/transaction overhead, and are not API/staging latency guarantees. `git diff --check` passed. Only a dedicated Docker PostgreSQL DB was used; the generated test schema was removed and its container stopped. No business/staging/production DB was used. HTTP/FE UAT and sustained-load testing remain unverified.
+
 ### [2026-10-09 14:15 UTC+07:00] — [Performance] Batch sale and draft list item queries (#134)
 
 **Done:** Removed N+1 item reads from the sale and sale-draft list services on `perf/query-optimization`. Nonempty lists use two data queries regardless of the tested parent count; empty lists use one. Authentication/shop-access queries are excluded from this budget. No API, entity, migration, FE or business-rule change.

@@ -238,8 +238,8 @@ class SaleDraftServiceTest {
         SaleDraftItem item = SaleDraftItem.create(11L, product, BigDecimal.ONE, 25000L, 25000L);
         when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
         when(draftItemRepository.findAllByDraftIdOrderByIdAsc(11L)).thenReturn(List.of(item));
-        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
-                .thenReturn(Optional.of(product));
+        when(productRepository.findAllLockedByIdInAndShopIdAndStatus(List.of(3L), 7L, CatalogStatus.ACTIVE))
+                .thenReturn(List.of(product));
         when(saleRepository.saveAndFlush(any(Sale.class))).thenAnswer(invocation -> {
             Sale sale = invocation.getArgument(0);
             ReflectionTestUtils.setField(sale, "id", 15L);
@@ -268,6 +268,60 @@ class SaleDraftServiceTest {
         verify(debtRepository, never()).save(any());
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {1, 20, 100})
+    void confirmationLocksAllCatalogProductsOnce(int count) {
+        var products = IntStream.rangeClosed(1, count).mapToObj(index -> {
+            Product product = product(BigDecimal.TEN);
+            ReflectionTestUtils.setField(product, "id", (long) index);
+            return product;
+        }).toList();
+        var items = products.reversed().stream().map(product ->
+                SaleDraftItem.create(11L, product, BigDecimal.ONE, 25000L, 25000L)).toList();
+        var ids = products.stream().map(Product::getId).toList();
+        SaleDraft draft = draft(count * 25000L, PaymentMethod.CASH);
+        draft.replace(null, null, null, 0, count * 25000L, count * 25000L, PaymentMethod.CASH);
+        when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
+        when(draftItemRepository.findAllByDraftIdOrderByIdAsc(11L)).thenReturn(items);
+        when(productRepository.findAllLockedByIdInAndShopIdAndStatus(ids, 7L, CatalogStatus.ACTIVE))
+                .thenReturn(products);
+        when(saleRepository.saveAndFlush(any(Sale.class))).thenAnswer(invocation -> {
+            Sale sale = invocation.getArgument(0);
+            ReflectionTestUtils.setField(sale, "id", 15L);
+            return sale;
+        });
+        when(saleItemRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = service.confirm(token, "7", "11");
+
+        assertThat(response.items()).hasSize(count);
+        assertThat(response.items()).extracting(item -> item.productId()).containsExactlyElementsOf(ids.reversed());
+        assertThat(products).allSatisfy(product -> assertThat(product.getStockQuantity()).isEqualByComparingTo("9"));
+        verify(productRepository).findAllLockedByIdInAndShopIdAndStatus(ids, 7L, CatalogStatus.ACTIVE);
+        verify(productRepository, never()).findLockedByIdAndShopIdAndStatus(any(), any(), any());
+    }
+
+    @Test
+    void confirmationRejectsIncompleteBatchBeforeChangingAnyStock() {
+        Product product = product(BigDecimal.TEN);
+        Product missing = product(BigDecimal.TEN);
+        ReflectionTestUtils.setField(missing, "id", 5L);
+        SaleDraft draft = draft(50000L, PaymentMethod.CASH);
+        draft.replace(null, null, null, 0, 50000L, 50000L, PaymentMethod.CASH);
+        when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
+        when(draftItemRepository.findAllByDraftIdOrderByIdAsc(11L)).thenReturn(List.of(
+                SaleDraftItem.create(11L, product, BigDecimal.ONE, 25000L, 25000L),
+                SaleDraftItem.create(11L, missing, BigDecimal.ONE, 25000L, 25000L)));
+        when(productRepository.findAllLockedByIdInAndShopIdAndStatus(List.of(3L, 5L), 7L, CatalogStatus.ACTIVE))
+                .thenReturn(List.of(product));
+
+        assertThatThrownBy(() -> service.confirm(token, "7", "11"))
+                .isInstanceOfSatisfying(BusinessException.class, error ->
+                        assertThat(error.getErrorCode()).isEqualTo(ErrorCode.DRAFT_ITEM_INVALID));
+        assertThat(product.getStockQuantity()).isEqualByComparingTo("10");
+        verifyNoInteractions(saleRepository, saleItemRepository, paymentRepository, debtRepository);
+    }
+
     @Test
     void confirmingMixedDraftSavesCustomSaleItemWithoutDeductingCustomStock() {
         Product product = product(new BigDecimal("5.000"));
@@ -280,8 +334,8 @@ class SaleDraftServiceTest {
         when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
         when(draftItemRepository.findAllByDraftIdOrderByIdAsc(11L))
                 .thenReturn(List.of(catalogItem, customItem));
-        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
-                .thenReturn(Optional.of(product));
+        when(productRepository.findAllLockedByIdInAndShopIdAndStatus(List.of(3L), 7L, CatalogStatus.ACTIVE))
+                .thenReturn(List.of(product));
         when(saleRepository.saveAndFlush(any(Sale.class))).thenAnswer(invocation -> {
             Sale sale = invocation.getArgument(0);
             ReflectionTestUtils.setField(sale, "id", 15L);
@@ -302,7 +356,7 @@ class SaleDraftServiceTest {
         verify(saleItemRepository).saveAll(saleItems.capture());
         assertThat(saleItems.getValue()).extracting(SaleItem::getEstimatedCostVnd)
                 .containsExactly(10_000L, null);
-        verify(productRepository).findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE);
+        verify(productRepository).findAllLockedByIdInAndShopIdAndStatus(List.of(3L), 7L, CatalogStatus.ACTIVE);
         verify(paymentRepository).save(any(Payment.class));
     }
 
@@ -325,7 +379,7 @@ class SaleDraftServiceTest {
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().getFirst().productId()).isNull();
         assertThat(response.items().getFirst().productName()).isEqualTo("Mon tu chon");
-        verify(productRepository, never()).findLockedByIdAndShopIdAndStatus(any(), any(), any());
+        verifyNoInteractions(productRepository);
         verify(paymentRepository).save(any(Payment.class));
     }
 
@@ -341,7 +395,7 @@ class SaleDraftServiceTest {
 
         assertThat(service.confirm(token, "7", "11").id()).isEqualTo(15L);
         verify(paymentRepository, never()).save(any());
-        verify(productRepository, never()).findLockedByIdAndShopIdAndStatus(any(), any(), any());
+        verifyNoInteractions(productRepository);
     }
 
     @Test
@@ -371,8 +425,8 @@ class SaleDraftServiceTest {
         when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
         when(draftItemRepository.findAllByDraftIdOrderByIdAsc(11L)).thenReturn(List.of(
                 SaleDraftItem.create(11L, product, BigDecimal.ONE, 25000L, 25000L)));
-        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
-                .thenReturn(Optional.of(product));
+        when(productRepository.findAllLockedByIdInAndShopIdAndStatus(List.of(3L), 7L, CatalogStatus.ACTIVE))
+                .thenReturn(List.of(product));
         when(saleRepository.saveAndFlush(any(Sale.class))).thenAnswer(invocation -> {
             Sale sale = invocation.getArgument(0);
             ReflectionTestUtils.setField(sale, "id", 15L);
@@ -424,8 +478,8 @@ class SaleDraftServiceTest {
                 .thenReturn(Optional.of(draftCaptor.getValue()));
         when(draftItemRepository.findAllByDraftIdOrderByIdAsc(11L)).thenReturn(List.of(
                 SaleDraftItem.create(11L, product, BigDecimal.ONE, 25000L, 25000L)));
-        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
-                .thenReturn(Optional.of(product));
+        when(productRepository.findAllLockedByIdInAndShopIdAndStatus(List.of(3L), 7L, CatalogStatus.ACTIVE))
+                .thenReturn(List.of(product));
         when(saleRepository.saveAndFlush(any(Sale.class))).thenAnswer(invocation -> {
             Sale sale = invocation.getArgument(0);
             ReflectionTestUtils.setField(sale, "id", 15L);
@@ -509,8 +563,8 @@ class SaleDraftServiceTest {
         SaleDraftItem item = SaleDraftItem.create(11L, product, BigDecimal.ONE, 25000L, 25000L);
         when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
         when(draftItemRepository.findAllByDraftIdOrderByIdAsc(11L)).thenReturn(List.of(item));
-        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
-                .thenReturn(Optional.of(product));
+        when(productRepository.findAllLockedByIdInAndShopIdAndStatus(List.of(3L), 7L, CatalogStatus.ACTIVE))
+                .thenReturn(List.of(product));
 
         assertThatThrownBy(() -> service.confirm(token, "7", "11"))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->

@@ -27,6 +27,12 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
             @Param("shopId") Long shopId, @Param("status") CatalogStatus status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select p from Product p where p.id = :id and p.shopId = :shopId")
-    Optional<Product> findLockedByIdAndShopId(@Param("id") Long id, @Param("shopId") Long shopId);
+    @Query("select p from Product p where p.id in :ids and p.shopId = :shopId "
+            + "and p.status = :status order by p.id asc")
+    List<Product> findAllLockedByIdInAndShopIdAndStatus(@Param("ids") List<Long> ids,
+            @Param("shopId") Long shopId, @Param("status") CatalogStatus status);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Product p where p.id in :ids and p.shopId = :shopId order by p.id asc")
+    List<Product> findAllLockedByIdInAndShopId(@Param("ids") List<Long> ids, @Param("shopId") Long shopId);
 }

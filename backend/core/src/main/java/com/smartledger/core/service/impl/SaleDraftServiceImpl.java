@@ -173,13 +173,20 @@ public class SaleDraftServiceImpl implements SaleDraftService {
         Map<Long, Long> estimatedCosts = new HashMap<>();
         Map<Long, BigDecimal> beforeStocks = new HashMap<>();
         Map<Long, BigDecimal> afterStocks = new HashMap<>();
-        // Lock catalog products in a stable order; custom items have no stock to deduct.
+        List<Long> productIds = draftItems.stream().map(SaleDraftItem::getProductId)
+                .filter(java.util.Objects::nonNull).distinct().sorted().toList();
+        List<Product> lockedProducts = productIds.isEmpty() ? List.of()
+                : productRepository.findAllLockedByIdInAndShopIdAndStatus(productIds, shop.getId(), CatalogStatus.ACTIVE);
+        if (lockedProducts.size() != productIds.size()) {
+            throw new BusinessException(ErrorCode.DRAFT_ITEM_INVALID);
+        }
+        Map<Long, Product> productsById = lockedProducts.stream()
+                .collect(Collectors.toMap(Product::getId, product -> product));
+        // The batch query orders locks in the DB; keep stock/notification processing in the same order.
         for (SaleDraftItem item : draftItems.stream()
                 .filter(item -> item.getProductId() != null)
                 .sorted(java.util.Comparator.comparing(SaleDraftItem::getProductId)).toList()) {
-            Product product = productRepository.findLockedByIdAndShopIdAndStatus(
-                            item.getProductId(), shop.getId(), CatalogStatus.ACTIVE)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.DRAFT_ITEM_INVALID));
+            Product product = productsById.get(item.getProductId());
             stockDeducted.put(item.getProductId(), product.isTracked());
             estimatedCosts.put(item.getProductId(), estimateCost(product, item.getQuantity()));
             if (product.isTracked()) { beforeStocks.put(product.getId(), product.getStockQuantity()); }

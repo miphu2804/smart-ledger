@@ -172,6 +172,20 @@ With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
 
 Use only a disposable database with schema-creation permission, never a business, shared staging or production database. Without the test URL, the PostgreSQL suite is skipped. This is a SQL-count regression test, not an HTTP/Firebase/FE load benchmark or staging UAT; list responses remain unpaginated and still load the shop's full history.
 
+### Checkout and void batch product-lock tests
+
+Issue [#136](https://github.com/miphu2804/smart-ledger/issues/136) replaces per-product lock queries during confirm and restocking void with one shop-scoped `PESSIMISTIC_WRITE` query ordered by product ID. Confirm requires ACTIVE products; void may restore archived products using the historical `stockDeducted` snapshot. Empty product groups skip the query. Void retains sale → debt → ascending product locks. API, schema, money/debt, cost snapshots and audit contracts are unchanged.
+
+With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
+
+```powershell
+.\mvnw.cmd '-Dtest=SaleDraftServiceTest,SaleVoidServiceTest,ProductBatchLockPostgresTest,DebtVoidPostgresTest' test
+```
+
+`ProductBatchLockPostgresTest` applies V1–V15 and validates mappings in a generated `core_batch_lock_test_*` schema. It checks the Hibernate SQL and PostgreSQL EXPLAIN ordering, one product-lock query for 1/20/100 products, missing/foreign/archived products, custom and non-deducted items, unknown deduction snapshots, concurrent reverse-order confirmations/voids, and rollback of stock, money/debt, audit, notifications and void idempotency reservations. Fixtures commit to permit real concurrent transactions; the suite removes its generated schema after the class. Use only a disposable database with schema-creation permission, never a business/shared staging/production DB. Without the test URL, PostgreSQL suites are skipped.
+
+The same suite compares legacy single-product locks with batch confirm locks for 1/20/100 selected products sampled across a 100,000-product catalog. It logs median elapsed time from three measured samples after one warmup, including connection/transaction overhead; query counts are asserted but latency is not, to avoid flaky CI thresholds. These local measurements are not HTTP/Firebase/FE benchmarks, sustained-load tests or staging UAT. For the full Core check with PostgreSQL suites enabled, use `mvnw.cmd clean verify` with all three test variables set.
+
 ### Admin dashboard development tests
 
 With the same disposable PostgreSQL variables, run:
