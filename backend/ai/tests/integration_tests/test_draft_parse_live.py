@@ -10,14 +10,17 @@ import os
 import pytest
 
 from src.app_config import app_config
-from src.catalog import CatalogProduct
+from src.drafts.catalog import CatalogProduct
 from src.drafts.service import DraftService
 from src.providers.factory import build_chat_model
 
-pytestmark = pytest.mark.skipif(
-    os.getenv("RUN_LIVE_MODEL_TESTS") != "1" or not app_config.OPENAI_API_KEY,
-    reason="live model test: set RUN_LIVE_MODEL_TESTS=1 and OPENAI_API_KEY",
-)
+pytestmark = [
+    pytest.mark.skipif(
+        os.getenv("RUN_LIVE_MODEL_TESTS") != "1" or not app_config.OPENAI_API_KEY,
+        reason="live model test: set RUN_LIVE_MODEL_TESTS=1 and OPENAI_API_KEY",
+    ),
+    pytest.mark.anyio,
+]
 
 CATALOG = [
     CatalogProduct(id=12, name="Cà phê sữa", unit="ly", selling_price_vnd=25000),
@@ -37,7 +40,7 @@ class StaticCatalog:
         return CATALOG
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def service() -> DraftService:
     return DraftService(build_chat_model(app_config), StaticCatalog())
 
@@ -60,8 +63,8 @@ def matched(draft) -> list[tuple[int | None, float]]:
         ("bán 2 cà fê sửa 30k", [(12, 2)]),
     ],
 )
-def test_sale_text_maps_to_catalog_products(service, text, expected) -> None:
-    draft = service.parse(1, "SALE", text)
+async def test_sale_text_maps_to_catalog_products(service, text, expected) -> None:
+    draft = await service.parse(1, "SALE", text)
 
     assert matched(draft) == expected
     assert draft.warnings == []
@@ -71,15 +74,15 @@ def test_sale_text_maps_to_catalog_products(service, text, expected) -> None:
     assert draft.model and draft.model_version
 
 
-def test_ambiguous_sale_is_not_chosen(service) -> None:
-    draft = service.parse(1, "SALE", "ban 2 ly ca phe")
+async def test_ambiguous_sale_is_not_chosen(service) -> None:
+    draft = await service.parse(1, "SALE", "ban 2 ly ca phe")
 
     assert [item.product_id for item in draft.items] == [None]
     assert draft.warnings
 
 
-def test_unknown_product_stays_open(service) -> None:
-    draft = service.parse(1, "SALE", "ban 1 lon bia tiger")
+async def test_unknown_product_stays_open(service) -> None:
+    draft = await service.parse(1, "SALE", "ban 1 lon bia tiger")
 
     assert [item.product_id for item in draft.items] == [None]
     assert draft.items[0].unit_price is None
@@ -95,16 +98,16 @@ def test_unknown_product_stays_open(service) -> None:
         ("chi 1 triệu 2 tiền thuê mặt bằng", [1200000]),
     ],
 )
-def test_expense_text_maps_to_amounts(service, text, amounts) -> None:
-    draft = service.parse(1, "EXPENSE", text)
+async def test_expense_text_maps_to_amounts(service, text, amounts) -> None:
+    draft = await service.parse(1, "EXPENSE", text)
 
     assert sorted(item.unit_price for item in draft.items) == amounts
     assert all(item.product_id is None and item.qty == 1 for item in draft.items)
     assert draft.warnings == []
 
 
-def test_expense_without_amount_warns(service) -> None:
-    draft = service.parse(1, "EXPENSE", "mua them bao nilon")
+async def test_expense_without_amount_warns(service) -> None:
+    draft = await service.parse(1, "EXPENSE", "mua them bao nilon")
 
     assert [item.unit_price for item in draft.items] == [None]
     assert draft.warnings

@@ -1,28 +1,30 @@
 from dataclasses import dataclass
 
-import psycopg
+from sqlalchemy import BigInteger, Select, String, func, select
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Mapped, mapped_column
 
-from src.infra.postgre_db_client import PostgreDBClient
+from src.infra.postgre_db_client import Base, PostgreDBClient
 
-LIST_ACTIVE_SQL = """
-SELECT id, name, unit, selling_price_vnd
-FROM products
-WHERE shop_id = %s AND status = 'ACTIVE'
-ORDER BY name, id
-"""
 
-IS_ACTIVE_SQL = """
-SELECT 1
-FROM products
-WHERE shop_id = %s AND id = %s AND status = 'ACTIVE'
-"""
+class Product(Base):
+    """Core's `products` table, read-only here; Core's Flyway owns the schema."""
+
+    __tablename__ = "products"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    shop_id: Mapped[int] = mapped_column(BigInteger)
+    name: Mapped[str] = mapped_column(String(255))
+    unit: Mapped[str] = mapped_column(String(50))
+    selling_price_vnd: Mapped[int] = mapped_column(BigInteger)
+    status: Mapped[str] = mapped_column(String(20))
 
 
 class CatalogUnavailableError(Exception):
     """The shop catalog could not be read; the caller falls back to manual entry.
 
     Raised for every database failure, including a timeout, so #3/#60 can map one
-    domain error to the Core fallback instead of leaking psycopg exceptions.
+    domain error to the Core fallback instead of leaking SQLAlchemy exceptions.
     """
 
 
@@ -64,8 +66,12 @@ class ProductCatalogRepository:
         """
         if shop_id is None:
             return []
-        rows = self._fetch(LIST_ACTIVE_SQL, (shop_id,))
-        return [CatalogProduct(row[0], row[1], row[2], row[3]) for row in rows]
+        rows = self._fetch(
+            select(Product.id, Product.name, Product.unit, Product.selling_price_vnd)
+            .where(Product.shop_id == shop_id, Product.status == "ACTIVE")
+            .order_by(Product.name, Product.id)
+        )
+        return [CatalogProduct(*row) for row in rows]
 
     def is_active_product(self, shop_id: int | None, product_id: int | None) -> bool:
         """Whether `product_id` is an ACTIVE product of `shop_id`.
@@ -76,19 +82,26 @@ class ProductCatalogRepository:
         """
         if shop_id is None or product_id is None:
             return False
-        return bool(self._fetch(IS_ACTIVE_SQL, (shop_id, product_id)))
+        return bool(
+            self._fetch(
+                select(Product.id).where(
+                    Product.shop_id == shop_id,
+                    Product.id == product_id,
+                    Product.status == "ACTIVE",
+                )
+            )
+        )
 
-    def _fetch(self, query: str, params: tuple) -> list[tuple]:
-        # The chat client shares one locked connection, so a hung query would stall
-        # every request. Cap the run time transaction-locally, like the SQL executor.
+    def _fetch(self, statement: Select) -> list[tuple]:
+        # Requests share a small connection pool, so a hung query would stall the
+        # others. Cap the run time transaction-locally, like the SQL executor.
         try:
-            with self.postgres.transaction() as connection:
-                with connection.cursor() as cursor:
-                    cursor.execute(
-                        "SELECT set_config('statement_timeout', %s, true)",
-                        (str(self.timeout_ms),),
+            with self.postgres.session() as session:
+                session.execute(
+                    select(
+                        func.set_config("statement_timeout", str(self.timeout_ms), True)
                     )
-                    cursor.execute(query, params)
-                    return cursor.fetchall()
-        except (psycopg.Error, RuntimeError) as error:
+                )
+                return [tuple(row) for row in session.execute(statement)]
+        except (SQLAlchemyError, RuntimeError) as error:
             raise CatalogUnavailableError("catalog unavailable") from error

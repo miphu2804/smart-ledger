@@ -1,4 +1,4 @@
-from src.catalog import CatalogProduct
+from src.drafts.catalog import CatalogProduct
 from src.drafts.matching import (
     MIN_MATCH_CONFIDENCE,
     ProposedLine,
