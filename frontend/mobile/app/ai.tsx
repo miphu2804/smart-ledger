@@ -217,9 +217,7 @@ export default function Ai() {
             <View style={styles.messageRow}>
               <AgentAvatar emotion="default" size={34} style={{ marginTop: 2 }} />
               <View style={[styles.bubble, styles.assistantBubble]}>
-                <T size={13.5} color={colors.ink} style={styles.messageText}>
-                  {draft}
-                </T>
+                <ChatText text={draft} />
               </View>
             </View>
           ) : typing ? (
