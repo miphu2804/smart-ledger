@@ -129,7 +129,7 @@ export default function Products() {
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: insets.top + headerHeight + 6, paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={16}
-          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
+          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
           ListEmptyComponent={
             <EmptyState
               icon={q ? 'search' : tab === 'low' ? 'check-circle' : 'package'}
