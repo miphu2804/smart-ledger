@@ -337,3 +337,8 @@ def test_screened_prefix_releases_a_select_with_no_from_in_reach() -> None:
 def test_screened_prefix_stops_before_a_complete_leak() -> None:
     assert screened_prefix("Here it is: SELECT name FROM v_products") == "Here it is: "
     assert screened_prefix("The data is in ai_read.v_products now") == "The data is in "
+
+
+def test_screened_prefix_holds_a_pending_select_before_a_later_leak() -> None:
+    assert screened_prefix("Here: SELECT v_sales.total ") == "Here: "
+    assert screened_prefix("Here: SELECT v_sales.total FROM v_sales") == "Here: "

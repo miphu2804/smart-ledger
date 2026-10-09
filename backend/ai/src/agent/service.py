@@ -257,7 +257,9 @@ class AgentService:
                     async for delta in stream.stream_text(delta=True, debounce_by=None):
                         response_text += delta
                         safe = self.guardrails.screened_prefix(response_text)
-                        if len(safe) == len(released):
+                        # The prefix can shrink when a view name at the end gets
+                        # extended (`v_products` then `_x`); only growth is sent.
+                        if len(safe) <= len(released):
                             continue
                         # Text an earlier response sent is replaced, not extended: a
                         # preamble before a tool call, or an answer the screen rejected.

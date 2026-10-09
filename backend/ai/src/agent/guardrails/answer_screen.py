@@ -46,15 +46,15 @@ def screen_answer(answer: str) -> str:
 def screened_prefix(text: str) -> str:
     """Return the longest prefix of a partial answer that no continuation can turn into
     a leak. `screen_answer` still checks the whole answer before it is stored."""
+    # A complete leak ends the release at its start; a partial one holds the tail.
     leak = LEAK_PATTERN.search(text)
-    if leak is not None:
-        return text[: leak.start()]
+    cut = leak.start() if leak is not None else len(text) - _HOLD_CHARS
     # A select within reach of its `from` may still complete a match, so it and
-    # everything after it wait. The +1 covers the `\b` after `from`.
+    # everything after it wait, even when a later leak already matches. The +1 covers
+    # the `\b` after `from`.
     pending_selects = [
         match.start()
         for match in _SELECT_WORD.finditer(text)
         if len(text) - match.end() <= _SELECT_SPAN + len("from") + 1
     ]
-    cut = min([len(text) - _HOLD_CHARS, *pending_selects])
-    return text[: max(0, cut)]
+    return text[: max(0, min([cut, *pending_selects]))]

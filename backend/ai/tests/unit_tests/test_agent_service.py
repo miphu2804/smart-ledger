@@ -265,6 +265,29 @@ async def test_stream_chat_resets_text_written_before_a_tool_call() -> None:
     assert shown_text(events) == answer
 
 
+async def test_stream_chat_never_takes_back_text_it_already_sent() -> None:
+    # A view name cut at the chunk end is released as a prefix; the next chunk extends
+    # it to `v_products_backup`, which shrinks the screened prefix for a moment.
+    chunks = ("Open the notes about v_products", "_backup", " and then rice prices.")
+
+    async def chunked_answer(messages, info):
+        for chunk in chunks:
+            yield chunk
+
+    agent = AgentService(
+        FunctionModel(stream_function=chunked_answer),
+        FakeConversationRepository(),
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
+    )
+
+    events = await collect(await agent.stream_chat(user_id=3, shop_id=15, message="m"))
+
+    deltas = [event.text for event in events if isinstance(event, TextDelta)]
+    assert "" not in deltas
+    assert not any(isinstance(event, Reset) for event in events)
+    assert "".join(deltas) == "".join(chunks)
+
+
 async def test_stream_chat_stops_an_answer_the_screen_keeps_rejecting() -> None:
     limits = replace(TEST_GUARDRAIL_LIMITS, model_call_limit=2)
     conversations = FakeConversationRepository()
