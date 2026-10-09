@@ -537,7 +537,7 @@ flowchart LR
 
     subgraph Agent["Agent Space"]
         SVC["AgentService.chat()"]
-        GUARD["AgentGuardrails<br/>+ PII + call limits"]
+        GUARD["guardrails<br/>redact + call limits<br/>+ answer screen"]
         TOOLS["tools<br/>query_shop_data<br/>suggest_restock"]
     end
 
@@ -555,7 +555,7 @@ flowchart LR
     MAIN -->|"include_router"| ROUTER
     ROUTER -->|"chat"| SVC
     ROUTER -->|"list / get / rename / delete"| REPO
-    SVC -->|"middleware"| GUARD
+    SVC -->|"before / during / after run"| GUARD
     SVC -->|"tool calls"| TOOLS
     SVC -->|"recent_messages / save_exchange"| REPO
     TOOLS -->|"sql"| EXEC --> SG
@@ -599,14 +599,14 @@ sequenceDiagram
     Core->>R: POST /internal/v1/agent/chat (timeout 40s, X-Internal-Token)
     R->>A: chat(user_id, shop_id, message, conversation_id)
     A->>DB: recent_messages(): latest AGENT_HISTORY_TURNS exchanges
-    A->>G: before_agent: input length, PII redaction
+    A->>G: redact_input, input length check
     loop up to model / tool call limits
         A->>T: query_shop_data(sql) or suggest_restock(period)
         T->>T: SqlGuard: one SELECT on ai_read views, LIMIT n+1
         T->>DB: read-only txn scoped by smartledger.shop_id
         T-->>A: JSON rows or Error[CODE] for the model to retry
     end
-    A->>G: after_agent: replace empty or leaking answers
+    A->>G: screen_answer: replace empty or leaking answers
     A->>DB: save_exchange(redacted user message, answer)
     A-->>R: AgentChatResult
     R-->>Core: conversation_id, message_id, answer, model

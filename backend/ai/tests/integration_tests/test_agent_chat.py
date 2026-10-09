@@ -3,40 +3,21 @@ from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
-from langchain_core.language_models.fake_chat_models import FakeListChatModel
-from langchain_core.messages import AIMessage
-from langchain_core.outputs import ChatGeneration, ChatResult
-from tests.support import TEST_GUARDRAIL_LIMITS
+from pydantic_ai.messages import ModelResponse, TextPart
+from pydantic_ai.models.function import FunctionModel
+from tests.support import TEST_GUARDRAIL_LIMITS, echo_user_prompts
 
 from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
 from src.agent.service import AgentService
 from src.main import app
 
 
-class FakeChatModel(FakeListChatModel):
-    def bind_tools(self, tools, **kwargs):
-        return self
+def answer(messages, info) -> ModelResponse:
+    return ModelResponse(parts=[TextPart("answer")])
 
 
-class ErrorChatModel(FakeListChatModel):
-    def bind_tools(self, tools, **kwargs):
-        return self
-
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        raise RuntimeError("down")
-
-
-class UserMessagesChatModel(FakeListChatModel):
-    def bind_tools(self, tools, **kwargs):
-        return self
-
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        content = " | ".join(
-            str(message.content) for message in messages if message.type == "human"
-        )
-        return ChatResult(
-            generations=[ChatGeneration(message=AIMessage(content=content))]
-        )
+def failing_model(messages, info):
+    raise RuntimeError("down")
 
 
 @pytest.fixture
@@ -45,7 +26,7 @@ def client(internal_headers: dict[str, str], wire_agent_state) -> TestClient:
     conversations.recent_messages.return_value = []
     conversations.save_exchange.return_value = (101, 502)
     agent = AgentService(
-        FakeChatModel(responses=["answer"]),
+        FunctionModel(answer),
         conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
@@ -93,7 +74,7 @@ def test_agent_chat_endpoint_rejects_blank_messages(
 
 def test_agent_chat_endpoint_strips_message_whitespace(client: TestClient) -> None:
     app.state.agent = AgentService(
-        UserMessagesChatModel(responses=[]),
+        FunctionModel(echo_user_prompts),
         app.state.conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
@@ -108,7 +89,7 @@ def test_agent_chat_does_not_reuse_messages_between_conversations(
     client: TestClient,
 ) -> None:
     app.state.agent = AgentService(
-        UserMessagesChatModel(responses=[]),
+        FunctionModel(echo_user_prompts),
         app.state.conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
@@ -243,7 +224,7 @@ def test_agent_chat_returns_503_when_agent_missing(client: TestClient) -> None:
 
 def test_agent_chat_returns_503_on_model_error(client: TestClient) -> None:
     app.state.agent = AgentService(
-        ErrorChatModel(responses=[]),
+        FunctionModel(failing_model),
         app.state.conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )

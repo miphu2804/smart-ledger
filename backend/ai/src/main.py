@@ -1,6 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 
+import pydantic_ai
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -21,6 +22,8 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+# stdout is the log contract, so Pydantic AI's one-off observability promo stays out.
+pydantic_ai.BANNER_ENABLED = False
 
 
 def build_sql_executor() -> ReadOnlySqlExecutor | None:

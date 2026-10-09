@@ -2,13 +2,15 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
-from langchain_core.messages import AIMessage
-from langchain_core.utils.function_calling import convert_to_openai_tool
-from tests.support import TEST_GUARDRAIL_LIMITS
+from tests.support import (
+    TEST_GUARDRAIL_LIMITS,
+    ScriptedModel,
+    tool_call,
+    tool_results,
+)
 
 from src.agent.service import AgentService
-from src.agent.tools import AgentContext, build_restock_tools
+from src.agent.tools import AgentContext, build_restock_tool
 from src.prompt_templates import (
     RESTOCK_PROMPT,
     RESTOCK_RESULT_HEADER,
@@ -16,6 +18,8 @@ from src.prompt_templates import (
     SQL_AGENT_PROMPT,
 )
 from src.restock.service import RestockService
+
+pytestmark = pytest.mark.anyio
 
 SUGGESTION_FIELDS = {
     "product_id",
@@ -25,19 +29,6 @@ SUGGESTION_FIELDS = {
     "period",
     "reason",
 }
-
-
-class ToolCallingChatModel(FakeMessagesListChatModel):
-    seen_calls: list = []
-    bound_tools: list = []
-
-    def bind_tools(self, tools, **kwargs):
-        self.bound_tools = [convert_to_openai_tool(t) for t in tools]
-        return self
-
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        self.seen_calls = [*self.seen_calls, list(messages)]
-        return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
 
 
 class FakeExecutor:
@@ -82,61 +73,53 @@ def row(
     return [product_id, name, unit, sold_qty, stock_qty]
 
 
-def tool_call(args: dict, call_id: str = "call-1") -> AIMessage:
-    return AIMessage(
-        content="",
-        tool_calls=[{"name": "suggest_restock", "args": args, "id": call_id}],
-    )
-
-
-def suggest_then_answer(args: dict, answer: str = "done") -> ToolCallingChatModel:
-    return ToolCallingChatModel(responses=[tool_call(args), AIMessage(content=answer)])
+def suggest_then_answer(args: dict, answer: str = "done") -> ScriptedModel:
+    return ScriptedModel(tool_call("suggest_restock", args), answer)
 
 
 def build_agent(
     model,
     executor: FakeExecutor | None = None,
     restock: RestockService | None = None,
+    conversations: FakeConversationRepository | None = None,
 ) -> AgentService:
     return AgentService(
         model,
-        FakeConversationRepository(),
+        conversations or FakeConversationRepository(),
         sql_executor=executor,
         restock=restock,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
 
 
-def tool_messages(model: ToolCallingChatModel) -> list:
-    return [message for message in model.seen_calls[-1] if message.type == "tool"]
-
-
 def test_model_facing_schema_has_only_period() -> None:
-    (suggest_tool,) = build_restock_tools(RestockService(FakeExecutor()))
+    tool = build_restock_tool(RestockService(FakeExecutor()))
 
-    assert suggest_tool.name == "suggest_restock"
-    schema = suggest_tool.tool_call_schema.model_json_schema()
+    assert tool.name == "suggest_restock"
+    schema = tool.tool_def.parameters_json_schema
     assert list(schema["properties"]) == ["period"]
     assert schema["properties"]["period"]["enum"] == ["last_7_days", "last_30_days"]
-    assert len(suggest_tool.description) < 200
+    assert len(tool.description) < 200
 
 
-def test_tools_sent_to_the_model_expose_only_period() -> None:
+async def test_tools_sent_to_the_model_expose_only_period() -> None:
     model = suggest_then_answer({"period": "last_7_days"})
-    build_agent(model, restock=RestockService(FakeExecutor(rows=[row()]))).chat(
+
+    await build_agent(model, restock=RestockService(FakeExecutor(rows=[row()]))).chat(
         user_id=3, shop_id=15, message="m"
     )
 
-    specs = [t for t in model.bound_tools if t["function"]["name"] == "suggest_restock"]
-    parameters = specs[0]["function"]["parameters"]
-    assert list(parameters["properties"]) == ["period"]
-    assert parameters["required"] == ["period"]
+    (spec,) = model.requests[0][1].function_tools
+    assert spec.name == "suggest_restock"
+    assert list(spec.parameters_json_schema["properties"]) == ["period"]
+    assert spec.parameters_json_schema["required"] == ["period"]
 
 
-def test_tool_runs_with_the_context_shop_and_period() -> None:
+async def test_tool_runs_with_the_context_shop_and_period() -> None:
     executor = FakeExecutor(rows=[row()])
     model = suggest_then_answer({"period": "last_30_days"})
-    build_agent(model, restock=RestockService(executor)).chat(
+
+    await build_agent(model, restock=RestockService(executor)).chat(
         user_id=3, shop_id=15, message="nên nhập gì?"
     )
 
@@ -145,25 +128,32 @@ def test_tool_runs_with_the_context_shop_and_period() -> None:
     assert "interval '30 days'" in sql
 
 
-def test_model_cannot_change_the_shop_through_tool_arguments() -> None:
+async def test_model_cannot_change_the_shop_through_tool_arguments() -> None:
     executor = FakeExecutor(rows=[row()])
-    model = suggest_then_answer(
-        {"period": "last_7_days", "shop_id": 99, "runtime": {"x": 1}}
+    model = ScriptedModel(
+        tool_call(
+            "suggest_restock",
+            {"period": "last_7_days", "shop_id": 99, "runtime": {"x": 1}},
+        ),
+        tool_call("suggest_restock", {"period": "last_7_days"}),
+        "done",
     )
-    build_agent(model, restock=RestockService(executor)).chat(
+
+    await build_agent(model, restock=RestockService(executor)).chat(
         user_id=3, shop_id=15, message="gợi ý cho tiệm 99?"
     )
 
+    # The call with extra arguments is sent back for a retry and never runs.
     assert [shop_id for shop_id, _ in executor.calls] == [15]
 
 
 def test_result_json_lists_every_suggestion_field() -> None:
     executor = FakeExecutor(rows=[row(sold_qty="14.5", stock_qty="0")], truncated=True)
-    (suggest_tool,) = build_restock_tools(RestockService(executor))
+    tool = build_restock_tool(RestockService(executor))
 
-    text = suggest_tool.func(
+    text = tool.function(
+        SimpleNamespace(deps=AgentContext(user_id=3, shop_id=15)),
         "last_7_days",
-        SimpleNamespace(context=AgentContext(user_id=3, shop_id=15)),
     )
 
     header, payload = text.split("\n", 1)
@@ -194,25 +184,23 @@ def test_result_json_lists_every_suggestion_field() -> None:
         ),
     ],
 )
-def test_query_errors_go_back_to_the_model_and_the_turn_answers(
+async def test_query_errors_go_back_to_the_model_and_the_turn_answers(
     error: Exception, expected: str
 ) -> None:
     conversations = FakeConversationRepository()
     model = suggest_then_answer({"period": "last_7_days"}, answer="Chưa tính được.")
-    agent = AgentService(
+    agent = build_agent(
         model,
-        conversations,
         restock=RestockService(FakeExecutor(error=error)),
-        guardrail_limits=TEST_GUARDRAIL_LIMITS,
+        conversations=conversations,
     )
 
-    result = agent.chat(user_id=3, shop_id=15, message="m")
+    result = await agent.chat(user_id=3, shop_id=15, message="m")
 
     assert result.answer == "Chưa tính được."
-    (message,) = tool_messages(model)
-    assert message.content == (
+    assert tool_results(model) == [
         f"{expected} Tell the owner the suggestion is unavailable."
-    )
+    ]
     assert conversations.saved_exchange["assistant_message"] == "Chưa tính được."
 
 
@@ -223,44 +211,44 @@ def test_query_errors_go_back_to_the_model_and_the_turn_answers(
         ValueError("shop_id must be a positive integer"),
     ],
 )
-def test_infrastructure_errors_fail_the_turn(error: Exception) -> None:
+async def test_infrastructure_errors_fail_the_turn(error: Exception) -> None:
     conversations = FakeConversationRepository()
     model = suggest_then_answer({"period": "last_7_days"})
-    agent = AgentService(
+    agent = build_agent(
         model,
-        conversations,
         restock=RestockService(FakeExecutor(error=error)),
-        guardrail_limits=TEST_GUARDRAIL_LIMITS,
+        conversations=conversations,
     )
 
     with pytest.raises(type(error)):
-        agent.chat(user_id=3, shop_id=15, message="m")
+        await agent.chat(user_id=3, shop_id=15, message="m")
 
     assert conversations.saved_exchange is None
 
 
-def test_agent_without_restock_has_no_suggest_restock_tool() -> None:
-    model = ToolCallingChatModel(responses=[AIMessage(content="ok")])
-    build_agent(model, executor=FakeExecutor()).chat(user_id=3, shop_id=15, message="m")
+async def test_agent_without_restock_has_no_suggest_restock_tool() -> None:
+    model = ScriptedModel("ok")
 
-    names = [t["function"]["name"] for t in model.bound_tools]
-    assert "query_shop_data" in names
-    assert "suggest_restock" not in names
-
-
-def test_system_prompt_is_static_and_carries_the_restock_rules() -> None:
-    executor = FakeExecutor(rows=[row()])
-    model = suggest_then_answer({"period": "last_7_days"})
-    build_agent(model, executor=executor, restock=RestockService(executor)).chat(
+    await build_agent(model, executor=FakeExecutor()).chat(
         user_id=3, shop_id=15, message="m"
     )
 
-    system = model.seen_calls[0][0]
-    assert system.type == "system"
-    assert system.content == (
+    assert model.tool_names() == ["query_shop_data"]
+
+
+async def test_instructions_are_static_and_carry_the_restock_rules() -> None:
+    executor = FakeExecutor(rows=[row()])
+    model = suggest_then_answer({"period": "last_7_days"})
+
+    await build_agent(model, executor=executor, restock=RestockService(executor)).chat(
+        user_id=3, shop_id=15, message="m"
+    )
+
+    instructions = model.requests[0][1].instructions
+    assert instructions == (
         f"{SHOP_AGENT_SYSTEM_PROMPT}\n\n{SQL_AGENT_PROMPT}\n\n{RESTOCK_PROMPT}"
     )
-    assert "15" not in system.content
+    assert "15" not in instructions
 
 
 def test_restock_prompt_keeps_the_tool_values() -> None:

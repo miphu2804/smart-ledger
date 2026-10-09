@@ -7,12 +7,14 @@ failure becomes `DraftUnavailableError`, so the endpoint (#3) can answer
 `503 ai_unavailable` and Core can fall back to manual text or POS entry.
 """
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Literal
 
-from langchain_core.language_models import BaseChatModel
 from pydantic import BaseModel
+from pydantic_ai import Agent, NativeOutput
+from pydantic_ai.models import Model
 
 from src.drafts import matching
 from src.drafts.catalog import (
@@ -70,18 +72,23 @@ class DraftResult:
 class DraftService:
     """Build a SALE or EXPENSE draft for one shop already authenticated by Core."""
 
-    def __init__(
-        self, model: BaseChatModel | None, catalog: ProductCatalogRepository
-    ) -> None:
-        self.model = model
+    def __init__(self, model: Model | None, catalog: ProductCatalogRepository) -> None:
+        self.model_name = model.model_name if model is not None else ""
         self.catalog = catalog
+        # Native structured output: the provider constrains the reply to the schema,
+        # like the JSON-schema mode the parser used before.
+        self.agent = (
+            Agent(model, output_type=NativeOutput(DraftOutput))
+            if model is not None
+            else None
+        )
 
-    def parse(self, shop_id: int, mode: DraftMode, text: str) -> DraftResult:
+    async def parse(self, shop_id: int, mode: DraftMode, text: str) -> DraftResult:
         """Return the draft for `text`; nothing is saved or confirmed."""
-        if self.model is None:
+        if self.agent is None:
             raise DraftUnavailableError("draft model unavailable")
-        products = self._load_catalog(shop_id) if mode == "SALE" else []
-        lines, version = self._propose(mode, text, products)
+        products = await self._load_catalog(shop_id) if mode == "SALE" else []
+        lines, version = await self._propose(mode, text, products)
         result = (
             matching.match_sale(lines, products)
             if mode == "SALE"
@@ -100,57 +107,40 @@ class DraftService:
             mode=mode,
             items=result.items,
             warnings=result.warnings,
-            model=self._model_name(),
+            model=self.model_name,
             model_version=version,
         )
 
-    def _load_catalog(self, shop_id: int) -> list[CatalogProduct]:
+    async def _load_catalog(self, shop_id: int) -> list[CatalogProduct]:
         try:
-            return self.catalog.list_active_products(shop_id)
+            return await asyncio.to_thread(self.catalog.list_active_products, shop_id)
         except CatalogUnavailableError as error:
             raise DraftUnavailableError("catalog unavailable") from error
 
-    def _propose(
+    async def _propose(
         self, mode: DraftMode, text: str, products: list[CatalogProduct]
     ) -> tuple[list[ProposedLine], str]:
-        structured = self.model.with_structured_output(DraftOutput, include_raw=True)
+        instructions, user_input = self._prompt(mode, text, products)
+        # Output that never fits the schema ends in UnexpectedModelBehavior after the
+        # agent's retries, so every model failure takes this one path.
         try:
-            response = structured.invoke(self._messages(mode, text, products))
+            result = await self.agent.run(user_input, instructions=instructions)
         except Exception as error:
             logger.warning("draft model failed", exc_info=True)
             raise DraftUnavailableError("draft model failed") from error
-        parsed = response.get("parsed")
-        if parsed is None:
-            logger.warning("draft model returned no valid output")
-            raise DraftUnavailableError("draft model returned invalid output")
-        raw = response.get("raw")
-        version = (getattr(raw, "response_metadata", None) or {}).get(
-            "model_name", self._model_name()
-        )
-        lines = [ProposedLine(**line.model_dump()) for line in parsed.lines]
-        return lines, version
-
-    def _model_name(self) -> str:
-        return getattr(self.model, "model_name", "")
+        lines = [ProposedLine(**line.model_dump()) for line in result.output.lines]
+        return lines, result.response.model_name or self.model_name
 
     @staticmethod
-    def _messages(
+    def _prompt(
         mode: DraftMode, text: str, products: list[CatalogProduct]
-    ) -> list[dict]:
+    ) -> tuple[str, str]:
+        """Return the instructions and the owner's input for `mode`."""
         if mode == "EXPENSE":
-            return [
-                {"role": "system", "content": DRAFT_EXPENSE_PROMPT},
-                {"role": "user", "content": DRAFT_EXPENSE_INPUT.format(text=text)},
-            ]
+            return DRAFT_EXPENSE_PROMPT, DRAFT_EXPENSE_INPUT.format(text=text)
         catalog = "\n".join(
             f"{product.id} | {product.name} | {product.unit}" for product in products
         )
-        return [
-            {"role": "system", "content": DRAFT_SALE_PROMPT},
-            {
-                "role": "user",
-                "content": DRAFT_SALE_INPUT.format(
-                    catalog=catalog or DRAFT_EMPTY_CATALOG, text=text
-                ),
-            },
-        ]
+        return DRAFT_SALE_PROMPT, DRAFT_SALE_INPUT.format(
+            catalog=catalog or DRAFT_EMPTY_CATALOG, text=text
+        )

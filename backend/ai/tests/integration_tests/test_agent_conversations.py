@@ -5,14 +5,13 @@ from collections.abc import Iterator
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
-from langchain_core.language_models.fake_chat_models import FakeListChatModel
-from langchain_core.messages import AIMessage
-from langchain_core.outputs import ChatGeneration, ChatResult
 from psycopg import sql
+from pydantic_ai.models.function import FunctionModel
 from tests.support import (
     TEST_GUARDRAIL_LIMITS,
     apply_ai_baseline,
     apply_core_migrations,
+    echo_user_prompts,
     schema_url,
 )
 
@@ -20,19 +19,6 @@ from src.agent.repository import AgentConversationRepository, ConversationNotFou
 from src.agent.service import AgentService
 from src.infra.postgre_db_client import PostgreDBClient
 from src.main import app
-
-
-class ConversationEchoModel(FakeListChatModel):
-    def bind_tools(self, tools, **kwargs):
-        return self
-
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        content = " | ".join(
-            str(message.content) for message in messages if message.type == "human"
-        )
-        return ChatResult(
-            generations=[ChatGeneration(message=AIMessage(content=content))]
-        )
 
 
 def seed_conversation(
@@ -92,7 +78,7 @@ def postgres_agent_client(
 
         postgres = PostgreDBClient(schema_url(database_url, schema_name))
         agent = AgentService(
-            ConversationEchoModel(responses=[]),
+            FunctionModel(echo_user_prompts),
             AgentConversationRepository(postgres),
             guardrail_limits=TEST_GUARDRAIL_LIMITS,
         )
@@ -236,7 +222,7 @@ def test_chat_sends_only_the_configured_window(
     client, user_id, shop_id, conversations = postgres_agent_client
     conversation_id = seed_conversation(conversations, user_id, shop_id, 3)
     agent = AgentService(
-        ConversationEchoModel(responses=[]),
+        FunctionModel(echo_user_prompts),
         conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
         history_turns=1,

@@ -6,6 +6,12 @@ from src.main import app
 TEST_INTERNAL_TOKEN = "test-internal-token"
 
 
+@pytest.fixture
+def anyio_backend() -> str:
+    # Async tests (`pytest.mark.anyio`) run on asyncio only, like uvicorn.
+    return "asyncio"
+
+
 @pytest.fixture(autouse=True)
 def no_application_database(monkeypatch: pytest.MonkeyPatch) -> None:
     # A local .env may point at the shared staging databases. Tests that need PostgreSQL

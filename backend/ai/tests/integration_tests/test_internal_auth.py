@@ -3,7 +3,8 @@ from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
-from langchain_core.language_models.fake_chat_models import FakeListChatModel
+from pydantic_ai.messages import ModelResponse, TextPart
+from pydantic_ai.models.function import FunctionModel
 from tests.support import TEST_GUARDRAIL_LIMITS
 
 from src.agent.repository import AgentConversationRepository
@@ -27,9 +28,8 @@ INTERNAL_ROUTES = sorted(
 )
 
 
-class EchoChatModel(FakeListChatModel):
-    def bind_tools(self, tools, **kwargs):
-        return self
+def answer(messages, info) -> ModelResponse:
+    return ModelResponse(parts=[TextPart("answer")])
 
 
 @pytest.fixture
@@ -39,7 +39,7 @@ def client(wire_agent_state) -> TestClient:
     conversations.recent_messages.return_value = []
     conversations.save_exchange.return_value = (101, 502)
     agent = AgentService(
-        EchoChatModel(responses=["answer"]),
+        FunctionModel(answer),
         conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )

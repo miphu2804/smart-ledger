@@ -34,9 +34,12 @@ AgentServiceDep = Annotated[AgentService, Depends(get_agent)]
 ConversationsDep = Annotated[AgentConversationRepository, Depends(get_conversations)]
 
 
+# Async: the model call awaits on the event loop and the service moves its blocking
+# database calls to worker threads. The conversation routes below only touch the
+# database, so they stay sync and FastAPI runs them in its thread pool.
 @router.post("/chat", response_model=AgentChatResponse)
-def agent_chat(payload: AgentChatRequest, agent: AgentServiceDep):
-    result = agent.chat(
+async def agent_chat(payload: AgentChatRequest, agent: AgentServiceDep):
+    result = await agent.chat(
         user_id=payload.user_id,
         shop_id=payload.shop_id,
         conversation_id=payload.conversation_id,
