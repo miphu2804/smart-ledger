@@ -25,7 +25,7 @@ import { categoryApi, productApi } from '../src/lib/catalogApi';
 import { errorMessage } from '../src/lib/errors';
 import { normalizeText, vnd } from '../src/lib/format';
 import { triggerFeedback } from '../src/lib/feedback';
-import { buildProductPatch, parseThreshold, stockLevel } from '../src/lib/productForm';
+import { buildProductPatch, isWholeNumber, parseThreshold, stockLevel } from '../src/lib/productForm';
 import { colors } from '../src/theme';
 
 /** 'all' | 'low' | id danh mục dạng chuỗi (Chips cần K extends string) */
@@ -278,6 +278,14 @@ function ProductForm({
 
   const save = async () => {
     setErr('');
+    if (isNew && tracked && stock.trim() !== '' && !isWholeNumber(stock)) {
+      setErr('Số lượng tồn chỉ gồm chữ số, không có dấu trừ, dấu chấm hay dấu phẩy.');
+      return;
+    }
+    if (tracked && threshold.trim() !== '' && !isWholeNumber(threshold)) {
+      setErr('Ngưỡng báo sắp hết chỉ gồm chữ số, không có dấu trừ, dấu chấm hay dấu phẩy.');
+      return;
+    }
     const priceNum = num(price);
     const costNum = cost.trim() === '' ? null : num(cost);
     const categoryId = catKey === 'none' ? null : Number(catKey);
@@ -323,8 +331,12 @@ function ProductForm({
   };
 
   const submitStockIn = async () => {
-    const qty = num(inQty);
-    if (!p || inBusy || qty <= 0) return;
+    if (!p || inBusy) return;
+    if (!isWholeNumber(inQty) || Number(inQty.trim()) <= 0 || Number(inQty.trim()) > 999999999999) {
+      setInErr('Số lượng nhập phải là số nguyên dương, chỉ gồm chữ số (không có dấu trừ, dấu chấm hay dấu phẩy).');
+      return;
+    }
+    const qty = Number(inQty.trim());
     setInBusy(true);
     setInErr('');
     try {
@@ -532,7 +544,7 @@ function ProductForm({
                       {inErr}
                     </T>
                   ) : null}
-                  <Button title="Nhập vào kho" disabled={num(inQty) <= 0 || inBusy} loading={inBusy} onPress={submitStockIn} />
+                  <Button title="Nhập vào kho" disabled={inQty.trim() === '' || inBusy} loading={inBusy} onPress={submitStockIn} />
                 </View>
               ) : null}
             </View>

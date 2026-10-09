@@ -42,6 +42,12 @@ export default function VerifyEmail() {
         router.replace('/(auth)/profile');
         return;
       }
+      // signIn() đăng xuất Firebase khi Core lỗi: ở lại màn này thì nút "Tôi đã xác minh" báo sai là chưa xác minh.
+      if (!authClient.currentEmail()) {
+        toast(errorMessage(e), 'err');
+        router.replace('/(auth)/welcome');
+        return;
+      }
       setErr(errorMessage(e));
     } finally {
       setBusy(false);

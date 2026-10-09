@@ -15,7 +15,15 @@ export function stockLevel(p: Pick<ProductView, 'tracked' | 'stockQuantity' | 'l
   return 'ok';
 }
 
-/** Ô ngưỡng chỉ nhận số nguyên không âm; để trống = không đặt ngưỡng (null). */
+/**
+ * Chỉ chữ số (số nguyên không âm). "-5", "1.5" và "1,5" không hợp lệ: bỏ ký tự lạ rồi đọc tiếp sẽ ra số khác
+ * ("-5" thành 5, "1,5" thành 15), nên các ô số lượng và ngưỡng phải từ chối thay vì tự đoán.
+ */
+export function isWholeNumber(text: string): boolean {
+  return /^[0-9]+$/.test(text.trim());
+}
+
+/** Ô ngưỡng chỉ nhận số nguyên không âm; để trống = không đặt ngưỡng (null). Gọi sau khi `isWholeNumber` đã đúng. */
 export function parseThreshold(text: string): number | null {
   const digits = text.replace(/\D/g, '');
   return digits === '' ? null : parseInt(digits, 10);
