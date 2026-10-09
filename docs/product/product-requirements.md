@@ -48,7 +48,7 @@ Cho phép người bán rất nhỏ ghi nhận bán hàng, chi phí và công n�
 
 ## 3. Luồng MVP chính
 
-1. Người bán đăng nhập bằng Google, số điện thoại OTP hoặc Zalo; nếu chưa có tiệm thì tạo tiệm và ngành hàng.
+1. Người bán đăng nhập bằng email và mật khẩu (đăng ký phải xác minh email, có quên mật khẩu) hoặc Facebook; Google và Zalo hiện nhãn “Sắp có”; nếu chưa có tiệm thì tạo tiệm và ngành hàng.
 2. Người bán lập hoặc bổ sung danh mục mặt hàng.
 3. Người bán lên đơn bằng text, voice, ảnh, POS hoặc thêm món lẻ.
 4. Sản phẩm hiện bản nháp để kiểm tra, sửa số lượng/giá, thêm món chưa có trong danh mục.
@@ -73,7 +73,7 @@ Luồng hỗ trợ: ADMIN đăng nhập dashboard web, tìm OWNER hoặc cơ s�
 | `FR-007` | `BO-003`, `BR-004`, `BR-005`, `BR-011` | Người bán xem gợi ý nhập hàng có giải thích từ dữ liệu đã chốt. | P1 — MVP |
 | `FR-008` | `BR-002`, `OQ-001` | Người bán nói để lên đơn/ghi chi; hệ thống chuyển giọng nói thành text và bản nháp để kiểm tra. | P0 — MVP |
 | `FR-009` | `BO-002`, `BR-007`, `BR-018` | Người bán tạo, cập nhật từng trường thông tin và archive mặt hàng. Tạo mới vẫn nhận tồn ban đầu; PATCH không nhận stockQuantity, bật theo dõi tồn false→true khởi tạo 0, true→true giữ tồn hiện tại, tắt theo dõi xóa tồn. Nhập tăng tồn qua FR-030. Category thuộc shop dùng nhóm sản phẩm, không phân loại shop. Archive không xóa snapshot sale; không archive category khi còn product active. | P0 — MVP |
-| `FR-010` | `BR-009` | OWNER đăng nhập trên mobile và ADMIN đăng nhập trên web bằng Google, số điện thoại OTP hoặc Zalo; các identity cùng người dùng không tạo dữ liệu trùng. | P0 — MVP thí điểm, chưa tuyên bố sẵn sàng sản xuất |
+| `FR-010` | `BR-009` | OWNER đăng nhập trên mobile bằng email và mật khẩu (đăng ký phải xác minh email qua thư; có đặt lại mật khẩu qua email) hoặc Facebook, ADMIN đăng nhập trên web. Google và Zalo hiện nhãn “Sắp có”. Không còn đăng ký hoặc đăng nhập bằng số điện thoại OTP. Các identity cùng người dùng không tạo dữ liệu trùng. | P0 — MVP thí điểm, chưa tuyên bố sẵn sàng sản xuất |
 | `FR-011` | `BR-009`, `BR-015` | OWNER tạo/xem/sửa hồ sơ tiệm (tên, ngành, liên hệ), archive tiệm ACTIVE kèm lý do. ADMIN được tạm ngưng/kích hoạt shop; INACTIVE phải có lý do. OWNER vẫn xem được hồ sơ và lý do INACTIVE nhưng không dùng API nghiệp vụ hay archive; shop ARCHIVED không còn hiển thị cho OWNER. | P0 — MVP |
 | `FR-012` | `BR-009` | Đã loại khỏi MVP: không có vai trò nhân viên hoặc quản lý thành viên trong mô hình hai vai trò. Giữ mã để không tái sử dụng ID. | Loại khỏi MVP |
 | `FR-013` | `BO-001`, `BR-001`, `BR-007` | Người bán chọn hàng từ danh mục, chỉnh số lượng, thêm món nhanh để lập giỏ. | P0 — MVP |
@@ -212,7 +212,7 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 
 - `OQ-001` đã chốt: STT thật thuộc đích MVP; FE hiện mới giả lập.
 - `FR-017`: phải chốt loại ảnh đầu tiên trong issue trước khi viết parser.
-- `FR-010`/`NFR-003`: mô tả mobile Phone/Email, Google/Zalo và admin mock là snapshot FE trước đây, không phải nghiệm thu mới. Core nhận Firebase ID token và ánh xạ UID; chưa có bằng chứng nghiệm thu provider/UI với Firebase thật.
+- `FR-010`/`NFR-003`: mô tả mobile Email/Facebook (đã bỏ số điện thoại OTP; Google/Zalo là “Sắp có”) và admin mock là snapshot FE, không phải nghiệm thu mới. Chặn đăng nhập khi chưa xác minh email hiện chỉ ở phía app; Core chưa kiểm tra `email_verified`. Core nhận Firebase ID token và ánh xạ UID; chưa có bằng chứng nghiệm thu provider/UI với Firebase thật.
 - MVP chỉ có hai vai trò `OWNER` và `ADMIN`; quản lý nhân viên/thành viên (`FR-012`) đã bị loại khỏi phạm vi.
 - Toàn bộ `FR-INV-*` bị hoãn cho đến khi `OQ-INV-001`–`OQ-INV-005` trong BRD được giải quyết.
 - Máy in và gói dịch vụ ngoài PRD MVP.
@@ -220,5 +220,5 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 - `FR-028`/`FR-029`, `AC-033`–`AC-039` là phạm vi audit Core thành công và lịch sử chỉ đọc của OWNER; không bao gồm màn hình FE, audit lỗi/bảo mật hoặc audit khi ADMIN xem dữ liệu theo `NFR-009`/`AC-017`. Kiểm thử API/DB không tự nghiệm thu các phần ngoài phạm vi đó.
 - `FR-022`–`FR-024`, `NFR-009`, `AC-015`–`AC-017` và `AC-040`–`AC-043` phủ hỗ trợ ADMIN theo BR-013/BR-014. [Thiết kế kỹ thuật](../architecture/technical-design.md) phân biệt API/audit Core đã có với dashboard web chưa tích hợp; contract không bao gồm các số liệu/tác vụ mock của web. Các AC là điều kiện kiểm chứng, chưa đánh dấu web/staging/production đã đạt.
 - `FR-006`, `AC-049`–`AC-052` phủ báo cáo nâng cao Core và V12; không đồng nghĩa Home/Analytics mobile đã bỏ phép tính cục bộ hoặc staging đã chạy migration/nghiệm thu.
-- `FR-032`/`AC-055`–`AC-058` mô tả Core in-app notification và V15 trên nhánh; chưa tích hợp UI, FCM/push, reminder nợ hoặc AI event, chưa nghiệm thu staging. Migration không tự tạo cảnh báo cho sản phẩm cũ; lần thao tác nghiệp vụ kế tiếp reconcile theo ngưỡng hiện tại.
+- `FR-032`/`AC-055`–`AC-058` mô tả Core in-app notification và V15; mobile đã hiện inbox này (màn Thông báo và chuông ở Trang chủ, tải thêm theo trang, đánh dấu đã đọc) và các thông báo đơn mới, công nợ, thu chi vẫn tính trên máy; chưa có FCM/push, reminder nợ hoặc AI event, chưa nghiệm thu staging. Migration không tự tạo cảnh báo cho sản phẩm cũ; lần thao tác nghiệp vụ kế tiếp reconcile theo ngưỡng hiện tại.
 - `FR-031`, `AC-053`–`AC-054` và V13/V14 là Core/contract trên nhánh; mobile/web chưa gọi endpoint upload. Outbox chỉ dọn asset cũ đã commit; asset mới upload trước rollback vẫn cần quy trình dọn vận hành. Chưa xác nhận UAT production.

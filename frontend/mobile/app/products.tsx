@@ -21,14 +21,21 @@ import {
   Toggle,
 } from '../src/components/ui';
 import type { CategoryView, ProductView } from '../src/data/types';
-import { categoryApi, productApi, ProductWriteRequest } from '../src/lib/catalogApi';
+import { categoryApi, productApi } from '../src/lib/catalogApi';
 import { errorMessage } from '../src/lib/errors';
 import { normalizeText, vnd } from '../src/lib/format';
 import { triggerFeedback } from '../src/lib/feedback';
+import { buildProductPatch, isWholeNumber, resolveThreshold, stockLevel } from '../src/lib/productForm';
 import { colors } from '../src/theme';
 
 /** 'all' | 'low' | id danh mục dạng chuỗi (Chips cần K extends string) */
 type Tab = 'all' | 'low' | string;
+
+/** Cần nhập thêm: đã hết hàng, hoặc tồn chạm ngưỡng riêng của mặt hàng (mặt hàng chưa đặt ngưỡng không bị tính). */
+const needsRestock = (p: ProductView) => {
+  const level = stockLevel(p);
+  return level === 'low' || level === 'out';
+};
 
 export default function Products() {
   const insets = useSafeAreaInsets();
@@ -63,7 +70,7 @@ export default function Products() {
   const list = useMemo(
     () =>
       products.filter((p) => {
-        if (tab === 'low' && !(p.tracked && (p.stockQuantity ?? 0) <= 6)) return false;
+        if (tab === 'low' && !needsRestock(p)) return false;
         if (tab !== 'all' && tab !== 'low' && String(p.categoryId ?? '') !== tab) return false;
         return (
           !q ||
@@ -73,7 +80,7 @@ export default function Products() {
     [products, tab, q],
   );
   const stockValue = products.reduce((a, p) => a + (p.tracked ? (p.stockQuantity ?? 0) * (p.costPriceVnd ?? 0) : 0), 0);
-  const low = products.filter((p) => p.tracked && (p.stockQuantity ?? 0) <= 6).length;
+  const low = products.filter(needsRestock).length;
   const headerHeight = 260;
 
   return (
@@ -122,7 +129,7 @@ export default function Products() {
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: insets.top + headerHeight + 6, paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={16}
-          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
+          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
           ListEmptyComponent={
             <EmptyState
               icon={q ? 'search' : tab === 'low' ? 'check-circle' : 'package'}
@@ -144,9 +151,9 @@ export default function Products() {
                   </T>
                   {!p.tracked ? (
                     <Badge text="Bán theo yêu cầu" color={colors.purple} bg={colors.purpleSoft} />
-                  ) : (p.stockQuantity ?? 0) === 0 ? (
+                  ) : stockLevel(p) === 'out' ? (
                     <Badge text="Hết hàng" color={colors.red} bg={colors.redSoft} />
-                  ) : (p.stockQuantity ?? 0) <= 6 ? (
+                  ) : stockLevel(p) === 'low' ? (
                     <Badge text={`Sắp hết · ${p.stockQuantity}`} color={colors.gold} bg={colors.goldSoft} />
                   ) : (
                     <Badge text={`Còn ${p.stockQuantity}`} color={colors.green} bg={colors.greenSoft} />
@@ -164,6 +171,7 @@ export default function Products() {
         onCategoryCreated={(c) => setCategories((cur) => [...cur, c])}
         onClose={() => setForm(null)}
         onSaved={load}
+        onChanged={load}
       />
     </View>
   );
@@ -200,12 +208,16 @@ function ProductForm({
   onCategoryCreated,
   onClose,
   onSaved,
+  onChanged,
 }: {
   value: ProductView | 'new' | null;
   categories: CategoryView[];
   onCategoryCreated: (c: CategoryView) => void;
   onClose: () => void;
+  /** Đã lưu xong: tải lại danh sách rồi đóng form */
   onSaved: () => void;
+  /** Dữ liệu đổi nhưng form còn mở (nhập hàng): chỉ tải lại danh sách */
+  onChanged: () => void;
 }) {
   const toast = useToast();
   const isNew = value === 'new';
@@ -216,6 +228,16 @@ function ProductForm({
   const [price, setPrice] = useState('');
   const [cost, setCost] = useState('');
   const [stock, setStock] = useState('');
+  const [threshold, setThreshold] = useState('');
+  /** Chữ ngưỡng lúc mở form: còn y nguyên khi lưu thì giữ giá trị gốc, kể cả khi có phần thập phân */
+  const [thresholdInit, setThresholdInit] = useState('');
+  /** Tồn đang hiện ở form sửa: lấy từ mặt hàng, cập nhật sau mỗi lần nhập hàng */
+  const [stockNow, setStockNow] = useState<number | null>(null);
+  const [stockInOpen, setStockInOpen] = useState(false);
+  const [inQty, setInQty] = useState('');
+  const [inReason, setInReason] = useState('');
+  const [inBusy, setInBusy] = useState(false);
+  const [inErr, setInErr] = useState('');
   const [tracked, setTracked] = useState(true);
   const [catKey, setCatKey] = useState('none');
   const [scanning, setScanning] = useState(false);
@@ -239,6 +261,14 @@ function ProductForm({
     setPrice(p ? String(p.sellingPriceVnd) : '');
     setCost(p?.costPriceVnd != null ? String(p.costPriceVnd) : '');
     setStock(p?.stockQuantity != null ? String(Math.round(p.stockQuantity)) : '');
+    const thresholdText = p?.lowStockThreshold != null ? String(p.lowStockThreshold) : '';
+    setThreshold(thresholdText);
+    setThresholdInit(thresholdText);
+    setStockNow(p?.stockQuantity ?? null);
+    setStockInOpen(false);
+    setInQty('');
+    setInReason('');
+    setInErr('');
     setTracked(p?.tracked ?? true);
     setCatKey(p?.categoryId != null ? String(p.categoryId) : 'none');
     setMode('manual');
@@ -252,24 +282,49 @@ function ProductForm({
 
   const save = async () => {
     setErr('');
+    if (isNew && tracked && stock.trim() !== '' && !isWholeNumber(stock)) {
+      setErr('Số lượng tồn chỉ gồm chữ số, không có dấu trừ, dấu chấm hay dấu phẩy.');
+      return;
+    }
+    const resolved = resolveThreshold(threshold, thresholdInit, p?.lowStockThreshold ?? null);
+    if (tracked && !resolved.ok) {
+      setErr('Ngưỡng báo sắp hết chỉ gồm chữ số, không có dấu trừ, dấu chấm hay dấu phẩy.');
+      return;
+    }
     const priceNum = num(price);
     const costNum = cost.trim() === '' ? null : num(cost);
-    const payload: ProductWriteRequest = {
-      categoryId: catKey === 'none' ? null : Number(catKey),
-      name: name.trim(),
-      unit: unit.trim(),
-      barcode: barcode.trim() || undefined,
-      sellingPriceVnd: priceNum,
-      costPriceVnd: costNum,
-      tracked,
-      stockQuantity: tracked ? num(stock) : null,
-    };
+    const categoryId = catKey === 'none' ? null : Number(catKey);
+    const lowStockThreshold = resolved.ok ? resolved.value : null;
     setBusy(true);
     try {
-      if (p) await productApi.update(p.id, payload);
-      else await productApi.create(payload);
+      if (p) {
+        // Core không nhận tồn qua PATCH: tồn đổi bằng "Nhập hàng" (stock-in). Không đổi gì thì khỏi gửi.
+        const patch = buildProductPatch(p, {
+          name,
+          unit,
+          barcode,
+          sellingPriceVnd: priceNum,
+          costPriceVnd: costNum,
+          categoryId,
+          tracked,
+          lowStockThreshold,
+        });
+        if (Object.keys(patch).length > 0) await productApi.update(p.id, patch);
+      } else {
+        await productApi.create({
+          categoryId,
+          name: name.trim(),
+          unit: unit.trim(),
+          barcode: barcode.trim() || undefined,
+          sellingPriceVnd: priceNum,
+          costPriceVnd: costNum,
+          tracked,
+          stockQuantity: tracked ? num(stock) : null,
+          lowStockThreshold: tracked ? lowStockThreshold : null,
+        });
+      }
       triggerFeedback('success');
-      toast(p ? 'Đã cập nhật mặt hàng' : `Đã thêm "${payload.name}"`);
+      toast(p ? 'Đã cập nhật mặt hàng' : `Đã thêm "${name.trim()}"`);
       onSaved();
       onClose();
     } catch (e) {
@@ -277,6 +332,32 @@ function ProductForm({
       setErr(errorMessage(e));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const submitStockIn = async () => {
+    if (!p || inBusy) return;
+    if (!isWholeNumber(inQty) || Number(inQty.trim()) <= 0 || Number(inQty.trim()) > 999999999999) {
+      setInErr('Số lượng nhập phải là số nguyên dương, chỉ gồm chữ số (không có dấu trừ, dấu chấm hay dấu phẩy).');
+      return;
+    }
+    const qty = Number(inQty.trim());
+    setInBusy(true);
+    setInErr('');
+    try {
+      const updated = await productApi.stockIn(p.id, { quantity: qty, reason: inReason.trim() || null });
+      setStockNow(updated.stockQuantity);
+      setInQty('');
+      setInReason('');
+      setStockInOpen(false);
+      triggerFeedback('success');
+      toast(`Đã nhập ${qty} ${p.unit} vào kho`);
+      onChanged();
+    } catch (e) {
+      triggerFeedback('error');
+      setInErr(errorMessage(e));
+    } finally {
+      setInBusy(false);
     }
   };
 
@@ -428,8 +509,60 @@ function ProductForm({
             </View>
             <Toggle value={tracked} onChange={setTracked} />
           </Row>
-          {tracked ? (
+          {tracked && isNew ? (
             <Field label="Số lượng tồn" keyboardType="number-pad" placeholder="0" value={stock} onChangeText={setStock} />
+          ) : null}
+          {tracked ? (
+            <Field
+              label="Báo sắp hết khi tồn còn từ (tuỳ chọn)"
+              keyboardType="number-pad"
+              placeholder="Để trống = không báo sắp hết"
+              value={threshold}
+              onChangeText={setThreshold}
+            />
+          ) : null}
+          {p && p.tracked && tracked ? (
+            <View style={styles.stockBox}>
+              <Row>
+                <View style={{ flex: 1 }}>
+                  <T w="semibold" size={14}>
+                    Tồn kho hiện tại
+                  </T>
+                  <T size={12} color={colors.faint}>
+                    {Number((stockNow ?? 0).toFixed(3))} {p.unit}
+                  </T>
+                </View>
+                <Button
+                  title={stockInOpen ? 'Đóng' : 'Nhập hàng'}
+                  icon={stockInOpen ? 'x' : 'plus'}
+                  variant="soft"
+                  small
+                  onPress={() => setStockInOpen((open) => !open)}
+                />
+              </Row>
+              {stockInOpen ? (
+                <View style={{ marginTop: 12 }}>
+                  <Field label="Số lượng nhập" keyboardType="number-pad" placeholder="VD: 24" value={inQty} onChangeText={setInQty} />
+                  <Field label="Lý do (tuỳ chọn)" placeholder="VD: Nhập thêm từ nhà cung cấp" value={inReason} onChangeText={setInReason} />
+                  {inErr ? (
+                    <T size={12} color={colors.red} style={{ marginBottom: 8 }}>
+                      {inErr}
+                    </T>
+                  ) : null}
+                  <Button title="Nhập vào kho" disabled={inQty.trim() === '' || inBusy} loading={inBusy} onPress={submitStockIn} />
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+          {p && !p.tracked && tracked ? (
+            <T size={12} color={colors.faint} style={{ marginBottom: 8 }}>
+              Sau khi lưu, tồn của mặt hàng bắt đầu từ 0. Mở lại mặt hàng và bấm "Nhập hàng" để thêm tồn.
+            </T>
+          ) : null}
+          {p && p.tracked && !tracked ? (
+            <T size={12} color={colors.faint} style={{ marginBottom: 8 }}>
+              Tắt theo dõi tồn kho sẽ xoá số tồn hiện tại của mặt hàng này.
+            </T>
           ) : null}
           {err ? (
             <T size={12} color={colors.red} style={{ marginBottom: 8 }}>
@@ -504,6 +637,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   trackRow: { marginTop: 16, marginBottom: 12, padding: 12, borderRadius: 14, backgroundColor: colors.bg },
+  stockBox: { marginBottom: 12, padding: 12, borderRadius: 14, backgroundColor: colors.bg },
   scan: {
     alignItems: 'center',
     borderWidth: 1.5,
