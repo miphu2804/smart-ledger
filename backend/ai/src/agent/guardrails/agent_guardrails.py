@@ -15,7 +15,9 @@
 3. `check_answer`, the agent's output validator: `screen_answer` sends an empty answer,
    or one that leaks internals (view names, scope settings, error codes, a SELECT
    statement), back to the model to answer again. Each retry is a model request, so
-   the request limit bounds the retries.
+   the request limit bounds the retries. A streamed answer releases only the prefix
+   `screened_prefix` proves safe, so no text the screen would reject reaches the owner
+   before the whole answer passes.
 
 A run that reaches the request or token limit, or gives up after the retries, raises
 `GuardrailError("answer_unavailable")` from `AgentService`, and one that passes the
@@ -39,7 +41,7 @@ from dataclasses import dataclass
 
 from pydantic_ai import UsageLimits
 
-from src.agent.guardrails.answer_screen import screen_answer
+from src.agent.guardrails.answer_screen import screen_answer, screened_prefix
 from src.agent.guardrails.input_redaction import redact_input
 from src.agent.guardrails.tool_call_limit import ToolCallLimit
 
@@ -89,3 +91,7 @@ class AgentGuardrails:
     def check_answer(self, answer: str) -> str:
         """Return the answer the owner may see; raise `ModelRetry` to ask again."""
         return screen_answer(answer)
+
+    def screened_prefix(self, partial: str) -> str:
+        """Return the part of a streamed answer that may be sent so far."""
+        return screened_prefix(partial)

@@ -1452,3 +1452,13 @@
 **Changed files:** Media idempotency, write-transaction, repository and test code; Cloudinary/Compose configuration; architecture exports and this append-only entry. No mobile, AI, shared database, provider credential or IDE file changed.
 
 **Check:** A disposable PostgreSQL 16 run completed `mvnw.cmd clean verify` with **560 tests, 0 failures, 0 errors, 0 skipped** before the final lease refinement; the targeted Cloudinary configuration, idempotency, service and write-transaction suite then passed **13/13**. `docker compose config --quiet` and `git diff --check` pass. The editable architecture sources and committed SVG/PNG export were regenerated together and visually checked. Manual local upload returned a Cloudinary URL; real staging/production credentials and UAT remain unverified.
+
+### [2026-10-09 21:06 UTC+07:00] — [AI] Stream Agent chat answers over SSE
+
+**Done:** AI has `POST /internal/v1/agent/chat/stream`, which runs the same chat turn as `/internal/v1/agent/chat` and answers with `text/event-stream` events `delta`, `reset`, `done` and `error`. Only the prefix the answer screen proves safe is sent, so a streamed answer cannot show what the screen would reject. Core does not proxy the route yet, so FE cannot reach it; PRD and AC are unchanged.
+
+**Changed files:** `backend/ai/src/agent/guardrails/` (`screened_prefix`), `backend/ai/src/agent/service.py` (`stream_chat`), `backend/ai/src/agent/router.py` (SSE route), AI unit and integration tests, `backend/ai/README.md`, `docs/contracts/api-contracts.md`, `docs/architecture/technical-design.md` and this entry.
+
+**Flow explained:** Core would call the stream route → AI reads the history and checks the input before the response starts, so those failures keep the JSON status codes → the run streams in its own task, each model response passing through `screened_prefix` → `reset` discards text before a tool call or an answer the screen rejected → `done` carries the stored answer, or `error` a guardrail code. A turn that ends in `error` or whose caller disconnects is not stored, unless the disconnect lands while the exchange is already being written.
+
+**Check:** In `backend/ai`, `uv run ruff check`, `uv run ruff format --check` and `uv run pytest` pass with **306 passed, 40 skipped** (baseline 278 passed, 40 skipped; skips are PostgreSQL and live-model tests). Scratch property checks found no leak over 777k chunk-boundary prefixes and 10,000 random end-to-end chunkings, and a real uvicorn disconnect saved nothing. PostgreSQL persistence for the stream and live-model streaming remain unverified.

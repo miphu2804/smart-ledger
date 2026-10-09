@@ -1,9 +1,20 @@
+import asyncio
+from dataclasses import replace
+
 import pytest
+from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 from tests.support import TEST_GUARDRAIL_LIMITS, ScriptedModel, transcript
 
+from src.agent.guardrails import GuardrailError
 from src.agent.repository import ConversationNotFoundError
-from src.agent.service import AgentService
+from src.agent.service import (
+    AgentChatResult,
+    AgentService,
+    Done,
+    Reset,
+    TextDelta,
+)
 from src.prompt_templates import SHOP_AGENT_SYSTEM_PROMPT
 
 pytestmark = pytest.mark.anyio
@@ -13,12 +24,33 @@ def failing_model(messages, info):
     raise RuntimeError("down")
 
 
+def shown_text(events: list) -> str:
+    """The text the owner sees: the deltas after the last Reset."""
+    text = ""
+    for event in events:
+        if isinstance(event, Reset):
+            text = ""
+        elif isinstance(event, TextDelta):
+            text += event.text
+    return text
+
+
+async def collect(events) -> list:
+    return [event async for event in events]
+
+
+class FakeExecutor:
+    def run(self, shop_id: int, sql: str) -> dict:
+        return {"columns": ["phone"], "rows": [["0901234567"]], "truncated": False}
+
+
 class FakeConversationRepository:
     def __init__(self, history: list[dict] | None = None, missing: bool = False):
         self.history = history or []
         self.missing = missing
         self.history_request: tuple | None = None
         self.saved_exchange: dict | None = None
+        self.saves: list[dict] = []
 
     def recent_messages(self, conversation_id, user_id, shop_id, limit):
         self.history_request = (conversation_id, user_id, shop_id, limit)
@@ -28,6 +60,7 @@ class FakeConversationRepository:
 
     def save_exchange(self, **kwargs):
         self.saved_exchange = kwargs
+        self.saves.append(kwargs)
         return kwargs["conversation_id"] or 41, 72
 
 
@@ -150,3 +183,213 @@ async def test_chat_without_a_model_is_unavailable() -> None:
 
     with pytest.raises(RuntimeError, match="agent model unavailable"):
         await agent.chat(user_id=3, shop_id=15, message="hello")
+
+
+async def test_stream_chat_streams_deltas_that_make_up_the_answer() -> None:
+    answer = "Rice sells for 30.000 VND/kg, 12 kg left."
+    conversations = FakeConversationRepository()
+    agent = AgentService(
+        ScriptedModel(answer), conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS
+    )
+
+    events = await collect(
+        await agent.stream_chat(user_id=3, shop_id=15, message="rice?")
+    )
+
+    assert shown_text(events) == answer
+    assert not any(isinstance(event, Reset) for event in events)
+    assert events[-1] == Done(
+        AgentChatResult(
+            conversation_id=41,
+            message_id=72,
+            answer=answer,
+            model="test-model",
+            model_version="test-model",
+        )
+    )
+    assert conversations.saves == [
+        {
+            "user_id": 3,
+            "shop_id": 15,
+            "conversation_id": None,
+            "user_message": "rice?",
+            "assistant_message": answer,
+        }
+    ]
+
+
+async def test_stream_chat_retries_a_leaking_answer_without_streaming_it() -> None:
+    answer = "Rice sells for 30.000 VND/kg."
+    model = ScriptedModel("SELECT name FROM v_products", answer)
+    agent = AgentService(
+        model, FakeConversationRepository(), guardrail_limits=TEST_GUARDRAIL_LIMITS
+    )
+
+    events = await collect(await agent.stream_chat(user_id=3, shop_id=15, message="m"))
+
+    emitted = "".join(event.text for event in events if isinstance(event, TextDelta))
+    for leak in ("select", "from v_", "v_products"):
+        assert leak not in emitted.lower()
+    assert shown_text(events) == answer
+    assert len(model.requests) == 2
+
+
+async def test_stream_chat_resets_text_written_before_a_tool_call() -> None:
+    preamble = "Let me check the products for this shop now."
+    answer = "Rice sells for 30.000 VND/kg."
+    model = ScriptedModel(
+        ModelResponse(
+            parts=[
+                TextPart(preamble),
+                ToolCallPart(
+                    "query_shop_data", {"sql": "SELECT phone FROM v_shop_profile"}
+                ),
+            ]
+        ),
+        answer,
+    )
+    agent = AgentService(
+        model,
+        FakeConversationRepository(),
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
+        sql_executor=FakeExecutor(),
+    )
+
+    events = await collect(await agent.stream_chat(user_id=3, shop_id=15, message="m"))
+
+    reset_at = events.index(Reset())
+    shown_before_reset = "".join(
+        event.text for event in events[:reset_at] if isinstance(event, TextDelta)
+    )
+    assert shown_before_reset and preamble.startswith(shown_before_reset)
+    assert shown_text(events) == answer
+
+
+async def test_stream_chat_never_takes_back_text_it_already_sent() -> None:
+    # A view name cut at the chunk end is released as a prefix; the next chunk extends
+    # it to `v_products_backup`, which shrinks the screened prefix for a moment.
+    chunks = ("Open the notes about v_products", "_backup", " and then rice prices.")
+
+    async def chunked_answer(messages, info):
+        for chunk in chunks:
+            yield chunk
+
+    agent = AgentService(
+        FunctionModel(stream_function=chunked_answer),
+        FakeConversationRepository(),
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
+    )
+
+    events = await collect(await agent.stream_chat(user_id=3, shop_id=15, message="m"))
+
+    deltas = [event.text for event in events if isinstance(event, TextDelta)]
+    assert "" not in deltas
+    assert not any(isinstance(event, Reset) for event in events)
+    assert "".join(deltas) == "".join(chunks)
+
+
+async def test_stream_chat_stops_an_answer_the_screen_keeps_rejecting() -> None:
+    limits = replace(TEST_GUARDRAIL_LIMITS, model_call_limit=2)
+    conversations = FakeConversationRepository()
+    agent = AgentService(
+        ScriptedModel("Error[SQL_ERROR]", "Error[SQL_ERROR]"),
+        conversations,
+        guardrail_limits=limits,
+    )
+
+    events = await agent.stream_chat(user_id=3, shop_id=15, message="m")
+    with pytest.raises(GuardrailError) as stopped:
+        await collect(events)
+
+    assert stopped.value.code == "answer_unavailable"
+    assert conversations.saves == []
+
+
+async def test_stream_chat_stops_a_turn_past_the_timeout() -> None:
+    async def slow_answer(messages, info):
+        yield "Rice sells for 30.000 VND/kg, "
+        await asyncio.sleep(1)
+        yield "12 kg left."
+
+    limits = replace(TEST_GUARDRAIL_LIMITS, turn_timeout_seconds=0.05)
+    conversations = FakeConversationRepository()
+    agent = AgentService(
+        FunctionModel(stream_function=slow_answer),
+        conversations,
+        guardrail_limits=limits,
+    )
+
+    events = await agent.stream_chat(user_id=3, shop_id=15, message="m")
+    with pytest.raises(GuardrailError) as stopped:
+        await collect(events)
+
+    assert stopped.value.code == "answer_timeout"
+    assert conversations.saves == []
+
+
+async def test_closing_a_stream_early_cancels_the_run_and_saves_nothing() -> None:
+    async def slow_answer(messages, info):
+        yield "Rice sells for 30.000 VND/kg, "
+        await asyncio.sleep(5)
+        yield "12 kg left."
+
+    conversations = FakeConversationRepository()
+    agent = AgentService(
+        FunctionModel(stream_function=slow_answer),
+        conversations,
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
+    )
+
+    tasks_before = asyncio.all_tasks()
+    events = await agent.stream_chat(user_id=3, shop_id=15, message="m")
+    first = await anext(events)
+    await events.aclose()
+
+    assert isinstance(first, TextDelta)
+    assert conversations.saves == []
+    assert asyncio.all_tasks() - tasks_before == set()
+
+
+async def test_a_slow_consumer_does_not_use_up_the_turn_timeout() -> None:
+    answer = "Rice sells for 30.000 VND/kg, 12 kg left."
+    limits = replace(TEST_GUARDRAIL_LIMITS, turn_timeout_seconds=0.05)
+    agent = AgentService(
+        ScriptedModel(answer), FakeConversationRepository(), guardrail_limits=limits
+    )
+
+    events = []
+    async for event in await agent.stream_chat(user_id=3, shop_id=15, message="m"):
+        events.append(event)
+        await asyncio.sleep(0.1)
+
+    assert shown_text(events) == answer
+    assert isinstance(events[-1], Done)
+
+
+async def test_pre_stream_refusals_raise_on_await_before_any_event() -> None:
+    model = ScriptedModel("ok")
+    out_of_scope = AgentService(
+        model,
+        FakeConversationRepository(missing=True),
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
+    )
+    too_long = AgentService(
+        model,
+        FakeConversationRepository(),
+        guardrail_limits=replace(TEST_GUARDRAIL_LIMITS, max_input_chars=5),
+    )
+    no_model = AgentService(
+        None, FakeConversationRepository(), guardrail_limits=TEST_GUARDRAIL_LIMITS
+    )
+
+    with pytest.raises(ConversationNotFoundError):
+        await out_of_scope.stream_chat(
+            user_id=3, shop_id=15, message="hello", conversation_id=41
+        )
+    with pytest.raises(GuardrailError) as refused:
+        await too_long.stream_chat(user_id=3, shop_id=15, message="hello world")
+    assert refused.value.code == "input_too_long"
+    with pytest.raises(RuntimeError, match="agent model unavailable"):
+        await no_model.stream_chat(user_id=3, shop_id=15, message="hello")
+
+    assert model.requests == []
