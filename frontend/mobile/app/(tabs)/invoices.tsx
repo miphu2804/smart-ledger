@@ -98,6 +98,10 @@ export default function Invoices() {
   const scopeName = period === 'all' ? null : periodLabel[period].toLowerCase();
   const countLabel = scopeName ? `Đơn ${scopeName}` : 'Tổng đơn hàng';
   const revenueLabel = scopeName ? `Doanh thu ${scopeName}` : 'Tổng doanh thu';
+  // Ô số đơn hẹp hơn ô doanh thu (flex 0.8 so với 1.2). Dòng chữ dưới số chỉ nêu khoảng thời gian, trùng tên nút lọc, nên luôn
+  // vừa một dòng; "Tổng đơn hàng" và "Đơn tháng này" bị cắt trên web ≤ 390px vì RN web không thu chữ theo adjustsFontSizeToFit.
+  // countLabel vẫn dùng làm nhãn đọc màn hình.
+  const countCaption = periodLabel[period];
 
   // Group sales by date
   const groupedSections = useMemo(() => {
@@ -185,7 +189,7 @@ export default function Invoices() {
                   {count} đơn
                 </T>
                 <T size={12} color={colors.muted} style={{ marginTop: 1 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
-                  {countLabel}
+                  {countCaption}
                 </T>
               </View>
             </Pressable>
