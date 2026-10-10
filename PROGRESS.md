@@ -1,3 +1,13 @@
+### [2026-10-10 15:30 UTC+07:00] — [Feature] Mobile barcode scanner uses the camera only and keeps the add-item card above the keyboard
+
+**Done:** The barcode scanner no longer has the 3x4 number pad; the camera takes the free space and the screen follows the Locket camera layout (dark background, large rounded viewfinder, top bar with close, title and item count, control row with flash, a ring that turns green when a code is read, and camera switch). The "Thêm mặt hàng" card for an unknown code no longer sits under the system keyboard: the screen shrinks around the keyboard, the camera gives way, the fields scroll on short screens and the buttons take the first tap. Quantity is still changed with the +/- buttons; typing a quantity is left for a later change (issue #141).
+
+**Changed files:** `frontend/mobile/src/components/BarcodeScannerModal.tsx`.
+
+**Flow explained:** Scanning a known product opens the quantity card as before; an unknown code opens the add-item card. While that card is open the root `KeyboardAvoidingView` (padding on iOS and Android) lifts it above the keyboard, the camera section drops its minimum height, and the bottom safe-area spacer is hidden because the keyboard already covers it. The center ring is an indicator, not a button; checkout keeps its own button.
+
+**Check:** `tsc --noEmit` clean. Checked by hand on the Android emulator in mock mode with a temporary hook that opened the add-item card: the keyboard covered the card before the change and no longer does after it, the numeric keyboard shows for the price field, and "Lưu & Thêm" saves on the first tap with the keyboard open (the temporary hook is not in the commit). **Not verified:** a real iPhone (where the problem was reported), a real barcode read (the virtual camera has none), short screens, the known-product card and the order card after a scan, and the web build in a browser.
+
 ### [2026-10-10 15:07 UTC+07:00] — [Docs] Clarify batch query, locking and benchmark guarantees (#133–#138)
 
 **Done:** Added focused JavaDoc for query-optimization repositories, services and PostgreSQL regression fixtures on `perf/query-optimization`, following the docstring review on PR #152. This improves documentation without changing runtime behavior or lowering review thresholds.
