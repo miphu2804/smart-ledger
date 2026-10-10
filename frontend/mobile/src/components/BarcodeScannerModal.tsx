@@ -171,20 +171,43 @@ export function BarcodeScannerModal({
 
   // Nơi gọi không truyền danh mục (màn Tổng quan): tự tải sản phẩm thật của tiệm mỗi lần mở. Nếu không, danh mục rỗng
   // nên mọi mã đều bị coi là mới và mời tạo món trùng.
+  // Khi danh mục chưa sẵn sàng (đang tải hoặc tải lỗi) thì không mời tạo món: mã có sẵn sẽ không tra được.
+  const catalogSelfLoaded = productsProp === undefined && mode === 'order';
   const [loadedProducts, setLoadedProducts] = useState<ProductView[]>([]);
+  const [catalogState, setCatalogState] = useState<'loading' | 'ready' | 'failed'>('loading');
+  const [catalogAttempt, setCatalogAttempt] = useState(0);
   useEffect(() => {
-    if (!visible || productsProp !== undefined || mode !== 'order') return;
+    if (!visible) {
+      // Đóng modal: bỏ danh mục đã tải để lần mở sau không dùng dữ liệu cũ (món đã xoá, giá đổi)
+      setLoadedProducts([]);
+      setCatalogState('loading');
+      return;
+    }
+    if (!catalogSelfLoaded) return;
     let cancelled = false;
+    setCatalogState('loading');
     productApi
       .list()
       .then((list) => {
-        if (!cancelled) setLoadedProducts(list);
+        if (cancelled) return;
+        setLoadedProducts(list);
+        setCatalogState('ready');
+        // Mã quét trong lúc đang tải đã bị bỏ qua: xoá biểu ngữ và cho phép quét lại ngay
+        setUnknownCode(null);
+        lastCodeRef.current = '';
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!cancelled) setCatalogState('failed');
+      });
     return () => {
       cancelled = true;
     };
-  }, [visible, productsProp, mode]);
+  }, [visible, catalogSelfLoaded, catalogAttempt]);
+  const catalogReady = !catalogSelfLoaded || catalogState === 'ready';
+  const retryCatalog = () => {
+    setCatalogState('loading');
+    setCatalogAttempt((attempt) => attempt + 1);
+  };
   const products = productsProp ?? loadedProducts;
 
   // Danh mục tra cứu: sản phẩm thật của tiệm (Core, hoặc mockCore khi xem trước) và sản phẩm vừa tạo trong phiên quét.
@@ -676,28 +699,41 @@ export function BarcodeScannerModal({
           {/* ── Cảnh báo mã chưa có trong danh mục & Nút Cấu hình ── */}
           {unknownCode && !configModalCode && (
             <Pressable
-              onPress={() => handleOpenConfig(unknownCode)}
+              onPress={() => {
+                if (catalogReady) handleOpenConfig(unknownCode);
+                else if (catalogState === 'failed') retryCatalog();
+              }}
               style={({ pressed }) => [S.unknownBanner, pressed && { opacity: 0.92 }]}
             >
               <View style={S.unknownBannerLeft}>
                 <BarcodeIcon size={16} color={colors.primary} />
                 <View style={{ flex: 1, paddingRight: 6 }}>
                   <T size={12.5} color={colors.ink}>
-                    Mã <T w="bold" color={colors.primaryDeep}>{unknownCode}</T> chưa có
+                    {catalogReady ? (
+                      <>
+                        Mã <T w="bold" color={colors.primaryDeep}>{unknownCode}</T> chưa có
+                      </>
+                    ) : catalogState === 'failed' ? (
+                      'Không tải được danh mục sản phẩm'
+                    ) : (
+                      'Đang tải danh mục sản phẩm…'
+                    )}
                   </T>
                   <T size={11.5} color={colors.muted}>
-                    Chạm để thêm mặt hàng
+                    {catalogReady ? 'Chạm để thêm mặt hàng' : catalogState === 'failed' ? 'Chạm để thử lại' : 'Quét lại sau giây lát'}
                   </T>
                 </View>
               </View>
 
               <View style={S.unknownBannerActions}>
-                <View style={S.configActionBtn}>
-                  <T w="bold" size={12.5} color={colors.brandInk}>
-                    Thêm
-                  </T>
-                  <Feather name="chevron-right" size={15} color={colors.brandInk} />
-                </View>
+                {catalogReady || catalogState === 'failed' ? (
+                  <View style={S.configActionBtn}>
+                    <T w="bold" size={12.5} color={colors.brandInk}>
+                      {catalogReady ? 'Thêm' : 'Thử lại'}
+                    </T>
+                    <Feather name="chevron-right" size={15} color={colors.brandInk} />
+                  </View>
+                ) : null}
 
                 <Pressable
                   onPress={(e) => {
