@@ -177,16 +177,16 @@ public class SaleDraftServiceImpl implements SaleDraftService {
                 .filter(java.util.Objects::nonNull).distinct().sorted().toList();
         List<Product> lockedProducts = productIds.isEmpty() ? List.of()
                 : productRepository.findAllLockedByIdInAndShopIdAndStatus(productIds, shop.getId(), CatalogStatus.ACTIVE);
-        if (lockedProducts.size() != productIds.size()) {
-            throw new BusinessException(ErrorCode.DRAFT_ITEM_INVALID);
-        }
         Map<Long, Product> productsById = lockedProducts.stream()
                 .collect(Collectors.toMap(Product::getId, product -> product));
-        // The batch query orders locks in the DB; keep stock/notification processing in the same order.
+        // Lock in one query, but preserve validation precedence by processing each item in ID order.
         for (SaleDraftItem item : draftItems.stream()
                 .filter(item -> item.getProductId() != null)
                 .sorted(java.util.Comparator.comparing(SaleDraftItem::getProductId)).toList()) {
             Product product = productsById.get(item.getProductId());
+            if (product == null) {
+                throw new BusinessException(ErrorCode.DRAFT_ITEM_INVALID);
+            }
             stockDeducted.put(item.getProductId(), product.isTracked());
             estimatedCosts.put(item.getProductId(), estimateCost(product, item.getQuantity()));
             if (product.isTracked()) { beforeStocks.put(product.getId(), product.getStockQuantity()); }

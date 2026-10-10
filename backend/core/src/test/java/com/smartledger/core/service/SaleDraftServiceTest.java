@@ -313,25 +313,37 @@ class SaleDraftServiceTest {
         verify(notifications, never()).reconcileStock(any(Shop.class), any(Product.class));
     }
 
-    @Test
-    void confirmationRejectsIncompleteBatchBeforeChangingAnyStock() {
-        Product product = product(BigDecimal.TEN);
-        Product missing = product(BigDecimal.TEN);
-        ReflectionTestUtils.setField(missing, "id", 5L);
+    @ParameterizedTest
+    @ValueSource(strings = {"STOCK", "COST", "MISSING"})
+    void confirmationPreservesErrorPrecedenceAcrossIncompleteProductBatch(String firstFailure) {
+        Product first = product(firstFailure.equals("STOCK") ? BigDecimal.ZERO : BigDecimal.TEN);
+        Product second = product(BigDecimal.ZERO);
+        ReflectionTestUtils.setField(second, "id", 5L);
+        if (firstFailure.equals("COST")) ReflectionTestUtils.setField(first, "costPriceVnd", Long.MAX_VALUE);
         SaleDraft draft = draft(50000L, PaymentMethod.CASH);
         draft.replace(null, null, null, 0, 50000L, 50000L, PaymentMethod.CASH);
         when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
+        // Reverse request order: confirmation has always validated catalog products by ascending ID.
         when(draftItemRepository.findAllByDraftIdOrderByIdAsc(11L)).thenReturn(List.of(
-                SaleDraftItem.create(11L, product, BigDecimal.ONE, 25000L, 25000L),
-                SaleDraftItem.create(11L, missing, BigDecimal.ONE, 25000L, 25000L)));
+                SaleDraftItem.create(11L, second, BigDecimal.ONE, 25000L, 25000L),
+                SaleDraftItem.create(11L, first, new BigDecimal("2"), 12500L, 25000L)));
         when(productRepository.findAllLockedByIdInAndShopIdAndStatus(List.of(3L, 5L), 7L, CatalogStatus.ACTIVE))
-                .thenReturn(List.of(product));
+                .thenReturn(firstFailure.equals("MISSING") ? List.of(second) : List.of(first));
+        ErrorCode expected = switch (firstFailure) {
+            case "STOCK" -> ErrorCode.PRODUCT_STOCK_INSUFFICIENT;
+            case "COST" -> ErrorCode.DRAFT_TOTAL_INVALID;
+            default -> ErrorCode.DRAFT_ITEM_INVALID;
+        };
 
         assertThatThrownBy(() -> service.confirm(token, "7", "11"))
                 .isInstanceOfSatisfying(BusinessException.class, error ->
-                        assertThat(error.getErrorCode()).isEqualTo(ErrorCode.DRAFT_ITEM_INVALID));
-        assertThat(product.getStockQuantity()).isEqualByComparingTo("10");
-        verifyNoInteractions(saleRepository, saleItemRepository, paymentRepository, debtRepository);
+                        assertThat(error.getErrorCode()).isEqualTo(expected));
+        assertThat(first.getStockQuantity()).isEqualByComparingTo(firstFailure.equals("STOCK") ? "0" : "10");
+        assertThat(second.getStockQuantity()).isEqualByComparingTo("0");
+        verify(productRepository).findAllLockedByIdInAndShopIdAndStatus(List.of(3L, 5L), 7L, CatalogStatus.ACTIVE);
+        verify(productRepository, never()).findLockedByIdAndShopIdAndStatus(any(), any(), any());
+        verifyNoInteractions(saleRepository, saleItemRepository, paymentRepository, debtRepository,
+                auditLogService, notifications);
     }
 
     @Test

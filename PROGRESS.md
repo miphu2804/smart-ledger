@@ -1,3 +1,13 @@
+### [2026-10-10 14:20 UTC+07:00] — [Fix] Preserve confirm error precedence with batch product locks (#136)
+
+**Done:** Restored staging's per-product validation precedence during confirmation without reverting ordered batch locks. The preceding review missed the mixed-error regression; this entry records its correction while preserving the earlier log unchanged.
+
+**Changed files:** Core `SaleDraftServiceImpl`, `SaleDraftServiceTest`, `ProductBatchLockPostgresTest`; this new append-only entry. No API, schema, migration, FE or other documentation change; untracked `.idea/` is excluded.
+
+**Flow explained:** Lock the ACTIVE, shop-scoped catalog group once in ascending ID order, build a map, then process draft catalog items in that same order. Report a missing/archived/foreign product only when its item is reached; earlier cost overflow or insufficient stock retains priority. Later failures roll back prior stock changes, customer creation and all checkout records. Stock-alert reconciliation remains grouped after successful stock processing.
+
+**Check:** New unit regressions first reproduced two wrong error codes before the fix. The corrected focused unit/PostgreSQL run passed 101 tests; subsequent `mvnw.cmd clean verify` passed 735 tests, 0 failures/errors/skips, BUILD SUCCESS (2:55), using Java 21 and PostgreSQL 16.15 in a dedicated disposable Docker container, since removed. Regression cases cover reversed item order, invalid products on either side of insufficient stock, earlier cost overflow, and transaction rollback. SQL/order/concurrency tests still pass, including one lock query for 1/20/100 selected products across a 100,000-product catalog. Before commit, the Core diff was confirmed unchanged from that verified run and all 735 XML test cases were rechecked; Maven was not rerun for this progress-only addition. No business/staging/production DB or external provider was used. This commit/push does not merge staging; the previously identified `PROGRESS.md` merge conflict remains a separate step. No staging/FE UAT or CI result is claimed.
+
 ### [2026-10-10 13:53 UTC+07:00] — [Verification] Review query-optimization branch before push (#134–#138)
 
 **Done:** Reviewed the complete branch diff for batched list items, draft Product reads, ordered confirm/void locks and grouped stock alerts. No blocking correctness regression found within #134–#138. Prepared the remaining #138 documentation for commit/push on `perf/query-optimization`; no staging merge or history rewrite.

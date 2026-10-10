@@ -176,6 +176,58 @@ class ProductBatchLockPostgresTest {
         assertProductLock(1, true);
         assertStocks(ids, "10");
         assertNoCheckoutWrites(draft);
+        assertThat(rows("notification_events")).isZero();
+        assertThat(sql.notificationStatements()).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"STOCK_THEN_ARCHIVED", "STOCK_THEN_FOREIGN", "ARCHIVED_THEN_STOCK", "FOREIGN_THEN_STOCK"})
+    void confirmPreservesErrorPrecedenceForStockAndInvalidProducts(String scenario) {
+        var ids = seedProducts(2, 0);
+        long draft = seedDraft(ids.reversed());
+        boolean invalidFirst = !scenario.startsWith("STOCK_");
+        long invalidId = invalidFirst ? ids.getFirst() : ids.getLast();
+        if (scenario.contains("ARCHIVED")) archive(invalidId);
+        else {
+            long foreignShop = jdbc.queryForObject("insert into shops(owner_id,name,industry) values (?,'Foreign','Retail') returning id",
+                    Long.class, userId);
+            jdbc.update("update products set shop_id=? where id=?", foreignShop, invalidId);
+        }
+        sql.clear();
+
+        expectCode(() -> confirm(draft), invalidFirst ? ErrorCode.DRAFT_ITEM_INVALID : ErrorCode.PRODUCT_STOCK_INSUFFICIENT);
+
+        assertProductLock(1, true);
+        assertStocks(ids, "0");
+        assertNoCheckoutWrites(draft);
+        assertThat(rows("notification_events")).isZero();
+        assertThat(sql.notificationStatements()).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ARCHIVED", "FOREIGN"})
+    void confirmRejectsEarlierCostOverflowBeforeStockOrLaterInvalidProduct(String kind) {
+        var ids = seedProducts(2, 0);
+        long draft = seedDraft(ids.reversed());
+        jdbc.update("update products set cost_price_vnd=? where id=?", Long.MAX_VALUE, ids.getFirst());
+        jdbc.update("update sale_draft_items set quantity=2,line_total_vnd=2000 where draft_id=? and product_id=?",
+                draft, ids.getFirst());
+        jdbc.update("update sale_drafts set estimated_total_vnd=3000,initial_paid_vnd=1200 where id=?", draft);
+        if (kind.equals("ARCHIVED")) archive(ids.getLast());
+        else {
+            long foreignShop = jdbc.queryForObject("insert into shops(owner_id,name,industry) values (?,'Foreign','Retail') returning id",
+                    Long.class, userId);
+            jdbc.update("update products set shop_id=? where id=?", foreignShop, ids.getLast());
+        }
+        sql.clear();
+
+        expectCode(() -> confirm(draft), ErrorCode.DRAFT_TOTAL_INVALID);
+
+        assertProductLock(1, true);
+        assertStocks(ids, "0");
+        assertNoCheckoutWrites(draft);
+        assertThat(rows("notification_events")).isZero();
+        assertThat(sql.notificationStatements()).isEmpty();
     }
 
     @Test
@@ -588,6 +640,9 @@ class ProductBatchLockPostgresTest {
 
     private void assertNoCheckoutWrites(long draft) {
         for (String table : List.of("sales", "payments", "debts", "audit_logs", "customers")) assertThat(rows(table)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from sale_items where sale_id in (select id from sales where shop_id=?)",
+                Long.class, shopId)).isZero();
+        assertThat(jdbc.queryForObject("select confirmed_sale_id from sale_drafts where id=?", Long.class, draft)).isNull();
         assertThat(jdbc.queryForObject("select status from sale_drafts where id=?", String.class, draft)).isEqualTo("DRAFT");
     }
 
