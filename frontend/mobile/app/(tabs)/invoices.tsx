@@ -44,7 +44,6 @@ export default function Invoices() {
   const initialPeriod: Period = queryPeriod === 'yesterday' || queryPeriod === 'month' ? queryPeriod : 'all';
   const [period, setPeriod] = useState<Period>(initialPeriod);
   const [q, setQ] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
   const [sales, setSales] = useState<SaleView[]>([]);
@@ -230,7 +229,7 @@ export default function Invoices() {
 
       {/* Header Container */}
       <View style={[styles.headerShell, { paddingTop: insets.top + 8 }]}>
-        {/* Title and Search Button Row */}
+        {/* Title Row */}
         <Row style={styles.heroRow} gap={10}>
           <View style={{ flex: 1 }}>
             <T w="extrabold" size={28} color={colors.ink}>
@@ -240,39 +239,26 @@ export default function Invoices() {
               Quản lý và theo dõi đơn hàng
             </T>
           </View>
-          <Pressable
-            onPress={() => {
-              triggerFeedback('selection');
-              setSearchOpen((cur) => !cur);
-              if (searchOpen) setQ('');
-            }}
-            style={({ pressed }) => [styles.searchBtn, pressed && { opacity: 0.8 }]}
-            accessibilityRole="button"
-            accessibilityLabel={searchOpen ? 'Đóng tìm kiếm' : 'Tìm kiếm'}
-          >
-            <Feather name={searchOpen ? 'x' : 'search'} size={19} color={colors.brand} />
-          </Pressable>
         </Row>
 
-        {/* Expandable Search Input */}
-        {searchOpen ? (
-          <View style={styles.searchBox}>
-            <Feather name="search" size={16} color={colors.faint} />
-            <TextInput
-              autoFocus
-              value={q}
-              onChangeText={setQ}
-              placeholder="Tìm theo khách, tên món, mã đơn..."
-              placeholderTextColor={colors.faint}
-              style={styles.searchInput}
-            />
-            {q ? (
-              <Pressable onPress={() => setQ('')} hitSlop={8}>
-                <Feather name="x-circle" size={15} color={colors.muted} />
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null}
+        {/* Search Input (luôn hiện, cùng kiểu với màn Bán hàng) */}
+        <View style={styles.searchBox}>
+          <Feather name="search" size={18} color={colors.faint} />
+          <TextInput
+            value={q}
+            onChangeText={setQ}
+            placeholder="Tìm theo khách, tên món, mã đơn..."
+            placeholderTextColor="#9CA3AF"
+            style={styles.searchInput}
+            returnKeyType="search"
+            accessibilityLabel="Tìm đơn hàng"
+          />
+          {q ? (
+            <Pressable onPress={() => setQ('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Xoá tìm kiếm">
+              <Feather name="x-circle" size={15} color={colors.muted} />
+            </Pressable>
+          ) : null}
+        </View>
 
         {/* Period Chips Filter */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.periodScroll}>
@@ -443,17 +429,6 @@ const styles = StyleSheet.create({
   heroRow: {
     alignItems: 'center',
     marginBottom: 8,
-  },
-  searchBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadow(0),
   },
   searchBox: {
     height: 42,
