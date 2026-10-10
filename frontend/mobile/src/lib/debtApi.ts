@@ -1,6 +1,7 @@
 import type { DebtView, PaymentView } from '../data/types';
 import { apiRequest } from './api';
 import { createIdempotentSender } from './idempotency';
+import { fetchAllPages } from './pageApi';
 
 const repaySender = createIdempotentSender();
 
@@ -21,7 +22,7 @@ export interface DebtRepaymentResponse {
 }
 
 export const debtApi = {
-  list: (): Promise<DebtView[]> => apiRequest<DebtView[]>('/debts', { withShop: true }),
+  list: (): Promise<DebtView[]> => fetchAllPages<DebtView>('/debts'),
   getById: (id: number): Promise<DebtView> => apiRequest<DebtView>(`/debts/${id}`, { withShop: true }),
   /** Ghi nhận một lần trả (append-only), trả về nợ + payment vừa tạo. Bấm lại sau lỗi mạng dùng lại key cũ. */
   repay: (id: number, input: DebtRepaymentRequest): Promise<DebtRepaymentResponse> =>
