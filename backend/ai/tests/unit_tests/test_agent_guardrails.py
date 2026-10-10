@@ -1,51 +1,32 @@
-import pytest
-from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
-from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.outputs import ChatGeneration, ChatResult
+import asyncio
 
-from src.agent.guardrails import (
-    EMPTY_ANSWER_REPLY,
-    INPUT_TOO_LONG_REPLY,
-    LEAK_REPLY,
-    AgentGuardrails,
-    GuardrailLimits,
-    build_guardrails,
+import pytest
+from pydantic_ai.messages import ModelResponse, TextPart
+from pydantic_ai.models.function import FunctionModel
+from tests.support import ScriptedModel, tool_call, transcript
+
+from src.agent.guardrails import GuardrailError, GuardrailLimits
+from src.agent.guardrails.answer_screen import (
+    EMPTY_ANSWER_RETRY,
+    LEAK_RETRY,
+    screened_prefix,
 )
+from src.agent.guardrails.input_redaction import redact_input
+from src.agent.guardrails.tool_call_limit import TOOL_LIMIT_NOTICE
 from src.agent.service import AgentService
+
+pytestmark = pytest.mark.anyio
 
 MAX_INPUT_CHARS = 200
 MODEL_CALL_LIMIT = 4
 TOOL_CALL_LIMIT = 3
+TURN_TOKEN_LIMIT = 10_000
+TURN_TIMEOUT_SECONDS = 5.0
 API_KEY = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz012345"
 JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.c2lnbmF0dXJlLXZhbHVl"
 BEARER = "Bearer abcdefghijklmnopqrstuvwxyz0123456789"
 CARD = "4111 1111 1111 1111"
-
-
-class RecordingModel(FakeMessagesListChatModel):
-    seen_calls: list = []
-
-    def bind_tools(self, tools, **kwargs):
-        return self
-
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        self.seen_calls = [*self.seen_calls, list(messages)]
-        return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
-
-
-class LoopingModel(RecordingModel):
-    """Asks for a tool on every call, with a fresh call id, and never answers."""
-
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        self.seen_calls = [*self.seen_calls, list(messages)]
-        call_id = f"loop-{len(self.seen_calls)}"
-        message = AIMessage(
-            content="",
-            tool_calls=[
-                {"name": "query_shop_data", "args": {"sql": "SELECT 1"}, "id": call_id}
-            ],
-        )
-        return ChatResult(generations=[ChatGeneration(message=message)])
+QUERY = {"sql": "SELECT 1"}
 
 
 class Conversations:
@@ -53,15 +34,8 @@ class Conversations:
         self.history = history or []
         self.saved_exchange: dict | None = None
 
-    def context_for(self, conversation_id, user_id, shop_id):
-        return {
-            "summary": None,
-            "summary_through_message_id": None,
-            "messages": self.history,
-        }
-
-    def folded_messages(self, conversation_id, user_id, shop_id):
-        return []
+    def recent_messages(self, conversation_id, user_id, shop_id, limit):
+        return self.history[-limit:]
 
     def save_exchange(self, **kwargs):
         self.saved_exchange = kwargs
@@ -77,34 +51,48 @@ class CountingExecutor:
         return {"columns": ["n"], "rows": [[1]], "truncated": False}
 
 
-def service(model, conversations=None, executor=None) -> AgentService:
+def service(
+    model,
+    conversations=None,
+    executor=None,
+    turn_token_limit=TURN_TOKEN_LIMIT,
+    turn_timeout_seconds=TURN_TIMEOUT_SECONDS,
+) -> AgentService:
     return AgentService(
         model,
         conversations or Conversations(),
-        GuardrailLimits(MAX_INPUT_CHARS, MODEL_CALL_LIMIT, TOOL_CALL_LIMIT),
+        GuardrailLimits(
+            MAX_INPUT_CHARS,
+            MODEL_CALL_LIMIT,
+            TOOL_CALL_LIMIT,
+            turn_token_limit,
+            turn_timeout_seconds,
+        ),
         sql_executor=executor,
     )
 
 
-def answering(text: str) -> RecordingModel:
-    return RecordingModel(responses=[AIMessage(content=text)])
+def sent_prompt(model: ScriptedModel) -> str:
+    """The owner's message as the model received it on the first request."""
+    return transcript(model.requests[0][0])[-1][1]
 
 
-def test_too_long_input_ends_the_run_without_a_model_call() -> None:
-    model = answering("should not be called")
+async def test_too_long_input_is_refused_without_a_model_call() -> None:
+    model = ScriptedModel("should not be called")
     conversations = Conversations()
 
-    result = service(model, conversations).chat(
-        user_id=3, shop_id=15, message="x" * (MAX_INPUT_CHARS + 1)
-    )
+    with pytest.raises(GuardrailError) as refused:
+        await service(model, conversations).chat(
+            user_id=3, shop_id=15, message="x" * (MAX_INPUT_CHARS + 1)
+        )
 
-    assert result.answer == INPUT_TOO_LONG_REPLY.format(limit=MAX_INPUT_CHARS)
-    assert model.seen_calls == []
-    assert conversations.saved_exchange["assistant_message"] == result.answer
+    assert refused.value.code == "input_too_long"
+    assert model.requests == []
+    assert conversations.saved_exchange is None
 
 
-def test_only_the_latest_message_counts_toward_the_input_limit() -> None:
-    model = answering("ok")
+async def test_only_the_latest_message_counts_toward_the_input_limit() -> None:
+    model = ScriptedModel("ok")
     conversations = Conversations(
         [
             {"message_id": 1, "role": "USER", "content": "y" * 500},
@@ -112,71 +100,58 @@ def test_only_the_latest_message_counts_toward_the_input_limit() -> None:
         ]
     )
 
-    result = service(model, conversations).chat(
+    result = await service(model, conversations).chat(
         user_id=3, shop_id=15, conversation_id=41, message="rice price?"
     )
 
     assert result.answer == "ok"
-    assert len(model.seen_calls) == 1
+    assert len(model.requests) == 1
 
 
-def test_input_guard_reads_the_last_human_message() -> None:
-    guard = AgentGuardrails(max_input_chars=5)
-    state = {"messages": [HumanMessage("a" * 100), HumanMessage("short")]}
-
-    assert guard.before_agent(state, None) is None
-
-
-def test_secrets_are_redacted_before_the_model_and_in_history() -> None:
-    model = answering("ok")
+async def test_secrets_are_redacted_before_the_model_and_in_history() -> None:
+    model = ScriptedModel("ok")
     conversations = Conversations()
     message = f"key {API_KEY} token {JWT} header {BEARER}"
 
-    service(model, conversations).chat(user_id=3, shop_id=15, message=message)
+    await service(model, conversations).chat(user_id=3, shop_id=15, message=message)
 
-    sent = model.seen_calls[0][-1].content
+    sent = sent_prompt(model)
     for secret in (API_KEY, JWT, BEARER):
         assert secret not in sent
         assert secret not in conversations.saved_exchange["user_message"]
     assert "[REDACTED_API_KEY]" in sent
 
 
-def test_card_numbers_are_masked_before_the_model() -> None:
-    model = answering("ok")
+async def test_card_numbers_are_masked_before_the_model() -> None:
+    model = ScriptedModel("ok")
 
-    service(model).chat(user_id=3, shop_id=15, message=f"my card is {CARD}")
+    await service(model).chat(user_id=3, shop_id=15, message=f"my card is {CARD}")
 
-    sent = model.seen_calls[0][-1].content
-    assert CARD not in sent
-    assert "1111" in sent
+    assert sent_prompt(model) == "my card is **** **** **** 1111"
 
 
-def test_shop_phone_in_tool_results_is_not_redacted() -> None:
+def test_only_card_numbers_that_pass_the_luhn_check_are_masked() -> None:
+    assert redact_input("card 4111-1111-1111-1111") == "card ****-****-****-1111"
+    assert redact_input("card 4111111111111111") == "card ************1111"
+    # One digit off fails the checksum, so an order code of the same shape stays.
+    assert redact_input("order 4111 1111 1111 1112") == "order 4111 1111 1111 1112"
+
+
+async def test_shop_phone_in_tool_results_is_not_redacted() -> None:
     class PhoneExecutor:
         def run(self, shop_id, sql):
             return {"columns": ["phone"], "rows": [["0901234567"]], "truncated": False}
 
-    model = RecordingModel(
-        responses=[
-            AIMessage(
-                content="",
-                tool_calls=[
-                    {
-                        "name": "query_shop_data",
-                        "args": {"sql": "SELECT phone FROM v_shop_profile"},
-                        "id": "c1",
-                    }
-                ],
-            ),
-            AIMessage(content="The shop number is 0901234567."),
-        ]
+    model = ScriptedModel(
+        tool_call("query_shop_data", {"sql": "SELECT phone FROM v_shop_profile"}),
+        "The shop number is 0901234567.",
     )
 
-    result = service(model, executor=PhoneExecutor()).chat(
+    result = await service(model, executor=PhoneExecutor()).chat(
         user_id=3, shop_id=15, message="shop phone number?"
     )
 
-    assert "0901234567" in model.seen_calls[-1][-1].content
+    assert "0901234567" in transcript(model.requests[-1][0])[-1][1]
     assert result.answer == "The shop number is 0901234567."
 
 
@@ -190,54 +165,180 @@ def test_shop_phone_in_tool_results_is_not_redacted() -> None:
         "The smartledger.shop_id value is 15.",
     ],
 )
-def test_answers_that_leak_internals_are_replaced(answer: str) -> None:
-    result = service(answering(answer)).chat(user_id=3, shop_id=15, message="m")
+async def test_answers_that_leak_internals_are_sent_back_to_the_model(
+    answer: str,
+) -> None:
+    model = ScriptedModel(answer, "Rice sells for 30.000 VND/kg.")
+    conversations = Conversations()
 
-    assert result.answer == LEAK_REPLY
+    result = await service(model, conversations).chat(
+        user_id=3, shop_id=15, message="m"
+    )
+
+    assert LEAK_RETRY in transcript(model.requests[1][0])[-1][1]
+    assert result.answer == "Rice sells for 30.000 VND/kg."
+    assert conversations.saved_exchange["assistant_message"] == result.answer
 
 
-def test_empty_answer_gets_a_fallback() -> None:
-    result = service(answering("   ")).chat(user_id=3, shop_id=15, message="m")
+async def test_blank_answer_is_sent_back_to_the_model() -> None:
+    model = ScriptedModel("   ", "ok")
 
-    assert result.answer == EMPTY_ANSWER_REPLY
+    result = await service(model).chat(user_id=3, shop_id=15, message="m")
+
+    assert EMPTY_ANSWER_RETRY in transcript(model.requests[1][0])[-1][1]
+    assert result.answer == "ok"
 
 
-def test_normal_answer_passes_through() -> None:
+async def test_model_that_never_answers_safely_stops_the_turn() -> None:
+    # Each rejected answer costs a model request, so the request limit ends the run;
+    # giving up is a guardrail outcome, not a 503.
+    model = ScriptedModel(*["Error[SQL_ERROR]"] * MODEL_CALL_LIMIT)
+    conversations = Conversations()
+
+    with pytest.raises(GuardrailError) as stopped:
+        await service(model, conversations).chat(user_id=3, shop_id=15, message="m")
+
+    assert stopped.value.code == "answer_unavailable"
+    assert len(model.requests) == MODEL_CALL_LIMIT
+    assert conversations.saved_exchange is None
+
+
+async def test_normal_answer_passes_through() -> None:
     answer = "ST25 rice sells for 30.000 VND/kg, 12 kg left (this shop, as of now)."
 
-    result = service(answering(answer)).chat(user_id=3, shop_id=15, message="m")
+    result = await service(ScriptedModel(answer)).chat(
+        user_id=3, shop_id=15, message="m"
+    )
 
     assert result.answer == answer
 
 
-def test_output_guard_keeps_the_answer_id_when_replacing() -> None:
-    update = AgentGuardrails(MAX_INPUT_CHARS).after_agent(
-        {"messages": [AIMessage(content="SELECT id FROM v_products", id="a1")]}, None
+async def test_limits_stop_a_model_that_keeps_calling_tools() -> None:
+    executor = CountingExecutor()
+    model = ScriptedModel(
+        *[tool_call("query_shop_data", QUERY) for _ in range(MODEL_CALL_LIMIT + 1)]
     )
 
-    (replacement,) = update["messages"]
-    assert replacement.id == "a1"
-    assert replacement.content == LEAK_REPLY
+    with pytest.raises(GuardrailError) as stopped:
+        await service(model, executor=executor).chat(user_id=3, shop_id=15, message="m")
 
-
-def test_limits_stop_a_model_that_keeps_calling_tools() -> None:
-    executor = CountingExecutor()
-    model = LoopingModel(responses=[])
-
-    result = service(model, executor=executor).chat(user_id=3, shop_id=15, message="m")
-
-    assert len(model.seen_calls) == MODEL_CALL_LIMIT
+    assert stopped.value.code == "answer_unavailable"
+    assert len(model.requests) == MODEL_CALL_LIMIT
     assert executor.calls == TOOL_CALL_LIMIT
-    assert result.answer == EMPTY_ANSWER_REPLY
+    assert model.tool_names(request=TOOL_CALL_LIMIT) == []
 
 
-def test_build_guardrails_has_no_tool_error_middleware() -> None:
-    names = [type(m).__name__ for m in build_guardrails(GuardrailLimits(200, 4, 3))]
+async def test_calls_over_the_tool_limit_are_refused_and_the_model_answers() -> None:
+    executor = CountingExecutor()
+    model = ScriptedModel(
+        tool_call("query_shop_data", QUERY, QUERY),
+        tool_call("query_shop_data", QUERY, QUERY),
+        "answer from three results",
+    )
 
-    assert names == [
-        "AgentGuardrails",
-        "PIIMiddleware",
-        "PIIMiddleware",
-        "ModelCallLimitMiddleware",
-        "ToolCallLimitMiddleware",
-    ]
+    result = await service(model, executor=executor).chat(
+        user_id=3, shop_id=15, message="m"
+    )
+
+    assert executor.calls == TOOL_CALL_LIMIT
+    assert any(
+        TOOL_LIMIT_NOTICE in text for _, text in transcript(model.requests[-1][0])
+    )
+    assert model.tool_names(request=2) == []
+    assert result.answer == "answer from three results"
+
+
+async def test_each_turn_gets_its_own_tool_budget() -> None:
+    executor = CountingExecutor()
+    model = ScriptedModel(
+        *[tool_call("query_shop_data", QUERY) for _ in range(TOOL_CALL_LIMIT)],
+        "first",
+        tool_call("query_shop_data", QUERY),
+        "second",
+    )
+    agent = service(model, executor=executor)
+
+    await agent.chat(user_id=3, shop_id=15, message="m")
+    result = await agent.chat(user_id=3, shop_id=15, message="m")
+
+    assert executor.calls == TOOL_CALL_LIMIT + 1
+    assert result.answer == "second"
+
+
+async def test_token_budget_stops_the_turn() -> None:
+    # The test model counts roughly one token per word, so a long answer passes a
+    # small budget on the first request.
+    model = ScriptedModel("word " * 200)
+    conversations = Conversations()
+
+    with pytest.raises(GuardrailError) as stopped:
+        await service(model, conversations, turn_token_limit=50).chat(
+            user_id=3, shop_id=15, message="m"
+        )
+
+    assert stopped.value.code == "answer_unavailable"
+    assert conversations.saved_exchange is None
+
+
+async def test_slow_turn_stops_before_core_gives_up() -> None:
+    async def slow_answer(messages, info):
+        await asyncio.sleep(1)
+        return ModelResponse(parts=[TextPart("late")])
+
+    conversations = Conversations()
+
+    with pytest.raises(GuardrailError) as stopped:
+        await service(
+            FunctionModel(slow_answer), conversations, turn_timeout_seconds=0.05
+        ).chat(user_id=3, shop_id=15, message="m")
+
+    assert stopped.value.code == "answer_timeout"
+    assert conversations.saved_exchange is None
+
+
+# The longest literal leak is `smartledger.shop_id`; one more character lets `\b` see
+# past it.
+HOLD = len("smartledger.shop_id") + 1
+SAFE_TEXT = "Rice stock is fine this week, nothing to restock yet. "
+
+
+def test_screened_prefix_releases_all_but_the_held_tail() -> None:
+    text = SAFE_TEXT * 2
+
+    assert screened_prefix(text) == text[:-HOLD]
+
+
+def test_screened_prefix_of_a_short_text_holds_everything() -> None:
+    assert screened_prefix("Rice sells for 30k.") == ""
+
+
+@pytest.mark.parametrize("partial", ["v_prod", "smartledger.shop_", "ai_read"])
+def test_screened_prefix_holds_a_partial_leak_at_the_end(partial: str) -> None:
+    text = SAFE_TEXT + partial
+
+    released = screened_prefix(text)
+
+    assert released == text[:-HOLD]
+    assert partial in text[len(released) :]
+
+
+def test_screened_prefix_holds_everything_after_a_pending_select() -> None:
+    text = SAFE_TEXT + "Please select the shop for the day"
+
+    assert screened_prefix(text) == text[: text.index("select")]
+
+
+def test_screened_prefix_releases_a_select_with_no_from_in_reach() -> None:
+    text = "Please select a shop. " + SAFE_TEXT * 12
+
+    assert screened_prefix(text) == text[:-HOLD]
+
+
+def test_screened_prefix_stops_before_a_complete_leak() -> None:
+    assert screened_prefix("Here it is: SELECT name FROM v_products") == "Here it is: "
+    assert screened_prefix("The data is in ai_read.v_products now") == "The data is in "
+
+
+def test_screened_prefix_holds_a_pending_select_before_a_later_leak() -> None:
+    assert screened_prefix("Here: SELECT v_sales.total ") == "Here: "
+    assert screened_prefix("Here: SELECT v_sales.total FROM v_sales") == "Here: "

@@ -461,6 +461,7 @@ export function BarcodeScannerModal({
           costPriceVnd: null,
           tracked: false,
           stockQuantity: null,
+          lowStockThreshold: null,
           status: 'ACTIVE',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),

@@ -14,8 +14,11 @@ import com.smartledger.core.service.NotificationEventService;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,9 +38,31 @@ public class NotificationEventServiceImpl implements NotificationEventService {
 
     @Override
     public void reconcileStock(Shop shop, Product product) {
+        reconcileStock(shop, List.of(product));
+    }
+
+    @Override
+    public void reconcileStock(Shop shop, Collection<Product> products) {
+        if (products.isEmpty()) return;
+        // Process each locked product once, retaining the caller's stable order.
+        Map<Long, Product> uniqueProducts = new LinkedHashMap<>();
+        products.forEach(product -> uniqueProducts.putIfAbsent(product.getId(), product));
+        Map<Long, List<NotificationEvent>> openByProduct = events
+                .findAllByShopIdAndEntityTypeAndEntityIdInAndTypeInAndResolvedAtIsNull(
+                        shop.getId(), "PRODUCT", List.copyOf(uniqueProducts.keySet()), STOCK_TYPES)
+                .stream().collect(Collectors.groupingBy(NotificationEvent::getEntityId));
+        uniqueProducts.values().forEach(product ->
+                reconcileStock(shop, product, openByProduct.getOrDefault(product.getId(), List.of())));
+    }
+
+    /**
+     * Applies one locked Product's alert transition using the batch's preloaded open alerts.
+     * An unchanged single alert is retained; obsolete alerts are resolved and flushed before
+     * opening a replacement to release the unique open-alert slot. History-based cycle keys
+     * and recipient creation remain in the same transaction; callers must serialize on Product.
+     */
+    private void reconcileStock(Shop shop, Product product, List<NotificationEvent> open) {
         NotificationType desired = stockType(product);
-        var open = events.findAllByShopIdAndEntityTypeAndEntityIdAndTypeInAndResolvedAtIsNull(
-                shop.getId(), "PRODUCT", product.getId(), STOCK_TYPES);
         if (open.size() == 1 && open.getFirst().getType() == desired) return;
         var now = OffsetDateTime.now(ZoneOffset.UTC);
         open.forEach(event -> event.resolve(now));

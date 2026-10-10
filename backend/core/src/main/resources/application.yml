@@ -10,6 +10,10 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+  mvc:
+    async:
+      # The agent answer stream lasts up to the AI turn timeout (35 s by default), past Tomcat's 30 s default.
+      request-timeout: 60s
   servlet:
     multipart:
       max-file-size: 5MB

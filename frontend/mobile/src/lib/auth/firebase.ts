@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import { debugLog, maskId } from '../debug';
 import { mapFirebaseError } from './firebaseErrors';
 import { AuthClient, AuthError } from './types';
@@ -8,7 +9,7 @@ import { AuthClient, AuthError } from './types';
  *
  * Gói được nạp lười trong try/catch: chưa cài Firebase thì bản mock / Expo Go vẫn chạy bình thường,
  * và chỉ khi USE_MOCK=false mới báo AuthError('not-configured') kèm hướng dẫn.
- * Hỗ trợ cả API modular (getAuth, signInWithPhoneNumber…) lẫn API namespaced cũ (auth().…).
+ * Hỗ trợ cả API modular (getAuth, signInWithEmailAndPassword…) lẫn API namespaced cũ (auth().…).
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Loaded = { m: any; auth: any };
@@ -30,27 +31,93 @@ function load(): Loaded {
   }
 }
 
+/**
+ * Facebook SDK nạp lười để bản dev client cũ (chưa có mô-đun native của Facebook) không sập ngay khi mở app.
+ * `extra.facebookConfigured` do app.config.js đặt khi có FACEBOOK_APP_ID và FACEBOOK_CLIENT_TOKEN lúc build.
+ */
+function loadFacebook(): any {
+  if (!(Constants.expoConfig?.extra as { facebookConfigured?: boolean } | undefined)?.facebookConfigured) {
+    throw new AuthError(
+      'not-configured',
+      'Bản build này chưa cấu hình đăng nhập Facebook: cần FACEBOOK_APP_ID và FACEBOOK_CLIENT_TOKEN lúc build (xem README, mục “Đăng nhập Facebook”)',
+    );
+  }
+  try {
+    return require('react-native-fbsdk-next');
+  } catch {
+    throw new AuthError('not-configured', 'Bản build này chưa có Facebook SDK: cần build lại development build (xem README, mục “Đăng nhập Facebook”)');
+  }
+}
+
 export const firebaseAuth: AuthClient = {
-  async sendOtp(phone) {
+  async signInWithFacebook() {
     const { m, auth } = load();
-    debugLog('auth', 'sendOtp →', maskId(phone));
+    const fb = loadFacebook();
+    debugLog('auth', 'signInWithFacebook →');
     try {
-      const conf =
-        typeof m.signInWithPhoneNumber === 'function'
-          ? await m.signInWithPhoneNumber(auth, phone)
-          : await auth.signInWithPhoneNumber(phone);
-      return {
-        async confirm(code) {
-          try {
-            await conf.confirm(code);
-            debugLog('auth', 'confirm OTP ✓');
-          } catch (e) {
-            // Android có thể tự xác minh SMS (instant verification): người dùng đã được đăng nhập trước khi kịp nhập mã
-            if (auth.currentUser?.phoneNumber === phone) return;
-            throw mapFirebaseError(e);
-          }
-        },
-      };
+      // Chỉ xin public_profile: Meta tự cấp cho mọi app nên không cần xét duyệt. `email` phải thêm vào trường hợp sử dụng
+      // trong Meta Dashboard và có thể kéo theo xét duyệt khi mở cho người ngoài; chưa thêm thì Facebook báo "Invalid Scopes: email".
+      const result = await fb.LoginManager.logInWithPermissions(['public_profile']);
+      if (result?.isCancelled) throw new AuthError('cancelled');
+      const token = await fb.AccessToken.getCurrentAccessToken();
+      if (!token?.accessToken) throw new AuthError('unknown', 'Facebook không trả về mã đăng nhập. Vui lòng thử lại');
+      const provider = m.FacebookAuthProvider ?? m.default?.FacebookAuthProvider;
+      const credential = provider.credential(token.accessToken);
+      if (typeof m.signInWithCredential === 'function') await m.signInWithCredential(auth, credential);
+      else await auth.signInWithCredential(credential);
+      debugLog('auth', 'signInWithFacebook ✓');
+    } catch (e) {
+      throw mapFirebaseError(e);
+    }
+  },
+
+  async sendPasswordReset(email) {
+    const { m, auth } = load();
+    debugLog('auth', 'sendPasswordReset →', maskId(email));
+    try {
+      if (typeof m.sendPasswordResetEmail === 'function') await m.sendPasswordResetEmail(auth, email.trim());
+      else await auth.sendPasswordResetEmail(email.trim());
+      debugLog('auth', 'sendPasswordReset ✓');
+    } catch (e) {
+      // Email chưa có tài khoản: coi như đã gửi, để không lộ email nào đã đăng ký
+      if (String((e as { code?: unknown })?.code ?? '').replace(/^auth\//, '') === 'user-not-found') return;
+      throw mapFirebaseError(e);
+    }
+  },
+
+  async sendEmailVerification() {
+    const { m, auth } = load();
+    const user = auth.currentUser;
+    if (!user) throw new AuthError('unknown');
+    try {
+      if (typeof m.sendEmailVerification === 'function') await m.sendEmailVerification(user);
+      else await user.sendEmailVerification();
+      debugLog('auth', 'sendEmailVerification ✓');
+    } catch (e) {
+      throw mapFirebaseError(e);
+    }
+  },
+
+  needsEmailVerification() {
+    try {
+      const user = load().auth.currentUser;
+      return !!user && !user.emailVerified && (user.providerData ?? []).some((p: { providerId?: string }) => p?.providerId === 'password');
+    } catch {
+      return false;
+    }
+  },
+
+  async refreshEmailVerified() {
+    const { m, auth } = load();
+    const user = auth.currentUser;
+    if (!user) return false;
+    try {
+      if (typeof m.reload === 'function') await m.reload(user);
+      else await user.reload();
+      const fresh = auth.currentUser ?? user;
+      if (fresh.emailVerified) await fresh.getIdToken(true); // đưa cờ email_verified vào token mới
+      debugLog('auth', 'refreshEmailVerified →', !!fresh.emailVerified);
+      return !!fresh.emailVerified;
     } catch (e) {
       throw mapFirebaseError(e);
     }
@@ -89,6 +156,12 @@ export const firebaseAuth: AuthClient = {
     const { m, auth } = load();
     if (typeof m.signOut === 'function') await m.signOut(auth);
     else await auth.signOut();
+    // Facebook SDK giữ phiên riêng; không đăng xuất thì lần sau không hỏi lại tài khoản. Lỗi ở đây không được chặn đăng xuất.
+    try {
+      loadFacebook().LoginManager.logOut();
+    } catch {
+      /* chưa có Facebook SDK trong bản build này */
+    }
   },
 
   currentEmail() {

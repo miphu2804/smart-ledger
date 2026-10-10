@@ -9,9 +9,10 @@ import { Button, Card, EmptyState, Row, T } from '../../src/components/ui';
 import { BarcodeScannerModal } from '../../src/components/BarcodeScannerModal';
 import { CountUp, Reveal, Skeleton } from '../../src/components/reveal';
 import { vnd } from '../../src/lib/format';
-import { buildNotifications, notifCategoryMeta } from '../../src/lib/notifications';
+import { buildNotifications, fromCoreNotification, isNotifUnread, mergeNotifications, notifCategoryMeta, totalUnread } from '../../src/lib/notifications';
 import { bestSellers, periodLabel, summary } from '../../src/lib/stats';
 import { useCoreData } from '../../src/lib/useCoreData';
+import { useCoreNotifications } from '../../src/lib/useCoreNotifications';
 import { useApp } from '../../src/store/AppStore';
 import { colors } from '../../src/theme';
 
@@ -57,17 +58,11 @@ export default function Home() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  useEffect(() => {
-    const id = scrollY.addListener(({ value }) => {
-      const threshold = headerScrollDistance * 0.90;
-      if (value >= threshold && !isCollapsed) {
-        setIsCollapsed(true);
-      } else if (value < threshold && isCollapsed) {
-        setIsCollapsed(false);
-      }
-    });
-    return () => scrollY.removeListener(id);
-  }, [headerScrollDistance, isCollapsed, scrollY]);
+  // Chỉ chốt trạng thái thu gọn (để chọn lớp header nhận chạm) khi cuộn dừng: không đổi state mỗi khung hình trong lúc cuộn.
+  const settleCollapsed = useCallback(
+    (offsetY: number) => setIsCollapsed(offsetY >= headerScrollDistance * 0.9),
+    [headerScrollDistance],
+  );
   const now = new Date();
 
   const { invoices, products, debts, expenses, loading, error, reload } = useCoreData({
@@ -92,12 +87,20 @@ export default function Home() {
   const lowStock = products.filter((product) => product.tracked && product.stock <= 6).sort((a, b) => a.stock - b.stock);
   const priorityCount = Number(totalDebt > 0) + Number(lowStock.length > 0);
   const revenueChange = totals && previousDay?.revenue ? (totals.revenue - previousDay.revenue) / previousDay.revenue : null;
-  const notifications = useMemo(
+  // Thông báo: kho hàng, đơn bị huỷ và tình trạng tiệm lấy từ inbox Core (chỉ cần trang đầu để xem trước); đơn mới, công nợ, thu chi tính trên máy.
+  const coreNotifications = useCoreNotifications(5);
+  const coreNotifs = useMemo(() => coreNotifications.items.map(fromCoreNotification), [coreNotifications.items]);
+  const localNotifications = useMemo(
     () => (ready ? buildNotifications({ invoices, products, expenses, debts }) : []),
     [ready, invoices, products, expenses, debts],
   );
+  const notifications = useMemo(
+    () => mergeNotifications(localNotifications, coreNotifs, coreNotifications.hasMore),
+    [localNotifications, coreNotifs, coreNotifications.hasMore],
+  );
   const readNotifications = useMemo(() => new Set(app.readNotifs), [app.readNotifs]);
-  const unreadNotifications = notifications.filter((notification) => !readNotifications.has(notification.id)).length;
+  // Đếm thông báo trên máy từ danh sách đầy đủ, không phải danh sách đã gộp (đã ẩn bớt khi Core còn trang chưa tải).
+  const unreadNotifications = totalUnread(localNotifications, readNotifications, coreNotifications.unreadCount);
   const periodName = periodLabel[period];
   const topSeller = topSellers[0];
   const openAssistant = (path: '/voice' | '/ai') => {
@@ -130,9 +133,16 @@ export default function Home() {
   const startTransition = headerScrollDistance * 0.80;
   const endTransition = headerScrollDistance * 1.02;
 
-  const headerHeight = scrollY.interpolate({
+  // Chỉ dùng transform và opacity để chạy ở luồng giao diện: khung header cố định chiều cao rồi trượt lên theo độ cuộn;
+  // lớp thu gọn bù ngược để đứng yên, lớp mở rộng trượt thêm +25% để tổng cộng vẫn lùi 75% độ cuộn như trước.
+  const shellTranslate = scrollY.interpolate({
     inputRange: [0, headerScrollDistance],
-    outputRange: [headerExpanded, HEADER_COLLAPSED],
+    outputRange: [0, -headerScrollDistance],
+    extrapolate: 'clamp',
+  });
+  const counterTranslate = scrollY.interpolate({
+    inputRange: [0, headerScrollDistance],
+    outputRange: [0, headerScrollDistance],
     extrapolate: 'clamp',
   });
   const expandedOpacity = scrollY.interpolate({
@@ -142,7 +152,7 @@ export default function Home() {
   });
   const expandedTranslate = scrollY.interpolate({
     inputRange: [0, headerScrollDistance],
-    outputRange: [0, -headerScrollDistance * 0.75],
+    outputRange: [0, headerScrollDistance * 0.25],
     extrapolate: 'clamp',
   });
   const compactOpacity = scrollY.interpolate({
@@ -177,7 +187,9 @@ export default function Home() {
           contentContainerStyle={[styles.scrollContent, { paddingTop: headerExpanded + insets.top }]}
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={16}
-          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
+          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+          onScrollEndDrag={(event) => settleCollapsed(event.nativeEvent.contentOffset.y)}
+          onMomentumScrollEnd={(event) => settleCollapsed(event.nativeEvent.contentOffset.y)}
         >
           <View style={styles.contentSheet}>
             <View style={styles.periodTabs}>
@@ -299,12 +311,13 @@ export default function Home() {
             <Card style={{ paddingVertical: 4, marginBottom: 88 }}>
               {notifications.slice(0, 3).map((notification, index) => {
                 const meta = notifCategoryMeta[notification.category];
-                const unread = !readNotifications.has(notification.id);
+                const unread = isNotifUnread(notification, readNotifications);
                 return (
                   <Pressable
                     key={notification.id}
                     onPress={() => {
-                      app.markNotifsRead([notification.id]);
+                      if (notification.coreId != null) coreNotifications.markRead([notification.coreId]).catch(() => undefined);
+                      else app.markNotifsRead([notification.id]);
                       if (notification.href) router.push(notification.href);
                     }}
                     style={({ pressed }) => [styles.notificationRow, index < Math.min(3, notifications.length) - 1 && styles.rowBorder, pressed && styles.pressed]}
@@ -330,7 +343,7 @@ export default function Home() {
           pointerEvents="box-none"
           style={[
             styles.collapsingHeader,
-            { height: Animated.add(headerHeight, insets.top) },
+            { height: headerExpanded + insets.top, transform: [{ translateY: shellTranslate }] },
           ]}
         >
           <Animated.View
@@ -494,7 +507,7 @@ export default function Home() {
               {
                 top: insets.top + 6,
                 opacity: compactOpacity,
-                transform: [{ translateY: compactTranslate }],
+                transform: [{ translateY: counterTranslate }, { translateY: compactTranslate }],
               },
             ]}
           >

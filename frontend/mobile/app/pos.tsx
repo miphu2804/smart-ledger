@@ -2,7 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Image, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Animated, Image, Platform, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarcodeScannerModal } from '../src/components/BarcodeScannerModal';
 import { useToast } from '../src/components/brand';
@@ -195,9 +195,15 @@ function PosCollapsibleHeader({
   children: React.ReactNode;
 }) {
   const distance = Math.max(1, expandedHeight - collapsedHeight);
-  const height = scrollY.interpolate({
+  // Chỉ dùng transform và opacity để chạy ở luồng giao diện: khung cố định chiều cao rồi trượt lên, phần ghim và thân bù ngược (xem CollapsibleHeader).
+  const shellTranslate = scrollY.interpolate({
     inputRange: [0, distance],
-    outputRange: [expandedHeight + topInset, collapsedHeight + topInset],
+    outputRange: [0, -distance],
+    extrapolate: 'clamp',
+  });
+  const counterTranslate = scrollY.interpolate({
+    inputRange: [0, distance],
+    outputRange: [0, distance],
     extrapolate: 'clamp',
   });
   const bodyOpacity = scrollY.interpolate({
@@ -217,21 +223,31 @@ function PosCollapsibleHeader({
   });
 
   return (
-    <Animated.View style={[styles.posHeaderShell, { height }]}>
-      <Animated.View style={[styles.posHeaderPinned, { top: topInset + 4, height: collapsedHeight, opacity: compactOpacity }]}>
+    <Animated.View style={[styles.posHeaderShell, { height: expandedHeight + topInset, transform: [{ translateY: shellTranslate }] }]}>
+      <Animated.View
+        style={[
+          styles.posHeaderPinned,
+          { top: topInset + 4, height: collapsedHeight, opacity: compactOpacity, transform: [{ translateY: counterTranslate }] },
+        ]}
+      >
         {pinned}
       </Animated.View>
       <Animated.View
         onLayout={(e) => onBodyHeight(e.nativeEvent.layout.height)}
         style={[
           styles.posHeaderBody,
-          { top: topInset + 4, opacity: bodyOpacity, transform: [{ translateY: bodyTranslate }] },
+          { top: topInset + 4, opacity: bodyOpacity, transform: [{ translateY: counterTranslate }, { translateY: bodyTranslate }] },
         ]}
       >
         {children}
       </Animated.View>
     </Animated.View>
   );
+}
+
+/** Thẻ chỉ dựng lại khi sản phẩm, số lượng trong giỏ hoặc kiểu xem đổi; các callback luôn gọi setCart/toast nên không bị cũ. */
+function sameCard(a: ProductCardProps, b: ProductCardProps) {
+  return a.product === b.product && a.inCart === b.inCart && a.viewMode === b.viewMode;
 }
 
 interface ProductCardProps {
@@ -507,6 +523,8 @@ function ProductCard({ product: p, inCart, viewMode, onAdd, onSubtract, onOutOfS
   );
 }
 
+const MemoProductCard = React.memo(ProductCard, sameCard);
+
 export default function Pos({ inTab = false }: { inTab?: boolean }) {
   const app = useApp();
   const toast = useToast();
@@ -532,6 +550,13 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const scrollY = useRef(new Animated.Value(0)).current;
+  // Đổi kiểu xem tạo lại FlatList (key={viewMode}) nên danh sách mới bắt đầu ở đầu và không phát sự kiện cuộn;
+  // đặt lại scrollY để header không còn thu gọn dở. Bấm lại đúng kiểu đang chọn thì danh sách giữ nguyên nên không đặt lại.
+  const changeViewMode = (mode: 'grid' | 'list') => {
+    if (mode === viewMode) return;
+    scrollY.setValue(0);
+    setViewMode(mode);
+  };
   // Chiều cao thật của phần thân header (tiêu đề + ô tìm + danh mục). Chữ hệ thống to hơn (iOS, cỡ chữ lớn) làm thân cao hơn
   // số cố định nên thanh danh mục bị cắt; đo ra để header luôn vừa nội dung.
   const [headerBodyHeight, setHeaderBodyHeight] = useState(0);
@@ -585,8 +610,9 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
     });
   }, [products, cat, q, sortMode, stockFilter]);
 
-  const leftCol = useMemo(() => list.filter((_, i) => i % 2 === 0), [list]);
-  const rightCol = useMemo(() => list.filter((_, i) => i % 2 === 1), [list]);
+  // Hai cột bằng nhau: màn trừ lề 10 hai bên và khe 8 giữa hai thẻ
+  const { width: windowWidth } = useWindowDimensions();
+  const gridCardWidth = (windowWidth - 20 - 8) / 2;
 
   const cartItems: LineItem[] = Object.entries(cart).flatMap(([id, qty]) => {
     const p = products.find((x) => x.id === Number(id));
@@ -722,16 +748,27 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
           <Button title="Thử lại" variant="outline" onPress={load} />
         </View>
       ) : (
-        <Animated.ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{
-            paddingHorizontal: 10,
-            paddingTop: insets.top + headerHeight + 10,
-            paddingBottom: inTab ? (insets.bottom + (count > 0 ? 190 : 96)) : (insets.bottom + (count > 0 ? 110 : 28)),
-          }}
-          scrollEventThrottle={16}
-          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
-        >
+        <Animated.FlatList
+          key={viewMode}
+          data={list}
+          numColumns={viewMode === 'grid' ? 2 : 1}
+          keyExtractor={(p) => String(p.id)}
+          renderItem={({ item: p }) => (
+            <View style={viewMode === 'grid' ? { width: gridCardWidth } : undefined}>
+              <MemoProductCard
+                product={p}
+                viewMode={viewMode}
+                inCart={cart[p.id] ?? 0}
+                onAdd={() => addToCart(p.id, 1)}
+                onSubtract={() => addToCart(p.id, -1)}
+                onOutOfStock={() => toast(`${p.name} đã hết hàng`, 'err')}
+              />
+            </View>
+          )}
+          columnWrapperStyle={viewMode === 'grid' ? { gap: 8, alignItems: 'flex-start' } : undefined}
+          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+          ListHeaderComponent={
+            <>
           {/* Filter & Toolbar */}
           <Row style={styles.filterRow} gap={8}>
             <Pressable
@@ -762,7 +799,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
               <Pressable
                 onPress={() => {
                   triggerFeedback('selection');
-                  setViewMode('grid');
+                  changeViewMode('grid');
                 }}
                 style={viewMode === 'grid' ? styles.viewToggleActive : styles.viewToggleBtn}
                 accessibilityLabel="Chế độ lưới"
@@ -772,7 +809,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
               <Pressable
                 onPress={() => {
                   triggerFeedback('selection');
-                  setViewMode('list');
+                  changeViewMode('list');
                 }}
                 style={viewMode === 'list' ? styles.viewToggleActive : styles.viewToggleBtn}
                 accessibilityLabel="Chế độ danh sách"
@@ -782,53 +819,11 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
             </View>
           </Row>
 
-          {list.length === 0 ? (
-            <EmptyState icon="search" title="Không tìm thấy hàng" hint="Thử từ khoá khác hoặc thêm món ngoài danh mục" />
-          ) : viewMode === 'list' ? (
-            <View style={{ gap: 8 }}>
-              {list.map((p) => (
-                <ProductCard
-                  key={p.id}
-                  product={p}
-                  viewMode="list"
-                  inCart={cart[p.id] ?? 0}
-                  onAdd={() => addToCart(p.id, 1)}
-                  onSubtract={() => addToCart(p.id, -1)}
-                  onOutOfStock={() => toast(`${p.name} đã hết hàng`, 'err')}
-                />
-              ))}
-            </View>
-          ) : (
-            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
-              <View style={{ flex: 1, gap: 8 }}>
-                {leftCol.map((p) => (
-                  <ProductCard
-                    key={p.id}
-                    product={p}
-                    viewMode="grid"
-                    inCart={cart[p.id] ?? 0}
-                    onAdd={() => addToCart(p.id, 1)}
-                    onSubtract={() => addToCart(p.id, -1)}
-                    onOutOfStock={() => toast(`${p.name} đã hết hàng`, 'err')}
-                  />
-                ))}
-              </View>
-              <View style={{ flex: 1, gap: 8 }}>
-                {rightCol.map((p) => (
-                  <ProductCard
-                    key={p.id}
-                    product={p}
-                    viewMode="grid"
-                    inCart={cart[p.id] ?? 0}
-                    onAdd={() => addToCart(p.id, 1)}
-                    onSubtract={() => addToCart(p.id, -1)}
-                    onOutOfStock={() => toast(`${p.name} đã hết hàng`, 'err')}
-                  />
-                ))}
-              </View>
-            </View>
-          )}
-
+            </>
+          }
+          ListEmptyComponent={<EmptyState icon="search" title="Không tìm thấy hàng" hint="Thử từ khoá khác hoặc thêm món ngoài danh mục" />}
+          ListFooterComponent={
+            <>
           <Button
             title="Thêm món ngoài danh mục"
             icon="plus"
@@ -836,7 +831,21 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
             onPress={() => setCustomOpen(true)}
             style={{ marginTop: 14, marginHorizontal: 4 }}
           />
-        </Animated.ScrollView>
+            </>
+          }
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{
+            paddingHorizontal: 10,
+            paddingTop: insets.top + headerHeight + 10,
+            paddingBottom: inTab ? (insets.bottom + (count > 0 ? 190 : 96)) : (insets.bottom + (count > 0 ? 110 : 28)),
+          }}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={7}
+          removeClippedSubviews={Platform.OS === 'android'}
+          scrollEventThrottle={16}
+          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+        />
       )}
 
       {/* Floating Bottom Cart Bar (Appears elevated above bottom tab bar only when cart has items) */}
