@@ -56,9 +56,10 @@ class SaleVoidServiceTest {
     private final SaleRefundRepository refundRepository = Mockito.mock(SaleRefundRepository.class);
     private final IdempotencyService idempotencyService = Mockito.mock(IdempotencyService.class);
     private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
+    private final NotificationEventService notifications = Mockito.mock(NotificationEventService.class);
     private final SaleVoidService service = new SaleVoidServiceImpl(shopService, saleRepository,
             itemRepository, debtRepository, paymentRepository, productRepository, refundRepository,
-            idempotencyService, auditLogService, Mockito.mock(NotificationEventService.class));
+            idempotencyService, auditLogService, notifications);
     private final VerifiedFirebaseToken token = new VerifiedFirebaseToken("uid", null, false, null, null, null);
 
     @BeforeEach
@@ -267,12 +268,18 @@ class SaleVoidServiceTest {
         when(saleRepository.findLockedByIdAndShopId(15L, 7L)).thenReturn(Optional.of(sale(0)));
         when(itemRepository.findAllBySaleIdOrderByIdAsc(15L)).thenReturn(items);
         when(productRepository.findAllLockedByIdInAndShopId(ids, 7L)).thenReturn(products);
+        Mockito.doAnswer(call -> {
+            assertThat(products).allSatisfy(product -> assertThat(product.getStockQuantity()).isEqualByComparingTo("11"));
+            return null;
+        }).when(notifications).reconcileStock(any(Shop.class), Mockito.anyCollection());
 
         assertThat(service.voidSale(token, "7", "15", "batch", new SaleVoidRequest("Return", true, null, null))
                 .stockRestocked()).isTrue();
 
         assertThat(products).allSatisfy(product -> assertThat(product.getStockQuantity()).isEqualByComparingTo("11"));
         verify(productRepository).findAllLockedByIdInAndShopId(ids, 7L);
+        verify(notifications).reconcileStock(any(Shop.class), Mockito.anyCollection());
+        verify(notifications, never()).reconcileStock(any(Shop.class), any(Product.class));
     }
 
     @Test

@@ -8,8 +8,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface NotificationEventRepository extends JpaRepository<NotificationEvent, Long> {
     boolean existsByShopIdAndDedupKey(Long shopId, String dedupKey);
-    List<NotificationEvent> findAllByShopIdAndEntityTypeAndEntityIdAndTypeInAndResolvedAtIsNull(
-            Long shopId, String entityType, Long entityId, List<NotificationType> types);
+    List<NotificationEvent> findAllByShopIdAndEntityTypeAndEntityIdInAndTypeInAndResolvedAtIsNull(
+            Long shopId, String entityType, List<Long> entityIds, List<NotificationType> types);
     Optional<NotificationEvent> findFirstByShopIdAndEntityTypeAndEntityIdOrderByIdDesc(
             Long shopId, String entityType, Long entityId);
 }

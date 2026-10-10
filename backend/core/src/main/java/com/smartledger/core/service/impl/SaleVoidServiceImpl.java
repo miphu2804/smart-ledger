@@ -136,7 +136,7 @@ public class SaleVoidServiceImpl implements SaleVoidService {
             }
         }
 
-        restoredProducts.values().forEach(product -> notifications.reconcileStock(shop, product));
+        notifications.reconcileStock(shop, restoredProducts.values());
 
         if (debt != null) {
             debt.voidRemaining();

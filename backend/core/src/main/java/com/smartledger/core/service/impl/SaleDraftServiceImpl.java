@@ -191,9 +191,9 @@ public class SaleDraftServiceImpl implements SaleDraftService {
             estimatedCosts.put(item.getProductId(), estimateCost(product, item.getQuantity()));
             if (product.isTracked()) { beforeStocks.put(product.getId(), product.getStockQuantity()); }
             product.deductStock(item.getQuantity());
-            notifications.reconcileStock(shop, product);
             if (product.isTracked()) { afterStocks.put(product.getId(), product.getStockQuantity()); }
         }
+        notifications.reconcileStock(shop, lockedProducts);
 
         Sale sale = saleRepository.saveAndFlush(Sale.fromDraft(draft, subtotal, customer));
         List<SaleItem> saleItems = saleItemRepository.saveAll(draftItems.stream()
@@ -277,6 +277,16 @@ public class SaleDraftServiceImpl implements SaleDraftService {
         Customer customer = request.customerId() == null ? null
                 : customerRepository.findByIdAndShopIdAndStatus(request.customerId(), shopId, CatalogStatus.ACTIVE)
                         .orElseThrow(() -> new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND));
+        // Collect only: item validation and duplicate detection below must keep request-order precedence.
+        Set<Long> catalogIds = new HashSet<>();
+        for (SaleDraftItemRequest item : request.items()) {
+            if (item.productId() != null) {
+                catalogIds.add(item.productId());
+            }
+        }
+        Map<Long, Product> products = catalogIds.isEmpty() ? Map.of()
+                : productRepository.findAllByIdInAndShopIdAndStatus(catalogIds, shopId, CatalogStatus.ACTIVE)
+                        .stream().collect(Collectors.toMap(Product::getId, product -> product));
         try {
             for (SaleDraftItemRequest item : request.items()) {
                 Product product = null;
@@ -296,9 +306,10 @@ public class SaleDraftServiceImpl implements SaleDraftService {
                     if (!productIds.add(item.productId())) {
                         throw new BusinessException(ErrorCode.DRAFT_ITEM_DUPLICATE);
                     }
-                    product = productRepository.findByIdAndShopIdAndStatus(
-                                    item.productId(), shopId, CatalogStatus.ACTIVE)
-                            .orElseThrow(() -> new BusinessException(ErrorCode.DRAFT_ITEM_INVALID));
+                    product = products.get(item.productId());
+                    if (product == null) {
+                        throw new BusinessException(ErrorCode.DRAFT_ITEM_INVALID);
+                    }
                 }
                 long lineTotal = BigDecimal.valueOf(item.unitPriceVnd()).multiply(item.quantity())
                         .setScale(0, RoundingMode.HALF_UP).longValueExact();

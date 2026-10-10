@@ -6,7 +6,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartledger.core.dto.request.SaleVoidRequest;
+import com.smartledger.core.dto.request.SaleDraftItemRequest;
+import com.smartledger.core.dto.request.SaleDraftWriteRequest;
 import com.smartledger.core.dto.response.SaleResponse;
+import com.smartledger.core.entity.Shop;
 import com.smartledger.core.enums.CatalogStatus;
 import com.smartledger.core.enums.ErrorCode;
 import com.smartledger.core.enums.PaymentMethod;
@@ -82,6 +85,8 @@ class ProductBatchLockPostgresTest {
     @Autowired private PlatformTransactionManager transactions;
     @Autowired private SqlProbe sql;
     @Autowired private ObjectMapper mapper;
+    @Autowired private NotificationEventService notifications;
+    @Autowired private ShopService shops;
     private VerifiedFirebaseToken owner;
     private long userId;
     private long shopId;
@@ -111,6 +116,7 @@ class ProductBatchLockPostgresTest {
         sql.clear();
         var sale = confirm(draft);
         assertProductLock(1, true);
+        assertThat(sql.openStockReads()).hasSize(1);
         assertThat(sale.items()).extracting(item -> item.productId()).containsExactlyElementsOf(ids.reversed());
         assertThat(jdbc.queryForObject("select sum(estimated_cost_vnd) from sale_items where sale_id=?", Long.class, sale.id()))
                 .isEqualTo(count * 500L);
@@ -121,6 +127,7 @@ class ProductBatchLockPostgresTest {
         var result = voids.voidSale(owner, shop(), sale.id().toString(), "batch-void", restock());
 
         assertProductLock(1, false);
+        assertThat(sql.openStockReads()).hasSize(1);
         assertLockOrder();
         assertThat(result.stockRestocked()).isTrue();
         assertThat(result.cancelledDebtVnd()).isEqualTo(count * 600L);
@@ -177,10 +184,12 @@ class ProductBatchLockPostgresTest {
         sql.clear();
         var sale = confirm(draft);
         assertProductLock(0, false);
+        assertThat(sql.openStockReads()).isEmpty();
         assertThat(sale.items().getFirst().productId()).isNull();
         sql.clear();
         assertThat(voids.voidSale(owner, shop(), sale.id().toString(), "custom", restock()).stockRestocked()).isFalse();
         assertProductLock(0, false);
+        assertThat(sql.openStockReads()).isEmpty();
     }
 
     @Test
@@ -223,7 +232,7 @@ class ProductBatchLockPostgresTest {
     }
 
     @Test
-    void stockFailureRollsBackEarlierDeductionAndNotification() {
+    void stockFailureRollsBackEarlierDeductionWithoutCreatingNotifications() {
         var ids = seedProducts(2, 1);
         jdbc.update("update products set stock_quantity=0 where id=?", ids.getLast());
         long draft = seedDraft(ids);
@@ -231,6 +240,62 @@ class ProductBatchLockPostgresTest {
         assertStocks(List.of(ids.getFirst()), "1");
         assertNoCheckoutWrites(draft);
         assertThat(rows("notification_events")).isZero();
+    }
+
+    @Test
+    void unchangedBatchReadsOpenAlertsOnceDespiteLargeResolvedHistory() {
+        var catalog = seedProducts(10_000, 9);
+        var ids = catalog.subList(0, 100);
+        jdbc.update("update products set low_stock_threshold=10 where shop_id=?", shopId);
+        jdbc.update("""
+                insert into notification_events(shop_id,type,title,body,entity_type,entity_id,dedup_key,created_at,resolved_at)
+                select ?,'LOW_STOCK','Old','Old','PRODUCT',?,'old-'||g.n,
+                    current_timestamp-interval '1 day',current_timestamp from generate_series(1,100000) g(n)
+                """, shopId, ids.getFirst());
+        jdbc.update("""
+                insert into notification_events(shop_id,type,title,body,entity_type,entity_id,dedup_key)
+                select shop_id,'LOW_STOCK','Open','Open','PRODUCT',id,'open-'||id from products where shop_id=?
+                """, shopId);
+        jdbc.update("""
+                insert into notification_recipients(notification_event_id,user_id)
+                select id,? from notification_events where shop_id=?
+                """, userId, shopId);
+        jdbc.execute("analyze notification_events");
+        var perProductMs = new ArrayList<Double>();
+        var batchMs = new ArrayList<Double>();
+        for (int round = 0; round < 4; round++) {
+            sql.clear();
+            double perProduct = timedStockReconciliation(ids, false);
+            assertProductLock(1, true);
+            assertThat(sql.openStockReads()).hasSize(100);
+            assertThat(sql.notificationStatements()).hasSize(100);
+            sql.clear();
+            double batch = timedStockReconciliation(ids, true);
+            assertProductLock(1, true);
+            assertThat(sql.openStockReads()).hasSize(1);
+            assertThat(sql.notificationStatements()).hasSize(1);
+            if (round > 0) { perProductMs.add(perProduct); batchMs.add(batch); }
+        }
+        assertThat(rows("notification_events")).isEqualTo(110_000);
+        assertThat(jdbc.queryForObject("select count(*) from notification_recipients where user_id=?", Long.class, userId))
+                .isEqualTo(110_000);
+        Collections.sort(perProductMs);
+        Collections.sort(batchMs);
+        LOG.info("Stock alert batch: catalog=10000, history=100000, open=10000, selected=100, "
+                + "perProductReads=100, batchReads=1, notificationWrites=0, perProductMedianMs={}, batchMedianMs={}, "
+                + "samples=3, warmup=1, includesProductLocksAndTransaction=true", perProductMs.get(1), batchMs.get(1));
+    }
+
+    private double timedStockReconciliation(List<Long> ids, boolean batch) {
+        long start = System.nanoTime();
+        tx(() -> {
+            Shop shop = shops.requireOwnedActiveShop(owner, shop());
+            var locked = products.findAllLockedByIdInAndShopIdAndStatus(ids, shopId, CatalogStatus.ACTIVE);
+            if (batch) notifications.reconcileStock(shop, locked);
+            else locked.forEach(product -> notifications.reconcileStock(shop, product));
+            return null;
+        });
+        return (System.nanoTime() - start) / 1_000_000.0;
     }
 
     @Test
@@ -346,6 +411,125 @@ class ProductBatchLockPostgresTest {
         LOG.info("Batch lock benchmark: catalog=100000, selected={}, legacyQueries={}, batchQueries=1, "
                         + "legacyMedianMs={}, batchMedianMs={}, samples=3, warmup=1, includesTransaction=true",
                 selectedCount, selectedCount, legacyMs.get(1), batchMs.get(1));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 20, 100})
+    void draftCreateAndReplaceReadCatalogOnceOnLargeCatalog(int selectedCount) {
+        var catalog = seedProducts(100_000, 10);
+        jdbc.execute("analyze products");
+        var ids = java.util.stream.IntStream.range(0, selectedCount)
+                .mapToObj(index -> catalog.get(index * (catalog.size() / selectedCount))).toList().reversed();
+        var lines = ids.stream().map(id -> new SaleDraftItemRequest(id, new BigDecimal("1.005"), 100L)).toList();
+        var request = new SaleDraftWriteRequest("Buyer", null, 1L, 50L, PaymentMethod.CASH, lines);
+        sql.clear();
+        long start = System.nanoTime();
+        var createdDraft = drafts.create(owner, shop(), request);
+        double createMs = (System.nanoTime() - start) / 1_000_000.0;
+        assertDraftProductRead(1);
+        assertThat(createdDraft.items()).extracting(item -> item.productId()).containsExactlyElementsOf(ids);
+        assertThat(createdDraft.items()).allSatisfy(item -> {
+            assertThat(item.unit()).isEqualTo("piece");
+            assertThat(item.lineTotalVnd()).isEqualTo(101L);
+        });
+        assertThat(createdDraft.estimatedTotalVnd()).isEqualTo(selectedCount * 101L - 1);
+        assertThat(createdDraft.initialPaidVnd()).isEqualTo(50);
+        assertThat(createdDraft.initialPaymentMethod()).isEqualTo(PaymentMethod.CASH);
+
+        sql.clear();
+        start = System.nanoTime();
+        var replaced = drafts.replace(owner, shop(), createdDraft.id().toString(), request);
+        double replaceMs = (System.nanoTime() - start) / 1_000_000.0;
+        assertDraftProductRead(1);
+        assertThat(replaced.items()).extracting(item -> item.productId()).containsExactlyElementsOf(ids);
+        assertThat(replaced.estimatedTotalVnd()).isEqualTo(createdDraft.estimatedTotalVnd());
+        assertThat(replaced.items()).extracting(item -> item.productName())
+                .containsExactlyElementsOf(createdDraft.items().stream().map(item -> item.productName()).toList());
+        assertStocks(ids, "10");
+        assertThat(jdbc.queryForObject("select count(*) from sale_draft_items where draft_id=?", Long.class, replaced.id()))
+                .isEqualTo(selectedCount);
+        for (String table : List.of("sales", "payments", "debts", "audit_logs", "notification_events")) {
+            assertThat(rows(table)).isZero();
+        }
+
+        var legacyMs = new ArrayList<Double>();
+        var batchMs = new ArrayList<Double>();
+        for (int round = 0; round < 4; round++) {
+            sql.clear();
+            start = System.nanoTime();
+            tx(() -> {
+                ids.forEach(id -> products.findByIdAndShopIdAndStatus(id, shopId, CatalogStatus.ACTIVE).orElseThrow());
+                return null;
+            });
+            double legacy = (System.nanoTime() - start) / 1_000_000.0;
+            assertThat(sql.productReads()).hasSize(selectedCount);
+            sql.clear();
+            start = System.nanoTime();
+            var loaded = tx(() -> products.findAllByIdInAndShopIdAndStatus(ids, shopId, CatalogStatus.ACTIVE));
+            double batch = (System.nanoTime() - start) / 1_000_000.0;
+            assertDraftProductRead(1);
+            assertThat(loaded).extracting(product -> product.getId()).containsExactlyInAnyOrderElementsOf(ids);
+            if (round > 0) { legacyMs.add(legacy); batchMs.add(batch); }
+        }
+        Collections.sort(legacyMs);
+        Collections.sort(batchMs);
+        // Repository round-trip observations, not a latency SLA or HTTP benchmark.
+        LOG.info("Draft product read benchmark: catalog=100000, selected={}, legacyQueries={}, batchQueries=1, "
+                        + "legacyMedianMs={}, batchMedianMs={}, samples=3, warmup=1, includesTransaction=true, "
+                        + "createServiceMs={}, replaceServiceMs={}",
+                selectedCount, selectedCount, legacyMs.get(1), batchMs.get(1), createMs, replaceMs);
+    }
+
+    @Test
+    void customOnlyDraftCreateAndReplaceDoNotReadProducts() {
+        var lines = java.util.stream.IntStream.range(0, 100).mapToObj(index ->
+                new SaleDraftItemRequest(null, BigDecimal.ONE, 100L, "Custom " + index, "piece")).toList();
+        var request = new SaleDraftWriteRequest(null, null, 0L, 0L, null, lines);
+        sql.clear();
+        var createdDraft = drafts.create(owner, shop(), request);
+        assertDraftProductRead(0);
+        sql.clear();
+        var replaced = drafts.replace(owner, shop(), createdDraft.id().toString(), request);
+        assertDraftProductRead(0);
+        assertThat(replaced.items()).hasSize(100).allSatisfy(item -> assertThat(item.productId()).isNull());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ARCHIVED", "FOREIGN", "MISSING"})
+    void invalidDraftCatalogBatchCannotCreateOrReplaceExistingDraft(String kind) {
+        var ids = seedProducts(2, 10);
+        var valid = new SaleDraftWriteRequest("Original", null, 0L, 0L, null,
+                List.of(new SaleDraftItemRequest(ids.getFirst(), BigDecimal.ONE, 100L)));
+        var original = drafts.create(owner, shop(), valid);
+        // Compare persisted snapshots, including PostgreSQL timestamp precision and NUMERIC scale.
+        var persisted = drafts.getById(owner, shop(), original.id().toString());
+        Long invalidId = ids.getLast();
+        if (kind.equals("ARCHIVED")) archive(invalidId);
+        else if (kind.equals("FOREIGN")) {
+            long foreignShop = jdbc.queryForObject("insert into shops(owner_id,name,industry) values (?,'Foreign','Retail') returning id",
+                    Long.class, userId);
+            jdbc.update("update products set shop_id=? where id=?", foreignShop, invalidId);
+        } else invalidId = Long.MAX_VALUE;
+        var invalid = new SaleDraftWriteRequest("Replacement", null, 0L, 0L, null,
+                List.of(new SaleDraftItemRequest(ids.getFirst(), BigDecimal.ONE, 200L),
+                        new SaleDraftItemRequest(invalidId, BigDecimal.ONE, 200L)));
+        sql.clear();
+        expectCode(() -> drafts.create(owner, shop(), invalid), ErrorCode.DRAFT_ITEM_INVALID);
+        assertDraftProductRead(1);
+        sql.clear();
+        expectCode(() -> drafts.replace(owner, shop(), original.id().toString(), invalid), ErrorCode.DRAFT_ITEM_INVALID);
+        assertDraftProductRead(1);
+
+        assertThat(jdbc.queryForObject("select count(*) from sale_drafts where shop_id=?", Long.class, shopId)).isEqualTo(1);
+        assertThat(drafts.getById(owner, shop(), original.id().toString())).isEqualTo(persisted);
+        assertStocks(ids, "10");
+    }
+
+    private void assertDraftProductRead(int count) {
+        assertThat(sql.productReads()).hasSize(count).allSatisfy(query -> {
+            assertThat(query).contains(".id in (", ".shop_id=?", ".status=?");
+            assertThat(SqlProbe.isLock(query)).isFalse();
+        });
     }
 
     private List<Long> seedProducts(int count, int stock) {
@@ -497,6 +681,17 @@ class ProductBatchLockPostgresTest {
         }
         void clear() { statements.clear(); }
         List<String> productLocks() { return statements.stream().filter(SqlProbe::isProductLock).toList(); }
+        List<String> productReads() {
+            return statements.stream().filter(query -> query.startsWith("select ") && query.contains(".products ")).toList();
+        }
+        List<String> notificationStatements() {
+            return statements.stream().filter(query -> query.contains(".notification_events ")
+                    || query.contains(".notification_recipients ")).toList();
+        }
+        List<String> openStockReads() {
+            return notificationStatements().stream().filter(query -> query.startsWith("select ")
+                    && query.contains(".resolved_at is null")).toList();
+        }
         static boolean isLock(String query) { return query.matches("(?s).* for (?:no key )?update.*"); }
         static boolean isProductLock(String query) { return query.contains(".products ") && isLock(query); }
     }

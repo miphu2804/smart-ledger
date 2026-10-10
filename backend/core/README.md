@@ -186,6 +186,30 @@ With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
 
 The same suite compares legacy single-product locks with batch confirm locks for 1/20/100 selected products sampled across a 100,000-product catalog. It logs median elapsed time from three measured samples after one warmup, including connection/transaction overhead; query counts are asserted but latency is not, to avoid flaky CI thresholds. These local measurements are not HTTP/Firebase/FE benchmarks, sustained-load tests or staging UAT. For the full Core check with PostgreSQL suites enabled, use `mvnw.cmd clean verify` with all three test variables set.
 
+### Batch stock-alert reconciliation tests
+
+Issue [#137](https://github.com/miphu2804/smart-ledger/issues/137) reads open stock alerts once for a nonempty collection of locked products, groups them by product ID, then preserves the existing resolve/flush/new-event/recipient lifecycle. The single-product method delegates to the collection method. Confirm reconciles once after all stock deductions; void reconciles the restored group once. Empty groups skip the alert query.
+
+With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
+
+```powershell
+.\mvnw.cmd '-Dtest=NotificationEventServiceTest,NotificationPostgresTest,ProductBatchLockPostgresTest,SaleDraftServiceTest,SaleVoidServiceTest' test
+```
+
+Unit tests count open-alert reads with up to 10,000 products. PostgreSQL tests cover LOW → OUT → resolved → LOW cycles, unchanged alerts/readAt, threshold/tracking/archive behavior, replay, reverse-order concurrent confirm/void, recipient uniqueness and notification-write rollback of stock, money/debt, audit and idempotency. The shared batch-lock suite compares 100 single-product reconciliations with one collection reconciliation against 100,000 resolved events plus 10,000 open alerts: open-alert reads drop from 100 to one without notification writes when state is unchanged. New alert cycles still perform per-product history/dedup queries and event/recipient writes; this is not a promise of two SQL statements for an entire confirm or void.
+
+### Draft batch product-read tests
+
+Issue [#135](https://github.com/miphu2804/smart-ledger/issues/135) loads distinct catalog product IDs once, filtered by shop and ACTIVE status, for draft creation/replacement. All-custom requests skip Product reads. Customer validation remains first; collection only gathers IDs, then the original request-order loop checks custom fields, catalog text, duplicates, missing products and monetary overflow. Missing/foreign/archived products retain `DRAFT_ITEM_INVALID`, duplicates retain `DRAFT_ITEM_DUPLICATE`; snapshots, HALF_UP rounding, discount and initial-payment rules are unchanged. These are non-locking reads; confirm retains its separate product locks.
+
+With the same disposable PostgreSQL variables, run:
+
+```powershell
+.\mvnw.cmd '-Dtest=SaleDraftServiceTest,ProductBatchLockPostgresTest' test
+```
+
+Tests exercise actual create/replace services and Hibernate SQL with 1/20/100 selected products across a 100,000-product catalog: one Product read per write, excluding authentication/shop/customer queries and draft/item writes. All-custom requests use zero Product reads. Multi-error unit cases preserve error precedence; PostgreSQL cases reject missing/foreign/archived products without creating a partial draft or changing the existing draft/items. The suite compares legacy per-product reads with batch reads using three measured samples after one warmup, including connection/transaction overhead. Latency is logged, not asserted; measurements are not HTTP/FE load tests or staging guarantees. The disposable-schema setup/cleanup is described in the batch product-lock section above. No API, schema or migration change is required for either optimization.
+
 ### Admin dashboard development tests
 
 With the same disposable PostgreSQL variables, run:
