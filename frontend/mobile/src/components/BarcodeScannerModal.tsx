@@ -45,6 +45,7 @@ import {
   triggerScanHaptic,
 } from '../lib/barcode';
 import { productApi } from '../lib/catalogApi';
+import { errorMessage } from '../lib/errors';
 import { triggerFeedback } from '../lib/feedback';
 import { vnd } from '../lib/format';
 import { useReducedMotion } from '../motion';
@@ -87,6 +88,7 @@ export function BarcodeIcon({ size = 20, color = colors.primary }: { size?: numb
 export interface BarcodeScannerModalProps {
   visible: boolean;
   onClose: () => void;
+  /** Danh mục để tra mã vạch. Không truyền thì màn quét tự tải từ Core mỗi lần mở (chế độ `order`). */
   products?: ProductView[];
   cartItems?: LineItem[];
   onAddToCart?: (product: ProductView, delta: number) => void;
@@ -115,7 +117,7 @@ interface ProductPopupData {
 export function BarcodeScannerModal({
   visible,
   onClose,
-  products = [],
+  products: productsProp,
   cartItems: externalCartItems,
   onAddToCart,
   onClearCart,
@@ -166,6 +168,24 @@ export function BarcodeScannerModal({
   const [configBusy, setConfigBusy]           = useState(false);
   const [configErr, setConfigErr]             = useState('');
   const [extraProducts, setExtraProducts]     = useState<ProductView[]>([]);
+
+  // Nơi gọi không truyền danh mục (màn Tổng quan): tự tải sản phẩm thật của tiệm mỗi lần mở. Nếu không, danh mục rỗng
+  // nên mọi mã đều bị coi là mới và mời tạo món trùng.
+  const [loadedProducts, setLoadedProducts] = useState<ProductView[]>([]);
+  useEffect(() => {
+    if (!visible || productsProp !== undefined || mode !== 'order') return;
+    let cancelled = false;
+    productApi
+      .list()
+      .then((list) => {
+        if (!cancelled) setLoadedProducts(list);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, productsProp, mode]);
+  const products = productsProp ?? loadedProducts;
 
   // Danh mục tra cứu: sản phẩm thật của tiệm (Core, hoặc mockCore khi xem trước) và sản phẩm vừa tạo trong phiên quét.
   // Không trộn dữ liệu mẫu: mã vạch mẫu sẽ ra "sản phẩm ma" có id không tồn tại ở Core, thêm vào đơn rồi checkout bị từ chối.
@@ -437,36 +457,16 @@ export function BarcodeScannerModal({
     setConfigErr('');
 
     try {
-      let createdProduct: ProductView;
-      try {
-        createdProduct = await productApi.create({
-          name: trimmedName,
-          barcode: configModalCode,
-          unit: configUnit.trim() || 'cái',
-          sellingPriceVnd: priceNum,
-          tracked: false,
-          stockQuantity: null,
-        });
-      } catch {
-        // Fallback offline / mock
-        createdProduct = {
-          id: Date.now(),
-          shopId: 1,
-          categoryId: null,
-          name: trimmedName,
-          barcode: configModalCode,
-          imageUrl: null,
-          unit: configUnit.trim() || 'cái',
-          sellingPriceVnd: priceNum,
-          costPriceVnd: null,
-          tracked: false,
-          stockQuantity: null,
-          lowStockThreshold: null,
-          status: 'ACTIVE',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-      }
+      // Lỗi tạo món (mất mạng, 400, 401…) rơi xuống catch bên dưới và hiện trên thẻ; không dựng món giả với id không
+      // tồn tại ở Core vì đơn chứa nó sẽ bị từ chối lúc thanh toán.
+      const createdProduct: ProductView = await productApi.create({
+        name: trimmedName,
+        barcode: configModalCode,
+        unit: configUnit.trim() || 'cái',
+        sellingPriceVnd: priceNum,
+        tracked: false,
+        stockQuantity: null,
+      });
 
       setExtraProducts((prev) => [...prev, createdProduct]);
       onProductCreated?.(createdProduct);
@@ -499,7 +499,7 @@ export function BarcodeScannerModal({
       setUnknownCode(null);
     } catch (e: any) {
       triggerFeedback('error');
-      setConfigErr(e?.message || 'Không thể lưu mặt hàng');
+      setConfigErr(errorMessage(e));
     } finally {
       setConfigBusy(false);
     }
