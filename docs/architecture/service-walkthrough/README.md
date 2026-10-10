@@ -1,6 +1,9 @@
 # Service walkthrough
 
 Core diagrams reviewed against `staging` commit [`b1de421c461d59473b3bb73aae103027afd67a89`](https://github.com/miphu2804/smart-ledger/tree/b1de421c461d59473b3bb73aae103027afd67a89) on 2026-10-06. AI diagrams are outside this review and remain unchanged.
+
+Query-optimization update (#138), reviewed on 2026-10-10 against `perf/query-optimization` commit [`b6e4169dcfb9ffb2534b20baa9aa5e368b86d9b3`](https://github.com/miphu2804/smart-ledger/tree/b6e4169dcfb9ffb2534b20baa9aa5e368b86d9b3): the preparation note in §5.2 and confirm/void diagrams in §5.3/§6.3 reflect #134–#137. This is a branch-code review, not confirmation of staging deployment or FE acceptance; other diagrams retain the baseline above. Query budgets and regression evidence are described in [technical design §4.1](../technical-design.md#41-truy-vấn-theo-lô) and [§7](../technical-design.md#7-kiểm-chứng-trước-merge).
+
 These are reading notes, not a source of truth — scope and behavior stay in `docs/product/` and `docs/contracts/`.
 
 | Folder | Diagrams |
@@ -248,6 +251,8 @@ stateDiagram-v2
 
 ### 5.2 `SaleDraftService.create / replace` — validation (`prepare`)
 
+After customer validation, `prepare` collects distinct catalog IDs without raising duplicate-item errors, then reads ACTIVE products in the shop once into a map. All-custom requests skip this Product query. The diagram below shows validation order, not one SQL query per item: `product ACTIVE?` is a map lookup. Items are still validated in request order (custom fields → catalog text → duplicate ID → product lookup → money calculation), preserving error precedence, snapshots, rounding, discount and initial-payment checks.
+
 ```mermaid
 flowchart LR
     IN["SaleDraftWriteRequest"]
@@ -302,6 +307,8 @@ flowchart LR
 
 ### 5.3 `SaleDraftService.confirm` — checkout
 
+The draft lock still protects confirmation/replay. Nonempty catalog groups use one `PESSIMISTIC_WRITE` Product query filtered by shop and ACTIVE status, with `ORDER BY p.id ASC` in SQL; no catalog IDs means no Product-lock query. Missing/inactive/foreign products remain invalid. After all deductions, one grouped stock reconciliation runs on the already-locked products before persisting the sale. Custom items do not deduct stock; response item order and cost snapshots are unchanged.
+
 ```mermaid
 flowchart LR
     S(["confirm(draftId)"]) --> LOCK["lock SaleDraft"]
@@ -319,7 +326,8 @@ flowchart LR
 
     subgraph Stock["Totals and Stock"]
         CHK["re-check<br/>Σ line − discount == total"]
-        STK["lock products by id asc<br/>deductStock() if tracked"]
+        STK["lock products by id asc (1 query)<br/>ACTIVE in shop; skip if empty<br/>deductStock() if tracked"]
+        ALERT["reconcile stock alerts (batch)<br/>1 open-alert read if nonempty"]
     end
 
     subgraph Persist["Persist"]
@@ -340,8 +348,9 @@ flowchart LR
     CN -->|active id| CHK
     CN -->|name only| NEWC --> CHK
     CN -->|none| X2["CUSTOMER_REQUIRED_FOR_DEBT<br/>CUSTOMER_NOT_FOUND"]
-    CHK --> STK --> SALE --> P1
+    CHK --> STK --> ALERT --> SALE --> P1
     STK -.->|"short stock"| X3["PRODUCT_STOCK_INSUFFICIENT"]
+    STK -.->|"missing / inactive / foreign"| X4["DRAFT_ITEM_INVALID"]
     P1 -->|yes| PAY --> D1
     P1 -->|no| D1
     D1 -->|yes| DEBT --> DONE
@@ -353,7 +362,8 @@ flowchart LR
     classDef store fill:#efe6ff,stroke:#8a63d2,color:#3d2a6b
     classDef shared fill:#ffe9d6,stroke:#e07b24,color:#6b3500
     class REP,ED,CU,CN,P1,D1 decision
-    class X1,X2,X3 error
+    class X1,X2,X3,X4 error
+    class ALERT shared
     class S,RET,DONE terminal
     style Guard fill:#f3f8ff,stroke:#9dbcf5
     style Cust fill:#f4fbf2,stroke:#a8d5a2
@@ -428,7 +438,9 @@ sequenceDiagram
 
 ### 6.3 `SaleVoidService.voidSale`
 
-Shared lock order for every money flow: **Sale → Debt → Product (ascending id)**.
+Repayment and void share the lock order **Sale → Debt**. A restocking void then locks Products in ascending ID order; confirm instead starts with its draft lock (§5.3).
+
+With `restockItems=true`, validate deduction snapshots before locking products. Only `stockDeducted=true` items contribute IDs; custom/non-deducted items do not restore stock, and unknown snapshots fail rather than guessing. One nonempty Product-lock query is scoped to the shop, ordered by ID and has no ACTIVE filter, so archived products remain eligible for restoration under the existing stock rules. Reconcile the restored product group once; an empty group skips both Product locking and open-alert reads. Restock audit, debt cancellation, full refund and idempotent replay keep their existing behavior.
 
 ```mermaid
 flowchart LR
@@ -443,7 +455,9 @@ flowchart LR
     subgraph Reverse["Reverse Effects"]
         LD["lock Debt"]
         RS{"restockItems?"}
-        RP["lock products asc<br/>restoreStock()"]
+        SNAP["validate stockDeducted snapshots<br/>collect deducted product IDs"]
+        RP["lock products by id asc (1 query)<br/>same shop, including ARCHIVED<br/>skip if empty; restoreStock()"]
+        ALERT["reconcile restored stock alerts (batch)<br/>1 open-alert read if nonempty"]
         DV["debt.voidRemaining()"]
     end
 
@@ -454,8 +468,8 @@ flowchart LR
     end
 
     LS --> ST -->|yes| SUM -->|yes| RM -->|yes| LD --> RS
-    RS -->|yes| RP --> DV
-    RS -->|no| DV
+    RS -->|yes| SNAP --> RP --> ALERT --> DV
+    RS -->|no; empty group| ALERT
     DV --> RF
     RF -->|yes| REF --> V
     RF -->|no| V
@@ -463,6 +477,8 @@ flowchart LR
     ST -->|no| X1["SALE_ALREADY_VOIDED"]
     SUM -->|no| X2["SALE_PAYMENT_MISMATCH"]
     RM -->|no| X3["SALE_REFUND_METHOD_<br/>REQUIRED / INVALID"]
+    SNAP -.->|"unknown / invalid snapshot"| X4["SALE_RESTOCK_UNAVAILABLE"]
+    RP -.->|"missing / unrestorable"| X4
     classDef default fill:#eef4ff,stroke:#5b8def,color:#1f2d3d
     classDef decision fill:#fff4cc,stroke:#d4a017,color:#5c4400
     classDef error fill:#fde2e1,stroke:#d9534f,color:#8a1f1b
@@ -470,12 +486,15 @@ flowchart LR
     classDef store fill:#efe6ff,stroke:#8a63d2,color:#3d2a6b
     classDef shared fill:#ffe9d6,stroke:#e07b24,color:#6b3500
     class ST,SUM,RM,RS,RF decision
-    class X1,X2,X3 error
+    class X1,X2,X3,X4 error
+    class ALERT shared
     class S,V terminal
     style Check fill:#f3f8ff,stroke:#9dbcf5
     style Reverse fill:#f4fbf2,stroke:#a8d5a2
     style Close fill:#fff9ee,stroke:#f0c987
 ```
+
+For both confirm and void, stock-alert reconciliation shares the business transaction: failures roll back stock, money/debt, notifications, audit and the idempotency reservation where applicable (confirm uses draft replay). Only the open-alert lookup is batched; creating new alert cycles can still require per-product history/dedup reads and writes. The diagrams do not promise a fixed total SQL count for the complete transaction.
 
 ## 7. Report — `ReportService.summary(period)`
 
