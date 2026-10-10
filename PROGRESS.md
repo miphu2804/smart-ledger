@@ -1,3 +1,13 @@
+### [2026-10-10 15:50 UTC+07:00] — [Fix] Password fields: show/hide button and no lost text when editing on iOS
+
+**Done:** The password field on the email sign-in and sign-up screen has an eye button that shows or hides the characters. On iOS, deleting or typing one character after returning to a hidden password field no longer wipes the whole password: iOS clears a secure field on the first edit after it regains focus, and the field now rebuilds the previous value for that edit.
+
+**Changed files:** `frontend/mobile/src/components/ui.tsx` (`Field`) and this entry.
+
+**Flow explained:** `Field` shows the eye button whenever it is given `secureTextEntry`; today only the password field in `app/(auth)/email.tsx` does. On iOS, while the characters are hidden, the first change after the field gains focus (or after hiding the characters again) that drops two or more characters and leaves zero or one is treated as the system clearing the field: a delete keeps the previous value minus its last character, a typed character is appended to the previous value. A single key press changes the length by at most one, so normal edits are untouched, and Android and revealed text are not touched at all.
+
+**Check:** `tsc --noEmit` clean. Android emulator in mock mode: the eye button shows the typed text and hides it again, and deleting one character leaves the rest. A scratch check of the length rule passed 9 cases (not part of the repo). **Not verified:** the iOS behaviour itself (no iPhone or simulator was available), so the rebuild rule is based on the known iOS secure-field behaviour; selecting all and deleting as the first edit after refocus removes only the last character; and the web build in a browser.
+
 ### [2026-10-10 15:07 UTC+07:00] — [Docs] Clarify batch query, locking and benchmark guarantees (#133–#138)
 
 **Done:** Added focused JavaDoc for query-optimization repositories, services and PostgreSQL regression fixtures on `perf/query-optimization`, following the docstring review on PR #152. This improves documentation without changing runtime behavior or lowering review thresholds.
