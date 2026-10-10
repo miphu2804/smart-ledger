@@ -40,6 +40,8 @@ Mục này là nơi duy nhất ghi hiện trạng triển khai; tài liệu khá
 
 **Đối chiếu tối ưu truy vấn ngày 2026-10-10:** #134–#137 đã có trên `perf/query-optimization` tại [`b6e4169dcfb9ffb2534b20baa9aa5e368b86d9b3`](https://github.com/miphu2804/smart-ledger/tree/b6e4169dcfb9ffb2534b20baa9aa5e368b86d9b3); #138 đồng bộ tài liệu cho phần này. Cách đọc/khóa theo lô nằm ở [§4.1](#41-truy-vấn-theo-lô), kiểm thử ở [§7](#7-kiểm-chứng-trước-merge). Không đổi nghiệp vụ, response, schema hoặc phạm vi AI/mobile; không xác nhận đã merge/deploy staging hay đạt UAT.
 
+**CORE-011 #153 trên `feat/owner-list-pagination`, ngày 2026-10-10:** tiếp nối staging `50891aabf8b6ba48406799fa5c31fef8c823569f`, sáu list OWNER đã phân trang DB và đổi mảng thành PageResponse. Đây là thay đổi response/thứ tự list có chủ đích, không phải bảo đảm “không đổi response” của đợt #134–#138. Chi tiết tại [§4.2](#42-phân-trang-danh-sách-owner) và [contract](../contracts/api-contracts.md#phân-trang-danh-sách-owner), truy vết `FR-033`/`AC-059`–`AC-063`. Chưa sửa FE, merge/deploy hoặc nghiệm thu staging; #144 theo dõi phối hợp mobile.
+
 ## 2. Thành phần và quyền sở hữu
 
 | Thành phần | Trách nhiệm |
@@ -102,13 +104,26 @@ Các tối ưu #134–#137 giữ nguyên tenant guard, thứ tự response, mã 
 
 | Luồng | Cách truy vấn và giới hạn kiểm thử |
 |---|---|
-| List sale/draft (#134) | Đọc danh sách cha một lần theo ID giảm dần; đọc item một lần bằng join cha để lọc shop, sắp ID cha rồi ID item tăng dần và nhóm vào map. Danh sách có dữ liệu: 2 query; rỗng: 1 query, không đọc item. Cha không có item trả `items: []`. Detail/confirm/void vẫn dùng query item của một cha. |
+| List sale/draft (#134, tiếp nối #153) | Giữ batch item nhưng chỉ đọc ID cha trong trang + shop, sắp ID cha/item tăng dần rồi nhóm map; không join-fetch collection khi phân trang. Có dữ liệu tối đa 3 query gồm content/count/item, có thể bỏ count khi suy ra tổng đúng; trang rỗng không đọc item. Sale sắp soldAt/id giảm, draft id giảm; cha thiếu item trả `items: []`. Detail/confirm/void giữ query item của một cha. |
 | Tạo/sửa draft — `prepare` (#135) | Kiểm customer trước; chỉ gom ID catalog, chưa ném lỗi trùng; đọc product ACTIVE cùng shop một lần, không khóa, rồi tra map theo thứ tự item request. Có catalog: 1 query Product; toàn custom: 0. Giữ thứ tự lỗi custom name/unit → text catalog → ID trùng → product không hợp lệ → tính tiền/overflow. |
 | Confirm (#136) | Gom ID catalog khác null, distinct; một query khóa product ACTIVE cùng shop, `ORDER BY p.id ASC` trong SQL. Thiếu kết quả vẫn bị từ chối; duyệt/trừ tồn và snapshot như cũ. Nhóm rỗng: 0 query khóa Product. |
 | Void hoàn tồn (#136) | Sau khóa sale → debt và kiểm snapshot, chỉ gom ID có `stockDeducted=true`; một query khóa theo shop, ID tăng dần, không lọc status. Nhóm rỗng: 0 query khóa Product; custom/không trừ tồn không hoàn kho. |
 | Reconcile cảnh báo kho (#137) | Confirm gom nhóm sau trừ tồn; void gom nhóm sau hoàn tồn. `reconcileStock(Shop, Collection<Product>)` đọc toàn bộ cảnh báo LOW/OUT đang mở của nhóm trong một query, rồi nhóm theo entity ID. Nhóm rỗng: 0; lời gọi một sản phẩm dùng lại logic collection. Giữ resolve → flush → tạo event/recipient và trạng thái đọc cũ. |
 
-Giới hạn: khi mở một chu kỳ cảnh báo mới, tra lịch sử/dedup và ghi event/recipient vẫn có thể phát sinh theo từng sản phẩm; không cam kết cả confirm/void chỉ có hai SQL. List sale/draft vẫn chưa phân trang, nên số query cố định không loại bỏ chi phí nạp toàn bộ lịch sử vào bộ nhớ. Trình tự khóa được kiểm trên SQL Hibernate và plan PostgreSQL, không chỉ bằng cách sort ID trong Java. Walkthrough [§5.3 confirm](service-walkthrough/README.md#53-saledraftserviceconfirm--checkout) và [§6.3 void](service-walkthrough/README.md#63-salevoidservicevoidsale) minh họa luồng; hướng dẫn chạy regression nằm ở [Core README](../../backend/core/README.md#sale-and-draft-list-query-regression-tests).
+Giới hạn: khi mở một chu kỳ cảnh báo mới, tra lịch sử/dedup và ghi event/recipient vẫn có thể phát sinh theo từng sản phẩm; không cam kết cả confirm/void chỉ có hai SQL. Phân trang #153 giới hạn cha được nạp nhưng không giới hạn riêng số item của một cha. Trình tự khóa được kiểm trên SQL Hibernate và plan PostgreSQL, không chỉ bằng cách sort ID trong Java. Walkthrough [§5.3 confirm](service-walkthrough/README.md#53-saledraftserviceconfirm--checkout) và [§6.3 void](service-walkthrough/README.md#63-salevoidservicevoidsale) minh họa luồng; hướng dẫn chạy regression nằm ở [Core README](../../backend/core/README.md#sale-and-draft-list-query-regression-tests).
+
+### 4.2. Phân trang danh sách OWNER
+
+`OwnerListQuery` chứa record/enum allowlist cho sáu list; controller bind và validate trước truy vấn. `PageResponse<T>` là DTO riêng, không expose Spring Page hoặc trả mảng legacy. Tên/default/filter/sort/lỗi nằm ở [contract phân trang](../contracts/api-contracts.md#phân-trang-danh-sách-owner), không áp contract này cho ADMIN/audit/notification/category/payment.
+
+- Service kiểm OWNER và shop ACTIVE trước đọc sổ, chạy `readOnly=true`, `REPEATABLE_READ`. Sáu repository dùng `JpaSpecificationExecutor`; `OwnerListSpecifications` dùng cùng tenant/filter cho content và count. PageRequest áp LIMIT/OFFSET ở SQL, không cắt danh sách toàn bộ trong Java. Count có thể được Spring Data bỏ qua khi suy ra tổng đúng; ngân sách dữ liệu tối đa 2 query cho list đơn giản, 3 cho sale/draft, không tính auth/shop.
+- Sale/draft chỉ batch item của các ID trong trang kèm tenant predicate; trang rỗng bỏ qua. Sale search item dùng EXISTS nên nhiều item khớp không nhân đôi sale/count; q chỉ dùng các snapshot lịch sử hoặc exact ID. Không thêm quan hệ JPA hoặc query item trong vòng lặp.
+- Search dùng built-in PostgreSQL `lower`/`translate`, chuẩn hóa term tiếng Việt và escape literal; không thêm extension unaccent, Redis hoặc dependency DB. Product stock sort dùng coalesce để null cuối; luôn có ID tie-break. Tìm kiếm không đồng nghĩa sort name đã bỏ dấu; sort name vẫn theo collation DB.
+- Draft dùng một mốc now cho SQL status/count và response mapping. DRAFT quá expiresAt được đọc là EXPIRED, không ghi status trong GET và không lọc expiry sau phân trang.
+- Sales/expenses so timestamp `[from, to)` trực tiếp trên soldAt/expenseAt; không tự biến timestamp thành ngày Việt Nam hay cộng một ngày vào to. Offset được xét theo instant; expenses period tiếp tục dùng ReportWindow và không kết hợp custom range.
+- Schema và các thao tác ghi không đổi; không thêm index/migration trong #153. Trang sâu vẫn có chi phí OFFSET và exact COUNT, cần đo plan trước khi đề xuất index/cursor. REPEATABLE_READ chỉ giữ snapshot trong **một request**, không ngăn dịch trang giữa hai lần GET. Không hứa thời gian đáp ứng cố định.
+
+Rollout là breaking change: FE phải đổi client/mock và các màn list, đưa filter lên server, không cộng số tổng từ một trang. Report hiện có giữ nguyên; summary vẫn tổng hợp entity bằng Java, tối ưu aggregate riêng. DebtResponse chưa có tên/SĐT; các projection/aggregate thiếu phải chốt riêng thay vì tải lại toàn bộ danh sách. Không merge/deploy cho FE cũ mà chưa phối hợp #144 và nghiệm thu `AC-063`.
 
 ## 5. Auth và phân quyền
 
@@ -144,7 +159,8 @@ Khi `FIREBASE_SERVICE_ACCOUNT_JSON` có giá trị không rỗng, Core dùng JSO
 
 Kiểm thử chống N+1 trên PostgreSQL thật (không chỉ mock repository):
 
-- `SalesListQueryPostgresTest`: 1/20/100/1.337/10.000 sale hoặc draft, tối đa 50.000 item; kiểm 2 query cho danh sách có dữ liệu, 1 khi rỗng, thứ tự item và tenant isolation. Xem [list regression](../../backend/core/README.md#sale-and-draft-list-query-regression-tests).
+- `OwnerPaginationWebTest`/`OwnerListQueryTest`: envelope/default/boundary/overflow, allowlist/filter binding, timestamp có offset và lỗi. `OwnerListPaginationPostgresTest`: sáu tenant/filter/count, expiry, range hai biên/offset tương đương, catalog 100.000, trang sâu, plan và snapshot khi insert giữa content/count. Xem [pagination tests](../../backend/core/README.md#owner-list-pagination-core-011).
+- `SalesListQueryPostgresTest`: 1/20/100/1.337/10.000 sale hoặc draft, tối đa 50.000 item; trang tối đa 100 cha chỉ đọc item của trang, tối đa 3 query gồm count, bỏ item khi rỗng; kiểm thứ tự và tenant. Control 100 cha tái hiện 101 query cũ, so 3 query mới gồm count. Xem [list regression](../../backend/core/README.md#sale-and-draft-list-query-regression-tests).
 - `ProductBatchLockPostgresTest`: kiểm một query khóa nhóm confirm/void, SQL có `ORDER BY`, plan PostgreSQL khóa theo ID; catalog 100.000 sản phẩm, nhóm 1/20/100. Kiểm cạnh tranh thứ tự item đảo ngược, archive/missing/custom và rollback tiền/nợ/tồn/notification/audit. Xem [batch locks](../../backend/core/README.md#checkout-and-void-batch-product-lock-tests).
 - `NotificationEventServiceTest`, `NotificationPostgresTest` và phần reconciliation trong `ProductBatchLockPostgresTest`: một query đọc cảnh báo mở cho nhóm không đổi trạng thái; fixture 100.000 event đã resolve và 10.000 cảnh báo mở; lifecycle LOW → OUT → hết cảnh báo → LOW, retry/concurrency không trùng event/recipient, lỗi notification rollback nghiệp vụ. Truy vấn lịch sử/dedup khi tạo mới không nằm trong ngân sách một query. Xem [stock alerts](../../backend/core/README.md#batch-stock-alert-reconciliation-tests).
 - `SaleDraftServiceTest` và phần prepare trong `ProductBatchLockPostgresTest`: create/replace có catalog dùng một query Product, toàn custom không đọc Product; nhiều lỗi vẫn ưu tiên theo thứ tự request, giữ snapshot/rounding/discount/payment và dữ liệu cũ khi replace lỗi. Xem [draft reads](../../backend/core/README.md#draft-batch-product-read-tests).
@@ -159,6 +175,8 @@ Query count, SQL/plan và tính đúng đắn là kiểm chứng hồi quy; th�
 | Ops | CI kiểm migration; staging dùng Supabase project riêng; deploy production cần phê duyệt |
 
 ## 8. Rủi ro
+
+- CORE-011 đổi response sáu list, mặc định chỉ trả 20 bản ghi; FE cũ có thể lỗi hoặc hiển thị tổng thiếu nếu vẫn map/reduce như mảng đầy đủ. Chưa có nghiệm thu #144/AC-063, không coi backend test là xác nhận tương thích khi rollout.
 
 - Khối lượng năm AI service trong 2–3 tuần là rủi ro chính; backlog phải chia theo vertical slice và ưu tiên luồng voice/text → bản nháp → chốt.
 - Không tự hoàn tồn lịch sử có stock_deducted NULL; không đoán audit nợ VOIDED. V9 dừng khi dữ liệu local không hợp lệ thay vì sửa ngầm. Cần backup/recovery trước migration môi trường dùng chung.

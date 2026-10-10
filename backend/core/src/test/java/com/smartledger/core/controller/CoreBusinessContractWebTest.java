@@ -14,7 +14,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.smartledger.core.config.SecurityConfiguration;
 import com.smartledger.core.config.TimeConfiguration;
+import com.smartledger.core.dto.request.OwnerListQuery.*;
 import com.smartledger.core.dto.response.*;
+import com.smartledger.core.dto.response.PageResponse;
 import com.smartledger.core.enums.*;
 import com.smartledger.core.exception.ApiExceptionHandler;
 import com.smartledger.core.exception.BusinessException;
@@ -112,7 +114,7 @@ class CoreBusinessContractWebTest {
         var product = new ProductResponse(5L, 7L, 3L, "Tea", null, null, "cup", 50_000L, null,
                 true, BigDecimal.TEN, CatalogStatus.ACTIVE, AT, AT);
         when(products.create(eq(TOKEN), eq("7"), any())).thenReturn(product);
-        when(products.list(TOKEN, "7")).thenReturn(List.of(product));
+        when(products.list(TOKEN, "7", Products.defaults())).thenReturn(page(List.of(product)));
         when(products.getById(TOKEN, "7", "5")).thenReturn(product);
         when(products.patch(eq(TOKEN), eq("7"), eq("5"), any())).thenReturn(product);
         when(products.stockIn(eq(TOKEN), eq("7"), eq("5"), eq("contract-stock-in"), any())).thenReturn(product);
@@ -121,11 +123,11 @@ class CoreBusinessContractWebTest {
                 new SaleDraftItemResponse(30L, 5L, "Tea", "cup", BigDecimal.ONE, 50_000L, 50_000L),
                 new SaleDraftItemResponse(31L, null, "Custom item", "piece", BigDecimal.ONE, 50_000L, 50_000L)), 9L);
         when(drafts.create(eq(TOKEN), eq("7"), any())).thenReturn(draft);
-        when(drafts.list(TOKEN, "7")).thenReturn(List.of(draft));
+        when(drafts.list(TOKEN, "7", Drafts.defaults())).thenReturn(page(List.of(draft)));
         when(drafts.getById(TOKEN, "7", "11")).thenReturn(draft);
         when(drafts.replace(eq(TOKEN), eq("7"), eq("11"), any())).thenReturn(draft);
         when(drafts.confirm(TOKEN, "7", "11")).thenReturn(sale(false));
-        when(sales.list(TOKEN, "7")).thenReturn(List.of(sale(false), sale(true)));
+        when(sales.list(TOKEN, "7", Sales.defaults())).thenReturn(page(List.of(sale(false), sale(true))));
         when(sales.getById(TOKEN, "7", "15")).thenReturn(sale(false));
         var payment = new PaymentResponse(20L, 15L, 40_000L, PaymentMethod.CASH, PaymentType.INITIAL, AT);
         when(payments.listForSale(TOKEN, "7", "15")).thenReturn(List.of(payment));
@@ -167,18 +169,18 @@ class CoreBusinessContractWebTest {
                 new Operation("PUT", "/api/v1/categories/3", "{\"name\":\"Drinks\"}", 200, CATEGORY_JSON),
                 new Operation("DELETE", "/api/v1/categories/3", null, 204, null),
                 new Operation("POST", "/api/v1/products", PRODUCT_BODY, 201, PRODUCT_JSON),
-                new Operation("GET", "/api/v1/products", null, 200, "[" + PRODUCT_JSON + "]"),
+                new Operation("GET", "/api/v1/products", null, 200, pageJson("[" + PRODUCT_JSON + "]", 1)),
                 new Operation("GET", "/api/v1/products/5", null, 200, PRODUCT_JSON),
                 new Operation("PATCH", "/api/v1/products/5", "{\"sellingPriceVnd\":50000}", 200, PRODUCT_JSON),
                 new Operation("POST", "/api/v1/products/5/stock-in", "{\"quantity\":2.125,\"reason\":\"Delivery\"}", 200, PRODUCT_JSON),
                 new Operation("DELETE", "/api/v1/products/5", null, 204, null),
                 new Operation("POST", "/api/v1/sale-drafts", DRAFT_BODY, 201, DRAFT_JSON),
-                new Operation("GET", "/api/v1/sale-drafts", null, 200, "[" + DRAFT_JSON + "]"),
+                new Operation("GET", "/api/v1/sale-drafts", null, 200, pageJson("[" + DRAFT_JSON + "]", 1)),
                 new Operation("GET", "/api/v1/sale-drafts/11", null, 200, DRAFT_JSON),
                 new Operation("PUT", "/api/v1/sale-drafts/11", DRAFT_BODY, 200, DRAFT_JSON),
                 new Operation("DELETE", "/api/v1/sale-drafts/11", null, 204, null),
                 new Operation("POST", "/api/v1/sale-drafts/11/confirm", null, 201, saleJson(false)),
-                new Operation("GET", "/api/v1/sales", null, 200, "[" + saleJson(false) + "," + saleJson(true) + "]"),
+                new Operation("GET", "/api/v1/sales", null, 200, pageJson("[" + saleJson(false) + "," + saleJson(true) + "]", 2)),
                 new Operation("GET", "/api/v1/sales/15", null, 200, saleJson(false)),
                 new Operation("GET", "/api/v1/sales/15/payments", null, 200, "[" + PAYMENT_JSON + "]"),
                 new Operation("GET", "/api/v1/sales/15/payments/20", null, 200, PAYMENT_JSON),
@@ -320,14 +322,14 @@ class CoreBusinessContractWebTest {
     }
 
     @ParameterizedTest @MethodSource("listPaths")
-    void emptyListsRemainArraysRatherThanNullOrNoContent(String path) throws Exception {
+    void emptyListsUseTheirResourceEnvelopeRatherThanNullOrNoContent(String path) throws Exception {
         when(categories.list(TOKEN, "7")).thenReturn(List.of());
-        when(products.list(TOKEN, "7")).thenReturn(List.of());
-        when(drafts.list(TOKEN, "7")).thenReturn(List.of());
-        when(sales.list(TOKEN, "7")).thenReturn(List.of());
+        when(products.list(TOKEN, "7", Products.defaults())).thenReturn(page(List.of()));
+        when(drafts.list(TOKEN, "7", Drafts.defaults())).thenReturn(page(List.of()));
+        when(sales.list(TOKEN, "7", Sales.defaults())).thenReturn(page(List.of()));
         when(payments.listForSale(TOKEN, "7", "15")).thenReturn(List.of());
         mvc.perform(request(HttpMethod.GET, path).header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7"))
-                .andExpect(status().isOk()).andExpect(content().json("[]", org.springframework.test.json.JsonCompareMode.STRICT));
+                .andExpect(status().isOk()).andExpect(content().json(path.equals("/api/v1/categories") || path.endsWith("/payments") ? "[]" : pageJson("[]", 0), org.springframework.test.json.JsonCompareMode.STRICT));
     }
 
     static Stream<Arguments> immutableLedgerPaths() {
@@ -372,5 +374,13 @@ class CoreBusinessContractWebTest {
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("missing_required_header"))
                 .andExpect(jsonPath("$.details[0].field").value("Idempotency-Key"));
         verifyNoInteractions(categories, products, drafts, sales, payments, voids);
+    }
+    private static String pageJson(String items, int count) {
+        return "{\"items\":" + items + ",\"page\":0,\"size\":20,\"totalElements\":" + count
+                + ",\"totalPages\":" + (count == 0 ? 0 : 1) + "}";
+    }
+
+    private static <T> PageResponse<T> page(List<T> items) {
+        return new PageResponse<>(items, 0, 20, items.size(), items.isEmpty() ? 0 : 1);
     }
 }

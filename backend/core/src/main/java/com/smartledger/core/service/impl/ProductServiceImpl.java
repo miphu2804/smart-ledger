@@ -1,28 +1,32 @@
 package com.smartledger.core.service.impl;
 
-import com.smartledger.core.enums.AuditAction;
-import com.smartledger.core.service.AuditLogService;
+import com.smartledger.core.dto.request.OwnerListQuery.Products;
 import com.smartledger.core.dto.request.ProductPatchRequest;
 import com.smartledger.core.dto.request.ProductStockInRequest;
 import com.smartledger.core.dto.request.ProductWriteRequest;
+import com.smartledger.core.dto.response.PageResponse;
 import com.smartledger.core.dto.response.ProductResponse;
 import com.smartledger.core.entity.Product;
 import com.smartledger.core.entity.Shop;
+import com.smartledger.core.enums.AuditAction;
 import com.smartledger.core.enums.CatalogStatus;
 import com.smartledger.core.enums.ErrorCode;
 import com.smartledger.core.exception.ApiErrorDetail;
 import com.smartledger.core.exception.BusinessException;
 import com.smartledger.core.repository.CategoryRepository;
+import com.smartledger.core.repository.OwnerListSpecifications;
 import com.smartledger.core.repository.ProductRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
-import com.smartledger.core.service.ProductService;
-import com.smartledger.core.service.NotificationEventService;
+import com.smartledger.core.service.AuditLogService;
 import com.smartledger.core.service.IdempotencyService;
+import com.smartledger.core.service.NotificationEventService;
+import com.smartledger.core.service.ProductService;
 import com.smartledger.core.service.ShopService;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
@@ -69,11 +73,12 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    @Transactional(readOnly = true)
-    public List<ProductResponse> list(VerifiedFirebaseToken firebaseToken, String shopId) {
-        Shop shop = shopService.requireOwnedActiveShop(firebaseToken, shopId);
-        return productRepository.findAllByShopIdAndStatusOrderByIdAsc(shop.getId(), CatalogStatus.ACTIVE)
-                .stream().map(this::toResponse).toList();
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public PageResponse<ProductResponse> list(VerifiedFirebaseToken token, String shopId, Products query) {
+        Shop shop = shopService.requireOwnedActiveShop(token, shopId);
+        var page = productRepository.findAll(OwnerListSpecifications.products(shop.getId(), query),
+                query.pageable(query.ordering()));
+        return PageResponse.from(page, this::toResponse);
     }
 
     @Override

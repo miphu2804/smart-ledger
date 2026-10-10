@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.smartledger.core.dto.request.ExpensePatchRequest;
 import com.smartledger.core.dto.request.ExpenseWriteRequest;
+import com.smartledger.core.dto.request.OwnerListQuery.*;
 import com.smartledger.core.entity.Debt;
 import com.smartledger.core.entity.Expense;
 import com.smartledger.core.entity.Payment;
@@ -23,23 +24,26 @@ import com.smartledger.core.exception.BusinessException;
 import com.smartledger.core.repository.DebtRepository;
 import com.smartledger.core.repository.ExpenseRepository;
 import com.smartledger.core.repository.PaymentRepository;
-import com.smartledger.core.repository.SaleRepository;
-import com.smartledger.core.repository.SaleRefundRepository;
 import com.smartledger.core.repository.ReportAggregationRepository;
+import com.smartledger.core.repository.SaleRefundRepository;
+import com.smartledger.core.repository.SaleRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.impl.ExpenseServiceImpl;
 import com.smartledger.core.service.impl.ReportServiceImpl;
-import java.util.function.Supplier;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class ExpenseReportServiceTest {
@@ -238,8 +242,10 @@ class ExpenseReportServiceTest {
 
     @Test
     void acceptsYearForExpenseListAndReportSummary() {
+        when(expenseRepository.findAll(org.mockito.ArgumentMatchers.<Specification<Expense>>any(),
+                org.mockito.ArgumentMatchers.any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
         OffsetDateTime before = OffsetDateTime.now(ZoneOffset.UTC);
-        var expenses = expenseService.list(token, "7", "year");
+        var expenses = expenseService.list(token, "7", new Expenses(0, 20, "year", null, null, null)).items();
         var summary = reportService.summary(token, "7", "year");
         OffsetDateTime after = OffsetDateTime.now(ZoneOffset.UTC);
 
@@ -250,7 +256,7 @@ class ExpenseReportServiceTest {
                 .withOffsetSameInstant(ZoneOffset.UTC);
         ArgumentCaptor<OffsetDateTime> from = ArgumentCaptor.forClass(OffsetDateTime.class);
         ArgumentCaptor<OffsetDateTime> to = ArgumentCaptor.forClass(OffsetDateTime.class);
-        verify(expenseRepository, Mockito.times(2))
+        verify(expenseRepository)
                 .findAllByShopIdAndStatusAndExpenseAtGreaterThanEqualAndExpenseAtLessThanOrderByExpenseAtDescIdDesc(
                         eq(7L), eq(ExpenseStatus.ACTIVE), from.capture(), to.capture());
         assertThat(from.getAllValues()).allSatisfy(value -> assertThat(value).isEqualTo(expectedFrom));

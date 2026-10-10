@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.smartledger.core.dto.request.*;
+import com.smartledger.core.dto.request.OwnerListQuery.*;
 import com.smartledger.core.entity.*;
 import com.smartledger.core.enums.*;
 import com.smartledger.core.exception.BusinessException;
@@ -14,7 +15,6 @@ import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
@@ -23,9 +23,9 @@ import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
@@ -289,17 +289,17 @@ class AuditLogPostgresTest {
                 () -> categories.replace(other, shop, categoryId, categoryRequest),
                 () -> categories.archive(other, shop, categoryId),
                 () -> products.create(other, shop, productRequest),
-                () -> products.list(other, shop),
+                () -> products.list(other, shop, Products.defaults()).items(),
                 () -> products.getById(other, shop, productId),
                 () -> products.patch(other, shop, productId, patch),
                 () -> products.archive(other, shop, productId),
                 () -> drafts.create(other, shop, draftRequest),
-                () -> drafts.list(other, shop),
+                () -> drafts.list(other, shop, new Drafts(0, 100, null)).items(),
                 () -> drafts.getById(other, shop, draftId),
                 () -> drafts.replace(other, shop, draftId, draftRequest),
                 () -> drafts.cancel(other, shop, draftId),
                 () -> drafts.confirm(other, shop, draftId),
-                () -> sales.list(other, shop),
+                () -> sales.list(other, shop, new Sales(0, 100, null, null, null, null)).items(),
                 () -> sales.getById(other, shop, fixture.saleId()),
                 () -> payments.listForSale(other, shop, fixture.saleId()),
                 () -> payments.getById(other, shop, fixture.saleId(), paymentId),
@@ -339,8 +339,8 @@ class AuditLogPostgresTest {
                 null, List.of(new SaleDraftItemRequest(fixture.productId(), BigDecimal.ONE, 50_000L)), null)),
                 ErrorCode.DRAFT_ITEM_INVALID);
         assertThat(checkoutSnapshot(fixture)).isEqualTo(before);
-        assertThat(sales.list(owner, secondShop)).isEmpty();
-        assertThat(drafts.list(owner, secondShop)).isEmpty();
+        assertThat(sales.list(owner, secondShop, new Sales(0, 100, null, null, null, null)).items()).isEmpty();
+        assertThat(drafts.list(owner, secondShop, new Drafts(0, 100, null)).items()).isEmpty();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM api_idempotency_keys WHERE shop_id=?", Long.class,
                 Long.valueOf(secondShop))).isZero();
     }
@@ -879,7 +879,7 @@ class AuditLogPostgresTest {
         long before = count(AuditAction.SALE_CONFIRMED);
         assertThat(drafts.confirm(owner, shop, draft.id().toString()).id()).isEqualTo(sale.id());
         assertThat(count(AuditAction.SALE_CONFIRMED)).isEqualTo(before);
-        String debtId = debts.list(owner, shop).stream().filter(d -> d.saleId().equals(sale.id())).findFirst().orElseThrow().id().toString();
+        String debtId = debts.list(owner, shop, Debts.defaults()).items().stream().filter(d -> d.saleId().equals(sale.id())).findFirst().orElseThrow().id().toString();
         return new Fixture(sale.id().toString(), debtId, productId);
     }
 

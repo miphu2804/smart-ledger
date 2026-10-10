@@ -5,7 +5,7 @@
 | Trạng thái | Core: hành vi đã chốt dưới đây; AI/dashboard và FE: cần nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; người rà soát kỹ thuật |
-| Cập nhật lần cuối | 2026-10-08 |
+| Cập nhật lần cuối | 2026-10-10 |
 
 ## Tài liệu liên quan
 
@@ -96,6 +96,7 @@ Luồng hỗ trợ: ADMIN đăng nhập dashboard web, tìm OWNER hoặc cơ s�
 | `FR-030` | `BO-002`, `BR-007`, `BR-009`, `BR-016`, `BR-017`, `BR-018` | OWNER nhập kho cho product ACTIVE tracked=true trong shop ACTIVE mình sở hữu bằng số lượng dương, tối đa 12 chữ số nguyên và 3 chữ số thập phân; lý do tùy chọn tối đa 500 ký tự. Core cộng vào tồn hiện tại dưới khóa, yêu cầu Idempotency-Key và ghi STOCK_ADJUSTED/source STOCK_IN cùng transaction; không tự ghi chi phí/thu tiền/nợ hoặc đổi giá vốn. | P0 — Core; cần phối hợp FE/nghiệm thu staging |
 | `FR-031` | `BR-007`, `BR-009`, `BR-017`, `BR-019` | OWNER upload/xóa một ảnh chính Product, logo Shop và avatar của chính mình qua Core. Cả ba upload dùng Idempotency-Key; URL read-only, không trả public ID. Product/logo công khai; avatar authenticated và giữ fallback Firebase, DELETE trở về fallback. Đổi/xóa enqueue dọn asset cũ sau commit, không xóa Product/Shop. | P1 — Core trên nhánh; cần tích hợp FE/nghiệm thu staging |
 | `FR-032` | `BO-003`, `BR-009`, `BR-020` | OWNER đọc inbox phân trang/lọc shop/type/chưa đọc, đếm chưa đọc và đánh dấu 1–100 ID đã đọc nguyên tử. Product nhận lowStockThreshold nullable ≥0, tối đa 12 chữ số nguyên/3 thập phân; PATCH bỏ qua giữ nguyên, null tắt LOW_STOCK. tracked=true và tồn 0 luôn OUT_OF_STOCK; tồn dương ≤ ngưỡng thì LOW_STOCK. Không lặp cảnh báo cùng mức; đổi mức kết thúc cảnh báo cũ, hồi tồn/tắt tracking/archive giải quyết cảnh báo. Lịch sử và readAt được giữ; chu kỳ sau có event mới. | P1 — Core trên feat/app-notifications; cần tích hợp FE/nghiệm thu staging |
+| `FR-033` | `BR-006`, `BR-007`, `BR-008`, `BR-009` | OWNER đọc products/sales/sale-drafts/customers/debts/expenses bằng phân trang DB trên sáu endpoint hiện có, luôn trả object có items và tổng theo filter, kể cả không gửi page/size. Tìm kiếm/lọc/sắp xếp diễn ra trước phân trang; sales/expenses nhận khoảng timestamp có offset, from inclusive/to exclusive. Giữ quyền tiệm, snapshot lịch sử và trạng thái draft hết hạn; detail/thao tác ghi không đổi. Contract và rollout FE ở [quy ước phân trang OWNER](../contracts/api-contracts.md#phân-trang-danh-sách-owner). | CORE-011 #153 trên nhánh; FE/staging cần nghiệm thu qua #144 |
 
 `FR-001`–`FR-009` giữ nguyên mã. `FR-007` không bị tái sử dụng cho yêu cầu khác.
 
@@ -205,10 +206,17 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 | `AC-056` | Confirm, void, stock-in và đổi trạng thái tiệm đồng thời/retry không nhân đôi event/recipient; DB unique nguồn/recipient và một cảnh báo tồn mở bảo vệ cạnh tranh. Lỗi notification rollback sale/payment/refund/nợ/tồn/audit/key cùng thao tác; không tạo thông báo cho giao dịch lỗi hoặc backfill sale cũ khi migrate. | `FR-032`, `AC-024`, `AC-030`, `AC-035` |
 | `AC-057` | Inbox/count/read chỉ cho OWNER ACTIVE có recipient và vẫn sở hữu tiệm; thiếu/sai token 401, ADMIN/disabled bị 403, shop khác chủ bị 403 khi lọc. INACTIVE chỉ xem/đánh dấu thông báo trạng thái tiệm; ARCHIVED bị loại, lọc trả 404. Không trả raw dataJson/dedupKey, tiền/khách/lý do void hoặc lý do tạm ngưng. | `FR-032`, `NFR-003` |
 | `AC-058` | page bắt đầu 0, size 1–100, page×size ≤2147483647; quá giới hạn trả 400 invalid_notification_query, không lỗi server. Thứ tự event createdAt/id giảm dần, trang/count cùng filter. Batch 1–100 ID: một ID không thấy trả 404 notification_not_found và không đánh dấu phần còn lại. Retry/hai thiết bị giữ readAt đầu tiên; resolved không tự đánh dấu đọc, chỉ ID gửi trong batch bị cập nhật. | `FR-032` |
+| `AC-059` | Sáu GET list OWNER luôn trả items/page/size/totalElements/totalPages, mặc định page 0/size 20. size 1–100, page không âm, page×size ≤2147483647; vượt giới hạn trả 400 với mã query của tài nguyên, sai kiểu/enum trả validation_failed. Không kết quả có tổng 0; vượt trang cuối vẫn giữ tổng đúng. Không có nhánh legacy mảng hoặc API /page. | `FR-033` |
+| `AC-060` | Filter được áp trước page/count: tìm không dấu/không phân biệt hoa thường, trim và wildcard literal; tìm được bản ghi ngoài trang đầu cũ. Stock LOW/OUT dùng tracking/ngưỡng riêng; debt status/customerId và expense category đúng contract. Sale search dùng snapshot không nhân đôi cha/count; thứ tự mặc định/allowlist có ID tie-break. Chéo shop, ADMIN và shop không ACTIVE không được đọc dữ liệu nghiệp vụ. | `FR-033`, `FR-009`, `FR-016`, `NFR-003` |
+| `AC-061` | Sales lọc soldAt, expenses lọc expenseAt theo from/to có offset: lấy tại from, loại tại to; offset tương đương cho cùng kết quả. Cho phép range một phía; thiếu offset/sai định dạng hoặc from ≥ to bị 400. Expenses không kết hợp period và range. Draft expiry được lọc/count/map bằng cùng mốc now, GET không tự ghi status. | `FR-033`, `FR-005`, `FR-015` |
+| `AC-062` | Phân trang tại SQL, không tải toàn bộ rồi cắt mảng. Content/count cùng tenant/filter và snapshot trong một request. List đơn giản tối đa 2 query dữ liệu; sale/draft tối đa 3 gồm count và item chỉ trong trang, không tính auth/shop. Trang rỗng không đọc item; cha thiếu item trả items rỗng. PostgreSQL tạm kiểm dữ liệu lớn/trang sâu và insert giữa content/count; không hứa snapshot xuyên request hoặc SLA từ timing local. | `FR-033`, `NFR-003` |
+| `AC-063` | Nghiệm thu FE/staging riêng với dữ liệu nhiều hơn một trang: client/mock đọc envelope, tải thêm/reset khi đổi shop/filter, xử lý lỗi/end và trùng ID. Không cộng revenue/profit/nợ/chi/tồn hoặc gộp nợ khách từ một trang; dùng report phù hợp và chốt aggregate còn thiếu riêng. Core test không tự chứng minh FE cũ tương thích hay tổng hiển thị đúng. | `FR-033`, `FR-006`, `FR-015`, `FR-016`, `NFR-005` |
 | `AC-INV-001` | Không thể kích hoạt hóa đơn điện tử khi hồ sơ áp dụng hoặc quy tắc pháp lý chưa được phê duyệt/hoàn tất. | `FR-INV-001` |
 | `AC-INV-002` | Mỗi giao dịch thuộc diện lập hóa đơn có một trạng thái đối soát và không biến mất khi nhà cung cấp lỗi. | `FR-INV-003`, `FR-INV-005`, `NFR-004` |
 
 ## 9. Phạm vi và câu hỏi mở
+
+- `FR-033`/`AC-059`–`AC-063`: CORE-011 #153 đổi trực tiếp response sáu list OWNER trên `feat/owner-list-pagination`; đây là breaking change, chưa phải nghiệm thu FE/staging. Phối hợp #144 trước rollout, đặc biệt các số tổng và dữ liệu tra cứu hiện dựa trên mảng đầy đủ. Chưa thêm schema/index/Redis, debt contact projection hay aggregate mới; các phần này cần quyết định/task riêng.
 
 - `OQ-001` đã chốt: STT thật thuộc đích MVP; FE hiện mới giả lập.
 - `FR-017`: phải chốt loại ảnh đầu tiên trong issue trước khi viết parser.

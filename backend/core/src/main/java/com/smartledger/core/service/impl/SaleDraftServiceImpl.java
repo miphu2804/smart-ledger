@@ -1,47 +1,54 @@
 package com.smartledger.core.service.impl;
 
-import com.smartledger.core.enums.AuditAction;
-import com.smartledger.core.service.AuditLogService;
+import com.smartledger.core.dto.request.OwnerListQuery.Drafts;
 import com.smartledger.core.dto.request.SaleDraftItemRequest;
 import com.smartledger.core.dto.request.SaleDraftWriteRequest;
+import com.smartledger.core.dto.response.PageResponse;
 import com.smartledger.core.dto.response.SaleDraftItemResponse;
 import com.smartledger.core.dto.response.SaleDraftResponse;
 import com.smartledger.core.dto.response.SaleResponse;
-import com.smartledger.core.entity.Product;
 import com.smartledger.core.entity.Customer;
 import com.smartledger.core.entity.Debt;
+import com.smartledger.core.entity.Payment;
+import com.smartledger.core.entity.Product;
 import com.smartledger.core.entity.Sale;
 import com.smartledger.core.entity.SaleDraft;
 import com.smartledger.core.entity.SaleDraftItem;
 import com.smartledger.core.entity.SaleItem;
 import com.smartledger.core.entity.Shop;
-import com.smartledger.core.entity.Payment;
+import com.smartledger.core.enums.AuditAction;
 import com.smartledger.core.enums.CatalogStatus;
 import com.smartledger.core.enums.DraftStatus;
 import com.smartledger.core.enums.ErrorCode;
 import com.smartledger.core.exception.BusinessException;
-import com.smartledger.core.repository.PaymentRepository;
 import com.smartledger.core.repository.CustomerRepository;
 import com.smartledger.core.repository.DebtRepository;
+import com.smartledger.core.repository.OwnerListSpecifications;
+import com.smartledger.core.repository.PaymentRepository;
 import com.smartledger.core.repository.ProductRepository;
 import com.smartledger.core.repository.SaleDraftItemRepository;
 import com.smartledger.core.repository.SaleDraftRepository;
 import com.smartledger.core.repository.SaleItemRepository;
 import com.smartledger.core.repository.SaleRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
-import com.smartledger.core.service.SaleDraftService;
+import com.smartledger.core.service.AuditLogService;
 import com.smartledger.core.service.NotificationEventService;
+import com.smartledger.core.service.SaleDraftService;
 import com.smartledger.core.service.ShopService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
@@ -89,22 +96,20 @@ public class SaleDraftServiceImpl implements SaleDraftService {
         return toResponse(draft, items);
     }
 
-    /**
-     * Lists all drafts for the owned active shop with descending draft IDs and ascending item IDs.
-     * Uses one parent read and, only for nonempty history, one item read, excluding auth/shop checks.
-     * Expiry is mapped in the response without persisting a status change; history remains unpaginated.
-     */
+    /** Bounded parent/count reads and one tenant-scoped item read for nonempty pages. */
     @Override
-    @Transactional(readOnly = true)
-    public List<SaleDraftResponse> list(VerifiedFirebaseToken token, String shopId) {
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public PageResponse<SaleDraftResponse> list(VerifiedFirebaseToken token, String shopId, Drafts query) {
         Shop shop = shopService.requireOwnedActiveShop(token, shopId);
-        List<SaleDraft> drafts = draftRepository.findAllByShopIdOrderByIdDesc(shop.getId());
-        if (drafts.isEmpty()) return List.of();
-        Map<Long, List<SaleDraftItem>> itemsByDraft = draftItemRepository.findAllByShopId(shop.getId()).stream()
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        var page = draftRepository.findAll(OwnerListSpecifications.drafts(shop.getId(), query, now),
+                query.pageable(Sort.by(Sort.Direction.DESC, "id")));
+        if (page.isEmpty()) return PageResponse.from(page, parent -> toResponse(parent, List.of(), now));
+        var ids = page.getContent().stream().map(SaleDraft::getId).toList();
+        Map<Long, List<SaleDraftItem>> itemsByParent = draftItemRepository.findAllForPage(shop.getId(), ids).stream()
                 .collect(Collectors.groupingBy(SaleDraftItem::getDraftId));
-        return drafts.stream()
-                .map(draft -> toResponse(draft, itemsByDraft.getOrDefault(draft.getId(), List.of())))
-                .toList();
+        return PageResponse.from(page, parent -> toResponse(parent,
+                itemsByParent.getOrDefault(parent.getId(), List.of()), now));
     }
 
     @Override
@@ -368,10 +373,15 @@ public class SaleDraftServiceImpl implements SaleDraftService {
     }
 
     private SaleDraftResponse toResponse(SaleDraft draft, List<SaleDraftItem> items) {
+        return toResponse(draft, items, OffsetDateTime.now(ZoneOffset.UTC));
+    }
+
+    private SaleDraftResponse toResponse(SaleDraft draft, List<SaleDraftItem> items, OffsetDateTime now) {
         return new SaleDraftResponse(draft.getId(), draft.getShopId(), draft.getCustomerName(),
                 draft.getCustomerPhone(), draft.getDiscountVnd(), draft.getEstimatedTotalVnd(),
                 draft.getInitialPaidVnd(), draft.getInitialPaymentMethod(),
-                draft.isExpired() ? DraftStatus.EXPIRED : draft.getStatus(), draft.getExpiresAt(),
+                (draft.getStatus() == DraftStatus.EXPIRED || draft.getStatus() == DraftStatus.DRAFT
+                        && !now.isBefore(draft.getExpiresAt())) ? DraftStatus.EXPIRED : draft.getStatus(), draft.getExpiresAt(),
                 draft.getConfirmedSaleId(), items.stream().map(this::toItemResponse).toList(),
                 draft.getCustomerId());
     }

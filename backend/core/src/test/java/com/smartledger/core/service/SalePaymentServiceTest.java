@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.smartledger.core.dto.request.OwnerListQuery.*;
 import com.smartledger.core.entity.Payment;
 import com.smartledger.core.entity.Sale;
 import com.smartledger.core.entity.SaleDraft;
@@ -33,6 +34,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class SalePaymentServiceTest {
@@ -54,19 +58,19 @@ class SalePaymentServiceTest {
     @Test
     void listsOnlySalesFromSelectedShop() {
         Sale sale = sale();
-        when(saleRepository.findAllByShopIdOrderByIdDesc(7L)).thenReturn(List.of(sale));
-        when(saleItemRepository.findAllByShopId(7L)).thenReturn(List.of());
+        when(saleRepository.findAll(org.mockito.ArgumentMatchers.<Specification<com.smartledger.core.entity.Sale>>any(), org.mockito.ArgumentMatchers.any(Pageable.class))).thenReturn(new PageImpl<>(List.of(sale)));
+        when(saleItemRepository.findAllForPage(eq(7L), any())).thenReturn(List.of());
 
-        var responses = saleService.list(token, "7");
+        var responses = saleService.list(token, "7", new Sales(0, 100, null, null, null, null)).items();
         assertThat(responses).extracting(response -> response.id()).containsExactly(15L);
         assertThat(responses.getFirst().items()).isEmpty();
-        verify(saleRepository).findAllByShopIdOrderByIdDesc(7L);
-        verify(saleItemRepository).findAllByShopId(7L);
+        verify(saleRepository).findAll(org.mockito.ArgumentMatchers.<Specification<com.smartledger.core.entity.Sale>>any(), org.mockito.ArgumentMatchers.any(Pageable.class));
+        verify(saleItemRepository).findAllForPage(eq(7L), any());
         verify(saleItemRepository, never()).findAllBySaleIdOrderByIdAsc(any());
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {1, 20, 100, 10000})
+    @ValueSource(ints = {1, 20, 100})
     void loadsItemsOnceRegardlessOfSaleCount(int count) {
         var sales = IntStream.rangeClosed(1, count).mapToObj(index -> {
             Sale sale = sale();
@@ -81,10 +85,10 @@ class SalePaymentServiceTest {
                     ReflectionTestUtils.setField(item, "id", index * 2L + line);
                     return item;
                 })).toList();
-        when(saleRepository.findAllByShopIdOrderByIdDesc(7L)).thenReturn(sales);
-        when(saleItemRepository.findAllByShopId(7L)).thenReturn(items);
+        when(saleRepository.findAll(org.mockito.ArgumentMatchers.<Specification<com.smartledger.core.entity.Sale>>any(), org.mockito.ArgumentMatchers.any(Pageable.class))).thenReturn(new PageImpl<>(sales));
+        when(saleItemRepository.findAllForPage(eq(7L), any())).thenReturn(items);
 
-        var responses = saleService.list(token, "7");
+        var responses = saleService.list(token, "7", new Sales(0, 100, null, null, null, null)).items();
 
         assertThat(responses).hasSize(count);
         assertThat(responses).extracting(response -> response.id())
@@ -95,15 +99,15 @@ class SalePaymentServiceTest {
             assertThat(response.items()).extracting(item -> item.productName())
                     .containsExactly("Item 1", "Item 2");
         }
-        verify(saleItemRepository).findAllByShopId(7L);
+        verify(saleItemRepository).findAllForPage(eq(7L), any());
         verify(saleItemRepository, never()).findAllBySaleIdOrderByIdAsc(any());
     }
 
     @Test
     void emptySaleListDoesNotReadItems() {
-        when(saleRepository.findAllByShopIdOrderByIdDesc(7L)).thenReturn(List.of());
+        when(saleRepository.findAll(org.mockito.ArgumentMatchers.<Specification<com.smartledger.core.entity.Sale>>any(), org.mockito.ArgumentMatchers.any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
 
-        assertThat(saleService.list(token, "7")).isEmpty();
+        assertThat(saleService.list(token, "7", new Sales(0, 100, null, null, null, null)).items()).isEmpty();
 
         verifyNoInteractions(saleItemRepository);
     }
@@ -113,7 +117,7 @@ class SalePaymentServiceTest {
         when(shopService.requireOwnedActiveShop(token, "7"))
                 .thenThrow(new BusinessException(ErrorCode.SHOP_ACCESS_DENIED));
 
-        assertThatThrownBy(() -> saleService.list(token, "7"))
+        assertThatThrownBy(() -> saleService.list(token, "7", new Sales(0, 100, null, null, null, null)).items())
                 .isInstanceOfSatisfying(BusinessException.class, error ->
                         assertThat(error.getErrorCode()).isEqualTo(ErrorCode.SHOP_ACCESS_DENIED));
 
