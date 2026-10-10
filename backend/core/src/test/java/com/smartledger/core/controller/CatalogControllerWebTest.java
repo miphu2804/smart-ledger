@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.smartledger.core.config.SecurityConfiguration;
+import com.smartledger.core.dto.request.OwnerListQuery.*;
 import com.smartledger.core.dto.request.ProductPatchRequest;
 import com.smartledger.core.dto.response.CategoryResponse;
 import com.smartledger.core.dto.response.ProductResponse;
@@ -27,9 +28,9 @@ import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.CategoryService;
 import com.smartledger.core.service.MediaService;
 import com.smartledger.core.service.ProductService;
-import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -253,7 +254,7 @@ class CatalogControllerWebTest {
 
     @Test
     void productListReturns403WhenShopIsNotAccessible() throws Exception {
-        when(productService.list(any(), eq("8")))
+        when(productService.list(any(), eq("8"), any(Products.class)))
                 .thenThrow(new BusinessException(ErrorCode.SHOP_ACCESS_DENIED));
 
         mvc.perform(get("/api/v1/products")

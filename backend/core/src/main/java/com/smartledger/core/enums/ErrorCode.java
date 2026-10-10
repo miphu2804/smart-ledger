@@ -7,6 +7,12 @@ import org.springframework.http.HttpStatus;
 @Getter
 @RequiredArgsConstructor
 public enum ErrorCode {
+    INVALID_PRODUCT_QUERY(HttpStatus.BAD_REQUEST, "invalid_product_query", "Use valid filters, page >= 0, size 1-100 and offset <= 2147483647."),
+    INVALID_SALE_QUERY(HttpStatus.BAD_REQUEST, "invalid_sale_query", "Use valid filters, page >= 0, size 1-100 and offset <= 2147483647."),
+    INVALID_DRAFT_QUERY(HttpStatus.BAD_REQUEST, "invalid_draft_query", "Use valid filters, page >= 0, size 1-100 and offset <= 2147483647."),
+    INVALID_CUSTOMER_QUERY(HttpStatus.BAD_REQUEST, "invalid_customer_query", "Use valid filters, page >= 0, size 1-100 and offset <= 2147483647."),
+    INVALID_DEBT_QUERY(HttpStatus.BAD_REQUEST, "invalid_debt_query", "Use valid filters, page >= 0, size 1-100 and offset <= 2147483647."),
+    INVALID_EXPENSE_QUERY(HttpStatus.BAD_REQUEST, "invalid_expense_query", "Use valid filters, page >= 0, size 1-100 and offset <= 2147483647."),
     ACCOUNT_DISABLED(HttpStatus.FORBIDDEN, "account_disabled", "This account is disabled."),
     AUTH_PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "auth_profile_not_found", "No local SmartLedger profile exists yet."),
     DISPLAY_NAME_REQUIRED(HttpStatus.BAD_REQUEST, "validation_failed", "Display name is required for a new account."),

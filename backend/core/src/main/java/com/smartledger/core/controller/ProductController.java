@@ -1,8 +1,12 @@
 package com.smartledger.core.controller;
 
+import com.smartledger.core.dto.request.OwnerListQuery.ProductSort;
+import com.smartledger.core.dto.request.OwnerListQuery.Products;
+import com.smartledger.core.dto.request.OwnerListQuery.StockStatus;
 import com.smartledger.core.dto.request.ProductPatchRequest;
 import com.smartledger.core.dto.request.ProductStockInRequest;
 import com.smartledger.core.dto.request.ProductWriteRequest;
+import com.smartledger.core.dto.response.PageResponse;
 import com.smartledger.core.dto.response.ProductResponse;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.MediaService;
@@ -15,19 +19,19 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -58,12 +62,22 @@ public class ProductController {
     }
 
     @GetMapping
-    @Operation(summary = "List active products in the selected shop")
+    @Operation(summary = "List active products in the selected shop",
+            description = "DB pagination: page starts at 0; size 1-100 (default 20); offset <= 2147483647. "
+                    + "Returns items/page/size/totalElements/totalPages, not an array. "
+                    + "q searches name/barcode literally, case/accent insensitive. Default sort ID_ASC; "
+                    + "NAME_ASC, PRICE_ASC, STOCK_DESC include an ID tie-break. LOW excludes zero stock; "
+                    + "OUT means tracked zero stock; NEEDS_RESTOCK is their union, using each product's threshold.")
     @ApiResponse(responseCode = "200", description = "Active products")
-    public List<ProductResponse> list(
-            @AuthenticationPrincipal VerifiedFirebaseToken firebaseToken,
-            @RequestHeader("X-Shop-Id") String shopId) {
-        return productService.list(firebaseToken, shopId);
+    public PageResponse<ProductResponse> list(@AuthenticationPrincipal VerifiedFirebaseToken firebaseToken,
+            @RequestHeader("X-Shop-Id") String shopId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) StockStatus stockStatus,
+            @RequestParam(required = false) ProductSort sort) {
+        return productService.list(firebaseToken, shopId, new Products(page, size, q, categoryId, stockStatus, sort));
     }
 
     @GetMapping("/{productId}")
