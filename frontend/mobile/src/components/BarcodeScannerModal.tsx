@@ -45,6 +45,7 @@ import {
   triggerScanHaptic,
 } from '../lib/barcode';
 import { productApi } from '../lib/catalogApi';
+import { errorMessage } from '../lib/errors';
 import { triggerFeedback } from '../lib/feedback';
 import { vnd } from '../lib/format';
 import { useReducedMotion } from '../motion';
@@ -87,6 +88,7 @@ export function BarcodeIcon({ size = 20, color = colors.primary }: { size?: numb
 export interface BarcodeScannerModalProps {
   visible: boolean;
   onClose: () => void;
+  /** Danh mục để tra mã vạch. Không truyền thì màn quét tự tải từ Core mỗi lần mở (chế độ `order`). */
   products?: ProductView[];
   cartItems?: LineItem[];
   onAddToCart?: (product: ProductView, delta: number) => void;
@@ -115,7 +117,7 @@ interface ProductPopupData {
 export function BarcodeScannerModal({
   visible,
   onClose,
-  products = [],
+  products: productsProp,
   cartItems: externalCartItems,
   onAddToCart,
   onClearCart,
@@ -166,6 +168,47 @@ export function BarcodeScannerModal({
   const [configBusy, setConfigBusy]           = useState(false);
   const [configErr, setConfigErr]             = useState('');
   const [extraProducts, setExtraProducts]     = useState<ProductView[]>([]);
+
+  // Nơi gọi không truyền danh mục (màn Tổng quan): tự tải sản phẩm thật của tiệm mỗi lần mở. Nếu không, danh mục rỗng
+  // nên mọi mã đều bị coi là mới và mời tạo món trùng.
+  // Khi danh mục chưa sẵn sàng (đang tải hoặc tải lỗi) thì không mời tạo món: mã có sẵn sẽ không tra được.
+  const catalogSelfLoaded = productsProp === undefined && mode === 'order';
+  const [loadedProducts, setLoadedProducts] = useState<ProductView[]>([]);
+  const [catalogState, setCatalogState] = useState<'loading' | 'ready' | 'failed'>('loading');
+  const [catalogAttempt, setCatalogAttempt] = useState(0);
+  useEffect(() => {
+    if (!visible) {
+      // Đóng modal: bỏ danh mục đã tải để lần mở sau không dùng dữ liệu cũ (món đã xoá, giá đổi)
+      setLoadedProducts([]);
+      setCatalogState('loading');
+      return;
+    }
+    if (!catalogSelfLoaded) return;
+    let cancelled = false;
+    setCatalogState('loading');
+    productApi
+      .list()
+      .then((list) => {
+        if (cancelled) return;
+        setLoadedProducts(list);
+        setCatalogState('ready');
+        // Mã quét trong lúc đang tải đã bị bỏ qua: xoá biểu ngữ và cho phép quét lại ngay
+        setUnknownCode(null);
+        lastCodeRef.current = '';
+      })
+      .catch(() => {
+        if (!cancelled) setCatalogState('failed');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, catalogSelfLoaded, catalogAttempt]);
+  const catalogReady = !catalogSelfLoaded || catalogState === 'ready';
+  const retryCatalog = () => {
+    setCatalogState('loading');
+    setCatalogAttempt((attempt) => attempt + 1);
+  };
+  const products = productsProp ?? loadedProducts;
 
   // Danh mục tra cứu: sản phẩm thật của tiệm (Core, hoặc mockCore khi xem trước) và sản phẩm vừa tạo trong phiên quét.
   // Không trộn dữ liệu mẫu: mã vạch mẫu sẽ ra "sản phẩm ma" có id không tồn tại ở Core, thêm vào đơn rồi checkout bị từ chối.
@@ -437,36 +480,16 @@ export function BarcodeScannerModal({
     setConfigErr('');
 
     try {
-      let createdProduct: ProductView;
-      try {
-        createdProduct = await productApi.create({
-          name: trimmedName,
-          barcode: configModalCode,
-          unit: configUnit.trim() || 'cái',
-          sellingPriceVnd: priceNum,
-          tracked: false,
-          stockQuantity: null,
-        });
-      } catch {
-        // Fallback offline / mock
-        createdProduct = {
-          id: Date.now(),
-          shopId: 1,
-          categoryId: null,
-          name: trimmedName,
-          barcode: configModalCode,
-          imageUrl: null,
-          unit: configUnit.trim() || 'cái',
-          sellingPriceVnd: priceNum,
-          costPriceVnd: null,
-          tracked: false,
-          stockQuantity: null,
-          lowStockThreshold: null,
-          status: 'ACTIVE',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-      }
+      // Lỗi tạo món (mất mạng, 400, 401…) rơi xuống catch bên dưới và hiện trên thẻ; không dựng món giả với id không
+      // tồn tại ở Core vì đơn chứa nó sẽ bị từ chối lúc thanh toán.
+      const createdProduct: ProductView = await productApi.create({
+        name: trimmedName,
+        barcode: configModalCode,
+        unit: configUnit.trim() || 'cái',
+        sellingPriceVnd: priceNum,
+        tracked: false,
+        stockQuantity: null,
+      });
 
       setExtraProducts((prev) => [...prev, createdProduct]);
       onProductCreated?.(createdProduct);
@@ -499,7 +522,7 @@ export function BarcodeScannerModal({
       setUnknownCode(null);
     } catch (e: any) {
       triggerFeedback('error');
-      setConfigErr(e?.message || 'Không thể lưu mặt hàng');
+      setConfigErr(errorMessage(e));
     } finally {
       setConfigBusy(false);
     }
@@ -676,28 +699,41 @@ export function BarcodeScannerModal({
           {/* ── Cảnh báo mã chưa có trong danh mục & Nút Cấu hình ── */}
           {unknownCode && !configModalCode && (
             <Pressable
-              onPress={() => handleOpenConfig(unknownCode)}
+              onPress={() => {
+                if (catalogReady) handleOpenConfig(unknownCode);
+                else if (catalogState === 'failed') retryCatalog();
+              }}
               style={({ pressed }) => [S.unknownBanner, pressed && { opacity: 0.92 }]}
             >
               <View style={S.unknownBannerLeft}>
                 <BarcodeIcon size={16} color={colors.primary} />
                 <View style={{ flex: 1, paddingRight: 6 }}>
                   <T size={12.5} color={colors.ink}>
-                    Mã <T w="bold" color={colors.primaryDeep}>{unknownCode}</T> chưa có
+                    {catalogReady ? (
+                      <>
+                        Mã <T w="bold" color={colors.primaryDeep}>{unknownCode}</T> chưa có
+                      </>
+                    ) : catalogState === 'failed' ? (
+                      'Không tải được danh mục sản phẩm'
+                    ) : (
+                      'Đang tải danh mục sản phẩm…'
+                    )}
                   </T>
                   <T size={11.5} color={colors.muted}>
-                    Chạm để thêm mặt hàng
+                    {catalogReady ? 'Chạm để thêm mặt hàng' : catalogState === 'failed' ? 'Chạm để thử lại' : 'Quét lại sau giây lát'}
                   </T>
                 </View>
               </View>
 
               <View style={S.unknownBannerActions}>
-                <View style={S.configActionBtn}>
-                  <T w="bold" size={12.5} color={colors.brandInk}>
-                    Thêm
-                  </T>
-                  <Feather name="chevron-right" size={15} color={colors.brandInk} />
-                </View>
+                {catalogReady || catalogState === 'failed' ? (
+                  <View style={S.configActionBtn}>
+                    <T w="bold" size={12.5} color={colors.brandInk}>
+                      {catalogReady ? 'Thêm' : 'Thử lại'}
+                    </T>
+                    <Feather name="chevron-right" size={15} color={colors.brandInk} />
+                  </View>
+                ) : null}
 
                 <Pressable
                   onPress={(e) => {
