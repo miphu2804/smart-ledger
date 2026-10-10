@@ -1,4 +1,5 @@
 import { apiRequest } from './api';
+import { ApiError } from './apiError';
 
 /**
  * Khung trả về của sáu GET danh sách OWNER (`/products`, `/sales`, `/sale-drafts`, `/customers`, `/debts`,
@@ -15,7 +16,10 @@ export interface PageResponse<T> {
 /** Kích thước trang lớn nhất Core cho phép; mặc định của Core là 20 nên luôn gửi `size` rõ ràng. */
 export const MAX_PAGE_SIZE = 100;
 
-/** Chặn vòng tải khi Core trả `totalPages` bất thường (≈ 20.000 bản ghi với trang 100). */
+/**
+ * Số trang tối đa một lần tải hết (≈ 20.000 bản ghi với trang 100). Vượt quá thì `fetchAllPages` báo lỗi `list_too_large`
+ * thay vì trả danh sách thiếu như thể đầy đủ (các màn hình tính tổng trên danh sách này).
+ */
 const MAX_PAGES = 200;
 
 type Query = Record<string, string | number | undefined>;
@@ -46,6 +50,9 @@ export async function fetchPage<T>(path: string, page: number, size: number, que
  * Các trang không chung snapshot: nếu có bản ghi mới giữa hai lần gọi thì một bản ghi có thể xuất hiện ở hai trang,
  * nên loại trùng theo `id`. Nếu có bản ghi bị lưu trữ giữa hai lần gọi thì một bản ghi có thể bị bỏ sót đến lần
  * làm mới kế tiếp.
+ *
+ * Ném `ApiError` mã `list_too_large` khi còn trang chưa tải sau `MAX_PAGES` trang: thà báo lỗi còn hơn trả một danh sách
+ * thiếu mà không ai biết. Cách xử lý đúng cho danh sách lớn là phân trang ở giao diện (#144).
  */
 export async function fetchAllPages<T extends { id: number | string }>(
   path: string,
@@ -61,7 +68,11 @@ export async function fetchAllPages<T extends { id: number | string }>(
       seen.add(item.id);
       items.push(item);
     }
-    if (result.items.length === 0 || page + 1 >= result.totalPages) break;
+    if (result.items.length === 0 || page + 1 >= result.totalPages) return items;
   }
-  return items;
+  throw new ApiError(
+    0,
+    'list_too_large',
+    `Danh sách ${path} có hơn ${MAX_PAGES * pageSize} bản ghi nên không tải hết được một lần.`,
+  );
 }
