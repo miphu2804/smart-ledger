@@ -55,6 +55,12 @@ public class NotificationEventServiceImpl implements NotificationEventService {
                 reconcileStock(shop, product, openByProduct.getOrDefault(product.getId(), List.of())));
     }
 
+    /**
+     * Applies one locked Product's alert transition using the batch's preloaded open alerts.
+     * An unchanged single alert is retained; obsolete alerts are resolved and flushed before
+     * opening a replacement to release the unique open-alert slot. History-based cycle keys
+     * and recipient creation remain in the same transaction; callers must serialize on Product.
+     */
     private void reconcileStock(Shop shop, Product product, List<NotificationEvent> open) {
         NotificationType desired = stockType(product);
         if (open.size() == 1 && open.getFirst().getType() == desired) return;

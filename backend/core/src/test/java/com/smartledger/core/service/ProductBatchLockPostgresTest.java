@@ -65,7 +65,12 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** Actual SQL/row locks, business services, audit, notification and monetary idempotency on a disposable schema. */
+/**
+ * Exercises real SQL/row locks, business services, audit, notifications and monetary idempotency.
+ * Requires CORE_TEST_POSTGRES_* pointing to a dedicated test database; fixture schemas are disposable.
+ * Query assertions inspect Hibernate SQL, not fixture JDBC or total HTTP request traffic.
+ * Benchmark medians discard one warmup and use three samples; timings are observations, never SLAs.
+ */
 @DataJpaTest(showSql = false, properties = {"spring.flyway.enabled=true", "spring.jpa.hibernate.ddl-auto=validate"})
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({SaleDraftServiceImpl.class, SaleVoidServiceImpl.class, ShopServiceImpl.class,
@@ -294,6 +299,11 @@ class ProductBatchLockPostgresTest {
         assertThat(rows("notification_events")).isZero();
     }
 
+    /**
+     * Compares 100 Product reconciliations against 100,000 resolved and 10,000 open synthetic alerts.
+     * Counts open-alert reads separately from Product locks; both timed paths include the transaction
+     * and Product locks. Unchanged alerts isolate the read optimization without notification writes.
+     */
     @Test
     void unchangedBatchReadsOpenAlertsOnceDespiteLargeResolvedHistory() {
         var catalog = seedProducts(10_000, 9);
@@ -430,6 +440,11 @@ class ProductBatchLockPostgresTest {
                 Long.class, shopId)).isZero();
     }
 
+    /**
+     * Samples IDs across 100,000 Products and verifies actual ordered lock SQL and returned order.
+     * Both timed paths include transaction boundaries; only query counts/order, not elapsed time,
+     * are pass/fail criteria, since local and CI database latency varies.
+     */
     @ParameterizedTest
     @ValueSource(ints = {1, 20, 100})
     void compareLockRoundTripsOnLargeCatalog(int selectedCount) {
@@ -465,6 +480,11 @@ class ProductBatchLockPostgresTest {
                 selectedCount, selectedCount, legacyMs.get(1), batchMs.get(1));
     }
 
+    /**
+     * Checks one Product read for create/replace on a 100,000-Product catalog without stock deduction.
+     * Logs service timings separately from the legacy/batch repository medians, which include
+     * transaction boundaries but not the whole create/replace flow. No latency threshold is asserted.
+     */
     @ParameterizedTest
     @ValueSource(ints = {1, 20, 100})
     void draftCreateAndReplaceReadCatalogOnceOnLargeCatalog(int selectedCount) {

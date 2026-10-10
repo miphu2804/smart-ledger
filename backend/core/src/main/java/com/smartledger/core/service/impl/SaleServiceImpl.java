@@ -32,6 +32,11 @@ public class SaleServiceImpl implements SaleService {
         this.saleItemRepository = saleItemRepository;
     }
 
+    /**
+     * Returns the owned active shop's unpaginated history: sales descending, items ascending by ID.
+     * After authorization, reads parents once and items once; empty history skips the item query.
+     * The two-query budget excludes auth/shop checks and is not a latency or memory bound.
+     */
     @Override
     @Transactional(readOnly = true)
     public List<SaleResponse> list(VerifiedFirebaseToken token, String shopId) {

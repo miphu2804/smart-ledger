@@ -75,6 +75,13 @@ public class SaleVoidServiceImpl implements SaleVoidService {
                 SaleVoidResponse.class, () -> voidOnce(shop, id, idempotencyKey, request));
     }
 
+    /**
+     * Executes the non-replayed void inside the outer idempotent business transaction.
+     * Locks sale, then its debt if present, then the nonempty restock Product group in ascending ID order.
+     * Restock validates deduction snapshots before Product locking and includes archived Products;
+     * custom or other non-deducted items do not change stock. Refund, debt cancellation, stock,
+     * grouped alerts and audit writes roll back together if any step fails.
+     */
     private SaleVoidResponse voidOnce(Shop shop, Long id, String idempotencyKey, SaleVoidRequest request) {
         Sale sale = saleRepository.findLockedByIdAndShopId(id, shop.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.SALE_NOT_FOUND));

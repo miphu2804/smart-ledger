@@ -8,6 +8,10 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface NotificationEventRepository extends JpaRepository<NotificationEvent, Long> {
     boolean existsByShopIdAndDedupKey(Long shopId, String dedupKey);
+    /**
+     * Reads unresolved alerts for one shop/entity group in one query, without acquiring Product locks.
+     * Reconciliation supplies a nonempty ID group and already holds the source Product locks.
+     */
     List<NotificationEvent> findAllByShopIdAndEntityTypeAndEntityIdInAndTypeInAndResolvedAtIsNull(
             Long shopId, String entityType, List<Long> entityIds, List<NotificationType> types);
     Optional<NotificationEvent> findFirstByShopIdAndEntityTypeAndEntityIdOrderByIdDesc(

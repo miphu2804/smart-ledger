@@ -48,7 +48,12 @@ import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
-/** Real list services, ownership guards and JPQL; all fixture data is synthetic and rolled back per test. */
+/**
+ * Exercises real list services, ownership guards and JPQL with synthetic fixtures rolled back per test.
+ * Requires CORE_TEST_POSTGRES_* for a dedicated database; clears the persistence context before counting
+ * Hibernate reads, excluding fixture JDBC and auth/user/shop queries from the data-query budget.
+ * Logged service timings are single observations, not repeated benchmarks or latency SLAs.
+ */
 @DataJpaTest(showSql = false, properties = {"spring.flyway.enabled=true", "spring.jpa.hibernate.ddl-auto=validate"})
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({SaleServiceImpl.class, SaleDraftServiceImpl.class, ShopServiceImpl.class,
@@ -323,6 +328,7 @@ class SalesListQueryPostgresTest {
                 """, ITEMS_PER_PARENT, selectedShop);
     }
 
+    /** Flushes fixtures and clears the first-level cache before resetting the Hibernate SQL counter. */
     private void startCounting() {
         entityManager.flush();
         entityManager.clear();

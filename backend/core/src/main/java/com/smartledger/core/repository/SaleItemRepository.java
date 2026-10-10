@@ -7,6 +7,10 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface SaleItemRepository extends JpaRepository<SaleItem, Long> {
+    /**
+     * Loads all historical items for this shop through their parent sale, ordered by sale ID then item ID.
+     * This unpaginated batch supports list responses without per-sale item queries; no Product status filter applies.
+     */
     @Query("select i from SaleItem i join Sale s on s.id = i.saleId "
             + "where s.shopId = :shopId order by i.saleId, i.id")
     List<SaleItem> findAllByShopId(@Param("shopId") Long shopId);

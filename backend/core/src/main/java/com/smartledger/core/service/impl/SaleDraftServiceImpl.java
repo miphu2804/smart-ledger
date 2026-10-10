@@ -89,6 +89,11 @@ public class SaleDraftServiceImpl implements SaleDraftService {
         return toResponse(draft, items);
     }
 
+    /**
+     * Lists all drafts for the owned active shop with descending draft IDs and ascending item IDs.
+     * Uses one parent read and, only for nonempty history, one item read, excluding auth/shop checks.
+     * Expiry is mapped in the response without persisting a status change; history remains unpaginated.
+     */
     @Override
     @Transactional(readOnly = true)
     public List<SaleDraftResponse> list(VerifiedFirebaseToken token, String shopId) {
@@ -133,6 +138,13 @@ public class SaleDraftServiceImpl implements SaleDraftService {
         draft.cancel();
     }
 
+    /**
+     * Confirms under the draft row lock, replaying its sale if confirmation already succeeded.
+     * Locks non-null catalog IDs once in ascending order, then validates each item in that order:
+     * a missing later Product must not mask an earlier cost overflow or stock shortage.
+     * Custom items do not lock or change Product stock. Cost snapshots, stock changes, sale/payment/debt,
+     * grouped stock alerts and audit writes share this transaction and roll back together on failure.
+     */
     @Override
     @Transactional
     public SaleResponse confirm(VerifiedFirebaseToken token, String shopId, String draftId) {
@@ -270,6 +282,12 @@ public class SaleDraftServiceImpl implements SaleDraftService {
         }
     }
 
+    /**
+     * Validates the customer first, batch-reads ACTIVE catalog Products, then checks items in request order.
+     * Collecting IDs must not reject duplicates or missing Products early and change error precedence.
+     * Custom-only requests skip the Product read; line totals use HALF_UP and exact arithmetic so overflow
+     * becomes DRAFT_TOTAL_INVALID. Preparation does not lock or deduct stock; confirm checks it again.
+     */
     private PreparedDraft prepare(Long shopId, SaleDraftWriteRequest request) {
         List<PreparedItem> items = new ArrayList<>();
         Set<Long> productIds = new HashSet<>();

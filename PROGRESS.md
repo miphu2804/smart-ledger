@@ -1,3 +1,13 @@
+### [2026-10-10 15:07 UTC+07:00] — [Docs] Clarify batch query, locking and benchmark guarantees (#133–#138)
+
+**Done:** Added focused JavaDoc for query-optimization repositories, services and PostgreSQL regression fixtures on `perf/query-optimization`, following the docstring review on PR #152. This improves documentation without changing runtime behavior or lowering review thresholds.
+
+**Changed files:** Eleven Core Java files: `ProductRepository`, `SaleItemRepository`, `SaleDraftItemRepository`, `NotificationEventRepository`, `NotificationEventService`, `NotificationEventServiceImpl`, `SaleServiceImpl`, `SaleDraftServiceImpl`, `SaleVoidServiceImpl`, `ProductBatchLockPostgresTest` and `SalesListQueryPostgresTest`; this new append-only entry. No API, schema, migration, dependency, FE, AI or CodeRabbit configuration change. Existing progress history and untracked `.idea/` are preserved.
+
+**Flow explained:** Documented tenant/status filters, empty-group shortcuts, result ordering, caller-owned transactions/locks, ascending Product lock order, per-item confirm validation precedence and grouped alert reconciliation. Query budgets exclude authentication/authorization reads; newly opened alert cycles retain per-product history/dedup work. Local timing observations are not HTTP/staging SLAs; unpaginated list queries do not guarantee bounded memory or latency.
+
+**Check:** Fresh Java 21 `mvnw.cmd clean verify` passed 739 tests across 64 suites, 0 failures/errors/skips, BUILD SUCCESS (4:10). PostgreSQL query-count, large-data, concurrency and rollback suites used a dedicated disposable Docker PostgreSQL 16 container, since removed; no business/local/staging/production database was used. JDK JavaDoc doclint passed for changed files with missing-documentation warnings excluded. Comparing each changed Java file with HEAD after stripping JavaDoc confirmed identical executable code and assertions; whitespace checks passed. No static-analysis/coverage/CVE plugin result, 80% CodeRabbit docstring coverage, fresh remote CI success or staging UAT is claimed. The separate GitHub security-agent quota failure is unchanged. Prepared for commit/push to the feature branch only; the user retains PR merge control.
+
 ### [2026-10-10 14:36 UTC+07:00] — [Integration] Merge staging into query optimization (#133–#138)
 
 **Done:** Integrated staging `9f23fe463d704fc9775e74de01799befd1431239` into `perf/query-optimization` at `1dc176d496ecc904b7443734eb7e3a3d697df0ea`. Resolved the only conflict, in this progress log, by retaining entries from both branches, including staging entries inserted farther down the file. The merge retains batch-query optimizations and the confirm validation-precedence fix; it does not merge the PR into staging.
