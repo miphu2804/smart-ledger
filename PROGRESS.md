@@ -1,3 +1,13 @@
+### [2026-10-10 19:50 UTC+07:00] — [Feature] Orders screen: the search bar is always visible, like the Sales screen
+
+**Done:** The Orders screen hid its search input behind a magnifier button in the top right corner. It now shows the search bar permanently under the title and above the period filter chips, with the same look as the Sales screen: a search icon on the left, a clear button when there is text, and no toggle button. The placeholder stays "Tìm theo khách, tên món, mã đơn..." because the search is over orders.
+
+**Changed files:** `frontend/mobile/app/(tabs)/invoices.tsx` and this entry.
+
+**Flow explained:** The `searchOpen` state, the toggle button and its `searchBtn` style are removed; the existing `searchBox` is always rendered and still drives the same `q` filter. The input no longer auto-focuses because it is no longer opened by a tap. The input and its clear button have accessibility labels ("Tìm đơn hàng", "Xoá tìm kiếm").
+
+**Check:** `tsc --noEmit` clean. Web build in the browser at 375 px in mock mode: the bar sits under the title above the period chips; typing "Minh" leaves 1 order ("Anh Minh", 379.000đ) and the summary card follows; the clear button restores all 6 orders. **Not verified:** a real iPhone, Android, and the system keyboard open over the list. The header is about 50 px taller than before, as on the Sales screen.
+
 ### [2026-10-10 19:15 UTC+07:00] — [Fix] Barcode scanner: load the catalog when none is passed, and surface product-creation errors
 
 **Done:** Two defects in the barcode scanner. (1) The scanner opened from the Home screen was given no product list, so its catalog was empty and every scanned code, including products the shop already has, was treated as new and offered for creation (a duplicate). When the caller does not pass `products`, the scanner now loads the shop's products from Core each time it opens in order mode; while that catalog is loading or failed to load, an unknown code shows "Đang tải danh mục sản phẩm…" or "Không tải được danh mục sản phẩm" (tap to retry) instead of offering to create the product, and the loaded catalog is dropped when the scanner closes so the next open does not use stale data. Callers that pass a list (POS, checkout) are unchanged. (2) When `POST /products` failed for any reason (offline, 400, 401, a conflict), the add-item card swallowed the error and fabricated a local product with a made-up id, added it to the order, and the order was later rejected at checkout. The error now stays on the card with the Core message, nothing is added to the order, and the card stays open so the user can retry or cancel.
