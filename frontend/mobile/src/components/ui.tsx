@@ -533,9 +533,40 @@ export function Field({
   inputStyle,
   onFocus,
   onBlur,
+  secureTextEntry,
+  onChangeText,
+  onSelectionChange,
   ...rest
 }: TextInputProps & { label?: string; error?: string; prefix?: string; inputStyle?: StyleProp<TextStyle> }) {
   const [focused, setFocused] = useState(false);
+  // Ô mật khẩu có nút hiện/ẩn ký tự.
+  const [revealed, setRevealed] = useState(false);
+  // iOS xoá sạch chữ cũ ở lần sửa đầu tiên sau khi quay lại một ô đang che chữ (gõ hay xoá 1 ký tự đều mất cả chuỗi).
+  // Đánh dấu lần sửa đó để dựng lại giá trị đúng thay vì để mất mật khẩu đã nhập.
+  const firstEditAfterReenter = useRef(false);
+  // Vùng chọn gần nhất mà ô báo về (giữ qua các lần mất/lấy lại focus). Chỉ dựng lại khi biết chắc đó là con trỏ:
+  // đang chọn một khoảng (chọn hết rồi xoá hoặc gõ đè) là thao tác có chủ ý, còn chưa biết thì không đoán.
+  const selectionRef = useRef<{ start: number; end: number } | null>(null);
+  const handleChangeText = (text: string) => {
+    let next = text;
+    if (Platform.OS === 'ios' && secureTextEntry && !revealed && firstEditAfterReenter.current) {
+      const previous = typeof rest.value === 'string' ? rest.value : '';
+      const selection = selectionRef.current;
+      const caretOnly = selection != null && selection.start === selection.end;
+      // Một lần bấm phím chỉ đổi độ dài tối đa 1; mất từ 2 ký tự trở lên rồi còn lại 0-1 ký tự khi chỉ có con trỏ
+      // (không chọn khoảng nào) là do hệ thống xoá sạch.
+      if (caretOnly && previous.length - text.length >= 2 && text.length <= 1) {
+        next = text === '' ? previous.slice(0, -1) : previous + text;
+      }
+    }
+    firstEditAfterReenter.current = false;
+    onChangeText?.(next);
+  };
+  const toggleReveal = () => {
+    // Che lại chữ cũng làm iOS xoá ở lần sửa kế tiếp
+    if (revealed) firstEditAfterReenter.current = true;
+    setRevealed(!revealed);
+  };
   return (
     <View style={[{ marginBottom: 12 }, style as StyleProp<ViewStyle>]}>
       {label ? (
@@ -554,6 +585,7 @@ export function Field({
           style={[styles.input, inputStyle]}
           onFocus={(event) => {
             setFocused(true);
+            firstEditAfterReenter.current = true;
             onFocus?.(event);
           }}
           onBlur={(event) => {
@@ -561,7 +593,24 @@ export function Field({
             onBlur?.(event);
           }}
           {...rest}
+          secureTextEntry={secureTextEntry && !revealed}
+          onChangeText={handleChangeText}
+          onSelectionChange={(event) => {
+            selectionRef.current = event.nativeEvent.selection;
+            onSelectionChange?.(event);
+          }}
         />
+        {secureTextEntry ? (
+          <Pressable
+            onPress={toggleReveal}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={revealed ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+            style={({ pressed }) => [{ width: 36, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: -8 }, pressed && { opacity: 0.6 }]}
+          >
+            <Feather name={revealed ? 'eye-off' : 'eye'} size={18} color={colors.muted} />
+          </Pressable>
+        ) : null}
       </View>
       {error ? (
         <T size={12} color={colors.red} style={{ marginTop: 4 }}>
