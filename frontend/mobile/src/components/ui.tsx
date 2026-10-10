@@ -544,18 +544,18 @@ export function Field({
   // iOS xoá sạch chữ cũ ở lần sửa đầu tiên sau khi quay lại một ô đang che chữ (gõ hay xoá 1 ký tự đều mất cả chuỗi).
   // Đánh dấu lần sửa đó để dựng lại giá trị đúng thay vì để mất mật khẩu đã nhập.
   const firstEditAfterReenter = useRef(false);
-  // Vùng chọn gần nhất mà ô báo về: nếu người dùng đang chọn một khoảng (chọn hết rồi xoá hoặc gõ đè) thì đó là thao tác
-  // có chủ ý, không phải hệ thống xoá sạch, nên giữ nguyên kết quả thay vì dựng lại.
+  // Vùng chọn gần nhất mà ô báo về (giữ qua các lần mất/lấy lại focus). Chỉ dựng lại khi biết chắc đó là con trỏ:
+  // đang chọn một khoảng (chọn hết rồi xoá hoặc gõ đè) là thao tác có chủ ý, còn chưa biết thì không đoán.
   const selectionRef = useRef<{ start: number; end: number } | null>(null);
   const handleChangeText = (text: string) => {
     let next = text;
     if (Platform.OS === 'ios' && secureTextEntry && !revealed && firstEditAfterReenter.current) {
       const previous = typeof rest.value === 'string' ? rest.value : '';
       const selection = selectionRef.current;
-      const hadRangeSelected = selection != null && selection.start !== selection.end;
+      const caretOnly = selection != null && selection.start === selection.end;
       // Một lần bấm phím chỉ đổi độ dài tối đa 1; mất từ 2 ký tự trở lên rồi còn lại 0-1 ký tự khi chỉ có con trỏ
       // (không chọn khoảng nào) là do hệ thống xoá sạch.
-      if (!hadRangeSelected && previous.length - text.length >= 2 && text.length <= 1) {
+      if (caretOnly && previous.length - text.length >= 2 && text.length <= 1) {
         next = text === '' ? previous.slice(0, -1) : previous + text;
       }
     }
