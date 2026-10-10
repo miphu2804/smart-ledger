@@ -1,13 +1,14 @@
 package com.smartledger.core.service;
 
 import com.smartledger.core.dto.request.DebtRepaymentRequest;
+import com.smartledger.core.dto.request.OwnerListQuery.Debts;
 import com.smartledger.core.dto.response.DebtRepaymentResponse;
 import com.smartledger.core.dto.response.DebtResponse;
+import com.smartledger.core.dto.response.PageResponse;
 import com.smartledger.core.security.VerifiedFirebaseToken;
-import java.util.List;
 
 public interface DebtService {
-    List<DebtResponse> list(VerifiedFirebaseToken token, String shopId);
+    PageResponse<DebtResponse> list(VerifiedFirebaseToken token, String shopId, Debts query);
 
     DebtResponse getById(VerifiedFirebaseToken token, String shopId, String debtId);
 

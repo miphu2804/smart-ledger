@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
+import com.smartledger.core.dto.request.OwnerListQuery.*;
 import com.smartledger.core.enums.DraftStatus;
 import com.smartledger.core.enums.ErrorCode;
 import com.smartledger.core.exception.BusinessException;
@@ -103,17 +104,20 @@ class SalesListQueryPostgresTest {
 
     @ParameterizedTest
     @ValueSource(ints = {1, 20, 100, 1337, 10000})
-    void saleListUsesTwoDataReadsAtEveryDatasetSize(int count) {
+    void saleListUsesBoundedPageReadsAtEveryDatasetSize(int count) {
         seedSales(shopId, userId, count);
         startCounting();
         long start = System.nanoTime();
 
-        var responses = sales.list(owner, Long.toString(shopId));
+        var page = sales.list(owner, Long.toString(shopId), new Sales(0, 100, null, null, null, null));
+        var responses = page.items();
+        assertThat(page.totalElements()).isEqualTo(count);
+        assertThat(page.totalPages()).isEqualTo((count + 99) / 100);
 
-        assertDataReads("sales", "sale_items", 2);
-        LOG.info("Sale list fixture: parents={}, items={}, dataReads=2, elapsedMs={}",
+        assertDataReads("sales", "sale_items", count >= 100 ? 3 : 2);
+        LOG.info("Sale list fixture: parents={}, items={}, pageSize=100, elapsedMs={}",
                 count, count * ITEMS_PER_PARENT, (System.nanoTime() - start) / 1_000_000);
-        assertThat(responses).hasSize(count);
+        assertThat(responses).hasSize(Math.min(count, 100));
         assertThat(responses).extracting(response -> response.id()).isSortedAccordingTo(java.util.Comparator.reverseOrder());
         assertThat(responses).allSatisfy(response -> {
             assertThat(response.shopId()).isEqualTo(shopId);
@@ -128,17 +132,20 @@ class SalesListQueryPostgresTest {
 
     @ParameterizedTest
     @ValueSource(ints = {1, 20, 100, 1337, 10000})
-    void draftListUsesTwoDataReadsAtEveryDatasetSize(int count) {
+    void draftListUsesBoundedPageReadsAtEveryDatasetSize(int count) {
         seedDrafts(shopId, userId, count);
         startCounting();
         long start = System.nanoTime();
 
-        var responses = drafts.list(owner, Long.toString(shopId));
+        var page = drafts.list(owner, Long.toString(shopId), new Drafts(0, 100, null));
+        var responses = page.items();
+        assertThat(page.totalElements()).isEqualTo(count);
+        assertThat(page.totalPages()).isEqualTo((count + 99) / 100);
 
-        assertDataReads("sale_drafts", "sale_draft_items", 2);
-        LOG.info("Draft list fixture: parents={}, items={}, dataReads=2, elapsedMs={}",
+        assertDataReads("sale_drafts", "sale_draft_items", count >= 100 ? 3 : 2);
+        LOG.info("Draft list fixture: parents={}, items={}, pageSize=100, elapsedMs={}",
                 count, count * ITEMS_PER_PARENT, (System.nanoTime() - start) / 1_000_000);
-        assertThat(responses).hasSize(count);
+        assertThat(responses).hasSize(Math.min(count, 100));
         assertThat(responses).extracting(response -> response.id()).isSortedAccordingTo(java.util.Comparator.reverseOrder());
         assertThat(responses).allSatisfy(response -> {
             assertThat(response.status()).isEqualTo(DraftStatus.DRAFT);
@@ -154,11 +161,11 @@ class SalesListQueryPostgresTest {
     @Test
     void emptyShopDoesNotLoadItemsEvenWhenAnotherShopHasData() {
         startCounting();
-        assertThat(sales.list(owner, Long.toString(shopId))).isEmpty();
+        assertThat(sales.list(owner, Long.toString(shopId), new Sales(0, 100, null, null, null, null)).items()).isEmpty();
         assertDataReads("sales", "sale_items", 1);
 
         startCounting();
-        assertThat(drafts.list(owner, Long.toString(shopId))).isEmpty();
+        assertThat(drafts.list(owner, Long.toString(shopId), new Drafts(0, 100, null)).items()).isEmpty();
         assertDataReads("sale_drafts", "sale_draft_items", 1);
     }
 
@@ -171,13 +178,13 @@ class SalesListQueryPostgresTest {
         jdbc.update("update sale_drafts set expires_at=current_timestamp-interval '1 day' where shop_id=?", shopId);
 
         startCounting();
-        var saleResponses = sales.list(owner, Long.toString(shopId));
+        var saleResponses = sales.list(owner, Long.toString(shopId), new Sales(0, 100, null, null, null, null)).items();
         assertDataReads("sales", "sale_items", 2);
         assertThat(saleResponses).hasSize(1);
         assertThat(saleResponses.getFirst().items()).isEmpty();
 
         startCounting();
-        var draftResponses = drafts.list(owner, Long.toString(shopId));
+        var draftResponses = drafts.list(owner, Long.toString(shopId), new Drafts(0, 100, null)).items();
         assertDataReads("sale_drafts", "sale_draft_items", 2);
         assertThat(draftResponses).hasSize(1);
         assertThat(draftResponses.getFirst().items()).isEmpty();
@@ -204,7 +211,7 @@ class SalesListQueryPostgresTest {
                 """, productId, shopId);
 
         startCounting();
-        var sale = sales.list(owner, Long.toString(shopId)).getFirst();
+        var sale = sales.list(owner, Long.toString(shopId), new Sales(0, 100, null, null, null, null)).items().getFirst();
         assertDataReads("sales", "sale_items", 2);
         assertThat(sale.items()).hasSize(ITEMS_PER_PARENT);
         assertThat(sale.items().getFirst().productId()).isEqualTo(productId);
@@ -212,7 +219,7 @@ class SalesListQueryPostgresTest {
         assertThat(sale.items().getFirst().unit()).isEqualTo("piece");
 
         startCounting();
-        var draft = drafts.list(owner, Long.toString(shopId)).getFirst();
+        var draft = drafts.list(owner, Long.toString(shopId), new Drafts(0, 100, null)).items().getFirst();
         assertDataReads("sale_drafts", "sale_draft_items", 2);
         assertThat(draft.items()).hasSize(ITEMS_PER_PARENT);
         assertThat(draft.items().getFirst().productId()).isEqualTo(productId);
@@ -234,8 +241,8 @@ class SalesListQueryPostgresTest {
         assertThat(sql.readsOf("sale_items")).hasSize(100);
 
         startCounting();
-        assertThat(sales.list(owner, Long.toString(shopId))).hasSize(100);
-        assertDataReads("sales", "sale_items", 2);
+        assertThat(sales.list(owner, Long.toString(shopId), new Sales(0, 100, null, null, null, null)).items()).hasSize(100);
+        assertDataReads("sales", "sale_items", 3);
 
         startCounting();
         draftRepository.findAllByShopIdOrderByIdDesc(shopId).forEach(draft ->
@@ -244,22 +251,22 @@ class SalesListQueryPostgresTest {
         assertThat(sql.readsOf("sale_draft_items")).hasSize(100);
 
         startCounting();
-        assertThat(drafts.list(owner, Long.toString(shopId))).hasSize(100);
-        assertDataReads("sale_drafts", "sale_draft_items", 2);
-        LOG.info("N+1 control fixture: parents=100, legacyDataReads=101, optimizedDataReads=2 (sales and drafts)");
+        assertThat(drafts.list(owner, Long.toString(shopId), new Drafts(0, 100, null)).items()).hasSize(100);
+        assertDataReads("sale_drafts", "sale_draft_items", 3);
+        LOG.info("N+1 control fixture: parents=100, legacyDataReads=101, optimizedDataReads=3 (sales and drafts, including count)");
     }
 
     @Test
     void foreignShopAccessIsDeniedBeforeReadingSalesOrDrafts() {
         startCounting();
-        assertThatThrownBy(() -> sales.list(owner, Long.toString(otherShopId)))
+        assertThatThrownBy(() -> sales.list(owner, Long.toString(otherShopId), new Sales(0, 100, null, null, null, null)).items())
                 .isInstanceOfSatisfying(BusinessException.class, error ->
                         assertThat(error.getErrorCode()).isEqualTo(ErrorCode.SHOP_ACCESS_DENIED));
         assertThat(sql.readsOf("sales")).isEmpty();
         assertThat(sql.readsOf("sale_items")).isEmpty();
 
         startCounting();
-        assertThatThrownBy(() -> drafts.list(owner, Long.toString(otherShopId)))
+        assertThatThrownBy(() -> drafts.list(owner, Long.toString(otherShopId), new Drafts(0, 100, null)).items())
                 .isInstanceOfSatisfying(BusinessException.class, error ->
                         assertThat(error.getErrorCode()).isEqualTo(ErrorCode.SHOP_ACCESS_DENIED));
         assertThat(sql.readsOf("sale_drafts")).isEmpty();
@@ -270,10 +277,10 @@ class SalesListQueryPostgresTest {
     void inactiveShopStillCannotReadLists() {
         jdbc.update("update shops set status='INACTIVE',inactive_reason='Test maintenance' where id=?", shopId);
         startCounting();
-        assertThatThrownBy(() -> sales.list(owner, Long.toString(shopId)))
+        assertThatThrownBy(() -> sales.list(owner, Long.toString(shopId), new Sales(0, 100, null, null, null, null)).items())
                 .isInstanceOfSatisfying(BusinessException.class, error ->
                         assertThat(error.getErrorCode()).isEqualTo(ErrorCode.SHOP_INACTIVE));
-        assertThatThrownBy(() -> drafts.list(owner, Long.toString(shopId)))
+        assertThatThrownBy(() -> drafts.list(owner, Long.toString(shopId), new Drafts(0, 100, null)).items())
                 .isInstanceOfSatisfying(BusinessException.class, error ->
                         assertThat(error.getErrorCode()).isEqualTo(ErrorCode.SHOP_INACTIVE));
         assertThat(sql.readsOf("sales")).isEmpty();
@@ -336,8 +343,8 @@ class SalesListQueryPostgresTest {
     }
 
     private void assertDataReads(String parents, String items, int expected) {
-        assertThat(sql.readsOf(parents)).hasSize(1);
-        assertThat(sql.readsOf(items)).hasSize(expected - 1);
+        assertThat(sql.readsOf(parents)).hasSize(expected == 3 ? 2 : 1);
+        assertThat(sql.readsOf(items)).hasSize(expected == 1 ? 0 : 1);
         // Auth/user/shop checks are deliberately excluded from this data-query budget.
         assertThat(sql.businessReads()).hasSize(expected);
     }

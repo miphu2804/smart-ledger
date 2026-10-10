@@ -1,28 +1,32 @@
 package com.smartledger.core.service.impl;
 
-import com.smartledger.core.enums.AuditAction;
-import com.smartledger.core.service.AuditLogService;
 import com.smartledger.core.dto.request.DebtRepaymentRequest;
+import com.smartledger.core.dto.request.OwnerListQuery.Debts;
 import com.smartledger.core.dto.response.DebtRepaymentResponse;
 import com.smartledger.core.dto.response.DebtResponse;
+import com.smartledger.core.dto.response.PageResponse;
 import com.smartledger.core.dto.response.PaymentResponse;
 import com.smartledger.core.entity.Debt;
 import com.smartledger.core.entity.Payment;
 import com.smartledger.core.entity.Sale;
 import com.smartledger.core.entity.Shop;
+import com.smartledger.core.enums.AuditAction;
 import com.smartledger.core.enums.ErrorCode;
 import com.smartledger.core.enums.SaleStatus;
 import com.smartledger.core.exception.BusinessException;
 import com.smartledger.core.repository.DebtRepository;
+import com.smartledger.core.repository.OwnerListSpecifications;
 import com.smartledger.core.repository.PaymentRepository;
 import com.smartledger.core.repository.SaleRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
+import com.smartledger.core.service.AuditLogService;
 import com.smartledger.core.service.DebtService;
 import com.smartledger.core.service.IdempotencyService;
 import com.smartledger.core.service.ShopService;
-import java.util.List;
 import java.util.Map;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
@@ -47,10 +51,12 @@ public class DebtServiceImpl implements DebtService {
     }
 
     @Override
-    @Transactional(readOnly = true)
-    public List<DebtResponse> list(VerifiedFirebaseToken token, String shopId) {
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public PageResponse<DebtResponse> list(VerifiedFirebaseToken token, String shopId, Debts query) {
         Shop shop = shopService.requireOwnedActiveShop(token, shopId);
-        return debtRepository.findAllByShopIdOrderByIdDesc(shop.getId()).stream().map(this::toResponse).toList();
+        var page = debtRepository.findAll(OwnerListSpecifications.debts(shop.getId(), query),
+                query.pageable(Sort.by(Sort.Direction.DESC, "id")));
+        return PageResponse.from(page, this::toResponse);
     }
 
     @Override

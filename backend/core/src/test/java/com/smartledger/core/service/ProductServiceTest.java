@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.smartledger.core.dto.request.OwnerListQuery.*;
 import com.smartledger.core.dto.request.ProductPatchRequest;
 import com.smartledger.core.dto.request.ProductWriteRequest;
 import com.smartledger.core.dto.response.ProductResponse;
@@ -26,6 +27,9 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class ProductServiceTest {
@@ -160,11 +164,11 @@ class ProductServiceTest {
     @Test
     void listsOnlyActiveProductsFromTheSelectedShop() {
         Product product = product();
-        when(productRepository.findAllByShopIdAndStatusOrderByIdAsc(7L, CatalogStatus.ACTIVE))
-                .thenReturn(List.of(product));
+        when(productRepository.findAll(org.mockito.ArgumentMatchers.<Specification<com.smartledger.core.entity.Product>>any(), org.mockito.ArgumentMatchers.any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(product)));
 
-        assertThat(service.list(token(), "7")).hasSize(1);
-        verify(productRepository).findAllByShopIdAndStatusOrderByIdAsc(7L, CatalogStatus.ACTIVE);
+        assertThat(service.list(token(), "7", Products.defaults()).items()).hasSize(1);
+        verify(productRepository).findAll(org.mockito.ArgumentMatchers.<Specification<com.smartledger.core.entity.Product>>any(), org.mockito.ArgumentMatchers.any(Pageable.class));
     }
 
     @Test
@@ -287,7 +291,7 @@ class ProductServiceTest {
         when(shopService.requireOwnedActiveShop(any(), eq("8")))
                 .thenThrow(new BusinessException(ErrorCode.SHOP_INACTIVE));
 
-        assertThatThrownBy(() -> service.list(token(), "8"))
+        assertThatThrownBy(() -> service.list(token(), "8", Products.defaults()).items())
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.SHOP_INACTIVE));
         verify(productRepository, never()).findAllByShopIdAndStatusOrderByIdAsc(any(), any());
@@ -305,7 +309,7 @@ class ProductServiceTest {
         assertThat(product.getArchivedAt()).isNotNull();
         assertThat(product.getArchivedByUserId()).isEqualTo(42L);
         verify(productRepository).findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE);
-        verify(productRepository, never()).delete(any());
+        verify(productRepository, never()).delete(any(Product.class));
     }
 
     private Product product() {

@@ -1,15 +1,17 @@
 package com.smartledger.core.controller;
 
 import com.smartledger.core.dto.request.DebtRepaymentRequest;
+import com.smartledger.core.dto.request.OwnerListQuery.Debts;
 import com.smartledger.core.dto.response.DebtRepaymentResponse;
 import com.smartledger.core.dto.response.DebtResponse;
+import com.smartledger.core.dto.response.PageResponse;
+import com.smartledger.core.enums.DebtStatus;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.DebtService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -33,10 +36,17 @@ public class DebtController {
     }
 
     @GetMapping
-    @Operation(summary = "List debts in the selected shop")
-    public List<DebtResponse> list(@AuthenticationPrincipal VerifiedFirebaseToken token,
-            @RequestHeader("X-Shop-Id") String shopId) {
-        return service.list(token, shopId);
+    @Operation(summary = "List debts in the selected shop",
+            description = "DB pagination: page starts at 0; size 1-100 (default 20); offset <= 2147483647. "
+                    + "Returns items/page/size/totalElements/totalPages, not an array. "
+                    + "Ordered by ID DESC. status/customerId apply before paging/counting; scope follows the sale's shop.")
+    public PageResponse<DebtResponse> list(@AuthenticationPrincipal VerifiedFirebaseToken token,
+            @RequestHeader("X-Shop-Id") String shopId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) DebtStatus status,
+            @RequestParam(required = false) Long customerId) {
+        return service.list(token, shopId, new Debts(page, size, status, customerId));
     }
 
     @GetMapping("/{debtId}")

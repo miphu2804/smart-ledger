@@ -3,15 +3,16 @@ package com.smartledger.core.repository;
 import com.smartledger.core.entity.Sale;
 import com.smartledger.core.enums.SaleStatus;
 import jakarta.persistence.LockModeType;
-import org.springframework.data.jpa.repository.Lock;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
-public interface SaleRepository extends JpaRepository<Sale, Long> {
+public interface SaleRepository extends JpaRepository<Sale, Long>, JpaSpecificationExecutor<Sale> {
     List<Sale> findAllByShopIdOrderByIdDesc(Long shopId);
 
     Optional<Sale> findByIdAndShopId(Long id, Long shopId);

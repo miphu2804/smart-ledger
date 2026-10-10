@@ -9,12 +9,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.smartledger.core.dto.request.OwnerListQuery.*;
 import com.smartledger.core.dto.request.SaleDraftItemRequest;
 import com.smartledger.core.dto.request.SaleDraftWriteRequest;
 import com.smartledger.core.dto.response.SaleDraftResponse;
-import com.smartledger.core.entity.Payment;
 import com.smartledger.core.entity.Customer;
 import com.smartledger.core.entity.Debt;
+import com.smartledger.core.entity.Payment;
 import com.smartledger.core.entity.Product;
 import com.smartledger.core.entity.Sale;
 import com.smartledger.core.entity.SaleDraft;
@@ -28,9 +29,9 @@ import com.smartledger.core.enums.PaymentMethod;
 import com.smartledger.core.enums.PaymentStatus;
 import com.smartledger.core.enums.PaymentType;
 import com.smartledger.core.exception.BusinessException;
-import com.smartledger.core.repository.PaymentRepository;
 import com.smartledger.core.repository.CustomerRepository;
 import com.smartledger.core.repository.DebtRepository;
+import com.smartledger.core.repository.PaymentRepository;
 import com.smartledger.core.repository.ProductRepository;
 import com.smartledger.core.repository.SaleDraftItemRepository;
 import com.smartledger.core.repository.SaleDraftRepository;
@@ -54,6 +55,9 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class SaleDraftServiceTest {
@@ -82,7 +86,7 @@ class SaleDraftServiceTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {1, 20, 100, 10000})
+    @ValueSource(ints = {1, 20, 100})
     void loadsDraftItemsOnceRegardlessOfDraftCount(int count) {
         var drafts = IntStream.rangeClosed(1, count).mapToObj(index -> {
             SaleDraft draft = draft(25000L, PaymentMethod.CASH);
@@ -96,10 +100,10 @@ class SaleDraftServiceTest {
                     ReflectionTestUtils.setField(item, "id", index * 2L + line);
                     return item;
                 })).toList();
-        when(draftRepository.findAllByShopIdOrderByIdDesc(7L)).thenReturn(drafts);
-        when(draftItemRepository.findAllByShopId(7L)).thenReturn(items);
+        when(draftRepository.findAll(org.mockito.ArgumentMatchers.<Specification<com.smartledger.core.entity.SaleDraft>>any(), org.mockito.ArgumentMatchers.any(Pageable.class))).thenReturn(new PageImpl<>(drafts));
+        when(draftItemRepository.findAllForPage(eq(7L), any())).thenReturn(items);
 
-        var responses = service.list(token, "7");
+        var responses = service.list(token, "7", new Drafts(0, 100, null)).items();
 
         assertThat(responses).hasSize(count);
         assertThat(responses).extracting(response -> response.id())
@@ -110,15 +114,15 @@ class SaleDraftServiceTest {
             assertThat(response.items()).extracting(item -> item.productName())
                     .containsExactly("Item 1", "Item 2");
         }
-        verify(draftItemRepository).findAllByShopId(7L);
+        verify(draftItemRepository).findAllForPage(eq(7L), any());
         verify(draftItemRepository, never()).findAllByDraftIdOrderByIdAsc(any());
     }
 
     @Test
     void emptyDraftListDoesNotReadItems() {
-        when(draftRepository.findAllByShopIdOrderByIdDesc(7L)).thenReturn(List.of());
+        when(draftRepository.findAll(org.mockito.ArgumentMatchers.<Specification<com.smartledger.core.entity.SaleDraft>>any(), org.mockito.ArgumentMatchers.any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
 
-        assertThat(service.list(token, "7")).isEmpty();
+        assertThat(service.list(token, "7", new Drafts(0, 100, null)).items()).isEmpty();
 
         verifyNoInteractions(draftItemRepository);
     }
@@ -134,11 +138,11 @@ class SaleDraftServiceTest {
         var cancelled = draft(25000L, PaymentMethod.CASH);
         ReflectionTestUtils.setField(cancelled, "id", 12L);
         cancelled.cancel();
-        when(draftRepository.findAllByShopIdOrderByIdDesc(7L))
-                .thenReturn(List.of(expired, confirmed, cancelled, draft(25000L, PaymentMethod.CASH)));
-        when(draftItemRepository.findAllByShopId(7L)).thenReturn(List.of());
+        when(draftRepository.findAll(org.mockito.ArgumentMatchers.<Specification<com.smartledger.core.entity.SaleDraft>>any(), org.mockito.ArgumentMatchers.any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(expired, confirmed, cancelled, draft(25000L, PaymentMethod.CASH))));
+        when(draftItemRepository.findAllForPage(eq(7L), any())).thenReturn(List.of());
 
-        var responses = service.list(token, "7");
+        var responses = service.list(token, "7", new Drafts(0, 100, null)).items();
 
         assertThat(responses).extracting(response -> response.id()).containsExactly(14L, 13L, 12L, 11L);
         assertThat(responses).extracting(response -> response.status())
@@ -153,7 +157,7 @@ class SaleDraftServiceTest {
         when(shopService.requireOwnedActiveShop(token, "7"))
                 .thenThrow(new BusinessException(ErrorCode.SHOP_ACCESS_DENIED));
 
-        assertThatThrownBy(() -> service.list(token, "7"))
+        assertThatThrownBy(() -> service.list(token, "7", new Drafts(0, 100, null)).items())
                 .isInstanceOfSatisfying(BusinessException.class, error ->
                         assertThat(error.getErrorCode()).isEqualTo(ErrorCode.SHOP_ACCESS_DENIED));
 
@@ -648,7 +652,7 @@ class SaleDraftServiceTest {
 
         assertThat(draft.getStatus()).isEqualTo(DraftStatus.CANCELLED);
         assertThat(draft.getCancelledAt()).isNotNull();
-        verify(draftRepository, never()).delete(any());
+        verify(draftRepository, never()).delete(any(SaleDraft.class));
         verify(draftItemRepository, never()).deleteAllByDraftId(any());
     }
 

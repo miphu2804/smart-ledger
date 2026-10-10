@@ -1,25 +1,29 @@
 package com.smartledger.core.service.impl;
 
-import com.smartledger.core.enums.AuditAction;
-import com.smartledger.core.service.AuditLogService;
 import com.smartledger.core.dto.request.ExpensePatchRequest;
 import com.smartledger.core.dto.request.ExpenseWriteRequest;
+import com.smartledger.core.dto.request.OwnerListQuery.Expenses;
 import com.smartledger.core.dto.response.ExpenseResponse;
+import com.smartledger.core.dto.response.PageResponse;
 import com.smartledger.core.entity.Expense;
 import com.smartledger.core.entity.Shop;
+import com.smartledger.core.enums.AuditAction;
 import com.smartledger.core.enums.ErrorCode;
 import com.smartledger.core.enums.ExpenseStatus;
 import com.smartledger.core.exception.BusinessException;
 import com.smartledger.core.repository.ExpenseRepository;
+import com.smartledger.core.repository.OwnerListSpecifications;
 import com.smartledger.core.security.VerifiedFirebaseToken;
+import com.smartledger.core.service.AuditLogService;
 import com.smartledger.core.service.ExpenseService;
 import com.smartledger.core.service.IdempotencyService;
 import com.smartledger.core.service.ShopService;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.List;
 import java.util.Map;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
@@ -59,20 +63,14 @@ public class ExpenseServiceImpl implements ExpenseService {
     }
 
     @Override
-    @Transactional(readOnly = true)
-    public List<ExpenseResponse> list(VerifiedFirebaseToken token, String shopId, String period) {
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public PageResponse<ExpenseResponse> list(VerifiedFirebaseToken token, String shopId, Expenses query) {
         Shop shop = shopService.requireOwnedActiveShop(token, shopId);
-        List<Expense> expenses;
-        if (!StringUtils.hasText(period)) {
-            expenses = expenseRepository.findAllByShopIdAndStatusOrderByExpenseAtDescIdDesc(
-                    shop.getId(), ExpenseStatus.ACTIVE);
-        } else {
-            ReportWindow window = ReportWindow.of(period, OffsetDateTime.now(ZoneOffset.UTC));
-            expenses = expenseRepository
-                    .findAllByShopIdAndStatusAndExpenseAtGreaterThanEqualAndExpenseAtLessThanOrderByExpenseAtDescIdDesc(
-                            shop.getId(), ExpenseStatus.ACTIVE, window.fromInclusive(), window.toExclusive());
-        }
-        return expenses.stream().map(this::toResponse).toList();
+        ReportWindow window = query.period() == null ? null : ReportWindow.of(query.period(), OffsetDateTime.now(ZoneOffset.UTC));
+        var page = expenseRepository.findAll(OwnerListSpecifications.expenses(shop.getId(), query,
+                window == null ? null : window.fromInclusive(), window == null ? null : window.toExclusive()),
+                query.pageable(Sort.by(Sort.Direction.DESC, "expenseAt", "id")));
+        return PageResponse.from(page, this::toResponse);
     }
 
     @Override

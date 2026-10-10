@@ -158,9 +158,42 @@ $env:CORE_TEST_POSTGRES_PASSWORD = 'test_password'
 
 The test creates and removes only a randomly named `core_void_test_*` schema, requires permission to create schemas, and does not run Flyway. It uses real business services and transactions, with auth/idempotency stubbed. Without `CORE_TEST_POSTGRES_URL`, PostgreSQL suites are skipped; unit/web tests still run normally.
 
+### OWNER list pagination (CORE-011)
+
+[CORE-011 #153](https://github.com/miphu2804/smart-ledger/issues/153) changes the existing six OWNER GET lists (`products`, `sales`, `sale-drafts`, `customers`, `debts`, `expenses`) from arrays to `PageResponse<T>`, even without query parameters. There is no `/page` route or full-array fallback. See the canonical [pagination contract](../../docs/contracts/api-contracts.md#phân-trang-danh-sách-owner) for the exact filters, sorting and errors. Detail/write/report contracts are unchanged; no schema/index migration or Redis cache is added.
+
+All lists default to `page=0&size=20`; size is 1–100 and the offset must fit Integer.MAX_VALUE. Filtering precedes SQL pagination. Sale/draft item queries are bounded by the parent IDs in the page and the selected shop. Simple lists use at most two data queries; sale/draft lists use at most three including count and item batch, excluding auth/shop checks. Spring Data may skip count when the correct total can be inferred. Empty parent pages never load items. Content/count share one REPEATABLE_READ snapshot per request, not across requests; deep OFFSET/count can still be expensive and concurrent changes can shift pages.
+
+With all three `CORE_TEST_POSTGRES_*` variables above pointing to a **disposable** database, run:
+
+```powershell
+.\mvnw.cmd '-Dtest=OwnerListQueryTest,OwnerPaginationWebTest,OwnerListPaginationPostgresTest,SalesListQueryPostgresTest,ApiDocumentationWebTest' test
+```
+
+`OwnerListPaginationPostgresTest` applies V1–V15 in a generated `core_owner_page_test_*` schema, validates mappings and removes that schema afterward. It checks tenant/filter/count consistency, effective draft expiry without GET writes, literal/accent-insensitive search, stock thresholds and sorting, timestamp boundaries/equivalent offsets, a 100,000-product catalog, deep pages, query counts, response bytes and EXPLAIN ANALYZE. A concurrent insert between content/count verifies per-request snapshot consistency. Timing is logged, not asserted as a latency SLA. Without the test URL PostgreSQL suites are skipped; that is not full verification. Run `.\mvnw.cmd verify` with all three variables for the entire Core regression suite.
+
+For a manual **read-only local** check, first run Core with a local test OWNER token and an ACTIVE shop it owns. Supply `CORE_LOCAL_OWNER_TOKEN` in your terminal without committing or printing it; select your test shop ID below. This does not create fixtures or prove staging UAT:
+
+```powershell
+$baseUrl = 'http://localhost:8080'
+$headers = @{ Authorization = "Bearer $env:CORE_LOCAL_OWNER_TOKEN"; 'X-Shop-Id' = '4' }
+$from = [uri]::EscapeDataString('2026-10-09T00:00:00+07:00')
+$to = [uri]::EscapeDataString('2026-10-10T00:00:00+07:00')
+$page = Invoke-RestMethod -Method Get -Headers $headers `
+    -Uri "$baseUrl/api/v1/sales?page=0&size=2&from=$from&to=$to"
+$page | Select-Object page,size,totalElements,totalPages
+$page.items
+```
+
+The same `from/to` applies to expenses; it requires offset timestamps and selects `[from, to)`, not inclusive calendar dates. Either bound may be omitted; if both exist, from must precede to by instant. Date-only/no-offset values return 400 validation_failed; reversed/equal bounds return the resource's invalid query code. Do not combine an expense period with either bound. In Swagger enter the raw offset value; URL construction must encode `+` as `%2B`, as above. Neither `fromDate` nor `toDate` is the filter name.
+
+Check no-result and beyond-last pages, page -1, size 0/101, offset overflow, a record exactly at each time bound, and equivalent Z/+07:00 timestamps. With no match expect items empty and totals zero; beyond the last page expect items empty but the actual filtered totals. For protected routes also check missing token, ADMIN, another OWNER's shop and INACTIVE/ARCHIVED shops under the existing auth contract.
+
+**FE rollout remains pending in #144 / PRD AC-063.** Clients/mocks must consume items/metadata, load/reset pages and use server-side filters. Do not reduce a page into shop-wide revenue/profit/debt/expense/stock totals or group incomplete debt pages by customer. Reuse suitable reports; missing aggregate/contact projections require separate approval. FE old arrays are incompatible with this branch; passing Core tests is not authorization to deploy over an unadapted FE or evidence of integrated acceptance.
+
 ### Sale and draft list query regression tests
 
-Issue [#134](https://github.com/miphu2804/smart-ledger/issues/134) replaces per-parent item queries in `GET /api/v1/sales` and `GET /api/v1/sale-drafts` with one shop-scoped item query, then groups items by parent ID. Nonempty lists use two data queries; empty lists skip the item query and use one. These counts exclude authentication and shop-access checks. Parent IDs remain descending and item IDs ascending; detail, confirm and void retain their single-parent item queries. No API or schema change is required.
+Issue [#134](https://github.com/miphu2804/smart-ledger/issues/134) removed per-parent item reads. CORE-011 retains batching but limits it to page parent IDs plus shop; nonempty pages use up to three data queries including count, and empty pages skip items. These counts exclude auth/shop checks. Sales now sort by soldAt/id descending, drafts by id descending, and items by id ascending within each parent. Detail, confirm and void retain single-parent item reads. The pagination response is a breaking API change, with no schema change.
 
 With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
 
@@ -168,9 +201,9 @@ With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
 .\mvnw.cmd '-Dtest=SalePaymentServiceTest,SaleDraftServiceTest,SalesListQueryPostgresTest' test
 ```
 
-`SalesListQueryPostgresTest` applies V1–V15 and validates mappings in a generated `core_list_query_test_*` schema. Synthetic fixtures roll back after each test, and the suite removes only its generated schema. Hibernate SQL counting exercises the real list services and ownership checks with 1, 20, 100, 1,337 and 10,000 parents, each with five items; it also covers empty lists, missing items, cross-shop denial, inactive shops, archived-product snapshots and computed draft expiry. A control reproduces the old loop with 100 parents (101 data queries) and checks the optimized services use two. Unit tests separately verify batch repository calls with up to 10,000 parents.
+`SalesListQueryPostgresTest` applies V1–V15 and validates mappings in a generated `core_list_query_test_*` schema. Synthetic fixtures roll back after each test, and the suite removes only its generated schema. Hibernate SQL counting exercises real list services and ownership checks with 1, 20, 100, 1,337 and 10,000 parents, each with five items, but reads at most 100 parents/500 items per tested page. It verifies filtered totals, item ordering, empty/missing items, cross-shop denial, inactive shops, archived-product snapshots and computed expiry. A control reproduces the old loop with 100 parents (101 data queries) versus three optimized queries including count.
 
-Use only a disposable database with schema-creation permission, never a business, shared staging or production database. Without the test URL, the PostgreSQL suite is skipped. This is a SQL-count regression test, not an HTTP/Firebase/FE load benchmark or staging UAT; list responses remain unpaginated and still load the shop's full history.
+Use only a disposable database with schema-creation permission, never a business, shared staging or production database. Without the test URL, the PostgreSQL suite is skipped. This is a SQL-count regression test, not an HTTP/Firebase/FE load benchmark or staging UAT. SQL pagination bounds parent rows, not the number of items inside any individual order/draft.
 
 ### Checkout and void batch product-lock tests
 
