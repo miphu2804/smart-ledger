@@ -170,7 +170,78 @@ class NotificationPostgresTest {
         assertThat(count("SALE_VOIDED")).isEqualTo(1);
     }
 
-    @Test void checkoutFailureRollsBackStockAndPreviouslyCreatedAlert() {
+    @Test void batchAlertsCloseReopenAndPreserveReadStateAcrossRetries() {
+        var ids = List.of(product("3", "2").id(), product("3", "2").id());
+        long draft = batchDraft(ids, "1");
+        var first = drafts.confirm(owner, shopId, Long.toString(draft));
+        assertThat(drafts.confirm(owner, shopId, Long.toString(draft)).id()).isEqualTo(first.id());
+        assertThat(count("LOW_STOCK")).isEqualTo(2);
+        long low = jdbc.queryForObject("select min(id) from notification_events where shop_id=?",
+                Long.class, Long.valueOf(shopId));
+        inbox.markRead(owner, List.of(low));
+        OffsetDateTime read = jdbc.queryForObject("select read_at from notification_recipients where notification_event_id=?",
+                OffsetDateTime.class, low);
+        drafts.confirm(owner, shopId, Long.toString(batchDraft(ids.reversed(), "1")));
+        assertThat(count("LOW_STOCK")).isEqualTo(2);
+        drafts.confirm(owner, shopId, Long.toString(batchDraft(ids, "1")));
+        assertThat(count("OUT_OF_STOCK")).isEqualTo(2);
+        assertThat(open()).isEqualTo(2);
+        assertThat(jdbc.queryForObject("select count(*) from notification_events where shop_id=? and type='LOW_STOCK' and resolved_at is not null",
+                Long.class, Long.valueOf(shopId))).isEqualTo(2);
+        for (Long id : ids) products.stockIn(owner, shopId, id.toString(), "recover-" + id,
+                new ProductStockInRequest(new BigDecimal("3"), null));
+        assertThat(open()).isZero();
+        drafts.confirm(owner, shopId, Long.toString(batchDraft(ids, "1")));
+        assertThat(count("LOW_STOCK")).isEqualTo(4);
+        assertThat(open()).isEqualTo(2);
+        assertRecipientsMatchEvents();
+        assertThat(jdbc.queryForObject("select read_at from notification_recipients where notification_event_id=?",
+                OffsetDateTime.class, low)).isEqualTo(read);
+    }
+
+    @Test void concurrentReverseOrderBatchesAndVoidReplaysDoNotDuplicateAlertsOrRecipients() throws Exception {
+        var ids = List.of(product("2", "1").id(), product("2", "1").id());
+        long first = batchDraft(ids, "1"), second = batchDraft(ids.reversed(), "1");
+        var sales = parallel(() -> drafts.confirm(owner, shopId, Long.toString(first)).id(),
+                () -> drafts.confirm(owner, shopId, Long.toString(second)).id());
+        assertThat(count("LOW_STOCK")).isEqualTo(2);
+        assertThat(count("OUT_OF_STOCK")).isEqualTo(2);
+        assertThat(open()).isEqualTo(2);
+        var request = new SaleVoidRequest("Return", true, PaymentMethod.CASH, null);
+        var results = parallel(() -> voids.voidSale(owner, shopId, sales.getFirst().toString(), "batch-first", request),
+                () -> voids.voidSale(owner, shopId, sales.getLast().toString(), "batch-second", request));
+        assertThat(voids.voidSale(owner, shopId, sales.getFirst().toString(), "batch-first", request).refund().id())
+                .isEqualTo(results.getFirst().refund().id());
+        assertThat(voids.voidSale(owner, shopId, sales.getLast().toString(), "batch-second", request).refund().id())
+                .isEqualTo(results.getLast().refund().id());
+        assertThat(count("LOW_STOCK")).isEqualTo(4);
+        assertThat(count("SALE_VOIDED")).isEqualTo(2);
+        assertThat(open()).isZero();
+        ids.forEach(id -> assertThat(products.getById(owner, shopId, id.toString()).stockQuantity()).isEqualByComparingTo("2"));
+        assertRecipientsMatchEvents();
+    }
+
+    @Test void notificationFailureOnSecondProductRollsBackTheWholeCheckoutBatch() {
+        var ids = List.of(product("1", null).id(), product("1", null).id());
+        long draft = batchDraft(ids, "1");
+        long auditBefore = jdbc.queryForObject("select count(*) from audit_logs where shop_id=?", Long.class, Long.valueOf(shopId));
+        jdbc.execute("alter table notification_events add constraint test_batch_notification_fail check (shop_id <> "
+                + shopId + " or type <> 'OUT_OF_STOCK' or entity_id <> " + ids.getLast() + ")");
+        try {
+            assertThatThrownBy(() -> drafts.confirm(owner, shopId, Long.toString(draft)))
+                    .isInstanceOf(DataIntegrityViolationException.class);
+            ids.forEach(id -> assertThat(products.getById(owner, shopId, id.toString()).stockQuantity()).isEqualByComparingTo("1"));
+            assertThat(count(null)).isZero();
+            assertRecipientsMatchEvents();
+            assertThat(jdbc.queryForObject("select status from sale_drafts where id=?", String.class, draft)).isEqualTo("DRAFT");
+            assertThat(jdbc.queryForObject("select count(*) from sales where shop_id=?", Long.class, Long.valueOf(shopId))).isZero();
+            assertThat(jdbc.queryForObject("select count(*) from customers where shop_id=?", Long.class, Long.valueOf(shopId))).isZero();
+            assertThat(jdbc.queryForObject("select count(*) from audit_logs where shop_id=?", Long.class, Long.valueOf(shopId)))
+                    .isEqualTo(auditBefore);
+        } finally { jdbc.execute("alter table notification_events drop constraint test_batch_notification_fail"); }
+    }
+
+    @Test void checkoutFailureRollsBackStockWithoutCreatingAlerts() {
         var first = product("1", null);
         var second = product("0", null);
         long before = count(null);
@@ -184,18 +255,26 @@ class NotificationPostgresTest {
     }
 
     @Test void notificationWriteFailureRollsBackVoidRefundAndIdempotencyKey() {
-        var product = product("1", null);
-        long sale = confirm(product.id(), "1");
+        var ids = List.of(product("2", "1").id(), product("2", "1").id());
+        long sale = drafts.confirm(owner, shopId, Long.toString(batchDraft(ids, "2"))).id();
+        long auditBefore = jdbc.queryForObject("select count(*) from audit_logs where shop_id=?", Long.class, Long.valueOf(shopId));
         jdbc.execute("alter table notification_events add constraint test_notification_fail check (shop_id <> " + shopId + " or type <> 'SALE_VOIDED')");
         try {
             assertThatThrownBy(() -> voids.voidSale(owner, shopId, Long.toString(sale), "failed-void",
                     new SaleVoidRequest("Return", true, PaymentMethod.CASH, null))).isInstanceOf(DataIntegrityViolationException.class);
-            assertThat(products.getById(owner, shopId, product.id().toString()).stockQuantity()).isEqualByComparingTo("0");
+            ids.forEach(id -> assertThat(products.getById(owner, shopId, id.toString()).stockQuantity()).isEqualByComparingTo("0"));
             assertThat(jdbc.queryForObject("select sale_status from sales where id=?", String.class, sale)).isEqualTo("CONFIRMED");
+            assertThat(jdbc.queryForObject("select paid_vnd from sales where id=?", Long.class, sale)).isEqualTo(20_000);
+            assertThat(jdbc.queryForObject("select outstanding_vnd from debts where sale_id=?", Long.class, sale)).isEqualTo(20_000);
+            assertThat(jdbc.queryForObject("select count(*) from payments where sale_id=?", Long.class, sale)).isEqualTo(1);
             assertThat(jdbc.queryForObject("select count(*) from sale_refunds where sale_id=?", Long.class, sale)).isZero();
             assertThat(jdbc.queryForObject("select count(*) from api_idempotency_keys where shop_id=? and idempotency_key='failed-void'",
                     Long.class, Long.valueOf(shopId))).isZero();
-            assertThat(open()).isEqualTo(1);
+            assertThat(open()).isEqualTo(2);
+            assertThat(count(null)).isEqualTo(2);
+            assertRecipientsMatchEvents();
+            assertThat(jdbc.queryForObject("select count(*) from audit_logs where shop_id=?", Long.class, Long.valueOf(shopId)))
+                    .isEqualTo(auditBefore);
         } finally { jdbc.execute("alter table notification_events drop constraint test_notification_fail"); }
     }
 
@@ -291,6 +370,16 @@ class NotificationPostgresTest {
                 PaymentMethod.CASH, List.of(new SaleDraftItemRequest(product, qty, 10_000L, null, null)), null)).id();
     }
     private long confirm(Long product, String quantity) { return drafts.confirm(owner, shopId, Long.toString(draft(product, quantity))).id(); }
+    private long batchDraft(List<Long> ids, String quantity) {
+        BigDecimal qty = new BigDecimal(quantity);
+        long total = qty.multiply(BigDecimal.valueOf(10_000L * ids.size())).longValueExact();
+        return drafts.create(owner, shopId, new SaleDraftWriteRequest("Batch buyer", null, 0L, total / 2,
+                PaymentMethod.CASH, ids.stream().map(id -> new SaleDraftItemRequest(id, qty, 10_000L, null, null)).toList(), null)).id();
+    }
+    private void assertRecipientsMatchEvents() {
+        assertThat(jdbc.queryForObject("select count(*) from notification_recipients r join notification_events e on e.id=r.notification_event_id where e.shop_id=?",
+                Long.class, Long.valueOf(shopId))).isEqualTo(count(null));
+    }
     private long count(String type) {
         return type == null ? jdbc.queryForObject("select count(*) from notification_events where shop_id=?", Long.class, Long.valueOf(shopId))
                 : jdbc.queryForObject("select count(*) from notification_events where shop_id=? and type=?", Long.class, Long.valueOf(shopId), type);

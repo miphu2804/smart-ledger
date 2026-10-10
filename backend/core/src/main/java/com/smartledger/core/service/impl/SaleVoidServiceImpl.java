@@ -29,6 +29,7 @@ import com.smartledger.core.service.ShopService;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -74,6 +75,13 @@ public class SaleVoidServiceImpl implements SaleVoidService {
                 SaleVoidResponse.class, () -> voidOnce(shop, id, idempotencyKey, request));
     }
 
+    /**
+     * Executes the non-replayed void inside the outer idempotent business transaction.
+     * Locks sale, then its debt if present, then the nonempty restock Product group in ascending ID order.
+     * Restock validates deduction snapshots before Product locking and includes archived Products;
+     * custom or other non-deducted items do not change stock. Refund, debt cancellation, stock,
+     * grouped alerts and audit writes roll back together if any step fails.
+     */
     private SaleVoidResponse voidOnce(Shop shop, Long id, String idempotencyKey, SaleVoidRequest request) {
         Sale sale = saleRepository.findLockedByIdAndShopId(id, shop.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.SALE_NOT_FOUND));
@@ -105,28 +113,37 @@ public class SaleVoidServiceImpl implements SaleVoidService {
         int restoredItemCount = 0;
         Map<Long, Product> restoredProducts = new java.util.TreeMap<>();
         if (Boolean.TRUE.equals(request.restockItems())) {
-            // Product locks follow the same stable ID order as checkout confirmation.
-            for (SaleItem item : items.stream().sorted(Comparator.comparing(
-                    SaleItem::getProductId, Comparator.nullsLast(Long::compareTo))).toList()) {
-                if (item.getStockDeducted() == null) {
+            // Reject unknown historical deductions before taking any product lock.
+            for (SaleItem item : items) {
+                if (item.getStockDeducted() == null
+                        || (Boolean.TRUE.equals(item.getStockDeducted()) && item.getProductId() == null)) {
                     throw new BusinessException(ErrorCode.SALE_RESTOCK_UNAVAILABLE);
                 }
-                if (Boolean.TRUE.equals(item.getStockDeducted())) {
-                    Product product = productRepository.findLockedByIdAndShopId(item.getProductId(), shop.getId())
-                            .orElseThrow(() -> new BusinessException(ErrorCode.SALE_RESTOCK_UNAVAILABLE));
-                    var beforeStock = product.getStockQuantity();
-                    product.restoreStock(item.getQuantity());
-                    restoredProducts.put(product.getId(), product);
-                    auditLogService.recordOwner(shop, AuditAction.STOCK_RESTORED_ON_VOID, product.getId(), null, idempotencyKey,
-                            Map.of("saleId", id, "quantity", item.getQuantity(), "beforeStock", beforeStock,
-                                    "afterStock", product.getStockQuantity()));
-                    stockRestocked = true;
-                    restoredItemCount++;
-                }
+            }
+            List<SaleItem> restockItems = items.stream().filter(item -> Boolean.TRUE.equals(item.getStockDeducted()))
+                    .sorted(Comparator.comparing(SaleItem::getProductId)).toList();
+            List<Long> productIds = restockItems.stream().map(SaleItem::getProductId).distinct().toList();
+            List<Product> lockedProducts = productIds.isEmpty() ? List.of()
+                    : productRepository.findAllLockedByIdInAndShopId(productIds, shop.getId());
+            if (lockedProducts.size() != productIds.size()) {
+                throw new BusinessException(ErrorCode.SALE_RESTOCK_UNAVAILABLE);
+            }
+            Map<Long, Product> productsById = lockedProducts.stream()
+                    .collect(Collectors.toMap(Product::getId, product -> product));
+            for (SaleItem item : restockItems) {
+                Product product = productsById.get(item.getProductId());
+                var beforeStock = product.getStockQuantity();
+                product.restoreStock(item.getQuantity());
+                restoredProducts.put(product.getId(), product);
+                auditLogService.recordOwner(shop, AuditAction.STOCK_RESTORED_ON_VOID, product.getId(), null, idempotencyKey,
+                        Map.of("saleId", id, "quantity", item.getQuantity(), "beforeStock", beforeStock,
+                                "afterStock", product.getStockQuantity()));
+                stockRestocked = true;
+                restoredItemCount++;
             }
         }
 
-        restoredProducts.values().forEach(product -> notifications.reconcileStock(shop, product));
+        notifications.reconcileStock(shop, restoredProducts.values());
 
         if (debt != null) {
             debt.voidRemaining();

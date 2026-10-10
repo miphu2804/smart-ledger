@@ -158,6 +158,58 @@ $env:CORE_TEST_POSTGRES_PASSWORD = 'test_password'
 
 The test creates and removes only a randomly named `core_void_test_*` schema, requires permission to create schemas, and does not run Flyway. It uses real business services and transactions, with auth/idempotency stubbed. Without `CORE_TEST_POSTGRES_URL`, PostgreSQL suites are skipped; unit/web tests still run normally.
 
+### Sale and draft list query regression tests
+
+Issue [#134](https://github.com/miphu2804/smart-ledger/issues/134) replaces per-parent item queries in `GET /api/v1/sales` and `GET /api/v1/sale-drafts` with one shop-scoped item query, then groups items by parent ID. Nonempty lists use two data queries; empty lists skip the item query and use one. These counts exclude authentication and shop-access checks. Parent IDs remain descending and item IDs ascending; detail, confirm and void retain their single-parent item queries. No API or schema change is required.
+
+With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
+
+```powershell
+.\mvnw.cmd '-Dtest=SalePaymentServiceTest,SaleDraftServiceTest,SalesListQueryPostgresTest' test
+```
+
+`SalesListQueryPostgresTest` applies V1–V15 and validates mappings in a generated `core_list_query_test_*` schema. Synthetic fixtures roll back after each test, and the suite removes only its generated schema. Hibernate SQL counting exercises the real list services and ownership checks with 1, 20, 100, 1,337 and 10,000 parents, each with five items; it also covers empty lists, missing items, cross-shop denial, inactive shops, archived-product snapshots and computed draft expiry. A control reproduces the old loop with 100 parents (101 data queries) and checks the optimized services use two. Unit tests separately verify batch repository calls with up to 10,000 parents.
+
+Use only a disposable database with schema-creation permission, never a business, shared staging or production database. Without the test URL, the PostgreSQL suite is skipped. This is a SQL-count regression test, not an HTTP/Firebase/FE load benchmark or staging UAT; list responses remain unpaginated and still load the shop's full history.
+
+### Checkout and void batch product-lock tests
+
+Issue [#136](https://github.com/miphu2804/smart-ledger/issues/136) replaces per-product lock queries during confirm and restocking void with one shop-scoped `PESSIMISTIC_WRITE` query ordered by product ID. Confirm requires ACTIVE products; void may restore archived products using the historical `stockDeducted` snapshot. Empty product groups skip the query. Void retains sale → debt → ascending product locks. API, schema, money/debt, cost snapshots and audit contracts are unchanged.
+
+With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
+
+```powershell
+.\mvnw.cmd '-Dtest=SaleDraftServiceTest,SaleVoidServiceTest,ProductBatchLockPostgresTest,DebtVoidPostgresTest' test
+```
+
+`ProductBatchLockPostgresTest` applies V1–V15 and validates mappings in a generated `core_batch_lock_test_*` schema. It checks the Hibernate SQL and PostgreSQL EXPLAIN ordering, one product-lock query for 1/20/100 products, missing/foreign/archived products, custom and non-deducted items, unknown deduction snapshots, concurrent reverse-order confirmations/voids, and rollback of stock, money/debt, audit, notifications and void idempotency reservations. Fixtures commit to permit real concurrent transactions; the suite removes its generated schema after the class. Use only a disposable database with schema-creation permission, never a business/shared staging/production DB. Without the test URL, PostgreSQL suites are skipped.
+
+The same suite compares legacy single-product locks with batch confirm locks for 1/20/100 selected products sampled across a 100,000-product catalog. It logs median elapsed time from three measured samples after one warmup, including connection/transaction overhead; query counts are asserted but latency is not, to avoid flaky CI thresholds. These local measurements are not HTTP/Firebase/FE benchmarks, sustained-load tests or staging UAT. For the full Core check with PostgreSQL suites enabled, use `mvnw.cmd clean verify` with all three test variables set.
+
+### Batch stock-alert reconciliation tests
+
+Issue [#137](https://github.com/miphu2804/smart-ledger/issues/137) reads open stock alerts once for a nonempty collection of locked products, groups them by product ID, then preserves the existing resolve/flush/new-event/recipient lifecycle. The single-product method delegates to the collection method. Confirm reconciles once after all stock deductions; void reconciles the restored group once. Empty groups skip the alert query.
+
+With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
+
+```powershell
+.\mvnw.cmd '-Dtest=NotificationEventServiceTest,NotificationPostgresTest,ProductBatchLockPostgresTest,SaleDraftServiceTest,SaleVoidServiceTest' test
+```
+
+Unit tests count open-alert reads with up to 10,000 products. PostgreSQL tests cover LOW → OUT → resolved → LOW cycles, unchanged alerts/readAt, threshold/tracking/archive behavior, replay, reverse-order concurrent confirm/void, recipient uniqueness and notification-write rollback of stock, money/debt, audit and idempotency. The shared batch-lock suite compares 100 single-product reconciliations with one collection reconciliation against 100,000 resolved events plus 10,000 open alerts: open-alert reads drop from 100 to one without notification writes when state is unchanged. New alert cycles still perform per-product history/dedup queries and event/recipient writes; this is not a promise of two SQL statements for an entire confirm or void.
+
+### Draft batch product-read tests
+
+Issue [#135](https://github.com/miphu2804/smart-ledger/issues/135) loads distinct catalog product IDs once, filtered by shop and ACTIVE status, for draft creation/replacement. All-custom requests skip Product reads. Customer validation remains first; collection only gathers IDs, then the original request-order loop checks custom fields, catalog text, duplicates, missing products and monetary overflow. Missing/foreign/archived products retain `DRAFT_ITEM_INVALID`, duplicates retain `DRAFT_ITEM_DUPLICATE`; snapshots, HALF_UP rounding, discount and initial-payment rules are unchanged. These are non-locking reads; confirm retains its separate product locks.
+
+With the same disposable PostgreSQL variables, run:
+
+```powershell
+.\mvnw.cmd '-Dtest=SaleDraftServiceTest,ProductBatchLockPostgresTest' test
+```
+
+Tests exercise actual create/replace services and Hibernate SQL with 1/20/100 selected products across a 100,000-product catalog: one Product read per write, excluding authentication/shop/customer queries and draft/item writes. All-custom requests use zero Product reads. Multi-error unit cases preserve error precedence; PostgreSQL cases reject missing/foreign/archived products without creating a partial draft or changing the existing draft/items. The suite compares legacy per-product reads with batch reads using three measured samples after one warmup, including connection/transaction overhead. Latency is logged, not asserted; measurements are not HTTP/FE load tests or staging guarantees. The disposable-schema setup/cleanup is described in the batch product-lock section above. No API, schema or migration change is required for either optimization.
+
 ### Admin dashboard development tests
 
 With the same disposable PostgreSQL variables, run:

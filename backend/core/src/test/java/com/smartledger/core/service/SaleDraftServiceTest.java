@@ -6,10 +6,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.smartledger.core.dto.request.SaleDraftItemRequest;
 import com.smartledger.core.dto.request.SaleDraftWriteRequest;
+import com.smartledger.core.dto.response.SaleDraftResponse;
 import com.smartledger.core.entity.Payment;
 import com.smartledger.core.entity.Customer;
 import com.smartledger.core.entity.Debt;
@@ -41,9 +43,14 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
@@ -60,10 +67,11 @@ class SaleDraftServiceTest {
     private final CustomerRepository customerRepository = Mockito.mock(CustomerRepository.class);
     private final DebtRepository debtRepository = Mockito.mock(DebtRepository.class);
     private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
+    private final NotificationEventService notifications = Mockito.mock(NotificationEventService.class);
     private final SaleDraftService service = new SaleDraftServiceImpl(shopService, draftRepository,
             draftItemRepository, productRepository, saleRepository, saleItemRepository,
             paymentRepository, customerRepository, debtRepository, auditLogService,
-            Mockito.mock(NotificationEventService.class));
+            notifications);
     private final VerifiedFirebaseToken token = new VerifiedFirebaseToken("uid", null, false, null, null, null);
 
     @BeforeEach
@@ -73,11 +81,90 @@ class SaleDraftServiceTest {
         when(shopService.requireOwnedActiveShop(any(), eq("7"))).thenReturn(shop);
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {1, 20, 100, 10000})
+    void loadsDraftItemsOnceRegardlessOfDraftCount(int count) {
+        var drafts = IntStream.rangeClosed(1, count).mapToObj(index -> {
+            SaleDraft draft = draft(25000L, PaymentMethod.CASH);
+            ReflectionTestUtils.setField(draft, "id", (long) count - index + 1);
+            return draft;
+        }).toList();
+        var items = IntStream.rangeClosed(1, count).boxed().flatMap(index ->
+                IntStream.rangeClosed(1, 2).mapToObj(line -> {
+                    var item = SaleDraftItem.createCustom((long) index, "Item " + line, "piece",
+                            BigDecimal.ONE, 12500L, 12500L);
+                    ReflectionTestUtils.setField(item, "id", index * 2L + line);
+                    return item;
+                })).toList();
+        when(draftRepository.findAllByShopIdOrderByIdDesc(7L)).thenReturn(drafts);
+        when(draftItemRepository.findAllByShopId(7L)).thenReturn(items);
+
+        var responses = service.list(token, "7");
+
+        assertThat(responses).hasSize(count);
+        assertThat(responses).extracting(response -> response.id())
+                .containsExactlyElementsOf(drafts.stream().map(SaleDraft::getId).toList());
+        for (var response : responses) {
+            assertThat(response.items()).extracting(item -> item.id())
+                    .containsExactly(response.id() * 2 + 1, response.id() * 2 + 2);
+            assertThat(response.items()).extracting(item -> item.productName())
+                    .containsExactly("Item 1", "Item 2");
+        }
+        verify(draftItemRepository).findAllByShopId(7L);
+        verify(draftItemRepository, never()).findAllByDraftIdOrderByIdAsc(any());
+    }
+
+    @Test
+    void emptyDraftListDoesNotReadItems() {
+        when(draftRepository.findAllByShopIdOrderByIdDesc(7L)).thenReturn(List.of());
+
+        assertThat(service.list(token, "7")).isEmpty();
+
+        verifyNoInteractions(draftItemRepository);
+    }
+
+    @Test
+    void draftListPreservesMissingItemsAndLifecycleStates() {
+        var expired = draft(25000L, PaymentMethod.CASH);
+        ReflectionTestUtils.setField(expired, "id", 14L);
+        ReflectionTestUtils.setField(expired, "expiresAt", OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
+        var confirmed = draft(25000L, PaymentMethod.CASH);
+        ReflectionTestUtils.setField(confirmed, "id", 13L);
+        confirmed.confirm(15L);
+        var cancelled = draft(25000L, PaymentMethod.CASH);
+        ReflectionTestUtils.setField(cancelled, "id", 12L);
+        cancelled.cancel();
+        when(draftRepository.findAllByShopIdOrderByIdDesc(7L))
+                .thenReturn(List.of(expired, confirmed, cancelled, draft(25000L, PaymentMethod.CASH)));
+        when(draftItemRepository.findAllByShopId(7L)).thenReturn(List.of());
+
+        var responses = service.list(token, "7");
+
+        assertThat(responses).extracting(response -> response.id()).containsExactly(14L, 13L, 12L, 11L);
+        assertThat(responses).extracting(response -> response.status())
+                .containsExactly(DraftStatus.EXPIRED, DraftStatus.CONFIRMED, DraftStatus.CANCELLED, DraftStatus.DRAFT);
+        assertThat(responses).allSatisfy(response -> assertThat(response.items()).isEmpty());
+        assertThat(expired.getStatus()).isEqualTo(DraftStatus.DRAFT);
+        verify(draftItemRepository, never()).findAllByDraftIdOrderByIdAsc(any());
+    }
+
+    @Test
+    void draftListChecksShopAccessBeforeReadingData() {
+        when(shopService.requireOwnedActiveShop(token, "7"))
+                .thenThrow(new BusinessException(ErrorCode.SHOP_ACCESS_DENIED));
+
+        assertThatThrownBy(() -> service.list(token, "7"))
+                .isInstanceOfSatisfying(BusinessException.class, error ->
+                        assertThat(error.getErrorCode()).isEqualTo(ErrorCode.SHOP_ACCESS_DENIED));
+
+        verifyNoInteractions(draftRepository, draftItemRepository);
+    }
+
     @Test
     void creatingDraftDoesNotCreateSalePaymentOrChangeStock() {
         Product product = product(new BigDecimal("5.000"));
-        when(productRepository.findByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
-                .thenReturn(Optional.of(product));
+        when(productRepository.findAllByIdInAndShopIdAndStatus(Set.of(3L), 7L, CatalogStatus.ACTIVE))
+                .thenReturn(List.of(product));
         when(draftRepository.save(any(SaleDraft.class))).thenAnswer(invocation -> {
             SaleDraft draft = invocation.getArgument(0);
             ReflectionTestUtils.setField(draft, "id", 11L);
@@ -135,8 +222,8 @@ class SaleDraftServiceTest {
     @Test
     void rejectsCatalogItemThatAlsoSendsCustomNameOrUnit() {
         // The product exists and is ACTIVE, so only the mixed-item rule can reject these requests.
-        when(productRepository.findByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
-                .thenReturn(Optional.of(product(new BigDecimal("5.000"))));
+        when(productRepository.findAllByIdInAndShopIdAndStatus(Set.of(3L), 7L, CatalogStatus.ACTIVE))
+                .thenReturn(List.of(product(new BigDecimal("5.000"))));
         for (SaleDraftItemRequest item : List.of(
                 new SaleDraftItemRequest(3L, BigDecimal.ONE, 20000L, "Bia thung", null),
                 new SaleDraftItemRequest(3L, BigDecimal.ONE, 20000L, null, "thung"))) {
@@ -157,8 +244,8 @@ class SaleDraftServiceTest {
         SaleDraftItem item = SaleDraftItem.create(11L, product, BigDecimal.ONE, 25000L, 25000L);
         when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
         when(draftItemRepository.findAllByDraftIdOrderByIdAsc(11L)).thenReturn(List.of(item));
-        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
-                .thenReturn(Optional.of(product));
+        when(productRepository.findAllLockedByIdInAndShopIdAndStatus(List.of(3L), 7L, CatalogStatus.ACTIVE))
+                .thenReturn(List.of(product));
         when(saleRepository.saveAndFlush(any(Sale.class))).thenAnswer(invocation -> {
             Sale sale = invocation.getArgument(0);
             ReflectionTestUtils.setField(sale, "id", 15L);
@@ -187,6 +274,78 @@ class SaleDraftServiceTest {
         verify(debtRepository, never()).save(any());
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {1, 20, 100})
+    void confirmationLocksAllCatalogProductsOnce(int count) {
+        var products = IntStream.rangeClosed(1, count).mapToObj(index -> {
+            Product product = product(BigDecimal.TEN);
+            ReflectionTestUtils.setField(product, "id", (long) index);
+            return product;
+        }).toList();
+        var items = products.reversed().stream().map(product ->
+                SaleDraftItem.create(11L, product, BigDecimal.ONE, 25000L, 25000L)).toList();
+        var ids = products.stream().map(Product::getId).toList();
+        SaleDraft draft = draft(count * 25000L, PaymentMethod.CASH);
+        draft.replace(null, null, null, 0, count * 25000L, count * 25000L, PaymentMethod.CASH);
+        when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
+        when(draftItemRepository.findAllByDraftIdOrderByIdAsc(11L)).thenReturn(items);
+        when(productRepository.findAllLockedByIdInAndShopIdAndStatus(ids, 7L, CatalogStatus.ACTIVE))
+                .thenReturn(products);
+        Mockito.doAnswer(call -> {
+            assertThat(products).allSatisfy(product -> assertThat(product.getStockQuantity()).isEqualByComparingTo("9"));
+            return null;
+        }).when(notifications).reconcileStock(any(Shop.class), eq(products));
+        when(saleRepository.saveAndFlush(any(Sale.class))).thenAnswer(invocation -> {
+            Sale sale = invocation.getArgument(0);
+            ReflectionTestUtils.setField(sale, "id", 15L);
+            return sale;
+        });
+        when(saleItemRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = service.confirm(token, "7", "11");
+
+        assertThat(response.items()).hasSize(count);
+        assertThat(response.items()).extracting(item -> item.productId()).containsExactlyElementsOf(ids.reversed());
+        assertThat(products).allSatisfy(product -> assertThat(product.getStockQuantity()).isEqualByComparingTo("9"));
+        verify(productRepository).findAllLockedByIdInAndShopIdAndStatus(ids, 7L, CatalogStatus.ACTIVE);
+        verify(productRepository, never()).findLockedByIdAndShopIdAndStatus(any(), any(), any());
+        verify(notifications).reconcileStock(any(Shop.class), eq(products));
+        verify(notifications, never()).reconcileStock(any(Shop.class), any(Product.class));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"STOCK", "COST", "MISSING"})
+    void confirmationPreservesErrorPrecedenceAcrossIncompleteProductBatch(String firstFailure) {
+        Product first = product(firstFailure.equals("STOCK") ? BigDecimal.ZERO : BigDecimal.TEN);
+        Product second = product(BigDecimal.ZERO);
+        ReflectionTestUtils.setField(second, "id", 5L);
+        if (firstFailure.equals("COST")) ReflectionTestUtils.setField(first, "costPriceVnd", Long.MAX_VALUE);
+        SaleDraft draft = draft(50000L, PaymentMethod.CASH);
+        draft.replace(null, null, null, 0, 50000L, 50000L, PaymentMethod.CASH);
+        when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
+        // Reverse request order: confirmation has always validated catalog products by ascending ID.
+        when(draftItemRepository.findAllByDraftIdOrderByIdAsc(11L)).thenReturn(List.of(
+                SaleDraftItem.create(11L, second, BigDecimal.ONE, 25000L, 25000L),
+                SaleDraftItem.create(11L, first, new BigDecimal("2"), 12500L, 25000L)));
+        when(productRepository.findAllLockedByIdInAndShopIdAndStatus(List.of(3L, 5L), 7L, CatalogStatus.ACTIVE))
+                .thenReturn(firstFailure.equals("MISSING") ? List.of(second) : List.of(first));
+        ErrorCode expected = switch (firstFailure) {
+            case "STOCK" -> ErrorCode.PRODUCT_STOCK_INSUFFICIENT;
+            case "COST" -> ErrorCode.DRAFT_TOTAL_INVALID;
+            default -> ErrorCode.DRAFT_ITEM_INVALID;
+        };
+
+        assertThatThrownBy(() -> service.confirm(token, "7", "11"))
+                .isInstanceOfSatisfying(BusinessException.class, error ->
+                        assertThat(error.getErrorCode()).isEqualTo(expected));
+        assertThat(first.getStockQuantity()).isEqualByComparingTo(firstFailure.equals("STOCK") ? "0" : "10");
+        assertThat(second.getStockQuantity()).isEqualByComparingTo("0");
+        verify(productRepository).findAllLockedByIdInAndShopIdAndStatus(List.of(3L, 5L), 7L, CatalogStatus.ACTIVE);
+        verify(productRepository, never()).findLockedByIdAndShopIdAndStatus(any(), any(), any());
+        verifyNoInteractions(saleRepository, saleItemRepository, paymentRepository, debtRepository,
+                auditLogService, notifications);
+    }
+
     @Test
     void confirmingMixedDraftSavesCustomSaleItemWithoutDeductingCustomStock() {
         Product product = product(new BigDecimal("5.000"));
@@ -199,8 +358,8 @@ class SaleDraftServiceTest {
         when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
         when(draftItemRepository.findAllByDraftIdOrderByIdAsc(11L))
                 .thenReturn(List.of(catalogItem, customItem));
-        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
-                .thenReturn(Optional.of(product));
+        when(productRepository.findAllLockedByIdInAndShopIdAndStatus(List.of(3L), 7L, CatalogStatus.ACTIVE))
+                .thenReturn(List.of(product));
         when(saleRepository.saveAndFlush(any(Sale.class))).thenAnswer(invocation -> {
             Sale sale = invocation.getArgument(0);
             ReflectionTestUtils.setField(sale, "id", 15L);
@@ -221,7 +380,7 @@ class SaleDraftServiceTest {
         verify(saleItemRepository).saveAll(saleItems.capture());
         assertThat(saleItems.getValue()).extracting(SaleItem::getEstimatedCostVnd)
                 .containsExactly(10_000L, null);
-        verify(productRepository).findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE);
+        verify(productRepository).findAllLockedByIdInAndShopIdAndStatus(List.of(3L), 7L, CatalogStatus.ACTIVE);
         verify(paymentRepository).save(any(Payment.class));
     }
 
@@ -244,7 +403,7 @@ class SaleDraftServiceTest {
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().getFirst().productId()).isNull();
         assertThat(response.items().getFirst().productName()).isEqualTo("Mon tu chon");
-        verify(productRepository, never()).findLockedByIdAndShopIdAndStatus(any(), any(), any());
+        verifyNoInteractions(productRepository);
         verify(paymentRepository).save(any(Payment.class));
     }
 
@@ -260,14 +419,14 @@ class SaleDraftServiceTest {
 
         assertThat(service.confirm(token, "7", "11").id()).isEqualTo(15L);
         verify(paymentRepository, never()).save(any());
-        verify(productRepository, never()).findLockedByIdAndShopIdAndStatus(any(), any(), any());
+        verifyNoInteractions(productRepository);
     }
 
     @Test
     void partialPaymentDraftCreatesCustomerSaleInitialPaymentAndDebtOnConfirm() {
         Product product = product(new BigDecimal("5.000"));
-        when(productRepository.findByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
-                .thenReturn(Optional.of(product));
+        when(productRepository.findAllByIdInAndShopIdAndStatus(Set.of(3L), 7L, CatalogStatus.ACTIVE))
+                .thenReturn(List.of(product));
         when(draftRepository.save(any(SaleDraft.class))).thenAnswer(invocation -> {
             SaleDraft saved = invocation.getArgument(0);
             ReflectionTestUtils.setField(saved, "id", 11L);
@@ -290,8 +449,8 @@ class SaleDraftServiceTest {
         when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
         when(draftItemRepository.findAllByDraftIdOrderByIdAsc(11L)).thenReturn(List.of(
                 SaleDraftItem.create(11L, product, BigDecimal.ONE, 25000L, 25000L)));
-        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
-                .thenReturn(Optional.of(product));
+        when(productRepository.findAllLockedByIdInAndShopIdAndStatus(List.of(3L), 7L, CatalogStatus.ACTIVE))
+                .thenReturn(List.of(product));
         when(saleRepository.saveAndFlush(any(Sale.class))).thenAnswer(invocation -> {
             Sale sale = invocation.getArgument(0);
             ReflectionTestUtils.setField(sale, "id", 15L);
@@ -323,8 +482,8 @@ class SaleDraftServiceTest {
         ReflectionTestUtils.setField(customer, "id", 22L);
         when(customerRepository.findByIdAndShopIdAndStatus(22L, 7L, CatalogStatus.ACTIVE))
                 .thenReturn(Optional.of(customer));
-        when(productRepository.findByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
-                .thenReturn(Optional.of(product));
+        when(productRepository.findAllByIdInAndShopIdAndStatus(Set.of(3L), 7L, CatalogStatus.ACTIVE))
+                .thenReturn(List.of(product));
         when(draftRepository.save(any(SaleDraft.class))).thenAnswer(invocation -> {
             SaleDraft saved = invocation.getArgument(0);
             ReflectionTestUtils.setField(saved, "id", 11L);
@@ -343,8 +502,8 @@ class SaleDraftServiceTest {
                 .thenReturn(Optional.of(draftCaptor.getValue()));
         when(draftItemRepository.findAllByDraftIdOrderByIdAsc(11L)).thenReturn(List.of(
                 SaleDraftItem.create(11L, product, BigDecimal.ONE, 25000L, 25000L)));
-        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
-                .thenReturn(Optional.of(product));
+        when(productRepository.findAllLockedByIdInAndShopIdAndStatus(List.of(3L), 7L, CatalogStatus.ACTIVE))
+                .thenReturn(List.of(product));
         when(saleRepository.saveAndFlush(any(Sale.class))).thenAnswer(invocation -> {
             Sale sale = invocation.getArgument(0);
             ReflectionTestUtils.setField(sale, "id", 15L);
@@ -375,8 +534,8 @@ class SaleDraftServiceTest {
                 .thenReturn(Optional.of(first));
         when(customerRepository.findByIdAndShopIdAndStatus(23L, 7L, CatalogStatus.ACTIVE))
                 .thenReturn(Optional.of(second));
-        when(productRepository.findByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
-                .thenReturn(Optional.of(product));
+        when(productRepository.findAllByIdInAndShopIdAndStatus(Set.of(3L), 7L, CatalogStatus.ACTIVE))
+                .thenReturn(List.of(product));
         when(draftRepository.save(any(SaleDraft.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(draftItemRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -407,8 +566,8 @@ class SaleDraftServiceTest {
     @Test
     void paidAmountWithoutPaymentMethodIsRejectedBeforeCreatingDraft() {
         Product product = product(new BigDecimal("5.000"));
-        when(productRepository.findByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
-                .thenReturn(Optional.of(product));
+        when(productRepository.findAllByIdInAndShopIdAndStatus(Set.of(3L), 7L, CatalogStatus.ACTIVE))
+                .thenReturn(List.of(product));
 
         assertThatThrownBy(() -> service.create(token, "7", request(10000L, null)))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
@@ -428,8 +587,8 @@ class SaleDraftServiceTest {
         SaleDraftItem item = SaleDraftItem.create(11L, product, BigDecimal.ONE, 25000L, 25000L);
         when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
         when(draftItemRepository.findAllByDraftIdOrderByIdAsc(11L)).thenReturn(List.of(item));
-        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
-                .thenReturn(Optional.of(product));
+        when(productRepository.findAllLockedByIdInAndShopIdAndStatus(List.of(3L), 7L, CatalogStatus.ACTIVE))
+                .thenReturn(List.of(product));
 
         assertThatThrownBy(() -> service.confirm(token, "7", "11"))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
@@ -446,8 +605,8 @@ class SaleDraftServiceTest {
         verify(draftRepository, never()).save(any());
 
         Product product = product(new BigDecimal("5.000"));
-        when(productRepository.findByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
-                .thenReturn(Optional.of(product));
+        when(productRepository.findAllByIdInAndShopIdAndStatus(Set.of(3L), 7L, CatalogStatus.ACTIVE))
+                .thenReturn(List.of(product));
         SaleDraftItemRequest line = new SaleDraftItemRequest(3L, BigDecimal.ONE, 25000L);
         SaleDraftWriteRequest duplicates = new SaleDraftWriteRequest(null, null, 0L, 50000L,
                 PaymentMethod.CASH, List.of(line, line));
@@ -498,8 +657,8 @@ class SaleDraftServiceTest {
         SaleDraft draft = draft(25000L, PaymentMethod.CASH);
         Product product = product(new BigDecimal("5.000"));
         when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
-        when(productRepository.findByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
-                .thenReturn(Optional.of(product));
+        when(productRepository.findAllByIdInAndShopIdAndStatus(Set.of(3L), 7L, CatalogStatus.ACTIVE))
+                .thenReturn(List.of(product));
         when(draftItemRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         var response = service.replace(token, "7", "11", request(25000L, PaymentMethod.CASH));
@@ -568,6 +727,143 @@ class SaleDraftServiceTest {
         verify(debtRepository, never()).save(any());
         verify(paymentRepository, never()).save(any());
         verify(auditLogService, never()).recordOwner(any(), any(), any(), any(), any(), any());
+    }
+
+    @ParameterizedTest
+    @MethodSource("draftWriteSizes")
+    void draftWritesReadCatalogOnceAndKeepRequestOrder(boolean replace, int count) {
+        stubDraftWrite();
+        var catalog = IntStream.rangeClosed(1, count).mapToObj(index -> {
+            Product product = product(BigDecimal.TEN);
+            ReflectionTestUtils.setField(product, "id", (long) index);
+            product.replace(null, "Product " + index, null, null, "unit " + index,
+                    25000L, 10000L, true, BigDecimal.TEN);
+            return product;
+        }).toList();
+        var ids = catalog.stream().map(Product::getId).collect(java.util.stream.Collectors.toSet());
+        when(productRepository.findAllByIdInAndShopIdAndStatus(ids, 7L, CatalogStatus.ACTIVE))
+                .thenReturn(catalog.reversed());
+        var lines = catalog.stream().map(product -> new SaleDraftItemRequest(product.getId(), BigDecimal.ONE, 100L)).toList();
+
+        var response = writeDraft(replace, new SaleDraftWriteRequest(null, null, 0L, 0L, null, lines));
+
+        assertThat(response.items()).extracting(item -> item.productId())
+                .containsExactlyElementsOf(catalog.stream().map(Product::getId).toList());
+        assertThat(response.items()).extracting(item -> item.productName())
+                .containsExactlyElementsOf(catalog.stream().map(Product::getName).toList());
+        assertThat(response.items()).extracting(item -> item.unit())
+                .containsExactlyElementsOf(catalog.stream().map(Product::getUnit).toList());
+        assertThat(response.estimatedTotalVnd()).isEqualTo(count * 100L);
+        verify(productRepository).findAllByIdInAndShopIdAndStatus(ids, 7L, CatalogStatus.ACTIVE);
+        verify(productRepository, never()).findByIdAndShopIdAndStatus(any(), any(), any());
+        verifyNoInteractions(saleRepository, saleItemRepository, paymentRepository, debtRepository, auditLogService, notifications);
+    }
+
+    static Stream<Arguments> draftWriteSizes() {
+        return Stream.of(false, true).flatMap(replace -> IntStream.of(1, 20, 100)
+                .mapToObj(count -> Arguments.of(replace, count)));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void draftWritesPreserveMixedSnapshotsRoundingDiscountAndInitialPayment(boolean replace) {
+        stubDraftWrite();
+        when(productRepository.findAllByIdInAndShopIdAndStatus(Set.of(3L), 7L, CatalogStatus.ACTIVE))
+                .thenReturn(List.of(product(BigDecimal.TEN)));
+        var request = new SaleDraftWriteRequest("  Buyer  ", " 0901234567 ", 3L, 100L, PaymentMethod.CASH,
+                List.of(new SaleDraftItemRequest(null, new BigDecimal("1.500"), 101L, "  Custom  ", " piece "),
+                        new SaleDraftItemRequest(3L, new BigDecimal("1.005"), 100L)));
+
+        var response = writeDraft(replace, request);
+
+        assertThat(response.items()).extracting(item -> item.productId()).containsExactly(null, 3L);
+        assertThat(response.items()).extracting(item -> item.productName()).containsExactly("Custom", "Cà phê");
+        assertThat(response.items()).extracting(item -> item.unit()).containsExactly("piece", "ly");
+        assertThat(response.items()).extracting(item -> item.lineTotalVnd()).containsExactly(152L, 101L);
+        assertThat(response.items()).extracting(item -> item.unitPriceVnd()).containsExactly(101L, 100L);
+        assertThat(response.discountVnd()).isEqualTo(3);
+        assertThat(response.estimatedTotalVnd()).isEqualTo(250);
+        assertThat(response.initialPaidVnd()).isEqualTo(100);
+        assertThat(response.initialPaymentMethod()).isEqualTo(PaymentMethod.CASH);
+        assertThat(response.customerName()).isEqualTo("Buyer");
+        assertThat(response.customerPhone()).isEqualTo("0901234567");
+        verify(productRepository).findAllByIdInAndShopIdAndStatus(Set.of(3L), 7L, CatalogStatus.ACTIVE);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void allCustomDraftWritesNeverReadProducts(boolean replace) {
+        stubDraftWrite();
+        var lines = IntStream.range(0, 100).mapToObj(index ->
+                new SaleDraftItemRequest(null, BigDecimal.ONE, 100L, "Custom " + index, "piece")).toList();
+
+        assertThat(writeDraft(replace, new SaleDraftWriteRequest(null, null, 0L, 0L, null, lines)).items()).hasSize(100);
+
+        verifyNoInteractions(productRepository);
+    }
+
+    @ParameterizedTest(name = "replace={0}, {1}")
+    @MethodSource("draftWriteErrors")
+    void draftWritesKeepOriginalErrorPrecedence(boolean replace, String scenario,
+            List<SaleDraftItemRequest> lines, ErrorCode expected) {
+        stubDraftWrite();
+        when(productRepository.findAllByIdInAndShopIdAndStatus(any(), eq(7L), eq(CatalogStatus.ACTIVE)))
+                .thenReturn(List.of(product(BigDecimal.TEN)));
+
+        assertThatThrownBy(() -> writeDraft(replace, new SaleDraftWriteRequest(null, null, 0L, 0L, null, lines)))
+                .isInstanceOfSatisfying(BusinessException.class, error -> assertThat(error.getErrorCode()).isEqualTo(expected));
+
+        verify(draftRepository, never()).save(any());
+        verify(draftItemRepository, never()).deleteAllByDraftId(any());
+        verify(draftItemRepository, never()).saveAll(any());
+    }
+
+    static Stream<Arguments> draftWriteErrors() {
+        var valid = new SaleDraftItemRequest(3L, BigDecimal.ONE, 100L);
+        var missing = new SaleDraftItemRequest(99L, BigDecimal.ONE, 100L);
+        var custom = new SaleDraftItemRequest(null, BigDecimal.ONE, 100L, " ", "piece");
+        var text = new SaleDraftItemRequest(3L, BigDecimal.ONE, 100L, "Client text", null);
+        var overflow = new SaleDraftItemRequest(3L, new BigDecimal("999999999999.999"), Long.MAX_VALUE);
+        var max = new SaleDraftItemRequest(null, BigDecimal.ONE, Long.MAX_VALUE, "Custom", "piece");
+        return Stream.of(false, true).flatMap(replace -> Stream.of(
+                Arguments.of(replace, "missing before duplicate", List.of(missing, valid, valid), ErrorCode.DRAFT_ITEM_INVALID),
+                Arguments.of(replace, "missing duplicate is still invalid", List.of(missing, missing), ErrorCode.DRAFT_ITEM_INVALID),
+                Arguments.of(replace, "custom before duplicate", List.of(custom, valid, valid), ErrorCode.DRAFT_ITEM_INVALID),
+                Arguments.of(replace, "catalog text before duplicate", List.of(valid, text), ErrorCode.DRAFT_ITEM_INVALID),
+                Arguments.of(replace, "duplicate before missing", List.of(valid, valid, missing), ErrorCode.DRAFT_ITEM_DUPLICATE),
+                Arguments.of(replace, "duplicate before custom", List.of(valid, valid, custom), ErrorCode.DRAFT_ITEM_DUPLICATE),
+                Arguments.of(replace, "duplicate before overflow", List.of(valid, overflow), ErrorCode.DRAFT_ITEM_DUPLICATE),
+                Arguments.of(replace, "line overflow before duplicate", List.of(overflow, valid), ErrorCode.DRAFT_TOTAL_INVALID),
+                Arguments.of(replace, "subtotal overflow before missing", List.of(max, valid, missing), ErrorCode.DRAFT_TOTAL_INVALID)));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void invalidCustomerWinsBeforeItemValidationOrProductRead(boolean replace) {
+        stubDraftWrite();
+        var request = new SaleDraftWriteRequest(null, null, 0L, 0L, null,
+                List.of(new SaleDraftItemRequest(null, BigDecimal.ONE, 100L)), 22L);
+
+        assertThatThrownBy(() -> writeDraft(replace, request))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.CUSTOMER_NOT_FOUND));
+
+        verifyNoInteractions(productRepository, draftItemRepository);
+        verify(draftRepository, never()).save(any());
+    }
+
+    private void stubDraftWrite() {
+        when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft(0, null)));
+        when(draftRepository.save(any(SaleDraft.class))).thenAnswer(invocation -> {
+            SaleDraft saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 11L);
+            return saved;
+        });
+        when(draftItemRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    private SaleDraftResponse writeDraft(boolean replace, SaleDraftWriteRequest request) {
+        return replace ? service.replace(token, "7", "11", request) : service.create(token, "7", request);
     }
 
     private Product product(BigDecimal stock) {

@@ -38,8 +38,11 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -53,9 +56,10 @@ class SaleVoidServiceTest {
     private final SaleRefundRepository refundRepository = Mockito.mock(SaleRefundRepository.class);
     private final IdempotencyService idempotencyService = Mockito.mock(IdempotencyService.class);
     private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
+    private final NotificationEventService notifications = Mockito.mock(NotificationEventService.class);
     private final SaleVoidService service = new SaleVoidServiceImpl(shopService, saleRepository,
             itemRepository, debtRepository, paymentRepository, productRepository, refundRepository,
-            idempotencyService, auditLogService, Mockito.mock(NotificationEventService.class));
+            idempotencyService, auditLogService, notifications);
     private final VerifiedFirebaseToken token = new VerifiedFirebaseToken("uid", null, false, null, null, null);
 
     @BeforeEach
@@ -168,7 +172,7 @@ class SaleVoidServiceTest {
         SaleItem item = SaleItem.fromDraftItem(15L, draftItem, true);
         when(saleRepository.findLockedByIdAndShopId(15L, 7L)).thenReturn(Optional.of(sale));
         when(itemRepository.findAllBySaleIdOrderByIdAsc(15L)).thenReturn(List.of(item));
-        when(productRepository.findLockedByIdAndShopId(3L, 7L)).thenReturn(Optional.of(product));
+        when(productRepository.findAllLockedByIdInAndShopId(List.of(3L), 7L)).thenReturn(List.of(product));
 
         var response = service.voidSale(token, "7", "15", "restock-one",
                 new SaleVoidRequest("Returned", true, null, null));
@@ -178,7 +182,7 @@ class SaleVoidServiceTest {
         var locks = inOrder(saleRepository, debtRepository, productRepository);
         locks.verify(saleRepository).findLockedByIdAndShopId(15L, 7L);
         locks.verify(debtRepository).findLockedBySaleIdAndShopId(15L, 7L);
-        locks.verify(productRepository).findLockedByIdAndShopId(3L, 7L);
+        locks.verify(productRepository).findAllLockedByIdInAndShopId(List.of(3L), 7L);
     }
 
     @Test
@@ -220,6 +224,7 @@ class SaleVoidServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.SALE_RESTOCK_UNAVAILABLE));
         assertThat(sale.getSaleStatus()).isEqualTo(SaleStatus.CONFIRMED);
+        verifyNoInteractions(productRepository);
     }
 
     @Test
@@ -235,18 +240,77 @@ class SaleVoidServiceTest {
         when(itemRepository.findAllBySaleIdOrderByIdAsc(15L)).thenReturn(List.of(
                 SaleItem.fromDraftItem(15L, SaleDraftItem.create(1L, higher, BigDecimal.ONE, 50_000L, 50_000L), true),
                 SaleItem.fromDraftItem(15L, SaleDraftItem.create(1L, lower, BigDecimal.ONE, 50_000L, 50_000L), true)));
-        when(productRepository.findLockedByIdAndShopId(3L, 7L)).thenReturn(Optional.of(lower));
-        when(productRepository.findLockedByIdAndShopId(5L, 7L)).thenReturn(Optional.of(higher));
+        when(productRepository.findAllLockedByIdInAndShopId(List.of(3L, 5L), 7L)).thenReturn(List.of(lower, higher));
 
         service.voidSale(token, "7", "15", "ordered-restock", new SaleVoidRequest("Returned", true, null, null));
 
         var locks = inOrder(saleRepository, debtRepository, productRepository);
         locks.verify(saleRepository).findLockedByIdAndShopId(15L, 7L);
         locks.verify(debtRepository).findLockedBySaleIdAndShopId(15L, 7L);
-        locks.verify(productRepository).findLockedByIdAndShopId(3L, 7L);
-        locks.verify(productRepository).findLockedByIdAndShopId(5L, 7L);
+        locks.verify(productRepository).findAllLockedByIdInAndShopId(List.of(3L, 5L), 7L);
+        verify(productRepository, never()).findLockedByIdAndShopIdAndStatus(any(), any(), any());
         assertThat(lower.getStockQuantity()).isEqualByComparingTo("8");
         assertThat(higher.getStockQuantity()).isEqualByComparingTo("8");
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 20, 100})
+    void restockLocksAllDeductedProductsOnce(int count) {
+        var products = IntStream.rangeClosed(1, count).mapToObj(index -> {
+            var product = Product.create(7L);
+            product.replace(null, "Item", null, null, "piece", 1000L, null, true, BigDecimal.TEN);
+            ReflectionTestUtils.setField(product, "id", (long) index);
+            return product;
+        }).toList();
+        var ids = products.stream().map(Product::getId).toList();
+        var items = products.reversed().stream().map(product -> SaleItem.fromDraftItem(15L,
+                SaleDraftItem.create(11L, product, BigDecimal.ONE, 1000L, 1000L), true)).toList();
+        when(saleRepository.findLockedByIdAndShopId(15L, 7L)).thenReturn(Optional.of(sale(0)));
+        when(itemRepository.findAllBySaleIdOrderByIdAsc(15L)).thenReturn(items);
+        when(productRepository.findAllLockedByIdInAndShopId(ids, 7L)).thenReturn(products);
+        Mockito.doAnswer(call -> {
+            assertThat(products).allSatisfy(product -> assertThat(product.getStockQuantity()).isEqualByComparingTo("11"));
+            return null;
+        }).when(notifications).reconcileStock(any(Shop.class), Mockito.anyCollection());
+
+        assertThat(service.voidSale(token, "7", "15", "batch", new SaleVoidRequest("Return", true, null, null))
+                .stockRestocked()).isTrue();
+
+        assertThat(products).allSatisfy(product -> assertThat(product.getStockQuantity()).isEqualByComparingTo("11"));
+        verify(productRepository).findAllLockedByIdInAndShopId(ids, 7L);
+        verify(notifications).reconcileStock(any(Shop.class), Mockito.anyCollection());
+        verify(notifications, never()).reconcileStock(any(Shop.class), any(Product.class));
+    }
+
+    @Test
+    void missingRestockProductRejectsWholeBatch() {
+        var product = Product.create(7L);
+        product.replace(null, "Item", null, null, "piece", 1000L, null, true, BigDecimal.TEN);
+        ReflectionTestUtils.setField(product, "id", 3L);
+        var sale = sale(0);
+        when(saleRepository.findLockedByIdAndShopId(15L, 7L)).thenReturn(Optional.of(sale));
+        when(itemRepository.findAllBySaleIdOrderByIdAsc(15L)).thenReturn(List.of(SaleItem.fromDraftItem(15L,
+                SaleDraftItem.create(11L, product, BigDecimal.ONE, 1000L, 1000L), true)));
+        when(productRepository.findAllLockedByIdInAndShopId(List.of(3L), 7L)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.voidSale(token, "7", "15", "missing", new SaleVoidRequest("Return", true, null, null)))
+                .isInstanceOfSatisfying(BusinessException.class, error ->
+                        assertThat(error.getErrorCode()).isEqualTo(ErrorCode.SALE_RESTOCK_UNAVAILABLE));
+        assertThat(sale.getSaleStatus()).isEqualTo(SaleStatus.CONFIRMED);
+        assertThat(product.getStockQuantity()).isEqualByComparingTo("10");
+        verifyNoInteractions(refundRepository, auditLogService);
+    }
+
+    @Test
+    void customAndNonDeductedItemsDoNotLockProductsWhenRestocking() {
+        var custom = SaleItem.fromDraftItem(15L,
+                SaleDraftItem.createCustom(11L, "Custom", "piece", BigDecimal.ONE, 1000L, 1000L), false);
+        when(saleRepository.findLockedByIdAndShopId(15L, 7L)).thenReturn(Optional.of(sale(0)));
+        when(itemRepository.findAllBySaleIdOrderByIdAsc(15L)).thenReturn(List.of(custom));
+
+        assertThat(service.voidSale(token, "7", "15", "custom", new SaleVoidRequest("Return", true, null, null))
+                .stockRestocked()).isFalse();
+        verifyNoInteractions(productRepository);
     }
 
     private Sale sale(long paid) {
