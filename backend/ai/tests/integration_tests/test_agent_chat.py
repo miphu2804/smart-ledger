@@ -1,11 +1,14 @@
+import json
+from dataclasses import replace
 from datetime import UTC, datetime
 from unittest.mock import Mock
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from pydantic_ai.messages import ModelResponse, TextPart
 from pydantic_ai.models.function import FunctionModel
-from tests.support import TEST_GUARDRAIL_LIMITS, echo_user_prompts
+from tests.support import TEST_GUARDRAIL_LIMITS, ScriptedModel, echo_user_prompts
 
 from src.agent.guardrails import GuardrailLimits
 from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
@@ -18,6 +21,12 @@ def answer(messages, info) -> ModelResponse:
 
 
 def failing_model(messages, info):
+    raise RuntimeError("down")
+
+
+async def broken_answer(messages, info):
+    # Longer than the screen's hold-back window, so the prefix is released.
+    yield "Rice sells for 30.000 VND/kg, and 12 kg are left on the shelf today. "
     raise RuntimeError("down")
 
 
@@ -44,6 +53,41 @@ def chat(
     if conversation_id is not None:
         payload["conversation_id"] = conversation_id
     return client.post("/internal/v1/agent/chat", json=payload)
+
+
+def stream_chat(
+    client: TestClient,
+    message: str = "today's revenue?",
+    conversation_id: int | None = None,
+) -> httpx.Response:
+    payload = {"user_id": 7, "shop_id": 12, "message": message}
+    if conversation_id is not None:
+        payload["conversation_id"] = conversation_id
+    with client.stream(
+        "POST", "/internal/v1/agent/chat/stream", json=payload
+    ) as response:
+        response.read()
+    return response
+
+
+def sse_events(response: httpx.Response) -> list[tuple[str, dict]]:
+    """The (event, data) pairs of an event stream, in arrival order."""
+    events = []
+    for block in response.text.strip().split("\n\n"):
+        fields = dict(line.split(": ", 1) for line in block.split("\n"))
+        events.append((fields["event"], json.loads(fields["data"])))
+    return events
+
+
+def shown_text(events: list[tuple[str, dict]]) -> str:
+    """The text the owner sees: the deltas after the last reset."""
+    text = ""
+    for name, data in events:
+        if name == "reset":
+            text = ""
+        elif name == "delta":
+            text += data["text"]
+    return text
 
 
 def test_agent_chat_returns_persisted_message_ids(client: TestClient) -> None:
@@ -254,3 +298,147 @@ def test_agent_chat_returns_503_on_model_error(client: TestClient) -> None:
 
     assert response.status_code == 503
     assert response.json()["detail"] == "ai_unavailable"
+
+
+def test_stream_sends_deltas_then_done_with_the_persisted_turn(
+    client: TestClient,
+) -> None:
+    answer = "Rice sells for 30.000 VND/kg, 12 kg left."
+    app.state.agent = AgentService(
+        ScriptedModel(answer),
+        app.state.conversations,
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
+    )
+
+    response = stream_chat(client)
+    events = sse_events(response)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    names = [name for name, _ in events]
+    assert names.count("delta") > 1
+    assert names.count("done") == 1
+    assert names[-1] == "done"
+    assert shown_text(events) == answer
+    done = events[-1][1]
+    assert done["answer"] == answer
+    assert done["conversation_id"] == 101
+    assert done["message_id"] == 502
+    assert done["model"] == "test-model"
+    assert done["model_version"] == "test-model"
+    assert done["request_id"]
+    app.state.conversations.save_exchange.assert_called_once_with(
+        user_id=7,
+        shop_id=12,
+        conversation_id=None,
+        user_message="today's revenue?",
+        assistant_message=answer,
+    )
+
+
+def test_stream_retries_a_leaking_answer_without_showing_it(
+    client: TestClient,
+) -> None:
+    answer = "Rice sells for 30.000 VND/kg."
+    app.state.agent = AgentService(
+        ScriptedModel("SELECT name FROM v_products", answer),
+        app.state.conversations,
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
+    )
+
+    events = sse_events(stream_chat(client))
+
+    emitted = "".join(data["text"] for name, data in events if name == "delta")
+    for leak in ("select", "from v_", "v_products"):
+        assert leak not in emitted.lower()
+    assert shown_text(events) == answer
+    assert events[-1][0] == "done"
+    assert events[-1][1]["answer"] == answer
+
+
+def test_stream_ends_with_an_error_event_when_the_screen_stops_the_answer(
+    client: TestClient,
+) -> None:
+    app.state.agent = AgentService(
+        ScriptedModel("Error[SQL_ERROR]", "Error[SQL_ERROR]"),
+        app.state.conversations,
+        guardrail_limits=replace(TEST_GUARDRAIL_LIMITS, model_call_limit=2),
+    )
+
+    response = stream_chat(client)
+    events = sse_events(response)
+
+    assert response.status_code == 200
+    assert events[-1] == ("error", {"detail": "answer_unavailable"})
+    assert "done" not in [name for name, _ in events]
+    app.state.conversations.save_exchange.assert_not_called()
+
+
+def test_stream_ends_with_an_error_event_when_the_model_fails_midway(
+    client: TestClient,
+) -> None:
+    app.state.agent = AgentService(
+        FunctionModel(stream_function=broken_answer),
+        app.state.conversations,
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
+    )
+
+    response = stream_chat(client)
+    events = sse_events(response)
+
+    assert response.status_code == 200
+    assert "delta" in [name for name, _ in events]
+    assert events[-1] == ("error", {"detail": "ai_unavailable"})
+    app.state.conversations.save_exchange.assert_not_called()
+
+
+def test_stream_refuses_a_conversation_outside_scope_before_streaming(
+    client: TestClient,
+) -> None:
+    app.state.conversations.recent_messages.side_effect = ConversationNotFoundError
+
+    response = stream_chat(client, conversation_id=101)
+
+    assert response.status_code == 404
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json()["detail"] == "conversation_not_found"
+
+
+def test_stream_refuses_an_overlong_message_before_streaming(
+    client: TestClient,
+) -> None:
+    app.state.agent = AgentService(
+        FunctionModel(answer),
+        app.state.conversations,
+        guardrail_limits=GuardrailLimits(
+            max_input_chars=5,
+            model_call_limit=1,
+            tool_call_limit=1,
+            turn_token_limit=1000,
+            turn_timeout_seconds=5,
+        ),
+    )
+
+    response = stream_chat(client, message="too long for the limit")
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "input_too_long"}
+    app.state.conversations.save_exchange.assert_not_called()
+
+
+def test_stream_refuses_with_503_when_agent_missing(client: TestClient) -> None:
+    app.state.agent = None
+
+    response = stream_chat(client)
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "ai_unavailable"
+
+
+@pytest.mark.parametrize("message", ["", "  \t\n  "])
+def test_stream_endpoint_rejects_blank_messages(
+    client: TestClient, message: str
+) -> None:
+    response = stream_chat(client, message=message)
+
+    assert response.status_code == 422

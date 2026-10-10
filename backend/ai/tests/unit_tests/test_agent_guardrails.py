@@ -6,7 +6,11 @@ from pydantic_ai.models.function import FunctionModel
 from tests.support import ScriptedModel, tool_call, transcript
 
 from src.agent.guardrails import GuardrailError, GuardrailLimits
-from src.agent.guardrails.answer_screen import EMPTY_ANSWER_RETRY, LEAK_RETRY
+from src.agent.guardrails.answer_screen import (
+    EMPTY_ANSWER_RETRY,
+    LEAK_RETRY,
+    screened_prefix,
+)
 from src.agent.guardrails.input_redaction import redact_input
 from src.agent.guardrails.tool_call_limit import TOOL_LIMIT_NOTICE
 from src.agent.service import AgentService
@@ -290,3 +294,51 @@ async def test_slow_turn_stops_before_core_gives_up() -> None:
 
     assert stopped.value.code == "answer_timeout"
     assert conversations.saved_exchange is None
+
+
+# The longest literal leak is `smartledger.shop_id`; one more character lets `\b` see
+# past it.
+HOLD = len("smartledger.shop_id") + 1
+SAFE_TEXT = "Rice stock is fine this week, nothing to restock yet. "
+
+
+def test_screened_prefix_releases_all_but_the_held_tail() -> None:
+    text = SAFE_TEXT * 2
+
+    assert screened_prefix(text) == text[:-HOLD]
+
+
+def test_screened_prefix_of_a_short_text_holds_everything() -> None:
+    assert screened_prefix("Rice sells for 30k.") == ""
+
+
+@pytest.mark.parametrize("partial", ["v_prod", "smartledger.shop_", "ai_read"])
+def test_screened_prefix_holds_a_partial_leak_at_the_end(partial: str) -> None:
+    text = SAFE_TEXT + partial
+
+    released = screened_prefix(text)
+
+    assert released == text[:-HOLD]
+    assert partial in text[len(released) :]
+
+
+def test_screened_prefix_holds_everything_after_a_pending_select() -> None:
+    text = SAFE_TEXT + "Please select the shop for the day"
+
+    assert screened_prefix(text) == text[: text.index("select")]
+
+
+def test_screened_prefix_releases_a_select_with_no_from_in_reach() -> None:
+    text = "Please select a shop. " + SAFE_TEXT * 12
+
+    assert screened_prefix(text) == text[:-HOLD]
+
+
+def test_screened_prefix_stops_before_a_complete_leak() -> None:
+    assert screened_prefix("Here it is: SELECT name FROM v_products") == "Here it is: "
+    assert screened_prefix("The data is in ai_read.v_products now") == "The data is in "
+
+
+def test_screened_prefix_holds_a_pending_select_before_a_later_leak() -> None:
+    assert screened_prefix("Here: SELECT v_sales.total ") == "Here: "
+    assert screened_prefix("Here: SELECT v_sales.total FROM v_sales") == "Here: "

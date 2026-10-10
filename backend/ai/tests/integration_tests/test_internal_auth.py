@@ -13,6 +13,7 @@ from src.app_config import app_config
 from src.main import app
 
 CHAT = "/internal/v1/agent/chat"
+CHAT_STREAM = f"{CHAT}/stream"
 CONVERSATIONS = "/internal/v1/agent/conversations"
 CONVERSATION = f"{CONVERSATIONS}/{{conversation_id}}"
 SCOPE = {"user_id": 7, "shop_id": 12}
@@ -54,6 +55,7 @@ def test_health_needs_no_token(client: TestClient) -> None:
 def test_internal_routes_cover_the_agent_contract() -> None:
     assert set(INTERNAL_ROUTES) >= {
         ("POST", CHAT),
+        ("POST", CHAT_STREAM),
         ("GET", CONVERSATIONS),
         ("GET", CONVERSATION),
         ("PATCH", CONVERSATION),

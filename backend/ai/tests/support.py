@@ -1,6 +1,8 @@
 """Shared data for the AI tests."""
 
+import json
 import re
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import psycopg
@@ -14,7 +16,12 @@ from pydantic_ai.messages import (
     ToolReturnPart,
     UserPromptPart,
 )
-from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai.models.function import (
+    AgentInfo,
+    DeltaToolCall,
+    DeltaToolCalls,
+    FunctionModel,
+)
 from sqlalchemy.engine import make_url
 
 from src.agent.guardrails import GuardrailLimits
@@ -68,22 +75,52 @@ def schema_url(database_url: str, schema: str) -> str:
 class ScriptedModel(FunctionModel):
     """A model that replays `responses` in order and records each request it gets.
 
-    A `str` response is a text answer; `tool_call` builds a tool-call response.
+    A `str` response is a text answer; `tool_call` builds a tool-call response. A
+    streamed request replays the same responses in chunks.
     """
 
     def __init__(self, *responses: str | ModelResponse) -> None:
-        super().__init__(self._respond, model_name="test-model")
+        super().__init__(
+            self._respond, stream_function=self._stream, model_name="test-model"
+        )
         self.responses = list(responses)
         self.requests: list[tuple[list[ModelMessage], AgentInfo]] = []
 
     def _respond(self, messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        self.requests.append((list(messages), info))
-        if not self.responses:
-            raise AssertionError("unexpected model request")
-        response = self.responses.pop(0)
+        response = self._take(messages, info)
         if isinstance(response, str):
             return ModelResponse(parts=[TextPart(response)])
         return response
+
+    async def _stream(
+        self, messages: list[ModelMessage], info: AgentInfo
+    ) -> AsyncIterator[str | DeltaToolCalls]:
+        response = self._take(messages, info)
+        if isinstance(response, str):
+            response = ModelResponse(parts=[TextPart(response)])
+        for part in response.parts:
+            if isinstance(part, TextPart):
+                # Word by word, so a leak arrives split across chunks.
+                for chunk in re.findall(r"\S+\s*|\s+", part.content):
+                    yield chunk
+        calls = [part for part in response.parts if isinstance(part, ToolCallPart)]
+        if calls:
+            yield {
+                index: DeltaToolCall(
+                    name=call.tool_name,
+                    json_args=json.dumps(call.args),
+                    tool_call_id=call.tool_call_id,
+                )
+                for index, call in enumerate(calls)
+            }
+
+    def _take(
+        self, messages: list[ModelMessage], info: AgentInfo
+    ) -> str | ModelResponse:
+        self.requests.append((list(messages), info))
+        if not self.responses:
+            raise AssertionError("unexpected model request")
+        return self.responses.pop(0)
 
     def tool_names(self, request: int = 0) -> list[str]:
         """Names of the tools the model was offered on that request."""

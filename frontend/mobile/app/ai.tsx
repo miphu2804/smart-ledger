@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AgentAvatar } from '../src/components/AgentAvatar';
+import { ChatText } from '../src/components/ChatText';
 import { Dialog, EmptyState, Field, IconBtn, Row, Sheet, T } from '../src/components/ui';
 import type { AgentConversationSummary, AgentConversationView, AgentMessageView, ChatMessage } from '../src/data/types';
 import { agentApi } from '../src/lib/agentApi';
@@ -76,8 +77,11 @@ export default function Ai() {
   const app = useApp();
   const insets = useSafeAreaInsets();
   const scroll = useRef<ScrollView>(null);
+  const sending = useRef(false);
   const [text, setText] = useState('');
   const [typing, setTyping] = useState(false);
+  // Chữ trợ lý đang trả lời dở; vào `msgs` khi có sự kiện `done`.
+  const [draft, setDraft] = useState('');
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [msgs, setMsgs] = useState<ChatMessage[]>(() => [welcome(app.user.name)]);
@@ -104,18 +108,20 @@ export default function Ai() {
   useEffect(() => {
     const t = setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 60);
     return () => clearTimeout(t);
-  }, [msgs, typing]);
+  }, [msgs, typing, draft]);
 
   const send = async (q: string) => {
     const message = q.trim();
-    if (!message || typing) return;
+    // `typing` là state nên chưa kịp true khi hai lần bấm đến cùng một nhịp: ref chặn gửi trùng.
+    if (!message || typing || sending.current) return;
+    sending.current = true;
     const userMessage: ChatMessage = { id: `u${Date.now()}`, from: 'user', text: message };
     setMsgs((m) => [...m, userMessage]);
     setText('');
     setError(null);
     setTyping(true);
     try {
-      const reply = await agentApi.chat({ conversation_id: conversationId, message });
+      const reply = await agentApi.chatStream({ conversation_id: conversationId, message }, setDraft);
       setConversationId(reply.conversation_id);
       setMsgs((m) => [...m, { id: `a${reply.message_id}`, from: 'ai', text: reply.answer }]);
     } catch (err) {
@@ -125,6 +131,8 @@ export default function Ai() {
       setText((current) => (current.trim() ? current : message));
       setError(chatErrorMessage(err));
     } finally {
+      sending.current = false;
+      setDraft('');
       setTyping(false);
     }
   };
@@ -193,15 +201,26 @@ export default function Ai() {
                       </Row>
                     </Row>
                   ) : null}
-                  <T size={13.5} color={isUser ? colors.white : colors.ink} style={styles.messageText}>
-                    {m.text}
-                  </T>
+                  {isUser ? (
+                    <T size={13.5} color={colors.white} style={styles.messageText}>
+                      {m.text}
+                    </T>
+                  ) : (
+                    <ChatText text={m.text} />
+                  )}
                 </View>
               </View>
             );
           })}
 
-          {typing ? (
+          {typing && draft ? (
+            <View style={styles.messageRow}>
+              <AgentAvatar emotion="default" size={34} style={{ marginTop: 2 }} />
+              <View style={[styles.bubble, styles.assistantBubble]}>
+                <ChatText text={draft} />
+              </View>
+            </View>
+          ) : typing ? (
             <View style={styles.messageRow}>
               <AgentAvatar emotion="idea" size={34} style={{ marginTop: 2 }} />
               <View style={[styles.bubble, styles.assistantBubble, styles.typingBubble]}>
@@ -219,6 +238,7 @@ export default function Ai() {
       <View style={[styles.composerWrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
         {!typing ? (
           <ScrollView
+            testID="quick-chips"
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.quickChipsScroll}
