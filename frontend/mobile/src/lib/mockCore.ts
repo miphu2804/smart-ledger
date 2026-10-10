@@ -24,6 +24,7 @@ import type {
 import { ApiError } from './apiError';
 import { normalizeText, vnd } from './format';
 import { canonicalJson } from './idempotency';
+import type { PageResponse } from './pageApi';
 
 /**
  * Core giả lập cho chế độ xem trước (EXPO_PUBLIC_USE_MOCK=true, xem src/config.ts) khi chưa có Core
@@ -81,6 +82,31 @@ function pastIso(days: number, hours: number, minutes = 0): string {
 
 function apiErr(status: number, code: string, message: string): ApiError {
   return new ApiError(status, code, message);
+}
+
+/**
+ * Cắt một danh sách thành `PageResponse` như sáu GET danh sách OWNER của Core (mặc định page=0, size=20, size 1–100,
+ * sai thì 400 với mã `invalid_*_query` của danh sách đó). Mock chỉ hỗ trợ page/size, bỏ qua các bộ lọc.
+ */
+function pageOf<T>(items: T[], rawQuery: string, errorCode: string): PageResponse<T> {
+  const params: Record<string, string> = {};
+  for (const pair of rawQuery.split('&')) {
+    if (!pair) continue;
+    const eq = pair.indexOf('=');
+    const key = decodeURIComponent(eq < 0 ? pair : pair.slice(0, eq));
+    params[key] = eq < 0 ? '' : decodeURIComponent(pair.slice(eq + 1));
+  }
+  const page = params.page === undefined ? 0 : Number(params.page);
+  const size = params.size === undefined ? 20 : Number(params.size);
+  if (!Number.isInteger(page) || page < 0) throw apiErr(400, errorCode, 'page phải là số nguyên không âm.');
+  if (!Number.isInteger(size) || size < 1 || size > 100) throw apiErr(400, errorCode, 'size phải là số nguyên từ 1 đến 100.');
+  return {
+    items: items.slice(page * size, (page + 1) * size),
+    page,
+    size,
+    totalElements: items.length,
+    totalPages: Math.ceil(items.length / size),
+  };
 }
 
 function makeSaleItem(product: ProductView, quantity: number): SaleItemView {
@@ -1137,15 +1163,17 @@ function idempotent<T>(operation: string, key: string | undefined, body: unknown
  */
 export function mockCoreRequest<T>(path: string, method: string, body: unknown, idempotencyKey?: string): T {
   if (path.startsWith('/me/notifications')) return handleNotifications(path, method, body) as T;
-  const segments = path.split('/').filter(Boolean);
+  // Sáu GET danh sách OWNER nhận thêm query (page/size); các route còn lại khớp theo path trần
+  const [route, rawQuery = ''] = path.split('?');
+  const segments = route.split('/').filter(Boolean);
 
   if (path === '/categories') {
     if (method === 'GET') return listCategories() as unknown as T;
     if (method === 'POST') return createCategory(body as { name: string }) as unknown as T;
   }
 
-  if (path === '/products') {
-    if (method === 'GET') return listProducts() as unknown as T;
+  if (route === '/products') {
+    if (method === 'GET') return pageOf(listProducts(), rawQuery, 'invalid_product_query') as unknown as T;
     if (method === 'POST') return createProduct(body as ProductWriteBody) as unknown as T;
   }
   if (segments[0] === 'products' && segments.length === 2) {
@@ -1176,7 +1204,7 @@ export function mockCoreRequest<T>(path: string, method: string, body: unknown, 
     return confirmSaleDraft(Number(segments[1])) as unknown as T;
   }
 
-  if (path === '/sales' && method === 'GET') return listSales() as unknown as T;
+  if (route === '/sales' && method === 'GET') return pageOf(listSales(), rawQuery, 'invalid_sale_query') as unknown as T;
   if (segments[0] === 'sales' && segments.length === 2 && method === 'GET') {
     return getSaleById(Number(segments[1])) as unknown as T;
   }
@@ -1192,17 +1220,17 @@ export function mockCoreRequest<T>(path: string, method: string, body: unknown, 
     return getRefund(Number(segments[1])) as unknown as T;
   }
 
-  if (path === '/customers' && method === 'GET') return listCustomers() as unknown as T;
+  if (route === '/customers' && method === 'GET') return pageOf(listCustomers(), rawQuery, 'invalid_customer_query') as unknown as T;
 
-  if (path === '/debts' && method === 'GET') return listDebts() as unknown as T;
+  if (route === '/debts' && method === 'GET') return pageOf(listDebts(), rawQuery, 'invalid_debt_query') as unknown as T;
   if (segments[0] === 'debts' && segments.length === 3 && segments[2] === 'payments' && method === 'POST') {
     return idempotent(`POST ${path}`, idempotencyKey, body, () =>
       repayDebt(Number(segments[1]), body as DebtRepaymentBody),
     ) as unknown as T;
   }
 
-  if (path === '/expenses') {
-    if (method === 'GET') return listExpenses() as unknown as T;
+  if (route === '/expenses') {
+    if (method === 'GET') return pageOf(listExpenses(), rawQuery, 'invalid_expense_query') as unknown as T;
     if (method === 'POST') {
       return idempotent('POST /expenses', idempotencyKey, body, () => createExpense(body as ExpenseWriteBody)) as unknown as T;
     }

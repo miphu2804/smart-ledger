@@ -1,5 +1,6 @@
 import type { CategoryView, ProductView } from '../data/types';
 import { apiRequest } from './api';
+import { fetchAllPages } from './pageApi';
 import { createIdempotentSender } from './idempotency';
 
 /**
@@ -66,7 +67,7 @@ export const categoryApi = {
 
 export const productApi = {
   /** GET /products — danh sách ACTIVE */
-  list: (): Promise<ProductView[]> => apiRequest<ProductView[]>('/products', { withShop: true }),
+  list: (): Promise<ProductView[]> => fetchAllPages<ProductView>('/products'),
   create: (input: ProductWriteRequest): Promise<ProductView> =>
     apiRequest<ProductView>('/products', { method: 'POST', body: input, withShop: true }),
   update: (id: number, input: ProductUpdateRequest): Promise<ProductView> =>
