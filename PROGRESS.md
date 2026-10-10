@@ -8,6 +8,17 @@
 
 **Check:** `tsc --noEmit` clean. Web build in the browser in mock mode with a temporary hook that exposed a few functions on `window` (the hook is not in the commit): from the Home screen the catalog loaded 47 products; scanning a known barcode opened the product card ("CocaCola / Nước ngọt CocaCola, 10.000đ / cái · Tồn: 60") instead of the new-product flow; with `productApi.create` forced to reject with a conflict, saving a new item kept the card open, showed the message, and left the order empty. **Not verified:** a real camera and a real barcode, a real Core (including whether Core rejects a duplicate barcode), a failed catalog load (the catalog then stays empty and the old behaviour applies), and native Android or iOS.
 
+### [2026-10-10 18:52 UTC+07:00] — [Fix] Orders summary card: short caption under the order count
+
+**Done:** The order count in the summary card of the Orders screen had a caption that repeated the filter in words ("Tổng đơn hàng", "Đơn tháng này"), which was cut on web at 390 px and below because react-native-web does not shrink the text with `adjustsFontSizeToFit`. The caption now names only the period ("Tất cả", "Hôm nay", "Tuần này", "Tháng này"), which is the same word as the filter button and always fits on one line. The longer text is still the accessibility label of the card, and the revenue caption ("Tổng doanh thu", "Doanh thu hôm nay") is unchanged. Related to #119, which stays open.
+
+**Changed files:** `frontend/mobile/app/(tabs)/invoices.tsx` and this entry.
+
+**Flow explained:** `countLabel` is still built from the active filter and used for the screen-reader label; a new `countCaption` (the period label of the active filter) is what is drawn under the number.
+
+**Check:** `tsc --noEmit` clean. Web build in the browser at 375 px in mock mode: with "Tất cả" the card reads "6 đơn / Tất cả" and "1.146.000đ / Tổng doanh thu", with "Hôm nay" it reads "3 đơn / Hôm nay" and "265.000đ / Doanh thu hôm nay", all on one line. **Not verified:** a real iPhone (where #119 was reported), Android, and filters other than "Tất cả" and "Hôm nay".
+
+
 ### [2026-10-10 17:54 UTC+07:00] — [Fix] Mobile list calls read the paged Core list responses (CORE-011, #153/#156)
 
 **Done:** Core now returns `{items, page, size, totalElements, totalPages}` from `GET /products`, `/sales`, `/sale-drafts`, `/customers`, `/debts` and `/expenses` with a default size of 20 and no array form (#156), and Railway staging already serves it, so the app, which read these as arrays, would have shown at most the first 20 items of each list or failed. The app now loads every page (size 100), merges them and drops duplicate ids, and it still accepts the old array shape from a Core that has not been upgraded, so it works with both Core versions during the rollout. The mock Core returns the same page shape and validates `page`/`size` with the `invalid_*_query` codes. Screens are unchanged: they still receive full arrays and compute totals over the whole shop. Server-side paging in the screens (load more, server filters and search, shop-wide aggregates) is not done and stays open in #144.
