@@ -19,7 +19,7 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models import Model
 
-from src.agent.guardrails import AgentGuardrails, GuardrailError, GuardrailLimits
+from src.agent.guardrails import GuardrailError, GuardrailLimits, GuardrailService
 from src.agent.repository import AgentConversationRepository
 from src.agent.tools import AgentContext, build_restock_tool, build_shop_data_tool
 from src.prompt_templates import (
@@ -74,7 +74,7 @@ class AgentService:
     ) -> None:
         self.model_name = model.model_name if model is not None else ""
         self.conversations = conversations
-        self.guardrails = AgentGuardrails(guardrail_limits)
+        self.guardrails = GuardrailService(guardrail_limits)
         # Each turn stores the owner's message and the reply, so a turn is two messages.
         self.history_messages = 2 * history_turns
         # The instructions are static so providers can cache them; the shop scope
@@ -102,8 +102,6 @@ class AgentService:
             if model is not None
             else None
         )
-        if self.agent is not None:
-            self.agent.output_validator(self.guardrails.check_answer)
 
     async def chat(
         self,
