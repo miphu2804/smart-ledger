@@ -408,12 +408,14 @@ export function ZenRing() {
   );
 }
 
+// Trên web, boxShadow vẽ bóng theo khung vuông trong suốt của vòng nên lộ ra một ô vuông; drop-shadow bám theo hình linh vật
+// như bóng đổ trên điện thoại.
 const ringShadow = Platform.select<ViewStyle>({
-  web: { boxShadow: '0 5px 16px rgba(26,25,22,0.19), 0 12px 26px rgba(26,25,22,0.13)' } as ViewStyle,
+  web: { filter: 'drop-shadow(0 5px 8px rgba(26,25,22,0.22)) drop-shadow(0 12px 14px rgba(26,25,22,0.12))' } as ViewStyle,
   default: { shadowColor: '#1A1916', shadowOpacity: 0.28, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 10 },
 })!;
 const dragShadow = Platform.select<ViewStyle>({
-  web: { boxShadow: '0 9px 26px rgba(26,25,22,0.23)' } as ViewStyle,
+  web: { filter: 'drop-shadow(0 9px 14px rgba(26,25,22,0.28))' } as ViewStyle,
   default: { shadowColor: '#1A1916', shadowOpacity: 0.34, shadowRadius: 20, shadowOffset: { width: 0, height: 10 }, elevation: 13 },
 })!;
 const menuShadow = Platform.select<ViewStyle>({
