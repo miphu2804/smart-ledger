@@ -1,3 +1,13 @@
+### [2026-10-12 13:33 UTC+07:00] — [Feature] Voice order: type the quantity for an item named without one
+
+**Done:** When the owner names an item that is not in the catalog without saying a quantity (for example "trà trái cây"), the voice order screen used to only ask them to say it again with a quantity. It now opens the existing "Thêm … vào danh mục?" dialog for that item with a new "Số lượng" field (default 1), so the quantity can be typed by hand together with the price and unit. Saying it again with a quantity still works after tapping "Bỏ qua". Items named with a quantity also show the field, prefilled with what was heard. Items already in the catalog are unchanged: without a spoken quantity they are added as 1 and edited with the +/− buttons.
+
+**Changed files:** `frontend/mobile/app/voice.tsx` and this entry. `parseOrder` is unchanged.
+
+**Flow explained:** `handleUtterance` turns `missingQuantityItems` into pending new items with quantity 1 and queues them after the unknown items in the same dialog. `resolvePending` reads the typed quantity, requires it to be at least 1 (shown as a field error next to the price error) and adds that quantity to the order after the product is created.
+
+**Check:** `tsc --noEmit` clean. Web build in headless Chrome, mock mode, typing through "Nhập tay": "trà trái cây" opens the dialog with the quantity field set to 1 and the assistant message offers typing or saying it again; an empty quantity shows "Nhập số lượng từ 1 trở lên"; quantity 3 at 15.000đ adds "3 Trà trái cây" and the total becomes 45.000đ. **Not verified:** real speech input, native Android and iOS (including the dialog with the system keyboard open), an item named with a quantity (the field should come prefilled with it), and several missing-quantity items in one sentence.
+
 ### [2026-10-10 19:50 UTC+07:00] — [Feature] Orders screen: the search bar is always visible, like the Sales screen
 
 **Done:** The Orders screen hid its search input behind a magnifier button in the top right corner. It now shows the search bar permanently under the title and above the period filter chips, with the same look as the Sales screen: a search icon on the left, a clear button when there is text, and no toggle button. The placeholder stays "Tìm theo khách, tên món, mã đơn..." because the search is over orders.
