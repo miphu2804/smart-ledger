@@ -4,9 +4,9 @@
 
 **Changed files:** `frontend/mobile/app/voice.tsx` and this entry. `parseOrder` is unchanged.
 
-**Flow explained:** `handleUtterance` turns `missingQuantityItems` into pending new items with quantity 1 and queues them after the unknown items in the same dialog. `resolvePending` reads the typed quantity, requires it to be at least 1 (shown as a field error next to the price error) and adds that quantity to the order after the product is created.
+**Flow explained:** `handleUtterance` turns `missingQuantityItems` into pending new items with quantity 1 and queues them after the unknown items in the same dialog. `resolvePending` reads the typed quantity, requires it to be between 1 and `MAX_NEW_ITEM_QTY` (9999; shown as a field error next to the price error, and the field stops at four digits) and adds that quantity to the order after the product is created.
 
-**Check:** `tsc --noEmit` clean. Web build in headless Chrome, mock mode, typing through "Nhập tay": "trà trái cây" opens the dialog with the quantity field set to 1 and the assistant message offers typing or saying it again; an empty quantity shows "Nhập số lượng từ 1 trở lên"; quantity 3 at 15.000đ adds "3 Trà trái cây" and the total becomes 45.000đ. **Not verified:** real speech input, native Android and iOS (including the dialog with the system keyboard open), an item named with a quantity (the field should come prefilled with it), and several missing-quantity items in one sentence.
+**Check:** `tsc --noEmit` clean. Web build in headless Chrome, mock mode, typing through "Nhập tay": "trà trái cây" opens the dialog with the quantity field set to 1 and the assistant message offers typing or saying it again; an empty quantity shows "Nhập số lượng từ 1 đến 9999"; the field takes at most four digits (typing 123456 leaves 1234) and a longer value forced into it is rejected with the same message; quantity 3 at 15.000đ adds "3 Trà trái cây" and the total becomes 45.000đ. **Not verified:** real speech input, native Android and iOS (including the dialog with the system keyboard open), an item named with a quantity (the field should come prefilled with it), and several missing-quantity items in one sentence.
 
 ### [2026-10-12 13:33 UTC+07:00] — [Fix] Sales product cards, web scanner lookup and mascot shadow
 

@@ -43,6 +43,9 @@ type Msg = {
   emotion?: 'happy' | 'holding_tablet' | 'excited' | 'wink' | 'question' | 'sorry' | 'thanks';
 };
 
+// Trần số lượng gõ tay cho một món mới: chuỗi số quá dài sẽ vượt giới hạn số nguyên an toàn và làm sai tổng đơn.
+const MAX_NEW_ITEM_QTY = 9999;
+
 const voiceTheme = {
   primary: colors.brand,
   primaryDark: colors.brandPressed,
@@ -694,9 +697,10 @@ export default function Voice() {
     if (!first || catalogBusy) return;
     const price = parseInt(newPrice.replace(/\D/g, ''), 10) || 0;
     const qty = parseInt(newQty.replace(/\D/g, ''), 10) || 0;
-    if (action === 'catalog' && (!price || qty < 1)) {
+    const qtyOk = qty >= 1 && qty <= MAX_NEW_ITEM_QTY;
+    if (action === 'catalog' && (!price || !qtyOk)) {
       setPriceErr(price ? '' : `Nhập giá bán cho "${first.name}" để thêm vào đơn`);
-      setQtyErr(qty >= 1 ? '' : 'Nhập số lượng từ 1 trở lên');
+      setQtyErr(qtyOk ? '' : `Nhập số lượng từ 1 đến ${MAX_NEW_ITEM_QTY}`);
       return;
     }
     if (action === 'catalog') {
@@ -1251,6 +1255,7 @@ export default function Voice() {
               label="Số lượng"
               keyboardType="number-pad"
               placeholder="VD: 2"
+              maxLength={String(MAX_NEW_ITEM_QTY).length}
               value={newQty}
               error={qtyErr || undefined}
               onChangeText={(t) => {
