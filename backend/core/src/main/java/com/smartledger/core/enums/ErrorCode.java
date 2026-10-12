@@ -33,6 +33,7 @@ public enum ErrorCode {
     IDEMPOTENCY_KEY_CONFLICT(HttpStatus.CONFLICT, "idempotency_key_conflict", "This Idempotency-Key belongs to a different request."),
     IDEMPOTENCY_KEY_EXPIRED(HttpStatus.CONFLICT, "idempotency_key_expired", "This Idempotency-Key has expired; review the result before submitting again."),
     INVALID_PRODUCT_ID(HttpStatus.BAD_REQUEST, "invalid_product_id", "Product ID must be a positive integer."),
+    INVALID_PRODUCT_BARCODE(HttpStatus.BAD_REQUEST, "validation_failed", "The barcode is invalid."),
     PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "product_not_found", "This product is unavailable."),
     PRODUCT_CATEGORY_INVALID(HttpStatus.BAD_REQUEST, "product_category_invalid", "Category must be active in this shop."),
     PRODUCT_BARCODE_CONFLICT(HttpStatus.CONFLICT, "product_barcode_conflict", "Barcode already belongs to a product in this shop."),

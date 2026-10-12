@@ -15,6 +15,9 @@ public interface ProductService {
 
     ProductResponse getById(VerifiedFirebaseToken firebaseToken, String shopId, String productId);
 
+    /** Looks up an exact barcode on an active product after checking OWNER and active-shop access. */
+    ProductResponse lookup(VerifiedFirebaseToken firebaseToken, String shopId, String barcode);
+
     ProductResponse patch(VerifiedFirebaseToken firebaseToken, String shopId, String productId,
             ProductPatchRequest request);
 

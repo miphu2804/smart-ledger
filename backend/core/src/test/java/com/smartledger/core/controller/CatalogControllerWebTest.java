@@ -152,6 +152,39 @@ class CatalogControllerWebTest {
     }
 
     @Test
+    void fixedLookupRouteDoesNotResolveAsAProductId() throws Exception {
+        when(productService.lookup(any(), eq("7"), eq("ABC-123")))
+                .thenReturn(new ProductResponse(5L, 7L, null, "Coffee", "ABC-123", null, "cup",
+                        25000L, null, false, null, CatalogStatus.ACTIVE, null, null));
+
+        mvc.perform(get("/api/v1/products/lookup").param("barcode", "ABC-123")
+                        .header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(5))
+                .andExpect(jsonPath("$.barcode").value("ABC-123"));
+        verify(productService).lookup(any(), eq("7"), eq("ABC-123"));
+        org.mockito.Mockito.verify(productService, org.mockito.Mockito.never()).getById(any(), any(), any());
+    }
+
+    @Test
+    void lookupRequiresBearerTokenAndShopHeader() throws Exception {
+        mvc.perform(get("/api/v1/products/lookup").param("barcode", "ABC-123").header("X-Shop-Id", "7"))
+                .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("unauthorized"));
+        mvc.perform(get("/api/v1/products/lookup").param("barcode", "ABC-123")
+                        .header("Authorization", "Bearer valid-token"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("missing_required_header"));
+        org.mockito.Mockito.verifyNoInteractions(productService);
+    }
+
+    @Test
+    void lookupReturnsNotFoundForBarcodeInAnotherShop() throws Exception {
+        when(productService.lookup(any(), eq("7"), eq("FOREIGN")))
+                .thenThrow(new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+        mvc.perform(get("/api/v1/products/lookup").param("barcode", "FOREIGN")
+                        .header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7"))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("product_not_found"));
+    }
+
+    @Test
     void productPatchAcceptsOnlyTheFieldsBeingChanged() throws Exception {
         when(productService.patch(any(), eq("7"), eq("5"), any()))
                 .thenReturn(new ProductResponse(5L, 7L, null, "Cà phê", null, null, "ly",

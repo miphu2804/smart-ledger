@@ -218,7 +218,7 @@ Table products {
   category_id bigint
 
   name varchar(255) [not null]
-  barcode varchar(100)
+  barcode varchar(100) [note: 'V16 exact, case-sensitive; unique only among ACTIVE non-null codes in the same shop. Archive releases the code without rewriting history.']
   image_url varchar(1000)
   image_public_id varchar(500) [note: 'V13 internal Cloudinary public asset reference; never returned directly']
   unit varchar(50) [not null]
@@ -240,8 +240,10 @@ Table products {
   indexes {
     (shop_id, status)
     category_id
-    (shop_id, barcode) [unique]
+    // DBML cannot encode a partial-index predicate. Do not export an unconditional UNIQUE here.
   }
+
+  Note: 'V16 SQL enforces UNIQUE (shop_id, barcode) WHERE status = ACTIVE AND barcode IS NOT NULL via uq_products_shop_barcode_active. The predicate is intentionally described rather than misrepresented as unconditional DBML uniqueness; see erd-description.md Migration Alignment.'
 }
 
 
