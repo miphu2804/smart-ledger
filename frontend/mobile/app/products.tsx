@@ -5,6 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarcodeScannerModal } from '../src/components/BarcodeScannerModal';
 import { CollapsibleHeader } from '../src/components/CollapsibleHeader';
 import { useToast } from '../src/components/brand';
+import { ProductPhotoCamera } from '../src/components/ProductPhotoCamera';
+import { ProductThumb } from '../src/components/ProductThumb';
 import {
   Badge,
   Button,
@@ -26,6 +28,7 @@ import { errorMessage } from '../src/lib/errors';
 import { normalizeText, vnd } from '../src/lib/format';
 import { triggerFeedback } from '../src/lib/feedback';
 import { buildProductPatch, isWholeNumber, resolveThreshold, stockLevel } from '../src/lib/productForm';
+import { PHOTO_SOURCE, PhotoError, pickImageOnWeb, type PickedImage } from '../src/lib/productPhoto';
 import { colors } from '../src/theme';
 
 /** 'all' | 'low' | id danh mục dạng chuỗi (Chips cần K extends string) */
@@ -140,7 +143,7 @@ export default function Products() {
           }
           renderItem={({ item: p }) => (
             <Pressable onPress={() => setForm(p)} style={({ pressed }) => [styles.row, pressed && { opacity: 0.8 }]}>
-              <Tile name={p.name} text={p.name[0]} size={42} />
+              <ProductThumb name={p.name} uri={p.imageUrl} size={42} />
               <View style={{ flex: 1 }}>
                 <T w="semibold" size={14}>
                   {p.name}
@@ -250,6 +253,13 @@ function ProductForm({
   const [addingCat, setAddingCat] = useState(false);
   const [newCatName, setNewCatName] = useState('');
   const [catBusy, setCatBusy] = useState(false);
+  /** Ảnh đang hiện ở form: ảnh đã lưu ở Core (mặt hàng cũ) hoặc ảnh vừa chọn của mặt hàng mới */
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  /** Mặt hàng mới chưa có id: giữ ảnh đã chọn, tải lên ngay sau khi tạo xong */
+  const [pendingPhoto, setPendingPhoto] = useState<PickedImage | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoErr, setPhotoErr] = useState('');
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   // nạp dữ liệu khi mở form
   const key = value === 'new' ? 'new' : (p ? String(p.id) : null);
@@ -275,6 +285,10 @@ function ProductForm({
     setErr('');
     setAddingCat(false);
     setNewCatName('');
+    setPhotoUrl(p?.imageUrl ?? null);
+    setPendingPhoto(null);
+    setPhotoBusy(false);
+    setPhotoErr('');
   }
 
   const num = (s: string) => parseInt(s.replace(/\D/g, ''), 10) || 0;
@@ -295,6 +309,7 @@ function ProductForm({
     const costNum = cost.trim() === '' ? null : num(cost);
     const categoryId = catKey === 'none' ? null : Number(catKey);
     const lowStockThreshold = resolved.ok ? resolved.value : null;
+    let photoFailure = '';
     setBusy(true);
     try {
       if (p) {
@@ -311,7 +326,7 @@ function ProductForm({
         });
         if (Object.keys(patch).length > 0) await productApi.update(p.id, patch);
       } else {
-        await productApi.create({
+        const created = await productApi.create({
           categoryId,
           name: name.trim(),
           unit: unit.trim(),
@@ -322,9 +337,22 @@ function ProductForm({
           stockQuantity: tracked ? num(stock) : null,
           lowStockThreshold: tracked ? lowStockThreshold : null,
         });
+        // Core nhận ảnh qua endpoint riêng sau khi mặt hàng đã có id. Lỗi ảnh không làm mất mặt hàng vừa tạo.
+        if (pendingPhoto) {
+          try {
+            await productApi.uploadImage(created.id, pendingPhoto);
+          } catch (e) {
+            photoFailure = errorMessage(e);
+          }
+        }
       }
-      triggerFeedback('success');
-      toast(p ? 'Đã cập nhật mặt hàng' : `Đã thêm "${name.trim()}"`);
+      if (photoFailure) {
+        triggerFeedback('warning');
+        toast(`Đã thêm "${name.trim()}" nhưng chưa lưu được ảnh: ${photoFailure}. Mở lại mặt hàng để thêm ảnh.`, 'err');
+      } else {
+        triggerFeedback('success');
+        toast(p ? 'Đã cập nhật mặt hàng' : `Đã thêm "${name.trim()}"`);
+      }
       onSaved();
       onClose();
     } catch (e) {
@@ -358,6 +386,64 @@ function ProductForm({
       setInErr(errorMessage(e));
     } finally {
       setInBusy(false);
+    }
+  };
+
+  // Mặt hàng đã có: tải ảnh lên ngay khi chọn (như nhập hàng, không chờ "Lưu thay đổi"). Mặt hàng mới: giữ lại chờ tạo xong.
+  const applyPhoto = async (image: PickedImage) => {
+    setPhotoErr('');
+    if (!p) {
+      setPendingPhoto(image);
+      setPhotoUrl(image.uri);
+      return;
+    }
+    setPhotoBusy(true);
+    try {
+      const updated = await productApi.uploadImage(p.id, image);
+      setPhotoUrl(updated.imageUrl);
+      triggerFeedback('success');
+      onChanged();
+    } catch (e) {
+      triggerFeedback('error');
+      setPhotoErr(errorMessage(e));
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
+  const choosePhoto = async () => {
+    if (photoBusy) return;
+    setPhotoErr('');
+    if (PHOTO_SOURCE === 'camera') {
+      setCameraOpen(true);
+      return;
+    }
+    try {
+      const image = await pickImageOnWeb();
+      if (image) await applyPhoto(image);
+    } catch (e) {
+      setPhotoErr(e instanceof PhotoError ? e.message : 'Không đọc được ảnh này. Hãy chọn ảnh khác');
+    }
+  };
+
+  const removePhoto = async () => {
+    if (photoBusy) return;
+    setPhotoErr('');
+    if (!p) {
+      setPendingPhoto(null);
+      setPhotoUrl(null);
+      return;
+    }
+    setPhotoBusy(true);
+    try {
+      await productApi.deleteImage(p.id);
+      setPhotoUrl(null);
+      onChanged();
+    } catch (e) {
+      triggerFeedback('error');
+      setPhotoErr(errorMessage(e));
+    } finally {
+      setPhotoBusy(false);
     }
   };
 
@@ -422,6 +508,33 @@ function ProductForm({
         </View>
       ) : (
         <>
+          <Row gap={12} style={styles.photoRow}>
+            <ProductThumb name={name || 'mặt hàng'} uri={photoUrl} size={72} busy={photoBusy} placeholder="icon" />
+            <View style={{ flex: 1 }}>
+              <T w="semibold" size={14}>
+                Ảnh mặt hàng
+              </T>
+              <T size={12} color={colors.faint}>
+                {photoUrl ? 'Ảnh này hiện trên thẻ ở màn Bán hàng.' : 'Tuỳ chọn. Chưa có ảnh thì app dùng ảnh minh hoạ theo tên.'}
+              </T>
+              <Row gap={8} style={{ marginTop: 8 }}>
+                <Button
+                  title={photoUrl ? 'Đổi ảnh' : PHOTO_SOURCE === 'camera' ? 'Chụp ảnh' : 'Chọn ảnh'}
+                  icon="camera"
+                  variant="soft"
+                  small
+                  disabled={photoBusy}
+                  onPress={choosePhoto}
+                />
+                {photoUrl ? <Button title="Xoá ảnh" icon="trash-2" variant="ghost" small disabled={photoBusy} onPress={removePhoto} /> : null}
+              </Row>
+            </View>
+          </Row>
+          {photoErr ? (
+            <T size={12} color={colors.red} style={{ marginTop: -6, marginBottom: 10 }}>
+              {photoErr}
+            </T>
+          ) : null}
           <Field label="Tên mặt hàng" placeholder="VD: Nước suối" value={name} onChangeText={setName} />
 
           <Row gap={8} style={{ alignItems: 'flex-end', marginBottom: 14 }}>
@@ -597,6 +710,14 @@ function ProductForm({
           setScannerOpen(false);
         }}
       />
+      <ProductPhotoCamera
+        visible={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onPicked={(image) => {
+          setCameraOpen(false);
+          applyPhoto(image);
+        }}
+      />
       <Dialog
         visible={confirmDel}
         danger
@@ -637,6 +758,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   trackRow: { marginTop: 16, marginBottom: 12, padding: 12, borderRadius: 14, backgroundColor: colors.bg },
+  photoRow: { alignItems: 'center', marginBottom: 14, padding: 12, borderRadius: 14, backgroundColor: colors.bg },
   stockBox: { marginBottom: 12, padding: 12, borderRadius: 14, backgroundColor: colors.bg },
   scan: {
     alignItems: 'center',
