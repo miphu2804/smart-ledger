@@ -26,6 +26,8 @@ export function ProductPhotoCamera({
   const cameraRef = useRef<CameraView>(null);
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   const [pictureSize, setPictureSize] = useState<string | undefined>(undefined);
+  // Tăng mỗi lần đổi camera hoặc đóng màn: kết quả hỏi cỡ ảnh hay ảnh chụp về muộn của camera trước bị bỏ qua
+  const cameraGeneration = useRef(0);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -36,36 +38,52 @@ export function ProductPhotoCamera({
 
   useEffect(() => {
     if (visible) return;
+    cameraGeneration.current += 1;
+    setPictureSize(undefined);
     setReady(false);
     setBusy(false);
     setErr('');
   }, [visible]);
 
+  const switchCamera = () => {
+    cameraGeneration.current += 1;
+    // Cỡ ảnh của camera trước có thể không có ở camera mới: về mặc định cho tới khi hỏi lại xong
+    setPictureSize(undefined);
+    setReady(false);
+    setBusy(false);
+    setFacing((current) => (current === 'back' ? 'front' : 'back'));
+  };
+
   const onCameraReady = async () => {
+    const generation = cameraGeneration.current;
+    let size: string | undefined;
     try {
-      const sizes = await cameraRef.current?.getAvailablePictureSizesAsync();
-      setPictureSize(choosePictureSize(sizes ?? []));
+      size = choosePictureSize((await cameraRef.current?.getAvailablePictureSizesAsync()) ?? []);
     } catch {
-      /* giữ cỡ mặc định của máy; ảnh vượt giới hạn sẽ bị chặn sau khi chụp */
+      /* dùng cỡ mặc định của máy; ảnh vượt giới hạn sẽ bị chặn sau khi chụp */
     }
+    if (generation !== cameraGeneration.current) return;
+    setPictureSize(size);
     setReady(true);
   };
 
   const shoot = async () => {
     if (!cameraRef.current || !ready || busy) return;
+    const generation = cameraGeneration.current;
     setBusy(true);
     setErr('');
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.7 });
+      if (generation !== cameraGeneration.current) return;
       if (!fitsCoreLimits(photo.width, photo.height)) {
         setErr(`Ảnh chụp được (${photo.width}×${photo.height}) lớn hơn giới hạn 2048 px mỗi cạnh nên chưa lưu được.`);
         return;
       }
       onPicked({ uri: photo.uri, width: photo.width, height: photo.height, mimeType: 'image/jpeg' });
     } catch {
-      setErr('Không chụp được ảnh. Vui lòng thử lại');
+      if (generation === cameraGeneration.current) setErr('Không chụp được ảnh. Vui lòng thử lại');
     } finally {
-      setBusy(false);
+      if (generation === cameraGeneration.current) setBusy(false);
     }
   };
 
@@ -80,10 +98,7 @@ export function ProductPhotoCamera({
             Chụp ảnh mặt hàng
           </T>
           <Pressable
-            onPress={() => {
-              setReady(false);
-              setFacing((current) => (current === 'back' ? 'front' : 'back'));
-            }}
+            onPress={switchCamera}
             hitSlop={14}
             style={styles.iconBtn}
             accessibilityRole="button"

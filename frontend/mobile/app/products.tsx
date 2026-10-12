@@ -260,6 +260,11 @@ function ProductForm({
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoErr, setPhotoErr] = useState('');
   const [cameraOpen, setCameraOpen] = useState(false);
+  /**
+   * Tăng mỗi lần form nạp lại (mở mặt hàng khác, đóng rồi mở lại). Form luôn nằm trong cây React, nên kết quả tải hoặc xoá
+   * ảnh về muộn của lần mở trước phải so số này trước khi ghi vào state, kẻo hiện nhầm sang mặt hàng đang mở.
+   */
+  const photoSession = useRef(0);
 
   // nạp dữ liệu khi mở form
   const key = value === 'new' ? 'new' : (p ? String(p.id) : null);
@@ -285,6 +290,7 @@ function ProductForm({
     setErr('');
     setAddingCat(false);
     setNewCatName('');
+    photoSession.current += 1;
     setPhotoUrl(p?.imageUrl ?? null);
     setPendingPhoto(null);
     setPhotoBusy(false);
@@ -391,6 +397,8 @@ function ProductForm({
 
   // Mặt hàng đã có: tải ảnh lên ngay khi chọn (như nhập hàng, không chờ "Lưu thay đổi"). Mặt hàng mới: giữ lại chờ tạo xong.
   const applyPhoto = async (image: PickedImage) => {
+    const session = photoSession.current;
+    const current = () => session === photoSession.current;
     setPhotoErr('');
     if (!p) {
       setPendingPhoto(image);
@@ -400,14 +408,16 @@ function ProductForm({
     setPhotoBusy(true);
     try {
       const updated = await productApi.uploadImage(p.id, image);
-      setPhotoUrl(updated.imageUrl);
       triggerFeedback('success');
       onChanged();
+      if (current()) setPhotoUrl(updated.imageUrl);
     } catch (e) {
       triggerFeedback('error');
-      setPhotoErr(errorMessage(e));
+      // Form đã chuyển sang việc khác thì không còn chỗ hiện lỗi của mặt hàng này: báo bằng toast
+      if (current()) setPhotoErr(errorMessage(e));
+      else toast(`Chưa lưu được ảnh cho "${p.name}": ${errorMessage(e)}`, 'err');
     } finally {
-      setPhotoBusy(false);
+      if (current()) setPhotoBusy(false);
     }
   };
 
@@ -418,10 +428,14 @@ function ProductForm({
       setCameraOpen(true);
       return;
     }
+    const session = photoSession.current;
     try {
       const image = await pickImageOnWeb();
-      if (image) await applyPhoto(image);
+      // Form đã đóng hoặc mở mặt hàng khác trong lúc hộp chọn file còn mở: bỏ ảnh vừa chọn
+      if (!image || session !== photoSession.current) return;
+      await applyPhoto(image);
     } catch (e) {
+      if (session !== photoSession.current) return;
       setPhotoErr(e instanceof PhotoError ? e.message : 'Không đọc được ảnh này. Hãy chọn ảnh khác');
     }
   };
@@ -434,16 +448,19 @@ function ProductForm({
       setPhotoUrl(null);
       return;
     }
+    const session = photoSession.current;
+    const current = () => session === photoSession.current;
     setPhotoBusy(true);
     try {
       await productApi.deleteImage(p.id);
-      setPhotoUrl(null);
       onChanged();
+      if (current()) setPhotoUrl(null);
     } catch (e) {
       triggerFeedback('error');
-      setPhotoErr(errorMessage(e));
+      if (current()) setPhotoErr(errorMessage(e));
+      else toast(`Chưa xoá được ảnh của "${p.name}": ${errorMessage(e)}`, 'err');
     } finally {
-      setPhotoBusy(false);
+      if (current()) setPhotoBusy(false);
     }
   };
 
