@@ -25,7 +25,10 @@ export default function EmailAuth() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  /** Đăng nhập không khớp (sai mật khẩu hoặc chưa có tài khoản): gợi ý hướng đi thay vì báo lỗi */
+  /**
+   * Đăng nhập không khớp. Firebase trả cùng một lỗi cho "sai mật khẩu" và "chưa có tài khoản" (chống dò email), nên app
+   * không biết là trường hợp nào: báo lỗi chung ngay tại ô mật khẩu, kèm hai lối đi tiếp ở dòng gợi ý bên dưới.
+   */
   const [hint, setHint] = useState(false);
   const [sentTo, setSentTo] = useState('');
   const cooldown = useCooldown(30);
@@ -63,10 +66,7 @@ export default function EmailAuth() {
         router.replace('/(auth)/profile');
         return;
       }
-      if (mode === 'login' && e instanceof AuthError && e.code === 'invalid-credentials') {
-        setHint(true);
-        return;
-      }
+      if (mode === 'login' && e instanceof AuthError && e.code === 'invalid-credentials') setHint(true);
       setErr(errorMessage(e));
     } finally {
       setBusy(false);
@@ -154,13 +154,13 @@ export default function EmailAuth() {
 
       {mode === 'login' && hint ? (
         <T size={13} color={colors.muted} style={{ marginBottom: 12, lineHeight: 20 }}>
-          Email hoặc mật khẩu chưa đúng. Nếu chưa có tài khoản, hãy{' '}
-          <T w="bold" size={13} color={colors.brand} onPress={() => switchMode('register')}>
-            tạo tài khoản
-          </T>
-          ; nếu quên mật khẩu, hãy{' '}
+          Hãy kiểm tra lại mật khẩu. Nếu quên, bạn có thể{' '}
           <T w="bold" size={13} color={colors.brand} onPress={() => switchMode('reset')}>
             đặt lại mật khẩu
+          </T>
+          . Chưa từng đăng ký bằng email này thì{' '}
+          <T w="bold" size={13} color={colors.brand} onPress={() => switchMode('register')}>
+            tạo tài khoản
           </T>
           .
         </T>
