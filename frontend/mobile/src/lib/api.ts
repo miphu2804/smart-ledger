@@ -13,6 +13,7 @@ import { mockCoreRequest } from './mockCore';
  *   token bằng Firebase Admin SDK. Token lấy mới mỗi request (SDK tự làm mới khi gần hết hạn, app không tự lưu).
  * - Endpoint nghiệp vụ của OWNER gửi thêm `X-Shop-Id` (bật bằng `withShop`). POST ghi tiền gửi thêm
  *   `Idempotency-Key` (`idempotencyKey`, sinh/giữ key ở `idempotency.ts`).
+ * - Upload ảnh (`image`) gửi `multipart/form-data` với đúng một part `image` thay cho JSON.
  * - Lỗi của Core: `{ code, message, details?, traceId }` (details: `[{ field, issue }]`). Lỗi của AI service: `{ detail }`.
  *   401 → đăng xuất.
  * - Quá thời gian chờ (mặc định 15 giây) → ApiError status 0, code 'timeout' (không để app quay vô hạn khi
@@ -53,13 +54,17 @@ export async function apiRequest<T>(
     timeoutMs?: number;
     /** Header Idempotency-Key — bắt buộc với POST /expenses và POST /debts/{id}/payments */
     idempotencyKey?: string;
+    /** Ảnh gửi dạng multipart (part `image`); không dùng cùng `body`. Web gửi `blob`, Android/iOS gửi file theo `uri`. */
+    image?: UploadImage;
   } = {},
 ): Promise<T> {
-  const method = opts.method ?? (opts.body === undefined ? 'GET' : 'POST');
+  const method = opts.method ?? (opts.body === undefined && !opts.image ? 'GET' : 'POST');
 
   if (USE_MOCK) {
     debugLog('api', '→ (mock)', method, path);
-    const raw = mockCoreRequest<T>(path, method, opts.body, opts.idempotencyKey);
+    // Bản mock không nhận file: chỉ chuyển địa chỉ ảnh xem trước để hiện lại
+    const mockBody = opts.image ? { imageUri: opts.image.uri } : opts.body;
+    const raw = mockCoreRequest<T>(path, method, mockBody, opts.idempotencyKey);
     const data = raw === undefined ? raw : (JSON.parse(JSON.stringify(raw)) as T);
     debugLog('api', '✓ (mock)', method, path);
     return data;
@@ -72,17 +77,19 @@ export async function apiRequest<T>(
   const token = await authClient.getIdToken();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  // Với multipart, để fetch tự đặt Content-Type kèm boundary
+  const form = opts.image ? imageForm(opts.image) : null;
   let res: Response;
   try {
     res = await fetch(`${API_ENDPOINT}/api/v1${path}`, {
       method,
       headers: {
-        'Content-Type': 'application/json',
+        ...(form ? {} : { 'Content-Type': 'application/json' }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(opts.withShop && activeShopId ? { 'X-Shop-Id': activeShopId } : {}),
         ...(opts.idempotencyKey ? { 'Idempotency-Key': opts.idempotencyKey } : {}),
       },
-      body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+      body: form ?? (opts.body === undefined ? undefined : JSON.stringify(opts.body)),
       signal: ctrl.signal,
     });
   } catch (err) {
@@ -100,6 +107,22 @@ export async function apiRequest<T>(
   debugLog('api', '✓', method, path, res.status, took());
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
+}
+
+/** Ảnh để upload: `blob` (web) hoặc file trên máy theo `uri` (Android/iOS). */
+export interface UploadImage {
+  uri: string;
+  mimeType: string;
+  blob?: Blob;
+}
+
+function imageForm(image: UploadImage): FormData {
+  const form = new FormData();
+  const name = image.mimeType === 'image/png' ? 'image.png' : 'image.jpg';
+  if (image.blob) form.append('image', image.blob, name);
+  // React Native đọc thẳng file trên máy khi part có dạng { uri, name, type }
+  else form.append('image', { uri: image.uri, name, type: image.mimeType } as unknown as Blob);
+  return form;
 }
 
 /**
