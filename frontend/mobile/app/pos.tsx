@@ -15,7 +15,7 @@ import { abbr, hashIndex, normalizeText, vnd } from '../src/lib/format';
 import { getProductImage } from '../src/lib/productImages';
 import { itemsTotal } from '../src/lib/stats';
 import { useApp } from '../src/store/AppStore';
-import { colors, font, shadow } from '../src/theme';
+import { colors, font, shadow, WEB_FRAME_MAX_WIDTH } from '../src/theme';
 
 const salesColors = {
   primary: colors.brand, // #482AAC
@@ -259,6 +259,13 @@ interface ProductCardProps {
   onOutOfStock: () => void;
 }
 
+/** Cỡ chữ giá trong thẻ lưới: giá càng dài chữ càng nhỏ để còn chỗ cho nút thêm/bớt. */
+function gridPriceSize(text: string): number {
+  if (text.length <= 8) return 15.5;
+  if (text.length <= 10) return 14.5;
+  return 13.5;
+}
+
 function ProductCard({ product: p, inCart, viewMode, onAdd, onSubtract, onOutOfStock }: ProductCardProps) {
   const [favorite, setFavorite] = useState(false);
   const stock = p.stockQuantity ?? 0;
@@ -466,13 +473,14 @@ function ProductCard({ product: p, inCart, viewMode, onAdd, onSubtract, onOutOfS
           {p.name}
         </T>
 
-        <Row style={styles.priceRow}>
-          <T w="extrabold" size={15.5} color={salesColors.primary}>
+        {/* Giá luôn hiện đủ: giá dài thì chữ nhỏ lại, vẫn không vừa thì cụm nút tự xuống dòng thay vì bị cắt */}
+        <Row style={styles.priceRow} gap={6}>
+          <T w="extrabold" size={gridPriceSize(vnd(p.sellingPriceVnd))} color={salesColors.primary} numberOfLines={1}>
             {vnd(p.sellingPriceVnd)}
           </T>
 
           {inCart > 0 ? (
-            <View style={styles.cartBar}>
+            <View style={[styles.cartBar, styles.priceRowControl]}>
               <Pressable
                 hitSlop={8}
                 onPress={(e) => {
@@ -511,7 +519,7 @@ function ProductCard({ product: p, inCart, viewMode, onAdd, onSubtract, onOutOfS
                 e.stopPropagation();
                 handleCardPress();
               }}
-              style={({ pressed }) => [styles.quickAddBtn, isOutOfStock && { opacity: 0.4 }, pressed && { opacity: 0.7 }]}
+              style={({ pressed }) => [styles.quickAddBtn, styles.priceRowControl, isOutOfStock && { opacity: 0.4 }, pressed && { opacity: 0.7 }]}
               accessibilityLabel="Thêm"
             >
               <Feather name="plus" size={18} color={salesColors.primary} />
@@ -610,9 +618,12 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
     });
   }, [products, cat, q, sortMode, stockFilter]);
 
-  // Hai cột bằng nhau: màn trừ lề 10 hai bên và khe 8 giữa hai thẻ
+  // Hai cột bằng nhau: bề rộng danh sách trừ lề 10 hai bên và khe 8 giữa hai thẻ. Dùng bề rộng đo được của danh sách;
+  // trước khi đo xong thì ước lượng theo cửa sổ, trên web chặn ở khung app vì cửa sổ trình duyệt rộng hơn khung nhiều.
   const { width: windowWidth } = useWindowDimensions();
-  const gridCardWidth = (windowWidth - 20 - 8) / 2;
+  const [listWidth, setListWidth] = useState(0);
+  const estimatedWidth = Platform.OS === 'web' ? Math.min(windowWidth, WEB_FRAME_MAX_WIDTH) : windowWidth;
+  const gridCardWidth = Math.max(0, ((listWidth || estimatedWidth) - 20 - 8) / 2);
 
   const cartItems: LineItem[] = Object.entries(cart).flatMap(([id, qty]) => {
     const p = products.find((x) => x.id === Number(id));
@@ -751,6 +762,10 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
         <Animated.FlatList
           key={viewMode}
           data={list}
+          onLayout={(event) => {
+            const width = Math.round(event.nativeEvent.layout.width);
+            setListWidth((current) => (current === width ? current : width));
+          }}
           numColumns={viewMode === 'grid' ? 2 : 1}
           keyExtractor={(p) => String(p.id)}
           renderItem={({ item: p }) => (
@@ -1304,6 +1319,12 @@ const styles = StyleSheet.create({
     marginTop: 6,
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    rowGap: 6,
+  },
+  // Cụm nút luôn nằm sát mép phải, kể cả khi đã xuống dòng
+  priceRowControl: {
+    marginLeft: 'auto',
   },
   quickAddBtn: {
     width: 32,
