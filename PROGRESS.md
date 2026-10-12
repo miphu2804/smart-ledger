@@ -1,3 +1,24 @@
+### [2026-10-12] — [Fix] Unicode barcode length and CORE-012 push preparation
+
+**Done:** Fixed the shared barcode limit to count Unicode code points after trim, not UTF-16 code units, and prepared the previously approved #164/V16/docs work for `feat/core-barcode`. No real local/staging/production migration or FE changes.
+
+**Changed files:** Core Product service, request/controller OpenAPI descriptions and service/web/PostgreSQL boundary tests; clarified Core README, API contract and PRD AC-064; removed temporary pre-push wording in technical design. This entry preserves all earlier progress entries.
+
+**Flow explained:** Create/PATCH/lookup accept 100 supplementary Unicode code points, reject 101 with barcode validation details, and preserve exact values. Tests cover emoji, supplementary ideographs and mixed BMP/supplementary text, including PostgreSQL char_length=100 and unchanged data after invalid writes. Existing trim, tenant, uniqueness and history rules remain unchanged; no additional migration is needed for this fix.
+
+**Check:** Focused suite: 141 tests passed. Full clean verify against dedicated disposable PostgreSQL 16: **950 tests, 0 failures, 0 errors, 0 skipped**, BUILD SUCCESS (4:48). Maven summary and actual XML testcase entries agree at 950; suite-header attributes total 949 because ApiDocumentationWebTest reports header=8 but contains 9 testcase entries. Recorded the observed reporting inconsistency without changing historical totals. V16/index/concurrency and full business regressions pass; Markdown file links and git diff --check pass. Real Firebase/scanner/FE/staging UAT and shared migration remain pending.
+
+### [2026-10-12] — [Feature] CORE-012 barcode lookup and ACTIVE-only uniqueness (#163/#164)
+
+**Done:** Prepared combined Core barcode work on `feat/core-barcode`: shared normalization, exact ACTIVE lookup, ACTIVE-only create/PATCH checks and optional Product conflict details. Recorded D1b/D4 on #159; D2/D3 and mobile #162/#165 remain team-owned. Added forward migration V16 without rewriting V1–V15. No commit/push/PR or migration against business local/staging/production databases in this preparation.
+
+**Changed files:** Core Product controller/request DTOs/repository/service, barcode ErrorCode/error details/handler, Core README and unit/web/OpenAPI/PostgreSQL tests across #163/#164; new `V16__product_barcode_unique_active.sql` and `ProductBarcodeMigrationPostgresTest`; latest-version expectations in `SaleRefundMigrationPostgresTest`. Outside Core: BRD/PRD, API contract, technical design, ERD description/DBML and this entry. No frontend/AI or `.idea/` edits.
+
+**Flow explained:** Create/PATCH/lookup trim Unicode/scanner padding but preserve exact case/letters/punctuation/leading zeros. Lookup checks OWNER/account/shop before one Product query; missing/archived/foreign codes return 404. Precheck conflicts return 409 with optional productId/status; DB races may omit details and still map to 409. V16 builds the ACTIVE/non-null partial unique index before removing the old constraint in one transaction. Archive releases the code without rewriting Product IDs or sale/draft snapshots. DBML describes the partial predicate rather than exporting unconditional uniqueness. Traceability: BR-021 → FR-034 → AC-064–AC-067. Migration requires a paused-write maintenance window (5s lock / 60s statement timeout), reviewed shared rollout and explicit forward recovery; it is not zero-downtime or replaced by ddl-auto=update.
+
+**Check:** Focused suite: 135 tests, no failures/errors/skips. Full `mvnw.cmd clean verify` with all three `CORE_TEST_POSTGRES_*` variables: **944 tests, 0 failures, 0 errors, 0 skipped**, BUILD SUCCESS (4:18). Dedicated disposable PostgreSQL 16 verified fresh V1–V16, V15 upgrade/history, partial index validity, CREATE/PATCH reuse, exact/null/tenant uniqueness, concurrent JDBC create/patch writers and atomic failures (dependent old FK / duplicated ACTIVE rows). HTTP/error mapping is tested separately, not concurrent HTTP end-to-end. Lookup with 20,000 synthetic Products: one Product query on the new index; local median 7.05 ms across 20 runs, diagnostic only, not SLA. Markdown file links and git diff --check pass. No real Firebase/scanner/staging UAT or production-sized DDL locking benchmark; shared migration/FE acceptance remain pending.
+
+
 ### [2026-10-10 19:50 UTC+07:00] — [Feature] Orders screen: the search bar is always visible, like the Sales screen
 
 **Done:** The Orders screen hid its search input behind a magnifier button in the top right corner. It now shows the search bar permanently under the title and above the period filter chips, with the same look as the Sales screen: a search icon on the left, a clear button when there is text, and no toggle button. The placeholder stays "Tìm theo khách, tên món, mã đơn..." because the search is over orders.

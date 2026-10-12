@@ -158,21 +158,41 @@ $env:CORE_TEST_POSTGRES_PASSWORD = 'test_password'
 
 The test creates and removes only a randomly named `core_void_test_*` schema, requires permission to create schemas, and does not run Flyway. It uses real business services and transactions, with auth/idempotency stubbed. Without `CORE_TEST_POSTGRES_URL`, PostgreSQL suites are skipped; unit/web tests still run normally.
 
-### Exact product barcode lookup (CORE-012.2 / #163)
+### Exact product barcode lookup and ACTIVE-only uniqueness (CORE-012 / #163–#164)
 
-`GET /api/v1/products/lookup?barcode=ABC-123` returns one `ProductResponse`, not a page. It requires a valid bearer token and `X-Shop-Id`, an active OWNER, and an ACTIVE shop belonging to that OWNER. The repository performs an exact, case-sensitive shop/barcode/ACTIVE lookup with a one-row limit; it does not load the product list. The existing `(shop_id, barcode)` unique index supports the lookup.
+`GET /api/v1/products/lookup?barcode=ABC-123` returns one `ProductResponse`, not a page. It requires a valid bearer token and `X-Shop-Id`, an active OWNER, and an ACTIVE shop belonging to that OWNER. The repository performs one exact, case-sensitive shop/barcode/ACTIVE lookup with a one-row limit; it does not load the product list. V16's partial unique index supports this lookup.
 
-Create, PATCH and lookup share normalization: trim leading/trailing whitespace (including Unicode spaces and scanner CR/LF/TAB suffixes); preserve case, letters, digits and punctuation; reject internal whitespace, non-whitespace control characters and more than 100 characters **after trim** with `400 validation_failed` and `details[].field = barcode`. Lookup requires a nonblank code; create accepts null/blank as no barcode. PATCH omission preserves the stored value, including legacy values; explicit null/blank clears it. Legacy values are not bulk-normalized by this change.
+Create, PATCH and lookup share normalization: trim leading/trailing whitespace (including Unicode spaces and scanner CR/LF/TAB suffixes); preserve case, letters, digits, leading zeros and punctuation; reject internal whitespace, non-whitespace control characters and more than 100 Unicode code points **after trim** with `400 validation_failed` and `details[].field = barcode`. The limit counts code points, not UTF-16 code units, bytes or grapheme clusters; supplementary characters count as one each, matching PostgreSQL `varchar(100)`. Lookup requires a nonblank code; create accepts null/blank as no barcode. PATCH omission preserves the stored value, including legacy values; explicit null/blank clears it. Legacy values are not bulk-normalized.
 
-Missing, foreign-shop or ARCHIVED products return `404 product_not_found`. Invalid shop/role/account access is checked before querying Products. **Archive still reserves the barcode for create/PATCH under the current DB constraint**: changing uniqueness to ACTIVE-only belongs to #164, needs a separately approved migration, and is not part of #163. No migration, Redis cache or mobile change is introduced here. The shared API contract and product FR/AC updates outside Core remain pending approval; this Core implementation is not integrated mobile/staging acceptance.
+Missing, foreign-shop or ARCHIVED products return `404 product_not_found`. Account/role/shop access is checked before querying Products. With V16, archive releases a code for another ACTIVE Product in the same shop; the old Product ID/barcode and sale/draft references remain intact. PATCH keeping its own code succeeds. Duplicate ACTIVE codes return `409 product_barcode_conflict`: the service precheck supplies `details: [{field: "barcode", issue: "already_in_use", productId: 123, status: "ACTIVE"}]`; races rejected by the DB may omit details. Ordinary errors retain only field/issue. The handler recognizes both the old constraint and V16 index during rollout.
 
-To run focused service, HTTP binding/routing, OpenAPI and real PostgreSQL tests, set the three `CORE_TEST_POSTGRES_*` variables above to a **disposable** database, then run:
+See the canonical [barcode contract](../../docs/contracts/api-contracts.md#barcode-core-012), `FR-034`/`AC-064`–`AC-067`, and [V16 schema/recovery notes](../../docs/architecture/erd-description.md#7-migration-alignment). No entity field, barcode table, restore API, Redis cache or mobile code is added. FE #162/#165 and integrated staging acceptance remain separate.
+
+To run focused tests, set the three `CORE_TEST_POSTGRES_*` variables above to a **disposable** database, then run:
 
 ```powershell
-.\mvnw.cmd '-Dtest=ProductServiceTest,CatalogControllerWebTest,ProductBarcodeWebTest,ProductBarcodePostgresTest,ApiDocumentationWebTest' test
+.\mvnw.cmd '-Dtest=ProductServiceTest,CatalogControllerWebTest,ProductBarcodeWebTest,ProductBarcodePostgresTest,ProductBarcodeMigrationPostgresTest,SaleRefundMigrationPostgresTest,ApiErrorDetailTest,ApiExceptionHandlerTest,ApiDocumentationWebTest' test
 ```
 
-`ProductBarcodePostgresTest` uses the existing migrations in a randomly named `core_barcode_test_*` schema and removes only that schema afterwards. It checks exact/case-sensitive matching, archived/foreign isolation, real OWNER/ADMIN/disabled-account permissions, persisted normalization and one Product query with 20,000 synthetic products. It explains Hibernate's actual lookup SQL with its bindings and records local timings without asserting a production latency SLA. Without `CORE_TEST_POSTGRES_URL`, PostgreSQL tests are skipped, not passed.
+`ProductBarcodePostgresTest` applies the current migrations in a generated `core_barcode_test_*` schema. It verifies persisted normalization, reuse after archive, CREATE/PATCH conflict details, tenant/status permissions and one Product query with 20,000 synthetic products; EXPLAIN uses Hibernate's actual SQL/bindings. Local timing is diagnostic, not a production SLA. `ProductBarcodeMigrationPostgresTest` uses generated `core_barcode_migration_test_*` schemas for fresh V1–V16, V15 upgrade with historical references/snapshots, null/exact/shop uniqueness, migration atomic failure and concurrent CREATE/PATCH writers that both pass precheck. These JDBC races verify the DB guard; HTTP tests verify 409 mapping separately. Tests remove only their own schemas. Without the test URL, PostgreSQL suites are skipped, not passed. Run `clean verify` with all three variables for full regression.
+
+#### V16 rollout and recovery
+
+- Do not run feature-branch migrations against the business local DB, staging or production. Shared rollout follows the [migration workflow](../../README.md#database-migrations): reviewed code merged into staging, backup, migration owner, staging verification, then controlled production release.
+- V16 changes an **index/constraint**, not a column. `ddl-auto=update` cannot safely replace the old `UNIQUE(shop_id, barcode)`; reuse remains blocked until V16 runs.
+- Review the actual current schema first, including unexpected dependent FKs and any locally added indexes. Check for duplicate ACTIVE non-null codes before migration:
+
+```sql
+SELECT shop_id, barcode, COUNT(*)
+FROM products
+WHERE status = 'ACTIVE' AND barcode IS NOT NULL
+GROUP BY shop_id, barcode
+HAVING COUNT(*) > 1;
+```
+
+- Pause catalog writes and schedule a maintenance window. V16 creates the partial unique index **before** dropping the old constraint in one transaction; lock timeout is 5 seconds and statement timeout is 60 seconds. It is not a concurrent/zero-downtime index build. Test duration on a disposable copy representative of your catalog first; the 20,000-product lookup benchmark does not predict production DDL locking.
+- A timeout, duplicate ACTIVE row or unexpected dependency stops/rolls back V16; inspect the cause and retry under the approved process. Never delete/recode history, rewrite V4, baseline a shared DB or use Flyway repair to bypass failure. Confirm a valid unique `uq_products_shop_barcode_active`, the exact ACTIVE/non-null predicate and absence of the old constraint.
+- Recovery retains the partial index and uses an ACTIVE-only-compatible application. Old code's precheck can still block archived-code reuse, so rolling back binaries is a degraded mode. Reintroducing the old uniqueness requires a reviewed forward migration and a check for duplicates across ACTIVE **and ARCHIVED**; obtain a resolution decision first. Do not drop the new guard or silently rewrite historical products.
 
 ### OWNER list pagination (CORE-011)
 
@@ -186,7 +206,7 @@ With all three `CORE_TEST_POSTGRES_*` variables above pointing to a **disposable
 .\mvnw.cmd '-Dtest=OwnerListQueryTest,OwnerPaginationWebTest,OwnerListPaginationPostgresTest,SalesListQueryPostgresTest,ApiDocumentationWebTest' test
 ```
 
-`OwnerListPaginationPostgresTest` applies V1–V15 in a generated `core_owner_page_test_*` schema, validates mappings and removes that schema afterward. It checks tenant/filter/count consistency, effective draft expiry without GET writes, literal/accent-insensitive search, stock thresholds and sorting, timestamp boundaries/equivalent offsets, a 100,000-product catalog, deep pages, query counts, response bytes and EXPLAIN ANALYZE. A concurrent insert between content/count verifies per-request snapshot consistency. Timing is logged, not asserted as a latency SLA. Without the test URL PostgreSQL suites are skipped; that is not full verification. Run `.\mvnw.cmd verify` with all three variables for the entire Core regression suite.
+`OwnerListPaginationPostgresTest` applies V1–V16 in a generated `core_owner_page_test_*` schema, validates mappings and removes that schema afterward. It checks tenant/filter/count consistency, effective draft expiry without GET writes, literal/accent-insensitive search, stock thresholds and sorting, timestamp boundaries/equivalent offsets, a 100,000-product catalog, deep pages, query counts, response bytes and EXPLAIN ANALYZE. A concurrent insert between content/count verifies per-request snapshot consistency. Timing is logged, not asserted as a latency SLA. Without the test URL PostgreSQL suites are skipped; that is not full verification. Run `.\mvnw.cmd verify` with all three variables for the entire Core regression suite.
 
 For a manual **read-only local** check, first run Core with a local test OWNER token and an ACTIVE shop it owns. Supply `CORE_LOCAL_OWNER_TOKEN` in your terminal without committing or printing it; select your test shop ID below. This does not create fixtures or prove staging UAT:
 
@@ -217,7 +237,7 @@ With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
 .\mvnw.cmd '-Dtest=SalePaymentServiceTest,SaleDraftServiceTest,SalesListQueryPostgresTest' test
 ```
 
-`SalesListQueryPostgresTest` applies V1–V15 and validates mappings in a generated `core_list_query_test_*` schema. Synthetic fixtures roll back after each test, and the suite removes only its generated schema. Hibernate SQL counting exercises real list services and ownership checks with 1, 20, 100, 1,337 and 10,000 parents, each with five items, but reads at most 100 parents/500 items per tested page. It verifies filtered totals, item ordering, empty/missing items, cross-shop denial, inactive shops, archived-product snapshots and computed expiry. A control reproduces the old loop with 100 parents (101 data queries) versus three optimized queries including count.
+`SalesListQueryPostgresTest` applies V1–V16 and validates mappings in a generated `core_list_query_test_*` schema. Synthetic fixtures roll back after each test, and the suite removes only its generated schema. Hibernate SQL counting exercises real list services and ownership checks with 1, 20, 100, 1,337 and 10,000 parents, each with five items, but reads at most 100 parents/500 items per tested page. It verifies filtered totals, item ordering, empty/missing items, cross-shop denial, inactive shops, archived-product snapshots and computed expiry. A control reproduces the old loop with 100 parents (101 data queries) versus three optimized queries including count.
 
 Use only a disposable database with schema-creation permission, never a business, shared staging or production database. Without the test URL, the PostgreSQL suite is skipped. This is a SQL-count regression test, not an HTTP/Firebase/FE load benchmark or staging UAT. SQL pagination bounds parent rows, not the number of items inside any individual order/draft.
 
@@ -231,7 +251,7 @@ With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
 .\mvnw.cmd '-Dtest=SaleDraftServiceTest,SaleVoidServiceTest,ProductBatchLockPostgresTest,DebtVoidPostgresTest' test
 ```
 
-`ProductBatchLockPostgresTest` applies V1–V15 and validates mappings in a generated `core_batch_lock_test_*` schema. It checks the Hibernate SQL and PostgreSQL EXPLAIN ordering, one product-lock query for 1/20/100 products, missing/foreign/archived products, custom and non-deducted items, unknown deduction snapshots, concurrent reverse-order confirmations/voids, and rollback of stock, money/debt, audit, notifications and void idempotency reservations. Fixtures commit to permit real concurrent transactions; the suite removes its generated schema after the class. Use only a disposable database with schema-creation permission, never a business/shared staging/production DB. Without the test URL, PostgreSQL suites are skipped.
+`ProductBatchLockPostgresTest` applies V1–V16 and validates mappings in a generated `core_batch_lock_test_*` schema. It checks the Hibernate SQL and PostgreSQL EXPLAIN ordering, one product-lock query for 1/20/100 products, missing/foreign/archived products, custom and non-deducted items, unknown deduction snapshots, concurrent reverse-order confirmations/voids, and rollback of stock, money/debt, audit, notifications and void idempotency reservations. Fixtures commit to permit real concurrent transactions; the suite removes its generated schema after the class. Use only a disposable database with schema-creation permission, never a business/shared staging/production DB. Without the test URL, PostgreSQL suites are skipped.
 
 The same suite compares legacy single-product locks with batch confirm locks for 1/20/100 selected products sampled across a 100,000-product catalog. It logs median elapsed time from three measured samples after one warmup, including connection/transaction overhead; query counts are asserted but latency is not, to avoid flaky CI thresholds. These local measurements are not HTTP/Firebase/FE benchmarks, sustained-load tests or staging UAT. For the full Core check with PostgreSQL suites enabled, use `mvnw.cmd clean verify` with all three test variables set.
 
@@ -267,11 +287,11 @@ With the same disposable PostgreSQL variables, run:
 .\mvnw.cmd '-Dtest=AdminDashboardControllerWebTest,AdminAccessAuditServiceTest,AdminDashboardPostgresTest' test
 ```
 
-`AdminDashboardPostgresTest` applies the actual V1–V15 Flyway migrations inside a generated `core_admin_test_*` schema, then removes that schema. It exercises the migrated schema without manual constraint fixtures. No additional audit table is created. Do not point test variables at staging or production.
+`AdminDashboardPostgresTest` applies the actual V1–V16 Flyway migrations inside a generated `core_admin_test_*` schema, then removes that schema. It exercises the migrated schema without manual constraint fixtures. No additional audit table is created. Do not point test variables at staging or production.
 
 ADMIN and OWNER events share the existing `audit_logs`; ADMIN reads are separated by their `ADMIN_*` actions and API whitelists. Shop status changes reuse the existing `SHOP_INACTIVATED`/`SHOP_REACTIVATED` event once. V11 extends action/target constraints and allows missing shop/target IDs only for the corresponding ADMIN reads; business events still require both IDs. Existing history, V10 foreign keys and append-only triggers are preserved. Failed audit persistence returns `503 admin_audit_unavailable` and rolls back the operation.
 
-For a fresh disposable local database, use `FLYWAY_ENABLED=true` and `SPRING_JPA_HIBERNATE_DDL_AUTO=validate` to apply V1–V15 and validate the entity mappings. A Flyway-managed database already at V10 can apply V11/V12/V13/V14/V15 in order. Follow the repository's merged-code migration policy for shared environments. Do not enable Flyway blindly on a Hibernate-created database without migration history: V10 rejects pre-existing ADMIN read events. Use a fresh local database or a separately reviewed adoption plan, preserving the original database. The migrations do not baseline or repair migration history.
+For a fresh disposable local database, use `FLYWAY_ENABLED=true` and `SPRING_JPA_HIBERNATE_DDL_AUTO=validate` to apply V1–V16 and validate the entity mappings. A Flyway-managed database already at V10 can apply V11/V12/V13/V14/V15 in order. Follow the repository's merged-code migration policy for shared environments. Do not enable Flyway blindly on a Hibernate-created database without migration history: V10 rejects pre-existing ADMIN read events. Use a fresh local database or a separately reviewed adoption plan, preserving the original database. The migrations do not baseline or repair migration history.
 
 If V11 validation fails, PostgreSQL rolls back its schema changes; review the offending records before retrying. Recovery uses a forward fix retaining audit history. Restoring V10 constraints or older readers that cannot handle `ADMIN_*` events is unsafe after these records exist. Integrated Firebase/FE UAT and document alignment remain pending.
 
@@ -287,7 +307,7 @@ With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
 .\mvnw.cmd '-Dtest=ProductStockInServiceTest,ProductServiceTest,CoreBusinessContractWebTest,ApiDocumentationWebTest,IdempotencyServiceTest,AuditLogPostgresTest' test
 ```
 
-`AuditLogPostgresTest` applies V1–V15 in a generated `core_audit_test_*` schema and removes only that schema. It checks concurrent receipts/retries and contention with checkout/void/PATCH/archive, audit/idempotency-write rollback, authorization and numeric overflow. Do not use shared/staging/production databases. Manual Swagger checks and mobile UAT remain separate.
+`AuditLogPostgresTest` applies V1–V16 in a generated `core_audit_test_*` schema and removes only that schema. It checks concurrent receipts/retries and contention with checkout/void/PATCH/archive, audit/idempotency-write rollback, authorization and numeric overflow. Do not use shared/staging/production databases. Manual Swagger checks and mobile UAT remain separate.
 
 ### Advanced report development tests
 
@@ -299,7 +319,7 @@ With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
 .\mvnw.cmd '-Dtest=AdvancedReportServiceTest,ExpenseReportControllerWebTest,ReportAggregationPostgresTest,SaleDraftServiceTest' test
 ```
 
-`ReportAggregationPostgresTest` applies V1–V15 in a generated `core_report_test_*` schema and removes only that schema. It verifies the nullable/nonnegative snapshot constraint, discounted item revenue, catalog/custom grouping, a prior-period void, daily event buckets and incomplete profit estimates. Mobile still computes its existing local analytics until FE integrates these endpoints; Core tests are not FE/staging UAT.
+`ReportAggregationPostgresTest` applies V1–V16 in a generated `core_report_test_*` schema and removes only that schema. It verifies the nullable/nonnegative snapshot constraint, discounted item revenue, catalog/custom grouping, a prior-period void, daily event buckets and incomplete profit estimates. Mobile still computes its existing local analytics until FE integrates these endpoints; Core tests are not FE/staging UAT.
 
 ### Cloudinary media development tests
 
@@ -339,4 +359,4 @@ Bearer OWNER token is required, but no `X-Shop-Id` or idempotency header for:
 
 Pages start at 0; size 1–100 and offset <=2147483647. OWNER must be ACTIVE, have a recipient and still own the shop. INACTIVE shops expose only status notifications; ARCHIVED shops are excluded. Retry/parallel reads preserve the first readAt. Any inaccessible ID rejects the whole batch with 404. See [notification contract](../../docs/contracts/api-contracts.md#8-notification-owner--đã-có-trên-featapp-notifications) and PRD AC-055–058.
 
-`NotificationPostgresTest` runs in a generated `core_notification_test_*` schema with actual V1–V15 and Hibernate validation, without a supplemental schema fixture. It covers event lifecycle, notification-write rollback, replay/concurrent checkout/void, read concurrency and cross-shop/status isolation. `SaleRefundMigrationPostgresTest` additionally tests V15 upgrade, local-table adoption and atomic migration failure/retry. Supply all `CORE_TEST_POSTGRES_*` variables pointing only to a disposable PostgreSQL DB. No push delivery/device registration/FCM/email/SMS/debt reminders or notification FE integration is implemented by this change.
+`NotificationPostgresTest` runs in a generated `core_notification_test_*` schema with actual V1–V16 and Hibernate validation, without a supplemental schema fixture. It covers event lifecycle, notification-write rollback, replay/concurrent checkout/void, read concurrency and cross-shop/status isolation. `SaleRefundMigrationPostgresTest` additionally tests V15 upgrade, local-table adoption and atomic migration failure/retry. Supply all `CORE_TEST_POSTGRES_*` variables pointing only to a disposable PostgreSQL DB. No push delivery/device registration/FCM/email/SMS/debt reminders or notification FE integration is implemented by this change.

@@ -222,12 +222,16 @@ public class ProductServiceImpl implements ProductService {
         // An omitted PATCH field must remain unchanged, including legacy barcode values.
         String barcode = validateBarcode ? normalizeBarcode(request.barcode()) : request.barcode();
         if (validateBarcode && barcode != null) {
-            boolean duplicate = currentProductId == null
-                    ? productRepository.existsByShopIdAndBarcode(shopId, barcode)
-                    : productRepository.existsByShopIdAndBarcodeAndIdNot(shopId, barcode, currentProductId);
-            if (duplicate) {
-                throw new BusinessException(ErrorCode.PRODUCT_BARCODE_CONFLICT);
-            }
+            var duplicate = currentProductId == null
+                    ? productRepository.findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(
+                            shopId, barcode, CatalogStatus.ACTIVE)
+                    : productRepository.findFirstByShopIdAndBarcodeAndStatusAndIdNotOrderByIdDesc(
+                            shopId, barcode, CatalogStatus.ACTIVE, currentProductId);
+            duplicate.ifPresent(conflict -> {
+                throw new BusinessException(ErrorCode.PRODUCT_BARCODE_CONFLICT,
+                        List.of(new ApiErrorDetail("barcode", "already_in_use",
+                                conflict.getId(), conflict.getStatus())));
+            });
         }
 
         BigDecimal stock = request.stockQuantity();
@@ -276,8 +280,8 @@ public class ProductServiceImpl implements ProductService {
         if (barcode.isEmpty()) {
             return null;
         }
-        if (barcode.length() > 100) {
-            throw invalidBarcode("must not exceed 100 characters after trim");
+        if (barcode.codePointCount(0, barcode.length()) > 100) {
+            throw invalidBarcode("must not exceed 100 Unicode code points after trim");
         }
         if (barcode.codePoints().anyMatch(character -> Character.isWhitespace(character)
                 || Character.isSpaceChar(character) || Character.isISOControl(character))) {

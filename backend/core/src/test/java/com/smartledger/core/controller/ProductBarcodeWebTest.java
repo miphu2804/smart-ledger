@@ -110,14 +110,16 @@ class ProductBarcodeWebTest {
         org.mockito.Mockito.verifyNoInteractions(products);
     }
 
-    @Test
-    void allThreeOperationsEnforceLengthAfterTrimNotBeforeRequestBinding() throws Exception {
-        String barcode = "A".repeat(100);
+    @ParameterizedTest
+    @ValueSource(ints = {0x41, 0x1F600, 0x20000})
+    void allThreeOperationsEnforceLengthAfterTrimNotBeforeRequestBinding(int codePoint) throws Exception {
+        String character = new String(Character.toChars(codePoint));
+        String barcode = character.repeat(100);
         when(products.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(products.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
                 .thenReturn(Optional.of(product("old")));
         when(products.findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(7L, barcode, CatalogStatus.ACTIVE))
-                .thenReturn(Optional.of(product(barcode)));
+                .thenReturn(Optional.empty(), Optional.of(product(barcode)));
 
         mvc.perform(post("/api/v1/products").header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7")
                         .contentType(MediaType.APPLICATION_JSON).content(createBody("\u2003\u00a0 " + barcode + "\n")))
@@ -129,13 +131,17 @@ class ProductBarcodeWebTest {
                         .header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.barcode").value(barcode));
 
-        for (String invalid : java.util.List.of(barcode + "A", "ABC 123", "ABC\n123")) {
+        for (String invalid : java.util.List.of(barcode + character, "ABC 123", "ABC\n123")) {
             mvc.perform(post("/api/v1/products").header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7")
                             .contentType(MediaType.APPLICATION_JSON).content(createBody(invalid)))
                     .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("validation_failed"))
                     .andExpect(jsonPath("$.details[0].field").value("barcode"));
             mvc.perform(patch("/api/v1/products/3").header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7")
                             .contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(Map.of("barcode", invalid))))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("validation_failed"))
+                    .andExpect(jsonPath("$.details[0].field").value("barcode"));
+            mvc.perform(get("/api/v1/products/lookup").param("barcode", invalid)
+                            .header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7"))
                     .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("validation_failed"))
                     .andExpect(jsonPath("$.details[0].field").value("barcode"));
         }
@@ -148,6 +154,70 @@ class ProductBarcodeWebTest {
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("validation_failed"))
                 .andExpect(jsonPath("$.details[0].field").value("barcode"));
         org.mockito.Mockito.verifyNoInteractions(products);
+    }
+
+    @Test
+    void createConflictIncludesTheActiveProductIdWithoutSavingOrAuditing() throws Exception {
+        when(products.findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(7L, "AbC-123", CatalogStatus.ACTIVE))
+                .thenReturn(Optional.of(product("AbC-123")));
+        mvc.perform(post("/api/v1/products").header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7")
+                        .contentType(MediaType.APPLICATION_JSON).content(createBody(" AbC-123\n")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("product_barcode_conflict"))
+                .andExpect(jsonPath("$.details.length()").value(1))
+                .andExpect(jsonPath("$.details[0].field").value("barcode"))
+                .andExpect(jsonPath("$.details[0].issue").value("already_in_use"))
+                .andExpect(jsonPath("$.details[0].productId").value(3))
+                .andExpect(jsonPath("$.details[0].status").value("ACTIVE"));
+        verify(products).findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(7L, "AbC-123", CatalogStatus.ACTIVE);
+        verify(products, never()).save(any());
+        org.mockito.Mockito.verifyNoInteractions(audit, notifications);
+    }
+
+    @Test
+    void patchConflictIncludesTheCompetingProductAndDoesNotChangeTheOriginal() throws Exception {
+        Product original = product("OLD");
+        when(products.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+                .thenReturn(Optional.of(original));
+        Product conflict = product("AbC-123");
+        ReflectionTestUtils.setField(conflict, "id", 4L);
+        when(products.findFirstByShopIdAndBarcodeAndStatusAndIdNotOrderByIdDesc(7L, "AbC-123", CatalogStatus.ACTIVE, 3L))
+                .thenReturn(Optional.of(conflict));
+        mvc.perform(patch("/api/v1/products/3").header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("barcode", " AbC-123\n", "name", "Must not change"))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("product_barcode_conflict"))
+                .andExpect(jsonPath("$.details[0].productId").value(4))
+                .andExpect(jsonPath("$.details[0].status").value("ACTIVE"));
+        org.assertj.core.api.Assertions.assertThat(original.getBarcode()).isEqualTo("OLD");
+        org.assertj.core.api.Assertions.assertThat(original.getName()).isEqualTo("Coffee");
+        org.mockito.Mockito.verifyNoInteractions(audit, notifications);
+    }
+
+    @Test
+    void ordinaryValidationErrorsDoNotAddNullConflictFields() throws Exception {
+        mvc.perform(post("/api/v1/products").header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7")
+                        .contentType(MediaType.APPLICATION_JSON).content(createBody("ABC 123")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[0].field").value("barcode"))
+                .andExpect(jsonPath("$.details[0].productId").doesNotExist())
+                .andExpect(jsonPath("$.details[0].status").doesNotExist());
+        org.mockito.Mockito.verifyNoInteractions(products, audit, notifications);
+    }
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value = ErrorCode.class,
+            names = {"SHOP_ACCESS_DENIED", "SHOP_INACTIVE", "ACCOUNT_DISABLED"})
+    void writesCheckShopAccessBeforeReadingConflictingProducts(ErrorCode code) throws Exception {
+        when(shops.requireOwnedActiveShop(any(), eq("7"))).thenThrow(new BusinessException(code));
+        mvc.perform(post("/api/v1/products").header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7")
+                        .contentType(MediaType.APPLICATION_JSON).content(createBody("AbC-123")))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(code.getCode()));
+        mvc.perform(patch("/api/v1/products/3").header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"barcode\":\"AbC-123\"}"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(code.getCode()));
+        org.mockito.Mockito.verifyNoInteractions(products, audit, notifications);
     }
 
     private String createBody(String barcode) throws Exception {

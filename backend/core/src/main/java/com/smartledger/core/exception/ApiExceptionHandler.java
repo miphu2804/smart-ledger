@@ -29,7 +29,9 @@ import org.springframework.web.multipart.support.MissingServletRequestPartExcept
 public class ApiExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
     private static final Map<String, ErrorCode> UNIQUE_CONSTRAINTS = Map.of(
+            // Support both V16 and older databases during controlled rollout.
             "uq_products_shop_barcode", ErrorCode.PRODUCT_BARCODE_CONFLICT,
+            "uq_products_shop_barcode_active", ErrorCode.PRODUCT_BARCODE_CONFLICT,
             "uq_auth_identities_provider_subject", ErrorCode.AUTH_SESSION_CONFLICT,
             "uq_auth_identities_user_id", ErrorCode.AUTH_SESSION_CONFLICT);
 

@@ -27,9 +27,9 @@ public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpec
      */
     List<Product> findAllByIdInAndShopIdAndStatus(Collection<Long> ids, Long shopId, CatalogStatus status);
 
-    boolean existsByShopIdAndBarcode(Long shopId, String barcode);
-
-    boolean existsByShopIdAndBarcodeAndIdNot(Long shopId, String barcode, Long id);
+    /** Finds a competing product without counting or loading the whole shop catalog. */
+    Optional<Product> findFirstByShopIdAndBarcodeAndStatusAndIdNotOrderByIdDesc(
+            Long shopId, String barcode, CatalogStatus status, Long id);
 
     boolean existsByShopIdAndCategoryIdAndStatus(Long shopId, Long categoryId, CatalogStatus status);
 

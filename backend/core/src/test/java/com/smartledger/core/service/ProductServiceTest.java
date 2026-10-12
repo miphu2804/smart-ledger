@@ -103,17 +103,33 @@ class ProductServiceTest {
         assertThat(response.barcode()).isEqualTo("123456");
         assertThat(response.tracked()).isTrue();
         assertThat(response.stockQuantity()).isEqualByComparingTo("2.500");
-        verify(productRepository).existsByShopIdAndBarcode(7L, "123456");
+        verify(productRepository).findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(7L, "123456", CatalogStatus.ACTIVE);
     }
 
     @Test
-    void archivedProductKeepsItsBarcodeReservedAccordingToTheCurrentErd() {
-        when(productRepository.existsByShopIdAndBarcode(7L, "123456"))
-                .thenReturn(true);
+    void activeProductKeepsItsBarcodeReservedAndReturnsConflictDetails() {
+        when(productRepository.findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(7L, "123456", CatalogStatus.ACTIVE))
+                .thenReturn(Optional.of(product()));
 
         assertThatThrownBy(() -> service.create(token(), "7", request(null, "123456", false, null)))
-                .isInstanceOfSatisfying(BusinessException.class, exception ->
-                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_BARCODE_CONFLICT));
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_BARCODE_CONFLICT);
+                    assertThat(exception.getDetails()).containsExactly(
+                            new ApiErrorDetail("barcode", "already_in_use", 3L, CatalogStatus.ACTIVE));
+                });
+        verify(productRepository, never()).save(any());
+        verifyNoInteractions(auditLogService);
+    }
+
+    @Test
+    void createPrecheckOnlyConsidersActiveProducts() {
+        // V16 reuse and the final DB unique guard are covered separately on PostgreSQL.
+        when(productRepository.findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(7L, "123456", CatalogStatus.ACTIVE))
+                .thenReturn(Optional.empty());
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThat(service.create(token(), "7", request(null, "123456", false, null)).barcode()).isEqualTo("123456");
+        verify(productRepository).findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(7L, "123456", CatalogStatus.ACTIVE);
     }
 
     @Test
@@ -123,7 +139,7 @@ class ProductServiceTest {
         ProductResponse response = service.create(token(), "7", request(null, "123456", false, null));
 
         assertThat(response.barcode()).isEqualTo("123456");
-        verify(productRepository).existsByShopIdAndBarcode(7L, "123456");
+        verify(productRepository).findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(7L, "123456", CatalogStatus.ACTIVE);
     }
 
     @Test
@@ -182,7 +198,7 @@ class ProductServiceTest {
         when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         assertThat(service.create(token(), "7", request(null, raw, false, null)).barcode()).isEqualTo(raw.trim());
-        verify(productRepository).existsByShopIdAndBarcode(7L, raw.trim());
+        verify(productRepository).findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(7L, raw.trim(), CatalogStatus.ACTIVE);
     }
 
     @ParameterizedTest
@@ -197,8 +213,8 @@ class ProductServiceTest {
         ProductPatchRequest patch = new ProductPatchRequest();
         patch.setBarcode(raw);
         assertThat(service.patch(token(), "7", "3", patch).barcode()).isNull();
-        verify(productRepository, never()).existsByShopIdAndBarcode(any(), any());
-        verify(productRepository, never()).existsByShopIdAndBarcodeAndIdNot(any(), any(), any());
+        verify(productRepository, never()).findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(any(), any(), any());
+        verify(productRepository, never()).findFirstByShopIdAndBarcodeAndStatusAndIdNotOrderByIdDesc(any(), any(), any(), any());
     }
 
     @ParameterizedTest
@@ -216,16 +232,17 @@ class ProductServiceTest {
         assertInvalidBarcode(() -> service.lookup(token(), "7", raw));
         assertThat(product.getBarcode()).isEqualTo("123456");
         verify(productRepository, never()).save(any());
-        verify(productRepository, never()).existsByShopIdAndBarcode(any(), any());
-        verify(productRepository, never()).existsByShopIdAndBarcodeAndIdNot(any(), any(), any());
         verify(productRepository, never()).findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(any(), any(), any());
+        verify(productRepository, never()).findFirstByShopIdAndBarcodeAndStatusAndIdNotOrderByIdDesc(any(), any(), any(), any());
         verifyNoInteractions(auditLogService);
     }
 
-    @Test
-    void barcodeLengthIsValidatedAfterTrimOnEveryOperation() {
-        String valid = "A".repeat(100);
-        String invalid = "A".repeat(101);
+    @ParameterizedTest
+    @ValueSource(ints = {0x41, 0x1F600, 0x20000})
+    void barcodeLengthIsValidatedAfterTrimOnEveryOperation(int codePoint) {
+        String character = new String(Character.toChars(codePoint));
+        String valid = character.repeat(100);
+        String invalid = character.repeat(101);
         when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
         assertThat(service.create(token(), "7", request(null, "  " + valid + "\n", false, null)).barcode())
                 .isEqualTo(valid);
@@ -249,7 +266,7 @@ class ProductServiceTest {
         patch.setBarcode(" 123456\n");
 
         assertThat(service.patch(token(), "7", "3", patch).barcode()).isEqualTo("123456");
-        verify(productRepository).existsByShopIdAndBarcodeAndIdNot(7L, "123456", 3L);
+        verify(productRepository).findFirstByShopIdAndBarcodeAndStatusAndIdNotOrderByIdDesc(7L, "123456", CatalogStatus.ACTIVE, 3L);
     }
 
     @Test
@@ -262,7 +279,7 @@ class ProductServiceTest {
         patch.setName("Coffee");
 
         assertThat(service.patch(token(), "7", "3", patch).barcode()).isEqualTo("legacy barcode");
-        verify(productRepository, never()).existsByShopIdAndBarcodeAndIdNot(any(), any(), any());
+        verify(productRepository, never()).findFirstByShopIdAndBarcodeAndStatusAndIdNotOrderByIdDesc(any(), any(), any(), any());
     }
 
     @Test
@@ -413,14 +430,23 @@ class ProductServiceTest {
         Product product = product();
         when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
                 .thenReturn(Optional.of(product));
-        when(productRepository.existsByShopIdAndBarcodeAndIdNot(7L, "654321", 3L)).thenReturn(true);
+        Product conflict = product();
+        ReflectionTestUtils.setField(conflict, "id", 4L);
+        when(productRepository.findFirstByShopIdAndBarcodeAndStatusAndIdNotOrderByIdDesc(
+                7L, "654321", CatalogStatus.ACTIVE, 3L)).thenReturn(Optional.of(conflict));
 
         ProductPatchRequest request = new ProductPatchRequest();
-        request.setBarcode("654321");
+        request.setBarcode(" 654321\n");
+        request.setName("Must not be saved");
         assertThatThrownBy(() -> service.patch(token(), "7", "3", request))
-                .isInstanceOfSatisfying(BusinessException.class, exception ->
-                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_BARCODE_CONFLICT));
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_BARCODE_CONFLICT);
+                    assertThat(exception.getDetails()).containsExactly(
+                            new ApiErrorDetail("barcode", "already_in_use", 4L, CatalogStatus.ACTIVE));
+                });
         assertThat(product.getBarcode()).isEqualTo("123456");
+        assertThat(product.getName()).isEqualTo("Cà phê");
+        verifyNoInteractions(auditLogService);
     }
 
     @Test

@@ -2,6 +2,8 @@
 
 ## 1. Overview
 
+CORE-012 #163/#164 on `feat/core-barcode`, reviewed 2026-10-12: V16 replaces archived-inclusive barcode uniqueness with an ACTIVE-only partial index. This branch addition does not assert shared-DB migration or mobile/staging acceptance; older schema/AI snapshots below remain dated as stated.
+
 This ERD describes the target PostgreSQL database for **SmartLedger Phase 1**, an AI-assisted bookkeeping system for small businesses. It includes planned tables and relationships that are not yet in Core's Flyway migrations.
 
 The logical ERD includes authentication, shops, products, customers, drafts, sales, payments, refunds, debts, expenses, media cleanup jobs, Agent chat history, AI request traces, idempotency, and audit logs. Core migrations V1–V15 implement the business tables, idempotency, shared OWNER/ADMIN audit logs, nullable sale-item estimated-cost snapshot, and Cloudinary media references/outbox; AI migrations `001`–`004` in `backend/ai/migrations` create the chat tables, enable `pgvector` and add read-only views for the Agent; migration `005` on branch `feat/ai-restock-insight` adds the `v_sales` and `v_sale_items` views. V15 adds OWNER notification events/recipients and nullable product thresholds; `ai_requests` remains target design. This does not assert deployment.
@@ -178,7 +180,8 @@ To keep the ERD clean in Phase 1 without nested composite foreign keys, Core ser
 1. **Tenant Consistency (Shop Isolation)**:
    - Core must ensure all related entities in a transaction belong to the same `shop_id` (e.g., `products.shop_id == sales.shop_id`, `customers.shop_id == sales.shop_id`, `categories.shop_id == products.shop_id`, `sale_drafts.shop_id == products.shop_id`).
 2. **Product Barcode Scope**:
-   - `(shop_id, barcode)` is unique per shop including archived products; nullable barcode is permitted regardless of stock tracking. Custom sale items are not product rows.
+   - With V16, `(shop_id, barcode)` is unique only where `status = 'ACTIVE' AND barcode IS NOT NULL`; codes are exact/case-sensitive. Archived rows retain their codes and product IDs, but release the code for a new ACTIVE row. Nullable barcode is permitted regardless of stock tracking. Sale/draft history still refers to the original product ID, not the reused code. Custom sale items are not product rows.
+   - Create/PATCH/lookup share input normalization in Core; V16 does not rewrite legacy strings. `erd.dbml` describes the partial index in a note, not an unconditional `[unique]` declaration: DBML cannot express the predicate faithfully. SQL V16 is the physical source for this guard; no barcode field/table or restore API is added.
 3. **Draft Item Integrity**:
    - Core requires either an active product belonging to the selected shop or, when `product_id` is null, a non-blank custom-item name and unit. Confirmation snapshots custom items into `sale_items` with a null `product_id`; only catalog products can deduct stock. The nullability change for `sale_items.product_id` is in Core migration V8.
 4. **Payment & Debt Integrity**:
@@ -199,6 +202,10 @@ To keep the ERD clean in Phase 1 without nested composite foreign keys, Core ser
 A business transaction holds the source product/sale/shop lock → reconcile/open/resolve the stock episode or append void/status event → insert its OWNER recipient → commit together with business data and audit. Failed transactions and idempotent replays create no new events. Per-product low_stock_threshold is nullable NUMERIC(15,3), nonnegative; null disables low-stock alerts but tracked stock=0 still creates OUT_OF_STOCK. Threshold changes, checkout, stock-in, restock on void, tracking changes and product archive reconcile the lifecycle. Reading/marking the inbox does not mutate the business source or audit; status/ownership filters apply equally to pages, counts and read updates. Contract and AC are linked from the product documents.
 
 ## 7. Migration Alignment
+
+- V16 `V16__product_barcode_unique_active.sql` creates `uq_products_shop_barcode_active` **before** dropping `uq_products_shop_barcode`, in one Flyway transaction with lock timeout 5 seconds and statement timeout 60 seconds. Pause catalog writes and use a controlled maintenance window; this ordinary index build is not zero-downtime. Failure creating the index or dropping the constraint rolls back V16. Unexpected ACTIVE duplicates/schema dependencies stop the migration; never silently delete/recode product/history rows. No new column/table or historical backfill is involved.
+- V16 tests cover fresh V1–V16, upgrade from V15 with sale/draft snapshots intact, archive/reuse, exact/shop/null uniqueness, concurrent CREATE/PATCH writers and atomic failure. Run only against a disposable test DB; the approved [migration workflow](../../README.md#database-migrations) still requires merged staging code and a migration owner for shared environments. `ddl-auto=update` cannot safely replace this constraint change.
+- V16 recovery: retain the partial index and deploy an application compatible with ACTIVE-only uniqueness. Old application prechecks may still reject reused archived codes, so rollback is a degraded mode, not equivalent behavior. Restoring the old constraint requires a reviewed forward migration, a check for duplicate codes across ACTIVE/ARCHIVED, and an explicit resolution plan; do not remove the ACTIVE guard or rewrite history to force a rollback.
 
 - Stock-in on `feat/core-stock-in` reuses products, api_idempotency_keys (V7) and STOCK_ADJUSTED in audit_logs (V10/V11). No new column/table/migration or DBML structure change: STOCK_IN is an application metadata source, not a new DB enum. This branch does not assert staging/mobile deployment.
 - V8 only permits NULL sale_items.product_id for custom items while keeping the FK for non-null values; it does not create catalog products.

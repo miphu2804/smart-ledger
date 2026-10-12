@@ -32,7 +32,7 @@ public class ProductPatchRequest {
     private String name;
 
     @Schema(description = "Omit to preserve the barcode; null or blank clears it. Trimmed before validation; "
-            + "at most 100 characters after trim, no internal whitespace or control characters, case-sensitive.")
+            + "at most 100 Unicode code points after trim, no internal whitespace or control characters, case-sensitive.")
     private String barcode;
 
     @Size(max = 1000)

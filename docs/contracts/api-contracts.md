@@ -4,7 +4,7 @@
 |---|---|
 | Trạng thái | đích MVP; các endpoint đã triển khai được đánh dấu riêng bên dưới |
 | Chủ sở hữu | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-10-10 |
+| Cập nhật lần cuối | 2026-10-12 |
 
 ## Tài liệu liên quan
 
@@ -84,6 +84,8 @@ Param sai kiểu/enum hoặc timestamp sai định dạng/thiếu offset trả `
 
 Core trả `{ code, message, details?: [{ field, issue }], traceId }`; bỏ details khi rỗng. Thiếu/sai token trả `401 unauthorized`; chưa có profile Core trả `404 auth_profile_not_found` (mở session trước); shop khác chủ trả `403 shop_access_denied`; shop INACTIVE trả `403 shop_inactive` kèm lý do. Thiếu header bắt buộc trả `400 missing_required_header`; validation body và query/path param sai kiểu (ví dụ enum lạ, thời điểm không đúng ISO 8601) trả `400 validation_failed` với `details[].field` là tên param. Unique barcode tranh chấp trả `409 product_barcode_conflict`; hai request mở phiên lần đầu cùng lúc cho một tài khoản Firebase trả `409 auth_session_conflict` cho request thua, FE gọi lại `POST /auth/session`; lỗi DB chưa nhận diện trả `500 internal_error`, không lộ chi tiết nội bộ. Deadlock hoặc không lấy được khóa DB trả `503 resource_busy`: FE gửi lại đúng request, giữ nguyên `Idempotency-Key` nếu có.
 
+Riêng lỗi trùng barcode, ApiErrorDetail có thêm hai field **tùy chọn** `productId` và `status`; service trả Product ACTIVE cùng tiệm đang giữ mã. Lỗi thông thường không có hai field này; 409 từ race DB có thể bỏ details. Format và ví dụ tại [Barcode CORE-012](#barcode-core-012).
+
 **Bắt buộc `Idempotency-Key` (1–255 ký tự, không rỗng; được trim khi lưu)** trên bảy POST: `/debts/{debtId}/payments`, `/expenses`, `/sales/{saleId}/void`, `/products/{productId}/stock-in`, `/products/{productId}/image`, `/shops/{shopId}/logo`, `/me/avatar`. FE tạo key mới cho một hành động, giữ nguyên khi retry cùng body/path/file. Expense/repay/void/stock-in dùng key shop + operation trong V7; media dùng scope SHOP hoặc USER trong V14 (xem quy tắc media bên dưới). Replay trả response ban đầu (`200` cho stock-in/media, `201` cho ba luồng còn lại), không lặp tác động. Khác người dùng/nội dung trả `409 idempotency_key_conflict`; key hoàn tất hết hạn trả `409 idempotency_key_expired`; rỗng/quá dài trả `400 invalid_idempotency_key`. TTL mặc định 30 ngày, chưa có job dọn key; không tự xóa key quá hạn. Lỗi nghiệp vụ rollback reservation của thao tác tiền/tồn. Media reserve riêng trước provider, chỉ release lượt PENDING do request hiện tại sở hữu khi thất bại; xem lease/reclaim bên dưới.
 
 V7 tạo bảng key. Confirm draft chống trùng bằng draftId, không yêu cầu key. Các POST tạo customer/category/product/draft/shop chưa có bảo vệ key; không coi idempotency đã phủ toàn bộ API. GET không cần key.
@@ -116,6 +118,8 @@ Phủ `FR-010`, `FR-011`, `NFR-003`; dashboard `FR-022` vẫn cần tích hợp.
 
 ## 2. Category, Product và Customer
 
+**Bổ sung CORE-012 #163/#164 trên `feat/core-barcode`, ngày 2026-10-12:** lookup, chuẩn hóa và chi tiết 409 đã có trong Core; V16 đổi unique barcode sang ACTIVE-only. Đây là phạm vi nhánh đang review, không khẳng định đã merge/migrate staging hoặc tích hợp scanner FE #162/#165. Truy vết `BR-021` → `FR-034` → `AC-064`–`AC-067`.
+
 Các API dưới đây bắt buộc Bearer token và `X-Shop-Id`. GET list/detail chỉ trả bản ghi ACTIVE; DELETE là archive, không xóa lịch sử liên quan.
 
 ### 2.1. Category
@@ -138,6 +142,7 @@ name không rỗng, tối đa 150 ký tự; không unique. Category nhóm produc
 |---|---|---|---|
 | `POST` | `/api/v1/products` | Product create như dưới | `201 ProductResponse` |
 | `GET` | `/api/v1/products` | page/size, q, categoryId, stockStatus, sort; xem quy ước phân trang | `200 PageResponse<ProductResponse>` |
+| `GET` | `/api/v1/products/lookup` | query `barcode` bắt buộc; [khớp chính xác](#barcode-core-012) | `200 ProductResponse` (CORE-012 trên nhánh) |
 | `GET` | `/api/v1/products/{productId}` | — | `200 ProductResponse` |
 | `PATCH` | `/api/v1/products/{productId}` | Các field tùy chọn như dưới | `200 ProductResponse` |
 | `POST` | `/api/v1/products/{productId}/image` | multipart `image` + `Idempotency-Key` | `200 ProductResponse` |
@@ -145,7 +150,7 @@ name không rỗng, tối đa 150 ký tự; không unique. Category nhóm produc
 | `POST` | `/api/v1/products/{productId}/stock-in` | `{ quantity, reason? }` + `Idempotency-Key` | `200 ProductResponse` (đã có trên nhánh stock-in) |
 | `DELETE` | `/api/v1/products/{productId}` | — | `204` |
 
-Create: `{ categoryId?, name, barcode?, unit, sellingPriceVnd, costPriceVnd?, tracked, stockQuantity?, lowStockThreshold? }`. `imageUrl` không phải input mới và giá trị URL thô khác rỗng bị từ chối; dùng POST image sau khi tạo Product. name/unit không rỗng (max 255/50), sellingPriceVnd và costPriceVnd nếu có ≥ 0; barcode max 100. categoryId nếu có phải ACTIVE cùng shop. tracked=true bắt buộc stockQuantity ≥ 0; tracked=false không nhận stockQuantity khác null. Barcode unique trong shop kể cả product đã archive; shop khác có thể dùng cùng barcode, null/rỗng không có barcode.
+Create: `{ categoryId?, name, barcode?, unit, sellingPriceVnd, costPriceVnd?, tracked, stockQuantity?, lowStockThreshold? }`. `imageUrl` không phải input mới và giá trị URL thô khác rỗng bị từ chối; dùng POST image sau khi tạo Product. name/unit không rỗng (max 255/50), sellingPriceVnd và costPriceVnd nếu có ≥ 0; barcode max 100 sau chuẩn hóa. categoryId nếu có phải ACTIVE cùng shop. tracked=true bắt buộc stockQuantity ≥ 0; tracked=false không nhận stockQuantity khác null. Sau V16, barcode chỉ unique giữa Product ACTIVE cùng shop; archive giải phóng mã nhưng giữ lịch sử. Shop khác có thể dùng cùng barcode, null/rỗng không có barcode. DB V1–V15 vẫn giữ unique cả ARCHIVED, phải migrate V16 theo quy trình trước khi rollout khả năng tái sử dụng mã.
 
 PATCH chỉ nhận `{ categoryId?, name?, barcode?, unit?, sellingPriceVnd?, costPriceVnd?, tracked?, lowStockThreshold? }`: bỏ field giữ nguyên; explicit null chỉ cho categoryId/barcode/costPriceVnd/lowStockThreshold. `imageUrl` (kể cả null) trả `400 product_image_url_unsupported`; dùng endpoint image. Không cho null name/unit/sellingPriceVnd/tracked. **Không nhận stockQuantity kể cả null**, trả `400 invalid_request` kèm chi tiết field và thông báo dùng stock-in. Đổi false→true khởi tạo tồn 0, true→true giữ tồn hiện tại; tracked=false xóa tồn. PATCH/archive khóa dòng product để không ghi đè tồn khi checkout/void/stock-in đồng thời. Create và response vẫn giữ stockQuantity.
 
@@ -163,7 +168,29 @@ Media Product/logo chỉ cho OWNER của shop ACTIVE. Transaction ghi khóa lạ
 
 Cả ba upload yêu cầu `Idempotency-Key`. V14 `media_upload_keys` dùng SHOP scope cho Product/logo và USER scope cho avatar. PENDING reservation commit trước provider; cùng key/file đang chạy trả `409 media_upload_in_progress`, payload khác trả `409 idempotency_key_conflict`. PENDING hết lease được claim lại nguyên tử với token mới; token cũ không được hoàn tất hoặc giải phóng lượt mới. Final write khóa reservation/kiểm tra lease rồi lưu entity/audit/replay cùng transaction. Cloudinary dùng public ID quyết định theo target/key/file và `overwrite=true`; completed replay không upload hoặc thêm audit. Avatar replay lưu snapshot nội bộ và tạo lại URL delivery. URL authenticated có chữ ký nhưng chưa có TTL delivery; không coi là URL tự hết hạn. Cleanup dùng khóa job `SKIP LOCKED` và khóa public ID cùng với writer; bỏ qua asset đang gắn entity, hoãn asset có upload PENDING còn lease. COMPLETED không đổi về PENDING. V13/V14 phải migrate trước runtime shared DB; chưa xác nhận FE/staging UAT.
 
+### Barcode CORE-012
+
+Create/PATCH/lookup trim khoảng trắng Unicode đầu/cuối, kể cả CR/LF/TAB từ scanner. Mã sau trim tối đa 100 Unicode code point (không đếm UTF-16 code unit, byte hay grapheme cluster); ký tự ngoài BMP được tính là một code point, khớp giới hạn PostgreSQL `varchar(100)`. Không chứa khoảng trắng hoặc ký tự điều khiển bên trong. Giữ nguyên chữ, hoa/thường, dấu, số 0 đầu: `ABC-123`, `123`, `abc-123`, `00123` là các mã khác nhau. Không bulk-normalize barcode lịch sử; lookup khớp với mã đã lưu. `%`/`_` là ký tự literal, không wildcard. Input không hợp lệ trả `400 validation_failed`, details có field barcode.
+
+- Create bỏ/null/chuỗi chỉ có whitespace lưu null. PATCH bỏ field giữ nguyên, null/blank gỡ mã; PATCH cùng mã của chính Product thành công. Không thêm field entity/barcode table.
+- `GET /api/v1/products/lookup?barcode=ABC-123` trả một ProductResponse, không page/mảng và không đọc toàn danh mục. Barcode thiếu/rỗng không hợp lệ. Phải có Bearer và X-Shop-Id, account OWNER ACTIVE, tiệm ACTIVE thuộc OWNER; kiểm tra quyền trước truy vấn Product theo mục 0. Lookup chỉ đọc Product ACTIVE: thiếu/chỉ ARCHIVED/mã tiệm khác trả `404 product_not_found`. Không trả Product ARCHIVED để UI tự restore; không có API restore.
+- Create/PATCH chỉ kiểm trùng Product ACTIVE cùng shop, PATCH loại chính ID đang sửa. Nếu service phát hiện trùng, `409 product_barcode_conflict` trả ví dụ dưới. Hai field bổ sung chỉ là optional của ApiErrorDetail; các lỗi khác giữ `{field, issue}`. Không trả ID từ tiệm khác.
+
+```json
+{
+  "code": "product_barcode_conflict",
+  "message": "The product barcode is already in use in this shop.",
+  "details": [{ "field": "barcode", "issue": "already_in_use", "productId": 123, "status": "ACTIVE" }],
+  "traceId": "server-generated-trace-id"
+}
+```
+
+`message` là mô tả, FE phân nhánh theo code/field. Nếu hai writer vượt precheck đồng thời, partial unique index V16 chặn lần ghi thua; handler map `uq_products_shop_barcode_active` (và constraint cũ trong giai đoạn nâng cấp) sang cùng 409, **có thể không có details**. Không truy vấn thêm trên transaction DB đã lỗi để điền details. Lookup thấy 404 không đảm bảo create kế tiếp thành công; FE phải xử lý 409 và có thể lookup lại. Create/PATCH không có bảo đảm replay bằng Idempotency-Key.
+
+**Rollout:** V16 được review/merge vào staging trước khi migration owner chạy trên shared DB; không chạy migration feature branch vào DB nghiệp vụ. Index build transactional trong cửa sổ bảo trì dừng ghi catalog; không zero-downtime. Archive/tái sử dụng không sửa productId/snapshot sale/draft cũ. FE #162/#165 cần dùng lookup, giữ nguyên ký tự mã, không tạo Product giả khi API lỗi và xử lý 409 có/không details; UI/giỏ hàng vẫn do team chốt và nghiệm thu riêng. Xem `FR-034`, `AC-064`–`AC-067` và [hướng dẫn Core](../../backend/core/README.md#exact-product-barcode-lookup-and-active-only-uniqueness-core-012--163164).
+
 ### 2.3. Customer
+
 
 | Method | Đường | Body | Response |
 |---|---|---|---|

@@ -154,6 +154,24 @@ class ApiDocumentationWebTest {
         }
 
         @Test
+        void productWritesDocumentBarcodeConflictAndOptionalStructuredDetails() throws Exception {
+            JsonNode api = mapper.readTree(mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString());
+            for (JsonNode operation : List.of(api.path("paths").path("/api/v1/products").path("post"),
+                    api.path("paths").path("/api/v1/products/{productId}").path("patch"))) {
+                JsonNode conflict = operation.path("responses").path("409");
+                assertThat(conflict.path("description").asText()).contains("product_barcode_conflict", "omit details");
+                assertThat(conflict.path("content").elements().next().path("schema").path("$ref").asText())
+                        .isEqualTo("#/components/schemas/ApiErrorResponse");
+            }
+            JsonNode detail = api.path("components").path("schemas").path("ApiErrorDetail");
+            assertThat(detail.path("properties").path("productId").path("type").asText()).isEqualTo("integer");
+            assertThat(detail.path("properties").path("status").path("type").asText()).isEqualTo("string");
+            assertThat(detail.path("required").toString()).doesNotContain("productId", "status");
+            verifyNoInteractions(products);
+        }
+
+        @Test
         void productSchemasSeparateInitialStockFromPatchAndDocumentStockIn() throws Exception {
             mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
                     .andExpect(jsonPath("$.paths['/api/v1/products/{productId}/stock-in'].post.responses['200']").exists())

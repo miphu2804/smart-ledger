@@ -7,7 +7,10 @@ import static org.mockito.Mockito.mock;
 import com.smartledger.core.dto.request.ProductPatchRequest;
 import com.smartledger.core.dto.request.ProductWriteRequest;
 import com.smartledger.core.enums.ErrorCode;
+import com.smartledger.core.enums.CatalogStatus;
+import com.smartledger.core.exception.ApiErrorDetail;
 import com.smartledger.core.exception.BusinessException;
+import com.smartledger.core.repository.ProductRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.SalesListQueryPostgresTest.SqlCounter;
 import com.smartledger.core.service.impl.ProductServiceImpl;
@@ -24,6 +27,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.orm.jpa.HibernatePropertiesCustomizer;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
@@ -47,6 +52,7 @@ class ProductBarcodePostgresTest {
     private static final String SCHEMA = "core_barcode_test_" + UUID.randomUUID().toString().replace("-", "");
     private static boolean schemaCreated;
     @Autowired ProductService products;
+    @Autowired ProductRepository repository;
     @Autowired JdbcTemplate jdbc;
     @Autowired EntityManager entityManager;
     @Autowired SqlCounter sql;
@@ -146,6 +152,116 @@ class ProductBarcodePostgresTest {
         assertError(() -> products.lookup(owner, shop(), "ABC-123"), ErrorCode.PRODUCT_NOT_FOUND);
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {0x1F600, 0x20000})
+    void supplementaryUnicodeLengthMatchesPostgresOnCreatePatchAndLookup(int codePoint) {
+        String character = new String(Character.toChars(codePoint));
+        String barcode = character.repeat(100);
+        assertThat(barcode.length()).isEqualTo(200);
+        long id = products.create(owner, shop(), request(" " + barcode + "\n")).id();
+        clear();
+        assertThat(jdbc.queryForObject("select char_length(barcode) from products where id=?", Integer.class, id))
+                .isEqualTo(100);
+        assertThat(products.lookup(owner, shop(), barcode).id()).isEqualTo(id);
+
+        String updated = "A" + character.repeat(99);
+        ProductPatchRequest patch = new ProductPatchRequest();
+        patch.setBarcode("\t" + updated + " ");
+        assertThat(products.patch(owner, shop(), Long.toString(id), patch).barcode()).isEqualTo(updated);
+        clear();
+        assertThat(products.lookup(owner, shop(), updated).id()).isEqualTo(id);
+        assertThat(jdbc.queryForObject("select char_length(barcode) from products where id=?", Integer.class, id))
+                .isEqualTo(100);
+
+        String invalid = character.repeat(101);
+        assertError(() -> products.create(owner, shop(), request(invalid)), ErrorCode.INVALID_PRODUCT_BARCODE);
+        patch.setBarcode(invalid);
+        assertError(() -> products.patch(owner, shop(), Long.toString(id), patch), ErrorCode.INVALID_PRODUCT_BARCODE);
+        assertError(() -> products.lookup(owner, shop(), invalid), ErrorCode.INVALID_PRODUCT_BARCODE);
+        clear();
+        assertThat(jdbc.queryForObject("select barcode from products where id=?", String.class, id)).isEqualTo(updated);
+        assertThat(jdbc.queryForObject("select count(*) from products where shop_id=?", Long.class, shopId)).isEqualTo(1L);
+    }
+
+    @Test
+    void activeConflictReturnsSameShopDetailsWithOneProductReadAndNoWrite() {
+        long existing = product(shopId, "TAKEN");
+        clear();
+        assertThatThrownBy(() -> products.create(owner, shop(), request(" TAKEN\n")))
+                .isInstanceOfSatisfying(BusinessException.class, error -> {
+                    assertThat(error.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_BARCODE_CONFLICT);
+                    assertThat(error.getDetails()).containsExactly(
+                            new ApiErrorDetail("barcode", "already_in_use", existing, CatalogStatus.ACTIVE));
+                });
+        assertOneExactRead();
+        assertThat(jdbc.queryForObject("select count(*) from products where shop_id=?", Long.class, shopId)).isEqualTo(1L);
+    }
+
+    @Test
+    void patchConflictExcludesItselfAndLeavesAllOriginalFieldsUnchanged() {
+        long original = product(shopId, "ORIGINAL");
+        long competing = product(shopId, "TAKEN");
+        clear();
+        ProductPatchRequest patch = new ProductPatchRequest();
+        patch.setBarcode(" TAKEN\t");
+        patch.setName("Must not change");
+        assertThatThrownBy(() -> products.patch(owner, shop(), Long.toString(original), patch))
+                .isInstanceOfSatisfying(BusinessException.class, error -> {
+                    assertThat(error.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_BARCODE_CONFLICT);
+                    assertThat(error.getDetails()).containsExactly(
+                            new ApiErrorDetail("barcode", "already_in_use", competing, CatalogStatus.ACTIVE));
+                });
+        assertThat(sql.readsOf("products")).hasSize(2); // One row lock, one competing-code read.
+        assertThat(sql.readsOf("products").getLast()).contains(".shop_id=?", ".barcode=?", ".status=?", ".id<>?");
+        entityManager.flush();
+        assertThat(jdbc.queryForObject("select barcode from products where id=?", String.class, original)).isEqualTo("ORIGINAL");
+        assertThat(jdbc.queryForObject("select name from products where id=?", String.class, original)).isEqualTo("Coffee");
+    }
+
+    @Test
+    void competingCodeQueryIgnoresArchivedForeignAndSelfRows() {
+        long archived = product(shopId, "ARCHIVED");
+        jdbc.update("update products set status='ARCHIVED',archived_at=current_timestamp,archived_by_user_id=? where id=?", userId, archived);
+        product(foreignShopId, "FOREIGN");
+        long self = product(shopId, "SELF");
+        for (String code : List.of("ARCHIVED", "FOREIGN", "SELF")) {
+            clear();
+            assertThat(repository.findFirstByShopIdAndBarcodeAndStatusAndIdNotOrderByIdDesc(
+                    shopId, code, CatalogStatus.ACTIVE, self)).isEmpty();
+            assertOneExactRead();
+            assertThat(sql.readsOf("products").getFirst()).contains(".id<>?");
+        }
+    }
+
+    @Test
+    void archiveReleasesCodeAndLookupSelectsTheNewActiveProductWithoutRewritingHistory() {
+        long archived = product(shopId, "REUSABLE");
+        products.archive(owner, shop(), Long.toString(archived));
+        clear();
+        long replacement = products.create(owner, shop(), request("REUSABLE")).id();
+        assertThat(replacement).isNotEqualTo(archived);
+        clear();
+        assertThat(products.lookup(owner, shop(), "REUSABLE").id()).isEqualTo(replacement);
+        assertOneExactRead();
+        assertThat(jdbc.queryForObject("select status || ':' || barcode from products where id=?",
+                String.class, archived)).isEqualTo("ARCHIVED:REUSABLE");
+    }
+
+    @Test
+    void patchCanReuseAnArchivedCodeAndThenKeepItsOwnCode() {
+        long archived = product(shopId, "REUSABLE");
+        products.archive(owner, shop(), Long.toString(archived));
+        long current = product(shopId, "ORIGINAL");
+        clear();
+        ProductPatchRequest patch = new ProductPatchRequest();
+        patch.setBarcode(" REUSABLE\n");
+        assertThat(products.patch(owner, shop(), Long.toString(current), patch).barcode()).isEqualTo("REUSABLE");
+        clear();
+        assertThat(products.patch(owner, shop(), Long.toString(current), patch).id()).isEqualTo(current);
+        clear();
+        assertThat(products.lookup(owner, shop(), "REUSABLE").id()).isEqualTo(current);
+    }
+
     @Test
     void lookupUsesOneIndexedQueryWithTwentyThousandProducts() {
         jdbc.update("""
@@ -163,7 +279,7 @@ class ProductBarcodePostgresTest {
         Object[] bindings = parameters == 4 ? new Object[] {shopId, "LOAD-19999", "ACTIVE", 1}
                 : new Object[] {shopId, "LOAD-19999", "ACTIVE"};
         String plan = String.join("\n", jdbc.queryForList("explain (analyze, buffers) " + statement, String.class, bindings));
-        assertThat(plan).contains("uq_products_shop_barcode", "Index Cond:");
+        assertThat(plan).contains("uq_products_shop_barcode_active", "Index Cond:");
 
         // Record local diagnostics, not a production latency promise; clear caches between calls.
         var timings = new java.util.ArrayList<Double>();
