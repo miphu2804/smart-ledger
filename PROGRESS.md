@@ -1,3 +1,13 @@
+### [2026-10-12 13:35 UTC+07:00] — [Docs] Marketing screenshots per product flow under docs/marketing
+
+**Done:** Added `docs/marketing/` with 21 phone-ratio screenshots of the mobile app grouped by product flow: `dashboard/` (9), `chat/` (3), `barcode/` (5) and `voice/` (4), plus a README that lists each image, how the set was produced and what to know before using it. The images are 1170 × 2532 px PNG (390 × 844 pt at 3x), without a status bar or device frame.
+
+**Changed files:** `docs/marketing/README.md`, 21 PNG files under `docs/marketing/{dashboard,chat,barcode,voice}/` (about 7.8 MB in total), one row in the document map of `docs/README.md`, and this entry. No code changed.
+
+**Flow explained:** The screenshots come from the web build of the mobile app in preview (mock) mode, captured with headless Chrome on `staging` at `33d2da4` plus two changes that were still in review: #168 (Sales product cards and the web scanner) and #169 (the quantity field in the voice new-item dialog). All data is demo data. The chat answers come from the preview assistant and carry its "Số liệu giả lập" note. The camera frames in `barcode/` are a drawn illustration with an EAN-13 barcode that the app decodes for real. The voice sentences were typed through "Nhập tay".
+
+**Check:** Every image is 1170 × 2532 px; each flow was viewed after capture. **Not verified:** the same screens on a real phone, and whether the third-party brand names in the demo data and the Unsplash product photos may be used in public material (the README asks an owner to review this before publishing). The capture script is not in the repo.
+
 ### [2026-10-10 19:50 UTC+07:00] — [Feature] Orders screen: the search bar is always visible, like the Sales screen
 
 **Done:** The Orders screen hid its search input behind a magnifier button in the top right corner. It now shows the search bar permanently under the title and above the period filter chips, with the same look as the Sales screen: a search icon on the left, a clear button when there is text, and no toggle button. The placeholder stays "Tìm theo khách, tên món, mã đơn..." because the search is over orders.
