@@ -1,4 +1,5 @@
 import { Feather } from '@expo/vector-icons';
+import { useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,11 +41,19 @@ const needsRestock = (p: ProductView) => {
   return level === 'low' || level === 'out';
 };
 
+/** Số tồn để hiển thị: tối đa 3 chữ số thập phân, bỏ số 0 thừa. */
+const formatQty = (n: number | null | undefined) => Number((n ?? 0).toFixed(3));
+
 export default function Products() {
   const insets = useSafeAreaInsets();
-  const [tab, setTab] = useState<Tab>('all');
+  const toast = useToast();
+  // /products?tab=low (từ "Kiểm tra hàng sắp hết" ở Tổng quan) mở thẳng danh sách cần nhập thêm
+  const params = useLocalSearchParams<{ tab?: string }>();
+  const [tab, setTab] = useState<Tab>(params.tab === 'low' ? 'low' : 'all');
   const [q, setQ] = useState('');
   const [form, setForm] = useState<ProductView | 'new' | null>(null);
+  /** Mặt hàng đang mở sheet nhập hàng nhanh (bấm "Nhập hàng" ngay trên dòng) */
+  const [stockInFor, setStockInFor] = useState<ProductView | null>(null);
 
   const [products, setProducts] = useState<ProductView[]>([]);
   const [categories, setCategories] = useState<CategoryView[]>([]);
@@ -163,7 +172,11 @@ export default function Products() {
                   )}
                 </Row>
               </View>
-              <Feather name="chevron-right" size={18} color={colors.disabled} />
+              {p.tracked ? (
+                <Button title="Nhập hàng" icon="plus" variant="soft" small onPress={() => setStockInFor(p)} />
+              ) : (
+                <Feather name="chevron-right" size={18} color={colors.disabled} />
+              )}
             </Pressable>
           )}
         />
@@ -176,7 +189,110 @@ export default function Products() {
         onSaved={load}
         onChanged={load}
       />
+      <Sheet visible={!!stockInFor} onClose={() => setStockInFor(null)} title="Nhập hàng">
+        {stockInFor ? (
+          <>
+            <Row gap={12} style={{ marginBottom: 14 }}>
+              <Tile name={stockInFor.name} text={stockInFor.name[0]} size={42} />
+              <View style={{ flex: 1 }}>
+                <T w="semibold" size={15}>
+                  {stockInFor.name}
+                </T>
+                <T size={12.5} color={colors.muted}>
+                  Tồn hiện tại: {formatQty(stockInFor.stockQuantity)} {stockInFor.unit}
+                </T>
+              </View>
+            </Row>
+            <StockInFields
+              key={stockInFor.id}
+              product={stockInFor}
+              currentStock={stockInFor.stockQuantity ?? 0}
+              autoFocus
+              onDone={(updated, qty) => {
+                // Core trả mặt hàng sau khi cộng tồn: cập nhật ngay dòng đó, không cần tải lại cả danh sách
+                setProducts((cur) => cur.map((x) => (x.id === updated.id ? updated : x)));
+                setStockInFor(null);
+                toast(`Đã nhập ${qty} ${updated.unit} · tồn mới ${formatQty(updated.stockQuantity)}`);
+              }}
+            />
+          </>
+        ) : null}
+      </Sheet>
     </View>
+  );
+}
+
+/**
+ * Ô số lượng, lý do và nút "Nhập vào kho" (POST /products/{id}/stock-in). Dùng chung cho sheet nhập nhanh trên danh sách
+ * và mục "Nhập hàng" trong form sửa mặt hàng.
+ */
+function StockInFields({
+  product,
+  currentStock,
+  autoFocus,
+  onDone,
+}: {
+  product: ProductView;
+  /** Tồn đang hiển thị ở nơi gọi, để xem trước tồn sau khi nhập */
+  currentStock: number;
+  autoFocus?: boolean;
+  onDone: (updated: ProductView, qty: number) => void;
+}) {
+  const [qty, setQty] = useState('');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const amount = isWholeNumber(qty) ? Number(qty.trim()) : 0;
+
+  const submit = async () => {
+    if (busy || qty.trim() === '') return;
+    if (!isWholeNumber(qty) || amount <= 0 || amount > 999999999999) {
+      setErr('Số lượng nhập phải là số nguyên dương, chỉ gồm chữ số (không có dấu trừ, dấu chấm hay dấu phẩy).');
+      return;
+    }
+    setBusy(true);
+    setErr('');
+    try {
+      const updated = await productApi.stockIn(product.id, { quantity: amount, reason: reason.trim() || null });
+      triggerFeedback('success');
+      setQty('');
+      setReason('');
+      onDone(updated, amount);
+    } catch (e) {
+      triggerFeedback('error');
+      setErr(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <Field
+        label="Số lượng nhập"
+        keyboardType="number-pad"
+        placeholder="VD: 24"
+        value={qty}
+        onChangeText={(t) => {
+          setQty(t);
+          setErr('');
+        }}
+        autoFocus={autoFocus}
+        onSubmitEditing={submit}
+      />
+      {amount > 0 ? (
+        <T size={12.5} color={colors.muted} style={{ marginTop: -6, marginBottom: 12 }}>
+          Tồn sau khi nhập: {formatQty(currentStock + amount)} {product.unit}
+        </T>
+      ) : null}
+      <Field label="Lý do (tuỳ chọn)" placeholder="VD: Nhập thêm từ nhà cung cấp" value={reason} onChangeText={setReason} />
+      {err ? (
+        <T size={12} color={colors.red} style={{ marginBottom: 8 }}>
+          {err}
+        </T>
+      ) : null}
+      <Button title="Nhập vào kho" disabled={qty.trim() === '' || busy} loading={busy} onPress={submit} />
+    </>
   );
 }
 
@@ -237,10 +353,6 @@ function ProductForm({
   /** Tồn đang hiện ở form sửa: lấy từ mặt hàng, cập nhật sau mỗi lần nhập hàng */
   const [stockNow, setStockNow] = useState<number | null>(null);
   const [stockInOpen, setStockInOpen] = useState(false);
-  const [inQty, setInQty] = useState('');
-  const [inReason, setInReason] = useState('');
-  const [inBusy, setInBusy] = useState(false);
-  const [inErr, setInErr] = useState('');
   const [tracked, setTracked] = useState(true);
   const [catKey, setCatKey] = useState('none');
   const [scanning, setScanning] = useState(false);
@@ -281,9 +393,6 @@ function ProductForm({
     setThresholdInit(thresholdText);
     setStockNow(p?.stockQuantity ?? null);
     setStockInOpen(false);
-    setInQty('');
-    setInReason('');
-    setInErr('');
     setTracked(p?.tracked ?? true);
     setCatKey(p?.categoryId != null ? String(p.categoryId) : 'none');
     setMode('manual');
@@ -366,32 +475,6 @@ function ProductForm({
       setErr(errorMessage(e));
     } finally {
       setBusy(false);
-    }
-  };
-
-  const submitStockIn = async () => {
-    if (!p || inBusy) return;
-    if (!isWholeNumber(inQty) || Number(inQty.trim()) <= 0 || Number(inQty.trim()) > 999999999999) {
-      setInErr('Số lượng nhập phải là số nguyên dương, chỉ gồm chữ số (không có dấu trừ, dấu chấm hay dấu phẩy).');
-      return;
-    }
-    const qty = Number(inQty.trim());
-    setInBusy(true);
-    setInErr('');
-    try {
-      const updated = await productApi.stockIn(p.id, { quantity: qty, reason: inReason.trim() || null });
-      setStockNow(updated.stockQuantity);
-      setInQty('');
-      setInReason('');
-      setStockInOpen(false);
-      triggerFeedback('success');
-      toast(`Đã nhập ${qty} ${p.unit} vào kho`);
-      onChanged();
-    } catch (e) {
-      triggerFeedback('error');
-      setInErr(errorMessage(e));
-    } finally {
-      setInBusy(false);
     }
   };
 
@@ -659,7 +742,7 @@ function ProductForm({
                     Tồn kho hiện tại
                   </T>
                   <T size={12} color={colors.faint}>
-                    {Number((stockNow ?? 0).toFixed(3))} {p.unit}
+                    {formatQty(stockNow)} {p.unit}
                   </T>
                 </View>
                 <Button
@@ -672,14 +755,16 @@ function ProductForm({
               </Row>
               {stockInOpen ? (
                 <View style={{ marginTop: 12 }}>
-                  <Field label="Số lượng nhập" keyboardType="number-pad" placeholder="VD: 24" value={inQty} onChangeText={setInQty} />
-                  <Field label="Lý do (tuỳ chọn)" placeholder="VD: Nhập thêm từ nhà cung cấp" value={inReason} onChangeText={setInReason} />
-                  {inErr ? (
-                    <T size={12} color={colors.red} style={{ marginBottom: 8 }}>
-                      {inErr}
-                    </T>
-                  ) : null}
-                  <Button title="Nhập vào kho" disabled={inQty.trim() === '' || inBusy} loading={inBusy} onPress={submitStockIn} />
+                  <StockInFields
+                    product={p}
+                    currentStock={stockNow ?? 0}
+                    onDone={(updated, qty) => {
+                      setStockNow(updated.stockQuantity);
+                      setStockInOpen(false);
+                      toast(`Đã nhập ${qty} ${p.unit} vào kho`);
+                      onChanged();
+                    }}
+                  />
                 </View>
               ) : null}
             </View>
