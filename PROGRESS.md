@@ -1,3 +1,13 @@
+### [2026-10-12] — [Chore] Sync staging progress history for PR #171
+
+**Done:** Integrated staging at 9619e05 into feat/core-barcode to resolve the concurrent PROGRESS.md additions. Preserved the complete barcode entries and both new staging entries without rewriting previous history.
+
+**Changed files:** Manual conflict resolution in PROGRESS.md only. Marketing documentation/images and the mobile voice change are inherited unchanged from staging; no new Core, FE, AI or migration edits.
+
+**Flow explained:** Retained newest-first progress additions from both branches above the unchanged common history. This updates the PR branch only, not staging or main; CodeRabbit's proposal to move entries to the bottom remains rejected under CONTRIBUTING.md.
+
+**Check:** Verified all branch-specific entries and the common history are preserved verbatim; no conflict markers or unmerged paths remain and git diff --check passes. Core is identical to the previously tested 84c41e0 (982 tests passed); Maven/FE/UAT were not rerun for this log-only conflict resolution. GitHub checks on the merge commit remain pending.
+
 ### [2026-10-12] — [Fix] Barcode control padding review on PR #171
 
 **Done:** Fixed the approved CodeRabbit finding in shared barcode normalization. Non-scanner ISO control characters are no longer trimmed at either boundary. Kept the newest-first progress convention from CONTRIBUTING.md and replied to/resolved the request to move entries to the bottom; all previous entries from staging and the feature branch remain unchanged.
@@ -27,6 +37,26 @@
 **Flow explained:** Create/PATCH/lookup trim Unicode/scanner padding but preserve exact case/letters/punctuation/leading zeros. Lookup checks OWNER/account/shop before one Product query; missing/archived/foreign codes return 404. Precheck conflicts return 409 with optional productId/status; DB races may omit details and still map to 409. V16 builds the ACTIVE/non-null partial unique index before removing the old constraint in one transaction. Archive releases the code without rewriting Product IDs or sale/draft snapshots. DBML describes the partial predicate rather than exporting unconditional uniqueness. Traceability: BR-021 → FR-034 → AC-064–AC-067. Migration requires a paused-write maintenance window (5s lock / 60s statement timeout), reviewed shared rollout and explicit forward recovery; it is not zero-downtime or replaced by ddl-auto=update.
 
 **Check:** Focused suite: 135 tests, no failures/errors/skips. Full `mvnw.cmd clean verify` with all three `CORE_TEST_POSTGRES_*` variables: **944 tests, 0 failures, 0 errors, 0 skipped**, BUILD SUCCESS (4:18). Dedicated disposable PostgreSQL 16 verified fresh V1–V16, V15 upgrade/history, partial index validity, CREATE/PATCH reuse, exact/null/tenant uniqueness, concurrent JDBC create/patch writers and atomic failures (dependent old FK / duplicated ACTIVE rows). HTTP/error mapping is tested separately, not concurrent HTTP end-to-end. Lookup with 20,000 synthetic Products: one Product query on the new index; local median 7.05 ms across 20 runs, diagnostic only, not SLA. Markdown file links and git diff --check pass. No real Firebase/scanner/staging UAT or production-sized DDL locking benchmark; shared migration/FE acceptance remain pending.
+
+### [2026-10-12 13:35 UTC+07:00] — [Docs] Marketing screenshots per product flow under docs/marketing
+
+**Done:** Added `docs/marketing/` with 21 phone-ratio screenshots of the mobile app grouped by product flow: `dashboard/` (9), `chat/` (3), `barcode/` (5) and `voice/` (4), plus a README that lists each image, how the set was produced and what to know before using it. The images are 1170 × 2532 px PNG (390 × 844 pt at 3x), without a status bar or device frame.
+
+**Changed files:** `docs/marketing/README.md`, 21 PNG files under `docs/marketing/{dashboard,chat,barcode,voice}/` (about 7.8 MB in total), one row in the document map of `docs/README.md`, and this entry. No code changed.
+
+**Flow explained:** The screenshots come from the web build of the mobile app in preview (mock) mode, captured with headless Chrome on `staging` at `33d2da4` plus two changes that were still in review: #168 (Sales product cards and the web scanner) and #169 (the quantity field in the voice new-item dialog). All data is demo data. The chat answers come from the preview assistant and carry its "Số liệu giả lập" note. The camera frames in `barcode/` are a drawn illustration with an EAN-13 barcode that the app decodes for real. The voice sentences were typed through "Nhập tay".
+
+**Check:** Every image is 1170 × 2532 px; each flow was viewed after capture. **Not verified:** the same screens on a real phone, and whether the third-party brand names in the demo data and the Unsplash product photos may be used in public material (the README asks an owner to review this before publishing). The capture script is not in the repo.
+
+### [2026-10-12 13:33 UTC+07:00] — [Feature] Voice order: type the quantity for an item named without one
+
+**Done:** When the owner names an item that is not in the catalog without saying a quantity (for example "trà trái cây"), the voice order screen used to only ask them to say it again with a quantity. It now opens the existing "Thêm … vào danh mục?" dialog for that item with a new "Số lượng" field (default 1), so the quantity can be typed by hand together with the price and unit. Saying it again with a quantity still works after tapping "Bỏ qua". Items named with a quantity also show the field, prefilled with what was heard. Items already in the catalog are unchanged: without a spoken quantity they are added as 1 and edited with the +/− buttons.
+
+**Changed files:** `frontend/mobile/app/voice.tsx` and this entry. `parseOrder` is unchanged.
+
+**Flow explained:** `handleUtterance` turns `missingQuantityItems` into pending new items with quantity 1 and queues them after the unknown items in the same dialog. `resolvePending` reads the typed quantity, requires it to be between 1 and `MAX_NEW_ITEM_QTY` (9999; shown as a field error next to the price error, and the field stops at four digits) and adds that quantity to the order after the product is created.
+
+**Check:** `tsc --noEmit` clean. Web build in headless Chrome, mock mode, typing through "Nhập tay": "trà trái cây" opens the dialog with the quantity field set to 1 and the assistant message offers typing or saying it again; an empty quantity shows "Nhập số lượng từ 1 đến 9999"; the field takes at most four digits (typing 123456 leaves 1234) and a longer value forced into it is rejected with the same message; quantity 3 at 15.000đ adds "3 Trà trái cây" and the total becomes 45.000đ. **Not verified:** real speech input, native Android and iOS (including the dialog with the system keyboard open), an item named with a quantity (the field should come prefilled with it), and several missing-quantity items in one sentence.
 
 ### [2026-10-12 13:33 UTC+07:00] — [Fix] Sales product cards, web scanner lookup and mascot shadow
 
