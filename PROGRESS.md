@@ -1,3 +1,13 @@
+### [2026-10-12 15:20 UTC+07:00] — [Feature] Products: stock-in button on each row and a short stock-in sheet
+
+**Done:** Adding stock took many steps: open a product, scroll to the bottom of the edit form, open "Nhập hàng", type, confirm. Each stock-tracked row of the Products list now has its own "Nhập hàng" button that opens a short sheet with the product name, the current stock, a quantity field that is focused right away, a preview of the stock after the entry, an optional reason and "Nhập vào kho". The Home row "Kiểm tra hàng sắp hết" now opens the Products screen on its "Sắp hết" tab, so restocking is: tap that row, tap "Nhập hàng", type the quantity, confirm. The stock-in section inside the edit form is still there.
+
+**Changed files:** `frontend/mobile/app/products.tsx`, `frontend/mobile/app/(tabs)/index.tsx`, and this entry.
+
+**Flow explained:** `StockInFields` holds the quantity/reason fields, the validation and the `productApi.stockIn` call, and is used by both the new sheet and the edit form (which no longer keeps its own copy of that state). After a quick stock-in the row is replaced with the product Core returns, without reloading the list, and a toast shows the new stock. `products.tsx` reads the `tab` route param once (`tab=low`). Untracked products keep the chevron and have no stock-in button.
+
+**Check:** `tsc --noEmit` clean. Web build in headless Chrome, mock mode, 9 checks: Home "Kiểm tra hàng sắp hết" lands on `/products?tab=low` showing only products that need restocking; the row button opens the sheet with the product name and current stock and the quantity field focused; quantity 0 shows the validation error; typing 24 previews "Tồn sau khi nhập: 30"; confirming closes the sheet, shows "Đã nhập 24 cái · tồn mới 30" and the row shows the new stock; an untracked product has no button; stock-in from the edit form still updates "Tồn kho hiện tại" (36 after 6 more). **Not verified:** a real phone (keyboard over the sheet on Android and iOS), a real Core, and rows with very long names on narrow screens.
+
 ### [2026-10-12 13:35 UTC+07:00] — [Docs] Marketing screenshots per product flow under docs/marketing
 
 **Done:** Added `docs/marketing/` with 21 phone-ratio screenshots of the mobile app grouped by product flow: `dashboard/` (9), `chat/` (3), `barcode/` (5) and `voice/` (4), plus a README that lists each image, how the set was produced and what to know before using it. The images are 1170 × 2532 px PNG (390 × 844 pt at 3x), without a status bar or device frame.
