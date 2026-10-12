@@ -43,6 +43,9 @@ type Msg = {
   emotion?: 'happy' | 'holding_tablet' | 'excited' | 'wink' | 'question' | 'sorry' | 'thanks';
 };
 
+// Trần số lượng gõ tay cho một món mới: chuỗi số quá dài sẽ vượt giới hạn số nguyên an toàn và làm sai tổng đơn.
+const MAX_NEW_ITEM_QTY = 9999;
+
 const voiceTheme = {
   primary: colors.brand,
   primaryDark: colors.brandPressed,
@@ -359,6 +362,9 @@ export default function Voice() {
   const [newPrice, setNewPrice] = useState('');
   const [newUnit, setNewUnit] = useState('cái');
   const [priceErr, setPriceErr] = useState('');
+  // Số lượng của món mới: lấy từ câu nói nếu có, còn không thì người dùng gõ tay trong hộp thoại
+  const [newQty, setNewQty] = useState('1');
+  const [qtyErr, setQtyErr] = useState('');
   const [catalogBusy, setCatalogBusy] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -478,16 +484,21 @@ export default function Voice() {
         responseParts.push(`Đã ghi ${found.map((f) => `${f.qty} ${f.name}`).join(', ')}.`);
       }
 
-      if (missingQuantityItems && missingQuantityItems.length > 0) {
+      // Món chưa có trong danh mục mà không nói số lượng: không bắt nói lại, cho gõ số lượng trong hộp thoại thêm món
+      const needQuantity: LineItem[] = (missingQuantityItems ?? []).map((name) => ({ name, price: 0, qty: 1 }));
+      if (needQuantity.length) {
         responseParts.push(
-          `Bạn đã gọi món "${missingQuantityItems.join(', ')}" nhưng chưa có số lượng. Mời bạn nói lại số lượng nhé (ví dụ: "1 ${missingQuantityItems[0]}").`,
+          `Bạn đã gọi món "${needQuantity.map((item) => item.name).join(', ')}" nhưng chưa có số lượng. Bạn nhập số lượng ở khung bên dưới, hoặc bỏ qua rồi nói lại kèm số lượng (ví dụ: "1 ${needQuantity[0].name}").`,
         );
       }
 
-      if (unknown.length) {
-        setPending(unknown);
-        setNewPrice(unknown[0].price ? String(unknown[0].price) : '');
-        responseParts.push(`"${unknown[0].name}" chưa có trong danh mục. Bạn có muốn thêm vào không?`);
+      const toConfirm = [...unknown, ...needQuantity];
+      if (toConfirm.length) {
+        setPending(toConfirm);
+        setNewPrice(toConfirm[0].price ? String(toConfirm[0].price) : '');
+        setNewQty(String(toConfirm[0].qty));
+        setQtyErr('');
+        if (unknown.length) responseParts.push(`"${unknown[0].name}" chưa có trong danh mục. Bạn có muốn thêm vào không?`);
       }
 
       if (expenses && expenses.length > 0) {
@@ -685,8 +696,11 @@ export default function Voice() {
     const [first, ...rest] = pending;
     if (!first || catalogBusy) return;
     const price = parseInt(newPrice.replace(/\D/g, ''), 10) || 0;
-    if (action === 'catalog' && !price) {
-      setPriceErr(`Nhập giá bán cho "${first.name}" để thêm vào đơn`);
+    const qty = parseInt(newQty.replace(/\D/g, ''), 10) || 0;
+    const qtyOk = qty >= 1 && qty <= MAX_NEW_ITEM_QTY;
+    if (action === 'catalog' && (!price || !qtyOk)) {
+      setPriceErr(price ? '' : `Nhập giá bán cho "${first.name}" để thêm vào đơn`);
+      setQtyErr(qtyOk ? '' : `Nhập số lượng từ 1 đến ${MAX_NEW_ITEM_QTY}`);
       return;
     }
     if (action === 'catalog') {
@@ -700,8 +714,8 @@ export default function Voice() {
           stockQuantity: null,
         });
         setProducts((cur) => [...cur, created]);
-        mergeItems([{ productId: created.id, name: created.name, price: created.sellingPriceVnd, qty: first.qty }]);
-        push('ai', `Đã thêm "${first.name}" (${vnd(price)}) vào danh mục và vào đơn.`, 'excited');
+        mergeItems([{ productId: created.id, name: created.name, price: created.sellingPriceVnd, qty }]);
+        push('ai', `Đã thêm ${qty} "${first.name}" (${vnd(price)}) vào danh mục và vào đơn.`, 'excited');
       } catch (e) {
         setPriceErr(`Không thêm được "${first.name}" vào danh mục: ${errorMessage(e)}`);
         return;
@@ -712,8 +726,10 @@ export default function Voice() {
       push('ai', `Đã bỏ qua "${first.name}".`);
     }
     setPriceErr('');
+    setQtyErr('');
     setPending(rest);
     setNewPrice(rest[0]?.price ? String(rest[0].price) : '');
+    setNewQty(String(rest[0]?.qty ?? 1));
     setNewUnit('cái');
   };
 
@@ -1234,7 +1250,22 @@ export default function Voice() {
               setPriceErr('');
             }}
           />
-          <Field label="Đơn vị" placeholder="VD: cái, ly, phần" value={newUnit} onChangeText={setNewUnit} />
+          <Row gap={10} style={{ alignItems: 'flex-start' }}>
+            <Field
+              label="Số lượng"
+              keyboardType="number-pad"
+              placeholder="VD: 2"
+              maxLength={String(MAX_NEW_ITEM_QTY).length}
+              value={newQty}
+              error={qtyErr || undefined}
+              onChangeText={(t) => {
+                setNewQty(t.replace(/\D/g, ''));
+                setQtyErr('');
+              }}
+              style={{ flex: 1 }}
+            />
+            <Field label="Đơn vị" placeholder="VD: cái, ly, phần" value={newUnit} onChangeText={setNewUnit} style={{ flex: 1 }} />
+          </Row>
         </View>
       </Dialog>
 
