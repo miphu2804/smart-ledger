@@ -9,6 +9,7 @@
  *  2. Khóa số lượng sau khi xác nhận:
  *     - Sau khi xác nhận, popup đóng lại và số lượng được KHÓA trong đơn hàng tạm.
  *     - Camera dù có quét lại sản phẩm đó thì cũng TỰ ĐỘNG BỎ QUA vì đã có trong đơn tempo.
+ *     - Món có theo dõi tồn mà đã hết hàng thì không vào đơn: màn quét báo "đã hết hàng"; số lượng chọn không vượt tồn.
  *  3. Chỉnh sửa số lượng:
  *     - Muốn thay đổi số lượng món nào, người dùng bấm vào sản phẩm đó trong đơn hàng tạm (Phần 2).
  *     - Popup mở lại với số lượng hiện tại để người dùng chỉnh sửa và xác nhận lại.
@@ -90,6 +91,13 @@ export interface BarcodeScannerModalProps {
   onClose: () => void;
   /** Danh mục để tra mã vạch. Không truyền thì màn quét tự tải từ Core mỗi lần mở (chế độ `order`). */
   products?: ProductView[];
+  /**
+   * Trạng thái của `products` do nơi gọi tự tải; bỏ trống nghĩa là đã sẵn sàng. Khi chưa sẵn sàng, mã không tra được
+   * sẽ không bị coi là món mới (không mời tạo món trùng).
+   */
+  productsStatus?: 'loading' | 'ready' | 'failed';
+  /** Tải lại `products` khi `productsStatus` là `failed`. */
+  onRetryProducts?: () => void;
   cartItems?: LineItem[];
   onAddToCart?: (product: ProductView, delta: number) => void;
   onClearCart?: () => void;
@@ -118,6 +126,8 @@ export function BarcodeScannerModal({
   visible,
   onClose,
   products: productsProp,
+  productsStatus,
+  onRetryProducts,
   cartItems: externalCartItems,
   onAddToCart,
   onClearCart,
@@ -159,6 +169,9 @@ export function BarcodeScannerModal({
   // State nội bộ khi dùng standalone (không truyền externalCartItems)
   const [internalItems, setInternalItems] = useState<LineItem[]>([]);
   const [unknownCode, setUnknownCode]     = useState<string | null>(null);
+  // Thông báo ngắn ngay trên khung ngắm (toast của app nằm dưới Modal nên không thấy được khi đang quét)
+  const [scanNotice, setScanNotice]       = useState<string | null>(null);
+  const noticeTimerRef                    = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // POPUP cấu hình số lượng & xác nhận sản phẩm
   const [popupProduct, setPopupProduct] = useState<ProductPopupData | null>(null);
@@ -207,11 +220,23 @@ export function BarcodeScannerModal({
       cancelled = true;
     };
   }, [visible, catalogSelfLoaded, catalogAttempt]);
-  const catalogReady = !catalogSelfLoaded || catalogState === 'ready';
+  // Danh mục do nơi gọi tải thì theo `productsStatus`; tự tải thì theo lần tải ở trên.
+  const catalogStatus = catalogSelfLoaded ? catalogState : productsStatus ?? 'ready';
+  const catalogReady = catalogStatus === 'ready';
   const retryCatalog = () => {
+    if (!catalogSelfLoaded) {
+      onRetryProducts?.();
+      return;
+    }
     setCatalogState('loading');
     setCatalogAttempt((attempt) => attempt + 1);
   };
+  useEffect(() => {
+    if (catalogSelfLoaded || productsStatus !== 'ready') return;
+    // Danh mục của nơi gọi vừa tải xong: mã quét trong lúc chờ đã bị bỏ qua, xoá biểu ngữ và cho phép quét lại ngay
+    setUnknownCode(null);
+    lastCodeRef.current = '';
+  }, [catalogSelfLoaded, productsStatus]);
   const products = productsProp ?? loadedProducts;
 
   // Danh mục tra cứu: sản phẩm thật của tiệm (Core, hoặc mockCore khi xem trước) và sản phẩm vừa tạo trong phiên quét.
@@ -222,6 +247,26 @@ export function BarcodeScannerModal({
   const displayItems = externalCartItems ?? internalItems;
   const totalCount   = displayItems.reduce((s, i) => s + i.qty, 0);
   const totalAmount  = displayItems.reduce((s, i) => s + i.price * i.qty, 0);
+
+  // Tồn còn bán được của một món: món không theo dõi tồn thì không giới hạn.
+  const stockLeft = (p: ProductView) => (p.tracked ? p.stockQuantity ?? 0 : Infinity);
+
+  const showScanNotice = (message: string) => {
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    setScanNotice(message);
+    noticeTimerRef.current = setTimeout(() => setScanNotice(null), 2600);
+  };
+  const clearScanNotice = () => {
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = null;
+    setScanNotice(null);
+  };
+  useEffect(() => {
+    if (!visible) clearScanNotice();
+    return () => {
+      if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    };
+  }, [visible]);
 
   // Cập nhật Bounding Box với timeout tự động ẩn khi không còn barcode trong khung hình
   const updateBbox = (box: BBox) => {
@@ -367,20 +412,23 @@ export function BarcodeScannerModal({
       return;
     }
 
-    const cleanCode = code.replace(/\D/g, '');
-    const found = catalog.find((p) => {
-      if (!p.barcode) return false;
-      const bClean = p.barcode.replace(/\D/g, '');
-      return p.barcode === code || bClean === cleanCode;
-    });
+    // So khớp chính xác từng ký tự: "ABC-123" và "123" là hai mã khác nhau.
+    const found = catalog.find((p) => p.barcode === code);
 
     if (found) {
       // KIỂM TRA ĐẶC BIỆT: Nếu sản phẩm ĐÃ CÓ trong đơn hàng tempo -> BỎ QUA HOÀN TOÀN!
-      const alreadyInCart = displayItems.some(
-        (i) => i.productId === found.id || i.name === found.name
-      );
+      // Đơn xác định món theo productId; hai món trùng tên vẫn là hai món khác nhau.
+      const alreadyInCart = displayItems.some((i) => i.productId === found.id);
       if (alreadyInCart) {
         // Đã có trong đơn hàng -> Bỏ qua, không tự động cộng dồn số lượng!
+        return;
+      }
+
+      // Món có theo dõi tồn mà đã hết: báo ngay trên màn quét, không mở thẻ chọn số lượng và không thêm vào đơn.
+      if (stockLeft(found) <= 0) {
+        triggerFeedback('warning');
+        setUnknownCode(null);
+        showScanNotice(`${found.name} đã hết hàng`);
         return;
       }
 
@@ -388,6 +436,7 @@ export function BarcodeScannerModal({
       playScanSuccessSound();
       triggerScanHaptic();
       setUnknownCode(null);
+      clearScanNotice();
 
       // HIỂN THỊ POPUP THÔNG BÁO ĐỂ CHỌN SỐ LƯỢNG VÀ XÁC NHẬN
       setPopupProduct({
@@ -398,6 +447,7 @@ export function BarcodeScannerModal({
       });
     } else {
       triggerFeedback('warning');
+      clearScanNotice();
       setUnknownCode(code);
     }
   };
@@ -412,9 +462,7 @@ export function BarcodeScannerModal({
 
     if (isExisting) {
       // Cập nhật lại số lượng của món đã có trong đơn hàng tạm
-      const existingItem = displayItems.find(
-        (i) => i.productId === product.id || i.name === product.name
-      );
+      const existingItem = displayItems.find((i) => i.productId === product.id);
       const oldQty = existingItem ? existingItem.qty : 0;
       const delta = safeQty - oldQty;
 
@@ -422,11 +470,7 @@ export function BarcodeScannerModal({
         onAddToCart(product, delta);
       } else {
         setInternalItems((cur) =>
-          cur.map((i) =>
-            i.productId === product.id || i.name === product.name
-              ? { ...i, qty: safeQty }
-              : i
-          )
+          cur.map((i) => (i.productId === product.id ? { ...i, qty: safeQty } : i))
         );
       }
     } else {
@@ -536,7 +580,7 @@ export function BarcodeScannerModal({
 
   // ── Khi bấm vào 1 sản phẩm trong đơn hàng tạm (Phần 2) để thay đổi số lượng ─
   const handleTapItemToEdit = (item: LineItem) => {
-    const product = catalog.find((p) => p.id === item.productId || p.name === item.name);
+    const product = catalog.find((p) => p.id === item.productId);
     if (!product) return;
 
     setPopupProduct({
@@ -707,7 +751,7 @@ export function BarcodeScannerModal({
             <Pressable
               onPress={() => {
                 if (catalogReady) handleOpenConfig(unknownCode);
-                else if (catalogState === 'failed') retryCatalog();
+                else if (catalogStatus === 'failed') retryCatalog();
               }}
               style={({ pressed }) => [S.unknownBanner, pressed && { opacity: 0.92 }]}
             >
@@ -719,20 +763,20 @@ export function BarcodeScannerModal({
                       <>
                         Mã <T w="bold" color={colors.primaryDeep}>{unknownCode}</T> chưa có
                       </>
-                    ) : catalogState === 'failed' ? (
+                    ) : catalogStatus === 'failed' ? (
                       'Không tải được danh mục sản phẩm'
                     ) : (
                       'Đang tải danh mục sản phẩm…'
                     )}
                   </T>
                   <T size={11.5} color={colors.muted}>
-                    {catalogReady ? 'Chạm để thêm mặt hàng' : catalogState === 'failed' ? 'Chạm để thử lại' : 'Quét lại sau giây lát'}
+                    {catalogReady ? 'Chạm để thêm mặt hàng' : catalogStatus === 'failed' ? 'Chạm để thử lại' : 'Quét lại sau giây lát'}
                   </T>
                 </View>
               </View>
 
               <View style={S.unknownBannerActions}>
-                {catalogReady || catalogState === 'failed' ? (
+                {catalogReady || catalogStatus === 'failed' ? (
                   <View style={S.configActionBtn}>
                     <T w="bold" size={12.5} color={colors.brandInk}>
                       {catalogReady ? 'Thêm' : 'Thử lại'}
@@ -753,6 +797,16 @@ export function BarcodeScannerModal({
                 </Pressable>
               </View>
             </Pressable>
+          )}
+
+          {/* ── Thông báo ngắn của lần quét vừa rồi (ví dụ món đã hết hàng) ── */}
+          {scanNotice && !unknownCode && !configModalCode && (
+            <View style={[S.unknownBanner, S.noticeBanner]} accessibilityRole="alert" accessibilityLiveRegion="polite">
+              <Feather name="alert-circle" size={16} color={colors.red} />
+              <T w="semibold" size={12.5} color={colors.ink} style={{ flex: 1 }} numberOfLines={2}>
+                {scanNotice}
+              </T>
+            </View>
           )}
         </View>
 
@@ -975,14 +1029,18 @@ export function BarcodeScannerModal({
                   </T>
                 </View>
 
+                {/* Không cho chọn quá số tồn của món có theo dõi tồn: Core sẽ từ chối đơn lúc thanh toán */}
                 <Pressable
                   onPress={() => {
                     setPopupProduct((prev) =>
-                      prev ? { ...prev, qty: prev.qty + 1 } : null
+                      prev && prev.qty + 1 <= stockLeft(prev.product) ? { ...prev, qty: prev.qty + 1 } : prev
                     );
                   }}
-                  style={S.popupStepBtn}
+                  disabled={popupProduct.qty + 1 > stockLeft(popupProduct.product)}
+                  style={[S.popupStepBtn, popupProduct.qty + 1 > stockLeft(popupProduct.product) && { opacity: 0.35 }]}
                   hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Tăng số lượng"
                 >
                   <Feather name="plus" size={16} color={colors.ink} />
                 </Pressable>
@@ -1344,6 +1402,10 @@ const S = StyleSheet.create({
   },
 
   // ─── BANNER MÃ CHƯA CÓ TRONG DANH MỤC ────────────────────────────────────
+  noticeBanner: {
+    justifyContent: 'flex-start',
+    gap: 10,
+  },
   unknownBanner: {
     position: 'absolute',
     bottom: 12,

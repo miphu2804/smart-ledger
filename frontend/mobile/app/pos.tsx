@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Image, Platform, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
@@ -546,6 +546,11 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
   const [confirmClear, setConfirmClear] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  // Nút "Quét mã" ở Tổng quan mở /pos?scan=1: vào thẳng màn quét, một lần cho mỗi lần mở màn Bán hàng.
+  const { scan } = useLocalSearchParams<{ scan?: string }>();
+  useEffect(() => {
+    if (scan === '1') setScannerOpen(true);
+  }, [scan]);
   const [cName, setCName] = useState('');
   const [cPrice, setCPrice] = useState('');
   const [cUnit, setCUnit] = useState('cái');
@@ -691,17 +696,6 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
     } finally {
       setCBusy(false);
     }
-  };
-
-  const handleBarcodeScanned = (product: ProductView) => {
-    const stock = product.stockQuantity ?? 0;
-    const inCart = cart[product.id] ?? 0;
-    if (product.tracked && stock <= inCart) {
-      toast(`${product.name} đã hết hàng`, 'err');
-      return;
-    }
-    addToCart(product.id, 1);
-    toast(`Đã thêm ${product.name}`);
   };
 
   return (
@@ -1004,6 +998,8 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
         visible={scannerOpen}
         onClose={() => setScannerOpen(false)}
         products={products}
+        productsStatus={products.length ? 'ready' : loading ? 'loading' : error ? 'failed' : 'ready'}
+        onRetryProducts={load}
         cartItems={cartItems}
         onAddToCart={(p, delta) => addToCart(p.id, delta)}
         onClearCart={() => setCart({})}

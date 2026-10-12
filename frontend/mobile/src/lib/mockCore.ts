@@ -496,6 +496,18 @@ function listProducts(): ProductView[] {
   return products.filter((p) => p.status === 'ACTIVE');
 }
 
+/** Như Core: bỏ khoảng trắng hai đầu, chuỗi rỗng nghĩa là không có mã. */
+function normalizeBarcode(raw: string | null | undefined): string | null {
+  return (raw ?? '').trim() || null;
+}
+
+/** Mã vạch là duy nhất trong tiệm, tính cả sản phẩm đã ẩn (hợp đồng Core hiện tại); trùng thì 409 như Core. */
+function assertBarcodeFree(barcode: string | null, exceptId?: number): void {
+  if (barcode && products.some((p) => p.id !== exceptId && p.barcode === barcode)) {
+    throw apiErr(409, 'product_barcode_conflict', 'This barcode is already used by another product.');
+  }
+}
+
 function createProduct(body: ProductWriteBody): ProductView {
   if (body.imageUrl) {
     throw apiErr(400, 'product_image_url_unsupported', 'Product images are uploaded through the image endpoint.');
@@ -509,13 +521,15 @@ function createProduct(body: ProductWriteBody): ProductView {
   if (body.lowStockThreshold != null && body.lowStockThreshold < 0) {
     throw apiErr(400, 'validation_failed', 'lowStockThreshold must be 0 or more.');
   }
+  const barcode = normalizeBarcode(body.barcode);
+  assertBarcodeFree(barcode);
   const now = nowIso();
   const product: ProductView = {
     id: nextProductId++,
     shopId: SHOP_ID,
     categoryId: body.categoryId ?? null,
     name: body.name,
-    barcode: body.barcode ?? null,
+    barcode,
     imageUrl: null,
     unit: body.unit,
     sellingPriceVnd: body.sellingPriceVnd,
@@ -549,9 +563,13 @@ function updateProduct(id: number, body: ProductPatchBody): ProductView {
   if (body.lowStockThreshold != null && body.lowStockThreshold < 0) {
     throw apiErr(400, 'validation_failed', 'lowStockThreshold must be 0 or more.');
   }
+  // Chỉ kiểm tra khi mã thật sự đổi: giữ nguyên mã của chính món đang sửa là hợp lệ
+  if (body.barcode !== undefined && normalizeBarcode(body.barcode) !== product.barcode) {
+    assertBarcodeFree(normalizeBarcode(body.barcode), product.id);
+  }
   if (body.categoryId !== undefined) product.categoryId = body.categoryId;
   if (body.name !== undefined) product.name = body.name;
-  if (body.barcode !== undefined) product.barcode = body.barcode;
+  if (body.barcode !== undefined) product.barcode = normalizeBarcode(body.barcode);
   if (body.unit !== undefined) product.unit = body.unit;
   if (body.sellingPriceVnd !== undefined) product.sellingPriceVnd = body.sellingPriceVnd;
   if (body.costPriceVnd !== undefined) product.costPriceVnd = body.costPriceVnd;
