@@ -1,5 +1,5 @@
 import type { CategoryView, ProductView } from '../data/types';
-import { apiRequest } from './api';
+import { apiRequest, type UploadImage } from './api';
 import { fetchAllPages } from './pageApi';
 import { createIdempotentSender } from './idempotency';
 
@@ -9,6 +9,9 @@ import { createIdempotentSender } from './idempotency';
  */
 
 const stockInSender = createIdempotentSender();
+const imageSender = createIdempotentSender();
+/** Upload ảnh qua mạng di động chậm hơn các lời gọi JSON nên chờ lâu hơn mặc định */
+const IMAGE_UPLOAD_TIMEOUT_MS = 60000;
 
 export interface CategoryWriteRequest {
   name: string;
@@ -80,6 +83,22 @@ export const productApi = {
     stockInSender.send({ productId: id, ...input }, (idempotencyKey) =>
       apiRequest<ProductView>(`/products/${id}/stock-in`, { method: 'POST', body: input, withShop: true, idempotencyKey }),
     ),
+  /**
+   * POST /products/{id}/image — đặt ảnh cho mặt hàng (JPEG/PNG, tối đa 5 MiB, mỗi cạnh ≤ 2048 px). Gửi lại cùng ảnh sau
+   * lỗi mạng dùng lại Idempotency-Key cũ; Core trả mặt hàng kèm `imageUrl` mới.
+   */
+  uploadImage: (id: number, image: UploadImage): Promise<ProductView> =>
+    imageSender.send({ productId: id, uri: image.uri }, (idempotencyKey) =>
+      apiRequest<ProductView>(`/products/${id}/image`, {
+        method: 'POST',
+        image,
+        withShop: true,
+        idempotencyKey,
+        timeoutMs: IMAGE_UPLOAD_TIMEOUT_MS,
+      }),
+    ),
+  /** DELETE /products/{id}/image — bỏ ảnh riêng của mặt hàng; chưa có ảnh thì Core vẫn trả 204 */
+  deleteImage: (id: number): Promise<void> => apiRequest<void>(`/products/${id}/image`, { method: 'DELETE', withShop: true }),
   /** DELETE — archive */
   archive: (id: number): Promise<void> => apiRequest<void>(`/products/${id}`, { method: 'DELETE', withShop: true }),
 };
