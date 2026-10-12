@@ -6,13 +6,10 @@ from pydantic_ai.models.function import FunctionModel
 from tests.support import ScriptedModel, tool_call, transcript
 
 from src.agent.guardrails import GuardrailError, GuardrailLimits
-from src.agent.guardrails.answer_screen import (
-    EMPTY_ANSWER_RETRY,
-    LEAK_RETRY,
-    screened_prefix,
-)
-from src.agent.guardrails.input_redaction import redact_input
-from src.agent.guardrails.tool_call_limit import TOOL_LIMIT_NOTICE
+from src.agent.guardrails.answer_leak_screen import AnswerLeakScreen
+from src.agent.guardrails.empty_answer_check import EmptyAnswerCheck
+from src.agent.guardrails.personal_data_redaction import PersonalDataRedaction
+from src.agent.guardrails.tool_call_limit import ToolCallLimit
 from src.agent.service import AgentService
 
 pytestmark = pytest.mark.anyio
@@ -119,22 +116,30 @@ async def test_secrets_are_redacted_before_the_model_and_in_history() -> None:
     for secret in (API_KEY, JWT, BEARER):
         assert secret not in sent
         assert secret not in conversations.saved_exchange["user_message"]
-    assert "[REDACTED_API_KEY]" in sent
+    for placeholder in ("openai_key", "jwt", "bearer_token"):
+        assert f"[redacted:{placeholder}]" in sent
 
 
-async def test_card_numbers_are_masked_before_the_model() -> None:
+async def test_card_numbers_are_redacted_before_the_model() -> None:
     model = ScriptedModel("ok")
 
     await service(model).chat(user_id=3, shop_id=15, message=f"my card is {CARD}")
 
-    assert sent_prompt(model) == "my card is **** **** **** 1111"
+    assert sent_prompt(model) == "my card is [redacted:credit_card]"
 
 
-def test_only_card_numbers_that_pass_the_luhn_check_are_masked() -> None:
-    assert redact_input("card 4111-1111-1111-1111") == "card ****-****-****-1111"
-    assert redact_input("card 4111111111111111") == "card ************1111"
+def test_only_card_numbers_that_pass_the_luhn_check_are_redacted() -> None:
+    redact = PersonalDataRedaction.redact
+    assert redact("card 4111-1111-1111-1111") == "card [redacted:credit_card]"
+    assert redact("card 4111111111111111") == "card [redacted:credit_card]"
+    # A fifteen-digit Amex number is a card too.
+    assert redact("amex 3782 822463 10005") == "amex [redacted:credit_card]"
     # One digit off fails the checksum, so an order code of the same shape stays.
-    assert redact_input("order 4111 1111 1111 1112") == "order 4111 1111 1111 1112"
+    assert redact("order 4111 1111 1111 1112") == "order 4111 1111 1111 1112"
+
+
+def test_emails_are_redacted() -> None:
+    assert PersonalDataRedaction.redact("mail a@b.vn") == "mail [redacted:email]"
 
 
 async def test_shop_phone_in_tool_results_is_not_redacted() -> None:
@@ -175,7 +180,7 @@ async def test_answers_that_leak_internals_are_sent_back_to_the_model(
         user_id=3, shop_id=15, message="m"
     )
 
-    assert LEAK_RETRY in transcript(model.requests[1][0])[-1][1]
+    assert AnswerLeakScreen.RETRY in transcript(model.requests[1][0])[-1][1]
     assert result.answer == "Rice sells for 30.000 VND/kg."
     assert conversations.saved_exchange["assistant_message"] == result.answer
 
@@ -185,7 +190,7 @@ async def test_blank_answer_is_sent_back_to_the_model() -> None:
 
     result = await service(model).chat(user_id=3, shop_id=15, message="m")
 
-    assert EMPTY_ANSWER_RETRY in transcript(model.requests[1][0])[-1][1]
+    assert EmptyAnswerCheck.RETRY in transcript(model.requests[1][0])[-1][1]
     assert result.answer == "ok"
 
 
@@ -242,7 +247,7 @@ async def test_calls_over_the_tool_limit_are_refused_and_the_model_answers() -> 
 
     assert executor.calls == TOOL_CALL_LIMIT
     assert any(
-        TOOL_LIMIT_NOTICE in text for _, text in transcript(model.requests[-1][0])
+        ToolCallLimit.NOTICE in text for _, text in transcript(model.requests[-1][0])
     )
     assert model.tool_names(request=2) == []
     assert result.answer == "answer from three results"
@@ -305,18 +310,18 @@ SAFE_TEXT = "Rice stock is fine this week, nothing to restock yet. "
 def test_screened_prefix_releases_all_but_the_held_tail() -> None:
     text = SAFE_TEXT * 2
 
-    assert screened_prefix(text) == text[:-HOLD]
+    assert AnswerLeakScreen.screened_prefix(text) == text[:-HOLD]
 
 
 def test_screened_prefix_of_a_short_text_holds_everything() -> None:
-    assert screened_prefix("Rice sells for 30k.") == ""
+    assert AnswerLeakScreen.screened_prefix("Rice sells for 30k.") == ""
 
 
 @pytest.mark.parametrize("partial", ["v_prod", "smartledger.shop_", "ai_read"])
 def test_screened_prefix_holds_a_partial_leak_at_the_end(partial: str) -> None:
     text = SAFE_TEXT + partial
 
-    released = screened_prefix(text)
+    released = AnswerLeakScreen.screened_prefix(text)
 
     assert released == text[:-HOLD]
     assert partial in text[len(released) :]
@@ -325,20 +330,29 @@ def test_screened_prefix_holds_a_partial_leak_at_the_end(partial: str) -> None:
 def test_screened_prefix_holds_everything_after_a_pending_select() -> None:
     text = SAFE_TEXT + "Please select the shop for the day"
 
-    assert screened_prefix(text) == text[: text.index("select")]
+    assert AnswerLeakScreen.screened_prefix(text) == text[: text.index("select")]
 
 
 def test_screened_prefix_releases_a_select_with_no_from_in_reach() -> None:
     text = "Please select a shop. " + SAFE_TEXT * 12
 
-    assert screened_prefix(text) == text[:-HOLD]
+    assert AnswerLeakScreen.screened_prefix(text) == text[:-HOLD]
 
 
 def test_screened_prefix_stops_before_a_complete_leak() -> None:
-    assert screened_prefix("Here it is: SELECT name FROM v_products") == "Here it is: "
-    assert screened_prefix("The data is in ai_read.v_products now") == "The data is in "
+    assert (
+        AnswerLeakScreen.screened_prefix("Here it is: SELECT name FROM v_products")
+        == "Here it is: "
+    )
+    assert (
+        AnswerLeakScreen.screened_prefix("The data is in ai_read.v_products now")
+        == "The data is in "
+    )
 
 
 def test_screened_prefix_holds_a_pending_select_before_a_later_leak() -> None:
-    assert screened_prefix("Here: SELECT v_sales.total ") == "Here: "
-    assert screened_prefix("Here: SELECT v_sales.total FROM v_sales") == "Here: "
+    assert AnswerLeakScreen.screened_prefix("Here: SELECT v_sales.total ") == "Here: "
+    assert (
+        AnswerLeakScreen.screened_prefix("Here: SELECT v_sales.total FROM v_sales")
+        == "Here: "
+    )
