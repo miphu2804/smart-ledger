@@ -1,5 +1,6 @@
 package com.smartledger.core.dto.request;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -14,7 +15,8 @@ public record ProductWriteRequest(
         @NotBlank(message = "must not be blank")
         @Size(max = 255, message = "must not exceed 255 characters")
         String name,
-        @Size(max = 100, message = "must not exceed 100 characters")
+        @Schema(description = "Trimmed before validation; blank becomes null. At most 100 characters after trim, "
+                + "no internal whitespace or control characters. Case and punctuation are preserved.")
         String barcode,
         @Size(max = 1000, message = "must not exceed 1000 characters")
         String imageUrl,

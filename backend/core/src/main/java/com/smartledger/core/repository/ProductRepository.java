@@ -17,6 +17,10 @@ public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpec
 
     Optional<Product> findByIdAndShopIdAndStatus(Long id, Long shopId, CatalogStatus status);
 
+    /** Exact, case-sensitive lookup scoped to one shop and status; never scans the catalog in Java. */
+    Optional<Product> findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(
+            Long shopId, String barcode, CatalogStatus status);
+
     /**
      * Reads the matching catalog group without locking or guaranteeing result order.
      * Callers skip empty groups and validate missing IDs in request order, not by result count.

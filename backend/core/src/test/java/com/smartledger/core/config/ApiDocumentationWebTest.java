@@ -134,6 +134,26 @@ class ApiDocumentationWebTest {
         }
 
         @Test
+        void barcodeLookupDocumentsRequiredExactCodeActiveScopeAndErrors() throws Exception {
+            JsonNode api = mapper.readTree(mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString());
+            JsonNode lookup = api.path("paths").path("/api/v1/products/lookup").path("get");
+            assertThat(parameter(lookup, "barcode").path("required").asBoolean()).isTrue();
+            assertThat(parameter(lookup, "barcode").path("in").asText()).isEqualTo("query");
+            assertThat(parameter(lookup, "X-Shop-Id").path("required").asBoolean()).isTrue();
+            assertThat(lookup.path("description").asText()).contains("ACTIVE", "trim", "100", "404");
+            assertThat(lookup.path("security").toString()).contains("bearerAuth");
+            for (String code : List.of("200", "400", "401", "403", "404")) {
+                assertThat(lookup.path("responses").has(code)).as("Lookup response " + code).isTrue();
+            }
+            for (String schema : List.of("ProductWriteRequest", "ProductPatchRequest")) {
+                assertThat(api.path("components").path("schemas").path(schema).path("properties")
+                        .path("barcode").path("description").asText()).contains("100", "trim");
+            }
+            verifyNoInteractions(products);
+        }
+
+        @Test
         void productSchemasSeparateInitialStockFromPatchAndDocumentStockIn() throws Exception {
             mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
                     .andExpect(jsonPath("$.paths['/api/v1/products/{productId}/stock-in'].post.responses['200']").exists())

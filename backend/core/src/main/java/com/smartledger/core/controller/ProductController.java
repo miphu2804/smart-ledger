@@ -8,6 +8,7 @@ import com.smartledger.core.dto.request.ProductStockInRequest;
 import com.smartledger.core.dto.request.ProductWriteRequest;
 import com.smartledger.core.dto.response.PageResponse;
 import com.smartledger.core.dto.response.ProductResponse;
+import com.smartledger.core.exception.ApiErrorResponse;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.MediaService;
 import com.smartledger.core.service.ProductService;
@@ -78,6 +79,29 @@ public class ProductController {
             @RequestParam(required = false) StockStatus stockStatus,
             @RequestParam(required = false) ProductSort sort) {
         return productService.list(firebaseToken, shopId, new Products(page, size, q, categoryId, stockStatus, sort));
+    }
+
+    @GetMapping("/lookup")
+    @Operation(summary = "Look up an active product by exact barcode in the selected shop",
+            description = "Requires an active OWNER and their ACTIVE shop. Barcode is required and trimmed; "
+                    + "1-100 characters after trim, no internal whitespace or control characters. "
+                    + "Case, letters and punctuation are preserved. No partial matching; archived, missing "
+                    + "or other-shop products return 404. Archive does not yet release a barcode for creation.")
+    @ApiResponse(responseCode = "200", description = "Active product matching the exact barcode",
+            content = @Content(schema = @Schema(implementation = ProductResponse.class)))
+    @ApiResponse(responseCode = "400", description = "validation_failed with details.field=barcode",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token")
+    @ApiResponse(responseCode = "403", description = "OWNER or active-shop access denied")
+    @ApiResponse(responseCode = "404", description = "product_not_found (or unavailable profile/shop)",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    public ProductResponse lookup(
+            @AuthenticationPrincipal VerifiedFirebaseToken firebaseToken,
+            @RequestHeader("X-Shop-Id") String shopId,
+            @Parameter(required = true, description = "Exact, case-sensitive barcode after trim", example = "ABC-123")
+            @RequestParam(required = false) String barcode) {
+        // Missing and blank codes share service validation, after the same shop authorization as list.
+        return productService.lookup(firebaseToken, shopId, barcode);
     }
 
     @GetMapping("/{productId}")

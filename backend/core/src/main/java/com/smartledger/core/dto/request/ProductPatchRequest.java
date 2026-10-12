@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonSetter;
 import com.fasterxml.jackson.annotation.Nulls;
 import com.fasterxml.jackson.core.JsonLocation;
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
@@ -30,7 +31,8 @@ public class ProductPatchRequest {
     @Size(max = 255)
     private String name;
 
-    @Size(max = 100)
+    @Schema(description = "Omit to preserve the barcode; null or blank clears it. Trimmed before validation; "
+            + "at most 100 characters after trim, no internal whitespace or control characters, case-sensitive.")
     private String barcode;
 
     @Size(max = 1000)

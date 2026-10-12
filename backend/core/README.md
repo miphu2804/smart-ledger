@@ -158,6 +158,22 @@ $env:CORE_TEST_POSTGRES_PASSWORD = 'test_password'
 
 The test creates and removes only a randomly named `core_void_test_*` schema, requires permission to create schemas, and does not run Flyway. It uses real business services and transactions, with auth/idempotency stubbed. Without `CORE_TEST_POSTGRES_URL`, PostgreSQL suites are skipped; unit/web tests still run normally.
 
+### Exact product barcode lookup (CORE-012.2 / #163)
+
+`GET /api/v1/products/lookup?barcode=ABC-123` returns one `ProductResponse`, not a page. It requires a valid bearer token and `X-Shop-Id`, an active OWNER, and an ACTIVE shop belonging to that OWNER. The repository performs an exact, case-sensitive shop/barcode/ACTIVE lookup with a one-row limit; it does not load the product list. The existing `(shop_id, barcode)` unique index supports the lookup.
+
+Create, PATCH and lookup share normalization: trim leading/trailing whitespace (including Unicode spaces and scanner CR/LF/TAB suffixes); preserve case, letters, digits and punctuation; reject internal whitespace, non-whitespace control characters and more than 100 characters **after trim** with `400 validation_failed` and `details[].field = barcode`. Lookup requires a nonblank code; create accepts null/blank as no barcode. PATCH omission preserves the stored value, including legacy values; explicit null/blank clears it. Legacy values are not bulk-normalized by this change.
+
+Missing, foreign-shop or ARCHIVED products return `404 product_not_found`. Invalid shop/role/account access is checked before querying Products. **Archive still reserves the barcode for create/PATCH under the current DB constraint**: changing uniqueness to ACTIVE-only belongs to #164, needs a separately approved migration, and is not part of #163. No migration, Redis cache or mobile change is introduced here. The shared API contract and product FR/AC updates outside Core remain pending approval; this Core implementation is not integrated mobile/staging acceptance.
+
+To run focused service, HTTP binding/routing, OpenAPI and real PostgreSQL tests, set the three `CORE_TEST_POSTGRES_*` variables above to a **disposable** database, then run:
+
+```powershell
+.\mvnw.cmd '-Dtest=ProductServiceTest,CatalogControllerWebTest,ProductBarcodeWebTest,ProductBarcodePostgresTest,ApiDocumentationWebTest' test
+```
+
+`ProductBarcodePostgresTest` uses the existing migrations in a randomly named `core_barcode_test_*` schema and removes only that schema afterwards. It checks exact/case-sensitive matching, archived/foreign isolation, real OWNER/ADMIN/disabled-account permissions, persisted normalization and one Product query with 20,000 synthetic products. It explains Hibernate's actual lookup SQL with its bindings and records local timings without asserting a production latency SLA. Without `CORE_TEST_POSTGRES_URL`, PostgreSQL tests are skipped, not passed.
+
 ### OWNER list pagination (CORE-011)
 
 [CORE-011 #153](https://github.com/miphu2804/smart-ledger/issues/153) changes the existing six OWNER GET lists (`products`, `sales`, `sale-drafts`, `customers`, `debts`, `expenses`) from arrays to `PageResponse<T>`, even without query parameters. There is no `/page` route or full-array fallback. See the canonical [pagination contract](../../docs/contracts/api-contracts.md#phân-trang-danh-sách-owner) for the exact filters, sorting and errors. Detail/write/report contracts are unchanged; no schema/index migration or Redis cache is added.
