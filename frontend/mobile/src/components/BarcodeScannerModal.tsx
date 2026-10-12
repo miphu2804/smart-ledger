@@ -141,6 +141,10 @@ export function BarcodeScannerModal({
 
   // Scan throttle & timer
   const lastCodeRef      = useRef('');
+  // Vòng quét của web chạy trong setInterval tạo một lần khi mở màn: nó phải gọi qua ref để luôn dùng danh mục và
+  // trạng thái thẻ mới nhất, không phải bản của lần vẽ lúc mở (khi danh mục còn rỗng).
+  const handleCodeRef    = useRef<(raw: string) => void>(() => {});
+  const scanPausedRef    = useRef(false);
   const lastTimeRef      = useRef(0);
   const bboxTimerRef     = useRef<any>(null);
 
@@ -301,7 +305,7 @@ export function BarcodeScannerModal({
   const startScanLoop = () => {
     clearInterval(intervalRef.current);
     intervalRef.current = setInterval(async () => {
-      if (!videoRef.current || videoRef.current.readyState < 2 || popupProduct || configModalCode) return;
+      if (!videoRef.current || videoRef.current.readyState < 2 || scanPausedRef.current) return;
       try {
         const r = await detectBarcodeFromSource(videoRef.current);
         if (r?.rawValue) {
@@ -330,7 +334,7 @@ export function BarcodeScannerModal({
               height: r.boundingBox.height * scale,
             });
           }
-          handleCode(r.rawValue);
+          handleCodeRef.current(r.rawValue);
         }
       } catch { /* continue scanning */ }
     }, 180);
@@ -397,6 +401,8 @@ export function BarcodeScannerModal({
       setUnknownCode(code);
     }
   };
+  handleCodeRef.current = handleCode;
+  scanPausedRef.current = !!popupProduct || !!configModalCode;
 
   // ── Xác nhận số lượng từ popup (Khoá số lượng và lưu vào đơn) ────────────
   const handleConfirmPopup = () => {
