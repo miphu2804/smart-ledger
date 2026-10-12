@@ -1,3 +1,13 @@
+### [2026-10-12] — [Fix] Barcode control padding review on PR #171
+
+**Done:** Fixed the approved CodeRabbit finding in shared barcode normalization. Non-scanner ISO control characters are no longer trimmed at either boundary. Kept the newest-first progress convention from CONTRIBUTING.md and replied to/resolved the request to move entries to the bottom; all previous entries from staging and the feature branch remain unchanged.
+
+**Changed files:** Core ProductServiceImpl and ProductServiceTest/ProductBarcodeWebTest/ProductBarcodePostgresTest; this new progress entry only. No FE/AI, migration, JavaDoc coverage configuration or other documentation changes.
+
+**Flow explained:** Create/PATCH/lookup reject U+000B, U+000C and U+001C–U+001F at either boundary, alone or surrounded by valid scanner padding, with barcode validation details. Invalid PATCH cannot clear an existing barcode or change the Product name; invalid writes produce no save/audit/notification. Unicode boundary spaces and TAB/CR/LF scanner padding remain accepted; exact matching and the 100-code-point limit are unchanged.
+
+**Check:** Regression tests reproduced 20 failures on the old implementation. After the fix, focused service/HTTP/PostgreSQL tests: **128 passed**. Full clean verify against dedicated disposable PostgreSQL 16: **982 tests, 0 failures, 0 errors, 0 skipped**, BUILD SUCCESS (4:44); Maven summary and actual XML testcase entries agree. Includes migration/index/concurrency/rollback regressions. Barcode lookup with 20,000 synthetic Products still uses one Product query (local median 6.78 ms, diagnostic only). git diff --check passes; no business local/staging/production DB was used. CI/re-review on the pushed commit and real scanner/FE/staging UAT remain separate checks.
+
 ### [2026-10-12] — [Fix] Unicode barcode length and CORE-012 push preparation
 
 **Done:** Fixed the shared barcode limit to count Unicode code points after trim, not UTF-16 code units, and prepared the previously approved #164/V16/docs work for `feat/core-barcode`. No real local/staging/production migration or FE changes.

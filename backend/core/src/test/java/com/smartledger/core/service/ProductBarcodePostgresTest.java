@@ -183,6 +183,28 @@ class ProductBarcodePostgresTest {
         assertThat(jdbc.queryForObject("select count(*) from products where shop_id=?", Long.class, shopId)).isEqualTo(1L);
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {0x000B, 0x000C, 0x001C, 0x001D, 0x001E, 0x001F})
+    void nonScannerControlsCannotCreateMatchOrClearAnExistingBarcode(int codePoint) {
+        long original = product(shopId, "ABC");
+        clear();
+        String control = Character.toString(codePoint);
+        ProductPatchRequest patch = new ProductPatchRequest();
+        patch.setName("Must not change");
+
+        for (String invalid : List.of(control + "ABC", "ABC" + control, control,
+                "\t " + control + "ABC\r\n")) {
+            assertError(() -> products.create(owner, shop(), request(invalid)), ErrorCode.INVALID_PRODUCT_BARCODE);
+            patch.setBarcode(invalid);
+            assertError(() -> products.patch(owner, shop(), Long.toString(original), patch), ErrorCode.INVALID_PRODUCT_BARCODE);
+            assertError(() -> products.lookup(owner, shop(), invalid), ErrorCode.INVALID_PRODUCT_BARCODE);
+        }
+        clear();
+        assertThat(jdbc.queryForObject("select barcode from products where id=?", String.class, original)).isEqualTo("ABC");
+        assertThat(jdbc.queryForObject("select name from products where id=?", String.class, original)).isEqualTo("Coffee");
+        assertThat(jdbc.queryForObject("select count(*) from products where shop_id=?", Long.class, shopId)).isEqualTo(1L);
+    }
+
     @Test
     void activeConflictReturnsSameShopDetailsWithOneProductReadAndNoWrite() {
         long existing = product(shopId, "TAKEN");

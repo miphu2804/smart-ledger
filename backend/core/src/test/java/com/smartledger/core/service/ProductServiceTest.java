@@ -219,8 +219,12 @@ class ProductServiceTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"ABC 123", "ABC\t123", "ABC\n123", "ABC\r123", "ABC\u0000123",
-            "ABC\u007f123", "ABC\u0085123", "ABC\u00a0123", "ABC\u2003123", "\u0000ABC", "ABC\u007f"})
-    void createPatchAndLookupRejectInternalWhitespaceAndControlCharacters(String raw) {
+            "ABC\u007f123", "ABC\u0085123", "ABC\u00a0123", "ABC\u2003123", "\u0000ABC", "ABC\u007f",
+            "\u000BABC", "ABC\u000B", "\u000B", "\u000CABC", "ABC\u000C", "\u000C",
+            "\u001CABC", "ABC\u001C", "\u001C", "\u001DABC", "ABC\u001D", "\u001D",
+            "\u001EABC", "ABC\u001E", "\u001E", "\u001FABC", "ABC\u001F", "\u001F",
+            "\tABC\u001D \r\n", "\r\n \u001DABC\t"})
+    void createPatchAndLookupRejectInternalWhitespaceAndNonScannerControlCharacters(String raw) {
         Product product = product();
         when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
                 .thenReturn(Optional.of(product));

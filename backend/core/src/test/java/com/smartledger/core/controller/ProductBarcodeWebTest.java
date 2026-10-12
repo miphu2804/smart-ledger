@@ -147,6 +147,38 @@ class ProductBarcodeWebTest {
         }
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {0x000B, 0x000C, 0x001C, 0x001D, 0x001E, 0x001F})
+    void allThreeOperationsRejectNonScannerControlsAtBoundariesWithoutWrites(int codePoint) throws Exception {
+        String control = Character.toString(codePoint);
+        Product original = product("OLD");
+        when(products.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+                .thenReturn(Optional.of(original));
+
+        for (String invalid : java.util.List.of(control + "ABC", "ABC" + control, control,
+                "\t " + control + "ABC\r\n")) {
+            mvc.perform(post("/api/v1/products").header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7")
+                            .contentType(MediaType.APPLICATION_JSON).content(createBody(invalid)))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("validation_failed"))
+                    .andExpect(jsonPath("$.details[0].field").value("barcode"));
+            mvc.perform(patch("/api/v1/products/3").header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(mapper.writeValueAsString(Map.of("barcode", invalid, "name", "Must not change"))))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("validation_failed"))
+                    .andExpect(jsonPath("$.details[0].field").value("barcode"));
+            mvc.perform(get("/api/v1/products/lookup").param("barcode", invalid)
+                            .header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7"))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("validation_failed"))
+                    .andExpect(jsonPath("$.details[0].field").value("barcode"));
+        }
+        org.assertj.core.api.Assertions.assertThat(original.getBarcode()).isEqualTo("OLD");
+        org.assertj.core.api.Assertions.assertThat(original.getName()).isEqualTo("Coffee");
+        verify(products, never()).save(any());
+        verify(products, never()).findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(any(), any(), any());
+        verify(products, never()).findFirstByShopIdAndBarcodeAndStatusAndIdNotOrderByIdDesc(any(), any(), any(), any());
+        org.mockito.Mockito.verifyNoInteractions(audit, notifications);
+    }
+
     @Test
     void lookupRejectsOverlongCodeBeforeReadingProducts() throws Exception {
         mvc.perform(get("/api/v1/products/lookup").param("barcode", "A".repeat(101))

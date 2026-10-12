@@ -291,6 +291,9 @@ public class ProductServiceImpl implements ProductService {
     }
 
     private boolean isBarcodePadding(char character) {
+        if (Character.isISOControl(character)) {
+            return character == '\t' || character == '\n' || character == '\r';
+        }
         return Character.isWhitespace(character) || Character.isSpaceChar(character);
     }
 
