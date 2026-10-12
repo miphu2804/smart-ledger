@@ -229,7 +229,7 @@ export default function Home() {
                     tone="danger"
                     title="Kiểm tra hàng sắp hết"
                     subtitle={lowStock.slice(0, 2).map((product) => `${product.name} còn ${product.stock}`).join(' · ')}
-                    onPress={() => router.push('/products')}
+                    onPress={() => router.push({ pathname: '/products', params: { tab: 'low' } })}
                     last
                   />
                 ) : null}

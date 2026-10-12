@@ -1,3 +1,23 @@
+### [2026-10-12 15:20 UTC+07:00] — [Feature] Products: stock-in button on each row and a short stock-in sheet
+
+**Done:** Adding stock took many steps: open a product, scroll to the bottom of the edit form, open "Nhập hàng", type, confirm. Each stock-tracked row of the Products list now has its own "Nhập hàng" button that opens a short sheet with the product name, the current stock, a quantity field that is focused right away, a preview of the stock after the entry, an optional reason and "Nhập vào kho". The Home row "Kiểm tra hàng sắp hết" now opens the Products screen on its "Sắp hết" tab, so restocking is: tap that row, tap "Nhập hàng", type the quantity, confirm. The stock-in section inside the edit form is still there.
+
+**Changed files:** `frontend/mobile/app/products.tsx`, `frontend/mobile/app/(tabs)/index.tsx`, and this entry.
+
+**Flow explained:** `StockInFields` holds the quantity/reason fields, the validation and the `productApi.stockIn` call, and is used by both the new sheet and the edit form (which no longer keeps its own copy of that state). After a quick stock-in the row is replaced with the product Core returns, without reloading the list, and a toast shows the new stock. `products.tsx` reads the `tab` route param once (`tab=low`). Untracked products keep the chevron and have no stock-in button.
+
+**Check:** `tsc --noEmit` clean. Web build in headless Chrome, mock mode, 9 checks: Home "Kiểm tra hàng sắp hết" lands on `/products?tab=low` showing only products that need restocking; the row button opens the sheet with the product name and current stock and the quantity field focused; quantity 0 shows the validation error; typing 24 previews "Tồn sau khi nhập: 30"; confirming closes the sheet, shows "Đã nhập 24 cái · tồn mới 30" and the row shows the new stock; an untracked product has no button; stock-in from the edit form still updates "Tồn kho hiện tại" (36 after 6 more). **Not verified:** a real phone (keyboard over the sheet on Android and iOS), a real Core, and rows with very long names on narrow screens.
+
+### [2026-10-12 15:20 UTC+07:00] — [Fix] Email sign-in: a failed sign-in no longer reads as "no account yet"
+
+**Done:** When an email sign-in did not match, the screen only showed a grey sentence that led with "Nếu chưa có tài khoản, hãy tạo tài khoản", so a wrong password with a correct email looked like "this account does not exist". The password field now shows the error "Email hoặc mật khẩu chưa đúng" in red, and the line under it starts with the likely case: check the password, reset it if forgotten, and only then the option to create an account. Firebase returns one error for both a wrong password and an unknown email (email enumeration protection), so the app still cannot say which of the two happened.
+
+**Changed files:** `frontend/mobile/app/(auth)/email.tsx` and this entry.
+
+**Flow explained:** On `invalid-credentials` in login mode, `submit` now sets the field error (`errorMessage(e)`) in addition to the hint flag instead of returning before it. The hint keeps its two inline links (`switchMode('reset')`, `switchMode('register')`) in the new order. Editing either field still clears both.
+
+**Check:** `tsc --noEmit` clean. Web build in headless Chrome, mock mode, 6 checks: a failed sign-in shows the red error under the password field and the new hint; the old sentence is gone; editing the password hides both; "đặt lại mật khẩu" opens the reset mode with the email kept; "tạo tài khoản" switches to registration. **Not verified:** real Firebase (the mock has no email accounts, so every sign-in takes the same not-matching branch), and a real phone.
+
 ### [2026-10-12 14:25 UTC+07:00] — [Fix] Barcode scan flow: exact code match, cart by product id, scan from Home through Sales, stock check
 
 **Done:** The remaining defects of the mobile scan flow listed in #162 (CORE-012.1). (1) A scanned code now matches a product only when the barcode is identical character for character; stripping non-digits made "ABC-123" and "123" the same code. (2) The scanner's temporary order identifies items by `productId` only, so two products with the same name are no longer treated as one. (3) The "Quét mã" buttons on Home open the Sales screen with the scanner (`/pos?scan=1`) instead of a second scanner on Home; the scanned item now really lands in the Sales cart (the old `autoAdd` param was never read). (4) A stock-tracked product that is out of stock is not added: the scanner shows "… đã hết hàng" over the viewfinder, and the quantity stepper stops at the available stock. The unused `handleBarcodeScanned` in `pos.tsx` is removed. The fake-product fallback from the same issue was already removed in #160.
