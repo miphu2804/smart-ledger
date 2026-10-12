@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { ADMIN_ENABLED } from '../../config'
 import Logo, { LogoMark } from '../../components/Logo'
 import { useReveal } from '../../hooks/useReveal'
 import '../../styles/landing.css'
@@ -68,9 +69,11 @@ function Nav() {
           ))}
         </nav>
         <div className="lp-nav-actions">
-          <Link to="/admin/login" className="lp-admin-link">
-            Quản trị
-          </Link>
+          {ADMIN_ENABLED && (
+            <Link to="/admin/login" className="lp-admin-link">
+              Quản trị
+            </Link>
+          )}
           <a href="#tai-ung-dung" className="btn btn-accent btn-sm lp-nav-cta">
             <Download size={16} /> Bản thử nghiệm
           </a>
@@ -96,9 +99,11 @@ function Nav() {
             <a href="#tai-ung-dung" className="btn btn-primary btn-block" onClick={() => setOpen(false)}>
               <Download size={16} /> Bản thử nghiệm
             </a>
-            <Link to="/admin/login" className="btn btn-ghost btn-block">
-              Quản trị
-            </Link>
+            {ADMIN_ENABLED && (
+              <Link to="/admin/login" className="btn btn-ghost btn-block">
+                Quản trị
+              </Link>
+            )}
           </div>
         </div>
       )}

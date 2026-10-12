@@ -25,9 +25,12 @@ Biến môi trường (xem `.env.example`):
 | `VITE_API_ENDPOINT` | `http://localhost:8000` | Địa chỉ backend |
 | `VITE_USE_MOCK` | (bật) | Đặt `false` để gọi API thật thay vì dữ liệu mẫu |
 | `VITE_CONTACT_EMAIL` | (trống) | Email nhận yêu cầu về dữ liệu cá nhân, hiện trên `/privacy` và `/data-deletion`. Để trống thì hai trang hiện chỗ trống thay vì địa chỉ giả |
+| `VITE_ADMIN_ENABLED` | (tắt) | `true` bật trang quản trị `/admin`. Tắt thì bản build không có mã admin, tài khoản demo cũng không lọt vào bundle. Đặt `true` trong `.env.local` khi phát triển |
 | `VITE_LEGAL_DRAFT` | `true` | Hai trang pháp lý hiện nhãn "Bản nháp" cho đến khi chủ sản phẩm duyệt; đặt `false` lúc build để gỡ nhãn |
 
 ## Trang quản trị
+
+Chỉ chạy khi `VITE_ADMIN_ENABLED=true` (mặc định tắt). Khi phát triển, đặt trong `.env.local`; các bản deploy không đặt biến này.
 
 Giao diện "calm operations": nền trung tính ấm, accent xanh lá (#2F7A43 / #8FD17D), radius 16/10/999, font Geist, icon Phosphor (regular). Token nằm đầu `src/styles/admin.css`, toàn bộ CSS admin nằm trong `.adm` nên không ảnh hưởng trang giới thiệu.
 
@@ -78,17 +81,17 @@ Chụp lại ảnh khi giao diện app đổi: chạy dev build trên simulator 
 
 **Trang pháp lý** (`src/pages/legal/`) chưa được duyệt theo [AGENTS.md](../../AGENTS.md). Trước khi công khai: điền `VITE_CONTACT_EMAIL`, chủ sản phẩm duyệt nội dung (kể cả cam kết xử lý yêu cầu xoá trong `DELETION_DAYS`, `src/pages/legal/legalConfig.ts`) rồi đặt `VITE_LEGAL_DRAFT=false`.
 
-**Triển khai:** web này dùng một dự án Vercel riêng nối thẳng vào repo GitHub (Vercel Git integration), không qua GitHub Actions. CI chỉ build và deploy bản web của `../mobile`. Ba môi trường:
+**Triển khai:** job `deploy-landing` trong [`ci.yml`](../../.github/workflows/ci.yml) build web này và đẩy lên một dự án Vercel riêng tên `landing`. Vercel Git không deploy (`git.deploymentEnabled: false` trong `vercel.json`). Ba môi trường, chi tiết ở [CI/CD](../../docs/development/ci-cd.md#landing-page-on-vercel):
 
 | Môi trường | Nhánh | Địa chỉ |
 | --- | --- | --- |
-| Preview | Mọi nhánh khác và pull request | URL Vercel tự sinh, gắn vào pull request |
-| Staging | `staging` | Domain gán cho nhánh `staging` trong Settings → Domains |
-| Production | `main` | Domain production của dự án |
+| Preview | Pull request trong repo | URL Vercel sinh ra, ghi trong run summary |
+| Staging | `staging` | `LANDING_URL` của environment `landing-staging` |
+| Production | `main` (cần duyệt) | `LANDING_URL` của environment `landing-production` |
 
-Thiết lập một lần trên Vercel: New Project → import repo này → Root Directory `frontend/web` (framework Vite tự nhận) → Settings → Git → Production Branch `main` → Settings → Domains thêm domain staging và chọn Git Branch `staging`. Biến môi trường (`VITE_CONTACT_EMAIL`, `VITE_LEGAL_DRAFT`) đặt riêng cho Production và Preview; staging dùng giá trị Preview.
+Thiết lập một lần trên Vercel: New Project → import repo này → Root Directory `frontend/web` (framework Vite tự nhận). Lấy project ID đặt làm secret `VERCEL_PROJECT_ID` trong ba environment `landing-*`. Biến `VITE_CONTACT_EMAIL`, `VITE_LEGAL_DRAFT` và `LANDING_URL` đặt làm Variables của từng environment.
 
-Trong `vercel.json`, `ignoreCommand` bỏ qua build khi commit không đụng tới `frontend/web` (`git diff` thoát mã 0 thì Vercel huỷ build), còn `rewrites` chuyển mọi đường dẫn về `index.html` để `/privacy`, `/data-deletion` mở trực tiếp được.
+`rewrites` trong `vercel.json` chuyển mọi đường dẫn về `index.html` để `/privacy`, `/data-deletion` mở trực tiếp được.
 
 ## Trạng thái dùng chung
 
