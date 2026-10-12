@@ -20,7 +20,6 @@ import {
   Row,
   Sheet,
   T,
-  Tile,
   Toggle,
 } from '../src/components/ui';
 import type { CategoryView, ProductView } from '../src/data/types';
@@ -193,7 +192,7 @@ export default function Products() {
         {stockInFor ? (
           <>
             <Row gap={12} style={{ marginBottom: 14 }}>
-              <Tile name={stockInFor.name} text={stockInFor.name[0]} size={42} />
+              <ProductThumb name={stockInFor.name} uri={stockInFor.imageUrl} size={42} />
               <View style={{ flex: 1 }}>
                 <T w="semibold" size={15}>
                   {stockInFor.name}
