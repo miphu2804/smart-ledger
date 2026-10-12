@@ -8,6 +8,16 @@
 
 **Check:** `tsc --noEmit` clean. Web build in headless Chrome, mock mode, 9 checks: Home "Kiểm tra hàng sắp hết" lands on `/products?tab=low` showing only products that need restocking; the row button opens the sheet with the product name and current stock and the quantity field focused; quantity 0 shows the validation error; typing 24 previews "Tồn sau khi nhập: 30"; confirming closes the sheet, shows "Đã nhập 24 cái · tồn mới 30" and the row shows the new stock; an untracked product has no button; stock-in from the edit form still updates "Tồn kho hiện tại" (36 after 6 more). **Not verified:** a real phone (keyboard over the sheet on Android and iOS), a real Core, and rows with very long names on narrow screens.
 
+### [2026-10-12 15:20 UTC+07:00] — [Fix] Email sign-in: a failed sign-in no longer reads as "no account yet"
+
+**Done:** When an email sign-in did not match, the screen only showed a grey sentence that led with "Nếu chưa có tài khoản, hãy tạo tài khoản", so a wrong password with a correct email looked like "this account does not exist". The password field now shows the error "Email hoặc mật khẩu chưa đúng" in red, and the line under it starts with the likely case: check the password, reset it if forgotten, and only then the option to create an account. Firebase returns one error for both a wrong password and an unknown email (email enumeration protection), so the app still cannot say which of the two happened.
+
+**Changed files:** `frontend/mobile/app/(auth)/email.tsx` and this entry.
+
+**Flow explained:** On `invalid-credentials` in login mode, `submit` now sets the field error (`errorMessage(e)`) in addition to the hint flag instead of returning before it. The hint keeps its two inline links (`switchMode('reset')`, `switchMode('register')`) in the new order. Editing either field still clears both.
+
+**Check:** `tsc --noEmit` clean. Web build in headless Chrome, mock mode, 6 checks: a failed sign-in shows the red error under the password field and the new hint; the old sentence is gone; editing the password hides both; "đặt lại mật khẩu" opens the reset mode with the email kept; "tạo tài khoản" switches to registration. **Not verified:** real Firebase (the mock has no email accounts, so every sign-in takes the same not-matching branch), and a real phone.
+
 ### [2026-10-12 13:35 UTC+07:00] — [Docs] Marketing screenshots per product flow under docs/marketing
 
 **Done:** Added `docs/marketing/` with 21 phone-ratio screenshots of the mobile app grouped by product flow: `dashboard/` (9), `chat/` (3), `barcode/` (5) and `voice/` (4), plus a README that lists each image, how the set was produced and what to know before using it. The images are 1170 × 2532 px PNG (390 × 844 pt at 3x), without a status bar or device frame.
