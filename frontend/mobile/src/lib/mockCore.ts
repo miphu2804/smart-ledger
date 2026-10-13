@@ -496,6 +496,43 @@ function listProducts(): ProductView[] {
   return products.filter((p) => p.status === 'ACTIVE');
 }
 
+/**
+ * Như Core (CORE-012): bỏ khoảng trắng hai đầu (kể cả CR/LF/TAB máy quét gửi kèm), chuỗi rỗng nghĩa là không có mã. Mã giữ
+ * nguyên từng ký tự, không chứa khoảng trắng hay ký tự điều khiển bên trong và dài tối đa 100 ký tự; sai thì 400.
+ */
+function normalizeBarcode(raw: string | null | undefined): string | null {
+  const code = (raw ?? '').trim();
+  if (!code) return null;
+  if (/[\s\p{Cc}]/u.test(code) || [...code].length > 100) {
+    throw new ApiError(400, 'validation_failed', 'barcode is invalid.', undefined, [{ field: 'barcode', issue: 'invalid' }]);
+  }
+  return code;
+}
+
+/**
+ * Mã vạch là duy nhất giữa các sản phẩm đang bán của tiệm; món đã ẩn nhả mã để dùng lại. Trùng thì 409 kèm món đang giữ
+ * mã, như Core.
+ */
+function assertBarcodeFree(barcode: string | null, exceptId?: number): void {
+  const holder = barcode ? products.find((p) => p.status === 'ACTIVE' && p.id !== exceptId && p.barcode === barcode) : undefined;
+  if (holder) {
+    throw new ApiError(409, 'product_barcode_conflict', 'The product barcode is already in use in this shop.', undefined, [
+      { field: 'barcode', issue: 'already_in_use', productId: holder.id, status: 'ACTIVE' },
+    ]);
+  }
+}
+
+/** GET /products/lookup?barcode=: khớp chính xác, chỉ sản phẩm ACTIVE; thiếu mã hoặc mã không hợp lệ thì 400, chưa có thì 404. */
+function lookupProduct(rawQuery: string): ProductView {
+  const barcode = normalizeBarcode(new URLSearchParams(rawQuery).get('barcode'));
+  if (!barcode) {
+    throw new ApiError(400, 'validation_failed', 'barcode is required.', undefined, [{ field: 'barcode', issue: 'required' }]);
+  }
+  const product = products.find((p) => p.status === 'ACTIVE' && p.barcode === barcode);
+  if (!product) throw apiErr(404, 'product_not_found', 'This product is unavailable.');
+  return { ...product };
+}
+
 function createProduct(body: ProductWriteBody): ProductView {
   if (body.imageUrl) {
     throw apiErr(400, 'product_image_url_unsupported', 'Product images are uploaded through the image endpoint.');
@@ -509,13 +546,15 @@ function createProduct(body: ProductWriteBody): ProductView {
   if (body.lowStockThreshold != null && body.lowStockThreshold < 0) {
     throw apiErr(400, 'validation_failed', 'lowStockThreshold must be 0 or more.');
   }
+  const barcode = normalizeBarcode(body.barcode);
+  assertBarcodeFree(barcode);
   const now = nowIso();
   const product: ProductView = {
     id: nextProductId++,
     shopId: SHOP_ID,
     categoryId: body.categoryId ?? null,
     name: body.name,
-    barcode: body.barcode ?? null,
+    barcode,
     imageUrl: null,
     unit: body.unit,
     sellingPriceVnd: body.sellingPriceVnd,
@@ -549,9 +588,13 @@ function updateProduct(id: number, body: ProductPatchBody): ProductView {
   if (body.lowStockThreshold != null && body.lowStockThreshold < 0) {
     throw apiErr(400, 'validation_failed', 'lowStockThreshold must be 0 or more.');
   }
+  // Chỉ kiểm tra khi mã thật sự đổi: giữ nguyên mã của chính món đang sửa là hợp lệ
+  if (body.barcode !== undefined && normalizeBarcode(body.barcode) !== product.barcode) {
+    assertBarcodeFree(normalizeBarcode(body.barcode), product.id);
+  }
   if (body.categoryId !== undefined) product.categoryId = body.categoryId;
   if (body.name !== undefined) product.name = body.name;
-  if (body.barcode !== undefined) product.barcode = body.barcode;
+  if (body.barcode !== undefined) product.barcode = normalizeBarcode(body.barcode);
   if (body.unit !== undefined) product.unit = body.unit;
   if (body.sellingPriceVnd !== undefined) product.sellingPriceVnd = body.sellingPriceVnd;
   if (body.costPriceVnd !== undefined) product.costPriceVnd = body.costPriceVnd;
@@ -1194,6 +1237,8 @@ export function mockCoreRequest<T>(path: string, method: string, body: unknown, 
     if (method === 'GET') return pageOf(listProducts(), rawQuery, 'invalid_product_query') as unknown as T;
     if (method === 'POST') return createProduct(body as ProductWriteBody) as unknown as T;
   }
+  // Đường dẫn cố định, phải khớp trước /products/{id}
+  if (route === '/products/lookup' && method === 'GET') return lookupProduct(rawQuery) as unknown as T;
   if (segments[0] === 'products' && segments.length === 2) {
     const id = Number(segments[1]);
     if (method === 'PATCH') return updateProduct(id, body as ProductPatchBody) as unknown as T;

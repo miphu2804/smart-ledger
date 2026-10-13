@@ -1,31 +1,52 @@
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useRef, useState } from 'react';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import {
+  Image,
+  type ImageSourcePropType,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, shadow } from '../theme';
-import { MascotBadge } from './MascotBadge';
 import { Button, T } from './ui';
+
+/** Lề ngang của nội dung trang (và bản hẹp cho màn thấp); hình minh hoạ tràn lề dùng lại hai số này. */
+const PAD = 24;
+const PAD_COMPACT = 18;
+/** Tỉ lệ của hình minh hoạ trang Bobi (1080×720). */
+const BOBI_GUIDE_RATIO = 1080 / 720;
 
 const steps: readonly {
   title: string;
   icon: React.ComponentProps<typeof Feather>['name'] | null;
+  /** Hình minh hoạ thay cho ô màu có icon; hiện tràn hết bề ngang thẻ */
+  image?: { source: ImageSourcePropType; label: string };
   tone: string;
   gradient: readonly [string, string, string];
   description: string;
   tips: readonly { title: string; body: string }[];
 }[] = [
   {
-    title: 'Trợ lý',
+    // Trang giới thiệu Bobi: hình minh hoạ cho thấy Bobi nằm ở đâu và chạm vào thì mở ra gì
+    title: 'Trợ lý Bobi',
     icon: null,
-    tone: colors.primary,
-    gradient: ['#8FDB6E', '#CDEFB8', '#F3FAEF'],
-    description:
-      'Mascot ở góc màn hình mở nhanh Hỏi đáp, Đọc đơn và Báo cáo.',
+    image: {
+      source: require('../../assets/guide/bobi-menu.jpg'),
+      label: 'Hình minh hoạ: Bobi ở góc màn hình Tổng quan; chạm vào Bobi mở ra Hỏi đáp, Đọc đơn và Báo cáo',
+    },
+    tone: colors.brand,
+    gradient: ['#CFC4F7', '#E9E3FC', '#F8F5FF'],
+    description: 'Bobi là linh vật và trợ lý của Sổ Nghe Lời, luôn nằm ở góc màn hình.',
     tips: [
-      { title: 'Chạm để mở', body: 'Mở Hỏi đáp, Đọc đơn hoặc Báo cáo.' },
-      { title: 'Giữ để đọc đơn', body: 'Đi thẳng tới màn Đọc đơn.' },
-      { title: 'Kéo đến chỗ thuận tay', body: 'Kéo mascot sang cạnh khác nếu che nội dung.' },
+      { title: 'Chạm vào Bobi', body: 'Mở Hỏi đáp, Đọc đơn hoặc Báo cáo.' },
+      { title: 'Giữ Bobi để đọc đơn', body: 'Đi thẳng tới màn Đọc đơn.' },
+      { title: 'Kéo Bobi đến chỗ thuận tay', body: 'Kéo sang cạnh khác nếu bị che.' },
     ],
   },
   {
@@ -142,26 +163,43 @@ export function AssistantIntroModal({
                   <T style={[styles.title, styles.number, compact && styles.titleCompact, { color: page.tone }]}>{String(index + 1).padStart(2, '0')}</T>
                 </View>
 
-                <LinearGradient
-                  colors={page.gradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={[styles.visual, compact && styles.visualCompact]}
-                >
-                  <LinearGradient
-                    colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.6)', 'rgba(255,255,255,0)']}
-                    start={{ x: 0, y: 1 }}
-                    end={{ x: 1, y: 0.2 }}
-                    style={StyleSheet.absoluteFill}
+                {page.image ? (
+                  // Hình có nền trắng và điện thoại bị cắt ở mép trái: cho tràn hết bề ngang thẻ (bỏ lề của trang) để
+                  // hình liền với thẻ và các chi tiết to nhất có thể.
+                  <Image
+                    source={page.image.source}
+                    resizeMode="cover"
+                    accessibilityLabel={page.image.label}
+                    // Chiều cao tính từ bề rộng: trên web Image không theo aspectRatio mà lấy chiều cao gốc của ảnh
+                    style={[
+                      styles.hero,
+                      { width: pageWidth, height: Math.round(pageWidth / BOBI_GUIDE_RATIO), marginLeft: -(compact ? PAD_COMPACT : PAD) },
+                    ]}
                   />
-                  {page.icon ? (
-                    <View style={styles.visualIcon}>
-                      <Feather name={page.icon} size={30} color={page.tone} />
-                    </View>
-                  ) : <MascotBadge size={compact ? 76 : 96} />}
-                </LinearGradient>
+                ) : (
+                  <LinearGradient
+                    colors={page.gradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[styles.visual, compact && styles.visualCompact]}
+                  >
+                    <LinearGradient
+                      colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.6)', 'rgba(255,255,255,0)']}
+                      start={{ x: 0, y: 1 }}
+                      end={{ x: 1, y: 0.2 }}
+                      style={StyleSheet.absoluteFill}
+                    />
+                    {page.icon ? (
+                      <View style={styles.visualIcon}>
+                        <Feather name={page.icon} size={30} color={page.tone} />
+                      </View>
+                    ) : null}
+                  </LinearGradient>
+                )}
 
-                <T size={15} color={colors.muted} style={styles.description}>{page.description}</T>
+                <T size={15} color={colors.muted} style={[styles.description, page.image && styles.descriptionAfterHero]}>
+                  {page.description}
+                </T>
 
                 <View style={styles.tips}>
                   {page.tips.map((tip, tipIndex) => (
@@ -235,11 +273,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 24, paddingTop: 18,
   },
-  padCompact: { paddingHorizontal: 18 },
+  padCompact: { paddingHorizontal: PAD_COMPACT },
   eyebrow: { letterSpacing: 1.2, lineHeight: 20 },
   close: { width: 44, height: 44, marginRight: -12, alignItems: 'center', justifyContent: 'center' },
   pager: { flex: 1 },
-  page: { paddingHorizontal: 24, paddingTop: 4, paddingBottom: 20 },
+  page: { paddingHorizontal: PAD, paddingTop: 4, paddingBottom: 20 },
   title: { fontFamily: serif, fontSize: 42, lineHeight: 48, color: colors.ink, letterSpacing: -0.5 },
   titleCompact: { fontSize: 34, lineHeight: 40 },
   number: { opacity: 0.55 },
@@ -249,7 +287,10 @@ const styles = StyleSheet.create({
     width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.75)', borderWidth: 1, borderColor: colors.white,
   },
+  hero: { marginTop: 10 },
   description: { marginTop: 18, lineHeight: 23 },
+  // Hình minh hoạ đã có khoảng trắng ở đáy nên chữ mô tả đứng sát hơn
+  descriptionAfterHero: { marginTop: 8 },
   tips: { marginTop: 18, gap: 14 },
   tip: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   tipIndex: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', marginTop: 1 },

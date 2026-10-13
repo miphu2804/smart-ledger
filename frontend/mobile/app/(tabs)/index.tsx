@@ -6,7 +6,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ReportPeriodTabs, type ReportPeriod } from '../../src/components/ReportPeriodTabs';
 import { AssistantIntroModal } from '../../src/components/AssistantIntroModal';
 import { Button, Card, EmptyState, Row, T } from '../../src/components/ui';
-import { BarcodeScannerModal } from '../../src/components/BarcodeScannerModal';
 import { CountUp, Reveal, Skeleton } from '../../src/components/reveal';
 import { vnd } from '../../src/lib/format';
 import { buildNotifications, fromCoreNotification, isNotifUnread, mergeNotifications, notifCategoryMeta, totalUnread } from '../../src/lib/notifications';
@@ -55,7 +54,6 @@ export default function Home() {
   const scrollY = useRef(new Animated.Value(0)).current;
   const bellShake = useRef(new Animated.Value(0)).current;
   const [period, setPeriod] = useState<ReportPeriod>('today');
-  const [scannerOpen, setScannerOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Chỉ chốt trạng thái thu gọn (để chọn lớp header nhận chạm) khi cuộn dừng: không đổi state mỗi khung hình trong lúc cuộn.
@@ -103,6 +101,8 @@ export default function Home() {
   const unreadNotifications = totalUnread(localNotifications, readNotifications, coreNotifications.unreadCount);
   const periodName = periodLabel[period];
   const topSeller = topSellers[0];
+  // Quét mã chạy trong màn Bán hàng: ở đó có danh mục, giỏ và kiểm tra tồn. `scan=1` mở thẳng màn quét.
+  const openScanner = () => router.push({ pathname: '/pos', params: { scan: '1' } });
   const openAssistant = (path: '/voice' | '/ai') => {
     app.dismissGuide();
     router.push(path);
@@ -462,7 +462,7 @@ export default function Home() {
                 </Pressable>
 
                 <Pressable
-                  onPress={() => setScannerOpen(true)}
+                  onPress={openScanner}
                   style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
                   accessibilityRole="button"
                   accessibilityLabel="Quét mã"
@@ -574,7 +574,7 @@ export default function Home() {
               </Pressable>
 
               <Pressable
-                onPress={() => setScannerOpen(true)}
+                onPress={openScanner}
                 style={({ pressed }) => [styles.compactActionBtn, pressed && styles.compactActionBtnPressed]}
                 accessibilityRole="button"
                 accessibilityLabel="Quét mã"
@@ -613,18 +613,6 @@ export default function Home() {
           <Animated.View pointerEvents="none" style={[styles.headerDivider, { opacity: dividerOpacity }]} />
         </Animated.View>
       </View>
-      <BarcodeScannerModal
-        visible={scannerOpen}
-        onClose={() => setScannerOpen(false)}
-        onProductScanned={(product) => {
-          setScannerOpen(false);
-          router.push({ pathname: '/pos', params: { autoAdd: product.id } });
-        }}
-        onCheckout={() => {
-          setScannerOpen(false);
-          router.push('/checkout');
-        }}
-      />
       <AssistantIntroModal
         visible={!app.guideDismissed}
         onDismiss={app.dismissGuide}
