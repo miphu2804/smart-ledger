@@ -311,6 +311,8 @@ flowchart LR
 
 ### 5.3 `SaleDraftService.confirm` — checkout
 
+When a selected Customer is needed for a new debt, the write lock order is **SaleDraft → Customer → Product ID ascending**. Refresh Customer under its lock before checking ACTIVE and taking its current profile snapshot; hold the lock through commit so archive cannot race debt creation. If confirm commits first, a later archive may retain that historical debt. Fully paid sales retain their existing snapshot behavior without taking this Customer lock. Confirmation replay returns before this check.
+
 The draft lock still protects confirmation/replay. Nonempty catalog groups use one `PESSIMISTIC_WRITE` Product query filtered by shop and ACTIVE status, with `ORDER BY p.id ASC` in SQL; no catalog IDs means no Product-lock query. Missing/inactive/foreign products remain invalid. After all deductions, one grouped stock reconciliation runs on the already-locked products before persisting the sale. Custom items do not deduct stock; response item order and cost snapshots are unchanged.
 
 ```mermaid
@@ -446,7 +448,7 @@ Repayment and void share the lock order **Sale → Debt**. A restocking void the
 
 With `restockItems=true`, validate deduction snapshots before locking products. Only `stockDeducted=true` items contribute IDs; custom/non-deducted items do not restore stock, and unknown snapshots fail rather than guessing. One nonempty Product-lock query is scoped to the shop, ordered by ID and has no ACTIVE filter, so archived products remain eligible for restoration under the existing stock rules. Reconcile the restored product group once; an empty group skips both Product locking and open-alert reads. Restock audit, debt cancellation, full refund and idempotent replay keep their existing behavior.
 
-`restoreStock()` accepts a total exactly at `999999999999.999`; a higher total throws `409 product_stock_overflow` before changing that Product. An earlier item may already have restored stock/written audit, but the whole transaction rolls back, including the idempotency reservation. Sale/debt/payment remain unchanged, no refund/notification survives. After a valid stock adjustment, the same key/body can retry once; a subsequent replay must not duplicate stock, money or audit. The request's explicit no-restock option is not silently substituted on overflow.
+The stock-restoration limit, error response and retry rules are defined in the [sale void API contract](../../contracts/api-contracts.md#hủy-toàn-bộ-và-hoàn-tiền). `restoreStock()` validates before mutating that Product; a failure on a later item rolls back earlier stock/audit writes and the entire void transaction, including refund, debt, notification and idempotency reservation.
 
 ```mermaid
 flowchart LR

@@ -1,3 +1,13 @@
+### [2026-10-14 00:55 UTC+07:00] — [Fix] CORE-013 customer confirmation race and contract links (#181, PR #187)
+
+**Done:** Addressed the two approved CodeRabbit findings: selected Customer debt confirmation uses locked refresh; the void walkthrough links to the authoritative contract instead of repeating its stock limit/error/retry rules. Core fix commit: `efbd403`. No migration, schema, API, FE/AI or deployment changes; the JavaDoc coverage warning is outside this approved scope.
+
+**Changed files:** Core `SaleDraftServiceImpl`, `SaleDraftServiceTest`, `CatalogLifecycleConcurrencyPostgresTest`, `scripts/verify_postgres_tests.py`; `docs/architecture/service-walkthrough/README.md`; this new progress entry. All older entries, including the staging speech-model entry and both CORE-013 entries, remain unchanged.
+
+**Flow explained:** Debt confirmation holds SaleDraft → selected Customer → Product ID ascending locks until commit, refreshes Customer before ACTIVE validation/snapshot, and rejects an archive that committed first. Confirmation first serializes the later archive without deleting historical debt; replay does not revalidate the archived Customer. Fully paid confirmation retains its snapshot/nonlocking behavior. The CI gate now requires the new archive/profile/rollback/paid-snapshot/tenant cases.
+
+**Check:** `mvnw.cmd -o clean verify` on a dedicated disposable PostgreSQL 16 container passed **1,140 tests, 0 failures, 0 errors, 0 skipped**, BUILD SUCCESS; actual Surefire testcase nodes match the Maven total. Focused run: 91 passed (66 unit + 25 PostgreSQL, including nine new PostgreSQL cases). Gate unit tests: 12 passed; all nine required PostgreSQL reports passed the gate. `git diff --check` and the linked contract heading pass. Staging `1adea42` remains an ancestor of this branch. **Not verified:** full HTTP/FE UAT, Firebase/Cloudinary network or remote CI for these commits. No protected-branch merge or issue closure.
+
 ### [2026-10-13 23:54 UTC+07:00] — [Feature] Ship the speech model to R2 from CI
 
 **Done:** The published APK (285.6 MB, 4 ABIs) had no speech model: the model is not in git, CI had no copy, and no build set `EXPO_PUBLIC_STT_MODEL_URL`, so voice input could not load. `mobile-release.yml` now resolves the model URL before the build. A publish uploads the version named in `core.ts` to `stt-model/<version>/` in the APK bucket when it is missing, fetched from HuggingFace (`hynt/Zipformer-30M-RNNT-Streaming-6000h`, pinned revision) with `tokens.txt` rebuilt from `bpe.model`. Repository variable `STT_MODEL_BASE_URL` is set to the bucket's `r2.dev` address. DVC was not used: it stores files by hash, so the app could not download them by name.
