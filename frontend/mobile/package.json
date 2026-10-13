@@ -46,7 +46,8 @@
     "voice:eval": "node --experimental-strip-types --no-warnings --import ./scripts/voice-crf/ts-resolve.mjs scripts/voice-crf/eval.mts",
     "voice:synth": "node --experimental-strip-types --no-warnings --import ./scripts/voice-crf/ts-resolve.mjs scripts/voice-crf/synth.mts",
     "voice:train": "uv run scripts/voice-crf/train.py",
-    "voice:parity": "node --experimental-strip-types --no-warnings --import ./scripts/voice-crf/ts-resolve.mjs scripts/voice-crf/parity.mts"
+    "voice:parity": "node --experimental-strip-types --no-warnings --import ./scripts/voice-crf/ts-resolve.mjs scripts/voice-crf/parity.mts",
+    "voice:tune": "node --experimental-strip-types --no-warnings --import ./scripts/voice-crf/ts-resolve.mjs scripts/voice-crf/tune.mts"
   },
   "private": true
 }

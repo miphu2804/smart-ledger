@@ -34,7 +34,7 @@ export const crfTagger =
   (tokens, _index, info) =>
     viterbi(model, crfFeatures(tokens, info)) as Label[];
 
-export const DEFAULT_TAU = 0.66;
+export const DEFAULT_TAU = 0.72;
 export const DEFAULT_DELTA = 0.12;
 const MAX_OPTIONS = 6;
 const MIN_ITEM_PRICE = 500;
