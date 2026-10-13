@@ -6,6 +6,8 @@
 import type { LineItem } from '../../data/types';
 import type { DisambiguationItem, ParseableProduct, ParsedExpenseItem, ParsedOrder } from '../parseOrder';
 import { type CatalogIndex, catalogIndex, type LinkCandidate, linkSpan } from './catalog';
+import { type CrfModel, viterbi } from './crf';
+import { crfFeatures } from './features';
 import { analyze, type Label, ruleTag, type Slot, type TokenInfo } from './tagger';
 import { quantityValue, type Token, tokenize } from './text';
 import { DELIMITERS, FILLER_RAW, FILLER_WORDS, UNIT_WORDS } from './lexicon';
@@ -25,6 +27,12 @@ export interface DetailedParse extends ParsedOrder {
   tokens: Token[];
   labels: Label[];
 }
+
+/** Tagger CRF (L3 đã train) thay cho tagger luật: `parseOrderDetailed(text, products, { tagger: crfTagger(model) })`. */
+export const crfTagger =
+  (model: CrfModel): NonNullable<ParseOptions['tagger']> =>
+  (tokens, _index, info) =>
+    viterbi(model, crfFeatures(tokens, info)) as Label[];
 
 export const DEFAULT_TAU = 0.66;
 export const DEFAULT_DELTA = 0.12;
