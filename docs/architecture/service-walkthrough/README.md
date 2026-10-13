@@ -6,6 +6,8 @@ Query-optimization update (#138), reviewed on 2026-10-10 against `perf/query-opt
 
 These are reading notes, not a source of truth — scope and behavior stay in `docs/product/` and `docs/contracts/`.
 
+CORE-013 (#181), reviewed on 2026-10-13 against `fix/core-concurrency` commit [`089611b`](https://github.com/miphu2804/smart-ledger/commit/089611b): session sync, profile/catalog writes and Category assignment use fresh rows under locks; void validates the restored total before assignment. The affected auth/void SVGs are re-rendered. This describes branch code and disposable PostgreSQL tests, not staging deployment or FE acceptance; see [technical design §4.4](../technical-design.md#44-concurrency-và-vòng-đời-core-013).
+
 | Folder | Diagrams |
 |---|---|
 | `01-overview/` | request resolution, core services |
@@ -176,10 +178,12 @@ flowchart LR
 
 ## 4. Auth Session — `openSession`
 
+Existing identities are first resolved to a User ID without fetching a stale User. Lock and refresh User before checking DISABLED and synchronizing Firebase fields. Role/status and Cloudinary avatar handle remain DB-owned; concurrent avatar/status/role writers serialize on the User row. New-owner creation and Firebase fallback avatar retain their behavior. This does not introduce an ADMIN user-disable/demote API; those races are exercised by DB test fixtures.
+
 ```mermaid
 flowchart LR
     T["Verified<br/>Firebase token"] --> L{"AuthIdentity<br/>by uid?"}
-    L -->|found| U["UserAccount"]
+    L -->|found| LK["lock + refresh UserAccount<br/>latest role / status / avatar handle"] --> U["UserAccount"]
     L -->|missing| D{"displayName<br/>given?"}
     D -->|no| X["DISPLAY_NAME_REQUIRED"]
     D -->|yes| C["createOwner()<br/>+ AuthIdentity"] --> U
@@ -442,6 +446,8 @@ Repayment and void share the lock order **Sale → Debt**. A restocking void the
 
 With `restockItems=true`, validate deduction snapshots before locking products. Only `stockDeducted=true` items contribute IDs; custom/non-deducted items do not restore stock, and unknown snapshots fail rather than guessing. One nonempty Product-lock query is scoped to the shop, ordered by ID and has no ACTIVE filter, so archived products remain eligible for restoration under the existing stock rules. Reconcile the restored product group once; an empty group skips both Product locking and open-alert reads. Restock audit, debt cancellation, full refund and idempotent replay keep their existing behavior.
 
+`restoreStock()` accepts a total exactly at `999999999999.999`; a higher total throws `409 product_stock_overflow` before changing that Product. An earlier item may already have restored stock/written audit, but the whole transaction rolls back, including the idempotency reservation. Sale/debt/payment remain unchanged, no refund/notification survives. After a valid stock adjustment, the same key/body can retry once; a subsequent replay must not duplicate stock, money or audit. The request's explicit no-restock option is not silently substituted on overflow.
+
 ```mermaid
 flowchart LR
     S(["voidSale(saleId, key, req)"]) --> IDEM["Idempotency<br/>SALE_VOID"] --> LS["lock Sale"]
@@ -456,7 +462,7 @@ flowchart LR
         LD["lock Debt"]
         RS{"restockItems?"}
         SNAP["validate stockDeducted snapshots<br/>collect deducted product IDs"]
-        RP["lock products by id asc (1 query)<br/>same shop, including ARCHIVED<br/>skip if empty; restoreStock()"]
+        RP["lock products by id asc (1 query)<br/>same shop, including ARCHIVED<br/>skip if empty; restoreStock checks MAX_STOCK"]
         ALERT["reconcile restored stock alerts (batch)<br/>1 open-alert read if nonempty"]
         DV["debt.voidRemaining()"]
     end
@@ -479,6 +485,7 @@ flowchart LR
     RM -->|no| X3["SALE_REFUND_METHOD_<br/>REQUIRED / INVALID"]
     SNAP -.->|"unknown / invalid snapshot"| X4["SALE_RESTOCK_UNAVAILABLE"]
     RP -.->|"missing / unrestorable"| X4
+    RP -.->|"total exceeds MAX_STOCK"| X5["409 PRODUCT_STOCK_OVERFLOW<br/>rollback whole void + key"]
     classDef default fill:#eef4ff,stroke:#5b8def,color:#1f2d3d
     classDef decision fill:#fff4cc,stroke:#d4a017,color:#5c4400
     classDef error fill:#fde2e1,stroke:#d9534f,color:#8a1f1b
@@ -486,7 +493,7 @@ flowchart LR
     classDef store fill:#efe6ff,stroke:#8a63d2,color:#3d2a6b
     classDef shared fill:#ffe9d6,stroke:#e07b24,color:#6b3500
     class ST,SUM,RM,RS,RF decision
-    class X1,X2,X3,X4 error
+    class X1,X2,X3,X4,X5 error
     class ALERT shared
     class S,V terminal
     style Check fill:#f3f8ff,stroke:#9dbcf5
