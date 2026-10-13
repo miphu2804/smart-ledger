@@ -18,6 +18,17 @@
 
 **Check:** `tsc --noEmit` clean. Web build in headless Chrome, mock mode, at 390×844 and 360×640 (9 checks): after a first sign-in the guide opens on "Trợ lý Bobi" with the new description and tips, the illustration has loaded, spans the card from edge to edge at its 3:2 ratio and the page does not scroll sideways; after closing the guide the floating button is the new image and the composite logo is gone; tapping Bobi still opens the Hỏi đáp / Đọc đơn / Báo cáo menu. **Not verified:** a real phone (button shadow on Android and iOS), holding and dragging the button, and the three later guide pages (unchanged).
 
+### [2026-10-12 23:55 UTC+07:00] — [Chore] Landing deploys through GitHub Actions, and the admin dashboard is hidden by default
+
+**Done:** The landing page (`frontend/web`) is built and deployed by job `deploy-landing` in `ci.yml`, using GitHub environments `landing-preview`, `landing-staging` and `landing-production`, instead of Vercel Git. Job `landing` runs lint and build on every push and PR. The admin dashboard (`/admin/*`) loads only when `VITE_ADMIN_ENABLED=true` at build time, so a public build contains no admin code or demo accounts. Not yet verified: the GitHub environment secrets and variables, the Vercel `landing` project settings, and the first PR run.
+
+**Changed files:**
+- `.github/workflows/ci.yml`, `frontend/web/vercel.json` — modified: `landing` and `deploy-landing` jobs, summary row, Vercel Git deploys disabled
+- `frontend/web/src/App.tsx`, `src/AdminRoutes.tsx` (created), `src/config.ts`, `src/vite-env.d.ts`, `vite.config.ts`, `src/pages/landing/{LandingPage,SiteFooter}.tsx` — modified: admin behind the flag
+- `frontend/web/.env.example`, `frontend/web/README.md`, `README.md`, `docs/development/ci-cd.md` — modified: docs
+
+**Flow explained:** A push to `staging` or `main` runs `landing`, then `deploy-landing`. After `vercel build`, the step `Check no admin code in the build` fails the job if `admin123` is in `.vercel/output/static`, which catches a `VITE_ADMIN_ENABLED=true` set in the Vercel project. Vite inlines the flag through `define` in `vite.config.ts`; `App.tsx` compares it directly, so the bundler drops the lazy admin import when the flag is off.
+
 ### [2026-10-12] — [Chore] Sync staging progress history for PR #171
 
 **Done:** Integrated staging at 9619e05 into feat/core-barcode to resolve the concurrent PROGRESS.md additions. Preserved the complete barcode entries and both new staging entries without rewriting previous history.

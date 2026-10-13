@@ -4,10 +4,13 @@
  * - USE_MOCK: mặc định dùng dữ liệu giả (localStorage). Đặt VITE_USE_MOCK=false
  *   trong file .env để chuyển sang gọi API thật.
  * - API_ENDPOINT: địa chỉ backend, lấy từ VITE_API_ENDPOINT (xem .env.example).
+ * - ADMIN_ENABLED: bật trang quản trị /admin. Mặc định tắt, nên bản build không có mã admin.
  */
 export const USE_MOCK: boolean = import.meta.env.VITE_USE_MOCK !== 'false'
 
 export const API_ENDPOINT: string = (import.meta.env.VITE_API_ENDPOINT ?? 'http://localhost:8000').replace(/\/+$/, '')
+
+export const ADMIN_ENABLED: boolean = import.meta.env.VITE_ADMIN_ENABLED === 'true'
 
 /** Độ trễ giả lập cho các lời gọi mock (ms). */
 export const MOCK_DELAY_MS = 350

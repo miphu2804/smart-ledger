@@ -35,7 +35,7 @@ cd backend/core && set -a && source ../../.env.staging && source .env && set +a 
 # Mobile
 cd frontend/mobile && npx expo start
 
-# Web admin, :5173
+# Web landing + admin, :5173 (/admin needs VITE_ADMIN_ENABLED=true in frontend/web/.env.local)
 cd frontend/web && npm run dev
 
 # AI + Core in Docker (Core :8000, AI :8001)

@@ -1,22 +1,14 @@
-import { Navigate, Route, Routes, useParams } from 'react-router-dom'
-import RequireAuth from './components/RequireAuth'
-import AdminLayout from './pages/admin/AdminLayout'
-import AiSupportPage from './pages/admin/AiSupportPage'
-import CustomersPage from './pages/admin/CustomersPage'
-import DashboardPage from './pages/admin/DashboardPage'
-import LoginPage from './pages/admin/LoginPage'
-import SettingsPage from './pages/admin/SettingsPage'
-import TasksPage from './pages/admin/TasksPage'
+import { lazy, Suspense } from 'react'
+import { Route, Routes } from 'react-router-dom'
 import NotFound from './pages/NotFound'
 import LandingPage from './pages/landing/LandingPage'
 import DataDeletionPage from './pages/legal/DataDeletionPage'
 import PrivacyPage from './pages/legal/PrivacyPage'
 
-/** URL cũ /admin/customers/:id → mở drawer chi tiết cơ sở */
-function LegacyCustomerRedirect() {
-  const { id = '' } = useParams()
-  return <Navigate to={`/admin/customers?tab=shops&shop=${encodeURIComponent(id)}`} replace />
-}
+// Off by default. The admin chunk (mock accounts included) is emitted only when VITE_ADMIN_ENABLED=true at build time.
+// Compare the env value here, not through config.ts: vite.config.ts inlines it as a literal, and only a comparison
+// in this expression lets the bundler drop the lazy import when the flag is off.
+const AdminRoutes = import.meta.env.VITE_ADMIN_ENABLED === 'true' ? lazy(() => import('./AdminRoutes')) : null
 
 export default function App() {
   return (
@@ -24,26 +16,7 @@ export default function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/data-deletion" element={<DataDeletionPage />} />
-      <Route path="/admin/login" element={<LoginPage />} />
-      <Route
-        path="/admin"
-        element={
-          <RequireAuth role="ADMIN">
-            <AdminLayout />
-          </RequireAuth>
-        }
-      >
-        <Route index element={<DashboardPage />} />
-        <Route path="customers" element={<CustomersPage />} />
-        <Route path="customers/:id" element={<LegacyCustomerRedirect />} />
-        <Route path="ai" element={<AiSupportPage />} />
-        <Route path="tasks" element={<TasksPage />} />
-        <Route path="settings" element={<SettingsPage />} />
-        <Route path="settings/:tab" element={<SettingsPage />} />
-        <Route path="accounts" element={<Navigate to="/admin/customers" replace />} />
-        <Route path="logs" element={<Navigate to="/admin/settings/audit" replace />} />
-        <Route path="*" element={<NotFound inAdmin />} />
-      </Route>
+      {AdminRoutes && <Route path="/admin/*" element={<Suspense fallback={null}><AdminRoutes /></Suspense>} />}
       <Route path="*" element={<NotFound />} />
     </Routes>
   )

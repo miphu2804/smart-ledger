@@ -1,5 +1,6 @@
 import { UserRound } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { ADMIN_ENABLED } from '../../config'
 import Logo from '../../components/Logo'
 import { CONTACT_EMAIL } from '../legal/legalConfig'
 
@@ -31,9 +32,11 @@ export default function SiteFooter({ onHome = false }: { onHome?: boolean }) {
           <h4>Pháp lý</h4>
           <Link to="/privacy">Chính sách quyền riêng tư</Link>
           <Link to="/data-deletion">Xoá dữ liệu người dùng</Link>
-          <Link to="/admin/login">
-            <UserRound size={14} /> Quản trị
-          </Link>
+          {ADMIN_ENABLED && (
+            <Link to="/admin/login">
+              <UserRound size={14} /> Quản trị
+            </Link>
+          )}
         </nav>
       </div>
     </footer>
