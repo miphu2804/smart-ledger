@@ -63,7 +63,7 @@ export default function PrivacyPage() {
             </tr>
             <tr>
               <th scope="row">Sổ bán hàng</th>
-              <td>Danh mục hàng hoá, giá, tồn kho; đơn bán, thanh toán, hoàn tiền; các khoản chi.</td>
+              <td>Danh mục hàng hoá, giá, tồn kho và ảnh mặt hàng bạn chụp; đơn bán, thanh toán, hoàn tiền; các khoản chi.</td>
               <td>Bạn nhập khi dùng</td>
             </tr>
             <tr>
@@ -96,7 +96,9 @@ export default function PrivacyPage() {
             nhận dạng chạy trên máy; ứng dụng không tải bản ghi âm lên máy chủ của chúng tôi.
           </li>
           <li>
-            <strong>Camera</strong> chỉ dùng khi bạn quét mã vạch hoặc mã QR của mặt hàng. Hình ảnh từ camera không được lưu và không được gửi đi.
+            <strong>Camera</strong> dùng trong hai trường hợp: khi bạn quét mã vạch hoặc mã QR của mặt hàng, và khi bạn chụp ảnh cho một mặt hàng.
+            Lúc quét mã, hình ảnh từ camera không được lưu và không được gửi đi. Ảnh mặt hàng bạn chụp được tải lên máy chủ để hiện trong danh mục
+            hàng của cửa hàng bạn; bạn có thể đổi hoặc xoá ảnh đó trong màn Hàng hoá.
           </li>
         </ul>
 
@@ -164,12 +166,20 @@ export default function PrivacyPage() {
               <td>Lưu cơ sở dữ liệu: tài khoản, cửa hàng, sổ bán hàng, lịch sử trò chuyện với trợ lý.</td>
             </tr>
             <tr>
+              <th scope="row">Cloudinary</th>
+              <td>Lưu ảnh mặt hàng bạn chụp trong ứng dụng.</td>
+            </tr>
+            <tr>
               <th scope="row">Railway, Redis Cloud</th>
               <td>Chạy máy chủ xử lý nghiệp vụ và AI, bộ nhớ đệm.</td>
             </tr>
             <tr>
               <th scope="row">Vercel</th>
               <td>Phục vụ bản web.</td>
+            </tr>
+            <tr>
+              <th scope="row">Cloudflare R2</th>
+              <td>Phục vụ file cài đặt Android khi bạn bấm tải ứng dụng ở trang giới thiệu.</td>
             </tr>
             <tr>
               <th scope="row">Nhà cung cấp mô hình ngôn ngữ (cấu hình hiện tại: OpenAI)</th>
