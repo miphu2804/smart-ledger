@@ -6,6 +6,9 @@
 export interface ApiErrorDetail {
   field: string;
   issue?: string;
+  /** Chỉ có ở `409 product_barcode_conflict`: sản phẩm đang giữ mã vạch (CORE-012). Lỗi do tranh chấp ở DB có thể không kèm. */
+  productId?: number;
+  status?: string;
 }
 
 export class ApiError extends Error {
