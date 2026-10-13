@@ -8,6 +8,16 @@
 
 **Check:** `tsc --noEmit` clean. A Node script over `saleFilter.ts`, 32 of 32: each period, both end days included, the three ready ranges, ranges across a month and a year, labels. Mock-mode web build in headless Chrome, 14 of 14: the date on every row, the sheet and its default of 7 days, "30 Ngày", two taps on the calendar, the chip, clearing with "Tất cả", the empty state and "Xoá bộ lọc". **Not verified:** on a phone, against the real Core, with a long order history (the list is still loaded whole and filtered on the device).
 
+### [2026-10-14 01:03 UTC+07:00] — [Fix] Landing: pains heading reworded and privacy page brought up to date
+
+**Done:** The heading of the "Vấn đề quen thuộc" section is now "App thì đắt, mà sổ sách thì rối", as the team asked. The privacy page said the camera is used only to scan codes and that camera images are never stored or sent; since product photos shipped that is no longer true. The page now says the camera is also used to take a product photo and that the photo is uploaded, lists product photos among the data collected, adds Cloudinary (stores product photos) and Cloudflare R2 (serves the Android install file) to the processors, and carries the new update date. Both legal pages still show the "Bản nháp" label: the wording needs the product owner's approval.
+
+**Changed files:** `frontend/web/src/pages/landing/LandingPage.tsx`, `frontend/web/src/pages/legal/PrivacyPage.tsx`, `frontend/web/src/pages/legal/legalConfig.ts` — modified; this entry.
+
+**Flow explained:** text only; no route, style or build setting changes.
+
+**Check:** `tsc -b --noEmit` and `npm run lint` pass (the lint warnings are in admin files this change does not touch). `/`, `/privacy` and `/data-deletion` of the deployed landing answer 200. **Not verified:** the pages in a browser after this change; whether production stores photos in Cloudinary (staging does: an upload from the emulator came back with a photo).
+
 ### [2026-10-14 00:55 UTC+07:00] — [Fix] CORE-013 customer confirmation race and contract links (#181, PR #187)
 
 **Done:** Addressed the two approved CodeRabbit findings: selected Customer debt confirmation uses locked refresh; the void walkthrough links to the authoritative contract instead of repeating its stock limit/error/retry rules. Core fix commit: `efbd403`. No migration, schema, API, FE/AI or deployment changes; the JavaDoc coverage warning is outside this approved scope.

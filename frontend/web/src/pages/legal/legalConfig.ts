@@ -12,7 +12,7 @@ export const CONTACT_EMAIL: string = ((import.meta.env.VITE_CONTACT_EMAIL as str
 export const CONTROLLER = 'Team HEXA (dự án môn EXE201, Trường Đại học FPT)'
 
 /** Ngày cập nhật gần nhất của cả hai trang. */
-export const LEGAL_UPDATED = '08/10/2026'
+export const LEGAL_UPDATED = '13/10/2026'
 
 /** Số ngày nhóm cam kết xử lý yêu cầu xoá dữ liệu — con số đề xuất, chờ chủ sản phẩm xác nhận. */
 export const DELETION_DAYS = 30
