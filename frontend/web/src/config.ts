@@ -12,6 +12,9 @@ export const API_ENDPOINT: string = (import.meta.env.VITE_API_ENDPOINT ?? 'http:
 
 export const ADMIN_ENABLED: boolean = import.meta.env.VITE_ADMIN_ENABLED === 'true'
 
+/** Liên kết tải file APK Android, lấy từ VITE_ANDROID_APK_URL. Để trống thì trang giới thiệu không hiện nút tải. */
+export const ANDROID_APK_URL: string = (import.meta.env.VITE_ANDROID_APK_URL ?? '').trim()
+
 /** Độ trễ giả lập cho các lời gọi mock (ms). */
 export const MOCK_DELAY_MS = 350
 

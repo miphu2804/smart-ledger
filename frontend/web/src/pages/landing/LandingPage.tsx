@@ -11,13 +11,12 @@ import {
   NotebookPen,
   SearchX,
   ShieldCheck,
-  Smartphone,
   X,
   type LucideIcon,
 } from 'lucide-react'
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ADMIN_ENABLED } from '../../config'
+import { ADMIN_ENABLED, ANDROID_APK_URL } from '../../config'
 import Logo, { LogoMark } from '../../components/Logo'
 import { useReveal } from '../../hooks/useReveal'
 import '../../styles/landing.css'
@@ -74,9 +73,11 @@ function Nav() {
               Quản trị
             </Link>
           )}
-          <a href="#tai-ung-dung" className="btn btn-accent btn-sm lp-nav-cta">
-            <Download size={16} /> Bản thử nghiệm
-          </a>
+          {ANDROID_APK_URL && (
+            <a href={ANDROID_APK_URL} className="btn btn-accent btn-sm lp-nav-cta">
+              <Download size={16} /> Tải ứng dụng
+            </a>
+          )}
           <button
             type="button"
             className="icon-btn lp-burger"
@@ -96,9 +97,11 @@ function Nav() {
             </a>
           ))}
           <div className="lp-mobile-menu-foot">
-            <a href="#tai-ung-dung" className="btn btn-primary btn-block" onClick={() => setOpen(false)}>
-              <Download size={16} /> Bản thử nghiệm
-            </a>
+            {ANDROID_APK_URL && (
+              <a href={ANDROID_APK_URL} className="btn btn-primary btn-block" onClick={() => setOpen(false)}>
+                <Download size={16} /> Tải ứng dụng
+              </a>
+            )}
             {ADMIN_ENABLED && (
               <Link to="/admin/login" className="btn btn-ghost btn-block">
                 Quản trị
@@ -113,12 +116,38 @@ function Nav() {
 
 /* ------------------------------------------------------------------ */
 
-function PhoneFrame({ src, alt, eager = false }: { src: string; alt: string; eager?: boolean }) {
+/** `lightStatus`: thanh trạng thái chữ trắng, dùng cho ảnh có đầu màn hình màu tối. */
+function PhoneFrame({ src, alt, eager = false, lightStatus = false }: { src: string; alt: string; eager?: boolean; lightStatus?: boolean }) {
   return (
     <div className="phone">
       <div className="phone-body">
         <div className="phone-screen">
           <img src={src} alt={alt} loading={eager ? 'eager' : 'lazy'} width={660} height={1434} decoding="async" />
+          <div className={`phone-status${lightStatus ? ' is-light' : ''}`} aria-hidden="true">
+            <svg className="phone-time" viewBox="0 0 40 13" fill="currentColor">
+              <text y="12.5" fontSize="17" fontWeight="600">
+                9:41
+              </text>
+            </svg>
+            <span>
+              <svg viewBox="0 0 18 12" fill="currentColor">
+                <rect y="8" width="3" height="4" rx="0.8" />
+                <rect x="5" y="5.5" width="3" height="6.5" rx="0.8" />
+                <rect x="10" y="3" width="3" height="9" rx="0.8" />
+                <rect x="15" width="3" height="12" rx="0.8" />
+              </svg>
+              <svg viewBox="0 0 16 12" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+                <path d="M1.3 4.4a9.5 9.5 0 0 1 13.4 0" />
+                <path d="M4 7.1a5.7 5.7 0 0 1 8 0" />
+                <circle cx="8" cy="10.2" r="1.4" fill="currentColor" stroke="none" />
+              </svg>
+              <svg viewBox="0 0 27 12" fill="currentColor">
+                <rect x="0.5" y="0.5" width="22" height="11" rx="3.4" fill="none" stroke="currentColor" opacity="0.4" />
+                <rect x="2" y="2" width="19" height="8" rx="2" />
+                <rect x="24" y="4" width="1.6" height="4" rx="0.8" opacity="0.45" />
+              </svg>
+            </span>
+          </div>
         </div>
       </div>
     </div>
@@ -142,12 +171,15 @@ function Hero() {
             Sổ Nghe Lời biến câu nói hoặc nội dung bạn gõ thành bản nháp đơn bán. Bạn xem lại, sửa nếu cần rồi mới xác nhận ghi vào sổ.
           </p>
           <div className="lp-hero-cta">
-            <a href="#tai-ung-dung" className="btn btn-accent btn-lg">
-              <Download size={18} /> Xem bản thử nghiệm
-            </a>
-            <a href="#cach-hoat-dong" className="btn btn-on-dark btn-lg">
-              Xem cách hoạt động <ArrowRight size={18} />
-            </a>
+            {ANDROID_APK_URL ? (
+              <a href={ANDROID_APK_URL} className="btn btn-accent btn-lg">
+                <Download size={18} /> Tải cho Android
+              </a>
+            ) : (
+              <button type="button" className="btn btn-accent btn-lg" disabled>
+                <Download size={18} /> Tải cho Android · Sắp ra mắt
+              </button>
+            )}
           </div>
           <ul className="lp-hero-points">
             <li>
@@ -164,7 +196,7 @@ function Hero() {
 
         <div className="lp-hero-visual">
           <div className="hero-stage">
-            <PhoneFrame src="/screens/home.webp" alt="Màn hình Tổng quan của ứng dụng Sổ Nghe Lời: doanh thu tuần, lối vào đọc đơn, chọn hàng, quét mã, trợ lý AI" eager />
+            <PhoneFrame src="/screens/home.webp" alt="Màn hình Tổng quan của ứng dụng Sổ Nghe Lời: doanh thu tuần, lối vào đọc đơn, chọn hàng, quét mã, trợ lý AI" eager lightStatus />
             <span className="hero-bubble">
               <Mic size={16} /> “Hai bánh mì thịt, một cà phê sữa đá”
             </span>
@@ -376,7 +408,7 @@ function Showcase() {
         <div className="showcase-row">
           {SCREENS.map((s, i) => (
             <figure key={s.src} className="showcase-item" data-reveal style={delay(i)}>
-              <PhoneFrame src={s.src} alt={`Màn hình ${s.title}`} />
+              <PhoneFrame src={s.src} alt={`Màn hình ${s.title}`} lightStatus={s.src === '/screens/home.webp'} />
               <figcaption>
                 <strong>{s.title}</strong>
                 <span>{s.text}</span>
@@ -385,7 +417,7 @@ function Showcase() {
           ))}
         </div>
       </div>
-      <p className="lp-showcase-foot">Ảnh chụp từ bản thử nghiệm; số liệu trong ảnh là dữ liệu mẫu.</p>
+      <p className="lp-showcase-foot">Số liệu trong ảnh là dữ liệu mẫu.</p>
     </section>
   )
 }
@@ -500,7 +532,7 @@ const FAQS: { q: string; a: ReactNode }[] = [
   },
   {
     q: 'Dùng có mất phí không?',
-    a: 'Ứng dụng đang là bản thử nghiệm của một dự án sinh viên: chưa thu phí và chưa công bố gói trả phí nào.',
+    a: 'Ứng dụng đang ở giai đoạn thử nghiệm: chưa thu phí và chưa công bố gói trả phí nào.',
   },
 ]
 
@@ -511,7 +543,9 @@ function Faq() {
       <div className="lp-container lp-faq-grid">
         <div className="lp-faq-aside">
           <SectionHead kicker="Hỏi đáp" title="Câu hỏi thường gặp" center={false}>
-            Chưa thấy câu trả lời bạn cần? Hãy nhắn cho Team HEXA qua mục Bản thử nghiệm ở cuối trang.
+            {CONTACT_EMAIL
+              ? 'Chưa thấy câu trả lời bạn cần? Hãy nhắn cho chúng tôi qua mục Liên hệ ở cuối trang.'
+              : 'Những điều người bán hay hỏi trước khi dùng thử.'}
           </SectionHead>
           <img src="/brand/agent-question.webp" alt="" width={194} height={237} loading="lazy" />
         </div>
@@ -546,34 +580,6 @@ function Faq() {
   )
 }
 
-/* ------------------------------------------------------------------ */
-
-function DownloadBand() {
-  return (
-    <section className="lp-dl" id="tai-ung-dung">
-      <div className="lp-container">
-        <div className="dl-card" data-reveal>
-          <div className="dl-copy">
-            <h2>Thử ghi sổ bằng giọng nói</h2>
-            <p>Sổ Nghe Lời đang là bản thử nghiệm cho Android. Khi bản cài đặt sẵn sàng, liên kết tải sẽ được đăng ngay tại đây.</p>
-            <div className="dl-actions">
-              <span className="dl-status">
-                <Smartphone size={20} /> Bản Android: sắp có liên kết tải
-              </span>
-              {CONTACT_EMAIL && (
-                <a className="btn btn-accent btn-lg" href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Nhận bản thử Sổ Nghe Lời')}`}>
-                  Nhắn để nhận bản thử
-                </a>
-              )}
-            </div>
-          </div>
-          <img className="dl-art" src="/brand/agent-happy.webp" alt="" width={206} height={221} loading="lazy" />
-        </div>
-      </div>
-    </section>
-  )
-}
-
 export default function LandingPage() {
   useReveal()
   useEffect(() => {
@@ -591,7 +597,6 @@ export default function LandingPage() {
         <Showcase />
         <Compare />
         <Faq />
-        <DownloadBand />
       </main>
       <SiteFooter onHome />
     </div>
