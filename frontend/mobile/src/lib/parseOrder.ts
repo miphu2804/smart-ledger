@@ -58,7 +58,7 @@ export interface ParsedExpense {
 // ─── Chuẩn hoá chữ ───────────────────────────────────────────────────────────
 
 /** Hạ chữ thường, bỏ dấu tiếng Việt. Chưa đụng đến dấu câu và chữ số. */
-function fold(s: string): string {
+export function fold(s: string): string {
   return s
     .toLowerCase()
     .normalize('NFD')
@@ -73,7 +73,7 @@ function normalize(s: string): string {
     .trim();
 }
 
-const DIGIT_WORDS: Record<string, number> = {
+export const DIGIT_WORDS: Record<string, number> = {
   mot: 1,
   hai: 2,
   ba: 3,
@@ -100,7 +100,7 @@ const NUM_WORDS: Record<string, number> = {
   chin: 9,
   muoi: 10,
 };
-const UNITS = [
+export const UNITS = [
   'ly',
   'o',
   'chai',
@@ -121,7 +121,7 @@ const UNITS = [
   'qua',
   'thung',
 ];
-const FILLER = [
+export const FILLER = [
   'cho',
   'co',
   'chu',
@@ -143,7 +143,7 @@ const FILLER = [
   'ha',
 ];
 /** Từ nối giữa hai món khi nói liền một câu: "2 cà phê VÀ 1 bánh mì". */
-const DELIMITER_WORDS = new Set(['voi', 'them', 'va', 'kem', 'cung', 'nha', 'nhe', 'roi']);
+export const DELIMITER_WORDS = new Set(['voi', 'them', 'va', 'kem', 'cung', 'nha', 'nhe', 'roi']);
 
 // ─── Đọc tiền ────────────────────────────────────────────────────────────────
 //
@@ -182,7 +182,7 @@ interface SpokenNumber {
  * Đọc một cụm số tiếng Việt đã bỏ dấu: "hai muoi lam nghin" → 25000, "mot tram hai muoi" → 120,
  * "hai lam" → 25 (cách nói tắt), "hai tram ruoi" → 250. Trả null nếu cụm không hợp lệ.
  */
-function parseSpokenRun(tokens: string[]): SpokenNumber | null {
+export function parseSpokenRun(tokens: string[]): SpokenNumber | null {
   let total = 0;
   let group = 0;
   let pend: number | null = null;
@@ -277,7 +277,7 @@ function parseSpokenRun(tokens: string[]): SpokenNumber | null {
 }
 
 /** "20k" nói thành "hai mươi ca"; "ca" đứng trước "phê" thì là cà phê chứ không phải nghìn. */
-const isThousandWord = (w: string | undefined, after: string | undefined) =>
+export const isThousandWord = (w: string | undefined, after: string | undefined) =>
   w === 'k' || w === 'ka' || (w === 'ca' && after !== 'phe');
 
 /** Gom các cụm số đọc bằng chữ + đơn vị tiền thành token `m<đồng>`; cụm không có đơn vị tiền giữ nguyên (là số lượng). */
@@ -497,7 +497,7 @@ function cleanName(seg: string, original: string, extraDrop: string[] = []) {
 // ─── Expense detection ───────────────────────────────────────────────────────
 
 /** Sau "trả"/"trà" các từ này nghĩa là đang gọi trà (trà sữa, trà đá…), không phải trả tiền. */
-const TEA_WORDS = new Set(['sua', 'da', 'dao', 'chanh', 'xanh', 'tac', 'den', 'nong', 'lipton', 'gung', 'atiso', 'hoa', 'vai', 'nhai', 'sen', 'chau', 'tran', 'thai', 'bi']);
+export const TEA_WORDS = new Set(['sua', 'da', 'dao', 'chanh', 'xanh', 'tac', 'den', 'nong', 'lipton', 'gung', 'atiso', 'hoa', 'vai', 'nhai', 'sen', 'chau', 'tran', 'thai', 'bi']);
 const EXPENSE_VERBS = ['chi', 'mua', 'tra', 'nop', 'thanh', 'dat', 'phi'];
 
 /** Từ ở vị trí i có mở đầu một khoản chi không ("chị lấy…" là xưng hô, "trà sữa…" là món). */
