@@ -212,6 +212,7 @@ Each `android-*` environment needs:
 
 - Secret `ANDROID_GOOGLE_SERVICES_JSON`: the content of `google-services.json` for that environment's Firebase project. The job writes it to a temp path and points `GOOGLE_SERVICES_JSON` at it, which [`app.config.js`](../../frontend/mobile/app.config.js) already reads.
 - Variables `EXPO_PUBLIC_*`, the same list as [Mobile web on Vercel](#mobile-web-on-vercel).
+- Variable `STT_MODEL_BASE_URL`: the public R2 address (`https://pub-<hash>.r2.dev`) that holds the speech model, which the app downloads on first use because it is not in git. Step `Resolve the speech model URL` checks every file of `STT_MODEL_VERSION` there and sets `EXPO_PUBLIC_STT_MODEL_URL`. When files are missing, a publish fetches the model from HuggingFace and uploads it with the R2 secrets; a test build has no R2 secrets and only warns. A publish fails without the variable. Source, versioning and a local check: [`frontend/mobile/assets/models/README.md`](../../frontend/mobile/assets/models/README.md#đưa-model-lên-r2). It can be a repository variable shared by every `android-*` environment.
 - Deployment branches and approval as in the table under [GitHub Environments](#github-environments).
 
 ### Release signing
@@ -255,7 +256,8 @@ One-time setup:
 2. R2 → **API Tokens** → create a token with **Object Read & Write**, limited to that bucket.
 3. In GitHub environment `android-production`, add secrets `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`, and variable `R2_BUCKET`.
 4. Set variable `VITE_ANDROID_APK_URL=https://pub-<hash>.r2.dev/android/production/latest.apk` in GitHub environment `landing-production`, then re-run `deploy-landing` (see [Landing page on Vercel](#landing-page-on-vercel)). While the variable is empty the download button is disabled and reads "Sắp ra mắt".
-5. Optional: add an R2 lifecycle rule that deletes objects under `android/production/builds/` after 30 days.
+5. Optional: add an R2 lifecycle rule that deletes objects under `android/production/builds/` after 30 days. Never let it match `stt-model/`, which old APKs still download from.
+6. Set variable `STT_MODEL_BASE_URL=https://pub-<hash>.r2.dev` (see [Configuration](#configuration)). The first publish uploads the speech model under `stt-model/<version>/`.
 
 - The `r2.dev` address is rate-limited, not cached, and meant for development ([public buckets](https://developers.cloudflare.com/r2/buckets/public-buckets/)); it is a stopgap until the project owns a domain on Cloudflare. Moving to a custom domain only changes `VITE_ANDROID_APK_URL`.
 - Rollback: copy a file from `builds/` over `latest.apk` in the R2 dashboard. Android refuses to install an older version over a newer one, so this only helps people who have not updated yet.
