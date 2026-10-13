@@ -24,8 +24,12 @@ import com.smartledger.core.repository.AuthIdentityRepository;
 import com.smartledger.core.repository.ShopRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.impl.ShopServiceImpl;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -35,8 +39,10 @@ class ShopServiceTest {
     private final ShopRepository shopRepository = Mockito.mock(ShopRepository.class);
     private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
     private final AdminAccessAuditService adminAccessAuditService = Mockito.mock(AdminAccessAuditService.class);
+    private final NotificationEventService notifications = Mockito.mock(NotificationEventService.class);
+    private final EntityManager entityManager = Mockito.mock(EntityManager.class);
     private final ShopService service = new ShopServiceImpl(authIdentityRepository, shopRepository, auditLogService,
-            adminAccessAuditService, Mockito.mock(NotificationEventService.class));
+            adminAccessAuditService, notifications, entityManager);
 
     @Test
     void createsAnActiveShopForTheCurrentOwner() {
@@ -127,6 +133,11 @@ class ShopServiceTest {
         assertThat(response.name()).isEqualTo("New name");
         assertThat(response.industry()).isEqualTo("Old industry");
         assertThat(response.status()).isEqualTo(ShopStatus.ACTIVE);
+        var order = Mockito.inOrder(shopRepository, entityManager, auditLogService);
+        order.verify(shopRepository).findLockedByIdAndOwnerId(7L, owner.getId());
+        order.verify(entityManager).refresh(shop, LockModeType.PESSIMISTIC_WRITE);
+        order.verify(auditLogService).recordOwner(eq(shop), any(), eq(7L), any(), any(), any());
+        verify(shopRepository, never()).findByIdAndOwnerId(any(), any());
     }
 
     @Test
@@ -157,6 +168,7 @@ class ShopServiceTest {
         Shop shop = Shop.create(owner.getId(), "Tiệm Thảo", "Grocery", null, null);
         shop.deactivate("Subscription expired");
         when(shopRepository.findByIdAndOwnerId(eq(7L), any())).thenReturn(Optional.of(shop));
+        when(shopRepository.findLockedByIdAndOwnerId(7L, owner.getId())).thenReturn(Optional.of(shop));
 
         assertThatThrownBy(() -> service.updateById(
                 firebaseToken(),
@@ -178,6 +190,7 @@ class ShopServiceTest {
         Shop shop = Shop.create(owner.getId(), "Tiệm Thảo", "Grocery", null, null);
         shop.deactivate("Policy review");
         when(shopRepository.findByIdAndOwnerId(eq(7L), any())).thenReturn(Optional.of(shop));
+        when(shopRepository.findLockedByIdAndOwnerId(7L, owner.getId())).thenReturn(Optional.of(shop));
 
         assertThatThrownBy(() -> service.archiveById(firebaseToken(), "7",
                 new ArchiveShopRequest("No longer operating")))
@@ -249,6 +262,84 @@ class ShopServiceTest {
 
         verify(shopRepository, never()).findById(any());
         Mockito.verifyNoInteractions(adminAccessAuditService);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void ownerWritesCheckTheRefreshedInactiveStatusBeforeMutating(boolean archive) {
+        UserAccount owner = owner();
+        authenticateAs(owner);
+        Shop stale = Shop.create(owner.getId(), "Old name", "Retail", null, null);
+        when(shopRepository.findLockedByIdAndOwnerId(7L, owner.getId())).thenReturn(Optional.of(stale));
+        Mockito.doAnswer(invocation -> {
+            stale.deactivate("Latest admin reason");
+            return null;
+        }).when(entityManager).refresh(stale, LockModeType.PESSIMISTIC_WRITE);
+
+        assertThatThrownBy(() -> ownerWrite(archive)).isInstanceOfSatisfying(BusinessException.class, error -> {
+            assertThat(error.getErrorCode()).isEqualTo(ErrorCode.SHOP_INACTIVE);
+            assertThat(error.getDetails()).hasSize(1);
+            assertThat(error.getDetails().getFirst().issue()).isEqualTo("Latest admin reason");
+        });
+        assertThat(stale.getStatus()).isEqualTo(ShopStatus.INACTIVE);
+        assertThat(stale.getName()).isEqualTo("Old name");
+        assertThat(stale.getArchivedAt()).isNull();
+        verify(shopRepository, never()).findByIdAndOwnerId(any(), any());
+        Mockito.verifyNoInteractions(auditLogService, adminAccessAuditService, notifications);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void ownerWritesRejectAnArchivedShopAfterRefresh(boolean archive) {
+        UserAccount owner = owner();
+        authenticateAs(owner);
+        Shop stale = Shop.create(owner.getId(), "Old name", "Retail", null, null);
+        when(shopRepository.findLockedByIdAndOwnerId(7L, owner.getId())).thenReturn(Optional.of(stale));
+        Mockito.doAnswer(invocation -> {
+            stale.archive("Already archived");
+            return null;
+        }).when(entityManager).refresh(stale, LockModeType.PESSIMISTIC_WRITE);
+
+        assertThatThrownBy(() -> ownerWrite(archive)).isInstanceOfSatisfying(BusinessException.class,
+                error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.SHOP_NOT_FOUND));
+        assertThat(stale.getArchivedReason()).isEqualTo("Already archived");
+        assertThat(stale.getName()).isEqualTo("Old name");
+        Mockito.verifyNoInteractions(auditLogService, adminAccessAuditService, notifications);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void ownerWritesDoNotReadOrRefreshAnotherOwnersShop(boolean archive) {
+        authenticateAs(owner());
+        assertThatThrownBy(() -> ownerWrite(archive)).isInstanceOfSatisfying(BusinessException.class,
+                error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.SHOP_ACCESS_DENIED));
+        verify(shopRepository, never()).findByIdAndOwnerId(any(), any());
+        Mockito.verifyNoInteractions(entityManager, auditLogService, adminAccessAuditService, notifications);
+    }
+
+    @Test
+    void adminCannotReopenAShopArchivedBeforeItsLockWasAcquired() {
+        UserAccount admin = owner();
+        ReflectionTestUtils.setField(admin, "systemRole", SystemRole.ADMIN);
+        authenticateAs(admin);
+        Shop stale = Shop.create(99L, "Old name", "Retail", null, null);
+        when(shopRepository.findLockedById(7L)).thenReturn(Optional.of(stale));
+        Mockito.doAnswer(invocation -> {
+            stale.archive("Owner closed shop");
+            return null;
+        }).when(entityManager).refresh(stale, LockModeType.PESSIMISTIC_WRITE);
+
+        assertThatThrownBy(() -> service.updateStatus(firebaseToken(), "7",
+                new ShopStatusUpdateRequest(ShopStatus.ACTIVE, null)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        error -> assertThat(error.getErrorCode()).isEqualTo(ErrorCode.SHOP_NOT_FOUND));
+        assertThat(stale.getStatus()).isEqualTo(ShopStatus.ARCHIVED);
+        Mockito.verifyNoInteractions(auditLogService, adminAccessAuditService, notifications);
+    }
+
+    private void ownerWrite(boolean archive) {
+        if (archive) service.archiveById(firebaseToken(), "7", new ArchiveShopRequest("Owner closed shop"));
+        else service.updateById(firebaseToken(), "7", new ShopUpdateRequest("New name", null, null, null));
     }
 
     private void authenticateAs(UserAccount user) {
