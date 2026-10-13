@@ -1,5 +1,5 @@
 import type { CategoryView, ProductView } from '../data/types';
-import { apiRequest, type UploadImage } from './api';
+import { ApiError, apiRequest, type UploadImage } from './api';
 import { fetchAllPages } from './pageApi';
 import { createIdempotentSender } from './idempotency';
 
@@ -71,6 +71,19 @@ export const categoryApi = {
 export const productApi = {
   /** GET /products — danh sách ACTIVE */
   list: (): Promise<ProductView[]> => fetchAllPages<ProductView>('/products'),
+  /**
+   * GET /products/lookup?barcode= — tra một sản phẩm ACTIVE của tiệm theo mã vạch, khớp chính xác từng ký tự (CORE-012).
+   * Trả `null` khi Core báo chưa có (`404 product_not_found`). Lỗi khác (mạng, mã không hợp lệ, hết phiên…) được ném
+   * lên để nơi gọi không nhầm "không kiểm tra được" thành "chưa có".
+   */
+  lookup: async (barcode: string): Promise<ProductView | null> => {
+    try {
+      return await apiRequest<ProductView>(`/products/lookup?barcode=${encodeURIComponent(barcode)}`, { withShop: true });
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404 && e.code === 'product_not_found') return null;
+      throw e;
+    }
+  },
   create: (input: ProductWriteRequest): Promise<ProductView> =>
     apiRequest<ProductView>('/products', { method: 'POST', body: input, withShop: true }),
   update: (id: number, input: ProductUpdateRequest): Promise<ProductView> =>

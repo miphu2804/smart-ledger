@@ -998,8 +998,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
         visible={scannerOpen}
         onClose={() => setScannerOpen(false)}
         products={products}
-        productsStatus={products.length ? 'ready' : loading ? 'loading' : error ? 'failed' : 'ready'}
-        onRetryProducts={load}
+        onProductFound={(p) => setProducts((cur) => (cur.some((x) => x.id === p.id) ? cur : [...cur, p]))}
         cartItems={cartItems}
         onAddToCart={(p, delta) => addToCart(p.id, delta)}
         onClearCart={() => setCart({})}

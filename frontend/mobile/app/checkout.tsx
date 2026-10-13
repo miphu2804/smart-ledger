@@ -71,13 +71,15 @@ export default function Checkout() {
     loadProducts();
   }, [loadProducts]);
 
-  const handleProductScanned = (product: ProductView, _barcode?: string, qty: number = 1) => {
+  // Bộ quét làm việc trên chính đơn này (như ở Bán hàng): thêm món, cộng số lượng khi quét lại, sửa hoặc xoá món đã quét.
+  const adjustScannedItem = (product: ProductView, delta: number) => {
     setItems((cur) => {
       const idx = cur.findIndex((i) => i.productId === product.id);
-      if (idx >= 0) {
-        return cur.map((x, i) => (i === idx ? { ...x, qty: x.qty + qty } : x));
+      if (idx < 0) {
+        return delta > 0 ? [...cur, { productId: product.id, name: product.name, price: product.sellingPriceVnd, qty: delta }] : cur;
       }
-      return [...cur, { productId: product.id, name: product.name, price: product.sellingPriceVnd, qty }];
+      const qty = cur[idx].qty + delta;
+      return qty > 0 ? cur.map((x, i) => (i === idx ? { ...x, qty } : x)) : cur.filter((_, i) => i !== idx);
     });
   };
 
@@ -431,7 +433,9 @@ export default function Checkout() {
         visible={scannerOpen}
         onClose={() => setScannerOpen(false)}
         products={products}
-        onProductScanned={handleProductScanned}
+        onProductFound={(p) => setProducts((cur) => (cur.some((x) => x.id === p.id) ? cur : [...cur, p]))}
+        cartItems={items}
+        onAddToCart={adjustScannedItem}
         onProductCreated={(p) => setProducts((cur) => [...cur, p])}
       />
     </Screen>

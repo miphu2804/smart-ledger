@@ -522,6 +522,17 @@ function assertBarcodeFree(barcode: string | null, exceptId?: number): void {
   }
 }
 
+/** GET /products/lookup?barcode=: khớp chính xác, chỉ sản phẩm ACTIVE; thiếu mã hoặc mã không hợp lệ thì 400, chưa có thì 404. */
+function lookupProduct(rawQuery: string): ProductView {
+  const barcode = normalizeBarcode(new URLSearchParams(rawQuery).get('barcode'));
+  if (!barcode) {
+    throw new ApiError(400, 'validation_failed', 'barcode is required.', undefined, [{ field: 'barcode', issue: 'required' }]);
+  }
+  const product = products.find((p) => p.status === 'ACTIVE' && p.barcode === barcode);
+  if (!product) throw apiErr(404, 'product_not_found', 'This product is unavailable.');
+  return { ...product };
+}
+
 function createProduct(body: ProductWriteBody): ProductView {
   if (body.imageUrl) {
     throw apiErr(400, 'product_image_url_unsupported', 'Product images are uploaded through the image endpoint.');
@@ -1226,6 +1237,8 @@ export function mockCoreRequest<T>(path: string, method: string, body: unknown, 
     if (method === 'GET') return pageOf(listProducts(), rawQuery, 'invalid_product_query') as unknown as T;
     if (method === 'POST') return createProduct(body as ProductWriteBody) as unknown as T;
   }
+  // Đường dẫn cố định, phải khớp trước /products/{id}
+  if (route === '/products/lookup' && method === 'GET') return lookupProduct(rawQuery) as unknown as T;
   if (segments[0] === 'products' && segments.length === 2) {
     const id = Number(segments[1]);
     if (method === 'PATCH') return updateProduct(id, body as ProductPatchBody) as unknown as T;
