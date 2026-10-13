@@ -20,7 +20,8 @@ class MediaDeleteTest {
     private final MediaCleanupJobService jobs = mock(MediaCleanupJobService.class);
     private final AuditLogService audit = mock(AuditLogService.class);
     private final MediaWriteTransactionService writes = new MediaWriteTransactionService(products, shops, users,
-            mock(MediaIdempotencyReplay.class), jobs, audit, new UnavailableMediaStorage(), mock(JdbcTemplate.class));
+            mock(MediaIdempotencyReplay.class), jobs, audit, new UnavailableMediaStorage(), mock(JdbcTemplate.class),
+            mock(jakarta.persistence.EntityManager.class));
 
     @Test void disabledMediaDoesNotClearExistingProductLogoOrAvatar() {
         Shop shop = shop();
