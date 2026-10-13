@@ -25,6 +25,7 @@ Biến môi trường (xem `.env.example`):
 | `VITE_API_ENDPOINT` | `http://localhost:8000` | Địa chỉ backend |
 | `VITE_USE_MOCK` | (bật) | Đặt `false` để gọi API thật thay vì dữ liệu mẫu |
 | `VITE_CONTACT_EMAIL` | (trống) | Email nhận yêu cầu về dữ liệu cá nhân, hiện trên `/privacy` và `/data-deletion`. Để trống thì hai trang hiện chỗ trống thay vì địa chỉ giả |
+| `VITE_ANDROID_APK_URL` | (trống) | Liên kết tải APK Android trên trang giới thiệu (xem [Publish the APK for the landing page](../../docs/development/ci-cd.md#publish-the-apk-for-the-landing-page)). Để trống thì nút tải hiện "Sắp ra mắt" và không bấm được |
 | `VITE_ADMIN_ENABLED` | (tắt) | `true` bật trang quản trị `/admin`. Tắt thì bản build không có mã admin, tài khoản demo cũng không lọt vào bundle. Đặt `true` trong `.env.local` khi phát triển |
 | `VITE_LEGAL_DRAFT` | `true` | Hai trang pháp lý hiện nhãn "Bản nháp" cho đến khi chủ sản phẩm duyệt; đặt `false` lúc build để gỡ nhãn |
 
