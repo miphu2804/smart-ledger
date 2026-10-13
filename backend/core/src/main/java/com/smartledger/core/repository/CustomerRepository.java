@@ -5,8 +5,9 @@ import com.smartledger.core.enums.CatalogStatus;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
-public interface CustomerRepository extends JpaRepository<Customer, Long> {
+public interface CustomerRepository extends JpaRepository<Customer, Long>, JpaSpecificationExecutor<Customer> {
     List<Customer> findAllByShopIdAndStatusOrderByIdAsc(Long shopId, CatalogStatus status);
 
     Optional<Customer> findByIdAndShopIdAndStatus(Long id, Long shopId, CatalogStatus status);

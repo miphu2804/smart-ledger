@@ -34,6 +34,8 @@ interface State {
   authReady: boolean;
   /** Firebase còn đăng nhập nhưng Core chưa có tài khoản (thoát app giữa chừng ở bước nhập tên) */
   needsProfile: boolean;
+  /** Firebase còn đăng nhập bằng email + mật khẩu nhưng email chưa xác minh (thoát app giữa chừng ở bước xác minh) */
+  needsEmailVerification: boolean;
   loggedIn: boolean;
   onboarded: boolean;
   /** id tiệm đang dùng (gửi qua header X-Shop-Id); null khi chưa có / đang mock */
@@ -56,6 +58,7 @@ function initialState(): State {
   return {
     authReady: false,
     needsProfile: false,
+    needsEmailVerification: false,
     loggedIn: false,
     onboarded: true,
     shopId: null,
@@ -82,6 +85,7 @@ function sessionPatch(st: State, s: SessionView): Partial<State> {
   return {
     loggedIn: true,
     needsProfile: false,
+    needsEmailVerification: false,
     onboarded: !s.needsOnboarding,
     shopId: shop ? String(shop.id) : null,
     user: {
@@ -138,20 +142,20 @@ function useStoreValue() {
       },
       logout: async () => {
         loggedInRef.current = false;
-        patch(() => ({ loggedIn: false, needsProfile: false, shopId: null }));
+        patch(() => ({ loggedIn: false, needsProfile: false, needsEmailVerification: false, shopId: null }));
         await authClient.signOut().catch(() => undefined);
       },
       enterDevApp: () => {
         if (!__DEV__) return;
         loggedInRef.current = true;
-        patch(() => ({ authReady: true, loggedIn: true, onboarded: true, needsProfile: false, guideDismissed: true }));
+        patch(() => ({ authReady: true, loggedIn: true, onboarded: true, needsProfile: false, needsEmailVerification: false, guideDismissed: true }));
       },
       /** 401 từ Core hoặc Firebase báo hết phiên: đăng xuất và đưa về màn đăng nhập (hợp đồng: 401 → đăng xuất). */
       forceSignOut: async () => {
         const wasLoggedIn = loggedInRef.current;
         debugLog('session', 'forceSignOut', wasLoggedIn ? '(đang đăng nhập → về màn đăng nhập)' : '(chưa đăng nhập)');
         loggedInRef.current = false;
-        patch(() => ({ loggedIn: false, needsProfile: false, shopId: null }));
+        patch(() => ({ loggedIn: false, needsProfile: false, needsEmailVerification: false, shopId: null }));
         await authClient.signOut().catch(() => undefined);
         if (wasLoggedIn) {
           try {
@@ -342,7 +346,10 @@ function useStoreValue() {
         first = false;
         clearTimeout(fallback);
         debugLog('session', 'khởi động: Firebase', signedIn ? 'còn đăng nhập → gọi /me' : 'chưa đăng nhập');
-        if (signedIn) {
+        if (signedIn && authClient.needsEmailVerification()) {
+          // Chưa xác minh email thì chưa lấy phiên ở Core; splash đưa về màn xác minh
+          patch(() => ({ needsEmailVerification: true }));
+        } else if (signedIn) {
           try {
             const session = await sessionApi.me();
             if (session.role !== 'OWNER') throw new AuthError('not-owner');

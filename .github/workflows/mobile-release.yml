@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: GitHub environment to build for; it picks the Firebase config and the allowed branch
+        description: Must be android-production on main, android-staging on staging and android-dev on any other branch; it picks the Firebase config
         type: choice
         required: true
         default: android-dev
@@ -20,6 +20,11 @@ on:
         required: true
         default: auto
         options: [auto, github-hosted, self-hosted]
+      publish:
+        description: android-production only; build a release-signed APK and publish it to R2 as the landing page download
+        type: boolean
+        required: true
+        default: false
 
 permissions:
   contents: read
@@ -35,6 +40,7 @@ env:
   ANDROID_PLATFORM: "36"
   ANDROID_BUILD_TOOLS: 36.0.0
   ANDROID_NDK: 27.1.12297006
+  RELEASE_KEY_ALIAS: smart-ledger
 
 jobs:
   ### Gate: branch policy and a green CI run, before any runner is used ###
@@ -48,21 +54,27 @@ jobs:
       - name: Check the branch matches the environment
         env:
           ENVIRONMENT: ${{ inputs.environment }}
+          PUBLISH: ${{ inputs.publish }}
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
         run: |
           if [ "$REF_TYPE" != branch ]; then
             echo "::error::Run this workflow from a branch, not a tag."; exit 1
           fi
-          case "$ENVIRONMENT" in
-            android-production) want=main ;;
-            android-staging) want=staging ;;
-            *) want="" ;;
+          # The branch decides the environment, so main can never be built with staging or dev config.
+          case "$REF_NAME" in
+            main) want=android-production ;;
+            staging) want=android-staging ;;
+            *) want=android-dev ;;
           esac
-          if [ -n "$want" ] && [ "$REF_NAME" != "$want" ]; then
-            echo "::error::$ENVIRONMENT builds only from $want, got $REF_NAME."; exit 1
+          if [ "$ENVIRONMENT" != "$want" ]; then
+            echo "::error::Branch $REF_NAME builds only with $want, got $ENVIRONMENT."; exit 1
           fi
-      # android-dev builds from any branch of this repository, so a pull request can be tested before it merges.
+          # The landing page links to one file, and it must be the build that talks to the production backend.
+          if [ "$PUBLISH" = true ] && [ "$ENVIRONMENT" != android-production ]; then
+            echo "::error::publish is only allowed with android-production, got $ENVIRONMENT."; exit 1
+          fi
+      # Any other branch of this repository builds as android-dev, so a pull request can be tested before it merges.
       - name: Require a green CI run for the commit
         if: inputs.environment != 'android-dev'
         env:
@@ -138,16 +150,41 @@ jobs:
         id: cfg
         env:
           ENVIRONMENT: ${{ inputs.environment }}
+          PUBLISH: ${{ inputs.publish }}
         run: |
           # Play needs an AAB with every ABI; staging ships a universal APK so it also runs on emulators and
-          # old phones; dev stays arm64-only for a fast build on a real phone.
+          # old phones; dev stays arm64-only for a fast build on a real phone. A published production build is an
+          # APK because people install it straight from the landing page.
+          production_format=aab
+          [ "$PUBLISH" = true ] && production_format=apk
           case "$ENVIRONMENT" in
-            android-production) { echo "format=aab"; echo "abis=armeabi-v7a,arm64-v8a,x86,x86_64"; } >> "$GITHUB_OUTPUT" ;;
+            android-production) { echo "format=$production_format"; echo "abis=armeabi-v7a,arm64-v8a,x86,x86_64"; } >> "$GITHUB_OUTPUT" ;;
             android-staging) { echo "format=apk"; echo "abis=armeabi-v7a,arm64-v8a,x86,x86_64"; } >> "$GITHUB_OUTPUT" ;;
             *) { echo "format=apk"; echo "abis=arm64-v8a"; } >> "$GITHUB_OUTPUT" ;;
           esac
           echo "TIMINGS=$RUNNER_TEMP/timings.txt" >> "$GITHUB_ENV"
           echo "start=$(date +%s)" > "$RUNNER_TEMP/timings.txt"
+
+      # Fails before the build, which takes minutes, instead of at the upload.
+      - name: Check the publish prerequisites
+        if: inputs.publish
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          missing=""
+          for name in R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Publishing needs these in environment ${{ inputs.environment }}:$missing"; exit 1
+          fi
+          command -v aws > /dev/null || { echo "::error::Publishing needs the aws CLI on this runner."; exit 1; }
+
 
       # GitHub-hosted runners are clean VMs, so the toolchain is installed (and cached) on every run.
       - uses: actions/setup-node@v7
@@ -200,6 +237,16 @@ jobs:
           printf '%s' "$ANDROID_GOOGLE_SERVICES_JSON" > "$RUNNER_TEMP/google-services.json"
           echo "GOOGLE_SERVICES_JSON=$RUNNER_TEMP/google-services.json" >> "$GITHUB_ENV"
 
+      # Without the secret the build keeps the template's debug keystore, which is public: fine for a test build, never
+      # for a published one. The keystore is PKCS12, so the key shares the store password.
+      - name: Write the release keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          [ -n "$ANDROID_KEYSTORE_BASE64" ] || { echo "No release keystore in this environment: signing with the debug keystore."; exit 0; }
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          echo "RELEASE_KEYSTORE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+
       # --clean regenerates android/ so a leftover from a previous build on a self-hosted machine cannot leak in.
       - name: Generate the native project
         working-directory: frontend/mobile
@@ -213,10 +260,25 @@ jobs:
         env:
           FORMAT: ${{ steps.cfg.outputs.format }}
           ABIS: ${{ steps.cfg.outputs.abis }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           task=assembleRelease
           [ "$FORMAT" = aab ] && task=bundleRelease
-          ./gradlew "$task" "-PreactNativeArchitectures=$ABIS" "-Dorg.gradle.jvmargs=$GRADLE_JVM_ARGS"
+          # `expo prebuild --clean` rewrites build.gradle on every run, so the keystore is passed through the Android
+          # Gradle plugin's injected signing properties, which override the signing config of the built variant.
+          signing=()
+          if [ -n "$RELEASE_KEYSTORE" ]; then
+            signing=(
+              "-Pandroid.injected.signing.store.file=$RELEASE_KEYSTORE"
+              "-Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD"
+              "-Pandroid.injected.signing.key.alias=$RELEASE_KEY_ALIAS"
+              "-Pandroid.injected.signing.key.password=$KEYSTORE_PASSWORD"
+            )
+          fi
+          ./gradlew "$task" "-PreactNativeArchitectures=$ABIS" "-Dorg.gradle.jvmargs=$GRADLE_JVM_ARGS" "${signing[@]}"
+      - name: Remove the release keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.keystore"
       - name: Mark build done
         run: echo "gradle=$(date +%s)" >> "$TIMINGS"
 
@@ -241,6 +303,32 @@ jobs:
           echo "path=$RUNNER_TEMP/android-out/$name" >> "$GITHUB_OUTPUT"
       - name: Mark packaged
         run: echo "package=$(date +%s)" >> "$TIMINGS"
+
+      # builds/ keeps every published APK for rollback; latest.apk is the fixed URL the landing page links to.
+      - name: Publish the APK to R2
+        id: publish
+        if: inputs.publish
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_ENDPOINT_URL: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          BUCKET: ${{ vars.R2_BUCKET }}
+          APK: ${{ steps.package.outputs.path }}
+        run: |
+          # Anyone can sign an update with the debug key, so a debug-signed APK must never reach the download link.
+          sdk="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          certs=$("$sdk/build-tools/$ANDROID_BUILD_TOOLS/apksigner" verify --print-certs "$APK")
+          echo "$certs"
+          if echo "$certs" | grep -q "CN=Android Debug"; then
+            echo "::error::The APK is signed with the debug keystore; not publishing."; exit 1
+          fi
+          prefix="s3://$BUCKET/android/production"
+          type=application/vnd.android.package-archive
+          aws s3 cp "$APK" "$prefix/builds/$(basename "$APK")" --content-type "$type"
+          aws s3 cp "$APK" "$prefix/latest.apk" --content-type "$type" --cache-control no-cache \
+            --content-disposition 'attachment; filename="so-nghe-loi.apk"'
+
 
       - name: Write the build summary
         if: always()

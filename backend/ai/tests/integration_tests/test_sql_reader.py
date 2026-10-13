@@ -6,14 +6,15 @@ from dataclasses import dataclass
 
 import psycopg
 import pytest
-from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
-from langchain_core.messages import AIMessage
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
 from tests.support import (
     TEST_GUARDRAIL_LIMITS,
+    ScriptedModel,
     apply_ai_baseline,
     apply_core_migrations,
+    tool_call,
+    tool_results,
 )
 
 from src.agent.service import AgentService
@@ -401,43 +402,24 @@ def test_rows_are_capped_and_marked_truncated(reader_db: ReaderDatabase) -> None
     assert result["truncated"] is True
 
 
-class ToolCallingChatModel(FakeMessagesListChatModel):
-    seen_calls: list = []
-
-    def bind_tools(self, tools, **kwargs):
-        return self
-
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        self.seen_calls = [*self.seen_calls, list(messages)]
-        return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
-
-
 class MemoryConversations:
-    def context_for(self, conversation_id, user_id, shop_id):
-        return {"summary": None, "summary_through_message_id": None, "messages": []}
-
-    def folded_messages(self, conversation_id, user_id, shop_id):
+    def recent_messages(self, conversation_id, user_id, shop_id, limit):
         return []
 
     def save_exchange(self, **kwargs):
         return 1, 2
 
 
-def test_chat_turn_answers_after_a_timed_out_query(reader_db: ReaderDatabase) -> None:
+@pytest.mark.anyio
+async def test_chat_turn_answers_after_a_timed_out_query(
+    reader_db: ReaderDatabase,
+) -> None:
     slow = (
         "WITH RECURSIVE n AS (SELECT 1 AS i UNION ALL SELECT i + 1 FROM n "
         "WHERE i < 100000000) SELECT count(*) FROM n"
     )
-    model = ToolCallingChatModel(
-        responses=[
-            AIMessage(
-                content="",
-                tool_calls=[
-                    {"name": "query_shop_data", "args": {"sql": slow}, "id": "c1"}
-                ],
-            ),
-            AIMessage(content="No shop data right now."),
-        ]
+    model = ScriptedModel(
+        tool_call("query_shop_data", {"sql": slow}), "No shop data right now."
     )
     agent = AgentService(
         model,
@@ -446,11 +428,10 @@ def test_chat_turn_answers_after_a_timed_out_query(reader_db: ReaderDatabase) ->
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
 
-    result = agent.chat(
+    result = await agent.chat(
         user_id=1, shop_id=reader_db.shop_a, message="count the products"
     )
 
     assert result.answer == "No shop data right now."
-    tool_message = model.seen_calls[-1][-1]
-    assert tool_message.type == "tool"
-    assert tool_message.content.startswith("Error[QUERY_TIMEOUT]")
+    (tool_result,) = tool_results(model)
+    assert tool_result.startswith("Error[QUERY_TIMEOUT]")

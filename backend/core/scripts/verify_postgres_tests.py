@@ -6,7 +6,18 @@ from xml.etree import ElementTree
 
 
 REQUIRED = {
-    "com.smartledger.core.config.SaleRefundMigrationPostgresTest": set(),
+    "com.smartledger.core.config.SaleRefundMigrationPostgresTest": {
+        "notificationUpgradePreservesExistingBusinessDataWithoutBackfill",
+        "notificationMigrationAdoptsLocalTablesAndPreservesReadHistory",
+        "invalidLocalThresholdFailsNotificationMigrationAtomicallyAndAllowsRetry",
+    },
+    "com.smartledger.core.service.NotificationPostgresTest": {
+        "concurrentConfirmationOfTheSameDraftCreatesOneSaleAndOneAlert",
+        "concurrentDifferentSalesProduceOnlyOneOpenStockAlert",
+        "concurrentVoidRetryCreatesOneNotificationAndRefund",
+        "notificationWriteFailureRollsBackVoidRefundAndIdempotencyKey",
+        "readBatchIsAtomicAndEventsCannotBeReadByAnotherOwnerEvenWithAnIncorrectRecipientRow",
+    },
     "com.smartledger.core.service.DebtVoidPostgresTest": set(),
     "com.smartledger.core.service.AuditLogPostgresTest": {
         "lateCheckoutFailureRollsBackEveryBusinessWriteAndCanBeRetried",
@@ -35,7 +46,7 @@ def verify(reports: Path) -> None:
             problems.append(f"{name}: tests skipped or failed")
         missing = required_methods - {case.get("name") for case in cases}
         if missing:
-            problems.append(f"{name}: required checkout tests missing: {sorted(missing)}")
+            problems.append(f"{name}: required tests missing: {sorted(missing)}")
         print(f"{name}: tests={suite.get('tests')}, skipped={suite.get('skipped')}")
     if problems:
         raise SystemExit("PostgreSQL verification incomplete:\n" + "\n".join(problems))

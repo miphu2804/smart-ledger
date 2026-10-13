@@ -17,6 +17,7 @@ import com.smartledger.core.repository.ShopRepository;
 import com.smartledger.core.repository.UserAccountRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.impl.AuthSessionServiceImpl;
+import com.smartledger.core.media.MediaStorage;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -27,10 +28,12 @@ class AuthSessionServiceTest {
     private final AuthIdentityRepository authIdentityRepository = Mockito.mock(AuthIdentityRepository.class);
     private final UserAccountRepository userAccountRepository = Mockito.mock(UserAccountRepository.class);
     private final ShopRepository shopRepository = Mockito.mock(ShopRepository.class);
+    private final MediaStorage mediaStorage = Mockito.mock(MediaStorage.class);
     private final AuthSessionService service = new AuthSessionServiceImpl(
             authIdentityRepository,
             userAccountRepository,
-            shopRepository);
+            shopRepository,
+            mediaStorage);
 
     @Test
     void createsOwnerAndFirebaseIdentityOnFirstSignIn() {
@@ -91,6 +94,38 @@ class AuthSessionServiceTest {
                         BusinessException.class,
                         exception -> assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.AUTH_PROFILE_NOT_FOUND));
+    }
+
+    @Test
+    void returnsASignedCloudinaryAvatarInsteadOfPersistingAProviderUrl() {
+        VerifiedFirebaseToken firebaseToken = firebaseToken();
+        UserAccount user = UserAccount.createOwner("Existing owner", firebaseToken);
+        user.replaceCloudinaryAvatar("users/1/avatar/opaque");
+        when(authIdentityRepository.findWithUserByProviderSubject(firebaseToken.uid()))
+                .thenReturn(Optional.of(AuthIdentity.forFirebase(user, firebaseToken.uid())));
+        when(mediaStorage.authenticatedUrl("users/1/avatar/opaque"))
+                .thenReturn("https://cdn.example/image/authenticated/s--signature--/avatar.png");
+
+        AuthSessionResponse session = service.getCurrentSession(firebaseToken);
+
+        assertThat(session.user().avatarUrl()).contains("authenticated").contains("s--signature--");
+        assertThat(user.getAvatarUrl()).isEqualTo("https://example.test/avatar.png");
+        verify(mediaStorage).authenticatedUrl("users/1/avatar/opaque");
+    }
+
+    @Test
+    void doesNotFailSessionWhenMediaIsDisabledForAnExistingCloudinaryAvatar() {
+        VerifiedFirebaseToken firebaseToken = firebaseToken();
+        UserAccount user = UserAccount.createOwner("Existing owner", firebaseToken);
+        user.replaceCloudinaryAvatar("users/1/avatar/opaque");
+        when(authIdentityRepository.findWithUserByProviderSubject(firebaseToken.uid()))
+                .thenReturn(Optional.of(AuthIdentity.forFirebase(user, firebaseToken.uid())));
+        when(mediaStorage.authenticatedUrl("users/1/avatar/opaque"))
+                .thenThrow(new BusinessException(ErrorCode.MEDIA_UNAVAILABLE));
+
+        AuthSessionResponse session = service.getCurrentSession(firebaseToken);
+
+        assertThat(session.user().avatarUrl()).isNull();
     }
 
     private VerifiedFirebaseToken firebaseToken() {

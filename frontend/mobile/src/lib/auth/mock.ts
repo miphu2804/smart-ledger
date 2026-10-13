@@ -1,33 +1,32 @@
-import { MOCK_OTP } from '../../data/mock';
 import { AuthClient, AuthError } from './types';
 
-/** Bản giả lập (USE_MOCK=true): mã OTP luôn là MOCK_OTP, trạng thái đăng nhập chỉ nằm trong bộ nhớ — không cần Firebase. */
+/** Bản giả lập (USE_MOCK=true): trạng thái đăng nhập chỉ nằm trong bộ nhớ — không cần Firebase. */
 let signedIn = false;
 let phone = '';
 let email = '';
+/** true khi tài khoản email vừa đăng ký chưa bấm xác minh; bản mock coi việc "Tôi đã xác minh" là đủ. */
+let unverified = false;
 const emailAccounts = new Map<string, string>(); // email -> mật khẩu
 const listeners = new Set<(signedIn: boolean) => void>();
 const notify = () => listeners.forEach((cb) => cb(signedIn));
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const normalize = (e: string) => e.trim().toLowerCase();
 
-function loginAs(kind: { phone: string } | { email: string }) {
-  phone = 'phone' in kind ? kind.phone : '';
-  email = 'email' in kind ? kind.email : '';
+function loginAs(kind: { email: string }, needsVerification = false) {
+  phone = '';
+  email = kind.email;
+  unverified = needsVerification;
   signedIn = true;
   notify();
 }
 
+/** Tài khoản Facebook giả lập: bản mock không có Facebook thật, nên luôn đăng nhập vào cùng một người dùng mẫu. */
+const MOCK_FACEBOOK_EMAIL = 'facebook.demo@example.com';
+
 export const mockAuth: AuthClient = {
-  async sendOtp(phoneE164) {
-    await sleep(300);
-    return {
-      async confirm(code) {
-        await sleep(600);
-        if (code !== MOCK_OTP) throw new AuthError('invalid-code', `Mã OTP không đúng. Thử lại với ${MOCK_OTP}`);
-        loginAs({ phone: phoneE164 });
-      },
-    };
+  async signInWithFacebook() {
+    await sleep(500);
+    loginAs({ email: MOCK_FACEBOOK_EMAIL });
   },
   async signInWithEmail(rawEmail, password) {
     await sleep(400);
@@ -42,13 +41,27 @@ export const mockAuth: AuthClient = {
     if (password.length < 6) throw new AuthError('weak-password');
     if (emailAccounts.has(e)) throw new AuthError('email-in-use');
     emailAccounts.set(e, password);
-    loginAs({ email: e });
+    loginAs({ email: e }, true);
+  },
+  async sendPasswordReset(rawEmail) {
+    await sleep(400);
+    if (!/^\S+@\S+\.\S+$/.test(normalize(rawEmail))) throw new AuthError('invalid-email');
+  },
+  async sendEmailVerification() {
+    await sleep(300);
+  },
+  needsEmailVerification: () => signedIn && unverified,
+  async refreshEmailVerified() {
+    await sleep(500);
+    unverified = false;
+    return true;
   },
   async getIdToken() {
     return signedIn ? 'mock-id-token' : null;
   },
   async signOut() {
     signedIn = false;
+    unverified = false;
     email = '';
     notify();
   },

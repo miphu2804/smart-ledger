@@ -23,6 +23,8 @@ import com.smartledger.core.enums.ErrorCode;
 import com.smartledger.core.exception.BusinessException;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.impl.AgentServiceImpl;
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -110,6 +112,38 @@ class AgentServiceTest {
         assertThatThrownBy(() -> service.getConversation(TOKEN, "7", 5L))
                 .isInstanceOfSatisfying(BusinessException.class,
                         e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.CONVERSATION_NOT_FOUND));
+    }
+
+    @Test
+    void chatStreamRelaysEventsAndNarrowsDone() throws Exception {
+        String events = "event: delta\r\ndata: {\"text\":\"Ti\u1ec7m\"}\r\n\r\n"
+                + "event: reset\r\ndata: {}\r\n\r\n"
+                + "event: done\r\ndata: {\"conversation_id\":5,\"message_id\":9,\"answer\":\"ok\","
+                + "\"request_id\":\"r\",\"model\":\"m\",\"model_version\":\"v\"}\r\n\r\n";
+        ai.expect(requestTo(AI + "/internal/v1/agent/chat/stream")).andExpect(method(HttpMethod.POST))
+                .andExpect(content().json("{\"user_id\":3,\"shop_id\":7,\"message\":\"hi\"}"))
+                .andRespond(withSuccess(events, MediaType.TEXT_EVENT_STREAM));
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        service.chatStream(TOKEN, "7", new AgentChatRequest(null, "hi")).writeTo(out);
+
+        assertThat(out.toString(StandardCharsets.UTF_8)).isEqualTo("event: delta\ndata: {\"text\":\"Ti\u1ec7m\"}\n\n"
+                + "event: reset\ndata: {}\n\n"
+                + "event: done\ndata: {\"conversation_id\":5,\"message_id\":9,\"answer\":\"ok\"}\n\n");
+    }
+
+    @Test
+    void chatStreamMapsFailuresBeforeTheFirstEvent() {
+        ai.expect(requestTo(AI + "/internal/v1/agent/chat/stream")).andRespond(withStatus(HttpStatus.NOT_FOUND));
+        assertThatThrownBy(() -> service.chatStream(TOKEN, "7", new AgentChatRequest(5L, "hi")))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.CONVERSATION_NOT_FOUND));
+
+        ai.reset();
+        ai.expect(requestTo(AI + "/internal/v1/agent/chat/stream")).andRespond(withServerError());
+        assertThatThrownBy(() -> service.chatStream(TOKEN, "7", new AgentChatRequest(null, "hi")))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.AI_UNAVAILABLE));
     }
 
     @Test

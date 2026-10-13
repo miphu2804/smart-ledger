@@ -8,7 +8,7 @@ import { colors } from '../src/theme';
 
 /** Splash — chờ Firebase khôi phục phiên đã lưu, rồi chuyển sang đăng nhập (hoặc Trang chủ nếu còn đăng nhập) */
 export default function Splash() {
-  const { loggedIn, authReady, needsProfile, onboarded } = useApp();
+  const { loggedIn, authReady, needsProfile, needsEmailVerification, onboarded } = useApp();
   const reducedMotion = useReducedMotion();
   const fade = useRef(new Animated.Value(0)).current;
 
@@ -23,12 +23,14 @@ export default function Splash() {
       ? onboarded
         ? '/(tabs)'
         : '/(auth)/setup' // đã có tài khoản nhưng chưa tạo tiệm
-      : needsProfile
-        ? '/(auth)/profile' // Firebase còn đăng nhập, Core chưa có tài khoản
-        : '/(auth)/welcome';
+      : needsEmailVerification
+        ? '/(auth)/verify-email' // đăng ký bằng email nhưng chưa xác minh
+        : needsProfile
+          ? '/(auth)/profile' // Firebase còn đăng nhập, Core chưa có tài khoản
+          : '/(auth)/welcome';
     const t = setTimeout(() => router.replace(target), 1400);
     return () => clearTimeout(t);
-  }, [authReady, loggedIn, needsProfile, onboarded]);
+  }, [authReady, loggedIn, needsProfile, needsEmailVerification, onboarded]);
 
   return (
     <View style={styles.wrap}>

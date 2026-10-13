@@ -6,10 +6,13 @@ import com.fasterxml.jackson.annotation.JsonSetter;
 import com.fasterxml.jackson.annotation.Nulls;
 import com.fasterxml.jackson.core.JsonLocation;
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
+import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.Set;
 import lombok.Getter;
@@ -28,7 +31,8 @@ public class ProductPatchRequest {
     @Size(max = 255)
     private String name;
 
-    @Size(max = 100)
+    @Schema(description = "Omit to preserve the barcode; null or blank clears it. Trimmed before validation; "
+            + "at most 100 Unicode code points after trim, no internal whitespace or control characters, case-sensitive.")
     private String barcode;
 
     @Size(max = 1000)
@@ -45,6 +49,16 @@ public class ProductPatchRequest {
     private Long costPriceVnd;
 
     private Boolean tracked;
+
+    @PositiveOrZero
+    @Digits(integer = 12, fraction = 3)
+    private BigDecimal lowStockThreshold;
+
+    @JsonSetter("lowStockThreshold")
+    public void setLowStockThreshold(BigDecimal value) {
+        providedFields.add("lowStockThreshold");
+        lowStockThreshold = value;
+    }
 
     public boolean hasField(String field) {
         return providedFields.contains(field);

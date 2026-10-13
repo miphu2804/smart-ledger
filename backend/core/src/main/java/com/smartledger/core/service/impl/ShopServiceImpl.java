@@ -21,6 +21,7 @@ import com.smartledger.core.repository.AuthIdentityRepository;
 import com.smartledger.core.repository.ShopRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.ShopService;
+import com.smartledger.core.service.NotificationEventService;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
@@ -31,12 +32,15 @@ import org.springframework.util.StringUtils;
 public class ShopServiceImpl implements ShopService {
     private final AuditLogService auditLogService;
     private final AdminAccessAuditService adminAccessAuditService;
+    private final NotificationEventService notifications;
 
     private final AuthIdentityRepository authIdentityRepository;
     private final ShopRepository shopRepository;
 
     public ShopServiceImpl(AuthIdentityRepository authIdentityRepository, ShopRepository shopRepository,
-            AuditLogService auditLogService, AdminAccessAuditService adminAccessAuditService) {
+            AuditLogService auditLogService, AdminAccessAuditService adminAccessAuditService,
+            NotificationEventService notifications) {
+        this.notifications = notifications;
         this.auditLogService = auditLogService;
         this.adminAccessAuditService = adminAccessAuditService;
         this.authIdentityRepository = authIdentityRepository;
@@ -73,7 +77,13 @@ public class ShopServiceImpl implements ShopService {
         if (!request.hasChanges()) {
             throw new BusinessException(ErrorCode.SHOP_UPDATE_REQUIRED);
         }
-        Shop shop = requireOwnedVisibleShop(firebaseToken, shopId, "shopId");
+        Shop visibleShop = requireOwnedVisibleShop(firebaseToken, shopId, "shopId");
+        ensureShopIsActive(visibleShop);
+        Shop shop = shopRepository.findLockedByIdAndOwnerId(visibleShop.getId(), visibleShop.getOwnerId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.SHOP_ACCESS_DENIED));
+        if (shop.getStatus() == ShopStatus.ARCHIVED) {
+            throw new BusinessException(ErrorCode.SHOP_NOT_FOUND);
+        }
         ensureShopIsActive(shop);
         shop.update(
                 request.name() == null ? shop.getName() : normalizeRequired(request.name()),
@@ -94,7 +104,13 @@ public class ShopServiceImpl implements ShopService {
             VerifiedFirebaseToken firebaseToken,
             String shopId,
             ArchiveShopRequest request) {
-        Shop shop = requireOwnedVisibleShop(firebaseToken, shopId, "shopId");
+        Shop visibleShop = requireOwnedVisibleShop(firebaseToken, shopId, "shopId");
+        ensureShopIsActive(visibleShop);
+        Shop shop = shopRepository.findLockedByIdAndOwnerId(visibleShop.getId(), visibleShop.getOwnerId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.SHOP_ACCESS_DENIED));
+        if (shop.getStatus() == ShopStatus.ARCHIVED) {
+            throw new BusinessException(ErrorCode.SHOP_NOT_FOUND);
+        }
         ensureShopIsActive(shop);
         shop.archive(normalizeRequired(request.archivedReason()));
         auditLogService.recordOwner(shop, AuditAction.SHOP_ARCHIVED, shop.getId(), shop.getArchivedReason(), null,
@@ -108,7 +124,7 @@ public class ShopServiceImpl implements ShopService {
             String shopId,
             ShopStatusUpdateRequest request) {
         UserAccount admin = requireActiveAdmin(firebaseToken);
-        Shop shop = shopRepository.findById(parseShopId(shopId, "shopId"))
+        Shop shop = shopRepository.findLockedById(parseShopId(shopId, "shopId"))
                 .orElseThrow(() -> new BusinessException(ErrorCode.SHOP_NOT_FOUND));
         if (shop.getStatus() == ShopStatus.ARCHIVED) {
             throw new BusinessException(ErrorCode.SHOP_NOT_FOUND);
@@ -125,6 +141,7 @@ public class ShopServiceImpl implements ShopService {
         // One existing status event serves both OWNER and ADMIN views; never duplicate the write.
         adminAccessAuditService.recordShopStatus(admin.getId(), shop.getId(), before,
                 shop.getStatus(), shop.getInactiveReason());
+        notifications.shopStatusChanged(shop, before);
         return toResponse(shop);
     }
 
@@ -235,6 +252,7 @@ public class ShopServiceImpl implements ShopService {
                 shop.getIndustry(),
                 shop.getPhone(),
                 shop.getAddress(),
+                shop.getLogoUrl(),
                 shop.getStatus(),
                 shop.getInactiveReason(),
                 shop.getArchivedReason());

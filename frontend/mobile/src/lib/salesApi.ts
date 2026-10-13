@@ -1,6 +1,7 @@
 import type { PaymentView, SaleDraftView, SaleRefundView, SaleView, SaleVoidView } from '../data/types';
 import { ApiError, apiRequest } from './api';
 import { createIdempotentSender } from './idempotency';
+import { fetchAllPages } from './pageApi';
 import type { SaleVoidRequest } from './saleVoid';
 
 // Mỗi loại thao tác ghi tiền một bộ gửi: mất mạng rồi bấm lại cùng nội dung dùng lại Idempotency-Key cũ nên Core
@@ -34,7 +35,7 @@ export interface SaleDraftWriteRequest {
 export const saleDraftApi = {
   create: (input: SaleDraftWriteRequest): Promise<SaleDraftView> =>
     apiRequest<SaleDraftView>('/sale-drafts', { method: 'POST', body: input, withShop: true }),
-  list: (): Promise<SaleDraftView[]> => apiRequest<SaleDraftView[]>('/sale-drafts', { withShop: true }),
+  list: (): Promise<SaleDraftView[]> => fetchAllPages<SaleDraftView>('/sale-drafts'),
   getById: (id: number): Promise<SaleDraftView> => apiRequest<SaleDraftView>(`/sale-drafts/${id}`, { withShop: true }),
   replace: (id: number, input: SaleDraftWriteRequest): Promise<SaleDraftView> =>
     apiRequest<SaleDraftView>(`/sale-drafts/${id}`, { method: 'PUT', body: input, withShop: true }),
@@ -46,7 +47,7 @@ export const saleDraftApi = {
 };
 
 export const saleApi = {
-  list: (): Promise<SaleView[]> => apiRequest<SaleView[]>('/sales', { withShop: true }),
+  list: (): Promise<SaleView[]> => fetchAllPages<SaleView>('/sales'),
   getById: (id: number): Promise<SaleView> => apiRequest<SaleView>(`/sales/${id}`, { withShop: true }),
   /**
    * POST /sales/{id}/void: huỷ cả đơn, hoàn toàn bộ tiền đã thu, huỷ nợ còn dư, tuỳ chọn hoàn hàng về kho (xem saleVoid.ts).

@@ -1,18 +1,22 @@
 package com.smartledger.core.service.impl;
 
 import com.smartledger.core.dto.request.CustomerWriteRequest;
+import com.smartledger.core.dto.request.OwnerListQuery.Customers;
 import com.smartledger.core.dto.response.CustomerResponse;
+import com.smartledger.core.dto.response.PageResponse;
 import com.smartledger.core.entity.Customer;
 import com.smartledger.core.entity.Shop;
 import com.smartledger.core.enums.CatalogStatus;
 import com.smartledger.core.enums.ErrorCode;
 import com.smartledger.core.exception.BusinessException;
 import com.smartledger.core.repository.CustomerRepository;
+import com.smartledger.core.repository.OwnerListSpecifications;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.CustomerService;
 import com.smartledger.core.service.ShopService;
-import java.util.List;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -34,11 +38,12 @@ public class CustomerServiceImpl implements CustomerService {
     }
 
     @Override
-    @Transactional(readOnly = true)
-    public List<CustomerResponse> list(VerifiedFirebaseToken token, String shopId) {
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public PageResponse<CustomerResponse> list(VerifiedFirebaseToken token, String shopId, Customers query) {
         Shop shop = shopService.requireOwnedActiveShop(token, shopId);
-        return customerRepository.findAllByShopIdAndStatusOrderByIdAsc(shop.getId(), CatalogStatus.ACTIVE)
-                .stream().map(this::toResponse).toList();
+        var page = customerRepository.findAll(OwnerListSpecifications.customers(shop.getId(), query),
+                query.pageable(Sort.by("id").ascending()));
+        return PageResponse.from(page, this::toResponse);
     }
 
     @Override

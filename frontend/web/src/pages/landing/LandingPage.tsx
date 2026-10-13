@@ -5,19 +5,18 @@ import {
   CheckCircle2,
   ChevronDown,
   Download,
-  Info,
   Menu,
   MessageSquareText,
   Mic,
   NotebookPen,
   SearchX,
   ShieldCheck,
-  Smartphone,
   X,
   type LucideIcon,
 } from 'lucide-react'
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { ADMIN_ENABLED, ANDROID_APK_URL } from '../../config'
 import Logo, { LogoMark } from '../../components/Logo'
 import { useReveal } from '../../hooks/useReveal'
 import '../../styles/landing.css'
@@ -69,12 +68,16 @@ function Nav() {
           ))}
         </nav>
         <div className="lp-nav-actions">
-          <Link to="/admin/login" className="lp-admin-link">
-            Quản trị
-          </Link>
-          <a href="#tai-ung-dung" className="btn btn-accent btn-sm lp-nav-cta">
-            <Download size={16} /> Bản thử nghiệm
-          </a>
+          {ADMIN_ENABLED && (
+            <Link to="/admin/login" className="lp-admin-link">
+              Quản trị
+            </Link>
+          )}
+          {ANDROID_APK_URL && (
+            <a href={ANDROID_APK_URL} className="btn btn-accent btn-sm lp-nav-cta">
+              <Download size={16} /> Tải ứng dụng
+            </a>
+          )}
           <button
             type="button"
             className="icon-btn lp-burger"
@@ -94,12 +97,16 @@ function Nav() {
             </a>
           ))}
           <div className="lp-mobile-menu-foot">
-            <a href="#tai-ung-dung" className="btn btn-primary btn-block" onClick={() => setOpen(false)}>
-              <Download size={16} /> Bản thử nghiệm
-            </a>
-            <Link to="/admin/login" className="btn btn-ghost btn-block">
-              Quản trị
-            </Link>
+            {ANDROID_APK_URL && (
+              <a href={ANDROID_APK_URL} className="btn btn-primary btn-block" onClick={() => setOpen(false)}>
+                <Download size={16} /> Tải ứng dụng
+              </a>
+            )}
+            {ADMIN_ENABLED && (
+              <Link to="/admin/login" className="btn btn-ghost btn-block">
+                Quản trị
+              </Link>
+            )}
           </div>
         </div>
       )}
@@ -109,11 +116,39 @@ function Nav() {
 
 /* ------------------------------------------------------------------ */
 
-function PhoneFrame({ src, alt, eager = false }: { src: string; alt: string; eager?: boolean }) {
+/** `lightStatus`: thanh trạng thái chữ trắng, dùng cho ảnh có đầu màn hình màu tối. */
+function PhoneFrame({ src, alt, eager = false, lightStatus = false }: { src: string; alt: string; eager?: boolean; lightStatus?: boolean }) {
   return (
     <div className="phone">
-      <div className="phone-screen">
-        <img src={src} alt={alt} loading={eager ? 'eager' : 'lazy'} width={390} height={844} decoding="async" />
+      <div className="phone-body">
+        <div className="phone-screen">
+          <img src={src} alt={alt} loading={eager ? 'eager' : 'lazy'} width={660} height={1434} decoding="async" />
+          <div className={`phone-status${lightStatus ? ' is-light' : ''}`} aria-hidden="true">
+            <svg className="phone-time" viewBox="0 0 40 13" fill="currentColor">
+              <text y="12.5" fontSize="17" fontWeight="600">
+                9:41
+              </text>
+            </svg>
+            <span>
+              <svg viewBox="0 0 18 12" fill="currentColor">
+                <rect y="8" width="3" height="4" rx="0.8" />
+                <rect x="5" y="5.5" width="3" height="6.5" rx="0.8" />
+                <rect x="10" y="3" width="3" height="9" rx="0.8" />
+                <rect x="15" width="3" height="12" rx="0.8" />
+              </svg>
+              <svg viewBox="0 0 16 12" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+                <path d="M1.3 4.4a9.5 9.5 0 0 1 13.4 0" />
+                <path d="M4 7.1a5.7 5.7 0 0 1 8 0" />
+                <circle cx="8" cy="10.2" r="1.4" fill="currentColor" stroke="none" />
+              </svg>
+              <svg viewBox="0 0 27 12" fill="currentColor">
+                <rect x="0.5" y="0.5" width="22" height="11" rx="3.4" fill="none" stroke="currentColor" opacity="0.4" />
+                <rect x="2" y="2" width="19" height="8" rx="2" />
+                <rect x="24" y="4" width="1.6" height="4" rx="0.8" opacity="0.45" />
+              </svg>
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -136,12 +171,15 @@ function Hero() {
             Sổ Nghe Lời biến câu nói hoặc nội dung bạn gõ thành bản nháp đơn bán. Bạn xem lại, sửa nếu cần rồi mới xác nhận ghi vào sổ.
           </p>
           <div className="lp-hero-cta">
-            <a href="#tai-ung-dung" className="btn btn-accent btn-lg">
-              <Download size={18} /> Xem bản thử nghiệm
-            </a>
-            <a href="#cach-hoat-dong" className="btn btn-on-dark btn-lg">
-              Xem cách hoạt động <ArrowRight size={18} />
-            </a>
+            {ANDROID_APK_URL ? (
+              <a href={ANDROID_APK_URL} className="btn btn-accent btn-lg">
+                <Download size={18} /> Tải cho Android
+              </a>
+            ) : (
+              <button type="button" className="btn btn-accent btn-lg" disabled>
+                <Download size={18} /> Tải cho Android · Sắp ra mắt
+              </button>
+            )}
           </div>
           <ul className="lp-hero-points">
             <li>
@@ -158,7 +196,7 @@ function Hero() {
 
         <div className="lp-hero-visual">
           <div className="hero-stage">
-            <PhoneFrame src="/screens/home.webp" alt="Màn hình Tổng quan của ứng dụng Sổ Nghe Lời: doanh thu tuần, lối vào đọc đơn, chọn hàng, quét mã, trợ lý AI" eager />
+            <PhoneFrame src="/screens/home.webp" alt="Màn hình Tổng quan của ứng dụng Sổ Nghe Lời: doanh thu tuần, lối vào đọc đơn, chọn hàng, quét mã, trợ lý AI" eager lightStatus />
             <span className="hero-bubble">
               <Mic size={16} /> “Hai bánh mì thịt, một cà phê sữa đá”
             </span>
@@ -318,7 +356,7 @@ function Steps() {
 
 /* ------------------------------------------------------------------ */
 
-const FEATURES: { icon: string; title: string; text: string; tag?: string }[] = [
+const FEATURES: { icon: string; title: string; text: string }[] = [
   { icon: 'doc-don', title: 'Đọc đơn bằng giọng nói', text: 'Nhấn giữ nút ghi âm, đọc đơn. Giọng nói được nhận dạng ngay trên điện thoại, bạn xem lại danh sách món trước khi lưu.' },
   { icon: 'chon-hang', title: 'Chọn hàng nhanh', text: 'Lưới hoặc danh sách hàng có ảnh, chạm là thêm vào đơn. Lọc theo nhóm, sắp xếp theo tên hoặc tồn kho.' },
   { icon: 'quet-ma', title: 'Quét mã vạch', text: 'Quét mã vạch hoặc mã QR bằng camera để thêm đúng mặt hàng vào đơn.' },
@@ -326,7 +364,6 @@ const FEATURES: { icon: string; title: string; text: string; tag?: string }[] = 
   { icon: 'debts', title: 'Công nợ', text: 'Ghi nợ khi khách chưa trả, theo dõi ai còn nợ bao nhiêu và ghi nhận từng lần thu.' },
   { icon: 'expenses', title: 'Chi phí', text: 'Ghi tiền nhập hàng, điện nước, mặt bằng để xem lãi gộp ước tính của kỳ.' },
   { icon: 'reports', title: 'Báo cáo', text: 'Doanh thu, số đơn, giờ bán đông và món bán chạy theo ngày, tuần, tháng.' },
-  { icon: 'tro-li-ai', title: 'Trợ lý AI', text: 'Hỏi đáp về số liệu của chính tiệm bạn. Trợ lý chỉ đọc dữ liệu, không tự sửa sổ.', tag: 'Đang hoàn thiện' },
 ]
 
 function Features() {
@@ -342,11 +379,9 @@ function Features() {
               <img src={`/brand/icons/${f.icon}.webp`} alt="" width={58} height={58} loading="lazy" />
               <h3>{f.title}</h3>
               <p>{f.text}</p>
-              {f.tag && <span className="feat-tag">{f.tag}</span>}
             </article>
           ))}
         </div>
-        <p className="lp-feat-note">Ứng dụng đang trong giai đoạn thử nghiệm: một số tính năng còn được hoàn thiện và có thể thay đổi.</p>
       </div>
     </section>
   )
@@ -373,7 +408,7 @@ function Showcase() {
         <div className="showcase-row">
           {SCREENS.map((s, i) => (
             <figure key={s.src} className="showcase-item" data-reveal style={delay(i)}>
-              <PhoneFrame src={s.src} alt={`Màn hình ${s.title}`} />
+              <PhoneFrame src={s.src} alt={`Màn hình ${s.title}`} lightStatus={s.src === '/screens/home.webp'} />
               <figcaption>
                 <strong>{s.title}</strong>
                 <span>{s.text}</span>
@@ -382,19 +417,18 @@ function Showcase() {
           ))}
         </div>
       </div>
-      <p className="lp-showcase-foot">Ảnh chụp từ bản thử nghiệm; số liệu trong ảnh là dữ liệu mẫu.</p>
+      <p className="lp-showcase-foot">Số liệu trong ảnh là dữ liệu mẫu.</p>
     </section>
   )
 }
 
 /* ------------------------------------------------------------------ */
 
-type Cell = { text: string; mark?: 'yes' | 'no' | 'mid' }
+type Cell = { text: string; mark?: 'yes' | 'no' }
 const COMPARE: { label: string; us: Cell; pos: Cell }[] = [
   { label: 'Cách ghi đơn', us: { text: 'Nói hoặc gõ một câu tự nhiên', mark: 'yes' }, pos: { text: 'Chọn món, nhập số trên màn hình hoặc máy quét' } },
   { label: 'Thời gian làm quen', us: { text: 'Vài phút, nói như nói chuyện', mark: 'yes' }, pos: { text: 'Cần thời gian thiết lập danh mục, học nghiệp vụ' } },
   { label: 'Thiết bị cần có', us: { text: 'Điện thoại sẵn có', mark: 'yes' }, pos: { text: 'Thường kèm máy POS, máy quét, máy in' } },
-  { label: 'Hỏi đáp số liệu bằng AI', us: { text: 'Đang hoàn thiện', mark: 'mid' }, pos: { text: 'Tuỳ sản phẩm', mark: 'mid' } },
   { label: 'Báo cáo', us: { text: 'Ngắn gọn: doanh thu, lãi gộp ước tính, bán chạy' }, pos: { text: 'Rất nhiều báo cáo chuyên sâu', mark: 'yes' } },
   { label: 'Kế toán, hoá đơn điện tử, chuỗi cửa hàng', us: { text: 'Chưa hỗ trợ', mark: 'no' }, pos: { text: 'Hỗ trợ đầy đủ', mark: 'yes' } },
   { label: 'Phù hợp nhất với', us: { text: 'Quán nước, xe đẩy, sạp chợ, tạp hoá nhỏ' }, pos: { text: 'Cửa hàng vừa và lớn, chuỗi, doanh nghiệp' } },
@@ -408,15 +442,9 @@ function Mark({ m }: { m?: Cell['mark'] }) {
         <Check size={13} strokeWidth={3} />
       </span>
     )
-  if (m === 'no')
-    return (
-      <span className="cmp-mark no" aria-label="Không">
-        <X size={13} strokeWidth={3} />
-      </span>
-    )
   return (
-    <span className="cmp-mark mid" aria-label="Tuỳ trường hợp">
-      ~
+    <span className="cmp-mark no" aria-label="Không">
+      <X size={13} strokeWidth={3} />
     </span>
   )
 }
@@ -474,7 +502,7 @@ const FAQS: { q: string; a: ReactNode }[] = [
   },
   {
     q: 'Có cần Internet không?',
-    a: 'Giọng nói được nhận dạng ngay trên điện thoại, không cần gửi âm thanh đi. Nhưng để lưu sổ lên tài khoản và dùng trợ lý AI, ứng dụng cần kết nối Internet (Wi‑Fi hoặc 4G).',
+    a: 'Giọng nói được nhận dạng ngay trên điện thoại, không cần gửi âm thanh đi. Nhưng để lưu sổ lên tài khoản, ứng dụng cần kết nối Internet (Wi‑Fi hoặc 4G).',
   },
   {
     q: 'Dữ liệu bán hàng của tôi có an toàn không?',
@@ -504,7 +532,7 @@ const FAQS: { q: string; a: ReactNode }[] = [
   },
   {
     q: 'Dùng có mất phí không?',
-    a: 'Ứng dụng đang là bản thử nghiệm của một dự án sinh viên: chưa thu phí và chưa công bố gói trả phí nào.',
+    a: 'Ứng dụng đang ở giai đoạn thử nghiệm: chưa thu phí và chưa công bố gói trả phí nào.',
   },
 ]
 
@@ -515,7 +543,9 @@ function Faq() {
       <div className="lp-container lp-faq-grid">
         <div className="lp-faq-aside">
           <SectionHead kicker="Hỏi đáp" title="Câu hỏi thường gặp" center={false}>
-            Chưa thấy câu trả lời bạn cần? Hãy nhắn cho Team HEXA qua mục Bản thử nghiệm ở cuối trang.
+            {CONTACT_EMAIL
+              ? 'Chưa thấy câu trả lời bạn cần? Hãy nhắn cho chúng tôi qua mục Liên hệ ở cuối trang.'
+              : 'Những điều người bán hay hỏi trước khi dùng thử.'}
           </SectionHead>
           <img src="/brand/agent-question.webp" alt="" width={194} height={237} loading="lazy" />
         </div>
@@ -523,7 +553,7 @@ function Faq() {
           {FAQS.map((f, i) => {
             const isOpen = open === i
             return (
-              <div key={f.q} className={`faq${isOpen ? ' is-open' : ''}`} data-reveal style={delay(i % 4)}>
+              <div key={f.q} className="faq" data-open={isOpen} data-reveal style={delay(i % 4)}>
                 <h3>
                   <button
                     type="button"
@@ -550,38 +580,6 @@ function Faq() {
   )
 }
 
-/* ------------------------------------------------------------------ */
-
-function DownloadBand() {
-  return (
-    <section className="lp-dl" id="tai-ung-dung">
-      <div className="lp-container">
-        <div className="dl-card" data-reveal>
-          <div className="dl-copy">
-            <h2>Thử ghi sổ bằng giọng nói</h2>
-            <p>Sổ Nghe Lời đang là bản thử nghiệm cho Android. Khi bản cài đặt sẵn sàng, liên kết tải sẽ được đăng ngay tại đây.</p>
-            <div className="dl-actions">
-              <span className="dl-status">
-                <Smartphone size={20} /> Bản Android: sắp có liên kết tải
-              </span>
-              {CONTACT_EMAIL && (
-                <a className="btn btn-accent btn-lg" href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Nhận bản thử Sổ Nghe Lời')}`}>
-                  Nhắn để nhận bản thử
-                </a>
-              )}
-            </div>
-            <p className="dl-note">
-              <Info size={15} />
-              <span>Đây là sản phẩm của một dự án sinh viên đang thử nghiệm: tính năng có thể thay đổi và chưa có gói trả phí.</span>
-            </p>
-          </div>
-          <img className="dl-art" src="/brand/agent-happy.webp" alt="" width={206} height={221} loading="lazy" />
-        </div>
-      </div>
-    </section>
-  )
-}
-
 export default function LandingPage() {
   useReveal()
   useEffect(() => {
@@ -599,7 +597,6 @@ export default function LandingPage() {
         <Showcase />
         <Compare />
         <Faq />
-        <DownloadBand />
       </main>
       <SiteFooter onHome />
     </div>

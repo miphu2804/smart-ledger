@@ -13,7 +13,7 @@ import { ActivityIndicator, Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ToastProvider } from '../src/components/brand';
 import { AppStoreProvider } from '../src/store/AppStore';
-import { colors } from '../src/theme';
+import { colors, WEB_FRAME_MAX_WIDTH } from '../src/theme';
 
 export default function RootLayout() {
   const [loaded] = useFonts({
@@ -63,5 +63,5 @@ export default function RootLayout() {
 
 const webFrame = {
   outer: { flex: 1, backgroundColor: '#E8E4DC', alignItems: 'center' as const },
-  inner: { flex: 1, width: '100%' as const, maxWidth: 440, backgroundColor: colors.bg, overflow: 'hidden' as const },
+  inner: { flex: 1, width: '100%' as const, maxWidth: WEB_FRAME_MAX_WIDTH, backgroundColor: colors.bg, overflow: 'hidden' as const },
 };

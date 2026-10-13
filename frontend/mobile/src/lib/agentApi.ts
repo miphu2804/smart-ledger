@@ -4,7 +4,8 @@ import type {
   AgentConversationSummary,
   AgentConversationView,
 } from '../data/types';
-import { apiRequest } from './api';
+import { USE_MOCK } from '../config';
+import { ApiError, apiRequest, apiStream } from './api';
 
 /**
  * Trợ lý AI qua Core (`/api/v1/agent/*`, docs/contracts/api-contracts.md §5) — cần header X-Shop-Id.
@@ -22,6 +23,31 @@ export const agentApi = {
       withShop: true,
       timeoutMs: CHAT_TIMEOUT_MS,
     }),
+  /**
+   * POST /agent/chat/stream — cùng lượt hỏi như `chat` nhưng trả lời dần: `onText` nhận toàn bộ chữ đã tới
+   * (rỗng khi AI báo `reset`), Promise trả câu cuối từ sự kiện `done`. Sự kiện `error` mang mã lỗi như `chat`.
+   * Khi bật mock thì hỏi `chat` rồi hiện cả câu một lần.
+   */
+  chatStream: async (input: AgentChatRequest, onText: (text: string) => void): Promise<AgentChatMessageView> => {
+    if (USE_MOCK) {
+      const reply = await agentApi.chat(input);
+      onText(reply.answer);
+      return reply;
+    }
+    let text = '';
+    let reply: AgentChatMessageView | null = null;
+    await apiStream('/agent/chat/stream', { body: input, withShop: true, timeoutMs: CHAT_TIMEOUT_MS }, (event, data) => {
+      if (event === 'delta') onText((text += (data as { text: string }).text));
+      else if (event === 'reset') onText((text = ''));
+      else if (event === 'done') reply = data as AgentChatMessageView;
+      else if (event === 'error') {
+        const code = (data as { detail?: string }).detail ?? 'ai_unavailable';
+        throw new ApiError(0, code, 'Trợ lý AI đang tạm lỗi hoặc quá tải.');
+      }
+    });
+    if (!reply) throw new ApiError(0, 'ai_unavailable', 'Trợ lý AI đang tạm lỗi hoặc quá tải.');
+    return reply;
+  },
   /** GET /agent/conversations — hội thoại của user/tiệm hiện tại */
   listConversations: (): Promise<AgentConversationSummary[]> =>
     apiRequest<AgentConversationSummary[]>('/agent/conversations', { withShop: true }),

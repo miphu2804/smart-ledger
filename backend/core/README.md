@@ -24,8 +24,25 @@ Set these environment variables in the process that launches Core. [`.env.exampl
 | `AI_BASE_URL` | Optional; AI service URL for the Agent proxy, defaults to `http://localhost:8001` |
 | `INTERNAL_API_TOKEN` | Shared with AI and sent as `X-Internal-Token`; a missing or mismatched value makes AI return `401`, which Core reports as `503 ai_unavailable` |
 | `IDEMPOTENCY_TTL_DAYS` | Optional; retention of `Idempotency-Key` results, defaults to `30` |
+| `CLOUDINARY_ENABLED` | `false` by default; set `true` only when all Cloudinary variables below are present |
+| `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | Server-only Cloudinary credential; never commit or put in mobile/web variables |
+| `CLOUDINARY_PUBLIC_ID_PREFIX` | Required when media is enabled; relative namespace such as `smartledger/local`, `smartledger/staging`, or `smartledger/prod` |
+| `MEDIA_UPLOAD_LEASE_SECONDS` | PENDING Product/logo/avatar upload lease, defaults to `300`; an expired lease can be safely claimed again with the same key/file |
+| `CLOUDINARY_CLEANUP_FIXED_DELAY_MS` | Optional cleanup worker delay; defaults to `60000` ms and is useful as a short value only in local testing |
 
 With `FLYWAY_ENABLED=true` (the default in `application.yml`) Flyway runs committed migrations at startup; JPA then validates the schema. The shared dev/staging database is migrated only from merged code, so set `FLYWAY_ENABLED=false` when you point Core at it (see [Database migrations](../../README.md#database-migrations)). Use the same Firebase project ID for the backend and any locally generated test tokens.
+
+## Cloudinary media
+
+Core uploads one Product image and one Shop logo as public media, and one user avatar as authenticated media. The client calls Core multipart endpoints; it never receives `CLOUDINARY_API_SECRET` or a provider public ID. Core accepts JPEG/PNG only, validates bytes rather than the filename/MIME, limits files to 5 MiB and dimensions to 2048×2048.
+
+Set `CLOUDINARY_ENABLED=true` only together with cloud name, API key, API secret and a prefix. Startup deliberately fails when one is missing or the prefix is unsafe. Use separate credentials or at least prefixes for local/staging/production; for example `smartledger/local`, `smartledger/staging`, `smartledger/prod`. When disabled, media writes return `503 media_unavailable`, the cleanup worker is absent, and session endpoints still work even for an account that has a stored avatar reference.
+
+Replacing or deleting a Product image/logo/avatar commits a `media_cleanup_jobs` row alongside the database change. The worker locks PENDING jobs with `FOR UPDATE SKIP LOCKED`, checks current references and active uploads, then deletes the old asset. Its per-job transaction remains open during deletion; competing workers skip it. Retry updates only PENDING jobs. New assets uploaded before a database rollback may still require operational cleanup.
+
+All three uploads require `Idempotency-Key`. V14 adds `media_upload_keys` with SHOP scope for Product/logo and USER scope for avatar. An active duplicate receives `409 media_upload_in_progress`; a completed request replays its snapshot. Avatar replay regenerates the delivery URL. Expired upload leases are reclaimed atomically with a new token; old uploaders cannot complete or release a newer reservation. Final writes lock/recheck the entity and lease before changing references/audit. Deterministic public IDs use `overwrite=true` to retry identical bytes. Monetary idempotency remains in `api_idempotency_keys`.
+
+Firebase `avatar_url` remains a fallback and keeps syncing. DELETE removes only the custom Cloudinary avatar; later sessions return the fallback. When Cloudinary is disabled, DELETE with a reference returns `503`; an absent custom reference remains a `204` no-op. Apply V13/V14 using the reviewed migration workflow before deploying to a shared database. Apply V13 audit CHECK validation during reduced or stopped writes. See the [API contract](../../docs/contracts/api-contracts.md#1-auth-và-tiệm).
 
 ## Windows PowerShell
 
@@ -63,7 +80,7 @@ Omit `core` to start AI as well. Compose mounts the service-account JSON read-on
 
 If the Firebase Auth Emulator runs on the host, configure `FIREBASE_AUTH_EMULATOR_HOST` with an address reachable **from the container**; `127.0.0.1` inside Core means the container, not the host.
 
-Compose forwards `CORS_ALLOWED_ORIGINS`, `OPENAPI_ENABLED` and `SWAGGER_UI_ENABLED` from its env files into Core. Set the actual FE origins in the env file selected for that environment and recreate the Core container after changing them. Host/IntelliJ and hosted runtimes use the same variables directly.
+Compose forwards `CORS_ALLOWED_ORIGINS`, `OPENAPI_ENABLED`, `SWAGGER_UI_ENABLED` and the Cloudinary variables into Core. Set the FE origins and Cloudinary values in the selected environment and recreate the Core container after changing them. Host/IntelliJ and hosted runtimes use the same variables directly.
 
 ## Browser access and deployment checks
 
@@ -141,6 +158,127 @@ $env:CORE_TEST_POSTGRES_PASSWORD = 'test_password'
 
 The test creates and removes only a randomly named `core_void_test_*` schema, requires permission to create schemas, and does not run Flyway. It uses real business services and transactions, with auth/idempotency stubbed. Without `CORE_TEST_POSTGRES_URL`, PostgreSQL suites are skipped; unit/web tests still run normally.
 
+### Exact product barcode lookup and ACTIVE-only uniqueness (CORE-012 / #163–#164)
+
+`GET /api/v1/products/lookup?barcode=ABC-123` returns one `ProductResponse`, not a page. It requires a valid bearer token and `X-Shop-Id`, an active OWNER, and an ACTIVE shop belonging to that OWNER. The repository performs one exact, case-sensitive shop/barcode/ACTIVE lookup with a one-row limit; it does not load the product list. V16's partial unique index supports this lookup.
+
+Create, PATCH and lookup share normalization: trim leading/trailing whitespace (including Unicode spaces and scanner CR/LF/TAB suffixes); preserve case, letters, digits, leading zeros and punctuation; reject internal whitespace, non-whitespace control characters and more than 100 Unicode code points **after trim** with `400 validation_failed` and `details[].field = barcode`. The limit counts code points, not UTF-16 code units, bytes or grapheme clusters; supplementary characters count as one each, matching PostgreSQL `varchar(100)`. Lookup requires a nonblank code; create accepts null/blank as no barcode. PATCH omission preserves the stored value, including legacy values; explicit null/blank clears it. Legacy values are not bulk-normalized.
+
+Missing, foreign-shop or ARCHIVED products return `404 product_not_found`. Account/role/shop access is checked before querying Products. With V16, archive releases a code for another ACTIVE Product in the same shop; the old Product ID/barcode and sale/draft references remain intact. PATCH keeping its own code succeeds. Duplicate ACTIVE codes return `409 product_barcode_conflict`: the service precheck supplies `details: [{field: "barcode", issue: "already_in_use", productId: 123, status: "ACTIVE"}]`; races rejected by the DB may omit details. Ordinary errors retain only field/issue. The handler recognizes both the old constraint and V16 index during rollout.
+
+See the canonical [barcode contract](../../docs/contracts/api-contracts.md#barcode-core-012), `FR-034`/`AC-064`–`AC-067`, and [V16 schema/recovery notes](../../docs/architecture/erd-description.md#7-migration-alignment). No entity field, barcode table, restore API, Redis cache or mobile code is added. FE #162/#165 and integrated staging acceptance remain separate.
+
+To run focused tests, set the three `CORE_TEST_POSTGRES_*` variables above to a **disposable** database, then run:
+
+```powershell
+.\mvnw.cmd '-Dtest=ProductServiceTest,CatalogControllerWebTest,ProductBarcodeWebTest,ProductBarcodePostgresTest,ProductBarcodeMigrationPostgresTest,SaleRefundMigrationPostgresTest,ApiErrorDetailTest,ApiExceptionHandlerTest,ApiDocumentationWebTest' test
+```
+
+`ProductBarcodePostgresTest` applies the current migrations in a generated `core_barcode_test_*` schema. It verifies persisted normalization, reuse after archive, CREATE/PATCH conflict details, tenant/status permissions and one Product query with 20,000 synthetic products; EXPLAIN uses Hibernate's actual SQL/bindings. Local timing is diagnostic, not a production SLA. `ProductBarcodeMigrationPostgresTest` uses generated `core_barcode_migration_test_*` schemas for fresh V1–V16, V15 upgrade with historical references/snapshots, null/exact/shop uniqueness, migration atomic failure and concurrent CREATE/PATCH writers that both pass precheck. These JDBC races verify the DB guard; HTTP tests verify 409 mapping separately. Tests remove only their own schemas. Without the test URL, PostgreSQL suites are skipped, not passed. Run `clean verify` with all three variables for full regression.
+
+#### V16 rollout and recovery
+
+- Do not run feature-branch migrations against the business local DB, staging or production. Shared rollout follows the [migration workflow](../../README.md#database-migrations): reviewed code merged into staging, backup, migration owner, staging verification, then controlled production release.
+- V16 changes an **index/constraint**, not a column. `ddl-auto=update` cannot safely replace the old `UNIQUE(shop_id, barcode)`; reuse remains blocked until V16 runs.
+- Review the actual current schema first, including unexpected dependent FKs and any locally added indexes. Check for duplicate ACTIVE non-null codes before migration:
+
+```sql
+SELECT shop_id, barcode, COUNT(*)
+FROM products
+WHERE status = 'ACTIVE' AND barcode IS NOT NULL
+GROUP BY shop_id, barcode
+HAVING COUNT(*) > 1;
+```
+
+- Pause catalog writes and schedule a maintenance window. V16 creates the partial unique index **before** dropping the old constraint in one transaction; lock timeout is 5 seconds and statement timeout is 60 seconds. It is not a concurrent/zero-downtime index build. Test duration on a disposable copy representative of your catalog first; the 20,000-product lookup benchmark does not predict production DDL locking.
+- A timeout, duplicate ACTIVE row or unexpected dependency stops/rolls back V16; inspect the cause and retry under the approved process. Never delete/recode history, rewrite V4, baseline a shared DB or use Flyway repair to bypass failure. Confirm a valid unique `uq_products_shop_barcode_active`, the exact ACTIVE/non-null predicate and absence of the old constraint.
+- Recovery retains the partial index and uses an ACTIVE-only-compatible application. Old code's precheck can still block archived-code reuse, so rolling back binaries is a degraded mode. Reintroducing the old uniqueness requires a reviewed forward migration and a check for duplicates across ACTIVE **and ARCHIVED**; obtain a resolution decision first. Do not drop the new guard or silently rewrite historical products.
+
+### OWNER list pagination (CORE-011)
+
+[CORE-011 #153](https://github.com/miphu2804/smart-ledger/issues/153) changes the existing six OWNER GET lists (`products`, `sales`, `sale-drafts`, `customers`, `debts`, `expenses`) from arrays to `PageResponse<T>`, even without query parameters. There is no `/page` route or full-array fallback. See the canonical [pagination contract](../../docs/contracts/api-contracts.md#phân-trang-danh-sách-owner) for the exact filters, sorting and errors. Detail/write/report contracts are unchanged; no schema/index migration or Redis cache is added.
+
+All lists default to `page=0&size=20`; size is 1–100 and the offset must fit Integer.MAX_VALUE. Filtering precedes SQL pagination. Sale/draft item queries are bounded by the parent IDs in the page and the selected shop. Simple lists use at most two data queries; sale/draft lists use at most three including count and item batch, excluding auth/shop checks. Spring Data may skip count when the correct total can be inferred. Empty parent pages never load items. Content/count share one REPEATABLE_READ snapshot per request, not across requests; deep OFFSET/count can still be expensive and concurrent changes can shift pages.
+
+With all three `CORE_TEST_POSTGRES_*` variables above pointing to a **disposable** database, run:
+
+```powershell
+.\mvnw.cmd '-Dtest=OwnerListQueryTest,OwnerPaginationWebTest,OwnerListPaginationPostgresTest,SalesListQueryPostgresTest,ApiDocumentationWebTest' test
+```
+
+`OwnerListPaginationPostgresTest` applies V1–V16 in a generated `core_owner_page_test_*` schema, validates mappings and removes that schema afterward. It checks tenant/filter/count consistency, effective draft expiry without GET writes, literal/accent-insensitive search, stock thresholds and sorting, timestamp boundaries/equivalent offsets, a 100,000-product catalog, deep pages, query counts, response bytes and EXPLAIN ANALYZE. A concurrent insert between content/count verifies per-request snapshot consistency. Timing is logged, not asserted as a latency SLA. Without the test URL PostgreSQL suites are skipped; that is not full verification. Run `.\mvnw.cmd verify` with all three variables for the entire Core regression suite.
+
+For a manual **read-only local** check, first run Core with a local test OWNER token and an ACTIVE shop it owns. Supply `CORE_LOCAL_OWNER_TOKEN` in your terminal without committing or printing it; select your test shop ID below. This does not create fixtures or prove staging UAT:
+
+```powershell
+$baseUrl = 'http://localhost:8080'
+$headers = @{ Authorization = "Bearer $env:CORE_LOCAL_OWNER_TOKEN"; 'X-Shop-Id' = '4' }
+$from = [uri]::EscapeDataString('2026-10-09T00:00:00+07:00')
+$to = [uri]::EscapeDataString('2026-10-10T00:00:00+07:00')
+$page = Invoke-RestMethod -Method Get -Headers $headers `
+    -Uri "$baseUrl/api/v1/sales?page=0&size=2&from=$from&to=$to"
+$page | Select-Object page,size,totalElements,totalPages
+$page.items
+```
+
+The same `from/to` applies to expenses; it requires offset timestamps and selects `[from, to)`, not inclusive calendar dates. Either bound may be omitted; if both exist, from must precede to by instant. Date-only/no-offset values return 400 validation_failed; reversed/equal bounds return the resource's invalid query code. Do not combine an expense period with either bound. In Swagger enter the raw offset value; URL construction must encode `+` as `%2B`, as above. Neither `fromDate` nor `toDate` is the filter name.
+
+Check no-result and beyond-last pages, page -1, size 0/101, offset overflow, a record exactly at each time bound, and equivalent Z/+07:00 timestamps. With no match expect items empty and totals zero; beyond the last page expect items empty but the actual filtered totals. For protected routes also check missing token, ADMIN, another OWNER's shop and INACTIVE/ARCHIVED shops under the existing auth contract.
+
+**FE rollout remains pending in #144 / PRD AC-063.** Clients/mocks must consume items/metadata, load/reset pages and use server-side filters. Do not reduce a page into shop-wide revenue/profit/debt/expense/stock totals or group incomplete debt pages by customer. Reuse suitable reports; missing aggregate/contact projections require separate approval. FE old arrays are incompatible with this branch; passing Core tests is not authorization to deploy over an unadapted FE or evidence of integrated acceptance.
+
+### Sale and draft list query regression tests
+
+Issue [#134](https://github.com/miphu2804/smart-ledger/issues/134) removed per-parent item reads. CORE-011 retains batching but limits it to page parent IDs plus shop; nonempty pages use up to three data queries including count, and empty pages skip items. These counts exclude auth/shop checks. Sales now sort by soldAt/id descending, drafts by id descending, and items by id ascending within each parent. Detail, confirm and void retain single-parent item reads. The pagination response is a breaking API change, with no schema change.
+
+With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
+
+```powershell
+.\mvnw.cmd '-Dtest=SalePaymentServiceTest,SaleDraftServiceTest,SalesListQueryPostgresTest' test
+```
+
+`SalesListQueryPostgresTest` applies V1–V16 and validates mappings in a generated `core_list_query_test_*` schema. Synthetic fixtures roll back after each test, and the suite removes only its generated schema. Hibernate SQL counting exercises real list services and ownership checks with 1, 20, 100, 1,337 and 10,000 parents, each with five items, but reads at most 100 parents/500 items per tested page. It verifies filtered totals, item ordering, empty/missing items, cross-shop denial, inactive shops, archived-product snapshots and computed expiry. A control reproduces the old loop with 100 parents (101 data queries) versus three optimized queries including count.
+
+Use only a disposable database with schema-creation permission, never a business, shared staging or production database. Without the test URL, the PostgreSQL suite is skipped. This is a SQL-count regression test, not an HTTP/Firebase/FE load benchmark or staging UAT. SQL pagination bounds parent rows, not the number of items inside any individual order/draft.
+
+### Checkout and void batch product-lock tests
+
+Issue [#136](https://github.com/miphu2804/smart-ledger/issues/136) replaces per-product lock queries during confirm and restocking void with one shop-scoped `PESSIMISTIC_WRITE` query ordered by product ID. Confirm requires ACTIVE products; void may restore archived products using the historical `stockDeducted` snapshot. Empty product groups skip the query. Void retains sale → debt → ascending product locks. API, schema, money/debt, cost snapshots and audit contracts are unchanged.
+
+With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
+
+```powershell
+.\mvnw.cmd '-Dtest=SaleDraftServiceTest,SaleVoidServiceTest,ProductBatchLockPostgresTest,DebtVoidPostgresTest' test
+```
+
+`ProductBatchLockPostgresTest` applies V1–V16 and validates mappings in a generated `core_batch_lock_test_*` schema. It checks the Hibernate SQL and PostgreSQL EXPLAIN ordering, one product-lock query for 1/20/100 products, missing/foreign/archived products, custom and non-deducted items, unknown deduction snapshots, concurrent reverse-order confirmations/voids, and rollback of stock, money/debt, audit, notifications and void idempotency reservations. Fixtures commit to permit real concurrent transactions; the suite removes its generated schema after the class. Use only a disposable database with schema-creation permission, never a business/shared staging/production DB. Without the test URL, PostgreSQL suites are skipped.
+
+The same suite compares legacy single-product locks with batch confirm locks for 1/20/100 selected products sampled across a 100,000-product catalog. It logs median elapsed time from three measured samples after one warmup, including connection/transaction overhead; query counts are asserted but latency is not, to avoid flaky CI thresholds. These local measurements are not HTTP/Firebase/FE benchmarks, sustained-load tests or staging UAT. For the full Core check with PostgreSQL suites enabled, use `mvnw.cmd clean verify` with all three test variables set.
+
+### Batch stock-alert reconciliation tests
+
+Issue [#137](https://github.com/miphu2804/smart-ledger/issues/137) reads open stock alerts once for a nonempty collection of locked products, groups them by product ID, then preserves the existing resolve/flush/new-event/recipient lifecycle. The single-product method delegates to the collection method. Confirm reconciles once after all stock deductions; void reconciles the restored group once. Empty groups skip the alert query.
+
+With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
+
+```powershell
+.\mvnw.cmd '-Dtest=NotificationEventServiceTest,NotificationPostgresTest,ProductBatchLockPostgresTest,SaleDraftServiceTest,SaleVoidServiceTest' test
+```
+
+Unit tests count open-alert reads with up to 10,000 products. PostgreSQL tests cover LOW → OUT → resolved → LOW cycles, unchanged alerts/readAt, threshold/tracking/archive behavior, replay, reverse-order concurrent confirm/void, recipient uniqueness and notification-write rollback of stock, money/debt, audit and idempotency. The shared batch-lock suite compares 100 single-product reconciliations with one collection reconciliation against 100,000 resolved events plus 10,000 open alerts: open-alert reads drop from 100 to one without notification writes when state is unchanged. New alert cycles still perform per-product history/dedup queries and event/recipient writes; this is not a promise of two SQL statements for an entire confirm or void.
+
+### Draft batch product-read tests
+
+Issue [#135](https://github.com/miphu2804/smart-ledger/issues/135) loads distinct catalog product IDs once, filtered by shop and ACTIVE status, for draft creation/replacement. All-custom requests skip Product reads. Customer validation remains first; collection only gathers IDs, then the original request-order loop checks custom fields, catalog text, duplicates, missing products and monetary overflow. Missing/foreign/archived products retain `DRAFT_ITEM_INVALID`, duplicates retain `DRAFT_ITEM_DUPLICATE`; snapshots, HALF_UP rounding, discount and initial-payment rules are unchanged. These are non-locking reads; confirm retains its separate product locks.
+
+With the same disposable PostgreSQL variables, run:
+
+```powershell
+.\mvnw.cmd '-Dtest=SaleDraftServiceTest,ProductBatchLockPostgresTest' test
+```
+
+Tests exercise actual create/replace services and Hibernate SQL with 1/20/100 selected products across a 100,000-product catalog: one Product read per write, excluding authentication/shop/customer queries and draft/item writes. All-custom requests use zero Product reads. Multi-error unit cases preserve error precedence; PostgreSQL cases reject missing/foreign/archived products without creating a partial draft or changing the existing draft/items. The suite compares legacy per-product reads with batch reads using three measured samples after one warmup, including connection/transaction overhead. Latency is logged, not asserted; measurements are not HTTP/FE load tests or staging guarantees. The disposable-schema setup/cleanup is described in the batch product-lock section above. No API, schema or migration change is required for either optimization.
+
 ### Admin dashboard development tests
 
 With the same disposable PostgreSQL variables, run:
@@ -149,11 +287,11 @@ With the same disposable PostgreSQL variables, run:
 .\mvnw.cmd '-Dtest=AdminDashboardControllerWebTest,AdminAccessAuditServiceTest,AdminDashboardPostgresTest' test
 ```
 
-`AdminDashboardPostgresTest` applies the actual V1–V12 Flyway migrations inside a generated `core_admin_test_*` schema, then removes that schema. It exercises the migrated schema without manual constraint fixtures. No additional audit table is created. Do not point test variables at staging or production.
+`AdminDashboardPostgresTest` applies the actual V1–V16 Flyway migrations inside a generated `core_admin_test_*` schema, then removes that schema. It exercises the migrated schema without manual constraint fixtures. No additional audit table is created. Do not point test variables at staging or production.
 
 ADMIN and OWNER events share the existing `audit_logs`; ADMIN reads are separated by their `ADMIN_*` actions and API whitelists. Shop status changes reuse the existing `SHOP_INACTIVATED`/`SHOP_REACTIVATED` event once. V11 extends action/target constraints and allows missing shop/target IDs only for the corresponding ADMIN reads; business events still require both IDs. Existing history, V10 foreign keys and append-only triggers are preserved. Failed audit persistence returns `503 admin_audit_unavailable` and rolls back the operation.
 
-For a fresh disposable local database, use `FLYWAY_ENABLED=true` and `SPRING_JPA_HIBERNATE_DDL_AUTO=validate` to apply V1–V12 and validate the entity mappings. A Flyway-managed database already at V10 can apply V11/V12 in order. Follow the repository's merged-code migration policy for shared environments. Do not enable Flyway blindly on a Hibernate-created database without migration history: V10 rejects pre-existing ADMIN read events. Use a fresh local database or a separately reviewed adoption plan, preserving the original database. The migrations do not baseline or repair migration history.
+For a fresh disposable local database, use `FLYWAY_ENABLED=true` and `SPRING_JPA_HIBERNATE_DDL_AUTO=validate` to apply V1–V16 and validate the entity mappings. A Flyway-managed database already at V10 can apply V11/V12/V13/V14/V15 in order. Follow the repository's merged-code migration policy for shared environments. Do not enable Flyway blindly on a Hibernate-created database without migration history: V10 rejects pre-existing ADMIN read events. Use a fresh local database or a separately reviewed adoption plan, preserving the original database. The migrations do not baseline or repair migration history.
 
 If V11 validation fails, PostgreSQL rolls back its schema changes; review the offending records before retrying. Recovery uses a forward fix retaining audit history. Restoring V10 constraints or older readers that cannot handle `ADMIN_*` events is unsafe after these records exist. Integrated Firebase/FE UAT and document alignment remain pending.
 
@@ -169,7 +307,7 @@ With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
 .\mvnw.cmd '-Dtest=ProductStockInServiceTest,ProductServiceTest,CoreBusinessContractWebTest,ApiDocumentationWebTest,IdempotencyServiceTest,AuditLogPostgresTest' test
 ```
 
-`AuditLogPostgresTest` applies V1–V12 in a generated `core_audit_test_*` schema and removes only that schema. It checks concurrent receipts/retries and contention with checkout/void/PATCH/archive, audit/idempotency-write rollback, authorization and numeric overflow. Do not use shared/staging/production databases. Manual Swagger checks and mobile UAT remain separate.
+`AuditLogPostgresTest` applies V1–V16 in a generated `core_audit_test_*` schema and removes only that schema. It checks concurrent receipts/retries and contention with checkout/void/PATCH/archive, audit/idempotency-write rollback, authorization and numeric overflow. Do not use shared/staging/production databases. Manual Swagger checks and mobile UAT remain separate.
 
 ### Advanced report development tests
 
@@ -181,7 +319,17 @@ With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
 .\mvnw.cmd '-Dtest=AdvancedReportServiceTest,ExpenseReportControllerWebTest,ReportAggregationPostgresTest,SaleDraftServiceTest' test
 ```
 
-`ReportAggregationPostgresTest` applies V1–V12 in a generated `core_report_test_*` schema and removes only that schema. It verifies the nullable/nonnegative snapshot constraint, discounted item revenue, catalog/custom grouping, a prior-period void, daily event buckets and incomplete profit estimates. Mobile still computes its existing local analytics until FE integrates these endpoints; Core tests are not FE/staging UAT.
+`ReportAggregationPostgresTest` applies V1–V16 in a generated `core_report_test_*` schema and removes only that schema. It verifies the nullable/nonnegative snapshot constraint, discounted item revenue, catalog/custom grouping, a prior-period void, daily event buckets and incomplete profit estimates. Mobile still computes its existing local analytics until FE integrates these endpoints; Core tests are not FE/staging UAT.
+
+### Cloudinary media development tests
+
+Run the unit/web contract tests without any Cloudinary network credential:
+
+```powershell
+.\mvnw.cmd '-Dtest=CloudinaryMediaConfigurationTest,MediaControllerWebTest,MediaServiceTest,MediaWriteTransactionServiceTest,MediaCleanupWorkerTest,MediaCleanupWorkerConfigurationTest,ImageUploadValidatorTest,MediaPublicIdFactoryTest,MediaIdempotencyReplayTest,MediaPersistenceModelTest,SaleRefundMigrationPostgresTest' test
+```
+
+Set `CORE_TEST_POSTGRES_*` only to a disposable PostgreSQL database to run the V13/V14 migration assertions and media concurrency tests. To smoke-test a real provider locally, set `CLOUDINARY_ENABLED=true`, all four Cloudinary values, `FLYWAY_ENABLED=false` and use a schema already created by local `ddl-auto=update`; do **not** point a feature branch at shared staging with `update`. Upload a small JPEG/PNG through Swagger, verify only the returned URL, replace it, then verify a `media_cleanup_jobs` row becomes COMPLETED. Local `CLOUDINARY_CLEANUP_FIXED_DELAY_MS=5000` can shorten the test wait. Do not paste Cloudinary API secrets or delivery URLs with authenticated signatures into source, tickets, or chat.
 
 ## Time display
 
@@ -194,3 +342,21 @@ SET TIME ZONE 'Asia/Ho_Chi_Minh';
 ```
 
 This affects only that connection's display, not stored data or teammates' connections. Reapply after reconnecting, or use the SQL client's session initialization setting.
+
+
+## OWNER in-app notifications
+
+V15 adds nullable `products.low_stock_threshold` and the existing ERD's `notification_events` / `notification_recipients`. Apply it through the reviewed migration workflow before using `ddl-auto=validate` with this code. No historical alerts or default thresholds are backfilled. A valid Hibernate-created local schema may be adopted, but first test a disposable copy with migration history; invalid rows stop migration. Do not baseline/repair a shared database or run feature-branch migrations there. Recovery retains these additive structures and read history; corrections use forward migrations. Stop writes during local-table adoption/index/CHECK validation; production-sized migration locking has not been benchmarked.
+
+Set `lowStockThreshold` via Product create/PATCH (nullable, nonnegative, max 12 integer/3 fractional digits). Omitted PATCH keeps it; explicit null clears it. Tracked stock zero always raises OUT_OF_STOCK; positive stock at/below a configured threshold raises LOW_STOCK. Same-level changes do not repeat an open alert. Level changes, restocking above threshold, tracking disable and archive resolve old alerts; subsequent episodes are new events. A resolved alert remains unread until marked read. Old products are reconciled on the next business write, not by migration or an automatic startup scan.
+
+Bearer OWNER token is required, but no `X-Shop-Id` or idempotency header for:
+
+- `GET /api/v1/me/notifications?shopId=4&page=0&size=20` (optional shop/type/unreadOnly filters).
+- `GET /api/v1/me/notifications/unread-count?shopId=4`.
+- `PATCH /api/v1/me/notifications/{eventId}/read` → 204.
+- `PATCH /api/v1/me/notifications/read` with `{ "ids": [1, 2] }` → atomic 204.
+
+Pages start at 0; size 1–100 and offset <=2147483647. OWNER must be ACTIVE, have a recipient and still own the shop. INACTIVE shops expose only status notifications; ARCHIVED shops are excluded. Retry/parallel reads preserve the first readAt. Any inaccessible ID rejects the whole batch with 404. See [notification contract](../../docs/contracts/api-contracts.md#8-notification-owner--đã-có-trên-featapp-notifications) and PRD AC-055–058.
+
+`NotificationPostgresTest` runs in a generated `core_notification_test_*` schema with actual V1–V16 and Hibernate validation, without a supplemental schema fixture. It covers event lifecycle, notification-write rollback, replay/concurrent checkout/void, read concurrency and cross-shop/status isolation. `SaleRefundMigrationPostgresTest` additionally tests V15 upgrade, local-table adoption and atomic migration failure/retry. Supply all `CORE_TEST_POSTGRES_*` variables pointing only to a disposable PostgreSQL DB. No push delivery/device registration/FCM/email/SMS/debt reminders or notification FE integration is implemented by this change.

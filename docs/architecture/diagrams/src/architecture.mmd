@@ -4,6 +4,7 @@
 flowchart TB
     mobile["Mobile app · OWNER"]
     admin_web["Admin web dashboard · ADMIN"]
+    cloudinary["Cloudinary · media storage"]
 
     subgraph core["Core · HTTP :8000"]
         direction TB
@@ -51,6 +52,7 @@ flowchart TB
     mobile -->|"HTTP :8000"| core_hub
     admin_web -->|"HTTP :8000"| core_hub
     core_hub -->|"SQL / cache / vectors"| data_access
+    core_hub -->|"provider API / delivery URL"| cloudinary
     core_hub -->|"HTTP :8001"| ai_hub
     ai_hub -->|"SQL / cache / vectors"| data_access
     ai_hub -->|"tracing"| langfuse

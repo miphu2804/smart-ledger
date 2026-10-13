@@ -41,12 +41,14 @@ Start with the path that matches your task; each step links to the next level of
 | [ERD description](architecture/erd-description.md) and [`erd.dbml`](architecture/diagrams/src/erd.dbml) | Database entities, relationships, data flows and migration alignment |
 | [ADR-0001: pgvector vector store](architecture/adr/0001-vector-store-pgvector.md) | Accepted: embeddings in Supabase PostgreSQL instead of Qdrant |
 | [Architecture diagram](architecture/diagrams/src/architecture.mmd) | MVP target system boundary; edit [`architecture.drawio`](architecture/diagrams/src/architecture.drawio) and re-export the [SVG](architecture/diagrams/images/architecture.svg) and [PNG](architecture/diagrams/images/architecture.png) together |
+| [Android APK release diagram](architecture/diagrams/images/apk-release.svg) | Manual release pipeline, release signing, the R2 bucket and the download from the landing page; edit [`apk-release.drawio`](architecture/diagrams/src/apk-release.drawio) and re-export the SVG |
 | [CI/CD and environments diagram](architecture/diagrams/images/ci-cd.svg) | CI/CD, Railway runtime, clients, dev machine, Supabase/Redis staging and production; edit [`ci-cd.drawio`](architecture/diagrams/src/ci-cd.drawio) and re-export the SVG; dashed edges are planned |
 | [Service walkthrough](architecture/service-walkthrough/README.md) | Reading notes with diagrams of Core and AI service flows; not a source of truth |
 | [Mobile UI style and migration](design/mobile-ui-style-migration.md) | Visual direction and implementation checks for the mobile app |
 | [Mobile wording review](design/mobile-wording-review.md) | Proposed UI wording, icon and feedback mapping pending product approval |
 | [Mobile iOS device release](development/mobile-ios-device-release.md) | Build and install a Release configuration on a connected iPhone |
 | [CI/CD to Railway and Vercel](development/ci-cd.md) | Flow from feature branch to Railway and Vercel, GitHub environments, Railway variables and Core CORS origins |
+| [Marketing screenshots](marketing/README.md) | Phone-ratio screenshots of the app per product flow (dashboard, chat, barcode, voice) for marketing; demo data, not a source of truth for behavior |
 
 ## Which document to update
 

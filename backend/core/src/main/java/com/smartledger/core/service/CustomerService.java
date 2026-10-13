@@ -1,14 +1,15 @@
 package com.smartledger.core.service;
 
 import com.smartledger.core.dto.request.CustomerWriteRequest;
+import com.smartledger.core.dto.request.OwnerListQuery.Customers;
 import com.smartledger.core.dto.response.CustomerResponse;
+import com.smartledger.core.dto.response.PageResponse;
 import com.smartledger.core.security.VerifiedFirebaseToken;
-import java.util.List;
 
 public interface CustomerService {
     CustomerResponse create(VerifiedFirebaseToken token, String shopId, CustomerWriteRequest request);
 
-    List<CustomerResponse> list(VerifiedFirebaseToken token, String shopId);
+    PageResponse<CustomerResponse> list(VerifiedFirebaseToken token, String shopId, Customers query);
 
     CustomerResponse getById(VerifiedFirebaseToken token, String shopId, String customerId);
 

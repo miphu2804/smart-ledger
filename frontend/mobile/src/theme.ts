@@ -71,6 +71,12 @@ export const font = {
 
 export const radius = { sm: 10, md: 14, lg: 18, xl: 20, pill: 999 };
 
+/**
+ * Bề rộng tối đa của khung app trên web (app/_layout.tsx). Phép tính bố cục theo bề rộng phải dựa vào khung này,
+ * không dựa vào bề rộng cửa sổ trình duyệt.
+ */
+export const WEB_FRAME_MAX_WIDTH = 440;
+
 export const shadow = (level: 0 | 1 | 2 | 3 = 1): ViewStyle =>
   Platform.select<ViewStyle>({
     web: {

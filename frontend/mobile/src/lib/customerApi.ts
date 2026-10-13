@@ -1,5 +1,6 @@
 import type { CustomerView } from '../data/types';
 import { apiRequest } from './api';
+import { fetchAllPages } from './pageApi';
 
 /**
  * Khách hàng thật (Core `/customers` — cần header X-Shop-Id, xem AGENTS.md).
@@ -7,6 +8,6 @@ import { apiRequest } from './api';
  */
 export const customerApi = {
   /** GET /customers — danh sách ACTIVE */
-  list: (): Promise<CustomerView[]> => apiRequest<CustomerView[]>('/customers', { withShop: true }),
+  list: (): Promise<CustomerView[]> => fetchAllPages<CustomerView>('/customers'),
   getById: (id: number): Promise<CustomerView> => apiRequest<CustomerView>(`/customers/${id}`, { withShop: true }),
 };

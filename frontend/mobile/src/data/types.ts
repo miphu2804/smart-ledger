@@ -174,6 +174,8 @@ export interface ProductView {
   tracked: boolean;
   /** BigDecimal ở Core — có thể có phần thập phân; UI hiện tại chỉ cần số nguyên */
   stockQuantity: number | null;
+  /** Ngưỡng báo sắp hết của riêng mặt hàng; null = không đặt (Core không báo LOW_STOCK, hết hàng vẫn báo OUT_OF_STOCK) */
+  lowStockThreshold: number | null;
   status: 'ACTIVE' | 'ARCHIVED';
   createdAt: string;
   updatedAt: string;
@@ -298,4 +300,29 @@ export interface ExpenseView {
   status: 'ACTIVE' | 'ARCHIVED';
   createdAt: string;
   updatedAt: string;
+}
+
+export type NotificationType = 'LOW_STOCK' | 'OUT_OF_STOCK' | 'SALE_VOIDED' | 'SHOP_INACTIVATED' | 'SHOP_REACTIVATED';
+
+/** Thông báo trong inbox của OWNER (Core `GET /me/notifications`, docs/contracts/api-contracts.md mục 8). `id` là ID sự kiện. */
+export interface NotificationView {
+  id: number;
+  shopId: number;
+  type: NotificationType;
+  title: string;
+  body: string;
+  targetType: 'PRODUCT' | 'SALE' | 'SHOP';
+  targetId: number;
+  createdAt: string;
+  readAt: string | null;
+  resolvedAt: string | null;
+}
+
+/** Một trang của inbox: `page` tính từ 0, mới nhất trước. */
+export interface NotificationPage {
+  items: NotificationView[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
 }

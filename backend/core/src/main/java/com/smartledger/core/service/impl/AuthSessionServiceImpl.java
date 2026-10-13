@@ -17,6 +17,7 @@ import com.smartledger.core.repository.ShopRepository;
 import com.smartledger.core.repository.UserAccountRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.AuthSessionService;
+import com.smartledger.core.media.MediaStorage;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,14 +29,17 @@ public class AuthSessionServiceImpl implements AuthSessionService {
     private final AuthIdentityRepository authIdentityRepository;
     private final UserAccountRepository userAccountRepository;
     private final ShopRepository shopRepository;
+    private final MediaStorage mediaStorage;
 
     public AuthSessionServiceImpl(
             AuthIdentityRepository authIdentityRepository,
             UserAccountRepository userAccountRepository,
-            ShopRepository shopRepository) {
+            ShopRepository shopRepository,
+            MediaStorage mediaStorage) {
         this.authIdentityRepository = authIdentityRepository;
         this.userAccountRepository = userAccountRepository;
         this.shopRepository = shopRepository;
+        this.mediaStorage = mediaStorage;
     }
 
     @Override
@@ -88,10 +92,24 @@ public class AuthSessionServiceImpl implements AuthSessionService {
                         user.getDisplayName(),
                         user.getEmail(),
                         user.getPhone(),
-                        user.getAvatarUrl()),
+                        avatarUrl(user)),
                 user.getSystemRole(),
                 shops,
                 needsOnboarding);
+    }
+
+    private String avatarUrl(UserAccount user) {
+        if (!StringUtils.hasText(user.getAvatarPublicId())) {
+            return user.getAvatarUrl();
+        }
+        try {
+            return mediaStorage.authenticatedUrl(user.getAvatarPublicId());
+        } catch (BusinessException exception) {
+            if (exception.getErrorCode() == ErrorCode.MEDIA_UNAVAILABLE) {
+                return null;
+            }
+            throw exception;
+        }
     }
 
     private void ensureActive(UserAccount user) {
@@ -111,6 +129,7 @@ public class AuthSessionServiceImpl implements AuthSessionService {
                 shop.getIndustry(),
                 shop.getPhone(),
                 shop.getAddress(),
+                shop.getLogoUrl(),
                 shop.getStatus(),
                 shop.getInactiveReason(),
                 shop.getArchivedReason());

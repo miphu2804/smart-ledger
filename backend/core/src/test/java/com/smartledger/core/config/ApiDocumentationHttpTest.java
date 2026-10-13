@@ -14,6 +14,7 @@ import com.smartledger.core.security.BearerTokenAuthenticationFilter;
 import com.smartledger.core.security.FirebaseTokenVerifier;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.AuthSessionService;
+import com.smartledger.core.service.MediaService;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -53,6 +54,7 @@ class ApiDocumentationHttpTest {
     @Autowired private ObjectMapper mapper;
     @MockitoBean private FirebaseTokenVerifier verifier;
     @MockitoBean private AuthSessionService service;
+    @MockitoBean private MediaService media;
     @MockitoBean(name = "dbHealthIndicator") private HealthIndicator database;
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 

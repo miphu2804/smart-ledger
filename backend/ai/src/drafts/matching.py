@@ -9,7 +9,7 @@ instead of the draft silently choosing one.
 
 from dataclasses import dataclass
 
-from src.catalog import CatalogProduct
+from src.drafts.catalog import CatalogProduct
 
 # Below this the match is a guess, so the line stays open for the owner to choose.
 # Provisional default for the MVP test set; tune it with real transcripts.

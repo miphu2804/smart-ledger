@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.smartledger.core.config.SecurityConfiguration;
+import com.smartledger.core.dto.request.OwnerListQuery.*;
 import com.smartledger.core.dto.request.ProductPatchRequest;
 import com.smartledger.core.dto.response.CategoryResponse;
 import com.smartledger.core.dto.response.ProductResponse;
@@ -25,10 +26,11 @@ import com.smartledger.core.security.BearerTokenAuthenticationFilter;
 import com.smartledger.core.security.FirebaseTokenVerifier;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.CategoryService;
+import com.smartledger.core.service.MediaService;
 import com.smartledger.core.service.ProductService;
-import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -51,6 +53,9 @@ class CatalogControllerWebTest {
 
     @MockitoBean
     private ProductService productService;
+
+    @MockitoBean
+    private MediaService mediaService;
 
     @BeforeEach
     void validToken() {
@@ -147,6 +152,39 @@ class CatalogControllerWebTest {
     }
 
     @Test
+    void fixedLookupRouteDoesNotResolveAsAProductId() throws Exception {
+        when(productService.lookup(any(), eq("7"), eq("ABC-123")))
+                .thenReturn(new ProductResponse(5L, 7L, null, "Coffee", "ABC-123", null, "cup",
+                        25000L, null, false, null, CatalogStatus.ACTIVE, null, null));
+
+        mvc.perform(get("/api/v1/products/lookup").param("barcode", "ABC-123")
+                        .header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(5))
+                .andExpect(jsonPath("$.barcode").value("ABC-123"));
+        verify(productService).lookup(any(), eq("7"), eq("ABC-123"));
+        org.mockito.Mockito.verify(productService, org.mockito.Mockito.never()).getById(any(), any(), any());
+    }
+
+    @Test
+    void lookupRequiresBearerTokenAndShopHeader() throws Exception {
+        mvc.perform(get("/api/v1/products/lookup").param("barcode", "ABC-123").header("X-Shop-Id", "7"))
+                .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("unauthorized"));
+        mvc.perform(get("/api/v1/products/lookup").param("barcode", "ABC-123")
+                        .header("Authorization", "Bearer valid-token"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("missing_required_header"));
+        org.mockito.Mockito.verifyNoInteractions(productService);
+    }
+
+    @Test
+    void lookupReturnsNotFoundForBarcodeInAnotherShop() throws Exception {
+        when(productService.lookup(any(), eq("7"), eq("FOREIGN")))
+                .thenThrow(new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+        mvc.perform(get("/api/v1/products/lookup").param("barcode", "FOREIGN")
+                        .header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7"))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("product_not_found"));
+    }
+
+    @Test
     void productPatchAcceptsOnlyTheFieldsBeingChanged() throws Exception {
         when(productService.patch(any(), eq("7"), eq("5"), any()))
                 .thenReturn(new ProductResponse(5L, 7L, null, "Cà phê", null, null, "ly",
@@ -214,8 +252,42 @@ class CatalogControllerWebTest {
     }
 
     @Test
+    void productThresholdAcceptsDecimalsAndExplicitNull() throws Exception {
+        mvc.perform(patch("/api/v1/products/5")
+                        .header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"lowStockThreshold\":2.500}"))
+                .andExpect(status().isOk());
+        mvc.perform(patch("/api/v1/products/5")
+                        .header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"lowStockThreshold\":null}"))
+                .andExpect(status().isOk());
+        ArgumentCaptor<ProductPatchRequest> requests = ArgumentCaptor.forClass(ProductPatchRequest.class);
+        verify(productService, org.mockito.Mockito.times(2)).patch(any(), eq("7"), eq("5"), requests.capture());
+        org.assertj.core.api.Assertions.assertThat(requests.getAllValues().getFirst().getLowStockThreshold())
+                .isEqualByComparingTo("2.5");
+        org.assertj.core.api.Assertions.assertThat(requests.getAllValues().getLast().hasField("lowStockThreshold")).isTrue();
+        org.assertj.core.api.Assertions.assertThat(requests.getAllValues().getLast().getLowStockThreshold()).isNull();
+    }
+
+    @Test
+    void productThresholdRejectsNegativeOverflowAndExcessPrecisionOnCreateAndPatch() throws Exception {
+        for (String value : java.util.List.of("-1", "1000000000000", "0.0001")) {
+            mvc.perform(patch("/api/v1/products/5")
+                            .header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7")
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"lowStockThreshold\":" + value + "}"))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("validation_failed"));
+            mvc.perform(post("/api/v1/products")
+                            .header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"name\":\"Coffee\",\"unit\":\"cup\",\"sellingPriceVnd\":10000,\"tracked\":false,\"lowStockThreshold\":" + value + "}"))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("validation_failed"));
+        }
+        org.mockito.Mockito.verifyNoInteractions(productService);
+    }
+
+    @Test
     void productListReturns403WhenShopIsNotAccessible() throws Exception {
-        when(productService.list(any(), eq("8")))
+        when(productService.list(any(), eq("8"), any(Products.class)))
                 .thenThrow(new BusinessException(ErrorCode.SHOP_ACCESS_DENIED));
 
         mvc.perform(get("/api/v1/products")

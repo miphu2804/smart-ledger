@@ -149,6 +149,9 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       EXPO_PUBLIC_USE_MOCK: "true"
+      EXPO_PUBLIC_MOCK_CORE: "true"
+      EXPO_PUBLIC_MOCK_SHOPS: "true"
+      EXPO_PUBLIC_API_ENDPOINT: http://localhost:8000
     defaults:
       run:
         working-directory: frontend/mobile
@@ -162,6 +165,22 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run export:web
+
+  landing:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend/web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
 
   container-images:
     runs-on: ubuntu-24.04
@@ -183,7 +202,7 @@ jobs:
   summary:
     name: CI result summary
     if: always()
-    needs: [ai, core, mobile-web, container-images]
+    needs: [ai, core, mobile-web, landing, container-images]
     runs-on: ubuntu-24.04
     steps:
       - name: Build compact report
@@ -199,6 +218,7 @@ jobs:
           CORE_ERRORS: ${{ needs.core.outputs.errors }}
           CORE_SKIPPED: ${{ needs.core.outputs.skipped }}
           MOBILE_RESULT: "${{ needs['mobile-web'].result }}"
+          LANDING_RESULT: "${{ needs.landing.result }}"
           CONTAINER_RESULT: "${{ needs['container-images'].result }}"
         run: |
           {
@@ -211,6 +231,7 @@ jobs:
             printf '| Core (Java) | %s | %s | %s | %s | %s |\n' \
               "$CORE_RESULT" "${CORE_TESTS:-n/a}" "${CORE_FAILURES:-n/a}" "${CORE_ERRORS:-n/a}" "${CORE_SKIPPED:-n/a}"
             printf '| Mobile web | %s | n/a | n/a | n/a | n/a |\n' "$MOBILE_RESULT"
+            printf '| Landing (web) | %s | n/a | n/a | n/a | n/a |\n' "$LANDING_RESULT"
             printf '| Container images | %s | n/a | n/a | n/a | n/a |\n' "$CONTAINER_RESULT"
           } > ci-summary.md
           cat ci-summary.md >> "$GITHUB_STEP_SUMMARY"
@@ -223,7 +244,7 @@ jobs:
 
   ### Deploy backend: Railway `ai` and `core` after a push to `staging` or `main` ###
 
-  # Deploys backend services to Railway after a push to `staging` or `main` passes every CI job.
+  # Deploys backend services to Railway after a push to `staging` or `main` passes the jobs in `needs`; `landing` is not one of them.
   # Each GitHub environment holds its own environment-scoped Railway project token and branch
   # policy; `railway-production` requires approval. The environment is set on this job, not in a
   # called workflow, so its secret reaches the job.
@@ -410,7 +431,7 @@ jobs:
           done
           test "$code" = 200
           echo "page: 200"
-          if [ "$EXPO_PUBLIC_USE_MOCK" != "false" ]; then echo "mock build, skipping Core checks"; exit 0; fi
+          if [ "$EXPO_PUBLIC_USE_MOCK" = "true" ]; then echo "mock build, skipping Core checks"; exit 0; fi
           grep -rqF "$EXPO_PUBLIC_API_ENDPOINT" .vercel/output/static
           echo "bundle: API endpoint baked in"
           allow=$(curl -s -o /dev/null -D - -X OPTIONS "$EXPO_PUBLIC_API_ENDPOINT/api/v1/auth/session" \
@@ -431,3 +452,110 @@ jobs:
             gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --edit-last --create-if-none \
               --body "Web preview (commit ${GITHUB_SHA::7}): $URL"
           fi
+
+  ### Deploy landing: Vercel project `landing` per pull request, staging alias, production ###
+
+  # Same shape as deploy-web, with its own Vercel project and GitHub environments. Vercel's Git
+  # deployments are off in frontend/web/vercel.json, so only this job deploys the landing.
+  # Pull requests get the alias smart-ledger-landing-pr-<number> in the run summary and no PR
+  # comment, because deploy-web already edits the bot's last PR comment. The landing calls no API,
+  # so no CORS list limits the alias names and each PR keeps its own.
+  deploy-landing:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: [landing]
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    environment: ${{ github.event_name == 'pull_request' && 'landing-preview' || (github.ref_name == 'main' && 'landing-production' || 'landing-staging') }}
+    concurrency:
+      group: deploy-landing-${{ github.head_ref || github.ref_name }}
+      cancel-in-progress: true
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TARGET: ${{ github.ref_name == 'main' && github.event_name == 'push' && 'production' || 'preview' }}
+      VITE_CONTACT_EMAIL: ${{ vars.VITE_CONTACT_EMAIL }}
+      VITE_LEGAL_DRAFT: ${{ vars.VITE_LEGAL_DRAFT }}
+      VITE_ANDROID_APK_URL: ${{ vars.VITE_ANDROID_APK_URL }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/web/package-lock.json
+      - name: Install Vercel CLI
+        run: npm install --global vercel@62.2.0
+      - run: vercel pull --yes --environment="$VERCEL_TARGET" --token="$VERCEL_TOKEN"
+      - run: vercel build ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN"
+      # Vercel project variables are pulled into the build, so a VITE_ADMIN_ENABLED=true set there would publish admin.
+      - name: Check no admin code in the build
+        run: |
+          # The chunk name follows the lazy import in App.tsx; admin123 is a mock password and may change.
+          if [ -n "$(find .vercel/output/static -name 'AdminRoutes-*')" ] || grep -rqF admin123 .vercel/output/static; then
+            echo "::error::admin code is in the landing build; remove VITE_ADMIN_ENABLED from the Vercel project"
+            exit 1
+          fi
+      - name: Deploy
+        id: deploy
+        run: |
+          url=$(vercel deploy --prebuilt ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      # REST alias, as in deploy-web: `vercel alias set` fails for team tokens.
+      - name: Alias preview
+        id: preview
+        if: github.event_name == 'pull_request'
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          alias="smart-ledger-landing-pr-$PR.vercel.app"
+          api=https://api.vercel.com
+          auth="Authorization: Bearer $VERCEL_TOKEN"
+          id=$(curl -fsS -H "$auth" "$api/v13/deployments/${URL#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
+          curl -fsS -X POST -H "$auth" -H "Content-Type: application/json" \
+            -d "$(jq -n --arg alias "$alias" '{alias: $alias}')" \
+            "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID"
+          echo "url=https://$alias" >> "$GITHUB_OUTPUT"
+          echo "alias: https://$alias -> $URL"
+      - name: Alias staging
+        if: github.event_name == 'push' && github.ref_name == 'staging'
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+          STAGING_URL: ${{ vars.LANDING_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$STAGING_URL" || { echo "::error::LANDING_URL is not set on landing-staging"; exit 1; }
+          alias="${STAGING_URL#https://}"
+          api=https://api.vercel.com
+          auth="Authorization: Bearer $VERCEL_TOKEN"
+          id=$(curl -fsS -H "$auth" "$api/v13/deployments/${URL#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
+          curl -fsS -X POST -H "$auth" -H "Content-Type: application/json" \
+            -d "$(jq -n --arg alias "$alias" '{alias: $alias}')" \
+            "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID"
+          echo "alias: $STAGING_URL -> $URL"
+      # Pull requests check their PR alias; staging and main check the fixed LANDING_URL.
+      - name: Smoke test
+        env:
+          URL: ${{ github.event_name == 'pull_request' && steps.preview.outputs.url || vars.LANDING_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$URL" || { echo "::error::LANDING_URL is not set for this environment"; exit 1; }
+          # A fresh alias can take a few seconds to route, so retry before failing.
+          for attempt in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$URL/" || true)
+            [ "$code" = 200 ] && break
+            sleep 5
+          done
+          test "$code" = 200
+          echo "page: 200 at $URL"
+      - name: Report URL
+        if: always() && steps.deploy.outputs.url != ''
+        env:
+          URL: ${{ steps.preview.outputs.url || steps.deploy.outputs.url }}
+        run: |
+          echo "Landing deploy: $URL" >> "$GITHUB_STEP_SUMMARY"
