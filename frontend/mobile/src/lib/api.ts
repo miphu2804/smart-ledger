@@ -5,6 +5,7 @@ import { ApiError } from './apiError';
 import type { ApiErrorDetail } from './apiError';
 import { debugLog } from './debug';
 import { resetAllIdempotentSenders } from './idempotency';
+import { imagePart } from './imagePart';
 import { mockCoreRequest } from './mockCore';
 
 /**
@@ -119,9 +120,8 @@ export interface UploadImage {
 function imageForm(image: UploadImage): FormData {
   const form = new FormData();
   const name = image.mimeType === 'image/png' ? 'image.png' : 'image.jpg';
-  if (image.blob) form.append('image', image.blob, name);
-  // React Native đọc thẳng file trên máy khi part có dạng { uri, name, type }
-  else form.append('image', { uri: image.uri, name, type: image.mimeType } as unknown as Blob);
+  // Web gửi Blob đã thu nhỏ; Android/iOS gửi File của expo-file-system (xem imagePart.native.ts vì sao không dùng { uri })
+  form.append('image', imagePart(image), name);
   return form;
 }
 
