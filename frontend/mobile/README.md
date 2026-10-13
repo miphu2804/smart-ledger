@@ -62,6 +62,16 @@ npm run export:web      # build web tĩnh ra dist/
 
 Chữ nhận được từ mic (hay gõ tay) đi qua `parseOrder()` (`src/lib/parseOrder.ts`); app chưa gọi AI để nhận diện đơn. Model giọng nói xuất câu liền, không dấu câu, số đọc bằng chữ, nên `parseOrder` đọc cả số tiền viết bằng chữ số (`20k`, `20.000đ`, `1,5tr`) lẫn bằng chữ (`hai mươi nghìn`, `hai lăm ca`) và tách món theo ba cách: (1) dấu câu và các từ nối (`và`, `với`, `thêm`, `kèm`, `cùng`, `rồi`, `nha`, `nhé`); (2) mỗi giá nói ra kết thúc một món (“bánh mì 20k cà phê 20k” → hai món có giá; món chưa có trong kho thì hỏi thêm vào danh mục với giá điền sẵn); (3) câu liền có nhiều món trong kho thì cắt trước mỗi tên món, lùi qua số lượng và đơn vị đứng ngay trước (“hai cà phê sữa một bánh mì thịt”). Hạn chế: nhiều món chưa có trong kho, không nói giá và không có từ nối vẫn gộp thành một; giá nói trước tên món và giá không kèm đơn vị tiền (“bánh mì hai mươi”) không được nhận; món có trong kho luôn lấy giá của kho, giá nói ra chỉ dùng để tách món. “Chi”, “mua”, “trả”, “nộp”… chỉ mở một khoản chi khi đứng đầu mệnh đề, sau một giá hoặc sau một món trong kho (nên “trà sữa 30k”, “chị lấy bánh mì 20k”, “bánh mì ba chỉ 20k” là món, không phải chi). `src/sst/` là khung cũ chưa chạy model thật và chưa màn nào dùng; nhận dạng giọng nói đang chạy nằm ở `src/lib/speech/`.
 
+### PoC parse giọng nói (chưa nối vào màn voice)
+
+`src/lib/voiceParse/` là bản thử L1–L4 theo [brief](../../docs/development/voice-parse-poc-brief.md): chuẩn hoá + đọc số tiền, chỉ mục danh mục, gắn nhãn (luật, hoặc CRF đã train), liên kết tên món theo thứ tự từ và gate (tự nhận / hỏi chọn biến thể / món chưa có). Cùng interface `parseOrder(text, products)` nhưng màn `/voice` vẫn dùng `src/lib/parseOrder.ts`, vì màn này chưa hiển thị `disambiguations`. Kết quả và giới hạn: [báo cáo](../../docs/development/voice-parse-poc/report.md).
+
+```bash
+npm run voice:eval      # bảng chỉ số baseline / PoC / PoC + CRF trên bộ câu tự soạn (scripts/voice-crf/eval/)
+npm run voice:tune      # dò ngưỡng gate trên tập dev
+npm run voice:synth && npm run voice:train && npm run voice:parity   # sinh câu, train CRF (cần uv), so Viterbi TS với Python
+```
+
 ### Nhận dạng giọng nói trên Android
 
 Màn Đọc đơn nhận giọng nói trên Android bằng model tiếng Việt streaming Zipformer chạy ngay trên máy (thư viện `react-native-sherpa-onnx`, kèm đọc mic native). Code ở `src/lib/speech/` (`sherpaEngine.ts`; phần thuần để kiểm thử ở `core.ts`).
@@ -71,7 +81,7 @@ Màn Đọc đơn nhận giọng nói trên Android bằng model tiếng Việt 
 - **Nhúng model vào APK (chạy offline):** plugin `plugins/withBundledSttModel.js` chép model vào `android/app/src/main/assets/models/stt-model-<phiên bản>/` khi `expo prebuild`; thư mục `android/` đã sinh sẵn thì chạy `node plugins/withBundledSttModel.js`. App tự nhận model nhúng (`listAssetModels`) và bỏ qua bước tải; thư viện chép nó ra bộ nhớ app ở lần mở đầu. Máy build không có model thì plugin chỉ cảnh báo và APK rơi về cách tải ở trên. Tên thư mục lấy từ `STT_MODEL_VERSION` trong `src/lib/speech/core.ts`.
 - **Bản vá thư viện:** `react-native-sherpa-onnx` 0.4.4 cố định `modelType = "zipformer"` cho mọi model transducer nên model `zipformer2` (như model đang dùng) làm app sập lúc nạp. `patches/react-native-sherpa-onnx+0.4.4.patch` (áp tự động bởi `postinstall` qua `patch-package`, kể cả trên máy build EAS) để trống giá trị này cho sherpa-onnx tự nhận loại theo metadata. Nâng phiên bản thư viện thì xem lại bản vá, và đổi bản vá là phải build lại dev client.
 - **Quyền micro:** app xin quyền khi mở màn Đọc đơn. Khi giữ nút mic có thanh “Mức mic” đo từ micro thật; không ra chữ thì app báo “micro không thu được âm thanh” hoặc “có tiếng nhưng chưa nhận ra chữ”.
-- **Chưa kiểm tra / chưa làm:** iOS; hotword từ menu (`bpe.model`); tinh chỉnh thời gian ngắt câu; Android 15+ yêu cầu thư viện native căn lề 16 KB khi đưa lên Google Play (cần kiểm tra các file `.so` của sherpa-onnx).
+- **Chưa kiểm tra / chưa làm:** iOS; hotword từ menu (`bpe.model`; bản 0.4.4 chưa truyền `modelingUnit`/`bpeVocab` cho STT streaming nên truyền hotwords sẽ làm app thoát, xem [BLOCKERS](../../BLOCKERS.md)); tinh chỉnh thời gian ngắt câu; Android 15+ yêu cầu thư viện native căn lề 16 KB khi đưa lên Google Play (cần kiểm tra các file `.so` của sherpa-onnx).
 
 ## Cấu trúc
 
@@ -91,6 +101,7 @@ src/
   lib/useCoreData.ts    tải đơn, sản phẩm, nợ, chi phí từ Core cho Home, Quản lý, Phân tích, Bán chạy, Thông báo
   lib/checkoutSession.ts giữ đơn nháp giữa các lần bấm thanh toán để thử lại không ghi trùng sale
   lib/speech/           nhận dạng giọng nói trên máy (Android): tải model, đọc mic, sherpa-onnx; core.ts là phần thuần
+  lib/voiceParse/       PoC parse giọng nói L1–L4 (chưa nối vào màn voice); script train/eval ở scripts/voice-crf/
   sst/                  khung nhận dạng giọng nói cũ (chưa chạy model thật), chưa được màn nào dùng
   components/           UI kit, biểu đồ, logo, toast, QR minh hoạ
 ```

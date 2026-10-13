@@ -7,6 +7,7 @@ File kèm theo trong `docs/development/voice-parse-poc/`:
 - `cascade-options.html`: phân tích các phương án cascade và trade-off (mở bằng trình duyệt).
 - `poc-proposal.html`: đề xuất PoC, có ví dụ đi qua từng lớp.
 - `agent-prompt.md`: prompt goal để giao cho agent.
+- `report.md`: báo cáo kết quả PoC (bảng chỉ số, những gì đã và chưa kiểm chứng).
 
 ---
 

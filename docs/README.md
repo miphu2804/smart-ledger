@@ -48,6 +48,7 @@ Start with the path that matches your task; each step links to the next level of
 | [Mobile wording review](design/mobile-wording-review.md) | Proposed UI wording, icon and feedback mapping pending product approval |
 | [Mobile iOS device release](development/mobile-ios-device-release.md) | Build and install a Release configuration on a connected iPhone |
 | [CI/CD to Railway and Vercel](development/ci-cd.md) | Flow from feature branch to Railway and Vercel, GitHub environments, Railway variables and Core CORS origins |
+| [Voice parse PoC](development/voice-parse-poc-brief.md) | Brief and [result report](development/voice-parse-poc/report.md) for the on-device voice order parser PoC (`frontend/mobile/src/lib/voiceParse/`); self-authored eval, not production behavior |
 | [Marketing screenshots](marketing/README.md) | Phone-ratio screenshots of the app per product flow (dashboard, chat, barcode, voice) for marketing; demo data, not a source of truth for behavior |
 
 ## Which document to update
