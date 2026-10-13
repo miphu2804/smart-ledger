@@ -42,7 +42,8 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "export:web": "expo export --platform web",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "voice:eval": "node --experimental-strip-types --no-warnings --import ./scripts/voice-crf/ts-resolve.mjs scripts/voice-crf/eval.mts"
   },
   "private": true
 }
