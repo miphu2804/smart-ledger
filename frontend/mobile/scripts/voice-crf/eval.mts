@@ -54,7 +54,8 @@ function table(split: 'dev' | 'test') {
   for (const [label, f, target] of ROWS) console.log(`| ${label} | ${f(metrics.baseline)} | ${f(metrics.poc)} | ${target} |`);
   console.log(`| Câu từ đúng thành sai (so với baseline) | — | ${regressions.length} | 0 |`);
   console.log(`| Câu từ sai thành đúng | — | ${fixed.length} | |`);
-  if (regressions.length) console.log(`\nCâu bị hỏng: ${regressions.map((i) => gold[i].id).join(', ')}`);
+  // Chỉ in câu bị hỏng của dev: soát lỗi trên test là tune theo test
+  if (regressions.length && split === 'dev') console.log(`\nCâu bị hỏng: ${regressions.map((i) => gold[i].id).join(', ')}`);
   return { metrics, regressions: regressions.length };
 }
 
@@ -73,13 +74,19 @@ function latency() {
   const products = bigCatalog(catalogs.tap_hoa, 1000);
   const texts = gold.filter((g) => g.split === 'test').map((g) => g.text);
   console.log(`\n## Độ trễ parse trên Node ${process.version}, catalog ${products.length} món, ${texts.length} câu test\n`);
-  console.log('| Parser | Lần đầu (dựng index) | P50 | P95 | Max |\n|---|---|---|---|---|');
+  console.log('| Parser | Dựng index (câu đầu) | Lượt đầu P95 | P50 | P95 | Max |\n|---|---|---|---|---|---|');
+  const quantile = (xs: number[], p: number) => [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(p * xs.length))];
   for (const [name, parse] of Object.entries(PARSERS)) {
     const fresh = products.map((p) => ({ ...p }));
     const t0 = performance.now();
     parse(texts[0], fresh);
     const first = performance.now() - t0;
-    for (let k = 0; k < 3; k++) for (const t of texts) parse(t, fresh);
+    // Lượt đầu: mỗi câu một lần, bộ nhớ đệm từ còn lạnh (gần với câu mới của người dùng)
+    const firstPass = texts.map((t) => {
+      const s = performance.now();
+      parse(t, fresh);
+      return performance.now() - s;
+    });
     const times: number[] = [];
     for (let k = 0; k < 10; k++) {
       for (const t of texts) {
@@ -88,9 +95,10 @@ function latency() {
         times.push(performance.now() - s);
       }
     }
-    times.sort((a, b) => a - b);
-    const q = (p: number) => times[Math.min(times.length - 1, Math.floor(p * times.length))].toFixed(3);
-    console.log(`| ${name} | ${first.toFixed(2)} ms | ${q(0.5)} ms | ${q(0.95)} ms | ${times[times.length - 1].toFixed(3)} ms |`);
+    const ms = (x: number) => `${x.toFixed(3)} ms`;
+    console.log(
+      `| ${name} | ${first.toFixed(2)} ms | ${ms(quantile(firstPass, 0.95))} | ${ms(quantile(times, 0.5))} | ${ms(quantile(times, 0.95))} | ${ms(Math.max(...times))} |`,
+    );
   }
 }
 
