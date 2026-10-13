@@ -9,7 +9,8 @@
  */
 import { readFileSync } from 'node:fs';
 import { parseOrder as baselineParse, type ParseableProduct } from '../../src/lib/parseOrder';
-import { parseOrderDetailed as pocParse } from '../../src/lib/voiceParse';
+import { crfTagger, parseOrderDetailed as pocParse } from '../../src/lib/voiceParse';
+import type { CrfModel } from '../../src/lib/voiceParse/crf';
 import { bigCatalog } from './lexicon';
 import { aggregate, type CaseScore, type GoldCase, type Metrics, type ScoredResult, scoreCase } from './eval/score';
 
@@ -21,7 +22,14 @@ const gold = readFileSync(here('./eval/gold.jsonl'), 'utf8')
   .map((l) => JSON.parse(l) as GoldCase);
 
 type Parser = (text: string, products: ParseableProduct[]) => ScoredResult;
-const PARSERS: Record<string, Parser> = { baseline: baselineParse, poc: pocParse };
+const crfModel = JSON.parse(readFileSync(here('../../src/lib/voiceParse/crf-model.json'), 'utf8')) as CrfModel;
+const crf = crfTagger(crfModel);
+const PARSERS: Record<string, Parser> = {
+  baseline: baselineParse,
+  poc: (t, p) => pocParse(t, p),
+  'poc-crf': (t, p) => pocParse(t, p, { tagger: crf }),
+};
+const COLUMNS = Object.keys(PARSERS);
 
 const args = process.argv.slice(2);
 const failuresSplit = args.includes('--failures') ? (args[args.indexOf('--failures') + 1] ?? 'dev') : null;
@@ -47,13 +55,15 @@ function table(split: 'dev' | 'test') {
   const idx = gold.map((g, i) => (g.split === split ? i : -1)).filter((i) => i >= 0);
   const golds = idx.map((i) => gold[i]);
   const metrics = Object.fromEntries(Object.entries(scores).map(([n, s]) => [n, aggregate(idx.map((i) => s[i]), golds)]));
-  const regressions = idx.filter((i) => scores.baseline[i].exact && !scores.poc[i].exact);
-  const fixed = idx.filter((i) => !scores.baseline[i].exact && scores.poc[i].exact);
+  const regress = (n: string) => idx.filter((i) => scores.baseline[i].exact && !scores[n][i].exact);
+  const fixed = (n: string) => idx.filter((i) => !scores.baseline[i].exact && scores[n][i].exact).length;
+  const regressions = regress('poc');
+  const others = COLUMNS.slice(1);
   console.log(`\n## ${split} (${idx.length} câu, ${golds.reduce((n, g) => n + g.lines.length, 0)} dòng vàng)\n`);
-  console.log('| Chỉ số | Baseline | PoC | Mục tiêu |\n|---|---|---|---|');
-  for (const [label, f, target] of ROWS) console.log(`| ${label} | ${f(metrics.baseline)} | ${f(metrics.poc)} | ${target} |`);
-  console.log(`| Câu từ đúng thành sai (so với baseline) | — | ${regressions.length} | 0 |`);
-  console.log(`| Câu từ sai thành đúng | — | ${fixed.length} | |`);
+  console.log(`| Chỉ số | ${COLUMNS.join(' | ')} | Mục tiêu |\n|---|${COLUMNS.map(() => '---|').join('')}---|`);
+  for (const [label, f, target] of ROWS) console.log(`| ${label} | ${COLUMNS.map((n) => f(metrics[n])).join(' | ')} | ${target} |`);
+  console.log(`| Câu từ đúng thành sai (so với baseline) | — | ${others.map((n) => regress(n).length).join(' | ')} | 0 |`);
+  console.log(`| Câu từ sai thành đúng | — | ${others.map(fixed).join(' | ')} | |`);
   // Chỉ in câu bị hỏng của dev: soát lỗi trên test là tune theo test
   if (regressions.length && split === 'dev') console.log(`\nCâu bị hỏng: ${regressions.map((i) => gold[i].id).join(', ')}`);
   return { metrics, regressions: regressions.length };
@@ -62,11 +72,11 @@ function table(split: 'dev' | 'test') {
 function byCategory(split: 'dev' | 'test') {
   const cats = [...new Set(gold.filter((g) => g.split === split).map((g) => g.category))].sort();
   console.log(`\nExact match theo câu, từng nhóm (${split}):\n`);
-  console.log('| Nhóm | Số câu | Baseline | PoC |\n|---|---|---|---|');
+  console.log(`| Nhóm | Số câu | ${COLUMNS.join(' | ')} |\n|---|---|${COLUMNS.map(() => '---|').join('')}`);
   for (const c of cats) {
     const idx = gold.map((g, i) => (g.split === split && g.category === c ? i : -1)).filter((i) => i >= 0);
     const rate = (n: string) => pct(idx.filter((i) => scores[n][i].exact).length / idx.length);
-    console.log(`| ${c} | ${idx.length} | ${rate('baseline')} | ${rate('poc')} |`);
+    console.log(`| ${c} | ${idx.length} | ${COLUMNS.map(rate).join(' | ')} |`);
   }
 }
 
