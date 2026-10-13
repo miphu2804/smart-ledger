@@ -160,7 +160,7 @@ Job `landing` runs `npm run lint` and `npm run build` in `frontend/web` on every
 - `VITE_LEGAL_DRAFT` must stay unset or `true` until the product owner approves the legal pages; set `false` only in `landing-production` after approval. `VITE_CONTACT_EMAIL` shows on `/privacy` and `/data-deletion`; leave it empty until the address is confirmed.
 - The landing has no path filter: a backend-only push also rebuilds and redeploys it.
 - Not yet verified: whether Vercel Deployment Protection on the `landing` project returns `401` for per-deploy PR URLs. The first PR run shows it; if the smoke test gets `401`, turn protection off for previews.
-- Admin (`/admin/*`) is hidden unless the build has `VITE_ADMIN_ENABLED=true`. No GitHub environment sets it. Step `Check no admin code in the build` in `deploy-landing` fails the job if `admin123` is in the build output, which catches a `VITE_ADMIN_ENABLED=true` set in the Vercel project `landing` (`vercel pull` brings those variables into the build).
+- Admin (`/admin/*`) is hidden unless the build has `VITE_ADMIN_ENABLED=true`. No GitHub environment sets it. Step `Check no admin code in the build` in `deploy-landing` fails the job if the build output has an `AdminRoutes-*` chunk or the mock password `admin123`, which catches a `VITE_ADMIN_ENABLED=true` set in the Vercel project `landing` (`vercel pull` brings those variables into the build).
 
 ## Android build
 

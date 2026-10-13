@@ -492,7 +492,8 @@ jobs:
       # Vercel project variables are pulled into the build, so a VITE_ADMIN_ENABLED=true set there would publish admin.
       - name: Check no admin code in the build
         run: |
-          if grep -rqF admin123 .vercel/output/static; then
+          # The chunk name follows the lazy import in App.tsx; admin123 is a mock password and may change.
+          if [ -n "$(find .vercel/output/static -name 'AdminRoutes-*')" ] || grep -rqF admin123 .vercel/output/static; then
             echo "::error::admin code is in the landing build; remove VITE_ADMIN_ENABLED from the Vercel project"
             exit 1
           fi
