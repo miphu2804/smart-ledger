@@ -279,7 +279,7 @@ function Pains() {
   return (
     <section className="lp-section lp-pains">
       <div className="lp-container">
-        <SectionHead kicker="Vấn đề quen thuộc" title="Bán thì đắt, mà sổ sách thì rối">
+        <SectionHead kicker="Vấn đề quen thuộc" title="App thì đắt, mà sổ sách thì rối">
           Phần lớn quán nước, xe trái cây, sạp chợ vẫn ghi sổ tay hoặc không ghi gì cả. Không phải vì lười, mà vì chưa có cách nào đủ nhanh.
         </SectionHead>
         <div className="pain-grid">
