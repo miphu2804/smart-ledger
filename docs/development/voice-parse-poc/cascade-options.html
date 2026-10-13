@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice Parse Cascade</title>
+<style>
+:root{
+  --bg:#f7f6f2; --surface:#ffffff; --surface-2:#f0eee8; --text:#1d1d1b; --muted:#66645e; --line:#dedbd2;
+  --accent:#2f5bd3; --good:#1f7a4d; --good-bg:#e3f3ea; --bad:#b3362b; --bad-bg:#fbe7e4; --warn:#93620a; --warn-bg:#fbf0d9;
+  --device:#2f5bd3; --device-bg:#e6edfc; --server:#7a4bc4; --server-bg:#efe7fb; --ext:#b3362b; --ext-bg:#fbe7e4; --new:#93620a; --new-bg:#fbf0d9;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121417; --surface:#1a1d22; --surface-2:#22262c; --text:#ecebe6; --muted:#a3a19a; --line:#30343b;
+    --accent:#7d9cf0; --good:#5cc392; --good-bg:#17322a; --bad:#ef8679; --bad-bg:#3a1f1c; --warn:#e3b65c; --warn-bg:#352a14;
+    --device:#86a5f3; --device-bg:#1d2a46; --server:#b597ec; --server-bg:#2c2242; --ext:#ef8679; --ext-bg:#3a1f1c; --new:#e3b65c; --new-bg:#352a14;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121417; --surface:#1a1d22; --surface-2:#22262c; --text:#ecebe6; --muted:#a3a19a; --line:#30343b;
+  --accent:#7d9cf0; --good:#5cc392; --good-bg:#17322a; --bad:#ef8679; --bad-bg:#3a1f1c; --warn:#e3b65c; --warn-bg:#352a14;
+  --device:#86a5f3; --device-bg:#1d2a46; --server:#b597ec; --server-bg:#2c2242; --ext:#ef8679; --ext-bg:#3a1f1c; --new:#e3b65c; --new-bg:#352a14;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1040px;margin:0 auto;padding:32px 16px 64px}
+h1{font-size:28px;line-height:1.25;margin:0 0 8px}
+h2{font-size:20px;margin:40px 0 12px}
+h3{font-size:16px;margin:0 0 8px}
+p{margin:0 0 12px}
+.lead{color:var(--muted);max-width:720px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px}
+code{font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--surface-2);padding:1px 5px;border-radius:4px}
+.legend{display:flex;flex-wrap:wrap;gap:12px;margin:12px 0 0;font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.tab{border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:999px;padding:7px 14px;font:inherit;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.tab[aria-selected="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);font-weight:600}
+.tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pill{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.pill.good{background:var(--good-bg);color:var(--good)} .pill.bad{background:var(--bad-bg);color:var(--bad)} .pill.warn{background:var(--warn-bg);color:var(--warn)}
+.flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:0;margin:16px 0 20px}
+.stage{flex:1 1 150px;min-width:140px;border-radius:10px;padding:12px;border:1px solid transparent}
+.stage b{display:block;font-size:14px;margin-bottom:4px}
+.stage small{display:block;color:var(--muted);font-size:12.5px;line-height:1.45}
+.stage .tag{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px}
+.k-device{background:var(--device-bg)} .k-device .tag{color:var(--device)}
+.k-server{background:var(--server-bg)} .k-server .tag{color:var(--server)}
+.k-ext{background:var(--ext-bg)} .k-ext .tag{color:var(--ext)}
+.k-new{background:var(--new-bg);border:1px dashed var(--new)} .k-new .tag{color:var(--new)}
+.k-io{background:var(--surface-2)} .k-io .tag{color:var(--muted)}
+.arrow{flex:0 0 28px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:18px}
+.fallback{margin:-8px 0 16px;padding:10px 12px;border-left:3px solid var(--warn);background:var(--warn-bg);border-radius:0 8px 8px 0;font-size:14px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.cols ul{margin:0;padding-left:18px} .cols li{margin-bottom:6px}
+.pros h3{color:var(--good)} .cons h3{color:var(--bad)}
+.example{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;background:var(--surface-2);border-radius:8px;padding:12px;overflow-x:auto;white-space:pre;margin-top:16px}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:14px}
+th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{background:var(--surface-2);font-weight:600;font-size:13px}
+tr:last-child td{border-bottom:0}
+td.g{color:var(--good);font-weight:600} td.b{color:var(--bad);font-weight:600} td.w{color:var(--warn);font-weight:600}
+tr.rec td{background:var(--good-bg)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.note{font-size:13px;color:var(--muted)}
+.steps{counter-reset:s;list-style:none;padding:0;margin:0}
+.steps li{counter-increment:s;position:relative;padding:0 0 14px 40px}
+.steps li::before{content:counter(s);position:absolute;left:0;top:0;width:28px;height:28px;border-radius:50%;background:var(--accent);color:var(--surface);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
+.v{font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;margin-left:4px}
+.v.ok{background:var(--good-bg);color:var(--good)} .v.inf{background:var(--warn-bg);color:var(--warn)}
+@media (max-width:640px){
+  h1{font-size:23px}
+  .cols{grid-template-columns:1fr}
+  .flow{flex-direction:column}
+  .arrow{flex-basis:24px;transform:rotate(90deg)}
+}
+</style>
+</head>
+<body>
+<main>
+  <h1>Giọng nói → dòng nháp đơn bán: các phương án cascade</h1>
+  <p class="lead">Chủ shop nói <em>"hai ký gạo với một chai nước mắm"</em>, app cần ra các dòng nháp <code>{product_id, qty}</code> khớp với catalog của shop. Trang này so sánh các phương án đã bàn: NeuDecide, cascade có dịch, Jev, Needle, và pipeline hiện tại. Với mỗi phương án có cách chạy, có phải train không, và đánh đổi những gì.</p>
+
+  <div class="legend">
+    <span><i class="dot" style="background:var(--device)"></i>Chạy trên máy</span>
+    <span><i class="dot" style="background:var(--server)"></i>Chạy ở server của mình</span>
+    <span><i class="dot" style="background:var(--ext)"></i>API bên thứ ba</span>
+    <span><i class="dot" style="background:var(--new);"></i>Khung nét đứt: phải xây hoặc train thêm</span>
+  </div>
+
+  <h2>1. Từng phương án</h2>
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <section class="card" id="panel" role="tabpanel" aria-live="polite"></section>
+
+  <h2>2. Bảng so sánh</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr>
+        <th>Phương án</th><th>Tiếng Việt</th><th>Cần train</th><th>Nhiều món / câu</th><th>Số lượng ("nửa ký")</th><th>Offline</th><th>Chi phí mỗi lần</th><th>Công sức</th>
+      </tr></thead>
+      <tbody>
+        <tr><td><b>A. Hiện tại</b><br><span class="note">STT → rule trên máy</span></td><td class="w">Ổn nếu tên khớp chính xác</td><td class="g">Không</td><td class="w">Có, nhưng hỏng khi đảo thứ tự</td><td class="g">Tốt</td><td class="g">Có</td><td class="g">~0</td><td class="g">Đã xong</td></tr>
+        <tr><td><b>B. NeuDecide</b><br><span class="note">audio → tool call</span></td><td class="b">Không hỗ trợ</td><td class="b">End-to-end, không có code train</td><td class="w">Có, nhưng yếu</td><td class="b">Yếu với giá trị tự do</td><td class="g">Có</td><td class="g">~0</td><td class="b">Rất cao</td></tr>
+        <tr><td><b>C. Cascade dịch</b><br><span class="note">STT → dịch → EN</span></td><td class="b">Mất tên riêng</td><td class="g">Không</td><td class="w">Tuỳ model</td><td class="b">Dễ dịch sai</td><td class="w">Tuỳ</td><td class="w">Cao hơn</td><td class="w">Trung bình</td></tr>
+        <tr><td><b>D. Rule + Jev</b><br><span class="note">parser + classifier</span></td><td class="w">Chưa rõ</td><td class="g">Không</td><td class="g">Nhờ rule</td><td class="g">Nhờ ITN rule</td><td class="b">Jev cần mạng</td><td class="w">Tiền Jev</td><td class="w">Trung bình</td></tr>
+        <tr><td><b>E. Needle fine-tune</b><br><span class="note">STT → Needle VI</span></td><td class="b">Bản gốc hỏng, cần fine-tune</td><td class="w">LoRA bằng text</td><td class="w">Sau fine-tune</td><td class="w">Sau fine-tune</td><td class="g">Có</td><td class="g">~0</td><td class="w">Trung bình, cao</td></tr>
+        <tr class="rec"><td><b>F. Lai (đề xuất)</b><br><span class="note">rule fast path + LLM</span></td><td class="g">Tốt</td><td class="g">Không</td><td class="g">Tốt</td><td class="g">Tốt</td><td class="w">Một phần</td><td class="g">Giảm số lần gọi LLM</td><td class="g">Thấp</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note" style="margin-top:8px">Các ô "Chưa rõ" và "Tuỳ" là suy luận, chưa đo. Các ô về NeuDecide và Needle dựa trên README của họ và lần test sandbox ở mục 3.</p>
+
+  <h2>3. Kết quả test Needle 3 trên sandbox</h2>
+  <div class="grid2">
+    <div class="card">
+      <h3>Cách thử</h3>
+      <p>Sandbox WASM trên cactuscompute.com. Mình thay bộ tool mặc định bằng <code>add_sale_line(product: enum 6 món, qty)</code> và <code>add_expense(note, amount_vnd)</code>.</p>
+      <p class="note">Dùng nguyên bộ tool đó viết lại bằng tiếng Anh thì model chạy đúng. Vậy lỗi nằm ở ngôn ngữ, không phải ở cách khai báo tool.</p>
+    </div>
+    <div class="card">
+      <h3>Kết quả</h3>
+      <ul style="margin:0;padding-left:18px">
+        <li>"bán hai bao gạo st hai lăm": ra qty 1 / 100 / 1005 <span class="pill bad">sai</span></li>
+        <li>"hai ký gạo với một chai nước mắm": nhận thành <code>add_expense</code> <span class="pill bad">sai</span></li>
+        <li>"chi tiền điện năm trăm nghìn": nhận thành <code>add_sale_line</code> gạo <span class="pill bad">sai</span></li>
+        <li>Câu tiếng Việt có tên đúng catalog và số viết bằng chữ số: chỉ ra 1 món, qty 1 <span class="pill bad">sai</span></li>
+        <li>EN "sold two bags of ST25 rice and one bottle of fish sauce" <span class="pill good">đúng</span></li>
+        <li>EN "paid 500000 for electricity" <span class="pill good">đúng</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>4. Đề xuất</h2>
+  <div class="card">
+    <ol class="steps">
+      <li><b>Giữ pipeline A làm nền.</b> <code>parseOrder.ts</code> đã chạy trên máy; cần sửa phần khớp sản phẩm và phần thứ tự từ.</li>
+      <li><b>Thêm fast path rule-based (F).</b> Gồm ITN (đổi số đọc bằng chữ thành số), tách món theo "với / và / thêm / dấu phẩy", và fuzzy match catalog. Chỉ khi mọi món đều khớp rõ ràng mới tạo draft ngay; còn lại chuyển cho LLM. Không cần train, đo được tỉ lệ câu đi qua fast path.</li>
+      <li><b>Gom dữ liệu.</b> Lưu các cặp (transcript, draft đã được chủ shop xác nhận) làm bộ eval, và sau này làm dữ liệu fine-tune.</li>
+      <li><b>Sau đó mới thử Needle fine-tune (E)</b>, khi có vài nghìn câu thật. Đo trên cùng bộ eval với LLM; chỉ thay khi Needle bằng hoặc tốt hơn.</li>
+    </ol>
+    <p class="note" style="margin:4px 0 0">Bỏ B (NeuDecide), vì phải train end-to-end bằng audio tiếng Việt mà repo không có code train. Bỏ C (dịch), vì tên sản phẩm và số lượng bị hỏng qua bước dịch.</p>
+  </div>
+</main>
+
+<script>
+const OPTIONS = [
+  { id:"a", name:"A. Hiện tại", verdict:["good","Đang chạy"],
+    summary:"Màn voice: STT tiếng Việt chạy trên máy, transcript đi vào parseOrder.ts (rule, cũng chạy trên máy), rồi tạo sale draft ở Core. LLM draft_parse ở backend có tồn tại nhưng màn voice không gọi tới.",
+    flow:[["io","Input","Audio VN","Micro trên điện thoại"],["device","Trên máy","sherpa-onnx STT","Zipformer, greedy, chưa bật hotword"],["device","Trên máy","parseOrder.ts","Chuẩn hoá, ITN, khớp chính xác tên hoặc alias"],["server","Core","sale-drafts","Chủ shop xác nhận"]],
+    pros:["Chạy offline, khoảng 0.05 ms mỗi câu (đo trên Node)","Không phải train gì","Xử lý được số đọc bằng chữ, từ đệm, câu không dấu"],
+    cons:["Chỉ khớp chính xác: 'gạo' không ra 'Gạo ST25 5kg'","Sai khi nói tên trước số sau ('gạo hai bao nước mắm một chai')","Không có hotword nên STT dễ nghe sai tên hàng","Đo thử: đúng 6/10 câu mẫu"],
+    ex:`"hai ký gạo với một chai nước mắm"
+→ parseOrder → items: [Nước mắm × 1], unknown: ["Gạo"]   ✗` },
+  { id:"b", name:"B. NeuDecide", verdict:["bad","Loại"],
+    summary:"Model end-to-end: audio vào, tool call ra, không có transcript ở giữa. Encoder lấy từ NVIDIA FastConformer (tiếng Anh), phần quyết định khởi tạo từ Needle, rồi cả hệ được train lại chung.",
+    flow:[["io","Input","Audio VN","16 kHz, tối đa 30 s"],["new","Phải train lại","FastConformer encoder","Encoder tiếng Anh, ra frame 12.5 Hz"],["new","Phải train lại","Tool encoder + decoder","Khởi tạo từ Needle, cross-attention với audio"],["io","Output","Tool call","{name, arguments}"]],
+    pros:["43 MB, chạy CPU một luồng, offline","Không có bước transcript, nên lỗi STT không truyền sang bước sau","Đổi tool chỉ cần đổi JSON (nhưng chỉ với tiếng Anh)"],
+    cons:["Chỉ hỗ trợ tiếng Anh","Muốn dùng tiếng Việt phải thay encoder và train lại toàn bộ","Repo không có code train, paper chưa ra","Cần dataset audio lệnh tiếng Việt có nhãn tool call, hiện chưa có bộ công khai","Yếu với argument tự do như tên hàng; README của họ khuyên dùng enum"],
+    ex:`audio ──► [encoder] ──► latent 12.5 Hz ──► [decoder] ──► {"name":"add_sale_line", ...}
+          (không có text ở giữa, nên không cắm ChunkFormer vào được)` },
+  { id:"c", name:"C. Cascade dịch", verdict:["bad","Loại"],
+    summary:"Dịch tiếng Việt sang tiếng Anh để dùng lại các model tiếng Anh. Có hai cách: đọc bản dịch thành audio cho NeuDecide, hoặc đưa thẳng text cho Needle.",
+    flow:[["io","Input","Audio VN",""],["device","Trên máy","STT VN",""],["ext","Thêm model","Dịch VN → EN","Tên riêng bị dịch hỏng"],["new","Cách 1","TTS EN → NeuDecide","Sinh audio chỉ để encode lại"],["io","Output","Tool call (EN)","Phải map ngược về catalog tiếng Việt"]],
+    pros:["Dùng lại được model tiếng Anh, không phải train"],
+    cons:["Ba đến bốn model nối tiếp, lỗi cộng dồn","\"nước mắm Nam Ngư\" thành \"Nam Ngu fish sauce\", không khớp catalog","Đơn vị và số đếm (\"nửa ký\", \"hai chục\") dễ dịch sai","Chính README NeuDecide cho thấy cascade kém xa end-to-end (25.6% so với 75.5% trên SLURP)"],
+    ex:`"hai ký gạo ST25" → "two kilos of ST25 rice" → product enum "Gạo ST25 5kg"?  ✗ phải dịch ngược` },
+  { id:"d", name:"D. Rule + Jev", verdict:["warn","Có thể làm router"],
+    summary:"Jev là classifier: chọn một nhãn trong tập mình đưa vào, kèm confidence. Nó không sinh text, không đọc được số, không tách được câu. Vì vậy phải có parser tách món và số lượng trước, rồi Jev chỉ chọn sản phẩm.",
+    flow:[["io","Input","Transcript VN","Từ STT"],["new","Phải viết","ITN + rule parser","Số đọc bằng chữ → số; tách món theo 'với / và / thêm'"],["device","Code","Fuzzy match","Lấy top-k sản phẩm ứng viên"],["ext","API TypeSafe","Jev choice","Chọn 1 id trong top-k, kèm confidence"],["io","Output","Draft lines","Confidence thấp thì chuyển LLM"]],
+    pros:["Không phải train","Confidence đã hiệu chỉnh, dễ đặt ngưỡng","Nhanh, rẻ hơn LLM (theo bài Deepgram, p50 khoảng 200 ms)"],
+    cons:["Chưa rõ Jev có hỗ trợ tiếng Việt không","Jev chỉ điền enum/boolean; số lượng và tên tự do phải do code xử lý","Vẫn là API ngoài: cần mạng, dữ liệu shop đi qua bên thứ ba","Phải tự viết và bảo trì rule parser"],
+    ex:`"hai ký gạo với một chai nước mắm"
+parser → [{qty:2, unit:"ký", item:"gạo"}, {qty:1, unit:"chai", item:"nước mắm"}]
+fuzzy  → "gạo": [P01 Gạo ST25, P07 Gạo tám] → Jev choice → P01 (0.82)` },
+  { id:"e", name:"E. Needle fine-tune", verdict:["warn","Thử sau"],
+    summary:"Needle là model tool-calling / extraction trên text, nặng 8–29 MB, chạy trên máy. Bản gốc không hiểu tiếng Việt (đã test). Fine-tune bằng LoRA trên dữ liệu text JSONL nhẹ hơn nhiều so với train NeuDecide.",
+    flow:[["io","Input","Audio VN",""],["device","Trên máy","sherpa-onnx STT",""],["new","Fine-tune VI","Needle (LoRA)","Tách nhiều món + qty + chọn enum sản phẩm"],["device","Code","Validate catalog","Grammar đảm bảo JSON hợp lệ; kiểm tra id"],["io","Output","Draft lines","Bị chặn (suppressed) thì chuyển LLM"]],
+    pros:["Chạy offline, gần như không tốn tiền mỗi lần","Một model làm cả việc tách món lẫn chọn sản phẩm","Có lớp grounding: argument không có trong câu thì bị chặn","Fine-tune chỉ cần text, chạy được trên laptop (JAX/Metal)"],
+    cons:["Bản gốc sai hết với tiếng Việt (mục 3)","Cần vài nghìn câu mẫu tiếng Việt","Fine-tune LoRA local làm mất confidence","Chưa kiểm tra runtime React Native"],
+    ex:`needle finetune data.jsonl --epochs 10 --out adapter.safetensors
+{"query":"hai ký gạo với một chai nước mắm",
+ "answers":[{"name":"add_sale_line","arguments":{"product":"Gạo ST25 5kg","qty":2}}, ...]}` },
+  { id:"f", name:"F. Lai (đề xuất)", verdict:["good","Đề xuất"],
+    summary:"Cải thiện parser trên máy (khớp n-gram, CRF, hotword) và chỉ gọi LLM cho câu khó; chi tiết trong trang Voice Parse PoC. Câu đơn giản, khớp rõ ràng thì tạo draft ngay; còn lại đi qua LLM như hiện tại. Không phải train, và trải nghiệm không bao giờ tệ hơn bây giờ.",
+    flow:[["io","Input","Audio VN",""],["device","Trên máy","sherpa-onnx STT",""],["new","Phải viết","ITN + rule parser + fuzzy","Mọi món đều khớp rõ ràng?"],["io","Output","Draft lines","Fast path, không gọi LLM"]],
+    fallback:"Không chắc (món mơ hồ, còn chữ thừa, parse lỗi) → gọi LLM draft_parse như pipeline A.",
+    pros:["Không phải train gì","Giảm số lần gọi LLM với các câu phổ biến","Không mất chất lượng vì luôn có LLM đỡ","Thu được dữ liệu thật để sau này fine-tune Needle"],
+    cons:["Phải viết và bảo trì rule: số đếm, đơn vị, từ nối","Tỉ lệ câu đi qua fast path chưa biết, cần đo","Câu khó vẫn cần mạng"],
+    ex:`"bán 2 gạo st25"     → rule: qty 2, fuzzy "Gạo ST25 5kg" khớp duy nhất → draft ngay ✓
+"lấy cho chị ít mắm" → rule không chắc qty → LLM ↪` },
+];
+
+const tabs = document.getElementById('tabs');
+const panel = document.getElementById('panel');
+const esc = s => s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+function render(id){
+  const o = OPTIONS.find(x => x.id === id);
+  [...tabs.children].forEach(b => b.setAttribute('aria-selected', b.dataset.id === id));
+  const stages = o.flow.map(([k,tag,title,sub]) =>
+    `<div class="stage k-${k}"><span class="tag">${tag}</span><b>${esc(title)}</b>${sub?`<small>${esc(sub)}</small>`:''}</div>`
+  ).join('<div class="arrow" aria-hidden="true">→</div>');
+  panel.innerHTML = `
+    <h3 style="font-size:18px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">${o.name}<span class="pill ${o.verdict[0]}">${o.verdict[1]}</span></h3>
+    <p>${o.summary}</p>
+    <div class="flow">${stages}</div>
+    ${o.fallback?`<div class="fallback">↪ ${o.fallback}</div>`:''}
+    <div class="cols">
+      <div class="pros"><h3>Được</h3><ul>${o.pros.map(p=>`<li>${p}</li>`).join('')}</ul></div>
+      <div class="cons"><h3>Mất / rủi ro</h3><ul>${o.cons.map(p=>`<li>${p}</li>`).join('')}</ul></div>
+    </div>
+    <div class="example">${esc(o.ex)}</div>`;
+  try { localStorage.setItem('vc-tab', id); } catch(e) {}
+}
+
+OPTIONS.forEach(o => {
+  const b = document.createElement('button');
+  b.className = 'tab'; b.role = 'tab'; b.dataset.id = o.id;
+  b.innerHTML = `${o.name}<span class="pill ${o.verdict[0]}">${o.verdict[1]}</span>`;
+  b.onclick = () => render(o.id);
+  tabs.appendChild(b);
+});
+let start = 'f';
+try { start = localStorage.getItem('vc-tab') || 'f'; } catch(e) {}
+render(OPTIONS.some(o => o.id === start) ? start : 'f');
+</script>
+</body>
+</html>

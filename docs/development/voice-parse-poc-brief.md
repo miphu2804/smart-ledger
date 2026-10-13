@@ -2,9 +2,11 @@
 
 Brief này là đầu vào cho một session tự chạy từ lúc research cho tới khi train xong CRF và hoàn thành PoC. Mọi thứ cần biết đều nằm trong file. Phần đánh dấu **[đã kiểm chứng]** là đã đọc code hoặc đã chạy thật trong session trước. Phần **[suy luận]** phải tự kiểm chứng lại trước khi dựa vào.
 
-Trang tham khảo, nếu mở được (private, thuộc tài khoản owner):
-- Phân tích các phương án: https://claude.ai/artifact/SdgPVPZiQNDsE1rki8nv2p
-- Đề xuất PoC: https://claude.ai/artifact/9pSdz4DZTHbFJzDa9zBxuE
+File kèm theo trong `docs/development/voice-parse-poc/`:
+- `bench.mts`: baseline 10 câu chạy trên `parseOrder.ts` của repo. Chạy từ root repo: `node --experimental-strip-types --no-warnings docs/development/voice-parse-poc/bench.mts`.
+- `cascade-options.html`: phân tích các phương án cascade và trade-off (mở bằng trình duyệt).
+- `poc-proposal.html`: đề xuất PoC, có ví dụ đi qua từng lớp.
+- `agent-prompt.md`: prompt goal để giao cho agent.
 
 ---
 
@@ -69,8 +71,7 @@ Trang tham khảo, nếu mở được (private, thuộc tài khoản owner):
 Script để chạy lại (catalog lấy từ đây):
 
 ```ts
-// bench.mts — copy parseOrder.ts cùng thư mục, chạy: node --experimental-strip-types --no-warnings bench.mts
-import { parseOrder } from './parseOrder.ts';
+// docs/development/voice-parse-poc/bench.mts (bản đầy đủ có 10 câu thử)
 const products = [
   { id: 1, name: 'Gạo ST25 5kg', price: 180000, aliases: ['gạo st25', 'gạo st hai lăm'] },
   { id: 2, name: 'Nước mắm Nam Ngư 500ml', price: 35000, aliases: ['nước mắm'] },

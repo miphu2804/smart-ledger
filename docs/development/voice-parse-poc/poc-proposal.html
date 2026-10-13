@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice Parse PoC</title>
+<style>
+:root{
+  --bg:#f7f6f2; --surface:#fff; --surface-2:#f0eee8; --text:#1d1d1b; --muted:#66645e; --line:#dedbd2; --accent:#2f5bd3;
+  --good:#1f7a4d; --good-bg:#e3f3ea; --bad:#b3362b; --bad-bg:#fbe7e4; --warn:#93620a; --warn-bg:#fbf0d9;
+  --l0:#e6edfc; --l0t:#2f5bd3; --l1:#efe7fb; --l1t:#7a4bc4; --l2:#e3f3ea; --l2t:#1f7a4d; --l3:#fbf0d9; --l3t:#93620a; --l4:#fbe7e4; --l4t:#b3362b;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#121417; --surface:#1a1d22; --surface-2:#22262c; --text:#ecebe6; --muted:#a3a19a; --line:#30343b; --accent:#7d9cf0;
+  --good:#5cc392; --good-bg:#17322a; --bad:#ef8679; --bad-bg:#3a1f1c; --warn:#e3b65c; --warn-bg:#352a14;
+  --l0:#1d2a46; --l0t:#86a5f3; --l1:#2c2242; --l1t:#b597ec; --l2:#17322a; --l2t:#5cc392; --l3:#352a14; --l3t:#e3b65c; --l4:#3a1f1c; --l4t:#ef8679;
+}}
+:root[data-theme="dark"]{
+  --bg:#121417; --surface:#1a1d22; --surface-2:#22262c; --text:#ecebe6; --muted:#a3a19a; --line:#30343b; --accent:#7d9cf0;
+  --good:#5cc392; --good-bg:#17322a; --bad:#ef8679; --bad-bg:#3a1f1c; --warn:#e3b65c; --warn-bg:#352a14;
+  --l0:#1d2a46; --l0t:#86a5f3; --l1:#2c2242; --l1t:#b597ec; --l2:#17322a; --l2t:#5cc392; --l3:#352a14; --l3t:#e3b65c; --l4:#3a1f1c; --l4t:#ef8679;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1040px;margin:0 auto;padding:32px 16px 64px}
+h1{font-size:28px;line-height:1.25;margin:0 0 8px} h2{font-size:20px;margin:40px 0 12px} h3{font-size:16px;margin:0 0 8px}
+p{margin:0 0 12px} .lead{color:var(--muted);max-width:760px} .note{font-size:13px;color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px}
+code{font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--surface-2);padding:1px 5px;border-radius:4px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:20px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.kpi b{display:block;font-size:22px} .kpi span{font-size:13px;color:var(--muted)}
+.layers{display:flex;flex-direction:column;gap:10px}
+.layer{display:grid;grid-template-columns:150px 1fr 120px;gap:16px;align-items:start;border-radius:12px;padding:14px 16px;border:1px solid var(--line);background:var(--surface)}
+.layer .lbl{border-radius:8px;padding:8px 10px;font-weight:700;font-size:13px}
+.layer .lbl small{display:block;font-weight:500;font-size:12px;opacity:.85}
+.layer p{margin:0 0 6px} .layer ul{margin:0;padding-left:18px;font-size:14px}
+.layer .lat{font:600 13px/1.4 ui-monospace,Menlo,monospace;text-align:right}
+.layer .lat small{display:block;font:12px system-ui;color:var(--muted)}
+.c0{background:var(--l0);color:var(--l0t)} .c1{background:var(--l1);color:var(--l1t)} .c2{background:var(--l2);color:var(--l2t)} .c3{background:var(--l3);color:var(--l3t)} .c4{background:var(--l4);color:var(--l4t)}
+.tag{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:4px;margin-left:6px;vertical-align:1px}
+.t-new{background:var(--warn-bg);color:var(--warn)} .t-have{background:var(--good-bg);color:var(--good)}
+.trace{font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--surface-2);border-radius:10px;padding:14px;overflow-x:auto;white-space:pre}
+.sel{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.sel button{border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:999px;padding:6px 12px;font:inherit;font-size:13.5px;cursor:pointer}
+.sel button[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);font-weight:600}
+.sel button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tok{display:inline-flex;flex-direction:column;align-items:center;margin:0 4px 8px 0;border-radius:6px;padding:4px 7px;background:var(--surface-2);font-size:14px}
+.tok i{font-style:normal;font-size:10.5px;font-weight:700;margin-top:2px}
+.B-QTY,.I-QTY{background:var(--l0)} .B-QTY i,.I-QTY i{color:var(--l0t)}
+.B-UNIT{background:var(--l1)} .B-UNIT i{color:var(--l1t)}
+.B-ITEM,.I-ITEM{background:var(--l2)} .B-ITEM i,.I-ITEM i{color:var(--l2t)}
+.B-EXP,.B-AMT,.I-AMT{background:var(--l4)} .B-EXP i,.B-AMT i,.I-AMT i{color:var(--l4t)}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}
+th,td{padding:9px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{background:var(--surface-2);font-size:13px} tr:last-child td{border-bottom:0}
+.ok{color:var(--good);font-weight:600} .ko{color:var(--bad);font-weight:600}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.steps{counter-reset:s;list-style:none;padding:0;margin:0}
+.steps li{counter-increment:s;position:relative;padding:0 0 16px 42px}
+.steps li::before{content:counter(s);position:absolute;left:0;top:0;width:28px;height:28px;border-radius:50%;background:var(--accent);color:var(--surface);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
+.v{font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:4px}
+.v.ok2{background:var(--good-bg);color:var(--good)} .v.inf{background:var(--warn-bg);color:var(--warn)}
+@media (max-width:700px){
+  h1{font-size:23px}
+  .layer{grid-template-columns:1fr}
+  .layer .lat{text-align:left}
+}
+</style>
+</head>
+<body>
+<main>
+  <h1>PoC: parse đơn bán từ giọng nói, chạy trên máy với độ trễ thấp</h1>
+  <p class="lead">Ghép bốn thành phần: <b>hotword biasing</b> cho STT, <b>ITN</b> (đổi số đọc bằng chữ thành số), <b>CRF</b> gắn nhãn từng từ, và <b>character n-gram</b> để khớp tên sản phẩm. Toàn bộ chạy trên điện thoại. LLM chỉ dùng làm đường dự phòng cho câu khó. PoC dựng trên <code>parseOrder.ts</code> đang chạy thật, không viết lại từ đầu.</p>
+
+  <div class="kpis">
+    <div class="kpi"><b>&lt; 5 ms</b><span>Thời gian parse mục tiêu, tính từ lúc có transcript (P95, máy Android tầm trung) <span class="v inf">ước tính</span></span></div>
+    <div class="kpi"><b>0.05 ms</b><span><code>parseOrder</code> hiện tại trên Node, catalog 6 món <span class="v ok2">đã đo</span></span></div>
+    <div class="kpi"><b>6 / 10</b><span>Số câu mẫu <code>parseOrder</code> hiện tại parse đúng <span class="v ok2">đã đo</span></span></div>
+    <div class="kpi"><b>0</b><span>Không cần GPU, server hay model mới cho phần parse. CRF chỉ là vài trăm KB trọng số</span></div>
+  </div>
+
+  <h2>1. Hiện trạng (đã đọc code)</h2>
+  <div class="grid2">
+    <div class="card">
+      <h3>Pipeline đang chạy ở màn <code>voice.tsx</code></h3>
+      <p>sherpa-onnx Zipformer transducer (streaming, fp16, khoảng 51 MB), giải mã bằng <code>greedy_search</code>, <b>chưa bật hotword</b> (app chưa tải <code>bpe.model</code>). Transcript đi vào <code>parseOrder.ts</code> (621 dòng rule, chạy trên máy), rồi thành sale draft ở Core.</p>
+      <p class="note">LLM <code>draft_parse</code> ở <code>backend/ai</code> có tồn tại, nhưng màn voice không gọi tới. Module <code>src/sst/</code> không được import ở đâu, và phần ASR trong đó là stub.</p>
+    </div>
+    <div class="card">
+      <h3>Chỗ <code>parseOrder</code> đang hỏng</h3>
+      <ul style="margin:0;padding-left:18px">
+        <li><b>Chỉ khớp chính xác theo token:</b> "gạo" không khớp được "Gạo ST25 5kg" (alias là "gạo st25"), và "một đường" thì bị đẩy vào danh sách <code>unknown</code>.</li>
+        <li><b>Gặp thứ tự "tên trước, số sau" là sai:</b> "gạo hai bao nước mắm một chai" ra <em>nước mắm × 2</em>, còn gạo bị mất.</li>
+        <li>STT nghe sai tên hàng (không có hotword) thì bước parse không cứu lại được.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>2. Kiến trúc PoC</h2>
+  <div class="layers">
+    <div class="layer">
+      <div class="lbl c0">L0 · STT + hotword<small>sherpa-onnx</small></div>
+      <div>
+        <p>Đổi <code>greedy_search</code> sang <code>modified_beam_search</code> và nạp <code>hotwords</code> sinh từ tên và alias của catalog shop (cần tải thêm <code>bpe.model</code>). Thêm vào đó là chỉnh endpoint, hoặc chốt câu ngay khi người dùng thả nút mic.<span class="tag t-new">MỚI</span></p>
+        <ul><li>Mục đích: STT ra đúng "nước mắm Nam Ngư" ngay từ đầu. Đây là lớp đòn bẩy lớn nhất, vì lỗi STT thì mọi bước sau đều chịu.</li>
+        <li>Rủi ro: chưa kiểm tra wrapper <code>react-native-sherpa-onnx@0.4.4</code> có cho truyền hotwords không.</li></ul>
+      </div>
+      <div class="lat">+? ms / chunk<small>beam chậm hơn greedy, phải đo</small></div>
+    </div>
+    <div class="layer">
+      <div class="lbl c1">L1 · Chuẩn hoá + ITN<small>rule, có sẵn</small></div>
+      <div>
+        <p>Dùng lại <code>normalize</code>, <code>fold</code> (bỏ dấu) và <code>parseSpokenRun</code> trong <code>parseOrder.ts</code>: bỏ từ đệm, đổi "hai mươi lăm", "nửa", "chục" thành số, đổi "năm trăm nghìn" thành 500000.<span class="tag t-have">CÓ SẴN</span></p>
+      </div>
+      <div class="lat">&lt; 0.1 ms</div>
+    </div>
+    <div class="layer">
+      <div class="lbl c2">L2 · Gazetteer n-gram<small>feature cho CRF</small></div>
+      <div>
+        <p>Đánh dấu cụm từ nào có thể là tên hàng. Có hai mức: (a) <code>findProductHits</code> khớp chính xác word n-gram (có sẵn); (b) <b>character trigram</b> cho các span 1–4 từ, chấm bằng <i>containment</i> (tỉ lệ trigram của span có trong tên sản phẩm) rồi dùng Dice để phân thứ hạng. Nhờ vậy bắt được "gạo" hay "đường" khi tên đầy đủ dài hơn. Nếu chỉ dùng Dice thì "gạo" so với "Gạo ST25 5kg" chỉ được 0.47, dưới ngưỡng. Kết quả không phải quyết định cuối, chỉ là một feature đưa vào CRF.<span class="tag t-new">MỚI (b)</span></p>
+      </div>
+      <div class="lat">&lt; 1 ms<small>catalog khoảng 1.000 món, có inverted index</small></div>
+    </div>
+    <div class="layer">
+      <div class="lbl c3">L3 · CRF slot tagger<small>linear-chain, BIO</small></div>
+      <div>
+        <p>Gán cho mỗi token một nhãn: <code>QTY UNIT ITEM AMT EXP O</code>. Feature gồm: token đã bỏ dấu, có phải số không, có trong danh sách đơn vị không, nhãn gazetteer từ L2, token trước và sau, bigram. Train offline bằng <code>python-crfsuite</code>, xuất trọng số ra JSON, rồi giải mã Viterbi bằng TypeScript (khoảng 60 dòng).<span class="tag t-new">MỚI</span></p>
+        <ul><li>Mục đích: xử lý được thứ tự tự do ("gạo hai bao"), câu không có từ nối, và từ đệm, những chỗ rule đang hỏng.</li>
+        <li>Từ chuỗi nhãn ghép lại thành các bộ <code>{qty, unit, item_span}</code>: món nào có QTY gần nhất thì gắn với QTY đó.</li></ul>
+      </div>
+      <div class="lat">&lt; 1 ms<small>khoảng 20 token × 11 nhãn</small></div>
+    </div>
+    <div class="layer">
+      <div class="lbl c4">L4 · Linker + gate<small>quyết định</small></div>
+      <div>
+        <p>Với mỗi <code>item_span</code>: lấy top-k sản phẩm theo trigram containment, xếp hạng phụ bằng Dice, cộng thêm điểm khi khớp chính xác hoặc khớp alias. <b>Gate</b>: chỉ nhận khi top1 ≥ τ, chênh lệch top1 − top2 ≥ δ, và có số lượng. Không qua gate thì: nếu có 2 ứng viên trở lên, hiện UI chọn biến thể (đã có); nếu hơn X% token là O hoặc parse rỗng, gửi sang LLM <code>draft_parse</code>.<span class="tag t-new">MỚI</span></p>
+      </div>
+      <div class="lat">&lt; 1 ms<small>đường LLM: vài giây, hiếm khi dùng</small></div>
+    </div>
+  </div>
+  <p class="note" style="margin-top:10px">Độ trễ từng lớp là ước tính, chưa đo trên máy thật. Phần người dùng cảm nhận rõ nhất là khoảng chờ endpoint của STT, không phải bước parse.</p>
+
+  <h2>3. Ví dụ đi qua từng lớp</h2>
+  <div class="card">
+    <div class="sel" id="sel"></div>
+    <div id="toks" style="margin-bottom:8px"></div>
+    <div class="trace" id="trace"></div>
+  </div>
+
+  <h2>4. Dữ liệu train CRF (không cần gán nhãn tay từ đầu)</h2>
+  <div class="grid2">
+    <div class="card">
+      <h3>Synthetic (khởi động)</h3>
+      <p>Sinh 5–10 nghìn câu từ template:</p>
+      <p><code>[từ mở]? [QTY] [UNIT]? [ITEM] ([nối] …)*</code> và <code>[ITEM] [QTY] [UNIT]?</code></p>
+      <p class="note">Nguồn ghép: tên và alias trong catalog demo, từ điển số đếm trong <code>parseOrder</code>, danh sách đơn vị, từ đệm ("cho chị", "lấy", "nha", "à"). Nhãn có sẵn vì chính mình sinh ra câu.</p>
+    </div>
+    <div class="card">
+      <h3>Silver, rồi gold</h3>
+      <p>Log transcript thật từ màn voice, cùng với draft mà chủ shop <b>đã xác nhận</b>. Căn ngược draft đó vào transcript là ra nhãn silver. Lấy 200–300 câu rà tay làm <b>bộ eval gold</b>; bộ này không dùng để train.</p>
+      <p class="note">Cần xin đồng ý của người dùng trước khi lưu transcript, và chỉ lưu text, không lưu audio.</p>
+    </div>
+  </div>
+
+  <h2>5. Kế hoạch theo bước, mỗi bước đo được</h2>
+  <div class="card">
+    <ol class="steps">
+      <li><b>Baseline.</b> Viết script Node chạy <code>parseOrder</code> trên bộ eval, đo exact match từng món (sản phẩm + số lượng) và tỉ lệ <code>unknown</code>. Đã có bản thử với 10 câu: đúng 6.</li>
+      <li><b>Linker trigram (L2b + L4).</b> Không cần train. Thay khớp chính xác bằng trigram có gate. Kỳ vọng sửa được nhóm lỗi "gạo", "đường". → Đo lại.</li>
+      <li><b>Hotword (L0).</b> Bật beam search, nạp hotwords từ catalog. Đo WER riêng trên tên hàng, và độ trễ STT trên máy thật. → Bỏ bước này nếu hotword không cải thiện hoặc làm chậm quá ngưỡng.</li>
+      <li><b>CRF (L3).</b> Train trên dữ liệu synthetic, đánh giá trên bộ gold. Chỉ giữ CRF nếu nó hơn rule ở nhóm câu sai thứ tự, thiếu từ nối, có từ đệm.</li>
+      <li><b>Gate + fallback LLM.</b> Câu không qua gate thì gửi <code>draft_parse</code>. Đo tỉ lệ fallback; mục tiêu ≤ 15%.</li>
+    </ol>
+    <p class="note" style="margin:0">Dừng ngay ở bước nào đã đạt mục tiêu. Ví dụ nếu bước 2–3 đã đủ tốt thì không làm CRF.</p>
+  </div>
+
+  <h2>6. Tiêu chí thành công và rủi ro</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Chỉ số</th><th>Mục tiêu PoC</th><th>Đo bằng</th></tr></thead>
+      <tbody>
+        <tr><td>Exact match từng món (sản phẩm + số lượng)</td><td>≥ 90% trên bộ gold</td><td>Script Node, chạy cùng bộ câu với baseline</td></tr>
+        <tr><td>Thời gian parse (L1–L4)</td><td>P95 &lt; 5 ms</td><td><code>performance.now()</code> trong app, máy Android tầm trung</td></tr>
+        <tr><td>Từ lúc thả mic đến lúc có draft</td><td>&lt; 500 ms (không tính fallback)</td><td>Log thời gian trên máy</td></tr>
+        <tr><td>Tỉ lệ fallback LLM</td><td>≤ 15%</td><td>Đếm số câu không qua gate</td></tr>
+        <tr><td>Sai mà vẫn tự nhận (gate để lọt)</td><td>≤ 2%</td><td>So với bộ gold</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="grid2" style="margin-top:16px">
+    <div class="card">
+      <h3>Rủi ro</h3>
+      <ul style="margin:0;padding-left:18px">
+        <li>Wrapper RN có thể không cho truyền hotwords. Khi đó phải patch native hoặc bỏ qua L0.</li>
+        <li>Câu synthetic khác câu nói thật, nên CRF có thể overfit theo template. Đây là lý do bắt buộc phải có bộ gold từ câu thật.</li>
+        <li>Catalog thay đổi liên tục, nên gazetteer và index trigram phải dựng lại khi catalog đổi. Việc này rẻ nhưng không được quên.</li>
+        <li>Shop có nhiều món tên gần giống nhau ("bạc xỉu đá" và "bạc xỉu nóng"): gate sẽ chặn nhiều, dẫn tới UI phải hỏi lại nhiều.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Lý do không chọn các phương án khác</h3>
+      <ul style="margin:0;padding-left:18px">
+        <li><b>NeuDecide:</b> chỉ có tiếng Anh, muốn tiếng Việt phải train lại end-to-end.</li>
+        <li><b>Needle chưa fine-tune:</b> sai toàn bộ câu tiếng Việt trong lần test sandbox.</li>
+        <li><b>PhoBERT NER:</b> quá nặng để chạy trên máy; nếu đã chạy server thì dùng LLM luôn còn hơn.</li>
+        <li><b>Jev:</b> là API ngoài, không chạy offline được.</li>
+      </ul>
+    </div>
+  </div>
+</main>
+
+<script>
+const EX = [
+  { q:"gạo hai bao nước mắm một chai", base:"nước mắm × 2, gạo bị mất  ✗",
+    toks:[["gao","B-ITEM"],["hai","B-QTY"],["bao","B-UNIT"],["nuoc","B-ITEM"],["mam","I-ITEM"],["mot","B-QTY"],["chai","B-UNIT"]],
+    trace:`L1  fold + ITN    : gao 2 bao nuoc mam 1 chai
+L2  gazetteer     : [gao]⊂Gạo ST25 (containment 1.00, Dice 0.47)  [nuoc mam]=alias Nước mắm (exact)
+L3  CRF           : ITEM QTY UNIT | ITEM ITEM QTY UNIT
+    ghép slot     : {item:"gao", qty:2, unit:"bao"}, {item:"nuoc mam", qty:1, unit:"chai"}
+L4  linker + gate : Gạo ST25 5kg (catalog chỉ có 1 món chứa 'gao' ✓)  Nước mắm Nam Ngư (1.0 ✓)
+→   draft         : Gạo ST25 5kg × 2, Nước mắm Nam Ngư 500ml × 1   ✓`},
+  { q:"hai ký gạo với một chai nước mắm", base:"nước mắm × 1, unknown: Gạo  ✗",
+    toks:[["hai","B-QTY"],["ky","B-UNIT"],["gao","B-ITEM"],["voi","O"],["mot","B-QTY"],["chai","B-UNIT"],["nuoc","B-ITEM"],["mam","I-ITEM"]],
+    trace:`L2  gazetteer     : "gao" không khớp chính xác alias "gao st25" → trigram containment 1.00
+L3  CRF           : QTY UNIT ITEM O QTY UNIT ITEM ITEM
+L4  gate          : chỉ có 1 sản phẩm tên chứa "gạo" → margin lớn ✓
+→   draft         : Gạo ST25 5kg × 2, Nước mắm × 1   ✓
+    (shop có cả "Gạo tám" thì margin nhỏ → hiện UI chọn biến thể)`},
+  { q:"cho chị ba gói mì hảo hảo nha", base:"Mì Hảo Hảo × 3  ✓ (rule đã xử lý được)",
+    toks:[["cho","O"],["chi","O"],["ba","B-QTY"],["goi","B-UNIT"],["mi","B-ITEM"],["hao","I-ITEM"],["hao","I-ITEM"],["nha","O"]],
+    trace:`L3  CRF           : bỏ từ đệm "cho chị", "nha" bằng nhãn O (rule hiện tại cũng làm được)
+→   draft         : Mì Hảo Hảo tôm chua cay × 3   ✓  — PoC không được làm hỏng những câu đang đúng`},
+  { q:"lấy cho anh cái kia nữa", base:"rỗng",
+    toks:[["lay","O"],["cho","O"],["anh","O"],["cai","B-UNIT"],["kia","O"],["nua","O"]],
+    trace:`L3  CRF           : không có ITEM, 5/6 token là O
+L4  gate          : parse rỗng → không tự đoán
+→   fallback      : gửi LLM draft_parse, hoặc hỏi lại người dùng "Anh muốn thêm món nào?"`},
+  { q:"chi năm trăm nghìn tiền điện", base:"khoản chi 500000, mục 'khac'",
+    toks:[["chi","B-EXP"],["500000","B-AMT"],["tien","O"],["dien","O"]],
+    trace:`L1  ITN           : "năm trăm nghìn" → 500000
+L3  CRF           : EXP AMT O O → khoản chi, phần mô tả là "tiền điện"
+→   draft chi     : 500.000đ "tiền điện" (chờ xác nhận, theo NFR-006)`},
+];
+const sel = document.getElementById('sel'), toks = document.getElementById('toks'), trace = document.getElementById('trace');
+function show(i){
+  const e = EX[i];
+  [...sel.children].forEach((b,j)=>b.setAttribute('aria-pressed', j===i));
+  toks.innerHTML = e.toks.map(([t,l])=>`<span class="tok ${l}">${t}<i>${l}</i></span>`).join('');
+  trace.textContent = `câu nói         : "${e.q}"\nparseOrder hiện tại: ${e.base}\n\n${e.trace}`;
+}
+EX.forEach((e,i)=>{ const b=document.createElement('button'); b.textContent=e.q; b.onclick=()=>show(i); sel.appendChild(b); });
+show(0);
+</script>
+</body>
+</html>
