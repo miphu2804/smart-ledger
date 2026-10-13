@@ -496,15 +496,29 @@ function listProducts(): ProductView[] {
   return products.filter((p) => p.status === 'ACTIVE');
 }
 
-/** Như Core: bỏ khoảng trắng hai đầu, chuỗi rỗng nghĩa là không có mã. */
+/**
+ * Như Core (CORE-012): bỏ khoảng trắng hai đầu (kể cả CR/LF/TAB máy quét gửi kèm), chuỗi rỗng nghĩa là không có mã. Mã giữ
+ * nguyên từng ký tự, không chứa khoảng trắng hay ký tự điều khiển bên trong và dài tối đa 100 ký tự; sai thì 400.
+ */
 function normalizeBarcode(raw: string | null | undefined): string | null {
-  return (raw ?? '').trim() || null;
+  const code = (raw ?? '').trim();
+  if (!code) return null;
+  if (/[\s\p{Cc}]/u.test(code) || [...code].length > 100) {
+    throw new ApiError(400, 'validation_failed', 'barcode is invalid.', undefined, [{ field: 'barcode', issue: 'invalid' }]);
+  }
+  return code;
 }
 
-/** Mã vạch là duy nhất trong tiệm, tính cả sản phẩm đã ẩn (hợp đồng Core hiện tại); trùng thì 409 như Core. */
+/**
+ * Mã vạch là duy nhất giữa các sản phẩm đang bán của tiệm; món đã ẩn nhả mã để dùng lại. Trùng thì 409 kèm món đang giữ
+ * mã, như Core.
+ */
 function assertBarcodeFree(barcode: string | null, exceptId?: number): void {
-  if (barcode && products.some((p) => p.id !== exceptId && p.barcode === barcode)) {
-    throw apiErr(409, 'product_barcode_conflict', 'This barcode is already used by another product.');
+  const holder = barcode ? products.find((p) => p.status === 'ACTIVE' && p.id !== exceptId && p.barcode === barcode) : undefined;
+  if (holder) {
+    throw new ApiError(409, 'product_barcode_conflict', 'The product barcode is already in use in this shop.', undefined, [
+      { field: 'barcode', issue: 'already_in_use', productId: holder.id, status: 'ACTIVE' },
+    ]);
   }
 }
 
