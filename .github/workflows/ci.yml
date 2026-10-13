@@ -477,6 +477,7 @@ jobs:
       VERCEL_TARGET: ${{ github.ref_name == 'main' && github.event_name == 'push' && 'production' || 'preview' }}
       VITE_CONTACT_EMAIL: ${{ vars.VITE_CONTACT_EMAIL }}
       VITE_LEGAL_DRAFT: ${{ vars.VITE_LEGAL_DRAFT }}
+      VITE_ANDROID_APK_URL: ${{ vars.VITE_ANDROID_APK_URL }}
     steps:
       - uses: actions/checkout@v7
         with:
