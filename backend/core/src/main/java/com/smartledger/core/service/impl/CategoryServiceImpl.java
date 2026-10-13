@@ -80,6 +80,8 @@ public class CategoryServiceImpl implements CategoryService {
     public void archive(VerifiedFirebaseToken firebaseToken, String shopId, String categoryId) {
         Shop shop = shopService.requireOwnedActiveShop(firebaseToken, shopId);
         Category category = requireLockedActiveCategory(shop.getId(), categoryId);
+        // Hold Category until commit; this existence read must not acquire Product row locks.
+        // Product PATCH acquires Product before Category, so locking both here would reverse that order.
         if (productRepository.existsByShopIdAndCategoryIdAndStatus(
                 shop.getId(), category.getId(), CatalogStatus.ACTIVE)) {
             throw new BusinessException(ErrorCode.CATEGORY_HAS_PRODUCTS);
