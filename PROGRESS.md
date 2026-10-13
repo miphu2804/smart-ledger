@@ -1,3 +1,13 @@
+### [2026-10-13 23:54 UTC+07:00] — [Feature] Ship the speech model to R2 from CI
+
+**Done:** The published APK (285.6 MB, 4 ABIs) had no speech model: the model is not in git, CI had no copy, and no build set `EXPO_PUBLIC_STT_MODEL_URL`, so voice input could not load. `mobile-release.yml` now resolves the model URL before the build. A publish uploads the version named in `core.ts` to `stt-model/<version>/` in the APK bucket when it is missing, fetched from HuggingFace (`hynt/Zipformer-30M-RNNT-Streaming-6000h`, pinned revision) with `tokens.txt` rebuilt from `bpe.model`. Repository variable `STT_MODEL_BASE_URL` is set to the bucket's `r2.dev` address. DVC was not used: it stores files by hash, so the app could not download them by name.
+
+**Changed files:** `.github/scripts/stt-model.mjs` — created; `.github/workflows/mobile-release.yml`, `docs/development/ci-cd.md`, `frontend/mobile/assets/models/README.md`, `PROGRESS.md` — modified.
+
+**Flow explained:** `stt-model.mjs check` reads `STT_MODEL_VERSION` and `STT_MODEL_FILES` from `core.ts` and HEADs each file under `$STT_MODEL_BASE_URL/stt-model/<version>/`. On a miss, a publish runs `fetch` (download, rebuild `tokens.txt` with CRLF endings to match the pinned size, compare sizes), `aws s3 sync --size-only`, and `check` again; the result goes to `$GITHUB_ENV` as `EXPO_PUBLIC_STT_MODEL_URL`. Test builds have no R2 secrets and only warn.
+
+**Check:** `fetch` output is byte-identical to a set built with the `sentencepiece` library. The step, run locally with a stub `aws` and a local HTTP bucket, uploads when missing, skips when present, re-uploads a wrong-size file and only warns on a test build. `r2.dev` answers HEAD with `Content-Length`. **Not verified:** the step on GitHub with real R2, and voice input on a device with the downloaded model. The model license is `cc-by-nc-nd-4.0` (non-commercial); it needs the product owner's approval before a public release.
+
 ### [2026-10-13 23:53 UTC+07:00] — [Fix] CORE-013 managed media writers and required PostgreSQL CI coverage (#181)
 
 **Done:** Added locked refresh to avatar, Shop logo and Product image upload/delete writers, covering request-managed entities rather than only detached pre-upload entities. Added required concurrency/overflow coverage to the PostgreSQL CI gate. Local commits: `34003d3` (media writes) and `3c6c35d` (CI gate and Core README); not pushed in this round. No new API, field, entity or migration; FE/AI and deployment configuration are unchanged.
