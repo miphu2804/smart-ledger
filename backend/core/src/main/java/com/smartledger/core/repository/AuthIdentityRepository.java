@@ -8,6 +8,10 @@ import org.springframework.data.repository.query.Param;
 
 public interface AuthIdentityRepository extends JpaRepository<AuthIdentity, Long> {
 
+    /** Resolves the account without loading a possibly stale User into the persistence context. */
+    @Query("select identity.user.id from AuthIdentity identity where identity.providerSubject = :providerSubject")
+    Optional<Long> findUserIdByProviderSubject(@Param("providerSubject") String providerSubject);
+
     @Query("""
             select identity
             from AuthIdentity identity

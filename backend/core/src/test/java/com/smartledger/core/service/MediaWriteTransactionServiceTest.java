@@ -33,7 +33,8 @@ class MediaWriteTransactionServiceTest {
         MediaCleanupJobService cleanup = mock(MediaCleanupJobService.class);
         AuditLogService audit = mock(AuditLogService.class);
         MediaWriteTransactionService writes = new MediaWriteTransactionService(products, shops, users, idempotency,
-                cleanup, audit, mock(com.smartledger.core.media.MediaStorage.class), mock(org.springframework.jdbc.core.JdbcTemplate.class));
+                cleanup, audit, mock(com.smartledger.core.media.MediaStorage.class), mock(org.springframework.jdbc.core.JdbcTemplate.class),
+                mock(jakarta.persistence.EntityManager.class));
         Shop beforeUpload = mock(Shop.class);
         Shop inactiveAtWrite = mock(Shop.class);
         when(beforeUpload.getId()).thenReturn(7L);
@@ -61,7 +62,8 @@ class MediaWriteTransactionServiceTest {
         MediaCleanupJobService cleanup = mock(MediaCleanupJobService.class);
         AuditLogService audit = mock(AuditLogService.class);
         MediaWriteTransactionService writes = new MediaWriteTransactionService(products, shops, users, idempotency,
-                cleanup, audit, mock(com.smartledger.core.media.MediaStorage.class), mock(org.springframework.jdbc.core.JdbcTemplate.class));
+                cleanup, audit, mock(com.smartledger.core.media.MediaStorage.class), mock(org.springframework.jdbc.core.JdbcTemplate.class),
+                mock(jakarta.persistence.EntityManager.class));
         UserAccount beforeUpload = mock(UserAccount.class);
         UserAccount disabledAtWrite = mock(UserAccount.class);
         when(beforeUpload.getId()).thenReturn(1L);

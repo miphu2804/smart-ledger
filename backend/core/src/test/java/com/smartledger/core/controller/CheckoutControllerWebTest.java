@@ -64,6 +64,22 @@ class CheckoutControllerWebTest {
     @MockitoBean
     private SaleVoidService saleVoidService;
 
+    @Test
+    void voidStockOverflowReturnsBusinessConflictInsteadOfServerError() throws Exception {
+        when(saleVoidService.voidSale(any(), eq("7"), eq("15"), eq("overflow"), any()))
+                .thenThrow(new com.smartledger.core.exception.BusinessException(
+                        com.smartledger.core.enums.ErrorCode.PRODUCT_STOCK_OVERFLOW));
+        mvc.perform(post("/api/v1/sales/15/void")
+                        .header("Authorization", "Bearer valid-token")
+                        .header("X-Shop-Id", "7")
+                        .header("Idempotency-Key", "overflow")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"Returned\",\"restockItems\":true,\"refundMethod\":\"CASH\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("product_stock_overflow"))
+                .andExpect(jsonPath("$.traceId").isNotEmpty());
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"{\"reason\":\"Returned\"}", "{\"reason\":\"Returned\",\"restockItems\":null}"})
     void rejectsMissingOrNullRestockChoiceBeforeCallingBusinessService(String body) throws Exception {

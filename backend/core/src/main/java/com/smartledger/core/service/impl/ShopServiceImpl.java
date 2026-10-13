@@ -22,6 +22,8 @@ import com.smartledger.core.repository.ShopRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.ShopService;
 import com.smartledger.core.service.NotificationEventService;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
@@ -36,15 +38,17 @@ public class ShopServiceImpl implements ShopService {
 
     private final AuthIdentityRepository authIdentityRepository;
     private final ShopRepository shopRepository;
+    private final EntityManager entityManager;
 
     public ShopServiceImpl(AuthIdentityRepository authIdentityRepository, ShopRepository shopRepository,
             AuditLogService auditLogService, AdminAccessAuditService adminAccessAuditService,
-            NotificationEventService notifications) {
+            NotificationEventService notifications, EntityManager entityManager) {
         this.notifications = notifications;
         this.auditLogService = auditLogService;
         this.adminAccessAuditService = adminAccessAuditService;
         this.authIdentityRepository = authIdentityRepository;
         this.shopRepository = shopRepository;
+        this.entityManager = entityManager;
     }
 
     @Override
@@ -77,14 +81,7 @@ public class ShopServiceImpl implements ShopService {
         if (!request.hasChanges()) {
             throw new BusinessException(ErrorCode.SHOP_UPDATE_REQUIRED);
         }
-        Shop visibleShop = requireOwnedVisibleShop(firebaseToken, shopId, "shopId");
-        ensureShopIsActive(visibleShop);
-        Shop shop = shopRepository.findLockedByIdAndOwnerId(visibleShop.getId(), visibleShop.getOwnerId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.SHOP_ACCESS_DENIED));
-        if (shop.getStatus() == ShopStatus.ARCHIVED) {
-            throw new BusinessException(ErrorCode.SHOP_NOT_FOUND);
-        }
-        ensureShopIsActive(shop);
+        Shop shop = requireLockedOwnedActiveShop(firebaseToken, shopId);
         shop.update(
                 request.name() == null ? shop.getName() : normalizeRequired(request.name()),
                 request.industry() == null ? shop.getIndustry() : normalizeRequired(request.industry()),
@@ -104,14 +101,7 @@ public class ShopServiceImpl implements ShopService {
             VerifiedFirebaseToken firebaseToken,
             String shopId,
             ArchiveShopRequest request) {
-        Shop visibleShop = requireOwnedVisibleShop(firebaseToken, shopId, "shopId");
-        ensureShopIsActive(visibleShop);
-        Shop shop = shopRepository.findLockedByIdAndOwnerId(visibleShop.getId(), visibleShop.getOwnerId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.SHOP_ACCESS_DENIED));
-        if (shop.getStatus() == ShopStatus.ARCHIVED) {
-            throw new BusinessException(ErrorCode.SHOP_NOT_FOUND);
-        }
-        ensureShopIsActive(shop);
+        Shop shop = requireLockedOwnedActiveShop(firebaseToken, shopId);
         shop.archive(normalizeRequired(request.archivedReason()));
         auditLogService.recordOwner(shop, AuditAction.SHOP_ARCHIVED, shop.getId(), shop.getArchivedReason(), null,
                 Map.of("beforeStatus", ShopStatus.ACTIVE, "afterStatus", ShopStatus.ARCHIVED));
@@ -126,6 +116,7 @@ public class ShopServiceImpl implements ShopService {
         UserAccount admin = requireActiveAdmin(firebaseToken);
         Shop shop = shopRepository.findLockedById(parseShopId(shopId, "shopId"))
                 .orElseThrow(() -> new BusinessException(ErrorCode.SHOP_NOT_FOUND));
+        refreshLockedShop(shop);
         if (shop.getStatus() == ShopStatus.ARCHIVED) {
             throw new BusinessException(ErrorCode.SHOP_NOT_FOUND);
         }
@@ -158,6 +149,24 @@ public class ShopServiceImpl implements ShopService {
         Long shopId = parseShopId(shopIdValue, fieldName);
         return shopRepository.findByIdAndOwnerId(shopId, owner.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.SHOP_ACCESS_DENIED));
+    }
+
+    private Shop requireLockedOwnedActiveShop(VerifiedFirebaseToken firebaseToken, String shopIdValue) {
+        UserAccount owner = requireActiveOwner(firebaseToken);
+        Long shopId = parseShopId(shopIdValue, "shopId");
+        Shop shop = shopRepository.findLockedByIdAndOwnerId(shopId, owner.getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.SHOP_ACCESS_DENIED));
+        refreshLockedShop(shop);
+        if (shop.getStatus() == ShopStatus.ARCHIVED) {
+            throw new BusinessException(ErrorCode.SHOP_NOT_FOUND);
+        }
+        ensureShopIsActive(shop);
+        return shop;
+    }
+
+    private void refreshLockedShop(Shop shop) {
+        // Lock queries do not refresh a Shop already managed by the caller's persistence context.
+        entityManager.refresh(shop, LockModeType.PESSIMISTIC_WRITE);
     }
 
     private Shop requireOwnedVisibleShop(

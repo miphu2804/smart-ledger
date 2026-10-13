@@ -35,6 +35,8 @@ import com.smartledger.core.service.AuditLogService;
 import com.smartledger.core.service.NotificationEventService;
 import com.smartledger.core.service.SaleDraftService;
 import com.smartledger.core.service.ShopService;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.OffsetDateTime;
@@ -65,12 +67,15 @@ public class SaleDraftServiceImpl implements SaleDraftService {
     private final PaymentRepository paymentRepository;
     private final CustomerRepository customerRepository;
     private final DebtRepository debtRepository;
+    private final EntityManager entityManager;
 
     public SaleDraftServiceImpl(ShopService shopService, SaleDraftRepository draftRepository,
             SaleDraftItemRepository draftItemRepository, ProductRepository productRepository,
             SaleRepository saleRepository, SaleItemRepository saleItemRepository,
             PaymentRepository paymentRepository, CustomerRepository customerRepository,
-            DebtRepository debtRepository, AuditLogService auditLogService, NotificationEventService notifications) {
+            DebtRepository debtRepository, AuditLogService auditLogService, NotificationEventService notifications,
+            EntityManager entityManager) {
+        this.entityManager = entityManager;
         this.notifications = notifications;
         this.auditLogService = auditLogService;
         this.shopService = shopService;
@@ -145,6 +150,7 @@ public class SaleDraftServiceImpl implements SaleDraftService {
 
     /**
      * Confirms under the draft row lock, replaying its sale if confirmation already succeeded.
+     * For a new debt, locks and refreshes the selected Customer before Product locks, until commit.
      * Locks non-null catalog IDs once in ascending order, then validates each item in that order:
      * a missing later Product must not mask an earlier cost overflow or stock shortage.
      * Custom items do not lock or change Product stock. Cost snapshots, stock changes, sale/payment/debt,
@@ -254,15 +260,19 @@ public class SaleDraftServiceImpl implements SaleDraftService {
     private Customer customerForConfirmation(SaleDraft draft, Long shopId) {
         boolean customerRequired = draft.getInitialPaidVnd() < draft.getEstimatedTotalVnd();
         if (draft.getCustomerId() != null) {
+            if (customerRequired) {
+                Customer customer = customerRepository.findLockedByIdAndShopId(draft.getCustomerId(), shopId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND));
+                // The lock query can reuse an entity loaded before another transaction archived/edited it.
+                entityManager.refresh(customer, LockModeType.PESSIMISTIC_WRITE);
+                if (customer.getStatus() != CatalogStatus.ACTIVE) {
+                    throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND);
+                }
+                return customer;
+            }
             // Fully paid sales keep the draft's customer snapshot even if that customer was archived.
-            // A new debt must still link to an active customer in this shop.
             return customerRepository.findByIdAndShopIdAndStatus(draft.getCustomerId(), shopId, CatalogStatus.ACTIVE)
-                    .orElseGet(() -> {
-                        if (customerRequired) {
-                            throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND);
-                        }
-                        return null;
-                    });
+                    .orElse(null);
         }
         if (customerRequired) {
             if (!StringUtils.hasText(draft.getCustomerName())) {

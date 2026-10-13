@@ -39,6 +39,8 @@ import com.smartledger.core.repository.SaleItemRepository;
 import com.smartledger.core.repository.SaleRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.impl.SaleDraftServiceImpl;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -72,10 +74,11 @@ class SaleDraftServiceTest {
     private final DebtRepository debtRepository = Mockito.mock(DebtRepository.class);
     private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
     private final NotificationEventService notifications = Mockito.mock(NotificationEventService.class);
+    private final EntityManager entityManager = Mockito.mock(EntityManager.class);
     private final SaleDraftService service = new SaleDraftServiceImpl(shopService, draftRepository,
             draftItemRepository, productRepository, saleRepository, saleItemRepository,
             paymentRepository, customerRepository, debtRepository, auditLogService,
-            notifications);
+            notifications, entityManager);
     private final VerifiedFirebaseToken token = new VerifiedFirebaseToken("uid", null, false, null, null, null);
 
     @BeforeEach
@@ -486,6 +489,7 @@ class SaleDraftServiceTest {
         ReflectionTestUtils.setField(customer, "id", 22L);
         when(customerRepository.findByIdAndShopIdAndStatus(22L, 7L, CatalogStatus.ACTIVE))
                 .thenReturn(Optional.of(customer));
+        when(customerRepository.findLockedByIdAndShopId(22L, 7L)).thenReturn(Optional.of(customer));
         when(productRepository.findAllByIdInAndShopIdAndStatus(Set.of(3L), 7L, CatalogStatus.ACTIVE))
                 .thenReturn(List.of(product));
         when(draftRepository.save(any(SaleDraft.class))).thenAnswer(invocation -> {
@@ -523,6 +527,12 @@ class SaleDraftServiceTest {
         ArgumentCaptor<Debt> debtCaptor = ArgumentCaptor.forClass(Debt.class);
         verify(debtRepository).save(debtCaptor.capture());
         assertThat(debtCaptor.getValue().getCustomerId()).isEqualTo(22L);
+        var locks = Mockito.inOrder(customerRepository, entityManager, productRepository);
+        locks.verify(customerRepository).findByIdAndShopIdAndStatus(22L, 7L, CatalogStatus.ACTIVE);
+        locks.verify(productRepository).findAllByIdInAndShopIdAndStatus(Set.of(3L), 7L, CatalogStatus.ACTIVE);
+        locks.verify(customerRepository).findLockedByIdAndShopId(22L, 7L);
+        locks.verify(entityManager).refresh(customer, LockModeType.PESSIMISTIC_WRITE);
+        locks.verify(productRepository).findAllLockedByIdInAndShopIdAndStatus(List.of(3L), 7L, CatalogStatus.ACTIVE);
         verify(customerRepository, never()).save(any());
         verify(paymentRepository, never()).save(any());
     }
@@ -711,6 +721,8 @@ class SaleDraftServiceTest {
         assertThat(result.customerPhone()).isEqualTo("0901234567");
         assertThat(result.paymentStatus()).isEqualTo(PaymentStatus.PAID);
         verify(customerRepository).findByIdAndShopIdAndStatus(22L, 7L, CatalogStatus.ACTIVE);
+        verify(customerRepository, never()).findLockedByIdAndShopId(any(), any());
+        verifyNoInteractions(entityManager);
         verify(customerRepository, never()).save(any());
         verify(debtRepository, never()).save(any());
     }
@@ -722,6 +734,10 @@ class SaleDraftServiceTest {
         draft.replace(22L, "Snapshot customer", "0901234567", 0, 25000, paid,
                 paid == 0 ? null : PaymentMethod.CASH);
         when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
+        Customer customer = Customer.create(7L, "Old customer", null);
+        when(customerRepository.findLockedByIdAndShopId(22L, 7L)).thenReturn(Optional.of(customer));
+        Mockito.doAnswer(invocation -> { customer.archive(42L); return null; })
+                .when(entityManager).refresh(customer, LockModeType.PESSIMISTIC_WRITE);
 
         assertThatThrownBy(() -> service.confirm(token, "7", "11"))
                 .isInstanceOfSatisfying(BusinessException.class, error ->
@@ -731,6 +747,21 @@ class SaleDraftServiceTest {
         verify(debtRepository, never()).save(any());
         verify(paymentRepository, never()).save(any());
         verify(auditLogService, never()).recordOwner(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void selectedCustomerFromAnotherShopIsRejectedBeforeAnyBusinessWrite() {
+        SaleDraft draft = draft(0, null);
+        draft.replace(22L, "Snapshot", null, 0, 25000, 0, null);
+        when(draftRepository.findLockedByIdAndShopId(11L, 7L)).thenReturn(Optional.of(draft));
+
+        assertThatThrownBy(() -> service.confirm(token, "7", "11"))
+                .isInstanceOfSatisfying(BusinessException.class, error ->
+                        assertThat(error.getErrorCode()).isEqualTo(ErrorCode.CUSTOMER_NOT_FOUND));
+
+        verify(customerRepository).findLockedByIdAndShopId(22L, 7L);
+        verifyNoInteractions(entityManager, productRepository, saleRepository, saleItemRepository,
+                paymentRepository, debtRepository, notifications, auditLogService);
     }
 
     @ParameterizedTest

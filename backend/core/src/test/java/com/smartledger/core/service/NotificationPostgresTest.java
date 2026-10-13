@@ -278,6 +278,76 @@ class NotificationPostgresTest {
         } finally { jdbc.execute("alter table notification_events drop constraint test_notification_fail"); }
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void laterRestockOverflowRollsBackEarlierStockAuditAndAllowsSameKeyRetry(boolean archived) {
+        var first = product("2", "1");
+        var second = product("2", "1");
+        long sale = drafts.confirm(owner, shopId, Long.toString(batchDraft(List.of(first.id(), second.id()), "2"))).id();
+        // First item has already restored stock and written its audit when the second item fails.
+        products.stockIn(owner, shopId, second.id().toString(), "fill-stock",
+                new ProductStockInRequest(new BigDecimal("999999999998.000"), null));
+        if (archived) products.archive(owner, shopId, second.id().toString());
+        var stockBefore = jdbc.queryForMap("select stock_quantity,status,archived_at,archived_by_user_id,updated_at from products where id=?", second.id());
+        var saleBefore = jdbc.queryForMap("select * from sales where id=?", sale);
+        var debtBefore = jdbc.queryForMap("select * from debts where sale_id=?", sale);
+        var paymentsBefore = jdbc.queryForList("select * from payments where sale_id=? order by id", sale);
+        var eventsBefore = jdbc.queryForList("select * from notification_events where shop_id=? order by id", Long.valueOf(shopId));
+        var recipientsBefore = jdbc.queryForList("select r.* from notification_recipients r join notification_events e on e.id=r.notification_event_id where e.shop_id=? order by r.id", Long.valueOf(shopId));
+        long auditBefore = jdbc.queryForObject("select count(*) from audit_logs where shop_id=?", Long.class, Long.valueOf(shopId));
+        var request = new SaleVoidRequest("Return", true, PaymentMethod.CASH, null);
+        expectCode(() -> voids.voidSale(owner, shopId, Long.toString(sale), "overflow-retry", request), ErrorCode.PRODUCT_STOCK_OVERFLOW);
+        assertThat(products.getById(owner, shopId, first.id().toString()).stockQuantity()).isEqualByComparingTo("0");
+        assertThat(jdbc.queryForMap("select stock_quantity,status,archived_at,archived_by_user_id,updated_at from products where id=?", second.id())).isEqualTo(stockBefore);
+        assertThat(jdbc.queryForMap("select * from sales where id=?", sale)).isEqualTo(saleBefore);
+        assertThat(jdbc.queryForMap("select * from debts where sale_id=?", sale)).isEqualTo(debtBefore);
+        assertThat(jdbc.queryForList("select * from payments where sale_id=? order by id", sale)).isEqualTo(paymentsBefore);
+        assertThat(jdbc.queryForObject("select count(*) from sale_refunds where sale_id=?", Long.class, sale)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from api_idempotency_keys where shop_id=? and operation='SALE_VOID' and idempotency_key='overflow-retry'", Long.class, Long.valueOf(shopId))).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from audit_logs where shop_id=?", Long.class, Long.valueOf(shopId))).isEqualTo(auditBefore);
+        assertThat(jdbc.queryForList("select * from notification_events where shop_id=? order by id", Long.valueOf(shopId))).isEqualTo(eventsBefore);
+        assertThat(jdbc.queryForList("select r.* from notification_recipients r join notification_events e on e.id=r.notification_event_id where e.shop_id=? order by r.id", Long.valueOf(shopId))).isEqualTo(recipientsBefore);
+
+        // Fixture-only adjustment in the disposable schema; no production stock overwrite API is introduced.
+        jdbc.update("update products set stock_quantity=999999999997.999 where id=?", second.id());
+        var result = voids.voidSale(owner, shopId, Long.toString(sale), "overflow-retry", request);
+        var replay = voids.voidSale(owner, shopId, Long.toString(sale), "overflow-retry", request);
+        assertThat(result.sale().saleStatus()).isEqualTo(SaleStatus.VOIDED);
+        assertThat(result.refund().amountVnd()).isEqualTo(20_000L);
+        assertThat(result.cancelledDebtVnd()).isEqualTo(20_000L);
+        assertThat(replay.refund().id()).isEqualTo(result.refund().id());
+        assertThat(products.getById(owner, shopId, first.id().toString()).stockQuantity()).isEqualByComparingTo("2");
+        assertThat(jdbc.queryForObject("select stock_quantity from products where id=?", BigDecimal.class, second.id())).isEqualByComparingTo("999999999999.999");
+        assertThat(jdbc.queryForObject("select count(*) from sale_refunds where sale_id=?", Long.class, sale)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from audit_logs where shop_id=? and idempotency_key='overflow-retry' and action='STOCK_RESTORED_ON_VOID'", Long.class, Long.valueOf(shopId))).isEqualTo(2);
+        assertThat(jdbc.queryForObject("select count(*) from api_idempotency_keys where shop_id=? and operation='SALE_VOID' and idempotency_key='overflow-retry' and response_body is not null", Long.class, Long.valueOf(shopId))).isEqualTo(1);
+        assertThat(count("SALE_VOIDED")).isEqualTo(1);
+        assertRecipientsMatchEvents();
+    }
+
+    @Test void voidRestorationExactlyAtMaximumSucceeds() {
+        var product = product("0.001", null);
+        long sale = confirm(product.id(), "0.001");
+        products.stockIn(owner, shopId, product.id().toString(), "fill-to-edge",
+                new ProductStockInRequest(new BigDecimal("999999999999.998"), null));
+        var result = voids.voidSale(owner, shopId, Long.toString(sale), "edge-void",
+                new SaleVoidRequest("Return", true, PaymentMethod.CASH, null));
+        assertThat(result.stockRestocked()).isTrue();
+        assertThat(products.getById(owner, shopId, product.id().toString()).stockQuantity()).isEqualByComparingTo("999999999999.999");
+    }
+
+    @Test void explicitNoRestockStillVoidsWhenStockIsAlreadyAtMaximum() {
+        var product = product("1", null);
+        long sale = confirm(product.id(), "1");
+        products.stockIn(owner, shopId, product.id().toString(), "fill-to-max",
+                new ProductStockInRequest(new BigDecimal("999999999999.999"), null));
+        var result = voids.voidSale(owner, shopId, Long.toString(sale), "no-restock",
+                new SaleVoidRequest("Return", false, PaymentMethod.CASH, null));
+        assertThat(result.sale().saleStatus()).isEqualTo(SaleStatus.VOIDED);
+        assertThat(result.stockRestocked()).isFalse();
+        assertThat(products.getById(owner, shopId, product.id().toString()).stockQuantity()).isEqualByComparingTo("999999999999.999");
+    }
+
     @Test void readBatchIsAtomicAndEventsCannotBeReadByAnotherOwnerEvenWithAnIncorrectRecipientRow() {
         product("0", null);
         long event = inbox.list(owner, null, null, false, 0, 20).items().getFirst().id();

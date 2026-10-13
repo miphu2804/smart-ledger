@@ -24,6 +24,8 @@ import com.smartledger.core.repository.UserAccountRepository;
 import com.smartledger.core.service.AuditLogService;
 import com.smartledger.core.service.MediaCleanupJobService;
 import com.smartledger.core.media.MediaIdempotencyReplay;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
@@ -40,10 +42,11 @@ public class MediaWriteTransactionService {
     private final AuditLogService audit;
     private final MediaStorage storage;
     private final JdbcTemplate jdbc;
+    private final EntityManager entityManager;
 
     public MediaWriteTransactionService(ProductRepository products, ShopRepository shops, UserAccountRepository users,
             MediaIdempotencyReplay idempotency, MediaCleanupJobService cleanupJobs, AuditLogService audit,
-            MediaStorage storage, JdbcTemplate jdbc) {
+            MediaStorage storage, JdbcTemplate jdbc, EntityManager entityManager) {
         this.products = products;
         this.shops = shops;
         this.users = users;
@@ -52,6 +55,7 @@ public class MediaWriteTransactionService {
         this.audit = audit;
         this.storage = storage;
         this.jdbc = jdbc;
+        this.entityManager = entityManager;
     }
 
     @Transactional
@@ -61,8 +65,7 @@ public class MediaWriteTransactionService {
         Shop lockedShop = lockActiveShop(shop);
         idempotency.lockPending(lockedShop.getId(), lockedShop.getOwnerId(), "PRODUCT_IMAGE_UPLOAD", reservation);
         lockAsset(stored.publicId());
-        Product product = products.findLockedByIdAndShopIdAndStatus(productId, lockedShop.getId(), CatalogStatus.ACTIVE)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+        Product product = lockActiveProduct(lockedShop.getId(), productId);
         enqueueReplacement(product.getImagePublicId(), stored.publicId(), MediaAssetType.PRODUCT_IMAGE);
         product.replaceCloudinaryImage(stored.secureUrl(), stored.publicId());
         audit.recordOwner(lockedShop, AuditAction.PRODUCT_UPDATED, product.getId(), null, reservation.key(),
@@ -77,8 +80,7 @@ public class MediaWriteTransactionService {
     @Transactional
     public void clearProductImage(Shop shop, Long productId) {
         Shop lockedShop = lockActiveShop(shop);
-        Product product = products.findLockedByIdAndShopIdAndStatus(productId, lockedShop.getId(), CatalogStatus.ACTIVE)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+        Product product = lockActiveProduct(lockedShop.getId(), productId);
         if (product.getImageUrl() == null && product.getImagePublicId() == null) {
             return;
         }
@@ -122,9 +124,7 @@ public class MediaWriteTransactionService {
     @Transactional
     public SavedAvatar saveAvatar(UserAccount user, MediaIdempotencyReplay.Reservation<SavedAvatar> reservation,
             StoredMedia stored) {
-        UserAccount locked = users.findLockedById(user.getId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_PROFILE_NOT_FOUND));
-        ensureUserIsActive(locked);
+        UserAccount locked = lockActiveUser(user.getId());
         idempotency.lockPending(null, locked.getId(), "USER_AVATAR_UPLOAD", reservation);
         lockAsset(stored.publicId());
         enqueueReplacement(locked.getAvatarPublicId(), stored.publicId(), MediaAssetType.USER_AVATAR);
@@ -141,9 +141,7 @@ public class MediaWriteTransactionService {
 
     @Transactional
     public void clearAvatar(UserAccount user) {
-        UserAccount locked = users.findLockedById(user.getId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_PROFILE_NOT_FOUND));
-        ensureUserIsActive(locked);
+        UserAccount locked = lockActiveUser(user.getId());
         if (locked.getAvatarPublicId() == null) {
             return;
         }
@@ -163,6 +161,8 @@ public class MediaWriteTransactionService {
     private Shop lockActiveShop(Shop shop) {
         Shop locked = shops.findLockedByIdAndOwnerId(shop.getId(), shop.getOwnerId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.SHOP_ACCESS_DENIED));
+        // OSIV can retain the pre-upload entity: a locking query does not refresh its fields.
+        entityManager.refresh(locked, LockModeType.PESSIMISTIC_WRITE);
         if (locked.getStatus() == ShopStatus.ARCHIVED) {
             throw new BusinessException(ErrorCode.SHOP_NOT_FOUND);
         }
@@ -174,10 +174,24 @@ public class MediaWriteTransactionService {
         return locked;
     }
 
-    private void ensureUserIsActive(UserAccount user) {
-        if (user.getStatus() == UserStatus.DISABLED) {
+    private UserAccount lockActiveUser(Long userId) {
+        UserAccount locked = users.findLockedById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_PROFILE_NOT_FOUND));
+        entityManager.refresh(locked, LockModeType.PESSIMISTIC_WRITE);
+        if (locked.getStatus() == UserStatus.DISABLED) {
             throw new BusinessException(ErrorCode.ACCOUNT_DISABLED);
         }
+        return locked;
+    }
+
+    private Product lockActiveProduct(Long shopId, Long productId) {
+        Product locked = products.findLockedByIdAndShopIdAndStatus(productId, shopId, CatalogStatus.ACTIVE)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+        entityManager.refresh(locked, LockModeType.PESSIMISTIC_WRITE);
+        if (locked.getStatus() != CatalogStatus.ACTIVE) {
+            throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
+        }
+        return locked;
     }
 
     private void lockAsset(String publicId) {

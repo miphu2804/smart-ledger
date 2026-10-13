@@ -331,6 +331,23 @@ Run the unit/web contract tests without any Cloudinary network credential:
 
 Set `CORE_TEST_POSTGRES_*` only to a disposable PostgreSQL database to run the V13/V14 migration assertions and media concurrency tests. To smoke-test a real provider locally, set `CLOUDINARY_ENABLED=true`, all four Cloudinary values, `FLYWAY_ENABLED=false` and use a schema already created by local `ddl-auto=update`; do **not** point a feature branch at shared staging with `update`. Upload a small JPEG/PNG through Swagger, verify only the returned URL, replace it, then verify a `media_cleanup_jobs` row becomes COMPLETED. Local `CLOUDINARY_CLEANUP_FIXED_DELAY_MS=5000` can shorten the test wait. Do not paste Cloudinary API secrets or delivery URLs with authenticated signatures into source, tickets, or chat.
 
+## CORE-013 concurrency and stock-restoration regression tests
+
+Point `CORE_TEST_POSTGRES_URL`, `CORE_TEST_POSTGRES_USERNAME` and `CORE_TEST_POSTGRES_PASSWORD` only at a disposable PostgreSQL database, then run from `backend/core`:
+
+```powershell
+.\mvnw.cmd '-Dtest=AuthSessionConcurrencyPostgresTest,ShopConcurrencyPostgresTest,CatalogLifecycleConcurrencyPostgresTest,CategoryAssignmentConcurrencyPostgresTest,MediaConcurrencyPostgresTest,ProductStockRestorationTest,CheckoutControllerWebTest,NotificationPostgresTest' test
+.\mvnw.cmd clean verify
+```
+
+The PostgreSQL suites create/drop UUID-named schemas, use real row locks and bounded transaction coordination, and must not be skipped for acceptance. Session sync preserves current role/status/Cloudinary avatar state; OWNER/ADMIN Shop writes and Customer/Category update/archive use locked refresh. Product create/PATCH assignment holds the target Category lock until commit: assignment first blocks archive with `category_has_products`; archive first rejects assignment with `product_category_invalid`. PATCH locks Product before Category; archive checks Product existence without taking Product write locks. Null/omitted category semantics remain unchanged. No new field or migration is required.
+
+Media upload/delete writers refresh User, Shop and Product under their row locks before status checks and mutations. `MediaConcurrencyPostgresTest` binds one request-style EntityManager across pre-upload reads, independent commits and the final writer transaction, covering managed (not just detached) entities as with OSIV. It checks both session/avatar and profile/logo orders, disabled/inactive/archived rejection, preservation of Product fields/stock and cleanup of the latest asset reference. Provider access is mocked; the database and transactions are real. There is no transaction spanning the provider upload. Preserving role/status/public IDs means preserving their latest business values, not forbidding unchanged columns in Hibernate UPDATE SQL.
+
+CI runs `python3 scripts/test_verify_postgres_tests.py` and `python3 scripts/verify_postgres_tests.py target/surefire-reports` after Maven. The gate requires all four new profile/catalog concurrency suites, the media suite and critical overflow/rollback methods; missing, empty, skipped or failing suites fail verification. Surefire parameter signatures/invocation indexes are normalized when checking required method names. Run the gate against a full `clean verify`, not a focused test run or stale reports.
+
+`ProductStockRestorationTest` and `NotificationPostgresTest` verify MAX_STOCK equality and overflow by 0.001, including archived Products. A later overflowing item rolls back earlier stock/audit plus refund/debt/notifications/idempotency; correcting the test fixture's stock allows the same key to retry once and replay safely. `restockItems=false` remains explicit, and custom/non-deducted items retain their behavior. `CheckoutControllerWebTest` verifies HTTP 409 `product_stock_overflow`. The ADMIN read-projection test checks event/field exclusion, not raw money digits that can coincidentally appear in timestamps or IDs. Full Core verification is not Firebase/FE/staging/production UAT.
+
 ## Time display
 
 No extra IntelliJ, JVM or Docker timezone setting is required. Core uses UTC internally; API timestamps include Vietnam's `+07:00` offset, and report periods follow the Vietnam calendar. Clients should parse the offset, not add seven hours. Date/time inputs must include an offset (`Z` or `+07:00`).

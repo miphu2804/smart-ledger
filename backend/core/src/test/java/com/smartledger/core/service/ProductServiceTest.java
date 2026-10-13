@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -13,6 +15,7 @@ import com.smartledger.core.dto.request.OwnerListQuery.*;
 import com.smartledger.core.dto.request.ProductPatchRequest;
 import com.smartledger.core.dto.request.ProductWriteRequest;
 import com.smartledger.core.dto.response.ProductResponse;
+import com.smartledger.core.entity.Category;
 import com.smartledger.core.entity.Product;
 import com.smartledger.core.entity.Shop;
 import com.smartledger.core.enums.CatalogStatus;
@@ -23,6 +26,8 @@ import com.smartledger.core.repository.CategoryRepository;
 import com.smartledger.core.repository.ProductRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.impl.ProductServiceImpl;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
@@ -44,8 +49,10 @@ class ProductServiceTest {
     private final CategoryRepository categoryRepository = Mockito.mock(CategoryRepository.class);
     private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
     private final IdempotencyService idempotencyService = Mockito.mock(IdempotencyService.class);
+    private final NotificationEventService notifications = Mockito.mock(NotificationEventService.class);
+    private final EntityManager entityManager = Mockito.mock(EntityManager.class);
     private final ProductService service = new ProductServiceImpl(shopService, productRepository, categoryRepository,
-            auditLogService, idempotencyService, Mockito.mock(NotificationEventService.class));
+            auditLogService, idempotencyService, notifications, entityManager);
 
     @BeforeEach
     void authorizeShop() {
@@ -87,13 +94,14 @@ class ProductServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_CATEGORY_INVALID));
 
-        verify(categoryRepository).existsByIdAndShopIdAndStatus(10L, 7L, CatalogStatus.ACTIVE);
+        verify(categoryRepository).findLockedByIdAndShopId(10L, 7L);
         verify(productRepository, never()).save(any());
     }
 
     @Test
     void createsTrackedProductWithActiveCategoryInTheSameShop() {
-        when(categoryRepository.existsByIdAndShopIdAndStatus(10L, 7L, CatalogStatus.ACTIVE)).thenReturn(true);
+        Category category = Category.create(7L, "Drinks");
+        when(categoryRepository.findLockedByIdAndShopId(10L, 7L)).thenReturn(Optional.of(category));
         when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         ProductResponse response = service.create(token(), "7", request(10L, " 123456 ", true,
@@ -104,6 +112,107 @@ class ProductServiceTest {
         assertThat(response.tracked()).isTrue();
         assertThat(response.stockQuantity()).isEqualByComparingTo("2.500");
         verify(productRepository).findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(7L, "123456", CatalogStatus.ACTIVE);
+        var order = inOrder(categoryRepository, entityManager, productRepository);
+        order.verify(categoryRepository).findLockedByIdAndShopId(10L, 7L);
+        order.verify(entityManager).refresh(category, LockModeType.PESSIMISTIC_WRITE);
+        order.verify(productRepository).save(any(Product.class));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void rejectsCategoryArchivedBeforeAssignment(boolean patch) {
+        Category category = Category.create(7L, "Drinks");
+        category.archive(42L);
+        assertInvalidCategoryAssignment(patch, category, false);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void checksRefreshedCategoryStatusBeforeAssignment(boolean patch) {
+        Category category = Category.create(7L, "Drinks");
+        assertInvalidCategoryAssignment(patch, category, true);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void missingOrForeignCategoryDoesNotWriteProductOrSideEffects(boolean patch) {
+        stubAssignmentProduct(patch);
+        assertThatThrownBy(() -> assignCategory(patch))
+                .isInstanceOfSatisfying(BusinessException.class, error ->
+                        assertThat(error.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_CATEGORY_INVALID));
+        verify(categoryRepository).findLockedByIdAndShopId(10L, 7L);
+        verify(productRepository, never()).save(any());
+        verifyNoInteractions(auditLogService, notifications);
+    }
+
+    @Test
+    void patchLocksProductThenCategoryBeforeReconcileAndAudit() {
+        Product product = product();
+        Category category = Category.create(7L, "Drinks");
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+                .thenReturn(Optional.of(product));
+        when(categoryRepository.findLockedByIdAndShopId(10L, 7L)).thenReturn(Optional.of(category));
+        ProductPatchRequest request = new ProductPatchRequest();
+        request.setCategoryId(10L);
+        assertThat(service.patch(token(), "7", "3", request).categoryId()).isEqualTo(10L);
+        var order = inOrder(productRepository, entityManager, categoryRepository, notifications, auditLogService);
+        order.verify(productRepository).findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE);
+        order.verify(entityManager).refresh(product, LockModeType.PESSIMISTIC_WRITE);
+        order.verify(categoryRepository).findLockedByIdAndShopId(10L, 7L);
+        order.verify(entityManager).refresh(category, LockModeType.PESSIMISTIC_WRITE);
+        order.verify(notifications).reconcileStock(any(Shop.class), eq(product));
+        order.verify(auditLogService).recordOwner(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void omittedCategoryUsesRefreshedProductSnapshotWithoutCategoryLock() {
+        Product product = product();
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+                .thenReturn(Optional.of(product));
+        doAnswer(invocation -> {
+            product.replace(11L, "Latest name", "123456", null, "ly", 27000L, 11000L, true, new BigDecimal("6.000"));
+            return null;
+        }).when(entityManager).refresh(product, LockModeType.PESSIMISTIC_WRITE);
+        ProductPatchRequest request = new ProductPatchRequest();
+        request.setSellingPriceVnd(30000L);
+        var response = service.patch(token(), "7", "3", request);
+        assertThat(response.categoryId()).isEqualTo(11L);
+        assertThat(response.name()).isEqualTo("Latest name");
+        assertThat(response.stockQuantity()).isEqualByComparingTo("6.000");
+        assertThat(response.costPriceVnd()).isEqualTo(11000L);
+        verifyNoInteractions(categoryRepository);
+    }
+
+    private void assertInvalidCategoryAssignment(boolean patch, Category category, boolean archiveOnRefresh) {
+        stubAssignmentProduct(patch);
+        when(categoryRepository.findLockedByIdAndShopId(10L, 7L)).thenReturn(Optional.of(category));
+        if (archiveOnRefresh) {
+            doAnswer(invocation -> { category.archive(42L); return null; }).when(entityManager)
+                    .refresh(category, LockModeType.PESSIMISTIC_WRITE);
+        }
+        assertThatThrownBy(() -> assignCategory(patch))
+                .isInstanceOfSatisfying(BusinessException.class, error ->
+                        assertThat(error.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_CATEGORY_INVALID));
+        verify(entityManager).refresh(category, LockModeType.PESSIMISTIC_WRITE);
+        verify(productRepository, never()).save(any());
+        verifyNoInteractions(auditLogService, notifications);
+    }
+
+    private void stubAssignmentProduct(boolean patch) {
+        if (patch) {
+            when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+                    .thenReturn(Optional.of(product()));
+        }
+    }
+
+    private void assignCategory(boolean patch) {
+        if (patch) {
+            ProductPatchRequest request = new ProductPatchRequest();
+            request.setCategoryId(10L);
+            service.patch(token(), "7", "3", request);
+        } else {
+            service.create(token(), "7", request(10L, null, false, null));
+        }
     }
 
     @Test
@@ -355,6 +464,7 @@ class ProductServiceTest {
         assertThat(response.barcode()).isEqualTo("123456");
         assertThat(response.stockQuantity()).isEqualByComparingTo("10.000");
         verify(productRepository).findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE);
+        verifyNoInteractions(categoryRepository);
     }
 
     @Test
@@ -388,6 +498,7 @@ class ProductServiceTest {
         assertThat(response.barcode()).isNull();
         assertThat(response.costPriceVnd()).isNull();
         assertThat(response.stockQuantity()).isEqualByComparingTo("10.000");
+        verifyNoInteractions(categoryRepository);
     }
 
     @Test

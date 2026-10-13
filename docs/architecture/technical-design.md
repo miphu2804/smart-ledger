@@ -139,6 +139,22 @@ Rollout là breaking change: FE phải đổi client/mock và các màn list, đ
 - `ProductBarcodeWebTest`/`ProductServiceTest`/`ApiDocumentationWebTest` kiểm normalize, routing, quyền, 409/JSON. `ProductBarcodePostgresTest` kiểm service trên schema Flyway, reuse CREATE/PATCH, tenant/status, một Product query và EXPLAIN Hibernate SQL với 20.000 Product. `ProductBarcodeMigrationPostgresTest` kiểm V16 fresh/upgrade/history/failure và hai writer JDBC cùng vượt precheck (create/patch), bổ sung test handler HTTP 409; không coi JDBC test là full request end-to-end. Timing local chỉ là bằng chứng chẩn đoán, không SLA production.
 - FE #162/#165 cần xử lý 404/409 có hoặc không details, giữ ký tự barcode và không tạo sản phẩm giả; quyết định D2/D3 và UAT scanner/giỏ hàng vẫn chờ team. Chưa sửa FE hoặc chứng minh Firebase/staging thực trong đợt này.
 
+### 4.4. Concurrency và vòng đời (CORE-013)
+
+Phần sửa #181 trên `fix/core-concurrency` không thêm field/entity/migration và không đổi tenant scope. Query lock không tự refresh entity đã nằm trong persistence context; các đường ghi hồ sơ/catalog lấy khóa rồi `EntityManager.refresh(..., PESSIMISTIC_WRITE)` trước check/mutate. Void giữ khóa batch hiện có và thêm kiểm tra giới hạn trong entity:
+
+| Đường ghi | Khóa và bảo đảm |
+|---|---|
+| Firebase session | Tra User ID từ identity, khóa/refresh User trước check ACTIVE và sync. Role/status/Cloudinary avatar handle không thuộc Firebase sync. Writer đổi avatar/quyền/trạng thái cùng row được tuần tự hóa; chưa có API ADMIN khóa/hạ quyền user. |
+| OWNER sửa/archive Shop; ADMIN đổi status | Đọc Shop dưới khóa và refresh trước kiểm tra; INACTIVE giữ lý do và lỗi shop_inactive, ARCHIVED giữ shop_not_found. Không ghi lại trạng thái/logo từ snapshot cũ; audit/notification cùng transaction. |
+| Customer/Category replace/archive | Khóa theo ID/shop rồi refresh/check ACTIVE, GET giữ read-only. Archive commit trước thì request sửa trả not_found, không hồi sinh bản ghi hoặc xóa metadata archive. |
+| Product create/gán Category | Create khóa Category đích trước insert; PATCH khóa/refresh Product rồi khóa/refresh Category đích cùng shop/ACTIVE, giữ đến commit. Null category không khóa; bỏ field giữ dữ liệu Product mới dưới khóa. Archive Category chỉ khóa Category rồi đọc exists Product ACTIVE, không khóa ghi Product nên không đảo Product → Category. Assignment commit trước: category_has_products; archive trước: product_category_invalid. Không tự gỡ category/archive Product. |
+| Void hoàn tồn | Giữ Sale → Debt → Product ID tăng dần theo batch query. Tổng đúng MAX_STOCK được phép, vượt trả product_stock_overflow trước gán. Cả void rollback kể cả item trước đã ghi tồn/audit; retry cùng key sau điều chỉnh hợp lệ không nhân đôi refund/tồn/notification. |
+
+Không áp khóa toàn shop lên mọi giao dịch. Refresh thêm một read dưới khóa cho đường ghi cần dữ liệu mới; không làm mất batch item/Product lock/reconcile của #133. SQL PostgreSQL thực tế dùng `FOR NO KEY UPDATE` qua Hibernate cho các row-lock này; kiểm tra bằng SQL assertions và hai transaction có coordination/timeout, không chỉ mock. Thử chuỗi Shop → Product, Product → Category và Category archive không deadlock trong fixture kiểm thử không đồng nghĩa mọi lịch chạy triển khai đều đã nghiệm thu.
+
+Bằng chứng: `AuthSessionConcurrencyPostgresTest`, `ShopConcurrencyPostgresTest`, `CatalogLifecycleConcurrencyPostgresTest`, `CategoryAssignmentConcurrencyPostgresTest` kiểm cả hai thứ tự commit và entity preloaded; `NotificationPostgresTest` kiểm rollback void nhiều item, Product archived, lỗi overflow và retry/replay với idempotency thật. `ProductStockRestorationTest` kiểm biên MAX_STOCK/giữ lỗi restock-unavailable; web test kiểm 409. Hướng dẫn ở [Core README](../../backend/core/README.md#core-013-concurrency-and-stock-restoration-regression-tests), lỗi void ở [contract](../contracts/api-contracts.md#3-bản-nháp--sale--payment--voidrefund). Test DB tạm không thay UAT FE/Firebase/staging; BRD/PRD/ERD không đổi vì khôi phục ràng buộc đã chốt, không mở rộng nghiệp vụ/schema.
+
 ## 5. Auth và phân quyền
 
 - Provider Phone/Google là đích đăng nhập đã mô tả trong PRD; Core nhận Firebase ID token, không chứng minh UI/provider đã tích hợp chỉ từ kiểm thử backend. Firebase Account Linking gộp các cách đăng nhập của cùng người dùng vào một Firebase UID; Core lưu UID đó trong `auth_identities`.
