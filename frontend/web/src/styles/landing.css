@@ -28,7 +28,10 @@
   --bg: #f7f6f2;
   --bg-soft: #f1efea;
   --surface: #ffffff;
-  --shadow: 0 1px 3px rgba(42, 41, 38, 0.04), 0 10px 24px rgba(42, 41, 38, 0.07);
+  /* Thẻ nổi: viền rất nhạt + bóng nhiều lớp, lan rộng và mờ */
+  --card-border: rgba(26, 25, 22, 0.06);
+  --shadow-sm: 0 1px 2px rgba(26, 25, 22, 0.04), 0 6px 16px -6px rgba(26, 25, 22, 0.07);
+  --shadow: 0 1px 2px rgba(26, 25, 22, 0.04), 0 10px 20px -8px rgba(26, 25, 22, 0.07), 0 28px 56px -20px rgba(26, 25, 22, 0.12);
   --shadow-lg: 0 30px 60px -24px rgba(26, 25, 22, 0.35), 0 14px 28px -14px rgba(72, 42, 172, 0.3);
 
   background: var(--bg);
@@ -66,7 +69,6 @@
   outline-color: var(--primary);
 }
 .lp-hero :focus-visible,
-.lp-dl :focus-visible,
 .lp-nav.is-top :focus-visible {
   outline-color: var(--accent);
 }
@@ -124,10 +126,8 @@
   z-index: 50;
   color: #fff;
   background: transparent;
-  border-bottom: 1px solid transparent;
   transition:
     background 0.2s,
-    border-color 0.2s,
     box-shadow 0.2s,
     color 0.2s;
 }
@@ -137,8 +137,10 @@
   background: rgba(247, 246, 242, 0.95);
   backdrop-filter: saturate(1.6) blur(14px);
   -webkit-backdrop-filter: saturate(1.6) blur(14px);
-  border-color: var(--border);
-  box-shadow: 0 6px 24px -18px rgba(42, 41, 38, 0.5);
+  /* Đường kẻ dưới vẽ bằng bóng: viền thật làm thanh cao 73px, hero (kéo lên 72px) hở 1px nền sáng ở mép trên */
+  box-shadow:
+    0 1px 0 var(--border),
+    0 6px 24px -18px rgba(42, 41, 38, 0.5);
 }
 .lp-nav-inner {
   height: 72px;
@@ -481,21 +483,54 @@
 }
 
 /* ---------- Khung điện thoại ---------- */
-/* Tỉ lệ theo iPhone Pro Max đời 6.9″ (thân 78 mm, màn 440×956 pt, bo góc màn ~62 pt), không vẽ Dynamic Island.
-   Viền và bo góc tính theo cqw nên khung giữ đúng tỉ lệ ở mọi kích thước. */
+/* Tỉ lệ theo iPhone Pro Max đời 6.9″ (thân 78 mm, màn 440×956 pt, bo góc màn ~62 pt).
+   Viền và bo góc tính theo cqw nên khung giữ đúng tỉ lệ ở mọi kích thước; 1 pt màn hình = 0.2136cqw. */
 .phone {
   position: relative;
   width: 100%;
   container-type: inline-size;
 }
 .phone-body {
-  padding: 3cqw;
+  padding: 2.5cqw;
+  border: 0.5cqw solid transparent;
   border-radius: 16.3cqw;
-  background: #1a1916;
+  /* Thân máy tối, cạnh kim loại bắt sáng chéo */
+  background:
+    linear-gradient(#0e0d12, #0e0d12) padding-box,
+    linear-gradient(135deg, #2b2933, #9a97a6 50%, #2b2933) border-box;
   box-shadow: var(--shadow-lg);
 }
 /* Ảnh chụp toàn màn hình từ simulator cùng tỉ lệ 440:956 nên phủ kín màn, vùng an toàn đã nằm sẵn trong ảnh */
+/* Ảnh chụp không có thanh trạng thái nên vùng an toàn phía trên trống; vẽ lại giờ và biểu tượng sóng, Wi-Fi, pin vào đó. */
+.phone-status {
+  position: absolute;
+  inset: 3cqw 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 7.9cqw;
+  padding: 0 7cqw 0 9cqw;
+  color: var(--ink);
+}
+.phone-status.is-light {
+  color: #fff;
+}
+.phone-status span:last-child {
+  display: flex;
+  align-items: center;
+  gap: 1.3cqw;
+}
+.phone-status svg {
+  width: auto;
+  height: 2.56cqw;
+}
+/* Giờ vẽ bằng SVG để co theo khung máy; chữ thường bị trình duyệt chặn ở cỡ chữ tối thiểu khi khung nhỏ. */
+.phone-status .phone-time {
+  height: 2.78cqw;
+  overflow: visible;
+}
 .phone-screen {
+  position: relative;
   aspect-ratio: 440 / 956;
   overflow: hidden;
   border-radius: 13.3cqw;
@@ -529,7 +564,7 @@
   padding: 16px 18px;
   border-radius: 20px;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--card-border);
   box-shadow: var(--shadow);
 }
 .lp-tile img {
@@ -598,8 +633,7 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.lp-sec-head h2,
-.dl-copy h2 {
+.lp-sec-head h2 {
   text-wrap: balance;
 }
 .lp-sec-head h2 {
@@ -627,7 +661,7 @@
   padding: 26px;
   border-radius: 24px;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--card-border);
   box-shadow: var(--shadow);
 }
 .pain-icon {
@@ -790,9 +824,10 @@
 }
 .feat {
   padding: 22px;
-  border-radius: 22px;
+  border-radius: 24px;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--card-border);
+  box-shadow: var(--shadow-sm);
   transition:
     transform 0.2s,
     box-shadow 0.2s,
@@ -897,7 +932,7 @@
 .cmp {
   border-radius: 24px;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--card-border);
   box-shadow: var(--shadow);
   overflow: hidden;
 }
@@ -1020,13 +1055,17 @@
   gap: 10px;
 }
 .faq {
-  border-radius: 18px;
+  border-radius: 20px;
   background: var(--surface);
-  border: 1px solid var(--border);
-  transition: border-color 0.15s;
+  border: 1px solid var(--card-border);
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 .faq[data-open="true"] {
   border-color: var(--brand-border);
+  box-shadow: var(--shadow);
 }
 .faq h3 {
   font-size: inherit;
@@ -1089,91 +1128,47 @@
   }
 }
 
-/* ---------- Tải ứng dụng ---------- */
-.lp-dl {
-  padding: 0 0 96px;
-}
-.dl-card {
-  position: relative;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 32px;
-  padding: 52px 56px;
-  overflow: hidden;
-  border-radius: 36px;
-  color: #fff;
-  background:
-    radial-gradient(520px 320px at 92% 8%, rgba(143, 219, 110, 0.28), transparent 62%),
-    radial-gradient(420px 320px at 0% 100%, rgba(255, 196, 46, 0.18), transparent 62%),
-    linear-gradient(150deg, #5334c4, var(--primary) 50%, #36208a);
-}
-.dl-copy h2 {
-  font-size: clamp(26px, 3.4vw, 40px);
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1.1;
-}
-.dl-copy > p {
-  margin-top: 14px;
-  max-width: 520px;
-  font-size: 16.5px;
-  line-height: 1.6;
-  color: rgba(255, 255, 255, 0.86);
-}
-.dl-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 26px;
-}
-.dl-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  height: 52px;
-  padding: 0 20px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px dashed rgba(255, 255, 255, 0.4);
-  font-weight: 700;
-  font-size: 14.5px;
-}
-.dl-status svg {
-  color: var(--accent);
-}
-.dl-art {
-  width: clamp(150px, 20vw, 250px);
-  filter: drop-shadow(0 22px 24px rgba(10, 6, 40, 0.4));
-  animation: lpFloat 5s ease-in-out infinite;
-}
-@media (max-width: 820px) {
-  .dl-card {
-    grid-template-columns: 1fr;
-    padding: 36px 24px;
-    text-align: center;
-    justify-items: center;
-    border-radius: 28px;
-  }
-  .dl-actions {
-    justify-content: center;
-  }
-  .dl-art {
-    order: -1;
-    width: 150px;
-  }
-}
-
 /* ---------- Footer ---------- */
 .lp-footer {
-  padding: 56px 0 48px;
+  padding: 0 0 32px;
+}
+.lp-footer-card {
+  padding: 48px 44px 20px;
+  border-radius: 32px;
   background: var(--surface);
-  border-top: 1px solid var(--border);
+  border: 1px solid var(--card-border);
+  box-shadow: var(--shadow);
 }
 .lp-footer-grid {
   display: grid;
-  grid-template-columns: 1.5fr 1fr 1fr 1fr;
-  gap: 32px;
+  grid-template-columns: 1.6fr 1fr 1fr 1.2fr;
+  gap: 40px 32px;
+}
+.lp-footer-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  margin-top: 40px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+  color: var(--muted-2);
+}
+.lp-footer-bottom p {
+  margin: 0;
+}
+.lp-footer-bottom a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.lp-footer-bottom a:hover {
+  color: var(--primary);
 }
 .lp-footer-brand .lp-brand {
   color: var(--ink);
@@ -1215,8 +1210,13 @@
   .lp-footer-grid {
     grid-template-columns: 1fr 1fr;
   }
-  .lp-footer-brand {
+  .lp-footer-brand,
+  .lp-footer-col:last-child {
     grid-column: 1 / -1;
+  }
+  .lp-footer-card {
+    padding: 32px 22px 12px;
+    border-radius: 24px;
   }
 }
 
