@@ -43,7 +43,10 @@
     "typecheck": "tsc --noEmit",
     "export:web": "expo export --platform web",
     "postinstall": "patch-package",
-    "voice:eval": "node --experimental-strip-types --no-warnings --import ./scripts/voice-crf/ts-resolve.mjs scripts/voice-crf/eval.mts"
+    "voice:eval": "node --experimental-strip-types --no-warnings --import ./scripts/voice-crf/ts-resolve.mjs scripts/voice-crf/eval.mts",
+    "voice:synth": "node --experimental-strip-types --no-warnings --import ./scripts/voice-crf/ts-resolve.mjs scripts/voice-crf/synth.mts",
+    "voice:train": "uv run scripts/voice-crf/train.py",
+    "voice:parity": "node --experimental-strip-types --no-warnings --import ./scripts/voice-crf/ts-resolve.mjs scripts/voice-crf/parity.mts"
   },
   "private": true
 }
