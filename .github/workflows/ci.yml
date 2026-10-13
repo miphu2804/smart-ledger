@@ -244,7 +244,7 @@ jobs:
 
   ### Deploy backend: Railway `ai` and `core` after a push to `staging` or `main` ###
 
-  # Deploys backend services to Railway after a push to `staging` or `main` passes every CI job.
+  # Deploys backend services to Railway after a push to `staging` or `main` passes the jobs in `needs`; `landing` is not one of them.
   # Each GitHub environment holds its own environment-scoped Railway project token and branch
   # policy; `railway-production` requires approval. The environment is set on this job, not in a
   # called workflow, so its secret reaches the job.
