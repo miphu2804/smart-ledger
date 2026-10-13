@@ -1,3 +1,13 @@
+### [2026-10-14 01:03 UTC+07:00] — [Feature] Date-range filter on the Orders tab and an explicit date on every order
+
+**Done:** Tester feedback asked for a filter like a banking app's transaction history and a clear date under each transaction. The Orders tab has a funnel button beside the search box. It opens a sheet with three ready ranges (7, 15 and 30 days up to today), a month calendar to pick a first and a last day (the days between are highlighted, days after today are disabled), the chosen "Từ ngày" and "Đến ngày", and the button "Chọn khoảng ngày". The chosen range shows as an active chip ("30 ngày gần nhất" or "07/10 – 13/10") beside the existing period chips; picking a period chip clears it. Every order row shows the date as dd/MM/yyyy with the time instead of "Hôm qua" or "3 ngày trước", and each day header carries the date. A range with no orders shows an empty state with "Xoá bộ lọc".
+
+**Changed files:** `frontend/mobile/app/(tabs)/invoices.tsx`, `frontend/mobile/src/lib/format.ts` — modified; `frontend/mobile/src/lib/saleFilter.ts`, `frontend/mobile/src/components/DateRangeSheet.tsx`, `frontend/mobile/src/components/MonthCalendar.tsx` — new; this entry.
+
+**Flow explained:** the screen keeps one `SaleFilter` (`time` is a period, or `custom` with `from` and `to` as local `yyyy-mm-dd` days) → `applySaleFilter` filters the list Core already returned, so the Core API is unchanged → `DateRangeSheet` edits a draft and returns it only from "Chọn khoảng ngày" → `MonthCalendar` is built from plain views because the app has no date-picker package and none was added.
+
+**Check:** `tsc --noEmit` clean. A Node script over `saleFilter.ts`, 32 of 32: each period, both end days included, the three ready ranges, ranges across a month and a year, labels. Mock-mode web build in headless Chrome, 14 of 14: the date on every row, the sheet and its default of 7 days, "30 Ngày", two taps on the calendar, the chip, clearing with "Tất cả", the empty state and "Xoá bộ lọc". **Not verified:** on a phone, against the real Core, with a long order history (the list is still loaded whole and filtered on the device).
+
 ### [2026-10-14 00:55 UTC+07:00] — [Fix] CORE-013 customer confirmation race and contract links (#181, PR #187)
 
 **Done:** Addressed the two approved CodeRabbit findings: selected Customer debt confirmation uses locked refresh; the void walkthrough links to the authoritative contract instead of repeating its stock limit/error/retry rules. Core fix commit: `efbd403`. No migration, schema, API, FE/AI or deployment changes; the JavaDoc coverage warning is outside this approved scope.
