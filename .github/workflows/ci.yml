@@ -457,8 +457,9 @@ jobs:
 
   # Same shape as deploy-web, with its own Vercel project and GitHub environments. Vercel's Git
   # deployments are off in frontend/web/vercel.json, so only this job deploys the landing.
-  # Pull requests get a per-deploy URL in the run summary and no PR comment, because deploy-web
-  # already edits the bot's last PR comment. The landing calls no API, so it needs no CORS alias.
+  # Pull requests get the alias smart-ledger-landing-pr-<number> in the run summary and no PR
+  # comment, because deploy-web already edits the bot's last PR comment. The landing calls no API,
+  # so no CORS list limits the alias names and each PR keeps its own.
   deploy-landing:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     needs: [landing]
@@ -503,6 +504,23 @@ jobs:
           url=$(vercel deploy --prebuilt ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN")
           echo "url=$url" >> "$GITHUB_OUTPUT"
       # REST alias, as in deploy-web: `vercel alias set` fails for team tokens.
+      - name: Alias preview
+        id: preview
+        if: github.event_name == 'pull_request'
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          alias="smart-ledger-landing-pr-$PR.vercel.app"
+          api=https://api.vercel.com
+          auth="Authorization: Bearer $VERCEL_TOKEN"
+          id=$(curl -fsS -H "$auth" "$api/v13/deployments/${URL#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
+          curl -fsS -X POST -H "$auth" -H "Content-Type: application/json" \
+            -d "$(jq -n --arg alias "$alias" '{alias: $alias}')" \
+            "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID"
+          echo "url=https://$alias" >> "$GITHUB_OUTPUT"
+          echo "alias: https://$alias -> $URL"
       - name: Alias staging
         if: github.event_name == 'push' && github.ref_name == 'staging'
         env:
@@ -519,10 +537,10 @@ jobs:
             -d "$(jq -n --arg alias "$alias" '{alias: $alias}')" \
             "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID"
           echo "alias: $STAGING_URL -> $URL"
-      # Pull requests check their own deploy URL; staging and main check the fixed LANDING_URL.
+      # Pull requests check their PR alias; staging and main check the fixed LANDING_URL.
       - name: Smoke test
         env:
-          URL: ${{ github.event_name == 'pull_request' && steps.deploy.outputs.url || vars.LANDING_URL }}
+          URL: ${{ github.event_name == 'pull_request' && steps.preview.outputs.url || vars.LANDING_URL }}
         run: |
           set -euo pipefail
           test -n "$URL" || { echo "::error::LANDING_URL is not set for this environment"; exit 1; }
@@ -537,6 +555,6 @@ jobs:
       - name: Report URL
         if: always() && steps.deploy.outputs.url != ''
         env:
-          URL: ${{ steps.deploy.outputs.url }}
+          URL: ${{ steps.preview.outputs.url || steps.deploy.outputs.url }}
         run: |
           echo "Landing deploy: $URL" >> "$GITHUB_STEP_SUMMARY"

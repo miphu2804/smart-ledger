@@ -85,7 +85,7 @@ Chụp lại ảnh khi giao diện app đổi: chạy dev build trên simulator 
 
 | Môi trường | Nhánh | Địa chỉ |
 | --- | --- | --- |
-| Preview | Pull request trong repo | URL Vercel sinh ra, ghi trong run summary |
+| Preview | Pull request trong repo | `https://smart-ledger-landing-pr-<số PR>.vercel.app`, ghi trong run summary |
 | Staging | `staging` | `LANDING_URL` của environment `landing-staging` |
 | Production | `main` (cần duyệt) | `LANDING_URL` của environment `landing-production` |
 
