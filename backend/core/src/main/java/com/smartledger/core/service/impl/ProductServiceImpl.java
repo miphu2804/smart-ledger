@@ -60,9 +60,9 @@ public class ProductServiceImpl implements ProductService {
             throw new BusinessException(ErrorCode.PRODUCT_IMAGE_URL_UNSUPPORTED);
         }
         Shop shop = shopService.requireOwnedActiveShop(firebaseToken, shopId);
-        validateReferencesAndStock(shop.getId(), null, request, true, true);
+        String barcode = validateReferencesAndStock(shop.getId(), null, request, true, true);
         Product product = Product.create(shop.getId());
-        replaceFields(product, request);
+        replaceFields(product, request, barcode);
         product = productRepository.save(product);
         notifications.reconcileStock(shop, product);
         auditLogService.recordOwner(shop, AuditAction.PRODUCT_CREATED, product.getId(), null, null,
@@ -89,6 +89,20 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public ProductResponse lookup(VerifiedFirebaseToken firebaseToken, String shopId, String barcode) {
+        Shop shop = shopService.requireOwnedActiveShop(firebaseToken, shopId);
+        String normalized = normalizeBarcode(barcode);
+        if (normalized == null) {
+            throw invalidBarcode("is required");
+        }
+        return productRepository.findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(
+                        shop.getId(), normalized, CatalogStatus.ACTIVE)
+                .map(this::toResponse)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+    }
+
+    @Override
     @Transactional
     public ProductResponse patch(
             VerifiedFirebaseToken firebaseToken,
@@ -101,12 +115,12 @@ public class ProductServiceImpl implements ProductService {
         Shop shop = shopService.requireOwnedActiveShop(firebaseToken, shopId);
         Product product = requireLockedActiveProduct(shop.getId(), productId);
         ProductWriteRequest merged = merge(product, request);
-        validateReferencesAndStock(shop.getId(), product.getId(), merged,
+        String barcode = validateReferencesAndStock(shop.getId(), product.getId(), merged,
                 request.hasField("categoryId"), request.hasField("barcode"));
         Long beforePrice = product.getSellingPriceVnd();
         BigDecimal beforeStock = product.getStockQuantity();
         boolean beforeTracked = product.isTracked();
-        replaceFields(product, merged);
+        replaceFields(product, merged, barcode);
         notifications.reconcileStock(shop, product);
         auditLogService.recordOwner(shop, AuditAction.PRODUCT_UPDATED, product.getId(), null, null,
                 Map.of("beforeSellingPriceVnd", beforePrice, "afterSellingPriceVnd", product.getSellingPriceVnd(),
@@ -198,21 +212,26 @@ public class ProductServiceImpl implements ProductService {
                 List.of(new ApiErrorDetail("productId", "must be a positive integer")));
     }
 
-    private void validateReferencesAndStock(Long shopId, Long currentProductId, ProductWriteRequest request,
+    private String validateReferencesAndStock(Long shopId, Long currentProductId, ProductWriteRequest request,
             boolean validateCategory, boolean validateBarcode) {
         if (validateCategory && request.categoryId() != null && !categoryRepository.existsByIdAndShopIdAndStatus(
                 request.categoryId(), shopId, CatalogStatus.ACTIVE)) {
             throw new BusinessException(ErrorCode.PRODUCT_CATEGORY_INVALID);
         }
 
-        String barcode = normalizeOptional(request.barcode());
+        // An omitted PATCH field must remain unchanged, including legacy barcode values.
+        String barcode = validateBarcode ? normalizeBarcode(request.barcode()) : request.barcode();
         if (validateBarcode && barcode != null) {
-            boolean duplicate = currentProductId == null
-                    ? productRepository.existsByShopIdAndBarcode(shopId, barcode)
-                    : productRepository.existsByShopIdAndBarcodeAndIdNot(shopId, barcode, currentProductId);
-            if (duplicate) {
-                throw new BusinessException(ErrorCode.PRODUCT_BARCODE_CONFLICT);
-            }
+            var duplicate = currentProductId == null
+                    ? productRepository.findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(
+                            shopId, barcode, CatalogStatus.ACTIVE)
+                    : productRepository.findFirstByShopIdAndBarcodeAndStatusAndIdNotOrderByIdDesc(
+                            shopId, barcode, CatalogStatus.ACTIVE, currentProductId);
+            duplicate.ifPresent(conflict -> {
+                throw new BusinessException(ErrorCode.PRODUCT_BARCODE_CONFLICT,
+                        List.of(new ApiErrorDetail("barcode", "already_in_use",
+                                conflict.getId(), conflict.getStatus())));
+            });
         }
 
         BigDecimal stock = request.stockQuantity();
@@ -222,13 +241,14 @@ public class ProductServiceImpl implements ProductService {
         if (Boolean.FALSE.equals(request.tracked()) && stock != null) {
             throw new BusinessException(ErrorCode.PRODUCT_STOCK_NOT_TRACKED);
         }
+        return barcode;
     }
 
-    private void replaceFields(Product product, ProductWriteRequest request) {
+    private void replaceFields(Product product, ProductWriteRequest request, String barcode) {
         product.replace(
                 request.categoryId(),
                 request.name().trim(),
-                normalizeOptional(request.barcode()),
+                barcode,
                 normalizeOptional(request.imageUrl()),
                 request.unit().trim(),
                 request.sellingPriceVnd(),
@@ -240,6 +260,46 @@ public class ProductServiceImpl implements ProductService {
 
     private String normalizeOptional(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
+    }
+
+    /** Trims boundary whitespace only, then validates the remaining exact barcode without rewriting it. */
+    private String normalizeBarcode(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        // Include Unicode spaces and scanner CR/LF/TAB suffixes, but never trim other control characters.
+        int start = 0;
+        int end = raw.length();
+        while (start < end && isBarcodePadding(raw.charAt(start))) {
+            start++;
+        }
+        while (end > start && isBarcodePadding(raw.charAt(end - 1))) {
+            end--;
+        }
+        String barcode = raw.substring(start, end);
+        if (barcode.isEmpty()) {
+            return null;
+        }
+        if (barcode.codePointCount(0, barcode.length()) > 100) {
+            throw invalidBarcode("must not exceed 100 Unicode code points after trim");
+        }
+        if (barcode.codePoints().anyMatch(character -> Character.isWhitespace(character)
+                || Character.isSpaceChar(character) || Character.isISOControl(character))) {
+            throw invalidBarcode("must not contain internal whitespace or control characters");
+        }
+        return barcode;
+    }
+
+    private boolean isBarcodePadding(char character) {
+        if (Character.isISOControl(character)) {
+            return character == '\t' || character == '\n' || character == '\r';
+        }
+        return Character.isWhitespace(character) || Character.isSpaceChar(character);
+    }
+
+    private BusinessException invalidBarcode(String issue) {
+        return new BusinessException(ErrorCode.INVALID_PRODUCT_BARCODE,
+                List.of(new ApiErrorDetail("barcode", issue)));
     }
 
     private ProductResponse toResponse(Product product) {

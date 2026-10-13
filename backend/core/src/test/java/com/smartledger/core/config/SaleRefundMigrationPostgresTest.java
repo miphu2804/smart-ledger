@@ -64,7 +64,7 @@ class SaleRefundMigrationPostgresTest {
 
     @Test
     void freshMigrationsMatchEveryEntityAndSecondRunDoesNothing() throws SQLException {
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(15);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(16);
         validateCurrentEntitySchema(testDataSource());
         assertThresholdConstraintValidated();
         assertThat(flyway(null).migrate().migrationsExecuted).isZero();
@@ -74,7 +74,7 @@ class SaleRefundMigrationPostgresTest {
     @Test
     void upgradeFromV8PreservesMoneySettledDebtAndUnknownStockHistory() throws SQLException {
         migrateAndSeedV8();
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(7);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(8);
         validateCurrentEntitySchema(testDataSource());
 
         assertThat(scalar("SELECT stock_deducted FROM sale_items WHERE id = 1")).isNull();
@@ -110,7 +110,7 @@ class SaleRefundMigrationPostgresTest {
                 VALUES (1, 40000, 'CASH', 1, TIMESTAMPTZ '2026-09-02T10:00:00Z');
                 """);
 
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(7);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(8);
         validateCurrentEntitySchema(testDataSource());
         assertThat(scalar("SELECT stock_deducted FROM sale_items WHERE id = 1")).isEqualTo("t");
         assertThat(scalar("SELECT amount_vnd FROM sale_refunds WHERE sale_id = 1")).isEqualTo("40000");
@@ -167,7 +167,7 @@ class SaleRefundMigrationPostgresTest {
                 .isEqualTo("8");
         // Correct the test row explicitly, then retry without Flyway repair.
         execute("UPDATE sale_refunds SET sale_id = 1 WHERE sale_id = 999");
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(7);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(8);
     }
 
     @Test
@@ -293,7 +293,7 @@ class SaleRefundMigrationPostgresTest {
         }
         assertThat(scalar("SELECT count(*) FROM information_schema.tables WHERE table_schema='" + schema + "' AND table_name='admin_access_logs'"))
                 .isEqualTo("0");
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(4);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(5);
         execute(userProfileInsert(AuditAction.USER_AVATAR_UPDATED));
         assertThat(scalar("SELECT count(*) FROM media_cleanup_jobs")).isEqualTo("0");
         validateCurrentEntitySchema(testDataSource());
@@ -344,7 +344,7 @@ class SaleRefundMigrationPostgresTest {
         assertThat(scalar("SELECT max(version::integer) FROM flyway_schema_history WHERE success AND version IS NOT NULL")).isEqualTo("10");
         assertThat(flyway("11").migrate().migrationsExecuted).isEqualTo(1);
         assertThat(scalar("SELECT json_agg(a ORDER BY id)::text FROM audit_logs a")).isEqualTo(before);
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(4);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(5);
         validateCurrentEntitySchema(testDataSource());
         assertThat(flyway(null).migrate().migrationsExecuted).isZero();
     }
@@ -497,7 +497,7 @@ class SaleRefundMigrationPostgresTest {
     void notificationUpgradePreservesExistingBusinessDataWithoutBackfill() throws SQLException {
         migrateAndSeedV8();
         flyway("14").migrate();
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(2);
         validateCurrentEntitySchema(testDataSource());
         assertThresholdConstraintValidated();
         assertThat(scalar("SELECT low_stock_threshold FROM products WHERE id = 1")).isNull();
@@ -523,7 +523,7 @@ class SaleRefundMigrationPostgresTest {
                 INSERT INTO notification_recipients (notification_event_id, user_id, created_at, read_at)
                 VALUES (1, 1, TIMESTAMPTZ '2026-10-01T10:00:00Z', TIMESTAMPTZ '2026-10-01T11:00:00Z');
                 """);
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(2);
         validateCurrentEntitySchema(testDataSource());
         assertThresholdConstraintValidated();
         assertThat(scalar("SELECT low_stock_threshold FROM products WHERE id = 1")).isEqualTo("3.125");
@@ -552,7 +552,7 @@ class SaleRefundMigrationPostgresTest {
         assertThat(scalar("SELECT count(*) FROM pg_constraint WHERE conrelid = 'products'::regclass"
                 + " AND conname = 'ck_products_low_stock_threshold'")).isEqualTo("0");
         execute("UPDATE products SET low_stock_threshold = NULL WHERE id = 1");
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(2);
         validateCurrentEntitySchema(testDataSource());
         assertThresholdConstraintValidated();
     }

@@ -605,6 +605,24 @@ function stockInProduct(id: number, body: StockInBody): ProductView {
   return { ...product };
 }
 
+/** POST /products/{id}/image: bản mock không lưu file, chỉ giữ địa chỉ ảnh xem trước của máy để hiện lại. */
+function setProductImage(id: number, body: { imageUri?: string } | undefined): ProductView {
+  const product = findActiveProduct(id);
+  if (!product) throw apiErr(404, 'product_not_found', 'This product is unavailable.');
+  if (!body?.imageUri) throw apiErr(400, 'image_required', 'An image file is required.');
+  product.imageUrl = body.imageUri;
+  product.updatedAt = nowIso();
+  return { ...product };
+}
+
+/** DELETE /products/{id}/image: chưa có ảnh thì vẫn thành công (204), như Core. */
+function deleteProductImage(id: number): void {
+  const product = findActiveProduct(id);
+  if (!product) throw apiErr(404, 'product_not_found', 'This product is unavailable.');
+  product.imageUrl = null;
+  product.updatedAt = nowIso();
+}
+
 function archiveProduct(id: number): void {
   const product = findActiveProduct(id);
   if (!product) throw apiErr(404, 'product_not_found', 'This product is unavailable.');
@@ -1207,6 +1225,19 @@ export function mockCoreRequest<T>(path: string, method: string, body: unknown, 
     return idempotent(`POST ${path}`, idempotencyKey, body, () =>
       stockInProduct(Number(segments[1]), body as StockInBody),
     ) as unknown as T;
+  }
+
+  if (segments[0] === 'products' && segments.length === 3 && segments[2] === 'image') {
+    const id = Number(segments[1]);
+    if (method === 'POST') {
+      return idempotent(`POST ${path}`, idempotencyKey, body, () =>
+        setProductImage(id, body as { imageUri?: string } | undefined),
+      ) as unknown as T;
+    }
+    if (method === 'DELETE') {
+      deleteProductImage(id);
+      return undefined as T;
+    }
   }
 
   if (path === '/sale-drafts' && method === 'POST') return createSaleDraft(body as SaleDraftWriteBody) as unknown as T;

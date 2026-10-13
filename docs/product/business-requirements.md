@@ -5,7 +5,7 @@
 | Trạng thái | Core: quy tắc dưới đây đã chốt; AI/dashboard: đích MVP, cần nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ kinh doanh/sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; chủ thuế cho `BR-INV-*` |
-| Cập nhật lần cuối | 2026-10-08 (notification OWNER và ngưỡng tồn; không rà soát lại căn cứ pháp lý) |
+| Cập nhật lần cuối | 2026-10-12 (barcode Core; không rà soát lại căn cứ pháp lý) |
 
 ## Tài liệu liên quan
 
@@ -99,8 +99,14 @@ Hóa đơn điện tử là initiative kế tiếp, không mặc nhiên thuộc 
 | `BR-018` | OWNER nhập kho bằng lượng tăng thêm dương cho sản phẩm ACTIVE có theo dõi tồn trong tiệm ACTIVE mình sở hữu. Sửa thông tin sản phẩm không ghi đè số tồn tuyệt đối; nhập kho không tự tạo nghĩa vụ tiền/nợ hay đổi giá vốn. |
 | `BR-019` | OWNER có thể lưu một ảnh chính cho Product, logo cho Shop và avatar hồ sơ. Core là bên duy nhất gọi kho media có credential; client không nhận secret hoặc provider public ID. Retry upload không tạo thêm thay đổi/audit. Thay/xóa ảnh commit dữ liệu và job dọn asset cũ cùng nhau; cleanup retry sau commit và không xóa asset còn được sử dụng. Avatar là authenticated media; Product/logo có URL công khai. Avatar tùy chỉnh ưu tiên hiển thị nhưng giữ fallback Firebase, bỏ avatar tùy chỉnh trở về fallback. |
 | `BR-020` | OWNER có hộp thông báo trong app cho tồn thấp/hết hàng, hủy sale và ADMIN tạm ngưng/kích hoạt tiệm. Ngưỡng tồn thấp tùy từng Product; không tự đặt ngưỡng cho dữ liệu cũ. Thông báo và người nhận commit/rollback cùng nghiệp vụ, retry không tạo trùng; trạng thái đã đọc riêng và giữ lần đọc đầu tiên. Chỉ OWNER hoạt động đọc dữ liệu của mình và tiệm mình sở hữu; tiệm INACTIVE chỉ lộ thông báo trạng thái, ARCHIVED không hiển thị. Notification không thay audit/sổ nghiệp vụ và chưa bao gồm push, email/SMS hay AI reminder. |
+| `BR-021` | Barcode là mã định danh tùy chọn của mặt hàng trong tiệm: khớp chính xác, phân biệt hoa thường, giữ chữ/dấu/số 0 đầu. Chỉ sản phẩm ACTIVE giữ quyền dùng mã; archive giải phóng mã cho sản phẩm khác nhưng giữ nguyên sản phẩm và tham chiếu lịch sử sale/draft. OWNER chỉ tra mã trong tiệm ACTIVE mình sở hữu; không dùng danh mục tiệm khác hoặc sản phẩm giả để thay thế kết quả không tìm thấy/lỗi. |
 
 `BR-003` giữ nguyên ý: người bán quyết định số liệu được ghi.
+
+### Barcode Core đã chốt — 2026-10-12
+
+- CORE-012 #159 chọn D1b: unique barcode chỉ trên ACTIVE; không thêm API restore. D4 dùng chi tiết lỗi tùy chọn `productId`/`status`; lỗi tranh chấp ở DB vẫn có thể không có chi tiết. Quy ước cụ thể nằm trong [contract Product](../contracts/api-contracts.md#barcode-core-012).
+- `BR-021` không chốt hành vi quét lại giỏ hàng hay nhiều barcode/Product, không nghiệm thu scanner mobile. #162/#165 và quyết định D2/D3 còn do team kiểm tra; test Core và migration V16 trên DB tạm không chứng minh rollout FE/staging đã thành công.
 
 ### Nhập kho đơn giản đã chốt — 2026-10-06
 
@@ -191,6 +197,7 @@ Copy UI viện dẫn nghị định trên màn bản ghi bán hàng **không** b
 | `BO-003`, `BR-004`, `BR-005`, `BR-011` | `FR-006`, `FR-007`, `FR-020`, `FR-025`, `AC-031`, `AC-049`–`AC-052` | Core summary và ba báo cáo nâng cao đã có trên nhánh Core; FE/AI và staging vẫn cần nghiệm thu |
 | `BO-005`, `BR-005`, `BR-008` | `FR-015`, `FR-016`, `FR-006` | tạm thời — MVP đã chấp nhận |
 | `BR-007` | `FR-009`, `FR-013` | tạm thời — MVP đã chấp nhận |
+| `BO-002`, `BR-007`, `BR-009`, `BR-021` | `FR-009`, `FR-034`, `AC-064`–`AC-067` | Barcode Core #163/#164 trên feat/core-barcode; V16/FE/staging cần review và nghiệm thu |
 | `BO-002`, `BR-007`, `BR-009`, `BR-016`, `BR-017`, `BR-018` | `FR-009`, `FR-030`, `AC-044`–`AC-048` | Nhập kho Core; FE/staging cần nghiệm thu |
 | `BR-007`, `BR-009`, `BR-017`, `BR-019` | `FR-011`, `FR-031`, `NFR-003`, `NFR-010`, `AC-053`–`AC-054` | Media Core có trên nhánh; FE/staging và migration shared DB cần nghiệm thu |
 | `BR-009` | `FR-010`, `FR-011`, `NFR-003` | tạm thời — MVP đã chấp nhận; không tuyên bố sẵn sàng sản xuất |

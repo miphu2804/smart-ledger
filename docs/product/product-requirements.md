@@ -5,7 +5,7 @@
 | Trạng thái | Core: hành vi đã chốt dưới đây; AI/dashboard và FE: cần nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; người rà soát kỹ thuật |
-| Cập nhật lần cuối | 2026-10-10 |
+| Cập nhật lần cuối | 2026-10-12 |
 
 ## Tài liệu liên quan
 
@@ -97,6 +97,7 @@ Luồng hỗ trợ: ADMIN đăng nhập dashboard web, tìm OWNER hoặc cơ s�
 | `FR-031` | `BR-007`, `BR-009`, `BR-017`, `BR-019` | OWNER upload/xóa một ảnh chính Product, logo Shop và avatar của chính mình qua Core. Cả ba upload dùng Idempotency-Key; URL read-only, không trả public ID. Product/logo công khai; avatar authenticated và giữ fallback Firebase, DELETE trở về fallback. Đổi/xóa enqueue dọn asset cũ sau commit, không xóa Product/Shop. | P1 — Core trên nhánh; cần tích hợp FE/nghiệm thu staging |
 | `FR-032` | `BO-003`, `BR-009`, `BR-020` | OWNER đọc inbox phân trang/lọc shop/type/chưa đọc, đếm chưa đọc và đánh dấu 1–100 ID đã đọc nguyên tử. Product nhận lowStockThreshold nullable ≥0, tối đa 12 chữ số nguyên/3 thập phân; PATCH bỏ qua giữ nguyên, null tắt LOW_STOCK. tracked=true và tồn 0 luôn OUT_OF_STOCK; tồn dương ≤ ngưỡng thì LOW_STOCK. Không lặp cảnh báo cùng mức; đổi mức kết thúc cảnh báo cũ, hồi tồn/tắt tracking/archive giải quyết cảnh báo. Lịch sử và readAt được giữ; chu kỳ sau có event mới. | P1 — Core trên feat/app-notifications; cần tích hợp FE/nghiệm thu staging |
 | `FR-033` | `BR-006`, `BR-007`, `BR-008`, `BR-009` | OWNER đọc products/sales/sale-drafts/customers/debts/expenses bằng phân trang DB trên sáu endpoint hiện có, luôn trả object có items và tổng theo filter, kể cả không gửi page/size. Tìm kiếm/lọc/sắp xếp diễn ra trước phân trang; sales/expenses nhận khoảng timestamp có offset, from inclusive/to exclusive. Giữ quyền tiệm, snapshot lịch sử và trạng thái draft hết hạn; detail/thao tác ghi không đổi. Contract và rollout FE ở [quy ước phân trang OWNER](../contracts/api-contracts.md#phân-trang-danh-sách-owner). | CORE-011 #153 trên nhánh; FE/staging cần nghiệm thu qua #144 |
+| `FR-034` | `BO-002`, `BR-007`, `BR-009`, `BR-021` | Create/PATCH/lookup dùng cùng chuẩn hóa barcode; OWNER tra đúng mã của Product ACTIVE trong tiệm ACTIVE mình sở hữu mà không tải danh sách. Barcode chỉ unique trên ACTIVE cùng tiệm; archive giải phóng mã nhưng giữ lịch sử. Trùng khi create/PATCH trả 409 với chi tiết Product đang giữ mã nếu service nhận diện; race DB có thể không có details. Quy ước trong [contract barcode](../contracts/api-contracts.md#barcode-core-012). | CORE-012 #163/#164 trên feat/core-barcode; cần V16 và phối hợp FE/nghiệm thu staging |
 
 `FR-001`–`FR-009` giữ nguyên mã. `FR-007` không bị tái sử dụng cho yêu cầu khác.
 
@@ -213,8 +214,14 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 | `AC-063` | Nghiệm thu FE/staging riêng với dữ liệu nhiều hơn một trang: client/mock đọc envelope, tải thêm/reset khi đổi shop/filter, xử lý lỗi/end và trùng ID. Không cộng revenue/profit/nợ/chi/tồn hoặc gộp nợ khách từ một trang; dùng report phù hợp và chốt aggregate còn thiếu riêng. Core test không tự chứng minh FE cũ tương thích hay tổng hiển thị đúng. | `FR-033`, `FR-006`, `FR-015`, `FR-016`, `NFR-005` |
 | `AC-INV-001` | Không thể kích hoạt hóa đơn điện tử khi hồ sơ áp dụng hoặc quy tắc pháp lý chưa được phê duyệt/hoàn tất. | `FR-INV-001` |
 | `AC-INV-002` | Mỗi giao dịch thuộc diện lập hóa đơn có một trạng thái đối soát và không biến mất khi nhà cung cấp lỗi. | `FR-INV-003`, `FR-INV-005`, `NFR-004` |
+| `AC-064` | Create/PATCH/lookup trim khoảng trắng Unicode đầu/cuối và suffix CR/LF/TAB, giữ case/chữ/dấu/số 0 đầu; không coi ABC-123, 123 và abc-123 là cùng mã. Giới hạn 100 Unicode code point sau trim, không đếm UTF-16 code unit: 100 ký tự ngoài BMP hợp lệ, 101 bị từ chối trên cả ba thao tác. Khoảng trắng/ký tự điều khiển bên trong hoặc quá giới hạn trả 400 validation_failed, field barcode. Create null/rỗng là không mã; PATCH bỏ field giữ nguyên, null/rỗng gỡ mã. Không chuẩn hóa lại hàng loạt mã lịch sử. | `FR-034`, `FR-009` |
+| `AC-065` | GET lookup trả một ProductResponse ACTIVE đúng barcode/shop; không tìm thấy/chỉ ARCHIVED/mã ở tiệm khác trả 404 product_not_found. Thiếu/sai token 401; OWNER khác, ADMIN, account DISABLED, shop INACTIVE/ARCHIVED bị từ chối theo contract trước truy vấn Product. Mã trống/thiếu trả 400; route lookup không bị parse thành productId. PostgreSQL với catalog 20.000 sản phẩm có một query Product dùng index; không hứa SLA từ timing local. | `FR-034`, `NFR-003` |
+| `AC-066` | V16 cho archive A rồi create B hoặc PATCH B dùng cùng mã trong tiệm thành công; lookup trả B, A và tham chiếu/snapshot sale/draft cũ không bị viết lại. Cùng mã ở tiệm khác được phép. PATCH giữ mã của chính nó thành công; trùng với Product ACTIVE khác trả 409 product_barcode_conflict và details barcode/already_in_use/productId/status ACTIVE; không lộ product tiệm khác hoặc thêm các field này vào lỗi thông thường. | `FR-034`, `FR-009`, `BR-006` |
+| `AC-067` | Hai writer create hoặc PATCH cùng mã ACTIVE có một lần commit, một lần vi phạm unique index; handler trả 409, có thể không có details. Test HTTP/error mapping và PostgreSQL cạnh tranh được kiểm riêng. V16 fresh/upgrade/no-op giữ dữ liệu, index partial hợp lệ; lỗi tạo index hoặc bỏ constraint rollback toàn V16, không tự sửa/xóa lịch sử. Nghiệm thu FE #162/#165 và migration staging do owner chạy từ code đã merge vẫn là bước riêng. | `FR-034`, `NFR-003` |
 
 ## 9. Phạm vi và câu hỏi mở
+
+- CORE-012 #159: D1b và D4 đã chốt ngày 2026-10-12. #163/#164 được chuẩn bị trên feat/core-barcode; V16 cần review trước rollout. #162/#165, hành vi giỏ hàng D2 và nhiều mã D3 chưa được nghiệm thu/chốt thay team. Không coi 404 là bằng chứng lần create sau chắc chắn thành công: có thể race và trả 409; không fallback sản phẩm giả khi API lỗi.
 
 - `FR-033`/`AC-059`–`AC-063`: CORE-011 #153 đổi trực tiếp response sáu list OWNER trên `feat/owner-list-pagination`; đây là breaking change, chưa phải nghiệm thu FE/staging. Phối hợp #144 trước rollout, đặc biệt các số tổng và dữ liệu tra cứu hiện dựa trên mảng đầy đủ. Chưa thêm schema/index/Redis, debt contact projection hay aggregate mới; các phần này cần quyết định/task riêng.
 

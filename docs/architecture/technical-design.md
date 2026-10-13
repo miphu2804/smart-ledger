@@ -5,7 +5,7 @@
 | Trạng thái | đích MVP; Core hiện có được phân biệt với phần chưa tích hợp |
 | Chủ sở hữu | Chủ kỹ thuật |
 | Người rà soát | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-10-10 |
+| Cập nhật lần cuối | 2026-10-12 |
 
 ## Tài liệu liên quan
 
@@ -42,7 +42,11 @@ Mục này là nơi duy nhất ghi hiện trạng triển khai; tài liệu khá
 
 **CORE-011 #153 trên `feat/owner-list-pagination`, ngày 2026-10-10:** tiếp nối staging `50891aabf8b6ba48406799fa5c31fef8c823569f`, sáu list OWNER đã phân trang DB và đổi mảng thành PageResponse. Đây là thay đổi response/thứ tự list có chủ đích, không phải bảo đảm “không đổi response” của đợt #134–#138. Chi tiết tại [§4.2](#42-phân-trang-danh-sách-owner) và [contract](../contracts/api-contracts.md#phân-trang-danh-sách-owner), truy vết `FR-033`/`AC-059`–`AC-063`. Chưa sửa FE, merge/deploy hoặc nghiệm thu staging; #144 theo dõi phối hợp mobile.
 
+**CORE-012 #163/#164 trên `feat/core-barcode`, ngày 2026-10-12:** chuẩn hóa barcode và lookup đã có; hoàn thiện precheck ACTIVE-only, 409 details và V16. Chưa chạy shared migration hoặc nghiệm thu FE. Xem [§4.3](#43-barcode-core-core-012-163164), [contract](../contracts/api-contracts.md#barcode-core-012), `FR-034`/`AC-064`–`AC-067`.
+
 ## 2. Thành phần và quyền sở hữu
+
+Phần barcode CORE-012 không đổi ranh giới thành phần hoặc thêm Redis: Core chuẩn hóa/tra cứu, PostgreSQL bảo vệ unique, FE tích hợp theo contract riêng. Hiện trạng nhánh và cách kiểm chứng tại §4.3 dưới đây; không sửa AI/scanner trong đợt này.
 
 | Thành phần | Trách nhiệm |
 |---|---|
@@ -125,6 +129,16 @@ Giới hạn: khi mở một chu kỳ cảnh báo mới, tra lịch sử/dedup v
 
 Rollout là breaking change: FE phải đổi client/mock và các màn list, đưa filter lên server, không cộng số tổng từ một trang. Report hiện có giữ nguyên; summary vẫn tổng hợp entity bằng Java, tối ưu aggregate riêng. DebtResponse chưa có tên/SĐT; các projection/aggregate thiếu phải chốt riêng thay vì tải lại toàn bộ danh sách. Không merge/deploy cho FE cũ mà chưa phối hợp #144 và nghiệm thu `AC-063`.
 
+### 4.3. Barcode Core (CORE-012 #163/#164)
+
+**Nhánh `feat/core-barcode`, ngày 2026-10-12, tiếp nối base staging `33d2da441e2eaf033a1af9663ddfbf99a6b53e3f`:** có chuẩn hóa chung create/PATCH/lookup, GET lookup chính xác, precheck ACTIVE-only và 409 optional productId/status. V16 được chuẩn bị để đổi unique; chưa chạy DB nghiệp vụ/shared DB hoặc nghiệm thu FE. Truy vết `BR-021` → `FR-034` → `AC-064`–`AC-067`; [API contract](../contracts/api-contracts.md#barcode-core-012) là nguồn input/output, [ERD](erd-description.md#7-migration-alignment) là nguồn schema/rollout/recovery.
+
+- Lookup kiểm OWNER/account/shop trước, gọi `findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc` với ACTIVE, exact barcode và limit 1. Không tải danh sách, không LIKE/lower/COUNT/cache. V16 partial index theo shop/barcode/ACTIVE hỗ trợ truy vấn này. Không tìm thấy/chỉ ARCHIVED trả 404; giữ nguyên route detail/list.
+- Create kiểm trùng ACTIVE; PATCH giữ khóa dòng hiện tại và loại chính ID khỏi query competing-code. Precheck trả details đã chốt D4; DB unique index là bảo vệ cuối khi hai request vượt precheck. Handler map cả tên index mới và constraint cũ thành 409, không đọc DB sau transaction lỗi để lấy details. Không mở rộng idempotency sang Product CRUD.
+- V16 index build transactional, tạo guard mới trước bỏ cũ; lock/statement timeout giới hạn chờ và phải có cửa sổ dừng ghi catalog. Không thay đổi dữ liệu, snapshot lịch sử hoặc entity field. `ddl-auto=update` không chứng minh partial uniqueness đã được áp dụng. Không chạy migration từ feature branch vào shared DB.
+- `ProductBarcodeWebTest`/`ProductServiceTest`/`ApiDocumentationWebTest` kiểm normalize, routing, quyền, 409/JSON. `ProductBarcodePostgresTest` kiểm service trên schema Flyway, reuse CREATE/PATCH, tenant/status, một Product query và EXPLAIN Hibernate SQL với 20.000 Product. `ProductBarcodeMigrationPostgresTest` kiểm V16 fresh/upgrade/history/failure và hai writer JDBC cùng vượt precheck (create/patch), bổ sung test handler HTTP 409; không coi JDBC test là full request end-to-end. Timing local chỉ là bằng chứng chẩn đoán, không SLA production.
+- FE #162/#165 cần xử lý 404/409 có hoặc không details, giữ ký tự barcode và không tạo sản phẩm giả; quyết định D2/D3 và UAT scanner/giỏ hàng vẫn chờ team. Chưa sửa FE hoặc chứng minh Firebase/staging thực trong đợt này.
+
 ## 5. Auth và phân quyền
 
 - Provider Phone/Google là đích đăng nhập đã mô tả trong PRD; Core nhận Firebase ID token, không chứng minh UI/provider đã tích hợp chỉ từ kiểm thử backend. Firebase Account Linking gộp các cách đăng nhập của cùng người dùng vào một Firebase UID; Core lưu UID đó trong `auth_identities`.
@@ -155,7 +169,7 @@ Khi `FIREBASE_SERVICE_ACCOUNT_JSON` có giá trị không rỗng, Core dùng JSO
 
 ## 7. Kiểm chứng trước merge
 
-Đối chiếu code/schema không thay thế chạy lại hệ thống. Suite Core có test controller, service, validation, timestamp, concurrency và migration (SaleRefundMigrationPostgresTest, DebtVoidPostgresTest, AdminDashboardControllerWebTest, AdminDashboardPostgresTest, ReportAggregationPostgresTest). Test PostgreSQL là opt-in: Maven skip khi thiếu `CORE_TEST_POSTGRES_URL` (job `core` của CI có đặt biến này); phải bật môi trường test DB để kiểm chứng V1–V15, rollback và khóa đồng thời. Media test kiểm input, public-ID prefix, idempotency replay, adapter, worker và schema V13/V14; vẫn cần upload thật bằng credential staging an toàn. NotificationPostgresTest dùng migration V1–V15 thật để kiểm stock episodes, cùng-key/khác-key confirm/void, rollback khi notification lỗi, batch read/concurrency và tenant/status filtering; migration tests kiểm fresh validation/upgrade/adoption/rollback. Lệnh trong [Core README](../../backend/core/README.md), kết quả từng lượt trong PROGRESS.md không thay UAT.
+Đối chiếu code/schema không thay thế chạy lại hệ thống. Suite Core có test controller, service, validation, timestamp, concurrency và migration (SaleRefundMigrationPostgresTest, DebtVoidPostgresTest, AdminDashboardControllerWebTest, AdminDashboardPostgresTest, ReportAggregationPostgresTest). Test PostgreSQL là opt-in: Maven skip khi thiếu `CORE_TEST_POSTGRES_URL` (job `core` của CI có đặt biến này); phải bật môi trường test DB để kiểm chứng V1–V16, rollback và khóa đồng thời. Media test kiểm input, public-ID prefix, idempotency replay, adapter, worker và schema V13/V14; vẫn cần upload thật bằng credential staging an toàn. NotificationPostgresTest dùng migration V1–V16 thật để kiểm stock episodes, cùng-key/khác-key confirm/void, rollback khi notification lỗi, batch read/concurrency và tenant/status filtering; migration tests kiểm fresh validation/upgrade/adoption/rollback. Lệnh trong [Core README](../../backend/core/README.md), kết quả từng lượt trong PROGRESS.md không thay UAT.
 
 Kiểm thử chống N+1 trên PostgreSQL thật (không chỉ mock repository):
 
@@ -169,7 +183,7 @@ Query count, SQL/plan và tính đúng đắn là kiểm chứng hồi quy; th�
 
 | Nhóm | Bằng chứng bắt buộc |
 |---|---|
-| Core | V1–V15 từ DB rỗng/upgrade; controller contract theo mục 1–4 và 7; chống N+1 cho list sale/draft, prepare, khóa confirm/void và đọc cảnh báo mở theo §4.1; confirm/repay/void rollback, replay và cạnh tranh khóa; report aggregate/giá vốn thiếu/ngày trống; media validation/idempotency/cleanup worker; test chéo shop, ADMIN projection/actor scope và audit fail-closed/rollback. DB local kiểm thử không thay nghiệm thu Supabase staging hoặc FE |
+| Core | V1–V16 từ DB rỗng/upgrade; controller contract theo mục 1–4 và 7; chống N+1 cho list sale/draft, prepare, khóa confirm/void và đọc cảnh báo mở theo §4.1; confirm/repay/void rollback, replay và cạnh tranh khóa; report aggregate/giá vốn thiếu/ngày trống; media validation/idempotency/cleanup worker; test chéo shop, ADMIN projection/actor scope và audit fail-closed/rollback. DB local kiểm thử không thay nghiệm thu Supabase staging hoặc FE |
 | AI | contract test Core ↔ AI; timeout/fallback; output schema; truy xuất đúng phạm vi `shop_id` |
 | FE | OWNER: login → chọn shop → tạo/chốt → báo cáo; ADMIN: login → tra cứu cơ sở → xem tổng quan; test role guard và trạng thái loading/error/empty |
 | Ops | CI kiểm migration; staging dùng Supabase project riêng; deploy production cần phê duyệt |
