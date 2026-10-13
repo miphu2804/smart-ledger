@@ -1,3 +1,13 @@
+### [2026-10-14 01:03 UTC+07:00] — [Fix] Product photo is saved only when the owner taps save
+
+**Done:** Tester feedback: in the edit form, choosing a photo saved it at once, before "Lưu thay đổi". The edit form uploaded the photo as soon as it was picked and deleted it as soon as "Xoá ảnh" was tapped. Both now only change the form; the photo reaches Core, or is removed there, in the same save as the other fields. Closing the form without saving leaves the product's photo as it was. While a change is waiting the form says so ("Ảnh mới chưa lưu…", "Ảnh sẽ bị xoá khi bạn bấm "Lưu thay đổi"."). If the other fields save but the photo call fails, the form stays open with the reason, so a second tap retries without taking the photo again.
+
+**Changed files:** `frontend/mobile/app/products.tsx` — modified; this entry.
+
+**Flow explained:** `applyPhoto` and `removePhoto` set `pendingPhoto` or `removeSavedPhoto` and the preview only → `save` sends the field patch first, then `productApi.uploadImage` or `deleteImage` for an existing product → a failed photo call keeps the form open and reloads the list, because the patch is already at Core. A new product keeps the earlier behaviour: the photo is uploaded right after the product is created.
+
+**Check:** `tsc --noEmit` clean. Mock-mode web build driven in headless Chrome, with the page's mock store read directly, 11 of 11: picking a photo leaves the store without an image; closing the form drops it; saving stores it and the list row shows it; "Xoá ảnh" removes nothing until save; a price change and a photo go in one save; a new product with a photo is still created with it. **Not verified:** on a phone (the camera path uses the same handlers but was not run), against the real Core, iOS. Picking a photo from the phone's gallery was also requested and then put aside by the owner for now; it is not in this change.
+
 ### [2026-10-14 01:03 UTC+07:00] — [Fix] Landing: pains heading reworded and privacy page brought up to date
 
 **Done:** The heading of the "Vấn đề quen thuộc" section is now "App thì đắt, mà sổ sách thì rối", as the team asked. The privacy page said the camera is used only to scan codes and that camera images are never stored or sent; since product photos shipped that is no longer true. The page now says the camera is also used to take a product photo and that the photo is uploaded, lists product photos among the data collected, adds Cloudinary (stores product photos) and Cloudflare R2 (serves the Android install file) to the processors, and carries the new update date. Both legal pages still show the "Bản nháp" label: the wording needs the product owner's approval.
