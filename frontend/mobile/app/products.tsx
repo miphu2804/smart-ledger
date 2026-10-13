@@ -370,6 +370,8 @@ function ProductForm({
   const [pendingPhoto, setPendingPhoto] = useState<PickedImage | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoErr, setPhotoErr] = useState('');
+  /** Cảnh báo ngay dưới ô mã vạch khi mã vừa quét đang thuộc một món khác (Core sẽ từ chối lúc lưu) */
+  const [barcodeWarn, setBarcodeWarn] = useState('');
   const [cameraOpen, setCameraOpen] = useState(false);
   /**
    * Tăng mỗi lần form nạp lại (mở mặt hàng khác, đóng rồi mở lại). Form luôn nằm trong cây React, nên kết quả tải hoặc xoá
@@ -399,6 +401,7 @@ function ProductForm({
     setAddingCat(false);
     setNewCatName('');
     photoSession.current += 1;
+    setBarcodeWarn('');
     setPhotoUrl(p?.imageUrl ?? null);
     setPendingPhoto(null);
     setPhotoBusy(false);
@@ -546,6 +549,20 @@ function ProductForm({
     }
   };
 
+  // Mã vừa quét: hỏi Core xem đã thuộc món khác chưa để báo ngay, không đợi tới lúc lưu mới gặp lỗi trùng mã.
+  // Không kiểm tra được (mất mạng…) thì bỏ qua: lúc lưu Core vẫn kiểm tra.
+  const checkScannedBarcode = async (code: string) => {
+    const session = photoSession.current;
+    setBarcodeWarn('');
+    try {
+      const holder = await productApi.lookup(code);
+      if (session !== photoSession.current) return;
+      if (holder && holder.id !== p?.id) setBarcodeWarn(`Mã này đang thuộc món "${holder.name}"`);
+    } catch {
+      /* lúc lưu Core sẽ báo nếu mã trùng */
+    }
+  };
+
   const createCategory = async () => {
     if (!newCatName.trim()) return;
     setCatBusy(true);
@@ -641,7 +658,11 @@ function ProductForm({
               label="Mã vạch (EAN-13, UPC...)"
               placeholder="VD: 8934563138165"
               value={barcode}
-              onChangeText={setBarcode}
+              onChangeText={(text) => {
+                setBarcode(text);
+                setBarcodeWarn('');
+              }}
+              error={barcodeWarn || undefined}
               style={{ flex: 1, marginBottom: 0 }}
             />
             <Button
@@ -809,6 +830,7 @@ function ProductForm({
         onBarcodeScanned={(code) => {
           setBarcode(code);
           setScannerOpen(false);
+          checkScannedBarcode(code);
         }}
       />
       <ProductPhotoCamera
