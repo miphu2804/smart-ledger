@@ -22,12 +22,16 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
     private static final Map<String, ErrorCode> UNIQUE_CONSTRAINTS = Map.of(
+            // Support both V16 and older databases during controlled rollout.
             "uq_products_shop_barcode", ErrorCode.PRODUCT_BARCODE_CONFLICT,
+            "uq_products_shop_barcode_active", ErrorCode.PRODUCT_BARCODE_CONFLICT,
             "uq_auth_identities_provider_subject", ErrorCode.AUTH_SESSION_CONFLICT,
             "uq_auth_identities_user_id", ErrorCode.AUTH_SESSION_CONFLICT);
 
@@ -89,6 +93,25 @@ public class ApiExceptionHandler {
             MethodArgumentTypeMismatchException exception, HttpServletRequest request) {
         return error(HttpStatus.BAD_REQUEST, "validation_failed", "The request contains invalid parameters.",
                 List.of(new ApiErrorDetail(exception.getName(), "has an invalid value")), request);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    ResponseEntity<ApiErrorResponse> handleMaxUploadSizeExceeded(
+            MaxUploadSizeExceededException exception, HttpServletRequest request) {
+        ErrorCode errorCode = ErrorCode.IMAGE_TOO_LARGE;
+        return error(errorCode.getHttpStatus(), errorCode.getCode(), errorCode.getMessage(), List.of(), request);
+    }
+
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    ResponseEntity<ApiErrorResponse> handleMissingMultipartPart(
+            MissingServletRequestPartException exception, HttpServletRequest request) {
+        if ("image".equals(exception.getRequestPartName())) {
+            ErrorCode errorCode = ErrorCode.IMAGE_REQUIRED;
+            return error(errorCode.getHttpStatus(), errorCode.getCode(), errorCode.getMessage(),
+                    List.of(new ApiErrorDetail("image", "is required")), request);
+        }
+        return error(HttpStatus.BAD_REQUEST, "invalid_request", "The request is missing a required part.",
+                List.of(new ApiErrorDetail(exception.getRequestPartName(), "is required")), request);
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

@@ -95,6 +95,7 @@ class DebtVoidPostgresTest {
     @Autowired private JdbcTemplate jdbc;
     @MockitoBean private ShopService shopService;
     @MockitoBean private IdempotencyService idempotencyService;
+    @MockitoBean private NotificationEventService notifications;
 
     @DynamicPropertySource
     static void isolatedSchema(DynamicPropertyRegistry properties) {

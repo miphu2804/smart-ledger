@@ -1,134 +1,81 @@
-from datetime import datetime
+import asyncio
+from dataclasses import replace
 
 import pytest
-from langchain_core.language_models.fake_chat_models import (
-    FakeListChatModel,
-    FakeMessagesListChatModel,
-)
-from langchain_core.messages import AIMessage
-from tests.support import TEST_GUARDRAIL_LIMITS
+from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.models.function import FunctionModel
+from tests.support import TEST_GUARDRAIL_LIMITS, ScriptedModel, transcript
 
+from src.agent.guardrails import GuardrailError
 from src.agent.repository import ConversationNotFoundError
-from src.agent.service import AgentService
-from src.agent.summary import (
-    FOLD_TRIGGER_MESSAGES,
-    KEEP_RECENT_MESSAGES,
-    ChatSummaryFolder,
+from src.agent.service import (
+    AgentChatResult,
+    AgentService,
+    Done,
+    Reset,
+    TextDelta,
 )
-from src.agent.tools import build_history_tools
 from src.prompt_templates import SHOP_AGENT_SYSTEM_PROMPT
 
-
-class RecordingChatModel(FakeListChatModel):
-    seen_messages: list = []
-
-    def bind_tools(self, tools, **kwargs):
-        return self
-
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        self.seen_messages = list(messages)
-        return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+pytestmark = pytest.mark.anyio
 
 
-class ToolCallingChatModel(FakeMessagesListChatModel):
-    seen_calls: list = []
-
-    def bind_tools(self, tools, **kwargs):
-        return self
-
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        self.seen_calls = [*self.seen_calls, list(messages)]
-        return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+def failing_model(messages, info):
+    raise RuntimeError("down")
 
 
-class ErrorChatModel(FakeListChatModel):
-    def bind_tools(self, tools, **kwargs):
-        return self
-
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        raise RuntimeError("down")
-
-
-class RecordingSummaryModel(FakeListChatModel):
-    seen_prompts: list = []
-
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        self.seen_prompts = [*self.seen_prompts, list(messages)]
-        return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+def shown_text(events: list) -> str:
+    """The text the owner sees: the deltas after the last Reset."""
+    text = ""
+    for event in events:
+        if isinstance(event, Reset):
+            text = ""
+        elif isinstance(event, TextDelta):
+            text += event.text
+    return text
 
 
-class ErrorSummaryModel(FakeListChatModel):
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        raise RuntimeError("summary down")
+async def collect(events) -> list:
+    return [event async for event in events]
 
 
-def history(count: int, content: str = "short note") -> list[dict]:
-    return [
-        {"message_id": index + 1, "role": "USER", "content": content}
-        for index in range(count)
-    ]
+class FakeExecutor:
+    def run(self, shop_id: int, sql: str) -> dict:
+        return {"columns": ["phone"], "rows": [["0901234567"]], "truncated": False}
 
 
 class FakeConversationRepository:
-    def __init__(
-        self,
-        history: list[dict] | None = None,
-        summary: str | None = None,
-        summary_through_message_id: int | None = None,
-        save_summary_applies: bool = True,
-        missing: bool = False,
-    ) -> None:
+    def __init__(self, history: list[dict] | None = None, missing: bool = False):
         self.history = history or []
-        self.summary = summary
-        self.summary_through_message_id = summary_through_message_id
-        self.save_summary_applies = save_summary_applies
         self.missing = missing
-        self.context_request: tuple | None = None
+        self.history_request: tuple | None = None
         self.saved_exchange: dict | None = None
-        self.saved_summaries: list[dict] = []
-        self.folded: list[dict] = []
-        self.folded_request: tuple | None = None
+        self.saves: list[dict] = []
 
-    def context_for(self, conversation_id, user_id, shop_id):
-        self.context_request = (conversation_id, user_id, shop_id)
+    def recent_messages(self, conversation_id, user_id, shop_id, limit):
+        self.history_request = (conversation_id, user_id, shop_id, limit)
         if self.missing:
             raise ConversationNotFoundError
-        return {
-            "summary": self.summary,
-            "summary_through_message_id": self.summary_through_message_id,
-            "messages": self.history,
-        }
-
-    def folded_messages(self, conversation_id, user_id, shop_id):
-        self.folded_request = (conversation_id, user_id, shop_id)
-        return self.folded
+        return self.history[-limit:]
 
     def save_exchange(self, **kwargs):
         self.saved_exchange = kwargs
+        self.saves.append(kwargs)
         return kwargs["conversation_id"] or 41, 72
 
-    def save_summary(self, **kwargs):
-        self.saved_summaries.append(kwargs)
-        if not self.save_summary_applies:
-            return False
-        self.summary = kwargs["summary"]
-        self.summary_through_message_id = kwargs["through_id"]
-        return True
 
-
-def test_chat_builds_system_prompt_and_persists_exchange() -> None:
-    model = RecordingChatModel(responses=["ok"])
+async def test_chat_sends_the_instructions_and_persists_the_exchange() -> None:
+    model = ScriptedModel("ok")
     conversations = FakeConversationRepository()
     agent = AgentService(model, conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS)
 
-    result = agent.chat(user_id=3, shop_id=15, message="today's revenue?")
+    result = await agent.chat(user_id=3, shop_id=15, message="today's revenue?")
 
-    assert result.answer == "ok"
-    assert result.conversation_id == 41
-    assert result.message_id == 72
-    assert model.seen_messages[0].type == "system"
-    assert model.seen_messages[0].content == SHOP_AGENT_SYSTEM_PROMPT
-    assert model.seen_messages[-1].content == "today's revenue?"
+    assert (result.answer, result.conversation_id, result.message_id) == ("ok", 41, 72)
+    assert (result.model, result.model_version) == ("test-model", "test-model")
+    messages, info = model.requests[0]
+    assert info.instructions == SHOP_AGENT_SYSTEM_PROMPT
+    assert transcript(messages) == [("user", "today's revenue?")]
     assert conversations.saved_exchange == {
         "user_id": 3,
         "shop_id": 15,
@@ -138,8 +85,8 @@ def test_chat_builds_system_prompt_and_persists_exchange() -> None:
     }
 
 
-def test_chat_adds_scoped_conversation_history_to_model_context() -> None:
-    model = RecordingChatModel(responses=["ok"])
+async def test_chat_adds_scoped_conversation_history_to_model_context() -> None:
+    model = ScriptedModel("ok")
     conversations = FakeConversationRepository(
         [
             {"message_id": 1, "role": "USER", "content": "hello"},
@@ -148,254 +95,301 @@ def test_chat_adds_scoped_conversation_history_to_model_context() -> None:
     )
     agent = AgentService(model, conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS)
 
-    agent.chat(
+    await agent.chat(
         user_id=3,
         shop_id=15,
         conversation_id=41,
         message="today's revenue?",
     )
 
-    assert conversations.context_request == (41, 3, 15)
-    assert [message.type for message in model.seen_messages] == [
-        "system",
-        "human",
-        "ai",
-        "human",
-    ]
-    assert [message.content for message in model.seen_messages[1:]] == [
-        "hello",
-        "hi there",
-        "today's revenue?",
+    assert conversations.history_request == (41, 3, 15, 200)
+    assert transcript(model.requests[0][0]) == [
+        ("user", "hello"),
+        ("assistant", "hi there"),
+        ("user", "today's revenue?"),
     ]
 
 
-def test_chat_does_not_save_exchange_when_model_fails() -> None:
+async def test_chat_does_not_save_exchange_when_model_fails() -> None:
     conversations = FakeConversationRepository()
     agent = AgentService(
-        ErrorChatModel(responses=[]),
+        FunctionModel(failing_model),
         conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
 
     with pytest.raises(RuntimeError, match="down"):
-        agent.chat(user_id=3, shop_id=15, message="m")
+        await agent.chat(user_id=3, shop_id=15, message="m")
 
     assert conversations.saved_exchange is None
 
 
-def test_chat_injects_stored_summary_after_system_prompt() -> None:
-    model = RecordingChatModel(responses=["ok"])
-    conversations = FakeConversationRepository(
-        history=[{"message_id": 9, "role": "USER", "content": "any debt left?"}],
-        summary="1. Customers and debts: Lan owes 200000",
-        summary_through_message_id=8,
-    )
-    agent = AgentService(model, conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS)
-
-    agent.chat(user_id=3, shop_id=15, conversation_id=41, message="today's revenue?")
-
-    assert [message.type for message in model.seen_messages] == [
-        "system",
-        "system",
-        "human",
-        "human",
+async def test_chat_sends_only_the_latest_turns_of_a_long_conversation() -> None:
+    model = ScriptedModel("ok")
+    history = [
+        {"message_id": index, "role": role, "content": f"{role} {index}"}
+        for index in range(1, 7)
+        for role in ["USER" if index % 2 else "ASSISTANT"]
     ]
-    assert model.seen_messages[0].content == SHOP_AGENT_SYSTEM_PROMPT
-    assert "Lan owes 200000" in model.seen_messages[1].content
-    assert [message.content for message in model.seen_messages[2:]] == [
-        "any debt left?",
-        "today's revenue?",
-    ]
-
-
-def test_chat_omits_summary_message_when_none_is_stored() -> None:
-    model = RecordingChatModel(responses=["ok"])
+    conversations = FakeConversationRepository(history)
     agent = AgentService(
         model,
-        FakeConversationRepository(summary=None),
+        conversations,
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
+        history_turns=2,
+    )
+
+    await agent.chat(user_id=3, shop_id=15, conversation_id=41, message="next")
+
+    assert conversations.history_request == (41, 3, 15, 4)
+    assert [text for _, text in transcript(model.requests[0][0])] == [
+        "USER 3",
+        "ASSISTANT 4",
+        "USER 5",
+        "ASSISTANT 6",
+        "next",
+    ]
+
+
+async def test_chat_reads_no_history_for_a_new_conversation() -> None:
+    conversations = FakeConversationRepository()
+    agent = AgentService(
+        ScriptedModel("ok"),
+        conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
 
-    agent.chat(user_id=3, shop_id=15, message="today's revenue?")
+    await agent.chat(user_id=3, shop_id=15, message="hello")
 
-    assert [message.type for message in model.seen_messages] == ["system", "human"]
-
-
-def test_fold_summary_does_nothing_while_history_fits_the_window() -> None:
-    summary_model = RecordingSummaryModel(responses=["rewritten"])
-    conversations = FakeConversationRepository(history=history(FOLD_TRIGGER_MESSAGES))
-    folder = ChatSummaryFolder(summary_model, conversations)
-
-    assert folder.fold(41, 3, 15) is False
-    assert summary_model.seen_prompts == []
-    assert conversations.saved_summaries == []
+    assert conversations.history_request is None
 
 
-def test_fold_summary_rewrites_and_advances_watermark() -> None:
-    summary_model = RecordingSummaryModel(responses=["1. Customers and debts: none"])
-    conversations = FakeConversationRepository(
-        history=history(FOLD_TRIGGER_MESSAGES + 2), summary_through_message_id=None
+async def test_chat_rejects_a_conversation_outside_the_owner_scope() -> None:
+    model = ScriptedModel("ok")
+    conversations = FakeConversationRepository(missing=True)
+    agent = AgentService(model, conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS)
+
+    with pytest.raises(ConversationNotFoundError):
+        await agent.chat(user_id=3, shop_id=15, conversation_id=41, message="hello")
+
+    assert model.requests == []
+    assert conversations.saved_exchange is None
+
+
+async def test_chat_without_a_model_is_unavailable() -> None:
+    agent = AgentService(
+        None, FakeConversationRepository(), guardrail_limits=TEST_GUARDRAIL_LIMITS
     )
-    folder = ChatSummaryFolder(summary_model, conversations)
 
-    assert folder.fold(41, 3, 15) is True
-    assert conversations.saved_summaries == [
+    with pytest.raises(RuntimeError, match="agent model unavailable"):
+        await agent.chat(user_id=3, shop_id=15, message="hello")
+
+
+async def test_stream_chat_streams_deltas_that_make_up_the_answer() -> None:
+    answer = "Rice sells for 30.000 VND/kg, 12 kg left."
+    conversations = FakeConversationRepository()
+    agent = AgentService(
+        ScriptedModel(answer), conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS
+    )
+
+    events = await collect(
+        await agent.stream_chat(user_id=3, shop_id=15, message="rice?")
+    )
+
+    assert shown_text(events) == answer
+    assert not any(isinstance(event, Reset) for event in events)
+    assert events[-1] == Done(
+        AgentChatResult(
+            conversation_id=41,
+            message_id=72,
+            answer=answer,
+            model="test-model",
+            model_version="test-model",
+        )
+    )
+    assert conversations.saves == [
         {
-            "conversation_id": 41,
             "user_id": 3,
             "shop_id": 15,
-            "summary": "1. Customers and debts: none",
-            "through_id": FOLD_TRIGGER_MESSAGES + 2 - KEEP_RECENT_MESSAGES,
-            "expected_through_id": None,
+            "conversation_id": None,
+            "user_message": "rice?",
+            "assistant_message": answer,
         }
     ]
 
 
-def test_fold_summary_sends_the_early_fact_to_the_summary_model() -> None:
-    summary_model = RecordingSummaryModel(responses=["rewritten"])
-    backlog = history(FOLD_TRIGGER_MESSAGES + 2)
-    backlog[0]["content"] = "Lan owes 200000 VND"
-    folder = ChatSummaryFolder(
-        summary_model, FakeConversationRepository(history=backlog)
+async def test_stream_chat_retries_a_leaking_answer_without_streaming_it() -> None:
+    answer = "Rice sells for 30.000 VND/kg."
+    model = ScriptedModel("SELECT name FROM v_products", answer)
+    agent = AgentService(
+        model, FakeConversationRepository(), guardrail_limits=TEST_GUARDRAIL_LIMITS
     )
 
-    folder.fold(41, 3, 15)
+    events = await collect(await agent.stream_chat(user_id=3, shop_id=15, message="m"))
 
-    prompt = summary_model.seen_prompts[0]
-    assert prompt[0].type == "system"
-    assert prompt[1].type == "human"
-    assert "Lan owes 200000 VND" in prompt[1].content
+    emitted = "".join(event.text for event in events if isinstance(event, TextDelta))
+    for leak in ("select", "from v_", "v_products"):
+        assert leak not in emitted.lower()
+    assert shown_text(events) == answer
+    assert len(model.requests) == 2
 
 
-def test_fold_summary_keeps_the_previous_summary_in_the_prompt() -> None:
-    summary_model = RecordingSummaryModel(responses=["rewritten"])
-    conversations = FakeConversationRepository(
-        history=history(FOLD_TRIGGER_MESSAGES + 2),
-        summary="1. Customers and debts: Lan owes 200000",
-        summary_through_message_id=5,
+async def test_stream_chat_resets_text_written_before_a_tool_call() -> None:
+    preamble = "Let me check the products for this shop now."
+    answer = "Rice sells for 30.000 VND/kg."
+    model = ScriptedModel(
+        ModelResponse(
+            parts=[
+                TextPart(preamble),
+                ToolCallPart(
+                    "query_shop_data", {"sql": "SELECT phone FROM v_shop_profile"}
+                ),
+            ]
+        ),
+        answer,
     )
-    folder = ChatSummaryFolder(summary_model, conversations)
-
-    folder.fold(41, 3, 15)
-
-    assert "Lan owes 200000" in summary_model.seen_prompts[0][1].content
-    assert conversations.saved_summaries[0]["expected_through_id"] == 5
-
-
-def test_fold_summary_skips_everything_when_the_summary_model_fails() -> None:
-    conversations = FakeConversationRepository(
-        history=history(FOLD_TRIGGER_MESSAGES + 2)
-    )
-    folder = ChatSummaryFolder(ErrorSummaryModel(responses=["x"]), conversations)
-
-    assert folder.fold(41, 3, 15) is False
-    assert conversations.saved_summaries == []
-    assert conversations.summary is None
-    assert conversations.summary_through_message_id is None
-
-
-def test_fold_summary_drops_the_rewrite_when_a_concurrent_fold_won() -> None:
-    summary_model = RecordingSummaryModel(responses=["rewritten"])
-    conversations = FakeConversationRepository(
-        history=history(FOLD_TRIGGER_MESSAGES + 2), save_summary_applies=False
-    )
-    folder = ChatSummaryFolder(summary_model, conversations)
-
-    assert folder.fold(41, 3, 15) is False
-    assert len(conversations.saved_summaries) == 1
-    assert conversations.summary_through_message_id is None
-
-
-def test_fold_summary_ignores_a_deleted_conversation() -> None:
-    conversations = FakeConversationRepository(missing=True)
-    folder = ChatSummaryFolder(
-        RecordingSummaryModel(responses=["rewritten"]), conversations
+    agent = AgentService(
+        model,
+        FakeConversationRepository(),
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
+        sql_executor=FakeExecutor(),
     )
 
-    assert folder.fold(41, 3, 15) is False
+    events = await collect(await agent.stream_chat(user_id=3, shop_id=15, message="m"))
 
-
-def test_fold_summary_does_nothing_without_a_summary_model() -> None:
-    conversations = FakeConversationRepository(
-        history=history(FOLD_TRIGGER_MESSAGES + 2)
+    reset_at = events.index(Reset())
+    shown_before_reset = "".join(
+        event.text for event in events[:reset_at] if isinstance(event, TextDelta)
     )
-    folder = ChatSummaryFolder(None, conversations)
-
-    assert folder.fold(41, 3, 15) is False
-    assert conversations.context_request is None
+    assert shown_before_reset and preamble.startswith(shown_before_reset)
+    assert shown_text(events) == answer
 
 
-def test_fold_summary_batches_a_long_backlog_and_chains_watermarks() -> None:
-    summary_model = RecordingSummaryModel(responses=["rewritten"])
-    conversations = FakeConversationRepository(history=history(200, "x" * 400))
-    folder = ChatSummaryFolder(summary_model, conversations)
+async def test_stream_chat_never_takes_back_text_it_already_sent() -> None:
+    # A view name cut at the chunk end is released as a prefix; the next chunk extends
+    # it to `v_products_backup`, which shrinks the screened prefix for a moment.
+    chunks = ("Open the notes about v_products", "_backup", " and then rice prices.")
 
-    assert folder.fold(41, 3, 15) is True
-    assert len(conversations.saved_summaries) > 1
-    through_ids = [saved["through_id"] for saved in conversations.saved_summaries]
-    assert through_ids == sorted(through_ids)
-    assert len(set(through_ids)) == len(through_ids)
-    assert conversations.summary_through_message_id == through_ids[-1]
-    assert conversations.saved_summaries[0]["expected_through_id"] is None
-    assert [
-        saved["expected_through_id"] for saved in conversations.saved_summaries[1:]
-    ] == through_ids[:-1]
+    async def chunked_answer(messages, info):
+        for chunk in chunks:
+            yield chunk
 
-
-def search_then_answer(query: str) -> ToolCallingChatModel:
-    return ToolCallingChatModel(
-        responses=[
-            AIMessage(
-                content="",
-                tool_calls=[
-                    {
-                        "name": "search_chat_history",
-                        "args": {"query": query},
-                        "id": "call-1",
-                    }
-                ],
-            ),
-            AIMessage(content="Lan owes 235000"),
-        ]
+    agent = AgentService(
+        FunctionModel(stream_function=chunked_answer),
+        FakeConversationRepository(),
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
 
+    events = await collect(await agent.stream_chat(user_id=3, shop_id=15, message="m"))
 
-def test_chat_searches_folded_history_within_the_request_scope() -> None:
-    model = search_then_answer("Lan")
-    conversations = FakeConversationRepository(summary="1. Customers and debts")
-    conversations.folded = [
-        {
-            "message_id": 3,
-            "role": "USER",
-            "content": "Lan owes 235000 for rice",
-            "created_at": datetime(2026, 10, 1),
-        }
-    ]
-    agent = AgentService(model, conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS)
-
-    result = agent.chat(user_id=3, shop_id=15, conversation_id=41, message="Lan?")
-
-    assert result.answer == "Lan owes 235000"
-    assert conversations.folded_request == (41, 3, 15)
-    tool_message = model.seen_calls[-1][-1]
-    assert tool_message.type == "tool"
-    assert "[#3 2026-10-01] USER: Lan owes 235000 for rice" in tool_message.content
+    deltas = [event.text for event in events if isinstance(event, TextDelta)]
+    assert "" not in deltas
+    assert not any(isinstance(event, Reset) for event in events)
+    assert "".join(deltas) == "".join(chunks)
 
 
-def test_search_tool_does_not_query_a_new_conversation() -> None:
-    model = search_then_answer("Lan")
+async def test_stream_chat_stops_an_answer_the_screen_keeps_rejecting() -> None:
+    limits = replace(TEST_GUARDRAIL_LIMITS, model_call_limit=2)
     conversations = FakeConversationRepository()
-    agent = AgentService(model, conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS)
+    agent = AgentService(
+        ScriptedModel("Error[SQL_ERROR]", "Error[SQL_ERROR]"),
+        conversations,
+        guardrail_limits=limits,
+    )
 
-    agent.chat(user_id=3, shop_id=15, message="Lan?")
+    events = await agent.stream_chat(user_id=3, shop_id=15, message="m")
+    with pytest.raises(GuardrailError) as stopped:
+        await collect(events)
 
-    assert conversations.folded_request is None
-    assert "No earlier message" in model.seen_calls[-1][-1].content
+    assert stopped.value.code == "answer_unavailable"
+    assert conversations.saves == []
 
 
-def test_search_tool_exposes_only_the_query_to_the_model() -> None:
-    (search_tool,) = build_history_tools(FakeConversationRepository())
+async def test_stream_chat_stops_a_turn_past_the_timeout() -> None:
+    async def slow_answer(messages, info):
+        yield "Rice sells for 30.000 VND/kg, "
+        await asyncio.sleep(1)
+        yield "12 kg left."
 
-    assert list(search_tool.tool_call_schema.model_json_schema()["properties"]) == [
-        "query"
-    ]
+    limits = replace(TEST_GUARDRAIL_LIMITS, turn_timeout_seconds=0.05)
+    conversations = FakeConversationRepository()
+    agent = AgentService(
+        FunctionModel(stream_function=slow_answer),
+        conversations,
+        guardrail_limits=limits,
+    )
+
+    events = await agent.stream_chat(user_id=3, shop_id=15, message="m")
+    with pytest.raises(GuardrailError) as stopped:
+        await collect(events)
+
+    assert stopped.value.code == "answer_timeout"
+    assert conversations.saves == []
+
+
+async def test_closing_a_stream_early_cancels_the_run_and_saves_nothing() -> None:
+    async def slow_answer(messages, info):
+        yield "Rice sells for 30.000 VND/kg, "
+        await asyncio.sleep(5)
+        yield "12 kg left."
+
+    conversations = FakeConversationRepository()
+    agent = AgentService(
+        FunctionModel(stream_function=slow_answer),
+        conversations,
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
+    )
+
+    tasks_before = asyncio.all_tasks()
+    events = await agent.stream_chat(user_id=3, shop_id=15, message="m")
+    first = await anext(events)
+    await events.aclose()
+
+    assert isinstance(first, TextDelta)
+    assert conversations.saves == []
+    assert asyncio.all_tasks() - tasks_before == set()
+
+
+async def test_a_slow_consumer_does_not_use_up_the_turn_timeout() -> None:
+    answer = "Rice sells for 30.000 VND/kg, 12 kg left."
+    limits = replace(TEST_GUARDRAIL_LIMITS, turn_timeout_seconds=0.05)
+    agent = AgentService(
+        ScriptedModel(answer), FakeConversationRepository(), guardrail_limits=limits
+    )
+
+    events = []
+    async for event in await agent.stream_chat(user_id=3, shop_id=15, message="m"):
+        events.append(event)
+        await asyncio.sleep(0.1)
+
+    assert shown_text(events) == answer
+    assert isinstance(events[-1], Done)
+
+
+async def test_pre_stream_refusals_raise_on_await_before_any_event() -> None:
+    model = ScriptedModel("ok")
+    out_of_scope = AgentService(
+        model,
+        FakeConversationRepository(missing=True),
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
+    )
+    too_long = AgentService(
+        model,
+        FakeConversationRepository(),
+        guardrail_limits=replace(TEST_GUARDRAIL_LIMITS, max_input_chars=5),
+    )
+    no_model = AgentService(
+        None, FakeConversationRepository(), guardrail_limits=TEST_GUARDRAIL_LIMITS
+    )
+
+    with pytest.raises(ConversationNotFoundError):
+        await out_of_scope.stream_chat(
+            user_id=3, shop_id=15, message="hello", conversation_id=41
+        )
+    with pytest.raises(GuardrailError) as refused:
+        await too_long.stream_chat(user_id=3, shop_id=15, message="hello world")
+    assert refused.value.code == "input_too_long"
+    with pytest.raises(RuntimeError, match="agent model unavailable"):
+        await no_model.stream_chat(user_id=3, shop_id=15, message="hello")
+
+    assert model.requests == []

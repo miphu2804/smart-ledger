@@ -4,22 +4,27 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.sql.SQLException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 class ApiExceptionHandlerTest {
     private final ApiExceptionHandler handler = new ApiExceptionHandler();
 
-    @Test
-    void mapsAConcurrentBarcodeUniqueViolationToTheCatalogError() {
+    @ParameterizedTest
+    @ValueSource(strings = {"uq_products_shop_barcode", "uq_products_shop_barcode_active"})
+    void mapsAConcurrentBarcodeUniqueViolationToTheCatalogError(String constraint) {
         SQLException sqlCause = new SQLException(
-                "duplicate key value violates unique constraint \"uq_products_shop_barcode\"", "23505");
+                "duplicate key value violates unique constraint \"" + constraint + "\"", "23505");
         var response = handler.handleDataIntegrity(new DataIntegrityViolationException("write failed", sqlCause),
                 new MockHttpServletRequest());
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(response.getBody().code()).isEqualTo("product_barcode_conflict");
+        assertThat(response.getBody().details()).isEmpty();
     }
 
     @Test
@@ -42,15 +47,17 @@ class ApiExceptionHandlerTest {
         assertThat(response.getBody().code()).isEqualTo("auth_session_conflict");
     }
 
-    @Test
-    void mapsAHibernateConstraintNameWithoutRelyingOnTheMessage() {
+    @ParameterizedTest
+    @ValueSource(strings = {"UQ_PRODUCTS_SHOP_BARCODE", "UQ_PRODUCTS_SHOP_BARCODE_ACTIVE"})
+    void mapsAHibernateConstraintNameWithoutRelyingOnTheMessage(String constraint) {
         var violation = new org.hibernate.exception.ConstraintViolationException(
-                "insert failed", new SQLException("duplicate", "23505"), "UQ_PRODUCTS_SHOP_BARCODE");
+                "insert failed", new SQLException("duplicate", "23505"), constraint);
         var response = handler.handleDataIntegrity(new DataIntegrityViolationException("write failed", violation),
                 new MockHttpServletRequest());
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(response.getBody().code()).isEqualTo("product_barcode_conflict");
+        assertThat(response.getBody().details()).isEmpty();
     }
 
     @Test
@@ -61,5 +68,14 @@ class ApiExceptionHandlerTest {
                 new MockHttpServletRequest());
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    @Test
+    void mapsMultipartLimitsToThePublicImageTooLargeError() {
+        var response = handler.handleMaxUploadSizeExceeded(
+                new MaxUploadSizeExceededException(5L * 1024 * 1024), new MockHttpServletRequest());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE);
+        assertThat(response.getBody().code()).isEqualTo("image_too_large");
     }
 }

@@ -8,15 +8,6 @@ export function mapFirebaseError(e: unknown): AuthError {
   // Ghi mã gốc + thông điệp của SDK để dò lỗi cấu hình (chỉ khi dev)
   debugLog('auth', 'Firebase lỗi:', code || '(không có code)', (e as { message?: string })?.message ?? '');
   switch (code.replace(/^auth\//, '')) {
-    case 'invalid-phone-number':
-    case 'missing-phone-number':
-      return new AuthError('invalid-phone');
-    case 'invalid-verification-code':
-    case 'missing-verification-code':
-      return new AuthError('invalid-code');
-    case 'code-expired':
-    case 'session-expired':
-      return new AuthError('code-expired');
     case 'invalid-email':
     case 'missing-email':
       return new AuthError('invalid-email');
@@ -33,13 +24,21 @@ export function mapFirebaseError(e: unknown): AuthError {
       return new AuthError('weak-password');
     case 'operation-not-allowed':
       return new AuthError('provider-disabled');
+    // Email của tài khoản Facebook đã gắn với cách đăng nhập khác trong Firebase (cài đặt "một tài khoản cho mỗi email")
+    case 'account-exists-with-different-credential':
+      return new AuthError('account-exists');
+    // Người dùng đóng cửa sổ đăng nhập (popup trên web)
+    case 'popup-closed-by-user':
+    case 'cancelled-popup-request':
+    case 'user-cancelled':
+      return new AuthError('cancelled');
     case 'too-many-requests':
     case 'quota-exceeded':
       return new AuthError('too-many-requests');
     case 'network-request-failed':
       return new AuthError('network');
     default:
-      // Lỗi cấu hình (chặn vùng +84, sai SHA, domain chưa được phép…) — hiện mã khi dev để dễ dò
+      // Lỗi cấu hình (sai SHA, domain chưa được phép…) — hiện mã khi dev để dễ dò
       return new AuthError('unknown', __DEV__ && code ? `Không đăng nhập được (${code})` : undefined);
   }
 }

@@ -39,6 +39,8 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(authorize -> authorize
                         // Preserve the original error status; normal requests still require authentication.
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+                        // Ends a streamed response the request dispatch already authorized; the bearer filter skips it.
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/actuator/health",
                                 "/actuator/health/liveness", "/actuator/health/readiness").permitAll()

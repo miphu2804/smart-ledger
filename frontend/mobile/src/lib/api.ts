@@ -1,9 +1,11 @@
+import { fetch as expoFetch } from 'expo/fetch';
 import { API_ENDPOINT, USE_MOCK } from '../config';
 import { authClient } from './auth';
 import { ApiError } from './apiError';
 import type { ApiErrorDetail } from './apiError';
 import { debugLog } from './debug';
 import { resetAllIdempotentSenders } from './idempotency';
+import { imagePart } from './imagePart';
 import { mockCoreRequest } from './mockCore';
 
 /**
@@ -12,6 +14,7 @@ import { mockCoreRequest } from './mockCore';
  *   token bằng Firebase Admin SDK. Token lấy mới mỗi request (SDK tự làm mới khi gần hết hạn, app không tự lưu).
  * - Endpoint nghiệp vụ của OWNER gửi thêm `X-Shop-Id` (bật bằng `withShop`). POST ghi tiền gửi thêm
  *   `Idempotency-Key` (`idempotencyKey`, sinh/giữ key ở `idempotency.ts`).
+ * - Upload ảnh (`image`) gửi `multipart/form-data` với đúng một part `image` thay cho JSON.
  * - Lỗi của Core: `{ code, message, details?, traceId }` (details: `[{ field, issue }]`). Lỗi của AI service: `{ detail }`.
  *   401 → đăng xuất.
  * - Quá thời gian chờ (mặc định 15 giây) → ApiError status 0, code 'timeout' (không để app quay vô hạn khi
@@ -52,13 +55,17 @@ export async function apiRequest<T>(
     timeoutMs?: number;
     /** Header Idempotency-Key — bắt buộc với POST /expenses và POST /debts/{id}/payments */
     idempotencyKey?: string;
+    /** Ảnh gửi dạng multipart (part `image`); không dùng cùng `body`. Web gửi `blob`, Android/iOS gửi file theo `uri`. */
+    image?: UploadImage;
   } = {},
 ): Promise<T> {
-  const method = opts.method ?? (opts.body === undefined ? 'GET' : 'POST');
+  const method = opts.method ?? (opts.body === undefined && !opts.image ? 'GET' : 'POST');
 
   if (USE_MOCK) {
     debugLog('api', '→ (mock)', method, path);
-    const raw = mockCoreRequest<T>(path, method, opts.body, opts.idempotencyKey);
+    // Bản mock không nhận file: chỉ chuyển địa chỉ ảnh xem trước để hiện lại
+    const mockBody = opts.image ? { imageUri: opts.image.uri } : opts.body;
+    const raw = mockCoreRequest<T>(path, method, mockBody, opts.idempotencyKey);
     const data = raw === undefined ? raw : (JSON.parse(JSON.stringify(raw)) as T);
     debugLog('api', '✓ (mock)', method, path);
     return data;
@@ -71,17 +78,19 @@ export async function apiRequest<T>(
   const token = await authClient.getIdToken();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  // Với multipart, để fetch tự đặt Content-Type kèm boundary
+  const form = opts.image ? imageForm(opts.image) : null;
   let res: Response;
   try {
     res = await fetch(`${API_ENDPOINT}/api/v1${path}`, {
       method,
       headers: {
-        'Content-Type': 'application/json',
+        ...(form ? {} : { 'Content-Type': 'application/json' }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(opts.withShop && activeShopId ? { 'X-Shop-Id': activeShopId } : {}),
         ...(opts.idempotencyKey ? { 'Idempotency-Key': opts.idempotencyKey } : {}),
       },
-      body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+      body: form ?? (opts.body === undefined ? undefined : JSON.stringify(opts.body)),
       signal: ctrl.signal,
     });
   } catch (err) {
@@ -95,31 +104,115 @@ export async function apiRequest<T>(
     clearTimeout(timer);
   }
 
-  if (!res.ok) {
-    let code = 'error';
-    let message = `Lỗi máy chủ (${res.status})`;
-    let traceId: string | undefined;
-    let details: ApiErrorDetail[] = [];
-    try {
-      const b = (await res.json()) as {
-        code?: string;
-        message?: string;
-        detail?: unknown;
-        details?: ApiErrorDetail[];
-        traceId?: string;
-      };
-      code = b.code ?? (typeof b.detail === 'string' ? b.detail : code);
-      message = b.message ?? (typeof b.detail === 'string' ? b.detail : message);
-      traceId = b.traceId;
-      details = Array.isArray(b.details) ? b.details : [];
-    } catch {
-      /* phản hồi không phải JSON */
-    }
-    debugLog('api', '✗', method, path, res.status, code, traceId ? `trace=${traceId}` : '', took());
-    if (res.status === 401 && opts.handle401 !== false) unauthorizedHandler?.();
-    throw new ApiError(res.status, code, message, traceId, details);
-  }
+  if (!res.ok) throw await errorFrom(res, method, path, took(), opts.handle401 !== false);
   debugLog('api', '✓', method, path, res.status, took());
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
+}
+
+/** Ảnh để upload: `blob` (web) hoặc file trên máy theo `uri` (Android/iOS). */
+export interface UploadImage {
+  uri: string;
+  mimeType: string;
+  blob?: Blob;
+}
+
+function imageForm(image: UploadImage): FormData {
+  const form = new FormData();
+  const name = image.mimeType === 'image/png' ? 'image.png' : 'image.jpg';
+  // Web gửi Blob đã thu nhỏ; Android/iOS gửi File của expo-file-system (xem imagePart.native.ts vì sao không dùng { uri })
+  form.append('image', imagePart(image), name);
+  return form;
+}
+
+/**
+ * POST nhận server-sent events (`/agent/chat/stream`): gọi `onEvent` cho từng sự kiện ngay khi tới.
+ * Lỗi trước sự kiện đầu tiên vẫn là JSON nên ném ApiError như `apiRequest`; `onEvent` ném lỗi thì dừng đọc.
+ * Dùng `fetch` của expo vì `fetch` của React Native chỉ trả body khi đã nhận đủ.
+ */
+export async function apiStream(
+  path: string,
+  opts: { body: unknown; withShop?: boolean; timeoutMs?: number },
+  onEvent: (event: string, data: unknown) => void,
+): Promise<void> {
+  const started = Date.now();
+  const took = () => `${Date.now() - started}ms`;
+  debugLog('api', '→ POST', path);
+
+  const token = await authClient.getIdToken();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  try {
+    const res = await expoFetch(`${API_ENDPOINT}/api/v1${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(opts.withShop && activeShopId ? { 'X-Shop-Id': activeShopId } : {}),
+      },
+      body: JSON.stringify(opts.body),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) throw await errorFrom(res as unknown as Response, 'POST', path, took(), true);
+
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+        // Mỗi sự kiện kết thúc bằng một dòng trống; phần còn lại chờ lần đọc sau.
+        let end: number;
+        while ((end = buffer.indexOf('\n\n')) >= 0) {
+          const block = buffer.slice(0, end);
+          buffer = buffer.slice(end + 2);
+          const event = block.match(/^event:\s*(.*)$/m)?.[1];
+          const data = block.match(/^data:\s*(.*)$/m)?.[1];
+          if (event && data !== undefined) onEvent(event, JSON.parse(data));
+        }
+      }
+    } finally {
+      reader.cancel().catch(() => undefined);
+    }
+    debugLog('api', '✓ POST', path, res.status, took());
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    if (ctrl.signal.aborted) {
+      debugLog('api', '✗ POST', path, 'hết thời gian chờ', took());
+      throw new ApiError(0, 'timeout', 'Máy chủ không phản hồi. Vui lòng kiểm tra địa chỉ máy chủ, mạng và tường lửa');
+    }
+    debugLog('api', '✗ POST', path, 'không kết nối được:', String(err), took());
+    throw new ApiError(0, 'network', 'Không kết nối được máy chủ. Vui lòng kiểm tra mạng và thử lại');
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Đọc lỗi Core `{ code, message, details?, traceId }` hoặc lỗi AI `{ detail }` thành ApiError; 401 → đăng xuất. */
+async function errorFrom(res: Response, method: string, path: string, took: string, handle401: boolean) {
+  let code = 'error';
+  let message = `Lỗi máy chủ (${res.status})`;
+  let traceId: string | undefined;
+  let details: ApiErrorDetail[] = [];
+  try {
+    const b = (await res.json()) as {
+      code?: string;
+      message?: string;
+      detail?: unknown;
+      details?: ApiErrorDetail[];
+      traceId?: string;
+    };
+    code = b.code ?? (typeof b.detail === 'string' ? b.detail : code);
+    message = b.message ?? (typeof b.detail === 'string' ? b.detail : message);
+    traceId = b.traceId;
+    details = Array.isArray(b.details) ? b.details : [];
+  } catch {
+    /* phản hồi không phải JSON */
+  }
+  debugLog('api', '✗', method, path, res.status, code, traceId ? `trace=${traceId}` : '', took);
+  if (res.status === 401 && handle401) unauthorizedHandler?.();
+  return new ApiError(res.status, code, message, traceId, details);
 }

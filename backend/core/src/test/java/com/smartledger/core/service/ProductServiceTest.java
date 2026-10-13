@@ -5,9 +5,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.smartledger.core.dto.request.OwnerListQuery.*;
 import com.smartledger.core.dto.request.ProductPatchRequest;
 import com.smartledger.core.dto.request.ProductWriteRequest;
 import com.smartledger.core.dto.response.ProductResponse;
@@ -16,6 +18,7 @@ import com.smartledger.core.entity.Shop;
 import com.smartledger.core.enums.CatalogStatus;
 import com.smartledger.core.enums.ErrorCode;
 import com.smartledger.core.exception.BusinessException;
+import com.smartledger.core.exception.ApiErrorDetail;
 import com.smartledger.core.repository.CategoryRepository;
 import com.smartledger.core.repository.ProductRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
@@ -25,7 +28,13 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class ProductServiceTest {
@@ -36,7 +45,7 @@ class ProductServiceTest {
     private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
     private final IdempotencyService idempotencyService = Mockito.mock(IdempotencyService.class);
     private final ProductService service = new ProductServiceImpl(shopService, productRepository, categoryRepository,
-            auditLogService, idempotencyService);
+            auditLogService, idempotencyService, Mockito.mock(NotificationEventService.class));
 
     @BeforeEach
     void authorizeShop() {
@@ -56,6 +65,18 @@ class ProductServiceTest {
         assertThat(response.status()).isEqualTo(CatalogStatus.ACTIVE);
         assertThat(response.stockQuantity()).isNull();
         verify(productRepository).save(any(Product.class));
+    }
+
+    @Test
+    void rejectsRawProductImageUrlOnCreate() {
+        ProductWriteRequest request = new ProductWriteRequest(null, "Cà phê", null,
+                "https://untrusted.example/image.png", "ly", 25000L, 10000L, false, null);
+
+        assertThatThrownBy(() -> service.create(token(), "7", request))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_IMAGE_URL_UNSUPPORTED));
+
+        verify(productRepository, never()).save(any());
     }
 
     @Test
@@ -82,17 +103,33 @@ class ProductServiceTest {
         assertThat(response.barcode()).isEqualTo("123456");
         assertThat(response.tracked()).isTrue();
         assertThat(response.stockQuantity()).isEqualByComparingTo("2.500");
-        verify(productRepository).existsByShopIdAndBarcode(7L, "123456");
+        verify(productRepository).findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(7L, "123456", CatalogStatus.ACTIVE);
     }
 
     @Test
-    void archivedProductKeepsItsBarcodeReservedAccordingToTheCurrentErd() {
-        when(productRepository.existsByShopIdAndBarcode(7L, "123456"))
-                .thenReturn(true);
+    void activeProductKeepsItsBarcodeReservedAndReturnsConflictDetails() {
+        when(productRepository.findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(7L, "123456", CatalogStatus.ACTIVE))
+                .thenReturn(Optional.of(product()));
 
         assertThatThrownBy(() -> service.create(token(), "7", request(null, "123456", false, null)))
-                .isInstanceOfSatisfying(BusinessException.class, exception ->
-                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_BARCODE_CONFLICT));
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_BARCODE_CONFLICT);
+                    assertThat(exception.getDetails()).containsExactly(
+                            new ApiErrorDetail("barcode", "already_in_use", 3L, CatalogStatus.ACTIVE));
+                });
+        verify(productRepository, never()).save(any());
+        verifyNoInteractions(auditLogService);
+    }
+
+    @Test
+    void createPrecheckOnlyConsidersActiveProducts() {
+        // V16 reuse and the final DB unique guard are covered separately on PostgreSQL.
+        when(productRepository.findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(7L, "123456", CatalogStatus.ACTIVE))
+                .thenReturn(Optional.empty());
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThat(service.create(token(), "7", request(null, "123456", false, null)).barcode()).isEqualTo("123456");
+        verify(productRepository).findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(7L, "123456", CatalogStatus.ACTIVE);
     }
 
     @Test
@@ -102,7 +139,7 @@ class ProductServiceTest {
         ProductResponse response = service.create(token(), "7", request(null, "123456", false, null));
 
         assertThat(response.barcode()).isEqualTo("123456");
-        verify(productRepository).existsByShopIdAndBarcode(7L, "123456");
+        verify(productRepository).findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(7L, "123456", CatalogStatus.ACTIVE);
     }
 
     @Test
@@ -148,11 +185,158 @@ class ProductServiceTest {
     @Test
     void listsOnlyActiveProductsFromTheSelectedShop() {
         Product product = product();
-        when(productRepository.findAllByShopIdAndStatusOrderByIdAsc(7L, CatalogStatus.ACTIVE))
-                .thenReturn(List.of(product));
+        when(productRepository.findAll(org.mockito.ArgumentMatchers.<Specification<com.smartledger.core.entity.Product>>any(), org.mockito.ArgumentMatchers.any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(product)));
 
-        assertThat(service.list(token(), "7")).hasSize(1);
-        verify(productRepository).findAllByShopIdAndStatusOrderByIdAsc(7L, CatalogStatus.ACTIVE);
+        assertThat(service.list(token(), "7", Products.defaults()).items()).hasSize(1);
+        verify(productRepository).findAll(org.mockito.ArgumentMatchers.<Specification<com.smartledger.core.entity.Product>>any(), org.mockito.ArgumentMatchers.any(Pageable.class));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ABC-123", "  ABC-123  ", "ABC-123\r\n", "\tABC-123\t", "123", "abc-123"})
+    void createPreservesTheExactBarcodeAfterTrim(String raw) {
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThat(service.create(token(), "7", request(null, raw, false, null)).barcode()).isEqualTo(raw.trim());
+        verify(productRepository).findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(7L, raw.trim(), CatalogStatus.ACTIVE);
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {" ", " \t\r\n ", "\u2003\u00a0"})
+    void createAcceptsNoBarcodeAndPatchClearsIt(String raw) {
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        assertThat(service.create(token(), "7", request(null, raw, false, null)).barcode()).isNull();
+
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+                .thenReturn(Optional.of(product()));
+        ProductPatchRequest patch = new ProductPatchRequest();
+        patch.setBarcode(raw);
+        assertThat(service.patch(token(), "7", "3", patch).barcode()).isNull();
+        verify(productRepository, never()).findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(any(), any(), any());
+        verify(productRepository, never()).findFirstByShopIdAndBarcodeAndStatusAndIdNotOrderByIdDesc(any(), any(), any(), any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ABC 123", "ABC\t123", "ABC\n123", "ABC\r123", "ABC\u0000123",
+            "ABC\u007f123", "ABC\u0085123", "ABC\u00a0123", "ABC\u2003123", "\u0000ABC", "ABC\u007f",
+            "\u000BABC", "ABC\u000B", "\u000B", "\u000CABC", "ABC\u000C", "\u000C",
+            "\u001CABC", "ABC\u001C", "\u001C", "\u001DABC", "ABC\u001D", "\u001D",
+            "\u001EABC", "ABC\u001E", "\u001E", "\u001FABC", "ABC\u001F", "\u001F",
+            "\tABC\u001D \r\n", "\r\n \u001DABC\t"})
+    void createPatchAndLookupRejectInternalWhitespaceAndNonScannerControlCharacters(String raw) {
+        Product product = product();
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+                .thenReturn(Optional.of(product));
+        ProductPatchRequest patch = new ProductPatchRequest();
+        patch.setBarcode(raw);
+
+        assertInvalidBarcode(() -> service.create(token(), "7", request(null, raw, false, null)));
+        assertInvalidBarcode(() -> service.patch(token(), "7", "3", patch));
+        assertInvalidBarcode(() -> service.lookup(token(), "7", raw));
+        assertThat(product.getBarcode()).isEqualTo("123456");
+        verify(productRepository, never()).save(any());
+        verify(productRepository, never()).findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(any(), any(), any());
+        verify(productRepository, never()).findFirstByShopIdAndBarcodeAndStatusAndIdNotOrderByIdDesc(any(), any(), any(), any());
+        verifyNoInteractions(auditLogService);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0x41, 0x1F600, 0x20000})
+    void barcodeLengthIsValidatedAfterTrimOnEveryOperation(int codePoint) {
+        String character = new String(Character.toChars(codePoint));
+        String valid = character.repeat(100);
+        String invalid = character.repeat(101);
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        assertThat(service.create(token(), "7", request(null, "  " + valid + "\n", false, null)).barcode())
+                .isEqualTo(valid);
+        assertInvalidBarcode(() -> service.create(token(), "7", request(null, invalid, false, null)));
+
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+                .thenReturn(Optional.of(product()));
+        ProductPatchRequest patch = new ProductPatchRequest();
+        patch.setBarcode(" " + valid + " ");
+        assertThat(service.patch(token(), "7", "3", patch).barcode()).isEqualTo(valid);
+        patch.setBarcode(invalid);
+        assertInvalidBarcode(() -> service.patch(token(), "7", "3", patch));
+        assertInvalidBarcode(() -> service.lookup(token(), "7", invalid));
+    }
+
+    @Test
+    void patchCanKeepItsOwnBarcodeAndUsesTheNormalizedValueForConflictChecks() {
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+                .thenReturn(Optional.of(product()));
+        ProductPatchRequest patch = new ProductPatchRequest();
+        patch.setBarcode(" 123456\n");
+
+        assertThat(service.patch(token(), "7", "3", patch).barcode()).isEqualTo("123456");
+        verify(productRepository).findFirstByShopIdAndBarcodeAndStatusAndIdNotOrderByIdDesc(7L, "123456", CatalogStatus.ACTIVE, 3L);
+    }
+
+    @Test
+    void omittedBarcodeOnPatchPreservesEvenLegacyValuesWithoutRevalidation() {
+        Product product = product();
+        ReflectionTestUtils.setField(product, "barcode", "legacy barcode");
+        when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
+                .thenReturn(Optional.of(product));
+        ProductPatchRequest patch = new ProductPatchRequest();
+        patch.setName("Coffee");
+
+        assertThat(service.patch(token(), "7", "3", patch).barcode()).isEqualTo("legacy barcode");
+        verify(productRepository, never()).findFirstByShopIdAndBarcodeAndStatusAndIdNotOrderByIdDesc(any(), any(), any(), any());
+    }
+
+    @Test
+    void lookupUsesOneExactShopScopedActiveProductRead() {
+        Product product = product();
+        ReflectionTestUtils.setField(product, "barcode", "ABC-123");
+        when(productRepository.findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(7L, "ABC-123", CatalogStatus.ACTIVE))
+                .thenReturn(Optional.of(product));
+
+        ProductResponse response = service.lookup(token(), "7", "\u2003\u00a0 ABC-123\n");
+
+        assertThat(response.id()).isEqualTo(3L);
+        assertThat(response.barcode()).isEqualTo("ABC-123");
+        assertThat(response.status()).isEqualTo(CatalogStatus.ACTIVE);
+        verify(productRepository).findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(7L, "ABC-123", CatalogStatus.ACTIVE);
+        org.mockito.Mockito.verifyNoMoreInteractions(productRepository);
+        verifyNoInteractions(auditLogService);
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {" ", " \t\r\n ", "\u2003\u00a0"})
+    void lookupRequiresANonblankBarcode(String raw) {
+        assertInvalidBarcode(() -> service.lookup(token(), "7", raw));
+        verifyNoInteractions(productRepository);
+    }
+
+    @Test
+    void lookupReturnsNotFoundForMissingArchivedOrForeignShopProduct() {
+        assertThatThrownBy(() -> service.lookup(token(), "7", "foreign-or-archived"))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_NOT_FOUND));
+        verify(productRepository).findFirstByShopIdAndBarcodeAndStatusOrderByIdDesc(
+                7L, "foreign-or-archived", CatalogStatus.ACTIVE);
+    }
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value = ErrorCode.class, names = {
+            "SHOP_ACCESS_DENIED", "SHOP_INACTIVE", "SHOP_NOT_FOUND", "ACCOUNT_DISABLED", "AUTH_PROFILE_NOT_FOUND"})
+    void lookupChecksShopAccessBeforeBarcodeValidationOrProductReads(ErrorCode error) {
+        when(shopService.requireOwnedActiveShop(any(), eq("7"))).thenThrow(new BusinessException(error));
+
+        assertThatThrownBy(() -> service.lookup(token(), "7", null))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(error));
+        verifyNoInteractions(productRepository);
+    }
+
+    private void assertInvalidBarcode(org.assertj.core.api.ThrowableAssert.ThrowingCallable operation) {
+        assertThatThrownBy(operation).isInstanceOfSatisfying(BusinessException.class, exception -> {
+            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.INVALID_PRODUCT_BARCODE);
+            assertThat(exception.getDetails()).extracting(ApiErrorDetail::field).containsExactly("barcode");
+        });
     }
 
     @Test
@@ -250,14 +434,23 @@ class ProductServiceTest {
         Product product = product();
         when(productRepository.findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE))
                 .thenReturn(Optional.of(product));
-        when(productRepository.existsByShopIdAndBarcodeAndIdNot(7L, "654321", 3L)).thenReturn(true);
+        Product conflict = product();
+        ReflectionTestUtils.setField(conflict, "id", 4L);
+        when(productRepository.findFirstByShopIdAndBarcodeAndStatusAndIdNotOrderByIdDesc(
+                7L, "654321", CatalogStatus.ACTIVE, 3L)).thenReturn(Optional.of(conflict));
 
         ProductPatchRequest request = new ProductPatchRequest();
-        request.setBarcode("654321");
+        request.setBarcode(" 654321\n");
+        request.setName("Must not be saved");
         assertThatThrownBy(() -> service.patch(token(), "7", "3", request))
-                .isInstanceOfSatisfying(BusinessException.class, exception ->
-                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_BARCODE_CONFLICT));
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_BARCODE_CONFLICT);
+                    assertThat(exception.getDetails()).containsExactly(
+                            new ApiErrorDetail("barcode", "already_in_use", 4L, CatalogStatus.ACTIVE));
+                });
         assertThat(product.getBarcode()).isEqualTo("123456");
+        assertThat(product.getName()).isEqualTo("Cà phê");
+        verifyNoInteractions(auditLogService);
     }
 
     @Test
@@ -275,7 +468,7 @@ class ProductServiceTest {
         when(shopService.requireOwnedActiveShop(any(), eq("8")))
                 .thenThrow(new BusinessException(ErrorCode.SHOP_INACTIVE));
 
-        assertThatThrownBy(() -> service.list(token(), "8"))
+        assertThatThrownBy(() -> service.list(token(), "8", Products.defaults()).items())
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.SHOP_INACTIVE));
         verify(productRepository, never()).findAllByShopIdAndStatusOrderByIdAsc(any(), any());
@@ -293,7 +486,7 @@ class ProductServiceTest {
         assertThat(product.getArchivedAt()).isNotNull();
         assertThat(product.getArchivedByUserId()).isEqualTo(42L);
         verify(productRepository).findLockedByIdAndShopIdAndStatus(3L, 7L, CatalogStatus.ACTIVE);
-        verify(productRepository, never()).delete(any());
+        verify(productRepository, never()).delete(any(Product.class));
     }
 
     private Product product() {

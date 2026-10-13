@@ -1,6 +1,7 @@
 import type { ExpenseView } from '../data/types';
 import { apiRequest } from './api';
 import { createIdempotentSender } from './idempotency';
+import { fetchAllPages } from './pageApi';
 
 const createSender = createIdempotentSender();
 
@@ -23,7 +24,7 @@ export const expenseApi = {
       apiRequest<ExpenseView>('/expenses', { method: 'POST', body: input, withShop: true, idempotencyKey }),
     ),
   /** GET /expenses — KHÔNG truyền period: trả toàn bộ khoản chi ACTIVE, app tự lọc theo tháng ở client */
-  list: (): Promise<ExpenseView[]> => apiRequest<ExpenseView[]>('/expenses', { withShop: true }),
+  list: (): Promise<ExpenseView[]> => fetchAllPages<ExpenseView>('/expenses'),
   getById: (id: number): Promise<ExpenseView> => apiRequest<ExpenseView>(`/expenses/${id}`, { withShop: true }),
   /** DELETE — archive */
   archive: (id: number): Promise<void> => apiRequest<void>(`/expenses/${id}`, { method: 'DELETE', withShop: true }),

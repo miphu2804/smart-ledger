@@ -12,6 +12,12 @@ const CORE_MESSAGES: Record<string, string> = {
   draft_item_invalid: 'Có món không còn trong danh mục hoặc thuộc tiệm khác',
   product_barcode_conflict: 'Mã vạch này đã dùng cho sản phẩm khác',
   product_category_invalid: 'Danh mục không hợp lệ hoặc đã ẩn',
+  image_required: 'Chưa có ảnh để lưu. Hãy chọn lại ảnh',
+  image_too_large: 'Ảnh quá lớn (tối đa 5 MB)',
+  image_type_invalid: 'Chỉ nhận ảnh JPEG hoặc PNG',
+  image_dimensions_invalid: 'Ảnh quá lớn (mỗi cạnh tối đa 2048 điểm ảnh)',
+  media_upload_in_progress: 'Ảnh đang được lưu. Vui lòng đợi một chút rồi thử lại',
+  media_unavailable: 'Chưa lưu được ảnh lúc này. Vui lòng thử lại sau',
   shop_inactive: 'Tiệm đang tạm khoá',
   shop_update_required: 'Tên tiệm và ngành hàng không được để trống',
   shop_access_denied: 'Bạn không có quyền sửa tiệm này',
@@ -50,12 +56,12 @@ export function errorMessage(e: unknown): string {
   return 'Đã có lỗi xảy ra. Vui lòng thử lại';
 }
 
-/** Mô tả kỹ thuật ngắn cho log / màn chẩn đoán: "HTTP 401 unauthorized trace=…", "AuthError invalid-code". */
+/** Mô tả kỹ thuật ngắn cho log / màn chẩn đoán: "HTTP 401 unauthorized trace=…", "AuthError invalid-credentials". */
 export function describeError(e: unknown): string {
   if (e instanceof ApiError) {
     return `${e.status ? `HTTP ${e.status}` : 'không có phản hồi'} ${e.code}${e.traceId ? ` trace=${e.traceId}` : ''}`;
   }
-  if (e instanceof AuthError) return `AuthError ${e.code}`;
+  if (e instanceof AuthError) return `AuthError ${e.code}${e.detail ? ` (${e.detail})` : ''}`;
   return String(e);
 }
 

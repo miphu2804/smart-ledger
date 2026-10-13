@@ -2,6 +2,12 @@ import React from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
 import { colors, shadow } from '../theme';
 
+/**
+ * Header thu gọn khi cuộn. Mọi hoạt ảnh chỉ dùng transform và opacity nên chạy hoàn toàn ở luồng giao diện (native driver),
+ * không phụ thuộc luồng JS: khung giữ chiều cao cố định rồi trượt lên theo độ cuộn; phần ghim và phần thân được bù ngược để
+ * đứng yên trên màn hình, còn đáy khung đi lên cắt dần phần thân. Trước đây animate `height` bằng JS nên mỗi khung hình
+ * phải qua luồng JS và bố cục lại, cuộn bị giật. `scrollY` phải được cập nhật bằng `Animated.event` với `useNativeDriver: true`.
+ */
 export function CollapsibleHeader({
   scrollY,
   topInset,
@@ -18,9 +24,14 @@ export function CollapsibleHeader({
   children: React.ReactNode;
 }) {
   const distance = Math.max(1, expandedHeight - collapsedHeight);
-  const height = scrollY.interpolate({
+  const shellTranslate = scrollY.interpolate({
     inputRange: [0, distance],
-    outputRange: [expandedHeight + topInset, collapsedHeight + topInset],
+    outputRange: [0, -distance],
+    extrapolate: 'clamp',
+  });
+  const counterTranslate = scrollY.interpolate({
+    inputRange: [0, distance],
+    outputRange: [0, distance],
     extrapolate: 'clamp',
   });
   const bodyOpacity = scrollY.interpolate({
@@ -40,12 +51,18 @@ export function CollapsibleHeader({
   });
 
   return (
-    <Animated.View style={[styles.shell, { height }]}>
-      <View style={[styles.pinned, { top: topInset, height: collapsedHeight }]}>{pinned}</View>
+    <Animated.View style={[styles.shell, { height: expandedHeight + topInset, transform: [{ translateY: shellTranslate }] }]}>
+      <Animated.View style={[styles.pinned, { top: topInset, height: collapsedHeight, transform: [{ translateY: counterTranslate }] }]}>
+        {pinned}
+      </Animated.View>
       <Animated.View
         style={[
           styles.body,
-          { top: topInset + collapsedHeight, opacity: bodyOpacity, transform: [{ translateY: bodyTranslate }] },
+          {
+            top: topInset + collapsedHeight,
+            opacity: bodyOpacity,
+            transform: [{ translateY: counterTranslate }, { translateY: bodyTranslate }],
+          },
         ]}
       >
         {children}

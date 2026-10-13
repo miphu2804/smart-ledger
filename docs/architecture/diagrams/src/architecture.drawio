@@ -299,6 +299,21 @@
             </mxGeometry>
           </mxCell>
         </UserObject>
+        <UserObject label="Cloudinary · media storage" mermaidId="n:cloudinary" mermaidBaseStyle="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=light-dark(#E6F7FF,#1f2020);strokeColor=light-dark(#1890FF,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" mermaidBaseValue="Cloudinary · media storage" id="46">
+          <mxCell parent="1" style="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=light-dark(#E6F7FF,#1f2020);strokeColor=light-dark(#1890FF,#cccccc);fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" vertex="1">
+            <mxGeometry height="54" width="220" x="3680" y="230" as="geometry" />
+          </mxCell>
+        </UserObject>
+        <UserObject label="provider API / delivery URL" mermaidId="e:core_hub-&gt;cloudinary#0" mermaidBaseStyle="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#1890FF,#cccccc);html=1;fontSize=16;labelBackgroundColor=light-dark(#E8E8E88D,#2a2a2a8D);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontColor=light-dark(#333333,#cccccc);exitX=1;exitY=0.65;entryX=0;entryY=0.5;" mermaidBaseValue="provider API / delivery URL" id="47">
+          <mxCell edge="1" parent="1" source="3" style="curved=1;startArrow=none;endArrow=block;endSize=7;strokeColor=light-dark(#1890FF,#cccccc);html=1;fontSize=16;labelBackgroundColor=light-dark(#E8E8E88D,#2a2a2a8D);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontColor=light-dark(#333333,#cccccc);exitX=1;exitY=0.65;entryX=0;entryY=0.5;" target="46">
+            <mxGeometry relative="1" as="geometry">
+              <Array as="points">
+                <mxPoint x="3550" y="215" />
+                <mxPoint x="3620" y="257" />
+              </Array>
+            </mxGeometry>
+          </mxCell>
+        </UserObject>
       </root>
     </mxGraphModel>
   </diagram>

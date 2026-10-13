@@ -25,9 +25,13 @@ Biến môi trường (xem `.env.example`):
 | `VITE_API_ENDPOINT` | `http://localhost:8000` | Địa chỉ backend |
 | `VITE_USE_MOCK` | (bật) | Đặt `false` để gọi API thật thay vì dữ liệu mẫu |
 | `VITE_CONTACT_EMAIL` | (trống) | Email nhận yêu cầu về dữ liệu cá nhân, hiện trên `/privacy` và `/data-deletion`. Để trống thì hai trang hiện chỗ trống thay vì địa chỉ giả |
+| `VITE_ANDROID_APK_URL` | (trống) | Liên kết tải APK Android trên trang giới thiệu (xem [Publish the APK for the landing page](../../docs/development/ci-cd.md#publish-the-apk-for-the-landing-page)). Để trống thì nút tải hiện "Sắp ra mắt" và không bấm được |
+| `VITE_ADMIN_ENABLED` | (tắt) | `true` bật trang quản trị `/admin`. Tắt thì bản build không có mã admin, tài khoản demo cũng không lọt vào bundle. Đặt `true` trong `.env.local` khi phát triển |
 | `VITE_LEGAL_DRAFT` | `true` | Hai trang pháp lý hiện nhãn "Bản nháp" cho đến khi chủ sản phẩm duyệt; đặt `false` lúc build để gỡ nhãn |
 
 ## Trang quản trị
+
+Chỉ chạy khi `VITE_ADMIN_ENABLED=true` (mặc định tắt). Khi phát triển, đặt trong `.env.local`; các bản deploy không đặt biến này.
 
 Giao diện "calm operations": nền trung tính ấm, accent xanh lá (#2F7A43 / #8FD17D), radius 16/10/999, font Geist, icon Phosphor (regular). Token nằm đầu `src/styles/admin.css`, toàn bộ CSS admin nằm trong `.adm` nên không ảnh hưởng trang giới thiệu.
 
@@ -68,17 +72,27 @@ Giao diện theo app mobile mới: tím thương hiệu `#482AAC`, nền kem `#F
 
 | Đường dẫn | Nguồn |
 | --- | --- |
-| `screens/{home,voice,checkout,orders,pos,reports,products}.webp` | Ảnh chụp app mobile ở chế độ mock (`EXPO_PUBLIC_USE_MOCK=true`), viewport 390×844, tỉ lệ 2x. Dữ liệu trong ảnh là dữ liệu mẫu; ẩn mascot nổi khi chụp để không đè nội dung |
+| `screens/{home,voice,checkout,orders,pos,reports,products}.webp` | Ảnh chụp app mobile ở chế độ mock (`EXPO_PUBLIC_USE_MOCK=true`), chụp toàn màn hình trên iOS Simulator iPhone 17 Pro Max (440×956 pt), xuất 660×1434. Đã xoá thanh trạng thái (giờ, sóng, pin, Dynamic Island). Dữ liệu trong ảnh là dữ liệu mẫu; ẩn mascot nổi khi chụp để không đè nội dung |
 | `brand/logo.webp`, `favicon.png`, `apple-touch-icon.png` | `frontend/mobile/assets/brand-logo.png` (icon của app) |
 | `brand/robot.webp`, `brand/agent-*.webp` | `frontend/mobile/assets/bubblelogo.png`, `assets/voice/agent-*.png` |
 | `brand/icons/*.webp` | Icon 3D trong `frontend/mobile/assets/tab1-overview` và `tab4-management` |
 | `brand/app-icon-1024.png` | Icon 1024×1024 cho trang cài đặt app Meta (Facebook Login), dựng từ `bubblelogo.png` |
 
-Chụp lại ảnh khi giao diện app đổi: chạy app ở chế độ mock (`npx expo start --web` trong `../mobile` với ba biến `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS` đặt `true`), mở bằng trình duyệt cỡ 390×844 rồi lưu WebP.
+Chụp lại ảnh khi giao diện app đổi: chạy dev build trên simulator ở chế độ mock (`npx expo start --dev-client` trong `../mobile` với ba biến `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS` đặt `true`), chụp bằng `xcrun simctl io booted screenshot`, phủ 186 px trên cùng (thanh trạng thái @3x) bằng hàng điểm ảnh ngay bên dưới, rồi `cwebp -q 82 -resize 660 0`. Giữ đúng tỉ lệ 440:956 để ảnh khớp khung điện thoại trong `landing.css`.
 
 **Trang pháp lý** (`src/pages/legal/`) chưa được duyệt theo [AGENTS.md](../../AGENTS.md). Trước khi công khai: điền `VITE_CONTACT_EMAIL`, chủ sản phẩm duyệt nội dung (kể cả cam kết xử lý yêu cầu xoá trong `DELETION_DAYS`, `src/pages/legal/legalConfig.ts`) rồi đặt `VITE_LEGAL_DRAFT=false`.
 
-**Triển khai:** CI hiện chỉ đưa bản web của `../mobile` lên Vercel; web này chưa có luồng deploy. `vercel.json` chuyển mọi đường dẫn về `index.html` để `/privacy`, `/data-deletion` mở trực tiếp được khi dùng một dự án Vercel riêng (Root Directory `frontend/web`).
+**Triển khai:** job `deploy-landing` trong [`ci.yml`](../../.github/workflows/ci.yml) build web này và đẩy lên một dự án Vercel riêng tên `landing`. Vercel Git không deploy (`git.deploymentEnabled: false` trong `vercel.json`). Ba môi trường, chi tiết ở [CI/CD](../../docs/development/ci-cd.md#landing-page-on-vercel):
+
+| Môi trường | Nhánh | Địa chỉ |
+| --- | --- | --- |
+| Preview | Pull request trong repo | `https://smart-ledger-landing-pr-<số PR>.vercel.app`, ghi trong run summary |
+| Staging | `staging` | `LANDING_URL` của environment `landing-staging` |
+| Production | `main` (cần duyệt) | `LANDING_URL` của environment `landing-production` |
+
+Thiết lập một lần trên Vercel: New Project → import repo này → Root Directory `frontend/web` (framework Vite tự nhận). Lấy project ID đặt làm secret `VERCEL_PROJECT_ID` trong ba environment `landing-*`. Biến `VITE_CONTACT_EMAIL`, `VITE_LEGAL_DRAFT` và `LANDING_URL` đặt làm Variables của từng environment.
+
+`rewrites` trong `vercel.json` chuyển mọi đường dẫn về `index.html` để `/privacy`, `/data-deletion` mở trực tiếp được.
 
 ## Trạng thái dùng chung
 

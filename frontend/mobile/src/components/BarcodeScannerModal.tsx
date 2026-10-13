@@ -4,16 +4,18 @@
  * Quy trình quét & quản lý đơn hàng:
  *  1. Khi nhận diện thành công 1 sản phẩm mới:
  *     - Hiển thị POPUP THÔNG BÁO với thông tin sản phẩm, số lượng mặc định = 1, thành tiền.
- *     - Người dùng bấm số trên bàn phím (hoặc stepper +/-) để chọn số lượng mong muốn.
+ *     - Người dùng chỉnh số lượng bằng stepper +/- trên popup.
  *     - Bấm "Xác nhận" để lưu vào đơn hàng tạm (Phần 2).
  *  2. Khóa số lượng sau khi xác nhận:
  *     - Sau khi xác nhận, popup đóng lại và số lượng được KHÓA trong đơn hàng tạm.
- *     - Camera dù có quét lại sản phẩm đó thì cũng TỰ ĐỘNG BỎ QUA vì đã có trong đơn tempo.
+ *     - Quét lại một món đã có trong đơn (sau khi mã rời khung hình rồi quay lại) thì cộng thêm 1 và kêu bíp.
+ *     - Mã không có trong danh mục đang giữ được hỏi Core (GET /products/lookup) trước khi mời tạo món mới.
+ *     - Món có theo dõi tồn mà đã hết hàng thì không vào đơn: màn quét báo "đã hết hàng"; số lượng chọn không vượt tồn.
  *  3. Chỉnh sửa số lượng:
  *     - Muốn thay đổi số lượng món nào, người dùng bấm vào sản phẩm đó trong đơn hàng tạm (Phần 2).
  *     - Popup mở lại với số lượng hiện tại để người dùng chỉnh sửa và xác nhận lại.
  *  4. Bố cục tối ưu:
- *     - Bàn phím số POS luôn hiển thị ở dưới cùng (Phần 1).
+ *     - Camera chiếm phần còn lại của màn hình; không có bàn phím số (mã vạch đi qua camera).
  *     - Phần 2 tóm tắt gọn gàng: Số món cạnh tổng tiền, nút "Thanh toán" cạnh nút "Xoá hết" (nhỏ hơn).
  *     - Vuốt sang trái để xoá từng món (swipe left to delete).
  *     - Camera (Phần 3) tràn viền qua tai thỏ, nút đổi cam & flash ở trên, âm thanh bíp POS 2000Hz, bounding box động.
@@ -25,6 +27,8 @@ import {
   Animated,
   Dimensions,
   Easing,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
   PanResponder,
   Platform,
@@ -42,7 +46,9 @@ import {
   playScanSuccessSound,
   triggerScanHaptic,
 } from '../lib/barcode';
+import { ApiError } from '../lib/api';
 import { productApi } from '../lib/catalogApi';
+import { errorMessage } from '../lib/errors';
 import { triggerFeedback } from '../lib/feedback';
 import { vnd } from '../lib/format';
 import { useReducedMotion } from '../motion';
@@ -81,11 +87,24 @@ export function BarcodeIcon({ size = 20, color = colors.primary }: { size?: numb
   );
 }
 
+/** Danh mục rỗng dùng chung khi nơi gọi không truyền `products` (giữ nguyên tham chiếu giữa các lần vẽ). */
+const NO_PRODUCTS: ProductView[] = [];
+/** Một mã phải rời khung hình ít nhất chừng này rồi quay lại mới được tính là một lần quét mới. */
+const REPEAT_GAP_MS = 1200;
+/** Core vừa báo một mã chưa có thì trong chừng này không hỏi lại (món tạo ở máy khác sẽ được nhận sau đó). */
+const MISS_TTL_MS = 15000;
+
 // ─── Props & Types ──────────────────────────────────────────────────────────
 export interface BarcodeScannerModalProps {
   visible: boolean;
   onClose: () => void;
+  /**
+   * Danh mục nơi gọi đang giữ, dùng để nhận món ngay không cần mạng. Mã không có trong đó được hỏi Core
+   * (`productApi.lookup`), nên danh mục cũ, chưa tải xong hoặc không truyền vẫn không làm món có sẵn bị coi là mới.
+   */
   products?: ProductView[];
+  /** Core trả về một món chưa có trong `products` (tạo hoặc đổi mã ở máy khác): nơi gọi thêm vào danh mục của mình. */
+  onProductFound?: (product: ProductView) => void;
   cartItems?: LineItem[];
   onAddToCart?: (product: ProductView, delta: number) => void;
   onClearCart?: () => void;
@@ -113,7 +132,8 @@ interface ProductPopupData {
 export function BarcodeScannerModal({
   visible,
   onClose,
-  products = [],
+  products: productsProp,
+  onProductFound,
   cartItems: externalCartItems,
   onAddToCart,
   onClearCart,
@@ -137,6 +157,10 @@ export function BarcodeScannerModal({
 
   // Scan throttle & timer
   const lastCodeRef      = useRef('');
+  // Vòng quét của web chạy trong setInterval tạo một lần khi mở màn: nó phải gọi qua ref để luôn dùng danh mục và
+  // trạng thái thẻ mới nhất, không phải bản của lần vẽ lúc mở (khi danh mục còn rỗng).
+  const handleCodeRef    = useRef<(raw: string) => void>(() => {});
+  const scanPausedRef    = useRef(false);
   const lastTimeRef      = useRef(0);
   const bboxTimerRef     = useRef<any>(null);
 
@@ -151,10 +175,18 @@ export function BarcodeScannerModal({
   // State nội bộ khi dùng standalone (không truyền externalCartItems)
   const [internalItems, setInternalItems] = useState<LineItem[]>([]);
   const [unknownCode, setUnknownCode]     = useState<string | null>(null);
+  // Thông báo ngắn ngay trên khung ngắm (toast của app nằm dưới Modal nên không thấy được khi đang quét)
+  const [scanNotice, setScanNotice]       = useState<{ text: string; tone: 'warn' | 'ok' } | null>(null);
+  const noticeTimerRef                    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Mã đang được hỏi Core; trong lúc chờ không nhận mã mới
+  const [lookingUp, setLookingUp]         = useState<string | null>(null);
+  // Tăng mỗi lần đóng màn quét: kết quả tra mã hoặc tạo món về muộn của lần mở trước bị bỏ qua
+  const scanSession                       = useRef(0);
+  // Mã Core vừa báo chưa có (kèm thời điểm): không hỏi lại ngay khi mã còn nằm trong khung hình
+  const missRef                           = useRef(new Map<string, number>());
 
   // POPUP cấu hình số lượng & xác nhận sản phẩm
   const [popupProduct, setPopupProduct] = useState<ProductPopupData | null>(null);
-  const isFreshScanRef = useRef(false);
 
   // State cấu hình món mới khi quét mã chưa có trong danh mục
   const [configModalCode, setConfigModalCode] = useState<string | null>(null);
@@ -166,7 +198,17 @@ export function BarcodeScannerModal({
   const [configErr, setConfigErr]             = useState('');
   const [extraProducts, setExtraProducts]     = useState<ProductView[]>([]);
 
-  // Danh mục tra cứu: sản phẩm thật của tiệm (Core, hoặc mockCore khi xem trước) và sản phẩm vừa tạo trong phiên quét.
+  // Đóng màn quét: bỏ kết quả đang chờ và những gì đã nhớ trong phiên, để lần mở sau hỏi lại Core
+  useEffect(() => {
+    if (visible) return;
+    scanSession.current += 1;
+    missRef.current.clear();
+    setLookingUp(null);
+    setConfigBusy(false);
+  }, [visible]);
+  const products = productsProp ?? NO_PRODUCTS;
+
+  // Danh mục tra cứu tại chỗ: sản phẩm nơi gọi đang giữ, cộng với món vừa tạo hoặc vừa được Core trả về trong phiên quét.
   // Không trộn dữ liệu mẫu: mã vạch mẫu sẽ ra "sản phẩm ma" có id không tồn tại ở Core, thêm vào đơn rồi checkout bị từ chối.
   const catalog: ProductView[] = useMemo(() => [...products, ...extraProducts], [products, extraProducts]);
 
@@ -174,6 +216,26 @@ export function BarcodeScannerModal({
   const displayItems = externalCartItems ?? internalItems;
   const totalCount   = displayItems.reduce((s, i) => s + i.qty, 0);
   const totalAmount  = displayItems.reduce((s, i) => s + i.price * i.qty, 0);
+
+  // Tồn còn bán được của một món: món không theo dõi tồn thì không giới hạn.
+  const stockLeft = (p: ProductView) => (p.tracked ? p.stockQuantity ?? 0 : Infinity);
+
+  const showScanNotice = (text: string, tone: 'warn' | 'ok' = 'warn') => {
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    setScanNotice({ text, tone });
+    noticeTimerRef.current = setTimeout(() => setScanNotice(null), 2600);
+  };
+  const clearScanNotice = () => {
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = null;
+    setScanNotice(null);
+  };
+  useEffect(() => {
+    if (!visible) clearScanNotice();
+    return () => {
+      if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    };
+  }, [visible]);
 
   // Cập nhật Bounding Box với timeout tự động ẩn khi không còn barcode trong khung hình
   const updateBbox = (box: BBox) => {
@@ -257,7 +319,7 @@ export function BarcodeScannerModal({
   const startScanLoop = () => {
     clearInterval(intervalRef.current);
     intervalRef.current = setInterval(async () => {
-      if (!videoRef.current || videoRef.current.readyState < 2 || popupProduct || configModalCode) return;
+      if (!videoRef.current || videoRef.current.readyState < 2 || scanPausedRef.current) return;
       try {
         const r = await detectBarcodeFromSource(videoRef.current);
         if (r?.rawValue) {
@@ -286,7 +348,7 @@ export function BarcodeScannerModal({
               height: r.boundingBox.height * scale,
             });
           }
-          handleCode(r.rawValue);
+          handleCodeRef.current(r.rawValue);
         }
       } catch { /* continue scanning */ }
     }, 180);
@@ -300,16 +362,109 @@ export function BarcodeScannerModal({
   }, [visible, permission]);
 
   // ── Barcode Handler ──────────────────────────────────────────────────────
+  // Đưa một món đã biết (có trong danh mục tại chỗ hoặc Core vừa trả về) vào luồng thêm món.
+  const presentProduct = (found: ProductView, code: string) => {
+    setUnknownCode(null);
+    // Đơn xác định món theo productId; hai món trùng tên vẫn là hai món khác nhau.
+    const inCart = displayItems.find((i) => i.productId === found.id);
+    if (inCart) {
+      // Quét lại món đã có trong đơn: cộng thêm 1 và kêu bíp như máy POS (đề xuất D2 của CORE-012), không quá số tồn.
+      if (inCart.qty + 1 > stockLeft(found)) {
+        triggerFeedback('warning');
+        showScanNotice(`${found.name} chỉ còn ${Number((found.stockQuantity ?? 0).toFixed(3))} trong kho`);
+        return;
+      }
+      playScanSuccessSound();
+      triggerScanHaptic();
+      if (onAddToCart) {
+        onAddToCart(found, 1);
+      } else {
+        setInternalItems((cur) => cur.map((i) => (i.productId === found.id ? { ...i, qty: i.qty + 1 } : i)));
+        onProductScanned?.(found, code, 1);
+      }
+      showScanNotice(`${found.name}: số lượng ${inCart.qty + 1}`, 'ok');
+      return;
+    }
+
+    // Món có theo dõi tồn mà đã hết: báo ngay trên màn quét, không mở thẻ chọn số lượng và không thêm vào đơn.
+    if (stockLeft(found) <= 0) {
+      triggerFeedback('warning');
+      showScanNotice(`${found.name} đã hết hàng`);
+      return;
+    }
+
+    // Phát âm thanh tiếng "bíp" máy POS & rung
+    playScanSuccessSound();
+    triggerScanHaptic();
+    clearScanNotice();
+
+    // HIỂN THỊ POPUP THÔNG BÁO ĐỂ CHỌN SỐ LƯỢNG VÀ XÁC NHẬN
+    setPopupProduct({
+      product: found,
+      barcode: code,
+      qty: 1,
+      isExisting: false,
+    });
+  };
+  // Kết quả tra mã về sau một lúc: gọi qua ref để dùng đơn hàng và danh mục của lần vẽ mới nhất
+  const presentProductRef = useRef(presentProduct);
+  presentProductRef.current = presentProduct;
+
+  /** Thêm món Core vừa trả về vào danh mục của phiên quét và báo cho nơi gọi (để giỏ của họ hiện được món này). */
+  const rememberProduct = (product: ProductView) => {
+    setExtraProducts((prev) => (prev.some((p) => p.id === product.id) ? prev : [...prev, product]));
+    if (!products.some((p) => p.id === product.id)) onProductFound?.(product);
+  };
+
+  // Mã không có trong danh mục tại chỗ: hỏi Core trước khi coi là mã mới. Món có thể vừa được tạo hoặc đổi mã ở máy khác.
+  const lookupUnknown = (code: string) => {
+    const missedAt = missRef.current.get(code);
+    if (missedAt !== undefined && Date.now() - missedAt < MISS_TTL_MS) {
+      triggerFeedback('warning');
+      clearScanNotice();
+      setUnknownCode(code);
+      return;
+    }
+    const session = scanSession.current;
+    setUnknownCode(null);
+    clearScanNotice();
+    setLookingUp(code);
+    productApi
+      .lookup(code)
+      .then((product) => {
+        if (session !== scanSession.current) return;
+        setLookingUp(null);
+        if (product) {
+          rememberProduct(product);
+          presentProductRef.current(product, code);
+          return;
+        }
+        missRef.current.set(code, Date.now());
+        triggerFeedback('warning');
+        setUnknownCode(code);
+      })
+      .catch(() => {
+        if (session !== scanSession.current) return;
+        setLookingUp(null);
+        // Chưa biết mã có hay chưa: không mời tạo món, kẻo tạo trùng
+        triggerFeedback('error');
+        showScanNotice('Không kiểm tra được mã. Kiểm tra mạng rồi quét lại');
+      });
+  };
+
   const handleCode = (raw: string) => {
-    // Nếu đang mở popup chỉnh sửa hoặc popup cấu hình thì tạm thời không quét thêm
-    if (popupProduct || configModalCode) return;
+    // Đang chọn số lượng, đang tạo món hoặc đang hỏi Core thì tạm thời không nhận mã mới
+    if (popupProduct || configModalCode || lookingUp) return;
 
     const code = raw.trim();
     if (!code) return;
+    // Một mã chỉ được xử lý lại sau khi đã rời khung hình một lúc: ghi nhận mọi lần nhìn thấy, kể cả lần bị bỏ qua, để
+    // giữ nguyên máy trên một món không cộng dồn hay hỏi Core liên tục.
     const now = Date.now();
-    if (lastCodeRef.current === code && now - lastTimeRef.current < 1200) return;
+    const stillInView = lastCodeRef.current === code && now - lastTimeRef.current < REPEAT_GAP_MS;
     lastCodeRef.current = code;
     lastTimeRef.current = now;
+    if (stillInView) return;
 
     if (mode === 'input') {
       playScanSuccessSound();
@@ -319,40 +474,19 @@ export function BarcodeScannerModal({
       return;
     }
 
-    const cleanCode = code.replace(/\D/g, '');
-    const found = catalog.find((p) => {
-      if (!p.barcode) return false;
-      const bClean = p.barcode.replace(/\D/g, '');
-      return p.barcode === code || bClean === cleanCode;
-    });
+    // So khớp chính xác từng ký tự: "ABC-123" và "123" là hai mã khác nhau.
+    const found = catalog.find((p) => p.barcode === code);
+    if (found) presentProduct(found, code);
+    else lookupUnknown(code);
+  };
+  handleCodeRef.current = handleCode;
+  scanPausedRef.current = !!popupProduct || !!configModalCode || !!lookingUp;
 
-    if (found) {
-      // KIỂM TRA ĐẶC BIỆT: Nếu sản phẩm ĐÃ CÓ trong đơn hàng tempo -> BỎ QUA HOÀN TOÀN!
-      const alreadyInCart = displayItems.some(
-        (i) => i.productId === found.id || i.name === found.name
-      );
-      if (alreadyInCart) {
-        // Đã có trong đơn hàng -> Bỏ qua, không tự động cộng dồn số lượng!
-        return;
-      }
-
-      // Phát âm thanh tiếng "bíp" máy POS & rung
-      playScanSuccessSound();
-      triggerScanHaptic();
-      setUnknownCode(null);
-
-      // HIỂN THỊ POPUP THÔNG BÁO ĐỂ CHỌN SỐ LƯỢNG VÀ XÁC NHẬN
-      setPopupProduct({
-        product: found,
-        barcode: code,
-        qty: 1,
-        isExisting: false,
-      });
-      isFreshScanRef.current = true;
-    } else {
-      triggerFeedback('warning');
-      setUnknownCode(code);
-    }
+  /** Vừa xử lý xong một mã (thêm, huỷ, tạo món): mã đó còn trong khung hình thì chưa tính là quét lại. */
+  const holdCode = (code: string | null | undefined) => {
+    if (!code) return;
+    lastCodeRef.current = code;
+    lastTimeRef.current = Date.now();
   };
 
   // ── Xác nhận số lượng từ popup (Khoá số lượng và lưu vào đơn) ────────────
@@ -363,9 +497,7 @@ export function BarcodeScannerModal({
 
     if (isExisting) {
       // Cập nhật lại số lượng của món đã có trong đơn hàng tạm
-      const existingItem = displayItems.find(
-        (i) => i.productId === product.id || i.name === product.name
-      );
+      const existingItem = displayItems.find((i) => i.productId === product.id);
       const oldQty = existingItem ? existingItem.qty : 0;
       const delta = safeQty - oldQty;
 
@@ -373,11 +505,7 @@ export function BarcodeScannerModal({
         onAddToCart(product, delta);
       } else {
         setInternalItems((cur) =>
-          cur.map((i) =>
-            i.productId === product.id || i.name === product.name
-              ? { ...i, qty: safeQty }
-              : i
-          )
+          cur.map((i) => (i.productId === product.id ? { ...i, qty: safeQty } : i))
         );
       }
     } else {
@@ -399,10 +527,12 @@ export function BarcodeScannerModal({
     }
 
     // Đóng popup -> số lượng được khóa!
+    holdCode(barcode);
     setPopupProduct(null);
   };
 
   const handleCancelPopup = () => {
+    holdCode(popupProduct?.barcode);
     setPopupProduct(null);
   };
 
@@ -417,6 +547,7 @@ export function BarcodeScannerModal({
   };
 
   const handleCloseConfig = () => {
+    holdCode(configModalCode);
     setConfigModalCode(null);
     setConfigErr('');
   };
@@ -433,39 +564,28 @@ export function BarcodeScannerModal({
       return;
     }
 
+    const session = scanSession.current;
+    const code = configModalCode;
     setConfigBusy(true);
     setConfigErr('');
 
     try {
-      let createdProduct: ProductView;
-      try {
-        createdProduct = await productApi.create({
-          name: trimmedName,
-          barcode: configModalCode,
-          unit: configUnit.trim() || 'cái',
-          sellingPriceVnd: priceNum,
-          tracked: false,
-          stockQuantity: null,
-        });
-      } catch {
-        // Fallback offline / mock
-        createdProduct = {
-          id: Date.now(),
-          shopId: 1,
-          categoryId: null,
-          name: trimmedName,
-          barcode: configModalCode,
-          imageUrl: null,
-          unit: configUnit.trim() || 'cái',
-          sellingPriceVnd: priceNum,
-          costPriceVnd: null,
-          tracked: false,
-          stockQuantity: null,
-          status: 'ACTIVE',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
+      // Lỗi tạo món (mất mạng, 400, 401…) rơi xuống catch bên dưới và hiện trên thẻ; không dựng món giả với id không
+      // tồn tại ở Core vì đơn chứa nó sẽ bị từ chối lúc thanh toán.
+      const createdProduct: ProductView = await productApi.create({
+        name: trimmedName,
+        barcode: code,
+        unit: configUnit.trim() || 'cái',
+        sellingPriceVnd: priceNum,
+        tracked: false,
+        stockQuantity: null,
+      });
+      // Màn quét đã đóng trong lúc chờ: món đã được tạo ở Core, chỉ báo cho nơi gọi rồi dừng
+      if (session !== scanSession.current) {
+        onProductCreated?.(createdProduct);
+        return;
       }
+      if (code) missRef.current.delete(code);
 
       setExtraProducts((prev) => [...prev, createdProduct]);
       onProductCreated?.(createdProduct);
@@ -494,19 +614,51 @@ export function BarcodeScannerModal({
       }
       triggerFeedback('success');
 
+      holdCode(code);
       setConfigModalCode(null);
       setUnknownCode(null);
     } catch (e: any) {
+      if (session !== scanSession.current) return;
+      // Mã vừa bị một món khác dùng (tạo ở máy khác sau lúc tra): chuyển sang món đang giữ mã thay vì bắt nhập lại.
+      const holder = mode === 'order' && code ? await findBarcodeHolder(e, code) : null;
+      if (session !== scanSession.current) return;
+      if (holder && code) {
+        missRef.current.delete(code);
+        rememberProduct(holder);
+        holdCode(code);
+        setConfigModalCode(null);
+        setConfigErr('');
+        presentProductRef.current(holder, code);
+        // Hiện sau khi mở thẻ: mở thẻ sẽ xoá thông báo đang có
+        showScanNotice(`Mã này đã thuộc món "${holder.name}"`);
+        return;
+      }
       triggerFeedback('error');
-      setConfigErr(e?.message || 'Không thể lưu mặt hàng');
+      setConfigErr(errorMessage(e));
     } finally {
-      setConfigBusy(false);
+      if (session === scanSession.current) setConfigBusy(false);
+    }
+  };
+
+  /**
+   * Lỗi `409 product_barcode_conflict` khi tạo món: trả sản phẩm ACTIVE đang giữ mã. Core kèm `productId` trong details
+   * khi phát hiện trùng; 409 do tranh chấp ở DB có thể không kèm, khi đó hỏi lại bằng lookup. Không xác định được thì null.
+   */
+  const findBarcodeHolder = async (e: unknown, code: string): Promise<ProductView | null> => {
+    if (!(e instanceof ApiError) || e.code !== 'product_barcode_conflict') return null;
+    const holderId = e.details.find((d) => d.field === 'barcode' && typeof d.productId === 'number')?.productId;
+    const known = holderId !== undefined ? catalog.find((p) => p.id === holderId) : undefined;
+    if (known) return known;
+    try {
+      return await productApi.lookup(code);
+    } catch {
+      return null;
     }
   };
 
   // ── Khi bấm vào 1 sản phẩm trong đơn hàng tạm (Phần 2) để thay đổi số lượng ─
   const handleTapItemToEdit = (item: LineItem) => {
-    const product = catalog.find((p) => p.id === item.productId || p.name === item.name);
+    const product = catalog.find((p) => p.id === item.productId);
     if (!product) return;
 
     setPopupProduct({
@@ -514,7 +666,6 @@ export function BarcodeScannerModal({
       qty: item.qty,
       isExisting: true,
     });
-    isFreshScanRef.current = false;
   };
 
   // ── Xoá một sản phẩm khỏi đơn hàng (qua swipe left) ───────────────────────
@@ -539,47 +690,23 @@ export function BarcodeScannerModal({
     setPopupProduct(null);
   };
 
-  // ── Bàn phím số POS: Điều khiển số lượng của popup ───────────────────────
-  const handleKeypadPress = (char: string) => {
-    if (!popupProduct) return;
-
-    let newQty: number;
-    if (isFreshScanRef.current) {
-      newQty = parseInt(char, 10) || 1;
-      isFreshScanRef.current = false;
-    } else {
-      const curStr = String(popupProduct.qty);
-      const nextStr = (curStr + char).slice(0, 4);
-      newQty = parseInt(nextStr, 10) || 1;
-    }
-
-    setPopupProduct((prev) => (prev ? { ...prev, qty: Math.max(1, newQty) } : null));
-  };
-
-  const handleKeypadBackspace = () => {
-    if (!popupProduct) return;
-
-    const curStr = String(popupProduct.qty);
-    if (curStr.length <= 1) {
-      setPopupProduct((prev) => (prev ? { ...prev, qty: 1 } : null));
-      isFreshScanRef.current = true;
-    } else {
-      const nextStr = curStr.slice(0, -1);
-      setPopupProduct((prev) => (prev ? { ...prev, qty: parseInt(nextStr, 10) || 1 } : null));
-    }
-  };
-
-  const handleKeypadClear = () => {
-    if (!popupProduct) return;
-    setPopupProduct((prev) => (prev ? { ...prev, qty: 1 } : null));
-    isFreshScanRef.current = true;
-  };
-
   // ── Layout Calculations: Giới hạn tối đa 50/50 giữa Phần 2 và Phần 3 ────
   const winH = Dimensions.get('window').height;
-  const keypadH = 220 + Math.max(insets.bottom, 12);
-  const availableUpperH = Math.max(280, winH - keypadH);
-  // Phần 2 tối đa chiếm 50% không gian phía trên bàn phím
+  const bottomPad = Math.max(insets.bottom, 12);
+  // Bàn phím phủ cả vùng vuốt home nên không cần chừa chân màn hình khi nó đang mở
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, () => setKeyboardOpen(true));
+    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardOpen(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+  const availableUpperH = Math.max(280, winH - bottomPad);
+  // Phần 2 tối đa chiếm 50% chiều cao màn hình (trừ chân màn hình)
   const maxPopupH = availableUpperH * 0.50;
 
   const rotateDeg = rotateAnim.interpolate({
@@ -599,14 +726,37 @@ export function BarcodeScannerModal({
       statusBarTranslucent
       onRequestClose={onClose}
     >
-      <View style={S.root}>
+      <KeyboardAvoidingView style={S.root} behavior="padding">
         {/* ════════════════════════════════════════════════════════
             PHẦN 3: CAMERA TRÀN VIỀN (Ở TRÊN)
             - Tràn đỉnh qua tai thỏ / notch
             - Nút đổi Camera & Flash ở Top HUD
             - Bounding box 4 góc bám theo mã vạch khi detect thành công
             ════════════════════════════════════════════════════════ */}
-        <View style={S.camSection}>
+        {/* Thanh trên kiểu Locket: nền tối, nút ✕, tên tính năng và số món đang có trong đơn */}
+        <View style={[S.topBar, { paddingTop: insets.top + 8 }]}>
+          <Pressable onPress={onClose} hitSlop={14} style={S.hudIconBtn} accessibilityRole="button" accessibilityLabel="Đóng">
+            <Feather name="x" size={20} color="#FFFFFF" />
+          </Pressable>
+          <View style={S.titlePill}>
+            <BarcodeIcon size={14} color="#FFFFFF" />
+            <T w="bold" size={14} color="#FFFFFF">
+              Quét mã vạch
+            </T>
+          </View>
+          <View style={S.hudIconBtn} accessibilityLabel={`${displayItems.length} món trong đơn`}>
+            <Feather name="shopping-bag" size={18} color="#FFFFFF" />
+            {displayItems.length > 0 ? (
+              <View style={S.countBadge}>
+                <T w="extrabold" size={10.5} color={colors.brandInk}>
+                  {displayItems.length}
+                </T>
+              </View>
+            ) : null}
+          </View>
+        </View>
+
+        <View style={[S.camSection, configModalCode ? S.camSectionCompact : null]}>
           {Platform.OS !== 'web' ? (
             permission?.granted ? (
               <CameraView
@@ -674,49 +824,18 @@ export function BarcodeScannerModal({
             </View>
           )}
 
-          {/* ── Top HUD Controls trên khu vực Camera ── */}
-          <View style={[S.topHud, { paddingTop: insets.top + 8 }]}>
-            {/* Title trung tâm để nhận diện tính năng Quét mã vạch */}
-            <View
-              style={[
-                StyleSheet.absoluteFill,
-                { top: insets.top + 8, alignItems: 'center', justifyContent: 'center' },
-              ]}
-              pointerEvents="none"
-            >
-              <T w="bold" size={16} color="#FFFFFF">
-                Quét mã vạch
+          {/* ── Đang hỏi Core về một mã không có trong danh mục tại chỗ ── */}
+          {lookingUp && !configModalCode && (
+            <View style={[S.unknownBanner, S.noticeBanner]} accessibilityRole="alert" accessibilityLiveRegion="polite">
+              <BarcodeIcon size={16} color={colors.primary} />
+              <T size={12.5} color={colors.ink} style={{ flex: 1 }} numberOfLines={2}>
+                Đang kiểm tra mã <T w="bold" color={colors.primaryDeep}>{lookingUp}</T>…
               </T>
             </View>
+          )}
 
-            {/* Nút Đóng (X) */}
-            <Pressable onPress={onClose} hitSlop={14} style={S.hudIconBtn}>
-              <Feather name="x" size={20} color="#FFFFFF" />
-            </Pressable>
-
-            <View style={{ flex: 1 }} />
-
-            <View style={S.hudRightBtns}>
-              {/* NÚT ĐỔI CAMERA */}
-              <Pressable onPress={toggleFacing} hitSlop={12} style={S.hudIconBtn}>
-                <Animated.View
-                  style={{
-                    transform: [{ rotate: rotateDeg }, { scale: rotateScale }],
-                  }}
-                >
-                  <Feather name="refresh-cw" size={18} color="#FFFFFF" />
-                </Animated.View>
-              </Pressable>
-
-              {/* NÚT FLASH: KHÔNG CÓ Ô BAO QUANH, icon sấm sét chuẩn Apple gọn gàng */}
-              <Pressable onPress={toggleFlash} hitSlop={14} style={S.flashBtn}>
-                <FlashLightning active={torch} scaleAnim={flashScaleAnim} />
-              </Pressable>
-            </View>
-          </View>
-
-          {/* ── Cảnh báo mã chưa có trong danh mục & Nút Cấu hình ── */}
-          {unknownCode && !configModalCode && (
+          {/* ── Cảnh báo mã chưa có trong danh mục & Nút Cấu hình (chỉ hiện sau khi Core xác nhận chưa có) ── */}
+          {unknownCode && !lookingUp && !configModalCode && (
             <Pressable
               onPress={() => handleOpenConfig(unknownCode)}
               style={({ pressed }) => [S.unknownBanner, pressed && { opacity: 0.92 }]}
@@ -744,6 +863,7 @@ export function BarcodeScannerModal({
                 <Pressable
                   onPress={(e) => {
                     e.stopPropagation?.();
+                    holdCode(unknownCode);
                     setUnknownCode(null);
                   }}
                   hitSlop={10}
@@ -754,13 +874,64 @@ export function BarcodeScannerModal({
               </View>
             </Pressable>
           )}
+
+          {/* ── Thông báo ngắn của lần quét vừa rồi (ví dụ món đã hết hàng) ── */}
+          {scanNotice && !unknownCode && !lookingUp && !configModalCode && (
+            <View style={[S.unknownBanner, S.noticeBanner]} accessibilityRole="alert" accessibilityLiveRegion="polite">
+              <Feather
+                name={scanNotice.tone === 'ok' ? 'check-circle' : 'alert-circle'}
+                size={16}
+                color={scanNotice.tone === 'ok' ? colors.green : colors.red}
+              />
+              <T w="semibold" size={12.5} color={colors.ink} style={{ flex: 1 }} numberOfLines={2}>
+                {scanNotice.text}
+              </T>
+            </View>
+          )}
         </View>
+
+        {/* Hàng điều khiển dưới khung ngắm (ẩn khi đang xác nhận món để nhường chỗ cho thẻ bên dưới) */}
+        {!popupProduct && !configModalCode && (
+          <View style={S.controlRow}>
+            <Pressable
+              onPress={toggleFlash}
+              hitSlop={10}
+              style={S.ctrlBtn}
+              accessibilityRole="button"
+              accessibilityLabel={torch ? 'Tắt đèn flash' : 'Bật đèn flash'}
+            >
+              <FlashLightning active={torch} scaleAnim={flashScaleAnim} />
+            </Pressable>
+
+            {/* Vòng ở giữa như nút chụp của Locket: chỉ báo đang quét (xanh khi vừa nhận mã), không bấm được */}
+            <View
+              style={[S.scanRing, detectedBbox ? { borderColor: "#8FDB6E" } : null]}
+              accessibilityLabel="Đang quét mã vạch"
+            >
+              <View style={S.scanRingInner}>
+                <BarcodeIcon size={26} color={colors.ink} />
+              </View>
+            </View>
+
+            <Pressable
+              onPress={toggleFacing}
+              hitSlop={10}
+              style={S.ctrlBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Đổi camera"
+            >
+              <Animated.View style={{ transform: [{ rotate: rotateDeg }, { scale: rotateScale }] }}>
+                <Feather name="refresh-cw" size={20} color="#FFFFFF" />
+              </Animated.View>
+            </Pressable>
+          </View>
+        )}
 
         {/* ════════════════════════════════════════════════════════
             POPUP CẤU HÌNH SẢN PHẨM MỚI (KHI QUÉT MÃ CHƯA CÓ)
             ════════════════════════════════════════════════════════ */}
         {configModalCode && (
-          <View style={S.configCard}>
+          <View style={[S.configCard, { flexShrink: 1 }]}>
             {/* Header */}
             <View style={S.configHeader}>
               <View style={{ flex: 1 }}>
@@ -779,8 +950,13 @@ export function BarcodeScannerModal({
               </Pressable>
             </View>
 
-            {/* Form Fields */}
-            <View style={S.configForm}>
+            {/* Form Fields (cuộn được khi bàn phím chiếm nhiều chỗ, chạm nút vẫn nhận ngay khi bàn phím đang mở) */}
+            <ScrollView
+              style={{ flexShrink: 1 }}
+              contentContainerStyle={S.configForm}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
               <View style={S.inputField}>
                 <T size={12} color={colors.muted} w="semibold">Tên mặt hàng *</T>
                 <TextInput
@@ -856,7 +1032,7 @@ export function BarcodeScannerModal({
               {configErr ? (
                 <T size={12} color={colors.red} style={{ marginTop: 2 }}>{configErr}</T>
               ) : null}
-            </View>
+            </ScrollView>
 
             {/* Buttons: [ Huỷ ] [ Lưu & Thêm ] */}
             <View style={S.btnRow}>
@@ -920,7 +1096,6 @@ export function BarcodeScannerModal({
                     setPopupProduct((prev) =>
                       prev ? { ...prev, qty: Math.max(1, prev.qty - 1) } : null
                     );
-                    isFreshScanRef.current = false;
                   }}
                   style={S.popupStepBtn}
                   hitSlop={8}
@@ -934,15 +1109,18 @@ export function BarcodeScannerModal({
                   </T>
                 </View>
 
+                {/* Không cho chọn quá số tồn của món có theo dõi tồn: Core sẽ từ chối đơn lúc thanh toán */}
                 <Pressable
                   onPress={() => {
                     setPopupProduct((prev) =>
-                      prev ? { ...prev, qty: prev.qty + 1 } : null
+                      prev && prev.qty + 1 <= stockLeft(prev.product) ? { ...prev, qty: prev.qty + 1 } : prev
                     );
-                    isFreshScanRef.current = false;
                   }}
-                  style={S.popupStepBtn}
+                  disabled={popupProduct.qty + 1 > stockLeft(popupProduct.product)}
+                  style={[S.popupStepBtn, popupProduct.qty + 1 > stockLeft(popupProduct.product) && { opacity: 0.35 }]}
                   hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Tăng số lượng"
                 >
                   <Feather name="plus" size={16} color={colors.ink} />
                 </Pressable>
@@ -1013,14 +1191,17 @@ export function BarcodeScannerModal({
 
               {/* Hàng nút bấm tối giản: [ Xoá ] [ Thanh toán ] */}
               <View style={S.btnRow}>
-                <Pressable
-                  onPress={handleClearAll}
-                  style={({ pressed }) => [S.clearBtn, pressed && { opacity: 0.7 }]}
-                  hitSlop={6}
-                >
-                  <Feather name="trash-2" size={15} color={colors.red} />
-                  <T w="bold" size={14} color={colors.red}>Xoá</T>
-                </Pressable>
+                {/* Đơn do nơi gọi giữ mà không cho xoá hết (màn Thanh toán) thì không hiện nút này */}
+                {externalCartItems && !onClearCart ? null : (
+                  <Pressable
+                    onPress={handleClearAll}
+                    style={({ pressed }) => [S.clearBtn, pressed && { opacity: 0.7 }]}
+                    hitSlop={6}
+                  >
+                    <Feather name="trash-2" size={15} color={colors.red} />
+                    <T w="bold" size={14} color={colors.red}>Xoá</T>
+                  </Pressable>
+                )}
 
                 <Pressable
                   onPress={() => {
@@ -1040,54 +1221,9 @@ export function BarcodeScannerModal({
           </View>
         )}
 
-        {/* ════════════════════════════════════════════════════════
-            PHẦN 1: BÀN PHÍM SỐ POS (LÚC NÀO CŨNG HIỂN THỊ)
-            - Dùng để nhập số lượng sản phẩm trên popup
-            - 3x4 layout chuẩn máy POS / OTP
-            - Hàng 4: [ C (Về 1) ] [ 0 ] [ ⌫ (Xoá lùi) ]
-            ════════════════════════════════════════════════════════ */}
-        <View style={[S.keypadContainer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-          {/* Row 1 */}
-          <View style={S.keyRow}>
-            <KeyBtn label="1" onPress={() => handleKeypadPress('1')} />
-            <KeyBtn label="2" onPress={() => handleKeypadPress('2')} />
-            <KeyBtn label="3" onPress={() => handleKeypadPress('3')} />
-          </View>
-
-          {/* Row 2 */}
-          <View style={S.keyRow}>
-            <KeyBtn label="4" onPress={() => handleKeypadPress('4')} />
-            <KeyBtn label="5" onPress={() => handleKeypadPress('5')} />
-            <KeyBtn label="6" onPress={() => handleKeypadPress('6')} />
-          </View>
-
-          {/* Row 3 */}
-          <View style={S.keyRow}>
-            <KeyBtn label="7" onPress={() => handleKeypadPress('7')} />
-            <KeyBtn label="8" onPress={() => handleKeypadPress('8')} />
-            <KeyBtn label="9" onPress={() => handleKeypadPress('9')} />
-          </View>
-
-          {/* Row 4: [C] [0] [⌫] */}
-          <View style={S.keyRow}>
-            <Pressable
-              onPress={handleKeypadClear}
-              style={({ pressed }) => [S.keyBtn, pressed && S.keyPressed]}
-            >
-              <T w="bold" size={19} color={colors.muted}>C</T>
-            </Pressable>
-
-            <KeyBtn label="0" onPress={() => handleKeypadPress('0')} />
-
-            <Pressable
-              onPress={handleKeypadBackspace}
-              style={({ pressed }) => [S.keyBtn, pressed && S.keyPressed]}
-            >
-              <Feather name="delete" size={20} color={colors.muted} />
-            </Pressable>
-          </View>
-        </View>
-      </View>
+        {/* Chừa chân màn hình (vùng vuốt home) dưới các thẻ ở dưới cùng. Mã vạch dùng camera nên không còn bàn phím số. */}
+        <View style={{ height: keyboardOpen ? 0 : bottomPad, backgroundColor: DARK_BG }} />
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -1211,25 +1347,14 @@ function SwipeableItemRow({
   );
 }
 
-// ─── KeyBtn Component ───────────────────────────────────────────────────────
-function KeyBtn({ label, onPress }: { label: string; onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [S.keyBtn, pressed && S.keyPressed]}
-    >
-      <T w="bold" size={22} color={colors.ink}>
-        {label}
-      </T>
-    </Pressable>
-  );
-}
+// Nền tối của màn quét (kiểu camera Locket)
+const DARK_BG = '#0D0F14';
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 const S = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: DARK_BG,
   },
 
   // ─── PHẦN 3: Camera ───────────────────────────────────────────────────────
@@ -1238,10 +1363,14 @@ const S = StyleSheet.create({
     minHeight: 160,
     backgroundColor: '#000000',
     overflow: 'hidden',
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
+    marginHorizontal: 12,
+    borderRadius: 32,
     position: 'relative',
-    ...shadow(2),
+  },
+
+  // Đang nhập thông tin món mới: camera chỉ còn phần dư, thẻ nhập được ưu tiên chỗ
+  camSectionCompact: {
+    minHeight: 0,
   },
 
   noCamera: {
@@ -1277,42 +1406,89 @@ const S = StyleSheet.create({
   bboxBL: { bottom: -2, left: -2, borderBottomWidth: 3, borderLeftWidth: 3, borderBottomLeftRadius: 6 },
   bboxBR: { bottom: -2, right: -2, borderBottomWidth: 3, borderRightWidth: 3, borderBottomRightRadius: 6 },
 
-  // Top HUD Controls
-  topHud: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+  // Thanh trên (ngoài khung ngắm)
+  topBar: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    zIndex: 30,
-  },
-
-  hudRightBtns: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    paddingBottom: 10,
   },
 
   hudIconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
   },
 
-  flashBtn: {
-    padding: 6,
+  titlePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 36,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+
+  countBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: '#FFC933',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Hàng điều khiển dưới khung ngắm: flash · vòng quét · đổi camera
+  controlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 40,
+    paddingVertical: 14,
+  },
+
+  ctrlBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  scanRing: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 4,
+    borderColor: '#FFC933',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  scanRingInner: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   // ─── BANNER MÃ CHƯA CÓ TRONG DANH MỤC ────────────────────────────────────
+  noticeBanner: {
+    justifyContent: 'flex-start',
+    gap: 10,
+  },
   unknownBanner: {
     position: 'absolute',
     bottom: 12,
@@ -1614,33 +1790,4 @@ const S = StyleSheet.create({
     ...shadow(1),
   },
 
-  // ─── PHẦN 1: BÀN PHÍM SỐ POS (LÚC NÀO CŨNG HIỂN THỊ) ──────────────────────
-  keypadContainer: {
-    backgroundColor: colors.bg,
-    paddingHorizontal: 14,
-    paddingTop: 8,
-    gap: 8,
-  },
-
-  keyRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-
-  keyBtn: {
-    flex: 1,
-    height: 48,
-    backgroundColor: colors.white,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadow(0),
-  },
-
-  keyPressed: {
-    backgroundColor: '#EBE8DF',
-    transform: [{ scale: 0.96 }],
-  },
 });

@@ -1,8 +1,8 @@
 import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { ActivityIndicator, Platform, Pressable, ScrollView, SectionList, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, EmptyState, Row, T } from '../../src/components/ui';
 import type { SaleView } from '../../src/data/types';
@@ -44,13 +44,11 @@ export default function Invoices() {
   const initialPeriod: Period = queryPeriod === 'yesterday' || queryPeriod === 'month' ? queryPeriod : 'all';
   const [period, setPeriod] = useState<Period>(initialPeriod);
   const [q, setQ] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
   const [sales, setSales] = useState<SaleView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const scrollY = useRef(new Animated.Value(0)).current;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -99,6 +97,10 @@ export default function Invoices() {
   const scopeName = period === 'all' ? null : periodLabel[period].toLowerCase();
   const countLabel = scopeName ? `Đơn ${scopeName}` : 'Tổng đơn hàng';
   const revenueLabel = scopeName ? `Doanh thu ${scopeName}` : 'Tổng doanh thu';
+  // Ô số đơn hẹp hơn ô doanh thu (flex 0.8 so với 1.2). Dòng chữ dưới số chỉ nêu khoảng thời gian, trùng tên nút lọc, nên luôn
+  // vừa một dòng; "Tổng đơn hàng" và "Đơn tháng này" bị cắt trên web ≤ 390px vì RN web không thu chữ theo adjustsFontSizeToFit.
+  // countLabel vẫn dùng làm nhãn đọc màn hình.
+  const countCaption = periodLabel[period];
 
   // Group sales by date
   const groupedSections = useMemo(() => {
@@ -136,6 +138,19 @@ export default function Invoices() {
     return groups;
   }, [filteredSales]);
 
+  // SectionList chỉ dựng các dòng đang nhìn thấy; nhóm đang thu gọn không có dòng nào nhưng vẫn giữ tiêu đề.
+  const sections = useMemo(
+    () =>
+      groupedSections.map((g) => ({
+        key: g.key,
+        title: g.title,
+        totalVnd: g.totalVnd,
+        count: g.sales.length,
+        data: collapsedGroups[g.key] ? ([] as SaleView[]) : g.sales,
+      })),
+    [groupedSections, collapsedGroups],
+  );
+
   const toggleGroupCollapse = (key: string) => {
     triggerFeedback('selection');
     setCollapsedGroups((cur) => ({ ...cur, [key]: !cur[key] }));
@@ -149,13 +164,72 @@ export default function Invoices() {
     { key: 'month', label: 'Tháng này' },
   ];
 
+  // Thẻ tóm tắt nằm đầu danh sách (cuộn cùng danh sách)
+  const listHeader = (
+    <>
+          {/* Top Summary Metric Card */}
+          <View style={styles.summaryCard}>
+            {/* Left Metric: Tổng đơn hàng */}
+            <Pressable
+              onPress={() => {
+                triggerFeedback('selection');
+                setPeriod('all');
+                setQ('');
+              }}
+              style={({ pressed }) => [styles.summaryMetricBtn, styles.summaryMetricCount, pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }]}
+              accessibilityRole="button"
+              accessibilityLabel={`${countLabel}: ${count} đơn. Bấm để xem tất cả`}
+            >
+              <View style={styles.summaryIconPurple}>
+                <Feather name="shopping-bag" size={17} color={colors.brand} />
+              </View>
+              <View style={styles.summaryText}>
+                <T w="extrabold" size={figureSize(`${count} đơn`)} color={colors.ink} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                  {count} đơn
+                </T>
+                <T size={12} color={colors.muted} style={{ marginTop: 1 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                  {countCaption}
+                </T>
+              </View>
+            </Pressable>
+
+            {/* Middle Divider */}
+            <View style={styles.summaryDivider} />
+
+            {/* Right Metric: Tổng doanh thu */}
+            <Pressable
+              onPress={() => {
+                triggerFeedback('selection');
+                router.push('/analytics');
+              }}
+              style={({ pressed }) => [styles.summaryMetricBtn, styles.summaryMetricRevenue, pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }]}
+              accessibilityRole="button"
+              accessibilityLabel={`${revenueLabel}: ${vnd(total)}. Bấm để xem báo cáo chi tiết`}
+            >
+              <View style={styles.summaryIconYellow}>
+                <Feather name="database" size={16} color={colors.data.debt} />
+              </View>
+              <View style={styles.summaryText}>
+                <T w="extrabold" size={figureSize(vnd(total))} color={colors.ink} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                  {vnd(total)}
+                </T>
+                <T size={12} color={colors.muted} style={{ marginTop: 1 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                  {revenueLabel}
+                </T>
+              </View>
+            </Pressable>
+          </View>
+
+    </>
+  );
+
   return (
     <View style={styles.screen}>
       <StatusBar style="dark" />
 
       {/* Header Container */}
       <View style={[styles.headerShell, { paddingTop: insets.top + 8 }]}>
-        {/* Title and Search Button Row */}
+        {/* Title Row */}
         <Row style={styles.heroRow} gap={10}>
           <View style={{ flex: 1 }}>
             <T w="extrabold" size={28} color={colors.ink}>
@@ -165,39 +239,26 @@ export default function Invoices() {
               Quản lý và theo dõi đơn hàng
             </T>
           </View>
-          <Pressable
-            onPress={() => {
-              triggerFeedback('selection');
-              setSearchOpen((cur) => !cur);
-              if (searchOpen) setQ('');
-            }}
-            style={({ pressed }) => [styles.searchBtn, pressed && { opacity: 0.8 }]}
-            accessibilityRole="button"
-            accessibilityLabel={searchOpen ? 'Đóng tìm kiếm' : 'Tìm kiếm'}
-          >
-            <Feather name={searchOpen ? 'x' : 'search'} size={19} color={colors.brand} />
-          </Pressable>
         </Row>
 
-        {/* Expandable Search Input */}
-        {searchOpen ? (
-          <View style={styles.searchBox}>
-            <Feather name="search" size={16} color={colors.faint} />
-            <TextInput
-              autoFocus
-              value={q}
-              onChangeText={setQ}
-              placeholder="Tìm theo khách, tên món, mã đơn..."
-              placeholderTextColor={colors.faint}
-              style={styles.searchInput}
-            />
-            {q ? (
-              <Pressable onPress={() => setQ('')} hitSlop={8}>
-                <Feather name="x-circle" size={15} color={colors.muted} />
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null}
+        {/* Search Input (luôn hiện, cùng kiểu với màn Bán hàng) */}
+        <View style={styles.searchBox}>
+          <Feather name="search" size={18} color={colors.faint} />
+          <TextInput
+            value={q}
+            onChangeText={setQ}
+            placeholder="Tìm theo khách, tên món, mã đơn..."
+            placeholderTextColor="#9CA3AF"
+            style={styles.searchInput}
+            returnKeyType="search"
+            accessibilityLabel="Tìm đơn hàng"
+          />
+          {q ? (
+            <Pressable onPress={() => setQ('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Xoá tìm kiếm">
+              <Feather name="x-circle" size={15} color={colors.muted} />
+            </Pressable>
+          ) : null}
+        </View>
 
         {/* Period Chips Filter */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.periodScroll}>
@@ -242,116 +303,51 @@ export default function Invoices() {
           <Button title="Thử lại" variant="outline" onPress={load} />
         </View>
       ) : (
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom + 84, 108) }]}
-          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
-          scrollEventThrottle={16}
-        >
-          {/* Top Summary Metric Card */}
-          <View style={styles.summaryCard}>
-            {/* Left Metric: Tổng đơn hàng */}
+        <SectionList
+          sections={sections}
+          extraData={collapsedGroups}
+          keyExtractor={(sale) => String(sale.id)}
+          renderItem={({ item }) => <OrderCard sale={item} />}
+          renderSectionHeader={({ section }) => (
             <Pressable
-              onPress={() => {
-                triggerFeedback('selection');
-                setPeriod('all');
-                setQ('');
-              }}
-              style={({ pressed }) => [styles.summaryMetricBtn, styles.summaryMetricCount, pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }]}
-              accessibilityRole="button"
-              accessibilityLabel={`${countLabel}: ${count} đơn. Bấm để xem tất cả`}
+              onPress={() => toggleGroupCollapse(section.key)}
+              style={({ pressed }) => [styles.sectionHeaderRow, pressed && { opacity: 0.75 }]}
             >
-              <View style={styles.summaryIconPurple}>
-                <Feather name="shopping-bag" size={17} color={colors.brand} />
-              </View>
-              <View style={styles.summaryText}>
-                <T w="extrabold" size={figureSize(`${count} đơn`)} color={colors.ink} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-                  {count} đơn
+              <T w="extrabold" size={13.5} color={colors.ink} style={styles.sectionTitle}>
+                {section.title}
+              </T>
+              <Row gap={6} style={{ alignItems: 'center' }}>
+                <T w="bold" size={12.5} color={colors.muted}>
+                  {section.count} đơn · {vnd(section.totalVnd)}
                 </T>
-                <T size={12} color={colors.muted} style={{ marginTop: 1 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
-                  {countLabel}
-                </T>
-              </View>
+                <Feather name={collapsedGroups[section.key] ? 'chevron-down' : 'chevron-up'} size={15} color={colors.muted} />
+              </Row>
             </Pressable>
-
-            {/* Middle Divider */}
-            <View style={styles.summaryDivider} />
-
-            {/* Right Metric: Tổng doanh thu */}
-            <Pressable
-              onPress={() => {
-                triggerFeedback('selection');
-                router.push('/analytics');
-              }}
-              style={({ pressed }) => [styles.summaryMetricBtn, styles.summaryMetricRevenue, pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }]}
-              accessibilityRole="button"
-              accessibilityLabel={`${revenueLabel}: ${vnd(total)}. Bấm để xem báo cáo chi tiết`}
-            >
-              <View style={styles.summaryIconYellow}>
-                <Feather name="database" size={16} color={colors.data.debt} />
-              </View>
-              <View style={styles.summaryText}>
-                <T w="extrabold" size={figureSize(vnd(total))} color={colors.ink} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-                  {vnd(total)}
-                </T>
-                <T size={12} color={colors.muted} style={{ marginTop: 1 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
-                  {revenueLabel}
-                </T>
-              </View>
-            </Pressable>
-          </View>
-
-          {/* Grouped Sales List */}
-          {groupedSections.length === 0 ? (
+          )}
+          renderSectionFooter={() => <View style={{ height: 14 }} />}
+          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+          ListHeaderComponent={listHeader}
+          ListEmptyComponent={
             <EmptyState
               icon={q ? 'search' : 'file-text'}
               title={q ? 'Không tìm thấy đơn' : 'Chưa có đơn hàng'}
               hint={q ? 'Thử tìm tên khách hoặc mã đơn khác' : 'Tạo đơn mới trong tab Bán hàng'}
             />
-          ) : (
-            groupedSections.map((group) => {
-              const isCollapsed = collapsedGroups[group.key];
-              return (
-                <View key={group.key} style={styles.groupSection}>
-                  {/* Date Section Header */}
-                  <Pressable
-                    onPress={() => toggleGroupCollapse(group.key)}
-                    style={({ pressed }) => [styles.sectionHeaderRow, pressed && { opacity: 0.75 }]}
-                  >
-                    <T w="extrabold" size={13.5} color={colors.ink} style={styles.sectionTitle}>
-                      {group.title}
-                    </T>
-                    <Row gap={6} style={{ alignItems: 'center' }}>
-                      <T w="bold" size={12.5} color={colors.muted}>
-                        {group.sales.length} đơn · {vnd(group.totalVnd)}
-                      </T>
-                      <Feather
-                        name={isCollapsed ? 'chevron-down' : 'chevron-up'}
-                        size={15}
-                        color={colors.muted}
-                      />
-                    </Row>
-                  </Pressable>
-
-                  {/* List of Orders in this Date Group */}
-                  {!isCollapsed ? (
-                    <View style={styles.ordersList}>
-                      {group.sales.map((sale) => (
-                        <OrderCard key={sale.id} sale={sale} />
-                      ))}
-                    </View>
-                  ) : null}
-                </View>
-              );
-            })
-          )}
-        </ScrollView>
+          }
+          stickySectionHeadersEnabled={false}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom + 84, 108) }]}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={7}
+          removeClippedSubviews={Platform.OS === 'android'}
+        />
       )}
     </View>
   );
 }
 
-function OrderCard({ sale }: { sale: SaleView }) {
+const OrderCard = React.memo(function OrderCard({ sale }: { sale: SaleView }) {
   const voided = sale.saleStatus === 'VOIDED';
   const tonePair = tilePalette[hashIndex(sale.customerName || `Customer-${sale.id}`, tilePalette.length)];
 
@@ -416,7 +412,7 @@ function OrderCard({ sale }: { sale: SaleView }) {
       </Row>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   screen: {
@@ -433,17 +429,6 @@ const styles = StyleSheet.create({
   heroRow: {
     alignItems: 'center',
     marginBottom: 8,
-  },
-  searchBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadow(0),
   },
   searchBox: {
     height: 42,

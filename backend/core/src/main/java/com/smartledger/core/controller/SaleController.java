@@ -1,17 +1,21 @@
 package com.smartledger.core.controller;
 
+import com.smartledger.core.dto.request.OwnerListQuery.Sales;
 import com.smartledger.core.dto.request.SaleVoidRequest;
+import com.smartledger.core.dto.response.PageResponse;
 import com.smartledger.core.dto.response.SaleRefundResponse;
 import com.smartledger.core.dto.response.SaleResponse;
 import com.smartledger.core.dto.response.SaleVoidResponse;
+import com.smartledger.core.enums.SaleStatus;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.SaleService;
 import com.smartledger.core.service.SaleVoidService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import java.util.List;
 import jakarta.validation.Valid;
+import java.time.OffsetDateTime;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -21,6 +25,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -37,10 +42,21 @@ public class SaleController {
     }
 
     @GetMapping
-    @Operation(summary = "List confirmed sales in the selected shop")
-    public List<SaleResponse> list(@AuthenticationPrincipal VerifiedFirebaseToken token,
-            @RequestHeader("X-Shop-Id") String shopId) {
-        return service.list(token, shopId);
+    @Operation(summary = "List sales in the selected shop, including voided history",
+            description = "DB pagination: page starts at 0; size 1-100 (default 20); offset <= 2147483647. "
+                    + "Returns items/page/size/totalElements/totalPages, not an array. "
+                    + "Ordered by soldAt/id DESC. from/to require ISO-8601 timestamps with an offset; "
+                    + "soldAt >= from and soldAt < to. Either bound may be omitted; from must precede to. "
+                    + "q searches customer/item snapshots without Vietnamese accents, or an exact sale ID.")
+    public PageResponse<SaleResponse> list(@AuthenticationPrincipal VerifiedFirebaseToken token,
+            @RequestHeader("X-Shop-Id") String shopId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) SaleStatus saleStatus,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to) {
+        return service.list(token, shopId, new Sales(page, size, q, saleStatus, from, to));
     }
 
     @GetMapping("/{saleId}")

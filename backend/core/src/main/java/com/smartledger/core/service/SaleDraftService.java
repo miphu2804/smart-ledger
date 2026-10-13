@@ -1,15 +1,16 @@
 package com.smartledger.core.service;
 
+import com.smartledger.core.dto.request.OwnerListQuery.Drafts;
 import com.smartledger.core.dto.request.SaleDraftWriteRequest;
+import com.smartledger.core.dto.response.PageResponse;
 import com.smartledger.core.dto.response.SaleDraftResponse;
 import com.smartledger.core.dto.response.SaleResponse;
 import com.smartledger.core.security.VerifiedFirebaseToken;
-import java.util.List;
 
 public interface SaleDraftService {
     SaleDraftResponse create(VerifiedFirebaseToken token, String shopId, SaleDraftWriteRequest request);
 
-    List<SaleDraftResponse> list(VerifiedFirebaseToken token, String shopId);
+    PageResponse<SaleDraftResponse> list(VerifiedFirebaseToken token, String shopId, Drafts query);
 
     SaleDraftResponse getById(VerifiedFirebaseToken token, String shopId, String draftId);
 

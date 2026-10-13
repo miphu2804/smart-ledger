@@ -1,5 +1,6 @@
 package com.smartledger.core.dto.request;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -14,7 +15,8 @@ public record ProductWriteRequest(
         @NotBlank(message = "must not be blank")
         @Size(max = 255, message = "must not exceed 255 characters")
         String name,
-        @Size(max = 100, message = "must not exceed 100 characters")
+        @Schema(description = "Trimmed before validation; blank becomes null. At most 100 Unicode code points after trim, "
+                + "no internal whitespace or control characters. Case and punctuation are preserved.")
         String barcode,
         @Size(max = 1000, message = "must not exceed 1000 characters")
         String imageUrl,
@@ -30,5 +32,12 @@ public record ProductWriteRequest(
         Boolean tracked,
         @PositiveOrZero(message = "must not be negative")
         @Digits(integer = 12, fraction = 3, message = "must fit NUMERIC(15,3)")
-        BigDecimal stockQuantity) {
+        BigDecimal stockQuantity,
+        @PositiveOrZero(message = "must not be negative")
+        @Digits(integer = 12, fraction = 3, message = "must fit NUMERIC(15,3)")
+        BigDecimal lowStockThreshold) {
+    public ProductWriteRequest(Long categoryId, String name, String barcode, String imageUrl, String unit,
+            Long sellingPriceVnd, Long costPriceVnd, Boolean tracked, BigDecimal stockQuantity) {
+        this(categoryId, name, barcode, imageUrl, unit, sellingPriceVnd, costPriceVnd, tracked, stockQuantity, null);
+    }
 }

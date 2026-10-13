@@ -4,7 +4,7 @@
 |---|---|
 | Trạng thái | đích MVP; các endpoint đã triển khai được đánh dấu riêng bên dưới |
 | Chủ sở hữu | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-10-06 |
+| Cập nhật lần cuối | 2026-10-12 |
 
 ## Tài liệu liên quan
 
@@ -22,7 +22,11 @@
 
 **Bổ sung Core ngày 2026-10-06 trên `feat/core-stock-in` (base staging `99ed97a9d03656fe782ae43c81526e68a8c0cc08`):** endpoint stock-in, contract PATCH product và ba report nâng cao dưới đây có trong nhánh này, chưa xác nhận đã merge/deploy staging. Mobile chưa được sửa để dùng các contract mới.
 
-**AI và proxy Agent:** AI có `GET /health` và năm endpoint `/internal/v1/agent/*` (chat, list, detail, rename, delete), cùng tóm tắt chat cuốn chiếu và tìm lịch sử. Mọi đường `/internal/v1/*` bắt buộc `X-Internal-Token`; thiếu/sai token hoặc AI chưa cấu hình `INTERNAL_API_TOKEN` trả `401`, riêng `/health` vẫn công khai. Core proxy `/api/v1/agent/*` sang các đường này, gửi `X-Internal-Token` và lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực; AI `404` thành `conversation_not_found`, lỗi hoặc quá thời gian khác thành `503 ai_unavailable`. Chưa có nghiệm thu đầu-cuối luồng FE → Core → AI với model thật.
+**Bổ sung media ngày 2026-10-08 trên nhánh hiện tại:** Core có upload/delete Product image, Shop logo và avatar qua Cloudinary; V13/V14 phải được migrate trước khi runtime dùng các entity mới trên DB shared. Đây chưa phải xác nhận FE/staging đã tích hợp.
+
+**CORE-011 (#153), ngày 2026-10-10:** sáu GET danh sách OWNER có phân trang trên `feat/owner-list-pagination`, base staging `50891aabf8b6ba48406799fa5c31fef8c823569f`. Contract dưới đây là breaking change cần phối hợp FE qua #144; chưa xác nhận merge/deploy hoặc nghiệm thu tích hợp. Các API detail, ghi và báo cáo không đổi.
+
+**AI và proxy Agent:** AI có `GET /health` và sáu endpoint `/internal/v1/agent/*` (chat, chat/stream, list, detail, rename, delete); Core proxy cả sáu endpoint. Mọi đường `/internal/v1/*` bắt buộc `X-Internal-Token`; thiếu/sai token hoặc AI chưa cấu hình `INTERNAL_API_TOKEN` trả `401`, riêng `/health` vẫn công khai. Core proxy `/api/v1/agent/*` sang sáu đường này, gửi `X-Internal-Token` và lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực; AI `404` thành `conversation_not_found`, lỗi hoặc quá thời gian khác thành `503 ai_unavailable`, kể cả `422` mang mã guardrail của AI (mục 6) vì Core chưa chuyển tiếp mã này. Chưa có nghiệm thu đầu-cuối luồng FE → Core → AI với model thật.
 
 ## Quy ước request
 
@@ -32,12 +36,57 @@
 - JSON Core dùng camelCase; ID là số `BIGINT`, tiền là số nguyên VND; quantity dùng `numeric(15,3)`. API AI và các route `/api/v1/agent/*` Core chuyển tiếp giữ snake_case.
 - Core/DB xử lý thời điểm UTC/`TIMESTAMPTZ`; timestamp JSON Core dùng ISO 8601 với offset Việt Nam `+07:00`. Timestamp đầu vào cần offset (`Z` hoặc `+07:00`); kỳ báo cáo theo `Asia/Ho_Chi_Minh`.
 - Body JSON dùng `Content-Type: application/json`; dấu `?` bên dưới chỉ field tùy chọn, không mặc nhiên cho phép explicit null.
+- Upload media dùng `Content-Type: multipart/form-data` với đúng một part `image`. Core chỉ nhận bytes JPEG/PNG, tối đa 5 MiB và 1–2048 px; không tin MIME/đuôi file. URL response là read-only; không trả Cloudinary credential, public ID hoặc hash file.
+
+### Phân trang danh sách OWNER
+
+Áp dụng cho đúng sáu GET `/products`, `/sales`, `/sale-drafts`, `/customers`, `/debts`, `/expenses` dưới `/api/v1`. Các endpoint này **luôn trả object**, kể cả khi không gửi query; không có `/page` hoặc chế độ legacy trả toàn bộ mảng. Category, payment, shop/session, audit, notification và ADMIN giữ contract riêng.
+
+`PageResponse<T> = { items: T[], page, size, totalElements, totalPages }`. Ví dụ không có kết quả:
+
+```json
+{ "items": [], "page": 0, "size": 20, "totalElements": 0, "totalPages": 0 }
+```
+
+- Mặc định `page=0`, `size=20`; page ≥ 0, size 1–100, `(long) page * size <= 2147483647`. Trang vượt cuối có items rỗng nhưng vẫn giữ tổng thực tế; tổng là số bản ghi **sau cùng tenant/filter**, không phải số tiền hay số khách DISTINCT.
+- Lọc/tìm kiếm/sắp xếp tại DB **trước** phân trang. Content/count cùng snapshot trong một request; không bảo đảm snapshot xuyên các request. Insert/archive/đổi trạng thái có thể làm dịch trang offset dù thứ tự có tie-break ID.
+- Bỏ filter nghĩa là không lọc theo field đó, trừ điều kiện ACTIVE nêu dưới. `q` được trim, rỗng thành không lọc, tối đa 200 ký tự sau trim; tìm chuỗi con không phân biệt hoa/thường và dấu tiếng Việt. `%`, `_`, `!` là ký tự literal, không là wildcard do client điều khiển. Sort chỉ products nhận allowlist; các list khác dùng thứ tự cố định.
+
+| List | Filter ngoài page/size | Thứ tự |
+|---|---|---|
+| Products | `q`: tên/barcode; `categoryId`: ID dương; `stockStatus`: LOW/OUT/NEEDS_RESTOCK. Chỉ product ACTIVE. | `sort=ID_ASC` mặc định; NAME_ASC: name/id tăng; PRICE_ASC: sellingPriceVnd/id tăng; STOCK_DESC: stockQuantity giảm, null cuối, id tăng. |
+| Sales | `from`, `to` theo soldAt; `saleStatus=CONFIRMED\|VOIDED`; `q`: tên khách/tên hàng snapshot hoặc khớp **chính xác ID sale dạng số**, không phải tìm chuỗi mã tùy ý. Bỏ saleStatus lấy cả hai trạng thái. | soldAt giảm, id giảm |
+| Sale drafts | `status=DRAFT\|CONFIRMED\|CANCELLED\|EXPIRED`; bỏ lọc lấy mọi trạng thái. DRAFT đã qua expiresAt thuộc EXPIRED khi lọc/count/map; GET không ghi thay đổi trạng thái. | id giảm |
+| Customers | `q`: tên hoặc SĐT đã chuẩn hóa lưu trong Core; chỉ ACTIVE. Không tự gộp khách trùng tên/SĐT. | id tăng |
+| Debts | `status=OPEN\|SETTLED\|VOIDED`, `customerId`: ID dương; bỏ status lấy mọi trạng thái. Phạm vi shop kế thừa qua sale. DTO không bổ sung tên/SĐT khách. | id giảm |
+| Expenses | `period`: kỳ ở mục 4; hoặc `from`, `to` theo expenseAt; `category`: khớp chính xác sau trim, tối đa 150 ký tự, rỗng bỏ lọc. Chỉ ACTIVE. Bỏ cả period và range lấy một trang của mọi thời điểm. | expenseAt giảm, id giảm |
+
+Stock filter chỉ xét tracked=true: OUT khi tồn 0, kể cả chưa có ngưỡng; LOW khi tồn dương ≤ lowStockThreshold khác null; NEEDS_RESTOCK là LOW hoặc OUT. Không dùng ngưỡng 6 cố định.
+
+`from/to` là timestamp ISO 8601 **có offset**, ví dụ `2026-10-09T12:30:00+07:00` hoặc `2026-10-09T05:30:00Z`; không nhận ngày thuần hoặc timestamp thiếu offset. Năm hỗ trợ 1–9998. Khoảng `[from, to)`: field ≥ from và field < to; được bỏ một trong hai mốc, nếu có cả hai thì from < to **theo thời điểm thực**, không so giờ địa phương. Đây không phải `fromDate/toDate` inclusive. Khi nhập ngày lịch trên UI, FE chuyển đầu ngày Việt Nam và đầu ngày kế tiếp thành hai timestamp; encode dấu `+` thành `%2B` trong URL. Expenses không được kết hợp period với bất kỳ mốc from/to nào; kỳ period vẫn theo lịch Việt Nam hiện có.
+
+Lỗi giới hạn page/size/offset, q quá dài, ID filter không dương hoặc range không hợp lệ trả `400` với mã riêng:
+
+| List | Code |
+|---|---|
+| Products | `invalid_product_query` |
+| Sales | `invalid_sale_query` |
+| Sale drafts | `invalid_draft_query` |
+| Customers | `invalid_customer_query` |
+| Debts | `invalid_debt_query` |
+| Expenses | `invalid_expense_query` |
+
+Param sai kiểu/enum hoặc timestamp sai định dạng/thiếu offset trả `400 validation_failed`, details chỉ rõ field. Expenses period không được hỗ trợ trả `400 invalid_report_period`; period kết hợp range trả `400 invalid_expense_query`. Quyền/token/shop giữ nguyên mục 0; không mở quyền ADMIN hoặc shop INACTIVE/ARCHIVED.
+
+**Phối hợp rollout FE (#144):** đổi client từ `T[]` sang `PageResponse<T>` và đọc items; mock cũng phải đổi, tải tiếp/reset khi đổi shop/filter, xử lý loading/error/end và trùng ID. Không lọc/sort chỉ trên trang đã tải; không tính revenue/profit, tổng nợ/chi/tồn hoặc gộp nợ theo khách từ một trang. Dùng API report phù hợp; aggregate/DTO còn thiếu cần contract và task riêng, không coi phân trang đã giải quyết. Giữ API detail để tra bản ghi được chọn khi không có trong trang hiện tại. FE cũ chưa tương thích, phải phối hợp deploy trước nghiệm thu; xem `FR-033`, `AC-059`–`AC-063` và [thiết kế kỹ thuật](../architecture/technical-design.md#42-phân-trang-danh-sách-owner).
 
 ## 0. Hợp đồng lỗi và chống ghi trùng
 
 Core trả `{ code, message, details?: [{ field, issue }], traceId }`; bỏ details khi rỗng. Thiếu/sai token trả `401 unauthorized`; chưa có profile Core trả `404 auth_profile_not_found` (mở session trước); shop khác chủ trả `403 shop_access_denied`; shop INACTIVE trả `403 shop_inactive` kèm lý do. Thiếu header bắt buộc trả `400 missing_required_header`; validation body và query/path param sai kiểu (ví dụ enum lạ, thời điểm không đúng ISO 8601) trả `400 validation_failed` với `details[].field` là tên param. Unique barcode tranh chấp trả `409 product_barcode_conflict`; hai request mở phiên lần đầu cùng lúc cho một tài khoản Firebase trả `409 auth_session_conflict` cho request thua, FE gọi lại `POST /auth/session`; lỗi DB chưa nhận diện trả `500 internal_error`, không lộ chi tiết nội bộ. Deadlock hoặc không lấy được khóa DB trả `503 resource_busy`: FE gửi lại đúng request, giữ nguyên `Idempotency-Key` nếu có.
 
-**Bắt buộc `Idempotency-Key` (1–255 ký tự, không rỗng; được trim khi lưu)** trên đúng bốn POST: `/debts/{debtId}/payments`, `/expenses`, `/sales/{saleId}/void`, `/products/{productId}/stock-in`. FE tạo key mới cho một hành động, giữ nguyên khi retry cùng body/path. Phạm vi key là shop + operation; cùng người dùng/nội dung trả response ban đầu (`200` cho stock-in, `201` cho ba luồng còn lại), không lặp tác động. Khác người dùng/nội dung trả `409 idempotency_key_conflict`; key hết hạn trả `409 idempotency_key_expired`; rỗng/quá dài trả `400 invalid_idempotency_key`. TTL mặc định 30 ngày, chưa có job dọn key; không tự xóa key quá hạn. Lỗi nghiệp vụ rollback cả reservation, có thể sửa request rồi retry với key chưa được commit.
+Riêng lỗi trùng barcode, ApiErrorDetail có thêm hai field **tùy chọn** `productId` và `status`; service trả Product ACTIVE cùng tiệm đang giữ mã. Lỗi thông thường không có hai field này; 409 từ race DB có thể bỏ details. Format và ví dụ tại [Barcode CORE-012](#barcode-core-012).
+
+**Bắt buộc `Idempotency-Key` (1–255 ký tự, không rỗng; được trim khi lưu)** trên bảy POST: `/debts/{debtId}/payments`, `/expenses`, `/sales/{saleId}/void`, `/products/{productId}/stock-in`, `/products/{productId}/image`, `/shops/{shopId}/logo`, `/me/avatar`. FE tạo key mới cho một hành động, giữ nguyên khi retry cùng body/path/file. Expense/repay/void/stock-in dùng key shop + operation trong V7; media dùng scope SHOP hoặc USER trong V14 (xem quy tắc media bên dưới). Replay trả response ban đầu (`200` cho stock-in/media, `201` cho ba luồng còn lại), không lặp tác động. Khác người dùng/nội dung trả `409 idempotency_key_conflict`; key hoàn tất hết hạn trả `409 idempotency_key_expired`; rỗng/quá dài trả `400 invalid_idempotency_key`. TTL mặc định 30 ngày, chưa có job dọn key; không tự xóa key quá hạn. Lỗi nghiệp vụ rollback reservation của thao tác tiền/tồn. Media reserve riêng trước provider, chỉ release lượt PENDING do request hiện tại sở hữu khi thất bại; xem lease/reclaim bên dưới.
 
 V7 tạo bảng key. Confirm draft chống trùng bằng draftId, không yêu cầu key. Các POST tạo customer/category/product/draft/shop chưa có bảo vệ key; không coi idempotency đã phủ toàn bộ API. GET không cần key.
 
@@ -47,15 +96,19 @@ V7 tạo bảng key. Confirm draft chống trùng bằng draftId, không yêu c�
 |---|---|---|---|
 | `POST` | `/api/v1/auth/session` | Token + `{ displayName? }`; tên bắt buộc khi tạo profile lần đầu | `200 AuthSessionResponse` |
 | `GET` | `/api/v1/me` | Token | `200 AuthSessionResponse` |
+| `POST` | `/api/v1/me/avatar` | multipart `image`, header `Idempotency-Key` bắt buộc | `200 UserResponse` |
+| `DELETE` | `/api/v1/me/avatar` | — | `204` |
 | `POST` | `/api/v1/shops` | `{ name, industry, phone?, address? }` | `201 ShopResponse` |
 | `GET` | `/api/v1/shops/{shopId}` | ID trong path | `200 ShopResponse` |
 | `PATCH` | `/api/v1/shops/{shopId}` | `{ name?, industry?, phone?, address? }` | `200 ShopResponse` |
+| `POST` | `/api/v1/shops/{shopId}/logo` | multipart `image` + `Idempotency-Key` | `200 ShopResponse` |
+| `DELETE` | `/api/v1/shops/{shopId}/logo` | — | `204` |
 | `DELETE` | `/api/v1/shops/{shopId}` | Body bắt buộc `{ archivedReason }` | `204` (archive) |
 | `PATCH` | `/api/v1/shops/{shopId}/status` | ADMIN: `{ status: ACTIVE\|INACTIVE, inactiveReason? }` | `200 ShopResponse` |
 
 `AuthSessionResponse = { user, role: OWNER|ADMIN, shops, needsOnboarding }`; user có dạng `UserResponse = { id, displayName, email, phone, avatarUrl }`, shops là danh sách ShopResponse. ADMIN có shops rỗng và needsOnboarding false. Core quyết định role từ server; không nhận role tự nâng từ client. Danh sách shop có thể truy cập lấy từ `/me`, không có `GET /shops` hay `/shops/current`.
 
-`ShopResponse = { id, name, industry, phone, address, status, inactiveReason, archivedReason }`. name/industry bắt buộc khi tạo. PATCH phải có ít nhất một giá trị cập nhật; null như bỏ qua, phone/address rỗng có thể xóa nội dung. OWNER chỉ sửa/archive shop ACTIVE; archivedReason không rỗng, tối đa 500 ký tự. INACTIVE vẫn GET được hồ sơ/lý do nhưng các API nghiệp vụ bị chặn; ARCHIVED GET trả `404 shop_not_found` và bị loại khỏi danh sách phiên.
+`ShopResponse = { id, name, industry, phone, address, logoUrl, status, inactiveReason, archivedReason }`. name/industry bắt buộc khi tạo. PATCH phải có ít nhất một giá trị cập nhật; null như bỏ qua, phone/address rỗng có thể xóa nội dung. OWNER chỉ sửa/archive shop ACTIVE; archivedReason không rỗng, tối đa 500 ký tự. INACTIVE vẫn GET được hồ sơ/lý do nhưng các API nghiệp vụ bị chặn; ARCHIVED GET trả `404 shop_not_found` và bị loại khỏi danh sách phiên. Logo là public delivery URL; upload/delete không dùng PATCH logoUrl.
 
 ADMIN đặt INACTIVE phải có inactiveReason không rỗng; đặt ACTIVE xóa lý do đó. Endpoint status không nhận ARCHIVED và không mở lại shop đã archive. OWNER gọi status trả `403 admin_access_required`. Đổi trạng thái ghi một audit `SHOP_INACTIVATED`/`SHOP_REACTIVATED` với actor ADMIN, beforeStatus/afterStatus và lý do; event này phục vụ cả lịch sử tiệm và projection ADMIN, không ghi trùng. Không ghi được audit trả `503 admin_audit_unavailable`, rollback thay đổi trạng thái/lý do (xem [Dashboard quản trị](#7-dashboard-quản-trị--đã-có-trong-core)).
 
@@ -64,6 +117,8 @@ Core ánh xạ `auth_identities.provider_subject` bằng Firebase UID. Provider 
 Phủ `FR-010`, `FR-011`, `NFR-003`; dashboard `FR-022` vẫn cần tích hợp.
 
 ## 2. Category, Product và Customer
+
+**Bổ sung CORE-012 #163/#164 trên `feat/core-barcode`, ngày 2026-10-12:** lookup, chuẩn hóa và chi tiết 409 đã có trong Core; V16 đổi unique barcode sang ACTIVE-only. Đây là phạm vi nhánh đang review, không khẳng định đã merge/migrate staging hoặc tích hợp scanner FE #162/#165. Truy vết `BR-021` → `FR-034` → `AC-064`–`AC-067`.
 
 Các API dưới đây bắt buộc Bearer token và `X-Shop-Id`. GET list/detail chỉ trả bản ghi ACTIVE; DELETE là archive, không xóa lịch sử liên quan.
 
@@ -86,15 +141,18 @@ name không rỗng, tối đa 150 ký tự; không unique. Category nhóm produc
 | Method | Đường | Body | Response |
 |---|---|---|---|
 | `POST` | `/api/v1/products` | Product create như dưới | `201 ProductResponse` |
-| `GET` | `/api/v1/products` | — | `200 ProductResponse[]` |
+| `GET` | `/api/v1/products` | page/size, q, categoryId, stockStatus, sort; xem quy ước phân trang | `200 PageResponse<ProductResponse>` |
+| `GET` | `/api/v1/products/lookup` | query `barcode` bắt buộc; [khớp chính xác](#barcode-core-012) | `200 ProductResponse` (CORE-012 trên nhánh) |
 | `GET` | `/api/v1/products/{productId}` | — | `200 ProductResponse` |
 | `PATCH` | `/api/v1/products/{productId}` | Các field tùy chọn như dưới | `200 ProductResponse` |
+| `POST` | `/api/v1/products/{productId}/image` | multipart `image` + `Idempotency-Key` | `200 ProductResponse` |
+| `DELETE` | `/api/v1/products/{productId}/image` | — | `204` |
 | `POST` | `/api/v1/products/{productId}/stock-in` | `{ quantity, reason? }` + `Idempotency-Key` | `200 ProductResponse` (đã có trên nhánh stock-in) |
 | `DELETE` | `/api/v1/products/{productId}` | — | `204` |
 
-Create: `{ categoryId?, name, barcode?, imageUrl?, unit, sellingPriceVnd, costPriceVnd?, tracked, stockQuantity? }`. name/unit không rỗng (max 255/50), sellingPriceVnd và costPriceVnd nếu có ≥ 0; barcode/imageUrl max 100/1000. categoryId nếu có phải ACTIVE cùng shop. tracked=true bắt buộc stockQuantity ≥ 0; tracked=false không nhận stockQuantity khác null. Barcode unique trong shop kể cả product đã archive; shop khác có thể dùng cùng barcode, null/rỗng không có barcode.
+Create: `{ categoryId?, name, barcode?, unit, sellingPriceVnd, costPriceVnd?, tracked, stockQuantity?, lowStockThreshold? }`. `imageUrl` không phải input mới và giá trị URL thô khác rỗng bị từ chối; dùng POST image sau khi tạo Product. name/unit không rỗng (max 255/50), sellingPriceVnd và costPriceVnd nếu có ≥ 0; barcode max 100 sau chuẩn hóa. categoryId nếu có phải ACTIVE cùng shop. tracked=true bắt buộc stockQuantity ≥ 0; tracked=false không nhận stockQuantity khác null. Sau V16, barcode chỉ unique giữa Product ACTIVE cùng shop; archive giải phóng mã nhưng giữ lịch sử. Shop khác có thể dùng cùng barcode, null/rỗng không có barcode. DB V1–V15 vẫn giữ unique cả ARCHIVED, phải migrate V16 theo quy trình trước khi rollout khả năng tái sử dụng mã.
 
-PATCH chỉ nhận `{ categoryId?, name?, barcode?, imageUrl?, unit?, sellingPriceVnd?, costPriceVnd?, tracked? }`: bỏ field giữ nguyên; explicit null chỉ cho categoryId/barcode/imageUrl/costPriceVnd. Không cho null name/unit/sellingPriceVnd/tracked. **Không nhận stockQuantity kể cả null**, trả `400 invalid_request` kèm chi tiết field và thông báo dùng stock-in. Đổi false→true khởi tạo tồn 0, true→true giữ tồn hiện tại; tracked=false xóa tồn. PATCH/archive khóa dòng product để không ghi đè tồn khi checkout/void/stock-in đồng thời. Create và response vẫn giữ stockQuantity.
+PATCH chỉ nhận `{ categoryId?, name?, barcode?, unit?, sellingPriceVnd?, costPriceVnd?, tracked?, lowStockThreshold? }`: bỏ field giữ nguyên; explicit null chỉ cho categoryId/barcode/costPriceVnd/lowStockThreshold. `imageUrl` (kể cả null) trả `400 product_image_url_unsupported`; dùng endpoint image. Không cho null name/unit/sellingPriceVnd/tracked. **Không nhận stockQuantity kể cả null**, trả `400 invalid_request` kèm chi tiết field và thông báo dùng stock-in. Đổi false→true khởi tạo tồn 0, true→true giữ tồn hiện tại; tracked=false xóa tồn. PATCH/archive khóa dòng product để không ghi đè tồn khi checkout/void/stock-in đồng thời. Create và response vẫn giữ stockQuantity.
 
 Stock-in chỉ cho OWNER hoạt động, shop ACTIVE thuộc OWNER và product ACTIVE cùng shop có tracked=true. quantity bắt buộc > 0, tối đa 12 chữ số nguyên và 3 thập phân; reason tùy chọn/null, tối đa 500 ký tự, trim và trống thành null. Body không hợp lệ trả `400 validation_failed`; productId không dương/sai định dạng trả `400 invalid_product_id`; product thiếu/khác shop/ARCHIVED trả `404 product_not_found`; không theo dõi tồn trả `409 product_stock_in_unavailable`. Tổng tồn vượt `999999999999.999` trả `409 product_stock_overflow`, không đổi dữ liệu.
 
@@ -102,14 +160,42 @@ Core reserve key với operation `PRODUCT_STOCK_IN` rồi khóa dòng product; t
 
 **Phối hợp mobile trước tích hợp:** bỏ stockQuantity khỏi DTO/payload PATCH kể cả lúc tắt theo dõi; false→true nhận tồn 0 rồi gọi stock-in khi OWNER nhập hàng. Bổ sung API/UI nhập quantity/reason, giữ key khi retry và refresh product từ kết quả hoặc GET mới. Mock cũng phải theo contract mới; lượt này không sửa FE và chưa nghiệm thu end-to-end.
 
-`ProductResponse = { id, shopId, categoryId, name, barcode, imageUrl, unit, sellingPriceVnd, costPriceVnd, tracked, stockQuantity, status, createdAt, updatedAt }`.
+`ProductResponse = { id, shopId, categoryId, name, barcode, imageUrl, unit, sellingPriceVnd, costPriceVnd, tracked, stockQuantity, status, createdAt, updatedAt, lowStockThreshold }`.
+
+`lowStockThreshold` nullable, không âm, tối đa 12 chữ số nguyên và 3 thập phân. Create bỏ/null không đặt ngưỡng; PATCH bỏ giữ nguyên, null tắt LOW_STOCK. tracked=false có thể lưu ngưỡng nhưng không cảnh báo; bật tracking khởi tạo tồn 0 và OUT_OF_STOCK. Ngưỡng 0 chỉ cảnh báo hết hàng. Thay đổi sản phẩm/tồn reconcile notification cùng transaction theo mục 8; không tự áp ngưỡng 6 của UI.
+
+Media Product/logo chỉ cho OWNER của shop ACTIVE. Transaction ghi khóa lại và kiểm tra Shop/Product còn ACTIVE; avatar kiểm tra user ACTIVE; lỗi shop INACTIVE kèm `inactiveReason` khi có lý do. DELETE no-op `204` khi chưa có ảnh tùy chỉnh, kể cả media disabled; có reference thì media disabled trả `503 media_unavailable` và không đổi DB/audit/job. Khi enabled, DELETE enqueue xóa asset cũ sau commit; archive không xóa media. Avatar chỉ cho chính user ACTIVE; URL authenticated được tạo khi response. `avatar_url` giữ fallback Firebase và tiếp tục sync; DELETE avatar chỉ bỏ `avatar_public_id`, lần đọc tiếp theo trở về fallback. Có avatar Cloudinary nhưng media disabled thì session vẫn thành công với avatarUrl null. Lỗi input: `400 image_required`, `413 image_too_large`, `415 image_type_invalid`, `400 image_dimensions_invalid`.
+
+Cả ba upload yêu cầu `Idempotency-Key`. V14 `media_upload_keys` dùng SHOP scope cho Product/logo và USER scope cho avatar. PENDING reservation commit trước provider; cùng key/file đang chạy trả `409 media_upload_in_progress`, payload khác trả `409 idempotency_key_conflict`. PENDING hết lease được claim lại nguyên tử với token mới; token cũ không được hoàn tất hoặc giải phóng lượt mới. Final write khóa reservation/kiểm tra lease rồi lưu entity/audit/replay cùng transaction. Cloudinary dùng public ID quyết định theo target/key/file và `overwrite=true`; completed replay không upload hoặc thêm audit. Avatar replay lưu snapshot nội bộ và tạo lại URL delivery. URL authenticated có chữ ký nhưng chưa có TTL delivery; không coi là URL tự hết hạn. Cleanup dùng khóa job `SKIP LOCKED` và khóa public ID cùng với writer; bỏ qua asset đang gắn entity, hoãn asset có upload PENDING còn lease. COMPLETED không đổi về PENDING. V13/V14 phải migrate trước runtime shared DB; chưa xác nhận FE/staging UAT.
+
+### Barcode CORE-012
+
+Create/PATCH/lookup trim khoảng trắng Unicode đầu/cuối, kể cả CR/LF/TAB từ scanner. Mã sau trim tối đa 100 Unicode code point (không đếm UTF-16 code unit, byte hay grapheme cluster); ký tự ngoài BMP được tính là một code point, khớp giới hạn PostgreSQL `varchar(100)`. Không chứa khoảng trắng hoặc ký tự điều khiển bên trong. Giữ nguyên chữ, hoa/thường, dấu, số 0 đầu: `ABC-123`, `123`, `abc-123`, `00123` là các mã khác nhau. Không bulk-normalize barcode lịch sử; lookup khớp với mã đã lưu. `%`/`_` là ký tự literal, không wildcard. Input không hợp lệ trả `400 validation_failed`, details có field barcode.
+
+- Create bỏ/null/chuỗi chỉ có whitespace lưu null. PATCH bỏ field giữ nguyên, null/blank gỡ mã; PATCH cùng mã của chính Product thành công. Không thêm field entity/barcode table.
+- `GET /api/v1/products/lookup?barcode=ABC-123` trả một ProductResponse, không page/mảng và không đọc toàn danh mục. Barcode thiếu/rỗng không hợp lệ. Phải có Bearer và X-Shop-Id, account OWNER ACTIVE, tiệm ACTIVE thuộc OWNER; kiểm tra quyền trước truy vấn Product theo mục 0. Lookup chỉ đọc Product ACTIVE: thiếu/chỉ ARCHIVED/mã tiệm khác trả `404 product_not_found`. Không trả Product ARCHIVED để UI tự restore; không có API restore.
+- Create/PATCH chỉ kiểm trùng Product ACTIVE cùng shop, PATCH loại chính ID đang sửa. Nếu service phát hiện trùng, `409 product_barcode_conflict` trả ví dụ dưới. Hai field bổ sung chỉ là optional của ApiErrorDetail; các lỗi khác giữ `{field, issue}`. Không trả ID từ tiệm khác.
+
+```json
+{
+  "code": "product_barcode_conflict",
+  "message": "The product barcode is already in use in this shop.",
+  "details": [{ "field": "barcode", "issue": "already_in_use", "productId": 123, "status": "ACTIVE" }],
+  "traceId": "server-generated-trace-id"
+}
+```
+
+`message` là mô tả, FE phân nhánh theo code/field. Nếu hai writer vượt precheck đồng thời, partial unique index V16 chặn lần ghi thua; handler map `uq_products_shop_barcode_active` (và constraint cũ trong giai đoạn nâng cấp) sang cùng 409, **có thể không có details**. Không truy vấn thêm trên transaction DB đã lỗi để điền details. Lookup thấy 404 không đảm bảo create kế tiếp thành công; FE phải xử lý 409 và có thể lookup lại. Create/PATCH không có bảo đảm replay bằng Idempotency-Key.
+
+**Rollout:** V16 được review/merge vào staging trước khi migration owner chạy trên shared DB; không chạy migration feature branch vào DB nghiệp vụ. Index build transactional trong cửa sổ bảo trì dừng ghi catalog; không zero-downtime. Archive/tái sử dụng không sửa productId/snapshot sale/draft cũ. FE #162/#165 cần dùng lookup, giữ nguyên ký tự mã, không tạo Product giả khi API lỗi và xử lý 409 có/không details; UI/giỏ hàng vẫn do team chốt và nghiệm thu riêng. Xem `FR-034`, `AC-064`–`AC-067` và [hướng dẫn Core](../../backend/core/README.md#exact-product-barcode-lookup-and-active-only-uniqueness-core-012--163164).
 
 ### 2.3. Customer
+
 
 | Method | Đường | Body | Response |
 |---|---|---|---|
 | `POST` | `/api/v1/customers` | `{ name, phone? }` | `201 CustomerResponse` |
-| `GET` | `/api/v1/customers` | — | `200 CustomerResponse[]` |
+| `GET` | `/api/v1/customers` | page/size, q; xem quy ước phân trang | `200 PageResponse<CustomerResponse>` |
 | `GET` | `/api/v1/customers/{customerId}` | — | `200 CustomerResponse` |
 | `PUT` | `/api/v1/customers/{customerId}` | `{ name, phone? }` | `200 CustomerResponse` |
 | `DELETE` | `/api/v1/customers/{customerId}` | — | `204` |
@@ -127,12 +213,12 @@ Sale là bản ghi bán hàng nội bộ, **không phải hóa đơn điện t�
 | Method | Đường | Request | Response |
 |---|---|---|---|
 | `POST` | `/api/v1/sale-drafts` | Body draft như dưới | `201 SaleDraftResponse` |
-| `GET` | `/api/v1/sale-drafts` | — | `200 SaleDraftResponse[]` |
+| `GET` | `/api/v1/sale-drafts` | page/size, status hiệu lực; xem quy ước phân trang | `200 PageResponse<SaleDraftResponse>` |
 | `GET` | `/api/v1/sale-drafts/{draftId}` | — | `200 SaleDraftResponse` |
 | `PUT` | `/api/v1/sale-drafts/{draftId}` | Thay toàn bộ draft/items | `200 SaleDraftResponse` |
 | `DELETE` | `/api/v1/sale-drafts/{draftId}` | Hủy draft còn sửa được, giữ lịch sử | `204` |
 | `POST` | `/api/v1/sale-drafts/{draftId}/confirm` | Không có body/key | `201 SaleResponse` |
-| `GET` | `/api/v1/sales` | Gồm CONFIRMED và VOIDED | `200 SaleResponse[]` |
+| `GET` | `/api/v1/sales` | page/size, from/to, saleStatus, q; xem quy ước phân trang | `200 PageResponse<SaleResponse>` |
 | `GET` | `/api/v1/sales/{saleId}` | — | `200 SaleResponse` |
 | `GET` | `/api/v1/sales/{saleId}/payments` | — | `200 PaymentResponse[]` |
 | `GET` | `/api/v1/sales/{saleId}/payments/{paymentId}` | ID payment phải thuộc sale | `200 PaymentResponse` |
@@ -202,11 +288,11 @@ Phủ `FR-003`–`FR-005`, `FR-013`, `FR-014`, `FR-016`, `AC-024`–`AC-032`.
 | Method | Đường | Body / query | Response |
 |---|---|---|---|
 | `POST` | `/api/v1/expenses` | Expense create + Idempotency-Key | `201 ExpenseResponse` |
-| `GET` | `/api/v1/expenses` | period tùy chọn; bỏ qua lấy toàn bộ ACTIVE | `200 ExpenseResponse[]` |
+| `GET` | `/api/v1/expenses` | page/size, category, period hoặc from/to; xem quy ước phân trang | `200 PageResponse<ExpenseResponse>` |
 | `GET` | `/api/v1/expenses/{expenseId}` | — | `200 ExpenseResponse` |
 | `PATCH` | `/api/v1/expenses/{expenseId}` | Các field tùy chọn | `200 ExpenseResponse` |
 | `DELETE` | `/api/v1/expenses/{expenseId}` | Archive | `204` |
-| `GET` | `/api/v1/debts` | Gồm OPEN/SETTLED/VOIDED | `200 DebtResponse[]` |
+| `GET` | `/api/v1/debts` | page/size, status, customerId; xem quy ước phân trang | `200 PageResponse<DebtResponse>` |
 | `GET` | `/api/v1/debts/{debtId}` | — | `200 DebtResponse` |
 | `POST` | `/api/v1/debts/{debtId}/payments` | Repayment + Idempotency-Key | `201 DebtRepaymentResponse` |
 | `GET` | `/api/v1/reports/summary` | period tùy chọn, mặc định today | `200 ReportSummaryResponse` |
@@ -298,6 +384,7 @@ AI chỉ tạo bản nháp/gợi ý và câu trả lời chat. Các endpoint nà
 |---|---|---|---|---|
 | `POST` | `/api/v1/ai/drafts` | JSON `{ type: TEXT, mode, text }` hoặc multipart `type=AUDIO\|IMAGE`, `mode=SALE\|EXPENSE`, `file` | `DraftView` | Đích |
 | `POST` | `/api/v1/agent/chat` | `{ conversation_id?, message }` | `AgentChatMessageView` | Đã có |
+| `POST` | `/api/v1/agent/chat/stream` | `{ conversation_id?, message }` | `text/event-stream`: `delta`, `reset`, `done` (`AgentChatMessageView`), `error` ([mục Stream](#stream-trả-lời-chat)) | Đã có |
 | `GET` | `/api/v1/agent/conversations` | `X-Shop-Id` | `AgentConversationSummary[]` | Đã có |
 | `GET` | `/api/v1/agent/conversations/{conversation_id}` | `X-Shop-Id` | `AgentConversationView` | Đã có |
 | `PATCH` | `/api/v1/agent/conversations/{conversation_id}` | `{ title }` (1–255 ký tự, không rỗng) | `AgentConversationSummary` | Đã có |
@@ -339,6 +426,7 @@ Phủ `FR-007`, `FR-008`, `FR-017`, `FR-018`, `FR-020`, `FR-021`, `FR-027`.
 | Method | Đường | Trách nhiệm | Trạng thái |
 |---|---|---|---|
 | `POST` | `/internal/v1/agent/chat` | Body `{ user_id, shop_id, conversation_id?, message }`; trả `{ conversation_id, message_id, request_id, answer, model, model_version }` | Đã có |
+| `POST` | `/internal/v1/agent/chat/stream` | Body giống `/internal/v1/agent/chat`; trả `text/event-stream` với các sự kiện `delta`, `reset`, `done`, `error` ([mục Stream](#stream-trả-lời-chat)) | Đã có; Core proxy qua `/api/v1/agent/chat/stream` |
 | `GET` | `/internal/v1/agent/conversations` | Query `user_id`, `shop_id`; trả danh sách hội thoại | Đã có |
 | `GET` | `/internal/v1/agent/conversations/{conversation_id}` | Query `user_id`, `shop_id`; trả hội thoại và tin nhắn | Đã có |
 | `PATCH` | `/internal/v1/agent/conversations/{conversation_id}` | Body `{ user_id, shop_id, title }`; trả summary đã đổi tên | Đã có |
@@ -349,6 +437,7 @@ Phủ `FR-007`, `FR-008`, `FR-017`, `FR-018`, `FR-020`, `FR-021`, `FR-027`.
 Yêu cầu chung:
 
 - timeout hoặc lỗi model trả `503` với `{ "detail": "ai_unavailable" }`; Core không retry đồng bộ quá một lần;
+- guardrail dừng lượt chat trả `422` với `{ "detail": "<mã>" }` và không lưu gì: `input_too_long` (tin nhắn mới dài quá `AGENT_MAX_INPUT_CHARS`, mặc định 2000 ký tự) `answer_unavailable` (hết lượt gọi model, vượt ngân sách token của lượt hoặc câu trả lời vẫn bị chặn sau các lần yêu cầu viết lại) hoặc `answer_timeout` (lượt chat quá `AGENT_TURN_TIMEOUT_SECONDS`, mặc định 35 giây, thấp hơn read timeout 40 giây của Core). AI chỉ trả mã, câu hiển thị do FE map; Core hiện vẫn đổi mã này thành `503 ai_unavailable` cho tới khi chủ Core chuyển tiếp;
 - response thành công có `request_id`, `model`, `model_version`;
 - AI không có endpoint tạo/sửa/xóa dữ liệu nghiệp vụ;
 - Core và AI cùng kiểm tra `shop_id`; test chéo shop là bắt buộc;
@@ -360,16 +449,35 @@ Yêu cầu chung:
 
 Agent có tool nội bộ `query_shop_data` để trả lời câu hỏi về hồ sơ tiệm, nhóm hàng, sản phẩm và đơn đã chốt. Đây không phải endpoint: **không có** `POST /internal/v1/agent/sql`, Core và FE chỉ nối `/internal/v1/agent/chat`, request và response của chat không đổi.
 
-- Model chỉ truyền `sql`; `shop_id` lấy từ request đã xác thực và tới tool qua runtime context của LangChain, không nằm trong schema tool hay system prompt, nên model không đổi được phạm vi tiệm.
+- Model chỉ truyền `sql`; `shop_id` lấy từ request đã xác thực và tới tool qua run context (`deps`) của Pydantic AI, không nằm trong schema tool hay system prompt, nên model không đổi được phạm vi tiệm.
 - Truy vấn chạy bằng role chỉ đọc `ai_sql_reader` trên năm view của schema `ai_read`: `v_shop_profile`, `v_categories`, `v_products`, `v_sales`, `v_sale_items`. View tự lọc theo tiệm của transaction và không có cột `shop_id`; role không có quyền trên bảng gốc. `v_sales`/`v_sale_items` không phơi snapshot khách hàng hay `void_reason`.
-- SQL phải qua bộ kiểm tra AST: đúng một câu `SELECT` (cho phép `WITH`, `UNION`), chỉ dùng hàm và kiểu cast trong allowlist. Transaction `READ ONLY`, `statement_timeout` mặc định 3000 ms, tối đa 100 dòng, luôn rollback; mỗi lượt chat gọi model tối đa 4 lần và tool tối đa 3 lần.
+- SQL phải qua bộ kiểm tra AST: đúng một câu `SELECT` (cho phép `WITH`, `UNION`), chỉ dùng hàm và kiểu cast trong allowlist. Transaction `READ ONLY`, `statement_timeout` mặc định 3000 ms, tối đa 100 dòng, luôn rollback; mỗi lượt chat gọi model tối đa 4 lần, tool tối đa 3 lần, tổng token vào và ra tối đa 200000 và chạy tối đa 35 giây. Các mặc định này là tạm thời, chờ PO duyệt.
 - Truy vấn bị bộ kiểm tra hoặc database từ chối, hoặc quá thời gian, trả về model dạng `Error[CODE]: lý do` (ví dụ `UNSAFE_FUNCTION`, `QUERY_TIMEOUT`, `SQL_ERROR`) để model viết lại câu truy vấn; lượt chat vẫn trả lời. Database đọc không kết nối được thì lượt chat trả `503 ai_unavailable`. Khi AI chưa cấu hình `AI_SQL_READER_URL`, agent vẫn chat nhưng không có tool này.
-- Guardrail tất định quanh agent: tin nhắn mới dài quá 2000 ký tự được trả lời ngắn bằng tiếng Việt, không gọi model; số thẻ được che và khóa API/token bị xóa khỏi tin nhắn trước khi gửi model và trước khi lưu; câu trả lời rỗng hoặc lộ chi tiết nội bộ (tên view, SQL, mã lỗi) được thay bằng câu trả lời an toàn. Hợp đồng request/response của `/internal/v1/agent/chat` không đổi.
+- Guardrail tất định quanh agent: tin nhắn mới dài quá 2000 ký tự bị từ chối với `422 input_too_long`, không gọi model; số thẻ được che và khóa API/token bị xóa khỏi tin nhắn trước khi gửi model và trước khi lưu; câu trả lời rỗng hoặc lộ chi tiết nội bộ (tên view, SQL, mã lỗi) bị gửi lại model để viết lại, hết lượt gọi model thì trả `422 answer_unavailable`. Request và response thành công của `/internal/v1/agent/chat` không đổi; mã lỗi nằm ở yêu cầu chung phía trên.
 - Agent đọc được hồ sơ tiệm, nhóm hàng, sản phẩm và **đơn đã chốt** (`v_sales`, `v_sale_items`); chi phí, công nợ và khách hàng vẫn chưa phơi. Ngoài `query_shop_data`, agent có tool `suggest_restock` trả gợi ý nhập hàng từ đơn `CONFIRMED`; `COVER_DAYS` và hai kỳ `last_7_days`/`last_30_days` hiện là mặc định chờ PO duyệt, chưa phải quyết định đã chốt. Chi tiết vận hành nằm trong [README của AI](../../backend/ai/README.md#shop-data-tool-read-only-sql) và [mục Restock suggestions](../../backend/ai/README.md#restock-suggestions).
 
-### Ngữ cảnh chat và bản tóm tắt cuốn chiếu
+### Ngữ cảnh chat
 
-AI gửi cho model bản tóm tắt đã lưu, rồi tới mọi tin nhắn chưa được gộp vào bản tóm tắt. Một tin chỉ rời ngữ cảnh sau khi đã nằm trong bản tóm tắt, nên không mất thông tin. Việc gộp chạy nền sau khi trả lời và chỉ gọi model tóm tắt khi số tin chưa gộp vượt ngưỡng, nên phần lớn lượt không phát sinh thêm chi phí. Bản tóm tắt thuộc hội thoại nên bị xóa cùng hội thoại. Hợp đồng này không đổi request hay response của `/internal/v1/agent/chat`.
+Mỗi lượt chat, AI gửi cho model system prompt tĩnh, sau đó là `AGENT_HISTORY_TURNS` lượt trao đổi gần nhất của hội thoại (mặc định 100 lượt, tức 200 tin nhắn OWNER và ASSISTANT), nguyên văn và xếp từ cũ đến mới, rồi tới tin nhắn mới của OWNER. Tin cũ hơn không tới được model và không được tóm tắt. Không còn bản tóm tắt, không gộp nền sau mỗi lượt và không còn tool tìm lịch sử: OWNER ít chat, còn model chat xử lý thoải mái cửa sổ 100 lượt. Hợp đồng này không đổi request hay response của `/internal/v1/agent/chat`.
+
+### Stream trả lời chat
+
+`POST /internal/v1/agent/chat/stream` chạy cùng lượt chat với `POST /internal/v1/agent/chat`: cùng body, cùng `X-Internal-Token`, cùng guardrail. Lỗi xảy ra trước khi stream bắt đầu giữ nguyên mã của route JSON: `401` (`unauthorized`), `404` (`conversation_not_found`), `422` (`input_too_long`) và `503` (`ai_unavailable`, kể cả khi model chưa cấu hình). Sau khi stream bắt đầu, lỗi đi trong sự kiện `error` thay vì HTTP status.
+
+Response thành công có `Content-Type: text/event-stream`. Mỗi sự kiện có tên và `data` là JSON:
+
+- `delta` `{ "text": "..." }`: nối `text` vào phần đã hiển thị.
+- `reset` `{}`: bỏ phần đã hiển thị; một lượt trả lời mới của model theo sau. Xảy ra khi model viết text trước một tool call, hoặc khi answer screen từ chối câu trả lời và model viết lại.
+- `done`: cùng body với response của `/internal/v1/agent/chat` (`conversation_id`, `message_id`, `request_id`, `answer`, `model`, `model_version`). `answer` là câu trả lời đã lưu, thay thế toàn bộ text đã stream.
+- `error` `{ "detail": "<mã>" }`: `answer_unavailable` hoặc `answer_timeout` (guardrail dừng lượt), `conversation_not_found` (hội thoại bị xóa trong lúc lượt đang chạy) hoặc `ai_unavailable`.
+
+Stream kết thúc sau `done` hoặc `error`.
+
+Chỉ text đã qua answer screen mới được gửi. Đoạn cuối ngắn và phần text sau một `select` còn đang chờ được giữ lại cho đến khi answer screen kiểm tra xong. Lượt kết thúc bằng `error`, hoặc caller ngắt kết nối giữa chừng, không được lưu, trừ khi caller ngắt đúng lúc AI đang ghi lượt vào database.
+
+Core proxy route này qua `POST /api/v1/agent/chat/stream` với cùng auth, `X-Shop-Id` và body như `/api/v1/agent/chat`. Lỗi trước sự kiện đầu tiên là JSON lỗi của Core và ánh xạ như route JSON: AI `404` thành `conversation_not_found`, lỗi khác thành `503 ai_unavailable`. Sau đó Core chuyển từng sự kiện của AI nguyên văn, trừ `done` chỉ giữ `conversation_id`, `message_id`, `answer` như `AgentChatMessageView`. App ngắt kết nối thì Core đóng stream tới AI, nên AI hủy lượt như trên. Request async của Core hết hạn sau 60 giây, trên thời hạn lượt mặc định 35 giây của AI.
+
+Màn Trợ lý AI trên mobile gọi route stream và hiện chữ dần trong bong bóng trả lời; `reset` xóa phần đã hiện, `done` thay bằng câu đã lưu. Câu trả lời, dữ liệu lưu và guardrail không đổi so với `/api/v1/agent/chat`, nên [PRD](../product/product-requirements.md) và AC chưa đổi.
 
 ## 7. Dashboard quản trị — đã có trong Core
 
@@ -441,3 +549,24 @@ Thiếu/sai token: `401 unauthorized`; OWNER: `403 admin_access_required`; ADMIN
 Không lưu được audit ADMIN (hoặc không đọc được access history): `503 admin_audit_unavailable`, không trả dữ liệu được bảo vệ. Đổi trạng thái tiệm ở mục 1 rollback cả trạng thái/lý do và audit khi ghi audit thất bại. Request bị từ chối/validation/không tìm thấy không tạo audit SUCCESS; chưa có contract audit FAILURE/bảo mật. V10 giữ trigger chặn UPDATE/DELETE/TRUNCATE; V11 không sửa lịch sử hay bỏ bảo vệ đó. Không suy ra DB đã chạy V11 từ việc service khởi động.
 
 Phủ `BR-013`/`BR-014` → `FR-022`–`FR-024`, `NFR-003`/`NFR-009` → `AC-015`–`AC-017`, `AC-040`–`AC-043`. Kiểm chứng API/DB tách riêng Firebase thật, dashboard web và UAT staging; không coi mock web là bằng chứng nghiệm thu.
+
+
+## 8. Notification OWNER — đã có trên `feat/app-notifications`
+
+Phủ `BR-020`, `FR-032`, `AC-055`–`AC-058`. Cần V15 trước runtime dùng `ddl-auto=validate`; chưa chứng minh FE hoặc staging UAT. Đây là inbox trong app, không phải FCM/push.
+
+| Method | Đường | Query/body | Response |
+|---|---|---|---|
+| `GET` | `/api/v1/me/notifications` | `shopId?`, `type?`, `unreadOnly=false`, `page=0`, `size=20` | `200 NotificationPageResponse` |
+| `GET` | `/api/v1/me/notifications/unread-count` | `shopId?`, `type?` | `200 { unreadCount }` |
+| `PATCH` | `/api/v1/me/notifications/{notificationId}/read` | Không body | `204` |
+| `PATCH` | `/api/v1/me/notifications/read` | `{ "ids": [1, 2] }` | `204` |
+
+- Bearer token bắt buộc; không yêu cầu `X-Shop-Id` hoặc `Idempotency-Key`. Actor lấy từ profile OWNER ACTIVE trong DB, không từ header/client. UID chưa có profile trả 404 auth_profile_not_found; ADMIN 403 shop_access_denied; user DISABLED 403 account_disabled.
+- Bỏ shopId đọc các tiệm hợp lệ của OWNER. Filter shopId phải dương: sai giá trị 400 invalid_shop_id, không sở hữu/không tồn tại 403 shop_access_denied; ARCHIVED 404 shop_not_found. Cả list/count/read đều cần recipient đúng user và tiệm còn do user sở hữu. INACTIVE chỉ cho SHOP_INACTIVATED/SHOP_REACTIVATED; ARCHIVED bị loại hoàn toàn.
+- type gồm LOW_STOCK, OUT_OF_STOCK, SALE_VOIDED, SHOP_INACTIVATED, SHOP_REACTIVATED; enum lạ/param sai kiểu trả 400 validation_failed. page ≥0, size 1–100, `(long)page * size ≤2147483647`; vượt giới hạn trả 400 invalid_notification_query. Thứ tự event createdAt rồi id giảm dần; chưa đọc là readAt=null. Trang và tổng phần tử dùng cùng snapshot/filter.
+- `NotificationPageResponse = { items, page, size, totalElements, totalPages }`; `NotificationResponse = { id, shopId, type, title, body, targetType, targetId, createdAt, readAt, resolvedAt }`. id là notification_event ID, không phải recipient ID. targetType PRODUCT/SALE/SHOP tương ứng type; timestamp +07:00. Không trả dataJson hoặc dedupKey.
+- Batch nhận 1–100 ID dương, không null; validation body sai trả 400 validation_failed. ID trùng được gộp; ID không nhìn thấy/không tồn tại trả 404 notification_not_found, toàn batch rollback. ID đơn không dương trả 400 invalid_notification_query. Retry/multiple devices không thay readAt đầu tiên; không cập nhật thông báo mới ngoài danh sách đã gửi.
+- LOW_STOCK/OUT_OF_STOCK tạo theo chu kỳ: giữ một cảnh báo mở cùng mức; đổi mức resolve cũ rồi tạo mới; hồi tồn/tắt tracking/archive resolve mà không xóa lịch sử. resolvedAt không tự đặt readAt, nên cảnh báo đã kết thúc vẫn có thể chưa đọc. Body chứa snapshot tồn lúc phát sinh, không phải tồn hiện tại.
+- Confirm/void/stock-in/Product create/PATCH/archive reconcile trong transaction nghiệp vụ, dưới khóa nguồn. Void tạo một SALE_VOIDED; ADMIN đổi ACTIVE↔INACTIVE tạo một thông báo trạng thái cho mỗi lần chuyển, gửi lại cùng trạng thái không tạo mới. Notification lỗi rollback cả nghiệp vụ/audit/idempotency; replay không tạo thêm event hoặc recipient. Không phát thông báo SALE_CONFIRMED/PAYMENT_RECEIVED/DEBT_REMINDER/AI_REVIEW_REQUIRED trong phạm vi này.
+- FE cần gọi inbox/count/read thật và bổ sung nhập ngưỡng Product; không coi mock badge hiện tại là tích hợp. Không có API tạo/sửa nội dung/xóa notification hoặc đánh dấu toàn bộ vô điều kiện. Nội dung void/status không chứa tiền, khách hoặc lý do nhạy cảm; mở hồ sơ tiệm đúng quyền để xem lý do INACTIVE.

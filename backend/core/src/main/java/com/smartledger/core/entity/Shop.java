@@ -42,6 +42,12 @@ public class Shop {
     @Column(length = 500)
     private String address;
 
+    @Column(name = "logo_url", length = 1000)
+    private String logoUrl;
+
+    @Column(name = "logo_public_id", length = 500)
+    private String logoPublicId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private ShopStatus status;
@@ -77,6 +83,16 @@ public class Shop {
         this.industry = industry;
         this.phone = phone;
         this.address = address;
+    }
+
+    public void replaceCloudinaryLogo(String logoUrl, String logoPublicId) {
+        this.logoUrl = logoUrl;
+        this.logoPublicId = logoPublicId;
+    }
+
+    public void clearLogo() {
+        logoUrl = null;
+        logoPublicId = null;
     }
 
     public void archive(String reason) {

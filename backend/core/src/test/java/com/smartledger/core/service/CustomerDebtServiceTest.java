@@ -4,13 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.smartledger.core.dto.request.CustomerWriteRequest;
 import com.smartledger.core.dto.request.DebtRepaymentRequest;
+import com.smartledger.core.dto.request.OwnerListQuery.*;
 import com.smartledger.core.entity.Customer;
 import com.smartledger.core.entity.Debt;
 import com.smartledger.core.entity.Payment;
@@ -31,12 +32,15 @@ import com.smartledger.core.repository.SaleRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.impl.CustomerServiceImpl;
 import com.smartledger.core.service.impl.DebtServiceImpl;
-import java.util.function.Supplier;
-import java.util.Optional;
 import java.util.List;
+import java.util.Optional;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class CustomerDebtServiceTest {
@@ -74,10 +78,10 @@ class CustomerDebtServiceTest {
         assertThat(created.id()).isEqualTo(9L);
         assertThat(created.name()).isEqualTo("Khach An");
         assertThat(created.phone()).isEqualTo("0901234567");
-        when(customerRepository.findAllByShopIdAndStatusOrderByIdAsc(7L, CatalogStatus.ACTIVE))
-                .thenReturn(List.of());
-        assertThat(customerService.list(token, "7")).isEmpty();
-        verify(customerRepository).findAllByShopIdAndStatusOrderByIdAsc(7L, CatalogStatus.ACTIVE);
+        when(customerRepository.findAll(org.mockito.ArgumentMatchers.<Specification<com.smartledger.core.entity.Customer>>any(), org.mockito.ArgumentMatchers.any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+        assertThat(customerService.list(token, "7", Customers.defaults()).items()).isEmpty();
+        verify(customerRepository).findAll(org.mockito.ArgumentMatchers.<Specification<com.smartledger.core.entity.Customer>>any(), org.mockito.ArgumentMatchers.any(Pageable.class));
     }
 
     @Test
@@ -211,14 +215,14 @@ class CustomerDebtServiceTest {
         debt.repay(20_000L);
         debt.voidRemaining();
         when(debtRepository.findByIdAndShopId(11L, 7L)).thenReturn(Optional.of(debt));
-        when(debtRepository.findAllByShopIdOrderByIdDesc(7L)).thenReturn(List.of(debt));
+        when(debtRepository.findAll(org.mockito.ArgumentMatchers.<Specification<com.smartledger.core.entity.Debt>>any(), org.mockito.ArgumentMatchers.any(Pageable.class))).thenReturn(new PageImpl<>(List.of(debt)));
 
         var response = debtService.getById(token, "7", "11");
 
         assertThat(response.cancelledVnd()).isEqualTo(40_000L);
         assertThat(response.voidedAt()).isEqualTo(debt.getVoidedAt());
         assertThat(response.settledAt()).isNull();
-        assertThat(debtService.list(token, "7")).containsExactly(response);
+        assertThat(debtService.list(token, "7", Debts.defaults()).items()).containsExactly(response);
     }
 
     @Test

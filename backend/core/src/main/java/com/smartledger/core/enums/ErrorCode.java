@@ -7,6 +7,12 @@ import org.springframework.http.HttpStatus;
 @Getter
 @RequiredArgsConstructor
 public enum ErrorCode {
+    INVALID_PRODUCT_QUERY(HttpStatus.BAD_REQUEST, "invalid_product_query", "Use valid filters, page >= 0, size 1-100 and offset <= 2147483647."),
+    INVALID_SALE_QUERY(HttpStatus.BAD_REQUEST, "invalid_sale_query", "Use valid filters, page >= 0, size 1-100 and offset <= 2147483647."),
+    INVALID_DRAFT_QUERY(HttpStatus.BAD_REQUEST, "invalid_draft_query", "Use valid filters, page >= 0, size 1-100 and offset <= 2147483647."),
+    INVALID_CUSTOMER_QUERY(HttpStatus.BAD_REQUEST, "invalid_customer_query", "Use valid filters, page >= 0, size 1-100 and offset <= 2147483647."),
+    INVALID_DEBT_QUERY(HttpStatus.BAD_REQUEST, "invalid_debt_query", "Use valid filters, page >= 0, size 1-100 and offset <= 2147483647."),
+    INVALID_EXPENSE_QUERY(HttpStatus.BAD_REQUEST, "invalid_expense_query", "Use valid filters, page >= 0, size 1-100 and offset <= 2147483647."),
     ACCOUNT_DISABLED(HttpStatus.FORBIDDEN, "account_disabled", "This account is disabled."),
     AUTH_PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "auth_profile_not_found", "No local SmartLedger profile exists yet."),
     DISPLAY_NAME_REQUIRED(HttpStatus.BAD_REQUEST, "validation_failed", "Display name is required for a new account."),
@@ -27,6 +33,7 @@ public enum ErrorCode {
     IDEMPOTENCY_KEY_CONFLICT(HttpStatus.CONFLICT, "idempotency_key_conflict", "This Idempotency-Key belongs to a different request."),
     IDEMPOTENCY_KEY_EXPIRED(HttpStatus.CONFLICT, "idempotency_key_expired", "This Idempotency-Key has expired; review the result before submitting again."),
     INVALID_PRODUCT_ID(HttpStatus.BAD_REQUEST, "invalid_product_id", "Product ID must be a positive integer."),
+    INVALID_PRODUCT_BARCODE(HttpStatus.BAD_REQUEST, "validation_failed", "The barcode is invalid."),
     PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "product_not_found", "This product is unavailable."),
     PRODUCT_CATEGORY_INVALID(HttpStatus.BAD_REQUEST, "product_category_invalid", "Category must be active in this shop."),
     PRODUCT_BARCODE_CONFLICT(HttpStatus.CONFLICT, "product_barcode_conflict", "Barcode already belongs to a product in this shop."),
@@ -34,6 +41,13 @@ public enum ErrorCode {
     PRODUCT_STOCK_NOT_TRACKED(HttpStatus.BAD_REQUEST, "product_stock_not_tracked", "Untracked products must not have a stock quantity."),
     PRODUCT_STOCK_IN_UNAVAILABLE(HttpStatus.CONFLICT, "product_stock_in_unavailable", "Stock-in requires a product with stock tracking enabled."),
     PRODUCT_STOCK_OVERFLOW(HttpStatus.CONFLICT, "product_stock_overflow", "Resulting stock cannot exceed 999999999999.999."),
+    IMAGE_REQUIRED(HttpStatus.BAD_REQUEST, "image_required", "An image file is required."),
+    IMAGE_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "image_too_large", "Image files must not exceed 5 MB."),
+    IMAGE_TYPE_INVALID(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "image_type_invalid", "Only valid JPEG and PNG images are accepted."),
+    IMAGE_DIMENSIONS_INVALID(HttpStatus.BAD_REQUEST, "image_dimensions_invalid", "Image dimensions must be between 1 and 2048 pixels."),
+    PRODUCT_IMAGE_URL_UNSUPPORTED(HttpStatus.BAD_REQUEST, "product_image_url_unsupported", "Use the product image upload or delete endpoint."),
+    MEDIA_UPLOAD_IN_PROGRESS(HttpStatus.CONFLICT, "media_upload_in_progress", "This media upload is still being processed. Please retry shortly."),
+    MEDIA_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "media_unavailable", "Media storage is unavailable. Please retry later."),
     INVALID_CUSTOMER_ID(HttpStatus.BAD_REQUEST, "invalid_customer_id", "Customer ID must be a positive integer."),
     CUSTOMER_NOT_FOUND(HttpStatus.NOT_FOUND, "customer_not_found", "This customer is unavailable in the selected shop."),
     CUSTOMER_REQUIRED_FOR_DEBT(HttpStatus.BAD_REQUEST, "customer_required_for_debt", "A customer is required before confirming an unpaid sale."),
@@ -67,6 +81,8 @@ public enum ErrorCode {
     SALE_RESTOCK_UNAVAILABLE(HttpStatus.CONFLICT, "sale_restock_unavailable", "Stock cannot be safely restored for this sale item; void without restocking and adjust inventory separately."),
     INVALID_PAYMENT_ID(HttpStatus.BAD_REQUEST, "invalid_payment_id", "Payment ID must be a positive integer."),
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "payment_not_found", "This payment is unavailable."),
+    INVALID_NOTIFICATION_QUERY(HttpStatus.BAD_REQUEST, "invalid_notification_query", "Use page >= 0, size 1-100, offset <= 2147483647 and 1-100 positive notification IDs."),
+    NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "notification_not_found", "This notification is unavailable."),
     INVALID_AUDIT_QUERY(HttpStatus.BAD_REQUEST, "invalid_audit_query", "Use a nonnegative page, size 1-100, positive entity ID and an increasing time range."),
     CONVERSATION_NOT_FOUND(HttpStatus.NOT_FOUND, "conversation_not_found", "This conversation is unavailable."),
     AI_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "ai_unavailable", "The assistant is unavailable. Please try again.");
