@@ -5,23 +5,30 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.smartledger.core.dto.request.CategoryWriteRequest;
 import com.smartledger.core.dto.request.CustomerWriteRequest;
+import com.smartledger.core.dto.request.SaleDraftItemRequest;
+import com.smartledger.core.dto.request.SaleDraftWriteRequest;
 import com.smartledger.core.entity.Category;
 import com.smartledger.core.entity.Customer;
 import com.smartledger.core.enums.CatalogStatus;
 import com.smartledger.core.enums.ErrorCode;
+import com.smartledger.core.enums.PaymentMethod;
+import com.smartledger.core.enums.PaymentStatus;
 import com.smartledger.core.exception.BusinessException;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.impl.AuditLogServiceImpl;
 import com.smartledger.core.service.impl.CategoryServiceImpl;
 import com.smartledger.core.service.impl.CustomerServiceImpl;
 import com.smartledger.core.service.impl.NotificationEventServiceImpl;
+import com.smartledger.core.service.impl.SaleDraftServiceImpl;
 import com.smartledger.core.service.impl.ShopServiceImpl;
 import jakarta.persistence.EntityManager;
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.Map;
+import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -34,6 +41,7 @@ import java.util.stream.Stream;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -62,7 +70,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({CustomerServiceImpl.class, CategoryServiceImpl.class, ShopServiceImpl.class,
         AuditLogServiceImpl.class, AdminAccessAuditService.class, NotificationEventServiceImpl.class,
-        CatalogLifecycleConcurrencyPostgresTest.Config.class})
+        SaleDraftServiceImpl.class, CatalogLifecycleConcurrencyPostgresTest.Config.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @EnabledIfEnvironmentVariable(named = "CORE_TEST_POSTGRES_URL", matches = "jdbc:postgresql:.+")
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
@@ -71,6 +79,7 @@ class CatalogLifecycleConcurrencyPostgresTest {
     private static boolean schemaCreated;
     @Autowired private CustomerService customers;
     @Autowired private CategoryService categories;
+    @Autowired private SaleDraftService drafts;
     @Autowired private EntityManager entityManager;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private PlatformTransactionManager transactions;
@@ -216,6 +225,212 @@ class CatalogLifecycleConcurrencyPostgresTest {
             jdbc.execute("alter table audit_logs drop constraint test_reject_category_audit");
         }
     }
+
+    /** A Customer lock must protect debt creation, including entities cached before a competing write. */
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void archiveBeforeDebtConfirmationRejectsEvenPreloadedCustomer(boolean preload) throws Exception {
+        confirmAfterCustomerWrite(preload, true);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void debtConfirmationSnapshotsLatestCustomerAfterWaitingForProfileWrite(boolean preload) throws Exception {
+        confirmAfterCustomerWrite(preload, false);
+    }
+
+    private void confirmAfterCustomerWrite(boolean preload, boolean archive) throws Exception {
+        Checkout fixture = checkout(10_000);
+        var ready = new CountDownLatch(1);
+        var attemptConfirm = new CountDownLatch(1);
+        var writerHoldsLock = new CountDownLatch(1);
+        var releaseWriter = new CountDownLatch(1);
+        var confirmerPid = new AtomicInteger();
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            var confirmer = pool.submit(() -> attempt(() -> tx(() -> {
+                confirmerPid.set(backendPid());
+                if (preload) assertActiveManaged(Target.CUSTOMER);
+                ready.countDown();
+                await(attemptConfirm);
+                return drafts.confirm(owner, Long.toString(shopId), Long.toString(fixture.draftId()));
+            })));
+            await(ready);
+            var writer = pool.submit(() -> tx(() -> {
+                write(Target.CUSTOMER, archive, shopId);
+                entityManager.flush();
+                writerHoldsLock.countDown();
+                await(releaseWriter);
+                return null;
+            }));
+            try {
+                await(writerHoldsLock);
+                attemptConfirm.countDown();
+                awaitBlocked(confirmerPid.get());
+                assertThat(confirmer.isDone()).isFalse();
+                releaseWriter.countDown();
+                writer.get(15, TimeUnit.SECONDS);
+                assertThat(confirmer.get(15, TimeUnit.SECONDS))
+                        .isEqualTo(archive ? ErrorCode.CUSTOMER_NOT_FOUND : null);
+                if (archive) assertNoCheckoutWrites(fixture);
+                else {
+                    var sale = jdbc.queryForMap("select * from sales where shop_id=?", shopId);
+                    assertThat(sale.get("customer_name_snapshot")).isEqualTo("New name");
+                    assertThat(sale.get("customer_phone_snapshot")).isEqualTo("0901234567");
+                    assertThat(((Number) sale.get("customer_id")).longValue()).isEqualTo(customerId);
+                    assertDebtAndStock(fixture);
+                }
+            } finally {
+                attemptConfirm.countDown();
+                releaseWriter.countDown();
+                confirmer.cancel(true);
+                writer.cancel(true);
+            }
+        }
+    }
+
+    /** Confirm serializes first; a later archive may keep the existing historical debt. */
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void debtConfirmationKeepsCustomerLockUntilCommitBeforeArchive(boolean preload) throws Exception {
+        Checkout fixture = checkout(10_000);
+        var ready = new CountDownLatch(1);
+        var attemptArchive = new CountDownLatch(1);
+        var confirmHoldsLock = new CountDownLatch(1);
+        var releaseConfirm = new CountDownLatch(1);
+        var archiverPid = new AtomicInteger();
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            var archiver = pool.submit(() -> tx(() -> {
+                archiverPid.set(backendPid());
+                if (preload) assertActiveManaged(Target.CUSTOMER);
+                ready.countDown();
+                await(attemptArchive);
+                write(Target.CUSTOMER, true, shopId);
+                return null;
+            }));
+            await(ready);
+            var confirmer = pool.submit(() -> tx(() -> {
+                var response = drafts.confirm(owner, Long.toString(shopId), Long.toString(fixture.draftId()));
+                entityManager.flush();
+                confirmHoldsLock.countDown();
+                await(releaseConfirm);
+                return response;
+            }));
+            try {
+                await(confirmHoldsLock);
+                attemptArchive.countDown();
+                awaitBlocked(archiverPid.get());
+                assertThat(archiver.isDone()).isFalse();
+                assertThat(stored(Target.CUSTOMER).get("status")).isEqualTo("ACTIVE");
+                releaseConfirm.countDown();
+                var sale = confirmer.get(15, TimeUnit.SECONDS);
+                archiver.get(15, TimeUnit.SECONDS);
+                assertThat(stored(Target.CUSTOMER).get("status")).isEqualTo("ARCHIVED");
+                assertThat(sale.customerId()).isEqualTo(customerId);
+                assertThat(sale.paymentStatus()).isEqualTo(PaymentStatus.PARTIAL);
+                assertDebtAndStock(fixture);
+                var replay = drafts.confirm(owner, Long.toString(shopId), Long.toString(fixture.draftId()));
+                assertThat(replay.id()).isEqualTo(sale.id());
+                assertDebtAndStock(fixture);
+            } finally {
+                attemptArchive.countDown();
+                releaseConfirm.countDown();
+                archiver.cancel(true);
+                confirmer.cancel(true);
+            }
+        }
+    }
+
+    @Test
+    void debtConfirmationAuditFailureRollsBackAndReleasesCustomerLock() throws Exception {
+        Checkout fixture = checkout(10_000);
+        jdbc.execute("alter table audit_logs add constraint test_reject_checkout_audit check (shop_id <> " + shopId + ")");
+        try {
+            assertThatThrownBy(() -> drafts.confirm(owner, Long.toString(shopId), Long.toString(fixture.draftId())))
+                    .isInstanceOf(DataIntegrityViolationException.class);
+            assertNoCheckoutWrites(fixture);
+        } finally {
+            jdbc.execute("alter table audit_logs drop constraint test_reject_checkout_audit");
+        }
+        // A different connection can now update the same Customer: failed confirmation released its lock.
+        try (var pool = Executors.newSingleThreadExecutor()) {
+            pool.submit(() -> customers.replace(owner, Long.toString(shopId), Long.toString(customerId),
+                    new CustomerWriteRequest("After rollback", null))).get(15, TimeUnit.SECONDS);
+        }
+        var sale = drafts.confirm(owner, Long.toString(shopId), Long.toString(fixture.draftId()));
+        assertThat(sale.customerName()).isEqualTo("After rollback");
+        assertDebtAndStock(fixture);
+    }
+
+    @Test
+    void fullyPaidConfirmationStillAcceptsArchivedCustomerSnapshotWithoutDebt() {
+        Checkout fixture = checkout(25_000);
+        customers.archive(owner, Long.toString(shopId), Long.toString(customerId));
+
+        var sale = drafts.confirm(owner, Long.toString(shopId), Long.toString(fixture.draftId()));
+
+        assertThat(sale.customerId()).isNull();
+        assertThat(sale.customerName()).isEqualTo("Old name");
+        assertThat(sale.customerPhone()).isEqualTo("0900");
+        assertThat(sale.paymentStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(jdbc.queryForObject("select count(*) from debts d join sales s on s.id=d.sale_id where s.shop_id=?",
+                Long.class, shopId)).isZero();
+        assertThat(stock(fixture)).isEqualByComparingTo("4.000");
+    }
+
+    @Test
+    void debtConfirmationDoesNotLockOrLinkCustomerFromAnotherShop() {
+        Checkout fixture = checkout(10_000);
+        long foreignId = jdbc.queryForObject("insert into customers(shop_id,name) values (?,'Foreign') returning id",
+                Long.class, otherShopId);
+        jdbc.update("update sale_drafts set customer_id=? where id=?", foreignId, fixture.draftId());
+        assertThatThrownBy(() -> drafts.confirm(owner, Long.toString(shopId), Long.toString(fixture.draftId())))
+                .isInstanceOfSatisfying(BusinessException.class, error ->
+                        assertThat(error.getErrorCode()).isEqualTo(ErrorCode.CUSTOMER_NOT_FOUND));
+        assertNoCheckoutWrites(fixture);
+    }
+
+    private Checkout checkout(long paid) {
+        long productId = jdbc.queryForObject("""
+                insert into products(shop_id,name,unit,selling_price_vnd,cost_price_vnd,tracked,stock_quantity)
+                values (?,'Product','piece',25000,10000,true,5) returning id
+                """, Long.class, shopId);
+        long draftId = drafts.create(owner, Long.toString(shopId), new SaleDraftWriteRequest(null, null, 0L,
+                paid, PaymentMethod.CASH, List.of(new SaleDraftItemRequest(productId, BigDecimal.ONE, 25000L)),
+                customerId)).id();
+        return new Checkout(draftId, productId);
+    }
+
+    private void assertNoCheckoutWrites(Checkout fixture) {
+        assertThat(jdbc.queryForObject("select status from sale_drafts where id=?", String.class, fixture.draftId()))
+                .isEqualTo("DRAFT");
+        assertThat(stock(fixture)).isEqualByComparingTo("5.000");
+        for (String table : List.of("sales", "audit_logs", "notification_events")) {
+            assertThat(jdbc.queryForObject("select count(*) from " + table + " where shop_id=?", Long.class, shopId))
+                    .as("no partial %s", table).isZero();
+        }
+        for (String table : List.of("sale_items", "payments", "debts")) {
+            assertThat(jdbc.queryForObject("select count(*) from " + table + " t join sales s on s.id=t.sale_id where s.shop_id=?",
+                    Long.class, shopId)).as("no partial %s", table).isZero();
+        }
+    }
+
+    private void assertDebtAndStock(Checkout fixture) {
+        assertThat(stock(fixture)).isEqualByComparingTo("4.000");
+        assertThat(jdbc.queryForObject("select count(*) from sales where shop_id=?", Long.class, shopId)).isEqualTo(1);
+        var debt = jdbc.queryForMap("select d.* from debts d join sales s on s.id=d.sale_id where s.shop_id=?", shopId);
+        assertThat(((Number) debt.get("customer_id")).longValue()).isEqualTo(customerId);
+        assertThat(((Number) debt.get("outstanding_vnd")).longValue()).isEqualTo(15_000);
+        assertThat(jdbc.queryForObject("select count(*) from payments p join sales s on s.id=p.sale_id where s.shop_id=?",
+                Long.class, shopId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from audit_logs where shop_id=? and action='SALE_CONFIRMED'",
+                Long.class, shopId)).isEqualTo(1);
+    }
+
+    private BigDecimal stock(Checkout fixture) {
+        return jdbc.queryForObject("select stock_quantity from products where id=?", BigDecimal.class, fixture.productId());
+    }
+
+    private record Checkout(long draftId, long productId) { }
 
     private void write(Target target, boolean archive, long selectedShopId) {
         String shop = Long.toString(selectedShopId);

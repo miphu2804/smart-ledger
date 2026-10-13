@@ -40,6 +40,12 @@ REQUIRED = {
         "archiveCommitPreventsStaleReplace",
         "archiveReadsLatestCommittedProfile",
         "concurrentArchivesKeepFirstMetadataAndSingleAudit",
+        "archiveBeforeDebtConfirmationRejectsEvenPreloadedCustomer",
+        "debtConfirmationSnapshotsLatestCustomerAfterWaitingForProfileWrite",
+        "debtConfirmationKeepsCustomerLockUntilCommitBeforeArchive",
+        "debtConfirmationAuditFailureRollsBackAndReleasesCustomerLock",
+        "fullyPaidConfirmationStillAcceptsArchivedCustomerSnapshotWithoutDebt",
+        "debtConfirmationDoesNotLockOrLinkCustomerFromAnotherShop",
     },
     "com.smartledger.core.service.CategoryAssignmentConcurrencyPostgresTest": {
         "archiveCommitRejectsCreateOrPatchWithoutPartialWrites",
