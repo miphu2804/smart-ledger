@@ -219,6 +219,38 @@ jobs:
       - name: Mark setup done
         run: echo "setup=$(date +%s)" >> "$TIMINGS"
 
+      # The model is not in git, so the APK downloads it from R2 on first use. A publish uploads the version named in
+      # core.ts when R2 lacks it (only missing or wrong-size files, so a released version is never rewritten); other
+      # builds have no R2 credentials and carry on with a warning, as voice input then cannot work.
+      - name: Resolve the speech model URL
+        env:
+          STT_MODEL_BASE_URL: ${{ vars.STT_MODEL_BASE_URL }}
+          PUBLISH: ${{ inputs.publish }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_ENDPOINT_URL: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          BUCKET: ${{ vars.R2_BUCKET }}
+        run: |
+          if [ -z "$STT_MODEL_BASE_URL" ]; then
+            [ "$PUBLISH" = true ] && { echo "::error::Publishing needs variable STT_MODEL_BASE_URL."; exit 1; }
+            echo "::warning::STT_MODEL_BASE_URL is not set: voice input in this build cannot download its model."; exit 0
+          fi
+          if ! line=$(node .github/scripts/stt-model.mjs check); then
+            if [ "$PUBLISH" != true ]; then
+              echo "$line" | sed 's/::error::/::warning::/'
+              echo "::warning::Voice input in this build cannot download its model; a publish uploads it."; exit 0
+            fi
+            echo "$line" | sed 's/::error::/::notice::/'
+            dir="$RUNNER_TEMP/stt-model"
+            version=$(node .github/scripts/stt-model.mjs fetch "$dir") || { echo "$version"; exit 1; }
+            aws s3 sync "$dir" "s3://$BUCKET/stt-model/$version/" --size-only
+            rm -rf "$dir"
+            line=$(node .github/scripts/stt-model.mjs check) || { echo "$line"; exit 1; }
+          fi
+          echo "$line"
+          echo "$line" >> "$GITHUB_ENV"
+
       - name: Install JavaScript dependencies
         working-directory: frontend/mobile
         run: npm ci
