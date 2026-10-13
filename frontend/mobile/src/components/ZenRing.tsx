@@ -370,7 +370,7 @@ export function ZenRing() {
             {...pan.panHandlers}
             accessible
             accessibilityRole="button"
-            accessibilityLabel="Trợ lý bán hàng"
+            accessibilityLabel="Bobi, trợ lý bán hàng"
             accessibilityHint="Chạm để mở Hỏi đáp, Đọc đơn hoặc Báo cáo. Giữ để Đọc đơn. Có thể kéo sang vị trí khác."
             accessibilityActions={[{ name: 'activate', label: 'Mở trợ lý' }, { name: 'longpress', label: 'Mở Đọc đơn' }]}
             onAccessibilityAction={(event) => {

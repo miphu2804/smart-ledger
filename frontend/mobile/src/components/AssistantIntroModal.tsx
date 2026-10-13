@@ -16,16 +16,17 @@ const steps: readonly {
   tips: readonly { title: string; body: string }[];
 }[] = [
   {
-    title: 'Trợ lý',
+    // Trang giới thiệu Bobi (không có icon): phần hình hiện Bobi kèm lời chào
+    title: 'Trợ lý Bobi',
     icon: null,
-    tone: colors.primary,
-    gradient: ['#8FDB6E', '#CDEFB8', '#F3FAEF'],
+    tone: colors.brand,
+    gradient: ['#CFC4F7', '#E9E3FC', '#F8F5FF'],
     description:
-      'Mascot ở góc màn hình mở nhanh Hỏi đáp, Đọc đơn và Báo cáo.',
+      'Bobi là linh vật và trợ lý của Sổ Nghe Lời. Bobi nằm ở góc màn hình để bạn mở nhanh Hỏi đáp, Đọc đơn và Báo cáo.',
     tips: [
-      { title: 'Chạm để mở', body: 'Mở Hỏi đáp, Đọc đơn hoặc Báo cáo.' },
-      { title: 'Giữ để đọc đơn', body: 'Đi thẳng tới màn Đọc đơn.' },
-      { title: 'Kéo đến chỗ thuận tay', body: 'Kéo mascot sang cạnh khác nếu che nội dung.' },
+      { title: 'Chạm vào Bobi', body: 'Mở Hỏi đáp, Đọc đơn hoặc Báo cáo.' },
+      { title: 'Giữ Bobi để đọc đơn', body: 'Đi thẳng tới màn Đọc đơn.' },
+      { title: 'Kéo Bobi đến chỗ thuận tay', body: 'Kéo Bobi sang cạnh khác nếu che nội dung.' },
     ],
   },
   {
@@ -158,7 +159,19 @@ export function AssistantIntroModal({
                     <View style={styles.visualIcon}>
                       <Feather name={page.icon} size={30} color={page.tone} />
                     </View>
-                  ) : <MascotBadge size={compact ? 76 : 96} />}
+                  ) : (
+                    <View style={styles.mascotRow} accessible accessibilityLabel="Bobi chào bạn: Chào bạn, mình là Bobi!">
+                      <MascotBadge size={compact ? 84 : 108} />
+                      <View style={styles.speech}>
+                        <T w="bold" size={15} color={colors.brand}>
+                          Chào bạn, mình là Bobi!
+                        </T>
+                        <T size={12.5} color={colors.muted} style={styles.speechSub}>
+                          Cần gì cứ gọi mình nhé.
+                        </T>
+                      </View>
+                    </View>
+                  )}
                 </LinearGradient>
 
                 <T size={15} color={colors.muted} style={styles.description}>{page.description}</T>
@@ -249,6 +262,13 @@ const styles = StyleSheet.create({
     width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.75)', borderWidth: 1, borderColor: colors.white,
   },
+  mascotRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14 },
+  // Bong bóng lời chào: góc dưới bên trái nhọn hơn để trông như lời của Bobi
+  speech: {
+    flexShrink: 1, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 16, borderBottomLeftRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 1, borderColor: colors.white,
+  },
+  speechSub: { marginTop: 2 },
   description: { marginTop: 18, lineHeight: 23 },
   tips: { marginTop: 18, gap: 14 },
   tip: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
