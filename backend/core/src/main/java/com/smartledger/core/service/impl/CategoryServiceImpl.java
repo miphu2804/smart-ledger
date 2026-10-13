@@ -15,6 +15,8 @@ import com.smartledger.core.repository.ProductRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.CategoryService;
 import com.smartledger.core.service.ShopService;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
@@ -26,13 +28,15 @@ public class CategoryServiceImpl implements CategoryService {
     private final ShopService shopService;
     private final CategoryRepository categoryRepository;
     private final ProductRepository productRepository;
+    private final EntityManager entityManager;
 
     public CategoryServiceImpl(ShopService shopService, CategoryRepository categoryRepository,
-            ProductRepository productRepository, AuditLogService auditLogService) {
+            ProductRepository productRepository, AuditLogService auditLogService, EntityManager entityManager) {
         this.auditLogService = auditLogService;
         this.shopService = shopService;
         this.categoryRepository = categoryRepository;
         this.productRepository = productRepository;
+        this.entityManager = entityManager;
     }
 
     @Override
@@ -64,7 +68,7 @@ public class CategoryServiceImpl implements CategoryService {
     public CategoryResponse replace(VerifiedFirebaseToken firebaseToken, String shopId, String categoryId,
             CategoryWriteRequest request) {
         Shop shop = shopService.requireOwnedActiveShop(firebaseToken, shopId);
-        Category category = requireActiveCategory(shop.getId(), categoryId);
+        Category category = requireLockedActiveCategory(shop.getId(), categoryId);
         category.rename(request.name().trim());
         auditLogService.recordOwner(shop, AuditAction.CATEGORY_UPDATED, category.getId(), null, null,
                 Map.of("changedFields", List.of("name")));
@@ -75,7 +79,7 @@ public class CategoryServiceImpl implements CategoryService {
     @Transactional
     public void archive(VerifiedFirebaseToken firebaseToken, String shopId, String categoryId) {
         Shop shop = shopService.requireOwnedActiveShop(firebaseToken, shopId);
-        Category category = requireActiveCategory(shop.getId(), categoryId);
+        Category category = requireLockedActiveCategory(shop.getId(), categoryId);
         if (productRepository.existsByShopIdAndCategoryIdAndStatus(
                 shop.getId(), category.getId(), CatalogStatus.ACTIVE)) {
             throw new BusinessException(ErrorCode.CATEGORY_HAS_PRODUCTS);
@@ -87,6 +91,17 @@ public class CategoryServiceImpl implements CategoryService {
     private Category requireActiveCategory(Long shopId, String categoryId) {
         return categoryRepository.findByIdAndShopIdAndStatus(parseCategoryId(categoryId), shopId, CatalogStatus.ACTIVE)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
+    }
+
+    private Category requireLockedActiveCategory(Long shopId, String categoryId) {
+        Category category = categoryRepository.findLockedByIdAndShopId(parseCategoryId(categoryId), shopId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
+        // A lock query can return an already-managed, stale entity; refresh before checking status.
+        entityManager.refresh(category, LockModeType.PESSIMISTIC_WRITE);
+        if (category.getStatus() != CatalogStatus.ACTIVE) {
+            throw new BusinessException(ErrorCode.CATEGORY_NOT_FOUND);
+        }
+        return category;
     }
 
     private Long parseCategoryId(String categoryId) {
