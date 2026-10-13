@@ -364,10 +364,12 @@ function ProductForm({
   const [addingCat, setAddingCat] = useState(false);
   const [newCatName, setNewCatName] = useState('');
   const [catBusy, setCatBusy] = useState(false);
-  /** Ảnh đang hiện ở form: ảnh đã lưu ở Core (mặt hàng cũ) hoặc ảnh vừa chọn của mặt hàng mới */
+  /** Ảnh đang hiện ở form: ảnh đã lưu ở Core, hoặc ảnh vừa chọn còn chờ lưu */
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  /** Mặt hàng mới chưa có id: giữ ảnh đã chọn, tải lên ngay sau khi tạo xong */
+  /** Ảnh vừa chọn, chưa gửi lên Core: chỉ tải lên khi bấm lưu (mặt hàng mới thì ngay sau khi tạo xong) */
   const [pendingPhoto, setPendingPhoto] = useState<PickedImage | null>(null);
+  /** Mặt hàng đang có ảnh ở Core và người dùng bấm "Xoá ảnh": ảnh ở Core chỉ bị xoá khi bấm lưu */
+  const [removeSavedPhoto, setRemoveSavedPhoto] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoErr, setPhotoErr] = useState('');
   /** Cảnh báo ngay dưới ô mã vạch khi mã vừa quét đang thuộc một món khác (Core sẽ từ chối lúc lưu) */
@@ -404,6 +406,7 @@ function ProductForm({
     setBarcodeWarn('');
     setPhotoUrl(p?.imageUrl ?? null);
     setPendingPhoto(null);
+    setRemoveSavedPhoto(false);
     setPhotoBusy(false);
     setPhotoErr('');
   }
@@ -427,6 +430,8 @@ function ProductForm({
     const categoryId = catKey === 'none' ? null : Number(catKey);
     const lowStockThreshold = resolved.ok ? resolved.value : null;
     let photoFailure = '';
+    const session = photoSession.current;
+    setPhotoErr('');
     setBusy(true);
     try {
       if (p) {
@@ -442,6 +447,16 @@ function ProductForm({
           lowStockThreshold,
         });
         if (Object.keys(patch).length > 0) await productApi.update(p.id, patch);
+        // Ảnh đổi hoặc xoá trong form chỉ tới Core ở bước lưu này. Lỗi ảnh không huỷ các thay đổi đã lưu ở trên.
+        if (pendingPhoto || removeSavedPhoto) {
+          setPhotoBusy(true);
+          try {
+            if (pendingPhoto) await productApi.uploadImage(p.id, pendingPhoto);
+            else await productApi.deleteImage(p.id);
+          } catch (e) {
+            photoFailure = errorMessage(e);
+          }
+        }
       } else {
         const created = await productApi.create({
           categoryId,
@@ -463,6 +478,19 @@ function ProductForm({
           }
         }
       }
+      if (photoFailure && p) {
+        // Giữ form mở để bấm lưu lại mà không phải chụp lại ảnh. Các thay đổi khác đã ở Core nên nạp lại danh sách.
+        triggerFeedback('warning');
+        onSaved();
+        const what = pendingPhoto ? 'chưa lưu được ảnh' : 'chưa xoá được ảnh';
+        if (session === photoSession.current) {
+          setPhotoErr(`Các thay đổi khác đã lưu, nhưng ${what}: ${photoFailure}. Bấm "Lưu thay đổi" để thử lại.`);
+        } else {
+          // Form đã chuyển sang việc khác thì không còn chỗ hiện lỗi của mặt hàng này: báo bằng toast
+          toast(`Đã cập nhật "${p.name}" nhưng ${what}: ${photoFailure}`, 'err');
+        }
+        return;
+      }
       if (photoFailure) {
         triggerFeedback('warning');
         toast(`Đã thêm "${name.trim()}" nhưng chưa lưu được ảnh: ${photoFailure}. Mở lại mặt hàng để thêm ảnh.`, 'err');
@@ -477,33 +505,17 @@ function ProductForm({
       setErr(errorMessage(e));
     } finally {
       setBusy(false);
+      if (session === photoSession.current) setPhotoBusy(false);
     }
   };
 
-  // Mặt hàng đã có: tải ảnh lên ngay khi chọn (như nhập hàng, không chờ "Lưu thay đổi"). Mặt hàng mới: giữ lại chờ tạo xong.
-  const applyPhoto = async (image: PickedImage) => {
-    const session = photoSession.current;
-    const current = () => session === photoSession.current;
+  // Ảnh vừa chọn chỉ hiện xem trước ở form. Nó tới Core khi bấm lưu (xem `save`), nên đóng form mà không lưu thì ảnh
+  // đang có của mặt hàng vẫn còn nguyên.
+  const applyPhoto = (image: PickedImage) => {
     setPhotoErr('');
-    if (!p) {
-      setPendingPhoto(image);
-      setPhotoUrl(image.uri);
-      return;
-    }
-    setPhotoBusy(true);
-    try {
-      const updated = await productApi.uploadImage(p.id, image);
-      triggerFeedback('success');
-      onChanged();
-      if (current()) setPhotoUrl(updated.imageUrl);
-    } catch (e) {
-      triggerFeedback('error');
-      // Form đã chuyển sang việc khác thì không còn chỗ hiện lỗi của mặt hàng này: báo bằng toast
-      if (current()) setPhotoErr(errorMessage(e));
-      else toast(`Chưa lưu được ảnh cho "${p.name}": ${errorMessage(e)}`, 'err');
-    } finally {
-      if (current()) setPhotoBusy(false);
-    }
+    setPendingPhoto(image);
+    setRemoveSavedPhoto(false);
+    setPhotoUrl(image.uri);
   };
 
   const choosePhoto = async () => {
@@ -518,35 +530,20 @@ function ProductForm({
       const image = await pickImageOnWeb();
       // Form đã đóng hoặc mở mặt hàng khác trong lúc hộp chọn file còn mở: bỏ ảnh vừa chọn
       if (!image || session !== photoSession.current) return;
-      await applyPhoto(image);
+      applyPhoto(image);
     } catch (e) {
       if (session !== photoSession.current) return;
       setPhotoErr(e instanceof PhotoError ? e.message : 'Không đọc được ảnh này. Hãy chọn ảnh khác');
     }
   };
 
-  const removePhoto = async () => {
+  // Bỏ ảnh khỏi form. Ảnh đã lưu ở Core chỉ bị xoá khi bấm lưu.
+  const removePhoto = () => {
     if (photoBusy) return;
     setPhotoErr('');
-    if (!p) {
-      setPendingPhoto(null);
-      setPhotoUrl(null);
-      return;
-    }
-    const session = photoSession.current;
-    const current = () => session === photoSession.current;
-    setPhotoBusy(true);
-    try {
-      await productApi.deleteImage(p.id);
-      onChanged();
-      if (current()) setPhotoUrl(null);
-    } catch (e) {
-      triggerFeedback('error');
-      if (current()) setPhotoErr(errorMessage(e));
-      else toast(`Chưa xoá được ảnh của "${p.name}": ${errorMessage(e)}`, 'err');
-    } finally {
-      if (current()) setPhotoBusy(false);
-    }
+    setPendingPhoto(null);
+    setPhotoUrl(null);
+    setRemoveSavedPhoto(!!p?.imageUrl);
   };
 
   // Mã vừa quét: hỏi Core xem đã thuộc món khác chưa để báo ngay, không đợi tới lúc lưu mới gặp lỗi trùng mã.
@@ -595,6 +592,17 @@ function ProductForm({
     }, 1400);
   };
 
+  // Mặt hàng đã có: nhắc rằng ảnh vừa đổi hoặc vừa bỏ chỉ có hiệu lực sau khi bấm lưu
+  const photoUnsaved = !!p && (!!pendingPhoto || removeSavedPhoto);
+  const photoHint =
+    p && pendingPhoto
+      ? 'Ảnh mới chưa lưu. Bấm "Lưu thay đổi" để dùng ảnh này.'
+      : removeSavedPhoto
+        ? 'Ảnh sẽ bị xoá khi bạn bấm "Lưu thay đổi".'
+        : photoUrl
+          ? 'Ảnh này hiện trên thẻ ở màn Bán hàng.'
+          : 'Tuỳ chọn. Chưa có ảnh thì app dùng ảnh minh hoạ theo tên.';
+
   return (
     <Sheet visible={!!value} onClose={onClose} title={isNew ? 'Thêm mặt hàng' : 'Sửa mặt hàng'}>
       {isNew ? (
@@ -630,8 +638,8 @@ function ProductForm({
               <T w="semibold" size={14}>
                 Ảnh mặt hàng
               </T>
-              <T size={12} color={colors.faint}>
-                {photoUrl ? 'Ảnh này hiện trên thẻ ở màn Bán hàng.' : 'Tuỳ chọn. Chưa có ảnh thì app dùng ảnh minh hoạ theo tên.'}
+              <T size={12} color={photoUnsaved ? colors.gold : colors.faint}>
+                {photoHint}
               </T>
               <Row gap={8} style={{ marginTop: 8 }}>
                 <Button
@@ -639,10 +647,10 @@ function ProductForm({
                   icon="camera"
                   variant="soft"
                   small
-                  disabled={photoBusy}
+                  disabled={photoBusy || busy}
                   onPress={choosePhoto}
                 />
-                {photoUrl ? <Button title="Xoá ảnh" icon="trash-2" variant="ghost" small disabled={photoBusy} onPress={removePhoto} /> : null}
+                {photoUrl ? <Button title="Xoá ảnh" icon="trash-2" variant="ghost" small disabled={photoBusy || busy} onPress={removePhoto} /> : null}
               </Row>
             </View>
           </Row>
