@@ -4,17 +4,20 @@
  * bằng giữa chất lượng và độ trễ.
  *
  *   npm run voice:cascade -- --llm scripts/voice-crf/.data/llm/default.jsonl [--llm <file khác>]
+ *   npm run voice:cascade -- --escalated scripts/voice-crf/.data/llm/escalated.txt
  *
+ * `--escalated` ghi id các câu mà gate cũ hoặc gate câu tự do chặn, theo thứ tự ưu tiên khi ngân sách LLM nhỏ (bộ giữ kín
+ * 3, gold test, câu tự do 2, câu tự do, gold dev), để `llm.py --ids` chỉ gọi những câu này.
  * File LLM do `llm.py` ghi (DraftService của backend/ai). Mỗi file LLM cho các cấu hình:
  * - chỉ trên máy, gate cũ / gate câu tự do: câu bị chặn thì hỏi lại người dùng (không tính là đúng);
  * - gate cũ / gate câu tự do → LLM: câu bị chặn gửi LLM;
- * - chỉ LLM.
+ * - chỉ LLM (chỉ khi mọi câu trong bộ đều có kết quả LLM).
  * Đơn hàng của LLM: dòng khớp danh mục → món; dòng model báo mơ hồ → hỏi chọn trong cả danh mục; dòng không khớp hoặc
  * chưa chắc → món ngoài danh mục; khoản chi lấy từ chế độ EXPENSE. LLM lỗi hoặc quá hạn thì tính như hỏi lại.
  * Độ trễ một câu = parse trên máy (đo ở đây, Node) + LLM nếu gửi đi (SALE và EXPENSE gọi song song: lấy lần lâu hơn).
  * Bộ giữ kín chỉ in số tổng.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import type { DisambiguationItem, ParseableProduct, ParsedExpenseItem } from '../../src/lib/parseOrder';
 import type { LineItem } from '../../src/data/types';
@@ -29,7 +32,9 @@ const readJsonl = <T,>(file: string) =>
     .filter((l) => l.trim())
     .map((l) => JSON.parse(l) as T);
 const readSet = (file: string, prefix = '') =>
-  existsSync(here(file)) ? readJsonl<GoldCase>(here(file).pathname).map((g) => ({ ...g, split: `${prefix}${g.split}` as GoldCase['split'] })) : [];
+  existsSync(here(file))
+    ? readJsonl<GoldCase>(here(file).pathname).map((g) => ({ ...g, split: `${prefix}${g.split}` as GoldCase['split'] }))
+    : [];
 const gold = [
   ...readSet('./eval/gold.jsonl'),
   ...readSet('./eval/free.jsonl', 'free-'),
@@ -40,6 +45,7 @@ const gold = [
 interface LlmMode {
   ms: number;
   error?: string;
+  tokens?: { input: number; output: number; reasoning: number; requests: number };
   lines?: Array<{ text: string; qty: number; product_id: number | null; ambiguous: boolean }>;
   items?: Array<{ product_id: number | null; name: string; qty: number; unit_price: number | null }>;
 }
@@ -64,7 +70,12 @@ function llmOrder(row: LlmRow | undefined, products: ParseableProduct[]): Scored
     const qty = Math.max(1, Math.round(it.qty));
     if (it.product_id !== null) items.push({ productId: it.product_id, name: it.name, price: it.unit_price ?? 0, qty });
     else if (kept[k]?.ambiguous) {
-      disambiguations.push({ rawName: it.name, qty, unit: null, options: products.map((p) => ({ product_id: p.id, name: p.name, unit_price_vnd: p.price })) });
+      disambiguations.push({
+        rawName: it.name,
+        qty,
+        unit: null,
+        options: products.map((p) => ({ product_id: p.id, name: p.name, unit_price_vnd: p.price })),
+      });
     } else unknown.push({ name: it.name, price: 0, qty });
   });
   const expenses: ParsedExpenseItem[] = (row.expense.items ?? [])
@@ -90,6 +101,19 @@ const local = gold.map((g) => {
 });
 
 const args = process.argv.slice(2);
+const escalatedOut = args[args.indexOf('--escalated') + 1];
+if (args.includes('--escalated') && escalatedOut) {
+  const PRIORITY = ['hold3-test', 'test', 'free2-dev', 'free-test', 'free-dev', 'dev'];
+  const ids = PRIORITY.flatMap((split) =>
+    gold.filter((g, i) => g.split === split && (local[i].old.r.fallback || local[i].neu.r.fallback)).map((g) => g.id),
+  );
+  writeFileSync(resolve(escalatedOut), `${ids.join('\n')}\n`);
+  const per = PRIORITY.map((split) => `${split} ${gold.filter((g) => g.split === split && ids.includes(g.id)).length}`).join(
+    ', ',
+  );
+  console.log(`${ids.length}/${gold.length} câu bị chặn (${per}) → ${escalatedOut}`);
+  process.exit(0);
+}
 const llmFiles = args.flatMap((a, i) => (a === '--llm' && args[i + 1] ? [args[i + 1]] : []));
 if (!llmFiles.length) {
   console.error('Cần ít nhất một --llm <file> do llm.py ghi.');
@@ -97,22 +121,35 @@ if (!llmFiles.length) {
 }
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
-const quantile = (xs: number[], p: number) => [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(p * xs.length))] ?? 0;
+const quantile = (xs: number[], p: number) =>
+  [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(p * xs.length))] ?? 0;
 const SPLITS = ['dev', 'test', 'free-dev', 'free-test', 'free2-dev', 'hold3-test'];
 
 for (const file of llmFiles) {
   const rows = new Map(readJsonl<LlmRow>(resolve(file)).map((r) => [r.id, r]));
   const any = rows.values().next().value as LlmRow | undefined;
   const missing = gold.filter((g) => !rows.has(g.id)).length;
-  console.log(`\n# ${basename(file)}: ${any?.model ?? '?'}, effort ${any?.effort ?? '?'} (${rows.size} câu có kết quả LLM, ${missing} câu thiếu)`);
+  console.log(
+    `\n# ${basename(file)}: ${any?.model ?? '?'}, effort ${any?.effort ?? '?'} (${rows.size} câu có kết quả LLM, ${missing} câu thiếu)`,
+  );
   console.log('Mỗi câu thiếu kết quả LLM hoặc LLM lỗi tính như hỏi lại.');
+  const tok = [...rows.values()].flatMap((r) => [r.sale.tokens, r.expense.tokens]).filter((t) => t);
+  if (tok.length) {
+    const sum = (k: 'input' | 'output') => tok.reduce((a, t) => a + (t?.[k] ?? 0), 0);
+    console.log(
+      `Token trung bình mỗi câu (SALE + EXPENSE): ${Math.round((2 * sum('input')) / tok.length)} vào, ${Math.round((2 * sum('output')) / tok.length)} ra.`,
+    );
+  }
   type Pick = (i: number) => { r: ScoredResult; ms: number; llm: boolean };
   const CONFIGS: Array<[string, Pick]> = [
     ['Chỉ trên máy, gate cũ', (i) => ({ r: local[i].old.r, ms: local[i].old.ms, llm: false })],
     ['Chỉ trên máy, gate câu tự do', (i) => ({ r: local[i].neu.r, ms: local[i].neu.ms, llm: false })],
     ['Gate cũ → LLM', (i) => cascade(i, local[i].old)],
     ['Gate câu tự do → LLM', (i) => cascade(i, local[i].neu)],
-    ['Chỉ LLM', (i) => ({ r: llmOrder(rows.get(gold[i].id), catalogs[gold[i].catalog]), ms: llmMs(rows.get(gold[i].id)), llm: true })],
+    [
+      'Chỉ LLM',
+      (i) => ({ r: llmOrder(rows.get(gold[i].id), catalogs[gold[i].catalog]), ms: llmMs(rows.get(gold[i].id)), llm: true }),
+    ],
   ];
   function cascade(i: number, l: { r: DetailedParse; ms: number }) {
     if (!l.r.fallback) return { r: l.r, ms: l.ms, llm: false };
@@ -126,6 +163,7 @@ for (const file of llmFiles) {
     console.log('| Cấu hình | Đúng hết (câu) | Đúng theo món | Dòng món sai / dòng món | Gửi LLM | Độ trễ P50 | P95 |');
     console.log('|---|---|---|---|---|---|---|');
     for (const [name, pick] of CONFIGS) {
+      if (name === 'Chỉ LLM' && idx.some((i) => !rows.has(gold[i].id))) continue;
       const picks = idx.map(pick);
       const scores: CaseScore[] = idx.map((i, k) => scoreCase(gold[i], picks[k].r));
       const m = aggregate(

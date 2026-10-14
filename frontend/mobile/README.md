@@ -72,7 +72,8 @@ npm run voice:tune      # dò ngưỡng gate trên tập dev
 npm run voice:grid      # dò lưới cách giải mã/ngưỡng; --model <json> --compact so model, --ablate, --lexout <dir> (từ chưa gặp), --gate
 npm run voice:router -- <model.json> <out.jsonl> human   # đặc trưng lượt parse cho router escalate (router.py học và so với θ)
 npm run voice:gate      # so chính sách gate tự nhận / gửi LLM; --set <tên>=<model>=<famout.jsonl> thêm kiểu câu chưa gặp
-npm run voice:llm -- --out scripts/voice-crf/.data/llm/default.jsonl   # LLM của backend/ai trên bộ eval (cần OPENAI_API_KEY)
+npm run voice:cascade -- --escalated scripts/voice-crf/.data/llm/escalated.txt # id câu bị chặn, theo thứ tự ưu tiên
+npm run voice:llm -- --out scripts/voice-crf/.data/llm/default.jsonl --ids scripts/voice-crf/.data/llm/escalated.txt # LLM của backend/ai (cần OPENAI_API_KEY; bỏ --ids để chạy hết)
 npm run voice:cascade -- --llm scripts/voice-crf/.data/llm/default.jsonl # chất lượng và độ trễ: trên máy / trên máy → LLM / chỉ LLM
 npm run voice:synth && npm run voice:train && npm run voice:parity   # sinh câu, train CRF (cần uv), so Viterbi TS với Python
 npm run voice:asr -- prompts            # danh sách câu eval cần thu âm (.data/asr/prompts.tsv)
