@@ -19,10 +19,13 @@ const dev = readFileSync(here('./eval/gold.jsonl'), 'utf8')
   .filter((g) => g.split === 'dev');
 
 const baseExact = dev.map((g) => scoreCase(g, baselineParse(g.text, catalogs[g.catalog])).exact);
+// Gate câu tự do tắt khi dò: nó chỉ chuyển thêm câu sang LLM, không đổi cách liên kết tên món; bật thì dev hỏi lại
+// 16.3% với mọi cặp (τ, δ) nên không cặp nào qua ràng buộc hỏi lại ≤ 15% (xem báo cáo, mục 3.5).
+const freeFormGate = false;
 const rows: Array<{ tau: number; delta: number; line: number; sentence: number; wrong: number; ask: number; regress: number }> = [];
 for (let tau = 0.5; tau <= 0.9001; tau += 0.02) {
   for (let delta = 0.02; delta <= 0.3001; delta += 0.02) {
-    const scores = dev.map((g) => scoreCase(g, parseOrderDetailed(g.text, catalogs[g.catalog], { tau, delta })));
+    const scores = dev.map((g) => scoreCase(g, parseOrderDetailed(g.text, catalogs[g.catalog], { tau, delta, freeFormGate })));
     const m = aggregate(scores, dev);
     const regress = scores.filter((s, i) => baseExact[i] && !s.exact).length;
     rows.push({ tau, delta, line: m.lineExact, sentence: m.sentenceExact, wrong: m.wrongAcceptRate, ask: m.askRate, regress });
@@ -68,7 +71,7 @@ const freeDev = readFileSync(here('./eval/free.jsonl'), 'utf8')
   .filter((g) => g.split === 'dev');
 const both = [...dev, ...freeDev];
 const at = (minConfidence: number) => {
-  const scores = both.map((g) => scoreCase(g, parseOrderDetailed(g.text, catalogs[g.catalog], { tau: pickRow.tau, delta: pickRow.delta, minConfidence })));
+  const scores = both.map((g) => scoreCase(g, parseOrderDetailed(g.text, catalogs[g.catalog], { tau: pickRow.tau, delta: pickRow.delta, minConfidence, freeFormGate })));
   return aggregate(scores, both);
 };
 const base = at(0);

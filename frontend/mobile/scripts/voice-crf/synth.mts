@@ -6,12 +6,13 @@
  *
  *   npm run voice:synth                                  # mặc định 16000 câu train + 1000 câu dev, seed 7
  *   npm run voice:synth -- --out <thư mục> --holdout 1   # thêm lexout.jsonl: câu dùng 1/3 từ vựng không có trong train
+ *   npm run voice:synth -- --out <thư mục> --famout repair   # bỏ kiểu câu sửa lời khỏi train, sinh famout.jsonl
  *   npm run voice:synth -- --edit 0 --lex 0 --corr 0.04 --features v1 --train 8000   # dữ liệu của model giai đoạn 3
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import type { ParseableProduct } from '../../src/lib/parseOrder';
 import { catalogIndex } from '../../src/lib/voiceParse/catalog';
-import { crfFeatures, type FeatureSet } from '../../src/lib/voiceParse/features';
+import { crfFeatures, type FeatureSet, sentenceShape, shapeBigrams } from '../../src/lib/voiceParse/features';
 import { analyze, type Label, QTY_SLOTS, type Slot } from '../../src/lib/voiceParse/tagger';
 import { tokenize } from '../../src/lib/voiceParse/text';
 import { OOC_ITEMS, TRAIN_CATALOGS } from './lexicon';
@@ -28,6 +29,11 @@ const LEX = opt('--lex', 1) > 0;
 /** Giữ lại 1/3 từ vựng mỗi danh sách để sinh `lexout.jsonl` (đo khả năng gặp từ chưa thấy, `voice:grid --lexout`). */
 const HOLDOUT = opt('--holdout', 0) > 0;
 const N_LEXOUT = opt('--lexout', 1000);
+/**
+ * Bỏ hẳn một kiểu câu khỏi train/dev (thay bằng câu bán thường) và sinh `famout.jsonl` gồm câu kiểu đó: đo parser và gate
+ * trên cấu trúc câu chưa từng gặp (`voice:gate`). Kết hợp `--holdout 1` thì câu `famout` còn dùng từ vựng giữ lại.
+ */
+const FAMOUT = args.includes('--famout') ? args[args.indexOf('--famout') + 1] : null;
 const OUT_DIR = args.includes('--out') ? `${args[args.indexOf('--out') + 1].replace(/\/$/, '')}/` : './.data/';
 /** Tỉ lệ câu sửa lời (phần thêm so với 4% lấy từ câu bán thường). */
 const CORR = opt('--corr', 0.08);
@@ -481,15 +487,26 @@ function repair(products: ParseableProduct[]): Seg[] {
   }
 }
 
+const FAMILIES: Record<string, (products: ParseableProduct[]) => Seg[]> = {
+  dist: distributive,
+  copy: copyQty,
+  repair: (p) => (EDIT ? repair(p) : correction(p)),
+  ref: references,
+  total: totalThenSplit,
+  topic: topicOrder,
+};
+if (FAMOUT && !FAMILIES[FAMOUT]) throw new Error(`--famout: một trong ${Object.keys(FAMILIES).join(', ')}`);
+const family = (name: string, products: ParseableProduct[]) => (name === FAMOUT ? sale(products) : FAMILIES[name](products));
+
 function sentence(products: ParseableProduct[]): Seg[] {
   const r = rand();
   const c = CORR - 0.04; // phần câu sửa lời thêm vào, lấy từ câu bán thường
-  if (r < 0.06) return distributive(products);
-  if (r < 0.1) return copyQty(products);
-  if (r < 0.14 + c) return EDIT ? repair(products) : correction(products);
-  if (r < 0.17 + c) return references(products);
-  if (r < 0.19 + c) return totalThenSplit(products);
-  if (r < 0.22 + c) return topicOrder(products);
+  if (r < 0.06) return family('dist', products);
+  if (r < 0.1) return family('copy', products);
+  if (r < 0.14 + c) return family('repair', products);
+  if (r < 0.17 + c) return family('ref', products);
+  if (r < 0.19 + c) return family('total', products);
+  if (r < 0.22 + c) return family('topic', products);
   if (r < 0.25 + c) return bare(products);
   if (r < 0.62) return sale(products);
   if (r < 0.76) return [...opener().filter(() => chance(0.3)), ...expense()];
@@ -526,15 +543,21 @@ const out = new URL(OUT_DIR, import.meta.url);
 mkdirSync(out, { recursive: true });
 const shops = Object.keys(TRAIN_CATALOGS);
 if (HOLDOUT) lexPart = 'train';
+const shapes = new Set<string>();
 for (const [file, n] of [['train', N_TRAIN], ['dev', N_DEV]] as const) {
   const lines: string[] = [];
   for (let i = 0; i < n; i++) {
     const products = TRAIN_CATALOGS[shops[i % shops.length]];
-    lines.push(JSON.stringify(render(sentence(products), products)));
+    const row = render(sentence(products), products);
+    if (file === 'train') for (const g of shapeBigrams(sentenceShape(row.x))) shapes.add(g);
+    lines.push(JSON.stringify(row));
   }
   writeFileSync(new URL(`${file}.jsonl`, out), `${lines.join('\n')}\n`);
   console.log(`${file}: ${n} câu`);
 }
+// Khung câu đã gặp khi train (train.py chép vào model): gate câu tự do so câu mới với tập này
+writeFileSync(new URL('shapes.json', out), `${JSON.stringify([...shapes].sort())}\n`);
+console.log(`shapes: ${shapes.size} cặp lớp của khung câu`);
 if (HOLDOUT) {
   // Câu có quan hệ số lượng / sửa lời, chỉ dùng 1/3 từ vựng không có trong train
   lexPart = 'test';
@@ -547,6 +570,18 @@ if (HOLDOUT) {
   }
   writeFileSync(new URL('lexout.jsonl', out), `${lines.join('\n')}\n`);
   console.log(`lexout: ${N_LEXOUT} câu (từ vựng giữ lại)`);
+  lexPart = 'all';
+}
+if (FAMOUT) {
+  if (HOLDOUT) lexPart = 'test';
+  const lines: string[] = [];
+  for (let i = 0; i < N_LEXOUT; i++) {
+    const shop = shops[i % shops.length];
+    const products = TRAIN_CATALOGS[shop];
+    lines.push(JSON.stringify({ shop, ...render(FAMILIES[FAMOUT](products), products) }));
+  }
+  writeFileSync(new URL('famout.jsonl', out), `${lines.join('\n')}\n`);
+  console.log(`famout: ${N_LEXOUT} câu kiểu "${FAMOUT}" (không có trong train)`);
   lexPart = 'all';
 }
 writeFileSync(new URL('meta.json', out), `${JSON.stringify({ features: FEATURE_SET, args })}\n`);

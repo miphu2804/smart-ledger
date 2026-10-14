@@ -12,7 +12,7 @@ gắn nhãn và xuất trọng số:
 
 Ghi ra:
 - `src/lib/voiceParse/crf-model.json`: nhãn, ma trận chuyển, trọng số trạng thái
-  (cho decoder Viterbi TS);
+  (cho decoder Viterbi TS) và khung câu đã gặp khi train (`shapes.json` của synth);
 - `.data/eval.pred.jsonl`, `.data/dev.pred.jsonl`: nhãn CRFsuite gán và xác suất
   biên của nhãn đó, để `parity.mts` so với Viterbi và forward-backward TS.
 """
@@ -138,6 +138,9 @@ def main():
         model = {"labels": labels, "transitions": transitions, "state": state}
         if features != "v1":
             model["features"] = features
+        if (data / "shapes.json").exists():
+            # khung câu đã gặp khi train (voice:synth), cho gate câu tự do
+            model["shapes"] = json.loads((data / "shapes.json").read_text())
         args.model.write_text(
             json.dumps(model, ensure_ascii=False, separators=(",", ":")) + "\n",
             encoding="utf-8",

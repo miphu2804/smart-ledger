@@ -30,6 +30,8 @@ export interface CaseScore {
   accepted: number;
   wrongAccepted: number;
   asked: boolean;
+  /** Xử lý trên máy: parser không gửi câu cho LLM (hỏi chọn biến thể vẫn tính là trên máy). */
+  local: boolean;
   expenseOk: boolean;
   exact: boolean;
   /** Mô tả ngắn chỗ sai, để in khi soát lỗi trên tập dev. */
@@ -103,6 +105,7 @@ export function scoreCase(gold: GoldCase, r: ScoredResult): CaseScore {
     accepted: accepted.length,
     wrongAccepted: wrongAccepted.length,
     asked: asks.length > 0 || !!r.fallback,
+    local: !r.fallback,
     expenseOk,
     exact: problems.length === 0,
     problems,
@@ -124,6 +127,10 @@ export interface Metrics {
   wrongAcceptSentenceRate: number;
   /** Tỉ lệ câu phải hỏi lại hoặc gửi LLM. */
   askRate: number;
+  /** Tỉ lệ câu xử lý trên máy (không gửi LLM). */
+  localRate: number;
+  /** Câu xử lý trên máy mà đúng hết / câu xử lý trên máy. */
+  localExact: number;
   expenseExact: number;
 }
 
@@ -141,6 +148,8 @@ export function aggregate(scores: CaseScore[], golds: GoldCase[]): Metrics {
     accepted: sum((s) => s.accepted),
     wrongAcceptSentenceRate: ratio(sum((s) => (s.wrongAccepted ? 1 : 0)), scores.length),
     askRate: ratio(sum((s) => (s.asked ? 1 : 0)), scores.length),
+    localRate: ratio(sum((s) => (s.local ? 1 : 0)), scores.length),
+    localExact: ratio(sum((s) => (s.local && s.exact ? 1 : 0)), sum((s) => (s.local ? 1 : 0))),
     expenseExact: ratio(withExpense.filter((s) => s.expenseOk).length, withExpense.length),
   };
 }

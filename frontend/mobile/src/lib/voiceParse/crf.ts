@@ -12,6 +12,8 @@ export interface CrfModel {
   state: Record<string, Array<[number, number]>>;
   /** Bộ đặc trưng model được train (`features.ts`); không có là `v1`. */
   features?: 'v1' | 'v2' | 'nolex';
+  /** Cặp lớp liền nhau của khung câu (`shapeBigrams`) có trong câu train, để gate đo câu mới lạ đến đâu. */
+  shapes?: string[];
 }
 
 /** Điểm trạng thái từng token: cộng trọng số theo thứ tự đặc trưng như CRFsuite. */

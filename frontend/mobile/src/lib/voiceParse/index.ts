@@ -8,7 +8,7 @@ import type { DisambiguationItem, ParseableProduct, ParsedExpenseItem, ParsedOrd
 import { type CatalogIndex, catalogIndex, type LinkCandidate, linkSpan } from './catalog';
 import { type CrfModel, marginals, nBest, sequenceProb, viterbi } from './crf';
 import crfModelJson from './crf-model.json';
-import { crfFeatures } from './features';
+import { crfFeatures, sentenceShape, shapeBigrams } from './features';
 import { analyze, findMarkers, isReferenceNumber, type Label, QTY_SLOTS, ruleTag, type Slot, type TokenInfo } from './tagger';
 import { quantityValue, type Token, tokenize } from './text';
 import { DELIMITERS, FILLER_RAW, FILLER_WORDS, UNIT_WORDS } from './lexicon';
@@ -22,6 +22,8 @@ export interface TagResult {
   nbest?: () => Array<{ labels: Label[]; prob: number }>;
   /** P(nhãn O | câu) ở token i: số bị gán O mà CRF chắc chắn thì không coi là số lượng bị bỏ sót (tính khi cần). */
   pOutside?: (i: number) => number;
+  /** Số cặp lớp liền nhau của khung câu (`sentenceShape`) không có trong câu train của model; không đo được thì bỏ trống. */
+  novelty?: number;
 }
 export type Tagger = (tokens: Token[], index: CatalogIndex, info: TokenInfo[]) => TagResult;
 
@@ -60,6 +62,13 @@ export interface ParseOptions {
    * qua hộp thoại cho người dùng sửa (`voice.tsx`), chỉ món trong danh mục được ghi thẳng.
    */
   looseNames?: boolean;
+  /**
+   * Gate cho câu nói tự do (mặc định bật). Câu phức (từ hai số hoặc hai dòng trở lên, có số lượng quan hệ, sửa lời hay dấu
+   * hiệu quan hệ) mà khung câu có cặp lớp chưa gặp khi train thì không tự nhận (`novel`): kiểu câu model chưa học thì độ
+   * tin cậy CRF không đáng tin. Món trong danh mục không nhận được số nào trong câu có nói số lượng cũng không tự nhận
+   * (`implicit`): thường là CRF bỏ sót "mỗi thứ", "cũng vậy"… và món đó lấy số 1. Tắt (`false`) để so với gate cũ.
+   */
+  freeFormGate?: boolean;
   /** Nghiên cứu (ablation, `voice:grid --ablate`): tắt gate dấu hiệu viết tay (`markers`) hoặc luật số bàn/giờ (`refs`). */
   ablate?: Array<'markers' | 'refs'>;
   /** Nghiên cứu (`voice:grid --oracle`): nhận danh sách đơn hàng ứng viên (đã gộp theo đơn hàng) của lượt CRF. */
@@ -70,15 +79,17 @@ export interface Candidate {
   mass: number;
   order: ParsedOrder;
   reason?: FallbackReason;
+  /** Có món trong danh mục không nhận được số nào trong câu có nói số lượng (lấy số 1). */
+  implicit?: boolean;
 }
 
 /**
  * Vì sao không tự nhận: `unattached` số lượng chưa gắn được vào món hoặc bị bỏ sót; `marker` có dấu hiệu quan hệ số lượng
  * mà tagger không giải thích; `duplicate` một món được nói hai lần (thường là sửa lời: "à nhầm", "khoan"); `implicit`
- * (chỉ với tagger luật) câu có nói số lượng mà một món trong danh mục không nhận được số nào; `confidence` CRF không
- * chắc; `empty` không ra dòng nào.
+ * câu có nói số lượng mà một món trong danh mục không nhận được số nào; `confidence` CRF không chắc; `novel` câu phức có
+ * khung câu model chưa gặp khi train (`freeFormGate`); `empty` không ra dòng nào.
  */
-export type FallbackReason = 'empty' | 'unattached' | 'marker' | 'duplicate' | 'implicit' | 'confidence';
+export type FallbackReason = 'empty' | 'unattached' | 'marker' | 'duplicate' | 'implicit' | 'confidence' | 'novel';
 
 export interface DetailedParse extends ParsedOrder {
   /**
@@ -89,6 +100,8 @@ export interface DetailedParse extends ParsedOrder {
   reason?: FallbackReason;
   tentative?: ParsedOrder;
   confidence?: number;
+  /** Số cặp lớp của khung câu chưa gặp khi train (`TagResult.novelty`). */
+  novelty?: number;
   tokens: Token[];
   labels: Label[];
 }
@@ -102,9 +115,9 @@ const lazy = (make: () => number[]) => {
 };
 
 /** Tagger CRF (L3 đã train): nhãn Viterbi và xác suất của nó, k chuỗi nhãn tốt nhất (tính khi cần), P(O) từng token. */
-export const crfTagger =
-  (model: CrfModel, k = N_BEST): Tagger =>
-  (tokens, _index, info) => {
+export const crfTagger = (model: CrfModel, k = N_BEST): Tagger => {
+  const seen = model.shapes && new Set(model.shapes);
+  return (tokens, _index, info) => {
     const x = crfFeatures(tokens, info, model.features);
     const labels = viterbi(model, x) as Label[];
     const outside = model.labels.indexOf('O');
@@ -113,8 +126,10 @@ export const crfTagger =
       prob: sequenceProb(model, x, labels),
       nbest: () => nBest(model, x, k) as Array<{ labels: Label[]; prob: number }>,
       pOutside: lazy(() => marginals(model, x).map((m) => m[outside])),
+      novelty: seen && new Set(shapeBigrams(sentenceShape(x)).filter((g) => !seen.has(g))).size,
     };
   };
+};
 
 export const DEFAULT_TAU = 0.72;
 export const DEFAULT_DELTA = 0.12;
@@ -234,6 +249,7 @@ interface Context {
   decode: NonNullable<ParseOptions['decode']>;
   minValidMass: number;
   looseNames: boolean;
+  freeFormGate: boolean;
   ablate: Set<string>;
   onCandidates?: ParseOptions['onCandidates'];
 }
@@ -257,12 +273,14 @@ export function parseOrderDetailed(text: string, products: ParseableProduct[], o
     decode: opts.decode ?? 'valid',
     minValidMass: opts.minValidMass ?? DEFAULT_MIN_VALID_MASS,
     looseNames: opts.looseNames ?? true,
+    freeFormGate: opts.freeFormGate ?? true,
     ablate: new Set(opts.ablate ?? []),
     onCandidates: opts.onCandidates,
   };
   const first = parseWith(ctx, opts.tagger ?? defaultCrf);
   if (!first.fallback || !opts.fallbackTagger) return first;
-  const second = parseWith(ctx, opts.fallbackTagger);
+  // tagger dự phòng không đo được độ lạ của câu: dùng độ lạ của lượt CRF để gate câu tự do vẫn áp dụng
+  const second = parseWith(ctx, opts.fallbackTagger, first.novelty);
   return second.fallback ? first : second;
 }
 
@@ -280,9 +298,10 @@ const signature = (a: Assembled, loose: boolean) => {
   ]);
 };
 
-function parseWith(ctx: Context, tagger: Tagger): DetailedParse {
+function parseWith(ctx: Context, tagger: Tagger, knownNovelty?: number): DetailedParse {
   const { tokens } = ctx;
   const tagged = tagger(tokens, ctx.index, ctx.info);
+  const novelty = tagged.novelty ?? knownNovelty;
   const { prob, nbest, pOutside } = tagged;
   let labels = tagged.labels;
   let best = assemble(ctx, labels, pOutside, prob === undefined);
@@ -304,7 +323,7 @@ function parseWith(ctx: Context, tagger: Tagger): DetailedParse {
       else groups.set(key(a), { mass: alt.prob, a, labels: alt.labels });
     }
     const all = [...groups.values()];
-    ctx.onCandidates?.(all.map((g) => ({ mass: g.mass, order: g.a.order, reason: g.a.reason })));
+    ctx.onCandidates?.(all.map((g) => ({ mass: g.mass, order: g.a.order, reason: g.a.reason, implicit: g.a.implicit })));
     const valid = all.filter((g) => !g.a.reason);
     const top = valid.reduce<(typeof all)[number] | undefined>((m, g) => (!m || g.mass > m.mass ? g : m), undefined);
     if (top) {
@@ -329,19 +348,36 @@ function parseWith(ctx: Context, tagger: Tagger): DetailedParse {
   if (!reason && confidence !== undefined && confidence < ctx.minConfidence) reason = 'confidence';
   if (!reason && best.empty) reason = 'empty';
   const order = best.order;
+  if (!reason && ctx.freeFormGate) {
+    if (best.implicit) reason = 'implicit';
+    else if (novelty && isComplex(ctx, labels, order)) reason = 'novel';
+  }
   if (reason && reason !== 'empty') {
     const none: ParsedOrder = { items: [], unknown: [], missingQuantityItems: [], disambiguations: [], expenses: [], normalizedText: order.normalizedText };
-    return { ...none, fallback: true, reason, tentative: order, confidence, tokens, labels };
+    return { ...none, fallback: true, reason, tentative: order, confidence, novelty, tokens, labels };
   }
-  return { ...order, fallback: !!reason, reason, confidence, tokens, labels };
+  return { ...order, fallback: !!reason, reason, confidence, novelty, tokens, labels };
+}
+
+/** Câu phức: nhiều số hoặc nhiều dòng, hoặc có quan hệ số lượng / sửa lời (nhãn hay dấu hiệu). */
+function isComplex(ctx: Context, labels: Label[], o: ParsedOrder): boolean {
+  const lines = o.items.length + o.unknown.length + (o.missingQuantityItems?.length ?? 0) + (o.disambiguations?.length ?? 0) + (o.expenses?.length ?? 0);
+  return (
+    lines >= 2 ||
+    ctx.info.filter((x) => x.isNum).length >= 2 ||
+    labels.some((l) => /^[BI]-(QTYP|QTYD|QTYC|COPY|EDIT)$/.test(l)) ||
+    findMarkers(ctx.tokens, ctx.info).length > 0
+  );
 }
 
 interface Assembled {
   order: ParsedOrder;
   /** Lý do gate theo cấu trúc câu (chưa tính độ tin cậy của tagger). */
-  reason?: Exclude<FallbackReason, 'confidence' | 'empty'>;
+  reason?: Exclude<FallbackReason, 'confidence' | 'empty' | 'novel'>;
   /** Câu có số hoặc nhãn mà không ra dòng nào. */
   empty: boolean;
+  /** Món trong danh mục không có số trong câu có nói số lượng (gate `implicit`: khi `strict`, và khi `freeFormGate`). */
+  implicit: boolean;
 }
 
 /**
@@ -558,7 +594,7 @@ function assemble(ctx: Context, labels: Label[], pOutside?: (i: number) => numbe
   else if (duplicate) reason = 'duplicate';
   else if (implicit && strict) reason = 'implicit';
   const none = !items.length && !unknown.length && !missingQuantityItems.length && !disambiguations.length && !expenses.length;
-  return { order, reason, empty: none && (labels.some((l) => l !== 'O') || info.some((x) => x.isNum)) };
+  return { order, reason, empty: none && (labels.some((l) => l !== 'O') || info.some((x) => x.isNum)), implicit };
 }
 
 export function parseOrder(text: string, products: ParseableProduct[]): ParsedOrder {

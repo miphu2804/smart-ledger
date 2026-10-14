@@ -76,3 +76,27 @@ export function crfFeatures(tokens: Token[], info: TokenInfo[], set: FeatureSet 
     return [...new Set(out)];
   });
 }
+
+/**
+ * Khung câu cho gate câu nói tự do: mỗi token thành một lớp (`,` dấu câu, `$` tiền, `#` số, `I` chữ của tên món trong
+ * danh mục, `U` đơn vị), từ khác giữ nguyên; các `I` liền nhau gộp một. Tính từ đặc trưng CRF nên câu train và câu mới
+ * được trừu tượng hoá giống hệt nhau: "cho chị hai gói hảo hảo" → `cho chi # U I`.
+ */
+export function sentenceShape(x: string[][]): string[] {
+  const out: string[] = [];
+  for (const fs of x) {
+    const get = (k: string) => fs.find((f) => f.startsWith(`${k}=`))?.slice(k.length + 1) ?? '';
+    const gz = get('gz');
+    const kind = get('k');
+    const c =
+      kind === 'sep' ? ',' : kind === 'money' ? '$' : get('num') !== '0' ? '#' : gz[0] !== '0' && gz.endsWith('c') ? 'I' : get('unit') === '1' ? 'U' : get('w');
+    if (!(c === 'I' && out[out.length - 1] === 'I')) out.push(c);
+  }
+  return out;
+}
+
+/** Các cặp lớp liền nhau của khung câu, kể cả đầu (`^`) và cuối câu (`$$`). */
+export function shapeBigrams(shape: string[]): string[] {
+  const p = ['^', ...shape, '$$'];
+  return p.slice(1).map((c, i) => `${p[i]} ${c}`);
+}

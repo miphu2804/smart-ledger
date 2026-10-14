@@ -29,11 +29,12 @@ const holdout = existsSync(here('./eval/holdout.jsonl')) ? readSet('./eval/holdo
 const gold = [...readSet('./eval/gold.jsonl'), ...readSet('./eval/free.jsonl', 'free-'), ...holdout];
 
 type Parser = (text: string, products: ParseableProduct[]) => ScoredResult;
-// poc: mặc định (chỉ CRF, chọn đơn hàng qua gate trong n-best); poc+luat: thêm tagger luật dự phòng cho câu CRF bỏ;
-// poc-luat: chỉ tagger luật
+// poc: mặc định (chỉ CRF, chọn đơn hàng qua gate trong n-best, gate câu tự do); poc-gatecu: gate trước khi có gate câu
+// tự do; poc+luat: thêm tagger luật dự phòng cho câu CRF bỏ; poc-luat: chỉ tagger luật
 const PARSERS: Record<string, Parser> = {
   baseline: baselineParse,
   poc: (t, p) => pocParse(t, p),
+  'poc-gatecu': (t, p) => pocParse(t, p, { freeFormGate: false }),
   'poc+luat': (t, p) => pocParse(t, p, { fallbackTagger: ruleTagger }),
   'poc-luat': (t, p) => pocParse(t, p, { tagger: ruleTagger }),
 };
@@ -57,6 +58,8 @@ const ROWS: Array<[string, (m: Metrics) => string, string]> = [
   ['Sai mà vẫn tự nhận (dòng)', (m) => `${pct(m.wrongAcceptRate)} (${m.wrongAccepted}/${m.accepted})`, '≤ 2%'],
   ['  câu có tự nhận sai', (m) => pct(m.wrongAcceptSentenceRate), ''],
   ['Fallback hoặc hỏi lại (câu)', (m) => pct(m.askRate), '≤ 15%'],
+  ['Câu xử lý trên máy (không gửi LLM)', (m) => pct(m.localRate), ''],
+  ['  đúng hết trong số đó', (m) => pct(m.localExact), '≥ 95%'],
   ['Khoản chi đúng số tiền', (m) => pct(m.expenseExact), ''],
 ];
 
@@ -67,15 +70,18 @@ function table(split: string) {
   const regress = (n: string) => idx.filter((i) => scores.baseline[i].exact && !scores[n][i].exact);
   const fixed = (n: string) => idx.filter((i) => !scores.baseline[i].exact && scores[n][i].exact).length;
   const regressions = regress('poc');
+  // câu baseline đúng mà PoC tự nhận sai (khác với câu PoC gửi LLM): là lỗi thật, làm lệnh trả mã lỗi
+  const wrongRegressions = regressions.filter((i) => scores.poc[i].local);
   const others = COLUMNS.slice(1);
   console.log(`\n## ${split} (${idx.length} câu, ${golds.reduce((n, g) => n + g.lines.length, 0)} dòng vàng)\n`);
   console.log(`| Chỉ số | ${COLUMNS.join(' | ')} | Mục tiêu |\n|---|${COLUMNS.map(() => '---|').join('')}---|`);
   for (const [label, f, target] of ROWS) console.log(`| ${label} | ${COLUMNS.map((n) => f(metrics[n])).join(' | ')} | ${target} |`);
   console.log(`| Câu từ đúng thành sai (so với baseline) | — | ${others.map((n) => regress(n).length).join(' | ')} | 0 |`);
+  console.log(`|   trong đó tự nhận sai (không gửi LLM) | — | ${others.map((n) => regress(n).filter((i) => scores[n][i].local).length).join(' | ')} | 0 |`);
   console.log(`| Câu từ sai thành đúng | — | ${others.map(fixed).join(' | ')} | |`);
   // Chỉ in câu bị hỏng của dev: soát lỗi trên test là tune theo test
   if (regressions.length && split.endsWith('dev')) console.log(`\nCâu bị hỏng: ${regressions.map((i) => gold[i].id).join(', ')}`);
-  return { metrics, regressions: regressions.length };
+  return { metrics, regressions: regressions.length, wrongRegressions: wrongRegressions.length };
 }
 
 function byCategory(split: string) {
@@ -204,5 +210,5 @@ if (failuresSplit?.startsWith('hold')) {
   if (count('hold-test')) byCategory('hold-test');
   for (const file of asrFiles) asrTable(file);
   if (!asrFiles.length) latency();
-  process.exitCode = test.regressions ? 1 : 0;
+  process.exitCode = test.wrongRegressions ? 1 : 0;
 }
