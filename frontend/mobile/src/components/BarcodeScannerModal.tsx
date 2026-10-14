@@ -50,6 +50,7 @@ import { ApiError } from '../lib/api';
 import { productApi } from '../lib/catalogApi';
 import { errorMessage } from '../lib/errors';
 import { triggerFeedback } from '../lib/feedback';
+import { CUSTOM_NAME_MAX, CUSTOM_UNIT_MAX, upsertCustomLine } from '../lib/customLines';
 import { vnd } from '../lib/format';
 import { useReducedMotion } from '../motion';
 import { colors, font, shadow } from '../theme';
@@ -107,6 +108,12 @@ export interface BarcodeScannerModalProps {
   onProductFound?: (product: ProductView) => void;
   cartItems?: LineItem[];
   onAddToCart?: (product: ProductView, delta: number) => void;
+  /**
+   * Đặt một "món tạm" vào đơn của nơi gọi: món mới nhập từ mã chưa có mà chủ tiệm bỏ chọn "Lưu vào danh mục hàng hoá"
+   * (`line.custom`, không có `productId`, không tạo mặt hàng). Nơi gọi thay dòng cùng `custom.barcode` bằng dòng này,
+   * `qty <= 0` là bỏ món (`upsertCustomLine`). `onClearCart` của nơi gọi cũng phải xoá các món này.
+   */
+  onCustomLine?: (line: LineItem) => void;
   onClearCart?: () => void;
   onCheckout?: () => void;
   onProductScanned?: (product: ProductView, barcode: string, qty: number) => void;
@@ -136,6 +143,7 @@ export function BarcodeScannerModal({
   onProductFound,
   cartItems: externalCartItems,
   onAddToCart,
+  onCustomLine,
   onClearCart,
   onCheckout,
   onProductScanned,
@@ -194,6 +202,10 @@ export function BarcodeScannerModal({
   const [configPrice, setConfigPrice]         = useState('');
   const [configUnit, setConfigUnit]           = useState('cái');
   const [configQty, setConfigQty]             = useState(1);
+  // Ô tick "Lưu vào danh mục hàng hoá" của thẻ nhập món mới: bỏ chọn thì món chỉ vào đơn này (món tạm)
+  const [configSaveToCatalog, setConfigSaveToCatalog] = useState(true);
+  // true = đang sửa một món tạm đã có trong đơn (mở từ danh sách), false = đang nhập món mới từ mã vừa quét
+  const [configEditingCustom, setConfigEditingCustom] = useState(false);
   const [configBusy, setConfigBusy]           = useState(false);
   const [configErr, setConfigErr]             = useState('');
   const [extraProducts, setExtraProducts]     = useState<ProductView[]>([]);
@@ -219,6 +231,12 @@ export function BarcodeScannerModal({
 
   // Tồn còn bán được của một món: món không theo dõi tồn thì không giới hạn.
   const stockLeft = (p: ProductView) => (p.tracked ? p.stockQuantity ?? 0 : Infinity);
+
+  // Đặt một món tạm vào đơn (thêm, đổi số lượng hoặc tên giá; `qty <= 0` là bỏ): đơn do nơi gọi giữ thì báo nơi gọi.
+  const setCustomLine = (line: LineItem) => {
+    if (externalCartItems) onCustomLine?.(line);
+    else setInternalItems((cur) => upsertCustomLine(cur, line));
+  };
 
   const showScanNotice = (text: string, tone: 'warn' | 'ok' = 'warn') => {
     if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
@@ -474,6 +492,17 @@ export function BarcodeScannerModal({
       return;
     }
 
+    // Món tạm của chính đơn này (không có ở Core nên tra mã sẽ không thấy): quét lại thì cộng 1 như món thường.
+    const customLine = displayItems.find((i) => i.custom?.barcode === code);
+    if (customLine) {
+      setUnknownCode(null);
+      playScanSuccessSound();
+      triggerScanHaptic();
+      setCustomLine({ ...customLine, qty: customLine.qty + 1 });
+      showScanNotice(`${customLine.name}: số lượng ${customLine.qty + 1}`, 'ok');
+      return;
+    }
+
     // So khớp chính xác từng ký tự: "ABC-123" và "123" là hai mã khác nhau.
     const found = catalog.find((p) => p.barcode === code);
     if (found) presentProduct(found, code);
@@ -543,6 +572,21 @@ export function BarcodeScannerModal({
     setConfigPrice('');
     setConfigUnit('cái');
     setConfigQty(1);
+    setConfigSaveToCatalog(true);
+    setConfigEditingCustom(false);
+    setConfigErr('');
+  };
+
+  // Mở lại thẻ đó để sửa một món tạm đang có trong đơn (tên, giá, đơn vị, số lượng)
+  const handleEditCustom = (item: LineItem) => {
+    if (!item.custom?.barcode) return;
+    setConfigModalCode(item.custom.barcode);
+    setConfigName(item.name);
+    setConfigPrice(String(item.price));
+    setConfigUnit(item.custom.unit);
+    setConfigQty(item.qty);
+    setConfigSaveToCatalog(false);
+    setConfigEditingCustom(true);
     setConfigErr('');
   };
 
@@ -561,6 +605,28 @@ export function BarcodeScannerModal({
     const priceNum = parseInt(configPrice.replace(/\D/g, ''), 10) || 0;
     if (priceNum <= 0) {
       setConfigErr('Vui lòng nhập giá bán hợp lệ');
+      return;
+    }
+
+    // Bỏ chọn "Lưu vào danh mục": món chỉ vào đơn này, không gọi Core. Lúc thanh toán đơn gửi nó như món tuỳ ý.
+    if (configEditingCustom || (mode === 'order' && !configSaveToCatalog)) {
+      const customCode = configModalCode;
+      if (!customCode) return;
+      setCustomLine({
+        name: trimmedName,
+        price: priceNum,
+        qty: Math.max(1, configQty),
+        custom: { unit: configUnit.trim() || 'cái', barcode: customCode },
+      });
+      if (!configEditingCustom) {
+        playScanSuccessSound();
+        triggerScanHaptic();
+      }
+      triggerFeedback('success');
+      holdCode(customCode);
+      setConfigModalCode(null);
+      setConfigErr('');
+      setUnknownCode(null);
       return;
     }
 
@@ -658,6 +724,10 @@ export function BarcodeScannerModal({
 
   // ── Khi bấm vào 1 sản phẩm trong đơn hàng tạm (Phần 2) để thay đổi số lượng ─
   const handleTapItemToEdit = (item: LineItem) => {
+    if (item.custom) {
+      handleEditCustom(item);
+      return;
+    }
     const product = catalog.find((p) => p.id === item.productId);
     if (!product) return;
 
@@ -935,7 +1005,7 @@ export function BarcodeScannerModal({
             {/* Header */}
             <View style={S.configHeader}>
               <View style={{ flex: 1 }}>
-                <T w="bold" size={16} color={colors.ink}>Thêm mặt hàng</T>
+                <T w="bold" size={16} color={colors.ink}>{configEditingCustom ? 'Sửa món tạm' : 'Thêm mặt hàng'}</T>
                 <View style={S.barcodeBadge}>
                   <BarcodeIcon size={12} color={colors.primary} />
                   <T w="semibold" size={12} color={colors.primaryDeep}>{configModalCode}</T>
@@ -968,6 +1038,7 @@ export function BarcodeScannerModal({
                   placeholder="Ví dụ: Sting vàng, Mì xào..."
                   placeholderTextColor={colors.muted}
                   style={S.textInput}
+                  maxLength={CUSTOM_NAME_MAX}
                   autoFocus
                 />
               </View>
@@ -996,6 +1067,7 @@ export function BarcodeScannerModal({
                     placeholder="cái, lon..."
                     placeholderTextColor={colors.muted}
                     style={S.textInput}
+                    maxLength={CUSTOM_UNIT_MAX}
                   />
                 </View>
               </View>
@@ -1029,6 +1101,29 @@ export function BarcodeScannerModal({
                 </View>
               )}
 
+              {mode === 'order' && !configEditingCustom && (
+                <Pressable
+                  onPress={() => setConfigSaveToCatalog((on) => !on)}
+                  style={S.saveToCatalogRow}
+                  hitSlop={6}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: configSaveToCatalog }}
+                  accessibilityLabel="Lưu vào danh mục hàng hoá"
+                >
+                  <View style={[S.checkbox, configSaveToCatalog && S.checkboxOn]}>
+                    {configSaveToCatalog ? <Feather name="check" size={14} color={colors.brandInk} /> : null}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <T size={13} color={colors.ink} w="semibold">Lưu vào danh mục hàng hoá</T>
+                    <T size={11.5} color={colors.muted} style={{ marginTop: 2 }}>
+                      {configSaveToCatalog
+                        ? 'Món được thêm vào Hàng hoá, lần sau quét mã này sẽ nhận ra ngay.'
+                        : 'Chỉ bán trong đơn này, không thêm vào Hàng hoá.'}
+                    </T>
+                  </View>
+                </Pressable>
+              )}
+
               {configErr ? (
                 <T size={12} color={colors.red} style={{ marginTop: 2 }}>{configErr}</T>
               ) : null}
@@ -1054,7 +1149,15 @@ export function BarcodeScannerModal({
                 ]}
               >
                 <T w="extrabold" size={15.5} color={colors.brandInk}>
-                  {configBusy ? 'Đang lưu...' : mode === 'order' ? 'Lưu & Thêm' : 'Lưu'}
+                  {configBusy
+                    ? 'Đang lưu...'
+                    : configEditingCustom
+                      ? 'Xong'
+                      : mode === 'order'
+                        ? configSaveToCatalog
+                          ? 'Lưu & Thêm'
+                          : 'Thêm vào đơn'
+                        : 'Lưu'}
                 </T>
                 <Feather name="check" size={18} color={colors.brandInk} />
               </Pressable>
@@ -1165,11 +1268,13 @@ export function BarcodeScannerModal({
             >
               {displayItems.map((item, idx) => (
                 <SwipeableItemRow
-                  key={`${item.productId ?? item.name}_${idx}`}
+                  key={`${item.productId ?? item.custom?.barcode ?? item.name}_${idx}`}
                   item={item}
                   onPressItem={() => handleTapItemToEdit(item)}
                   onDelete={() => {
-                    if (item.productId != null) {
+                    if (item.custom) {
+                      setCustomLine({ ...item, qty: 0 });
+                    } else if (item.productId != null) {
                       handleDeleteItem(item.productId);
                     }
                   }}
@@ -1325,6 +1430,8 @@ function SwipeableItemRow({
             </T>
             <T size={13} color={colors.muted} style={{ marginTop: 2 }}>
               {vnd(item.price)}
+              {/* Món tạm: nhắc rằng món này không được lưu vào danh mục */}
+              {item.custom ? <T size={12} color={colors.gold}>{'  ·  Món tạm, không lưu danh mục'}</T> : null}
             </T>
           </View>
 
@@ -1591,6 +1698,26 @@ const S = StyleSheet.create({
     color: colors.ink,
   },
 
+  saveToCatalogRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: colors.disabled,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.white,
+  },
+  checkboxOn: {
+    backgroundColor: colors.brand,
+    borderColor: colors.brand,
+  },
   configQtyRow: {
     flexDirection: 'row',
     alignItems: 'center',
