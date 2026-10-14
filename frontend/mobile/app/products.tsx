@@ -601,7 +601,7 @@ function ProductForm({
         ? 'Ảnh sẽ bị xoá khi bạn bấm "Lưu thay đổi".'
         : photoUrl
           ? 'Ảnh này hiện trên thẻ ở màn Bán hàng.'
-          : 'Tuỳ chọn. Chưa có ảnh thì app dùng ảnh minh hoạ theo tên.';
+          : 'Tuỳ chọn. Chưa có ảnh thì thẻ món hiện chữ cái đầu của tên.';
 
   return (
     <Sheet visible={!!value} onClose={onClose} title={isNew ? 'Thêm mặt hàng' : 'Sửa mặt hàng'}>
