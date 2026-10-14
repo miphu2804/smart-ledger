@@ -54,7 +54,7 @@ export default function LegalLayout({ title, lead, toc, children }: Props) {
                 {!CONTACT_EMAIL && (
                   <ul>
                     <li>
-                      Chưa có email liên hệ: đặt <code>VITE_CONTACT_EMAIL</code> lúc build.
+                      Chưa có email liên hệ: điền <code>contact_email</code> trong <code>site.yaml</code>.
                     </li>
                   </ul>
                 )}
