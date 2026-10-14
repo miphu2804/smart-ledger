@@ -31,8 +31,8 @@ npm run export:web      # build web tĩnh ra dist/
 | `/(auth)/welcome`, `/email`, `/verify-email`, `/profile`, `/setup` | Chọn cách đăng nhập, email + mật khẩu (đăng ký, quên mật khẩu), xác minh email, nhập tên lần đầu, tạo tiệm |
 | `/(tabs)` | Trang chủ: doanh thu hôm nay/tuần này/tháng này, việc cần xử lý, gợi ý và bán chạy |
 | `/analytics` | Phân tích theo kỳ: doanh thu, diễn biến theo giờ/ngày trong tuần/tuần trong tháng, chi phí, lãi gộp ước tính, bán chạy, công nợ |
-| `/(tabs)/invoices` | Đơn hàng: lọc theo thời gian, nguồn (AI/POS/nhập tay), ghi nợ, đã huỷ, tìm kiếm |
-| `/(tabs)/sales` | Bán hàng: vào thẳng danh mục, chọn món và xem giỏ; Zen ring (kéo thả, dính cạnh trái/phải, giữ vị trí qua các tab) mở Hỏi đáp, Đọc đơn hoặc Báo cáo hôm nay |
+| `/(tabs)/invoices` | Đơn hàng: cuộn vô hạn, 20 đơn mỗi lần; lọc theo thời gian và tìm kiếm chạy ở Core |
+| `/(tabs)/sales` | Bán hàng: vào thẳng danh mục theo số trang (20 món mỗi trang, tìm/lọc/sắp xếp ở Core), chọn món và xem giỏ; Zen ring (kéo thả, dính cạnh trái/phải, giữ vị trí qua các tab) mở Hỏi đáp, Đọc đơn hoặc Báo cáo hôm nay |
 | `/(tabs)/more` | Quản lý: hồ sơ, báo cáo, hàng hoá, chi phí, công nợ, cài đặt và đăng xuất |
 | `/expenses` | Chi phí theo tháng, cơ cấu chi, thêm chi phí bằng giọng nói / nhập tay |
 | `/voice` | Đọc đơn: nhập văn bản hoặc giữ nút mic, hỏi thêm món lạ vào danh mục, sửa số lượng. Mic: web dùng Web Speech API (`vi-VN`); Android dùng model sherpa-onnx chạy trên máy (xem “Nhận dạng giọng nói trên Android”), không còn câu mẫu giả. Không có gì hỗ trợ thì app báo rõ và dùng nút Nhập tay |
@@ -90,6 +90,7 @@ src/
   lib/*Api.ts           session, catalog, customer, sales, debt, expense, agent
   lib/mockCore.ts       giả lập các endpoint Core trong bộ nhớ
   lib/useCoreData.ts    tải đơn, sản phẩm, nợ, chi phí từ Core cho Home, Quản lý, Phân tích, Bán chạy, Thông báo
+  lib/usePagedList.ts   danh sách cuộn vô hạn 20 dòng mỗi lần (Đơn hàng); lib/usePagedPage.ts danh sách theo số trang (Bán hàng)
   lib/checkoutSession.ts giữ đơn nháp giữa các lần bấm thanh toán để thử lại không ghi trùng sale
   lib/speech/           nhận dạng giọng nói trên máy (Android): tải model, đọc mic, sherpa-onnx; core.ts là phần thuần
   sst/                  khung nhận dạng giọng nói cũ (chưa chạy model thật), chưa được màn nào dùng

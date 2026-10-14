@@ -1966,3 +1966,11 @@
 **Flow explained:** Core would call the stream route → AI reads the history and checks the input before the response starts, so those failures keep the JSON status codes → the run streams in its own task, each model response passing through `screened_prefix` → `reset` discards text before a tool call or an answer the screen rejected → `done` carries the stored answer, or `error` a guardrail code. A turn that ends in `error` or whose caller disconnects is not stored, unless the disconnect lands while the exchange is already being written.
 
 **Check:** In `backend/ai`, `uv run ruff check`, `uv run ruff format --check` and `uv run pytest` pass with **306 passed, 40 skipped** (baseline 278 passed, 40 skipped; skips are PostgreSQL and live-model tests). Scratch property checks found no leak over 777k chunk-boundary prefixes and 10,000 random end-to-end chunkings, and a real uvicorn disconnect saved nothing. PostgreSQL persistence for the stream and live-model streaming remain unverified.
+
+### [2026-10-14 UTC+07:00] — [Mobile] Numbered pages for the Sales catalog
+
+**Done:** After #199 made both Sales and Orders infinite scroll, the Sales tab now shows its product list in numbered pages of 20 (`usePagedPage`, `PageControls`) while Orders stays infinite scroll at 20 per load. Sales keeps the Core-side search, category, stock and sort filters from #199, jumps to page 1 when any of them changes, scrolls to the top on a page change, and the cart, scanner and known-products lookup are unchanged so selected items survive a page change. PRD `FR-033` and new `AC-068` record both behaviors.
+
+**Changed files:** `frontend/mobile/app/pos.tsx`, `src/lib/usePagedPage.ts`, `src/lib/pageNumbers.ts`, `src/components/PageControls.tsx`, `tests/pageNumbers.test.ts`, `frontend/mobile/README.md`, `docs/product/product-requirements.md` and this entry.
+
+**Check:** In `frontend/mobile`, `npm run typecheck` passes and `npm test` passes **30/30** including the new page-number tests. Not run: the app on a device or against staging Core, so the page controls and the scroll-to-top on page change are unverified visually.
