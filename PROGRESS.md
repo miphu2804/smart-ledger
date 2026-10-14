@@ -1,3 +1,13 @@
+### [2026-10-14 19:02 UTC+07:00] — [Docs] ADR-0002 proposes agent long-term memory after Tencent's PostgreSQL guide
+
+**Done:** Recorded what Tencent's "Agent Long-Term Memory" guide for TencentDB for PostgreSQL builds (pgvector, an append-only `memory.records` table with four memory types, row-level security per tenant, in-database `bge-m3` embeddings, Apache AGE, PostgREST) and how each part maps to SmartLedger. The ADR compares building the same pattern on Supabase pgvector, moving to TencentDB, running the open-source TencentDB-Agent-Memory service, and keeping the 100-turn window. It proposes the first, only after the PO approves a requirement, and sketches it on the existing patterns: a new Supabase migration, a `recall_memory` tool built like `query_shop_data`, a writer after `_save_turn`, `shop_id` + `user_id` in every query and a cascade from the source conversation. A new draw.io diagram in the CI/CD style shows the Tencent reference and the proposed read and write flows.
+
+**Changed files:** `docs/architecture/adr/0002-agent-long-term-memory.md`, `docs/architecture/diagrams/src/agent-memory.drawio`, `docs/architecture/diagrams/images/agent-memory.svg` — new; `docs/README.md` — modified; this entry.
+
+**Flow explained:** none changed. The ADR is Proposed; code, contracts and the PRD are unchanged.
+
+**Check:** SVG exported with the documented `drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff` command and checked as a rendered PNG. **Not verified:** the Tencent guide pages were read through search excerpts, not the pages themselves; whether Supabase offers the `age` extension.
+
 ### [2026-10-15 08:20 UTC+07:00] — [Fix] Sales and Orders share one search bar in the same place
 
 **Done:** The team sent a screen recording: switching between Sales and Orders made the header jump, because the two tabs placed their title, search box and filter button differently (Orders had a 28 pt title, 8 pt top and 16 pt side margins, and a separate funnel button that narrowed the search box). Both tabs now use one search bar (`TabSearchBar`) at the Sales coordinates: same title and subtitle sizes, same margins, a full-width box with the funnel inside on the right. On Sales the funnel replaces the scan icon in the box (scanning stays on the "Quét mã" button) and opens a "Bộ lọc" sheet with Sắp xếp (Tên A-Z, Giá tăng dần, Tồn kho giảm) and Tồn kho (Tất cả, Sắp hết, Hết hàng), plus "Đặt lại" and "Xong"; the two old sort and stock buttons are gone and a line shows the active filter. On Orders the funnel still opens the date range sheet. The funnel is tinted while a filter is active.
