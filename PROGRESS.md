@@ -1,3 +1,13 @@
+### [2026-10-14 19:02 UTC+07:00] — [Docs] ADR-0002 proposes agent long-term memory after Tencent's PostgreSQL guide
+
+**Done:** Recorded what Tencent's "Agent Long-Term Memory" guide for TencentDB for PostgreSQL builds (pgvector, an append-only `memory.records` table with four memory types, row-level security per tenant, in-database `bge-m3` embeddings, Apache AGE, PostgREST) and how each part maps to SmartLedger. The ADR compares building the same pattern on Supabase pgvector, moving to TencentDB, running the open-source TencentDB-Agent-Memory service, and keeping the 100-turn window. It proposes the first, only after the PO approves a requirement, and sketches it on the existing patterns: a new Supabase migration, a `recall_memory` tool built like `query_shop_data`, a writer after `_save_turn`, `shop_id` + `user_id` in every query and a cascade from the source conversation. A new draw.io diagram in the CI/CD style shows the Tencent reference and the proposed read and write flows.
+
+**Changed files:** `docs/architecture/adr/0002-agent-long-term-memory.md`, `docs/architecture/diagrams/src/agent-memory.drawio`, `docs/architecture/diagrams/images/agent-memory.svg` — new; `docs/README.md` — modified; this entry.
+
+**Flow explained:** none changed. The ADR is Proposed; code, contracts and the PRD are unchanged.
+
+**Check:** SVG exported with the documented `drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff` command and checked as a rendered PNG. **Not verified:** the Tencent guide pages were read through search excerpts, not the pages themselves; whether Supabase offers the `age` extension.
+
 ### [2026-10-14 01:03 UTC+07:00] — [Feature] Date-range filter on the Orders tab and an explicit date on every order
 
 **Done:** Tester feedback asked for a filter like a banking app's transaction history and a clear date under each transaction. The Orders tab has a funnel button beside the search box. It opens a sheet with three ready ranges (7, 15 and 30 days up to today), a month calendar to pick a first and a last day (the days between are highlighted, days after today are disabled), the chosen "Từ ngày" and "Đến ngày", and the button "Chọn khoảng ngày". The chosen range shows as an active chip ("30 ngày gần nhất" or "07/10 – 13/10") beside the existing period chips; picking a period chip clears it. Every order row shows the date as dd/MM/yyyy with the time instead of "Hôm qua" or "3 ngày trước", and each day header carries the date. A range with no orders shows an empty state with "Xoá bộ lọc".
