@@ -2036,3 +2036,11 @@
 **Changed files:** `frontend/mobile/app/pos.tsx`, `src/lib/usePagedPage.ts`, `src/lib/pageNumbers.ts`, `src/components/PageControls.tsx`, `tests/pageNumbers.test.ts`, `frontend/mobile/README.md`, `docs/product/product-requirements.md` and this entry.
 
 **Check:** In `frontend/mobile`, `npm run typecheck` passes and `npm test` passes **30/30** including the new page-number tests. Not run: the app on a device or against staging Core, so the page controls and the scroll-to-top on page change are unverified visually.
+
+### [2026-10-14 18:45 UTC+07:00] — [Fix] Show the AI guardrail codes in the mobile chat
+
+**Done:** A message over the AI input limit showed the generic "Chưa gửi được tin nhắn cho trợ lý." instead of the app's `input_too_long` text (#207). Two causes: Core turned every non-404 AI error, including the guardrail `422`, into `503 ai_unavailable`; and the mobile stream request sent `Accept: text/event-stream` only, so Core could not write its JSON error before the first event (`HttpMediaTypeNotAcceptableException` in `ApiExceptionHandler`) and the app read no code. Core now forwards `input_too_long`, `answer_unavailable` and `answer_timeout` as `422` with that `code` on `/agent/chat` and `/agent/chat/stream`; any other `422` or an unreadable body stays `ai_unavailable`. The app sends `Accept: text/event-stream, application/json`. PRD and AC are unchanged: `FR-021`/`AC-011` already require the error message with the input kept.
+
+**Changed files:** `backend/core/.../enums/ErrorCode.java`, `backend/core/.../service/impl/AgentServiceImpl.java`, `AgentServiceTest`, `AgentControllerWebTest`, `frontend/mobile/src/lib/api.ts`, `docs/contracts/api-contracts.md`, `backend/ai/README.md` and this entry.
+
+**Check:** A scratch web test with the app's old `Accept: text/event-stream` reproduced the failure (`No acceptable representation`, exception left unhandled) before the fix. In `backend/core`, `mvn test` passes **1033 tests, 0 failures, 195 skipped** (PostgreSQL tests). In `frontend/mobile`, `npm run typecheck` passes and `npm test` passes **37/37**. Not run: the app against staging with a message over 2000 characters.
