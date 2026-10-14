@@ -64,10 +64,10 @@ Chữ nhận được từ mic (hay gõ tay) đi qua `parseOrder()` (`src/lib/pa
 
 ### PoC parse giọng nói (chưa nối vào màn voice)
 
-`src/lib/voiceParse/` là bản thử L1–L4 theo [brief](../../docs/development/voice-parse-poc-brief.md): chuẩn hoá + đọc số tiền, chỉ mục danh mục, gắn nhãn (luật, hoặc CRF đã train), liên kết tên món theo thứ tự từ và gate (tự nhận / hỏi chọn biến thể / món chưa có). Cùng interface `parseOrder(text, products)` nhưng màn `/voice` vẫn dùng `src/lib/parseOrder.ts`, vì màn này chưa hiển thị `disambiguations`. Kết quả và giới hạn: [báo cáo](../../docs/development/voice-parse-poc/report.md).
+`src/lib/voiceParse/` là bản thử L1–L4 theo [brief](../../docs/development/voice-parse-poc-brief.md): chuẩn hoá + đọc số tiền, chỉ mục danh mục, gắn nhãn (luật trước; câu luật không hiểu như “mỗi thứ”, “cũng vậy”, “à không” thì CRF đã train gắn lại), liên kết tên món theo thứ tự từ và gate (tự nhận / hỏi chọn biến thể / món chưa có / `fallback` khi không hiểu câu thì không đoán). Cùng interface `parseOrder(text, products)` nhưng màn `/voice` vẫn dùng `src/lib/parseOrder.ts`, vì màn này chưa hiển thị `disambiguations`. Kết quả và giới hạn: [báo cáo](../../docs/development/voice-parse-poc/report.md).
 
 ```bash
-npm run voice:eval      # bảng chỉ số baseline / PoC / PoC + CRF trên bộ câu tự soạn (scripts/voice-crf/eval/)
+npm run voice:eval      # bảng chỉ số baseline / PoC trên bộ câu tự soạn (scripts/voice-crf/eval/: bộ chính + câu tự do)
 npm run voice:tune      # dò ngưỡng gate trên tập dev
 npm run voice:synth && npm run voice:train && npm run voice:parity   # sinh câu, train CRF (cần uv), so Viterbi TS với Python
 ```
