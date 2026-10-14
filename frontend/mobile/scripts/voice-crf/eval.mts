@@ -9,7 +9,7 @@
  * Bộ câu là câu tự soạn, chưa phải câu thật của người dùng: `eval/gold.jsonl` (bộ chính, dev/test) và `eval/free.jsonl`
  * (câu cấu trúc tự do: "mỗi thứ", "cũng vậy", sửa lời, số bàn…; tách `free-dev`/`free-test`).
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { parseOrder as baselineParse, type ParseableProduct } from '../../src/lib/parseOrder';
 import { parseOrderDetailed as pocParse, ruleTagger } from '../../src/lib/voiceParse';
@@ -24,7 +24,9 @@ const readSet = (file: string, prefix = '') =>
     .filter((l) => l.trim())
     .map((l) => JSON.parse(l) as GoldCase)
     .map((g) => ({ ...g, split: `${prefix}${g.split}` as GoldCase['split'] }));
-const gold = [...readSet('./eval/gold.jsonl'), ...readSet('./eval/free.jsonl', 'free-')];
+// holdout.jsonl: bộ câu tự do giữ kín thứ hai (sub-agent viết, không xem code); chỉ in số tổng, không in câu sai
+const holdout = existsSync(here('./eval/holdout.jsonl')) ? readSet('./eval/holdout.jsonl', 'hold-') : [];
+const gold = [...readSet('./eval/gold.jsonl'), ...readSet('./eval/free.jsonl', 'free-'), ...holdout];
 
 type Parser = (text: string, products: ParseableProduct[]) => ScoredResult;
 // poc: mặc định (chỉ CRF, chọn đơn hàng qua gate trong n-best); poc+luat: thêm tagger luật dự phòng cho câu CRF bỏ;
@@ -156,7 +158,7 @@ function asrTable(file: string) {
   console.log('Chữ vàng = parser chạy trên câu vàng; STT = parser chạy trên transcript của cùng các câu đó.\n');
   console.log('| Tập | Số câu | WER | CER | Exact theo món: chữ vàng → STT | Tự nhận sai: chữ vàng → STT | Hỏi lại: chữ vàng → STT |');
   console.log('|---|---|---|---|---|---|---|');
-  for (const split of ['dev', 'test', 'free-dev', 'free-test']) {
+  for (const split of ['dev', 'test', 'free-dev', 'free-test', 'hold-test']) {
     const idx = gold.map((g, i) => (g.split === split && transcripts.has(g.id) ? i : -1)).filter((i) => i >= 0);
     if (!idx.length) continue;
     const golds = idx.map((i) => gold[i]);
@@ -181,7 +183,9 @@ function asrTable(file: string) {
   }
 }
 
-if (failuresSplit) {
+if (failuresSplit?.startsWith('hold')) {
+  console.log('Bộ giữ kín: không in câu sai (xem câu sai là tune theo bộ này).');
+} else if (failuresSplit) {
   for (const [i, g] of gold.entries()) {
     const s = scores[failuresParser][i];
     if (g.split !== failuresSplit || s.exact) continue;
@@ -189,12 +193,15 @@ if (failuresSplit) {
   }
 } else {
   const count = (split: string) => gold.filter((g) => g.split === split).length;
-  console.log(`# Voice parse eval — ${gold.length} câu tự soạn (dev ${count('dev')}, test ${count('test')}, free-dev ${count('free-dev')}, free-test ${count('free-test')})`);
+  console.log(
+    `# Voice parse eval — ${gold.length} câu tự soạn (dev ${count('dev')}, test ${count('test')}, free-dev ${count('free-dev')}, free-test ${count('free-test')}${count('hold-test') ? `, giữ kín ${count('hold-test')}` : ''})`,
+  );
   table('dev');
   const test = table('test');
   byCategory('test');
-  for (const split of ['free-dev', 'free-test']) if (count(split)) table(split);
+  for (const split of ['free-dev', 'free-test', 'hold-test']) if (count(split)) table(split);
   if (count('free-test')) byCategory('free-test');
+  if (count('hold-test')) byCategory('hold-test');
   for (const file of asrFiles) asrTable(file);
   if (!asrFiles.length) latency();
   process.exitCode = test.regressions ? 1 : 0;
