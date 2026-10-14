@@ -12,6 +12,7 @@ import com.smartledger.core.service.AgentService;
 import com.smartledger.core.service.ShopService;
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
@@ -23,6 +24,7 @@ import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
@@ -36,6 +38,11 @@ public class AgentServiceImpl implements AgentService {
     private static final String AGENT_PATH = "/internal/v1/agent";
     private static final String CONVERSATION_PATH = AGENT_PATH + "/conversations/{id}";
     private static final ObjectMapper JSON = new ObjectMapper();
+    /** A turn the AI's guardrails stop answers 422 with one of these codes (api-contracts.md section 6). */
+    private static final Map<String, ErrorCode> GUARDRAIL_CODES = Map.of(
+            "input_too_long", ErrorCode.AGENT_INPUT_TOO_LONG,
+            "answer_unavailable", ErrorCode.AGENT_ANSWER_UNAVAILABLE,
+            "answer_timeout", ErrorCode.AGENT_ANSWER_TIMEOUT);
 
     private final ShopService shopService;
     private final RestClient aiClient;
@@ -109,9 +116,32 @@ public class AgentServiceImpl implements AgentService {
         if (response.getStatusCode().is2xxSuccessful()) {
             return response;
         }
-        boolean notFound = response.getStatusCode().isSameCodeAs(HttpStatus.NOT_FOUND);
-        response.close();
-        throw new BusinessException(notFound ? ErrorCode.CONVERSATION_NOT_FOUND : ErrorCode.AI_UNAVAILABLE);
+        try (response) {
+            throw aiError(response.getStatusCode(), response.getBody());
+        }
+    }
+
+    private static boolean isMappedAiError(HttpStatusCode status) {
+        return status.isSameCodeAs(HttpStatus.NOT_FOUND) || status.isSameCodeAs(HttpStatus.UNPROCESSABLE_ENTITY);
+    }
+
+    /** AI 404 → conversation_not_found, a guardrail 422 keeps its code, anything else → ai_unavailable. */
+    private static BusinessException aiError(HttpStatusCode status, InputStream body) {
+        if (status.isSameCodeAs(HttpStatus.NOT_FOUND)) {
+            return new BusinessException(ErrorCode.CONVERSATION_NOT_FOUND);
+        }
+        if (status.isSameCodeAs(HttpStatus.UNPROCESSABLE_ENTITY)) {
+            try {
+                ErrorCode code = GUARDRAIL_CODES.get(JSON.readTree(body).path("detail").asText());
+                if (code != null) {
+                    return new BusinessException(code);
+                }
+            } catch (IOException exception) {
+                // An unreadable body is an unmapped AI error, like any other below.
+            }
+        }
+        log.warn("AI service answered {}", status);
+        return new BusinessException(ErrorCode.AI_UNAVAILABLE);
     }
 
     /**
@@ -155,8 +185,8 @@ public class AgentServiceImpl implements AgentService {
     }
 
     private RestClient.ResponseSpec send(RestClient.RequestHeadersSpec<?> request) {
-        return request.retrieve().onStatus(HttpStatus.NOT_FOUND::equals, (req, res) -> {
-            throw new BusinessException(ErrorCode.CONVERSATION_NOT_FOUND);
+        return request.retrieve().onStatus(AgentServiceImpl::isMappedAiError, (req, res) -> {
+            throw aiError(res.getStatusCode(), res.getBody());
         });
     }
 

@@ -85,7 +85,10 @@ public enum ErrorCode {
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "notification_not_found", "This notification is unavailable."),
     INVALID_AUDIT_QUERY(HttpStatus.BAD_REQUEST, "invalid_audit_query", "Use a nonnegative page, size 1-100, positive entity ID and an increasing time range."),
     CONVERSATION_NOT_FOUND(HttpStatus.NOT_FOUND, "conversation_not_found", "This conversation is unavailable."),
-    AI_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "ai_unavailable", "The assistant is unavailable. Please try again.");
+    AI_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "ai_unavailable", "The assistant is unavailable. Please try again."),
+    AGENT_INPUT_TOO_LONG(HttpStatus.UNPROCESSABLE_ENTITY, "input_too_long", "The message is too long. Shorten it and send it again."),
+    AGENT_ANSWER_UNAVAILABLE(HttpStatus.UNPROCESSABLE_ENTITY, "answer_unavailable", "The assistant could not answer this question."),
+    AGENT_ANSWER_TIMEOUT(HttpStatus.UNPROCESSABLE_ENTITY, "answer_timeout", "The assistant took too long to answer.");
 
     private final HttpStatus httpStatus;
     private final String code;

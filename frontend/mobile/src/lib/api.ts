@@ -147,7 +147,8 @@ export async function apiStream(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Accept: 'text/event-stream',
+        // Lỗi trước sự kiện đầu tiên là JSON; chỉ nhận SSE thì Core không ghi được lỗi đó và app mất mã lỗi.
+        Accept: 'text/event-stream, application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(opts.withShop && activeShopId ? { 'X-Shop-Id': activeShopId } : {}),
       },

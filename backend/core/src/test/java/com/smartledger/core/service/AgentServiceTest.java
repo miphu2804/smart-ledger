@@ -147,6 +147,38 @@ class AgentServiceTest {
     }
 
     @Test
+    void guardrailCodesReachTheApp() {
+        ai.expect(requestTo(AI + "/internal/v1/agent/chat")).andRespond(withStatus(HttpStatus.UNPROCESSABLE_ENTITY)
+                .contentType(MediaType.APPLICATION_JSON).body("{\"detail\":\"input_too_long\"}"));
+        assertThatThrownBy(() -> service.chat(TOKEN, "7", new AgentChatRequest(null, "hi")))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.AGENT_INPUT_TOO_LONG));
+
+        ai.reset();
+        ai.expect(requestTo(AI + "/internal/v1/agent/chat/stream"))
+                .andRespond(withStatus(HttpStatus.UNPROCESSABLE_ENTITY).contentType(MediaType.APPLICATION_JSON).body("{\"detail\":\"input_too_long\"}"));
+        assertThatThrownBy(() -> service.chatStream(TOKEN, "7", new AgentChatRequest(null, "hi")))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.AGENT_INPUT_TOO_LONG));
+    }
+
+    @Test
+    void unknownOrUnreadable422BecomesAiUnavailable() {
+        ai.expect(requestTo(AI + "/internal/v1/agent/chat")).andRespond(withStatus(HttpStatus.UNPROCESSABLE_ENTITY)
+                .contentType(MediaType.APPLICATION_JSON).body("{\"detail\":[{\"loc\":[\"body\"]}]}"));
+        assertThatThrownBy(() -> service.chat(TOKEN, "7", new AgentChatRequest(null, "hi")))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.AI_UNAVAILABLE));
+
+        ai.reset();
+        ai.expect(requestTo(AI + "/internal/v1/agent/chat/stream"))
+                .andRespond(withStatus(HttpStatus.UNPROCESSABLE_ENTITY).body("not json"));
+        assertThatThrownBy(() -> service.chatStream(TOKEN, "7", new AgentChatRequest(null, "hi")))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.AI_UNAVAILABLE));
+    }
+
+    @Test
     void aiFailureBecomesAiUnavailable() {
         ai.expect(requestTo(AI + "/internal/v1/agent/chat")).andRespond(withServerError());
 

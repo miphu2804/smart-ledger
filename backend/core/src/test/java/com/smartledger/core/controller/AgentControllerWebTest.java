@@ -111,6 +111,19 @@ class AgentControllerWebTest {
     }
 
     @Test
+    void chatStreamFailureIsJsonForTheAppsAcceptHeader() throws Exception {
+        // The app asks for SSE and JSON; JSON alone cannot answer an SSE-only Accept.
+        when(agentService.chatStream(any(), eq("7"), any()))
+                .thenThrow(new BusinessException(ErrorCode.AGENT_INPUT_TOO_LONG));
+        mvc.perform(post("/api/v1/agent/chat/stream").header("Authorization", "Bearer valid-token")
+                        .header("X-Shop-Id", "7").contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.TEXT_EVENT_STREAM, MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"hi\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("input_too_long"));
+    }
+
+    @Test
     void deleteReturnsNoContent() throws Exception {
         mvc.perform(delete("/api/v1/agent/conversations/5").header("Authorization", "Bearer valid-token")
                         .header("X-Shop-Id", "7"))
