@@ -119,8 +119,18 @@ export default function Ai() {
     setText('');
     setError(null);
     setTyping(true);
+    // Delta tới theo từng token; gom về một lần render mỗi khung hình thay vì một lần mỗi token.
+    let frame: number | null = null;
+    let latest = '';
+    const showDraft = (draftText: string) => {
+      latest = draftText;
+      frame ??= requestAnimationFrame(() => {
+        frame = null;
+        setDraft(latest);
+      });
+    };
     try {
-      const reply = await agentApi.chatStream({ conversation_id: conversationId, message }, setDraft);
+      const reply = await agentApi.chatStream({ conversation_id: conversationId, message }, showDraft);
       setConversationId(reply.conversation_id);
       setMsgs((m) => [...m, { id: `a${reply.message_id}`, from: 'ai', text: reply.answer }]);
     } catch (err) {
@@ -130,6 +140,8 @@ export default function Ai() {
       setText((current) => (current.trim() ? current : message));
       setError(chatErrorMessage(err));
     } finally {
+      // Khung hình còn chờ sẽ đặt lại chữ cũ sau khi bong bóng nháp đã được xoá.
+      if (frame !== null) cancelAnimationFrame(frame);
       sending.current = false;
       setDraft('');
       setTyping(false);
@@ -184,9 +196,6 @@ export default function Ai() {
             const isUser = m.from === 'user';
             return (
               <View key={m.id} style={[styles.messageRow, isUser && styles.userMessageRow]}>
-                {!isUser ? (
-                  <AgentAvatar emotion={'default'} size={34} style={{ marginTop: 2 }} />
-                ) : null}
                 <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
                   {!isUser ? (
                     <Row style={styles.assistantBubbleHeader}>
@@ -214,14 +223,12 @@ export default function Ai() {
 
           {typing && draft ? (
             <View style={styles.messageRow}>
-              <AgentAvatar emotion="default" size={34} style={{ marginTop: 2 }} />
               <View style={[styles.bubble, styles.assistantBubble]}>
-                <ChatText text={draft} />
+                <ChatText text={draft} streaming />
               </View>
             </View>
           ) : typing ? (
             <View style={styles.messageRow}>
-              <AgentAvatar emotion="idea" size={34} style={{ marginTop: 2 }} />
               <View style={[styles.bubble, styles.assistantBubble, styles.typingBubble]}>
                 <T size={12.5} color={colors.muted}>
                   Đang phân tích số liệu…
@@ -567,9 +574,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   assistantBubble: {
+    // Không có avatar và rộng hết hàng để bảng, biểu đồ và câu dài có đủ chỗ trên điện thoại.
     flex: 1,
     minWidth: 0,
-    maxWidth: '86%',
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
@@ -594,7 +601,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    maxWidth: '75%',
+    flex: 0,
   },
   pressed: {
     opacity: 0.72,
