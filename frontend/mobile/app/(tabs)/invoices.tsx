@@ -6,7 +6,7 @@ import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, Sec
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DateRangeSheet } from '../../src/components/DateRangeSheet';
 import { Button, EmptyState, Row, T } from '../../src/components/ui';
-import type { ReportPeriod, ReportSummaryView, SaleView, SalesSeriesPoint } from '../../src/data/types';
+import type { SaleView, SalesSeriesPoint } from '../../src/data/types';
 import { triggerFeedback } from '../../src/lib/feedback';
 import { dayKey, ddmmyyyy, hashIndex, hhmm, vnd } from '../../src/lib/format';
 import { reportApi } from '../../src/lib/reportApi';
@@ -18,6 +18,7 @@ import {
   saleFilterTimeLabel,
   saleFilterTimeShort,
   saleFilterWindow,
+  saleFilterYearDays,
   type SaleFilter,
 } from '../../src/lib/saleFilter';
 import { saleApi } from '../../src/lib/salesApi';
@@ -88,27 +89,43 @@ export default function Invoices() {
     saleApi.page(page, size, { ...saleWindow, q: searchQ || undefined }),
   );
 
-  // Doanh thu và tổng từng ngày chỉ có khi bộ lọc trùng một kỳ báo cáo của Core và không tìm theo từ khoá: các trang đã
-  // tải không đủ để cộng tổng. "Tất cả", khoảng tự chọn và khi tìm thì chỉ hiện số đơn.
+  // Doanh thu và tổng từng ngày lấy từ báo cáo của Core (các trang đã tải không đủ để cộng tổng), không có khi đang tìm:
+  // - kỳ có sẵn (Hôm nay, 7 ngày…): báo cáo của đúng kỳ đó;
+  // - "Tất cả" và khoảng tự chọn trong năm nay: cộng các ngày trong khoảng từ chuỗi ngày của năm ("Tất cả" là năm nay vì Core
+  //   không có tổng toàn thời gian); khoảng lấn sang năm trước thì chỉ hiện số đơn.
   const reportPeriod = searchQ ? null : saleFilterReportPeriod(filter);
-  const [report, setReport] = useState<{ period: ReportPeriod; summary: ReportSummaryView; days: Map<string, SalesSeriesPoint> } | null>(null);
+  const yearDays = searchQ || reportPeriod ? null : saleFilterYearDays(filter);
+  const yearFrom = yearDays?.from ?? null;
+  const yearTo = yearDays?.to ?? null;
+  const reportKey = reportPeriod ?? (yearFrom && yearTo ? `days:${yearFrom}:${yearTo}` : null);
+  const [report, setReport] = useState<{ key: string; revenue: number; days: Map<string, SalesSeriesPoint> } | null>(null);
   const reportSeq = useRef(0);
   const loadReport = useCallback(async () => {
     const mine = ++reportSeq.current;
-    if (!reportPeriod) {
+    if (!reportKey) {
       setReport(null);
       return;
     }
     try {
-      const [summary, series] = await Promise.all([reportApi.summary(reportPeriod), reportApi.salesSeries(reportPeriod)]);
-      if (mine !== reportSeq.current) return;
-      setReport({ period: reportPeriod, summary, days: new Map(series.items.map((day) => [day.date, day])) });
+      if (reportPeriod) {
+        const [summary, series] = await Promise.all([reportApi.summary(reportPeriod), reportApi.salesSeries(reportPeriod)]);
+        if (mine !== reportSeq.current) return;
+        // Doanh thu thuần của kỳ: đơn bán trong kỳ trừ đơn bị huỷ trong kỳ
+        setReport({ key: reportKey, revenue: summary.netRevenueVnd, days: new Map(series.items.map((day) => [day.date, day])) });
+      } else if (yearFrom && yearTo) {
+        const series = await reportApi.salesSeries('year');
+        if (mine !== reportSeq.current) return;
+        // Cùng cách tính với kỳ có sẵn, cộng theo từng ngày (`date` là ngày Việt Nam, so chuỗi `yyyy-mm-dd` được)
+        const days = series.items.filter((day) => day.date >= yearFrom && day.date <= yearTo);
+        const revenue = days.reduce((sum, day) => sum + day.netRevenueVnd, 0);
+        setReport({ key: reportKey, revenue, days: new Map(days.map((day) => [day.date, day])) });
+      }
     } catch {
       // Không có số tổng thì thẻ hiện "—"; danh sách đơn vẫn dùng được
       if (mine === reportSeq.current) setReport(null);
     }
-  }, [reportPeriod]);
-  const activeReport = report && report.period === reportPeriod ? report : null;
+  }, [reportKey, reportPeriod, yearFrom, yearTo]);
+  const activeReport = report && report.key === reportKey ? report : null;
 
   // Quay lại màn hình (vừa bán hoặc huỷ đơn): làm mới trang đầu mà giữ chỗ đang cuộn, và làm mới số tổng
   useFocusEffect(
@@ -137,8 +154,8 @@ export default function Invoices() {
     setQ('');
   };
 
-  // Doanh thu thuần của kỳ theo Core: đơn bán trong kỳ trừ đơn bị huỷ trong kỳ
-  const revenue = activeReport ? activeReport.summary.netRevenueVnd : null;
+  // Doanh thu thuần theo Core: đơn bán trong khoảng trừ đơn bị huỷ trong khoảng
+  const revenue = activeReport ? activeReport.revenue : null;
   const revenueText = revenue === null ? '—' : vnd(revenue);
   // Số trên thẻ là của khoảng thời gian đang lọc; chỉ "Tất cả" mới là tổng, nên nhãn đổi theo bộ lọc
   const timeShort = saleFilterTimeShort(filter);
@@ -146,7 +163,8 @@ export default function Invoices() {
   const customChipLabel = matchingPreset(filter.from, filter.to) ? saleFilterTimeLabel(filter) : timeShort;
   const scopeName = period === 'all' ? null : timeShort.toLowerCase();
   const countLabel = scopeName ? `Đơn ${scopeName}` : 'Tổng đơn hàng';
-  const revenueLabel = scopeName ? `Doanh thu ${scopeName}` : 'Tổng doanh thu';
+  // "Tất cả" cộng từ chuỗi ngày của năm nên nói rõ là năm nay
+  const revenueLabel = scopeName ? `Doanh thu ${scopeName}` : 'Doanh thu năm nay';
   // Ô số đơn hẹp hơn ô doanh thu (flex 0.8 so với 1.2). Dòng chữ dưới số chỉ nêu khoảng thời gian, trùng tên nút lọc, nên luôn
   // vừa một dòng; "Tổng đơn hàng" và "Đơn tháng này" bị cắt trên web ≤ 390px vì RN web không thu chữ theo adjustsFontSizeToFit.
   // countLabel vẫn dùng làm nhãn đọc màn hình.
@@ -222,7 +240,7 @@ export default function Invoices() {
               style={({ pressed }) => [
                 styles.summaryMetricBtn,
                 styles.summaryMetricCount,
-                !reportPeriod && { flex: 1 },
+                !reportKey && { flex: 1 },
                 pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] },
               ]}
               accessibilityRole="button"
@@ -241,8 +259,8 @@ export default function Invoices() {
               </View>
             </Pressable>
 
-            {/* Doanh thu chỉ có với kỳ báo cáo của Core (xem reportPeriod) */}
-            {reportPeriod ? (
+            {/* Doanh thu chỉ có khi lấy được từ báo cáo của Core (xem reportKey) */}
+            {reportKey ? (
             <>
             <View style={styles.summaryDivider} />
 
