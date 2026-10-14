@@ -6,6 +6,7 @@
  *   npm run voice:cascade -- --llm scripts/voice-crf/.data/llm/default.jsonl [--llm <file khác>]
  *   npm run voice:cascade -- --escalated scripts/voice-crf/.data/llm/escalated.txt
  *   npm run voice:cascade -- --grid --llm <file có LLM cho mọi câu>   # lưới cấu hình parser, mỗi cấu hình → LLM
+ *   npm run voice:cascade -- --grid --llm <file> --asr <transcript STT> --asr-llm <file LLM chạy trên transcript>
  *
  * `--escalated` ghi id các câu mà gate cũ hoặc gate câu tự do chặn, theo thứ tự ưu tiên khi ngân sách LLM nhỏ (bộ giữ kín
  * 3, gold test, câu tự do 2, câu tự do, gold dev), để `llm.py --ids` chỉ gọi những câu này.
@@ -156,43 +157,84 @@ if (args.includes('--grid')) {
           grid.push([`${name} viterbi`, { ...base, decode: 'viterbi' }]);
           for (const nu of [0.1, 0.3, 0.5]) grid.push([`${name} valid ν${nu}`, { ...base, minValidMass: nu }]);
         }
-  const run = (opts: ParseOptions, keep: (split: string) => boolean) => {
-    const idx = gold.map((g, i) => (keep(g.split) ? i : -1)).filter((i) => i >= 0);
+  // `opts` null là chỉ LLM. `text`/`llmRows` mặc định là câu vàng; với `--asr` là transcript STT của cùng câu và LLM
+  // chạy trên transcript đó.
+  const run = (opts: ParseOptions | null, keep: (i: number) => boolean, text = (i: number) => gold[i].text, llmRows = rows) => {
+    const idx = gold.map((_, i) => (keep(i) ? i : -1)).filter((i) => i >= 0);
     const picks = idx.map((i) => {
       const s = performance.now();
-      const r = parseOrderDetailed(gold[i].text, catalogs[gold[i].catalog], opts);
+      const r = opts && parseOrderDetailed(text(i), catalogs[gold[i].catalog], opts);
       const ms = performance.now() - s;
-      if (!r.fallback) return { r, ms, llm: false };
-      const row = rows.get(gold[i].id);
-      return { r: llmOrder(row, catalogs[gold[i].catalog]), ms: ms + llmMs(row), llm: true };
+      if (r && !r.fallback) return { r, ms, llm: false };
+      const row = llmRows.get(gold[i].id);
+      return { r: llmOrder(row, catalogs[gold[i].catalog]), ms: (r ? ms : 0) + llmMs(row), llm: true };
     });
     const m = aggregate(
       idx.map((i, k) => scoreCase(gold[i], picks[k].r)),
       idx.map((i) => gold[i]),
     );
-    return { m, llm: picks.filter((p) => p.llm).length / picks.length, p50: quantile(picks.map((p) => p.ms), 0.5), p95: quantile(picks.map((p) => p.ms), 0.95) };
+    const ms = picks.map((p) => p.ms);
+    return {
+      m,
+      llm: picks.filter((p) => p.llm).length / picks.length,
+      mean: ms.reduce((a, x) => a + x, 0) / ms.length,
+      p50: quantile(ms, 0.5),
+      p95: quantile(ms, 0.95),
+    };
   };
   type Res = ReturnType<typeof run>;
   const row = (name: string, r: Res) =>
-    `| ${name} | ${pct(r.m.sentenceExact)} | ${pct(r.m.lineExact)} | ${pct(r.m.wrongAcceptRate)} (${r.m.wrongAccepted}/${r.m.accepted}) | ${pct(r.llm)} | ${Math.round(r.p50)} ms | ${Math.round(r.p95)} ms |`;
-  const header = '| Cấu hình | Đúng hết (câu) | Đúng theo món | Dòng món sai / dòng món | Gửi LLM | P50 | P95 |\n|---|---|---|---|---|---|---|';
+    `| ${name} | ${pct(r.m.sentenceExact)} | ${pct(r.m.lineExact)} | ${pct(r.m.wrongAcceptRate)} (${r.m.wrongAccepted}/${r.m.accepted}) | ${pct(r.llm)} | ${Math.round(r.mean)} ms | ${Math.round(r.p50)} ms | ${Math.round(r.p95)} ms |`;
+  const header =
+    '| Cấu hình | Đúng hết (câu) | Đúng theo món | Dòng món sai / dòng món | Gửi LLM | Trung bình | P50 | P95 |\n|---|---|---|---|---|---|---|---|';
+  const inPool = (i: number) => POOL.has(gold[i].split);
   const ranked = grid
-    .map(([name, opts]) => ({ name, opts, r: run(opts, (s) => POOL.has(s)) }))
+    .map(([name, opts]) => ({ name, opts, r: run(opts, inPool) }))
     .sort((a, b) => b.r.m.sentenceExact - a.r.m.sentenceExact || a.r.m.wrongAcceptRate - b.r.m.wrongAcceptRate || a.r.llm - b.r.llm);
+  // độ trễ do LLM quyết định, nên cấu hình nhanh nhất là cấu hình ít gửi LLM nhất (hòa thì đúng hết cao hơn)
+  const fastest = [...ranked].sort((a, b) => a.r.llm - b.r.llm || b.r.m.sentenceExact - a.r.m.sentenceExact)[0];
   const defaults = ['gate tự do θ0.9 valid ν0.1', 'gate cũ θ0.9 valid ν0.1'];
   console.log(`# Lưới × LLM (${basename(llmFiles[0])}), ${grid.length} cấu hình, pool ${[...POOL].join(' + ')}\n`);
   console.log(header);
   for (const c of ranked.slice(0, 15)) console.log(row(c.name, c.r));
-  console.log('| … | | | | | | |');
+  console.log('| … | | | | | | | |');
   for (const c of ranked.filter((c) => defaults.includes(c.name))) console.log(row(`${c.name} (mặc định, hạng ${ranked.indexOf(c) + 1})`, c.r));
   const oldBest = ranked.find((c) => c.name.startsWith('gate cũ'));
   if (oldBest) console.log(row(`${oldBest.name} (gate cũ tốt nhất, hạng ${ranked.indexOf(oldBest) + 1})`, oldBest.r));
   const last = ranked[ranked.length - 1];
   console.log(row(`${last.name} (cuối, hạng ${ranked.length})`, last.r));
+  console.log(row(`${fastest.name} (ít gửi LLM nhất, hạng ${ranked.indexOf(fastest) + 1})`, fastest.r));
+  const label = (c: (typeof ranked)[number]) =>
+    c === ranked[0] ? `${c.name} (chất lượng cao nhất trên pool)` : c === fastest ? `${c.name} (nhanh nhất trên pool)` : c.name;
   for (const split of ['test', 'hold3-test']) {
     console.log(`\n## ${split}\n\n${header}`);
-    for (const c of [ranked[0], ...ranked.filter((c) => defaults.includes(c.name))])
-      console.log(row(c === ranked[0] ? `${c.name} (chọn trên pool)` : c.name, run(c.opts, (s) => s === split)));
+    for (const c of [ranked[0], fastest, ...ranked.filter((c) => defaults.includes(c.name))]) console.log(row(label(c), run(c.opts, (i) => gold[i].split === split)));
+  }
+  const asrFile = args[args.indexOf('--asr') + 1];
+  const asrLlmFile = args[args.indexOf('--asr-llm') + 1];
+  if (args.includes('--asr') && asrFile && asrLlmFile) {
+    // Cùng hai cấu hình chọn được, chạy trên transcript STT; so với chính các câu đó khi đọc thẳng chữ vàng
+    const heard = new Map(readJsonl<{ id: string; text: string }>(resolve(asrFile)).map((r) => [r.id, r.text]));
+    const asrRows = new Map(readJsonl<LlmRow>(resolve(asrLlmFile)).map((r) => [r.id, r]));
+    const heardText = (i: number) => heard.get(gold[i].id) ?? '';
+    console.log(`\n# STT ${basename(asrFile)} (${heard.size} transcript), LLM trên transcript: ${basename(asrLlmFile)}`);
+    for (const [title, inSet] of [
+      ['pool', inPool],
+      ['test', (i: number) => gold[i].split === 'test'],
+    ] as const) {
+      const keep = (i: number) => inSet(i) && heard.has(gold[i].id);
+      const n = gold.filter((_, i) => keep(i)).length;
+      if (!n) continue;
+      console.log(`\n## ${title}, ${n} câu có transcript\n\n${header}`);
+      for (const [name, opts] of [
+        [label(ranked[0]), ranked[0].opts],
+        [label(fastest), fastest.opts],
+        ['Chỉ LLM', null],
+      ] as const) {
+        console.log(row(`${name}, chữ vàng`, run(opts, keep)));
+        console.log(row(`${name}, STT`, run(opts, keep, heardText, asrRows)));
+      }
+    }
   }
   process.exit(0);
 }

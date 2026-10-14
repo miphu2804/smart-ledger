@@ -14,6 +14,9 @@ Ngân sách nhỏ: `--ids` (danh sách do `voice:cascade -- --escalated` ghi: c�
 câu đó và theo thứ tự đó; `--limit` chặn số câu. Hết quota hoặc key sai thì dừng hẳn; lỗi mạng, giới hạn tốc độ, lỗi phía
 máy chủ thì bỏ qua câu đó (không ghi, chạy lại sẽ gọi lại). Chỉ lỗi của chính model (sai schema, quá hạn) được ghi lại và
 `voice:cascade` tính như hỏi lại. Không in câu nào: bộ giữ kín chỉ xem số tổng.
+
+`--asr <transcript>` (file `asr.py` ghi, mỗi dòng {"id", "text"}) gửi transcript STT thay cho câu vàng, chỉ các câu có
+transcript, để `voice:cascade -- --asr-llm` đo chuỗi STT → parser → LLM.
 """
 
 import argparse
@@ -146,6 +149,7 @@ async def main() -> int:
     ap.add_argument("--ids", type=Path, help="chỉ các id trong file này, theo thứ tự")
     ap.add_argument("--limit", type=int, help="gọi nhiều nhất bấy nhiêu câu mới")
     ap.add_argument("--concurrency", type=int, default=4)
+    ap.add_argument("--asr", type=Path, help="transcript STT thay cho câu vàng")
     args = ap.parse_args()
 
     model = build_chat_model(app_config)
@@ -174,6 +178,16 @@ async def main() -> int:
                 for line in path.read_text(encoding="utf-8").splitlines()
                 if line.strip()
             ]
+    if args.asr:
+        heard = {
+            r["id"]: r["text"]
+            for r in (
+                json.loads(line)
+                for line in args.asr.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            )
+        }
+        rows = [{**r, "text": heard[r["id"]]} for r in rows if r["id"] in heard]
     if args.ids:
         order = [i for i in args.ids.read_text().split() if i]
         by_id = {r["id"]: r for r in rows}

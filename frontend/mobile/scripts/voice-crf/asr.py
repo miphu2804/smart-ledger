@@ -55,7 +55,7 @@ OUT = HERE / ".data" / "asr"
 
 def gold_rows():
     rows = []
-    for name in ("gold.jsonl", "free.jsonl"):
+    for name in ("gold.jsonl", "free.jsonl", "free2.jsonl"):
         with open(EVAL / name, encoding="utf-8") as f:
             rows += [json.loads(line) for line in f if line.strip()]
     return rows
@@ -365,6 +365,8 @@ def cmd_zipformer(args):
             sys.exit(f"không thấy {prefix}*.onnx trong {d}")
         return str(found[0])
 
+    if args.offline:
+        return zipformer_offline(sherpa_onnx, d, find, args)
     if args.hotwords and not (d / "bpe.vocab").exists():
         sys.exit("--hotwords cần bpe.vocab trong thư mục model (app hiện không tải file này)")
     rec = sherpa_onnx.OnlineRecognizer.from_transducer(
@@ -392,6 +394,27 @@ def cmd_zipformer(args):
         results.append((path.stem, " ".join(rec.get_result(stream).lower().split())))
     method = "hw" if hotwords else "beam" if args.beam else "greedy"
     write_jsonl(f"zipformer-{method}", results)
+
+
+def zipformer_offline(sherpa_onnx, d, find, args):
+    """Zipformer không streaming (vd. gipformer): giải mã cả câu một lần, ghi `.data/asr/<tên thư mục model>-<cách giải mã>`."""
+    if args.hotwords:
+        sys.exit("--hotwords chưa hỗ trợ với --offline")
+    rec = sherpa_onnx.OfflineRecognizer.from_transducer(
+        tokens=str(d / "tokens.txt"),
+        encoder=find("encoder"),
+        decoder=find("decoder"),
+        joiner=find("joiner"),
+        num_threads=2,
+        decoding_method="modified_beam_search" if args.beam else "greedy_search",
+    )
+    results = []
+    for path in audio_files(args.audio_dir):
+        stream = rec.create_stream()
+        stream.accept_waveform(16000, read_wav(path))
+        rec.decode_stream(stream)
+        results.append((path.stem, " ".join(stream.result.text.lower().split())))
+    write_jsonl(f"{d.name}-{'beam' if args.beam else 'greedy'}", results)
 
 
 def main():
@@ -430,6 +453,7 @@ def main():
     s.add_argument("--beam", action="store_true", help="modified_beam_search thay vì greedy như app")
     s.add_argument("--hotwords", action="store_true", help="tên món trong danh mục của câu làm hotword (cần bpe.vocab)")
     s.add_argument("--hotwords-score", type=float, default=1.5)
+    s.add_argument("--offline", action="store_true", help="model không streaming (vd. gipformer)")
     s.set_defaults(func=cmd_zipformer)
 
     args = p.parse_args()

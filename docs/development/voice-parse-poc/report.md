@@ -7,7 +7,7 @@ Báo cáo kết quả của PoC theo [brief](../voice-parse-poc-brief.md). Nhán
 - **Câu đặt hàng thông thường:** PoC L1–L4 đạt mọi mục tiêu §7 đo được trên Node, trên tập test của bộ câu tự soạn **[đã kiểm chứng]**.
 - **Câu cấu trúc tự do** ("mỗi thứ một cái", "pepsi cũng vậy", "à không, ba gói", "bàn năm hai cà phê", câu dài lồng nhau): lần đo giữ kín duy nhất (100 câu, giai đoạn 2) cho 70.8% theo món, 7.0% tự nhận sai, 25% hỏi lại, **chưa đạt mục tiêu**. Giai đoạn 3 đưa bộ đó lên 83.9% / 0.7% / 17%; giai đoạn 4 (dò lưới, nhãn sửa lời EDIT, chọn đơn hàng qua gate trong n-best, bỏ tagger luật dự phòng) lên 96.4% / 0 dòng sai / 4%, nhưng bộ này đã được xem lỗi nên đó là số dev. **Bộ giữ kín thứ hai** (120 câu, sub-agent viết, chấm một lần với parser đã chốt, mục 3.4) cho **44.2% theo món, 6.4% tự nhận sai, 59.2% hỏi lại**; giai đoạn 3 trên cùng bộ: 42.6% / 7.7% / 60.0%. Phần lớn mức tăng của giai đoạn 4 là học các biến thể đã thấy; với câu tự do chưa gặp, PoC chỉ tự xử lý được khoảng 4 câu trong 10 và vẫn tự nhận sai quá ngưỡng 2%. Câu tự do cần LLM dự phòng; parser trên máy hợp với câu đặt hàng thông thường.
 - **Gate câu tự do** (giai đoạn 5, mục 3.5–3.6, mặc định bật): câu phức có khung câu chưa gặp khi train, món không nhận được số trong câu có nói số, hoặc câu hỏi chọn trùng món khác của đơn, thì gửi LLM. Trên **bộ giữ kín thứ ba** (160 câu, sub-agent viết, chấm một lần với parser chốt ở `ddc7afd`): máy tự xử lý **8.1%** số câu (13/160) và **13/13 câu đúng hết, 0 dòng tự nhận sai**; gate cũ tự xử lý 58.1%, đúng hết 67.7%, tự nhận sai 8.6% số dòng. Mục tiêu "≥ 95% đúng khi máy tự xử lý" **đạt** trên bộ này, nhưng mẫu nhỏ (cận dưới khoảng tin cậy 95% của 13/13 là 75%) và cái giá rất lớn: 94% câu tự do sang LLM/hỏi lại, kể cả một nửa câu đặt hàng thường của người viết mới (nhóm control: đúng 50% so với 94% của gate cũ). Trên test chính: hỏi lại 14.1% (trước 10.9%), theo món 90.7% (trước 95.1%), 0 dòng sai.
-- **Chuỗi trên máy → LLM** (mục 3.7, OpenCode Go, `claude-haiku-5-5`, mức `medium`): trên **bộ giữ kín 3**, gate câu tự do → LLM đúng hết **88.8%** câu so với **76.3%** của gate cũ → LLM, dòng sai 3.4% so với 7.0%; LLM đúng 87.1% câu bị chặn (mức hòa vốn khoảng 62%). Trên test và free-test hai gate ngang nhau (98–100%). Cái giá: 92% câu tự do chờ LLM khoảng 3 s (P95 5.4 s, đo từ máy phát triển), khoảng 0.0005 USD mỗi câu; `high` không hơn `medium`. Đề xuất **gate câu tự do → LLM mức `medium`**. Dò lưới 160 cấu hình × LLM (mục 3.8): gate quyết định, tham số lưới không đổi kết quả; giữ cấu hình mặc định.
+- **Chuỗi trên máy → LLM** (mục 3.7, OpenCode Go, `claude-haiku-5-5`, mức `medium`): trên **bộ giữ kín 3**, gate câu tự do → LLM đúng hết **88.8%** câu so với **76.3%** của gate cũ → LLM, dòng sai 3.4% so với 7.0%; LLM đúng 87.1% câu bị chặn (mức hòa vốn khoảng 62%). Trên test và free-test hai gate ngang nhau (98–100%). Cái giá: 92% câu tự do chờ LLM khoảng 3 s (P95 5.4 s, đo từ máy phát triển), khoảng 0.0005 USD mỗi câu. Chạy lại cả 672 câu với `high` (mục 3.8): gate câu tự do → LLM lên **91.3%** trên bộ giữ kín 3 (dòng sai 1.9%), nên đề xuất **gate câu tự do → LLM mức `high`**. Dò lưới 160 cấu hình × LLM: gate quyết định, tham số lưới không đổi kết quả; giữ cấu hình mặc định. Pipeline độ trễ thấp nhất (gửi LLM 7%) chỉ đạt 64.4% trên bộ giữ kín 3. Qua STT gipformer trên audio TTS (mục 3.9, WER khoảng 15%), pipeline tốt nhất còn 83% đúng hết trên test: STT là nút cổ chai, cần audio người đọc để chọn model STT.
 - **Phụ thuộc phần viết tay** (mục 3.2): sau khi train, tắt gate dấu hiệu viết tay (`findMarkers`) không đổi dòng nào trên bộ câu người viết; tắt luật số bàn/giờ làm sai 1 dòng. Các danh sách từ viết tay còn lại chủ yếu nằm ở bộ sinh câu train và ở đặc trưng CRF (bỏ đặc trưng từ điển: vẫn 0 dòng sai nhưng hỏi lại nhiều hơn).
 - **"System 1" router quyết định escalate sang LLM** (mục 3.3): router học (logistic) từ đặc trưng của lượt parse tốt hơn ngưỡng θ trên synthetic nhưng **không hơn trên câu người viết**, nên chưa dùng; giữ ngưỡng θ cho tới khi có kết quả thật (có đồng ý) để học.
 - **STT:** eval chấm được transcript của từng hệ STT (`--asr`), có script cho ChunkFormer (greedy, beam + KenLM, hotword) và Zipformer đang dùng. **Chưa có số ASR thật**: cần audio người đọc các câu eval và model tải từ Hugging Face (mục 12).
@@ -331,6 +331,61 @@ Câu hỏi: khi câu bị chặn đã có LLM, cấu hình parser nào (lưới 
 - Gate tự do → LLM hơn chỉ LLM trên pool (94.7% so với 93.3%) và test (98.7% so với 97.4%), bằng trên hold3, mà gửi LLM ít hơn: phần máy tự xử lý đúng hơn LLM trên những câu quen.
 - Chi phí cả lượt 672 câu: 1.465.268 token vào, 322.009 ra, khoảng 0.31 USD theo giá Anthropic niêm yết (giá OpenCode Go có thể khác).
 
+**Lặp lại với `high`** (cả 672 câu, 0 lỗi model; 1.408.198 token vào, 405.052 ra, khoảng 0.34 USD theo giá niêm yết). Hai pipeline: **chất lượng cao nhất** là hạng 1 trên pool, **độ trễ thấp nhất** là cấu hình gửi LLM ít nhất (độ trễ do LLM quyết định; hòa thì lấy đúng hết cao hơn). Độ trễ = parse trên máy + LLM (SALE và EXPENSE song song như Core), đo từ máy phát triển:
+
+| Pipeline (`high`) | Tập | Đúng hết (câu) | Theo món | Dòng sai | Gửi LLM | Trung bình | P95 |
+|---|---|---|---|---|---|---|---|
+| Chất lượng cao nhất: gate tự do θ0.8 Viterbi | pool | 96.1% | 98.0% | 5/551 | 42.1% | 1.5 s | 4.6 s |
+| | test | 98.7% | 98.8% | 0/136 | 9.0% | 0.3 s | 3.3 s |
+| | hold3-test | 90.0% | 97.0% | 8/320 | 91.3% | 3.2 s | 5.4 s |
+| Độ trễ thấp nhất: gate cũ θ0.7 +luật `valid` ν0.1 | pool | 84.6% | 92.0% | 23/535 | 7.0% | 0.24 s | 2.9 s |
+| | test | 98.1% | 98.1% | 0/135 | 1.3% | 0.05 s | 1 ms |
+| | hold3-test | 64.4% | 84.8% | 29/301 | 22.5% | 0.8 s | 4.5 s |
+| Gate tự do mặc định (θ0.9 `valid` ν0.1, hạng 27) | hold3-test | **91.3%** | 97.6% | 6/320 | 91.9% | 3.3 s | 5.4 s |
+| Gate cũ mặc định (hạng 100) | hold3-test | 78.1% | 92.2% | 17/314 | 41.9% | 1.4 s | 4.7 s |
+| Chỉ LLM | hold3-test | 91.3% | 97.6% | 6/320 | 100% | 3.3 s | 5.7 s |
+
+- `high` hơn `medium` trên hold3 (gate tự do mặc định 91.3% so với 88.8%, dòng sai 6 so với 11; gate cũ 78.1% so với 76.3%), ngang trên test. Lượt 26 câu trước đó (mục 3.7) quá nhỏ để thấy chênh lệch này.
+- Pipeline nhanh nhất chỉ đáng dùng cho câu đặt hàng thường (test 98.1%, gửi LLM 1.3%); với câu tự do nó tự nhận sai 9.6% số dòng trên hold3, quá ngưỡng 2%. Gate cũ mặc định là điểm giữa: gửi LLM 42% câu tự do, 78% đúng hết.
+- Hạng 1 trên pool vẫn kém gate tự do mặc định trên hold3 (90.0% so với 91.3%), nên kết luận của mục này giữ nguyên: **giữ cấu hình mặc định**, đổi LLM sang `high`.
+
+### 3.9 STT gipformer → parser → LLM
+
+Model: [`g-group-ai-lab/gipformer1.5-68M-rnnt`](https://huggingface.co/g-group-ai-lab/gipformer1.5-68M-rnnt) (Zipformer transducer 68M tham số, ONNX int8 khoảng 73 MB, giấy phép MIT), không streaming nên giải mã bằng `OfflineRecognizer` của sherpa-onnx (`voice:asr zipformer --offline`, greedy).
+
+**Audio là TTS, không phải người đọc.** Chưa có bản thu thật, nên 512 câu (dev, test, free-dev, free-test, free2-dev; không gồm bộ giữ kín 3) được đọc bằng giọng `Linh` (vi_VN) của macOS `say`, chạy trên máy, đổi sang 16 kHz mono. Giọng TTS sạch, không ồn, không giọng địa phương nên số dưới đây là **cận trên lạc quan về âm học**; ngược lại TTS đọc số và từ mượn ("flan", "cacao") kém hơn người, và WER tính cả lỗi chuẩn hóa ("2" → "hai").
+
+| Tập (`voice:eval -- --asr`) | Số câu | WER | CER | Theo món: chữ vàng → STT | Tự nhận sai: chữ vàng → STT |
+|---|---|---|---|---|---|
+| test | 156 | 15.1% | 8.4% | 90.7% → 56.8% | 0.0% → 1.3% |
+| free-test | 100 | 13.5% | 7.6% | 60.1% → 44.0% | 0.0% → 1.3% |
+| free2-dev | 120 | 14.0% | 7.8% | 16.7% → 12.4% | 0.0% → 3.6% |
+
+Giải mã 512 câu mất 16 s trên máy phát triển (2 luồng), khoảng 30 ms mỗi câu.
+
+Gắn vào hai pipeline của mục 3.8 (`voice:cascade -- --grid --asr … --asr-llm …`): câu bị chặn gửi **transcript** sang Haiku 5.5 `high` (512 câu, 0 lỗi model; 1.114.404 token vào, 369.380 ra, khoảng 0.30 USD theo giá niêm yết):
+
+| Pipeline | Tập | Đầu vào | Đúng hết (câu) | Theo món | Dòng sai | Gửi LLM | Trung bình | P95 |
+|---|---|---|---|---|---|---|---|---|
+| Chất lượng cao nhất (gate tự do θ0.8 Viterbi) | pool | chữ vàng | 96.1% | 98.0% | 5/551 | 42.1% | 1.5 s | 4.6 s |
+| | | gipformer | 82.6% | 89.7% | 15/512 | 55.3% | 2.2 s | 5.4 s |
+| | test | chữ vàng | 98.7% | 98.8% | 0/136 | 9.0% | 0.3 s | 3.3 s |
+| | | gipformer | 83.3% | 84.6% | 2/117 | 28.2% | 1.0 s | 4.7 s |
+| Độ trễ thấp nhất (gate cũ θ0.7 +luật `valid` ν0.1) | pool | chữ vàng | 84.6% | 92.0% | 23/535 | 7.0% | 0.24 s | 2.9 s |
+| | | gipformer | 61.8% | 73.7% | 30/434 | 10.4% | 0.45 s | 4.3 s |
+| | test | chữ vàng | 98.1% | 98.1% | 0/135 | 1.3% | 0.05 s | 1 ms |
+| | | gipformer | 71.8% | 73.5% | 9/108 | 3.2% | 0.14 s | 2 ms |
+| Chỉ LLM | pool | gipformer | 81.5% | 89.3% | 21/518 | 100% | 3.7 s | 5.9 s |
+| | test | gipformer | 84.0% | 86.4% | 1/122 | 100% | 3.2 s | 5.0 s |
+
+Độ trễ trong bảng chưa gồm thời gian STT (khoảng 30 ms mỗi câu trên máy phát triển).
+
+**Đọc kết quả:**
+- STT là nút cổ chai: cùng pipeline chất lượng cao nhất mất khoảng 13–15 điểm đúng hết (pool 96.1% → 82.6%, test 98.7% → 83.3%). LLM phía sau không sửa được tên món nghe sai ("cam sả" → "cam xả", "chanh hai ly" → "tranh ili").
+- Gate tự do vẫn giữ lỗi thấp trên transcript (test 2/117 dòng sai, gửi LLM tăng 9% → 28%). Pipeline nhanh nhất tự nhận sai 8.3% số dòng trên test khi nghe qua STT, nên **không dùng được với STT này**.
+- Gate tự do → LLM ngang chỉ LLM trên transcript (pool 82.6% so với 81.5%, test 83.3% so với 84.0%), ít dòng sai hơn trên pool (15 so với 21).
+- Chưa so với Zipformer streaming đang dùng trong app trên cùng audio (model app chưa tải về ở đây). Cần audio người đọc thật (`voice:asr prompts`) trước khi chọn model STT; gipformer cũng không streaming nên app phải chờ hết câu mới giải mã.
+
 ## 4. Chạy lại
 
 Trong `frontend/mobile` (Node có `--experimental-strip-types`; Python qua `uv`, không đụng `backend/ai`):
@@ -371,6 +426,12 @@ npm run voice:llm -- --out scripts/voice-crf/.data/llm/high.jsonl --ids scripts/
 MODEL_REASONING_EFFORT=low npm run voice:llm -- --out scripts/voice-crf/.data/llm/low.jsonl --ids scripts/voice-crf/.data/llm/escalated.txt
 npm run voice:cascade -- --llm scripts/voice-crf/.data/llm/high.jsonl --llm scripts/voice-crf/.data/llm/low.jsonl
 npm run voice:cascade -- --grid --llm scripts/voice-crf/.data/llm/haiku-med.jsonl   # lưới × LLM (mục 3.8; cần LLM cho mọi câu)
+
+# STT gipformer → parser → LLM (mục 3.9); <id>.wav 16 kHz mono trong .data/audio-tts, model ONNX trong .data/models/gipformer
+uv run scripts/voice-crf/asr.py zipformer --offline --model-dir scripts/voice-crf/.data/models/gipformer --audio-dir scripts/voice-crf/.data/audio-tts
+npm run voice:eval -- --asr scripts/voice-crf/.data/asr/gipformer-greedy.jsonl
+MODEL_REASONING_EFFORT=high npm run voice:llm -- --sets gold,free,free2 --asr scripts/voice-crf/.data/asr/gipformer-greedy.jsonl --out scripts/voice-crf/.data/llm/haiku-high-gipformer.jsonl
+npm run voice:cascade -- --grid --llm scripts/voice-crf/.data/llm/haiku-high.jsonl --asr scripts/voice-crf/.data/asr/gipformer-greedy.jsonl --asr-llm scripts/voice-crf/.data/llm/haiku-high-gipformer.jsonl
 ```
 
 `node scripts/voice-crf/...` chạy thẳng mã TS của app nhờ `scripts/voice-crf/ts-resolve.mjs` (thêm đuôi `.ts` và thuộc tính JSON như Metro), không đổi `tsconfig`.
@@ -413,11 +474,11 @@ Ngưỡng dò trên dev (`voice:tune`): mọi cặp τ ∈ [0.64, 0.80] cho cùn
 
 ## 8. Đã kiểm chứng và chưa kiểm chứng
 
-**Đã kiểm chứng:** bảng §7 và bảng câu tự do bằng `npm run voice:eval`; lưới, ablation, lexout và router bằng `voice:grid` / `voice:router` / `router.py` (mục 3.2, 3.3); gate câu tự do bằng `voice:gate` / `voice:grid --gate` trên 12 model bỏ một kiểu câu (mục 3.5); parity bằng `npm run voice:parity`; `npm run typecheck` pass; 0 câu baseline đúng mà PoC tự nhận sai trên dev và test của bộ chính (5 câu dev và 2 câu test baseline đúng nay gửi LLM); mã wrapper và mã sherpa-onnx upstream về hotword và LM (mục 12); chế độ `--asr` của eval (transcript trùng chữ vàng cho đúng số của eval chữ); `voice:asr prompts` và `voice:asr lm` chạy được, file ARPA nạp được bằng KenLM 0.3.0; chuỗi trên máy → LLM qua OpenCode Go (`claude-haiku-5-5`, `medium` và `high`) trên mọi câu bị chặn của test, free-test, free-dev, dev và bộ giữ kín 3 bằng `voice:llm` và `voice:cascade` (mục 3.7; dùng `backend/ai` của `staging`).
+**Đã kiểm chứng:** bảng §7 và bảng câu tự do bằng `npm run voice:eval`; lưới, ablation, lexout và router bằng `voice:grid` / `voice:router` / `router.py` (mục 3.2, 3.3); gate câu tự do bằng `voice:gate` / `voice:grid --gate` trên 12 model bỏ một kiểu câu (mục 3.5); parity bằng `npm run voice:parity`; `npm run typecheck` pass; 0 câu baseline đúng mà PoC tự nhận sai trên dev và test của bộ chính (5 câu dev và 2 câu test baseline đúng nay gửi LLM); mã wrapper và mã sherpa-onnx upstream về hotword và LM (mục 12); chế độ `--asr` của eval (transcript trùng chữ vàng cho đúng số của eval chữ); `voice:asr prompts` và `voice:asr lm` chạy được, file ARPA nạp được bằng KenLM 0.3.0; chuỗi trên máy → LLM qua OpenCode Go (`claude-haiku-5-5`, `medium` và `high`) trên mọi câu bị chặn của test, free-test, free-dev, dev và bộ giữ kín 3 bằng `voice:llm` và `voice:cascade` (mục 3.7; dùng `backend/ai` của `staging`); lưới × LLM `medium` và `high` trên cả 672 câu (mục 3.8); `voice:asr zipformer --offline` với gipformer trên 512 câu audio TTS, chấm bằng `voice:eval -- --asr` và `voice:cascade -- --grid --asr` (mục 3.9).
 
 **Lưu ý về tập test chính:** khi soát lỗi free2-dev (mục 3.6), một lần chạy script soát lỗi in dòng mô tả lỗi (không in câu) của 3 câu test chính máy tự xử lý sai; 2 câu đã có ở mục 9, câu thứ ba là lỗi tách "cơm thêm" giống câu dev. Bản sửa của mục 3.6 làm theo câu dev và không đổi số test.
 
-**Chưa kiểm chứng:** L0 hotword (WER tên hàng, độ trễ beam search); mọi số ASR (ChunkFormer, KenLM, Zipformer trên audio: chưa có audio, Hugging Face bị chặn trong môi trường này); `voice:asr chunkformer` và `voice:asr zipformer` chưa chạy lần nào; độ trễ trên máy Android thật (mới đo trên Node); độ chính xác với catalog 1.000 món (mới đo độ trễ); câu thật của người dùng; `high` trên bộ giữ kín 3; độ trễ LLM đo từ điện thoại; chuỗi LLM với `backend/ai` của nhánh này (chưa có `MODEL_PROVIDER=anthropic`); UX hỏi chọn biến thể; số giữ kín cho giai đoạn 3 (giai đoạn 4 đã có, mục 3.4); độ chính xác khi máy tự xử lý trên mẫu đủ lớn (bộ giữ kín thứ ba chỉ có 13 câu được tự xử lý, mục 3.6); router trên dữ liệu thật; độ trễ giai đoạn 4 trên máy (Hermes chậm hơn Node).
+**Chưa kiểm chứng:** L0 hotword (WER tên hàng, độ trễ beam search); số ASR trên audio người đọc (mới có audio TTS cho gipformer, mục 3.9; ChunkFormer, KenLM và Zipformer streaming của app chưa đo); `voice:asr chunkformer` và `voice:asr zipformer` không `--offline` chưa chạy lần nào; độ trễ trên máy Android thật (mới đo trên Node); độ chính xác với catalog 1.000 món (mới đo độ trễ); câu thật của người dùng; `high` trên bộ giữ kín 3; độ trễ LLM đo từ điện thoại; chuỗi LLM với `backend/ai` của nhánh này (chưa có `MODEL_PROVIDER=anthropic`); UX hỏi chọn biến thể; số giữ kín cho giai đoạn 3 (giai đoạn 4 đã có, mục 3.4); độ chính xác khi máy tự xử lý trên mẫu đủ lớn (bộ giữ kín thứ ba chỉ có 13 câu được tự xử lý, mục 3.6); router trên dữ liệu thật; độ trễ giai đoạn 4 trên máy (Hermes chậm hơn Node).
 
 **Cách làm bộ eval và giới hạn:**
 - **Bộ chính (260 câu):** một sub-agent viết nháp theo quy tắc gắn nhãn, không xem code parser; tôi soát lại toàn bộ nhãn. Chia dev/test 40/60 phân tầng theo 11 nhóm, seed cố định, đóng băng trước khi viết PoC. Lỗi được soát trên dev; tập test chỉ xem số tổng, trừ một lần bảng eval in ra ID 4 câu test bị hỏng ở phiên bản đầu (đã tắt ngay). Tôi đã đọc mọi câu khi soát nhãn, nên danh sách từ đệm có thể vô tình hợp với bộ câu này hơn câu thật.
