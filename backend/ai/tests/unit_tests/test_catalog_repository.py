@@ -4,11 +4,8 @@ import pytest
 from sqlalchemy.dialects import postgresql
 from tests.support import CORE_MIGRATIONS, REPO_ROOT
 
-from src.drafts.catalog import (
-    CatalogProduct,
-    CatalogUnavailableError,
-    ProductCatalogRepository,
-)
+from src.drafts.catalog import CatalogProduct, ProductCatalogRepository
+from src.drafts.errors import CatalogUnavailableError
 from src.infra.postgre_db_client import PostgreDBClient
 
 

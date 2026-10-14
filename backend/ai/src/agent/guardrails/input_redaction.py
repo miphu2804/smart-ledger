@@ -1,40 +1,31 @@
-import re
-
-# Sixteen digits in groups of four; only numbers that pass the Luhn check are masked.
-CARD_PATTERN = re.compile(r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b")
-
-# Secrets an owner might paste by mistake: OpenAI-style keys, bearer tokens and JWTs.
-SECRET_PATTERN = re.compile(
-    r"sk-[A-Za-z0-9_-]{20,}"
-    r"|Bearer\s+[A-Za-z0-9._~+/=-]{20,}"
-    r"|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"
-)
-SECRET_REPLACEMENT = "[REDACTED_API_KEY]"
+from pydantic_ai_harness.guardrails import detectors
 
 
-def redact_input(text: str) -> str:
-    """Return the owner's message with card numbers masked and secrets redacted."""
-    masked = CARD_PATTERN.sub(_mask_card, text)
-    return SECRET_PATTERN.sub(SECRET_REPLACEMENT, masked)
+class InputRedaction:
+    """Removes secrets and personal data from the owner's message (NFR-008).
 
+    Uses the Pydantic AI Harness detectors, which name what they removed
+    (`[redacted:openai_key]`, `[redacted:credit_card]`). Secrets run first: a card or
+    email pattern matching inside a key would break the key apart before the secret
+    pattern could remove all of it.
+    """
 
-def _mask_card(match: re.Match[str]) -> str:
-    """Keep the last four digits of a card number, in the owner's grouping."""
-    number = match.group()
-    digits = [int(character) for character in number if character.isdigit()]
-    if not _passes_luhn(digits):
-        return number
-    last_four = "".join(str(digit) for digit in digits[-4:])
-    separator = "-" if "-" in number else " " if " " in number else ""
-    return separator.join(["****", "****", "****", last_four])
+    _DETECTORS = (
+        # The Harness has no pattern for a bearer token, so one is added here.
+        detectors.secret_data(
+            extra={"bearer_token": r"Bearer\s+[A-Za-z0-9._~+/=-]{20,}"}
+        ),
+        # No `us_ssn`: its 3-2-4 digit shape matches order codes and phone numbers of
+        # a Vietnamese shop. A card number must pass the Luhn check, so an order code of
+        # the same shape stays.
+        detectors.personal_data(only=["iban", "credit_card", "email"]),
+    )
 
-
-def _passes_luhn(digits: list[int]) -> bool:
-    checksum = 0
-    for index, digit in enumerate(reversed(digits)):
-        if index % 2 == 1:
-            digit *= 2
-            if digit > 9:
-                digit -= 9
-        checksum += digit
-    return checksum % 10 == 0
+    @classmethod
+    def redact(cls, text: str) -> str:
+        """Return the text with every secret and personal datum replaced."""
+        for detector in cls._DETECTORS:
+            result = detector(text)
+            if result.action == "replace":
+                text = result.replacement
+        return text

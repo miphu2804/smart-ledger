@@ -17,11 +17,8 @@ from pydantic_ai import Agent, NativeOutput
 from pydantic_ai.models import Model
 
 from src.drafts import matching
-from src.drafts.catalog import (
-    CatalogProduct,
-    CatalogUnavailableError,
-    ProductCatalogRepository,
-)
+from src.drafts.catalog import CatalogProduct, ProductCatalogRepository
+from src.drafts.errors import CatalogUnavailableError, DraftUnavailableError
 from src.drafts.matching import DraftItem, ProposedLine
 from src.prompt_templates import (
     DRAFT_EMPTY_CATALOG,
@@ -34,10 +31,6 @@ from src.prompt_templates import (
 logger = logging.getLogger(__name__)
 
 DraftMode = Literal["SALE", "EXPENSE"]
-
-
-class DraftUnavailableError(Exception):
-    """The draft could not be built; the caller falls back to manual entry."""
 
 
 class DraftLineOutput(BaseModel):
