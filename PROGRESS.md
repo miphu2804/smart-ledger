@@ -1,3 +1,13 @@
+### [2026-10-14 19:20 UTC+07:00] — [CI] Sync the Logfire token and release from GitHub to Railway
+
+**Done:** The deploy job now owns the AI tracing settings, like the model settings: step `Sync ai tracing settings` copies the `LOGFIRE_TOKEN` secret of the `railway-staging` or `railway-production` GitHub environment to Railway service `ai`, and sets `LOGFIRE_ENVIRONMENT` (`staging` or `production`, from the branch) and `LOGFIRE_SERVICE_VERSION` (the deployed commit) before `railway up`. The token is rotated in one place, each environment keeps its own token, and each trace shows the release that produced it, which Logfire could not read because the container is uploaded without `.git`. Logfire has no OIDC login for a running service, so a write token stays the credential.
+
+**Changed files:** `.github/workflows/ci.yml`, `docs/development/ci-cd.md` (environment table, Railway `ai` variables, new "AI tracing settings" section), `backend/ai/README.md` and this entry.
+
+**Flow explained:** push to `staging` or `main` → job `deploy` with the matching `railway-*` environment → `Sync ai model settings` → `Sync ai tracing settings` sets each non-empty value with `railway variable set --stdin --skip-deploys` → `railway up backend/ai` starts the new AI with them → `configure_tracing` turns tracing on when the token is present.
+
+**Check:** `ci.yml` parses as YAML and the step script passes `bash -n`. With a stub `railway` CLI, the script skips an empty token and sets environment and version, and with a token sets all three, each value passed on stdin. **Not verified:** the step on a real deploy; traces in a real Logfire project.
+
 ### [2026-10-14 18:40 UTC+07:00] — [AI] Trace agent runs in Logfire without message content
 
 **Done:** The AI service can send Pydantic AI traces to Pydantic Logfire, so a slow, failed or costly chat turn can be found by shop and inspected: one span per turn, per model request and per tool call, with timing, model, token counts, tool names, errors and `shop_id`. Content stays out (`include_content=False`): the question, history, answer, the model's SQL and tool results are never exported, per `NFR-008`. Tracing is off unless `LOGFIRE_TOKEN` is set on Railway, so this change alone sends nothing anywhere; turning it on means accepting that this metadata goes to Logfire (pick the EU or US region when creating the project). Langfuse stays deferred; PRD and API contracts are unchanged.
