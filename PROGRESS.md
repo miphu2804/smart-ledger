@@ -1,3 +1,13 @@
+### [2026-10-14 21:05 UTC+07:00] — [Feature] Voice parse: parser grid × LLM escalation
+
+**Done:** Added `voice:cascade --grid`: the 160 configurations of the `voice:grid` decode grid (Viterbi or valid ν × θ × rule fallback × strict names) × old or free-form gate, each sending its blocked sentences to the LLM. Ran the LLM (OpenCode Go, `claude-haiku-5-5`, medium) on all 672 sentences so every configuration has LLM rows, 0 model errors, about 0.31 USD at Anthropic's list price. Selected on the reviewed pool (dev, free-dev, free-test, free2-dev). Every free-form-gate configuration beats every old-gate one (94.7–95.2% vs at most 93.3% sentences fully right); within the free-form gate the spread is 2 of 356 sentences, and the pool winner (θ 0.8 Viterbi) ties the default on test and loses 2 sentences on hold3. Kept the default configuration. Free-form gate → LLM also beats LLM only on pool and test and ties on hold3 while sending fewer sentences.
+
+**Changed files:** `frontend/mobile/scripts/voice-crf/cascade.mts` (`--grid`); `docs/development/voice-parse-poc/report.md` (§1, §3.8, §4), `PROGRESS.md`.
+
+**Flow explained:** `voice:llm` on every sentence → `voice:cascade --grid` parses each sentence under each configuration, replaces blocked ones with the LLM row, ranks on the pool → test and hold3 aggregates only for the winner and the two defaults.
+
+**Check:** `npm run typecheck`; `voice:cascade --grid` and `--llm` on the full LLM file. **Not verified:** high effort on the full set; latency from a phone.
+
 ### [2026-10-14 20:40 UTC+07:00] — [Feature] Voice parse: LLM cascade on the third held-out set
 
 **Done:** Ran the backend LLM (OpenCode Go, `claude-haiku-5-5`, medium) once on the 147 escalated sentences of the third held-out set, aggregates only. End to end, the free-form gate → LLM gets 88.8% of sentences fully right vs 76.3% for the old gate → LLM, 96.7% vs 91.3% per line, 3.4% vs 7.0% wrong lines. The LLM gets 87.1% of the escalated sentences right, above the ~62% break-even. Cost: 92% of these sentences wait for the LLM (P50 3.0 s, P95 5.4 s from the dev machine); about 0.074 USD for the run at Anthropic's list price. The 3.4% wrong lines all come from the LLM. Confirms the free-form gate → LLM at medium.

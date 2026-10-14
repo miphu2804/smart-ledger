@@ -5,6 +5,7 @@
  *
  *   npm run voice:cascade -- --llm scripts/voice-crf/.data/llm/default.jsonl [--llm <file khác>]
  *   npm run voice:cascade -- --escalated scripts/voice-crf/.data/llm/escalated.txt
+ *   npm run voice:cascade -- --grid --llm <file có LLM cho mọi câu>   # lưới cấu hình parser, mỗi cấu hình → LLM
  *
  * `--escalated` ghi id các câu mà gate cũ hoặc gate câu tự do chặn, theo thứ tự ưu tiên khi ngân sách LLM nhỏ (bộ giữ kín
  * 3, gold test, câu tự do 2, câu tự do, gold dev), để `llm.py --ids` chỉ gọi những câu này.
@@ -21,7 +22,14 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import type { DisambiguationItem, ParseableProduct, ParsedExpenseItem } from '../../src/lib/parseOrder';
 import type { LineItem } from '../../src/data/types';
-import { type DetailedParse, parseOrderDetailed } from '../../src/lib/voiceParse';
+import {
+  CRF_MODEL,
+  crfTagger,
+  type DetailedParse,
+  type ParseOptions,
+  parseOrderDetailed,
+  ruleTagger,
+} from '../../src/lib/voiceParse';
 import { aggregate, type CaseScore, type GoldCase, type ScoredResult, scoreCase } from './eval/score';
 
 const here = (p: string) => new URL(p, import.meta.url);
@@ -124,6 +132,70 @@ const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 const quantile = (xs: number[], p: number) =>
   [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(p * xs.length))] ?? 0;
 const SPLITS = ['dev', 'test', 'free-dev', 'free-test', 'free2-dev', 'hold3-test'];
+
+if (args.includes('--grid')) {
+  // Lưới của `voice:grid` (giải mã × θ × ν × tagger dự phòng × tên) × gate, mỗi cấu hình gửi câu bị chặn sang LLM (file
+  // --llm đầu tiên). Chọn trên pool đã soát lỗi (dev, free-dev, free-test, free2-dev) theo câu đúng hết, rồi ít dòng sai,
+  // rồi ít gửi LLM; test và bộ giữ kín 3 chỉ in cho cấu hình chọn được và cấu hình mặc định, số tổng.
+  const rows = new Map(readJsonl<LlmRow>(resolve(llmFiles[0])).map((r) => [r.id, r]));
+  const POOL = new Set(['dev', 'free-dev', 'free-test', 'free2-dev']);
+  const tagger = crfTagger(CRF_MODEL, 32);
+  const grid: Array<[string, ParseOptions]> = [];
+  for (const freeFormGate of [true, false])
+    for (const fb of ['none', 'rule'] as const)
+      for (const looseNames of [true, false])
+        for (const theta of [0.7, 0.8, 0.85, 0.9, 0.95]) {
+          const name = `${freeFormGate ? 'gate tự do' : 'gate cũ'} θ${theta}${fb === 'rule' ? ' +luật' : ''}${looseNames ? '' : ' tên chặt'}`;
+          const base: ParseOptions = {
+            tagger,
+            fallbackTagger: fb === 'rule' ? ruleTagger : undefined,
+            looseNames,
+            minConfidence: theta,
+            freeFormGate,
+          };
+          grid.push([`${name} viterbi`, { ...base, decode: 'viterbi' }]);
+          for (const nu of [0.1, 0.3, 0.5]) grid.push([`${name} valid ν${nu}`, { ...base, minValidMass: nu }]);
+        }
+  const run = (opts: ParseOptions, keep: (split: string) => boolean) => {
+    const idx = gold.map((g, i) => (keep(g.split) ? i : -1)).filter((i) => i >= 0);
+    const picks = idx.map((i) => {
+      const s = performance.now();
+      const r = parseOrderDetailed(gold[i].text, catalogs[gold[i].catalog], opts);
+      const ms = performance.now() - s;
+      if (!r.fallback) return { r, ms, llm: false };
+      const row = rows.get(gold[i].id);
+      return { r: llmOrder(row, catalogs[gold[i].catalog]), ms: ms + llmMs(row), llm: true };
+    });
+    const m = aggregate(
+      idx.map((i, k) => scoreCase(gold[i], picks[k].r)),
+      idx.map((i) => gold[i]),
+    );
+    return { m, llm: picks.filter((p) => p.llm).length / picks.length, p50: quantile(picks.map((p) => p.ms), 0.5), p95: quantile(picks.map((p) => p.ms), 0.95) };
+  };
+  type Res = ReturnType<typeof run>;
+  const row = (name: string, r: Res) =>
+    `| ${name} | ${pct(r.m.sentenceExact)} | ${pct(r.m.lineExact)} | ${pct(r.m.wrongAcceptRate)} (${r.m.wrongAccepted}/${r.m.accepted}) | ${pct(r.llm)} | ${Math.round(r.p50)} ms | ${Math.round(r.p95)} ms |`;
+  const header = '| Cấu hình | Đúng hết (câu) | Đúng theo món | Dòng món sai / dòng món | Gửi LLM | P50 | P95 |\n|---|---|---|---|---|---|---|';
+  const ranked = grid
+    .map(([name, opts]) => ({ name, opts, r: run(opts, (s) => POOL.has(s)) }))
+    .sort((a, b) => b.r.m.sentenceExact - a.r.m.sentenceExact || a.r.m.wrongAcceptRate - b.r.m.wrongAcceptRate || a.r.llm - b.r.llm);
+  const defaults = ['gate tự do θ0.9 valid ν0.1', 'gate cũ θ0.9 valid ν0.1'];
+  console.log(`# Lưới × LLM (${basename(llmFiles[0])}), ${grid.length} cấu hình, pool ${[...POOL].join(' + ')}\n`);
+  console.log(header);
+  for (const c of ranked.slice(0, 15)) console.log(row(c.name, c.r));
+  console.log('| … | | | | | | |');
+  for (const c of ranked.filter((c) => defaults.includes(c.name))) console.log(row(`${c.name} (mặc định, hạng ${ranked.indexOf(c) + 1})`, c.r));
+  const oldBest = ranked.find((c) => c.name.startsWith('gate cũ'));
+  if (oldBest) console.log(row(`${oldBest.name} (gate cũ tốt nhất, hạng ${ranked.indexOf(oldBest) + 1})`, oldBest.r));
+  const last = ranked[ranked.length - 1];
+  console.log(row(`${last.name} (cuối, hạng ${ranked.length})`, last.r));
+  for (const split of ['test', 'hold3-test']) {
+    console.log(`\n## ${split}\n\n${header}`);
+    for (const c of [ranked[0], ...ranked.filter((c) => defaults.includes(c.name))])
+      console.log(row(c === ranked[0] ? `${c.name} (chọn trên pool)` : c.name, run(c.opts, (s) => s === split)));
+  }
+  process.exit(0);
+}
 
 for (const file of llmFiles) {
   const rows = new Map(readJsonl<LlmRow>(resolve(file)).map((r) => [r.id, r]));

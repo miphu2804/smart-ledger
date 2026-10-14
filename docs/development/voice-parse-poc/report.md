@@ -7,7 +7,7 @@ Báo cáo kết quả của PoC theo [brief](../voice-parse-poc-brief.md). Nhán
 - **Câu đặt hàng thông thường:** PoC L1–L4 đạt mọi mục tiêu §7 đo được trên Node, trên tập test của bộ câu tự soạn **[đã kiểm chứng]**.
 - **Câu cấu trúc tự do** ("mỗi thứ một cái", "pepsi cũng vậy", "à không, ba gói", "bàn năm hai cà phê", câu dài lồng nhau): lần đo giữ kín duy nhất (100 câu, giai đoạn 2) cho 70.8% theo món, 7.0% tự nhận sai, 25% hỏi lại, **chưa đạt mục tiêu**. Giai đoạn 3 đưa bộ đó lên 83.9% / 0.7% / 17%; giai đoạn 4 (dò lưới, nhãn sửa lời EDIT, chọn đơn hàng qua gate trong n-best, bỏ tagger luật dự phòng) lên 96.4% / 0 dòng sai / 4%, nhưng bộ này đã được xem lỗi nên đó là số dev. **Bộ giữ kín thứ hai** (120 câu, sub-agent viết, chấm một lần với parser đã chốt, mục 3.4) cho **44.2% theo món, 6.4% tự nhận sai, 59.2% hỏi lại**; giai đoạn 3 trên cùng bộ: 42.6% / 7.7% / 60.0%. Phần lớn mức tăng của giai đoạn 4 là học các biến thể đã thấy; với câu tự do chưa gặp, PoC chỉ tự xử lý được khoảng 4 câu trong 10 và vẫn tự nhận sai quá ngưỡng 2%. Câu tự do cần LLM dự phòng; parser trên máy hợp với câu đặt hàng thông thường.
 - **Gate câu tự do** (giai đoạn 5, mục 3.5–3.6, mặc định bật): câu phức có khung câu chưa gặp khi train, món không nhận được số trong câu có nói số, hoặc câu hỏi chọn trùng món khác của đơn, thì gửi LLM. Trên **bộ giữ kín thứ ba** (160 câu, sub-agent viết, chấm một lần với parser chốt ở `ddc7afd`): máy tự xử lý **8.1%** số câu (13/160) và **13/13 câu đúng hết, 0 dòng tự nhận sai**; gate cũ tự xử lý 58.1%, đúng hết 67.7%, tự nhận sai 8.6% số dòng. Mục tiêu "≥ 95% đúng khi máy tự xử lý" **đạt** trên bộ này, nhưng mẫu nhỏ (cận dưới khoảng tin cậy 95% của 13/13 là 75%) và cái giá rất lớn: 94% câu tự do sang LLM/hỏi lại, kể cả một nửa câu đặt hàng thường của người viết mới (nhóm control: đúng 50% so với 94% của gate cũ). Trên test chính: hỏi lại 14.1% (trước 10.9%), theo món 90.7% (trước 95.1%), 0 dòng sai.
-- **Chuỗi trên máy → LLM** (mục 3.7, OpenCode Go, `claude-haiku-5-5`, mức `medium`): trên **bộ giữ kín 3**, gate câu tự do → LLM đúng hết **88.8%** câu so với **76.3%** của gate cũ → LLM, dòng sai 3.4% so với 7.0%; LLM đúng 87.1% câu bị chặn (mức hòa vốn khoảng 62%). Trên test và free-test hai gate ngang nhau (98–100%). Cái giá: 92% câu tự do chờ LLM khoảng 3 s (P95 5.4 s, đo từ máy phát triển), khoảng 0.0005 USD mỗi câu; `high` không hơn `medium`. Đề xuất **gate câu tự do → LLM mức `medium`**.
+- **Chuỗi trên máy → LLM** (mục 3.7, OpenCode Go, `claude-haiku-5-5`, mức `medium`): trên **bộ giữ kín 3**, gate câu tự do → LLM đúng hết **88.8%** câu so với **76.3%** của gate cũ → LLM, dòng sai 3.4% so với 7.0%; LLM đúng 87.1% câu bị chặn (mức hòa vốn khoảng 62%). Trên test và free-test hai gate ngang nhau (98–100%). Cái giá: 92% câu tự do chờ LLM khoảng 3 s (P95 5.4 s, đo từ máy phát triển), khoảng 0.0005 USD mỗi câu; `high` không hơn `medium`. Đề xuất **gate câu tự do → LLM mức `medium`**. Dò lưới 160 cấu hình × LLM (mục 3.8): gate quyết định, tham số lưới không đổi kết quả; giữ cấu hình mặc định.
 - **Phụ thuộc phần viết tay** (mục 3.2): sau khi train, tắt gate dấu hiệu viết tay (`findMarkers`) không đổi dòng nào trên bộ câu người viết; tắt luật số bàn/giờ làm sai 1 dòng. Các danh sách từ viết tay còn lại chủ yếu nằm ở bộ sinh câu train và ở đặc trưng CRF (bỏ đặc trưng từ điển: vẫn 0 dòng sai nhưng hỏi lại nhiều hơn).
 - **"System 1" router quyết định escalate sang LLM** (mục 3.3): router học (logistic) từ đặc trưng của lượt parse tốt hơn ngưỡng θ trên synthetic nhưng **không hơn trên câu người viết**, nên chưa dùng; giữ ngưỡng θ cho tới khi có kết quả thật (có đồng ý) để học.
 - **STT:** eval chấm được transcript của từng hệ STT (`--asr`), có script cho ChunkFormer (greedy, beam + KenLM, hotword) và Zipformer đang dùng. **Chưa có số ASR thật**: cần audio người đọc các câu eval và model tải từ Hugging Face (mục 12).
@@ -307,6 +307,30 @@ free-dev và dev (số dev): gate câu tự do → LLM đúng hết 100% / 98.1%
 - High không hơn medium trên 26 câu đã đo (24/26 cả hai), chậm hơn khoảng 0.4 s P50 và ra nhiều token hơn khoảng 18%. High chưa đo trên hold3.
 - **Đề xuất:** dùng **gate câu tự do → LLM, `claude-haiku-5-5` mức `medium`**. Mẫu vẫn nhỏ (160 câu tự soạn) và độ trễ đo từ máy phát triển, không phải điện thoại.
 
+### 3.8 Lưới cấu hình × LLM
+
+Câu hỏi: khi câu bị chặn đã có LLM, cấu hình parser nào (lưới của `voice:grid`: Viterbi hoặc `valid` ν 0.1/0.3/0.5 × θ 0.7–0.95 × tagger luật dự phòng × tên chặt) kết hợp với gate nào cho chất lượng đầu-cuối tốt nhất? `voice:cascade -- --grid` chạy 160 cấu hình (80 mỗi gate), mỗi cấu hình gửi câu bị chặn sang LLM. Để mọi cấu hình đều có LLM cho câu nó chặn, đã gọi LLM (OpenCode Go, `claude-haiku-5-5`, `medium`) cho **cả 672 câu**, 0 lỗi model; câu của LLM không phụ thuộc cấu hình nên dùng chung. Chọn trên pool đã soát lỗi (dev + free-dev + free-test + free2-dev, 356 câu) theo câu đúng hết, rồi ít dòng sai, rồi ít gửi LLM; test và bộ giữ kín 3 chỉ xem cho cấu hình chọn được và hai cấu hình mặc định, số tổng.
+
+| Pool (356 câu) | Đúng hết (câu) | Theo món | Dòng sai | Gửi LLM | P95 |
+|---|---|---|---|---|---|
+| Hạng 1: gate tự do θ0.8 Viterbi | 95.2% | 98.1% | 6/553 | 42.1% | 4.1 s |
+| Gate tự do θ0.9 `valid` ν0.1 (mặc định, hạng 27) | 94.7% | 97.8% | 6/552 | 41.6% | 4.1 s |
+| Gate cũ tốt nhất (θ0.85 tên chặt Viterbi, hạng 81) | 93.3% | 96.3% | 10/545 | 23.0% | 3.6 s |
+| Gate cũ θ0.9 `valid` ν0.1 (mặc định, hạng 100) | 91.3% | 95.8% | 9/543 | 18.0% | 3.4 s |
+| Cuối: gate cũ θ0.7 +luật `valid` ν0.3 | 84.3% | 91.5% | 27/536 | 8.1% | 3.0 s |
+| Chỉ LLM | 93.3% | | | 100% | |
+
+| Kiểm tra | Hạng 1 (gate tự do θ0.8 Viterbi) | Gate tự do mặc định | Gate cũ mặc định | Chỉ LLM |
+|---|---|---|---|---|
+| test: đúng hết / dòng sai / gửi LLM | 98.7% / 0 / 9.0% | 98.7% / 0 / 7.7% | 98.7% / 0 / 4.5% | 97.4% / 0 / 100% |
+| hold3-test: đúng hết / dòng sai / gửi LLM | 87.5% / 13/322 / 91.3% | **88.8% / 11/322 / 91.9%** | 76.3% / 22/316 / 41.9% | 88.8% / 11/322 / 100% |
+
+**Đọc kết quả:**
+- **Gate quyết định, tham số lưới gần như không.** 80 cấu hình gate tự do nằm sát nhau ở đầu bảng (khoảng 94.7–95.2% trên pool, chênh 2 câu trên 356); mọi cấu hình gate cũ đều thấp hơn, tốt nhất 93.3%. Có LLM phía sau thì gate chặt hơn luôn có lợi: câu nó chặn LLM làm tốt hơn parser.
+- Hạng 1 trên pool không hơn mặc định trên test và kém 2 câu trên hold3, nên chênh lệch trong nhóm gate tự do là nhiễu. **Giữ cấu hình mặc định** (gate câu tự do, θ 0.9, `valid` ν 0.1, không tagger luật).
+- Gate tự do → LLM hơn chỉ LLM trên pool (94.7% so với 93.3%) và test (98.7% so với 97.4%), bằng trên hold3, mà gửi LLM ít hơn: phần máy tự xử lý đúng hơn LLM trên những câu quen.
+- Chi phí cả lượt 672 câu: 1.465.268 token vào, 322.009 ra, khoảng 0.31 USD theo giá Anthropic niêm yết (giá OpenCode Go có thể khác).
+
 ## 4. Chạy lại
 
 Trong `frontend/mobile` (Node có `--experimental-strip-types`; Python qua `uv`, không đụng `backend/ai`):
@@ -346,6 +370,7 @@ npm run voice:cascade -- --escalated scripts/voice-crf/.data/llm/escalated.txt
 npm run voice:llm -- --out scripts/voice-crf/.data/llm/high.jsonl --ids scripts/voice-crf/.data/llm/escalated.txt
 MODEL_REASONING_EFFORT=low npm run voice:llm -- --out scripts/voice-crf/.data/llm/low.jsonl --ids scripts/voice-crf/.data/llm/escalated.txt
 npm run voice:cascade -- --llm scripts/voice-crf/.data/llm/high.jsonl --llm scripts/voice-crf/.data/llm/low.jsonl
+npm run voice:cascade -- --grid --llm scripts/voice-crf/.data/llm/haiku-med.jsonl   # lưới × LLM (mục 3.8; cần LLM cho mọi câu)
 ```
 
 `node scripts/voice-crf/...` chạy thẳng mã TS của app nhờ `scripts/voice-crf/ts-resolve.mjs` (thêm đuôi `.ts` và thuộc tính JSON như Metro), không đổi `tsconfig`.
