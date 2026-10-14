@@ -1,3 +1,17 @@
+### [2026-10-14 18:57 UTC+07:00] — [Feature] Voice parse: harness for the on-device → LLM cascade
+
+**Done:** Tried trading on-device latency for quality once more: re-parse a sentence blocked for an unseen shape after dropping its unknown words. Human-written sets gained 2–13 points of coverage, but wrong auto-accepts rose 2–4× on the synthetic proxies, so it was not kept. Built the cascade harness instead:
+- `voice:llm` runs the unchanged `backend/ai` `DraftService` (SALE and EXPENSE) on the eval sentences and records orders, latency and tokens. It can run only the escalated sentences, in priority order. It stops on a bad key or exhausted quota and skips transient errors, so a rerun resumes.
+- `voice:cascade` scores on-device only, on-device → LLM (old and free-form gate) and LLM only, with sentence exact, line exact, wrong lines, escalation rate and P50/P95 latency.
+
+Break-even, inferred from the third held-out set: the free-form gate beats the old gate end to end if the LLM gets more than about 62% of the ~80 extra escalated sentences right. No LLM call has run yet: this session has no `OPENAI_API_KEY`. `api.openai.com` is now reachable (401 without a key).
+
+**Changed files:** `frontend/mobile/scripts/voice-crf/llm.py`, `cascade.mts` — created; `frontend/mobile/package.json`, `frontend/mobile/README.md`; `docs/development/voice-parse-poc/report.md` (§3.6, §3.7, §4, §11), `PROGRESS.md`.
+
+**Flow explained:** `voice:cascade --escalated` writes the ids either gate blocks → `voice:llm --ids` calls the backend LLM for those, highest priority first → `voice:cascade --llm` combines the on-device parse with the LLM rows per config.
+
+**Check:** `npm run typecheck`; `ruff check` / `ruff format`; `voice:llm` with `pydantic_ai` fake models (success, schema failure, rate limit, quota, configuration error); `voice:cascade` on those fake rows (exit 0). **Not verified:** any real LLM quality, latency or token count; the cost estimate (≈ 0.006 USD per sentence at `high`, from the `genai-prices` table and prompt length).
+
 ### [2026-10-14 13:20 UTC+07:00] — [Feature] Voice parse: third held-out set for the free-form gate
 
 **Done:** Turned the second held-out set (scored twice) into a dev split (`eval/free2.jsonl`, `free2-dev`) and reviewed its five handled-but-wrong sentences: three totals said before the breakdown without the word "tổng", one "cơm thêm" cut to an ambiguous "cơm", one "à" read as a correction. Fixed the first two kinds: an item span takes the next unlabeled word when that makes a clear full catalog name, and the free-form gate sends an order to the LLM when a variant question overlaps another line of the same order; left the third, since a stricter threshold for item-swapping corrections matched only that sentence. No change on the main dev/test numbers. A sub-agent that read only the catalogs and the scoring format wrote a third held-out set (160 sentences, 10 groups × 16, 335 gold lines, 16 expenses) to `eval/holdout3.jsonl`; I validated it mechanically without reading the text and scored it once with the parser frozen at `ddc7afd`. Free-form gate: the phone handles 8.1% of sentences (13/160), all 13 fully correct, 0 wrong auto-accepted lines, 93.8% go to the LLM or an ask; old gate: 58.1% handled, 67.7% of those correct, 8.6% wrong lines. The 95% target is met on this set, but on a small sample (95% lower bound 75%) and at a large cost: half of the plain orders from a new writer also go to the LLM (control group 50% exact vs 94% with the old gate).

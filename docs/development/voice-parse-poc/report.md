@@ -250,6 +250,25 @@ Exact theo câu theo nhóm (gate mới / gate cũ): câu thường (control) 50 
 - Với cách làm hiện tại (dữ liệu tự sinh), tỉ lệ đúng khi tự xử lý và tỉ lệ tự xử lý kéo ngược nhau: gate cũ 58% / 68%, gate mới 8% / 100%. Muốn cả hai cùng cao thì cần câu thật để train và đo, và `draft_parse` cho phần còn lại.
 - Đã thử đổi thêm thời gian trên máy lấy chất lượng (`voice:gate`, chính sách "cứu câu khung lạ"): câu bị chặn vì khung lạ thì bỏ các từ lạ rồi parse lại (thêm một lượt parse, vài ms); câu rút gọn qua mọi gate và ra cùng đơn thì tự nhận. Câu người viết được thêm 2–13 điểm độ phủ (free2-dev 18 → 28%, đúng 97%), nhưng trên synthetic lexout và kiểu câu chưa gặp, tự nhận sai tăng 2–4 lần (ví dụ "số bàn/người" chưa gặp: đúng 84% → 64%), vì từ lạ ở giữa câu thường là từ cấu trúc ("người ăn", "tổng cộng"). Chỉ cứu khi từ lạ nằm ở lời mở/kết: thêm 1–4 điểm cho câu người viết, synthetic vẫn tệ hơn. Không giữ. Các thử trước (n-best k = 64/128, gộp model, 32.000 câu train) cũng không đổi thời gian lấy chất lượng được; đòn bẩy thật là LLM cho phần escalate.
 
+### 3.7 Chuỗi trên máy → LLM (chưa đo)
+
+Câu bị gate chặn sẽ gửi `draft_parse` của `backend/ai`. Muốn chọn giữa gate cũ và gate câu tự do theo chất lượng đầu-cuối thì phải đo LLM trên đúng các câu bị chặn. Công cụ đã có (commit `26ee6a4`, `a41c6d4`), **chưa có số LLM thật**:
+- `voice:llm` (`scripts/voice-crf/llm.py`) gọi đúng `DraftService` của `backend/ai` (prompt, model, structured output, matching), không sửa gì ở đó. Mỗi câu gọi hai chế độ như Core: SALE và EXPENSE. Script ghi đơn hàng, thời gian và số token của từng lần gọi.
+  - `--ids` chỉ gọi các câu bị chặn, theo thứ tự ưu tiên: bộ giữ kín 3, gold test, câu tự do 2, câu tự do, gold dev.
+  - Hết quota hoặc key sai thì dừng hẳn, không ghi dòng lỗi. Lỗi mạng, giới hạn tốc độ và lỗi phía máy chủ thì bỏ qua câu đó. Chạy lại cùng `--out` sẽ tiếp từ chỗ dừng.
+- `voice:cascade` so năm cấu hình: chỉ trên máy (gate cũ / gate mới), trên máy → LLM (gate cũ / gate mới), chỉ LLM. Mỗi cấu hình có số câu đúng hết, theo món, dòng sai, tỉ lệ gửi LLM và độ trễ P50/P95. `--escalated` ghi danh sách id cho `--ids`: hiện 307/672 câu bị một trong hai gate chặn (hold3-test 147, test 12, free2-dev 98, free-test 36, free-dev 6, dev 8).
+- Đã thử bằng model giả của `pydantic_ai` (`FunctionModel`): đường gọi thành công, model trả sai schema, giới hạn tốc độ, hết quota và lỗi cấu hình đều chạy đúng. Chưa gọi OpenAI lần nào: phiên này không có `OPENAI_API_KEY`. Mạng tới `api.openai.com` đã mở, không có key thì trả 401.
+
+**Điểm hòa vốn (suy từ bảng mục 3.6, chưa đo):**
+- Trên bộ giữ kín 3, gate cũ tự xử lý 93 câu (63 đúng, 30 sai). Gate mới chỉ giữ 13 câu đúng và gửi thêm khoảng 80 câu mà gate cũ tự xử lý (khoảng 50 đúng, 30 sai).
+- Gate mới cho nhiều câu đúng hơn nếu LLM làm đúng hơn khoảng 62% trong 80 câu đó (50/80). Ước tính này coi 13 câu của gate mới nằm trong 93 câu của gate cũ.
+- Đổi lại, khoảng 92% câu tự do phải chờ LLM, so với 42% của gate cũ.
+
+**Chi phí ước tính:**
+- Bảng giá đi kèm `pydantic_ai` (gói `genai-prices`) cho `gpt-5.6-luna` là 0.40 USD / 1 triệu token vào và 1.80 USD / 1 triệu token ra.
+- Prompt SALE khoảng 1.600–2.100 ký tự, EXPENSE khoảng 730 ký tự.
+- Ở mức suy luận `high` (mặc định của `backend/ai`), ước chừng 0.006 USD mỗi câu, nên 307 câu bị chặn tốn khoảng 2 USD. Số token thật chưa đo: lượt chạy đầu nên thử 5 câu dev (`--limit 5`) rồi tính lại.
+
 ## 4. Chạy lại
 
 Trong `frontend/mobile` (Node có `--experimental-strip-types`; Python qua `uv`, không đụng `backend/ai`):
@@ -283,6 +302,12 @@ npm run voice:router -- /tmp/h/model.json /tmp/r/train.jsonl synth-dev:/tmp/r/de
 npm run voice:router -- /tmp/h/model.json /tmp/r/eval.jsonl synth-dev:/tmp/h/dev.jsonl synth-lexout:/tmp/h/lexout.jsonl
 npm run voice:router -- src/lib/voiceParse/crf-model.json /tmp/r/human.jsonl human
 uv run scripts/voice-crf/router.py /tmp/r/train.jsonl /tmp/r/eval.jsonl /tmp/r/human.jsonl
+
+# chuỗi trên máy → LLM (mục 3.7; cần OPENAI_API_KEY và mạng tới api.openai.com)
+npm run voice:cascade -- --escalated scripts/voice-crf/.data/llm/escalated.txt
+npm run voice:llm -- --out scripts/voice-crf/.data/llm/high.jsonl --ids scripts/voice-crf/.data/llm/escalated.txt
+MODEL_REASONING_EFFORT=low npm run voice:llm -- --out scripts/voice-crf/.data/llm/low.jsonl --ids scripts/voice-crf/.data/llm/escalated.txt
+npm run voice:cascade -- --llm scripts/voice-crf/.data/llm/high.jsonl --llm scripts/voice-crf/.data/llm/low.jsonl
 ```
 
 `node scripts/voice-crf/...` chạy thẳng mã TS của app nhờ `scripts/voice-crf/ts-resolve.mjs` (thêm đuôi `.ts` và thuộc tính JSON như Metro), không đổi `tsconfig`.
@@ -359,7 +384,7 @@ Bảng từ giai đoạn 2–3. Giai đoạn 4 chỉ xem số tổng của test 
 
 ## 11. Bước tiếp theo
 
-1. **Câu tự do sang LLM:** gate câu tự do đạt 13/13 câu đúng khi máy tự xử lý trên bộ giữ kín thứ ba (mục 3.6), nhưng chỉ tự xử lý 8% câu tự do. Ưu tiên endpoint `draft_parse`; sau đó quyết điểm cân bằng (gate mới chặt, gate cũ rộng, hoặc nới gate cho câu ngắn) dựa trên số câu thật, không phải câu tự soạn.
+1. **Câu tự do sang LLM:** gate câu tự do đạt 13/13 câu đúng khi máy tự xử lý trên bộ giữ kín thứ ba (mục 3.6), nhưng chỉ tự xử lý 8% câu tự do. Bước kế tiếp là chạy `voice:llm` + `voice:cascade` (mục 3.7) với key OpenAI để biết LLM có vượt điểm hòa vốn khoảng 62% không và độ trễ đầu-cuối bao nhiêu. Sau đó ưu tiên endpoint `draft_parse`, và quyết điểm cân bằng (gate mới chặt, gate cũ rộng, hoặc nới gate cho câu ngắn) dựa trên số câu thật, không phải câu tự soạn.
 2. **Thu âm các câu eval** (người trong nhóm đọc, có đồng ý, không commit audio) rồi chạy `voice:asr` cho Zipformer hiện tại (greedy như app, beam + hotword) và ChunkFormer (greedy, beam + KenLM, + hotword), chấm bằng `voice:eval --asr` (mục 12). Đây là cách duy nhất để biết LM/hotword có đáng làm trên máy.
 3. Owner quyết làm endpoint `draft_parse` (AI + Core proxy) cho câu `fallback` (4–11% trên bộ tự soạn).
 4. **Router học từ phân phối thật** (mục 3.3): khi owner duyệt, ghi đặc trưng của `voice:router` (không ghi transcript) cùng kết quả người dùng xác nhận hoặc kết quả LLM chạy song song; thêm xác suất token của STT làm đặc trưng chất lượng giọng nói; học lại `router.py` và so với θ.
