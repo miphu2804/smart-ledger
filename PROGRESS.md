@@ -1,3 +1,13 @@
+### [2026-10-14 20:40 UTC+07:00] — [Feature] Voice parse: LLM cascade on the third held-out set
+
+**Done:** Ran the backend LLM (OpenCode Go, `claude-haiku-5-5`, medium) once on the 147 escalated sentences of the third held-out set, aggregates only. End to end, the free-form gate → LLM gets 88.8% of sentences fully right vs 76.3% for the old gate → LLM, 96.7% vs 91.3% per line, 3.4% vs 7.0% wrong lines. The LLM gets 87.1% of the escalated sentences right, above the ~62% break-even. Cost: 92% of these sentences wait for the LLM (P50 3.0 s, P95 5.4 s from the dev machine); about 0.074 USD for the run at Anthropic's list price. The 3.4% wrong lines all come from the LLM. Confirms the free-form gate → LLM at medium.
+
+**Changed files:** `docs/development/voice-parse-poc/report.md` (§1, §3.7, §8), `PROGRESS.md`.
+
+**Flow explained:** hold3-test ids from `escalated.txt` → `voice:llm --ids` at medium into the same file → one `voice:cascade --llm`, hold3 aggregates only.
+
+**Check:** `voice:llm` 147/147, 0 model errors; `voice:cascade --llm`; `npm run typecheck`. **Not verified:** high on hold3; latency from a phone.
+
 ### [2026-10-14 20:23 UTC+07:00] — [Feature] Voice parse: measured the on-device → LLM cascade
 
 **Done:** Ran the backend LLM on the escalated sentences through OpenCode Go with `claude-haiku-5-5`: 88 sentences (medium on all 62 escalated sentences of test, free-test, free-dev and dev; high on the 26 of test, free-dev and dev), 0 model errors. The free-form gate → LLM at medium gets 58/62 escalated sentences fully right (93.5%; old gate 11/13), with 0 wrong lines on every measured split; high is no better (24/26 on both). Test: 98.7% exact for both gates → LLM, 7.7% vs 4.5% sent to the LLM; free-test: 98% vs 100%, 36% vs 3% sent. LLM latency per escalated sentence P50 3.0 s / P95 4.3 s from the dev machine. 194,580 input and 48,158 output tokens, about 0.044 USD at Anthropic's list price (OpenCode Go pricing may differ). Recommended the free-form gate → LLM at medium: 93.5% is well above the ~62% break-even inferred from the third held-out set, though no LLM ran on that set.
