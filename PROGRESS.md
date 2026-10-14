@@ -32,6 +32,16 @@
 
 **Check:** `uv run pytest` 307 passed, 40 skipped (PostgreSQL tests need `POSTGRES_TEST_URL`); 306 passed after the dependency bump alone, before the code change; `ruff check` and `ruff format --check` clean; the sequence SVG renders. One turn and one streamed turn of `AgentService` with the real model from `backend/ai/.env` and an in-memory history: correct answer, stored message `Thẻ của tôi [redacted:credit_card]. ...`, 21 stream deltas. **Not verified:** a full uvicorn turn against staging (no `POSTGRES_URL` in `backend/ai/.env`), and pyright (not installed). Pydantic AI 2.55 prints an observability banner on start unless `PYDANTIC_AI_NO_BANNER=1` is set.
 
+### [2026-10-14 10:54 UTC+07:00] — [Fix] Keyboard no longer covers forms on Android
+
+**Done:** Tester feedback with a screenshot: on Android the keyboard covered the "Món ngoài danh mục" sheet on the Sales tab, and the owner asked to check every place with an input. The app draws edge to edge (`edgeToEdgeEnabled`), so Android no longer shrinks the window when the keyboard opens, while the keyboard-avoiding views moved only on iOS. They now move on both platforms: `Screen`, `Sheet`, `Dialog` (it had none; dialogs with an input now rise above the keyboard), the AI assistant chat and the voice order screen. The barcode scanner already did this and is unchanged.
+
+**Changed files:** `frontend/mobile/src/components/ui.tsx`, `frontend/mobile/app/ai.tsx`, `frontend/mobile/app/voice.tsx` — modified; this entry.
+
+**Flow explained:** `KEYBOARD_AVOID_BEHAVIOR` in `ui.tsx` is `'padding'` → every `KeyboardAvoidingView` in the app uses it → with the keyboard open the content is padded by the keyboard height and the scroll view inside brings the focused input into view.
+
+**Check:** `tsc --noEmit` clean. On the Android emulator (a hand-repacked staging APK carrying this change, staging Core), with the keyboard open the focused input and its button stayed visible on: "Món ngoài danh mục", the scanner's new-item card, Checkout, void order, add product (new category, stock, low-stock threshold), add expense, shop and account info (including the bank transfer fields), AI chat, the rename-conversation dialog, typed entry on the voice screen and its "Thêm … vào danh mục?" dialog. **Not verified:** sign-in and shop setup screens (they need a sign-out), the debt sheet (no debt in the test shop), the staff screen (no menu entry) — they use the same `Screen` and `Sheet`; iOS. In a sheet the focused input sits right at the keyboard edge and its bottom border can be hidden by a few pixels.
+
 ### [2026-10-14 10:54 UTC+07:00] — [Fix] Products without a photo show their initial instead of a stock picture
 
 **Done:** Tester feedback: a product the owner had not given a photo still showed a picture, which the app picked by the product's name from a fixed set of Unsplash photos. That picture is removed. A product without a photo now shows the first letter of its name on a coloured tile in Sales (grid, list and cart), Checkout and the voice order screen; a product with a photo shows its own photo there (the Sales cart, Checkout and the voice screen used to show the stock picture even then). The product form's hint says what happens without a photo. The privacy page no longer mentions illustration photos from Unsplash and carries the new update date.

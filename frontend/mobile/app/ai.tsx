@@ -3,7 +3,6 @@ import { router } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,7 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AgentAvatar } from '../src/components/AgentAvatar';
 import { ChatText } from '../src/components/ChatText';
-import { Dialog, EmptyState, Field, IconBtn, Row, Sheet, T } from '../src/components/ui';
+import { Dialog, EmptyState, Field, IconBtn, KEYBOARD_AVOID_BEHAVIOR, Row, Sheet, T } from '../src/components/ui';
 import type { AgentConversationSummary, AgentConversationView, AgentMessageView, ChatMessage } from '../src/data/types';
 import { agentApi } from '../src/lib/agentApi';
 import { ApiError } from '../src/lib/api';
@@ -140,7 +139,7 @@ export default function Ai() {
   return (
     <KeyboardAvoidingView
       style={styles.screen}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={KEYBOARD_AVOID_BEHAVIOR}
     >
       <View style={[styles.headerWrap, { paddingTop: insets.top + 4 }]}>
         <Row style={{ alignItems: 'center' }} gap={10}>
