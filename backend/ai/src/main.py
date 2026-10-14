@@ -13,6 +13,7 @@ from src.agent.service import AgentService
 from src.app_config import app_config
 from src.infra.postgre_db_client import PostgreDBClient
 from src.infra.redis_db_client import RedisDBClient
+from src.observability import configure_tracing
 from src.providers.factory import build_chat_model
 from src.restock.service import RestockService
 from src.security import require_internal_token
@@ -25,6 +26,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 # stdout is the log contract, so Pydantic AI's one-off observability promo stays out.
 pydantic_ai.BANNER_ENABLED = False
+# Before any agent runs, so every run is traced when a Logfire token is set.
+configure_tracing(app_config)
 
 
 def build_sql_executor() -> ReadOnlySqlExecutor | None:

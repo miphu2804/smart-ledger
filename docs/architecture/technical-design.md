@@ -58,6 +58,7 @@ Phần barcode CORE-012 không đổi ranh giới thành phần hoặc thêm Red
 | Redis | Cache/giới hạn tốc độ/tác vụ ngắn hạn; không là nguồn dữ liệu chuẩn. Tính năng dựa trên Redis hoãn sau bản phát hành đầu tiên; AI đã kết nối Redis lúc khởi động nhưng chưa tính năng nào dùng, Core không dùng |
 | LiteLLM | Chọn model và quản lý khóa model ở phía server. Hoãn sau bản phát hành đầu tiên; AI hiện không dùng |
 | Langfuse | Trace AI; không ghi audio/ảnh hoặc dữ liệu nhạy cảm thô mặc định. Hoãn sau bản phát hành đầu tiên; AI hiện không dùng |
+| Logfire | Trace từng lượt Agent chat (thời gian, model, token, tên tool, lỗi, `shop_id`), không gửi nội dung câu hỏi, câu trả lời, SQL hay kết quả tool. Chỉ bật khi đặt `LOGFIRE_TOKEN`; xem [AI README](../../backend/ai/README.md#tracing-logfire) |
 
 Chỉ Core có API công khai. FE không gọi AI, PostgreSQL, Redis, LiteLLM hoặc Langfuse trực tiếp.
 
@@ -170,7 +171,7 @@ Bằng chứng: `AuthSessionConcurrencyPostgresTest`, `ShopConcurrencyPostgresTe
 |---|---|
 | FE | `API_BASE_URL` |
 | Core hiện tại | `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, `FIREBASE_PROJECT_ID`; credential qua `FIREBASE_SERVICE_ACCOUNT_JSON` hoặc Application Default Credentials (ADC, local thường dùng `GOOGLE_APPLICATION_CREDENTIALS`); `CORS_ALLOWED_ORIGINS`, `FLYWAY_ENABLED`, `AI_BASE_URL`, `INTERNAL_API_TOKEN`; media dùng `CLOUDINARY_ENABLED`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_PUBLIC_ID_PREFIX` (bắt buộc khi enabled), optional `MEDIA_UPLOAD_LEASE_SECONDS` (mặc định 300) và `CLOUDINARY_CLEANUP_FIXED_DELAY_MS`; `SERVER_PORT`, `IDEMPOTENCY_TTL_DAYS` tùy chọn; Core không dùng Redis |
-| AI hiện tại | `POSTGRES_URL`, `REDIS_URL`, `INTERNAL_API_TOKEN`, `MODEL_*` (kiểu API, model, fallback), `OPENAI_API_KEY` và `OPENAI_BASE_URL` dùng chung cho mọi model (OpenAI hoặc gateway như OpenCode Go); `AI_SQL_READER_URL` tùy chọn cho tool đọc dữ liệu tiệm. AI kết nối Redis lúc khởi động nhưng chưa tính năng nào dùng; `LITELLM_URL` và `LANGFUSE_*` đã bỏ khỏi cấu hình AI, hoãn sau bản phát hành đầu tiên. Danh sách đầy đủ: [`backend/ai/.env.example`](../../backend/ai/.env.example) |
+| AI hiện tại | `POSTGRES_URL`, `REDIS_URL`, `INTERNAL_API_TOKEN`, `MODEL_*` (kiểu API, model, fallback), `OPENAI_API_KEY` và `OPENAI_BASE_URL` dùng chung cho mọi model (OpenAI hoặc gateway như OpenCode Go); `AI_SQL_READER_URL` tùy chọn cho tool đọc dữ liệu tiệm. `LOGFIRE_TOKEN`, `LOGFIRE_ENVIRONMENT` tùy chọn cho trace Logfire. AI kết nối Redis lúc khởi động nhưng chưa tính năng nào dùng; `LITELLM_URL` và `LANGFUSE_*` còn trong cấu hình AI nhưng chưa code nào đọc, hoãn sau bản phát hành đầu tiên. Danh sách đầy đủ: [`backend/ai/.env.example`](../../backend/ai/.env.example) |
 
 Host và port thuộc cấu hình môi trường, không phải API contract. [Core README](../../backend/core/README.md) là nơi hướng dẫn chạy IntelliJ/Maven/Docker và Firebase Emulator; không nhân bản hướng dẫn vận hành tại đây.
 
