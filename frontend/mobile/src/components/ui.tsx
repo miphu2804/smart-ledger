@@ -53,6 +53,12 @@ export function T({
   return <Text {...rest} style={[{ fontFamily: font[w], fontSize: size, color }, style]} />;
 }
 
+/**
+ * Cách các khung có ô nhập né bàn phím. Trên Android app vẽ tràn viền (`edgeToEdgeEnabled`), nên hệ điều hành không còn
+ * tự thu màn khi bàn phím mở: chỉ né trên iOS thì bàn phím đè lên form trên Android. Vì vậy dùng 'padding' cho cả hai.
+ */
+export const KEYBOARD_AVOID_BEHAVIOR = 'padding' as const;
+
 // ---------------------------------------------------------------- Screen
 export function Screen({
   children,
@@ -75,7 +81,7 @@ export function Screen({
   const insets = useSafeAreaInsets();
   const pad = padded ? { paddingHorizontal: 16 } : null;
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: bg }} behavior={KEYBOARD_AVOID_BEHAVIOR}>
       <View style={{ height: insets.top, backgroundColor: bg }} />
       {scroll ? (
         <ScrollView
@@ -682,7 +688,7 @@ export function Sheet({
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.backdrop}>
+      <KeyboardAvoidingView behavior={KEYBOARD_AVOID_BEHAVIOR} style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Đóng" />
         <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]} accessibilityViewIsModal>
           <View style={styles.grabber} />
@@ -728,7 +734,8 @@ export function Dialog({
 }) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <View style={[styles.backdrop, { justifyContent: 'center', padding: 24 }]}>
+      {/* Có hộp thoại chứa ô nhập (đặt tên, ghi chú): né bàn phím như Sheet để ô và nút không bị che */}
+      <KeyboardAvoidingView behavior={KEYBOARD_AVOID_BEHAVIOR} style={[styles.backdrop, { justifyContent: 'center', padding: 24 }]}>
         <View style={styles.dialog} accessibilityViewIsModal>
           <View style={[styles.dialogIcon, danger && { backgroundColor: colors.red }]}>
             <Feather name={icon} size={20} color={colors.white} />
@@ -747,7 +754,7 @@ export function Dialog({
             <Button title={confirm} variant={danger ? 'danger' : 'primary'} onPress={onConfirm} style={{ flex: 1 }} small />
           </Row>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
