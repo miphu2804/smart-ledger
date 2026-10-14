@@ -26,7 +26,7 @@
 
 **CORE-011 (#153), ngày 2026-10-10:** sáu GET danh sách OWNER có phân trang trên `feat/owner-list-pagination`, base staging `50891aabf8b6ba48406799fa5c31fef8c823569f`. Contract dưới đây là breaking change cần phối hợp FE qua #144; chưa xác nhận merge/deploy hoặc nghiệm thu tích hợp. Các API detail, ghi và báo cáo không đổi.
 
-**AI và proxy Agent:** AI có `GET /health` và sáu endpoint `/internal/v1/agent/*` (chat, chat/stream, list, detail, rename, delete); Core proxy cả sáu endpoint. Mọi đường `/internal/v1/*` bắt buộc `X-Internal-Token`; thiếu/sai token hoặc AI chưa cấu hình `INTERNAL_API_TOKEN` trả `401`, riêng `/health` vẫn công khai. Core proxy `/api/v1/agent/*` sang sáu đường này, gửi `X-Internal-Token` và lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực; AI `404` thành `conversation_not_found`, lỗi hoặc quá thời gian khác thành `503 ai_unavailable`, kể cả `422` mang mã guardrail của AI (mục 6) vì Core chưa chuyển tiếp mã này. Chưa có nghiệm thu đầu-cuối luồng FE → Core → AI với model thật.
+**AI và proxy Agent:** AI có `GET /health` và sáu endpoint `/internal/v1/agent/*` (chat, chat/stream, list, detail, rename, delete); Core proxy cả sáu endpoint. Mọi đường `/internal/v1/*` bắt buộc `X-Internal-Token`; thiếu/sai token hoặc AI chưa cấu hình `INTERNAL_API_TOKEN` trả `401`, riêng `/health` vẫn công khai. Core proxy `/api/v1/agent/*` sang sáu đường này, gửi `X-Internal-Token` và lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực; AI `404` thành `conversation_not_found`; AI `422` mang mã guardrail (mục 6) giữ nguyên `422` và mã đó trong `code`; lỗi hoặc quá thời gian khác thành `503 ai_unavailable`. Lỗi trước sự kiện đầu tiên của `/api/v1/agent/chat/stream` là JSON, nên client gửi `Accept: text/event-stream, application/json`; chỉ nhận `text/event-stream` thì Core không ghi được JSON lỗi. Chưa có nghiệm thu đầu-cuối luồng FE → Core → AI với model thật.
 
 ## Quy ước request
 
@@ -438,7 +438,7 @@ Phủ `FR-007`, `FR-008`, `FR-017`, `FR-018`, `FR-020`, `FR-021`, `FR-027`.
 Yêu cầu chung:
 
 - timeout hoặc lỗi model trả `503` với `{ "detail": "ai_unavailable" }`; Core không retry đồng bộ quá một lần;
-- guardrail dừng lượt chat trả `422` với `{ "detail": "<mã>" }` và không lưu gì: `input_too_long` (tin nhắn mới dài quá `AGENT_MAX_INPUT_CHARS`, mặc định 2000 ký tự) `answer_unavailable` (hết lượt gọi model, vượt ngân sách token của lượt hoặc câu trả lời vẫn bị chặn sau các lần yêu cầu viết lại) hoặc `answer_timeout` (lượt chat quá `AGENT_TURN_TIMEOUT_SECONDS`, mặc định 35 giây, thấp hơn read timeout 40 giây của Core). AI chỉ trả mã, câu hiển thị do FE map; Core hiện vẫn đổi mã này thành `503 ai_unavailable` cho tới khi chủ Core chuyển tiếp;
+- guardrail dừng lượt chat trả `422` với `{ "detail": "<mã>" }` và không lưu gì: `input_too_long` (tin nhắn mới dài quá `AGENT_MAX_INPUT_CHARS`, mặc định 2000 ký tự) `answer_unavailable` (hết lượt gọi model, vượt ngân sách token của lượt hoặc câu trả lời vẫn bị chặn sau các lần yêu cầu viết lại) hoặc `answer_timeout` (lượt chat quá `AGENT_TURN_TIMEOUT_SECONDS`, mặc định 35 giây, thấp hơn read timeout 40 giây của Core). AI chỉ trả mã, câu hiển thị do FE map; Core chuyển tiếp `422` và mã này trong `code` của lỗi Core;
 - response thành công có `request_id`, `model`, `model_version`;
 - AI không có endpoint tạo/sửa/xóa dữ liệu nghiệp vụ;
 - Core và AI cùng kiểm tra `shop_id`; test chéo shop là bắt buộc;
