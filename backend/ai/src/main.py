@@ -5,8 +5,9 @@ import pydantic_ai
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from src.agent.guardrails import GuardrailError, GuardrailLimits
-from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
+from src.agent.errors import ConversationNotFoundError, GuardrailError
+from src.agent.guardrails import GuardrailLimits
+from src.agent.repository import AgentConversationRepository
 from src.agent.router import router as agent_router
 from src.agent.service import AgentService
 from src.app_config import app_config
