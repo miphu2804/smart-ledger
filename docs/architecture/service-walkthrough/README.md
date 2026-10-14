@@ -622,7 +622,7 @@ flowchart LR
 
 `POST /chat` returns one JSON reply after the turn is saved. `POST /chat/stream` answers with server-sent events while the model runs: `delta` carries new text, `reset` discards text already sent (a preamble before a tool call, or an answer the screen rejected), and `done` carries the saved ids and answer. `done` is sent only after `save_exchange`. A refusal before the stream opens, such as `input_too_long` or a missing conversation, is an HTTP error; a later failure, such as `answer_timeout`, arrives as an `error` event. If the app disconnects, Core closes the stream and the turn is cancelled; nothing is saved unless the disconnect lands while the exchange is already being written.
 
-Core checks the owner's shop, sends the owner's `user_id` with `shop_id`, and copies the stream line by line; on the JSON route it narrows the reply to `conversation_id`, `message_id` and `answer`. An AI `404` becomes `conversation_not_found`, an AI `422` keeps its guardrail code, and any other failure becomes `503 ai_unavailable`. The codes are listed in [API contracts](../../contracts/api-contracts.md).
+Core checks the owner's shop, sends the owner's `user_id` with `shop_id`, and copies the stream line by line; on the JSON route it narrows the reply to `conversation_id`, `message_id` and `answer`. An AI `404` becomes `conversation_not_found`, an AI `422` with a guardrail code (`input_too_long`, `answer_unavailable` or `answer_timeout`) keeps that code, and any other failure, including any other `422`, becomes `503 ai_unavailable`. The codes are listed in [API contracts](../../contracts/api-contracts.md).
 
 ```mermaid
 sequenceDiagram
