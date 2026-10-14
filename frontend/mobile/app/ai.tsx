@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AgentAvatar } from '../src/components/AgentAvatar';
 import { ChatText } from '../src/components/ChatText';
+import { ThinkingStatus } from '../src/components/ThinkingStatus';
 import { Dialog, EmptyState, Field, IconBtn, KEYBOARD_AVOID_BEHAVIOR, Row, Sheet, T } from '../src/components/ui';
 import type { AgentConversationSummary, AgentConversationView, AgentMessageView, ChatMessage } from '../src/data/types';
 import { agentApi } from '../src/lib/agentApi';
@@ -230,10 +231,7 @@ export default function Ai() {
           ) : typing ? (
             <View style={styles.messageRow}>
               <View style={[styles.bubble, styles.assistantBubble, styles.typingBubble]}>
-                <T size={12.5} color={colors.muted}>
-                  Đang phân tích số liệu…
-                </T>
-                <Feather name="more-horizontal" size={16} color={colors.brand} />
+                <ThinkingStatus />
               </View>
             </View>
           ) : null}
@@ -598,10 +596,8 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   typingBubble: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 0,
+    // Rộng hết hàng như bong bóng trả lời, để câu chờ đổi độ dài mà bong bóng không co giãn theo.
+    paddingVertical: 12,
   },
   pressed: {
     opacity: 0.72,
