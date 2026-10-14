@@ -81,6 +81,8 @@ Enter each value once and reuse it with a [reference variable](https://docs.rail
 | `AI_SQL_READER_URL` | Read-only `ai_sql_reader` login (AI baseline in `supabase/migrations/`); when empty, the agent cannot read shop data |
 | `REDIS_URL` | Redis Cloud of the matching environment |
 | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `MODEL_*` | Managed from GitHub, see [AI model settings](#ai-model-settings). Do not edit them on Railway. |
+| `LOGFIRE_TOKEN` | Optional Railway secret: write token of the Logfire project. Empty sends no traces; traces carry no message content (see [AI README](../../backend/ai/README.md#tracing-logfire)) |
+| `LOGFIRE_ENVIRONMENT` | `staging` or `production`, set with `LOGFIRE_TOKEN` |
 
 - `ai` has no public domain; `core` calls it over the private network. Port `8001` is AI's default `SERVER_PORT`, not the `PORT` Railway assigns, so changing `SERVER_PORT` on `ai` requires updating `AI_BASE_URL`.
 - Variables have local defaults (`AI_BASE_URL` defaults to `http://localhost:8001`), so a missing variable on Railway still reports a successful deploy while Core cannot reach AI. After changing variables, run one chat through Core on staging.
