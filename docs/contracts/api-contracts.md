@@ -4,7 +4,7 @@
 |---|---|
 | Trạng thái | đích MVP; các endpoint đã triển khai được đánh dấu riêng bên dưới |
 | Chủ sở hữu | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-10-12 |
+| Cập nhật lần cuối | 2026-10-14 |
 
 ## Tài liệu liên quan
 
@@ -18,7 +18,7 @@
 - Không dùng cổng trong sơ đồ kiến trúc làm hợp đồng API.
 - Redis, Langfuse và LiteLLM không có API công khai. FE không gọi trực tiếp các thành phần này.
 
-**Hiện trạng Core (đối chiếu `staging` tại `b1de421c461d59473b3bb73aae103027afd67a89`, ngày 2026-10-06):** mục 1–4 và 7 là API Core đã có. Bảng mục 5–6 giữ trạng thái từng endpoint từ lần rà soát AI trước; lượt này không rà soát lại AI. Có trong code không đồng nghĩa đã deploy staging hay nghiệm thu FE; hiện trạng triển khai/kiểm thử nằm trong [thiết kế kỹ thuật](../architecture/technical-design.md#1-phạm-vi).
+**Hiện trạng Core (đối chiếu `staging` tại `b1de421c461d59473b3bb73aae103027afd67a89`, ngày 2026-10-06):** mục 1–4 và 7 là API Core đã có. Mục 5–6 và đoạn AI ở trên được đối chiếu lại với `backend/ai/src` và `backend/core` ngày 2026-10-14; trạng thái endpoint dựa trên code, không phải triển khai staging. Có trong code không đồng nghĩa đã deploy staging hay nghiệm thu FE; hiện trạng triển khai/kiểm thử nằm trong [thiết kế kỹ thuật](../architecture/technical-design.md#1-phạm-vi).
 
 **Bổ sung Core ngày 2026-10-06 trên `feat/core-stock-in` (base staging `99ed97a9d03656fe782ae43c81526e68a8c0cc08`):** endpoint stock-in, contract PATCH product và ba report nâng cao dưới đây có trong nhánh này, chưa xác nhận đã merge/deploy staging. Mobile chưa được sửa để dùng các contract mới.
 
@@ -437,7 +437,7 @@ Phủ `FR-007`, `FR-008`, `FR-017`, `FR-018`, `FR-020`, `FR-021`, `FR-027`.
 
 Yêu cầu chung:
 
-- timeout hoặc lỗi model trả `503` với `{ "detail": "ai_unavailable" }`; Core không retry đồng bộ quá một lần;
+- lỗi model, kể cả timeout của một request model (`MODEL_TIMEOUT_SECONDS`), trả `503` với `{ "detail": "ai_unavailable" }`; Core không tự retry lời gọi AI;
 - guardrail dừng lượt chat trả `422` với `{ "detail": "<mã>" }` và không lưu gì: `input_too_long` (tin nhắn mới dài quá `AGENT_MAX_INPUT_CHARS`, mặc định 2000 ký tự) `answer_unavailable` (hết lượt gọi model, vượt ngân sách token của lượt hoặc câu trả lời vẫn bị chặn sau các lần yêu cầu viết lại) hoặc `answer_timeout` (lượt chat quá `AGENT_TURN_TIMEOUT_SECONDS`, mặc định 35 giây, thấp hơn read timeout 40 giây của Core). AI chỉ trả mã, câu hiển thị do FE map; Core chuyển tiếp `422` và mã này trong `code` của lỗi Core;
 - response thành công có `request_id`, `model`, `model_version`;
 - AI không có endpoint tạo/sửa/xóa dữ liệu nghiệp vụ;
@@ -452,7 +452,7 @@ Agent có tool nội bộ `query_shop_data` để trả lời câu hỏi về h�
 
 - Model chỉ truyền `sql`; `shop_id` lấy từ request đã xác thực và tới tool qua run context (`deps`) của Pydantic AI, không nằm trong schema tool hay system prompt, nên model không đổi được phạm vi tiệm.
 - Truy vấn chạy bằng role chỉ đọc `ai_sql_reader` trên năm view của schema `ai_read`: `v_shop_profile`, `v_categories`, `v_products`, `v_sales`, `v_sale_items`. View tự lọc theo tiệm của transaction và không có cột `shop_id`; role không có quyền trên bảng gốc. `v_sales`/`v_sale_items` không phơi snapshot khách hàng hay `void_reason`.
-- SQL phải qua bộ kiểm tra AST: đúng một câu `SELECT` (cho phép `WITH`, `UNION`), chỉ dùng hàm và kiểu cast trong allowlist. Transaction `READ ONLY`, `statement_timeout` mặc định 3000 ms, tối đa 100 dòng, luôn rollback; mỗi lượt chat gọi model tối đa 4 lần, tool tối đa 3 lần, tổng token vào và ra tối đa 200000 và chạy tối đa 35 giây. Các mặc định này là tạm thời, chờ PO duyệt.
+- SQL phải qua bộ kiểm tra AST: đúng một câu `SELECT` (cho phép `WITH`, `UNION`), chỉ dùng hàm và kiểu cast trong allowlist. Transaction `READ ONLY` (`postgresql_readonly`), `statement_timeout` mặc định 3000 ms, tối đa 100 dòng; thành công thì commit (không ghi được gì), lỗi thì rollback; mỗi lượt chat gọi model tối đa 4 lần, tool tối đa 3 lần, tổng token vào và ra tối đa 200000 và chạy tối đa 35 giây. Các mặc định này là tạm thời, chờ PO duyệt.
 - Truy vấn bị bộ kiểm tra hoặc database từ chối, hoặc quá thời gian, trả về model dạng `Error[CODE]: lý do` (ví dụ `UNSAFE_FUNCTION`, `QUERY_TIMEOUT`, `SQL_ERROR`) để model viết lại câu truy vấn; lượt chat vẫn trả lời. Database đọc không kết nối được thì lượt chat trả `503 ai_unavailable`. Khi AI chưa cấu hình `AI_SQL_READER_URL`, agent vẫn chat nhưng không có tool này.
 - Guardrail tất định quanh agent: tin nhắn mới dài quá 2000 ký tự bị từ chối với `422 input_too_long`, không gọi model; khóa API, bearer token, JWT, private key, IBAN, số thẻ hợp lệ theo Luhn và email trong tin nhắn được thay bằng `[redacted:<loại>]` trước khi gửi model và trước khi lưu; câu trả lời rỗng hoặc lộ chi tiết nội bộ (tên view, SQL, mã lỗi) bị gửi lại model để viết lại, hết lượt gọi model thì trả `422 answer_unavailable`. System prompt giới hạn agent trong việc của tiệm (doanh thu, đơn hàng, sản phẩm, giá, tồn kho, nhập hàng, bản nháp ghi chép, cách dùng SmartLedger); câu hỏi ngoài phạm vi nhận một câu từ chối ngắn với `200`, không phải mã lỗi, và đây là ràng buộc bằng prompt, không phải bộ lọc tất định. Request và response thành công của `/internal/v1/agent/chat` không đổi; mã lỗi nằm ở yêu cầu chung phía trên.
 - Agent đọc được hồ sơ tiệm, nhóm hàng, sản phẩm và **đơn đã chốt** (`v_sales`, `v_sale_items`); chi phí, công nợ và khách hàng vẫn chưa phơi. Ngoài `query_shop_data`, agent có tool `suggest_restock` trả gợi ý nhập hàng từ đơn `CONFIRMED`; `COVER_DAYS` và hai kỳ `last_7_days`/`last_30_days` hiện là mặc định chờ PO duyệt, chưa phải quyết định đã chốt. Chi tiết vận hành nằm trong [README của AI](../../backend/ai/README.md#shop-data-tool-read-only-sql) và [mục Restock suggestions](../../backend/ai/README.md#restock-suggestions).
@@ -476,7 +476,7 @@ Stream kết thúc sau `done` hoặc `error`.
 
 Chỉ text đã qua answer screen mới được gửi. Đoạn cuối ngắn và phần text sau một `select` còn đang chờ được giữ lại cho đến khi answer screen kiểm tra xong. Lượt kết thúc bằng `error`, hoặc caller ngắt kết nối giữa chừng, không được lưu, trừ khi caller ngắt đúng lúc AI đang ghi lượt vào database.
 
-Core proxy route này qua `POST /api/v1/agent/chat/stream` với cùng auth, `X-Shop-Id` và body như `/api/v1/agent/chat`. Lỗi trước sự kiện đầu tiên là JSON lỗi của Core và ánh xạ như route JSON: AI `404` thành `conversation_not_found`, lỗi khác thành `503 ai_unavailable`. Sau đó Core chuyển từng sự kiện của AI nguyên văn, trừ `done` chỉ giữ `conversation_id`, `message_id`, `answer` như `AgentChatMessageView`. App ngắt kết nối thì Core đóng stream tới AI, nên AI hủy lượt như trên. Request async của Core hết hạn sau 60 giây, trên thời hạn lượt mặc định 35 giây của AI.
+Core proxy route này qua `POST /api/v1/agent/chat/stream` với cùng auth, `X-Shop-Id` và body như `/api/v1/agent/chat`. Lỗi trước sự kiện đầu tiên là JSON lỗi của Core và ánh xạ như route JSON: AI `404` thành `conversation_not_found`, AI `422` mang mã guardrail (`input_too_long`) giữ nguyên `422` như route JSON, lỗi khác thành `503 ai_unavailable`. Sau đó Core chuyển từng sự kiện của AI nguyên văn, trừ `done` chỉ giữ `conversation_id`, `message_id`, `answer` như `AgentChatMessageView`. App ngắt kết nối thì Core đóng stream tới AI, nên AI hủy lượt như trên. Request async của Core hết hạn sau 60 giây, trên thời hạn lượt mặc định 35 giây của AI.
 
 Màn Trợ lý AI trên mobile gọi route stream và hiện chữ dần trong bong bóng trả lời; `reset` xóa phần đã hiện, `done` thay bằng câu đã lưu. Câu trả lời, dữ liệu lưu và guardrail không đổi so với `/api/v1/agent/chat`.
 

@@ -7,7 +7,7 @@
 // Time: TIMESTAMPTZ, UTC internally; Core JSON displays +07:00
 // Core schema: Flyway V1-V15 (business tables, idempotency, shared OWNER/ADMIN audit_logs, cost snapshot, media outbox and upload leases).
 // Core audit alignment: staging b1de421c461d, 2026-10-06; AI sections unchanged.
-// AI schema: supabase/migrations AI baseline (chat_conversations, chat_messages, pgvector, ai_read views).
+// AI schema: supabase/migrations AI baseline (chat_conversations, chat_messages, vector extension, ai_read views, ai_sql_reader role; no embedding table yet, ADR-0001).
 // V15 implements OWNER notifications/thresholds on feat/app-notifications; ai_requests remains planned.
 // Report periods use Asia/Ho_Chi_Minh; this logical ERD does not imply runtime completion.
 // Quantity: NUMERIC(15,3)
@@ -518,6 +518,7 @@ Table expenses {
 // AI TRACE
 // =====================================================
 
+// Planned (target design): no migration creates ai_requests yet. Runtime traces go to Logfire.
 Table ai_requests {
   id bigint [pk, increment]
   shop_id bigint [not null]
@@ -589,7 +590,7 @@ Table chat_messages {
   content text [not null]
 
   // Link to AI processing when the message comes from AI
-  ai_request_id bigint
+  ai_request_id bigint [note: 'Column and index exist in the AI baseline; no foreign key until ai_requests exists.']
 
   created_at timestamptz [not null, default: `now()`]
 
@@ -598,6 +599,11 @@ Table chat_messages {
     ai_request_id
   }
 }
+
+// AI read layer (views, not tables): schema ai_read holds v_shop_profile, v_categories,
+// v_products, v_sales and v_sale_items. Each filters on smartledger.shop_id and exposes no shop_id.
+// Role ai_sql_reader (NOLOGIN) has SELECT on those views only. The login behind AI_SQL_READER_URL
+// is created outside the migration. The vector extension is enabled; no embedding table exists yet.
 
 
 // =====================================================
@@ -834,7 +840,7 @@ Ref: users.id < chat_conversations.user_id
 Ref: shops.id < chat_conversations.shop_id
 
 Ref: chat_conversations.id < chat_messages.conversation_id
-Ref: ai_requests.id < chat_messages.ai_request_id
+// Planned, add when ai_requests exists: Ref: ai_requests.id < chat_messages.ai_request_id
 
 
 // ---------- NOTIFICATION ----------

@@ -80,12 +80,13 @@ Enter each value once and reuse it with a [reference variable](https://docs.rail
 | `POSTGRES_URL` | Supabase of the matching environment (`postgresql://…`) |
 | `AI_SQL_READER_URL` | Read-only `ai_sql_reader` login (AI baseline in `supabase/migrations/`) as a `postgresql://` URL, not a libpq keyword string; when empty, the agent cannot read shop data |
 | `REDIS_URL` | Redis Cloud of the matching environment |
-| `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `MODEL_*` | Managed from GitHub, see [AI model settings](#ai-model-settings). Do not edit them on Railway. |
+| `POSTGRES_POOL_MAX_SIZE`, `SQL_POOL_MAX_SIZE` | Optional, default `2` each; GitHub does not set them. Both pools count against the Supabase session-pooler limit shared with Core, so keep them small. See [AI README](../../backend/ai/README.md#routes-and-database-access). |
+| `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `MODEL_PROVIDER`, `MODEL_NAME`, `MODEL_FALLBACKS`, `MODEL_REASONING_EFFORT` | Managed from GitHub, see [AI model settings](#ai-model-settings). Do not edit them on Railway. |
 | `LOGFIRE_TOKEN`, `LOGFIRE_ENVIRONMENT`, `LOGFIRE_SERVICE_VERSION` | Managed from GitHub, see [AI tracing settings](#ai-tracing-settings). Do not edit them on Railway. |
 
 - `ai` has no public domain; `core` calls it over the private network. Port `8001` is AI's default `SERVER_PORT`, not the `PORT` Railway assigns, so changing `SERVER_PORT` on `ai` requires updating `AI_BASE_URL`.
 - Variables have local defaults (`AI_BASE_URL` defaults to `http://localhost:8001`), so a missing variable on Railway still reports a successful deploy while Core cannot reach AI. After changing variables, run one chat through Core on staging.
-- Backend secrets live only on Railway, except `OPENAI_API_KEY`, which the deploy copies from the `railway-*` GitHub environment. The mobile web Vercel project receives only `EXPO_PUBLIC_*`.
+- Backend secrets live only on Railway, except `OPENAI_API_KEY` and `LOGFIRE_TOKEN`, which the deploy copies from the `railway-*` GitHub environment. The mobile web Vercel project receives only `EXPO_PUBLIC_*`.
 - Before enabling Cloudinary in staging/production, run V13 from merged code under the approved migration workflow, then set the variables above and run a controlled upload/replace/delete smoke check. Use separate Cloudinary credentials or at least non-overlapping prefixes per environment. `CLOUDINARY_API_SECRET` must never be placed in `EXPO_PUBLIC_*`, GitHub Variables, client source, Swagger request data, audit metadata or logs.
 
 ### AI model settings

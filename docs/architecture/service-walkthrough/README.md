@@ -1,6 +1,6 @@
 # Service walkthrough
 
-Core diagrams reviewed against `staging` commit [`b1de421c461d59473b3bb73aae103027afd67a89`](https://github.com/miphu2804/smart-ledger/tree/b1de421c461d59473b3bb73aae103027afd67a89) on 2026-10-06. AI diagrams are outside this review and remain unchanged.
+Core diagrams reviewed against `staging` commit [`b1de421c461d59473b3bb73aae103027afd67a89`](https://github.com/miphu2804/smart-ledger/tree/b1de421c461d59473b3bb73aae103027afd67a89) on 2026-10-06. AI diagrams (§8) were reviewed separately against `staging` commit [`0443d30daddcd70392070055bba580269e8f7afa`](https://github.com/miphu2804/smart-ledger/tree/0443d30daddcd70392070055bba580269e8f7afa) on 2026-10-14.
 
 Query-optimization update (#138), reviewed on 2026-10-10 against `perf/query-optimization` commit [`b6e4169dcfb9ffb2534b20baa9aa5e368b86d9b3`](https://github.com/miphu2804/smart-ledger/tree/b6e4169dcfb9ffb2534b20baa9aa5e368b86d9b3): the preparation note in §5.2 and confirm/void diagrams in §5.3/§6.3 reflect #134–#137. This is a branch-code review, not confirmation of staging deployment or FE acceptance; other diagrams retain the baseline above. Query budgets and regression evidence are described in [technical design §4.1](../technical-design.md#41-truy-vấn-theo-lô) and [§7](../technical-design.md#7-kiểm-chứng-trước-merge).
 
@@ -15,7 +15,7 @@ CORE-013 (#181), reviewed on 2026-10-13 against `fix/core-concurrency` commit [`
 | `03-sales/` | draft/sale/debt states, draft validation, checkout confirm |
 | `04-money/` | idempotency, debt repay, sale void |
 | `05-report/` | report summary |
-| `06-ai/` | AI components, chat turn |
+| `06-ai/` | AI components, chat turn (JSON and stream) |
 
 Colors: blue = step, yellow = decision / open state, red = error / terminal failure, green = start, success or final state, purple = data store, orange = shared service. Each group box has its own tint.
 
@@ -554,19 +554,23 @@ flowchart LR
 
 ### 8.1 Components (composition root: `main.lifespan`)
 
-`main.py` builds one `APIRouter` with prefix `/internal/v1` and the `X-Internal-Token` dependency, includes the agent router under it, and mounts it on the app, so every route under that prefix requires the token.
+`main.py` builds one `APIRouter` with prefix `/internal/v1` and the `X-Internal-Token` dependency, includes the agent router under it, and mounts it on the app, so every route under that prefix requires the token. `GET /health` sits outside the prefix and needs no token. The agent router exposes `POST /agent/chat`, `POST /agent/chat/stream` and the conversation list, get, rename and delete routes; the endpoint contract is in [API contracts](../../contracts/api-contracts.md).
+
+`lifespan` opens two `PostgreDBClient` pools: one for chat history (`POSTGRES_URL`, `POSTGRES_POOL_MAX_SIZE`) and one for the read-only SQL reader (`AI_SQL_READER_URL`, `SQL_POOL_MAX_SIZE`, used by `ShopDataRepository`). Both default to 2 connections. It connects Redis at startup, but no feature reads it yet. It builds the chat model with `build_chat_model`: `MODEL_PROVIDER` picks the API, and a non-empty `MODEL_FALLBACKS` wraps the primary model in a `FallbackModel`. Without `OPENAI_API_KEY`, or when the primary model cannot be built, the model is `None` and every chat turn answers `503 ai_unavailable`. `AgentService` then receives `shop_data` and `restock`; both are `None` when `AI_SQL_READER_URL` is unset, so chat still runs with no tools. `configure_tracing` runs at module import, before any agent runs, and sends Pydantic AI spans to Logfire only when `LOGFIRE_TOKEN` is set. Spans carry the run's `shop_id`, never message content.
 
 ```mermaid
 flowchart LR
     subgraph API["API Space"]
-        MAIN["main.py<br/>APIRouter /internal/v1<br/>X-Internal-Token"]
-        ROUTER["agent router<br/>/internal/v1/agent"]
+        MAIN["main.py lifespan<br/>pools, model, AgentService<br/>APIRouter /internal/v1 + X-Internal-Token"]
+        ROUTER["agent router<br/>/internal/v1/agent<br/>chat, chat/stream, conversations"]
     end
 
     subgraph Agent["Agent Space"]
-        SVC["AgentService.chat()"]
-        GUARD["GuardrailService<br/>redact + call limits<br/>+ answer screen"]
+        SVC["AgentService<br/>chat() / stream_chat()"]
+        GUARD["GuardrailService<br/>input check + redaction<br/>call, token, time limits<br/>answer screen"]
+        MODEL["model gateway<br/>build_chat_model()<br/>FallbackModel when MODEL_FALLBACKS is set"]
         TOOLS["tools<br/>query_shop_data<br/>suggest_restock"]
+        RESTOCK["RestockService<br/>suggest(shop_id, period)"]
     end
 
     subgraph SQL["SQL Space"]
@@ -575,34 +579,50 @@ flowchart LR
     end
 
     subgraph Store["Storage"]
-        REPO["AgentConversationRepository"]
+        REPO["AgentConversationRepository<br/>pooled chat-history client"]
         PG[("chat history")]
         VIEWS[("ai_read views")]
+        REDIS[("Redis<br/>connected at startup<br/>no feature reads it")]
+    end
+
+    subgraph Obs["Observability"]
+        LF["Logfire<br/>only when LOGFIRE_TOKEN is set"]
     end
 
     MAIN -->|"include_router"| ROUTER
-    ROUTER -->|"chat"| SVC
+    MAIN -.->|"connect at startup"| REDIS
+    ROUTER -->|"chat, chat/stream"| SVC
     ROUTER -->|"list / get / rename / delete"| REPO
     SVC -->|"before / during / after run"| GUARD
+    SVC -->|"model calls"| MODEL
     SVC -->|"tool calls"| TOOLS
     SVC -->|"recent_messages / save_exchange"| REPO
-    TOOLS -->|"sql"| EXEC --> SG
-    EXEC -->|"shop-scoped txn"| VIEWS
-    REPO --> PG
+    SVC -.->|"run spans, no content"| LF
+    TOOLS -->|"query_shop_data(sql)"| EXEC
+    TOOLS -->|"suggest_restock(period)"| RESTOCK -->|"fixed query"| EXEC
+    EXEC --> SG
+    EXEC -->|"shop-scoped read-only txn"| VIEWS
+    REPO -->|"postgres pool"| PG
     classDef default fill:#eef4ff,stroke:#5b8def,color:#1f2d3d
     classDef decision fill:#fff4cc,stroke:#d4a017,color:#5c4400
     classDef error fill:#fde2e1,stroke:#d9534f,color:#8a1f1b
     classDef terminal fill:#dff5e3,stroke:#3c9d5d,color:#1e5631
     classDef store fill:#efe6ff,stroke:#8a63d2,color:#3d2a6b
     classDef shared fill:#ffe9d6,stroke:#e07b24,color:#6b3500
-    class PG,VIEWS store
+    class PG,VIEWS,REDIS store
+    class MODEL,LF shared
     style API fill:#f3f8ff,stroke:#9dbcf5
     style Agent fill:#f4fbf2,stroke:#a8d5a2
     style SQL fill:#fff9ee,stroke:#f0c987
     style Store fill:#faf3ff,stroke:#cfa8f0
+    style Obs fill:#fdf3f8,stroke:#e0a3c4
 ```
 
 ### 8.2 One chat turn end-to-end
+
+`POST /chat` returns one JSON reply after the turn is saved. `POST /chat/stream` answers with server-sent events while the model runs: `delta` carries new text, `reset` discards text already sent (a preamble before a tool call, or an answer the screen rejected), and `done` carries the saved ids and answer. `done` is sent only after `save_exchange`. A refusal before the stream opens, such as `input_too_long` or a missing conversation, is an HTTP error; a later failure, such as `answer_timeout`, arrives as an `error` event. If the app disconnects, Core closes the stream and the turn is cancelled; nothing is saved unless the disconnect lands while the exchange is already being written.
+
+Core checks the owner's shop, sends the owner's `user_id` with `shop_id`, and copies the stream line by line; on the JSON route it narrows the reply to `conversation_id`, `message_id` and `answer`. An AI `404` becomes `conversation_not_found`, an AI `422` keeps its guardrail code, and any other failure becomes `503 ai_unavailable`. The codes are listed in [API contracts](../../contracts/api-contracts.md).
 
 ```mermaid
 sequenceDiagram
@@ -618,26 +638,46 @@ sequenceDiagram
     participant G as Guardrails
     participant T as Tools
     end
+    box rgb(240,240,240) Model gateway
+    participant M as Model
+    end
     box rgb(239,230,255) Data
     participant DB as Postgres
     end
 
-    App->>Core: POST /api/v1/agent/chat
-    Core->>Core: requireOwnedActiveShop gives user_id, shop_id
-    Core->>R: POST /internal/v1/agent/chat (timeout 40s, X-Internal-Token)
-    R->>A: chat(user_id, shop_id, message, conversation_id)
-    A->>DB: recent_messages(): latest AGENT_HISTORY_TURNS exchanges
-    A->>G: input length check + redaction
-    loop up to model / tool call limits
+    App->>Core: POST /api/v1/agent/chat or /chat/stream
+    Core->>Core: requireOwnedActiveShop gives owner user_id, shop_id
+    Core->>R: POST /internal/v1/agent/chat or /chat/stream (40s read timeout, X-Internal-Token)
+    R->>A: chat() or stream_chat(user_id, shop_id, message, conversation_id)
+    opt conversation_id given
+        A->>DB: recent_messages(): owner-scoped, latest AGENT_HISTORY_TURNS exchanges
+    end
+    A->>G: input length check (input_too_long), then redaction
+    Note over A,M: turn limits (config defaults): 4 model requests, 200000 tokens, 3 tool calls, 35 s
+    loop model requests and tool calls
+        A->>M: instructions, history, redacted message
+        M-->>A: text or tool call
+        opt POST /chat/stream
+            A-->>R: delta or reset
+            R-->>Core: SSE delta or reset
+            Core-->>App: relayed delta or reset
+        end
         A->>T: query_shop_data(sql) or suggest_restock(period)
         T->>T: SqlGuard: one SELECT on ai_read views, LIMIT n+1
         T->>DB: read-only txn scoped by smartledger.shop_id
         T-->>A: JSON rows or Error[CODE] for the model to retry
     end
     A->>G: OutputGuardrail: retry empty or leaking answers
-    A->>DB: save_exchange(redacted user message, answer)
-    A-->>R: AgentChatResult
-    R-->>Core: conversation_id, message_id, answer, model
-    Core-->>App: AgentChatResponse
-    Note over Core: AI error or timeout gives ai_unavailable, 404 gives CONVERSATION_NOT_FOUND
+    alt POST /chat
+        A->>DB: save_exchange(redacted user message, answer)
+        A-->>R: AgentChatResult
+        R-->>Core: conversation_id, message_id, request_id, answer, model, model_version
+        Core-->>App: AgentChatResponse (conversation_id, message_id, answer)
+    else POST /chat/stream
+        A->>DB: save_exchange(redacted user message, answer)
+        A-->>R: Done with saved ids and answer
+        R-->>Core: SSE done
+        Core-->>App: done (conversation_id, message_id, answer)
+    end
+    Note over A,App: a guardrail stop or other failure after the stream opens is an error event
 ```
