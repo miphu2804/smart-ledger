@@ -6,6 +6,7 @@ import { ActivityIndicator, Animated, Platform, Pressable, RefreshControl, Scrol
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarcodeScannerModal } from '../src/components/BarcodeScannerModal';
 import { useToast } from '../src/components/brand';
+import { PageControls } from '../src/components/PageControls';
 import { Button, Dialog, EmptyState, Field, Row, Sheet, Stepper, T } from '../src/components/ui';
 import type { CategoryView, LineItem, ProductView } from '../src/data/types';
 import { categoryApi, productApi, type ProductListQuery } from '../src/lib/catalogApi';
@@ -15,7 +16,8 @@ import { abbr, hashIndex, normalizeText, vnd } from '../src/lib/format';
 import { ProductImage } from '../src/components/ProductImage';
 import { upsertCustomLine } from '../src/lib/customLines';
 import { itemsTotal } from '../src/lib/stats';
-import { usePagedList } from '../src/lib/usePagedList';
+import { LIST_PAGE_SIZE } from '../src/lib/usePagedList';
+import { usePagedPage } from '../src/lib/usePagedPage';
 import { useApp } from '../src/store/AppStore';
 import { colors, font, shadow, WEB_FRAME_MAX_WIDTH } from '../src/theme';
 
@@ -588,7 +590,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
     return () => clearTimeout(timer);
   }, [q]);
 
-  // Danh sách tải dần 20 món mỗi lần; đổi từ khoá, nhóm, lọc tồn hoặc cách sắp xếp thì tải lại từ trang đầu
+  // Danh sách phân trang theo số trang, 20 món mỗi trang; đổi từ khoá, nhóm, lọc tồn hoặc cách sắp xếp thì về trang đầu
   const productQuery: ProductListQuery = {
     q: searchQ || undefined,
     categoryId: cat === 'all' ? undefined : Number(cat),
@@ -599,14 +601,20 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
     items: products,
     total: productTotal,
     loading,
+    page: pageIndex,
+    setPage,
     refreshing,
-    loadingMore,
     error,
-    moreError,
-    loadMore,
-    refreshTop,
+    refresh,
     reload,
-  } = usePagedList<ProductView>(JSON.stringify(productQuery), (page, size) => productApi.page(page, size, productQuery));
+  } = usePagedPage<ProductView>(JSON.stringify(productQuery), (page, size) => productApi.page(page, size, productQuery));
+  const listRef = useRef<{ scrollToOffset?: (params: { offset: number; animated?: boolean }) => void } | null>(null);
+  const goToPage = (next: number) => {
+    triggerFeedback('selection');
+    setPage(next);
+    // Trang mới bắt đầu từ đầu danh sách, không giữ vị trí cuộn của trang trước
+    listRef.current?.scrollToOffset?.({ offset: 0, animated: false });
+  };
 
   // Các món đã gặp (trang đã tải, món máy quét tra được hoặc vừa tạo), theo id. Giỏ hàng và máy quét tra món ở đây vì
   // món đã chọn có thể không còn trong trang đang hiện sau khi tìm hoặc đổi nhóm.
@@ -636,8 +644,8 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
   useFocusEffect(
     useCallback(() => {
       void loadCategories();
-      void refreshTop();
-    }, [loadCategories, refreshTop]),
+      void refresh();
+    }, [loadCategories, refresh]),
   );
 
   const retry = () => {
@@ -718,7 +726,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
       });
       rememberProducts([created]);
       addToCart(created.id, 1);
-      void refreshTop();
+      void refresh();
       setCName('');
       setCPrice('');
       setCUnit('cái');
@@ -784,6 +792,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
       ) : (
         <Animated.FlatList
           key={viewMode}
+          ref={listRef as never}
           data={products}
           onLayout={(event) => {
             const width = Math.round(event.nativeEvent.layout.width);
@@ -866,8 +875,6 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
               <EmptyState icon="search" title="Không tìm thấy hàng" hint="Thử từ khoá khác hoặc thêm món ngoài danh mục" />
             )
           }
-          onEndReached={() => void loadMore()}
-          onEndReachedThreshold={0.5}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -879,15 +886,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
           }
           ListFooterComponent={
             <>
-          {loadingMore ? <ActivityIndicator color={salesColors.primary} style={{ marginTop: 14 }} /> : null}
-          {moreError ? (
-            <View style={{ marginTop: 10, marginHorizontal: 4 }}>
-              <T size={12.5} color={salesColors.muted} style={{ textAlign: 'center', marginBottom: 8 }}>
-                Không tải thêm được hàng: {moreError}
-              </T>
-              <Button title="Tải thêm" variant="outline" onPress={() => void loadMore()} />
-            </View>
-          ) : null}
+          <PageControls page={pageIndex} pageSize={LIST_PAGE_SIZE} total={productTotal} unit="sản phẩm" onPage={goToPage} />
           {categoryError ? (
             <T size={12} color={salesColors.muted} style={{ textAlign: 'center', marginTop: 10 }}>
               Không tải được nhóm hàng: {categoryError}
@@ -1071,7 +1070,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
         }}
         onProductCreated={(p) => {
           rememberProducts([p]);
-          void refreshTop();
+          void refresh();
         }}
       />
 
