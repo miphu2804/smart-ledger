@@ -1292,6 +1292,23 @@ function mockAgentAnswer(question: string): string {
     const top = [...active].sort((a, b) => b.sellingPriceVnd - a.sellingPriceVnd).slice(0, 5);
     return `Năm món giá cao nhất:\n${top.map((p, i) => `${i + 1}. ${p.name} — ${vnd(p.sellingPriceVnd)}`).join('\n')}\n${scope}`;
   }
+  if (/bieu do|bang/.test(q)) {
+    // Có bảng và khối chart để xem cách bong bóng trình bày chúng (docs/contracts/api-contracts.md, mục Stream).
+    const top = [...active].sort((a, b) => b.sellingPriceVnd - a.sellingPriceVnd).slice(0, 5);
+    const chart = { type: 'bar', title: 'Giá bán 5 món cao nhất', unit: 'vnd', data: top.map((p) => ({ label: p.name.slice(0, 12), value: p.sellingPriceVnd })) };
+    return [
+      `Món giá cao nhất là **${top[0]?.name}** với ${vnd(top[0]?.sellingPriceVnd ?? 0)}.`,
+      '',
+      '| Món | Giá bán |',
+      '|---|---:|',
+      ...top.map((p) => `| ${p.name} | ${vnd(p.sellingPriceVnd)} |`),
+      '',
+      '```chart',
+      JSON.stringify(chart),
+      '```',
+      scope,
+    ].join('\n');
+  }
   if (/het hang|sap het|ton kho|con bao nhieu|nhap/.test(q)) {
     const low = active.filter((p) => p.tracked && (p.stockQuantity ?? 0) <= 6);
     if (!low.length) return `Chưa có mặt hàng nào dưới ngưỡng 6. ${scope}`;
