@@ -10,8 +10,9 @@ from pydantic_ai.messages import ModelResponse, TextPart
 from pydantic_ai.models.function import FunctionModel
 from tests.support import TEST_GUARDRAIL_LIMITS, ScriptedModel, echo_user_prompts
 
+from src.agent.errors import ConversationNotFoundError
 from src.agent.guardrails import GuardrailLimits
-from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
+from src.agent.repository import AgentConversationRepository
 from src.agent.service import AgentService
 from src.main import app
 

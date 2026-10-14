@@ -1,6 +1,5 @@
-"""Guardrails of the shop agent, one module per Pydantic AI Harness use case."""
+"""Guardrails of the shop agent, applied through `GuardrailService`."""
 
-from src.agent.guardrails.guardrail_error import GuardrailError
 from src.agent.guardrails.service import GuardrailLimits, GuardrailService
 
-__all__ = ["GuardrailError", "GuardrailLimits", "GuardrailService"]
+__all__ = ["GuardrailLimits", "GuardrailService"]

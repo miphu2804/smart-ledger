@@ -5,12 +5,13 @@ from pydantic_ai_harness import GuardrailResult
 from src.sql.guard import SqlGuard
 
 
-class AnswerLeakScreen:
-    """Keeps leaked internals away from the owner, in a whole or a streamed answer.
+class AnswerScreen:
+    """Keeps empty answers and leaked internals away from the owner, in a whole or a
+    streamed answer.
 
-    `check` is a Pydantic AI Harness output guard that sends a leaking answer back to
-    the model. The Harness checks only the final output, so `screened_prefix` holds
-    back streamed text that could still become a leak.
+    `check` is a Pydantic AI Harness output guard that sends an empty or leaking answer
+    back to the model. The Harness checks only the final output, so `screened_prefix`
+    holds back streamed text that could still become a leak.
     """
 
     # Internals the answer must never show: the view schema and names, the scope
@@ -36,16 +37,19 @@ class AnswerLeakScreen:
         + rf"|\bselect\b[\s\S]{{1,{_SELECT_SPAN}}}?\bfrom\b",
         re.IGNORECASE,
     )
-    RETRY = (
+    EMPTY_RETRY = "The answer was empty. Answer the owner's question."
+    LEAK_RETRY = (
         "Rewrite the answer in plain words for the shop owner, without SQL, view "
         "names, settings or error codes."
     )
 
     @classmethod
     def check(cls, answer: str) -> GuardrailResult:
-        """Allow an answer with no leak; ask the model again for a leaking one."""
+        """Allow a non-empty answer with no leak; ask the model again otherwise."""
+        if not answer.strip():
+            return GuardrailResult.retry(cls.EMPTY_RETRY)
         if cls.LEAK_PATTERN.search(answer):
-            return GuardrailResult.retry(cls.RETRY)
+            return GuardrailResult.retry(cls.LEAK_RETRY)
         return GuardrailResult.allow()
 
     @classmethod

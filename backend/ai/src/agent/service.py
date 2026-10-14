@@ -1,15 +1,10 @@
 import asyncio
 import logging
-from collections.abc import AsyncGenerator, AsyncIterator
-from contextlib import asynccontextmanager, suppress
+from collections.abc import AsyncGenerator
+from contextlib import suppress
 from dataclasses import dataclass
 
-from pydantic_ai import (
-    Agent,
-    AgentRunResult,
-    UnexpectedModelBehavior,
-    UsageLimitExceeded,
-)
+from pydantic_ai import Agent, AgentRunResult
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
@@ -19,7 +14,7 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models import Model
 
-from src.agent.guardrails import GuardrailError, GuardrailLimits, GuardrailService
+from src.agent.guardrails import GuardrailLimits, GuardrailService
 from src.agent.repository import AgentConversationRepository
 from src.agent.tools import AgentContext, build_restock_tool, build_shop_data_tool
 from src.prompt_templates import (
@@ -160,7 +155,7 @@ class AgentService:
         self, question: str, history: list[dict], context: AgentContext
     ) -> tuple[str, str]:
         """Run the agent; return the screened answer and the model version."""
-        async with self._run_limits():
+        async with self.guardrails.run_limits():
             result = await self.agent.run(
                 question,
                 message_history=self._model_messages(history),
@@ -233,7 +228,7 @@ class AgentService:
         sent since the last Reset, and the run result."""
         delivered = ""
         async with (
-            self._run_limits(),
+            self.guardrails.run_limits(),
             self.agent.iter(
                 question,
                 message_history=self._model_messages(history),
@@ -295,24 +290,6 @@ class AgentService:
             model=self.model_name,
             model_version=version,
         )
-
-    @asynccontextmanager
-    async def _run_limits(self) -> AsyncIterator[None]:
-        """Stop a run at the turn timeout or a model limit, as a guardrail code."""
-        try:
-            async with asyncio.timeout(self.guardrails.turn_timeout_seconds):
-                yield
-        except TimeoutError as error:
-            # Stopped before Core stops waiting, so the turn is not stored behind an
-            # error the owner already saw.
-            logger.warning("agent run passed the turn timeout")
-            raise GuardrailError("answer_timeout") from error
-        except (UsageLimitExceeded, UnexpectedModelBehavior) as error:
-            # The model used up its requests or never gave an answer the screen
-            # accepts. Provider errors are neither, so they still propagate and the
-            # router answers 503.
-            logger.warning("agent run ended without an answer: %s", error)
-            raise GuardrailError("answer_unavailable") from error
 
     @staticmethod
     def _model_messages(history: list[dict]) -> list[ModelMessage]:
