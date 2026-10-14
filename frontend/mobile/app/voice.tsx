@@ -20,7 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddItemSheet } from '../src/components/AddItemSheet';
 
 import { useToast } from '../src/components/brand';
-import { Button, Dialog, Field, Row, T } from '../src/components/ui';
+import { Button, Dialog, Field, KEYBOARD_AVOID_BEHAVIOR, Row, T } from '../src/components/ui';
 import type { LineItem, ProductView } from '../src/data/types';
 import { productApi } from '../src/lib/catalogApi';
 import { debugLog } from '../src/lib/debug';
@@ -787,7 +787,7 @@ export default function Voice() {
   return (
     <KeyboardAvoidingView
       style={styles.screen}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={KEYBOARD_AVOID_BEHAVIOR}
     >
       <StatusBar style="dark" />
 
