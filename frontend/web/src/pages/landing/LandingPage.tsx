@@ -22,6 +22,7 @@ import { useReveal } from '../../hooks/useReveal'
 import '../../styles/landing.css'
 import { CONTACT_EMAIL } from '../legal/legalConfig'
 import SiteFooter from './SiteFooter'
+import SocialLinks from './SocialLinks'
 
 const NAV = [
   { href: '#tinh-nang', label: 'Tính năng' },
@@ -68,6 +69,7 @@ function Nav() {
           ))}
         </nav>
         <div className="lp-nav-actions">
+          <SocialLinks />
           {ADMIN_ENABLED && (
             <Link to="/admin/login" className="lp-admin-link">
               Quản trị
@@ -107,6 +109,7 @@ function Nav() {
                 Quản trị
               </Link>
             )}
+            <SocialLinks />
           </div>
         </div>
       )}

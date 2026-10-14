@@ -1,0 +1,6 @@
+# Thông tin liên hệ công khai của Sổ Nghe Lời, đọc lúc build (vite.config.ts).
+# Để trống một mục thì trang không hiện mục đó. Sửa xong phải chạy lại `npm run dev`.
+contact_email: songheloi.vn@gmail.com
+social:
+  facebook: https://www.facebook.com/profile.php?id=61594879606205
+  tiktok: https://www.tiktok.com/@songheloi.vn

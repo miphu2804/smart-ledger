@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { ADMIN_ENABLED } from '../../config'
 import Logo from '../../components/Logo'
 import { CONTACT_EMAIL } from '../legal/legalConfig'
+import SocialLinks from './SocialLinks'
 
 /** `onHome`: đang ở trang chủ thì dùng neo trong trang (#x), nơi khác thì quay về trang chủ rồi tới neo (/#x). */
 export default function SiteFooter({ onHome = false }: { onHome?: boolean }) {
@@ -17,6 +18,7 @@ export default function SiteFooter({ onHome = false }: { onHome?: boolean }) {
                 <Logo />
               </Link>
               <p>Sổ bán hàng AI cho quán nhỏ Việt Nam. Miệng nói, sổ ghi.</p>
+              <SocialLinks />
             </div>
             <nav className="lp-footer-col" aria-label="Sản phẩm">
               <h4>Sản phẩm</h4>
