@@ -4,11 +4,13 @@
  *
  *   npm run voice:eval                       # bảng chỉ số dev + test, độ trễ trên catalog 1.000 món
  *   npm run voice:eval -- --failures dev     # in câu sai của tập dev (chỉ soát lỗi trên dev, không trên test)
+ *   npm run voice:eval -- --asr eval/asr/chunkformer-lm.jsonl   # chấm thêm transcript của một hệ STT (lặp --asr được)
  *
  * Bộ câu là câu tự soạn, chưa phải câu thật của người dùng: `eval/gold.jsonl` (bộ chính, dev/test) và `eval/free.jsonl`
  * (câu cấu trúc tự do: "mỗi thứ", "cũng vậy", sửa lời, số bàn…; tách `free-dev`/`free-test`).
  */
 import { readFileSync } from 'node:fs';
+import { basename, resolve } from 'node:path';
 import { parseOrder as baselineParse, type ParseableProduct } from '../../src/lib/parseOrder';
 import { parseOrderDetailed as pocParse, ruleTagger } from '../../src/lib/voiceParse';
 import { bigCatalog } from './lexicon';
@@ -37,6 +39,7 @@ const COLUMNS = Object.keys(PARSERS);
 const args = process.argv.slice(2);
 const failuresSplit = args.includes('--failures') ? (args[args.indexOf('--failures') + 1] ?? 'dev') : null;
 const failuresParser = args.includes('--parser') ? args[args.indexOf('--parser') + 1] : 'poc';
+const asrFiles = args.flatMap((a, i) => (a === '--asr' && args[i + 1] ? [args[i + 1]] : []));
 
 const scores: Record<string, CaseScore[]> = {};
 for (const [name, parse] of Object.entries(PARSERS)) {
@@ -115,6 +118,68 @@ function latency() {
   }
 }
 
+// ─── Transcript của STT (`--asr`) ──────────────────────────────────────────────
+// Mỗi dòng file: {"id": "<id câu vàng>", "text": "<transcript>"}. Câu vàng được đọc lên rồi đưa qua STT; ở đây chấm WER/CER
+// của transcript so với câu vàng và chấm parser PoC trên transcript (so với cùng câu khi đọc thẳng chữ vàng).
+
+/** Âm tiết để tính WER: chữ thường, giữ dấu (dấu thanh sai là lỗi STT), bỏ dấu câu. */
+const syllables = (text: string) =>
+  text
+    .normalize('NFC')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{M}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+
+function editDistance<T>(a: T[], b: T[]): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur.push(Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+function asrTable(file: string) {
+  const transcripts = new Map(
+    readFileSync(resolve(file), 'utf8')
+      .split('\n')
+      .filter((l) => l.trim())
+      .map((l) => JSON.parse(l) as { id: string; text: string })
+      .map((r) => [r.id, r.text] as const),
+  );
+  const name = basename(file).replace(/\.jsonl$/, '');
+  const unknownIds = [...transcripts.keys()].filter((id) => !gold.some((g) => g.id === id));
+  console.log(`\n## STT \`${name}\` (${transcripts.size} transcript${unknownIds.length ? `, ${unknownIds.length} id không có trong bộ vàng` : ''})\n`);
+  console.log('Chữ vàng = parser chạy trên câu vàng; STT = parser chạy trên transcript của cùng các câu đó.\n');
+  console.log('| Tập | Số câu | WER | CER | Exact theo món: chữ vàng → STT | Tự nhận sai: chữ vàng → STT | Hỏi lại: chữ vàng → STT |');
+  console.log('|---|---|---|---|---|---|---|');
+  for (const split of ['dev', 'test', 'free-dev', 'free-test']) {
+    const idx = gold.map((g, i) => (g.split === split && transcripts.has(g.id) ? i : -1)).filter((i) => i >= 0);
+    if (!idx.length) continue;
+    const golds = idx.map((i) => gold[i]);
+    let wordErr = 0;
+    let words = 0;
+    let charErr = 0;
+    let chars = 0;
+    for (const g of golds) {
+      const ref = syllables(g.text);
+      const hyp = syllables(transcripts.get(g.id) ?? '');
+      wordErr += editDistance(ref, hyp);
+      words += ref.length;
+      charErr += editDistance([...ref.join(' ')], [...hyp.join(' ')]);
+      chars += ref.join(' ').length;
+    }
+    const oracle = aggregate(idx.map((i) => scores.poc[i]), golds);
+    const heard = aggregate(golds.map((g) => scoreCase(g, pocParse(transcripts.get(g.id) ?? '', catalogs[g.catalog]))), golds);
+    const arrow = (f: (m: Metrics) => string) => `${f(oracle)} → ${f(heard)}`;
+    console.log(
+      `| ${split} | ${idx.length} | ${pct(wordErr / words)} | ${pct(charErr / chars)} | ${arrow((m) => pct(m.lineExact))} | ${arrow((m) => pct(m.wrongAcceptRate))} | ${arrow((m) => pct(m.askRate))} |`,
+    );
+  }
+}
+
 if (failuresSplit) {
   for (const [i, g] of gold.entries()) {
     const s = scores[failuresParser][i];
@@ -129,6 +194,7 @@ if (failuresSplit) {
   byCategory('test');
   for (const split of ['free-dev', 'free-test']) if (count(split)) table(split);
   if (count('free-test')) byCategory('free-test');
-  latency();
+  for (const file of asrFiles) asrTable(file);
+  if (!asrFiles.length) latency();
   process.exitCode = test.regressions ? 1 : 0;
 }
