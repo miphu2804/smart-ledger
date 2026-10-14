@@ -41,6 +41,12 @@ class AppConfig(BaseSettings):
     LANGFUSE_SECRET_KEY: str | None = None
     LANGFUSE_HOST: str | None = None
 
+    # logfire: Pydantic AI traces without message content (src/observability.py);
+    # an unset token sends nothing
+    LOGFIRE_TOKEN: str | None = None
+    # staging or production, so one Logfire project can hold both
+    LOGFIRE_ENVIRONMENT: str | None = None
+
     # model provider: the API the model speaks, one of openai (Responses API),
     # openai-chat (/chat/completions) or anthropic (/v1/messages)
     MODEL_PROVIDER: str = "anthropic"

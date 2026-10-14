@@ -298,6 +298,23 @@ jobs:
               printf '%s' "${!name}" | railway variable set "$name" --stdin --service ai --skip-deploys
             fi
           done
+      # GitHub also owns the Logfire token (backend/ai/README.md#tracing-logfire), one per
+      # environment, so it is rotated in one place. The environment name and the deployed commit
+      # are derived here, so each trace shows which environment and release produced it. An unset
+      # token leaves the Railway value untouched.
+      - name: Sync ai tracing settings
+        env:
+          LOGFIRE_TOKEN: ${{ secrets.LOGFIRE_TOKEN }}
+          LOGFIRE_ENVIRONMENT: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+          LOGFIRE_SERVICE_VERSION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          for name in LOGFIRE_TOKEN LOGFIRE_ENVIRONMENT LOGFIRE_SERVICE_VERSION; do
+            if [[ -n "${!name}" ]]; then
+              # stdin keeps the token out of the runner's process list
+              printf '%s' "${!name}" | railway variable set "$name" --stdin --service ai --skip-deploys
+            fi
+          done
       # AI first: Core calls AI, so the new Core should not start against an old AI.
       - name: Deploy ai
         id: deploy_ai
