@@ -10,7 +10,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { parseOrder as baselineParse, type ParseableProduct } from '../../src/lib/parseOrder';
-import { CRF_MODEL, crfTagger, parseOrderDetailed as pocParse } from '../../src/lib/voiceParse';
+import { parseOrderDetailed as pocParse, ruleTagger } from '../../src/lib/voiceParse';
 import { bigCatalog } from './lexicon';
 import { aggregate, type CaseScore, type GoldCase, type Metrics, type ScoredResult, scoreCase } from './eval/score';
 
@@ -25,13 +25,12 @@ const readSet = (file: string, prefix = '') =>
 const gold = [...readSet('./eval/gold.jsonl'), ...readSet('./eval/free.jsonl', 'free-')];
 
 type Parser = (text: string, products: ParseableProduct[]) => ScoredResult;
-const crf = crfTagger(CRF_MODEL);
-// poc: mặc định (luật trước, CRF cho câu luật không hiểu); poc-luat / poc-crf: chỉ một tagger, để so sánh
+// poc: mặc định (CRF trước, tagger luật cho câu CRF không tự nhận được); poc-luat / poc-crf: chỉ một tagger, để so sánh
 const PARSERS: Record<string, Parser> = {
   baseline: baselineParse,
   poc: (t, p) => pocParse(t, p),
-  'poc-luat': (t, p) => pocParse(t, p, { fallbackTagger: undefined }),
-  'poc-crf': (t, p) => pocParse(t, p, { tagger: crf, fallbackTagger: undefined }),
+  'poc-luat': (t, p) => pocParse(t, p, { tagger: ruleTagger, fallbackTagger: undefined }),
+  'poc-crf': (t, p) => pocParse(t, p, { fallbackTagger: undefined }),
 };
 const COLUMNS = Object.keys(PARSERS);
 

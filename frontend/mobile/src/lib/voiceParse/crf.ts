@@ -74,16 +74,13 @@ const logSumExp = (xs: Float64Array | number[]) => {
   return m + Math.log(sum);
 };
 
-/** Xác suất biên P(nhãn y ở token t | câu) bằng forward-backward; marginals[t][y], cùng thứ tự nhãn với `model.labels`. */
-export function marginals(model: CrfModel, features: string[][]): Float64Array[] {
-  const T = features.length;
+/** Forward (log): alpha[t][y] = log tổng điểm các chuỗi nhãn của token 0..t kết thúc bằng y. */
+function forward(model: CrfModel, score: Float64Array[]): Float64Array[] {
   const L = model.labels.length;
-  if (!T) return [];
-  const score = stateScores(model, features);
   const tr = model.transitions;
   const alpha: Float64Array[] = [Float64Array.from(score[0])];
   const tmp = new Float64Array(L);
-  for (let t = 1; t < T; t++) {
+  for (let t = 1; t < score.length; t++) {
     const a = new Float64Array(L);
     for (let j = 0; j < L; j++) {
       for (let i = 0; i < L; i++) tmp[i] = alpha[t - 1][i] + tr[i][j];
@@ -91,6 +88,18 @@ export function marginals(model: CrfModel, features: string[][]): Float64Array[]
     }
     alpha.push(a);
   }
+  return alpha;
+}
+
+/** Xác suất biên P(nhãn y ở token t | câu) bằng forward-backward; marginals[t][y], cùng thứ tự nhãn với `model.labels`. */
+export function marginals(model: CrfModel, features: string[][]): Float64Array[] {
+  const T = features.length;
+  const L = model.labels.length;
+  if (!T) return [];
+  const score = stateScores(model, features);
+  const tr = model.transitions;
+  const alpha = forward(model, score);
+  const tmp = new Float64Array(L);
   const beta: Float64Array[] = new Array(T);
   beta[T - 1] = new Float64Array(L);
   for (let t = T - 2; t >= 0; t--) {
@@ -103,4 +112,99 @@ export function marginals(model: CrfModel, features: string[][]): Float64Array[]
   }
   const logZ = logSumExp(alpha[T - 1]);
   return alpha.map((a, t) => a.map((v, y) => Math.exp(v + beta[t][y] - logZ)));
+}
+
+/** P(chuỗi nhãn | câu) = exp(điểm của chuỗi − log Z). */
+export function sequenceProb(model: CrfModel, features: string[][], labels: readonly string[]): number {
+  const T = features.length;
+  if (!T) return 1;
+  const score = stateScores(model, features);
+  const ys = labels.map((l) => model.labels.indexOf(l));
+  let s = score[0][ys[0]];
+  for (let t = 1; t < T; t++) s += model.transitions[ys[t - 1]][ys[t]] + score[t][ys[t]];
+  return Math.exp(s - logSumExp(forward(model, score)[T - 1]));
+}
+
+/**
+ * k chuỗi nhãn có điểm cao nhất (list Viterbi), giảm dần, kèm xác suất P(chuỗi | câu). Dùng để tính độ tin cậy theo kết
+ * quả: cộng xác suất các chuỗi cho ra cùng đơn hàng, vì nhiều chuỗi nhãn khác nhau (ví dụ "vỉ" là UNIT hay O) vẫn cho
+ * cùng một kết quả. Mỗi ô (t, nhãn) giữ k đường tốt nhất; ghép k đường từ L ô trước bằng trộn L danh sách đã sắp xếp.
+ */
+export function nBest(model: CrfModel, features: string[][], k: number): Array<{ labels: string[]; prob: number }> {
+  const T = features.length;
+  const L = model.labels.length;
+  if (!T || k < 1) return [];
+  const score = stateScores(model, features);
+  const tr = model.transitions;
+  // Ô (t, y) có cnt[t][y] đường; đường thứ r: điểm s[t][y*k+r], nhãn trước bi[..], hạng của đường trước br[..]
+  const s: Float64Array[] = [];
+  const bi: Int32Array[] = [];
+  const br: Int32Array[] = [];
+  const cnt: Int32Array[] = [];
+  s.push(new Float64Array(L * k));
+  bi.push(new Int32Array(L * k).fill(-1));
+  br.push(new Int32Array(L * k).fill(-1));
+  cnt.push(new Int32Array(L).fill(1));
+  for (let y = 0; y < L; y++) s[0][y * k] = score[0][y];
+  const head = new Int32Array(L);
+  for (let t = 1; t < T; t++) {
+    const ps = s[t - 1];
+    const pc = cnt[t - 1];
+    const cs = new Float64Array(L * k);
+    const ci = new Int32Array(L * k);
+    const cr = new Int32Array(L * k);
+    const cc = new Int32Array(L);
+    for (let j = 0; j < L; j++) {
+      head.fill(0);
+      let n = 0;
+      while (n < k) {
+        let bestI = -1;
+        let best = -Infinity;
+        for (let i = 0; i < L; i++) {
+          if (head[i] >= pc[i]) continue;
+          const v = ps[i * k + head[i]] + tr[i][j];
+          if (best < v) {
+            best = v;
+            bestI = i;
+          }
+        }
+        if (bestI < 0) break;
+        cs[j * k + n] = best + score[t][j];
+        ci[j * k + n] = bestI;
+        cr[j * k + n] = head[bestI]++;
+        n++;
+      }
+      cc[j] = n;
+    }
+    s.push(cs);
+    bi.push(ci);
+    br.push(cr);
+    cnt.push(cc);
+  }
+  const logZ = logSumExp(forward(model, score)[T - 1]);
+  const out: Array<{ labels: string[]; prob: number }> = [];
+  head.fill(0);
+  const last = s[T - 1];
+  while (out.length < k) {
+    let bestY = -1;
+    let best = -Infinity;
+    for (let y = 0; y < L; y++) {
+      if (head[y] < cnt[T - 1][y] && best < last[y * k + head[y]]) {
+        best = last[y * k + head[y]];
+        bestY = y;
+      }
+    }
+    if (bestY < 0) break;
+    const labels = new Array<string>(T);
+    let y = bestY;
+    let r = head[bestY]++;
+    for (let t = T - 1; t >= 0; t--) {
+      labels[t] = model.labels[y];
+      const at = y * k + r;
+      y = bi[t][at];
+      r = br[t][at];
+    }
+    out.push({ labels, prob: Math.exp(best - logZ) });
+  }
+  return out;
 }
