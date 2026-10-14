@@ -80,7 +80,10 @@ Enter each value once and reuse it with a [reference variable](https://docs.rail
 | `POSTGRES_URL` | Supabase of the matching environment (`postgresql://…`) |
 | `AI_SQL_READER_URL` | Read-only `ai_sql_reader` login (AI baseline in `supabase/migrations/`); when empty, the agent cannot read shop data |
 | `REDIS_URL` | Redis Cloud of the matching environment |
-| `OPENAI_API_KEY` | Model provider key |
+| `OPENAI_API_KEY` | Model gateway key, shared by every model (OpenAI or OpenCode Go) |
+| `OPENAI_BASE_URL` | Empty for OpenAI; `https://opencode.ai/inference/go/v1` for OpenCode Go |
+| `MODEL_PROVIDER`, `MODEL_NAME` | Primary model and the API it speaks (`openai`, `openai-chat`, `anthropic`); see [`backend/ai/README.md`](../../backend/ai/README.md) |
+| `MODEL_FALLBACKS` | Optional JSON list of `provider:model`, e.g. `["openai-chat:deepseek-v4.1-flash","anthropic:claude-haiku-5-5"]` |
 
 - `ai` has no public domain; `core` calls it over the private network. Port `8001` is AI's default `SERVER_PORT`, not the `PORT` Railway assigns, so changing `SERVER_PORT` on `ai` requires updating `AI_BASE_URL`.
 - Variables have local defaults (`AI_BASE_URL` defaults to `http://localhost:8001`), so a missing variable on Railway still reports a successful deploy while Core cannot reach AI. After changing variables, run one chat through Core on staging.
