@@ -57,3 +57,25 @@ const pickRow = [...plateau].sort(
   (a, b) => support(b) - support(a) || Math.hypot(a.tau - center.tau, a.delta - center.delta) - Math.hypot(b.tau - center.tau, b.delta - center.delta),
 )[0];
 console.log(`Chọn τ = ${pickRow.tau.toFixed(2)}, δ = ${pickRow.delta.toFixed(2)} (${support(pickRow)}/25 cặp lân cận cùng tốt nhất)`);
+
+// Ngưỡng tin cậy CRF (chỉ áp cho câu do CRF gắn nhãn): dev chính + free-dev. Chọn ngưỡng cao nhất chưa làm giảm kết quả
+// so với tắt ngưỡng, để có biên an toàn mà không trả giá trên dev.
+const freeDev = readFileSync(here('./eval/free.jsonl'), 'utf8')
+  .split('\n')
+  .filter((l) => l.trim())
+  .map((l) => JSON.parse(l) as GoldCase)
+  .filter((g) => g.split === 'dev');
+const both = [...dev, ...freeDev];
+const at = (minConfidence: number) => {
+  const scores = both.map((g) => scoreCase(g, parseOrderDetailed(g.text, catalogs[g.catalog], { tau: pickRow.tau, delta: pickRow.delta, minConfidence })));
+  return aggregate(scores, both);
+};
+const base = at(0);
+console.log(`\nNgưỡng tin cậy CRF trên dev + free-dev (${both.length} câu):\n\n| θ | Exact theo món | Tự nhận sai | Hỏi lại |\n|---|---|---|---|`);
+let chosen = 0;
+for (const theta of [0, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]) {
+  const m = at(theta);
+  console.log(`| ${theta.toFixed(1)} | ${pct(m.lineExact)} | ${pct(m.wrongAcceptRate)} | ${pct(m.askRate)} |`);
+  if (m.lineExact >= base.lineExact && m.wrongAcceptRate <= base.wrongAcceptRate) chosen = theta;
+}
+console.log(`Chọn θ = ${chosen.toFixed(1)}`);

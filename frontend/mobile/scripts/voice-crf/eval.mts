@@ -5,29 +5,33 @@
  *   npm run voice:eval                       # bảng chỉ số dev + test, độ trễ trên catalog 1.000 món
  *   npm run voice:eval -- --failures dev     # in câu sai của tập dev (chỉ soát lỗi trên dev, không trên test)
  *
- * Bộ câu là câu tự soạn (eval/gold.jsonl), chưa phải câu thật của người dùng.
+ * Bộ câu là câu tự soạn, chưa phải câu thật của người dùng: `eval/gold.jsonl` (bộ chính, dev/test) và `eval/free.jsonl`
+ * (câu cấu trúc tự do: "mỗi thứ", "cũng vậy", sửa lời, số bàn…; tách `free-dev`/`free-test`).
  */
 import { readFileSync } from 'node:fs';
 import { parseOrder as baselineParse, type ParseableProduct } from '../../src/lib/parseOrder';
-import { crfTagger, parseOrderDetailed as pocParse } from '../../src/lib/voiceParse';
-import type { CrfModel } from '../../src/lib/voiceParse/crf';
+import { CRF_MODEL, crfTagger, parseOrderDetailed as pocParse } from '../../src/lib/voiceParse';
 import { bigCatalog } from './lexicon';
 import { aggregate, type CaseScore, type GoldCase, type Metrics, type ScoredResult, scoreCase } from './eval/score';
 
 const here = (p: string) => new URL(p, import.meta.url);
 const catalogs = JSON.parse(readFileSync(here('./eval/catalogs.json'), 'utf8')) as Record<string, ParseableProduct[]>;
-const gold = readFileSync(here('./eval/gold.jsonl'), 'utf8')
-  .split('\n')
-  .filter((l) => l.trim())
-  .map((l) => JSON.parse(l) as GoldCase);
+const readSet = (file: string, prefix = '') =>
+  readFileSync(here(file), 'utf8')
+    .split('\n')
+    .filter((l) => l.trim())
+    .map((l) => JSON.parse(l) as GoldCase)
+    .map((g) => ({ ...g, split: `${prefix}${g.split}` as GoldCase['split'] }));
+const gold = [...readSet('./eval/gold.jsonl'), ...readSet('./eval/free.jsonl', 'free-')];
 
 type Parser = (text: string, products: ParseableProduct[]) => ScoredResult;
-const crfModel = JSON.parse(readFileSync(here('../../src/lib/voiceParse/crf-model.json'), 'utf8')) as CrfModel;
-const crf = crfTagger(crfModel);
+const crf = crfTagger(CRF_MODEL);
+// poc: mặc định (luật trước, CRF cho câu luật không hiểu); poc-luat / poc-crf: chỉ một tagger, để so sánh
 const PARSERS: Record<string, Parser> = {
   baseline: baselineParse,
   poc: (t, p) => pocParse(t, p),
-  'poc-crf': (t, p) => pocParse(t, p, { tagger: crf }),
+  'poc-luat': (t, p) => pocParse(t, p, { fallbackTagger: undefined }),
+  'poc-crf': (t, p) => pocParse(t, p, { tagger: crf, fallbackTagger: undefined }),
 };
 const COLUMNS = Object.keys(PARSERS);
 
@@ -51,7 +55,7 @@ const ROWS: Array<[string, (m: Metrics) => string, string]> = [
   ['Khoản chi đúng số tiền', (m) => pct(m.expenseExact), ''],
 ];
 
-function table(split: 'dev' | 'test') {
+function table(split: string) {
   const idx = gold.map((g, i) => (g.split === split ? i : -1)).filter((i) => i >= 0);
   const golds = idx.map((i) => gold[i]);
   const metrics = Object.fromEntries(Object.entries(scores).map(([n, s]) => [n, aggregate(idx.map((i) => s[i]), golds)]));
@@ -65,11 +69,11 @@ function table(split: 'dev' | 'test') {
   console.log(`| Câu từ đúng thành sai (so với baseline) | — | ${others.map((n) => regress(n).length).join(' | ')} | 0 |`);
   console.log(`| Câu từ sai thành đúng | — | ${others.map(fixed).join(' | ')} | |`);
   // Chỉ in câu bị hỏng của dev: soát lỗi trên test là tune theo test
-  if (regressions.length && split === 'dev') console.log(`\nCâu bị hỏng: ${regressions.map((i) => gold[i].id).join(', ')}`);
+  if (regressions.length && split.endsWith('dev')) console.log(`\nCâu bị hỏng: ${regressions.map((i) => gold[i].id).join(', ')}`);
   return { metrics, regressions: regressions.length };
 }
 
-function byCategory(split: 'dev' | 'test') {
+function byCategory(split: string) {
   const cats = [...new Set(gold.filter((g) => g.split === split).map((g) => g.category))].sort();
   console.log(`\nExact match theo câu, từng nhóm (${split}):\n`);
   console.log(`| Nhóm | Số câu | ${COLUMNS.join(' | ')} |\n|---|---|${COLUMNS.map(() => '---|').join('')}`);
@@ -119,10 +123,13 @@ if (failuresSplit) {
     console.log(`${g.id} [${g.category}] ${JSON.stringify(g.text)}\n    ${s.problems.join('; ')}${g.note ? `\n    note: ${g.note}` : ''}`);
   }
 } else {
-  console.log(`# Voice parse eval — ${gold.length} câu tự soạn (dev ${gold.filter((g) => g.split === 'dev').length}, test ${gold.filter((g) => g.split === 'test').length})`);
+  const count = (split: string) => gold.filter((g) => g.split === split).length;
+  console.log(`# Voice parse eval — ${gold.length} câu tự soạn (dev ${count('dev')}, test ${count('test')}, free-dev ${count('free-dev')}, free-test ${count('free-test')})`);
   table('dev');
   const test = table('test');
   byCategory('test');
+  for (const split of ['free-dev', 'free-test']) if (count(split)) table(split);
+  if (count('free-test')) byCategory('free-test');
   latency();
   process.exitCode = test.regressions ? 1 : 0;
 }

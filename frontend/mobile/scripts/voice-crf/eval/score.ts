@@ -13,7 +13,7 @@ export type GoldLine =
 
 export interface GoldCase {
   id: string;
-  split: 'dev' | 'test';
+  split: 'dev' | 'test' | 'free-dev' | 'free-test';
   catalog: string;
   category: string;
   text: string;
