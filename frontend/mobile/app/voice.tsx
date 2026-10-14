@@ -31,7 +31,7 @@ import { abbr, hashIndex, hhmm, vnd } from '../src/lib/format';
 import { type PrepareProgress, type SpeechSession, speechEngine } from '../src/lib/speech';
 import { type ParsedExpenseItem, parseOrder } from '../src/lib/parseOrder';
 import { itemsTotal } from '../src/lib/stats';
-import { getProductImage } from '../src/lib/productImages';
+import { ProductImage } from '../src/components/ProductImage';
 import { useApp } from '../src/store/AppStore';
 import { colors, font, shadow } from '../src/theme';
 
@@ -974,16 +974,14 @@ export default function Voice() {
                 </View>
               ) : (
                 items.map((it, idx) => {
-                  const imageSrc = getProductImage(it.name);
-
                   return (
                     <Row key={`${it.productId ?? it.name}-${idx}`} style={styles.notebookItemRow}>
                       {/* Product Thumbnail Photo */}
                       <View style={styles.itemThumb}>
-                        <Image
-                          source={{ uri: imageSrc }}
+                        <ProductImage
+                          name={it.name}
+                          uri={products.find((p) => p.id === it.productId)?.imageUrl}
                           style={styles.itemThumbImage}
-                          resizeMode="cover"
                         />
                       </View>
 

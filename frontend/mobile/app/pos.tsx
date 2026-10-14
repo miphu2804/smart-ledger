@@ -2,7 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Image, Platform, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Animated, Platform, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarcodeScannerModal } from '../src/components/BarcodeScannerModal';
 import { useToast } from '../src/components/brand';
@@ -12,7 +12,7 @@ import { categoryApi, productApi } from '../src/lib/catalogApi';
 import { errorMessage } from '../src/lib/errors';
 import { triggerFeedback } from '../src/lib/feedback';
 import { abbr, hashIndex, normalizeText, vnd } from '../src/lib/format';
-import { getProductImage } from '../src/lib/productImages';
+import { ProductImage } from '../src/components/ProductImage';
 import { itemsTotal } from '../src/lib/stats';
 import { useApp } from '../src/store/AppStore';
 import { colors, font, shadow, WEB_FRAME_MAX_WIDTH } from '../src/theme';
@@ -332,11 +332,7 @@ function ProductCard({ product: p, inCart, viewMode, onAdd, onSubtract, onOutOfS
         accessibilityLabel={`${p.name}, giá ${vnd(p.sellingPriceVnd)}, đã chọn ${inCart}`}
       >
         <View style={styles.listThumb}>
-          <Image
-            source={{ uri: getProductImage(p.name, p.imageUrl) }}
-            style={styles.listThumbImage}
-            resizeMode="cover"
-          />
+          <ProductImage name={p.name} uri={p.imageUrl} style={styles.listThumbImage} letterSize={22} />
           {p.tracked ? (
             <View style={styles.listStockBadge}>
               <T w="bold" size={9.5} color={stock === 0 ? colors.red : salesColors.stockGreen}>
@@ -460,11 +456,7 @@ function ProductCard({ product: p, inCart, viewMode, onAdd, onSubtract, onOutOfS
         ) : null}
 
         {/* Product Photo */}
-        <Image
-          source={{ uri: getProductImage(p.name, p.imageUrl) }}
-          style={styles.productGridImage}
-          resizeMode="cover"
-        />
+        <ProductImage name={p.name} uri={p.imageUrl} style={styles.productGridImage} letterSize={56} />
       </View>
 
       {/* Info Area */}
@@ -930,11 +922,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
             style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: salesColors.borderLight, alignItems: 'center' }}
           >
             <View style={styles.cartItemThumbWrap}>
-              <Image
-                source={{ uri: getProductImage(it.name) }}
-                style={styles.cartItemThumb}
-                resizeMode="cover"
-              />
+              <ProductImage name={it.name} uri={products.find((x) => x.id === it.productId)?.imageUrl} style={styles.cartItemThumb} />
             </View>
             <View style={{ flex: 1, paddingRight: 8, marginLeft: 10 }}>
               <T w="semibold" size={14} color={salesColors.ink}>

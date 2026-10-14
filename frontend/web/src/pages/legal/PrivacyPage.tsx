@@ -102,12 +102,6 @@ export default function PrivacyPage() {
           </li>
         </ul>
 
-        <h3>Ảnh minh hoạ hàng hoá</h3>
-        <p>
-          Ảnh minh hoạ của một số mặt hàng được tải từ dịch vụ ảnh công khai Unsplash (images.unsplash.com). Khi đó nhà cung cấp ảnh nhận được địa
-          chỉ IP của thiết bị, giống mọi trang web hay ứng dụng tải ảnh từ bên ngoài.
-        </p>
-
         <h3>Không dùng cho quảng cáo</h3>
         <p>
           Chúng tôi không dùng dữ liệu bán hàng của bạn để quảng cáo và không bán dữ liệu cho bên thứ ba. Bộ công cụ Facebook trong ứng dụng được cấu
@@ -184,10 +178,6 @@ export default function PrivacyPage() {
             <tr>
               <th scope="row">Nhà cung cấp mô hình ngôn ngữ (cấu hình hiện tại: OpenAI)</th>
               <td>Chỉ khi bạn dùng trợ lý AI: nội dung câu hỏi và dữ liệu cửa hàng liên quan được gửi tới để tạo câu trả lời.</td>
-            </tr>
-            <tr>
-              <th scope="row">Unsplash</th>
-              <td>Cung cấp ảnh minh hoạ hàng hoá (xem mục 2).</td>
             </tr>
           </tbody>
         </table>
