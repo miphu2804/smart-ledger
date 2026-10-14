@@ -8,10 +8,13 @@ import { AssistantIntroModal } from '../../src/components/AssistantIntroModal';
 import { Button, Card, EmptyState, Row, T } from '../../src/components/ui';
 import { CountUp, Reveal, Skeleton } from '../../src/components/reveal';
 import { vnd } from '../../src/lib/format';
-import { buildNotifications, fromCoreNotification, isNotifUnread, mergeNotifications, notifCategoryMeta, totalUnread } from '../../src/lib/notifications';
-import { bestSellers, periodLabel, summary } from '../../src/lib/stats';
-import { useCoreData } from '../../src/lib/useCoreData';
+import { formatQuantity, restockRows, revenueChange as changeVsYesterday, topSellerRows } from '../../src/lib/homeOverview';
+import { fromCoreNotification, isNotifUnread, mergeNotifications, notifCategoryMeta, totalUnread } from '../../src/lib/notifications';
+import { reportPeriodOf } from '../../src/lib/saleFilter';
+import { periodLabel } from '../../src/lib/stats';
 import { useCoreNotifications } from '../../src/lib/useCoreNotifications';
+import { useHomeOverview } from '../../src/lib/useHomeOverview';
+import { useLocalNotifications } from '../../src/lib/useLocalNotifications';
 import { useApp } from '../../src/store/AppStore';
 import { colors } from '../../src/theme';
 
@@ -63,35 +66,39 @@ export default function Home() {
   );
   const now = new Date();
 
-  const { invoices, products, debts, expenses, loading, error, reload } = useCoreData({
-    invoices: true,
-    products: true,
-    debts: true,
-    expenses: true,
-  });
+  // Số liệu lấy từ báo cáo của Core (tính trên toàn tiệm ở Core), không tải toàn bộ đơn, hàng, nợ về máy để cộng.
+  // Chỉ lần đầu của mỗi kỳ mới hiện skeleton; quay lại màn hình hay đổi về kỳ đã xem thì giữ số cũ trong lúc làm mới.
+  const overview = useHomeOverview(reportPeriodOf(period) ?? 'today');
+  const local = useLocalNotifications();
+  const { error } = overview;
+  const reload = () => {
+    void overview.reload();
+    void local.reload();
+  };
+  const ready = !overview.loading && !error;
 
-  // `loading` chỉ true ở lần tải đầu (xem useCoreData) nên các lần tải lại khi focus giữ số cũ, không nháy.
-  const ready = !loading && !error;
-
-  // Báo cáo của kỳ đang chọn, tính từ dữ liệu Core; `undefined` khi chưa tải xong (hiện skeleton, không hiện số 0 giả).
-  const totals = useMemo(() => (ready ? summary(invoices, products, period) : undefined), [ready, invoices, products, period]);
-  const previousDay = useMemo(
-    () => (ready && period === 'today' ? summary(invoices, products, 'yesterday') : null),
-    [ready, invoices, products, period],
-  );
-  const topSellers = useMemo(() => (ready ? bestSellers(invoices, period).slice(0, 4) : []), [ready, invoices, period]);
-  const totalDebt = debts.reduce((total, debt) => total + Math.max(0, debt.total - debt.paid), 0);
-  const debtorCount = debts.filter((debt) => debt.total > debt.paid).length;
-  const lowStock = products.filter((product) => product.tracked && product.stock <= 6).sort((a, b) => a.stock - b.stock);
-  const priorityCount = Number(totalDebt > 0) + Number(lowStock.length > 0);
-  const revenueChange = totals && previousDay?.revenue ? (totals.revenue - previousDay.revenue) / previousDay.revenue : null;
+  // Doanh thu thuần (bán trong kỳ − huỷ trong kỳ) và số đơn bán trong kỳ, như màn Đơn hàng; `undefined` khi chưa có số.
+  const totals = overview.summary
+    ? {
+        count: overview.summary.orderCount,
+        revenue: overview.summary.netRevenueVnd,
+        // Kỳ có đơn bán hoặc đơn bị huỷ thì có doanh thu để hiện (có thể âm), không phải "Chưa có đơn"
+        active: overview.summary.orderCount > 0 || overview.summary.voidedOrderCount > 0,
+      }
+    : undefined;
+  const topSellers = topSellerRows(overview.top ?? []);
+  const totalDebt = overview.summary?.currentOutstandingDebtVnd ?? 0;
+  const openDebtCount = local.openDebtCount;
+  // Món cần nhập theo ngưỡng riêng của từng món (Core); chỉ nhắc 2 món, tổng số món ở `restockTotal`
+  const restockTotal = overview.restock?.total ?? 0;
+  const lowStock = restockRows(overview.restock?.items ?? []);
+  const priorityCount = Number(totalDebt > 0) + Number(restockTotal > 0);
+  const revenueChange =
+    period === 'today' && totals ? changeVsYesterday(totals.revenue, local.yesterday?.netRevenueVnd) : null;
   // Thông báo: kho hàng, đơn bị huỷ và tình trạng tiệm lấy từ inbox Core (chỉ cần trang đầu để xem trước); đơn mới, công nợ, thu chi tính trên máy.
   const coreNotifications = useCoreNotifications(5);
   const coreNotifs = useMemo(() => coreNotifications.items.map(fromCoreNotification), [coreNotifications.items]);
-  const localNotifications = useMemo(
-    () => (ready ? buildNotifications({ invoices, products, expenses, debts }) : []),
-    [ready, invoices, products, expenses, debts],
-  );
+  const localNotifications = local.notifications;
   const notifications = useMemo(
     () => mergeNotifications(localNotifications, coreNotifs, coreNotifications.hasMore),
     [localNotifications, coreNotifs, coreNotifications.hasMore],
@@ -218,17 +225,20 @@ export default function Home() {
                     icon="collectDebt"
                     tone="warning"
                     title="Thu khoản còn nợ"
-                    subtitle={`${debtorCount} khách · ${vnd(totalDebt)} chưa thu`}
+                    subtitle={`${openDebtCount != null ? `${openDebtCount} khoản nợ · ` : ''}${vnd(totalDebt)} chưa thu`}
                     onPress={() => router.push('/debts')}
-                    last={lowStock.length === 0}
+                    last={restockTotal === 0}
                   />
                 ) : null}
-                {lowStock.length > 0 ? (
+                {restockTotal > 0 ? (
                   <PriorityRow
                     icon="lowStock"
                     tone="danger"
                     title="Kiểm tra hàng sắp hết"
-                    subtitle={lowStock.slice(0, 2).map((product) => `${product.name} còn ${product.stock}`).join(' · ')}
+                    subtitle={
+                      lowStock.map((product) => `${product.name} còn ${formatQuantity(product.stockQuantity ?? 0)}`).join(' · ') +
+                      (restockTotal > lowStock.length ? ` · và ${restockTotal - lowStock.length} món khác` : '')
+                    }
                     onPress={() => router.push({ pathname: '/products', params: { tab: 'low' } })}
                     last
                   />
@@ -253,7 +263,7 @@ export default function Home() {
                     <Reveal>
                       <T size={13} color={colors.muted} style={{ lineHeight: 20 }}>
                         {topSeller
-                          ? `${topSeller.name} bán nhiều nhất trong kỳ, đã bán ${topSeller.qty}. Xem số liệu trước khi chuẩn bị thêm.`
+                          ? `${topSeller.productName} bán nhiều nhất trong kỳ, đã bán ${formatQuantity(topSeller.netQuantity)} ${topSeller.unit}. Xem số liệu trước khi chuẩn bị thêm.`
                           : 'Chưa đủ dữ liệu đơn đã chốt trong kỳ để đưa ra gợi ý.'}
                       </T>
                       <T size={12} color={colors.faint} style={{ marginTop: 5 }}>
@@ -286,20 +296,24 @@ export default function Home() {
               ) : topSellers.length ? (
                 topSellers.map((seller, index) => (
                   <Row
-                    key={seller.productId ?? seller.name}
+                    key={seller.itemKey}
                     style={[styles.sellerRow, index < topSellers.length - 1 && styles.rowBorder]}
                   >
                     <T w="bold" size={12} color={colors.muted} style={{ width: 22 }}>
                       {index + 1}
                     </T>
                     <T w="semibold" size={14} style={{ flex: 1 }} numberOfLines={1}>
-                      {seller.name}
+                      {seller.productName}
                     </T>
                     <T w="bold" size={14} color={colors.primary}>
-                      {seller.qty} phần
+                      {formatQuantity(seller.netQuantity)} {seller.unit}
                     </T>
                   </Row>
                 ))
+              ) : overview.topError ? (
+                <T size={13} color={colors.muted} style={{ paddingVertical: 13, textAlign: 'center' }}>
+                  Không tải được món bán chạy: {overview.topError}
+                </T>
               ) : (
                 <T size={13} color={colors.muted} style={{ paddingVertical: 13, textAlign: 'center' }}>
                   Chưa có đơn trong kỳ
@@ -399,7 +413,7 @@ export default function Home() {
               </Row>
               {!totals ? (
                 <Skeleton width={190} height={34} radius={10} style={{ marginTop: 8 }} />
-              ) : totals.count ? (
+              ) : totals.active ? (
                 <CountUp value={totals.revenue} format={vnd} w="extrabold" size={34} numberOfLines={1} adjustsFontSizeToFit style={styles.expandedRevenueValue} />
               ) : (
                 <T w="extrabold" size={18} style={{ marginTop: 10 }}>Chưa có đơn trong kỳ</T>
@@ -540,7 +554,7 @@ export default function Home() {
                 </View>
                 {!totals ? (
                   <Skeleton width={110} height={20} radius={6} style={{ marginTop: 2 }} />
-                ) : totals.count ? (
+                ) : totals.active ? (
                   <CountUp
                     value={totals.revenue}
                     format={vnd}

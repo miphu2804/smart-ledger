@@ -7,7 +7,6 @@ import { Badge, Button, Card, Chips, EmptyState, Header, Row, Screen, T } from '
 import { errorMessage } from '../src/lib/errors';
 import { hhmm, relDay } from '../src/lib/format';
 import {
-  buildNotifications,
   fromCoreNotification,
   isNotifUnread,
   mergeNotifications,
@@ -17,7 +16,7 @@ import {
   notifCategoryMeta,
   totalUnread,
 } from '../src/lib/notifications';
-import { useCoreData } from '../src/lib/useCoreData';
+import { useLocalNotifications } from '../src/lib/useLocalNotifications';
 import { useCoreNotifications } from '../src/lib/useCoreNotifications';
 import { useApp } from '../src/store/AppStore';
 import { triggerFeedback } from '../src/lib/feedback';
@@ -33,23 +32,17 @@ export default function Notifications() {
   const app = useApp();
   const toast = useToast();
   const [filter, setFilter] = useState<Filter>('all');
-  const { invoices, products, debts, expenses, loading, error, reload } = useCoreData({
-    invoices: true,
-    products: true,
-    debts: true,
-    expenses: true,
-  });
+  // Thông báo trên máy (đơn mới, công nợ, thu chi) dựng từ vài lần gọi nhỏ, dùng chung với Tổng quan để chuông và màn này đếm như nhau
+  const localData = useLocalNotifications();
+  const { loading, error, reload } = localData;
   const core = useCoreNotifications();
 
-  // `loading` chỉ true ở lần tải đầu (xem useCoreData) nên các lần tải lại khi focus giữ danh sách cũ, không nháy.
+  // `loading` chỉ true ở lần tải đầu nên các lần tải lại khi focus giữ danh sách cũ, không nháy.
   const dataReady = !loading && !error;
   const ready = dataReady && !core.loading;
 
   // Chưa tải xong thì không dựng thông báo (tránh hiện "Chưa có thông báo" sai khi dữ liệu còn rỗng).
-  const local = useMemo(
-    () => (dataReady ? buildNotifications({ invoices, products, expenses, debts }) : []),
-    [dataReady, invoices, products, expenses, debts],
-  );
+  const local = dataReady ? localData.notifications : [];
   const coreNotifs = useMemo(() => core.items.map(fromCoreNotification), [core.items]);
   const all = useMemo(() => mergeNotifications(local, coreNotifs, core.hasMore), [local, coreNotifs, core.hasMore]);
   const read = useMemo(() => new Set(app.readNotifs), [app.readNotifs]);
