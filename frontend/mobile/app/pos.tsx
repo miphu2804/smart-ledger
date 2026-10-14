@@ -929,7 +929,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
       <Sheet visible={cartOpen} onClose={() => setCartOpen(false)} title="Đơn đang chọn">
         {cartItems.map((it) => (
           <Row
-            key={`${it.productId ?? it.custom?.barcode ?? it.name}`}
+            key={it.custom ? `custom:${it.custom.barcode}` : it.productId != null ? `product:${it.productId}` : `name:${it.name}`}
             style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: salesColors.borderLight, alignItems: 'center' }}
           >
             <View style={styles.cartItemThumbWrap}>

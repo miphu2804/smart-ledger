@@ -232,6 +232,10 @@ export function BarcodeScannerModal({
   // Tồn còn bán được của một món: món không theo dõi tồn thì không giới hạn.
   const stockLeft = (p: ProductView) => (p.tracked ? p.stockQuantity ?? 0 : Infinity);
 
+  // Món tạm cần chỗ giữ: đơn nội bộ của màn quét, hoặc `onCustomLine` khi đơn do nơi gọi giữ. Nơi gọi truyền `cartItems`
+  // mà không truyền `onCustomLine` thì không có ô tick và không thêm, sửa được món tạm (món sẽ biến mất sau khi "lưu").
+  const canHoldCustomLines = mode === 'order' && (!externalCartItems || !!onCustomLine);
+
   // Đặt một món tạm vào đơn (thêm, đổi số lượng hoặc tên giá; `qty <= 0` là bỏ): đơn do nơi gọi giữ thì báo nơi gọi.
   const setCustomLine = (line: LineItem) => {
     if (externalCartItems) onCustomLine?.(line);
@@ -493,7 +497,7 @@ export function BarcodeScannerModal({
     }
 
     // Món tạm của chính đơn này (không có ở Core nên tra mã sẽ không thấy): quét lại thì cộng 1 như món thường.
-    const customLine = displayItems.find((i) => i.custom?.barcode === code);
+    const customLine = canHoldCustomLines ? displayItems.find((i) => i.custom?.barcode === code) : undefined;
     if (customLine) {
       setUnknownCode(null);
       playScanSuccessSound();
@@ -579,7 +583,7 @@ export function BarcodeScannerModal({
 
   // Mở lại thẻ đó để sửa một món tạm đang có trong đơn (tên, giá, đơn vị, số lượng)
   const handleEditCustom = (item: LineItem) => {
-    if (!item.custom?.barcode) return;
+    if (!item.custom?.barcode || !canHoldCustomLines) return;
     setConfigModalCode(item.custom.barcode);
     setConfigName(item.name);
     setConfigPrice(String(item.price));
@@ -609,7 +613,7 @@ export function BarcodeScannerModal({
     }
 
     // Bỏ chọn "Lưu vào danh mục": món chỉ vào đơn này, không gọi Core. Lúc thanh toán đơn gửi nó như món tuỳ ý.
-    if (configEditingCustom || (mode === 'order' && !configSaveToCatalog)) {
+    if (canHoldCustomLines && (configEditingCustom || !configSaveToCatalog)) {
       const customCode = configModalCode;
       if (!customCode) return;
       setCustomLine({
@@ -1101,7 +1105,7 @@ export function BarcodeScannerModal({
                 </View>
               )}
 
-              {mode === 'order' && !configEditingCustom && (
+              {canHoldCustomLines && !configEditingCustom && (
                 <Pressable
                   onPress={() => setConfigSaveToCatalog((on) => !on)}
                   style={S.saveToCatalogRow}

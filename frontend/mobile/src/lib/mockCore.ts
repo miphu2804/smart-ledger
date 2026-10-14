@@ -683,6 +683,13 @@ function createSaleDraft(body: SaleDraftWriteBody): SaleDraftView {
   const seenProductIds = new Set<number>();
   let subtotal = 0;
   const items: SaleDraftItemView[] = body.items.map((item) => {
+    // Như Core (`SaleDraftItemRequest`): số lượng dương, đơn giá là số nguyên từ 0, cho mọi dòng kể cả món tuỳ ý
+    if (!Number.isFinite(item.quantity) || item.quantity <= 0) {
+      throw apiErr(400, 'validation_failed', 'quantity must be greater than 0.');
+    }
+    if (!Number.isInteger(item.unitPriceVnd) || item.unitPriceVnd < 0) {
+      throw apiErr(400, 'validation_failed', 'unitPriceVnd must be 0 or more.');
+    }
     const lineTotalVnd = Math.round(item.unitPriceVnd * item.quantity);
     if (item.productId == null) {
       // Món tuỳ ý: phải có tên và đơn vị. Core không tạo mặt hàng, không trừ tồn và coi mỗi dòng là độc lập.
