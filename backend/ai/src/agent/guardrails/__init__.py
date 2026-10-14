@@ -1,9 +1,5 @@
-"""Deterministic guardrails of the shop agent, one module per guardrail."""
+"""Guardrails of the shop agent, applied through `GuardrailService`."""
 
-from src.agent.guardrails.agent_guardrails import (
-    AgentGuardrails,
-    GuardrailError,
-    GuardrailLimits,
-)
+from src.agent.guardrails.service import GuardrailLimits, GuardrailService
 
-__all__ = ["AgentGuardrails", "GuardrailError", "GuardrailLimits"]
+__all__ = ["GuardrailLimits", "GuardrailService"]

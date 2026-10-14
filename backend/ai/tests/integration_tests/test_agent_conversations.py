@@ -15,7 +15,8 @@ from tests.support import (
     schema_url,
 )
 
-from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
+from src.agent.errors import ConversationNotFoundError
+from src.agent.repository import AgentConversationRepository
 from src.agent.service import AgentService
 from src.infra.postgre_db_client import PostgreDBClient
 from src.main import app

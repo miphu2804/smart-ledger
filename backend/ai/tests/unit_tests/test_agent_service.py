@@ -6,8 +6,7 @@ from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 from tests.support import TEST_GUARDRAIL_LIMITS, ScriptedModel, transcript
 
-from src.agent.guardrails import GuardrailError
-from src.agent.repository import ConversationNotFoundError
+from src.agent.errors import ConversationNotFoundError, GuardrailError
 from src.agent.service import (
     AgentChatResult,
     AgentService,
