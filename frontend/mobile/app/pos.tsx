@@ -13,6 +13,7 @@ import { errorMessage } from '../src/lib/errors';
 import { triggerFeedback } from '../src/lib/feedback';
 import { abbr, hashIndex, normalizeText, vnd } from '../src/lib/format';
 import { ProductImage } from '../src/components/ProductImage';
+import { upsertCustomLine } from '../src/lib/customLines';
 import { itemsTotal } from '../src/lib/stats';
 import { useApp } from '../src/store/AppStore';
 import { colors, font, shadow, WEB_FRAME_MAX_WIDTH } from '../src/theme';
@@ -552,6 +553,13 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
   const [products, setProducts] = useState<ProductView[]>([]);
   const [categories, setCategories] = useState<CategoryView[]>([]);
   const [cart, setCart] = useState<Record<number, number>>({});
+  // Món tạm của đơn đang lập (món mới quét mà chủ tiệm chọn không lưu vào danh mục): không có productId nên không nằm
+  // được trong `cart` (giỏ theo productId). Chúng đi cùng đơn sang Thanh toán như các món khác.
+  const [customLines, setCustomLines] = useState<LineItem[]>([]);
+  const clearCart = () => {
+    setCart({});
+    setCustomLines([]);
+  };
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -622,10 +630,13 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
   const estimatedWidth = Platform.OS === 'web' ? Math.min(windowWidth, WEB_FRAME_MAX_WIDTH) : windowWidth;
   const gridCardWidth = Math.max(0, ((listWidth || estimatedWidth) - 20 - 8) / 2);
 
-  const cartItems: LineItem[] = Object.entries(cart).flatMap(([id, qty]) => {
-    const p = products.find((x) => x.id === Number(id));
-    return p ? [{ productId: p.id, name: p.name, price: p.sellingPriceVnd, qty }] : [];
-  });
+  const cartItems: LineItem[] = [
+    ...Object.entries(cart).flatMap(([id, qty]) => {
+      const p = products.find((x) => x.id === Number(id));
+      return p ? [{ productId: p.id, name: p.name, price: p.sellingPriceVnd, qty }] : [];
+    }),
+    ...customLines,
+  ];
   const total = itemsTotal(cartItems);
   const count = cartItems.reduce((a, i) => a + i.qty, 0);
 
@@ -655,7 +666,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
 
   const pay = () => {
     app.setDraft({ items: cartItems, source: 'pos' });
-    setCart({});
+    clearCart();
     router.push('/checkout');
   };
 
@@ -918,7 +929,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
       <Sheet visible={cartOpen} onClose={() => setCartOpen(false)} title="Đơn đang chọn">
         {cartItems.map((it) => (
           <Row
-            key={`${it.productId ?? it.name}`}
+            key={it.custom ? `custom:${it.custom.barcode}` : it.productId != null ? `product:${it.productId}` : `name:${it.name}`}
             style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: salesColors.borderLight, alignItems: 'center' }}
           >
             <View style={styles.cartItemThumbWrap}>
@@ -931,11 +942,17 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
               <T w="bold" size={13} color={salesColors.primary} style={{ marginTop: 2 }}>
                 {vnd(it.price)}
               </T>
+              {it.custom ? (
+                <T size={11.5} color={colors.gold} style={{ marginTop: 1 }}>
+                  Món tạm, không lưu vào danh mục
+                </T>
+              ) : null}
             </View>
             <Stepper
               value={it.qty}
               onChange={(v) => {
                 if (typeof it.productId === 'number') addToCart(it.productId, v - it.qty);
+                else if (it.custom) setCustomLines((cur) => upsertCustomLine(cur, { ...it, qty: v }));
                 if (count - it.qty + v <= 0) setCartOpen(false);
               }}
             />
@@ -989,7 +1006,8 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
         onProductFound={(p) => setProducts((cur) => (cur.some((x) => x.id === p.id) ? cur : [...cur, p]))}
         cartItems={cartItems}
         onAddToCart={(p, delta) => addToCart(p.id, delta)}
-        onClearCart={() => setCart({})}
+        onCustomLine={(line) => setCustomLines((cur) => upsertCustomLine(cur, line))}
+        onClearCart={clearCart}
         onCheckout={() => {
           setScannerOpen(false);
           pay();
@@ -1007,7 +1025,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
         confirm="Xoá"
         cancel="Giữ lại"
         onConfirm={() => {
-          setCart({});
+          clearCart();
           setCartOpen(false);
           setConfirmClear(false);
           triggerFeedback('selection');
