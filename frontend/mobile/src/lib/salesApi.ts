@@ -50,9 +50,9 @@ export const saleDraftApi = {
 
 /**
  * Bộ lọc của `GET /sales` (Core lọc trước khi chia trang): `from`/`to` là mốc ISO 8601 có múi giờ, lấy đơn có soldAt trong
- * `[from, to)`; `q` tìm trong tên khách và tên món, hoặc khớp đúng mã đơn dạng số.
+ * `[from, to)`; `q` tìm trong tên khách và tên món, hoặc khớp đúng mã đơn dạng số; `saleStatus` bỏ trống là cả hai trạng thái.
  */
-export type SaleListQuery = { from?: string; to?: string; q?: string };
+export type SaleListQuery = { from?: string; to?: string; q?: string; saleStatus?: 'CONFIRMED' | 'VOIDED' };
 
 export const saleApi = {
   list: (): Promise<SaleView[]> => fetchAllPages<SaleView>('/sales'),

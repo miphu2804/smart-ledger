@@ -89,12 +89,17 @@ export function saleFilterWindow(f: SaleFilter, now = new Date()): { from?: stri
  * không có kỳ tương ứng ("Tất cả", khoảng tự chọn): khi đó màn hình chỉ hiện số đơn.
  */
 export function saleFilterReportPeriod(f: SaleFilter): ReportPeriod | null {
-  switch (f.time) {
+  return f.time === 'custom' ? null : reportPeriodOf(f.time);
+}
+
+/** Kỳ báo cáo của Core cho một kỳ của app; "Tất cả" không có kỳ tương ứng. */
+export function reportPeriodOf(p: Period): ReportPeriod | null {
+  switch (p) {
     case 'today':
     case 'yesterday':
     case 'week':
     case 'month':
-      return f.time;
+      return p;
     case 'thisWeek':
       return 'this_week';
     default:

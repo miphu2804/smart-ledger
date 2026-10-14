@@ -14,8 +14,11 @@ import type {
   NotificationView,
   PaymentView,
   ProductView,
+  ProfitEstimateView,
   ReportPeriod,
   ReportSummaryView,
+  TopProductItem,
+  TopProductsView,
   SaleDraftItemView,
   SaleDraftView,
   SaleItemView,
@@ -1051,6 +1054,108 @@ function reportSummary(rawQuery: string): ReportSummaryView {
   };
 }
 
+/**
+ * `/reports/top-products` như Core: món trong danh mục gộp theo productId, món tuỳ ý theo tên + đơn vị; bán theo soldAt,
+ * huỷ theo lúc huỷ; doanh thu dòng chia theo tỷ lệ thành tiền trên tổng đơn (sau giảm giá).
+ */
+function reportTopProducts(rawQuery: string): TopProductsView {
+  const { period, from, to } = reportWindow(rawQuery);
+  const params = parseQuery(rawQuery);
+  const limit = params.limit === undefined ? 10 : Number(params.limit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw apiErr(400, 'invalid_report_query', 'limit phải từ 1 đến 100.');
+  const sortBy = params.sortBy ?? 'NET_REVENUE';
+  if (sortBy !== 'QUANTITY' && sortBy !== 'NET_REVENUE') throw apiErr(400, 'validation_failed', 'sortBy không hợp lệ.');
+  const within = (iso: string | undefined) => !!iso && Date.parse(iso) >= from.getTime() && Date.parse(iso) < to.getTime();
+  const rows = new Map<string, TopProductItem>();
+  const add = (sale: SaleView, sign: 'gross' | 'voided') => {
+    const lineSum = sale.items.reduce((sum, item) => sum + item.lineTotalVnd, 0) || 1;
+    for (const item of sale.items) {
+      const key = item.productId != null ? `P${item.productId}` : `C${item.productName.trim().toLowerCase()}|${item.unit.trim()}`;
+      const row = rows.get(key) ?? {
+        itemKey: key,
+        productId: item.productId,
+        productName: item.productName,
+        unit: item.unit,
+        source: item.productId != null ? ('CATALOG' as const) : ('CUSTOM' as const),
+        grossQuantity: 0,
+        voidedQuantity: 0,
+        netQuantity: 0,
+        grossRevenueVnd: 0,
+        voidedRevenueVnd: 0,
+        netRevenueVnd: 0,
+      };
+      const revenue = Math.round((sale.totalVnd * item.lineTotalVnd) / lineSum);
+      if (sign === 'gross') {
+        row.grossQuantity += item.quantity;
+        row.grossRevenueVnd += revenue;
+      } else {
+        row.voidedQuantity += item.quantity;
+        row.voidedRevenueVnd += revenue;
+      }
+      row.netQuantity = row.grossQuantity - row.voidedQuantity;
+      row.netRevenueVnd = row.grossRevenueVnd - row.voidedRevenueVnd;
+      rows.set(key, row);
+    }
+  };
+  for (const s of sales) {
+    if (within(s.soldAt)) add(s, 'gross');
+    if (s.saleStatus === 'VOIDED' && within(saleVoidedAt.get(s.id) ?? s.soldAt)) add(s, 'voided');
+  }
+  const metric = (r: TopProductItem) => (sortBy === 'QUANTITY' ? r.netQuantity : r.netRevenueVnd);
+  const items = [...rows.values()].sort((a, b) => metric(b) - metric(a) || a.itemKey.localeCompare(b.itemKey)).slice(0, limit);
+  return { period, fromInclusive: from.toISOString(), toExclusive: to.toISOString(), sortBy, items };
+}
+
+/**
+ * `/reports/profit-estimate` gần đúng: Core chụp giá vốn lúc bán, mock không lưu nên dùng giá vốn hiện tại của món; món
+ * không có giá vốn (hoặc món tuỳ ý) tính vào phần thiếu giá vốn và làm `isComplete=false`. Chỉ dùng để thử giao diện.
+ */
+function reportProfitEstimate(rawQuery: string): ProfitEstimateView {
+  const { period, from, to } = reportWindow(rawQuery);
+  const within = (iso: string | undefined) => !!iso && Date.parse(iso) >= from.getTime() && Date.parse(iso) < to.getTime();
+  const totals = salesTotals(from, to);
+  let grossCogs = 0;
+  let voidedCogs = 0;
+  let unknownCount = 0;
+  let unknownRevenue = 0;
+  const cost = (sale: SaleView, into: 'gross' | 'voided') => {
+    for (const item of sale.items) {
+      const unitCost = item.productId != null ? products.find((p) => p.id === item.productId)?.costPriceVnd ?? null : null;
+      if (unitCost == null) {
+        unknownCount += 1;
+        unknownRevenue += item.lineTotalVnd;
+        continue;
+      }
+      if (into === 'gross') grossCogs += Math.round(unitCost * item.quantity);
+      else voidedCogs += Math.round(unitCost * item.quantity);
+    }
+  };
+  for (const s of sales) {
+    if (within(s.soldAt)) cost(s, 'gross');
+    if (s.saleStatus === 'VOIDED' && within(saleVoidedAt.get(s.id) ?? s.soldAt)) cost(s, 'voided');
+  }
+  const expenseVnd = expenses.filter((e) => e.status === 'ACTIVE' && within(e.expenseAt)).reduce((sum, e) => sum + e.amountVnd, 0);
+  const netCogs = grossCogs - voidedCogs;
+  const grossProfit = totals.netRevenueVnd - netCogs;
+  return {
+    period,
+    fromInclusive: from.toISOString(),
+    toExclusive: to.toISOString(),
+    grossRevenueVnd: totals.grossRevenueVnd,
+    voidedRevenueVnd: totals.voidedRevenueVnd,
+    netRevenueVnd: totals.netRevenueVnd,
+    grossEstimatedCogsVnd: grossCogs,
+    voidedEstimatedCogsVnd: voidedCogs,
+    netEstimatedCogsVnd: netCogs,
+    estimatedGrossProfitVnd: grossProfit,
+    expenseVnd,
+    estimatedOperatingProfitVnd: grossProfit - expenseVnd,
+    isComplete: unknownCount === 0,
+    unknownCostItemCount: unknownCount,
+    unknownCostRevenueVnd: unknownRevenue,
+  };
+}
+
 function reportSalesSeries(rawQuery: string): SalesSeriesView {
   const { period, from, to } = reportWindow(rawQuery);
   const items: SalesSeriesPoint[] = [];
@@ -1187,6 +1292,18 @@ function listDebts(): DebtView[] {
   return [...debts].sort((a, b) => b.id - a.id);
 }
 
+/** `GET /debts` như Core: lọc trạng thái và khách, mới nhất trước. */
+function filterDebts(rawQuery: string): DebtView[] {
+  const params = parseQuery(rawQuery);
+  const status = params.status;
+  if (status !== undefined && !['OPEN', 'SETTLED', 'VOIDED'].includes(status)) throw apiErr(400, 'validation_failed', 'status không hợp lệ.');
+  const customerId = params.customerId === undefined ? null : Number(params.customerId);
+  if (customerId !== null && (!Number.isInteger(customerId) || customerId <= 0)) {
+    throw apiErr(400, 'invalid_debt_query', 'customerId phải là số nguyên dương.');
+  }
+  return listDebts().filter((d) => (!status || d.status === status) && (customerId === null || d.customerId === customerId));
+}
+
 function repayDebt(id: number, body: DebtRepaymentBody): { debt: DebtView; payment: PaymentView } {
   const debt = debts.find((d) => d.id === id);
   if (!debt) throw apiErr(404, 'debt_not_found', 'This debt is unavailable.');
@@ -1234,6 +1351,15 @@ interface ExpenseWriteBody {
 
 function listExpenses(): ExpenseView[] {
   return expenses.filter((e) => e.status === 'ACTIVE').sort((a, b) => b.id - a.id);
+}
+
+/** `GET /expenses` như Core: lọc theo kỳ báo cáo (`period`), mới nhất trước. Mock chưa lọc from/to và category. */
+function filterExpenses(rawQuery: string): ExpenseView[] {
+  const params = parseQuery(rawQuery);
+  const list = listExpenses().sort((a, b) => Date.parse(b.expenseAt) - Date.parse(a.expenseAt) || b.id - a.id);
+  if (params.period === undefined) return list;
+  const { from, to } = reportWindow(rawQuery);
+  return list.filter((e) => Date.parse(e.expenseAt) >= from.getTime() && Date.parse(e.expenseAt) < to.getTime());
 }
 
 function createExpense(body: ExpenseWriteBody): ExpenseView {
@@ -1486,6 +1612,8 @@ export function mockCoreRequest<T>(path: string, method: string, body: unknown, 
   if (route === '/sales' && method === 'GET') return pageOf(filterSales(rawQuery), rawQuery, 'invalid_sale_query') as unknown as T;
   if (route === '/reports/summary' && method === 'GET') return reportSummary(rawQuery) as unknown as T;
   if (route === '/reports/sales-series' && method === 'GET') return reportSalesSeries(rawQuery) as unknown as T;
+  if (route === '/reports/top-products' && method === 'GET') return reportTopProducts(rawQuery) as unknown as T;
+  if (route === '/reports/profit-estimate' && method === 'GET') return reportProfitEstimate(rawQuery) as unknown as T;
   if (segments[0] === 'sales' && segments.length === 2 && method === 'GET') {
     return getSaleById(Number(segments[1])) as unknown as T;
   }
@@ -1503,7 +1631,7 @@ export function mockCoreRequest<T>(path: string, method: string, body: unknown, 
 
   if (route === '/customers' && method === 'GET') return pageOf(listCustomers(), rawQuery, 'invalid_customer_query') as unknown as T;
 
-  if (route === '/debts' && method === 'GET') return pageOf(listDebts(), rawQuery, 'invalid_debt_query') as unknown as T;
+  if (route === '/debts' && method === 'GET') return pageOf(filterDebts(rawQuery), rawQuery, 'invalid_debt_query') as unknown as T;
   if (segments[0] === 'debts' && segments.length === 3 && segments[2] === 'payments' && method === 'POST') {
     return idempotent(`POST ${path}`, idempotencyKey, body, () =>
       repayDebt(Number(segments[1]), body as DebtRepaymentBody),
@@ -1511,7 +1639,7 @@ export function mockCoreRequest<T>(path: string, method: string, body: unknown, 
   }
 
   if (route === '/expenses') {
-    if (method === 'GET') return pageOf(listExpenses(), rawQuery, 'invalid_expense_query') as unknown as T;
+    if (method === 'GET') return pageOf(filterExpenses(rawQuery), rawQuery, 'invalid_expense_query') as unknown as T;
     if (method === 'POST') {
       return idempotent('POST /expenses', idempotencyKey, body, () => createExpense(body as ExpenseWriteBody)) as unknown as T;
     }

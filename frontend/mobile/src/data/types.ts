@@ -352,6 +352,54 @@ export interface SalesSeriesView {
   items: SalesSeriesPoint[];
 }
 
+/**
+ * Một dòng bán chạy: món trong danh mục gộp theo `productId`, món tuỳ ý gộp theo tên + đơn vị (`source: 'CUSTOM'`).
+ * `net*` = bán trong kỳ − huỷ trong kỳ, có thể âm. `itemKey` là khoá ổn định trong một response, không tự phân tích.
+ */
+export interface TopProductItem {
+  itemKey: string;
+  productId: number | null;
+  productName: string;
+  unit: string;
+  source: 'CATALOG' | 'CUSTOM';
+  grossQuantity: number;
+  voidedQuantity: number;
+  netQuantity: number;
+  grossRevenueVnd: number;
+  voidedRevenueVnd: number;
+  netRevenueVnd: number;
+}
+
+export interface TopProductsView {
+  period: ReportPeriod;
+  fromInclusive: string;
+  toExclusive: string;
+  sortBy: 'QUANTITY' | 'NET_REVENUE';
+  items: TopProductItem[];
+}
+
+/**
+ * Lãi ước tính của một kỳ theo giá vốn Core chụp lúc bán (món không có giá vốn không bị đoán). `isComplete=false` khi có
+ * dòng thiếu giá vốn; `unknownCostItemCount` đếm các dòng đó. Là số vận hành ước tính, không phải số kế toán.
+ */
+export interface ProfitEstimateView {
+  period: ReportPeriod;
+  fromInclusive: string;
+  toExclusive: string;
+  grossRevenueVnd: number;
+  voidedRevenueVnd: number;
+  netRevenueVnd: number;
+  grossEstimatedCogsVnd: number;
+  voidedEstimatedCogsVnd: number;
+  netEstimatedCogsVnd: number;
+  estimatedGrossProfitVnd: number;
+  expenseVnd: number;
+  estimatedOperatingProfitVnd: number;
+  isComplete: boolean;
+  unknownCostItemCount: number;
+  unknownCostRevenueVnd: number;
+}
+
 export type NotificationType = 'LOW_STOCK' | 'OUT_OF_STOCK' | 'SALE_VOIDED' | 'SHOP_INACTIVATED' | 'SHOP_REACTIVATED';
 
 /** Thông báo trong inbox của OWNER (Core `GET /me/notifications`, docs/contracts/api-contracts.md mục 8). `id` là ID sự kiện. */
