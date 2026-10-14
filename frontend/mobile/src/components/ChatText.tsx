@@ -6,6 +6,8 @@ import { AreaChart, BarChart } from './charts';
 import { T } from './ui';
 
 const SIZE = 13.5;
+// Bề ngang tối thiểu cho mỗi điểm biểu đồ, đủ cho nhãn hai chữ như "Giặt tẩy" ở cỡ 12.
+const CHART_SLOT = 58;
 const MONO = Platform.select({ ios: 'Menlo', default: 'monospace' });
 
 function Inlines({ inlines, color }: { inlines: Inline[]; color: string }) {
@@ -36,12 +38,17 @@ function ChartCard({ spec }: { spec: ChartSpec }) {
           {spec.title}
         </T>
       ) : null}
-      {/* AreaChart ghi "đ" sau giá trị nên số lượng luôn vẽ bằng cột. */}
-      {spec.type === 'line' && spec.unit === 'vnd' ? (
-        <AreaChart data={spec.data} height={120} />
-      ) : (
-        <BarChart data={spec.data} height={110} selected={selected} onSelect={setSelected} />
-      )}
+      {/* Mỗi điểm cần đủ chỗ cho nhãn: ít điểm thì giãn cho đầy thẻ, nhiều điểm thì cuộn ngang thay vì tràn. */}
+      <ScrollView horizontal contentContainerStyle={{ flexGrow: 1 }}>
+        <View style={{ flexGrow: 1, minWidth: spec.data.length * CHART_SLOT }}>
+          {/* AreaChart ghi "đ" sau giá trị nên số lượng luôn vẽ bằng cột. */}
+          {spec.type === 'line' && spec.unit === 'vnd' ? (
+            <AreaChart data={spec.data} height={120} />
+          ) : (
+            <BarChart data={spec.data} height={110} selected={selected} onSelect={setSelected} />
+          )}
+        </View>
+      </ScrollView>
     </View>
   );
 }
