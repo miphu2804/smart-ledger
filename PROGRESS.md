@@ -1,3 +1,13 @@
+### [2026-10-14 20:23 UTC+07:00] — [Feature] Voice parse: measured the on-device → LLM cascade
+
+**Done:** Ran the backend LLM on the escalated sentences through OpenCode Go with `claude-haiku-5-5`: 88 sentences (medium on all 62 escalated sentences of test, free-test, free-dev and dev; high on the 26 of test, free-dev and dev), 0 model errors. The free-form gate → LLM at medium gets 58/62 escalated sentences fully right (93.5%; old gate 11/13), with 0 wrong lines on every measured split; high is no better (24/26 on both). Test: 98.7% exact for both gates → LLM, 7.7% vs 4.5% sent to the LLM; free-test: 98% vs 100%, 36% vs 3% sent. LLM latency per escalated sentence P50 3.0 s / P95 4.3 s from the dev machine. 194,580 input and 48,158 output tokens, about 0.044 USD at Anthropic's list price (OpenCode Go pricing may differ). Recommended the free-form gate → LLM at medium: 93.5% is well above the ~62% break-even inferred from the third held-out set, though no LLM ran on that set.
+
+**Changed files:** `docs/development/voice-parse-poc/report.md` (§1, §3.7, §4, §8), `PROGRESS.md`.
+
+**Flow explained:** `voice:cascade --escalated` lists the blocked ids → ids of test, free-test, free-dev and dev → `voice:llm --ids` at medium and high → `voice:cascade --llm` per file. This branch's `backend/ai` only speaks the Responses API and sends no `x-opencode-session`, which OpenCode Go rejects, so the run used `backend/ai` from `staging` at `0443d30` (PR #204, `MODEL_PROVIDER=anthropic`), unmodified.
+
+**Check:** `voice:cascade --escalated` (307 blocked, as expected); `voice:llm` 5-sentence trial, then 57 + 26 sentences; `voice:cascade --llm` for both files; `npm run typecheck`. **Not verified:** LLM on the third held-out set; latency from a phone; the cascade with this branch's `backend/ai`.
+
 ### [2026-10-14 18:57 UTC+07:00] — [Feature] Voice parse: harness for the on-device → LLM cascade
 
 **Done:** Tried trading on-device latency for quality once more: re-parse a sentence blocked for an unseen shape after dropping its unknown words. Human-written sets gained 2–13 points of coverage, but wrong auto-accepts rose 2–4× on the synthetic proxies, so it was not kept. Built the cascade harness instead:
