@@ -140,3 +140,19 @@ export function saleFilterTimeShort(f: SaleFilter, now = new Date()): string {
   if (preset) return `${preset} ngày`;
   return rangeLabel(f.from, f.to, (key) => shortDay(key, now));
 }
+
+/**
+ * Khoảng ngày lịch Việt Nam (`yyyy-mm-dd`, tính cả hai đầu) để cộng doanh thu từ chuỗi ngày của năm nay
+ * (`/reports/sales-series?period=year`) khi bộ lọc không có kỳ báo cáo riêng: "Tất cả" là từ 01/01 tới hôm nay (Core không có
+ * tổng toàn thời gian), khoảng tự chọn phải bắt đầu trong năm nay. `null` khi không cộng được: kỳ có sẵn (đã có báo cáo riêng)
+ * hoặc khoảng lấn sang năm trước.
+ */
+export function saleFilterYearDays(f: SaleFilter, now = new Date()): { from: string; to: string } | null {
+  const { y, m, d } = vnCalendar(now);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const yearStart = `${y}-01-01`;
+  const today = `${y}-${pad(m + 1)}-${pad(d)}`;
+  if (f.time === 'all') return { from: yearStart, to: today };
+  if (f.time !== 'custom' || !f.from || f.from < yearStart) return null;
+  return { from: f.from, to: f.to && f.to < today ? f.to : today };
+}
