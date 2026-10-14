@@ -48,7 +48,8 @@ export function crfFeatures(tokens: Token[], info: TokenInfo[]): string[][] {
         out.push(`${d}:${d < 0 ? 'BOS' : 'EOS'}`);
         continue;
       }
-      const keys = Math.abs(d) === 1 ? CONTEXT_KEYS : ['w', 'num', 'gz'];
+      // ±1 thêm dạng có dấu: "bàn năm" (số bàn) khác "bán năm" (bán năm cái)
+      const keys = Math.abs(d) === 1 ? [...CONTEXT_KEYS, 'r'] : ['w', 'num', 'gz'];
       for (const k of keys) out.push(`${d}:${k}=${g[k]}`);
     }
     if (i > 0) out.push(`-1|0:w=${loc[i - 1].w}|${f.w}`, `-1|0:gz=${loc[i - 1].gz}|${f.gz}`);

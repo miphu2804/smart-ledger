@@ -176,16 +176,30 @@ function wordSim(norm: string, raw: string | null, q: NameWord): number {
     if (raw === null || q.raw === null || raw === norm || raw === q.raw) return 1;
     return 0.9; // cùng chữ, sai dấu thanh (STT hay nhầm)
   }
-  return stringSim(norm, q.norm);
+  // Gần âm chỉ tính khi cùng dấu thanh hoặc gõ không dấu: "sỉu"/"xỉu", "dò"/"giò" được; "bàn"/"bánh" thì không
+  if (raw === null || q.raw === null || raw === norm || form(norm).phon !== form(q.norm).phon) return stringSim(norm, q.norm);
+  return stringSim(norm, q.norm, toneOf(raw) === toneOf(q.raw));
 }
 
-function stringSim(a: string, b: string): number {
+const TONE_RE = /[̣̀́̃̉]/;
+const tones = new Map<string, string>();
+/** Dấu thanh của một âm tiết ("" là thanh ngang), nhớ theo từ. */
+function toneOf(w: string): string {
+  let t = tones.get(w);
+  if (t === undefined) {
+    if (tones.size >= MEMO_LIMIT) tones.clear();
+    tones.set(w, (t = w.normalize('NFD').match(TONE_RE)?.[0] ?? ''));
+  }
+  return t;
+}
+
+function stringSim(a: string, b: string, phoneticOk = true): number {
   if (a === b) return 1;
-  const key = `${a}|${b}`;
+  const key = `${a}|${b}|${phoneticOk ? 1 : 0}`;
   let v = sims.get(key);
   if (v === undefined) {
     if (sims.size >= MEMO_LIMIT) sims.clear();
-    if (a.length >= 2 && b.length >= 2 && form(a).phon === form(b).phon) v = 0.8;
+    if (phoneticOk && a.length >= 2 && b.length >= 2 && form(a).phon === form(b).phon) v = 0.8;
     else if (a.length < 3 || b.length < 3) v = 0;
     // Dice ≤ 2·min/(tổng) theo số trigram (= độ dài + 1): chênh độ dài quá thì không thể đạt ngưỡng
     else if ((2 * Math.min(a.length, b.length) + 2) / (a.length + b.length + 2) < 0.55) v = 0;

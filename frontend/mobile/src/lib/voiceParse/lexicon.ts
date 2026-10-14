@@ -5,14 +5,17 @@ import { fold, UNITS } from '../parseOrder';
 export const UNIT_WORDS = new Set([
   ...UNITS,
   'bao', 'vi', 'hu', 'cay', 'tuyp', 'tup', 'tui', 'can', 'lit', 'loc', 'xien', 'cuon', 'cap', 'khay', 'thanh', 'vien',
-  'chiec', 'doi', 'suat', 'binh', 'chen', 'bat', 'lang', 'xap', 'mieng', 'cu', 'trai', 'con',
+  'chiec', 'doi', 'suat', 'binh', 'chen', 'bat', 'lang', 'xap', 'mieng', 'cu', 'trai', 'con', 'nguoi',
 ]);
 /** Cách viết có dấu của đơn vị: "ờ"/"ở" không phải "ổ", "bò" không phải "bó", "tố" không phải "tô". */
 export const UNIT_RAW = new Set([
   'ly', 'ổ', 'chai', 'lon', 'gói', 'bịch', 'ký', 'kí', 'kg', 'ki', 'hộp', 'cái', 'phần', 'tô', 'dĩa', 'đĩa', 'bó', 'cốc',
   'trái', 'quả', 'thùng', 'bao', 'vỉ', 'hũ', 'cây', 'tuýp', 'túp', 'túi', 'can', 'lít', 'lốc', 'xiên', 'cuộn', 'cặp',
-  'khay', 'thanh', 'viên', 'chiếc', 'đôi', 'suất', 'bình', 'chén', 'bát', 'lạng', 'xấp', 'miếng', 'củ', 'con',
+  'khay', 'thanh', 'viên', 'chiếc', 'đôi', 'suất', 'bình', 'chén', 'bát', 'lạng', 'xấp', 'miếng', 'củ', 'con', 'người',
 ]);
+
+/** Từ đứng trước số bàn/phòng/giờ: "bàn năm", "phòng 2", "lúc tám giờ" (viết có dấu: "bán năm gói" là bán hàng). */
+export const REF_AFTER_RAW = new Set(['bàn', 'phòng', 'lúc', 'bàn số', 'tầng']);
 
 /**
  * Từ đệm, xưng hô, từ cảm thán (viết có dấu): không thuộc tên món mới; món trong danh mục có chữ trùng thì gazetteer
@@ -25,6 +28,9 @@ export const FILLER_RAW = new Set([
   'thì', 'là', 'nè', 'nghe', 'đây', 'đấy', 'này', 'kia', 'cái', 'gì', 'hộ', 'cháu', 'bác', 'cậu', 'ông', 'bà', 'ghi',
   'tính', 'giúp', 'với', 'và', 'cũng', 'cùng', 'không', 'được', 'nhiều', 'ít', 'lại', 'để', 'xem', 'cần', 'đang',
   'của', 'quán', 'chừng', 'tiền', 'hàng', 'ấy', 'ui', 'mà', 'như', 'vợ', 'chồng', 'oke', 'ok', 'uk', 'vâng',
+  // dấu hiệu quan hệ số lượng: "mỗi thứ", "cũng vậy", "à nhầm", "đổi thành", "tổng cộng"
+  'mỗi', 'thứ', 'loại', 'món', 'vậy', 'y', 'giống', 'nhầm', 'lộn', 'quên', 'đổi', 'thành', 'sửa', 'tổng', 'cộng', 'tất',
+  'cả', 'phải', 'chủ', 'bàn', 'số', 'phòng', 'lúc', 'giờ', 'đều', 'chang', 'người',
 ]);
 /** Dạng bỏ dấu của từ đệm, chỉ dùng khi câu gõ không dấu. */
 export const FILLER_WORDS = new Set([...FILLER_RAW].map(fold));

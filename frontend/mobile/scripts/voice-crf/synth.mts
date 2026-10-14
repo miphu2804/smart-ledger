@@ -10,7 +10,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import type { ParseableProduct } from '../../src/lib/parseOrder';
 import { catalogIndex } from '../../src/lib/voiceParse/catalog';
 import { crfFeatures } from '../../src/lib/voiceParse/features';
-import { analyze, type Label, type Slot } from '../../src/lib/voiceParse/tagger';
+import { analyze, type Label, QTY_SLOTS, type Slot } from '../../src/lib/voiceParse/tagger';
 import { tokenize } from '../../src/lib/voiceParse/text';
 import { OOC_ITEMS, TRAIN_CATALOGS } from './lexicon';
 
@@ -148,8 +148,12 @@ const closer = (): Seg[] =>
 const UNITS = ['chai', 'lon', 'gói', 'hộp', 'bịch', 'ly', 'phần', 'tô', 'dĩa', 'cái', 'bao', 'vỉ', 'cây', 'lốc', 'thùng', 'ký', 'trái', 'ổ', 'xiên', 'tuýp', 'hũ', 'cốc', 'quả', 'chiếc', 'túi'];
 const DELIMS = ['với', 'và', 'thêm', ',', 'rồi', 'với lại'];
 
+/** Bổ ngữ sau tên món, không thuộc tên: "trà tắc KHÔNG ĐƯỜNG", "cà phê ÍT ĐÁ". */
+const MODIFIERS = ['không đường', 'ít đường', 'ít đá', 'nhiều đá', 'không đá', 'ít ngọt', 'không hành', 'nhiều sữa', 'mang về', 'để riêng', 'loại nhỏ', 'cho nóng'];
+
 function saleItem(products: ParseableProduct[], nameFirst: boolean): Seg[] {
-  const item: Seg = [chance(0.12) ? pick(OOC_ITEMS) : itemText(pick(products)), 'ITEM'];
+  const item: Seg[] = [[chance(0.12) ? pick(OOC_ITEMS) : itemText(pick(products)), 'ITEM']];
+  if (chance(0.08)) item.push([pick(MODIFIERS), null]);
   const qty: Seg[] = [];
   const r = rand();
   if (r < 0.85) {
@@ -157,7 +161,12 @@ function saleItem(products: ParseableProduct[], nameFirst: boolean): Seg[] {
     if (chance(0.6)) qty.push([pick(UNITS), 'UNIT']);
   } else if (r < 0.93) qty.push([pick(UNITS), 'UNIT']);
   const price: Seg[] = chance(0.06) ? [[moneyText(), 'AMT']] : [];
-  return nameFirst ? [item, ...qty, ...price] : [...qty, item, ...price];
+  return nameFirst ? [...item, ...qty, ...price] : [...qty, ...item, ...price];
+}
+
+/** Chỉ nói tên món, không số lượng ("gỏi cuốn cho chị", "trà đào đi em"). */
+function bare(products: ParseableProduct[]): Seg[] {
+  return [...(chance(0.5) ? opener() : []), [chance(0.35) ? pick(OOC_ITEMS) : itemText(pick(products)), 'ITEM'], ...(chance(0.15) ? ([[pick(MODIFIERS), null]] as Seg[]) : []), ...closer()];
 }
 
 function sale(products: ParseableProduct[]): Seg[] {
@@ -216,8 +225,106 @@ function chat(products: ParseableProduct[]): Seg[] {
   return [[t.replace(/\s+/g, ' ').trim(), null]];
 }
 
+// ─── Câu có quan hệ số lượng (nhãn QTYP/QTYD/QTYC/COPY, số không phải số lượng gán O) ─────────
+const item = (products: ParseableProduct[]): Seg => [chance(0.08) ? pick(OOC_ITEMS) : itemText(pick(products)), 'ITEM'];
+const unitSeg = (p = 0.6): Seg[] => (chance(p) ? [[pick(UNITS), 'UNIT']] : []);
+const LIST_SEP = [',', 'với', 'và', '', 'với lại'];
+function list(products: ParseableProduct[], n: number): Seg[] {
+  const out: Seg[] = [];
+  for (let i = 0; i < n; i++) {
+    if (i > 0) {
+      const sep = pick(LIST_SEP);
+      if (sep) out.push([sep, null]);
+    }
+    out.push(item(products));
+  }
+  return out;
+}
+const tail = (products: ParseableProduct[]): Seg[] =>
+  chance(0.3) ? [[pick([',', 'với', 'thêm', 'rồi']), null], ...saleItem(products, chance(0.2))] : [];
+
+function distributive(products: ParseableProduct[]): Seg[] {
+  const each = pick(['mỗi thứ', 'mỗi loại', 'mỗi cái', 'mỗi món', 'mỗi thứ là', 'mỗi loại là', 'mỗi thứ một', 'mỗi thứ lấy']);
+  const n = int(2, 3);
+  switch (int(0, 3)) {
+    case 0: // "coca, pepsi mỗi thứ ba lon"
+      return [...opener(), ...list(products, n), [each, null], [qtyText(), 'QTYD'], ...unitSeg(), ...tail(products), ...closer()];
+    case 1: // "mỗi loại hai gói hảo hảo với omachi"
+      return [...opener(), [each.replace(/ (là|một|lấy)$/, ''), null], [qtyText(), 'QTYD'], ...unitSeg(), ...list(products, n), ...closer()];
+    case 2: // "ba ly mỗi loại: bạc xỉu, cacao"
+      return [...opener(), [qtyText(), 'QTYD'], ...unitSeg(0.8), [pick(['mỗi loại', 'mỗi thứ', 'mỗi món']), null], [pick([',', '', 'là']), null], ...list(products, n), ...closer()];
+    default: // "coca với pepsi đều hai lon"
+      return [...opener(), ...list(products, n), [pick(['đều', 'đều là', 'cũng đều']), null], [qtyText(), 'QTYD'], ...unitSeg(), ...closer()];
+  }
+}
+
+function copyQty(products: ParseableProduct[]): Seg[] {
+  // món đầu luôn có số lượng để "cũng vậy" có cái mà chép
+  const first: Seg[] = chance(0.3) ? [item(products), [qtyText(), 'QTY'], ...unitSeg()] : [[qtyText(), 'QTY'], ...unitSeg(), item(products)];
+  const sep: Seg = [pick([',', 'còn', 'rồi', '', 'với']), null];
+  if (chance(0.5)) {
+    return [...opener(), ...first, sep, item(products), [pick(['cũng vậy', 'cũng thế', 'y vậy', 'giống vậy', 'cũng như vậy', 'cũng y chang', 'cũng vậy luôn']), 'COPY'], ...closer()];
+  }
+  return [...opener(), ...first, sep, item(products), [pick(['cũng', 'thì cũng', 'cũng lấy']), null], [qtyText(), 'QTYP'], ...unitSeg(0.4), ...closer()];
+}
+
+function correction(products: ParseableProduct[]): Seg[] {
+  const marker = pick(['à không', 'à nhầm', 'à lộn', 'ờ không', 'nhầm', 'không phải', 'à mà thôi', 'à không phải']);
+  switch (int(0, 2)) {
+    case 0: // "hai gói hảo hảo, à không, ba gói"
+      return [...opener(), [qtyText(), 'QTY'], ...unitSeg(), item(products), [`${pick([',', ''])} ${marker}${pick([',', ''])}`.trim(), null], [qtyText(), 'QTYC'], ...unitSeg(0.5), ...closer()];
+    case 1: // "lấy ba chai à nhầm hai chai nước mắm"
+      return [...opener(), [qtyText(), null], ...(chance(0.6) ? ([[pick(UNITS), null]] as Seg[]) : []), [marker, null], [qtyText(), 'QTY'], ...unitSeg(), item(products), ...closer()];
+    default: // "một bạc xỉu, thôi đổi thành hai"
+      return [...opener(), [qtyText(), 'QTY'], ...unitSeg(), item(products), [pick([', thôi đổi thành', ', sửa lại', ', đổi thành', 'à không lấy']), null], [qtyText(), 'QTYC'], ...unitSeg(0.4), ...closer()];
+  }
+}
+
+function references(products: ParseableProduct[]): Seg[] {
+  const n = String(int(1, 20));
+  const ref: Seg[] = pick([
+    [['bàn', null], [chance(0.5) ? spoken(int(1, 12)) : n, null]],
+    [['bàn số', null], [chance(0.5) ? spoken(int(1, 12)) : n, null]],
+    [['phòng', null], [n, null]],
+    [['lúc', null], [spoken(int(1, 11)), null], ['giờ', null]],
+  ] as Seg[][]);
+  switch (int(0, 2)) {
+    case 0: // "cho bàn năm hai cà phê muối"
+      return [[pick(['cho', 'ghi', '', 'lên']), null], ...ref, ...sale(products).filter(([t]) => t)];
+    case 1: // "hai cà phê muối cho bàn năm"
+      return [...sale(products), [pick(['cho', 'mang ra', 'ở', '']), null], ...ref];
+    default: // "bún bò huế cho hai người"
+      return [...opener(), item(products), [pick(['cho', '']), null], [qtyText(), 'QTYP'], ['người', 'UNIT'], ...(chance(0.3) ? ([['ăn', null]] as Seg[]) : []), ...closer()];
+  }
+}
+
+function totalThenSplit(products: ParseableProduct[]): Seg[] {
+  const head: Seg[] = chance(0.5)
+    ? [[qtyText(), null], ...(chance(0.7) ? ([[pick(['ly', 'món', 'phần', 'cái', 'chai']), null]] as Seg[]) : [])]
+    : [[pick(['tổng cộng', 'tất cả', 'hết thảy']), null], [qtyText(), null], [pick(['món', 'thứ', 'cái', 'ly']), null]];
+  const parts: Seg[] = [];
+  for (let i = 0; i < int(2, 3); i++) parts.push(...(i ? ([[pick(['', ',', 'với']), null]] as Seg[]) : []), ...saleItem(products, false).filter(([, sl]) => sl !== 'AMT'));
+  return [...opener(), ...head, [pick([',', ':', 'gồm', 'là']), null], ...parts.filter(([t]) => t !== ''), ...closer()];
+}
+
+function topicOrder(products: ParseableProduct[]): Seg[] {
+  const out: Seg[] = [...opener()];
+  for (let i = 0; i < int(1, 3); i++) {
+    if (i > 0) out.push([pick([',', 'còn', ', còn', 'với']), null]);
+    out.push(item(products), [pick(['thì', 'là', 'nè', 'đó', 'thì lấy']), null], [qtyText(), 'QTY'], ...unitSeg());
+  }
+  return [...out, ...closer()];
+}
+
 function sentence(products: ParseableProduct[]): Seg[] {
   const r = rand();
+  if (r < 0.06) return distributive(products);
+  if (r < 0.1) return copyQty(products);
+  if (r < 0.14) return correction(products);
+  if (r < 0.17) return references(products);
+  if (r < 0.19) return totalThenSplit(products);
+  if (r < 0.22) return topicOrder(products);
+  if (r < 0.25) return bare(products);
   if (r < 0.62) return sale(products);
   if (r < 0.76) return [...opener().filter(() => chance(0.3)), ...expense()];
   if (r < 0.88) return chance(0.5) ? [...sale(products), [pick(['rồi', 'với', ',', 'xong']), null], ...expense()] : [...expense(), [pick(['rồi', ',', 'xong']), null], ...sale(products)];
@@ -242,7 +349,7 @@ function render(segs: Seg[], products: ParseableProduct[]) {
   const y: Label[] = tokens.map((t, i) => {
     const slot = ranges[seg[i]]?.[2];
     if (!slot || t.kind === 'sep') return 'O';
-    const cont = i > 0 && seg[i - 1] === seg[i] && !(slot === 'QTY' && t.kind === 'num');
+    const cont = i > 0 && seg[i - 1] === seg[i] && !(QTY_SLOTS.has(slot) && t.kind === 'num');
     return `${cont ? 'I' : 'B'}-${slot}` as Label;
   });
   const info = analyze(tokens, catalogIndex(products));
@@ -264,7 +371,9 @@ for (const [file, n] of [['train', N_TRAIN], ['dev', N_DEV]] as const) {
 
 // Đặc trưng của bộ eval (để CRF gắn nhãn và để so khớp Viterbi TS với Python)
 const catalogs = JSON.parse(readFileSync(new URL('./eval/catalogs.json', import.meta.url), 'utf8')) as Record<string, ParseableProduct[]>;
-const gold = readFileSync(new URL('./eval/gold.jsonl', import.meta.url), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+const gold = ['./eval/gold.jsonl', './eval/free.jsonl'].flatMap((f) =>
+  readFileSync(new URL(f, import.meta.url), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)),
+);
 const evalLines = gold.map((g: { id: string; catalog: string; text: string }) => {
   const tokens = tokenize(g.text);
   return JSON.stringify({ id: g.id, x: crfFeatures(tokens, analyze(tokens, catalogIndex(catalogs[g.catalog]))) });

@@ -12,8 +12,8 @@ gắn nhãn và xuất trọng số:
 Ghi ra:
 - `src/lib/voiceParse/crf-model.json`: nhãn, ma trận chuyển, trọng số trạng thái
   (cho decoder Viterbi TS);
-- `.data/eval.pred.jsonl`, `.data/dev.pred.jsonl`: nhãn CRFsuite gán, để
-  `parity.mts` so với Viterbi TS.
+- `.data/eval.pred.jsonl`, `.data/dev.pred.jsonl`: nhãn CRFsuite gán và xác suất
+  biên của nhãn đó, để `parity.mts` so với Viterbi và forward-backward TS.
 """
 
 import json
@@ -113,18 +113,14 @@ def main():
             f" {len(state)} đặc trưng → {where} ({size} KB)"
         )
 
-        for name, rows, preds in (
-            ("dev.pred.jsonl", dev, dev_pred),
-            ("eval.pred.jsonl", evals, [tagger.tag(r["x"]) for r in evals]),
-        ):
+        for name, rows in (("dev.pred.jsonl", dev), ("eval.pred.jsonl", evals)):
             with open(DATA / name, "w", encoding="utf-8") as f:
-                for i, (row, pred) in enumerate(zip(rows, preds)):
-                    f.write(
-                        json.dumps(
-                            {"id": row.get("id", i), "y": pred}, ensure_ascii=False
-                        )
-                        + "\n"
-                    )
+                for i, row in enumerate(rows):
+                    pred = tagger.tag(row["x"])
+                    # xác suất biên của nhãn đã chọn, để so với forward-backward TS
+                    marg = [tagger.marginal(y, t) for t, y in enumerate(pred)]
+                    out = {"id": row.get("id", i), "y": pred, "m": marg}
+                    f.write(json.dumps(out, ensure_ascii=False) + "\n")
     return 0
 
 

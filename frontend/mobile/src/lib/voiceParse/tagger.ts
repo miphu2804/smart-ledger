@@ -1,14 +1,22 @@
 /**
- * L3: gắn nhãn BIO cho token (QTY UNIT ITEM AMT EXP O). `analyze` tính thông tin gazetteer dùng chung cho tagger luật
- * (bước không train) và cho đặc trưng CRF.
+ * L3: gắn nhãn BIO cho token. `analyze` tính thông tin gazetteer dùng chung cho tagger luật và cho đặc trưng CRF.
+ *
+ * Nhãn: QTY UNIT ITEM AMT EXP O, và các nhãn quan hệ của số lượng mà chỉ CRF gán:
+ * - QTYP: số lượng của món đứng TRƯỚC ("trà vải cũng HAI", "bún bò cho HAI người");
+ * - QTYD: một số lượng cho cả danh sách món ("coca, pepsi mỗi thứ BA lon");
+ * - QTYC: sửa số lượng món vừa nói ("hai gói hảo hảo, à không, BA gói");
+ * - COPY: lấy lại số lượng của món trước ("pepsi CŨNG VẬY").
+ * Số không phải số lượng (bàn năm, lúc tám giờ, tổng "ba ly:" trước khi kể từng món) gán O.
  */
 import { type CatalogIndex, fuzzyInVocab } from './catalog';
-import { CHAT_RAW, DELIMITERS, FILLER_RAW, FILLER_WORDS, SALE_VERBS, SALE_VERBS_RAW, TEA_WORDS, UNIT_RAW, UNIT_WORDS } from './lexicon';
+import { CHAT_RAW, DELIMITERS, FILLER_RAW, FILLER_WORDS, REF_AFTER_RAW, SALE_VERBS, SALE_VERBS_RAW, TEA_WORDS, UNIT_RAW, UNIT_WORDS } from './lexicon';
 import { isSpokenNumber, numberRunEnd, SPOKEN_NUMBER_WORDS, type Token } from './text';
 
-export const LABELS = ['O', 'B-QTY', 'I-QTY', 'B-UNIT', 'I-UNIT', 'B-ITEM', 'I-ITEM', 'B-AMT', 'I-AMT', 'B-EXP', 'I-EXP'] as const;
-export type Label = (typeof LABELS)[number];
-export type Slot = 'QTY' | 'UNIT' | 'ITEM' | 'AMT' | 'EXP';
+export const SLOTS = ['QTY', 'QTYP', 'QTYD', 'QTYC', 'COPY', 'UNIT', 'ITEM', 'AMT', 'EXP'] as const;
+export type Slot = (typeof SLOTS)[number];
+export type Label = 'O' | `B-${Slot}` | `I-${Slot}`;
+/** Các nhãn số lượng (thường và quan hệ). */
+export const QTY_SLOTS: ReadonlySet<Slot> = new Set(['QTY', 'QTYP', 'QTYD', 'QTYC']);
 
 export interface TokenInfo {
   /** Độ dài n-gram dài nhất của tên món phủ token (0 = không có trong tên nào). */
@@ -117,9 +125,57 @@ export function clauseRanges(tokens: Token[], info: TokenInfo[]): Array<[number,
   return out;
 }
 
+export type MarkerKind = 'dist' | 'copy' | 'corr' | 'total';
+
+/**
+ * Dấu hiệu câu có quan hệ số lượng mà ghép slot thông thường không hiểu: "mỗi thứ/loại/cái/món" (một số cho nhiều món),
+ * "cũng vậy", "cũng hai" (lấy lại số), "à không", "à nhầm", "đổi thành" (sửa lời), "ba ly: hai … một …" (tổng rồi kể).
+ */
+export function findMarkers(tokens: Token[], info: TokenInfo[]): Array<{ kind: MarkerKind; at: number }> {
+  const out: Array<{ kind: MarkerKind; at: number }> = [];
+  const w = (i: number) => tokens[i]?.norm ?? '';
+  const raw = (i: number) => tokens[i]?.raw ?? '';
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t.kind === 'sep') {
+      // "ba ly: hai sữa đá một đen đá": số (+ đơn vị) rồi dấu câu rồi số nữa
+      let j = i - 1;
+      if (j >= 0 && info[j].isUnit) j--;
+      if (j >= 0 && info[j].isNum && info[i + 1]?.isNum && j === 0) out.push({ kind: 'total', at: j });
+      continue;
+    }
+    if (w(i) === 'moi' && (raw(i) === 'mỗi' || raw(i) === 'moi') && ['thu', 'loai', 'cai', 'mon', 'nguoi', 'phan', 'ly', 'chai', 'goi', 'lon'].includes(w(i + 1))) {
+      out.push({ kind: 'dist', at: i });
+    } else if (w(i) === 'deu' && (raw(i) === 'đều' || raw(i) === 'deu') && (info[i + 1]?.isNum || info[i + 2]?.isNum)) {
+      out.push({ kind: 'dist', at: i });
+    } else if (w(i) === 'cung' && (raw(i) === 'cũng' || raw(i) === 'cung') && (['vay', 'the', 'nhu', 'y', 'giong'].includes(w(i + 1)) || info[i + 1]?.isNum)) {
+      out.push({ kind: 'copy', at: i });
+    } else if ((w(i) === 'y' || w(i) === 'giong') && ['vay', 'nhu', 'the'].includes(w(i + 1))) {
+      out.push({ kind: 'copy', at: i });
+    } else if (['a', 'o', 'u'].includes(w(i)) && ['khong', 'nham', 'lon'].includes(w(i + 1)) && raw(i + 1) !== 'lon') {
+      out.push({ kind: 'corr', at: i });
+    } else if ((w(i) === 'nham' && raw(i) !== 'nhâm') || (w(i) === 'khong' && w(i + 1) === 'phai') || (w(i) === 'doi' && w(i + 1) === 'thanh') || (w(i) === 'sua' && w(i + 1) === 'lai')) {
+      if (!out.some((m) => m.kind === 'corr' && m.at >= i - 1)) out.push({ kind: 'corr', at: i });
+    }
+  }
+  return out;
+}
+
+/** Số đứng sau "bàn", "bàn số", "phòng", "lúc" hoặc trước "giờ": là số bàn/phòng/giờ, không phải số lượng. */
+export function isReferenceNumber(tokens: Token[], i: number): boolean {
+  const prev = tokens[i - 1];
+  const prev2 = tokens[i - 2];
+  const next = tokens[i + 1];
+  if (prev && REF_AFTER_RAW.has(prev.raw)) return true;
+  if (prev?.norm === 'so' && prev.raw !== 'sợ' && prev2 && REF_AFTER_RAW.has(prev2.raw)) return true;
+  return !!next && (next.raw === 'giờ' || next.raw === 'gio' || next.raw === 'h');
+}
+
 export function ruleTag(tokens: Token[], index: CatalogIndex, info = analyze(tokens, index)): Label[] {
   const slot: Array<Slot | null> = tokens.map(() => null);
+  const reference = new Set<number>();
   const protectedName = (k: number) => info[k].gzLen >= 2 && info[k].gzContent;
+  const skip = (k: number) => (info[k].isFiller || reference.has(k)) && !protectedName(k);
 
   for (const [a, b] of clauseRanges(tokens, info)) {
     for (let k = a; k < b; k++) if (tokens[k].kind === 'money') slot[k] = 'AMT';
@@ -144,6 +200,10 @@ export function ruleTag(tokens: Token[], index: CatalogIndex, info = analyze(tok
     // Số lượng: số (chữ số ≤ 3 chữ số hoặc cụm đọc số) không nằm trong tên món
     for (let k = a; k < b; k++) {
       if (slot[k] || !info[k].isNum || protectedName(k)) continue;
+      if (isReferenceNumber(tokens, k)) {
+        reference.add(k); // "bàn năm hai cà phê": "năm" là số bàn, "hai" là số lượng
+        continue;
+      }
       if (tokens[k].kind === 'num') {
         slot[k] = 'QTY';
         continue;
@@ -165,13 +225,13 @@ export function ruleTag(tokens: Token[], index: CatalogIndex, info = analyze(tok
     // khớp tên món trong danh mục bằng ≥ 2 từ
     let k = a;
     while (k < b) {
-      if (slot[k] || (info[k].isFiller && !protectedName(k))) {
+      if (slot[k] || skip(k)) {
         k++;
         continue;
       }
       let e = k;
-      while (e < b && !slot[e] && !(info[e].isFiller && !protectedName(e) && !(info[e].inVocab && e > k))) e++;
-      while (e > k && info[e - 1].isFiller && !protectedName(e - 1)) e--;
+      while (e < b && !slot[e] && !reference.has(e) && !(info[e].isFiller && !protectedName(e) && !(info[e].inVocab && e > k))) e++;
+      while (e > k && skip(e - 1)) e--;
       if (e === k) {
         k++;
         continue;
@@ -179,7 +239,10 @@ export function ruleTag(tokens: Token[], index: CatalogIndex, info = analyze(tok
       let before = k - 1;
       while (before >= a && !slot[before] && info[before].isFiller && !isSaleVerb(tokens[before])) before--;
       const anchoredBefore = before >= a && (slot[before] === 'QTY' || slot[before] === 'UNIT' || isSaleVerb(tokens[before]));
-      const anchoredAfter = e < b && slot[e] === 'QTY';
+      let after = e;
+      while (after < b && !slot[after] && info[after].isFiller) after++;
+      // "muối thì một gói": từ đệm giữa tên và số lượng vẫn neo được
+      const anchoredAfter = after < b && slot[after] === 'QTY';
       const strong = tokens.slice(k, e).some((_, o) => protectedName(k + o)) || (e - k === 1 && info[k].df === 1 && e - k === b - a);
       const known = tokens.slice(k, e).some((_, o) => info[k + o].inVocab);
       if (anchoredBefore || anchoredAfter || (strong && known)) {
@@ -191,7 +254,7 @@ export function ruleTag(tokens: Token[], index: CatalogIndex, info = analyze(tok
     // Mệnh đề chỉ có một cụm danh từ ngắn ("gỏi cuốn cho chị", "chè đậu xanh"): là món, chưa nói số lượng (như parseOrder)
     if (tokens.slice(a, b).every((_, o) => !slot[a + o])) {
       const content = [];
-      for (let m = a; m < b; m++) if (!info[m].isFiller && tokens[m].kind === 'word') content.push(m);
+      for (let m = a; m < b; m++) if (!skip(m) && tokens[m].kind === 'word') content.push(m);
       const contiguous = content.length > 0 && content[content.length - 1] - content[0] === content.length - 1;
       if (contiguous && content.length <= 3) for (const m of content) slot[m] = 'ITEM';
     }
