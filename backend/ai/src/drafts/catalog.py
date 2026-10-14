@@ -87,7 +87,7 @@ class ProductCatalogRepository:
 
     def _fetch(self, statement: Select) -> list[tuple]:
         # Requests share a small connection pool, so a hung query would stall the
-        # others. Cap the run time transaction-locally, like the SQL executor.
+        # others. Cap the run time transaction-locally, like the shop-data repository.
         try:
             with self.postgres.session() as session:
                 session.execute(

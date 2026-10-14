@@ -25,7 +25,7 @@ from src.prompt_templates import (
 )
 from src.providers.factory import session_settings
 from src.restock.service import RestockService
-from src.sql.executor import ReadOnlySqlExecutor
+from src.sql.repository import ShopDataRepository
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ class AgentService:
         model: Model | None,
         conversations: AgentConversationRepository,
         guardrail_limits: GuardrailLimits,
-        sql_executor: ReadOnlySqlExecutor | None = None,
+        shop_data: ShopDataRepository | None = None,
         restock: RestockService | None = None,
         history_turns: int = 100,
     ) -> None:
@@ -79,8 +79,8 @@ class AgentService:
         # Each optional capability adds its own tool and prompt section.
         tools = []
         prompt_parts = [SHOP_AGENT_SYSTEM_PROMPT]
-        if sql_executor is not None:
-            tools.append(build_shop_data_tool(sql_executor))
+        if shop_data is not None:
+            tools.append(build_shop_data_tool(shop_data))
             prompt_parts.append(SQL_AGENT_PROMPT)
         if restock is not None:
             tools.append(build_restock_tool(restock))

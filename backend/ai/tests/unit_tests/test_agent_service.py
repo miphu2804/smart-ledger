@@ -38,7 +38,7 @@ async def collect(events) -> list:
     return [event async for event in events]
 
 
-class FakeExecutor:
+class FakeShopData:
     def run(self, shop_id: int, sql: str) -> dict:
         return {"columns": ["phone"], "rows": [["0901234567"]], "truncated": False}
 
@@ -251,7 +251,7 @@ async def test_stream_chat_resets_text_written_before_a_tool_call() -> None:
         model,
         FakeConversationRepository(),
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
-        sql_executor=FakeExecutor(),
+        shop_data=FakeShopData(),
     )
 
     events = await collect(await agent.stream_chat(user_id=3, shop_id=15, message="m"))

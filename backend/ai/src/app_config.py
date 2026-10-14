@@ -27,6 +27,9 @@ class AppConfig(BaseSettings):
     # read-only login granted ai_sql_reader (AI baseline migration); unset disables the
     # agent's shop-data tool while chat keeps working
     AI_SQL_READER_URL: str | None = None
+    # most connections the shop-data pool opens; it shares the Supabase client limit
+    # with the chat-history pool and Core
+    SQL_POOL_MAX_SIZE: int = Field(default=2, gt=0)
     SQL_TIMEOUT_MS: int = Field(default=3000, gt=0)
     SQL_ROW_LIMIT: int = Field(default=100, gt=0)
 
