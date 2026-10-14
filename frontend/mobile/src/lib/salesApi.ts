@@ -15,11 +15,13 @@ const voidSender = createIdempotentSender();
  * nếu không sẽ lỗi `customer_required_for_debt`.
  */
 
-export interface SaleDraftItemRequest {
-  productId: number;
-  quantity: number;
-  unitPriceVnd: number;
-}
+/**
+ * Một dòng của đơn nháp: món trong danh mục (theo `productId`, tên và đơn vị do Core lấy từ mặt hàng), hoặc món tuỳ ý
+ * (app gửi tên và đơn vị; Core không tạo mặt hàng và không trừ tồn). Core từ chối dòng có cả `productId` lẫn tên.
+ */
+export type SaleDraftItemRequest =
+  | { productId: number; quantity: number; unitPriceVnd: number }
+  | { productName: string; unit: string; quantity: number; unitPriceVnd: number };
 
 export interface SaleDraftWriteRequest {
   customerName?: string | null;

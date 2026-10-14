@@ -22,6 +22,12 @@ export interface LineItem {
   name: string;
   price: number;
   qty: number;
+  /**
+   * "Món tạm": món mới nhập ở màn quét mã mà chủ tiệm bỏ chọn "Lưu vào danh mục hàng hoá". Dòng này không có `productId`
+   * và không bao giờ thành mặt hàng: đơn gửi nó lên Core như một món tuỳ ý (tên, đơn vị, giá). `barcode` là mã vừa quét,
+   * để quét lại cùng mã trong đơn này thì cộng số lượng (xem `src/lib/customLines.ts`).
+   */
+  custom?: { unit: string; barcode?: string };
 }
 
 export type PayMethod = 'cash' | 'transfer' | 'debt';
@@ -183,7 +189,8 @@ export interface ProductView {
 
 export interface SaleDraftItemView {
   id: number;
-  productId: number;
+  /** null = món tuỳ ý của đơn, không gắn với mặt hàng nào trong danh mục */
+  productId: number | null;
   productName: string;
   unit: string;
   quantity: number;
@@ -208,7 +215,8 @@ export interface SaleDraftView {
 
 export interface SaleItemView {
   id: number;
-  productId: number;
+  /** null = món tuỳ ý của đơn, không gắn với mặt hàng nào trong danh mục */
+  productId: number | null;
   productName: string;
   unit: string;
   quantity: number;

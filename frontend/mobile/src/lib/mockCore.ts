@@ -720,9 +720,12 @@ function archiveProduct(id: number): void {
 // ---------------------------------------------------------------------------
 
 interface SaleDraftItemBody {
-  productId: number;
+  /** Bỏ trống hoặc null = món tuỳ ý, khi đó phải có `productName` và `unit` */
+  productId?: number | null;
   quantity: number;
   unitPriceVnd: number;
+  productName?: string | null;
+  unit?: string | null;
 }
 
 interface SaleDraftWriteBody {
@@ -740,11 +743,32 @@ function createSaleDraft(body: SaleDraftWriteBody): SaleDraftView {
   const seenProductIds = new Set<number>();
   let subtotal = 0;
   const items: SaleDraftItemView[] = body.items.map((item) => {
+    // Như Core (`SaleDraftItemRequest`): số lượng dương, đơn giá là số nguyên từ 0, cho mọi dòng kể cả món tuỳ ý
+    if (!Number.isFinite(item.quantity) || item.quantity <= 0) {
+      throw apiErr(400, 'validation_failed', 'quantity must be greater than 0.');
+    }
+    if (!Number.isInteger(item.unitPriceVnd) || item.unitPriceVnd < 0) {
+      throw apiErr(400, 'validation_failed', 'unitPriceVnd must be 0 or more.');
+    }
+    const lineTotalVnd = Math.round(item.unitPriceVnd * item.quantity);
+    if (item.productId == null) {
+      // Món tuỳ ý: phải có tên và đơn vị. Core không tạo mặt hàng, không trừ tồn và coi mỗi dòng là độc lập.
+      const productName = normalizeOrNull(item.productName);
+      const unit = normalizeOrNull(item.unit);
+      if (!productName || !unit || productName.length > 255 || unit.length > 50) {
+        throw apiErr(400, 'draft_item_invalid', 'A custom draft item needs a product name and a unit.');
+      }
+      subtotal += lineTotalVnd;
+      return { id: nextDraftItemId++, productId: null, productName, unit, quantity: item.quantity, unitPriceVnd: item.unitPriceVnd, lineTotalVnd };
+    }
+    // Món trong danh mục lấy tên và đơn vị từ mặt hàng: gửi kèm tên hoặc đơn vị bị từ chối như ở Core thật.
+    if (normalizeOrNull(item.productName) || normalizeOrNull(item.unit)) {
+      throw apiErr(400, 'draft_item_invalid', 'A catalog draft item must not carry a product name or unit.');
+    }
     if (seenProductIds.has(item.productId)) throw apiErr(400, 'draft_item_duplicate', 'A product may appear only once in a draft.');
     seenProductIds.add(item.productId);
     const product = findActiveProduct(item.productId);
     if (!product) throw apiErr(400, 'draft_item_invalid', 'Every draft item must reference an active product in this shop.');
-    const lineTotalVnd = Math.round(item.unitPriceVnd * item.quantity);
     subtotal += lineTotalVnd;
     return {
       id: nextDraftItemId++,
@@ -854,6 +878,7 @@ function confirmSaleDraft(id: number): SaleView {
   if (!draft.items.length) throw apiErr(400, 'draft_item_invalid', 'Every draft item must reference an active product in this shop.');
   // Kiểm tra đủ hàng cho MỌI dòng trước khi trừ bất kỳ dòng nào (tránh trừ nửa chừng rồi báo lỗi).
   for (const item of draft.items) {
+    if (item.productId == null) continue; // món tuỳ ý không có mặt hàng và không có tồn
     const product = findActiveProduct(item.productId);
     if (!product) throw apiErr(400, 'draft_item_invalid', 'Every draft item must reference an active product in this shop.');
     if (product.tracked && (product.stockQuantity == null || product.stockQuantity < item.quantity)) {
@@ -862,6 +887,7 @@ function confirmSaleDraft(id: number): SaleView {
   }
   const now = nowIso();
   for (const item of draft.items) {
+    if (item.productId == null) continue;
     const product = findActiveProduct(item.productId)!;
     if (product.tracked && product.stockQuantity != null) {
       product.stockQuantity -= item.quantity;
@@ -1088,6 +1114,7 @@ function voidSale(id: number, body: SaleVoidBody): SaleVoidView {
   const restores: Array<{ product: ProductView; quantity: number }> = [];
   if (body.restockItems) {
     for (const item of sale.items) {
+      if (item.productId == null) continue; // món tuỳ ý chưa từng trừ tồn nên không có gì để hoàn
       const product = products.find((p) => p.id === item.productId);
       if (!product) {
         throw apiErr(409, 'sale_restock_unavailable', 'Stock cannot be safely restored for this sale item; void without restocking.');
