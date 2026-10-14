@@ -24,9 +24,11 @@ const readSet = (file: string, prefix = '') =>
     .filter((l) => l.trim())
     .map((l) => JSON.parse(l) as GoldCase)
     .map((g) => ({ ...g, split: `${prefix}${g.split}` as GoldCase['split'] }));
-// holdout.jsonl: bộ câu tự do giữ kín thứ hai (sub-agent viết, không xem code); chỉ in số tổng, không in câu sai
-const holdout = existsSync(here('./eval/holdout.jsonl')) ? readSet('./eval/holdout.jsonl', 'hold-') : [];
-const gold = [...readSet('./eval/gold.jsonl'), ...readSet('./eval/free.jsonl', 'free-'), ...holdout];
+// free2.jsonl: bộ câu tự do do sub-agent viết (bộ giữ kín thứ hai, đã chấm hai lần nên nay là dev).
+// holdout3.jsonl: bộ giữ kín thứ ba (sub-agent viết, không xem code); chỉ in số tổng, không in câu sai.
+const free2 = existsSync(here('./eval/free2.jsonl')) ? readSet('./eval/free2.jsonl', 'free2-') : [];
+const holdout = existsSync(here('./eval/holdout3.jsonl')) ? readSet('./eval/holdout3.jsonl', 'hold3-') : [];
+const gold = [...readSet('./eval/gold.jsonl'), ...readSet('./eval/free.jsonl', 'free-'), ...free2, ...holdout];
 
 type Parser = (text: string, products: ParseableProduct[]) => ScoredResult;
 // poc: mặc định (chỉ CRF, chọn đơn hàng qua gate trong n-best, gate câu tự do); poc-gatecu: gate trước khi có gate câu
@@ -164,7 +166,7 @@ function asrTable(file: string) {
   console.log('Chữ vàng = parser chạy trên câu vàng; STT = parser chạy trên transcript của cùng các câu đó.\n');
   console.log('| Tập | Số câu | WER | CER | Exact theo món: chữ vàng → STT | Tự nhận sai: chữ vàng → STT | Hỏi lại: chữ vàng → STT |');
   console.log('|---|---|---|---|---|---|---|');
-  for (const split of ['dev', 'test', 'free-dev', 'free-test', 'hold-test']) {
+  for (const split of ['dev', 'test', 'free-dev', 'free-test', 'free2-dev', 'hold3-test']) {
     const idx = gold.map((g, i) => (g.split === split && transcripts.has(g.id) ? i : -1)).filter((i) => i >= 0);
     if (!idx.length) continue;
     const golds = idx.map((i) => gold[i]);
@@ -200,14 +202,15 @@ if (failuresSplit?.startsWith('hold')) {
 } else {
   const count = (split: string) => gold.filter((g) => g.split === split).length;
   console.log(
-    `# Voice parse eval — ${gold.length} câu tự soạn (dev ${count('dev')}, test ${count('test')}, free-dev ${count('free-dev')}, free-test ${count('free-test')}${count('hold-test') ? `, giữ kín ${count('hold-test')}` : ''})`,
+    `# Voice parse eval — ${gold.length} câu tự soạn (dev ${count('dev')}, test ${count('test')}, free-dev ${count('free-dev')}, free-test ${count('free-test')}, free2-dev ${count('free2-dev')}${count('hold3-test') ? `, giữ kín ${count('hold3-test')}` : ''})`,
   );
   table('dev');
   const test = table('test');
   byCategory('test');
-  for (const split of ['free-dev', 'free-test', 'hold-test']) if (count(split)) table(split);
+  for (const split of ['free-dev', 'free-test', 'free2-dev', 'hold3-test']) if (count(split)) table(split);
   if (count('free-test')) byCategory('free-test');
-  if (count('hold-test')) byCategory('hold-test');
+  if (count('free2-dev')) byCategory('free2-dev');
+  if (count('hold3-test')) byCategory('hold3-test');
   for (const file of asrFiles) asrTable(file);
   if (!asrFiles.length) latency();
   process.exitCode = test.wrongRegressions ? 1 : 0;

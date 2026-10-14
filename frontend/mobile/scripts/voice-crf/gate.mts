@@ -16,7 +16,7 @@
  *   npm run voice:gate -- --partner <model phụ.json>         # model phụ cho bộ câu tự soạn
  *   npm run voice:gate -- --dump <out.jsonl>                # ghi tín hiệu từng câu (để học gate bằng Python)
  *
- * Không đọc `eval/holdout.jsonl`: bộ giữ kín chỉ chấm bằng `voice:eval` (số tổng) sau khi đã chốt gate.
+ * Không đọc `eval/holdout3.jsonl`: bộ giữ kín chỉ chấm bằng `voice:eval` (số tổng) sau khi đã chốt gate.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -164,6 +164,7 @@ const humanSeen = seenGrams(mainModel, one('--ngrams'));
 const human = [
   ...readJsonl<GoldCase>(here('./eval/gold.jsonl').pathname),
   ...readJsonl<GoldCase>(here('./eval/free.jsonl').pathname).map((g) => ({ ...g, split: `free-${g.split}` as GoldCase['split'] })),
+  ...readJsonl<GoldCase>(here('./eval/free2.jsonl').pathname).map((g) => ({ ...g, split: `free2-${g.split}` as GoldCase['split'] })),
 ];
 for (const g of human) {
   const products = catalogs[g.catalog];

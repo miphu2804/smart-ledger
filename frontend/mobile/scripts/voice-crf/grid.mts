@@ -31,7 +31,7 @@ const readSet = (file: string, prefix = '') =>
     .filter((l) => l.trim())
     .map((l) => JSON.parse(l) as GoldCase)
     .map((g) => ({ ...g, split: `${prefix}${g.split}` as GoldCase['split'] }));
-const gold = [...readSet('./eval/gold.jsonl'), ...readSet('./eval/free.jsonl', 'free-')];
+const gold = [...readSet('./eval/gold.jsonl'), ...readSet('./eval/free.jsonl', 'free-'), ...readSet('./eval/free2.jsonl', 'free2-')];
 const POOL = new Set(['dev', 'free-dev', 'free-test']);
 
 const args = process.argv.slice(2);
@@ -110,6 +110,7 @@ function evaluate(opts: ParseOptions) {
     dev: of((g) => g.split === 'dev'),
     freeDev: of((g) => g.split === 'free-dev'),
     freeTest: of((g) => g.split === 'free-test'),
+    free2: of((g) => g.split === 'free2-dev'),
     test: of((g) => g.split === 'test'),
   };
 }
@@ -178,16 +179,16 @@ if (lexoutDir) {
   }
   console.log(ranks);
 } else {
-  const rows: string[] = ['config\tpool\tdev\tfree-dev\tfree-test\ttest\tp95'];
-  console.log('| Cấu hình | pool | dev | free-dev | free-test | test | P95 |\n|---|---|---|---|---|---|---|');
+  const rows: string[] = ['config\tpool\tdev\tfree-dev\tfree-test\tfree2-dev\ttest\tp95'];
+  console.log('| Cấu hình | pool | dev | free-dev | free-test | free2-dev | test | P95 |\n|---|---|---|---|---|---|---|---|');
   console.log('(mỗi ô: exact theo món / tự nhận sai / hỏi lại, %)');
   for (const [name, m] of models) {
     for (const c of configs(name, m)) {
       if (only && !c.name.includes(only)) continue;
       const r = evaluate(c.opts);
       const p95 = args.includes('--latency') ? `${latencyP95(c.opts).toFixed(2)} ms` : '';
-      console.log(`| ${c.name} | ${fmt(r.pool)} | ${fmt(r.dev)} | ${fmt(r.freeDev)} | ${fmt(r.freeTest)} | ${fmt(r.test)} | ${p95} |`);
-      rows.push([c.name, fmt(r.pool), fmt(r.dev), fmt(r.freeDev), fmt(r.freeTest), fmt(r.test), p95].join('\t'));
+      console.log(`| ${c.name} | ${fmt(r.pool)} | ${fmt(r.dev)} | ${fmt(r.freeDev)} | ${fmt(r.freeTest)} | ${fmt(r.free2)} | ${fmt(r.test)} | ${p95} |`);
+      rows.push([c.name, fmt(r.pool), fmt(r.dev), fmt(r.freeDev), fmt(r.freeTest), fmt(r.free2), fmt(r.test), p95].join('\t'));
     }
   }
   if (out) writeFileSync(resolve(out), `${rows.join('\n')}\n`);
