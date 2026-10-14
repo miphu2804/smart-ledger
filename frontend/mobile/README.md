@@ -11,6 +11,7 @@ npm install
 npx expo start          # quét QR bằng Expo Go (bản hỗ trợ SDK 57)
 npm run web             # hoặc bấm w: chạy trên trình duyệt (khung giới hạn 440px)
 npm run typecheck
+npm test                # test parser câu trả lời của trợ lý (node --test, không cần thiết bị)
 npm run export:web      # build web tĩnh ra dist/
 ../../scripts/ios-device-release.sh   # chọn iPhone đang cắm vào Mac, build Release từ code đang checkout và cài lên máy
 ```
@@ -44,7 +45,7 @@ npm run export:web      # build web tĩnh ra dist/
 | `/profile` | Sửa thông tin tiệm (tên, địa chỉ, ngành hàng) lưu lên Core qua `PATCH /api/v1/shops/{shopId}`; họ tên, email, Facebook và tài khoản ngân hàng chỉ lưu trên máy |
 | `/settings` | Âm thanh, rung, đọc lại đơn, tự mở in |
 | `/notifications` | Thông báo trong app |
-| `/ai` | Hỏi đáp với trợ lý qua `src/lib/agentApi.ts` → Core `/api/v1/agent/*`; lịch sử hội thoại. Câu trả lời của trợ lý qua `components/ChatText.tsx`, chỉ render `**đậm**` và dòng bắt đầu bằng `- ` hoặc `* `; ký hiệu markdown khác hiện nguyên chữ. Khi bật mock, `mockCore` trả lời giả |
+| `/ai` | Hỏi đáp với trợ lý qua `src/lib/agentApi.ts` → Core `/api/v1/agent/*`; lịch sử hội thoại. Câu trả lời của trợ lý qua `components/ChatText.tsx`, đọc bằng `lib/chatMarkdown.ts` cho cả chữ đang stream lẫn câu đã lưu: `**đậm**`, `` `mã` ``, tiêu đề, danh sách `-`/`1.`, bảng và khối ```chart (biểu đồ cột/vùng); ký hiệu khác hiện nguyên chữ. Khi bật mock, `mockCore` trả lời giả; hỏi có chữ "biểu đồ" hoặc "bảng" để xem bảng và biểu đồ |
 | `/printer` | Màn cấu hình máy in K80/K58; chưa có kết nối thiết bị |
 | `/debug` | Chẩn đoán kết nối, chỉ có ở bản dev (xem [Debug](#debug)) |
 
