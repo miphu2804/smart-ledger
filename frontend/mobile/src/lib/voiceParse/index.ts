@@ -26,23 +26,50 @@ export interface TagResult {
 export type Tagger = (tokens: Token[], index: CatalogIndex, info: TokenInfo[]) => TagResult;
 
 export interface ParseOptions {
-  /** Gắn nhãn bằng luật (mặc định) hoặc bằng CRF (`crfTagger`). */
+  /** Tagger chính: CRF (mặc định) hoặc tagger luật (`ruleTagger`), hoặc CRF với model khác (`crfTagger`). */
   tagger?: Tagger;
   /** Điểm tối thiểu để coi là món trong danh mục. */
   tau?: number;
   /** Khoảng cách tối thiểu giữa ứng viên 1 và 2 để tự nhận; gần hơn thì hỏi chọn. */
   delta?: number;
   /**
-   * Độ tin cậy tối thiểu của tagger CRF: tổng xác suất các chuỗi nhãn ghép ra đúng đơn hàng đã chọn; thấp hơn thì không tự
-   * nhận mà gửi LLM / hỏi lại. Cũng là ngưỡng để tin một số bị CRF gán O (không phải số lượng).
+   * Độ tin cậy tối thiểu của tagger CRF: xác suất của đơn hàng đã chọn (xem `decode`); thấp hơn thì không tự nhận mà gửi
+   * LLM / hỏi lại. Cũng là ngưỡng để tin một số bị CRF gán O (không phải số lượng).
    */
   minConfidence?: number;
   /**
-   * Tagger thứ hai cho câu mà tagger chính không tự nhận được (gate báo bất kỳ lý do nào). Mặc định CRF là tagger chính
-   * (có độ tin cậy, nhận ra từ lạ không phải tên món), tagger luật là tagger thứ hai (chắc ở câu thường, không cần tin
-   * cậy). Kết quả của tagger thứ hai vẫn qua cùng gate.
+   * Tagger thứ hai cho câu mà tagger chính không tự nhận được; kết quả vẫn qua cùng gate. Mặc định không có: dò lưới
+   * (`voice:grid`) cho thấy tagger luật làm dự phòng thêm vài câu đúng nhưng tự nhận sai nhiều khi câu có từ lạ (biến
+   * "thím", "xin lỗi", "dãy 3" thành món), nên chỉ để so sánh.
    */
   fallbackTagger?: Tagger;
+  /**
+   * Cách chọn đơn hàng từ k chuỗi nhãn tốt nhất của CRF khi chuỗi Viterbi chưa đủ tin cậy hoặc không qua gate:
+   * `valid` (mặc định) chỉ xét các chuỗi qua gate cấu trúc (mọi số đều gắn được vào món, mọi dấu hiệu đều được giải
+   * thích), chọn đơn hàng có tổng xác suất lớn nhất và chuẩn hoá trên các chuỗi đó; `viterbi` giữ đơn hàng của chuỗi
+   * Viterbi và cộng xác suất các chuỗi ra cùng đơn hàng.
+   */
+  decode?: 'viterbi' | 'valid';
+  /**
+   * `valid`: tổng xác suất tối thiểu của các chuỗi qua gate; thấp hơn thì CRF gần như chắc câu này nằm ngoài cấu trúc nó
+   * hiểu, tỉ lệ giữa các chuỗi còn lại không đáng tin.
+   */
+  minValidMass?: number;
+  /**
+   * Độ tin cậy không phân biệt tên món mới, tiêu đề khoản chi và tên trong câu hỏi chọn (mặc định bật): các phần này luôn
+   * qua hộp thoại cho người dùng sửa (`voice.tsx`), chỉ món trong danh mục được ghi thẳng.
+   */
+  looseNames?: boolean;
+  /** Nghiên cứu (ablation, `voice:grid --ablate`): tắt gate dấu hiệu viết tay (`markers`) hoặc luật số bàn/giờ (`refs`). */
+  ablate?: Array<'markers' | 'refs'>;
+  /** Nghiên cứu (`voice:grid --oracle`): nhận danh sách đơn hàng ứng viên (đã gộp theo đơn hàng) của lượt CRF. */
+  onCandidates?: (list: Candidate[]) => void;
+}
+
+export interface Candidate {
+  mass: number;
+  order: ParsedOrder;
+  reason?: FallbackReason;
 }
 
 /**
@@ -78,7 +105,7 @@ const lazy = (make: () => number[]) => {
 export const crfTagger =
   (model: CrfModel, k = N_BEST): Tagger =>
   (tokens, _index, info) => {
-    const x = crfFeatures(tokens, info);
+    const x = crfFeatures(tokens, info, model.features);
     const labels = viterbi(model, x) as Label[];
     const outside = model.labels.indexOf('O');
     return {
@@ -92,8 +119,9 @@ export const crfTagger =
 export const DEFAULT_TAU = 0.72;
 export const DEFAULT_DELTA = 0.12;
 export const DEFAULT_MIN_CONFIDENCE = 0.9;
-/** Số chuỗi nhãn CRF xét khi tính độ tin cậy theo đơn hàng. */
-const N_BEST = 16;
+export const DEFAULT_MIN_VALID_MASS = 0.1;
+/** Số chuỗi nhãn CRF xét khi tính độ tin cậy theo đơn hàng (lưới k = 32/64/128 cho cùng kết quả). */
+const N_BEST = 32;
 const MAX_OPTIONS = 6;
 const MIN_ITEM_PRICE = 500;
 
@@ -203,15 +231,19 @@ interface Context {
   tau: number;
   delta: number;
   minConfidence: number;
+  decode: NonNullable<ParseOptions['decode']>;
+  minValidMass: number;
+  looseNames: boolean;
+  ablate: Set<string>;
+  onCandidates?: ParseOptions['onCandidates'];
 }
 
 /**
- * Mặc định: CRF trước; câu CRF không tự nhận được (không chắc, số chưa gắn, dấu hiệu chưa hiểu…) thì tagger luật gắn
- * lại; cả hai không được thì `fallback`. Truyền `tagger`/`fallbackTagger` để so sánh từng cách (`fallbackTagger:
- * undefined` là chỉ dùng tagger chính).
+ * Mặc định chỉ CRF: câu CRF không tự nhận được (không chắc, số chưa gắn, dấu hiệu chưa hiểu…) thì `fallback`. Truyền
+ * `tagger`/`fallbackTagger` để so sánh (`fallbackTagger: ruleTagger` là CRF trước, tagger luật gắn lại câu CRF bỏ).
  */
 export function parseOrderDetailed(text: string, products: ParseableProduct[], options: ParseOptions = {}): DetailedParse {
-  const opts: ParseOptions = { tagger: defaultCrf, fallbackTagger: ruleTagger, ...options };
+  const opts: ParseOptions = { tagger: defaultCrf, ...options };
   const index = catalogIndex(products);
   const tokens = tokenize(text);
   const ctx: Context = {
@@ -222,6 +254,11 @@ export function parseOrderDetailed(text: string, products: ParseableProduct[], o
     tau: opts.tau ?? DEFAULT_TAU,
     delta: opts.delta ?? DEFAULT_DELTA,
     minConfidence: opts.minConfidence ?? DEFAULT_MIN_CONFIDENCE,
+    decode: opts.decode ?? 'valid',
+    minValidMass: opts.minValidMass ?? DEFAULT_MIN_VALID_MASS,
+    looseNames: opts.looseNames ?? true,
+    ablate: new Set(opts.ablate ?? []),
+    onCandidates: opts.onCandidates,
   };
   const first = parseWith(ctx, opts.tagger ?? defaultCrf);
   if (!first.fallback || !opts.fallbackTagger) return first;
@@ -229,28 +266,66 @@ export function parseOrderDetailed(text: string, products: ParseableProduct[], o
   return second.fallback ? first : second;
 }
 
-const signature = (a: Assembled) =>
-  JSON.stringify([a.order.items, a.order.unknown, a.order.missingQuantityItems, a.order.disambiguations, a.order.expenses, a.reason]);
+/** Khoá của đơn hàng ghép ra (kèm lý do gate) để gộp các chuỗi nhãn ra cùng đơn hàng. */
+const signature = (a: Assembled, loose: boolean) => {
+  const o = a.order;
+  if (!loose) return JSON.stringify([o.items, o.unknown, o.missingQuantityItems, o.disambiguations, o.expenses, a.reason]);
+  return JSON.stringify([
+    o.items,
+    o.unknown.map((u) => [u.price, u.qty]),
+    o.missingQuantityItems?.length,
+    o.disambiguations?.map((d) => [d.qty, d.unit, d.options.map((x) => x.product_id)]),
+    o.expenses?.map((e) => e.amount),
+    a.reason,
+  ]);
+};
 
 function parseWith(ctx: Context, tagger: Tagger): DetailedParse {
   const { tokens } = ctx;
-  const { labels, prob, nbest, pOutside } = tagger(tokens, ctx.index, ctx.info);
-  const best = assemble(ctx, labels, pOutside, prob === undefined);
-  let reason: FallbackReason | undefined = best.reason;
+  const tagged = tagger(tokens, ctx.index, ctx.info);
+  const { prob, nbest, pOutside } = tagged;
+  let labels = tagged.labels;
+  let best = assemble(ctx, labels, pOutside, prob === undefined);
   let confidence = prob;
-  if (confidence !== undefined && confidence < ctx.minConfidence && nbest) {
-    // Độ tin cậy theo đơn hàng: cộng xác suất các chuỗi nhãn ứng viên ghép ra đúng đơn hàng này (cùng lý do gate).
+  const key = (a: Assembled) => signature(a, ctx.looseNames);
+  const same = (a: Label[]) => a.length === labels.length && a.every((l, i) => l === labels[i]);
+  if (confidence !== undefined && nbest && ctx.decode === 'valid' && (confidence < ctx.minConfidence || best.reason)) {
+    // Gộp k chuỗi nhãn tốt nhất theo đơn hàng ghép ra; trong các đơn hàng qua gate, chọn đơn có tổng xác suất lớn nhất.
+    // Độ tin cậy = xác suất của đơn đó trên tổng xác suất các chuỗi qua gate (phần ngoài k chuỗi tính là không qua được).
+    const groups = new Map<string, { mass: number; a: Assembled; labels: Label[] }>();
+    groups.set(key(best), { mass: confidence, a: best, labels });
+    let seen = confidence;
+    for (const alt of nbest()) {
+      if (same(alt.labels)) continue;
+      seen += alt.prob;
+      const a = assemble(ctx, alt.labels, pOutside);
+      const g = groups.get(key(a));
+      if (g) g.mass += alt.prob;
+      else groups.set(key(a), { mass: alt.prob, a, labels: alt.labels });
+    }
+    const all = [...groups.values()];
+    ctx.onCandidates?.(all.map((g) => ({ mass: g.mass, order: g.a.order, reason: g.a.reason })));
+    const valid = all.filter((g) => !g.a.reason);
+    const top = valid.reduce<(typeof all)[number] | undefined>((m, g) => (!m || g.mass > m.mass ? g : m), undefined);
+    if (top) {
+      const validMass = valid.reduce((n, g) => n + g.mass, 0);
+      best = top.a;
+      labels = top.labels;
+      confidence = validMass < ctx.minValidMass ? 0 : top.mass / (validMass + Math.max(0, 1 - seen));
+    }
+  } else if (confidence !== undefined && confidence < ctx.minConfidence && nbest) {
+    // `viterbi`: cộng xác suất các chuỗi nhãn ứng viên ghép ra đúng đơn hàng của chuỗi Viterbi (cùng lý do gate).
     // Dừng sớm khi đã chắc chắn qua hoặc không thể qua ngưỡng.
-    const key = signature(best);
-    const same = (a: Label[]) => a.length === labels.length && a.every((l, i) => l === labels[i]);
+    const k = key(best);
     let seen = confidence;
     for (const alt of nbest()) {
       if (confidence >= ctx.minConfidence || confidence + (1 - seen) < ctx.minConfidence) break;
       if (same(alt.labels)) continue;
       seen += alt.prob;
-      if (signature(assemble(ctx, alt.labels, pOutside)) === key) confidence += alt.prob;
+      if (key(assemble(ctx, alt.labels, pOutside)) === k) confidence += alt.prob;
     }
   }
+  let reason: FallbackReason | undefined = best.reason;
   if (!reason && confidence !== undefined && confidence < ctx.minConfidence) reason = 'confidence';
   if (!reason && best.empty) reason = 'empty';
   const order = best.order;
@@ -285,10 +360,12 @@ function assemble(ctx: Context, labels: Label[], pOutside?: (i: number) => numbe
   const expenses: ParsedExpenseItem[] = [];
 
   // Mệnh đề: cắt ở dấu câu và ở từ nối đã được gắn O
+  // Cụm sửa lời (EDIT) nối hai mệnh đề quanh nó: "hai gói hảo hảo, à không, ba gói" là một mệnh đề
+  const isEdit = (i: number) => labels[i] === 'B-EDIT' || labels[i] === 'I-EDIT';
   const clauseOf: number[] = [];
   let clause = 0;
   tokens.forEach((t, i) => {
-    if (t.kind === 'sep' || (labels[i] === 'O' && DELIMITERS.has(t.norm))) clause++;
+    if ((t.kind === 'sep' || (labels[i] === 'O' && DELIMITERS.has(t.norm))) && !isEdit(i - 1) && !isEdit(i + 1)) clause++;
     clauseOf.push(clause);
   });
   const used = new Set<Span>();
@@ -358,10 +435,37 @@ function assemble(ctx: Context, labels: Label[], pOutside?: (i: number) => numbe
     }
   }
 
+  // Sửa lời: món nói ngay sau cụm EDIT (cùng mệnh đề) thay cho món nói trước. Cùng món thì thay lần nói trước của món
+  // đó ("ba trà đá à không năm trà đá"), khác món thì thay món ngay trước EDIT ("hai phở gà, à nhầm phở bò"); món mới
+  // chưa có số thì giữ số của món cũ. EDIT không thay món nào thì phải sửa số (QTYC sau nó, hoặc số bị bỏ trước nó).
+  const dropped = new Set<Line>();
+  const edits = spans.filter((s) => s.slot === 'EDIT');
+  let unusedEdit = false;
+  const identity = (l: Line) => {
+    const top = link(l.item.from, l.item.to)[0];
+    return top && top.score >= tau ? `#${top.product.id}` : displayName(tokens.slice(l.item.from, l.item.to)).toLowerCase();
+  };
+  for (const e of edits) {
+    const before = lines.filter((l) => l.item.to <= e.from && !dropped.has(l));
+    const after = lines.find((l) => l.item.from >= e.to && !dropped.has(l));
+    const relational = (s: Span) => s.slot !== 'QTY' && QTY_SLOTS.has(s.slot);
+    if (before.length && after && after.clause === clauseOf[e.from] && !spans.some((s) => (relational(s) || s.slot === 'COPY') && s.from >= e.to && s.to <= after.item.from)) {
+      const id = identity(after);
+      const target = [...before].reverse().find((l) => identity(l) === id) ?? before[before.length - 1];
+      if (after.qty === null) after.qty = target.qty;
+      dropped.add(target);
+    } else {
+      const fixesQty = spans.some((s) => s.slot === 'QTYC' && s.from >= e.to);
+      const cancelsNumber = tokens.some((t, i) => i < e.from && clauseOf[i] === clauseOf[e.from] && info[i].isNum && labels[i] === 'O');
+      if (!fixesQty && !cancelsNumber) unusedEdit = true;
+    }
+  }
+
   let duplicate = false;
   let implicit = false;
   const anyQuantity = lines.some((l) => l.qty !== null);
   for (const line of lines) {
+    if (dropped.has(line)) continue;
     const { item } = line;
     const nextStart = lines.find((l) => l.item.from > item.from)?.item.from ?? Infinity;
     const q = line.qtySpan;
@@ -419,7 +523,7 @@ function assemble(ctx: Context, labels: Label[], pOutside?: (i: number) => numbe
   // số → gửi LLM / hỏi lại.
   const qtySpans = spans.filter((s) => QTY_SLOTS.has(s.slot) || s.slot === 'COPY');
   const has = (slot: Slot, from = 0) => spans.some((s) => s.slot === slot && s.from >= from);
-  const markers = findMarkers(tokens, info);
+  const markers = ctx.ablate.has('markers') ? [] : findMarkers(tokens, info);
   const explained = markers.every((m) => {
     switch (m.kind) {
       case 'dist':
@@ -427,7 +531,11 @@ function assemble(ctx: Context, labels: Label[], pOutside?: (i: number) => numbe
       case 'copy':
         return has('COPY', m.at) || has('QTYP', m.at);
       case 'corr':
-        return has('QTYC', m.at) || tokens.some((t, i) => i < m.at && info[i].isNum && labels[i] === 'O');
+        return (
+          has('QTYC', m.at) ||
+          tokens.some((t, i) => i < m.at && info[i].isNum && labels[i] === 'O') ||
+          edits.some((e) => e.from <= m.at + 1 && e.to >= m.at)
+        );
       case 'total':
         return labels[m.at] === 'O';
     }
@@ -438,14 +546,15 @@ function assemble(ctx: Context, labels: Label[], pOutside?: (i: number) => numbe
     (t, i) =>
       info[i].isNum &&
       labels[i] === 'O' &&
-      !isReferenceNumber(tokens, i) &&
+      !(!ctx.ablate.has('refs') && isReferenceNumber(tokens, i)) &&
       !markers.some((m) => (m.kind === 'total' && m.at === i) || (m.kind === 'corr' && m.at > i)) &&
+      !edits.some((e) => e.from > i && clauseOf[e.from] === clauseOf[i]) &&
       !(info[i].gzLen >= 2 && info[i].gzContent) &&
       !(pOutside && pOutside(i) >= ctx.minConfidence),
   );
   let reason: Assembled['reason'];
   if (qtySpans.some((s) => !used.has(s)) || droppedNumber) reason = 'unattached';
-  else if (!explained) reason = 'marker';
+  else if (!explained || unusedEdit) reason = 'marker';
   else if (duplicate) reason = 'duplicate';
   else if (implicit && strict) reason = 'implicit';
   const none = !items.length && !unknown.length && !missingQuantityItems.length && !disambiguations.length && !expenses.length;

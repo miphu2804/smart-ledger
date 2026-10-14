@@ -35,9 +35,27 @@ function local(t: Token, x: TokenInfo): Record<string, string> {
 
 const CONTEXT_KEYS = ['w', 'num', 'unit', 'fill', 'gz', 'sale', 'expw', 'k'];
 
+/**
+ * Bộ đặc trưng; model ghi bộ nó được train (`CrfModel.features`). `v2` thêm đặc trưng lặp lại: từ này có được nói lại
+ * ở sau / đã nói ở trước trong câu không (dấu hiệu sửa lời: "ba trà đá à không năm TRÀ ĐÁ").
+ */
+export type FeatureSet = 'v1' | 'v2' | 'nolex';
+
 /** Danh sách đặc trưng dạng chuỗi "tên=giá trị" cho cả câu; thứ tự cố định để tổng điểm giống hệt CRFsuite. */
-export function crfFeatures(tokens: Token[], info: TokenInfo[]): string[][] {
+export function crfFeatures(tokens: Token[], info: TokenInfo[], set: FeatureSet = 'v1'): string[][] {
   const loc = tokens.map((t, i) => local(t, info[i]));
+  if (set === 'nolex') {
+    // Nghiên cứu (ablation): bỏ đặc trưng lấy từ danh sách từ viết tay (đơn vị, từ đệm, động từ bán, từ nối, từ chi)
+    for (const f of loc) for (const k of ['unit', 'fill', 'sale', 'delim', 'expw']) delete f[k];
+  }
+  if (set === 'v2' || set === 'nolex') {
+    const words = tokens.map((t, i) => (t.kind === 'word' && (set === 'nolex' || !info[i].isFiller) ? t.norm : ''));
+    loc.forEach((f, i) => {
+      const w = words[i];
+      f.rep = w && words.indexOf(w, i + 1) > i ? '1' : '0';
+      f.prv = w && i > 0 && words.lastIndexOf(w, i - 1) >= 0 ? '1' : '0';
+    });
+  }
   const n = tokens.length;
   return loc.map((f, i) => {
     const out: string[] = ['bias'];
@@ -50,7 +68,7 @@ export function crfFeatures(tokens: Token[], info: TokenInfo[]): string[][] {
       }
       // ±1 thêm dạng có dấu: "bàn năm" (số bàn) khác "bán năm" (bán năm cái)
       const keys = Math.abs(d) === 1 ? [...CONTEXT_KEYS, 'r'] : ['w', 'num', 'gz'];
-      for (const k of keys) out.push(`${d}:${k}=${g[k]}`);
+      for (const k of keys) if (g[k] !== undefined) out.push(`${d}:${k}=${g[k]}`);
     }
     if (i > 0) out.push(`-1|0:w=${loc[i - 1].w}|${f.w}`, `-1|0:gz=${loc[i - 1].gz}|${f.gz}`);
     if (i + 1 < n) out.push(`0|1:w=${f.w}|${loc[i + 1].w}`, `0|1:gz=${f.gz}|${loc[i + 1].gz}`);

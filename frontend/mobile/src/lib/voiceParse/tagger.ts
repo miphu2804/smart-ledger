@@ -5,14 +5,15 @@
  * - QTYP: số lượng của món đứng TRƯỚC ("trà vải cũng HAI", "bún bò cho HAI người");
  * - QTYD: một số lượng cho cả danh sách món ("coca, pepsi mỗi thứ BA lon");
  * - QTYC: sửa số lượng món vừa nói ("hai gói hảo hảo, à không, BA gói");
- * - COPY: lấy lại số lượng của món trước ("pepsi CŨNG VẬY").
+ * - COPY: lấy lại số lượng của món trước ("pepsi CŨNG VẬY");
+ * - EDIT: cụm sửa lời ("hai phở gà, À NHẦM phở bò"): món nói ngay sau thay cho món nói trước.
  * Số không phải số lượng (bàn năm, lúc tám giờ, tổng "ba ly:" trước khi kể từng món) gán O.
  */
 import { type CatalogIndex, fuzzyInVocab } from './catalog';
 import { CHAT_RAW, DELIMITERS, FILLER_RAW, FILLER_WORDS, REF_AFTER_RAW, SALE_VERBS, SALE_VERBS_RAW, TEA_WORDS, UNIT_RAW, UNIT_WORDS } from './lexicon';
 import { isSpokenNumber, numberRunEnd, SPOKEN_NUMBER_WORDS, type Token } from './text';
 
-export const SLOTS = ['QTY', 'QTYP', 'QTYD', 'QTYC', 'COPY', 'UNIT', 'ITEM', 'AMT', 'EXP'] as const;
+export const SLOTS = ['QTY', 'QTYP', 'QTYD', 'QTYC', 'COPY', 'EDIT', 'UNIT', 'ITEM', 'AMT', 'EXP'] as const;
 export type Slot = (typeof SLOTS)[number];
 export type Label = 'O' | `B-${Slot}` | `I-${Slot}`;
 /** Các nhãn số lượng (thường và quan hệ). */

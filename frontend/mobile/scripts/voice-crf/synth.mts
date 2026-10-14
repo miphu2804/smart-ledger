@@ -4,21 +4,33 @@
  * `.data/` cho `train.py`. Câu sinh từ mẫu trên các danh mục ở `lexicon.ts` (không trùng danh mục eval), có biến thể
  * dấu, số đọc/viết, tên một phần, từ đệm, món ngoài danh mục và lỗi STT giả lập. Cũng xuất đặc trưng của bộ eval.
  *
- *   npm run voice:synth            # mặc định 8000 câu train + 1000 câu dev, seed 7
+ *   npm run voice:synth                                  # mặc định 16000 câu train + 1000 câu dev, seed 7
+ *   npm run voice:synth -- --out <thư mục> --holdout 1   # thêm lexout.jsonl: câu dùng 1/3 từ vựng không có trong train
+ *   npm run voice:synth -- --edit 0 --lex 0 --corr 0.04 --features v1 --train 8000   # dữ liệu của model giai đoạn 3
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import type { ParseableProduct } from '../../src/lib/parseOrder';
 import { catalogIndex } from '../../src/lib/voiceParse/catalog';
-import { crfFeatures } from '../../src/lib/voiceParse/features';
+import { crfFeatures, type FeatureSet } from '../../src/lib/voiceParse/features';
 import { analyze, type Label, QTY_SLOTS, type Slot } from '../../src/lib/voiceParse/tagger';
 import { tokenize } from '../../src/lib/voiceParse/text';
 import { OOC_ITEMS, TRAIN_CATALOGS } from './lexicon';
 
 const args = process.argv.slice(2);
 const opt = (name: string, def: number) => (args.includes(name) ? Number(args[args.indexOf(name) + 1]) : def);
-const N_TRAIN = opt('--train', 8000);
+const N_TRAIN = opt('--train', 16000);
 const N_DEV = opt('--dev', 1000);
 let seed = opt('--seed', 7);
+/** Nhãn EDIT cho cụm sửa lời + câu sửa lời tổ hợp (`--edit 0`: mẫu sửa lời cũ, chỉ QTYC). */
+const EDIT = opt('--edit', 1) > 0;
+/** Từ vựng rộng cho xưng hô, lời mở/kết, "mỗi", "y chang", số tham chiếu, tổng (`--lex 0`: danh sách cũ). */
+const LEX = opt('--lex', 1) > 0;
+/** Giữ lại 1/3 từ vựng mỗi danh sách để sinh `lexout.jsonl` (đo khả năng gặp từ chưa thấy, `voice:grid --lexout`). */
+const HOLDOUT = opt('--holdout', 0) > 0;
+const OUT_DIR = args.includes('--out') ? `${args[args.indexOf('--out') + 1].replace(/\/$/, '')}/` : './.data/';
+/** Tỉ lệ câu sửa lời (phần thêm so với 4% lấy từ câu bán thường). */
+const CORR = opt('--corr', 0.08);
+const FEATURE_SET = args.includes('--features') ? (args[args.indexOf('--features') + 1] as FeatureSet) : 'v2';
 
 // ─── Ngẫu nhiên có seed (mulberry32) ──────────────────────────────────────────
 function rand(): number {
@@ -29,6 +41,12 @@ function rand(): number {
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)];
+/** Phần từ vựng đang dùng khi `--holdout`: train dùng 2/3 mỗi danh sách, `lexout` dùng 1/3 còn lại. */
+let lexPart: 'all' | 'train' | 'test' = 'all';
+const lexPick = <T,>(xs: readonly T[]): T => {
+  if (lexPart === 'all' || xs.length < 3) return pick(xs);
+  return pick(xs.filter((_, i) => (i % 3 === 2) === (lexPart === 'test')));
+};
 const chance = (p: number) => rand() < p;
 const int = (lo: number, hi: number) => lo + Math.floor(rand() * (hi - lo + 1));
 
@@ -133,7 +151,35 @@ function itemText(p: ParseableProduct): string {
 // ─── Mẫu câu ─────────────────────────────────────────────────────────────────
 type Seg = [string, Slot | null];
 const PRONOUNS = ['anh', 'chị', 'em', 'cô', 'chú', 'con', 'bác', 'cháu'];
+// Từ vựng rộng (`--lex 1`, mặc định): xưng hô, lời nhờ, lời kết hay gặp khi nói tự nhiên
+const PRONOUNS_X = [...PRONOUNS, 'tớ', 'mình', 'tui', 'tôi', 'tao', 'ông', 'bà', 'cậu', 'dì', 'thím', 'mợ', 'má', 'mẹ', 'bố', 'chế', 'bạn', 'ẻm', 'ảnh', 'chỉ', 'cưng'];
+const CLOSERS_X = [
+  'nha', 'nhé', 'nha em', 'đi', 'đi em', 'luôn', 'nữa', 'thôi', 'à', 'nghen', 'nhé chị', 'luôn nha', 'nhá', 'nhen', 'đó', 'đó nha',
+  'giùm', 'giúp em', 'luôn đi', 'liền', 'lẹ nha', 'nhanh nha', 'cảm ơn', 'nha cưng', 'nghe chưa', 'vậy thôi', 'là được', 'hen',
+  'nhe', 'đi nha', 'luôn nhé', 'thế thôi', 'với nha', 'nha bạn', 'được không', 'nhé em',
+];
+const openerX = (): Seg[] => {
+  if (chance(0.3)) return [];
+  const p = lexPick(PRONOUNS_X);
+  const q = lexPick(PRONOUNS_X);
+  const o = lexPick([
+    'à', 'ờ', 'ừm', 'dạ', 'ơi', `${p} ơi`, `cho ${p}`, `lấy cho ${p}`, `bán cho ${p}`, `ghi cho ${p}`, `tính cho ${p}`, 'khách lấy',
+    'lấy', 'bán', 'thêm', 'cho', 'ghi', 'à ờ', `ờ cho ${p} lấy`, `${p} lấy`, 'tính tiền', 'order', `làm ơn cho ${p}`, `${p} lấy giùm`,
+    `cho ${p} xin`, `${p} ơi cho ${q}`, `ê ${p}`, 'ê', 'nè', `${p} ơi lấy`, `bán cho ${p} với`, 'cho xin', `phiền ${p}`, `ghi giùm ${p}`,
+    `${p} ghi`, `${p} mua`, `mua cho ${p}`, 'làm ơn', `${p} ơi ${q} lấy`, `dạ ${p} lấy`, 'cho mình', `${p} cần`, `${p} muốn lấy`,
+    `ờ ${p} ơi`, 'khách gọi', 'bàn kia gọi', `${p} order`, 'lên đơn', 'ghi đơn',
+  ]);
+  return [[o, null]];
+};
+const closerX = (): Seg[] => {
+  if (chance(0.5)) return [];
+  // "gỏi cuốn cho chị", "hai trà đá giùm em"
+  if (chance(0.25)) return [[`${pick(['cho', 'giùm', 'giúp', 'cho', 'lấy cho'])} ${lexPick(PRONOUNS_X)}${pick(['', ' nha', ' nhé', ' với'])}`, null]];
+  return [[lexPick(CLOSERS_X), null]];
+};
+
 const opener = (): Seg[] => {
+  if (LEX) return openerX();
   const r = rand();
   if (r < 0.35) return [];
   const p = pick(PRONOUNS);
@@ -144,7 +190,7 @@ const opener = (): Seg[] => {
   return [[o, null]];
 };
 const closer = (): Seg[] =>
-  chance(0.55) ? [] : [[pick(['nha', 'nhé', 'nha em', 'đi', 'đi em', 'luôn', 'nữa', 'thôi', 'à', 'nghen', 'nhé chị', 'luôn nha']), null]];
+  LEX ? closerX() : chance(0.55) ? [] : [[pick(['nha', 'nhé', 'nha em', 'đi', 'đi em', 'luôn', 'nữa', 'thôi', 'à', 'nghen', 'nhé chị', 'luôn nha']), null]];
 const UNITS = ['chai', 'lon', 'gói', 'hộp', 'bịch', 'ly', 'phần', 'tô', 'dĩa', 'cái', 'bao', 'vỉ', 'cây', 'lốc', 'thùng', 'ký', 'trái', 'ổ', 'xiên', 'tuýp', 'hũ', 'cốc', 'quả', 'chiếc', 'túi'];
 const DELIMS = ['với', 'và', 'thêm', ',', 'rồi', 'với lại'];
 
@@ -243,7 +289,30 @@ function list(products: ParseableProduct[], n: number): Seg[] {
 const tail = (products: ParseableProduct[]): Seg[] =>
   chance(0.3) ? [[pick([',', 'với', 'thêm', 'rồi']), null], ...saleItem(products, chance(0.2))] : [];
 
+const EACH_X = [
+  'mỗi thứ', 'mỗi loại', 'mỗi cái', 'mỗi món', 'mỗi thứ là', 'mỗi loại là', 'mỗi thứ một', 'mỗi thứ lấy', 'mỗi món là', 'mỗi loại lấy',
+  'từng món', 'mỗi bên', 'mỗi thứ cho', 'mỗi cái là', 'mỗi món lấy', 'cái nào cũng', 'món nào cũng', 'loại nào cũng',
+];
+function distributiveX(products: ParseableProduct[]): Seg[] {
+  // "mỗi tô hai", "mỗi ly ba": loại từ sau "mỗi" thay cho "thứ/loại"
+  const each = chance(0.35) ? `mỗi ${pick(UNITS)}` : lexPick(EACH_X);
+  const n = int(2, 3);
+  switch (int(0, 4)) {
+    case 0: // "coca, pepsi mỗi thứ ba lon"
+      return [...opener(), ...list(products, n), [each, null], [qtyText(), 'QTYD'], ...unitSeg(), ...tail(products), ...closer()];
+    case 1: // "mỗi loại hai gói hảo hảo với omachi", "mỗi thứ hai, gạo tám với dầu ăn"
+      return [...opener(), [each.replace(/ (là|một|lấy|cho)$/, ''), null], [qtyText(), 'QTYD'], ...unitSeg(), ...(chance(0.4) ? ([[pick([',', ':', 'là']), null]] as Seg[]) : []), ...list(products, n), ...closer()];
+    case 2: // "ba ly mỗi loại: bạc xỉu, cacao"
+      return [...opener(), [qtyText(), 'QTYD'], ...unitSeg(0.8), [lexPick(EACH_X).replace(/ (là|một|lấy|cho)$/, ''), null], [pick([',', '', 'là', ':']), null], ...list(products, n), ...closer()];
+    case 3: // "phở gà phở bò mỗi tô hai"
+      return [...opener(), ...list(products, n), [`mỗi ${pick(UNITS)}`, null], [qtyText(), 'QTYD'], ...tail(products), ...closer()];
+    default: // "coca với pepsi đều hai lon"
+      return [...opener(), ...list(products, n), [pick(['đều', 'đều là', 'cũng đều', 'đều lấy', 'hết thảy đều']), null], [qtyText(), 'QTYD'], ...unitSeg(), ...closer()];
+  }
+}
+
 function distributive(products: ParseableProduct[]): Seg[] {
+  if (LEX) return distributiveX(products);
   const each = pick(['mỗi thứ', 'mỗi loại', 'mỗi cái', 'mỗi món', 'mỗi thứ là', 'mỗi loại là', 'mỗi thứ một', 'mỗi thứ lấy']);
   const n = int(2, 3);
   switch (int(0, 3)) {
@@ -258,7 +327,20 @@ function distributive(products: ParseableProduct[]): Seg[] {
   }
 }
 
+const COPY_X = [
+  'cũng vậy', 'cũng thế', 'y vậy', 'giống vậy', 'cũng như vậy', 'cũng y chang', 'cũng vậy luôn', 'y chang', 'y như vậy', 'như trên',
+  'y hệt', 'giống y vậy', 'cũng giống', 'như cũ', 'cũng thế luôn', 'tương tự', 'giống như trên', 'y chang vậy', 'cũng bấy nhiêu',
+  'nhiêu đó luôn', 'cũng nhiêu đó', 'cũng y vậy', 'giống hệt', 'như vậy luôn',
+];
+function copyQtyX(products: ParseableProduct[]): Seg[] {
+  const first: Seg[] = chance(0.3) ? [item(products), [qtyText(), 'QTY'], ...unitSeg()] : [[qtyText(), 'QTY'], ...unitSeg(), item(products)];
+  const sep: Seg = [pick([',', 'còn', 'rồi', '', 'với', ', còn', 'thêm']), null];
+  if (chance(0.5)) return [...opener(), ...first, sep, item(products), [lexPick(COPY_X), 'COPY'], ...closer()];
+  return [...opener(), ...first, sep, item(products), [lexPick(['cũng', 'thì cũng', 'cũng lấy', 'cũng là', 'cũng cho', 'thì cũng lấy']), null], [qtyText(), 'QTYP'], ...unitSeg(0.4), ...closer()];
+}
+
 function copyQty(products: ParseableProduct[]): Seg[] {
+  if (LEX) return copyQtyX(products);
   // món đầu luôn có số lượng để "cũng vậy" có cái mà chép
   const first: Seg[] = chance(0.3) ? [item(products), [qtyText(), 'QTY'], ...unitSeg()] : [[qtyText(), 'QTY'], ...unitSeg(), item(products)];
   const sep: Seg = [pick([',', 'còn', 'rồi', '', 'với']), null];
@@ -280,7 +362,32 @@ function correction(products: ParseableProduct[]): Seg[] {
   }
 }
 
+const REF_X = ['bàn', 'bàn số', 'phòng', 'phòng số', 'quầy', 'quầy số', 'kệ', 'kệ số', 'tầng', 'lầu', 'lô', 'dãy', 'xe số', 'khu', 'ghế số', 'số bàn', 'cửa số', 'số phòng', 'ghi số bàn'];
+function referencesX(products: ParseableProduct[]): Seg[] {
+  const num = () => (chance(0.5) ? spoken(int(1, 12)) : String(int(1, 20)));
+  const ref: Seg[] = chance(0.15)
+    ? [['lúc', null], [spoken(int(1, 11)), null], ['giờ', null]]
+    : chance(0.15)
+      ? [[lexPick(['bàn', 'phòng', 'bàn số']), null], [num(), null], [lexPick(['có', 'được', 'đi', 'ngồi']), null], [num(), null], ['người', null]]
+      : [[lexPick(REF_X), null], [num(), null]];
+  switch (int(0, 3)) {
+    case 0: {
+      // "cho bàn năm hai cà phê muối" (số bàn liền số lượng), "quầy số hai, một cây xúc xích"
+      const body = sale(products).filter(([t]) => t);
+      const first = body.findIndex(([, sl]) => sl !== null);
+      return [[pick(['cho', 'ghi', '', 'lên', 'ở']), null], ...ref, ...(chance(0.3) ? ([[',', null]] as Seg[]) : []), ...body.slice(first > 0 && chance(0.6) ? first : 0)];
+    }
+    case 1: // "hai cà phê muối cho bàn năm"
+      return [...sale(products), [pick(['cho', 'mang ra', 'ở', '', ',', 'để ở']), null], ...ref];
+    case 2: // "quầy số hai, một cây xúc xích, kệ số bốn"
+      return [...ref, [',', null], ...sale(products), [',', null], [lexPick(REF_X), null], [num(), null], ...closer()];
+    default: // "bún bò huế cho hai người"
+      return [...opener(), item(products), [pick(['cho', '']), null], [qtyText(), 'QTYP'], ['người', 'UNIT'], ...(chance(0.3) ? ([['ăn', null]] as Seg[]) : []), ...closer()];
+  }
+}
+
 function references(products: ParseableProduct[]): Seg[] {
+  if (LEX) return referencesX(products);
   const n = String(int(1, 20));
   const ref: Seg[] = pick([
     [['bàn', null], [chance(0.5) ? spoken(int(1, 12)) : n, null]],
@@ -298,7 +405,21 @@ function references(products: ParseableProduct[]): Seg[] {
   }
 }
 
+function totalThenSplitX(products: ParseableProduct[]): Seg[] {
+  const r = rand();
+  const head: Seg[] =
+    r < 0.4
+      ? [[qtyText(), null], ...(chance(0.7) ? ([[pick(['ly', 'món', 'phần', 'cái', 'chai', 'gói', 'tô', 'thứ']), null]] as Seg[]) : [])]
+      : r < 0.75
+        ? [[lexPick(['tổng cộng', 'tất cả', 'hết thảy', 'tổng', 'cả thảy', 'tất cả là', 'gồm', 'tổng cộng là']), null], [qtyText(), null], [pick(['món', 'thứ', 'cái', 'ly', 'phần']), null]]
+        : [[lexPick(['chia ra', 'gồm có', 'bao gồm', 'cụ thể', 'kể ra', 'liệt kê', 'gồm những']), null]];
+  const parts: Seg[] = [];
+  for (let i = 0; i < int(2, 3); i++) parts.push(...(i ? ([[pick(['', ',', 'với']), null]] as Seg[]) : []), ...saleItem(products, false).filter(([, sl]) => sl !== 'AMT'));
+  return [...opener(), ...head, [pick([',', ':', 'gồm', 'là', 'trong đó', 'gồm có']), null], ...parts.filter(([t]) => t !== ''), ...closer()];
+}
+
 function totalThenSplit(products: ParseableProduct[]): Seg[] {
+  if (LEX) return totalThenSplitX(products);
   const head: Seg[] = chance(0.5)
     ? [[qtyText(), null], ...(chance(0.7) ? ([[pick(['ly', 'món', 'phần', 'cái', 'chai']), null]] as Seg[]) : [])]
     : [[pick(['tổng cộng', 'tất cả', 'hết thảy']), null], [qtyText(), null], [pick(['món', 'thứ', 'cái', 'ly']), null]];
@@ -316,15 +437,59 @@ function topicOrder(products: ParseableProduct[]): Seg[] {
   return [...out, ...closer()];
 }
 
+// ─── Sửa lời (`--edit 1`, mặc định): cụm sửa lời gán EDIT; món nói lại / đổi món / sửa số ghép theo mọi kiểu câu ─────
+const EDIT_TERMS = [
+  'à không', 'à nhầm', 'à lộn', 'ờ không', 'nhầm', 'không phải', 'à mà thôi', 'à không phải', 'ờ sai', 'sai rồi', 'à sai', 'khoan',
+  'à khoan', 'khoan đã', 'ý lộn', 'ý nhầm', 'à quên', 'không không', 'à mà nhầm', 'nhầm rồi', 'lộn rồi', 'ấy chết', 'chết', 'à chết',
+  'nói lại', 'à nói lại', 'xin lỗi', 'à xin lỗi', 'không đúng', 'ờ nhầm', 'ờ lộn', 'ơ không', 'à thôi', 'đổi lại', 'đổi thành',
+  'sửa lại', 'thôi đổi thành', 'à mà không', 'ờ à không', 'à ý là', 'ý là', 'à đâu', 'ờ mà', 'không', 'thôi', 'thôi lấy',
+];
+function repair(products: ParseableProduct[]): Seg[] {
+  const term = (): Seg => [chance(0.06) ? pick(['ờ', 'à', 'ơ']) : lexPick(EDIT_TERMS), 'EDIT'];
+  const sep = (): Seg[] => (chance(0.5) ? [[',', null]] : []);
+  const ooc = chance(0.08) ? pick(OOC_ITEMS) : null;
+  const p = pick(products);
+  const name = (q: ParseableProduct) => ooc ?? itemText(q);
+  const line = (text: string, nameFirst: boolean): Seg[] => {
+    const q: Seg[] = [[qtyText(), 'QTY'], ...unitSeg()];
+    return nameFirst ? [[text, 'ITEM'], ...q] : [...q, [text, 'ITEM']];
+  };
+  const nf = chance(0.35);
+  const head: Seg[] = [...opener(), ...(chance(0.3) ? [...saleItem(products, chance(0.2)), [pick([',', 'với', 'và']), null] as Seg] : [])];
+  switch (int(0, 5)) {
+    case 0:
+    case 1: // sửa số: "hai gói hảo hảo, à không, ba gói", "trứng gà một vỉ à không hai vỉ"
+      return [...head, ...line(name(p), nf), ...sep(), term(), ...sep(), [qtyText(), 'QTYC'], ...unitSeg(0.5), ...tail(products), ...closer()];
+    case 2: // sửa số trước khi nói món: "lấy ba chai à nhầm hai chai nước mắm"
+      return [...head, [qtyText(), null], ...(chance(0.6) ? ([[pick(UNITS), null]] as Seg[]) : []), term(), [qtyText(), 'QTY'], ...unitSeg(), [name(p), 'ITEM'], ...tail(products), ...closer()];
+    case 3: // nói lại món với số mới: "ba trà đá à không năm trà đá", "sữa chua đá hai ly, à mà nhầm sữa chua đá năm ly"
+      return [...head, ...line(name(p), nf), ...sep(), term(), ...sep(), ...line(name(p), chance(0.7) ? nf : !nf), ...tail(products), ...closer()];
+    case 4: {
+      // đổi món, giữ số cũ hoặc nói số mới: "hai phở gà, à nhầm phở bò", "… phở bò, ba tô"
+      const other = chance(0.08) ? pick(OOC_ITEMS) : itemText(pick(products));
+      const changed: Seg[] = chance(0.4)
+        ? line(other, nf)
+        : [[other, 'ITEM'], ...(chance(0.4) ? ([[',', null], [qtyText(), 'QTYC'], ...unitSeg(0.6)] as Seg[]) : [])];
+      return [...head, ...line(name(p), nf), ...sep(), term(), ...sep(), ...changed, ...tail(products), ...closer()];
+    }
+    default: {
+      // nói lại một món trước đó: "một bánh mì thịt, hai ốp la, khoan, bánh mì thịt năm cái"
+      const a = name(p);
+      return [...opener(), ...line(a, nf), [pick([',', 'với', 'và']), null], ...saleItem(products, nf), ...sep(), term(), ...sep(), ...line(chance(0.5) ? a : name(p), chance(0.5)), ...closer()];
+    }
+  }
+}
+
 function sentence(products: ParseableProduct[]): Seg[] {
   const r = rand();
+  const c = CORR - 0.04; // phần câu sửa lời thêm vào, lấy từ câu bán thường
   if (r < 0.06) return distributive(products);
   if (r < 0.1) return copyQty(products);
-  if (r < 0.14) return correction(products);
-  if (r < 0.17) return references(products);
-  if (r < 0.19) return totalThenSplit(products);
-  if (r < 0.22) return topicOrder(products);
-  if (r < 0.25) return bare(products);
+  if (r < 0.14 + c) return EDIT ? repair(products) : correction(products);
+  if (r < 0.17 + c) return references(products);
+  if (r < 0.19 + c) return totalThenSplit(products);
+  if (r < 0.22 + c) return topicOrder(products);
+  if (r < 0.25 + c) return bare(products);
   if (r < 0.62) return sale(products);
   if (r < 0.76) return [...opener().filter(() => chance(0.3)), ...expense()];
   if (r < 0.88) return chance(0.5) ? [...sale(products), [pick(['rồi', 'với', ',', 'xong']), null], ...expense()] : [...expense(), [pick(['rồi', ',', 'xong']), null], ...sale(products)];
@@ -353,12 +518,13 @@ function render(segs: Seg[], products: ParseableProduct[]) {
     return `${cont ? 'I' : 'B'}-${slot}` as Label;
   });
   const info = analyze(tokens, catalogIndex(products));
-  return { text, x: crfFeatures(tokens, info), y };
+  return { text, x: crfFeatures(tokens, info, FEATURE_SET), y };
 }
 
-const out = new URL('./.data/', import.meta.url);
+const out = new URL(OUT_DIR, import.meta.url);
 mkdirSync(out, { recursive: true });
 const shops = Object.keys(TRAIN_CATALOGS);
+if (HOLDOUT) lexPart = 'train';
 for (const [file, n] of [['train', N_TRAIN], ['dev', N_DEV]] as const) {
   const lines: string[] = [];
   for (let i = 0; i < n; i++) {
@@ -368,6 +534,21 @@ for (const [file, n] of [['train', N_TRAIN], ['dev', N_DEV]] as const) {
   writeFileSync(new URL(`${file}.jsonl`, out), `${lines.join('\n')}\n`);
   console.log(`${file}: ${n} câu`);
 }
+if (HOLDOUT) {
+  // Câu có quan hệ số lượng / sửa lời, chỉ dùng 1/3 từ vựng không có trong train
+  lexPart = 'test';
+  const kinds = [distributive, copyQty, EDIT ? repair : correction, references, totalThenSplit];
+  const lines: string[] = [];
+  for (let i = 0; i < 1000; i++) {
+    const shop = shops[i % shops.length];
+    const products = TRAIN_CATALOGS[shop];
+    lines.push(JSON.stringify({ shop, ...render(kinds[i % kinds.length](products), products) }));
+  }
+  writeFileSync(new URL('lexout.jsonl', out), `${lines.join('\n')}\n`);
+  console.log('lexout: 1000 câu (từ vựng giữ lại)');
+  lexPart = 'all';
+}
+writeFileSync(new URL('meta.json', out), `${JSON.stringify({ features: FEATURE_SET, args })}\n`);
 
 // Đặc trưng của bộ eval (để CRF gắn nhãn và để so khớp Viterbi TS với Python)
 const catalogs = JSON.parse(readFileSync(new URL('./eval/catalogs.json', import.meta.url), 'utf8')) as Record<string, ParseableProduct[]>;
@@ -376,7 +557,7 @@ const gold = ['./eval/gold.jsonl', './eval/free.jsonl'].flatMap((f) =>
 );
 const evalLines = gold.map((g: { id: string; catalog: string; text: string }) => {
   const tokens = tokenize(g.text);
-  return JSON.stringify({ id: g.id, x: crfFeatures(tokens, analyze(tokens, catalogIndex(catalogs[g.catalog]))) });
+  return JSON.stringify({ id: g.id, x: crfFeatures(tokens, analyze(tokens, catalogIndex(catalogs[g.catalog])), FEATURE_SET) });
 });
 writeFileSync(new URL('eval.jsonl', out), `${evalLines.join('\n')}\n`);
 console.log(`eval: ${evalLines.length} câu`);

@@ -10,6 +10,8 @@ export interface CrfModel {
   transitions: number[][];
   /** Đặc trưng → các cặp [chỉ số nhãn, trọng số]. */
   state: Record<string, Array<[number, number]>>;
+  /** Bộ đặc trưng model được train (`features.ts`); không có là `v1`. */
+  features?: 'v1' | 'v2' | 'nolex';
 }
 
 /** Điểm trạng thái từng token: cộng trọng số theo thứ tự đặc trưng như CRFsuite. */

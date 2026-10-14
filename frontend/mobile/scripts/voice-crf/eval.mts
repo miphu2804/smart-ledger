@@ -27,12 +27,13 @@ const readSet = (file: string, prefix = '') =>
 const gold = [...readSet('./eval/gold.jsonl'), ...readSet('./eval/free.jsonl', 'free-')];
 
 type Parser = (text: string, products: ParseableProduct[]) => ScoredResult;
-// poc: mặc định (CRF trước, tagger luật cho câu CRF không tự nhận được); poc-luat / poc-crf: chỉ một tagger, để so sánh
+// poc: mặc định (chỉ CRF, chọn đơn hàng qua gate trong n-best); poc+luat: thêm tagger luật dự phòng cho câu CRF bỏ;
+// poc-luat: chỉ tagger luật
 const PARSERS: Record<string, Parser> = {
   baseline: baselineParse,
   poc: (t, p) => pocParse(t, p),
-  'poc-luat': (t, p) => pocParse(t, p, { tagger: ruleTagger, fallbackTagger: undefined }),
-  'poc-crf': (t, p) => pocParse(t, p, { fallbackTagger: undefined }),
+  'poc+luat': (t, p) => pocParse(t, p, { fallbackTagger: ruleTagger }),
+  'poc-luat': (t, p) => pocParse(t, p, { tagger: ruleTagger }),
 };
 const COLUMNS = Object.keys(PARSERS);
 

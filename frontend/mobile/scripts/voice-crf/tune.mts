@@ -29,16 +29,17 @@ for (let tau = 0.5; tau <= 0.9001; tau += 0.02) {
   }
 }
 
-// Hợp lệ: đạt mục tiêu §7 trên dev. Xếp theo exact theo món, rồi theo câu, rồi ít hỏi lại.
-const ok = rows.filter((r) => r.wrong <= 0.02 && r.ask <= 0.15 && r.regress === 0);
-ok.sort((a, b) => b.line - a.line || b.sentence - a.sentence || a.ask - b.ask);
+// Hợp lệ: tự nhận sai và hỏi lại đạt mục tiêu §7 trên dev. Xếp theo exact theo món, rồi ít câu hỏng so với baseline
+// (câu baseline đúng mà PoC hỏi lại cũng tính là hỏng), rồi theo câu, rồi ít hỏi lại.
+const ok = rows.filter((r) => r.wrong <= 0.02 && r.ask <= 0.15);
+ok.sort((a, b) => b.line - a.line || a.regress - b.regress || b.sentence - a.sentence || a.ask - b.ask);
 const best = ok[0];
-const plateau = ok.filter((r) => r.line === best.line && r.sentence === best.sentence && r.ask === best.ask);
+const plateau = ok.filter((r) => r.line === best.line && r.regress === best.regress && r.sentence === best.sentence && r.ask === best.ask);
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 console.log(`dev ${dev.length} câu; ${rows.length} cặp (τ, δ); ${ok.length} cặp đạt mục tiêu; ${plateau.length} cặp cùng điểm cao nhất`);
-console.log('| τ | δ | Exact theo món | Theo câu | Tự nhận sai | Hỏi lại |\n|---|---|---|---|---|---|');
+console.log('| τ | δ | Exact theo món | Theo câu | Tự nhận sai | Hỏi lại | Câu hỏng |\n|---|---|---|---|---|---|---|');
 for (const r of ok.slice(0, 8)) {
-  console.log(`| ${r.tau.toFixed(2)} | ${r.delta.toFixed(2)} | ${pct(r.line)} | ${pct(r.sentence)} | ${pct(r.wrong)} | ${pct(r.ask)} |`);
+  console.log(`| ${r.tau.toFixed(2)} | ${r.delta.toFixed(2)} | ${pct(r.line)} | ${pct(r.sentence)} | ${pct(r.wrong)} | ${pct(r.ask)} | ${r.regress} |`);
 }
 const taus = [...new Set(plateau.map((r) => r.tau))];
 const deltas = [...new Set(plateau.map((r) => r.delta))];

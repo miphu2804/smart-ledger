@@ -8,6 +8,7 @@
 gắn nhãn và xuất trọng số:
 
     uv run scripts/voice-crf/train.py
+    uv run scripts/voice-crf/train.py --data <thư mục synth> --model <file.json> --c1 0.1  # biến thể cho voice:grid
 
 Ghi ra:
 - `src/lib/voiceParse/crf-model.json`: nhãn, ma trận chuyển, trọng số trạng thái
@@ -16,6 +17,7 @@ Ghi ra:
   biên của nhãn đó, để `parity.mts` so với Viterbi và forward-backward TS.
 """
 
+import argparse
 import json
 import sys
 import tempfile
@@ -35,8 +37,8 @@ PARAMS = {
 }
 
 
-def read(name):
-    with open(DATA / name, encoding="utf-8") as f:
+def read(data, name):
+    with open(data / name, encoding="utf-8") as f:
         return [json.loads(line) for line in f if line.strip()]
 
 
@@ -73,11 +75,38 @@ def report(gold, pred):
 
 
 def main():
-    train, dev, evals = read("train.jsonl"), read("dev.jsonl"), read("eval.jsonl")
+    ap = argparse.ArgumentParser()
+    ap.add_argument(
+        "--data",
+        type=Path,
+        default=DATA,
+        help="thư mục của voice:synth (mặc định .data/)",
+    )
+    ap.add_argument(
+        "--model", type=Path, default=MODEL_JSON, help="file model JSON ghi ra"
+    )
+    ap.add_argument("--c1", type=float, default=PARAMS["c1"])
+    ap.add_argument("--c2", type=float, default=PARAMS["c2"])
+    ap.add_argument("--iters", type=int, default=PARAMS["max_iterations"])
+    args = ap.parse_args()
+    data = args.data
+    params = {**PARAMS, "c1": args.c1, "c2": args.c2, "max_iterations": args.iters}
+    meta = (
+        json.loads((data / "meta.json").read_text())
+        if (data / "meta.json").exists()
+        else {}
+    )
+    features = meta.get("features", "v1")
+
+    train, dev, evals = (
+        read(data, "train.jsonl"),
+        read(data, "dev.jsonl"),
+        read(data, "eval.jsonl"),
+    )
     trainer = pycrfsuite.Trainer(verbose=False)
     for row in train:
         trainer.append(row["x"], row["y"])
-    trainer.set_params(PARAMS)
+    trainer.set_params(params)
     with tempfile.TemporaryDirectory() as tmp:
         path = str(Path(tmp) / "model.crfsuite")
         trainer.train(path)
@@ -85,8 +114,17 @@ def main():
         tagger.open(path)
 
         dev_pred = [tagger.tag(row["x"]) for row in dev]
-        print(f"train {len(train)} câu, dev synthetic {len(dev)} câu, params {PARAMS}")
+        print(
+            f"train {len(train)} câu, dev synthetic {len(dev)} câu, params {params}, đặc trưng {features}"
+        )
         report([row["y"] for row in dev], dev_pred)
+        if (data / "lexout.jsonl").exists():
+            # câu dùng từ vựng không có trong train (voice:synth --holdout 1)
+            lexout = read(data, "lexout.jsonl")
+            pred = [tagger.tag(row["x"]) for row in lexout]
+            exact = sum(p == row["y"] for p, row in zip(pred, lexout)) / len(lexout)
+            print(f"lexout {len(lexout)} câu: đúng cả câu {exact:.4f}")
+            report([row["y"] for row in lexout], pred)
 
         info = tagger.info()
         labels = tagger.labels()
@@ -97,24 +135,21 @@ def main():
         state = {}
         for (attr, lab), w in info.state_features.items():
             state.setdefault(attr, []).append([index[lab], w])
-        MODEL_JSON.write_text(
-            json.dumps(
-                {"labels": labels, "transitions": transitions, "state": state},
-                ensure_ascii=False,
-                separators=(",", ":"),
-            )
-            + "\n",
+        model = {"labels": labels, "transitions": transitions, "state": state}
+        if features != "v1":
+            model["features"] = features
+        args.model.write_text(
+            json.dumps(model, ensure_ascii=False, separators=(",", ":")) + "\n",
             encoding="utf-8",
         )
-        size = MODEL_JSON.stat().st_size // 1024
-        where = MODEL_JSON.relative_to(HERE.parent.parent)
+        size = args.model.stat().st_size // 1024
         print(
             f"model: {len(labels)} nhãn, {len(info.state_features)} trọng số,"
-            f" {len(state)} đặc trưng → {where} ({size} KB)"
+            f" {len(state)} đặc trưng → {args.model} ({size} KB)"
         )
 
         for name, rows in (("dev.pred.jsonl", dev), ("eval.pred.jsonl", evals)):
-            with open(DATA / name, "w", encoding="utf-8") as f:
+            with open(data / name, "w", encoding="utf-8") as f:
                 for i, row in enumerate(rows):
                     pred = tagger.tag(row["x"])
                     # xác suất biên của nhãn đã chọn, để so với forward-backward TS
