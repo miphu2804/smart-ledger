@@ -9,6 +9,7 @@ failure becomes `DraftUnavailableError`, so the endpoint (#3) can answer
 
 import asyncio
 import logging
+import uuid
 from dataclasses import dataclass
 from typing import Literal
 
@@ -27,6 +28,7 @@ from src.prompt_templates import (
     DRAFT_SALE_INPUT,
     DRAFT_SALE_PROMPT,
 )
+from src.providers.factory import session_settings
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +119,11 @@ class DraftService:
         # Output that never fits the schema ends in UnexpectedModelBehavior after the
         # agent's retries, so every model failure takes this one path.
         try:
-            result = await self.agent.run(user_input, instructions=instructions)
+            result = await self.agent.run(
+                user_input,
+                instructions=instructions,
+                model_settings=session_settings(uuid.uuid4().hex),
+            )
         except Exception as error:
             logger.warning("draft model failed", exc_info=True)
             raise DraftUnavailableError("draft model failed") from error

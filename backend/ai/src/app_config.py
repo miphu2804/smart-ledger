@@ -41,12 +41,16 @@ class AppConfig(BaseSettings):
     LANGFUSE_SECRET_KEY: str | None = None
     LANGFUSE_HOST: str | None = None
 
-    # model provider
-    MODEL_PROVIDER: str = "openai"
-    MODEL_NAME: str = "gpt-5.6-luna"
+    # model provider: the API the model speaks, one of openai (Responses API),
+    # openai-chat (/chat/completions) or anthropic (/v1/messages)
+    MODEL_PROVIDER: str = "anthropic"
+    MODEL_NAME: str = "claude-haiku-5-5"
+    # models tried in order when the previous one fails, as a JSON list of
+    # "provider:model", e.g. ["openai-chat:deepseek-v4.1-flash"]
+    MODEL_FALLBACKS: list[str] = []
     MODEL_TIMEOUT_SECONDS: float = 20.0
     # reasoning effort for the chat model: none, low, medium or high
-    MODEL_REASONING_EFFORT: str = "high"
+    MODEL_REASONING_EFFORT: str = "medium"
 
     # agent guardrails (src/agent/guardrails/), per chat turn
     AGENT_MAX_INPUT_CHARS: int = Field(default=2000, gt=0)
@@ -61,7 +65,8 @@ class AppConfig(BaseSettings):
     # most recent owner/assistant exchanges sent to the model with each turn
     AGENT_HISTORY_TURNS: int = Field(default=100, gt=0)
 
-    # openai
+    # model gateway shared by every model: OpenAI, or an OpenAI-compatible gateway
+    # such as OpenCode Go (https://opencode.ai/inference/go/v1)
     OPENAI_API_KEY: str | None = None
     OPENAI_BASE_URL: str | None = None
 
