@@ -16,7 +16,7 @@ from src.infra.redis_db_client import RedisDBClient
 from src.providers.factory import build_chat_model
 from src.restock.service import RestockService
 from src.security import require_internal_token
-from src.sql.executor import ReadOnlySqlExecutor
+from src.sql.repository import ShopDataRepository
 
 logging.basicConfig(
     level=getattr(logging, app_config.LOG_LEVEL.upper(), logging.INFO),
@@ -27,13 +27,13 @@ logger = logging.getLogger(__name__)
 pydantic_ai.BANNER_ENABLED = False
 
 
-def build_sql_executor() -> ReadOnlySqlExecutor | None:
+def build_shop_data(reader: PostgreDBClient) -> ShopDataRepository | None:
     url = app_config.AI_SQL_READER_URL
     if url is None or not url.strip():
         logger.info("sql reader unconfigured; shop-data tool off")
         return None
-    return ReadOnlySqlExecutor(
-        url,
+    return ShopDataRepository(
+        reader,
         timeout_ms=app_config.SQL_TIMEOUT_MS,
         row_limit=app_config.SQL_ROW_LIMIT,
     )
@@ -44,13 +44,17 @@ async def lifespan(app: FastAPI):
     postgres = PostgreDBClient(
         app_config.POSTGRES_URL, pool_size=app_config.POSTGRES_POOL_MAX_SIZE
     )
+    # Model-written SQL runs as the read-only login, so it gets its own pool.
+    reader = PostgreDBClient(
+        app_config.AI_SQL_READER_URL, pool_size=app_config.SQL_POOL_MAX_SIZE
+    )
     redis = RedisDBClient(app_config.REDIS_URL)
     redis.connect()
     app.state.redis = redis
     chat_model = build_chat_model(app_config)
     conversations = AgentConversationRepository(postgres)
     app.state.conversations = conversations
-    executor = build_sql_executor()
+    shop_data = build_shop_data(reader)
     app.state.agent = AgentService(
         chat_model,
         conversations,
@@ -61,14 +65,15 @@ async def lifespan(app: FastAPI):
             turn_token_limit=app_config.AGENT_TURN_TOKEN_LIMIT,
             turn_timeout_seconds=app_config.AGENT_TURN_TIMEOUT_SECONDS,
         ),
-        sql_executor=executor,
-        restock=RestockService(executor) if executor else None,
+        shop_data=shop_data,
+        restock=RestockService(shop_data) if shop_data else None,
         history_turns=app_config.AGENT_HISTORY_TURNS,
     )
     try:
         yield
     finally:
         postgres.close()
+        reader.close()
         redis.close()
 
 

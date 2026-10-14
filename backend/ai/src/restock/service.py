@@ -1,7 +1,7 @@
 """Load one shop's confirmed sales and ask the policy what to restock.
 
 The service is the only restock module that does I/O: it runs one fixed query through
-the read-only executor (which scopes it to the shop and caps time and rows) and hands
+the shop-data repository (which scopes it to the shop and caps time and rows) and hands
 the rows to `policy.suggest`. Rejected queries raise `ValueError("CODE: reason")`, which
 the agent tool turns back into model-facing text.
 """
@@ -11,7 +11,7 @@ from decimal import Decimal
 
 from src.restock import policy
 from src.restock.policy import PERIOD_DAYS, SoldProduct
-from src.sql.executor import ReadOnlySqlExecutor
+from src.sql.repository import ShopDataRepository
 
 
 @dataclass(frozen=True)
@@ -27,8 +27,8 @@ class RestockResult:
 class RestockService:
     """Suggest restock quantities for one shop from its confirmed sales."""
 
-    def __init__(self, executor: ReadOnlySqlExecutor) -> None:
-        self.executor = executor
+    def __init__(self, shop_data: ShopDataRepository) -> None:
+        self.shop_data = shop_data
 
     def suggest(self, shop_id: int, period: str) -> RestockResult:
         """Return the products worth restocking for `period`, most urgent first."""
@@ -43,7 +43,7 @@ class RestockService:
         )
 
     def _load(self, shop_id: int, days: int) -> tuple[list[list], bool]:
-        result = self.executor.run(shop_id, self._query(days))
+        result = self.shop_data.run(shop_id, self._query(days))
         return result["rows"], result["truncated"]
 
     @staticmethod
@@ -65,7 +65,7 @@ ORDER BY s.sold_qty DESC"""
 
     @staticmethod
     def _to_sold_product(row: list) -> SoldProduct:
-        # The executor renders a Decimal as an int or a str, so both go through str().
+        # The repository renders a Decimal as an int or a str, so both go through str().
         product_id, name, unit, sold_qty, stock_qty = row
         return SoldProduct(
             product_id=int(product_id),

@@ -570,7 +570,7 @@ flowchart LR
     end
 
     subgraph SQL["SQL Space"]
-        EXEC["ReadOnlySqlExecutor.run()"]
+        EXEC["ShopDataRepository.run()<br/>pooled reader"]
         SG["SqlGuard<br/>validate_and_wrap()"]
     end
 

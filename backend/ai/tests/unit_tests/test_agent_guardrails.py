@@ -39,7 +39,7 @@ class Conversations:
         return kwargs["conversation_id"] or 41, 72
 
 
-class CountingExecutor:
+class CountingShopData:
     def __init__(self) -> None:
         self.calls = 0
 
@@ -51,7 +51,7 @@ class CountingExecutor:
 def service(
     model,
     conversations=None,
-    executor=None,
+    shop_data=None,
     turn_token_limit=TURN_TOKEN_LIMIT,
     turn_timeout_seconds=TURN_TIMEOUT_SECONDS,
 ) -> AgentService:
@@ -65,7 +65,7 @@ def service(
             turn_token_limit=turn_token_limit,
             turn_timeout_seconds=turn_timeout_seconds,
         ),
-        sql_executor=executor,
+        shop_data=shop_data,
     )
 
 
@@ -158,7 +158,7 @@ def test_a_secret_is_removed_whole_before_personal_data() -> None:
 
 
 async def test_shop_phone_in_tool_results_is_not_redacted() -> None:
-    class PhoneExecutor:
+    class PhoneShopData:
         def run(self, shop_id, sql):
             return {"columns": ["phone"], "rows": [["0901234567"]], "truncated": False}
 
@@ -167,7 +167,7 @@ async def test_shop_phone_in_tool_results_is_not_redacted() -> None:
         "The shop number is 0901234567.",
     )
 
-    result = await service(model, executor=PhoneExecutor()).chat(
+    result = await service(model, shop_data=PhoneShopData()).chat(
         user_id=3, shop_id=15, message="shop phone number?"
     )
 
@@ -234,33 +234,35 @@ async def test_normal_answer_passes_through() -> None:
 
 
 async def test_limits_stop_a_model_that_keeps_calling_tools() -> None:
-    executor = CountingExecutor()
+    shop_data = CountingShopData()
     model = ScriptedModel(
         *[tool_call("query_shop_data", QUERY) for _ in range(MODEL_CALL_LIMIT + 1)]
     )
 
     with pytest.raises(GuardrailError) as stopped:
-        await service(model, executor=executor).chat(user_id=3, shop_id=15, message="m")
+        await service(model, shop_data=shop_data).chat(
+            user_id=3, shop_id=15, message="m"
+        )
 
     assert stopped.value.code == "answer_unavailable"
     assert len(model.requests) == MODEL_CALL_LIMIT
-    assert executor.calls == TOOL_CALL_LIMIT
+    assert shop_data.calls == TOOL_CALL_LIMIT
     assert model.tool_names(request=TOOL_CALL_LIMIT) == []
 
 
 async def test_calls_over_the_tool_limit_are_refused_and_the_model_answers() -> None:
-    executor = CountingExecutor()
+    shop_data = CountingShopData()
     model = ScriptedModel(
         tool_call("query_shop_data", QUERY, QUERY),
         tool_call("query_shop_data", QUERY, QUERY),
         "answer from three results",
     )
 
-    result = await service(model, executor=executor).chat(
+    result = await service(model, shop_data=shop_data).chat(
         user_id=3, shop_id=15, message="m"
     )
 
-    assert executor.calls == TOOL_CALL_LIMIT
+    assert shop_data.calls == TOOL_CALL_LIMIT
     assert any(
         ToolCallLimit.NOTICE in text for _, text in transcript(model.requests[-1][0])
     )
@@ -269,19 +271,19 @@ async def test_calls_over_the_tool_limit_are_refused_and_the_model_answers() -> 
 
 
 async def test_each_turn_gets_its_own_tool_budget() -> None:
-    executor = CountingExecutor()
+    shop_data = CountingShopData()
     model = ScriptedModel(
         *[tool_call("query_shop_data", QUERY) for _ in range(TOOL_CALL_LIMIT)],
         "first",
         tool_call("query_shop_data", QUERY),
         "second",
     )
-    agent = service(model, executor=executor)
+    agent = service(model, shop_data=shop_data)
 
     await agent.chat(user_id=3, shop_id=15, message="m")
     result = await agent.chat(user_id=3, shop_id=15, message="m")
 
-    assert executor.calls == TOOL_CALL_LIMIT + 1
+    assert shop_data.calls == TOOL_CALL_LIMIT + 1
     assert result.answer == "second"
 
 

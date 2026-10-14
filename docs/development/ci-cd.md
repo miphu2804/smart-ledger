@@ -78,7 +78,7 @@ Enter each value once and reuse it with a [reference variable](https://docs.rail
 |---|---|
 | `INTERNAL_API_TOKEN` | `${{shared.INTERNAL_API_TOKEN}}` |
 | `POSTGRES_URL` | Supabase of the matching environment (`postgresql://…`) |
-| `AI_SQL_READER_URL` | Read-only `ai_sql_reader` login (AI baseline in `supabase/migrations/`); when empty, the agent cannot read shop data |
+| `AI_SQL_READER_URL` | Read-only `ai_sql_reader` login (AI baseline in `supabase/migrations/`) as a `postgresql://` URL, not a libpq keyword string; when empty, the agent cannot read shop data |
 | `REDIS_URL` | Redis Cloud of the matching environment |
 | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `MODEL_*` | Managed from GitHub, see [AI model settings](#ai-model-settings). Do not edit them on Railway. |
 

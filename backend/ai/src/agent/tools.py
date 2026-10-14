@@ -7,10 +7,10 @@ from pydantic_ai import RunContext, Tool
 
 from src.prompt_templates import QUERY_RESULT_HEADER, RESTOCK_RESULT_HEADER
 from src.restock.service import RestockService
-from src.sql.executor import ReadOnlySqlExecutor
+from src.sql.repository import ShopDataRepository
 
-# The guard and the executor raise ValueError("CODE: reason") for a query the model can
-# fix. Any other ValueError is a bug and must not reach the model.
+# The guard and the repository raise ValueError("CODE: reason") for a query the model
+# can fix. Any other ValueError is a bug and must not reach the model.
 MODEL_ERROR = re.compile(r"([A-Z][A-Z_]*): (.*)", re.DOTALL)
 
 
@@ -31,8 +31,8 @@ class AgentContext:
     shop_id: int
 
 
-def build_shop_data_tool(executor: ReadOnlySqlExecutor) -> Tool[AgentContext]:
-    """Shop-data tool; the executor is injected here, the shop comes per request.
+def build_shop_data_tool(shop_data: ShopDataRepository) -> Tool[AgentContext]:
+    """Shop-data tool; the repository is injected here, the shop comes per request.
 
     `ctx` is filled by Pydantic AI from the run's deps and is not part of the schema
     sent to the model, which forbids extra arguments, so the model only supplies `sql`
@@ -45,7 +45,7 @@ def build_shop_data_tool(executor: ReadOnlySqlExecutor) -> Tool[AgentContext]:
         # the query. Anything else, such as an unreachable reader database, propagates
         # and the router answers 503 ai_unavailable.
         try:
-            result = executor.run(ctx.deps.shop_id, sql)
+            result = shop_data.run(ctx.deps.shop_id, sql)
         except ValueError as error:
             return f"{_model_error(error)} Rewrite the query and retry."
         payload = {
