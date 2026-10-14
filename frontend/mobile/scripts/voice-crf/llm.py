@@ -6,7 +6,7 @@ môi trường uv của `backend/ai`, từ `frontend/mobile`:
     uv run --project ../../backend/ai python scripts/voice-crf/llm.py --out scripts/voice-crf/.data/llm/default.jsonl
     MODEL_REASONING_EFFORT=low uv run --project ../../backend/ai python scripts/voice-crf/llm.py --out …/low.jsonl
 
-Cần `OPENAI_API_KEY` (và mạng tới api.openai.com); `MODEL_NAME`, `MODEL_REASONING_EFFORT` đổi model như `backend/ai`.
+Cần `OPENAI_API_KEY` (mặc định gọi OpenCode Go, `OPENAI_BASE_URL` đổi được); `MODEL_NAME`, `MODEL_REASONING_EFFORT` đổi model như `backend/ai`.
 Mỗi câu gọi hai chế độ như Core: SALE (món) và EXPENSE (khoản chi), ghi dòng model đề xuất, dòng còn lại sau matching,
 thời gian và số token từng lần gọi. Chạy lại cùng `--out` thì bỏ qua câu đã có.
 
@@ -19,6 +19,7 @@ máy chủ thì bỏ qua câu đó (không ghi, chạy lại sẽ gọi lại). 
 import argparse
 import asyncio
 import json
+import os
 import sys
 import time
 from contextvars import ContextVar
@@ -27,6 +28,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 AI_ROOT = HERE.parents[3] / "backend" / "ai"
 sys.path.insert(0, str(AI_ROOT))
+# Key đang dùng là của OpenCode Go; đặt trước khi nạp `app_config`. Biến môi trường đã đặt thì giữ nguyên.
+os.environ.setdefault("OPENAI_BASE_URL", "https://opencode.ai/inference/go/v1")
 
 from pydantic_ai.exceptions import (
     ModelAPIError,
