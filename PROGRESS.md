@@ -1,3 +1,26 @@
+### [2026-10-14 23:40 UTC+07:00] — [Feature] Voice parse: STT matrix of three models and decoding methods
+
+**Done:** Ran the STT matrix on the same 512 TTS sentences:
+
+- App Zipformer (streaming) with greedy, beam and hotwords.
+- gipformer with greedy, beam and hotwords.
+- ChunkFormer CTC large, exported to streaming ONNX, with greedy, KenLM, hotwords, and KenLM + hotwords.
+
+Ran Haiku high on the best transcript set of each model, about 0.90 USD at list price. Through the free-form gate → LLM pipeline, sentence-exact on pool / test is:
+
+| STT | Pool | Test |
+|---|---|---|
+| gipformer + hotwords | 82.9% | 84.0% |
+| App Zipformer + hotwords | 72.8% | 75.0% |
+| ChunkFormer + KenLM | 67.1% | 76.3% |
+
+ChunkFormer hotwords through pyctcdecode append garbage words; the cause is unverified. `asr.py zipformer` now pads 0.5 s of silence, as the app does; without it the streaming model dropped the end of each sentence. It also names greedy and beam outputs correctly (they had both been written as `-hw`), and `--offline` supports hotwords.
+
+**Changed files:**
+- `frontend/mobile/scripts/voice-crf/asr.py`
+- `docs/development/voice-parse-poc/report.md` (§1, §3.9, §3.10, §4, §8, §12.4)
+- `PROGRESS.md`
+
 ### [2026-10-14 21:17 UTC+07:00] — [Feature] Voice parse: LLM at high effort and gipformer STT in the cascade
 
 **Done:** Ran the LLM (OpenCode Go, `claude-haiku-5-5`) at high effort on all 672 sentences, about 0.34 USD at Anthropic's list price. The free-form gate → LLM reaches 91.3% sentence-exact on hold3, up from 88.8% at medium, with 6 wrong lines instead of 11. `voice:cascade --grid` now also picks the lowest-latency configuration (fewest sentences sent to the LLM): old gate θ0.7, rule fallback, valid ν0.1. It sends 7% of the pool to the LLM but gets only 64.4% of hold3 sentences fully right. Tested `g-group-ai-lab/gipformer1.5-68M-rnnt`, which is offline-only, with a new `asr.py zipformer --offline` mode. The 512 non-hold3 sentences were read by local macOS TTS (voice Linh), giving about 15% WER. Haiku high ran on the transcripts. The best pipeline drops from 98.7% to 83.3% sentence-exact on test, and the fastest pipeline's wrong lines rise to 8.3%. STT is the bottleneck; real recordings are still needed.

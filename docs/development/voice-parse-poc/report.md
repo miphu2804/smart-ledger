@@ -10,7 +10,7 @@ Báo cáo kết quả của PoC theo [brief](../voice-parse-poc-brief.md). Nhán
 - **Chuỗi trên máy → LLM** (mục 3.7, OpenCode Go, `claude-haiku-5-5`, mức `medium`): trên **bộ giữ kín 3**, gate câu tự do → LLM đúng hết **88.8%** câu so với **76.3%** của gate cũ → LLM, dòng sai 3.4% so với 7.0%; LLM đúng 87.1% câu bị chặn (mức hòa vốn khoảng 62%). Trên test và free-test hai gate ngang nhau (98–100%). Cái giá: 92% câu tự do chờ LLM khoảng 3 s (P95 5.4 s, đo từ máy phát triển), khoảng 0.0005 USD mỗi câu. Chạy lại cả 672 câu với `high` (mục 3.8): gate câu tự do → LLM lên **91.3%** trên bộ giữ kín 3 (dòng sai 1.9%), nên đề xuất **gate câu tự do → LLM mức `high`**. Dò lưới 160 cấu hình × LLM: gate quyết định, tham số lưới không đổi kết quả; giữ cấu hình mặc định. Pipeline độ trễ thấp nhất (gửi LLM 7%) chỉ đạt 64.4% trên bộ giữ kín 3. Qua STT gipformer trên audio TTS (mục 3.9, WER khoảng 15%), pipeline tốt nhất còn 83% đúng hết trên test: STT là nút cổ chai, cần audio người đọc để chọn model STT.
 - **Phụ thuộc phần viết tay** (mục 3.2): sau khi train, tắt gate dấu hiệu viết tay (`findMarkers`) không đổi dòng nào trên bộ câu người viết; tắt luật số bàn/giờ làm sai 1 dòng. Các danh sách từ viết tay còn lại chủ yếu nằm ở bộ sinh câu train và ở đặc trưng CRF (bỏ đặc trưng từ điển: vẫn 0 dòng sai nhưng hỏi lại nhiều hơn).
 - **"System 1" router quyết định escalate sang LLM** (mục 3.3): router học (logistic) từ đặc trưng của lượt parse tốt hơn ngưỡng θ trên synthetic nhưng **không hơn trên câu người viết**, nên chưa dùng; giữ ngưỡng θ cho tới khi có kết quả thật (có đồng ý) để học.
-- **STT:** eval chấm được transcript của từng hệ STT (`--asr`), có script cho ChunkFormer (greedy, beam + KenLM, hotword) và Zipformer đang dùng. **Chưa có số ASR thật**: cần audio người đọc các câu eval và model tải từ Hugging Face (mục 12).
+- **STT** (mục 3.10): đã chạy ma trận 3 model × cách giải mã trên 512 câu audio TTS. Model là Zipformer của app, gipformer và ChunkFormer CTC; cách giải mã là greedy, beam, hotword, KenLM và KenLM + hotword. Biến thể tốt nhất là **gipformer + hotword**, đi qua gate tự do → LLM `high`. Kết quả là 82.9% câu đúng hết trên pool và 84.0% trên test; Zipformer của app đạt 72.8% / 75.0%, ChunkFormer + KenLM đạt 67.1% / 76.3%. Hotword trên ChunkFormer qua pyctcdecode làm hỏng transcript. **Chưa có số trên audio người đọc.**
 - **L0 (hotword):** chưa kiểm chứng. Không có máy Android, và wrapper `react-native-sherpa-onnx@0.4.4` cần vá native mới bật được hotword cho STT streaming (xem [BLOCKERS.md](../../../BLOCKERS.md)).
 
 PoC nằm ở `frontend/mobile/src/lib/voiceParse/`, giữ nguyên interface `parseOrder(text, products): ParsedOrder`, **chưa nối vào màn voice**: `app/voice.tsx` chưa hiển thị `disambiguations` (mục 7), nên thay vào lúc này là đổi hành vi sản phẩm và cần owner quyết.
@@ -384,7 +384,74 @@ Gắn vào hai pipeline của mục 3.8 (`voice:cascade -- --grid --asr … --as
 - STT là nút cổ chai: cùng pipeline chất lượng cao nhất mất khoảng 13–15 điểm đúng hết (pool 96.1% → 82.6%, test 98.7% → 83.3%). LLM phía sau không sửa được tên món nghe sai ("cam sả" → "cam xả", "chanh hai ly" → "tranh ili").
 - Gate tự do vẫn giữ lỗi thấp trên transcript (test 2/117 dòng sai, gửi LLM tăng 9% → 28%). Pipeline nhanh nhất tự nhận sai 8.3% số dòng trên test khi nghe qua STT, nên **không dùng được với STT này**.
 - Gate tự do → LLM ngang chỉ LLM trên transcript (pool 82.6% so với 81.5%, test 83.3% so với 84.0%), ít dòng sai hơn trên pool (15 so với 21).
-- Chưa so với Zipformer streaming đang dùng trong app trên cùng audio (model app chưa tải về ở đây). Cần audio người đọc thật (`voice:asr prompts`) trước khi chọn model STT; gipformer cũng không streaming nên app phải chờ hết câu mới giải mã.
+- So với Zipformer streaming của app và ChunkFormer trên cùng audio: xem mục 3.10. Cần audio người đọc thật (`voice:asr prompts`) trước khi chọn model STT; gipformer cũng không streaming nên app phải chờ hết câu mới giải mã.
+
+### 3.10 Ma trận STT: 3 model × cách giải mã
+
+Cùng 512 câu audio TTS của mục 3.9. Ba model:
+
+- **Zipformer của app**: streaming, chunk 32, fp16, cc-by-nc-nd-4.0. Chạy bằng `OnlineRecognizer`, đệm 0,5 giây im lặng trước `input_finished` như `src/lib/speech/sherpaEngine.ts`.
+- **gipformer** 68M: offline, MIT.
+- **ChunkFormer CTC large** (`khanhld/chunkformer-ctc-large-vie`, cc-by-nc-4.0): xuất ONNX streaming `encoder_chunk.onnx` (chunk 64, left 128, right 8). Bản `encoder_full.onnx` xuất được, nhưng onnxruntime lỗi broadcast khi độ dài câu khác 400 khung lúc trace.
+
+Các cách giải mã thử:
+
+- greedy;
+- `modified_beam_search`, gọi tắt là beam;
+- hotword (`hw`): tên món của danh mục câu đó, viết HOA;
+- KenLM ARPA bậc 3 theo danh mục, dựng bằng `voice:asr lm` và dùng qua pyctcdecode, α 0.5, β 1.0, beam 32.
+
+KenLM chỉ áp dụng được cho CTC. sherpa-onnx không nạp n-gram cho transducer (mục 12.2), nên Zipformer và gipformer không có cột KenLM.
+
+| Model | Giải mã | WER test | CER test | Theo món test (chữ vàng 90.7%) | Tự nhận sai test | WER free-test | Theo món free-test (chữ vàng 60.1%) |
+|---|---|---|---|---|---|---|---|
+| Zipformer app | greedy (như app hiện tại) | 22.2% | 14.6% | 50.0% | 1.4% | 18.0% | 29.2% |
+| | beam | 22.4% | 14.4% | 52.5% | 1.4% | 18.1% | 29.2% |
+| | hotword | 20.6% | 13.9% | 57.4% | 3.7% | 16.8% | 32.1% |
+| gipformer | greedy | 15.1% | 8.4% | 56.8% | 1.3% | 13.5% | 44.0% |
+| | beam | 15.1% | 8.4% | 56.2% | 1.3% | 13.3% | 43.5% |
+| | hotword | 15.0% | 8.4% | **58.6%** | 1.2% | **12.9%** | **45.8%** |
+| ChunkFormer CTC | greedy | 23.8% | 16.0% | 45.1% | 7.7% | 22.6% | 16.7% |
+| | KenLM | 16.5% | 10.5% | **61.7%** | 2.3% | 14.9% | 47.0% |
+| | hotword (pyctcdecode) | 143.2% | 141.5% | 9.3% | 13.3% | 84.9% | 3.0% |
+| | KenLM + hotword | 133.4% | 131.4% | 18.5% | 7.4% | 78.4% | 7.1% |
+
+Thời gian giải mã trên máy phát triển với 2 luồng:
+
+- Zipformer: 512 câu khoảng 27–30 s.
+- gipformer: khoảng 30 ms mỗi câu.
+- ChunkFormer: encoder + CTC khoảng 33 ms mỗi câu, chưa tính beam search Python.
+
+Thêm hotword vào ChunkFormer qua pyctcdecode làm hỏng kết quả. Decoder chèn từ rác sau câu, ví dụ "…nha em một nước nước", với cả trọng số 10 và 1,5. Nguyên nhân chưa xác định, nên không dùng biến thể này.
+
+Biến thể tốt nhất của mỗi model được đưa vào hai pipeline của mục 3.8. LLM là Haiku 5.5 `high` chạy trên transcript, mỗi bộ 512 câu, 0 lỗi model, khoảng 1,11 triệu token vào và 0,37–0,38 triệu token ra. Ba bộ tốn khoảng 0,90 USD theo giá niêm yết; giá của OpenCode Go có thể khác. Bảng dưới là tỉ lệ câu đúng hết; trong ngoặc là số dòng món sai.
+
+| Pipeline | Tập | Chữ vàng | Zipformer app + hotword | gipformer + hotword | ChunkFormer + KenLM |
+|---|---|---|---|---|---|
+| Chất lượng cao nhất (gate tự do θ0.8 Viterbi) | pool | 96.1% (5/551) | 72.8% (48/511) | **82.9% (11/509)** | 67.1% (56/500) |
+| | test | 98.7% (0/136) | 75.0% (5/111) | **84.0% (2/119)** | 76.3% (7/115) |
+| Độ trễ thấp nhất (gate cũ θ0.7 +luật `valid` ν0.1) | pool | 84.6% (23/535) | 55.6% (61/453) | 62.9% (30/439) | 53.4% (63/444) |
+| | test | 98.1% (0/135) | 68.6% (8/104) | 73.1% (8/110) | 69.2% (10/109) |
+| Chỉ LLM | pool | 95.2% (7/552) | 71.1% (50/511) | 81.5% (14/512) | 68.5% (58/504) |
+| | test | 96.8% (0/138) | 73.7% (5/113) | 84.0% (1/124) | 78.8% (8/123) |
+
+Tỉ lệ gửi LLM của pipeline chất lượng cao nhất trên pool:
+
+- chữ vàng: 42%;
+- qua STT: 53–56%.
+
+Độ trễ trung bình trên pool (chưa gồm STT):
+
+- pipeline chất lượng cao nhất: 2,2–2,4 s;
+- pipeline độ trễ thấp nhất: 0,5 s.
+
+**Đọc kết quả:**
+
+- **gipformer + hotword + gate tự do → LLM tốt nhất** trên cả pool (82.9%) và test (84.0%), với ít dòng sai nhất (pool 2.2%). Hotword chỉ nhích gipformer (pool 82.6% → 82.9%, test 83.3% → 84.0% so với greedy ở mục 3.9).
+- ChunkFormer + KenLM có điểm parser riêng tốt nhất trên test (61.7% theo món), nhưng sau LLM lại kém hơn trên pool (67.1%) và để lại 11% dòng sai. **[suy luận]** Có thể LM miền kéo tên nghe sai về một tên món có thật nhưng sai món, khiến LLM không còn dấu hiệu để nghi ngờ. LM được học từ câu synthetic.
+- Zipformer của app, kể cả khi có hotword, kém gipformer khoảng 10 điểm sau LLM. Greedy, tức cách app đang chạy, còn kém hơn nữa (50.0% theo món trên test so với 57.4% khi có hotword).
+- Pipeline độ trễ thấp nhất mất 25–30 điểm qua mọi STT và tự nhận sai 7–14% số dòng, nên không dùng được với STT.
+- Mọi số ở đây dùng audio TTS sạch. Thứ hạng giữa các model có thể đổi với giọng người thật và tiếng ồn.
 
 ## 4. Chạy lại
 
@@ -432,6 +499,12 @@ uv run scripts/voice-crf/asr.py zipformer --offline --model-dir scripts/voice-cr
 npm run voice:eval -- --asr scripts/voice-crf/.data/asr/gipformer-greedy.jsonl
 MODEL_REASONING_EFFORT=high npm run voice:llm -- --sets gold,free,free2 --asr scripts/voice-crf/.data/asr/gipformer-greedy.jsonl --out scripts/voice-crf/.data/llm/haiku-high-gipformer.jsonl
 npm run voice:cascade -- --grid --llm scripts/voice-crf/.data/llm/haiku-high.jsonl --asr scripts/voice-crf/.data/asr/gipformer-greedy.jsonl --asr-llm scripts/voice-crf/.data/llm/haiku-high-gipformer.jsonl
+
+# ma trận STT (mục 3.10); thêm --beam hoặc --hotwords cho Zipformer/gipformer, --lm và/hoặc --hotwords cho ChunkFormer
+uv run scripts/voice-crf/asr.py zipformer --model-dir scripts/voice-crf/.data/models/zipformer --audio-dir scripts/voice-crf/.data/audio-tts --hotwords
+uv run scripts/voice-crf/asr.py zipformer --offline --model-dir scripts/voice-crf/.data/models/gipformer --audio-dir scripts/voice-crf/.data/audio-tts --hotwords
+python tools/export_onnx.py --checkpoint <chunkformer-ctc-large-vie> --out-dir <onnx> --streaming   # trong clone khanld/chunkformer
+uv run scripts/voice-crf/asr.py chunkformer --onnx-dir <onnx> --chunkformer-repo <clone> --audio-dir scripts/voice-crf/.data/audio-tts --lm 'scripts/voice-crf/.data/asr/lm-{catalog}.arpa'
 ```
 
 `node scripts/voice-crf/...` chạy thẳng mã TS của app nhờ `scripts/voice-crf/ts-resolve.mjs` (thêm đuôi `.ts` và thuộc tính JSON như Metro), không đổi `tsconfig`.
@@ -474,11 +547,11 @@ Ngưỡng dò trên dev (`voice:tune`): mọi cặp τ ∈ [0.64, 0.80] cho cùn
 
 ## 8. Đã kiểm chứng và chưa kiểm chứng
 
-**Đã kiểm chứng:** bảng §7 và bảng câu tự do bằng `npm run voice:eval`; lưới, ablation, lexout và router bằng `voice:grid` / `voice:router` / `router.py` (mục 3.2, 3.3); gate câu tự do bằng `voice:gate` / `voice:grid --gate` trên 12 model bỏ một kiểu câu (mục 3.5); parity bằng `npm run voice:parity`; `npm run typecheck` pass; 0 câu baseline đúng mà PoC tự nhận sai trên dev và test của bộ chính (5 câu dev và 2 câu test baseline đúng nay gửi LLM); mã wrapper và mã sherpa-onnx upstream về hotword và LM (mục 12); chế độ `--asr` của eval (transcript trùng chữ vàng cho đúng số của eval chữ); `voice:asr prompts` và `voice:asr lm` chạy được, file ARPA nạp được bằng KenLM 0.3.0; chuỗi trên máy → LLM qua OpenCode Go (`claude-haiku-5-5`, `medium` và `high`) trên mọi câu bị chặn của test, free-test, free-dev, dev và bộ giữ kín 3 bằng `voice:llm` và `voice:cascade` (mục 3.7; dùng `backend/ai` của `staging`); lưới × LLM `medium` và `high` trên cả 672 câu (mục 3.8); `voice:asr zipformer --offline` với gipformer trên 512 câu audio TTS, chấm bằng `voice:eval -- --asr` và `voice:cascade -- --grid --asr` (mục 3.9).
+**Đã kiểm chứng:** bảng §7 và bảng câu tự do bằng `npm run voice:eval`; lưới, ablation, lexout và router bằng `voice:grid` / `voice:router` / `router.py` (mục 3.2, 3.3); gate câu tự do bằng `voice:gate` / `voice:grid --gate` trên 12 model bỏ một kiểu câu (mục 3.5); parity bằng `npm run voice:parity`; `npm run typecheck` pass; 0 câu baseline đúng mà PoC tự nhận sai trên dev và test của bộ chính (5 câu dev và 2 câu test baseline đúng nay gửi LLM); mã wrapper và mã sherpa-onnx upstream về hotword và LM (mục 12); chế độ `--asr` của eval (transcript trùng chữ vàng cho đúng số của eval chữ); `voice:asr prompts` và `voice:asr lm` chạy được, file ARPA nạp được bằng KenLM 0.3.0; chuỗi trên máy → LLM qua OpenCode Go (`claude-haiku-5-5`, `medium` và `high`) trên mọi câu bị chặn của test, free-test, free-dev, dev và bộ giữ kín 3 bằng `voice:llm` và `voice:cascade` (mục 3.7; dùng `backend/ai` của `staging`); lưới × LLM `medium` và `high` trên cả 672 câu (mục 3.8); `voice:asr zipformer --offline` với gipformer trên 512 câu audio TTS, chấm bằng `voice:eval -- --asr` và `voice:cascade -- --grid --asr` (mục 3.9); ma trận STT trên cùng audio (mục 3.10): Zipformer của app greedy/beam/hotword (streaming, đệm 0,5 giây như app), gipformer greedy/beam/hotword, ChunkFormer CTC large ONNX streaming greedy/KenLM/hotword/KenLM + hotword, và LLM `high` trên transcript tốt nhất của mỗi model.
 
 **Lưu ý về tập test chính:** khi soát lỗi free2-dev (mục 3.6), một lần chạy script soát lỗi in dòng mô tả lỗi (không in câu) của 3 câu test chính máy tự xử lý sai; 2 câu đã có ở mục 9, câu thứ ba là lỗi tách "cơm thêm" giống câu dev. Bản sửa của mục 3.6 làm theo câu dev và không đổi số test.
 
-**Chưa kiểm chứng:** L0 hotword (WER tên hàng, độ trễ beam search); số ASR trên audio người đọc (mới có audio TTS cho gipformer, mục 3.9; ChunkFormer, KenLM và Zipformer streaming của app chưa đo); `voice:asr chunkformer` và `voice:asr zipformer` không `--offline` chưa chạy lần nào; độ trễ trên máy Android thật (mới đo trên Node); độ chính xác với catalog 1.000 món (mới đo độ trễ); câu thật của người dùng; `high` trên bộ giữ kín 3; độ trễ LLM đo từ điện thoại; chuỗi LLM với `backend/ai` của nhánh này (chưa có `MODEL_PROVIDER=anthropic`); UX hỏi chọn biến thể; số giữ kín cho giai đoạn 3 (giai đoạn 4 đã có, mục 3.4); độ chính xác khi máy tự xử lý trên mẫu đủ lớn (bộ giữ kín thứ ba chỉ có 13 câu được tự xử lý, mục 3.6); router trên dữ liệu thật; độ trễ giai đoạn 4 trên máy (Hermes chậm hơn Node).
+**Chưa kiểm chứng:** L0 hotword (WER tên hàng, độ trễ beam search); số ASR trên audio người đọc (mới có audio TTS, mục 3.9–3.10); ChunkFormer `encoder_full.onnx` (lỗi shape khi export, mới chạy bản streaming); nguyên nhân hotword pyctcdecode chèn từ rác; α/β của KenLM chưa dò; độ trễ trên máy Android thật (mới đo trên Node); độ chính xác với catalog 1.000 món (mới đo độ trễ); câu thật của người dùng; `high` trên bộ giữ kín 3; độ trễ LLM đo từ điện thoại; chuỗi LLM với `backend/ai` của nhánh này (chưa có `MODEL_PROVIDER=anthropic`); UX hỏi chọn biến thể; số giữ kín cho giai đoạn 3 (giai đoạn 4 đã có, mục 3.4); độ chính xác khi máy tự xử lý trên mẫu đủ lớn (bộ giữ kín thứ ba chỉ có 13 câu được tự xử lý, mục 3.6); router trên dữ liệu thật; độ trễ giai đoạn 4 trên máy (Hermes chậm hơn Node).
 
 **Cách làm bộ eval và giới hạn:**
 - **Bộ chính (260 câu):** một sub-agent viết nháp theo quy tắc gắn nhãn, không xem code parser; tôi soát lại toàn bộ nhãn. Chia dev/test 40/60 phân tầng theo 11 nhóm, seed cố định, đóng băng trước khi viết PoC. Lỗi được soát trên dev; tập test chỉ xem số tổng, trừ một lần bảng eval in ra ID 4 câu test bị hỏng ở phiên bản đầu (đã tắt ngay). Tôi đã đọc mọi câu khi soát nhãn, nên danh sách từ đệm có thể vô tình hợp với bộ câu này hơn câu thật.
@@ -559,4 +632,4 @@ npm run voice:eval -- --asr scripts/voice-crf/.data/asr/chunkformer-stream-lm-hw
 
 Mỗi `--asr` in WER, CER (âm tiết có dấu) và các chỉ số §7 của parser khi chạy trên transcript, đặt cạnh chính các chỉ số đó khi chạy trên chữ vàng của cùng các câu. LM và hotword lấy theo danh mục của từng câu, như mỗi shop dùng danh mục của mình. `voice:asr lm` gọi `lmplz` nếu có, không thì tự ghi ARPA Kneser-Ney nội suy bậc 3.
 
-Đã chạy được: `prompts`, `lm` (ARPA nạp được bằng KenLM; "hai gói mì hảo hảo" −10.9 so với "hai gói mì hão hảo" −16.6), pyctcdecode + LM trên một ma trận CTC giả lập sửa được "hão" thành "hảo" (chỉ kiểm tra đường ống), và `--asr` với transcript trùng chữ vàng (ra đúng số của eval chữ). **Chưa chạy:** `chunkformer` và `zipformer` trên audio thật. LM miền học từ câu synthetic nên vẫn là "mẫu câu tự soạn"; nên thêm câu thật hoặc corpus hội thoại khi có.
+Đã chạy được: `prompts`, `lm` (ARPA nạp được bằng KenLM; "hai gói mì hảo hảo" −10.9 so với "hai gói mì hão hảo" −16.6), pyctcdecode + LM trên một ma trận CTC giả lập sửa được "hão" thành "hảo" (chỉ kiểm tra đường ống), và `--asr` với transcript trùng chữ vàng (ra đúng số của eval chữ). Đã chạy `chunkformer` và `zipformer` trên audio TTS (mục 3.10); **chưa chạy** trên audio người đọc. LM miền học từ câu synthetic nên vẫn là "mẫu câu tự soạn"; nên thêm câu thật hoặc corpus hội thoại khi có.

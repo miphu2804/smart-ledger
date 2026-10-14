@@ -387,34 +387,42 @@ def cmd_zipformer(args):
     for path in audio_files(args.audio_dir):
         stream = rec.create_stream(hotwords=hotwords[catalog[path.stem]]) if args.hotwords else rec.create_stream()
         stream.accept_waveform(16000, read_wav(path))
+        # như app (`src/lib/speech/sherpaEngine.ts`): đệm 0,5 giây im lặng để model nhả nốt token cuối
+        stream.accept_waveform(16000, [0.0] * 8000)
         stream.input_finished()
         while rec.is_ready(stream):
             rec.decode_stream(stream)
         # model xuất chữ HOA, app đưa về chữ thường (`src/lib/speech/core.ts`)
         results.append((path.stem, " ".join(rec.get_result(stream).lower().split())))
-    method = "hw" if hotwords else "beam" if args.beam else "greedy"
+    method = "hw" if args.hotwords else "beam" if args.beam else "greedy"
     write_jsonl(f"zipformer-{method}", results)
 
 
 def zipformer_offline(sherpa_onnx, d, find, args):
     """Zipformer không streaming (vd. gipformer): giải mã cả câu một lần, ghi `.data/asr/<tên thư mục model>-<cách giải mã>`."""
-    if args.hotwords:
-        sys.exit("--hotwords chưa hỗ trợ với --offline")
+    if args.hotwords and not (d / "bpe.vocab").exists():
+        sys.exit("--hotwords cần bpe.vocab trong thư mục model")
     rec = sherpa_onnx.OfflineRecognizer.from_transducer(
         tokens=str(d / "tokens.txt"),
         encoder=find("encoder"),
         decoder=find("decoder"),
         joiner=find("joiner"),
         num_threads=2,
-        decoding_method="modified_beam_search" if args.beam else "greedy_search",
+        decoding_method="modified_beam_search" if args.hotwords or args.beam else "greedy_search",
+        hotwords_score=args.hotwords_score,
+        modeling_unit="bpe" if args.hotwords else "",
+        bpe_vocab=str(d / "bpe.vocab") if args.hotwords else "",
     )
+    hotwords = {c: "/".join(stt_style(n).upper() for n in catalog_names(c)) for c in catalogs()}
+    catalog = catalog_of()
     results = []
     for path in audio_files(args.audio_dir):
-        stream = rec.create_stream()
+        stream = rec.create_stream(hotwords=hotwords[catalog[path.stem]]) if args.hotwords else rec.create_stream()
         stream.accept_waveform(16000, read_wav(path))
         rec.decode_stream(stream)
         results.append((path.stem, " ".join(stream.result.text.lower().split())))
-    write_jsonl(f"{d.name}-{'beam' if args.beam else 'greedy'}", results)
+    method = "hw" if args.hotwords else "beam" if args.beam else "greedy"
+    write_jsonl(f"{d.name}-{method}", results)
 
 
 def main():
