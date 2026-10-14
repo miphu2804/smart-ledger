@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Image, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { AddItemSheet } from '../src/components/AddItemSheet';
 import { BarcodeScannerModal } from '../src/components/BarcodeScannerModal';
 import { useToast } from '../src/components/brand';
@@ -14,7 +14,7 @@ import { vnd } from '../src/lib/format';
 import { createCheckoutSession } from '../src/lib/checkoutSession';
 import { toDraftItem, upsertCustomLine } from '../src/lib/customLines';
 import { triggerFeedback } from '../src/lib/feedback';
-import { getProductImage } from '../src/lib/productImages';
+import { ProductImage } from '../src/components/ProductImage';
 import { saleApi, saleDraftApi } from '../src/lib/salesApi';
 import { itemsTotal, methodLabel } from '../src/lib/stats';
 import { useReducedMotion } from '../src/motion';
@@ -207,11 +207,7 @@ export default function Checkout() {
         {items.map((it, idx) => (
           <Row key={`${it.productId ?? it.custom?.barcode ?? it.name}-${idx}`} style={[styles.line, { alignItems: 'center' }]}>
             <View style={styles.checkoutThumbWrap}>
-              <Image
-                source={{ uri: getProductImage(it.name) }}
-                style={styles.checkoutThumb}
-                resizeMode="cover"
-              />
+              <ProductImage name={it.name} uri={products.find((p) => p.id === it.productId)?.imageUrl} style={styles.checkoutThumb} />
             </View>
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Row gap={6}>
