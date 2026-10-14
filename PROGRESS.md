@@ -1,3 +1,13 @@
+### [2026-10-14 14:05 UTC+07:00] — [Fix] Orders shows revenue for "Tất cả" and custom date ranges again
+
+**Done:** The team reported that the Orders summary card lost its revenue figure under "Tất cả" and after a custom date range. Since #199 the revenue comes from Core's reports, which only take preset periods, so those filters showed the order count only. The owner chose to add up Core's daily figures for this year instead: "Tất cả" now shows "Doanh thu năm nay" (Core has no all-time total), and a custom range that starts this year shows its revenue and the per-day totals in the day headers. A range that reaches into last year still shows the order count only, and so does a search. Preset periods are unchanged.
+
+**Changed files:** `frontend/mobile/app/(tabs)/invoices.tsx`, `frontend/mobile/src/lib/saleFilter.ts` — modified; this entry.
+
+**Flow explained:** `saleFilterYearDays` turns "Tất cả" or a custom range into Vietnam calendar days of this year (or `null`) → the Orders tab calls `reportApi.salesSeries('year')` once, keeps the days inside the range, and adds up their net revenue for the card; the same days give the day headers their totals → preset periods still use their own summary and series.
+
+**Check:** `tsc --noEmit` clean. `saleFilterYearDays`, 7 of 7 with the device set to New York and to Vietnam time ("Tất cả", a range in this year, a range from a day only, a range into last year, a range with no start day, a preset period, 00:30 on 1 January in Vietnam). Mock-mode web build in headless Chrome, 7 of 7: "Tất cả" shows "Doanh thu năm nay" and day totals, a custom "7 ngày gần nhất" range gives the same revenue as the "7 ngày" button, a search hides the revenue and clearing it brings it back, returning to "Tất cả" keeps it. **Not verified:** against the real Core on the emulator; iOS.
+
 ### [2026-10-14 13:16 UTC+07:00] — [Fix] Agent chat: charts stay inside their card, a loader while waiting, floating header
 
 **Done:** A chart with many points (17 categories on staging) no longer spills its labels past the card: each point gets at least 58px, a short series still fills the card, and a long one scrolls sideways inside it. While the agent has not sent its first word, the bubble shows a 3×3 dot lattice (the "orbit" pattern of React Bits' LatticeLoader, rebuilt with React Native `Animated` because the original is web CSS), one of 80 Vietnamese waiting phrases that changes every 3.5 s, and a stopwatch; with reduce motion on, the lattice stays still. The header drops the title, the online subtitle and the avatar: back, new conversation and history float as shadowed buttons over the conversation, which scrolls beneath them.
