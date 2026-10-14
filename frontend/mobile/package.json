@@ -50,6 +50,7 @@
     "voice:tune": "node --experimental-strip-types --no-warnings --import ./scripts/voice-crf/ts-resolve.mjs scripts/voice-crf/tune.mts",
     "voice:grid": "node --experimental-strip-types --no-warnings --import ./scripts/voice-crf/ts-resolve.mjs scripts/voice-crf/grid.mts",
     "voice:router": "node --experimental-strip-types --no-warnings --import ./scripts/voice-crf/ts-resolve.mjs scripts/voice-crf/router.mts",
+    "voice:gate": "node --experimental-strip-types --no-warnings --import ./scripts/voice-crf/ts-resolve.mjs scripts/voice-crf/gate.mts",
     "voice:asr": "uv run scripts/voice-crf/asr.py"
   },
   "private": true

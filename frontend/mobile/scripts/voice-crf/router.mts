@@ -133,7 +133,7 @@ for (const spec of sets) {
   readJsonl<{ shop?: string; text: string; y: Label[] }>(resolve(path)).forEach((r, i) => {
     // dev.jsonl không ghi cửa hàng: synth xoay vòng danh mục theo chỉ số câu
     const products = TRAIN_CATALOGS[r.shop ?? shops[i % shops.length]];
-    const gold = parseOrderDetailed(r.text, products, { tagger: () => ({ labels: r.y, prob: 1, pOutside: () => 1 }) });
+    const gold = parseOrderDetailed(r.text, products, { tagger: () => ({ labels: r.y, prob: 1, pOutside: () => 1 }), freeFormGate: false });
     if (gold.fallback && gold.reason !== 'empty') return; // nhãn vàng không ghép được
     const { order, f } = features(r.text, products);
     out.push(JSON.stringify({ set: kind, id: `${kind}-${i}`, hasCand: !!order, correct: !!order && looseKey(order) === looseKey(gold), f }));

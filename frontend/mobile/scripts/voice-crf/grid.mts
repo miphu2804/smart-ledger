@@ -9,6 +9,8 @@
  *   npm run voice:grid -- --ablate                       # tắt gate dấu hiệu / luật số tham chiếu viết tay
  *   npm run voice:grid -- --lexout <thư mục synth --holdout 1> --model <model train trên thư mục đó>
  *                                                        # câu synthetic dùng từ vựng chưa gặp: đúng / tự nhận sai / hỏi lại
+ *   npm run voice:grid -- --lexout <thư mục synth --famout repair>/famout.jsonl --model <model của thư mục đó> --gate
+ *                                                        # kiểu câu chưa gặp; --gate: gate câu tự do bật / tắt
  *   npm run voice:grid -- --oracle                       # câu hỏi lại trong pool: đơn hàng đúng có trong n-best không
  *   npm run voice:grid -- --latency                      # thêm P95 trên danh mục 1.000 món
  */
@@ -50,6 +52,14 @@ interface Config {
 function configs(model: string, m: CrfModel): Config[] {
   const tagger = crfTagger(m, 32);
   const list: Config[] = [];
+  if (args.includes('--gate')) {
+    // gate câu tự do (mặc định) so với gate cũ, ở vài ngưỡng
+    for (const theta of [0.9, 0.95]) {
+      list.push({ name: `${model} θ${theta} gate tự do`, opts: { tagger, minConfidence: theta } });
+      list.push({ name: `${model} θ${theta} gate cũ`, opts: { tagger, minConfidence: theta, freeFormGate: false } });
+    }
+    return list;
+  }
   if (args.includes('--ablate')) {
     // Có phụ thuộc phần viết tay không: cấu hình mặc định, tắt lần lượt gate dấu hiệu / luật số tham chiếu
     for (const theta of [0.8, 0.9]) {
@@ -120,17 +130,17 @@ function latencyP95(opts: ParseOptions) {
 const lexoutDir = one('--lexout');
 if (lexoutDir) {
   // Câu synthetic dùng từ vựng giữ lại (voice:synth --holdout 1): đơn hàng vàng = ghép slot từ nhãn vàng; so với parser
-  const rows = readFileSync(resolve(lexoutDir, 'lexout.jsonl'), 'utf8')
+  const rows = readFileSync(lexoutDir.endsWith('.jsonl') ? resolve(lexoutDir) : resolve(lexoutDir, 'lexout.jsonl'), 'utf8')
     .split('\n')
     .filter((l) => l.trim())
     .map((l) => JSON.parse(l) as { shop: string; text: string; y: Label[] });
   const key = (o: ParsedOrder) => JSON.stringify([o.items, o.unknown, o.missingQuantityItems, o.disambiguations, o.expenses]);
   const golds = rows.map((r) => {
-    const g = parseOrderDetailed(r.text, TRAIN_CATALOGS[r.shop], { tagger: () => ({ labels: r.y, prob: 1, pOutside: () => 1 }), fallbackTagger: undefined });
+    const g = parseOrderDetailed(r.text, TRAIN_CATALOGS[r.shop], { tagger: () => ({ labels: r.y, prob: 1, pOutside: () => 1 }), fallbackTagger: undefined, freeFormGate: false });
     return g.fallback && g.reason !== 'empty' ? null : key(g);
   });
   console.log(`lexout ${rows.length} câu, ${golds.filter((g) => g === null).length} câu nhãn vàng không ghép được (bỏ qua)`);
-  console.log('| Cấu hình | đúng | tự nhận sai | hỏi lại |\n|---|---|---|---|');
+  console.log('| Cấu hình | đúng | tự nhận sai | hỏi lại | đúng / tự nhận |\n|---|---|---|---|---|');
   for (const [name, m] of models) {
     for (const c of configs(name, m)) {
       if (only && !c.name.includes(only)) continue;
@@ -146,7 +156,7 @@ if (lexoutDir) {
         else if (key(p) === golds[i]) ok++;
         else wrong++;
       });
-      console.log(`| ${c.name} | ${pct(ok / n)} | ${pct(wrong / n)} | ${pct(ask / n)} |`);
+      console.log(`| ${c.name} | ${pct(ok / n)} | ${pct(wrong / n)} | ${pct(ask / n)} | ${ok + wrong ? pct(ok / (ok + wrong)) : '—'} |`);
     }
   }
 } else if (args.includes('--oracle')) {
