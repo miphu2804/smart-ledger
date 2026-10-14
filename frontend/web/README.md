@@ -28,7 +28,7 @@ Biến môi trường (xem `.env.example`):
 | `VITE_ADMIN_ENABLED` | (tắt) | `true` bật trang quản trị `/admin`. Tắt thì bản build không có mã admin, tài khoản demo cũng không lọt vào bundle. Đặt `true` trong `.env.local` khi phát triển |
 | `VITE_LEGAL_DRAFT` | `true` | Hai trang pháp lý hiện nhãn "Bản nháp" cho đến khi chủ sản phẩm duyệt; đặt `false` lúc build để gỡ nhãn |
 
-Thông tin liên hệ công khai nằm trong [`site.yaml`](site.yaml), không phải biến môi trường: `contact_email` (hiện ở mục Liên hệ, `/privacy` và `/data-deletion`) và `social.facebook`, `social.tiktok` (icon trên thanh điều hướng và footer). Mục nào để trống thì trang không hiện mục đó.
+Thông tin liên hệ công khai nằm trong [`site.yaml`](site.yaml), không phải biến môi trường: `contact_email` (hiện ở mục Liên hệ, `/privacy` và `/data-deletion`) và `social.facebook`, `social.tiktok`, `social.instagram` (icon trên thanh điều hướng và footer). Mục nào để trống thì trang không hiện mục đó.
 
 ## Trang quản trị
 

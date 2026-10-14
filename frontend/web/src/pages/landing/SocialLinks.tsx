@@ -1,12 +1,13 @@
-import { FacebookMonoIcon, TiktokIcon } from '../../components/BrandIcons'
-import { FACEBOOK_URL, TIKTOK_URL } from '../../config'
+import { FacebookMonoIcon, InstagramIcon, TiktokIcon } from '../../components/BrandIcons'
+import { FACEBOOK_URL, INSTAGRAM_URL, TIKTOK_URL } from '../../config'
 
 const LINKS = [
   { href: FACEBOOK_URL, label: 'Facebook của Sổ Nghe Lời', Icon: FacebookMonoIcon },
   { href: TIKTOK_URL, label: 'TikTok của Sổ Nghe Lời', Icon: TiktokIcon },
+  { href: INSTAGRAM_URL, label: 'Instagram của Sổ Nghe Lời', Icon: InstagramIcon },
 ].filter((l) => l.href)
 
-/** Icon kênh Facebook/TikTok; không có kênh nào trong `site.yaml` thì không hiện gì. */
+/** Icon kênh Facebook/TikTok/Instagram; không có kênh nào trong `site.yaml` thì không hiện gì. */
 export default function SocialLinks() {
   if (LINKS.length === 0) return null
   return (
