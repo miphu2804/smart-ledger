@@ -27,6 +27,7 @@ const EDIT = opt('--edit', 1) > 0;
 const LEX = opt('--lex', 1) > 0;
 /** Giữ lại 1/3 từ vựng mỗi danh sách để sinh `lexout.jsonl` (đo khả năng gặp từ chưa thấy, `voice:grid --lexout`). */
 const HOLDOUT = opt('--holdout', 0) > 0;
+const N_LEXOUT = opt('--lexout', 1000);
 const OUT_DIR = args.includes('--out') ? `${args[args.indexOf('--out') + 1].replace(/\/$/, '')}/` : './.data/';
 /** Tỉ lệ câu sửa lời (phần thêm so với 4% lấy từ câu bán thường). */
 const CORR = opt('--corr', 0.08);
@@ -539,13 +540,13 @@ if (HOLDOUT) {
   lexPart = 'test';
   const kinds = [distributive, copyQty, EDIT ? repair : correction, references, totalThenSplit];
   const lines: string[] = [];
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < N_LEXOUT; i++) {
     const shop = shops[i % shops.length];
     const products = TRAIN_CATALOGS[shop];
     lines.push(JSON.stringify({ shop, ...render(kinds[i % kinds.length](products), products) }));
   }
   writeFileSync(new URL('lexout.jsonl', out), `${lines.join('\n')}\n`);
-  console.log('lexout: 1000 câu (từ vựng giữ lại)');
+  console.log(`lexout: ${N_LEXOUT} câu (từ vựng giữ lại)`);
   lexPart = 'all';
 }
 writeFileSync(new URL('meta.json', out), `${JSON.stringify({ features: FEATURE_SET, args })}\n`);

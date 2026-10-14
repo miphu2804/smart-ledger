@@ -70,6 +70,7 @@ Chữ nhận được từ mic (hay gõ tay) đi qua `parseOrder()` (`src/lib/pa
 npm run voice:eval      # bảng chỉ số baseline / PoC trên bộ câu tự soạn (scripts/voice-crf/eval/: bộ chính + câu tự do)
 npm run voice:tune      # dò ngưỡng gate trên tập dev
 npm run voice:grid      # dò lưới cách giải mã/ngưỡng; --model <json> --compact so model, --ablate, --lexout <dir> (từ chưa gặp)
+npm run voice:router -- <model.json> <out.jsonl> human   # đặc trưng lượt parse cho router escalate (router.py học và so với θ)
 npm run voice:synth && npm run voice:train && npm run voice:parity   # sinh câu, train CRF (cần uv), so Viterbi TS với Python
 npm run voice:asr -- prompts            # danh sách câu eval cần thu âm (.data/asr/prompts.tsv)
 npm run voice:asr -- lm --catalog tap_hoa   # LM n-gram miền dạng ARPA (dùng lmplz của KenLM nếu có)
