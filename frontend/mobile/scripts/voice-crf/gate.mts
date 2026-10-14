@@ -118,6 +118,23 @@ function signals(text: string, products: ParseableProduct[], model: CrfModel, pa
     return o && key && looseKey(o) === key ? 1 : 0;
   };
   const rule = parseOrderDetailed(text, products, { tagger: ruleTagger });
+  // Parse mặc định (gate câu tự do) và "cứu" câu bị chặn chỉ vì khung câu lạ: bỏ các từ nằm trong cặp lớp chưa gặp rồi
+  // parse lại; câu rút gọn qua mọi gate và ra cùng đơn hàng thì từ lạ không đổi nghĩa.
+  const def = parseOrderDetailed(text, products, { tagger });
+  const tokCls = x.map((fs) => sentenceShape([fs])[0]);
+  const clsTok = tokCls.flatMap((c, i) => (c === 'I' && tokCls[i - 1] === 'I' ? [] : [i])); // token đầu của từng lớp
+  const literal = (k: number) => k >= 0 && k < sh.length && ![',', '$', '#', 'I', 'U'].includes(sh[k]);
+  const padded = ['^', ...sh, '$$'];
+  const novelWords = new Set<number>();
+  for (let k = 0; k + 1 < padded.length; k++) {
+    if (seen.has(`${padded[k]} ${padded[k + 1]}`)) continue;
+    for (const c of [k - 1, k]) if (literal(c)) novelWords.add(clsTok[c]);
+  }
+  const reduced = d.tokens
+    .filter((_, i) => !novelWords.has(i))
+    .map((t) => text.normalize('NFC').slice(t.start, t.end))
+    .join(' ');
+  const red = novelWords.size ? parseOrderDetailed(reduced, products, { tagger }) : undefined;
   // Nhiễu nhỏ không đổi nghĩa: bỏ dấu thanh, bỏ dấu câu, bỏ từ lạ. Đơn hàng đổi theo nhiễu là parser chưa vững với câu này.
   const same = (t: string) => {
     if (t === text) return 1;
@@ -147,6 +164,14 @@ function signals(text: string, products: ParseableProduct[], model: CrfModel, pa
     novel3: new Set(grams(sh, 3).filter((g) => !seen.has(g))).size,
     pTone: same(strip(text).normalize('NFC')),
     pSep: same(text.replace(/[,.;:!?]/g, ' ').replace(/\s+/g, ' ').trim()),
+    defReason: ['', 'empty', 'unattached', 'marker', 'duplicate', 'implicit', 'confidence', 'novel'].indexOf(def.reason ?? ''),
+    rescue: def.reason === 'novel' && red && !red.fallback && key && looseKey(red) === key ? 1 : 0,
+    // chỉ khi mọi từ lạ nằm trước nhãn đầu tiên hoặc sau nhãn cuối cùng (lời mở/kết: "lấy cho anh…", "…luôn nghen")
+    edge: (() => {
+      const lab = labels.flatMap((l, i) => (l !== 'O' ? [i] : []));
+      return lab.length > 0 && [...novelWords].every((i) => i < lab[0] || i > lab[lab.length - 1]) ? 1 : 0;
+    })(),
+    defOk: 0,
     pUnk: unknown.size ? same(d.tokens.filter((_, i) => !unknown.has(i)).map((t) => text.normalize('NFC').slice(t.start, t.end)).join(' ')) : 1,
   };
   partners.forEach((p, k) => (f[`agree${k}`] = agree(p)));
@@ -170,6 +195,7 @@ for (const g of human) {
   const products = catalogs[g.catalog];
   const { top, f, tok } = signals(g.text, products, mainModel, humanPartners, humanSeen);
   const s = top ? scoreCase(g, { ...top, fallback: false }) : undefined;
+  f.defOk = scoreCase(g, parseOrderDetailed(g.text, products, { tagger: crfTagger(mainModel, 32) })).exact ? 1 : 0;
   // câu không có món nào (nói chuyện, khoản chi rỗng): đúng khi parser không ra dòng nào
   const correct = s ? s.exact : g.lines.length === 0 && g.expenses.length === 0;
   rows.push({
@@ -200,6 +226,8 @@ for (const spec of many('--set')) {
     if (gold.fallback && gold.reason !== 'empty') return; // nhãn vàng không ghép được
     const { top, f, tok } = signals(r.text, products, main, partners, seen);
     const correct = top ? looseKey(top) === looseKey(gold) : lineCount(gold) === 0;
+    const def = parseOrderDetailed(r.text, products, { tagger: crfTagger(main, 32) });
+    f.defOk = !def.fallback && looseKey(def) === looseKey(gold) ? 1 : 0;
     rows.push({ set: name, id: `${name}-${i}`, text: r.text, got: top && looseKey(top), want: looseKey(gold), cand: !!top, correct, acc: 0, wrong: 0, gold: 0, right: 0, f, tok });
   });
 }
@@ -216,6 +244,9 @@ const POLICIES: Policy[] = [
   ['θ0.9 (gate cũ)', (f) => f.conf >= 0.9],
   ['gate câu tự do (mặc định)', (f) => f.conf >= 0.9 && !f.implicit && !(complex(f) && f.novel2 > 0)],
   ['gate câu tự do, 3-gram', (f) => f.conf >= 0.9 && !f.implicit && !(complex(f) && f.novel3 > 0)],
+  ['parse mặc định (gate câu tự do thật)', (f) => f.defReason === 0],
+  ['parse mặc định + cứu câu khung lạ', (f) => f.defReason === 0 || f.rescue === 1],
+  ['parse mặc định + cứu câu lạ ở lời mở/kết', (f) => f.defReason === 0 || (f.rescue === 1 && f.edge === 1)],
   ['θ0.95', (f) => f.conf >= 0.95],
   ['θ0.98', (f) => f.conf >= 0.98],
   ['θ0.99', (f) => f.conf >= 0.99],
@@ -249,7 +280,8 @@ for (const [name, accept] of POLICIES) {
   const cells = sets.map((s) => {
     const list = rows.filter((r) => r.set === s);
     const acc = list.filter((r) => r.cand && accept(r.f));
-    const ok = acc.filter((r) => r.correct).length;
+    // chính sách "parse mặc định": câu tự nhận ngay thì chấm đơn hàng của parse mặc định; câu cứu thì đơn hàng = ứng viên tốt nhất
+    const ok = acc.filter((r) => (name.startsWith('parse mặc định') && r.f.defReason === 0 ? r.f.defOk === 1 : r.correct)).length;
     const lines = acc.reduce((n, r) => n + r.acc, 0);
     const wrong = acc.reduce((n, r) => n + r.wrong, 0);
     const human = list.some((r) => r.gold > 0);

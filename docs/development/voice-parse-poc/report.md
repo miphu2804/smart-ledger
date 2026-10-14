@@ -248,6 +248,7 @@ Exact theo câu theo nhóm (gate mới / gate cũ): câu thường (control) 50 
 - Mục tiêu 95% đúng khi máy tự xử lý đạt, và không dòng nào bị ghi sai. Nhưng chỉ có 13 câu được tự xử lý: cận dưới khoảng tin cậy 95% của 13/13 là 75%, nên số này cho biết gate rất thận trọng chứ chưa chứng minh được 95%.
 - Gate chặt đến mức máy gần như chỉ còn tự xử lý câu rất quen: với người viết mới, một nửa câu đặt hàng thường cũng sang LLM vì cách nói lạ với dữ liệu train (gate cũ đúng 94% nhóm này). Trên test chính chỉ mất 3 điểm vì bộ sinh câu đã được mở rộng theo cách nói của bộ đó.
 - Với cách làm hiện tại (dữ liệu tự sinh), tỉ lệ đúng khi tự xử lý và tỉ lệ tự xử lý kéo ngược nhau: gate cũ 58% / 68%, gate mới 8% / 100%. Muốn cả hai cùng cao thì cần câu thật để train và đo, và `draft_parse` cho phần còn lại.
+- Đã thử đổi thêm thời gian trên máy lấy chất lượng (`voice:gate`, chính sách "cứu câu khung lạ"): câu bị chặn vì khung lạ thì bỏ các từ lạ rồi parse lại (thêm một lượt parse, vài ms); câu rút gọn qua mọi gate và ra cùng đơn thì tự nhận. Câu người viết được thêm 2–13 điểm độ phủ (free2-dev 18 → 28%, đúng 97%), nhưng trên synthetic lexout và kiểu câu chưa gặp, tự nhận sai tăng 2–4 lần (ví dụ "số bàn/người" chưa gặp: đúng 84% → 64%), vì từ lạ ở giữa câu thường là từ cấu trúc ("người ăn", "tổng cộng"). Chỉ cứu khi từ lạ nằm ở lời mở/kết: thêm 1–4 điểm cho câu người viết, synthetic vẫn tệ hơn. Không giữ. Các thử trước (n-best k = 64/128, gộp model, 32.000 câu train) cũng không đổi thời gian lấy chất lượng được; đòn bẩy thật là LLM cho phần escalate.
 
 ## 4. Chạy lại
 
