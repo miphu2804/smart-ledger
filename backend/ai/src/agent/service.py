@@ -95,6 +95,8 @@ class AgentService:
                 # global settings and guardrails cannot be switched off by a caller.
                 retries=self.guardrails.retries,
                 capabilities=self.guardrails.capabilities,
+                # Tags the run's trace, so one shop's turns can be filtered (NFR-007).
+                metadata=lambda ctx: {"shop_id": ctx.deps.shop_id},
             )
             if model is not None
             else None

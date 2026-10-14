@@ -24,8 +24,8 @@ The backend deploy (`deploy`) waits for `ai`, `core`, `mobile-web` and `containe
 
 | Environment | Allowed branches | Approval | Secrets | Variables |
 |---|---|---|---|---|
-| `railway-staging` | `staging` | No | `RAILWAY_TOKEN`: project token of the Railway staging environment; `OPENAI_API_KEY` ([AI model settings](#ai-model-settings)) | `CORS_ALLOWED_ORIGINS`, AI model settings |
-| `railway-production` | `main` | Yes | `RAILWAY_TOKEN`: project token of the Railway production environment; `OPENAI_API_KEY` | `CORS_ALLOWED_ORIGINS` (optional), AI model settings |
+| `railway-staging` | `staging` | No | `RAILWAY_TOKEN`: project token of the Railway staging environment; `OPENAI_API_KEY` ([AI model settings](#ai-model-settings)); `LOGFIRE_TOKEN` (optional, [AI tracing settings](#ai-tracing-settings)) | `CORS_ALLOWED_ORIGINS`, AI model settings |
+| `railway-production` | `main` | Yes | `RAILWAY_TOKEN`: project token of the Railway production environment; `OPENAI_API_KEY`; `LOGFIRE_TOKEN` (optional) | `CORS_ALLOWED_ORIGINS` (optional), AI model settings |
 | `vercel-preview` | Any branch (PR) | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `EXPO_PUBLIC_*` |
 | `vercel-staging` | `staging` | No | Same as above | `EXPO_PUBLIC_*`, `VERCEL_STAGING_ALIAS` |
 | `vercel-production` | `main` | Yes | Same as above | `EXPO_PUBLIC_*` |
@@ -44,7 +44,7 @@ Each Railway project token can deploy to exactly one Railway environment, so a j
 
 - One project with two environments, `staging` and `production`, each with services `core` and `ai`. Service names must match `--service` in the workflow.
 - The workflow uploads code with `railway up backend/<service> --path-as-root`, so each service's **Root Directory** stays empty and GitHub auto-deploy stays **off** (otherwise every commit deploys twice).
-- Service variables (database, Firebase, `INTERNAL_API_TOKEN`, model key…) are set on Railway per environment; GitHub keeps only the deploy token, `CORS_ALLOWED_ORIGINS` and the [AI model settings](#ai-model-settings). Railway does not mount files, so Core receives the Firebase Admin key through `FIREBASE_SERVICE_ACCOUNT_JSON` (the full service-account JSON, one service account per environment); when it is empty, Core falls back to `GOOGLE_APPLICATION_CREDENTIALS` as in local runs.
+- Service variables (database, Firebase, `INTERNAL_API_TOKEN`, model key…) are set on Railway per environment; GitHub keeps only the deploy token, `CORS_ALLOWED_ORIGINS`, the [AI model settings](#ai-model-settings) and the [AI tracing settings](#ai-tracing-settings). Railway does not mount files, so Core receives the Firebase Admin key through `FIREBASE_SERVICE_ACCOUNT_JSON` (the full service-account JSON, one service account per environment); when it is empty, Core falls back to `GOOGLE_APPLICATION_CREDENTIALS` as in local runs.
 
 ### Railway service variables
 
@@ -81,6 +81,7 @@ Enter each value once and reuse it with a [reference variable](https://docs.rail
 | `AI_SQL_READER_URL` | Read-only `ai_sql_reader` login (AI baseline in `supabase/migrations/`) as a `postgresql://` URL, not a libpq keyword string; when empty, the agent cannot read shop data |
 | `REDIS_URL` | Redis Cloud of the matching environment |
 | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `MODEL_*` | Managed from GitHub, see [AI model settings](#ai-model-settings). Do not edit them on Railway. |
+| `LOGFIRE_TOKEN`, `LOGFIRE_ENVIRONMENT`, `LOGFIRE_SERVICE_VERSION` | Managed from GitHub, see [AI tracing settings](#ai-tracing-settings). Do not edit them on Railway. |
 
 - `ai` has no public domain; `core` calls it over the private network. Port `8001` is AI's default `SERVER_PORT`, not the `PORT` Railway assigns, so changing `SERVER_PORT` on `ai` requires updating `AI_BASE_URL`.
 - Variables have local defaults (`AI_BASE_URL` defaults to `http://localhost:8001`), so a missing variable on Railway still reports a successful deploy while Core cannot reach AI. After changing variables, run one chat through Core on staging.
@@ -100,6 +101,18 @@ Step `Sync ai model settings` copies these from the `railway-staging` or `railwa
 | `MODEL_FALLBACKS` | Variable | Optional JSON list of `provider:model`, e.g. `["openai-chat:deepseek-v4.1-flash"]` |
 
 `anthropic` models need `OPENAI_BASE_URL` set; without it AI starts with chat disabled. A step cannot clear a Railway value: an emptied GitHub setting is skipped, so delete the value on Railway as well.
+
+### AI tracing settings
+
+Step `Sync ai tracing settings` sets these on Railway service `ai` before deploying it. Traces carry no message content; see [AI README](../../backend/ai/README.md#tracing-logfire).
+
+| Name | Source | Value |
+|---|---|---|
+| `LOGFIRE_TOKEN` | Secret of the `railway-staging` or `railway-production` GitHub environment | Write token of the Logfire project, a separate token per environment so one can be revoked alone. Unset: the step skips it and AI sends traces only if Railway already holds a token |
+| `LOGFIRE_ENVIRONMENT` | Derived from the branch | `staging` on `staging`, `production` on `main` |
+| `LOGFIRE_SERVICE_VERSION` | Derived | The deployed commit (`github.sha`), shown on each trace |
+
+The container is uploaded without `.git`, so Logfire cannot read the commit itself. To turn tracing off, delete `LOGFIRE_TOKEN` on GitHub and on Railway: as for the model settings, an emptied GitHub secret is skipped, not cleared.
 
 ### Core CORS origins
 
