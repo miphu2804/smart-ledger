@@ -310,6 +310,48 @@ export interface ExpenseView {
   updatedAt: string;
 }
 
+// ---- Báo cáo của Core (`/reports/*`), docs/contracts/api-contracts.md mục 4 ----
+
+/** Kỳ báo cáo theo giờ Việt Nam: `week` là 7 ngày gồm hôm nay, `this_week` từ thứ Hai, `month`/`year` từ đầu tháng/năm. */
+export type ReportPeriod = 'today' | 'yesterday' | 'this_week' | 'week' | 'month' | 'year';
+
+/**
+ * Tổng của một kỳ trên toàn tiệm. `orderCount`/`grossRevenueVnd` tính đơn bán trong kỳ (kể cả đơn sau đó bị huỷ);
+ * `voided*` tính đơn bị huỷ trong kỳ theo lúc huỷ; `netRevenueVnd` = gross − voided, có thể âm.
+ */
+export interface ReportSummaryView {
+  period: ReportPeriod;
+  fromInclusive: string;
+  toExclusive: string;
+  grossRevenueVnd: number;
+  voidedRevenueVnd: number;
+  netRevenueVnd: number;
+  collectedVnd: number;
+  expenseVnd: number;
+  currentOutstandingDebtVnd: number;
+  orderCount: number;
+  refundedVnd: number;
+  voidedOrderCount: number;
+}
+
+/** Một ngày của chuỗi doanh thu; `date` là ngày `yyyy-mm-dd` theo giờ Việt Nam, Core trả đủ mọi ngày của kỳ. */
+export interface SalesSeriesPoint {
+  date: string;
+  grossRevenueVnd: number;
+  voidedRevenueVnd: number;
+  netRevenueVnd: number;
+  orderCount: number;
+  voidedOrderCount: number;
+}
+
+export interface SalesSeriesView {
+  period: ReportPeriod;
+  fromInclusive: string;
+  toExclusive: string;
+  granularity: 'DAY';
+  items: SalesSeriesPoint[];
+}
+
 export type NotificationType = 'LOW_STOCK' | 'OUT_OF_STOCK' | 'SALE_VOIDED' | 'SHOP_INACTIVATED' | 'SHOP_REACTIVATED';
 
 /** Thông báo trong inbox của OWNER (Core `GET /me/notifications`, docs/contracts/api-contracts.md mục 8). `id` là ID sự kiện. */

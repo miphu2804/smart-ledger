@@ -1,7 +1,7 @@
 import type { PaymentView, SaleDraftView, SaleRefundView, SaleView, SaleVoidView } from '../data/types';
 import { ApiError, apiRequest } from './api';
 import { createIdempotentSender } from './idempotency';
-import { fetchAllPages } from './pageApi';
+import { fetchAllPages, fetchPage, type PageResponse } from './pageApi';
 import type { SaleVoidRequest } from './saleVoid';
 
 // Mỗi loại thao tác ghi tiền một bộ gửi: mất mạng rồi bấm lại cùng nội dung dùng lại Idempotency-Key cũ nên Core
@@ -48,8 +48,17 @@ export const saleDraftApi = {
     apiRequest<SaleView>(`/sale-drafts/${id}/confirm`, { method: 'POST', withShop: true }),
 };
 
+/**
+ * Bộ lọc của `GET /sales` (Core lọc trước khi chia trang): `from`/`to` là mốc ISO 8601 có múi giờ, lấy đơn có soldAt trong
+ * `[from, to)`; `q` tìm trong tên khách và tên món, hoặc khớp đúng mã đơn dạng số.
+ */
+export type SaleListQuery = { from?: string; to?: string; q?: string };
+
 export const saleApi = {
   list: (): Promise<SaleView[]> => fetchAllPages<SaleView>('/sales'),
+  /** Một trang đơn theo bộ lọc, mới bán trước (soldAt giảm, rồi id giảm). */
+  page: (page: number, size: number, query: SaleListQuery = {}): Promise<PageResponse<SaleView>> =>
+    fetchPage<SaleView>('/sales', page, size, { ...query }),
   getById: (id: number): Promise<SaleView> => apiRequest<SaleView>(`/sales/${id}`, { withShop: true }),
   /**
    * POST /sales/{id}/void: huỷ cả đơn, hoàn toàn bộ tiền đã thu, huỷ nợ còn dư, tuỳ chọn hoàn hàng về kho (xem saleVoid.ts).

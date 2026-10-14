@@ -1,10 +1,11 @@
 /**
  * Bộ lọc thời gian của màn Đơn hàng: một kỳ có sẵn (hàng nút dưới ô tìm) hoặc một khoảng ngày tự chọn (bảng chọn khoảng
- * ngày). Core trả cả danh sách đơn nên app lọc ngay trên máy; phần thuần nằm ở đây để kiểm tra được mà không cần giao diện.
+ * ngày). Core lọc theo khoảng thời gian trước khi chia trang (`saleFilterWindow`); số tổng của các kỳ có sẵn lấy từ báo cáo
+ * của Core (`saleFilterReportPeriod`). Phần thuần nằm ở đây để kiểm tra được mà không cần giao diện.
  */
-import type { SaleView } from '../data/types';
+import type { ReportPeriod } from '../data/types';
 import { dayKey, ddmm, ddmmyyyy, parseDayKey } from './format';
-import { inPeriod, periodLabel, type Period } from './stats';
+import { periodLabel, type Period } from './stats';
 
 export interface SaleFilter {
   /** Một kỳ có sẵn, hoặc 'custom' = khoảng ngày tự chọn (`from`, `to`) */
@@ -36,16 +37,69 @@ export function matchingPreset(from: string | null, to: string | null, now = new
   );
 }
 
-export function matchesSaleFilter(sale: SaleView, f: SaleFilter, now = new Date()): boolean {
-  if (f.time !== 'custom') return inPeriod(sale.soldAt, f.time, now);
-  const day = dayKey(new Date(sale.soldAt));
-  if (f.from && day < f.from) return false;
-  if (f.to && day > f.to) return false;
-  return true;
+/** Giờ Việt Nam (UTC+07, không đổi giờ mùa hè): kỳ báo cáo của Core tính theo lịch này. */
+const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+/** Ngày lịch Việt Nam của một thời điểm, dạng năm/tháng (0–11)/ngày/thứ (0 = Chủ nhật). */
+function vnCalendar(at: Date) {
+  const shifted = new Date(at.getTime() + VN_OFFSET_MS);
+  return { y: shifted.getUTCFullYear(), m: shifted.getUTCMonth(), d: shifted.getUTCDate(), weekday: shifted.getUTCDay() };
 }
 
-export function applySaleFilter(sales: SaleView[], f: SaleFilter, now = new Date()): SaleView[] {
-  return sales.filter((sale) => matchesSaleFilter(sale, f, now));
+/** Nửa đêm Việt Nam của một ngày lịch (tháng 0–11; ngày tràn hoặc âm tự lùi/tiến tháng), dạng ISO 8601 UTC. */
+function vnMidnight(y: number, m: number, d: number): string {
+  return new Date(Date.UTC(y, m, d) - VN_OFFSET_MS).toISOString();
+}
+
+/**
+ * Khoảng thời gian gửi lên Core (`GET /sales?from=&to=`): đơn có soldAt trong `[from, to)`, mốc là nửa đêm theo lịch Việt
+ * Nam như các kỳ báo cáo của Core, kể cả khi máy đặt múi giờ khác. Ngày cuối của khoảng tự chọn được tính trọn nên `to` là
+ * nửa đêm ngày hôm sau. "Tất cả" không gửi mốc nào.
+ */
+export function saleFilterWindow(f: SaleFilter, now = new Date()): { from?: string; to?: string } {
+  const { y, m, d, weekday } = vnCalendar(now);
+  const tomorrow = vnMidnight(y, m, d + 1);
+  switch (f.time) {
+    case 'all':
+      return {};
+    case 'today':
+      return { from: vnMidnight(y, m, d), to: tomorrow };
+    case 'yesterday':
+      return { from: vnMidnight(y, m, d - 1), to: vnMidnight(y, m, d) };
+    case 'thisWeek':
+      // Tuần lịch bắt đầu từ thứ Hai
+      return { from: vnMidnight(y, m, d - ((weekday + 6) % 7)), to: tomorrow };
+    case 'week':
+      return { from: vnMidnight(y, m, d - 6), to: tomorrow };
+    case 'month':
+      return { from: vnMidnight(y, m, 1), to: tomorrow };
+    case 'custom': {
+      // Ngày của khoảng tự chọn là ngày lịch (`yyyy-mm-dd`), không phụ thuộc múi giờ máy
+      const day = (key: string, offset: number) => {
+        const [ky, km, kd] = key.split('-').map(Number);
+        return vnMidnight(ky, km - 1, kd + offset);
+      };
+      return { ...(f.from ? { from: day(f.from, 0) } : {}), ...(f.to ? { to: day(f.to, 1) } : {}) };
+    }
+  }
+}
+
+/**
+ * Kỳ báo cáo của Core trùng với bộ lọc, để lấy số tổng (doanh thu, số đơn từng ngày) tính trên toàn tiệm. `null` khi
+ * không có kỳ tương ứng ("Tất cả", khoảng tự chọn): khi đó màn hình chỉ hiện số đơn.
+ */
+export function saleFilterReportPeriod(f: SaleFilter): ReportPeriod | null {
+  switch (f.time) {
+    case 'today':
+    case 'yesterday':
+    case 'week':
+    case 'month':
+      return f.time;
+    case 'thisWeek':
+      return 'this_week';
+    default:
+      return null;
+  }
 }
 
 /** Bộ lọc có đang thu hẹp danh sách không. */

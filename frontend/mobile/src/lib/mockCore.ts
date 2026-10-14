@@ -14,15 +14,19 @@ import type {
   NotificationView,
   PaymentView,
   ProductView,
+  ReportPeriod,
+  ReportSummaryView,
   SaleDraftItemView,
   SaleDraftView,
   SaleItemView,
   SaleRefundView,
   SaleView,
   SaleVoidView,
+  SalesSeriesPoint,
+  SalesSeriesView,
 } from '../data/types';
 import { ApiError } from './apiError';
-import { normalizeText, vnd } from './format';
+import { dayKey, normalizeText, vnd } from './format';
 import { canonicalJson } from './idempotency';
 import type { PageResponse } from './pageApi';
 
@@ -51,6 +55,8 @@ let debts: DebtView[] = [];
 let expenses: ExpenseView[] = [];
 /** Khoản hoàn của đơn đã huỷ, theo saleId (mỗi đơn tối đa một khoản) */
 const refunds = new Map<number, SaleRefundView>();
+/** Lúc huỷ của đơn đã huỷ, theo saleId — Core lưu voidedAt nhưng `SaleView` không trả, báo cáo cần để tính doanh thu bị huỷ */
+const saleVoidedAt = new Map<number, string>();
 /** Inbox thông báo của OWNER (mới nhất cuối mảng; endpoint trả mới nhất trước) */
 let notifications: NotificationView[] = [];
 
@@ -84,11 +90,8 @@ function apiErr(status: number, code: string, message: string): ApiError {
   return new ApiError(status, code, message);
 }
 
-/**
- * Cắt một danh sách thành `PageResponse` như sáu GET danh sách OWNER của Core (mặc định page=0, size=20, size 1–100,
- * sai thì 400 với mã `invalid_*_query` của danh sách đó). Mock chỉ hỗ trợ page/size, bỏ qua các bộ lọc.
- */
-function pageOf<T>(items: T[], rawQuery: string, errorCode: string): PageResponse<T> {
+/** Tách query string thành các cặp khoá/giá trị đã giải mã. */
+function parseQuery(rawQuery: string): Record<string, string> {
   const params: Record<string, string> = {};
   for (const pair of rawQuery.split('&')) {
     if (!pair) continue;
@@ -96,6 +99,16 @@ function pageOf<T>(items: T[], rawQuery: string, errorCode: string): PageRespons
     const key = decodeURIComponent(eq < 0 ? pair : pair.slice(0, eq));
     params[key] = eq < 0 ? '' : decodeURIComponent(pair.slice(eq + 1));
   }
+  return params;
+}
+
+/**
+ * Cắt một danh sách (đã lọc và sắp xếp) thành `PageResponse` như sáu GET danh sách OWNER của Core (mặc định page=0, size=20,
+ * size 1–100, sai thì 400 với mã `invalid_*_query` của danh sách đó). Bộ lọc của `/sales` và `/products` xem
+ * `filterSales`/`filterProducts`; các danh sách khác mock chưa lọc.
+ */
+function pageOf<T>(items: T[], rawQuery: string, errorCode: string): PageResponse<T> {
+  const params = parseQuery(rawQuery);
   const page = params.page === undefined ? 0 : Number(params.page);
   const size = params.size === undefined ? 20 : Number(params.size);
   if (!Number.isInteger(page) || page < 0) throw apiErr(400, errorCode, 'page phải là số nguyên không âm.');
@@ -494,6 +507,53 @@ interface StockInBody {
 
 function listProducts(): ProductView[] {
   return products.filter((p) => p.status === 'ACTIVE');
+}
+
+/** Từ khoá `q` như Core: bỏ khoảng trắng hai đầu, rỗng là không lọc, tối đa 200 ký tự. */
+function queryText(params: Record<string, string>, errorCode: string): string {
+  const q = (params.q ?? '').trim();
+  if (q.length > 200) throw apiErr(400, errorCode, 'q không được dài quá 200 ký tự.');
+  return q;
+}
+
+/** `GET /products` như Core: tìm tên/mã vạch không phân biệt hoa thường và dấu, lọc nhóm và tồn, rồi sắp xếp. */
+function filterProducts(rawQuery: string): ProductView[] {
+  const params = parseQuery(rawQuery);
+  const q = normalizeText(queryText(params, 'invalid_product_query'));
+  const categoryId = params.categoryId === undefined ? null : Number(params.categoryId);
+  if (categoryId !== null && (!Number.isInteger(categoryId) || categoryId <= 0)) {
+    throw apiErr(400, 'invalid_product_query', 'categoryId phải là số nguyên dương.');
+  }
+  const stockStatus = params.stockStatus;
+  if (stockStatus !== undefined && !['LOW', 'OUT', 'NEEDS_RESTOCK'].includes(stockStatus)) {
+    throw apiErr(400, 'validation_failed', 'stockStatus không hợp lệ.');
+  }
+  const sort = params.sort ?? 'ID_ASC';
+  if (!['ID_ASC', 'NAME_ASC', 'PRICE_ASC', 'STOCK_DESC'].includes(sort)) throw apiErr(400, 'validation_failed', 'sort không hợp lệ.');
+
+  // Lọc tồn chỉ xét món theo dõi tồn: OUT khi tồn 0; LOW khi tồn dương mà không quá ngưỡng riêng của món (có đặt ngưỡng)
+  const isOut = (p: ProductView) => p.tracked && (p.stockQuantity ?? 0) <= 0;
+  const isLow = (p: ProductView) =>
+    p.tracked && (p.stockQuantity ?? 0) > 0 && p.lowStockThreshold != null && (p.stockQuantity ?? 0) <= p.lowStockThreshold;
+  const filtered = listProducts().filter((p) => {
+    if (q && !normalizeText(p.name).includes(q) && !normalizeText(p.barcode ?? '').includes(q)) return false;
+    if (categoryId !== null && p.categoryId !== categoryId) return false;
+    if (stockStatus === 'OUT' && !isOut(p)) return false;
+    if (stockStatus === 'LOW' && !isLow(p)) return false;
+    if (stockStatus === 'NEEDS_RESTOCK' && !isOut(p) && !isLow(p)) return false;
+    return true;
+  });
+  const byId = (a: ProductView, b: ProductView) => a.id - b.id;
+  return filtered.sort((a, b) => {
+    if (sort === 'NAME_ASC') return a.name.localeCompare(b.name, 'vi') || byId(a, b);
+    if (sort === 'PRICE_ASC') return a.sellingPriceVnd - b.sellingPriceVnd || byId(a, b);
+    if (sort === 'STOCK_DESC') {
+      // Tồn giảm dần, món không có số tồn xếp cuối
+      if (a.stockQuantity == null || b.stockQuantity == null) return (a.stockQuantity == null ? 1 : 0) - (b.stockQuantity == null ? 1 : 0) || byId(a, b);
+      return b.stockQuantity - a.stockQuantity || byId(a, b);
+    }
+    return byId(a, b);
+  });
 }
 
 /**
@@ -899,8 +959,106 @@ function confirmSaleDraft(id: number): SaleView {
 // Bán hàng đã xác nhận & lịch sử thanh toán
 // ---------------------------------------------------------------------------
 
-function listSales(): SaleView[] {
-  return [...sales].sort((a, b) => b.id - a.id);
+/** Mốc thời gian `from`/`to` của một danh sách: ISO 8601 có múi giờ, sai định dạng thì 400 như Core. */
+function queryInstant(value: string | undefined, field: string): number | null {
+  if (value === undefined) return null;
+  const at = Date.parse(value);
+  if (!/(Z|[+-]\d{2}:\d{2})$/.test(value) || Number.isNaN(at)) {
+    throw new ApiError(400, 'validation_failed', `${field} phải là thời điểm ISO 8601 có múi giờ.`, undefined, [{ field, issue: 'invalid' }]);
+  }
+  return at;
+}
+
+/**
+ * `GET /sales` như Core: đơn có soldAt trong `[from, to)`, lọc trạng thái, tìm theo tên khách/tên món (không phân biệt dấu)
+ * hoặc đúng mã đơn dạng số; mới bán trước (soldAt giảm, id giảm).
+ */
+function filterSales(rawQuery: string): SaleView[] {
+  const params = parseQuery(rawQuery);
+  const from = queryInstant(params.from, 'from');
+  const to = queryInstant(params.to, 'to');
+  if (from !== null && to !== null && from >= to) throw apiErr(400, 'invalid_sale_query', 'from phải trước to.');
+  const status = params.saleStatus;
+  if (status !== undefined && status !== 'CONFIRMED' && status !== 'VOIDED') throw apiErr(400, 'validation_failed', 'saleStatus không hợp lệ.');
+  const raw = queryText(params, 'invalid_sale_query');
+  const q = normalizeText(raw);
+  const idQuery = /^\d+$/.test(raw) ? Number(raw) : null;
+  return sales
+    .filter((s) => {
+      const soldAt = Date.parse(s.soldAt);
+      if (from !== null && soldAt < from) return false;
+      if (to !== null && soldAt >= to) return false;
+      if (status && s.saleStatus !== status) return false;
+      if (!q) return true;
+      if (idQuery !== null && s.id === idQuery) return true;
+      return normalizeText(`${s.customerName ?? ''} ${s.items.map((item) => item.productName).join(' ')}`).includes(q);
+    })
+    .sort((a, b) => Date.parse(b.soldAt) - Date.parse(a.soldAt) || b.id - a.id);
+}
+
+/** Cửa sổ `[from, to)` của một kỳ báo cáo theo giờ máy (Core tính theo giờ Việt Nam). */
+function reportWindow(rawQuery: string): { period: ReportPeriod; from: Date; to: Date } {
+  const period = (parseQuery(rawQuery).period ?? 'today') as ReportPeriod;
+  const now = new Date();
+  const day = (offset: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+  const tomorrow = day(1);
+  switch (period) {
+    case 'today':
+      return { period, from: day(0), to: tomorrow };
+    case 'yesterday':
+      return { period, from: day(-1), to: day(0) };
+    case 'this_week':
+      return { period, from: day(-((now.getDay() + 6) % 7)), to: tomorrow };
+    case 'week':
+      return { period, from: day(-6), to: tomorrow };
+    case 'month':
+      return { period, from: new Date(now.getFullYear(), now.getMonth(), 1), to: tomorrow };
+    case 'year':
+      return { period, from: new Date(now.getFullYear(), 0, 1), to: tomorrow };
+    default:
+      throw apiErr(400, 'invalid_report_period', 'Kỳ báo cáo không hợp lệ.');
+  }
+}
+
+/** Doanh thu và số đơn của một khoảng: đơn bán theo soldAt (kể cả đơn sau đó bị huỷ), đơn bị huỷ theo lúc huỷ. */
+function salesTotals(from: Date, to: Date): Omit<SalesSeriesPoint, 'date'> {
+  const within = (iso: string | undefined) => !!iso && Date.parse(iso) >= from.getTime() && Date.parse(iso) < to.getTime();
+  const sold = sales.filter((s) => within(s.soldAt));
+  const voided = sales.filter((s) => s.saleStatus === 'VOIDED' && within(saleVoidedAt.get(s.id) ?? s.soldAt));
+  const gross = sold.reduce((sum, s) => sum + s.totalVnd, 0);
+  const voidedVnd = voided.reduce((sum, s) => sum + s.totalVnd, 0);
+  return {
+    grossRevenueVnd: gross,
+    voidedRevenueVnd: voidedVnd,
+    netRevenueVnd: gross - voidedVnd,
+    orderCount: sold.length,
+    voidedOrderCount: voided.length,
+  };
+}
+
+function reportSummary(rawQuery: string): ReportSummaryView {
+  const { period, from, to } = reportWindow(rawQuery);
+  const within = (iso: string) => Date.parse(iso) >= from.getTime() && Date.parse(iso) < to.getTime();
+  return {
+    period,
+    fromInclusive: from.toISOString(),
+    toExclusive: to.toISOString(),
+    ...salesTotals(from, to),
+    collectedVnd: payments.filter((p) => within(p.receivedAt)).reduce((sum, p) => sum + p.amountVnd, 0),
+    refundedVnd: [...refunds.values()].filter((r) => within(r.refundedAt)).reduce((sum, r) => sum + r.amountVnd, 0),
+    expenseVnd: expenses.filter((e) => e.status === 'ACTIVE' && within(e.expenseAt)).reduce((sum, e) => sum + e.amountVnd, 0),
+    currentOutstandingDebtVnd: debts.filter((d) => d.status === 'OPEN').reduce((sum, d) => sum + d.outstandingVnd, 0),
+  };
+}
+
+function reportSalesSeries(rawQuery: string): SalesSeriesView {
+  const { period, from, to } = reportWindow(rawQuery);
+  const items: SalesSeriesPoint[] = [];
+  for (let day = from; day < to; day = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1)) {
+    const next = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
+    items.push({ date: dayKey(day), ...salesTotals(day, next < to ? next : to) });
+  }
+  return { period, fromInclusive: from.toISOString(), toExclusive: to.toISOString(), granularity: 'DAY', items };
 }
 
 function getSaleById(id: number): SaleView {
@@ -995,6 +1153,7 @@ function voidSale(id: number, body: SaleVoidBody): SaleVoidView {
   // Như Core: đơn đã huỷ có dư nợ 0 nhưng giữ nguyên số đã thu và trạng thái thanh toán để xem lại lịch sử.
   sale.saleStatus = 'VOIDED';
   sale.outstandingVnd = 0;
+  saleVoidedAt.set(id, now);
   pushNotification('SALE_VOIDED', 'Đơn hàng đã hủy', `Đơn #${sale.id} đã được hủy.`, 'SALE', sale.id);
   return { sale, refund, cancelledDebtVnd, stockRestocked: restores.length > 0 };
 }
@@ -1278,7 +1437,7 @@ export function mockCoreRequest<T>(path: string, method: string, body: unknown, 
   }
 
   if (route === '/products') {
-    if (method === 'GET') return pageOf(listProducts(), rawQuery, 'invalid_product_query') as unknown as T;
+    if (method === 'GET') return pageOf(filterProducts(rawQuery), rawQuery, 'invalid_product_query') as unknown as T;
     if (method === 'POST') return createProduct(body as ProductWriteBody) as unknown as T;
   }
   // Đường dẫn cố định, phải khớp trước /products/{id}
@@ -1324,7 +1483,9 @@ export function mockCoreRequest<T>(path: string, method: string, body: unknown, 
     return confirmSaleDraft(Number(segments[1])) as unknown as T;
   }
 
-  if (route === '/sales' && method === 'GET') return pageOf(listSales(), rawQuery, 'invalid_sale_query') as unknown as T;
+  if (route === '/sales' && method === 'GET') return pageOf(filterSales(rawQuery), rawQuery, 'invalid_sale_query') as unknown as T;
+  if (route === '/reports/summary' && method === 'GET') return reportSummary(rawQuery) as unknown as T;
+  if (route === '/reports/sales-series' && method === 'GET') return reportSalesSeries(rawQuery) as unknown as T;
   if (segments[0] === 'sales' && segments.length === 2 && method === 'GET') {
     return getSaleById(Number(segments[1])) as unknown as T;
   }
