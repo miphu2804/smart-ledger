@@ -11,7 +11,7 @@ from pydantic_ai.models.instrumented import InstrumentationSettings
 from tests.support import TEST_GUARDRAIL_LIMITS, ScriptedModel
 from tests.unit_tests.test_agent_service import (
     FakeConversationRepository,
-    FakeExecutor,
+    FakeShopData,
     collect,
 )
 
@@ -22,7 +22,7 @@ from src.app_config import AppConfig
 pytestmark = pytest.mark.anyio
 
 # Text the owner, the model and the shop-data tool exchange in the traced turn; none of
-# it may reach a span. FakeExecutor answers with the phone number 0901234567.
+# it may reach a span. FakeShopData answers with the phone number 0901234567.
 QUESTION = "Số của chị Lan 0912345678 là gì?"
 SQL = "SELECT phone FROM v_shop_profile WHERE note = 'chi Lan'"
 ANSWER = "Số của chị Lan là 0901234567."
@@ -62,7 +62,7 @@ def traced_agent() -> AgentService:
         model,
         FakeConversationRepository(),
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
-        sql_executor=FakeExecutor(),
+        shop_data=FakeShopData(),
     )
 
 
