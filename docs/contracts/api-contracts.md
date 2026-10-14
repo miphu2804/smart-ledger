@@ -478,7 +478,17 @@ Chỉ text đã qua answer screen mới được gửi. Đoạn cuối ngắn v�
 
 Core proxy route này qua `POST /api/v1/agent/chat/stream` với cùng auth, `X-Shop-Id` và body như `/api/v1/agent/chat`. Lỗi trước sự kiện đầu tiên là JSON lỗi của Core và ánh xạ như route JSON: AI `404` thành `conversation_not_found`, lỗi khác thành `503 ai_unavailable`. Sau đó Core chuyển từng sự kiện của AI nguyên văn, trừ `done` chỉ giữ `conversation_id`, `message_id`, `answer` như `AgentChatMessageView`. App ngắt kết nối thì Core đóng stream tới AI, nên AI hủy lượt như trên. Request async của Core hết hạn sau 60 giây, trên thời hạn lượt mặc định 35 giây của AI.
 
-Màn Trợ lý AI trên mobile gọi route stream và hiện chữ dần trong bong bóng trả lời; `reset` xóa phần đã hiện, `done` thay bằng câu đã lưu. Câu trả lời, dữ liệu lưu và guardrail không đổi so với `/api/v1/agent/chat`, nên [PRD](../product/product-requirements.md) và AC chưa đổi.
+Màn Trợ lý AI trên mobile gọi route stream và hiện chữ dần trong bong bóng trả lời; `reset` xóa phần đã hiện, `done` thay bằng câu đã lưu. Câu trả lời, dữ liệu lưu và guardrail không đổi so với `/api/v1/agent/chat`.
+
+`answer` (và chữ ghép từ `delta`) là văn bản thuần với một tập Markdown nhỏ do prompt của AI quy định: `**đậm**`, danh sách `- `/`1. `, bảng Markdown, và tối đa một khối biểu đồ:
+
+````text
+```chart
+{"type": "bar" | "line", "title": "…", "unit": "vnd" | "count", "data": [{"label": "…", "value": 0}]}
+```
+````
+
+Khối `chart` nằm trong `answer` nên được lưu cùng câu trả lời và hiện lại khi mở lịch sử; Core và AI không đổi route hay sự kiện. Mobile dùng chung một parser (`frontend/mobile/src/lib/chatMarkdown.ts`) cho chữ đang stream và câu đã lưu: ký hiệu `**`/`` ` `` còn mở ở dòng cuối được đóng tạm, dòng chưa rõ sẽ thành khối gì (`#`, `-`, `` ``` ``, tiêu đề bảng chưa có dòng gạch) được giữ lại, khối `chart` chưa đóng hiện "Đang vẽ biểu đồ…". Biểu đồ chỉ vẽ khi JSON hợp lệ, 1–31 điểm, nhãn là chữ và giá trị là số không âm; sai thì hiện "Không hiện được biểu đồ này.". Số trong biểu đồ do model chép từ kết quả công cụ, như mọi số trong câu trả lời. [PRD](../product/product-requirements.md) và AC chưa ghi cách trình bày bảng/biểu đồ trong chat.
 
 ## 7. Dashboard quản trị — đã có trong Core
 
