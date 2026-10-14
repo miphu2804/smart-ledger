@@ -24,14 +24,14 @@ The backend deploy (`deploy`) waits for `ai`, `core`, `mobile-web` and `containe
 
 | Environment | Allowed branches | Approval | Secrets | Variables |
 |---|---|---|---|---|
-| `railway-staging` | `staging` | No | `RAILWAY_TOKEN`: project token of the Railway staging environment | `CORS_ALLOWED_ORIGINS` |
-| `railway-production` | `main` | Yes | `RAILWAY_TOKEN`: project token of the Railway production environment | `CORS_ALLOWED_ORIGINS` (optional) |
+| `railway-staging` | `staging` | No | `RAILWAY_TOKEN`: project token of the Railway staging environment; `OPENAI_API_KEY` ([AI model settings](#ai-model-settings)) | `CORS_ALLOWED_ORIGINS`, AI model settings |
+| `railway-production` | `main` | Yes | `RAILWAY_TOKEN`: project token of the Railway production environment; `OPENAI_API_KEY` | `CORS_ALLOWED_ORIGINS` (optional), AI model settings |
 | `vercel-preview` | Any branch (PR) | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `EXPO_PUBLIC_*` |
 | `vercel-staging` | `staging` | No | Same as above | `EXPO_PUBLIC_*`, `VERCEL_STAGING_ALIAS` |
 | `vercel-production` | `main` | Yes | Same as above | `EXPO_PUBLIC_*` |
-| `landing-preview` | Any branch (PR) | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` of the `landing` project | `VITE_CONTACT_EMAIL`, `VITE_LEGAL_DRAFT` |
-| `landing-staging` | `staging` | No | Same as above | `VITE_CONTACT_EMAIL`, `VITE_LEGAL_DRAFT`, `LANDING_URL` |
-| `landing-production` | `main` | Yes | Same as above | `VITE_CONTACT_EMAIL`, `VITE_LEGAL_DRAFT`, `LANDING_URL`, `VITE_ANDROID_APK_URL` |
+| `landing-preview` | Any branch (PR) | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` of the `landing` project | `VITE_LEGAL_DRAFT` |
+| `landing-staging` | `staging` | No | Same as above | `VITE_LEGAL_DRAFT`, `LANDING_URL` |
+| `landing-production` | `main` | Yes | Same as above | `VITE_LEGAL_DRAFT`, `LANDING_URL`, `VITE_ANDROID_APK_URL` |
 | `android-dev` | None; job `gate` pairs it with branches other than `main` and `staging` | No | `ANDROID_GOOGLE_SERVICES_JSON`: Firebase config of the dev/staging project | `EXPO_PUBLIC_*` |
 | `android-staging` | `staging` | No | `ANDROID_GOOGLE_SERVICES_JSON`: Firebase config of the staging project | `EXPO_PUBLIC_*` |
 | `android-production` | `main` | Yes | `ANDROID_GOOGLE_SERVICES_JSON`: Firebase config of the production project; `ANDROID_KEYSTORE_*` ([Release signing](#release-signing)); `R2_*` ([Publish the APK](#publish-the-apk-for-the-landing-page)) | `EXPO_PUBLIC_*`, `R2_BUCKET` |
@@ -44,7 +44,7 @@ Each Railway project token can deploy to exactly one Railway environment, so a j
 
 - One project with two environments, `staging` and `production`, each with services `core` and `ai`. Service names must match `--service` in the workflow.
 - The workflow uploads code with `railway up backend/<service> --path-as-root`, so each service's **Root Directory** stays empty and GitHub auto-deploy stays **off** (otherwise every commit deploys twice).
-- Service variables (database, Firebase, `INTERNAL_API_TOKEN`, model key…) are set on Railway per environment; GitHub keeps only the deploy token and `CORS_ALLOWED_ORIGINS`. Railway does not mount files, so Core receives the Firebase Admin key through `FIREBASE_SERVICE_ACCOUNT_JSON` (the full service-account JSON, one service account per environment); when it is empty, Core falls back to `GOOGLE_APPLICATION_CREDENTIALS` as in local runs.
+- Service variables (database, Firebase, `INTERNAL_API_TOKEN`, model key…) are set on Railway per environment; GitHub keeps only the deploy token, `CORS_ALLOWED_ORIGINS` and the [AI model settings](#ai-model-settings). Railway does not mount files, so Core receives the Firebase Admin key through `FIREBASE_SERVICE_ACCOUNT_JSON` (the full service-account JSON, one service account per environment); when it is empty, Core falls back to `GOOGLE_APPLICATION_CREDENTIALS` as in local runs.
 
 ### Railway service variables
 
@@ -80,12 +80,26 @@ Enter each value once and reuse it with a [reference variable](https://docs.rail
 | `POSTGRES_URL` | Supabase of the matching environment (`postgresql://…`) |
 | `AI_SQL_READER_URL` | Read-only `ai_sql_reader` login (AI baseline in `supabase/migrations/`); when empty, the agent cannot read shop data |
 | `REDIS_URL` | Redis Cloud of the matching environment |
-| `OPENAI_API_KEY` | Model provider key |
+| `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `MODEL_*` | Managed from GitHub, see [AI model settings](#ai-model-settings). Do not edit them on Railway. |
 
 - `ai` has no public domain; `core` calls it over the private network. Port `8001` is AI's default `SERVER_PORT`, not the `PORT` Railway assigns, so changing `SERVER_PORT` on `ai` requires updating `AI_BASE_URL`.
 - Variables have local defaults (`AI_BASE_URL` defaults to `http://localhost:8001`), so a missing variable on Railway still reports a successful deploy while Core cannot reach AI. After changing variables, run one chat through Core on staging.
-- Backend secrets live only on Railway. The mobile web Vercel project receives only `EXPO_PUBLIC_*`.
+- Backend secrets live only on Railway, except `OPENAI_API_KEY`, which the deploy copies from the `railway-*` GitHub environment. The mobile web Vercel project receives only `EXPO_PUBLIC_*`.
 - Before enabling Cloudinary in staging/production, run V13 from merged code under the approved migration workflow, then set the variables above and run a controlled upload/replace/delete smoke check. Use separate Cloudinary credentials or at least non-overlapping prefixes per environment. `CLOUDINARY_API_SECRET` must never be placed in `EXPO_PUBLIC_*`, GitHub Variables, client source, Swagger request data, audit metadata or logs.
+
+### AI model settings
+
+Step `Sync ai model settings` copies these from the `railway-staging` or `railway-production` GitHub environment to Railway service `ai` before deploying it, so the new AI starts with them. A setting left unset on GitHub keeps its Railway value.
+
+| Name | Kind | Value |
+|---|---|---|
+| `OPENAI_API_KEY` | Secret | Model gateway key, shared by every model (OpenAI or OpenCode Go) |
+| `OPENAI_BASE_URL` | Variable | `https://opencode.ai/inference/go/v1` for OpenCode Go; for OpenAI itself, `https://api.openai.com/v1` |
+| `MODEL_PROVIDER`, `MODEL_NAME` | Variable | Primary model and the API it speaks (`openai`, `openai-chat`, `anthropic`), e.g. `anthropic` and `claude-haiku-5-5`; see [`backend/ai/README.md`](../../backend/ai/README.md) |
+| `MODEL_REASONING_EFFORT` | Variable | `none`, `low`, `medium` or `high` |
+| `MODEL_FALLBACKS` | Variable | Optional JSON list of `provider:model`, e.g. `["openai-chat:deepseek-v4.1-flash"]` |
+
+`anthropic` models need `OPENAI_BASE_URL` set; without it AI starts with chat disabled. A step cannot clear a Railway value: an emptied GitHub setting is skipped, so delete the value on Railway as well.
 
 ### Core CORS origins
 
@@ -157,7 +171,7 @@ Job `landing` runs `npm run lint` and `npm run build` in `frontend/web` on every
 
 - Vercel project `landing`: **Root Directory** `frontend/web`. Store its project ID as `VERCEL_PROJECT_ID` in each `landing-*` environment; `VERCEL_TOKEN` and `VERCEL_ORG_ID` are the same team values as `vercel-*`.
 - `LANDING_URL` is the fixed domain (`https://…`) of the environment. Set it in `landing-staging` and `landing-production`.
-- `VITE_LEGAL_DRAFT` must stay unset or `true` until the product owner approves the legal pages; set `false` only in `landing-production` after approval. `VITE_CONTACT_EMAIL` shows on `/privacy` and `/data-deletion`; leave it empty until the address is confirmed.
+- `VITE_LEGAL_DRAFT` must stay unset or `true` until the product owner approves the legal pages; set `false` only in `landing-production` after approval. The contact email and the Facebook/TikTok links are not environment variables: they live in [`frontend/web/site.yaml`](../../frontend/web/site.yaml).
 - The landing has no path filter: a backend-only push also rebuilds and redeploys it.
 - Vercel Authentication (Settings → Deployment Protection) must stay off on the `landing` project. With it on, preview deployments redirect to the Vercel login (`302`) and the smoke test fails on pull requests and on `staging`.
 - Admin (`/admin/*`) is hidden unless the build has `VITE_ADMIN_ENABLED=true`. No GitHub environment sets it. Step `Check no admin code in the build` in `deploy-landing` fails the job if the build output has an `AdminRoutes-*` chunk or the mock password `admin123`, which catches a `VITE_ADMIN_ENABLED=true` set in the Vercel project `landing` (`vercel pull` brings those variables into the build).

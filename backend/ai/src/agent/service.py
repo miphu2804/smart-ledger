@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import uuid
 from collections.abc import AsyncGenerator
 from contextlib import suppress
 from dataclasses import dataclass
@@ -22,6 +23,7 @@ from src.prompt_templates import (
     SHOP_AGENT_SYSTEM_PROMPT,
     SQL_AGENT_PROMPT,
 )
+from src.providers.factory import session_settings
 from src.restock.service import RestockService
 from src.sql.executor import ReadOnlySqlExecutor
 
@@ -107,7 +109,9 @@ class AgentService:
     ) -> AgentChatResult:
         context = AgentContext(user_id=user_id, shop_id=shop_id)
         question, history = await self._prepare_turn(context, message, conversation_id)
-        answer, version = await self._answer(question, history, context)
+        answer, version = await self._answer(
+            question, history, context, self._session_id(conversation_id)
+        )
         return await self._save_turn(
             context, conversation_id, question, answer, version
         )
@@ -152,7 +156,11 @@ class AgentService:
         return question, history
 
     async def _answer(
-        self, question: str, history: list[dict], context: AgentContext
+        self,
+        question: str,
+        history: list[dict],
+        context: AgentContext,
+        session_id: str,
     ) -> tuple[str, str]:
         """Run the agent; return the screened answer and the model version."""
         async with self.guardrails.run_limits():
@@ -161,6 +169,7 @@ class AgentService:
                 message_history=self._model_messages(history),
                 deps=context,
                 usage_limits=self.guardrails.usage_limits,
+                model_settings=session_settings(session_id),
             )
         return self._read_result(result)
 
@@ -201,7 +210,7 @@ class AgentService:
         # opened it, so a generator suspended mid-run cannot be closed from outside.
         try:
             delivered, result = await self._stream_run(
-                question, history, context, events
+                question, history, context, self._session_id(conversation_id), events
             )
             answer, version = self._read_result(result)
             if not answer.startswith(delivered):
@@ -222,6 +231,7 @@ class AgentService:
         question: str,
         history: list[dict],
         context: AgentContext,
+        session_id: str,
         events: asyncio.Queue[AgentStreamEvent | Exception],
     ) -> tuple[str, AgentRunResult[str]]:
         """Queue the text each model response releases; return the text the owner was
@@ -234,6 +244,7 @@ class AgentService:
                 message_history=self._model_messages(history),
                 deps=context,
                 usage_limits=self.guardrails.usage_limits,
+                model_settings=session_settings(session_id),
             ) as run,
         ):
             async for node in run:
@@ -300,3 +311,11 @@ class AgentService:
             else ModelResponse(parts=[TextPart(entry["content"])])
             for entry in history
         ]
+
+    @staticmethod
+    def _session_id(conversation_id: int | None) -> str:
+        # A new conversation gets its id only when the turn is saved, so its first turn
+        # runs under a one-off session.
+        if conversation_id is None:
+            return uuid.uuid4().hex
+        return f"conversation-{conversation_id}"

@@ -3,11 +3,11 @@
  *
  * Nội dung pháp lý cần chủ sản phẩm duyệt (AGENTS.md). Cho đến khi duyệt, hai trang hiện nhãn "Bản nháp";
  * sau khi duyệt, đặt VITE_LEGAL_DRAFT=false lúc build để gỡ nhãn mà không phải sửa code.
- * Email liên hệ đọc từ VITE_CONTACT_EMAIL để không đưa địa chỉ thật vào repo công khai.
+ * Email liên hệ là địa chỉ công khai của sản phẩm, đọc từ `site.yaml`.
  */
 export const LEGAL_DRAFT: boolean = import.meta.env.VITE_LEGAL_DRAFT !== 'false'
 
-export const CONTACT_EMAIL: string = ((import.meta.env.VITE_CONTACT_EMAIL as string | undefined) ?? '').trim()
+export const CONTACT_EMAIL: string = (__SITE__.contact_email ?? '').trim()
 
 export const CONTROLLER = 'Team HEXA (dự án môn EXE201, Trường Đại học FPT)'
 
