@@ -10,7 +10,6 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AgentAvatar } from '../src/components/AgentAvatar';
 import { ChatText } from '../src/components/ChatText';
 import { ThinkingStatus } from '../src/components/ThinkingStatus';
 import { Dialog, EmptyState, Field, IconBtn, KEYBOARD_AVOID_BEHAVIOR, Row, Sheet, T } from '../src/components/ui';
@@ -73,6 +72,8 @@ function lastActive(iso: string): string {
 }
 
 /** Trợ lý AI — gửi qua agentApi (Core `/api/v1/agent/chat`; khi bật mock thì mockCore trả lời giả). */
+const HEADER_BTN = 40;
+
 export default function Ai() {
   const app = useApp();
   const insets = useSafeAreaInsets();
@@ -154,41 +155,10 @@ export default function Ai() {
       style={styles.screen}
       behavior={KEYBOARD_AVOID_BEHAVIOR}
     >
-      <View style={[styles.headerWrap, { paddingTop: insets.top + 4 }]}>
-        <Row style={{ alignItems: 'center' }} gap={10}>
-          <Pressable
-            onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
-            style={styles.backBtn}
-            accessibilityLabel="Quay lại"
-          >
-            <Feather name="chevron-left" size={20} color={colors.ink} />
-          </Pressable>
-          <AgentAvatar emotion={typing ? 'idea' : 'happy'} size={40} badge />
-          <View style={{ flex: 1 }}>
-            <T w="extrabold" size={17} color={colors.ink}>
-              Trợ lý Sổ Nghe Lời
-            </T>
-            <Row gap={5} style={{ alignItems: 'center', marginTop: 1 }}>
-              <View style={styles.onlineDot} />
-              <T size={11.5} color={colors.muted}>
-                Sẵn sàng giải đáp dữ liệu tiệm
-              </T>
-            </Row>
-          </View>
-          <IconBtn
-            name="edit"
-            label="Cuộc trò chuyện mới"
-            color={typing ? colors.faint : colors.ink}
-            onPress={() => !typing && startNew()}
-          />
-          <IconBtn name="clock" label="Lịch sử trò chuyện" color={typing ? colors.faint : colors.ink} onPress={openHistory} />
-        </Row>
-      </View>
-
       <ScrollView
         ref={scroll}
         style={styles.chat}
-        contentContainerStyle={styles.chatContent}
+        contentContainerStyle={[styles.chatContent, { paddingTop: insets.top + 6 + HEADER_BTN + 14 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -237,6 +207,32 @@ export default function Ai() {
           ) : null}
         </View>
       </ScrollView>
+
+      {/* Nút nổi trên khung chat: hội thoại trôi bên dưới, chỉ nút nhận chạm. Đặt sau ScrollView để nằm trên. */}
+      <View pointerEvents="box-none" style={[styles.headerWrap, { paddingTop: insets.top + 6 }]}>
+        <Pressable
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
+          style={[styles.floatBtn, styles.backBtn]}
+          accessibilityRole="button"
+          accessibilityLabel="Quay lại"
+        >
+          <Feather name="chevron-left" size={20} color={colors.ink} />
+        </Pressable>
+        <Row gap={10}>
+          <View style={styles.floatBtn}>
+            <IconBtn
+              name="edit"
+              label="Cuộc trò chuyện mới"
+              size={HEADER_BTN}
+              color={typing ? colors.faint : colors.ink}
+              onPress={() => !typing && startNew()}
+            />
+          </View>
+          <View style={styles.floatBtn}>
+            <IconBtn name="clock" label="Lịch sử trò chuyện" size={HEADER_BTN} color={typing ? colors.faint : colors.ink} onPress={openHistory} />
+          </View>
+        </Row>
+      </View>
 
       {/* Suggestion Chips & Composer Bar (Đề xuất nằm ngay sát trên thanh nhập) */}
       <View style={[styles.composerWrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
@@ -525,34 +521,32 @@ function HistorySheet({
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   headerWrap: {
-    paddingHorizontal: 16,
-    paddingBottom: 10,
-    backgroundColor: colors.bg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  // Bóng đậm hơn shadow(0) của IconBtn để nút nổi rõ khi tin nhắn trôi bên dưới.
+  floatBtn: {
+    borderRadius: 12,
+    backgroundColor: colors.white,
+    ...shadow(2),
   },
   backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
+    width: HEADER_BTN,
+    height: HEADER_BTN,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadow(0),
-  },
-  onlineDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: colors.data.revenue,
   },
   chat: { flex: 1 },
   chatContent: {
     flexGrow: 1,
     paddingHorizontal: 14,
-    paddingTop: 16,
     paddingBottom: 16,
   },
   messages: { gap: 12 },
