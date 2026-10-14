@@ -69,6 +69,8 @@ Không cần upload tay. Bước "Resolve the speech model URL" của `mobile-re
    lên R2 bằng token của bucket APK (chỉ file thiếu hoặc lệch), rồi `check` lại.
 3. Đủ file thì build nhận `EXPO_PUBLIC_STT_MODEL_URL=<STT_MODEL_BASE_URL>/stt-model/<version>/`.
 
+Pull request sửa `core.ts` hoặc `stt-model.mjs` chạy job `stt-model` của `ci.yml`: job này chạy `fetch` để so kích thước với nguồn đã ghim, nên lệch sẽ báo ngay trên PR thay vì lúc phát hành. Job không cần token và không ghi lên R2.
+
 Bản thử (dev, staging) không có token R2. Model chưa có trên R2 thì bản đó chỉ cảnh báo, vẫn build nhưng nói không được.
 Biến GitHub `STT_MODEL_BASE_URL` là địa chỉ công khai của bucket, ví dụ `https://pub-<hash>.r2.dev`. Thiếu biến này thì bản
 phát hành bị từ chối. Kiểm tra R2 từ máy mình:

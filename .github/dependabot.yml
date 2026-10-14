@@ -1,0 +1,29 @@
+# Third-party actions are pinned to a commit SHA so a moved or hijacked tag cannot run in
+# jobs that hold signing keys; Dependabot keeps those SHAs and the base images current.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: staging
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: chore
+      include: scope
+
+  - package-ecosystem: docker
+    directories:
+      - /backend/ai
+      - /backend/core
+    target-branch: staging
+    schedule:
+      interval: weekly
+    groups:
+      base-images:
+        patterns: ["*"]
+    commit-message:
+      prefix: chore
+      include: scope

@@ -1,15 +1,80 @@
 name: CI
 
+# Tests and builds, then the deploy workflows (cd-*.yml) as called jobs, so each deploy keeps its `needs` gate, the
+# pushed branch as ref and its environment rules. Run it by hand (Actions tab, or `gh workflow run ci.yml --ref staging`)
+# to test and redeploy everything on `staging` or `main` without a new commit.
 on:
   pull_request:
   push:
     branches: [main, staging]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A new commit on a pull request cancels the run of the previous one. Other runs get their own group: they carry
+# deploys, and a shared group would also make the tests of one push wait for the deploy of the one before.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  ### Test: lint, tests and builds on every pull request and push ###
+  ### Changes: which parts of the repository this run touches ###
+
+  # Test and deploy jobs run only for the parts that changed. A job skipped by its `if` still counts as passed for
+  # the required checks, which a workflow-level `paths` filter would leave pending.
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      ai: ${{ steps.filter.outputs.ai }}
+      core: ${{ steps.filter.outputs.core }}
+      mobile: ${{ steps.filter.outputs.mobile }}
+      landing: ${{ steps.filter.outputs.landing }}
+      images: ${{ steps.filter.outputs.images }}
+      backend: ${{ steps.filter.outputs.backend }}
+      stt: ${{ steps.filter.outputs.stt }}
+    steps:
+      # Full history without file contents: enough to list changed paths, and fast.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - name: List changed parts
+        id: filter
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          if git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            files=$(git diff --name-only --no-renames "$BASE" HEAD)
+          else
+            # No base commit (manual run, first push of a branch): treat everything as changed.
+            files=.github/workflows/ci.yml
+          fi
+          echo "$files"
+          # A change to the workflows themselves runs every job.
+          changed() { grep -qE "^\.github/workflows/(ci|cd-[a-z]+)\.yml$|$1" <<< "$files" && echo true || echo false; }
+          {
+            # The AI tests apply the AI baseline from supabase/migrations.
+            echo "ai=$(changed '^backend/ai/|^supabase/migrations/')"
+            echo "core=$(changed '^backend/core/')"
+            echo "mobile=$(changed '^frontend/mobile/')"
+            echo "landing=$(changed '^frontend/web/')"
+            echo "images=$(changed '^backend/(ai|core)/|^compose\.yaml$')"
+            # The deploy ships service code only; CI does not run migrations, so they alone do not redeploy.
+            echo "backend=$(changed '^backend/(ai|core)/')"
+            # The speech model's version and file sizes, and the script that uploads it to R2 at release time.
+            echo "stt=$(changed '^frontend/mobile/src/lib/speech/core\.ts$|^\.github/scripts/stt-model\.mjs$')"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  ### Test: lint, tests and builds for the parts that changed ###
 
   ai:
+    needs: changes
+    if: needs.changes.outputs.ai == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     services:
       postgres:
         image: pgvector/pgvector:pg17
@@ -36,7 +101,7 @@ jobs:
         working-directory: backend/ai
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           python-version: "3.11"
       - run: uv sync --group dev
@@ -65,9 +130,19 @@ jobs:
           for name, value in counts.items():
               print(f"{name}={value}")
           PY
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: ai-test-report
+          path: backend/ai/pytest-results.xml
+          if-no-files-found: ignore
+          retention-days: 7
 
   core:
+    needs: changes
+    if: needs.changes.outputs.core == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16
@@ -144,9 +219,20 @@ jobs:
           for name, value in totals.items():
               print(f"{name}={value}")
           PY
+      # Surefire keeps the full stack traces and captured output that the Maven console cuts short.
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: core-test-report
+          path: backend/core/target/surefire-reports
+          if-no-files-found: ignore
+          retention-days: 7
 
   mobile-web:
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     env:
       EXPO_PUBLIC_USE_MOCK: "true"
       EXPO_PUBLIC_MOCK_CORE: "true"
@@ -166,8 +252,26 @@ jobs:
       - run: npm run typecheck
       - run: npm run export:web
 
-  landing:
+  # The release build uploads the speech model from HuggingFace to R2 only when it publishes to production, and fails
+  # there if core.ts no longer matches the pinned source. Fetching it here moves that failure to the pull request.
+  stt-model:
+    needs: changes
+    if: needs.changes.outputs.stt == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Check the speech model source against core.ts
+        run: node .github/scripts/stt-model.mjs fetch "$RUNNER_TEMP/stt-model"
+
+  landing:
+    needs: changes
+    if: needs.changes.outputs.landing == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: frontend/web
@@ -183,7 +287,10 @@ jobs:
       - run: npm run build
 
   container-images:
+    needs: changes
+    if: needs.changes.outputs.images == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     env:
       DATABASE_URL: jdbc:postgresql://ci-placeholder:5432/ci
       DATABASE_USERNAME: ci-placeholder
@@ -197,13 +304,16 @@ jobs:
       - name: Build custom service images
         run: docker compose build
 
-  ### Report: one table of test results per run ###
+  ### Report: one table of test results per run, and the gate for the required checks ###
 
+  # A failed `changes` skips every test job, and a skipped job passes a required check, so this job is required too
+  # and fails when `changes`, a required test job or `stt-model` did not pass. `landing` is reported but, as before, not required.
   summary:
     name: CI result summary
     if: always()
-    needs: [ai, core, mobile-web, landing, container-images]
+    needs: [changes, ai, core, mobile-web, stt-model, landing, container-images]
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - name: Build compact report
         env:
@@ -218,6 +328,7 @@ jobs:
           CORE_ERRORS: ${{ needs.core.outputs.errors }}
           CORE_SKIPPED: ${{ needs.core.outputs.skipped }}
           MOBILE_RESULT: "${{ needs['mobile-web'].result }}"
+          STT_RESULT: "${{ needs['stt-model'].result }}"
           LANDING_RESULT: "${{ needs.landing.result }}"
           CONTAINER_RESULT: "${{ needs['container-images'].result }}"
         run: |
@@ -231,331 +342,55 @@ jobs:
             printf '| Core (Java) | %s | %s | %s | %s | %s |\n' \
               "$CORE_RESULT" "${CORE_TESTS:-n/a}" "${CORE_FAILURES:-n/a}" "${CORE_ERRORS:-n/a}" "${CORE_SKIPPED:-n/a}"
             printf '| Mobile web | %s | n/a | n/a | n/a | n/a |\n' "$MOBILE_RESULT"
+            printf '| Speech model source | %s | n/a | n/a | n/a | n/a |\n' "$STT_RESULT"
             printf '| Landing (web) | %s | n/a | n/a | n/a | n/a |\n' "$LANDING_RESULT"
             printf '| Container images | %s | n/a | n/a | n/a | n/a |\n' "$CONTAINER_RESULT"
-          } > ci-summary.md
-          cat ci-summary.md >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v7
-        with:
-          name: ci-summary
-          path: ci-summary.md
-          if-no-files-found: error
-          retention-days: 14
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Fail when a required job did not pass
+        if: >-
+          needs.changes.result != 'success'
+          || contains(fromJSON('["failure", "cancelled"]'), needs.ai.result)
+          || contains(fromJSON('["failure", "cancelled"]'), needs.core.result)
+          || contains(fromJSON('["failure", "cancelled"]'), needs['mobile-web'].result)
+          || contains(fromJSON('["failure", "cancelled"]'), needs['container-images'].result)
+          || contains(fromJSON('["failure", "cancelled"]'), needs['stt-model'].result)
+        run: |
+          echo "::error::changes, ai, core, mobile-web, container-images or stt-model did not pass; see the table above"
+          exit 1
 
-  ### Deploy backend: Railway `ai` and `core` after a push to `staging` or `main` ###
+  ### Deploy: one called workflow per target, each behind the test jobs it depends on ###
 
-  # Deploys backend services to Railway after a push to `staging` or `main` passes the jobs in `needs`; `landing` is not one of them.
-  # Each GitHub environment holds its own environment-scoped Railway project token and branch
-  # policy; `railway-production` requires approval. The environment is set on this job, not in a
-  # called workflow, so its secret reaches the job.
+  # A skipped test job means its part did not change, so these jobs check results instead of the default `success()`,
+  # which would skip the deploy too. `secrets: inherit` is what lets a called job read its environment's secrets.
+
+  # Railway `ai` and `core`, after a push to `staging` or `main` that changed the backend. A red `landing` does not
+  # hold it back.
   deploy:
-    if: github.event_name == 'push'
-    needs: [ai, core, mobile-web, container-images]
+    needs: [changes, ai, core, mobile-web, container-images]
+    if: >-
+      !cancelled() && github.event_name != 'pull_request'
+      && needs.changes.outputs.backend == 'true'
+      && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     permissions:
       contents: read
-    runs-on: ubuntu-24.04
-    environment: ${{ github.ref_name == 'main' && 'railway-production' || 'railway-staging' }}
-    concurrency:
-      group: deploy-${{ github.ref_name }}
-      cancel-in-progress: false
-    env:
-      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - name: Install Railway CLI
-        run: npm install --global @railway/cli@5.63.1
-      # GitHub owns the browser origins Core allows, so a manual edit on Railway cannot drift or
-      # crash Core: Core refuses to start on any whitespace, wildcard or path inside an origin.
-      # Skipped while the environment variable is unset, leaving the Railway value untouched.
-      - name: Sync core CORS origins
-        if: vars.CORS_ALLOWED_ORIGINS != ''
-        env:
-          CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
-        run: |
-          set -euo pipefail
-          if [[ "$CORS_ALLOWED_ORIGINS" =~ [[:space:]*] ]]; then
-            echo "::error::CORS_ALLOWED_ORIGINS must be comma-separated origins without spaces or wildcards"
-            exit 1
-          fi
-          railway variable set "CORS_ALLOWED_ORIGINS=$CORS_ALLOWED_ORIGINS" --service core --skip-deploys
-      # AI first: Core calls AI, so the new Core should not start against an old AI.
-      - name: Deploy ai
-        id: deploy_ai
-        run: railway up backend/ai --path-as-root --service ai --ci
-      - name: Deploy core
-        id: deploy_core
-        run: railway up backend/core --path-as-root --service core --ci
-      - name: Build deploy report
-        if: always()
-        env:
-          AI_OUTCOME: ${{ steps.deploy_ai.outcome }}
-          CORE_OUTCOME: ${{ steps.deploy_core.outcome }}
-          TARGET_ENV: ${{ github.ref_name == 'main' && 'railway-production' || 'railway-staging' }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          {
-            echo "# Deploy results"
-            echo
-            echo "| Item | Value |"
-            echo "|---|---|"
-            echo "| Environment | $TARGET_ENV |"
-            echo "| Branch | ${GITHUB_REF_NAME} |"
-            echo "| Commit | ${GITHUB_SHA::7} |"
-            echo "| Triggered by | ${GITHUB_ACTOR} |"
-            echo "| Run | $RUN_URL |"
-            echo
-            echo "| Service | Result |"
-            echo "|---|---|"
-            echo "| ai | $AI_OUTCOME |"
-            echo "| core | $CORE_OUTCOME |"
-          } > deploy-summary.md
-          cat deploy-summary.md >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: deploy-summary-${{ github.ref_name }}
-          path: deploy-summary.md
-          if-no-files-found: error
-          retention-days: 14
+    uses: ./.github/workflows/cd-backend.yml
+    secrets: inherit
 
-  ### Deploy web: Vercel preview per pull request, staging alias, production ###
-
-  # Builds the mobile web bundle on the runner and uploads it to Vercel, so each GitHub
-  # environment owns its EXPO_PUBLIC_* values (baked in at build time) and Vercel token.
-  # Pull requests get a preview URL, `staging` gets a fixed alias, `main` goes to production.
-  # Vercel's own Git deployments are off in frontend/mobile/vercel.json to avoid double deploys.
+  # Mobile web on Vercel. Pull requests from forks get no secrets, so no preview.
   deploy-web:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     needs: [mobile-web]
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
       pull-requests: write
-    runs-on: ubuntu-24.04
-    # `url` links the GitHub Deployments sidebar to the fixed domains; previews get none because
-    # their alias depends on the PR number and is already commented on the PR.
-    environment:
-      name: ${{ github.event_name == 'pull_request' && 'vercel-preview' || (github.ref_name == 'main' && 'vercel-production' || 'vercel-staging') }}
-      url: ${{ github.event_name == 'pull_request' && '' || (github.ref_name == 'main' && 'https://smart-ledger-prod.vercel.app' || 'https://smart-ledger-staging.vercel.app') }}
-    concurrency:
-      group: deploy-web-${{ github.head_ref || github.ref_name }}
-      cancel-in-progress: true
-    # Vercel CLI runs from the repo root: the project's Root Directory setting already points at frontend/mobile.
-    env:
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      VERCEL_TARGET: ${{ github.ref_name == 'main' && github.event_name == 'push' && 'production' || 'preview' }}
-      EXPO_PUBLIC_USE_MOCK: ${{ vars.EXPO_PUBLIC_USE_MOCK }}
-      EXPO_PUBLIC_MOCK_CORE: ${{ vars.EXPO_PUBLIC_MOCK_CORE }}
-      EXPO_PUBLIC_MOCK_SHOPS: ${{ vars.EXPO_PUBLIC_MOCK_SHOPS }}
-      EXPO_PUBLIC_API_ENDPOINT: ${{ vars.EXPO_PUBLIC_API_ENDPOINT }}
-      EXPO_PUBLIC_FIREBASE_API_KEY: ${{ vars.EXPO_PUBLIC_FIREBASE_API_KEY }}
-      EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN }}
-      EXPO_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_PROJECT_ID }}
-      EXPO_PUBLIC_FIREBASE_APP_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_APP_ID }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: frontend/mobile/package-lock.json
-      - name: Install Vercel CLI
-        run: npm install --global vercel@62.2.0
-      - run: vercel pull --yes --environment="$VERCEL_TARGET" --token="$VERCEL_TOKEN"
-      # Job env wins over values pulled from Vercel, so GitHub stays the source of EXPO_PUBLIC_*.
-      - run: vercel build ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN"
-      - name: Deploy
-        id: deploy
-        run: |
-          url=$(vercel deploy --prebuilt ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN")
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-      # A per-deploy URL carries a random hash, so Core CORS and Firebase cannot list it. Each PR
-      # takes the fixed alias of its number's last digit (00-09); PRs sharing a digit overwrite
-      # each other, and re-running the job takes the slot back.
-      - name: Alias preview
-        id: preview
-        if: github.event_name == 'pull_request'
-        env:
-          URL: ${{ steps.deploy.outputs.url }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          alias="smart-ledger-preview-0$((PR % 10)).vercel.app"
-          api=https://api.vercel.com
-          auth="Authorization: Bearer $VERCEL_TOKEN"
-          id=$(curl -fsS -H "$auth" "$api/v13/deployments/${URL#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
-          curl -fsS -X POST -H "$auth" -H "Content-Type: application/json" \
-            -d "$(jq -n --arg alias "$alias" '{alias: $alias}')" \
-            "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID"
-          echo "url=https://$alias" >> "$GITHUB_OUTPUT"
-          echo "alias: https://$alias -> $URL"
-      # Runs before the smoke test so the test checks the fixed alias that Core CORS lists,
-      # not the per-deploy hash URL.
-      - name: Alias staging
-        id: staging
-        if: github.event_name == 'push' && github.ref_name == 'staging'
-        env:
-          STAGING_ALIAS: ${{ vars.VERCEL_STAGING_ALIAS }}
-          URL: ${{ steps.deploy.outputs.url }}
-        # Calls the REST API directly: `vercel alias set` first loads the token's user, which
-        # fails with "User not found" for this team token even though deploys succeed.
-        run: |
-          set -euo pipefail
-          api=https://api.vercel.com
-          auth="Authorization: Bearer $VERCEL_TOKEN"
-          id=$(curl -fsS -H "$auth" "$api/v13/deployments/${URL#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
-          curl -fsS -X POST -H "$auth" -H "Content-Type: application/json" \
-            -d "$(jq -n --arg alias "$STAGING_ALIAS" '{alias: $alias}')" \
-            "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID"
-          echo "url=https://$STAGING_ALIAS" >> "$GITHUB_OUTPUT"
-          echo "alias: https://$STAGING_ALIAS -> $URL"
-      # `main` is checked at the fixed production domain, the only origin Core CORS lists; the
-      # per-deploy hash URL is never allowed.
-      # Fails the job when the deployed web would not reach Core: page down, env not baked in,
-      # or Core rejecting this origin's CORS preflight.
-      - name: Smoke test
-        env:
-          URL: ${{ steps.preview.outputs.url || steps.staging.outputs.url || (github.ref_name == 'main' && 'https://smart-ledger-prod.vercel.app') || steps.deploy.outputs.url }}
-        run: |
-          set -euo pipefail
-          # A fresh alias can take a few seconds to route, so retry before failing.
-          for attempt in 1 2 3 4 5 6; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "$URL/")
-            [ "$code" = 200 ] && break
-            sleep 5
-          done
-          test "$code" = 200
-          echo "page: 200"
-          if [ "$EXPO_PUBLIC_USE_MOCK" = "true" ]; then echo "mock build, skipping Core checks"; exit 0; fi
-          grep -rqF "$EXPO_PUBLIC_API_ENDPOINT" .vercel/output/static
-          echo "bundle: API endpoint baked in"
-          allow=$(curl -s -o /dev/null -D - -X OPTIONS "$EXPO_PUBLIC_API_ENDPOINT/api/v1/auth/session" \
-            -H "Origin: $URL" -H "Access-Control-Request-Method: POST" \
-            -H "Access-Control-Request-Headers: authorization,content-type" \
-            | tr -d '\r' | awk -F': ' 'tolower($1)=="access-control-allow-origin"{print $2}')
-          if [ "$allow" != "$URL" ]; then echo "::error::Core CORS does not allow $URL"; exit 1; fi
-          echo "cors: Core allows $URL"
-      - name: Report URL
-        if: always() && steps.deploy.outputs.url != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          URL: ${{ steps.preview.outputs.url || steps.staging.outputs.url || (github.ref_name == 'main' && 'https://smart-ledger-prod.vercel.app') || steps.deploy.outputs.url }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
-          echo "Web deploy: $URL" >> "$GITHUB_STEP_SUMMARY"
-          if [ -n "$PR" ]; then
-            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --edit-last --create-if-none \
-              --body "Web preview (commit ${GITHUB_SHA::7}): $URL"
-          fi
+    uses: ./.github/workflows/cd-web.yml
+    secrets: inherit
 
-  ### Deploy landing: Vercel project `landing` per pull request, staging alias, production ###
-
-  # Same shape as deploy-web, with its own Vercel project and GitHub environments. Vercel's Git
-  # deployments are off in frontend/web/vercel.json, so only this job deploys the landing.
-  # Pull requests get the alias smart-ledger-landing-pr-<number> in the run summary and no PR
-  # comment, because deploy-web already edits the bot's last PR comment. The landing calls no API,
-  # so no CORS list limits the alias names and each PR keeps its own.
+  # Landing page on Vercel.
   deploy-landing:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     needs: [landing]
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
-    runs-on: ubuntu-24.04
-    environment: ${{ github.event_name == 'pull_request' && 'landing-preview' || (github.ref_name == 'main' && 'landing-production' || 'landing-staging') }}
-    concurrency:
-      group: deploy-landing-${{ github.head_ref || github.ref_name }}
-      cancel-in-progress: true
-    env:
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      VERCEL_TARGET: ${{ github.ref_name == 'main' && github.event_name == 'push' && 'production' || 'preview' }}
-      VITE_CONTACT_EMAIL: ${{ vars.VITE_CONTACT_EMAIL }}
-      VITE_LEGAL_DRAFT: ${{ vars.VITE_LEGAL_DRAFT }}
-      VITE_ANDROID_APK_URL: ${{ vars.VITE_ANDROID_APK_URL }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: frontend/web/package-lock.json
-      - name: Install Vercel CLI
-        run: npm install --global vercel@62.2.0
-      - run: vercel pull --yes --environment="$VERCEL_TARGET" --token="$VERCEL_TOKEN"
-      - run: vercel build ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN"
-      # Vercel project variables are pulled into the build, so a VITE_ADMIN_ENABLED=true set there would publish admin.
-      - name: Check no admin code in the build
-        run: |
-          # The chunk name follows the lazy import in App.tsx; admin123 is a mock password and may change.
-          if [ -n "$(find .vercel/output/static -name 'AdminRoutes-*')" ] || grep -rqF admin123 .vercel/output/static; then
-            echo "::error::admin code is in the landing build; remove VITE_ADMIN_ENABLED from the Vercel project"
-            exit 1
-          fi
-      - name: Deploy
-        id: deploy
-        run: |
-          url=$(vercel deploy --prebuilt ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN")
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-      # REST alias, as in deploy-web: `vercel alias set` fails for team tokens.
-      - name: Alias preview
-        id: preview
-        if: github.event_name == 'pull_request'
-        env:
-          URL: ${{ steps.deploy.outputs.url }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          alias="smart-ledger-landing-pr-$PR.vercel.app"
-          api=https://api.vercel.com
-          auth="Authorization: Bearer $VERCEL_TOKEN"
-          id=$(curl -fsS -H "$auth" "$api/v13/deployments/${URL#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
-          curl -fsS -X POST -H "$auth" -H "Content-Type: application/json" \
-            -d "$(jq -n --arg alias "$alias" '{alias: $alias}')" \
-            "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID"
-          echo "url=https://$alias" >> "$GITHUB_OUTPUT"
-          echo "alias: https://$alias -> $URL"
-      - name: Alias staging
-        if: github.event_name == 'push' && github.ref_name == 'staging'
-        env:
-          URL: ${{ steps.deploy.outputs.url }}
-          STAGING_URL: ${{ vars.LANDING_URL }}
-        run: |
-          set -euo pipefail
-          test -n "$STAGING_URL" || { echo "::error::LANDING_URL is not set on landing-staging"; exit 1; }
-          alias="${STAGING_URL#https://}"
-          api=https://api.vercel.com
-          auth="Authorization: Bearer $VERCEL_TOKEN"
-          id=$(curl -fsS -H "$auth" "$api/v13/deployments/${URL#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
-          curl -fsS -X POST -H "$auth" -H "Content-Type: application/json" \
-            -d "$(jq -n --arg alias "$alias" '{alias: $alias}')" \
-            "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID"
-          echo "alias: $STAGING_URL -> $URL"
-      # Pull requests check their PR alias; staging and main check the fixed LANDING_URL.
-      - name: Smoke test
-        env:
-          URL: ${{ github.event_name == 'pull_request' && steps.preview.outputs.url || vars.LANDING_URL }}
-        run: |
-          set -euo pipefail
-          test -n "$URL" || { echo "::error::LANDING_URL is not set for this environment"; exit 1; }
-          # A fresh alias can take a few seconds to route, so retry before failing.
-          for attempt in 1 2 3 4 5 6; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "$URL/" || true)
-            [ "$code" = 200 ] && break
-            sleep 5
-          done
-          test "$code" = 200
-          echo "page: 200 at $URL"
-      - name: Report URL
-        if: always() && steps.deploy.outputs.url != ''
-        env:
-          URL: ${{ steps.preview.outputs.url || steps.deploy.outputs.url }}
-        run: |
-          echo "Landing deploy: $URL" >> "$GITHUB_STEP_SUMMARY"
+    uses: ./.github/workflows/cd-landing.yml
+    secrets: inherit
