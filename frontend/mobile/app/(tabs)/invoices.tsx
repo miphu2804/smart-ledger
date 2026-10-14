@@ -380,7 +380,7 @@ export default function Invoices() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator color={colors.brand} />
         </View>
-      ) : error ? (
+      ) : error && !sales.length ? (
         <View style={{ paddingHorizontal: 16, paddingTop: 20 }}>
           <EmptyState icon="alert-triangle" title="Không tải được đơn hàng" hint={error} />
           <Button title="Thử lại" variant="outline" onPress={pullToRefresh} />
@@ -416,6 +416,11 @@ export default function Invoices() {
           ListFooterComponent={
             loadingMore ? (
               <ActivityIndicator color={colors.brand} style={{ marginVertical: 12 }} />
+            ) : error ? (
+              // Làm mới thất bại khi đã có đơn: giữ danh sách và chỗ đang cuộn, báo lỗi ở cuối
+              <T size={12.5} color={colors.muted} style={{ textAlign: 'center', marginVertical: 8 }}>
+                Không làm mới được: {error}
+              </T>
             ) : moreError ? (
               <View style={{ marginTop: 4 }}>
                 <T size={12.5} color={colors.muted} style={{ textAlign: 'center', marginBottom: 8 }}>

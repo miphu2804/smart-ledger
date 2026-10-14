@@ -37,38 +37,50 @@ export function matchingPreset(from: string | null, to: string | null, now = new
   );
 }
 
-/** Đầu ngày (giờ máy) cách `day` một số ngày; tạo bằng năm/tháng/ngày nên ngày đổi giờ mùa hè vẫn đúng. */
-function shiftDay(day: Date, days: number): Date {
-  return new Date(day.getFullYear(), day.getMonth(), day.getDate() + days);
+/** Giờ Việt Nam (UTC+07, không đổi giờ mùa hè): kỳ báo cáo của Core tính theo lịch này. */
+const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+/** Ngày lịch Việt Nam của một thời điểm, dạng năm/tháng (0–11)/ngày/thứ (0 = Chủ nhật). */
+function vnCalendar(at: Date) {
+  const shifted = new Date(at.getTime() + VN_OFFSET_MS);
+  return { y: shifted.getUTCFullYear(), m: shifted.getUTCMonth(), d: shifted.getUTCDate(), weekday: shifted.getUTCDay() };
+}
+
+/** Nửa đêm Việt Nam của một ngày lịch (tháng 0–11; ngày tràn hoặc âm tự lùi/tiến tháng), dạng ISO 8601 UTC. */
+function vnMidnight(y: number, m: number, d: number): string {
+  return new Date(Date.UTC(y, m, d) - VN_OFFSET_MS).toISOString();
 }
 
 /**
- * Khoảng thời gian gửi lên Core (`GET /sales?from=&to=`): đơn có soldAt trong `[from, to)`, mốc là ISO 8601 (UTC) của đầu
- * ngày theo giờ máy. Ngày cuối của khoảng tự chọn được tính trọn nên `to` là đầu ngày hôm sau. "Tất cả" không gửi mốc nào.
+ * Khoảng thời gian gửi lên Core (`GET /sales?from=&to=`): đơn có soldAt trong `[from, to)`, mốc là nửa đêm theo lịch Việt
+ * Nam như các kỳ báo cáo của Core, kể cả khi máy đặt múi giờ khác. Ngày cuối của khoảng tự chọn được tính trọn nên `to` là
+ * nửa đêm ngày hôm sau. "Tất cả" không gửi mốc nào.
  */
 export function saleFilterWindow(f: SaleFilter, now = new Date()): { from?: string; to?: string } {
-  const today = shiftDay(now, 0);
-  const tomorrow = shiftDay(now, 1);
-  const window = (from: Date | null, to: Date | null) => ({
-    ...(from ? { from: from.toISOString() } : {}),
-    ...(to ? { to: to.toISOString() } : {}),
-  });
+  const { y, m, d, weekday } = vnCalendar(now);
+  const tomorrow = vnMidnight(y, m, d + 1);
   switch (f.time) {
     case 'all':
       return {};
     case 'today':
-      return window(today, tomorrow);
+      return { from: vnMidnight(y, m, d), to: tomorrow };
     case 'yesterday':
-      return window(shiftDay(now, -1), today);
+      return { from: vnMidnight(y, m, d - 1), to: vnMidnight(y, m, d) };
     case 'thisWeek':
       // Tuần lịch bắt đầu từ thứ Hai
-      return window(shiftDay(now, -((now.getDay() + 6) % 7)), tomorrow);
+      return { from: vnMidnight(y, m, d - ((weekday + 6) % 7)), to: tomorrow };
     case 'week':
-      return window(shiftDay(now, -6), tomorrow);
+      return { from: vnMidnight(y, m, d - 6), to: tomorrow };
     case 'month':
-      return window(new Date(now.getFullYear(), now.getMonth(), 1), tomorrow);
-    case 'custom':
-      return window(f.from ? parseDayKey(f.from) : null, f.to ? shiftDay(parseDayKey(f.to), 1) : null);
+      return { from: vnMidnight(y, m, 1), to: tomorrow };
+    case 'custom': {
+      // Ngày của khoảng tự chọn là ngày lịch (`yyyy-mm-dd`), không phụ thuộc múi giờ máy
+      const day = (key: string, offset: number) => {
+        const [ky, km, kd] = key.split('-').map(Number);
+        return vnMidnight(ky, km - 1, kd + offset);
+      };
+      return { ...(f.from ? { from: day(f.from, 0) } : {}), ...(f.to ? { to: day(f.to, 1) } : {}) };
+    }
   }
 }
 
