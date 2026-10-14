@@ -191,13 +191,22 @@ type Link = ReturnType<typeof linker>;
  * Sửa ranh giới cụm tên món bằng bằng chứng của linker (dùng cho mọi tagger):
  * - bỏ đơn vị đứng đầu cụm ("chai nam ngư" → đơn vị "chai" + "nam ngư");
  * - cắt bổ ngữ cuối khi phần đầu tự khớp một món tốt hơn ("trà tắc không đường" → "trà tắc");
- * - nối hai cụm liền nhau khi cụm sau không tự chỉ một món khác ("mì ly" + "lẩu thái", "tra đào cam" + "xả").
+ * - nối hai cụm liền nhau khi cụm sau không tự chỉ một món khác ("mì ly" + "lẩu thái", "tra đào cam" + "xả");
+ * - nối từ đứng ngay sau (đang gán O) khi nó làm trọn tên một món rõ ràng hơn: "hai cơm thêm" là "Cơm thêm", không phải
+ *   "cơm" (mơ hồ) và từ nối "thêm".
  */
-function repairItemSpans(spans: Span[], info: TokenInfo[], link: Link, tau: number): Span[] {
+function repairItemSpans(spans: Span[], info: TokenInfo[], link: Link, tau: number, delta: number): Span[] {
   const out: Span[] = [];
-  for (const s0 of spans) {
+  const margin = (c: LinkCandidate[]) => (c[0]?.score ?? 0) - (c[1]?.score ?? 0);
+  for (const [n, s0] of spans.entries()) {
     let s = s0;
     if (s.slot === 'ITEM') {
+      const next = s.to;
+      if (next < info.length && spans[n + 1]?.from !== next && info[next].gzLen > 0 && !info[next].isNum) {
+        const cur = link(s.from, s.to);
+        const ext = link(s.from, next + 1);
+        if (ext[0] && ext[0].score >= tau && ext[0].coverage >= 1 && margin(ext) >= delta && margin(ext) > margin(cur)) s = { ...s, to: next + 1 };
+      }
       if (s.to - s.from > 1 && info[s.from].isUnit && !(info[s.from].gzLen >= 2 && info[s.from].gzContent)) {
         out.push({ slot: 'UNIT', from: s.from, to: s.from + 1 });
         s = { ...s, from: s.from + 1 };
@@ -350,6 +359,7 @@ function parseWith(ctx: Context, tagger: Tagger, knownNovelty?: number): Detaile
   const order = best.order;
   if (!reason && ctx.freeFormGate) {
     if (best.implicit) reason = 'implicit';
+    else if (best.overlap) reason = 'duplicate';
     else if (novelty && isComplex(ctx, labels, order)) reason = 'novel';
   }
   if (reason && reason !== 'empty') {
@@ -378,6 +388,8 @@ interface Assembled {
   empty: boolean;
   /** Món trong danh mục không có số trong câu có nói số lượng (gate `implicit`: khi `strict`, và khi `freeFormGate`). */
   implicit: boolean;
+  /** Câu hỏi chọn có lựa chọn trùng một món khác của đơn (thường là "tổng rồi kể": "hai tô phở, một bò tái một gà"). */
+  overlap: boolean;
 }
 
 /**
@@ -387,7 +399,7 @@ interface Assembled {
  */
 function assemble(ctx: Context, labels: Label[], pOutside?: (i: number) => number, strict = false): Assembled {
   const { tokens, info, link, tau, delta } = ctx;
-  const spans = repairItemSpans(spansOf(labels), info, link, tau);
+  const spans = repairItemSpans(spansOf(labels), info, link, tau, delta);
 
   const items: LineItem[] = [];
   const unknown: LineItem[] = [];
@@ -594,7 +606,11 @@ function assemble(ctx: Context, labels: Label[], pOutside?: (i: number) => numbe
   else if (duplicate) reason = 'duplicate';
   else if (implicit && strict) reason = 'implicit';
   const none = !items.length && !unknown.length && !missingQuantityItems.length && !disambiguations.length && !expenses.length;
-  return { order, reason, empty: none && (labels.some((l) => l !== 'O') || info.some((x) => x.isNum)), implicit };
+  const asked = disambiguations.map((d) => new Set(d.options.map((o) => String(o.product_id))));
+  const overlap = asked.some((ids, k) =>
+    [...ids].some((id) => items.some((i) => String(i.productId) === id) || asked.some((other, j) => j !== k && other.has(id))),
+  );
+  return { order, reason, empty: none && (labels.some((l) => l !== 'O') || info.some((x) => x.isNum)), implicit, overlap };
 }
 
 export function parseOrder(text: string, products: ParseableProduct[]): ParsedOrder {
