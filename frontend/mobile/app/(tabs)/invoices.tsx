@@ -1,25 +1,27 @@
 import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, SectionList, StyleSheet, TextInput, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, SectionList, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DateRangeSheet } from '../../src/components/DateRangeSheet';
 import { Button, EmptyState, Row, T } from '../../src/components/ui';
-import type { SaleView } from '../../src/data/types';
-import { errorMessage } from '../../src/lib/errors';
+import type { ReportPeriod, ReportSummaryView, SaleView, SalesSeriesPoint } from '../../src/data/types';
 import { triggerFeedback } from '../../src/lib/feedback';
-import { ddmmyyyy, hashIndex, hhmm, normalizeText, vnd } from '../../src/lib/format';
+import { dayKey, ddmmyyyy, hashIndex, hhmm, vnd } from '../../src/lib/format';
+import { reportApi } from '../../src/lib/reportApi';
 import {
-  applySaleFilter,
   DEFAULT_SALE_FILTER,
   isSaleFilterActive,
   matchingPreset,
+  saleFilterReportPeriod,
   saleFilterTimeLabel,
   saleFilterTimeShort,
+  saleFilterWindow,
   type SaleFilter,
 } from '../../src/lib/saleFilter';
 import { saleApi } from '../../src/lib/salesApi';
+import { usePagedList } from '../../src/lib/usePagedList';
 import type { Period } from '../../src/lib/stats';
 import { colors, font, shadow, tilePalette } from '../../src/theme';
 
@@ -28,6 +30,9 @@ import { colors, font, shadow, tilePalette } from '../../src/theme';
  * (web bỏ qua) và thẻ này hẹp trên điện thoại nhỏ, nên số dài ("17.555.000đ") bắt đầu từ cỡ nhỏ hơn để luôn nằm một dòng.
  */
 const figureSize = (text: string) => (text.length >= 12 ? 14 : text.length >= 10 ? 15.5 : 17.5);
+
+/** Chờ người dùng ngừng gõ chừng này rồi mới tìm ở Core, để không gọi một lần cho mỗi phím. */
+const SEARCH_DEBOUNCE_MS = 350;
 
 const WEEKDAY_NAMES = ['CHỦ NHẬT', 'THỨ HAI', 'THỨ BA', 'THỨ TƯ', 'THỨ NĂM', 'THỨ SÁU', 'THỨ BẢY'];
 
@@ -57,27 +62,66 @@ export default function Invoices() {
   const [q, setQ] = useState('');
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
-  const [sales, setSales] = useState<SaleView[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  // Từ khoá gửi lên Core sau khi ngừng gõ; Core tìm trong tên khách, tên món, hoặc khớp đúng mã đơn
+  const [searchQ, setSearchQ] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchQ(q.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [q]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      setSales(await saleApi.list());
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setLoading(false);
+  // Core lọc và chia trang (mới bán trước); đổi khoảng thời gian hoặc từ khoá thì tải lại từ trang đầu
+  const saleWindow = saleFilterWindow(filter);
+  const queryKey = JSON.stringify([saleWindow.from, saleWindow.to, searchQ]);
+  const {
+    items: sales,
+    total: count,
+    hasMore,
+    loading,
+    refreshing,
+    loadingMore,
+    error,
+    moreError,
+    loadMore,
+    refreshTop,
+    reload,
+  } = usePagedList<SaleView>(queryKey, (page, size) =>
+    saleApi.page(page, size, { ...saleWindow, q: searchQ || undefined }),
+  );
+
+  // Doanh thu và tổng từng ngày chỉ có khi bộ lọc trùng một kỳ báo cáo của Core và không tìm theo từ khoá: các trang đã
+  // tải không đủ để cộng tổng. "Tất cả", khoảng tự chọn và khi tìm thì chỉ hiện số đơn.
+  const reportPeriod = searchQ ? null : saleFilterReportPeriod(filter);
+  const [report, setReport] = useState<{ period: ReportPeriod; summary: ReportSummaryView; days: Map<string, SalesSeriesPoint> } | null>(null);
+  const reportSeq = useRef(0);
+  const loadReport = useCallback(async () => {
+    const mine = ++reportSeq.current;
+    if (!reportPeriod) {
+      setReport(null);
+      return;
     }
-  }, []);
+    try {
+      const [summary, series] = await Promise.all([reportApi.summary(reportPeriod), reportApi.salesSeries(reportPeriod)]);
+      if (mine !== reportSeq.current) return;
+      setReport({ period: reportPeriod, summary, days: new Map(series.items.map((day) => [day.date, day])) });
+    } catch {
+      // Không có số tổng thì thẻ hiện "—"; danh sách đơn vẫn dùng được
+      if (mine === reportSeq.current) setReport(null);
+    }
+  }, [reportPeriod]);
+  const activeReport = report && report.period === reportPeriod ? report : null;
 
+  // Quay lại màn hình (vừa bán hoặc huỷ đơn): làm mới trang đầu mà giữ chỗ đang cuộn, và làm mới số tổng
   useFocusEffect(
     useCallback(() => {
-      load();
-    }, [load]),
+      void refreshTop();
+      void loadReport();
+    }, [refreshTop, loadReport]),
   );
+
+  const pullToRefresh = () => {
+    void reload();
+    void loadReport();
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -87,26 +131,15 @@ export default function Invoices() {
     }, [queryPeriod, setPeriod]),
   );
 
-  const filteredSales = useMemo(() => {
-    const nq = normalizeText(q);
-    return applySaleFilter(sales, filter)
-      .filter((s) => {
-        if (!nq) return true;
-        const hay = normalizeText(`${s.id} ${s.customerName ?? ''} ${s.items.map((x) => x.productName).join(' ')}`);
-        return hay.includes(nq);
-      })
-      // Core trả theo mã đơn; đơn có giờ bán cũ hơn mà mã lớn hơn (dữ liệu nhập tay/mẫu) làm nhóm ngày bị đảo. Mới nhất trước.
-      .sort((a, b) => new Date(b.soldAt).getTime() - new Date(a.soldAt).getTime());
-  }, [sales, filter, q]);
-
   const clearFilters = () => {
     triggerFeedback('selection');
     setFilter(DEFAULT_SALE_FILTER);
     setQ('');
   };
 
-  const total = filteredSales.filter((s) => s.saleStatus !== 'VOIDED').reduce((a, s) => a + s.totalVnd, 0);
-  const count = filteredSales.length;
+  // Doanh thu thuần của kỳ theo Core: đơn bán trong kỳ trừ đơn bị huỷ trong kỳ
+  const revenue = activeReport ? activeReport.summary.netRevenueVnd : null;
+  const revenueText = revenue === null ? '—' : vnd(revenue);
   // Số trên thẻ là của khoảng thời gian đang lọc; chỉ "Tất cả" mới là tổng, nên nhãn đổi theo bộ lọc
   const timeShort = saleFilterTimeShort(filter);
   // Nhãn nút của khoảng tự chọn: "30 ngày gần nhất" như trong bảng chọn, hoặc "07/10 – 13/10"
@@ -119,17 +152,18 @@ export default function Invoices() {
   // countLabel vẫn dùng làm nhãn đọc màn hình.
   const countCaption = timeShort;
 
-  // Group sales by date
+  // Nhóm theo ngày bán. Danh sách tải dần nên một ngày có thể mới có một phần đơn: số đơn và doanh thu của ngày lấy từ
+  // chuỗi báo cáo của Core, không đếm trên các trang đã tải; không có báo cáo thì tiêu đề chỉ có ngày.
   const groupedSections = useMemo(() => {
     const groups: Array<{
       key: string;
       title: string;
       date: Date;
       sales: SaleView[];
-      totalVnd: number;
+      day: SalesSeriesPoint | null;
     }> = [];
 
-    filteredSales.forEach((sale) => {
+    sales.forEach((sale) => {
       const saleDate = new Date(sale.soldAt);
       const title = formatGroupDateTitle(saleDate);
       const groupKey = `${saleDate.getFullYear()}-${saleDate.getMonth()}-${saleDate.getDate()}-${title}`;
@@ -141,19 +175,16 @@ export default function Invoices() {
           title,
           date: saleDate,
           sales: [],
-          totalVnd: 0,
+          day: activeReport?.days.get(dayKey(saleDate)) ?? null,
         };
         groups.push(existing);
       }
 
       existing.sales.push(sale);
-      if (sale.saleStatus !== 'VOIDED') {
-        existing.totalVnd += sale.totalVnd;
-      }
     });
 
     return groups;
-  }, [filteredSales]);
+  }, [sales, activeReport]);
 
   // SectionList chỉ dựng các dòng đang nhìn thấy; nhóm đang thu gọn không có dòng nào nhưng vẫn giữ tiêu đề.
   const sections = useMemo(
@@ -161,8 +192,7 @@ export default function Invoices() {
       groupedSections.map((g) => ({
         key: g.key,
         title: g.title,
-        totalVnd: g.totalVnd,
-        count: g.sales.length,
+        day: g.day,
         data: collapsedGroups[g.key] ? ([] as SaleView[]) : g.sales,
       })),
     [groupedSections, collapsedGroups],
@@ -189,7 +219,12 @@ export default function Invoices() {
             {/* Left Metric: Tổng đơn hàng */}
             <Pressable
               onPress={clearFilters}
-              style={({ pressed }) => [styles.summaryMetricBtn, styles.summaryMetricCount, pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }]}
+              style={({ pressed }) => [
+                styles.summaryMetricBtn,
+                styles.summaryMetricCount,
+                !reportPeriod && { flex: 1 },
+                pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] },
+              ]}
               accessibilityRole="button"
               accessibilityLabel={`${countLabel}: ${count} đơn. Bấm để xem tất cả`}
             >
@@ -198,7 +233,7 @@ export default function Invoices() {
               </View>
               <View style={styles.summaryText}>
                 <T w="extrabold" size={figureSize(`${count} đơn`)} color={colors.ink} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-                  {count} đơn
+                  {loading ? '…' : `${count} đơn`}
                 </T>
                 <T size={12} color={colors.muted} style={{ marginTop: 1 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
                   {countCaption}
@@ -206,10 +241,11 @@ export default function Invoices() {
               </View>
             </Pressable>
 
-            {/* Middle Divider */}
+            {/* Doanh thu chỉ có với kỳ báo cáo của Core (xem reportPeriod) */}
+            {reportPeriod ? (
+            <>
             <View style={styles.summaryDivider} />
 
-            {/* Right Metric: Tổng doanh thu */}
             <Pressable
               onPress={() => {
                 triggerFeedback('selection');
@@ -217,20 +253,22 @@ export default function Invoices() {
               }}
               style={({ pressed }) => [styles.summaryMetricBtn, styles.summaryMetricRevenue, pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }]}
               accessibilityRole="button"
-              accessibilityLabel={`${revenueLabel}: ${vnd(total)}. Bấm để xem báo cáo chi tiết`}
+              accessibilityLabel={`${revenueLabel}: ${revenueText}. Bấm để xem báo cáo chi tiết`}
             >
               <View style={styles.summaryIconYellow}>
                 <Feather name="database" size={16} color={colors.data.debt} />
               </View>
               <View style={styles.summaryText}>
-                <T w="extrabold" size={figureSize(vnd(total))} color={colors.ink} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-                  {vnd(total)}
+                <T w="extrabold" size={figureSize(revenueText)} color={colors.ink} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                  {revenueText}
                 </T>
                 <T size={12} color={colors.muted} style={{ marginTop: 1 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
                   {revenueLabel}
                 </T>
               </View>
             </Pressable>
+            </>
+            ) : null}
           </View>
 
     </>
@@ -345,7 +383,7 @@ export default function Invoices() {
       ) : error ? (
         <View style={{ paddingHorizontal: 16, paddingTop: 20 }}>
           <EmptyState icon="alert-triangle" title="Không tải được đơn hàng" hint={error} />
-          <Button title="Thử lại" variant="outline" onPress={load} />
+          <Button title="Thử lại" variant="outline" onPress={pullToRefresh} />
         </View>
       ) : (
         <SectionList
@@ -362,14 +400,35 @@ export default function Invoices() {
                 {section.title}
               </T>
               <Row gap={6} style={{ alignItems: 'center' }}>
-                <T w="bold" size={12.5} color={colors.muted}>
-                  {section.count} đơn · {vnd(section.totalVnd)}
-                </T>
+                {section.day ? (
+                  <T w="bold" size={12.5} color={colors.muted}>
+                    {section.day.orderCount} đơn · {vnd(section.day.netRevenueVnd)}
+                  </T>
+                ) : null}
                 <Feather name={collapsedGroups[section.key] ? 'chevron-down' : 'chevron-up'} size={15} color={colors.muted} />
               </Row>
             </Pressable>
           )}
           renderSectionFooter={() => <View style={{ height: 14 }} />}
+          onEndReached={() => void loadMore()}
+          onEndReachedThreshold={0.5}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={colors.brand} colors={[colors.brand]} />}
+          ListFooterComponent={
+            loadingMore ? (
+              <ActivityIndicator color={colors.brand} style={{ marginVertical: 12 }} />
+            ) : moreError ? (
+              <View style={{ marginTop: 4 }}>
+                <T size={12.5} color={colors.muted} style={{ textAlign: 'center', marginBottom: 8 }}>
+                  Không tải thêm được đơn: {moreError}
+                </T>
+                <Button title="Tải thêm" variant="outline" onPress={() => void loadMore()} />
+              </View>
+            ) : !hasMore && sales.length > 0 ? (
+              <T size={12} color={colors.faint} style={{ textAlign: 'center', marginVertical: 8 }}>
+                Đã hiện hết {count} đơn
+              </T>
+            ) : null
+          }
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
           ListHeaderComponent={listHeader}
           ListEmptyComponent={
