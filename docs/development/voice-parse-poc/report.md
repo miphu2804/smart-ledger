@@ -6,7 +6,7 @@ Báo cáo kết quả của PoC theo [brief](../voice-parse-poc-brief.md). Nhán
 
 - **Câu đặt hàng thông thường:** PoC L1–L4 đạt mọi mục tiêu §7 đo được trên Node, trên tập test của bộ câu tự soạn **[đã kiểm chứng]**.
 - **Câu cấu trúc tự do** ("mỗi thứ một cái", "pepsi cũng vậy", "à không, ba gói", "bàn năm hai cà phê", câu dài lồng nhau): lần đo giữ kín duy nhất (100 câu, giai đoạn 2) cho 70.8% theo món, 7.0% tự nhận sai, 25% hỏi lại, **chưa đạt mục tiêu**. Giai đoạn 3 đưa bộ đó lên 83.9% / 0.7% / 17%; giai đoạn 4 (dò lưới, nhãn sửa lời EDIT, chọn đơn hàng qua gate trong n-best, bỏ tagger luật dự phòng) lên 96.4% / 0 dòng sai / 4%, nhưng bộ này đã được xem lỗi nên đó là số dev. **Bộ giữ kín thứ hai** (120 câu, sub-agent viết, chấm một lần với parser đã chốt, mục 3.4) cho **44.2% theo món, 6.4% tự nhận sai, 59.2% hỏi lại**; giai đoạn 3 trên cùng bộ: 42.6% / 7.7% / 60.0%. Phần lớn mức tăng của giai đoạn 4 là học các biến thể đã thấy; với câu tự do chưa gặp, PoC chỉ tự xử lý được khoảng 4 câu trong 10 và vẫn tự nhận sai quá ngưỡng 2%. Câu tự do cần LLM dự phòng; parser trên máy hợp với câu đặt hàng thông thường.
-- **Gate câu tự do** (giai đoạn 5, mục 3.5, mặc định bật): câu phức có khung câu chưa gặp khi train, hoặc có món không nhận được số trong câu có nói số, thì gửi LLM. Trên bộ giữ kín thứ hai (chấm lần hai, chỉ số tổng): **tự nhận sai 0/41 dòng** (gate cũ 7/109), máy tự xử lý 20.8% số câu và **80.0% số câu đó đúng hết** (gate cũ 51.7%, 66.1%). Mục tiêu 95% đúng khi tự xử lý **chưa đạt** theo câu; theo dòng món tự nhận thì đạt (100%). Cái giá trên câu thường: test chính hỏi lại 14.1% (trước 10.9%), theo món 90.7% (trước 95.1%), 0 dòng sai.
+- **Gate câu tự do** (giai đoạn 5, mục 3.5–3.6, mặc định bật): câu phức có khung câu chưa gặp khi train, món không nhận được số trong câu có nói số, hoặc câu hỏi chọn trùng món khác của đơn, thì gửi LLM. Trên **bộ giữ kín thứ ba** (160 câu, sub-agent viết, chấm một lần với parser chốt ở `ddc7afd`): máy tự xử lý **8.1%** số câu (13/160) và **13/13 câu đúng hết, 0 dòng tự nhận sai**; gate cũ tự xử lý 58.1%, đúng hết 67.7%, tự nhận sai 8.6% số dòng. Mục tiêu "≥ 95% đúng khi máy tự xử lý" **đạt** trên bộ này, nhưng mẫu nhỏ (cận dưới khoảng tin cậy 95% của 13/13 là 75%) và cái giá rất lớn: 94% câu tự do sang LLM/hỏi lại, kể cả một nửa câu đặt hàng thường của người viết mới (nhóm control: đúng 50% so với 94% của gate cũ). Trên test chính: hỏi lại 14.1% (trước 10.9%), theo món 90.7% (trước 95.1%), 0 dòng sai.
 - **Phụ thuộc phần viết tay** (mục 3.2): sau khi train, tắt gate dấu hiệu viết tay (`findMarkers`) không đổi dòng nào trên bộ câu người viết; tắt luật số bàn/giờ làm sai 1 dòng. Các danh sách từ viết tay còn lại chủ yếu nằm ở bộ sinh câu train và ở đặc trưng CRF (bỏ đặc trưng từ điển: vẫn 0 dòng sai nhưng hỏi lại nhiều hơn).
 - **"System 1" router quyết định escalate sang LLM** (mục 3.3): router học (logistic) từ đặc trưng của lượt parse tốt hơn ngưỡng θ trên synthetic nhưng **không hơn trên câu người viết**, nên chưa dùng; giữ ngưỡng θ cho tới khi có kết quả thật (có đồng ý) để học.
 - **STT:** eval chấm được transcript của từng hệ STT (`--asr`), có script cho ChunkFormer (greedy, beam + KenLM, hotword) và Zipformer đang dùng. **Chưa có số ASR thật**: cần audio người đọc các câu eval và model tải từ Hugging Face (mục 12).
@@ -224,6 +224,31 @@ Trên bộ người viết: test chính 90.7% theo món / 0/127 dòng sai / 14.1
 - Đổi lại, máy chỉ tự xử lý 1/5 câu tự do; 85% câu tự do cần LLM hoặc hỏi lại. Câu thường mất 3–6 điểm độ phủ, chủ yếu câu có món ngoài danh mục.
 - Bộ giữ kín này đã chấm hai lần và tôi đã thấy số theo nhóm của lần đầu; muốn sửa tiếp theo kết quả thì cần bộ giữ kín thứ ba (sub-agent viết như mục 3.4) để đo sạch.
 
+### 3.6 Bộ giữ kín thứ ba
+
+Bộ thứ hai đã chấm hai lần nên chuyển thành dev: file đổi tên `eval/free2.jsonl`, split `free2-dev`, được xem câu sai. Trong 25 câu máy tự xử lý của nó có 5 câu sai: 3 câu "tổng rồi kể" không có từ "tổng" ("hai tô phở, một bò tái một gà": "hai tô phở" thành câu hỏi chọn phở, trùng hai món sau), 1 câu "hai cơm thêm" bị cắt thành "cơm" vì "thêm" là từ nối, 1 câu chữ "à" bị hiểu là sửa lời và bỏ mất món trước. Sửa (commit `ddc7afd`):
+- Cụm tên món nhận thêm từ đứng ngay sau (đang gán O) khi nhờ đó khớp trọn một tên món rõ ràng hơn ("cơm thêm" → Cơm thêm).
+- Gate câu tự do: câu hỏi chọn có lựa chọn trùng một món khác của đơn thì gửi LLM (`duplicate`).
+- Không sửa câu "à": đòi độ tin cậy 0.99 khi sửa lời bỏ một món khác loại chỉ khớp đúng câu đó và không đổi gì trên synthetic, nên bỏ.
+
+Hai thay đổi không đổi số nào của dev/test chính, gần như không đổi synthetic (lexout 95.2% đúng khi tự nhận); free2-dev lên 21/22 câu đúng khi máy tự xử lý (số dev).
+
+Sau đó một sub-agent viết bộ thứ ba (`eval/holdout3.jsonl`, split `hold3-test`): 160 câu, 10 nhóm × 16, 335 dòng vàng (320 món trong danh mục, 5 món mơ hồ, 10 món ngoài danh mục), 16 khoản chi; chỉ đọc `catalogs.json` và `score.ts`, được dặn không đọc file `.jsonl` nào khác. Tôi chỉ kiểm máy móc (JSON, ID, danh mục, số lượng, nhóm; 0 lỗi), không đọc câu, rồi chấm **một lần** với parser chốt ở `ddc7afd`:
+
+| Cấu hình | Theo món | Tự nhận sai (dòng) | Máy tự xử lý (câu) | Đúng hết trong số đó | Hỏi lại / LLM |
+|---|---|---|---|---|---|
+| Baseline `parseOrder` | 35.8% | 39.0% (71/182) | 100% | 6.9% | 0% |
+| Gate cũ (giai đoạn 4) | 50.1% | 8.6% (15/174) | 58.1% | 67.7% | 50.6% |
+| **Gate câu tự do** | 4.8% | **0.0% (0/13)** | **8.1%** | **100% (13/13)** | 93.8% |
+| Gate câu tự do + luật dự phòng | 5.1% | 0.0% (0/14) | 8.8% | 92.9% | 93.1% |
+
+Exact theo câu theo nhóm (gate mới / gate cũ): câu thường (control) 50 / 94, lỗi STT 31 / 50, kể theo tên trước 6 / 19, các nhóm còn lại 0 / 13–69.
+
+**Đọc kết quả:**
+- Mục tiêu 95% đúng khi máy tự xử lý đạt, và không dòng nào bị ghi sai. Nhưng chỉ có 13 câu được tự xử lý: cận dưới khoảng tin cậy 95% của 13/13 là 75%, nên số này cho biết gate rất thận trọng chứ chưa chứng minh được 95%.
+- Gate chặt đến mức máy gần như chỉ còn tự xử lý câu rất quen: với người viết mới, một nửa câu đặt hàng thường cũng sang LLM vì cách nói lạ với dữ liệu train (gate cũ đúng 94% nhóm này). Trên test chính chỉ mất 3 điểm vì bộ sinh câu đã được mở rộng theo cách nói của bộ đó.
+- Với cách làm hiện tại (dữ liệu tự sinh), tỉ lệ đúng khi tự xử lý và tỉ lệ tự xử lý kéo ngược nhau: gate cũ 58% / 68%, gate mới 8% / 100%. Muốn cả hai cùng cao thì cần câu thật để train và đo, và `draft_parse` cho phần còn lại.
+
 ## 4. Chạy lại
 
 Trong `frontend/mobile` (Node có `--experimental-strip-types`; Python qua `uv`, không đụng `backend/ai`):
@@ -301,7 +326,9 @@ Ngưỡng dò trên dev (`voice:tune`): mọi cặp τ ∈ [0.64, 0.80] cho cùn
 
 **Đã kiểm chứng:** bảng §7 và bảng câu tự do bằng `npm run voice:eval`; lưới, ablation, lexout và router bằng `voice:grid` / `voice:router` / `router.py` (mục 3.2, 3.3); gate câu tự do bằng `voice:gate` / `voice:grid --gate` trên 12 model bỏ một kiểu câu (mục 3.5); parity bằng `npm run voice:parity`; `npm run typecheck` pass; 0 câu baseline đúng mà PoC tự nhận sai trên dev và test của bộ chính (5 câu dev và 2 câu test baseline đúng nay gửi LLM); mã wrapper và mã sherpa-onnx upstream về hotword và LM (mục 12); chế độ `--asr` của eval (transcript trùng chữ vàng cho đúng số của eval chữ); `voice:asr prompts` và `voice:asr lm` chạy được, file ARPA nạp được bằng KenLM 0.3.0.
 
-**Chưa kiểm chứng:** L0 hotword (WER tên hàng, độ trễ beam search); mọi số ASR (ChunkFormer, KenLM, Zipformer trên audio: chưa có audio, Hugging Face bị chặn trong môi trường này); `voice:asr chunkformer` và `voice:asr zipformer` chưa chạy lần nào; độ trễ trên máy Android thật (mới đo trên Node); độ chính xác với catalog 1.000 món (mới đo độ trễ); câu thật của người dùng; fallback LLM thật; UX hỏi chọn biến thể; số giữ kín cho giai đoạn 3 (giai đoạn 4 đã có, mục 3.4); số giữ kín sạch cho gate câu tự do (bộ thứ hai đã chấm lần hai, mục 3.5); router trên dữ liệu thật; độ trễ giai đoạn 4 trên máy (Hermes chậm hơn Node).
+**Lưu ý về tập test chính:** khi soát lỗi free2-dev (mục 3.6), một lần chạy script soát lỗi in dòng mô tả lỗi (không in câu) của 3 câu test chính máy tự xử lý sai; 2 câu đã có ở mục 9, câu thứ ba là lỗi tách "cơm thêm" giống câu dev. Bản sửa của mục 3.6 làm theo câu dev và không đổi số test.
+
+**Chưa kiểm chứng:** L0 hotword (WER tên hàng, độ trễ beam search); mọi số ASR (ChunkFormer, KenLM, Zipformer trên audio: chưa có audio, Hugging Face bị chặn trong môi trường này); `voice:asr chunkformer` và `voice:asr zipformer` chưa chạy lần nào; độ trễ trên máy Android thật (mới đo trên Node); độ chính xác với catalog 1.000 món (mới đo độ trễ); câu thật của người dùng; fallback LLM thật; UX hỏi chọn biến thể; số giữ kín cho giai đoạn 3 (giai đoạn 4 đã có, mục 3.4); độ chính xác khi máy tự xử lý trên mẫu đủ lớn (bộ giữ kín thứ ba chỉ có 13 câu được tự xử lý, mục 3.6); router trên dữ liệu thật; độ trễ giai đoạn 4 trên máy (Hermes chậm hơn Node).
 
 **Cách làm bộ eval và giới hạn:**
 - **Bộ chính (260 câu):** một sub-agent viết nháp theo quy tắc gắn nhãn, không xem code parser; tôi soát lại toàn bộ nhãn. Chia dev/test 40/60 phân tầng theo 11 nhóm, seed cố định, đóng băng trước khi viết PoC. Lỗi được soát trên dev; tập test chỉ xem số tổng, trừ một lần bảng eval in ra ID 4 câu test bị hỏng ở phiên bản đầu (đã tắt ngay). Tôi đã đọc mọi câu khi soát nhãn, nên danh sách từ đệm có thể vô tình hợp với bộ câu này hơn câu thật.
@@ -325,13 +352,13 @@ Bảng từ giai đoạn 2–3. Giai đoạn 4 chỉ xem số tổng của test 
 - Fallback (4–11% câu trên bộ tự soạn, 25% trên câu synthetic có từ chưa gặp) chỉ an toàn khi có đường dự phòng thật (LLM hoặc hỏi lại trên UI); hiện app chưa có.
 - Câu tự do chưa gặp: bộ giữ kín thứ hai cho 6.4% tự nhận sai và 59% hỏi lại (mục 3.4). Số 0 dòng sai trên pool lạc quan vì bộ sinh câu được mở rộng sau khi xem lỗi của pool.
 - Model CRF 251 KB (giai đoạn 4: 199 KB, giai đoạn 3: 107 KB) nằm trong bundle JS.
-- Gate câu tự do đẩy 85% câu tự do và 14% câu thường sang LLM/hỏi lại; chưa có `draft_parse` thì các câu đó chỉ có thể hỏi lại người dùng.
+- Gate câu tự do đẩy 94% câu tự do (bộ giữ kín thứ ba), một nửa câu thường của người viết mới và 14% câu thường của test chính sang LLM/hỏi lại; chưa có `draft_parse` thì các câu đó chỉ có thể hỏi lại người dùng.
 - Danh mục lớn có nhiều món gần giống làm tăng tỉ lệ hỏi lại; chưa có bộ eval cho trường hợp này.
 - Bật hotword khi chưa vá wrapper sẽ làm app thoát (`exit(-1)`).
 
 ## 11. Bước tiếp theo
 
-1. **Câu tự do sang LLM:** gate câu tự do (mục 3.5) đưa tự nhận sai trên bộ giữ kín về 0 dòng, nhưng máy chỉ tự xử lý 1/5 câu tự do và 80% (chưa tới 95%) số câu đó đúng hết. Ưu tiên endpoint `draft_parse`. Muốn đẩy lên 95%: viết bộ giữ kín thứ ba (sub-agent), tìm loại lỗi của câu tự xử lý mà không sai dòng món (thiếu món, món mới, khoản chi) trên dev/synthetic, đo lại một lần.
+1. **Câu tự do sang LLM:** gate câu tự do đạt 13/13 câu đúng khi máy tự xử lý trên bộ giữ kín thứ ba (mục 3.6), nhưng chỉ tự xử lý 8% câu tự do. Ưu tiên endpoint `draft_parse`; sau đó quyết điểm cân bằng (gate mới chặt, gate cũ rộng, hoặc nới gate cho câu ngắn) dựa trên số câu thật, không phải câu tự soạn.
 2. **Thu âm các câu eval** (người trong nhóm đọc, có đồng ý, không commit audio) rồi chạy `voice:asr` cho Zipformer hiện tại (greedy như app, beam + hotword) và ChunkFormer (greedy, beam + KenLM, + hotword), chấm bằng `voice:eval --asr` (mục 12). Đây là cách duy nhất để biết LM/hotword có đáng làm trên máy.
 3. Owner quyết làm endpoint `draft_parse` (AI + Core proxy) cho câu `fallback` (4–11% trên bộ tự soạn).
 4. **Router học từ phân phối thật** (mục 3.3): khi owner duyệt, ghi đặc trưng của `voice:router` (không ghi transcript) cùng kết quả người dùng xác nhận hoặc kết quả LLM chạy song song; thêm xác suất token của STT làm đặc trưng chất lượng giọng nói; học lại `router.py` và so với θ.
