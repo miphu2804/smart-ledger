@@ -13,10 +13,11 @@ import { colors } from '../../src/theme';
 type TabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>['tabBar']>>[0];
 
 /**
- * Hiệu ứng chuyển tab: mờ dần trên điện thoại. Trên web hiệu ứng chạy bằng JavaScript nên trên Safari iPhone đứng hình, hai màn
- * chồng lên nhau rồi trắng một lúc; web chuyển tab ngay, phần dữ liệu đang tải hiện skeleton của từng màn.
+ * Chuyển tab không có hiệu ứng, trên mọi nền tảng. Hiệu ứng mờ dần từng làm Safari iPhone đứng hình (#224) và trên Android đôi khi
+ * kẹt ở độ đậm 0: bấm sang tab khác chỉ thấy màn trắng với Bobi và thanh tab. Phần dữ liệu đang tải hiện skeleton của từng màn;
+ * nền của vùng màn hình cùng màu nền app để nếu có chớp cũng không trắng tinh.
  */
-const TAB_ANIMATION = Platform.OS === 'web' ? 'none' : 'fade';
+const TAB_ANIMATION = 'none';
 
 const TABS: Record<string, { label: string; icon: TabIconName }> = {
   index: { label: 'Tổng quan', icon: 'home' },
@@ -210,7 +211,10 @@ function TabBar({ state, navigation }: TabBarProps) {
 export default function TabsLayout() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <Tabs screenOptions={{ headerShown: false, animation: TAB_ANIMATION }} tabBar={(p) => <TabBar {...p} />}>
+      <Tabs
+        screenOptions={{ headerShown: false, animation: TAB_ANIMATION, sceneStyle: { backgroundColor: colors.bg } }}
+        tabBar={(p) => <TabBar {...p} />}
+      >
         <Tabs.Screen name="index" />
         <Tabs.Screen name="invoices" />
         <Tabs.Screen name="sales" />

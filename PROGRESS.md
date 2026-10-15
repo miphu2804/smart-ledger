@@ -1,3 +1,11 @@
+### [2026-10-16 02:47 UTC+07:00] — [Fix] Tabs switch without fading; overview compact bar and best sellers tidied
+
+**Done:** On an Android phone, switching to Quản lý sometimes showed only a blank screen with Bobi and the tab bar. The bottom tabs still faded on phones (#224 turned the fade off only on the web) and the fade can get stuck at zero opacity (inferred from the screenshot; not reproducible on the web). Tabs now switch without animation everywhere, and the scene background is the app background so any gap is not pure white. On Tổng quan, the compact bar shown after scrolling looked as if its icons were cut: the dark purple parts of the small icons disappeared into the purple bar, and at 360 px the labels were cut ("Đọc …", "Chọ…"). Each compact button now shows its icon on a light rounded tile above the label (buttons 50 instead of 42 px tall, which still fits the 115 px bar). In "Bán chạy", product names and quantities use the same line height without Android font padding so the quantity no longer sits higher than the name.
+
+**Changed files:** `frontend/mobile/app/(tabs)/_layout.tsx`, `frontend/mobile/app/(tabs)/index.tsx` (`CompactAction`) — modified; this entry.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (only the 2 known errors in #230's files). Mock web build in headless Chrome at 360×780, 8/8: name and quantity centres in "Bán chạy" match (0 px), the four compact buttons show icon tiles with full labels inside the buttons, and 250 ms after tapping Đơn hàng, Bán hàng, Quản lý, Tổng quan and Quản lý again each screen's title is fully visible. **Not verified:** the blank-tab fix on an Android phone.
+
 ### [2026-10-16 02:46 UTC+07:00] — [Fix] Voice orders ask before saving a longer name as a shorter product
 
 **Done:** With "Cà phê" in the catalog, saying "cà phê sữa" recorded "Cà phê" and dropped "sữa". When the spoken name is longer than the matched product and no other product contains it, Đọc đơn now asks: pick the matched product, or "Thêm món mới" with the spoken name, which opens the usual add-to-catalog dialog (price, quantity, unit). The choice card is titled "Chọn món cho …" and its skip button is "Bỏ qua". Words like "nữa", "thôi", "luôn", "giúp", "dùm" are treated as filler so "hai cà phê nữa" still records 2 Cà phê.
