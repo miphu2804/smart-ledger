@@ -1,3 +1,11 @@
+### [2026-10-15 23:57 UTC+07:00] — [Feature] Replay the welcome guide from Settings
+
+**Done:** Settings has a "Xem lại hướng dẫn" button that opens the welcome guide (`AssistantIntroModal`) again from the Bobi step, as on the first sign-in. It opens on Settings itself, so closing it returns to Settings; "Hỏi đáp"/"Đọc đơn" on the first step close it and open those screens. The first-sign-in behaviour is unchanged.
+
+**Changed files:** `frontend/mobile/app/settings.tsx`, `docs/product/product-requirements.md` (`FR-025`, `AC-018`) — modified; this entry.
+
+**Check:** `tsc --noEmit` clean. Mock web build in headless Chrome, 3/3: Settings shows the button, it opens the guide on the Bobi step, closing returns to Settings. **Not verified:** a phone.
+
 ### [2026-10-15 18:00 UTC+07:00] — [Feature] In-app update for the R2 APK
 
 **Done:** A published production APK now offers to update itself. CD builds it with `ANDROID_VERSION_CODE=<run number>` (new, monotonic; before, every build was versionCode 1) and `EXPO_PUBLIC_UPDATE_URL`, uploads the APK, then writes `android/production/version.json`. On launch the app fetches that file, compares `versionCode` with the installed one and, if higher, shows a dialog that downloads the APK from `builds/` and opens Android's installer. No new native module: `expo-file-system` (existing FileProvider), `expo-intent-launcher` and `expo-application`. `REQUEST_INSTALL_PACKAGES` is declared only when the update URL is set. Stacked on #225 (`feat/mobile-release-builds`).
