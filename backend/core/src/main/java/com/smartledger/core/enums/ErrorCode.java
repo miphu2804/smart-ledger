@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 public enum ErrorCode {
     INVALID_PRODUCT_QUERY(HttpStatus.BAD_REQUEST, "invalid_product_query", "Use valid filters, page >= 0, size 1-100 and offset <= 2147483647."),
     INVALID_SALE_QUERY(HttpStatus.BAD_REQUEST, "invalid_sale_query", "Use valid filters, page >= 0, size 1-100 and offset <= 2147483647."),
+    SALE_SUMMARY_OVERFLOW(HttpStatus.CONFLICT, "sale_summary_overflow", "Filtered sale value exceeds the supported 64-bit VND range; narrow the filters."),
     INVALID_DRAFT_QUERY(HttpStatus.BAD_REQUEST, "invalid_draft_query", "Use valid filters, page >= 0, size 1-100 and offset <= 2147483647."),
     INVALID_CUSTOMER_QUERY(HttpStatus.BAD_REQUEST, "invalid_customer_query", "Use valid filters, page >= 0, size 1-100 and offset <= 2147483647."),
     INVALID_DEBT_QUERY(HttpStatus.BAD_REQUEST, "invalid_debt_query", "Use valid filters, page >= 0, size 1-100 and offset <= 2147483647."),

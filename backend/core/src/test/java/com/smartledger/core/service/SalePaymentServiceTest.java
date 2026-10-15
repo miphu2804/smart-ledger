@@ -18,6 +18,7 @@ import com.smartledger.core.entity.SaleItem;
 import com.smartledger.core.entity.Shop;
 import com.smartledger.core.enums.ErrorCode;
 import com.smartledger.core.enums.PaymentMethod;
+import com.smartledger.core.dto.response.SaleSummaryResponse;
 import com.smartledger.core.exception.BusinessException;
 import com.smartledger.core.repository.PaymentRepository;
 import com.smartledger.core.repository.SaleItemRepository;
@@ -118,6 +119,30 @@ class SalePaymentServiceTest {
                 .thenThrow(new BusinessException(ErrorCode.SHOP_ACCESS_DENIED));
 
         assertThatThrownBy(() -> saleService.list(token, "7", new Sales(0, 100, null, null, null, null)).items())
+                .isInstanceOfSatisfying(BusinessException.class, error ->
+                        assertThat(error.getErrorCode()).isEqualTo(ErrorCode.SHOP_ACCESS_DENIED));
+
+        verifyNoInteractions(saleRepository, saleItemRepository);
+    }
+
+    @Test
+    void summaryChecksTheSameShopGuardAndUsesOneAggregateRepositoryCall() {
+        var expected = new SaleSummaryResponse(3L, 2L, 1L, 90_000L, 10_000L);
+        when(saleRepository.aggregateSummary(any())).thenReturn(expected);
+
+        assertThat(saleService.summary(token, "7", SalesSummary.defaults())).isEqualTo(expected);
+
+        verify(shopService).requireOwnedActiveShop(token, "7");
+        verify(saleRepository).aggregateSummary(any());
+        verifyNoInteractions(saleItemRepository);
+    }
+
+    @Test
+    void summaryDoesNotReadAggregateWhenShopAccessFails() {
+        when(shopService.requireOwnedActiveShop(token, "7"))
+                .thenThrow(new BusinessException(ErrorCode.SHOP_ACCESS_DENIED));
+
+        assertThatThrownBy(() -> saleService.summary(token, "7", SalesSummary.defaults()))
                 .isInstanceOfSatisfying(BusinessException.class, error ->
                         assertThat(error.getErrorCode()).isEqualTo(ErrorCode.SHOP_ACCESS_DENIED));
 

@@ -1,11 +1,13 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useToast } from '../src/components/brand';
-import { Badge, Button, Card, Chips, EmptyState, Header, Row, Screen, T } from '../src/components/ui';
+import { FuseButton } from '../src/components/FuseButton';
+import { SwipeRow } from '../src/components/SwipeRow';
+import { Badge, Button, Card, EmptyState, Header, Row, Screen, T } from '../src/components/ui';
 import { errorMessage } from '../src/lib/errors';
-import { hhmm, relDay } from '../src/lib/format';
+import { ddmm, ddmmyyyy, hhmm, relDay } from '../src/lib/format';
 import {
   fromCoreNotification,
   isNotifUnread,
@@ -20,7 +22,7 @@ import { useLocalNotifications } from '../src/lib/useLocalNotifications';
 import { useCoreNotifications } from '../src/lib/useCoreNotifications';
 import { useApp } from '../src/store/AppStore';
 import { triggerFeedback } from '../src/lib/feedback';
-import { colors } from '../src/theme';
+import { colors, radius, shadow } from '../src/theme';
 
 type Filter = 'all' | 'unread' | NotifCategory;
 
@@ -54,22 +56,27 @@ export default function Notifications() {
 
   // Gom theo ngày: Hôm nay / Hôm qua / 3 ngày trước…
   const groups = useMemo(() => {
-    const out: { day: string; items: Notif[] }[] = [];
+    const out: { day: string; date: string | null; items: Notif[] }[] = [];
     for (const n of shown) {
-      const day = relDay(new Date(n.at));
+      const d = new Date(n.at);
+      const day = relDay(d);
       const last = out[out.length - 1];
       if (last?.day === day) last.items.push(n);
-      else out.push({ day, items: [n] });
+      // relDay đã là ngày (dd/mm) khi quá 7 ngày, khi đó không ghi lặp lại.
+      else out.push({ day, date: day === ddmm(d) ? null : ddmmyyyy(d), items: [n] });
     }
     return out;
   }, [shown]);
 
   const count = (c: NotifCategory) => unread.filter((n) => n.category === c).length;
-  const withCount = (label: string, n: number) => (n ? `${label} · ${n}` : label);
 
-  const open = (n: Notif) => {
+  const markRead = (n: Notif) => {
     if (n.coreId != null) core.markRead([n.coreId]).catch((e) => toast(errorMessage(e), 'err'));
     else app.markNotifsRead([n.id]);
+  };
+
+  const open = (n: Notif) => {
+    markRead(n);
     triggerFeedback('selection');
     if (n.href) router.push(n.href);
   };
@@ -81,35 +88,29 @@ export default function Notifications() {
   };
 
   return (
-    <Screen>
+    <Screen onEndReached={core.hasMore && !core.moreError ? core.loadMore : undefined}>
       <Header
         title="Thông báo"
         subtitle={!ready ? undefined : unreadTotal ? `${unreadTotal} thông báo chưa đọc` : 'Không có thông báo mới'}
         right={
           ready && unreadTotal ? (
-            <Pressable
-              onPress={readAll}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Đọc hết thông báo"
-              style={({ pressed }) => [styles.readAll, pressed && { opacity: 0.75 }]}
-            >
-              <Feather name="check-circle" size={14} color={colors.primary} />
-              <T w="bold" size={12.5} color={colors.primary}>
-                Đọc hết
-              </T>
-            </Pressable>
+            <FuseButton label="Đọc hết" icon="check-circle" onCommit={readAll} />
           ) : null
         }
       />
 
-      <Chips<Filter>
+      <FilterPills
         value={filter}
         onChange={setFilter}
         options={[
-          { key: 'all', label: 'Tất cả' },
-          { key: 'unread', label: withCount('Chưa đọc', unreadTotal) },
-          ...NOTIF_CATEGORIES.map((c) => ({ key: c, label: withCount(notifCategoryMeta[c].label, count(c)) })),
+          { key: 'all', label: 'Tất cả', icon: 'grid' },
+          { key: 'unread', label: 'Chưa đọc', icon: 'bell', count: unreadTotal },
+          ...NOTIF_CATEGORIES.map((c) => ({
+            key: c,
+            label: notifCategoryMeta[c].label,
+            icon: notifCategoryMeta[c].icon,
+            count: count(c),
+          })),
         ]}
       />
 
@@ -138,18 +139,23 @@ export default function Notifications() {
               <View key={g.day}>
                 <T w="bold" size={13} color={colors.muted} style={{ marginTop: 18, marginBottom: 8 }}>
                   {g.day}
+                  {g.date ? ` · ${g.date}` : ''}
                 </T>
-                <Card style={{ paddingVertical: 4, paddingHorizontal: 0 }}>
-                  {g.items.map((n, i) => (
-                    <NotifRow
-                      key={n.id}
-                      n={n}
-                      unread={isNotifUnread(n, read)}
-                      showCategory={filter === 'all' || filter === 'unread'}
-                      last={i === g.items.length - 1}
-                      onPress={() => open(n)}
-                    />
-                  ))}
+                {/* Card giữ bóng (doc: thẻ chính có bóng mềm + viền); lớp trong cắt nút vuốt theo góc bo. */}
+                <Card style={{ padding: 0, ...shadow(2) }}>
+                  <View style={styles.clip}>
+                    {g.items.map((n, i) => (
+                      <NotifRow
+                        key={n.id}
+                        n={n}
+                        unread={isNotifUnread(n, read)}
+                        showCategory={filter === 'all' || filter === 'unread'}
+                        last={i === g.items.length - 1}
+                        onPress={() => open(n)}
+                        onMarkRead={() => markRead(n)}
+                      />
+                    ))}
+                  </View>
                 </Card>
               </View>
             ))
@@ -168,17 +174,15 @@ export default function Notifications() {
           {core.hasMore ? (
             <View style={{ marginTop: 18, marginBottom: 8 }}>
               {core.moreError ? (
-                <T size={12.5} color={colors.red} style={{ textAlign: 'center', marginBottom: 8 }}>
-                  {core.moreError}
-                </T>
-              ) : null}
-              <Button
-                title={core.moreError ? 'Thử lại' : 'Tải thêm'}
-                icon="chevron-down"
-                variant="outline"
-                loading={core.loadingMore}
-                onPress={core.loadMore}
-              />
+                <>
+                  <T size={12.5} color={colors.red} style={{ textAlign: 'center', marginBottom: 8 }}>
+                    {core.moreError}
+                  </T>
+                  <Button title="Thử lại" icon="refresh-cw" variant="outline" onPress={core.loadMore} />
+                </>
+              ) : (
+                <ActivityIndicator color={colors.primary} />
+              )}
             </View>
           ) : coreNotifs.length ? (
             <T size={12} color={colors.faint} style={{ textAlign: 'center', marginTop: 18, marginBottom: 8 }}>
@@ -191,22 +195,77 @@ export default function Notifications() {
   );
 }
 
+/** Giờ cho thông báo hôm nay, ngày + giờ cho thông báo cũ hơn để biết chính xác xảy ra hôm nào. */
+function timeLabel(at: number | string | Date) {
+  const d = new Date(at);
+  return relDay(d) === 'Hôm nay' ? hhmm(d) : `${ddmm(d)} · ${hhmm(d)}`;
+}
+
+/** Pill bộ lọc cùng khuôn với bộ lọc kỳ ở màn Đơn hàng (cao 32, nền tím khi chọn). */
+function FilterPills<K extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { key: K; label: string; icon: React.ComponentProps<typeof Feather>['name']; count?: number }[];
+  value: K;
+  onChange: (k: K) => void;
+}) {
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={styles.pills}>
+      {options.map((o) => {
+        const active = o.key === value;
+        const ink = active ? colors.brandInk : colors.inkSecondary;
+        return (
+          <View key={o.key}>
+            <Pressable
+              onPress={() => {
+                triggerFeedback('selection');
+                onChange(o.key);
+              }}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={o.count ? `${o.label}, ${o.count} chưa đọc` : o.label}
+              style={({ pressed }) => [styles.pill, active && styles.pillActive, pressed && { opacity: 0.8 }]}
+            >
+              <Feather name={o.icon} size={14} color={ink} />
+              <T w={active ? 'bold' : 'medium'} size={13} color={ink} numberOfLines={1}>
+                {o.label}
+              </T>
+            </Pressable>
+            {o.count ? (
+              // Số chưa đọc nằm đè góc pill (như mail) nên pill không phình rộng khi có số.
+              <View pointerEvents="none" style={styles.badge}>
+                <T w="bold" size={10.5} color={colors.white}>
+                  {o.count > 99 ? '99+' : o.count}
+                </T>
+              </View>
+            ) : null}
+          </View>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
 function NotifRow({
   n,
   unread,
   showCategory,
   last,
   onPress,
+  onMarkRead,
 }: {
   n: Notif;
   unread: boolean;
   showCategory: boolean;
   last: boolean;
   onPress: () => void;
+  onMarkRead: () => void;
 }) {
   const meta = notifCategoryMeta[n.category];
   const tint = n.urgent ? colors.red : meta.color;
-  return (
+  const body = (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
@@ -224,7 +283,7 @@ function NotifRow({
             {n.title}
           </T>
           <T size={12} color={colors.faint}>
-            {hhmm(new Date(n.at))}
+            {timeLabel(n.at)}
           </T>
         </Row>
         <T size={12.5} color={colors.muted} style={{ marginTop: 2, lineHeight: 18 }} numberOfLines={2}>
@@ -241,18 +300,47 @@ function NotifRow({
       {unread ? <View style={styles.dot} /> : null}
     </Pressable>
   );
+  // Chỉ thông báo chưa đọc mới có nút "Đã đọc"; thông báo đã đọc không có gì để vuốt.
+  return unread ? (
+    <SwipeRow actionLabel="Đã đọc" actionIcon="check" onCommit={onMarkRead}>
+      {body}
+    </SwipeRow>
+  ) : (
+    body
+  );
 }
 
 const styles = StyleSheet.create({
-  readAll: {
+  clip: { borderRadius: radius.md - 1, overflow: 'hidden' },
+  // paddingTop chừa chỗ cho badge nhô lên khỏi pill, vì ScrollView ngang cắt nội dung tràn ra ngoài.
+  pills: { gap: 6, paddingRight: 16, paddingTop: 7 },
+  badge: {
+    position: 'absolute',
+    top: -7,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.data.expense,
+  },
+  pill: {
+    height: 32,
+    minWidth: 64,
+    borderRadius: 16,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 5,
-    backgroundColor: colors.primarySoft,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 10,
+    paddingHorizontal: 12,
   },
+  pillActive: { backgroundColor: colors.brand, borderColor: colors.brand },
+
   coreError: {
     flexDirection: 'row',
     alignItems: 'center',

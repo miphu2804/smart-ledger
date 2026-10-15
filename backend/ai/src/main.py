@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 import pydantic_ai
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
+from pydantic_ai import Embedder
 
 from src.agent.errors import ConversationNotFoundError, GuardrailError
 from src.agent.guardrails import GuardrailLimits
@@ -13,6 +14,8 @@ from src.agent.service import AgentService
 from src.app_config import app_config
 from src.infra.postgre_db_client import PostgreDBClient
 from src.infra.redis_db_client import RedisDBClient
+from src.memory.repository import AgentMemoryRepository
+from src.memory.service import AgentMemoryService
 from src.observability import configure_tracing
 from src.providers.factory import build_chat_model
 from src.restock.service import RestockService
@@ -42,6 +45,37 @@ def build_shop_data(reader: PostgreDBClient) -> ShopDataRepository | None:
     )
 
 
+def build_memory_service(
+    chat_model, postgres: PostgreDBClient
+) -> AgentMemoryService | None:
+    if not app_config.AGENT_MEMORY_ENABLED:
+        return None
+    if chat_model is None or postgres.sessions is None:
+        logger.warning("memory enabled without a chat model or postgres; memory off")
+        return None
+    try:
+        # Resolved now, so a missing `memory` dependency group shows at startup rather
+        # than on the first chat; the weights still load on first use.
+        embedder = Embedder(
+            f"sentence-transformers:{app_config.AGENT_MEMORY_EMBEDDING_MODEL}",
+            settings={"sentence_transformers_normalize_embeddings": True},
+            defer_model_check=False,
+        )
+    except ImportError:
+        logger.error("memory enabled but the memory dependency group is missing")
+        return None
+    return AgentMemoryService(
+        chat_model,
+        AgentMemoryRepository(postgres),
+        embedder,
+        allowed_types=frozenset(
+            item.strip()
+            for item in app_config.AGENT_MEMORY_TYPES.split(",")
+            if item.strip()
+        ),
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     postgres = PostgreDBClient(
@@ -58,6 +92,8 @@ async def lifespan(app: FastAPI):
     conversations = AgentConversationRepository(postgres)
     app.state.conversations = conversations
     shop_data = build_shop_data(reader)
+    memory = build_memory_service(chat_model, postgres)
+    app.state.memory = memory
     app.state.agent = AgentService(
         chat_model,
         conversations,
@@ -70,6 +106,7 @@ async def lifespan(app: FastAPI):
         ),
         shop_data=shop_data,
         restock=RestockService(shop_data) if shop_data else None,
+        memory=memory,
         history_turns=app_config.AGENT_HISTORY_TURNS,
     )
     try:

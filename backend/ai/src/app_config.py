@@ -74,6 +74,17 @@ class AppConfig(BaseSettings):
     # most recent owner/assistant exchanges sent to the model with each turn
     AGENT_HISTORY_TURNS: int = Field(default=100, gt=0)
 
+    # long-term memory across conversations (ADR-0002); off until the PO approves it.
+    # Needs the `memory` dependency group and the agent_memories migration, whose
+    # vector size must match the embedding model.
+    AGENT_MEMORY_ENABLED: bool = False
+    # comma-separated memory types the model may write on its own; the rest stay
+    # unwritten until the PO approves them
+    AGENT_MEMORY_TYPES: str = "preference,procedural"
+    AGENT_MEMORY_EMBEDDING_MODEL: str = (
+        "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    )
+
     # model gateway shared by every model: OpenAI, or an OpenAI-compatible gateway
     # such as OpenCode Go (https://opencode.ai/inference/go/v1)
     OPENAI_API_KEY: str | None = None

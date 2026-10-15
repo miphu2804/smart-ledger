@@ -55,7 +55,7 @@ public final class OwnerListSpecifications {
         };
     }
 
-    public static Specification<Sale> sales(long shopId, Sales filter) {
+    public static Specification<Sale> sales(long shopId, SaleFilter filter) {
         return (root, query, cb) -> {
             List<Predicate> p = new ArrayList<>();
             p.add(cb.equal(root.get("shopId"), shopId));

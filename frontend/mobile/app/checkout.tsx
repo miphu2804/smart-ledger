@@ -427,7 +427,13 @@ export default function Checkout() {
             const ex = cur.find((x) => !x.custom && x.productId === li.productId);
             return ex ? cur.map((x) => (x === ex ? { ...x, qty: x.qty + 1 } : x)) : [...cur, li];
           });
-          toast(`Đã thêm ${li.name}`);
+          toast(`Đã thêm ${li.name}`, 'ok', {
+            actionLabel: 'Hoàn tác',
+            onAction: () =>
+              setItems((cur) =>
+                cur.flatMap((x) => (x.productId !== li.productId ? [x] : x.qty > 1 ? [{ ...x, qty: x.qty - 1 }] : [])),
+              ),
+          });
         }}
       />
 

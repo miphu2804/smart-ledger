@@ -93,6 +93,8 @@ export interface ChatMessage {
   id: string;
   from: 'user' | 'ai';
   text: string;
+  /** Ghi nhớ trợ lý đã dùng cho câu trả lời này; chỉ có ở lượt vừa chat, không lưu vào lịch sử. */
+  memories?: AgentMemoryUsed[];
 }
 
 // ---- Trợ lý AI (Agent chat) — khớp docs/contracts/api-contracts.md §5, AI dùng snake_case ----
@@ -105,6 +107,19 @@ export interface AgentChatMessageView {
   conversation_id: number;
   message_id: number;
   answer: string;
+}
+
+/** Một ghi nhớ trong sự kiện SSE `memory` */
+export interface AgentMemoryUsed {
+  id: number;
+  memory_type: string;
+  content: string;
+}
+
+export interface AgentMemorySettings {
+  memory_enabled: boolean;
+  /** false khi trợ lý chưa bật ghi nhớ dài hạn cho cả hệ thống */
+  available: boolean;
 }
 
 export interface AgentConversationSummary {
@@ -211,6 +226,19 @@ export interface SaleDraftView {
   expiresAt: string;
   confirmedSaleId: number | null;
   items: SaleDraftItemView[];
+}
+
+/**
+ * Tổng của mọi đơn khớp bộ lọc của `GET /sales` (`GET /sales/summary`, CORE-014), không phụ thuộc trang đã tải. Theo trạng
+ * thái hiện tại của đơn: `confirmedSalesVnd` là tổng tiền (sau giảm giá) của đơn chưa huỷ, kể cả bán nợ; không phải tiền
+ * thực thu và khác `netRevenueVnd` của báo cáo kỳ (báo cáo trừ đơn huỷ theo lúc huỷ).
+ */
+export interface SaleSummaryView {
+  matchedOrderCount: number;
+  confirmedOrderCount: number;
+  voidedOrderCount: number;
+  confirmedSalesVnd: number;
+  voidedSalesVnd: number;
 }
 
 export interface SaleItemView {

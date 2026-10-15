@@ -1,16 +1,22 @@
 package com.smartledger.core.controller;
 
 import com.smartledger.core.dto.request.OwnerListQuery.Sales;
+import com.smartledger.core.dto.request.OwnerListQuery.SalesSummary;
 import com.smartledger.core.dto.request.SaleVoidRequest;
 import com.smartledger.core.dto.response.PageResponse;
 import com.smartledger.core.dto.response.SaleRefundResponse;
 import com.smartledger.core.dto.response.SaleResponse;
+import com.smartledger.core.dto.response.SaleSummaryResponse;
 import com.smartledger.core.dto.response.SaleVoidResponse;
 import com.smartledger.core.enums.SaleStatus;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.SaleService;
 import com.smartledger.core.service.SaleVoidService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import com.smartledger.core.exception.ApiErrorResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -57,6 +63,35 @@ public class SaleController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to) {
         return service.list(token, shopId, new Sales(page, size, q, saleStatus, from, to));
+    }
+
+    @GetMapping("/summary")
+    @Operation(summary = "Summarize all sales matching the list filters, without pagination",
+            description = "Uses the same q/saleStatus predicates as GET /sales. from/to require an ISO-8601 "
+                    + "timestamp with an offset: soldAt >= from, soldAt < to. Either bound may be omitted; "
+                    + "no bounds means all history. Filters are applied before COUNT/SUM, not to a page. "
+                    + "Values use current CONFIRMED/VOIDED status; not cash collected or report netRevenueVnd "
+                    + "(which adjusts by voidedAt). Counts include VOIDED, but confirmedSalesVnd does not. "
+                    + "Separate list and summary HTTP requests do not share a snapshot.")
+    @ApiResponse(responseCode = "200", description = "Filtered order counts and sale-value totals",
+            content = @Content(schema = @Schema(implementation = SaleSummaryResponse.class)))
+    @ApiResponse(responseCode = "400", description = "invalid_sale_query or validation_failed",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    @ApiResponse(responseCode = "401", description = "unauthorized",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    @ApiResponse(responseCode = "403", description = "shop_access_denied, account_disabled or shop_inactive",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    @ApiResponse(responseCode = "404", description = "auth_profile_not_found or shop_not_found",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    @ApiResponse(responseCode = "409", description = "sale_summary_overflow: narrow the filters",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    public SaleSummaryResponse summary(@AuthenticationPrincipal VerifiedFirebaseToken token,
+            @RequestHeader("X-Shop-Id") String shopId,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) SaleStatus saleStatus,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to) {
+        return service.summary(token, shopId, new SalesSummary(q, saleStatus, from, to));
     }
 
     @GetMapping("/{saleId}")

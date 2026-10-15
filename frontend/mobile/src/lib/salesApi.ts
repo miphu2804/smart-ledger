@@ -1,7 +1,7 @@
-import type { PaymentView, SaleDraftView, SaleRefundView, SaleView, SaleVoidView } from '../data/types';
+import type { PaymentView, SaleDraftView, SaleRefundView, SaleSummaryView, SaleView, SaleVoidView } from '../data/types';
 import { ApiError, apiRequest } from './api';
 import { createIdempotentSender } from './idempotency';
-import { fetchAllPages, fetchPage, type PageResponse } from './pageApi';
+import { fetchAllPages, fetchPage, type PageResponse, withQuery } from './pageApi';
 import type { SaleVoidRequest } from './saleVoid';
 
 // Mỗi loại thao tác ghi tiền một bộ gửi: mất mạng rồi bấm lại cùng nội dung dùng lại Idempotency-Key cũ nên Core
@@ -56,6 +56,9 @@ export type SaleListQuery = { from?: string; to?: string; q?: string; saleStatus
 
 export const saleApi = {
   list: (): Promise<SaleView[]> => fetchAllPages<SaleView>('/sales'),
+  /** Số đơn và tổng tiền của mọi đơn khớp cùng bộ lọc với `page` (Core cộng, không cần tải hết các trang). */
+  summary: (query: SaleListQuery = {}): Promise<SaleSummaryView> =>
+    apiRequest<SaleSummaryView>(withQuery('/sales/summary', { ...query }), { withShop: true }),
   /** Một trang đơn theo bộ lọc, mới bán trước (soldAt giảm, rồi id giảm). */
   page: (page: number, size: number, query: SaleListQuery = {}): Promise<PageResponse<SaleView>> =>
     fetchPage<SaleView>('/sales', page, size, { ...query }),

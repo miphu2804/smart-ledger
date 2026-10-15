@@ -5,12 +5,15 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartledger.core.config.SecurityConfiguration;
 import com.smartledger.core.dto.response.AgentChatResponse;
 import com.smartledger.core.enums.ErrorCode;
@@ -121,6 +124,34 @@ class AgentControllerWebTest {
                         .content("{\"message\":\"hi\"}"))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("input_too_long"));
+    }
+
+    @Test
+    void memorySettingsAreReadAndWrittenInSnakeCase() throws Exception {
+        when(agentService.getMemorySettings(any(), eq("7"))).thenReturn(settings(true));
+        when(agentService.setMemoryEnabled(any(), eq("7"), eq(false))).thenReturn(settings(false));
+
+        mvc.perform(get("/api/v1/agent/memory/settings").header("Authorization", "Bearer valid-token")
+                        .header("X-Shop-Id", "7"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.memory_enabled").value(true))
+                .andExpect(jsonPath("$.available").value(true));
+        mvc.perform(put("/api/v1/agent/memory/settings").header("Authorization", "Bearer valid-token")
+                        .header("X-Shop-Id", "7").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"memory_enabled\":false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.memory_enabled").value(false));
+    }
+
+    @Test
+    void memorySettingsRejectAMissingFlag() throws Exception {
+        mvc.perform(put("/api/v1/agent/memory/settings").header("Authorization", "Bearer valid-token")
+                        .header("X-Shop-Id", "7").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    private static com.fasterxml.jackson.databind.JsonNode settings(boolean enabled) {
+        return new ObjectMapper().createObjectNode().put("memory_enabled", enabled).put("available", true);
     }
 
     @Test

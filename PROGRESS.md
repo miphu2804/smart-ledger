@@ -1,3 +1,138 @@
+### [2026-10-15 21:00 UTC+07:00] — [Fix] Notification swipe-to-read works on iOS, unread counts move to pill badges
+
+**Done:** On iOS the swipe-to-read row (#218) did not move at all. `SwipeRow` now refuses to give the gesture back once it has taken a horizontal drag (`onPanResponderTerminationRequest: () => false`). The action is a lighter red that fills the whole revealed area (Gmail style), and the card no longer pads the list vertically so the action meets the rounded corner. The filter pills show unread counts as a badge on the pill corner instead of "· N" text, so a pill no longer grows when it has unread items.
+
+**Changed files:** `frontend/mobile/src/components/SwipeRow.tsx`, `frontend/mobile/app/notifications.tsx` — modified; this entry.
+
+**Flow explained:** drag right-to-left past 10 pt → `SwipeRow` becomes the responder and keeps it → release past 60% of the width or tap the action marks the notification read; a smaller drag leaves the action open. `FilterPills` takes an optional `count` per option and draws the badge over the pill corner (`99+` above 99).
+
+**Check:** `tsc --noEmit` clean. iOS simulator (iPhone 17 Pro) against staging Core: without the change the row did not move; with it the swipe opens the action, a full swipe and a tap on the action each mark the row read (unread 7 → 6 → 5), and pills show badges 7 and 6 without growing. **Not verified:** Android, the `99+` badge, a badge clipped at the right edge while scrolling the pills.
+
+### [2026-10-15 20:10 UTC+07:00] — [Fix] Web on iPhone: Sales grid fills the width, tabs switch without a blank screen
+
+**Done:** The team sent screenshots and a screen recording from Safari on an iPhone: on Sales the right column of product cards stopped about 17 pt short of the edge, so the grid looked shifted, and switching tabs faded through overlapping and then blank screens. The card width was a pixel value computed from the list width measured when the screen appeared; on Safari that measurement can land while the tab's fade is running and come out smaller (inferred: not reproducible in Chrome, where every screen measures 393 px). Cards are now 50% of the row each (10 px outer margins and an 8 px gap as before), so nothing is measured. On the web the tab switch no longer animates (the fade runs in JavaScript there and stalls on Safari); the phone app keeps the fade. While a list loads for the first time, Sales shows skeleton product cards (or rows in list view) and Orders a skeleton summary card and order rows, instead of a spinner. The skeletons pulse with one animation for the whole block instead of one per block, which matters on the web where each animation runs in JavaScript.
+
+**Changed files:** `frontend/mobile/app/pos.tsx`, `frontend/mobile/app/(tabs)/invoices.tsx`, `frontend/mobile/app/(tabs)/_layout.tsx` — modified; `frontend/mobile/src/components/ListSkeleton.tsx` — new; this entry.
+
+**Flow explained:** the Sales `FlatList` renders each grid item in a 50% cell padded 4 px on the inner side (`gridCellLeft`/`gridCellRight`); the measured `listWidth` and window-based estimate are gone → `TAB_ANIMATION` is `'none'` on the web and `'fade'` elsewhere → `ProductGridSkeleton` and `RowListSkeleton` wrap static grey blocks in one pulsing `Animated.View`.
+
+**Check:** `tsc --noEmit` clean. Mock-mode web build in headless Chrome at 393 px, 6 of 6: 120 ms after tapping Sales, Orders, Quản lý and Sales again the new screen's title is fully opaque; after switching tabs and after list → grid the cards sit at 10 px from both edges with an 8 px gap and equal 183 px columns. **Not verified:** Safari on an iPhone, where the bug was seen; the skeletons on screen (the mock loads instantly).
+
+### [2026-10-15 16:30 UTC+07:00] — [Feature] Orders summary card uses Core's filtered sales summary (#221)
+
+**Done:** Core added `GET /api/v1/sales/summary` (CORE-014, #221), which counts and totals every sale matching the same filter as the paged sales list. The Orders tab now uses it for "Tất cả", a custom date range and a search: "Tất cả" shows the all-time total again ("Tổng doanh thu" instead of "Doanh thu năm nay"), any custom range has a revenue figure even when it reaches into last year, and a search shows the revenue of its results instead of the order count only. The preset periods (Hôm nay, Hôm qua, 7 ngày, Tháng này) keep Core's period report, as #221 asks not to change the meaning of the period cards. The summary's revenue is the value of the matching sales that are not voided now; the period report subtracts voids at the time they happen, so the two differ only when a sale from an earlier period is voided in the period shown. Day header totals are unchanged.
+
+**Changed files:** `frontend/mobile/app/(tabs)/invoices.tsx`, `frontend/mobile/src/lib/salesApi.ts`, `frontend/mobile/src/data/types.ts`, `frontend/mobile/src/lib/mockCore.ts` — modified; this entry.
+
+**Flow explained:** without a preset period (or while searching) the Orders tab calls `saleApi.summary` with the same `from`/`to`/`q` as the list and shows `confirmedSalesVnd`; with a preset period it still calls `reportApi.summary` and shows `netRevenueVnd` → day headers keep the period series, or this year's series for "Tất cả" and a custom range inside this year → the mock Core answers `/sales/summary` from the same filter as `/sales`.
+
+**Check:** `tsc --noEmit` clean. Mock-mode web build in headless Chrome, 6 of 6: "Tất cả" 1.146.000đ, "7 ngày" and a 30-day range have revenue, a search for "Sting" gives 3 orders and 613.000đ, a search with no match gives 0đ, clearing the search restores the total. Android emulator against staging Core (hand-repacked staging APK): "Tất cả" shows 2 orders and 11.567.567.232đ, the voided order not counted. **Not verified:** search and custom ranges against the real Core (the emulator was taken by another app mid-test); iOS.
+
+### [2026-10-15] — [Core] CORE-014 filtered sale counts and values (#213)
+
+**Done:** Added `GET /api/v1/sales/summary` on `feat/sales-filter-summary`, based on staging `df69819642fc420b7686d6f66073b946df2f13c2`. OWNER totals cover the entire matching sale set with the same q/status/soldAt filters as the paginated list. The response separates current CONFIRMED/VOIDED counts and discounted sale values, includes partial/debt sales, excludes drafts, and returns five zeros for an empty set. Per-status monetary overflow returns 409 `sale_summary_overflow`. No new schema, migration or FE/AI implementation.
+
+**Changed files:** Core Sale controller/service/repository and shared list filter/specification; new `SaleSummaryResponse` and repository fragment/implementation; Core query/service/web/OpenAPI/PostgreSQL tests, PostgreSQL CI gate and README. API contract, PRD `FR-033`/`AC-069`–`AC-072`, technical design and this new entry were aligned with user approval; previous progress entries are preserved.
+
+**Flow explained:** verified Firebase principal → active OWNER/owned ACTIVE shop guard → shared list predicate → one PostgreSQL COUNT/SUM tuple → checked signed-64-bit conversion → response. Item search uses EXISTS, so multiple matching items cannot multiply sale totals. Summary filters by soldAt and current status; report net revenue keeps its existing soldAt/voidedAt event timing. Separate list/summary requests do not share a snapshot. Deploy Core before FE adopts this endpoint.
+
+**Check:** Core commit `a8be3c0` was rebased onto the staging base above without conflict. `mvnw.cmd -o clean verify` against a dedicated disposable PostgreSQL 16 container passed **1,178 tests, 0 failures/errors/skipped**; the required PostgreSQL gate passed, and its own 12 tests passed. The 32-test sales/list suite covers combined filters/offset boundaries, empty sets, discounts/partial/debt sales, cross-period void, role/shop guards and Long.MAX_VALUE/overflow for both statuses using valid PAID fixtures. The 10,000-sale/50,000-item summary used one data SELECT (excluding auth/shop), with an 11 ms local observation in the post-rebase run, not a production SLA. Temporary test containers/data were removed. Documentation-only follow-up was checked separately; Firebase/FE/staging UAT remains pending.
+
+### [2026-10-15 12:10 UTC+07:00] — [Feature] Agent memory visibility and owner switch
+
+**Done:** After Sakana Chat's "My Fish": recalls now record `last_used_at` and `use_count`, and decay counts from the last use. A new fact can supersede a recalled one (`superseded_by`; deleting the newer fact's chat revives the old one, so AC-022 holds). Only `preference` and `procedural` are written (`AGENT_MEMORY_TYPES`), and facts with a Vietnamese phone number are dropped. The stream sends a `memory` event before the first delta; mobile shows a "Đã dùng ghi nhớ" chip. Owners get an on/off switch (`agent_memory_settings`, default on; off stops recall and writes, deletes nothing) through AI `GET`/`PUT /internal/v1/agent/memory/settings`, a Core proxy (owner-approved exception to "do not modify Core") and a Settings row. All still behind `AGENT_MEMORY_ENABLED` and PO approval. The e2e run found that the extractor and summarizer sent no `x-opencode-session`, so the gateway refused every memory write with 400; they now pass `session_settings` like `drafts`. Branch rebased onto `origin/staging`.
+
+**Changed files:**
+- `supabase/migrations/20261015000000_agent_memory_visibility.sql` — created; applied to staging `public` with the owner's approval (rollback: `DROP TABLE agent_memory_settings; ALTER TABLE agent_memories DROP COLUMN superseded_by, DROP COLUMN use_count, DROP COLUMN last_used_at;`)
+- `backend/ai/src/{memory/repository,memory/service,agent/service,agent/router,agent/schema,prompt_templates/memory,app_config,main}.py`, `backend/ai/.env.example`, `backend/ai/tests/{conftest,unit_tests/test_agent_memory,integration_tests/test_memory_repository}.py`, `backend/ai/README.md` — modified
+- `backend/core/.../{AgentController,AgentService,AgentServiceImpl,AgentControllerWebTest,AgentServiceTest}.java` — modified; `AgentMemorySettingsRequest.java` — created
+- `frontend/mobile/{app/ai.tsx,app/settings.tsx,src/lib/agentApi.ts,src/data/types.ts}` — modified
+- `docs/contracts/api-contracts.md`, `docs/architecture/adr/0002-agent-long-term-memory.md` — modified
+
+**Flow explained:** read: switch on? → search live rows → record use → prompt, and the memories go out as a `memory` event. Write: switch on? → extractor sees `[id] fact` lines → drop disallowed types and phone numbers → keep `replaces` only for recalled ids → insert and mark the old row superseded.
+
+**Check:** after the rebase, AI ruff clean and 359 passed / 52 skipped (unit 319 after the session fix); `test_memory_repository.py` 10 passed against a throwaway schema on staging Supabase (pgvector), no schema left; mobile `npm run typecheck` passes; Core `mvnw test -Dtest=Agent*` 22/22 on JDK 21. E2E on the iOS simulator (local AI + Core on staging DB, gateway `claude-haiku-5-5`, shop 6): a stated preference was stored as one `preference` fact (importance 0.85); a new chat asking "Doanh thu 7 ngày qua?" showed the "Đã dùng ghi nhớ" chip and answered in bullets rounded to thousands (`use_count` 1); with the Settings switch off (`agent_memory_settings` row false) the same question showed no chip, unrounded figures and wrote nothing. Test chats deleted through the AI API, 0 memories left, switch back on. **Not verified:** Android; a real phone; summaries by the real model.
+
+### [2026-10-15 10:57 UTC+07:00] — [Feature] Agent memory decay, 7-day summaries and shop time
+
+**Done:** Built the two Tencent steps that were missing. Recall now re-ranks the 20 nearest memories by relevance × `importance * exp(-0.01 * age in days)`. After each memory write, memories older than 7 days are grouped by conversation and shop day; the chat model merges each group (at most 3 per turn) into 1–5 facts that replace it in one transaction, keep the latest date and carry `metadata.summarized_from`. Added the shared `get_time` (Asia/Ho_Chi_Minh): memory dates and the extraction's "today" use it, and every agent run ends its instructions with the current shop time. Corrected ADR-0002 where it had drifted from the code (no `MemoryWriter`, local embedding instead of an embedding API, the schema sketch, the memory types). Removed `backend/ai/evals/` and the `eval` dependency group at the user's request.
+
+**Changed files:** `backend/ai/src/utils.py` — created; `backend/ai/src/memory/{repository,service}.py`, `src/agent/service.py`, `src/prompt_templates/{memory,shop_agent,__init__}.py`, `tests/support.py`, `tests/unit_tests/{test_agent_memory,test_agent_service,test_restock_tool,test_shop_data_tool}.py`, `tests/integration_tests/test_memory_repository.py`, `backend/ai/README.md`, `backend/ai/pyproject.toml`, `uv.lock`, `docs/architecture/adr/0002-agent-long-term-memory.md`, `docs/contracts/api-contracts.md` — modified; `backend/ai/evals/` — deleted.
+
+**Flow explained:** read: embed message → 20 nearest unexpired by cosine (shop + user) → re-rank by relevance × decay → top 5 dated in shop time. Write: extract facts (with today) → embed → insert → find old groups → model merges → delete group and insert summary in one transaction (a group another run already changed is left alone).
+
+**Check:** unit suite 279 passed, same 2 `test_provider_factory.py` failures; `test_memory_repository.py` 4 passed against a throwaway schema on staging (decay order, summary swap, second swap refused, cascade), no schema left. Live run on the local AI (staging DB, gateway model): it answered "thứ Năm, ngày 15 tháng 10 năm 2026, 10 giờ 55"; "hôm qua máy đá hỏng" was stored as an episodic fact dated 14/10/2026 and recalled in a new chat; test chats deleted, 0 memories left. **Not verified:** a summary produced by the real model (needs 7-day-old data; covered by unit and integration tests only); the diagram still shows decay and summaries as proposed.
+
+### [2026-10-14 23:10 UTC+07:00] — [Fix] Agent memory verified end to end on staging
+
+**Done:** Applied `20261014000000_agent_memories.sql` to staging (the user ran it; rollback is `DROP TABLE agent_memories;`). Ran the AI app locally with `AGENT_MEMORY_ENABLED=true` against staging's database and the gateway model staging uses (`claude-haiku-5-5` over the Anthropic API). The first run found two bugs: the gateway's Anthropic models reject `NativeOutput`, so every fact extraction failed; and the model told the owner it cannot remember between chats. Fixed by extracting with `PromptedOutput(MemoryFacts)` and a fourth rule in `MEMORY_PROMPT`.
+
+**Changed files:** `backend/ai/src/memory/service.py`, `backend/ai/src/prompt_templates/memory.py` — modified.
+
+**Flow explained:** unchanged; extraction now asks for JSON in the prompt instead of the provider's structured-output mode.
+
+**Check:** e2e through `POST /internal/v1/agent/chat` (shop 5): turn 1 stored one `semantic` fact (importance 0.7) under the right shop, user and conversation; turn 2 in a new chat answered "anh nhập gạo ở chú Tư chợ Bà Chiểu" from memory, and the stored user message stayed raw; shop 4 asking the same got no such fact; deleting the test chats removed their memories; staging left with 0 memory rows. Unit suite 312 passed, same 2 `test_provider_factory.py` failures. **Not verified:** this branch's factory cannot build Anthropic models (that is on `origin/staging`, #204), so the test patched `build_chat_model` in a scratch launcher to mirror staging's.
+
+### [2026-10-14 23:00 UTC+07:00] — [Refactor] Agent memory repository on the SQLAlchemy ORM
+
+**Done:** `AgentMemoryRepository` now matches the other AI repositories: an `AgentMemory` mapped class on the shared `Base`, `select(...)` for Tencent's search (cosine distance through `pgvector.sqlalchemy`, same filters and order) and `session.add_all` for inserts. The raw `text()` SQL and the hand-built vector literal are gone.
+
+**Changed files:** `backend/ai/src/memory/repository.py` — modified; `backend/ai/pyproject.toml`, `uv.lock` — `pgvector` added to the base dependencies (it brings `numpy` into the image).
+
+**Flow explained:** unchanged: search filters shop, user and unexpired rows, orders by `<=>`, returns `1 - distance`.
+
+**Check:** `ruff check` clean; full AI suite 312 passed, 42 skipped, same 2 `test_provider_factory.py` failures as before. Throwaway `memory_eval` schema on staging with real MiniLM through `pydantic_ai.Embedder`: same ranking as the SQL version (0.681 for the rice-supplier fact), other user and expired rows hidden, conversation delete cascades, schema dropped afterwards.
+
+### [2026-10-14 22:40 UTC+07:00] — [Refactor] Agent memory reads by injection, embeds through Pydantic AI
+
+**Done:** Memory now reads the way Tencent's guides do: before the model answers, code searches the owner's memories with the current message and places up to five dated facts before it ("Earlier facts from this owner", the shape of Tencent's Agentic RAG "reference materials" prompt). The `recall_memory` tool is gone, so memory no longer spends a tool call. The stored message stays the owner's own words; a failed search answers without memories. Embedding uses Pydantic AI's built-in `Embedder` (`sentence-transformers:` provider, normalised) instead of a hand-written adapter. Supersedes the read flow in the 21:30 entry.
+
+**Changed files:** `backend/ai/src/memory/service.py`, `src/agent/service.py`, `src/agent/tools.py`, `src/main.py`, `src/prompt_templates/{memory,__init__}.py` — modified; `backend/ai/src/memory/sentence_transformer_embedder.py` — deleted; `tests/unit_tests/test_agent_memory.py` — rewritten (8 tests, `TestEmbeddingModel`); `backend/ai/README.md`, ADR-0002 read bullet, `docs/architecture/diagrams/{src/agent-memory.drawio,images/agent-memory.svg}` — modified.
+
+**Flow explained:** `chat`/`stream_chat` → `_with_memories` → `Embedder.embed_query` → cosine search on shop and user, unexpired → `MEMORY_CONTEXT` + message sent to the model; `_save_turn` stores the raw message, then the background write runs as before.
+
+**Check:** `ruff check` clean; full AI suite 312 passed, 42 skipped, same 2 `test_provider_factory.py` failures as before; diagram re-exported and checked as PNG. **Not verified:** a turn against the real chat model with real MiniLM; Tencent's decay and 7-day summarisation are not built (no scheduler in the AI service).
+
+### [2026-10-14 21:30 UTC+07:00] — [Feature] Agent long-term memory behind AGENT_MEMORY_ENABLED
+
+**Done:** Built ADR-0002 option A on Tencent's agent-memory pattern: `agent_memories` table (Tencent's columns, cosine HNSW index, append-only, `expires_at`), Tencent's semantic search scoped to shop and user, a model step that distills each saved exchange into facts (Tencent's summarization), and a `recall_memory(query)` tool. MiniLM runs in process through a thin adapter. Off by default; with the flag off, chat behaves as before.
+
+**Changed files:** `supabase/migrations/20261014000000_agent_memories.sql` — created; `backend/ai/src/memory/` (`repository.py`, `service.py`, `sentence_transformer_embedder.py`) — created; `backend/ai/src/prompt_templates/memory.py` — created; `backend/ai/src/agent/{service,tools}.py`, `src/main.py`, `src/app_config.py`, `src/prompt_templates/__init__.py` — modified; `backend/ai/pyproject.toml`, `uv.lock` — `memory` group, `eval` includes it; `tests/unit_tests/test_agent_memory.py`, `tests/integration_tests/test_memory_repository.py` — created; `backend/ai/README.md`, `.env.example`, ADR-0002 status — modified.
+
+**Flow explained:** read: model calls `recall_memory(query)` → embed → cosine search on the request's shop and user, unexpired only → JSON under a "data, not instructions" header. Write: `_save_turn` saves the exchange → background task → chat model extracts up to 5 facts → embed → INSERT; failures only log. Deleting a conversation cascades to its memories.
+
+**Check:** 8 new unit tests pass; full suite 312 passed with the same 2 `test_provider_factory.py` failures as before. Migration and repository exercised on a throwaway `memory_eval` schema on staging with real MiniLM: correct ranking, expired/other-user/other-shop rows hidden, cascade works, RLS on, schema dropped. **Not verified:** the Postgres integration test (runs in CI only), fact extraction against the real chat model.
+
+### [2026-10-14 21:00 UTC+07:00] — [Eval] Tencent agent-memory baseline with a local MiniLM embedder
+
+**Done:** Built Tencent's agent-memory pattern as written (table, HNSW cosine index, `tenant_isolation` policy, INSERT, search and decay queries) in a throwaway `memory_eval` schema on staging, with `paraphrase-multilingual-MiniLM-L12-v2` computing 384-dimension embeddings locally. A synthetic Vietnamese set (35 searchable memories, 16 distractors, 40 questions) scores Hit@1 0.575, Recall@5 0.825, MRR@5 0.670. No foreign, expired or other-shop row ever came back. All five questions typed without diacritics missed.
+
+**Changed files:** `backend/ai/evals/agent_memory/` (`README.md`, `schema.sql`, `dataset.json`, `run_baseline.py`, `results/baseline-minilm.json`) — new; `backend/ai/pyproject.toml`, `backend/ai/uv.lock` — `eval` dependency group with `sentence-transformers`; `docs/architecture/adr/0002-agent-long-term-memory.md` — link to the baseline; this entry.
+
+**Flow explained:** `run_baseline.py` refuses to start if `memory_eval` exists → creates it from `schema.sql` → inserts each memory as `postgres` → searches each question as `authenticated` (Supabase's `postgres` bypasses RLS) with `app.tenant_id` set → repeats every search as the other shop to prove RLS → drops the schema in `finally` → writes the JSON report.
+
+**Check:** ran twice with identical scores; `memory_eval` absent afterwards; `ruff check` and `ruff format --check` clean on `evals/`. The AI test suite shows 2 failures in `test_provider_factory.py` with and without this change (stashed and re-run), so they predate it. **Not verified:** any model other than MiniLM; real owner phrasing (the set is synthetic).
+
+### [2026-10-14 20:10 UTC+07:00] — [Docs] ADR-0002 checked against the Tencent pages, staging and VN-MTEB
+
+**Done:** Read the four Tencent pages themselves. They add an `importance` column, decay by importance and age, summarisation with `tencentdb_ai.chat_completions`, and a hybrid search that uses the `chinese` text search config; PostgREST `/memory/records` is confirmed. The sample `INSERT` passes a text id into a UUID column, so it does not run as written. Staging (PostgreSQL 17.11) has no `age` extension; `pg_trgm`, `unaccent` and `pgroonga` 3.2.5 are available but not enabled. The chat proxy in the AI `.env` returns 404 on `/v1/embeddings`, so option A needs its own embedding provider. A new Embedding section gives the VN-MTEB retrieval scores for the 1024-dimension candidates and the next measuring step.
+
+**Changed files:** `docs/architecture/adr/0002-agent-long-term-memory.md` — modified; this entry.
+
+**Flow explained:** none changed. The ADR stays Proposed.
+
+**Check:** read-only `pg_available_extensions` query on staging through `AI_SQL_READER_URL`; one embeddings call through the configured proxy (404). **Not verified:** any embedding model on Vietnamese shop data, since no provider with an embeddings endpoint is configured.
+
+### [2026-10-14 19:02 UTC+07:00] — [Docs] ADR-0002 proposes agent long-term memory after Tencent's PostgreSQL guide
+
+**Done:** Recorded what Tencent's "Agent Long-Term Memory" guide for TencentDB for PostgreSQL builds (pgvector, an append-only `memory.records` table with four memory types, row-level security per tenant, in-database `bge-m3` embeddings, Apache AGE, PostgREST) and how each part maps to SmartLedger. The ADR compares building the same pattern on Supabase pgvector, moving to TencentDB, running the open-source TencentDB-Agent-Memory service, and keeping the 100-turn window. It proposes the first, only after the PO approves a requirement, and sketches it on the existing patterns: a new Supabase migration, a `recall_memory` tool built like `query_shop_data`, a writer after `_save_turn`, `shop_id` + `user_id` in every query and a cascade from the source conversation. A new draw.io diagram in the CI/CD style shows the Tencent reference and the proposed read and write flows.
+
+**Changed files:** `docs/architecture/adr/0002-agent-long-term-memory.md`, `docs/architecture/diagrams/src/agent-memory.drawio`, `docs/architecture/diagrams/images/agent-memory.svg` — new; `docs/README.md` — modified; this entry.
+
+**Flow explained:** none changed. The ADR is Proposed; code, contracts and the PRD are unchanged.
+
+**Check:** SVG exported with the documented `drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff` command and checked as a rendered PNG. **Not verified:** the Tencent guide pages were read through search excerpts, not the pages themselves; whether Supabase offers the `age` extension.
+
 ### [2026-10-15 08:20 UTC+07:00] — [Fix] Sales and Orders share one search bar in the same place
 
 **Done:** The team sent a screen recording: switching between Sales and Orders made the header jump, because the two tabs placed their title, search box and filter button differently (Orders had a 28 pt title, 8 pt top and 16 pt side margins, and a separate funnel button that narrowed the search box). Both tabs now use one search bar (`TabSearchBar`) at the Sales coordinates: same title and subtitle sizes, same margins, a full-width box with the funnel inside on the right. On Sales the funnel replaces the scan icon in the box (scanning stays on the "Quét mã" button) and opens a "Bộ lọc" sheet with Sắp xếp (Tên A-Z, Giá tăng dần, Tồn kho giảm) and Tồn kho (Tất cả, Sắp hết, Hết hàng), plus "Đặt lại" and "Xong"; the two old sort and stock buttons are gone and a line shows the active filter. On Orders the funnel still opens the date range sheet. The funnel is tinted while a filter is active.
