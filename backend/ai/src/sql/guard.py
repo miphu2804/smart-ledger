@@ -26,7 +26,16 @@ class SqlGuard:
     DIALECT = "postgres"
     VIEW_SCHEMA = "ai_read"
     ALLOWED_VIEWS = frozenset(
-        {"v_shop_profile", "v_categories", "v_products", "v_sales", "v_sale_items"}
+        {
+            "v_shop_profile",
+            "v_categories",
+            "v_products",
+            "v_sales",
+            "v_sale_items",
+            "v_debts",
+            "v_payments",
+            "v_expenses",
+        }
     )
     MAX_SQL_CHARS = 4000
 
