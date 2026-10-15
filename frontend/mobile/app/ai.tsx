@@ -11,7 +11,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChatText } from '../src/components/ChatText';
+import { SlingSendButton } from '../src/components/SlingSendButton';
 import { ThinkingStatus } from '../src/components/ThinkingStatus';
+import { VoicePillButton } from '../src/components/VoicePillButton';
 import { Dialog, EmptyState, Field, IconBtn, KEYBOARD_AVOID_BEHAVIOR, Row, Sheet, T } from '../src/components/ui';
 import type { AgentConversationSummary, AgentConversationView, AgentMessageView, ChatMessage } from '../src/data/types';
 import { agentApi } from '../src/lib/agentApi';
@@ -236,32 +238,6 @@ export default function Ai() {
 
       {/* Suggestion Chips & Composer Bar (Đề xuất nằm ngay sát trên thanh nhập) */}
       <View style={[styles.composerWrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-        {!typing ? (
-          <ScrollView
-            testID="quick-chips"
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.quickChipsScroll}
-            style={styles.quickChipsWrapper}
-            keyboardShouldPersistTaps="handled"
-          >
-            {QUICK.map((q) => (
-              <Pressable
-                key={q.label}
-                accessibilityRole="button"
-                accessibilityLabel={`Hỏi trợ lý: ${q.label}`}
-                onPress={() => send(q.label)}
-                style={({ pressed }) => [styles.quickChip, pressed && styles.pressed]}
-              >
-                <Feather name={q.icon} size={13} color={colors.brand} />
-                <T w="semibold" size={12} color={colors.ink}>
-                  {q.label}
-                </T>
-              </Pressable>
-            ))}
-          </ScrollView>
-        ) : null}
-
         {error ? (
           <View style={styles.errorCard} accessibilityRole="alert">
             <View style={styles.errorHeader}>
@@ -305,6 +281,32 @@ export default function Ai() {
             </View>
           </View>
         ) : null}
+
+        {!typing ? (
+          <ScrollView
+            testID="quick-chips"
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickChipsScroll}
+            style={styles.quickChipsWrapper}
+            keyboardShouldPersistTaps="handled"
+          >
+            {QUICK.map((q) => (
+              <Pressable
+                key={q.label}
+                accessibilityRole="button"
+                accessibilityLabel={`Hỏi trợ lý: ${q.label}`}
+                onPress={() => send(q.label)}
+                style={({ pressed }) => [styles.quickChip, pressed && styles.pressed]}
+              >
+                <Feather name={q.icon} size={13} color={colors.brand} />
+                <T w="semibold" size={12} color={colors.ink}>
+                  {q.label}
+                </T>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : null}
         <View style={styles.composer}>
           <TextInput
             value={text}
@@ -316,30 +318,8 @@ export default function Ai() {
             style={styles.input}
             returnKeyType="send"
           />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Mở nhập bằng giọng nói"
-            hitSlop={6}
-            onPress={() => router.push('/voice')}
-            style={({ pressed }) => [styles.actionButton, styles.voiceButton, pressed && styles.pressed]}
-          >
-            <Feather name="mic" size={18} color={colors.brand} />
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Gửi tin nhắn"
-            disabled={!text.trim() || typing}
-            hitSlop={4}
-            onPress={() => send(text)}
-            style={({ pressed }) => [
-              styles.actionButton,
-              styles.sendButton,
-              (!text.trim() || typing) && styles.sendDisabled,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Feather name="arrow-up" size={18} color={text.trim() && !typing ? colors.white : colors.muted} />
-          </Pressable>
+          <VoicePillButton onOpen={() => router.push('/voice')} />
+          <SlingSendButton disabled={!text.trim() || typing} onSend={() => send(text)} />
         </View>
       </View>
 
@@ -646,23 +626,6 @@ const styles = StyleSheet.create({
     color: colors.ink,
     outlineStyle: 'none',
   } as never,
-  actionButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  voiceButton: {
-    backgroundColor: colors.brandSoft,
-  },
-  sendButton: {
-    backgroundColor: colors.brand,
-  },
-  sendDisabled: {
-    backgroundColor: colors.brandSoft,
-    opacity: 0.7,
-  },
   errorCard: {
     gap: 6,
     marginBottom: 10,
