@@ -279,7 +279,12 @@ jobs:
           ENVIRONMENT: ${{ inputs.environment }}
           REF_NAME: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
+          # Every build gets a higher versionCode than the last, so Android installs it over the old one. A published
+          # APK also learns where to look for newer ones; other builds leave the URL empty and never ask.
+          ANDROID_VERSION_CODE: ${{ github.run_number }}
+          EXPO_PUBLIC_UPDATE_URL: ${{ inputs.publish && format('{0}/android/production/version.json', vars.R2_PUBLIC_URL) || '' }}
         run: |
+          [ "${{ inputs.publish }}" != true ] || [ -n "${{ vars.R2_PUBLIC_URL }}" ] || { echo "::error::Variable R2_PUBLIC_URL is not set; the published APK would not know where to find updates."; exit 1; }
           branch=$(echo "$REF_NAME" | tr -c 'A-Za-z0-9\n' '-')
           out="$RUNNER_TEMP/android-out/smart-ledger-${ENVIRONMENT#android-}-${branch}-${SHA::7}.$FORMAT"
           args=(--abis "$ABIS" --out "$out")
@@ -301,6 +306,8 @@ jobs:
           AWS_ENDPOINT_URL: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
           BUCKET: ${{ vars.R2_BUCKET }}
           APK: ${{ steps.build.outputs.path }}
+          VERSION_CODE: ${{ github.run_number }}
+          R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
         run: |
           # Anyone can sign an update with the debug key, so a debug-signed APK must never reach the download link.
           sdk="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
@@ -314,6 +321,13 @@ jobs:
           aws s3 cp "$APK" "$prefix/builds/$(basename "$APK")" --content-type "$type"
           aws s3 cp "$APK" "$prefix/latest.apk" --content-type "$type" --cache-control no-cache \
             --content-disposition 'attachment; filename="so-nghe-loi.apk"'
+          # Last, so a phone never reads a manifest whose APK is not uploaded yet. Installed apps compare versionCode
+          # with this file (frontend/mobile/src/lib/appUpdate.ts) and offer the APK in builds/, which is never overwritten.
+          version_name=$(node -p 'require("./frontend/mobile/app.json").expo.version')
+          jq -n --argjson code "$VERSION_CODE" --arg name "$version_name" --arg apk "$R2_PUBLIC_URL/android/production/builds/$(basename "$APK")" \
+            '{versionCode: $code, versionName: $name, apk: $apk}' > "$RUNNER_TEMP/version.json"
+          cat "$RUNNER_TEMP/version.json"
+          aws s3 cp "$RUNNER_TEMP/version.json" "$prefix/version.json" --content-type application/json --cache-control no-cache
 
 
       - name: Write the build summary

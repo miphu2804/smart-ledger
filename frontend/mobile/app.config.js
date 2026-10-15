@@ -12,6 +12,10 @@
  * Đăng nhập Google: thư viện cần Web client ID để Google trả về ID token cho Firebase. Giá trị này nằm sẵn trong
  * `google-services.json` (mục `oauth_client` có `client_type` 3, chỉ có sau khi bật Google trong Firebase) nên đọc từ
  * chính file đó vào `extra.googleWebClientId`: mỗi môi trường tự lấy đúng client của Firebase project của nó.
+ *
+ * Tự cập nhật APK: `ANDROID_VERSION_CODE` (CD đặt bằng số lần chạy workflow) là versionCode của APK; phải tăng sau mỗi lần
+ * phát hành để Android cho cài đè và để app so với version.json. Thiếu thì là 1. Có `EXPO_PUBLIC_UPDATE_URL` thì khai
+ * quyền cài APK; bản không có biến này (dev, Play Store) không xin quyền đó vì Play không cho phép.
  */
 const fs = require('fs');
 const path = require('path');
@@ -40,12 +44,15 @@ module.exports = ({ config }) => {
   const facebookConfigured = Boolean(facebookAppId && facebookClientToken);
   const googleServicesFile = process.env.GOOGLE_SERVICES_JSON ?? config.android?.googleServicesFile;
   const googleWebClientId = readGoogleWebClientId(googleServicesFile, config.android?.package);
+  const selfUpdate = Boolean(process.env.EXPO_PUBLIC_UPDATE_URL?.trim());
 
   return {
     ...config,
     android: {
       ...config.android,
       googleServicesFile,
+      versionCode: Number(process.env.ANDROID_VERSION_CODE) || 1,
+      permissions: [...(config.android?.permissions ?? []), ...(selfUpdate ? ['android.permission.REQUEST_INSTALL_PACKAGES'] : [])],
     },
     plugins: [
       ...(config.plugins ?? []),

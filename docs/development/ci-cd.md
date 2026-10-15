@@ -275,7 +275,8 @@ Run the workflow from `main` with `environment=android-production` and `publish=
 | Key | Purpose |
 |---|---|
 | `android/production/latest.apk` | The fixed URL the landing page links to; overwritten by every publish and served as `so-nghe-loi.apk` |
-| `android/production/builds/<artifact name>.apk` | One copy per publish, for rollback |
+| `android/production/builds/<artifact name>.apk` | One copy per publish, for rollback; the in-app update downloads this copy because it is never overwritten |
+| `android/production/version.json` | `{versionCode, versionName, apk}` of the latest publish, written after the APK so a phone never reads a manifest whose file is missing |
 
 The job stops before the build when a publish setting is missing or the runner has no `aws` CLI, and refuses to upload an APK signed with the debug key. Job `gate` rejects `publish` on any other environment.
 
@@ -286,9 +287,11 @@ One-time setup:
 3. In GitHub environment `android-production`, add secrets `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`, and variable `R2_BUCKET`.
 4. Set variable `VITE_ANDROID_APK_URL=https://pub-<hash>.r2.dev/android/production/latest.apk` in GitHub environment `landing-production`, then re-run `deploy-landing` (see [Landing page on Vercel](#landing-page-on-vercel)). While the variable is empty the download button is disabled and reads "Sắp ra mắt".
 5. Optional: add an R2 lifecycle rule that deletes objects under `android/production/builds/` after 30 days. Never let it match `stt-model/`, which old APKs still download from.
-6. Set variable `STT_MODEL_BASE_URL=https://pub-<hash>.r2.dev` (see [Configuration](#configuration)). The first publish uploads the speech model under `stt-model/<version>/`.
+6. Set variable `R2_PUBLIC_URL=https://pub-<hash>.r2.dev` (no trailing slash) in the same environment. The publish step stops without it, because the APK would not know where to look for updates.
+7. Set variable `STT_MODEL_BASE_URL=https://pub-<hash>.r2.dev` (see [Configuration](#configuration)). The first publish uploads the speech model under `stt-model/<version>/`.
 
 - The `r2.dev` address is rate-limited, not cached, and meant for development ([public buckets](https://developers.cloudflare.com/r2/buckets/public-buckets/)); it is a stopgap until the project owns a domain on Cloudflare. Moving to a custom domain only changes `VITE_ANDROID_APK_URL`.
+- In-app update: a published APK is built with `ANDROID_VERSION_CODE=<run number>` and `EXPO_PUBLIC_UPDATE_URL=$R2_PUBLIC_URL/android/production/version.json`. On launch the app fetches `version.json`; when its `versionCode` is higher than the installed one it offers to download the APK and hands it to Android's installer, which asks the user to confirm (and, the first time, to allow installs from the app). Android only installs it over the old app when it is signed with the same keystore. Builds without the URL (dev, staging, a Play Store AAB) never check and do not declare `REQUEST_INSTALL_PACKAGES`, which Play does not allow. After a rollback, edit `version.json` too, or phones keep being offered the newer build.
 - Rollback: copy a file from `builds/` over `latest.apk` in the R2 dashboard. Android refuses to install an older version over a newer one, so this only helps people who have not updated yet.
 
 ### Result
