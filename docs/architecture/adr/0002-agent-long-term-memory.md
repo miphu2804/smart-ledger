@@ -1,6 +1,6 @@
 # ADR-0002: Long-term memory cho Agent theo mẫu TencentDB for PostgreSQL, dựng trên pgvector của Supabase
 
-- **Trạng thái:** Proposed. Chưa có FR/AC; không đổi code hay contract cho tới khi PO duyệt yêu cầu và team chấp nhận ADR này
+- **Trạng thái:** Proposed. Chưa có FR/AC; không đổi contract cho tới khi PO duyệt yêu cầu và team chấp nhận ADR này. Phương án A đã có code sau cờ `AGENT_MEMORY_ENABLED` (mặc định tắt), xem [AI README](../../../backend/ai/README.md#long-term-memory-off-by-default); khi tắt, hành vi chat không đổi
 - **Ngày:** 2026-10-14
 - **Owner:** chưa chỉ định
 
@@ -17,28 +17,46 @@ Nguồn sơ đồ: [`agent-memory.drawio`](../diagrams/src/agent-memory.drawio),
 
 ## Phát hiện từ hướng dẫn của Tencent
 
-Nội dung dưới đây lấy từ trích đoạn của trang [Agent Long-Term Memory Feature Overview](https://www.tencentcloud.com/document/product/409/80363) và [Building Agentic RAG Applications Based on PostgreSQL](https://intl.cloud.tencent.com/document/product/409/80410) qua công cụ tìm kiếm. Cần đối chiếu trang gốc trước khi chuyển ADR sang Accepted.
+Nội dung dưới đây đã đối chiếu với trang gốc [Agent Long-Term Memory Feature Overview](https://www.tencentcloud.com/document/product/409/80363), [Building Agentic RAG Applications Based on PostgreSQL](https://intl.cloud.tencent.com/document/product/409/80410), [pgvector](https://www.tencentcloud.com/document/product/409/80360) và [Apache AGE](https://www.tencentcloud.com/document/product/409/80361) ngày 2026-10-14.
 
 | Thành phần trong hướng dẫn | Tencent làm gì | Áp dụng cho SmartLedger |
 |---|---|---|
 | Kiến trúc | Vector + đồ thị + quan hệ trong một instance PostgreSQL, thay bộ Mem0 + Redis + Neo4j | Giữ ý tưởng một DB; Supabase đã có `vector` |
-| `pgvector` ([hướng dẫn](https://www.tencentcloud.com/document/product/409/80360)) | Bản 0.8.x, tìm theo khoảng cách cosine | Dùng y nguyên; staging có `vector` 0.8.2 (ADR-0001) |
-| Bảng `memory.records` | Append-only; `tenant_id`, `agent_id` (UUID, bắt buộc), `project_id`, `content`, `memory_type` (mặc định `episodic`), `metadata`, `expires_at`; `embedding vector(1024)` với index HNSW cosine | Bảng `agent_memories` theo khóa `BIGINT` của ERD, scope `shop_id` + `user_id` |
-| Loại memory | `episodic` (lịch sử, thao tác), `semantic` (kiến thức), `procedural` (quy trình), `preference` (sở thích, thói quen) | MVP chỉ cần `preference` và `semantic`; danh sách chốt là câu hỏi cho PO |
+| `pgvector` | Tìm theo khoảng cách cosine; ví dụ index HNSW `m = 16, ef_construction = 200`; khuyên đặt `NOT NULL` cho cột vector vì vector `NULL` không vào index | Dùng y nguyên; staging đã bật `vector` 0.8.2 (baseline, ADR-0001) |
+| Bảng `memory.records` | Append-only; `id UUID`, `tenant_id` và `agent_id` (UUID, bắt buộc), `project_id`, `content`, `embedding vector(1024)` (cho phép `NULL`), `memory_type` (mặc định `episodic`), `importance FLOAT` (mặc định 0.5), `metadata JSONB`, `created_at`, `expires_at`; index HNSW cosine. Ví dụ trong trang truyền chuỗi `'agent-planner-001'` vào cột `agent_id` kiểu UUID, nên mã mẫu không chạy nguyên văn | Bảng `agent_memories` theo khóa `BIGINT` của ERD, scope `shop_id` + `user_id`, `embedding NOT NULL` |
+| Loại memory | `episodic` (lịch sử, thao tác), `semantic` (kiến thức), `procedural` (quy trình), `preference` (sở thích, thói quen) | Code nhận đủ 4 loại như Tencent; danh sách chốt cho MVP là câu hỏi cho PO |
 | Tìm kiếm | Lọc `agent_id` và `expires_at IS NULL OR > now()`, xếp theo khoảng cách cosine tới embedding của câu hỏi, lấy 5 dòng | Giống vậy, lọc thêm `shop_id` và `user_id` trong cùng câu SQL |
-| Cách ly tenant | Row-level security: policy so `tenant_id` với setting phiên `app.tenant_id` | Cùng ý với setting `smartledger.shop_id` của các view `ai_read`; với bảng ghi, giữ cách repository hiện tại là `WHERE shop_id AND user_id` tường minh |
-| Embedding | `tencentdb_ai.get_embedding('bge-m3', …)` chạy trong DB | Không có extension này; AI service gọi embedding API qua provider hiện có |
-| Apache AGE ([hướng dẫn](https://www.tencentcloud.com/document/product/409/80361)) | Bản 1.5.x, đồ thị thực thể bằng openCypher | Không dùng ở MVP; chưa xác minh Supabase có `age` hay không (`SELECT … FROM pg_available_extensions WHERE name = 'age'`) |
-| PostgREST | Có trích đoạn nhắc endpoint `/memory/records`, chưa đối chiếu | Không cần: Core không đọc memory, AI nối DB trực tiếp |
+| Suy giảm và quên | Xếp theo `importance * exp(-0.01 * số ngày tuổi)` | Đã làm: lấy 20 memory gần nhất theo cosine rồi xếp lại theo `relevance × importance × exp(-0.01 × số ngày)`, lấy 5 |
+| Tóm tắt, nén | `tencentdb_ai.chat_completions(...)` gộp các memory cũ hơn 7 ngày theo ngày | Đã làm trong `AgentMemoryService.remember`, sau bước ghi: memory cũ hơn 7 ngày gom theo hội thoại và ngày (giờ VN), model chat gộp mỗi nhóm thành 1–5 fact thay nhóm cũ trong một transaction. Gom thêm theo hội thoại để xóa chat vẫn xóa được bản tóm tắt; tối đa 3 nhóm mỗi lượt |
+| Tìm kiếm lai (trang RAG) | Vector + `ts_rank(to_tsvector('chinese', …))`, gộp bằng RRF | PostgreSQL không có cấu hình text search tiếng Việt; staging có sẵn (chưa bật) `pg_trgm`, `unaccent`, `pgroonga` 3.2.5 nếu sau này cần phần từ khóa |
+| Cách ly tenant | Row-level security: policy so `tenant_id` với `current_setting('app.tenant_id')` | Cùng ý với setting `smartledger.shop_id` của các view `ai_read`; với bảng ghi, giữ cách repository hiện tại là `WHERE shop_id AND user_id` tường minh |
+| Embedding | `tencentdb_ai.get_embedding('bge-m3', …)` chạy trong DB; trang ghi `bge-m3` chỉ là ví dụ | Không có extension này; AI service embed bằng model sentence-transformers chạy ngay trong process qua `pydantic_ai.Embedder` (xem [Embedding](#embedding)) |
+| Apache AGE | Bản 1.5.x, đồ thị thực thể bằng openCypher | Không dùng được: `pg_available_extensions` trên staging (PostgreSQL 17.11) không có `age` |
+| Cách truy cập | SQL trực tiếp vào bảng `memory.*`, hoặc endpoint `/memory/records` qua PostgREST | Không cần PostgREST: Core không đọc memory, AI nối DB trực tiếp |
 
-Hướng dẫn mô tả cách tự dựng: người dùng tự tạo schema và bảng (`CREATE SCHEMA memory`). Không thấy API memory đóng gói sẵn hay bảng giá riêng; chi phí là instance TencentDB for PostgreSQL cộng tiền gọi model. Vì vậy phần lớn mẫu này dựng được trên Supabase mà không cần đổi nhà cung cấp DB.
+Hướng dẫn mô tả cách tự dựng: người dùng tự tạo schema và bảng (`CREATE SCHEMA memory`). Không có API memory đóng gói sẵn hay bảng giá riêng; chi phí là instance TencentDB for PostgreSQL cộng tiền gọi model. Vì vậy phần lớn mẫu này dựng được trên Supabase mà không cần đổi nhà cung cấp DB.
+
+## Embedding
+
+- Provider chat hiện tại là một proxy qua `OPENAI_BASE_URL`, chỉ cần phục vụ `/v1/responses` ([AI README](../../../backend/ai/README.md)). Ngày 2026-10-14, gọi `POST /v1/embeddings` (`text-embedding-3-small`) qua proxy đang cấu hình trong `.env` của AI trả 404. Vì vậy bản hiện tại embed bằng `paraphrase-multilingual-MiniLM-L12-v2` chạy local trong AI service (nhóm dependency `memory`): không cần secret, nội dung chat không gửi ra ngoài để embed.
+- [VN-MTEB](https://arxiv.org/abs/2507.21500) (EACL 2026 Findings, 41 tập dữ liệu dịch từ MTEB) chỉ đo model mã nguồn mở. Điểm Retrieval trung bình (15 tập) và trung bình chung:
+
+  | Model | Dim | Retrieval | Trung bình |
+  |---|---|---|---|
+  | gte-Qwen2-7B-instruct | 3584 | 46.05 | 65.84 |
+  | e5-Mistral-7B-instruct | 4096 | 41.73 | 67.67 |
+  | multilingual-e5-large-instruct | 1024 | 40.88 | 67.99 |
+  | bge-m3 | 1024 | 39.84 | 64.90 |
+  | gte-multilingual-base | 768 | 38.38 | 65.22 |
+
+  Model 1024 chiều (`bge-m3`, `multilingual-e5-large-instruct`) gần bằng model 7B về retrieval với kích thước nhỏ hơn nhiều, và vừa với `vector(1024)` như mẫu Tencent. Bảng không có model API như OpenAI `text-embedding-3-*`, nên nếu chọn model API vẫn phải tự đo.
+- Baseline đúng mẫu Tencent với `paraphrase-multilingual-MiniLM-L12-v2` chạy local, đo trên staging. Trên 40 câu hỏi tổng hợp: Hit@1 0.575, Recall@5 0.825; RLS và lọc `expires_at` không lọt dòng nào; mọi câu gõ không dấu đều trượt.
 
 ## Các phương án
 
 | Phương án | Ưu | Nhược |
 |---|---|---|
-| **A. Tự dựng theo mẫu Tencent trên Supabase** | Giữ ADR-0001: cùng DB, lọc `shop_id` trong SQL, xóa theo hội thoại trong một transaction; không thêm service hay secret ngoài embedding | Tự viết bước trích xuất fact và đánh giá chất lượng tiếng Việt |
-| B. Chuyển sang TencentDB for PostgreSQL | Có sẵn `tencentdb_ai`, AGE | Phải dời hoặc chạy song song DB nghiệp vụ, đổi quy trình backup/migration, thêm chi phí instance |
+| **A. Tự dựng theo mẫu Tencent trên Supabase** | Giữ ADR-0001: cùng DB, lọc `shop_id` trong SQL, xóa theo hội thoại trong một transaction; không thêm service hay secret ngoài embedding | Tự viết bước trích xuất fact và đánh giá chất lượng tiếng Việt; embedding local làm image nặng thêm (`torch`) || B. Chuyển sang TencentDB for PostgreSQL | Có sẵn `tencentdb_ai`, AGE | Phải dời hoặc chạy song song DB nghiệp vụ, đổi quy trình backup/migration, thêm chi phí instance |
 | C. Chạy [TencentDB-Agent-Memory](https://github.com/TencentCloud/TencentDB-Agent-Memory) (mã nguồn mở) bên cạnh AI | Có pipeline L0–L3, SDK Python | Service Node.js riêng; chỉ lưu `sqlite`, `tcvdb`, `mongodb`. Backend Postgres mới ở PR cộng đồng [#1387](https://github.com/TencentCloud/TencentDB-Agent-Memory/pull/1387) và [#1466](https://github.com/TencentCloud/TencentDB-Agent-Memory/pull/1466), còn mở. Thiếu ID thì rơi về bucket `default`; BM25 chỉ có tham số `zh`/`en` |
 | D. Giữ nguyên cửa sổ 100 lượt | Không tốn gì | Không nhớ qua hội thoại |
 
@@ -46,42 +64,23 @@ Hướng dẫn mô tả cách tự dựng: người dùng tự tạo schema và 
 
 Giữ **D** cho tới khi PO duyệt yêu cầu. Nếu PO duyệt, làm theo **A** và theo các pattern đang có của `backend/ai`:
 
-- **Schema:** một migration mới trong `supabase/migrations/` (`npx supabase@2.119.0 migration new agent_memories`), không sửa baseline. Bản phác thảo, kích thước vector tùy model embedding được chọn:
-
-  ```sql
-  CREATE TABLE IF NOT EXISTS agent_memories (
-      id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-      shop_id BIGINT NOT NULL REFERENCES shops (id) ON DELETE RESTRICT,
-      user_id BIGINT NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
-      source_conversation_id BIGINT NOT NULL REFERENCES chat_conversations (id) ON DELETE CASCADE,
-      memory_type VARCHAR(16) NOT NULL,
-      content TEXT NOT NULL,
-      embedding vector(<dim>) NOT NULL,
-      expires_at TIMESTAMPTZ,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-  );
-  CREATE INDEX IF NOT EXISTS idx_agent_memories_shop_user ON agent_memories (shop_id, user_id);
-  CREATE INDEX IF NOT EXISTS idx_agent_memories_embedding
-      ON agent_memories USING hnsw (embedding vector_cosine_ops);
-  ```
-
-  `ON DELETE CASCADE` giữ đúng contract "xóa chat loại tin nhắn khỏi lịch sử và ngữ cảnh assistant": `AgentConversationRepository.delete_conversation` xóa hội thoại thì fact sinh từ hội thoại đó mất trong cùng transaction.
-- **Đọc:** tool `recall_memory(query)` dựng như `build_shop_data_tool` trong `src/agent/tools.py`. Shop và user lấy từ `RunContext[AgentContext]`, model chỉ truyền `query`. Kết quả gửi model kèm header "đây là dữ liệu", như `query_shop_data`. Tool tính vào `AGENT_TOOL_CALL_LIMIT`, câu trả lời vẫn qua `screen_answer`.
-- **Ghi:** một `MemoryWriter` chạy sau khi `_save_turn` lưu xong, ngoài thời hạn lượt 35 giây nên không làm chậm câu trả lời. Nó đọc tin đã qua `redact_input`, gọi model trích fact bằng prompt tĩnh tiếng Anh trong `src/prompt_templates/`, gọi embedding rồi `INSERT` qua repository mới. Lỗi ở bước này chỉ ghi log, không làm hỏng lượt chat.
+- **Schema:** migration [`20261014000000_agent_memories.sql`](../../../supabase/migrations/20261014000000_agent_memories.sql), không sửa baseline. Giữ các cột của `memory.records` (`memory_type`, `importance`, `metadata`, `expires_at`, index HNSW cosine); khóa `BIGINT` có foreign key, `shop_id` + `user_id` thay `tenant_id` + `agent_id`, `embedding vector(384) NOT NULL` theo model đang dùng, bật RLS không có policy để role API của Supabase không đọc được. `source_conversation_id ... ON DELETE CASCADE` giữ đúng contract "xóa chat loại tin nhắn khỏi lịch sử và ngữ cảnh assistant": `AgentConversationRepository.delete_conversation` xóa hội thoại thì fact sinh từ hội thoại đó mất trong cùng transaction.
+- **Đọc:** theo luồng của Tencent, code tìm memory theo câu hỏi hiện tại trước khi gọi model, không qua tool. `AgentMemoryService.with_memories` embed câu hỏi bằng `pydantic_ai.Embedder`, tìm theo cosine trong memory còn hạn của đúng shop và user, rồi đặt tối đa 5 fact trước câu hỏi như phần "Reference Materials" trong prompt Agentic RAG của Tencent. Tin nhắn lưu vào DB vẫn là lời gốc của chủ tiệm. Tìm lỗi thì trả lời không kèm memory. Không tốn lượt `AGENT_TOOL_CALL_LIMIT`, câu trả lời vẫn qua `screen_answer`.
+- **Ghi:** `AgentMemoryService.remember` chạy nền sau khi `_save_turn` lưu xong, ngoài thời hạn lượt 35 giây nên không làm chậm câu trả lời. Nó đọc tin đã qua `redact_input`, gọi model trích fact bằng prompt tĩnh tiếng Anh trong `src/prompt_templates/` (kèm ngày hôm nay để đổi "tuần trước" thành ngày cụ thể), embed rồi `INSERT` qua repository; sau đó tóm tắt memory cũ như bảng trên. Lỗi ở bước nào cũng chỉ ghi log, không làm hỏng lượt chat.
 - **Cách ly:** mọi câu SQL đọc hoặc ghi `agent_memories` có `shop_id` và `user_id`. Integration test chéo shop giống `tests/integration_tests/test_sql_reader.py` (`NFR-007`, `AC-012`).
 
 ## Hệ quả
 
-- Khi làm: thêm FR/NFR/AC vào PRD (và BRD nếu PO coi đây là phạm vi nghiệp vụ mới), cập nhật [Ngữ cảnh chat](../../contracts/api-contracts.md#ngữ-cảnh-chat), [AI README](../../../backend/ai/README.md#chat-context), [Technical design §1](../technical-design.md#1-phạm-vi), `erd.dbml` và trang quyền riêng tư, vì nội dung chat được gửi thêm tới API embedding.
-- Mỗi lượt có memory tốn thêm một lời gọi embedding khi đọc, và sau lượt thêm một lời gọi model cộng embedding khi ghi.
+- Khi làm: thêm FR/NFR/AC vào PRD (và BRD nếu PO coi đây là phạm vi nghiệp vụ mới), cập nhật [Ngữ cảnh chat](../../contracts/api-contracts.md#ngữ-cảnh-chat), [AI README](../../../backend/ai/README.md#chat-context), [Technical design §1](../technical-design.md#1-phạm-vi), `erd.dbml` và trang quyền riêng tư nếu cần, vì nội dung chat được gửi thêm tới model chat để trích và tóm tắt fact.
+- Image AI phải cài nhóm `memory` (sentence-transformers, `torch`) khi bật, vì proxy chat hiện tại không phục vụ `/v1/embeddings`.
+- Mỗi lượt có memory tốn thêm một lần embed local khi đọc; sau lượt thêm một lời gọi model khi ghi và tối đa 3 lời gọi model khi có memory cũ cần tóm tắt.
 - Request và response của `/internal/v1/agent/chat` và `/api/v1/agent/*` không đổi.
 
 ## Câu hỏi mở trước khi Accepted
 
 - PO: chủ tiệm có cần agent nhớ qua hội thoại không, nhớ loại nào, và có cần màn xem/xóa memory riêng không?
 - Thời hạn lưu: hợp đồng hiện tại nói MVP không có TTL; `expires_at` có dùng không?
-- Model embedding và kích thước vector; đo chất lượng truy xuất tiếng Việt trên dữ liệu mẫu trước khi chọn.
-- Đối chiếu trang gốc của Tencent (schema đầy đủ, PostgREST, danh sách hàm `tencentdb_ai`).
+- Giữ MiniLM local hay đổi sang model 1024 chiều (`bge-m3`/`multilingual-e5-large-instruct`, tự host hay qua API cần secret); đo chất lượng truy xuất tiếng Việt như mục [Embedding](#embedding) trước khi chọn.
 
 ## Tham khảo
 
