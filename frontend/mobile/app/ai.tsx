@@ -318,7 +318,7 @@ export default function Ai() {
             style={styles.input}
             returnKeyType="send"
           />
-          <VoicePillButton onOpen={() => router.push('/voice')} />
+          <VoicePillButton disabled={typing} onTranscript={send} />
           <SlingSendButton disabled={!text.trim() || typing} onSend={() => send(text)} />
         </View>
       </View>
