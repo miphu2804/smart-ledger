@@ -18,6 +18,18 @@
 
 **Check:** `tsc --noEmit` clean. Mock web build in headless Chrome, 3/3: Settings shows the button, it opens the guide on the Bobi step, closing returns to Settings. **Not verified:** a phone.
 
+### [2026-10-15 22:40 UTC+07:00] — [Feature] Cloudflare Workers AI embedder for agent memory
+
+**Done:** `AGENT_MEMORY_EMBEDDING_PROVIDER` picks `sentence-transformers` (default, local) or `cloudflare` (Workers AI `/v1/embeddings` with `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`). `WorkersAIEmbeddingModel` adds embeddinggemma's query/document prompts, which Workers AI does not, and cuts vectors to `EMBEDDING_DIMENSIONS` (384, the migration's size); the local embedder cuts to it too. ADR-0002 records the local bench (embeddinggemma at 384: Recall@1 0.947 vs MiniLM 0.658). Still behind `AGENT_MEMORY_ENABLED` and PO approval.
+
+**Changed files:**
+- `backend/ai/src/memory/workers_ai_embedding.py`, `backend/ai/tests/unit_tests/test_workers_ai_embedding.py` — created
+- `backend/ai/src/{app_config,main,memory/repository}.py`, `backend/ai/.env.example`, `backend/ai/README.md`, `docs/architecture/adr/0002-agent-long-term-memory.md` — modified
+
+**Flow explained:** startup → `build_memory_embedder` picks provider → Workers AI: prompt + text → `/v1/embeddings` → 768-d → cut to 384 → same pgvector search.
+
+**Check:** ruff clean, pytest 361 passed / 53 skipped. Live Workers AI on the bench set (34 facts, 38 queries): recall@1 0.947, MRR@10 0.961, same as local gemma@384; 300–600 ms per query. **Not verified:** the memory integration test against Postgres (needs `POSTGRES_TEST_URL`).
+
 ### [2026-10-15 18:00 UTC+07:00] — [Feature] In-app update for the R2 APK
 
 **Done:** A published production APK now offers to update itself. CD builds it with `ANDROID_VERSION_CODE=<run number>` (new, monotonic; before, every build was versionCode 1) and `EXPO_PUBLIC_UPDATE_URL`, uploads the APK, then writes `android/production/version.json`. On launch the app fetches that file, compares `versionCode` with the installed one and, if higher, shows a dialog that downloads the APK from `builds/` and opens Android's installer. No new native module: `expo-file-system` (existing FileProvider), `expo-intent-launcher` and `expo-application`. `REQUEST_INSTALL_PACKAGES` is declared only when the update URL is set. Stacked on #225 (`feat/mobile-release-builds`).
@@ -79,6 +91,19 @@
 **Flow explained:** verified Firebase principal → active OWNER/owned ACTIVE shop guard → shared list predicate → one PostgreSQL COUNT/SUM tuple → checked signed-64-bit conversion → response. Item search uses EXISTS, so multiple matching items cannot multiply sale totals. Summary filters by soldAt and current status; report net revenue keeps its existing soldAt/voidedAt event timing. Separate list/summary requests do not share a snapshot. Deploy Core before FE adopts this endpoint.
 
 **Check:** Core commit `a8be3c0` was rebased onto the staging base above without conflict. `mvnw.cmd -o clean verify` against a dedicated disposable PostgreSQL 16 container passed **1,178 tests, 0 failures/errors/skipped**; the required PostgreSQL gate passed, and its own 12 tests passed. The 32-test sales/list suite covers combined filters/offset boundaries, empty sets, discounts/partial/debt sales, cross-period void, role/shop guards and Long.MAX_VALUE/overflow for both statuses using valid PAID fixtures. The 10,000-sale/50,000-item summary used one data SELECT (excluding auth/shop), with an 11 ms local observation in the post-rebase run, not a production SLA. Temporary test containers/data were removed. Documentation-only follow-up was checked separately; Firebase/FE/staging UAT remains pending.
+
+### [2026-10-15 15:30 UTC+07:00] — [Feature] Agent memory pins preferences and links the chip to the source chat
+
+**Done:** After Cognition's agent memory repo (an always-loaded `MEMORY.md`): every turn now leads with up to ten live `preference` memories, most important then newest, whatever the message; the cosine + decay search fills five more and skips those already pinned. Prompt lines carry date and type, and `MEMORY_PROMPT` tells the model to shape every answer by the preferences. The SSE `memory` event adds `source_conversation_id` and `created_at`; tapping a memory in the expanded chip opens the chat it came from (a memory from the open chat shows its date only). No migration, no Core change (Core relays the event as is). Still behind `AGENT_MEMORY_ENABLED` and PO approval.
+
+**Changed files:**
+- `backend/ai/src/{memory/repository,memory/service,agent/router,prompt_templates/memory}.py`, `backend/ai/tests/{unit_tests/test_agent_memory,integration_tests/test_memory_repository}.py`, `backend/ai/README.md` — modified
+- `frontend/mobile/{app/ai.tsx,src/data/types.ts}` — modified
+- `docs/contracts/api-contracts.md`, `docs/architecture/adr/0002-agent-long-term-memory.md` — modified
+
+**Flow explained:** read: pinned preferences (cap 10) → search the rest by cosine × decay (top 5) → record use for all → prompt, preferences first → `memory` event with source chat and date → chip → `GET /agent/conversations/{id}`.
+
+**Check:** AI ruff clean, pytest 359 passed / 53 skipped; mobile `tsc --noEmit` passes, `npm test` 37/37. **Not verified:** the new integration test `test_preferences_lead_whatever_the_message_and_are_not_repeated` (needs `POSTGRES_TEST_URL`); e2e on the simulator.
 
 ### [2026-10-15 12:10 UTC+07:00] — [Feature] Agent memory visibility and owner switch
 
