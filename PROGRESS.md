@@ -7,7 +7,7 @@
 **Flow explained:** extractor facts → filter by `AGENT_MEMORY_TYPES` → `semantic` facts are now stored and recalled in later chats; `episodic` and other types are still dropped.
 
 **Check:** `uv run pytest tests/unit_tests -q` and `ruff check` / `ruff format --check` in `backend/ai`. Staging E2E (supplier fact stored and recalled in a new chat) was run by the owner with the env var set.
-=======
+
 ### [2026-10-16 10:30 UTC+07:00] — [CI] Release build ignores stale Metro cache and refuses mock values
 
 **Done:** `scripts/android-release.sh` deletes Metro's cache before Gradle and stops when a mock flag is true or the API endpoint is localhost or `10.0.2.2`. The APK published by `Mobile release` run #22 carried the values of a local test build (`http://10.0.2.2:1` API, `http://10.0.2.2:8765/version.json` update URL, no production strings), so it never offered an update and `latest.apk` served a mock build. The cause is inferred: Metro's transform cache is keyed on file contents, not on `EXPO_PUBLIC_*`, and the test build ran on the same machine as the self-hosted runner.
@@ -15,7 +15,6 @@
 **Changed files:** `scripts/android-release.sh` — modified; this entry.
 
 **Check:** `bash -n` passes. **Not verified:** a real build; the bundle of the next published APK must contain `railway.app` and the R2 `version.json` URL and no `10.0.2.2`. `latest.apk` stays a bad build until then.
->>>>>>> bed62bc (fix(ci): clear Metro cache and refuse mock values in release builds)
 
 ### [2026-10-16 01:35 UTC+07:00] — [Feature] Welcome guide pages show the new illustrations
 
