@@ -7,6 +7,7 @@
 #   ./scripts/android-release.sh --install               also install the APK on the phone that adb sees
 #   ./scripts/android-release.sh --aab                   Android App Bundle for Google Play instead of an APK
 #   ./scripts/android-release.sh --out <file>            copy the APK or AAB to <file>
+#   ./scripts/android-release.sh --skip-preflight        build even if the toolchain differs from the pinned versions
 #
 # Locally, like scripts/ios-device-release.sh: mocks are off (real Firebase and Core), Core defaults to staging and can
 # be overridden with EXPO_PUBLIC_API_ENDPOINT in .env or the shell; the Firebase web keys and EXPO_PUBLIC_STT_MODEL_URL
@@ -20,13 +21,15 @@ abis="armeabi-v7a,arm64-v8a"
 format=apk
 install=false
 out=""
+preflight=true
 while [ $# -gt 0 ]; do
   case "$1" in
     --abis) abis="${2:?thiếu giá trị cho --abis}"; shift 2 ;;
     --aab) format=aab; shift ;;
     --install) install=true; shift ;;
     --out) out="${2:?thiếu giá trị cho --out}"; shift 2 ;;
-    -h | --help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --skip-preflight) preflight=false; shift ;;
+    -h | --help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Không hiểu tham số: $1 (xem --help)" >&2; exit 2 ;;
   esac
 done
@@ -48,9 +51,15 @@ mark() { [ -z "${TIMINGS:-}" ] || echo "$1=$(date +%s)" >>"$TIMINGS"; }
 
 command -v node >/dev/null || die "Không thấy node."
 
-# JDK: JAVA_HOME, else the one bundled with Android Studio on macOS, else java on PATH.
+# JDK: JAVA_HOME, else the pinned major version if macOS has it installed (/usr/libexec/java_home), else the one bundled
+# with Android Studio, else java on PATH. Android Studio bundles a newer JDK than the pinned one, so it comes last.
+java_major="$(sed -n 's/^  JAVA_MAJOR: *"\{0,1\}\([0-9]*\)"\{0,1\} *$/\1/p' "$root/.github/workflows/mobile-release.yml")"
 studio_jbr="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
-if [ -z "${JAVA_HOME:-}" ] && [ -d "$studio_jbr" ]; then export JAVA_HOME="$studio_jbr"; fi
+if [ -z "${JAVA_HOME:-}" ] && [ -x /usr/libexec/java_home ] && pinned_jdk="$(/usr/libexec/java_home -v "$java_major" 2>/dev/null)"; then
+  export JAVA_HOME="$pinned_jdk"
+elif [ -z "${JAVA_HOME:-}" ] && [ -d "$studio_jbr" ]; then
+  export JAVA_HOME="$studio_jbr"
+fi
 java_bin="${JAVA_HOME:+$JAVA_HOME/bin/}java"
 command -v "$java_bin" >/dev/null || die "Không thấy JDK — cài JDK 17 hoặc Android Studio, hoặc đặt JAVA_HOME."
 
@@ -72,6 +81,13 @@ find_sdk() {
 }
 sdk="$(find_sdk)" || die "Không thấy Android SDK (thư mục có platforms/). Đặt ANDROID_HOME=<đường dẫn SDK> rồi chạy lại."
 export ANDROID_HOME="$sdk"
+
+# Same check as a CI runner: Node, JDK, SDK platform, build-tools and NDK must match the versions pinned at the top of
+# .github/workflows/mobile-release.yml, so a build that passes here also passes there.
+if $preflight; then
+  node "$root/.github/scripts/android-preflight.mjs" ||
+    die "Toolchain khác bản ghim trong mobile-release.yml (xem các dòng trên). Cài đúng bản, hoặc chạy lại với --skip-preflight."
+fi
 
 if [ -z "${GOOGLE_SERVICES_JSON:-}" ] && [ ! -f google-services.json ]; then
   die "Thiếu frontend/mobile/google-services.json (Firebase Console → Project settings → app Android)."

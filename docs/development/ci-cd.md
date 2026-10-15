@@ -227,7 +227,7 @@ Job `select-runner` resolves input `runner`:
 
 `auto` lists runners through the GitHub API, which the default `GITHUB_TOKEN` cannot do. Create a fine-grained token with repository permission **Administration: read** and store it as repository secret `RUNNERS_READ_TOKEN`; without it `auto` always falls back to GitHub-hosted, and the reason is written in the build summary.
 
-A GitHub-hosted runner installs Node, JDK, SDK, NDK and Gradle with caching on every run. A self-hosted machine already holds them and its Gradle and npm caches, so the job only runs `.github/scripts/android-preflight.mjs`, which fails with a clear message when a version differs from the pinned block at the top of the workflow. It never downloads: pulling GitHub's cache or the roughly 1 GB NDK over a home connection is slower than the build.
+A GitHub-hosted runner installs Node, JDK, SDK, NDK and Gradle with caching on every run. A self-hosted machine already holds them and its Gradle and npm caches, so nothing is installed there. On every runner, and on a laptop, `scripts/android-release.sh` first runs `.github/scripts/android-preflight.mjs`, which reads the pinned block at the top of the workflow and fails with a clear message when Node, the JDK, the SDK platform, build-tools or the NDK differ (`--skip-preflight` builds anyway, locally). It never downloads: pulling GitHub's cache or the roughly 1 GB NDK over a home connection is slower than the build.
 
 To add a machine: install Node 22, JDK 17, and the Android SDK with platform 36, build-tools 36.0.0 and NDK 27.1.12297006; set `ANDROID_HOME`; register a runner (repository Settings → Actions → Runners) with the label `android-build`.
 

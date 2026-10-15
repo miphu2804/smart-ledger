@@ -33,7 +33,8 @@ concurrency:
   group: mobile-release-${{ inputs.environment }}-${{ github.ref_name }}
   cancel-in-progress: false
 
-# Single source of the toolchain: the hosted setup installs these versions and the self-hosted preflight checks them.
+# Single source of the toolchain: the hosted setup installs these versions, and .github/scripts/android-preflight.mjs
+# (run by scripts/android-release.sh on every build, here or on a laptop) checks them.
 env:
   NODE_MAJOR: "22"
   JAVA_MAJOR: "17"
@@ -206,17 +207,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
         if: runner.environment == 'github-hosted'
 
-      # A self-hosted machine keeps its toolchain and Gradle/npm caches on disk. Pulling GitHub's cache or the NDK over
-      # a home connection is slower than the build itself, so it only verifies versions and never downloads.
-      - name: Preflight the self-hosted toolchain
-        if: runner.environment == 'self-hosted'
-        env:
-          EXPECT_NODE_MAJOR: ${{ env.NODE_MAJOR }}
-          EXPECT_JAVA_MAJOR: ${{ env.JAVA_MAJOR }}
-          EXPECT_PLATFORM: ${{ env.ANDROID_PLATFORM }}
-          EXPECT_BUILD_TOOLS: ${{ env.ANDROID_BUILD_TOOLS }}
-          EXPECT_NDK: ${{ env.ANDROID_NDK }}
-        run: node .github/scripts/android-preflight.mjs
+      # A self-hosted machine keeps its toolchain and Gradle/npm caches on disk: pulling GitHub's cache or the NDK over
+      # a home connection is slower than the build itself, so nothing is installed there. scripts/android-release.sh
+      # checks the versions before it builds, on either runner.
       - name: Mark setup done
         run: echo "setup=$(date +%s)" >> "$TIMINGS"
 

@@ -5,6 +5,7 @@
 #   ./scripts/ios-device-release.sh                  pick the device from a menu (up/down or j/k, Enter; q to quit)
 #   ./scripts/ios-device-release.sh --device <UDID>  skip the menu (UDID or device name)
 #   ./scripts/ios-device-release.sh --clean          regenerate ios/ from app.json first (after native config changes)
+#   ./scripts/ios-device-release.sh --skip-preflight build even if no signing profile for this iPhone is found
 #
 # The Release build embeds the JS bundle, so the app runs without Metro. Mocks are always off (real Firebase and Core);
 # Core defaults to staging and can be overridden with EXPO_PUBLIC_API_ENDPOINT in .env or the shell. To build another
@@ -13,11 +14,13 @@ set -euo pipefail
 
 device=""
 clean=false
+preflight=true
 while [ $# -gt 0 ]; do
   case "$1" in
     -d | --device) device="${2:?thiếu giá trị cho --device}"; shift 2 ;;
     --clean) clean=true; shift ;;
-    -h | --help) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --skip-preflight) preflight=false; shift ;;
+    -h | --help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Không hiểu tham số: $1 (xem --help)" >&2; exit 2 ;;
   esac
 done
@@ -118,6 +121,66 @@ if $clean; then
   echo "${bold}→ expo prebuild --clean (sinh lại ios/)${reset}"
   npx expo prebuild --platform ios --clean
 fi
+
+# Signing preflight. `expo run:ios` does not let Xcode create profiles (no -allowProvisioningUpdates), so the build only
+# signs when this Mac already holds a valid profile for the app's bundle ID, from the project's team, that lists this
+# iPhone. Without one, xcodebuild fails after bundling with "No profiles for '<bundle>' were found"; check it first.
+# A free Personal Team cannot get a profile for a bundle ID that another team registered.
+signing_preflight() {
+  local bundle team pbx now f plist appid pteam exp name devices seen="" ok=""
+  bundle="$(node -p "require('./app.json').expo.ios.bundleIdentifier")"
+  pbx="$(ls ios/*.xcodeproj/project.pbxproj 2>/dev/null | head -1 || true)"
+  team=""
+  [ -z "$pbx" ] || team="$(sed -n 's/.*DEVELOPMENT_TEAM = \([A-Z0-9]*\);.*/\1/p' "$pbx" | head -1)"
+  echo "${bold}→ Kiểm tra ký app${reset} ${dim}(bundle $bundle, team ${team:-chưa đặt}, iPhone $device)${reset}"
+
+  security find-identity -v -p codesigning 2>/dev/null | grep -q '"Apple Development' ||
+    die "Keychain chưa có certificate Apple Development. Xcode › Settings › Accounts › chọn Apple ID › Manage Certificates › + Apple Development."
+
+  now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  for f in "$HOME/Library/MobileDevice/Provisioning Profiles"/*.mobileprovision \
+    "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"/*.mobileprovision; do
+    [ -f "$f" ] || continue
+    plist="$(security cms -D -i "$f" 2>/dev/null)" || continue
+    appid="$(plutil -extract Entitlements.application-identifier raw -o - - <<<"$plist" 2>/dev/null || true)"
+    pteam="$(plutil -extract TeamIdentifier.0 raw -o - - <<<"$plist" 2>/dev/null || true)"
+    exp="$(plutil -extract ExpirationDate raw -o - - <<<"$plist" 2>/dev/null || true)"
+    name="$(plutil -extract Name raw -o - - <<<"$plist" 2>/dev/null || true)"
+    # application-identifier is "<team prefix>.<bundle ID or wildcard>"; the unquoted pattern matches "*" wildcards.
+    # shellcheck disable=SC2053
+    [[ "$bundle" == ${appid#*.} ]] || continue
+    [ -z "$team" ] || [ "$pteam" = "$team" ] || { seen="$seen\n    - $name: team $pteam, không phải $team"; continue; }
+    [[ "$exp" > "$now" ]] || { seen="$seen\n    - $name: hết hạn $exp"; continue; }
+    if [ "$(plutil -extract ProvisionsAllDevices raw -o - - <<<"$plist" 2>/dev/null || true)" != true ]; then
+      devices="$(plutil -extract ProvisionedDevices json -o - - <<<"$plist" 2>/dev/null || true)"
+      # A device name passed to --device cannot be matched against UDIDs, so only a UDID is checked.
+      if [[ "$device" =~ ^[0-9A-Fa-f-]{24,40}$ ]] && ! grep -qi "\"$device\"" <<<"$devices"; then
+        seen="$seen\n    - $name: không có iPhone này"
+        continue
+      fi
+    fi
+    ok="$name"
+    break
+  done
+
+  if [ -n "$ok" ]; then
+    echo "  Profile: $ok"
+    return 0
+  fi
+  echo "${red}✗ Không có provisioning profile dùng được cho $bundle${team:+ (team $team)} và iPhone này; xcodebuild sẽ báo \"No profiles for '$bundle' were found\".${reset}" >&2
+  [ -z "$seen" ] || printf '  Profile có nhưng không dùng được:%b\n' "$seen" >&2
+  cat >&2 <<EOF
+  Cách sửa:
+    1. Xcode › Settings › Accounts: thêm Apple ID thuộc team sở hữu bundle $bundle (Personal Team miễn phí không tạo
+       được profile cho bundle đã đăng ký ở team khác).
+    2. Mở frontend/mobile/ios/*.xcworkspace › target › Signing & Capabilities: chọn team đó, bật "Automatically manage
+       signing", cắm iPhone và đợi Xcode tạo profile (iPhone mới phải được đăng ký vào team).
+    3. Chạy lại script. --clean sinh lại ios/ và đặt lại team; muốn giữ team thì khai ios.appleTeamId trong app.json.
+  Bỏ qua bước kiểm tra: --skip-preflight.
+EOF
+  exit 1
+}
+if $preflight; then signing_preflight; fi
 
 echo "${bold}→ Build Release và cài lên $device${reset}"
 echo "  ${dim}Giữ iPhone mở khoá khi build xong để app tự mở; máy đang khoá thì app vẫn được cài nhưng báo lỗi lúc mở.${reset}"

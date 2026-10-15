@@ -13,8 +13,8 @@ npm run web             # hoặc bấm w: chạy trên trình duyệt (khung gi�
 npm run typecheck
 npm test                # test parser câu trả lời của trợ lý (node --test, không cần thiết bị)
 npm run export:web      # build web tĩnh ra dist/
-../../scripts/ios-device-release.sh   # chọn iPhone đang cắm vào Mac, build Release từ code đang checkout và cài lên máy
-../../scripts/android-release.sh [--abis arm64-v8a] [--install]   # build APK Release ngay trên máy, giống hệt CI; in dung lượng từng phần, --install cài qua adb
+../../scripts/ios-device-release.sh   # chọn iPhone đang cắm vào Mac, kiểm tra ký app (profile đúng team, bundle, iPhone), build Release và cài lên máy
+../../scripts/android-release.sh [--abis arm64-v8a] [--install]   # kiểm tra toolchain theo bản ghim của CI, build APK Release giống hệt CI, in dung lượng, --install cài qua adb
 ```
 
 ## Xem thử với dữ liệu mẫu
