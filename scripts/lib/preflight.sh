@@ -1,4 +1,5 @@
-# Shared preflight report for the device build scripts (scripts/ios-device-release.sh, scripts/android-release.sh).
+# Shared helpers for the device build scripts (scripts/ios-device-release.sh, scripts/android-release.sh): the
+# preflight report and the arrow-key menu that picks a phone.
 # Every check prints one line (✓ passed, ! warning, ✗ failed). A failure says how to fix it and can register an action
 # (open a page or an app, or run a command); pf_finish then lists those actions so the user can start one from the
 # terminal instead of looking up what to install. Written for the bash 3.2 that ships with macOS.
@@ -101,4 +102,33 @@ pf_finish() {
     done
   fi
   exit 1
+}
+
+# Arrow-key menu (up/down or j/k, Enter; q quits); stores the selected index in `choice`.
+pf_pick() {
+  local -a items=("$@")
+  local n=${#items[@]} cur=0 key rest i
+  tput civis 2>/dev/null || true
+  trap 'tput cnorm 2>/dev/null || true' EXIT
+  while true; do
+    for ((i = 0; i < n; i++)); do
+      if [ "$i" -eq "$cur" ]; then
+        printf '\033[2K  %s❯ %s%s\n' "$pf_bold" "${items[i]}" "$pf_reset"
+      else
+        printf '\033[2K    %s\n' "${items[i]}"
+      fi
+    done
+    IFS= read -rsn1 key
+    if [ "$key" = $'\033' ]; then
+      read -rsn2 -t 1 rest || true
+      key="$key$rest"
+    fi
+    case "$key" in
+      $'\033[A' | k) cur=$(((cur - 1 + n) % n)) ;;
+      $'\033[B' | j) cur=$(((cur + 1) % n)) ;;
+      '') choice=$cur; tput cnorm 2>/dev/null || true; return 0 ;;
+      q | Q) echo; exit 130 ;;
+    esac
+    printf '\033[%dA' "$n"
+  done
 }

@@ -174,7 +174,8 @@ check_mac() {
   fi
 }
 
-# One line per iPhone paired with this Mac: udid<TAB>name<TAB>model<TAB>iOS<TAB>connection<TAB>developer mode.
+# One line per iPhone or iPad this Mac sees: udid<TAB>name<TAB>model<TAB>iOS<TAB>connection<TAB>developer mode<TAB>pairing
+# state ("paired" once the user tapped Trust).
 # xcodebuild needs hardwareProperties.udid, not the CoreDevice identifier.
 list_devices() {
   local json
@@ -184,49 +185,21 @@ list_devices() {
     const { result } = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
     for (const d of result.devices) {
       const hw = d.hardwareProperties, conn = d.connectionProperties, dp = d.deviceProperties;
-      if (hw.platform !== "iOS" || hw.reality !== "physical" || conn.pairingState !== "paired") continue;
+      if (hw.platform !== "iOS" || hw.reality !== "physical") continue;
       const via = conn.transportType === "wired" ? "cable" : "Wi-Fi";
-      console.log([hw.udid, dp.name, hw.marketingName, dp.osVersionNumber, via, dp.developerModeStatus || "unknown"].join("\t"));
+      console.log([hw.udid || d.identifier, dp.name, hw.marketingName, dp.osVersionNumber || "?", via,
+        dp.developerModeStatus || "unknown", conn.pairingState || "unknown"].join("\t"));
     }' "$json"
   rm -f "$json"
-}
-
-# Arrow-key menu; stores the selected index in `choice`. Written for the bash 3.2 that ships with macOS.
-pick() {
-  local -a items=("$@")
-  local n=${#items[@]} cur=0 key rest i
-  tput civis 2>/dev/null || true
-  trap 'tput cnorm 2>/dev/null || true' EXIT
-  while true; do
-    for ((i = 0; i < n; i++)); do
-      if [ "$i" -eq "$cur" ]; then
-        printf '\033[2K  %s❯ %s%s\n' "$cyan$bold" "${items[i]}" "$reset"
-      else
-        printf '\033[2K    %s\n' "${items[i]}"
-      fi
-    done
-    IFS= read -rsn1 key
-    if [ "$key" = $'\033' ]; then
-      read -rsn2 -t 1 rest || true
-      key="$key$rest"
-    fi
-    case "$key" in
-      $'\033[A' | k) cur=$(((cur - 1 + n) % n)) ;;
-      $'\033[B' | j) cur=$(((cur + 1) % n)) ;;
-      '') choice=$cur; return 0 ;;
-      q | Q) echo; exit 130 ;;
-    esac
-    printf '\033[%dA' "$n"
-  done
 }
 
 no_iphone_fix="Connect the iPhone by cable, unlock it and tap Trust. The first time, also open Xcode › Window ›\nDevices and Simulators so Xcode pairs with the iPhone and prepares it for development."
 
 # The chosen iPhone (its line from list_devices) and the profile that can sign the app for it.
 check_iphone() {
-  local line="$1" udid="" name="" model="" ios="" via="" devmode="" sdk="" pbx="" team="" teams="" kind="" ws="" now=""
+  local line="$1" udid="" name="" model="" ios="" via="" devmode="" pairing="" sdk="" pbx="" team="" teams="" kind="" ws="" now=""
   local f plist appid pteam exp pname devices seen="" ok="" fix=""
-  IFS=$'\t' read -r udid name model ios via devmode <<<"$line"
+  IFS=$'\t' read -r udid name model ios via devmode pairing <<<"$line"
 
   pf_section "iPhone"
   pf_ok "$name ($model, iOS $ios, $via)"
@@ -255,8 +228,10 @@ check_iphone() {
   team=""
   [ -z "$pbx" ] || team="$(sed -n 's/.*DEVELOPMENT_TEAM = \([A-Z0-9]*\);.*/\1/p' "$pbx" | head -1)"
   teams="$(xcode_teams 2>/dev/null || true)"
-  if [ -z "$team" ]; then
-    pf_warn "No signing team in the iOS project yet" "Expo picks one when it generates ios/; run with --check again after a first build to verify the profile."
+  if [ -z "$pbx" ]; then
+    pf_warn "No ios/ project yet, so the profile cannot be checked" "Run the script without --check: it generates ios/ first, then checks the profile before building."
+  elif [ -z "$team" ]; then
+    pf_warn "No signing team in the iOS project yet" "Pick one in the workspace › target › Signing & Capabilities, or set ios.appleTeamId in app.json and run with --clean."
   else
     kind="$(printf '%s\n' "$teams" | awk -F'\t' -v t="$team" '$1 == t { print $3 }')"
     case "$kind" in
@@ -291,7 +266,9 @@ check_iphone() {
     break
   done
 
-  if [ -n "$ok" ]; then
+  if [ -z "$pbx" ]; then
+    :
+  elif [ -n "$ok" ]; then
     pf_ok "$ok"
   else
     fix="xcodebuild would stop with \"No profiles for '$bundle' were found\"."
@@ -329,24 +306,32 @@ if $checks; then
 fi
 
 # Paired iPhones; the device checks need Xcode, so they run after the Mac checks passed.
-devices="$(list_devices)" || die "Could not list devices (xcrun devicectl). Open Xcode once so it finishes installing its components."
+all_devices="$(list_devices)" || die "Could not list devices (xcrun devicectl). Open Xcode once so it finishes installing its components."
+devices="$(printf '%s\n' "$all_devices" | awk -F'\t' '$7 == "paired"')"
+untrusted="$(printf '%s\n' "$all_devices" | awk -F'\t' 'NF && $7 != "paired" { print $2 }' | paste -sd, - | sed 's/,/, /g')"
 if [ -z "$devices" ]; then
   pf_begin
   pf_section "iPhone"
-  pf_fail "No iPhone is paired with this Mac" "$no_iphone_fix" "Open Xcode (then Window › Devices and Simulators)" "pf_open -a Xcode"
+  if [ -n "$untrusted" ]; then
+    pf_fail "$untrusted is connected but has not trusted this Mac" "Unlock the iPhone, tap Trust on the \"Trust This Computer?\" prompt and enter the passcode. No prompt: unplug and\nplug the cable back in, or open Xcode › Window › Devices and Simulators." \
+      "Open Xcode (then Window › Devices and Simulators)" "pf_open -a Xcode"
+  else
+    pf_fail "No iPhone is connected to this Mac" "$no_iphone_fix" "Open Xcode (then Window › Devices and Simulators)" "pf_open -a Xcode"
+  fi
   pf_finish
 fi
+[ -z "$untrusted" ] || echo "  ${yellow}! Also connected but not trusting this Mac: $untrusted${reset}"
 
 if [ -z "$device" ]; then
   [ -t 0 ] || die "No terminal to show the menu: pass --device <UDID>."
   udids=() labels=()
-  while IFS=$'\t' read -r udid name model os via devmode; do
+  while IFS=$'\t' read -r udid name model os via devmode pairing; do
     udids+=("$udid")
     labels+=("$name  ${dim}$model · iOS $os · $via${reset}")
   done <<<"$devices"
   echo
   echo "Pick the iPhone:"
-  pick "${labels[@]}"
+  pf_pick "${labels[@]}"
   device="${udids[choice]}"
 fi
 device_line="$(printf '%s\n' "$devices" | awk -F'\t' -v d="$device" '$1 == d || $2 == d' | head -1)"
@@ -362,6 +347,10 @@ if ! $check_only; then
   if $clean; then
     echo "${bold}→ expo prebuild --clean (regenerates ios/)${reset}"
     npx expo prebuild --platform ios --clean
+  elif [ ! -d ios ] && $checks; then
+    # A fresh clone has no ios/ yet; generate it now so the profile check sees the project's signing team.
+    echo "${bold}→ expo prebuild (generates ios/)${reset}"
+    npx expo prebuild --platform ios
   fi
 fi
 

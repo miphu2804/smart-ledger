@@ -4,14 +4,16 @@
 #
 #   ./scripts/android-release.sh                         APK with the release ABIs: armeabi-v7a,arm64-v8a
 #   ./scripts/android-release.sh --abis arm64-v8a        one ABI, faster (most phones)
-#   ./scripts/android-release.sh --install               also install the APK on the phone that adb sees
+#   ./scripts/android-release.sh --install               also install the APK on a phone connected over adb (menu if several)
+#   ./scripts/android-release.sh --install --device <serial>   pick the phone without the menu (serial from `adb devices`)
 #   ./scripts/android-release.sh --aab                   Android App Bundle for Google Play instead of an APK
 #   ./scripts/android-release.sh --out <file>            copy the APK or AAB to <file>
 #   ./scripts/android-release.sh --check                 only run the preflight checks
 #   ./scripts/android-release.sh --skip-preflight        build even if a check fails
 #
 # Before building it checks the machine (Node, JDK, Android SDK packages pinned at the top of mobile-release.yml, the
-# Firebase file, the phone for --install) and, in a terminal, offers to open or run the fix for what is missing.
+# Firebase file) and, for --install, the phone (USB debugging allowed, an ABI this build contains, Android new enough,
+# an older install signed with another key), and in a terminal offers to open or run the fix for what is missing.
 # Locally, like scripts/ios-device-release.sh: mocks are off (real Firebase and Core) and Core defaults to staging,
 # overridable with EXPO_PUBLIC_API_ENDPOINT in .env or the shell. In GitHub Actions every EXPO_PUBLIC_* value comes from
 # the environment as given. Signs with RELEASE_KEYSTORE, KEYSTORE_PASSWORD and RELEASE_KEY_ALIAS when RELEASE_KEYSTORE
@@ -22,6 +24,7 @@ abis="armeabi-v7a,arm64-v8a"
 format=apk
 install=false
 out=""
+serial=""
 preflight=true
 check_only=false
 while [ $# -gt 0 ]; do
@@ -29,10 +32,11 @@ while [ $# -gt 0 ]; do
     --abis) abis="${2:?--abis needs a value}"; shift 2 ;;
     --aab) format=aab; shift ;;
     --install) install=true; shift ;;
+    --device) serial="${2:?--device needs a value}"; install=true; shift 2 ;;
     --out) out="${2:?--out needs a value}"; shift 2 ;;
     --check) check_only=true; shift ;;
     --skip-preflight) preflight=false; shift ;;
-    -h | --help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $1 (see --help)" >&2; exit 2 ;;
   esac
 done
@@ -93,8 +97,90 @@ find_sdk() {
 sdk="$(find_sdk || true)"
 [ -z "$sdk" ] || export ANDROID_HOME="$sdk"
 
+app_id="$(sed -n 's/.*"package": *"\([^"]*\)".*/\1/p' app.json | head -1)"
+# The lowest Android version the app runs on: React Native's minSdk unless app.json overrides it.
+min_sdk="$(sed -n 's/.*"minSdkVersion": *\([0-9]*\).*/\1/p' app.json | head -1)"
+[ -n "$min_sdk" ] || min_sdk="$(sed -n 's/^minSdk = "\([0-9]*\)"/\1/p' node_modules/react-native/gradle/libs.versions.toml 2>/dev/null || true)"
+min_sdk="${min_sdk:-24}"
+
 firebase_project="$(sed -n 's/^EXPO_PUBLIC_FIREBASE_PROJECT_ID=//p' .env 2>/dev/null | tail -1 || true)"
 firebase_url="https://console.firebase.google.com/${firebase_project:+project/$firebase_project/settings/general}"
+
+# The phone for --install: exactly one ready phone (or the --device / menu choice), allowed to debug, with an ABI this
+# build contains and an Android version at or above minSdk. Sets `serial`.
+check_phone() {
+  local adb="${sdk:+$sdk/platform-tools/adb}" sm="" lines ready others serials labels line state model abilist api release
+  pf_section "Phone (--install)"
+  [ -z "$sdk" ] || sm="$(ls "$sdk"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1 || true)"
+  if [ -z "$adb" ] || [ ! -x "$adb" ]; then
+    if [ -n "$sm" ]; then
+      pf_fail "adb not found" "It comes with the SDK's platform-tools package." \
+        "Install platform-tools with sdkmanager" "yes | '$sm' --sdk_root='$sdk' platform-tools"
+    else
+      pf_fail "adb not found" "Install Platform-Tools in Android Studio › Settings › Android SDK › SDK Tools."
+    fi
+    return 0
+  fi
+
+  # `adb devices -l`: "<serial> <state> ... model:<model> ...", one line per phone or emulator.
+  lines="$("$adb" devices -l 2>/dev/null | sed '1d;/^[[:space:]]*$/d' || true)"
+  if [ -n "$serial" ]; then
+    lines="$(printf '%s\n' "$lines" | awk -v s="$serial" '$1 == s')"
+    [ -n "$lines" ] || { pf_fail "No phone with serial $serial (see adb devices)" ""; return 0; }
+  fi
+  ready="$(printf '%s\n' "$lines" | awk '$2 == "device"')"
+  others="$(printf '%s\n' "$lines" | awk 'NF && $2 != "device"')"
+  while read -r line; do
+    [ -n "$line" ] || continue
+    state="$(echo "$line" | awk '{ print $2 }')"
+    case "$state" in
+      unauthorized) pf_fail "$(echo "$line" | awk '{ print $1 }') has not allowed USB debugging from this computer" "Unlock the phone and tap Allow on the \"Allow USB debugging?\" prompt (tick \"Always allow\")." ;;
+      offline) pf_fail "$(echo "$line" | awk '{ print $1 }') is offline" "Unplug and plug the cable back in, or restart adb." "Restart adb" "'$adb' kill-server && '$adb' start-server" ;;
+      no) pf_fail "This computer has no permission to talk to $(echo "$line" | awk '{ print $1 }')" "On Linux add a udev rule for the phone's vendor (see developer.android.com/studio/run/device), then replug." ;;
+      *) pf_warn "$(echo "$line" | awk '{ print $1 }') is $state" ;;
+    esac
+  done <<<"$others"
+  if [ -z "$ready" ]; then
+    [ -n "$others" ] || pf_fail "No Android phone found by adb" "Connect the phone by cable and turn on USB debugging: Settings › About phone › tap Build number 7 times,\nthen Settings › System › Developer options › USB debugging. Some phones also need the USB mode set to File transfer."
+    return 0
+  fi
+  serials=() labels=()
+  while read -r line; do
+    serials+=("$(echo "$line" | awk '{ print $1 }')")
+    model="$(echo "$line" | sed -n 's/.*model:\([^ ]*\).*/\1/p' | tr _ ' ')"
+    labels+=("${model:-unknown model}  ${pf_dim}$(echo "$line" | awk '{ print $1 }')${pf_reset}")
+  done <<<"$ready"
+  if [ "${#serials[@]}" -eq 1 ]; then
+    serial="${serials[0]}"
+  elif [ -t 0 ] && [ -t 1 ] && ! $ci; then
+    echo "  Several phones are connected; pick one:"
+    pf_pick "${labels[@]}"
+    serial="${serials[choice]}"
+  else
+    pf_fail "${#serials[@]} phones are connected" "Pick one with --device <serial>: ${serials[*]}"
+    return 0
+  fi
+
+  # getprop answers with a trailing \r.
+  model="$("$adb" -s "$serial" shell getprop ro.product.model 2>/dev/null | tr -d '\r')"
+  release="$("$adb" -s "$serial" shell getprop ro.build.version.release 2>/dev/null | tr -d '\r')"
+  api="$("$adb" -s "$serial" shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r')"
+  abilist="$("$adb" -s "$serial" shell getprop ro.product.cpu.abilist 2>/dev/null | tr -d '\r')"
+  pf_ok "${model:-Phone} ($serial), Android ${release:-?}"
+  if [ -n "$api" ] && [ "$api" -lt "$min_sdk" ]; then
+    pf_fail "${model:-The phone} runs Android API $api; the app needs API $min_sdk (Android 7.0) or newer" "Use a newer phone or emulator."
+  fi
+  if [ -n "$abilist" ]; then
+    if printf '%s\n' "${abilist//,/$'\n'}" | grep -qxF -f <(printf '%s\n' "${abis//,/$'\n'}"); then
+      pf_ok "ABI: the phone runs ${abilist%%,*}; this build has $abis"
+    else
+      pf_fail "${model:-The phone} runs $abilist, which this build ($abis) does not contain" "Build with --abis ${abilist%%,*}. Release builds carry armeabi-v7a and arm64-v8a only, so x86 emulators need an\narm64 emulator image (Apple Silicon) or --abis x86_64 for a local test build."
+    fi
+  fi
+  if "$adb" -s "$serial" shell pm list packages "$app_id" 2>/dev/null | tr -d '\r' | grep -qx "package:$app_id"; then
+    pf_warn "$app_id is already installed on ${model:-the phone}" "If that copy was signed with another key (e.g. the APK from the landing page), Android refuses the update:\nuninstall it first with: $adb -s $serial uninstall $app_id (deletes the app's data on the phone)."
+  fi
+}
 
 run_checks() {
   local node_found java_found major what sm="" missing pkgs adb devices
@@ -199,25 +285,7 @@ run_checks() {
   fi
 
   if $install; then
-    pf_section "Phone (--install)"
-    adb="${sdk:+$sdk/platform-tools/adb}"
-    if [ -z "$adb" ] || [ ! -x "$adb" ]; then
-      if [ -n "$sm" ]; then
-        pf_fail "adb not found" "It comes with the SDK's platform-tools package." \
-          "Install platform-tools with sdkmanager" "yes | '$sm' --sdk_root='$sdk' platform-tools"
-      else
-        pf_fail "adb not found" "Install Platform-Tools in Android Studio › Settings › Android SDK › SDK Tools."
-      fi
-    else
-      devices="$("$adb" devices 2>/dev/null | sed '1d;/^$/d' || true)"
-      if printf '%s\n' "$devices" | grep -q $'\tdevice$'; then
-        pf_ok "Phone connected: $(printf '%s\n' "$devices" | grep $'\tdevice$' | head -1 | cut -f1)"
-      elif printf '%s\n' "$devices" | grep -q $'\tunauthorized$'; then
-        pf_fail "The phone has not allowed USB debugging from this computer" "Unlock the phone and tap Allow on the \"Allow USB debugging?\" prompt."
-      else
-        pf_fail "No Android phone found by adb" "Connect the phone by cable and turn on USB debugging: Settings › About phone › tap Build number 7 times,\nthen Settings › System › Developer options › USB debugging."
-      fi
-    fi
+    check_phone
   fi
 }
 
@@ -305,7 +373,21 @@ if [ "$format" = apk ]; then
 fi
 
 if $install; then
-  echo "${bold}→ adb install${reset}"
-  echo "  If the phone has a build signed with another key (the one from the landing page), Android refuses it: uninstall that first."
-  "$sdk/platform-tools/adb" install -r "$built"
+  adb="$sdk/platform-tools/adb"
+  echo "${bold}→ adb install on ${serial:-the connected phone}${reset}"
+  if result="$("$adb" ${serial:+-s "$serial"} install -r "$built" 2>&1)"; then
+    printf '%s\n' "$result"
+  else
+    printf '%s\n' "$result"
+    # adb's install errors, in words.
+    case "$result" in
+      *INSTALL_FAILED_UPDATE_INCOMPATIBLE*) die "The installed $app_id is signed with another key. Uninstall it (its data goes with it): $adb ${serial:+-s $serial }uninstall $app_id" ;;
+      *INSTALL_FAILED_NO_MATCHING_ABIS*) die "The phone's CPU is not in this build ($abis). Build again with --abis matching the phone." ;;
+      *INSTALL_FAILED_OLDER_SDK*) die "The phone's Android is older than the app's minimum (API $min_sdk)." ;;
+      *INSTALL_FAILED_VERSION_DOWNGRADE*) die "The phone has a newer versionCode of the app. Uninstall it first: $adb ${serial:+-s $serial }uninstall $app_id" ;;
+      *INSTALL_FAILED_INSUFFICIENT_STORAGE*) die "Not enough free storage on the phone." ;;
+      *INSTALL_FAILED_USER_RESTRICTED* | *INSTALL_CANCELED_BY_USER*) die "The phone blocked the install. Accept the prompt on the phone; on Xiaomi/Redmi also turn on Developer options › Install via USB." ;;
+      *) die "adb install failed (see the output above)." ;;
+    esac
+  fi
 fi

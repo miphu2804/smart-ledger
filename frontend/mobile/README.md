@@ -14,10 +14,10 @@ npm run typecheck
 npm test                # test parser câu trả lời của trợ lý (node --test, không cần thiết bị)
 npm run export:web      # build web tĩnh ra dist/
 ../../scripts/ios-device-release.sh   # kiểm tra Mac và iPhone (Xcode, CocoaPods, Apple ID, profile ký app…), build Release và cài lên iPhone; --check chỉ kiểm tra
-../../scripts/android-release.sh [--abis arm64-v8a] [--install]   # kiểm tra toolchain theo bản ghim của CI, build APK Release giống hệt CI, in dung lượng; --install cài qua adb, --check chỉ kiểm tra
+../../scripts/android-release.sh [--abis arm64-v8a] [--install [--device <serial>]]   # kiểm tra toolchain theo bản ghim của CI, build APK Release giống hệt CI, in dung lượng; --install cài qua adb, --check chỉ kiểm tra
 ```
 
-Hai script build trên máy tự kiểm tra môi trường trước khi build. Máy mới cài thiếu gì (Xcode, license, CocoaPods, JDK 17, Android Studio và SDK, file Firebase, Apple ID, provisioning profile, Developer Mode, USB debugging…) thì script liệt kê đủ các lỗi, mỗi lỗi kèm cách sửa, rồi hỏi có muốn mở trang tải, mở Xcode hoặc Android Studio, hay chạy lệnh sửa không. Thông báo trong terminal viết bằng tiếng Anh.
+Hai script build trên máy tự kiểm tra môi trường trước khi build. Máy mới cài thiếu gì (Xcode, license, CocoaPods, JDK 17, Android Studio và SDK, file Firebase, Apple ID, provisioning profile, iPhone chưa bấm Trust, Developer Mode, USB debugging, điện thoại không hợp ABI hoặc Android quá cũ, máy đã cài bản ký key khác…) thì script liệt kê đủ các lỗi, mỗi lỗi kèm cách sửa, rồi hỏi có muốn mở trang tải, mở Xcode hoặc Android Studio, hay chạy lệnh sửa không. Thông báo trong terminal viết bằng tiếng Anh.
 
 ## Xem thử với dữ liệu mẫu
 
