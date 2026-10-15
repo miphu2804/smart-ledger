@@ -1,3 +1,13 @@
+### [2026-10-16 03:00 UTC+07:00] — [CI] Deploy the landing only when it changed
+
+**Done:** `deploy-landing` now runs on a push only when the push changes `frontend/web/` or `.github/workflows/ci.yml`; a re-run always deploys. Every push to `staging` and `main` used to spend two Vercel deployments (web and landing) even when only the backend changed, and the production deploy of release #249 hit the Hobby limit of 100 a day (`api-deployments-free-per-day`).
+
+**Changed files:** `.github/workflows/ci.yml`, `docs/development/ci-cd.md` — modified; this entry.
+
+**Flow explained:** push → job `landing` diffs `github.event.before`..`GITHUB_SHA` → `changed=true|false` → `deploy-landing` runs when `true` or on a re-run.
+
+**Check:** YAML parses and actionlint passes; the step script run locally against real commit pairs gives `false` for a backend-only push and `true` for a push touching `frontend/web/`, an all-zero `before` and an unknown commit. **Not verified:** a real push on GitHub (this PR's merge into `staging` touches `ci.yml`, so it will deploy; the first push after it that leaves the landing alone should skip).
+
 ### [2026-10-16 02:45 UTC+07:00] — [Feature] Report uses Core's estimated cost and shows the money of voided orders
 
 **Done:** "Giá vốn ước tính" on the Báo cáo screen was computed on the phone from each product's current cost, or 60% of the price when the product had none, which FR-006 rules out. The report now reads Core: revenue is the confirmed orders sold in the period (`/sales/summary`, never negative), and cost and profit come from `/reports/profit-estimate`, which uses the cost snapshotted at sale time. Core's net cost (sold minus voided) can go negative when an earlier order is voided, so the screen shows non-negative parts that add up exactly to Core's gross profit: revenue − cost of goods sold − orders sold earlier and voided now + cost of voided orders = gross profit, then − recorded expenses = profit after expenses. When some items have no cost, it says how many and how much revenue they cover, and links to Hàng hoá. A new "Đơn huỷ trong kỳ" block shows the number and value of orders voided in the period and how much was refunded, and explains that the rest of a voided order's value is only cancelled debt; its "Xem các đơn đã huỷ" button opens Orders with a new "Đã huỷ" filter, where the summary card shows the value of voided orders and day headers count voided orders. `stats.summary` no longer estimates cost at all, and the report stops loading the whole product list for it.
