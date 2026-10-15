@@ -15,7 +15,13 @@ import { SlingSendButton } from '../src/components/SlingSendButton';
 import { ThinkingStatus } from '../src/components/ThinkingStatus';
 import { VoicePillButton } from '../src/components/VoicePillButton';
 import { Dialog, EmptyState, Field, IconBtn, KEYBOARD_AVOID_BEHAVIOR, Row, Sheet, T } from '../src/components/ui';
-import type { AgentConversationSummary, AgentConversationView, AgentMessageView, ChatMessage } from '../src/data/types';
+import type {
+  AgentConversationSummary,
+  AgentConversationView,
+  AgentMemoryUsed,
+  AgentMessageView,
+  ChatMessage,
+} from '../src/data/types';
 import { agentApi } from '../src/lib/agentApi';
 import { ApiError } from '../src/lib/api';
 import { hhmm, relDay } from '../src/lib/format';
@@ -71,6 +77,36 @@ function conversationTitle(c: AgentConversationSummary): string {
 function lastActive(iso: string): string {
   const d = new Date(iso);
   return `${relDay(d)} · ${hhmm(d)}`;
+}
+
+/** Chip trên câu trả lời: ghi nhớ trợ lý đã dùng; chạm để xem đủ nội dung. */
+function MemoryChip({ memories }: { memories: AgentMemoryUsed[] }) {
+  const [open, setOpen] = useState(false);
+  const first = memories[0].content;
+  const label = first.length > 40 ? `${first.slice(0, 40)}…` : first;
+  return (
+    <View style={styles.memoryWrap}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Xem ghi nhớ trợ lý đã dùng"
+        onPress={() => setOpen((v) => !v)}
+        style={({ pressed }) => [styles.memoryChip, pressed && styles.pressed]}
+      >
+        <Feather name="cpu" size={12} color={colors.brand} />
+        <T w="semibold" size={11.5} color={colors.ink} numberOfLines={1} style={{ flexShrink: 1 }}>
+          Đã dùng ghi nhớ: {label}
+          {memories.length > 1 ? ` +${memories.length - 1}` : ''}
+        </T>
+      </Pressable>
+      {open
+        ? memories.map((m) => (
+            <T key={m.id} size={12} color={colors.muted} style={styles.memoryItem}>
+              • {m.content}
+            </T>
+          ))
+        : null}
+    </View>
+  );
 }
 
 /** Trợ lý AI — gửi qua agentApi (Core `/api/v1/agent/chat`; khi bật mock thì mockCore trả lời giả). */
@@ -142,10 +178,11 @@ export default function Ai() {
         setDraft(latest);
       });
     };
+    let memories: AgentMemoryUsed[] = [];
     try {
-      const reply = await agentApi.chatStream({ conversation_id: conversationId, message }, showDraft);
+      const reply = await agentApi.chatStream({ conversation_id: conversationId, message }, showDraft, (used) => (memories = used));
       setConversationId(reply.conversation_id);
-      setMsgs((m) => [...m, { id: `a${reply.message_id}`, from: 'ai', text: reply.answer }]);
+      setMsgs((m) => [...m, { id: `a${reply.message_id}`, from: 'ai', text: reply.answer, memories }]);
     } catch (err) {
       if (err instanceof ApiError && err.code === 'conversation_not_found') setConversationId(null);
       // Không mất câu đã gõ: gỡ bong bóng chưa gửi được và trả câu về ô nhập (trừ khi đã gõ câu khác).
@@ -177,29 +214,32 @@ export default function Ai() {
           {msgs.map((m) => {
             const isUser = m.from === 'user';
             return (
-              <View key={m.id} style={[styles.messageRow, isUser && styles.userMessageRow]}>
-                <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
-                  {!isUser ? (
-                    <Row style={styles.assistantBubbleHeader}>
-                      <Row gap={3} style={{ alignItems: 'center' }}>
-                        <View style={{ width: 2, height: 7, backgroundColor: colors.brand, borderRadius: 1 }} />
-                        <View style={{ width: 2, height: 11, backgroundColor: colors.brand, borderRadius: 1 }} />
-                        <View style={{ width: 2, height: 6, backgroundColor: colors.brand, borderRadius: 1 }} />
-                        <T w="bold" size={11.5} color={colors.brand} style={{ marginLeft: 3 }}>
-                          Trợ lý AI
-                        </T>
+              <React.Fragment key={m.id}>
+                {m.memories?.length ? <MemoryChip memories={m.memories} /> : null}
+                <View style={[styles.messageRow, isUser && styles.userMessageRow]}>
+                  <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
+                    {!isUser ? (
+                      <Row style={styles.assistantBubbleHeader}>
+                        <Row gap={3} style={{ alignItems: 'center' }}>
+                          <View style={{ width: 2, height: 7, backgroundColor: colors.brand, borderRadius: 1 }} />
+                          <View style={{ width: 2, height: 11, backgroundColor: colors.brand, borderRadius: 1 }} />
+                          <View style={{ width: 2, height: 6, backgroundColor: colors.brand, borderRadius: 1 }} />
+                          <T w="bold" size={11.5} color={colors.brand} style={{ marginLeft: 3 }}>
+                            Trợ lý AI
+                          </T>
+                        </Row>
                       </Row>
-                    </Row>
-                  ) : null}
-                  {isUser ? (
-                    <T size={13.5} color={colors.white} style={styles.messageText}>
-                      {m.text}
-                    </T>
-                  ) : (
-                    <ChatText text={m.text} />
-                  )}
+                    ) : null}
+                    {isUser ? (
+                      <T size={13.5} color={colors.white} style={styles.messageText}>
+                        {m.text}
+                      </T>
+                    ) : (
+                      <ChatText text={m.text} />
+                    )}
+                  </View>
                 </View>
-              </View>
+              </React.Fragment>
             );
           })}
 
@@ -539,6 +579,27 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   messages: { gap: 12 },
+  memoryWrap: {
+    // Thẳng hàng với bong bóng (sau avatar 34 + khoảng cách 8) và kéo sát bong bóng bên dưới.
+    marginLeft: 42,
+    marginBottom: -6,
+    gap: 4,
+  },
+  memoryChip: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    maxWidth: '86%',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: colors.brandSoft,
+  },
+  memoryItem: {
+    maxWidth: '86%',
+    lineHeight: 17,
+  },
   messageRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
