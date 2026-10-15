@@ -32,7 +32,7 @@ Types:
 
 Rules:
 
-- Use one of these scopes: `core`, `ai`, `mobile`, `web`, `ci`, `deploy`. For a `docs` commit the scope may instead name the document (`docs(contributing): ...`). Omit the scope for a change that spans areas.
+- Use a scope that names the affected module or area when it helps (for example `core`, `ai`, `mobile`, `web`, `ci`, `deploy`, or a document name for `docs`); omit it when the change spans areas. The scope is a hint for readers, not a fixed list.
 - Describe the action taken, not the resulting state.
 - Keep each commit focused on one related logical change.
 - Do not add attribution lines, and do not mention AI generation, co-authorship, or similar metadata in commit messages or pull request descriptions unless explicitly requested.
@@ -118,7 +118,7 @@ What changed and why.
 New environment variables, secrets, or migrations, or None.
 ```
 
-- **Area** is one of the commit scopes (`core`, `ai`, `mobile`, `web`, `docs`, `ci`).
+- **Area** is the module or part of the repo that changed, usually the commit scope.
 - **Validation** records what was actually run and its result. Add a row marked `Not verified` for anything that was not checked, such as a real device or a production run.
 - Link related documentation, API contracts, and issues (`Closes #123`), and state assumptions.
 - Add screenshots or a recording for a visible UI change.

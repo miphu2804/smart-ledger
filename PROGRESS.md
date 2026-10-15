@@ -1,6 +1,6 @@
 ### [2026-10-16 09:00 UTC+07:00] — [Docs] Table format for commits and pull requests
 
-**Done:** Defined one format for every future commit and pull request: a closed scope list, body and footer rules, a `!` plus `BREAKING CHANGE:` rule that survives squash merges, and pull request descriptions built from Summary, Changes, Validation, Risks and rollback, and Config and migrations tables. Release pull requests (`staging` → `main`) get their own template that must list every commit in `origin/main..origin/staging` grouped by area, with Breaking changes and Deploy tables. Reviewed by an Opus medium pass; its findings (template default-branch caveat, release template URL, squash and breaking marks, scope list, Deploy rows, AGENTS.md duplication) are applied.
+**Done:** Defined one format for every future commit and pull request: a free-form scope (examples, no fixed list), body and footer rules, a `!` plus `BREAKING CHANGE:` rule that survives squash merges, and pull request descriptions built from Summary, Changes, Validation, Risks and rollback, and Config and migrations tables. Release pull requests (`staging` → `main`) get their own template that must list every commit in `origin/main..origin/staging` grouped by area, with Breaking changes and Deploy tables. Reviewed by an Opus medium pass; its findings (template default-branch caveat, release template URL, squash and breaking marks, Deploy rows, AGENTS.md duplication) are applied.
 
 **Changed files:**
 - `CONTRIBUTING.md`, `AGENTS.md`, `PROGRESS.md` — modified
