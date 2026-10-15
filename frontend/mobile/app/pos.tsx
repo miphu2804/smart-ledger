@@ -2,11 +2,12 @@ import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
+import { Animated, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarcodeScannerModal } from '../src/components/BarcodeScannerModal';
 import { useToast } from '../src/components/brand';
 import { PageControls } from '../src/components/PageControls';
+import { ProductGridSkeleton, RowListSkeleton } from '../src/components/ListSkeleton';
 import { TAB_HEADER_SIDE, TAB_HEADER_TOP, TabSearchBar } from '../src/components/TabSearchBar';
 import { Button, Chips, Dialog, EmptyState, Field, Row, Sheet, Stepper, T } from '../src/components/ui';
 import type { CategoryView, LineItem, ProductView } from '../src/data/types';
@@ -20,7 +21,7 @@ import { itemsTotal } from '../src/lib/stats';
 import { LIST_PAGE_SIZE } from '../src/lib/usePagedList';
 import { usePagedPage } from '../src/lib/usePagedPage';
 import { useApp } from '../src/store/AppStore';
-import { colors, font, shadow, WEB_FRAME_MAX_WIDTH } from '../src/theme';
+import { colors, font, shadow } from '../src/theme';
 
 const salesColors = {
   primary: colors.brand, // #482AAC
@@ -657,12 +658,10 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
       return next;
     });
 
-  // Hai cột bằng nhau: bề rộng danh sách trừ lề 10 hai bên và khe 8 giữa hai thẻ. Dùng bề rộng đo được của danh sách;
-  // trước khi đo xong thì ước lượng theo cửa sổ, trên web chặn ở khung app vì cửa sổ trình duyệt rộng hơn khung nhiều.
-  const { width: windowWidth } = useWindowDimensions();
-  const [listWidth, setListWidth] = useState(0);
-  const estimatedWidth = Platform.OS === 'web' ? Math.min(windowWidth, WEB_FRAME_MAX_WIDTH) : windowWidth;
-  const gridCardWidth = Math.max(0, ((listWidth || estimatedWidth) - 20 - 8) / 2);
+  // Hai cột bằng nhau theo phần trăm của hàng: mỗi thẻ rộng 50%, chừa 4 px phía giữa (khe 8 giữa hai thẻ, lề 10 hai bên
+  // do danh sách). Không tính bề rộng bằng px từ cửa sổ hay từ lần đo danh sách: trên Safari iPhone lần đo rơi vào lúc màn
+  // đang chuyển tab nên ra số nhỏ hơn thật và cột phải hụt khỏi mép.
+  const gridCellStyle = (index: number) => (index % 2 === 0 ? styles.gridCellLeft : styles.gridCellRight);
 
   const cartItems: LineItem[] = [
     ...Object.entries(cart).flatMap(([id, qty]) => {
@@ -793,14 +792,10 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
           key={viewMode}
           ref={listRef as never}
           data={products}
-          onLayout={(event) => {
-            const width = Math.round(event.nativeEvent.layout.width);
-            setListWidth((current) => (current === width ? current : width));
-          }}
           numColumns={viewMode === 'grid' ? 2 : 1}
           keyExtractor={(p) => String(p.id)}
-          renderItem={({ item: p }) => (
-            <View style={viewMode === 'grid' ? { width: gridCardWidth } : undefined}>
+          renderItem={({ item: p, index }) => (
+            <View style={viewMode === 'grid' ? gridCellStyle(index) : undefined}>
               <MemoProductCard
                 product={p}
                 viewMode={viewMode}
@@ -811,7 +806,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
               />
             </View>
           )}
-          columnWrapperStyle={viewMode === 'grid' ? { gap: 8, alignItems: 'flex-start' } : undefined}
+          columnWrapperStyle={viewMode === 'grid' ? { alignItems: 'flex-start' } : undefined}
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
           ListHeaderComponent={
             <>
@@ -850,7 +845,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
           }
           ListEmptyComponent={
             loading ? (
-              <ActivityIndicator color={salesColors.primary} style={{ marginTop: 20 }} />
+              viewMode === 'grid' ? <ProductGridSkeleton rows={3} /> : <RowListSkeleton rows={6} />
             ) : (
               <EmptyState icon="search" title="Không tìm thấy hàng" hint="Thử từ khoá khác hoặc thêm món ngoài danh mục" />
             )
@@ -1303,6 +1298,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  gridCellLeft: {
+    width: '50%',
+    paddingRight: 4,
+  },
+  gridCellRight: {
+    width: '50%',
+    paddingLeft: 4,
   },
   card: {
     backgroundColor: salesColors.cardBg,

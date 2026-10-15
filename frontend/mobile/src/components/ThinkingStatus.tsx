@@ -64,11 +64,26 @@ export function ThinkingStatus({ color = colors.brand }: { color?: string }) {
 /** Mỗi chấm sáng ở 18–42% vòng của riêng nó, lệch pha theo độ trễ, giống keyframe `lattice-on`. */
 function dotOpacity(clock: Animated.Value, delay: number) {
   const phase = Animated.modulo(Animated.add(clock, 1 - delay / CYCLE_STEPS), 1);
-  return phase.interpolate({
-    inputRange: [0, 0.18, 0.42, 0.62, 1],
-    outputRange: [IDLE, 1, 1, IDLE, IDLE],
-    easing: Easing.bezier(0.77, 0, 0.175, 1),
-  });
+  return phase.interpolate(LATTICE_ON);
+}
+
+// Native driver không nhận `easing` trong `interpolate`, nên đường cong bezier được lấy mẫu sẵn
+// thành 8 mốc tuyến tính mỗi đoạn giữa các keyframe để giữ dáng nhấp nháy cũ.
+const LATTICE_ON = easedRange([0, 0.18, 0.42, 0.62, 1], [IDLE, 1, 1, IDLE, IDLE], Easing.bezier(0.77, 0, 0.175, 1), 8);
+
+function easedRange(keys: number[], levels: number[], ease: (t: number) => number, samples: number) {
+  const inputRange: number[] = [];
+  const outputRange: number[] = [];
+  for (let i = 0; i < keys.length - 1; i++) {
+    for (let k = 0; k < samples; k++) {
+      const t = k / samples;
+      inputRange.push(keys[i] + t * (keys[i + 1] - keys[i]));
+      outputRange.push(levels[i] + ease(t) * (levels[i + 1] - levels[i]));
+    }
+  }
+  inputRange.push(keys[keys.length - 1]);
+  outputRange.push(levels[levels.length - 1]);
+  return { inputRange, outputRange };
 }
 
 function elapsed(tenths: number) {
