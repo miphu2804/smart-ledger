@@ -46,8 +46,11 @@ function atToday(now: Date, hour: number, minute = 0) {
 export interface LocalNotificationData {
   /** Vài đơn chưa huỷ mới nhất (trang đầu của `GET /sales?saleStatus=CONFIRMED`) */
   recentSales: Invoice[];
-  /** Báo cáo hôm qua: số đơn, doanh thu thuần, chi phí */
-  yesterday: { orderCount: number; netRevenueVnd: number; expenseVnd: number } | null;
+  /**
+   * Hôm qua: số đơn còn hiệu lực, doanh thu không âm (`periodRevenue`), khoản chi và giá trị đơn bán trước đó mà bị huỷ
+   * hôm qua (tính vào chi)
+   */
+  yesterday: { orderCount: number; revenueVnd: number; expenseVnd: number; cancelledEarlierVnd: number } | null;
   /** Lãi gộp ước tính hôm qua; `isComplete=false` khi có món thiếu giá vốn */
   yesterdayProfit: { estimatedGrossProfitVnd: number; isComplete: boolean; unknownCostItemCount: number } | null;
   /** Các khoản chi hôm nay (giờ Việt Nam) */
@@ -98,7 +101,7 @@ export function buildLocalNotifications(data: LocalNotificationData, now = new D
 
   // --- Thu chi: tổng kết hôm qua theo báo cáo của Core + chi phí hôm nay
   const y = data.yesterday;
-  if (y && (y.orderCount || y.expenseVnd)) {
+  if (y && (y.orderCount || y.expenseVnd || y.cancelledEarlierVnd)) {
     const profit = data.yesterdayProfit;
     const profitText = profit
       ? ` · Lãi gộp ước tính ${vnd(profit.estimatedGrossProfitVnd)}${
@@ -110,7 +113,9 @@ export function buildLocalNotifications(data: LocalNotificationData, now = new D
       category: 'finance',
       icon: 'bar-chart-2',
       title: 'Tổng kết ngày hôm qua',
-      body: `${y.orderCount} đơn · Doanh thu ${vnd(y.netRevenueVnd)} · Chi ${vnd(y.expenseVnd)}${profitText}`,
+      body: `${y.orderCount} đơn · Doanh thu ${vnd(y.revenueVnd)} · Chi ${vnd(y.expenseVnd + y.cancelledEarlierVnd)}${
+        y.cancelledEarlierVnd ? ` (gồm huỷ đơn ${vnd(y.cancelledEarlierVnd)})` : ''
+      }${profitText}`,
       at: atToday(now, 6),
       href: '/(tabs)/invoices',
     });

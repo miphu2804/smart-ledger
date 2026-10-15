@@ -1,7 +1,7 @@
 /**
  * Bộ lọc thời gian của màn Đơn hàng: một kỳ có sẵn (hàng nút dưới ô tìm) hoặc một khoảng ngày tự chọn (bảng chọn khoảng
- * ngày). Core lọc theo khoảng thời gian trước khi chia trang (`saleFilterWindow`); số tổng của các kỳ có sẵn lấy từ báo cáo
- * của Core (`saleFilterReportPeriod`). Phần thuần nằm ở đây để kiểm tra được mà không cần giao diện.
+ * ngày). Core lọc theo khoảng thời gian trước khi chia trang (`saleFilterWindow`); số tổng cùng khoảng lấy từ
+ * `GET /sales/summary`. Phần thuần nằm ở đây để kiểm tra được mà không cần giao diện.
  */
 import type { ReportPeriod } from '../data/types';
 import { dayKey, ddmm, ddmmyyyy, parseDayKey } from './format';
@@ -85,11 +85,17 @@ export function saleFilterWindow(f: SaleFilter, now = new Date()): { from?: stri
 }
 
 /**
- * Kỳ báo cáo của Core trùng với bộ lọc, để lấy số tổng (doanh thu, số đơn từng ngày) tính trên toàn tiệm. `null` khi
- * không có kỳ tương ứng ("Tất cả", khoảng tự chọn): khi đó màn hình chỉ hiện số đơn.
+ * Khoảng thời gian (giờ Việt Nam) của một kỳ báo cáo, để hỏi `GET /sales/summary` cùng kỳ với `/reports/summary`. Core kết
+ * thúc các kỳ đang chạy ở thời điểm hỏi; ở đây kết thúc nửa đêm mai, cùng kết quả vì không có đơn bán trong tương lai.
  */
-export function saleFilterReportPeriod(f: SaleFilter): ReportPeriod | null {
-  return f.time === 'custom' ? null : reportPeriodOf(f.time);
+export function reportPeriodWindow(p: ReportPeriod, now = new Date()): { from: string; to: string } {
+  if (p === 'year') {
+    const { y, m, d } = vnCalendar(now);
+    return { from: vnMidnight(y, 0, 1), to: vnMidnight(y, m, d + 1) };
+  }
+  const time: Period = p === 'this_week' ? 'thisWeek' : p;
+  const w = saleFilterWindow({ time, from: null, to: null }, now);
+  return { from: w.from as string, to: w.to as string };
 }
 
 /** Kỳ báo cáo của Core cho một kỳ của app; "Tất cả" không có kỳ tương ứng. */
@@ -141,18 +147,3 @@ export function saleFilterTimeShort(f: SaleFilter, now = new Date()): string {
   return rangeLabel(f.from, f.to, (key) => shortDay(key, now));
 }
 
-/**
- * Khoảng ngày lịch Việt Nam (`yyyy-mm-dd`, tính cả hai đầu) để cộng doanh thu từ chuỗi ngày của năm nay
- * (`/reports/sales-series?period=year`) khi bộ lọc không có kỳ báo cáo riêng: "Tất cả" là từ 01/01 tới hôm nay (Core không có
- * tổng toàn thời gian), khoảng tự chọn phải bắt đầu trong năm nay. `null` khi không cộng được: kỳ có sẵn (đã có báo cáo riêng)
- * hoặc khoảng lấn sang năm trước.
- */
-export function saleFilterYearDays(f: SaleFilter, now = new Date()): { from: string; to: string } | null {
-  const { y, m, d } = vnCalendar(now);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const yearStart = `${y}-01-01`;
-  const today = `${y}-${pad(m + 1)}-${pad(d)}`;
-  if (f.time === 'all') return { from: yearStart, to: today };
-  if (f.time !== 'custom' || !f.from || f.from < yearStart) return null;
-  return { from: f.from, to: f.to && f.to < today ? f.to : today };
-}
