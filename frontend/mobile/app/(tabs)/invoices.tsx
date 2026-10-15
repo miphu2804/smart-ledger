@@ -33,8 +33,13 @@ const figureSize = (text: string) => (text.length >= 12 ? 14 : text.length >= 10
 
 /** Chờ người dùng ngừng gõ chừng này rồi mới tìm ở Core, để không gọi một lần cho mỗi phím. */
 const SEARCH_DEBOUNCE_MS = 350;
+/** Tổng của một ngày ở tiêu đề nhóm, kèm vòng hỏi đã lấy số đó */
+interface DayTotal {
+  round: number;
+  summary: SaleSummaryView;
+}
 /** Chưa có tổng ngày nào: một object cố định để không tính lại nhóm ngày ở mỗi lần vẽ */
-const NO_DAY_TOTALS: Record<string, SaleSummaryView> = {};
+const NO_DAY_TOTALS: Record<string, DayTotal> = {};
 
 const WEEKDAY_NAMES = ['CHỦ NHẬT', 'THỨ HAI', 'THỨ BA', 'THỨ TƯ', 'THỨ NĂM', 'THỨ SÁU', 'THỨ BẢY'];
 
@@ -111,19 +116,27 @@ export default function Invoices() {
 
   // Số đơn và doanh thu của từng ngày ở tiêu đề nhóm: `/sales/summary` của đúng ngày đó (cùng từ khoá tìm), hỏi dần cho các
   // ngày đã có trong danh sách. Mỗi lần màn hình được focus hoặc kéo làm mới (`dayRound` tăng) thì hỏi lại, giữ số cũ trong lúc chờ.
-  const [dayTotals, setDayTotals] = useState<{ key: string; days: Record<string, SaleSummaryView> }>({ key: queryKey, days: {} });
+  // Mỗi ngày nhớ số của vòng hỏi nào: kết quả của vòng cũ về muộn không ghi đè số của vòng mới hơn.
+  const [dayTotals, setDayTotals] = useState<{ key: string; days: Record<string, DayTotal> }>({ key: queryKey, days: {} });
   const [dayRound, setDayRound] = useState(0);
-  const askedDays = useRef(new Set<string>());
+  // Các ngày đã hỏi trong vòng hiện tại (cùng bộ lọc); sang vòng hoặc bộ lọc khác thì bắt đầu tập mới
+  const askedDays = useRef<{ scope: string; days: Set<string> }>({ scope: '', days: new Set() });
   useEffect(() => {
-    const days = new Set(sales.map((sale) => dayKey(new Date(sale.soldAt))));
-    days.forEach((day) => {
-      const asked = `${dayRound}|${queryKey}|${day}`;
-      if (askedDays.current.has(asked)) return;
-      askedDays.current.add(asked);
+    const scope = `${dayRound}|${queryKey}`;
+    if (askedDays.current.scope !== scope) askedDays.current = { scope, days: new Set() };
+    const asked = askedDays.current.days;
+    const round = dayRound;
+    new Set(sales.map((sale) => dayKey(new Date(sale.soldAt)))).forEach((day) => {
+      if (asked.has(day)) return;
+      asked.add(day);
       saleApi
         .summary({ ...saleFilterWindow({ time: 'custom', from: day, to: day }), q: searchQ || undefined })
         .then((summary) =>
-          setDayTotals((cur) => ({ key: queryKey, days: { ...(cur.key === queryKey ? cur.days : {}), [day]: summary } })),
+          setDayTotals((cur) => {
+            const days = cur.key === queryKey ? cur.days : {};
+            if ((days[day]?.round ?? -1) > round) return cur;
+            return { key: queryKey, days: { ...days, [day]: { round, summary } } };
+          }),
         )
         .catch(() => {
           // Không có số của ngày thì tiêu đề chỉ có ngày; lần làm mới sau hỏi lại
@@ -199,7 +212,7 @@ export default function Invoices() {
           title,
           date: saleDate,
           sales: [],
-          day: dayTotalsNow[dayKey(saleDate)] ?? null,
+          day: dayTotalsNow[dayKey(saleDate)]?.summary ?? null,
         };
         groups.push(existing);
       }
@@ -400,7 +413,9 @@ export default function Invoices() {
               <Row gap={6} style={{ alignItems: 'center' }}>
                 {section.day ? (
                   <T w="bold" size={12.5} color={colors.muted}>
-                    {section.day.matchedOrderCount} đơn · {vnd(section.day.confirmedSalesVnd)}
+                    {/* Số đơn còn hiệu lực khớp với doanh thu; đơn huỷ trong ngày (vẫn có dòng trong danh sách) ghi riêng */}
+                    {section.day.confirmedOrderCount} đơn
+                    {section.day.voidedOrderCount ? ` · ${section.day.voidedOrderCount} huỷ` : ''} · {vnd(section.day.confirmedSalesVnd)}
                   </T>
                 ) : null}
                 <Feather name={collapsedGroups[section.key] ? 'chevron-down' : 'chevron-up'} size={15} color={colors.muted} />
