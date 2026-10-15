@@ -72,12 +72,12 @@ export function initials(name: string) {
 }
 
 /** Two-letter badge like the prototype: "Trà đá" -> "TĐ" */
-export function abbr(name: string) {
-  const w = name
+export function abbr(name: string | null | undefined) {
+  const w = (name ?? '')
     .replace(/\(.*?\)/g, '')
     .trim()
     .split(/\s+/);
-  if (w.length === 1) return w[0].slice(0, 2).toUpperCase();
+  if (w.length === 1) return (w[0].slice(0, 2) || '?').toUpperCase();
   return (w[0][0] + w[1][0]).toUpperCase();
 }
 
