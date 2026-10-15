@@ -1,3 +1,13 @@
+### [2026-10-15 16:30 UTC+07:00] — [Feature] Orders summary card uses Core's filtered sales summary (#221)
+
+**Done:** Core added `GET /api/v1/sales/summary` (CORE-014, #221), which counts and totals every sale matching the same filter as the paged sales list. The Orders tab now uses it for "Tất cả", a custom date range and a search: "Tất cả" shows the all-time total again ("Tổng doanh thu" instead of "Doanh thu năm nay"), any custom range has a revenue figure even when it reaches into last year, and a search shows the revenue of its results instead of the order count only. The preset periods (Hôm nay, Hôm qua, 7 ngày, Tháng này) keep Core's period report, as #221 asks not to change the meaning of the period cards. The summary's revenue is the value of the matching sales that are not voided now; the period report subtracts voids at the time they happen, so the two differ only when a sale from an earlier period is voided in the period shown. Day header totals are unchanged.
+
+**Changed files:** `frontend/mobile/app/(tabs)/invoices.tsx`, `frontend/mobile/src/lib/salesApi.ts`, `frontend/mobile/src/data/types.ts`, `frontend/mobile/src/lib/mockCore.ts` — modified; this entry.
+
+**Flow explained:** without a preset period (or while searching) the Orders tab calls `saleApi.summary` with the same `from`/`to`/`q` as the list and shows `confirmedSalesVnd`; with a preset period it still calls `reportApi.summary` and shows `netRevenueVnd` → day headers keep the period series, or this year's series for "Tất cả" and a custom range inside this year → the mock Core answers `/sales/summary` from the same filter as `/sales`.
+
+**Check:** `tsc --noEmit` clean. Mock-mode web build in headless Chrome, 6 of 6: "Tất cả" 1.146.000đ, "7 ngày" and a 30-day range have revenue, a search for "Sting" gives 3 orders and 613.000đ, a search with no match gives 0đ, clearing the search restores the total. Android emulator against staging Core (hand-repacked staging APK): "Tất cả" shows 2 orders and 11.567.567.232đ, the voided order not counted. **Not verified:** search and custom ranges against the real Core (the emulator was taken by another app mid-test); iOS.
+
 ### [2026-10-15] — [Core] CORE-014 filtered sale counts and values (#213)
 
 **Done:** Added `GET /api/v1/sales/summary` on `feat/sales-filter-summary`, based on staging `df69819642fc420b7686d6f66073b946df2f13c2`. OWNER totals cover the entire matching sale set with the same q/status/soldAt filters as the paginated list. The response separates current CONFIRMED/VOIDED counts and discounted sale values, includes partial/debt sales, excludes drafts, and returns five zeros for an empty set. Per-status monetary overflow returns 409 `sale_summary_overflow`. No new schema, migration or FE/AI implementation.

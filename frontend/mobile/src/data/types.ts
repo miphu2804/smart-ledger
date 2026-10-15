@@ -228,6 +228,19 @@ export interface SaleDraftView {
   items: SaleDraftItemView[];
 }
 
+/**
+ * Tổng của mọi đơn khớp bộ lọc của `GET /sales` (`GET /sales/summary`, CORE-014), không phụ thuộc trang đã tải. Theo trạng
+ * thái hiện tại của đơn: `confirmedSalesVnd` là tổng tiền (sau giảm giá) của đơn chưa huỷ, kể cả bán nợ; không phải tiền
+ * thực thu và khác `netRevenueVnd` của báo cáo kỳ (báo cáo trừ đơn huỷ theo lúc huỷ).
+ */
+export interface SaleSummaryView {
+  matchedOrderCount: number;
+  confirmedOrderCount: number;
+  voidedOrderCount: number;
+  confirmedSalesVnd: number;
+  voidedSalesVnd: number;
+}
+
 export interface SaleItemView {
   id: number;
   /** null = món tuỳ ý của đơn, không gắn với mặt hàng nào trong danh mục */

@@ -90,41 +90,41 @@ export default function Invoices() {
     saleApi.page(page, size, { ...saleWindow, q: searchQ || undefined }),
   );
 
-  // Doanh thu và tổng từng ngày lấy từ báo cáo của Core (các trang đã tải không đủ để cộng tổng), không có khi đang tìm:
-  // - kỳ có sẵn (Hôm nay, 7 ngày…): báo cáo của đúng kỳ đó;
-  // - "Tất cả" và khoảng tự chọn trong năm nay: cộng các ngày trong khoảng từ chuỗi ngày của năm ("Tất cả" là năm nay vì Core
-  //   không có tổng toàn thời gian); khoảng lấn sang năm trước thì chỉ hiện số đơn.
+  // Doanh thu trên thẻ lấy từ Core (các trang đã tải không đủ để cộng tổng):
+  // - kỳ có sẵn (Hôm nay, 7 ngày…), không tìm: báo cáo của đúng kỳ đó (doanh thu thuần: bán trong kỳ trừ huỷ trong kỳ);
+  // - "Tất cả", khoảng tự chọn và khi tìm: tổng của mọi đơn khớp cùng bộ lọc với danh sách (`GET /sales/summary`), tức tiền
+  //   các đơn chưa huỷ trong khoảng, kể cả toàn thời gian và kết quả tìm.
+  // Tổng từng ngày ở tiêu đề nhóm lấy từ chuỗi ngày của báo cáo: của kỳ có sẵn, hoặc của năm nay khi "Tất cả"/khoảng tự chọn
+  // nằm trong năm; khi tìm hoặc ngày không có trong chuỗi thì tiêu đề chỉ có ngày.
   const reportPeriod = searchQ ? null : saleFilterReportPeriod(filter);
   const yearDays = searchQ || reportPeriod ? null : saleFilterYearDays(filter);
   const yearFrom = yearDays?.from ?? null;
   const yearTo = yearDays?.to ?? null;
-  const reportKey = reportPeriod ?? (yearFrom && yearTo ? `days:${yearFrom}:${yearTo}` : null);
+  const reportKey = reportPeriod ?? `list:${queryKey}`;
   const [report, setReport] = useState<{ key: string; revenue: number; days: Map<string, SalesSeriesPoint> } | null>(null);
   const reportSeq = useRef(0);
   const loadReport = useCallback(async () => {
     const mine = ++reportSeq.current;
-    if (!reportKey) {
-      setReport(null);
-      return;
-    }
     try {
       if (reportPeriod) {
         const [summary, series] = await Promise.all([reportApi.summary(reportPeriod), reportApi.salesSeries(reportPeriod)]);
         if (mine !== reportSeq.current) return;
-        // Doanh thu thuần của kỳ: đơn bán trong kỳ trừ đơn bị huỷ trong kỳ
         setReport({ key: reportKey, revenue: summary.netRevenueVnd, days: new Map(series.items.map((day) => [day.date, day])) });
-      } else if (yearFrom && yearTo) {
-        const series = await reportApi.salesSeries('year');
+      } else {
+        const [summary, series] = await Promise.all([
+          saleApi.summary({ ...saleWindow, q: searchQ || undefined }),
+          yearFrom && yearTo ? reportApi.salesSeries('year') : Promise.resolve(null),
+        ]);
         if (mine !== reportSeq.current) return;
-        // Cùng cách tính với kỳ có sẵn, cộng theo từng ngày (`date` là ngày Việt Nam, so chuỗi `yyyy-mm-dd` được)
-        const days = series.items.filter((day) => day.date >= yearFrom && day.date <= yearTo);
-        const revenue = days.reduce((sum, day) => sum + day.netRevenueVnd, 0);
-        setReport({ key: reportKey, revenue, days: new Map(days.map((day) => [day.date, day])) });
+        // `date` là ngày Việt Nam dạng `yyyy-mm-dd` nên so chuỗi được
+        const days = series && yearFrom && yearTo ? series.items.filter((day) => day.date >= yearFrom && day.date <= yearTo) : [];
+        setReport({ key: reportKey, revenue: summary.confirmedSalesVnd, days: new Map(days.map((day) => [day.date, day])) });
       }
     } catch {
       // Không có số tổng thì thẻ hiện "—"; danh sách đơn vẫn dùng được
       if (mine === reportSeq.current) setReport(null);
     }
+    // saleWindow và searchQ đổi thì queryKey đổi, nên reportKey đổi và hàm được tạo lại
   }, [reportKey, reportPeriod, yearFrom, yearTo]);
   const activeReport = report && report.key === reportKey ? report : null;
 
@@ -155,7 +155,6 @@ export default function Invoices() {
     setQ('');
   };
 
-  // Doanh thu thuần theo Core: đơn bán trong khoảng trừ đơn bị huỷ trong khoảng
   const revenue = activeReport ? activeReport.revenue : null;
   const revenueText = revenue === null ? '—' : vnd(revenue);
   // Số trên thẻ là của khoảng thời gian đang lọc; chỉ "Tất cả" mới là tổng, nên nhãn đổi theo bộ lọc
@@ -164,8 +163,7 @@ export default function Invoices() {
   const customChipLabel = matchingPreset(filter.from, filter.to) ? saleFilterTimeLabel(filter) : timeShort;
   const scopeName = period === 'all' ? null : timeShort.toLowerCase();
   const countLabel = scopeName ? `Đơn ${scopeName}` : 'Tổng đơn hàng';
-  // "Tất cả" cộng từ chuỗi ngày của năm nên nói rõ là năm nay
-  const revenueLabel = scopeName ? `Doanh thu ${scopeName}` : 'Doanh thu năm nay';
+  const revenueLabel = scopeName ? `Doanh thu ${scopeName}` : 'Tổng doanh thu';
   // Ô số đơn hẹp hơn ô doanh thu (flex 0.8 so với 1.2). Dòng chữ dưới số chỉ nêu khoảng thời gian, trùng tên nút lọc, nên luôn
   // vừa một dòng; "Tổng đơn hàng" và "Đơn tháng này" bị cắt trên web ≤ 390px vì RN web không thu chữ theo adjustsFontSizeToFit.
   // countLabel vẫn dùng làm nhãn đọc màn hình.
@@ -241,7 +239,6 @@ export default function Invoices() {
               style={({ pressed }) => [
                 styles.summaryMetricBtn,
                 styles.summaryMetricCount,
-                !reportKey && { flex: 1 },
                 pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] },
               ]}
               accessibilityRole="button"
@@ -260,9 +257,6 @@ export default function Invoices() {
               </View>
             </Pressable>
 
-            {/* Doanh thu chỉ có khi lấy được từ báo cáo của Core (xem reportKey) */}
-            {reportKey ? (
-            <>
             <View style={styles.summaryDivider} />
 
             <Pressable
@@ -286,8 +280,6 @@ export default function Invoices() {
                 </T>
               </View>
             </Pressable>
-            </>
-            ) : null}
           </View>
 
     </>
