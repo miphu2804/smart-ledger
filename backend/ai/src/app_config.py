@@ -80,10 +80,21 @@ class AppConfig(BaseSettings):
     AGENT_MEMORY_ENABLED: bool = False
     # comma-separated memory types the model may write on its own; the rest stay
     # unwritten until the PO approves them
-    AGENT_MEMORY_TYPES: str = "preference,procedural"
+    AGENT_MEMORY_TYPES: str = "preference,procedural,semantic"
+    # where memory embeddings come from: sentence-transformers runs the model in this
+    # process (the `memory` dependency group); cloudflare calls Workers AI and needs
+    # the CLOUDFLARE_* settings below
+    AGENT_MEMORY_EMBEDDING_PROVIDER: str = "sentence-transformers"
+    # a Hugging Face model for sentence-transformers, a Workers AI model such as
+    # @cf/google/embeddinggemma-300m for cloudflare
     AGENT_MEMORY_EMBEDDING_MODEL: str = (
         "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     )
+
+    # cloudflare workers ai: account that runs the embeddings, and an API token with
+    # the Workers AI Read permission
+    CLOUDFLARE_ACCOUNT_ID: str | None = None
+    CLOUDFLARE_API_TOKEN: str | None = None
 
     # model gateway shared by every model: OpenAI, or an OpenAI-compatible gateway
     # such as OpenCode Go (https://opencode.ai/inference/go/v1)

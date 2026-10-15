@@ -1,9 +1,11 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ProductView, ReportPeriod, ReportSummaryView, TopProductItem } from '../data/types';
+import type { ProductView, ReportPeriod, ReportSummaryView, SaleSummaryView, TopProductItem } from '../data/types';
 import { productApi } from './catalogApi';
 import { errorMessage } from './errors';
 import { reportApi } from './reportApi';
+import { reportPeriodWindow } from './saleFilter';
+import { saleApi } from './salesApi';
 
 /** Lấy dư vài dòng bán chạy vì dòng có số lượng thuần ≤ 0 bị bỏ khi hiện (xem `topSellerRows`) */
 const TOP_LIMIT = 8;
@@ -12,11 +14,14 @@ const RESTOCK_SIZE = 3;
 
 interface PeriodData {
   summary: ReportSummaryView;
+  /** Đơn bán trong kỳ theo trạng thái hiện tại (`GET /sales/summary`): doanh thu hiện không âm, xem `periodRevenue` */
+  sales: SaleSummaryView;
   top: TopProductItem[] | null;
 }
 
 /**
- * Số liệu Tổng quan theo kỳ, lấy từ báo cáo của Core thay vì cộng trên toàn bộ đơn: tổng của kỳ (`/reports/summary`), món bán
+ * Số liệu Tổng quan theo kỳ, lấy từ báo cáo của Core thay vì cộng trên toàn bộ đơn: tổng của kỳ (`/reports/summary` cùng
+ * `/sales/summary` của đúng khoảng đó để doanh thu không âm), món bán
  * chạy (`/reports/top-products`) và món cần nhập (`GET /products?stockStatus=NEEDS_RESTOCK`, theo ngưỡng riêng từng món).
  *
  * Mỗi kỳ đã xem được nhớ trong lúc màn hình mở: đổi lại kỳ cũ hiện ngay rồi làm mới nền. Chỉ khi kỳ chưa có số mới là
@@ -34,7 +39,7 @@ export function useHomeOverview(period: ReportPeriod) {
     const mine = ++seq.current;
     setError('');
     // Tổng của kỳ gọi trước tiên để vào đợt request đầu (Android giới hạn số request song song mỗi máy chủ)
-    const summaryCall = reportApi.summary(p);
+    const summaryCall = Promise.all([reportApi.summary(p), saleApi.summary(reportPeriodWindow(p))]);
     const [summary, top, needRestock] = await Promise.allSettled([
       summaryCall,
       reportApi.topProducts(p, { limit: TOP_LIMIT, sortBy: 'QUANTITY' }),
@@ -51,7 +56,7 @@ export function useHomeOverview(period: ReportPeriod) {
     if (summary.status === 'fulfilled') {
       setByPeriod((cur) => ({
         ...cur,
-        [p]: { summary: summary.value, top: top.status === 'fulfilled' ? top.value.items : cur[p]?.top ?? null },
+        [p]: { summary: summary.value[0], sales: summary.value[1], top: top.status === 'fulfilled' ? top.value.items : cur[p]?.top ?? null },
       }));
     } else {
       setError(errorMessage(summary.reason));
@@ -75,6 +80,7 @@ export function useHomeOverview(period: ReportPeriod) {
   const current = byPeriod[period];
   return {
     summary: current?.summary ?? null,
+    sales: current?.sales ?? null,
     top: current?.top ?? null,
     restock,
     /** Kỳ đang xem chưa có số nào (hiện skeleton) */

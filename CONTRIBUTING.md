@@ -32,10 +32,13 @@ Types:
 
 Rules:
 
-- Use a scope that matches the affected module or area when useful.
+- Use a scope that names the affected module or area when it helps (for example `core`, `ai`, `mobile`, `web`, `ci`, `deploy`, or a document name for `docs`); omit it when the change spans areas. The scope is a hint for readers, not a fixed list.
 - Describe the action taken, not the resulting state.
 - Keep each commit focused on one related logical change.
-- Do not mention AI generation, co-authorship, or similar metadata unless explicitly requested.
+- Do not add attribution lines, and do not mention AI generation, co-authorship, or similar metadata in commit messages or pull request descriptions unless explicitly requested.
+- Add a body only when the reason is not obvious from the subject: separate it from the subject with a blank line, wrap at 72 characters, and explain why, not what the diff already shows.
+- Mark a breaking change with `!` after the scope (`feat(core)!: ...`) and a `BREAKING CHANGE: <what breaks and how to migrate>` footer. Pull requests into `staging` are squashed, so the pull request title must carry the `!` and the squash commit body must keep the footer.
+- Reference issues in a footer: `Closes #123` or `Refs #123`.
 
 Examples:
 
@@ -43,7 +46,7 @@ Examples:
 feat(core): add idempotent transaction confirmation
 fix(ai): handle malformed parser response
 test(core): cover confirmation conflict
-chore(docs): clarify contribution workflow
+docs(contributing): clarify contribution workflow
 ```
 
 ## Pull request instructions
@@ -80,7 +83,7 @@ git switch -c feat/<short-description>
 - Deploy the same tested commit or artifact from staging to production; environment-specific values belong in secrets or environment configuration.
 - Run database migrations on staging before production, and only from code merged into `staging`; never from a feature branch, because dev shares the staging database (see [Database migrations](README.md#database-migrations)). Destructive migrations require an explicit rollback or recovery plan.
 - Required CI checks are `ai` (lint and tests), `core` (Maven verify plus Flyway migration against a fresh PostgreSQL service), `container-images` (Docker Compose build of custom service images), and `mobile-web` (TypeScript and Expo web export).
-- The mobile web is built in CI and uploaded to Vercel by the `deploy-web` job: pull requests get a preview URL, `staging` a fixed alias, and `main` production. See [CI/CD](docs/development/ci-cd.md#mobile-web-on-vercel).
+- The mobile web is built in CI and uploaded to Vercel by the `deploy-web` job: `staging` gets a fixed alias and `main` production; pull requests get no preview, to stay within Vercel's daily deployment limit. See [CI/CD](docs/development/ci-cd.md#mobile-web-on-vercel).
 - CI verifies migrations from an empty database. Staging and production use separate Supabase projects with separate credential files and dev shares the staging database (see [Local Compose](README.md#local-compose)); backup/restore, rollback, and moving production credentials into an environment-scoped secret store still require an operational smoke check before production release.
 
 ### Pull request title
@@ -93,23 +96,42 @@ Use the Conventional Commit format for pull request titles so the title can serv
 
 ### Pull request description
 
-Use the following structure for every pull request:
+GitHub pre-fills the description from [`.github/pull_request_template.md`](.github/pull_request_template.md) (GitHub reads templates from the default branch `main`, so this starts working after the release that carries it); keep every section and write `None` instead of deleting one. Use tables for Changes, Validation, and Risks so a reviewer can scan them, and keep the Summary short.
 
 ```markdown
 ## Summary
-What changed and why.
+What changed and why. One sentence when there is one point; a numbered list, one point per line, when there are several.
 
 ## Changes
-Important implementation changes.
+| Area | Change | Files / PR |
+|---|---|---|
 
 ## Validation
-Tests, checks, builds, or manual verification performed.
+| Check | Command / steps | Status | Result |
+|---|---|---|---|
 
-## Risks
-Known risks, migrations, compatibility concerns, or None.
+## Risks and rollback
+| Risk | Impact | Rollback |
+|---|---|---|
+
+## Config and migrations
+New environment variables, secrets, or migrations, or None.
 ```
 
-Each pull request should identify related documentation or API contracts, assumptions, and anything that remains unverified.
+- **Area** is the module or part of the repo that changed, usually the commit scope.
+- **Summary** with more than one point is a numbered list, one point per line, so each can be referenced in review ("point 2").
+- **Validation** records what was actually run. **Status** is `Verified` (run, with output), `Inferred` (reasoned from code or docs, not run), or `Not verified` (not checked; give the reason in Result, for example a real device or a production run).
+- Link related documentation, API contracts, and issues (`Closes #123`), and state assumptions.
+- Add screenshots or a recording for a visible UI change.
+
+#### Release pull requests (`staging` → `main`)
+
+Open them with [`.github/PULL_REQUEST_TEMPLATE/release.md`](.github/PULL_REQUEST_TEMPLATE/release.md): `gh pr create --base main --head staging --template release.md`, or append `?expand=1&template=release.md` to the `main...staging` compare URL. The title is `chore(release): <yyyy-mm-dd>` until releases are tagged, then the tag.
+
+- Changes lists **every** commit in `git log --no-merges --format='%s' origin/main..origin/staging`, grouped by area with the PR number on each row, not only the latest ones. Check the row count against that log.
+- Add a Breaking changes section when any commit carries `!` or a `BREAKING CHANGE:` footer, and a Config and migrations section for new variables, secrets, or migrations.
+- Add a Deploy table of the steps that follow the merge and what the merge does not do by itself (for example, merging does not publish an APK); link [CI/CD](docs/development/ci-cd.md#steps) instead of restating it.
+- Merge with a merge commit (see "Target branch").
 
 ### Review, rebase, and merge
 

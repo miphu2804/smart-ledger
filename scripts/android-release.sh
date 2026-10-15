@@ -327,6 +327,12 @@ echo
 echo "  Core: ${cyan}${EXPO_PUBLIC_API_ENDPOINT:-?}${reset} (mock: ${EXPO_PUBLIC_USE_MOCK:-?})"
 echo
 
+# A release must never ship mock data or an emulator/localhost API, whatever the shell or the environment variables say.
+if [ "${EXPO_PUBLIC_USE_MOCK:-}" = true ] || [ "${EXPO_PUBLIC_MOCK_CORE:-}" = true ] || [ "${EXPO_PUBLIC_MOCK_SHOPS:-}" = true ]; then
+  die "A mock flag (EXPO_PUBLIC_USE_MOCK / MOCK_CORE / MOCK_SHOPS) is true; a release build needs all three false."
+fi
+case "${EXPO_PUBLIC_API_ENDPOINT:-}" in *10.0.2.2* | *localhost* | *127.0.0.1*) die "EXPO_PUBLIC_API_ENDPOINT points at this machine: $EXPO_PUBLIC_API_ENDPOINT" ;; esac
+
 if $ci; then
   echo "${bold}→ npm ci${reset}"
   npm ci
@@ -342,6 +348,10 @@ mark install
 echo "${bold}→ expo prebuild --clean (regenerates android/)${reset}"
 npx expo prebuild --platform android --no-install --clean
 mark prebuild
+
+# Metro's transform cache is keyed on file contents, not on EXPO_PUBLIC_* values, so a cache left by an earlier build
+# with other values (a local test build on the same machine) would bake those values into the release bundle.
+rm -rf "${TMPDIR:-/tmp}/metro-cache" .expo/metro
 
 task=assembleRelease built="$PWD/android/app/build/outputs/apk/release/app-release.apk"
 if [ "$format" = aab ]; then

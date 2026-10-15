@@ -1,4 +1,5 @@
 import { Feather } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useToast } from '../src/components/brand';
@@ -29,9 +30,19 @@ import { saleApi } from '../src/lib/salesApi';
 import { monthExpenses } from '../src/lib/stats';
 import { colors } from '../src/theme';
 
+/** Loại chi của dòng "Huỷ đơn": đơn bán tháng trước bị huỷ trong tháng, app tự thêm từ danh sách đơn (không có trong sổ chi) */
+const CANCELLED_ORDER = 'huy_don';
+const CANCELLED_ORDER_PREFIX = 'void-';
+
 /** Thông tin hiển thị (nhãn/màu) của một loại chi — dùng cho cả key hợp lệ và chuỗi lạ (fallback) */
 function catMeta(key: string) {
+  if (key === CANCELLED_ORDER) return { label: 'Huỷ đơn', color: colors.red, bg: colors.redSoft };
   return expenseCategoryMeta[key] ?? { label: key, color: colors.muted, bg: colors.border };
+}
+
+/** Hai thời điểm có cùng tháng (giờ máy) không */
+function sameMonth(a: Date, b: Date) {
+  return a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
 }
 
 /** Đơn `soldAt` có rơi vào tháng cách hiện tại `offset` tháng không — dùng để lọc doanh thu theo tháng như `monthExpenses`. */
@@ -74,9 +85,12 @@ export default function Expenses() {
   // `monthExpenses`/`stats.ts` vẫn đọc dữ liệu mẫu (Expense) — đổ mảng thật vào cùng hình dạng đó.
   // `category` giữ nguyên chuỗi thô của Core (ép kiểu để khớp Expense.category, không đổi giá trị runtime)
   // nên chuỗi lạ vẫn hiện đúng qua `catMeta` phía dưới; Core chưa có trường `source` nên mặc định 'manual'.
+  // Đơn bán tháng trước mà bị huỷ trong tháng này không trừ vào doanh thu tháng này (doanh thu chỉ tính đơn còn hiệu lực bán
+  // trong tháng) mà hiện thành khoản chi "Huỷ đơn" của tháng huỷ, để chủ tiệm biết. Đơn bán và huỷ cùng tháng chỉ không còn
+  // trong doanh thu. Đây là dòng app tự thêm, không có trong sổ chi của Core nên không xoá được.
   const mapped = useMemo<Expense[]>(
-    () =>
-      expenses.map((e) => ({
+    () => [
+      ...expenses.map((e) => ({
         id: String(e.id),
         title: e.description,
         amount: e.amountVnd,
@@ -84,14 +98,25 @@ export default function Expenses() {
         createdAt: e.expenseAt,
         source: 'manual' as const,
       })),
-    [expenses],
+      ...sales
+        .filter((s) => s.saleStatus === 'VOIDED' && s.voidedAt && !sameMonth(new Date(s.soldAt), new Date(s.voidedAt)))
+        .map((s) => ({
+          id: `${CANCELLED_ORDER_PREFIX}${s.id}`,
+          title: `Huỷ đơn #${s.id}${s.customerName ? ` · ${s.customerName}` : ''}`,
+          amount: s.totalVnd,
+          category: CANCELLED_ORDER as ExpenseCategory,
+          createdAt: s.voidedAt as string,
+          source: 'manual' as const,
+        })),
+    ],
+    [expenses, sales],
   );
 
   const months = [0, 1, 2, 3].map((m) => {
     const d = new Date(now.getFullYear(), now.getMonth() - m, 1);
     return { m, label: `Th${d.getMonth() + 1}`, total: monthExpenses(mapped, m).reduce((a, e) => a + e.amount, 0) };
   });
-  const list = monthExpenses(mapped, month);
+  const list = monthExpenses(mapped, month).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const total = list.reduce((a, e) => a + e.amount, 0);
   // Doanh thu tính từ `saleApi.list()` (đơn đã xác nhận qua checkout thật), loại đơn đã huỷ — checkout không còn
   // ghi vào `app.invoices` (dữ liệu mẫu cũ) nên không thể lấy doanh thu từ đó nữa.
@@ -205,10 +230,13 @@ export default function Expenses() {
               list.map((e, i) => {
                 const meta = catMeta(e.category);
                 const d = new Date(e.createdAt);
+                const cancelledSaleId = e.id.startsWith(CANCELLED_ORDER_PREFIX) ? e.id.slice(CANCELLED_ORDER_PREFIX.length) : null;
                 return (
                   <Pressable
                     key={e.id}
-                    onLongPress={() => setDelId(Number(e.id))}
+                    // Dòng "Huỷ đơn" mở đơn đó; khoản chi thật nhấn giữ để xoá
+                    onPress={cancelledSaleId ? () => router.push(`/invoice/${cancelledSaleId}`) : undefined}
+                    onLongPress={cancelledSaleId ? undefined : () => setDelId(Number(e.id))}
                     style={[styles.row, i < list.length - 1 && styles.rowBorder]}
                   >
                     <Tile name={e.title} palette={[meta.bg, meta.color]} size={40} />
