@@ -385,11 +385,13 @@ AI chỉ tạo bản nháp/gợi ý và câu trả lời chat. Các endpoint nà
 |---|---|---|---|---|
 | `POST` | `/api/v1/ai/drafts` | JSON `{ type: TEXT, mode, text }` hoặc multipart `type=AUDIO\|IMAGE`, `mode=SALE\|EXPENSE`, `file` | `DraftView` | Đích |
 | `POST` | `/api/v1/agent/chat` | `{ conversation_id?, message }` | `AgentChatMessageView` | Đã có |
-| `POST` | `/api/v1/agent/chat/stream` | `{ conversation_id?, message }` | `text/event-stream`: `delta`, `reset`, `done` (`AgentChatMessageView`), `error` ([mục Stream](#stream-trả-lời-chat)) | Đã có |
+| `POST` | `/api/v1/agent/chat/stream` | `{ conversation_id?, message }` | `text/event-stream`: `delta`, `reset`, `memory` (chỉ khi bật ghi nhớ), `done` (`AgentChatMessageView`), `error` ([mục Stream](#stream-trả-lời-chat)) | Đã có |
 | `GET` | `/api/v1/agent/conversations` | `X-Shop-Id` | `AgentConversationSummary[]` | Đã có |
 | `GET` | `/api/v1/agent/conversations/{conversation_id}` | `X-Shop-Id` | `AgentConversationView` | Đã có |
 | `PATCH` | `/api/v1/agent/conversations/{conversation_id}` | `{ title }` (1–255 ký tự, không rỗng) | `AgentConversationSummary` | Đã có |
 | `DELETE` | `/api/v1/agent/conversations/{conversation_id}` | `X-Shop-Id` | `204 No Content` | Đã có |
+| `GET` | `/api/v1/agent/memory/settings` | `X-Shop-Id` | `{ memory_enabled, available }` | Chỉ hoạt động khi `AGENT_MEMORY_ENABLED` bật; chờ PO duyệt ([ADR-0002](../architecture/adr/0002-agent-long-term-memory.md)) |
+| `PUT` | `/api/v1/agent/memory/settings` | `{ memory_enabled }` | `{ memory_enabled, available }` | Như trên |
 
 `DraftView`:
 
@@ -432,6 +434,8 @@ Phủ `FR-007`, `FR-008`, `FR-017`, `FR-018`, `FR-020`, `FR-021`, `FR-027`.
 | `GET` | `/internal/v1/agent/conversations/{conversation_id}` | Query `user_id`, `shop_id`; trả hội thoại và tin nhắn | Đã có |
 | `PATCH` | `/internal/v1/agent/conversations/{conversation_id}` | Body `{ user_id, shop_id, title }`; trả summary đã đổi tên | Đã có |
 | `DELETE` | `/internal/v1/agent/conversations/{conversation_id}` | Query `user_id`, `shop_id`; xóa hội thoại, trả `204` | Đã có |
+| `GET` | `/internal/v1/agent/memory/settings` | Query `user_id`, `shop_id`; trả `{ memory_enabled, available }`. `available` là `false` (và `memory_enabled` `false`) khi ghi nhớ dài hạn chưa bật cho cả hệ thống | Chỉ hoạt động khi `AGENT_MEMORY_ENABLED` bật; chờ PO duyệt (ADR-0002); Core proxy qua `/api/v1/agent/memory/settings` |
+| `PUT` | `/internal/v1/agent/memory/settings` | Body `{ user_id, shop_id, memory_enabled }`; trả như `GET`. Khi ghi nhớ chưa bật trả `409` `{ "detail": "memory_unavailable" }`, Core đổi thành `503 ai_unavailable` | Như trên |
 | `POST` | `/internal/v1/drafts/parse` | Text/voice/image → `DraftView` | Đích |
 | `GET` | `/internal/v1/recommendations/restock` | Query `user_id`, `shop_id`, `period`; trả danh sách gợi ý nhập hàng có cấu trúc cho màn tổng quan (#103) | Đích |
 
@@ -469,6 +473,7 @@ Response thành công có `Content-Type: text/event-stream`. Mỗi sự kiện c
 
 - `delta` `{ "text": "..." }`: nối `text` vào phần đã hiển thị.
 - `reset` `{}`: bỏ phần đã hiển thị; một lượt trả lời mới của model theo sau. Xảy ra khi model viết text trước một tool call, hoặc khi answer screen từ chối câu trả lời và model viết lại.
+- `memory` `{ "used": [{ "id", "memory_type", "content" }] }`: các ghi nhớ dài hạn lượt này dùng; gửi một lần, trước `delta` đầu tiên, và chỉ khi `AGENT_MEMORY_ENABLED` bật, chủ tiệm chưa tắt ghi nhớ và có ghi nhớ được dùng (chờ PO duyệt, ADR-0002). App hiện chip "Đã dùng ghi nhớ" trên câu trả lời; sự kiện không vào lịch sử hội thoại.
 - `done`: cùng body với response của `/internal/v1/agent/chat` (`conversation_id`, `message_id`, `request_id`, `answer`, `model`, `model_version`). `answer` là câu trả lời đã lưu, thay thế toàn bộ text đã stream.
 - `error` `{ "detail": "<mã>" }`: `answer_unavailable` hoặc `answer_timeout` (guardrail dừng lượt), `conversation_not_found` (hội thoại bị xóa trong lúc lượt đang chạy) hoặc `ai_unavailable`.
 

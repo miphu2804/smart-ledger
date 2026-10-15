@@ -76,9 +76,20 @@ Giữ **D** cho tới khi PO duyệt yêu cầu. Nếu PO duyệt, làm theo **A
 - Mỗi lượt có memory tốn thêm một lần embed local khi đọc; sau lượt thêm một lời gọi model khi ghi và tối đa 3 lời gọi model khi có memory cũ cần tóm tắt.
 - Request và response của `/internal/v1/agent/chat` và `/api/v1/agent/*` không đổi.
 
+## Bổ sung theo Sakana "My Fish"
+
+Migration [`20261015000000_agent_memory_visibility.sql`](../../../supabase/migrations/20261015000000_agent_memory_visibility.sql), cùng cờ `AGENT_MEMORY_ENABLED`, cùng chờ PO duyệt:
+
+- **Đếm dùng và suy giảm theo lần dùng cuối:** mỗi lần `search` trả memory, cột `last_used_at` và `use_count` được cập nhật trong cùng session; tuổi trong công thức suy giảm tính từ `coalesce(last_used_at, created_at)` (độ mới như Generative Agents). Bản tóm tắt giữ `last_used_at` lớn nhất và tổng `use_count` của nhóm.
+- **Thay thế (supersede) kiểu Mem0:** model trích xuất thấy các memory vừa dùng dạng `[id] nội dung` và có thể đặt `replaces` cho fact sửa lại một memory đó. Code chỉ nhận id nằm trong danh sách vừa dùng. Dòng cũ nhận `superseded_by` và không còn được tìm; không xóa, nên khi xóa hội thoại sinh ra fact mới thì `ON DELETE SET NULL` đưa fact cũ trở lại, giữ `AC-022`. Prompt đọc thêm quy tắc: hai fact mâu thuẫn thì fact có ngày muộn hơn thắng.
+- **Loại tự ghi:** chỉ `preference` và `procedural` (`AGENT_MEMORY_TYPES`); fact loại khác bị bỏ trước khi lưu. Đây là câu trả lời tạm cho câu hỏi mở về loại memory; PO vẫn duyệt cùng yêu cầu.
+- **Lọc số điện thoại:** fact (kể cả bản tóm tắt) chứa số điện thoại Việt Nam bị bỏ; prompt trích xuất cũng cấm lưu số điện thoại.
+- **Chip trong chat:** sự kiện SSE `memory` gửi trước `delta` đầu tiên khi có memory được dùng; app hiện chip "Đã dùng ghi nhớ" trên câu trả lời. Không đổi `/internal/v1/agent/chat`.
+- **Công tắc theo chủ tiệm:** bảng `agent_memory_settings`, mặc định bật khi chưa có dòng. Tắt thì không tìm và không ghi, không xóa memory đã có. Cờ toàn cục vẫn quyết định cuối. Endpoint `memory/settings` ở [contract](../../contracts/api-contracts.md#6-core--ai-nội-bộ); mobile có công tắc trong Cài đặt.
+
 ## Câu hỏi mở trước khi Accepted
 
-- PO: chủ tiệm có cần agent nhớ qua hội thoại không, nhớ loại nào, và có cần màn xem/xóa memory riêng không?
+- PO: chủ tiệm có cần agent nhớ qua hội thoại không và có cần màn xem/xóa từng memory riêng không (hiện chỉ có chip và công tắc bật/tắt)?
 - Thời hạn lưu: hợp đồng hiện tại nói MVP không có TTL; `expires_at` có dùng không?
 - Giữ MiniLM local hay đổi sang model 1024 chiều (`bge-m3`/`multilingual-e5-large-instruct`, tự host hay qua API cần secret); đo chất lượng truy xuất tiếng Việt như mục [Embedding](#embedding) trước khi chọn.
 
