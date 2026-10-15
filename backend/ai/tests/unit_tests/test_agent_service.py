@@ -4,7 +4,12 @@ from dataclasses import replace
 import pytest
 from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
-from tests.support import TEST_GUARDRAIL_LIMITS, ScriptedModel, transcript
+from tests.support import (
+    TEST_GUARDRAIL_LIMITS,
+    ScriptedModel,
+    static_instructions,
+    transcript,
+)
 
 from src.agent.errors import ConversationNotFoundError, GuardrailError
 from src.agent.service import (
@@ -15,6 +20,7 @@ from src.agent.service import (
     TextDelta,
 )
 from src.prompt_templates import SHOP_AGENT_SYSTEM_PROMPT
+from src.utils import get_time
 
 pytestmark = pytest.mark.anyio
 
@@ -73,7 +79,7 @@ async def test_chat_sends_the_instructions_and_persists_the_exchange() -> None:
     assert (result.answer, result.conversation_id, result.message_id) == ("ok", 41, 72)
     assert (result.model, result.model_version) == ("test-model", "test-model")
     messages, info = model.requests[0]
-    assert info.instructions == SHOP_AGENT_SYSTEM_PROMPT
+    assert static_instructions(info.instructions) == SHOP_AGENT_SYSTEM_PROMPT
     assert transcript(messages) == [("user", "today's revenue?")]
     assert conversations.saved_exchange == {
         "user_id": 3,
@@ -392,3 +398,16 @@ async def test_pre_stream_refusals_raise_on_await_before_any_event() -> None:
         await no_model.stream_chat(user_id=3, shop_id=15, message="hello")
 
     assert model.requests == []
+
+
+async def test_each_run_tells_the_model_the_shop_time() -> None:
+    model = ScriptedModel("ok")
+    agent = AgentService(
+        model, FakeConversationRepository(), guardrail_limits=TEST_GUARDRAIL_LIMITS
+    )
+
+    await agent.chat(user_id=3, shop_id=15, message="hôm nay thứ mấy?")
+
+    current_time = model.requests[0][1].instructions.rpartition("\n\n")[2]
+    assert current_time.startswith("Current time at the shop (Vietnam, UTC+07:00): ")
+    assert get_time().date().isoformat() in current_time

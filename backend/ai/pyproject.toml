@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
     "logfire>=4",
+    "pgvector>=0.4",
     "psycopg[binary]>=3.2",
     "pydantic-ai-harness>=0.55.0",
     "pydantic-ai-slim[anthropic,openai]>=2.55.0",
@@ -21,6 +22,11 @@ dev = [
     "httpx>=0.27",
     "pytest>=8.3",
     "ruff>=0.8",
+]
+# Local embedding model for agent memory (AGENT_MEMORY_ENABLED). Pulls in torch, so
+# the Docker image leaves it out until memory is turned on.
+memory = [
+    "sentence-transformers>=5",
 ]
 
 [build-system]
