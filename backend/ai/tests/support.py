@@ -38,14 +38,23 @@ TEST_GUARDRAIL_LIMITS = GuardrailLimits(
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CORE_MIGRATIONS = REPO_ROOT / "backend/core/src/main/resources/db/migration"
-# The Core tables the AI baseline reads (users, shops, catalog and sales).
+# The Core tables the AI views read (users, shops, catalog, sales, debts, payments and
+# expenses, with the debt void columns from V9).
 CORE_MIGRATION_FILES = [
     "V1__create_auth_and_shops.sql",
     "V2__add_shop_archive.sql",
     "V3__add_shop_inactive_reason.sql",
     "V4__create_catalog_and_paid_sales.sql",
+    "V5__create_customers_and_debts.sql",
+    "V6__create_expenses.sql",
+    "V7__create_api_idempotency_keys.sql",
+    "V8__allow_custom_sale_items.sql",
+    "V9__add_sale_refunds_and_debt_void_audit.sql",
 ]
-AI_BASELINE = REPO_ROOT / "supabase/migrations/20261005000000_ai_baseline.sql"
+AI_MIGRATIONS = REPO_ROOT / "supabase/migrations"
+AI_BASELINE = AI_MIGRATIONS / "20261005000000_ai_baseline.sql"
+# The read views added after the baseline, applied with it.
+AI_READ_VIEW_MIGRATIONS = [AI_MIGRATIONS / "20261016000000_ai_read_ledger_views.sql"]
 
 
 def apply_core_migrations(connection: psycopg.Connection) -> None:
@@ -56,8 +65,9 @@ def apply_core_migrations(connection: psycopg.Connection) -> None:
 def apply_ai_baseline(connection: psycopg.Connection, view_schema: str) -> None:
     # The views go to a per-test schema so parallel runs and a developer's real
     # `ai_read` schema are never touched; the role name is shared across the cluster.
-    text = re.sub(r"\bai_read\b", view_schema, AI_BASELINE.read_text())
-    connection.execute(text, prepare=False)
+    for path in [AI_BASELINE, *AI_READ_VIEW_MIGRATIONS]:
+        text = re.sub(r"\bai_read\b", view_schema, path.read_text())
+        connection.execute(text, prepare=False)
 
 
 def schema_url(database_url: str, schema: str) -> str:

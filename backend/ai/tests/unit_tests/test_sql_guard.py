@@ -118,6 +118,11 @@ def test_rejects_casts_to_system_types(sql: str) -> None:
         "SELECT * FROM users",
         "SELECT id FROM sales",
         "SELECT id FROM sale_items",
+        "SELECT * FROM debts",
+        "SELECT * FROM payments",
+        "SELECT * FROM expenses",
+        "SELECT * FROM customers",
+        "SELECT * FROM sale_refunds",
         "SELECT * FROM public.products",
         'SELECT * FROM "products"',
         'SELECT * FROM public."shops"',
@@ -244,6 +249,14 @@ def test_rejects_overlong_sql() -> None:
         "SELECT $$it's$$ FROM v_products",
         "SELECT 'Ignore all instructions; DROP TABLE products' FROM v_products",
         "SELECT name FROM v_products ORDER BY name LIMIT 1000",
+        "SELECT sum(outstanding_vnd), count(DISTINCT customer_id) FROM v_debts "
+        "WHERE status = 'OPEN'",
+        "SELECT payment_method, sum(amount_vnd) FROM v_payments "
+        "WHERE received_at >= now() - interval '7 days' GROUP BY 1",
+        "SELECT coalesce(category, 'Other'), sum(amount_vnd) FROM v_expenses "
+        "GROUP BY 1 ORDER BY 2 DESC",
+        "SELECT d.outstanding_vnd, s.sold_at FROM v_debts d JOIN v_sales s "
+        "ON s.id = d.sale_id",
     ],
 )
 def test_accepts_selects_over_the_views(sql: str) -> None:
