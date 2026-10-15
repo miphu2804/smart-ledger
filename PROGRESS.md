@@ -1,3 +1,13 @@
+### [2026-10-15 21:00 UTC+07:00] — [Fix] Notification swipe-to-read works on iOS, unread counts move to pill badges
+
+**Done:** On iOS the swipe-to-read row (#218) did not move at all. `SwipeRow` now refuses to give the gesture back once it has taken a horizontal drag (`onPanResponderTerminationRequest: () => false`). The action is a lighter red that fills the whole revealed area (Gmail style), and the card no longer pads the list vertically so the action meets the rounded corner. The filter pills show unread counts as a badge on the pill corner instead of "· N" text, so a pill no longer grows when it has unread items.
+
+**Changed files:** `frontend/mobile/src/components/SwipeRow.tsx`, `frontend/mobile/app/notifications.tsx` — modified; this entry.
+
+**Flow explained:** drag right-to-left past 10 pt → `SwipeRow` becomes the responder and keeps it → release past 60% of the width or tap the action marks the notification read; a smaller drag leaves the action open. `FilterPills` takes an optional `count` per option and draws the badge over the pill corner (`99+` above 99).
+
+**Check:** `tsc --noEmit` clean. iOS simulator (iPhone 17 Pro) against staging Core: without the change the row did not move; with it the swipe opens the action, a full swipe and a tap on the action each mark the row read (unread 7 → 6 → 5), and pills show badges 7 and 6 without growing. **Not verified:** Android, the `99+` badge, a badge clipped at the right edge while scrolling the pills.
+
 ### [2026-10-15 20:10 UTC+07:00] — [Fix] Web on iPhone: Sales grid fills the width, tabs switch without a blank screen
 
 **Done:** The team sent screenshots and a screen recording from Safari on an iPhone: on Sales the right column of product cards stopped about 17 pt short of the edge, so the grid looked shifted, and switching tabs faded through overlapping and then blank screens. The card width was a pixel value computed from the list width measured when the screen appeared; on Safari that measurement can land while the tab's fade is running and come out smaller (inferred: not reproducible in Chrome, where every screen measures 393 px). Cards are now 50% of the row each (10 px outer margins and an 8 px gap as before), so nothing is measured. On the web the tab switch no longer animates (the fade runs in JavaScript there and stalls on Safari); the phone app keeps the fade. While a list loads for the first time, Sales shows skeleton product cards (or rows in list view) and Orders a skeleton summary card and order rows, instead of a spinner. The skeletons pulse with one animation for the whole block instead of one per block, which matters on the web where each animation runs in JavaScript.

@@ -69,7 +69,6 @@ export default function Notifications() {
   }, [shown]);
 
   const count = (c: NotifCategory) => unread.filter((n) => n.category === c).length;
-  const withCount = (label: string, n: number) => (n ? `${label} · ${n}` : label);
 
   const markRead = (n: Notif) => {
     if (n.coreId != null) core.markRead([n.coreId]).catch((e) => toast(errorMessage(e), 'err'));
@@ -105,11 +104,12 @@ export default function Notifications() {
         onChange={setFilter}
         options={[
           { key: 'all', label: 'Tất cả', icon: 'grid' },
-          { key: 'unread', label: withCount('Chưa đọc', unreadTotal), icon: 'bell' },
+          { key: 'unread', label: 'Chưa đọc', icon: 'bell', count: unreadTotal },
           ...NOTIF_CATEGORIES.map((c) => ({
             key: c,
-            label: withCount(notifCategoryMeta[c].label, count(c)),
+            label: notifCategoryMeta[c].label,
             icon: notifCategoryMeta[c].icon,
+            count: count(c),
           })),
         ]}
       />
@@ -207,7 +207,7 @@ function FilterPills<K extends string>({
   value,
   onChange,
 }: {
-  options: { key: K; label: string; icon: React.ComponentProps<typeof Feather>['name'] }[];
+  options: { key: K; label: string; icon: React.ComponentProps<typeof Feather>['name']; count?: number }[];
   value: K;
   onChange: (k: K) => void;
 }) {
@@ -217,21 +217,31 @@ function FilterPills<K extends string>({
         const active = o.key === value;
         const ink = active ? colors.brandInk : colors.inkSecondary;
         return (
-          <Pressable
-            key={o.key}
-            onPress={() => {
-              triggerFeedback('selection');
-              onChange(o.key);
-            }}
-            accessibilityRole="button"
-            accessibilityState={{ selected: active }}
-            style={({ pressed }) => [styles.pill, active && styles.pillActive, pressed && { opacity: 0.8 }]}
-          >
-            <Feather name={o.icon} size={14} color={ink} />
-            <T w={active ? 'bold' : 'medium'} size={13} color={ink} numberOfLines={1}>
-              {o.label}
-            </T>
-          </Pressable>
+          <View key={o.key}>
+            <Pressable
+              onPress={() => {
+                triggerFeedback('selection');
+                onChange(o.key);
+              }}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={o.count ? `${o.label}, ${o.count} chưa đọc` : o.label}
+              style={({ pressed }) => [styles.pill, active && styles.pillActive, pressed && { opacity: 0.8 }]}
+            >
+              <Feather name={o.icon} size={14} color={ink} />
+              <T w={active ? 'bold' : 'medium'} size={13} color={ink} numberOfLines={1}>
+                {o.label}
+              </T>
+            </Pressable>
+            {o.count ? (
+              // Số chưa đọc nằm đè góc pill (như mail) nên pill không phình rộng khi có số.
+              <View pointerEvents="none" style={styles.badge}>
+                <T w="bold" size={10.5} color={colors.white}>
+                  {o.count > 99 ? '99+' : o.count}
+                </T>
+              </View>
+            ) : null}
+          </View>
         );
       })}
     </ScrollView>
@@ -301,8 +311,21 @@ function NotifRow({
 }
 
 const styles = StyleSheet.create({
-  clip: { borderRadius: radius.md - 1, overflow: 'hidden', paddingVertical: 4 },
-  pills: { gap: 6, paddingRight: 16 },
+  clip: { borderRadius: radius.md - 1, overflow: 'hidden' },
+  // paddingTop chừa chỗ cho badge nhô lên khỏi pill, vì ScrollView ngang cắt nội dung tràn ra ngoài.
+  pills: { gap: 6, paddingRight: 16, paddingTop: 7 },
+  badge: {
+    position: 'absolute',
+    top: -7,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.data.expense,
+  },
   pill: {
     height: 32,
     minWidth: 64,
