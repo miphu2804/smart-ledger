@@ -60,6 +60,8 @@ export function T({
 export const KEYBOARD_AVOID_BEHAVIOR = 'padding' as const;
 
 // ---------------------------------------------------------------- Screen
+const END_REACHED_PX = 400;
+
 export function Screen({
   children,
   scroll = true,
@@ -68,6 +70,7 @@ export function Screen({
   footer,
   overlay,
   contentStyle,
+  onEndReached,
 }: {
   children: React.ReactNode;
   scroll?: boolean;
@@ -77,8 +80,14 @@ export function Screen({
   /** phần tử nổi (FAB…) đặt trên nội dung cuộn */
   overlay?: React.ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
+  /** cuộn gần cuối (hoặc nội dung chưa đầy màn hình) thì gọi; bên gọi tự chặn gọi lặp khi đang tải */
+  onEndReached?: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const viewportH = useRef(0);
+  const nearEnd = (contentH: number, y: number) => {
+    if (onEndReached && contentH - y - viewportH.current < END_REACHED_PX) onEndReached();
+  };
   const pad = padded ? { paddingHorizontal: 16 } : null;
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: bg }} behavior={KEYBOARD_AVOID_BEHAVIOR}>
@@ -89,6 +98,10 @@ export function Screen({
           contentContainerStyle={[pad, { paddingBottom: 28 }, contentStyle]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          scrollEventThrottle={100}
+          onLayout={(e) => (viewportH.current = e.nativeEvent.layout.height)}
+          onScroll={(e) => nearEnd(e.nativeEvent.contentSize.height, e.nativeEvent.contentOffset.y)}
+          onContentSizeChange={(_, h) => nearEnd(h, 0)}
         >
           {children}
         </ScrollView>
