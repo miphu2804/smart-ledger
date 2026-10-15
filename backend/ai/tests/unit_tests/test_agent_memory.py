@@ -39,10 +39,10 @@ class FakeMemoryRepository:
         self.added: list[tuple] = []
         self.replaced: list[tuple] = []
 
-    def search(self, shop_id, user_id, query, limit):
+    def search(self, shop_id, user_id, query, limit, preference_limit=0):
         if self.error is not None:
             raise self.error
-        self.searches.append((shop_id, user_id, query, limit))
+        self.searches.append((shop_id, user_id, query, limit, preference_limit))
         return self.recalled
 
     def add(self, shop_id, user_id, conversation_id, memories):
@@ -93,7 +93,7 @@ def memory_service(
 
 def recalled(content: str = RICE_SUPPLIER, memory_id: int = 7) -> RecalledMemory:
     return RecalledMemory(
-        memory_id, content, "semantic", datetime(2026, 10, 1, tzinfo=UTC), 0.8
+        memory_id, content, "semantic", datetime(2026, 10, 1, tzinfo=UTC), 0.8, 41
     )
 
 
@@ -133,11 +133,12 @@ async def test_recalled_memories_lead_the_prompt_but_not_the_stored_message() ->
     await agent.chat(user_id=3, shop_id=15, message="nhập gạo ở đâu?")
     await asyncio.gather(*agent.memory_writes)
 
-    (shop_id, user_id, _, limit) = repository.searches[0]
-    assert (shop_id, user_id, limit) == (15, 3, 5)
+    (shop_id, user_id, _, limit, preference_limit) = repository.searches[0]
+    assert (shop_id, user_id, limit, preference_limit) == (15, 3, 5, 10)
     assert sent_prompt(chat_model) == (
-        "Earlier facts from this owner, dated, most relevant first:\n"
-        f"- (2026-10-01) {RICE_SUPPLIER}\n\n"
+        "Earlier facts from this owner, with date and type, preferences first, then"
+        " most relevant:\n"
+        f"- (2026-10-01, semantic) {RICE_SUPPLIER}\n\n"
         "Owner message:\nnhập gạo ở đâu?"
     )
     assert MEMORY_PROMPT in chat_model.requests[0][1].instructions
@@ -237,7 +238,12 @@ async def test_a_failed_extraction_is_logged_not_raised(
 async def test_memory_dates_are_shop_days_not_utc_days() -> None:
     # 17:28 UTC on 14 October is 00:28 on 15 October in Vietnam.
     late_night = RecalledMemory(
-        7, RICE_SUPPLIER, "semantic", datetime(2026, 10, 14, 17, 28, tzinfo=UTC), 0.8
+        7,
+        RICE_SUPPLIER,
+        "semantic",
+        datetime(2026, 10, 14, 17, 28, tzinfo=UTC),
+        0.8,
+        41,
     )
     service = memory_service(
         ScriptedModel(), FakeMemoryRepository(recalled=[late_night])
@@ -245,7 +251,7 @@ async def test_memory_dates_are_shop_days_not_utc_days() -> None:
 
     prompt, _ = await service.with_memories(15, 3, "gạo?")
 
-    assert f"- (2026-10-15) {RICE_SUPPLIER}" in prompt
+    assert f"- (2026-10-15, semantic) {RICE_SUPPLIER}" in prompt
 
 
 async def test_extraction_knows_today_to_date_events() -> None:
@@ -450,7 +456,15 @@ def test_the_sse_memory_event_lists_what_was_used(
     frames = [frame for frame in body.split("\n\n") if frame.strip()]
     assert frames[0].splitlines()[0] == "event: memory"
     assert json.loads(frames[0].splitlines()[1].removeprefix("data: ")) == {
-        "used": [{"id": 7, "memory_type": "semantic", "content": RICE_SUPPLIER}]
+        "used": [
+            {
+                "id": 7,
+                "memory_type": "semantic",
+                "content": RICE_SUPPLIER,
+                "source_conversation_id": 41,
+                "created_at": "2026-10-01T00:00:00+00:00",
+            }
+        ]
     }
 
 

@@ -22,11 +22,17 @@ function loginAs(kind: { email: string }, needsVerification = false) {
 
 /** Tài khoản Facebook giả lập: bản mock không có Facebook thật, nên luôn đăng nhập vào cùng một người dùng mẫu. */
 const MOCK_FACEBOOK_EMAIL = 'facebook.demo@example.com';
+/** Tài khoản Google giả lập, tương tự Facebook. */
+const MOCK_GOOGLE_EMAIL = 'google.demo@example.com';
 
 export const mockAuth: AuthClient = {
   async signInWithFacebook() {
     await sleep(500);
     loginAs({ email: MOCK_FACEBOOK_EMAIL });
+  },
+  async signInWithGoogle() {
+    await sleep(500);
+    loginAs({ email: MOCK_GOOGLE_EMAIL });
   },
   async signInWithEmail(rawEmail, password) {
     await sleep(400);

@@ -4,7 +4,7 @@ import { mapFirebaseError } from './firebaseErrors';
 import { AuthClient, AuthError } from './types';
 
 /**
- * Firebase Auth trên web (expo web) bằng Firebase JS SDK: email + mật khẩu (gồm quên mật khẩu, xác minh email) và popup Facebook.
+ * Firebase Auth trên web (expo web) bằng Firebase JS SDK: email + mật khẩu (gồm quên mật khẩu, xác minh email), popup Facebook và popup Google.
  * Android / iOS dùng firebase.ts (React Native Firebase).
  *
  * Gói `firebase` được nạp lười trong try/catch: chưa cài thì bản mock vẫn chạy bình thường.
@@ -41,6 +41,21 @@ export const firebaseAuth: AuthClient = {
       // Mặc định chỉ có public_profile (xem ghi chú ở firebase.ts về quyền email)
       await m.signInWithPopup(auth, new m.FacebookAuthProvider());
       debugLog('auth', 'signInWithFacebook (web) ✓');
+    } catch (e) {
+      throw mapFirebaseError(e);
+    }
+  },
+
+  /** Popup Google của Firebase; domain của trang phải nằm trong Authorized domains của Firebase project. */
+  async signInWithGoogle() {
+    const { m, auth } = load();
+    debugLog('auth', 'signInWithGoogle (web) →');
+    try {
+      const provider = new m.GoogleAuthProvider();
+      // Luôn cho chọn tài khoản, kể cả khi trình duyệt chỉ đang đăng nhập một tài khoản Google
+      provider.setCustomParameters({ prompt: 'select_account' });
+      await m.signInWithPopup(auth, provider);
+      debugLog('auth', 'signInWithGoogle (web) ✓');
     } catch (e) {
       throw mapFirebaseError(e);
     }

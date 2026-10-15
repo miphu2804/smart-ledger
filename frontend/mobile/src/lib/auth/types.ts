@@ -27,7 +27,7 @@ const MESSAGES: Record<AuthErrorCode, string> = {
   'not-configured': 'Cách đăng nhập này chưa dùng được lúc này. Vui lòng chọn cách khác hoặc thử lại sau',
   'not-owner': 'Tài khoản quản trị chỉ đăng nhập trên trang web quản trị',
   cancelled: 'Bạn đã huỷ đăng nhập',
-  'account-exists': 'Email này đã đăng ký bằng một cách đăng nhập khác (email hoặc Facebook). Hãy dùng cách đó để vào app',
+  'account-exists': 'Email này đã đăng ký bằng một cách đăng nhập khác (email, Facebook hoặc Google). Hãy dùng cách đó để vào app',
   unknown: 'Không đăng nhập được. Vui lòng thử lại',
 };
 
@@ -58,7 +58,7 @@ export interface AuthClient {
   sendPasswordReset(email: string): Promise<void>;
   /** Gửi (lại) email xác minh tới người đang đăng nhập bằng email + mật khẩu. */
   sendEmailVerification(): Promise<void>;
-  /** true khi người đang đăng nhập dùng email + mật khẩu mà chưa xác minh email (Facebook không có bước này). */
+  /** true khi người đang đăng nhập dùng email + mật khẩu mà chưa xác minh email (Facebook và Google không có bước này). */
   needsEmailVerification(): boolean;
   /** Tải lại hồ sơ từ Firebase; trả true khi email đã xác minh (và làm mới ID token để mang cờ đã xác minh). */
   refreshEmailVerified(): Promise<boolean>;
@@ -67,10 +67,15 @@ export interface AuthClient {
    * Native cần development build có Facebook SDK (không chạy trên Expo Go); web mở cửa sổ popup của Firebase.
    */
   signInWithFacebook(): Promise<void>;
+  /**
+   * Đăng nhập bằng tài khoản Google rồi đổi sang tài khoản Firebase. Người dùng đóng hộp chọn tài khoản → AuthError('cancelled').
+   * Native cần bản build có thư viện Google Sign-In và Web client ID (đọc từ google-services.json lúc build); web mở popup.
+   */
+  signInWithGoogle(): Promise<void>;
   /** Firebase ID token hiện tại (SDK tự làm mới khi gần hết hạn). null nếu chưa đăng nhập. */
   getIdToken(forceRefresh?: boolean): Promise<string | null>;
   signOut(): Promise<void>;
-  /** Số điện thoại (E.164) của tài khoản cũ đăng ký bằng SĐT; null với tài khoản email hoặc Facebook. Không còn cách đăng nhập mới bằng SĐT. */
+  /** Số điện thoại (E.164) của tài khoản cũ đăng ký bằng SĐT; null với tài khoản email, Facebook hoặc Google. Không còn cách đăng nhập mới bằng SĐT. */
   currentPhone(): string | null;
   /** Email của người đang đăng nhập; null nếu chưa đăng nhập hoặc tài khoản không có email. */
   currentEmail(): string | null;

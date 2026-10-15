@@ -12,6 +12,7 @@ import React from 'react';
 import { ActivityIndicator, Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ToastProvider } from '../src/components/brand';
+import { UpdatePrompt } from '../src/components/UpdatePrompt';
 import { AppStoreProvider } from '../src/store/AppStore';
 import { colors, WEB_FRAME_MAX_WIDTH } from '../src/theme';
 
@@ -53,6 +54,7 @@ export default function RootLayout() {
                 <Stack.Screen name="voice" options={{ animation: 'slide_from_bottom' }} />
                 <Stack.Screen name="ai" options={{ animation: 'slide_from_bottom' }} />
               </Stack>
+              <UpdatePrompt />
             </ToastProvider>
           </AppStoreProvider>
         </View>

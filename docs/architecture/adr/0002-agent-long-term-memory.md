@@ -51,6 +51,16 @@ Hướng dẫn mô tả cách tự dựng: người dùng tự tạo schema và 
 
   Model 1024 chiều (`bge-m3`, `multilingual-e5-large-instruct`) gần bằng model 7B về retrieval với kích thước nhỏ hơn nhiều, và vừa với `vector(1024)` như mẫu Tencent. Bảng không có model API như OpenAI `text-embedding-3-*`, nên nếu chọn model API vẫn phải tự đo.
 - Baseline đúng mẫu Tencent với `paraphrase-multilingual-MiniLM-L12-v2` chạy local, đo trên staging. Trên 40 câu hỏi tổng hợp: Hit@1 0.575, Recall@5 0.825; RLS và lọc `expires_at` không lọt dòng nào; mọi câu gõ không dấu đều trượt.
+- Ngày 2026-10-15 đo local (CPU, macOS) trên 34 fact và 38 câu hỏi tiếng Việt kiểu chủ tiệm, có 4 câu không dấu hoặc lẫn tiếng Anh. Bộ nhỏ, chênh 1 câu là 2,6 điểm:
+
+  | Model | Dim | Recall@1 | Recall@5 | MRR@10 | ms/câu hỏi | RSS |
+  |---|---|---|---|---|---|---|
+  | paraphrase-multilingual-MiniLM-L12-v2 | 384 | 0.658 | 0.842 | 0.751 | 6.7 | 1.16 GB |
+  | bge-m3 | 1024 | 0.895 | 0.974 | 0.928 | 45.7 | 4.14 GB |
+  | embeddinggemma-300m | 768 | 0.921 | 0.974 | 0.950 | 22.7 | 1.34 GB |
+  | embeddinggemma-300m cắt còn 384 | 384 | 0.947 | 0.974 | 0.961 | 22.7 | 1.34 GB |
+
+  embeddinggemma (có prompt query/document, huấn luyện Matryoshka) giữ chất lượng khi cắt về `vector(384)`, nên đổi model không cần migration. Không model nào chạy local vừa gói Railway Free (0.5 GB RAM); Cloudflare Workers AI có `@cf/google/embeddinggemma-300m` (beta) qua `/v1/embeddings`, nên AI service có thêm provider `cloudflare`.
 
 ## Các phương án
 
@@ -72,7 +82,7 @@ Giữ **D** cho tới khi PO duyệt yêu cầu. Nếu PO duyệt, làm theo **A
 ## Hệ quả
 
 - Khi làm: thêm FR/NFR/AC vào PRD (và BRD nếu PO coi đây là phạm vi nghiệp vụ mới), cập nhật [Ngữ cảnh chat](../../contracts/api-contracts.md#ngữ-cảnh-chat), [AI README](../../../backend/ai/README.md#chat-context), [Technical design §1](../technical-design.md#1-phạm-vi), `erd.dbml` và trang quyền riêng tư nếu cần, vì nội dung chat được gửi thêm tới model chat để trích và tóm tắt fact.
-- Image AI phải cài nhóm `memory` (sentence-transformers, `torch`) khi bật, vì proxy chat hiện tại không phục vụ `/v1/embeddings`.
+- Khi bật với provider `sentence-transformers`, image AI phải cài nhóm `memory` (sentence-transformers, `torch`), vì proxy chat hiện tại không phục vụ `/v1/embeddings`. Provider `cloudflare` không cần nhóm này nhưng gửi tin nhắn của chủ tiệm và fact tới Cloudflare để embed, và cần `CLOUDFLARE_API_TOKEN`.
 - Mỗi lượt có memory tốn thêm một lần embed local khi đọc; sau lượt thêm một lời gọi model khi ghi và tối đa 3 lời gọi model khi có memory cũ cần tóm tắt.
 - Request và response của `/internal/v1/agent/chat` và `/api/v1/agent/*` không đổi.
 
@@ -87,11 +97,18 @@ Migration [`20261015000000_agent_memory_visibility.sql`](../../../supabase/migra
 - **Chip trong chat:** sự kiện SSE `memory` gửi trước `delta` đầu tiên khi có memory được dùng; app hiện chip "Đã dùng ghi nhớ" trên câu trả lời. Không đổi `/internal/v1/agent/chat`.
 - **Công tắc theo chủ tiệm:** bảng `agent_memory_settings`, mặc định bật khi chưa có dòng. Tắt thì không tìm và không ghi, không xóa memory đã có. Cờ toàn cục vẫn quyết định cuối. Endpoint `memory/settings` ở [contract](../../contracts/api-contracts.md#6-core--ai-nội-bộ); mobile có công tắc trong Cài đặt.
 
+## Bổ sung theo Cognition "agent memory repo"
+
+So với [agent memory repo](https://cognition.com/agent-memory-repo) của Cognition, nơi một `MEMORY.md` ngắn luôn được nạp vào mọi session, cách đọc ở trên chỉ tìm theo độ giống với câu hỏi. Sở thích như "trả lời dạng bảng" thường không giống câu hỏi về nghĩa nên dễ bị bỏ sót. Cùng cờ `AGENT_MEMORY_ENABLED`, cùng chờ PO duyệt, không thêm migration:
+
+- **Luôn nạp preference:** `search` lấy trước tối đa 10 memory `preference` còn hiệu lực (chưa bị thay, chưa hết hạn), xếp theo `importance` rồi mới nhất, bất kể câu hỏi; sau đó tìm theo cosine và suy giảm thêm tối đa 5 memory khác, bỏ các dòng đã lấy. Preference vượt giới hạn vẫn được tìm như memory thường. Mỗi dòng trong prompt ghi ngày và loại; `MEMORY_PROMPT` dặn model áp preference (định dạng, độ dài, giọng, cách xưng hô) cho mọi câu trả lời. Preference được nạp cũng vào danh sách `[id]` của bước trích xuất, nên chủ tiệm đổi ý thì fact mới thay được preference cũ.
+- **Chip dẫn về hội thoại gốc:** sự kiện `memory` gửi thêm `source_conversation_id` và `created_at` (đã có trong bảng). Chạm một ghi nhớ trên chip mở hội thoại sinh ra nó; ghi nhớ từ chính hội thoại đang mở chỉ hiện ngày. Hội thoại gốc luôn còn, vì xóa hội thoại thì memory của nó mất theo (`ON DELETE CASCADE`).
+
 ## Câu hỏi mở trước khi Accepted
 
 - PO: chủ tiệm có cần agent nhớ qua hội thoại không và có cần màn xem/xóa từng memory riêng không (hiện chỉ có chip và công tắc bật/tắt)?
 - Thời hạn lưu: hợp đồng hiện tại nói MVP không có TTL; `expires_at` có dùng không?
-- Giữ MiniLM local hay đổi sang model 1024 chiều (`bge-m3`/`multilingual-e5-large-instruct`, tự host hay qua API cần secret); đo chất lượng truy xuất tiếng Việt như mục [Embedding](#embedding) trước khi chọn.
+- Chọn embedder cho staging/production: embeddinggemma qua Cloudflare Workers AI (model beta, chưa công bố giá; dữ liệu chat ra khỏi hạ tầng của mình) hay chạy local (cần gói RAM trên 1.3 GB). Cần PO/owner duyệt việc gửi nội dung chat tới Cloudflare.
 
 ## Tham khảo
 
