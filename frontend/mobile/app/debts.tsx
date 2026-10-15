@@ -1,6 +1,7 @@
 import { Feather } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useToast } from '../src/components/brand';
 import {
   Badge,
@@ -21,16 +22,30 @@ import {
 import type { CustomerView, DebtView, PaymentView } from '../src/data/types';
 import { customerApi } from '../src/lib/customerApi';
 import { debtApi } from '../src/lib/debtApi';
+import { debtAgeDays, groupDebtsByCustomer, matchesDebtSearch, type DebtGroup } from '../src/lib/debtGroups';
 import { errorMessage } from '../src/lib/errors';
 import { triggerFeedback } from '../src/lib/feedback';
 import { ddmm, hhmm, initials, relDay, vnd } from '../src/lib/format';
 import { paymentApi } from '../src/lib/salesApi';
+import { useApp } from '../src/store/AppStore';
 import { colors, shadow } from '../src/theme';
 
 type F = 'open' | 'done' | 'all';
+type Method = 'CASH' | 'TRANSFER';
 
 /** Nợ đã gắn tên/SĐT khách (join client-side — Core không trả kèm tên khách trong `/debts`) */
 type DebtCard = DebtView & { name: string; phone: string };
+
+/** Nợ từ chừng này ngày trở lên thì tô đỏ số ngày để chủ tiệm chú ý */
+const LONG_DEBT_DAYS = 30;
+
+const METHOD_LABEL: Record<Method, string> = { CASH: 'Tiền mặt', TRANSFER: 'Chuyển khoản' };
+
+/** "nợ 12 ngày" / "nợ từ hôm nay" của khoản nợ đang mở cũ nhất */
+function ageText(createdAt: string) {
+  const days = debtAgeDays(createdAt);
+  return days === 0 ? 'nợ từ hôm nay' : `nợ ${days} ngày`;
+}
 
 export default function Debts() {
   const [debts, setDebts] = useState<DebtView[]>([]);
@@ -38,6 +53,7 @@ export default function Debts() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<F>('open');
+  const [q, setQ] = useState('');
   const [openId, setOpenId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
@@ -69,10 +85,21 @@ export default function Debts() {
     [debts, customerMap],
   );
 
-  const owing = list.filter((d) => d.status === 'OPEN');
-  const totalLeft = owing.reduce((a, d) => a + d.outstandingVnd, 0);
-  const filtered = list.filter((d) =>
-    filter === 'open' ? d.status === 'OPEN' : filter === 'done' ? d.status === 'SETTLED' : true,
+  // Gộp theo khách: mỗi lần ghi nợ Core có thể tạo một khách mới, nên cùng SĐT là một khách (xem `customerKey`)
+  const groups = useMemo(() => groupDebtsByCustomer(list), [list]);
+  const owing = groups.filter((g) => g.openCount > 0);
+  const totalLeft = owing.reduce((a, g) => a + g.outstandingVnd, 0);
+  const openDebtCount = owing.reduce((a, g) => a + g.openCount, 0);
+  const shown = useMemo<DebtGroup<DebtCard>[]>(
+    () =>
+      groups
+        .filter((g) => matchesDebtSearch(g, q))
+        .map((g) => ({
+          ...g,
+          debts: g.debts.filter((d) => (filter === 'open' ? d.status === 'OPEN' : filter === 'done' ? d.status === 'SETTLED' : true)),
+        }))
+        .filter((g) => g.debts.length > 0),
+    [groups, q, filter],
   );
   const selected = list.find((d) => d.id === openId) ?? null;
 
@@ -93,17 +120,29 @@ export default function Debts() {
           </View>
           <View style={{ alignItems: 'flex-end' }}>
             <T size={12} color={colors.muted}>
-              Số khách nợ
+              Khách đang nợ
             </T>
             <T w="extrabold" size={26}>
               {owing.length}
+            </T>
+            <T size={11.5} color={colors.faint}>
+              {openDebtCount} khoản
             </T>
           </View>
         </Row>
       </View>
 
+      <Field
+        placeholder="Tìm tên hoặc SĐT khách"
+        value={q}
+        onChangeText={setQ}
+        autoCorrect={false}
+        returnKeyType="search"
+        style={{ marginTop: 16, marginBottom: 0 }}
+      />
+
       <Chips<F>
-        style={{ marginTop: 16, marginBottom: 12 }}
+        style={{ marginTop: 10, marginBottom: 12 }}
         value={filter}
         onChange={setFilter}
         options={[
@@ -120,53 +159,10 @@ export default function Debts() {
           <EmptyState icon="alert-triangle" title="Không tải được danh sách" hint={error} />
           <Button title="Thử lại" variant="outline" onPress={load} />
         </>
-      ) : filtered.length ? (
-        filtered.map((d) => {
-          const l = d.outstandingVnd;
-          const paid = d.originalVnd - d.outstandingVnd;
-          const status = d.status === 'SETTLED' ? 'done' : paid > 0 ? 'partial' : 'unpaid';
-          return (
-            <Pressable
-              key={d.id}
-              onPress={() => setOpenId(d.id)}
-              style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }]}
-            >
-              <Row>
-                <Tile
-                  name={d.name}
-                  text={initials(d.name)}
-                  size={42}
-                  palette={l > 0 ? [colors.redSoft, colors.red] : [colors.greenSoft, colors.green]}
-                />
-                <View style={{ flex: 1 }}>
-                  <T w="bold" size={15}>
-                    {d.name}
-                  </T>
-                  <T size={12} color={colors.faint}>
-                    {d.phone || 'Chưa có SĐT'} · {relDay(new Date(d.createdAt))}
-                  </T>
-                </View>
-                <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                  <T w="extrabold" size={16} color={l > 0 ? colors.gold : colors.green}>
-                    {vnd(Math.max(0, l))}
-                  </T>
-                  {status === 'unpaid' ? (
-                    <Badge text="Chưa trả" color={colors.red} bg={colors.redSoft} />
-                  ) : status === 'partial' ? (
-                    <Badge text="Đã trả một phần" color={colors.gold} bg={colors.goldSoft} />
-                  ) : (
-                    <Badge text="Đã trả xong" color={colors.green} bg={colors.greenSoft} />
-                  )}
-                </View>
-              </Row>
-              {paid > 0 && l > 0 ? (
-                <View style={{ marginTop: 10 }}>
-                  <Progress value={paid / d.originalVnd} color={colors.green} track={colors.greenSoft} />
-                </View>
-              ) : null}
-            </Pressable>
-          );
-        })
+      ) : shown.length ? (
+        shown.map((g) => <CustomerCard key={g.key} group={g} onOpen={setOpenId} />)
+      ) : q.trim() ? (
+        <EmptyState icon="search" title="Không tìm thấy khách" hint="Thử tên khác hoặc vài số cuối SĐT" />
       ) : (
         <EmptyState
           icon={filter === 'open' ? 'check-circle' : 'book-open'}
@@ -181,6 +177,94 @@ export default function Debts() {
   );
 }
 
+/** Một khách: tổng còn nợ, khoản nợ lâu nhất, và từng khoản (theo đơn) để bấm vào thu tiền. */
+function CustomerCard({ group, onOpen }: { group: DebtGroup<DebtCard>; onOpen: (id: number) => void }) {
+  const owing = group.outstandingVnd > 0;
+  const age = group.oldestOpenAt ? debtAgeDays(group.oldestOpenAt) : 0;
+  return (
+    <View style={styles.card}>
+      <Row>
+        <Tile
+          name={group.name}
+          text={initials(group.name)}
+          size={42}
+          palette={owing ? [colors.redSoft, colors.red] : [colors.greenSoft, colors.green]}
+        />
+        <View style={{ flex: 1 }}>
+          <T w="bold" size={15} numberOfLines={1}>
+            {group.name}
+          </T>
+          <T size={12} color={colors.faint} numberOfLines={1}>
+            {group.phone || 'Chưa có SĐT'}
+            {group.oldestOpenAt ? (
+              <T size={12} w={age >= LONG_DEBT_DAYS ? 'bold' : undefined} color={age >= LONG_DEBT_DAYS ? colors.red : colors.faint}>
+                {' · '}
+                {ageText(group.oldestOpenAt)}
+              </T>
+            ) : null}
+          </T>
+        </View>
+        <View style={{ alignItems: 'flex-end', gap: 2 }}>
+          {owing ? (
+            <>
+              <T w="extrabold" size={16} color={colors.gold}>
+                {vnd(group.outstandingVnd)}
+              </T>
+              <T size={11.5} color={colors.faint}>
+                {group.openCount} khoản chưa trả
+              </T>
+            </>
+          ) : (
+            <Badge text="Đã trả xong" color={colors.green} bg={colors.greenSoft} />
+          )}
+        </View>
+      </Row>
+
+      {group.debts.map((d) => {
+        const left = d.outstandingVnd;
+        const paid = d.originalVnd - left;
+        return (
+          <Pressable
+            key={d.id}
+            onPress={() => onOpen(d.id)}
+            accessibilityRole="button"
+            accessibilityLabel={`Khoản nợ đơn #${d.saleId} của ${group.name}, còn ${vnd(left)}`}
+            style={({ pressed }) => [styles.debtRow, pressed && { opacity: 0.7 }]}
+          >
+            <View style={{ flex: 1 }}>
+              <T w="semibold" size={13}>
+                Đơn #{d.saleId} · {relDay(new Date(d.createdAt))}
+              </T>
+              {paid > 0 && left > 0 ? (
+                <View style={{ marginTop: 6, marginRight: 12 }}>
+                  <Progress value={paid / d.originalVnd} color={colors.green} track={colors.greenSoft} />
+                </View>
+              ) : (
+                <T size={12} color={colors.faint}>
+                  Tổng {vnd(d.originalVnd)}
+                </T>
+              )}
+            </View>
+            <View style={{ alignItems: 'flex-end', gap: 4 }}>
+              <T w="bold" size={14} color={left > 0 ? colors.gold : colors.green}>
+                {vnd(Math.max(0, left))}
+              </T>
+              {d.status === 'SETTLED' ? (
+                <Badge text="Đã trả xong" color={colors.green} bg={colors.greenSoft} />
+              ) : paid > 0 ? (
+                <Badge text="Đã trả một phần" color={colors.gold} bg={colors.goldSoft} />
+              ) : (
+                <Badge text="Chưa trả" color={colors.red} bg={colors.redSoft} />
+              )}
+            </View>
+            <Feather name="chevron-right" size={16} color={colors.faint} />
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 function DebtSheet({
   debt,
   onClose,
@@ -191,13 +275,18 @@ function DebtSheet({
   onRepay: (debt: DebtView) => void;
 }) {
   const toast = useToast();
+  const app = useApp();
   const [amount, setAmount] = useState('');
+  const [method, setMethod] = useState<Method>('CASH');
+  const [reference, setReference] = useState('');
   const [busy, setBusy] = useState(false);
   const [payments, setPayments] = useState<PaymentView[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
   useEffect(() => {
     setAmount('');
+    setMethod('CASH');
+    setReference('');
     if (!debt) {
       setPayments([]);
       return;
@@ -235,12 +324,18 @@ function DebtSheet({
     if (!v || v > left || busy) return;
     setBusy(true);
     try {
-      const res = await debtApi.repay(debt.id, { amountVnd: v, paymentMethod: 'CASH' });
+      const ref = reference.trim();
+      const res = await debtApi.repay(debt.id, {
+        amountVnd: v,
+        paymentMethod: method,
+        ...(method === 'TRANSFER' && ref ? { transferReference: ref } : {}),
+      });
       onRepay(res.debt);
       setPayments((cur) => [...cur, res.payment]);
       setAmount('');
+      setReference('');
       if (v >= left) triggerFeedback('success');
-      toast(v >= left ? `${debt.name} đã trả hết nợ` : `Đã ghi nhận ${debt.name} trả ${vnd(v)}`);
+      toast(v >= left ? `${debt.name} đã trả hết nợ` : `Đã ghi nhận ${debt.name} trả ${vnd(v)} (${METHOD_LABEL[method].toLowerCase()})`);
     } catch (e) {
       triggerFeedback('error');
       toast(errorMessage(e), 'err');
@@ -249,12 +344,27 @@ function DebtSheet({
     }
   };
 
+  // Tin nhắc nợ soạn sẵn; iOS nối nội dung bằng "&", Android bằng "?"
+  const remind = () => {
+    const shop = app.store.name ? `${app.store.name} ` : '';
+    const body = `Chào ${debt.name}, ${shop}xin nhắc khoản còn nợ ${vnd(left)} của đơn #${debt.saleId} ngày ${ddmm(new Date(debt.createdAt))}. Cảm ơn bạn!`;
+    const sep = Platform.OS === 'ios' ? '&' : '?';
+    Linking.openURL(`sms:${debt.phone}${sep}body=${encodeURIComponent(body)}`).catch(() =>
+      toast('Không thể mở ứng dụng tin nhắn', 'err'),
+    );
+  };
+
+  const openSale = () => {
+    onClose();
+    router.push(`/invoice/${debt.saleId}`);
+  };
+
   // Dòng đầu là khoản nợ gốc (giờ tạo debt); các lần trả nợ thật (DEBT_REPAYMENT) nối sau — mới nhất lên trước
   const history = [
     { at: debt.createdAt, amount: debt.originalVnd, note: 'Ghi nợ ban đầu' },
     ...payments
       .filter((p) => p.type === 'DEBT_REPAYMENT')
-      .map((p) => ({ at: p.receivedAt, amount: -p.amountVnd, note: 'Khách trả nợ' })),
+      .map((p) => ({ at: p.receivedAt, amount: -p.amountVnd, note: `Khách trả nợ · ${METHOD_LABEL[p.paymentMethod]}` })),
   ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 
   return (
@@ -280,16 +390,22 @@ function DebtSheet({
               onPress={() => Linking.openURL(`tel:${debt.phone}`).catch(() => {})}
               label="Gọi"
             />
-            <IconBtn
-              name="message-circle"
-              bg={colors.primarySoft}
-              color={colors.primary}
-              onPress={() => Linking.openURL(`sms:${debt.phone}`).catch(() => toast('Không thể mở ứng dụng tin nhắn', 'err'))}
-              label="Nhắc nợ"
-            />
+            {left > 0 ? <IconBtn name="message-circle" bg={colors.primarySoft} color={colors.primary} onPress={remind} label="Nhắc nợ" /> : null}
           </Row>
         ) : null}
       </Row>
+
+      <Pressable
+        onPress={openSale}
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.saleLink, pressed && { opacity: 0.7 }]}
+      >
+        <Feather name="file-text" size={15} color={colors.primary} />
+        <T w="semibold" size={13} color={colors.primary} style={{ flex: 1 }}>
+          Xem đơn #{debt.saleId} · {ddmm(new Date(debt.createdAt))}
+        </T>
+        <Feather name="chevron-right" size={16} color={colors.primary} />
+      </Pressable>
 
       {left > 0 ? (
         <View style={styles.payBox}>
@@ -301,6 +417,26 @@ function DebtSheet({
             onChangeText={setAmount}
             style={{ marginBottom: 8 }}
           />
+          <Chips<Method>
+            scroll={false}
+            value={method}
+            onChange={setMethod}
+            options={[
+              { key: 'CASH', label: METHOD_LABEL.CASH },
+              { key: 'TRANSFER', label: METHOD_LABEL.TRANSFER },
+            ]}
+            style={{ marginBottom: 8 }}
+          />
+          {method === 'TRANSFER' ? (
+            <Field
+              placeholder="Mã giao dịch (không bắt buộc)"
+              value={reference}
+              onChangeText={setReference}
+              maxLength={255}
+              autoCapitalize="characters"
+              style={{ marginBottom: 8 }}
+            />
+          ) : null}
           <Row>
             <Button
               title="Trả một phần"
@@ -364,6 +500,26 @@ function DebtSheet({
 const styles = StyleSheet.create({
   hero: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.border, borderRadius: 18, padding: 18, ...shadow(1) },
   card: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.border, borderRadius: 18, padding: 14, marginBottom: 10, ...shadow(1) },
+  debtRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 52,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  saleLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minHeight: 44,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: colors.primarySoft,
+  },
   payBox: { marginTop: 16, backgroundColor: colors.bg, borderRadius: 16, padding: 12 },
   hist: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
   histIcon: {
