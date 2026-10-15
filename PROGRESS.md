@@ -1,3 +1,11 @@
+### [2026-10-16 02:43 UTC+07:00] — [Fix] Sales: pinned Scan and Read buttons work after scrolling
+
+**Done:** After scrolling the Sales list, tapping "Quét mã" or "Đọc đơn" on the pinned bar did nothing. The large header above the list only fades out when collapsed, and it sits on top of the pinned bar, so it kept taking the taps. The collapsible header now tracks when it crosses the collapse point (a listener that sets state only on crossing) and lets only the visible layer take touches: the large header while expanded, the pinned bar once collapsed.
+
+**Changed files:** `frontend/mobile/app/pos.tsx` (`PosCollapsibleHeader`) — modified; this entry.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (its only 2 errors are in #230's files: `expo-application` and `expo-intent-launcher` are not installed on this machine). Mock web build in headless Chrome at 393×852, 3/3: before scrolling the centre of the large "Quét mã" button hits that button; after scrolling the centre of the pinned "Quét mã" hits the pinned button and tapping it opens the scanner. **Not verified:** a phone.
+
 ### [2026-10-16 10:30 UTC+07:00] — [Fix] Agent memory writes semantic facts by default
 
 **Done:** The default for `AGENT_MEMORY_TYPES` is now `preference,procedural,semantic`, matching what staging and production run. With the old default the extractor dropped stable facts such as suppliers while the agent still told the owner "Đã ghi nhớ". ADR 0002 records the change and its reason; PO approval of the type list is still open.

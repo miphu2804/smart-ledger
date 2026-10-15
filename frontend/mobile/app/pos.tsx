@@ -222,10 +222,22 @@ function PosCollapsibleHeader({
     outputRange: [0, 0.3, 1],
     extrapolate: 'clamp',
   });
+  // Thân nằm đè lên phần ghim; khi đã thu gọn nó chỉ mờ đi nên vẫn nhận chạm và che nút Quét mã/Đọc đơn của phần ghim.
+  // Theo dõi mốc thu gọn (chỉ đổi state khi vượt mốc) để chỉ lớp đang hiện nhận chạm.
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    const threshold = distance * 0.6;
+    const id = scrollY.addListener(({ value }) => {
+      const next = value >= threshold;
+      setCollapsed((cur) => (cur === next ? cur : next));
+    });
+    return () => scrollY.removeListener(id);
+  }, [scrollY, distance]);
 
   return (
     <Animated.View style={[styles.posHeaderShell, { height: expandedHeight + topInset, transform: [{ translateY: shellTranslate }] }]}>
       <Animated.View
+        pointerEvents={collapsed ? 'auto' : 'none'}
         style={[
           styles.posHeaderPinned,
           { top: topInset + TAB_HEADER_TOP, height: collapsedHeight, opacity: compactOpacity, transform: [{ translateY: counterTranslate }] },
@@ -234,6 +246,7 @@ function PosCollapsibleHeader({
         {pinned}
       </Animated.View>
       <Animated.View
+        pointerEvents={collapsed ? 'none' : 'auto'}
         onLayout={(e) => onBodyHeight(e.nativeEvent.layout.height)}
         style={[
           styles.posHeaderBody,
