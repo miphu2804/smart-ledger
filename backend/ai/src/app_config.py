@@ -27,6 +27,9 @@ class AppConfig(BaseSettings):
     # read-only login granted ai_sql_reader (AI baseline migration); unset disables the
     # agent's shop-data tool while chat keeps working
     AI_SQL_READER_URL: str | None = None
+    # most connections the shop-data pool opens; it shares the Supabase client limit
+    # with the chat-history pool and Core
+    SQL_POOL_MAX_SIZE: int = Field(default=2, gt=0)
     SQL_TIMEOUT_MS: int = Field(default=3000, gt=0)
     SQL_ROW_LIMIT: int = Field(default=100, gt=0)
 
@@ -41,12 +44,22 @@ class AppConfig(BaseSettings):
     LANGFUSE_SECRET_KEY: str | None = None
     LANGFUSE_HOST: str | None = None
 
-    # model provider
-    MODEL_PROVIDER: str = "openai"
-    MODEL_NAME: str = "gpt-5.6-luna"
+    # logfire: Pydantic AI traces without message content (src/observability.py);
+    # an unset token sends nothing
+    LOGFIRE_TOKEN: str | None = None
+    # staging or production, so one Logfire project can hold both
+    LOGFIRE_ENVIRONMENT: str | None = None
+
+    # model provider: the API the model speaks, one of openai (Responses API),
+    # openai-chat (/chat/completions) or anthropic (/v1/messages)
+    MODEL_PROVIDER: str = "anthropic"
+    MODEL_NAME: str = "claude-haiku-5-5"
+    # models tried in order when the previous one fails, as a JSON list of
+    # "provider:model", e.g. ["openai-chat:deepseek-v4.1-flash"]
+    MODEL_FALLBACKS: list[str] = []
     MODEL_TIMEOUT_SECONDS: float = 20.0
     # reasoning effort for the chat model: none, low, medium or high
-    MODEL_REASONING_EFFORT: str = "high"
+    MODEL_REASONING_EFFORT: str = "medium"
 
     # agent guardrails (src/agent/guardrails/), per chat turn
     AGENT_MAX_INPUT_CHARS: int = Field(default=2000, gt=0)
@@ -61,7 +74,19 @@ class AppConfig(BaseSettings):
     # most recent owner/assistant exchanges sent to the model with each turn
     AGENT_HISTORY_TURNS: int = Field(default=100, gt=0)
 
-    # openai
+    # long-term memory across conversations (ADR-0002); off until the PO approves it.
+    # Needs the `memory` dependency group and the agent_memories migration, whose
+    # vector size must match the embedding model.
+    AGENT_MEMORY_ENABLED: bool = False
+    # comma-separated memory types the model may write on its own; the rest stay
+    # unwritten until the PO approves them
+    AGENT_MEMORY_TYPES: str = "preference,procedural"
+    AGENT_MEMORY_EMBEDDING_MODEL: str = (
+        "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    )
+
+    # model gateway shared by every model: OpenAI, or an OpenAI-compatible gateway
+    # such as OpenCode Go (https://opencode.ai/inference/go/v1)
     OPENAI_API_KEY: str | None = None
     OPENAI_BASE_URL: str | None = None
 

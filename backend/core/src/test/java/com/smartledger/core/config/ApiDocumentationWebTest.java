@@ -80,6 +80,44 @@ class ApiDocumentationWebTest {
     @AutoConfigureMockMvc
     class Enabled extends SecurityChecks {
         @Test
+        void saleSummaryDocumentsGlobalFilteredTotalsWithoutPagination() throws Exception {
+            JsonNode api = mapper.readTree(mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString());
+            JsonNode operation = api.path("paths").path("/api/v1/sales/summary").path("get");
+            assertThat(operation.isMissingNode()).as("sales summary operation").isFalse();
+            for (String name : List.of("q", "saleStatus", "from", "to")) {
+                assertThat(parameter(operation, name).path("required").asBoolean()).isFalse();
+            }
+            assertThat(parameter(operation, "X-Shop-Id").path("required").asBoolean()).isTrue();
+            for (JsonNode param : operation.path("parameters")) {
+                assertThat(param.path("name").asText()).isNotIn("page", "size", "period", "sort");
+            }
+            for (String name : List.of("from", "to")) {
+                assertThat(parameter(operation, name).path("schema").path("format").asText()).isEqualTo("date-time");
+            }
+            JsonNode schemaRef = operation.path("responses").path("200").path("content").elements().next().path("schema");
+            JsonNode schema = api.at(schemaRef.path("$ref").asText().substring(1));
+            var required = new java.util.ArrayList<String>();
+            schema.path("required").forEach(node -> required.add(node.asText()));
+            var fields = List.of("matchedOrderCount", "confirmedOrderCount", "voidedOrderCount",
+                    "confirmedSalesVnd", "voidedSalesVnd");
+            assertThat(required).containsExactlyInAnyOrderElementsOf(fields);
+            for (String field : fields) {
+                assertThat(schema.path("properties").path(field).path("type").asText()).isEqualTo("integer");
+                assertThat(schema.path("properties").path(field).path("format").asText()).isEqualTo("int64");
+            }
+            assertThat(schema.path("properties").path("confirmedSalesVnd").path("description").asText())
+                    .contains("not cash collected", "soldAt");
+            assertThat(schema.path("properties").path("voidedSalesVnd").path("description").asText())
+                    .contains("not refunded money");
+            assertThat(operation.path("description").asText()).contains("soldAt >= from", "soldAt < to", "offset", "netRevenueVnd");
+            for (String code : List.of("400", "401", "403", "404", "409")) {
+                assertThat(operation.path("responses").has(code)).isTrue();
+            }
+            verifyNoInteractions(sales);
+        }
+
+        @Test
         void ownerListSchemasAreObjectsWithPaginationDefaultsRatherThanArrays() throws Exception {
             JsonNode api = mapper.readTree(mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
                     .andReturn().getResponse().getContentAsString());

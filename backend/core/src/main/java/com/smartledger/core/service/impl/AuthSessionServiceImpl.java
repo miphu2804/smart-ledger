@@ -18,6 +18,8 @@ import com.smartledger.core.repository.UserAccountRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.AuthSessionService;
 import com.smartledger.core.media.MediaStorage;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,23 +32,26 @@ public class AuthSessionServiceImpl implements AuthSessionService {
     private final UserAccountRepository userAccountRepository;
     private final ShopRepository shopRepository;
     private final MediaStorage mediaStorage;
+    private final EntityManager entityManager;
 
     public AuthSessionServiceImpl(
             AuthIdentityRepository authIdentityRepository,
             UserAccountRepository userAccountRepository,
             ShopRepository shopRepository,
-            MediaStorage mediaStorage) {
+            MediaStorage mediaStorage,
+            EntityManager entityManager) {
         this.authIdentityRepository = authIdentityRepository;
         this.userAccountRepository = userAccountRepository;
         this.shopRepository = shopRepository;
         this.mediaStorage = mediaStorage;
+        this.entityManager = entityManager;
     }
 
     @Override
     @Transactional
     public AuthSessionResponse openSession(VerifiedFirebaseToken firebaseToken, String requestedDisplayName) {
-        UserAccount user = authIdentityRepository.findWithUserByProviderSubject(firebaseToken.uid())
-                .map(AuthIdentity::getUser)
+        UserAccount user = authIdentityRepository.findUserIdByProviderSubject(firebaseToken.uid())
+                .map(this::requireFreshLockedUser)
                 .orElseGet(() -> createUser(firebaseToken, requestedDisplayName));
 
         ensureActive(user);
@@ -63,6 +68,14 @@ public class AuthSessionServiceImpl implements AuthSessionService {
 
         ensureActive(user);
         return toSessionResponse(user);
+    }
+
+    private UserAccount requireFreshLockedUser(Long userId) {
+        UserAccount user = userAccountRepository.findLockedById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_PROFILE_NOT_FOUND));
+        // A lock query does not refresh an entity already managed by the caller's persistence context.
+        entityManager.refresh(user, LockModeType.PESSIMISTIC_WRITE);
+        return user;
     }
 
     private UserAccount createUser(VerifiedFirebaseToken firebaseToken, String requestedDisplayName) {

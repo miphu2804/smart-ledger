@@ -1,7 +1,7 @@
 import type { IconName } from '../components/ui';
-import type { Debt, Expense, Invoice, NotificationType, NotificationView, Product } from '../data/types';
+import type { Expense, Invoice, NotificationType, NotificationView } from '../data/types';
 import { vnd } from './format';
-import { inPeriod, invoiceTotal, methodLabel, summary } from './stats';
+import { invoiceTotal, methodLabel } from './stats';
 
 export type NotifCategory = 'order' | 'stock' | 'debt' | 'finance' | 'ai' | 'system';
 
@@ -42,40 +42,44 @@ function atToday(now: Date, hour: number, minute = 0) {
   return (d > now ? now : d).toISOString();
 }
 
+/** Dữ liệu cho thông báo trên máy: vài bản ghi mới nhất và số tổng của Core, không phải toàn bộ danh sách của tiệm. */
+export interface LocalNotificationData {
+  /** Vài đơn chưa huỷ mới nhất (trang đầu của `GET /sales?saleStatus=CONFIRMED`) */
+  recentSales: Invoice[];
+  /** Báo cáo hôm qua: số đơn, doanh thu thuần, chi phí */
+  yesterday: { orderCount: number; netRevenueVnd: number; expenseVnd: number } | null;
+  /** Lãi gộp ước tính hôm qua; `isComplete=false` khi có món thiếu giá vốn */
+  yesterdayProfit: { estimatedGrossProfitVnd: number; isComplete: boolean; unknownCostItemCount: number } | null;
+  /** Các khoản chi hôm nay (giờ Việt Nam) */
+  todayExpenses: Expense[];
+  /** Nợ đang mở của cả tiệm: số khoản và số tiền chưa thu */
+  openDebt: { count: number; totalVnd: number } | null;
+}
+
 /**
- * Sinh danh sách thông báo từ dữ liệu hiện có của tiệm: đơn mới, công nợ và thu chi. Kho hàng, đơn bị huỷ và tình trạng tiệm
- * không tính ở đây nữa mà lấy từ inbox Core (`fromCoreNotification`), vì Core mới biết ngưỡng sắp hết riêng của từng mặt hàng.
- * Kết quả đã sắp xếp mới nhất trước.
+ * Sinh thông báo trên máy: đơn mới, công nợ và thu chi. Kho hàng, đơn bị huỷ và tình trạng tiệm lấy từ inbox Core
+ * (`fromCoreNotification`). Công nợ là một thông báo gộp cho cả tiệm: Core không trả tên khách trong danh sách nợ và không cho
+ * gộp nợ theo khách trên một trang, nên không còn nhắc nợ riêng từng khách ở đây (xem màn Công nợ). Mới nhất trước.
  */
-export function buildNotifications(
-  data: { invoices: Invoice[]; products: Product[]; expenses: Expense[]; debts: Debt[] },
-  now = new Date(),
-): Notif[] {
+export function buildLocalNotifications(data: LocalNotificationData, now = new Date()): Notif[] {
   const list: Notif[] = [];
 
-  // --- Công nợ
-  for (const d of data.debts) {
-    const left = d.total - d.paid;
-    if (left <= 0) continue;
-    const days = Math.floor((now.getTime() - new Date(d.lastDate).getTime()) / 86400000);
-    const old = days >= 3;
+  // --- Công nợ: id đổi khi số khoản hoặc số tiền đổi, để thông báo hiện lại là chưa đọc
+  if (data.openDebt && data.openDebt.count > 0 && data.openDebt.totalVnd > 0) {
+    const { count, totalVnd } = data.openDebt;
     list.push({
-      id: `debt-${d.id}-${d.lastDate}`,
+      id: `debt-open-${count}-${totalVnd}`,
       category: 'debt',
-      icon: old ? 'clock' : 'book-open',
-      urgent: old,
-      title: old ? `Nhắc nợ: ${d.name}` : `${d.name} đang nợ ${vnd(left)}`,
-      body: old
-        ? `Còn nợ ${vnd(left)}, đã ${days} ngày chưa trả. Gọi nhắc khách${d.phone ? ` qua ${d.phone}` : ''}.`
-        : d.history[0]?.note ?? 'Khoản nợ mới được ghi',
-      at: d.lastDate,
+      icon: 'book-open',
+      title: `Còn ${count} khoản nợ chưa thu`,
+      body: `${vnd(totalVnd)} chưa thu. Mở Công nợ để xem và nhắc khách.`,
+      at: atToday(now, 7),
       href: '/debts',
     });
   }
 
-  // --- Đơn hàng: vài đơn mới nhất + đơn bị huỷ trong 7 ngày
-  const sorted = [...data.invoices].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  for (const inv of sorted.filter((i) => i.status !== 'cancelled').slice(0, RECENT_ORDERS)) {
+  // --- Đơn hàng: vài đơn mới nhất
+  for (const inv of data.recentSales.filter((i) => i.status !== 'cancelled').slice(0, RECENT_ORDERS)) {
     // Đơn lấy từ Core không biết tiền mặt hay chuyển khoản (methodKnown === false) → chỉ nói "Đã thanh toán", không đoán phương thức.
     const payment =
       inv.status === 'debt' ? 'Ghi nợ' : inv.methodKnown === false ? 'Đã thanh toán' : methodLabel[inv.method];
@@ -91,21 +95,27 @@ export function buildNotifications(
       href: `/invoice/${inv.id}`,
     });
   }
-  // --- Thu chi: tổng kết hôm qua + chi phí hôm nay
-  const y = summary(data.invoices, data.products, 'yesterday');
-  const ySpend = data.expenses.filter((e) => inPeriod(e.createdAt, 'yesterday', now)).reduce((a, e) => a + e.amount, 0);
-  if (y.count || ySpend) {
+
+  // --- Thu chi: tổng kết hôm qua theo báo cáo của Core + chi phí hôm nay
+  const y = data.yesterday;
+  if (y && (y.orderCount || y.expenseVnd)) {
+    const profit = data.yesterdayProfit;
+    const profitText = profit
+      ? ` · Lãi gộp ước tính ${vnd(profit.estimatedGrossProfitVnd)}${
+          profit.isComplete ? '' : ` (thiếu giá vốn ${profit.unknownCostItemCount} món)`
+        }`
+      : '';
     list.push({
       id: `fin-yesterday-${now.toDateString()}`,
       category: 'finance',
       icon: 'bar-chart-2',
       title: 'Tổng kết ngày hôm qua',
-      body: `${y.count} đơn · Doanh thu ${vnd(y.revenue)} · Chi ${vnd(ySpend)} · Lãi gộp ước tính ${vnd(y.profit)}`,
+      body: `${y.orderCount} đơn · Doanh thu ${vnd(y.netRevenueVnd)} · Chi ${vnd(y.expenseVnd)}${profitText}`,
       at: atToday(now, 6),
       href: '/(tabs)/invoices',
     });
   }
-  for (const e of data.expenses.filter((x) => inPeriod(x.createdAt, 'today', now))) {
+  for (const e of data.todayExpenses) {
     list.push({
       id: `exp-${e.id}`,
       category: 'finance',

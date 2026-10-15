@@ -6,6 +6,7 @@ import com.smartledger.core.dto.request.ProductStockInRequest;
 import com.smartledger.core.dto.request.ProductWriteRequest;
 import com.smartledger.core.dto.response.PageResponse;
 import com.smartledger.core.dto.response.ProductResponse;
+import com.smartledger.core.entity.Category;
 import com.smartledger.core.entity.Product;
 import com.smartledger.core.entity.Shop;
 import com.smartledger.core.enums.AuditAction;
@@ -22,6 +23,8 @@ import com.smartledger.core.service.IdempotencyService;
 import com.smartledger.core.service.NotificationEventService;
 import com.smartledger.core.service.ProductService;
 import com.smartledger.core.service.ShopService;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -39,18 +42,20 @@ public class ProductServiceImpl implements ProductService {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final IdempotencyService idempotencyService;
+    private final EntityManager entityManager;
 
     public ProductServiceImpl(
             ShopService shopService,
             ProductRepository productRepository,
             CategoryRepository categoryRepository, AuditLogService auditLogService,
-            IdempotencyService idempotencyService, NotificationEventService notifications) {
+            IdempotencyService idempotencyService, NotificationEventService notifications, EntityManager entityManager) {
         this.notifications = notifications;
         this.auditLogService = auditLogService;
         this.shopService = shopService;
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
         this.idempotencyService = idempotencyService;
+        this.entityManager = entityManager;
     }
 
     @Override
@@ -114,6 +119,8 @@ public class ProductServiceImpl implements ProductService {
         }
         Shop shop = shopService.requireOwnedActiveShop(firebaseToken, shopId);
         Product product = requireLockedActiveProduct(shop.getId(), productId);
+        // Merge omitted fields from the latest row, even if this Product was already managed before the lock.
+        entityManager.refresh(product, LockModeType.PESSIMISTIC_WRITE);
         ProductWriteRequest merged = merge(product, request);
         String barcode = validateReferencesAndStock(shop.getId(), product.getId(), merged,
                 request.hasField("categoryId"), request.hasField("barcode"));
@@ -214,9 +221,8 @@ public class ProductServiceImpl implements ProductService {
 
     private String validateReferencesAndStock(Long shopId, Long currentProductId, ProductWriteRequest request,
             boolean validateCategory, boolean validateBarcode) {
-        if (validateCategory && request.categoryId() != null && !categoryRepository.existsByIdAndShopIdAndStatus(
-                request.categoryId(), shopId, CatalogStatus.ACTIVE)) {
-            throw new BusinessException(ErrorCode.PRODUCT_CATEGORY_INVALID);
+        if (validateCategory && request.categoryId() != null) {
+            requireLockedActiveCategory(shopId, request.categoryId());
         }
 
         // An omitted PATCH field must remain unchanged, including legacy barcode values.
@@ -242,6 +248,17 @@ public class ProductServiceImpl implements ProductService {
             throw new BusinessException(ErrorCode.PRODUCT_STOCK_NOT_TRACKED);
         }
         return barcode;
+    }
+
+    private void requireLockedActiveCategory(Long shopId, Long categoryId) {
+        // Create locks the target Category before insertion; PATCH locks Product, then target Category.
+        // Category archive takes no Product row lock, so it cannot reverse this acquisition order.
+        Category category = categoryRepository.findLockedByIdAndShopId(categoryId, shopId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_CATEGORY_INVALID));
+        entityManager.refresh(category, LockModeType.PESSIMISTIC_WRITE);
+        if (category.getStatus() != CatalogStatus.ACTIVE) {
+            throw new BusinessException(ErrorCode.PRODUCT_CATEGORY_INVALID);
+        }
     }
 
     private void replaceFields(Product product, ProductWriteRequest request, String barcode) {

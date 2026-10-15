@@ -14,6 +14,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ENUM
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
+from src.agent.errors import ConversationNotFoundError
 from src.infra.postgre_db_client import Base, PostgreDBClient
 
 
@@ -47,10 +48,6 @@ class ChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-
-
-class ConversationNotFoundError(Exception):
-    pass
 
 
 class AgentConversationRepository:

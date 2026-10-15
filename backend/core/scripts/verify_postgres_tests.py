@@ -17,13 +17,71 @@ REQUIRED = {
         "concurrentVoidRetryCreatesOneNotificationAndRefund",
         "notificationWriteFailureRollsBackVoidRefundAndIdempotencyKey",
         "readBatchIsAtomicAndEventsCannotBeReadByAnotherOwnerEvenWithAnIncorrectRecipientRow",
+        "laterRestockOverflowRollsBackEarlierStockAuditAndAllowsSameKeyRetry",
+        "voidRestorationExactlyAtMaximumSucceeds",
+        "explicitNoRestockStillVoidsWhenStockIsAlreadyAtMaximum",
     },
     "com.smartledger.core.service.DebtVoidPostgresTest": set(),
     "com.smartledger.core.service.AuditLogPostgresTest": {
         "lateCheckoutFailureRollsBackEveryBusinessWriteAndCanBeRetried",
         "laterProductFailureRollsBackEarlierStockChangeAndCustomer",
     },
+    "com.smartledger.core.service.AuthSessionConcurrencyPostgresTest": {
+        "sessionReadsCommittedChangesEvenWhenUserWasAlreadyManaged",
+        "sessionKeepsItsRowLockUntilCommitAndTheLaterWriterWins",
+        "identityLookupDoesNotLoadUserBeforeTakingItsLock",
+    },
+    "com.smartledger.core.service.ShopConcurrencyPostgresTest": {
+        "adminSuspensionWinsBeforeOwnerWrite",
+        "adminReadsOwnerCommitWithoutOverwritingProfileOrReopeningArchivedShop",
+        "profileEditPreservesLogoCommittedWhileItsShopWasAlreadyManaged",
+    },
+    "com.smartledger.core.service.CatalogLifecycleConcurrencyPostgresTest": {
+        "archiveCommitPreventsStaleReplace",
+        "archiveReadsLatestCommittedProfile",
+        "concurrentArchivesKeepFirstMetadataAndSingleAudit",
+        "archiveBeforeDebtConfirmationRejectsEvenPreloadedCustomer",
+        "debtConfirmationSnapshotsLatestCustomerAfterWaitingForProfileWrite",
+        "debtConfirmationKeepsCustomerLockUntilCommitBeforeArchive",
+        "debtConfirmationAuditFailureRollsBackAndReleasesCustomerLock",
+        "fullyPaidConfirmationStillAcceptsArchivedCustomerSnapshotWithoutDebt",
+        "debtConfirmationDoesNotLockOrLinkCustomerFromAnotherShop",
+    },
+    "com.smartledger.core.service.CategoryAssignmentConcurrencyPostgresTest": {
+        "archiveCommitRejectsCreateOrPatchWithoutPartialWrites",
+        "assignmentCommitMakesArchiveRejectActiveProducts",
+        "categoryArchiveDoesNotDeadlockWithMediaStyleShopThenProductLocks",
+        "omittedCategoryKeepsLatestAssignmentAfterPreloadedProductWaitsForAnotherPatch",
+    },
+    "com.smartledger.core.service.MediaConcurrencyPostgresTest": {
+        "simultaneousSameAvatarKeyOnlyReservesOnce",
+        "avatarAuditAndReferenceRollbackTogetherAndKeepPendingKey",
+        "managedAvatarWriterPreservesSessionProfileCommittedDuringUpload",
+        "managedAvatarWriterSeesLatestStatusAndRole",
+        "managedAvatarWriterCleansLatestReferenceNotPreloadedReference",
+        "sessionAfterAvatarWritePreservesMediaReference",
+        "managedLogoAndProfileWritersPreserveEachOthersChanges",
+        "managedShopMediaWriterRejectsCommittedLifecycleChange",
+        "managedProductMediaWriterPreservesCommittedCatalogAndStock",
+        "managedProductMediaWriterRejectsArchivedProduct",
+    },
+    "com.smartledger.core.service.SalesListQueryPostgresTest": {
+        "saleSummaryUsesOneAggregateReadForTenThousandSalesWithoutHydratingItems",
+        "saleSummaryReusesItemSearchWithoutDuplicateCountingAndHonorsStatus",
+        "saleSummaryRejectsAValueOutsideTheApiLongRangeInsteadOfReturningCorruptedMoney",
+        "saleSummaryReturnsFiveZerosForEmptyOrUnmatchedSetsAndExcludesDrafts",
+        "saleSummaryCombinesAllFiltersWithHalfOpenBoundsAndEquivalentOffsets",
+        "saleSummaryUsesDiscountedSaleValueForPaidPartialDebtAndCrossPeriodVoid",
+        "saleSummarySupportsExactIdLiteralWildcardsAndArchivedProductSnapshots",
+        "saleSummaryRejectsUnauthorizedAccessBeforeAggregateRead",
+        "saleSummaryAcceptsExactlyLongMaxValue",
+    },
 }
+
+
+def method_name(case_name: str) -> str:
+    """Surefire appends parameter signatures and invocation indexes to JUnit methods."""
+    return case_name.split("(", 1)[0].split("[", 1)[0]
 
 
 def verify(reports: Path) -> None:
@@ -44,7 +102,7 @@ def verify(reports: Path) -> None:
             case.find(tag) is not None for case in cases for tag in ("skipped", "failure", "error")
         ):
             problems.append(f"{name}: tests skipped or failed")
-        missing = required_methods - {case.get("name") for case in cases}
+        missing = required_methods - {method_name(case.get("name", "")) for case in cases}
         if missing:
             problems.append(f"{name}: required tests missing: {sorted(missing)}")
         print(f"{name}: tests={suite.get('tests')}, skipped={suite.get('skipped')}")

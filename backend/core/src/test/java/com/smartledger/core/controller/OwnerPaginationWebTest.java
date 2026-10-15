@@ -10,6 +10,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.smartledger.core.config.SecurityConfiguration;
 import com.smartledger.core.dto.request.OwnerListQuery.*;
 import com.smartledger.core.dto.response.PageResponse;
+import com.smartledger.core.dto.response.SaleSummaryResponse;
+import com.smartledger.core.enums.ErrorCode;
+import com.smartledger.core.exception.BusinessException;
 import com.smartledger.core.exception.ApiExceptionHandler;
 import com.smartledger.core.exception.RestAuthenticationEntryPoint;
 import com.smartledger.core.security.BearerTokenAuthenticationFilter;
@@ -53,6 +56,8 @@ class OwnerPaginationWebTest {
                 new VerifiedFirebaseToken("owner", null, false, null, null, null));
         when(products.list(any(), eq("4"), any(Products.class))).thenReturn(page(List.of()));
         when(sales.list(any(), eq("4"), any(Sales.class))).thenReturn(page(List.of()));
+        when(sales.summary(any(), eq("4"), any(SalesSummary.class))).thenReturn(
+                new SaleSummaryResponse(12L, 10L, 2L, 1_000_000L, 200_000L));
         when(drafts.list(any(), eq("4"), any(Drafts.class))).thenReturn(page(List.of()));
         when(customers.list(any(), eq("4"), any(Customers.class))).thenReturn(page(List.of()));
         when(debts.list(any(), eq("4"), any(Debts.class))).thenReturn(page(List.of()));
@@ -117,6 +122,63 @@ class OwnerPaginationWebTest {
     }
 
     @Test
+    void summarizesAllMatchingSalesWithoutAListPageOrDetailLookup() throws Exception {
+        when(sales.summary(any(), eq("4"), any(SalesSummary.class)))
+                .thenReturn(new SaleSummaryResponse(2, 0, 2, 0, 200_000));
+        mvc.perform(get("/api/v1/sales/summary").queryParam("q", "  ca phe ")
+                        .queryParam("saleStatus", "VOIDED")
+                        .queryParam("from", "2026-10-09T12:30:00+07:00")
+                        .queryParam("to", "2026-10-09T06:30:00Z")
+                        .header("Authorization", "Bearer owner-token").header("X-Shop-Id", "4"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.matchedOrderCount").value(2))
+                .andExpect(jsonPath("$.confirmedOrderCount").value(0))
+                .andExpect(jsonPath("$.voidedOrderCount").value(2))
+                .andExpect(jsonPath("$.confirmedSalesVnd").value(0))
+                .andExpect(jsonPath("$.voidedSalesVnd").value(200_000));
+        org.mockito.Mockito.verify(sales).summary(any(), eq("4"), eq(new SalesSummary("ca phe",
+                com.smartledger.core.enums.SaleStatus.VOIDED,
+                OffsetDateTime.parse("2026-10-09T12:30:00+07:00"), OffsetDateTime.parse("2026-10-09T06:30:00Z"))));
+        org.mockito.Mockito.verify(sales, org.mockito.Mockito.never()).getById(any(), any(), any());
+    }
+
+    @Test
+    void saleSummaryRequiresAuthenticationAndShopHeaderAndSerializesFiveZeros() throws Exception {
+        mvc.perform(get("/api/v1/sales/summary").header("X-Shop-Id", "4"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/sales/summary").header("Authorization", "Bearer owner-token"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("missing_required_header"));
+        org.mockito.Mockito.verifyNoInteractions(sales);
+        when(sales.summary(any(), eq("4"), any(SalesSummary.class)))
+                .thenReturn(new SaleSummaryResponse(0, 0, 0, 0, 0));
+        mvc.perform(get("/api/v1/sales/summary").header("Authorization", "Bearer owner-token")
+                        .header("X-Shop-Id", "4"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.matchedOrderCount").value(0))
+                .andExpect(jsonPath("$.confirmedOrderCount").value(0))
+                .andExpect(jsonPath("$.voidedOrderCount").value(0))
+                .andExpect(jsonPath("$.confirmedSalesVnd").value(0))
+                .andExpect(jsonPath("$.voidedSalesVnd").value(0));
+        org.mockito.Mockito.verify(sales).summary(any(), eq("4"), eq(SalesSummary.defaults()));
+    }
+
+    @Test
+    void summaryRejectsInvalidRangeBeforeCallingServiceAndMapsAggregateOverflow() throws Exception {
+        mvc.perform(get("/api/v1/sales/summary").queryParam("from", "2026-10-09T12:30:00+07:00")
+                        .queryParam("to", "2026-10-09T05:30:00Z")
+                        .header("Authorization", "Bearer owner-token").header("X-Shop-Id", "4"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("invalid_sale_query"));
+        org.mockito.Mockito.verifyNoMoreInteractions(sales);
+
+        when(sales.summary(any(), eq("4"), any(SalesSummary.class)))
+                .thenThrow(new BusinessException(ErrorCode.SALE_SUMMARY_OVERFLOW));
+        mvc.perform(get("/api/v1/sales/summary").header("Authorization", "Bearer owner-token")
+                        .header("X-Shop-Id", "4"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("sale_summary_overflow"));
+    }
+
+    @Test
     void parsesExpenseCategoryAndOffsetRange() throws Exception {
         mvc.perform(get("/api/v1/expenses").queryParam("from", "2026-10-09T12:30:00+07:00")
                         .queryParam("to", "2026-10-09T06:30:00Z")
@@ -132,11 +194,13 @@ class OwnerPaginationWebTest {
                 Arguments.of("products", "stockStatus", "UNKNOWN"), Arguments.of("products", "categoryId", "0"),
                 Arguments.of("customers", "q", "x".repeat(201)), Arguments.of("debts", "customerId", "-1"),
                 Arguments.of("debts", "status", "UNKNOWN"), Arguments.of("sale-drafts", "status", "UNKNOWN"),
-                Arguments.of("sales", "from", "not-a-date"));
+                Arguments.of("sales", "from", "not-a-date"),
+                Arguments.of("sales/summary", "q", "x".repeat(201)),
+                Arguments.of("sales/summary", "saleStatus", "UNKNOWN"));
     }
 
     static Stream<Arguments> invalidOffsetTimestamps() {
-        return Stream.of("sales", "expenses").flatMap(resource -> Stream.of("from", "to")
+        return Stream.of("sales", "sales/summary", "expenses").flatMap(resource -> Stream.of("from", "to")
                 .flatMap(parameter -> Stream.of("not-a-timestamp", "2026-10-09", "2026-10-09T12:30:00")
                         .map(value -> Arguments.of(resource, parameter, value))));
     }
@@ -153,7 +217,7 @@ class OwnerPaginationWebTest {
     }
 
     static Stream<Arguments> invalidTimeRanges() {
-        return Stream.of("sales", "expenses").flatMap(resource -> Stream.of(
+        return Stream.of("sales", "sales/summary", "expenses").flatMap(resource -> Stream.of(
                 Arguments.of(resource, "2026-10-09T12:30:00+07:00", "2026-10-09T05:29:59Z"),
                 Arguments.of(resource, "2026-10-09T12:30:00+07:00", "2026-10-09T05:30:00Z")));
     }
@@ -163,7 +227,7 @@ class OwnerPaginationWebTest {
         mvc.perform(get("/api/v1/" + resource).queryParam("from", from).queryParam("to", to)
                         .header("Authorization", "Bearer owner-token").header("X-Shop-Id", "4"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(resource.equals("sales")
+                .andExpect(jsonPath("$.code").value(resource.startsWith("sales")
                         ? "invalid_sale_query" : "invalid_expense_query"));
         org.mockito.Mockito.verifyNoInteractions(sales, expenses);
     }

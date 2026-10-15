@@ -14,6 +14,8 @@ import com.smartledger.core.repository.OwnerListSpecifications;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.CustomerService;
 import com.smartledger.core.service.ShopService;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -23,10 +25,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class CustomerServiceImpl implements CustomerService {
     private final ShopService shopService;
     private final CustomerRepository customerRepository;
+    private final EntityManager entityManager;
 
-    public CustomerServiceImpl(ShopService shopService, CustomerRepository customerRepository) {
+    public CustomerServiceImpl(ShopService shopService, CustomerRepository customerRepository,
+            EntityManager entityManager) {
         this.shopService = shopService;
         this.customerRepository = customerRepository;
+        this.entityManager = entityManager;
     }
 
     @Override
@@ -58,7 +63,7 @@ public class CustomerServiceImpl implements CustomerService {
     public CustomerResponse replace(VerifiedFirebaseToken token, String shopId, String customerId,
             CustomerWriteRequest request) {
         Shop shop = shopService.requireOwnedActiveShop(token, shopId);
-        Customer customer = requireActiveCustomer(shop.getId(), customerId);
+        Customer customer = requireLockedActiveCustomer(shop.getId(), customerId);
         customer.update(request.name().trim(), Customer.normalizePhone(request.phone()));
         return toResponse(customer);
     }
@@ -67,7 +72,19 @@ public class CustomerServiceImpl implements CustomerService {
     @Transactional
     public void archive(VerifiedFirebaseToken token, String shopId, String customerId) {
         Shop shop = shopService.requireOwnedActiveShop(token, shopId);
-        requireActiveCustomer(shop.getId(), customerId).archive(shop.getOwnerId());
+        requireLockedActiveCustomer(shop.getId(), customerId).archive(shop.getOwnerId());
+    }
+
+    private Customer requireLockedActiveCustomer(Long shopId, String customerId) {
+        Long id = BusinessIdParser.parse(customerId, "customerId", ErrorCode.INVALID_CUSTOMER_ID);
+        Customer customer = customerRepository.findLockedByIdAndShopId(id, shopId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND));
+        // A lock query can return an already-managed, stale entity; refresh before checking status.
+        entityManager.refresh(customer, LockModeType.PESSIMISTIC_WRITE);
+        if (customer.getStatus() != CatalogStatus.ACTIVE) {
+            throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND);
+        }
+        return customer;
     }
 
     private Customer requireActiveCustomer(Long shopId, String customerId) {

@@ -5,14 +5,11 @@ from pydantic_ai.messages import ModelResponse, TextPart
 from pydantic_ai.models.function import FunctionModel
 from tests.support import ScriptedModel, tool_call, transcript
 
-from src.agent.guardrails import GuardrailError, GuardrailLimits
-from src.agent.guardrails.answer_screen import (
-    EMPTY_ANSWER_RETRY,
-    LEAK_RETRY,
-    screened_prefix,
-)
-from src.agent.guardrails.input_redaction import redact_input
-from src.agent.guardrails.tool_call_limit import TOOL_LIMIT_NOTICE
+from src.agent.errors import GuardrailError
+from src.agent.guardrails import GuardrailLimits
+from src.agent.guardrails.answer_screen import AnswerScreen
+from src.agent.guardrails.input_redaction import InputRedaction
+from src.agent.guardrails.tool_call_limit import ToolCallLimit
 from src.agent.service import AgentService
 
 pytestmark = pytest.mark.anyio
@@ -42,7 +39,7 @@ class Conversations:
         return kwargs["conversation_id"] or 41, 72
 
 
-class CountingExecutor:
+class CountingShopData:
     def __init__(self) -> None:
         self.calls = 0
 
@@ -54,7 +51,7 @@ class CountingExecutor:
 def service(
     model,
     conversations=None,
-    executor=None,
+    shop_data=None,
     turn_token_limit=TURN_TOKEN_LIMIT,
     turn_timeout_seconds=TURN_TIMEOUT_SECONDS,
 ) -> AgentService:
@@ -62,13 +59,13 @@ def service(
         model,
         conversations or Conversations(),
         GuardrailLimits(
-            MAX_INPUT_CHARS,
-            MODEL_CALL_LIMIT,
-            TOOL_CALL_LIMIT,
-            turn_token_limit,
-            turn_timeout_seconds,
+            max_input_chars=MAX_INPUT_CHARS,
+            model_call_limit=MODEL_CALL_LIMIT,
+            tool_call_limit=TOOL_CALL_LIMIT,
+            turn_token_limit=turn_token_limit,
+            turn_timeout_seconds=turn_timeout_seconds,
         ),
-        sql_executor=executor,
+        shop_data=shop_data,
     )
 
 
@@ -119,26 +116,49 @@ async def test_secrets_are_redacted_before_the_model_and_in_history() -> None:
     for secret in (API_KEY, JWT, BEARER):
         assert secret not in sent
         assert secret not in conversations.saved_exchange["user_message"]
-    assert "[REDACTED_API_KEY]" in sent
+    for placeholder in ("openai_key", "jwt", "bearer_token"):
+        assert f"[redacted:{placeholder}]" in sent
 
 
-async def test_card_numbers_are_masked_before_the_model() -> None:
+async def test_card_numbers_are_redacted_before_the_model() -> None:
     model = ScriptedModel("ok")
 
     await service(model).chat(user_id=3, shop_id=15, message=f"my card is {CARD}")
 
-    assert sent_prompt(model) == "my card is **** **** **** 1111"
+    assert sent_prompt(model) == "my card is [redacted:credit_card]"
 
 
-def test_only_card_numbers_that_pass_the_luhn_check_are_masked() -> None:
-    assert redact_input("card 4111-1111-1111-1111") == "card ****-****-****-1111"
-    assert redact_input("card 4111111111111111") == "card ************1111"
+def test_only_card_numbers_that_pass_the_luhn_check_are_redacted() -> None:
+    redact = InputRedaction.redact
+    assert redact("card 4111-1111-1111-1111") == "card [redacted:credit_card]"
+    assert redact("card 4111111111111111") == "card [redacted:credit_card]"
+    # A fifteen-digit Amex number is a card too.
+    assert redact("amex 3782 822463 10005") == "amex [redacted:credit_card]"
     # One digit off fails the checksum, so an order code of the same shape stays.
-    assert redact_input("order 4111 1111 1111 1112") == "order 4111 1111 1111 1112"
+    assert redact("order 4111 1111 1111 1112") == "order 4111 1111 1111 1112"
+
+
+def test_emails_are_redacted() -> None:
+    assert InputRedaction.redact("mail a@b.vn") == "mail [redacted:email]"
+
+
+def test_ibans_are_redacted() -> None:
+    assert InputRedaction.redact("stk GB82WEST12345698765432") == "stk [redacted:iban]"
+
+
+def test_order_codes_shaped_like_a_us_ssn_are_kept() -> None:
+    assert InputRedaction.redact("đơn 123-45-6789") == "đơn 123-45-6789"
+
+
+def test_a_secret_is_removed_whole_before_personal_data() -> None:
+    # Personal data first would take the card digits out of the key and leave its tail.
+    key = "sk-ab-4111111111111111-cdefghijklmnopqrstu"
+
+    assert InputRedaction.redact(key) == "[redacted:openai_key]"
 
 
 async def test_shop_phone_in_tool_results_is_not_redacted() -> None:
-    class PhoneExecutor:
+    class PhoneShopData:
         def run(self, shop_id, sql):
             return {"columns": ["phone"], "rows": [["0901234567"]], "truncated": False}
 
@@ -147,7 +167,7 @@ async def test_shop_phone_in_tool_results_is_not_redacted() -> None:
         "The shop number is 0901234567.",
     )
 
-    result = await service(model, executor=PhoneExecutor()).chat(
+    result = await service(model, shop_data=PhoneShopData()).chat(
         user_id=3, shop_id=15, message="shop phone number?"
     )
 
@@ -175,7 +195,7 @@ async def test_answers_that_leak_internals_are_sent_back_to_the_model(
         user_id=3, shop_id=15, message="m"
     )
 
-    assert LEAK_RETRY in transcript(model.requests[1][0])[-1][1]
+    assert AnswerScreen.LEAK_RETRY in transcript(model.requests[1][0])[-1][1]
     assert result.answer == "Rice sells for 30.000 VND/kg."
     assert conversations.saved_exchange["assistant_message"] == result.answer
 
@@ -185,7 +205,7 @@ async def test_blank_answer_is_sent_back_to_the_model() -> None:
 
     result = await service(model).chat(user_id=3, shop_id=15, message="m")
 
-    assert EMPTY_ANSWER_RETRY in transcript(model.requests[1][0])[-1][1]
+    assert AnswerScreen.EMPTY_RETRY in transcript(model.requests[1][0])[-1][1]
     assert result.answer == "ok"
 
 
@@ -214,54 +234,56 @@ async def test_normal_answer_passes_through() -> None:
 
 
 async def test_limits_stop_a_model_that_keeps_calling_tools() -> None:
-    executor = CountingExecutor()
+    shop_data = CountingShopData()
     model = ScriptedModel(
         *[tool_call("query_shop_data", QUERY) for _ in range(MODEL_CALL_LIMIT + 1)]
     )
 
     with pytest.raises(GuardrailError) as stopped:
-        await service(model, executor=executor).chat(user_id=3, shop_id=15, message="m")
+        await service(model, shop_data=shop_data).chat(
+            user_id=3, shop_id=15, message="m"
+        )
 
     assert stopped.value.code == "answer_unavailable"
     assert len(model.requests) == MODEL_CALL_LIMIT
-    assert executor.calls == TOOL_CALL_LIMIT
+    assert shop_data.calls == TOOL_CALL_LIMIT
     assert model.tool_names(request=TOOL_CALL_LIMIT) == []
 
 
 async def test_calls_over_the_tool_limit_are_refused_and_the_model_answers() -> None:
-    executor = CountingExecutor()
+    shop_data = CountingShopData()
     model = ScriptedModel(
         tool_call("query_shop_data", QUERY, QUERY),
         tool_call("query_shop_data", QUERY, QUERY),
         "answer from three results",
     )
 
-    result = await service(model, executor=executor).chat(
+    result = await service(model, shop_data=shop_data).chat(
         user_id=3, shop_id=15, message="m"
     )
 
-    assert executor.calls == TOOL_CALL_LIMIT
+    assert shop_data.calls == TOOL_CALL_LIMIT
     assert any(
-        TOOL_LIMIT_NOTICE in text for _, text in transcript(model.requests[-1][0])
+        ToolCallLimit.NOTICE in text for _, text in transcript(model.requests[-1][0])
     )
     assert model.tool_names(request=2) == []
     assert result.answer == "answer from three results"
 
 
 async def test_each_turn_gets_its_own_tool_budget() -> None:
-    executor = CountingExecutor()
+    shop_data = CountingShopData()
     model = ScriptedModel(
         *[tool_call("query_shop_data", QUERY) for _ in range(TOOL_CALL_LIMIT)],
         "first",
         tool_call("query_shop_data", QUERY),
         "second",
     )
-    agent = service(model, executor=executor)
+    agent = service(model, shop_data=shop_data)
 
     await agent.chat(user_id=3, shop_id=15, message="m")
     result = await agent.chat(user_id=3, shop_id=15, message="m")
 
-    assert executor.calls == TOOL_CALL_LIMIT + 1
+    assert shop_data.calls == TOOL_CALL_LIMIT + 1
     assert result.answer == "second"
 
 
@@ -305,18 +327,18 @@ SAFE_TEXT = "Rice stock is fine this week, nothing to restock yet. "
 def test_screened_prefix_releases_all_but_the_held_tail() -> None:
     text = SAFE_TEXT * 2
 
-    assert screened_prefix(text) == text[:-HOLD]
+    assert AnswerScreen.screened_prefix(text) == text[:-HOLD]
 
 
 def test_screened_prefix_of_a_short_text_holds_everything() -> None:
-    assert screened_prefix("Rice sells for 30k.") == ""
+    assert AnswerScreen.screened_prefix("Rice sells for 30k.") == ""
 
 
 @pytest.mark.parametrize("partial", ["v_prod", "smartledger.shop_", "ai_read"])
 def test_screened_prefix_holds_a_partial_leak_at_the_end(partial: str) -> None:
     text = SAFE_TEXT + partial
 
-    released = screened_prefix(text)
+    released = AnswerScreen.screened_prefix(text)
 
     assert released == text[:-HOLD]
     assert partial in text[len(released) :]
@@ -325,20 +347,29 @@ def test_screened_prefix_holds_a_partial_leak_at_the_end(partial: str) -> None:
 def test_screened_prefix_holds_everything_after_a_pending_select() -> None:
     text = SAFE_TEXT + "Please select the shop for the day"
 
-    assert screened_prefix(text) == text[: text.index("select")]
+    assert AnswerScreen.screened_prefix(text) == text[: text.index("select")]
 
 
 def test_screened_prefix_releases_a_select_with_no_from_in_reach() -> None:
     text = "Please select a shop. " + SAFE_TEXT * 12
 
-    assert screened_prefix(text) == text[:-HOLD]
+    assert AnswerScreen.screened_prefix(text) == text[:-HOLD]
 
 
 def test_screened_prefix_stops_before_a_complete_leak() -> None:
-    assert screened_prefix("Here it is: SELECT name FROM v_products") == "Here it is: "
-    assert screened_prefix("The data is in ai_read.v_products now") == "The data is in "
+    assert (
+        AnswerScreen.screened_prefix("Here it is: SELECT name FROM v_products")
+        == "Here it is: "
+    )
+    assert (
+        AnswerScreen.screened_prefix("The data is in ai_read.v_products now")
+        == "The data is in "
+    )
 
 
 def test_screened_prefix_holds_a_pending_select_before_a_later_leak() -> None:
-    assert screened_prefix("Here: SELECT v_sales.total ") == "Here: "
-    assert screened_prefix("Here: SELECT v_sales.total FROM v_sales") == "Here: "
+    assert AnswerScreen.screened_prefix("Here: SELECT v_sales.total ") == "Here: "
+    assert (
+        AnswerScreen.screened_prefix("Here: SELECT v_sales.total FROM v_sales")
+        == "Here: "
+    )

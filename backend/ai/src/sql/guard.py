@@ -243,7 +243,7 @@ class SqlGuard:
                 f"UNSAFE_TABLE: {table.sql(dialect=cls.DIALECT)} is not allowed; "
                 f"use only {views}"
             )
-        # The executor resolves the views through its search_path; dropping the
+        # The repository resolves the views through its search_path; dropping the
         # qualifier keeps the check and the run independent of the deployed schema name.
         table.set("db", None)
 

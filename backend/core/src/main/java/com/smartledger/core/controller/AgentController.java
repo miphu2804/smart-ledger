@@ -2,6 +2,7 @@ package com.smartledger.core.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.smartledger.core.dto.request.AgentChatRequest;
+import com.smartledger.core.dto.request.AgentMemorySettingsRequest;
 import com.smartledger.core.dto.request.AgentRenameRequest;
 import com.smartledger.core.dto.response.AgentChatResponse;
 import com.smartledger.core.security.VerifiedFirebaseToken;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -75,6 +77,20 @@ public class AgentController {
             @RequestHeader("X-Shop-Id") String shopId, @PathVariable long conversationId,
             @Valid @RequestBody AgentRenameRequest request) {
         return service.renameConversation(token, shopId, conversationId, request.title());
+    }
+
+    @GetMapping("/memory/settings")
+    @Operation(summary = "Read whether the assistant's long-term memory is on for the owner")
+    public JsonNode memorySettings(@AuthenticationPrincipal VerifiedFirebaseToken token,
+            @RequestHeader("X-Shop-Id") String shopId) {
+        return service.getMemorySettings(token, shopId);
+    }
+
+    @PutMapping("/memory/settings")
+    @Operation(summary = "Turn the assistant's long-term memory on or off for the owner")
+    public JsonNode updateMemorySettings(@AuthenticationPrincipal VerifiedFirebaseToken token,
+            @RequestHeader("X-Shop-Id") String shopId, @Valid @RequestBody AgentMemorySettingsRequest request) {
+        return service.setMemoryEnabled(token, shopId, request.memoryEnabled());
     }
 
     @DeleteMapping("/conversations/{conversationId}")

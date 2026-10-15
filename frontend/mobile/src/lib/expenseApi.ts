@@ -1,7 +1,7 @@
-import type { ExpenseView } from '../data/types';
+import type { ExpenseView, ReportPeriod } from '../data/types';
 import { apiRequest } from './api';
 import { createIdempotentSender } from './idempotency';
-import { fetchAllPages } from './pageApi';
+import { fetchAllPages, fetchPage, type PageResponse } from './pageApi';
 
 const createSender = createIdempotentSender();
 
@@ -25,6 +25,9 @@ export const expenseApi = {
     ),
   /** GET /expenses — KHÔNG truyền period: trả toàn bộ khoản chi ACTIVE, app tự lọc theo tháng ở client */
   list: (): Promise<ExpenseView[]> => fetchAllPages<ExpenseView>('/expenses'),
+  /** Một trang chi phí ACTIVE (mới nhất trước) của một kỳ báo cáo (giờ Việt Nam), vd. `period: 'today'` */
+  page: (page: number, size: number, query: { period?: ReportPeriod } = {}): Promise<PageResponse<ExpenseView>> =>
+    fetchPage<ExpenseView>('/expenses', page, size, { ...query }),
   getById: (id: number): Promise<ExpenseView> => apiRequest<ExpenseView>(`/expenses/${id}`, { withShop: true }),
   /** DELETE — archive */
   archive: (id: number): Promise<void> => apiRequest<void>(`/expenses/${id}`, { method: 'DELETE', withShop: true }),

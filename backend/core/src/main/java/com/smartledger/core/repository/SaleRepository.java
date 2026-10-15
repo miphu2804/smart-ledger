@@ -12,7 +12,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface SaleRepository extends JpaRepository<Sale, Long>, JpaSpecificationExecutor<Sale> {
+public interface SaleRepository extends JpaRepository<Sale, Long>, JpaSpecificationExecutor<Sale>, SaleSummaryRepository {
     List<Sale> findAllByShopIdOrderByIdDesc(Long shopId);
 
     Optional<Sale> findByIdAndShopId(Long id, Long shopId);

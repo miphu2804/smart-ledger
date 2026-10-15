@@ -15,6 +15,11 @@ export const ADMIN_ENABLED: boolean = import.meta.env.VITE_ADMIN_ENABLED === 'tr
 /** Liên kết tải file APK Android, lấy từ VITE_ANDROID_APK_URL. Để trống thì trang giới thiệu không hiện nút tải. */
 export const ANDROID_APK_URL: string = (import.meta.env.VITE_ANDROID_APK_URL ?? '').trim()
 
+/** Trang Facebook, kênh TikTok và Instagram, lấy từ `site.yaml`. URL trống thì trang không hiện icon đó. */
+export const FACEBOOK_URL: string = (__SITE__.social?.facebook ?? '').trim()
+export const TIKTOK_URL: string = (__SITE__.social?.tiktok ?? '').trim()
+export const INSTAGRAM_URL: string = (__SITE__.social?.instagram ?? '').trim()
+
 /** Độ trễ giả lập cho các lời gọi mock (ms). */
 export const MOCK_DELAY_MS = 350
 

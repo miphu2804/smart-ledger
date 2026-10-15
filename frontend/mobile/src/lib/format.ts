@@ -32,6 +32,21 @@ export function ddmm(d: Date) {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
 }
 
+export function ddmmyyyy(d: Date) {
+  return `${ddmm(d)}/${d.getFullYear()}`;
+}
+
+/** Ngày theo giờ máy dạng `yyyy-mm-dd`: so sánh được như chuỗi và không lệch ngày vì múi giờ như `toISOString`. */
+export function dayKey(d: Date) {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Ngược của `dayKey`: 0 giờ của ngày đó theo giờ máy. */
+export function parseDayKey(key: string) {
+  const [year, month, day] = key.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
 export function startOfDay(d: Date) {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
@@ -57,12 +72,12 @@ export function initials(name: string) {
 }
 
 /** Two-letter badge like the prototype: "Trà đá" -> "TĐ" */
-export function abbr(name: string) {
-  const w = name
+export function abbr(name: string | null | undefined) {
+  const w = (name ?? '')
     .replace(/\(.*?\)/g, '')
     .trim()
     .split(/\s+/);
-  if (w.length === 1) return w[0].slice(0, 2).toUpperCase();
+  if (w.length === 1) return (w[0].slice(0, 2) || '?').toUpperCase();
   return (w[0][0] + w[1][0]).toUpperCase();
 }
 

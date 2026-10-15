@@ -22,6 +22,12 @@ export interface LineItem {
   name: string;
   price: number;
   qty: number;
+  /**
+   * "Món tạm": món mới nhập ở màn quét mã mà chủ tiệm bỏ chọn "Lưu vào danh mục hàng hoá". Dòng này không có `productId`
+   * và không bao giờ thành mặt hàng: đơn gửi nó lên Core như một món tuỳ ý (tên, đơn vị, giá). `barcode` là mã vừa quét,
+   * để quét lại cùng mã trong đơn này thì cộng số lượng (xem `src/lib/customLines.ts`).
+   */
+  custom?: { unit: string; barcode?: string };
 }
 
 export type PayMethod = 'cash' | 'transfer' | 'debt';
@@ -87,6 +93,8 @@ export interface ChatMessage {
   id: string;
   from: 'user' | 'ai';
   text: string;
+  /** Ghi nhớ trợ lý đã dùng cho câu trả lời này; chỉ có ở lượt vừa chat, không lưu vào lịch sử. */
+  memories?: AgentMemoryUsed[];
 }
 
 // ---- Trợ lý AI (Agent chat) — khớp docs/contracts/api-contracts.md §5, AI dùng snake_case ----
@@ -99,6 +107,19 @@ export interface AgentChatMessageView {
   conversation_id: number;
   message_id: number;
   answer: string;
+}
+
+/** Một ghi nhớ trong sự kiện SSE `memory` */
+export interface AgentMemoryUsed {
+  id: number;
+  memory_type: string;
+  content: string;
+}
+
+export interface AgentMemorySettings {
+  memory_enabled: boolean;
+  /** false khi trợ lý chưa bật ghi nhớ dài hạn cho cả hệ thống */
+  available: boolean;
 }
 
 export interface AgentConversationSummary {
@@ -183,7 +204,8 @@ export interface ProductView {
 
 export interface SaleDraftItemView {
   id: number;
-  productId: number;
+  /** null = món tuỳ ý của đơn, không gắn với mặt hàng nào trong danh mục */
+  productId: number | null;
   productName: string;
   unit: string;
   quantity: number;
@@ -206,9 +228,23 @@ export interface SaleDraftView {
   items: SaleDraftItemView[];
 }
 
+/**
+ * Tổng của mọi đơn khớp bộ lọc của `GET /sales` (`GET /sales/summary`, CORE-014), không phụ thuộc trang đã tải. Theo trạng
+ * thái hiện tại của đơn: `confirmedSalesVnd` là tổng tiền (sau giảm giá) của đơn chưa huỷ, kể cả bán nợ; không phải tiền
+ * thực thu và khác `netRevenueVnd` của báo cáo kỳ (báo cáo trừ đơn huỷ theo lúc huỷ).
+ */
+export interface SaleSummaryView {
+  matchedOrderCount: number;
+  confirmedOrderCount: number;
+  voidedOrderCount: number;
+  confirmedSalesVnd: number;
+  voidedSalesVnd: number;
+}
+
 export interface SaleItemView {
   id: number;
-  productId: number;
+  /** null = món tuỳ ý của đơn, không gắn với mặt hàng nào trong danh mục */
+  productId: number | null;
   productName: string;
   unit: string;
   quantity: number;
@@ -300,6 +336,96 @@ export interface ExpenseView {
   status: 'ACTIVE' | 'ARCHIVED';
   createdAt: string;
   updatedAt: string;
+}
+
+// ---- Báo cáo của Core (`/reports/*`), docs/contracts/api-contracts.md mục 4 ----
+
+/** Kỳ báo cáo theo giờ Việt Nam: `week` là 7 ngày gồm hôm nay, `this_week` từ thứ Hai, `month`/`year` từ đầu tháng/năm. */
+export type ReportPeriod = 'today' | 'yesterday' | 'this_week' | 'week' | 'month' | 'year';
+
+/**
+ * Tổng của một kỳ trên toàn tiệm. `orderCount`/`grossRevenueVnd` tính đơn bán trong kỳ (kể cả đơn sau đó bị huỷ);
+ * `voided*` tính đơn bị huỷ trong kỳ theo lúc huỷ; `netRevenueVnd` = gross − voided, có thể âm.
+ */
+export interface ReportSummaryView {
+  period: ReportPeriod;
+  fromInclusive: string;
+  toExclusive: string;
+  grossRevenueVnd: number;
+  voidedRevenueVnd: number;
+  netRevenueVnd: number;
+  collectedVnd: number;
+  expenseVnd: number;
+  currentOutstandingDebtVnd: number;
+  orderCount: number;
+  refundedVnd: number;
+  voidedOrderCount: number;
+}
+
+/** Một ngày của chuỗi doanh thu; `date` là ngày `yyyy-mm-dd` theo giờ Việt Nam, Core trả đủ mọi ngày của kỳ. */
+export interface SalesSeriesPoint {
+  date: string;
+  grossRevenueVnd: number;
+  voidedRevenueVnd: number;
+  netRevenueVnd: number;
+  orderCount: number;
+  voidedOrderCount: number;
+}
+
+export interface SalesSeriesView {
+  period: ReportPeriod;
+  fromInclusive: string;
+  toExclusive: string;
+  granularity: 'DAY';
+  items: SalesSeriesPoint[];
+}
+
+/**
+ * Một dòng bán chạy: món trong danh mục gộp theo `productId`, món tuỳ ý gộp theo tên + đơn vị (`source: 'CUSTOM'`).
+ * `net*` = bán trong kỳ − huỷ trong kỳ, có thể âm. `itemKey` là khoá ổn định trong một response, không tự phân tích.
+ */
+export interface TopProductItem {
+  itemKey: string;
+  productId: number | null;
+  productName: string;
+  unit: string;
+  source: 'CATALOG' | 'CUSTOM';
+  grossQuantity: number;
+  voidedQuantity: number;
+  netQuantity: number;
+  grossRevenueVnd: number;
+  voidedRevenueVnd: number;
+  netRevenueVnd: number;
+}
+
+export interface TopProductsView {
+  period: ReportPeriod;
+  fromInclusive: string;
+  toExclusive: string;
+  sortBy: 'QUANTITY' | 'NET_REVENUE';
+  items: TopProductItem[];
+}
+
+/**
+ * Lãi ước tính của một kỳ theo giá vốn Core chụp lúc bán (món không có giá vốn không bị đoán). `isComplete=false` khi có
+ * dòng thiếu giá vốn; `unknownCostItemCount` đếm các dòng đó. Là số vận hành ước tính, không phải số kế toán.
+ */
+export interface ProfitEstimateView {
+  period: ReportPeriod;
+  fromInclusive: string;
+  toExclusive: string;
+  grossRevenueVnd: number;
+  voidedRevenueVnd: number;
+  netRevenueVnd: number;
+  grossEstimatedCogsVnd: number;
+  voidedEstimatedCogsVnd: number;
+  netEstimatedCogsVnd: number;
+  estimatedGrossProfitVnd: number;
+  expenseVnd: number;
+  estimatedOperatingProfitVnd: number;
+  isComplete: boolean;
+  unknownCostItemCount: number;
+  unknownCostRevenueVnd: number;
 }
 
 export type NotificationType = 'LOW_STOCK' | 'OUT_OF_STOCK' | 'SALE_VOIDED' | 'SHOP_INACTIVATED' | 'SHOP_REACTIVATED';

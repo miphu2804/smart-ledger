@@ -10,25 +10,29 @@ import uuid
 from collections.abc import AsyncGenerator, AsyncIterator
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.sse import EventSourceResponse, format_sse_event
 
-from src.agent.guardrails import GuardrailError
-from src.agent.repository import AgentConversationRepository, ConversationNotFoundError
+from src.agent.errors import ConversationNotFoundError, GuardrailError
+from src.agent.repository import AgentConversationRepository
 from src.agent.schema import (
     AgentChatRequest,
     AgentChatResponse,
     AgentConversationRenameRequest,
     AgentConversationSummary,
     AgentConversationView,
+    AgentMemorySettings,
+    AgentMemorySettingsRequest,
 )
 from src.agent.service import (
     AgentChatResult,
     AgentService,
     AgentStreamEvent,
+    MemoryRecalled,
     Reset,
     TextDelta,
 )
+from src.memory.service import AgentMemoryService
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 logger = logging.getLogger(__name__)
@@ -38,12 +42,17 @@ def get_agent(request: Request) -> AgentService:
     return request.app.state.agent
 
 
+def get_memory(request: Request) -> AgentMemoryService | None:
+    return request.app.state.memory
+
+
 def get_conversations(request: Request) -> AgentConversationRepository:
     return request.app.state.conversations
 
 
 AgentServiceDep = Annotated[AgentService, Depends(get_agent)]
 ConversationsDep = Annotated[AgentConversationRepository, Depends(get_conversations)]
+MemoryDep = Annotated[AgentMemoryService | None, Depends(get_memory)]
 
 
 def _chat_response(result: AgentChatResult) -> AgentChatResponse:
@@ -111,6 +120,16 @@ def _sse_frame(event: AgentStreamEvent) -> bytes:
         )
     if isinstance(event, Reset):
         return format_sse_event(event="reset", data_str="{}")
+    if isinstance(event, MemoryRecalled):
+        used = [
+            {
+                "id": memory.id,
+                "memory_type": memory.memory_type,
+                "content": memory.content,
+            }
+            for memory in event.memories
+        ]
+        return format_sse_event(event="memory", data_str=json.dumps({"used": used}))
     return format_sse_event(
         event="done", data_str=_chat_response(event.result).model_dump_json()
     )
@@ -178,3 +197,28 @@ def delete_agent_conversation(
         shop_id=shop_id,
     )
     return Response(status_code=204)
+
+
+# The memory service is None while long-term memory is off, which the owner's app reads
+# as "not available" rather than as an error.
+@router.get("/memory/settings", response_model=AgentMemorySettings)
+async def get_memory_settings(
+    memory: MemoryDep,
+    user_id: int = Query(gt=0),
+    shop_id: int = Query(gt=0),
+):
+    if memory is None:
+        return AgentMemorySettings(memory_enabled=False, available=False)
+    return AgentMemorySettings(
+        memory_enabled=await memory.memory_enabled(shop_id, user_id), available=True
+    )
+
+
+@router.put("/memory/settings", response_model=AgentMemorySettings)
+async def put_memory_settings(payload: AgentMemorySettingsRequest, memory: MemoryDep):
+    if memory is None:
+        raise HTTPException(status_code=409, detail="memory_unavailable")
+    await memory.set_memory_enabled(
+        payload.shop_id, payload.user_id, payload.memory_enabled
+    )
+    return AgentMemorySettings(memory_enabled=payload.memory_enabled, available=True)

@@ -21,6 +21,7 @@ import com.smartledger.core.repository.ProductRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.impl.IdempotencyServiceImpl;
 import com.smartledger.core.service.impl.ProductServiceImpl;
+import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.Optional;
@@ -37,7 +38,7 @@ class ProductStockInServiceTest {
     private final IdempotencyKeyRepository keys = mock(IdempotencyKeyRepository.class);
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
     private final ProductService service = new ProductServiceImpl(shops, products, categories, audit,
-            new IdempotencyServiceImpl(keys, mapper, 30), mock(NotificationEventService.class));
+            new IdempotencyServiceImpl(keys, mapper, 30), mock(NotificationEventService.class), mock(EntityManager.class));
     private final VerifiedFirebaseToken token = new VerifiedFirebaseToken("owner", null, false, null, null, null);
     private Product product;
 

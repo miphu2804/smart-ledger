@@ -170,7 +170,11 @@ public class Product {
         if (!tracked || stockQuantity == null || quantity == null || quantity.signum() <= 0) {
             throw new BusinessException(ErrorCode.SALE_RESTOCK_UNAVAILABLE);
         }
-        stockQuantity = stockQuantity.add(quantity);
+        BigDecimal result = stockQuantity.add(quantity);
+        if (result.compareTo(MAX_STOCK) > 0) {
+            throw new BusinessException(ErrorCode.PRODUCT_STOCK_OVERFLOW);
+        }
+        stockQuantity = result;
     }
 
     @PrePersist

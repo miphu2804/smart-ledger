@@ -4,6 +4,7 @@ from sqlalchemy import BigInteger, Select, String, func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Mapped, mapped_column
 
+from src.drafts.errors import CatalogUnavailableError
 from src.infra.postgre_db_client import Base, PostgreDBClient
 
 
@@ -18,14 +19,6 @@ class Product(Base):
     unit: Mapped[str] = mapped_column(String(50))
     selling_price_vnd: Mapped[int] = mapped_column(BigInteger)
     status: Mapped[str] = mapped_column(String(20))
-
-
-class CatalogUnavailableError(Exception):
-    """The shop catalog could not be read; the caller falls back to manual entry.
-
-    Raised for every database failure, including a timeout, so #3/#60 can map one
-    domain error to the Core fallback instead of leaking SQLAlchemy exceptions.
-    """
 
 
 @dataclass(frozen=True)
@@ -94,7 +87,7 @@ class ProductCatalogRepository:
 
     def _fetch(self, statement: Select) -> list[tuple]:
         # Requests share a small connection pool, so a hung query would stall the
-        # others. Cap the run time transaction-locally, like the SQL executor.
+        # others. Cap the run time transaction-locally, like the shop-data repository.
         try:
             with self.postgres.session() as session:
                 session.execute(
