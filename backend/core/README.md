@@ -241,6 +241,20 @@ With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
 
 Use only a disposable database with schema-creation permission, never a business, shared staging or production database. Without the test URL, the PostgreSQL suite is skipped. This is a SQL-count regression test, not an HTTP/Firebase/FE load benchmark or staging UAT. SQL pagination bounds parent rows, not the number of items inside any individual order/draft.
 
+### CORE-014 filtered sale totals
+
+On `feat/sales-filter-summary`, `GET /api/v1/sales/summary` accepts the same `q`, `saleStatus`, `from` and `to` filters as the sale list, plus the required OWNER bearer token and `X-Shop-Id`. It aggregates all matching sales without pagination. Time bounds apply to `soldAt`, with `from` inclusive and `to` exclusive; timestamps require an offset. Either bound can be omitted; omitting both includes all history. The existing list and `/reports/summary` retain their behavior.
+
+The response has five non-null integer fields: `matchedOrderCount`, `confirmedOrderCount`, `voidedOrderCount`, `confirmedSalesVnd` and `voidedSalesVnd`. Empty sets return five zeros. Counts and values use the current sale status, and values sum `totalVnd` after discount. Confirmed value includes unpaid and partly paid orders; it is not cash collected. Voided value is the whole sale value, not the refund amount. A prior-period sale voided later stays in its original `soldAt` filter window here; report `netRevenueVnd` instead subtracts void adjustments by `voidedAt`. Separate list and summary requests do not share a database snapshot. A per-status monetary sum exceeding signed 64-bit VND returns HTTP 409 `sale_summary_overflow`; narrow the filters.
+
+With `CORE_TEST_POSTGRES_*` pointing at the disposable database described above, run:
+
+```powershell
+.\mvnw.cmd '-Dtest=SalesListQueryPostgresTest,OwnerListQueryTest,SalePaymentServiceTest,OwnerPaginationWebTest,ApiDocumentationWebTest' test
+```
+
+The real PostgreSQL summary cases cover zero results/draft exclusion, status and combined search/time filters, equivalent offsets, half-open boundaries, one-sided ranges, discounted paid/partial/debt sales, cross-period voids, literal wildcard and archived-product snapshot search, OWNER/ADMIN/account/shop guards, exact `Long.MAX_VALUE` and overflow for both statuses. Overflow fixtures use valid PAID sales and keep the real business constraints enabled. The 10,000-sale/50,000-item fixture checks one aggregate data SELECT with no item hydration; auth/shop checks are excluded. Logged local timings are observations, not staging latency guarantees. CI requires these summary methods through `scripts/verify_postgres_tests.py`. See the [API contract](../../docs/contracts/api-contracts.md#tổng-danh-sách-sale-theo-bộ-lọc-core-014) and PRD `AC-069`–`AC-072`; FE/staging UAT remains pending.
+
 ### Checkout and void batch product-lock tests
 
 Issue [#136](https://github.com/miphu2804/smart-ledger/issues/136) replaces per-product lock queries during confirm and restocking void with one shop-scoped `PESSIMISTIC_WRITE` query ordered by product ID. Confirm requires ACTIVE products; void may restore archived products using the historical `stockDeducted` snapshot. Empty product groups skip the query. Void retains sale → debt → ascending product locks. API, schema, money/debt, cost snapshots and audit contracts are unchanged.
@@ -330,6 +344,23 @@ Run the unit/web contract tests without any Cloudinary network credential:
 ```
 
 Set `CORE_TEST_POSTGRES_*` only to a disposable PostgreSQL database to run the V13/V14 migration assertions and media concurrency tests. To smoke-test a real provider locally, set `CLOUDINARY_ENABLED=true`, all four Cloudinary values, `FLYWAY_ENABLED=false` and use a schema already created by local `ddl-auto=update`; do **not** point a feature branch at shared staging with `update`. Upload a small JPEG/PNG through Swagger, verify only the returned URL, replace it, then verify a `media_cleanup_jobs` row becomes COMPLETED. Local `CLOUDINARY_CLEANUP_FIXED_DELAY_MS=5000` can shorten the test wait. Do not paste Cloudinary API secrets or delivery URLs with authenticated signatures into source, tickets, or chat.
+
+## CORE-013 concurrency and stock-restoration regression tests
+
+Point `CORE_TEST_POSTGRES_URL`, `CORE_TEST_POSTGRES_USERNAME` and `CORE_TEST_POSTGRES_PASSWORD` only at a disposable PostgreSQL database, then run from `backend/core`:
+
+```powershell
+.\mvnw.cmd '-Dtest=AuthSessionConcurrencyPostgresTest,ShopConcurrencyPostgresTest,CatalogLifecycleConcurrencyPostgresTest,CategoryAssignmentConcurrencyPostgresTest,MediaConcurrencyPostgresTest,ProductStockRestorationTest,CheckoutControllerWebTest,NotificationPostgresTest' test
+.\mvnw.cmd clean verify
+```
+
+The PostgreSQL suites create/drop UUID-named schemas, use real row locks and bounded transaction coordination, and must not be skipped for acceptance. Session sync preserves current role/status/Cloudinary avatar state; OWNER/ADMIN Shop writes and Customer/Category update/archive use locked refresh. Product create/PATCH assignment holds the target Category lock until commit: assignment first blocks archive with `category_has_products`; archive first rejects assignment with `product_category_invalid`. PATCH locks Product before Category; archive checks Product existence without taking Product write locks. Null/omitted category semantics remain unchanged. No new field or migration is required.
+
+Media upload/delete writers refresh User, Shop and Product under their row locks before status checks and mutations. `MediaConcurrencyPostgresTest` binds one request-style EntityManager across pre-upload reads, independent commits and the final writer transaction, covering managed (not just detached) entities as with OSIV. It checks both session/avatar and profile/logo orders, disabled/inactive/archived rejection, preservation of Product fields/stock and cleanup of the latest asset reference. Provider access is mocked; the database and transactions are real. There is no transaction spanning the provider upload. Preserving role/status/public IDs means preserving their latest business values, not forbidding unchanged columns in Hibernate UPDATE SQL.
+
+CI runs `python3 scripts/test_verify_postgres_tests.py` and `python3 scripts/verify_postgres_tests.py target/surefire-reports` after Maven. The gate requires all four new profile/catalog concurrency suites, the media suite and critical overflow/rollback methods; missing, empty, skipped or failing suites fail verification. Surefire parameter signatures/invocation indexes are normalized when checking required method names. Run the gate against a full `clean verify`, not a focused test run or stale reports.
+
+`ProductStockRestorationTest` and `NotificationPostgresTest` verify MAX_STOCK equality and overflow by 0.001, including archived Products. A later overflowing item rolls back earlier stock/audit plus refund/debt/notifications/idempotency; correcting the test fixture's stock allows the same key to retry once and replay safely. `restockItems=false` remains explicit, and custom/non-deducted items retain their behavior. `CheckoutControllerWebTest` verifies HTTP 409 `product_stock_overflow`. The ADMIN read-projection test checks event/field exclusion, not raw money digits that can coincidentally appear in timestamps or IDs. Full Core verification is not Firebase/FE/staging/production UAT.
 
 ## Time display
 

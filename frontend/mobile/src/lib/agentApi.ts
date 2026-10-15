@@ -3,6 +3,8 @@ import type {
   AgentChatRequest,
   AgentConversationSummary,
   AgentConversationView,
+  AgentMemorySettings,
+  AgentMemoryUsed,
 } from '../data/types';
 import { USE_MOCK } from '../config';
 import { ApiError, apiRequest, apiStream } from './api';
@@ -26,9 +28,14 @@ export const agentApi = {
   /**
    * POST /agent/chat/stream — cùng lượt hỏi như `chat` nhưng trả lời dần: `onText` nhận toàn bộ chữ đã tới
    * (rỗng khi AI báo `reset`), Promise trả câu cuối từ sự kiện `done`. Sự kiện `error` mang mã lỗi như `chat`.
+   * Sự kiện `memory` (trước chữ đầu tiên, chỉ khi trợ lý dùng ghi nhớ) đưa các ghi nhớ đó cho `onMemories`.
    * Khi bật mock thì hỏi `chat` rồi hiện cả câu một lần.
    */
-  chatStream: async (input: AgentChatRequest, onText: (text: string) => void): Promise<AgentChatMessageView> => {
+  chatStream: async (
+    input: AgentChatRequest,
+    onText: (text: string) => void,
+    onMemories?: (used: AgentMemoryUsed[]) => void,
+  ): Promise<AgentChatMessageView> => {
     if (USE_MOCK) {
       const reply = await agentApi.chat(input);
       onText(reply.answer);
@@ -39,6 +46,7 @@ export const agentApi = {
     await apiStream('/agent/chat/stream', { body: input, withShop: true, timeoutMs: CHAT_TIMEOUT_MS }, (event, data) => {
       if (event === 'delta') onText((text += (data as { text: string }).text));
       else if (event === 'reset') onText((text = ''));
+      else if (event === 'memory') onMemories?.((data as { used: AgentMemoryUsed[] }).used);
       else if (event === 'done') reply = data as AgentChatMessageView;
       else if (event === 'error') {
         const code = (data as { detail?: string }).detail ?? 'ai_unavailable';
@@ -48,6 +56,16 @@ export const agentApi = {
     if (!reply) throw new ApiError(0, 'ai_unavailable', 'Trợ lý AI đang tạm lỗi hoặc quá tải.');
     return reply;
   },
+  /** GET /agent/memory/settings — `available` false thì ẩn công tắc */
+  getMemorySettings: (): Promise<AgentMemorySettings> =>
+    apiRequest<AgentMemorySettings>('/agent/memory/settings', { withShop: true }),
+  /** PUT /agent/memory/settings — tắt chỉ dừng nhớ và dùng ghi nhớ, không xoá cái đã có */
+  setMemorySettings: (enabled: boolean): Promise<AgentMemorySettings> =>
+    apiRequest<AgentMemorySettings>('/agent/memory/settings', {
+      method: 'PUT',
+      body: { memory_enabled: enabled },
+      withShop: true,
+    }),
   /** GET /agent/conversations — hội thoại của user/tiệm hiện tại */
   listConversations: (): Promise<AgentConversationSummary[]> =>
     apiRequest<AgentConversationSummary[]>('/agent/conversations', { withShop: true }),

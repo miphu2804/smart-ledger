@@ -8,7 +8,8 @@ import pytest
 from psycopg import sql
 from tests.support import apply_core_migrations, schema_url
 
-from src.drafts.catalog import CatalogUnavailableError, ProductCatalogRepository
+from src.drafts.catalog import ProductCatalogRepository
+from src.drafts.errors import CatalogUnavailableError
 from src.infra.postgre_db_client import PostgreDBClient
 
 

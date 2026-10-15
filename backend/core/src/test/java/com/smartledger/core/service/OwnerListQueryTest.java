@@ -53,6 +53,11 @@ class OwnerListQueryTest {
         OffsetDateTime day = OffsetDateTime.parse("2026-10-10T00:00:00+07:00");
         assertThatThrownBy(() -> new Sales(0, 20, null, null, day, day.minusDays(1)))
                 .isInstanceOf(BusinessException.class);
+        assertThat(new SalesSummary("  cafe  ", null, null, null).q()).isEqualTo("cafe");
+        assertThatThrownBy(() -> new SalesSummary(null, null, day, day))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> new SalesSummary("x".repeat(201), null, null, null))
+                .isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> new Expenses(0, 20, "month", null, day, day))
                 .isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> new Expenses(0, 20, null, null, null, OffsetDateTime.MAX))

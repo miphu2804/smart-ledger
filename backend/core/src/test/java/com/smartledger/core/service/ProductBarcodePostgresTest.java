@@ -233,7 +233,9 @@ class ProductBarcodePostgresTest {
                     assertThat(error.getDetails()).containsExactly(
                             new ApiErrorDetail("barcode", "already_in_use", competing, CatalogStatus.ACTIVE));
                 });
-        assertThat(sql.readsOf("products")).hasSize(2); // One row lock, one competing-code read.
+        assertThat(sql.readsOf("products")).hasSize(3); // Row lock, locked refresh, competing-code read.
+        assertThat(sql.readsOf("products").get(0)).contains(".id=?", ".shop_id=?", "for no key update");
+        assertThat(sql.readsOf("products").get(1)).contains(".id=?", "for no key update");
         assertThat(sql.readsOf("products").getLast()).contains(".shop_id=?", ".barcode=?", ".status=?", ".id<>?");
         entityManager.flush();
         assertThat(jdbc.queryForObject("select barcode from products where id=?", String.class, original)).isEqualTo("ORIGINAL");

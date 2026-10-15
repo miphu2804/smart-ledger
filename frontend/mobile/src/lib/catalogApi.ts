@@ -1,12 +1,23 @@
 import type { CategoryView, ProductView } from '../data/types';
 import { ApiError, apiRequest, type UploadImage } from './api';
-import { fetchAllPages } from './pageApi';
+import { fetchAllPages, fetchPage, type PageResponse } from './pageApi';
 import { createIdempotentSender } from './idempotency';
 
 /**
  * Danh mục hàng hoá thật (Core `/categories`, `/products` — cần header X-Shop-Id, xem AGENTS.md).
  * Mọi hàm gọi qua `apiRequest` với `withShop: true` — AppStore đã gắn X-Shop-Id qua `setActiveShop`.
  */
+
+/**
+ * Bộ lọc và thứ tự của `GET /products` (Core lọc và sắp xếp trước khi chia trang): `q` tìm trong tên và mã vạch,
+ * `stockStatus` chỉ xét món theo dõi tồn (LOW: còn hàng nhưng chạm ngưỡng của món; OUT: hết hàng).
+ */
+export type ProductListQuery = {
+  q?: string;
+  categoryId?: number;
+  stockStatus?: 'LOW' | 'OUT' | 'NEEDS_RESTOCK';
+  sort?: 'ID_ASC' | 'NAME_ASC' | 'PRICE_ASC' | 'STOCK_DESC';
+};
 
 const stockInSender = createIdempotentSender();
 const imageSender = createIdempotentSender();
@@ -71,6 +82,9 @@ export const categoryApi = {
 export const productApi = {
   /** GET /products — danh sách ACTIVE */
   list: (): Promise<ProductView[]> => fetchAllPages<ProductView>('/products'),
+  /** Một trang sản phẩm ACTIVE theo bộ lọc, để màn hình tải dần thay vì tải cả danh mục. */
+  page: (page: number, size: number, query: ProductListQuery = {}): Promise<PageResponse<ProductView>> =>
+    fetchPage<ProductView>('/products', page, size, { ...query }),
   /**
    * GET /products/lookup?barcode= — tra một sản phẩm ACTIVE của tiệm theo mã vạch, khớp chính xác từng ký tự (CORE-012).
    * Trả `null` khi Core báo chưa có (`404 product_not_found`). Lỗi khác (mạng, mã không hợp lệ, hết phiên…) được ném

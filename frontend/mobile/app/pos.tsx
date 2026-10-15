@@ -2,20 +2,26 @@ import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Image, Platform, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
+import { Animated, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarcodeScannerModal } from '../src/components/BarcodeScannerModal';
 import { useToast } from '../src/components/brand';
-import { Button, Dialog, EmptyState, Field, Row, Sheet, Stepper, T } from '../src/components/ui';
+import { PageControls } from '../src/components/PageControls';
+import { ProductGridSkeleton, RowListSkeleton } from '../src/components/ListSkeleton';
+import { TAB_HEADER_SIDE, TAB_HEADER_TOP, TabSearchBar } from '../src/components/TabSearchBar';
+import { Button, Chips, Dialog, EmptyState, Field, Row, Sheet, Stepper, T } from '../src/components/ui';
 import type { CategoryView, LineItem, ProductView } from '../src/data/types';
-import { categoryApi, productApi } from '../src/lib/catalogApi';
+import { categoryApi, productApi, type ProductListQuery } from '../src/lib/catalogApi';
 import { errorMessage } from '../src/lib/errors';
 import { triggerFeedback } from '../src/lib/feedback';
 import { abbr, hashIndex, normalizeText, vnd } from '../src/lib/format';
-import { getProductImage } from '../src/lib/productImages';
+import { ProductImage } from '../src/components/ProductImage';
+import { upsertCustomLine } from '../src/lib/customLines';
 import { itemsTotal } from '../src/lib/stats';
+import { LIST_PAGE_SIZE } from '../src/lib/usePagedList';
+import { usePagedPage } from '../src/lib/usePagedPage';
 import { useApp } from '../src/store/AppStore';
-import { colors, font, shadow, WEB_FRAME_MAX_WIDTH } from '../src/theme';
+import { colors, font, shadow } from '../src/theme';
 
 const salesColors = {
   primary: colors.brand, // #482AAC
@@ -143,15 +149,14 @@ function PosActionButton({
   );
 }
 
+/** Ô tìm gọn ở thanh ghim khi phần đầu đã thu lại (ô tìm đầy đủ là `TabSearchBar`, dùng chung với Đơn hàng). */
 function PosSearchBox({
   value,
   onChangeText,
-  onBarcodePress,
   compact,
 }: {
   value: string;
   onChangeText: (value: string) => void;
-  onBarcodePress?: () => void;
   compact?: boolean;
 }) {
   return (
@@ -167,10 +172,6 @@ function PosSearchBox({
       {value ? (
         <Pressable onPress={() => onChangeText('')} hitSlop={8}>
           <Feather name="x-circle" size={15} color={salesColors.muted} />
-        </Pressable>
-      ) : onBarcodePress && !compact ? (
-        <Pressable onPress={onBarcodePress} hitSlop={8} style={styles.barcodeScanIconBtn} accessibilityLabel="Quét mã vạch">
-          <Feather name="maximize" size={16} color={salesColors.inkSecondary} />
         </Pressable>
       ) : null}
     </View>
@@ -227,7 +228,7 @@ function PosCollapsibleHeader({
       <Animated.View
         style={[
           styles.posHeaderPinned,
-          { top: topInset + 4, height: collapsedHeight, opacity: compactOpacity, transform: [{ translateY: counterTranslate }] },
+          { top: topInset + TAB_HEADER_TOP, height: collapsedHeight, opacity: compactOpacity, transform: [{ translateY: counterTranslate }] },
         ]}
       >
         {pinned}
@@ -236,7 +237,7 @@ function PosCollapsibleHeader({
         onLayout={(e) => onBodyHeight(e.nativeEvent.layout.height)}
         style={[
           styles.posHeaderBody,
-          { top: topInset + 4, opacity: bodyOpacity, transform: [{ translateY: counterTranslate }, { translateY: bodyTranslate }] },
+          { top: topInset + TAB_HEADER_TOP, opacity: bodyOpacity, transform: [{ translateY: counterTranslate }, { translateY: bodyTranslate }] },
         ]}
       >
         {children}
@@ -332,11 +333,7 @@ function ProductCard({ product: p, inCart, viewMode, onAdd, onSubtract, onOutOfS
         accessibilityLabel={`${p.name}, giá ${vnd(p.sellingPriceVnd)}, đã chọn ${inCart}`}
       >
         <View style={styles.listThumb}>
-          <Image
-            source={{ uri: getProductImage(p.name, p.imageUrl) }}
-            style={styles.listThumbImage}
-            resizeMode="cover"
-          />
+          <ProductImage name={p.name} uri={p.imageUrl} style={styles.listThumbImage} letterSize={22} />
           {p.tracked ? (
             <View style={styles.listStockBadge}>
               <T w="bold" size={9.5} color={stock === 0 ? colors.red : salesColors.stockGreen}>
@@ -460,11 +457,7 @@ function ProductCard({ product: p, inCart, viewMode, onAdd, onSubtract, onOutOfS
         ) : null}
 
         {/* Product Photo */}
-        <Image
-          source={{ uri: getProductImage(p.name, p.imageUrl) }}
-          style={styles.productGridImage}
-          resizeMode="cover"
-        />
+        <ProductImage name={p.name} uri={p.imageUrl} style={styles.productGridImage} letterSize={56} />
       </View>
 
       {/* Info Area */}
@@ -533,6 +526,13 @@ function ProductCard({ product: p, inCart, viewMode, onAdd, onSubtract, onOutOfS
 
 const MemoProductCard = React.memo(ProductCard, sameCard);
 
+/** Chờ người dùng ngừng gõ chừng này rồi mới tìm ở Core, để không gọi một lần cho mỗi phím. */
+const SEARCH_DEBOUNCE_MS = 350;
+
+/** Lựa chọn sắp xếp và lọc tồn trên thanh công cụ, đổi sang tham số của `GET /products` (Core lọc và sắp xếp trước khi chia trang). */
+const SORT_QUERY = { name: 'NAME_ASC', price: 'PRICE_ASC', stock: 'STOCK_DESC' } as const;
+const STOCK_QUERY = { all: undefined, low: 'LOW', out: 'OUT' } as const;
+
 export default function Pos({ inTab = false }: { inTab?: boolean }) {
   const app = useApp();
   const toast = useToast();
@@ -540,7 +540,8 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
   const [cat, setCat] = useState('all');
   const [q, setQ] = useState('');
   const [sortMode, setSortMode] = useState<'name' | 'price' | 'stock'>('name');
-  const [stockFilter, setStockFilter] = useState<'all' | 'available' | 'low'>('all');
+  // Core lọc tồn theo ngưỡng riêng của từng món (LOW) hoặc hết hàng (OUT); không có bộ lọc "còn hàng"
+  const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [cartOpen, setCartOpen] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -557,11 +558,15 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
   const [cBusy, setCBusy] = useState(false);
   const [cErr, setCErr] = useState('');
 
-  const [products, setProducts] = useState<ProductView[]>([]);
   const [categories, setCategories] = useState<CategoryView[]>([]);
   const [cart, setCart] = useState<Record<number, number>>({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  // Món tạm của đơn đang lập (món mới quét mà chủ tiệm chọn không lưu vào danh mục): không có productId nên không nằm
+  // được trong `cart` (giỏ theo productId). Chúng đi cùng đơn sang Thanh toán như các món khác.
+  const [customLines, setCustomLines] = useState<LineItem[]>([]);
+  const clearCart = () => {
+    setCart({});
+    setCustomLines([]);
+  };
   const scrollY = useRef(new Animated.Value(0)).current;
   // Đổi kiểu xem tạo lại FlatList (key={viewMode}) nên danh sách mới bắt đầu ở đầu và không phát sự kiện cuộn;
   // đặt lại scrollY để header không còn thu gọn dở. Bấm lại đúng kiểu đang chọn thì danh sách giữ nguyên nên không đặt lại.
@@ -575,25 +580,75 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
   const [headerBodyHeight, setHeaderBodyHeight] = useState(0);
   const cartBarAnim = useRef(new Animated.Value(0)).current;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
+  // Từ khoá gửi lên Core sau khi ngừng gõ; Core tìm trong tên và mã vạch
+  const [searchQ, setSearchQ] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchQ(q.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [q]);
+
+  // Danh sách phân trang theo số trang, 20 món mỗi trang; đổi từ khoá, nhóm, lọc tồn hoặc cách sắp xếp thì về trang đầu
+  const productQuery: ProductListQuery = {
+    q: searchQ || undefined,
+    categoryId: cat === 'all' ? undefined : Number(cat),
+    stockStatus: STOCK_QUERY[stockFilter],
+    sort: SORT_QUERY[sortMode],
+  };
+  const {
+    items: products,
+    total: productTotal,
+    loading,
+    page: pageIndex,
+    setPage,
+    refreshing,
+    error,
+    refresh,
+    reload,
+  } = usePagedPage<ProductView>(JSON.stringify(productQuery), (page, size) => productApi.page(page, size, productQuery));
+  const listRef = useRef<{ scrollToOffset?: (params: { offset: number; animated?: boolean }) => void } | null>(null);
+  const goToPage = (next: number) => {
+    triggerFeedback('selection');
+    setPage(next);
+    // Trang mới bắt đầu từ đầu danh sách, không giữ vị trí cuộn của trang trước
+    listRef.current?.scrollToOffset?.({ offset: 0, animated: false });
+  };
+
+  // Các món đã gặp (trang đã tải, món máy quét tra được hoặc vừa tạo), theo id. Giỏ hàng và máy quét tra món ở đây vì
+  // món đã chọn có thể không còn trong trang đang hiện sau khi tìm hoặc đổi nhóm.
+  const [knownProducts, setKnownProducts] = useState<Record<number, ProductView>>({});
+  const rememberProducts = useCallback((list: ProductView[]) => {
+    if (!list.length) return;
+    setKnownProducts((cur) => {
+      const next = { ...cur };
+      for (const p of list) next[p.id] = p;
+      return next;
+    });
+  }, []);
+  useEffect(() => rememberProducts(products), [products, rememberProducts]);
+  const knownList = useMemo(() => Object.values(knownProducts), [knownProducts]);
+
+  const [categoryError, setCategoryError] = useState('');
+  const loadCategories = useCallback(async () => {
     try {
-      const [ps, cs] = await Promise.all([productApi.list(), categoryApi.list()]);
-      setProducts(ps);
-      setCategories(cs);
+      setCategories(await categoryApi.list());
+      setCategoryError('');
     } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setLoading(false);
+      setCategoryError(errorMessage(e));
     }
   }, []);
 
+  // Quay lại màn hình (vừa sửa món, nhập hàng, bán xong): làm mới nhóm hàng và trang đầu mà giữ chỗ đang cuộn
   useFocusEffect(
     useCallback(() => {
-      load();
-    }, [load]),
+      void loadCategories();
+      void refresh();
+    }, [loadCategories, refresh]),
   );
+
+  const retry = () => {
+    void loadCategories();
+    void reload();
+  };
 
   const addToCart = (id: number, delta = 1) =>
     setCart((cur) => {
@@ -603,37 +658,18 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
       return next;
     });
 
-  const list = useMemo(() => {
-    const filtered = products.filter((p) => {
-      if (cat !== 'all') {
-        if (cat === 'none' ? p.categoryId != null : String(p.categoryId ?? '') !== cat) return false;
-      }
-      if (stockFilter === 'available' && p.tracked && (p.stockQuantity ?? 0) <= 0) return false;
-      if (stockFilter === 'low' && (!p.tracked || (p.stockQuantity ?? 0) > 6)) return false;
-      return (
-        !q ||
-        normalizeText(p.name).includes(normalizeText(q)) ||
-        (p.barcode && p.barcode.toLowerCase().includes(q.toLowerCase().trim()))
-      );
-    });
-    return [...filtered].sort((a, b) => {
-      if (sortMode === 'price') return a.sellingPriceVnd - b.sellingPriceVnd;
-      if (sortMode === 'stock') return (b.stockQuantity ?? 0) - (a.stockQuantity ?? 0);
-      return a.name.localeCompare(b.name, 'vi');
-    });
-  }, [products, cat, q, sortMode, stockFilter]);
+  // Hai cột bằng nhau theo phần trăm của hàng: mỗi thẻ rộng 50%, chừa 4 px phía giữa (khe 8 giữa hai thẻ, lề 10 hai bên
+  // do danh sách). Không tính bề rộng bằng px từ cửa sổ hay từ lần đo danh sách: trên Safari iPhone lần đo rơi vào lúc màn
+  // đang chuyển tab nên ra số nhỏ hơn thật và cột phải hụt khỏi mép.
+  const gridCellStyle = (index: number) => (index % 2 === 0 ? styles.gridCellLeft : styles.gridCellRight);
 
-  // Hai cột bằng nhau: bề rộng danh sách trừ lề 10 hai bên và khe 8 giữa hai thẻ. Dùng bề rộng đo được của danh sách;
-  // trước khi đo xong thì ước lượng theo cửa sổ, trên web chặn ở khung app vì cửa sổ trình duyệt rộng hơn khung nhiều.
-  const { width: windowWidth } = useWindowDimensions();
-  const [listWidth, setListWidth] = useState(0);
-  const estimatedWidth = Platform.OS === 'web' ? Math.min(windowWidth, WEB_FRAME_MAX_WIDTH) : windowWidth;
-  const gridCardWidth = Math.max(0, ((listWidth || estimatedWidth) - 20 - 8) / 2);
-
-  const cartItems: LineItem[] = Object.entries(cart).flatMap(([id, qty]) => {
-    const p = products.find((x) => x.id === Number(id));
-    return p ? [{ productId: p.id, name: p.name, price: p.sellingPriceVnd, qty }] : [];
-  });
+  const cartItems: LineItem[] = [
+    ...Object.entries(cart).flatMap(([id, qty]) => {
+      const p = knownProducts[Number(id)];
+      return p ? [{ productId: p.id, name: p.name, price: p.sellingPriceVnd, qty }] : [];
+    }),
+    ...customLines,
+  ];
   const total = itemsTotal(cartItems);
   const count = cartItems.reduce((a, i) => a + i.qty, 0);
 
@@ -645,25 +681,20 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
       useNativeDriver: true,
     }).start();
   }, [count > 0]);
-  const hasUncategorized = products.some((p) => p.categoryId == null);
-  const cats = ['all', ...(hasUncategorized ? ['none'] : []), ...categories.map((c) => String(c.id))];
-  const catLabel = (c: string) =>
-    c === 'all' ? 'Tất cả' : c === 'none' ? 'Chưa phân loại' : categories.find((x) => String(x.id) === c)?.name ?? c;
+  // Chưa có chip "Chưa phân loại": Core chưa lọc được món không thuộc nhóm nào (món đó vẫn có trong "Tất cả")
+  const cats = ['all', ...categories.map((c) => String(c.id))];
+  const catLabel = (c: string) => (c === 'all' ? 'Tất cả' : categories.find((x) => String(x.id) === c)?.name ?? c);
 
+  // Sắp xếp và lọc tồn chọn trong bảng lọc mở từ nút phễu của ô tìm; phễu tô màu khi khác mặc định
+  const [filterOpen, setFilterOpen] = useState(false);
   const sortLabel = sortMode === 'name' ? 'Tên A-Z' : sortMode === 'price' ? 'Giá tăng dần' : 'Tồn kho giảm';
-  const stockLabel = stockFilter === 'all' ? 'Tồn kho' : stockFilter === 'available' ? 'Còn hàng' : 'Sắp hết';
-  const cycleSort = () => {
-    triggerFeedback('selection');
-    setSortMode((cur) => (cur === 'name' ? 'price' : cur === 'price' ? 'stock' : 'name'));
-  };
-  const cycleStock = () => {
-    triggerFeedback('selection');
-    setStockFilter((cur) => (cur === 'all' ? 'available' : cur === 'available' ? 'low' : 'all'));
-  };
+  const stockLabel = stockFilter === 'all' ? 'Mọi mức tồn' : stockFilter === 'low' ? 'Sắp hết' : 'Hết hàng';
+  const filterActive = sortMode !== 'name' || stockFilter !== 'all';
+  const filterSummary = `${sortLabel}${stockFilter !== 'all' ? ` · ${stockLabel}` : ''}`;
 
   const pay = () => {
     app.setDraft({ items: cartItems, source: 'pos' });
-    setCart({});
+    clearCart();
     router.push('/checkout');
   };
 
@@ -684,8 +715,9 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
         tracked: false,
         stockQuantity: null,
       });
-      setProducts((cur) => [...cur, created]);
+      rememberProducts([created]);
       addToCart(created.id, 1);
+      void refresh();
       setCName('');
       setCPrice('');
       setCUnit('cái');
@@ -727,43 +759,43 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
                 Bán hàng
               </T>
               <T w="medium" size={13} color={salesColors.muted} style={{ marginTop: 1 }}>
-                {products.length} sản phẩm
+                {loading ? 'Đang tải…' : `${productTotal} sản phẩm`}
               </T>
             </View>
             <PosActionButton tone="gold" icon="maximize" label="Quét mã" onPress={() => setScannerOpen(true)} />
             <PosActionButton tone="purple" icon="mic" label="Đọc đơn" onPress={() => router.push('/voice')} />
           </Row>
 
-          <PosSearchBox
+          <TabSearchBar
             value={q}
             onChangeText={setQ}
-            onBarcodePress={() => setScannerOpen(true)}
+            placeholder="Tìm theo tên hoặc mã vạch..."
+            searchLabel="Tìm hàng"
+            onFilterPress={() => {
+              triggerFeedback('selection');
+              setFilterOpen(true);
+            }}
+            filterActive={filterActive}
+            filterLabel={filterActive ? `Bộ lọc, đang chọn ${filterSummary}` : 'Bộ lọc'}
           />
           <PosCategoryChips value={cat} onChange={setCat} options={cats.map((c) => ({ key: c, label: catLabel(c) }))} />
         </View>
       </PosCollapsibleHeader>
 
-      {loading ? (
-        <View style={{ paddingTop: insets.top + headerHeight + 20, alignItems: 'center' }}>
-          <ActivityIndicator color={salesColors.primary} />
-        </View>
-      ) : error ? (
+      {error && !products.length && !loading ? (
         <View style={{ paddingHorizontal: 16, paddingTop: insets.top + headerHeight + 10 }}>
           <EmptyState icon="alert-triangle" title="Không tải được danh sách hàng" hint={error} />
-          <Button title="Thử lại" variant="outline" onPress={load} />
+          <Button title="Thử lại" variant="outline" onPress={retry} />
         </View>
       ) : (
         <Animated.FlatList
           key={viewMode}
-          data={list}
-          onLayout={(event) => {
-            const width = Math.round(event.nativeEvent.layout.width);
-            setListWidth((current) => (current === width ? current : width));
-          }}
+          ref={listRef as never}
+          data={products}
           numColumns={viewMode === 'grid' ? 2 : 1}
           keyExtractor={(p) => String(p.id)}
-          renderItem={({ item: p }) => (
-            <View style={viewMode === 'grid' ? { width: gridCardWidth } : undefined}>
+          renderItem={({ item: p, index }) => (
+            <View style={viewMode === 'grid' ? gridCellStyle(index) : undefined}>
               <MemoProductCard
                 product={p}
                 viewMode={viewMode}
@@ -774,35 +806,16 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
               />
             </View>
           )}
-          columnWrapperStyle={viewMode === 'grid' ? { gap: 8, alignItems: 'flex-start' } : undefined}
+          columnWrapperStyle={viewMode === 'grid' ? { alignItems: 'flex-start' } : undefined}
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
           ListHeaderComponent={
             <>
           {/* Filter & Toolbar */}
           <Row style={styles.filterRow} gap={8}>
-            <Pressable
-              onPress={cycleSort}
-              style={({ pressed }) => [styles.filterPill, sortMode !== 'name' && styles.filterPillActive, pressed && { opacity: 0.76 }]}
-            >
-              <Feather name="sliders" size={13} color={salesColors.inkSecondary} />
-              <T w="semibold" size={12.5} color={salesColors.ink}>
-                {sortLabel}
-              </T>
-              <Feather name="chevron-down" size={13} color={salesColors.muted} />
-            </Pressable>
-
-            <Pressable
-              onPress={cycleStock}
-              style={({ pressed }) => [styles.filterPill, stockFilter !== 'all' && styles.filterPillActive, pressed && { opacity: 0.76 }]}
-            >
-              <Feather name="box" size={13} color={salesColors.inkSecondary} />
-              <T w="semibold" size={12.5} color={salesColors.ink}>
-                {stockLabel}
-              </T>
-              <Feather name="chevron-down" size={13} color={salesColors.muted} />
-            </Pressable>
-
-            <View style={{ flex: 1 }} />
+            {/* Bộ lọc đang dùng (chọn ở nút phễu trong ô tìm) */}
+            <T w="semibold" size={12.5} color={filterActive ? colors.brand : salesColors.muted} style={{ flex: 1 }} numberOfLines={1}>
+              {filterSummary}
+            </T>
 
             <View style={styles.viewToggle}>
               <Pressable
@@ -830,9 +843,30 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
 
             </>
           }
-          ListEmptyComponent={<EmptyState icon="search" title="Không tìm thấy hàng" hint="Thử từ khoá khác hoặc thêm món ngoài danh mục" />}
+          ListEmptyComponent={
+            loading ? (
+              viewMode === 'grid' ? <ProductGridSkeleton rows={3} /> : <RowListSkeleton rows={6} />
+            ) : (
+              <EmptyState icon="search" title="Không tìm thấy hàng" hint="Thử từ khoá khác hoặc thêm món ngoài danh mục" />
+            )
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={retry}
+              progressViewOffset={insets.top + headerHeight}
+              tintColor={salesColors.primary}
+              colors={[salesColors.primary]}
+            />
+          }
           ListFooterComponent={
             <>
+          <PageControls page={pageIndex} pageSize={LIST_PAGE_SIZE} total={productTotal} unit="sản phẩm" onPage={goToPage} />
+          {categoryError ? (
+            <T size={12} color={salesColors.muted} style={{ textAlign: 'center', marginTop: 10 }}>
+              Không tải được nhóm hàng: {categoryError}
+            </T>
+          ) : null}
           <Button
             title="Thêm món ngoài danh mục"
             icon="plus"
@@ -926,15 +960,11 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
       <Sheet visible={cartOpen} onClose={() => setCartOpen(false)} title="Đơn đang chọn">
         {cartItems.map((it) => (
           <Row
-            key={`${it.productId ?? it.name}`}
+            key={it.custom ? `custom:${it.custom.barcode}` : it.productId != null ? `product:${it.productId}` : `name:${it.name}`}
             style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: salesColors.borderLight, alignItems: 'center' }}
           >
             <View style={styles.cartItemThumbWrap}>
-              <Image
-                source={{ uri: getProductImage(it.name) }}
-                style={styles.cartItemThumb}
-                resizeMode="cover"
-              />
+              <ProductImage name={it.name} uri={typeof it.productId === 'number' ? knownProducts[it.productId]?.imageUrl : null} style={styles.cartItemThumb} />
             </View>
             <View style={{ flex: 1, paddingRight: 8, marginLeft: 10 }}>
               <T w="semibold" size={14} color={salesColors.ink}>
@@ -943,11 +973,17 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
               <T w="bold" size={13} color={salesColors.primary} style={{ marginTop: 2 }}>
                 {vnd(it.price)}
               </T>
+              {it.custom ? (
+                <T size={11.5} color={colors.gold} style={{ marginTop: 1 }}>
+                  Món tạm, không lưu vào danh mục
+                </T>
+              ) : null}
             </View>
             <Stepper
               value={it.qty}
               onChange={(v) => {
                 if (typeof it.productId === 'number') addToCart(it.productId, v - it.qty);
+                else if (it.custom) setCustomLines((cur) => upsertCustomLine(cur, { ...it, qty: v }));
                 if (count - it.qty + v <= 0) setCartOpen(false);
               }}
             />
@@ -975,6 +1011,56 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
         />
       </Sheet>
 
+      {/* Bộ lọc: mở từ nút phễu trong ô tìm, chọn xong áp dụng ngay */}
+      <Sheet visible={filterOpen} onClose={() => setFilterOpen(false)} title="Bộ lọc">
+        <T w="bold" size={13} color={salesColors.muted} style={{ marginBottom: 8 }}>
+          Sắp xếp
+        </T>
+        <Chips
+          scroll={false}
+          value={sortMode}
+          onChange={(mode) => {
+            triggerFeedback('selection');
+            setSortMode(mode);
+          }}
+          options={[
+            { key: 'name', label: 'Tên A-Z' },
+            { key: 'price', label: 'Giá tăng dần' },
+            { key: 'stock', label: 'Tồn kho giảm' },
+          ]}
+        />
+        <T w="bold" size={13} color={salesColors.muted} style={{ marginTop: 16, marginBottom: 8 }}>
+          Tồn kho
+        </T>
+        <Chips
+          scroll={false}
+          value={stockFilter}
+          onChange={(stock) => {
+            triggerFeedback('selection');
+            setStockFilter(stock);
+          }}
+          options={[
+            { key: 'all', label: 'Tất cả' },
+            { key: 'low', label: 'Sắp hết' },
+            { key: 'out', label: 'Hết hàng' },
+          ]}
+        />
+        <Row gap={10} style={{ marginTop: 20 }}>
+          <Button
+            title="Đặt lại"
+            variant="outline"
+            disabled={!filterActive}
+            onPress={() => {
+              triggerFeedback('selection');
+              setSortMode('name');
+              setStockFilter('all');
+            }}
+            style={{ flex: 1 }}
+          />
+          <Button title="Xong" onPress={() => setFilterOpen(false)} style={{ flex: 1 }} />
+        </Row>
+      </Sheet>
+
       {/* Custom Item Sheet */}
       <Sheet visible={customOpen} onClose={() => setCustomOpen(false)} title="Món ngoài danh mục">
         <Field label="Tên món" placeholder="VD: Bánh bao" value={cName} onChangeText={setCName} />
@@ -997,16 +1083,20 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
       <BarcodeScannerModal
         visible={scannerOpen}
         onClose={() => setScannerOpen(false)}
-        products={products}
-        onProductFound={(p) => setProducts((cur) => (cur.some((x) => x.id === p.id) ? cur : [...cur, p]))}
+        products={knownList}
+        onProductFound={(p) => rememberProducts([p])}
         cartItems={cartItems}
         onAddToCart={(p, delta) => addToCart(p.id, delta)}
-        onClearCart={() => setCart({})}
+        onCustomLine={(line) => setCustomLines((cur) => upsertCustomLine(cur, line))}
+        onClearCart={clearCart}
         onCheckout={() => {
           setScannerOpen(false);
           pay();
         }}
-        onProductCreated={(p) => setProducts((cur) => [...cur, p])}
+        onProductCreated={(p) => {
+          rememberProducts([p]);
+          void refresh();
+        }}
       />
 
       {/* Confirm Clear Cart Dialog */}
@@ -1019,7 +1109,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
         confirm="Xoá"
         cancel="Giữ lại"
         onConfirm={() => {
-          setCart({});
+          clearCart();
           setCartOpen(false);
           setConfirmClear(false);
           triggerFeedback('selection');
@@ -1048,13 +1138,13 @@ const styles = StyleSheet.create({
   },
   posHeaderBody: {
     position: 'absolute',
-    left: 14,
-    right: 14,
+    left: TAB_HEADER_SIDE,
+    right: TAB_HEADER_SIDE,
   },
   posHeaderPinned: {
     position: 'absolute',
-    left: 14,
-    right: 14,
+    left: TAB_HEADER_SIDE,
+    right: TAB_HEADER_SIDE,
     justifyContent: 'center',
   },
   heroRow: {
@@ -1147,9 +1237,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     gap: 6,
   },
-  barcodeScanIconBtn: {
-    padding: 4,
-  },
   searchInput: {
     flex: 1,
     height: 38,
@@ -1188,21 +1275,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     alignItems: 'center',
   },
-  filterPill: {
-    height: 34,
-    borderRadius: 12,
-    backgroundColor: salesColors.cardBg,
-    borderWidth: 1,
-    borderColor: salesColors.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 11,
-  },
-  filterPillActive: {
-    borderColor: salesColors.primary,
-    backgroundColor: salesColors.primaryTint,
-  },
   viewToggle: {
     height: 34,
     borderRadius: 10,
@@ -1226,6 +1298,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  gridCellLeft: {
+    width: '50%',
+    paddingRight: 4,
+  },
+  gridCellRight: {
+    width: '50%',
+    paddingLeft: 4,
   },
   card: {
     backgroundColor: salesColors.cardBg,

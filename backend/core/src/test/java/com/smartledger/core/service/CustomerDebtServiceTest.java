@@ -32,6 +32,7 @@ import com.smartledger.core.repository.SaleRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.impl.CustomerServiceImpl;
 import com.smartledger.core.service.impl.DebtServiceImpl;
+import jakarta.persistence.EntityManager;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -51,7 +52,8 @@ class CustomerDebtServiceTest {
     private final PaymentRepository paymentRepository = Mockito.mock(PaymentRepository.class);
     private final IdempotencyService idempotencyService = Mockito.mock(IdempotencyService.class);
     private final AuditLogService auditLogService = Mockito.mock(AuditLogService.class);
-    private final CustomerService customerService = new CustomerServiceImpl(shopService, customerRepository);
+    private final EntityManager entityManager = Mockito.mock(EntityManager.class);
+    private final CustomerService customerService = new CustomerServiceImpl(shopService, customerRepository, entityManager);
     private final DebtService debtService = new DebtServiceImpl(shopService, debtRepository,
             saleRepository, paymentRepository, idempotencyService, auditLogService);
     private final VerifiedFirebaseToken token = new VerifiedFirebaseToken("uid", null, false, null, null, null);
@@ -96,7 +98,7 @@ class CustomerDebtServiceTest {
     void archivesCustomerInsteadOfDeletingIt() {
         Customer customer = Customer.create(7L, "Khach An", null);
         ReflectionTestUtils.setField(customer, "id", 9L);
-        when(customerRepository.findByIdAndShopIdAndStatus(9L, 7L, CatalogStatus.ACTIVE))
+        when(customerRepository.findLockedByIdAndShopId(9L, 7L))
                 .thenReturn(Optional.of(customer));
 
         customerService.archive(token, "7", "9");

@@ -1,17 +1,32 @@
 import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, SectionList, StyleSheet, TextInput, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, SectionList, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DateRangeSheet } from '../../src/components/DateRangeSheet';
+import { RowListSkeleton } from '../../src/components/ListSkeleton';
+import { TAB_HEADER_SIDE, TAB_HEADER_TOP, TabSearchBar } from '../../src/components/TabSearchBar';
 import { Button, EmptyState, Row, T } from '../../src/components/ui';
-import type { SaleView } from '../../src/data/types';
-import { errorMessage } from '../../src/lib/errors';
+import type { SaleView, SalesSeriesPoint } from '../../src/data/types';
 import { triggerFeedback } from '../../src/lib/feedback';
-import { hashIndex, hhmm, normalizeText, relDay, vnd } from '../../src/lib/format';
+import { dayKey, ddmmyyyy, hashIndex, hhmm, vnd } from '../../src/lib/format';
+import { reportApi } from '../../src/lib/reportApi';
+import {
+  DEFAULT_SALE_FILTER,
+  isSaleFilterActive,
+  matchingPreset,
+  saleFilterReportPeriod,
+  saleFilterTimeLabel,
+  saleFilterTimeShort,
+  saleFilterWindow,
+  saleFilterYearDays,
+  type SaleFilter,
+} from '../../src/lib/saleFilter';
 import { saleApi } from '../../src/lib/salesApi';
-import { inPeriod, Period, periodLabel } from '../../src/lib/stats';
-import { colors, font, shadow, tilePalette } from '../../src/theme';
+import { usePagedList } from '../../src/lib/usePagedList';
+import type { Period } from '../../src/lib/stats';
+import { colors, shadow, tilePalette } from '../../src/theme';
 
 /**
  * Cỡ chữ của số trên thẻ tổng theo độ dài chữ. `adjustsFontSizeToFit` co chữ nhưng không đủ tin cậy trên mọi nền tảng
@@ -19,100 +34,154 @@ import { colors, font, shadow, tilePalette } from '../../src/theme';
  */
 const figureSize = (text: string) => (text.length >= 12 ? 14 : text.length >= 10 ? 15.5 : 17.5);
 
+/** Chờ người dùng ngừng gõ chừng này rồi mới tìm ở Core, để không gọi một lần cho mỗi phím. */
+const SEARCH_DEBOUNCE_MS = 350;
+
+const WEEKDAY_NAMES = ['CHỦ NHẬT', 'THỨ HAI', 'THỨ BA', 'THỨ TƯ', 'THỨ NĂM', 'THỨ SÁU', 'THỨ BẢY'];
+
+/** Tiêu đề nhóm ngày, luôn kèm ngày tháng năm: "HÔM NAY · 13/10/2026", "HÔM QUA · 12/10/2026", "THỨ BA · 06/10/2026". */
 function formatGroupDateTitle(date: Date): string {
   const now = new Date();
-  const diffDays = Math.floor(
+  // Math.round: ngày đổi giờ mùa hè dài 23 hoặc 25 tiếng vẫn ra đúng số ngày
+  const diffDays = Math.round(
     (new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() -
       new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) /
       (1000 * 60 * 60 * 24),
   );
-
-  if (diffDays === 0) return 'HÔM NAY';
-  if (diffDays === 1) return 'HÔM QUA';
-  if (diffDays === 2) return '2 NGÀY TRƯỚC';
-  if (diffDays === 3) return '3 NGÀY TRƯỚC';
-  if (diffDays <= 7) return `${diffDays} NGÀY TRƯỚC`;
-
-  const d = date.getDate().toString().padStart(2, '0');
-  const m = (date.getMonth() + 1).toString().padStart(2, '0');
-  return `${d}/${m}`;
+  const word = diffDays === 0 ? 'HÔM NAY' : diffDays === 1 ? 'HÔM QUA' : WEEKDAY_NAMES[date.getDay()];
+  return `${word} · ${ddmmyyyy(date)}`;
 }
 
 export default function Invoices() {
   const insets = useSafeAreaInsets();
   const { period: queryPeriod } = useLocalSearchParams<{ period?: string }>();
   const initialPeriod: Period = queryPeriod === 'yesterday' || queryPeriod === 'month' ? queryPeriod : 'all';
-  const [period, setPeriod] = useState<Period>(initialPeriod);
+  // Một bộ lọc thời gian cho cả hai cách chọn: kỳ có sẵn (hàng nút dưới ô tìm) và khoảng ngày tự chọn (nút phễu)
+  const [filter, setFilter] = useState<SaleFilter>({ ...DEFAULT_SALE_FILTER, time: initialPeriod });
+  const [filterOpen, setFilterOpen] = useState(false);
+  const period = filter.time;
+  /** Chọn một kỳ có sẵn thì bỏ khoảng ngày tự chọn */
+  const setPeriod = useCallback((time: Period) => setFilter({ time, from: null, to: null }), []);
   const [q, setQ] = useState('');
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
-  const [sales, setSales] = useState<SaleView[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  // Từ khoá gửi lên Core sau khi ngừng gõ; Core tìm trong tên khách, tên món, hoặc khớp đúng mã đơn
+  const [searchQ, setSearchQ] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchQ(q.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [q]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
+  // Core lọc và chia trang (mới bán trước); đổi khoảng thời gian hoặc từ khoá thì tải lại từ trang đầu
+  const saleWindow = saleFilterWindow(filter);
+  const queryKey = JSON.stringify([saleWindow.from, saleWindow.to, searchQ]);
+  const {
+    items: sales,
+    total: count,
+    hasMore,
+    loading,
+    refreshing,
+    loadingMore,
+    error,
+    moreError,
+    loadMore,
+    refreshTop,
+    reload,
+  } = usePagedList<SaleView>(queryKey, (page, size) =>
+    saleApi.page(page, size, { ...saleWindow, q: searchQ || undefined }),
+  );
+
+  // Doanh thu trên thẻ lấy từ Core (các trang đã tải không đủ để cộng tổng):
+  // - kỳ có sẵn (Hôm nay, 7 ngày…), không tìm: báo cáo của đúng kỳ đó (doanh thu thuần: bán trong kỳ trừ huỷ trong kỳ);
+  // - "Tất cả", khoảng tự chọn và khi tìm: tổng của mọi đơn khớp cùng bộ lọc với danh sách (`GET /sales/summary`), tức tiền
+  //   các đơn chưa huỷ trong khoảng, kể cả toàn thời gian và kết quả tìm.
+  // Tổng từng ngày ở tiêu đề nhóm lấy từ chuỗi ngày của báo cáo: của kỳ có sẵn, hoặc của năm nay khi "Tất cả"/khoảng tự chọn
+  // nằm trong năm; khi tìm hoặc ngày không có trong chuỗi thì tiêu đề chỉ có ngày.
+  const reportPeriod = searchQ ? null : saleFilterReportPeriod(filter);
+  const yearDays = searchQ || reportPeriod ? null : saleFilterYearDays(filter);
+  const yearFrom = yearDays?.from ?? null;
+  const yearTo = yearDays?.to ?? null;
+  const reportKey = reportPeriod ?? `list:${queryKey}`;
+  const [report, setReport] = useState<{ key: string; revenue: number; days: Map<string, SalesSeriesPoint> } | null>(null);
+  const reportSeq = useRef(0);
+  const loadReport = useCallback(async () => {
+    const mine = ++reportSeq.current;
     try {
-      setSales(await saleApi.list());
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setLoading(false);
+      if (reportPeriod) {
+        const [summary, series] = await Promise.all([reportApi.summary(reportPeriod), reportApi.salesSeries(reportPeriod)]);
+        if (mine !== reportSeq.current) return;
+        setReport({ key: reportKey, revenue: summary.netRevenueVnd, days: new Map(series.items.map((day) => [day.date, day])) });
+      } else {
+        const [summary, series] = await Promise.all([
+          saleApi.summary({ ...saleWindow, q: searchQ || undefined }),
+          yearFrom && yearTo ? reportApi.salesSeries('year') : Promise.resolve(null),
+        ]);
+        if (mine !== reportSeq.current) return;
+        // `date` là ngày Việt Nam dạng `yyyy-mm-dd` nên so chuỗi được
+        const days = series && yearFrom && yearTo ? series.items.filter((day) => day.date >= yearFrom && day.date <= yearTo) : [];
+        setReport({ key: reportKey, revenue: summary.confirmedSalesVnd, days: new Map(days.map((day) => [day.date, day])) });
+      }
+    } catch {
+      // Không có số tổng thì thẻ hiện "—"; danh sách đơn vẫn dùng được
+      if (mine === reportSeq.current) setReport(null);
     }
-  }, []);
+    // saleWindow và searchQ đổi thì queryKey đổi, nên reportKey đổi và hàm được tạo lại
+  }, [reportKey, reportPeriod, yearFrom, yearTo]);
+  const activeReport = report && report.key === reportKey ? report : null;
 
+  // Quay lại màn hình (vừa bán hoặc huỷ đơn): làm mới trang đầu mà giữ chỗ đang cuộn, và làm mới số tổng
   useFocusEffect(
     useCallback(() => {
-      load();
-    }, [load]),
+      void refreshTop();
+      void loadReport();
+    }, [refreshTop, loadReport]),
   );
+
+  const pullToRefresh = () => {
+    void reload();
+    void loadReport();
+  };
 
   useFocusEffect(
     useCallback(() => {
       if (queryPeriod === 'today' || queryPeriod === 'yesterday' || queryPeriod === 'month') {
         setPeriod(queryPeriod);
       }
-    }, [queryPeriod]),
+    }, [queryPeriod, setPeriod]),
   );
 
-  const filteredSales = useMemo(() => {
-    const nq = normalizeText(q);
-    return sales
-      .filter((s) => {
-        if (!inPeriod(s.soldAt, period)) return false;
-        if (nq) {
-          const hay = normalizeText(`${s.id} ${s.customerName ?? ''} ${s.items.map((x) => x.productName).join(' ')}`);
-          if (!hay.includes(nq)) return false;
-        }
-        return true;
-      })
-      // Core trả theo mã đơn; đơn có giờ bán cũ hơn mà mã lớn hơn (dữ liệu nhập tay/mẫu) làm nhóm ngày bị đảo. Mới nhất trước.
-      .sort((a, b) => new Date(b.soldAt).getTime() - new Date(a.soldAt).getTime());
-  }, [sales, period, q]);
+  const clearFilters = () => {
+    triggerFeedback('selection');
+    setFilter(DEFAULT_SALE_FILTER);
+    setQ('');
+  };
 
-  const total = filteredSales.filter((s) => s.saleStatus !== 'VOIDED').reduce((a, s) => a + s.totalVnd, 0);
-  const count = filteredSales.length;
+  const revenue = activeReport ? activeReport.revenue : null;
+  const revenueText = revenue === null ? '—' : vnd(revenue);
   // Số trên thẻ là của khoảng thời gian đang lọc; chỉ "Tất cả" mới là tổng, nên nhãn đổi theo bộ lọc
-  const scopeName = period === 'all' ? null : periodLabel[period].toLowerCase();
+  const timeShort = saleFilterTimeShort(filter);
+  // Nhãn nút của khoảng tự chọn: "30 ngày gần nhất" như trong bảng chọn, hoặc "07/10 – 13/10"
+  const customChipLabel = matchingPreset(filter.from, filter.to) ? saleFilterTimeLabel(filter) : timeShort;
+  const scopeName = period === 'all' ? null : timeShort.toLowerCase();
   const countLabel = scopeName ? `Đơn ${scopeName}` : 'Tổng đơn hàng';
   const revenueLabel = scopeName ? `Doanh thu ${scopeName}` : 'Tổng doanh thu';
   // Ô số đơn hẹp hơn ô doanh thu (flex 0.8 so với 1.2). Dòng chữ dưới số chỉ nêu khoảng thời gian, trùng tên nút lọc, nên luôn
   // vừa một dòng; "Tổng đơn hàng" và "Đơn tháng này" bị cắt trên web ≤ 390px vì RN web không thu chữ theo adjustsFontSizeToFit.
   // countLabel vẫn dùng làm nhãn đọc màn hình.
-  const countCaption = periodLabel[period];
+  const countCaption = timeShort;
 
-  // Group sales by date
+  // Nhóm theo ngày bán. Danh sách tải dần nên một ngày có thể mới có một phần đơn: số đơn và doanh thu của ngày lấy từ
+  // chuỗi báo cáo của Core, không đếm trên các trang đã tải; không có báo cáo thì tiêu đề chỉ có ngày.
   const groupedSections = useMemo(() => {
     const groups: Array<{
       key: string;
       title: string;
       date: Date;
       sales: SaleView[];
-      totalVnd: number;
+      day: SalesSeriesPoint | null;
     }> = [];
 
-    filteredSales.forEach((sale) => {
+    sales.forEach((sale) => {
       const saleDate = new Date(sale.soldAt);
       const title = formatGroupDateTitle(saleDate);
       const groupKey = `${saleDate.getFullYear()}-${saleDate.getMonth()}-${saleDate.getDate()}-${title}`;
@@ -124,19 +193,16 @@ export default function Invoices() {
           title,
           date: saleDate,
           sales: [],
-          totalVnd: 0,
+          day: activeReport?.days.get(dayKey(saleDate)) ?? null,
         };
         groups.push(existing);
       }
 
       existing.sales.push(sale);
-      if (sale.saleStatus !== 'VOIDED') {
-        existing.totalVnd += sale.totalVnd;
-      }
     });
 
     return groups;
-  }, [filteredSales]);
+  }, [sales, activeReport]);
 
   // SectionList chỉ dựng các dòng đang nhìn thấy; nhóm đang thu gọn không có dòng nào nhưng vẫn giữ tiêu đề.
   const sections = useMemo(
@@ -144,8 +210,7 @@ export default function Invoices() {
       groupedSections.map((g) => ({
         key: g.key,
         title: g.title,
-        totalVnd: g.totalVnd,
-        count: g.sales.length,
+        day: g.day,
         data: collapsedGroups[g.key] ? ([] as SaleView[]) : g.sales,
       })),
     [groupedSections, collapsedGroups],
@@ -171,12 +236,12 @@ export default function Invoices() {
           <View style={styles.summaryCard}>
             {/* Left Metric: Tổng đơn hàng */}
             <Pressable
-              onPress={() => {
-                triggerFeedback('selection');
-                setPeriod('all');
-                setQ('');
-              }}
-              style={({ pressed }) => [styles.summaryMetricBtn, styles.summaryMetricCount, pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }]}
+              onPress={clearFilters}
+              style={({ pressed }) => [
+                styles.summaryMetricBtn,
+                styles.summaryMetricCount,
+                pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] },
+              ]}
               accessibilityRole="button"
               accessibilityLabel={`${countLabel}: ${count} đơn. Bấm để xem tất cả`}
             >
@@ -185,7 +250,7 @@ export default function Invoices() {
               </View>
               <View style={styles.summaryText}>
                 <T w="extrabold" size={figureSize(`${count} đơn`)} color={colors.ink} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-                  {count} đơn
+                  {loading ? '…' : `${count} đơn`}
                 </T>
                 <T size={12} color={colors.muted} style={{ marginTop: 1 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
                   {countCaption}
@@ -193,10 +258,8 @@ export default function Invoices() {
               </View>
             </Pressable>
 
-            {/* Middle Divider */}
             <View style={styles.summaryDivider} />
 
-            {/* Right Metric: Tổng doanh thu */}
             <Pressable
               onPress={() => {
                 triggerFeedback('selection');
@@ -204,14 +267,14 @@ export default function Invoices() {
               }}
               style={({ pressed }) => [styles.summaryMetricBtn, styles.summaryMetricRevenue, pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }]}
               accessibilityRole="button"
-              accessibilityLabel={`${revenueLabel}: ${vnd(total)}. Bấm để xem báo cáo chi tiết`}
+              accessibilityLabel={`${revenueLabel}: ${revenueText}. Bấm để xem báo cáo chi tiết`}
             >
               <View style={styles.summaryIconYellow}>
                 <Feather name="database" size={16} color={colors.data.debt} />
               </View>
               <View style={styles.summaryText}>
-                <T w="extrabold" size={figureSize(vnd(total))} color={colors.ink} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-                  {vnd(total)}
+                <T w="extrabold" size={figureSize(revenueText)} color={colors.ink} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                  {revenueText}
                 </T>
                 <T size={12} color={colors.muted} style={{ marginTop: 1 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
                   {revenueLabel}
@@ -228,40 +291,53 @@ export default function Invoices() {
       <StatusBar style="dark" />
 
       {/* Header Container */}
-      <View style={[styles.headerShell, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerShell, { paddingTop: insets.top + TAB_HEADER_TOP }]}>
         {/* Title Row */}
-        <Row style={styles.heroRow} gap={10}>
+        {/* Cùng cỡ chữ và lề với tiêu đề Bán hàng để chuyển tab qua lại ô tìm không xê dịch */}
+        <Row style={styles.heroRow} gap={8}>
           <View style={{ flex: 1 }}>
-            <T w="extrabold" size={28} color={colors.ink}>
+            <T w="extrabold" size={26} color={colors.ink}>
               Đơn hàng
             </T>
-            <T w="medium" size={13.5} color={colors.muted} style={{ marginTop: 1 }}>
+            <T w="medium" size={13} color={colors.muted} style={{ marginTop: 1 }}>
               Quản lý và theo dõi đơn hàng
             </T>
           </View>
         </Row>
 
-        {/* Search Input (luôn hiện, cùng kiểu với màn Bán hàng) */}
-        <View style={styles.searchBox}>
-          <Feather name="search" size={18} color={colors.faint} />
-          <TextInput
-            value={q}
-            onChangeText={setQ}
-            placeholder="Tìm theo khách, tên món, mã đơn..."
-            placeholderTextColor="#9CA3AF"
-            style={styles.searchInput}
-            returnKeyType="search"
-            accessibilityLabel="Tìm đơn hàng"
-          />
-          {q ? (
-            <Pressable onPress={() => setQ('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Xoá tìm kiếm">
-              <Feather name="x-circle" size={15} color={colors.muted} />
-            </Pressable>
-          ) : null}
-        </View>
+        {/* Ô tìm dùng chung với Bán hàng: phễu trong ô mở bảng chọn khoảng ngày */}
+        <TabSearchBar
+          value={q}
+          onChangeText={setQ}
+          placeholder="Tìm theo khách, tên món, mã đơn..."
+          searchLabel="Tìm đơn hàng"
+          onFilterPress={() => {
+            triggerFeedback('selection');
+            setFilterOpen(true);
+          }}
+          filterActive={period === 'custom'}
+          filterLabel={period === 'custom' ? `Lọc theo ngày, đang chọn ${saleFilterTimeLabel(filter)}` : 'Lọc theo ngày'}
+        />
 
         {/* Period Chips Filter */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.periodScroll}>
+          {/* Khoảng ngày tự chọn hiện thành một nút đang bật ("30 ngày gần nhất", "07/10 – 13/10"); chạm để chọn lại */}
+          {period === 'custom' ? (
+            <Pressable
+              onPress={() => {
+                triggerFeedback('selection');
+                setFilterOpen(true);
+              }}
+              style={({ pressed }) => [styles.periodPill, styles.periodPillActive, pressed && { opacity: 0.8 }]}
+              accessibilityRole="button"
+              accessibilityLabel={`Khoảng ngày đang lọc: ${saleFilterTimeLabel(filter)}. Bấm để đổi`}
+            >
+              <Feather name="calendar" size={14} color={colors.brandInk} />
+              <T w="bold" size={13} color={colors.brandInk} numberOfLines={1}>
+                {customChipLabel}
+              </T>
+            </Pressable>
+          ) : null}
           {periodOptions.map((opt) => {
             const active = period === opt.key;
             return (
@@ -294,13 +370,12 @@ export default function Invoices() {
 
       {/* Main Content */}
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator color={colors.brand} />
-        </View>
-      ) : error ? (
+        // Khung chờ cùng lề với danh sách thật: thẻ tổng rồi các dòng đơn
+        <RowListSkeleton header rows={5} style={styles.scrollContent} />
+      ) : error && !sales.length ? (
         <View style={{ paddingHorizontal: 16, paddingTop: 20 }}>
           <EmptyState icon="alert-triangle" title="Không tải được đơn hàng" hint={error} />
-          <Button title="Thử lại" variant="outline" onPress={load} />
+          <Button title="Thử lại" variant="outline" onPress={pullToRefresh} />
         </View>
       ) : (
         <SectionList
@@ -317,22 +392,60 @@ export default function Invoices() {
                 {section.title}
               </T>
               <Row gap={6} style={{ alignItems: 'center' }}>
-                <T w="bold" size={12.5} color={colors.muted}>
-                  {section.count} đơn · {vnd(section.totalVnd)}
-                </T>
+                {section.day ? (
+                  <T w="bold" size={12.5} color={colors.muted}>
+                    {section.day.orderCount} đơn · {vnd(section.day.netRevenueVnd)}
+                  </T>
+                ) : null}
                 <Feather name={collapsedGroups[section.key] ? 'chevron-down' : 'chevron-up'} size={15} color={colors.muted} />
               </Row>
             </Pressable>
           )}
           renderSectionFooter={() => <View style={{ height: 14 }} />}
+          onEndReached={() => void loadMore()}
+          onEndReachedThreshold={0.5}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={colors.brand} colors={[colors.brand]} />}
+          ListFooterComponent={
+            loadingMore ? (
+              <ActivityIndicator color={colors.brand} style={{ marginVertical: 12 }} />
+            ) : error ? (
+              // Làm mới thất bại khi đã có đơn: giữ danh sách và chỗ đang cuộn, báo lỗi ở cuối
+              <T size={12.5} color={colors.muted} style={{ textAlign: 'center', marginVertical: 8 }}>
+                Không làm mới được: {error}
+              </T>
+            ) : moreError ? (
+              <View style={{ marginTop: 4 }}>
+                <T size={12.5} color={colors.muted} style={{ textAlign: 'center', marginBottom: 8 }}>
+                  Không tải thêm được đơn: {moreError}
+                </T>
+                <Button title="Tải thêm" variant="outline" onPress={() => void loadMore()} />
+              </View>
+            ) : !hasMore && sales.length > 0 ? (
+              <T size={12} color={colors.faint} style={{ textAlign: 'center', marginVertical: 8 }}>
+                Đã hiện hết {count} đơn
+              </T>
+            ) : null
+          }
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
           ListHeaderComponent={listHeader}
           ListEmptyComponent={
-            <EmptyState
-              icon={q ? 'search' : 'file-text'}
-              title={q ? 'Không tìm thấy đơn' : 'Chưa có đơn hàng'}
-              hint={q ? 'Thử tìm tên khách hoặc mã đơn khác' : 'Tạo đơn mới trong tab Bán hàng'}
-            />
+            isSaleFilterActive(filter) ? (
+              // Có đơn nhưng bộ lọc (và từ khoá, nếu có) loại hết: cho gỡ lọc ngay tại chỗ
+              <View>
+                <EmptyState
+                  icon="filter"
+                  title="Không có đơn phù hợp"
+                  hint={`Không có đơn nào trong khoảng đang lọc (${saleFilterTimeLabel(filter)}${q ? ', kèm từ khoá' : ''}).`}
+                />
+                <Button title="Xoá bộ lọc" variant="outline" onPress={clearFilters} />
+              </View>
+            ) : (
+              <EmptyState
+                icon={q ? 'search' : 'file-text'}
+                title={q ? 'Không tìm thấy đơn' : 'Chưa có đơn hàng'}
+                hint={q ? 'Thử tìm tên khách hoặc mã đơn khác' : 'Tạo đơn mới trong tab Bán hàng'}
+              />
+            )
           }
           stickySectionHeadersEnabled={false}
           showsVerticalScrollIndicator={false}
@@ -343,6 +456,17 @@ export default function Invoices() {
           removeClippedSubviews={Platform.OS === 'android'}
         />
       )}
+      <DateRangeSheet
+        visible={filterOpen}
+        from={filter.from}
+        to={filter.to}
+        onClose={() => setFilterOpen(false)}
+        onApply={(from, to) => {
+          triggerFeedback('selection');
+          setFilter({ time: 'custom', from, to });
+          setFilterOpen(false);
+        }}
+      />
     </View>
   );
 }
@@ -355,8 +479,9 @@ const OrderCard = React.memo(function OrderCard({ sale }: { sale: SaleView }) {
     .map((item) => `${item.productName}${item.quantity > 1 ? ` x${item.quantity}` : ''}`)
     .join(', ');
 
+  // Ngày ghi đủ ngày tháng năm ngay trên từng đơn, không dùng "hôm qua", "3 ngày trước"
   const timeStr = hhmm(new Date(sale.soldAt));
-  const dateStr = relDay(new Date(sale.soldAt));
+  const dateStr = ddmmyyyy(new Date(sale.soldAt));
 
   return (
     <Pressable
@@ -420,39 +545,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   headerShell: {
-    paddingHorizontal: 16,
+    paddingHorizontal: TAB_HEADER_SIDE,
     paddingBottom: 10,
     backgroundColor: colors.bg,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
+  // Như `heroRow` của Bán hàng
   heroRow: {
+    paddingTop: 2,
+    paddingBottom: 4,
     alignItems: 'center',
-    marginBottom: 8,
   },
-  searchBox: {
-    height: 42,
-    borderRadius: 13,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    marginBottom: 8,
-  },
-  searchInput: {
-    flex: 1,
-    height: 38,
-    fontFamily: font.medium,
-    fontSize: 14,
-    color: colors.ink,
-    outlineStyle: 'none',
-  } as never,
   periodScroll: {
     gap: 6,
-    paddingRight: 16,
+    paddingRight: TAB_HEADER_SIDE,
   },
   periodPill: {
     height: 32,
@@ -470,11 +577,6 @@ const styles = StyleSheet.create({
   periodPillActive: {
     backgroundColor: colors.brand,
     borderColor: colors.brand,
-  },
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   scrollContent: {
     paddingHorizontal: 16,

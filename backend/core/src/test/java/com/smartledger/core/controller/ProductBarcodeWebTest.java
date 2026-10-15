@@ -31,6 +31,7 @@ import com.smartledger.core.service.MediaService;
 import com.smartledger.core.service.NotificationEventService;
 import com.smartledger.core.service.ShopService;
 import com.smartledger.core.service.impl.ProductServiceImpl;
+import jakarta.persistence.EntityManager;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -61,6 +62,7 @@ class ProductBarcodeWebTest {
     @MockitoBean IdempotencyService idempotency;
     @MockitoBean NotificationEventService notifications;
     @MockitoBean MediaService media;
+    @MockitoBean EntityManager entityManager;
 
     @BeforeEach
     void authorize() {

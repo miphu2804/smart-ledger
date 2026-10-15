@@ -2,13 +2,9 @@ import pytest
 from pydantic_ai.models.function import FunctionModel
 from tests.support import ScriptedModel, transcript
 
-from src.drafts.catalog import CatalogProduct, CatalogUnavailableError
-from src.drafts.service import (
-    DraftLineOutput,
-    DraftOutput,
-    DraftService,
-    DraftUnavailableError,
-)
+from src.drafts.catalog import CatalogProduct
+from src.drafts.errors import CatalogUnavailableError, DraftUnavailableError
+from src.drafts.service import DraftLineOutput, DraftOutput, DraftService
 from src.prompt_templates import DRAFT_SALE_PROMPT
 
 pytestmark = pytest.mark.anyio

@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Image, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { AddItemSheet } from '../src/components/AddItemSheet';
 import { BarcodeScannerModal } from '../src/components/BarcodeScannerModal';
 import { useToast } from '../src/components/brand';
@@ -12,8 +12,9 @@ import { productApi } from '../src/lib/catalogApi';
 import { errorMessage } from '../src/lib/errors';
 import { vnd } from '../src/lib/format';
 import { createCheckoutSession } from '../src/lib/checkoutSession';
+import { toDraftItem, upsertCustomLine } from '../src/lib/customLines';
 import { triggerFeedback } from '../src/lib/feedback';
-import { getProductImage } from '../src/lib/productImages';
+import { ProductImage } from '../src/components/ProductImage';
 import { saleApi, saleDraftApi } from '../src/lib/salesApi';
 import { itemsTotal, methodLabel } from '../src/lib/stats';
 import { useReducedMotion } from '../src/motion';
@@ -88,7 +89,9 @@ export default function Checkout() {
   const quick = Array.from(new Set([total, Math.ceil(total / 50000) * 50000, Math.ceil(total / 100000) * 100000, 200000, 500000]))
     .filter((v) => v >= total)
     .slice(0, 4);
-  const hasInvalidItems = items.some((it) => typeof it.productId !== 'number');
+  // Món tạm (món mới quét, chọn không lưu vào danh mục) không có productId nhưng hợp lệ: Core nhận nó như một món tuỳ ý
+  const hasInvalidItems = items.some((it) => typeof it.productId !== 'number' && !it.custom);
+  const hasCustomItems = items.some((it) => !!it.custom);
 
   if (doneId != null) return <Success id={doneId} total={doneTotal} method={method} change={method === 'cash' && given ? change : 0} />;
 
@@ -124,11 +127,7 @@ export default function Checkout() {
       const { sale, recovered, sameCart } = await checkout.submit({
         customerName: customer.trim() || undefined,
         customerPhone: phone.trim() || undefined,
-        items: items.map((it) => ({
-          productId: it.productId as number,
-          quantity: it.qty,
-          unitPriceVnd: it.price,
-        })),
+        items: items.map(toDraftItem),
         initialPaidVnd: method === 'debt' ? debtUpfrontAmount : total,
         initialPaymentMethod: method === 'debt' ? (debtUpfrontAmount > 0 ? 'CASH' : null) : method === 'cash' ? 'CASH' : 'TRANSFER',
       });
@@ -206,20 +205,18 @@ export default function Checkout() {
           </Row>
         </Row>
         {items.map((it, idx) => (
-          <Row key={`${it.productId ?? it.name}-${idx}`} style={[styles.line, { alignItems: 'center' }]}>
+          <Row key={`${it.productId ?? it.custom?.barcode ?? it.name}-${idx}`} style={[styles.line, { alignItems: 'center' }]}>
             <View style={styles.checkoutThumbWrap}>
-              <Image
-                source={{ uri: getProductImage(it.name) }}
-                style={styles.checkoutThumb}
-                resizeMode="cover"
-              />
+              <ProductImage name={it.name} uri={products.find((p) => p.id === it.productId)?.imageUrl} style={styles.checkoutThumb} />
             </View>
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Row gap={6}>
                 <T w="semibold" size={14}>
                   {it.name}
                 </T>
-                {typeof it.productId !== 'number' ? (
+                {it.custom ? (
+                  <Badge text="Món tạm" color={colors.gold} bg={colors.goldSoft} />
+                ) : typeof it.productId !== 'number' ? (
                   <Badge text="Ngoài danh mục" color={colors.red} bg={colors.redSoft} />
                 ) : null}
               </Row>
@@ -262,6 +259,11 @@ export default function Checkout() {
               style={{ flex: 1 }}
             />
           </Row>
+        ) : null}
+        {hasCustomItems ? (
+          <T size={12} color={colors.gold} style={{ marginTop: 10 }}>
+            Món tạm chỉ có trong đơn này, không được thêm vào Hàng hoá.
+          </T>
         ) : null}
         {app.draft?.transcript ? (
           <View style={styles.transcript}>
@@ -422,10 +424,16 @@ export default function Checkout() {
         products={products}
         onPick={(li) => {
           setItems((cur) => {
-            const ex = cur.find((x) => x.productId === li.productId);
+            const ex = cur.find((x) => !x.custom && x.productId === li.productId);
             return ex ? cur.map((x) => (x === ex ? { ...x, qty: x.qty + 1 } : x)) : [...cur, li];
           });
-          toast(`Đã thêm ${li.name}`);
+          toast(`Đã thêm ${li.name}`, 'ok', {
+            actionLabel: 'Hoàn tác',
+            onAction: () =>
+              setItems((cur) =>
+                cur.flatMap((x) => (x.productId !== li.productId ? [x] : x.qty > 1 ? [{ ...x, qty: x.qty - 1 }] : [])),
+              ),
+          });
         }}
       />
 
@@ -436,6 +444,7 @@ export default function Checkout() {
         onProductFound={(p) => setProducts((cur) => (cur.some((x) => x.id === p.id) ? cur : [...cur, p]))}
         cartItems={items}
         onAddToCart={adjustScannedItem}
+        onCustomLine={(line) => setItems((cur) => upsertCustomLine(cur, line))}
         onProductCreated={(p) => setProducts((cur) => [...cur, p])}
       />
     </Screen>

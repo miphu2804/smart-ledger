@@ -132,6 +132,13 @@ def tool_call(name: str, args: dict, *more: dict) -> ModelResponse:
     return ModelResponse(parts=[ToolCallPart(name, call) for call in (args, *more)])
 
 
+def static_instructions(instructions: str) -> str:
+    """The cacheable part: everything before the current-time line that ends them."""
+    static, _, current_time = instructions.rpartition("\n\n")
+    assert current_time.startswith("Current time at the shop")
+    return static
+
+
 def transcript(messages: list[ModelMessage]) -> list[tuple[str, str]]:
     """The messages as (kind, text) pairs, in the order the model read them."""
     pairs = []

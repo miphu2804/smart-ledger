@@ -224,6 +224,11 @@
 .lp-nav.is-open .icon-btn:hover {
   background: var(--primary-50);
 }
+.lp-social {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
 .lp-burger {
   display: none;
 }
@@ -232,7 +237,8 @@
 }
 @media (max-width: 960px) {
   .lp-nav-links,
-  .lp-admin-link {
+  .lp-admin-link,
+  .lp-nav-actions .lp-social {
     display: none;
   }
   .lp-nav-actions {
@@ -259,6 +265,16 @@
     display: grid;
     gap: 8px;
     margin-top: 12px;
+  }
+  .lp-mobile-menu .lp-social {
+    justify-content: center;
+    gap: 8px;
+  }
+  .lp-mobile-menu .lp-social a {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 0;
   }
 }
 @media (max-width: 420px) {
@@ -1181,6 +1197,16 @@
   max-width: 300px;
   font-size: 15px;
   color: var(--muted);
+}
+.lp-footer-brand .lp-social {
+  margin: 12px 0 0 -8px;
+}
+.lp-footer-brand .lp-social a {
+  width: 44px;
+  height: 44px;
+}
+.lp-footer-brand .lp-social a:hover {
+  color: var(--primary);
 }
 .lp-footer-col {
   display: flex;

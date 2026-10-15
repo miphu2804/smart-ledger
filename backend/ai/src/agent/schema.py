@@ -47,3 +47,15 @@ class AgentConversationMessage(BaseModel):
 
 class AgentConversationView(AgentConversationSummary):
     messages: list[AgentConversationMessage]
+
+
+class AgentMemorySettingsRequest(BaseModel):
+    user_id: int = Field(gt=0)
+    shop_id: int = Field(gt=0)
+    memory_enabled: bool
+
+
+class AgentMemorySettings(BaseModel):
+    memory_enabled: bool
+    # False when long-term memory is off for the whole deployment.
+    available: bool

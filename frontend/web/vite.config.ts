@@ -1,5 +1,7 @@
 import react from '@vitejs/plugin-react'
+import { readFileSync } from 'node:fs'
 import { defineConfig, loadEnv } from 'vite'
+import { parse } from 'yaml'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -9,6 +11,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     define: {
       'import.meta.env.VITE_ADMIN_ENABLED': JSON.stringify(VITE_ADMIN_ENABLED),
+      __SITE__: JSON.stringify(parse(readFileSync('site.yaml', 'utf8')) ?? {}),
     },
   }
 })

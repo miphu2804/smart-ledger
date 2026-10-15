@@ -39,14 +39,31 @@ public final class OwnerListQuery {
         }
     }
 
+    /** One filter contract shared by paginated sale reads and unpaginated totals. */
+    public interface SaleFilter {
+        String q();
+        SaleStatus saleStatus();
+        OffsetDateTime from();
+        OffsetDateTime to();
+    }
+
     public record Sales(int page, int size, String q, SaleStatus saleStatus,
-            OffsetDateTime from, OffsetDateTime to) implements Pagination {
+            OffsetDateTime from, OffsetDateTime to) implements Pagination, SaleFilter {
         public Sales {
             validatePage(page, size, ErrorCode.INVALID_SALE_QUERY);
             q = search(q, ErrorCode.INVALID_SALE_QUERY);
             range(from, to, ErrorCode.INVALID_SALE_QUERY);
         }
         public static Sales defaults() { return new Sales(0, 20, null, null, null, null); }
+    }
+
+    public record SalesSummary(String q, SaleStatus saleStatus, OffsetDateTime from, OffsetDateTime to)
+            implements SaleFilter {
+        public SalesSummary {
+            q = search(q, ErrorCode.INVALID_SALE_QUERY);
+            range(from, to, ErrorCode.INVALID_SALE_QUERY);
+        }
+        public static SalesSummary defaults() { return new SalesSummary(null, null, null, null); }
     }
 
     public record Drafts(int page, int size, DraftStatus status) implements Pagination {

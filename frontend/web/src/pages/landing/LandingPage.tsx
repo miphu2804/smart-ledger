@@ -22,6 +22,7 @@ import { useReveal } from '../../hooks/useReveal'
 import '../../styles/landing.css'
 import { CONTACT_EMAIL } from '../legal/legalConfig'
 import SiteFooter from './SiteFooter'
+import SocialLinks from './SocialLinks'
 
 const NAV = [
   { href: '#tinh-nang', label: 'Tính năng' },
@@ -68,6 +69,7 @@ function Nav() {
           ))}
         </nav>
         <div className="lp-nav-actions">
+          <SocialLinks />
           {ADMIN_ENABLED && (
             <Link to="/admin/login" className="lp-admin-link">
               Quản trị
@@ -107,6 +109,7 @@ function Nav() {
                 Quản trị
               </Link>
             )}
+            <SocialLinks />
           </div>
         </div>
       )}
@@ -279,7 +282,7 @@ function Pains() {
   return (
     <section className="lp-section lp-pains">
       <div className="lp-container">
-        <SectionHead kicker="Vấn đề quen thuộc" title="Bán thì đắt, mà sổ sách thì rối">
+        <SectionHead kicker="Vấn đề quen thuộc" title="App thì đắt, mà sổ sách thì rối">
           Phần lớn quán nước, xe trái cây, sạp chợ vẫn ghi sổ tay hoặc không ghi gì cả. Không phải vì lười, mà vì chưa có cách nào đủ nhanh.
         </SectionHead>
         <div className="pain-grid">

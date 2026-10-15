@@ -2,12 +2,13 @@ import os
 import secrets
 import uuid
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import psycopg
 import pytest
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
+from sqlalchemy.engine import make_url
 from tests.support import (
     TEST_GUARDRAIL_LIMITS,
     ScriptedModel,
@@ -18,7 +19,8 @@ from tests.support import (
 )
 
 from src.agent.service import AgentService
-from src.sql.executor import ReadOnlySqlExecutor
+from src.infra.postgre_db_client import PostgreDBClient
+from src.sql.repository import ShopDataRepository
 
 # Escaped so the source stays ASCII: an upper-case accented letter (lower() keeps it
 # under the C locale) and d with stroke (NFD keeps it) both must fold.
@@ -37,14 +39,20 @@ SHOP_B_VOIDED_VND = 8000
 class ReaderDatabase:
     admin: psycopg.Connection
     reader_url: str
+    reader_pool_url: str
     base_schema: str
     view_schema: str
     shop_a: int
     shop_b: int
+    clients: list[PostgreDBClient] = field(default_factory=list)
 
-    def executor(self, timeout_ms: int = 3000, row_limit: int = 100):
-        return ReadOnlySqlExecutor(
-            self.reader_url,
+    def shop_data(
+        self, timeout_ms: int = 3000, row_limit: int = 100, pool_size: int = 2
+    ) -> ShopDataRepository:
+        client = PostgreDBClient(self.reader_pool_url, pool_size=pool_size)
+        self.clients.append(client)
+        return ShopDataRepository(
+            client,
             timeout_ms=timeout_ms,
             row_limit=row_limit,
             view_schema=self.view_schema,
@@ -185,9 +193,26 @@ def reader_db() -> Iterator[ReaderDatabase]:
                 )
             )
         reader_url = make_conninfo(database_url, user=login_role, password=password)
-        yield ReaderDatabase(
-            admin, reader_url, base_schema, view_schema, shop_a, shop_b
+        # `PostgreDBClient` takes a URL; `POSTGRES_TEST_URL` must be one (see support).
+        reader_pool_url = (
+            make_url(database_url)
+            .set(username=login_role, password=password)
+            .render_as_string(hide_password=False)
         )
+        database = ReaderDatabase(
+            admin,
+            reader_url,
+            reader_pool_url,
+            base_schema,
+            view_schema,
+            shop_a,
+            shop_b,
+        )
+        try:
+            yield database
+        finally:
+            for client in database.clients:
+                client.close()
     finally:
         for schema in (view_schema, base_schema):
             admin.execute(
@@ -204,14 +229,14 @@ def reader_db() -> Iterator[ReaderDatabase]:
 def test_same_product_name_in_two_shops_stays_in_the_current_shop(
     reader_db: ReaderDatabase,
 ) -> None:
-    executor = reader_db.executor()
+    shop_data = reader_db.shop_data()
     query = (
         "SELECT name, selling_price_vnd, category_name FROM v_products "
         "WHERE name_folded LIKE '%gao st25%'"
     )
 
-    in_a = executor.run(reader_db.shop_a, query)
-    in_b = executor.run(reader_db.shop_b, query)
+    in_a = shop_data.run(reader_db.shop_a, query)
+    in_b = shop_data.run(reader_db.shop_b, query)
 
     assert in_a["columns"] == ["name", "selling_price_vnd", "category_name"]
     assert in_a["rows"] == [[SHARED_NAME, 30000, "Staples"]]
@@ -219,10 +244,12 @@ def test_same_product_name_in_two_shops_stays_in_the_current_shop(
 
 
 def test_sales_views_show_only_the_current_shop(reader_db: ReaderDatabase) -> None:
-    executor = reader_db.executor()
-    sales = executor.run(reader_db.shop_a, "SELECT total_vnd, sale_status FROM v_sales")
-    items = executor.run(reader_db.shop_a, "SELECT product_name FROM v_sale_items")
-    other_sales = executor.run(
+    shop_data = reader_db.shop_data()
+    sales = shop_data.run(
+        reader_db.shop_a, "SELECT total_vnd, sale_status FROM v_sales"
+    )
+    items = shop_data.run(reader_db.shop_a, "SELECT product_name FROM v_sale_items")
+    other_sales = shop_data.run(
         reader_db.shop_b, "SELECT total_vnd, sale_status FROM v_sales"
     )
 
@@ -239,7 +266,7 @@ def test_sales_views_show_only_the_current_shop(reader_db: ReaderDatabase) -> No
 
 
 def test_sales_view_hides_pii_and_free_text(reader_db: ReaderDatabase) -> None:
-    result = reader_db.executor().run(reader_db.shop_a, "SELECT * FROM v_sales")
+    result = reader_db.shop_data().run(reader_db.shop_a, "SELECT * FROM v_sales")
 
     assert result["columns"] == [
         "id",
@@ -258,7 +285,7 @@ def test_sales_view_hides_pii_and_free_text(reader_db: ReaderDatabase) -> None:
 def test_sales_views_return_nothing_without_a_shop_scope(
     reader_db: ReaderDatabase,
 ) -> None:
-    # The executor requires a shop id, so this goes straight to the reader role, like
+    # The repository requires a shop id, so this goes straight to the reader role, like
     # `test_views_return_nothing_without_a_shop_scope`.
     views = sql.Identifier(reader_db.view_schema)
     with psycopg.connect(reader_db.reader_url, autocommit=True) as reader:
@@ -275,7 +302,7 @@ def test_sales_views_return_nothing_without_a_shop_scope(
 def test_shop_profile_shows_only_the_current_shop_without_owner_contact(
     reader_db: ReaderDatabase,
 ) -> None:
-    result = reader_db.executor().run(reader_db.shop_a, "SELECT * FROM v_shop_profile")
+    result = reader_db.shop_data().run(reader_db.shop_a, "SELECT * FROM v_shop_profile")
 
     assert result["columns"] == [
         "name",
@@ -304,7 +331,7 @@ def test_shop_a_cannot_reach_shop_b(reader_db: ReaderDatabase, query: str) -> No
     text = query.format(shop_b=reader_db.shop_b, base=reader_db.base_schema)
 
     with pytest.raises(ValueError) as error:
-        reader_db.executor().run(reader_db.shop_a, text)
+        reader_db.shop_data().run(reader_db.shop_a, text)
 
     code = str(error.value).split(":", 1)[0]
     assert code in {"UNSAFE_TABLE", "UNSAFE_FUNCTION", "SQL_ERROR"}
@@ -316,7 +343,7 @@ def test_errors_raised_by_a_filter_do_not_leak_other_shops(
     # Without security_barrier the planner may run the cast on shop B's rows first,
     # and the cast error would quote shop B's product name.
     with pytest.raises(ValueError) as error:
-        reader_db.executor().run(
+        reader_db.shop_data().run(
             reader_db.shop_a,
             "SELECT name FROM v_products WHERE CAST(name AS bigint) > 0",
         )
@@ -328,7 +355,7 @@ def test_errors_raised_by_a_filter_do_not_leak_other_shops(
 
 
 def test_view_columns_hide_the_shop_id(reader_db: ReaderDatabase) -> None:
-    result = reader_db.executor().run(reader_db.shop_a, "SELECT * FROM v_products")
+    result = reader_db.shop_data().run(reader_db.shop_a, "SELECT * FROM v_products")
 
     columns = result["columns"]
     assert "shop_id" not in columns
@@ -340,7 +367,7 @@ def test_view_columns_hide_the_shop_id(reader_db: ReaderDatabase) -> None:
 
 
 def test_name_folded_matches_unaccented_text(reader_db: ReaderDatabase) -> None:
-    result = reader_db.executor().run(
+    result = reader_db.shop_data().run(
         reader_db.shop_a,
         "SELECT name_folded FROM v_products WHERE name_folded LIKE '%gao st25 duong%'",
     )
@@ -390,11 +417,56 @@ def test_slow_query_hits_the_statement_timeout(reader_db: ReaderDatabase) -> Non
     )
 
     with pytest.raises(ValueError, match="^QUERY_TIMEOUT: "):
-        reader_db.executor(timeout_ms=200).run(reader_db.shop_a, query)
+        reader_db.shop_data(timeout_ms=200).run(reader_db.shop_a, query)
+
+
+def test_a_run_is_read_only_and_scoped_to_its_shop(
+    reader_db: ReaderDatabase, monkeypatch
+) -> None:
+    # The guard rejects current_setting, so this skips it to read the run's settings.
+    shop_data = reader_db.shop_data(timeout_ms=200)
+    monkeypatch.setattr(shop_data.guard, "validate_and_wrap", lambda query: query)
+
+    result = shop_data.run(
+        reader_db.shop_a,
+        "SELECT current_setting('smartledger.shop_id', true), "
+        "current_setting('transaction_read_only'), "
+        "current_setting('statement_timeout')",
+    )
+
+    assert result["rows"] == [[str(reader_db.shop_a), "on", "200ms"]]
+
+
+def test_a_reused_connection_keeps_no_scope_from_the_previous_turn(
+    reader_db: ReaderDatabase,
+) -> None:
+    # One pooled connection serves every run, so a scope, timeout or read-only flag
+    # left behind by one turn would show up in the next.
+    shop_data = reader_db.shop_data(timeout_ms=200, pool_size=1)
+    slow = (
+        "WITH RECURSIVE n AS (SELECT 1 AS i UNION ALL SELECT i + 1 FROM n "
+        "WHERE i < 100000000) SELECT count(*) FROM n"
+    )
+    prices = "SELECT selling_price_vnd FROM v_products WHERE name_folded LIKE '%gao%'"
+
+    with pytest.raises(ValueError, match="^QUERY_TIMEOUT: "):
+        shop_data.run(reader_db.shop_a, slow)
+    in_b = shop_data.run(reader_db.shop_b, prices)
+    in_a = shop_data.run(reader_db.shop_a, prices)
+    with reader_db.clients[-1].engine.connect() as same_connection:
+        leftover = same_connection.exec_driver_sql(
+            "SELECT current_setting('smartledger.shop_id', true), "
+            "current_setting('transaction_read_only'), "
+            "current_setting('statement_timeout')"
+        ).one()
+
+    assert in_b["rows"] == [[99000]]
+    assert in_a["rows"] == [[30000]]
+    assert tuple(leftover) in {(None, "off", "0"), ("", "off", "0")}
 
 
 def test_rows_are_capped_and_marked_truncated(reader_db: ReaderDatabase) -> None:
-    result = reader_db.executor(row_limit=1).run(
+    result = reader_db.shop_data(row_limit=1).run(
         reader_db.shop_a, "SELECT name FROM v_products ORDER BY name"
     )
 
@@ -424,7 +496,7 @@ async def test_chat_turn_answers_after_a_timed_out_query(
     agent = AgentService(
         model,
         MemoryConversations(),
-        sql_executor=reader_db.executor(timeout_ms=200),
+        shop_data=reader_db.shop_data(timeout_ms=200),
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
 
