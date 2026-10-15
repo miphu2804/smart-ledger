@@ -126,6 +126,8 @@ def _sse_frame(event: AgentStreamEvent) -> bytes:
                 "id": memory.id,
                 "memory_type": memory.memory_type,
                 "content": memory.content,
+                "source_conversation_id": memory.source_conversation_id,
+                "created_at": memory.created_at.isoformat(),
             }
             for memory in event.memories
         ]

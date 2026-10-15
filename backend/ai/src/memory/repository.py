@@ -10,11 +10,13 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    Select,
     String,
     Text,
     delete,
     extract,
     func,
+    null,
     or_,
     select,
     update,
@@ -24,6 +26,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infra.postgre_db_client import Base, PostgreDBClient
 from src.utils import SHOP_TIMEZONE
+
+# Size of agent_memories.embedding, fixed by its migration; every embedder is cut to it.
+EMBEDDING_DIMENSIONS = 384
 
 
 class AgentMemory(Base):
@@ -35,8 +40,7 @@ class AgentMemory(Base):
     source_conversation_id: Mapped[int] = mapped_column(BigInteger)
     memory_type: Mapped[str] = mapped_column(String(16))
     content: Mapped[str] = mapped_column(Text)
-    # Dimension of the default multilingual MiniLM model; the migration fixes it.
-    embedding: Mapped[list[float]] = mapped_column(Vector(384))
+    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIMENSIONS))
     importance: Mapped[float] = mapped_column(Float)
     # `metadata` is reserved on declarative classes, hence the attribute name.
     details: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
@@ -78,7 +82,11 @@ class RecalledMemory:
     content: str
     memory_type: str
     created_at: datetime
-    relevance: float
+    # Cosine relevance to the message; None for a standing preference, which is
+    # recalled whatever the message is.
+    relevance: float | None
+    # The chat the memory came from, so the owner can open it from the reply.
+    source_conversation_id: int
 
 
 @dataclass(frozen=True)
@@ -113,9 +121,21 @@ class AgentMemoryRepository:
         self.postgres = postgres
 
     def search(
-        self, shop_id: int, user_id: int, query: list[float], limit: int
+        self,
+        shop_id: int,
+        user_id: int,
+        query: list[float],
+        limit: int,
+        preference_limit: int = 0,
     ) -> list[RecalledMemory]:
-        """Tencent's semantic search, re-ranked by Tencent's decay.
+        """The owner's standing preferences, then Tencent's semantic search re-ranked
+        by Tencent's decay.
+
+        Up to `preference_limit` live preferences come first, most important and newest
+        first, whatever the message: "answer in tables" rarely resembles the question
+        it should shape, so similarity alone would miss it. This follows the always
+        loaded MEMORY.md of Cognition's agent memory repo. The search then fills
+        `limit` more from the other memories.
 
         "Agent Long-Term Memory", Feature Overview: skip expired rows, take the nearest
         by cosine distance with relevance as 1 - distance, and weigh each memory by
@@ -130,47 +150,33 @@ class AgentMemoryRepository:
         owner keeps relying on stays fresh; and the memories returned have their use
         recorded, which the owner sees. Superseded memories are skipped.
         """
-        distance = AgentMemory.embedding.cosine_distance(query)
-        candidates = (
+        live = (
+            AgentMemory.shop_id == shop_id,
+            AgentMemory.user_id == user_id,
+            AgentMemory.superseded_by.is_(None),
+            or_(
+                AgentMemory.expires_at.is_(None),
+                AgentMemory.expires_at > func.now(),
+            ),
+        )
+        preferences = (
             select(
                 AgentMemory.id,
                 AgentMemory.content,
                 AgentMemory.memory_type,
                 AgentMemory.created_at,
-                func.coalesce(AgentMemory.last_used_at, AgentMemory.created_at).label(
-                    "touched_at"
-                ),
-                AgentMemory.importance,
-                (1 - distance).label("relevance"),
+                null().label("relevance"),
+                AgentMemory.source_conversation_id,
             )
-            .where(
-                AgentMemory.shop_id == shop_id,
-                AgentMemory.user_id == user_id,
-                AgentMemory.superseded_by.is_(None),
-                or_(
-                    AgentMemory.expires_at.is_(None),
-                    AgentMemory.expires_at > func.now(),
-                ),
-            )
-            .order_by(distance)
-            .limit(self.CANDIDATES)
-            .subquery()
-        )
-        age_days = extract("epoch", func.now() - candidates.c.touched_at) / 86400
-        weight = candidates.c.importance * func.exp(-self.DECAY_PER_DAY * age_days)
-        statement = (
-            select(
-                candidates.c.id,
-                candidates.c.content,
-                candidates.c.memory_type,
-                candidates.c.created_at,
-                candidates.c.relevance,
-            )
-            .order_by((candidates.c.relevance * weight).desc())
-            .limit(limit)
+            .where(*live, AgentMemory.memory_type == "preference")
+            .order_by(AgentMemory.importance.desc(), AgentMemory.created_at.desc())
+            .limit(preference_limit)
         )
         with self.postgres.session() as session:
-            rows = session.execute(statement).all()
+            rows = session.execute(preferences).all() if preference_limit else []
+            rows += session.execute(
+                self._searched(live, query, limit, [row.id for row in rows])
+            ).all()
             if rows:
                 session.execute(
                     update(AgentMemory)
@@ -185,10 +191,53 @@ class AgentMemoryRepository:
                 )
         return [
             RecalledMemory(
-                row.id, row.content, row.memory_type, row.created_at, row.relevance
+                row.id,
+                row.content,
+                row.memory_type,
+                row.created_at,
+                row.relevance,
+                row.source_conversation_id,
             )
             for row in rows
         ]
+
+    def _searched(
+        self, live: tuple, query: list[float], limit: int, skipped: list[int]
+    ) -> Select:
+        """The `limit` live memories nearest `query` after decay, minus `skipped`."""
+        distance = AgentMemory.embedding.cosine_distance(query)
+        candidates = (
+            select(
+                AgentMemory.id,
+                AgentMemory.content,
+                AgentMemory.memory_type,
+                AgentMemory.created_at,
+                func.coalesce(AgentMemory.last_used_at, AgentMemory.created_at).label(
+                    "touched_at"
+                ),
+                AgentMemory.importance,
+                (1 - distance).label("relevance"),
+                AgentMemory.source_conversation_id,
+            )
+            .where(*live, AgentMemory.id.not_in(skipped))
+            .order_by(distance)
+            .limit(self.CANDIDATES)
+            .subquery()
+        )
+        age_days = extract("epoch", func.now() - candidates.c.touched_at) / 86400
+        weight = candidates.c.importance * func.exp(-self.DECAY_PER_DAY * age_days)
+        return (
+            select(
+                candidates.c.id,
+                candidates.c.content,
+                candidates.c.memory_type,
+                candidates.c.created_at,
+                candidates.c.relevance,
+                candidates.c.source_conversation_id,
+            )
+            .order_by((candidates.c.relevance * weight).desc())
+            .limit(limit)
+        )
 
     def add(
         self,
