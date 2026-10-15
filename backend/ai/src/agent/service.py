@@ -23,12 +23,14 @@ from src.agent.guardrails import AgentGuardrails, GuardrailError, GuardrailLimit
 from src.agent.repository import AgentConversationRepository
 from src.agent.tools import AgentContext, build_restock_tool, build_shop_data_tool
 from src.prompt_templates import (
+    CURRENT_TIME,
     RESTOCK_PROMPT,
     SHOP_AGENT_SYSTEM_PROMPT,
     SQL_AGENT_PROMPT,
 )
 from src.restock.service import RestockService
 from src.sql.executor import ReadOnlySqlExecutor
+from src.utils import get_time
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +81,7 @@ class AgentService:
         self.history_messages = 2 * history_turns
         # The instructions are static so providers can cache them; the shop scope
         # arrives per request through AgentContext and never appears in the prompt.
+        # Only the current time changes per run, so it comes last.
         # Each optional capability adds its own tool and prompt section.
         tools = []
         prompt_parts = [SHOP_AGENT_SYSTEM_PROMPT]
@@ -92,7 +95,7 @@ class AgentService:
             Agent(
                 model,
                 deps_type=AgentContext,
-                instructions="\n\n".join(prompt_parts),
+                instructions=["\n\n".join(prompt_parts), self._current_time],
                 tools=tools,
                 # The limits arrive from the composition root, so this module reads no
                 # global settings and guardrails cannot be switched off by a caller.
@@ -297,6 +300,11 @@ class AgentService:
             model=self.model_name,
             model_version=version,
         )
+
+    @staticmethod
+    def _current_time() -> str:
+        """Lets the model resolve "today" or "last week" without asking."""
+        return CURRENT_TIME.format(time=get_time().strftime("%A %Y-%m-%d %H:%M"))
 
     @asynccontextmanager
     async def _run_limits(self) -> AsyncIterator[None]:

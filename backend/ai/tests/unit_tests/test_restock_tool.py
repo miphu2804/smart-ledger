@@ -5,6 +5,7 @@ import pytest
 from tests.support import (
     TEST_GUARDRAIL_LIMITS,
     ScriptedModel,
+    static_instructions,
     tool_call,
     tool_results,
 )
@@ -245,10 +246,10 @@ async def test_instructions_are_static_and_carry_the_restock_rules() -> None:
     )
 
     instructions = model.requests[0][1].instructions
-    assert instructions == (
+    assert static_instructions(instructions) == (
         f"{SHOP_AGENT_SYSTEM_PROMPT}\n\n{SQL_AGENT_PROMPT}\n\n{RESTOCK_PROMPT}"
     )
-    assert "15" not in instructions
+    assert "15" not in static_instructions(instructions)
 
 
 def test_restock_prompt_keeps_the_tool_values() -> None:
