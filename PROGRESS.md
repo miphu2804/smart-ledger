@@ -1,3 +1,15 @@
+### [2026-10-16 09:00 UTC+07:00] — [Docs] Table format for commits and pull requests
+
+**Done:** Defined one format for every future commit and pull request: a free-form scope (examples, no fixed list), body and footer rules, a `!` plus `BREAKING CHANGE:` rule that survives squash merges, and pull request descriptions built from Summary, Changes, Validation, Risks and rollback, and Config and migrations tables. Release pull requests (`staging` → `main`) get their own template that must list every commit in `origin/main..origin/staging` grouped by area, with Breaking changes and Deploy tables. Reviewed by an Opus medium pass; its findings (template default-branch caveat, release template URL, squash and breaking marks, Deploy rows, AGENTS.md duplication) are applied.
+
+**Changed files:**
+- `CONTRIBUTING.md`, `AGENTS.md`, `PROGRESS.md` — modified
+- `.github/pull_request_template.md`, `.github/PULL_REQUEST_TEMPLATE/release.md` — created
+
+**Flow explained:** GitHub reads pull request templates from the default branch (`main`), so they pre-fill only after the release that carries them; until then paste the structure from CONTRIBUTING.md.
+
+**Check:** Markdown re-read and links checked; no code or workflow touched. **Not verified:** the templates pre-filling on GitHub (needs the change on `main`).
+
 ### [2026-10-15 23:59 UTC+07:00] — [Feature] Voice orders ask which variant when a name is shared by several products
 
 **Done:** Saying a name that several catalog products share ("hai sting" with "Sting vàng" and "Sting đỏ") no longer treats it as a new product: Đọc đơn shows "Chọn mẫu cho "Sting" · 2" with each matching product and its price (up to 6, shortest names first). Picking one adds that product with the spoken quantity; "Không phải mẫu nào" skips it. Saying a product's exact name, or a name with a spoken price, still works as before. This also fixes a bug where "sting gold" silently became the product "Sting" (dropping "gold") when "Sting" and longer "… Sting Gold …" products both exist: a spoken name longer than the matched product now asks too. `parseOrder` fills the existing `disambiguations` field, which was always empty.
