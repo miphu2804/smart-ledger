@@ -8,6 +8,14 @@
 
 **Check:** `uv run pytest tests/unit_tests -q` and `ruff check` / `ruff format --check` in `backend/ai`. Staging E2E (supplier fact stored and recalled in a new chat) was run by the owner with the env var set.
 
+### [2026-10-16 10:30 UTC+07:00] — [CI] Release build ignores stale Metro cache and refuses mock values
+
+**Done:** `scripts/android-release.sh` deletes Metro's cache before Gradle and stops when a mock flag is true or the API endpoint is localhost or `10.0.2.2`. The APK published by `Mobile release` run #22 carried the values of a local test build (`http://10.0.2.2:1` API, `http://10.0.2.2:8765/version.json` update URL, no production strings), so it never offered an update and `latest.apk` served a mock build. The cause is inferred: Metro's transform cache is keyed on file contents, not on `EXPO_PUBLIC_*`, and the test build ran on the same machine as the self-hosted runner.
+
+**Changed files:** `scripts/android-release.sh` — modified; this entry.
+
+**Check:** `bash -n` passes. **Not verified:** a real build; the bundle of the next published APK must contain `railway.app` and the R2 `version.json` URL and no `10.0.2.2`. `latest.apk` stays a bad build until then.
+
 ### [2026-10-16 01:35 UTC+07:00] — [Feature] Welcome guide pages show the new illustrations
 
 **Done:** The Bán hàng, Tổng quan and Quản lý pages of the welcome guide show the designer's illustrations (converted from webp to 1080 px JPEG) instead of an icon on a colour block. Each image now carries its own aspect ratio: Bán hàng and Tổng quan are 3:2 like the Bobi page, Quản lý is near-square (1080×1151) and would lose its lower part under the old fixed 3:2 height. The text of those pages was rewritten to add what the pictures do not say instead of repeating their callouts, and to correct where the pictures differ from the app: sorting and stock filters live in the funnel button (the picture shows the older buttons and a "Cá nhân" tab), the outstanding debt on Home is the whole shop's and does not follow the period (the picture's callout says "trong kỳ"), and Công nợ only tracks what customers owe (the picture shows a "Nhà cung cấp" tab the app does not have). The Bobi page is unchanged.
