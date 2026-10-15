@@ -19,14 +19,15 @@ import { Button, T } from './ui';
 /** Lề ngang của nội dung trang (và bản hẹp cho màn thấp); hình minh hoạ tràn lề dùng lại hai số này. */
 const PAD = 24;
 const PAD_COMPACT = 18;
-/** Tỉ lệ của hình minh hoạ trang Bobi (1080×720). */
-const BOBI_GUIDE_RATIO = 1080 / 720;
 
 const steps: readonly {
   title: string;
   icon: React.ComponentProps<typeof Feather>['name'] | null;
-  /** Hình minh hoạ thay cho ô màu có icon; hiện tràn hết bề ngang thẻ */
-  image?: { source: ImageSourcePropType; label: string };
+  /**
+   * Hình minh hoạ thay cho ô màu có icon; hiện tràn hết bề ngang thẻ. `ratio` là rộng/cao của chính hình: các hình không
+   * cùng tỉ lệ (Quản lý gần vuông, còn lại 3:2) nên chiều cao tính theo từng hình để không bị cắt hay méo.
+   */
+  image?: { source: ImageSourcePropType; label: string; ratio: number };
   tone: string;
   gradient: readonly [string, string, string];
   description: string;
@@ -39,6 +40,7 @@ const steps: readonly {
     image: {
       source: require('../../assets/guide/bobi-menu.jpg'),
       label: 'Hình minh hoạ: Bobi ở góc màn hình Tổng quan; chạm vào Bobi mở ra Hỏi đáp, Đọc đơn và Báo cáo',
+      ratio: 1080 / 720,
     },
     tone: colors.brand,
     gradient: ['#CFC4F7', '#E9E3FC', '#F8F5FF'],
@@ -50,42 +52,63 @@ const steps: readonly {
     ],
   },
   {
+    // Hình đã chỉ cách chọn món (quét mã, đọc đơn, tìm, thêm món ngoài danh mục); chữ nói phần sau đó và chỗ hình khác app:
+    // sắp xếp và lọc tồn kho nằm trong nút phễu, đơn đã bán ở tab Đơn hàng (hình vẽ thanh tab cũ có "Cá nhân").
     title: 'Bán hàng',
     icon: 'shopping-cart',
+    image: {
+      source: require('../../assets/guide/guide-sales.jpg'),
+      label:
+        'Hình minh hoạ màn Bán hàng: nút Quét mã và Đọc đơn ở trên, ô tìm theo tên hoặc mã vạch, lưới món có nút cộng để thêm vào đơn, và nút Thêm món ngoài danh mục ở cuối',
+      ratio: 1080 / 720,
+    },
     tone: colors.gold,
     gradient: ['#F2C77A', '#F8E9C8', '#FFF8EA'],
-    description:
-      'Chọn món ở tab Bán hàng hoặc đọc đơn. Luôn kiểm tra giỏ trước khi thanh toán.',
+    description: 'Chọn món như hình, rồi bấm Thanh toán ở cuối màn để chốt đơn.',
     tips: [
-      { title: 'Kiểm tra giỏ', body: 'Xem lại món, số lượng và giá trước khi thanh toán.' },
-      { title: 'Chọn cách thu', body: 'Tiền mặt, chuyển khoản hoặc ghi nợ.' },
-      { title: 'Xem lại đơn', body: 'Tìm theo mã, khách hoặc tên món.' },
+      { title: 'Sắp xếp và lọc', body: 'Bấm nút phễu trong ô tìm để sắp theo tên, giá, tồn kho hoặc chỉ xem món sắp hết.' },
+      { title: 'Chọn cách thu', body: 'Tiền mặt, chuyển khoản hoặc ghi nợ. Ghi nợ cần tên khách.' },
+      { title: 'Đơn đã bán', body: 'Xem lại, tìm hoặc huỷ đơn ở tab Đơn hàng.' },
     ],
   },
   {
+    // Hình có năm chú thích (doanh thu, nút vào nhanh, đổi kỳ, việc ưu tiên, gợi ý); chữ chỉ thêm điều hình chưa nói. Chú
+    // thích 1 của hình ghi "công nợ trong kỳ" nhưng số đó là nợ hiện tại của cả tiệm, nên nói rõ ở đây.
     title: 'Tổng quan',
     icon: 'bar-chart-2',
+    image: {
+      source: require('../../assets/guide/guide-overview.jpg'),
+      label:
+        'Hình minh hoạ màn Tổng quan: thẻ doanh thu với số đơn đã chốt và tiền còn nợ, bốn nút Đọc đơn, Chọn hàng, Quét mã, Trợ lý AI, nút đổi Hôm nay, Tuần này, Tháng này, mục Ưu tiên hôm nay và gợi ý từ dữ liệu đã chốt',
+      ratio: 1080 / 720,
+    },
     tone: colors.purple,
     gradient: ['#8DB8F2', '#E4F0FF', '#F5F9FF'],
-    description:
-      'Xem nhanh doanh thu, việc cần xử lý và mặt hàng bán chạy.',
+    description: 'Màn đầu tiên khi mở app: xem tiệm đang thế nào và bắt đầu đơn mới.',
     tips: [
-      { title: 'Doanh thu theo kỳ', body: 'Đổi kỳ xem và so sánh với ngày trước để thấy tiệm đang tăng hay giảm.' },
-      { title: 'Việc cần xử lý', body: 'App nhắc khi còn công nợ chưa thu hoặc có món sắp hết hàng.' },
-      { title: 'Món bán chạy', body: 'Xem mặt hàng bán nhiều nhất trong kỳ.' },
+      { title: 'Bấm vào ô doanh thu', body: 'Mở Báo cáo: doanh thu theo ngày, thu chi và món bán chạy trong kỳ.' },
+      { title: 'Tiền còn nợ là của cả tiệm', body: 'Số này không đổi theo Hôm nay, Tuần này hay Tháng này.' },
+      { title: 'Chuông thông báo', body: 'Báo đơn bị huỷ, hàng sắp hết và tổng kết thu chi hôm qua.' },
     ],
   },
   {
+    // Hình gần vuông, đã giới thiệu Báo cáo, Hàng hoá, Chi phí, Công nợ. Khung Công nợ trong hình có tab "Nhà cung cấp"
+    // nhưng app chỉ theo dõi tiền khách nợ, nên chữ nói rõ để người dùng không đi tìm.
     title: 'Quản lý',
     icon: 'grid',
+    image: {
+      source: require('../../assets/guide/guide-manage.jpg'),
+      label:
+        'Hình minh hoạ tab Quản lý với các mục Báo cáo, Hàng hoá, Chi phí, Công nợ, Cài đặt và Đăng xuất, kèm ảnh nhỏ của từng màn',
+      ratio: 1080 / 1151,
+    },
     tone: colors.red,
     gradient: ['#E9B8A8', '#F8E2DE', '#FFF5F2'],
-    description:
-      'Tiện ích gom hàng hoá, chi phí, công nợ và báo cáo vào một chỗ.',
+    description: 'Sổ sách và cài đặt của tiệm nằm ở tab Quản lý.',
     tips: [
-      { title: 'Hàng hoá', body: 'Thêm món, sửa giá và theo dõi tồn kho.' },
-      { title: 'Chi phí và công nợ', body: 'Ghi khoản chi và theo dõi tiền khách còn nợ.' },
-      { title: 'Báo cáo', body: 'Xem doanh thu, thu chi và mặt hàng bán chạy.' },
+      { title: 'Công nợ là tiền khách nợ', body: 'Bấm từng khoản để thu tiền hoặc nhắn tin nhắc. App chưa theo dõi tiền nợ nhà cung cấp.' },
+      { title: 'Hàng về thì nhập hàng', body: 'Trong Hàng hoá, bấm Nhập hàng ở món đó để cộng tồn kho.' },
+      { title: 'Xem lại hướng dẫn', body: 'Vào Cài đặt khi cần mở lại phần này.' },
     ],
   },
 ];
@@ -164,8 +187,8 @@ export function AssistantIntroModal({
                 </View>
 
                 {page.image ? (
-                  // Hình có nền trắng và điện thoại bị cắt ở mép trái: cho tràn hết bề ngang thẻ (bỏ lề của trang) để
-                  // hình liền với thẻ và các chi tiết to nhất có thể.
+                  // Hình có nền trắng: cho tràn hết bề ngang thẻ (bỏ lề của trang) để hình liền với thẻ và các chi tiết to
+                  // nhất có thể. Chiều cao theo tỉ lệ của từng hình nên không bị cắt.
                   <Image
                     source={page.image.source}
                     resizeMode="cover"
@@ -173,7 +196,7 @@ export function AssistantIntroModal({
                     // Chiều cao tính từ bề rộng: trên web Image không theo aspectRatio mà lấy chiều cao gốc của ảnh
                     style={[
                       styles.hero,
-                      { width: pageWidth, height: Math.round(pageWidth / BOBI_GUIDE_RATIO), marginLeft: -(compact ? PAD_COMPACT : PAD) },
+                      { width: pageWidth, height: Math.round(pageWidth / page.image.ratio), marginLeft: -(compact ? PAD_COMPACT : PAD) },
                     ]}
                   />
                 ) : (

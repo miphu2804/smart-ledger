@@ -26,10 +26,10 @@ The backend deploy (`deploy`) waits for `ai`, `core`, `mobile-web` and `containe
 |---|---|---|---|---|
 | `railway-staging` | `staging` | No | `RAILWAY_TOKEN`: project token of the Railway staging environment; `OPENAI_API_KEY` ([AI model settings](#ai-model-settings)); `LOGFIRE_TOKEN` (optional, [AI tracing settings](#ai-tracing-settings)) | `CORS_ALLOWED_ORIGINS`, AI model settings |
 | `railway-production` | `main` | Yes | `RAILWAY_TOKEN`: project token of the Railway production environment; `OPENAI_API_KEY`; `LOGFIRE_TOKEN` (optional) | `CORS_ALLOWED_ORIGINS` (optional), AI model settings |
-| `vercel-preview` | Any branch (PR) | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `EXPO_PUBLIC_*` |
+| `vercel-preview` (unused while PR previews are off) | Any branch (PR) | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `EXPO_PUBLIC_*` |
 | `vercel-staging` | `staging` | No | Same as above | `EXPO_PUBLIC_*`, `VERCEL_STAGING_ALIAS` |
 | `vercel-production` | `main` | Yes | Same as above | `EXPO_PUBLIC_*` |
-| `landing-preview` | Any branch (PR) | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` of the `landing` project | `VITE_LEGAL_DRAFT` |
+| `landing-preview` (unused while PR previews are off) | Any branch (PR) | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` of the `landing` project | `VITE_LEGAL_DRAFT` |
 | `landing-staging` | `staging` | No | Same as above | `VITE_LEGAL_DRAFT`, `LANDING_URL` |
 | `landing-production` | `main` | Yes | Same as above | `VITE_LEGAL_DRAFT`, `LANDING_URL`, `VITE_ANDROID_APK_URL` |
 | `android-dev` | None; job `gate` pairs it with branches other than `main` and `staging` | No | `ANDROID_GOOGLE_SERVICES_JSON`: Firebase config of the dev/staging project | `EXPO_PUBLIC_*` |
@@ -130,7 +130,7 @@ Staging value:
 https://smart-ledger-staging.vercel.app,https://smart-ledger-preview-00.vercel.app,…,https://smart-ledger-preview-09.vercel.app
 ```
 
-The ten `smart-ledger-preview-0N` origins belong to pull-request previews (see below); the same domains must also be listed in Firebase Authorized domains for sign-in to work.
+The ten `smart-ledger-preview-0N` origins belong to pull-request previews, which are off for now (see below); keep them so previews can return; the same domains must also be listed in Firebase Authorized domains for sign-in to work.
 
 ## Production environment checklist
 
@@ -159,13 +159,13 @@ Job `deploy-web` builds `frontend/mobile` on the runner (`vercel build`) and upl
 
 | Event | Environment | Result |
 |---|---|---|
-| PR (branch in this repo) | `vercel-preview` | Aliased to `smart-ledger-preview-0N.vercel.app`, where `N` is the last digit of the PR number; the bot comments the alias on the PR |
+| PR | — | No deploy (see below) |
 | Push `staging` | `vercel-staging` | Preview deploy, then aliased to `VERCEL_STAGING_ALIAS`; the GitHub Deployments link is `https://smart-ledger-staging.vercel.app` |
 | Push `main` | `vercel-production` | Production deploy after approval; the smoke test and the GitHub Deployments link use `https://smart-ledger-prod.vercel.app` |
 
 - The `url` of `vercel-staging` and `vercel-production` is set on job `deploy-web` in `ci.yml` and fixed to the two domains above, so the repository's Deployments panel links to them. `vercel-preview` has no `url`: its alias depends on the PR number and is already commented on the PR. If a domain changes in Vercel (Project → Settings → Domains), update `ci.yml` too.
+- Pull requests get no web preview. Previews used up the Vercel Hobby limit of 100 deployments a day, and once it ran out the `staging` and `main` deploys failed too. To bring them back, add `|| github.event.pull_request.head.repo.full_name == github.repository` to the `if` of `deploy-web` and `deploy-landing`; the PR-only steps (alias, PR comment) are still in `ci.yml`, and the `vercel-preview` and `landing-preview` environments still exist.
 - Only job `mobile-web` must pass; the web does not wait for the backend deploy.
-- PRs from forks get no secrets, so they get no preview.
 - `EXPO_PUBLIC_*` values are baked into the bundle at build time, so set them as **Variables** (not Secrets) of each environment: `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS`, `EXPO_PUBLIC_API_ENDPOINT`, `EXPO_PUBLIC_FIREBASE_API_KEY`, `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`, `EXPO_PUBLIC_FIREBASE_PROJECT_ID`, `EXPO_PUBLIC_FIREBASE_APP_ID`. Re-run the job after changing one so the web picks it up.
 - `EXPO_PUBLIC_API_ENDPOINT`, `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE` and `EXPO_PUBLIC_MOCK_SHOPS` have no default in code: `frontend/mobile/src/config.ts` stops the app at launch when one is missing or a flag is not `true`/`false`.
 - Calling the real Core from a browser needs the web origin in Core's [`CORS_ALLOWED_ORIGINS`](#core-cors-origins) and the web domain in Firebase Authorized domains. Each deploy URL carries a random hash and cannot be listed, so previews use ten fixed aliases, `smart-ledger-preview-00` … `-09`. Two open PRs sharing a last digit overwrite each other's alias; re-run the job to take the slot back.
@@ -178,7 +178,7 @@ Job `landing` runs `npm run lint` and `npm run build` in `frontend/web` on every
 
 | Event | Environment | Result |
 |---|---|---|
-| PR (branch in this repo) | `landing-preview` | Aliased to `https://smart-ledger-landing-pr-<number>.vercel.app`, shown in the run summary; smoke test on the alias; no PR comment |
+| PR | — | No deploy, like `deploy-web` |
 | Push `staging` | `landing-staging` | Preview deploy, then aliased to `LANDING_URL`; smoke test on `LANDING_URL` |
 | Push `main` | `landing-production` | Production deploy after approval; smoke test on `LANDING_URL` |
 

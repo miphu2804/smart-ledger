@@ -2,7 +2,9 @@
 
 Reading is Tencent's flow (Agent Long-Term Memory and Agentic RAG guides): before the
 model answers, code searches the owner's memories for the current message, weighs them
-by Tencent's decay and places them before the question as reference material. Writing
+by Tencent's decay and places them before the question as reference material. The
+owner's standing preferences lead every turn whatever the message, like the always
+loaded MEMORY.md of Cognition's agent memory repo. Writing
 appends records with Tencent's INSERT; Tencent leaves open how a memory's text is
 produced, so here a model distills each saved exchange into a few facts. Tencent's
 compression then has a model merge the owner's memories older than 7 days.
@@ -77,6 +79,7 @@ class AgentMemoryService:
         embedder: Embedder,
         allowed_types: frozenset[str],
         recall_limit: int = 5,
+        preference_limit: int = 10,
     ) -> None:
         self.repository = repository
         self.embedder = embedder
@@ -84,6 +87,9 @@ class AgentMemoryService:
         self.allowed_types = allowed_types
         # Tencent's search returns LIMIT 5.
         self.recall_limit = recall_limit
+        # Standing preferences sent every turn on top of the search, so a growing list
+        # cannot crowd the prompt.
+        self.preference_limit = preference_limit
         # Prompted JSON works on every provider; the Anthropic models behind the
         # gateway reject native structured output.
         self.extractor = Agent(
@@ -115,7 +121,8 @@ class AgentMemoryService:
         if not memories:
             return message, []
         facts = "\n".join(
-            f"- ({get_time(memory.created_at).date().isoformat()}) {memory.content}"
+            f"- ({get_time(memory.created_at).date().isoformat()},"
+            f" {memory.memory_type}) {memory.content}"
             for memory in memories
         )
         return MEMORY_CONTEXT.format(facts=facts, message=message), memories
@@ -261,6 +268,7 @@ class AgentMemoryService:
             user_id,
             list(query[0]),
             self.recall_limit,
+            self.preference_limit,
         )
 
     async def _extract(
