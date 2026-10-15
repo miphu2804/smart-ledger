@@ -24,7 +24,7 @@ import type {
 } from '../src/data/types';
 import { agentApi } from '../src/lib/agentApi';
 import { ApiError } from '../src/lib/api';
-import { hhmm, relDay } from '../src/lib/format';
+import { ddmmyyyy, hhmm, relDay } from '../src/lib/format';
 import { useApp } from '../src/store/AppStore';
 import { colors, font, shadow } from '../src/theme';
 
@@ -79,8 +79,19 @@ function lastActive(iso: string): string {
   return `${relDay(d)} · ${hhmm(d)}`;
 }
 
-/** Chip trên câu trả lời: ghi nhớ trợ lý đã dùng; chạm để xem đủ nội dung. */
-function MemoryChip({ memories }: { memories: AgentMemoryUsed[] }) {
+/**
+ * Chip trên câu trả lời: ghi nhớ trợ lý đã dùng; chạm để xem đủ nội dung, ngày nhớ và mở hội thoại gốc
+ * (trừ khi ghi nhớ đến từ chính hội thoại đang mở).
+ */
+function MemoryChip({
+  memories,
+  currentId,
+  onOpenSource,
+}: {
+  memories: AgentMemoryUsed[];
+  currentId: number | null;
+  onOpenSource: (conversationId: number) => void;
+}) {
   const [open, setOpen] = useState(false);
   const first = memories[0].content;
   const label = first.length > 40 ? `${first.slice(0, 40)}…` : first;
@@ -99,11 +110,26 @@ function MemoryChip({ memories }: { memories: AgentMemoryUsed[] }) {
         </T>
       </Pressable>
       {open
-        ? memories.map((m) => (
-            <T key={m.id} size={12} color={colors.muted} style={styles.memoryItem}>
-              • {m.content}
-            </T>
-          ))
+        ? memories.map((m) => {
+            const fromHere = m.source_conversation_id === currentId;
+            return (
+              <Pressable
+                key={m.id}
+                accessibilityRole={fromHere ? 'text' : 'link'}
+                accessibilityLabel={fromHere ? undefined : `Mở hội thoại gốc của ghi nhớ: ${m.content}`}
+                disabled={fromHere}
+                onPress={() => onOpenSource(m.source_conversation_id)}
+                style={({ pressed }) => [styles.memoryItem, pressed && styles.pressed]}
+              >
+                <T size={12} color={colors.muted} style={{ lineHeight: 17 }}>
+                  • {m.content}
+                </T>
+                <T size={11} color={fromHere ? colors.muted : colors.brand}>
+                  {`  Nhớ từ ${ddmmyyyy(new Date(m.created_at))}${fromHere ? ' · hội thoại này' : ' · Mở hội thoại gốc ›'}`}
+                </T>
+              </Pressable>
+            );
+          })
         : null}
     </View>
   );
@@ -143,6 +169,16 @@ export default function Ai() {
     setMsgs([welcome(app.user.name), ...view.messages.map(toChatMessage)]);
     setError(null);
     setHistoryOpen(false);
+  };
+
+  // Chạm ghi nhớ trên chip → mở hội thoại sinh ra nó, để chủ tiệm xem lại mình đã nói gì.
+  const openSource = async (sourceId: number) => {
+    if (typing) return;
+    try {
+      showConversation(await agentApi.getConversation(sourceId));
+    } catch (err) {
+      setError(historyErrorMessage(err, 'Chưa mở được cuộc trò chuyện gốc.'));
+    }
   };
 
   useEffect(() => {
@@ -215,7 +251,9 @@ export default function Ai() {
             const isUser = m.from === 'user';
             return (
               <React.Fragment key={m.id}>
-                {m.memories?.length ? <MemoryChip memories={m.memories} /> : null}
+                {m.memories?.length ? (
+                  <MemoryChip memories={m.memories} currentId={conversationId} onOpenSource={openSource} />
+                ) : null}
                 <View style={[styles.messageRow, isUser && styles.userMessageRow]}>
                   <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
                     {!isUser ? (
@@ -598,7 +636,6 @@ const styles = StyleSheet.create({
   },
   memoryItem: {
     maxWidth: '86%',
-    lineHeight: 17,
   },
   messageRow: {
     flexDirection: 'row',

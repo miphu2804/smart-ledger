@@ -14,8 +14,9 @@ from src.agent.service import AgentService
 from src.app_config import app_config
 from src.infra.postgre_db_client import PostgreDBClient
 from src.infra.redis_db_client import RedisDBClient
-from src.memory.repository import AgentMemoryRepository
+from src.memory.repository import EMBEDDING_DIMENSIONS, AgentMemoryRepository
 from src.memory.service import AgentMemoryService
+from src.memory.workers_ai_embedding import WorkersAIEmbeddingModel
 from src.observability import configure_tracing
 from src.providers.factory import build_chat_model
 from src.restock.service import RestockService
@@ -53,16 +54,8 @@ def build_memory_service(
     if chat_model is None or postgres.sessions is None:
         logger.warning("memory enabled without a chat model or postgres; memory off")
         return None
-    try:
-        # Resolved now, so a missing `memory` dependency group shows at startup rather
-        # than on the first chat; the weights still load on first use.
-        embedder = Embedder(
-            f"sentence-transformers:{app_config.AGENT_MEMORY_EMBEDDING_MODEL}",
-            settings={"sentence_transformers_normalize_embeddings": True},
-            defer_model_check=False,
-        )
-    except ImportError:
-        logger.error("memory enabled but the memory dependency group is missing")
+    embedder = build_memory_embedder()
+    if embedder is None:
         return None
     return AgentMemoryService(
         chat_model,
@@ -74,6 +67,42 @@ def build_memory_service(
             if item.strip()
         ),
     )
+
+
+def build_memory_embedder() -> Embedder | None:
+    provider = app_config.AGENT_MEMORY_EMBEDDING_PROVIDER
+    model = app_config.AGENT_MEMORY_EMBEDDING_MODEL
+    if provider == "cloudflare":
+        account_id = app_config.CLOUDFLARE_ACCOUNT_ID
+        api_token = app_config.CLOUDFLARE_API_TOKEN
+        if not account_id or not api_token:
+            logger.error("cloudflare embeddings need an account id and token")
+            return None
+        return Embedder(
+            WorkersAIEmbeddingModel(
+                model,
+                account_id=account_id,
+                api_token=api_token,
+                dimensions=EMBEDDING_DIMENSIONS,
+            )
+        )
+    if provider != "sentence-transformers":
+        logger.error("unknown memory embedding provider %r; memory off", provider)
+        return None
+    try:
+        # Resolved now, so a missing `memory` dependency group shows at startup rather
+        # than on the first chat; the weights still load on first use.
+        return Embedder(
+            f"sentence-transformers:{model}",
+            settings={
+                "sentence_transformers_normalize_embeddings": True,
+                "dimensions": EMBEDDING_DIMENSIONS,
+            },
+            defer_model_check=False,
+        )
+    except ImportError:
+        logger.error("memory enabled but the memory dependency group is missing")
+        return None
 
 
 @asynccontextmanager
