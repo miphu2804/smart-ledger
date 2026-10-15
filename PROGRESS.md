@@ -28,6 +28,14 @@
 
 **Check:** `tsc --noEmit` has no errors in this PR's files; its only 2 errors are in #230's files because `expo-application` and `expo-intent-launcher` are not installed on this machine. `node --test tests/*.test.ts` 64/64 (21 new in `tests/parseOrder.test.ts`), including run-on phrases, names with digits, unit homographs and unchanged expense phrases. Mock web build in headless Chrome, 8/8: "hai sting gold" shows 3 Sting Gold options with quantity 2 and long names wrap inside the rows, picking one adds 2 of it, "Không phải mẫu nào" skips, "một sting" adds the product "Sting" directly, "hai sting gold một nước ngọt" adds 1 Nước ngọt and asks for Sting gold · 2, "hai bò húc" offers to add "Bò húc". **Not verified:** speech on a phone (the homograph fix needs the speech model to return accented words; unaccented "bo huc" still reads "bo" as a unit unless the product is in the catalog).
 
+### [2026-10-15 23:57 UTC+07:00] — [Feature] Replay the welcome guide from Settings
+
+**Done:** Settings has a "Xem lại hướng dẫn" button that opens the welcome guide (`AssistantIntroModal`) again from the Bobi step, as on the first sign-in. It opens on Settings itself, so closing it returns to Settings; "Hỏi đáp"/"Đọc đơn" on the first step close it and open those screens. The first-sign-in behaviour is unchanged.
+
+**Changed files:** `frontend/mobile/app/settings.tsx`, `docs/product/product-requirements.md` (`FR-025`, `AC-018`) — modified; this entry.
+
+**Check:** `tsc --noEmit` clean. Mock web build in headless Chrome, 3/3: Settings shows the button, it opens the guide on the Bobi step, closing returns to Settings. **Not verified:** a phone.
+
 ### [2026-10-15 23:55 UTC+07:00] — [Fix] Revenue never shows negative; orders sold earlier and voided now count as an expense
 
 **Done:** Core's reports compute net revenue as sales in the period minus orders voided in the period, so voiding today an order sold yesterday made today's revenue negative on Home and the Orders card. The app now shows revenue as the orders sold in the period that are still confirmed (`GET /sales/summary` for the same window), which is never negative. An order sold before the period and voided in it is shown on the expense side instead: a line "Huỷ đơn bán kỳ trước … · tính vào chi phí" under Home revenue, "Chi … (gồm huỷ đơn …)" in yesterday's summary notification, and a "Huỷ đơn #…" row in the month it was voided on the Expenses screen (opens the order, cannot be deleted). Display only: nothing is written to Core's expense book, so Core's profit is not reduced twice. Orders' day headers also come from `/sales/summary` per day (fetched as days appear, a late answer from an older refresh never overwrites a newer one) instead of the report series, and count confirmed orders with voided ones shown separately ("1 đơn · 1 huỷ · 120.000đ"). `SaleView` gains `voidedAt`/`voidReason` from the contract; the mock sets them.
