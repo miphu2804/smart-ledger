@@ -82,6 +82,7 @@ export default function Ai() {
   const scroll = useRef<ScrollView>(null);
   const sending = useRef(false);
   const [text, setText] = useState('');
+  const voiceBase = useRef<string | null>(null);
   const [typing, setTyping] = useState(false);
   // Chữ trợ lý đang trả lời dở; vào `msgs` khi có sự kiện `done`.
   const [draft, setDraft] = useState('');
@@ -112,6 +113,14 @@ export default function Ai() {
     const t = setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 60);
     return () => clearTimeout(t);
   }, [msgs, typing, draft]);
+
+  // Chữ nói ra được đổ vào ô nhập, nối sau phần đã gõ; người dùng xem lại rồi bấm gửi.
+  const dictate = (spoken: string, done = false) => {
+    if (voiceBase.current === null) voiceBase.current = text.trim();
+    const base = voiceBase.current;
+    setText(base && spoken ? `${base} ${spoken}` : base || spoken);
+    if (done) voiceBase.current = null;
+  };
 
   const send = async (q: string) => {
     const message = q.trim();
@@ -318,7 +327,7 @@ export default function Ai() {
             style={styles.input}
             returnKeyType="send"
           />
-          <VoicePillButton disabled={typing} onTranscript={send} />
+          <VoicePillButton disabled={typing} onPartial={(t) => dictate(t)} onTranscript={(t) => dictate(t, true)} />
           <SlingSendButton disabled={!text.trim() || typing} onSend={() => send(text)} />
         </View>
       </View>

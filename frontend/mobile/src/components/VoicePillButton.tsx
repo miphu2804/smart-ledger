@@ -18,9 +18,17 @@ const clock = (ms: number) => {
 
 /**
  * Nút mic phình thành viên thuốc có thanh equalizer theo mức mic thật và đồng hồ khi đang ghi (React Bits "Voice Pill").
- * Chạm để bắt đầu rồi chạm lần nữa để dừng, hoặc giữ rồi thả; chữ nhận được trả về qua `onTranscript`.
+ * Chạm để bắt đầu rồi chạm lần nữa để dừng, hoặc giữ rồi thả; chữ đang nghe được trả về qua `onPartial`, kết quả cuối (có thể rỗng) qua `onTranscript`.
  */
-export function VoicePillButton({ disabled, onTranscript }: { disabled?: boolean; onTranscript: (text: string) => void }) {
+export function VoicePillButton({
+  disabled,
+  onPartial,
+  onTranscript,
+}: {
+  disabled?: boolean;
+  onPartial: (text: string) => void;
+  onTranscript: (text: string) => void;
+}) {
   const toast = useToast();
   const open = useRef(new Animated.Value(0)).current;
   const level = useRef(new Animated.Value(0)).current;
@@ -72,8 +80,8 @@ export function VoicePillButton({ disabled, onTranscript }: { disabled?: boolean
     try {
       const text = ((await s.stop()) || partial.current).trim();
       if (!mounted.current) return;
-      if (text) onTranscript(text);
-      else
+      onTranscript(text);
+      if (!text)
         toast(
           peak.current < 0.05
             ? 'Micro không thu được âm thanh. Kiểm tra micro của máy.'
@@ -113,7 +121,10 @@ export function VoicePillButton({ disabled, onTranscript }: { disabled?: boolean
     swell(1);
     try {
       const s = await speechEngine.start({
-        onPartial: (t) => (partial.current = t),
+        onPartial: (t) => {
+          partial.current = t;
+          onPartial(t);
+        },
         onLevel: (v) => {
           peak.current = Math.max(peak.current, v);
           Animated.timing(level, { toValue: v, duration: 80, useNativeDriver: false }).start();
