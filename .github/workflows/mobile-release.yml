@@ -363,7 +363,7 @@ jobs:
             echo
             echo "Largest entries (stored MB, raw MB, name):"
             zipinfo -l "$APK" | awk 'NF >= 10 && $4 ~ /^[0-9]+$/ { printf "%8.2f %8.2f  %s\n", $6 / 1048576, $4 / 1048576, $10 }' \
-              | sort -rn | head -40
+              | sort -rn | awk 'NR <= 40'
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
