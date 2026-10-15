@@ -75,6 +75,15 @@ Màn Đọc đơn nhận giọng nói trên Android bằng model tiếng Việt 
 - **FFmpeg và libarchive tắt:** `plugins/withAndroidApkSize.js` đặt `sherpaOnnxDisableFfmpeg` và `sherpaOnnxDisableLibarchive` vì app chỉ nhận dạng PCM từ mic và tải model từng file. Các hàm `convertAudio*`, `decodeAudioFileToFloatSamples` (file không phải WAV) và `extractTarBz2` của thư viện vì vậy báo lỗi; cần dùng thì bỏ cờ trong plugin và bỏ các file `.so` tương ứng khỏi `packagingOptions.exclude` trong `app.json`.
 - **Chưa kiểm tra / chưa làm:** iOS; hotword từ menu (`bpe.model`); tinh chỉnh thời gian ngắt câu; Android 15+ yêu cầu thư viện native căn lề 16 KB khi đưa lên Google Play (cần kiểm tra các file `.so` của sherpa-onnx).
 
+### Dung lượng APK Android
+
+Bản release dùng các thiết lập sau (đo trên `arm64-v8a`, cùng commit: 95,2 MB → 40,3 MB; xem [CI/CD](../../docs/development/ci-cd.md#measured-and-not-yet-verified)):
+
+- `expo-build-properties` trong `app.json`: `useLegacyPackaging` nén các file `.so` trong APK (trước đó lưu không nén, chiếm 62 MB); `enableMinifyInReleaseBuilds` và `enableShrinkResourcesInReleaseBuilds` bật R8 và bỏ resource không dùng; `packagingOptions.exclude` bỏ file `.so` của FFmpeg và libarchive.
+- `extraProguardRules` giữ nguyên các class `com.k2fsa.sherpa.onnx.**` và `com.sherpaonnx.**`: code native của sherpa-onnx đọc chúng theo tên mà thư viện không kèm luật R8 cho chúng. Thêm thư viện native khác mà sập ở bản release (không sập ở bản debug) thì nghi R8 trước và thêm luật `-keep` ở đây.
+- `plugins/withAndroidApkSize.js`: tắt FFmpeg và libarchive trong sherpa-onnx (xem mục Nhận dạng giọng nói trên Android) và chỉ giữ chuỗi `vi`, `en` của các thư viện.
+- Đánh đổi: thư viện native được giải nén ra máy khi cài, nên dung lượng sau khi cài lớn hơn file APK; cài từ Google Play (AAB) không bị ảnh hưởng.
+
 ## Cấu trúc
 
 ```
