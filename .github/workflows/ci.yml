@@ -355,14 +355,17 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  ### Deploy web: Vercel preview per pull request, staging alias, production ###
+  ### Deploy web: Vercel staging alias and production ###
 
   # Builds the mobile web bundle on the runner and uploads it to Vercel, so each GitHub
   # environment owns its EXPO_PUBLIC_* values (baked in at build time) and Vercel token.
-  # Pull requests get a preview URL, `staging` gets a fixed alias, `main` goes to production.
+  # `staging` gets a fixed alias and `main` goes to production; pull requests get no preview.
   # Vercel's own Git deployments are off in frontend/mobile/vercel.json to avoid double deploys.
   deploy-web:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    # Push only: pull-request previews used up the Vercel Hobby limit of 100 deployments a day and
+    # blocked the staging and production deploys. The PR-only steps below stay so previews can
+    # return with `|| github.event.pull_request.head.repo.full_name == github.repository`.
+    if: github.event_name == 'push'
     needs: [mobile-web]
     permissions:
       contents: read
@@ -488,15 +491,16 @@ jobs:
               --body "Web preview (commit ${GITHUB_SHA::7}): $URL"
           fi
 
-  ### Deploy landing: Vercel project `landing` per pull request, staging alias, production ###
+  ### Deploy landing: Vercel project `landing`, staging alias and production ###
 
   # Same shape as deploy-web, with its own Vercel project and GitHub environments. Vercel's Git
   # deployments are off in frontend/web/vercel.json, so only this job deploys the landing.
-  # Pull requests get the alias smart-ledger-landing-pr-<number> in the run summary and no PR
-  # comment, because deploy-web already edits the bot's last PR comment. The landing calls no API,
-  # so no CORS list limits the alias names and each PR keeps its own.
+  # Pull requests get no preview (see deploy-web). When previews return, each PR gets the alias
+  # smart-ledger-landing-pr-<number> in the run summary and no PR comment, because deploy-web
+  # already edits the bot's last PR comment.
   deploy-landing:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    # Push only, like deploy-web.
+    if: github.event_name == 'push'
     needs: [landing]
     permissions:
       contents: read

@@ -1,3 +1,92 @@
+### [2026-10-16 10:30 UTC+07:00] — [Fix] Agent memory writes semantic facts by default
+
+**Done:** The default for `AGENT_MEMORY_TYPES` is now `preference,procedural,semantic`, matching what staging and production run. With the old default the extractor dropped stable facts such as suppliers while the agent still told the owner "Đã ghi nhớ". ADR 0002 records the change and its reason; PO approval of the type list is still open.
+
+**Changed files:** `backend/ai/src/app_config.py`, `backend/ai/.env.example`, `backend/ai/README.md`, `docs/architecture/adr/0002-agent-long-term-memory.md` — modified; this entry.
+
+**Flow explained:** extractor facts → filter by `AGENT_MEMORY_TYPES` → `semantic` facts are now stored and recalled in later chats; `episodic` and other types are still dropped.
+
+**Check:** `uv run pytest tests/unit_tests -q` and `ruff check` / `ruff format --check` in `backend/ai`. Staging E2E (supplier fact stored and recalled in a new chat) was run by the owner with the env var set.
+
+### [2026-10-16 01:35 UTC+07:00] — [Feature] Welcome guide pages show the new illustrations
+
+**Done:** The Bán hàng, Tổng quan and Quản lý pages of the welcome guide show the designer's illustrations (converted from webp to 1080 px JPEG) instead of an icon on a colour block. Each image now carries its own aspect ratio: Bán hàng and Tổng quan are 3:2 like the Bobi page, Quản lý is near-square (1080×1151) and would lose its lower part under the old fixed 3:2 height. The text of those pages was rewritten to add what the pictures do not say instead of repeating their callouts, and to correct where the pictures differ from the app: sorting and stock filters live in the funnel button (the picture shows the older buttons and a "Cá nhân" tab), the outstanding debt on Home is the whole shop's and does not follow the period (the picture's callout says "trong kỳ"), and Công nợ only tracks what customers owe (the picture shows a "Nhà cung cấp" tab the app does not have). The Bobi page is unchanged.
+
+**Changed files:** `frontend/mobile/src/components/AssistantIntroModal.tsx` — modified; `frontend/mobile/assets/guide/guide-sales.jpg`, `guide-overview.jpg`, `guide-manage.jpg` — new; this entry.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (its only 2 errors are in #230's files because `expo-application` and `expo-intent-launcher` are not installed on this machine). Mock web build in headless Chrome, guide opened from Cài đặt → "Xem lại hướng dẫn": at 393×852 and 360×640 each picture shows at its own ratio (3:2 pages 1.502, Quản lý 0.937–0.939 against 0.938), nothing is cut or stretched, and the footer buttons stay visible. The local install lacks the Google Sign-In package, so the Expo plugin line was removed from `app.json` only for those runs and restored. **Not verified:** a phone; the callout text inside the pictures is small (about 7–8 pt at card width).
+
+### [2026-10-16 01:30 UTC+07:00] — [CI] Skip Vercel previews on pull requests
+
+**Done:** `deploy-web` and `deploy-landing` now run on pushes to `staging` and `main` only. Pull-request previews used up the Vercel Hobby limit of 100 deployments a day (`api-deployments-free-per-day`), and once it ran out the staging deploys failed too and every PR showed two red checks. The PR-only steps stay in `ci.yml`, so previews come back by restoring one condition.
+
+**Changed files:**
+- `.github/workflows/ci.yml`, `docs/development/ci-cd.md`, `CONTRIBUTING.md`, `frontend/mobile/README.md`, `frontend/web/README.md` — modified
+
+**Flow explained:** PR → tests and builds only → merge → push `staging` → `deploy-web` / `deploy-landing` → staging alias; push `main` → approval → production.
+
+**Check:** workflow YAML parses and actionlint passes; docs re-read. **Not verified:** the first PR run without the deploy jobs (this PR's own CI).
+
+### [2026-10-16 00:45 UTC+07:00] — [Feature] Debts screen groups by customer, searches, opens the sale and records transfers
+
+**Done:** The Công nợ screen lists one card per customer with the total still owed, the number of open debts and how long the oldest open debt has run ("nợ 7 ngày", red from 30 days), and under it each debt by sale ("Đơn #4 · Hôm qua") with its remaining amount. Core can create a new customer with the same name and phone for each credit sale, so customers with the same phone digits are grouped as one; customers without a phone stay apart. The header counts customers, not debts (the old "Số khách nợ" counted debts), with the number of open debts under it. A search box filters by name (accent-insensitive) or phone digits. The debt sheet opens the original sale ("Xem đơn #…"), records a payment as cash or transfer with an optional transaction reference (it always sent `CASH` before), shows the method in the history, and the reminder button opens an SMS with the shop name, amount left and sale number. Core is unchanged.
+
+**Changed files:** `frontend/mobile/app/debts.tsx`, `docs/product/product-requirements.md` (`FR-016`, new `AC-075`) — modified; `frontend/mobile/src/lib/debtGroups.ts`, `frontend/mobile/tests/debtGroups.test.ts` — new; this entry.
+
+**Flow explained:** `GET /debts` and `GET /customers` (all pages) → join name/phone → drop VOIDED → `groupDebtsByCustomer` (key: phone digits, else customer ID; most owed first) → search with `matchesDebtSearch` → status chips filter each group's debts. Repay sends `POST /debts/{id}/payments` with `paymentMethod` and `transferReference` when given.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files; its only 2 errors are in #230's files because `expo-application` and `expo-intent-launcher` are not installed on this machine. `node --test tests/debtGroups.test.ts` 8/8. Mock web build in headless Chrome, 9/9: header shows 3 customers and 3 debts, each debt row names its sale, "minh" and "8123456" leave only the matching customer, no match shows "Không tìm thấy khách", the sheet links "Xem đơn #4 · 15/10", choosing transfer shows the reference field, a partial transfer payment shows "Khách trả nợ · Chuyển khoản", and "Xem đơn" opens that sale. **Not verified:** grouping two customers with the same phone on screen (the mock has none; covered by unit tests), the SMS reminder on a phone.
+
+### [2026-10-16 09:00 UTC+07:00] — [Docs] Table format for commits and pull requests
+
+**Done:** Defined one format for every future commit and pull request: a free-form scope (examples, no fixed list), body and footer rules, a `!` plus `BREAKING CHANGE:` rule that survives squash merges, and pull request descriptions built from Summary, Changes, Validation, Risks and rollback, and Config and migrations tables. Release pull requests (`staging` → `main`) get their own template that must list every commit in `origin/main..origin/staging` grouped by area, with Breaking changes and Deploy tables. Reviewed by an Opus medium pass; its findings (template default-branch caveat, release template URL, squash and breaking marks, Deploy rows, AGENTS.md duplication) are applied.
+
+**Changed files:**
+- `CONTRIBUTING.md`, `AGENTS.md`, `PROGRESS.md` — modified
+- `.github/pull_request_template.md`, `.github/PULL_REQUEST_TEMPLATE/release.md` — created
+
+**Flow explained:** GitHub reads pull request templates from the default branch (`main`), so they pre-fill only after the release that carries them; until then paste the structure from CONTRIBUTING.md.
+
+**Check:** Markdown re-read and links checked; no code or workflow touched. **Not verified:** the templates pre-filling on GitHub (needs the change on `main`).
+
+### [2026-10-15 23:59 UTC+07:00] — [Feature] Voice orders ask which variant when a name is shared by several products
+
+**Done:** Saying a name that several catalog products share ("hai sting" with "Sting vàng" and "Sting đỏ") no longer treats it as a new product: Đọc đơn shows "Chọn mẫu cho "Sting" · 2" with each matching product and its price (up to 6, shortest names first). Picking one adds that product with the spoken quantity; "Không phải mẫu nào" skips it. Saying a product's exact name, or a name with a spoken price, still works as before. This also fixes a bug where "sting gold" silently became the product "Sting" (dropping "gold") when "Sting" and longer "… Sting Gold …" products both exist: a spoken name longer than the matched product now asks too. `parseOrder` fills the existing `disambiguations` field, which was always empty. Two older parsing bugs found while testing are fixed too. Two items said without a pause merged into one whenever one name was not a full catalog name: "hai sting một bánh mì thịt" gave "2 Bánh mì thịt" and lost the Sting, "hai bò húc một bánh mì thịt" the same; a quantity right after a product word now starts a new item (`chunkByQuantity`), except between the words of a number, inside a catalog name with digits ("… Lốc 6 Lon 320ml", also when only part of it is said) or after filler words. A matched product's quantity is read outside its name, so "một … lốc 6 lon 320ml" is 1, not 6. Accent folding made "bò" equal the unit "bó" (also "gỏi"/"gói", "cải"/"cái", "lợn"/"lon"…), so "hai bò húc" became "Húc": a word whose accents differ from the unit's own spelling is kept as a name word (`UNIT_SPELLINGS`, `markHomograph`), unaccented typing behaves as before, and catalog names still match when typed without accents.
+
+**Changed files:** `frontend/mobile/src/lib/parseOrder.ts`, `frontend/mobile/app/voice.tsx`, `docs/product/product-requirements.md` (`FR-008`, new `AC-074`) — modified; `frontend/mobile/tests/parseOrder.test.ts` — new; this entry.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files; its only 2 errors are in #230's files because `expo-application` and `expo-intent-launcher` are not installed on this machine. `node --test tests/*.test.ts` 64/64 (21 new in `tests/parseOrder.test.ts`), including run-on phrases, names with digits, unit homographs and unchanged expense phrases. Mock web build in headless Chrome, 8/8: "hai sting gold" shows 3 Sting Gold options with quantity 2 and long names wrap inside the rows, picking one adds 2 of it, "Không phải mẫu nào" skips, "một sting" adds the product "Sting" directly, "hai sting gold một nước ngọt" adds 1 Nước ngọt and asks for Sting gold · 2, "hai bò húc" offers to add "Bò húc". **Not verified:** speech on a phone (the homograph fix needs the speech model to return accented words; unaccented "bo huc" still reads "bo" as a unit unless the product is in the catalog).
+
+### [2026-10-15 23:57 UTC+07:00] — [Feature] Replay the welcome guide from Settings
+
+**Done:** Settings has a "Xem lại hướng dẫn" button that opens the welcome guide (`AssistantIntroModal`) again from the Bobi step, as on the first sign-in. It opens on Settings itself, so closing it returns to Settings; "Hỏi đáp"/"Đọc đơn" on the first step close it and open those screens. The first-sign-in behaviour is unchanged.
+
+**Changed files:** `frontend/mobile/app/settings.tsx`, `docs/product/product-requirements.md` (`FR-025`, `AC-018`) — modified; this entry.
+
+**Check:** `tsc --noEmit` clean. Mock web build in headless Chrome, 3/3: Settings shows the button, it opens the guide on the Bobi step, closing returns to Settings. **Not verified:** a phone.
+
+### [2026-10-15 23:55 UTC+07:00] — [Fix] Revenue never shows negative; orders sold earlier and voided now count as an expense
+
+**Done:** Core's reports compute net revenue as sales in the period minus orders voided in the period, so voiding today an order sold yesterday made today's revenue negative on Home and the Orders card. The app now shows revenue as the orders sold in the period that are still confirmed (`GET /sales/summary` for the same window), which is never negative. An order sold before the period and voided in it is shown on the expense side instead: a line "Huỷ đơn bán kỳ trước … · tính vào chi phí" under Home revenue, "Chi … (gồm huỷ đơn …)" in yesterday's summary notification, and a "Huỷ đơn #…" row in the month it was voided on the Expenses screen (opens the order, cannot be deleted). Display only: nothing is written to Core's expense book, so Core's profit is not reduced twice. Orders' day headers also come from `/sales/summary` per day (fetched as days appear, a late answer from an older refresh never overwrites a newer one) instead of the report series, and count confirmed orders with voided ones shown separately ("1 đơn · 1 huỷ · 120.000đ"). `SaleView` gains `voidedAt`/`voidReason` from the contract; the mock sets them.
+
+**Changed files:** `frontend/mobile/src/lib/homeOverview.ts` (`periodRevenue`), `saleFilter.ts` (`reportPeriodWindow`; unused `saleFilterReportPeriod`/`saleFilterYearDays` removed), `useHomeOverview.ts`, `useLocalNotifications.ts`, `notifications.ts`, `mockCore.ts`, `src/data/types.ts`, `frontend/mobile/app/(tabs)/index.tsx`, `app/(tabs)/invoices.tsx`, `app/expenses.tsx`, `tests/homeOverview.test.ts`, `docs/product/product-requirements.md` (`FR-006`, new `AC-073`) — modified; this entry.
+
+**Flow explained:** report period → `reportPeriodWindow` → `/reports/summary` + `/sales/summary` → `periodRevenue`: revenue = `confirmedSalesVnd`, cancelled earlier = `voidedRevenueVnd − (grossRevenueVnd − confirmedSalesVnd)`, floored at 0.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files; its only 2 errors are in #230's files because `expo-application` and `expo-intent-launcher` are not installed on this machine. `node --test tests/*.test.ts` 47/47 on top of staging (4 new for `periodRevenue`). Mock web build in headless Chrome, 4/4: today sold 265.000đ, then voided yesterday's 379.000đ order (the report's net would be −114.000đ); Home stays 265.000đ with "Huỷ đơn bán kỳ trước 379.000đ · tính vào chi phí", Orders "Hôm qua" goes 379.000đ → 0đ, no negative day header. **Not verified:** the Expenses "Huỷ đơn" row (the mock has no order sold last month and voided this month), staging Core, a phone.
+
+### [2026-10-15 22:40 UTC+07:00] — [Feature] Cloudflare Workers AI embedder for agent memory
+
+**Done:** `AGENT_MEMORY_EMBEDDING_PROVIDER` picks `sentence-transformers` (default, local) or `cloudflare` (Workers AI `/v1/embeddings` with `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`). `WorkersAIEmbeddingModel` adds embeddinggemma's query/document prompts, which Workers AI does not, and cuts vectors to `EMBEDDING_DIMENSIONS` (384, the migration's size); the local embedder cuts to it too. ADR-0002 records the local bench (embeddinggemma at 384: Recall@1 0.947 vs MiniLM 0.658). Still behind `AGENT_MEMORY_ENABLED` and PO approval.
+
+**Changed files:**
+- `backend/ai/src/memory/workers_ai_embedding.py`, `backend/ai/tests/unit_tests/test_workers_ai_embedding.py` — created
+- `backend/ai/src/{app_config,main,memory/repository}.py`, `backend/ai/.env.example`, `backend/ai/README.md`, `docs/architecture/adr/0002-agent-long-term-memory.md` — modified
+
+**Flow explained:** startup → `build_memory_embedder` picks provider → Workers AI: prompt + text → `/v1/embeddings` → 768-d → cut to 384 → same pgvector search.
+
+**Check:** ruff clean, pytest 361 passed / 53 skipped. Live Workers AI on the bench set (34 facts, 38 queries): recall@1 0.947, MRR@10 0.961, same as local gemma@384; 300–600 ms per query. **Not verified:** the memory integration test against Postgres (needs `POSTGRES_TEST_URL`).
+
 ### [2026-10-15 18:00 UTC+07:00] — [Feature] In-app update for the R2 APK
 
 **Done:** A published production APK now offers to update itself. CD builds it with `ANDROID_VERSION_CODE=<run number>` (new, monotonic; before, every build was versionCode 1) and `EXPO_PUBLIC_UPDATE_URL`, uploads the APK, then writes `android/production/version.json`. On launch the app fetches that file, compares `versionCode` with the installed one and, if higher, shows a dialog that downloads the APK from `builds/` and opens Android's installer. No new native module: `expo-file-system` (existing FileProvider), `expo-intent-launcher` and `expo-application`. `REQUEST_INSTALL_PACKAGES` is declared only when the update URL is set. Stacked on #225 (`feat/mobile-release-builds`).
@@ -59,6 +148,19 @@
 **Flow explained:** verified Firebase principal → active OWNER/owned ACTIVE shop guard → shared list predicate → one PostgreSQL COUNT/SUM tuple → checked signed-64-bit conversion → response. Item search uses EXISTS, so multiple matching items cannot multiply sale totals. Summary filters by soldAt and current status; report net revenue keeps its existing soldAt/voidedAt event timing. Separate list/summary requests do not share a snapshot. Deploy Core before FE adopts this endpoint.
 
 **Check:** Core commit `a8be3c0` was rebased onto the staging base above without conflict. `mvnw.cmd -o clean verify` against a dedicated disposable PostgreSQL 16 container passed **1,178 tests, 0 failures/errors/skipped**; the required PostgreSQL gate passed, and its own 12 tests passed. The 32-test sales/list suite covers combined filters/offset boundaries, empty sets, discounts/partial/debt sales, cross-period void, role/shop guards and Long.MAX_VALUE/overflow for both statuses using valid PAID fixtures. The 10,000-sale/50,000-item summary used one data SELECT (excluding auth/shop), with an 11 ms local observation in the post-rebase run, not a production SLA. Temporary test containers/data were removed. Documentation-only follow-up was checked separately; Firebase/FE/staging UAT remains pending.
+
+### [2026-10-15 15:30 UTC+07:00] — [Feature] Agent memory pins preferences and links the chip to the source chat
+
+**Done:** After Cognition's agent memory repo (an always-loaded `MEMORY.md`): every turn now leads with up to ten live `preference` memories, most important then newest, whatever the message; the cosine + decay search fills five more and skips those already pinned. Prompt lines carry date and type, and `MEMORY_PROMPT` tells the model to shape every answer by the preferences. The SSE `memory` event adds `source_conversation_id` and `created_at`; tapping a memory in the expanded chip opens the chat it came from (a memory from the open chat shows its date only). No migration, no Core change (Core relays the event as is). Still behind `AGENT_MEMORY_ENABLED` and PO approval.
+
+**Changed files:**
+- `backend/ai/src/{memory/repository,memory/service,agent/router,prompt_templates/memory}.py`, `backend/ai/tests/{unit_tests/test_agent_memory,integration_tests/test_memory_repository}.py`, `backend/ai/README.md` — modified
+- `frontend/mobile/{app/ai.tsx,src/data/types.ts}` — modified
+- `docs/contracts/api-contracts.md`, `docs/architecture/adr/0002-agent-long-term-memory.md` — modified
+
+**Flow explained:** read: pinned preferences (cap 10) → search the rest by cosine × decay (top 5) → record use for all → prompt, preferences first → `memory` event with source chat and date → chip → `GET /agent/conversations/{id}`.
+
+**Check:** AI ruff clean, pytest 359 passed / 53 skipped; mobile `tsc --noEmit` passes, `npm test` 37/37. **Not verified:** the new integration test `test_preferences_lead_whatever_the_message_and_are_not_repeated` (needs `POSTGRES_TEST_URL`); e2e on the simulator.
 
 ### [2026-10-15 12:10 UTC+07:00] — [Feature] Agent memory visibility and owner switch
 
@@ -2267,3 +2369,11 @@
 **Changed files:** `scripts/android-release.sh`, `scripts/ios-device-release.sh`, `scripts/lib/preflight.sh`, `frontend/mobile/README.md`, `docs/development/ci-cd.md` and this entry.
 
 **Check:** On Linux with a stand-in `adb`: one ready arm64 phone with the app installed (passes, warns about the install), two phones without a terminal (asks for `--device`), two phones in a pseudo-terminal (the arrow-key menu picks the second), an Android 6 32-bit phone against an arm64 build (API and ABI failures), an x86 emulator next to an offline phone, and the install errors for another signing key, a blocked install and a missing ABI. With the macOS stand-ins: an untrusted iPhone, a fresh clone under `--check`, and the earlier Personal Team and valid-profile cases. Not run on a real Mac or phone.
+
+### [2026-10-15 21:37 UTC+07:00] — [AI] Let the agent read debts, payments and expenses
+
+**Done:** The chat agent could answer only about the shop profile, catalog and sales; its prompt told it "you cannot see expense or debt records". A new AI migration adds three read-only views for `query_shop_data`: `v_debts` and `v_payments` (scoped to the shop through their sale, since `debts` and `payments` have no `shop_id`) and `v_expenses` (ACTIVE only). They follow the baseline's rules (transaction-local shop setting, no `shop_id`, `security_barrier`) and leave out customer names and phone numbers (only the opaque `customer_id`, for counting customers), transfer references, the users who received or recorded money and the free-text expense description. `SqlGuard.ALLOWED_VIEWS` lists the three views, so the answer screen also blocks their names. The shop prompt's scope now includes debts, payments received and expenses; the SQL prompt describes the views, says how to count money still owed and money kept after a cancelled sale, forbids calling revenue minus expenses "profit", and adds four example queries. Charts need no change: the existing `chart` block already covers these figures. PRD `FR-020` now names these data and the PII left out; new `AC-076`–`AC-077`; BRD traceability, API contract, technical design and ERD description updated. BRD scope is unchanged: debts and expenses were already in business scope.
+
+**Changed files:** `supabase/migrations/20261016000000_ai_read_ledger_views.sql` (new), `backend/ai/src/sql/guard.py`, `backend/ai/src/prompt_templates/shop_agent.py`, `backend/ai/src/prompt_templates/sql_agent.py`, `backend/ai/tests/support.py` (applies Core V1–V9 and the new migration), `backend/ai/tests/integration_tests/test_sql_reader.py`, `backend/ai/tests/unit_tests/test_sql_guard.py`, `backend/ai/README.md`, `docs/product/product-requirements.md`, `docs/product/business-requirements.md`, `docs/contracts/api-contracts.md`, `docs/architecture/technical-design.md`, `docs/architecture/erd-description.md` and this entry.
+
+**Check:** In `backend/ai`, `uv run ruff check`, `uv run ruff format --check` and `uv run pytest` with `POSTGRES_TEST_URL` on a local PostgreSQL 16 with pgvector pass **416 passed, 13 skipped** (baseline 398 passed, 13 skipped). New tests: each shop sees only its own debt, payments and active expense; `SELECT *` on the three views returns exactly the listed columns and no customer name, phone, transfer reference or expense description; the views return nothing without a shop scope; the reader cannot read `debts`, `payments`, `expenses` or `customers`; the guard accepts the views and rejects those base tables. Removing the shop filter from `v_payments` made 3 tests fail. Applying Core V5 required the existing voided test sale to be PAID instead of DEBT (`ck_sales_debt_requires_customer`). Not run: a live model answering these questions, or the migration on staging, which needs Core Flyway through V9 first. Open for the PO: whether the agent may read customer names.

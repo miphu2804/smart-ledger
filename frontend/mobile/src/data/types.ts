@@ -114,6 +114,10 @@ export interface AgentMemoryUsed {
   id: number;
   memory_type: string;
   content: string;
+  /** Hội thoại sinh ra ghi nhớ; xoá hội thoại đó thì ghi nhớ cũng mất */
+  source_conversation_id: number;
+  /** ISO 8601 */
+  created_at: string;
 }
 
 export interface AgentMemorySettings {
@@ -267,6 +271,9 @@ export interface SaleView {
   items: SaleItemView[];
   customerId: number | null;
   outstandingVnd: number;
+  /** Lúc đơn bị huỷ; null khi đơn còn hiệu lực */
+  voidedAt?: string | null;
+  voidReason?: string | null;
 }
 
 /** Hoàn tiền của một đơn đã huỷ (`SaleRefundResponse`). Một đơn có tối đa một khoản hoàn, bằng toàn bộ tiền đã thu. */
