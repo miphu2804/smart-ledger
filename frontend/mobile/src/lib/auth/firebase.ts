@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import { debugLog, maskId } from '../debug';
 import { mapFirebaseError } from './firebaseErrors';
 import { AuthClient, AuthError } from './types';
@@ -51,13 +52,14 @@ function loadFacebook(): any {
 
 /**
  * Thư viện Google Sign-In nạp lười như Facebook: bản build cũ chưa có mô-đun native vẫn mở được app.
- * Web client ID lấy từ `extra.googleWebClientId` (app.config.js đọc trong google-services.json lúc build); thiếu nó
- * Google không trả ID token nên không đổi sang Firebase được.
+ * Web client ID lấy từ `extra.googleWebClientId` (app.config.js đọc trong google-services.json lúc build). Android bắt buộc
+ * có nó thì Google mới trả ID token; iOS tự lấy client iOS trong GoogleService-Info.plist (plugin của thư viện gắn vào lúc
+ * prebuild) và token đó Firebase cũng nhận, nên ở iOS Web client ID là tuỳ chọn.
  */
 let googleConfigured = false;
 function loadGoogle(): any {
   const webClientId = (Constants.expoConfig?.extra as { googleWebClientId?: string } | undefined)?.googleWebClientId;
-  if (!webClientId) {
+  if (!webClientId && Platform.OS === 'android') {
     throw new AuthError(
       'not-configured',
       'Bản build này chưa có Web client ID của Google: google-services.json lúc build thiếu oauth_client client_type 3 (bật Google trong Firebase rồi tải lại file)',

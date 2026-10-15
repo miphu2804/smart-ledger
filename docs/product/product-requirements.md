@@ -232,7 +232,7 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 
 - `OQ-001` đã chốt: STT thật thuộc đích MVP; FE hiện mới giả lập.
 - `FR-017`: phải chốt loại ảnh đầu tiên trong issue trước khi viết parser.
-- `FR-010`/`NFR-003`: mô tả mobile Email/Facebook/Google (đã bỏ số điện thoại OTP; Zalo là “Sắp có”; Google chưa được thử với Firebase thật trên máy) và admin mock là snapshot FE, không phải nghiệm thu mới. Chặn đăng nhập khi chưa xác minh email hiện chỉ ở phía app; Core chưa kiểm tra `email_verified`. Core nhận Firebase ID token và ánh xạ UID; chưa có bằng chứng nghiệm thu provider/UI với Firebase thật.
+- `FR-010`/`NFR-003`: mô tả mobile Email/Facebook/Google (đã bỏ số điện thoại OTP; Zalo là “Sắp có”; Google đã đăng nhập được trên một điện thoại Android thật với Firebase staging, còn web, bản production và iOS chưa thử, xem [`PROGRESS.md`](../../PROGRESS.md)) và admin mock là snapshot FE, không phải nghiệm thu mới. Chặn đăng nhập khi chưa xác minh email hiện chỉ ở phía app; Core chưa kiểm tra `email_verified`. Core nhận Firebase ID token và ánh xạ UID; chưa có bằng chứng nghiệm thu provider/UI với Firebase thật.
 - MVP chỉ có hai vai trò `OWNER` và `ADMIN`; quản lý nhân viên/thành viên (`FR-012`) đã bị loại khỏi phạm vi.
 - Toàn bộ `FR-INV-*` bị hoãn cho đến khi `OQ-INV-001`–`OQ-INV-005` trong BRD được giải quyết.
 - Máy in và gói dịch vụ ngoài PRD MVP.

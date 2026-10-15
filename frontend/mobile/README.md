@@ -206,7 +206,7 @@ Cấu hình một lần, trên **từng** Firebase project (staging `smart-ledge
 3. **Tải lại `google-services.json`** (phải có `oauth_client` với `client_type` 1 mang SHA-1 ở trên và `client_type` 3) rồi cập nhật secret `ANDROID_GOOGLE_SERVICES_JSON` của môi trường GitHub tương ứng. `app.config.js` đọc Web client ID (`client_type` 3) từ chính file này vào `extra.googleWebClientId`, nên không có biến môi trường riêng.
 4. **Web:** thêm domain của bản web vào Authentication → Settings → Authorized domains.
 
-Thư viện có mã native nên phải build lại APK. Chưa kiểm tra: iOS (cần thêm plugin `@react-native-google-signin/google-signin` vào `app.json` khi build iOS). Giới hạn liên kết tài khoản giống Facebook (xem mục trên).
+Thư viện có mã native nên phải build lại APK. Plugin `@react-native-google-signin/google-signin` trong `app.json` gắn client iOS của `GoogleService-Info.plist` khi prebuild iOS; trên iOS thư viện tự dùng client đó nên không bắt buộc Web client ID (Android thì bắt buộc). Chưa kiểm tra: iOS. Giới hạn liên kết tài khoản giống Facebook (xem mục trên).
 
 ## Debug
 
