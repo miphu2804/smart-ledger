@@ -7,7 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarcodeScannerModal } from '../src/components/BarcodeScannerModal';
 import { useToast } from '../src/components/brand';
 import { PageControls } from '../src/components/PageControls';
-import { Button, Dialog, EmptyState, Field, Row, Sheet, Stepper, T } from '../src/components/ui';
+import { TAB_HEADER_SIDE, TAB_HEADER_TOP, TabSearchBar } from '../src/components/TabSearchBar';
+import { Button, Chips, Dialog, EmptyState, Field, Row, Sheet, Stepper, T } from '../src/components/ui';
 import type { CategoryView, LineItem, ProductView } from '../src/data/types';
 import { categoryApi, productApi, type ProductListQuery } from '../src/lib/catalogApi';
 import { errorMessage } from '../src/lib/errors';
@@ -147,15 +148,14 @@ function PosActionButton({
   );
 }
 
+/** Ô tìm gọn ở thanh ghim khi phần đầu đã thu lại (ô tìm đầy đủ là `TabSearchBar`, dùng chung với Đơn hàng). */
 function PosSearchBox({
   value,
   onChangeText,
-  onBarcodePress,
   compact,
 }: {
   value: string;
   onChangeText: (value: string) => void;
-  onBarcodePress?: () => void;
   compact?: boolean;
 }) {
   return (
@@ -171,10 +171,6 @@ function PosSearchBox({
       {value ? (
         <Pressable onPress={() => onChangeText('')} hitSlop={8}>
           <Feather name="x-circle" size={15} color={salesColors.muted} />
-        </Pressable>
-      ) : onBarcodePress && !compact ? (
-        <Pressable onPress={onBarcodePress} hitSlop={8} style={styles.barcodeScanIconBtn} accessibilityLabel="Quét mã vạch">
-          <Feather name="maximize" size={16} color={salesColors.inkSecondary} />
         </Pressable>
       ) : null}
     </View>
@@ -231,7 +227,7 @@ function PosCollapsibleHeader({
       <Animated.View
         style={[
           styles.posHeaderPinned,
-          { top: topInset + 4, height: collapsedHeight, opacity: compactOpacity, transform: [{ translateY: counterTranslate }] },
+          { top: topInset + TAB_HEADER_TOP, height: collapsedHeight, opacity: compactOpacity, transform: [{ translateY: counterTranslate }] },
         ]}
       >
         {pinned}
@@ -240,7 +236,7 @@ function PosCollapsibleHeader({
         onLayout={(e) => onBodyHeight(e.nativeEvent.layout.height)}
         style={[
           styles.posHeaderBody,
-          { top: topInset + 4, opacity: bodyOpacity, transform: [{ translateY: counterTranslate }, { translateY: bodyTranslate }] },
+          { top: topInset + TAB_HEADER_TOP, opacity: bodyOpacity, transform: [{ translateY: counterTranslate }, { translateY: bodyTranslate }] },
         ]}
       >
         {children}
@@ -690,16 +686,12 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
   const cats = ['all', ...categories.map((c) => String(c.id))];
   const catLabel = (c: string) => (c === 'all' ? 'Tất cả' : categories.find((x) => String(x.id) === c)?.name ?? c);
 
+  // Sắp xếp và lọc tồn chọn trong bảng lọc mở từ nút phễu của ô tìm; phễu tô màu khi khác mặc định
+  const [filterOpen, setFilterOpen] = useState(false);
   const sortLabel = sortMode === 'name' ? 'Tên A-Z' : sortMode === 'price' ? 'Giá tăng dần' : 'Tồn kho giảm';
-  const stockLabel = stockFilter === 'all' ? 'Tồn kho' : stockFilter === 'low' ? 'Sắp hết' : 'Hết hàng';
-  const cycleSort = () => {
-    triggerFeedback('selection');
-    setSortMode((cur) => (cur === 'name' ? 'price' : cur === 'price' ? 'stock' : 'name'));
-  };
-  const cycleStock = () => {
-    triggerFeedback('selection');
-    setStockFilter((cur) => (cur === 'all' ? 'low' : cur === 'low' ? 'out' : 'all'));
-  };
+  const stockLabel = stockFilter === 'all' ? 'Mọi mức tồn' : stockFilter === 'low' ? 'Sắp hết' : 'Hết hàng';
+  const filterActive = sortMode !== 'name' || stockFilter !== 'all';
+  const filterSummary = `${sortLabel}${stockFilter !== 'all' ? ` · ${stockLabel}` : ''}`;
 
   const pay = () => {
     app.setDraft({ items: cartItems, source: 'pos' });
@@ -775,10 +767,17 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
             <PosActionButton tone="purple" icon="mic" label="Đọc đơn" onPress={() => router.push('/voice')} />
           </Row>
 
-          <PosSearchBox
+          <TabSearchBar
             value={q}
             onChangeText={setQ}
-            onBarcodePress={() => setScannerOpen(true)}
+            placeholder="Tìm theo tên hoặc mã vạch..."
+            searchLabel="Tìm hàng"
+            onFilterPress={() => {
+              triggerFeedback('selection');
+              setFilterOpen(true);
+            }}
+            filterActive={filterActive}
+            filterLabel={filterActive ? `Bộ lọc, đang chọn ${filterSummary}` : 'Bộ lọc'}
           />
           <PosCategoryChips value={cat} onChange={setCat} options={cats.map((c) => ({ key: c, label: catLabel(c) }))} />
         </View>
@@ -818,29 +817,10 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
             <>
           {/* Filter & Toolbar */}
           <Row style={styles.filterRow} gap={8}>
-            <Pressable
-              onPress={cycleSort}
-              style={({ pressed }) => [styles.filterPill, sortMode !== 'name' && styles.filterPillActive, pressed && { opacity: 0.76 }]}
-            >
-              <Feather name="sliders" size={13} color={salesColors.inkSecondary} />
-              <T w="semibold" size={12.5} color={salesColors.ink}>
-                {sortLabel}
-              </T>
-              <Feather name="chevron-down" size={13} color={salesColors.muted} />
-            </Pressable>
-
-            <Pressable
-              onPress={cycleStock}
-              style={({ pressed }) => [styles.filterPill, stockFilter !== 'all' && styles.filterPillActive, pressed && { opacity: 0.76 }]}
-            >
-              <Feather name="box" size={13} color={salesColors.inkSecondary} />
-              <T w="semibold" size={12.5} color={salesColors.ink}>
-                {stockLabel}
-              </T>
-              <Feather name="chevron-down" size={13} color={salesColors.muted} />
-            </Pressable>
-
-            <View style={{ flex: 1 }} />
+            {/* Bộ lọc đang dùng (chọn ở nút phễu trong ô tìm) */}
+            <T w="semibold" size={12.5} color={filterActive ? colors.brand : salesColors.muted} style={{ flex: 1 }} numberOfLines={1}>
+              {filterSummary}
+            </T>
 
             <View style={styles.viewToggle}>
               <Pressable
@@ -1036,6 +1016,56 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
         />
       </Sheet>
 
+      {/* Bộ lọc: mở từ nút phễu trong ô tìm, chọn xong áp dụng ngay */}
+      <Sheet visible={filterOpen} onClose={() => setFilterOpen(false)} title="Bộ lọc">
+        <T w="bold" size={13} color={salesColors.muted} style={{ marginBottom: 8 }}>
+          Sắp xếp
+        </T>
+        <Chips
+          scroll={false}
+          value={sortMode}
+          onChange={(mode) => {
+            triggerFeedback('selection');
+            setSortMode(mode);
+          }}
+          options={[
+            { key: 'name', label: 'Tên A-Z' },
+            { key: 'price', label: 'Giá tăng dần' },
+            { key: 'stock', label: 'Tồn kho giảm' },
+          ]}
+        />
+        <T w="bold" size={13} color={salesColors.muted} style={{ marginTop: 16, marginBottom: 8 }}>
+          Tồn kho
+        </T>
+        <Chips
+          scroll={false}
+          value={stockFilter}
+          onChange={(stock) => {
+            triggerFeedback('selection');
+            setStockFilter(stock);
+          }}
+          options={[
+            { key: 'all', label: 'Tất cả' },
+            { key: 'low', label: 'Sắp hết' },
+            { key: 'out', label: 'Hết hàng' },
+          ]}
+        />
+        <Row gap={10} style={{ marginTop: 20 }}>
+          <Button
+            title="Đặt lại"
+            variant="outline"
+            disabled={!filterActive}
+            onPress={() => {
+              triggerFeedback('selection');
+              setSortMode('name');
+              setStockFilter('all');
+            }}
+            style={{ flex: 1 }}
+          />
+          <Button title="Xong" onPress={() => setFilterOpen(false)} style={{ flex: 1 }} />
+        </Row>
+      </Sheet>
+
       {/* Custom Item Sheet */}
       <Sheet visible={customOpen} onClose={() => setCustomOpen(false)} title="Món ngoài danh mục">
         <Field label="Tên món" placeholder="VD: Bánh bao" value={cName} onChangeText={setCName} />
@@ -1113,13 +1143,13 @@ const styles = StyleSheet.create({
   },
   posHeaderBody: {
     position: 'absolute',
-    left: 14,
-    right: 14,
+    left: TAB_HEADER_SIDE,
+    right: TAB_HEADER_SIDE,
   },
   posHeaderPinned: {
     position: 'absolute',
-    left: 14,
-    right: 14,
+    left: TAB_HEADER_SIDE,
+    right: TAB_HEADER_SIDE,
     justifyContent: 'center',
   },
   heroRow: {
@@ -1212,9 +1242,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     gap: 6,
   },
-  barcodeScanIconBtn: {
-    padding: 4,
-  },
   searchInput: {
     flex: 1,
     height: 38,
@@ -1252,21 +1279,6 @@ const styles = StyleSheet.create({
     minHeight: 36,
     marginBottom: 10,
     alignItems: 'center',
-  },
-  filterPill: {
-    height: 34,
-    borderRadius: 12,
-    backgroundColor: salesColors.cardBg,
-    borderWidth: 1,
-    borderColor: salesColors.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 11,
-  },
-  filterPillActive: {
-    borderColor: salesColors.primary,
-    backgroundColor: salesColors.primaryTint,
   },
   viewToggle: {
     height: 34,

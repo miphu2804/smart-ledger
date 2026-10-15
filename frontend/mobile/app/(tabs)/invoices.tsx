@@ -2,9 +2,10 @@ import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, SectionList, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, SectionList, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DateRangeSheet } from '../../src/components/DateRangeSheet';
+import { TAB_HEADER_SIDE, TAB_HEADER_TOP, TabSearchBar } from '../../src/components/TabSearchBar';
 import { Button, EmptyState, Row, T } from '../../src/components/ui';
 import type { SaleView, SalesSeriesPoint } from '../../src/data/types';
 import { triggerFeedback } from '../../src/lib/feedback';
@@ -24,7 +25,7 @@ import {
 import { saleApi } from '../../src/lib/salesApi';
 import { usePagedList } from '../../src/lib/usePagedList';
 import type { Period } from '../../src/lib/stats';
-import { colors, font, shadow, tilePalette } from '../../src/theme';
+import { colors, shadow, tilePalette } from '../../src/theme';
 
 /**
  * Cỡ chữ của số trên thẻ tổng theo độ dài chữ. `adjustsFontSizeToFit` co chữ nhưng không đủ tin cậy trên mọi nền tảng
@@ -297,52 +298,33 @@ export default function Invoices() {
       <StatusBar style="dark" />
 
       {/* Header Container */}
-      <View style={[styles.headerShell, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerShell, { paddingTop: insets.top + TAB_HEADER_TOP }]}>
         {/* Title Row */}
-        <Row style={styles.heroRow} gap={10}>
+        {/* Cùng cỡ chữ và lề với tiêu đề Bán hàng để chuyển tab qua lại ô tìm không xê dịch */}
+        <Row style={styles.heroRow} gap={8}>
           <View style={{ flex: 1 }}>
-            <T w="extrabold" size={28} color={colors.ink}>
+            <T w="extrabold" size={26} color={colors.ink}>
               Đơn hàng
             </T>
-            <T w="medium" size={13.5} color={colors.muted} style={{ marginTop: 1 }}>
+            <T w="medium" size={13} color={colors.muted} style={{ marginTop: 1 }}>
               Quản lý và theo dõi đơn hàng
             </T>
           </View>
         </Row>
 
-        {/* Search Input (luôn hiện, cùng kiểu với màn Bán hàng) và nút phễu mở bảng chọn khoảng ngày */}
-        <Row gap={8} style={styles.searchRow}>
-          <View style={styles.searchBox}>
-            <Feather name="search" size={18} color={colors.faint} />
-            <TextInput
-              value={q}
-              onChangeText={setQ}
-              placeholder="Tìm theo khách, tên món, mã đơn..."
-              placeholderTextColor="#9CA3AF"
-              style={styles.searchInput}
-              returnKeyType="search"
-              accessibilityLabel="Tìm đơn hàng"
-            />
-            {q ? (
-              <Pressable onPress={() => setQ('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Xoá tìm kiếm">
-                <Feather name="x-circle" size={15} color={colors.muted} />
-              </Pressable>
-            ) : null}
-          </View>
-          <Pressable
-            onPress={() => {
-              triggerFeedback('selection');
-              setFilterOpen(true);
-            }}
-            style={({ pressed }) => [styles.filterBtn, period === 'custom' && styles.filterBtnActive, pressed && { opacity: 0.8 }]}
-            accessibilityRole="button"
-            accessibilityLabel={
-              period === 'custom' ? `Lọc theo ngày, đang chọn ${saleFilterTimeLabel(filter)}` : 'Lọc theo ngày'
-            }
-          >
-            <Feather name="filter" size={18} color={period === 'custom' ? colors.brand : colors.inkSecondary} />
-          </Pressable>
-        </Row>
+        {/* Ô tìm dùng chung với Bán hàng: phễu trong ô mở bảng chọn khoảng ngày */}
+        <TabSearchBar
+          value={q}
+          onChangeText={setQ}
+          placeholder="Tìm theo khách, tên món, mã đơn..."
+          searchLabel="Tìm đơn hàng"
+          onFilterPress={() => {
+            triggerFeedback('selection');
+            setFilterOpen(true);
+          }}
+          filterActive={period === 'custom'}
+          filterLabel={period === 'custom' ? `Lọc theo ngày, đang chọn ${saleFilterTimeLabel(filter)}` : 'Lọc theo ngày'}
+        />
 
         {/* Period Chips Filter */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.periodScroll}>
@@ -571,56 +553,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   headerShell: {
-    paddingHorizontal: 16,
+    paddingHorizontal: TAB_HEADER_SIDE,
     paddingBottom: 10,
     backgroundColor: colors.bg,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
+  // Như `heroRow` của Bán hàng
   heroRow: {
+    paddingTop: 2,
+    paddingBottom: 4,
     alignItems: 'center',
-    marginBottom: 8,
   },
-  searchRow: {
-    marginBottom: 8,
-  },
-  searchBox: {
-    flex: 1,
-    height: 42,
-    borderRadius: 13,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-  },
-  filterBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  filterBtnActive: {
-    borderColor: colors.brand,
-    backgroundColor: colors.brandTint,
-  },
-  searchInput: {
-    flex: 1,
-    height: 38,
-    fontFamily: font.medium,
-    fontSize: 14,
-    color: colors.ink,
-    outlineStyle: 'none',
-  } as never,
   periodScroll: {
     gap: 6,
-    paddingRight: 16,
+    paddingRight: TAB_HEADER_SIDE,
   },
   periodPill: {
     height: 32,
