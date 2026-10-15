@@ -11,9 +11,17 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChatText } from '../src/components/ChatText';
+import { SlingSendButton } from '../src/components/SlingSendButton';
 import { ThinkingStatus } from '../src/components/ThinkingStatus';
+import { VoicePillButton } from '../src/components/VoicePillButton';
 import { Dialog, EmptyState, Field, IconBtn, KEYBOARD_AVOID_BEHAVIOR, Row, Sheet, T } from '../src/components/ui';
-import type { AgentConversationSummary, AgentConversationView, AgentMessageView, ChatMessage } from '../src/data/types';
+import type {
+  AgentConversationSummary,
+  AgentConversationView,
+  AgentMemoryUsed,
+  AgentMessageView,
+  ChatMessage,
+} from '../src/data/types';
 import { agentApi } from '../src/lib/agentApi';
 import { ApiError } from '../src/lib/api';
 import { hhmm, relDay } from '../src/lib/format';
@@ -71,6 +79,36 @@ function lastActive(iso: string): string {
   return `${relDay(d)} · ${hhmm(d)}`;
 }
 
+/** Chip trên câu trả lời: ghi nhớ trợ lý đã dùng; chạm để xem đủ nội dung. */
+function MemoryChip({ memories }: { memories: AgentMemoryUsed[] }) {
+  const [open, setOpen] = useState(false);
+  const first = memories[0].content;
+  const label = first.length > 40 ? `${first.slice(0, 40)}…` : first;
+  return (
+    <View style={styles.memoryWrap}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Xem ghi nhớ trợ lý đã dùng"
+        onPress={() => setOpen((v) => !v)}
+        style={({ pressed }) => [styles.memoryChip, pressed && styles.pressed]}
+      >
+        <Feather name="cpu" size={12} color={colors.brand} />
+        <T w="semibold" size={11.5} color={colors.ink} numberOfLines={1} style={{ flexShrink: 1 }}>
+          Đã dùng ghi nhớ: {label}
+          {memories.length > 1 ? ` +${memories.length - 1}` : ''}
+        </T>
+      </Pressable>
+      {open
+        ? memories.map((m) => (
+            <T key={m.id} size={12} color={colors.muted} style={styles.memoryItem}>
+              • {m.content}
+            </T>
+          ))
+        : null}
+    </View>
+  );
+}
+
 /** Trợ lý AI — gửi qua agentApi (Core `/api/v1/agent/chat`; khi bật mock thì mockCore trả lời giả). */
 const HEADER_BTN = 40;
 
@@ -80,6 +118,7 @@ export default function Ai() {
   const scroll = useRef<ScrollView>(null);
   const sending = useRef(false);
   const [text, setText] = useState('');
+  const voiceBase = useRef<string | null>(null);
   const [typing, setTyping] = useState(false);
   // Chữ trợ lý đang trả lời dở; vào `msgs` khi có sự kiện `done`.
   const [draft, setDraft] = useState('');
@@ -111,6 +150,14 @@ export default function Ai() {
     return () => clearTimeout(t);
   }, [msgs, typing, draft]);
 
+  // Chữ nói ra được đổ vào ô nhập, nối sau phần đã gõ; người dùng xem lại rồi bấm gửi.
+  const dictate = (spoken: string, done = false) => {
+    if (voiceBase.current === null) voiceBase.current = text.trim();
+    const base = voiceBase.current;
+    setText(base && spoken ? `${base} ${spoken}` : base || spoken);
+    if (done) voiceBase.current = null;
+  };
+
   const send = async (q: string) => {
     const message = q.trim();
     // `typing` là state nên chưa kịp true khi hai lần bấm đến cùng một nhịp: ref chặn gửi trùng.
@@ -131,10 +178,11 @@ export default function Ai() {
         setDraft(latest);
       });
     };
+    let memories: AgentMemoryUsed[] = [];
     try {
-      const reply = await agentApi.chatStream({ conversation_id: conversationId, message }, showDraft);
+      const reply = await agentApi.chatStream({ conversation_id: conversationId, message }, showDraft, (used) => (memories = used));
       setConversationId(reply.conversation_id);
-      setMsgs((m) => [...m, { id: `a${reply.message_id}`, from: 'ai', text: reply.answer }]);
+      setMsgs((m) => [...m, { id: `a${reply.message_id}`, from: 'ai', text: reply.answer, memories }]);
     } catch (err) {
       if (err instanceof ApiError && err.code === 'conversation_not_found') setConversationId(null);
       // Không mất câu đã gõ: gỡ bong bóng chưa gửi được và trả câu về ô nhập (trừ khi đã gõ câu khác).
@@ -166,29 +214,32 @@ export default function Ai() {
           {msgs.map((m) => {
             const isUser = m.from === 'user';
             return (
-              <View key={m.id} style={[styles.messageRow, isUser && styles.userMessageRow]}>
-                <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
-                  {!isUser ? (
-                    <Row style={styles.assistantBubbleHeader}>
-                      <Row gap={3} style={{ alignItems: 'center' }}>
-                        <View style={{ width: 2, height: 7, backgroundColor: colors.brand, borderRadius: 1 }} />
-                        <View style={{ width: 2, height: 11, backgroundColor: colors.brand, borderRadius: 1 }} />
-                        <View style={{ width: 2, height: 6, backgroundColor: colors.brand, borderRadius: 1 }} />
-                        <T w="bold" size={11.5} color={colors.brand} style={{ marginLeft: 3 }}>
-                          Trợ lý AI
-                        </T>
+              <React.Fragment key={m.id}>
+                {m.memories?.length ? <MemoryChip memories={m.memories} /> : null}
+                <View style={[styles.messageRow, isUser && styles.userMessageRow]}>
+                  <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
+                    {!isUser ? (
+                      <Row style={styles.assistantBubbleHeader}>
+                        <Row gap={3} style={{ alignItems: 'center' }}>
+                          <View style={{ width: 2, height: 7, backgroundColor: colors.brand, borderRadius: 1 }} />
+                          <View style={{ width: 2, height: 11, backgroundColor: colors.brand, borderRadius: 1 }} />
+                          <View style={{ width: 2, height: 6, backgroundColor: colors.brand, borderRadius: 1 }} />
+                          <T w="bold" size={11.5} color={colors.brand} style={{ marginLeft: 3 }}>
+                            Trợ lý AI
+                          </T>
+                        </Row>
                       </Row>
-                    </Row>
-                  ) : null}
-                  {isUser ? (
-                    <T size={13.5} color={colors.white} style={styles.messageText}>
-                      {m.text}
-                    </T>
-                  ) : (
-                    <ChatText text={m.text} />
-                  )}
+                    ) : null}
+                    {isUser ? (
+                      <T size={13.5} color={colors.white} style={styles.messageText}>
+                        {m.text}
+                      </T>
+                    ) : (
+                      <ChatText text={m.text} />
+                    )}
+                  </View>
                 </View>
-              </View>
+              </React.Fragment>
             );
           })}
 
@@ -236,32 +287,6 @@ export default function Ai() {
 
       {/* Suggestion Chips & Composer Bar (Đề xuất nằm ngay sát trên thanh nhập) */}
       <View style={[styles.composerWrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-        {!typing ? (
-          <ScrollView
-            testID="quick-chips"
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.quickChipsScroll}
-            style={styles.quickChipsWrapper}
-            keyboardShouldPersistTaps="handled"
-          >
-            {QUICK.map((q) => (
-              <Pressable
-                key={q.label}
-                accessibilityRole="button"
-                accessibilityLabel={`Hỏi trợ lý: ${q.label}`}
-                onPress={() => send(q.label)}
-                style={({ pressed }) => [styles.quickChip, pressed && styles.pressed]}
-              >
-                <Feather name={q.icon} size={13} color={colors.brand} />
-                <T w="semibold" size={12} color={colors.ink}>
-                  {q.label}
-                </T>
-              </Pressable>
-            ))}
-          </ScrollView>
-        ) : null}
-
         {error ? (
           <View style={styles.errorCard} accessibilityRole="alert">
             <View style={styles.errorHeader}>
@@ -305,6 +330,32 @@ export default function Ai() {
             </View>
           </View>
         ) : null}
+
+        {!typing ? (
+          <ScrollView
+            testID="quick-chips"
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickChipsScroll}
+            style={styles.quickChipsWrapper}
+            keyboardShouldPersistTaps="handled"
+          >
+            {QUICK.map((q) => (
+              <Pressable
+                key={q.label}
+                accessibilityRole="button"
+                accessibilityLabel={`Hỏi trợ lý: ${q.label}`}
+                onPress={() => send(q.label)}
+                style={({ pressed }) => [styles.quickChip, pressed && styles.pressed]}
+              >
+                <Feather name={q.icon} size={13} color={colors.brand} />
+                <T w="semibold" size={12} color={colors.ink}>
+                  {q.label}
+                </T>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : null}
         <View style={styles.composer}>
           <TextInput
             value={text}
@@ -316,30 +367,8 @@ export default function Ai() {
             style={styles.input}
             returnKeyType="send"
           />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Mở nhập bằng giọng nói"
-            hitSlop={6}
-            onPress={() => router.push('/voice')}
-            style={({ pressed }) => [styles.actionButton, styles.voiceButton, pressed && styles.pressed]}
-          >
-            <Feather name="mic" size={18} color={colors.brand} />
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Gửi tin nhắn"
-            disabled={!text.trim() || typing}
-            hitSlop={4}
-            onPress={() => send(text)}
-            style={({ pressed }) => [
-              styles.actionButton,
-              styles.sendButton,
-              (!text.trim() || typing) && styles.sendDisabled,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Feather name="arrow-up" size={18} color={text.trim() && !typing ? colors.white : colors.muted} />
-          </Pressable>
+          <VoicePillButton disabled={typing} onPartial={(t) => dictate(t)} onTranscript={(t) => dictate(t, true)} />
+          <SlingSendButton disabled={!text.trim() || typing} onSend={() => send(text)} />
         </View>
       </View>
 
@@ -550,6 +579,27 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   messages: { gap: 12 },
+  memoryWrap: {
+    // Thẳng hàng với bong bóng (sau avatar 34 + khoảng cách 8) và kéo sát bong bóng bên dưới.
+    marginLeft: 42,
+    marginBottom: -6,
+    gap: 4,
+  },
+  memoryChip: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    maxWidth: '86%',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: colors.brandSoft,
+  },
+  memoryItem: {
+    maxWidth: '86%',
+    lineHeight: 17,
+  },
   messageRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -646,23 +696,6 @@ const styles = StyleSheet.create({
     color: colors.ink,
     outlineStyle: 'none',
   } as never,
-  actionButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  voiceButton: {
-    backgroundColor: colors.brandSoft,
-  },
-  sendButton: {
-    backgroundColor: colors.brand,
-  },
-  sendDisabled: {
-    backgroundColor: colors.brandSoft,
-    opacity: 0.7,
-  },
   errorCard: {
     gap: 6,
     marginBottom: 10,

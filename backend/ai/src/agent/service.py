@@ -17,8 +17,16 @@ from pydantic_ai.models import Model
 
 from src.agent.guardrails import GuardrailLimits, GuardrailService
 from src.agent.repository import AgentConversationRepository
-from src.agent.tools import AgentContext, build_restock_tool, build_shop_data_tool
+from src.agent.tools import (
+    AgentContext,
+    build_restock_tool,
+    build_shop_data_tool,
+)
+from src.memory.repository import RecalledMemory
+from src.memory.service import AgentMemoryService
 from src.prompt_templates import (
+    CURRENT_TIME,
+    MEMORY_PROMPT,
     RESTOCK_PROMPT,
     SHOP_AGENT_SYSTEM_PROMPT,
     SQL_AGENT_PROMPT,
@@ -26,6 +34,7 @@ from src.prompt_templates import (
 from src.providers.factory import session_settings
 from src.restock.service import RestockService
 from src.sql.repository import ShopDataRepository
+from src.utils import get_time
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +46,13 @@ class AgentChatResult:
     answer: str
     model: str
     model_version: str
+
+
+@dataclass(frozen=True)
+class MemoryRecalled:
+    """The memories the reply draws on; sent before the first text."""
+
+    memories: list[RecalledMemory]
 
 
 @dataclass(frozen=True)
@@ -54,7 +70,7 @@ class Done:
     result: AgentChatResult
 
 
-AgentStreamEvent = TextDelta | Reset | Done
+AgentStreamEvent = MemoryRecalled | TextDelta | Reset | Done
 
 
 class AgentService:
@@ -67,6 +83,7 @@ class AgentService:
         guardrail_limits: GuardrailLimits,
         shop_data: ShopDataRepository | None = None,
         restock: RestockService | None = None,
+        memory: AgentMemoryService | None = None,
         history_turns: int = 100,
     ) -> None:
         self.model_name = model.model_name if model is not None else ""
@@ -76,6 +93,7 @@ class AgentService:
         self.history_messages = 2 * history_turns
         # The instructions are static so providers can cache them; the shop scope
         # arrives per request through AgentContext and never appears in the prompt.
+        # Only the current time changes per run, so it comes last.
         # Each optional capability adds its own tool and prompt section.
         tools = []
         prompt_parts = [SHOP_AGENT_SYSTEM_PROMPT]
@@ -85,11 +103,17 @@ class AgentService:
         if restock is not None:
             tools.append(build_restock_tool(restock))
             prompt_parts.append(RESTOCK_PROMPT)
+        if memory is not None:
+            prompt_parts.append(MEMORY_PROMPT)
+        self.memory = memory
+        # Memory writes run after the reply; held here so they are not garbage
+        # collected mid-run.
+        self.memory_writes: set[asyncio.Task] = set()
         self.agent = (
             Agent(
                 model,
                 deps_type=AgentContext,
-                instructions="\n\n".join(prompt_parts),
+                instructions=["\n\n".join(prompt_parts), self._current_time],
                 tools=tools,
                 # The limits arrive from the composition root, so this module reads no
                 # global settings and guardrails cannot be switched off by a caller.
@@ -111,11 +135,12 @@ class AgentService:
     ) -> AgentChatResult:
         context = AgentContext(user_id=user_id, shop_id=shop_id)
         question, history = await self._prepare_turn(context, message, conversation_id)
+        prompt, recalled = await self._with_memories(context, question)
         answer, version = await self._answer(
-            question, history, context, self._session_id(conversation_id)
+            prompt, history, context, self._session_id(conversation_id)
         )
         return await self._save_turn(
-            context, conversation_id, question, answer, version
+            context, conversation_id, question, answer, version, recalled
         )
 
     async def stream_chat(
@@ -129,7 +154,10 @@ class AgentService:
         iterator runs the model and yields the events."""
         context = AgentContext(user_id=user_id, shop_id=shop_id)
         question, history = await self._prepare_turn(context, message, conversation_id)
-        return self._stream_events(question, history, context, conversation_id)
+        prompt, recalled = await self._with_memories(context, question)
+        return self._stream_events(
+            question, prompt, recalled, history, context, conversation_id
+        )
 
     async def _prepare_turn(
         self, context: AgentContext, message: str, conversation_id: int | None
@@ -157,9 +185,23 @@ class AgentService:
         question = self.guardrails.check_input(message)
         return question, history
 
+    async def _with_memories(
+        self, context: AgentContext, question: str
+    ) -> tuple[str, list[RecalledMemory]]:
+        """The prompt sent to the model, led by recalled memories, and those memories.
+
+        Only the model sees them; the stored message stays the owner's own words, so
+        later turns do not replay old memories with the history.
+        """
+        if self.memory is None:
+            return question, []
+        return await self.memory.with_memories(
+            context.shop_id, context.user_id, question
+        )
+
     async def _answer(
         self,
-        question: str,
+        prompt: str,
         history: list[dict],
         context: AgentContext,
         session_id: str,
@@ -167,7 +209,7 @@ class AgentService:
         """Run the agent; return the screened answer and the model version."""
         async with self.guardrails.run_limits():
             result = await self.agent.run(
-                question,
+                prompt,
                 message_history=self._model_messages(history),
                 deps=context,
                 usage_limits=self.guardrails.usage_limits,
@@ -178,13 +220,17 @@ class AgentService:
     async def _stream_events(
         self,
         question: str,
+        prompt: str,
+        recalled: list[RecalledMemory],
         history: list[dict],
         context: AgentContext,
         conversation_id: int | None,
     ) -> AsyncGenerator[AgentStreamEvent]:
         events: asyncio.Queue[AgentStreamEvent | Exception] = asyncio.Queue()
         producer = asyncio.create_task(
-            self._produce_turn(question, history, context, conversation_id, events)
+            self._produce_turn(
+                question, prompt, recalled, history, context, conversation_id, events
+            )
         )
         try:
             while True:
@@ -203,6 +249,8 @@ class AgentService:
     async def _produce_turn(
         self,
         question: str,
+        prompt: str,
+        recalled: list[RecalledMemory],
         history: list[dict],
         context: AgentContext,
         conversation_id: int | None,
@@ -211,8 +259,10 @@ class AgentService:
         # The run gets its own task: pydantic-ai binds its run state to the task that
         # opened it, so a generator suspended mid-run cannot be closed from outside.
         try:
+            if recalled:
+                events.put_nowait(MemoryRecalled(recalled))
             delivered, result = await self._stream_run(
-                question, history, context, self._session_id(conversation_id), events
+                prompt, history, context, self._session_id(conversation_id), events
             )
             answer, version = self._read_result(result)
             if not answer.startswith(delivered):
@@ -221,7 +271,7 @@ class AgentService:
             if answer[len(delivered) :]:
                 events.put_nowait(TextDelta(answer[len(delivered) :]))
             saved = await self._save_turn(
-                context, conversation_id, question, answer, version
+                context, conversation_id, question, answer, version, recalled
             )
             events.put_nowait(Done(saved))
         except Exception as error:
@@ -230,7 +280,7 @@ class AgentService:
 
     async def _stream_run(
         self,
-        question: str,
+        prompt: str,
         history: list[dict],
         context: AgentContext,
         session_id: str,
@@ -242,7 +292,7 @@ class AgentService:
         async with (
             self.guardrails.run_limits(),
             self.agent.iter(
-                question,
+                prompt,
                 message_history=self._model_messages(history),
                 deps=context,
                 usage_limits=self.guardrails.usage_limits,
@@ -287,6 +337,7 @@ class AgentService:
         question: str,
         answer: str,
         version: str,
+        recalled: list[RecalledMemory],
     ) -> AgentChatResult:
         saved_conversation_id, message_id = await asyncio.to_thread(
             self.conversations.save_exchange,
@@ -296,6 +347,8 @@ class AgentService:
             user_message=question,
             assistant_message=answer,
         )
+        if self.memory is not None:
+            self._remember(context, saved_conversation_id, question, answer, recalled)
         return AgentChatResult(
             conversation_id=saved_conversation_id,
             message_id=message_id,
@@ -303,6 +356,33 @@ class AgentService:
             model=self.model_name,
             model_version=version,
         )
+
+    def _remember(
+        self,
+        context: AgentContext,
+        conversation_id: int,
+        question: str,
+        answer: str,
+        recalled: list[RecalledMemory],
+    ) -> None:
+        """Store what the turn taught without making the owner wait for it."""
+        task = asyncio.create_task(
+            self.memory.remember(
+                context.shop_id,
+                context.user_id,
+                conversation_id,
+                question,
+                answer,
+                recalled,
+            )
+        )
+        self.memory_writes.add(task)
+        task.add_done_callback(self.memory_writes.discard)
+
+    @staticmethod
+    def _current_time() -> str:
+        """Lets the model resolve "today" or "last week" without asking."""
+        return CURRENT_TIME.format(time=get_time().strftime("%A %Y-%m-%d %H:%M"))
 
     @staticmethod
     def _model_messages(history: list[dict]) -> list[ModelMessage]:

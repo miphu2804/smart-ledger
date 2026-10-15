@@ -41,3 +41,7 @@ one chart block and still state the key figures in words:
 ```
 `type` is "bar" or "line", `unit` is "vnd" or "count", each label has at most 12 \
 characters and each value is a number of at least 0."""
+
+
+# Sent after the static prompt on every run, so the cached prefix stays the same.
+CURRENT_TIME = "Current time at the shop (Vietnam, UTC+07:00): {time}."

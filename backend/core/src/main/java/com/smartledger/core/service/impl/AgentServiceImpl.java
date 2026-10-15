@@ -37,6 +37,7 @@ public class AgentServiceImpl implements AgentService {
     private static final Logger log = LoggerFactory.getLogger(AgentServiceImpl.class);
     private static final String AGENT_PATH = "/internal/v1/agent";
     private static final String CONVERSATION_PATH = AGENT_PATH + "/conversations/{id}";
+    private static final String MEMORY_SETTINGS_PATH = AGENT_PATH + "/memory/settings";
     private static final ObjectMapper JSON = new ObjectMapper();
     /** A turn the AI's guardrails stop answers 422 with one of these codes (api-contracts.md section 6). */
     private static final Map<String, ErrorCode> GUARDRAIL_CODES = Map.of(
@@ -92,6 +93,22 @@ public class AgentServiceImpl implements AgentService {
         body.put("title", title);
         return callAi(() -> send(aiClient.patch().uri(CONVERSATION_PATH, conversationId).body(body))
                 .body(JsonNode.class));
+    }
+
+    @Override
+    public JsonNode getMemorySettings(VerifiedFirebaseToken token, String shopId) {
+        Shop shop = shopService.requireOwnedActiveShop(token, shopId);
+        return callAi(() -> send(aiClient.get()
+                .uri(uri -> scoped(uri.path(MEMORY_SETTINGS_PATH), shop).build()))
+                .body(JsonNode.class));
+    }
+
+    @Override
+    public JsonNode setMemoryEnabled(VerifiedFirebaseToken token, String shopId, boolean enabled) {
+        Shop shop = shopService.requireOwnedActiveShop(token, shopId);
+        Map<String, Object> body = scopedBody(shop);
+        body.put("memory_enabled", enabled);
+        return callAi(() -> send(aiClient.put().uri(MEMORY_SETTINGS_PATH).body(body)).body(JsonNode.class));
     }
 
     @Override

@@ -36,8 +36,9 @@ def internal_headers() -> dict[str, str]:
 def wire_agent_state():
     """Point the app at a test agent and its conversation store."""
 
-    def _wire(agent, conversations) -> None:
+    def _wire(agent, conversations, memory=None) -> None:
         app.state.agent = agent
         app.state.conversations = conversations
+        app.state.memory = memory
 
     return _wire
