@@ -1,3 +1,11 @@
+### [2026-10-16 02:44 UTC+07:00] — [Fix] "Xem lại hướng dẫn" replays the guide on Tổng quan
+
+**Done:** The Settings button "Xem lại hướng dẫn" (#233) opened the guide on top of Settings. It now goes to Tổng quan and shows the guide there, as on the first sign-in; closing it leaves the user on Tổng quan. `AppStore` gains `showGuide()` (sets `guideDismissed` to false), and Settings no longer renders its own copy of the guide.
+
+**Changed files:** `frontend/mobile/app/settings.tsx`, `frontend/mobile/src/store/AppStore.tsx`, `docs/product/product-requirements.md` (`AC-018`) — modified; this entry.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (only the 2 known errors in #230's files). Mock web build in headless Chrome, 2/2: from Settings the guide opens on the Bobi step over Tổng quan, and after closing, Tổng quan is shown and Settings is not. **Not verified:** a phone.
+
 ### [2026-10-16 10:30 UTC+07:00] — [Fix] Agent memory writes semantic facts by default
 
 **Done:** The default for `AGENT_MEMORY_TYPES` is now `preference,procedural,semantic`, matching what staging and production run. With the old default the extractor dropped stable facts such as suppliers while the agent still told the owner "Đã ghi nhớ". ADR 0002 records the change and its reason; PO approval of the type list is still open.
