@@ -2185,3 +2185,11 @@
 **Changed files:** `frontend/mobile/app.json`, `frontend/mobile/plugins/withAndroidApkSize.js` (new), `frontend/mobile/README.md`, `.github/workflows/mobile-release.yml`, `docs/development/ci-cd.md` and this entry.
 
 **Check:** `expo prebuild` writes the expected `gradle.properties`, `build.gradle` locale filter and ProGuard rules. Two `android-dev` builds on `ubuntu-24.04` from the same base commit (runs 38729102565 and 38729105555, `arm64-v8a`): 95.2 MB before, 40.3 MB after (native libraries 62.0 → 20.3 MB stored, dex 20.1 → 8.4 MB). Not run: the four-ABI staging or production build (expected near 100 MB), and the R8 build on a device, so sign-in, barcode scanning and voice ordering in the minified build are unverified.
+
+### [2026-10-15 20:00 UTC+07:00] — [Mobile] Release ABIs and a local Android build
+
+**Done:** Staging and production builds carry only `armeabi-v7a` and `arm64-v8a`; x86 and x86_64 served only Intel emulators. New `scripts/android-local-release.sh` builds the release APK on a developer machine without CI (prebuild, `assembleRelease`, optional `adb install`) and prints the APK contents through `scripts/apk-contents.sh`, which the workflow's report step now shares.
+
+**Changed files:** `.github/workflows/mobile-release.yml`, `scripts/android-local-release.sh` (new), `scripts/apk-contents.sh` (new), `frontend/mobile/README.md`, `docs/development/ci-cd.md` and this entry.
+
+**Check:** On the Apple M4 Pro the script built the two-ABI release APK in 3 min 21 s at 58.2 MB, against 287 MB for the last published four-ABI APK. Run 38730893725 passed with the shared report step. Not run: the minified APK on a phone (sign-in, barcode scanning, voice ordering), and a staging or production run of the workflow.
