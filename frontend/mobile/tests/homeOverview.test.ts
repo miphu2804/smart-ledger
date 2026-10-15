@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { formatQuantity, restockRows, revenueChange, topSellerRows } from '../src/lib/homeOverview.ts';
+import { formatQuantity, periodRevenue, restockRows, revenueChange, topSellerRows } from '../src/lib/homeOverview.ts';
 
 describe('revenueChange', () => {
   it('tính tỉ lệ so với hôm qua', () => {
@@ -48,5 +48,40 @@ describe('formatQuantity', () => {
     assert.equal(formatQuantity(2), '2');
     assert.equal(formatQuantity(1.5), '1.5');
     assert.equal(formatQuantity(0.1 + 0.2), '0.3');
+  });
+});
+
+describe('periodRevenue', () => {
+  const sales = (confirmedSalesVnd: number, confirmedOrderCount: number, matchedOrderCount = confirmedOrderCount) => ({
+    confirmedSalesVnd,
+    confirmedOrderCount,
+    matchedOrderCount,
+  });
+  it('huỷ đơn bán kỳ trước: doanh thu không âm, giá trị đơn sang bên chi', () => {
+    // Hôm nay chưa bán gì, huỷ một đơn 150.000đ bán hôm qua (Core: net = −150.000)
+    assert.deepEqual(periodRevenue({ grossRevenueVnd: 0, voidedRevenueVnd: 150_000 }, sales(0, 0)), {
+      orderCount: 0,
+      revenueVnd: 0,
+      cancelledEarlierVnd: 150_000,
+      hasOrders: false,
+    });
+  });
+  it('bán rồi huỷ cùng kỳ: chỉ mất khỏi doanh thu, không sang bên chi', () => {
+    // Bán 300.000đ (2 đơn), huỷ đơn 100.000đ cũng bán hôm nay
+    assert.deepEqual(periodRevenue({ grossRevenueVnd: 300_000, voidedRevenueVnd: 100_000 }, sales(200_000, 1, 2)), {
+      orderCount: 1,
+      revenueVnd: 200_000,
+      cancelledEarlierVnd: 0,
+      hasOrders: true,
+    });
+  });
+  it('vừa huỷ đơn cùng kỳ vừa huỷ đơn kỳ trước', () => {
+    // Bán 300.000đ, huỷ 100.000đ bán hôm nay và 50.000đ bán hôm qua
+    const r = periodRevenue({ grossRevenueVnd: 300_000, voidedRevenueVnd: 150_000 }, sales(200_000, 1, 2));
+    assert.equal(r.revenueVnd, 200_000);
+    assert.equal(r.cancelledEarlierVnd, 50_000);
+  });
+  it('đơn bán trong kỳ huỷ sau kỳ (hôm qua): bên chi không âm', () => {
+    assert.equal(periodRevenue({ grossRevenueVnd: 300_000, voidedRevenueVnd: 0 }, sales(200_000, 1, 2)).cancelledEarlierVnd, 0);
   });
 });
