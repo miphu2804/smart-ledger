@@ -1,3 +1,15 @@
+### [2026-10-16 09:00 UTC+07:00] — [Docs] Table format for commits and pull requests
+
+**Done:** Defined one format for every future commit and pull request: a closed scope list, body and footer rules, a `!` plus `BREAKING CHANGE:` rule that survives squash merges, and pull request descriptions built from Summary, Changes, Validation, Risks and rollback, and Config and migrations tables. Release pull requests (`staging` → `main`) get their own template that must list every commit in `origin/main..origin/staging` grouped by area, with Breaking changes and Deploy tables. Reviewed by an Opus medium pass; its findings (template default-branch caveat, release template URL, squash and breaking marks, scope list, Deploy rows, AGENTS.md duplication) are applied.
+
+**Changed files:**
+- `CONTRIBUTING.md`, `AGENTS.md`, `PROGRESS.md` — modified
+- `.github/pull_request_template.md`, `.github/PULL_REQUEST_TEMPLATE/release.md` — created
+
+**Flow explained:** GitHub reads pull request templates from the default branch (`main`), so they pre-fill only after the release that carries them; until then paste the structure from CONTRIBUTING.md.
+
+**Check:** Markdown re-read and links checked; no code or workflow touched. **Not verified:** the templates pre-filling on GitHub (needs the change on `main`).
+
 ### [2026-10-15 18:00 UTC+07:00] — [Feature] In-app update for the R2 APK
 
 **Done:** A published production APK now offers to update itself. CD builds it with `ANDROID_VERSION_CODE=<run number>` (new, monotonic; before, every build was versionCode 1) and `EXPO_PUBLIC_UPDATE_URL`, uploads the APK, then writes `android/production/version.json`. On launch the app fetches that file, compares `versionCode` with the installed one and, if higher, shows a dialog that downloads the APK from `builds/` and opens Android's installer. No new native module: `expo-file-system` (existing FileProvider), `expo-intent-launcher` and `expo-application`. `REQUEST_INSTALL_PACKAGES` is declared only when the update URL is set. Stacked on #225 (`feat/mobile-release-builds`).
