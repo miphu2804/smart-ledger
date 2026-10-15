@@ -271,6 +271,9 @@ export interface SaleView {
   items: SaleItemView[];
   customerId: number | null;
   outstandingVnd: number;
+  /** Lúc đơn bị huỷ; null khi đơn còn hiệu lực */
+  voidedAt?: string | null;
+  voidReason?: string | null;
 }
 
 /** Hoàn tiền của một đơn đã huỷ (`SaleRefundResponse`). Một đơn có tối đa một khoản hoàn, bằng toàn bộ tiền đã thu. */
