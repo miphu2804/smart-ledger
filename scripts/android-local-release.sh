@@ -37,8 +37,23 @@ if [ -z "${JAVA_HOME:-}" ] && [ -d "$studio_jbr" ]; then export JAVA_HOME="$stud
 java_bin="${JAVA_HOME:+$JAVA_HOME/bin/}java"
 command -v "$java_bin" >/dev/null || die "Không thấy JDK — cài JDK 17 hoặc Android Studio, hoặc đặt JAVA_HOME."
 
-sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}"
-[ -d "$sdk" ] || die "Không thấy Android SDK ở $sdk — cài qua Android Studio hoặc đặt ANDROID_HOME."
+# SDK: ANDROID_HOME / ANDROID_SDK_ROOT, else the usual install folders (Android Studio, Homebrew), else the folder
+# that holds adb or sdkmanager on PATH.
+find_sdk() {
+  local d tool
+  for d in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "$HOME/Library/Android/sdk" "$HOME/Android/Sdk" \
+    /opt/homebrew/share/android-commandlinetools /usr/local/share/android-commandlinetools; do
+    [ -n "$d" ] && [ -d "$d/platforms" ] && { echo "$d"; return 0; }
+  done
+  for tool in adb sdkmanager; do
+    tool="$(command -v "$tool" 2>/dev/null)" || continue
+    d="$(cd "$(dirname "$(readlink -f "$tool" 2>/dev/null || echo "$tool")")/.." && pwd)"
+    [ -d "$d/platforms" ] && { echo "$d"; return 0; }
+    [ -d "$d/../platforms" ] && { (cd "$d/.." && pwd); return 0; }
+  done
+  return 1
+}
+sdk="$(find_sdk)" || die "Không thấy Android SDK (thư mục có platforms/). Đặt ANDROID_HOME=<đường dẫn SDK> rồi chạy lại."
 export ANDROID_HOME="$sdk"
 
 if [ -z "${GOOGLE_SERVICES_JSON:-}" ] && [ ! -f google-services.json ]; then
@@ -51,6 +66,7 @@ echo "${bold}Sổ Nghe Lời — build APK Release trên máy này${reset}"
 echo "  Nhánh:  ${cyan}$branch${reset}"
 echo "  Commit: $commit"
 echo "  ABI:    ${cyan}$abis${reset}"
+echo "  SDK:    $sdk"
 [ -z "$(git status --porcelain -- . 2>/dev/null)" ] || echo "  ${yellow}! Có thay đổi chưa commit trong frontend/mobile — vẫn được build vào app.${reset}"
 # Expo does not override shell variables with .env values, so the exported mock flags cannot be turned back on by .env.
 export EXPO_PUBLIC_USE_MOCK=false EXPO_PUBLIC_MOCK_CORE=false EXPO_PUBLIC_MOCK_SHOPS=false
