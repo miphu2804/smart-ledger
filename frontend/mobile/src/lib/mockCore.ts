@@ -59,7 +59,7 @@ let debts: DebtView[] = [];
 let expenses: ExpenseView[] = [];
 /** Khoản hoàn của đơn đã huỷ, theo saleId (mỗi đơn tối đa một khoản) */
 const refunds = new Map<number, SaleRefundView>();
-/** Lúc huỷ của đơn đã huỷ, theo saleId — Core lưu voidedAt nhưng `SaleView` không trả, báo cáo cần để tính doanh thu bị huỷ */
+/** Lúc huỷ của đơn đã huỷ, theo saleId (cũng có trong `SaleView.voidedAt`), để báo cáo tính doanh thu bị huỷ */
 const saleVoidedAt = new Map<number, string>();
 /** Inbox thông báo của OWNER (mới nhất cuối mảng; endpoint trả mới nhất trước) */
 let notifications: NotificationView[] = [];
@@ -1273,6 +1273,8 @@ function voidSale(id: number, body: SaleVoidBody): SaleVoidView {
   // Như Core: đơn đã huỷ có dư nợ 0 nhưng giữ nguyên số đã thu và trạng thái thanh toán để xem lại lịch sử.
   sale.saleStatus = 'VOIDED';
   sale.outstandingVnd = 0;
+  sale.voidedAt = now;
+  sale.voidReason = reason;
   saleVoidedAt.set(id, now);
   pushNotification('SALE_VOIDED', 'Đơn hàng đã hủy', `Đơn #${sale.id} đã được hủy.`, 'SALE', sale.id);
   return { sale, refund, cancelledDebtVnd, stockRestocked: restores.length > 0 };

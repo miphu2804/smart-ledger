@@ -8,7 +8,7 @@ import { AssistantIntroModal } from '../../src/components/AssistantIntroModal';
 import { Button, Card, EmptyState, Row, T } from '../../src/components/ui';
 import { CountUp, Reveal, Skeleton } from '../../src/components/reveal';
 import { vnd } from '../../src/lib/format';
-import { formatQuantity, restockRows, revenueChange as changeVsYesterday, topSellerRows } from '../../src/lib/homeOverview';
+import { formatQuantity, periodRevenue, restockRows, revenueChange as changeVsYesterday, topSellerRows } from '../../src/lib/homeOverview';
 import { fromCoreNotification, isNotifUnread, mergeNotifications, notifCategoryMeta, totalUnread } from '../../src/lib/notifications';
 import { reportPeriodOf } from '../../src/lib/saleFilter';
 import { periodLabel } from '../../src/lib/stats';
@@ -77,13 +77,15 @@ export default function Home() {
   };
   const ready = !overview.loading && !error;
 
-  // Doanh thu thuần (bán trong kỳ − huỷ trong kỳ) và số đơn bán trong kỳ, như màn Đơn hàng; `undefined` khi chưa có số.
-  const totals = overview.summary
+  // Doanh thu của các đơn bán trong kỳ còn hiệu lực (không âm) và số đơn đó, như màn Đơn hàng; `undefined` khi chưa có số.
+  // Đơn bán kỳ trước mà huỷ trong kỳ không trừ vào đây (xem `periodRevenue`).
+  const periodTotals = overview.summary && overview.sales ? periodRevenue(overview.summary, overview.sales) : null;
+  const totals = periodTotals
     ? {
-        count: overview.summary.orderCount,
-        revenue: overview.summary.netRevenueVnd,
-        // Kỳ có đơn bán hoặc đơn bị huỷ thì có doanh thu để hiện (có thể âm), không phải "Chưa có đơn"
-        active: overview.summary.orderCount > 0 || overview.summary.voidedOrderCount > 0,
+        count: periodTotals.orderCount,
+        revenue: periodTotals.revenueVnd,
+        // Kỳ có đơn bán (kể cả đơn sau đó bị huỷ) thì hiện doanh thu, không phải "Chưa có đơn"
+        active: periodTotals.hasOrders,
       }
     : undefined;
   const topSellers = topSellerRows(overview.top ?? []);
@@ -94,7 +96,7 @@ export default function Home() {
   const lowStock = restockRows(overview.restock?.items ?? []);
   const priorityCount = Number(totalDebt > 0) + Number(restockTotal > 0);
   const revenueChange =
-    period === 'today' && totals ? changeVsYesterday(totals.revenue, local.yesterday?.netRevenueVnd) : null;
+    period === 'today' && totals ? changeVsYesterday(totals.revenue, local.yesterdayRevenue) : null;
   // Thông báo: kho hàng, đơn bị huỷ và tình trạng tiệm lấy từ inbox Core (chỉ cần trang đầu để xem trước); đơn mới, công nợ, thu chi tính trên máy.
   const coreNotifications = useCoreNotifications(5);
   const coreNotifs = useMemo(() => coreNotifications.items.map(fromCoreNotification), [coreNotifications.items]);
@@ -418,6 +420,12 @@ export default function Home() {
               ) : (
                 <T w="extrabold" size={18} style={{ marginTop: 10 }}>Chưa có đơn trong kỳ</T>
               )}
+              {periodTotals && periodTotals.cancelledEarlierVnd > 0 ? (
+                // Đơn bán kỳ trước bị huỷ trong kỳ: không trừ vào doanh thu mà tính vào chi, nêu ra để chủ tiệm biết
+                <T size={12} color={colors.muted} style={{ marginTop: 4 }}>
+                  Huỷ đơn bán kỳ trước {vnd(periodTotals.cancelledEarlierVnd)} · tính vào chi phí
+                </T>
+              ) : null}
               <Row style={styles.financeRow} gap={14}>
                 <View style={styles.financeItem}>
                   <Tab1Icon name="closedOrders" size={25} style={styles.financeIcon} />

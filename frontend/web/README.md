@@ -83,11 +83,10 @@ Chụp lại ảnh khi giao diện app đổi: chạy dev build trên simulator 
 
 **Trang pháp lý** (`src/pages/legal/`) chưa được duyệt theo [AGENTS.md](../../AGENTS.md). Trước khi công khai: chủ sản phẩm duyệt nội dung (kể cả cam kết xử lý yêu cầu xoá trong `DELETION_DAYS`, `src/pages/legal/legalConfig.ts`) rồi đặt `VITE_LEGAL_DRAFT=false`.
 
-**Triển khai:** job `deploy-landing` trong [`ci.yml`](../../.github/workflows/ci.yml) build web này và đẩy lên một dự án Vercel riêng tên `landing`. Vercel Git không deploy (`git.deploymentEnabled: false` trong `vercel.json`). Ba môi trường, chi tiết ở [CI/CD](../../docs/development/ci-cd.md#landing-page-on-vercel):
+**Triển khai:** job `deploy-landing` trong [`ci.yml`](../../.github/workflows/ci.yml) build web này và đẩy lên một dự án Vercel riêng tên `landing`. Vercel Git không deploy (`git.deploymentEnabled: false` trong `vercel.json`). Pull request tạm không deploy preview (giới hạn deploy/ngày của Vercel Hobby). Các môi trường, chi tiết ở [CI/CD](../../docs/development/ci-cd.md#landing-page-on-vercel):
 
 | Môi trường | Nhánh | Địa chỉ |
 | --- | --- | --- |
-| Preview | Pull request trong repo | `https://smart-ledger-landing-pr-<số PR>.vercel.app`, ghi trong run summary |
 | Staging | `staging` | `LANDING_URL` của environment `landing-staging` |
 | Production | `main` (cần duyệt) | `LANDING_URL` của environment `landing-production` |
 
