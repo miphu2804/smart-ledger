@@ -167,6 +167,12 @@ const FILLER = [
   'con',
   'a',
   'ha',
+  // Từ thêm vào cuối câu gọi món ("hai cà phê nữa", "lấy luôn"), không thuộc tên món
+  'nua',
+  'thoi',
+  'luon',
+  'giup',
+  'dum',
 ];
 /** Từ nối giữa hai món khi nói liền một câu: "2 cà phê VÀ 1 bánh mì". */
 const DELIMITER_WORDS = new Set(['voi', 'them', 'va', 'kem', 'cung', 'nha', 'nhe', 'roi']);
@@ -674,7 +680,10 @@ export function parseOrder(text: string, products: ParseableProduct[]): ParsedOr
     // lặng lẽ bỏ chữ thừa. Nói trùng hẳn tên một món (ngoài tên chỉ còn số lượng, từ đệm), hoặc nói kèm giá, thì không hỏi.
     const words = spokenNameWords(rest);
     const exact = !!outside && spokenNameWords(outside.rest).length === 0;
-    const variants = price || exact ? [] : variantsOf(words, products);
+    const longer = price || exact ? [] : variantsOf(words, products);
+    // Khớp được món nhưng còn chữ thuộc tên mà không món nào có ("cà phê sữa" khi danh mục chỉ có "Cà phê"): không lặng lẽ ghi
+    // món ngắn hơn, mà hỏi người dùng chọn món đó hay thêm món mới đúng tên đã nói
+    const variants = longer.length || !matched || price || exact ? longer : [matched];
     const name = cleanName(rest, text);
 
     if (matched && !variants.length) {
