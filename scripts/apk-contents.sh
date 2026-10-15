@@ -4,7 +4,7 @@
 #
 #   ./scripts/apk-contents.sh path/to/app.apk
 #
-# Used by scripts/android-local-release.sh and by step "Report the APK contents" of .github/workflows/mobile-release.yml.
+# Used by scripts/android-release.sh, which runs both locally and in .github/workflows/mobile-release.yml.
 set -euo pipefail
 
 apk="${1:?usage: $0 <file.apk>}"

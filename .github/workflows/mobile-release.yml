@@ -252,12 +252,6 @@ jobs:
           echo "$line"
           echo "$line" >> "$GITHUB_ENV"
 
-      - name: Install JavaScript dependencies
-        working-directory: frontend/mobile
-        run: npm ci
-      - name: Mark install done
-        run: echo "install=$(date +%s)" >> "$TIMINGS"
-
       # app.config.js reads the Firebase file from the path in GOOGLE_SERVICES_JSON. The file is gitignored (public
       # repo), so it is written from the environment secret to a temp path and never lands in the workspace.
       - name: Write google-services.json
@@ -280,70 +274,28 @@ jobs:
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
           echo "RELEASE_KEYSTORE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
 
-      # --clean regenerates android/ so a leftover from a previous build on a self-hosted machine cannot leak in.
-      - name: Generate the native project
-        working-directory: frontend/mobile
-        run: npx expo prebuild --platform android --no-install --clean
-      - name: Mark prebuild done
-        run: echo "prebuild=$(date +%s)" >> "$TIMINGS"
-
+      # scripts/android-release.sh does what a local build does (npm ci, expo prebuild --clean, Gradle, APK report), so
+      # a build on a laptop matches this one. The workflow keeps only what needs CI: branch gate, runner, toolchain,
+      # secrets, publish and artifacts.
       - name: Build
         id: build
-        working-directory: frontend/mobile/android
         env:
           FORMAT: ${{ steps.cfg.outputs.format }}
           ABIS: ${{ steps.cfg.outputs.abis }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-        run: |
-          task=assembleRelease
-          [ "$FORMAT" = aab ] && task=bundleRelease
-          # `expo prebuild --clean` rewrites build.gradle on every run, so the keystore is passed through the Android
-          # Gradle plugin's injected signing properties, which override the signing config of the built variant.
-          signing=()
-          if [ -n "$RELEASE_KEYSTORE" ]; then
-            signing=(
-              "-Pandroid.injected.signing.store.file=$RELEASE_KEYSTORE"
-              "-Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD"
-              "-Pandroid.injected.signing.key.alias=$RELEASE_KEY_ALIAS"
-              "-Pandroid.injected.signing.key.password=$KEYSTORE_PASSWORD"
-            )
-          fi
-          ./gradlew "$task" "-PreactNativeArchitectures=$ABIS" "-Dorg.gradle.jvmargs=$GRADLE_JVM_ARGS" "${signing[@]}"
-      - name: Remove the release keystore
-        if: always()
-        run: rm -f "$RUNNER_TEMP/release.keystore"
-      - name: Mark build done
-        run: echo "gradle=$(date +%s)" >> "$TIMINGS"
-
-      - name: Collect the artifact
-        id: package
-        env:
-          FORMAT: ${{ steps.cfg.outputs.format }}
           ENVIRONMENT: ${{ inputs.environment }}
           REF_NAME: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
         run: |
-          if [ "$FORMAT" = aab ]; then
-            built=frontend/mobile/android/app/build/outputs/bundle/release/app-release.aab
-          else
-            built=frontend/mobile/android/app/build/outputs/apk/release/app-release.apk
-          fi
-          [ -f "$built" ] || { echo "::error::Gradle finished but $built does not exist."; exit 1; }
           branch=$(echo "$REF_NAME" | tr -c 'A-Za-z0-9\n' '-')
-          name="smart-ledger-${ENVIRONMENT#android-}-${branch}-${SHA::7}.$FORMAT"
-          mkdir -p "$RUNNER_TEMP/android-out"
-          cp "$built" "$RUNNER_TEMP/android-out/$name"
-          echo "path=$RUNNER_TEMP/android-out/$name" >> "$GITHUB_OUTPUT"
-      - name: Mark packaged
-        run: echo "package=$(date +%s)" >> "$TIMINGS"
-
-      # Shows where the APK size goes (native libraries per ABI, dex, assets) on the run page, so a size change can be
-      # traced to its cause without downloading the file. Sizes are as stored in the APK (stored = compressed size).
-      - name: Report the APK contents
-        if: steps.cfg.outputs.format == 'apk'
-        env:
-          APK: ${{ steps.package.outputs.path }}
-        run: bash scripts/apk-contents.sh "$APK" | tee -a "$GITHUB_STEP_SUMMARY"
+          out="$RUNNER_TEMP/android-out/smart-ledger-${ENVIRONMENT#android-}-${branch}-${SHA::7}.$FORMAT"
+          args=(--abis "$ABIS" --out "$out")
+          [ "$FORMAT" = aab ] && args+=(--aab)
+          ./scripts/android-release.sh "${args[@]}"
+          echo "path=$out" >> "$GITHUB_OUTPUT"
+      - name: Remove the release keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.keystore"
 
       # builds/ keeps every published APK for rollback; latest.apk is the fixed URL the landing page links to.
       - name: Publish the APK to R2
@@ -355,7 +307,7 @@ jobs:
           AWS_DEFAULT_REGION: auto
           AWS_ENDPOINT_URL: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
           BUCKET: ${{ vars.R2_BUCKET }}
-          APK: ${{ steps.package.outputs.path }}
+          APK: ${{ steps.build.outputs.path }}
         run: |
           # Anyone can sign an update with the debug key, so a debug-signed APK must never reach the download link.
           sdk="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
@@ -376,7 +328,7 @@ jobs:
         env:
           STEPS_JSON: ${{ toJSON(steps) }}
           SUMMARY_DIR: ${{ runner.temp }}/android-summary
-          ARTIFACT_PATH: ${{ steps.package.outputs.path }}
+          ARTIFACT_PATH: ${{ steps.build.outputs.path }}
           ENVIRONMENT: ${{ inputs.environment }}
           REF_NAME: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
@@ -389,7 +341,7 @@ jobs:
         run: node .github/scripts/android-summary.mjs
 
       - uses: actions/upload-artifact@v7
-        if: steps.package.outcome == 'success'
+        if: steps.build.outcome == 'success'
         with:
           name: android-${{ inputs.environment }}-${{ github.run_number }}
           path: ${{ runner.temp }}/android-out/*

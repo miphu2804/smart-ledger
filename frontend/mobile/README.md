@@ -14,7 +14,7 @@ npm run typecheck
 npm test                # test parser câu trả lời của trợ lý (node --test, không cần thiết bị)
 npm run export:web      # build web tĩnh ra dist/
 ../../scripts/ios-device-release.sh   # chọn iPhone đang cắm vào Mac, build Release từ code đang checkout và cài lên máy
-../../scripts/android-local-release.sh [--abis arm64-v8a] [--install]   # build APK Release ngay trên máy (không qua CI), in dung lượng từng phần, --install cài qua adb
+../../scripts/android-release.sh [--abis arm64-v8a] [--install]   # build APK Release ngay trên máy, giống hệt CI; in dung lượng từng phần, --install cài qua adb
 ```
 
 ## Xem thử với dữ liệu mẫu
@@ -83,7 +83,7 @@ Bản release dùng các thiết lập sau (đo trên `arm64-v8a`, cùng commit:
 - `expo-build-properties` trong `app.json`: `useLegacyPackaging` nén các file `.so` trong APK (trước đó lưu không nén, chiếm 62 MB); `enableMinifyInReleaseBuilds` và `enableShrinkResourcesInReleaseBuilds` bật R8 và bỏ resource không dùng; `packagingOptions.exclude` bỏ file `.so` của FFmpeg và libarchive.
 - `extraProguardRules` giữ nguyên các class `com.k2fsa.sherpa.onnx.**` và `com.sherpaonnx.**`: code native của sherpa-onnx đọc chúng theo tên mà thư viện không kèm luật R8 cho chúng. Thêm thư viện native khác mà sập ở bản release (không sập ở bản debug) thì nghi R8 trước và thêm luật `-keep` ở đây.
 - `plugins/withAndroidApkSize.js`: tắt FFmpeg và libarchive trong sherpa-onnx (xem mục Nhận dạng giọng nói trên Android) và chỉ giữ chuỗi `vi`, `en` của các thư viện.
-- Đo lại: `scripts/apk-contents.sh <file.apk>` in dung lượng theo ABI, dex, resource, assets và 40 file lớn nhất; `scripts/android-local-release.sh` và bước `Report the APK contents` của CI đều gọi script này.
+- Đo lại: `scripts/apk-contents.sh <file.apk>` in dung lượng theo ABI, dex, resource, assets và 40 file lớn nhất; `scripts/android-release.sh` (chạy ở máy và trong CI) gọi script này sau mỗi lần build APK.
 - Đánh đổi: thư viện native được giải nén ra máy khi cài, nên dung lượng sau khi cài lớn hơn file APK; cài từ Google Play (AAB) không bị ảnh hưởng.
 
 ## Cấu trúc

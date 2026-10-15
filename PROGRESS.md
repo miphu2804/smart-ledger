@@ -2193,3 +2193,11 @@
 **Changed files:** `.github/workflows/mobile-release.yml`, `scripts/android-local-release.sh` (new), `scripts/apk-contents.sh` (new), `frontend/mobile/README.md`, `docs/development/ci-cd.md` and this entry.
 
 **Check:** On the Apple M4 Pro the script built the two-ABI release APK in 3 min 21 s at 58.2 MB, against 287 MB for the last published four-ABI APK. Run 38730893725 passed with the shared report step. Not run: the minified APK on a phone (sign-in, barcode scanning, voice ordering), and a staging or production run of the workflow.
+
+### [2026-10-15 20:30 UTC+07:00] — [Mobile] One Android build script for local and CI
+
+**Done:** `scripts/android-local-release.sh` becomes `scripts/android-release.sh` and job `build` of `mobile-release.yml` calls it instead of repeating the steps: `npm ci`, `expo prebuild --clean`, Gradle with the environment's ABIs and keystore (`--aab` for Play, `--out` for the artifact path), and the APK contents report. The workflow keeps the gate, runner choice, toolchain, secrets, R2 publish, summary and artifacts. Locally the script still turns the mocks off and points at staging Core; in GitHub Actions it uses the environment's `EXPO_PUBLIC_*` values as given. It also writes the phase marks the build summary reads.
+
+**Changed files:** `scripts/android-release.sh` (renamed), `scripts/apk-contents.sh`, `.github/workflows/mobile-release.yml`, `frontend/mobile/README.md`, `docs/development/ci-cd.md` and this entry.
+
+**Check:** See the run listed with this change in `docs/development/ci-cd.md` once it passes. Temporary branches `perf/mobile-apk-size-baseline` and `perf/mobile-apk-size-release-test` still exist on GitHub: this environment cannot delete remote branches.
