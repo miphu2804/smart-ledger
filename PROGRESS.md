@@ -1,3 +1,14 @@
+### [2026-10-16 01:30 UTC+07:00] — [CI] Skip Vercel previews on pull requests
+
+**Done:** `deploy-web` and `deploy-landing` now run on pushes to `staging` and `main` only. Pull-request previews used up the Vercel Hobby limit of 100 deployments a day (`api-deployments-free-per-day`), and once it ran out the staging deploys failed too and every PR showed two red checks. The PR-only steps stay in `ci.yml`, so previews come back by restoring one condition.
+
+**Changed files:**
+- `.github/workflows/ci.yml`, `docs/development/ci-cd.md`, `CONTRIBUTING.md`, `frontend/mobile/README.md`, `frontend/web/README.md` — modified
+
+**Flow explained:** PR → tests and builds only → merge → push `staging` → `deploy-web` / `deploy-landing` → staging alias; push `main` → approval → production.
+
+**Check:** workflow YAML parses and actionlint passes; docs re-read. **Not verified:** the first PR run without the deploy jobs (this PR's own CI).
+
 ### [2026-10-16 00:45 UTC+07:00] — [Feature] Debts screen groups by customer, searches, opens the sale and records transfers
 
 **Done:** The Công nợ screen lists one card per customer with the total still owed, the number of open debts and how long the oldest open debt has run ("nợ 7 ngày", red from 30 days), and under it each debt by sale ("Đơn #4 · Hôm qua") with its remaining amount. Core can create a new customer with the same name and phone for each credit sale, so customers with the same phone digits are grouped as one; customers without a phone stay apart. The header counts customers, not debts (the old "Số khách nợ" counted debts), with the number of open debts under it. A search box filters by name (accent-insensitive) or phone digits. The debt sheet opens the original sale ("Xem đơn #…"), records a payment as cash or transfer with an optional transaction reference (it always sent `CASH` before), shows the method in the history, and the reminder button opens an SMS with the shop name, amount left and sale number. Core is unchanged.
