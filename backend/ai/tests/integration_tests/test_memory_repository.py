@@ -122,6 +122,37 @@ def test_search_ranks_by_cosine_and_stays_in_the_owner_scope(memory_db) -> None:
     assert memories.search(ids["shop_a"], ids["user_b"], vector(1, 0), 5) == []
 
 
+def test_preferences_lead_whatever_the_message_and_are_not_repeated(
+    memory_db,
+) -> None:
+    _, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    conversation_id = new_conversation(postgres, ids["user_a"], ids["shop_a"])
+    memories.add(
+        ids["shop_a"],
+        ids["user_a"],
+        conversation_id,
+        [
+            NewMemory("preference", "trả lời dạng bảng", 0.9, vector(0, 1)),
+            NewMemory("preference", "gọi tôi là anh", 0.5, vector(0, 1)),
+            memory("gạo chú Tư", 1, 0),
+        ],
+    )
+
+    found = memories.search(
+        ids["shop_a"], ids["user_a"], vector(1, 0), 5, preference_limit=1
+    )
+
+    # The weaker preference is past the cap, so only the search can return it.
+    assert [item.content for item in found] == [
+        "trả lời dạng bảng",
+        "gạo chú Tư",
+        "gọi tôi là anh",
+    ]
+    assert found[0].relevance is None
+    assert {item.source_conversation_id for item in found} == {conversation_id}
+
+
 def test_deleting_a_conversation_forgets_its_memories(memory_db) -> None:
     _, postgres, ids = memory_db
     memories = AgentMemoryRepository(postgres)

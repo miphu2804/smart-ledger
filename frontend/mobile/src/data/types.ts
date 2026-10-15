@@ -114,6 +114,10 @@ export interface AgentMemoryUsed {
   id: number;
   memory_type: string;
   content: string;
+  /** Hội thoại sinh ra ghi nhớ; xoá hội thoại đó thì ghi nhớ cũng mất */
+  source_conversation_id: number;
+  /** ISO 8601 */
+  created_at: string;
 }
 
 export interface AgentMemorySettings {
