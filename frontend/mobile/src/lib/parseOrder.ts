@@ -14,7 +14,10 @@ export interface ParsedOrder {
   unknown: LineItem[];
   /** Các món đã nói tên nhưng chưa cung cấp số lượng */
   missingQuantityItems?: string[];
-  /** Các món có nhiều biến thể (ví dụ: Bạc xỉu -> Bạc xỉu đá / nóng, Sting -> Sting dâu / vàng) */
+  /**
+   * Tên nói ra là phần chung của một hay nhiều món trong danh mục nhưng không trùng hẳn món nào (ví dụ: "sting" khi có
+   * "Sting vàng" và "Sting đỏ"): UI hỏi người dùng chọn mẫu, không coi là món mới.
+   */
   disambiguations?: DisambiguationItem[];
   /**
    * Khoản chi phát hiện được trong câu nói (ví dụ: "chi 20k mua đá").
@@ -408,6 +411,34 @@ function matchProduct(seg: string, products: ParseableProduct[]): ParseableProdu
   return best?.p;
 }
 
+/** Số mẫu tối đa đưa ra cho một tên chung; nhiều hơn thì người dùng nên nói rõ tên */
+const MAX_VARIANTS = 6;
+
+/** Các chữ của tên món đã nói (phần còn lại sau số lượng): bỏ từ đệm, và đơn vị đứng đầu ("lon sting") vì nó đi theo số lượng. */
+function spokenNameWords(rest: string): string[] {
+  const words = rest.split(' ').filter((w) => w && !FILLER.includes(w));
+  while (words.length && UNITS.includes(words[0])) words.shift();
+  return words;
+}
+
+/**
+ * Các món mà tên (hoặc tên gọi khác) chứa trọn dãy chữ đã nói nhưng dài hơn: "sting" → "Sting vàng", "Sting đỏ"; "cà phê" →
+ * "Cà phê sữa", "Cà phê đen". Chỉ dùng khi tên nói ra không khớp hẳn món nào.
+ */
+function variantsOf(words: string[], products: ParseableProduct[]): ParseableProduct[] {
+  if (!words.length) return [];
+  const containsRun = (key: string[]) =>
+    key.length > words.length && key.some((_, i) => words.every((w, o) => key[i + o] === w));
+  // Tên ngắn trước (gần với điều đã nói nhất); nhiều mẫu quá thì chỉ đưa vài mẫu đầu
+  const shortest = (p: ParseableProduct) => Math.min(...productKeys(p).filter(containsRun).map((k) => k.length));
+  return products
+    .filter((p) => productKeys(p).some(containsRun))
+    .map((p, i) => ({ p, i, len: shortest(p) }))
+    .sort((x, y) => x.len - y.len || x.i - y.i)
+    .slice(0, MAX_VARIANTS)
+    .map((x) => x.p);
+}
+
 interface ProductHit {
   start: number;
   end: number;
@@ -548,16 +579,25 @@ export function parseOrder(text: string, products: ParseableProduct[]): ParsedOr
   const unknown: LineItem[] = [];
   const expenses: ParsedExpenseItem[] = [];
   const missingQuantityItems: string[] = [];
+  const disambiguations: DisambiguationItem[] = [];
 
   const addLine = (chunk: string[]) => {
     const price = chunk.find(isMoney);
     const seg = chunk.filter((t) => !isMoney(t)).join(' ');
     if (!seg) return;
 
+    const { qty, rest, explicit } = parseQty(seg);
     const matched = matchProduct(seg, products);
-    if (matched) {
+    // Tên chung của các mẫu trong danh mục ("sting" → Sting vàng / Sting đỏ) thì hỏi chọn mẫu, không thêm món mới. Khớp được
+    // một món mà tên nói ra dài hơn tên món đó ("sting gold" khi có "Sting" và hai loại "… Sting Gold …") cũng hỏi, không
+    // lặng lẽ bỏ chữ thừa. Nói trùng hẳn tên một món, hoặc nói kèm giá, thì không hỏi.
+    const words = spokenNameWords(rest);
+    const exact = !!matched && productKeys(matched).some((key) => key.join(' ') === words.join(' '));
+    const variants = price || exact ? [] : variantsOf(words, products);
+    const name = cleanName(rest, text);
+
+    if (matched && !variants.length) {
       // Giá bán của món trong danh mục do Core quyết định; giá nói ra chỉ dùng để tách món
-      const { qty } = parseQty(seg);
       const ex = items.find((i) => i.productId === matched.id);
       if (ex) {
         ex.qty += qty;
@@ -568,9 +608,19 @@ export function parseOrder(text: string, products: ParseableProduct[]): ParsedOr
     }
 
     // Kiểm tra có nhắc tên hàng không số lượng không
-    const { qty, rest, explicit } = parseQty(seg);
-    const name = cleanName(rest, text);
     if (!name) return;
+
+    if (variants.length) {
+      const same = disambiguations.find((d) => d.rawName === name);
+      if (same) same.qty += qty;
+      else
+        disambiguations.push({
+          rawName: name,
+          qty,
+          options: variants.map((p) => ({ product_id: p.id, name: p.name, unit_price_vnd: p.price })),
+        });
+      return;
+    }
     const spoken = price && moneyValue(price) >= MIN_ITEM_PRICE ? moneyValue(price) : 0;
     if (spoken) {
       // Nói cả giá ("bánh mì 20k") là đã chốt một dòng: không có số lượng thì hiểu là 1
@@ -600,7 +650,7 @@ export function parseOrder(text: string, products: ParseableProduct[]): ParsedOr
     items,
     unknown,
     missingQuantityItems,
-    disambiguations: [],
+    disambiguations,
     expenses,
     normalizedText: normalize(text),
   };

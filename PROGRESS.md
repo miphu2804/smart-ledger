@@ -1,3 +1,11 @@
+### [2026-10-15 23:59 UTC+07:00] — [Feature] Voice orders ask which variant when a name is shared by several products
+
+**Done:** Saying a name that several catalog products share ("hai sting" with "Sting vàng" and "Sting đỏ") no longer treats it as a new product: Đọc đơn shows "Chọn mẫu cho "Sting" · 2" with each matching product and its price (up to 6, shortest names first). Picking one adds that product with the spoken quantity; "Không phải mẫu nào" skips it. Saying a product's exact name, or a name with a spoken price, still works as before. This also fixes a bug where "sting gold" silently became the product "Sting" (dropping "gold") when "Sting" and longer "… Sting Gold …" products both exist: a spoken name longer than the matched product now asks too. `parseOrder` fills the existing `disambiguations` field, which was always empty.
+
+**Changed files:** `frontend/mobile/src/lib/parseOrder.ts`, `frontend/mobile/app/voice.tsx`, `docs/product/product-requirements.md` (`FR-008`, new `AC-074`) — modified; `frontend/mobile/tests/parseOrder.test.ts` — new; this entry.
+
+**Check:** `tsc --noEmit` clean; `node --test tests/*.test.ts` 47/47 (10 new). Mock web build in headless Chrome, 6/6: "hai sting gold" shows 3 Sting Gold options with quantity 2 and long names wrap inside the rows, picking one adds 2 of it, "Không phải mẫu nào" skips, "một sting" adds the product "Sting" directly. **Not verified:** a generic name said together with another product without a pause ("hai sting một bánh mì thịt"), speech on a phone.
+
 ### [2026-10-15 18:00 UTC+07:00] — [Feature] In-app update for the R2 APK
 
 **Done:** A published production APK now offers to update itself. CD builds it with `ANDROID_VERSION_CODE=<run number>` (new, monotonic; before, every build was versionCode 1) and `EXPO_PUBLIC_UPDATE_URL`, uploads the APK, then writes `android/production/version.json`. On launch the app fetches that file, compares `versionCode` with the installed one and, if higher, shows a dialog that downloads the APK from `builds/` and opens Android's installer. No new native module: `expo-file-system` (existing FileProvider), `expo-intent-launcher` and `expo-application`. `REQUEST_INSTALL_PACKAGES` is declared only when the update URL is set. Stacked on #225 (`feat/mobile-release-builds`).
