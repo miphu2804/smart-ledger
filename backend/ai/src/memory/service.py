@@ -11,6 +11,7 @@ compression then has a model merge the owner's memories older than 7 days.
 import asyncio
 import logging
 import re
+import uuid
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -30,6 +31,7 @@ from src.prompt_templates import (
     MEMORY_SUMMARY_INPUT,
     MEMORY_SUMMARY_PROMPT,
 )
+from src.providers.factory import session_settings
 from src.utils import get_time
 
 logger = logging.getLogger(__name__)
@@ -209,7 +211,8 @@ class AgentMemoryService:
             for memory in group.memories
         )
         result = await self.summarizer.run(
-            MEMORY_SUMMARY_INPUT.format(day=group.day.isoformat(), facts=listed)
+            MEMORY_SUMMARY_INPUT.format(day=group.day.isoformat(), facts=listed),
+            model_settings=session_settings(uuid.uuid4().hex),
         )
         facts = [
             fact
@@ -272,7 +275,9 @@ class AgentMemoryService:
                 or "(nothing)",
                 question=question,
                 answer=answer,
-            )
+            ),
+            # The gateway rejects a request without a session; each call stands alone.
+            model_settings=session_settings(uuid.uuid4().hex),
         )
         known = {memory.id for memory in recalled}
         # The model could name any id; only a memory this turn recalled may be replaced.
