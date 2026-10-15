@@ -208,8 +208,8 @@ The branch picks the code and the environment picks the config (Firebase file, `
 | Environment | Builds from | Output | ABIs |
 |---|---|---|---|
 | `android-dev` | Any branch except `main` and `staging`, including a pull request branch; no CI-green check | APK | `arm64-v8a` |
-| `android-staging` | `staging`, after a green CI run on the commit | APK | all four |
-| `android-production` | `main`, after a green CI run and approval | AAB, or APK with `publish` | all four |
+| `android-staging` | `staging`, after a green CI run on the commit | APK | `armeabi-v7a`, `arm64-v8a` |
+| `android-production` | `main`, after a green CI run and approval | AAB, or APK with `publish` | `armeabi-v7a`, `arm64-v8a` |
 
 Job `gate` rejects a branch and environment that do not pair as above, or a staging or production commit without a successful `ci.yml` run, before any runner starts. Only people with write access can run a workflow, and forks cannot.
 
@@ -297,7 +297,7 @@ Every run uploads `android-build-summary-<environment>-<run number>` (`.md` and 
 
 - Measured on an Apple M4 Pro (12 cores) with a warm Gradle cache, 4 ABIs, a placeholder Firebase file: prebuild 1 s and `assembleRelease` 4 min 3 s. The first build on a machine was blocked for over 30 minutes downloading the NDK over a slow connection, and Gradle stalled with the default 2 GB heap and 512 MB Metaspace; the workflow passes `-Xmx6g -XX:MaxMetaspaceSize=1g`.
 - Measured on `ubuntu-24.04` (run 37740574672, `android-dev` config built from `main`, before the gate paired environments with branches; `arm64-v8a`, cold cache): setup 34 s, install 13 s, prebuild 2 s, Gradle 654 s, about 11.7 minutes in all, a 94.7 MB APK. The run page showed 13 min 9 s, which adds the gate jobs and the Gradle cache save. The self-hosted M4 Pro is about three times faster.
-- APK size, `android-dev` (`arm64-v8a`) on `ubuntu-24.04`, same commit before and after the size settings in [`frontend/mobile/README.md`](../../frontend/mobile/README.md#dung-lượng-apk-android) (runs 38729102565 and 38729105555): 95.2 MB → 40.3 MB. Native libraries 62.0 → 20.3 MB as stored (they were stored uncompressed; 57.5 MB raw after FFmpeg and libarchive were dropped), dex 20.1 → 8.4 MB (R8), resources 8.0 → 6.7 MB, assets unchanged at 4.4 MB. The four-ABI APK (287 MB published from run 38494582573) has not been rebuilt with these settings; by the same ratio it should land near 100 MB.
-- Not yet run: `android-staging` and `android-production` (four ABIs, so slower than the dev build), the `self-hosted` and `auto` runner paths, and the APK on a physical device.
+- APK size, `android-dev` (`arm64-v8a`) on `ubuntu-24.04`, same commit before and after the size settings in [`frontend/mobile/README.md`](../../frontend/mobile/README.md#dung-lượng-apk-android) (runs 38729102565 and 38729105555): 95.2 MB → 40.3 MB. Native libraries 62.0 → 20.3 MB as stored (they were stored uncompressed; 57.5 MB raw after FFmpeg and libarchive were dropped), dex 20.1 → 8.4 MB (R8), resources 8.0 → 6.7 MB, assets unchanged at 4.4 MB. The four-ABI APK (287 MB published from run 38494582573) is no longer built: staging and production now carry only `armeabi-v7a` and `arm64-v8a`, so the APK no longer installs on an x86 (Intel) emulator, and the Play listing no longer offers x86 devices.
+- Not yet run: `android-staging` and `android-production` (two ABIs, so slower than the dev build), the `self-hosted` and `auto` runner paths, and the APK on a physical device.
 - Release signing was checked locally only as far as `./gradlew :app:signingReport` with a throwaway keystore: the `release` variant reports `Config: externalOverride` and that keystore. A full signed build, the `apksigner` check, the R2 upload and the download from `r2.dev` have not run yet. The Play upload is not part of this workflow.
 - iOS is not built here (see [mobile-ios-device-release.md](mobile-ios-device-release.md)).

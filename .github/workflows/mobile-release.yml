@@ -152,14 +152,15 @@ jobs:
           ENVIRONMENT: ${{ inputs.environment }}
           PUBLISH: ${{ inputs.publish }}
         run: |
-          # Play needs an AAB with every ABI; staging ships a universal APK so it also runs on emulators and
-          # old phones; dev stays arm64-only for a fast build on a real phone. A published production build is an
-          # APK because people install it straight from the landing page.
+          # Staging and production carry the two ARM ABIs that phones use: arm64 for current phones and Apple Silicon
+          # emulators, armeabi-v7a for old 32-bit phones. x86 and x86_64 only served Intel emulators and added about
+          # 20 MB each to the APK. Dev stays arm64-only for a fast build on a real phone. A published production
+          # build is an APK because people install it straight from the landing page.
           production_format=aab
           [ "$PUBLISH" = true ] && production_format=apk
           case "$ENVIRONMENT" in
-            android-production) { echo "format=$production_format"; echo "abis=armeabi-v7a,arm64-v8a,x86,x86_64"; } >> "$GITHUB_OUTPUT" ;;
-            android-staging) { echo "format=apk"; echo "abis=armeabi-v7a,arm64-v8a,x86,x86_64"; } >> "$GITHUB_OUTPUT" ;;
+            android-production) { echo "format=$production_format"; echo "abis=armeabi-v7a,arm64-v8a"; } >> "$GITHUB_OUTPUT" ;;
+            android-staging) { echo "format=apk"; echo "abis=armeabi-v7a,arm64-v8a"; } >> "$GITHUB_OUTPUT" ;;
             *) { echo "format=apk"; echo "abis=arm64-v8a"; } >> "$GITHUB_OUTPUT" ;;
           esac
           echo "TIMINGS=$RUNNER_TEMP/timings.txt" >> "$GITHUB_ENV"
