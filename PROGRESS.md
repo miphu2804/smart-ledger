@@ -1,3 +1,11 @@
+### [2026-10-16 02:47 UTC+07:00] — [Fix] Tabs switch without fading; overview compact bar and best sellers tidied
+
+**Done:** On an Android phone, switching to Quản lý sometimes showed only a blank screen with Bobi and the tab bar. The bottom tabs still faded on phones (#224 turned the fade off only on the web) and the fade can get stuck at zero opacity (inferred from the screenshot; not reproducible on the web). Tabs now switch without animation everywhere, and the scene background is the app background so any gap is not pure white. On Tổng quan, the compact bar shown after scrolling looked as if its icons were cut: the dark purple parts of the small icons disappeared into the purple bar, and at 360 px the labels were cut ("Đọc …", "Chọ…"). Each compact button now shows its icon on a light rounded tile above the label (buttons 50 instead of 42 px tall, which still fits the 115 px bar). In "Bán chạy", product names and quantities use the same line height without Android font padding so the quantity no longer sits higher than the name.
+
+**Changed files:** `frontend/mobile/app/(tabs)/_layout.tsx`, `frontend/mobile/app/(tabs)/index.tsx` (`CompactAction`) — modified; this entry.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (only the 2 known errors in #230's files). Mock web build in headless Chrome at 360×780, 8/8: name and quantity centres in "Bán chạy" match (0 px), the four compact buttons show icon tiles with full labels inside the buttons, and 250 ms after tapping Đơn hàng, Bán hàng, Quản lý, Tổng quan and Quản lý again each screen's title is fully visible. **Not verified:** the blank-tab fix on an Android phone.
+
 ### [2026-10-16 10:30 UTC+07:00] — [Fix] Agent memory writes semantic facts by default
 
 **Done:** The default for `AGENT_MEMORY_TYPES` is now `preference,procedural,semantic`, matching what staging and production run. With the old default the extractor dropped stable facts such as suppliers while the agent still told the owner "Đã ghi nhớ". ADR 0002 records the change and its reason; PO approval of the type list is still open.
