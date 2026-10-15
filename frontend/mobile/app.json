@@ -45,7 +45,31 @@
       "@react-native-firebase/auth",
       "@react-native-google-signin/google-signin",
       "./plugins/withBundledSttModel",
-      ["expo-build-properties", { "ios": { "useFrameworks": "static", "usePrecompiledModules": false } }],
+      "./plugins/withAndroidApkSize",
+      [
+        "expo-build-properties",
+        {
+          "ios": { "useFrameworks": "static", "usePrecompiledModules": false },
+          "android": {
+            "useLegacyPackaging": true,
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "extraProguardRules": "-keep class com.k2fsa.sherpa.onnx.** { *; }\n-keep class com.sherpaonnx.** { *; }\n-dontwarn com.k2fsa.sherpa.onnx.**\n-dontwarn ai.onnxruntime.**",
+            "packagingOptions": {
+              "exclude": [
+                "**/libavcodec.so",
+                "**/libavformat.so",
+                "**/libavutil.so",
+                "**/libavfilter.so",
+                "**/libswresample.so",
+                "**/libshine.so",
+                "**/libopus.so",
+                "**/libarchive.so"
+              ]
+            }
+          }
+        }
+      ],
       [
         "expo-camera",
         {

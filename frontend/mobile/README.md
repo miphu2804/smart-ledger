@@ -13,8 +13,11 @@ npm run web             # hoặc bấm w: chạy trên trình duyệt (khung gi�
 npm run typecheck
 npm test                # test parser câu trả lời của trợ lý (node --test, không cần thiết bị)
 npm run export:web      # build web tĩnh ra dist/
-../../scripts/ios-device-release.sh   # chọn iPhone đang cắm vào Mac, build Release từ code đang checkout và cài lên máy
+../../scripts/ios-device-release.sh   # kiểm tra Mac và iPhone (Xcode, CocoaPods, Apple ID, profile ký app…), build Release và cài lên iPhone; --check chỉ kiểm tra
+../../scripts/android-release.sh [--abis arm64-v8a] [--install [--device <serial>]]   # kiểm tra toolchain theo bản ghim của CI, build APK Release giống hệt CI, in dung lượng; --install cài qua adb, --check chỉ kiểm tra
 ```
+
+Hai script build trên máy tự kiểm tra môi trường trước khi build. Máy mới cài thiếu gì (Xcode, license, CocoaPods, JDK 17, Android Studio và SDK, file Firebase, Apple ID, provisioning profile, iPhone chưa bấm Trust, Developer Mode, USB debugging, điện thoại không hợp ABI hoặc Android quá cũ, máy đã cài bản ký key khác…) thì script liệt kê đủ các lỗi, mỗi lỗi kèm cách sửa, rồi hỏi có muốn mở trang tải, mở Xcode hoặc Android Studio, hay chạy lệnh sửa không. Thông báo trong terminal viết bằng tiếng Anh.
 
 ## Xem thử với dữ liệu mẫu
 
@@ -72,7 +75,18 @@ Màn Đọc đơn nhận giọng nói trên Android bằng model tiếng Việt 
 - **Nhúng model vào APK (chạy offline):** plugin `plugins/withBundledSttModel.js` chép model vào `android/app/src/main/assets/models/stt-model-<phiên bản>/` khi `expo prebuild`; thư mục `android/` đã sinh sẵn thì chạy `node plugins/withBundledSttModel.js`. App tự nhận model nhúng (`listAssetModels`) và bỏ qua bước tải; thư viện chép nó ra bộ nhớ app ở lần mở đầu. Máy build không có model thì plugin chỉ cảnh báo và APK rơi về cách tải ở trên. Tên thư mục lấy từ `STT_MODEL_VERSION` trong `src/lib/speech/core.ts`.
 - **Bản vá thư viện:** `react-native-sherpa-onnx` 0.4.4 cố định `modelType = "zipformer"` cho mọi model transducer nên model `zipformer2` (như model đang dùng) làm app sập lúc nạp. `patches/react-native-sherpa-onnx+0.4.4.patch` (áp tự động bởi `postinstall` qua `patch-package`, kể cả trên máy build EAS) để trống giá trị này cho sherpa-onnx tự nhận loại theo metadata. Nâng phiên bản thư viện thì xem lại bản vá, và đổi bản vá là phải build lại dev client.
 - **Quyền micro:** app xin quyền khi mở màn Đọc đơn. Khi giữ nút mic có thanh “Mức mic” đo từ micro thật; không ra chữ thì app báo “micro không thu được âm thanh” hoặc “có tiếng nhưng chưa nhận ra chữ”.
+- **FFmpeg và libarchive tắt:** `plugins/withAndroidApkSize.js` đặt `sherpaOnnxDisableFfmpeg` và `sherpaOnnxDisableLibarchive` vì app chỉ nhận dạng PCM từ mic và tải model từng file. Các hàm `convertAudio*`, `decodeAudioFileToFloatSamples` (file không phải WAV) và `extractTarBz2` của thư viện vì vậy báo lỗi; cần dùng thì bỏ cờ trong plugin và bỏ các file `.so` tương ứng khỏi `packagingOptions.exclude` trong `app.json`.
 - **Chưa kiểm tra / chưa làm:** iOS; hotword từ menu (`bpe.model`); tinh chỉnh thời gian ngắt câu; Android 15+ yêu cầu thư viện native căn lề 16 KB khi đưa lên Google Play (cần kiểm tra các file `.so` của sherpa-onnx).
+
+### Dung lượng APK Android
+
+Bản release dùng các thiết lập sau (đo trên `arm64-v8a`, cùng commit: 95,2 MB → 40,3 MB; xem [CI/CD](../../docs/development/ci-cd.md#measured-and-not-yet-verified)):
+
+- `expo-build-properties` trong `app.json`: `useLegacyPackaging` nén các file `.so` trong APK (trước đó lưu không nén, chiếm 62 MB); `enableMinifyInReleaseBuilds` và `enableShrinkResourcesInReleaseBuilds` bật R8 và bỏ resource không dùng; `packagingOptions.exclude` bỏ file `.so` của FFmpeg và libarchive.
+- `extraProguardRules` giữ nguyên các class `com.k2fsa.sherpa.onnx.**` và `com.sherpaonnx.**`: code native của sherpa-onnx đọc chúng theo tên mà thư viện không kèm luật R8 cho chúng. Thêm thư viện native khác mà sập ở bản release (không sập ở bản debug) thì nghi R8 trước và thêm luật `-keep` ở đây.
+- `plugins/withAndroidApkSize.js`: tắt FFmpeg và libarchive trong sherpa-onnx (xem mục Nhận dạng giọng nói trên Android) và chỉ giữ chuỗi `vi`, `en` của các thư viện.
+- Đo lại: `scripts/apk-contents.sh <file.apk>` in dung lượng theo ABI, dex, resource, assets và 40 file lớn nhất; `scripts/android-release.sh` (chạy ở máy và trong CI) gọi script này sau mỗi lần build APK.
+- Đánh đổi: thư viện native được giải nén ra máy khi cài, nên dung lượng sau khi cài lớn hơn file APK; cài từ Google Play (AAB) không bị ảnh hưởng.
 
 ## Cấu trúc
 
