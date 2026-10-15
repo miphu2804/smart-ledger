@@ -23,6 +23,16 @@ Each chat turn sends the static system prompt, then the conversation's latest `A
 
 `AgentConversationRepository.recent_messages(conversation_id, user_id, shop_id, limit)` reads the history. It first checks that the conversation belongs to that user and shop; otherwise the request fails with `404 conversation_not_found`.
 
+### Long-term memory (off by default)
+
+`AGENT_MEMORY_ENABLED=true` turns on the [ADR-0002](../../docs/architecture/adr/0002-agent-long-term-memory.md) memory, which is not product behavior until the PO approves it. It needs the [`agent_memories`](../../supabase/migrations/20261014000000_agent_memories.sql) migration and `uv sync --group memory`; the Docker image installs neither group, so the flag logs an error and stays off there. When on:
+
+- Before the model answers, `AgentMemoryService.with_memories` embeds the owner's message with `AGENT_MEMORY_EMBEDDING_MODEL` (a Pydantic AI `Embedder` running sentence-transformers in this process), runs Tencent's cosine search over the owner's unexpired memories, scoped to the request's shop and user (`src/memory/repository.py`), re-ranks the 20 nearest by relevance × Tencent's decay `importance * exp(-0.01 * age in days)`, and places the top five, each dated in shop time, before the message under "Earlier facts from this owner", as Tencent's Agentic RAG prompt does. The model calls no tool, and the stored message stays the owner's own words. A failed search answers without memories.
+- After a turn is saved, `AgentMemoryService.remember` asks the chat model for up to five durable facts from the owner's message, with today's date so "last week" becomes a date, embeds them and appends them. It then compresses the owner's memories older than 7 days, as Tencent does: each conversation's memories from one shop day are merged by the chat model into one to five facts that replace them in one transaction, keep the latest date and carry `metadata.summarized_from`, so they are not merged again. At most three such groups per turn. It runs in the background; a failure is logged and never fails the turn.
+- Deleting a conversation deletes the memories it produced, summaries included (`ON DELETE CASCADE`).
+
+Every agent run also ends its instructions with the current shop time (`get_time` in `src/utils.py`, Asia/Ho_Chi_Minh), after the static prompt so the cacheable prefix stays the same.
+
 `chat_conversations.summary` and `summary_through_message_id` still exist, because the AI baseline migration created them. The code neither reads nor writes them. They are kept so the previous release can roll back, and a later migration drops them after this deploy.
 
 The agent runs on [Pydantic AI](https://ai.pydantic.dev/). `build_chat_model` in `src/providers/factory.py` returns an `OpenAIResponsesModel`, because reasoning models reject function tools on `/v1/chat/completions`. An `OPENAI_BASE_URL` proxy must therefore serve `/v1/responses`; a blank `OPENAI_BASE_URL` means the OpenAI default. `MODEL_REASONING_EFFORT` (default `high`) sets the reasoning effort for the chat model.
