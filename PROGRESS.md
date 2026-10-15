@@ -8,7 +8,7 @@
 
 **Flow explained:** publish → build with versionCode and update URL baked in → APK to `builds/` and `latest.apk` → `version.json` last → installed app fetches it at launch (8 s timeout, any failure is silent) → higher versionCode → dialog → download to cache → `getContentUriAsync` → `ACTION_VIEW` installer → user confirms. Required R2 variable: `R2_PUBLIC_URL` (needs the owner to set it before the next publish).
 
-**Check:** `npm test` 42/42 (5 new for the version logic), `tsc --noEmit` clean, the check run against a local HTTP server (older → offered, equal/newer/404/down → none), `expo prebuild` gives `versionCode 57` and the install permission only with the URL, workflow YAML parses and the `jq` manifest renders. **Not verified:** the download and install on a real phone or emulator (no adb here), the workflow on GitHub, R8 (#225) keeping the new code.
+**Check:** `npm test` 42/42 (5 new for the version logic), `tsc --noEmit` clean, the check run against a local HTTP server (older → offered, equal/newer/404/down → none), `expo prebuild` gives `versionCode 57` and the install permission only with the URL, workflow YAML parses and the manifest renders. Android 14 emulator (arm64), release build with R8, two APKs signed with the same key (versionCode 1 and 2): the app asked, downloaded `app-2.apk` from a local server, Android asked once to allow installs from the app, then installed over the old one (`versionCode=2`), and the next launch did not ask. **Not verified:** a real phone, the workflow on GitHub, cancelling a download mid-way.
 
 ### [2026-10-15 21:45 UTC+07:00] — [Feature] Sign in with Google on mobile and web
 

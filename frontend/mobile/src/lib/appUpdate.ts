@@ -6,7 +6,7 @@
 export interface UpdateManifest {
   versionCode: number;
   versionName: string;
-  /** Địa chỉ tuyệt đối của file APK; trỏ tới bản trong builds/ để file không bị ghi đè lúc đang tải. */
+  /** Địa chỉ tuyệt đối của file APK (bản release của Android chặn HTTP thường, và trình cài đặt chỉ nhận APK ký đúng keystore); trỏ tới bản trong builds/ để file không bị ghi đè lúc đang tải. */
   apk: string;
 }
 
@@ -23,7 +23,9 @@ export async function findNewerBuild(
     const res = await fetchImpl(manifestUrl, { cache: 'no-store', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     if (!res.ok) return null;
     const manifest = parseManifest(await res.json());
-    return manifest && manifest.versionCode > installedVersionCode ? manifest : null;
+    // Cùng nguồn với version.json: ai chỉ sửa được file này không trỏ được tới APK ở nơi khác.
+    if (!manifest || new URL(manifest.apk).origin !== new URL(manifestUrl).origin) return null;
+    return manifest.versionCode > installedVersionCode ? manifest : null;
   } catch {
     return null;
   }
@@ -33,7 +35,5 @@ export function parseManifest(raw: unknown): UpdateManifest | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const { versionCode, versionName, apk } = raw as Record<string, unknown>;
   if (!Number.isInteger(versionCode) || typeof versionName !== 'string' || typeof apk !== 'string') return null;
-  // Chỉ tải qua HTTPS: file về máy sẽ được đưa cho trình cài đặt của Android.
-  if (!apk.startsWith('https://')) return null;
   return { versionCode: versionCode as number, versionName, apk };
 }
