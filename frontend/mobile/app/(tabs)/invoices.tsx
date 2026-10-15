@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, SectionList, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DateRangeSheet } from '../../src/components/DateRangeSheet';
+import { RowListSkeleton } from '../../src/components/ListSkeleton';
 import { TAB_HEADER_SIDE, TAB_HEADER_TOP, TabSearchBar } from '../../src/components/TabSearchBar';
 import { Button, EmptyState, Row, T } from '../../src/components/ui';
 import type { SaleView, SalesSeriesPoint } from '../../src/data/types';
@@ -369,9 +370,8 @@ export default function Invoices() {
 
       {/* Main Content */}
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator color={colors.brand} />
-        </View>
+        // Khung chờ cùng lề với danh sách thật: thẻ tổng rồi các dòng đơn
+        <RowListSkeleton header rows={5} style={styles.scrollContent} />
       ) : error && !sales.length ? (
         <View style={{ paddingHorizontal: 16, paddingTop: 20 }}>
           <EmptyState icon="alert-triangle" title="Không tải được đơn hàng" hint={error} />
@@ -577,11 +577,6 @@ const styles = StyleSheet.create({
   periodPillActive: {
     backgroundColor: colors.brand,
     borderColor: colors.brand,
-  },
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   scrollContent: {
     paddingHorizontal: 16,
