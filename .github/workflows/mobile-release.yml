@@ -175,11 +175,12 @@ jobs:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ vars.R2_BUCKET }}
+          R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           missing=""
-          for name in R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD; do
+          for name in R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET R2_PUBLIC_URL ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD; do
             [ -n "${!name}" ] || missing="$missing $name"
           done
           if [ -n "$missing" ]; then
@@ -279,6 +280,10 @@ jobs:
           ENVIRONMENT: ${{ inputs.environment }}
           REF_NAME: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
+          # Every build gets a higher versionCode than the last, so Android installs it over the old one. A published
+          # APK also learns where to look for newer ones; other builds leave the URL empty and never ask.
+          ANDROID_VERSION_CODE: ${{ github.run_number }}
+          EXPO_PUBLIC_UPDATE_URL: ${{ inputs.publish && format('{0}/android/production/version.json', vars.R2_PUBLIC_URL) || '' }}
         run: |
           branch=$(echo "$REF_NAME" | tr -c 'A-Za-z0-9\n' '-')
           out="$RUNNER_TEMP/android-out/smart-ledger-${ENVIRONMENT#android-}-${branch}-${SHA::7}.$FORMAT"
@@ -301,6 +306,8 @@ jobs:
           AWS_ENDPOINT_URL: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
           BUCKET: ${{ vars.R2_BUCKET }}
           APK: ${{ steps.build.outputs.path }}
+          VERSION_CODE: ${{ github.run_number }}
+          R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
         run: |
           # Anyone can sign an update with the debug key, so a debug-signed APK must never reach the download link.
           sdk="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
@@ -314,6 +321,15 @@ jobs:
           aws s3 cp "$APK" "$prefix/builds/$(basename "$APK")" --content-type "$type"
           aws s3 cp "$APK" "$prefix/latest.apk" --content-type "$type" --cache-control no-cache \
             --content-disposition 'attachment; filename="so-nghe-loi.apk"'
+          # Last, so a phone never reads a manifest whose APK is not uploaded yet. Installed apps compare versionCode
+          # with this file (frontend/mobile/src/lib/appUpdate.ts) and offer the APK in builds/, which is never overwritten.
+          base="${R2_PUBLIC_URL%/}"
+          BASE="$base" node -e 'const { expo } = require("./frontend/mobile/app.json");
+            console.log(JSON.stringify({ versionCode: Number(process.env.VERSION_CODE), versionName: expo.version,
+              apk: `${process.env.BASE}/android/production/builds/${require("path").basename(process.env.APK)}` }))' \
+            > "$RUNNER_TEMP/version.json"
+          cat "$RUNNER_TEMP/version.json"
+          aws s3 cp "$RUNNER_TEMP/version.json" "$prefix/version.json" --content-type application/json --cache-control no-cache
 
 
       - name: Write the build summary

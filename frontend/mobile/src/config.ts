@@ -37,6 +37,13 @@ export const FIREBASE_WEB_CONFIG = {
  */
 export const STT_MODEL_URL = process.env.EXPO_PUBLIC_STT_MODEL_URL ?? '';
 
+/**
+ * Địa chỉ version.json của bản APK phát hành (ví dụ https://pub-xxx.r2.dev/android/production/version.json). CD ghi file này
+ * sau mỗi lần phát hành; có giá trị thì app Android hỏi cập nhật khi có bản mới hơn. Để trống thì không kiểm tra
+ * (bản dev, bản đưa lên Play Store).
+ */
+export const APP_UPDATE_URL = (process.env.EXPO_PUBLIC_UPDATE_URL ?? '').trim();
+
 /** Email hỗ trợ hiện ở màn xác minh email; để trống thì không hiện dòng liên hệ. */
 export const SUPPORT_EMAIL = (process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? '').trim();
 
