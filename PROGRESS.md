@@ -1,3 +1,13 @@
+### [2026-10-16 03:00 UTC+07:00] — [CI] Deploy the landing only when it changed
+
+**Done:** `deploy-landing` now runs on a push only when the push changes `frontend/web/` or `.github/workflows/ci.yml`; a re-run always deploys. Every push to `staging` and `main` used to spend two Vercel deployments (web and landing) even when only the backend changed, and the production deploy of release #249 hit the Hobby limit of 100 a day (`api-deployments-free-per-day`).
+
+**Changed files:** `.github/workflows/ci.yml`, `docs/development/ci-cd.md` — modified; this entry.
+
+**Flow explained:** push → job `landing` diffs `github.event.before`..`GITHUB_SHA` → `changed=true|false` → `deploy-landing` runs when `true` or on a re-run.
+
+**Check:** YAML parses and actionlint passes; the step script run locally against real commit pairs gives `false` for a backend-only push and `true` for a push touching `frontend/web/`, an all-zero `before` and an unknown commit. **Not verified:** a real push on GitHub (this PR's merge into `staging` touches `ci.yml`, so it will deploy; the first push after it that leaves the landing alone should skip).
+
 ### [2026-10-16 10:30 UTC+07:00] — [Fix] Agent memory writes semantic facts by default
 
 **Done:** The default for `AGENT_MEMORY_TYPES` is now `preference,procedural,semantic`, matching what staging and production run. With the old default the extractor dropped stable facts such as suppliers while the agent still told the owner "Đã ghi nhớ". ADR 0002 records the change and its reason; PO approval of the type list is still open.
