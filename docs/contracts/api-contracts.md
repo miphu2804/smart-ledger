@@ -4,7 +4,7 @@
 |---|---|
 | Trạng thái | đích MVP; các endpoint đã triển khai được đánh dấu riêng bên dưới |
 | Chủ sở hữu | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-10-12 |
+| Cập nhật lần cuối | 2026-10-15 |
 
 ## Tài liệu liên quan
 
@@ -25,6 +25,8 @@
 **Bổ sung media ngày 2026-10-08 trên nhánh hiện tại:** Core có upload/delete Product image, Shop logo và avatar qua Cloudinary; V13/V14 phải được migrate trước khi runtime dùng các entity mới trên DB shared. Đây chưa phải xác nhận FE/staging đã tích hợp.
 
 **CORE-011 (#153), ngày 2026-10-10:** sáu GET danh sách OWNER có phân trang trên `feat/owner-list-pagination`, base staging `50891aabf8b6ba48406799fa5c31fef8c823569f`. Contract dưới đây là breaking change cần phối hợp FE qua #144; chưa xác nhận merge/deploy hoặc nghiệm thu tích hợp. Các API detail, ghi và báo cáo không đổi.
+
+**CORE-014 (#213), ngày 2026-10-15:** `GET /api/v1/sales/summary` đã có trên `feat/sales-filter-summary`, tiếp nối staging `df69819642fc420b7686d6f66073b946df2f13c2`. Đây là API bổ sung để tính tổng theo cùng filter của sales list; không đổi response list hoặc định nghĩa báo cáo kỳ. Xem [tổng danh sách sale](#tổng-danh-sách-sale-theo-bộ-lọc-core-014); chưa nghiệm thu FE/staging.
 
 **AI và proxy Agent:** AI có `GET /health` và sáu endpoint `/internal/v1/agent/*` (chat, chat/stream, list, detail, rename, delete); Core proxy cả sáu endpoint. Mọi đường `/internal/v1/*` bắt buộc `X-Internal-Token`; thiếu/sai token hoặc AI chưa cấu hình `INTERNAL_API_TOKEN` trả `401`, riêng `/health` vẫn công khai. Core proxy `/api/v1/agent/*` sang sáu đường này, gửi `X-Internal-Token` và lấy `user_id`/`shop_id` từ tiệm của OWNER đã xác thực; AI `404` thành `conversation_not_found`; AI `422` mang mã guardrail (mục 6) giữ nguyên `422` và mã đó trong `code`; lỗi hoặc quá thời gian khác thành `503 ai_unavailable`. Lỗi trước sự kiện đầu tiên của `/api/v1/agent/chat/stream` là JSON, nên client gửi `Accept: text/event-stream, application/json`; chỉ nhận `text/event-stream` thì Core không ghi được JSON lỗi. Chưa có nghiệm thu đầu-cuối luồng FE → Core → AI với model thật.
 
@@ -219,6 +221,7 @@ Sale là bản ghi bán hàng nội bộ, **không phải hóa đơn điện t�
 | `DELETE` | `/api/v1/sale-drafts/{draftId}` | Hủy draft còn sửa được, giữ lịch sử | `204` |
 | `POST` | `/api/v1/sale-drafts/{draftId}/confirm` | Không có body/key | `201 SaleResponse` |
 | `GET` | `/api/v1/sales` | page/size, from/to, saleStatus, q; xem quy ước phân trang | `200 PageResponse<SaleResponse>` |
+| `GET` | `/api/v1/sales/summary` | q, saleStatus, from/to; không phân trang; có trong nhánh CORE-014 | `200 SaleSummaryResponse` |
 | `GET` | `/api/v1/sales/{saleId}` | — | `200 SaleResponse` |
 | `GET` | `/api/v1/sales/{saleId}/payments` | — | `200 PaymentResponse[]` |
 | `GET` | `/api/v1/sales/{saleId}/payments/{paymentId}` | ID payment phải thuộc sale | `200 PaymentResponse` |
@@ -255,6 +258,42 @@ Ví dụ trộn catalog/món tùy ý:
 Item draft/sale: `{ id, productId, productName, unit, quantity, unitPriceVnd, lineTotalVnd }`. productId có thể null. `stock_deducted` chỉ lưu DB, không phải field response.
 
 `PaymentResponse = { id, saleId, amountVnd, paymentMethod, type: INITIAL|DEBT_REPAYMENT, receivedAt }`. Payment chỉ thêm, không sửa/xóa; payment không thuộc sale trả `404 payment_not_found`.
+
+### Tổng danh sách sale theo bộ lọc (CORE-014)
+
+`GET /api/v1/sales/summary` yêu cầu Bearer Firebase ID token của OWNER ACTIVE và `X-Shop-Id` của shop ACTIVE thuộc OWNER đó. Không cần `Idempotency-Key`. Filter và quyền giống `GET /sales`; phần này chỉ thêm tổng tiền/count trên **toàn bộ tập khớp**, không giới hạn theo trang đã tải.
+
+| Query tùy chọn | Quy tắc |
+|---|---|
+| `q` | Trim, rỗng bỏ lọc, tối đa 200 ký tự; tìm không dấu/không phân biệt hoa thường, wildcard literal theo [quy ước OWNER](#phân-trang-danh-sách-owner). Tên khách và tên item dùng snapshot lịch sử; sale ID khớp chính xác khi q là số. Không tìm tên Product hiện tại; nhiều item khớp chỉ cộng sale một lần. |
+| `saleStatus` | `CONFIRMED` hoặc `VOIDED`; bỏ qua lấy cả hai trạng thái hiện tại. |
+| `from`, `to` | ISO 8601 có offset, năm 1–9998, lọc `soldAt >= from` và `soldAt < to`. Được bỏ một phía; nếu có cả hai thì from < to theo instant. Bỏ cả hai lấy toàn bộ lịch sử. |
+
+Endpoint không định nghĩa `page`, `size`, `period` hoặc `sort`. FE dựng các nút ngày/kỳ bằng ranh giới lịch `Asia/Ho_Chi_Minh`, rồi gửi cùng `q/saleStatus/from/to` cho list và summary; encode dấu `+` trong URL thành `%2B`. List và summary là hai HTTP request riêng, không cam kết chung snapshot khi có writer đồng thời.
+
+HTTP 200 trả năm field số nguyên signed 64-bit VND/count, bắt buộc, không null và không âm:
+
+```json
+{
+  "matchedOrderCount": 12,
+  "confirmedOrderCount": 10,
+  "voidedOrderCount": 2,
+  "confirmedSalesVnd": 1000000,
+  "voidedSalesVnd": 200000
+}
+```
+
+| Field | Ý nghĩa sau khi áp filter |
+|---|---|
+| `matchedOrderCount` | Mọi sale khớp; bằng confirmedOrderCount + voidedOrderCount. Draft chưa confirm không góp số liệu. |
+| `confirmedOrderCount`, `confirmedSalesVnd` | Count và tổng `totalVnd` sau discount của sale có trạng thái hiện tại CONFIRMED. Bao gồm thu đủ, thu một phần và bán nợ; không phải tiền thực thu hay lợi nhuận. |
+| `voidedOrderCount`, `voidedSalesVnd` | Count và toàn bộ giá trị `totalVnd` sau discount của sale có trạng thái hiện tại VOIDED; không phải số tiền đã hoàn. |
+
+Không có kết quả trả cả năm field bằng 0. Filter VOIDED thì hai field confirmed bằng 0; filter CONFIRMED thì hai field voided bằng 0. Sale bán tháng A nhưng void tháng B vẫn thuộc filter soldAt tháng A: giá trị chuyển từ confirmed sang voided theo trạng thái hiện tại. `/reports/summary` giữ gross theo soldAt và điều chỉnh net theo voidedAt ở tháng B, vì vậy `confirmedSalesVnd` không đồng nghĩa `netRevenueVnd`.
+
+Lỗi giữ envelope mục 0: `400 invalid_sale_query` khi q/range vượt giới hạn; sai enum/kiểu hoặc timestamp thiếu offset trả `400 validation_failed`; thiếu header trả `400 missing_required_header`; shop ID sai trả `400 invalid_shop_id`. Thiếu/sai token trả `401 unauthorized`; ADMIN/khác chủ trả `403 shop_access_denied`, user DISABLED trả `403 account_disabled`, shop INACTIVE trả `403 shop_inactive`; thiếu profile trả `404 auth_profile_not_found`, shop ARCHIVED của OWNER trả `404 shop_not_found`. Nếu tổng tiền riêng một trạng thái vượt `9223372036854775807`, trả **`409 sale_summary_overflow`**; FE đề nghị thu hẹp bộ lọc, không thay lỗi bằng số 0 hoặc cộng trang đang tải.
+
+Triển khai Core trước khi FE chuyển client. FE tải lại list/summary khi đổi shop/filter, giữ loading/error/empty rõ ràng và không thay thẻ báo cáo kỳ bằng tổng danh sách nếu chưa chốt nhãn/nghiệp vụ. Đây là thay đổi API bổ sung, không cần migration/đổi ERD; FE/staging UAT theo `FR-033`, `AC-069`–`AC-072` vẫn riêng.
 
 ### Hủy toàn bộ và hoàn tiền
 
