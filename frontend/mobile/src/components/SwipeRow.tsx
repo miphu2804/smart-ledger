@@ -45,6 +45,8 @@ export function SwipeRow({
     () =>
       PanResponder.create({
         onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 10 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+        // Đã nhận cử chỉ ngang thì không để ScrollView dọc (nhất là Android) giật lại giữa chừng.
+        onPanResponderTerminationRequest: () => false,
         onPanResponderMove: (_, g) => {
           const raw = base.current + g.dx;
           // Quá nút thì chỉ theo một phần ngón tay; không cho kéo sang phải khỏi vị trí đóng.
