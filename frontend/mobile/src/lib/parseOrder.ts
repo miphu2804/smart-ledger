@@ -60,10 +60,31 @@ export interface ParsedExpense {
 
 // ─── Chuẩn hoá chữ ───────────────────────────────────────────────────────────
 
+/** Bỏ dấu tiếng Việt của một chữ đã hạ thường (giữ nguyên "đ"). */
+const stripMarks = (w: string) => w.normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+/**
+ * Bỏ dấu thì "bò" (bò húc) trùng "bó" (đơn vị), "gỏi" (gỏi cuốn) trùng "gói", "cải" trùng "cái", "lợn" trùng "lon"… nên tên
+ * món bị cắt mất chữ đầu ("hai bò húc" → "Húc"). Chữ có dấu khác dấu của đơn vị được thêm hậu tố `HOMOGRAPH_MARK` để không còn
+ * trùng đơn vị nào ("bò" → "boq"); chữ gõ không dấu giữ nguyên như trước. Tên món qua cùng hàm này nên vẫn khớp, và
+ * `productKeys` thêm cả dạng không hậu tố để người gõ không dấu ("bo huc") vẫn khớp món "Bò húc".
+ */
+const HOMOGRAPH_MARK = 'q';
+function markHomograph(word: string): string {
+  const w = word.normalize('NFC');
+  const plain = stripMarks(w).replace(/đ/g, 'd');
+  const spellings = UNIT_SPELLINGS[plain];
+  if (!spellings || plain === w || spellings.includes(w)) return word;
+  return `${w}${HOMOGRAPH_MARK}`;
+}
+
 /** Hạ chữ thường, bỏ dấu tiếng Việt. Chưa đụng đến dấu câu và chữ số. */
 function fold(s: string): string {
   return s
     .toLowerCase()
+    // Chữ cái Latin kể cả chữ có dấu tiếng Việt (à…ỹ); dựng dạng NFC trước để dấu không bị tách khỏi chữ
+    .normalize('NFC')
+    .replace(/[a-zà-ỹ]+/g, markHomograph)
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .replace(/đ/g, 'd');
@@ -103,27 +124,29 @@ const NUM_WORDS: Record<string, number> = {
   chin: 9,
   muoi: 10,
 };
-const UNITS = [
-  'ly',
-  'o',
-  'chai',
-  'lon',
-  'goi',
-  'bich',
-  'ky',
-  'kg',
-  'ki',
-  'hop',
-  'cai',
-  'phan',
-  'to',
-  'dia',
-  'bo',
-  'coc',
-  'trai',
-  'qua',
-  'thung',
-];
+/** Đơn vị (đã bỏ dấu) và cách viết có dấu của chính đơn vị đó; chữ cùng mặt chữ mà khác dấu không phải đơn vị (`markHomograph`). */
+const UNIT_SPELLINGS: Record<string, string[]> = {
+  ly: ['ly'],
+  o: ['ổ'],
+  chai: ['chai'],
+  lon: ['lon'],
+  goi: ['gói'],
+  bich: ['bịch'],
+  ky: ['ký', 'kí'],
+  kg: ['kg'],
+  ki: ['kí', 'ký'],
+  hop: ['hộp'],
+  cai: ['cái'],
+  phan: ['phần'],
+  to: ['tô'],
+  dia: ['đĩa', 'dĩa'],
+  bo: ['bó'],
+  coc: ['cốc'],
+  trai: ['trái'],
+  qua: ['quả'],
+  thung: ['thùng'],
+};
+const UNITS = Object.keys(UNIT_SPELLINGS);
 const FILLER = [
   'cho',
   'co',
@@ -395,10 +418,15 @@ function parseQty(seg: string): { qty: number; rest: string; explicit: boolean }
 }
 
 function productKeys(p: ParseableProduct): string[][] {
-  return [p.name.replace(/\(.*?\)/g, ''), ...(p.aliases ?? [])]
-    .map(normalize)
-    .filter(Boolean)
-    .map((k) => k.split(' '));
+  const keys = [p.name.replace(/\(.*?\)/g, ''), ...(p.aliases ?? [])].map(normalize).filter(Boolean);
+  // Thêm dạng không hậu tố của chữ trùng đơn vị ("boq huc" → "bo huc") cho người gõ không dấu
+  const unmarked = keys.map((k) =>
+    k
+      .split(' ')
+      .map((w) => (w.endsWith(HOMOGRAPH_MARK) && UNITS.includes(w.slice(0, -1)) ? w.slice(0, -1) : w))
+      .join(' '),
+  );
+  return [...new Set([...keys, ...unmarked])].map((k) => k.split(' '));
 }
 
 function matchProduct(seg: string, products: ParseableProduct[]): ParseableProduct | undefined {
@@ -437,6 +465,16 @@ function variantsOf(words: string[], products: ParseableProduct[]): ParseablePro
     .sort((x, y) => x.len - y.len || x.i - y.i)
     .slice(0, MAX_VARIANTS)
     .map((x) => x.p);
+}
+
+/** Bỏ tên món (tên dài nhất khớp được, một lần) khỏi đoạn đã nói, còn lại số lượng và chữ thừa. */
+function withoutName(seg: string, p: ParseableProduct): string {
+  const keys = productKeys(p)
+    .map((k) => k.join(' '))
+    .sort((a, b) => b.length - a.length);
+  const padded = ` ${seg} `;
+  const key = keys.find((k) => padded.includes(` ${k} `));
+  return key ? padded.replace(` ${key} `, ' ').trim().replace(/\s+/g, ' ') : seg;
 }
 
 interface ProductHit {
@@ -488,6 +526,45 @@ function chunkByCatalog(tokens: string[], products: ParseableProduct[]): string[
   for (const c of cuts) {
     chunks.push(tokens.slice(from, c));
     from = c;
+  }
+  chunks.push(tokens.slice(from));
+  return chunks.filter((c) => c.length);
+}
+
+/** Chữ có thể là một phần tên món (không phải số, đơn vị, từ đệm hay từ nối). */
+const isNameWord = (t: string) => !isNumberToken(t) && !UNITS.includes(t) && !FILLER.includes(t) && !DELIMITER_WORDS.has(t);
+
+/**
+ * Nói liền "hai sting một bánh mì thịt" khi một món chưa đủ tên trong danh mục ("sting", hoặc món chưa có như "bò húc"):
+ * `chunkByCatalog` chỉ tách khi có từ hai tên đầy đủ nên cả câu thành một món (ra "2 Bánh mì thịt", mất sting). Ở đây cắt
+ * trước mỗi số lượng đứng ngay sau một chữ thuộc tên món, khi sau số đó còn tên món: "hai sting | một bánh mì thịt".
+ * Không cắt bên trong tên món có trong danh mục, kể cả khi chỉ nói một phần tên ("sting gold lốc 6 lon": "lốc 6" liền nhau
+ * trong tên món), giữa các chữ của một số ("hai mươi"), hay khi phía trước chưa có tên món ("cho em | hai sting" không cắt).
+ */
+function chunkByQuantity(tokens: string[], products: ParseableProduct[]): string[][] {
+  const inCatalogName = new Array<boolean>(tokens.length).fill(false);
+  for (const hit of findProductHits(tokens, products)) for (let i = hit.start + 1; i < hit.end; i++) inCatalogName[i] = true;
+  // Hai chữ liền nhau trong tên một món ("loc 6"): cắt giữa chúng là cắt đôi tên món
+  const namePairs = new Set<string>();
+  for (const p of products) for (const key of productKeys(p)) for (let k = 1; k < key.length; k++) namePairs.add(`${key[k - 1]} ${key[k]}`);
+  const isQtyStart = (i: number) => {
+    const w = tokens[i];
+    if (/^\d{1,3}$/.test(w)) return true;
+    if (!(w in DIGIT_WORDS) || w === 'lam') return false;
+    // "nam", "sau", "tu", "tam", "bay" còn là chữ thường ("cô Năm", "sau đó"): chỉ tính là số khi đứng trước đơn vị
+    return !['nam', 'sau', 'tu', 'tam', 'bay'].includes(w) || UNITS.includes(tokens[i + 1] ?? '');
+  };
+  const chunks: string[][] = [];
+  let from = 0;
+  for (let i = 1; i < tokens.length; i++) {
+    if (inCatalogName[i] || namePairs.has(`${tokens[i - 1]} ${tokens[i]}`) || !isQtyStart(i) || !isNameWord(tokens[i - 1])) continue;
+    // Sau số lượng (và đơn vị nếu có) phải còn tên món
+    let j = i + 1;
+    while (j < tokens.length && (isNumberToken(tokens[j]) || UNITS.includes(tokens[j]))) j++;
+    if (!tokens.slice(j).some(isNameWord)) continue;
+    if (!tokens.slice(from, i).some(isNameWord)) continue;
+    chunks.push(tokens.slice(from, i));
+    from = i;
   }
   chunks.push(tokens.slice(from));
   return chunks.filter((c) => c.length);
@@ -586,13 +663,17 @@ export function parseOrder(text: string, products: ParseableProduct[]): ParsedOr
     const seg = chunk.filter((t) => !isMoney(t)).join(' ');
     if (!seg) return;
 
-    const { qty, rest, explicit } = parseQty(seg);
+    const spokenQty = parseQty(seg);
+    const { rest, explicit } = spokenQty;
     const matched = matchProduct(seg, products);
+    // Khớp được món thì số lượng lấy ở phần ngoài tên món: tên có chữ số ("… Lốc 6 Lon 320ml") không bị đọc thành 6 cái
+    const outside = matched ? parseQty(withoutName(seg, matched)) : null;
+    const qty = outside ? outside.qty : spokenQty.qty;
     // Tên chung của các mẫu trong danh mục ("sting" → Sting vàng / Sting đỏ) thì hỏi chọn mẫu, không thêm món mới. Khớp được
     // một món mà tên nói ra dài hơn tên món đó ("sting gold" khi có "Sting" và hai loại "… Sting Gold …") cũng hỏi, không
-    // lặng lẽ bỏ chữ thừa. Nói trùng hẳn tên một món, hoặc nói kèm giá, thì không hỏi.
+    // lặng lẽ bỏ chữ thừa. Nói trùng hẳn tên một món (ngoài tên chỉ còn số lượng, từ đệm), hoặc nói kèm giá, thì không hỏi.
     const words = spokenNameWords(rest);
-    const exact = !!matched && productKeys(matched).some((key) => key.join(' ') === words.join(' '));
+    const exact = !!outside && spokenNameWords(outside.rest).length === 0;
     const variants = price || exact ? [] : variantsOf(words, products);
     const name = cleanName(rest, text);
 
@@ -642,7 +723,9 @@ export function parseOrder(text: string, products: ParseableProduct[]): ParsedOr
     if (expense) expenses.push(expense.item);
     const itemTokens = expense ? clause.slice(0, expense.start) : clause;
     for (const seg of splitByPrice(itemTokens)) {
-      for (const chunk of chunkByCatalog(seg, products)) addLine(chunk);
+      for (const chunk of chunkByCatalog(seg, products)) {
+        for (const part of chunkByQuantity(chunk, products)) addLine(part);
+      }
     }
   }
 

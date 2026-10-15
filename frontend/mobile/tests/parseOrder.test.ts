@@ -104,3 +104,91 @@ describe('parseOrder: tên dài hơn món khớp được', () => {
     );
   });
 });
+
+describe('parseOrder: nói liền hai món không ngắt câu', () => {
+  const catalog = [
+    { id: 1, name: 'Sting vàng', price: 10_000 },
+    { id: 2, name: 'Sting đỏ', price: 10_000 },
+    { id: 3, name: 'Bánh mì thịt', price: 20_000 },
+    { id: 4, name: 'Cà phê sữa', price: 25_000 },
+    { id: 5, name: 'Trà đá', price: 5_000 },
+    { id: 6, name: 'Nước Tăng Lực Sting Gold Lốc 6 Lon 320ml', price: 63_000 },
+  ];
+  const summary = (text: string) => {
+    const r = parseOrder(text, catalog);
+    return {
+      items: r.items.map((i) => `${i.qty} ${i.name}`),
+      choose: (r.disambiguations ?? []).map((d) => `${d.qty} ${d.rawName}`),
+      unknown: r.unknown.map((u) => `${u.qty} ${u.name}`),
+    };
+  };
+
+  it('"hai sting một bánh mì thịt": hỏi mẫu Sting và ghi bánh mì, không thành 2 bánh mì', () => {
+    assert.deepEqual(summary('hai sting một bánh mì thịt'), { items: ['1 Bánh mì thịt'], choose: ['2 Sting'], unknown: [] });
+  });
+
+  it('thứ tự ngược lại cũng tách được', () => {
+    assert.deepEqual(summary('một bánh mì thịt hai sting'), { items: ['1 Bánh mì thịt'], choose: ['2 Sting'], unknown: [] });
+  });
+
+  it('món chưa có trong danh mục nói liền với món có sẵn không mất món nào', () => {
+    assert.deepEqual(summary('hai bia tiger một bánh mì thịt'), { items: ['1 Bánh mì thịt'], choose: [], unknown: ['2 Bia tiger'] });
+  });
+
+  it('hai tên chung nói liền', () => {
+    assert.deepEqual(summary('hai sting ba trà đá'), { items: ['3 Trà đá'], choose: ['2 Sting'], unknown: [] });
+  });
+
+  it('số lượng có đơn vị và số hai chữ', () => {
+    assert.deepEqual(summary('hai mươi ly trà đá một bánh mì thịt'), { items: ['20 Trà đá', '1 Bánh mì thịt'], choose: [], unknown: [] });
+  });
+
+  it('không tách bên trong tên món có số ("Lốc 6 Lon")', () => {
+    // Nói đủ tên: đúng món
+    assert.deepEqual(summary('một nước tăng lực sting gold lốc 6 lon 320ml'), {
+      items: ['1 Nước Tăng Lực Sting Gold Lốc 6 Lon 320ml'],
+      choose: [],
+      unknown: [],
+    });
+    // Nói một phần tên: "lốc 6" liền nhau trong tên món nên không bị cắt thành hai mục
+    const r = summary('một sting gold lốc 6 lon 320ml');
+    assert.equal(r.items.length + r.choose.length + r.unknown.length, 1);
+  });
+
+  it('không tách khi phía trước chỉ là từ đệm', () => {
+    assert.deepEqual(summary('cho em hai cà phê sữa'), { items: ['2 Cà phê sữa'], choose: [], unknown: [] });
+  });
+});
+
+describe('parseOrder: chữ trùng đơn vị khi bỏ dấu', () => {
+  const catalog = [
+    { id: 1, name: 'Bò húc', price: 12_000 },
+    { id: 2, name: 'Bánh mì thịt', price: 20_000 },
+    { id: 3, name: 'Gỏi cuốn', price: 30_000 },
+  ];
+  const summary = (text: string, cat: { id: number; name: string; price: number }[] = []) => {
+    const r = parseOrder(text, cat);
+    return { items: r.items.map((i) => `${i.qty} ${i.name}`), unknown: r.unknown.map((u) => `${u.qty} ${u.name}`) };
+  };
+
+  it('"bò húc" chưa có trong danh mục giữ đủ tên, không thành "Húc"', () => {
+    assert.deepEqual(summary('hai bò húc một bánh mì thịt', [catalog[1]]), { items: ['1 Bánh mì thịt'], unknown: ['2 Bò húc'] });
+  });
+
+  it('"gỏi cuốn", "rau cải" không bị cắt chữ đầu', () => {
+    assert.deepEqual(summary('ba gỏi cuốn').unknown, ['3 Gỏi cuốn']);
+    assert.deepEqual(summary('hai rau cải').unknown, ['2 Rau cải']);
+  });
+
+  it('đơn vị thật vẫn đi theo số lượng', () => {
+    assert.deepEqual(summary('hai bó rau').unknown, ['2 Rau']);
+    assert.deepEqual(summary('một gói mì tôm').unknown, ['1 Mì tôm']);
+    assert.deepEqual(summary('hai cái bánh bao').unknown, ['2 Bánh bao']);
+  });
+
+  it('món có trong danh mục khớp cả khi nói có dấu và gõ không dấu', () => {
+    assert.deepEqual(summary('hai bò húc', catalog).items, ['2 Bò húc']);
+    assert.deepEqual(summary('hai bo huc', catalog).items, ['2 Bò húc']);
+    assert.deepEqual(summary('một goi cuon', catalog).items, ['1 Gỏi cuốn']);
+  });
+});
