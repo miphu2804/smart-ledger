@@ -1,9 +1,11 @@
 package com.smartledger.core.service.impl;
 
 import com.smartledger.core.dto.request.OwnerListQuery.Sales;
+import com.smartledger.core.dto.request.OwnerListQuery.SalesSummary;
 import com.smartledger.core.dto.response.PageResponse;
 import com.smartledger.core.dto.response.SaleItemResponse;
 import com.smartledger.core.dto.response.SaleResponse;
+import com.smartledger.core.dto.response.SaleSummaryResponse;
 import com.smartledger.core.entity.Sale;
 import com.smartledger.core.entity.SaleItem;
 import com.smartledger.core.entity.Shop;
@@ -54,6 +56,14 @@ public class SaleServiceImpl implements SaleService {
                 .collect(Collectors.groupingBy(SaleItem::getSaleId));
         return PageResponse.from(page, parent -> toResponse(parent,
                 itemsByParent.getOrDefault(parent.getId(), List.of())));
+    }
+
+    /** Computes one snapshot of all matching sales; separate list requests do not share this snapshot. */
+    @Override
+    @Transactional(readOnly = true)
+    public SaleSummaryResponse summary(VerifiedFirebaseToken token, String shopId, SalesSummary query) {
+        Shop shop = shopService.requireOwnedActiveShop(token, shopId);
+        return saleRepository.aggregateSummary(OwnerListSpecifications.sales(shop.getId(), query));
     }
 
     @Override
