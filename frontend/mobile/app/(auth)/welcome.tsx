@@ -10,30 +10,30 @@ import { describeError, errorMessage, isDisplayNameRequired } from '../../src/li
 import { useApp } from '../../src/store/AppStore';
 import { colors, shadow } from '../../src/theme';
 
-/** Cách đăng nhập: email + mật khẩu và Facebook dùng được; Google và Zalo ghi "Sắp có". Không còn đăng nhập bằng số điện thoại. */
+/** Cách đăng nhập: email + mật khẩu, Facebook và Google dùng được; Zalo ghi "Sắp có". Không còn đăng nhập bằng số điện thoại. */
 export default function Welcome() {
   const toast = useToast();
   const app = useApp();
-  const [facebookBusy, setFacebookBusy] = useState(false);
+  const [busy, setBusy] = useState<SocialProvider | null>(null);
 
-  // Facebook → Firebase → phiên Core, cùng luồng với email: tài khoản mới (Core đòi tên) đi tiếp qua màn đăng ký.
-  const signInWithFacebook = async () => {
-    if (facebookBusy) return;
-    setFacebookBusy(true);
+  // Facebook/Google → Firebase → phiên Core, cùng luồng với email: tài khoản mới (Core đòi tên) đi tiếp qua màn đăng ký.
+  const signInWith = async (provider: SocialProvider) => {
+    if (busy) return;
+    setBusy(provider);
     try {
-      await authClient.signInWithFacebook();
+      await (provider === 'google' ? authClient.signInWithGoogle() : authClient.signInWithFacebook());
       const session = await app.signIn(); // gửi Firebase ID token xuống Core (POST /auth/session)
       router.replace(session.needsOnboarding ? '/(auth)/setup' : '/(tabs)');
     } catch (e) {
       if (e instanceof AuthError && e.code === 'cancelled') return; // người dùng tự đóng, không phải lỗi
-      debugLog('auth', 'facebook flow ✗', describeError(e));
+      debugLog('auth', `${provider} flow ✗`, describeError(e));
       if (isDisplayNameRequired(e)) {
         router.replace('/(auth)/profile');
         return;
       }
       toast(errorMessage(e), 'err');
     } finally {
-      setFacebookBusy(false);
+      setBusy(null);
     }
   };
 
@@ -82,8 +82,8 @@ export default function Welcome() {
         <View style={styles.line} />
       </Row>
       <Row gap={8} style={{ alignItems: 'stretch' }}>
-        <SocialBtn name="Facebook" icon="facebook" busy={facebookBusy} onPress={signInWithFacebook} />
-        <SocialBtn name="Google" icon="google" soon />
+        <SocialBtn name="Facebook" icon="facebook" busy={busy === 'facebook'} disabled={busy === 'google'} onPress={() => signInWith('facebook')} />
+        <SocialBtn name="Google" icon="google" busy={busy === 'google'} disabled={busy === 'facebook'} onPress={() => signInWith('google')} />
         <SocialBtn name="Zalo" icon="zalo" soon />
       </Row>
 
@@ -97,25 +97,28 @@ export default function Welcome() {
   );
 }
 
-type SocialIcon = 'google' | 'facebook' | 'zalo';
+type SocialProvider = 'facebook' | 'google';
+type SocialIcon = SocialProvider | 'zalo';
 const SOCIAL_COLOR: Record<SocialIcon, string> = { google: '#EA4335', facebook: '#1877F2', zalo: '#0068FF' };
 
-function SocialBtn({ name, icon, onPress, soon = false, busy = false }: {
+function SocialBtn({ name, icon, onPress, soon = false, busy = false, disabled = false }: {
   name: string;
   icon: SocialIcon;
   onPress?: () => void;
   /** true = chưa có: nút mờ, có nhãn "Sắp có" và không bấm được */
   soon?: boolean;
   busy?: boolean;
+  /** true khi đang chờ cách đăng nhập khác: không bấm được nhưng không mờ như "Sắp có" */
+  disabled?: boolean;
 }) {
   const color = SOCIAL_COLOR[icon];
   return (
     <Pressable
       onPress={onPress}
-      disabled={soon || busy}
+      disabled={soon || busy || disabled}
       accessibilityRole="button"
       accessibilityLabel={soon ? `${name}, sắp có` : `Đăng nhập bằng ${name}`}
-      accessibilityState={{ busy, disabled: soon }}
+      accessibilityState={{ busy, disabled: soon || disabled }}
       style={({ pressed }) => [styles.social, soon && styles.socialSoon, (pressed || busy) && { opacity: 0.75 }]}
     >
       <Row gap={6}>
