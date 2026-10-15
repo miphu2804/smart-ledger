@@ -23,6 +23,7 @@ import type {
   SaleDraftView,
   SaleItemView,
   SaleRefundView,
+  SaleSummaryView,
   SaleView,
   SaleVoidView,
   SalesSeriesPoint,
@@ -999,6 +1000,20 @@ function filterSales(rawQuery: string): SaleView[] {
     .sort((a, b) => Date.parse(b.soldAt) - Date.parse(a.soldAt) || b.id - a.id);
 }
 
+/** `GET /sales/summary` như Core: cùng bộ lọc với `GET /sales`, tổng theo trạng thái hiện tại của đơn. */
+function summarizeSales(rawQuery: string): SaleSummaryView {
+  const matched = filterSales(rawQuery);
+  const confirmed = matched.filter((s) => s.saleStatus === 'CONFIRMED');
+  const voided = matched.filter((s) => s.saleStatus === 'VOIDED');
+  return {
+    matchedOrderCount: matched.length,
+    confirmedOrderCount: confirmed.length,
+    voidedOrderCount: voided.length,
+    confirmedSalesVnd: confirmed.reduce((sum, s) => sum + s.totalVnd, 0),
+    voidedSalesVnd: voided.reduce((sum, s) => sum + s.totalVnd, 0),
+  };
+}
+
 /** Cửa sổ `[from, to)` của một kỳ báo cáo theo giờ máy (Core tính theo giờ Việt Nam). */
 function reportWindow(rawQuery: string): { period: ReportPeriod; from: Date; to: Date } {
   const period = (parseQuery(rawQuery).period ?? 'today') as ReportPeriod;
@@ -1610,6 +1625,7 @@ export function mockCoreRequest<T>(path: string, method: string, body: unknown, 
   }
 
   if (route === '/sales' && method === 'GET') return pageOf(filterSales(rawQuery), rawQuery, 'invalid_sale_query') as unknown as T;
+  if (route === '/sales/summary' && method === 'GET') return summarizeSales(rawQuery) as unknown as T;
   if (route === '/reports/summary' && method === 'GET') return reportSummary(rawQuery) as unknown as T;
   if (route === '/reports/sales-series' && method === 'GET') return reportSalesSeries(rawQuery) as unknown as T;
   if (route === '/reports/top-products' && method === 'GET') return reportTopProducts(rawQuery) as unknown as T;
