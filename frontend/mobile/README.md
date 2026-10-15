@@ -111,11 +111,11 @@ src/
   components/           UI kit, biểu đồ, logo, toast, QR minh hoạ
 ```
 
-## Gắn Firebase (đăng nhập bằng email và Facebook)
+## Gắn Firebase (đăng nhập bằng email, Facebook và Google)
 
-Code đã nối sẵn theo `docs/contracts/api-contracts.md`: Firebase xác thực (email + mật khẩu hoặc Facebook) → app gửi Firebase ID token (`Authorization: Bearer …`) tới `POST /api/v1/auth/session` → nhận `SessionView` (role, tiệm, `needsOnboarding`). Với `EXPO_PUBLIC_USE_MOCK=true` app chạy giả lập (không gọi Firebase); với `false` app dùng Firebase + Core thật. Chỉ cần cài gói và điền cấu hình:
+Code đã nối sẵn theo `docs/contracts/api-contracts.md`: Firebase xác thực (email + mật khẩu, Facebook hoặc Google) → app gửi Firebase ID token (`Authorization: Bearer …`) tới `POST /api/v1/auth/session` → nhận `SessionView` (role, tiệm, `needsOnboarding`). Với `EXPO_PUBLIC_USE_MOCK=true` app chạy giả lập (không gọi Firebase); với `false` app dùng Firebase + Core thật. Chỉ cần cài gói và điền cấu hình:
 
-1. **Firebase Console** → Authentication → Sign-in method → bật **Email/Password** (và **Facebook** nếu dùng, xem mục Facebook bên dưới). App không còn đăng nhập bằng số điện thoại.
+1. **Firebase Console** → Authentication → Sign-in method → bật **Email/Password** (và **Facebook**, **Google** nếu dùng, xem các mục bên dưới). App không còn đăng nhập bằng số điện thoại.
    - Templates → *Email address verification* và *Password reset*: đặt tên người gửi, tiêu đề; điền *Reply-to* là email hỗ trợ của dự án (Firebase gửi từ địa chỉ `noreply@…firebaseapp.com`; muốn gửi từ địa chỉ riêng cần SMTP tuỳ chỉnh).
    - Settings → *Authorized domains*: thêm domain của bản web (localhost có sẵn).
 2. **Thêm app** trong Project settings → Your apps:
@@ -190,7 +190,7 @@ Home và Analytics lấy danh sách sale/product/debt/expense qua [`useCoreData.
 
 ### Đăng nhập bằng email + mật khẩu
 
-Màn đầu có nút **Đăng nhập bằng email** và liên kết **Tạo tài khoản** (`app/(auth)/welcome.tsx` → `app/(auth)/email.tsx`). Google và Zalo hiện nhãn “Sắp có”; app không còn đăng nhập bằng số điện thoại.
+Màn đầu có nút **Đăng nhập bằng email** và liên kết **Tạo tài khoản** (`app/(auth)/welcome.tsx` → `app/(auth)/email.tsx`). Facebook và Google ở hàng nút bên dưới; Zalo hiện nhãn “Sắp có”; app không còn đăng nhập bằng số điện thoại.
 
 - **Tạo tài khoản** tự đăng ký bằng Firebase (`createUserWithEmailAndPassword`, không cần ai thêm user trong Console), gửi thư xác minh (`sendEmailVerification`) rồi chuyển sang `app/(auth)/verify-email.tsx`. Chỉ khi người dùng bấm **Tôi đã xác minh** và Firebase báo `emailVerified` thì app mới gửi Firebase ID token xuống Core (`POST /auth/session`). Mở lại app khi chưa xác minh vẫn quay về màn này. Đây là chặn ở phía app; Core chưa kiểm tra `email_verified`.
 - **Đăng nhập** bằng email chưa xác minh cũng đi qua màn xác minh (không tự gửi lại thư; bấm **Gửi lại thư xác minh**, chờ 60 giây giữa hai lần). Sai email hoặc mật khẩu hiện gợi ý “tạo tài khoản” hoặc “đặt lại mật khẩu” thay vì báo lỗi.
@@ -208,6 +208,19 @@ Cấu hình một lần (người quản trị app Facebook và Firebase làm):
 3. **Build:** `app.config.js` chỉ thêm plugin Facebook khi có `FACEBOOK_APP_ID` và `FACEBOOK_CLIENT_TOKEN` (đặt trong `.env` khi chạy `npx expo prebuild --platform android`, hoặc làm biến môi trường EAS). Hai giá trị này không đưa vào repo công khai và **App Secret không bao giờ đặt trong app hay `.env`**. Thư viện có mã native nên phải build lại dev client/APK, **không chạy trên Expo Go**; thiếu cấu hình thì bấm nút báo lỗi rõ ràng thay vì sập. Thư mục `android/` đã sinh sẵn thì chạy lại prebuild sau khi đổi hai biến.
 
 Giới hạn: mỗi cách đăng nhập là một tài khoản Firebase riêng, nên cùng một người đăng nhập bằng cách khác sẽ thành người dùng khác trong Core trừ khi liên kết ở Firebase (chưa làm). Nếu email Facebook đã dùng ở cách đăng nhập khác, Firebase có thể trả `account-exists-with-different-credential` và app báo người dùng dùng cách cũ. Chưa kiểm tra: iOS, và đăng nhập Facebook thật trên máy.
+
+### Đăng nhập bằng Google
+
+Nút Google ở màn đầu (`app/(auth)/welcome.tsx`) dùng `@react-native-google-signin/google-signin` trên điện thoại: Google trả ID token, app đổi sang tài khoản Firebase (`GoogleAuthProvider.credential` + `signInWithCredential`, ở `src/lib/auth/firebase.ts`) rồi đi tiếp như Facebook (Core `POST /auth/session`, tài khoản mới qua màn "Bạn tên gì?"). Web dùng popup Google của Firebase (`signInWithPopup`); bản mock đăng nhập vào người dùng mẫu `google.demo@example.com`. Đăng xuất cũng đăng xuất khỏi Google để lần sau hiện lại hộp chọn tài khoản. Core không cần sửa.
+
+Cấu hình một lần, trên **từng** Firebase project (staging `smart-ledger-c2892` cho `android-dev`/`android-staging`, production `smart-ledger-production` cho `android-production`):
+
+1. **Authentication → Sign-in method:** bật **Google**.
+2. **Project settings → Your apps → Android `vn.teamhexa.songheloi` → Add fingerprint:** thêm SHA-1 và SHA-256 của mọi khoá ký bản build trỏ về project đó. Staging: khoá debug (`android/app/debug.keystore`, SHA-1 `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`). Production: khoá release (SHA-1 `F9:2B:40:76:E8:B8:01:BB:B9:D8:6E:78:8E:A5:3E:87:C2:54:A1:D5`; workflow in lại chứng chỉ ở bước "Publish the APK to R2"), sau này thêm khoá Google Play. Không thêm khoá debug vào production: khoá này công khai trong repo. Thiếu SHA của khoá nào thì bản ký bằng khoá đó bị Google từ chối (`DEVELOPER_ERROR`, app báo "Cách đăng nhập này chưa dùng được").
+3. **Tải lại `google-services.json`** (phải có `oauth_client` với `client_type` 1 mang SHA-1 ở trên và `client_type` 3) rồi cập nhật secret `ANDROID_GOOGLE_SERVICES_JSON` của môi trường GitHub tương ứng. `app.config.js` đọc Web client ID (`client_type` 3) từ chính file này vào `extra.googleWebClientId`, nên không có biến môi trường riêng.
+4. **Web:** thêm domain của bản web vào Authentication → Settings → Authorized domains.
+
+Thư viện có mã native nên phải build lại APK. Plugin `@react-native-google-signin/google-signin` trong `app.json` gắn client iOS của `GoogleService-Info.plist` khi prebuild iOS; trên iOS thư viện tự dùng client đó nên không bắt buộc Web client ID (Android thì bắt buộc). Chưa kiểm tra: iOS. Giới hạn liên kết tài khoản giống Facebook (xem mục trên).
 
 ## Debug
 

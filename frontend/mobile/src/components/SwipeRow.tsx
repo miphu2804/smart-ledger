@@ -45,6 +45,8 @@ export function SwipeRow({
     () =>
       PanResponder.create({
         onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 10 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+        // Đã nhận cử chỉ ngang thì không để ScrollView dọc (nhất là Android) giật lại giữa chừng.
+        onPanResponderTerminationRequest: () => false,
         onPanResponderMove: (_, g) => {
           const raw = base.current + g.dx;
           // Quá nút thì chỉ theo một phần ngón tay; không cho kéo sang phải khỏi vị trí đóng.
@@ -75,10 +77,12 @@ export function SwipeRow({
         accessibilityLabel={actionLabel}
         style={styles.action}
       >
-        <Feather name={actionIcon} size={18} color={colors.white} />
-        <T w="bold" size={12} color={colors.white} style={{ marginTop: 4 }}>
-          {actionLabel}
-        </T>
+        <View style={styles.actionBody}>
+          <Feather name={actionIcon} size={18} color={colors.white} />
+          <T w="bold" size={12} color={colors.white} style={{ marginTop: 4 }}>
+            {actionLabel}
+          </T>
+        </View>
       </Pressable>
       <Animated.View
         {...pan.panHandlers}
@@ -99,10 +103,11 @@ const styles = StyleSheet.create({
     top: 0,
     right: 0,
     bottom: 0,
-    width: ACTION_W,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.brand,
+    left: 0,
+    alignItems: 'flex-end',
+    backgroundColor: colors.data.expense,
   },
+  // Nền đỏ phủ hết phần đã lộ khi kéo (như Gmail); nút giữ nguyên bề rộng ở mép phải.
+  actionBody: { width: ACTION_W, flex: 1, alignItems: 'center', justifyContent: 'center' },
   surface: { backgroundColor: colors.card },
 });

@@ -24,7 +24,7 @@ export function mapFirebaseError(e: unknown): AuthError {
       return new AuthError('weak-password');
     case 'operation-not-allowed':
       return new AuthError('provider-disabled');
-    // Email của tài khoản Facebook đã gắn với cách đăng nhập khác trong Firebase (cài đặt "một tài khoản cho mỗi email")
+    // Email của tài khoản Facebook/Google đã gắn với cách đăng nhập khác trong Firebase (cài đặt "một tài khoản cho mỗi email")
     case 'account-exists-with-different-credential':
       return new AuthError('account-exists');
     // Người dùng đóng cửa sổ đăng nhập (popup trên web)

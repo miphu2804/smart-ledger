@@ -8,17 +8,44 @@
  * `FACEBOOK_APP_ID` và `FACEBOOK_CLIENT_TOKEN` (trong .env khi chạy prebuild ở máy, hoặc biến môi trường EAS) thì thêm
  * plugin `react-native-fbsdk-next` và đặt `extra.facebookConfigured` để app biết nút Facebook dùng được; thiếu thì bỏ plugin,
  * các bản build khác (web, CI, prototype) vẫn chạy bình thường. Đổi các giá trị này phải prebuild lại thư mục android/.
+ *
+ * Đăng nhập Google: thư viện cần Web client ID để Google trả về ID token cho Firebase. Giá trị này nằm sẵn trong
+ * `google-services.json` (mục `oauth_client` có `client_type` 3, chỉ có sau khi bật Google trong Firebase) nên đọc từ
+ * chính file đó vào `extra.googleWebClientId`: mỗi môi trường tự lấy đúng client của Firebase project của nó.
  */
+const fs = require('fs');
+const path = require('path');
+
+/** Web client ID trong google-services.json; không có file hoặc chưa bật Google thì trả undefined (nút Google báo lỗi rõ). */
+function readGoogleWebClientId(file, packageName) {
+  if (!file) return undefined;
+  try {
+    const json = JSON.parse(fs.readFileSync(path.resolve(__dirname, file), 'utf8'));
+    const clients = (json.client ?? []).filter((c) => !packageName || c.client_info?.android_client_info?.package_name === packageName);
+    for (const c of clients) {
+      const web = [...(c.oauth_client ?? []), ...(c.services?.appinvite_service?.other_platform_oauth_client ?? [])].find(
+        (o) => o.client_type === 3,
+      );
+      if (web?.client_id) return web.client_id;
+    }
+  } catch {
+    // Bản web, bản CI kiểm tra và máy chưa có file: không cần Google trên điện thoại
+  }
+  return undefined;
+}
+
 module.exports = ({ config }) => {
   const facebookAppId = process.env.FACEBOOK_APP_ID;
   const facebookClientToken = process.env.FACEBOOK_CLIENT_TOKEN;
   const facebookConfigured = Boolean(facebookAppId && facebookClientToken);
+  const googleServicesFile = process.env.GOOGLE_SERVICES_JSON ?? config.android?.googleServicesFile;
+  const googleWebClientId = readGoogleWebClientId(googleServicesFile, config.android?.package);
 
   return {
     ...config,
     android: {
       ...config.android,
-      googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? config.android?.googleServicesFile,
+      googleServicesFile,
     },
     plugins: [
       ...(config.plugins ?? []),
@@ -41,6 +68,6 @@ module.exports = ({ config }) => {
           ]
         : []),
     ],
-    extra: { ...config.extra, facebookConfigured },
+    extra: { ...config.extra, facebookConfigured, googleWebClientId },
   };
 };
