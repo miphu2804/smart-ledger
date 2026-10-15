@@ -96,12 +96,60 @@ describe('parseOrder: tên dài hơn món khớp được', () => {
     assert.equal(r.disambiguations?.length, 0);
   });
 
-  it('chữ thừa không thuộc món nào thì vẫn ghi món khớp được như trước', () => {
+  it('chữ thừa không thuộc món nào thì hỏi: món khớp được hay thêm món mới', () => {
     const r = parseOrder('hai sting lạnh', catalog);
+    assert.equal(r.items.length, 0);
+    assert.equal(r.disambiguations?.[0].rawName, 'Sting lạnh');
+    assert.equal(r.disambiguations?.[0].qty, 2);
     assert.deepEqual(
-      r.items.map((i) => [i.productId, i.qty]),
-      [[10, 2]],
+      r.disambiguations?.[0].options.map((o) => o.product_id),
+      [10],
     );
+  });
+});
+
+describe('parseOrder: tên dài hơn món duy nhất trong danh mục', () => {
+  const catalog = [
+    { id: 1, name: 'Cà phê', price: 15_000 },
+    { id: 2, name: 'Bánh mì thịt', price: 20_000 },
+  ];
+
+  it('"một cà phê sữa" khi chỉ có "Cà phê": hỏi lại, không ghi thành Cà phê', () => {
+    const r = parseOrder('một cà phê sữa', catalog);
+    assert.equal(r.items.length, 0);
+    assert.equal(r.disambiguations?.[0].rawName, 'Cà phê sữa');
+    assert.deepEqual(
+      r.disambiguations?.[0].options.map((o) => o.name),
+      ['Cà phê'],
+    );
+  });
+
+  it('nói đúng tên món thì ghi thẳng', () => {
+    assert.deepEqual(
+      parseOrder('hai cà phê', catalog).items.map((i) => [i.name, i.qty]),
+      [['Cà phê', 2]],
+    );
+  });
+
+  it('từ thêm ở cuối câu ("nữa", "luôn") không làm hỏi lại', () => {
+    assert.deepEqual(
+      parseOrder('thêm hai cà phê nữa', catalog).items.map((i) => [i.name, i.qty]),
+      [['Cà phê', 2]],
+    );
+    assert.deepEqual(
+      parseOrder('lấy một bánh mì thịt luôn', catalog).items.map((i) => [i.name, i.qty]),
+      [['Bánh mì thịt', 1]],
+    );
+  });
+
+  it('nói liền món có sẵn và tên dài hơn', () => {
+    const r = parseOrder('hai cà phê sữa một bánh mì thịt', catalog);
+    assert.deepEqual(
+      r.items.map((i) => [i.name, i.qty]),
+      [['Bánh mì thịt', 1]],
+    );
+    assert.equal(r.disambiguations?.[0].rawName, 'Cà phê sữa');
+    assert.equal(r.disambiguations?.[0].qty, 2);
   });
 });
 

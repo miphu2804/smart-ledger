@@ -509,7 +509,7 @@ export default function Voice() {
         responseParts.push(
           first.options.length > 1
             ? `"${first.rawName}" có ${first.options.length} mẫu: ${first.options.map((o) => o.name).join(', ')}. Bạn chọn mẫu ở khung bên dưới.`
-            : `Có phải "${first.options[0].name}" không? Bạn xác nhận ở khung bên dưới.`,
+            : `Có phải "${first.options[0].name}" không? Nếu là món khác, bấm "Thêm món mới" ở khung bên dưới.`,
         );
       }
 
@@ -1088,7 +1088,7 @@ export default function Voice() {
             <Row gap={8} style={{ alignItems: 'center' }}>
               <Feather name="help-circle" size={15} color={voiceTheme.amberFg} />
               <T w="extrabold" size={14} color={voiceTheme.ink} style={{ flex: 1 }}>
-                Chọn mẫu cho "{choices[0].rawName}" · {choices[0].qty}
+                Chọn món cho "{choices[0].rawName}" · {choices[0].qty}
               </T>
               {choices.length > 1 ? (
                 <T size={12} color={voiceTheme.muted}>
@@ -1119,12 +1119,27 @@ export default function Voice() {
                   </T>
                 </Pressable>
               ))}
+              {/* Không mẫu nào đúng: thêm món mới đúng tên đã nói ("Cà phê sữa"), qua hộp thoại nhập giá như món chưa có */}
               <Button
-                title="Không phải mẫu nào"
+                title={`Thêm món mới "${choices[0].rawName}"`}
+                icon="plus"
                 variant="ghost"
                 small
                 onPress={() => {
-                  push('ai', `Đã bỏ qua "${choices[0].rawName}". Bạn nói lại tên đầy đủ của món nhé.`);
+                  const choice = choices[0];
+                  setChoices((cur) => cur.slice(1));
+                  setPending((cur) => [...cur, { name: choice.rawName, price: 0, qty: choice.qty }]);
+                  setNewPrice('');
+                  setNewQty(String(choice.qty));
+                  setQtyErr('');
+                }}
+              />
+              <Button
+                title="Bỏ qua"
+                variant="ghost"
+                small
+                onPress={() => {
+                  push('ai', `Đã bỏ qua "${choices[0].rawName}".`);
                   setChoices((cur) => cur.slice(1));
                 }}
               />

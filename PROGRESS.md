@@ -1,3 +1,11 @@
+### [2026-10-16 02:46 UTC+07:00] — [Fix] Voice orders ask before saving a longer name as a shorter product
+
+**Done:** With "Cà phê" in the catalog, saying "cà phê sữa" recorded "Cà phê" and dropped "sữa". When the spoken name is longer than the matched product and no other product contains it, Đọc đơn now asks: pick the matched product, or "Thêm món mới" with the spoken name, which opens the usual add-to-catalog dialog (price, quantity, unit). The choice card is titled "Chọn món cho …" and its skip button is "Bỏ qua". Words like "nữa", "thôi", "luôn", "giúp", "dùm" are treated as filler so "hai cà phê nữa" still records 2 Cà phê.
+
+**Changed files:** `frontend/mobile/src/lib/parseOrder.ts`, `frontend/mobile/app/voice.tsx`, `frontend/mobile/tests/parseOrder.test.ts`, `docs/product/product-requirements.md` (`AC-074`) — modified; this entry.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (only the 2 known errors in #230's files); `node --test tests/*.test.ts` 80/80 (5 new). Mock web build in headless Chrome, 3/3: "hai trà đá nữa" records 2 Trà đá, "một trà đá chanh" asks with Trà đá as the option, and "Thêm món mới" opens the dialog to add "Trà đá chanh". **Not verified:** speech on a phone.
+
 ### [2026-10-16 10:30 UTC+07:00] — [Fix] Agent memory writes semantic facts by default
 
 **Done:** The default for `AGENT_MEMORY_TYPES` is now `preference,procedural,semantic`, matching what staging and production run. With the old default the extractor dropped stable facts such as suppliers while the agent still told the owner "Đã ghi nhớ". ADR 0002 records the change and its reason; PO approval of the type list is still open.
