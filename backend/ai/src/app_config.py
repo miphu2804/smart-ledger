@@ -80,7 +80,7 @@ class AppConfig(BaseSettings):
     AGENT_MEMORY_ENABLED: bool = False
     # comma-separated memory types the model may write on its own; the rest stay
     # unwritten until the PO approves them
-    AGENT_MEMORY_TYPES: str = "preference,procedural"
+    AGENT_MEMORY_TYPES: str = "preference,procedural,semantic"
     # where memory embeddings come from: sentence-transformers runs the model in this
     # process (the `memory` dependency group); cloudflare calls Workers AI and needs
     # the CLOUDFLARE_* settings below

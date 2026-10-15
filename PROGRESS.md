@@ -1,3 +1,13 @@
+### [2026-10-16 10:30 UTC+07:00] — [Fix] Agent memory writes semantic facts by default
+
+**Done:** The default for `AGENT_MEMORY_TYPES` is now `preference,procedural,semantic`, matching what staging and production run. With the old default the extractor dropped stable facts such as suppliers while the agent still told the owner "Đã ghi nhớ". ADR 0002 records the change and its reason; PO approval of the type list is still open.
+
+**Changed files:** `backend/ai/src/app_config.py`, `backend/ai/.env.example`, `backend/ai/README.md`, `docs/architecture/adr/0002-agent-long-term-memory.md` — modified; this entry.
+
+**Flow explained:** extractor facts → filter by `AGENT_MEMORY_TYPES` → `semantic` facts are now stored and recalled in later chats; `episodic` and other types are still dropped.
+
+**Check:** `uv run pytest tests/unit_tests -q` and `ruff check` / `ruff format --check` in `backend/ai`. Staging E2E (supplier fact stored and recalled in a new chat) was run by the owner with the env var set.
+
 ### [2026-10-16 01:35 UTC+07:00] — [Feature] Welcome guide pages show the new illustrations
 
 **Done:** The Bán hàng, Tổng quan and Quản lý pages of the welcome guide show the designer's illustrations (converted from webp to 1080 px JPEG) instead of an icon on a colour block. Each image now carries its own aspect ratio: Bán hàng and Tổng quan are 3:2 like the Bobi page, Quản lý is near-square (1080×1151) and would lose its lower part under the old fixed 3:2 height. The text of those pages was rewritten to add what the pictures do not say instead of repeating their callouts, and to correct where the pictures differ from the app: sorting and stock filters live in the funnel button (the picture shows the older buttons and a "Cá nhân" tab), the outstanding debt on Home is the whole shop's and does not follow the period (the picture's callout says "trong kỳ"), and Công nợ only tracks what customers owe (the picture shows a "Nhà cung cấp" tab the app does not have). The Bobi page is unchanged.

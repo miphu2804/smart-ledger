@@ -40,7 +40,7 @@ Visibility and control, after Sakana Chat's "My Fish" (migration [`2026101500000
 
 - Each recall sets `last_used_at` and adds to `use_count`; decay counts age from the last use, not creation.
 - The extraction model sees the recalled memories as `[id] fact` and may set `replaces` on a fact that corrects one. The id is accepted only if that turn recalled it. The old row gets `superseded_by` and stops being recalled; deleting the newer fact's chat sets it back to NULL, so the old fact returns.
-- Only the types in `AGENT_MEMORY_TYPES` (default `preference,procedural`) are written; facts holding a Vietnamese phone number are dropped, including from summaries.
+- Only the types in `AGENT_MEMORY_TYPES` (default `preference,procedural,semantic`) are written; facts holding a Vietnamese phone number are dropped, including from summaries.
 - Up to ten live `preference` memories (most important, then newest) lead every turn whatever the message, ahead of the five searched ones, which never repeat them: a preference such as "answer in tables" rarely resembles the question it should shape. This follows the always-loaded `MEMORY.md` of Cognition's [agent memory repo](https://cognition.com/agent-memory-repo).
 - When memories are recalled, the stream sends a `memory` event before the first `delta`, each memory with its `source_conversation_id` and `created_at`, so the app can open the chat it came from (see the [stream contract](../../docs/contracts/api-contracts.md#stream-trả-lời-chat)).
 - `GET`/`PUT /internal/v1/agent/memory/settings` read and set the owner's switch in `agent_memory_settings` (on when no row). Off stops recall and writes, deletes nothing. When the service is not built, `GET` answers `available: false` and `PUT` answers `409`.
