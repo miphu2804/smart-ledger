@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useToast } from '../src/components/brand';
 import {
   Button,
@@ -19,13 +19,14 @@ import {
   T,
   Tile,
 } from '../src/components/ui';
-import { expenseCategoryMeta, expenseVoiceSamples } from '../src/data/mock';
+import { expenseCategoryMeta } from '../src/data/mock';
 import type { Expense, ExpenseCategory, ExpenseView, SaleView } from '../src/data/types';
 import { errorMessage } from '../src/lib/errors';
 import { triggerFeedback } from '../src/lib/feedback';
 import { compact, ddmm, hhmm, vnd } from '../src/lib/format';
 import { expenseApi } from '../src/lib/expenseApi';
-import { parseExpense } from '../src/lib/parseOrder';
+import { parseExpenseVoice } from '../src/lib/expenseVoiceParser';
+import { useVoiceRecorder } from '../src/lib/speech/useVoiceRecorder';
 import { saleApi } from '../src/lib/salesApi';
 import { monthExpenses } from '../src/lib/stats';
 import { colors } from '../src/theme';
@@ -295,19 +296,31 @@ function AddExpenseSheet({
   onSaved: () => void;
 }) {
   const toast = useToast();
-  const [mode, setMode] = useState<'voice' | 'manual'>('voice');
-  const [rec, setRec] = useState(false);
   const [heard, setHeard] = useState('');
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [cat, setCat] = useState<ExpenseCategory>('nguyenlieu');
-  const [sampleIdx, setSampleIdx] = useState(0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
+  const voice = useVoiceRecorder({
+    onResult: (text) => {
+      setHeard(text);
+      const parsed = parseExpenseVoice(text);
+      if (parsed.title) setTitle(parsed.title);
+      if (parsed.amount) setAmount(String(parsed.amount));
+      triggerFeedback('success');
+      toast(parsed.amount ? `Đã nhận diện ${vnd(parsed.amount)}` : 'Đã nhận diện giọng nói');
+    },
+    onError: (msg) => {
+      triggerFeedback('error');
+      toast(msg, 'err');
+    },
+  });
+
   useEffect(() => {
     if (!visible) {
-      setRec(false);
+      voice.cancelRecording();
       setHeard('');
       setTitle('');
       setAmount('');
@@ -315,23 +328,15 @@ function AddExpenseSheet({
     }
   }, [visible]);
 
-  const startRec = () => {
-    const sample = expenseVoiceSamples[sampleIdx % expenseVoiceSamples.length];
-    setSampleIdx((i) => i + 1);
-    setRec(true);
-    setHeard('');
-    const words = sample.split(' ');
-    words.forEach((_, i) => setTimeout(() => setHeard(words.slice(0, i + 1).join(' ')), 180 * (i + 1)));
-    setTimeout(
-      () => {
-        setRec(false);
-        const p = parseExpense(sample);
-        setTitle(p.title);
-        setAmount(String(p.amount));
-        setCat(/điện|nước/i.test(sample) ? 'dien' : /mặt bằng/i.test(sample) ? 'matbang' : 'nguyenlieu');
-      },
-      180 * words.length + 500,
-    );
+  const toggleRecording = async () => {
+    Keyboard.dismiss();
+    if (voice.isRecording) {
+      await voice.stopRecording();
+    } else {
+      triggerFeedback('selection');
+      setHeard('');
+      voice.startRecording();
+    }
   };
 
   const amt = parseInt(amount.replace(/\D/g, ''), 10) || 0;
@@ -361,68 +366,121 @@ function AddExpenseSheet({
 
   return (
     <Sheet visible={visible} onClose={onClose} title="Thêm chi phí">
-      <Chips<'voice' | 'manual'>
-        scroll={false}
-        value={mode}
-        onChange={setMode}
-        options={[
-          { key: 'voice', label: 'Gợi ý nhanh', icon: 'message-circle' },
-          { key: 'manual', label: 'Nhập tay', icon: 'edit-3' },
+      {/* Thanh trợ lý giọng nói thông minh - 1 chạm để nói */}
+      <Pressable
+        onPress={toggleRecording}
+        accessibilityRole="button"
+        accessibilityLabel={voice.isRecording ? 'Dừng nhận diện giọng nói' : 'Nhập chi phí bằng giọng nói'}
+        style={({ pressed }) => [
+          styles.voiceCard,
+          voice.isRecording ? styles.voiceCardRecording : heard ? styles.voiceCardHeard : null,
+          pressed && { opacity: 0.82 },
         ]}
-      />
-      {mode === 'voice' ? (
-        <View style={styles.voiceBox}>
-          <T
-            w="semibold"
-            size={14}
-            style={{ textAlign: 'center', minHeight: 40, marginTop: 6 }}
-            color={heard ? colors.ink : colors.faint}
-          >
-            {heard || 'Ví dụ: “Nhập bánh mì với nguyên liệu hết 850 nghìn”'}
-          </T>
-          <Button
-            title={rec ? 'Đang điền…' : title ? 'Điền câu khác' : 'Điền gợi ý'}
-            icon="arrow-down"
-            variant="gold"
-            onPress={startRec}
-            disabled={rec}
-            style={{ marginTop: 8 }}
+      >
+        <View
+          style={[
+            styles.voiceMicBtn,
+            voice.isRecording
+              ? styles.voiceMicBtnRecording
+              : heard
+                ? styles.voiceMicBtnHeard
+                : null,
+          ]}
+        >
+          <Feather
+            name={voice.isRecording ? 'square' : 'mic'}
+            size={18}
+            color={voice.isRecording ? colors.white : heard ? colors.brand : colors.white}
           />
         </View>
-      ) : null}
-      {mode === 'manual' || title ? (
-        <View style={{ marginTop: 14 }}>
-          <Field label="Nội dung" placeholder="VD: Tiền điện tháng 9" value={title} onChangeText={setTitle} />
-          <Field
-            label="Số tiền (đ)"
-            placeholder="0"
-            keyboardType="number-pad"
-            value={amt ? amt.toLocaleString('vi-VN') : ''}
-            onChangeText={setAmount}
-          />
-          <T w="semibold" size={12} color={colors.muted} style={{ marginBottom: 6 }}>
-            Loại chi
-          </T>
-          <Chips<ExpenseCategory>
-            scroll={false}
-            value={cat}
-            onChange={setCat}
-            options={Object.entries(expenseCategoryMeta).map(([k, v]) => ({ key: k as ExpenseCategory, label: v.label }))}
-          />
-          {err ? (
-            <T size={12} color={colors.red} style={{ marginTop: 8 }}>
-              {err}
+        <View style={{ flex: 1 }}>
+          <Row gap={6}>
+            {voice.isRecording ? <View style={styles.voiceDot} /> : null}
+            <T
+              w="bold"
+              size={13}
+              color={voice.isRecording ? colors.red : heard ? colors.green : colors.brand}
+            >
+              {voice.isRecording
+                ? 'Đang nghe bạn nói...'
+                : heard
+                  ? 'Đã tự động điền'
+                  : 'Nói để điền nhanh'}
             </T>
-          ) : null}
-          <Button
-            title="Lưu khoản chi"
-            onPress={save}
-            disabled={!title.trim() || !amt || busy}
-            loading={busy}
-            style={{ marginTop: 16 }}
-          />
+          </Row>
+          <T
+            size={12}
+            color={voice.isRecording ? colors.ink : heard ? colors.inkSecondary : colors.muted}
+            numberOfLines={1}
+          >
+            {voice.partialText
+              ? `“${voice.partialText}”`
+              : heard
+                ? `“${heard}”`
+                : 'Chạm để nói (VD: “Mua 2 cây đá 20k”)'}
+          </T>
         </View>
-      ) : null}
+        {voice.isRecording ? (
+          <View style={[styles.voicePill, styles.voicePillRecording]}>
+            <T w="bold" size={12} color={colors.white}>
+              Dừng
+            </T>
+          </View>
+        ) : heard ? (
+          <Row gap={4} style={styles.voicePill}>
+            <Feather name="rotate-ccw" size={11} color={colors.brand} />
+            <T w="bold" size={12} color={colors.brand}>
+              Nói lại
+            </T>
+          </Row>
+        ) : (
+          <View style={styles.voicePill}>
+            <T w="bold" size={12} color={colors.brand}>
+              Bấm nói
+            </T>
+          </View>
+        )}
+      </Pressable>
+
+      <View style={{ marginTop: 6 }}>
+        <Field
+          label="Nội dung"
+          placeholder="VD: Mua 2 cây đá"
+          value={title}
+          onChangeText={setTitle}
+        />
+        <Field
+          label="Số tiền (đ)"
+          placeholder="0"
+          keyboardType="number-pad"
+          value={amt ? amt.toLocaleString('vi-VN') : ''}
+          onChangeText={setAmount}
+        />
+        <T w="semibold" size={12} color={colors.muted} style={{ marginBottom: 6 }}>
+          Loại chi
+        </T>
+        <Chips<ExpenseCategory>
+          scroll={false}
+          value={cat}
+          onChange={setCat}
+          options={Object.entries(expenseCategoryMeta).map(([k, v]) => ({
+            key: k as ExpenseCategory,
+            label: v.label,
+          }))}
+        />
+        {err ? (
+          <T size={12} color={colors.red} style={{ marginTop: 8 }}>
+            {err}
+          </T>
+        ) : null}
+        <Button
+          title="Lưu khoản chi"
+          onPress={save}
+          disabled={!title.trim() || !amt || busy}
+          loading={busy}
+          style={{ marginTop: 16 }}
+        />
+      </View>
     </Sheet>
   );
 }
@@ -436,5 +494,52 @@ const styles = StyleSheet.create({
   stack: { flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'hidden', gap: 2 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  voiceBox: { marginTop: 14, backgroundColor: colors.white, borderRadius: 18, padding: 14, borderWidth: 1, borderColor: colors.border },
+  voiceCard: {
+    backgroundColor: colors.brandTint,
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.brandBorder,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 10,
+  },
+  voiceCardRecording: {
+    backgroundColor: colors.redSoft,
+    borderColor: colors.red,
+  },
+  voiceCardHeard: {
+    backgroundColor: '#F3FAF0',
+    borderColor: '#C9E4B9',
+  },
+  voiceMicBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: colors.brand,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  voiceMicBtnRecording: {
+    backgroundColor: colors.red,
+  },
+  voiceMicBtnHeard: {
+    backgroundColor: colors.brandSoft,
+  },
+  voicePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: colors.brandSoft,
+  },
+  voicePillRecording: {
+    backgroundColor: colors.red,
+  },
+  voiceDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: colors.red,
+  },
 });
