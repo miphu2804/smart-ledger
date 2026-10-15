@@ -96,19 +96,19 @@ Use the Conventional Commit format for pull request titles so the title can serv
 
 ### Pull request description
 
-GitHub pre-fills the description from [`.github/pull_request_template.md`](.github/pull_request_template.md) (GitHub reads templates from the default branch `main`, so this starts working after the release that carries it); keep every section and write `None` instead of deleting one. Use tables for Changes, Validation, and Risks so a reviewer can scan them, and keep the Summary to one or two sentences.
+GitHub pre-fills the description from [`.github/pull_request_template.md`](.github/pull_request_template.md) (GitHub reads templates from the default branch `main`, so this starts working after the release that carries it); keep every section and write `None` instead of deleting one. Use tables for Changes, Validation, and Risks so a reviewer can scan them, and keep the Summary short.
 
 ```markdown
 ## Summary
-What changed and why.
+What changed and why. One sentence when there is one point; a numbered list, one point per line, when there are several.
 
 ## Changes
 | Area | Change | Files / PR |
 |---|---|---|
 
 ## Validation
-| Check | Command / steps | Result |
-|---|---|---|
+| Check | Command / steps | Status | Result |
+|---|---|---|---|
 
 ## Risks and rollback
 | Risk | Impact | Rollback |
@@ -119,7 +119,8 @@ New environment variables, secrets, or migrations, or None.
 ```
 
 - **Area** is the module or part of the repo that changed, usually the commit scope.
-- **Validation** records what was actually run and its result. Add a row marked `Not verified` for anything that was not checked, such as a real device or a production run.
+- **Summary** with more than one point is a numbered list, one point per line, so each can be referenced in review ("point 2").
+- **Validation** records what was actually run. **Status** is `Verified` (run, with output), `Inferred` (reasoned from code or docs, not run), or `Not verified` (not checked; give the reason in Result, for example a real device or a production run).
 - Link related documentation, API contracts, and issues (`Closes #123`), and state assumptions.
 - Add screenshots or a recording for a visible UI change.
 

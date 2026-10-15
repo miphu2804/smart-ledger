@@ -1,6 +1,8 @@
 ## Summary
 
-<!-- Release scope in one or two sentences: N commits since the last release. -->
+<!-- Release scope: N commits since the last release. Numbered list, one point per line when there are several. -->
+
+1. 
 
 ## Changes
 
@@ -28,10 +30,10 @@ None.
 
 ## Validation
 
-| Check | Command / steps | Result |
-|---|---|---|
-| Required CI checks on `staging` | | |
-| Not verified | | |
+| Check | Command / steps | Status | Result |
+|---|---|---|---|
+| Required CI checks on `staging` | | | |
+| Anything not checked | | Not verified | |
 
 ## Deploy
 

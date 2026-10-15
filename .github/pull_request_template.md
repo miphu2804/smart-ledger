@@ -1,6 +1,8 @@
 ## Summary
 
-<!-- What changed and why, in one or two sentences. Link issues: Closes #123 -->
+<!-- What changed and why. One sentence for one point; a numbered list, one point per line, for several. Link issues: Closes #123 -->
+
+1. 
 
 ## Changes
 
@@ -10,11 +12,11 @@
 
 ## Validation
 
-| Check | Command / steps | Result |
-|---|---|---|
-| | | |
+| Check | Command / steps | Status | Result |
+|---|---|---|---|
+| | | | |
 
-<!-- Add a "Not verified" row for anything not checked (real device, production run, ...). -->
+<!-- Status: Verified (run, with output) | Inferred (reasoned, not run) | Not verified (say why in Result). -->
 
 ## Risks and rollback
 
