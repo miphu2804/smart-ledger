@@ -1,3 +1,11 @@
+### [2026-10-16 02:44 UTC+07:00] — [Fix] "Xem lại hướng dẫn" replays the guide on Tổng quan
+
+**Done:** The Settings button "Xem lại hướng dẫn" (#233) opened the guide on top of Settings. It now goes to Tổng quan and shows the guide there, as on the first sign-in; closing it leaves the user on Tổng quan. `AppStore` gains `showGuide()` (sets `guideDismissed` to false), and Settings no longer renders its own copy of the guide.
+
+**Changed files:** `frontend/mobile/app/settings.tsx`, `frontend/mobile/src/store/AppStore.tsx`, `docs/product/product-requirements.md` (`AC-018`) — modified; this entry.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (only the 2 known errors in #230's files). Mock web build in headless Chrome, 2/2: from Settings the guide opens on the Bobi step over Tổng quan, and after closing, Tổng quan is shown and Settings is not. **Not verified:** a phone.
+
 ### [2026-10-16 02:43 UTC+07:00] — [Fix] Sales: pinned Scan and Read buttons work after scrolling
 
 **Done:** After scrolling the Sales list, tapping "Quét mã" or "Đọc đơn" on the pinned bar did nothing. The large header above the list only fades out when collapsed, and it sits on top of the pinned bar, so it kept taking the taps. The collapsible header now tracks when it crosses the collapse point (a listener that sets state only on crossing) and lets only the visible layer take touches: the large header while expanded, the pinned bar once collapsed.
