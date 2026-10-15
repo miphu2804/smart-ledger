@@ -8,6 +8,48 @@
 
 **Check:** YAML parses and actionlint passes; the step script run locally against real commit pairs gives `false` for a backend-only push and `true` for a push touching `frontend/web/`, an all-zero `before` and an unknown commit. **Not verified:** a real push on GitHub (this PR's merge into `staging` touches `ci.yml`, so it will deploy; the first push after it that leaves the landing alone should skip).
 
+### [2026-10-16 02:47 UTC+07:00] — [Fix] Tabs switch without fading; overview compact bar and best sellers tidied
+
+**Done:** On an Android phone, switching to Quản lý sometimes showed only a blank screen with Bobi and the tab bar. The bottom tabs still faded on phones (#224 turned the fade off only on the web) and the fade can get stuck at zero opacity (inferred from the screenshot; not reproducible on the web). Tabs now switch without animation everywhere, and the scene background is the app background so any gap is not pure white. On Tổng quan, the compact bar shown after scrolling looked as if its icons were cut: the dark purple parts of the small icons disappeared into the purple bar, and at 360 px the labels were cut ("Đọc …", "Chọ…"). Each compact button now shows its icon on a light rounded tile above the label (buttons 50 instead of 42 px tall, which still fits the 115 px bar). In "Bán chạy", product names and quantities use the same line height without Android font padding so the quantity no longer sits higher than the name.
+
+**Changed files:** `frontend/mobile/app/(tabs)/_layout.tsx`, `frontend/mobile/app/(tabs)/index.tsx` (`CompactAction`) — modified; this entry.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (only the 2 known errors in #230's files). Mock web build in headless Chrome at 360×780, 8/8: name and quantity centres in "Bán chạy" match (0 px), the four compact buttons show icon tiles with full labels inside the buttons, and 250 ms after tapping Đơn hàng, Bán hàng, Quản lý, Tổng quan and Quản lý again each screen's title is fully visible. **Not verified:** the blank-tab fix on an Android phone.
+
+### [2026-10-16 02:46 UTC+07:00] — [Fix] Voice orders ask before saving a longer name as a shorter product
+
+**Done:** With "Cà phê" in the catalog, saying "cà phê sữa" recorded "Cà phê" and dropped "sữa". When the spoken name is longer than the matched product and no other product contains it, Đọc đơn now asks: pick the matched product, or "Thêm món mới" with the spoken name, which opens the usual add-to-catalog dialog (price, quantity, unit). The choice card is titled "Chọn món cho …" and its skip button is "Bỏ qua". Words like "nữa", "thôi", "luôn", "giúp", "dùm" are treated as filler so "hai cà phê nữa" still records 2 Cà phê.
+
+**Changed files:** `frontend/mobile/src/lib/parseOrder.ts`, `frontend/mobile/app/voice.tsx`, `frontend/mobile/tests/parseOrder.test.ts`, `docs/product/product-requirements.md` (`AC-074`) — modified; this entry.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (only the 2 known errors in #230's files); `node --test tests/*.test.ts` 80/80 (5 new). Mock web build in headless Chrome, 3/3: "hai trà đá nữa" records 2 Trà đá, "một trà đá chanh" asks with Trà đá as the option, and "Thêm món mới" opens the dialog to add "Trà đá chanh". **Not verified:** speech on a phone.
+
+### [2026-10-16 02:45 UTC+07:00] — [Feature] Report uses Core's estimated cost and shows the money of voided orders
+
+**Done:** "Giá vốn ước tính" on the Báo cáo screen was computed on the phone from each product's current cost, or 60% of the price when the product had none, which FR-006 rules out. The report now reads Core: revenue is the confirmed orders sold in the period (`/sales/summary`, never negative), and cost and profit come from `/reports/profit-estimate`, which uses the cost snapshotted at sale time. Core's net cost (sold minus voided) can go negative when an earlier order is voided, so the screen shows non-negative parts that add up exactly to Core's gross profit: revenue − cost of goods sold − orders sold earlier and voided now + cost of voided orders = gross profit, then − recorded expenses = profit after expenses. When some items have no cost, it says how many and how much revenue they cover, and links to Hàng hoá. A new "Đơn huỷ trong kỳ" block shows the number and value of orders voided in the period and how much was refunded, and explains that the rest of a voided order's value is only cancelled debt; its "Xem các đơn đã huỷ" button opens Orders with a new "Đã huỷ" filter, where the summary card shows the value of voided orders and day headers count voided orders. `stats.summary` no longer estimates cost at all, and the report stops loading the whole product list for it.
+
+**Changed files:** `frontend/mobile/app/analytics.tsx`, `frontend/mobile/app/(tabs)/invoices.tsx`, `frontend/mobile/src/lib/stats.ts`, `docs/product/product-requirements.md` (new `AC-076`) — modified; `frontend/mobile/src/lib/useReportTotals.ts` — new; this entry.
+
+**Flow explained:** report period → `useReportTotals` → `/reports/summary` + `/reports/profit-estimate` + `/sales/summary` → `periodRevenue` → rows from `grossEstimatedCogsVnd`, `cancelledEarlierVnd`, `voidedEstimatedCogsVnd`, `estimatedGrossProfitVnd`, `expenseVnd`, `estimatedOperatingProfitVnd`; voided block from `voidedOrderCount`, `voidedRevenueVnd`, `refundedVnd`. Orders "Đã huỷ" adds `saleStatus=VOIDED` to the list, the summary and each day's summary.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (only the 2 known errors in #230's files); `node --test tests/*.test.ts` 76/76. Mock web build in headless Chrome, 12/12: before and after voiding yesterday's 379.000đ order the rows add up (265.000 − 195.500 − 379.000 + 323.000 = 13.500) with no negative row, the old "dùng mức ước tính" note is gone, the voided block shows 1 order, 379.000đ, refunded 0đ, and "Xem các đơn đã huỷ" opens Orders with only that order and a 379.000đ "Giá trị đơn huỷ" card. **Not verified:** staging Core, a phone, the missing-cost warning (the mock has no item without cost in the period).
+
+### [2026-10-16 02:44 UTC+07:00] — [Fix] "Xem lại hướng dẫn" replays the guide on Tổng quan
+
+**Done:** The Settings button "Xem lại hướng dẫn" (#233) opened the guide on top of Settings. It now goes to Tổng quan and shows the guide there, as on the first sign-in; closing it leaves the user on Tổng quan. `AppStore` gains `showGuide()` (sets `guideDismissed` to false), and Settings no longer renders its own copy of the guide.
+
+**Changed files:** `frontend/mobile/app/settings.tsx`, `frontend/mobile/src/store/AppStore.tsx`, `docs/product/product-requirements.md` (`AC-018`) — modified; this entry.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (only the 2 known errors in #230's files). Mock web build in headless Chrome, 2/2: from Settings the guide opens on the Bobi step over Tổng quan, and after closing, Tổng quan is shown and Settings is not. **Not verified:** a phone.
+
+### [2026-10-16 02:43 UTC+07:00] — [Fix] Sales: pinned Scan and Read buttons work after scrolling
+
+**Done:** After scrolling the Sales list, tapping "Quét mã" or "Đọc đơn" on the pinned bar did nothing. The large header above the list only fades out when collapsed, and it sits on top of the pinned bar, so it kept taking the taps. The collapsible header now tracks when it crosses the collapse point (a listener that sets state only on crossing) and lets only the visible layer take touches: the large header while expanded, the pinned bar once collapsed.
+
+**Changed files:** `frontend/mobile/app/pos.tsx` (`PosCollapsibleHeader`) — modified; this entry.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (its only 2 errors are in #230's files: `expo-application` and `expo-intent-launcher` are not installed on this machine). Mock web build in headless Chrome at 393×852, 3/3: before scrolling the centre of the large "Quét mã" button hits that button; after scrolling the centre of the pinned "Quét mã" hits the pinned button and tapping it opens the scanner. **Not verified:** a phone.
+
 ### [2026-10-16 10:30 UTC+07:00] — [Fix] Agent memory writes semantic facts by default
 
 **Done:** The default for `AGENT_MEMORY_TYPES` is now `preference,procedural,semantic`, matching what staging and production run. With the old default the extractor dropped stable facts such as suppliers while the agent still told the owner "Đã ghi nhớ". ADR 0002 records the change and its reason; PO approval of the type list is still open.
