@@ -22,6 +22,7 @@ from src.agent.tools import (
     build_restock_tool,
     build_shop_data_tool,
 )
+from src.memory.repository import RecalledMemory
 from src.memory.service import AgentMemoryService
 from src.prompt_templates import (
     CURRENT_TIME,
@@ -48,6 +49,13 @@ class AgentChatResult:
 
 
 @dataclass(frozen=True)
+class MemoryRecalled:
+    """The memories the reply draws on; sent before the first text."""
+
+    memories: list[RecalledMemory]
+
+
+@dataclass(frozen=True)
 class TextDelta:
     text: str
 
@@ -62,7 +70,7 @@ class Done:
     result: AgentChatResult
 
 
-AgentStreamEvent = TextDelta | Reset | Done
+AgentStreamEvent = MemoryRecalled | TextDelta | Reset | Done
 
 
 class AgentService:
@@ -127,12 +135,12 @@ class AgentService:
     ) -> AgentChatResult:
         context = AgentContext(user_id=user_id, shop_id=shop_id)
         question, history = await self._prepare_turn(context, message, conversation_id)
-        prompt = await self._with_memories(context, question)
+        prompt, recalled = await self._with_memories(context, question)
         answer, version = await self._answer(
             prompt, history, context, self._session_id(conversation_id)
         )
         return await self._save_turn(
-            context, conversation_id, question, answer, version
+            context, conversation_id, question, answer, version, recalled
         )
 
     async def stream_chat(
@@ -146,8 +154,10 @@ class AgentService:
         iterator runs the model and yields the events."""
         context = AgentContext(user_id=user_id, shop_id=shop_id)
         question, history = await self._prepare_turn(context, message, conversation_id)
-        prompt = await self._with_memories(context, question)
-        return self._stream_events(question, prompt, history, context, conversation_id)
+        prompt, recalled = await self._with_memories(context, question)
+        return self._stream_events(
+            question, prompt, recalled, history, context, conversation_id
+        )
 
     async def _prepare_turn(
         self, context: AgentContext, message: str, conversation_id: int | None
@@ -175,14 +185,16 @@ class AgentService:
         question = self.guardrails.check_input(message)
         return question, history
 
-    async def _with_memories(self, context: AgentContext, question: str) -> str:
-        """The prompt sent to the model: the question, led by recalled memories.
+    async def _with_memories(
+        self, context: AgentContext, question: str
+    ) -> tuple[str, list[RecalledMemory]]:
+        """The prompt sent to the model, led by recalled memories, and those memories.
 
         Only the model sees them; the stored message stays the owner's own words, so
         later turns do not replay old memories with the history.
         """
         if self.memory is None:
-            return question
+            return question, []
         return await self.memory.with_memories(
             context.shop_id, context.user_id, question
         )
@@ -209,6 +221,7 @@ class AgentService:
         self,
         question: str,
         prompt: str,
+        recalled: list[RecalledMemory],
         history: list[dict],
         context: AgentContext,
         conversation_id: int | None,
@@ -216,7 +229,7 @@ class AgentService:
         events: asyncio.Queue[AgentStreamEvent | Exception] = asyncio.Queue()
         producer = asyncio.create_task(
             self._produce_turn(
-                question, prompt, history, context, conversation_id, events
+                question, prompt, recalled, history, context, conversation_id, events
             )
         )
         try:
@@ -237,6 +250,7 @@ class AgentService:
         self,
         question: str,
         prompt: str,
+        recalled: list[RecalledMemory],
         history: list[dict],
         context: AgentContext,
         conversation_id: int | None,
@@ -245,6 +259,8 @@ class AgentService:
         # The run gets its own task: pydantic-ai binds its run state to the task that
         # opened it, so a generator suspended mid-run cannot be closed from outside.
         try:
+            if recalled:
+                events.put_nowait(MemoryRecalled(recalled))
             delivered, result = await self._stream_run(
                 prompt, history, context, self._session_id(conversation_id), events
             )
@@ -255,7 +271,7 @@ class AgentService:
             if answer[len(delivered) :]:
                 events.put_nowait(TextDelta(answer[len(delivered) :]))
             saved = await self._save_turn(
-                context, conversation_id, question, answer, version
+                context, conversation_id, question, answer, version, recalled
             )
             events.put_nowait(Done(saved))
         except Exception as error:
@@ -321,6 +337,7 @@ class AgentService:
         question: str,
         answer: str,
         version: str,
+        recalled: list[RecalledMemory],
     ) -> AgentChatResult:
         saved_conversation_id, message_id = await asyncio.to_thread(
             self.conversations.save_exchange,
@@ -331,7 +348,7 @@ class AgentService:
             assistant_message=answer,
         )
         if self.memory is not None:
-            self._remember(context, saved_conversation_id, question, answer)
+            self._remember(context, saved_conversation_id, question, answer, recalled)
         return AgentChatResult(
             conversation_id=saved_conversation_id,
             message_id=message_id,
@@ -341,12 +358,22 @@ class AgentService:
         )
 
     def _remember(
-        self, context: AgentContext, conversation_id: int, question: str, answer: str
+        self,
+        context: AgentContext,
+        conversation_id: int,
+        question: str,
+        answer: str,
+        recalled: list[RecalledMemory],
     ) -> None:
         """Store what the turn taught without making the owner wait for it."""
         task = asyncio.create_task(
             self.memory.remember(
-                context.shop_id, context.user_id, conversation_id, question, answer
+                context.shop_id,
+                context.user_id,
+                conversation_id,
+                question,
+                answer,
+                recalled,
             )
         )
         self.memory_writes.add(task)

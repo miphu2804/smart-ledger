@@ -78,6 +78,9 @@ class AppConfig(BaseSettings):
     # Needs the `memory` dependency group and the agent_memories migration, whose
     # vector size must match the embedding model.
     AGENT_MEMORY_ENABLED: bool = False
+    # comma-separated memory types the model may write on its own; the rest stay
+    # unwritten until the PO approves them
+    AGENT_MEMORY_TYPES: str = "preference,procedural"
     AGENT_MEMORY_EMBEDDING_MODEL: str = (
         "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     )

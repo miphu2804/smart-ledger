@@ -64,7 +64,16 @@ def build_memory_service(
     except ImportError:
         logger.error("memory enabled but the memory dependency group is missing")
         return None
-    return AgentMemoryService(chat_model, AgentMemoryRepository(postgres), embedder)
+    return AgentMemoryService(
+        chat_model,
+        AgentMemoryRepository(postgres),
+        embedder,
+        allowed_types=frozenset(
+            item.strip()
+            for item in app_config.AGENT_MEMORY_TYPES.split(",")
+            if item.strip()
+        ),
+    )
 
 
 @asynccontextmanager
@@ -83,6 +92,8 @@ async def lifespan(app: FastAPI):
     conversations = AgentConversationRepository(postgres)
     app.state.conversations = conversations
     shop_data = build_shop_data(reader)
+    memory = build_memory_service(chat_model, postgres)
+    app.state.memory = memory
     app.state.agent = AgentService(
         chat_model,
         conversations,
@@ -95,7 +106,7 @@ async def lifespan(app: FastAPI):
         ),
         shop_data=shop_data,
         restock=RestockService(shop_data) if shop_data else None,
-        memory=build_memory_service(chat_model, postgres),
+        memory=memory,
         history_turns=app_config.AGENT_HISTORY_TURNS,
     )
     try:

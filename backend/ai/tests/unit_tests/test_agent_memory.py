@@ -4,26 +4,35 @@ import logging
 from datetime import UTC, date, datetime
 
 import pytest
+from fastapi.testclient import TestClient
 from pydantic_ai import Embedder
 from pydantic_ai.embeddings import TestEmbeddingModel
 from pydantic_ai.messages import ModelResponse, TextPart
 from tests.support import TEST_GUARDRAIL_LIMITS, ScriptedModel, transcript
 
-from src.agent.service import AgentService
+from src.agent.service import AgentService, Done, MemoryRecalled, TextDelta
+from src.main import app
 from src.memory.repository import MemoryGroup, RecalledMemory, StoredMemory
-from src.memory.service import AgentMemoryService
+from src.memory.service import PHONE_NUMBER, AgentMemoryService
 from src.prompt_templates import MEMORY_PROMPT
 
 pytestmark = pytest.mark.anyio
 
 RICE_SUPPLIER = "Anh nhập gạo ở chú Tư chợ Bà Chiểu."
+SHORT_REPORTS = "Anh thích báo cáo ngắn gọn."
+PREFERENCE = {"memory_type": "preference", "content": SHORT_REPORTS, "importance": 0.6}
 
 
 class FakeMemoryRepository:
     def __init__(
-        self, recalled=None, error: Exception | None = None, groups=None
+        self,
+        recalled=None,
+        error: Exception | None = None,
+        groups=None,
+        enabled: bool = True,
     ) -> None:
         self.recalled = recalled or []
+        self.enabled = enabled
         self.error = error
         self.groups = groups or []
         self.searches: list[tuple] = []
@@ -40,6 +49,12 @@ class FakeMemoryRepository:
         if self.error is not None:
             raise self.error
         self.added.append((shop_id, user_id, conversation_id, memories))
+
+    def memory_enabled(self, shop_id, user_id):
+        return self.enabled
+
+    def set_memory_enabled(self, shop_id, user_id, enabled):
+        self.enabled = enabled
 
     def due_for_summary(self, shop_id, user_id, older_than_days):
         return self.groups
@@ -72,11 +87,14 @@ def memory_service(
         model,
         repository or FakeMemoryRepository(),
         Embedder(TestEmbeddingModel(dimensions=2)),
+        allowed_types=frozenset({"preference", "procedural"}),
     )
 
 
-def recalled(content: str = RICE_SUPPLIER) -> RecalledMemory:
-    return RecalledMemory(content, "semantic", datetime(2026, 10, 1, tzinfo=UTC), 0.8)
+def recalled(content: str = RICE_SUPPLIER, memory_id: int = 7) -> RecalledMemory:
+    return RecalledMemory(
+        memory_id, content, "semantic", datetime(2026, 10, 1, tzinfo=UTC), 0.8
+    )
 
 
 def agent_with(chat_model, memory, conversations=None) -> AgentService:
@@ -160,9 +178,7 @@ async def test_a_failed_search_answers_without_memories(
 
 
 async def test_saved_turn_is_remembered_under_its_owner_and_conversation() -> None:
-    extractor = ScriptedModel(
-        facts({"memory_type": "semantic", "content": RICE_SUPPLIER, "importance": 0.6})
-    )
+    extractor = ScriptedModel(facts(PREFERENCE))
     repository = FakeMemoryRepository()
     agent = agent_with(
         ScriptedModel("Dạ, em nhớ rồi."), memory_service(extractor, repository)
@@ -177,8 +193,8 @@ async def test_saved_turn_is_remembered_under_its_owner_and_conversation() -> No
     assert (shop_id, user_id, conversation_id) == (15, 3, 9)
     (memory,) = memories
     assert (memory.memory_type, memory.content, memory.importance) == (
-        "semantic",
-        RICE_SUPPLIER,
+        "preference",
+        SHORT_REPORTS,
         0.6,
     )
     assert len(memory.embedding) == 2
@@ -191,7 +207,7 @@ async def test_nothing_is_written_when_no_fact_is_extracted() -> None:
     repository = FakeMemoryRepository()
 
     await memory_service(ScriptedModel(facts()), repository).remember(
-        15, 3, 9, "chào em", "Dạ chào anh."
+        15, 3, 9, "chào em", "Dạ chào anh.", []
     )
 
     assert repository.added == []
@@ -212,7 +228,7 @@ async def test_a_failed_extraction_is_logged_not_raised(
     repository = FakeMemoryRepository()
 
     with caplog.at_level(logging.WARNING):
-        await memory_service(extractor, repository).remember(15, 3, 9, "q", "a")
+        await memory_service(extractor, repository).remember(15, 3, 9, "q", "a", [])
 
     assert repository.added == []
     assert "memory not stored: shop=15 conversation=9" in caplog.text
@@ -221,13 +237,13 @@ async def test_a_failed_extraction_is_logged_not_raised(
 async def test_memory_dates_are_shop_days_not_utc_days() -> None:
     # 17:28 UTC on 14 October is 00:28 on 15 October in Vietnam.
     late_night = RecalledMemory(
-        RICE_SUPPLIER, "semantic", datetime(2026, 10, 14, 17, 28, tzinfo=UTC), 0.8
+        7, RICE_SUPPLIER, "semantic", datetime(2026, 10, 14, 17, 28, tzinfo=UTC), 0.8
     )
     service = memory_service(
         ScriptedModel(), FakeMemoryRepository(recalled=[late_night])
     )
 
-    prompt = await service.with_memories(15, 3, "gạo?")
+    prompt, _ = await service.with_memories(15, 3, "gạo?")
 
     assert f"- (2026-10-15) {RICE_SUPPLIER}" in prompt
 
@@ -235,7 +251,9 @@ async def test_memory_dates_are_shop_days_not_utc_days() -> None:
 async def test_extraction_knows_today_to_date_events() -> None:
     extractor = ScriptedModel(facts())
 
-    await memory_service(extractor).remember(15, 3, 9, "tuần trước máy đá hỏng", "Dạ.")
+    await memory_service(extractor).remember(
+        15, 3, 9, "tuần trước máy đá hỏng", "Dạ.", []
+    )
 
     assert "Today at the shop: " in sent_prompt(extractor)
 
@@ -264,11 +282,11 @@ async def test_old_memories_of_a_chat_day_are_replaced_by_their_summary() -> Non
     group = old_group()
     model = ScriptedModel(
         facts(),
-        facts({"memory_type": "semantic", "content": RICE_SUPPLIER, "importance": 0.6}),
+        facts(PREFERENCE),
     )
     repository = FakeMemoryRepository(groups=[group])
 
-    await memory_service(model, repository).remember(15, 3, 9, "chào em", "Dạ.")
+    await memory_service(model, repository).remember(15, 3, 9, "chào em", "Dạ.", [])
 
     summarized_from = sent_prompt(model, request=1)
     assert "Facts from 2026-10-01" in summarized_from
@@ -276,7 +294,7 @@ async def test_old_memories_of_a_chat_day_are_replaced_by_their_summary() -> Non
     ((shop_id, user_id, replaced_group, summary),) = repository.replaced
     assert (shop_id, user_id, replaced_group) == (15, 3, group)
     assert [(memory.content, memory.importance) for memory in summary] == [
-        (RICE_SUPPLIER, 0.6)
+        (SHORT_REPORTS, 0.6)
     ]
 
 
@@ -288,7 +306,188 @@ async def test_an_empty_summary_keeps_the_old_memories(
     repository = FakeMemoryRepository(groups=[old_group()])
 
     with caplog.at_level(logging.WARNING):
-        await memory_service(model, repository).remember(15, 3, 9, "chào em", "Dạ.")
+        await memory_service(model, repository).remember(15, 3, 9, "chào em", "Dạ.", [])
 
     assert repository.replaced == []
     assert "memory not summarized: shop=15" in caplog.text
+
+
+async def test_an_owner_who_switched_memory_off_gets_no_recall_and_no_write() -> None:
+    repository = FakeMemoryRepository(recalled=[recalled()], enabled=False)
+    extractor = ScriptedModel()
+    service = memory_service(extractor, repository)
+
+    prompt, used = await service.with_memories(15, 3, "gạo?")
+    await service.remember(15, 3, 9, "q", "a", [])
+
+    assert (prompt, used) == ("gạo?", [])
+    assert repository.searches == []
+    assert extractor.requests == []
+    assert repository.added == []
+
+
+async def test_only_the_allowed_memory_types_are_written() -> None:
+    extractor = ScriptedModel(
+        facts(
+            PREFERENCE,
+            {"memory_type": "semantic", "content": RICE_SUPPLIER, "importance": 0.6},
+            {"memory_type": "episodic", "content": "Máy đá hỏng.", "importance": 0.3},
+        )
+    )
+    repository = FakeMemoryRepository()
+
+    await memory_service(extractor, repository).remember(15, 3, 9, "q", "a", [])
+
+    ((_, _, _, memories),) = repository.added
+    assert [memory.memory_type for memory in memories] == ["preference"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Số của chú Tư là 0901234567.",
+        "Gọi 090 123 4567 nhé.",
+        "Liên hệ +84 901 234 567.",
+        "SĐT 0901.234.567",
+        "Zalo 84-901-234-567",
+    ],
+)
+def test_vietnamese_phone_numbers_are_detected(text: str) -> None:
+    assert PHONE_NUMBER.search(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Mỗi ngày bán khoảng 120.000đ tiền đá.",
+        "Nhập gạo 1.200.000đ một bao.",
+        "Vốn 150.000.000 đồng.",
+        "Chốt sổ lúc 22h30.",
+    ],
+)
+def test_money_and_times_are_not_phone_numbers(text: str) -> None:
+    assert PHONE_NUMBER.search(text) is None
+
+
+async def test_facts_with_a_phone_number_are_dropped_from_extraction_and_summary():
+    leaking = {**PREFERENCE, "content": "Gọi chú Tư số 0901234567."}
+    model = ScriptedModel(facts(leaking, PREFERENCE), facts(leaking))
+    repository = FakeMemoryRepository(groups=[old_group()])
+
+    await memory_service(model, repository).remember(15, 3, 9, "q", "a", [])
+
+    ((_, _, _, memories),) = repository.added
+    assert [memory.content for memory in memories] == [SHORT_REPORTS]
+    # Every summary fact was dropped, so the group stays rather than become nothing.
+    assert repository.replaced == []
+
+
+async def test_a_fact_may_replace_only_a_memory_this_turn_recalled() -> None:
+    extractor = ScriptedModel(
+        facts(
+            {**PREFERENCE, "replaces": 7},
+            {**PREFERENCE, "content": "Anh thích số liệu.", "replaces": 99},
+        )
+    )
+    repository = FakeMemoryRepository()
+
+    await memory_service(extractor, repository).remember(
+        15, 3, 9, "q", "a", [recalled(memory_id=7)]
+    )
+
+    ((_, _, _, memories),) = repository.added
+    assert [memory.supersedes for memory in memories] == [7, None]
+    assert f"[7] {RICE_SUPPLIER}" in sent_prompt(extractor)
+
+
+async def collect_events(agent: AgentService, message: str = "gạo?") -> list:
+    events = await agent.stream_chat(user_id=3, shop_id=15, message=message)
+    found = [event async for event in events]
+    await asyncio.gather(*agent.memory_writes)
+    return found
+
+
+async def test_the_stream_names_recalled_memories_before_the_first_text() -> None:
+    memory = recalled()
+    agent = agent_with(
+        ScriptedModel("Chú Tư."),
+        memory_service(ScriptedModel(facts()), FakeMemoryRepository(recalled=[memory])),
+    )
+
+    events = await collect_events(agent)
+
+    assert events[0] == MemoryRecalled([memory])
+    assert isinstance(events[1], TextDelta)
+    assert isinstance(events[-1], Done)
+
+
+async def test_the_stream_has_no_memory_event_when_nothing_was_recalled() -> None:
+    agent = agent_with(
+        ScriptedModel("ok"),
+        memory_service(ScriptedModel(facts()), FakeMemoryRepository()),
+    )
+
+    events = await collect_events(agent)
+
+    assert not any(isinstance(event, MemoryRecalled) for event in events)
+
+
+def test_the_sse_memory_event_lists_what_was_used(
+    internal_headers: dict[str, str], wire_agent_state
+) -> None:
+    repository = FakeMemoryRepository(recalled=[recalled()])
+    memory = memory_service(ScriptedModel(facts()), repository)
+    wire_agent_state(
+        agent_with(ScriptedModel("Chú Tư."), memory), FakeConversationRepository()
+    )
+
+    client = TestClient(app, headers=internal_headers)
+    body = client.post(
+        "/internal/v1/agent/chat/stream",
+        json={"user_id": 3, "shop_id": 15, "message": "gạo?"},
+    ).text
+
+    frames = [frame for frame in body.split("\n\n") if frame.strip()]
+    assert frames[0].splitlines()[0] == "event: memory"
+    assert json.loads(frames[0].splitlines()[1].removeprefix("data: ")) == {
+        "used": [{"id": 7, "memory_type": "semantic", "content": RICE_SUPPLIER}]
+    }
+
+
+SETTINGS_URL = "/internal/v1/agent/memory/settings"
+
+
+def test_settings_say_memory_is_unavailable_when_the_service_is_off(
+    internal_headers: dict[str, str], wire_agent_state
+) -> None:
+    wire_agent_state(agent_with(ScriptedModel(), None), FakeConversationRepository())
+    body = {"user_id": 3, "shop_id": 15, "memory_enabled": True}
+
+    client = TestClient(app, headers=internal_headers)
+    read = client.get(SETTINGS_URL, params={"user_id": 3, "shop_id": 15})
+    write = client.put(SETTINGS_URL, json=body)
+
+    assert read.json() == {"memory_enabled": False, "available": False}
+    assert (write.status_code, write.json()) == (409, {"detail": "memory_unavailable"})
+
+
+def test_settings_round_trip_through_the_memory_service(
+    internal_headers: dict[str, str], wire_agent_state
+) -> None:
+    repository = FakeMemoryRepository()
+    memory = memory_service(ScriptedModel(), repository)
+    wire_agent_state(
+        agent_with(ScriptedModel(), memory), FakeConversationRepository(), memory
+    )
+
+    client = TestClient(app, headers=internal_headers)
+    before = client.get(SETTINGS_URL, params={"user_id": 3, "shop_id": 15})
+    put = client.put(
+        SETTINGS_URL, json={"user_id": 3, "shop_id": 15, "memory_enabled": False}
+    )
+    after = client.get(SETTINGS_URL, params={"user_id": 3, "shop_id": 15})
+
+    assert before.json() == {"memory_enabled": True, "available": True}
+    assert put.json() == {"memory_enabled": False, "available": True}
+    assert after.json() == {"memory_enabled": False, "available": True}
+    assert repository.enabled is False

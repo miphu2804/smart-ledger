@@ -12,7 +12,10 @@ from src.agent.repository import AgentConversationRepository
 from src.infra.postgre_db_client import PostgreDBClient
 from src.memory.repository import AgentMemoryRepository, NewMemory
 
-MEMORY_MIGRATION = REPO_ROOT / "supabase/migrations/20261014000000_agent_memories.sql"
+MEMORY_MIGRATIONS = [
+    REPO_ROOT / "supabase/migrations/20261014000000_agent_memories.sql",
+    REPO_ROOT / "supabase/migrations/20261015000000_agent_memory_visibility.sql",
+]
 
 
 def vector(*head: float) -> list[float]:
@@ -20,8 +23,8 @@ def vector(*head: float) -> list[float]:
     return [*head, *([0.0] * (384 - len(head)))]
 
 
-def memory(content: str, *head: float) -> NewMemory:
-    return NewMemory("semantic", content, 0.5, vector(*head))
+def memory(content: str, *head: float, supersedes: int | None = None) -> NewMemory:
+    return NewMemory("semantic", content, 0.5, vector(*head), supersedes)
 
 
 @pytest.fixture
@@ -45,7 +48,8 @@ def memory_db() -> Iterator[tuple[psycopg.Connection, PostgreDBClient, dict]]:
         ).fetchone()[0]
         search_path = f"{schema},{vector_schema}"
         admin.execute(f"SET search_path TO {search_path}")
-        admin.execute(MEMORY_MIGRATION.read_text(), prepare=False)
+        for migration in MEMORY_MIGRATIONS:
+            admin.execute(migration.read_text(), prepare=False)
 
         ids = {}
         for name in ("a", "b"):
@@ -199,3 +203,146 @@ def test_old_memories_of_a_chat_day_are_swapped_for_their_summary(memory_db) -> 
         conversation_id, ids["user_a"], ids["shop_a"]
     )
     assert memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 5) == []
+
+
+def test_search_records_the_use_of_the_memories_it_returns(memory_db) -> None:
+    admin, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    conversation_id = new_conversation(postgres, ids["user_a"], ids["shop_a"])
+    memories.add(
+        ids["shop_a"],
+        ids["user_a"],
+        conversation_id,
+        [memory("gạo chú Tư", 1, 0), memory("đóng cửa 22h", 0, 1)],
+    )
+
+    found = memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 1)
+    memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 1)
+
+    assert [item.content for item in found] == ["gạo chú Tư"]
+    rows = dict(
+        admin.execute(
+            "SELECT content, use_count FROM agent_memories"
+            " WHERE last_used_at IS NOT NULL"
+        ).fetchall()
+    )
+    assert rows == {"gạo chú Tư": 2}
+
+
+def test_decay_counts_from_the_last_use(memory_db) -> None:
+    admin, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    conversation_id = new_conversation(postgres, ids["user_a"], ids["shop_a"])
+    memories.add(
+        ids["shop_a"],
+        ids["user_a"],
+        conversation_id,
+        [memory("gạo chú Tư", 1, 0), memory("gạo cô Ba", 1, 0.2)],
+    )
+    age(admin, "gạo chú Tư", 200)
+    admin.execute("UPDATE agent_memories SET last_used_at = NOW()")
+
+    found = memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 5)
+
+    # Created long ago but used just now, the closer fact is no longer penalized.
+    assert [item.content for item in found] == ["gạo chú Tư", "gạo cô Ba"]
+
+
+def test_a_superseded_memory_is_hidden_until_the_newer_one_is_forgotten(
+    memory_db,
+) -> None:
+    _, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    old_chat = new_conversation(postgres, ids["user_a"], ids["shop_a"])
+    new_chat = new_conversation(postgres, ids["user_a"], ids["shop_a"])
+    memories.add(ids["shop_a"], ids["user_a"], old_chat, [memory("họp lúc 8h", 1, 0)])
+    (old,) = memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 5)
+    memories.add(
+        ids["shop_a"],
+        ids["user_a"],
+        new_chat,
+        [memory("họp lúc 9h", 1, 0.1, supersedes=old.id)],
+    )
+
+    found = memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 5)
+    assert [item.content for item in found] == ["họp lúc 9h"]
+
+    AgentConversationRepository(postgres).delete_conversation(
+        new_chat, ids["user_a"], ids["shop_a"]
+    )
+    found = memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 5)
+    assert [item.content for item in found] == ["họp lúc 8h"]
+
+
+def test_supersede_cannot_reach_another_owners_memory(memory_db) -> None:
+    _, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    chat_a = new_conversation(postgres, ids["user_a"], ids["shop_a"])
+    chat_b = new_conversation(postgres, ids["user_b"], ids["shop_b"])
+    memories.add(ids["shop_b"], ids["user_b"], chat_b, [memory("gạo shop B", 1, 0)])
+    (other,) = memories.search(ids["shop_b"], ids["user_b"], vector(1, 0), 5)
+
+    memories.add(
+        ids["shop_a"],
+        ids["user_a"],
+        chat_a,
+        [memory("gạo shop A", 1, 0, supersedes=other.id)],
+    )
+
+    found = memories.search(ids["shop_b"], ids["user_b"], vector(1, 0), 5)
+    assert [item.content for item in found] == ["gạo shop B"]
+
+
+def test_a_summary_inherits_use_and_keeps_superseded_memories_hidden(
+    memory_db,
+) -> None:
+    admin, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    old_chat = new_conversation(postgres, ids["user_a"], ids["shop_a"])
+    chat = new_conversation(postgres, ids["user_a"], ids["shop_a"])
+    memories.add(ids["shop_a"], ids["user_a"], old_chat, [memory("họp lúc 8h", 0, 1)])
+    (old,) = memories.search(ids["shop_a"], ids["user_a"], vector(0, 1), 5)
+    memories.add(
+        ids["shop_a"],
+        ids["user_a"],
+        chat,
+        [
+            memory("họp lúc 9h", 1, 0, supersedes=old.id),
+            memory("chợ Bà Chiểu", 1, 0.1),
+        ],
+    )
+    memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 5)
+    age(admin, "họp lúc 9h", 10)
+    age(admin, "chợ Bà Chiểu", 10)
+
+    (group,) = memories.due_for_summary(ids["shop_a"], ids["user_a"], 7)
+    assert memories.replace(
+        ids["shop_a"], ids["user_a"], group, [memory("họp 9h chợ Bà Chiểu", 1, 0)]
+    )
+
+    ((use_count, used),) = admin.execute(
+        "SELECT use_count, last_used_at IS NOT NULL FROM agent_memories"
+        " WHERE content = 'họp 9h chợ Bà Chiểu'"
+    ).fetchall()
+    # Both members were recalled once.
+    assert (use_count, used) == (2, True)
+    found = memories.search(ids["shop_a"], ids["user_a"], vector(0, 1), 5)
+    assert "họp lúc 8h" not in [item.content for item in found]
+    ((pointer,),) = admin.execute(
+        "SELECT superseded_by FROM agent_memories WHERE content = 'họp lúc 8h'"
+    ).fetchall()
+    assert pointer is not None
+
+
+def test_memory_is_on_until_the_owner_turns_it_off(memory_db) -> None:
+    _, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    shop, user = ids["shop_a"], ids["user_a"]
+
+    assert memories.memory_enabled(shop, user) is True
+    memories.set_memory_enabled(shop, user, False)
+    assert memories.memory_enabled(shop, user) is False
+    memories.set_memory_enabled(shop, user, False)
+    memories.set_memory_enabled(shop, user, True)
+    assert memories.memory_enabled(shop, user) is True
+    assert memories.memory_enabled(ids["shop_b"], ids["user_b"]) is True

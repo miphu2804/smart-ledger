@@ -5,8 +5,11 @@ from itertools import groupby
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     DateTime,
     Float,
+    ForeignKey,
+    Integer,
     String,
     Text,
     delete,
@@ -14,8 +17,9 @@ from sqlalchemy import (
     func,
     or_,
     select,
+    update,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infra.postgre_db_client import Base, PostgreDBClient
@@ -40,6 +44,22 @@ class AgentMemory(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    use_count: Mapped[int] = mapped_column(Integer, default=0)
+    superseded_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("agent_memories.id")
+    )
+
+
+class AgentMemorySetting(Base):
+    __tablename__ = "agent_memory_settings"
+
+    shop_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    memory_enabled: Mapped[bool] = mapped_column(Boolean)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 @dataclass(frozen=True)
@@ -48,10 +68,13 @@ class NewMemory:
     content: str
     importance: float
     embedding: list[float]
+    # Id of a recalled memory this one corrects; that memory stops being recalled.
+    supersedes: int | None = None
 
 
 @dataclass(frozen=True)
 class RecalledMemory:
+    id: int
     content: str
     memory_type: str
     created_at: datetime
@@ -101,19 +124,29 @@ class AgentMemoryRepository:
         candidates, so an old or minor memory yields to a fresh, important one about
         the same thing. The shop and user replace Tencent's agent_id filter, and both
         come from the request.
+
+        Two departures from Tencent, after Sakana Chat's "My Fish" and Generative
+        Agents: age counts from the last recall, not from creation, so a memory the
+        owner keeps relying on stays fresh; and the memories returned have their use
+        recorded, which the owner sees. Superseded memories are skipped.
         """
         distance = AgentMemory.embedding.cosine_distance(query)
         candidates = (
             select(
+                AgentMemory.id,
                 AgentMemory.content,
                 AgentMemory.memory_type,
                 AgentMemory.created_at,
+                func.coalesce(AgentMemory.last_used_at, AgentMemory.created_at).label(
+                    "touched_at"
+                ),
                 AgentMemory.importance,
                 (1 - distance).label("relevance"),
             )
             .where(
                 AgentMemory.shop_id == shop_id,
                 AgentMemory.user_id == user_id,
+                AgentMemory.superseded_by.is_(None),
                 or_(
                     AgentMemory.expires_at.is_(None),
                     AgentMemory.expires_at > func.now(),
@@ -123,10 +156,11 @@ class AgentMemoryRepository:
             .limit(self.CANDIDATES)
             .subquery()
         )
-        age_days = extract("epoch", func.now() - candidates.c.created_at) / 86400
+        age_days = extract("epoch", func.now() - candidates.c.touched_at) / 86400
         weight = candidates.c.importance * func.exp(-self.DECAY_PER_DAY * age_days)
         statement = (
             select(
+                candidates.c.id,
                 candidates.c.content,
                 candidates.c.memory_type,
                 candidates.c.created_at,
@@ -137,8 +171,22 @@ class AgentMemoryRepository:
         )
         with self.postgres.session() as session:
             rows = session.execute(statement).all()
+            if rows:
+                session.execute(
+                    update(AgentMemory)
+                    .where(
+                        AgentMemory.shop_id == shop_id,
+                        AgentMemory.user_id == user_id,
+                        AgentMemory.id.in_([row.id for row in rows]),
+                    )
+                    .values(
+                        last_used_at=func.now(), use_count=AgentMemory.use_count + 1
+                    )
+                )
         return [
-            RecalledMemory(row.content, row.memory_type, row.created_at, row.relevance)
+            RecalledMemory(
+                row.id, row.content, row.memory_type, row.created_at, row.relevance
+            )
             for row in rows
         ]
 
@@ -151,19 +199,36 @@ class AgentMemoryRepository:
     ) -> None:
         if not memories:
             return
-        with self.postgres.session() as session:
-            session.add_all(
-                AgentMemory(
-                    shop_id=shop_id,
-                    user_id=user_id,
-                    source_conversation_id=conversation_id,
-                    memory_type=memory.memory_type,
-                    content=memory.content,
-                    embedding=memory.embedding,
-                    importance=memory.importance,
-                )
-                for memory in memories
+        rows = [
+            AgentMemory(
+                shop_id=shop_id,
+                user_id=user_id,
+                source_conversation_id=conversation_id,
+                memory_type=memory.memory_type,
+                content=memory.content,
+                embedding=memory.embedding,
+                importance=memory.importance,
             )
+            for memory in memories
+        ]
+        with self.postgres.session() as session:
+            session.add_all(rows)
+            session.flush()
+            for memory, row in zip(memories, rows, strict=True):
+                if memory.supersedes is None:
+                    continue
+                # Scoped like every statement, so a stray id cannot touch another
+                # owner's memory.
+                session.execute(
+                    update(AgentMemory)
+                    .where(
+                        AgentMemory.id == memory.supersedes,
+                        AgentMemory.shop_id == shop_id,
+                        AgentMemory.user_id == user_id,
+                        AgentMemory.superseded_by.is_(None),
+                    )
+                    .values(superseded_by=row.id)
+                )
 
     def due_for_summary(
         self, shop_id: int, user_id: int, older_than_days: int
@@ -192,6 +257,7 @@ class AgentMemoryRepository:
                 AgentMemory.shop_id == shop_id,
                 AgentMemory.user_id == user_id,
                 AgentMemory.created_at < func.now() - timedelta(days=older_than_days),
+                AgentMemory.superseded_by.is_(None),
                 or_(
                     AgentMemory.expires_at.is_(None),
                     AgentMemory.expires_at > func.now(),
@@ -236,26 +302,16 @@ class AgentMemoryRepository:
     ) -> bool:
         """Swap a group for its summary in one transaction.
 
-        The summary keeps the group's latest date, so decay and the date shown to the
-        model stay those of the facts. Returns False, changing nothing, when another
-        run already replaced part of the group.
+        The summary keeps the group's latest date, so the date shown to the model stays
+        that of the facts, and carries its last recall and total use count. Memories
+        the group had superseded now point at the summary, so they stay hidden.
+        Returns False, changing nothing, when another run already replaced part of the
+        group.
         """
         ids = [memory.id for memory in group.memories]
         try:
             with self.postgres.session() as session:
-                deleted = session.execute(
-                    delete(AgentMemory)
-                    .where(
-                        AgentMemory.shop_id == shop_id,
-                        AgentMemory.user_id == user_id,
-                        AgentMemory.id.in_(ids),
-                    )
-                    .returning(AgentMemory.id)
-                ).all()
-                if len(deleted) != len(ids):
-                    # Raised inside the transaction, so the delete is rolled back.
-                    raise LookupError("memory group changed")
-                session.add_all(
+                rows = [
                     AgentMemory(
                         shop_id=shop_id,
                         user_id=user_id,
@@ -268,7 +324,66 @@ class AgentMemoryRepository:
                         created_at=max(item.created_at for item in group.memories),
                     )
                     for memory in summary
-                )
+                ]
+                session.add_all(rows)
+                session.flush()
+                used = session.execute(
+                    select(
+                        func.max(AgentMemory.last_used_at),
+                        func.coalesce(func.sum(AgentMemory.use_count), 0),
+                    ).where(
+                        AgentMemory.shop_id == shop_id,
+                        AgentMemory.user_id == user_id,
+                        AgentMemory.id.in_(ids),
+                    )
+                ).one()
+                for row in rows:
+                    row.last_used_at, row.use_count = used
+                if rows:
+                    session.execute(
+                        update(AgentMemory)
+                        .where(
+                            AgentMemory.shop_id == shop_id,
+                            AgentMemory.user_id == user_id,
+                            AgentMemory.superseded_by.in_(ids),
+                        )
+                        .values(superseded_by=rows[0].id)
+                    )
+                deleted = session.execute(
+                    delete(AgentMemory)
+                    .where(
+                        AgentMemory.shop_id == shop_id,
+                        AgentMemory.user_id == user_id,
+                        AgentMemory.id.in_(ids),
+                    )
+                    .returning(AgentMemory.id)
+                ).all()
+                if len(deleted) != len(ids):
+                    # Raised inside the transaction, so the summary is rolled back.
+                    raise LookupError("memory group changed")
         except LookupError:
             return False
         return True
+
+    def memory_enabled(self, shop_id: int, user_id: int) -> bool:
+        """The owner's switch; on until they turn it off."""
+        with self.postgres.session() as session:
+            enabled = session.scalar(
+                select(AgentMemorySetting.memory_enabled).where(
+                    AgentMemorySetting.shop_id == shop_id,
+                    AgentMemorySetting.user_id == user_id,
+                )
+            )
+        return True if enabled is None else enabled
+
+    def set_memory_enabled(self, shop_id: int, user_id: int, enabled: bool) -> None:
+        statement = insert(AgentMemorySetting).values(
+            shop_id=shop_id, user_id=user_id, memory_enabled=enabled
+        )
+        with self.postgres.session() as session:
+            session.execute(
+                statement.on_conflict_do_update(
+                    index_elements=["shop_id", "user_id"],
+                    set_={"memory_enabled": enabled, "updated_at": func.now()},
+                )
+            )

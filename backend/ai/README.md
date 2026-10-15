@@ -31,6 +31,14 @@ Each chat turn sends the static system prompt, then the conversation's latest `A
 - After a turn is saved, `AgentMemoryService.remember` asks the chat model for up to five durable facts from the owner's message, with today's date so "last week" becomes a date, embeds them and appends them. It then compresses the owner's memories older than 7 days, as Tencent does: each conversation's memories from one shop day are merged by the chat model into one to five facts that replace them in one transaction, keep the latest date and carry `metadata.summarized_from`, so they are not merged again. At most three such groups per turn. It runs in the background; a failure is logged and never fails the turn.
 - Deleting a conversation deletes the memories it produced, summaries included (`ON DELETE CASCADE`).
 
+Visibility and control, after Sakana Chat's "My Fish" (migration [`20261015000000_agent_memory_visibility.sql`](../../supabase/migrations/20261015000000_agent_memory_visibility.sql), applied after the first one):
+
+- Each recall sets `last_used_at` and adds to `use_count`; decay counts age from the last use, not creation.
+- The extraction model sees the recalled memories as `[id] fact` and may set `replaces` on a fact that corrects one. The id is accepted only if that turn recalled it. The old row gets `superseded_by` and stops being recalled; deleting the newer fact's chat sets it back to NULL, so the old fact returns.
+- Only the types in `AGENT_MEMORY_TYPES` (default `preference,procedural`) are written; facts holding a Vietnamese phone number are dropped, including from summaries.
+- When memories are recalled, the stream sends a `memory` event before the first `delta` (see the [stream contract](../../docs/contracts/api-contracts.md#stream-trả-lời-chat)).
+- `GET`/`PUT /internal/v1/agent/memory/settings` read and set the owner's switch in `agent_memory_settings` (on when no row). Off stops recall and writes, deletes nothing. When the service is not built, `GET` answers `available: false` and `PUT` answers `409`.
+
 Every agent run also ends its instructions with the current shop time (`get_time` in `src/utils.py`, Asia/Ho_Chi_Minh), after the static prompt so the cacheable prefix stays the same.
 
 `chat_conversations.summary` and `summary_through_message_id` still exist, because the AI baseline migration created them. The code neither reads nor writes them. They are kept so the previous release can roll back, and a later migration drops them after this deploy.

@@ -10,6 +10,7 @@ compression then has a model merge the owner's memories older than 7 days.
 
 import asyncio
 import logging
+import re
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -33,6 +34,11 @@ from src.utils import get_time
 
 logger = logging.getLogger(__name__)
 
+# A Vietnamese phone number: 0, 84 or +84, then nine digits that spaces, dots or
+# dashes may split. The lookbehind keeps a digit run inside a longer number, such as
+# the money amount "120.000.000đ", from matching.
+PHONE_NUMBER = re.compile(r"(?<![\d.,])(?:\+84|84|0)(?:[\s.\-]?\d){9}(?!\d)")
+
 
 class MemoryFact(BaseModel):
     """One fact the extraction model proposes."""
@@ -40,6 +46,8 @@ class MemoryFact(BaseModel):
     memory_type: Literal["preference", "semantic", "procedural", "episodic"]
     content: str = Field(min_length=1, max_length=500)
     importance: float = Field(ge=0, le=1)
+    # Id of an "Already remembered" fact this one corrects or updates.
+    replaces: int | None = None
 
 
 class MemoryFacts(BaseModel):
@@ -65,10 +73,13 @@ class AgentMemoryService:
         model: Model,
         repository: AgentMemoryRepository,
         embedder: Embedder,
+        allowed_types: frozenset[str],
         recall_limit: int = 5,
     ) -> None:
         self.repository = repository
         self.embedder = embedder
+        # Memory types the model may write on its own.
+        self.allowed_types = allowed_types
         # Tencent's search returns LIMIT 5.
         self.recall_limit = recall_limit
         # Prompted JSON works on every provider; the Anthropic models behind the
@@ -84,23 +95,38 @@ class AgentMemoryService:
             instructions=MEMORY_SUMMARY_PROMPT,
         )
 
-    async def with_memories(self, shop_id: int, user_id: int, message: str) -> str:
-        """Return `message` led by the owner's most relevant memories, if any.
+    async def with_memories(
+        self, shop_id: int, user_id: int, message: str
+    ) -> tuple[str, list[RecalledMemory]]:
+        """Return `message` led by the owner's best memories, and those memories.
 
-        A failed search answers without memories rather than failing the turn.
+        An owner who switched memory off, a failed search or no match answers without
+        memories rather than failing the turn.
         """
         try:
+            if not await self.memory_enabled(shop_id, user_id):
+                return message, []
             memories = await self._recall(shop_id, user_id, message)
         except Exception:
             logger.warning("memory not recalled: shop=%s", shop_id, exc_info=True)
-            return message
+            return message, []
         if not memories:
-            return message
+            return message, []
         facts = "\n".join(
             f"- ({get_time(memory.created_at).date().isoformat()}) {memory.content}"
             for memory in memories
         )
-        return MEMORY_CONTEXT.format(facts=facts, message=message)
+        return MEMORY_CONTEXT.format(facts=facts, message=message), memories
+
+    async def memory_enabled(self, shop_id: int, user_id: int) -> bool:
+        return await asyncio.to_thread(self.repository.memory_enabled, shop_id, user_id)
+
+    async def set_memory_enabled(
+        self, shop_id: int, user_id: int, enabled: bool
+    ) -> None:
+        await asyncio.to_thread(
+            self.repository.set_memory_enabled, shop_id, user_id, enabled
+        )
 
     async def remember(
         self,
@@ -109,14 +135,23 @@ class AgentMemoryService:
         conversation_id: int,
         question: str,
         answer: str,
+        recalled: list[RecalledMemory],
     ) -> None:
         """Store what the exchange taught, then compress the owner's old memories.
 
         Runs after the turn is saved, so the owner never waits for it. A failure in
         either step is logged, never raised, so a broken memory step cannot fail a
-        chat.
+        chat. Does nothing for an owner who switched memory off. `recalled` are the
+        memories the turn used: the model skips them and may mark one a new fact
+        replaces.
         """
-        await self._store(shop_id, user_id, conversation_id, question, answer)
+        try:
+            if not await self.memory_enabled(shop_id, user_id):
+                return
+        except Exception:
+            logger.warning("memory not stored: shop=%s", shop_id, exc_info=True)
+            return
+        await self._store(shop_id, user_id, conversation_id, question, answer, recalled)
         await self._summarize(shop_id, user_id)
 
     async def _store(
@@ -126,9 +161,10 @@ class AgentMemoryService:
         conversation_id: int,
         question: str,
         answer: str,
+        recalled: list[RecalledMemory],
     ) -> None:
         try:
-            facts = await self._extract(question, answer)
+            facts = await self._extract(question, answer, recalled)
             if not facts:
                 return
             await asyncio.to_thread(
@@ -175,26 +211,40 @@ class AgentMemoryService:
         result = await self.summarizer.run(
             MEMORY_SUMMARY_INPUT.format(day=group.day.isoformat(), facts=listed)
         )
+        facts = [
+            fact
+            for fact in result.output.facts
+            if not PHONE_NUMBER.search(fact.content)
+        ]
+        # Replacing with nothing would forget the group, so it stays for a later turn.
+        if not facts:
+            return
         replaced = await asyncio.to_thread(
             self.repository.replace,
             shop_id,
             user_id,
             group,
-            await self._embed(result.output.facts),
+            await self._embed(facts),
         )
         logger.info(
             "memory summarized: shop=%s conversation=%s from=%d to=%d replaced=%s",
             shop_id,
             group.conversation_id,
             len(group.memories),
-            len(result.output.facts),
+            len(facts),
             replaced,
         )
 
     async def _embed(self, facts: list[MemoryFact]) -> list[NewMemory]:
         vectors = await self.embedder.embed_documents([fact.content for fact in facts])
         return [
-            NewMemory(fact.memory_type, fact.content, fact.importance, list(vector))
+            NewMemory(
+                fact.memory_type,
+                fact.content,
+                fact.importance,
+                list(vector),
+                fact.replaces,
+            )
             for fact, vector in zip(facts, vectors.embeddings, strict=True)
         ]
 
@@ -210,10 +260,29 @@ class AgentMemoryService:
             self.recall_limit,
         )
 
-    async def _extract(self, question: str, answer: str) -> list[MemoryFact]:
+    async def _extract(
+        self, question: str, answer: str, recalled: list[RecalledMemory]
+    ) -> list[MemoryFact]:
         result = await self.extractor.run(
             MEMORY_EXTRACT_INPUT.format(
-                today=get_time().date().isoformat(), question=question, answer=answer
+                today=get_time().date().isoformat(),
+                remembered="\n".join(
+                    f"[{memory.id}] {memory.content}" for memory in recalled
+                )
+                or "(nothing)",
+                question=question,
+                answer=answer,
             )
         )
-        return result.output.facts
+        known = {memory.id for memory in recalled}
+        # The model could name any id; only a memory this turn recalled may be replaced.
+        # Types and phone numbers are screened here too, because the prompt alone does
+        # not bind the model.
+        return [
+            fact.model_copy(
+                update={"replaces": fact.replaces if fact.replaces in known else None}
+            )
+            for fact in result.output.facts
+            if fact.memory_type in self.allowed_types
+            and not PHONE_NUMBER.search(fact.content)
+        ]
