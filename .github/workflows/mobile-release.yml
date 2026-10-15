@@ -343,30 +343,7 @@ jobs:
         if: steps.cfg.outputs.format == 'apk'
         env:
           APK: ${{ steps.package.outputs.path }}
-        run: |
-          {
-            echo "### APK contents"
-            echo
-            wc -c < "$APK" | awk '{ printf "Total: %.1f MB\n", $1 / 1048576 }'
-            echo
-            echo '```'
-            zipinfo -l "$APK" | awk 'NF >= 10 && $4 ~ /^[0-9]+$/ {
-                n = $10; g = n
-                if (n ~ /^lib\//) { split(n, p, "/"); g = "lib/" p[2] }
-                else if (n ~ /\.dex$/) g = "dex"
-                else if (n ~ /^assets\//) g = "assets"
-                else if (n ~ /^res\// || n == "resources.arsc") g = "res"
-                else g = "other"
-                raw[g] += $4; stored[g] += $6
-              }
-              END { printf "%-22s %10s %10s\n", "group", "raw MB", "stored MB"
-                    for (g in raw) printf "%-22s %10.1f %10.1f\n", g, raw[g] / 1048576, stored[g] / 1048576 }'
-            echo
-            echo "Largest entries (stored MB, raw MB, name):"
-            zipinfo -l "$APK" | awk 'NF >= 10 && $4 ~ /^[0-9]+$/ { printf "%8.2f %8.2f  %s\n", $6 / 1048576, $4 / 1048576, $10 }' \
-              | sort -rn | awk 'NR <= 40'
-            echo '```'
-          } | tee -a "$GITHUB_STEP_SUMMARY"
+        run: bash scripts/apk-contents.sh "$APK" | tee -a "$GITHUB_STEP_SUMMARY"
 
       # builds/ keeps every published APK for rollback; latest.apk is the fixed URL the landing page links to.
       - name: Publish the APK to R2

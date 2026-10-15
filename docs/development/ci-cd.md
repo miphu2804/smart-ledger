@@ -195,6 +195,8 @@ Job `landing` runs `npm run lint` and `npm run build` in `frontend/web` on every
 
 ### Run a build
 
+To build on your own machine without this workflow, run [`scripts/android-local-release.sh`](../../scripts/android-local-release.sh) from any checkout: it regenerates `android/`, runs `assembleRelease` for `armeabi-v7a,arm64-v8a` (or `--abis`), prints the APK contents and can install the APK with `--install`. It needs the same toolchain as a self-hosted runner and a local `google-services.json`, and signs with the debug key.
+
 Actions tab → **Mobile release** → **Run workflow**, choose the branch in *Use workflow from*, then the inputs; or `gh workflow run mobile-release.yml --ref <branch> -f environment=<environment> -f runner=auto`.
 
 The branch picks the code and the environment picks the config (Firebase file, `EXPO_PUBLIC_*`, approval), and job `gate` allows only one pair per branch:
@@ -291,7 +293,7 @@ One-time setup:
 
 ### Result
 
-Every run uploads `android-build-summary-<environment>-<run number>` (`.md` and `.json`: runner and why it was chosen, commit, toolchain, time per phase, step outcomes, artifact size and SHA-256), also on failure, and the same table on the run page. An APK build also writes its contents to the run page (step `Report the APK contents`): the total size, the raw and stored size of the native libraries per ABI, dex, resources and assets, and the 40 largest entries, so a size change can be traced without downloading the file. A successful run also uploads `android-<environment>-<run number>`, the APK or AAB named `smart-ledger-<environment>-<branch>-<commit>`; artifacts are kept 14 days.
+Every run uploads `android-build-summary-<environment>-<run number>` (`.md` and `.json`: runner and why it was chosen, commit, toolchain, time per phase, step outcomes, artifact size and SHA-256), also on failure, and the same table on the run page. An APK build also writes its contents to the run page (step `Report the APK contents`, [`scripts/apk-contents.sh`](../../scripts/apk-contents.sh)): the total size, the raw and stored size of the native libraries per ABI, dex, resources and assets, and the 40 largest entries, so a size change can be traced without downloading the file. A successful run also uploads `android-<environment>-<run number>`, the APK or AAB named `smart-ledger-<environment>-<branch>-<commit>`; artifacts are kept 14 days.
 
 ### Measured and not yet verified
 
