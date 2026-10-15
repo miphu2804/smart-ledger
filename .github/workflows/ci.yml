@@ -168,11 +168,30 @@ jobs:
 
   landing:
     runs-on: ubuntu-24.04
+    outputs:
+      changed: ${{ steps.changes.outputs.changed }}
     defaults:
       run:
         working-directory: frontend/web
     steps:
       - uses: actions/checkout@v7
+      # deploy-landing reads this so pushes that leave the landing alone do not spend a Vercel
+      # deployment. A new branch or an unreadable previous commit counts as changed.
+      - name: Detect landing changes
+        id: changes
+        if: github.event_name == 'push'
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          changed=true
+          if [ -n "$BEFORE" ] && [ "$BEFORE" != 0000000000000000000000000000000000000000 ] \
+            && git fetch --quiet --depth=1 origin "$BEFORE" \
+            && files=$(git diff --name-only "$BEFORE" "$GITHUB_SHA") \
+            && ! grep -qE '^(frontend/web/|\.github/workflows/ci\.yml$)' <<< "$files"; then
+            changed=false
+          fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          echo "landing changed: $changed"
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
@@ -499,8 +518,9 @@ jobs:
   # smart-ledger-landing-pr-<number> in the run summary and no PR comment, because deploy-web
   # already edits the bot's last PR comment.
   deploy-landing:
-    # Push only, like deploy-web.
-    if: github.event_name == 'push'
+    # Push only, like deploy-web, and only when frontend/web or this workflow changed. A re-run
+    # always deploys, so a changed environment variable can be picked up by re-running this job.
+    if: github.event_name == 'push' && (needs.landing.outputs.changed == 'true' || github.run_attempt > 1)
     needs: [landing]
     permissions:
       contents: read
