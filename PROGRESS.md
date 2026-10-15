@@ -1,3 +1,13 @@
+### [2026-10-16 03:00 UTC+07:00] — [CI] Deploy the landing only when it changed
+
+**Done:** `deploy-landing` now runs on a push only when the push changes `frontend/web/` or `.github/workflows/ci.yml`; a re-run always deploys. Every push to `staging` and `main` used to spend two Vercel deployments (web and landing) even when only the backend changed, and the production deploy of release #249 hit the Hobby limit of 100 a day (`api-deployments-free-per-day`).
+
+**Changed files:** `.github/workflows/ci.yml`, `docs/development/ci-cd.md` — modified; this entry.
+
+**Flow explained:** push → job `landing` diffs `github.event.before`..`GITHUB_SHA` → `changed=true|false` → `deploy-landing` runs when `true` or on a re-run.
+
+**Check:** YAML parses and actionlint passes; the step script run locally against real commit pairs gives `false` for a backend-only push and `true` for a push touching `frontend/web/`, an all-zero `before` and an unknown commit. **Not verified:** a real push on GitHub (this PR's merge into `staging` touches `ci.yml`, so it will deploy; the first push after it that leaves the landing alone should skip).
+
 ### [2026-10-16 02:47 UTC+07:00] — [Fix] Tabs switch without fading; overview compact bar and best sellers tidied
 
 **Done:** On an Android phone, switching to Quản lý sometimes showed only a blank screen with Bobi and the tab bar. The bottom tabs still faded on phones (#224 turned the fade off only on the web) and the fade can get stuck at zero opacity (inferred from the screenshot; not reproducible on the web). Tabs now switch without animation everywhere, and the scene background is the app background so any gap is not pure white. On Tổng quan, the compact bar shown after scrolling looked as if its icons were cut: the dark purple parts of the small icons disappeared into the purple bar, and at 360 px the labels were cut ("Đọc …", "Chọ…"). Each compact button now shows its icon on a light rounded tile above the label (buttons 50 instead of 42 px tall, which still fits the 115 px bar). In "Bán chạy", product names and quantities use the same line height without Android font padding so the quantity no longer sits higher than the name.
