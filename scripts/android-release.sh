@@ -7,14 +7,15 @@
 #   ./scripts/android-release.sh --install               also install the APK on the phone that adb sees
 #   ./scripts/android-release.sh --aab                   Android App Bundle for Google Play instead of an APK
 #   ./scripts/android-release.sh --out <file>            copy the APK or AAB to <file>
-#   ./scripts/android-release.sh --skip-preflight        build even if the toolchain differs from the pinned versions
+#   ./scripts/android-release.sh --check                 only run the preflight checks
+#   ./scripts/android-release.sh --skip-preflight        build even if a check fails
 #
-# Locally, like scripts/ios-device-release.sh: mocks are off (real Firebase and Core), Core defaults to staging and can
-# be overridden with EXPO_PUBLIC_API_ENDPOINT in .env or the shell; the Firebase web keys and EXPO_PUBLIC_STT_MODEL_URL
-# come from .env. In GitHub Actions every EXPO_PUBLIC_* value comes from the environment as given. Needs
-# frontend/mobile/google-services.json (or GOOGLE_SERVICES_JSON), Node, JDK 17 and the Android SDK with the NDK (see
-# docs/development/ci-cd.md#runners). Signs with RELEASE_KEYSTORE, KEYSTORE_PASSWORD and RELEASE_KEY_ALIAS when
-# RELEASE_KEYSTORE is set, otherwise with the template's public debug key.
+# Before building it checks the machine (Node, JDK, Android SDK packages pinned at the top of mobile-release.yml, the
+# Firebase file, the phone for --install) and, in a terminal, offers to open or run the fix for what is missing.
+# Locally, like scripts/ios-device-release.sh: mocks are off (real Firebase and Core) and Core defaults to staging,
+# overridable with EXPO_PUBLIC_API_ENDPOINT in .env or the shell. In GitHub Actions every EXPO_PUBLIC_* value comes from
+# the environment as given. Signs with RELEASE_KEYSTORE, KEYSTORE_PASSWORD and RELEASE_KEY_ALIAS when RELEASE_KEYSTORE
+# is set, otherwise with the template's public debug key.
 set -euo pipefail
 
 abis="armeabi-v7a,arm64-v8a"
@@ -22,25 +23,32 @@ format=apk
 install=false
 out=""
 preflight=true
+check_only=false
 while [ $# -gt 0 ]; do
   case "$1" in
-    --abis) abis="${2:?thiếu giá trị cho --abis}"; shift 2 ;;
+    --abis) abis="${2:?--abis needs a value}"; shift 2 ;;
     --aab) format=aab; shift ;;
     --install) install=true; shift ;;
-    --out) out="${2:?thiếu giá trị cho --out}"; shift 2 ;;
+    --out) out="${2:?--out needs a value}"; shift 2 ;;
+    --check) check_only=true; shift ;;
     --skip-preflight) preflight=false; shift ;;
-    -h | --help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *) echo "Không hiểu tham số: $1 (xem --help)" >&2; exit 2 ;;
+    -h | --help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "Unknown option: $1 (see --help)" >&2; exit 2 ;;
   esac
 done
-$install && [ "$format" = aab ] && { echo "--install chỉ dùng với APK, không dùng với --aab." >&2; exit 2; }
+if $install && [ "$format" = aab ]; then
+  echo "--install works with an APK, not with --aab." >&2
+  exit 2
+fi
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=lib/preflight.sh
+. "$root/scripts/lib/preflight.sh"
 cd "$root/frontend/mobile"
 ci=false
-[ "${GITHUB_ACTIONS:-}" = true ] && ci=true
-
-bold=$'\033[1m' cyan=$'\033[36m' yellow=$'\033[33m' red=$'\033[31m' reset=$'\033[0m'
+pf_ci && ci=true
+bold="$pf_bold" cyan=$'\033[36m' yellow="$pf_yellow" red="$pf_red" reset="$pf_reset"
+[ -t 1 ] || cyan=""
 die() {
   $ci && echo "::error::$*"
   echo "${red}✗ $*${reset}" >&2
@@ -48,20 +56,23 @@ die() {
 }
 # CI times each phase from these marks (TIMINGS, read by .github/scripts/android-summary.mjs).
 mark() { [ -z "${TIMINGS:-}" ] || echo "$1=$(date +%s)" >>"$TIMINGS"; }
+has_brew() { command -v brew >/dev/null; }
 
-command -v node >/dev/null || die "Không thấy node."
+# Versions pinned in the workflow's top-level env: block, the single source for CI and laptops.
+pinned() { sed -n "s/^  $1: *\"\{0,1\}\([^\" ]*\)\"\{0,1\} *$/\1/p" "$root/.github/workflows/mobile-release.yml"; }
+node_major="$(pinned NODE_MAJOR)" java_major="$(pinned JAVA_MAJOR)" platform="$(pinned ANDROID_PLATFORM)"
+build_tools="$(pinned ANDROID_BUILD_TOOLS)" ndk="$(pinned ANDROID_NDK)"
 
 # JDK: JAVA_HOME, else the pinned major version if macOS has it installed (/usr/libexec/java_home), else the one bundled
 # with Android Studio, else java on PATH. Android Studio bundles a newer JDK than the pinned one, so it comes last.
-java_major="$(sed -n 's/^  JAVA_MAJOR: *"\{0,1\}\([0-9]*\)"\{0,1\} *$/\1/p' "$root/.github/workflows/mobile-release.yml")"
-studio_jbr="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+studio_app="/Applications/Android Studio.app"
+studio_jbr="$studio_app/Contents/jbr/Contents/Home"
 if [ -z "${JAVA_HOME:-}" ] && [ -x /usr/libexec/java_home ] && pinned_jdk="$(/usr/libexec/java_home -v "$java_major" 2>/dev/null)"; then
   export JAVA_HOME="$pinned_jdk"
 elif [ -z "${JAVA_HOME:-}" ] && [ -d "$studio_jbr" ]; then
   export JAVA_HOME="$studio_jbr"
 fi
 java_bin="${JAVA_HOME:+$JAVA_HOME/bin/}java"
-command -v "$java_bin" >/dev/null || die "Không thấy JDK — cài JDK 17 hoặc Android Studio, hoặc đặt JAVA_HOME."
 
 # SDK: ANDROID_HOME / ANDROID_SDK_ROOT, else the usual install folders (Android Studio, Homebrew), else the folder
 # that holds adb or sdkmanager on PATH.
@@ -79,55 +90,173 @@ find_sdk() {
   done
   return 1
 }
-sdk="$(find_sdk)" || die "Không thấy Android SDK (thư mục có platforms/). Đặt ANDROID_HOME=<đường dẫn SDK> rồi chạy lại."
-export ANDROID_HOME="$sdk"
+sdk="$(find_sdk || true)"
+[ -z "$sdk" ] || export ANDROID_HOME="$sdk"
 
-# Same check as a CI runner: Node, JDK, SDK platform, build-tools and NDK must match the versions pinned at the top of
-# .github/workflows/mobile-release.yml, so a build that passes here also passes there.
-if $preflight; then
-  node "$root/.github/scripts/android-preflight.mjs" ||
-    die "Toolchain khác bản ghim trong mobile-release.yml (xem các dòng trên). Cài đúng bản, hoặc chạy lại với --skip-preflight."
+firebase_project="$(sed -n 's/^EXPO_PUBLIC_FIREBASE_PROJECT_ID=//p' .env 2>/dev/null | tail -1 || true)"
+firebase_url="https://console.firebase.google.com/${firebase_project:+project/$firebase_project/settings/general}"
+
+run_checks() {
+  local node_found java_found major what sm="" missing pkgs adb devices
+
+  pf_section "Toolchain (pinned in .github/workflows/mobile-release.yml)"
+  if ! command -v node >/dev/null; then
+    if has_brew; then
+      pf_fail "Node.js is not installed" "Install Node $node_major." "Install Node $node_major with Homebrew" "brew install node@$node_major"
+    else
+      pf_fail "Node.js is not installed" "Install Node $node_major from nodejs.org." "Open the Node.js download page" "pf_open https://nodejs.org/en/download"
+    fi
+  else
+    node_found="$(node -p 'process.versions.node')"
+    if [ "${node_found%%.*}" = "$node_major" ]; then
+      pf_ok "Node $node_found"
+    elif has_brew; then
+      pf_fail "Node $node_major required, found $node_found" "Install Node $node_major and put it first on PATH (or switch with nvm or fnm)." \
+        "Install Node $node_major with Homebrew" "brew install node@$node_major && brew link --overwrite --force node@$node_major"
+    else
+      pf_fail "Node $node_major required, found $node_found" "Install Node $node_major (nodejs.org, nvm or fnm)." \
+        "Open the Node.js download page" "pf_open https://nodejs.org/en/download"
+    fi
+  fi
+
+  # `java -version` prints to stderr, e.g. `openjdk version "17.0.20" ...`.
+  java_found="$("$java_bin" -version 2>&1 || true)"
+  major="$(printf '%s' "$java_found" | sed -n 's/.*version "\(1\.\)\{0,1\}\([0-9]*\).*/\2/p' | head -1)"
+  if [ "$major" = "$java_major" ]; then
+    pf_ok "JDK $major ($java_bin)"
+  else
+    what="JDK $java_major is not installed"
+    [ -z "$major" ] || what="JDK $java_major required, found JDK $major ($java_bin)"
+    if has_brew; then
+      pf_fail "$what" "Install JDK $java_major (Temurin); the script finds it through /usr/libexec/java_home." \
+        "Install JDK $java_major (Temurin) with Homebrew" "brew install --cask temurin@$java_major"
+    else
+      pf_fail "$what" "Install JDK $java_major and set JAVA_HOME to it." \
+        "Open the Temurin $java_major download page" "pf_open 'https://adoptium.net/temurin/releases/?version=$java_major'"
+    fi
+  fi
+
+  if [ -z "$sdk" ]; then
+    if [ -d "$studio_app" ]; then
+      pf_fail "Android SDK not found" "Open Android Studio once and finish the setup wizard (it installs the SDK in ~/Library/Android/sdk),\nor set ANDROID_HOME to an existing SDK." \
+        "Open Android Studio" "pf_open -a 'Android Studio'"
+    elif has_brew; then
+      pf_fail "Android Studio and the Android SDK are not installed" "Install Android Studio, open it once and finish the setup wizard." \
+        "Install Android Studio with Homebrew" "brew install --cask android-studio && open -a 'Android Studio'"
+    else
+      pf_fail "Android Studio and the Android SDK are not installed" "Install Android Studio, open it once and finish the setup wizard." \
+        "Open the Android Studio download page" "pf_open https://developer.android.com/studio"
+    fi
+  else
+    pf_ok "Android SDK at $sdk"
+    sm="$(ls "$sdk"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1 || true)"
+    missing="" pkgs=""
+    [ -d "$sdk/platforms/android-$platform" ] || { missing="$missing platform android-$platform,"; pkgs="$pkgs 'platforms;android-$platform'"; }
+    [ -d "$sdk/build-tools/$build_tools" ] || { missing="$missing build-tools $build_tools,"; pkgs="$pkgs 'build-tools;$build_tools'"; }
+    [ -d "$sdk/ndk/$ndk" ] || { missing="$missing NDK $ndk,"; pkgs="$pkgs 'ndk;$ndk'"; }
+    if [ -z "$missing" ]; then
+      pf_ok "SDK platform $platform, build-tools $build_tools, NDK $ndk"
+    elif [ -n "$sm" ]; then
+      pf_fail "Missing SDK packages:${missing%,}" "Install them with sdkmanager (the NDK is about 1 GB)." \
+        "Install the missing SDK packages with sdkmanager" "yes | '$sm' --sdk_root='$sdk'$pkgs"
+    else
+      pf_fail "Missing SDK packages:${missing%,}" "Android Studio › Settings › Languages & Frameworks › Android SDK: tick them under SDK Platforms and,\nwith \"Show Package Details\" on, under SDK Tools (NDK (Side by side))." \
+        "Open Android Studio" "pf_open -a 'Android Studio'"
+    fi
+  fi
+
+  pf_section "Project files"
+  if [ -n "${GOOGLE_SERVICES_JSON:-}" ]; then
+    if [ -f "$GOOGLE_SERVICES_JSON" ]; then
+      pf_ok "Firebase config: $GOOGLE_SERVICES_JSON"
+    else
+      pf_fail "GOOGLE_SERVICES_JSON points to a missing file: $GOOGLE_SERVICES_JSON" ""
+    fi
+  elif [ -f google-services.json ]; then
+    pf_ok "Firebase config: frontend/mobile/google-services.json"
+  else
+    pf_fail "frontend/mobile/google-services.json is missing" "Firebase Console › Project settings › Your apps › Android app vn.teamhexa.songheloi › download\ngoogle-services.json into frontend/mobile/ (it is gitignored)." \
+      "Open the Firebase Console" "pf_open '$firebase_url'"
+  fi
+  if ! $ci; then
+    if [ -f .env ]; then
+      pf_ok "frontend/mobile/.env"
+    else
+      pf_warn "No frontend/mobile/.env" "Copy .env.example to .env and fill it in; without it the Firebase web keys and the speech model URL are empty."
+    fi
+    if [ -z "${EXPO_PUBLIC_STT_MODEL_URL:-}$(sed -n 's/^EXPO_PUBLIC_STT_MODEL_URL=//p' .env 2>/dev/null | tail -1 || true)" ]; then
+      pf_warn "EXPO_PUBLIC_STT_MODEL_URL is not set" "Voice ordering cannot download its speech model in this build (see frontend/mobile/assets/models/README.md)."
+    fi
+  fi
+  if [ -z "${RELEASE_KEYSTORE:-}" ]; then
+    pf_ok "Signing with the template's debug key (fine for testing, never for publishing)"
+  elif [ ! -f "$RELEASE_KEYSTORE" ]; then
+    pf_fail "RELEASE_KEYSTORE points to a missing file: $RELEASE_KEYSTORE" ""
+  elif [ -z "${KEYSTORE_PASSWORD:-}" ]; then
+    pf_fail "RELEASE_KEYSTORE is set but KEYSTORE_PASSWORD is empty" ""
+  else
+    pf_ok "Signing with the release keystore $RELEASE_KEYSTORE"
+  fi
+
+  if $install; then
+    pf_section "Phone (--install)"
+    adb="${sdk:+$sdk/platform-tools/adb}"
+    if [ -z "$adb" ] || [ ! -x "$adb" ]; then
+      if [ -n "$sm" ]; then
+        pf_fail "adb not found" "It comes with the SDK's platform-tools package." \
+          "Install platform-tools with sdkmanager" "yes | '$sm' --sdk_root='$sdk' platform-tools"
+      else
+        pf_fail "adb not found" "Install Platform-Tools in Android Studio › Settings › Android SDK › SDK Tools."
+      fi
+    else
+      devices="$("$adb" devices 2>/dev/null | sed '1d;/^$/d' || true)"
+      if printf '%s\n' "$devices" | grep -q $'\tdevice$'; then
+        pf_ok "Phone connected: $(printf '%s\n' "$devices" | grep $'\tdevice$' | head -1 | cut -f1)"
+      elif printf '%s\n' "$devices" | grep -q $'\tunauthorized$'; then
+        pf_fail "The phone has not allowed USB debugging from this computer" "Unlock the phone and tap Allow on the \"Allow USB debugging?\" prompt."
+      else
+        pf_fail "No Android phone found by adb" "Connect the phone by cable and turn on USB debugging: Settings › About phone › tap Build number 7 times,\nthen Settings › System › Developer options › USB debugging."
+      fi
+    fi
+  fi
+}
+
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
+commit="$(git log -1 --format='%h %s' 2>/dev/null || echo '?')"
+echo "${bold}Sổ Nghe Lời: Android Release build${reset}"
+echo "  Branch: ${cyan}$branch${reset}"
+echo "  Commit: $commit"
+echo "  Output: ${cyan}$format${reset}, ABIs ${cyan}$abis${reset}"
+[ -z "$(git status --porcelain -- . 2>/dev/null)" ] || echo "  ${yellow}! Uncommitted changes in frontend/mobile are built into the app.${reset}"
+
+if $preflight || $check_only; then
+  run_checks
+  pf_finish
 fi
+$check_only && exit 0
+[ -n "$sdk" ] || die "No Android SDK found; set ANDROID_HOME."
 
-if [ -z "${GOOGLE_SERVICES_JSON:-}" ] && [ ! -f google-services.json ]; then
-  die "Thiếu frontend/mobile/google-services.json (Firebase Console → Project settings → app Android)."
-fi
-
-signing=() signer="key debug của template (không dùng để phát hành)"
+signing=()
 if [ -n "${RELEASE_KEYSTORE:-}" ]; then
-  signer="keystore $RELEASE_KEYSTORE"
-  [ -f "$RELEASE_KEYSTORE" ] || die "RELEASE_KEYSTORE trỏ tới file không tồn tại: $RELEASE_KEYSTORE"
-  [ -n "${KEYSTORE_PASSWORD:-}" ] || die "Có RELEASE_KEYSTORE nhưng thiếu KEYSTORE_PASSWORD."
-  key_alias="${RELEASE_KEY_ALIAS:-smart-ledger}"
   # `expo prebuild --clean` rewrites build.gradle on every run, so the keystore goes through the Android Gradle
   # plugin's injected signing properties, which override the signing config of the built variant. The keystore is
   # PKCS12, so the key shares the store password.
   signing=(
     "-Pandroid.injected.signing.store.file=$RELEASE_KEYSTORE"
-    "-Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD"
-    "-Pandroid.injected.signing.key.alias=$key_alias"
-    "-Pandroid.injected.signing.key.password=$KEYSTORE_PASSWORD"
+    "-Pandroid.injected.signing.store.password=${KEYSTORE_PASSWORD:-}"
+    "-Pandroid.injected.signing.key.alias=${RELEASE_KEY_ALIAS:-smart-ledger}"
+    "-Pandroid.injected.signing.key.password=${KEYSTORE_PASSWORD:-}"
   )
 fi
 
-branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
-commit="$(git log -1 --format='%h %s' 2>/dev/null || echo '?')"
-echo "${bold}Sổ Nghe Lời — build Android Release${reset}"
-echo "  Nhánh:  ${cyan}$branch${reset}"
-echo "  Commit: $commit"
-echo "  Ra:     ${cyan}$format${reset}, ABI ${cyan}$abis${reset}"
-echo "  SDK:    $sdk"
-echo "  Ký:     $signer"
-[ -z "$(git status --porcelain -- . 2>/dev/null)" ] || echo "  ${yellow}! Có thay đổi chưa commit trong frontend/mobile — vẫn được build vào app.${reset}"
 if ! $ci; then
   # Expo does not override shell variables with .env values, so the exported mock flags cannot be turned back on by .env.
   export EXPO_PUBLIC_USE_MOCK=false EXPO_PUBLIC_MOCK_CORE=false EXPO_PUBLIC_MOCK_SHOPS=false
   api="${EXPO_PUBLIC_API_ENDPOINT:-$(sed -n 's/^EXPO_PUBLIC_API_ENDPOINT=//p' .env 2>/dev/null | tail -1 || true)}"
   export EXPO_PUBLIC_API_ENDPOINT="${api:-https://core-staging-01d2.up.railway.app}"
 fi
-echo "  Core:   ${cyan}${EXPO_PUBLIC_API_ENDPOINT:-?}${reset} (mock: ${EXPO_PUBLIC_USE_MOCK:-?})"
-stt="${EXPO_PUBLIC_STT_MODEL_URL:-$(sed -n 's/^EXPO_PUBLIC_STT_MODEL_URL=//p' .env 2>/dev/null | tail -1 || true)}"
-[ -n "$stt" ] || echo "  ${yellow}! Không có EXPO_PUBLIC_STT_MODEL_URL: Đọc đơn bằng giọng nói không tải được model.${reset}"
+echo
+echo "  Core: ${cyan}${EXPO_PUBLIC_API_ENDPOINT:-?}${reset} (mock: ${EXPO_PUBLIC_USE_MOCK:-?})"
 echo
 
 if $ci; then
@@ -142,7 +271,7 @@ mark install
 
 # --clean every time: android/ comes from app.json and the config plugins (APK size settings included), so a leftover
 # folder, from an older checkout or a previous build on a self-hosted machine, could build with stale settings.
-echo "${bold}→ expo prebuild --clean (sinh lại android/)${reset}"
+echo "${bold}→ expo prebuild --clean (regenerates android/)${reset}"
 npx expo prebuild --platform android --no-install --clean
 mark prebuild
 
@@ -155,13 +284,13 @@ start=$(date +%s)
 (cd android && ./gradlew "$task" "-PreactNativeArchitectures=$abis" \
   "-Dorg.gradle.jvmargs=${GRADLE_JVM_ARGS:--Xmx6g -XX:MaxMetaspaceSize=1g}" ${signing[@]+"${signing[@]}"})
 mark gradle
-[ -f "$built" ] || die "Gradle chạy xong nhưng không thấy $built."
-echo "  Xong sau $(($(date +%s) - start)) giây: $built"
+[ -f "$built" ] || die "Gradle finished but $built does not exist."
+echo "  Done in $(($(date +%s) - start)) s: $built"
 if [ -n "$out" ]; then
   mkdir -p "$(dirname "$out")"
   cp "$built" "$out"
   built="$out"
-  echo "  Đã chép ra $out"
+  echo "  Copied to $out"
 fi
 mark package
 echo
@@ -176,9 +305,7 @@ if [ "$format" = apk ]; then
 fi
 
 if $install; then
-  adb="$sdk/platform-tools/adb"
-  [ -x "$adb" ] || die "Không thấy adb ở $adb."
   echo "${bold}→ adb install${reset}"
-  echo "  Máy đã cài bản ký bằng key khác (bản tải từ landing page) thì Android từ chối; gỡ bản đó trước."
-  "$adb" install -r "$built"
+  echo "  If the phone has a build signed with another key (the one from the landing page), Android refuses it: uninstall that first."
+  "$sdk/platform-tools/adb" install -r "$built"
 fi
