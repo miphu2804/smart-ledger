@@ -28,6 +28,14 @@
 
 **Check:** `tsc --noEmit` has no errors in this PR's files; its only 2 errors are in #230's files because `expo-application` and `expo-intent-launcher` are not installed on this machine. `node --test tests/*.test.ts` 64/64 (21 new in `tests/parseOrder.test.ts`), including run-on phrases, names with digits, unit homographs and unchanged expense phrases. Mock web build in headless Chrome, 8/8: "hai sting gold" shows 3 Sting Gold options with quantity 2 and long names wrap inside the rows, picking one adds 2 of it, "Không phải mẫu nào" skips, "một sting" adds the product "Sting" directly, "hai sting gold một nước ngọt" adds 1 Nước ngọt and asks for Sting gold · 2, "hai bò húc" offers to add "Bò húc". **Not verified:** speech on a phone (the homograph fix needs the speech model to return accented words; unaccented "bo huc" still reads "bo" as a unit unless the product is in the catalog).
 
+### [2026-10-15 23:57 UTC+07:00] — [Feature] Replay the welcome guide from Settings
+
+**Done:** Settings has a "Xem lại hướng dẫn" button that opens the welcome guide (`AssistantIntroModal`) again from the Bobi step, as on the first sign-in. It opens on Settings itself, so closing it returns to Settings; "Hỏi đáp"/"Đọc đơn" on the first step close it and open those screens. The first-sign-in behaviour is unchanged.
+
+**Changed files:** `frontend/mobile/app/settings.tsx`, `docs/product/product-requirements.md` (`FR-025`, `AC-018`) — modified; this entry.
+
+**Check:** `tsc --noEmit` clean. Mock web build in headless Chrome, 3/3: Settings shows the button, it opens the guide on the Bobi step, closing returns to Settings. **Not verified:** a phone.
+
 ### [2026-10-15 22:40 UTC+07:00] — [Feature] Cloudflare Workers AI embedder for agent memory
 
 **Done:** `AGENT_MEMORY_EMBEDDING_PROVIDER` picks `sentence-transformers` (default, local) or `cloudflare` (Workers AI `/v1/embeddings` with `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`). `WorkersAIEmbeddingModel` adds embeddinggemma's query/document prompts, which Workers AI does not, and cuts vectors to `EMBEDDING_DIMENSIONS` (384, the migration's size); the local embedder cuts to it too. ADR-0002 records the local bench (embeddinggemma at 384: Recall@1 0.947 vs MiniLM 0.658). Still behind `AGENT_MEMORY_ENABLED` and PO approval.
