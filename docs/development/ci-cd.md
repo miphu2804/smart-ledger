@@ -179,13 +179,13 @@ Job `landing` runs `npm run lint` and `npm run build` in `frontend/web` on every
 | Event | Environment | Result |
 |---|---|---|
 | PR | — | No deploy, like `deploy-web` |
-| Push `staging` | `landing-staging` | Preview deploy, then aliased to `LANDING_URL`; smoke test on `LANDING_URL` |
-| Push `main` | `landing-production` | Production deploy after approval; smoke test on `LANDING_URL` |
+| Push `staging` | `landing-staging` | When the landing changed: preview deploy, then aliased to `LANDING_URL`; smoke test on `LANDING_URL` |
+| Push `main` | `landing-production` | When the landing changed: production deploy after approval; smoke test on `LANDING_URL` |
 
 - Vercel project `landing`: **Root Directory** `frontend/web`. Store its project ID as `VERCEL_PROJECT_ID` in each `landing-*` environment; `VERCEL_TOKEN` and `VERCEL_ORG_ID` are the same team values as `vercel-*`.
 - `LANDING_URL` is the fixed domain (`https://…`) of the environment. Set it in `landing-staging` and `landing-production`.
 - `VITE_LEGAL_DRAFT` must stay unset or `true` until the product owner approves the legal pages; set `false` only in `landing-production` after approval. The contact email and the Facebook/TikTok links are not environment variables: they live in [`frontend/web/site.yaml`](../../frontend/web/site.yaml).
-- The landing has no path filter: a backend-only push also rebuilds and redeploys it.
+- `deploy-landing` runs only when the push changes `frontend/web/` or `.github/workflows/ci.yml` (step `Detect landing changes` in job `landing` diffs the push against its previous commit), so a push that leaves the landing alone does not spend one of Vercel's 100 daily deployments. A push to a new branch, or one whose previous commit cannot be fetched, counts as changed. A re-run always deploys: after changing a `landing-*` variable, re-run `deploy-landing` on the latest run. If a landing deploy was cancelled or failed, re-run that run, not a later one that did not touch the landing.
 - Vercel Authentication (Settings → Deployment Protection) must stay off on the `landing` project. With it on, preview deployments redirect to the Vercel login (`302`) and the smoke test fails on pull requests and on `staging`.
 - Admin (`/admin/*`) is hidden unless the build has `VITE_ADMIN_ENABLED=true`. No GitHub environment sets it. Step `Check no admin code in the build` in `deploy-landing` fails the job if the build output has an `AdminRoutes-*` chunk or the mock password `admin123`, which catches a `VITE_ADMIN_ENABLED=true` set in the Vercel project `landing` (`vercel pull` brings those variables into the build).
 
