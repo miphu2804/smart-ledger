@@ -5,8 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 import com.smartledger.core.dto.request.OwnerListQuery.*;
+import com.smartledger.core.dto.response.SaleSummaryResponse;
 import com.smartledger.core.enums.DraftStatus;
 import com.smartledger.core.enums.ErrorCode;
+import com.smartledger.core.enums.SaleStatus;
 import com.smartledger.core.exception.BusinessException;
 import com.smartledger.core.repository.SaleDraftItemRepository;
 import com.smartledger.core.repository.SaleDraftRepository;
@@ -20,6 +22,8 @@ import jakarta.persistence.EntityManager;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -34,6 +38,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -170,6 +175,227 @@ class SalesListQueryPostgresTest {
     }
 
     @Test
+    void saleSummaryUsesOneAggregateReadForTenThousandSalesWithoutHydratingItems() {
+        seedSales(shopId, userId, 10_000);
+        jdbc.update("""
+                update sales set sale_status='VOIDED', voided_at=current_timestamp,
+                    voided_by_user_id=?, void_reason='Summary test'
+                where id in (select id from sales where shop_id=? order by id limit 2_000)
+                """, userId, shopId);
+        startCounting();
+        long start = System.nanoTime();
+
+        var summary = sales.summary(owner, Long.toString(shopId), SalesSummary.defaults());
+
+        assertThat(summary.matchedOrderCount()).isEqualTo(10_000L);
+        assertThat(summary.confirmedOrderCount()).isEqualTo(8_000L);
+        assertThat(summary.voidedOrderCount()).isEqualTo(2_000L);
+        assertThat(summary.confirmedSalesVnd()).isEqualTo(40_000_000L);
+        assertThat(summary.voidedSalesVnd()).isEqualTo(10_000_000L);
+        assertThat(sql.businessReads()).hasSize(1);
+        assertThat(sql.readsOf("sales")).hasSize(1);
+        assertThat(sql.readsOf("sale_items")).isEmpty();
+        LOG.info("Sale summary fixture: sales=10000, items=50000, aggregateReads=1, elapsedMs={}",
+                (System.nanoTime() - start) / 1_000_000);
+    }
+
+    @Test
+    void saleSummaryReusesItemSearchWithoutDuplicateCountingAndHonorsStatus() {
+        seedSales(shopId, userId, 1);
+        jdbc.update("""
+                update sale_items set product_name_snapshot='Cà phê match'
+                where sale_id=(select id from sales where shop_id=? limit 1)
+                """, shopId);
+
+        startCounting();
+        var confirmed = sales.summary(owner, Long.toString(shopId),
+                new SalesSummary("ca phe match", SaleStatus.CONFIRMED, null, null));
+
+        assertThat(confirmed.matchedOrderCount()).isOne();
+        assertThat(confirmed.confirmedOrderCount()).isOne();
+        assertThat(confirmed.voidedOrderCount()).isZero();
+        assertThat(confirmed.confirmedSalesVnd()).isEqualTo(5_000L);
+        assertThat(confirmed.voidedSalesVnd()).isZero();
+        assertThat(sql.businessReads()).hasSize(1);
+        assertThat(sql.readsOf("sales")).hasSize(1);
+    }
+
+    @ParameterizedTest
+    @EnumSource(SaleStatus.class)
+    void saleSummaryRejectsAValueOutsideTheApiLongRangeInsteadOfReturningCorruptedMoney(SaleStatus status) {
+        // PAID rows satisfy the real customer/debt constraint even at the monetary boundary.
+        jdbc.update("""
+                insert into sales(shop_id,created_by_user_id,subtotal_vnd,discount_vnd,total_vnd,paid_vnd,payment_status)
+                values (?, ?, ?, 0, ?, ?, 'PAID'), (?, ?, ?, 0, ?, ?, 'PAID')
+                """, shopId, userId, Long.MAX_VALUE, Long.MAX_VALUE,
+                Long.MAX_VALUE, shopId, userId, Long.MAX_VALUE, Long.MAX_VALUE, Long.MAX_VALUE);
+        if (status == SaleStatus.VOIDED) {
+            jdbc.update("""
+                    update sales set sale_status='VOIDED',voided_at=current_timestamp,
+                        voided_by_user_id=?,void_reason='Overflow fixture' where shop_id=?
+                    """, userId, shopId);
+        }
+        startCounting();
+
+        assertThatThrownBy(() -> sales.summary(owner, Long.toString(shopId), SalesSummary.defaults()))
+                .isInstanceOfSatisfying(BusinessException.class, error ->
+                        assertThat(error.getErrorCode()).isEqualTo(ErrorCode.SALE_SUMMARY_OVERFLOW));
+        assertThat(sql.businessReads()).hasSize(1);
+    }
+
+    @Test
+    void saleSummaryReturnsFiveZerosForEmptyOrUnmatchedSetsAndExcludesDrafts() {
+        seedDrafts(shopId, userId, 2);
+        startCounting();
+        assertThat(sales.summary(owner, Long.toString(shopId), SalesSummary.defaults()))
+                .isEqualTo(new SaleSummaryResponse(0, 0, 0, 0, 0));
+        assertThat(sql.businessReads()).hasSize(1);
+
+        seedSales(shopId, userId, 2);
+        startCounting();
+        assertThat(sales.summary(owner, Long.toString(shopId),
+                new SalesSummary("no matching snapshot", null, null, null)))
+                .isEqualTo(new SaleSummaryResponse(0, 0, 0, 0, 0));
+        assertThat(sql.businessReads()).hasSize(1);
+    }
+
+    @Test
+    void saleSummaryCombinesAllFiltersWithHalfOpenBoundsAndEquivalentOffsets() {
+        var from = OffsetDateTime.parse("2026-10-01T00:00:00+07:00");
+        var to = from.plusDays(1);
+        summarySale("Cà phê", from.minusSeconds(1), 10_000, 0, 10_000, null);
+        summarySale("Cà phê", from, 20_000, 0, 20_000, null);
+        summarySale("Cà phê", to.minusNanos(1_000), 30_000, 0, 30_000, null);
+        summarySale("Cà phê", to, 40_000, 0, 40_000, null);
+        summarySale("Tea", from.plusHours(1), 50_000, 0, 50_000, null);
+        long voided = summarySale("Cà phê", from.plusHours(2), 60_000, 0, 60_000, null);
+        voidSummarySale(voided, to.plusMonths(1));
+        var filter = new SalesSummary("  CA PHE  ", SaleStatus.CONFIRMED, from, to);
+        startCounting();
+
+        var summary = sales.summary(owner, Long.toString(shopId), filter);
+
+        assertThat(summary).isEqualTo(new SaleSummaryResponse(2, 2, 0, 50_000, 0));
+        assertThat(sql.businessReads()).hasSize(1);
+        assertThat(sales.summary(owner, Long.toString(shopId), new SalesSummary("ca phe",
+                SaleStatus.CONFIRMED, from.withOffsetSameInstant(ZoneOffset.UTC),
+                to.withOffsetSameInstant(ZoneOffset.UTC)))).isEqualTo(summary);
+        var page = sales.list(owner, Long.toString(shopId),
+                new Sales(0, 1, filter.q(), filter.saleStatus(), filter.from(), filter.to()));
+        assertThat(page.totalElements()).isEqualTo(summary.matchedOrderCount());
+        assertThat(page.items()).hasSize(1);
+        assertThat(sales.summary(owner, Long.toString(shopId),
+                new SalesSummary("ca phe", SaleStatus.CONFIRMED, from, null)))
+                .isEqualTo(new SaleSummaryResponse(3, 3, 0, 90_000, 0));
+        assertThat(sales.summary(owner, Long.toString(shopId),
+                new SalesSummary("ca phe", SaleStatus.CONFIRMED, null, to)))
+                .isEqualTo(new SaleSummaryResponse(3, 3, 0, 60_000, 0));
+    }
+
+    @Test
+    void saleSummaryUsesDiscountedSaleValueForPaidPartialDebtAndCrossPeriodVoid() {
+        var october = OffsetDateTime.parse("2026-10-01T00:00:00+07:00");
+        long customer = jdbc.queryForObject("insert into customers(shop_id,name) values (?,'Buyer') returning id",
+                Long.class, shopId);
+        summarySale("Buyer", october.plusDays(1), 100_000, 10_000, 90_000, null);
+        long partial = summarySale("Buyer", october.plusDays(2), 80_000, 20_000, 20_000, customer);
+        long debt = summarySale("Buyer", october.plusDays(3), 50_000, 0, 0, customer);
+        jdbc.update("""
+                insert into debts(sale_id,customer_id,original_vnd,outstanding_vnd)
+                values (?,?,40000,40000),(?,?,50000,50000)
+                """, partial, customer, debt, customer);
+        long previousMonth = summarySale("Buyer", october.minusHours(1), 100_000, 30_000, 70_000, null);
+        voidSummarySale(previousMonth, october.plusDays(4));
+
+        startCounting();
+        assertThat(sales.summary(owner, Long.toString(shopId),
+                new SalesSummary(null, null, october, october.plusMonths(1))))
+                .isEqualTo(new SaleSummaryResponse(3, 3, 0, 200_000, 0));
+        assertThat(sales.summary(owner, Long.toString(shopId),
+                new SalesSummary(null, SaleStatus.VOIDED, october.minusMonths(1), october)))
+                .isEqualTo(new SaleSummaryResponse(1, 0, 1, 0, 70_000));
+        assertThat(sales.summary(owner, Long.toString(shopId), SalesSummary.defaults()))
+                .isEqualTo(new SaleSummaryResponse(4, 3, 1, 200_000, 70_000));
+        assertThat(sql.businessReads()).hasSize(3);
+    }
+
+    @Test
+    void saleSummarySupportsExactIdLiteralWildcardsAndArchivedProductSnapshots() {
+        var soldAt = OffsetDateTime.parse("2026-10-01T12:00:00+07:00");
+        long saleId = summarySale("Buyer", soldAt, 5_000, 0, 5_000, null);
+        summarySale("Not a match", soldAt, 6_000, 0, 6_000, null);
+        long productId = jdbc.queryForObject("""
+                insert into products(shop_id,name,unit,selling_price_vnd,tracked,status,archived_at,archived_by_user_id)
+                values (?,'Current name','piece',1000,false,'ARCHIVED',current_timestamp,?) returning id
+                """, Long.class, shopId, userId);
+        jdbc.update("""
+                insert into sale_items(sale_id,product_id,product_name_snapshot,unit_snapshot,quantity,
+                    unit_price_vnd,line_total_vnd,stock_deducted)
+                values (?,?,'Cà phê 100%_!','piece',1,5000,5000,false)
+                """, saleId, productId);
+        startCounting();
+        var expected = new SaleSummaryResponse(1, 1, 0, 5_000, 0);
+        assertThat(sales.summary(owner, Long.toString(shopId),
+                new SalesSummary(Long.toString(saleId), null, null, null))).isEqualTo(expected);
+        assertThat(sales.summary(owner, Long.toString(shopId),
+                new SalesSummary("CA PHE 100%_!", null, null, null))).isEqualTo(expected);
+        assertThat(sql.businessReads()).hasSize(2);
+        assertThat(sql.readsOf("products")).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ADMIN", "DISABLED", "FOREIGN", "INACTIVE", "ARCHIVED"})
+    void saleSummaryRejectsUnauthorizedAccessBeforeAggregateRead(String scenario) {
+        seedSales(shopId, userId, 1);
+        long selectedShop = shopId;
+        ErrorCode expected;
+        switch (scenario) {
+            case "ADMIN" -> {
+                jdbc.update("update users set system_role='ADMIN' where id=?", userId);
+                expected = ErrorCode.SHOP_ACCESS_DENIED;
+            }
+            case "DISABLED" -> {
+                jdbc.update("update users set status='DISABLED' where id=?", userId);
+                expected = ErrorCode.ACCOUNT_DISABLED;
+            }
+            case "FOREIGN" -> {
+                selectedShop = otherShopId;
+                expected = ErrorCode.SHOP_ACCESS_DENIED;
+            }
+            case "INACTIVE" -> {
+                jdbc.update("update shops set status='INACTIVE',inactive_reason='Test maintenance' where id=?", shopId);
+                expected = ErrorCode.SHOP_INACTIVE;
+            }
+            case "ARCHIVED" -> {
+                jdbc.update("update shops set status='ARCHIVED',archived_at=current_timestamp,archived_reason='Test archive' where id=?", shopId);
+                expected = ErrorCode.SHOP_NOT_FOUND;
+            }
+            default -> throw new IllegalArgumentException(scenario);
+        }
+        String selected = Long.toString(selectedShop);
+        startCounting();
+
+        assertThatThrownBy(() -> sales.summary(owner, selected, SalesSummary.defaults()))
+                .isInstanceOfSatisfying(BusinessException.class, error ->
+                        assertThat(error.getErrorCode()).isEqualTo(expected));
+        assertThat(sql.businessReads()).isEmpty();
+    }
+
+    @ParameterizedTest
+    @EnumSource(SaleStatus.class)
+    void saleSummaryAcceptsExactlyLongMaxValue(SaleStatus status) {
+        long sale = summarySale("Boundary", OffsetDateTime.parse("2026-10-01T00:00:00Z"),
+                Long.MAX_VALUE, 0, Long.MAX_VALUE, null);
+        if (status == SaleStatus.VOIDED) voidSummarySale(sale, OffsetDateTime.parse("2026-11-01T00:00:00Z"));
+        var expected = status == SaleStatus.CONFIRMED
+                ? new SaleSummaryResponse(1, 1, 0, Long.MAX_VALUE, 0)
+                : new SaleSummaryResponse(1, 0, 1, 0, Long.MAX_VALUE);
+        startCounting();
+        assertThat(sales.summary(owner, Long.toString(shopId), SalesSummary.defaults())).isEqualTo(expected);
+        assertThat(sql.businessReads()).hasSize(1);
+    }
+
+    @Test
     void parentsWithoutItemsAndExpiredDraftKeepTheirResponses() {
         seedSales(shopId, userId, 1);
         seedDrafts(shopId, userId, 1);
@@ -302,6 +528,24 @@ class SalesListQueryPostgresTest {
         assertThat(sql.readsOf("sale_draft_items")).hasSize(1).allSatisfy(query -> assertThat(query).doesNotContain(" join "));
         assertThat(saleItems.findAllByShopId(shopId)).hasSize(ITEMS_PER_PARENT);
         assertThat(draftItems.findAllByShopId(shopId)).hasSize(ITEMS_PER_PARENT);
+    }
+
+    private long summarySale(String name, OffsetDateTime soldAt, long subtotal, long discount, long paid,
+            Long customerId) {
+        long total = subtotal - discount;
+        String paymentStatus = paid == total ? "PAID" : paid == 0 ? "DEBT" : "PARTIAL";
+        return jdbc.queryForObject("""
+                insert into sales(shop_id,created_by_user_id,customer_id,customer_name_snapshot,sold_at,
+                    subtotal_vnd,discount_vnd,total_vnd,paid_vnd,payment_status)
+                values (?,?,?,?,?,?,?,?,?,?) returning id
+                """, Long.class, shopId, userId, customerId, name, soldAt, subtotal, discount, total, paid, paymentStatus);
+    }
+
+    private void voidSummarySale(long saleId, OffsetDateTime voidedAt) {
+        jdbc.update("""
+                update sales set sale_status='VOIDED',voided_at=?,voided_by_user_id=?,void_reason='Summary test'
+                where id=? and shop_id=?
+                """, voidedAt, userId, saleId, shopId);
     }
 
     private long shop(long ownerId, String name) {

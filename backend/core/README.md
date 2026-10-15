@@ -241,6 +241,20 @@ With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
 
 Use only a disposable database with schema-creation permission, never a business, shared staging or production database. Without the test URL, the PostgreSQL suite is skipped. This is a SQL-count regression test, not an HTTP/Firebase/FE load benchmark or staging UAT. SQL pagination bounds parent rows, not the number of items inside any individual order/draft.
 
+### CORE-014 filtered sale totals
+
+On `feat/sales-filter-summary`, `GET /api/v1/sales/summary` accepts the same `q`, `saleStatus`, `from` and `to` filters as the sale list, plus the required OWNER bearer token and `X-Shop-Id`. It aggregates all matching sales without pagination. Time bounds apply to `soldAt`, with `from` inclusive and `to` exclusive; timestamps require an offset. Either bound can be omitted; omitting both includes all history. The existing list and `/reports/summary` retain their behavior.
+
+The response has five non-null integer fields: `matchedOrderCount`, `confirmedOrderCount`, `voidedOrderCount`, `confirmedSalesVnd` and `voidedSalesVnd`. Empty sets return five zeros. Counts and values use the current sale status, and values sum `totalVnd` after discount. Confirmed value includes unpaid and partly paid orders; it is not cash collected. Voided value is the whole sale value, not the refund amount. A prior-period sale voided later stays in its original `soldAt` filter window here; report `netRevenueVnd` instead subtracts void adjustments by `voidedAt`. Separate list and summary requests do not share a database snapshot. A per-status monetary sum exceeding signed 64-bit VND returns HTTP 409 `sale_summary_overflow`; narrow the filters.
+
+With `CORE_TEST_POSTGRES_*` pointing at the disposable database described above, run:
+
+```powershell
+.\mvnw.cmd '-Dtest=SalesListQueryPostgresTest,OwnerListQueryTest,SalePaymentServiceTest,OwnerPaginationWebTest,ApiDocumentationWebTest' test
+```
+
+The real PostgreSQL summary cases cover zero results/draft exclusion, status and combined search/time filters, equivalent offsets, half-open boundaries, one-sided ranges, discounted paid/partial/debt sales, cross-period voids, literal wildcard and archived-product snapshot search, OWNER/ADMIN/account/shop guards, exact `Long.MAX_VALUE` and overflow for both statuses. Overflow fixtures use valid PAID sales and keep the real business constraints enabled. The 10,000-sale/50,000-item fixture checks one aggregate data SELECT with no item hydration; auth/shop checks are excluded. Logged local timings are observations, not staging latency guarantees. CI requires these summary methods through `scripts/verify_postgres_tests.py`. See the [API contract](../../docs/contracts/api-contracts.md#tổng-danh-sách-sale-theo-bộ-lọc-core-014) and PRD `AC-069`–`AC-072`; FE/staging UAT remains pending.
+
 ### Checkout and void batch product-lock tests
 
 Issue [#136](https://github.com/miphu2804/smart-ledger/issues/136) replaces per-product lock queries during confirm and restocking void with one shop-scoped `PESSIMISTIC_WRITE` query ordered by product ID. Confirm requires ACTIVE products; void may restore archived products using the historical `stockDeducted` snapshot. Empty product groups skip the query. Void retains sale → debt → ascending product locks. API, schema, money/debt, cost snapshots and audit contracts are unchanged.

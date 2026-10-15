@@ -5,7 +5,7 @@
 | Trạng thái | đích MVP; Core hiện có được phân biệt với phần chưa tích hợp |
 | Chủ sở hữu | Chủ kỹ thuật |
 | Người rà soát | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-10-12 |
+| Cập nhật lần cuối | 2026-10-15 |
 
 ## Tài liệu liên quan
 
@@ -43,6 +43,8 @@ Mục này là nơi duy nhất ghi hiện trạng triển khai; tài liệu khá
 **CORE-011 #153 trên `feat/owner-list-pagination`, ngày 2026-10-10:** tiếp nối staging `50891aabf8b6ba48406799fa5c31fef8c823569f`, sáu list OWNER đã phân trang DB và đổi mảng thành PageResponse. Đây là thay đổi response/thứ tự list có chủ đích, không phải bảo đảm “không đổi response” của đợt #134–#138. Chi tiết tại [§4.2](#42-phân-trang-danh-sách-owner) và [contract](../contracts/api-contracts.md#phân-trang-danh-sách-owner), truy vết `FR-033`/`AC-059`–`AC-063`. Chưa sửa FE, merge/deploy hoặc nghiệm thu staging; #144 theo dõi phối hợp mobile.
 
 **CORE-012 #163/#164 trên `feat/core-barcode`, ngày 2026-10-12:** chuẩn hóa barcode và lookup đã có; hoàn thiện precheck ACTIVE-only, 409 details và V16. Chưa chạy shared migration hoặc nghiệm thu FE. Xem [§4.3](#43-barcode-core-core-012-163164), [contract](../contracts/api-contracts.md#barcode-core-012), `FR-034`/`AC-064`–`AC-067`.
+
+**CORE-014 #213 trên `feat/sales-filter-summary`, ngày 2026-10-15 (base staging `df69819642fc420b7686d6f66073b946df2f13c2`):** Core có GET `/api/v1/sales/summary` để trả count/giá trị toàn bộ sale khớp filter, dùng chung predicate với list và một query aggregate. Không đổi schema, API ghi hoặc báo cáo kỳ; chưa tích hợp FE hay nghiệm thu staging. Truy vết `BR-004`/`BR-005`/`BR-009` → `FR-006`/`FR-033` → `AC-069`–`AC-072`; [§4.5](#45-tổng-danh-sách-sale-core-014) mô tả triển khai, [contract](../contracts/api-contracts.md#tổng-danh-sách-sale-theo-bộ-lọc-core-014) giữ ý nghĩa field/lỗi.
 
 ## 2. Thành phần và quyền sở hữu
 
@@ -128,7 +130,7 @@ Giới hạn: khi mở một chu kỳ cảnh báo mới, tra lịch sử/dedup v
 - Sales/expenses so timestamp `[from, to)` trực tiếp trên soldAt/expenseAt; không tự biến timestamp thành ngày Việt Nam hay cộng một ngày vào to. Offset được xét theo instant; expenses period tiếp tục dùng ReportWindow và không kết hợp custom range.
 - Schema và các thao tác ghi không đổi; không thêm index/migration trong #153. Trang sâu vẫn có chi phí OFFSET và exact COUNT, cần đo plan trước khi đề xuất index/cursor. REPEATABLE_READ chỉ giữ snapshot trong **một request**, không ngăn dịch trang giữa hai lần GET. Không hứa thời gian đáp ứng cố định.
 
-Rollout là breaking change: FE phải đổi client/mock và các màn list, đưa filter lên server, không cộng số tổng từ một trang. Report hiện có giữ nguyên; summary vẫn tổng hợp entity bằng Java, tối ưu aggregate riêng. DebtResponse chưa có tên/SĐT; các projection/aggregate thiếu phải chốt riêng thay vì tải lại toàn bộ danh sách. Không merge/deploy cho FE cũ mà chưa phối hợp #144 và nghiệm thu `AC-063`.
+Rollout list là breaking change: FE phải đổi client/mock và các màn list, đưa filter lên server, không cộng số tổng từ một trang. `/reports/summary` hiện có giữ nguyên và vẫn tổng hợp entity bằng Java; aggregate danh sách sale là endpoint riêng ở [§4.5](#45-tổng-danh-sách-sale-core-014). DebtResponse chưa có tên/SĐT; các projection/aggregate còn thiếu phải chốt riêng thay vì tải lại toàn bộ danh sách. Không merge/deploy cho FE cũ mà chưa phối hợp #144 và nghiệm thu `AC-063`.
 
 ### 4.3. Barcode Core (CORE-012 #163/#164)
 
@@ -155,6 +157,16 @@ Phần sửa #181 trên `fix/core-concurrency` không thêm field/entity/migrati
 Không áp khóa toàn shop lên mọi giao dịch. Refresh thêm một read dưới khóa cho đường ghi cần dữ liệu mới; không làm mất batch item/Product lock/reconcile của #133. SQL PostgreSQL thực tế dùng `FOR NO KEY UPDATE` qua Hibernate cho các row-lock này; kiểm tra bằng SQL assertions và hai transaction có coordination/timeout, không chỉ mock. Thử chuỗi Shop → Product, Product → Category và Category archive không deadlock trong fixture kiểm thử không đồng nghĩa mọi lịch chạy triển khai đều đã nghiệm thu.
 
 Bằng chứng: `AuthSessionConcurrencyPostgresTest`, `ShopConcurrencyPostgresTest`, `CatalogLifecycleConcurrencyPostgresTest`, `CategoryAssignmentConcurrencyPostgresTest` kiểm cả hai thứ tự commit và entity preloaded; `NotificationPostgresTest` kiểm rollback void nhiều item, Product archived, lỗi overflow và retry/replay với idempotency thật. `ProductStockRestorationTest` kiểm biên MAX_STOCK/giữ lỗi restock-unavailable; web test kiểm 409. Hướng dẫn ở [Core README](../../backend/core/README.md#core-013-concurrency-and-stock-restoration-regression-tests), lỗi void ở [contract](../contracts/api-contracts.md#3-bản-nháp--sale--payment--voidrefund). Test DB tạm không thay UAT FE/Firebase/staging; BRD/PRD/ERD không đổi vì khôi phục ràng buộc đã chốt, không mở rộng nghiệp vụ/schema.
+
+### 4.5. Tổng danh sách sale (CORE-014)
+
+`Sales` và `SalesSummary` cùng triển khai `OwnerListQuery.SaleFilter`; cả hai chuẩn hóa q/kiểm range bằng cùng helper, nhưng summary không có pagination. `SaleController` khai báo route cụ thể `/summary` và `SaleService.summary` kiểm `requireOwnedActiveShop` trước repository, chạy transaction chỉ đọc. Controller/Swagger có test route và schema năm field; không gọi detail với saleId="summary".
+
+`SaleRepository` ghép fragment `SaleSummaryRepository`, triển khai bằng Criteria tuple COUNT/conditional COUNT/SUM trong PostgreSQL. `OwnerListSpecifications.sales` áp cùng tenant/q/status/soldAt predicate như list; q item dùng EXISTS nên nhiều item khớp không nhân dòng sale. Không hydrate Sale/SaleItem hoặc đọc từng item rồi cộng trong Java. Ba count là long; tổng tiền giữ kiểu rộng đến bước chuyển signed 64-bit có kiểm tra. Tràn một tổng trả 409 sale_summary_overflow; không thay constraint DB hay ép về số âm. Hợp đồng field/lỗi và khác biệt với netRevenueVnd nằm ở [contract](../contracts/api-contracts.md#tổng-danh-sách-sale-theo-bộ-lọc-core-014).
+
+`SalesListQueryPostgresTest` chạy migration V1–V16 trên schema tạm và giữ constraint thật. Test trực tiếp summary: tập rỗng, filter status, q kết hợp half-open range/offset tương đương/một phía, sale sau discount thu đủ/thu một phần/bán nợ, void chéo kỳ, snapshot product archived, item trùng và quyền OWNER/ADMIN/shop. Fixture overflow dùng PAID với paidVnd=totalVnd, kiểm cả hai trạng thái và biên Long.MAX_VALUE; gate CI yêu cầu các method này. Dữ liệu 10.000 sale/50.000 item có một data SELECT, không tính auth/shop; timing chỉ là quan sát local. Lệnh chạy tại [Core README](../../backend/core/README.md#core-014-filtered-sale-totals).
+
+API bổ sung không cần field/entity/index/migration hoặc Redis, không đổi list/detail/write/report hiện có. Core được triển khai trước khi FE gọi summary; frontend gửi cùng filter và refresh khi đổi shop/filter, nhưng hai HTTP request không chia sẻ snapshot. Không tự thay thẻ báo cáo kỳ bằng thẻ giá trị danh sách. Chưa có kiểm chứng Firebase/FE/staging cho endpoint này; theo dõi `AC-069`–`AC-072`.
 
 ## 5. Auth và phân quyền
 

@@ -65,6 +65,17 @@ REQUIRED = {
         "managedProductMediaWriterPreservesCommittedCatalogAndStock",
         "managedProductMediaWriterRejectsArchivedProduct",
     },
+    "com.smartledger.core.service.SalesListQueryPostgresTest": {
+        "saleSummaryUsesOneAggregateReadForTenThousandSalesWithoutHydratingItems",
+        "saleSummaryReusesItemSearchWithoutDuplicateCountingAndHonorsStatus",
+        "saleSummaryRejectsAValueOutsideTheApiLongRangeInsteadOfReturningCorruptedMoney",
+        "saleSummaryReturnsFiveZerosForEmptyOrUnmatchedSetsAndExcludesDrafts",
+        "saleSummaryCombinesAllFiltersWithHalfOpenBoundsAndEquivalentOffsets",
+        "saleSummaryUsesDiscountedSaleValueForPaidPartialDebtAndCrossPeriodVoid",
+        "saleSummarySupportsExactIdLiteralWildcardsAndArchivedProductSnapshots",
+        "saleSummaryRejectsUnauthorizedAccessBeforeAggregateRead",
+        "saleSummaryAcceptsExactlyLongMaxValue",
+    },
 }
 
 
