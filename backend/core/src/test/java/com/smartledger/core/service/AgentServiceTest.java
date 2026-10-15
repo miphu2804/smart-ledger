@@ -104,6 +104,31 @@ class AgentServiceTest {
     }
 
     @Test
+    void memorySettingsAreScopedToTheVerifiedShop() {
+        ai.expect(requestTo(AI + "/internal/v1/agent/memory/settings?user_id=3&shop_id=7"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("{\"memory_enabled\":true,\"available\":true}", MediaType.APPLICATION_JSON));
+        ai.expect(requestTo(AI + "/internal/v1/agent/memory/settings")).andExpect(method(HttpMethod.PUT))
+                .andExpect(content().json("{\"user_id\":3,\"shop_id\":7,\"memory_enabled\":false}"))
+                .andRespond(withSuccess("{\"memory_enabled\":false,\"available\":true}", MediaType.APPLICATION_JSON));
+
+        assertThat(service.getMemorySettings(TOKEN, "7").get("memory_enabled").asBoolean()).isTrue();
+        assertThat(service.setMemoryEnabled(TOKEN, "7", false).get("memory_enabled").asBoolean()).isFalse();
+        ai.verify();
+    }
+
+    @Test
+    void memorySettingsRefusedByTheAiBecomeAiUnavailable() {
+        ai.expect(requestTo(AI + "/internal/v1/agent/memory/settings")).andExpect(method(HttpMethod.PUT))
+                .andRespond(withStatus(HttpStatus.CONFLICT).contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"detail\":\"memory_unavailable\"}"));
+
+        assertThatThrownBy(() -> service.setMemoryEnabled(TOKEN, "7", true))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.AI_UNAVAILABLE));
+    }
+
+    @Test
     void aiNotFoundBecomesConversationNotFound() {
         ai.expect(requestTo(org.hamcrest.Matchers.startsWith(AI + "/internal/v1/agent/conversations/5?")))
                 .andRespond(withStatus(HttpStatus.NOT_FOUND).contentType(MediaType.APPLICATION_JSON)
