@@ -11,13 +11,15 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChatText, ScreenActions } from '../src/components/ChatText';
+import { BusinessIcon } from '../src/components/icons';
 import { SlingSendButton } from '../src/components/SlingSendButton';
 import { ThinkingStatus } from '../src/components/ThinkingStatus';
 import { VoicePillButton } from '../src/components/VoicePillButton';
-import { Dialog, EmptyState, Field, IconBtn, KEYBOARD_AVOID_BEHAVIOR, Row, Sheet, T } from '../src/components/ui';
+import { Button, Dialog, EmptyState, Field, IconBtn, KEYBOARD_AVOID_BEHAVIOR, Row, Sheet, T, Toggle } from '../src/components/ui';
 import type {
   AgentConversationSummary,
   AgentConversationView,
+  AgentMemorySettings,
   AgentMemoryUsed,
   AgentMessageView,
   ChatMessage,
@@ -81,10 +83,10 @@ function lastActive(iso: string): string {
 }
 
 /**
- * Chip trên câu trả lời: ghi nhớ trợ lý đã dùng; chạm để xem đủ nội dung, ngày nhớ và mở hội thoại gốc
+ * Biểu tượng trên câu trả lời: trợ lý đã dùng ghi nhớ; chạm để xem đủ nội dung, ngày nhớ và mở hội thoại gốc
  * (trừ khi ghi nhớ đến từ chính hội thoại đang mở).
  */
-function MemoryChip({
+function MemoryIcon({
   memories,
   currentId,
   onOpenSource,
@@ -94,21 +96,21 @@ function MemoryChip({
   onOpenSource: (conversationId: number) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const first = memories[0].content;
-  const label = first.length > 40 ? `${first.slice(0, 40)}…` : first;
   return (
     <View style={styles.memoryWrap}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Xem ghi nhớ trợ lý đã dùng"
+        accessibilityLabel={`Xem ${memories.length} ghi nhớ trợ lý đã dùng`}
+        hitSlop={10}
         onPress={() => setOpen((v) => !v)}
-        style={({ pressed }) => [styles.memoryChip, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.memoryIcon, pressed && styles.pressed]}
       >
-        <Feather name="cpu" size={12} color={colors.brand} />
-        <T w="semibold" size={11.5} color={colors.ink} numberOfLines={1} style={{ flexShrink: 1 }}>
-          Đã dùng ghi nhớ: {label}
-          {memories.length > 1 ? ` +${memories.length - 1}` : ''}
-        </T>
+        <BusinessIcon size={15} color={colors.brand} filled />
+        {memories.length > 1 ? (
+          <T w="semibold" size={11.5} color={colors.brand}>
+            {memories.length}
+          </T>
+        ) : null}
       </Pressable>
       {open
         ? memories.map((m) => {
@@ -153,6 +155,7 @@ export default function Ai() {
   const [error, setError] = useState<string | null>(null);
   const [msgs, setMsgs] = useState<ChatMessage[]>(() => [welcome(app.user.name)]);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const startNew = () => {
     setConversationId(null);
@@ -255,7 +258,7 @@ export default function Ai() {
             return (
               <React.Fragment key={m.id}>
                 {m.memories?.length ? (
-                  <MemoryChip memories={m.memories} currentId={conversationId} onOpenSource={openSource} />
+                  <MemoryIcon memories={m.memories} currentId={conversationId} onOpenSource={openSource} />
                 ) : null}
                 <View style={[styles.messageRow, isUser && styles.userMessageRow]}>
                   <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
@@ -323,6 +326,9 @@ export default function Ai() {
           </View>
           <View style={styles.floatBtn}>
             <IconBtn name="clock" label="Lịch sử trò chuyện" size={HEADER_BTN} color={typing ? colors.faint : colors.ink} onPress={openHistory} />
+          </View>
+          <View style={styles.floatBtn}>
+            <IconBtn name="sliders" label="Cài đặt trợ lý" size={HEADER_BTN} onPress={() => setSettingsOpen(true)} />
           </View>
         </Row>
       </View>
@@ -414,6 +420,7 @@ export default function Ai() {
         </View>
       </View>
 
+      <AssistantSettingsSheet visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <HistorySheet
         visible={historyOpen}
         activeId={conversationId}
@@ -589,8 +596,81 @@ function HistorySheet({
   );
 }
 
+/**
+ * Cài đặt trợ lý: công tắc ghi nhớ dài hạn. Tải mỗi lần mở; lỗi hiện kèm nút thử lại, vì AI có thể
+ * đang khởi động lại và lần gọi đầu bị từ chối.
+ */
+function AssistantSettingsSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const [settings, setSettings] = useState<AgentMemorySettings | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    setError(null);
+    try {
+      setSettings(await agentApi.getMemorySettings());
+    } catch (err) {
+      setError(historyErrorMessage(err, 'Chưa tải được cài đặt ghi nhớ.'));
+    }
+  };
+
+  useEffect(() => {
+    if (!visible) return;
+    setSettings(null);
+    void load();
+  }, [visible]);
+
+  const change = async (enabled: boolean) => {
+    setError(null);
+    setSettings((s) => s && { ...s, memory_enabled: enabled });
+    try {
+      setSettings(await agentApi.setMemorySettings(enabled));
+    } catch (err) {
+      setSettings((s) => s && { ...s, memory_enabled: !enabled });
+      setError(historyErrorMessage(err, 'Chưa đổi được cài đặt ghi nhớ.'));
+    }
+  };
+
+  return (
+    <Sheet visible={visible} onClose={onClose} title="Cài đặt trợ lý">
+      {error ? (
+        <View style={styles.historyError}>
+          <T size={13} color={colors.red} accessibilityRole="alert">
+            {error}
+          </T>
+          {settings === null ? <Button title="Thử lại" variant="soft" small onPress={load} style={{ marginTop: 10 }} /> : null}
+        </View>
+      ) : null}
+      {settings === null && !error ? (
+        <T size={13} color={colors.muted}>
+          Đang tải…
+        </T>
+      ) : null}
+      {settings && !settings.available ? (
+        <T size={13} color={colors.muted}>
+          Ghi nhớ dài hạn chưa được bật cho tiệm của bạn.
+        </T>
+      ) : null}
+      {settings?.available ? (
+        <Row gap={12} style={styles.settingRow}>
+          <BusinessIcon size={26} color={colors.brand} offColor={colors.faint} filled={settings.memory_enabled} />
+          <View style={{ flex: 1 }}>
+            <T w="bold" size={15} color={colors.ink}>
+              Ghi nhớ dài hạn
+            </T>
+            <T size={12.5} color={colors.muted} style={{ marginTop: 3 }}>
+              Trợ lý nhớ sở thích và thói quen của bạn qua các cuộc trò chuyện. Tắt chỉ dừng nhớ và dùng ghi nhớ, không xoá cái đã có.
+            </T>
+          </View>
+          <Toggle value={settings.memory_enabled} onChange={change} />
+        </Row>
+      ) : null}
+    </Sheet>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  settingRow: { alignItems: 'center', paddingVertical: 8 },
   headerWrap: {
     position: 'absolute',
     top: 0,
@@ -627,15 +707,16 @@ const styles = StyleSheet.create({
     marginBottom: -6,
     gap: 4,
   },
-  memoryChip: {
+  memoryIcon: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    maxWidth: '86%',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 12,
+    gap: 4,
+    minWidth: 26,
+    height: 26,
+    paddingHorizontal: 7,
+    justifyContent: 'center',
+    borderRadius: 13,
     backgroundColor: colors.brandSoft,
   },
   memoryItem: {
