@@ -63,7 +63,7 @@ Production rejects writes and chat. It also needs `LOADTEST_CONFIRM_HOST` equal 
 
 ### SLO gate
 
-At the end the run prints a table per request name and fails when the failure ratio exceeds `SLO_MAX_FAIL_RATIO` (0.01) or a p95 exceeds its group limit. Names below `SLO_MIN_SAMPLES` (20) requests are reported as `few-samples` and do not fail the run.
+At the end the run prints a table per request name and fails when the failure ratio exceeds `SLO_MAX_FAIL_RATIO` (0.01) or a p95 exceeds its group limit. Names below `SLO_MIN_SAMPLES` requests (20, or 3 for `smoke`) are reported as `few-samples` and do not fail the run.
 
 | Group | Requests | p95 limit (ms) | Override |
 |---|---|---|---|

@@ -40,9 +40,12 @@ def p95_limits() -> dict[str, int]:
     return limits
 
 
-def evaluate(stats) -> tuple[list[Verdict], bool]:
+def evaluate(stats, profile: str) -> tuple[list[Verdict], bool]:
     max_fail_ratio = float(os.getenv("SLO_MAX_FAIL_RATIO", "0.01"))
-    min_samples = int(os.getenv("SLO_MIN_SAMPLES", "20"))
+    # Smoke sends about 20 requests in total, so the run-wide default would mark every
+    # name `few-samples` and skip the p95 check entirely.
+    default_min = "3" if profile == "smoke" else "20"
+    min_samples = int(os.getenv("SLO_MIN_SAMPLES") or default_min)
     limits = p95_limits()
     verdicts: list[Verdict] = []
     passed = True

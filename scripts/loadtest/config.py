@@ -90,7 +90,7 @@ def check(settings: Settings, host: str | None) -> list[str]:
     if settings.target_env == "production":
         # Production holds real shops: never write, never call the model, and make
         # the operator type the host so a copied command cannot hit it by accident.
-        if settings.confirm_host != host.rstrip("/"):
+        if settings.confirm_host.rstrip("/") != host.rstrip("/"):
             problems.append("production needs LOADTEST_CONFIRM_HOST set to the exact --host value")
         if settings.writes:
             problems.append("LOADTEST_WRITES is not allowed on production")
