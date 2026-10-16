@@ -94,19 +94,19 @@ Migration [`20261015000000_agent_memory_visibility.sql`](../../../supabase/migra
 - **Thay thế (supersede) kiểu Mem0:** model trích xuất thấy các memory vừa dùng dạng `[id] nội dung` và có thể đặt `replaces` cho fact sửa lại một memory đó. Code chỉ nhận id nằm trong danh sách vừa dùng. Dòng cũ nhận `superseded_by` và không còn được tìm; không xóa, nên khi xóa hội thoại sinh ra fact mới thì `ON DELETE SET NULL` đưa fact cũ trở lại, giữ `AC-022`. Prompt đọc thêm quy tắc: hai fact mâu thuẫn thì fact có ngày muộn hơn thắng.
 - **Loại tự ghi:** `preference`, `procedural` và `semantic` (`AGENT_MEMORY_TYPES`, mặc định `preference,procedural,semantic`); fact loại khác (như `episodic`) bị bỏ trước khi lưu. `semantic` là fact ổn định như nhà cung cấp, nhân viên, giờ mở cửa. Ban đầu chỉ ghi `preference` và `procedural`, nhưng E2E trên staging cho thấy agent trả lời "Đã ghi nhớ" với một fact về nhà cung cấp rồi fact đó bị lọc bỏ, nên chủ tiệm bị hiểu sai; staging và production nay chạy với cả `semantic`. Đây vẫn là câu trả lời tạm cho câu hỏi mở về loại memory; PO chưa duyệt danh sách loại, vẫn duyệt cùng yêu cầu.
 - **Lọc số điện thoại:** fact (kể cả bản tóm tắt) chứa số điện thoại Việt Nam bị bỏ; prompt trích xuất cũng cấm lưu số điện thoại.
-- **Chip trong chat:** sự kiện SSE `memory` gửi trước `delta` đầu tiên khi có memory được dùng; app hiện chip "Đã dùng ghi nhớ" trên câu trả lời. Không đổi `/internal/v1/agent/chat`.
-- **Công tắc theo chủ tiệm:** bảng `agent_memory_settings`, mặc định bật khi chưa có dòng. Tắt thì không tìm và không ghi, không xóa memory đã có. Cờ toàn cục vẫn quyết định cuối. Endpoint `memory/settings` ở [contract](../../contracts/api-contracts.md#6-core--ai-nội-bộ); mobile có công tắc trong Cài đặt.
+- **Biểu tượng trong chat:** sự kiện SSE `memory` gửi trước `delta` đầu tiên khi có memory được dùng; app hiện biểu tượng ghi nhớ trên câu trả lời. Không đổi `/internal/v1/agent/chat`.
+- **Công tắc theo chủ tiệm:** bảng `agent_memory_settings`, mặc định bật khi chưa có dòng. Tắt thì không tìm và không ghi, không xóa memory đã có. Cờ toàn cục vẫn quyết định cuối. Endpoint `memory/settings` ở [contract](../../contracts/api-contracts.md#6-core--ai-nội-bộ); mobile có công tắc trong "Cài đặt trợ lý" của màn chat, tải lại mỗi lần mở và có nút thử lại khi lỗi.
 
 ## Bổ sung theo Cognition "agent memory repo"
 
 So với [agent memory repo](https://cognition.com/agent-memory-repo) của Cognition, nơi một `MEMORY.md` ngắn luôn được nạp vào mọi session, cách đọc ở trên chỉ tìm theo độ giống với câu hỏi. Sở thích như "trả lời dạng bảng" thường không giống câu hỏi về nghĩa nên dễ bị bỏ sót. Cùng cờ `AGENT_MEMORY_ENABLED`, cùng chờ PO duyệt, không thêm migration:
 
 - **Luôn nạp preference:** `search` lấy trước tối đa 10 memory `preference` còn hiệu lực (chưa bị thay, chưa hết hạn), xếp theo `importance` rồi mới nhất, bất kể câu hỏi; sau đó tìm theo cosine và suy giảm thêm tối đa 5 memory khác, bỏ các dòng đã lấy. Preference vượt giới hạn vẫn được tìm như memory thường. Mỗi dòng trong prompt ghi ngày và loại; `MEMORY_PROMPT` dặn model áp preference (định dạng, độ dài, giọng, cách xưng hô) cho mọi câu trả lời. Preference được nạp cũng vào danh sách `[id]` của bước trích xuất, nên chủ tiệm đổi ý thì fact mới thay được preference cũ.
-- **Chip dẫn về hội thoại gốc:** sự kiện `memory` gửi thêm `source_conversation_id` và `created_at` (đã có trong bảng). Chạm một ghi nhớ trên chip mở hội thoại sinh ra nó; ghi nhớ từ chính hội thoại đang mở chỉ hiện ngày. Hội thoại gốc luôn còn, vì xóa hội thoại thì memory của nó mất theo (`ON DELETE CASCADE`).
+- **Biểu tượng dẫn về hội thoại gốc:** sự kiện `memory` gửi thêm `source_conversation_id` và `created_at` (đã có trong bảng). Chạm biểu tượng để xem từng ghi nhớ, chạm một ghi nhớ mở hội thoại sinh ra nó; ghi nhớ từ chính hội thoại đang mở chỉ hiện ngày. Hội thoại gốc luôn còn, vì xóa hội thoại thì memory của nó mất theo (`ON DELETE CASCADE`).
 
 ## Câu hỏi mở trước khi Accepted
 
-- PO: chủ tiệm có cần agent nhớ qua hội thoại không và có cần màn xem/xóa từng memory riêng không (hiện chỉ có chip và công tắc bật/tắt)?
+- PO: chủ tiệm có cần agent nhớ qua hội thoại không và có cần màn xem/xóa từng memory riêng không (hiện chỉ có biểu tượng ghi nhớ và công tắc bật/tắt)?
 - Thời hạn lưu: hợp đồng hiện tại nói MVP không có TTL; `expires_at` có dùng không?
 - Chọn embedder cho staging/production: embeddinggemma qua Cloudflare Workers AI (model beta, chưa công bố giá; dữ liệu chat ra khỏi hạ tầng của mình) hay chạy local (cần gói RAM trên 1.3 GB). Cần PO/owner duyệt việc gửi nội dung chat tới Cloudflare.
 
