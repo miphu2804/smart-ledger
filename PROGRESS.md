@@ -1,3 +1,11 @@
+### [2026-10-16 17:58 UTC+07:00] — [Fix] An account without a shop no longer lands in the sample shop
+
+**Done:** A tester creating an account pressed Android back on "Tiệm của bạn tên gì?" and landed in the tabs showing "Tiệm tạp hoá cô Thỏ". The app state starts with the sample shop until Core returns a session with a shop, and nothing stopped the tabs from opening before that, so going back from shop setup (or signing out from a screen stacked on the tabs) exposed the sample data as if it were a real account. The tabs layout now opens only for a signed-in account with a shop: before the session is restored it shows a blank screen, signed out it redirects to the sign-in screen, and without a shop to shop setup. On shop setup, Android back and a new "Dùng tài khoản khác" link ask "Dừng tạo tiệm?"; confirming signs out and returns to sign-in. New criterion `AC-079`.
+
+**Changed files:** `frontend/mobile/app/(tabs)/_layout.tsx`, `frontend/mobile/app/(auth)/setup.tsx`, `docs/product/product-requirements.md` (`AC-079`) — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors; mock web build in headless Chrome (5/5): signed out, opening `/invoices` lands on sign-in with no sample shop; "Vào app" opens Tổng quan; signing out from Quản lý returns to sign-in; on `/setup`, "Dùng tài khoản khác" asks "Dừng tạo tiệm?" and confirming returns to sign-in. **Not verified:** Android back on a real phone during a real sign-up.
+
 ### [2026-10-16] — [Mobile] Thought line shows only the latest tool step, with shimmer
 
 **Done:** `ThoughtLine` now shows one step at a time: each new tool call replaces the waiting phrase or the step before it instead of lining up beside it. A running step's label types in and then gets the same shimmer sweep as the waiting phrase; a finished step stays still in the faint color with a tick.
