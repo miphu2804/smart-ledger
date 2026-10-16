@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChatText } from '../src/components/ChatText';
+import { ChatText, ScreenActions } from '../src/components/ChatText';
 import { SlingSendButton } from '../src/components/SlingSendButton';
 import { ThinkingStatus } from '../src/components/ThinkingStatus';
 import { VoicePillButton } from '../src/components/VoicePillButton';
@@ -24,6 +24,7 @@ import type {
 } from '../src/data/types';
 import { agentApi } from '../src/lib/agentApi';
 import { ApiError } from '../src/lib/api';
+import { splitActions } from '../src/lib/chatMarkdown';
 import { ddmmyyyy, hhmm, relDay } from '../src/lib/format';
 import { useApp } from '../src/store/AppStore';
 import { colors, font, shadow } from '../src/theme';
@@ -249,6 +250,8 @@ export default function Ai() {
         <View style={styles.messages}>
           {msgs.map((m) => {
             const isUser = m.from === 'user';
+            // Nút mở màn hình nằm ở thẻ riêng dưới bong bóng; bong bóng chỉ giữ nội dung trả lời.
+            const reply = isUser ? null : splitActions(m.text);
             return (
               <React.Fragment key={m.id}>
                 {m.memories?.length ? (
@@ -273,10 +276,11 @@ export default function Ai() {
                         {m.text}
                       </T>
                     ) : (
-                      <ChatText text={m.text} />
+                      <ChatText text={reply?.text ?? m.text} />
                     )}
                   </View>
                 </View>
+                {reply?.screens.length ? <ScreenActions screens={reply.screens} /> : null}
               </React.Fragment>
             );
           })}
@@ -284,7 +288,7 @@ export default function Ai() {
           {typing && draft ? (
             <View style={styles.messageRow}>
               <View style={[styles.bubble, styles.assistantBubble]}>
-                <ChatText text={draft} streaming />
+                <ChatText text={splitActions(draft, true).text} streaming />
               </View>
             </View>
           ) : typing ? (

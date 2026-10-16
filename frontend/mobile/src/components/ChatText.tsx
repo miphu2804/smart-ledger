@@ -70,6 +70,22 @@ function ScreenButtons({ screens }: { screens: AppScreen[] }) {
   );
 }
 
+/**
+ * Thẻ nút mở màn hình, đặt riêng dưới bong bóng trả lời (`splitActions` tách khối ```actions ra khỏi
+ * chữ), để nút không chen vào nội dung câu trả lời.
+ */
+export function ScreenActions({ screens }: { screens: AppScreen[] }) {
+  if (!screens.length) return null;
+  return (
+    <View style={styles.actionsCard}>
+      <T size={11.5} color={colors.muted}>
+        Mở nhanh
+      </T>
+      <ScreenButtons screens={screens} />
+    </View>
+  );
+}
+
 type BlockProps = { block: ChatBlock; color: string };
 
 // Mỗi delta parse lại cả câu và tạo object block mới, nên so theo nội dung: khi stream chỉ khối cuối
@@ -207,4 +223,16 @@ const styles = StyleSheet.create({
   card: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 10, marginVertical: 4 },
   chartNote: { alignItems: 'center', paddingVertical: 16 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
+  actionsCard: {
+    // Kéo sát bong bóng phía trên (danh sách tin nhắn cách nhau 12) để thấy thẻ thuộc câu trả lời đó.
+    marginTop: -4,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
 });
