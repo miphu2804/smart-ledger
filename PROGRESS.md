@@ -1,3 +1,11 @@
+### [2026-10-17 01:25 UTC+07:00] — [Fix] Debt answers get the Công nợ button; the memory count reads as a count
+
+**Done:** Asked "mún xem công nợ", Bobi told the owner to open Quản lý, Công nợ but added no button, so the owner typed "link" and got "Bobi chưa hiểu ý". The `suggest_screen` rule from #267 allowed a button only when the reply asked the owner to record, pay or edit something and forbade it for replies that report figures, while the SQL prompt tells the model to point to the Debts screen to see who owes. The rule now asks for a button whenever the reply sends the owner to a screen to see, record, pay or edit something, and when the owner asks for a link or button to a screen, including one named earlier; a reply that only reports figures and sends the owner nowhere still gets none. Above an answer that used memories, the label read "Trợ lý Bobi 3": the bare memory count looked like part of the name. It now reads "Trợ lý Bobi · 3 ghi nhớ" in muted text, also for a single memory, so the tappable list is discoverable.
+
+**Changed files:** `backend/ai/src/prompt_templates/app_guide.py`, `frontend/mobile/app/ai.tsx` — modified; this entry.
+
+**Check:** AI `ruff check`, `ruff format --check` and unit tests (345 passed); mobile `tsc --noEmit` clean. Real model (Claude Haiku 5.5 on OpenCode Go) against staging shop 8, 5 rounds each: old prompt gave the debts button 0/5 for "mún xem công nợ", new prompt 5/5; the "link" follow-up got it 4/5; "Doanh thu 7 ngày qua?" got no button in either. **Not verified:** the label on a phone.
+
 ### [2026-10-17 00:41 UTC+07:00] — [AI] Memory reconcile against similar memories and use frequency in ranking
 
 **Done:** After Hy Memory's `pro` mode, a new fact that replaces no recalled memory is now checked against up to three live memories with cosine 0.6 or more that the turn did not recall (`AgentMemoryRepository.similar`, which records no use); one `MEMORY_RECONCILE_PROMPT` call marks each fact `new`, `replaces` a shown id, or `known` (dropped). No candidate means no call; a failed call keeps the facts. This catches an owner updating an old fact inside a question about something else, which the extraction step alone missed. Recall ranking also multiplies by `1 + ln(max(use_count, 1))`, Hy Memory's frequency term. ADR-0002 gains "Bổ sung theo Hy Memory".

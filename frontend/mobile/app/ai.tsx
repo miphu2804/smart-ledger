@@ -107,9 +107,10 @@ function BobiLabel({
       <T w="bold" size={13.5} color={colors.brand} style={{ marginLeft: 3 }}>
         Trợ lý Bobi
       </T>
-      {memories.length > 1 ? (
-        <T w="semibold" size={13.5} color={colors.brand}>
-          {memories.length}
+      {/* Nói rõ là số ghi nhớ; một con số trần sau nhãn đọc thành tên "Trợ lý Bobi 3". */}
+      {memories.length ? (
+        <T size={12} color={colors.muted}>
+          {` · ${memories.length} ghi nhớ`}
         </T>
       ) : null}
     </Row>
