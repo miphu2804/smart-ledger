@@ -1,3 +1,13 @@
+### [2026-10-17] — [Chore] Resolve PR 293 progress conflict with staging
+
+**Done:** Synchronized staging `6caa9b2` into `feat/zalo-android` for PR #293, retaining all progress entries from both parents. The only conflict was this log; the incoming AI fix and its tests are kept exactly as staged upstream.
+
+**Changed files:** `PROGRESS.md` conflict resolution and this entry; `backend/ai/src/agent/service.py` and `backend/ai/tests/unit_tests/test_screen_buttons.py` are incoming staging content, not manual Zalo changes.
+
+**Flow explained:** Core, V18 and Zalo configuration remain unchanged. No PR merge, deployment, shared-DB migration or native activation is performed.
+
+**Check:** Before committing, verify preservation of every parent log block, unchanged Core index, exact upstream AI content, absence of conflict markers and clean whitespace. Existing Core regression evidence is 1,358 tests / 100 suites with no failures/errors/skips; this log-only resolution does not rerun Core, AI or APK acceptance. New remote CI checks follow the push.
+
 ### [2026-10-17] — [Chore] Sync Zalo Android with latest staging progress
 
 **Done:** Merged staging `5e8f27b` into `feat/zalo-android` and resolved the only conflict, `PROGRESS.md`, by retaining every entry from both parents. Incoming AI prompt files are taken unchanged from staging; no manual FE/AI edit or live-environment operation is included.
@@ -17,6 +27,14 @@
 **Flow explained:** V18 extends only transient OAuth sessions with WEB-default channel/client/target/native reference hash/expiry and channel-aware constraints; existing account/shop/mapping and WEB session values remain. One transaction, 5-second lock timeout and 60-second statement timeout bound the ordinary locked unique-index/constraint build; early/late/schema/lock failure rolls back all V18 changes without adopting unexpected schema. RLS/public-access restrictions remain. After merge and verified V18, review/copy staging variables to Railway for APK acceptance; the example contains no secret/DB/migration switch and is not auto-loaded. Recovery disables native and retains V18/mappings, never deletes users or identity history. AC-092 clarifies controlled staging testing versus separate APK/production acceptance.
 
 **Check:** Test-first missing-migration/config RED: 9 tests, 1 failure / 7 errors / 0 skipped; focused GREEN: all 7 migration and 2 staging-configuration tests pass on isolated PostgreSQL 16 loopback/tmpfs. The first full run exposed a test-only Mockito restubbing error in the new V17 compatibility setup; corrected with doAnswer, keeping the real transaction assertion. Final fresh Java 21 Maven `verify` with JaCoCo 0.8.14 passed **1,358 tests / 100 suites, 0 failures / 0 errors / 0 skipped**; all 15 mandatory PostgreSQL suites pass, including 7 V18 migration and 14 native-flow cases. Node helpers/landing (8 + 3), three Chrome popup scenarios and all 13 report-gate self-tests pass with synthetic data. Native repository/controller/service/page and DTO/result retain full measured Java line coverage; properties 40/42. JAR includes V1–V18, no fixture/manual tooling/staging example/private config. Runtime default, public configuration allowlist, unchanged V1–V17, document links/anchors, acceptance-ID and append-only-history checks pass. Remote CI/CodeQL, real APK/provider and live rollout remain unverified.
+
+### [2026-10-17 00:25 UTC+07:00] — [Fix] Bobi no longer shows the same answer twice
+
+**Done:** After #262 kept the answer a model writes before calling `suggest_screen`, a model that then wrote the same answer again (after the tool returned) had both copies joined, so the chat showed every paragraph twice ("Xóa đơn hàng #225", the matcha latte profit question). A later response that only repeats the kept answer (spacing ignored) is now dropped, both in the stored answer and in the stream; while a response still reads like the start of the kept answer, the stream holds it back until it differs, so nothing is sent and taken back.
+
+**Changed files:** `backend/ai/src/agent/service.py`, `backend/ai/tests/unit_tests/test_screen_buttons.py` — modified; this entry.
+
+**Check:** New tests failed before the fix (answer and stream held the list twice) and pass after; `uv run ruff check`, `uv run ruff format --check`, `uv run pytest -q tests`: 386 passed, 62 skipped. **Not verified:** against the real model on staging.
 
 ### [2026-10-17] — [Fix] Keep Bobi in Vietnamese when the owner asks for another language
 
