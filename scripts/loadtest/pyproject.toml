@@ -1,0 +1,23 @@
+[project]
+name = "smart-ledger-loadtest"
+version = "0.1.0"
+description = "Locust load, stress, spike and soak tests against SmartLedger Core"
+requires-python = ">=3.11"
+dependencies = [
+    "locust>=2.40,<3",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
