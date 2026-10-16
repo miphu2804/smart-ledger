@@ -6,8 +6,9 @@
 // Money: BIGINT VND
 // Time: TIMESTAMPTZ, UTC internally; Core JSON displays +07:00
 // Core schema: Flyway V1-V15 (business tables, idempotency, shared OWNER/ADMIN audit_logs, cost snapshot, media outbox and upload leases).
-// Core audit alignment: staging b1de421c461d, 2026-10-06; AI sections unchanged.
-// AI schema: supabase/migrations AI baseline (chat_conversations, chat_messages, pgvector, ai_read views).
+// Core audit alignment: staging b1de421c461d, 2026-10-06; AI sections re-checked at staging f1a4818, 2026-10-16.
+// AI schema: supabase/migrations AI baseline (chat_conversations, chat_messages, vector extension, ai_read views, ai_sql_reader role),
+// ledger views (v_debts, v_payments, v_expenses) and agent memory (agent_memories, agent_memory_settings; ADR-0002, off by default).
 // V15 implements OWNER notifications/thresholds on feat/app-notifications; ai_requests remains planned.
 // Report periods use Asia/Ho_Chi_Minh; this logical ERD does not imply runtime completion.
 // Quantity: NUMERIC(15,3)
@@ -294,7 +295,7 @@ Table sale_drafts {
   initial_payment_method PaymentMethod
 
   source_type DraftSourceType [not null, default: 'MANUAL']
-  source_ai_request_id bigint
+  source_ai_request_id bigint [note: 'Column and index exist in Flyway V4; no foreign key until ai_requests exists']
 
   status DraftStatus [not null, default: 'DRAFT']
 
@@ -497,7 +498,7 @@ Table expenses {
   expense_at timestamptz [not null]
 
   // AI origin
-  source_ai_request_id bigint
+  source_ai_request_id bigint [note: 'Column and index exist in Flyway V6; no foreign key until ai_requests exists']
 
   status ExpenseStatus [not null, default: 'ACTIVE']
   archived_at timestamptz
@@ -518,6 +519,7 @@ Table expenses {
 // AI TRACE
 // =====================================================
 
+// Planned (target design): no migration creates ai_requests yet. Runtime traces go to Logfire.
 Table ai_requests {
   id bigint [pk, increment]
   shop_id bigint [not null]
@@ -589,7 +591,7 @@ Table chat_messages {
   content text [not null]
 
   // Link to AI processing when the message comes from AI
-  ai_request_id bigint
+  ai_request_id bigint [note: 'Column and index exist in the AI baseline; no foreign key until ai_requests exists.']
 
   created_at timestamptz [not null, default: `now()`]
 
@@ -598,6 +600,57 @@ Table chat_messages {
     ai_request_id
   }
 }
+
+// Agent long-term memory (ADR-0002): migrations 20261014000000_agent_memories.sql and
+// 20261015000000_agent_memory_visibility.sql. Written only when AGENT_MEMORY_ENABLED is on (default off,
+// awaiting PO approval). Row-level security is on with no policy, so Supabase API roles see no rows.
+Table agent_memories {
+  id bigint [pk, increment]
+
+  shop_id bigint [not null]
+  user_id bigint [not null]
+  source_conversation_id bigint [not null, note: 'ON DELETE CASCADE: deleting a conversation deletes the memories it produced']
+
+  memory_type varchar(16) [not null, note: 'preference | semantic | procedural | episodic']
+  content text [not null]
+  embedding "vector(384)" [not null, note: 'pgvector; HNSW index with vector_cosine_ops']
+  importance "double precision" [not null, default: 0.5, note: 'CHECK 0..1']
+  metadata jsonb [not null, default: '{}', note: 'Summary rows hold {"summarized_from": [replaced ids]}; the replaced rows are deleted']
+  expires_at timestamptz
+
+  last_used_at timestamptz
+  use_count integer [not null, default: 0]
+  superseded_by bigint [note: 'Newer memory that corrects this one; ON DELETE SET NULL']
+
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (shop_id, user_id)
+    source_conversation_id
+    superseded_by
+    embedding [note: 'USING hnsw (embedding vector_cosine_ops)']
+  }
+}
+
+Table agent_memory_settings {
+  shop_id bigint [not null]
+  user_id bigint [not null]
+
+  memory_enabled boolean [not null, default: true, note: 'No row means on; off stops recall and writes, deletes nothing']
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (shop_id, user_id) [pk]
+  }
+}
+
+// AI read layer (views, not tables): schema ai_read holds v_shop_profile, v_categories,
+// v_products, v_sales and v_sale_items (baseline), and v_debts, v_payments and v_expenses
+// (20261016000000_ai_read_ledger_views.sql; debts and payments are scoped through their sale,
+// v_expenses keeps ACTIVE rows only). Each filters on smartledger.shop_id and exposes no shop_id.
+// Role ai_sql_reader (NOLOGIN) has SELECT on those views only. The login behind AI_SQL_READER_URL
+// is created outside the migration. The vector extension is enabled; agent_memories is the only
+// table with an embedding column.
 
 
 // =====================================================
@@ -782,7 +835,7 @@ Ref: users.id < customers.archived_by_user_id
 Ref: shops.id < sale_drafts.shop_id
 Ref: users.id < sale_drafts.created_by_user_id
 Ref: customers.id < sale_drafts.customer_id
-Ref: ai_requests.id < sale_drafts.source_ai_request_id
+// Planned, add when ai_requests exists: Ref: ai_requests.id < sale_drafts.source_ai_request_id
 
 Ref: sale_drafts.confirmed_sale_id - sales.id
 
@@ -819,7 +872,7 @@ Ref: users.id < sale_refunds.refunded_by_user_id
 Ref: shops.id < expenses.shop_id
 Ref: users.id < expenses.created_by_user_id
 Ref: users.id < expenses.archived_by_user_id
-Ref: ai_requests.id < expenses.source_ai_request_id
+// Planned, add when ai_requests exists: Ref: ai_requests.id < expenses.source_ai_request_id
 
 
 // ---------- AI ----------
@@ -834,7 +887,14 @@ Ref: users.id < chat_conversations.user_id
 Ref: shops.id < chat_conversations.shop_id
 
 Ref: chat_conversations.id < chat_messages.conversation_id
-Ref: ai_requests.id < chat_messages.ai_request_id
+// Planned, add when ai_requests exists: Ref: ai_requests.id < chat_messages.ai_request_id
+
+Ref: shops.id < agent_memories.shop_id [delete: restrict]
+Ref: users.id < agent_memories.user_id [delete: restrict]
+Ref: chat_conversations.id < agent_memories.source_conversation_id [delete: cascade]
+Ref: agent_memories.id < agent_memories.superseded_by [delete: set null]
+Ref: shops.id < agent_memory_settings.shop_id [delete: restrict]
+Ref: users.id < agent_memory_settings.user_id [delete: restrict]
 
 
 // ---------- NOTIFICATION ----------
@@ -891,6 +951,8 @@ TableGroup ai_and_chat {
   ai_requests
   chat_conversations
   chat_messages
+  agent_memories
+  agent_memory_settings
 }
 
 TableGroup notification {
