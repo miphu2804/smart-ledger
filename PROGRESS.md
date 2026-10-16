@@ -17,6 +17,7 @@
 **Flow explained:** 100 exchanges at the 2000-character input cap plus answers can pass 100k tokens of Vietnamese; 30 leaves room for the system prompt and tool results.
 
 **Check:** AI unit tests 331 passed, ruff clean. **Not verified:** live replies to greetings and off-topic questions; whether a deployed env overrides `AGENT_HISTORY_TURNS`.
+
 ### [2026-10-16 14:30 UTC+07:00] — [Feature] Bobi guides the owner around the app and links replies to screens
 
 **Done:** The agent prompt now describes the app's tabs, screens and buttons, so Bobi can say how to sell, record a debt payment, add an expense or open a report. A new `suggest_screen` tool lets Bobi add up to two buttons under a reply (e.g. "Mở Công nợ" after an answer about open debts); the mobile chat renders them and opens the screen with `router.navigate`.
@@ -46,6 +47,18 @@
 **Flow explained:** `AgentService` still joins the static shop prompt, the query prompt, the restock prompt and the memory prompt in that order, then the current time, so the cacheable prefix layout is unchanged.
 
 **Check:** `uv run pytest tests/unit_tests` 319 passed; ruff clean; all 14 example queries and every function named in rule 7 pass `SqlGuard.validate_and_wrap`. **Not verified:** the new examples against staging data, and live replies from the model.
+
+### [2026-10-16 03:21 UTC+07:00] — [Fix] Guide button on the Quản lý tab; report cost warning no longer counts voided orders twice
+
+**Done:** The button that replays the welcome guide sat at the bottom of Settings, two taps deep. It is now a row "Xem lại hướng dẫn" in the "Tài khoản & ứng dụng" group of the Quản lý tab, between Cài đặt and Đăng xuất; it still goes to Tổng quan and opens the guide there. Settings no longer has the button, and the guide's own tip now points to the Quản lý tab.
+
+Testing #256 on a real phone against staging Core showed the report's missing-cost card saying 42.859.626đ of revenue lacked a cost while the day's revenue was 217.000đ. Core's `/reports/profit-estimate` counts lines without a cost both when sold and when voided (`ReportAggregationRepository.profitEstimate`), so a sale made and voided in the same period counts twice (217.000 + 2 × 21.321.313). The card now gives the item count and revenue only when the period has no voided order; otherwise it says the cost and profit above are incomplete. Core is unchanged.
+
+The report criterion added by #256 reused the number `AC-076`, which the Agent ledger criterion already had; it is now `AC-078`.
+
+**Changed files:** `frontend/mobile/app/(tabs)/more.tsx`, `frontend/mobile/app/settings.tsx`, `frontend/mobile/src/components/AssistantIntroModal.tsx`, `frontend/mobile/src/store/AppStore.tsx`, `frontend/mobile/app/analytics.tsx`, `docs/product/product-requirements.md` (`FR-025`, `AC-018`, `AC-078`) — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors.
 ### [2026-10-16 03:00 UTC+07:00] — [CI] Deploy the landing only when it changed
 
 **Done:** `deploy-landing` now runs on a push only when the push changes `frontend/web/` or `.github/workflows/ci.yml`; a re-run always deploys. Every push to `staging` and `main` used to spend two Vercel deployments (web and landing) even when only the backend changed, and the production deploy of release #249 hit the Hobby limit of 100 a day (`api-deployments-free-per-day`).

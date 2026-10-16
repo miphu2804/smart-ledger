@@ -3,7 +3,6 @@ import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, Card, Header, Row, Screen, T, Toggle } from '../src/components/ui';
-import { useApp } from '../src/store/AppStore';
 import { colors } from '../src/theme';
 
 function SettingRow({
@@ -44,12 +43,6 @@ export default function Settings() {
   const [receipt, setReceipt] = useState(true);
   const [lowStock, setLowStock] = useState(true);
   const [backup, setBackup] = useState(false);
-  const app = useApp();
-  // Xem lại phần giới thiệu như lần đầu vào app: về Tổng quan rồi hiện ở đó (Tổng quan mở phần giới thiệu khi chưa đóng)
-  const replayGuide = () => {
-    router.navigate('/(tabs)');
-    app.showGuide();
-  };
 
   return (
     <Screen>
@@ -74,7 +67,6 @@ export default function Settings() {
       </Card>
 
       <Button title="Kết nối máy in" icon="printer" variant="soft" onPress={() => router.push('/printer')} style={{ marginTop: 16 }} />
-      <Button title="Xem lại hướng dẫn" icon="help-circle" variant="soft" onPress={replayGuide} style={{ marginTop: 10 }} />
     </Screen>
   );
 }

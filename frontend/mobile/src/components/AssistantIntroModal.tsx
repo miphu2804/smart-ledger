@@ -108,7 +108,7 @@ const steps: readonly {
     tips: [
       { title: 'Công nợ là tiền khách nợ', body: 'Bấm từng khoản để thu tiền hoặc nhắn tin nhắc. App chưa theo dõi tiền nợ nhà cung cấp.' },
       { title: 'Hàng về thì nhập hàng', body: 'Trong Hàng hoá, bấm Nhập hàng ở món đó để cộng tồn kho.' },
-      { title: 'Xem lại hướng dẫn', body: 'Vào Cài đặt khi cần mở lại phần này.' },
+      { title: 'Xem lại hướng dẫn', body: 'Bấm mục này ngay trong tab Quản lý khi cần mở lại phần này.' },
     ],
   },
 ];
