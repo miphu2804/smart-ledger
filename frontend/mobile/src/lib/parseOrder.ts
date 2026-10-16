@@ -84,11 +84,6 @@ function fold(s: string): string {
     .toLowerCase()
     // Chữ cái Latin kể cả chữ có dấu tiếng Việt (à…ỹ); dựng dạng NFC trước để dấu không bị tách khỏi chữ
     .normalize('NFC')
-    // Common Vietnamese ASR substitutions for catalog terms. Keep these
-    // narrow and phrase-level; broad phonetic replacement can change a real
-    // product name into a different SKU.
-    .replace(/\bthương\s+vong\b/gu, 'việt quất')
-    .replace(/\bthuong\s+vong\b/gu, 'viet quat')
     .replace(/[a-zà-ỹ]+/g, markHomograph)
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
