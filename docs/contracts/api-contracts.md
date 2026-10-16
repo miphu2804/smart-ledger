@@ -32,7 +32,7 @@
 
 ## Quy ước request
 
-- Core dùng `Authorization: Bearer <Firebase ID token>`, không cấp access/refresh token riêng.
+- API nghiệp vụ Core dùng `Authorization: Bearer <Firebase ID token>`, không cấp access/refresh token riêng. Riêng authorize/callback/exchange của [Zalo](#zalo-core-015) là bước tiền đăng nhập công khai; custom token trả bởi exchange chỉ dùng đăng nhập Firebase, không là Bearer của Core.
 - Auth/me và các API shop dùng ID trong path, không cần `X-Shop-Id`. Category/Product/Customer/Draft/Sale/Payment/Debt/Expense/Report bắt buộc `X-Shop-Id` của shop `ACTIVE` thuộc OWNER đang hoạt động. ADMIN không dùng API ghi sổ.
 - Quản trị: `PATCH /api/v1/shops/{shopId}/status` và các GET `/api/v1/admin/*` chỉ ADMIN đang hoạt động; dashboard dùng ID/filter riêng, không yêu cầu `X-Shop-Id` và không mở quyền API OWNER.
 - JSON Core dùng camelCase; ID là số `BIGINT`, tiền là số nguyên VND; quantity dùng `numeric(15,3)`. API AI và các route `/api/v1/agent/*` Core chuyển tiếp giữ snake_case.
@@ -84,7 +84,7 @@ Param sai kiểu/enum hoặc timestamp sai định dạng/thiếu offset trả `
 
 ## 0. Hợp đồng lỗi và chống ghi trùng
 
-Core trả `{ code, message, details?: [{ field, issue }], traceId }`; bỏ details khi rỗng. Thiếu/sai token trả `401 unauthorized`; chưa có profile Core trả `404 auth_profile_not_found` (mở session trước); shop khác chủ trả `403 shop_access_denied`; shop INACTIVE trả `403 shop_inactive` kèm lý do. Thiếu header bắt buộc trả `400 missing_required_header`; validation body và query/path param sai kiểu (ví dụ enum lạ, thời điểm không đúng ISO 8601) trả `400 validation_failed` với `details[].field` là tên param. Unique barcode tranh chấp trả `409 product_barcode_conflict`; hai request mở phiên lần đầu cùng lúc cho một tài khoản Firebase trả `409 auth_session_conflict` cho request thua, FE gọi lại `POST /auth/session`; lỗi DB chưa nhận diện trả `500 internal_error`, không lộ chi tiết nội bộ. Deadlock hoặc không lấy được khóa DB trả `503 resource_busy`: FE gửi lại đúng request, giữ nguyên `Idempotency-Key` nếu có.
+Core trả `{ code, message, details?: [{ field, issue }], traceId }`; bỏ details khi rỗng. Thiếu/sai token trả `401 unauthorized`; chưa có profile Core trả `404 auth_profile_not_found` (mở session trước); shop khác chủ trả `403 shop_access_denied`; shop INACTIVE trả `403 shop_inactive` kèm lý do. Thiếu header bắt buộc trả `400 missing_required_header`; Bean Validation body và query/path param sai kiểu (ví dụ enum lạ, thời điểm không đúng ISO 8601) trả `400 validation_failed` với `details[].field` là tên param. JSON không đọc được hoặc field thừa bị từ chối khi deserialize trả `400 invalid_request`; không gộp với Bean Validation. Unique barcode tranh chấp trả `409 product_barcode_conflict`; hai request mở phiên lần đầu cùng lúc cho một tài khoản Firebase trả `409 auth_session_conflict` cho request thua, FE gọi lại `POST /auth/session`; lỗi DB chưa nhận diện trả `500 internal_error`, không lộ chi tiết nội bộ. Deadlock hoặc không lấy được khóa DB trả `503 resource_busy`: FE gửi lại đúng request, giữ nguyên `Idempotency-Key` nếu có.
 
 Riêng lỗi trùng barcode, ApiErrorDetail có thêm hai field **tùy chọn** `productId` và `status`; service trả Product ACTIVE cùng tiệm đang giữ mã. Lỗi thông thường không có hai field này; 409 từ race DB có thể bỏ details. Format và ví dụ tại [Barcode CORE-012](#barcode-core-012).
 
@@ -114,9 +114,44 @@ V7 tạo bảng key. Confirm draft chống trùng bằng draftId, không yêu c�
 
 ADMIN đặt INACTIVE phải có inactiveReason không rỗng; đặt ACTIVE xóa lý do đó. Endpoint status không nhận ARCHIVED và không mở lại shop đã archive. OWNER gọi status trả `403 admin_access_required`. Đổi trạng thái ghi một audit `SHOP_INACTIVATED`/`SHOP_REACTIVATED` với actor ADMIN, beforeStatus/afterStatus và lý do; event này phục vụ cả lịch sử tiệm và projection ADMIN, không ghi trùng. Không ghi được audit trả `503 admin_audit_unavailable`, rollback thay đổi trạng thái/lý do (xem [Dashboard quản trị](#7-dashboard-quản-trị--đã-có-trong-core)).
 
-Core ánh xạ `auth_identities.provider_subject` bằng Firebase UID. Provider linking diễn ra ở Firebase; kiểm thử UI/provider thật không được suy ra từ việc Core xác thực token.
+Core ánh xạ `auth_identities.provider_subject` bằng Firebase UID. Linking các provider Firebase diễn ra ở Firebase; riêng Zalo dùng mapping ngoài và proof sở hữu hai tài khoản như mục dưới. Không suy ra kiểm thử UI/provider thật chỉ từ việc Core xác thực token.
 
 Phủ `FR-010`, `FR-011`, `NFR-003`; dashboard `FR-022` vẫn cần tích hợp.
+
+### Zalo CORE-015
+
+**Trạng thái:** Core trên `feat/zalo-login`, tiếp nối staging `120779d`; V17 được chuẩn bị, mặc định `ZALO_ENABLED=false`. Người dùng xác nhận LOGIN qua bộ thử local ngày 2026-10-16; chưa nghiệm thu FE, LINK với provider thật, Railway hoặc native. Chủ boundary: Core cung cấp, FE/mobile tiêu thụ; chủ sản phẩm duyệt hành vi. Contract tham số/DTO được phản ánh ở OpenAPI `/v3/api-docs` của runtime đã cấu hình; test OpenAPI/HTTP phải kiểm chứng response thực, không suy ra nghiệm thu consumer.
+
+| Method | Đường | Request | Response / quyền |
+|---|---|---|---|
+| `GET` | `/api/v1/auth/zalo/authorize` | Query bắt buộc `purpose=LOGIN\|LINK`, `clientOrigin`, `requestId`, `clientChallenge` | Công khai; `302 Location` tới Zalo, cookie ràng buộc lượt thử; không trả token |
+| `GET` | `/api/v1/auth/zalo/callback` | Query `state`, một trong `code` hoặc `error`, `code_challenge?`; cookie đúng lượt | Công khai cho provider; `200 text/html` gửi message xuống opener, không redirect secret |
+| `POST` | `/api/v1/auth/zalo/exchange` | Header `Origin` đúng một giá trị; `{ proof, clientVerifier }` | Công khai; chỉ LOGIN, `200 { firebaseCustomToken, displayName }` |
+| `POST` | `/api/v1/auth/zalo/link` | Cùng body/Origin; Bearer Firebase ID token gần đây | Chỉ OWNER ACTIVE; chỉ LINK, `204`, không có token response |
+
+Không dùng `X-Shop-Id`, `Idempotency-Key` hoặc target UID client truyền vào bốn đường này. Query chỉ nhận các tên trên và một giá trị/tên; body không nhận field thừa. ID/subject provider là chuỗi nội bộ, không phải ID số của Core.
+
+- `clientOrigin`: HTTPS origin chính xác trong allowlist, không slash cuối/path/query/wildcard; không là callback URL. FE sinh `requestId` gồm 16–100 ký tự `[A-Za-z0-9_-]`, giữ `clientVerifier` ngẫu nhiên 32 byte base64url (43 ký tự), chỉ gửi SHA-256 base64url của nó làm `clientChallenge` (43 ký tự). Đây là ràng buộc client riêng; provider PKCE được Core giữ kín.
+- Cookie per-attempt `__Host-sl_zalo_<opaque>`: Secure/HttpOnly/SameSite=Lax/Path=/, không Domain, hết hạn theo session (mặc định 300 giây). Callback phải quay lại đúng Core hostname mở authorize; không chuyển callback local sang Railway. Hủy consent qua callback có `error`; callback claim đã hoàn tất mới trả HTML lỗi cố định. Sai tham số/state/cookie trước claim trả JSON 4xx theo quy ước chung.
+- Popup message luôn có `{ type: "smartledger:zalo", requestId, purpose, proof, error }`; `proof` là chuỗi 43 ký tự khi thành công, ngược lại null; `error` là mã cố định hoặc null. FE kiểm đồng thời `event.origin` bằng Core origin, `event.source` bằng popup đã mở, requestId và purpose. Không dùng `*`; không giữ token/proof trong URL, log hoặc storage. Không có opener thì đóng trang và bắt đầu lượt mới; `noopener`/COOP không tương thích có thể làm gãy luồng.
+- Proof mặc định tối đa 90 giây và không vượt expiry của session; dùng một lần, đúng purpose/origin/challenge. Body JSON tối đa 8 KiB; `proof` và `clientVerifier` đều bắt buộc/không null, đúng 43 ký tự base64url. Replay/lost response bắt đầu lượt mới; không tự gửi lại callback code. Response auth có `Cache-Control: no-store`; callback có nonce CSP và no-referrer.
+- LOGIN: client dùng `firebaseCustomToken` với Firebase custom sign-in, sau đó dùng **Firebase ID token** để gọi `/api/v1/auth/session` (truyền tên hint khi tạo lần đầu). `displayName` là chuỗi tên đã xác minh, không phải lệnh đổi tên hồ sơ. Hint từ Zalo tối đa 255 ký tự; request session hiện giới hạn 150 ký tự, nên client cần kiểm tra và cho người dùng chỉnh tên trước khi gửi, không tự ghi đè tên hồ sơ đã có. LOGIN không tự tạo Shop; `needsOnboarding` tiếp tục quyết định bước tạo tiệm.
+- LINK: user phải reauthenticate tài khoản hiện có; Core xác minh lại ID token có kiểm tra thu hồi và `auth_time` trong 300 giây, so UID với principal và khóa/check local OWNER ACTIVE. Cùng Zalo/app chỉ có một UID chuẩn; khác UID trả conflict, không move/merge/delete. Muốn giữ tài khoản cũ thì LINK trước lần LOGIN Zalo riêng; không tự khớp theo tên/email/ảnh. Không có unlink/merge/migration account API trong đợt này.
+- Role/status/custom avatar và dữ liệu tiệm được giữ nguyên; mapped DISABLED/ADMIN không lấy custom token qua luồng OWNER này. Không nhận Zalo access token hoặc Firebase custom token làm Bearer nghiệp vụ. Core không đồng bộ ảnh Zalo hoặc lưu access/refresh token Zalo.
+- Public abuse guard hash path/socket IP có salt riêng mỗi instance vào 4096 bucket cố định, tối đa 30 request/cửa sổ 60 giây mỗi bucket; key trùng hash chia sẻ quota và có thể bị 429 sớm hơn. Không có ngưỡng chặn toàn bộ key mới do đầy map hoặc xóa bucket để reset quota. `Retry-After: 60` khi 429. Đây là guard hữu hạn theo instance, không bảo đảm chống DDoS; không tin trực tiếp X-Forwarded-For. Proxy/log redaction và giới hạn dùng chung giữa instance là điều kiện rollout, không phải SLA từ test local.
+
+| HTTP | Code / xử lý client |
+|---|---|
+| `400` | `invalid_zalo_request`, `zalo_session_invalid`, `zalo_session_expired`; sửa request hoặc bắt đầu lượt mới. Bean Validation và JSON/deserialization dùng các mã riêng theo [mục 0](#0-hợp-đồng-lỗi-và-chống-ghi-trùng). |
+| Popup | `zalo_consent_denied` hoặc lỗi cố định sau claim; không coi `200 HTML` là đăng nhập thành công. |
+| `401` | `zalo_reauthentication_required`; xác thực lại trước LINK. Thiếu/sai Bearer vẫn dùng handler `unauthorized` hiện có. |
+| `403` | `account_disabled`, `zalo_account_not_allowed`; không tự mở lại/nâng quyền tài khoản. CORS origin không được phép bị Spring từ chối trước controller. |
+| `404` | `auth_profile_not_found` khi LINK chưa có profile Core. |
+| `409` | `zalo_identity_conflict`; hướng dẫn giữ tài khoản đang sở hữu, không tự gộp. |
+| `413` / `429` | `invalid_zalo_request` / `zalo_rate_limited`; giảm body hoặc đợi rồi bắt đầu lại. |
+| `503` | `zalo_unavailable` (tắt tính năng/config/schema/storage), `zalo_provider_unavailable` (provider/Firebase); không hiện raw body provider. |
+
+V17 và thứ tự rollout/recovery trong [ERD description](../architecture/erd-description.md#zalo-core-015-v17); cấu hình ở [Core README](../../backend/core/README.md#zalo-authentication-core-015-local-backend-implementation). Không đưa `ZALO_MANUAL_*`, tunnel, trang thử hoặc đường dẫn JSON trên máy dev vào Railway. Phủ `BR-022` → `FR-010`/`NFR-003` → `AC-081`–`AC-086`; nghiệm thu consumer/staging là phần riêng.
 
 ## 2. Category, Product và Customer
 
