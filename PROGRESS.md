@@ -1,3 +1,11 @@
+### [2026-10-16 17:58 UTC+07:00] — [Fix] An account without a shop no longer lands in the sample shop
+
+**Done:** A tester creating an account pressed Android back on "Tiệm của bạn tên gì?" and landed in the tabs showing "Tiệm tạp hoá cô Thỏ". The app state starts with the sample shop until Core returns a session with a shop, and nothing stopped the tabs from opening before that, so going back from shop setup (or signing out from a screen stacked on the tabs) exposed the sample data as if it were a real account. The tabs layout now opens only for a signed-in account with a shop: before the session is restored it shows a blank screen, signed out it redirects to the sign-in screen, and without a shop to shop setup. On shop setup, Android back and a new "Dùng tài khoản khác" link ask "Dừng tạo tiệm?"; confirming signs out and returns to sign-in. New criterion `AC-079`.
+
+**Changed files:** `frontend/mobile/app/(tabs)/_layout.tsx`, `frontend/mobile/app/(auth)/setup.tsx`, `docs/product/product-requirements.md` (`AC-079`) — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors; mock web build in headless Chrome (5/5): signed out, opening `/invoices` lands on sign-in with no sample shop; "Vào app" opens Tổng quan; signing out from Quản lý returns to sign-in; on `/setup`, "Dùng tài khoản khác" asks "Dừng tạo tiệm?" and confirming returns to sign-in. **Not verified:** Android back on a real phone during a real sign-up.
+
 ### [2026-10-16 17:55 UTC+07:00] — [Mobile/AI] Tool step keeps its shimmer, screen button in brand purple, numbered lists
 
 **Done:** A tool step in `ThoughtLine` keeps its shimmer after the tool ends, because the model is still writing the reply; the running dot is gone and the tick sits after the label, so the label starts where the waiting phrase does. `suggest_screen` gets its own step label instead of the generic one. The screen-button card under a reply drops the "Mở nhanh" label and shows brand-purple buttons with a purple shadow. The shop agent prompt asks for numbered lists only, and the mock replies follow it.

@@ -1,3 +1,4 @@
+import { Redirect } from 'expo-router';
 import { Tabs } from 'expo-router/js-tabs';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
@@ -8,6 +9,7 @@ import { T } from '../../src/components/ui';
 import { ZenRing } from '../../src/components/ZenRing';
 import { triggerFeedback } from '../../src/lib/feedback';
 import { useReducedMotion } from '../../src/motion';
+import { useApp } from '../../src/store/AppStore';
 import { colors } from '../../src/theme';
 
 type TabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>['tabBar']>>[0];
@@ -209,6 +211,13 @@ function TabBar({ state, navigation }: TabBarProps) {
 }
 
 export default function TabsLayout() {
+  const { authReady, loggedIn, onboarded } = useApp();
+  // Các tab chỉ mở khi đã có tài khoản và tiệm. Trước khi có phiên, state còn là tiệm mẫu ("Tiệm tạp hoá cô Thỏ"): bấm back ở
+  // bước tạo tiệm hay đăng xuất từ một màn mở chồng lên tab từng để lộ tiệm mẫu này như một tài khoản thật.
+  if (!authReady) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+  if (!loggedIn) return <Redirect href="/(auth)/welcome" />;
+  if (!onboarded) return <Redirect href="/(auth)/setup" />;
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <Tabs
