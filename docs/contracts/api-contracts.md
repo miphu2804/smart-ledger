@@ -155,7 +155,7 @@ V17 và thứ tự rollout/recovery trong [ERD description](../architecture/erd-
 
 ### Zalo Android CORE-016
 
-**Trạng thái:** chuẩn bị Core trên `feat/zalo-android` cho #276; schema/API được duyệt nhưng **chưa có migration, native mặc định tắt**, không phải nghiệm thu APK hoặc rollout. Chỉ dùng trình duyệt ngoài/Custom Tabs + HTTPS App Link; không phải Zalo Android SDK/WebView. Chủ cung cấp: Core; FE/APK tiêu thụ. Truy vết `BR-009`/`BR-022` → `FR-010`/`NFR-003` → `AC-087`–`AC-092`. Contract WEB CORE-015 giữ nguyên.
+**Trạng thái:** Core/V18 trên `feat/zalo-android` cho #276; đã duyệt migration và chuẩn bị cấu hình **bật staging sau merge**, chưa chạy DB dùng chung/bật Railway hoặc nghiệm thu APK. Runtime vẫn mặc định tắt, không tự bật production. Chỉ dùng trình duyệt ngoài/Custom Tabs + HTTPS App Link; không phải Zalo Android SDK/WebView. Chủ cung cấp: Core; FE/APK tiêu thụ. Truy vết `BR-009`/`BR-022` → `FR-010`/`NFR-003` → `AC-087`–`AC-092`. Contract WEB CORE-015 giữ nguyên.
 
 | Method | Đường | Request | Response / quyền |
 |---|---|---|---|
@@ -181,7 +181,7 @@ V17 và thứ tự rollout/recovery trong [ERD description](../architecture/erd-
 | `413` / `429` | `invalid_zalo_request` / `zalo_rate_limited`; giảm body hoặc đợi theo Retry-After. |
 | `503` | `zalo_unavailable` khi off/config/schema/storage thiếu; `zalo_provider_unavailable` khi provider/Firebase lỗi; không lộ raw upstream response. |
 
-Schema tương lai chỉ được kiểm trên fixture PostgreSQL tạm, không chạy tự động: [ERD pending schema](../architecture/erd-description.md#zalo-android-core-016-pending-schema). Không bật native từ nhánh này; cần migration duyệt riêng, tích hợp FE và nghiệm thu `AC-092`. Chi tiết triển khai/kiểm thử tại [technical design](../architecture/technical-design.md#zalo-android-core-016).
+Schema do migration thật `V18__add_zalo_android_handoff.sql` quản lý, fixture native cũ đã bỏ: [ERD V18](../architecture/erd-description.md#zalo-android-core-016-v18). Không migrate DB dùng chung từ nhánh feature. [Cấu hình staging đã duyệt](../../backend/core/config/zalo-native-staging.env.example) đặt native true nhưng không được runtime tự tải; chỉ sao chép vào Railway staging sau merge/V18 theo [runbook](../../backend/core/docs/zalo-android-preparation.md#staging-activation-after-merge). Bật staging để nghiệm thu `AC-092` không đồng nghĩa nghiệm thu FE/APK hoặc cho phép bật production. Chi tiết triển khai/kiểm thử tại [technical design](../architecture/technical-design.md#zalo-android-core-016).
 
 ## 2. Category, Product và Customer
 

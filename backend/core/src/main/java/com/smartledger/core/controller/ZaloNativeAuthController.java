@@ -37,7 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @SecurityRequirements
-@Tag(name = "Zalo Android authentication", description = "External browser + verified HTTPS App Links; native disabled by default, schema pending")
+@Tag(name = "Zalo Android authentication", description = "External browser + verified HTTPS App Links; requires V18 and explicit environment enablement")
 public class ZaloNativeAuthController {
     private final ZaloNativeAuthService service;
     private final ZaloNativePage page;

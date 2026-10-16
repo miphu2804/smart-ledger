@@ -5,7 +5,7 @@
 | Trạng thái | Core: hành vi đã chốt dưới đây; AI/dashboard và FE: cần nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; người rà soát kỹ thuật |
-| Cập nhật lần cuối | 2026-10-16 |
+| Cập nhật lần cuối | 2026-10-17 |
 
 ## Tài liệu liên quan
 
@@ -73,7 +73,7 @@ Luồng hỗ trợ: ADMIN đăng nhập dashboard web, tìm OWNER hoặc cơ s�
 | `FR-007` | `BO-003`, `BR-004`, `BR-005`, `BR-011` | Người bán xem gợi ý nhập hàng có giải thích từ dữ liệu đã chốt. | P1 — MVP |
 | `FR-008` | `BR-002`, `OQ-001` | Người bán nói để lên đơn/ghi chi; hệ thống chuyển giọng nói thành text và bản nháp để kiểm tra. Tên nói ra là phần chung của nhiều món trong danh mục (“sting” khi có “Sting vàng”, “Sting đỏ”) thì app hỏi chọn mẫu thay vì đoán hoặc coi là món mới. | P0 — MVP |
 | `FR-009` | `BO-002`, `BR-007`, `BR-018` | Người bán tạo, cập nhật từng trường thông tin và archive mặt hàng. Tạo mới vẫn nhận tồn ban đầu; PATCH không nhận stockQuantity, bật theo dõi tồn false→true khởi tạo 0, true→true giữ tồn hiện tại, tắt theo dõi xóa tồn. Nhập tăng tồn qua FR-030. Category thuộc shop dùng nhóm sản phẩm, không phân loại shop. Archive không xóa snapshot sale; không archive category khi còn product active. | P0 — MVP |
-| `FR-010` | `BR-009`, `BR-022` | OWNER đăng nhập trên mobile bằng email/mật khẩu (đăng ký phải xác minh email qua thư; có đặt lại mật khẩu qua email; đổi mật khẩu ngay trong app bằng mật khẩu hiện tại, không phải đăng xuất), Facebook hoặc Google; không đăng ký/đăng nhập bằng OTP số điện thoại. Backend hỗ trợ thêm Zalo web-popup và liên kết chủ động với tài khoản hiện có qua Firebase. CORE-016 bổ sung chuẩn bị Android qua trình duyệt ngoài và HTTPS App Link, không dùng Zalo Android SDK/WebView. LINK cần xác thực gần đây và kiểm tra thu hồi token; không gộp theo tên/email, không chuyển identity sang UID khác. API nghiệp vụ chỉ dùng Firebase ID token. Không coi Core test là nghiệm thu UI/provider thật; Android native vẫn tắt đến khi có migration và nghiệm thu APK riêng; iOS Zalo ngoài đợt này. ADMIN đăng nhập web, không dùng luồng Zalo OWNER. | P0 — MVP thí điểm; CORE-015 #238 và CORE-016 #276 cần nghiệm thu tích hợp theo kênh; chưa tuyên bố sẵn sàng sản xuất |
+| `FR-010` | `BR-009`, `BR-022` | OWNER đăng nhập trên mobile bằng email/mật khẩu (đăng ký phải xác minh email qua thư; có đặt lại mật khẩu qua email; đổi mật khẩu ngay trong app bằng mật khẩu hiện tại, không phải đăng xuất), Facebook hoặc Google; không đăng ký/đăng nhập bằng OTP số điện thoại. Backend hỗ trợ thêm Zalo web-popup và liên kết chủ động với tài khoản hiện có qua Firebase. CORE-016 bổ sung Android qua trình duyệt ngoài và HTTPS App Link, không dùng Zalo Android SDK/WebView. LINK cần xác thực gần đây và kiểm tra thu hồi token; không gộp theo tên/email, không chuyển identity sang UID khác. API nghiệp vụ chỉ dùng Firebase ID token. Native mặc định tắt; staging chỉ bật sau merged V18 theo cấu hình đã duyệt để nghiệm thu APK. Core test/bật staging không thay nghiệm thu UI/provider thật hoặc phê duyệt production; iOS Zalo ngoài đợt này. ADMIN đăng nhập web, không dùng luồng Zalo OWNER. | P0 — MVP thí điểm; CORE-015 #238 và CORE-016 #276 cần nghiệm thu tích hợp theo kênh; chưa tuyên bố sẵn sàng sản xuất |
 | `FR-011` | `BR-009`, `BR-015` | OWNER tạo/xem/sửa hồ sơ tiệm (tên, ngành, liên hệ), archive tiệm ACTIVE kèm lý do. ADMIN được tạm ngưng/kích hoạt shop; INACTIVE phải có lý do. OWNER vẫn xem được hồ sơ và lý do INACTIVE nhưng không dùng API nghiệp vụ hay archive; shop ARCHIVED không còn hiển thị cho OWNER. | P0 — MVP |
 | `FR-012` | `BR-009` | Đã loại khỏi MVP: không có vai trò nhân viên hoặc quản lý thành viên trong mô hình hai vai trò. Giữ mã để không tái sử dụng ID. | Loại khỏi MVP |
 | `FR-013` | `BO-001`, `BR-001`, `BR-007` | Người bán chọn hàng từ danh mục, chỉnh số lượng, thêm món nhanh để lập giỏ. | P0 — MVP |
@@ -247,7 +247,7 @@ Giữ `AC-079`/`AC-080` đã có trên staging cho chặn truy cập khi chưa t
 
 ### Nghiệm thu Zalo Android CORE-016
 
-Phạm vi chuẩn bị backend trên `feat/zalo-android` (#276), không thay thế tiêu chí WEB của CORE-015. `AC-087`–`AC-091` có kiểm thử Core với provider/Firebase giả lập và PostgreSQL tạm; `AC-092` là điều kiện tích hợp/rollout còn chờ, không được suy ra từ các test đó.
+Phạm vi backend/V18 trên `feat/zalo-android` (#276), không thay thế tiêu chí WEB của CORE-015. Đã duyệt migration và chuẩn bị cấu hình bật staging sau merge, chưa chạy DB dùng chung hoặc bật Railway. `AC-087`–`AC-091` có kiểm thử Core với provider/Firebase giả lập và PostgreSQL tạm; `AC-092` là điều kiện tích hợp/rollout còn chờ, không được suy ra từ các test đó.
 
 | ID | Tiêu chí | Truy vết |
 |---|---|---|
@@ -256,7 +256,7 @@ Phạm vi chuẩn bị backend trên `feat/zalo-android` (#276), không thay th�
 | `AC-089` | Native LOGIN không cần Origin, consume đúng reference/verifier rồi trả Firebase custom token; APK đổi thành Firebase ID token trước gọi `/auth/session`. WEB và ANDROID dùng chung canonical UID, không tự tạo tiệm hoặc đổi role/status/avatar/hồ sơ. Lỗi Firebase sau consume cần lượt mới, vẫn giữ UID đã reserve; DISABLED/ADMIN không được mở lại/nâng quyền. | `FR-010`, `BR-022`, `NFR-003` |
 | `AC-090` | Native LINK cần reference đúng purpose và Firebase Bearer ID token đã kiểm tra thu hồi, auth_time trong 300 giây, UID trùng principal và local OWNER ACTIVE. Không lấy UID từ body; identity thuộc người khác trả 409, mapping đã thuộc chính UID đó thành công với lượt mới. LOGIN không dùng được handoff LINK và ngược lại. | `FR-010`, `BR-022`, `NFR-003` |
 | `AC-091` | Native mặc định tắt; V17 vẫn chạy WEB, không tự DDL hoặc backfill. Bật native khi thiếu schema trả 503, không dùng proof WEB thay thế. Association chỉ công bố package/chứng chỉ cấu hình cho môi trường, có thể chuẩn bị khi native tắt. Fallback không xác thực, xóa fragment khỏi history và chỉ hiện link cố định cho payload hợp lệ. Guard hạn chế body/rate không nới web CORS hoặc quyền LINK. | `FR-010`, `NFR-003` |
-| `AC-092` | Trước bật native: migration được duyệt riêng và chạy theo quy trình từ code đã merge; FE kiểm đúng host/path/client/request/purpose, giữ verifier ngoài URL/log và xử lý lượt thử mất/hết hạn. Nghiệm thu APK ký thật: domain association, quay về app cold/warm start, thoát process/hủy, nhiều lượt đồng thời, LOGIN/LINK với Zalo/Firebase thật và user ngoài team. Kiểm tra signing, HTTPS, proxy/throttling, redaction và recovery; không coi chuẩn bị Core là đã hoàn thành các bước này. | `FR-010`, `BR-022`, `NFR-003` |
+| `AC-092` | V18 đã được duyệt; chỉ áp dụng DB dùng chung từ code đã merge theo quy trình migration, có owner/backup/window. Bật staging bằng cấu hình môi trường đã duyệt để kiểm thử, không đổi runtime default hoặc tự bật production. FE kiểm đúng host/path/client/request/purpose, giữ verifier ngoài URL/log và xử lý lượt thử mất/hết hạn. Nghiệm thu APK ký thật: domain association, quay về app cold/warm start, thoát process/hủy, nhiều lượt đồng thời, LOGIN/LINK với Zalo/Firebase thật và user ngoài team. Kiểm tra signing, HTTPS, proxy/throttling, redaction và recovery trước phát hành; không coi chuẩn bị Core/bật staging là đã hoàn thành nghiệm thu hoặc cho phép release production. | `FR-010`, `BR-022`, `NFR-003` |
 
 ## 9. Phạm vi và câu hỏi mở
 
@@ -268,7 +268,7 @@ Phạm vi chuẩn bị backend trên `feat/zalo-android` (#276), không thay th�
 - `OQ-001` đã chốt: STT thật thuộc đích MVP; FE hiện mới giả lập.
 - `FR-017`: phải chốt loại ảnh đầu tiên trong issue trước khi viết parser.
 - `FR-010`/`NFR-003`: CORE-015 #238 bổ sung backend Zalo và `AC-081`–`AC-086`; người dùng xác nhận LOGIN qua bộ thử local, chưa nghiệm thu LINK thật, FE/staging hoặc native. Snapshot UI Zalo “Sắp có” vẫn giữ đến khi FE triển khai. Email verification hiện chỉ ở app, Core chưa kiểm tra `email_verified`; không đổi hành vi này trong CORE-015. Firebase ID token vẫn là Bearer duy nhất cho API nghiệp vụ.
-- CORE-016 #276 thêm chuẩn bị Android Core theo `AC-087`–`AC-092`; schema/API đã duyệt nhưng chưa có migration, native mặc định tắt. Chưa sửa FE/AI hoặc nghiệm thu APK; điều kiện bật và ranh giới WEB/ANDROID theo [contract](../contracts/api-contracts.md#zalo-android-core-016).
+- CORE-016 #276 có Android Core/V18 và cấu hình bật staging sau merge theo `AC-087`–`AC-092`; native vẫn mặc định tắt, chưa chạy migration shared DB/bật Railway hoặc sửa FE/AI/nghiệm thu APK. Điều kiện bật và ranh giới WEB/ANDROID theo [contract](../contracts/api-contracts.md#zalo-android-core-016).
 - MVP chỉ có hai vai trò `OWNER` và `ADMIN`; quản lý nhân viên/thành viên (`FR-012`) đã bị loại khỏi phạm vi.
 - Toàn bộ `FR-INV-*` bị hoãn cho đến khi `OQ-INV-001`–`OQ-INV-005` trong BRD được giải quyết.
 - Máy in và gói dịch vụ ngoài PRD MVP.

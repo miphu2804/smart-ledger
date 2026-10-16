@@ -5,7 +5,7 @@
 | Trạng thái | Core: quy tắc dưới đây đã chốt; AI/dashboard: đích MVP, cần nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ kinh doanh/sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; chủ thuế cho `BR-INV-*` |
-| Cập nhật lần cuối | 2026-10-16 (Zalo Core; không rà soát lại căn cứ pháp lý) |
+| Cập nhật lần cuối | 2026-10-17 (Zalo Android/V18; không rà soát lại căn cứ pháp lý) |
 
 ## Tài liệu liên quan
 
@@ -112,7 +112,7 @@ Hóa đơn điện tử là initiative kế tiếp, không mặc nhiên thuộc 
 ### Zalo Android CORE-016 đã chốt — 2026-10-16
 
 - Theo `BR-009`/`BR-022`, Android dùng trình duyệt ngoài/Custom Tabs rồi quay về APK qua HTTPS App Link đã xác minh. Không tích hợp Zalo Android SDK hoặc WebView trong đợt này; LOGIN và LINK giữ cùng tài khoản chuẩn và quy tắc sở hữu của CORE-015.
-- Đã duyệt schema/API và chuẩn bị Core trên `feat/zalo-android` (#276), nhưng **chưa tạo migration, chưa bật native, chưa nghiệm thu APK/provider thật**. FE/AI không thuộc thay đổi này. Không suy ra đã hoàn thành rollout chỉ từ việc cấu hình package/chứng chỉ/domain trên Zalo Developer. Ranh giới triển khai tại [thiết kế kỹ thuật](../architecture/technical-design.md#zalo-android-core-016).
+- Tiếp nối duyệt schema/API, đã duyệt tạo V18 và chuẩn bị cấu hình bật native **staging sau khi merge** trên `feat/zalo-android` (#276). V18 có trong nhánh, chưa áp dụng DB dùng chung hoặc bật Railway; runtime mặc định vẫn tắt, production cần phê duyệt riêng. Chưa nghiệm thu APK/provider thật; FE/AI không thuộc thay đổi này. Không suy ra đã hoàn thành rollout chỉ từ việc cấu hình package/chứng chỉ/domain trên Zalo Developer. Ranh giới triển khai tại [thiết kế kỹ thuật](../architecture/technical-design.md#zalo-android-core-016).
 
 ### Barcode Core đã chốt — 2026-10-12
 
@@ -213,7 +213,7 @@ Copy UI viện dẫn nghị định trên màn bản ghi bán hàng **không** b
 | `BR-007`, `BR-009`, `BR-017`, `BR-019` | `FR-011`, `FR-031`, `NFR-003`, `NFR-010`, `AC-053`–`AC-054` | Media Core có trên nhánh; FE/staging và migration shared DB cần nghiệm thu |
 | `BR-009` | `FR-010`, `FR-011`, `NFR-003` | tạm thời — MVP đã chấp nhận; không tuyên bố sẵn sàng sản xuất |
 | `BR-009`, `BR-022` | `FR-010`, `NFR-003`, `AC-081`–`AC-086` | CORE-015 #238: backend Zalo web-popup trên feat/zalo-login; LOGIN local do người dùng xác nhận, FE/LINK thật/staging còn nghiệm thu |
-| `BR-009`, `BR-022` | `FR-010`, `NFR-003`, `AC-087`–`AC-092` | CORE-016 #276: chuẩn bị Android Core trên feat/zalo-android; migration, FE/APK và rollout chưa nghiệm thu; native mặc định tắt |
+| `BR-009`, `BR-022` | `FR-010`, `NFR-003`, `AC-087`–`AC-092` | CORE-016 #276: Core/V18 và cấu hình bật staging trên feat/zalo-android; chưa áp dụng shared DB/bật Railway/nghiệm thu FE/APK; runtime mặc định tắt |
 | `BR-013`, `BR-014` | `FR-022`–`FR-024`, `NFR-003`, `NFR-009`, `AC-015`–`AC-017`, `AC-040`–`AC-043` | Core có API hỗ trợ/audit; dashboard web và staging cần nghiệm thu riêng |
 | `BR-010` | `FR-014` | tạm thời — MVP đã chấp nhận |
 | `BR-015` | `FR-011`, `AC-025` | tạm thời — cần kiểm chứng với FE |

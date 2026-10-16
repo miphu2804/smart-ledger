@@ -14,7 +14,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** No DDL. Requires the separately approved future schema; provider I/O is never inside these transactions. */
+/** No runtime DDL. Requires Flyway V18; provider I/O is never inside these transactions. */
 @Repository
 public class ZaloNativeOAuthRepository {
     private static final String COLUMNS = """

@@ -24,15 +24,13 @@ import java.util.concurrent.*;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.util.UriComponentsBuilder;
 
-/** Real committed PostgreSQL transactions, stubbed provider/Firebase. Future columns exist ONLY in a test fixture. */
+/** Real Flyway V18 and committed PostgreSQL transactions, with stubbed provider/Firebase. */
 @EnabledIfEnvironmentVariable(named = "CORE_TEST_POSTGRES_URL", matches = "jdbc:postgresql:.+")
 class ZaloNativeFlowPostgresTest {
     private static final String SCHEMA = "core_zalo_native_test_" + UUID.randomUUID().toString().replace("-", "");
@@ -67,7 +65,6 @@ class ZaloNativeFlowPostgresTest {
         var manager = new DataSourceTransactionManager(source);
         repository = new ZaloNativeOAuthRepository(jdbc, manager);
         identities = new ZaloOAuthRepository(jdbc, manager);
-        installProspectiveFixture();
     }
 
     @BeforeEach
@@ -98,23 +95,45 @@ class ZaloNativeFlowPostgresTest {
     }
 
     @Test
-    void nativeOffAndMissingFutureSchemaFailClosedWhileV17WebKeepsWorking() {
-        dropProspectiveFixture();
+    void nativeOffAndMissingV18FailClosedWhileV17WebKeepsWorking() {
+        String compatibilitySchema = "core_zalo_v17_compat_" + UUID.randomUUID().toString().replace("-", "");
+        jdbc.execute("create schema \"" + compatibilitySchema + "\"");
         try {
+            var source = new DriverManagerDataSource(System.getenv("CORE_TEST_POSTGRES_URL"),
+                    System.getenv("CORE_TEST_POSTGRES_USERNAME"), System.getenv("CORE_TEST_POSTGRES_PASSWORD"));
+            var settings = new Properties(); settings.setProperty("currentSchema", compatibilitySchema); source.setConnectionProperties(settings);
+            Flyway.configure().dataSource(source).schemas(compatibilitySchema).defaultSchema(compatibilitySchema).target("17").load().migrate();
+            var legacyJdbc = new JdbcTemplate(source);
+            var manager = new DataSourceTransactionManager(source);
+            var legacyIdentities = new ZaloOAuthRepository(legacyJdbc, manager);
+            var crypto = new ZaloCrypto(properties);
+            var legacyNative = new ZaloNativeAuthServiceImpl(properties, nativeProperties, crypto,
+                    new ZaloNativeOAuthRepository(legacyJdbc, manager), legacyIdentities, provider, firebase, clock);
+            var legacyWeb = new ZaloAuthServiceImpl(properties, crypto, legacyIdentities, provider, firebase, clock);
+            String verifier = ZaloCrypto.randomToken();
             nativeProperties.setEnabled(false);
-            assertError(() -> start(ZaloPurpose.LOGIN), ErrorCode.ZALO_UNAVAILABLE);
+            assertError(() -> legacyNative.authorize(CLIENT, ZaloPurpose.LOGIN, ZaloCrypto.randomToken(), ZaloCrypto.hash(verifier)), ErrorCode.ZALO_UNAVAILABLE);
             verifyNoInteractions(provider, firebase);
             nativeProperties.setEnabled(true);
-            assertError(() -> start(ZaloPurpose.LOGIN), ErrorCode.ZALO_UNAVAILABLE);
-            assertThat(jdbc.queryForObject("select count(*) from information_schema.columns where table_schema=? and table_name='oauth_login_sessions' and column_name='client_type'", Integer.class, SCHEMA)).isZero();
-            assertThat(jdbc.queryForObject("select max(version::integer) from flyway_schema_history where success=true", Integer.class)).isEqualTo(17);
-            var proof = webProof(ZaloPurpose.LOGIN);
-            assertThat(web.exchange(proof, ORIGIN).firebaseCustomToken()).startsWith("synthetic-custom:");
+            assertError(() -> legacyNative.authorize(CLIENT, ZaloPurpose.LOGIN, ZaloCrypto.randomToken(), ZaloCrypto.hash(verifier)), ErrorCode.ZALO_UNAVAILABLE);
+            assertThat(legacyJdbc.queryForObject("select count(*) from information_schema.columns where table_schema=? and table_name='oauth_login_sessions' and column_name='client_type'", Integer.class, compatibilitySchema)).isZero();
+            assertThat(legacyJdbc.queryForObject("select max(version::integer) from flyway_schema_history where success=true", Integer.class)).isEqualTo(17);
+            doAnswer(invocation -> {
+                assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+                assertThat(legacyJdbc.queryForObject("select count(*) from oauth_login_sessions where status='EXCHANGING'", Integer.class)).isEqualTo(1);
+                return new ZaloProfile("subject", "Zalo name hint");
+            }).when(provider).exchangeCode(anyString(), anyString());
+            var start = legacyWeb.authorize(ZaloPurpose.LOGIN, ORIGIN, ZaloCrypto.randomToken(), ZaloCrypto.hash(verifier));
+            var params = UriComponentsBuilder.fromUriString(start.authorizationUrl()).build().getQueryParams();
+            assertThat(legacyNative.isNativeCallback(params.getFirst("state"))).isFalse();
+            var result = legacyWeb.callback(params.getFirst("state"), "provider-code", null, params.getFirst("code_challenge"), start.cookieValue());
+            assertThat(legacyWeb.exchange(new ZaloProofRequest(result.proof(), verifier), ORIGIN).firebaseCustomToken()).startsWith("synthetic-custom:");
             properties.setEnabled(false);
-            assertThat(service.isNativeCallback(ZaloCrypto.randomToken())).isFalse();
+            assertThat(legacyNative.isNativeCallback(ZaloCrypto.randomToken())).isFalse();
         } finally {
-            jdbc.update("delete from oauth_login_sessions");
-            installProspectiveFixture();
+            if (compatibilitySchema.matches("core_zalo_v17_compat_[a-f0-9]{32}")) {
+                jdbc.execute("drop schema \"" + compatibilitySchema + "\" cascade");
+            }
         }
     }
 
@@ -306,7 +325,7 @@ class ZaloNativeFlowPostgresTest {
     }
 
     @Test
-    void prospectiveFixtureEnforcesChannelIsolationReferenceUniquenessAndExpiry() {
+    void v18EnforcesChannelIsolationReferenceUniquenessAndExpiry() {
         var first = start(ZaloPurpose.LOGIN); complete(first);
         String hash = ZaloCrypto.hash(first.state());
         assertThatThrownBy(() -> jdbc.update("update oauth_login_sessions set client_origin=? where state_hash=?", ORIGIN, hash))
@@ -363,16 +382,6 @@ class ZaloNativeFlowPostgresTest {
         public ZoneId getZone() { return ZoneOffset.UTC; }
         public Clock withZone(ZoneId zone) { return this; }
         public Instant instant() { return instant; }
-    }
-    private static void installProspectiveFixture() { new ResourceDatabasePopulator(new ClassPathResource("fixtures/zalo-native-schema.sql")).execute(jdbc.getDataSource()); }
-    private static void dropProspectiveFixture() {
-        jdbc.execute("""
-                alter table oauth_login_sessions drop constraint ck_test_oauth_channel,drop constraint ck_test_oauth_handoff_expiry,
-                drop constraint ck_test_oauth_verified,drop column client_type,drop column native_client_id,drop column return_target_id,
-                drop column handoff_reference_hash,drop column handoff_expires_at,alter column client_origin set not null,
-                add constraint ck_oauth_login_sessions_verified_proof check (status<>'VERIFIED' or
-                    (proof_hash is not null and provider_subject is not null and proof_expires_at is not null))
-                """);
     }
     @AfterAll
     static void cleanup() throws Exception {

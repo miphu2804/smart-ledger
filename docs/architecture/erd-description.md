@@ -4,6 +4,8 @@
 
 CORE-015 #238 on `feat/zalo-login`, prepared 2026-10-16 against staging `120779d`: additive V17 creates external Zalo identity mappings and short-lived OAuth sessions. Schema details and operational recovery are [below](#zalo-core-015-v17); preparation and disposable-PostgreSQL verification do not assert shared-DB rollout.
 
+CORE-016 #276 on `feat/zalo-android`: approved V18 extends the session store for Android; [migration and recovery](#zalo-android-core-016-v18) and the reviewed staging configuration are checked in, not applied to a shared DB or Railway. Native remains off by runtime default; production activation and APK acceptance are separate.
+
 CORE-012 #163/#164 on `feat/core-barcode`, reviewed 2026-10-12: V16 replaces archived-inclusive barcode uniqueness with an ACTIVE-only partial index. This branch addition does not assert shared-DB migration or mobile/staging acceptance; older schema/AI snapshots below remain dated as stated.
 
 This ERD describes the target PostgreSQL database for **SmartLedger Phase 1**, an AI-assisted bookkeeping system for small businesses. It includes planned tables and relationships that are not yet in Core's Flyway migrations.
@@ -21,7 +23,7 @@ A sale record in this MVP is an internal business record. It is **not an electro
 - **users**: Stores user profiles and system roles (`OWNER`, `ADMIN`), Firebase/avatar URL fallback, and nullable internal `avatar_public_id` for an authenticated Cloudinary avatar.
 - **auth_identities**: Stores one Firebase UID per application user. Firebase sign-in providers remain under that account; Zalo uses the external mapping below, not another row/provider in this table.
 - **external_auth_identities**: V17 primary key `(provider, provider_app_id, provider_subject)` maps an app-scoped Zalo subject to a canonical `firebase_uid` string. No user FK: the UID mapping is committed before Firebase provisioning and before `/auth/session` creates a Core profile. Several explicitly linked subjects may share a UID; one external identity may not be reassigned to another UID. It is not tenant business data and is never exposed to AI read views or FE DTOs.
-- **oauth_login_sessions**: V17 UUID session with unique state hash, browser-binding hash, purpose, exact client origin/request ID/challenge, encrypted provider verifier, provider app/subject/name, unique nullable proof hash, lifecycle and TTL timestamps. Constraints enforce LOGIN/LINK, allowed states, session/proof expiry and required verifier/proof in pending/verified states. Expiry index supports cleanup. No provider access/refresh token or Firebase custom token is stored; raw state/proof/browser binding are hashed and verifier ciphertext uses authenticated encryption.
+- **oauth_login_sessions**: V17 UUID session with unique state hash, browser-binding hash, purpose, exact client origin/request ID/challenge, encrypted provider verifier, provider app/subject/name, unique nullable proof hash, lifecycle and TTL timestamps. V18 defaults existing sessions to WEB and adds ANDROID client/return-target/reference hash/expiry; channel constraints require WEB origin/proof versus ANDROID NULL origin/no WEB proof and the proper VERIFIED handoff. Expiry index supports cleanup. No provider access/refresh token or Firebase custom token is stored; raw state/proof/reference/browser binding are hashed and verifier ciphertext uses authenticated encryption. V18 being checked in does not assert shared deployment.
 
 ### Shops, Products, and Customers
 
@@ -270,11 +272,13 @@ Hibernate on V16 before applying the exact V17 SQL; it also proves feature-off
 and missing-schema fail-closed behavior. These are generated disposable schemas,
 not a staging migration or a performance/lock SLA for a production-sized DB.
 
-### Zalo Android CORE-016 pending schema
+<a id="zalo-android-core-016-pending-schema"></a>
 
-Approved design for #276 on `feat/zalo-android`, **not a Flyway migration or an applied shared-DB schema**. V17 remains unchanged and sufficient for WEB. Native stays OFF; runtime never runs DDL. The current entity description and DBML still represent V17; comments identify this pending extension rather than presenting it as deployed.
+### Zalo Android CORE-016 V18
 
-| Prospective `oauth_login_sessions` change | Purpose / constraint |
+`V18__add_zalo_android_handoff.sql` is approved and checked in for #276 on `feat/zalo-android`, **not yet an applied shared-DB schema**. V1–V17 remain unchanged. Native defaults OFF; explicit staging enablement is prepared for after merge/migration, production is not enabled. The entity description and DBML include V18; the old pending-schema anchor above is retained for existing links.
+
+| V18 `oauth_login_sessions` change | Purpose / constraint |
 |---|---|
 | `client_type VARCHAR(10) NOT NULL DEFAULT 'WEB'` | WEB or ANDROID; existing web rows retain their channel without user/account backfill |
 | `native_client_id VARCHAR(100)`, `return_target_id VARCHAR(100)` | Non-null only for ANDROID; fixed deployment configuration, never arbitrary callback URL |
@@ -283,11 +287,13 @@ Approved design for #276 on `feat/zalo-android`, **not a Flyway migration or an 
 | Make `client_origin` conditionally nullable | WEB requires origin and no native fields; ANDROID requires NULL origin and NULL WEB proof/expiry |
 | Replace WEB-only VERIFIED constraint with channel-aware checks | VERIFIED requires subject plus the correct channel's hash/expiry; reject mixed channel state |
 
-No new durable mapping/account/shop table or change to `auth_identities` is needed. Both channels reuse `(provider, provider_app_id, provider_subject) → canonical firebase_uid`; do not move existing identities or merge profiles. Existing RLS/private-store requirements remain; a future migration must preserve WEB state and these protections, with reviewed upgrade/rollback evidence before shared rollout.
+No new durable mapping/account/shop table or change to `auth_identities` is needed. Both channels reuse `(provider, provider_app_id, provider_subject) → canonical firebase_uid`; no identity reassignment, profile merge or business backfill occurs. Existing RLS/private-store grants/policies, WEB proof uniqueness/expiry and other lifecycle constraints remain. The VERIFIED constraint is replaced atomically with a channel-aware equivalent, and handoff reference uniqueness has a named constraint/index.
 
-The prospective SQL is deliberately only `backend/core/src/test/resources/fixtures/zalo-native-schema.sql`, installed after real V1–V17 in UUID-named disposable PostgreSQL test schemas. It is **not** an operator upgrade script and is excluded from the production JAR. Native repository checks column availability and fails closed with `503 zalo_unavailable` if missing; it does not adopt or repair schema. Persisted-channel callback lookup tolerates absent columns on V17, and WEB callback separately requires a valid configured origin so native cannot fall through into WEB proof delivery.
+V18 is transactional DDL with `lock_timeout=5s` and `statement_timeout=60s`. Its ordinary unique-index/constraint build locks the existing transient session table; this is not zero-downtime or a production-sized performance guarantee. Review a short window/stop new OAuth starts and check backups, SQL-role ownership and `FLYWAY_ENABLED` before merge/deploy. Feature-off does not stop startup Flyway. Only run on shared DB from merged staging code under the [repository migration workflow](../../README.md#database-migrations), never from this feature branch. No `IF NOT EXISTS`/baseline/repair silently adopts unexpected columns; early/late failures roll back all V18 DDL/history and retain V17 state. Resolve the cause before normal retry.
 
-`ZaloNativeFlowPostgresTest` covers V17 compatibility, missing-schema behavior, channel separation, atomic callback/handoff concurrency, expiry/replay and shared UID/link safeguards. Migration creation/review, integrated APK/provider acceptance and enabling native remain separate approvals/work. See [implementation status](technical-design.md#zalo-android-core-016), [contract](../contracts/api-contracts.md#zalo-android-core-016) and [Core preparation guide](../../backend/core/docs/zalo-android-preparation.md). Recovery retains durable mappings and disables native; it never deletes Firebase users or business data.
+The former native SQL fixture is removed. `ZaloNativeMigrationPostgresTest` uses real Flyway V18 for fresh/upgrade/no-op, WEB/account/mapping preservation, mixed-channel/reference/expiry rejection, early/late rollback, lock contention/retry and RLS. `ZaloNativeFlowPostgresTest` uses actual V18 for channel/concurrency/expiry/UID/LINK safeguards and a separate actual V17 schema for compatibility/missing-V18 fail-closed checks; no ad-hoc column downgrade or migration-history edit is used. Runtime repository never executes DDL or adopts/repairs schema.
+
+After merged V18 succeeds, the operator may review/copy [staging variables](../../backend/core/config/zalo-native-staging.env.example) to Railway staging to enable testing; Spring/Railway does not auto-load the file and it contains no secret/DB/migration switch. APK/provider acceptance remains pending and production needs separate release approval. See [implementation status](technical-design.md#zalo-android-core-016), [contract](../contracts/api-contracts.md#zalo-android-core-016) and [activation runbook](../../backend/core/docs/zalo-android-preparation.md#staging-activation-after-merge). Recovery disables native and retains V18/mappings/Firebase users/business data. There is no automatic destructive DOWN; any schema removal needs a separately approved forward migration, not column drops to roll back the app.
 
 ### Earlier migrations and business schema
 

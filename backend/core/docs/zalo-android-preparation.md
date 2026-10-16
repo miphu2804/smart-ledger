@@ -1,16 +1,25 @@
-# CORE-016 — Android Core preparation (migration intentionally absent)
+# CORE-016 — Android Core integration and V18 rollout
 
-Scope approved in chat: external browser/Custom Tabs, verified HTTPS App Links, LOGIN and explicit secure LINK on `feat/zalo-android` (#276). Core and the approved related documentation only. No Zalo Android SDK, embedded WebView, FE/AI changes, production migration or deployment is included here. Canonical behavior is defined by the [API contract](../../../docs/contracts/api-contracts.md#zalo-android-core-016), [PRD AC-087–092](../../../docs/product/product-requirements.md#nghiệm-thu-zalo-android-core-016) and [implementation status](../../../docs/architecture/technical-design.md#zalo-android-core-016).
+Scope approved in chat: external browser/Custom Tabs, verified HTTPS App Links, LOGIN and explicit secure LINK on `feat/zalo-android` (#276), followed by V18 and staging-configuration preparation. Core and the approved related documentation only. No Zalo Android SDK, embedded WebView, FE/AI changes, shared-DB execution or deployment is included here. Canonical behavior is defined by the [API contract](../../../docs/contracts/api-contracts.md#zalo-android-core-016), [PRD AC-087–092](../../../docs/product/product-requirements.md#nghiệm-thu-zalo-android-core-016) and [implementation status](../../../docs/architecture/technical-design.md#zalo-android-core-016).
 
 ## Rollout boundary
 
-`ZALO_NATIVE_ENABLED=false` by default. This branch **does not add or alter a Flyway migration**. V17 alone remains sufficient for the existing web flow. Native authorization/completion requires the approved future columns and fails with `503 zalo_unavailable` when they are absent. Runtime never executes DDL, creates/adopts tables, or queries native columns on startup. Keep native OFF in every deployed environment until a separately reviewed migration and APK acceptance are approved.
+`ZALO_NATIVE_ENABLED=false` remains the runtime default. Following migration/enablement approval, this branch now includes `V18__add_zalo_android_handoff.sql` and a reviewed public staging configuration. The user chose **configuration preparation in this branch, Railway activation only after merge**. This is not a live Railway change or shared-DB migration. Production remains off pending separate release approval.
 
-`src/test/resources/fixtures/zalo-native-schema.sql` represents the prospective schema ONLY in disposable UUID-named PostgreSQL test schemas. It is not a migration or a rollout script. Existing users, Firebase identities and shops need no backfill. Durable `external_auth_identities` mappings remain shared between web and Android.
+V18 adds channel/client/target/reference/expiry fields to the existing OAuth session store, defaults existing rows to WEB and replaces the WEB-only VERIFIED constraint with channel-aware constraints. V1–V17 are unchanged; the duplicate prospective SQL fixture has been removed and native tests use actual Flyway V18. Existing users, Firebase identities, identity mappings, shops and WEB session values are not rewritten. Runtime repository code never executes DDL or adopts/repairs schema; V17 WEB remains supported, and native enabled before V18 fails closed with `503 zalo_unavailable`.
+
+## Staging activation after merge
+
+1. Review/merge this branch into `staging` through the normal checks. Confirm the migration owner, intended staging DB/history, backup/recovery and maintenance window. Do not migrate the shared DB from the feature branch; do not edit V18 once applied.
+2. Keep `ZALO_NATIVE_ENABLED=false`; temporarily stop new OAuth starts during the migration window. Check `FLYWAY_ENABLED`: feature-off does not stop automatic Flyway startup. Apply V18 only from merged staging code using the [repository migration workflow](../../../README.md#database-migrations), and verify successful history/checksums and Core's private-store access.
+3. V18 is one PostgreSQL transaction with 5-second lock timeout and 60-second statement timeout. Its ordinary unique-index/constraint build locks the transient OAuth table; it is **not zero-downtime** and has not been benchmarked on a production-sized table. Lock/schema conflicts roll back the whole V18 and leave V17 usable. Correct the cause, then retry normally; do not baseline/repair or manually adopt unexpected columns.
+4. Review/copy the public variables in [config/zalo-native-staging.env.example](../config/zalo-native-staging.env.example) into **Railway staging only**, after the schema step. This sets native on with the exact staging callback, client, return URL, package and certificate. The file is not auto-loaded by Spring/Railway and contains no secret or DB/migration switch. Keep existing Zalo app credentials, session encryption key and Firebase signing credentials in Railway's secret configuration; never replace them with blanks or use production credentials.
+5. Confirm Zalo Developer's exact Core staging callback and verified domain, HTTPS/proxy/redaction/throttling, and the staged `assetlinks.json`. The APK must match its signing certificate and exact App Link path. Run LOGIN/LINK and the physical-device checks below on the signed staging APK; configuration approval does not mean those checks have passed.
+6. Recovery: set `ZALO_NATIVE_ENABLED=false`, retain V18 columns and all durable mappings/UIDs. WEB remains usable with native off; do not remove columns, delete users/mappings or restore an old schema over live data as application rollback. Any later destructive removal requires a reviewed forward migration. Production activation is a separate release, not implied by copying the staging example.
 
 ## Deployment-specific configuration
 
-Keep the existing `ZALO_*` provider/Firebase settings. Each deployment explicitly configures one public Android client and fixed return target; client ID, package and certificate are not authentication credentials.
+Keep the existing `ZALO_*` provider/Firebase settings. Each deployment explicitly configures one public Android client and fixed return target; client ID, package and certificate are not authentication credentials. The production column below is reference metadata, **not approval to activate production**.
 
 | Setting | Staging | Production |
 |---|---|---|
@@ -46,11 +55,11 @@ The return URL must be exact HTTPS on the same origin as `ZALO_CALLBACK_URL`, wi
 
 Native endpoints accept only documented fields, share the bounded rate/body guard (30/minute per endpoint/IP bucket, 8 KiB body), and do not loosen web CORS or web Origin validation. Wrong request/channel/purpose/verifier, expiry or replay returns `400 zalo_session_invalid`; disabled/missing schema/config returns `503 zalo_unavailable`. Start a new flow after cancel, timeout, consume or lost verifier. If Firebase fails after consume, the next flow reuses the committed canonical UID, not the consumed reference.
 
-## Verification still required before enabling
+## Verification and remaining APK acceptance
 
-- Core real-PostgreSQL suite `ZaloNativeFlowPostgresTest` is mandatory in the Core report gate; provider/Firebase are stubs. It covers V17 web compatibility, missing schema fail-closed, reference/callback concurrency, cross-channel/purpose/replay, both expiries, consent/failure recovery, UID consistency, recent LINK/account conflicts and suspension.
+- Core real-PostgreSQL suites `ZaloNativeMigrationPostgresTest` and `ZaloNativeFlowPostgresTest` are mandatory in the Core report gate; provider/Firebase are stubs. Migration tests cover fresh/upgrade/no-op, data preservation, early/late rollback, lock timeout and RLS; flow tests use actual V18 for concurrency/replay/expiry/UID/LINK safeguards and a separate real V17 schema for WEB compatibility/missing-V18 fail-closed behavior.
 - Core HTTP/controller/OpenAPI tests cover exact anonymous routes, authenticated LINK, no-Origin native completion, unchanged CORS, cookie/redirect payload, request validation, environment-specific association and rate/body guard.
-- Separately approve/create/review the actual migration, integrate FE, and run physical APK tests for Android domain verification, browser return, cold/warm start, process exit/cancel, concurrent flows, LINK reauthentication and real Zalo/Firebase signing/revocation. These tests are not implied by Core unit/DB tests. The [ERD](../../../docs/architecture/erd-description.md#zalo-android-core-016-pending-schema) distinguishes prospective columns from deployed V17.
+- Integrate FE and run physical APK tests for Android domain verification, browser return, cold/warm start, process exit/cancel, concurrent flows, LINK reauthentication and real Zalo/Firebase signing/revocation. These are not implied by Core unit/DB tests. The [ERD](../../../docs/architecture/erd-description.md#zalo-android-core-016-v18) documents V18 and the distinction between checked-in migration and actual shared-DB rollout.
 - Verify TLS, trusted proxy/edge throttling, callback query/body/Authorization/cookie redaction and operational backup/recovery before enabling. Rollback disables native and retains durable identity mappings; never delete accounts or mappings as application rollback.
 
 Design references: [RFC 8252 native OAuth external browsers](https://www.rfc-editor.org/rfc/rfc8252.html), [Android domain association](https://developer.android.com/training/app-links/configure-assetlinks).
@@ -68,4 +77,10 @@ Verified on a disposable PostgreSQL 16 container (loopback-only, tmpfs, no busin
 | Existing `test_zalo_manual.mjs` | 8 passed |
 | Existing Chrome popup regression | 3 scenarios passed with loopback/synthetic data |
 
-Native repository/controller/service/page and handoff DTO/result reached full measured Java line coverage; native properties reached 39/42 lines. Coverage is not proof of real-provider or physical-APK acceptance. The future schema was installed only as a test fixture; Flyway migration files and shared databases remain unchanged.
+Native repository/controller/service/page and handoff DTO/result reached full measured Java line coverage; native properties reached 39/42 lines. This dated preparation run used the former test-only schema fixture, before V18 approval. Coverage is not proof of real-provider or physical-APK acceptance. See the new V18 verification entry in [PROGRESS.md](../../../PROGRESS.md) for the subsequent migration-backed run; shared databases remain untouched by local tests.
+
+## V18 verification — 2026-10-17
+
+Fresh Java 21 Maven `verify` with JaCoCo 0.8.14 passed **1,358 tests / 100 suites, zero failures/errors/skips**, using actual V1–V18 in disposable loopback/tmpfs PostgreSQL 16. The mandatory report gate accepts all 15 PostgreSQL suites, including 7 V18 migration cases and 14 native-flow cases; its 13 self-tests pass. The staging example has 2 passing configuration/default-off tests. All 11 Node helper/landing tests and 3 real Chrome popup scenarios pass with synthetic data. The V17 compatibility test uses a separate migrated schema rather than deleting V18 columns.
+
+The production JAR contains all 18 migrations but no test fixture, manual tooling, staging env example or private credential file. Native repository/controller/service/page and DTO/result retain full measured Java line coverage; properties reach 40/42. This proves local Core/migration behavior, not Railway activation, shared-DB rollout, real native-provider/Firebase or signed-APK acceptance.
