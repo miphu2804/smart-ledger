@@ -28,7 +28,7 @@ const USE_NATIVE = Platform.OS !== 'web';
 const MONO = Platform.select({ ios: 'Menlo', default: 'monospace' });
 
 interface ThoughtLineProps {
-  /** Các bước trợ lý đang làm (mỗi lần gọi tool một bước): bước đã xong có dấu tick, bước đang chạy có chấm. */
+  /** Các bước trợ lý đang làm (mỗi lần gọi tool một bước): bước đã xong có dấu tick. */
   steps?: ThoughtStep[];
   color?: string;
 }
@@ -79,11 +79,10 @@ export function ThoughtLine({ steps = [], color = colors.brand }: ThoughtLinePro
         </View>
         {/* Mỗi lúc chỉ một việc ở ô đầu hàng: bước tool mới nhất thế chỗ câu chờ và bước trước nó. */}
         {current ? (
+          // Nhãn bắt đầu đúng chỗ câu chờ; dấu tick đứng sau nhãn nên chữ không dịch khi tool xong.
           <SlideIn key={current.id} trigger={current.id} style={styles.step}>
-            <View style={styles.mark}>
-              {current.done ? <Feather name="check" size={11} color={colors.faint} /> : <View style={[styles.running, { backgroundColor: color }]} />}
-            </View>
-            <StreamedLabel text={current.label} shimmer={!current.done} color={current.done ? colors.faint : colors.muted} />
+            <StreamedLabel text={current.label} color={colors.muted} />
+            {current.done ? <Feather name="check" size={11} color={colors.faint} /> : null}
           </SlideIn>
         ) : (
           <SlideIn trigger={phrase} style={styles.label}>
@@ -142,9 +141,9 @@ function useSweep() {
 /**
  * Nhãn của bước đang làm, chạy chữ dần như đang được gõ ra. Mọi chữ đã nằm sẵn trong hàng nên bề rộng
  * không đổi: bong bóng và đồng hồ không nhảy theo từng chữ, chỉ độ hiện của từng chữ tăng dần.
- * Bước còn chạy thì có thêm dải sáng quét qua như câu chờ; bước xong thì chữ đứng yên.
+ * Dải sáng quét qua như câu chờ cả khi tool đã xong: trợ lý vẫn đang viết câu trả lời, chỉ dấu tick báo bước xong.
  */
-function StreamedLabel({ text, color, shimmer }: { text: string; color: string; shimmer: boolean }) {
+function StreamedLabel({ text, color }: { text: string; color: string }) {
   const progress = useRef(new Animated.Value(0)).current;
   const sweep = useSweep();
   const chars = useMemo(() => Array.from(text), [text]);
@@ -156,9 +155,9 @@ function StreamedLabel({ text, color, shimmer }: { text: string; color: string; 
           outputRange: [0, 1],
           extrapolate: 'clamp',
         });
-        return shimmer ? Animated.multiply(typed, charOpacity(sweep, i / Math.max(chars.length - 1, 1))) : typed;
+        return Animated.multiply(typed, charOpacity(sweep, i / Math.max(chars.length - 1, 1)));
       }),
-    [chars, progress, sweep, shimmer],
+    [chars, progress, sweep],
   );
 
   useEffect(() => {
@@ -240,7 +239,5 @@ const styles = StyleSheet.create({
   dot: { width: DOT, height: DOT, borderRadius: DOT / 2 },
   label: { flexShrink: 1 },
   shimmer: { flexDirection: 'row', flexWrap: 'wrap' },
-  step: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  mark: { width: 11, height: 11, alignItems: 'center', justifyContent: 'center' },
-  running: { width: 5, height: 5, borderRadius: 2.5 },
+  step: { flexDirection: 'row', alignItems: 'center', gap: 5 },
 });

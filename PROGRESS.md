@@ -1,3 +1,13 @@
+### [2026-10-16 17:55 UTC+07:00] — [Mobile/AI] Tool step keeps its shimmer, screen button in brand purple, numbered lists
+
+**Done:** A tool step in `ThoughtLine` keeps its shimmer after the tool ends, because the model is still writing the reply; the running dot is gone and the tick sits after the label, so the label starts where the waiting phrase does. `suggest_screen` gets its own step label instead of the generic one. The screen-button card under a reply drops the "Mở nhanh" label and shows brand-purple buttons with a purple shadow. The shop agent prompt asks for numbered lists only, and the mock replies follow it.
+
+**Changed files:** `frontend/mobile/src/components/ThoughtLine.tsx`, `frontend/mobile/src/components/ChatText.tsx`, `frontend/mobile/src/lib/toolSteps.ts`, `frontend/mobile/tests/toolSteps.test.ts`, `frontend/mobile/src/lib/mockCore.ts`, `backend/ai/src/prompt_templates/shop_agent.py`, `docs/contracts/api-contracts.md` — modified; this entry.
+
+**Flow explained:** tool `start` → the step replaces the waiting phrase, types in with shimmer → tool `end` → tick after the label, shimmer continues → first `delta` → the line is replaced by the reply.
+
+**Check:** `tsc --noEmit` clean, `toolSteps` tests 6 passed, AI unit tests 342 passed; checked in the Expo web build with mock data. **Not verified:** on a device, and the numbered-list rule against the real model.
+
 ### [2026-10-16] — [Mobile] Thought line shows only the latest tool step, with shimmer
 
 **Done:** `ThoughtLine` now shows one step at a time: each new tool call replaces the waiting phrase or the step before it instead of lining up beside it. A running step's label types in and then gets the same shimmer sweep as the waiting phrase; a finished step stays still in the faint color with a tick.
