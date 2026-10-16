@@ -318,9 +318,10 @@ class AgentService:
                 model_settings=session_settings(session_id),
             ) as run,
         ):
-            # Whether the text delivered so far is answer text the next response
-            # extends, rather than a preamble it replaces.
-            kept = False
+            # The answer text the last screen-button response wrote, which the next
+            # response extends; empty when the text delivered so far is a preamble
+            # it replaces.
+            kept = ""
             async for node in run:
                 if Agent.is_call_tools_node(node):
                     await self._queue_tool_events(node, run, events)
@@ -351,20 +352,22 @@ class AgentService:
                         safe = self.guardrails.screened_prefix(response_text)
                         # The prefix can shrink when a view name at the end gets
                         # extended (`v_products` then `_x`); only growth is sent.
-                        if len(safe) > len(released):
+                        # Text that may still turn out to repeat the kept answer
+                        # waits until it differs.
+                        if len(safe) > len(released) and not self._repeats(safe, kept):
                             release(safe[len(released) :])
                             released = safe
                     response = stream.response
                 text = self._kept_text(response)
-                if text.startswith(released) and text[len(released) :]:
-                    # The screen held back the tail while it could still become a
-                    # leak; the whole text passed, so the tail goes out now.
-                    release(text[len(released) :])
                 # Mirrors _answer_text, so the text sent matches the answer stored.
-                if text:
-                    kept = True
-                elif self._calls(response) - {suggest_screen.__name__}:
-                    kept = False
+                if text and not self._repeats(text, kept):
+                    if text.startswith(released) and text[len(released) :]:
+                        # The screen held back the tail while it could still become
+                        # a leak; the whole text passed, so the tail goes out now.
+                        release(text[len(released) :])
+                    kept = text
+                elif not text and self._calls(response) - {suggest_screen.__name__}:
+                    kept = ""
             result = run.result
         return delivered, result
 
@@ -404,17 +407,28 @@ class AgentService:
 
         A model often writes the whole answer, then calls suggest_screen and adds one
         line about the button. That earlier text is the answer, so it is kept; text
-        before a data tool call is a preamble and is dropped.
+        before a data tool call is a preamble and is dropped. Models also often write
+        the kept answer again after the tool returns; that repeat is dropped.
         """
         pieces: list[str] = []
         for message in result.new_messages():
             if not isinstance(message, ModelResponse) or not self._calls(message):
                 continue
             if text := self._kept_text(message):
-                pieces.append(text)
+                if not (pieces and self._repeats(text, pieces[-1])):
+                    pieces.append(text)
             elif self._calls(message) - {suggest_screen.__name__}:
                 pieces = []
+        if pieces and self._repeats(result.output, pieces[-1]):
+            return ANSWER_JOIN.join(pieces)
         return ANSWER_JOIN.join([*pieces, result.output])
+
+    @staticmethod
+    def _repeats(text: str, kept: str) -> bool:
+        """Whether text is the kept answer again, or so far only its start; spacing
+        is ignored."""
+        words = " ".join(text.split())
+        return bool(words) and " ".join(kept.split()).startswith(words)
 
     @staticmethod
     def _calls(response: ModelResponse) -> set[str]:
