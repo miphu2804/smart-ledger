@@ -83,35 +83,49 @@ function lastActive(iso: string): string {
 }
 
 /**
- * Biểu tượng trên câu trả lời: trợ lý đã dùng ghi nhớ; chạm để xem đủ nội dung, ngày nhớ và mở hội thoại gốc
- * (trừ khi ghi nhớ đến từ chính hội thoại đang mở).
+ * Nhãn "Trợ lý Bobi" đầu bong bóng; biểu tượng sáng khi tiệm bật ghi nhớ. Câu trả lời đã dùng ghi nhớ thì nhãn
+ * chạm được để xem đủ nội dung, ngày nhớ và mở hội thoại gốc (trừ khi ghi nhớ đến từ chính hội thoại đang mở).
  */
-function MemoryIcon({
+function BobiLabel({
+  memoryOn,
   memories,
   currentId,
   onOpenSource,
 }: {
+  memoryOn: boolean;
   memories: AgentMemoryUsed[];
   currentId: number | null;
   onOpenSource: (conversationId: number) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const label = (
+    <Row gap={3} style={{ alignItems: 'center' }}>
+      <BusinessIcon size={14} color={colors.brand} offColor={colors.faint} filled={memoryOn || memories.length > 0} />
+      <T w="bold" size={11.5} color={colors.brand} style={{ marginLeft: 3 }}>
+        Trợ lý Bobi
+      </T>
+      {memories.length > 1 ? (
+        <T w="semibold" size={11.5} color={colors.brand}>
+          {memories.length}
+        </T>
+      ) : null}
+    </Row>
+  );
   return (
-    <View style={styles.memoryWrap}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Xem ${memories.length} ghi nhớ trợ lý đã dùng`}
-        hitSlop={10}
-        onPress={() => setOpen((v) => !v)}
-        style={({ pressed }) => [styles.memoryIcon, pressed && styles.pressed]}
-      >
-        <BusinessIcon size={15} color={colors.brand} filled />
-        {memories.length > 1 ? (
-          <T w="semibold" size={11.5} color={colors.brand}>
-            {memories.length}
-          </T>
-        ) : null}
-      </Pressable>
+    <View style={styles.assistantBubbleHeader}>
+      {memories.length ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Xem ${memories.length} ghi nhớ trợ lý đã dùng`}
+          hitSlop={10}
+          onPress={() => setOpen((v) => !v)}
+          style={({ pressed }) => pressed && styles.pressed}
+        >
+          {label}
+        </Pressable>
+      ) : (
+        label
+      )}
       {open
         ? memories.map((m) => {
             const fromHere = m.source_conversation_id === currentId;
@@ -272,20 +286,15 @@ export default function Ai() {
             const reply = isUser ? null : splitActions(m.text);
             return (
               <React.Fragment key={m.id}>
-                {m.memories?.length ? (
-                  <MemoryIcon memories={m.memories} currentId={conversationId} onOpenSource={openSource} />
-                ) : null}
                 <View style={[styles.messageRow, isUser && styles.userMessageRow]}>
                   <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
                     {!isUser ? (
-                      <Row style={styles.assistantBubbleHeader}>
-                        <Row gap={3} style={{ alignItems: 'center' }}>
-                          <BusinessIcon size={14} color={colors.brand} offColor={colors.faint} filled={memoryOn} />
-                          <T w="bold" size={11.5} color={colors.brand} style={{ marginLeft: 3 }}>
-                            Trợ lý Bobi
-                          </T>
-                        </Row>
-                      </Row>
+                      <BobiLabel
+                        memoryOn={memoryOn}
+                        memories={m.memories ?? []}
+                        currentId={conversationId}
+                        onOpenSource={openSource}
+                      />
                     ) : null}
                     {isUser ? (
                       <T size={13.5} color={colors.white} style={styles.messageText}>
@@ -714,24 +723,6 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   messages: { gap: 12 },
-  memoryWrap: {
-    // Thẳng hàng với bong bóng (sau avatar 34 + khoảng cách 8) và kéo sát bong bóng bên dưới.
-    marginLeft: 42,
-    marginBottom: -6,
-    gap: 4,
-  },
-  memoryIcon: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    minWidth: 26,
-    height: 26,
-    paddingHorizontal: 7,
-    justifyContent: 'center',
-    borderRadius: 13,
-    backgroundColor: colors.brandSoft,
-  },
   memoryItem: {
     maxWidth: '86%',
   },
@@ -761,8 +752,8 @@ const styles = StyleSheet.create({
     ...shadow(1),
   },
   assistantBubbleHeader: {
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    gap: 4,
     marginBottom: 4,
   },
   userBubble: {
