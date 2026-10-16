@@ -6,6 +6,42 @@
 
 **Check:** `tsc --noEmit` clean (0 errors), `npm test` clean, `npm run export:web` built `dist` without errors.
 
+### [2026-10-16] — [Chore] Core-only Zalo domain verification
+
+**Done:** Added the supplied Zalo verification HTML as a Core static resource and allowed anonymous GET of that exact filename only. This branch does not contain the unfinished Zalo login/link implementation, new configuration, or a database migration.
+
+**Changed files:** `backend/core/src/main/resources/static/zalo_verifierMysnBA7R831YqgKCwDCT0HgaYGlsqb9MCpOu.html`, `backend/core/src/main/java/com/smartledger/core/config/SecurityConfiguration.java`, `backend/core/src/test/java/com/smartledger/core/config/ZaloDomainVerificationHttpTest.java`; this entry. Existing progress entries retained unchanged.
+
+**Flow explained:** After merging into staging and deploying Core, open `https://<Core-domain>/zalo_verifierMysnBA7R831YqgKCwDCT0HgaYGlsqb9MCpOu.html` without a Bearer token, then use Zalo Developers' domain-verification action. The file is not the OAuth callback. Other files, business APIs and unreleased Zalo routes remain authenticated; no wildcard exception was added.
+
+**Check:** Verified test-first RED: 14 HTTP cases executed, with the expected GET failing as 401 instead of 200. After the fix, `mvnw.cmd '-Dtest=ZaloDomainVerificationHttpTest,ApiDocumentationHttpTest,ApiDocumentationWebTest,CorsWebTest,BearerTokenAuthenticationFilterTest' test` passes 43 tests, 0 failures/errors/skipped. The 14 new cases use a real loopback HTTP server and cover exact HTML delivery, six non-GET methods and seven unrelated paths. JaCoCo reports SecurityConfiguration line coverage 36/39 (92.31%); this is not whole-Core coverage. Supplied HTML matches after line-ending normalization. No business DB or real Firebase/Zalo calls. Railway delivery and Zalo's actual verification remain unverified until the team merges/deploys this branch.
+
+### [2026-10-16 12:57 UTC+07:00] — [Mobile] A running tool step replaces the waiting phrase in the thought line
+
+**Done:** When the assistant calls a tool, the step label now takes the place of the shimmering waiting phrase instead of standing beside it, so the first slot of the thought line shows the one thing happening now. The waiting phrase still rotates until the first tool call, and a finished step stays on the line with a check.
+
+**Changed files:** `frontend/mobile/src/components/ThoughtLine.tsx` and this entry.
+
+**Check:** `npm run typecheck` clean; `npm test` 107 passed; the Metro iOS bundle builds (HTTP 200) and carries the new comment. Not run on a real device: only the iOS simulator.
+
+### [2026-10-16 14:00 UTC+07:00] — [Feature] Agent chat shows tool steps in a "Thought Line" and streams text smoothly
+
+**Done:** AI emits `tool_start {call_id,name}` / `tool_end {call_id}` SSE events for each tool call (name only, never arguments or results); Core relays unknown event names verbatim, so Java is untouched. The mobile chat replaces `ThinkingStatus` with `ThoughtLine` (React Bits Thought Line port): the lattice-dots indicator in place of the star, a live clock, the steps the assistant ran (Vietnamese labels live in the app) inline after the waiting phrase and wrapping to the next line when they run out of room; the thought line has no bubble of its own, so it reads as a status line rather than a second answer, and it stays until the answer bubble takes its place. The answer then streams in a separate bubble with the Bobi label. The waiting label is semibold with a shimmer band sweeping its letters; phrase changes and each step slide up and fade in, and a step label streams in one character at a time. Streamed answer text now reveals a few characters per frame (`useSmoothText`) instead of jumping a token burst at a time. The reveal is timed in ms (half-life 80 ms), not per frame, so a slow device does not fall behind and dump the tail when the turn ends. The streaming bubble now carries the same Bobi label as a saved answer, and the label text and memory icon are larger. Reduce-motion keeps the label static.
+
+**Changed files:**
+- `backend/ai/src/agent/tool_events.py` — created (only module reading pydantic-ai tool events)
+- `backend/ai/src/agent/service.py`, `router.py` — modified
+- `backend/ai/tests/unit_tests/test_agent_service.py`, `tests/integration_tests/test_agent_chat.py` — modified
+- `docs/contracts/api-contracts.md` — modified (`tool_start`, `tool_end`)
+- `frontend/mobile/src/components/ThoughtLine.tsx` — renamed from `ThinkingStatus.tsx`, rewritten
+- `frontend/mobile/src/components/ChatText.tsx` — modified (`StreamingChatText`)
+- `frontend/mobile/app/ai.tsx`, `src/data/types.ts`, `src/lib/agentApi.ts` — modified
+- `frontend/mobile/src/lib/toolSteps.ts`, `src/lib/smoothText.ts`, `tests/toolSteps.test.ts`, `tests/smoothText.test.ts` — created
+
+**Flow explained:** `agent.iter()` → each `CallToolsNode` is streamed → `tool_progress` maps call/result events → `ToolStarted`/`ToolFinished` → SSE `tool_start`/`tool_end` → Core → `chatStream` `onTool` → `applyToolEvent` builds the steps → `ThoughtLine`. Draft text goes through `useSmoothText` before the markdown parser.
+
+**Check:** backend 383 passed, ruff clean; mobile 99 node tests pass, `tsc --noEmit` clean; Expo web mock in a browser shows the shimmer sweeping, slide-in, lattice dots and the fold to "Đã suy nghĩ". **Not verified:** a real model end to end (mock emits no tool events and returns the whole answer at once, so the per-frame reveal is covered by unit tests only); on-device motion and the native driver; the contract still has no end-to-end acceptance.
+
 ### [2026-10-16 11:39 UTC+07:00] — [Fix] Mobile release scripts: Node drift, one-shot fix menu, simulator and emulator by default
 
 **Done:** `scripts/ios-device-release.sh` and `scripts/android-release.sh` share one Node check in `scripts/lib/preflight.sh`. When the Node first on PATH is another major than `NODE_MAJOR` (or does not run, e.g. Homebrew's node after an `icu4c` upgrade) and the pinned major is installed through Homebrew `node@<major>`, nvm, fnm, Volta, asdf, mise or n, the scripts put it first on PATH for that run, also with `--skip-preflight`. The suggested fix is now `nvm install`, `fnm install` or `brew install node@<major>`, without the `brew link --overwrite --force` that failed next to Homebrew's unversioned node. `node_modules` is reinstalled when the last install ran under another Node major, and the iOS script rewrites `ios/.xcode.env.local` so Xcode's bundling phase uses the same Node. The fix menu no longer asks "Pick a number" again after a fix ran: a successful command re-runs the checks with the same arguments, an opened page or app stops the script. iOS now defaults to the iOS Simulator (a booted iPhone simulator, else the newest runtime's first iPhone), preselected in the menu next to paired iPhones; `--simulator` skips the menu and `--device` also takes a simulator's name or UDID; signing checks run only for an iPhone, and a missing runtime offers `xcodebuild -downloadPlatform iOS`. Android defaults locally to an emulator: a running one, else it boots an AVD while Gradle runs and offers to create one with `sdkmanager` and `avdmanager`; it builds only the emulator's ABI, installs and opens the app. `--build-only` keeps the previous default, which stays the default in GitHub Actions and with `--aab` or `--out`. Both builds use staging Core unless `EXPO_PUBLIC_API_ENDPOINT` says otherwise.

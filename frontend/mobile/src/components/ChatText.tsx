@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { parseChatMarkdown, SCREEN_LINKS, type AppScreen, type ChartSpec, type ChatBlock, type Inline } from '../lib/chatMarkdown';
+import { useSmoothText } from '../lib/smoothText';
 import { colors, font } from '../theme';
 import { AreaChart, BarChart } from './charts';
 import { Button, T } from './ui';
@@ -207,6 +208,11 @@ export const ChatText = React.memo(function ChatText({
     </View>
   );
 });
+
+/** Câu đang stream: chữ chảy đều từng khung hình qua `useSmoothText` rồi mới vào cùng bộ parse với câu đã lưu. */
+export function StreamingChatText({ text }: { text: string }) {
+  return <ChatText text={useSmoothText(text)} streaming />;
+}
 
 const styles = StyleSheet.create({
   wrap: { flexShrink: 1, gap: 2 },

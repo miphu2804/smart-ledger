@@ -3,6 +3,7 @@ import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
+  LayoutAnimation,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,10 +11,10 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChatText, ScreenActions } from '../src/components/ChatText';
+import { ChatText, ScreenActions, StreamingChatText } from '../src/components/ChatText';
 import { BusinessIcon } from '../src/components/icons';
 import { SlingSendButton } from '../src/components/SlingSendButton';
-import { ThinkingStatus } from '../src/components/ThinkingStatus';
+import { ThoughtLine } from '../src/components/ThoughtLine';
 import { VoicePillButton } from '../src/components/VoicePillButton';
 import { Button, Dialog, EmptyState, Field, IconBtn, KEYBOARD_AVOID_BEHAVIOR, Row, Sheet, T, Toggle } from '../src/components/ui';
 import type {
@@ -23,11 +24,13 @@ import type {
   AgentMemoryUsed,
   AgentMessageView,
   ChatMessage,
+  ThoughtStep,
 } from '../src/data/types';
 import { agentApi } from '../src/lib/agentApi';
 import { ApiError } from '../src/lib/api';
 import { splitActions } from '../src/lib/chatMarkdown';
 import { ddmmyyyy, hhmm, relDay } from '../src/lib/format';
+import { applyToolEvent } from '../src/lib/toolSteps';
 import { useApp } from '../src/store/AppStore';
 import { colors, font, shadow } from '../src/theme';
 
@@ -100,12 +103,12 @@ function BobiLabel({
   const [open, setOpen] = useState(false);
   const label = (
     <Row gap={3} style={{ alignItems: 'center' }}>
-      <BusinessIcon size={14} color={colors.brand} offColor={colors.faint} filled={memoryOn || memories.length > 0} />
-      <T w="bold" size={11.5} color={colors.brand} style={{ marginLeft: 3 }}>
+      <BusinessIcon size={19} color={colors.brand} offColor={colors.faint} filled={memoryOn || memories.length > 0} />
+      <T w="bold" size={13.5} color={colors.brand} style={{ marginLeft: 3 }}>
         Trợ lý Bobi
       </T>
       {memories.length > 1 ? (
-        <T w="semibold" size={11.5} color={colors.brand}>
+        <T w="semibold" size={13.5} color={colors.brand}>
           {memories.length}
         </T>
       ) : null}
@@ -165,6 +168,8 @@ export default function Ai() {
   const [typing, setTyping] = useState(false);
   // Chữ trợ lý đang trả lời dở; vào `msgs` khi có sự kiện `done`.
   const [draft, setDraft] = useState('');
+  // Các bước (gọi tool) của lượt đang chạy, hiện trong bong bóng chờ cho tới khi chữ đầu tiên tới.
+  const [steps, setSteps] = useState<ThoughtStep[]>([]);
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [msgs, setMsgs] = useState<ChatMessage[]>(() => [welcome(app.user.name)]);
@@ -240,16 +245,28 @@ export default function Ai() {
     // Delta tới theo từng token; gom về một lần render mỗi khung hình thay vì một lần mỗi token.
     let frame: number | null = null;
     let latest = '';
+    let started = false;
     const showDraft = (draftText: string) => {
       latest = draftText;
       frame ??= requestAnimationFrame(() => {
         frame = null;
+        // Chữ đầu tiên thay dòng suy nghĩ bằng bong bóng trả lời: cho bong bóng hiện ra có chuyển động thay vì nhảy thẳng.
+        if (!started && latest) {
+          started = true;
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        }
         setDraft(latest);
       });
     };
     let memories: AgentMemoryUsed[] = [];
+    let turnSteps: ThoughtStep[] = [];
     try {
-      const reply = await agentApi.chatStream({ conversation_id: conversationId, message }, showDraft, (used) => (memories = used));
+      const reply = await agentApi.chatStream(
+        { conversation_id: conversationId, message },
+        showDraft,
+        (used) => (memories = used),
+        (event) => setSteps((turnSteps = applyToolEvent(turnSteps, event))),
+      );
       setConversationId(reply.conversation_id);
       setMsgs((m) => [...m, { id: `a${reply.message_id}`, from: 'ai', text: reply.answer, memories }]);
     } catch (err) {
@@ -263,6 +280,7 @@ export default function Ai() {
       if (frame !== null) cancelAnimationFrame(frame);
       sending.current = false;
       setDraft('');
+      setSteps([]);
       setTyping(false);
     }
   };
@@ -310,17 +328,20 @@ export default function Ai() {
             );
           })}
 
-          {typing && draft ? (
+          {/* Chờ chữ đầu tiên: dòng suy nghĩ trôi trên nền, không bọc hộp để không bị nhầm là bong bóng trả lời. */}
+          {typing ? (
             <View style={styles.messageRow}>
-              <View style={[styles.bubble, styles.assistantBubble]}>
-                <ChatText text={splitActions(draft, true).text} streaming />
-              </View>
-            </View>
-          ) : typing ? (
-            <View style={styles.messageRow}>
-              <View style={[styles.bubble, styles.assistantBubble, styles.typingBubble]}>
-                <ThinkingStatus />
-              </View>
+              {draft ? (
+                <View style={[styles.bubble, styles.assistantBubble]}>
+                  <BobiLabel memoryOn={memoryOn} memories={[]} currentId={conversationId} onOpenSource={openSource} />
+                  <StreamingChatText text={splitActions(draft, true).text} />
+                </View>
+              ) : (
+                // Bề rộng hết hàng để hàng suy nghĩ tự xuống dòng khi có nhiều bước, thay vì tràn ra ngoài màn hình.
+                <View style={styles.thinkingLine}>
+                  <ThoughtLine steps={steps} />
+                </View>
+              )}
             </View>
           ) : null}
         </View>
@@ -765,9 +786,11 @@ const styles = StyleSheet.create({
     lineHeight: 20.5,
     flexWrap: 'wrap',
   },
-  typingBubble: {
-    // Rộng hết hàng như bong bóng trả lời, để câu chờ đổi độ dài mà bong bóng không co giãn theo.
-    paddingVertical: 12,
+  // Dòng suy nghĩ không bọc hộp: chữ và các bước trôi trên nền, chỉ chiếm bề rộng hết hàng để xuống dòng đúng.
+  thinkingLine: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 4,
   },
   pressed: {
     opacity: 0.72,
