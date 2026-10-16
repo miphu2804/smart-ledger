@@ -1,3 +1,11 @@
+### [2026-10-17 00:41 UTC+07:00] — [AI] Memory reconcile against similar memories and use frequency in ranking
+
+**Done:** After Hy Memory's `pro` mode, a new fact that replaces no recalled memory is now checked against up to three live memories with cosine 0.6 or more that the turn did not recall (`AgentMemoryRepository.similar`, which records no use); one `MEMORY_RECONCILE_PROMPT` call marks each fact `new`, `replaces` a shown id, or `known` (dropped). No candidate means no call; a failed call keeps the facts. This catches an owner updating an old fact inside a question about something else, which the extraction step alone missed. Recall ranking also multiplies by `1 + ln(max(use_count, 1))`, Hy Memory's frequency term. ADR-0002 gains "Bổ sung theo Hy Memory".
+
+**Changed files:** `backend/ai/src/memory/repository.py`, `backend/ai/src/memory/service.py`, `backend/ai/src/prompt_templates/memory.py`, `backend/ai/src/prompt_templates/__init__.py`, `backend/ai/tests/unit_tests/test_agent_memory.py`, `backend/ai/tests/integration_tests/test_memory_repository.py`, `backend/ai/README.md`, `docs/architecture/adr/0002-agent-long-term-memory.md` — modified; this entry.
+
+**Check:** `uv run pytest` 390 passed, 64 skipped; ruff clean. Through `POST /internal/v1/agent/chat/stream` against staging (shop 3): an old rice-supplier fact left out of recall was superseded by "anh Tâm" said inside a revenue question (`memory reconciled ... candidates=1 replaced=1`); the first try at threshold 0.7 missed it (cosine 0.652), hence 0.6. Test conversations deleted. **Not verified:** the new integration tests (need `POSTGRES_TEST_URL`, run in CI).
+
 ### [2026-10-17] — [Chore] Resolve PR 293 progress conflict with staging
 
 **Done:** Synchronized staging `6caa9b2` into `feat/zalo-android` for PR #293, retaining all progress entries from both parents. The only conflict was this log; the incoming AI fix and its tests are kept exactly as staged upstream.

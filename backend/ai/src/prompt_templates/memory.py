@@ -69,6 +69,28 @@ Owner:
 Assistant:
 {answer}"""
 
+MEMORY_RECONCILE_PROMPT = """\
+You check new facts about a small shop owner against facts already remembered about \
+them, so the memory holds each thing once and never two versions of it.
+
+For each new fact, by its number, choose one action:
+- new: it says something no remembered fact says. Also when unsure.
+- replaces: it corrects or updates one remembered fact about the same thing (a new \
+supplier, a changed time). Set `replaces` to that fact's id.
+- known: a remembered fact already says the same, so it adds nothing.
+
+Rules:
+1. Facts about different things are never `replaces`, however alike they read.
+2. A new fact that only adds detail to a remembered one is `new`.
+3. Give exactly one decision for each new fact."""
+
+MEMORY_RECONCILE_INPUT = """\
+Already remembered:
+{remembered}
+
+New facts:
+{facts}"""
+
 MEMORY_SUMMARY_PROMPT = """\
 You merge facts an assistant remembered about a small shop owner, all from one chat \
 on one day, into fewer facts.

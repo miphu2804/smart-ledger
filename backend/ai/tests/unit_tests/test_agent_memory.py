@@ -30,12 +30,15 @@ class FakeMemoryRepository:
         error: Exception | None = None,
         groups=None,
         enabled: bool = True,
+        similar=None,
     ) -> None:
         self.recalled = recalled or []
         self.enabled = enabled
         self.error = error
         self.groups = groups or []
+        self.similar_memories = similar or []
         self.searches: list[tuple] = []
+        self.similar_searches: list[tuple] = []
         self.added: list[tuple] = []
         self.replaced: list[tuple] = []
 
@@ -44,6 +47,12 @@ class FakeMemoryRepository:
             raise self.error
         self.searches.append((shop_id, user_id, query, limit, preference_limit))
         return self.recalled
+
+    def similar(self, shop_id, user_id, embeddings, min_relevance, limit, skipped):
+        self.similar_searches.append(
+            (shop_id, user_id, len(embeddings), min_relevance, limit, skipped)
+        )
+        return self.similar_memories
 
     def add(self, shop_id, user_id, conversation_id, memories):
         if self.error is not None:
@@ -507,3 +516,130 @@ def test_settings_round_trip_through_the_memory_service(
     assert put.json() == {"memory_enabled": False, "available": True}
     assert after.json() == {"memory_enabled": False, "available": True}
     assert repository.enabled is False
+
+
+NEW_SUPPLIER = "Anh chuyển sang lấy gạo của anh Tâm."
+NEW_SUPPLIER_FACT = {
+    "memory_type": "preference",
+    "content": NEW_SUPPLIER,
+    "importance": 0.6,
+}
+
+
+def stored(content: str = RICE_SUPPLIER, memory_id: int = 12) -> StoredMemory:
+    return StoredMemory(
+        memory_id, "preference", content, 0.6, datetime(2026, 10, 1, tzinfo=UTC)
+    )
+
+
+def decisions(*items: dict) -> str:
+    return json.dumps({"decisions": list(items)})
+
+
+async def test_a_fact_replaces_a_similar_memory_the_turn_did_not_recall() -> None:
+    model = ScriptedModel(
+        facts(NEW_SUPPLIER_FACT),
+        decisions({"fact": 1, "action": "replaces", "replaces": 12}),
+    )
+    repository = FakeMemoryRepository(similar=[stored()])
+
+    await memory_service(model, repository).remember(
+        15, 3, 9, "doanh thu sao? À anh đổi qua gạo anh Tâm", "Dạ.", [recalled()]
+    )
+
+    ((_, _, _, memories),) = repository.added
+    assert [(memory.content, memory.supersedes) for memory in memories] == [
+        (NEW_SUPPLIER, 12)
+    ]
+    ((shop_id, user_id, embeddings, min_relevance, limit, skipped),) = (
+        repository.similar_searches
+    )
+    assert (shop_id, user_id, embeddings, min_relevance, limit, skipped) == (
+        15,
+        3,
+        1,
+        0.6,
+        3,
+        [7],
+    )
+    reconciled_from = sent_prompt(model, request=1)
+    assert f"[12] {RICE_SUPPLIER}" in reconciled_from
+    assert f"1. {NEW_SUPPLIER}" in reconciled_from
+
+
+async def test_a_fact_already_remembered_is_not_stored_again() -> None:
+    model = ScriptedModel(
+        facts(NEW_SUPPLIER_FACT, PREFERENCE),
+        decisions({"fact": 1, "action": "known"}, {"fact": 2, "action": "new"}),
+    )
+    repository = FakeMemoryRepository(similar=[stored(NEW_SUPPLIER)])
+
+    await memory_service(model, repository).remember(15, 3, 9, "q", "a", [])
+
+    ((_, _, _, memories),) = repository.added
+    assert [(memory.content, memory.supersedes) for memory in memories] == [
+        (SHORT_REPORTS, None)
+    ]
+
+
+async def test_only_every_known_fact_means_nothing_is_written() -> None:
+    model = ScriptedModel(facts(PREFERENCE), decisions({"fact": 1, "action": "known"}))
+    repository = FakeMemoryRepository(similar=[stored(SHORT_REPORTS)])
+
+    await memory_service(model, repository).remember(15, 3, 9, "q", "a", [])
+
+    assert repository.added == []
+
+
+async def test_no_similar_memory_skips_the_reconcile_model() -> None:
+    model = ScriptedModel(facts(PREFERENCE))
+    repository = FakeMemoryRepository()
+
+    await memory_service(model, repository).remember(15, 3, 9, "q", "a", [])
+
+    assert len(model.requests) == 1
+    ((_, _, _, (memory,)),) = repository.added
+    assert memory.supersedes is None
+
+
+async def test_reconcile_may_replace_only_a_memory_it_was_shown() -> None:
+    model = ScriptedModel(
+        facts(NEW_SUPPLIER_FACT),
+        decisions({"fact": 1, "action": "replaces", "replaces": 99}),
+    )
+    repository = FakeMemoryRepository(similar=[stored()])
+
+    await memory_service(model, repository).remember(15, 3, 9, "q", "a", [])
+
+    ((_, _, _, (memory,)),) = repository.added
+    assert memory.supersedes is None
+
+
+async def test_a_failed_reconcile_stores_the_facts_unchecked(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Every answer is invalid, so the reconcile output never validates.
+    model = ScriptedModel(
+        facts(NEW_SUPPLIER_FACT), *[ModelResponse(parts=[TextPart("not json")])] * 3
+    )
+    repository = FakeMemoryRepository(similar=[stored()])
+
+    with caplog.at_level(logging.WARNING):
+        await memory_service(model, repository).remember(15, 3, 9, "q", "a", [])
+
+    ((_, _, _, (memory,)),) = repository.added
+    assert (memory.content, memory.supersedes) == (NEW_SUPPLIER, None)
+    assert "memory not reconciled: shop=15" in caplog.text
+
+
+async def test_a_fact_replacing_a_recalled_memory_skips_the_reconcile() -> None:
+    model = ScriptedModel(facts({**NEW_SUPPLIER_FACT, "replaces": 7}))
+    repository = FakeMemoryRepository(similar=[stored()])
+
+    await memory_service(model, repository).remember(
+        15, 3, 9, "q", "a", [recalled(memory_id=7)]
+    )
+
+    assert repository.similar_searches == []
+    ((_, _, _, (memory,)),) = repository.added
+    assert memory.supersedes == 7
