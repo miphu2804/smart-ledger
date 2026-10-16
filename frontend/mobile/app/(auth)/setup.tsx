@@ -1,8 +1,8 @@
 import { Feather } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React, { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { Button, Field, Header, Progress, Screen, T } from '../../src/components/ui';
+import { router, useFocusEffect } from 'expo-router';
+import React, { useCallback, useState } from 'react';
+import { BackHandler, Pressable, StyleSheet, View } from 'react-native';
+import { Button, Dialog, Field, Header, Progress, Screen, T } from '../../src/components/ui';
 import { industryList } from '../../src/data/mock';
 import { errorMessage } from '../../src/lib/errors';
 import { useApp } from '../../src/store/AppStore';
@@ -10,12 +10,30 @@ import { colors } from '../../src/theme';
 
 /** Tạo tiệm lần đầu: tên tiệm + ngành hàng */
 export default function Setup() {
-  const { finishOnboarding } = useApp();
+  const { finishOnboarding, logout } = useApp();
   const [name, setName] = useState('');
   const [picked, setPicked] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [confirmLeave, setConfirmLeave] = useState(false);
   const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+
+  // Chưa có tiệm thì chưa vào app được: nút back của Android hỏi đăng xuất thay vì lùi về màn trước (có khi là các tab).
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        setConfirmLeave(true);
+        return true;
+      });
+      return () => sub.remove();
+    }, []),
+  );
+
+  const leave = async () => {
+    setConfirmLeave(false);
+    await logout();
+    router.replace('/(auth)/welcome');
+  };
 
   return (
     <Screen
@@ -81,6 +99,26 @@ export default function Setup() {
           );
         })}
       </View>
+      <Pressable
+        onPress={() => setConfirmLeave(true)}
+        accessibilityRole="button"
+        style={{ alignSelf: 'center', marginTop: 20, minHeight: 44, justifyContent: 'center' }}
+      >
+        <T size={13} color={colors.faint}>
+          Dùng tài khoản khác
+        </T>
+      </Pressable>
+
+      <Dialog
+        visible={confirmLeave}
+        icon="log-out"
+        title="Dừng tạo tiệm?"
+        message="Bạn sẽ được đăng xuất. Lần sau đăng nhập bằng tài khoản này, app sẽ hỏi tạo tiệm tiếp."
+        confirm="Đăng xuất"
+        cancel="Tạo tiệm tiếp"
+        onCancel={() => setConfirmLeave(false)}
+        onConfirm={() => void leave()}
+      />
     </Screen>
   );
 }

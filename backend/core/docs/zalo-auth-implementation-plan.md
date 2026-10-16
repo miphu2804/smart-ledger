@@ -20,7 +20,7 @@ Branch: `feat/zalo-login`.
   profile or shop; the client still opens `/auth/session` after Firebase sign-in.
 
 Traceability is [BR-009 / BR-022](../../../docs/product/business-requirements.md) →
-[FR-010 / NFR-003 / AC-079–084](../../../docs/product/product-requirements.md).
+[FR-010 / NFR-003 / AC-081–086](../../../docs/product/product-requirements.md).
 UI remains forthcoming until FE implements and accepts the canonical
 [Zalo contract](../../../docs/contracts/api-contracts.md#zalo-core-015). This plan does not claim staging/consumer acceptance.
 

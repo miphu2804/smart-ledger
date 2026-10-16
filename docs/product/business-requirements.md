@@ -207,7 +207,7 @@ Copy UI viện dẫn nghị định trên màn bản ghi bán hàng **không** b
 | `BO-002`, `BR-007`, `BR-009`, `BR-016`, `BR-017`, `BR-018` | `FR-009`, `FR-030`, `AC-044`–`AC-048` | Nhập kho Core; FE/staging cần nghiệm thu |
 | `BR-007`, `BR-009`, `BR-017`, `BR-019` | `FR-011`, `FR-031`, `NFR-003`, `NFR-010`, `AC-053`–`AC-054` | Media Core có trên nhánh; FE/staging và migration shared DB cần nghiệm thu |
 | `BR-009` | `FR-010`, `FR-011`, `NFR-003` | tạm thời — MVP đã chấp nhận; không tuyên bố sẵn sàng sản xuất |
-| `BR-009`, `BR-022` | `FR-010`, `NFR-003`, `AC-079`–`AC-084` | CORE-015 #238: backend Zalo web-popup trên feat/zalo-login; LOGIN local do người dùng xác nhận, FE/LINK thật/staging còn nghiệm thu |
+| `BR-009`, `BR-022` | `FR-010`, `NFR-003`, `AC-081`–`AC-086` | CORE-015 #238: backend Zalo web-popup trên feat/zalo-login; LOGIN local do người dùng xác nhận, FE/LINK thật/staging còn nghiệm thu |
 | `BR-013`, `BR-014` | `FR-022`–`FR-024`, `NFR-003`, `NFR-009`, `AC-015`–`AC-017`, `AC-040`–`AC-043` | Core có API hỗ trợ/audit; dashboard web và staging cần nghiệm thu riêng |
 | `BR-010` | `FR-014` | tạm thời — MVP đã chấp nhận |
 | `BR-015` | `FR-011`, `AC-025` | tạm thời — cần kiểm chứng với FE |

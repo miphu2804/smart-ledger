@@ -1,3 +1,13 @@
+### [2026-10-16] — [Chore] Reconcile Zalo branch with staging documentation
+
+**Done:** Integrated staging `ea2c1a0` into `feat/zalo-login`, retaining both sides of the progress history and combining the in-app password requirement with the Zalo login/link requirement. Staging's AC-079/AC-080 remain unchanged; the colliding, not-yet-integrated Zalo LOGIN/LINK criteria are now AC-085/AC-086. Zalo AC-081–084 keep their IDs. Historical entries below retain their original IDs; current references use AC-081–086.
+
+**Changed files:** Conflict resolution in `PROGRESS.md` and `docs/product/product-requirements.md`; traceability references in `docs/product/business-requirements.md`, `docs/contracts/api-contracts.md`, `docs/architecture/technical-design.md`, `backend/core/docs/zalo-auth-implementation-plan.md` and `backend/core/docs/zalo-auth.tdd.md`. Other incoming changes are taken unchanged from staging; unrelated local files are excluded.
+
+**Flow explained:** No new product behavior, Core implementation or migration is introduced by the resolution. Both mobile requirements and the Zalo backend boundaries remain; this sync does not accept native Zalo, FE integration or production readiness.
+
+**Check:** Conflict-marker, whitespace, acceptance-ID uniqueness, traceability and parent-history preservation checks performed before commit. All 252 feature-parent and 257 staging-parent progress blocks are preserved verbatim; all 86 acceptance IDs are unique and both parents' criteria are retained with only the two recorded ID remaps. Eight Node helper tests pass with synthetic loopback traffic after rerunning outside the sandbox's local-network restriction. Core code is unchanged from the previously tested feature commit; full Core regression is not rerun for this documentation resolution. CI/CodeQL and unresolved PR conversations remain separate merge gates.
+
 ### [2026-10-16] — [Fix] Harden Zalo review findings without changing account or native flows
 
 **Done:** Addressed the four PR #275 review topics locally: pinned the manual proxy's HTTP destination to validated loopback configuration, replaced the permissive hostname regex with structured URL assertions, removed the limiter's map-capacity admission failure, and corrected validation-error documentation without changing the shared exception handler.
@@ -17,6 +27,59 @@
 **Flow explained:** Zalo consent returns to Core; a short-lived proof is delivered only to the initiating popup origin and consumed with the matching client verifier. LOGIN yields a Firebase custom token, exchanged for an ID token before the existing Core session flow. LINK requires recent, revocation-checked Firebase authentication and never reassigns an existing provider identity or auto-merges by name/email. V17 creates server-only identity/session stores with RLS and no public policies; durable mappings are retained when rolling back application code. Feature-off does not disable Flyway: review Railway migration settings, backup/window and Core SQL-role access before merging/deploying. Canonical rollout and recovery: [ERD](docs/architecture/erd-description.md#zalo-core-015-v17), [Core README](backend/core/README.md#zalo-authentication-core-015-local-backend-implementation).
 
 **Check:** Verified Java 21 Maven `verify` with JaCoCo and all opt-in PostgreSQL suites against UUID-named schemas in the disposable loopback PostgreSQL 16.15 container: **1,281 tests, 0 failures / 0 errors / 0 skipped**, including 104 Zalo-named cases. Six V17 tests cover fresh/upgrade/no-op/rollback, lifecycle and unique constraints, and non-owner reads/writes under RLS; two real-HTTP OpenAPI tests check the generated contract against the DTO/response. The PostgreSQL report gate and its 13 self-tests pass. Five Node manual-helper tests, the Windows PowerShell launcher regression and three actual Chrome popup scenarios pass with synthetic data. Packaged JAR contains V17/controller/verifier but no manual launcher, retired SQL fixture or private configuration. Relative document file links and `git diff --check` pass. The user reported real-provider local LOGIN success; real-provider LINK, FE/native integration, Railway signing/proxy/log behavior and shared-environment migration remain pending. No shared/business/staging/production DB change, commit, push, PR or deployment was performed.
+### [2026-10-16 18:26 UTC+07:00] — [Fix] Guide pictures for Bán hàng and Quản lý match the app
+
+**Done:** In the guide pictures from #274, the Bán hàng phone highlighted "Quản lý" in the tab bar and its bar ran past the screen, and the Quản lý phone lacked the "Xem lại hướng dẫn" row (#257) while its notes had a garbled character in "số lượng" and wrote "Quản lí". The Quản lý phone screen is now a capture of the real tab from the mock web build (same sample shop and numbers), with the floating Bobi and the version line hidden; the arrows that ended inside the old screen are redrawn to the same rows, and the Hàng hoá, Chi phí and Công nợ notes are rewritten in Plus Jakarta Sans. The Bán hàng phone keeps its screen but gets the real tab bar with "Bán hàng" highlighted. Same 1672 × 941 size; the bobi and overview pictures are unchanged. The manage picture's accessibility label lists the new row.
+
+**Changed files:** `frontend/mobile/assets/guide/guide-manage.png`, `frontend/mobile/assets/guide/guide-sales.png`, `frontend/mobile/src/components/AssistantIntroModal.tsx` — modified; this entry.
+
+**Check:** Both pictures inspected at full size and zoomed at the edited areas (tab bar, arrow heads, rewritten notes). **Not verified:** how they look inside the guide on a phone.
+
+### [2026-10-16 18:06 UTC+07:00] — [Feature] Change the password inside the app
+
+**Done:** Testers had to sign out and go through "Quên mật khẩu" to change a password. The Quản lý tab now has "Đổi mật khẩu" for accounts that signed up with email (Facebook and Google accounts have no password here, so the row is hidden). The new screen asks for the current password and the new one twice (at least 6 characters, different from the current one); the app re-authenticates with the current password and then updates it in Firebase, so the user stays signed in. A wrong current password shows under that field. "Quên mật khẩu hiện tại? Gửi thư đặt lại" sends the reset email to the signed-in address without signing out. `AuthClient` gains `hasPassword()` and `changePassword()` for native Firebase, web Firebase and the mock. Core is unchanged (it never stores passwords). `FR-010` mentions the in-app change; new criterion `AC-080`.
+
+**Changed files:** `frontend/mobile/app/change-password.tsx` — added; `frontend/mobile/app/(tabs)/more.tsx`, `frontend/mobile/src/lib/auth/types.ts`, `frontend/mobile/src/lib/auth/firebase.ts`, `frontend/mobile/src/lib/auth/firebase.web.ts`, `frontend/mobile/src/lib/auth/mock.ts`, `docs/product/product-requirements.md` (`FR-010`, `AC-080`) — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors; mock web build in headless Chrome (6/6): a new email account (ZZ-TEST) sees "Đổi mật khẩu" in Quản lý; a wrong current password shows "Mật khẩu hiện tại chưa đúng"; a mismatched repeat is flagged; the correct one shows "Đã đổi mật khẩu" and returns to Quản lý still signed in; after signing out the old password is refused and the new one signs in. **Not verified:** real Firebase on a phone (re-authentication and `updatePassword` against the staging project).
+
+### [2026-10-16 17:58 UTC+07:00] — [Fix] An account without a shop no longer lands in the sample shop
+
+**Done:** A tester creating an account pressed Android back on "Tiệm của bạn tên gì?" and landed in the tabs showing "Tiệm tạp hoá cô Thỏ". The app state starts with the sample shop until Core returns a session with a shop, and nothing stopped the tabs from opening before that, so going back from shop setup (or signing out from a screen stacked on the tabs) exposed the sample data as if it were a real account. The tabs layout now opens only for a signed-in account with a shop: before the session is restored it shows a blank screen, signed out it redirects to the sign-in screen, and without a shop to shop setup. On shop setup, Android back and a new "Dùng tài khoản khác" link ask "Dừng tạo tiệm?"; confirming signs out and returns to sign-in. New criterion `AC-079`.
+
+**Changed files:** `frontend/mobile/app/(tabs)/_layout.tsx`, `frontend/mobile/app/(auth)/setup.tsx`, `docs/product/product-requirements.md` (`AC-079`) — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors; mock web build in headless Chrome (5/5): signed out, opening `/invoices` lands on sign-in with no sample shop; "Vào app" opens Tổng quan; signing out from Quản lý returns to sign-in; on `/setup`, "Dùng tài khoản khác" asks "Dừng tạo tiệm?" and confirming returns to sign-in. **Not verified:** Android back on a real phone during a real sign-up.
+
+### [2026-10-16 17:55 UTC+07:00] — [Mobile/AI] Tool step keeps its shimmer, screen button in brand purple, numbered lists
+
+**Done:** A tool step in `ThoughtLine` keeps its shimmer after the tool ends, because the model is still writing the reply; the running dot is gone and the tick sits after the label, so the label starts where the waiting phrase does. `suggest_screen` gets its own step label instead of the generic one. The screen-button card under a reply drops the "Mở nhanh" label and shows brand-purple buttons with a purple shadow. The shop agent prompt asks for numbered lists only, and the mock replies follow it.
+
+**Changed files:** `frontend/mobile/src/components/ThoughtLine.tsx`, `frontend/mobile/src/components/ChatText.tsx`, `frontend/mobile/src/lib/toolSteps.ts`, `frontend/mobile/tests/toolSteps.test.ts`, `frontend/mobile/src/lib/mockCore.ts`, `backend/ai/src/prompt_templates/shop_agent.py`, `docs/contracts/api-contracts.md` — modified; this entry.
+
+**Flow explained:** tool `start` → the step replaces the waiting phrase, types in with shimmer → tool `end` → tick after the label, shimmer continues → first `delta` → the line is replaced by the reply.
+
+**Check:** `tsc --noEmit` clean, `toolSteps` tests 6 passed, AI unit tests 342 passed; checked in the Expo web build with mock data. **Not verified:** on a device, and the numbered-list rule against the real model.
+
+### [2026-10-16] — [Mobile] Thought line shows only the latest tool step, with shimmer
+
+**Done:** `ThoughtLine` now shows one step at a time: each new tool call replaces the waiting phrase or the step before it instead of lining up beside it. A running step's label types in and then gets the same shimmer sweep as the waiting phrase; a finished step stays still in the faint color with a tick.
+
+**Changed files:** `frontend/mobile/src/components/ThoughtLine.tsx` — modified; this entry.
+
+**Flow explained:** tool `start` → the step slides in and its label types in with shimmer → tool `end` → tick, shimmer stops → next tool `start` → the new step replaces it.
+
+**Check:** `tsc --noEmit` clean, `npm test` 107 passed. **Not verified:** on a device or in the Expo web build.
+
+### [2026-10-16 15:25 UTC+07:00] — [CI] CI runs only the jobs whose area changed
+
+**Done:** New job `changes` in `ci.yml` (`dorny/paths-filter@v4.0.3`) marks which of `ai`, `core`, `mobile`, `landing`, `containers` a pull request or push touched. Each test job, `deploy-web` and `deploy-landing` run only for their area; `deploy` runs when `ai` or `core` changed and deploys only the changed service. Skipped jobs count as passed, so required checks and the `mobile-release.yml` gate still work. A change to `ci.yml` runs everything. It replaces the landing-only `Detect landing changes` step, and keeps its rule that a re-run always deploys, now for every deploy job.
+
+**Changed files:** `.github/workflows/ci.yml`, `docs/development/ci-cd.md`, `CONTRIBUTING.md` — modified; this entry.
+
+**Flow explained:** `changes` → test jobs gated by area → `summary` (skipped rows) → deploy jobs gated by area and by no failed test job.
+
+**Check:** `actionlint` passes. **Not verified:** a real run on GitHub; the PR of this change touches `ci.yml`, so it runs every job, and the skip path shows only on a later docs-only or single-area PR.
 
 ### [2026-10-16 14:15 UTC+07:00] — [Feature] App guide updated with refreshed illustrations, 16:9 ratio, and aligned copy
 
@@ -79,6 +142,14 @@
 **Flow explained:** each round, one slice per doc group was checked sentence by sentence against the code; every claimed drift was verified against the cited code before it was applied. A claim the code cannot show (Railway, Vercel or Firebase settings) was left open, not written as fact.
 
 **Check:** `dbml2sql` parses `erd.dbml`; every `.drawio` and SVG parses as XML; Mermaid re-rendered; local link and anchor check reports 0 bad links. **Not verified:** whether staging or production set `AGENT_MEMORY_ENABLED` or Cloudflare variables; `vercel-production` secrets, Firebase authorized domains and `CORS_ALLOWED_ORIGINS` on `railway-production`.
+
+### [2026-10-16 10:23 UTC+07:00] — [Fix] Overview compact bar buttons on one line
+
+**Done:** After scrolling Tổng quan, the four quick buttons of the compact bar (Đọc đơn, Quét mã, Chọn hàng, Trợ lý) showed the icon above the label (#254), which took two lines of height. Each button now has the icon tile and the label on one line, 34 px high instead of 50 px; buttons are as wide as their label instead of equal, so "Chọn hàng" fits beside the short "Trợ lý". `HEADER_COLLAPSED` goes from 115 to 99, so the collapsed bar is 16 px lower. On screens narrower than 360 px the label shrinks to fit instead of wrapping (native only).
+
+**Changed files:** `frontend/mobile/app/(tabs)/index.tsx` — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors; mock web build in headless Chrome at 360 and 393 px after scrolling: the four buttons share one row, each 34 px high with icon and label on one line, no label cut and no button past the bar (10/10). **Not verified:** a real phone.
 
 ### [2026-10-16 15:30 UTC+07:00] — [Feature] Shorter Bobi intro and scope, history fits a 100k-token window
 

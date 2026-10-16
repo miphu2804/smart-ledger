@@ -192,7 +192,7 @@ automated check of provider roles, real-provider LINK or the staging consumer.
 | Manual helper regression | Five Node cases and the Windows PowerShell launcher check pass; the thin launcher contains only the manual entrypoint, with migrations supplied by production classes. |
 | Browser regression | Actual Chrome passes all three synthetic loopback popup scenarios: exact-target delivery/receiver checks, orphan fail-closed, and no delivery to the wrong origin. |
 | Packaging | The built executable JAR contains V17, the production Zalo controller and exact verifier; it excludes the manual launcher, retired SQL fixture and private configuration. |
-| Documentation and scope | BR-022 → FR-010/NFR-003 → AC-079–084 and canonical contract/design/ERD/setup/recovery updated with approval. Relative file links resolve. `git diff --check` passes. No FE/AI implementation edits, secret files or IDE files are included in the intended change. |
+| Documentation and scope | BR-022 → FR-010/NFR-003 → AC-081–086 and canonical contract/design/ERD/setup/recovery updated with approval. Relative file links resolve. `git diff --check` passes. No FE/AI implementation edits, secret files or IDE files are included in the intended change. |
 
 All automated DB work used generated schemas in the disposable loopback
 PostgreSQL 16.15 instance. The existing legacy manual-test schema was not reset,
