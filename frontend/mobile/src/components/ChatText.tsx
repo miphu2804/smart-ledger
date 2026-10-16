@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { parseChatMarkdown, SCREEN_LINKS, type AppScreen, type ChartSpec, type ChatBlock, type Inline } from '../lib/chatMarkdown';
 import { useSmoothText } from '../lib/smoothText';
 import { colors, font } from '../theme';
@@ -55,15 +55,24 @@ function ChartCard({ spec }: { spec: ChartSpec }) {
   );
 }
 
-function ScreenButtons({ screens }: { screens: AppScreen[] }) {
+function ScreenButtons({
+  screens,
+  variant = 'outline',
+  style,
+}: {
+  screens: AppScreen[];
+  variant?: 'outline' | 'primary';
+  style?: StyleProp<ViewStyle>;
+}) {
   return (
-    <View style={styles.actions}>
+    <View style={[styles.actions, style]}>
       {screens.map((screen) => (
         <Button
           key={screen}
           title={SCREEN_LINKS[screen].label}
-          variant="outline"
+          variant={variant}
           small
+          style={variant === 'primary' && styles.brandShadow}
           onPress={() => router.navigate(SCREEN_LINKS[screen].route)}
         />
       ))}
@@ -73,16 +82,14 @@ function ScreenButtons({ screens }: { screens: AppScreen[] }) {
 
 /**
  * Thẻ nút mở màn hình, đặt riêng dưới bong bóng trả lời (`splitActions` tách khối ```actions ra khỏi
- * chữ), để nút không chen vào nội dung câu trả lời.
+ * chữ), để nút không chen vào nội dung câu trả lời. Nút tím như bong bóng câu hỏi, không nhãn, để tách
+ * khỏi bong bóng trả lời trắng.
  */
 export function ScreenActions({ screens }: { screens: AppScreen[] }) {
   if (!screens.length) return null;
   return (
     <View style={styles.actionsCard}>
-      <T size={11.5} color={colors.muted}>
-        Mở nhanh
-      </T>
-      <ScreenButtons screens={screens} />
+      <ScreenButtons screens={screens} variant="primary" style={styles.actionsInCard} />
     </View>
   );
 }
@@ -235,11 +242,11 @@ const styles = StyleSheet.create({
     marginTop: -4,
     alignSelf: 'flex-start',
     maxWidth: '100%',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
   },
+  actionsInCard: { marginTop: 0 },
+  // Bóng ngả tím theo màu nút, đậm hơn shadow(3) xám để nút nổi khỏi nền kem.
+  brandShadow: Platform.select<ViewStyle>({
+    web: { boxShadow: '0 6px 16px rgba(72,42,172,0.32)' } as ViewStyle,
+    default: { shadowColor: colors.brand, shadowOpacity: 0.32, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
+  })!,
 });

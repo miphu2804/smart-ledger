@@ -1429,7 +1429,7 @@ function mockAgentAnswer(question: string): string {
   if (/gia von/.test(q)) {
     const missing = active.filter((p) => p.costPriceVnd == null);
     if (!missing.length) return `Món nào cũng đã có giá vốn. ${scope}`;
-    return `Chưa nhập giá vốn:\n${missing.slice(0, 20).map((p) => `• ${p.name}`).join('\n')}\n${scope}`;
+    return `Chưa nhập giá vốn:\n${missing.slice(0, 20).map((p, i) => `${i + 1}. ${p.name}`).join('\n')}\n${scope}`;
   }
   if (/dat nhat|mac nhat/.test(q)) {
     const top = [...active].sort((a, b) => b.sellingPriceVnd - a.sellingPriceVnd).slice(0, 5);
@@ -1456,7 +1456,7 @@ function mockAgentAnswer(question: string): string {
     const low = active.filter((p) => p.tracked && (p.stockQuantity ?? 0) <= 6);
     if (!low.length) return `Chưa có mặt hàng nào dưới ngưỡng 6. ${scope}`;
     // Khối ```actions như AI service gắn sau lời gọi suggest_screen, để xem thẻ nút mở màn hình.
-    return `Các món sắp hết:\n${low.map((p) => `• ${p.name}: còn ${p.stockQuantity} ${p.unit}`).join('\n')}\n${scope}\n\n\`\`\`actions\n["products"]\n\`\`\``;
+    return `Các món sắp hết:\n${low.map((p, i) => `${i + 1}. ${p.name}: còn ${p.stockQuantity} ${p.unit}`).join('\n')}\n${scope}\n\n\`\`\`actions\n["products"]\n\`\`\``;
   }
   if (/bao nhieu (mon|mat hang|san pham)|may mon/.test(q)) {
     return `Tiệm đang bán ${active.length} mặt hàng trong ${listCategories().length} nhóm. ${scope}`;
@@ -1468,7 +1468,7 @@ function mockAgentAnswer(question: string): string {
   if (matched.length) {
     return `${matched
       .slice(0, 5)
-      .map((p) => `• ${p.name}: ${vnd(p.sellingPriceVnd)}/${p.unit}${p.tracked ? `, còn ${p.stockQuantity}` : ''}`)
+      .map((p, i) => `${i + 1}. ${p.name}: ${vnd(p.sellingPriceVnd)}/${p.unit}${p.tracked ? `, còn ${p.stockQuantity}` : ''}`)
       .join('\n')}\n${scope}`;
   }
   return 'Mình chưa đủ dữ liệu để trả lời câu này. Ở bản xem trước, bạn thử hỏi giá hoặc tồn kho của một món nhé.';
