@@ -2,6 +2,8 @@
 
 This guide builds the current `frontend/mobile` workspace in the Xcode `Release` configuration, installs it on a connected iPhone, and opens the app. It covers direct installation for device validation; it does not upload a build to TestFlight or the App Store.
 
+[`scripts/ios-device-release.sh`](../../scripts/ios-device-release.sh) runs these steps with a preflight check. Without options it builds against staging Core and installs on the iOS Simulator; its menu, or `--device <name or UDID>`, picks a paired iPhone instead. The steps below are the manual path for an iPhone.
+
 ## Prerequisites
 
 - Xcode and the mobile project dependencies are installed on the Mac.
