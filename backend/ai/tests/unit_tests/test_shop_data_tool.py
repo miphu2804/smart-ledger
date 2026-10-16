@@ -8,7 +8,6 @@ from sqlalchemy.exc import DBAPIError
 from tests.support import (
     TEST_GUARDRAIL_LIMITS,
     ScriptedModel,
-    static_instructions,
     tool_call,
     tool_results,
     transcript,
@@ -167,14 +166,11 @@ async def test_instructions_are_static_and_carry_the_sql_rules() -> None:
     await build_agent(without_tool).chat(user_id=3, shop_id=15, message="m")
 
     instructions = with_tool.requests[0][1].instructions
-    assert (
-        static_instructions(instructions)
-        == f"{SHOP_AGENT_SYSTEM_PROMPT}\n\n{SQL_AGENT_PROMPT}"
-    )
-    assert "15" not in static_instructions(instructions)
+    assert instructions == f"{SHOP_AGENT_SYSTEM_PROMPT}\n\n{SQL_AGENT_PROMPT}"
+    assert "15" not in instructions
     messages, info = without_tool.requests[0]
-    assert static_instructions(info.instructions) == SHOP_AGENT_SYSTEM_PROMPT
-    assert transcript(messages) == [("user", "m")]
+    assert info.instructions == SHOP_AGENT_SYSTEM_PROMPT
+    assert transcript(messages) == [("user", "m"), ("time", "")]
 
 
 @pytest.mark.parametrize(

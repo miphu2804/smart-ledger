@@ -1,3 +1,22 @@
+### [2026-10-16 10:10 UTC+07:00] — [Feature] Agent prompt cache: time after the message, Anthropic cache breakpoints, cache usage in logs
+
+**Done:** The current-time line moved out of the system instructions to the end of the owner's new message, behind a `CachePoint`, so the instructions and the whole stored history stay a byte-identical prefix from turn to turn. The Anthropic model now sets explicit cache breakpoints on tools, instructions and the last message (not the top-level automatic mode, which the gateway may not forward). Each turn logs cache read and write tokens and the hit ratio next to the usage.
+
+**Changed files:** `backend/ai/src/agent/service.py`, `backend/ai/src/providers/factory.py`, `backend/ai/src/prompt_templates/shop_agent.py`, `backend/ai/tests/support.py`, `backend/ai/tests/unit_tests/test_agent_service.py`, `test_shop_data_tool.py`, `test_restock_tool.py`, `test_agent_guardrails.py`, `test_agent_memory.py`, `test_provider_factory.py` — modified; this entry.
+
+**Flow explained:** request = `[instructions][stored history][new message | CachePoint | current time]`. The time is never stored, so it must come after the breakpoint: the next turn repeats the previous request up to that breakpoint and the provider finds it in its cache. Putting the time before the message was measured and rejected: cache reads stayed flat at the instructions while the history was re-written every turn.
+
+**Check:** 320 unit tests pass, integration 40 passed / 52 skipped (no DB env), ruff clean. Live against the gateway (`claude-haiku-5-5`), real `AgentService`, three turns: cache read 0 → 992 → 1124 tokens, hit 0% → 85% → 87%, and the model answered "thứ Sáu, 16/10/2026" from the moved time line. **Not verified:** turns with tool calls and recalled memories: memory-wrapped prompts are not stored as sent, so the turn after a recall misses the history cache from that message on.
+
+### [2026-10-16 08:30 UTC+07:00] — [Feature] Chat prompts speak as Bobi of Sổ Nghe Lời, query prompt matches the SQL guard
+
+**Done:** The shop chat prompt now introduces the assistant as Bobi of Sổ Nghe Lời (was "SmartLedger's assistant"): Bobi refers to itself as "Bobi", addresses the owner as "anh/chị", leads with the answer, uses today when no period is named, and lists the matches when a product name is ambiguous. The query prompt now lists exactly the functions and casts `SqlGuard` accepts (it omitted CASE, row_number, substring and others), defines today/yesterday/this week/this month in shop time, shows how to fold Vietnamese names for `name_folded`, and adds examples for today, yesterday and revenue per day this month; sums use `coalesce(..., 0)` so an empty period reads as zero sales.
+
+**Changed files:** `backend/ai/src/prompt_templates/shop_agent.py`, `backend/ai/src/prompt_templates/sql_agent.py` — modified; this entry.
+
+**Flow explained:** `AgentService` still joins the static shop prompt, the query prompt, the restock prompt and the memory prompt in that order, then the current time, so the cacheable prefix layout is unchanged.
+
+**Check:** `uv run pytest tests/unit_tests` 319 passed; ruff clean; all 14 example queries and every function named in rule 7 pass `SqlGuard.validate_and_wrap`. **Not verified:** the new examples against staging data, and live replies from the model.
 ### [2026-10-16 03:00 UTC+07:00] — [CI] Deploy the landing only when it changed
 
 **Done:** `deploy-landing` now runs on a push only when the push changes `frontend/web/` or `.github/workflows/ci.yml`; a re-run always deploys. Every push to `staging` and `main` used to spend two Vercel deployments (web and landing) even when only the backend changed, and the production deploy of release #249 hit the Hobby limit of 100 a day (`api-deployments-free-per-day`).
