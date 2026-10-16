@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChatText, ScreenActions } from '../src/components/ChatText';
+import { BusinessIcon } from '../src/components/icons';
 import { SlingSendButton } from '../src/components/SlingSendButton';
 import { ThinkingStatus } from '../src/components/ThinkingStatus';
 import { VoicePillButton } from '../src/components/VoicePillButton';
@@ -104,7 +105,7 @@ function MemoryIcon({
         onPress={() => setOpen((v) => !v)}
         style={({ pressed }) => [styles.memoryIcon, pressed && styles.pressed]}
       >
-        <Feather name="bookmark" size={13} color={colors.brand} />
+        <BusinessIcon size={15} color={colors.brand} filled />
         {memories.length > 1 ? (
           <T w="semibold" size={11.5} color={colors.brand}>
             {memories.length}
@@ -651,6 +652,7 @@ function AssistantSettingsSheet({ visible, onClose }: { visible: boolean; onClos
       ) : null}
       {settings?.available ? (
         <Row gap={12} style={styles.settingRow}>
+          <BusinessIcon size={26} color={colors.brand} offColor={colors.faint} filled={settings.memory_enabled} />
           <View style={{ flex: 1 }}>
             <T w="bold" size={15} color={colors.ink}>
               Ghi nhớ dài hạn
