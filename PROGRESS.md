@@ -1,3 +1,13 @@
+### [2026-10-17] — [Chore] Sync Zalo Android with latest staging progress
+
+**Done:** Merged staging `5e8f27b` into `feat/zalo-android` and resolved the only conflict, `PROGRESS.md`, by retaining every entry from both parents. Incoming AI prompt files are taken unchanged from staging; no manual FE/AI edit or live-environment operation is included.
+
+**Changed files:** Progress conflict resolution and this new entry; the two AI prompt files are normal incoming staging changes, not Zalo implementation changes.
+
+**Flow explained:** Core, V18 and staging configuration are identical to the tested feature parent. This sync does not activate Railway/native, run a shared migration or accept the APK/provider flow.
+
+**Check:** Parent progress-block preservation, unchanged Core tree, exact incoming AI content, conflict-marker and whitespace checks are performed before the merge commit. Core regression evidence remains the preceding V18 entry (1,358 tests / 100 suites, no failures/errors/skips; 15 required PostgreSQL suites); no claim of rerunning AI/provider/APK acceptance for this merge.
+
 ### [2026-10-17] — [Feature] Add approved Zalo Android V18 and staging activation configuration
 
 **Done:** Added the approved CORE-016 #276 migration and prepared explicit staging enablement on `feat/zalo-android`. The user chose configuration in this branch and Railway activation only after merge. Runtime defaults remain OFF; no shared/business/staging/production DB migration, Railway change, production activation or FE implementation is performed here.
@@ -7,6 +17,16 @@
 **Flow explained:** V18 extends only transient OAuth sessions with WEB-default channel/client/target/native reference hash/expiry and channel-aware constraints; existing account/shop/mapping and WEB session values remain. One transaction, 5-second lock timeout and 60-second statement timeout bound the ordinary locked unique-index/constraint build; early/late/schema/lock failure rolls back all V18 changes without adopting unexpected schema. RLS/public-access restrictions remain. After merge and verified V18, review/copy staging variables to Railway for APK acceptance; the example contains no secret/DB/migration switch and is not auto-loaded. Recovery disables native and retains V18/mappings, never deletes users or identity history. AC-092 clarifies controlled staging testing versus separate APK/production acceptance.
 
 **Check:** Test-first missing-migration/config RED: 9 tests, 1 failure / 7 errors / 0 skipped; focused GREEN: all 7 migration and 2 staging-configuration tests pass on isolated PostgreSQL 16 loopback/tmpfs. The first full run exposed a test-only Mockito restubbing error in the new V17 compatibility setup; corrected with doAnswer, keeping the real transaction assertion. Final fresh Java 21 Maven `verify` with JaCoCo 0.8.14 passed **1,358 tests / 100 suites, 0 failures / 0 errors / 0 skipped**; all 15 mandatory PostgreSQL suites pass, including 7 V18 migration and 14 native-flow cases. Node helpers/landing (8 + 3), three Chrome popup scenarios and all 13 report-gate self-tests pass with synthetic data. Native repository/controller/service/page and DTO/result retain full measured Java line coverage; properties 40/42. JAR includes V1–V18, no fixture/manual tooling/staging example/private config. Runtime default, public configuration allowlist, unchanged V1–V17, document links/anchors, acceptance-ID and append-only-history checks pass. Remote CI/CodeQL, real APK/provider and live rollout remain unverified.
+
+### [2026-10-17] — [Fix] Keep Bobi in Vietnamese when the owner asks for another language
+
+**Done:** A chat on staging showed Bobi refusing English, while the memory extractor stored "Chủ shop muốn nhận câu trả lời bằng tiếng Anh." as a preference; from the next turn the memory prompt's "shape every answer by the owner's preferences" switched Bobi to English. The extractor now never stores a wish to change the assistant's language, name or scope, the memory prompt says no fact changes them, and the shop prompt lists language among what the owner cannot change.
+
+**Changed files:** `backend/ai/src/prompt_templates/memory.py`, `backend/ai/src/prompt_templates/shop_agent.py`; this entry.
+
+**Flow explained:** Prompt text only; recall, storage and the number of memories shown next to "Trợ lý Bobi" (memories used by that answer) are unchanged. Memory #11 already stored for shop 8 on staging still exists; the new memory prompt keeps answers in Vietnamese even with it recalled.
+
+**Check:** `ruff check`, `ruff format --check` and 342 AI unit tests pass. Against the configured real model (claude-haiku-5-5), the old prompts stored the English preference 3/3 times and answered in English 3/3 times with it recalled; the new prompts stored nothing 3/3 and answered in Vietnamese 3/3. Ordinary preferences and facts ("báo cáo ngắn gọn", "gọi tôi là anh Phú", opening hours) are still extracted 2/2.
 
 ### [2026-10-16] — [Feature] Prepare CORE-016 Android Zalo login and secure linking
 
