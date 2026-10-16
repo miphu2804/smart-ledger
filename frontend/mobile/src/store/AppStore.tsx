@@ -177,7 +177,7 @@ function useStoreValue() {
       updateProfile: (user: Partial<State['user']>, store: Partial<State['store']>) =>
         patch((st) => ({ user: { ...st.user, ...user }, store: { ...st.store, ...store } })),
       dismissGuide: () => patch(() => ({ guideDismissed: true })),
-      /** Mở lại phần giới thiệu ở Tổng quan (nút "Xem lại hướng dẫn" trong Cài đặt) */
+      /** Mở lại phần giới thiệu ở Tổng quan (mục "Xem lại hướng dẫn" ở tab Quản lý) */
       showGuide: () => patch(() => ({ guideDismissed: false })),
       markNotifsRead: (ids: string[]) =>
         patch((st) => ({ readNotifs: Array.from(new Set([...st.readNotifs, ...ids])) })),
