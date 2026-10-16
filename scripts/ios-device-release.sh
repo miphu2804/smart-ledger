@@ -1,36 +1,47 @@
 #!/usr/bin/env bash
-# Build a Release of the mobile app (frontend/mobile) from the current checkout and install it on a real iPhone paired
-# with this Mac (cable or Wi-Fi), for quick testing.
+# Build a Release of the mobile app (frontend/mobile) from the current checkout, against staging Core, and install it on
+# the iOS Simulator (the default) or on a real iPhone paired with this Mac (cable or Wi-Fi), for quick testing.
 #
-#   ./scripts/ios-device-release.sh                  pick the device from a menu (up/down or j/k, Enter; q to quit)
-#   ./scripts/ios-device-release.sh --device <UDID>  skip the menu (UDID or device name)
+#   ./scripts/ios-device-release.sh                  pick the target from a menu: the iOS Simulator (preselected, Enter)
+#                                                    or a paired iPhone (up/down or j/k, Enter; q to quit)
+#   ./scripts/ios-device-release.sh --simulator      the iOS Simulator without the menu (a booted iPhone, else the newest)
+#   ./scripts/ios-device-release.sh --device <id>    skip the menu: UDID or name of a paired iPhone or of a simulator
 #   ./scripts/ios-device-release.sh --clean          regenerate ios/ from app.json first (after native config changes)
 #   ./scripts/ios-device-release.sh --check          only run the preflight checks
 #   ./scripts/ios-device-release.sh --skip-preflight build even if a check fails
 #
-# Before building it checks the Mac (Xcode, its first-launch setup, CocoaPods, Node, the Firebase file, an Apple ID and
-# a signing certificate in Xcode), then the iPhone (Developer Mode, iOS version against the Xcode SDK) and a provisioning
-# profile that can sign the app for it. On a fresh Mac it lists everything missing and, in a terminal, offers to open
-# the App Store, Xcode, the Firebase Console or run the fixing command.
+# Before building it checks the Mac (Xcode, its first-launch setup, CocoaPods, Node, the Firebase file), then the
+# target: for the Simulator an installed iOS runtime; for an iPhone an Apple ID and a signing certificate in Xcode,
+# Developer Mode, the iOS version against the Xcode SDK and a provisioning profile that can sign the app for it. On a
+# fresh Mac it lists everything missing and, in a terminal, offers to open the App Store, Xcode, the Firebase Console or
+# run the fixing command. When another Node than the pinned one is first on PATH, it uses the pinned one if installed.
 # The Release build embeds the JS bundle, so the app runs without Metro. Mocks are always off (real Firebase and Core);
 # Core defaults to staging and can be overridden with EXPO_PUBLIC_API_ENDPOINT in .env or the shell. To build another
 # branch, git checkout it first.
 set -euo pipefail
 
+# pf_finish runs the script again with these arguments after a fix it started has succeeded.
+pf_rerun=("$(cd "$(dirname "$0")" && pwd)/$(basename "$0")" "$@")
 device=""
+simulator=false
 clean=false
 preflight=true
 check_only=false
 while [ $# -gt 0 ]; do
   case "$1" in
     -d | --device) device="${2:?--device needs a value}"; shift 2 ;;
+    -s | --simulator) simulator=true; shift ;;
     --clean) clean=true; shift ;;
     --check) check_only=true; shift ;;
     --skip-preflight) preflight=false; shift ;;
-    -h | --help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $1 (see --help)" >&2; exit 2 ;;
   esac
 done
+if $simulator && [ -n "$device" ]; then
+  echo "Pass --simulator or --device, not both (--device also takes a simulator's name or UDID)." >&2
+  exit 2
+fi
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=lib/preflight.sh
@@ -52,6 +63,8 @@ has_brew() { command -v brew >/dev/null; }
 xcode_app_store="macappstore://apps.apple.com/app/xcode/id497799835"
 min_xcode=15 # xcrun devicectl, used to list and install on iPhones, arrived in Xcode 15
 node_major="$(sed -n 's/^  NODE_MAJOR: *"\{0,1\}\([0-9]*\)"\{0,1\} *$/\1/p' "$root/.github/workflows/mobile-release.yml")"
+# Put the pinned Node first on PATH when another one is (also with --skip-preflight, so the build uses it).
+pf_use_node "$node_major"
 bundle="$(sed -n 's/.*"bundleIdentifier": *"\([^"]*\)".*/\1/p' app.json | head -1)"
 firebase_project="$(sed -n 's/^EXPO_PUBLIC_FIREBASE_PROJECT_ID=//p' .env 2>/dev/null | tail -1 || true)"
 firebase_url="https://console.firebase.google.com/${firebase_project:+project/$firebase_project/settings/general}"
@@ -79,7 +92,7 @@ xcode_teams() {
 }
 
 check_mac() {
-  local selected="" xcode_dir="" version="" major="" teams="" status=0
+  local selected="" xcode_dir="" version="" major=""
 
   pf_section "Mac and Xcode"
   selected="$(xcode-select -p 2>/dev/null || true)"
@@ -125,17 +138,7 @@ check_mac() {
       "Open the Homebrew install page" "pf_open https://brew.sh"
   fi
 
-  if ! command -v node >/dev/null; then
-    pf_fail "Node.js is not installed" "Install Node $node_major (the version pinned in .github/workflows/mobile-release.yml)." \
-      "$(has_brew && echo "Install Node $node_major with Homebrew" || echo "Open the Node.js download page")" \
-      "$(has_brew && echo "brew install node@$node_major" || echo "pf_open https://nodejs.org/en/download")"
-  elif [ "$(node -p 'process.versions.node.split(".")[0]')" != "$node_major" ]; then
-    pf_fail "Node $node_major required, found $(node --version)" "Install Node $node_major and put it first on PATH (or switch with nvm or fnm)." \
-      "$(has_brew && echo "Install Node $node_major with Homebrew" || echo "Open the Node.js download page")" \
-      "$(has_brew && echo "brew install node@$node_major && brew link --overwrite --force node@$node_major" || echo "pf_open https://nodejs.org/en/download")"
-  else
-    pf_ok "Node $(node --version)"
-  fi
+  pf_check_node "$node_major"
 
   pf_section "Project files"
   if [ -f GoogleService-Info.plist ]; then
@@ -152,9 +155,12 @@ check_mac() {
   if [ -z "${EXPO_PUBLIC_STT_MODEL_URL:-}$(sed -n 's/^EXPO_PUBLIC_STT_MODEL_URL=//p' .env 2>/dev/null | tail -1 || true)" ]; then
     pf_warn "EXPO_PUBLIC_STT_MODEL_URL is not set" "Voice ordering cannot download its speech model in this build."
   fi
+}
 
+# An iPhone build is signed; the Simulator build is not.
+check_signing() {
+  local teams="" status=0
   pf_section "Apple ID and signing certificate"
-  status=0
   teams="$(xcode_teams)" || status=$?
   if [ "$status" -eq 1 ] || { [ "$status" -eq 0 ] && [ -z "$teams" ]; }; then
     pf_fail "No Apple ID is signed in to Xcode" "Xcode › Settings › Accounts › + › Apple ID. Use an Apple ID that belongs to the team that owns $bundle;\na free Personal Team cannot sign a bundle ID that another team registered." \
@@ -190,6 +196,28 @@ list_devices() {
       console.log([hw.udid || d.identifier, dp.name, hw.marketingName, dp.osVersionNumber || "?", via,
         dp.developerModeStatus || "unknown", conn.pairingState || "unknown"].join("\t"));
     }' "$json"
+  rm -f "$json"
+}
+
+# One line per available iPhone simulator, newest iOS runtime first: udid<TAB>name<TAB>iOS<TAB>state (Booted or Shutdown).
+list_simulators() {
+  local json
+  json="$(mktemp)"
+  xcrun simctl list devices available --json >"$json" 2>/dev/null || { rm -f "$json"; return 1; }
+  node -e '
+    const { devices } = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+    const ver = (k) => (k.match(/\.iOS-([0-9-]+)$/) || [])[1];
+    const rows = [];
+    for (const [runtime, list] of Object.entries(devices)) {
+      const v = ver(runtime);
+      if (!v) continue;
+      for (const d of list) {
+        if (d.isAvailable === false || !/iPhone/.test(d.deviceTypeIdentifier || d.name)) continue;
+        rows.push({ d, v: v.replace(/-/g, "."), n: v.split("-").map(Number) });
+      }
+    }
+    rows.sort((a, b) => b.n[0] - a.n[0] || (b.n[1] || 0) - (a.n[1] || 0) || (b.n[2] || 0) - (a.n[2] || 0));
+    for (const { d, v } of rows) console.log([d.udid, d.name, v, d.state].join("\t"));' "$json"
   rm -f "$json"
 }
 
@@ -289,7 +317,7 @@ check_iphone() {
 # Show what is being built, and warn when uncommitted changes make the installed app differ from the commit.
 branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
 commit="$(git log -1 --format='%h %s' 2>/dev/null || echo '?')"
-echo "${bold}Sổ Nghe Lời: iOS Release build for an iPhone${reset}"
+echo "${bold}Sổ Nghe Lời: iOS Release build (Simulator or iPhone)${reset}"
 echo "  Branch: ${cyan}$branch${reset}"
 echo "  Commit: $commit"
 [ -z "$(git status --porcelain -- . 2>/dev/null)" ] || echo "  ${yellow}! Uncommitted changes in frontend/mobile are built into the app.${reset}"
@@ -305,63 +333,130 @@ if $checks; then
   pf_finish
 fi
 
-# Paired iPhones; the device checks need Xcode, so they run after the Mac checks passed.
-all_devices="$(list_devices)" || die "Could not list devices (xcrun devicectl). Open Xcode once so it finishes installing its components."
+# Targets. Both lists need Xcode, so they are read after the Mac checks passed. The default simulator is a booted
+# iPhone, else the first iPhone of the newest iOS runtime.
+simulators="$(list_simulators || true)"
+default_sim="$(printf '%s\n' "$simulators" | awk -F'\t' '$4 == "Booted"' | head -1)"
+[ -n "$default_sim" ] || default_sim="$(printf '%s\n' "$simulators" | sed '/^$/d' | head -1)"
+devicectl=true
+all_devices="$(list_devices)" || { devicectl=false; all_devices=""; }
 devices="$(printf '%s\n' "$all_devices" | awk -F'\t' '$7 == "paired"')"
 untrusted="$(printf '%s\n' "$all_devices" | awk -F'\t' 'NF && $7 != "paired" { print $2 }' | paste -sd, - | sed 's/,/, /g')"
-if [ -z "$devices" ]; then
+
+no_simulator() {
+  pf_begin
+  pf_section "iOS Simulator"
+  pf_fail "No iPhone simulator with an iOS runtime is installed" "Xcode › Settings › Components › iOS: Get, or download it from the terminal (about 8 GB).\nFor a real iPhone instead, connect it, tap Trust and pass --device <name>." \
+    "Download the iOS Simulator runtime" "xcodebuild -downloadPlatform iOS"
+  pf_finish
+}
+no_iphone() {
   pf_begin
   pf_section "iPhone"
   if [ -n "$untrusted" ]; then
     pf_fail "$untrusted is connected but has not trusted this Mac" "Unlock the iPhone, tap Trust on the \"Trust This Computer?\" prompt and enter the passcode. No prompt: unplug and\nplug the cable back in, or open Xcode › Window › Devices and Simulators." \
       "Open Xcode (then Window › Devices and Simulators)" "pf_open -a Xcode"
+  elif ! $devicectl; then
+    pf_fail "Could not list iPhones (xcrun devicectl)" "Open Xcode once so it finishes installing its components." "Open Xcode" "pf_open -a Xcode"
   else
     pf_fail "No iPhone is connected to this Mac" "$no_iphone_fix" "Open Xcode (then Window › Devices and Simulators)" "pf_open -a Xcode"
   fi
   pf_finish
-fi
-[ -z "$untrusted" ] || echo "  ${yellow}! Also connected but not trusting this Mac: $untrusted${reset}"
+}
 
-if [ -z "$device" ]; then
-  [ -t 0 ] || die "No terminal to show the menu: pass --device <UDID>."
-  udids=() labels=()
-  while IFS=$'\t' read -r udid name model os via devmode pairing; do
-    udids+=("$udid")
+# kind is "simulator" or "iphone"; target_line is the target's line from list_simulators or list_devices.
+kind="" target_line=""
+if $simulator; then
+  [ -n "$default_sim" ] || no_simulator
+  kind=simulator target_line="$default_sim"
+elif [ -n "$device" ]; then
+  target_line="$(printf '%s\n' "$devices" | awk -F'\t' -v d="$device" '$1 == d || $2 == d' | head -1)"
+  if [ -n "$target_line" ]; then
+    kind=iphone
+  else
+    target_line="$(printf '%s\n' "$simulators" | awk -F'\t' -v d="$device" '$1 == d || $2 == d' | head -1)"
+    [ -n "$target_line" ] && kind=simulator
+  fi
+  if [ -z "$kind" ]; then
+    if printf '%s\n' "$all_devices" | awk -F'\t' -v d="$device" '$1 == d || $2 == d' | grep -q .; then
+      untrusted="$device"
+      no_iphone
+    fi
+    die "$device is neither a paired iPhone nor an available simulator. Paired iPhones: $(printf '%s\n' "$devices" | sed '/^$/d' | cut -f2 | paste -sd, - | sed 's/,/, /g; s/^$/none/'). Simulators: xcrun simctl list devices available."
+  fi
+else
+  ids=() kinds=() labels=()
+  if [ -n "$default_sim" ]; then
+    IFS=$'\t' read -r udid name os state <<<"$default_sim"
+    ids+=("$udid") kinds+=(simulator)
+    labels+=("iOS Simulator: $name  ${dim}iOS $os · ${state} · default${reset}")
+  fi
+  while IFS=$'\t' read -r udid name model os via _; do
+    [ -n "$udid" ] || continue
+    ids+=("$udid") kinds+=(iphone)
     labels+=("$name  ${dim}$model · iOS $os · $via${reset}")
   done <<<"$devices"
-  echo
-  echo "Pick the iPhone:"
-  pf_pick "${labels[@]}"
-  device="${udids[choice]}"
+  if [ "${#ids[@]}" -eq 0 ]; then
+    no_simulator
+  fi
+  choice=0
+  if [ "${#ids[@]}" -gt 1 ]; then
+    [ -t 0 ] || [ "${kinds[0]}" = simulator ] || die "No terminal to show the menu: pass --device <UDID> or --simulator."
+    if [ -t 0 ]; then
+      echo
+      if [ "${kinds[0]}" = simulator ]; then echo "Install on (Enter keeps the iOS Simulator):"; else echo "Pick the iPhone:"; fi
+      pf_pick "${labels[@]}"
+    fi
+  fi
+  kind="${kinds[choice]}"
+  if [ "$kind" = simulator ]; then
+    target_line="$default_sim"
+  else
+    target_line="$(printf '%s\n' "$devices" | awk -F'\t' -v d="${ids[choice]}" '$1 == d' | head -1)"
+  fi
 fi
-device_line="$(printf '%s\n' "$devices" | awk -F'\t' -v d="$device" '$1 == d || $2 == d' | head -1)"
-[ -n "$device_line" ] || die "$device is not a paired iPhone. Paired: $(printf '%s\n' "$devices" | cut -f2 | paste -sd, -)."
-device="$(printf '%s' "$device_line" | cut -f1)"
+device="$(printf '%s' "$target_line" | cut -f1)"
+[ -z "$untrusted" ] || [ "$kind" != iphone ] || echo "  ${yellow}! Also connected but not trusting this Mac: $untrusted${reset}"
+if [ "$kind" = simulator ]; then
+  echo "  Target: ${cyan}iOS Simulator, $(printf '%s' "$target_line" | cut -f2) (iOS $(printf '%s' "$target_line" | cut -f3))${reset}"
+else
+  echo "  Target: ${cyan}iPhone $(printf '%s' "$target_line" | cut -f2)${reset}"
+fi
 
 if ! $check_only; then
-  # Reinstall when package-lock.json is newer than the last install (after a pull or a branch switch).
-  if [ ! -f node_modules/.package-lock.json ] || [ package-lock.json -nt node_modules/.package-lock.json ]; then
-    echo "${bold}→ npm install${reset}"
-    npm install
-  fi
+  pf_npm_install
   if $clean; then
     echo "${bold}→ expo prebuild --clean (regenerates ios/)${reset}"
     npx expo prebuild --platform ios --clean
-  elif [ ! -d ios ] && $checks; then
-    # A fresh clone has no ios/ yet; generate it now so the profile check sees the project's signing team.
+  elif [ ! -d ios ]; then
+    # A fresh clone has no ios/ yet; generate it now so the profile check sees the project's signing team and the
+    # Node path below lands in the project.
     echo "${bold}→ expo prebuild (generates ios/)${reset}"
     npx expo prebuild --platform ios
   fi
+  # Xcode's "Bundle React Native code and images" phase runs the node named in ios/.xcode.env.local, which prebuild
+  # wrote once. After a Node upgrade or an nvm switch that path is gone or another major, and the build fails late.
+  if [ -d ios ]; then
+    printf 'export NODE_BINARY=%q\n' "$(command -v node)" >ios/.xcode.env.local
+  fi
 fi
 
-if $checks; then
+if $checks && [ "$kind" = iphone ]; then
   pf_begin
-  check_iphone "$device_line"
+  check_signing
+  check_iphone "$target_line"
   pf_finish
 fi
 $check_only && exit 0
 
 echo
-echo "${bold}→ Build Release and install on $device${reset}"
-echo "  ${dim}Keep the iPhone unlocked when the build finishes so the app opens; a locked iPhone still gets the app but reports an error on launch.${reset}"
+if [ "$kind" = simulator ]; then
+  echo "${bold}→ Build Release and install on the iOS Simulator ($(printf '%s' "$target_line" | cut -f2))${reset}"
+  # Boot it and bring Simulator.app up first, so the app appears there when the build finishes.
+  xcrun simctl boot "$device" 2>/dev/null || true
+  open -a Simulator --args -CurrentDeviceUDID "$device" 2>/dev/null || true
+else
+  echo "${bold}→ Build Release and install on $device${reset}"
+  echo "  ${dim}Keep the iPhone unlocked when the build finishes so the app opens; a locked iPhone still gets the app but reports an error on launch.${reset}"
+fi
 npx expo run:ios --device "$device" --configuration Release --no-bundler
