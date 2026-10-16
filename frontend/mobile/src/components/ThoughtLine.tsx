@@ -35,7 +35,8 @@ interface ThoughtLineProps {
 
 /**
  * Dòng suy nghĩ của trợ lý lúc chờ câu trả lời, theo "Thought Line" của React Bits: lưới chấm chạy, câu chờ
- * đổi dần, đồng hồ đếm, kèm các bước đang làm. Ngôi sao của mẫu gốc được thay bằng lưới chấm của LatticeLoader.
+ * đổi dần, đồng hồ đếm. Khi trợ lý gọi tool thì bước đang làm thế chỗ câu chờ, chữ chạy dần như đang gõ.
+ * Ngôi sao của mẫu gốc được thay bằng lưới chấm của LatticeLoader.
  * Có chữ đầu tiên thì màn chat bỏ cả bong bóng này.
  */
 export function ThoughtLine({ steps = [], color = colors.brand }: ThoughtLineProps) {
@@ -75,10 +76,12 @@ export function ThoughtLine({ steps = [], color = colors.brand }: ThoughtLinePro
             <Animated.View key={i} style={[styles.dot, { backgroundColor: color, opacity: opacities[i] }]} />
           ))}
         </View>
-        {/* Đổi câu chờ thì nhãn trượt lên và hiện dần. */}
-        <SlideIn trigger={phrase} style={styles.label}>
-          <ShimmerText text={phrase} color={colors.ink} />
-        </SlideIn>
+        {/* Có bước tool thì bước thế chỗ câu chờ: mỗi lúc chỉ một việc đang làm hiện ở ô đầu hàng. */}
+        {steps.length ? null : (
+          <SlideIn trigger={phrase} style={styles.label}>
+            <ShimmerText text={phrase} color={colors.ink} />
+          </SlideIn>
+        )}
         {steps.map((step) => (
           <SlideIn key={step.id} trigger={step.id} style={styles.step}>
             <View style={styles.mark}>
