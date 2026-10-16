@@ -77,7 +77,7 @@ def test_blank_token_leaves_tracing_off(monkeypatch) -> None:
     assert observability.configure_tracing(AppConfig(LOGFIRE_TOKEN=None)) is False
 
 
-def test_token_traces_agents_without_message_content(monkeypatch) -> None:
+def test_token_traces_agents_with_message_content(monkeypatch) -> None:
     calls: dict = {}
     monkeypatch.setattr(
         observability.logfire,
@@ -97,13 +97,28 @@ def test_token_traces_agents_without_message_content(monkeypatch) -> None:
     assert calls["configure"]["environment"] == "staging"
     assert calls["configure"]["console"] is False
     assert calls["instrument"] == {
-        "include_content": False,
+        "include_content": True,
         "include_binary_content": False,
     }
 
 
+def test_content_can_be_switched_off(monkeypatch) -> None:
+    calls: dict = {}
+    monkeypatch.setattr(observability.logfire, "configure", lambda **kwargs: None)
+    monkeypatch.setattr(
+        observability.logfire,
+        "instrument_pydantic_ai",
+        lambda **kwargs: calls.update(kwargs),
+    )
+    config = AppConfig(LOGFIRE_TOKEN="token", LOGFIRE_INCLUDE_CONTENT=False)
+
+    observability.configure_tracing(config)
+
+    assert calls["include_content"] is False
+
+
 @pytest.mark.parametrize("streamed", [False, True])
-async def test_traced_turn_carries_the_shop_but_no_message_content(
+async def test_traced_turn_without_content_carries_the_shop_but_no_message_text(
     spans, streamed
 ) -> None:
     agent = traced_agent()
