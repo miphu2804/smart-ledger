@@ -506,12 +506,12 @@ export default function Home() {
                   onPress={() => openAssistant('/ai')}
                   style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
                   accessibilityRole="button"
-                  accessibilityLabel="Trợ lý AI"
+                  accessibilityLabel="Trợ lý Bobi"
                 >
                   <Tab1Icon name="assistant" size={30} />
                   <View style={styles.actionTextCol}>
                     <T w="bold" size={14.5} color="#FFFFFF" numberOfLines={1}>
-                      Trợ lý AI
+                      Trợ lý Bobi
                     </T>
                     <T size={10.5} color="rgba(255, 255, 255, 0.58)" numberOfLines={1} style={{ marginTop: 2 }}>
                       Gợi ý bán
@@ -587,7 +587,7 @@ export default function Home() {
               <CompactAction icon="readOrder" label="Đọc đơn" onPress={() => openAssistant('/voice')} />
               <CompactAction icon="scanCode" label="Quét mã" onPress={openScanner} />
               <CompactAction icon="selectGoods" label="Chọn hàng" onPress={() => router.push('/pos')} />
-              <CompactAction icon="assistant" label="Trợ lý" accessibilityLabel="Trợ lý AI" onPress={() => openAssistant('/ai')} />
+              <CompactAction icon="assistant" label="Trợ lý" accessibilityLabel="Trợ lý Bobi" onPress={() => openAssistant('/ai')} />
             </View>
           </Animated.View>
           <Animated.View pointerEvents="none" style={[styles.headerDivider, { opacity: dividerOpacity }]} />

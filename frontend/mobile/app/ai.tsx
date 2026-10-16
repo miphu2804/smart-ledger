@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Pressable,
@@ -156,6 +156,21 @@ export default function Ai() {
   const [msgs, setMsgs] = useState<ChatMessage[]>(() => [welcome(app.user.name)]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Trạng thái công tắc "Ghi nhớ dài hạn"; chưa tải được hoặc tiệm chưa bật ghi nhớ thì coi là tắt.
+  const [memoryOn, setMemoryOn] = useState(false);
+
+  const loadMemoryOn = useCallback(() => {
+    agentApi
+      .getMemorySettings()
+      .then((s) => setMemoryOn(s.available && s.memory_enabled))
+      .catch(() => setMemoryOn(false));
+  }, []);
+  useFocusEffect(loadMemoryOn);
+
+  const closeSettings = () => {
+    setSettingsOpen(false);
+    loadMemoryOn();
+  };
 
   const startNew = () => {
     setConversationId(null);
@@ -265,11 +280,9 @@ export default function Ai() {
                     {!isUser ? (
                       <Row style={styles.assistantBubbleHeader}>
                         <Row gap={3} style={{ alignItems: 'center' }}>
-                          <View style={{ width: 2, height: 7, backgroundColor: colors.brand, borderRadius: 1 }} />
-                          <View style={{ width: 2, height: 11, backgroundColor: colors.brand, borderRadius: 1 }} />
-                          <View style={{ width: 2, height: 6, backgroundColor: colors.brand, borderRadius: 1 }} />
+                          <BusinessIcon size={14} color={colors.brand} offColor={colors.faint} filled={memoryOn} />
                           <T w="bold" size={11.5} color={colors.brand} style={{ marginLeft: 3 }}>
-                            Trợ lý AI
+                            Trợ lý Bobi
                           </T>
                         </Row>
                       </Row>
@@ -420,7 +433,7 @@ export default function Ai() {
         </View>
       </View>
 
-      <AssistantSettingsSheet visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <AssistantSettingsSheet visible={settingsOpen} onClose={closeSettings} />
       <HistorySheet
         visible={historyOpen}
         activeId={conversationId}
