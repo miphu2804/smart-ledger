@@ -1,3 +1,13 @@
+### [2026-10-17] — [Fix] Keep Bobi in Vietnamese when the owner asks for another language
+
+**Done:** A chat on staging showed Bobi refusing English, while the memory extractor stored "Chủ shop muốn nhận câu trả lời bằng tiếng Anh." as a preference; from the next turn the memory prompt's "shape every answer by the owner's preferences" switched Bobi to English. The extractor now never stores a wish to change the assistant's language, name or scope, the memory prompt says no fact changes them, and the shop prompt lists language among what the owner cannot change.
+
+**Changed files:** `backend/ai/src/prompt_templates/memory.py`, `backend/ai/src/prompt_templates/shop_agent.py`; this entry.
+
+**Flow explained:** Prompt text only; recall, storage and the number of memories shown next to "Trợ lý Bobi" (memories used by that answer) are unchanged. Memory #11 already stored for shop 8 on staging still exists; the new memory prompt keeps answers in Vietnamese even with it recalled.
+
+**Check:** `ruff check`, `ruff format --check` and 342 AI unit tests pass. Against the configured real model (claude-haiku-5-5), the old prompts stored the English preference 3/3 times and answered in English 3/3 times with it recalled; the new prompts stored nothing 3/3 and answered in Vietnamese 3/3. Ordinary preferences and facts ("báo cáo ngắn gọn", "gọi tôi là anh Phú", opening hours) are still extracted 2/2.
+
 ### [2026-10-16] — [Fix] Share Zalo rate quota across equivalent servlet paths
 
 **Done:** Addressed PR #275's new CodeRabbit finding at `ZaloRequestLimiter.java:54`: route matching and quota keys now use one shared endpoint-path helper, retaining the servlet-path fallback that removes the context path. Equivalent raw URI forms no longer select separate quotas for the same endpoint/socket IP.
