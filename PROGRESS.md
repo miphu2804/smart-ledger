@@ -1,3 +1,13 @@
+### [2026-10-16 15:25 UTC+07:00] — [CI] CI runs only the jobs whose area changed
+
+**Done:** New job `changes` in `ci.yml` (`dorny/paths-filter@v4.0.3`) marks which of `ai`, `core`, `mobile`, `landing`, `containers` a pull request or push touched. Each test job, `deploy-web` and `deploy-landing` run only for their area; `deploy` runs when `ai` or `core` changed and deploys only the changed service. Skipped jobs count as passed, so required checks and the `mobile-release.yml` gate still work. A change to `ci.yml` runs everything. It replaces the landing-only `Detect landing changes` step, and keeps its rule that a re-run always deploys, now for every deploy job.
+
+**Changed files:** `.github/workflows/ci.yml`, `docs/development/ci-cd.md`, `CONTRIBUTING.md` — modified; this entry.
+
+**Flow explained:** `changes` → test jobs gated by area → `summary` (skipped rows) → deploy jobs gated by area and by no failed test job.
+
+**Check:** `actionlint` passes. **Not verified:** a real run on GitHub; the PR of this change touches `ci.yml`, so it runs every job, and the skip path shows only on a later docs-only or single-area PR.
+
 ### [2026-10-16 14:15 UTC+07:00] — [Feature] App guide updated with refreshed illustrations, 16:9 ratio, and aligned copy
 
 **Done:** The app guide in `AssistantIntroModal.tsx` now follows the updated visual mockups across all 4 steps in sequential order: Trợ lý Bobi, Tổng quan, Bán hàng, and Quản lý. The 4 legacy JPEG illustrations were replaced with clean PNG assets (`guide-bobi.png`, `guide-overview.png`, `guide-sales.png`, `guide-manage.png`) rendered at their native 1672×941 ratio (16:9) to prevent clipping callout bubbles. The step descriptions and bullet tips were rewritten and aligned with the callouts in each illustration.
