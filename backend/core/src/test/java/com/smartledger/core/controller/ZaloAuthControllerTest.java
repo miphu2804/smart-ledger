@@ -138,10 +138,21 @@ class ZaloAuthControllerTest {
     void exchangeRejectsUnexpectedBodyFieldsAndInvalidLengths() throws Exception {
         mvc.perform(post("/api/v1/auth/zalo/exchange").header("Origin", ORIGIN).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"proof\":\"short\",\"clientVerifier\":\"short\"}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation_failed"));
         mvc.perform(post("/api/v1/auth/zalo/exchange").header("Origin", ORIGIN).contentType(MediaType.APPLICATION_JSON)
                         .content(body().replace("}", ",\"firebaseUid\":\"attacker\"}")))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("invalid_request"));
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void malformedJsonRetainsTheSharedInvalidRequestCode() throws Exception {
+        mvc.perform(post("/api/v1/auth/zalo/exchange").header("Origin", ORIGIN)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"proof\":"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("invalid_request"));
         verifyNoInteractions(service);
     }
 

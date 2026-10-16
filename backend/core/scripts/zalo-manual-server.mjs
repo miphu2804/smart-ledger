@@ -7,8 +7,13 @@ import { resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 
 const verifierName = 'zalo_verifierMysnBA7R831YqgKCwDCT0HgaYGlsqb9MCpOu.html';
-const routes = new Set(['GET /api/v1/auth/zalo/authorize', 'GET /api/v1/auth/zalo/callback',
-  'POST /api/v1/auth/zalo/exchange', 'POST /api/v1/auth/session', 'GET /api/v1/me']);
+const routes = new Map([
+  ['GET /api/v1/auth/zalo/authorize', '/api/v1/auth/zalo/authorize'],
+  ['GET /api/v1/auth/zalo/callback', '/api/v1/auth/zalo/callback'],
+  ['POST /api/v1/auth/zalo/exchange', '/api/v1/auth/zalo/exchange'],
+  ['POST /api/v1/auth/session', '/api/v1/auth/session'],
+  ['GET /api/v1/me', '/api/v1/me'],
+]);
 const lifetime = 2 * 60 * 60 * 1000;
 const hash = value => createHash('sha256').update(value).digest();
 const equal = (a, b) => typeof a === 'string' && timingSafeEqual(hash(a), hash(b));
@@ -38,9 +43,9 @@ function bodyOf(req) {
   });
 }
 
-function relay(req, res, upstream, body) {
+function relay(req, res, upstreamPort, path, body) {
   return new Promise(resolveRequest => {
-    const headers = { host: new URL(upstream).host };
+    const headers = { host: `127.0.0.1:${upstreamPort}` };
     for (const name of ['authorization', 'content-type', 'origin']) {
       if (req.headers[name]) headers[name] = req.headers[name];
     }
@@ -48,7 +53,9 @@ function relay(req, res, upstream, body) {
       .filter(value => value.startsWith('__Host-sl_zalo_'));
     if (cookies.length) headers.cookie = cookies.join('; ');
     if (req.method === 'POST') headers['content-length'] = body.length;
-    const target = http.request(new URL(req.url, upstream), { method: req.method, headers }, response => {
+    // Incoming targets can never supply a protocol, authority, hostname or port.
+    const target = http.request({ protocol: 'http:', hostname: '127.0.0.1', port: upstreamPort,
+      method: req.method, path, headers }, response => {
       // Upstream is loopback Core only. Never follow redirects or log callback URLs/bodies.
       for (const name of ['content-type', 'location', 'set-cookie', 'content-security-policy',
         'retry-after', 'x-content-type-options', 'x-frame-options', 'www-authenticate']) {
@@ -78,6 +85,8 @@ export function createManualServer({ origin, accessKey, upstream = 'http://127.0
   const target = new URL(upstream);
   if (target.protocol !== 'http:' || target.hostname !== '127.0.0.1' || target.pathname !== '/' ||
     target.search || target.hash || target.username || target.password) throw new Error('Loopback Core required.');
+  const upstreamPort = target.port ? Number(target.port) : 80;
+  if (upstreamPort < 1 || upstreamPort > 65535) throw new Error('Invalid loopback Core port.');
   if (typeof accessKey !== 'string' || accessKey.length < 32 || accessKey.length > 200) {
     throw new Error('A temporary access key of 32–200 characters is required.');
   }
@@ -96,7 +105,10 @@ export function createManualServer({ origin, accessKey, upstream = 'http://127.0
       if (req.headers.host !== new URL(origin).host) return respond(403);
       if (Date.now() - windowStart >= 60_000) { windowStart = Date.now(); total = 0; unlocks = 0; }
       if (++total > 120) { res.setHeader('Retry-After', '60'); return respond(429); }
-      const path = req.url.split('?')[0];
+      if (typeof req.url !== 'string' || req.url.includes('#') || req.url.includes('\\') ||
+        /[\u0000-\u0020\u007f]/.test(req.url)) return respond(400);
+      const queryIndex = req.url.indexOf('?');
+      const path = queryIndex < 0 ? req.url : req.url.slice(0, queryIndex);
       if (req.method === 'GET' && path === `/${verifierName}`) {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         return respond(200, '<!doctype html><meta property="zalo-platform-site-verification" content="MysnBA7R831YqgKCwDCT0HgaYGlsqb9MCpOu">');
@@ -119,8 +131,11 @@ export function createManualServer({ origin, accessKey, upstream = 'http://127.0
       const cookie = (req.headers.cookie ?? '').split(';').map(value => value.trim())
         .find(value => value.startsWith('__Host-zalo-manual='))?.slice('__Host-zalo-manual='.length);
       if (!equal(cookie, gate)) return respond(401, 'Open the local shortcut to unlock this test.');
-      if (!routes.has(`${req.method} ${path}`)) return respond(404);
-      await relay(req, res, upstream, req.method === 'POST' ? await bodyOf(req) : Buffer.alloc(0));
+      const approvedPath = routes.get(`${req.method} ${path}`);
+      if (!approvedPath) return respond(404);
+      const query = queryIndex < 0 ? '' : req.url.slice(queryIndex);
+      await relay(req, res, upstreamPort, approvedPath + query,
+        req.method === 'POST' ? await bodyOf(req) : Buffer.alloc(0));
     } catch (error) {
       if (!res.headersSent && !res.destroyed) respond(error.message === 'body-too-large' ? 413 : 400);
       else res.destroy();

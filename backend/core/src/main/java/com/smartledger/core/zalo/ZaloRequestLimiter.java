@@ -13,9 +13,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.time.Clock;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,7 +22,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-/** Bounded per-instance abuse guard; deployment-level distributed limits are still required. */
+/** Fixed salted buckets bound memory without key admission failure or eviction-based quota resets. */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 20)
 public class ZaloRequestLimiter extends OncePerRequestFilter {
@@ -34,13 +32,14 @@ public class ZaloRequestLimiter extends OncePerRequestFilter {
     private final ObjectMapper mapper;
     private final Clock clock;
     private final int limit;
-    private final int maxKeys;
-    private final Map<String, Window> windows = new HashMap<>();
+    private final Window[] windows;
+    private final String bucketSalt = ZaloCrypto.randomToken();
 
     @Autowired
     public ZaloRequestLimiter(ObjectMapper mapper) { this(mapper, Clock.systemUTC(), 30, 4096); }
-    ZaloRequestLimiter(ObjectMapper mapper, Clock clock, int limit, int maxKeys) {
-        this.mapper = mapper; this.clock = clock; this.limit = limit; this.maxKeys = maxKeys;
+    ZaloRequestLimiter(ObjectMapper mapper, Clock clock, int limit, int bucketCount) {
+        this.mapper = mapper; this.clock = clock; this.limit = limit;
+        this.windows = new Window[bucketCount];
     }
 
     @Override
@@ -71,15 +70,19 @@ public class ZaloRequestLimiter extends OncePerRequestFilter {
     }
 
     private synchronized boolean allow(String key) {
+        if (windows.length == 0 || limit <= 0) return false;
         long now = clock.millis();
-        windows.entrySet().removeIf(entry -> entry.getValue().until <= now);
-        Window window = windows.get(key);
-        if (window == null) {
-            if (windows.size() >= maxKeys) return false;
+        // Stable for this instance: key churn cannot evict/reset a bucket. A private salt prevents
+        // choosing collisions from public String.hashCode. Colliding clients share quota conservatively.
+        int bucket = Math.floorMod(ZaloCrypto.hash(bucketSalt + ":" + key).hashCode(), windows.length);
+        Window window = windows[bucket];
+        if (window == null || window.until <= now) {
             window = new Window(now + 60000);
-            windows.put(key, window);
+            windows[bucket] = window;
         }
-        return ++window.count <= limit;
+        if (window.count >= limit) return false;
+        window.count++;
+        return true;
     }
 
     private void error(HttpServletResponse response, int status, ErrorCode code) throws IOException {

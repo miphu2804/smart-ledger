@@ -12,7 +12,11 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -40,21 +44,53 @@ class ZaloRequestLimiterTest {
     }
 
     @Test
-    void boundedRateMapRejectsNewKeysUntilWindowExpiresThenResets() throws Exception {
+    void newKeysRemainEligibleBeyondCapacityWithoutDroppingExistingCounters() throws Exception {
         MutableClock clock = new MutableClock();
-        var limiter = new ZaloRequestLimiter(new ObjectMapper(), clock, 1, 1);
-        var first = new MockHttpServletResponse();
-        limiter.doFilter(request("GET", "/api/v1/auth/zalo/authorize", new byte[0], false), first, (r, s) -> {});
-        assertThat(first.getStatus()).isEqualTo(200);
-        var capacity = new MockHttpServletResponse();
-        limiter.doFilter(request("POST", EXCHANGE, new byte[0], false), capacity, (r, s) -> {
-            throw new AssertionError("capacity exceeded");
-        });
-        assertThat(capacity.getStatus()).isEqualTo(429);
-        clock.instant = clock.instant.plusSeconds(60);
-        var reset = new MockHttpServletResponse();
-        limiter.doFilter(request("POST", EXCHANGE, new byte[0], false), reset, (r, s) -> {});
-        assertThat(reset.getStatus()).isEqualTo(200);
+        var limiter = new ZaloRequestLimiter(new ObjectMapper(), clock, 20, 1);
+        for (int index = 0; index < 20; index++) {
+            assertThat(rateStatus(limiter, "192.0.2." + index)).isEqualTo(200);
+        }
+        assertThat(rateStatus(limiter, "192.0.2.0")).isEqualTo(429);
+    }
+
+    @Test
+    void churnCannotResetExhaustedQuotaAndCollisionWindowExpiresAtItsBoundary() throws Exception {
+        MutableClock clock = new MutableClock();
+        var limiter = new ZaloRequestLimiter(new ObjectMapper(), clock, 2, 1);
+        assertThat(rateStatus(limiter, "192.0.2.1")).isEqualTo(200);
+        assertThat(rateStatus(limiter, "192.0.2.1")).isEqualTo(200);
+        for (int index = 2; index < 40; index++) {
+            assertThat(rateStatus(limiter, "192.0.2." + index)).isEqualTo(429);
+        }
+        assertThat(rateStatus(limiter, "192.0.2.1")).isEqualTo(429);
+        clock.instant = clock.instant.plusMillis(59_999);
+        assertThat(rateStatus(limiter, "192.0.2.1")).isEqualTo(429);
+        clock.instant = clock.instant.plusMillis(1);
+        assertThat(rateStatus(limiter, "192.0.2.1")).isEqualTo(200);
+        assertThat(rateStatus(limiter, "2001:db8::2")).isEqualTo(200);
+        assertThat(rateStatus(limiter, "192.0.2.1")).isEqualTo(429);
+    }
+
+    @Test
+    void concurrentDistinctClientsShareOneBoundedBucketWithoutExceedingItsQuota() throws Exception {
+        var limiter = new ZaloRequestLimiter(new ObjectMapper(), new MutableClock(), 7, 1);
+        List<Callable<Integer>> calls = IntStream.range(0, 80)
+                .mapToObj(index -> (Callable<Integer>) () -> rateStatus(limiter, "192.0.2." + index)).toList();
+        try (var executor = Executors.newFixedThreadPool(8)) {
+            int accepted = 0;
+            for (var result : executor.invokeAll(calls)) {
+                int status = result.get();
+                assertThat(status).isIn(200, 429);
+                if (status == 200) accepted++;
+            }
+            assertThat(accepted).isEqualTo(7);
+        }
+    }
+
+    @Test
+    void zeroCapacityFailsClosedForZaloRoutes() throws Exception {
+        var limiter = new ZaloRequestLimiter(new ObjectMapper(), new MutableClock(), 30, 0);
+        assertThat(rateStatus(limiter, "192.0.2.1")).isEqualTo(429);
     }
 
     @Test
@@ -100,6 +136,14 @@ class ZaloRequestLimiterTest {
             assertThat(response.getContentAsString()).contains("invalid_zalo_request");
             verifyNoInteractions(chain);
         }
+    }
+
+    private static int rateStatus(ZaloRequestLimiter limiter, String remoteAddress) throws Exception {
+        var request = request("GET", "/api/v1/auth/zalo/authorize", new byte[0], false);
+        request.setRemoteAddr(remoteAddress);
+        var response = new MockHttpServletResponse();
+        limiter.doFilter(request, response, (r, s) -> {});
+        return response.getStatus();
     }
 
     private static MockHttpServletRequest request(String method, String path, byte[] body, boolean unknownLength) {

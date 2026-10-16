@@ -8,6 +8,19 @@ import { acceptsMessage, completeLogin } from './zalo-manual/client.mjs';
 const origin = 'https://manual.example.test';
 const accessKey = 'synthetic-gate-key-with-at-least-32-characters';
 
+function assertFirebaseExchangeUrl(value) {
+  const url = new URL(value);
+  assert.equal(url.protocol, 'https:');
+  assert.equal(url.hostname, 'identitytoolkit.googleapis.com');
+  assert.equal(url.port, '');
+  assert.equal(url.username, '');
+  assert.equal(url.password, '');
+  assert.equal(url.pathname, '/v1/accounts:signInWithCustomToken');
+  assert.equal(url.hash, '');
+  assert.deepEqual([...url.searchParams.keys()], ['key']);
+  assert.ok(url.searchParams.get('key'));
+}
+
 async function listen(server) {
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -16,7 +29,10 @@ async function listen(server) {
 
 function localRequest(url, options = {}) {
   return new Promise((resolve, reject) => {
-    const req = http.request(url, { method: options.method ?? 'GET', headers: options.headers }, res => {
+    const destination = new URL(url);
+    const req = http.request({ hostname: destination.hostname, port: destination.port,
+      path: options.rawPath ?? destination.pathname + destination.search,
+      method: options.method ?? 'GET', headers: options.headers }, res => {
       const chunks = [];
       res.on('data', chunk => chunks.push(chunk));
       res.on('end', () => {
@@ -37,6 +53,15 @@ test('only exact HTTPS origins accepted', () => {
   for (const value of ['http://localhost:8792', `${origin}/`, `${origin}/path`, `${origin}?q=1`,
     'https://a:b@example.test', 'https://*.example.test', 'https://example.test#x']) {
     assert.throws(() => validateOrigin(value));
+  }
+});
+
+test('manual upstream accepts only an explicit IPv4 loopback HTTP origin', () => {
+  for (const upstream of ['http://attacker.invalid:18081', 'http://localhost:18081',
+    'https://127.0.0.1:18081', 'http://127.0.0.1:18081/path',
+    'http://127.0.0.1:18081/?target=attacker', 'http://127.0.0.1:18081/#fragment',
+    'http://user:password@127.0.0.1:18081', 'http://127.0.0.1:0']) {
+    assert.throws(() => createManualServer({ origin, accessKey, upstream }));
   }
 });
 
@@ -97,6 +122,55 @@ test('gate, host, origin and exact route checks protect the loopback proxy', asy
   assert.match(await verifier.text(), /zalo-platform-site-verification/);
 });
 
+test('proxy pins its network destination and rejects ambiguous request targets', async t => {
+  const calls = [];
+  const upstream = http.createServer((req, res) => {
+    calls.push({ path: req.url, host: req.headers.host });
+    if (req.url.includes('redirect=1')) res.writeHead(302, { Location: 'https://attacker.invalid/' });
+    res.end('synthetic');
+  });
+  const upstreamUrl = await listen(upstream);
+  const server = createManualServer({ origin, accessKey, upstream: upstreamUrl });
+  const base = await listen(server);
+  t.after(() => { server.closeAllConnections(); server.close(); upstream.closeAllConnections(); upstream.close(); });
+  const headers = { Host: new URL(origin).host, Origin: origin };
+  const unlock = await localRequest(base + '/unlock', { method: 'POST', headers,
+    body: JSON.stringify({ key: accessKey }) });
+  assert.equal(unlock.status, 204);
+  headers.Cookie = unlock.headers.get('set-cookie').split(';')[0];
+  const callback = '/api/v1/auth/zalo/callback';
+  for (const rawPath of [`http://attacker.invalid${callback}`, `//attacker.invalid${callback}`,
+    `\\\\attacker.invalid${callback}`, '/api/v1/auth/zalo/../me',
+    '/api/v1/auth/zalo/%2e%2e/me', '/api/v1/auth/zalo/%2f%2fattacker.invalid',
+    `${callback}#fragment`, `${callback}?code=synthetic#fragment`]) {
+    const response = await localRequest(base, { headers, rawPath });
+    assert.ok([400, 404].includes(response.status), 'Ambiguous target must be rejected.');
+    assert.equal(calls.length, 0, 'No upstream request for a rejected target.');
+  }
+  const query = '?code=synthetic&next=https%3A%2F%2Fattacker.invalid%2F';
+  assert.equal((await localRequest(base + callback + query, { headers })).status, 200);
+  assert.deepEqual(calls, [{ path: callback + query, host: new URL(upstreamUrl).host }]);
+  const redirect = await localRequest(base + callback + '?redirect=1', { headers });
+  assert.equal(redirect.status, 302);
+  assert.equal(calls.length, 2, 'Proxy does not follow redirects.');
+});
+
+test('Firebase URL assertion rejects lookalike hosts, credentials and alternate endpoints', () => {
+  assertFirebaseExchangeUrl('https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=synthetic');
+  for (const value of [
+    'https://identitytoolkitXgoogleapisYcom/v1/accounts:signInWithCustomToken?key=synthetic',
+    'https://identitytoolkit.googleapis.com.attacker.invalid/v1/accounts:signInWithCustomToken?key=synthetic',
+    'https://user:password@identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=synthetic',
+    'http://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=synthetic',
+    'https://identitytoolkit.googleapis.com:444/v1/accounts:signInWithCustomToken?key=synthetic',
+    'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=synthetic',
+    'https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=synthetic#fragment',
+    'https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=synthetic&other=1',
+    'https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=synthetic&key=other',
+    'https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=',
+  ]) assert.throws(() => assertFirebaseExchangeUrl(value));
+});
+
 test('popup identity and purpose are checked before accepting proof', () => {
   const popup = {};
   const attempt = { popup, requestId: 'request123', purpose: 'LOGIN' };
@@ -121,7 +195,7 @@ test('real-flow client uses custom token only with Firebase and ID token only wi
   });
   assert.equal(calls[0].url, '/api/v1/auth/zalo/exchange');
   assert.equal(JSON.parse(calls[1].body).token, 'synthetic-custom');
-  assert.match(calls[1].url, /^https:\/\/identitytoolkit.googleapis.com\/v1\/accounts:signInWithCustomToken\?key=/);
+  assertFirebaseExchangeUrl(calls[1].url);
   assert.equal(calls[2].headers.Authorization, 'Bearer synthetic-id');
   assert.equal(result.user.id, 7);
   assert.doesNotMatch(JSON.stringify(result), /synthetic-id|synthetic-custom|not-retained/);
