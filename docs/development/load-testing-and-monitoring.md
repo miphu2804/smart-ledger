@@ -160,7 +160,7 @@ Owned by the team organization with the repository admin as Grafana admin. Steps
    GRANT SELECT (created_by_user_id, created_at) ON sales, sale_drafts, expenses TO grafana_reader;
    ```
 
-4. Import [`scripts/monitor/grafana/smartledger-load.json`](../../scripts/monitor/grafana/smartledger-load.json) (Dashboards → New → Import) and pick the stack's Prometheus datasource and the PostgreSQL datasource from step 3. Export it back to this file after editing it in the UI.
+4. Import [`scripts/monitor/grafana/smartledger-load.json`](../../scripts/monitor/grafana/smartledger-load.json) (Dashboards → New → Import) and pick the stack's Prometheus datasource and the PostgreSQL datasource from step 3. Export it back to this file after editing it in the UI. Import [`smartledger-overview.json`](../../scripts/monitor/grafana/smartledger-overview.json) the same way: it is the start page, showing whether each synthetic check is up and inside its SLO, with links to every provider console.
 5. Scrape Supabase metrics: add a Metrics Endpoint scrape job for the project's [metrics endpoint](https://supabase.com/docs/guides/telemetry/metrics), one job per environment, and add its database connection and CPU panels to the dashboard.
 6. In **Testing & synthetics → Synthetic Monitoring**, add HTTP checks for the URLs in the [synthetic monitor table](#monitoring) every 1–5 minutes, and route alerts to the team channel.
 
