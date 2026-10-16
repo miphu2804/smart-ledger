@@ -301,11 +301,11 @@ With the same disposable PostgreSQL variables, run:
 .\mvnw.cmd '-Dtest=AdminDashboardControllerWebTest,AdminAccessAuditServiceTest,AdminDashboardPostgresTest' test
 ```
 
-`AdminDashboardPostgresTest` applies the actual Flyway migrations (currently V1–V17) inside a generated `core_admin_test_*` schema, then removes that schema. It exercises the migrated schema without manual constraint fixtures. No additional audit table is created. Do not point test variables at staging or production.
+`AdminDashboardPostgresTest` applies the actual Flyway migrations (currently V1–V18) inside a generated `core_admin_test_*` schema, then removes that schema. It exercises the migrated schema without manual constraint fixtures. No additional audit table is created. Do not point test variables at staging or production.
 
 ADMIN and OWNER events share the existing `audit_logs`; ADMIN reads are separated by their `ADMIN_*` actions and API whitelists. Shop status changes reuse the existing `SHOP_INACTIVATED`/`SHOP_REACTIVATED` event once. V11 extends action/target constraints and allows missing shop/target IDs only for the corresponding ADMIN reads; business events still require both IDs. Existing history, V10 foreign keys and append-only triggers are preserved. Failed audit persistence returns `503 admin_audit_unavailable` and rolls back the operation.
 
-For a fresh disposable local database, use `FLYWAY_ENABLED=true` and `SPRING_JPA_HIBERNATE_DDL_AUTO=validate` to apply V1–V17 and validate the entity mappings. A Flyway-managed database already at V10 applies subsequent versions in order; review the V17 Zalo rollout below before a shared-environment deployment. Follow the repository's merged-code migration policy for shared environments. Do not enable Flyway blindly on a Hibernate-created database without migration history: V10 rejects pre-existing ADMIN read events. Use a fresh local database or a separately reviewed adoption plan, preserving the original database. The migrations do not baseline or repair migration history.
+For a fresh disposable local database, use `FLYWAY_ENABLED=true` and `SPRING_JPA_HIBERNATE_DDL_AUTO=validate` to apply V1–V18 and validate the entity mappings. A Flyway-managed database already at V10 applies subsequent versions in order; review the V17 Zalo rollout below and [V18 Android rollout](docs/zalo-android-preparation.md#staging-activation-after-merge) before a shared-environment deployment. Follow the repository's merged-code migration policy for shared environments. Do not enable Flyway blindly on a Hibernate-created database without migration history: V10 rejects pre-existing ADMIN read events. Use a fresh local database or a separately reviewed adoption plan, preserving the original database. The migrations do not baseline or repair migration history.
 
 If V11 validation fails, PostgreSQL rolls back its schema changes; review the offending records before retrying. Recovery uses a forward fix retaining audit history. Restoring V10 constraints or older readers that cannot handle `ADMIN_*` events is unsafe after these records exist. Integrated Firebase/FE UAT and document alignment remain pending.
 
@@ -405,7 +405,7 @@ Proofs are one-use and purpose/origin/challenge-bound. Replay, browser mismatch 
 
 Zalo routes hash the path and socket `remoteAddr` with a private per-instance salt into 4096 fixed buckets, each allowing at most 30 requests per 60-second window; completion bodies are limited to 8 KiB. Colliding clients conservatively share a bucket and can receive 429 earlier. New keys are not rejected just because a key map is full, and key churn cannot evict/reset counters. This bounded guard is neither distributed protection nor a DDoS guarantee. Before deployment, verify trusted-proxy handling so the address is meaningful; do not trust arbitrary `X-Forwarded-For`. Configure edge throttling and redact callback query strings, proof bodies, Authorization, cookies and custom tokens from proxy/APM/access logs. Core does not log provider bodies or credentials. A scheduled worker removes expired OAuth sessions; identity mappings remain.
 
-Point `CORE_TEST_POSTGRES_*` only at a disposable DB. Tests apply actual Flyway migrations in UUID-named schemas and remove only those schemas. The compatibility flow starts Hibernate on V16 before applying the exact V17 SQL; it proves feature-off behavior with the old schema as well. No separate schema fixture is maintained:
+Point `CORE_TEST_POSTGRES_*` only at a disposable DB. Web/native tests apply actual Flyway migrations in UUID-named schemas and remove only those schemas. Historical V17 migration tests pin that version; Android migration/flow tests use V18, with a separate V17 compatibility schema. The web compatibility flow starts Hibernate on V16 before applying the exact V17 SQL; it proves feature-off behavior with the old schema as well. No duplicate prospective native schema fixture remains:
 
 ```powershell
 .\mvnw.cmd '-Dtest=*Zalo*' test
@@ -425,6 +425,10 @@ Staging preparation (do not copy `ZALO_MANUAL_*` variables into Railway):
 4. Verify callback registration, HTTPS cookie/popup opener, log redaction (callback query/body/Authorization/cookies), trusted proxy behavior and edge/shared throttling. FE must validate origin/source/requestId/purpose and reauthenticate before LINK. Keep the feature off until owners approve integration testing; enabling does not deploy FE.
 5. Recovery: turn Zalo off/roll back application code but retain V17 tables and identity mappings. Do not drop mappings or delete Firebase accounts as rollback; key rotation invalidates active OAuth sessions. Any destructive removal needs a separately reviewed forward migration.
 
+
+## Zalo Android Core preparation — CORE-016
+
+Android LOGIN/LINK on `feat/zalo-android` (#276) adds separate `/api/v1/auth/zalo/native/authorize`, `/api/v1/auth/zalo/native/exchange`, `/api/v1/auth/zalo/native/link` endpoints, shared provider callback dispatch, exact HTTPS App Link fallback and environment-specific `/.well-known/assetlinks.json`. The approved migration `V18__add_zalo_android_handoff.sql` is now included; native remains **OFF by runtime default**. [The reviewed staging example](config/zalo-native-staging.env.example) sets `ZALO_NATIVE_ENABLED=true` only when explicitly copied to Railway staging **after merge/migration**; it does not auto-enable a deployment. V17 WEB stays supported, missing V18 fails closed, and production is not activated. See [the integration/rollout guide](docs/zalo-android-preparation.md) and [canonical contract](../../docs/contracts/api-contracts.md#zalo-android-core-016). FE/APK and real-provider/device acceptance remain separate work.
 
 ## OWNER in-app notifications
 

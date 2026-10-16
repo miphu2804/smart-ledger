@@ -11,6 +11,9 @@
 // ledger views (v_debts, v_payments, v_expenses) and agent memory (agent_memories, agent_memory_settings; ADR-0002, off by default).
 // V15 implements OWNER notifications/thresholds on feat/app-notifications; ai_requests remains planned.
 // CORE-015 #238: V17 on feat/zalo-login adds external Zalo identities and OAuth sessions; not shared-DB rollout.
+// CORE-016 #276 on feat/zalo-android: V18 adds Android handoff; checked in, not shared-DB rollout.
+// Existing sessions default WEB. Native defaults OFF; reviewed staging variables are applied only after merge/V18.
+// Channel-aware origin/VERIFIED/expiry checks and rollback/window are documented in erd-description.md.
 // Report periods use Asia/Ho_Chi_Minh; this logical ERD does not imply runtime completion.
 // Quantity: NUMERIC(15,3)
 //
@@ -182,7 +185,10 @@ Table oauth_login_sessions {
   state_hash varchar(64) [not null, unique]
   browser_binding_hash varchar(64) [not null]
   purpose varchar(10) [not null, note: 'CHECK LOGIN or LINK']
-  client_origin varchar(2048) [not null]
+  client_type varchar(10) [not null, default: 'WEB', note: 'V18: WEB or ANDROID; existing sessions remain WEB']
+  client_origin varchar(2048) [note: 'V18: required for WEB, NULL for ANDROID']
+  native_client_id varchar(100) [note: 'V18: ANDROID only, configured public client ID']
+  return_target_id varchar(100) [note: 'V18: ANDROID only, server-fixed target ID, not an arbitrary URL']
   client_request_id varchar(128) [not null]
   client_challenge varchar(64) [not null]
   verifier_ciphertext varchar(2048) [note: 'AES-GCM provider PKCE verifier; cleared on verification/failure']
@@ -190,16 +196,19 @@ Table oauth_login_sessions {
   provider_subject varchar(255)
   display_name varchar(255)
   proof_hash varchar(64) [unique]
+  handoff_reference_hash varchar(64) [note: 'V18: ANDROID reference hash, unique when non-NULL; no WEB proof in this channel']
   created_at timestamptz [not null]
   expires_at timestamptz [not null]
   proof_expires_at timestamptz
+  handoff_expires_at timestamptz [note: 'V18: ANDROID only, no later than expires_at']
   completed_at timestamptz
   provider_app_id varchar(100) [not null]
 
   indexes {
     expires_at [name: 'ix_oauth_login_sessions_expires_at']
+    handoff_reference_hash [unique, name: 'uq_oauth_login_sessions_handoff_reference']
   }
-  Note: 'V17 transient OAuth data, not business ledger. RLS enabled, no public policies/grants. Expiry/proof lifecycle CHECKs in migration. Only hashes of state/binding/proof; no provider tokens. Cleanup deletes expired sessions only.'
+  Note: 'V17/V18 transient OAuth data, not business ledger. RLS/no public policies/grants retained. WEB requires origin and no native fields; ANDROID requires NULL origin/no WEB proof. VERIFIED requires provider subject and channel-specific handoff/expiry. Only hashes of state/binding/proof/reference; no provider tokens. Cleanup deletes expired sessions only. V18 checked in does not imply deployment.'
 }
 
 

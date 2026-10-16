@@ -10,6 +10,9 @@ import com.smartledger.core.exception.RestAuthenticationEntryPoint;
 import com.smartledger.core.security.BearerTokenAuthenticationFilter;
 import com.smartledger.core.security.FirebaseTokenVerifier;
 import com.smartledger.core.service.ZaloAuthService;
+import com.smartledger.core.service.ZaloNativeAuthService;
+import com.smartledger.core.zalo.ZaloNativePage;
+import com.smartledger.core.controller.ZaloNativeAuthController;
 import com.smartledger.core.zalo.ZaloCallbackPage;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -39,12 +42,14 @@ class ZaloOpenApiHttpTest {
     @Configuration(proxyBeanMethods = false)
     @EnableAutoConfiguration(exclude = {DataSourceAutoConfiguration.class, HibernateJpaAutoConfiguration.class, FlywayAutoConfiguration.class})
     @Import({SecurityConfiguration.class, OpenApiConfiguration.class, ZaloAuthController.class,
-            ZaloCallbackPage.class, BearerTokenAuthenticationFilter.class, RestAuthenticationEntryPoint.class})
+            ZaloCallbackPage.class, ZaloNativeAuthController.class, BearerTokenAuthenticationFilter.class, RestAuthenticationEntryPoint.class})
     static class App { }
 
     @LocalServerPort private int port;
     @Autowired private ObjectMapper mapper;
     @MockitoBean private ZaloAuthService service;
+    @MockitoBean private ZaloNativeAuthService nativeService;
+    @MockitoBean private ZaloNativePage nativePage;
     @MockitoBean private FirebaseTokenVerifier verifier;
     @MockitoBean(name = "dbHealthIndicator") private HealthIndicator database;
 
@@ -88,6 +93,30 @@ class ZaloOpenApiHttpTest {
         exchange.path("properties").fieldNames().forEachRemaining(documented::add);
         assertThat(fields).isEqualTo(documented).containsExactlyInAnyOrder("firebaseCustomToken", "displayName");
         assertThat(serialized.toString()).doesNotContain("accessToken", "refreshToken", "appSecret", "providerSubject");
+    }
+
+    @Test
+    void nativeContractHasOnlyApprovedInputsAndAuthenticatedLinkWithoutOriginRequirement() throws Exception {
+        var doc = document();
+        var paths = doc.path("paths");
+        var authorize = paths.path("/api/v1/auth/zalo/native/authorize").path("get");
+        Set<String> parameters = new HashSet<>();
+        authorize.path("parameters").forEach(parameter -> {
+            assertThat(parameter.path("required").asBoolean()).isTrue();
+            parameters.add(parameter.path("name").asText());
+        });
+        assertThat(parameters).containsExactlyInAnyOrder("nativeClientId", "purpose", "requestId", "clientChallenge");
+        assertThat(authorize.path("responses").has("302")).isTrue();
+        assertThat(authorize.path("security").isEmpty()).isTrue();
+        assertThat(paths.path("/api/v1/auth/zalo/native/exchange").path("post").path("security").isEmpty()).isTrue();
+        var link = paths.path("/api/v1/auth/zalo/native/link").path("post");
+        assertThat(link.path("security").get(0).has("bearerAuth")).isTrue();
+        assertThat(link.path("responses").has("204")).isTrue();
+        var handoff = doc.path("components").path("schemas").path("ZaloNativeHandoffRequest");
+        assertThat(strings(handoff.path("required"))).containsExactlyInAnyOrder("nativeClientId", "requestId", "handoffReference", "clientVerifier");
+        assertThat(handoff.path("additionalProperties").asBoolean(true)).isFalse();
+        assertThat(handoff.path("properties").has("firebaseUid")).isFalse();
+        assertThat(handoff.path("properties").has("returnUrl")).isFalse();
     }
 
     private JsonNode document() throws Exception {

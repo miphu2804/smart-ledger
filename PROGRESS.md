@@ -1,3 +1,33 @@
+### [2026-10-17] — [Chore] Resolve PR 293 progress conflict with staging
+
+**Done:** Synchronized staging `6caa9b2` into `feat/zalo-android` for PR #293, retaining all progress entries from both parents. The only conflict was this log; the incoming AI fix and its tests are kept exactly as staged upstream.
+
+**Changed files:** `PROGRESS.md` conflict resolution and this entry; `backend/ai/src/agent/service.py` and `backend/ai/tests/unit_tests/test_screen_buttons.py` are incoming staging content, not manual Zalo changes.
+
+**Flow explained:** Core, V18 and Zalo configuration remain unchanged. No PR merge, deployment, shared-DB migration or native activation is performed.
+
+**Check:** Before committing, verify preservation of every parent log block, unchanged Core index, exact upstream AI content, absence of conflict markers and clean whitespace. Existing Core regression evidence is 1,358 tests / 100 suites with no failures/errors/skips; this log-only resolution does not rerun Core, AI or APK acceptance. New remote CI checks follow the push.
+
+### [2026-10-17] — [Chore] Sync Zalo Android with latest staging progress
+
+**Done:** Merged staging `5e8f27b` into `feat/zalo-android` and resolved the only conflict, `PROGRESS.md`, by retaining every entry from both parents. Incoming AI prompt files are taken unchanged from staging; no manual FE/AI edit or live-environment operation is included.
+
+**Changed files:** Progress conflict resolution and this new entry; the two AI prompt files are normal incoming staging changes, not Zalo implementation changes.
+
+**Flow explained:** Core, V18 and staging configuration are identical to the tested feature parent. This sync does not activate Railway/native, run a shared migration or accept the APK/provider flow.
+
+**Check:** Parent progress-block preservation, unchanged Core tree, exact incoming AI content, conflict-marker and whitespace checks are performed before the merge commit. Core regression evidence remains the preceding V18 entry (1,358 tests / 100 suites, no failures/errors/skips; 15 required PostgreSQL suites); no claim of rerunning AI/provider/APK acceptance for this merge.
+
+### [2026-10-17] — [Feature] Add approved Zalo Android V18 and staging activation configuration
+
+**Done:** Added the approved CORE-016 #276 migration and prepared explicit staging enablement on `feat/zalo-android`. The user chose configuration in this branch and Railway activation only after merge. Runtime defaults remain OFF; no shared/business/staging/production DB migration, Railway change, production activation or FE implementation is performed here.
+
+**Changed files:** New `V18__add_zalo_android_handoff.sql`, public `backend/core/config/zalo-native-staging.env.example`, `ZaloNativeMigrationPostgresTest` and `ZaloNativeStagingConfigurationTest`; native flow tests, V17 test target, CI report gate, runtime/OpenAPI comments, Core examples/README/guides, canonical API/BRD/PRD/technical design/ERD and docs index; this new entry. Removed the duplicate native test-schema fixture (retained in Git history); native tests now use actual Flyway V18 and a separate actual V17 compatibility schema. Existing unrelated formatting/IDE files and all earlier progress entries are preserved.
+
+**Flow explained:** V18 extends only transient OAuth sessions with WEB-default channel/client/target/native reference hash/expiry and channel-aware constraints; existing account/shop/mapping and WEB session values remain. One transaction, 5-second lock timeout and 60-second statement timeout bound the ordinary locked unique-index/constraint build; early/late/schema/lock failure rolls back all V18 changes without adopting unexpected schema. RLS/public-access restrictions remain. After merge and verified V18, review/copy staging variables to Railway for APK acceptance; the example contains no secret/DB/migration switch and is not auto-loaded. Recovery disables native and retains V18/mappings, never deletes users or identity history. AC-092 clarifies controlled staging testing versus separate APK/production acceptance.
+
+**Check:** Test-first missing-migration/config RED: 9 tests, 1 failure / 7 errors / 0 skipped; focused GREEN: all 7 migration and 2 staging-configuration tests pass on isolated PostgreSQL 16 loopback/tmpfs. The first full run exposed a test-only Mockito restubbing error in the new V17 compatibility setup; corrected with doAnswer, keeping the real transaction assertion. Final fresh Java 21 Maven `verify` with JaCoCo 0.8.14 passed **1,358 tests / 100 suites, 0 failures / 0 errors / 0 skipped**; all 15 mandatory PostgreSQL suites pass, including 7 V18 migration and 14 native-flow cases. Node helpers/landing (8 + 3), three Chrome popup scenarios and all 13 report-gate self-tests pass with synthetic data. Native repository/controller/service/page and DTO/result retain full measured Java line coverage; properties 40/42. JAR includes V1–V18, no fixture/manual tooling/staging example/private config. Runtime default, public configuration allowlist, unchanged V1–V17, document links/anchors, acceptance-ID and append-only-history checks pass. Remote CI/CodeQL, real APK/provider and live rollout remain unverified.
+
 ### [2026-10-17 00:25 UTC+07:00] — [Fix] Bobi no longer shows the same answer twice
 
 **Done:** After #262 kept the answer a model writes before calling `suggest_screen`, a model that then wrote the same answer again (after the tool returned) had both copies joined, so the chat showed every paragraph twice ("Xóa đơn hàng #225", the matcha latte profit question). A later response that only repeats the kept answer (spacing ignored) is now dropped, both in the stored answer and in the stream; while a response still reads like the start of the kept answer, the stream holds it back until it differs, so nothing is sent and taken back.
@@ -15,6 +45,16 @@
 **Flow explained:** Prompt text only; recall, storage and the number of memories shown next to "Trợ lý Bobi" (memories used by that answer) are unchanged. Memory #11 already stored for shop 8 on staging still exists; the new memory prompt keeps answers in Vietnamese even with it recalled.
 
 **Check:** `ruff check`, `ruff format --check` and 342 AI unit tests pass. Against the configured real model (claude-haiku-5-5), the old prompts stored the English preference 3/3 times and answered in English 3/3 times with it recalled; the new prompts stored nothing 3/3 and answered in Vietnamese 3/3. Ordinary preferences and facts ("báo cáo ngắn gọn", "gọi tôi là anh Phú", opening hours) are still extracted 2/2.
+
+### [2026-10-16] — [Feature] Prepare CORE-016 Android Zalo login and secure linking
+
+**Done:** Prepared #276 on `feat/zalo-android`: external-browser LOGIN/LINK, verifier-bound one-time App Link handoff, environment-specific Android association, safe browser fallback and mandatory PostgreSQL regression coverage. Synchronized the approved canonical documents with BR-009/BR-022 → FR-010/NFR-003 → AC-087–092. Native remains OFF; no new Flyway migration, FE/AI changes, shared-DB operation, deployment or physical-APK acceptance is included.
+
+**Changed files:** Core native controller/service/repository/DTO/configuration/page, shared callback dispatch and WEB guard, rate-limit coverage, OpenAPI/unit/PostgreSQL tests, test-only prospective schema fixture, report gate, Core README/config examples/integration guide and landing-script regression; `docs/contracts/api-contracts.md`, BRD/PRD, technical design, ERD description/DBML comments and `docs/README.md`; this new entry. Existing progress history, unrelated `ZaloCallbackResult.java` formatting and `.idea/` are preserved. Pulled `origin/staging` at `290312c4874291ca8596fef86ed0e13f9b31d4ed`: already up to date, no merge conflict.
+
+**Flow explained:** APK retains its client verifier and opens Zalo through Core in an external browser. Persisted session channel selects WEB popup or fixed HTTPS Android return; only short-lived reference/request metadata cross the App Link, never provider code/token, client verifier or WEB proof. LOGIN reuses the canonical Firebase UID; LINK requires recent revocation-checked Firebase authentication and ACTIVE OWNER, never reassigns identities or merges by name/email. V17 WEB remains compatible; native without future schema fails closed. Schema approval is not migration approval: the SQL fixture runs only in disposable test schemas and is excluded from the production JAR. Migration review, FE integration and AC-092 real-device/provider/operations acceptance are required before enabling.
+
+**Check:** Fresh Java 21 Maven `verify` with JaCoCo 0.8.14 on PostgreSQL 16 loopback/tmpfs passed **1,349 tests / 98 suites, 0 failures / 0 errors / 0 skipped**. All 14 required PostgreSQL suites pass, including 14 native-flow cases; 13 report-gate self-tests, 3 actual Java-rendered native landing-script tests, 8 existing manual-helper tests and 3 real Chrome popup scenarios pass with synthetic data. Native repository/controller/service/page and DTO/result have full measured Java line coverage; properties 39/42 lines. JAR contains only existing V1–V17 migrations and no test fixture/manual tooling/private config. Relative file links/new anchors, unchanged existing AC rows, unique acceptance IDs, staged scope/credential-pattern and whitespace checks pass. Remote CI/CodeQL/review and physical APK/Zalo/Firebase acceptance are not claimed by local checks.
 
 ### [2026-10-16] — [Fix] Share Zalo rate quota across equivalent servlet paths
 

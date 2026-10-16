@@ -175,7 +175,8 @@ class ZaloMigrationPostgresTest {
 
     private Flyway flyway(String target) {
         var config = Flyway.configure().dataSource(source).schemas(schema).defaultSchema(schema).cleanDisabled(true);
-        if (target != null) config.target(target);
+        // Historical V17 assertions stay stable; V18 has a separate upgrade/security/rollback suite.
+        config.target(target != null ? target : "17");
         return config.load();
     }
 

@@ -6,8 +6,10 @@ import com.smartledger.core.enums.ErrorCode;
 import com.smartledger.core.exception.BusinessException;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.ZaloAuthService;
+import com.smartledger.core.service.ZaloNativeAuthService;
 import com.smartledger.core.service.impl.ZaloAuthServiceImpl;
 import com.smartledger.core.zalo.ZaloCallbackPage;
+import com.smartledger.core.zalo.ZaloNativePage;
 import com.smartledger.core.zalo.ZaloPurpose;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -46,7 +48,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class ZaloAuthController {
     private final ZaloAuthService service;
     private final ZaloCallbackPage page;
-    public ZaloAuthController(ZaloAuthService service, ZaloCallbackPage page) { this.service = service; this.page = page; }
+    private final ZaloNativeAuthService nativeService;
+    private final ZaloNativePage nativePage;
+    public ZaloAuthController(ZaloAuthService service, ZaloCallbackPage page,
+            ZaloNativeAuthService nativeService, ZaloNativePage nativePage) {
+        this.service = service; this.page = page; this.nativeService = nativeService; this.nativePage = nativePage;
+    }
 
     @GetMapping("/authorize")
     @Parameters({
@@ -86,9 +93,11 @@ public class ZaloAuthController {
     })
     @ApiResponse(responseCode = "200", description = "Nonce-protected popup handoff, not login success by itself",
             content = @Content(mediaType = MediaType.TEXT_HTML_VALUE, schema = @Schema(type = "string")))
+    @ApiResponse(responseCode = "302", description = "ANDROID session only: fixed App Link with verifier-bound handoff reference in fragment")
     @Operation(summary = "Receive Zalo callback in the browser that started the flow",
-            description = "Provider callback only. Returns a nonce-protected popup message to the exact originating frontend, "
-                    + "not a token in the URL. The frontend must check message origin, popup source, requestId and purpose.")
+            description = "Provider callback only. Dispatches using persisted WEB/ANDROID channel, never input mode/return URL. "
+                    + "WEB returns a nonce-protected popup message to the exact originating frontend; validate message origin/source/requestId/purpose. "
+                    + "ANDROID redirects to the fixed HTTPS return target with only verifier-bound handoffReference and request metadata in fragment, never provider/Firebase tokens.")
     public ResponseEntity<String> callback(@Parameter(hidden = true) @RequestParam MultiValueMap<String, String> params, HttpServletRequest request) {
         singleParameters(params, Set.of("state", "code", "error", "code_challenge"));
         String state = params.getFirst("state");
@@ -97,6 +106,10 @@ public class ZaloAuthController {
         var matching = request.getCookies() == null ? java.util.List.<Cookie>of()
                 : Arrays.stream(request.getCookies()).filter(cookie -> name.equals(cookie.getName())).toList();
         if (matching.size() != 1) throw new BusinessException(ErrorCode.ZALO_SESSION_INVALID);
+        if (nativeService.isNativeCallback(state)) {
+            return nativePage.callback(nativeService.callback(state, params.getFirst("code"), params.getFirst("error"),
+                    params.getFirst("code_challenge"), matching.getFirst().getValue()), cookie(name, "", 0));
+        }
         var result = service.callback(state, params.getFirst("code"), params.getFirst("error"),
                 params.getFirst("code_challenge"), matching.getFirst().getValue());
         return page.render(result, cookie(name, "", 0));
@@ -127,7 +140,7 @@ public class ZaloAuthController {
         return ResponseEntity.noContent().header(HttpHeaders.CACHE_CONTROL, "no-store").build();
     }
 
-    private static String cookie(String name, String value, int seconds) {
+    static String cookie(String name, String value, int seconds) {
         return ResponseCookie.from(name, value).secure(true).httpOnly(true).sameSite("Lax").path("/").maxAge(seconds).build().toString();
     }
 
@@ -137,7 +150,7 @@ public class ZaloAuthController {
         return origins.getFirst();
     }
 
-    private static void singleParameters(MultiValueMap<String, String> params, Set<String> allowed) {
+    static void singleParameters(MultiValueMap<String, String> params, Set<String> allowed) {
         if (!allowed.containsAll(params.keySet()) || params.values().stream().anyMatch(values -> values.size() != 1)) {
             throw new BusinessException(ErrorCode.INVALID_ZALO_REQUEST);
         }

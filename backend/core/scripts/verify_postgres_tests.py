@@ -6,6 +6,28 @@ from xml.etree import ElementTree
 
 
 REQUIRED = {
+    "com.smartledger.core.config.ZaloNativeMigrationPostgresTest": {
+        "freshV18CreatesNativeColumnsAndRerunIsNoOp",
+        "upgradeFromV17PreservesWebSessionsMappingsAndBusinessData",
+        "v18RejectsMixedChannelsDuplicateReferenceAndInvalidExpiry",
+        "earlyColumnCollisionRollsBackWithoutAdoptingUnexpectedSchema",
+        "lateConstraintCollisionRollsBackAllColumnsAndRetainsWebConstraint",
+        "lockTimeoutLeavesV17UsableAndRetrySucceeds",
+        "nativeColumnsRetainRlsAndNoPublicPoliciesOrGrants",
+    },
+    "com.smartledger.core.service.ZaloNativeFlowPostgresTest": {
+        "nativeOffAndMissingV18FailClosedWhileV17WebKeepsWorking",
+        "loginUsesVerifierBoundReferenceWithoutPersistingCredentialsAndReusesWebIdentity",
+        "wrongVerifierRequestClientPurposeOrChannelCannotConsumeNativeHandoff",
+        "concurrentCallbacksAndExchangesHaveExactlyOneWinner",
+        "handoffAndSessionExpiryAreExclusiveAndProviderDelayDoesNotExtendSession",
+        "linkUsesRecentVerifiedUidPreservesProfileAndNeverMovesConflictingIdentity",
+        "linkRejectsMissingStaleOrMismatchedFirebaseProofWithoutConsumingHandoff",
+        "disabledAndAdminAccountsCannotLoginOrLinkAndNoProfileIsCreatedImplicitly",
+        "firebaseFailureKeepsCanonicalUidAndFreshFlowRecoversWithoutReferenceReplay",
+        "competingNativeLinksHaveOneOwnerAndSuspensionDuringMintDoesNotReturnToken",
+        "v18EnforcesChannelIsolationReferenceUniquenessAndExpiry",
+    },
     "com.smartledger.core.config.ZaloMigrationPostgresTest": {
         "freshMigrationCreatesBothStoresAndExpiryIndexWithoutCoreProfileForeignKey",
         "upgradeFromV16PreservesExistingOwnerIdentityShopAndCreatesNoMappings",

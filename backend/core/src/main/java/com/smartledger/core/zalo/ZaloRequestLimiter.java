@@ -27,7 +27,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Order(Ordered.HIGHEST_PRECEDENCE + 20)
 public class ZaloRequestLimiter extends OncePerRequestFilter {
     private static final String BASE = "/api/v1/auth/zalo/";
-    private static final Set<String> PATHS = Set.of(BASE + "authorize", BASE + "callback", BASE + "exchange", BASE + "link");
+    private static final Set<String> PATHS = Set.of(BASE + "authorize", BASE + "callback", BASE + "exchange", BASE + "link",
+            BASE + "native/authorize", BASE + "native/exchange", BASE + "native/link");
     private static final int MAX_BODY_BYTES = 8192;
     private final ObjectMapper mapper;
     private final Clock clock;

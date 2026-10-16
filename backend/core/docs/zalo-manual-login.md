@@ -12,7 +12,7 @@ preparation is separate and does not deploy or run shared-DB migrations.
   `zalo_manual`, schema `core_zalo_manual`. Synthetic credentials are hard-coded
   exclusively for this disposable container. The launcher rejects other mounts,
   labels, ports or database settings. It does not load the repo `.env.staging`.
-- Existing V1–V17 migrations are applied only there. The test entry point is in
+- Existing V1–V18 migrations are applied only there. The test entry point is in
   `src/test`, not the packaged application. The earlier separate schema fixture
   is retired; V17 is now the single SQL source.
 - Database data is in **tmpfs**: stopping/restarting the container or Docker

@@ -18,6 +18,7 @@ import com.smartledger.core.security.BearerTokenAuthenticationFilter;
 import com.smartledger.core.security.FirebaseTokenVerifier;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.ZaloAuthService;
+import com.smartledger.core.service.ZaloNativeAuthService;
 import com.smartledger.core.zalo.*;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
@@ -39,6 +40,8 @@ class ZaloAuthControllerTest {
     private static final String BINDING = "b".repeat(43);
     @Autowired private MockMvc mvc;
     @MockitoBean private ZaloAuthService service;
+    @MockitoBean private ZaloNativeAuthService nativeService;
+    @MockitoBean private ZaloNativePage nativePage;
     @MockitoBean private FirebaseTokenVerifier tokenVerifier;
 
     @Test
