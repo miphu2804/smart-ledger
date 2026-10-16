@@ -1,3 +1,13 @@
+### [2026-10-16 10:25 UTC+07:00] — [Docs] AI docs and diagrams re-checked against the AI service (supersedes #212)
+
+**Done:** Moved the 13 findings of #212 onto a fresh branch from `staging` (#212 was far behind) and re-checked them in four audit rounds against `backend/ai/src`, Core's Agent proxy, `supabase/migrations` and `ci.yml`. Docs now cover: the Core stream relay and memory settings proxy (eight Agent routes), guardrail `422` codes kept by Core, the reader pool and eight `ai_read` views, long-term memory behind `AGENT_MEMORY_ENABLED` (off by default, awaiting PO approval) with its tables in the ERD, the current-time line after the new message, `suggest_screen` and the ```` ```actions ```` block (stripped from replayed history, appended after the answer screen), and CI/CD details (landing deploy and approval, PR previews off, pool sizes, memory variables on Railway). Diagrams were re-exported from source: `ci-cd`, `auth-request-flow` (sign-in by email, Facebook or Google), `agent-memory`, and the two `06-ai` walkthrough diagrams.
+
+**Changed files:** `README.md`, `backend/ai/README.md`, `backend/ai/.env.example` (comments and blank keys only), `docs/README.md`, `docs/contracts/api-contracts.md`, `docs/architecture/technical-design.md`, `docs/architecture/erd-description.md`, `docs/architecture/diagrams/src/erd.dbml`, `docs/architecture/adr/0002-agent-long-term-memory.md`, `docs/architecture/service-walkthrough/README.md` and `06-ai/*.svg`, `docs/development/ci-cd.md`, `docs/architecture/diagrams/src/{ci-cd,auth-request-flow,agent-memory}.drawio` and their SVGs — modified; this entry.
+
+**Flow explained:** each round, one slice per doc group was checked sentence by sentence against the code; every claimed drift was verified against the cited code before it was applied. A claim the code cannot show (Railway, Vercel or Firebase settings) was left open, not written as fact.
+
+**Check:** `dbml2sql` parses `erd.dbml`; every `.drawio` and SVG parses as XML; Mermaid re-rendered; local link and anchor check reports 0 bad links. **Not verified:** whether staging or production set `AGENT_MEMORY_ENABLED` or Cloudflare variables; `vercel-production` secrets, Firebase authorized domains and `CORS_ALLOWED_ORIGINS` on `railway-production`.
+
 ### [2026-10-16 10:23 UTC+07:00] — [Fix] Overview compact bar buttons on one line
 
 **Done:** After scrolling Tổng quan, the four quick buttons of the compact bar (Đọc đơn, Quét mã, Chọn hàng, Trợ lý) showed the icon above the label (#254), which took two lines of height. Each button now has the icon tile and the label on one line, 34 px high instead of 50 px; buttons are as wide as their label instead of equal, so "Chọn hàng" fits beside the short "Trợ lý". `HEADER_COLLAPSED` goes from 115 to 99, so the collapsed bar is 16 px lower. On screens narrower than 360 px the label shrinks to fit instead of wrapping (native only).
@@ -15,6 +25,7 @@
 **Flow explained:** 100 exchanges at the 2000-character input cap plus answers can pass 100k tokens of Vietnamese; 30 leaves room for the system prompt and tool results.
 
 **Check:** AI unit tests 331 passed, ruff clean. **Not verified:** live replies to greetings and off-topic questions; whether a deployed env overrides `AGENT_HISTORY_TURNS`.
+
 ### [2026-10-16 14:30 UTC+07:00] — [Feature] Bobi guides the owner around the app and links replies to screens
 
 **Done:** The agent prompt now describes the app's tabs, screens and buttons, so Bobi can say how to sell, record a debt payment, add an expense or open a report. A new `suggest_screen` tool lets Bobi add up to two buttons under a reply (e.g. "Mở Công nợ" after an answer about open debts); the mobile chat renders them and opens the screen with `router.navigate`.
@@ -44,6 +55,18 @@
 **Flow explained:** `AgentService` still joins the static shop prompt, the query prompt, the restock prompt and the memory prompt in that order, then the current time, so the cacheable prefix layout is unchanged.
 
 **Check:** `uv run pytest tests/unit_tests` 319 passed; ruff clean; all 14 example queries and every function named in rule 7 pass `SqlGuard.validate_and_wrap`. **Not verified:** the new examples against staging data, and live replies from the model.
+
+### [2026-10-16 03:21 UTC+07:00] — [Fix] Guide button on the Quản lý tab; report cost warning no longer counts voided orders twice
+
+**Done:** The button that replays the welcome guide sat at the bottom of Settings, two taps deep. It is now a row "Xem lại hướng dẫn" in the "Tài khoản & ứng dụng" group of the Quản lý tab, between Cài đặt and Đăng xuất; it still goes to Tổng quan and opens the guide there. Settings no longer has the button, and the guide's own tip now points to the Quản lý tab.
+
+Testing #256 on a real phone against staging Core showed the report's missing-cost card saying 42.859.626đ of revenue lacked a cost while the day's revenue was 217.000đ. Core's `/reports/profit-estimate` counts lines without a cost both when sold and when voided (`ReportAggregationRepository.profitEstimate`), so a sale made and voided in the same period counts twice (217.000 + 2 × 21.321.313). The card now gives the item count and revenue only when the period has no voided order; otherwise it says the cost and profit above are incomplete. Core is unchanged.
+
+The report criterion added by #256 reused the number `AC-076`, which the Agent ledger criterion already had; it is now `AC-078`.
+
+**Changed files:** `frontend/mobile/app/(tabs)/more.tsx`, `frontend/mobile/app/settings.tsx`, `frontend/mobile/src/components/AssistantIntroModal.tsx`, `frontend/mobile/src/store/AppStore.tsx`, `frontend/mobile/app/analytics.tsx`, `docs/product/product-requirements.md` (`FR-025`, `AC-018`, `AC-078`) — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors.
 ### [2026-10-16 03:00 UTC+07:00] — [CI] Deploy the landing only when it changed
 
 **Done:** `deploy-landing` now runs on a push only when the push changes `frontend/web/` or `.github/workflows/ci.yml`; a re-run always deploys. Every push to `staging` and `main` used to spend two Vercel deployments (web and landing) even when only the backend changed, and the production deploy of release #249 hit the Hobby limit of 100 a day (`api-deployments-free-per-day`).
