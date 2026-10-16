@@ -29,7 +29,9 @@ def _env_int(name: str, default: int) -> int:
 def build_stages(profile: str) -> list[Stage]:
     peak = max(1, _env_int("PEAK_USERS", 50))
     ramp = _env_int("RAMP_SECONDS", 120)
-    ramp_rate = max(1.0, peak / max(ramp, 1))
+    # Locust accepts fractional spawn rates; rounding up to 1/s would finish the ramp
+    # early whenever PEAK_USERS < RAMP_SECONDS.
+    ramp_rate = peak / max(ramp, 1)
 
     if profile == "smoke":
         return [Stage(_env_int("HOLD_SECONDS", 60), 2, 2, "smoke")]
@@ -66,7 +68,7 @@ def build_stages(profile: str) -> list[Stage]:
         users = max(1, int(peak * 0.7))
         hold = _env_int("HOLD_SECONDS", 3600)
         return [
-            Stage(ramp, users, max(1.0, users / max(ramp, 1)), "ramp"),
+            Stage(ramp, users, users / max(ramp, 1), "ramp"),
             Stage(ramp + hold, users, 1, f"soak {users}"),
         ]
 
@@ -76,7 +78,8 @@ def build_stages(profile: str) -> list[Stage]:
 @dataclass
 class StepResult:
     label: str
-    users: int
+    users: int  # target of the stage
+    running_users: int  # users actually running when the stage ended
     rps: float
     fail_ratio: float
     p95_ms: float | None
@@ -89,17 +92,20 @@ class StageTracker:
         self.results: list[StepResult] = []
         self.stopped_reason: str = ""
 
-    def sample(self, stage: Stage, stats) -> StepResult:
+    def sample(self, stage: Stage, stats, running_users: int) -> StepResult:
         total = stats.total
         rps = total.current_rps or 0.0
         fails = total.current_fail_per_sec or 0.0
         p95 = total.get_current_response_time_percentile(0.95)
-        result = StepResult(stage.label, stage.users, rps, fails / rps if rps else 0.0, p95)
+        result = StepResult(
+            stage.label, stage.users, running_users, rps, fails / rps if rps else 0.0, p95
+        )
         self.results.append(result)
         logger.info(
-            "stage %s: users=%d rps=%.1f fail=%.2f%% p95=%s ms",
+            "stage %s: users=%d running=%d rps=%.1f fail=%.2f%% p95=%s ms",
             result.label,
             result.users,
+            result.running_users,
             result.rps,
             result.fail_ratio * 100,
             "n/a" if result.p95_ms is None else f"{result.p95_ms:.0f}",

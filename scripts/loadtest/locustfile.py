@@ -11,6 +11,7 @@ import os
 import sys
 import uuid
 
+import gevent
 from gevent.lock import Semaphore
 from locust import HttpUser, LoadTestShape, between, events, task
 from locust.exception import StopUser
@@ -58,15 +59,16 @@ def _check_settings(environment, **_kwargs) -> None:
 def _slo_gate(environment, **_kwargs) -> None:
     if isinstance(environment.runner, WorkerRunner):
         return
-    verdicts, passed = slo.evaluate(environment.stats)
+    verdicts, passed = slo.evaluate(environment.stats, SETTINGS.profile)
     if TRACKER.results:
         logger.info("stage summary:")
         for step in TRACKER.results:
             p95 = "n/a" if step.p95_ms is None else f"{step.p95_ms:.0f}"
             logger.info(
-                "  %-16s users=%-5d rps=%-8.1f fail=%.2f%% p95=%s ms",
+                "  %-16s users=%-5d running=%-5d rps=%-8.1f fail=%.2f%% p95=%s ms",
                 step.label,
                 step.users,
+                step.running_users,
                 step.rps,
                 step.fail_ratio * 100,
                 p95,
@@ -90,9 +92,18 @@ class OwnerSession:
         self.account = POOL.next_account()
         self.shop_id: int | None = None
         # The app opens a session after every sign-in; it is idempotent for an
-        # existing profile and returns the shops the account may use.
-        body = self.call("auth", "POST", f"{API}/auth/session", json={}, shop=False)
-        shops = [s for s in (body or {}).get("shops", []) if s.get("status") == "ACTIVE"]
+        # existing profile and returns the shops the account may use. Under stress the
+        # session call itself can fail: retry it, so the run keeps the user count the
+        # stage reports instead of silently shedding users.
+        body, attempt = None, 0
+        while body is None:
+            if attempt:
+                delay = min(30, 2**attempt)
+                logger.warning("%s session failed; retrying in %ds", self.account.label, delay)
+                gevent.sleep(delay)
+            attempt += 1
+            body = self.call("auth", "POST", f"{API}/auth/session", json={}, shop=False)
+        shops = [s for s in body.get("shops", []) if s.get("status") == "ACTIVE"]
         if not shops:
             logger.error("%s has no ACTIVE shop; create one before the run", self.account.label)
             raise StopUser()
@@ -329,7 +340,7 @@ if SETTINGS.profile != "manual" and SETTINGS.profile in config.PROFILES:
                 and run_time >= self.stages[self.stage_index].until
             ):
                 finished = self.stages[self.stage_index]
-                result = TRACKER.sample(finished, self.runner.stats)
+                result = TRACKER.sample(finished, self.runner.stats, self.runner.user_count)
                 self.stage_index += 1
                 if SETTINGS.profile == "stress" and self._broken(result):
                     return None
