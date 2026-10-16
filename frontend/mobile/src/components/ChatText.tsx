@@ -212,7 +212,8 @@ const styles = StyleSheet.create({
   wrap: { flexShrink: 1, gap: 2 },
   gap: { height: 8 },
   listRow: { flexDirection: 'row', gap: 6 },
-  marker: { lineHeight: 20.5, minWidth: 8 },
+  // Không co lại: dòng dài đẩy số thứ tự hai chữ số xuống dòng ("10" rồi ".").
+  marker: { lineHeight: 20.5, minWidth: 8, flexShrink: 0 },
   line: { lineHeight: 20.5, flexShrink: 1, flexWrap: 'wrap' },
   inlineCode: { fontFamily: MONO, backgroundColor: colors.primarySoft },
   codeBlock: { backgroundColor: colors.primarySoft, borderRadius: 10, marginVertical: 4 },
