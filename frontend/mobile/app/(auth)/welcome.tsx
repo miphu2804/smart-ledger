@@ -7,22 +7,29 @@ import { Button, Row, Screen, T } from '../../src/components/ui';
 import { AuthError, authClient } from '../../src/lib/auth';
 import { debugLog } from '../../src/lib/debug';
 import { describeError, errorMessage, isDisplayNameRequired } from '../../src/lib/errors';
+import { signInWithZalo, ZALO_LOGIN_AVAILABLE } from '../../src/lib/zaloLogin';
 import { useApp } from '../../src/store/AppStore';
 import { colors, shadow } from '../../src/theme';
 
-/** Cách đăng nhập: email + mật khẩu, Facebook và Google dùng được; Zalo ghi "Sắp có". Không còn đăng nhập bằng số điện thoại. */
+/**
+ * Cách đăng nhập: email + mật khẩu, Facebook và Google dùng được; Zalo dùng được trên bản web khi bật EXPO_PUBLIC_ZALO_LOGIN,
+ * còn lại ghi "Sắp có". Không còn đăng nhập bằng số điện thoại.
+ */
 export default function Welcome() {
   const toast = useToast();
   const app = useApp();
   const [busy, setBusy] = useState<SocialProvider | null>(null);
 
-  // Facebook/Google → Firebase → phiên Core, cùng luồng với email: tài khoản mới (Core đòi tên) đi tiếp qua màn đăng ký.
+  // Facebook/Google/Zalo → Firebase → phiên Core, cùng luồng với email: tài khoản mới (Core đòi tên) đi tiếp qua màn đăng ký.
   const signInWith = async (provider: SocialProvider) => {
     if (busy) return;
     setBusy(provider);
     try {
-      await (provider === 'google' ? authClient.signInWithGoogle() : authClient.signInWithFacebook());
-      const session = await app.signIn(); // gửi Firebase ID token xuống Core (POST /auth/session)
+      // Zalo mở cửa sổ ngay trong lượt bấm (trước mọi await) để trình duyệt không chặn; tên Zalo dùng khi tạo tài khoản mới
+      let displayName: string | undefined;
+      if (provider === 'zalo') displayName = (await signInWithZalo()).displayName;
+      else await (provider === 'google' ? authClient.signInWithGoogle() : authClient.signInWithFacebook());
+      const session = await app.signIn(displayName); // gửi Firebase ID token xuống Core (POST /auth/session)
       router.replace(session.needsOnboarding ? '/(auth)/setup' : '/(tabs)');
     } catch (e) {
       if (e instanceof AuthError && e.code === 'cancelled') return; // người dùng tự đóng, không phải lỗi
@@ -82,9 +89,16 @@ export default function Welcome() {
         <View style={styles.line} />
       </Row>
       <Row gap={8} style={{ alignItems: 'stretch' }}>
-        <SocialBtn name="Facebook" icon="facebook" busy={busy === 'facebook'} disabled={busy === 'google'} onPress={() => signInWith('facebook')} />
-        <SocialBtn name="Google" icon="google" busy={busy === 'google'} disabled={busy === 'facebook'} onPress={() => signInWith('google')} />
-        <SocialBtn name="Zalo" icon="zalo" soon />
+        <SocialBtn name="Facebook" icon="facebook" busy={busy === 'facebook'} disabled={!!busy && busy !== 'facebook'} onPress={() => signInWith('facebook')} />
+        <SocialBtn name="Google" icon="google" busy={busy === 'google'} disabled={!!busy && busy !== 'google'} onPress={() => signInWith('google')} />
+        <SocialBtn
+          name="Zalo"
+          icon="zalo"
+          soon={!ZALO_LOGIN_AVAILABLE}
+          busy={busy === 'zalo'}
+          disabled={!!busy && busy !== 'zalo'}
+          onPress={() => signInWith('zalo')}
+        />
       </Row>
 
       <Row style={{ justifyContent: 'center', marginTop: 24 }} gap={6}>
@@ -97,8 +111,8 @@ export default function Welcome() {
   );
 }
 
-type SocialProvider = 'facebook' | 'google';
-type SocialIcon = SocialProvider | 'zalo';
+type SocialProvider = 'facebook' | 'google' | 'zalo';
+type SocialIcon = SocialProvider;
 const SOCIAL_COLOR: Record<SocialIcon, string> = { google: '#EA4335', facebook: '#1877F2', zalo: '#0068FF' };
 
 function SocialBtn({ name, icon, onPress, soon = false, busy = false, disabled = false }: {

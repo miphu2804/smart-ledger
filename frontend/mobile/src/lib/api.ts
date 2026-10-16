@@ -57,6 +57,8 @@ export async function apiRequest<T>(
     idempotencyKey?: string;
     /** Ảnh gửi dạng multipart (part `image`); không dùng cùng `body`. Web gửi `blob`, Android/iOS gửi file theo `uri`. */
     image?: UploadImage;
+    /** Endpoint công khai (đổi proof Zalo): không lấy và không gửi Firebase ID token, kể cả khi máy còn phiên cũ */
+    anonymous?: boolean;
   } = {},
 ): Promise<T> {
   const method = opts.method ?? (opts.body === undefined && !opts.image ? 'GET' : 'POST');
@@ -75,7 +77,7 @@ export async function apiRequest<T>(
   const took = () => `${Date.now() - started}ms`;
   debugLog('api', '→', method, path);
 
-  const token = await authClient.getIdToken();
+  const token = opts.anonymous ? null : await authClient.getIdToken();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   // Với multipart, để fetch tự đặt Content-Type kèm boundary
