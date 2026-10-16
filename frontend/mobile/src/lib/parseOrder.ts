@@ -84,6 +84,11 @@ function fold(s: string): string {
     .toLowerCase()
     // Chữ cái Latin kể cả chữ có dấu tiếng Việt (à…ỹ); dựng dạng NFC trước để dấu không bị tách khỏi chữ
     .normalize('NFC')
+    // Common Vietnamese ASR substitutions for catalog terms. Keep these
+    // narrow and phrase-level; broad phonetic replacement can change a real
+    // product name into a different SKU.
+    .replace(/\bthương\s+vong\b/gu, 'việt quất')
+    .replace(/\bthuong\s+vong\b/gu, 'viet quat')
     .replace(/[a-zà-ỹ]+/g, markHomograph)
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
@@ -173,6 +178,11 @@ const FILLER = [
   'luon',
   'giup',
   'dum',
+  'gium',
+  'tui',
+  'dang',
+  'nghen',
+  'hen',
 ];
 /** Từ nối giữa hai món khi nói liền một câu: "2 cà phê VÀ 1 bánh mì". */
 const DELIMITER_WORDS = new Set(['voi', 'them', 'va', 'kem', 'cung', 'nha', 'nhe', 'roi']);
@@ -461,8 +471,19 @@ function spokenNameWords(rest: string): string[] {
  */
 function variantsOf(words: string[], products: ParseableProduct[]): ParseableProduct[] {
   if (!words.length) return [];
-  const containsRun = (key: string[]) =>
-    key.length > words.length && key.some((_, i) => words.every((w, o) => key[i + o] === w));
+  // A spoken name may omit descriptive words from the catalog name:
+  // "sting dau" should match "Sting huong dau". Keep the order of the
+  // meaningful words, but allow catalog words between them.
+  const containsRun = (key: string[]) => {
+    if (key.length <= words.length) return false;
+    let keyIndex = 0;
+    for (const word of words) {
+      const foundAt = key.indexOf(word, keyIndex);
+      if (foundAt < 0) return false;
+      keyIndex = foundAt + 1;
+    }
+    return true;
+  };
   // Tên ngắn trước (gần với điều đã nói nhất); nhiều mẫu quá thì chỉ đưa vài mẫu đầu
   const shortest = (p: ParseableProduct) => Math.min(...productKeys(p).filter(containsRun).map((k) => k.length));
   return products
@@ -671,7 +692,8 @@ export function parseOrder(text: string, products: ParseableProduct[]): ParsedOr
 
     const spokenQty = parseQty(seg);
     const { rest, explicit } = spokenQty;
-    const matched = matchProduct(seg, products);
+    let matched = matchProduct(seg, products);
+    const hadExactMatch = !!matched;
     // Khớp được món thì số lượng lấy ở phần ngoài tên món: tên có chữ số ("… Lốc 6 Lon 320ml") không bị đọc thành 6 cái
     const outside = matched ? parseQty(withoutName(seg, matched)) : null;
     const qty = outside ? outside.qty : spokenQty.qty;
@@ -686,7 +708,12 @@ export function parseOrder(text: string, products: ParseableProduct[]): ParsedOr
     const variants = longer.length || !matched || price || exact ? longer : [matched];
     const name = cleanName(rest, text);
 
-    if (matched && !variants.length) {
+    // A single longer catalog name is a safe match when the spoken name
+    // contains its meaningful tokens in order (e.g. "sting dau" ->
+    // "Sting huong dau"). Multiple variants still require a choice.
+    if (!matched && variants.length === 1) matched = variants[0];
+
+    if (matched && (!variants.length || (!hadExactMatch && variants.length === 1))) {
       // Giá bán của món trong danh mục do Core quyết định; giá nói ra chỉ dùng để tách món
       const ex = items.find((i) => i.productId === matched.id);
       if (ex) {
