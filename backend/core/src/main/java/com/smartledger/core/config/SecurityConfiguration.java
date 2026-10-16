@@ -44,6 +44,8 @@ public class SecurityConfiguration {
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/actuator/health",
                                 "/actuator/health/liveness", "/actuator/health/readiness").permitAll()
+                        .requestMatchers(HttpMethod.GET,
+                                "/zalo_verifierMysnBA7R831YqgKCwDCT0HgaYGlsqb9MCpOu.html").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(bearerTokenAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
