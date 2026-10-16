@@ -6,6 +6,31 @@ from xml.etree import ElementTree
 
 
 REQUIRED = {
+    "com.smartledger.core.config.ZaloMigrationPostgresTest": {
+        "freshMigrationCreatesBothStoresAndExpiryIndexWithoutCoreProfileForeignKey",
+        "upgradeFromV16PreservesExistingOwnerIdentityShopAndCreatesNoMappings",
+        "migrationFailureRollsBackNewTableAndHistoryWithoutAdoptingUnexpectedTables",
+        "rerunIsNoOpAndProviderAppScopeUniquenessPreservesCanonicalUid",
+        "databaseRejectsInvalidSessionLifecycleAndDuplicateHandoffProof",
+        "nonOwnerRolesCannotReadOrInsertEvenWithBroadTablePrivileges",
+    },
+    "com.smartledger.core.repository.ZaloOAuthPostgresTest": {
+        "concurrentCallbacksHaveOnlyOneWinner",
+        "concurrentProofExchangesHaveOnlyOneWinner",
+        "sessionTransitionsCommitBeforeSurroundingTransactionRollsBack",
+        "concurrentFirstLoginAlwaysResolvesTheSameCanonicalUid",
+        "competingLinksCannotReassignIdentity",
+        "linkingWaitsForConcurrentDisableAndDoesNotCommitTheNewMapping",
+        "verifiedProofIsBoundToPurposeOriginChallengeAndBothExpiries",
+    },
+    "com.smartledger.core.service.ZaloAuthFlowPostgresTest": {
+        "disabledWorksWithOnlyOldSchemaAndMissingNewTablesFailClosedWhenEnabled",
+        "repeatedLoginUsesOneFirebaseUidAndCreatesCoreOwnerOnlyThroughExistingSession",
+        "linkedLoginKeepsExistingOwnerProfileShopRoleAndPrivateAvatar",
+        "conflictingLinkNeverMovesTheIdentityOrChangesEitherOwner",
+        "disabledMappedOwnerCannotObtainFirebaseCustomToken",
+        "freshOAuthAfterFirebaseFailureReusesReservedUidWithoutReusingConsumedProof",
+    },
     "com.smartledger.core.config.SaleRefundMigrationPostgresTest": {
         "notificationUpgradePreservesExistingBusinessDataWithoutBackfill",
         "notificationMigrationAdoptsLocalTablesAndPreservesReadHistory",
