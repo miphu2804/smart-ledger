@@ -3,6 +3,7 @@ import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
+  LayoutAnimation,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -244,10 +245,16 @@ export default function Ai() {
     // Delta tới theo từng token; gom về một lần render mỗi khung hình thay vì một lần mỗi token.
     let frame: number | null = null;
     let latest = '';
+    let started = false;
     const showDraft = (draftText: string) => {
       latest = draftText;
       frame ??= requestAnimationFrame(() => {
         frame = null;
+        // Chữ đầu tiên thay dòng suy nghĩ bằng bong bóng trả lời: cho bong bóng hiện ra có chuyển động thay vì nhảy thẳng.
+        if (!started && latest) {
+          started = true;
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        }
         setDraft(latest);
       });
     };
@@ -321,7 +328,7 @@ export default function Ai() {
             );
           })}
 
-          {/* Chờ chữ đầu tiên: bong bóng chỉ có dòng suy nghĩ. Có chữ rồi bong bóng đó biến mất, câu trả lời stream trong bong bóng riêng có nhãn Bobi như câu đã lưu. */}
+          {/* Chờ chữ đầu tiên: dòng suy nghĩ trôi trên nền, không bọc hộp để không bị nhầm là bong bóng trả lời. */}
           {typing ? (
             <View style={styles.messageRow}>
               {draft ? (
@@ -330,7 +337,8 @@ export default function Ai() {
                   <StreamingChatText text={splitActions(draft, true).text} />
                 </View>
               ) : (
-                <View style={[styles.bubble, styles.assistantBubble, styles.typingBubble]}>
+                // Bề rộng hết hàng để hàng suy nghĩ tự xuống dòng khi có nhiều bước, thay vì tràn ra ngoài màn hình.
+                <View style={styles.thinkingLine}>
                   <ThoughtLine steps={steps} />
                 </View>
               )}
@@ -778,9 +786,11 @@ const styles = StyleSheet.create({
     lineHeight: 20.5,
     flexWrap: 'wrap',
   },
-  typingBubble: {
-    // Rộng hết hàng như bong bóng trả lời, để câu chờ đổi độ dài mà bong bóng không co giãn theo.
-    paddingVertical: 12,
+  // Dòng suy nghĩ không bọc hộp: chữ và các bước trôi trên nền, chỉ chiếm bề rộng hết hàng để xuống dòng đúng.
+  thinkingLine: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 4,
   },
   pressed: {
     opacity: 0.72,
