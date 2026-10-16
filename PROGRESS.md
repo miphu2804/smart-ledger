@@ -1,3 +1,11 @@
+### [2026-10-16 18:26 UTC+07:00] — [Fix] Guide pictures for Bán hàng and Quản lý match the app
+
+**Done:** In the guide pictures from #274, the Bán hàng phone highlighted "Quản lý" in the tab bar and its bar ran past the screen, and the Quản lý phone lacked the "Xem lại hướng dẫn" row (#257) while its notes had a garbled character in "số lượng" and wrote "Quản lí". The Quản lý phone screen is now a capture of the real tab from the mock web build (same sample shop and numbers), with the floating Bobi and the version line hidden; the arrows that ended inside the old screen are redrawn to the same rows, and the Hàng hoá, Chi phí and Công nợ notes are rewritten in Plus Jakarta Sans. The Bán hàng phone keeps its screen but gets the real tab bar with "Bán hàng" highlighted. Same 1672 × 941 size; the bobi and overview pictures are unchanged. The manage picture's accessibility label lists the new row.
+
+**Changed files:** `frontend/mobile/assets/guide/guide-manage.png`, `frontend/mobile/assets/guide/guide-sales.png`, `frontend/mobile/src/components/AssistantIntroModal.tsx` — modified; this entry.
+
+**Check:** Both pictures inspected at full size and zoomed at the edited areas (tab bar, arrow heads, rewritten notes). **Not verified:** how they look inside the guide on a phone.
+
 ### [2026-10-16 17:55 UTC+07:00] — [Mobile/AI] Tool step keeps its shimmer, screen button in brand purple, numbered lists
 
 **Done:** A tool step in `ThoughtLine` keeps its shimmer after the tool ends, because the model is still writing the reply; the running dot is gone and the tick sits after the label, so the label starts where the waiting phrase does. `suggest_screen` gets its own step label instead of the generic one. The screen-button card under a reply drops the "Mở nhanh" label and shows brand-purple buttons with a purple shadow. The shop agent prompt asks for numbered lists only, and the mock replies follow it.
