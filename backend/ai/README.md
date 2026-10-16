@@ -104,6 +104,10 @@ When the read-only executor is configured, the agent also gets a `suggest_restoc
 - The service runs one fixed `SELECT` through the same guard and read-only executor as `query_shop_data`, so the shop scope, statement timeout and row cap apply unchanged. The candidate list is capped at the fastest-selling rows the row cap returns, and the result flags when that cap was hit so the agent can say the list is partial.
 - `RestockSuggestion.reason` is a fixed Vietnamese sentence built from the period's sales and the current stock; the agent copies `suggested_qty`, `unit` and `reason` verbatim rather than recomputing them.
 
+## App guide and screen buttons
+
+The agent always gets `APP_GUIDE_PROMPT` (`src/prompt_templates/app_guide.py`), which names the app's tabs, screens and buttons so it can tell the owner how to do something, and the `suggest_screen` tool. The tool takes one closed-set `screen` and returns its choice as `ToolReturn` metadata, which the model never reads back. After the run, `AgentService` appends the accepted screens, deduplicated and capped at two, to the answer as a ```` ```actions ```` block, and strips that block from stored answers before replaying history. The block format is in the [API contract](../../docs/contracts/api-contracts.md). Keep the prompt in step with the mobile routes when a screen moves or is renamed.
+
 ## Text drafts
 
 The async `DraftService.parse(shop_id, mode, text)` in `src/drafts/service.py` turns an owner's text or STT transcript into a `DraftView` without `request_id`, which the endpoint assigns. It changes nothing: no sale, expense or stock is written. The endpoint `/internal/v1/drafts/parse` and audio belong to #3; this module is the text step it calls.

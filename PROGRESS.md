@@ -1,3 +1,13 @@
+### [2026-10-16 14:30 UTC+07:00] — [Feature] Bobi guides the owner around the app and links replies to screens
+
+**Done:** The agent prompt now describes the app's tabs, screens and buttons, so Bobi can say how to sell, record a debt payment, add an expense or open a report. A new `suggest_screen` tool lets Bobi add up to two buttons under a reply (e.g. "Mở Công nợ" after an answer about open debts); the mobile chat renders them and opens the screen with `router.navigate`.
+
+**Changed files:** `backend/ai/src/prompt_templates/app_guide.py` — created; `backend/ai/src/prompt_templates/__init__.py`, `backend/ai/src/agent/tools.py`, `backend/ai/src/agent/service.py` — modified; `backend/ai/tests/unit_tests/test_screen_buttons.py` — created; `test_agent_service.py`, `test_shop_data_tool.py`, `test_restock_tool.py` — modified; `frontend/mobile/src/lib/chatMarkdown.ts`, `frontend/mobile/src/components/ChatText.tsx`, `frontend/mobile/tests/chatMarkdown.test.ts` — modified; `docs/contracts/api-contracts.md`, `backend/ai/README.md`, `frontend/mobile/README.md` — modified; this entry.
+
+**Flow explained:** model calls `suggest_screen(screen)` (closed `Literal`, so an unlisted screen is retried) → the tool returns the screen as `ToolReturn` metadata → after the run `AgentService` reads it from the new messages, dedupes, caps at 2 and appends a ```` ```actions ```` block to `answer` → the block is stored and reaches the app as the last `delta` and in `done`, so Core is unchanged → history replay strips it → mobile maps names through `SCREEN_LINKS` and draws the buttons once the block is closed. A Pydantic AI `CustomEvent` was considered and not used: the answer must carry the buttons anyway to show them again from history, so a separate SSE event would duplicate it.
+
+**Check:** AI unit tests 337 passed, ruff clean; mobile `npm test` 83 passed, `tsc --noEmit` reports only two modules missing from the local `node_modules` in an untouched file. **Not verified:** live model behaviour (when Bobi chooses to add a button) and tapping the buttons on a device.
+
 ### [2026-10-16 10:10 UTC+07:00] — [Feature] Agent prompt cache: time after the message, Anthropic cache breakpoints, cache usage in logs
 
 **Done:** The current-time line moved out of the system instructions to the end of the owner's new message, behind a `CachePoint`, so the instructions and the whole stored history stay a byte-identical prefix from turn to turn. The Anthropic model now sets explicit cache breakpoints on tools, instructions and the last message (not the top-level automatic mode, which the gateway may not forward). Each turn logs cache read and write tokens and the hit ratio next to the usage.

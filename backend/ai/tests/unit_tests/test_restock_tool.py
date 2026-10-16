@@ -12,6 +12,7 @@ from tests.support import (
 from src.agent.service import AgentService
 from src.agent.tools import AgentContext, build_restock_tool
 from src.prompt_templates import (
+    APP_GUIDE_PROMPT,
     RESTOCK_PROMPT,
     RESTOCK_RESULT_HEADER,
     SHOP_AGENT_SYSTEM_PROMPT,
@@ -109,7 +110,7 @@ async def test_tools_sent_to_the_model_expose_only_period() -> None:
         user_id=3, shop_id=15, message="m"
     )
 
-    (spec,) = model.requests[0][1].function_tools
+    spec, _ = model.requests[0][1].function_tools
     assert spec.name == "suggest_restock"
     assert list(spec.parameters_json_schema["properties"]) == ["period"]
     assert spec.parameters_json_schema["required"] == ["period"]
@@ -233,7 +234,7 @@ async def test_agent_without_restock_has_no_suggest_restock_tool() -> None:
         user_id=3, shop_id=15, message="m"
     )
 
-    assert model.tool_names() == ["query_shop_data"]
+    assert model.tool_names() == ["query_shop_data", "suggest_screen"]
 
 
 async def test_instructions_are_static_and_carry_the_restock_rules() -> None:
@@ -246,7 +247,8 @@ async def test_instructions_are_static_and_carry_the_restock_rules() -> None:
 
     instructions = model.requests[0][1].instructions
     assert instructions == (
-        f"{SHOP_AGENT_SYSTEM_PROMPT}\n\n{SQL_AGENT_PROMPT}\n\n{RESTOCK_PROMPT}"
+        f"{SHOP_AGENT_SYSTEM_PROMPT}\n\n{APP_GUIDE_PROMPT}\n\n{SQL_AGENT_PROMPT}"
+        f"\n\n{RESTOCK_PROMPT}"
     )
     assert "15" not in instructions
 

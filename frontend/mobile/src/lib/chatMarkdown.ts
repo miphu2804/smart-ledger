@@ -3,6 +3,7 @@
  *
  * Chỉ nhận tập markdown mà prompt của AI cho phép (backend/ai/src/prompt_templates/shop_agent.py):
  * `**đậm**`, `` `mã` ``, tiêu đề `#`, danh sách `-`/`1.`, bảng `|`, khối ``` và khối ```chart (JSON).
+ * Khối ```actions do AI service tự gắn cuối câu trả lời (backend/ai/src/agent/service.py), không phải model.
  * Ký hiệu khác giữ nguyên chữ. Khi `streaming` là true, phần đuôi chưa trọn được tự đóng hoặc giữ lại
  * để bong bóng không nháy ký hiệu thô rồi đổi dạng khi chữ tới đủ.
  */
@@ -18,6 +19,19 @@ export type ChartSpec = {
   data: ChartPoint[];
 };
 
+/** Màn hình mà nút dưới câu trả lời mở được; khoá trùng `Screen` trong backend/ai/src/agent/tools.py. */
+export const SCREEN_LINKS = {
+  sales: { label: 'Mở Bán hàng', route: '/(tabs)/sales' },
+  voice_order: { label: 'Mở Đọc đơn', route: '/voice' },
+  orders: { label: 'Mở Đơn hàng', route: '/(tabs)/invoices' },
+  products: { label: 'Mở Hàng hoá', route: '/products' },
+  debts: { label: 'Mở Công nợ', route: '/debts' },
+  expenses: { label: 'Mở Chi phí', route: '/expenses' },
+  reports: { label: 'Mở Báo cáo', route: '/analytics' },
+} as const;
+
+export type AppScreen = keyof typeof SCREEN_LINKS;
+
 export type ChatBlock =
   | { kind: 'paragraph' | 'heading' | 'bullet'; inlines: Inline[] }
   | { kind: 'ordered'; marker: string; inlines: Inline[] }
@@ -25,6 +39,7 @@ export type ChatBlock =
   | { kind: 'code'; text: string }
   | { kind: 'table'; header: Inline[][]; rows: Inline[][][] }
   | { kind: 'chart'; spec: ChartSpec }
+  | { kind: 'actions'; screens: AppScreen[] }
   // Khối ```chart chưa đóng khi đang stream, hoặc JSON không hợp lệ ở câu đã xong.
   | { kind: 'chartPending' | 'chartInvalid' };
 
@@ -87,7 +102,11 @@ function readFence(lines: string[], start: number, lang: string, streaming: bool
   // Dấu đóng đang gõ dở ("`", "``") không thuộc nội dung.
   if (!closed && streaming && /^\s*`{1,2}\s*$/.test(body.at(-1) ?? '')) body.pop();
 
-  if (lang === 'chart') {
+  if (lang === 'actions') {
+    // Nút chỉ hiện khi khối đã trọn; màn lạ bị bỏ, nên chữ trong khối không bao giờ thành route.
+    const screens = closed ? readScreens(body.join('\n')) : [];
+    if (screens.length) blocks.push({ kind: 'actions', screens });
+  } else if (lang === 'chart') {
     if (!closed && streaming) blocks.push({ kind: 'chartPending' });
     else {
       const spec = readChart(body.join('\n'));
@@ -176,6 +195,18 @@ function closeDangling(line: string) {
 function trimGaps(blocks: ChatBlock[]) {
   while (blocks.at(-1)?.kind === 'gap') blocks.pop();
   return blocks;
+}
+
+/** Danh sách màn trong khối ```actions; JSON hỏng hoặc màn lạ thì bỏ qua. */
+export function readScreens(body: string): AppScreen[] {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(body);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((screen): screen is AppScreen => typeof screen === 'string' && Object.hasOwn(SCREEN_LINKS, screen));
 }
 
 /**
