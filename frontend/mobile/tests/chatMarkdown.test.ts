@@ -216,3 +216,24 @@ describe('readChart', () => {
     assert.equal(readChart('null'), null);
   });
 });
+
+describe('actions block', () => {
+  const ACTIONS = '```actions\n["debts", "sales"]\n```';
+
+  it('turns listed screens into buttons after the answer', () => {
+    const blocks = parse('Còn 2 khoản nợ.\n\n' + ACTIONS);
+    assert.deepEqual(kinds(blocks), ['paragraph', 'gap', 'actions']);
+    assert.deepEqual((blocks.at(-1) as { screens: string[] }).screens, ['debts', 'sales']);
+  });
+
+  it('drops unknown screens and broken JSON instead of showing them', () => {
+    assert.deepEqual((parse('```actions\n["debts", "/admin", 3]\n```')[0] as { screens: string[] }).screens, ['debts']);
+    assert.deepEqual(parse('```actions\n["/admin"]\n```'), []);
+    assert.deepEqual(parse('```actions\n["debts"\n```'), []);
+  });
+
+  it('shows nothing while the block is still streaming', () => {
+    assert.deepEqual(kinds(stream('Còn nợ.\n```actions\n["deb')), ['paragraph']);
+    assert.deepEqual(kinds(stream('Còn nợ.\n' + ACTIONS)), ['paragraph', 'actions']);
+  });
+});

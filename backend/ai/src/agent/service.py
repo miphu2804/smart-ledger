@@ -1,17 +1,20 @@
 import asyncio
+import json
 import logging
+import re
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import suppress
 from dataclasses import dataclass
 
-from pydantic_ai import Agent, AgentRunResult
+from pydantic_ai import Agent, AgentRunResult, Tool
 from pydantic_ai.messages import (
     CachePoint,
     ModelMessage,
     ModelRequest,
     ModelResponse,
     TextPart,
+    ToolReturnPart,
     UserPromptPart,
 )
 from pydantic_ai.models import Model
@@ -22,10 +25,12 @@ from src.agent.tools import (
     AgentContext,
     build_restock_tool,
     build_shop_data_tool,
+    suggest_screen,
 )
 from src.memory.repository import RecalledMemory
 from src.memory.service import AgentMemoryService
 from src.prompt_templates import (
+    APP_GUIDE_PROMPT,
     CURRENT_TIME,
     MEMORY_PROMPT,
     RESTOCK_PROMPT,
@@ -38,6 +43,11 @@ from src.sql.repository import ShopDataRepository
 from src.utils import get_time
 
 logger = logging.getLogger(__name__)
+
+# A reply links to at most this many screens, so the buttons fit under it on a phone.
+MAX_SCREEN_BUTTONS = 2
+# The screen-button block _with_screen_buttons appends to a stored answer.
+SCREEN_BUTTONS = re.compile(r"\n*```actions\n.*?\n```\s*$", re.DOTALL)
 
 
 @dataclass(frozen=True)
@@ -98,7 +108,7 @@ class AgentService:
         # so the instructions and the history both stay a cacheable prefix.
         # Each optional capability adds its own tool and prompt section.
         tools = []
-        prompt_parts = [SHOP_AGENT_SYSTEM_PROMPT]
+        prompt_parts = [SHOP_AGENT_SYSTEM_PROMPT, APP_GUIDE_PROMPT]
         if shop_data is not None:
             tools.append(build_shop_data_tool(shop_data))
             prompt_parts.append(SQL_AGENT_PROMPT)
@@ -107,6 +117,7 @@ class AgentService:
             prompt_parts.append(RESTOCK_PROMPT)
         if memory is not None:
             prompt_parts.append(MEMORY_PROMPT)
+        tools.append(Tool(suggest_screen))
         self.memory = memory
         # Memory writes run after the reply; held here so they are not garbage
         # collected mid-run.
@@ -327,7 +338,8 @@ class AgentService:
         return delivered, result
 
     def _read_result(self, result: AgentRunResult[str]) -> tuple[str, str]:
-        """Log the turn's token use; return the answer and the model version."""
+        """Log the turn's token use; return the answer, with its screen buttons, and
+        the model version."""
         # Token counts per turn, to size AGENT_TURN_TOKEN_LIMIT from real traffic and
         # to see how much of the prompt the provider served from its cache.
         usage = result.usage
@@ -338,7 +350,30 @@ class AgentService:
             usage.cache_write_tokens,
             100 * usage.cache_hit_ratio,
         )
-        return result.output, result.response.model_name or self.model_name
+        answer = self._with_screen_buttons(result.output, self._screens(result))
+        return answer, result.response.model_name or self.model_name
+
+    @staticmethod
+    def _screens(result: AgentRunResult[str]) -> list[str]:
+        """The screens suggest_screen accepted this run, in order, without repeats."""
+        screens = []
+        for message in result.new_messages():
+            for part in message.parts:
+                if (
+                    isinstance(part, ToolReturnPart)
+                    and part.tool_name == suggest_screen.__name__
+                    and part.metadata["screen"] not in screens
+                ):
+                    screens.append(part.metadata["screen"])
+        return screens[:MAX_SCREEN_BUTTONS]
+
+    @staticmethod
+    def _with_screen_buttons(answer: str, screens: list[str]) -> str:
+        # Stored with the answer, so the buttons come back with the conversation;
+        # the app renders the block as buttons, like a ```chart block as a chart.
+        if not screens:
+            return answer
+        return f"{answer}\n\n```actions\n{json.dumps(screens)}\n```"
 
     async def _save_turn(
         self,
@@ -407,10 +442,13 @@ class AgentService:
     @staticmethod
     def _model_messages(history: list[dict]) -> list[ModelMessage]:
         # History follows verbatim; the agent adds the instructions to the new request.
+        # Stored buttons are dropped, so the model does not learn to write them itself.
         return [
             ModelRequest(parts=[UserPromptPart(entry["content"])])
             if entry["role"] == "USER"
-            else ModelResponse(parts=[TextPart(entry["content"])])
+            else ModelResponse(
+                parts=[TextPart(SCREEN_BUTTONS.sub("", entry["content"]))]
+            )
             for entry in history
         ]
 

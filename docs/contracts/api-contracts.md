@@ -534,6 +534,16 @@ Màn Trợ lý AI trên mobile gọi route stream và hiện chữ dần trong b
 
 Khối `chart` nằm trong `answer` nên được lưu cùng câu trả lời và hiện lại khi mở lịch sử; Core và AI không đổi route hay sự kiện. Mobile dùng chung một parser (`frontend/mobile/src/lib/chatMarkdown.ts`) cho chữ đang stream và câu đã lưu: ký hiệu `**`/`` ` `` còn mở ở dòng cuối được đóng tạm, dòng chưa rõ sẽ thành khối gì (`#`, `-`, `` ``` ``, tiêu đề bảng chưa có dòng gạch) được giữ lại, khối `chart` chưa đóng hiện "Đang vẽ biểu đồ…". Biểu đồ chỉ vẽ khi JSON hợp lệ, 1–31 điểm, nhãn là chữ và giá trị là số không âm; sai thì hiện "Không hiện được biểu đồ này.". Số trong biểu đồ do model chép từ kết quả công cụ, như mọi số trong câu trả lời. [PRD](../product/product-requirements.md) và AC chưa ghi cách trình bày bảng/biểu đồ trong chat.
 
+Cuối `answer` có thể có một khối nút mở màn hình trong app, tối đa 2 nút:
+
+````text
+```actions
+["debts", "sales"]
+```
+````
+
+Model không tự viết khối này: agent gọi tool `suggest_screen(screen)` với `screen` thuộc tập đóng `sales`, `voice_order`, `orders`, `products`, `debts`, `expenses`, `reports` (giá trị khác bị Pydantic AI trả về model để thử lại). Sau lượt, AI nối khối vào cuối `answer` theo thứ tự gọi, bỏ trùng; khối được lưu cùng câu trả lời và đi tới app qua `delta` cuối cùng và `done`, nên Core không đổi route hay sự kiện. Khi đọc lịch sử cho lượt sau, AI bỏ khối này khỏi câu trả lời cũ. Mobile ánh xạ mỗi tên sang route và nhãn trong `SCREEN_LINKS` (`frontend/mobile/src/lib/chatMarkdown.ts`), bỏ qua tên lạ hoặc JSON hỏng, và chỉ hiện nút khi khối đã đóng. Hướng dẫn dùng app trong prompt của agent (`backend/ai/src/prompt_templates/app_guide.py`) chép tên màn hình và nút từ app hiện tại; PRD và AC chưa ghi hành vi hướng dẫn này.
+
 ## 7. Dashboard quản trị — đã có trong Core
 
 Cả 7 GET dưới đây đã có controller/service Core. Yêu cầu Firebase ID token hợp lệ và profile DB `ADMIN`/`ACTIVE`; role không lấy từ client hoặc claim tự tạo. Không cần `X-Shop-Id`; header này và param `actorUserId` không đổi phạm vi truy cập. Response thành công có `Cache-Control: no-store`. Dashboard web còn cần tích hợp theo contract này, không suy ra đã nghiệm thu từ việc API tồn tại.

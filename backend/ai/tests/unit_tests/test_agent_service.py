@@ -18,7 +18,7 @@ from src.agent.service import (
     Reset,
     TextDelta,
 )
-from src.prompt_templates import SHOP_AGENT_SYSTEM_PROMPT
+from src.prompt_templates import APP_GUIDE_PROMPT, SHOP_AGENT_SYSTEM_PROMPT
 from src.utils import get_time
 
 pytestmark = pytest.mark.anyio
@@ -78,7 +78,7 @@ async def test_chat_sends_the_instructions_and_persists_the_exchange() -> None:
     assert (result.answer, result.conversation_id, result.message_id) == ("ok", 41, 72)
     assert (result.model, result.model_version) == ("test-model", "test-model")
     messages, info = model.requests[0]
-    assert info.instructions == SHOP_AGENT_SYSTEM_PROMPT
+    assert info.instructions == f"{SHOP_AGENT_SYSTEM_PROMPT}\n\n{APP_GUIDE_PROMPT}"
     assert transcript(messages) == [("user", "today's revenue?"), ("time", "")]
     assert conversations.saved_exchange == {
         "user_id": 3,
