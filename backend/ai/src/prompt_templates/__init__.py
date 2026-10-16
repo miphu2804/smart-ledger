@@ -1,5 +1,6 @@
 """Every prompt the AI service sends to a model, one module per purpose."""
 
+from src.prompt_templates.app_guide import APP_GUIDE_PROMPT
 from src.prompt_templates.draft_parse import (
     DRAFT_EMPTY_CATALOG,
     DRAFT_EXPENSE_INPUT,
@@ -20,6 +21,7 @@ from src.prompt_templates.shop_agent import CURRENT_TIME, SHOP_AGENT_SYSTEM_PROM
 from src.prompt_templates.sql_agent import QUERY_RESULT_HEADER, SQL_AGENT_PROMPT
 
 __all__ = [
+    "APP_GUIDE_PROMPT",
     "CURRENT_TIME",
     "DRAFT_EMPTY_CATALOG",
     "DRAFT_EXPENSE_INPUT",

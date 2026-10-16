@@ -1,8 +1,9 @@
 import { Feather } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
+  LayoutAnimation,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,21 +11,26 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChatText } from '../src/components/ChatText';
+import { ChatText, ScreenActions, StreamingChatText } from '../src/components/ChatText';
+import { BusinessIcon } from '../src/components/icons';
 import { SlingSendButton } from '../src/components/SlingSendButton';
-import { ThinkingStatus } from '../src/components/ThinkingStatus';
+import { ThoughtLine } from '../src/components/ThoughtLine';
 import { VoicePillButton } from '../src/components/VoicePillButton';
-import { Dialog, EmptyState, Field, IconBtn, KEYBOARD_AVOID_BEHAVIOR, Row, Sheet, T } from '../src/components/ui';
+import { Button, Dialog, EmptyState, Field, IconBtn, KEYBOARD_AVOID_BEHAVIOR, Row, Sheet, T, Toggle } from '../src/components/ui';
 import type {
   AgentConversationSummary,
   AgentConversationView,
+  AgentMemorySettings,
   AgentMemoryUsed,
   AgentMessageView,
   ChatMessage,
+  ThoughtStep,
 } from '../src/data/types';
 import { agentApi } from '../src/lib/agentApi';
 import { ApiError } from '../src/lib/api';
+import { splitActions } from '../src/lib/chatMarkdown';
 import { ddmmyyyy, hhmm, relDay } from '../src/lib/format';
+import { applyToolEvent } from '../src/lib/toolSteps';
 import { useApp } from '../src/store/AppStore';
 import { colors, font, shadow } from '../src/theme';
 
@@ -80,35 +86,49 @@ function lastActive(iso: string): string {
 }
 
 /**
- * Chip trên câu trả lời: ghi nhớ trợ lý đã dùng; chạm để xem đủ nội dung, ngày nhớ và mở hội thoại gốc
- * (trừ khi ghi nhớ đến từ chính hội thoại đang mở).
+ * Nhãn "Trợ lý Bobi" đầu bong bóng; biểu tượng sáng khi tiệm bật ghi nhớ. Câu trả lời đã dùng ghi nhớ thì nhãn
+ * chạm được để xem đủ nội dung, ngày nhớ và mở hội thoại gốc (trừ khi ghi nhớ đến từ chính hội thoại đang mở).
  */
-function MemoryChip({
+function BobiLabel({
+  memoryOn,
   memories,
   currentId,
   onOpenSource,
 }: {
+  memoryOn: boolean;
   memories: AgentMemoryUsed[];
   currentId: number | null;
   onOpenSource: (conversationId: number) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const first = memories[0].content;
-  const label = first.length > 40 ? `${first.slice(0, 40)}…` : first;
-  return (
-    <View style={styles.memoryWrap}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Xem ghi nhớ trợ lý đã dùng"
-        onPress={() => setOpen((v) => !v)}
-        style={({ pressed }) => [styles.memoryChip, pressed && styles.pressed]}
-      >
-        <Feather name="cpu" size={12} color={colors.brand} />
-        <T w="semibold" size={11.5} color={colors.ink} numberOfLines={1} style={{ flexShrink: 1 }}>
-          Đã dùng ghi nhớ: {label}
-          {memories.length > 1 ? ` +${memories.length - 1}` : ''}
+  const label = (
+    <Row gap={3} style={{ alignItems: 'center' }}>
+      <BusinessIcon size={19} color={colors.brand} offColor={colors.faint} filled={memoryOn || memories.length > 0} />
+      <T w="bold" size={13.5} color={colors.brand} style={{ marginLeft: 3 }}>
+        Trợ lý Bobi
+      </T>
+      {memories.length > 1 ? (
+        <T w="semibold" size={13.5} color={colors.brand}>
+          {memories.length}
         </T>
-      </Pressable>
+      ) : null}
+    </Row>
+  );
+  return (
+    <View style={styles.assistantBubbleHeader}>
+      {memories.length ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Xem ${memories.length} ghi nhớ trợ lý đã dùng`}
+          hitSlop={10}
+          onPress={() => setOpen((v) => !v)}
+          style={({ pressed }) => pressed && styles.pressed}
+        >
+          {label}
+        </Pressable>
+      ) : (
+        label
+      )}
       {open
         ? memories.map((m) => {
             const fromHere = m.source_conversation_id === currentId;
@@ -148,10 +168,28 @@ export default function Ai() {
   const [typing, setTyping] = useState(false);
   // Chữ trợ lý đang trả lời dở; vào `msgs` khi có sự kiện `done`.
   const [draft, setDraft] = useState('');
+  // Các bước (gọi tool) của lượt đang chạy, hiện trong bong bóng chờ cho tới khi chữ đầu tiên tới.
+  const [steps, setSteps] = useState<ThoughtStep[]>([]);
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [msgs, setMsgs] = useState<ChatMessage[]>(() => [welcome(app.user.name)]);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // Trạng thái công tắc "Ghi nhớ dài hạn"; chưa tải được hoặc tiệm chưa bật ghi nhớ thì coi là tắt.
+  const [memoryOn, setMemoryOn] = useState(false);
+
+  const loadMemoryOn = useCallback(() => {
+    agentApi
+      .getMemorySettings()
+      .then((s) => setMemoryOn(s.available && s.memory_enabled))
+      .catch(() => setMemoryOn(false));
+  }, []);
+  useFocusEffect(loadMemoryOn);
+
+  const closeSettings = () => {
+    setSettingsOpen(false);
+    loadMemoryOn();
+  };
 
   const startNew = () => {
     setConversationId(null);
@@ -207,16 +245,28 @@ export default function Ai() {
     // Delta tới theo từng token; gom về một lần render mỗi khung hình thay vì một lần mỗi token.
     let frame: number | null = null;
     let latest = '';
+    let started = false;
     const showDraft = (draftText: string) => {
       latest = draftText;
       frame ??= requestAnimationFrame(() => {
         frame = null;
+        // Chữ đầu tiên thay dòng suy nghĩ bằng bong bóng trả lời: cho bong bóng hiện ra có chuyển động thay vì nhảy thẳng.
+        if (!started && latest) {
+          started = true;
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        }
         setDraft(latest);
       });
     };
     let memories: AgentMemoryUsed[] = [];
+    let turnSteps: ThoughtStep[] = [];
     try {
-      const reply = await agentApi.chatStream({ conversation_id: conversationId, message }, showDraft, (used) => (memories = used));
+      const reply = await agentApi.chatStream(
+        { conversation_id: conversationId, message },
+        showDraft,
+        (used) => (memories = used),
+        (event) => setSteps((turnSteps = applyToolEvent(turnSteps, event))),
+      );
       setConversationId(reply.conversation_id);
       setMsgs((m) => [...m, { id: `a${reply.message_id}`, from: 'ai', text: reply.answer, memories }]);
     } catch (err) {
@@ -230,6 +280,7 @@ export default function Ai() {
       if (frame !== null) cancelAnimationFrame(frame);
       sending.current = false;
       setDraft('');
+      setSteps([]);
       setTyping(false);
     }
   };
@@ -249,49 +300,48 @@ export default function Ai() {
         <View style={styles.messages}>
           {msgs.map((m) => {
             const isUser = m.from === 'user';
+            // Nút mở màn hình nằm ở thẻ riêng dưới bong bóng; bong bóng chỉ giữ nội dung trả lời.
+            const reply = isUser ? null : splitActions(m.text);
             return (
               <React.Fragment key={m.id}>
-                {m.memories?.length ? (
-                  <MemoryChip memories={m.memories} currentId={conversationId} onOpenSource={openSource} />
-                ) : null}
                 <View style={[styles.messageRow, isUser && styles.userMessageRow]}>
                   <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
                     {!isUser ? (
-                      <Row style={styles.assistantBubbleHeader}>
-                        <Row gap={3} style={{ alignItems: 'center' }}>
-                          <View style={{ width: 2, height: 7, backgroundColor: colors.brand, borderRadius: 1 }} />
-                          <View style={{ width: 2, height: 11, backgroundColor: colors.brand, borderRadius: 1 }} />
-                          <View style={{ width: 2, height: 6, backgroundColor: colors.brand, borderRadius: 1 }} />
-                          <T w="bold" size={11.5} color={colors.brand} style={{ marginLeft: 3 }}>
-                            Trợ lý AI
-                          </T>
-                        </Row>
-                      </Row>
+                      <BobiLabel
+                        memoryOn={memoryOn}
+                        memories={m.memories ?? []}
+                        currentId={conversationId}
+                        onOpenSource={openSource}
+                      />
                     ) : null}
                     {isUser ? (
                       <T size={13.5} color={colors.white} style={styles.messageText}>
                         {m.text}
                       </T>
                     ) : (
-                      <ChatText text={m.text} />
+                      <ChatText text={reply?.text ?? m.text} />
                     )}
                   </View>
                 </View>
+                {reply?.screens.length ? <ScreenActions screens={reply.screens} /> : null}
               </React.Fragment>
             );
           })}
 
-          {typing && draft ? (
+          {/* Chờ chữ đầu tiên: dòng suy nghĩ trôi trên nền, không bọc hộp để không bị nhầm là bong bóng trả lời. */}
+          {typing ? (
             <View style={styles.messageRow}>
-              <View style={[styles.bubble, styles.assistantBubble]}>
-                <ChatText text={draft} streaming />
-              </View>
-            </View>
-          ) : typing ? (
-            <View style={styles.messageRow}>
-              <View style={[styles.bubble, styles.assistantBubble, styles.typingBubble]}>
-                <ThinkingStatus />
-              </View>
+              {draft ? (
+                <View style={[styles.bubble, styles.assistantBubble]}>
+                  <BobiLabel memoryOn={memoryOn} memories={[]} currentId={conversationId} onOpenSource={openSource} />
+                  <StreamingChatText text={splitActions(draft, true).text} />
+                </View>
+              ) : (
+                // Bề rộng hết hàng để hàng suy nghĩ tự xuống dòng khi có nhiều bước, thay vì tràn ra ngoài màn hình.
+                <View style={styles.thinkingLine}>
+                  <ThoughtLine steps={steps} />
+                </View>
+              )}
             </View>
           ) : null}
         </View>
@@ -319,6 +369,9 @@ export default function Ai() {
           </View>
           <View style={styles.floatBtn}>
             <IconBtn name="clock" label="Lịch sử trò chuyện" size={HEADER_BTN} color={typing ? colors.faint : colors.ink} onPress={openHistory} />
+          </View>
+          <View style={styles.floatBtn}>
+            <IconBtn name="sliders" label="Cài đặt trợ lý" size={HEADER_BTN} onPress={() => setSettingsOpen(true)} />
           </View>
         </Row>
       </View>
@@ -410,6 +463,7 @@ export default function Ai() {
         </View>
       </View>
 
+      <AssistantSettingsSheet visible={settingsOpen} onClose={closeSettings} />
       <HistorySheet
         visible={historyOpen}
         activeId={conversationId}
@@ -585,8 +639,81 @@ function HistorySheet({
   );
 }
 
+/**
+ * Cài đặt trợ lý: công tắc ghi nhớ dài hạn. Tải mỗi lần mở; lỗi hiện kèm nút thử lại, vì AI có thể
+ * đang khởi động lại và lần gọi đầu bị từ chối.
+ */
+function AssistantSettingsSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const [settings, setSettings] = useState<AgentMemorySettings | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    setError(null);
+    try {
+      setSettings(await agentApi.getMemorySettings());
+    } catch (err) {
+      setError(historyErrorMessage(err, 'Chưa tải được cài đặt ghi nhớ.'));
+    }
+  };
+
+  useEffect(() => {
+    if (!visible) return;
+    setSettings(null);
+    void load();
+  }, [visible]);
+
+  const change = async (enabled: boolean) => {
+    setError(null);
+    setSettings((s) => s && { ...s, memory_enabled: enabled });
+    try {
+      setSettings(await agentApi.setMemorySettings(enabled));
+    } catch (err) {
+      setSettings((s) => s && { ...s, memory_enabled: !enabled });
+      setError(historyErrorMessage(err, 'Chưa đổi được cài đặt ghi nhớ.'));
+    }
+  };
+
+  return (
+    <Sheet visible={visible} onClose={onClose} title="Cài đặt trợ lý">
+      {error ? (
+        <View style={styles.historyError}>
+          <T size={13} color={colors.red} accessibilityRole="alert">
+            {error}
+          </T>
+          {settings === null ? <Button title="Thử lại" variant="soft" small onPress={load} style={{ marginTop: 10 }} /> : null}
+        </View>
+      ) : null}
+      {settings === null && !error ? (
+        <T size={13} color={colors.muted}>
+          Đang tải…
+        </T>
+      ) : null}
+      {settings && !settings.available ? (
+        <T size={13} color={colors.muted}>
+          Ghi nhớ dài hạn chưa được bật cho tiệm của bạn.
+        </T>
+      ) : null}
+      {settings?.available ? (
+        <Row gap={12} style={styles.settingRow}>
+          <BusinessIcon size={26} color={colors.brand} offColor={colors.faint} filled={settings.memory_enabled} />
+          <View style={{ flex: 1 }}>
+            <T w="bold" size={15} color={colors.ink}>
+              Ghi nhớ dài hạn
+            </T>
+            <T size={12.5} color={colors.muted} style={{ marginTop: 3 }}>
+              Trợ lý nhớ sở thích và thói quen của bạn qua các cuộc trò chuyện. Tắt chỉ dừng nhớ và dùng ghi nhớ, không xoá cái đã có.
+            </T>
+          </View>
+          <Toggle value={settings.memory_enabled} onChange={change} />
+        </Row>
+      ) : null}
+    </Sheet>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  settingRow: { alignItems: 'center', paddingVertical: 8 },
   headerWrap: {
     position: 'absolute',
     top: 0,
@@ -617,23 +744,6 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   messages: { gap: 12 },
-  memoryWrap: {
-    // Thẳng hàng với bong bóng (sau avatar 34 + khoảng cách 8) và kéo sát bong bóng bên dưới.
-    marginLeft: 42,
-    marginBottom: -6,
-    gap: 4,
-  },
-  memoryChip: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    maxWidth: '86%',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: colors.brandSoft,
-  },
   memoryItem: {
     maxWidth: '86%',
   },
@@ -663,8 +773,8 @@ const styles = StyleSheet.create({
     ...shadow(1),
   },
   assistantBubbleHeader: {
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    gap: 4,
     marginBottom: 4,
   },
   userBubble: {
@@ -676,9 +786,11 @@ const styles = StyleSheet.create({
     lineHeight: 20.5,
     flexWrap: 'wrap',
   },
-  typingBubble: {
-    // Rộng hết hàng như bong bóng trả lời, để câu chờ đổi độ dài mà bong bóng không co giãn theo.
-    paddingVertical: 12,
+  // Dòng suy nghĩ không bọc hộp: chữ và các bước trôi trên nền, chỉ chiếm bề rộng hết hàng để xuống dòng đúng.
+  thinkingLine: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 4,
   },
   pressed: {
     opacity: 0.72,

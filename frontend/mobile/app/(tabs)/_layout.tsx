@@ -1,3 +1,4 @@
+import { Redirect } from 'expo-router';
 import { Tabs } from 'expo-router/js-tabs';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
@@ -8,15 +9,17 @@ import { T } from '../../src/components/ui';
 import { ZenRing } from '../../src/components/ZenRing';
 import { triggerFeedback } from '../../src/lib/feedback';
 import { useReducedMotion } from '../../src/motion';
+import { useApp } from '../../src/store/AppStore';
 import { colors } from '../../src/theme';
 
 type TabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>['tabBar']>>[0];
 
 /**
- * Hiệu ứng chuyển tab: mờ dần trên điện thoại. Trên web hiệu ứng chạy bằng JavaScript nên trên Safari iPhone đứng hình, hai màn
- * chồng lên nhau rồi trắng một lúc; web chuyển tab ngay, phần dữ liệu đang tải hiện skeleton của từng màn.
+ * Chuyển tab không có hiệu ứng, trên mọi nền tảng. Hiệu ứng mờ dần từng làm Safari iPhone đứng hình (#224) và trên Android đôi khi
+ * kẹt ở độ đậm 0: bấm sang tab khác chỉ thấy màn trắng với Bobi và thanh tab. Phần dữ liệu đang tải hiện skeleton của từng màn;
+ * nền của vùng màn hình cùng màu nền app để nếu có chớp cũng không trắng tinh.
  */
-const TAB_ANIMATION = Platform.OS === 'web' ? 'none' : 'fade';
+const TAB_ANIMATION = 'none';
 
 const TABS: Record<string, { label: string; icon: TabIconName }> = {
   index: { label: 'Tổng quan', icon: 'home' },
@@ -208,9 +211,19 @@ function TabBar({ state, navigation }: TabBarProps) {
 }
 
 export default function TabsLayout() {
+  const { authReady, loggedIn, onboarded } = useApp();
+  // Các tab chỉ mở khi đã có tài khoản và tiệm. Trước khi có phiên, state còn là tiệm mẫu ("Tiệm tạp hoá cô Thỏ"): bấm back ở
+  // bước tạo tiệm hay đăng xuất từ một màn mở chồng lên tab từng để lộ tiệm mẫu này như một tài khoản thật.
+  if (!authReady) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+  if (!loggedIn) return <Redirect href="/(auth)/welcome" />;
+  if (!onboarded) return <Redirect href="/(auth)/setup" />;
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <Tabs screenOptions={{ headerShown: false, animation: TAB_ANIMATION }} tabBar={(p) => <TabBar {...p} />}>
+      <Tabs
+        screenOptions={{ headerShown: false, animation: TAB_ANIMATION, sceneStyle: { backgroundColor: colors.bg } }}
+        tabBar={(p) => <TabBar {...p} />}
+      >
         <Tabs.Screen name="index" />
         <Tabs.Screen name="invoices" />
         <Tabs.Screen name="sales" />

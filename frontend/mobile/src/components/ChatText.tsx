@@ -1,9 +1,11 @@
+import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, View } from 'react-native';
-import { parseChatMarkdown, type ChartSpec, type ChatBlock, type Inline } from '../lib/chatMarkdown';
+import { Platform, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { parseChatMarkdown, SCREEN_LINKS, type AppScreen, type ChartSpec, type ChatBlock, type Inline } from '../lib/chatMarkdown';
+import { useSmoothText } from '../lib/smoothText';
 import { colors, font } from '../theme';
 import { AreaChart, BarChart } from './charts';
-import { T } from './ui';
+import { Button, T } from './ui';
 
 const SIZE = 13.5;
 // Bề ngang tối thiểu cho mỗi điểm biểu đồ, đủ cho nhãn hai chữ như "Giặt tẩy" ở cỡ 12.
@@ -49,6 +51,45 @@ function ChartCard({ spec }: { spec: ChartSpec }) {
           )}
         </View>
       </ScrollView>
+    </View>
+  );
+}
+
+function ScreenButtons({
+  screens,
+  variant = 'outline',
+  style,
+}: {
+  screens: AppScreen[];
+  variant?: 'outline' | 'primary';
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <View style={[styles.actions, style]}>
+      {screens.map((screen) => (
+        <Button
+          key={screen}
+          title={SCREEN_LINKS[screen].label}
+          variant={variant}
+          small
+          style={variant === 'primary' && styles.brandShadow}
+          onPress={() => router.navigate(SCREEN_LINKS[screen].route)}
+        />
+      ))}
+    </View>
+  );
+}
+
+/**
+ * Thẻ nút mở màn hình, đặt riêng dưới bong bóng trả lời (`splitActions` tách khối ```actions ra khỏi
+ * chữ), để nút không chen vào nội dung câu trả lời. Nút tím như bong bóng câu hỏi, không nhãn, để tách
+ * khỏi bong bóng trả lời trắng.
+ */
+export function ScreenActions({ screens }: { screens: AppScreen[] }) {
+  if (!screens.length) return null;
+  return (
+    <View style={styles.actionsCard}>
+      <ScreenButtons screens={screens} variant="primary" style={styles.actionsInCard} />
     </View>
   );
 }
@@ -113,6 +154,8 @@ function BlockView({ block, color }: BlockProps) {
     }
     case 'chart':
       return <ChartCard spec={block.spec} />;
+    case 'actions':
+      return <ScreenButtons screens={block.screens} />;
     case 'chartPending':
       return (
         <View style={[styles.card, styles.chartNote]}>
@@ -173,11 +216,17 @@ export const ChatText = React.memo(function ChatText({
   );
 });
 
+/** Câu đang stream: chữ chảy đều từng khung hình qua `useSmoothText` rồi mới vào cùng bộ parse với câu đã lưu. */
+export function StreamingChatText({ text }: { text: string }) {
+  return <ChatText text={useSmoothText(text)} streaming />;
+}
+
 const styles = StyleSheet.create({
   wrap: { flexShrink: 1, gap: 2 },
   gap: { height: 8 },
   listRow: { flexDirection: 'row', gap: 6 },
-  marker: { lineHeight: 20.5, minWidth: 8 },
+  // Không co lại: dòng dài đẩy số thứ tự hai chữ số xuống dòng ("10" rồi ".").
+  marker: { lineHeight: 20.5, minWidth: 8, flexShrink: 0 },
   line: { lineHeight: 20.5, flexShrink: 1, flexWrap: 'wrap' },
   inlineCode: { fontFamily: MONO, backgroundColor: colors.primarySoft },
   codeBlock: { backgroundColor: colors.primarySoft, borderRadius: 10, marginVertical: 4 },
@@ -187,4 +236,17 @@ const styles = StyleSheet.create({
   cell: { paddingHorizontal: 8, paddingVertical: 6, lineHeight: 18 },
   card: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 10, marginVertical: 4 },
   chartNote: { alignItems: 'center', paddingVertical: 16 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
+  actionsCard: {
+    // Kéo sát bong bóng phía trên (danh sách tin nhắn cách nhau 12) để thấy thẻ thuộc câu trả lời đó.
+    marginTop: -4,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+  },
+  actionsInCard: { marginTop: 0 },
+  // Bóng ngả tím theo màu nút, đậm hơn shadow(3) xám để nút nổi khỏi nền kem.
+  brandShadow: Platform.select<ViewStyle>({
+    web: { boxShadow: '0 6px 16px rgba(72,42,172,0.32)' } as ViewStyle,
+    default: { shadowColor: colors.brand, shadowOpacity: 0.32, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
+  })!,
 });
