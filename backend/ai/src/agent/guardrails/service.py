@@ -112,3 +112,11 @@ class GuardrailService:
     def screened_prefix(self, partial: str) -> str:
         """Return the part of a streamed answer that may be sent so far."""
         return AnswerScreen.screened_prefix(partial)
+
+    def allows_answer(self, text: str) -> bool:
+        """Whether the screen passes `text` as answer text the owner may keep.
+
+        The Harness screens only the final output, so text a response wrote before a
+        screen-button call is checked here before it joins the answer.
+        """
+        return AnswerScreen.check(text).action == "allow"
