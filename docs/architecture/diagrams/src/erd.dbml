@@ -11,6 +11,11 @@
 // ledger views (v_debts, v_payments, v_expenses) and agent memory (agent_memories, agent_memory_settings; ADR-0002, off by default).
 // V15 implements OWNER notifications/thresholds on feat/app-notifications; ai_requests remains planned.
 // CORE-015 #238: V17 on feat/zalo-login adds external Zalo identities and OAuth sessions; not shared-DB rollout.
+// CORE-016 #276 on feat/zalo-android: native schema approved, NO migration yet; native defaults OFF.
+// oauth_login_sessions below remains V17. Pending extension: client_type (WEB default/ANDROID),
+// native_client_id, return_target_id, unique handoff_reference_hash and handoff_expires_at;
+// conditional client_origin + channel-aware VERIFIED/expiry constraints. See erd-description.md.
+// The native SQL fixture is disposable-test-only, never a rollout script or current production schema.
 // Report periods use Asia/Ho_Chi_Minh; this logical ERD does not imply runtime completion.
 // Quantity: NUMERIC(15,3)
 //

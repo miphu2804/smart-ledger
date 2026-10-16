@@ -86,7 +86,7 @@ class ZaloRequestLimiterHttpTest {
     static class ProbeController {
         private final AtomicInteger calls = new AtomicInteger();
 
-        @RequestMapping(value = BASE + "{endpoint}", method = {RequestMethod.GET, RequestMethod.POST})
+        @RequestMapping(value = {BASE + "{endpoint}", BASE + "native/{endpoint}"}, method = {RequestMethod.GET, RequestMethod.POST})
         String endpoint() {
             calls.incrementAndGet();
             return "test-only";
@@ -109,7 +109,7 @@ class ZaloRequestLimiterHttpTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"authorize", "callback", "exchange"})
+    @ValueSource(strings = {"authorize", "callback", "exchange", "native/authorize", "native/exchange", "native/link"})
     void semicolonVariantsShareQuotaButStillCannotPassFirewall(String endpoint) throws Exception {
         for (int index = 1; index <= 2; index++) {
             assertThat(request(endpoint + ";a=" + index).statusCode()).isEqualTo(400);
@@ -139,10 +139,21 @@ class ZaloRequestLimiterHttpTest {
         assertThat(controller.calls.get()).isEqualTo(2);
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"native/exchange", "native/link"})
+    void nativeBodiesAreLimitedBeforeAuthenticationAndParsing(String endpoint) throws Exception {
+        var response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/limiter-test" + BASE + endpoint))
+                .timeout(Duration.ofSeconds(5)).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString("x".repeat(8193))).build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(413);
+        assertThat(response.body()).contains("invalid_zalo_request");
+        assertThat(controller.calls.get()).isZero();
+    }
+
     private HttpResponse<String> request(String endpoint) throws Exception {
         var builder = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/limiter-test" + BASE + endpoint))
                 .timeout(Duration.ofSeconds(5));
-        if (endpoint.startsWith("exchange")) builder.POST(HttpRequest.BodyPublishers.ofString("{}"));
+        if (endpoint.startsWith("exchange") || endpoint.startsWith("native/exchange")) builder.POST(HttpRequest.BodyPublishers.ofString("{}"));
         return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 

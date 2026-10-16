@@ -6,6 +6,19 @@ from xml.etree import ElementTree
 
 
 REQUIRED = {
+    "com.smartledger.core.service.ZaloNativeFlowPostgresTest": {
+        "nativeOffAndMissingFutureSchemaFailClosedWhileV17WebKeepsWorking",
+        "loginUsesVerifierBoundReferenceWithoutPersistingCredentialsAndReusesWebIdentity",
+        "wrongVerifierRequestClientPurposeOrChannelCannotConsumeNativeHandoff",
+        "concurrentCallbacksAndExchangesHaveExactlyOneWinner",
+        "handoffAndSessionExpiryAreExclusiveAndProviderDelayDoesNotExtendSession",
+        "linkUsesRecentVerifiedUidPreservesProfileAndNeverMovesConflictingIdentity",
+        "linkRejectsMissingStaleOrMismatchedFirebaseProofWithoutConsumingHandoff",
+        "disabledAndAdminAccountsCannotLoginOrLinkAndNoProfileIsCreatedImplicitly",
+        "firebaseFailureKeepsCanonicalUidAndFreshFlowRecoversWithoutReferenceReplay",
+        "competingNativeLinksHaveOneOwnerAndSuspensionDuringMintDoesNotReturnToken",
+        "prospectiveFixtureEnforcesChannelIsolationReferenceUniquenessAndExpiry",
+    },
     "com.smartledger.core.config.ZaloMigrationPostgresTest": {
         "freshMigrationCreatesBothStoresAndExpiryIndexWithoutCoreProfileForeignKey",
         "upgradeFromV16PreservesExistingOwnerIdentityShopAndCreatesNoMappings",

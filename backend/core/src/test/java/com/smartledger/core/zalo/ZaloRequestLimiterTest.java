@@ -27,7 +27,7 @@ class ZaloRequestLimiterTest {
     private static final String EXCHANGE = "/api/v1/auth/zalo/exchange";
 
     @ParameterizedTest
-    @ValueSource(strings = {"authorize", "callback", "exchange", "link"})
+    @ValueSource(strings = {"authorize", "callback", "exchange", "link", "native/authorize", "native/exchange", "native/link"})
     void servletPathVariantsShareOneQuotaForEachEndpoint(String endpoint) throws Exception {
         String path = "/api/v1/auth/zalo/" + endpoint;
         var limiter = new ZaloRequestLimiter(new ObjectMapper(), new MutableClock(), 1, 4096);

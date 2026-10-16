@@ -405,7 +405,7 @@ Proofs are one-use and purpose/origin/challenge-bound. Replay, browser mismatch 
 
 Zalo routes hash the path and socket `remoteAddr` with a private per-instance salt into 4096 fixed buckets, each allowing at most 30 requests per 60-second window; completion bodies are limited to 8 KiB. Colliding clients conservatively share a bucket and can receive 429 earlier. New keys are not rejected just because a key map is full, and key churn cannot evict/reset counters. This bounded guard is neither distributed protection nor a DDoS guarantee. Before deployment, verify trusted-proxy handling so the address is meaningful; do not trust arbitrary `X-Forwarded-For`. Configure edge throttling and redact callback query strings, proof bodies, Authorization, cookies and custom tokens from proxy/APM/access logs. Core does not log provider bodies or credentials. A scheduled worker removes expired OAuth sessions; identity mappings remain.
 
-Point `CORE_TEST_POSTGRES_*` only at a disposable DB. Tests apply actual Flyway migrations in UUID-named schemas and remove only those schemas. The compatibility flow starts Hibernate on V16 before applying the exact V17 SQL; it proves feature-off behavior with the old schema as well. No separate schema fixture is maintained:
+Point `CORE_TEST_POSTGRES_*` only at a disposable DB. Web tests apply actual Flyway migrations in UUID-named schemas and remove only those schemas. The web compatibility flow starts Hibernate on V16 before applying the exact V17 SQL; it proves feature-off behavior with the old schema as well. CORE-016 Android preparation additionally uses an explicitly test-only prospective schema fixture, not a deployment migration:
 
 ```powershell
 .\mvnw.cmd '-Dtest=*Zalo*' test
@@ -425,6 +425,10 @@ Staging preparation (do not copy `ZALO_MANUAL_*` variables into Railway):
 4. Verify callback registration, HTTPS cookie/popup opener, log redaction (callback query/body/Authorization/cookies), trusted proxy behavior and edge/shared throttling. FE must validate origin/source/requestId/purpose and reauthenticate before LINK. Keep the feature off until owners approve integration testing; enabling does not deploy FE.
 5. Recovery: turn Zalo off/roll back application code but retain V17 tables and identity mappings. Do not drop mappings or delete Firebase accounts as rollback; key rotation invalidates active OAuth sessions. Any destructive removal needs a separately reviewed forward migration.
 
+
+## Zalo Android Core preparation — CORE-016
+
+Android LOGIN/LINK on `feat/zalo-android` (#276) adds separate `/api/v1/auth/zalo/native/authorize`, `/api/v1/auth/zalo/native/exchange`, `/api/v1/auth/zalo/native/link` endpoints, shared provider callback dispatch, exact HTTPS App Link fallback and environment-specific `/.well-known/assetlinks.json`. Native is **OFF by default** and the actual schema migration is **not included**. V17 web behavior remains supported; enabling native without its future schema fails closed, never auto-DDL. See [the scoped API/configuration and rollout guide](docs/zalo-android-preparation.md) and the [canonical contract](../../docs/contracts/api-contracts.md#zalo-android-core-016). Related documents are synchronized; FE/APK integration and real-provider/device acceptance remain separate work.
 
 ## OWNER in-app notifications
 

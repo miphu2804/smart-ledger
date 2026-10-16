@@ -125,7 +125,7 @@ Phủ `FR-010`, `FR-011`, `NFR-003`; dashboard `FR-022` vẫn cần tích hợp.
 | Method | Đường | Request | Response / quyền |
 |---|---|---|---|
 | `GET` | `/api/v1/auth/zalo/authorize` | Query bắt buộc `purpose=LOGIN\|LINK`, `clientOrigin`, `requestId`, `clientChallenge` | Công khai; `302 Location` tới Zalo, cookie ràng buộc lượt thử; không trả token |
-| `GET` | `/api/v1/auth/zalo/callback` | Query `state`, một trong `code` hoặc `error`, `code_challenge?`; cookie đúng lượt | Công khai cho provider; `200 text/html` gửi message xuống opener, không redirect secret |
+| `GET` | `/api/v1/auth/zalo/callback` | Query `state`, một trong `code` hoặc `error`, `code_challenge?`; cookie đúng lượt | Công khai cho provider; session WEB trả `200 text/html` gửi message xuống opener; session ANDROID theo CORE-016 bên dưới |
 | `POST` | `/api/v1/auth/zalo/exchange` | Header `Origin` đúng một giá trị; `{ proof, clientVerifier }` | Công khai; chỉ LOGIN, `200 { firebaseCustomToken, displayName }` |
 | `POST` | `/api/v1/auth/zalo/link` | Cùng body/Origin; Bearer Firebase ID token gần đây | Chỉ OWNER ACTIVE; chỉ LINK, `204`, không có token response |
 
@@ -152,6 +152,36 @@ Không dùng `X-Shop-Id`, `Idempotency-Key` hoặc target UID client truyền v�
 | `503` | `zalo_unavailable` (tắt tính năng/config/schema/storage), `zalo_provider_unavailable` (provider/Firebase); không hiện raw body provider. |
 
 V17 và thứ tự rollout/recovery trong [ERD description](../architecture/erd-description.md#zalo-core-015-v17); cấu hình ở [Core README](../../backend/core/README.md#zalo-authentication-core-015-local-backend-implementation). Không đưa `ZALO_MANUAL_*`, tunnel, trang thử hoặc đường dẫn JSON trên máy dev vào Railway. Phủ `BR-022` → `FR-010`/`NFR-003` → `AC-081`–`AC-086`; nghiệm thu consumer/staging là phần riêng.
+
+### Zalo Android CORE-016
+
+**Trạng thái:** chuẩn bị Core trên `feat/zalo-android` cho #276; schema/API được duyệt nhưng **chưa có migration, native mặc định tắt**, không phải nghiệm thu APK hoặc rollout. Chỉ dùng trình duyệt ngoài/Custom Tabs + HTTPS App Link; không phải Zalo Android SDK/WebView. Chủ cung cấp: Core; FE/APK tiêu thụ. Truy vết `BR-009`/`BR-022` → `FR-010`/`NFR-003` → `AC-087`–`AC-092`. Contract WEB CORE-015 giữ nguyên.
+
+| Method | Đường | Request | Response / quyền |
+|---|---|---|---|
+| `GET` | `/api/v1/auth/zalo/native/authorize` | Query bắt buộc `nativeClientId`, `purpose=LOGIN\|LINK`, `requestId`, `clientChallenge` | Công khai; cookie per-attempt và `302` tới Zalo Web OAuth; không nhận return URL hoặc UID |
+| `GET` | `/api/v1/auth/zalo/callback` | Cùng tham số/cookie CORE-015; chọn kênh từ session lưu bền | Session ANDROID hợp lệ trả `302` tới HTTPS return target cố định với fragment; sai state/cookie/context không redirect |
+| `POST` | `/api/v1/auth/zalo/native/exchange` | JSON `{ nativeClientId, requestId, handoffReference, clientVerifier }`; không bắt buộc Origin | Công khai; chỉ LOGIN, `200 { firebaseCustomToken, displayName }`, `Cache-Control: no-store` |
+| `POST` | `/api/v1/auth/zalo/native/link` | Cùng JSON; Bearer Firebase ID token gần đây | OWNER ACTIVE; chỉ LINK, `204`, không mint token |
+| `GET` | `/mobile/auth/zalo/complete` | Fragment do APK/browser xử lý, không gửi tới HTTP server | Fallback HTML không xác thực; no-store/no-referrer/nonce CSP; xóa fragment khỏi history, chỉ hiện link cố định cho payload hợp lệ |
+| `GET` | `/.well-known/assetlinks.json` | Không tham số nghiệp vụ | JSON Android domain association của package/chứng chỉ được cấu hình rõ cho môi trường; cấu hình hợp lệ có thể phục vụ khi native login tắt |
+
+- Mỗi deployment cấu hình một `nativeClientId` và return target. ID/package/chứng chỉ là metadata công khai, **không phải proof xác thực**. Return URL chính xác HTTPS, cùng origin với callback Core, path `/mobile/auth/zalo/complete`, không query/fragment/userinfo; client không chọn target. Cấu hình staging/production và chứng chỉ ở [Core guide](../../backend/core/docs/zalo-android-preparation.md#deployment-specific-configuration).
+- APK sinh riêng `requestId` ngẫu nhiên 16–100 ký tự `[A-Za-z0-9_-]` và `clientVerifier` ngẫu nhiên 32 byte base64url không padding (43 ký tự). Gửi `clientChallenge = BASE64URL(SHA256(ASCII(clientVerifier)))` ở authorize; verifier chỉ giữ cho lượt thử trong APK, không đặt trong URL/log. Provider PKCE khác do Core giữ mã hóa. Query/body không nhận field thừa hoặc query nhiều giá trị; không dùng X-Shop-Id/Idempotency-Key.
+- Callback cùng hostname HTTPS mở authorize; Core kiểm state/browser cookie/provider app/client/target/expiry và claim nguyên tử trước provider I/O. Thành công redirect tới `#nativeClientId=...&requestId=...&purpose=LOGIN|LINK&handoffReference=...`; lỗi consent/provider sau claim dùng `error=<fixed_code>` thay reference. Không có provider code/token, Firebase token, client verifier hoặc proof WEB trong App Link. `302`/trang fallback tự nó không chứng minh đăng nhập thành công.
+- Reference là chuỗi ngẫu nhiên 43 ký tự base64url, DB chỉ giữ hash. TTL cấu hình 15–90 giây, không vượt session (mặc định 300 giây). Consume chỉ thành công một lần với đủ reference hash/client verifier challenge/client/request/purpose/channel/target/provider app và cả hai hạn chưa hết; không đổi reference thành proof WEB. APK phải kiểm đúng host/path/client/request/purpose đang chờ trước gửi body completion. Hủy, hết hạn, replay, mất verifier hoặc lỗi sau consume phải bắt đầu lượt mới.
+- LOGIN/LINK giữ quy tắc account CORE-015: dùng chung mapping app-scoped/canonical UID, không tự gộp tên/email, không sửa profile/role/status/avatar hoặc tạo tiệm. LOGIN đổi custom token qua Firebase thành ID token rồi gọi `/auth/session`; LINK kiểm thu hồi + auth_time ≤300 giây + UID trùng principal + local OWNER ACTIVE, identity khác UID trả 409, không chuyển mapping. API nghiệp vụ vẫn chỉ nhận Firebase ID token. Không lưu Zalo access/refresh token.
+- Native không yêu cầu giả Origin, không nới CORS WEB và không miễn Bearer cho LINK. Giữ guard per-endpoint/socket-IP hữu hạn của CORE-015 (30 request/60 giây/bucket; body 8 KiB); cần proxy/edge throttling và che log trước rollout.
+
+| HTTP / nơi nhận | Code / xử lý |
+|---|---|
+| `400` | `invalid_zalo_request` cho tham số sai; `zalo_session_invalid` cho handoff sai/hết hạn/replay. Bean Validation `validation_failed`, JSON/extra field `invalid_request` theo mục 0. Bắt đầu lượt mới, không retry code provider. |
+| Fragment lỗi cố định | `zalo_consent_denied`, `zalo_session_invalid`, `zalo_session_expired`, `zalo_provider_unavailable`, `zalo_unavailable`; không có reference/token khi lỗi. |
+| `401` / `403` / `404` / `409` | Cùng LINK/account codes CORE-015: `zalo_reauthentication_required`, `unauthorized`, `account_disabled`, `zalo_account_not_allowed`, `auth_profile_not_found`, `zalo_identity_conflict`. |
+| `413` / `429` | `invalid_zalo_request` / `zalo_rate_limited`; giảm body hoặc đợi theo Retry-After. |
+| `503` | `zalo_unavailable` khi off/config/schema/storage thiếu; `zalo_provider_unavailable` khi provider/Firebase lỗi; không lộ raw upstream response. |
+
+Schema tương lai chỉ được kiểm trên fixture PostgreSQL tạm, không chạy tự động: [ERD pending schema](../architecture/erd-description.md#zalo-android-core-016-pending-schema). Không bật native từ nhánh này; cần migration duyệt riêng, tích hợp FE và nghiệm thu `AC-092`. Chi tiết triển khai/kiểm thử tại [technical design](../architecture/technical-design.md#zalo-android-core-016).
 
 ## 2. Category, Product và Customer
 

@@ -37,6 +37,15 @@ zalo:
   session-ttl-seconds: ${ZALO_SESSION_TTL_SECONDS:300}
   proof-ttl-seconds: ${ZALO_PROOF_TTL_SECONDS:90}
   http-timeout-seconds: ${ZALO_HTTP_TIMEOUT_SECONDS:10}
+  # Schema is intentionally not migrated in CORE-016 preparation. Keep native off.
+  native:
+    enabled: ${ZALO_NATIVE_ENABLED:false}
+    client-id: ${ZALO_NATIVE_CLIENT_ID:}
+    return-target-id: ${ZALO_NATIVE_RETURN_TARGET_ID:}
+    return-url: ${ZALO_NATIVE_RETURN_URL:}
+    package-name: ${ZALO_NATIVE_PACKAGE_NAME:vn.teamhexa.songheloi}
+    certificate-sha256: ${ZALO_NATIVE_CERTIFICATE_SHA256:}
+    handoff-ttl-seconds: ${ZALO_NATIVE_HANDOFF_TTL_SECONDS:90}
 
 cloudinary:
   enabled: ${CLOUDINARY_ENABLED:false}

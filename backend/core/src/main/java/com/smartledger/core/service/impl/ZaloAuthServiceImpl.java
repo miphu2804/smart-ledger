@@ -90,7 +90,8 @@ public class ZaloAuthServiceImpl implements ZaloAuthService {
         String stateHash = ZaloCrypto.hash(state);
         var session = database(() -> repository.findByStateHash(stateHash))
                 .orElseThrow(() -> new BusinessException(ErrorCode.ZALO_SESSION_INVALID));
-        if (!session.providerAppId().equals(properties.getAppId())
+        if (session.clientOrigin() == null || !properties.getClientOrigins().contains(session.clientOrigin())
+                || !session.providerAppId().equals(properties.getAppId())
                 || !session.browserBindingHash().equals(ZaloCrypto.hash(browserBinding))
                 || session.status() != ZaloStatus.PENDING) {
             throw new BusinessException(ErrorCode.ZALO_SESSION_INVALID);
