@@ -2,13 +2,23 @@
 
 Every profile scales from PEAK_USERS, the concurrent-user count being tested.
 `stress` climbs in steps past the peak and stops itself once the error ratio or
-p95 of a step breaks the limit, so the last healthy step is the measured ceiling."""
+p95 of a step breaks the limit, so the last healthy step is the measured ceiling.
+Chat is left out of the step p95: an Agent answer takes seconds by design and has
+its own limit in the SLO gate."""
 
 from __future__ import annotations
 
 import logging
 import os
+import time
+from collections import Counter
 from dataclasses import dataclass
+
+from locust.stats import (
+    CURRENT_RESPONSE_TIME_PERCENTILE_WINDOW,
+    calculate_response_time_percentile,
+    diff_response_time_dicts,
+)
 
 logger = logging.getLogger("loadtest.shape")
 
@@ -96,13 +106,13 @@ class StageTracker:
         total = stats.total
         rps = total.current_rps or 0.0
         fails = total.current_fail_per_sec or 0.0
-        p95 = total.get_current_response_time_percentile(0.95)
+        p95 = self._current_p95_without_chat(stats)
         result = StepResult(
             stage.label, stage.users, running_users, rps, fails / rps if rps else 0.0, p95
         )
         self.results.append(result)
         logger.info(
-            "stage %s: users=%d running=%d rps=%.1f fail=%.2f%% p95=%s ms",
+            "stage %s: users=%d running=%d rps=%.1f fail=%.2f%% p95 (no chat)=%s ms",
             result.label,
             result.users,
             result.running_users,
@@ -111,6 +121,30 @@ class StageTracker:
             "n/a" if result.p95_ms is None else f"{result.p95_ms:.0f}",
         )
         return result
+
+    @staticmethod
+    def _current_p95_without_chat(stats) -> float | None:
+        """p95 of roughly the last 10 s over every request except `[chat]`.
+
+        Locust only offers this window per entry or for the aggregate, so the
+        per-entry windows are merged the same way Locust builds each one."""
+        window_start = int(time.time()) - CURRENT_RESPONSE_TIME_PERCENTILE_WINDOW
+        response_times: Counter[int] = Counter()
+        count = 0
+        for entry in stats.entries.values():
+            if entry.name.startswith("[chat]") or not entry.response_times_cache:
+                continue
+            nearest = min(entry.response_times_cache, key=lambda second: abs(second - window_start))
+            if abs(nearest - window_start) > 8:  # Locust's own tolerance
+                continue
+            cached = entry.response_times_cache[nearest]
+            response_times.update(
+                diff_response_time_dicts(entry.response_times, cached.response_times)
+            )
+            count += (entry.num_requests - entry.num_none_requests) - (
+                cached.num_requests - cached.num_none_requests
+            )
+        return calculate_response_time_percentile(response_times, count, 0.95) if count else None
 
 
 TRACKER = StageTracker()

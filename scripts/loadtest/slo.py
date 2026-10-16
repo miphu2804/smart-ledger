@@ -66,7 +66,9 @@ def evaluate(stats, profile: str) -> tuple[list[Verdict], bool]:
         verdicts.append(Verdict(entry.name, entry.method, requests, fail_ratio, p95, limit, status))
 
     total = stats.total
-    if total.num_requests and total.num_failures / total.num_requests > max_fail_ratio:
+    # No requests means the scenario never ran (for example every sign-in failed),
+    # which must not read as a pass in CI.
+    if not total.num_requests or total.num_failures / total.num_requests > max_fail_ratio:
         passed = False
     return verdicts, passed
 
