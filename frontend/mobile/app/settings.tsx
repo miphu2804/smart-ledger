@@ -5,6 +5,7 @@ import { StyleSheet, View } from 'react-native';
 import { useToast } from '../src/components/brand';
 import { Button, Card, Header, Row, Screen, T, Toggle } from '../src/components/ui';
 import { agentApi } from '../src/lib/agentApi';
+import { useApp } from '../src/store/AppStore';
 import { errorMessage } from '../src/lib/errors';
 import { colors } from '../src/theme';
 
@@ -49,6 +50,12 @@ export default function Settings() {
   const toast = useToast();
   // null khi chưa tải xong hoặc trợ lý chưa bật ghi nhớ: khi đó ẩn mục này.
   const [memory, setMemory] = useState<boolean | null>(null);
+  const app = useApp();
+  // Xem lại phần giới thiệu như lần đầu vào app: về Tổng quan rồi hiện ở đó (Tổng quan mở phần giới thiệu khi chưa đóng)
+  const replayGuide = () => {
+    router.navigate('/(tabs)');
+    app.showGuide();
+  };
 
   useEffect(() => {
     let alive = true;
@@ -103,6 +110,7 @@ export default function Settings() {
       ) : null}
 
       <Button title="Kết nối máy in" icon="printer" variant="soft" onPress={() => router.push('/printer')} style={{ marginTop: 16 }} />
+      <Button title="Xem lại hướng dẫn" icon="help-circle" variant="soft" onPress={replayGuide} style={{ marginTop: 10 }} />
     </Screen>
   );
 }

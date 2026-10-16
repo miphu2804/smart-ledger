@@ -8,7 +8,7 @@ import { AssistantIntroModal } from '../../src/components/AssistantIntroModal';
 import { Button, Card, EmptyState, Row, T } from '../../src/components/ui';
 import { CountUp, Reveal, Skeleton } from '../../src/components/reveal';
 import { vnd } from '../../src/lib/format';
-import { formatQuantity, restockRows, revenueChange as changeVsYesterday, topSellerRows } from '../../src/lib/homeOverview';
+import { formatQuantity, periodRevenue, restockRows, revenueChange as changeVsYesterday, topSellerRows } from '../../src/lib/homeOverview';
 import { fromCoreNotification, isNotifUnread, mergeNotifications, notifCategoryMeta, totalUnread } from '../../src/lib/notifications';
 import { reportPeriodOf } from '../../src/lib/saleFilter';
 import { periodLabel } from '../../src/lib/stats';
@@ -77,13 +77,15 @@ export default function Home() {
   };
   const ready = !overview.loading && !error;
 
-  // Doanh thu thuần (bán trong kỳ − huỷ trong kỳ) và số đơn bán trong kỳ, như màn Đơn hàng; `undefined` khi chưa có số.
-  const totals = overview.summary
+  // Doanh thu của các đơn bán trong kỳ còn hiệu lực (không âm) và số đơn đó, như màn Đơn hàng; `undefined` khi chưa có số.
+  // Đơn bán kỳ trước mà huỷ trong kỳ không trừ vào đây (xem `periodRevenue`).
+  const periodTotals = overview.summary && overview.sales ? periodRevenue(overview.summary, overview.sales) : null;
+  const totals = periodTotals
     ? {
-        count: overview.summary.orderCount,
-        revenue: overview.summary.netRevenueVnd,
-        // Kỳ có đơn bán hoặc đơn bị huỷ thì có doanh thu để hiện (có thể âm), không phải "Chưa có đơn"
-        active: overview.summary.orderCount > 0 || overview.summary.voidedOrderCount > 0,
+        count: periodTotals.orderCount,
+        revenue: periodTotals.revenueVnd,
+        // Kỳ có đơn bán (kể cả đơn sau đó bị huỷ) thì hiện doanh thu, không phải "Chưa có đơn"
+        active: periodTotals.hasOrders,
       }
     : undefined;
   const topSellers = topSellerRows(overview.top ?? []);
@@ -94,7 +96,7 @@ export default function Home() {
   const lowStock = restockRows(overview.restock?.items ?? []);
   const priorityCount = Number(totalDebt > 0) + Number(restockTotal > 0);
   const revenueChange =
-    period === 'today' && totals ? changeVsYesterday(totals.revenue, local.yesterday?.netRevenueVnd) : null;
+    period === 'today' && totals ? changeVsYesterday(totals.revenue, local.yesterdayRevenue) : null;
   // Thông báo: kho hàng, đơn bị huỷ và tình trạng tiệm lấy từ inbox Core (chỉ cần trang đầu để xem trước); đơn mới, công nợ, thu chi tính trên máy.
   const coreNotifications = useCoreNotifications(5);
   const coreNotifs = useMemo(() => coreNotifications.items.map(fromCoreNotification), [coreNotifications.items]);
@@ -299,13 +301,14 @@ export default function Home() {
                     key={seller.itemKey}
                     style={[styles.sellerRow, index < topSellers.length - 1 && styles.rowBorder]}
                   >
-                    <T w="bold" size={12} color={colors.muted} style={{ width: 22 }}>
+                    {/* Cùng chiều cao dòng: trên Android mỗi độ đậm của font có khoảng đệm khác nhau nên số lượng bị lệch lên */}
+                    <T w="bold" size={12} color={colors.muted} style={[styles.sellerText, { width: 22 }]}>
                       {index + 1}
                     </T>
-                    <T w="semibold" size={14} style={{ flex: 1 }} numberOfLines={1}>
+                    <T w="semibold" size={14} style={[styles.sellerText, { flex: 1 }]} numberOfLines={1}>
                       {seller.productName}
                     </T>
-                    <T w="bold" size={14} color={colors.primary}>
+                    <T w="bold" size={14} color={colors.primary} style={styles.sellerText}>
                       {formatQuantity(seller.netQuantity)} {seller.unit}
                     </T>
                   </Row>
@@ -418,6 +421,12 @@ export default function Home() {
               ) : (
                 <T w="extrabold" size={18} style={{ marginTop: 10 }}>Chưa có đơn trong kỳ</T>
               )}
+              {periodTotals && periodTotals.cancelledEarlierVnd > 0 ? (
+                // Đơn bán kỳ trước bị huỷ trong kỳ: không trừ vào doanh thu mà tính vào chi, nêu ra để chủ tiệm biết
+                <T size={12} color={colors.muted} style={{ marginTop: 4 }}>
+                  Huỷ đơn bán kỳ trước {vnd(periodTotals.cancelledEarlierVnd)} · tính vào chi phí
+                </T>
+              ) : null}
               <Row style={styles.financeRow} gap={14}>
                 <View style={styles.financeItem}>
                   <Tab1Icon name="closedOrders" size={25} style={styles.financeIcon} />
@@ -575,53 +584,10 @@ export default function Home() {
 
             {/* Tier 2: 4 quick actions */}
             <View style={styles.compactTier2}>
-              <Pressable
-                onPress={() => openAssistant('/voice')}
-                style={({ pressed }) => [styles.compactActionBtn, pressed && styles.compactActionBtnPressed]}
-                accessibilityRole="button"
-                accessibilityLabel="Đọc đơn"
-              >
-                <Tab1Icon name="readOrder" size={20} />
-                <T w="semibold" size={11} color="#FFFFFF" numberOfLines={1}>
-                  Đọc đơn
-                </T>
-              </Pressable>
-
-              <Pressable
-                onPress={openScanner}
-                style={({ pressed }) => [styles.compactActionBtn, pressed && styles.compactActionBtnPressed]}
-                accessibilityRole="button"
-                accessibilityLabel="Quét mã"
-              >
-                <Tab1Icon name="scanCode" size={20} />
-                <T w="semibold" size={11} color="#FFFFFF" numberOfLines={1}>
-                  Quét mã
-                </T>
-              </Pressable>
-
-              <Pressable
-                onPress={() => router.push('/pos')}
-                style={({ pressed }) => [styles.compactActionBtn, pressed && styles.compactActionBtnPressed]}
-                accessibilityRole="button"
-                accessibilityLabel="Chọn hàng"
-              >
-                <Tab1Icon name="selectGoods" size={20} />
-                <T w="semibold" size={11} color="#FFFFFF" numberOfLines={1}>
-                  Chọn hàng
-                </T>
-              </Pressable>
-
-              <Pressable
-                onPress={() => openAssistant('/ai')}
-                style={({ pressed }) => [styles.compactActionBtn, pressed && styles.compactActionBtnPressed]}
-                accessibilityRole="button"
-                accessibilityLabel="Trợ lý"
-              >
-                <Tab1Icon name="assistant" size={20} />
-                <T w="semibold" size={11} color="#FFFFFF" numberOfLines={1}>
-                  Trợ lý
-                </T>
-              </Pressable>
+              <CompactAction icon="readOrder" label="Đọc đơn" onPress={() => openAssistant('/voice')} />
+              <CompactAction icon="scanCode" label="Quét mã" onPress={openScanner} />
+              <CompactAction icon="selectGoods" label="Chọn hàng" onPress={() => router.push('/pos')} />
+              <CompactAction icon="assistant" label="Trợ lý" accessibilityLabel="Trợ lý AI" onPress={() => openAssistant('/ai')} />
             </View>
           </Animated.View>
           <Animated.View pointerEvents="none" style={[styles.headerDivider, { opacity: dividerOpacity }]} />
@@ -651,6 +617,48 @@ function HomeSectionHeading({ title, side, onPress }: { title: string; side?: st
         <T w="semibold" size={12} color={colors.muted}>{side}</T>
       ) : null}
     </Row>
+  );
+}
+
+/**
+ * Nút vào nhanh của thanh gọn (đã cuộn). Biểu tượng nằm trên ô nền sáng: ở cỡ nhỏ, phần tím đậm của biểu tượng chìm vào nền
+ * tím của thanh nên trông như bị cắt. Biểu tượng ở trên, chữ ở dưới: bốn nút chia nhau bề ngang (khoảng 77 px ở màn 360 px) nên
+ * xếp ngang thì chữ "Chọn hàng" bị cắt; chữ không phóng theo cỡ chữ hệ thống quá 1,15 lần.
+ */
+function CompactAction({
+  icon,
+  label,
+  accessibilityLabel,
+  onPress,
+}: {
+  icon: Tab1IconName;
+  label: string;
+  accessibilityLabel?: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.compactActionBtn, pressed && styles.compactActionBtnPressed]}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
+    >
+      <View style={styles.compactActionIcon}>
+        <Tab1Icon name={icon} size={16} />
+      </View>
+      <T
+        w="semibold"
+        size={10.5}
+        color="#FFFFFF"
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.85}
+        maxFontSizeMultiplier={1.15}
+        style={styles.compactActionLabel}
+      >
+        {label}
+      </T>
+    </Pressable>
   );
 }
 
@@ -849,17 +857,26 @@ const styles = StyleSheet.create({
   },
   compactActionBtn: {
     flex: 1,
-    height: 42,
+    height: 50,
     borderRadius: 11,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.16)',
     backgroundColor: 'transparent',
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
-    paddingHorizontal: 4,
+    gap: 3,
+    paddingHorizontal: 3,
   },
+  compactActionIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  compactActionLabel: { maxWidth: '100%', textAlign: 'center' },
   compactActionBtnPressed: {
     opacity: 0.72,
     borderColor: 'rgba(255, 255, 255, 0.35)',
@@ -879,6 +896,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sellerRow: { minHeight: 52, paddingVertical: 8 },
+  sellerText: { lineHeight: 20, includeFontPadding: false, textAlignVertical: 'center' },
   notificationRow: { minHeight: 66, flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 9 },
   notificationIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   notificationDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary },

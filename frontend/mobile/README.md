@@ -13,8 +13,11 @@ npm run web             # hoặc bấm w: chạy trên trình duyệt (khung gi�
 npm run typecheck
 npm test                # test parser câu trả lời của trợ lý (node --test, không cần thiết bị)
 npm run export:web      # build web tĩnh ra dist/
-../../scripts/ios-device-release.sh   # chọn iPhone đang cắm vào Mac, build Release từ code đang checkout và cài lên máy
+../../scripts/ios-device-release.sh   # kiểm tra Mac và iPhone (Xcode, CocoaPods, Apple ID, profile ký app…), build Release và cài lên iPhone; --check chỉ kiểm tra
+../../scripts/android-release.sh [--abis arm64-v8a] [--install [--device <serial>]]   # kiểm tra toolchain theo bản ghim của CI, build APK Release giống hệt CI, in dung lượng; --install cài qua adb, --check chỉ kiểm tra
 ```
+
+Hai script build trên máy tự kiểm tra môi trường trước khi build. Máy mới cài thiếu gì (Xcode, license, CocoaPods, JDK 17, Android Studio và SDK, file Firebase, Apple ID, provisioning profile, iPhone chưa bấm Trust, Developer Mode, USB debugging, điện thoại không hợp ABI hoặc Android quá cũ, máy đã cài bản ký key khác…) thì script liệt kê đủ các lỗi, mỗi lỗi kèm cách sửa, rồi hỏi có muốn mở trang tải, mở Xcode hoặc Android Studio, hay chạy lệnh sửa không. Thông báo trong terminal viết bằng tiếng Anh.
 
 ## Xem thử với dữ liệu mẫu
 
@@ -72,7 +75,18 @@ Màn Đọc đơn nhận giọng nói trên Android bằng model tiếng Việt 
 - **Nhúng model vào APK (chạy offline):** plugin `plugins/withBundledSttModel.js` chép model vào `android/app/src/main/assets/models/stt-model-<phiên bản>/` khi `expo prebuild`; thư mục `android/` đã sinh sẵn thì chạy `node plugins/withBundledSttModel.js`. App tự nhận model nhúng (`listAssetModels`) và bỏ qua bước tải; thư viện chép nó ra bộ nhớ app ở lần mở đầu. Máy build không có model thì plugin chỉ cảnh báo và APK rơi về cách tải ở trên. Tên thư mục lấy từ `STT_MODEL_VERSION` trong `src/lib/speech/core.ts`.
 - **Bản vá thư viện:** `react-native-sherpa-onnx` 0.4.4 cố định `modelType = "zipformer"` cho mọi model transducer nên model `zipformer2` (như model đang dùng) làm app sập lúc nạp. `patches/react-native-sherpa-onnx+0.4.4.patch` (áp tự động bởi `postinstall` qua `patch-package`, kể cả trên máy build EAS) để trống giá trị này cho sherpa-onnx tự nhận loại theo metadata. Nâng phiên bản thư viện thì xem lại bản vá, và đổi bản vá là phải build lại dev client.
 - **Quyền micro:** app xin quyền khi mở màn Đọc đơn. Khi giữ nút mic có thanh “Mức mic” đo từ micro thật; không ra chữ thì app báo “micro không thu được âm thanh” hoặc “có tiếng nhưng chưa nhận ra chữ”.
+- **FFmpeg và libarchive tắt:** `plugins/withAndroidApkSize.js` đặt `sherpaOnnxDisableFfmpeg` và `sherpaOnnxDisableLibarchive` vì app chỉ nhận dạng PCM từ mic và tải model từng file. Các hàm `convertAudio*`, `decodeAudioFileToFloatSamples` (file không phải WAV) và `extractTarBz2` của thư viện vì vậy báo lỗi; cần dùng thì bỏ cờ trong plugin và bỏ các file `.so` tương ứng khỏi `packagingOptions.exclude` trong `app.json`.
 - **Chưa kiểm tra / chưa làm:** iOS; hotword từ menu (`bpe.model`); tinh chỉnh thời gian ngắt câu; Android 15+ yêu cầu thư viện native căn lề 16 KB khi đưa lên Google Play (cần kiểm tra các file `.so` của sherpa-onnx).
+
+### Dung lượng APK Android
+
+Bản release dùng các thiết lập sau (đo trên `arm64-v8a`, cùng commit: 95,2 MB → 40,3 MB; xem [CI/CD](../../docs/development/ci-cd.md#measured-and-not-yet-verified)):
+
+- `expo-build-properties` trong `app.json`: `useLegacyPackaging` nén các file `.so` trong APK (trước đó lưu không nén, chiếm 62 MB); `enableMinifyInReleaseBuilds` và `enableShrinkResourcesInReleaseBuilds` bật R8 và bỏ resource không dùng; `packagingOptions.exclude` bỏ file `.so` của FFmpeg và libarchive.
+- `extraProguardRules` giữ nguyên các class `com.k2fsa.sherpa.onnx.**` và `com.sherpaonnx.**`: code native của sherpa-onnx đọc chúng theo tên mà thư viện không kèm luật R8 cho chúng. Thêm thư viện native khác mà sập ở bản release (không sập ở bản debug) thì nghi R8 trước và thêm luật `-keep` ở đây.
+- `plugins/withAndroidApkSize.js`: tắt FFmpeg và libarchive trong sherpa-onnx (xem mục Nhận dạng giọng nói trên Android) và chỉ giữ chuỗi `vi`, `en` của các thư viện.
+- Đo lại: `scripts/apk-contents.sh <file.apk>` in dung lượng theo ABI, dex, resource, assets và 40 file lớn nhất; `scripts/android-release.sh` (chạy ở máy và trong CI) gọi script này sau mỗi lần build APK.
+- Đánh đổi: thư viện native được giải nén ra máy khi cài, nên dung lượng sau khi cài lớn hơn file APK; cài từ Google Play (AAB) không bị ảnh hưởng.
 
 ## Cấu trúc
 
@@ -97,11 +111,11 @@ src/
   components/           UI kit, biểu đồ, logo, toast, QR minh hoạ
 ```
 
-## Gắn Firebase (đăng nhập bằng email và Facebook)
+## Gắn Firebase (đăng nhập bằng email, Facebook và Google)
 
-Code đã nối sẵn theo `docs/contracts/api-contracts.md`: Firebase xác thực (email + mật khẩu hoặc Facebook) → app gửi Firebase ID token (`Authorization: Bearer …`) tới `POST /api/v1/auth/session` → nhận `SessionView` (role, tiệm, `needsOnboarding`). Với `EXPO_PUBLIC_USE_MOCK=true` app chạy giả lập (không gọi Firebase); với `false` app dùng Firebase + Core thật. Chỉ cần cài gói và điền cấu hình:
+Code đã nối sẵn theo `docs/contracts/api-contracts.md`: Firebase xác thực (email + mật khẩu, Facebook hoặc Google) → app gửi Firebase ID token (`Authorization: Bearer …`) tới `POST /api/v1/auth/session` → nhận `SessionView` (role, tiệm, `needsOnboarding`). Với `EXPO_PUBLIC_USE_MOCK=true` app chạy giả lập (không gọi Firebase); với `false` app dùng Firebase + Core thật. Chỉ cần cài gói và điền cấu hình:
 
-1. **Firebase Console** → Authentication → Sign-in method → bật **Email/Password** (và **Facebook** nếu dùng, xem mục Facebook bên dưới). App không còn đăng nhập bằng số điện thoại.
+1. **Firebase Console** → Authentication → Sign-in method → bật **Email/Password** (và **Facebook**, **Google** nếu dùng, xem các mục bên dưới). App không còn đăng nhập bằng số điện thoại.
    - Templates → *Email address verification* và *Password reset*: đặt tên người gửi, tiêu đề; điền *Reply-to* là email hỗ trợ của dự án (Firebase gửi từ địa chỉ `noreply@…firebaseapp.com`; muốn gửi từ địa chỉ riêng cần SMTP tuỳ chỉnh).
    - Settings → *Authorized domains*: thêm domain của bản web (localhost có sẵn).
 2. **Thêm app** trong Project settings → Your apps:
@@ -176,7 +190,7 @@ Home và Analytics lấy danh sách sale/product/debt/expense qua [`useCoreData.
 
 ### Đăng nhập bằng email + mật khẩu
 
-Màn đầu có nút **Đăng nhập bằng email** và liên kết **Tạo tài khoản** (`app/(auth)/welcome.tsx` → `app/(auth)/email.tsx`). Google và Zalo hiện nhãn “Sắp có”; app không còn đăng nhập bằng số điện thoại.
+Màn đầu có nút **Đăng nhập bằng email** và liên kết **Tạo tài khoản** (`app/(auth)/welcome.tsx` → `app/(auth)/email.tsx`). Facebook và Google ở hàng nút bên dưới; Zalo hiện nhãn “Sắp có”; app không còn đăng nhập bằng số điện thoại.
 
 - **Tạo tài khoản** tự đăng ký bằng Firebase (`createUserWithEmailAndPassword`, không cần ai thêm user trong Console), gửi thư xác minh (`sendEmailVerification`) rồi chuyển sang `app/(auth)/verify-email.tsx`. Chỉ khi người dùng bấm **Tôi đã xác minh** và Firebase báo `emailVerified` thì app mới gửi Firebase ID token xuống Core (`POST /auth/session`). Mở lại app khi chưa xác minh vẫn quay về màn này. Đây là chặn ở phía app; Core chưa kiểm tra `email_verified`.
 - **Đăng nhập** bằng email chưa xác minh cũng đi qua màn xác minh (không tự gửi lại thư; bấm **Gửi lại thư xác minh**, chờ 60 giây giữa hai lần). Sai email hoặc mật khẩu hiện gợi ý “tạo tài khoản” hoặc “đặt lại mật khẩu” thay vì báo lỗi.
@@ -194,6 +208,19 @@ Cấu hình một lần (người quản trị app Facebook và Firebase làm):
 3. **Build:** `app.config.js` chỉ thêm plugin Facebook khi có `FACEBOOK_APP_ID` và `FACEBOOK_CLIENT_TOKEN` (đặt trong `.env` khi chạy `npx expo prebuild --platform android`, hoặc làm biến môi trường EAS). Hai giá trị này không đưa vào repo công khai và **App Secret không bao giờ đặt trong app hay `.env`**. Thư viện có mã native nên phải build lại dev client/APK, **không chạy trên Expo Go**; thiếu cấu hình thì bấm nút báo lỗi rõ ràng thay vì sập. Thư mục `android/` đã sinh sẵn thì chạy lại prebuild sau khi đổi hai biến.
 
 Giới hạn: mỗi cách đăng nhập là một tài khoản Firebase riêng, nên cùng một người đăng nhập bằng cách khác sẽ thành người dùng khác trong Core trừ khi liên kết ở Firebase (chưa làm). Nếu email Facebook đã dùng ở cách đăng nhập khác, Firebase có thể trả `account-exists-with-different-credential` và app báo người dùng dùng cách cũ. Chưa kiểm tra: iOS, và đăng nhập Facebook thật trên máy.
+
+### Đăng nhập bằng Google
+
+Nút Google ở màn đầu (`app/(auth)/welcome.tsx`) dùng `@react-native-google-signin/google-signin` trên điện thoại: Google trả ID token, app đổi sang tài khoản Firebase (`GoogleAuthProvider.credential` + `signInWithCredential`, ở `src/lib/auth/firebase.ts`) rồi đi tiếp như Facebook (Core `POST /auth/session`, tài khoản mới qua màn "Bạn tên gì?"). Web dùng popup Google của Firebase (`signInWithPopup`); bản mock đăng nhập vào người dùng mẫu `google.demo@example.com`. Đăng xuất cũng đăng xuất khỏi Google để lần sau hiện lại hộp chọn tài khoản. Core không cần sửa.
+
+Cấu hình một lần, trên **từng** Firebase project (staging `smart-ledger-c2892` cho `android-dev`/`android-staging`, production `smart-ledger-production` cho `android-production`):
+
+1. **Authentication → Sign-in method:** bật **Google**.
+2. **Project settings → Your apps → Android `vn.teamhexa.songheloi` → Add fingerprint:** thêm SHA-1 và SHA-256 của mọi khoá ký bản build trỏ về project đó. Staging: khoá debug (`android/app/debug.keystore`, SHA-1 `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`). Production: khoá release (SHA-1 `F9:2B:40:76:E8:B8:01:BB:B9:D8:6E:78:8E:A5:3E:87:C2:54:A1:D5`; workflow in lại chứng chỉ ở bước "Publish the APK to R2"), sau này thêm khoá Google Play. Không thêm khoá debug vào production: khoá này công khai trong repo. Thiếu SHA của khoá nào thì bản ký bằng khoá đó bị Google từ chối (`DEVELOPER_ERROR`, app báo "Cách đăng nhập này chưa dùng được").
+3. **Tải lại `google-services.json`** (phải có `oauth_client` với `client_type` 1 mang SHA-1 ở trên và `client_type` 3) rồi cập nhật secret `ANDROID_GOOGLE_SERVICES_JSON` của môi trường GitHub tương ứng. `app.config.js` đọc Web client ID (`client_type` 3) từ chính file này vào `extra.googleWebClientId`, nên không có biến môi trường riêng.
+4. **Web:** thêm domain của bản web vào Authentication → Settings → Authorized domains.
+
+Thư viện có mã native nên phải build lại APK. Plugin `@react-native-google-signin/google-signin` trong `app.json` gắn client iOS của `GoogleService-Info.plist` khi prebuild iOS; trên iOS thư viện tự dùng client đó nên không bắt buộc Web client ID (Android thì bắt buộc). Chưa kiểm tra: iOS. Giới hạn liên kết tài khoản giống Facebook (xem mục trên).
 
 ## Debug
 
@@ -216,6 +243,6 @@ Ghi chú: mã QR chuyển khoản chỉ để minh hoạ, không xác nhận gia
 
 ## Vercel preview trên trình duyệt
 
-`vercel.json` cấu hình Expo export ra `dist/` và chuyển các đường dẫn Expo Router về SPA entry. CI build web và tải lên Vercel (job `deploy-web`): mỗi PR có URL preview, `staging` có alias cố định, `main` là production. Biến `EXPO_PUBLIC_*` đặt ở GitHub Environment `vercel-preview`/`vercel-staging`/`vercel-production`, không đặt trên Vercel; xem [CI/CD](../../docs/development/ci-cd.md#mobile-web-on-vercel).
+`vercel.json` cấu hình Expo export ra `dist/` và chuyển các đường dẫn Expo Router về SPA entry. CI build web và tải lên Vercel (job `deploy-web`): `staging` có alias cố định, `main` là production; PR tạm không có preview vì vượt giới hạn 100 deploy/ngày của Vercel Hobby. Biến `EXPO_PUBLIC_*` đặt ở GitHub Environment `vercel-preview`/`vercel-staging`/`vercel-production`, không đặt trên Vercel; xem [CI/CD](../../docs/development/ci-cd.md#mobile-web-on-vercel).
 
 Các biến `EXPO_PUBLIC_*` được đóng vào bundle trình duyệt, vì vậy không đặt service-account keys ở đó. Preview web giúp kiểm tra giao diện responsive và luồng với Core staging; nó không thay thế kiểm tra native trên iOS/Android.

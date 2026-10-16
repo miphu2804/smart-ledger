@@ -8,19 +8,16 @@ import { DateRangeSheet } from '../../src/components/DateRangeSheet';
 import { RowListSkeleton } from '../../src/components/ListSkeleton';
 import { TAB_HEADER_SIDE, TAB_HEADER_TOP, TabSearchBar } from '../../src/components/TabSearchBar';
 import { Button, EmptyState, Row, T } from '../../src/components/ui';
-import type { SaleView, SalesSeriesPoint } from '../../src/data/types';
+import type { SaleSummaryView, SaleView } from '../../src/data/types';
 import { triggerFeedback } from '../../src/lib/feedback';
 import { dayKey, ddmmyyyy, hashIndex, hhmm, vnd } from '../../src/lib/format';
-import { reportApi } from '../../src/lib/reportApi';
 import {
   DEFAULT_SALE_FILTER,
   isSaleFilterActive,
   matchingPreset,
-  saleFilterReportPeriod,
   saleFilterTimeLabel,
   saleFilterTimeShort,
   saleFilterWindow,
-  saleFilterYearDays,
   type SaleFilter,
 } from '../../src/lib/saleFilter';
 import { saleApi } from '../../src/lib/salesApi';
@@ -36,6 +33,13 @@ const figureSize = (text: string) => (text.length >= 12 ? 14 : text.length >= 10
 
 /** Chờ người dùng ngừng gõ chừng này rồi mới tìm ở Core, để không gọi một lần cho mỗi phím. */
 const SEARCH_DEBOUNCE_MS = 350;
+/** Tổng của một ngày ở tiêu đề nhóm, kèm vòng hỏi đã lấy số đó */
+interface DayTotal {
+  round: number;
+  summary: SaleSummaryView;
+}
+/** Chưa có tổng ngày nào: một object cố định để không tính lại nhóm ngày ở mỗi lần vẽ */
+const NO_DAY_TOTALS: Record<string, DayTotal> = {};
 
 const WEEKDAY_NAMES = ['CHỦ NHẬT', 'THỨ HAI', 'THỨ BA', 'THỨ TƯ', 'THỨ NĂM', 'THỨ SÁU', 'THỨ BẢY'];
 
@@ -54,8 +58,12 @@ function formatGroupDateTitle(date: Date): string {
 
 export default function Invoices() {
   const insets = useSafeAreaInsets();
-  const { period: queryPeriod } = useLocalSearchParams<{ period?: string }>();
+  const { period: queryPeriod, status: queryStatus } = useLocalSearchParams<{ period?: string; status?: string }>();
   const initialPeriod: Period = queryPeriod === 'yesterday' || queryPeriod === 'month' ? queryPeriod : 'all';
+  // Chỉ xem đơn đã huỷ (nút "Đã huỷ" ở hàng lọc, hoặc mở từ Báo cáo với `status=voided`): thẻ tổng và tiêu đề ngày đổi sang
+  // số và giá trị của các đơn huỷ
+  const [voidedOnly, setVoidedOnly] = useState(queryStatus === 'voided');
+  const saleStatus = voidedOnly ? ('VOIDED' as const) : undefined;
   // Một bộ lọc thời gian cho cả hai cách chọn: kỳ có sẵn (hàng nút dưới ô tìm) và khoảng ngày tự chọn (nút phễu)
   const [filter, setFilter] = useState<SaleFilter>({ ...DEFAULT_SALE_FILTER, time: initialPeriod });
   const [filterOpen, setFilterOpen] = useState(false);
@@ -74,7 +82,7 @@ export default function Invoices() {
 
   // Core lọc và chia trang (mới bán trước); đổi khoảng thời gian hoặc từ khoá thì tải lại từ trang đầu
   const saleWindow = saleFilterWindow(filter);
-  const queryKey = JSON.stringify([saleWindow.from, saleWindow.to, searchQ]);
+  const queryKey = JSON.stringify([saleWindow.from, saleWindow.to, searchQ, saleStatus]);
   const {
     items: sales,
     total: count,
@@ -88,58 +96,73 @@ export default function Invoices() {
     refreshTop,
     reload,
   } = usePagedList<SaleView>(queryKey, (page, size) =>
-    saleApi.page(page, size, { ...saleWindow, q: searchQ || undefined }),
+    saleApi.page(page, size, { ...saleWindow, q: searchQ || undefined, saleStatus }),
   );
 
-  // Doanh thu trên thẻ lấy từ Core (các trang đã tải không đủ để cộng tổng):
-  // - kỳ có sẵn (Hôm nay, 7 ngày…), không tìm: báo cáo của đúng kỳ đó (doanh thu thuần: bán trong kỳ trừ huỷ trong kỳ);
-  // - "Tất cả", khoảng tự chọn và khi tìm: tổng của mọi đơn khớp cùng bộ lọc với danh sách (`GET /sales/summary`), tức tiền
-  //   các đơn chưa huỷ trong khoảng, kể cả toàn thời gian và kết quả tìm.
-  // Tổng từng ngày ở tiêu đề nhóm lấy từ chuỗi ngày của báo cáo: của kỳ có sẵn, hoặc của năm nay khi "Tất cả"/khoảng tự chọn
-  // nằm trong năm; khi tìm hoặc ngày không có trong chuỗi thì tiêu đề chỉ có ngày.
-  const reportPeriod = searchQ ? null : saleFilterReportPeriod(filter);
-  const yearDays = searchQ || reportPeriod ? null : saleFilterYearDays(filter);
-  const yearFrom = yearDays?.from ?? null;
-  const yearTo = yearDays?.to ?? null;
-  const reportKey = reportPeriod ?? `list:${queryKey}`;
-  const [report, setReport] = useState<{ key: string; revenue: number; days: Map<string, SalesSeriesPoint> } | null>(null);
+  // Doanh thu trên thẻ: tiền các đơn còn hiệu lực khớp cùng bộ lọc với danh sách (`GET /sales/summary`), cho mọi kỳ, khoảng tự
+  // chọn và kết quả tìm. Không dùng doanh thu thuần của báo cáo (bán trong kỳ trừ huỷ trong kỳ) vì huỷ một đơn bán kỳ trước làm
+  // số đó âm; phần đó Tổng quan và thông báo tính vào chi phí. Các trang đã tải không đủ để tự cộng tổng.
+  const [report, setReport] = useState<{ key: string; revenue: number } | null>(null);
   const reportSeq = useRef(0);
   const loadReport = useCallback(async () => {
     const mine = ++reportSeq.current;
     try {
-      if (reportPeriod) {
-        const [summary, series] = await Promise.all([reportApi.summary(reportPeriod), reportApi.salesSeries(reportPeriod)]);
-        if (mine !== reportSeq.current) return;
-        setReport({ key: reportKey, revenue: summary.netRevenueVnd, days: new Map(series.items.map((day) => [day.date, day])) });
-      } else {
-        const [summary, series] = await Promise.all([
-          saleApi.summary({ ...saleWindow, q: searchQ || undefined }),
-          yearFrom && yearTo ? reportApi.salesSeries('year') : Promise.resolve(null),
-        ]);
-        if (mine !== reportSeq.current) return;
-        // `date` là ngày Việt Nam dạng `yyyy-mm-dd` nên so chuỗi được
-        const days = series && yearFrom && yearTo ? series.items.filter((day) => day.date >= yearFrom && day.date <= yearTo) : [];
-        setReport({ key: reportKey, revenue: summary.confirmedSalesVnd, days: new Map(days.map((day) => [day.date, day])) });
-      }
+      const summary = await saleApi.summary({ ...saleWindow, q: searchQ || undefined, saleStatus });
+      if (mine !== reportSeq.current) return;
+      setReport({ key: queryKey, revenue: voidedOnly ? summary.voidedSalesVnd : summary.confirmedSalesVnd });
     } catch {
       // Không có số tổng thì thẻ hiện "—"; danh sách đơn vẫn dùng được
       if (mine === reportSeq.current) setReport(null);
     }
-    // saleWindow và searchQ đổi thì queryKey đổi, nên reportKey đổi và hàm được tạo lại
-  }, [reportKey, reportPeriod, yearFrom, yearTo]);
-  const activeReport = report && report.key === reportKey ? report : null;
+    // saleWindow, searchQ và saleStatus đổi thì queryKey đổi và hàm được tạo lại
+  }, [queryKey]);
+  const activeReport = report && report.key === queryKey ? report : null;
+
+  // Số đơn và doanh thu của từng ngày ở tiêu đề nhóm: `/sales/summary` của đúng ngày đó (cùng từ khoá tìm), hỏi dần cho các
+  // ngày đã có trong danh sách. Mỗi lần màn hình được focus hoặc kéo làm mới (`dayRound` tăng) thì hỏi lại, giữ số cũ trong lúc chờ.
+  // Mỗi ngày nhớ số của vòng hỏi nào: kết quả của vòng cũ về muộn không ghi đè số của vòng mới hơn.
+  const [dayTotals, setDayTotals] = useState<{ key: string; days: Record<string, DayTotal> }>({ key: queryKey, days: {} });
+  const [dayRound, setDayRound] = useState(0);
+  // Các ngày đã hỏi trong vòng hiện tại (cùng bộ lọc); sang vòng hoặc bộ lọc khác thì bắt đầu tập mới
+  const askedDays = useRef<{ scope: string; days: Set<string> }>({ scope: '', days: new Set() });
+  useEffect(() => {
+    const scope = `${dayRound}|${queryKey}`;
+    if (askedDays.current.scope !== scope) askedDays.current = { scope, days: new Set() };
+    const asked = askedDays.current.days;
+    const round = dayRound;
+    new Set(sales.map((sale) => dayKey(new Date(sale.soldAt)))).forEach((day) => {
+      if (asked.has(day)) return;
+      asked.add(day);
+      saleApi
+        .summary({ ...saleFilterWindow({ time: 'custom', from: day, to: day }), q: searchQ || undefined, saleStatus })
+        .then((summary) =>
+          setDayTotals((cur) => {
+            const days = cur.key === queryKey ? cur.days : {};
+            if ((days[day]?.round ?? -1) > round) return cur;
+            return { key: queryKey, days: { ...days, [day]: { round, summary } } };
+          }),
+        )
+        .catch(() => {
+          // Không có số của ngày thì tiêu đề chỉ có ngày; lần làm mới sau hỏi lại
+        });
+    });
+    // searchQ đổi thì queryKey đổi
+  }, [sales, queryKey, dayRound]);
+  const dayTotalsNow = dayTotals.key === queryKey ? dayTotals.days : NO_DAY_TOTALS;
 
   // Quay lại màn hình (vừa bán hoặc huỷ đơn): làm mới trang đầu mà giữ chỗ đang cuộn, và làm mới số tổng
   useFocusEffect(
     useCallback(() => {
       void refreshTop();
       void loadReport();
+      setDayRound((n) => n + 1);
     }, [refreshTop, loadReport]),
   );
 
   const pullToRefresh = () => {
     void reload();
     void loadReport();
+    setDayRound((n) => n + 1);
   };
 
   useFocusEffect(
@@ -147,13 +170,15 @@ export default function Invoices() {
       if (queryPeriod === 'today' || queryPeriod === 'yesterday' || queryPeriod === 'month') {
         setPeriod(queryPeriod);
       }
-    }, [queryPeriod, setPeriod]),
+      if (queryStatus === 'voided') setVoidedOnly(true);
+    }, [queryPeriod, queryStatus, setPeriod]),
   );
 
   const clearFilters = () => {
     triggerFeedback('selection');
     setFilter(DEFAULT_SALE_FILTER);
     setQ('');
+    setVoidedOnly(false);
   };
 
   const revenue = activeReport ? activeReport.revenue : null;
@@ -163,22 +188,23 @@ export default function Invoices() {
   // Nhãn nút của khoảng tự chọn: "30 ngày gần nhất" như trong bảng chọn, hoặc "07/10 – 13/10"
   const customChipLabel = matchingPreset(filter.from, filter.to) ? saleFilterTimeLabel(filter) : timeShort;
   const scopeName = period === 'all' ? null : timeShort.toLowerCase();
-  const countLabel = scopeName ? `Đơn ${scopeName}` : 'Tổng đơn hàng';
-  const revenueLabel = scopeName ? `Doanh thu ${scopeName}` : 'Tổng doanh thu';
+  const countLabel = voidedOnly ? 'Đơn đã huỷ' : scopeName ? `Đơn ${scopeName}` : 'Tổng đơn hàng';
+  // Đơn đã huỷ không có doanh thu: thẻ nêu tổng giá trị các đơn đó (gồm cả phần khách chưa trả)
+  const revenueLabel = voidedOnly ? 'Giá trị đơn huỷ' : scopeName ? `Doanh thu ${scopeName}` : 'Tổng doanh thu';
   // Ô số đơn hẹp hơn ô doanh thu (flex 0.8 so với 1.2). Dòng chữ dưới số chỉ nêu khoảng thời gian, trùng tên nút lọc, nên luôn
   // vừa một dòng; "Tổng đơn hàng" và "Đơn tháng này" bị cắt trên web ≤ 390px vì RN web không thu chữ theo adjustsFontSizeToFit.
   // countLabel vẫn dùng làm nhãn đọc màn hình.
   const countCaption = timeShort;
 
   // Nhóm theo ngày bán. Danh sách tải dần nên một ngày có thể mới có một phần đơn: số đơn và doanh thu của ngày lấy từ
-  // chuỗi báo cáo của Core, không đếm trên các trang đã tải; không có báo cáo thì tiêu đề chỉ có ngày.
+  // `/sales/summary` của ngày đó (`dayTotalsNow`), không đếm trên các trang đã tải; chưa có số thì tiêu đề chỉ có ngày.
   const groupedSections = useMemo(() => {
     const groups: Array<{
       key: string;
       title: string;
       date: Date;
       sales: SaleView[];
-      day: SalesSeriesPoint | null;
+      day: SaleSummaryView | null;
     }> = [];
 
     sales.forEach((sale) => {
@@ -193,7 +219,7 @@ export default function Invoices() {
           title,
           date: saleDate,
           sales: [],
-          day: activeReport?.days.get(dayKey(saleDate)) ?? null,
+          day: dayTotalsNow[dayKey(saleDate)]?.summary ?? null,
         };
         groups.push(existing);
       }
@@ -202,7 +228,7 @@ export default function Invoices() {
     });
 
     return groups;
-  }, [sales, activeReport]);
+  }, [sales, dayTotalsNow]);
 
   // SectionList chỉ dựng các dòng đang nhìn thấy; nhóm đang thu gọn không có dòng nào nhưng vẫn giữ tiêu đề.
   const sections = useMemo(
@@ -365,6 +391,22 @@ export default function Invoices() {
               </Pressable>
             );
           })}
+          {/* Chỉ xem đơn đã huỷ, kết hợp được với kỳ đang chọn */}
+          <Pressable
+            onPress={() => {
+              triggerFeedback('selection');
+              setVoidedOnly((on) => !on);
+            }}
+            style={({ pressed }) => [styles.periodPill, voidedOnly && styles.periodPillVoided, pressed && { opacity: 0.8 }]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: voidedOnly }}
+            accessibilityLabel={voidedOnly ? 'Đang chỉ xem đơn đã huỷ. Bấm để xem tất cả đơn' : 'Chỉ xem đơn đã huỷ'}
+          >
+            <Feather name="x-circle" size={14} color={voidedOnly ? colors.red : colors.inkSecondary} />
+            <T w={voidedOnly ? 'bold' : 'medium'} size={13} color={voidedOnly ? colors.red : colors.inkSecondary} numberOfLines={1}>
+              Đã huỷ
+            </T>
+          </Pressable>
         </ScrollView>
       </View>
 
@@ -394,7 +436,10 @@ export default function Invoices() {
               <Row gap={6} style={{ alignItems: 'center' }}>
                 {section.day ? (
                   <T w="bold" size={12.5} color={colors.muted}>
-                    {section.day.orderCount} đơn · {vnd(section.day.netRevenueVnd)}
+                    {/* Số đơn còn hiệu lực khớp với doanh thu; đơn huỷ trong ngày (vẫn có dòng trong danh sách) ghi riêng */}
+                    {voidedOnly
+                      ? `${section.day.voidedOrderCount} đơn huỷ · ${vnd(section.day.voidedSalesVnd)}`
+                      : `${section.day.confirmedOrderCount} đơn${section.day.voidedOrderCount ? ` · ${section.day.voidedOrderCount} huỷ` : ''} · ${vnd(section.day.confirmedSalesVnd)}`}
                   </T>
                 ) : null}
                 <Feather name={collapsedGroups[section.key] ? 'chevron-down' : 'chevron-up'} size={15} color={colors.muted} />
@@ -577,6 +622,10 @@ const styles = StyleSheet.create({
   periodPillActive: {
     backgroundColor: colors.brand,
     borderColor: colors.brand,
+  },
+  periodPillVoided: {
+    backgroundColor: colors.redSoft,
+    borderColor: colors.red,
   },
   scrollContent: {
     paddingHorizontal: 16,

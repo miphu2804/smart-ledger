@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import { debugLog, maskId } from '../debug';
 import { mapFirebaseError } from './firebaseErrors';
 import { AuthClient, AuthError } from './types';
@@ -49,7 +50,71 @@ function loadFacebook(): any {
   }
 }
 
+/**
+ * Thư viện Google Sign-In nạp lười như Facebook: bản build cũ chưa có mô-đun native vẫn mở được app.
+ * Web client ID lấy từ `extra.googleWebClientId` (app.config.js đọc trong google-services.json lúc build). Android bắt buộc
+ * có nó thì Google mới trả ID token; iOS tự lấy client iOS trong GoogleService-Info.plist (plugin của thư viện gắn vào lúc
+ * prebuild) và token đó Firebase cũng nhận, nên ở iOS Web client ID là tuỳ chọn.
+ */
+let googleConfigured = false;
+function loadGoogle(): any {
+  const webClientId = (Constants.expoConfig?.extra as { googleWebClientId?: string } | undefined)?.googleWebClientId;
+  if (!webClientId && Platform.OS === 'android') {
+    throw new AuthError(
+      'not-configured',
+      'Bản build này chưa có Web client ID của Google: google-services.json lúc build thiếu oauth_client client_type 3 (bật Google trong Firebase rồi tải lại file)',
+    );
+  }
+  try {
+    const g = require('@react-native-google-signin/google-signin');
+    if (!googleConfigured) {
+      g.GoogleSignin.configure({ webClientId });
+      googleConfigured = true;
+    }
+    return g;
+  } catch {
+    throw new AuthError('not-configured', 'Bản build này chưa có thư viện Google Sign-In: cần build lại APK');
+  }
+}
+
+/** Lỗi riêng của thư viện Google (mã của nó không có tiền tố auth/), còn lại để mapFirebaseError xử lý. */
+function mapGoogleError(e: unknown, statusCodes: Record<string, string>): AuthError {
+  if (e instanceof AuthError) return e;
+  const code = String((e as { code?: unknown })?.code ?? '');
+  if (code === statusCodes.SIGN_IN_CANCELLED) return new AuthError('cancelled');
+  if (code === statusCodes.IN_PROGRESS) return new AuthError('unknown', 'Đang mở đăng nhập Google, vui lòng đợi');
+  if (code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+    return new AuthError('unknown', 'Máy chưa có hoặc cần cập nhật Google Play Services để đăng nhập bằng Google');
+  }
+  // DEVELOPER_ERROR (10): Google không nhận cặp tên gói + SHA-1 của khoá đã ký bản này
+  if (code === '10' || code === 'DEVELOPER_ERROR') {
+    debugLog('auth', 'Google lỗi DEVELOPER_ERROR:', (e as { message?: string })?.message ?? '');
+    return new AuthError('not-configured', 'Google từ chối bản build này (DEVELOPER_ERROR): SHA-1 của khoá ký chưa có trong Firebase project');
+  }
+  return mapFirebaseError(e);
+}
+
 export const firebaseAuth: AuthClient = {
+  async signInWithGoogle() {
+    const { m, auth } = load();
+    const { GoogleSignin, statusCodes } = loadGoogle();
+    debugLog('auth', 'signInWithGoogle →');
+    try {
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const result = await GoogleSignin.signIn();
+      if (result?.type === 'cancelled') throw new AuthError('cancelled');
+      const idToken = result?.data?.idToken;
+      if (!idToken) throw new AuthError('unknown', 'Google không trả về mã đăng nhập. Vui lòng thử lại');
+      const provider = m.GoogleAuthProvider ?? m.default?.GoogleAuthProvider;
+      const credential = provider.credential(idToken);
+      if (typeof m.signInWithCredential === 'function') await m.signInWithCredential(auth, credential);
+      else await auth.signInWithCredential(credential);
+      debugLog('auth', 'signInWithGoogle ✓');
+    } catch (e) {
+      throw mapGoogleError(e, statusCodes);
+    }
+  },
+
   async signInWithFacebook() {
     const { m, auth } = load();
     const fb = loadFacebook();
@@ -161,6 +226,12 @@ export const firebaseAuth: AuthClient = {
       loadFacebook().LoginManager.logOut();
     } catch {
       /* chưa có Facebook SDK trong bản build này */
+    }
+    // Google cũng nhớ tài khoản đã chọn; đăng xuất để lần sau hiện lại hộp chọn tài khoản
+    try {
+      await loadGoogle().GoogleSignin.signOut();
+    } catch {
+      /* chưa có thư viện Google hoặc chưa cấu hình trong bản build này */
     }
   },
 

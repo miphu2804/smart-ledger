@@ -17,6 +17,176 @@
 **Flow explained:** `AgentService` still joins the static shop prompt, the query prompt, the restock prompt and the memory prompt in that order, then the current time, so the cacheable prefix layout is unchanged.
 
 **Check:** `uv run pytest tests/unit_tests` 319 passed; ruff clean; all 14 example queries and every function named in rule 7 pass `SqlGuard.validate_and_wrap`. **Not verified:** the new examples against staging data, and live replies from the model.
+### [2026-10-16 03:00 UTC+07:00] — [CI] Deploy the landing only when it changed
+
+**Done:** `deploy-landing` now runs on a push only when the push changes `frontend/web/` or `.github/workflows/ci.yml`; a re-run always deploys. Every push to `staging` and `main` used to spend two Vercel deployments (web and landing) even when only the backend changed, and the production deploy of release #249 hit the Hobby limit of 100 a day (`api-deployments-free-per-day`).
+
+**Changed files:** `.github/workflows/ci.yml`, `docs/development/ci-cd.md` — modified; this entry.
+
+**Flow explained:** push → job `landing` diffs `github.event.before`..`GITHUB_SHA` → `changed=true|false` → `deploy-landing` runs when `true` or on a re-run.
+
+**Check:** YAML parses and actionlint passes; the step script run locally against real commit pairs gives `false` for a backend-only push and `true` for a push touching `frontend/web/`, an all-zero `before` and an unknown commit. **Not verified:** a real push on GitHub (this PR's merge into `staging` touches `ci.yml`, so it will deploy; the first push after it that leaves the landing alone should skip).
+
+### [2026-10-16 02:47 UTC+07:00] — [Fix] Tabs switch without fading; overview compact bar and best sellers tidied
+
+**Done:** On an Android phone, switching to Quản lý sometimes showed only a blank screen with Bobi and the tab bar. The bottom tabs still faded on phones (#224 turned the fade off only on the web) and the fade can get stuck at zero opacity (inferred from the screenshot; not reproducible on the web). Tabs now switch without animation everywhere, and the scene background is the app background so any gap is not pure white. On Tổng quan, the compact bar shown after scrolling looked as if its icons were cut: the dark purple parts of the small icons disappeared into the purple bar, and at 360 px the labels were cut ("Đọc …", "Chọ…"). Each compact button now shows its icon on a light rounded tile above the label (buttons 50 instead of 42 px tall, which still fits the 115 px bar). In "Bán chạy", product names and quantities use the same line height without Android font padding so the quantity no longer sits higher than the name.
+
+**Changed files:** `frontend/mobile/app/(tabs)/_layout.tsx`, `frontend/mobile/app/(tabs)/index.tsx` (`CompactAction`) — modified; this entry.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (only the 2 known errors in #230's files). Mock web build in headless Chrome at 360×780, 8/8: name and quantity centres in "Bán chạy" match (0 px), the four compact buttons show icon tiles with full labels inside the buttons, and 250 ms after tapping Đơn hàng, Bán hàng, Quản lý, Tổng quan and Quản lý again each screen's title is fully visible. **Not verified:** the blank-tab fix on an Android phone.
+
+### [2026-10-16 02:46 UTC+07:00] — [Fix] Voice orders ask before saving a longer name as a shorter product
+
+**Done:** With "Cà phê" in the catalog, saying "cà phê sữa" recorded "Cà phê" and dropped "sữa". When the spoken name is longer than the matched product and no other product contains it, Đọc đơn now asks: pick the matched product, or "Thêm món mới" with the spoken name, which opens the usual add-to-catalog dialog (price, quantity, unit). The choice card is titled "Chọn món cho …" and its skip button is "Bỏ qua". Words like "nữa", "thôi", "luôn", "giúp", "dùm" are treated as filler so "hai cà phê nữa" still records 2 Cà phê.
+
+**Changed files:** `frontend/mobile/src/lib/parseOrder.ts`, `frontend/mobile/app/voice.tsx`, `frontend/mobile/tests/parseOrder.test.ts`, `docs/product/product-requirements.md` (`AC-074`) — modified; this entry.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (only the 2 known errors in #230's files); `node --test tests/*.test.ts` 80/80 (5 new). Mock web build in headless Chrome, 3/3: "hai trà đá nữa" records 2 Trà đá, "một trà đá chanh" asks with Trà đá as the option, and "Thêm món mới" opens the dialog to add "Trà đá chanh". **Not verified:** speech on a phone.
+
+### [2026-10-16 02:45 UTC+07:00] — [Feature] Report uses Core's estimated cost and shows the money of voided orders
+
+**Done:** "Giá vốn ước tính" on the Báo cáo screen was computed on the phone from each product's current cost, or 60% of the price when the product had none, which FR-006 rules out. The report now reads Core: revenue is the confirmed orders sold in the period (`/sales/summary`, never negative), and cost and profit come from `/reports/profit-estimate`, which uses the cost snapshotted at sale time. Core's net cost (sold minus voided) can go negative when an earlier order is voided, so the screen shows non-negative parts that add up exactly to Core's gross profit: revenue − cost of goods sold − orders sold earlier and voided now + cost of voided orders = gross profit, then − recorded expenses = profit after expenses. When some items have no cost, it says how many and how much revenue they cover, and links to Hàng hoá. A new "Đơn huỷ trong kỳ" block shows the number and value of orders voided in the period and how much was refunded, and explains that the rest of a voided order's value is only cancelled debt; its "Xem các đơn đã huỷ" button opens Orders with a new "Đã huỷ" filter, where the summary card shows the value of voided orders and day headers count voided orders. `stats.summary` no longer estimates cost at all, and the report stops loading the whole product list for it.
+
+**Changed files:** `frontend/mobile/app/analytics.tsx`, `frontend/mobile/app/(tabs)/invoices.tsx`, `frontend/mobile/src/lib/stats.ts`, `docs/product/product-requirements.md` (new `AC-076`) — modified; `frontend/mobile/src/lib/useReportTotals.ts` — new; this entry.
+
+**Flow explained:** report period → `useReportTotals` → `/reports/summary` + `/reports/profit-estimate` + `/sales/summary` → `periodRevenue` → rows from `grossEstimatedCogsVnd`, `cancelledEarlierVnd`, `voidedEstimatedCogsVnd`, `estimatedGrossProfitVnd`, `expenseVnd`, `estimatedOperatingProfitVnd`; voided block from `voidedOrderCount`, `voidedRevenueVnd`, `refundedVnd`. Orders "Đã huỷ" adds `saleStatus=VOIDED` to the list, the summary and each day's summary.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (only the 2 known errors in #230's files); `node --test tests/*.test.ts` 76/76. Mock web build in headless Chrome, 12/12: before and after voiding yesterday's 379.000đ order the rows add up (265.000 − 195.500 − 379.000 + 323.000 = 13.500) with no negative row, the old "dùng mức ước tính" note is gone, the voided block shows 1 order, 379.000đ, refunded 0đ, and "Xem các đơn đã huỷ" opens Orders with only that order and a 379.000đ "Giá trị đơn huỷ" card. **Not verified:** staging Core, a phone, the missing-cost warning (the mock has no item without cost in the period).
+
+### [2026-10-16 02:44 UTC+07:00] — [Fix] "Xem lại hướng dẫn" replays the guide on Tổng quan
+
+**Done:** The Settings button "Xem lại hướng dẫn" (#233) opened the guide on top of Settings. It now goes to Tổng quan and shows the guide there, as on the first sign-in; closing it leaves the user on Tổng quan. `AppStore` gains `showGuide()` (sets `guideDismissed` to false), and Settings no longer renders its own copy of the guide.
+
+**Changed files:** `frontend/mobile/app/settings.tsx`, `frontend/mobile/src/store/AppStore.tsx`, `docs/product/product-requirements.md` (`AC-018`) — modified; this entry.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (only the 2 known errors in #230's files). Mock web build in headless Chrome, 2/2: from Settings the guide opens on the Bobi step over Tổng quan, and after closing, Tổng quan is shown and Settings is not. **Not verified:** a phone.
+
+### [2026-10-16 02:43 UTC+07:00] — [Fix] Sales: pinned Scan and Read buttons work after scrolling
+
+**Done:** After scrolling the Sales list, tapping "Quét mã" or "Đọc đơn" on the pinned bar did nothing. The large header above the list only fades out when collapsed, and it sits on top of the pinned bar, so it kept taking the taps. The collapsible header now tracks when it crosses the collapse point (a listener that sets state only on crossing) and lets only the visible layer take touches: the large header while expanded, the pinned bar once collapsed.
+
+**Changed files:** `frontend/mobile/app/pos.tsx` (`PosCollapsibleHeader`) — modified; this entry.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (its only 2 errors are in #230's files: `expo-application` and `expo-intent-launcher` are not installed on this machine). Mock web build in headless Chrome at 393×852, 3/3: before scrolling the centre of the large "Quét mã" button hits that button; after scrolling the centre of the pinned "Quét mã" hits the pinned button and tapping it opens the scanner. **Not verified:** a phone.
+
+### [2026-10-16 10:30 UTC+07:00] — [Fix] Agent memory writes semantic facts by default
+
+**Done:** The default for `AGENT_MEMORY_TYPES` is now `preference,procedural,semantic`, matching what staging and production run. With the old default the extractor dropped stable facts such as suppliers while the agent still told the owner "Đã ghi nhớ". ADR 0002 records the change and its reason; PO approval of the type list is still open.
+
+**Changed files:** `backend/ai/src/app_config.py`, `backend/ai/.env.example`, `backend/ai/README.md`, `docs/architecture/adr/0002-agent-long-term-memory.md` — modified; this entry.
+
+**Flow explained:** extractor facts → filter by `AGENT_MEMORY_TYPES` → `semantic` facts are now stored and recalled in later chats; `episodic` and other types are still dropped.
+
+**Check:** `uv run pytest tests/unit_tests -q` and `ruff check` / `ruff format --check` in `backend/ai`. Staging E2E (supplier fact stored and recalled in a new chat) was run by the owner with the env var set.
+
+### [2026-10-16 10:30 UTC+07:00] — [CI] Release build ignores stale Metro cache and refuses mock values
+
+**Done:** `scripts/android-release.sh` deletes Metro's cache before Gradle and stops when a mock flag is true or the API endpoint is localhost or `10.0.2.2`. The APK published by `Mobile release` run #22 carried the values of a local test build (`http://10.0.2.2:1` API, `http://10.0.2.2:8765/version.json` update URL, no production strings), so it never offered an update and `latest.apk` served a mock build. The cause is inferred: Metro's transform cache is keyed on file contents, not on `EXPO_PUBLIC_*`, and the test build ran on the same machine as the self-hosted runner.
+
+**Changed files:** `scripts/android-release.sh` — modified; this entry.
+
+**Check:** `bash -n` passes. **Not verified:** a real build; the bundle of the next published APK must contain `railway.app` and the R2 `version.json` URL and no `10.0.2.2`. `latest.apk` stays a bad build until then.
+
+### [2026-10-16 01:35 UTC+07:00] — [Feature] Welcome guide pages show the new illustrations
+
+**Done:** The Bán hàng, Tổng quan and Quản lý pages of the welcome guide show the designer's illustrations (converted from webp to 1080 px JPEG) instead of an icon on a colour block. Each image now carries its own aspect ratio: Bán hàng and Tổng quan are 3:2 like the Bobi page, Quản lý is near-square (1080×1151) and would lose its lower part under the old fixed 3:2 height. The text of those pages was rewritten to add what the pictures do not say instead of repeating their callouts, and to correct where the pictures differ from the app: sorting and stock filters live in the funnel button (the picture shows the older buttons and a "Cá nhân" tab), the outstanding debt on Home is the whole shop's and does not follow the period (the picture's callout says "trong kỳ"), and Công nợ only tracks what customers owe (the picture shows a "Nhà cung cấp" tab the app does not have). The Bobi page is unchanged.
+
+**Changed files:** `frontend/mobile/src/components/AssistantIntroModal.tsx` — modified; `frontend/mobile/assets/guide/guide-sales.jpg`, `guide-overview.jpg`, `guide-manage.jpg` — new; this entry.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (its only 2 errors are in #230's files because `expo-application` and `expo-intent-launcher` are not installed on this machine). Mock web build in headless Chrome, guide opened from Cài đặt → "Xem lại hướng dẫn": at 393×852 and 360×640 each picture shows at its own ratio (3:2 pages 1.502, Quản lý 0.937–0.939 against 0.938), nothing is cut or stretched, and the footer buttons stay visible. The local install lacks the Google Sign-In package, so the Expo plugin line was removed from `app.json` only for those runs and restored. **Not verified:** a phone; the callout text inside the pictures is small (about 7–8 pt at card width).
+
+### [2026-10-16 01:30 UTC+07:00] — [CI] Skip Vercel previews on pull requests
+
+**Done:** `deploy-web` and `deploy-landing` now run on pushes to `staging` and `main` only. Pull-request previews used up the Vercel Hobby limit of 100 deployments a day (`api-deployments-free-per-day`), and once it ran out the staging deploys failed too and every PR showed two red checks. The PR-only steps stay in `ci.yml`, so previews come back by restoring one condition.
+
+**Changed files:**
+- `.github/workflows/ci.yml`, `docs/development/ci-cd.md`, `CONTRIBUTING.md`, `frontend/mobile/README.md`, `frontend/web/README.md` — modified
+
+**Flow explained:** PR → tests and builds only → merge → push `staging` → `deploy-web` / `deploy-landing` → staging alias; push `main` → approval → production.
+
+**Check:** workflow YAML parses and actionlint passes; docs re-read. **Not verified:** the first PR run without the deploy jobs (this PR's own CI).
+
+### [2026-10-16 00:45 UTC+07:00] — [Feature] Debts screen groups by customer, searches, opens the sale and records transfers
+
+**Done:** The Công nợ screen lists one card per customer with the total still owed, the number of open debts and how long the oldest open debt has run ("nợ 7 ngày", red from 30 days), and under it each debt by sale ("Đơn #4 · Hôm qua") with its remaining amount. Core can create a new customer with the same name and phone for each credit sale, so customers with the same phone digits are grouped as one; customers without a phone stay apart. The header counts customers, not debts (the old "Số khách nợ" counted debts), with the number of open debts under it. A search box filters by name (accent-insensitive) or phone digits. The debt sheet opens the original sale ("Xem đơn #…"), records a payment as cash or transfer with an optional transaction reference (it always sent `CASH` before), shows the method in the history, and the reminder button opens an SMS with the shop name, amount left and sale number. Core is unchanged.
+
+**Changed files:** `frontend/mobile/app/debts.tsx`, `docs/product/product-requirements.md` (`FR-016`, new `AC-075`) — modified; `frontend/mobile/src/lib/debtGroups.ts`, `frontend/mobile/tests/debtGroups.test.ts` — new; this entry.
+
+**Flow explained:** `GET /debts` and `GET /customers` (all pages) → join name/phone → drop VOIDED → `groupDebtsByCustomer` (key: phone digits, else customer ID; most owed first) → search with `matchesDebtSearch` → status chips filter each group's debts. Repay sends `POST /debts/{id}/payments` with `paymentMethod` and `transferReference` when given.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files; its only 2 errors are in #230's files because `expo-application` and `expo-intent-launcher` are not installed on this machine. `node --test tests/debtGroups.test.ts` 8/8. Mock web build in headless Chrome, 9/9: header shows 3 customers and 3 debts, each debt row names its sale, "minh" and "8123456" leave only the matching customer, no match shows "Không tìm thấy khách", the sheet links "Xem đơn #4 · 15/10", choosing transfer shows the reference field, a partial transfer payment shows "Khách trả nợ · Chuyển khoản", and "Xem đơn" opens that sale. **Not verified:** grouping two customers with the same phone on screen (the mock has none; covered by unit tests), the SMS reminder on a phone.
+
+### [2026-10-16 09:00 UTC+07:00] — [Docs] Table format for commits and pull requests
+
+**Done:** Defined one format for every future commit and pull request: a free-form scope (examples, no fixed list), body and footer rules, a `!` plus `BREAKING CHANGE:` rule that survives squash merges, and pull request descriptions built from Summary, Changes, Validation, Risks and rollback, and Config and migrations tables. Release pull requests (`staging` → `main`) get their own template that must list every commit in `origin/main..origin/staging` grouped by area, with Breaking changes and Deploy tables. Reviewed by an Opus medium pass; its findings (template default-branch caveat, release template URL, squash and breaking marks, Deploy rows, AGENTS.md duplication) are applied.
+
+**Changed files:**
+- `CONTRIBUTING.md`, `AGENTS.md`, `PROGRESS.md` — modified
+- `.github/pull_request_template.md`, `.github/PULL_REQUEST_TEMPLATE/release.md` — created
+
+**Flow explained:** GitHub reads pull request templates from the default branch (`main`), so they pre-fill only after the release that carries them; until then paste the structure from CONTRIBUTING.md.
+
+**Check:** Markdown re-read and links checked; no code or workflow touched. **Not verified:** the templates pre-filling on GitHub (needs the change on `main`).
+
+### [2026-10-15 23:59 UTC+07:00] — [Feature] Voice orders ask which variant when a name is shared by several products
+
+**Done:** Saying a name that several catalog products share ("hai sting" with "Sting vàng" and "Sting đỏ") no longer treats it as a new product: Đọc đơn shows "Chọn mẫu cho "Sting" · 2" with each matching product and its price (up to 6, shortest names first). Picking one adds that product with the spoken quantity; "Không phải mẫu nào" skips it. Saying a product's exact name, or a name with a spoken price, still works as before. This also fixes a bug where "sting gold" silently became the product "Sting" (dropping "gold") when "Sting" and longer "… Sting Gold …" products both exist: a spoken name longer than the matched product now asks too. `parseOrder` fills the existing `disambiguations` field, which was always empty. Two older parsing bugs found while testing are fixed too. Two items said without a pause merged into one whenever one name was not a full catalog name: "hai sting một bánh mì thịt" gave "2 Bánh mì thịt" and lost the Sting, "hai bò húc một bánh mì thịt" the same; a quantity right after a product word now starts a new item (`chunkByQuantity`), except between the words of a number, inside a catalog name with digits ("… Lốc 6 Lon 320ml", also when only part of it is said) or after filler words. A matched product's quantity is read outside its name, so "một … lốc 6 lon 320ml" is 1, not 6. Accent folding made "bò" equal the unit "bó" (also "gỏi"/"gói", "cải"/"cái", "lợn"/"lon"…), so "hai bò húc" became "Húc": a word whose accents differ from the unit's own spelling is kept as a name word (`UNIT_SPELLINGS`, `markHomograph`), unaccented typing behaves as before, and catalog names still match when typed without accents.
+
+**Changed files:** `frontend/mobile/src/lib/parseOrder.ts`, `frontend/mobile/app/voice.tsx`, `docs/product/product-requirements.md` (`FR-008`, new `AC-074`) — modified; `frontend/mobile/tests/parseOrder.test.ts` — new; this entry.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files; its only 2 errors are in #230's files because `expo-application` and `expo-intent-launcher` are not installed on this machine. `node --test tests/*.test.ts` 64/64 (21 new in `tests/parseOrder.test.ts`), including run-on phrases, names with digits, unit homographs and unchanged expense phrases. Mock web build in headless Chrome, 8/8: "hai sting gold" shows 3 Sting Gold options with quantity 2 and long names wrap inside the rows, picking one adds 2 of it, "Không phải mẫu nào" skips, "một sting" adds the product "Sting" directly, "hai sting gold một nước ngọt" adds 1 Nước ngọt and asks for Sting gold · 2, "hai bò húc" offers to add "Bò húc". **Not verified:** speech on a phone (the homograph fix needs the speech model to return accented words; unaccented "bo huc" still reads "bo" as a unit unless the product is in the catalog).
+
+### [2026-10-15 23:57 UTC+07:00] — [Feature] Replay the welcome guide from Settings
+
+**Done:** Settings has a "Xem lại hướng dẫn" button that opens the welcome guide (`AssistantIntroModal`) again from the Bobi step, as on the first sign-in. It opens on Settings itself, so closing it returns to Settings; "Hỏi đáp"/"Đọc đơn" on the first step close it and open those screens. The first-sign-in behaviour is unchanged.
+
+**Changed files:** `frontend/mobile/app/settings.tsx`, `docs/product/product-requirements.md` (`FR-025`, `AC-018`) — modified; this entry.
+
+**Check:** `tsc --noEmit` clean. Mock web build in headless Chrome, 3/3: Settings shows the button, it opens the guide on the Bobi step, closing returns to Settings. **Not verified:** a phone.
+
+### [2026-10-15 23:55 UTC+07:00] — [Fix] Revenue never shows negative; orders sold earlier and voided now count as an expense
+
+**Done:** Core's reports compute net revenue as sales in the period minus orders voided in the period, so voiding today an order sold yesterday made today's revenue negative on Home and the Orders card. The app now shows revenue as the orders sold in the period that are still confirmed (`GET /sales/summary` for the same window), which is never negative. An order sold before the period and voided in it is shown on the expense side instead: a line "Huỷ đơn bán kỳ trước … · tính vào chi phí" under Home revenue, "Chi … (gồm huỷ đơn …)" in yesterday's summary notification, and a "Huỷ đơn #…" row in the month it was voided on the Expenses screen (opens the order, cannot be deleted). Display only: nothing is written to Core's expense book, so Core's profit is not reduced twice. Orders' day headers also come from `/sales/summary` per day (fetched as days appear, a late answer from an older refresh never overwrites a newer one) instead of the report series, and count confirmed orders with voided ones shown separately ("1 đơn · 1 huỷ · 120.000đ"). `SaleView` gains `voidedAt`/`voidReason` from the contract; the mock sets them.
+
+**Changed files:** `frontend/mobile/src/lib/homeOverview.ts` (`periodRevenue`), `saleFilter.ts` (`reportPeriodWindow`; unused `saleFilterReportPeriod`/`saleFilterYearDays` removed), `useHomeOverview.ts`, `useLocalNotifications.ts`, `notifications.ts`, `mockCore.ts`, `src/data/types.ts`, `frontend/mobile/app/(tabs)/index.tsx`, `app/(tabs)/invoices.tsx`, `app/expenses.tsx`, `tests/homeOverview.test.ts`, `docs/product/product-requirements.md` (`FR-006`, new `AC-073`) — modified; this entry.
+
+**Flow explained:** report period → `reportPeriodWindow` → `/reports/summary` + `/sales/summary` → `periodRevenue`: revenue = `confirmedSalesVnd`, cancelled earlier = `voidedRevenueVnd − (grossRevenueVnd − confirmedSalesVnd)`, floored at 0.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files; its only 2 errors are in #230's files because `expo-application` and `expo-intent-launcher` are not installed on this machine. `node --test tests/*.test.ts` 47/47 on top of staging (4 new for `periodRevenue`). Mock web build in headless Chrome, 4/4: today sold 265.000đ, then voided yesterday's 379.000đ order (the report's net would be −114.000đ); Home stays 265.000đ with "Huỷ đơn bán kỳ trước 379.000đ · tính vào chi phí", Orders "Hôm qua" goes 379.000đ → 0đ, no negative day header. **Not verified:** the Expenses "Huỷ đơn" row (the mock has no order sold last month and voided this month), staging Core, a phone.
+
+### [2026-10-15 22:40 UTC+07:00] — [Feature] Cloudflare Workers AI embedder for agent memory
+
+**Done:** `AGENT_MEMORY_EMBEDDING_PROVIDER` picks `sentence-transformers` (default, local) or `cloudflare` (Workers AI `/v1/embeddings` with `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`). `WorkersAIEmbeddingModel` adds embeddinggemma's query/document prompts, which Workers AI does not, and cuts vectors to `EMBEDDING_DIMENSIONS` (384, the migration's size); the local embedder cuts to it too. ADR-0002 records the local bench (embeddinggemma at 384: Recall@1 0.947 vs MiniLM 0.658). Still behind `AGENT_MEMORY_ENABLED` and PO approval.
+
+**Changed files:**
+- `backend/ai/src/memory/workers_ai_embedding.py`, `backend/ai/tests/unit_tests/test_workers_ai_embedding.py` — created
+- `backend/ai/src/{app_config,main,memory/repository}.py`, `backend/ai/.env.example`, `backend/ai/README.md`, `docs/architecture/adr/0002-agent-long-term-memory.md` — modified
+
+**Flow explained:** startup → `build_memory_embedder` picks provider → Workers AI: prompt + text → `/v1/embeddings` → 768-d → cut to 384 → same pgvector search.
+
+**Check:** ruff clean, pytest 361 passed / 53 skipped. Live Workers AI on the bench set (34 facts, 38 queries): recall@1 0.947, MRR@10 0.961, same as local gemma@384; 300–600 ms per query. **Not verified:** the memory integration test against Postgres (needs `POSTGRES_TEST_URL`).
+
+### [2026-10-15 18:00 UTC+07:00] — [Feature] In-app update for the R2 APK
+
+**Done:** A published production APK now offers to update itself. CD builds it with `ANDROID_VERSION_CODE=<run number>` (new, monotonic; before, every build was versionCode 1) and `EXPO_PUBLIC_UPDATE_URL`, uploads the APK, then writes `android/production/version.json`. On launch the app fetches that file, compares `versionCode` with the installed one and, if higher, shows a dialog that downloads the APK from `builds/` and opens Android's installer. No new native module: `expo-file-system` (existing FileProvider), `expo-intent-launcher` and `expo-application`. `REQUEST_INSTALL_PACKAGES` is declared only when the update URL is set. Stacked on #225 (`feat/mobile-release-builds`).
+
+**Changed files:**
+- `frontend/mobile/src/lib/appUpdate.ts`, `appUpdateInstall.ts`, `appUpdateInstall.native.ts`, `src/components/UpdatePrompt.tsx`, `tests/appUpdate.test.ts` — created
+- `frontend/mobile/{app/_layout.tsx,src/config.ts,app.config.js,.env.example,package.json,package-lock.json}`, `.github/workflows/mobile-release.yml`, `docs/development/ci-cd.md` — modified
+
+**Flow explained:** publish → build with versionCode and update URL baked in → APK to `builds/` and `latest.apk` → `version.json` last → installed app fetches it at launch (8 s timeout, any failure is silent) → higher versionCode → dialog → download to cache → `getContentUriAsync` → `ACTION_VIEW` installer → user confirms. Required R2 variable: `R2_PUBLIC_URL` (needs the owner to set it before the next publish).
+
+**Check:** `npm test` 42/42 (5 new for the version logic), `tsc --noEmit` clean, the check run against a local HTTP server (older → offered, equal/newer/404/down → none), `expo prebuild` gives `versionCode 57` and the install permission only with the URL, workflow YAML parses and the manifest renders. Android 14 emulator (arm64), release build with R8, two APKs signed with the same key (versionCode 1 and 2): the app asked, downloaded `app-2.apk` from a local server, Android asked once to allow installs from the app, then installed over the old one (`versionCode=2`), and the next launch did not ask. **Not verified:** a real phone, the workflow on GitHub, cancelling a download mid-way.
+
+### [2026-10-15 21:45 UTC+07:00] — [Feature] Sign in with Google on mobile and web
+
+**Done:** The Google button on the sign-in screen works instead of showing "Sắp có". On Android and iOS it uses `@react-native-google-signin/google-signin` (new dependency, 16.1.5): Google returns an ID token, the app signs in to Firebase with `GoogleAuthProvider.credential`, then follows the Facebook flow (Core `POST /auth/session`; a new account goes through "Bạn tên gì?" and shop setup). The web opens Firebase's Google popup; the mock signs in as `google.demo@example.com`. Signing out also signs out of Google so the account chooser shows next time. The Web client ID that Google needs is read at build time from the `google-services.json` of the build's environment (`oauth_client` with `client_type` 3) into `extra.googleWebClientId`, so no new variable or secret. A rejected signing key (`DEVELOPER_ERROR`) shows the generic "not available" message and logs the cause. Firebase setup done by the team: Google enabled in both projects; staging `smart-ledger-c2892` has the debug key's SHA-1/SHA-256, production `smart-ledger-production` the release key's; `ANDROID_GOOGLE_SERVICES_JSON` updated in `android-dev`, `android-staging` and `android-production`. Core is unchanged.
+
+**Changed files:** `frontend/mobile/app.config.js`, `frontend/mobile/app/(auth)/welcome.tsx`, `frontend/mobile/src/lib/auth/types.ts`, `firebase.ts`, `firebase.web.ts`, `firebaseErrors.ts`, `mock.ts`, `frontend/mobile/package.json`, `package-lock.json`, `frontend/mobile/README.md`, `docs/product/product-requirements.md` (`FR-010`) — modified; this entry.
+
+**Flow explained:** tap Google → `authClient.signInWithGoogle()` → native: `GoogleSignin.configure({ webClientId })` once, `hasPlayServices`, `signIn` → `signInWithCredential` / web: `signInWithPopup(GoogleAuthProvider)` → `app.signIn()` sends the Firebase ID token to Core → setup or tabs.
+
+**Check:** `tsc --noEmit` clean. `app.config.js` returns the staging client for the staging file, the production client for the production file and none without a file. CI `android-dev` APK (run 38747868804, arm64, debug key, staging): signer SHA-1 matches the staging fingerprint and the APK contains the module; the user signed in with Google on a real Android phone. **Not verified:** the web popup, the production APK (release key), iOS.
 
 ### [2026-10-15 21:00 UTC+07:00] — [Fix] Notification swipe-to-read works on iOS, unread counts move to pill badges
 
@@ -57,6 +227,19 @@
 **Flow explained:** verified Firebase principal → active OWNER/owned ACTIVE shop guard → shared list predicate → one PostgreSQL COUNT/SUM tuple → checked signed-64-bit conversion → response. Item search uses EXISTS, so multiple matching items cannot multiply sale totals. Summary filters by soldAt and current status; report net revenue keeps its existing soldAt/voidedAt event timing. Separate list/summary requests do not share a snapshot. Deploy Core before FE adopts this endpoint.
 
 **Check:** Core commit `a8be3c0` was rebased onto the staging base above without conflict. `mvnw.cmd -o clean verify` against a dedicated disposable PostgreSQL 16 container passed **1,178 tests, 0 failures/errors/skipped**; the required PostgreSQL gate passed, and its own 12 tests passed. The 32-test sales/list suite covers combined filters/offset boundaries, empty sets, discounts/partial/debt sales, cross-period void, role/shop guards and Long.MAX_VALUE/overflow for both statuses using valid PAID fixtures. The 10,000-sale/50,000-item summary used one data SELECT (excluding auth/shop), with an 11 ms local observation in the post-rebase run, not a production SLA. Temporary test containers/data were removed. Documentation-only follow-up was checked separately; Firebase/FE/staging UAT remains pending.
+
+### [2026-10-15 15:30 UTC+07:00] — [Feature] Agent memory pins preferences and links the chip to the source chat
+
+**Done:** After Cognition's agent memory repo (an always-loaded `MEMORY.md`): every turn now leads with up to ten live `preference` memories, most important then newest, whatever the message; the cosine + decay search fills five more and skips those already pinned. Prompt lines carry date and type, and `MEMORY_PROMPT` tells the model to shape every answer by the preferences. The SSE `memory` event adds `source_conversation_id` and `created_at`; tapping a memory in the expanded chip opens the chat it came from (a memory from the open chat shows its date only). No migration, no Core change (Core relays the event as is). Still behind `AGENT_MEMORY_ENABLED` and PO approval.
+
+**Changed files:**
+- `backend/ai/src/{memory/repository,memory/service,agent/router,prompt_templates/memory}.py`, `backend/ai/tests/{unit_tests/test_agent_memory,integration_tests/test_memory_repository}.py`, `backend/ai/README.md` — modified
+- `frontend/mobile/{app/ai.tsx,src/data/types.ts}` — modified
+- `docs/contracts/api-contracts.md`, `docs/architecture/adr/0002-agent-long-term-memory.md` — modified
+
+**Flow explained:** read: pinned preferences (cap 10) → search the rest by cosine × decay (top 5) → record use for all → prompt, preferences first → `memory` event with source chat and date → chip → `GET /agent/conversations/{id}`.
+
+**Check:** AI ruff clean, pytest 359 passed / 53 skipped; mobile `tsc --noEmit` passes, `npm test` 37/37. **Not verified:** the new integration test `test_preferences_lead_whatever_the_message_and_are_not_repeated` (needs `POSTGRES_TEST_URL`); e2e on the simulator.
 
 ### [2026-10-15 12:10 UTC+07:00] — [Feature] Agent memory visibility and owner switch
 
@@ -2217,3 +2400,59 @@
 **Changed files:** `backend/ai/src/sql/repository.py` (replaces `executor.py`), `src/main.py`, `src/app_config.py`, `src/agent/service.py`, `src/agent/tools.py`, `src/restock/service.py`, comments in `src/sql/guard.py` and `src/drafts/catalog.py`, AI unit and integration tests, `backend/ai/README.md`, `backend/ai/.env.example`, `docs/development/ci-cd.md`, the AI components diagram in `docs/architecture/service-walkthrough/` (source and SVG) and this entry.
 
 **Check:** In `backend/ai`, `uv run ruff check`, `uv run ruff format --check` and `uv run pytest` with `POSTGRES_TEST_URL` on a local PostgreSQL 16 with pgvector pass **350 passed, 13 skipped**. New integration tests: a run is read only with the shop scope and timeout set, and with a one-connection pool, a timed-out query followed by shop B and shop A runs leaves no scope, timeout or read-only flag on the reused connection. Both tests failed when the read-only option or the transaction-local settings were removed. On the local database a query took 6.26 ms with a new connection and 2.45 ms pooled. Not measured: latency against Supabase, where connection setup costs more.
+
+### [2026-10-15 19:10 UTC+07:00] — [Mobile] Shrink the Android APK
+
+**Done:** The published four-ABI APK was 287 MB, mostly native libraries stored uncompressed. Release builds now compress native libraries (`useLegacyPackaging`), run R8 with resource shrinking, keep only `vi` and `en` library strings, and drop the FFmpeg and libarchive builds that `react-native-sherpa-onnx` ships but the app never calls (it only streams mic PCM and downloads the model file by file). R8 keep rules cover the sherpa-onnx classes that its native code reads by name. `mobile-release.yml` gains a `Report the APK contents` step that writes the size per ABI, dex, resources and assets and the largest entries to the run page. PRD and AC are unchanged.
+
+**Changed files:** `frontend/mobile/app.json`, `frontend/mobile/plugins/withAndroidApkSize.js` (new), `frontend/mobile/README.md`, `.github/workflows/mobile-release.yml`, `docs/development/ci-cd.md` and this entry.
+
+**Check:** `expo prebuild` writes the expected `gradle.properties`, `build.gradle` locale filter and ProGuard rules. Two `android-dev` builds on `ubuntu-24.04` from the same base commit (runs 38729102565 and 38729105555, `arm64-v8a`): 95.2 MB before, 40.3 MB after (native libraries 62.0 → 20.3 MB stored, dex 20.1 → 8.4 MB). Not run: the four-ABI staging or production build (expected near 100 MB), and the R8 build on a device, so sign-in, barcode scanning and voice ordering in the minified build are unverified.
+
+### [2026-10-15 20:00 UTC+07:00] — [Mobile] Release ABIs and a local Android build
+
+**Done:** Staging and production builds carry only `armeabi-v7a` and `arm64-v8a`; x86 and x86_64 served only Intel emulators. New `scripts/android-local-release.sh` builds the release APK on a developer machine without CI (prebuild, `assembleRelease`, optional `adb install`) and prints the APK contents through `scripts/apk-contents.sh`, which the workflow's report step now shares.
+
+**Changed files:** `.github/workflows/mobile-release.yml`, `scripts/android-local-release.sh` (new), `scripts/apk-contents.sh` (new), `frontend/mobile/README.md`, `docs/development/ci-cd.md` and this entry.
+
+**Check:** On the Apple M4 Pro the script built the two-ABI release APK in 3 min 21 s at 58.2 MB, against 287 MB for the last published four-ABI APK. Run 38730893725 passed with the shared report step. Not run: the minified APK on a phone (sign-in, barcode scanning, voice ordering), and a staging or production run of the workflow.
+
+### [2026-10-15 20:30 UTC+07:00] — [Mobile] One Android build script for local and CI
+
+**Done:** `scripts/android-local-release.sh` becomes `scripts/android-release.sh` and job `build` of `mobile-release.yml` calls it instead of repeating the steps: `npm ci`, `expo prebuild --clean`, Gradle with the environment's ABIs and keystore (`--aab` for Play, `--out` for the artifact path), and the APK contents report. The workflow keeps the gate, runner choice, toolchain, secrets, R2 publish, summary and artifacts. Locally the script still turns the mocks off and points at staging Core; in GitHub Actions it uses the environment's `EXPO_PUBLIC_*` values as given. It also writes the phase marks the build summary reads.
+
+**Changed files:** `scripts/android-release.sh` (renamed), `scripts/apk-contents.sh`, `.github/workflows/mobile-release.yml`, `frontend/mobile/README.md`, `docs/development/ci-cd.md` and this entry.
+
+**Check:** See the run listed with this change in `docs/development/ci-cd.md` once it passes. Temporary branches `perf/mobile-apk-size-baseline` and `perf/mobile-apk-size-release-test` still exist on GitHub: this environment cannot delete remote branches.
+
+### [2026-10-15 21:00 UTC+07:00] — [Mobile] Preflight checks in the device build scripts
+
+**Done:** `scripts/android-release.sh` runs `.github/scripts/android-preflight.mjs` before every build, locally and in CI. The preflight now reads the Node, JDK, SDK platform, build-tools and NDK versions from the `env:` block of `mobile-release.yml`, so the workflow's separate self-hosted preflight step is gone. Locally the script prefers the pinned JDK (`/usr/libexec/java_home -v 17`) over Android Studio's newer bundled JDK. `scripts/ios-device-release.sh` checks signing before it builds: an Apple Development certificate in the keychain, and an unexpired provisioning profile for the app's bundle ID from the project's `DEVELOPMENT_TEAM` that lists the chosen iPhone (or all devices). Without one it stops with the cause and the Xcode steps, instead of `xcodebuild` failing after bundling with "No profiles for 'vn.teamhexa.songheloi' were found", as it did on a Personal Team. Both scripts accept `--skip-preflight`.
+
+**Changed files:** `.github/scripts/android-preflight.mjs`, `.github/workflows/mobile-release.yml`, `scripts/android-release.sh`, `scripts/ios-device-release.sh`, `frontend/mobile/README.md`, `docs/development/ci-cd.md` and this entry.
+
+**Check:** The Android preflight passes with the pinned SDK folders and fails with one line per mismatch (JDK 21 against the pinned 17, missing platform, build-tools and NDK), as `::error::` lines in GitHub Actions. The iOS signing check ran on Linux with stand-ins for `security` and `plutil` over six cases: Personal Team with no profile, a profile from another team, the iPhone missing from the profile, and an expired profile all stop with the reason; a valid profile and a wildcard all-devices profile pass. Not run on a Mac: the real `security cms` and `plutil` output, so a format difference there would show as no profile found (`--skip-preflight` bypasses it).
+
+### [2026-10-15 21:45 UTC+07:00] — [Mobile] Full preflight with guided fixes in the device build scripts
+
+**Done:** `scripts/ios-device-release.sh` and `scripts/android-release.sh` check the whole machine before building and report every problem at once through the shared `scripts/lib/preflight.sh` (✓, ! or ✗ per check, how to fix each failure). In a terminal they then list the fixes they can start: open the App Store page for Xcode, Xcode, Android Studio, the Firebase Console or a download page, or run `sudo xcodebuild -license accept && sudo xcodebuild -runFirstLaunch`, `sudo xcode-select -s`, `brew install` or `sdkmanager`. iOS checks: Xcode installed, selected, 15 or newer and past its first launch; CocoaPods; Node at the pinned major; `GoogleService-Info.plist`; an Apple ID and an Apple Development certificate in Xcode; a paired iPhone with Developer Mode on and an iOS version the Xcode SDK covers; the project team signed in; and a provisioning profile for the bundle ID, team and iPhone. Android checks: Node, JDK 17, the Android SDK with the pinned platform, build-tools and NDK, `google-services.json`, the release keystore when set, and a phone that allows USB debugging for `--install`. Both scripts gain `--check` (only the preflight) and keep `--skip-preflight`; all their messages are now in English. `.github/scripts/android-preflight.mjs` is removed, as the Android script now holds the check. The work moved to branch `feat/mobile-release-builds`.
+
+**Changed files:** `scripts/lib/preflight.sh` (new), `scripts/ios-device-release.sh`, `scripts/android-release.sh`, `.github/scripts/android-preflight.mjs` (removed), `.github/workflows/mobile-release.yml`, `frontend/mobile/README.md`, `docs/development/ci-cd.md` and this entry.
+
+**Check:** On Linux with stand-ins for the macOS tools (`xcode-select`, `xcodebuild`, `xcrun devicectl`, `security`, `plutil`, `defaults`, `open`): a fresh Mac with only the Command Line Tools reports Xcode, CocoaPods, the Firebase file, the Apple ID and the certificate missing; Xcode before its first launch; the Personal Team with no profile for `vn.teamhexa.songheloi`; no paired iPhone; Developer Mode off with iOS 26 against the 18.5 SDK, the iPhone picked by name; and a signed-in team with a valid profile, which passes. The fix menu in a pseudo-terminal starts the chosen action and rejects a wrong number. Android on Linux: no SDK and JDK 21 against 17, and an SDK missing the pinned packages with an unauthorized phone, whose menu offers the Temurin page and the `sdkmanager` install. Not run on a Mac: the real output of those tools, so a format difference would show as a false failure (`--skip-preflight` bypasses it).
+
+### [2026-10-15 22:15 UTC+07:00] — [Mobile] Phone checks for both device build scripts
+
+**Done:** `scripts/android-release.sh --install` checks the phone, not only adb: every connected phone's state (unauthorized, offline, no permissions), a menu or `--device <serial>` when several are ready, the phone's Android API against minSdk (read from app.json, else React Native's), its ABIs against the build's `--abis` (an x86 emulator against an ARM-only build, a 32-bit phone against an arm64-only build), and an earlier install of the app that may carry another signing key. A failed `adb install` is explained (another signing key, missing ABI, Android too old, a newer versionCode, storage, an install blocked on the phone or by Xiaomi's "Install via USB"). `scripts/ios-device-release.sh` now tells an iPhone that has not tapped Trust apart from no iPhone, and on a fresh clone generates `ios/` before the signing check so it sees the project's team (with `--check` it warns instead). The arrow-key menu moved into `scripts/lib/preflight.sh` for both scripts.
+
+**Changed files:** `scripts/android-release.sh`, `scripts/ios-device-release.sh`, `scripts/lib/preflight.sh`, `frontend/mobile/README.md`, `docs/development/ci-cd.md` and this entry.
+
+**Check:** On Linux with a stand-in `adb`: one ready arm64 phone with the app installed (passes, warns about the install), two phones without a terminal (asks for `--device`), two phones in a pseudo-terminal (the arrow-key menu picks the second), an Android 6 32-bit phone against an arm64 build (API and ABI failures), an x86 emulator next to an offline phone, and the install errors for another signing key, a blocked install and a missing ABI. With the macOS stand-ins: an untrusted iPhone, a fresh clone under `--check`, and the earlier Personal Team and valid-profile cases. Not run on a real Mac or phone.
+
+### [2026-10-15 21:37 UTC+07:00] — [AI] Let the agent read debts, payments and expenses
+
+**Done:** The chat agent could answer only about the shop profile, catalog and sales; its prompt told it "you cannot see expense or debt records". A new AI migration adds three read-only views for `query_shop_data`: `v_debts` and `v_payments` (scoped to the shop through their sale, since `debts` and `payments` have no `shop_id`) and `v_expenses` (ACTIVE only). They follow the baseline's rules (transaction-local shop setting, no `shop_id`, `security_barrier`) and leave out customer names and phone numbers (only the opaque `customer_id`, for counting customers), transfer references, the users who received or recorded money and the free-text expense description. `SqlGuard.ALLOWED_VIEWS` lists the three views, so the answer screen also blocks their names. The shop prompt's scope now includes debts, payments received and expenses; the SQL prompt describes the views, says how to count money still owed and money kept after a cancelled sale, forbids calling revenue minus expenses "profit", and adds four example queries. Charts need no change: the existing `chart` block already covers these figures. PRD `FR-020` now names these data and the PII left out; new `AC-076`–`AC-077`; BRD traceability, API contract, technical design and ERD description updated. BRD scope is unchanged: debts and expenses were already in business scope.
+
+**Changed files:** `supabase/migrations/20261016000000_ai_read_ledger_views.sql` (new), `backend/ai/src/sql/guard.py`, `backend/ai/src/prompt_templates/shop_agent.py`, `backend/ai/src/prompt_templates/sql_agent.py`, `backend/ai/tests/support.py` (applies Core V1–V9 and the new migration), `backend/ai/tests/integration_tests/test_sql_reader.py`, `backend/ai/tests/unit_tests/test_sql_guard.py`, `backend/ai/README.md`, `docs/product/product-requirements.md`, `docs/product/business-requirements.md`, `docs/contracts/api-contracts.md`, `docs/architecture/technical-design.md`, `docs/architecture/erd-description.md` and this entry.
+
+**Check:** In `backend/ai`, `uv run ruff check`, `uv run ruff format --check` and `uv run pytest` with `POSTGRES_TEST_URL` on a local PostgreSQL 16 with pgvector pass **416 passed, 13 skipped** (baseline 398 passed, 13 skipped). New tests: each shop sees only its own debt, payments and active expense; `SELECT *` on the three views returns exactly the listed columns and no customer name, phone, transfer reference or expense description; the views return nothing without a shop scope; the reader cannot read `debts`, `payments`, `expenses` or `customers`; the guard accepts the views and rejects those base tables. Removing the shop filter from `v_payments` made 3 tests fail. Applying Core V5 required the existing voided test sale to be PAID instead of DEBT (`ck_sales_debt_requires_customer`). Not run: a live model answering these questions, or the migration on staging, which needs Core Flyway through V9 first. Open for the PO: whether the agent may read customer names.

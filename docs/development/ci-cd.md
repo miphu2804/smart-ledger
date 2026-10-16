@@ -26,10 +26,10 @@ The backend deploy (`deploy`) waits for `ai`, `core`, `mobile-web` and `containe
 |---|---|---|---|---|
 | `railway-staging` | `staging` | No | `RAILWAY_TOKEN`: project token of the Railway staging environment; `OPENAI_API_KEY` ([AI model settings](#ai-model-settings)); `LOGFIRE_TOKEN` (optional, [AI tracing settings](#ai-tracing-settings)) | `CORS_ALLOWED_ORIGINS`, AI model settings |
 | `railway-production` | `main` | Yes | `RAILWAY_TOKEN`: project token of the Railway production environment; `OPENAI_API_KEY`; `LOGFIRE_TOKEN` (optional) | `CORS_ALLOWED_ORIGINS` (optional), AI model settings |
-| `vercel-preview` | Any branch (PR) | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `EXPO_PUBLIC_*` |
+| `vercel-preview` (unused while PR previews are off) | Any branch (PR) | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `EXPO_PUBLIC_*` |
 | `vercel-staging` | `staging` | No | Same as above | `EXPO_PUBLIC_*`, `VERCEL_STAGING_ALIAS` |
 | `vercel-production` | `main` | Yes | Same as above | `EXPO_PUBLIC_*` |
-| `landing-preview` | Any branch (PR) | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` of the `landing` project | `VITE_LEGAL_DRAFT` |
+| `landing-preview` (unused while PR previews are off) | Any branch (PR) | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` of the `landing` project | `VITE_LEGAL_DRAFT` |
 | `landing-staging` | `staging` | No | Same as above | `VITE_LEGAL_DRAFT`, `LANDING_URL` |
 | `landing-production` | `main` | Yes | Same as above | `VITE_LEGAL_DRAFT`, `LANDING_URL`, `VITE_ANDROID_APK_URL` |
 | `android-dev` | None; job `gate` pairs it with branches other than `main` and `staging` | No | `ANDROID_GOOGLE_SERVICES_JSON`: Firebase config of the dev/staging project | `EXPO_PUBLIC_*` |
@@ -130,7 +130,7 @@ Staging value:
 https://smart-ledger-staging.vercel.app,https://smart-ledger-preview-00.vercel.app,…,https://smart-ledger-preview-09.vercel.app
 ```
 
-The ten `smart-ledger-preview-0N` origins belong to pull-request previews (see below); the same domains must also be listed in Firebase Authorized domains for sign-in to work.
+The ten `smart-ledger-preview-0N` origins belong to pull-request previews, which are off for now (see below); keep them so previews can return; the same domains must also be listed in Firebase Authorized domains for sign-in to work.
 
 ## Production environment checklist
 
@@ -159,13 +159,13 @@ Job `deploy-web` builds `frontend/mobile` on the runner (`vercel build`) and upl
 
 | Event | Environment | Result |
 |---|---|---|
-| PR (branch in this repo) | `vercel-preview` | Aliased to `smart-ledger-preview-0N.vercel.app`, where `N` is the last digit of the PR number; the bot comments the alias on the PR |
+| PR | — | No deploy (see below) |
 | Push `staging` | `vercel-staging` | Preview deploy, then aliased to `VERCEL_STAGING_ALIAS`; the GitHub Deployments link is `https://smart-ledger-staging.vercel.app` |
 | Push `main` | `vercel-production` | Production deploy after approval; the smoke test and the GitHub Deployments link use `https://smart-ledger-prod.vercel.app` |
 
 - The `url` of `vercel-staging` and `vercel-production` is set on job `deploy-web` in `ci.yml` and fixed to the two domains above, so the repository's Deployments panel links to them. `vercel-preview` has no `url`: its alias depends on the PR number and is already commented on the PR. If a domain changes in Vercel (Project → Settings → Domains), update `ci.yml` too.
+- Pull requests get no web preview. Previews used up the Vercel Hobby limit of 100 deployments a day, and once it ran out the `staging` and `main` deploys failed too. To bring them back, add `|| github.event.pull_request.head.repo.full_name == github.repository` to the `if` of `deploy-web` and `deploy-landing`; the PR-only steps (alias, PR comment) are still in `ci.yml`, and the `vercel-preview` and `landing-preview` environments still exist.
 - Only job `mobile-web` must pass; the web does not wait for the backend deploy.
-- PRs from forks get no secrets, so they get no preview.
 - `EXPO_PUBLIC_*` values are baked into the bundle at build time, so set them as **Variables** (not Secrets) of each environment: `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS`, `EXPO_PUBLIC_API_ENDPOINT`, `EXPO_PUBLIC_FIREBASE_API_KEY`, `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`, `EXPO_PUBLIC_FIREBASE_PROJECT_ID`, `EXPO_PUBLIC_FIREBASE_APP_ID`. Re-run the job after changing one so the web picks it up.
 - `EXPO_PUBLIC_API_ENDPOINT`, `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE` and `EXPO_PUBLIC_MOCK_SHOPS` have no default in code: `frontend/mobile/src/config.ts` stops the app at launch when one is missing or a flag is not `true`/`false`.
 - Calling the real Core from a browser needs the web origin in Core's [`CORS_ALLOWED_ORIGINS`](#core-cors-origins) and the web domain in Firebase Authorized domains. Each deploy URL carries a random hash and cannot be listed, so previews use ten fixed aliases, `smart-ledger-preview-00` … `-09`. Two open PRs sharing a last digit overwrite each other's alias; re-run the job to take the slot back.
@@ -178,14 +178,14 @@ Job `landing` runs `npm run lint` and `npm run build` in `frontend/web` on every
 
 | Event | Environment | Result |
 |---|---|---|
-| PR (branch in this repo) | `landing-preview` | Aliased to `https://smart-ledger-landing-pr-<number>.vercel.app`, shown in the run summary; smoke test on the alias; no PR comment |
-| Push `staging` | `landing-staging` | Preview deploy, then aliased to `LANDING_URL`; smoke test on `LANDING_URL` |
-| Push `main` | `landing-production` | Production deploy after approval; smoke test on `LANDING_URL` |
+| PR | — | No deploy, like `deploy-web` |
+| Push `staging` | `landing-staging` | When the landing changed: preview deploy, then aliased to `LANDING_URL`; smoke test on `LANDING_URL` |
+| Push `main` | `landing-production` | When the landing changed: production deploy after approval; smoke test on `LANDING_URL` |
 
 - Vercel project `landing`: **Root Directory** `frontend/web`. Store its project ID as `VERCEL_PROJECT_ID` in each `landing-*` environment; `VERCEL_TOKEN` and `VERCEL_ORG_ID` are the same team values as `vercel-*`.
 - `LANDING_URL` is the fixed domain (`https://…`) of the environment. Set it in `landing-staging` and `landing-production`.
 - `VITE_LEGAL_DRAFT` must stay unset or `true` until the product owner approves the legal pages; set `false` only in `landing-production` after approval. The contact email and the Facebook/TikTok links are not environment variables: they live in [`frontend/web/site.yaml`](../../frontend/web/site.yaml).
-- The landing has no path filter: a backend-only push also rebuilds and redeploys it.
+- `deploy-landing` runs only when the push changes `frontend/web/` or `.github/workflows/ci.yml` (step `Detect landing changes` in job `landing` diffs the push against its previous commit), so a push that leaves the landing alone does not spend one of Vercel's 100 daily deployments. A push to a new branch, or one whose previous commit cannot be fetched, counts as changed. A re-run always deploys: after changing a `landing-*` variable, re-run `deploy-landing` on the latest run. If a landing deploy was cancelled or failed, re-run that run, not a later one that did not touch the landing.
 - Vercel Authentication (Settings → Deployment Protection) must stay off on the `landing` project. With it on, preview deployments redirect to the Vercel login (`302`) and the smoke test fails on pull requests and on `staging`.
 - Admin (`/admin/*`) is hidden unless the build has `VITE_ADMIN_ENABLED=true`. No GitHub environment sets it. Step `Check no admin code in the build` in `deploy-landing` fails the job if the build output has an `AdminRoutes-*` chunk or the mock password `admin123`, which catches a `VITE_ADMIN_ENABLED=true` set in the Vercel project `landing` (`vercel pull` brings those variables into the build).
 
@@ -194,6 +194,8 @@ Job `landing` runs `npm run lint` and `npm run build` in `frontend/web` on every
 [`mobile-release.yml`](../../.github/workflows/mobile-release.yml) builds the Android app only when someone starts it (`workflow_dispatch`); no push or pull request triggers it. It lives outside `ci.yml` so the Android toolchain is downloaded only when needed and a change here cannot affect the backend and web gates. The Expo cloud build (`eas build`) is not used because the free plan queues builds behind paid ones ([Expo build queues](https://github.com/expo/fyi/blob/main/eas-build-queues.md)).
 
 ### Run a build
+
+Job `build` runs [`scripts/android-release.sh`](../../scripts/android-release.sh) for the build itself (`npm ci`, `expo prebuild --clean`, Gradle with the environment's ABIs and keystore, APK contents), and keeps only what needs CI around it: the gate, the runner, the toolchain, the secrets, the R2 publish and the artifacts. To build on your own machine without this workflow, run the same script from any checkout: by default an APK for `armeabi-v7a,arm64-v8a`; `--abis`, `--aab`, `--install` (over adb) and `--out` change that. Locally it turns the mocks off and points at staging Core like [`ios-device-release.sh`](../../scripts/ios-device-release.sh), and signs with the debug key unless `RELEASE_KEYSTORE` and `KEYSTORE_PASSWORD` are set. On a machine that lacks something (JDK 17, Android Studio and the SDK, the pinned SDK packages, `google-services.json`; with `--install`, a phone that allows USB debugging, carries an ABI of the build and runs API 24 or newer, picked from a menu or with `--device` when several are connected) the preflight lists every problem and, in a terminal, offers to start the fix: open the download page or Android Studio, run `brew` or `sdkmanager`. `--check` runs only the preflight; `--skip-preflight` builds anyway. Both device scripts share [`scripts/lib/preflight.sh`](../../scripts/lib/preflight.sh), and their messages are in English.
 
 Actions tab → **Mobile release** → **Run workflow**, choose the branch in *Use workflow from*, then the inputs; or `gh workflow run mobile-release.yml --ref <branch> -f environment=<environment> -f runner=auto`.
 
@@ -208,8 +210,8 @@ The branch picks the code and the environment picks the config (Firebase file, `
 | Environment | Builds from | Output | ABIs |
 |---|---|---|---|
 | `android-dev` | Any branch except `main` and `staging`, including a pull request branch; no CI-green check | APK | `arm64-v8a` |
-| `android-staging` | `staging`, after a green CI run on the commit | APK | all four |
-| `android-production` | `main`, after a green CI run and approval | AAB, or APK with `publish` | all four |
+| `android-staging` | `staging`, after a green CI run on the commit | APK | `armeabi-v7a`, `arm64-v8a` |
+| `android-production` | `main`, after a green CI run and approval | AAB, or APK with `publish` | `armeabi-v7a`, `arm64-v8a` |
 
 Job `gate` rejects a branch and environment that do not pair as above, or a staging or production commit without a successful `ci.yml` run, before any runner starts. Only people with write access can run a workflow, and forks cannot.
 
@@ -225,7 +227,7 @@ Job `select-runner` resolves input `runner`:
 
 `auto` lists runners through the GitHub API, which the default `GITHUB_TOKEN` cannot do. Create a fine-grained token with repository permission **Administration: read** and store it as repository secret `RUNNERS_READ_TOKEN`; without it `auto` always falls back to GitHub-hosted, and the reason is written in the build summary.
 
-A GitHub-hosted runner installs Node, JDK, SDK, NDK and Gradle with caching on every run. A self-hosted machine already holds them and its Gradle and npm caches, so the job only runs `.github/scripts/android-preflight.mjs`, which fails with a clear message when a version differs from the pinned block at the top of the workflow. It never downloads: pulling GitHub's cache or the roughly 1 GB NDK over a home connection is slower than the build.
+A GitHub-hosted runner installs Node, JDK, SDK, NDK and Gradle with caching on every run. A self-hosted machine already holds them and its Gradle and npm caches, so nothing is installed there. On every runner, and on a laptop, `scripts/android-release.sh` first runs its preflight: it reads the pinned block at the top of the workflow and fails, with one `::error::` line per problem in Actions, when Node, the JDK, the SDK platform, build-tools or the NDK differ, or when the Firebase file or the keystore is missing. It never downloads: pulling GitHub's cache or the roughly 1 GB NDK over a home connection is slower than the build.
 
 To add a machine: install Node 22, JDK 17, and the Android SDK with platform 36, build-tools 36.0.0 and NDK 27.1.12297006; set `ANDROID_HOME`; register a runner (repository Settings → Actions → Runners) with the label `android-build`.
 
@@ -273,7 +275,8 @@ Run the workflow from `main` with `environment=android-production` and `publish=
 | Key | Purpose |
 |---|---|
 | `android/production/latest.apk` | The fixed URL the landing page links to; overwritten by every publish and served as `so-nghe-loi.apk` |
-| `android/production/builds/<artifact name>.apk` | One copy per publish, for rollback |
+| `android/production/builds/<artifact name>.apk` | One copy per publish, for rollback; the in-app update downloads this copy because it is never overwritten |
+| `android/production/version.json` | `{versionCode, versionName, apk}` of the latest publish, written after the APK so a phone never reads a manifest whose file is missing |
 
 The job stops before the build when a publish setting is missing or the runner has no `aws` CLI, and refuses to upload an APK signed with the debug key. Job `gate` rejects `publish` on any other environment.
 
@@ -284,19 +287,22 @@ One-time setup:
 3. In GitHub environment `android-production`, add secrets `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`, and variable `R2_BUCKET`.
 4. Set variable `VITE_ANDROID_APK_URL=https://pub-<hash>.r2.dev/android/production/latest.apk` in GitHub environment `landing-production`, then re-run `deploy-landing` (see [Landing page on Vercel](#landing-page-on-vercel)). While the variable is empty the download button is disabled and reads "Sắp ra mắt".
 5. Optional: add an R2 lifecycle rule that deletes objects under `android/production/builds/` after 30 days. Never let it match `stt-model/`, which old APKs still download from.
-6. Set variable `STT_MODEL_BASE_URL=https://pub-<hash>.r2.dev` (see [Configuration](#configuration)). The first publish uploads the speech model under `stt-model/<version>/`.
+6. Set variable `R2_PUBLIC_URL=https://pub-<hash>.r2.dev` (no trailing slash) in the same environment. The publish step stops without it, because the APK would not know where to look for updates.
+7. Set variable `STT_MODEL_BASE_URL=https://pub-<hash>.r2.dev` (see [Configuration](#configuration)). The first publish uploads the speech model under `stt-model/<version>/`.
 
 - The `r2.dev` address is rate-limited, not cached, and meant for development ([public buckets](https://developers.cloudflare.com/r2/buckets/public-buckets/)); it is a stopgap until the project owns a domain on Cloudflare. Moving to a custom domain only changes `VITE_ANDROID_APK_URL`.
+- In-app update: a published APK is built with `ANDROID_VERSION_CODE=<run number>` and `EXPO_PUBLIC_UPDATE_URL=$R2_PUBLIC_URL/android/production/version.json`. On launch the app fetches `version.json`; when its `versionCode` is higher than the installed one it offers to download the APK and hands it to Android's installer, which asks the user to confirm (and, the first time, to allow installs from the app). Android only installs it over the old app when it is signed with the same keystore. Builds without the URL (dev, staging, a Play Store AAB) never check and do not declare `REQUEST_INSTALL_PACKAGES`, which Play does not allow. APKs published before this feature carry no update URL and never ask, so those users download the APK once more from the landing page. After a rollback, edit `version.json` too, or phones keep being offered the newer build. Do not re-run an old publish run: it keeps its run number and file name, so it overwrites that `builds/` file and moves `latest.apk` and `version.json` back.
 - Rollback: copy a file from `builds/` over `latest.apk` in the R2 dashboard. Android refuses to install an older version over a newer one, so this only helps people who have not updated yet.
 
 ### Result
 
-Every run uploads `android-build-summary-<environment>-<run number>` (`.md` and `.json`: runner and why it was chosen, commit, toolchain, time per phase, step outcomes, artifact size and SHA-256), also on failure, and the same table on the run page. A successful run also uploads `android-<environment>-<run number>`, the APK or AAB named `smart-ledger-<environment>-<branch>-<commit>`; artifacts are kept 14 days.
+Every run uploads `android-build-summary-<environment>-<run number>` (`.md` and `.json`: runner and why it was chosen, commit, toolchain, time per phase, step outcomes, artifact size and SHA-256), also on failure, and the same table on the run page. An APK build also writes its contents to the run page ([`scripts/apk-contents.sh`](../../scripts/apk-contents.sh)): the total size, the raw and stored size of the native libraries per ABI, dex, resources and assets, and the 40 largest entries, so a size change can be traced without downloading the file. A successful run also uploads `android-<environment>-<run number>`, the APK or AAB named `smart-ledger-<environment>-<branch>-<commit>`; artifacts are kept 14 days.
 
 ### Measured and not yet verified
 
 - Measured on an Apple M4 Pro (12 cores) with a warm Gradle cache, 4 ABIs, a placeholder Firebase file: prebuild 1 s and `assembleRelease` 4 min 3 s. The first build on a machine was blocked for over 30 minutes downloading the NDK over a slow connection, and Gradle stalled with the default 2 GB heap and 512 MB Metaspace; the workflow passes `-Xmx6g -XX:MaxMetaspaceSize=1g`.
 - Measured on `ubuntu-24.04` (run 37740574672, `android-dev` config built from `main`, before the gate paired environments with branches; `arm64-v8a`, cold cache): setup 34 s, install 13 s, prebuild 2 s, Gradle 654 s, about 11.7 minutes in all, a 94.7 MB APK. The run page showed 13 min 9 s, which adds the gate jobs and the Gradle cache save. The self-hosted M4 Pro is about three times faster.
-- Not yet run: `android-staging` and `android-production` (four ABIs, so slower than the dev build), the `self-hosted` and `auto` runner paths, and the APK on a physical device.
+- APK size, `android-dev` (`arm64-v8a`) on `ubuntu-24.04`, same commit before and after the size settings in [`frontend/mobile/README.md`](../../frontend/mobile/README.md#dung-lượng-apk-android) (runs 38729102565 and 38729105555): 95.2 MB → 40.3 MB. Native libraries 62.0 → 20.3 MB as stored (they were stored uncompressed; 57.5 MB raw after FFmpeg and libarchive were dropped), dex 20.1 → 8.4 MB (R8), resources 8.0 → 6.7 MB, assets unchanged at 4.4 MB. The four-ABI APK (287 MB published from run 38494582573) is no longer built: staging and production now carry only `armeabi-v7a` and `arm64-v8a`, so the APK no longer installs on an x86 (Intel) emulator, and the Play listing no longer offers x86 devices. With both changes, the local build script (now `scripts/android-release.sh`) on the Apple M4 Pro (warm Gradle cache, `armeabi-v7a,arm64-v8a`, R8 on) built the release APK in 3 min 21 s at 58.2 MB: native libraries 20.3 MB (`arm64-v8a`) and 17.9 MB (`armeabi-v7a`) stored, dex 8.4 MB, resources 6.7 MB, assets 4.4 MB. R8 prints `Invalid stack map table` warnings for `play-services-auth`; the build still succeeds.
+- Not yet run: `android-staging` and `android-production` (two ABIs, so slower than the dev build), the `self-hosted` and `auto` runner paths, and the APK on a physical device.
 - Release signing was checked locally only as far as `./gradlew :app:signingReport` with a throwaway keystore: the `release` variant reports `Config: externalOverride` and that keystore. A full signed build, the `apksigner` check, the R2 upload and the download from `r2.dev` have not run yet. The Play upload is not part of this workflow.
 - iOS is not built here (see [mobile-ios-device-release.md](mobile-ios-device-release.md)).

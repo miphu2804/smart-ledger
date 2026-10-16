@@ -29,7 +29,7 @@ import { expenseApi } from '../src/lib/expenseApi';
 import { triggerFeedback } from '../src/lib/feedback';
 import { abbr, hashIndex, hhmm, vnd } from '../src/lib/format';
 import { type PrepareProgress, type SpeechSession, speechEngine } from '../src/lib/speech';
-import { type ParsedExpenseItem, parseOrder } from '../src/lib/parseOrder';
+import { type DisambiguationItem, type ParsedExpenseItem, parseOrder } from '../src/lib/parseOrder';
 import { itemsTotal } from '../src/lib/stats';
 import { ProductImage } from '../src/components/ProductImage';
 import { useApp } from '../src/store/AppStore';
@@ -373,6 +373,8 @@ export default function Voice() {
    * Khoản chi nghe được trong lời nói. NFR-006/AC-010: không ghi ngay, người dùng phải bấm "Lưu chi phí".
    */
   const [pendingExpenses, setPendingExpenses] = useState<ParsedExpenseItem[]>([]);
+  /** Tên chung của nhiều mẫu ("sting" → Sting vàng / Sting đỏ) đang chờ người dùng chọn mẫu, lần lượt từng tên */
+  const [choices, setChoices] = useState<DisambiguationItem[]>([]);
   const [expenseBusy, setExpenseBusy] = useState(false);
   const [products, setProducts] = useState<ProductView[]>([]);
 
@@ -469,7 +471,7 @@ export default function Voice() {
   const handleUtterance = (utter: string) => {
     push('user', utter);
     setTranscripts((t) => [...t, utter]);
-    const { items: found, unknown, missingQuantityItems, expenses } = parseOrder(utter, parseableProducts);
+    const { items: found, unknown, missingQuantityItems, expenses, disambiguations } = parseOrder(utter, parseableProducts);
     // Chỉ chạy ở bản dev (debugLog tự bỏ qua ở bản phát hành): cho thấy model nghe ra gì và tách được mấy món
     debugLog(
       'voice',
@@ -501,6 +503,16 @@ export default function Voice() {
         if (unknown.length) responseParts.push(`"${unknown[0].name}" chưa có trong danh mục. Bạn có muốn thêm vào không?`);
       }
 
+      if (disambiguations && disambiguations.length > 0) {
+        setChoices((cur) => [...cur, ...disambiguations]);
+        const first = disambiguations[0];
+        responseParts.push(
+          first.options.length > 1
+            ? `"${first.rawName}" có ${first.options.length} mẫu: ${first.options.map((o) => o.name).join(', ')}. Bạn chọn mẫu ở khung bên dưới.`
+            : `Có phải "${first.options[0].name}" không? Nếu là món khác, bấm "Thêm món mới" ở khung bên dưới.`,
+        );
+      }
+
       if (expenses && expenses.length > 0) {
         setPendingExpenses((cur) => [...cur, ...expenses]);
         responseParts.push(
@@ -512,6 +524,7 @@ export default function Voice() {
         !found.length &&
         !unknown.length &&
         (!missingQuantityItems || !missingQuantityItems.length) &&
+        (!disambiguations || !disambiguations.length) &&
         (!expenses || !expenses.length)
       ) {
         responseParts.push(
@@ -1069,6 +1082,71 @@ export default function Voice() {
           </View>
         </View>
 
+        {/* Tên chung của nhiều mẫu: người dùng chọn đúng mẫu rồi mới ghi vào đơn */}
+        {choices.length > 0 ? (
+          <View style={styles.expenseCard}>
+            <Row gap={8} style={{ alignItems: 'center' }}>
+              <Feather name="help-circle" size={15} color={voiceTheme.amberFg} />
+              <T w="extrabold" size={14} color={voiceTheme.ink} style={{ flex: 1 }}>
+                Chọn món cho "{choices[0].rawName}" · {choices[0].qty}
+              </T>
+              {choices.length > 1 ? (
+                <T size={12} color={voiceTheme.muted}>
+                  còn {choices.length - 1}
+                </T>
+              ) : null}
+            </Row>
+            <View style={{ gap: 8, marginTop: 10 }}>
+              {/* Tên món có thể rất dài ("… Lốc 6 Lon 320ml"): tên xuống dòng, giá giữ bên phải */}
+              {choices[0].options.map((option) => (
+                <Pressable
+                  key={String(option.product_id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Chọn ${option.name}, ${vnd(option.unit_price_vnd)}`}
+                  onPress={() => {
+                    const choice = choices[0];
+                    mergeItems([{ productId: option.product_id, name: option.name, price: option.unit_price_vnd, qty: choice.qty }]);
+                    push('ai', `Đã ghi ${choice.qty} ${option.name}.`);
+                    setChoices((cur) => cur.slice(1));
+                  }}
+                  style={({ pressed }) => [styles.choiceRow, pressed && { opacity: 0.75 }]}
+                >
+                  <T w="semibold" size={13.5} color={voiceTheme.primary} numberOfLines={2} style={{ flex: 1 }}>
+                    {option.name}
+                  </T>
+                  <T w="bold" size={13.5} color={voiceTheme.primary}>
+                    {vnd(option.unit_price_vnd)}
+                  </T>
+                </Pressable>
+              ))}
+              {/* Không mẫu nào đúng: thêm món mới đúng tên đã nói ("Cà phê sữa"), qua hộp thoại nhập giá như món chưa có */}
+              <Button
+                title={`Thêm món mới "${choices[0].rawName}"`}
+                icon="plus"
+                variant="ghost"
+                small
+                onPress={() => {
+                  const choice = choices[0];
+                  setChoices((cur) => cur.slice(1));
+                  setPending((cur) => [...cur, { name: choice.rawName, price: 0, qty: choice.qty }]);
+                  setNewPrice('');
+                  setNewQty(String(choice.qty));
+                  setQtyErr('');
+                }}
+              />
+              <Button
+                title="Bỏ qua"
+                variant="ghost"
+                small
+                onPress={() => {
+                  push('ai', `Đã bỏ qua "${choices[0].rawName}".`);
+                  setChoices((cur) => cur.slice(1));
+                }}
+              />
+            </View>
+          </View>
+        ) : null}
+
         {/* Khoản chi nghe được: chờ người dùng xác nhận mới ghi lên Core */}
         {pendingExpenses.length > 0 ? (
           <View style={styles.expenseCard}>
@@ -1615,6 +1693,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: voiceTheme.border,
     padding: 14,
+  },
+  choiceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 44,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: voiceTheme.primarySoft,
   },
   expenseRow: {
     paddingVertical: 8,
