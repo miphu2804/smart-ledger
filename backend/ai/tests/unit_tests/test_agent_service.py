@@ -18,6 +18,7 @@ from src.agent.service import (
     Reset,
     TextDelta,
 )
+from src.agent.tool_events import ToolFinished, ToolStarted
 from src.prompt_templates import APP_GUIDE_PROMPT, SHOP_AGENT_SYSTEM_PROMPT
 from src.utils import get_time
 
@@ -270,6 +271,30 @@ async def test_stream_chat_resets_text_written_before_a_tool_call() -> None:
     )
     assert shown_before_reset and preamble.startswith(shown_before_reset)
     assert shown_text(events) == answer
+
+
+async def test_stream_chat_reports_each_tool_call_without_its_arguments() -> None:
+    call = ToolCallPart(
+        "query_shop_data",
+        {"sql": "SELECT phone FROM v_shop_profile"},
+        tool_call_id="call-1",
+    )
+    model = ScriptedModel(ModelResponse(parts=[call]), "The phone is 0901234567.")
+    agent = AgentService(
+        model,
+        FakeConversationRepository(),
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
+        shop_data=FakeShopData(),
+    )
+
+    events = await collect(await agent.stream_chat(user_id=3, shop_id=15, message="m"))
+
+    progress = [e for e in events if isinstance(e, ToolStarted | ToolFinished)]
+    assert progress == [
+        ToolStarted(call_id="call-1", name="query_shop_data"),
+        ToolFinished(call_id="call-1"),
+    ]
+    assert shown_text(events) == "The phone is 0901234567."
 
 
 async def test_stream_chat_never_takes_back_text_it_already_sent() -> None:
