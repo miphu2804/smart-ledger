@@ -71,7 +71,9 @@ def service(
 
 def sent_prompt(model: ScriptedModel) -> str:
     """The owner's message as the model received it on the first request."""
-    return transcript(model.requests[0][0])[-1][1]
+    return [text for kind, text in transcript(model.requests[0][0]) if kind == "user"][
+        -1
+    ]
 
 
 async def test_too_long_input_is_refused_without_a_model_call() -> None:

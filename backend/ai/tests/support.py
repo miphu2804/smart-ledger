@@ -7,6 +7,7 @@ from pathlib import Path
 
 import psycopg
 from pydantic_ai.messages import (
+    CachePoint,
     ModelMessage,
     ModelRequest,
     ModelResponse,
@@ -132,20 +133,16 @@ def tool_call(name: str, args: dict, *more: dict) -> ModelResponse:
     return ModelResponse(parts=[ToolCallPart(name, call) for call in (args, *more)])
 
 
-def static_instructions(instructions: str) -> str:
-    """The cacheable part: everything before the current-time line that ends them."""
-    static, _, current_time = instructions.rpartition("\n\n")
-    assert current_time.startswith("Current time at the shop")
-    return static
-
-
 def transcript(messages: list[ModelMessage]) -> list[tuple[str, str]]:
-    """The messages as (kind, text) pairs, in the order the model read them."""
+    """The messages as (kind, text) pairs, in the order the model read them.
+
+    The current-time line changes every minute, so it shows as ("time", "").
+    """
     pairs = []
     for message in messages:
         for part in message.parts:
             if isinstance(part, UserPromptPart):
-                pairs.append(("user", part.content))
+                pairs.extend(user_pairs(part.content))
             elif isinstance(part, TextPart):
                 pairs.append(("assistant", part.content))
             elif isinstance(part, ToolCallPart):
@@ -157,6 +154,16 @@ def transcript(messages: list[ModelMessage]) -> list[tuple[str, str]]:
     return pairs
 
 
+def user_pairs(content: str | list) -> list[tuple[str, str]]:
+    """A user prompt as (kind, text) pairs, without its cache breakpoints."""
+    items = [content] if isinstance(content, str) else content
+    return [
+        ("time", "") if item.startswith("Current time at the shop") else ("user", item)
+        for item in items
+        if not isinstance(item, CachePoint)
+    ]
+
+
 def tool_results(model: ScriptedModel) -> list[str]:
     """What the tools returned, as the model read it on its last request."""
     return [text for kind, text in transcript(model.requests[-1][0]) if kind == "tool"]
@@ -165,10 +172,12 @@ def tool_results(model: ScriptedModel) -> list[str]:
 def echo_user_prompts(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
     """A model function that answers with every user prompt it was sent, in order."""
     prompts = [
-        part.content
+        text
         for message in messages
         if isinstance(message, ModelRequest)
         for part in message.parts
         if isinstance(part, UserPromptPart)
+        for kind, text in user_pairs(part.content)
+        if kind == "user"
     ]
     return ModelResponse(parts=[TextPart(" | ".join(prompts))])

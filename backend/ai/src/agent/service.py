@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from pydantic_ai import Agent, AgentRunResult
 from pydantic_ai.messages import (
+    CachePoint,
     ModelMessage,
     ModelRequest,
     ModelResponse,
@@ -93,7 +94,8 @@ class AgentService:
         self.history_messages = 2 * history_turns
         # The instructions are static so providers can cache them; the shop scope
         # arrives per request through AgentContext and never appears in the prompt.
-        # Only the current time changes per run, so it comes last.
+        # The current time travels with the new message instead (_with_current_time),
+        # so the instructions and the history both stay a cacheable prefix.
         # Each optional capability adds its own tool and prompt section.
         tools = []
         prompt_parts = [SHOP_AGENT_SYSTEM_PROMPT]
@@ -113,7 +115,7 @@ class AgentService:
             Agent(
                 model,
                 deps_type=AgentContext,
-                instructions=["\n\n".join(prompt_parts), self._current_time],
+                instructions="\n\n".join(prompt_parts),
                 tools=tools,
                 # The limits arrive from the composition root, so this module reads no
                 # global settings and guardrails cannot be switched off by a caller.
@@ -209,7 +211,7 @@ class AgentService:
         """Run the agent; return the screened answer and the model version."""
         async with self.guardrails.run_limits():
             result = await self.agent.run(
-                prompt,
+                self._with_current_time(prompt),
                 message_history=self._model_messages(history),
                 deps=context,
                 usage_limits=self.guardrails.usage_limits,
@@ -292,7 +294,7 @@ class AgentService:
         async with (
             self.guardrails.run_limits(),
             self.agent.iter(
-                prompt,
+                self._with_current_time(prompt),
                 message_history=self._model_messages(history),
                 deps=context,
                 usage_limits=self.guardrails.usage_limits,
@@ -326,8 +328,16 @@ class AgentService:
 
     def _read_result(self, result: AgentRunResult[str]) -> tuple[str, str]:
         """Log the turn's token use; return the answer and the model version."""
-        # Token counts per turn, to size AGENT_TURN_TOKEN_LIMIT from real traffic.
-        logger.info("agent turn usage: %s", result.usage)
+        # Token counts per turn, to size AGENT_TURN_TOKEN_LIMIT from real traffic and
+        # to see how much of the prompt the provider served from its cache.
+        usage = result.usage
+        logger.info(
+            "agent turn usage: %s, cache read %d, cache write %d, cache hit %.0f%%",
+            usage,
+            usage.cache_read_tokens,
+            usage.cache_write_tokens,
+            100 * usage.cache_hit_ratio,
+        )
         return result.output, result.response.model_name or self.model_name
 
     async def _save_turn(
@@ -383,6 +393,16 @@ class AgentService:
     def _current_time() -> str:
         """Lets the model resolve "today" or "last week" without asking."""
         return CURRENT_TIME.format(time=get_time().strftime("%A %Y-%m-%d %H:%M"))
+
+    @staticmethod
+    def _with_current_time(prompt: str) -> list[str | CachePoint]:
+        """The new message, a cache breakpoint, then the current time.
+
+        The time is never stored, so it comes after the message: the next turn's
+        history then repeats this request up to the breakpoint, and the provider
+        serves the instructions and the whole history from its cache.
+        """
+        return [prompt, CachePoint(), AgentService._current_time()]
 
     @staticmethod
     def _model_messages(history: list[dict]) -> list[ModelMessage]:

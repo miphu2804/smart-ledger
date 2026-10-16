@@ -150,6 +150,16 @@ def test_anthropic_provider_sets_effort_from_reasoning_effort() -> None:
     assert model.settings["anthropic_effort"] == "medium"
 
 
+def test_anthropic_provider_caches_tools_instructions_and_messages() -> None:
+    config = AppConfig(OPENAI_API_KEY="sk-test", OPENAI_BASE_URL=GATEWAY_URL)
+
+    settings = build_chat_model(config).settings
+
+    assert settings["anthropic_cache_tool_definitions"] is True
+    assert settings["anthropic_cache_instructions"] is True
+    assert settings["anthropic_cache_messages"] is True
+
+
 def test_session_settings_name_the_client_and_the_session() -> None:
     settings = session_settings("conversation-7")
 
