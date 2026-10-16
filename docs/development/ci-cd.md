@@ -1,22 +1,22 @@
 # CI/CD to Railway and Vercel
 
-This document traces a change from a feature branch to Railway for `backend/core` and `backend/ai`, and to Vercel for the mobile web and the landing page. Everything runs in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), split into `###` sections: **Test**, **Report**, **Deploy backend** (job `deploy`, after the backend, mobile web and container image jobs pass) and **Deploy web** (job `deploy-web`, see [Mobile web on Vercel](#mobile-web-on-vercel)). Branch and review rules live in [CONTRIBUTING](../../CONTRIBUTING.md). The Android app is built by a separate manual workflow, [`mobile-release.yml`](../../.github/workflows/mobile-release.yml); see [Android build](#android-build).
+This document traces a change from a feature branch to Railway for `backend/core` and `backend/ai`, and to Vercel for the mobile web and the landing page. Everything runs in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), split into `###` sections: **Test**, **Report**, **Deploy backend** (job `deploy`, after the backend, mobile web and container image jobs pass), **Deploy web** (job `deploy-web`, see [Mobile web on Vercel](#mobile-web-on-vercel)) and **Deploy landing** (job `deploy-landing`, see [Landing page on Vercel](#landing-page-on-vercel)). Branch and review rules live in [CONTRIBUTING](../../CONTRIBUTING.md). The Android app is built by a separate manual workflow, [`mobile-release.yml`](../../.github/workflows/mobile-release.yml); see [Android build](#android-build).
 
 ## Overview
 
 ![Backend CI/CD flow](../architecture/diagrams/images/ci-cd.svg)
 
-Diagram source: [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio); edit it in draw.io, then re-export the SVG (`drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/ci-cd.svg docs/architecture/diagrams/src/ci-cd.drawio`). Blue numbers are the deploy pipeline; orange numbers are the runtime request flow.
+Diagram source: [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio); edit it in draw.io, then re-export the SVG (`drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/ci-cd.svg docs/architecture/diagrams/src/ci-cd.drawio`). Green numbers are the deploy pipeline; orange numbers are the runtime request flow.
 
 ## Steps
 
 1. **PR into `staging`:** CI runs the tests, checks migrations on a throwaway PostgreSQL and builds the images. Job `deploy` is skipped because the event is `pull_request`.
 2. **Merge into `staging`:** CI runs again on the merged commit. When `ai`, `core`, `mobile-web` and `container-images` all pass, job `deploy` uses environment `railway-staging` and deploys to Railway staging. No approval is needed.
 3. **PR `staging` → `main`:** open it only after checking staging (see [Target branch](../../CONTRIBUTING.md#target-branch)).
-4. **Merge into `main`:** use a merge commit, never a squash. If `staging` and `main` conflict, release from a `release/staging-to-main-<date>` branch as described in [CONTRIBUTING](../../CONTRIBUTING.md#target-branch). CI runs again on `main`; jobs `deploy` (`railway-production`) and `deploy-web` (`vercel-production`) wait in *Waiting*. A reviewer opens the run in the Actions tab → **Review deployments** → approves both. Only then does a job receive its production token and deploy.
+4. **Merge into `main`:** use a merge commit, never a squash. If `staging` and `main` conflict, release from a `release/staging-to-main-<date>` branch as described in [CONTRIBUTING](../../CONTRIBUTING.md#target-branch). CI runs again on `main`; jobs `deploy` (`railway-production`) and `deploy-web` (`vercel-production`), plus `deploy-landing` (`landing-production`) when `frontend/web/` changed, wait in *Waiting*. A reviewer opens the run in the Actions tab → **Review deployments** → approves each of them. Only then does a job receive its production token and deploy.
 5. **Check production, then tag:** the web smoke test runs against `https://smart-ledger-prod.vercel.app` and must pass; open the app and sign in. Then create the release on the commit that ran, for example `gh release create vX.Y.Z --target <merge commit> --generate-notes`. Tags are created by a person, not by CI.
 
-The backend deploy (`deploy`) waits for `ai`, `core`, `mobile-web` and `container-images`, not for `landing`, so a red landing does not hold back the backend. `deploy-web` waits for `mobile-web`, and `deploy-landing` waits for `landing` only, so a red `core` does not hold back the landing. Each deploy uploads a `deploy-summary-<branch>` artifact (environment, commit, `ai`/`core` result) and a summary table on the run page.
+The backend deploy (`deploy`) waits for `ai`, `core`, `mobile-web` and `container-images`, not for `landing`, so a red landing does not hold back the backend. `deploy-web` waits for `mobile-web`, and `deploy-landing` waits for `landing` only, so a red `core` does not hold back the landing. The backend deploy (`deploy`) uploads a `deploy-summary-<branch>` artifact (environment, commit, `ai`/`core` result) and a summary table on the run page; `deploy-web` and `deploy-landing` only add a URL line to the run summary.
 
 ## Configuration
 
@@ -80,12 +80,14 @@ Enter each value once and reuse it with a [reference variable](https://docs.rail
 | `POSTGRES_URL` | Supabase of the matching environment (`postgresql://…`) |
 | `AI_SQL_READER_URL` | Read-only `ai_sql_reader` login (AI baseline in `supabase/migrations/`) as a `postgresql://` URL, not a libpq keyword string; when empty, the agent cannot read shop data |
 | `REDIS_URL` | Redis Cloud of the matching environment |
-| `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `MODEL_*` | Managed from GitHub, see [AI model settings](#ai-model-settings). Do not edit them on Railway. |
+| `POSTGRES_POOL_MAX_SIZE`, `SQL_POOL_MAX_SIZE` | Optional, default `2` each; GitHub does not set them. Both pools count against the Supabase session-pooler limit shared with Core, so keep them small. See [AI README](../../backend/ai/README.md#routes-and-database-access). |
+| `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `MODEL_PROVIDER`, `MODEL_NAME`, `MODEL_FALLBACKS`, `MODEL_REASONING_EFFORT` | Managed from GitHub, see [AI model settings](#ai-model-settings). Do not edit them on Railway. |
 | `LOGFIRE_TOKEN`, `LOGFIRE_ENVIRONMENT`, `LOGFIRE_SERVICE_VERSION` | Managed from GitHub, see [AI tracing settings](#ai-tracing-settings). Do not edit them on Railway. |
+| `AGENT_MEMORY_ENABLED`, `AGENT_MEMORY_TYPES`, `AGENT_MEMORY_EMBEDDING_PROVIDER`, `AGENT_MEMORY_EMBEDDING_MODEL`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | Optional, set on Railway only; GitHub does not sync them. Long-term memory stays off unless `AGENT_MEMORY_ENABLED=true`, and it is not product behavior until the PO approves it ([ADR-0002](../architecture/adr/0002-agent-long-term-memory.md)). The image leaves out the `memory` dependency group, so on Railway memory runs only with `AGENT_MEMORY_EMBEDDING_PROVIDER=cloudflare`, a Workers AI model in `AGENT_MEMORY_EMBEDDING_MODEL` and both `CLOUDFLARE_*` values, after both agent memory migrations are pushed. See [AI README](../../backend/ai/README.md#long-term-memory-off-by-default). |
 
 - `ai` has no public domain; `core` calls it over the private network. Port `8001` is AI's default `SERVER_PORT`, not the `PORT` Railway assigns, so changing `SERVER_PORT` on `ai` requires updating `AI_BASE_URL`.
 - Variables have local defaults (`AI_BASE_URL` defaults to `http://localhost:8001`), so a missing variable on Railway still reports a successful deploy while Core cannot reach AI. After changing variables, run one chat through Core on staging.
-- Backend secrets live only on Railway, except `OPENAI_API_KEY`, which the deploy copies from the `railway-*` GitHub environment. The mobile web Vercel project receives only `EXPO_PUBLIC_*`.
+- Backend secrets live only on Railway, except `OPENAI_API_KEY` and `LOGFIRE_TOKEN`, which the deploy copies from the `railway-*` GitHub environment. The mobile web Vercel project receives only `EXPO_PUBLIC_*`.
 - Before enabling Cloudinary in staging/production, run V13 from merged code under the approved migration workflow, then set the variables above and run a controlled upload/replace/delete smoke check. Use separate Cloudinary credentials or at least non-overlapping prefixes per environment. `CLOUDINARY_API_SECRET` must never be placed in `EXPO_PUBLIC_*`, GitHub Variables, client source, Swagger request data, audit metadata or logs.
 
 ### AI model settings
@@ -120,7 +122,7 @@ The container is uploaded without `.git`, so Logfire cannot read the commit itse
 
 Diagram source: [`auth-request-flow.drawio`](../architecture/diagrams/src/auth-request-flow.drawio), exported like the CI/CD diagram above. A browser request passes two domain gates, Firebase Authorized domains (step 1) and Core CORS (step 3), and Core accepts only ID tokens from its own Firebase project (step 5).
 
-Core accepts browser calls only from the exact origins in `CORS_ALLOWED_ORIGINS`: comma-separated, `http(s)` only, no wildcard, path, trailing `/` or whitespace. Core **refuses to start** on any invalid entry, so a stray line break pasted on Railway takes staging down.
+Core accepts browser calls only from the exact origins in `CORS_ALLOWED_ORIGINS`: comma-separated, `http(s)` only, no wildcard, path or trailing `/`. Core trims spaces and line breaks around each entry, but one inside an entry (for example two origins joined by a line break instead of a comma) is invalid, and Core **refuses to start** on any invalid entry, so such a value pasted on Railway takes staging down. The GitHub sync step rejects any whitespace.
 
 The value is kept in the **Variables** of GitHub environments `railway-staging` and `railway-production`. Before deploying Core, step `Sync core CORS origins` rejects whitespace or wildcards and writes the value to Railway service `core`. When the GitHub variable is unset, the step is skipped and the Railway value stays as is. A change takes effect on the next push to the branch, or by re-running the `deploy` job.
 
@@ -149,7 +151,7 @@ A new Firebase project limits SMS to 10 a day until a billing account is attache
 
 ## What this flow does not do yet
 
-- No database migrations. Flyway stays off by default and `supabase db push` is not in CI; the migration owner runs them by hand following [Database migrations](../../README.md#database-migrations), on staging before production.
+- No database migrations. Flyway stays off (`FLYWAY_ENABLED=false` on Railway and the Compose default; Core itself runs it when the variable is unset) and `supabase db push` is not in CI; the migration owner runs them by hand following [Database migrations](../../README.md#database-migrations), on staging before production.
 - No path filtering: every push to `staging` or `main` redeploys both `ai` and `core`, even for a mobile-only change.
 - Rollback: pick the previous deploy on the Railway dashboard → **Redeploy**; there is no automated step.
 

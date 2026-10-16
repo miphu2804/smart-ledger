@@ -1,3 +1,13 @@
+### [2026-10-16 10:25 UTC+07:00] — [Docs] AI docs and diagrams re-checked against the AI service (supersedes #212)
+
+**Done:** Moved the 13 findings of #212 onto a fresh branch from `staging` (#212 was far behind) and re-checked them in four audit rounds against `backend/ai/src`, Core's Agent proxy, `supabase/migrations` and `ci.yml`. Docs now cover: the Core stream relay and memory settings proxy (eight Agent routes), guardrail `422` codes kept by Core, the reader pool and eight `ai_read` views, long-term memory behind `AGENT_MEMORY_ENABLED` (off by default, awaiting PO approval) with its tables in the ERD, the current-time line after the new message, `suggest_screen` and the ```` ```actions ```` block (stripped from replayed history, appended after the answer screen), and CI/CD details (landing deploy and approval, PR previews off, pool sizes, memory variables on Railway). Diagrams were re-exported from source: `ci-cd`, `auth-request-flow` (sign-in by email, Facebook or Google), `agent-memory`, and the two `06-ai` walkthrough diagrams.
+
+**Changed files:** `README.md`, `backend/ai/README.md`, `backend/ai/.env.example` (comments and blank keys only), `docs/README.md`, `docs/contracts/api-contracts.md`, `docs/architecture/technical-design.md`, `docs/architecture/erd-description.md`, `docs/architecture/diagrams/src/erd.dbml`, `docs/architecture/adr/0002-agent-long-term-memory.md`, `docs/architecture/service-walkthrough/README.md` and `06-ai/*.svg`, `docs/development/ci-cd.md`, `docs/architecture/diagrams/src/{ci-cd,auth-request-flow,agent-memory}.drawio` and their SVGs — modified; this entry.
+
+**Flow explained:** each round, one slice per doc group was checked sentence by sentence against the code; every claimed drift was verified against the cited code before it was applied. A claim the code cannot show (Railway, Vercel or Firebase settings) was left open, not written as fact.
+
+**Check:** `dbml2sql` parses `erd.dbml`; every `.drawio` and SVG parses as XML; Mermaid re-rendered; local link and anchor check reports 0 bad links. **Not verified:** whether staging or production set `AGENT_MEMORY_ENABLED` or Cloudflare variables; `vercel-production` secrets, Firebase authorized domains and `CORS_ALLOWED_ORIGINS` on `railway-production`.
+
 ### [2026-10-16 15:30 UTC+07:00] — [Feature] Shorter Bobi intro and scope, history fits a 100k-token window
 
 **Done:** The shop prompt no longer says who Bobi is twice or lists the shop topics twice: voice, identity and the off-topic reply now take one paragraph each (3.5k → 3.0k characters); rules and the current-time line are unchanged. `AGENT_HISTORY_TURNS` defaults to 30 (was 100), so one request stays inside a 100k-token context window.
