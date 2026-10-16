@@ -19,7 +19,7 @@ The AI service does not create or migrate tables at startup. `ai_request_id` rem
 
 ## Chat context
 
-Each chat turn sends the static system prompt, then the conversation's latest `AGENT_HISTORY_TURNS` owner and assistant exchanges verbatim (default 100 turns, that is 200 messages, oldest first), then the new owner message. Older messages do not reach the model. Nothing is summarized: there is no summary model, no background fold after a turn and no history search tool. Owners chat little, and the chat model handles a 100-turn window comfortably.
+Each chat turn sends the static system prompt, then the conversation's latest `AGENT_HISTORY_TURNS` owner and assistant exchanges verbatim (default 30 turns, that is 60 messages, oldest first), then the new owner message. Older messages do not reach the model. Nothing is summarized: there is no summary model, no background fold after a turn and no history search tool. Owners chat little; 30 turns at the 2000-character input cap keep one request well inside a 100k-token context window.
 
 `AgentConversationRepository.recent_messages(conversation_id, user_id, shop_id, limit)` reads the history. It first checks that the conversation belongs to that user and shop; otherwise the request fails with `404 conversation_not_found`.
 

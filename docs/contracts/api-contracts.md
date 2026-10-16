@@ -502,7 +502,7 @@ Agent có tool nội bộ `query_shop_data` để trả lời câu hỏi về h�
 
 ### Ngữ cảnh chat
 
-Mỗi lượt chat, AI gửi cho model system prompt tĩnh, cuối prompt là giờ hiện tại của tiệm (`Asia/Ho_Chi_Minh`) để model hiểu "hôm nay" hay "tuần trước", sau đó là `AGENT_HISTORY_TURNS` lượt trao đổi gần nhất của hội thoại (mặc định 100 lượt, tức 200 tin nhắn OWNER và ASSISTANT), nguyên văn và xếp từ cũ đến mới, rồi tới tin nhắn mới của OWNER. Tin cũ hơn không tới được model và không được tóm tắt. Không còn bản tóm tắt, không gộp nền sau mỗi lượt và không còn tool tìm lịch sử: OWNER ít chat, còn model chat xử lý thoải mái cửa sổ 100 lượt. Hợp đồng này không đổi request hay response của `/internal/v1/agent/chat`.
+Mỗi lượt chat, AI gửi cho model system prompt tĩnh, cuối prompt là giờ hiện tại của tiệm (`Asia/Ho_Chi_Minh`) để model hiểu "hôm nay" hay "tuần trước", sau đó là `AGENT_HISTORY_TURNS` lượt trao đổi gần nhất của hội thoại (mặc định 30 lượt, tức 60 tin nhắn OWNER và ASSISTANT), nguyên văn và xếp từ cũ đến mới, rồi tới tin nhắn mới của OWNER. Tin cũ hơn không tới được model và không được tóm tắt. Không còn bản tóm tắt, không gộp nền sau mỗi lượt và không còn tool tìm lịch sử: OWNER ít chat; 30 lượt với giới hạn 2000 ký tự mỗi tin giữ một request trong cửa sổ 100k token. Hợp đồng này không đổi request hay response của `/internal/v1/agent/chat`.
 
 ### Stream trả lời chat
 
