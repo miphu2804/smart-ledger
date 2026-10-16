@@ -19,7 +19,8 @@ import { useApp } from '../../src/store/AppStore';
 import { colors } from '../../src/theme';
 
 const weekdayNames = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
-const HEADER_COLLAPSED = 115;
+// Thanh gọn: dòng tiêu đề và doanh thu (38) + 8 + một hàng nút (34) + khoảng đệm dưới
+const HEADER_COLLAPSED = 99;
 const overviewHeaderPurple = '#482AAC';
 type Tab1IconName =
   | 'logo'
@@ -622,8 +623,8 @@ function HomeSectionHeading({ title, side, onPress }: { title: string; side?: st
 
 /**
  * Nút vào nhanh của thanh gọn (đã cuộn). Biểu tượng nằm trên ô nền sáng: ở cỡ nhỏ, phần tím đậm của biểu tượng chìm vào nền
- * tím của thanh nên trông như bị cắt. Biểu tượng ở trên, chữ ở dưới: bốn nút chia nhau bề ngang (khoảng 77 px ở màn 360 px) nên
- * xếp ngang thì chữ "Chọn hàng" bị cắt; chữ không phóng theo cỡ chữ hệ thống quá 1,15 lần.
+ * tím của thanh nên trông như bị cắt. Biểu tượng và chữ cùng một dòng để thanh gọn thấp. Nút rộng theo chữ (không chia đều)
+ * vì "Chọn hàng" dài hơn "Trợ lý" nhiều, nhờ vậy cả bốn vừa màn 360 px; màn hẹp hơn thì chữ tự thu nhỏ, không xuống dòng.
  */
 function CompactAction({
   icon,
@@ -644,16 +645,16 @@ function CompactAction({
       accessibilityLabel={accessibilityLabel ?? label}
     >
       <View style={styles.compactActionIcon}>
-        <Tab1Icon name={icon} size={16} />
+        <Tab1Icon name={icon} size={13} />
       </View>
       <T
         w="semibold"
-        size={10.5}
+        size={11}
         color="#FFFFFF"
         numberOfLines={1}
         adjustsFontSizeToFit
-        minimumFontScale={0.85}
-        maxFontSizeMultiplier={1.15}
+        minimumFontScale={0.8}
+        maxFontSizeMultiplier={1.1}
         style={styles.compactActionLabel}
       >
         {label}
@@ -852,31 +853,35 @@ const styles = StyleSheet.create({
   compactTier2: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     marginTop: 8,
   },
   compactActionBtn: {
-    flex: 1,
-    height: 50,
-    borderRadius: 11,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 'auto',
+    minWidth: 0,
+    height: 34,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.16)',
     backgroundColor: 'transparent',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
-    paddingHorizontal: 3,
+    gap: 4,
+    paddingHorizontal: 4,
   },
   compactActionIcon: {
-    width: 22,
-    height: 22,
-    borderRadius: 7,
+    width: 18,
+    height: 18,
+    borderRadius: 6,
     backgroundColor: 'rgba(255, 255, 255, 0.94)',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
-  compactActionLabel: { maxWidth: '100%', textAlign: 'center' },
+  compactActionLabel: { flexShrink: 1, minWidth: 0 },
   compactActionBtnPressed: {
     opacity: 0.72,
     borderColor: 'rgba(255, 255, 255, 0.35)',
