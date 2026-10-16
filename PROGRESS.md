@@ -1,3 +1,13 @@
+### [2026-10-16 08:30 UTC+07:00] — [Feature] Chat prompts speak as Bobi of Sổ Nghe Lời, query prompt matches the SQL guard
+
+**Done:** The shop chat prompt now introduces the assistant as Bobi of Sổ Nghe Lời (was "SmartLedger's assistant"): Bobi refers to itself as "Bobi", addresses the owner as "anh/chị", leads with the answer, uses today when no period is named, and lists the matches when a product name is ambiguous. The query prompt now lists exactly the functions and casts `SqlGuard` accepts (it omitted CASE, row_number, substring and others), defines today/yesterday/this week/this month in shop time, shows how to fold Vietnamese names for `name_folded`, and adds examples for today, yesterday and revenue per day this month; sums use `coalesce(..., 0)` so an empty period reads as zero sales.
+
+**Changed files:** `backend/ai/src/prompt_templates/shop_agent.py`, `backend/ai/src/prompt_templates/sql_agent.py` — modified; this entry.
+
+**Flow explained:** `AgentService` still joins the static shop prompt, the query prompt, the restock prompt and the memory prompt in that order, then the current time, so the cacheable prefix layout is unchanged.
+
+**Check:** `uv run pytest tests/unit_tests` 319 passed; ruff clean; all 14 example queries and every function named in rule 7 pass `SqlGuard.validate_and_wrap`. **Not verified:** the new examples against staging data, and live replies from the model.
+
 ### [2026-10-15 21:00 UTC+07:00] — [Fix] Notification swipe-to-read works on iOS, unread counts move to pill badges
 
 **Done:** On iOS the swipe-to-read row (#218) did not move at all. `SwipeRow` now refuses to give the gesture back once it has taken a horizontal drag (`onPanResponderTerminationRequest: () => false`). The action is a lighter red that fills the whole revealed area (Gmail style), and the card no longer pads the list vertically so the action meets the rounded corner. The filter pills show unread counts as a badge on the pill corner instead of "· N" text, so a pill no longer grows when it has unread items.
