@@ -10,7 +10,7 @@ Nguồn sơ đồ: [`agent-memory.drawio`](../diagrams/src/agent-memory.drawio),
 
 ## Bối cảnh
 
-- Agent hiện chỉ nhớ trong một hội thoại: mỗi lượt gửi `AGENT_HISTORY_TURNS` lượt gần nhất (mặc định 100), không tóm tắt, không có tool tìm lịch sử ([Ngữ cảnh chat](../../contracts/api-contracts.md#ngữ-cảnh-chat), [AI README](../../../backend/ai/README.md#chat-context)). Thói quen hay sở thích chủ tiệm nói ở hội thoại khác không tới được model.
+- Agent hiện chỉ nhớ trong một hội thoại: mỗi lượt gửi `AGENT_HISTORY_TURNS` lượt gần nhất (mặc định 30), không tóm tắt, không có tool tìm lịch sử ([Ngữ cảnh chat](../../contracts/api-contracts.md#ngữ-cảnh-chat), [AI README](../../../backend/ai/README.md#chat-context)). Thói quen hay sở thích chủ tiệm nói ở hội thoại khác không tới được model.
 - Team đã xem ba lựa chọn "long-term memory" của Tencent. Chỉ một lựa chọn chạy trên PostgreSQL: tính năng Agent Long-Term Memory của TencentDB for PostgreSQL, mô tả trong hướng dẫn chính thức.
 - [ADR-0001](0001-vector-store-pgvector.md) đã chốt: embedding nằm trong PostgreSQL của Supabase, mọi truy vấn vector lọc `shop_id` trong cùng câu SQL.
 - PRD chưa có yêu cầu nào về memory dài hạn. ADR này chỉ ghi phát hiện và hướng kiến trúc để PO quyết định có làm hay không.
