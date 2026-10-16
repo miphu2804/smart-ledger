@@ -16,6 +16,10 @@ import { ApiError, apiRequest, apiStream } from './api';
  * Chat chờ tới 45 giây vì model có thể gọi công cụ đọc dữ liệu tiệm trước khi trả lời.
  */
 const CHAT_TIMEOUT_MS = 45000;
+const MOCK_THINK_MS = 1200;
+const MOCK_TOOL_MS = 1500;
+const MOCK_CHUNK = 12;
+const MOCK_CHUNK_MS = 60;
 
 export const agentApi = {
   /** POST /agent/chat — bỏ `conversation_id` để mở hội thoại mới */
@@ -31,7 +35,7 @@ export const agentApi = {
    * (rỗng khi AI báo `reset`), Promise trả câu cuối từ sự kiện `done`. Sự kiện `error` mang mã lỗi như `chat`.
    * Sự kiện `memory` (trước chữ đầu tiên, chỉ khi trợ lý dùng ghi nhớ) đưa các ghi nhớ đó cho `onMemories`.
    * Sự kiện `tool_start` / `tool_end` (mỗi lần AI gọi tool) đi vào `onTool`; AI chỉ gửi tên tool, không gửi tham số.
-   * Khi bật mock thì hỏi `chat` rồi hiện cả câu một lần.
+   * Khi bật mock thì hỏi `chat` rồi giả lập độ trễ, một bước tool và chữ đến từng đoạn.
    */
   chatStream: async (
     input: AgentChatRequest,
@@ -41,6 +45,16 @@ export const agentApi = {
   ): Promise<AgentChatMessageView> => {
     if (USE_MOCK) {
       const reply = await agentApi.chat(input);
+      // Giả lập một lượt thật để thấy dòng suy nghĩ: chờ model, một bước tool, rồi chữ đến từng đoạn.
+      const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+      await pause(MOCK_THINK_MS);
+      onTool?.({ phase: 'start', callId: 'mock', name: 'query_shop_data' });
+      await pause(MOCK_TOOL_MS);
+      onTool?.({ phase: 'end', callId: 'mock' });
+      for (let end = MOCK_CHUNK; end < reply.answer.length; end += MOCK_CHUNK) {
+        onText(reply.answer.slice(0, end));
+        await pause(MOCK_CHUNK_MS);
+      }
       onText(reply.answer);
       return reply;
     }
