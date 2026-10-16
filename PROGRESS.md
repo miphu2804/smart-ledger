@@ -1,3 +1,11 @@
+### [2026-10-17 00:25 UTC+07:00] — [Fix] Bobi no longer shows the same answer twice
+
+**Done:** After #262 kept the answer a model writes before calling `suggest_screen`, a model that then wrote the same answer again (after the tool returned) had both copies joined, so the chat showed every paragraph twice ("Xóa đơn hàng #225", the matcha latte profit question). A later response that only repeats the kept answer (spacing ignored) is now dropped, both in the stored answer and in the stream; while a response still reads like the start of the kept answer, the stream holds it back until it differs, so nothing is sent and taken back.
+
+**Changed files:** `backend/ai/src/agent/service.py`, `backend/ai/tests/unit_tests/test_screen_buttons.py` — modified; this entry.
+
+**Check:** New tests failed before the fix (answer and stream held the list twice) and pass after; `uv run ruff check`, `uv run ruff format --check`, `uv run pytest -q tests`: 386 passed, 62 skipped. **Not verified:** against the real model on staging.
+
 ### [2026-10-17] — [Fix] Keep Bobi in Vietnamese when the owner asks for another language
 
 **Done:** A chat on staging showed Bobi refusing English, while the memory extractor stored "Chủ shop muốn nhận câu trả lời bằng tiếng Anh." as a preference; from the next turn the memory prompt's "shape every answer by the owner's preferences" switched Bobi to English. The extractor now never stores a wish to change the assistant's language, name or scope, the memory prompt says no fact changes them, and the shop prompt lists language among what the owner cannot change.

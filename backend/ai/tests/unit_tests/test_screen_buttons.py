@@ -176,3 +176,43 @@ async def test_text_before_the_button_call_that_leaks_is_dropped() -> None:
     result = await build_agent(model).chat(user_id=3, shop_id=15, message="m")
 
     assert result.answer == "Còn nợ." + BUTTONS
+
+
+async def test_chat_drops_a_reply_that_repeats_the_answer_before_the_button() -> None:
+    # After suggest_screen returns, models often write the same answer again.
+    model = ScriptedModel(answer_then_button(), LIST)
+
+    result = await build_agent(model).chat(user_id=3, shop_id=15, message="m")
+
+    assert result.answer == LIST + BUTTONS
+
+
+async def test_stream_chat_does_not_send_a_repeated_answer_twice() -> None:
+    model = ScriptedModel(answer_then_button(), answer_then_button(), LIST + "\n")
+
+    events = [
+        event
+        async for event in await build_agent(model).stream_chat(
+            user_id=3, shop_id=15, message="m"
+        )
+    ]
+
+    assert not any(isinstance(event, Reset) for event in events)
+    streamed = "".join(event.text for event in events if isinstance(event, TextDelta))
+    assert streamed == LIST + BUTTONS
+    assert events[-1].result.answer == streamed
+
+
+async def test_a_reply_that_starts_like_the_answer_but_goes_on_is_kept() -> None:
+    model = ScriptedModel(answer_then_button(), LIST + " Bấm nút bên dưới.")
+
+    events = [
+        event
+        async for event in await build_agent(model).stream_chat(
+            user_id=3, shop_id=15, message="m"
+        )
+    ]
+
+    streamed = "".join(event.text for event in events if isinstance(event, TextDelta))
+    assert streamed == LIST + "\n\n" + LIST + " Bấm nút bên dưới." + BUTTONS
+    assert events[-1].result.answer == streamed
