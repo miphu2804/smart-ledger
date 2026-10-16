@@ -43,15 +43,19 @@ public class ZaloRequestLimiter extends OncePerRequestFilter {
     }
 
     @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) { return !PATHS.contains(request.getServletPath().isEmpty()
-            ? request.getRequestURI().substring(request.getContextPath().length()) : request.getServletPath()); }
+    protected boolean shouldNotFilter(HttpServletRequest request) { return !PATHS.contains(endpointPath(request)); }
+
+    private static String endpointPath(HttpServletRequest request) {
+        return request.getServletPath().isEmpty()
+                ? request.getRequestURI().substring(request.getContextPath().length()) : request.getServletPath();
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         response.setHeader("Cache-Control", "no-store");
         // Do not trust client-supplied forwarding headers as an identity/rate-limit key.
-        String key = request.getRequestURI() + ":" + request.getRemoteAddr();
+        String key = endpointPath(request) + ":" + request.getRemoteAddr();
         if (!allow(key)) {
             response.setHeader("Retry-After", "60");
             error(response, 429, ErrorCode.ZALO_RATE_LIMITED);

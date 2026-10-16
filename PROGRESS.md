@@ -1,3 +1,13 @@
+### [2026-10-16] — [Fix] Share Zalo rate quota across equivalent servlet paths
+
+**Done:** Addressed PR #275's new CodeRabbit finding at `ZaloRequestLimiter.java:54`: route matching and quota keys now use one shared endpoint-path helper, retaining the servlet-path fallback that removes the context path. Equivalent raw URI forms no longer select separate quotas for the same endpoint/socket IP.
+
+**Changed files:** `backend/core/src/main/java/com/smartledger/core/zalo/ZaloRequestLimiter.java`, `backend/core/src/test/java/com/smartledger/core/zalo/ZaloRequestLimiterTest.java`, new `backend/core/src/test/java/com/smartledger/core/zalo/ZaloRequestLimiterHttpTest.java`; this new entry. Existing progress history, unrelated local formatting and IDE files are preserved.
+
+**Flow explained:** Tomcat's mapped servlet path is used consistently before Spring Security. Semicolon variants share quota and are still rejected by the unchanged firewall; encoded/plain paths and differing query strings cannot obtain fresh quota. The fixed salted bucket policy, body limit, account/identity behavior, API contract and schema remain unchanged. No FE/AI, security configuration or deployment change.
+
+**Check:** After supplying the isolated HTTP test's mock health contributor, test-first RED produced 9 assertion failures, 0 errors/skips across 18 focused cases. GREEN passes all 13 limiter unit cases and 5 real loopback HTTP cases through Tomcat 10.1.55 and the production Spring Security configuration, including a non-root context path and GET/POST semicolon variants. Java 21 Maven `verify` with JaCoCo on fresh PostgreSQL 16.15 loopback/tmpfs reports **1,295 tests / 93 suites, 0 failures / 0 errors / 0 skipped**. All 13 required PostgreSQL suites and 13 report-gate self-tests pass. Limiter coverage including inner classes: 49/53 lines (92.45%), 19/22 branches (86.36%). Whitespace and scope checks pass. No business/shared DB or real Zalo/Firebase calls; remote CI/review gates remain separate from this local verification.
+
 ### [2026-10-16] — [Chore] Reconcile Zalo branch with staging documentation
 
 **Done:** Integrated staging `ea2c1a0` into `feat/zalo-login`, retaining both sides of the progress history and combining the in-app password requirement with the Zalo login/link requirement. Staging's AC-079/AC-080 remain unchanged; the colliding, not-yet-integrated Zalo LOGIN/LINK criteria are now AC-085/AC-086. Zalo AC-081–084 keep their IDs. Historical entries below retain their original IDs; current references use AC-081–086.

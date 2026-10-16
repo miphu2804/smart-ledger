@@ -18,11 +18,51 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
 class ZaloRequestLimiterTest {
     private static final String EXCHANGE = "/api/v1/auth/zalo/exchange";
+
+    @ParameterizedTest
+    @ValueSource(strings = {"authorize", "callback", "exchange", "link"})
+    void servletPathVariantsShareOneQuotaForEachEndpoint(String endpoint) throws Exception {
+        String path = "/api/v1/auth/zalo/" + endpoint;
+        var limiter = new ZaloRequestLimiter(new ObjectMapper(), new MutableClock(), 1, 4096);
+        var first = request("GET", "/app" + path, new byte[0], false);
+        first.setContextPath("/app");
+        first.setServletPath(path);
+        limiter.doFilter(first, new MockHttpServletResponse(), (r, s) -> {});
+
+        for (String variant : new String[] {path + ";a=1", path + ";a=2",
+                path.replace(endpoint, "%" + Integer.toHexString(endpoint.charAt(0)) + endpoint.substring(1))}) {
+            var request = request("GET", "/app" + variant, new byte[0], false);
+            request.setContextPath("/app");
+            request.setServletPath(path);
+            var response = new MockHttpServletResponse();
+            FilterChain chain = mock(FilterChain.class);
+            limiter.doFilter(request, response, chain);
+            assertThat(response.getStatus()).as(variant).isEqualTo(429);
+            assertThat(response.getContentAsString()).contains("zalo_rate_limited");
+            verifyNoInteractions(chain);
+        }
+    }
+
+    @Test
+    void emptyServletPathFallbackExcludesContextPathFromQuotaKey() throws Exception {
+        var limiter = new ZaloRequestLimiter(new ObjectMapper(), new MutableClock(), 1, 4096);
+        var first = request("GET", "/app" + EXCHANGE, new byte[0], false);
+        first.setContextPath("/app");
+        limiter.doFilter(first, new MockHttpServletResponse(), (r, s) -> {});
+        var second = request("GET", EXCHANGE, new byte[0], false);
+        var response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+        limiter.doFilter(second, response, chain);
+        assertThat(response.getStatus()).isEqualTo(429);
+        verifyNoInteractions(chain);
+    }
 
     @Test
     void rejectsBeforeParsingOrReadingBodyWhenRateExceededAndIgnoresForwardingSpoof() throws Exception {
