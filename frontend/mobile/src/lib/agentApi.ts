@@ -5,6 +5,7 @@ import type {
   AgentConversationView,
   AgentMemorySettings,
   AgentMemoryUsed,
+  AgentToolEvent,
 } from '../data/types';
 import { USE_MOCK } from '../config';
 import { ApiError, apiRequest, apiStream } from './api';
@@ -29,12 +30,14 @@ export const agentApi = {
    * POST /agent/chat/stream — cùng lượt hỏi như `chat` nhưng trả lời dần: `onText` nhận toàn bộ chữ đã tới
    * (rỗng khi AI báo `reset`), Promise trả câu cuối từ sự kiện `done`. Sự kiện `error` mang mã lỗi như `chat`.
    * Sự kiện `memory` (trước chữ đầu tiên, chỉ khi trợ lý dùng ghi nhớ) đưa các ghi nhớ đó cho `onMemories`.
+   * Sự kiện `tool_start` / `tool_end` (mỗi lần AI gọi tool) đi vào `onTool`; AI chỉ gửi tên tool, không gửi tham số.
    * Khi bật mock thì hỏi `chat` rồi hiện cả câu một lần.
    */
   chatStream: async (
     input: AgentChatRequest,
     onText: (text: string) => void,
     onMemories?: (used: AgentMemoryUsed[]) => void,
+    onTool?: (event: AgentToolEvent) => void,
   ): Promise<AgentChatMessageView> => {
     if (USE_MOCK) {
       const reply = await agentApi.chat(input);
@@ -47,6 +50,10 @@ export const agentApi = {
       if (event === 'delta') onText((text += (data as { text: string }).text));
       else if (event === 'reset') onText((text = ''));
       else if (event === 'memory') onMemories?.((data as { used: AgentMemoryUsed[] }).used);
+      else if (event === 'tool_start') {
+        const { call_id, name } = data as { call_id: string; name: string };
+        onTool?.({ phase: 'start', callId: call_id, name });
+      } else if (event === 'tool_end') onTool?.({ phase: 'end', callId: (data as { call_id: string }).call_id });
       else if (event === 'done') reply = data as AgentChatMessageView;
       else if (event === 'error') {
         const code = (data as { detail?: string }).detail ?? 'ai_unavailable';

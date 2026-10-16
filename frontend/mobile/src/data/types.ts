@@ -95,7 +95,18 @@ export interface ChatMessage {
   text: string;
   /** Ghi nhớ trợ lý đã dùng cho câu trả lời này; chỉ có ở lượt vừa chat, không lưu vào lịch sử. */
   memories?: AgentMemoryUsed[];
+  /** Các bước trợ lý đã làm (gọi tool) và thời gian suy nghĩ; chỉ có ở lượt vừa chat có gọi tool, không lưu vào lịch sử. */
+  thought?: { steps: ThoughtStep[]; seconds: number };
 }
+
+/** Một bước trong dòng suy nghĩ, ứng với một lần AI gọi tool (sự kiện `tool_start` / `tool_end`). */
+export interface ThoughtStep {
+  id: string;
+  label: string;
+  done: boolean;
+}
+
+export type AgentToolEvent = { phase: 'start'; callId: string; name: string } | { phase: 'end'; callId: string };
 
 // ---- Trợ lý AI (Agent chat) — khớp docs/contracts/api-contracts.md §5, AI dùng snake_case ----
 export interface AgentChatRequest {

@@ -10,10 +10,10 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChatText, ScreenActions } from '../src/components/ChatText';
+import { ChatText, ScreenActions, StreamingChatText } from '../src/components/ChatText';
 import { BusinessIcon } from '../src/components/icons';
 import { SlingSendButton } from '../src/components/SlingSendButton';
-import { ThinkingStatus } from '../src/components/ThinkingStatus';
+import { ThoughtLine } from '../src/components/ThoughtLine';
 import { VoicePillButton } from '../src/components/VoicePillButton';
 import { Button, Dialog, EmptyState, Field, IconBtn, KEYBOARD_AVOID_BEHAVIOR, Row, Sheet, T, Toggle } from '../src/components/ui';
 import type {
@@ -23,11 +23,13 @@ import type {
   AgentMemoryUsed,
   AgentMessageView,
   ChatMessage,
+  ThoughtStep,
 } from '../src/data/types';
 import { agentApi } from '../src/lib/agentApi';
 import { ApiError } from '../src/lib/api';
 import { splitActions } from '../src/lib/chatMarkdown';
 import { ddmmyyyy, hhmm, relDay } from '../src/lib/format';
+import { applyToolEvent } from '../src/lib/toolSteps';
 import { useApp } from '../src/store/AppStore';
 import { colors, font, shadow } from '../src/theme';
 
@@ -100,12 +102,12 @@ function BobiLabel({
   const [open, setOpen] = useState(false);
   const label = (
     <Row gap={3} style={{ alignItems: 'center' }}>
-      <BusinessIcon size={14} color={colors.brand} offColor={colors.faint} filled={memoryOn || memories.length > 0} />
-      <T w="bold" size={11.5} color={colors.brand} style={{ marginLeft: 3 }}>
+      <BusinessIcon size={19} color={colors.brand} offColor={colors.faint} filled={memoryOn || memories.length > 0} />
+      <T w="bold" size={13.5} color={colors.brand} style={{ marginLeft: 3 }}>
         Trợ lý Bobi
       </T>
       {memories.length > 1 ? (
-        <T w="semibold" size={11.5} color={colors.brand}>
+        <T w="semibold" size={13.5} color={colors.brand}>
           {memories.length}
         </T>
       ) : null}
@@ -165,6 +167,8 @@ export default function Ai() {
   const [typing, setTyping] = useState(false);
   // Chữ trợ lý đang trả lời dở; vào `msgs` khi có sự kiện `done`.
   const [draft, setDraft] = useState('');
+  // Các bước (gọi tool) của lượt đang chạy; vào `thought` của câu trả lời khi có `done`.
+  const [steps, setSteps] = useState<ThoughtStep[]>([]);
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [msgs, setMsgs] = useState<ChatMessage[]>(() => [welcome(app.user.name)]);
@@ -248,10 +252,21 @@ export default function Ai() {
       });
     };
     let memories: AgentMemoryUsed[] = [];
+    let turnSteps: ThoughtStep[] = [];
+    const startedAt = Date.now();
     try {
-      const reply = await agentApi.chatStream({ conversation_id: conversationId, message }, showDraft, (used) => (memories = used));
+      const reply = await agentApi.chatStream(
+        { conversation_id: conversationId, message },
+        showDraft,
+        (used) => (memories = used),
+        (event) => setSteps((turnSteps = applyToolEvent(turnSteps, event))),
+      );
       setConversationId(reply.conversation_id);
-      setMsgs((m) => [...m, { id: `a${reply.message_id}`, from: 'ai', text: reply.answer, memories }]);
+      // Chỉ lượt có gọi tool mới giữ dòng suy nghĩ; lượt trả lời thẳng không cần.
+      const thought = turnSteps.length
+        ? { steps: turnSteps.map((step) => ({ ...step, done: true })), seconds: (Date.now() - startedAt) / 1000 }
+        : undefined;
+      setMsgs((m) => [...m, { id: `a${reply.message_id}`, from: 'ai', text: reply.answer, memories, thought }]);
     } catch (err) {
       if (err instanceof ApiError && err.code === 'conversation_not_found') setConversationId(null);
       // Không mất câu đã gõ: gỡ bong bóng chưa gửi được và trả câu về ô nhập (trừ khi đã gõ câu khác).
@@ -263,6 +278,7 @@ export default function Ai() {
       if (frame !== null) cancelAnimationFrame(frame);
       sending.current = false;
       setDraft('');
+      setSteps([]);
       setTyping(false);
     }
   };
@@ -296,6 +312,11 @@ export default function Ai() {
                         onOpenSource={openSource}
                       />
                     ) : null}
+                    {m.thought ? (
+                      <View style={styles.thought}>
+                        <ThoughtLine working={false} steps={m.thought.steps} elapsed={m.thought.seconds} />
+                      </View>
+                    ) : null}
                     {isUser ? (
                       <T size={13.5} color={colors.white} style={styles.messageText}>
                         {m.text}
@@ -310,16 +331,17 @@ export default function Ai() {
             );
           })}
 
-          {typing && draft ? (
+          {typing ? (
             <View style={styles.messageRow}>
-              <View style={[styles.bubble, styles.assistantBubble]}>
-                <ChatText text={splitActions(draft, true).text} streaming />
-              </View>
-            </View>
-          ) : typing ? (
-            <View style={styles.messageRow}>
-              <View style={[styles.bubble, styles.assistantBubble, styles.typingBubble]}>
-                <ThinkingStatus />
+              <View style={[styles.bubble, styles.assistantBubble, !draft && styles.typingBubble]}>
+                {/* Chờ chữ đầu tiên: chỉ dòng suy nghĩ chạy. Có chữ rồi bong bóng có đủ nhãn Bobi như câu đã lưu, và dòng suy nghĩ chỉ còn khi lượt đã gọi tool, gập lại phía trên chữ. */}
+                {draft ? <BobiLabel memoryOn={memoryOn} memories={[]} currentId={conversationId} onOpenSource={openSource} /> : null}
+                {!draft || steps.length ? (
+                  <View style={draft ? styles.thought : undefined}>
+                    <ThoughtLine working={!draft} steps={steps} />
+                  </View>
+                ) : null}
+                {draft ? <StreamingChatText text={splitActions(draft, true).text} /> : null}
               </View>
             </View>
           ) : null}
@@ -764,6 +786,9 @@ const styles = StyleSheet.create({
   messageText: {
     lineHeight: 20.5,
     flexWrap: 'wrap',
+  },
+  thought: {
+    marginBottom: 8,
   },
   typingBubble: {
     // Rộng hết hàng như bong bóng trả lời, để câu chờ đổi độ dài mà bong bóng không co giãn theo.
