@@ -48,7 +48,7 @@ Hai script build trên máy tự kiểm tra môi trường trước khi build. M
 | `/profile` | Sửa thông tin tiệm (tên, địa chỉ, ngành hàng) lưu lên Core qua `PATCH /api/v1/shops/{shopId}`; họ tên, email, Facebook và tài khoản ngân hàng chỉ lưu trên máy |
 | `/settings` | Âm thanh, rung, đọc lại đơn, tự mở in |
 | `/notifications` | Thông báo trong app |
-| `/ai` | Hỏi đáp với trợ lý qua `src/lib/agentApi.ts` → Core `/api/v1/agent/*`; lịch sử hội thoại. Câu trả lời của trợ lý qua `components/ChatText.tsx`, đọc bằng `lib/chatMarkdown.ts` cho cả chữ đang stream lẫn câu đã lưu: `**đậm**`, `` `mã` ``, tiêu đề, danh sách `-`/`1.`, bảng, khối ```chart (biểu đồ cột/vùng) và khối ```actions (nút mở màn hình theo `SCREEN_LINKS`); ký hiệu khác hiện nguyên chữ. Khi bật mock, `mockCore` trả lời giả; hỏi có chữ "biểu đồ" hoặc "bảng" để xem bảng và biểu đồ |
+| `/ai` | Hỏi đáp với trợ lý qua `src/lib/agentApi.ts` → Core `/api/v1/agent/*`; lịch sử hội thoại. Câu trả lời của trợ lý qua `components/ChatText.tsx`, đọc bằng `lib/chatMarkdown.ts` cho cả chữ đang stream lẫn câu đã lưu: `**đậm**`, `` `mã` ``, tiêu đề, danh sách `-`/`1.`, bảng, khối ```chart (biểu đồ cột/vùng) và khối ```actions (`splitActions` tách khỏi chữ; nút mở màn hình theo `SCREEN_LINKS` hiện ở thẻ riêng dưới bong bóng, chỉ khi câu đã xong); ký hiệu khác hiện nguyên chữ. Khi bật mock, `mockCore` trả lời giả; hỏi có chữ "biểu đồ" hoặc "bảng" để xem bảng và biểu đồ, hỏi "sắp hết hàng" để xem thẻ nút mở màn hình dưới bong bóng |
 | `/printer` | Màn cấu hình máy in K80/K58; chưa có kết nối thiết bị |
 | `/debug` | Chẩn đoán kết nối, chỉ có ở bản dev (xem [Debug](#debug)) |
 

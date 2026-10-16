@@ -197,6 +197,34 @@ function trimGaps(blocks: ChatBlock[]) {
   return blocks;
 }
 
+// Khối ```actions mà AI service gắn cuối câu đã lưu (SCREEN_BUTTONS trong backend/ai/src/agent/service.py).
+const ACTIONS_TAIL = /\n*```actions\n([\s\S]*?)\n```\s*$/;
+// Khi đang stream: khối ```actions ở đầu dòng cuối, kể cả dấu mở đang gõ dở ("`", "``", "```act"…).
+const ACTIONS_STREAMING = /\n+(?:`{1,3}|```a(?:c(?:t(?:i(?:o(?:n(?:s(?:\n[\s\S]*)?)?)?)?)?)?)?)$/;
+
+/** Chữ đang stream bỏ khối ```actions ở cuối; "```" đóng một khối mã đang mở thì giữ. */
+function withoutStreamingActions(text: string) {
+  const match = ACTIONS_STREAMING.exec(text);
+  if (!match) return text;
+  const head = text.slice(0, match.index);
+  const tail = match[0].trim();
+  if (tail === '```' && head.split('\n').filter((line) => FENCE_OPEN.test(line) || FENCE_CLOSE.test(line)).length % 2) {
+    return text;
+  }
+  return head;
+}
+
+/**
+ * Tách nút mở màn hình khỏi nội dung câu trả lời, để nút nằm ở thẻ riêng dưới bong bóng và không
+ * đổi chữ trong bong bóng. Khi `streaming` chỉ bỏ khối ở cuối: nút chỉ hiện khi câu đã xong.
+ */
+export function splitActions(text: string, streaming = false): { text: string; screens: AppScreen[] } {
+  if (streaming) return { text: withoutStreamingActions(text), screens: [] };
+  const match = ACTIONS_TAIL.exec(text);
+  if (!match) return { text, screens: [] };
+  return { text: text.slice(0, match.index), screens: readScreens(match[1]) };
+}
+
 /** Danh sách màn trong khối ```actions; JSON hỏng hoặc màn lạ thì bỏ qua. */
 export function readScreens(body: string): AppScreen[] {
   let raw: unknown;
