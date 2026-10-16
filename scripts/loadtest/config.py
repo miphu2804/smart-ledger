@@ -4,6 +4,7 @@ from writing to or overloading the wrong environment."""
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -40,6 +41,11 @@ class Settings:
     chat_max: int
     confirm_host: str
     allow_production_stress: bool
+    grafana_url: str
+    grafana_user: str
+    grafana_token: str
+    run_id: str
+    summary_file: str
 
 
 def load() -> Settings:
@@ -59,6 +65,12 @@ def load() -> Settings:
         chat_max=_int("CHAT_MAX_REQUESTS", 0),
         confirm_host=os.getenv("LOADTEST_CONFIRM_HOST", "").strip(),
         allow_production_stress=_flag("LOADTEST_ALLOW_PRODUCTION_STRESS"),
+        grafana_url=os.getenv("GRAFANA_PUSH_URL", "").strip(),
+        grafana_user=os.getenv("GRAFANA_PUSH_USER", "").strip(),
+        grafana_token=os.getenv("GRAFANA_PUSH_TOKEN", "").strip(),
+        # Labels every pushed series, so one run can be picked out on the dashboard.
+        run_id=os.getenv("LOADTEST_RUN_ID", "").strip() or time.strftime("%Y%m%d-%H%M%S"),
+        summary_file=os.getenv("SUMMARY_FILE", "").strip(),
     )
 
 
@@ -75,6 +87,11 @@ def check(settings: Settings, host: str | None) -> list[str]:
         problems.append("FIREBASE_API_KEY is required when AUTH_MODE=firebase")
     if settings.think_min < 0 or settings.think_max < settings.think_min:
         problems.append("THINK_MIN_SECONDS/THINK_MAX_SECONDS must satisfy 0 <= min <= max")
+    grafana = (settings.grafana_url, settings.grafana_user, settings.grafana_token)
+    if any(grafana) and not all(grafana):
+        problems.append(
+            "set all of GRAFANA_PUSH_URL, GRAFANA_PUSH_USER, GRAFANA_PUSH_TOKEN or none of them"
+        )
     if settings.chat_users > 0 and settings.chat_max <= 0:
         problems.append("CHAT_USERS > 0 needs CHAT_MAX_REQUESTS > 0 to cap model spend")
     if not host:

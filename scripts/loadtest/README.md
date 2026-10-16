@@ -10,7 +10,7 @@ uv sync
 cp accounts.example.csv accounts.csv   # test OWNER accounts, never real shops
 ```
 
-Each account in `accounts.csv` needs an Email/Password Firebase user in the target environment's project, a Core profile and one `ACTIVE` shop. The run opens a Core session per Locust user (`POST /api/v1/auth/session`) and uses the first `ACTIVE` shop. Use at least one account per ten users; for write runs, one account per user, because users sharing a shop also share its row locks. `accounts.csv` is git-ignored.
+Each account in `accounts.csv` needs an Email/Password Firebase user in the target environment's project, a Core profile and one `ACTIVE` shop. The run opens a Core session per Locust user (`POST /api/v1/auth/session`) and uses the first `ACTIVE` shop. Use at least one account per ten users; for write runs, one account per user, because users sharing a shop also share its row locks. `accounts.csv` is git-ignored. Give test accounts emails starting with `loadtest+` so the DAU query in [`activity.sql`](../monitor/activity.sql) leaves them out.
 
 `FIREBASE_API_KEY` is the Web API key of that Firebase project (the same value as `EXPO_PUBLIC_FIREBASE_API_KEY`). Tokens are fetched once per account and refreshed before they expire; Firebase calls are not counted in the results.
 
@@ -36,6 +36,17 @@ TARGET_ENV=staging FIREBASE_API_KEY=... uv run locust -H https://core-staging-01
 ```
 
 The exit code is `1` when the SLO gate fails, `2` when the settings are refused, so a CI job can use it.
+
+### In CI and Grafana
+
+Staging and production runs go through Actions → **Load test** ([`load-test.yml`](../../.github/workflows/load-test.yml)), which takes accounts, keys and the Core URL from the `loadtest-<env>` GitHub Environment and keeps `reports/` as an artifact for 90 days. On production it asks for the Core URL as `confirm_host` and never runs `stress` or `spike`. Setup and where results show up: [Where to watch](../../docs/development/load-testing-and-monitoring.md#where-to-watch).
+
+| Variable | Effect |
+|---|---|
+| `GRAFANA_PUSH_URL`, `GRAFANA_PUSH_USER`, `GRAFANA_PUSH_TOKEN` | Push users, req/s, p95 and failure ratio to Grafana Cloud every 5 s. Set all three or none; a failed push only logs a warning |
+| `LOADTEST_RUN_ID` | Label for this run on the dashboard; defaults to the start time |
+| `SUMMARY_FILE` | Writes the SLO verdicts, stage results, commit and runner-to-Core RTT as JSON |
+| `GITHUB_STEP_SUMMARY` | Set by GitHub Actions; the SLO table is appended to the job summary |
 
 | `LOAD_PROFILE` | Shape | Answers |
 |---|---|---|

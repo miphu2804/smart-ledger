@@ -6,12 +6,17 @@ run refuses to start until TARGET_ENV, --host and the test accounts are set."""
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import statistics
 import sys
+import time
 import uuid
+from dataclasses import asdict
 
 import gevent
+import requests
 from gevent.lock import Semaphore
 from locust import HttpUser, LoadTestShape, between, events, task
 from locust.exception import StopUser
@@ -20,17 +25,19 @@ from locust.runners import WorkerRunner
 import config
 import slo
 from auth import AuthError, TokenPool
+from grafana_push import GrafanaPusher
 from shapes import TRACKER, build_stages
 
 logger = logging.getLogger("loadtest")
 SETTINGS = config.load()
 POOL: TokenPool | None = None
+RTT_MS: float | None = None
 API = "/api/v1"
 
 
 @events.init.add_listener
 def _check_settings(environment, **_kwargs) -> None:
-    global POOL
+    global POOL, RTT_MS
     problems = config.check(SETTINGS, environment.host)
     if problems:
         for problem in problems:
@@ -53,6 +60,34 @@ def _check_settings(environment, **_kwargs) -> None:
         SETTINGS.writes,
         SETTINGS.chat_users,
     )
+    if isinstance(environment.runner, WorkerRunner):
+        return
+    RTT_MS = _measure_rtt_ms(environment.host)
+    rtt = "n/a" if RTT_MS is None else f"{RTT_MS:.0f}"
+    logger.info("run_id=%s rtt=%s ms", SETTINGS.run_id, rtt)
+    if SETTINGS.grafana_url:
+        labels = {
+            "env": SETTINGS.target_env,
+            "profile": SETTINGS.profile,
+            "run_id": SETTINGS.run_id,
+        }
+        GrafanaPusher(
+            SETTINGS.grafana_url, SETTINGS.grafana_user, SETTINGS.grafana_token, labels
+        ).start(environment)
+
+
+def _measure_rtt_ms(host: str) -> float | None:
+    """Median round trip to Core liveness. Every p95 measured from a distant runner
+    includes it, so the summary records it for whoever compares runs."""
+    samples = []
+    for _ in range(5):
+        start = time.perf_counter()
+        try:
+            requests.get(f"{host.rstrip('/')}/actuator/health/liveness", timeout=5)
+        except requests.RequestException:
+            continue
+        samples.append((time.perf_counter() - start) * 1000)
+    return statistics.median(samples) if samples else None
 
 
 @events.quitting.add_listener
@@ -76,9 +111,33 @@ def _slo_gate(environment, **_kwargs) -> None:
     if TRACKER.stopped_reason:
         logger.info("stress stopped: %s", TRACKER.stopped_reason)
     print(slo.report(verdicts, passed, environment.stats.total))
+    if SETTINGS.summary_file:
+        _write_summary(environment.host, verdicts, passed)
+    step_summary = os.getenv("GITHUB_STEP_SUMMARY")
+    if step_summary:
+        with open(step_summary, "a", encoding="utf-8") as handle:
+            handle.write(slo.markdown(verdicts, passed, SETTINGS.run_id, RTT_MS))
     # The gate decides the exit code; Locust alone would exit 1 on any failed request,
     # even when the failure ratio is inside the SLO.
     environment.process_exit_code = 0 if passed else 1
+
+
+def _write_summary(host: str, verdicts, passed: bool) -> None:
+    """One JSON file per run, kept as a CI artifact after Grafana's retention ends."""
+    summary = {
+        "run_id": SETTINGS.run_id,
+        "target_env": SETTINGS.target_env,
+        "host": host,
+        "profile": SETTINGS.profile,
+        "commit": os.getenv("GITHUB_SHA", ""),
+        "rtt_ms": RTT_MS,
+        "passed": passed,
+        "stopped_reason": TRACKER.stopped_reason,
+        "stages": [asdict(step) for step in TRACKER.results],
+        "verdicts": [asdict(verdict) for verdict in verdicts],
+    }
+    with open(SETTINGS.summary_file, "w", encoding="utf-8") as handle:
+        json.dump(summary, handle, indent=2)
 
 
 class OwnerSession:

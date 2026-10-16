@@ -91,3 +91,24 @@ def report(verdicts: list[Verdict], passed: bool, total) -> str:
     )
     lines.append(f"result: {'PASS' if passed else 'FAIL'}")
     return "\n".join(lines)
+
+
+def markdown(verdicts: list[Verdict], passed: bool, run_id: str, rtt_ms: float | None) -> str:
+    """The same gate as a GitHub job summary table."""
+    rtt = "n/a" if rtt_ms is None else f"{rtt_ms:.0f} ms"
+    lines = [
+        f"### Load test `{run_id}`: {'PASS' if passed else 'FAIL'}",
+        "",
+        f"Round trip from the runner to Core: {rtt} (included in every p95 below).",
+        "",
+        "| status | reqs | fail % | p95 ms | limit | name |",
+        "|---|---:|---:|---:|---:|---|",
+    ]
+    for v in verdicts:
+        p95 = "n/a" if v.p95_ms is None else f"{v.p95_ms:.0f}"
+        limit = "-" if v.limit_ms is None else str(v.limit_ms)
+        lines.append(
+            f"| {v.status} | {v.requests} | {v.fail_ratio * 100:.2f} | {p95} | {limit}"
+            f" | `{v.method} {v.name}` |"
+        )
+    return "\n".join(lines) + "\n"
