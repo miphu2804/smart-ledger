@@ -1,3 +1,15 @@
+### [2026-10-16 19:53 UTC+07:00] — [Fix] Debt repayment in two steps; "Dùng tài khoản khác" on the name step; Bobi hint no longer cut
+
+**Done:** The debt sheet showed the amount field, the cash/transfer choice and both buttons at once, and "Trả hết" recorded the whole balance on a single tap. It now opens with two buttons under "Khách trả nợ": "Trả một phần" shows the amount field ("Còn nợ …" as placeholder, an error when the amount is above the balance), the payment method and "Quay lại" / "Ghi nhận …"; after recording, the sheet returns to the two buttons. "Trả đủ" opens "Khách trả đủ nợ?" with the customer, amount, sale number and payment method; "Huỷ" records nothing and "Xác nhận đã trả" settles the debt. `AC-075` describes the two steps.
+
+On "Bạn tên gì?" the link "Dùng số điện thoại khác" is now "Dùng tài khoản khác", like on shop setup: sign-in by phone number is gone and the link just signs out to pick another account.
+
+A tester's phone showed the "Giữ để đọc đơn" hint beside Bobi cut to "Giữ để đọc đơ": the bubble started a fixed 94 px left of Bobi, so its end slid under Bobi, more so with large system text. The bubble is now anchored by its right edge 8 px from Bobi (by its left edge when Bobi sits on the left), stays on one line and stops growing at 1.3× system text.
+
+**Changed files:** `frontend/mobile/app/debts.tsx`, `frontend/mobile/app/(auth)/profile.tsx`, `frontend/mobile/src/components/ZenRing.tsx`, `docs/product/product-requirements.md` (`AC-075`) — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors; mock web build in headless Chrome (7/7): the sheet opens with only the two buttons and no amount field; "Trả một phần" shows the field and "Quay lại"; an amount above the balance is flagged; recording 10.000đ of 379.000đ leaves 369.000đ and returns to the two buttons; "Trả đủ" asks "Khách trả đủ nợ?", "Huỷ" keeps 369.000đ, "Xác nhận đã trả" leaves 0đ and "Khách đã trả đủ"; the hint bubble ends 8 px left of Bobi with its text uncut, also with the hint text at 15.6 px (4/4). **Not verified:** a real phone against staging Core.
+
 ### [2026-10-16 18:26 UTC+07:00] — [Fix] Guide pictures for Bán hàng and Quản lý match the app
 
 **Done:** In the guide pictures from #274, the Bán hàng phone highlighted "Quản lý" in the tab bar and its bar ran past the screen, and the Quản lý phone lacked the "Xem lại hướng dẫn" row (#257) while its notes had a garbled character in "số lượng" and wrote "Quản lí". The Quản lý phone screen is now a capture of the real tab from the mock web build (same sample shop and numbers), with the floating Bobi and the version line hidden; the arrows that ended inside the old screen are redrawn to the same rows, and the Hàng hoá, Chi phí and Công nợ notes are rewritten in Plus Jakarta Sans. The Bán hàng phone keeps its screen but gets the real tab bar with "Bán hàng" highlighted. Same 1672 × 941 size; the bobi and overview pictures are unchanged. The manage picture's accessibility label lists the new row.
