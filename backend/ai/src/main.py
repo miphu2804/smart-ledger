@@ -1,4 +1,5 @@
 import logging
+import sys
 from contextlib import asynccontextmanager
 
 import pydantic_ai
@@ -26,6 +27,8 @@ from src.sql.repository import ShopDataRepository
 logging.basicConfig(
     level=getattr(logging, app_config.LOG_LEVEL.upper(), logging.INFO),
     format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+    # Railway marks every stderr line as an error, whatever its level.
+    stream=sys.stdout,
 )
 logger = logging.getLogger(__name__)
 # stdout is the log contract, so Pydantic AI's one-off observability promo stays out.
@@ -192,4 +195,6 @@ if __name__ == "__main__":
         app,
         host=app_config.SERVER_HOST,
         port=app_config.SERVER_PORT,
+        # Uvicorn's own config logs to stderr; reuse the stdout root handler.
+        log_config=None,
     )
