@@ -95,11 +95,9 @@ export interface ChatMessage {
   text: string;
   /** Ghi nhớ trợ lý đã dùng cho câu trả lời này; chỉ có ở lượt vừa chat, không lưu vào lịch sử. */
   memories?: AgentMemoryUsed[];
-  /** Các bước trợ lý đã làm (gọi tool) và thời gian suy nghĩ; chỉ có ở lượt vừa chat có gọi tool, không lưu vào lịch sử. */
-  thought?: { steps: ThoughtStep[]; seconds: number };
 }
 
-/** Một bước trong dòng suy nghĩ, ứng với một lần AI gọi tool (sự kiện `tool_start` / `tool_end`). */
+/** Một bước trong dòng suy nghĩ lúc chờ trả lời, ứng với một lần AI gọi tool (sự kiện `tool_start` / `tool_end`). */
 export interface ThoughtStep {
   id: string;
   label: string;

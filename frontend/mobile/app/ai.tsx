@@ -167,7 +167,7 @@ export default function Ai() {
   const [typing, setTyping] = useState(false);
   // Chữ trợ lý đang trả lời dở; vào `msgs` khi có sự kiện `done`.
   const [draft, setDraft] = useState('');
-  // Các bước (gọi tool) của lượt đang chạy; vào `thought` của câu trả lời khi có `done`.
+  // Các bước (gọi tool) của lượt đang chạy, hiện trong bong bóng chờ cho tới khi chữ đầu tiên tới.
   const [steps, setSteps] = useState<ThoughtStep[]>([]);
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -253,7 +253,6 @@ export default function Ai() {
     };
     let memories: AgentMemoryUsed[] = [];
     let turnSteps: ThoughtStep[] = [];
-    const startedAt = Date.now();
     try {
       const reply = await agentApi.chatStream(
         { conversation_id: conversationId, message },
@@ -262,11 +261,7 @@ export default function Ai() {
         (event) => setSteps((turnSteps = applyToolEvent(turnSteps, event))),
       );
       setConversationId(reply.conversation_id);
-      // Chỉ lượt có gọi tool mới giữ dòng suy nghĩ; lượt trả lời thẳng không cần.
-      const thought = turnSteps.length
-        ? { steps: turnSteps.map((step) => ({ ...step, done: true })), seconds: (Date.now() - startedAt) / 1000 }
-        : undefined;
-      setMsgs((m) => [...m, { id: `a${reply.message_id}`, from: 'ai', text: reply.answer, memories, thought }]);
+      setMsgs((m) => [...m, { id: `a${reply.message_id}`, from: 'ai', text: reply.answer, memories }]);
     } catch (err) {
       if (err instanceof ApiError && err.code === 'conversation_not_found') setConversationId(null);
       // Không mất câu đã gõ: gỡ bong bóng chưa gửi được và trả câu về ô nhập (trừ khi đã gõ câu khác).
@@ -312,11 +307,6 @@ export default function Ai() {
                         onOpenSource={openSource}
                       />
                     ) : null}
-                    {m.thought ? (
-                      <View style={styles.thought}>
-                        <ThoughtLine working={false} steps={m.thought.steps} elapsed={m.thought.seconds} />
-                      </View>
-                    ) : null}
                     {isUser ? (
                       <T size={13.5} color={colors.white} style={styles.messageText}>
                         {m.text}
@@ -331,18 +321,19 @@ export default function Ai() {
             );
           })}
 
+          {/* Chờ chữ đầu tiên: bong bóng chỉ có dòng suy nghĩ. Có chữ rồi bong bóng đó biến mất, câu trả lời stream trong bong bóng riêng có nhãn Bobi như câu đã lưu. */}
           {typing ? (
             <View style={styles.messageRow}>
-              <View style={[styles.bubble, styles.assistantBubble, !draft && styles.typingBubble]}>
-                {/* Chờ chữ đầu tiên: chỉ dòng suy nghĩ chạy. Có chữ rồi bong bóng có đủ nhãn Bobi như câu đã lưu, và dòng suy nghĩ chỉ còn khi lượt đã gọi tool, gập lại phía trên chữ. */}
-                {draft ? <BobiLabel memoryOn={memoryOn} memories={[]} currentId={conversationId} onOpenSource={openSource} /> : null}
-                {!draft || steps.length ? (
-                  <View style={draft ? styles.thought : undefined}>
-                    <ThoughtLine working={!draft} steps={steps} />
-                  </View>
-                ) : null}
-                {draft ? <StreamingChatText text={splitActions(draft, true).text} /> : null}
-              </View>
+              {draft ? (
+                <View style={[styles.bubble, styles.assistantBubble]}>
+                  <BobiLabel memoryOn={memoryOn} memories={[]} currentId={conversationId} onOpenSource={openSource} />
+                  <StreamingChatText text={splitActions(draft, true).text} />
+                </View>
+              ) : (
+                <View style={[styles.bubble, styles.assistantBubble, styles.typingBubble]}>
+                  <ThoughtLine steps={steps} />
+                </View>
+              )}
             </View>
           ) : null}
         </View>
@@ -786,9 +777,6 @@ const styles = StyleSheet.create({
   messageText: {
     lineHeight: 20.5,
     flexWrap: 'wrap',
-  },
-  thought: {
-    marginBottom: 8,
   },
   typingBubble: {
     // Rộng hết hàng như bong bóng trả lời, để câu chờ đổi độ dài mà bong bóng không co giãn theo.

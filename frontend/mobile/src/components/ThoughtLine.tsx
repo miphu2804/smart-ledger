@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, Platform, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import type { ThoughtStep } from '../data/types';
 import { nextThinkingPhrase } from '../lib/thinkingPhrases';
 import { colors } from '../theme';
@@ -12,7 +12,6 @@ const ORBIT = [0, 1, 2, 7, null, 3, 6, 5, 4];
 const CYCLE_STEPS = 8;
 const CYCLE_MS = 864;
 const IDLE = 0.15;
-const SETTLED = 0.55;
 const DOT = 6;
 const GAP = 2;
 const GRID = DOT * 3 + GAP * 2;
@@ -27,46 +26,36 @@ const USE_NATIVE = Platform.OS !== 'web';
 const MONO = Platform.select({ ios: 'Menlo', default: 'monospace' });
 
 interface ThoughtLineProps {
-  /** Còn đang chờ trợ lý: lưới chạy, đồng hồ đếm, câu chờ đổi. Hết việc thì gập thành "Đã suy nghĩ". */
-  working: boolean;
-  /** Các bước trợ lý đã và đang làm; mở ra khi đang làm, gập lại khi xong, chạm tiêu đề để mở lại. */
+  /** Các bước trợ lý đang làm (mỗi lần gọi tool một bước): bước đã xong có dấu tick, bước đang chạy có chấm. */
   steps?: ThoughtStep[];
-  /** Giây đã suy nghĩ của lượt đã xong; bỏ trống thì đồng hồ tự đếm từ lúc dòng này hiện. */
-  elapsed?: number;
   color?: string;
 }
 
 /**
- * Dòng suy nghĩ của trợ lý, theo "Thought Line" của React Bits: tiêu đề có đồng hồ, kèm các bước đã làm,
- * gập thành một dòng khi xong. Ngôi sao của mẫu gốc được thay bằng lưới chấm của LatticeLoader.
+ * Dòng suy nghĩ của trợ lý lúc chờ câu trả lời, theo "Thought Line" của React Bits: lưới chấm chạy, câu chờ
+ * đổi dần, đồng hồ đếm, kèm các bước đang làm. Ngôi sao của mẫu gốc được thay bằng lưới chấm của LatticeLoader.
+ * Có chữ đầu tiên thì màn chat bỏ cả bong bóng này.
  */
-export function ThoughtLine({ working, steps = [], elapsed, color = colors.brand }: ThoughtLineProps) {
+export function ThoughtLine({ steps = [], color = colors.brand }: ThoughtLineProps) {
   const [phrase, setPhrase] = useState(() => nextThinkingPhrase());
-  const [tenths, setTenths] = useState(() => Math.round((elapsed ?? 0) * 10));
-  const [open, setOpen] = useState(working);
+  const [tenths, setTenths] = useState(0);
   const clock = useRef(new Animated.Value(0)).current;
-  // Giữ qua các lần `working` đổi: lượt có tool bị `reset` rồi chạy lại vẫn tính từ lúc đầu.
-  const startedAt = useRef(Date.now() - (elapsed ?? 0) * 1000);
   // Đồng hồ render lại 10 lần/giây: dựng node animation một lần thay vì mỗi lần render.
   const opacities = useMemo(() => ORBIT.map((delay) => (delay == null ? IDLE * 0.47 : dotOpacity(clock, delay))), [clock]);
 
   useEffect(() => {
-    if (!working) {
-      setOpen(false);
-      return;
-    }
-    setOpen(true);
     let loop: Animated.CompositeAnimation | null = null;
     let cancelled = false;
     // Người bật giảm chuyển động chỉ thấy lưới đứng yên; chữ và đồng hồ vẫn chạy.
     AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
       if (cancelled || reduce) return;
       loop = Animated.loop(
-        Animated.timing(clock, { toValue: 1, duration: CYCLE_MS, easing: Easing.linear, useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(clock, { toValue: 1, duration: CYCLE_MS, easing: Easing.linear, useNativeDriver: USE_NATIVE }),
       );
       loop.start();
     });
-    const timer = setInterval(() => setTenths(Math.floor((Date.now() - startedAt.current) / 100)), 100);
+    const startedAt = Date.now();
+    const timer = setInterval(() => setTenths(Math.floor((Date.now() - startedAt) / 100)), 100);
     const rotate = setInterval(() => setPhrase((current) => nextThinkingPhrase(current)), PHRASE_MS);
     return () => {
       cancelled = true;
@@ -74,44 +63,25 @@ export function ThoughtLine({ working, steps = [], elapsed, color = colors.brand
       clearInterval(timer);
       clearInterval(rotate);
     };
-  }, [working, clock]);
+  }, [clock]);
 
-  const hasSteps = steps.length > 0;
-  const time = elapsedText(tenths);
   return (
-    <View>
-      <Pressable
-        disabled={!hasSteps}
-        onPress={() => setOpen((value) => !value)}
-        style={styles.row}
-        accessibilityRole={hasSteps ? 'button' : 'progressbar'}
-        accessibilityState={hasSteps ? { expanded: open } : undefined}
-        accessibilityLabel={working ? 'Trợ lý đang suy nghĩ' : `Đã suy nghĩ ${time}`}
-      >
+    <View accessibilityRole="progressbar" accessibilityLabel="Trợ lý đang suy nghĩ">
+      <View style={styles.row}>
         <View style={styles.grid}>
           {ORBIT.map((delay, i) => (
-            <Animated.View
-              key={i}
-              style={[styles.dot, { backgroundColor: color, opacity: working ? opacities[i] : delay == null ? IDLE * 0.47 : SETTLED }]}
-            />
+            <Animated.View key={i} style={[styles.dot, { backgroundColor: color, opacity: opacities[i] }]} />
           ))}
         </View>
-        {/* Đổi câu chờ hay gập lại thành "Đã suy nghĩ" thì nhãn trượt lên và hiện dần. */}
-        <SlideIn trigger={working ? phrase : 'settled'} style={styles.label}>
-          {working ? (
-            <ShimmerText text={phrase} color={colors.ink} />
-          ) : (
-            <T w="semibold" size={13} color={colors.muted} numberOfLines={1}>
-              Đã suy nghĩ
-            </T>
-          )}
+        {/* Đổi câu chờ thì nhãn trượt lên và hiện dần. */}
+        <SlideIn trigger={phrase} style={styles.label}>
+          <ShimmerText text={phrase} color={colors.ink} />
         </SlideIn>
         <T w="medium" size={11.5} color={colors.faint} style={{ fontFamily: MONO }}>
-          {time}
+          {elapsedText(tenths)}
         </T>
-        {hasSteps ? <Feather name={open ? 'chevron-up' : 'chevron-down'} size={13} color={colors.faint} /> : null}
-      </Pressable>
-      {open && hasSteps ? (
+      </View>
+      {steps.length ? (
         <View style={styles.steps}>
           {steps.map((step) => (
             <SlideIn key={step.id} trigger={step.id} style={styles.step}>
