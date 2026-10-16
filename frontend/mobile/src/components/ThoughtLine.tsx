@@ -45,6 +45,7 @@ export function ThoughtLine({ steps = [], color = colors.brand }: ThoughtLinePro
   const clock = useRef(new Animated.Value(0)).current;
   // Đồng hồ render lại 10 lần/giây: dựng node animation một lần thay vì mỗi lần render.
   const opacities = useMemo(() => ORBIT.map((delay) => (delay == null ? IDLE * 0.47 : dotOpacity(clock, delay))), [clock]);
+  const current = steps[steps.length - 1];
 
   useEffect(() => {
     let loop: Animated.CompositeAnimation | null = null;
@@ -76,20 +77,19 @@ export function ThoughtLine({ steps = [], color = colors.brand }: ThoughtLinePro
             <Animated.View key={i} style={[styles.dot, { backgroundColor: color, opacity: opacities[i] }]} />
           ))}
         </View>
-        {/* Có bước tool thì bước thế chỗ câu chờ: mỗi lúc chỉ một việc đang làm hiện ở ô đầu hàng. */}
-        {steps.length ? null : (
+        {/* Mỗi lúc chỉ một việc ở ô đầu hàng: bước tool mới nhất thế chỗ câu chờ và bước trước nó. */}
+        {current ? (
+          <SlideIn key={current.id} trigger={current.id} style={styles.step}>
+            <View style={styles.mark}>
+              {current.done ? <Feather name="check" size={11} color={colors.faint} /> : <View style={[styles.running, { backgroundColor: color }]} />}
+            </View>
+            <StreamedLabel text={current.label} shimmer={!current.done} color={current.done ? colors.faint : colors.muted} />
+          </SlideIn>
+        ) : (
           <SlideIn trigger={phrase} style={styles.label}>
             <ShimmerText text={phrase} color={colors.ink} />
           </SlideIn>
         )}
-        {steps.map((step) => (
-          <SlideIn key={step.id} trigger={step.id} style={styles.step}>
-            <View style={styles.mark}>
-              {step.done ? <Feather name="check" size={11} color={colors.faint} /> : <View style={[styles.running, { backgroundColor: color }]} />}
-            </View>
-            <StreamedLabel text={step.label} color={step.done ? colors.faint : colors.muted} />
-          </SlideIn>
-        ))}
         <T w="medium" size={11.5} color={colors.faint} style={{ fontFamily: MONO }}>
           {elapsedText(tenths)}
         </T>
@@ -114,10 +114,15 @@ function SlideIn({ trigger, style, children }: { trigger: string; style?: StyleP
  * đoạn Text lồng nhau; mỗi chữ dựng sẵn đường nội suy theo vị trí của nó nên chạy được bằng native driver.
  */
 function ShimmerText({ text, color }: { text: string; color: string }) {
-  const sweep = useRef(new Animated.Value(0)).current;
+  const sweep = useSweep();
   const chars = useMemo(() => Array.from(text), [text]);
   const opacities = useMemo(() => chars.map((_, i) => charOpacity(sweep, i / Math.max(chars.length - 1, 1))), [chars, sweep]);
+  return <CharRun chars={chars} opacities={opacities} w="semibold" size={13} color={color} />;
+}
 
+/** Nhịp quét sáng lặp mãi của nhãn; người bật giảm chuyển động thì dải sáng đứng yên. */
+function useSweep() {
+  const sweep = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     let loop: Animated.CompositeAnimation | null = null;
     let cancelled = false;
@@ -131,27 +136,29 @@ function ShimmerText({ text, color }: { text: string; color: string }) {
       loop?.stop();
     };
   }, [sweep]);
-
-  return <CharRun chars={chars} opacities={opacities} w="semibold" size={13} color={color} />;
+  return sweep;
 }
 
 /**
  * Nhãn của bước đang làm, chạy chữ dần như đang được gõ ra. Mọi chữ đã nằm sẵn trong hàng nên bề rộng
  * không đổi: bong bóng và đồng hồ không nhảy theo từng chữ, chỉ độ hiện của từng chữ tăng dần.
+ * Bước còn chạy thì có thêm dải sáng quét qua như câu chờ; bước xong thì chữ đứng yên.
  */
-function StreamedLabel({ text, color }: { text: string; color: string }) {
+function StreamedLabel({ text, color, shimmer }: { text: string; color: string; shimmer: boolean }) {
   const progress = useRef(new Animated.Value(0)).current;
+  const sweep = useSweep();
   const chars = useMemo(() => Array.from(text), [text]);
   const opacities = useMemo(
     () =>
-      chars.map((_, i) =>
-        progress.interpolate({
+      chars.map((_, i) => {
+        const typed = progress.interpolate({
           inputRange: [i / chars.length, (i + 1) / chars.length],
           outputRange: [0, 1],
           extrapolate: 'clamp',
-        }),
-      ),
-    [chars, progress],
+        });
+        return shimmer ? Animated.multiply(typed, charOpacity(sweep, i / Math.max(chars.length - 1, 1))) : typed;
+      }),
+    [chars, progress, sweep, shimmer],
   );
 
   useEffect(() => {
@@ -173,7 +180,7 @@ function CharRun({
   ...text
 }: {
   chars: string[];
-  opacities: Animated.AnimatedInterpolation<number>[];
+  opacities: Animated.AnimatedInterpolation<number>[] | Animated.AnimatedMultiplication<number>[];
 } & React.ComponentProps<typeof T>) {
   return (
     <View style={styles.shimmer}>
@@ -227,7 +234,7 @@ function elapsedText(tenths: number) {
 }
 
 const styles = StyleSheet.create({
-  // Câu chờ, các bước và đồng hồ chung một hàng; hết chỗ thì bước xuống dòng.
+  // Câu chờ (hoặc bước đang làm) và đồng hồ chung một hàng.
   row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 9, rowGap: 4 },
   grid: { width: GRID, flexDirection: 'row', flexWrap: 'wrap', gap: GAP },
   dot: { width: DOT, height: DOT, borderRadius: DOT / 2 },

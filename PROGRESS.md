@@ -1,3 +1,13 @@
+### [2026-10-16] — [Mobile] Thought line shows only the latest tool step, with shimmer
+
+**Done:** `ThoughtLine` now shows one step at a time: each new tool call replaces the waiting phrase or the step before it instead of lining up beside it. A running step's label types in and then gets the same shimmer sweep as the waiting phrase; a finished step stays still in the faint color with a tick.
+
+**Changed files:** `frontend/mobile/src/components/ThoughtLine.tsx` — modified; this entry.
+
+**Flow explained:** tool `start` → the step slides in and its label types in with shimmer → tool `end` → tick, shimmer stops → next tool `start` → the new step replaces it.
+
+**Check:** `tsc --noEmit` clean, `npm test` 107 passed. **Not verified:** on a device or in the Expo web build.
+
 ### [2026-10-16 15:25 UTC+07:00] — [CI] CI runs only the jobs whose area changed
 
 **Done:** New job `changes` in `ci.yml` (`dorny/paths-filter@v4.0.3`) marks which of `ai`, `core`, `mobile`, `landing`, `containers` a pull request or push touched. Each test job, `deploy-web` and `deploy-landing` run only for their area; `deploy` runs when `ai` or `core` changed and deploys only the changed service. Skipped jobs count as passed, so required checks and the `mobile-release.yml` gate still work. A change to `ci.yml` runs everything. It replaces the landing-only `Detect landing changes` step, and keeps its rule that a re-run always deploys, now for every deploy job.
