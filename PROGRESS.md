@@ -1,3 +1,11 @@
+### [2026-10-16 19:41 UTC+07:00] — [Fix] AI logs no longer show as errors on Railway
+
+**Done:** Railway's Error logs panel listed AI INFO lines such as httpx's `"HTTP/1.1 200 OK"`, because Railway marks every stderr line as an error and `logging.basicConfig` writes to stderr by default; uvicorn's own log config also writes to stderr. The root handler now writes to stdout, and `uvicorn.run` gets `log_config=None` so uvicorn's startup and access lines go through that same handler.
+
+**Changed files:** `backend/ai/src/main.py`, this entry — modified.
+
+**Check:** `uv run python -m src.main` locally, then `GET /health` → 200: every app and uvicorn log line (startup, access, shutdown) went to stdout and none to stderr; `ruff check` and `ruff format --check` pass. **Not verified:** the Railway panel after deploy.
+
 ### [2026-10-16 18:26 UTC+07:00] — [Fix] Guide pictures for Bán hàng and Quản lý match the app
 
 **Done:** In the guide pictures from #274, the Bán hàng phone highlighted "Quản lý" in the tab bar and its bar ran past the screen, and the Quản lý phone lacked the "Xem lại hướng dẫn" row (#257) while its notes had a garbled character in "số lượng" and wrote "Quản lí". The Quản lý phone screen is now a capture of the real tab from the mock web build (same sample shop and numbers), with the floating Bobi and the version line hidden; the arrows that ended inside the old screen are redrawn to the same rows, and the Hàng hoá, Chi phí and Công nợ notes are rewritten in Plus Jakarta Sans. The Bán hàng phone keeps its screen but gets the real tab bar with "Bán hàng" highlighted. Same 1672 × 941 size; the bobi and overview pictures are unchanged. The manage picture's accessibility label lists the new row.
