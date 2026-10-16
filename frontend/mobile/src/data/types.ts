@@ -97,6 +97,15 @@ export interface ChatMessage {
   memories?: AgentMemoryUsed[];
 }
 
+/** Một bước trong dòng suy nghĩ lúc chờ trả lời, ứng với một lần AI gọi tool (sự kiện `tool_start` / `tool_end`). */
+export interface ThoughtStep {
+  id: string;
+  label: string;
+  done: boolean;
+}
+
+export type AgentToolEvent = { phase: 'start'; callId: string; name: string } | { phase: 'end'; callId: string };
+
 // ---- Trợ lý AI (Agent chat) — khớp docs/contracts/api-contracts.md §5, AI dùng snake_case ----
 export interface AgentChatRequest {
   conversation_id?: number | null;

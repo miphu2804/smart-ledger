@@ -32,6 +32,7 @@ from src.agent.service import (
     Reset,
     TextDelta,
 )
+from src.agent.tool_events import ToolFinished, ToolStarted
 from src.memory.service import AgentMemoryService
 
 router = APIRouter(prefix="/agent", tags=["agent"])
@@ -120,6 +121,15 @@ def _sse_frame(event: AgentStreamEvent) -> bytes:
         )
     if isinstance(event, Reset):
         return format_sse_event(event="reset", data_str="{}")
+    if isinstance(event, ToolStarted):
+        return format_sse_event(
+            event="tool_start",
+            data_str=json.dumps({"call_id": event.call_id, "name": event.name}),
+        )
+    if isinstance(event, ToolFinished):
+        return format_sse_event(
+            event="tool_end", data_str=json.dumps({"call_id": event.call_id})
+        )
     if isinstance(event, MemoryRecalled):
         used = [
             {
