@@ -108,7 +108,9 @@ def agent_with(chat_model, memory, conversations=None) -> AgentService:
 
 def sent_prompt(model: ScriptedModel, request: int = 0) -> str:
     """The last text the model read on that request: the new owner message."""
-    return transcript(model.requests[request][0])[-1][1]
+    return [
+        text for kind, text in transcript(model.requests[request][0]) if kind == "user"
+    ][-1]
 
 
 async def test_without_memory_the_prompt_is_the_owner_message() -> None:

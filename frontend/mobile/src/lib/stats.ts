@@ -1,4 +1,4 @@
-import type { Expense, Invoice, LineItem, Product } from '../data/types';
+import type { Expense, Invoice, LineItem } from '../data/types';
 import { sameDay, startOfDay } from './format';
 
 export type Period = 'today' | 'yesterday' | 'thisWeek' | 'week' | 'month' | 'all';
@@ -47,16 +47,16 @@ export function activeInvoices(invoices: Invoice[], p: Period) {
   return invoices.filter((i) => i.status !== 'cancelled' && inPeriod(i.createdAt, p));
 }
 
-export function summary(invoices: Invoice[], products: Product[], p: Period) {
+/**
+ * Số đơn, doanh thu và số lượng của các đơn đã tải trong kỳ. Không tính giá vốn hay lãi ở đây: giá vốn phải là giá vốn chốt
+ * lúc bán (`/reports/profit-estimate` của Core), không lấy giá vốn hiện tại hay đoán theo giá bán (FR-006).
+ */
+export function summary(invoices: Invoice[], p: Period) {
   const list = activeInvoices(invoices, p);
-  // So khớp bằng chuỗi: Product.id là string còn LineItem.productId có thể là number (id thật từ Core).
-  const costOf = (li: LineItem) =>
-    (products.find((x) => li.productId != null && String(x.id) === String(li.productId))?.cost ?? li.price * 0.6) * li.qty;
   const revenue = list.reduce((a, i) => a + invoiceTotal(i), 0);
-  const cost = list.reduce((a, i) => a + i.items.reduce((b, li) => b + costOf(li), 0), 0);
   const voice = list.filter((i) => i.source === 'voice').length;
   const qty = list.reduce((a, i) => a + i.items.reduce((b, li) => b + li.qty, 0), 0);
-  return { count: list.length, revenue, profit: revenue - cost, voiceRatio: list.length ? voice / list.length : 0, qty };
+  return { count: list.length, revenue, voiceRatio: list.length ? voice / list.length : 0, qty };
 }
 
 /** Doanh thu theo giờ (6h → 22h) cho 1 ngày */

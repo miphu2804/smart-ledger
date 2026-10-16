@@ -3,7 +3,7 @@ import re
 from dataclasses import asdict, dataclass
 from typing import Literal
 
-from pydantic_ai import RunContext, Tool
+from pydantic_ai import RunContext, Tool, ToolReturn
 
 from src.prompt_templates import QUERY_RESULT_HEADER, RESTOCK_RESULT_HEADER
 from src.restock.service import RestockService
@@ -29,6 +29,21 @@ class AgentContext:
 
     user_id: int
     shop_id: int
+
+
+# App screens a reply can link to; the mobile app maps each to its route and label.
+Screen = Literal[
+    "sales", "voice_order", "orders", "products", "debts", "expenses", "reports"
+]
+
+
+def suggest_screen(screen: Screen) -> ToolReturn:
+    """Add a button under the reply that opens this app screen."""
+    # The screen travels as metadata, which the model never reads back; the service
+    # turns it into the button after the run, so no model text reaches the button.
+    return ToolReturn(
+        return_value=f"Button to {screen} added.", metadata={"screen": screen}
+    )
 
 
 def build_shop_data_tool(shop_data: ShopDataRepository) -> Tool[AgentContext]:

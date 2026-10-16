@@ -1,12 +1,8 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { AssistantIntroModal } from '../src/components/AssistantIntroModal';
-import { useToast } from '../src/components/brand';
 import { Button, Card, Header, Row, Screen, T, Toggle } from '../src/components/ui';
-import { agentApi } from '../src/lib/agentApi';
-import { errorMessage } from '../src/lib/errors';
 import { colors } from '../src/theme';
 
 function SettingRow({
@@ -47,34 +43,6 @@ export default function Settings() {
   const [receipt, setReceipt] = useState(true);
   const [lowStock, setLowStock] = useState(true);
   const [backup, setBackup] = useState(false);
-  const toast = useToast();
-  // null khi chưa tải xong hoặc trợ lý chưa bật ghi nhớ: khi đó ẩn mục này.
-  const [memory, setMemory] = useState<boolean | null>(null);
-  // Xem lại phần giới thiệu như lần đầu vào app; mở ngay tại đây nên đóng thì quay về Cài đặt
-  const [guideOpen, setGuideOpen] = useState(false);
-  const openFromGuide = (path: '/voice' | '/ai') => {
-    setGuideOpen(false);
-    router.push(path);
-  };
-
-  useEffect(() => {
-    let alive = true;
-    agentApi
-      .getMemorySettings()
-      .then((s) => alive && s.available && setMemory(s.memory_enabled))
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const changeMemory = (enabled: boolean) => {
-    setMemory(enabled);
-    agentApi.setMemorySettings(enabled).catch((e) => {
-      setMemory(!enabled);
-      toast(errorMessage(e), 'err');
-    });
-  };
 
   return (
     <Screen>
@@ -98,26 +66,7 @@ export default function Settings() {
         <SettingRow icon="cloud" title="Sao lưu tự động" subtitle="Đồng bộ dữ liệu khi có kết nối mạng" value={backup} onChange={setBackup} />
       </Card>
 
-      {memory !== null ? (
-        <>
-          <T w="bold" size={14} color={colors.muted} style={styles.sectionTitle}>
-            Trợ lý AI
-          </T>
-          <Card style={styles.card}>
-            <SettingRow icon="cpu" title="Ghi nhớ dài hạn" subtitle="Trợ lý nhớ sở thích và thói quen của bạn qua các cuộc trò chuyện" value={memory} onChange={changeMemory} />
-          </Card>
-        </>
-      ) : null}
-
       <Button title="Kết nối máy in" icon="printer" variant="soft" onPress={() => router.push('/printer')} style={{ marginTop: 16 }} />
-      <Button title="Xem lại hướng dẫn" icon="help-circle" variant="soft" onPress={() => setGuideOpen(true)} style={{ marginTop: 10 }} />
-
-      <AssistantIntroModal
-        visible={guideOpen}
-        onDismiss={() => setGuideOpen(false)}
-        onVoice={() => openFromGuide('/voice')}
-        onChat={() => openFromGuide('/ai')}
-      />
     </Screen>
   );
 }

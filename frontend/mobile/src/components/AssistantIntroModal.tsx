@@ -24,8 +24,8 @@ const steps: readonly {
   title: string;
   icon: React.ComponentProps<typeof Feather>['name'] | null;
   /**
-   * Hình minh hoạ thay cho ô màu có icon; hiện tràn hết bề ngang thẻ. `ratio` là rộng/cao của chính hình: các hình không
-   * cùng tỉ lệ (Quản lý gần vuông, còn lại 3:2) nên chiều cao tính theo từng hình để không bị cắt hay méo.
+   * Hình minh hoạ thay cho ô màu có icon; hiện tràn hết bề ngang thẻ. `ratio` là rộng/cao của chính hình:
+   * chiều cao tính theo từng hình để không bị cắt hay méo.
    */
   image?: { source: ImageSourcePropType; label: string; ratio: number };
   tone: string;
@@ -34,81 +34,78 @@ const steps: readonly {
   tips: readonly { title: string; body: string }[];
 }[] = [
   {
-    // Trang giới thiệu Bobi: hình minh hoạ cho thấy Bobi nằm ở đâu và chạm vào thì mở ra gì
+    // Bước 1: Trợ lý Bobi
     title: 'Trợ lý Bobi',
     icon: null,
     image: {
-      source: require('../../assets/guide/bobi-menu.jpg'),
-      label: 'Hình minh hoạ: Bobi ở góc màn hình Tổng quan; chạm vào Bobi mở ra Hỏi đáp, Đọc đơn và Báo cáo',
-      ratio: 1080 / 720,
+      source: require('../../assets/guide/guide-bobi.png'),
+      label: 'Hình minh hoạ: Bobi ở góc màn hình; chạm vào Bobi mở ra Hỏi đáp, Đọc đơn và Báo cáo',
+      ratio: 1672 / 941,
     },
     tone: colors.brand,
     gradient: ['#CFC4F7', '#E9E3FC', '#F8F5FF'],
-    description: 'Bobi là linh vật và trợ lý của Sổ Nghe Lời, luôn nằm ở góc màn hình.',
+    description: 'Bobi luôn nằm ở góc màn hình, giúp bạn thao tác nhanh mọi việc chỉ với một chạm.',
     tips: [
-      { title: 'Chạm vào Bobi', body: 'Mở Hỏi đáp, Đọc đơn hoặc Báo cáo.' },
-      { title: 'Giữ Bobi để đọc đơn', body: 'Đi thẳng tới màn Đọc đơn.' },
-      { title: 'Kéo Bobi đến chỗ thuận tay', body: 'Kéo sang cạnh khác nếu bị che.' },
+      { title: 'Chạm vào Bobi', body: 'Mở nhanh menu Hỏi đáp AI, Đọc đơn giọng nói và Báo cáo.' },
+      { title: 'Giữ Bobi để đọc đơn', body: 'Nhấn giữ biểu tượng để mở thẳng màn hình lên đơn bằng giọng nói.' },
+      { title: 'Kéo thả linh hoạt', body: 'Kéo Bobi sang vị trí khác nếu bị che mất nội dung bên dưới.' },
     ],
   },
   {
-    // Hình đã chỉ cách chọn món (quét mã, đọc đơn, tìm, thêm món ngoài danh mục); chữ nói phần sau đó và chỗ hình khác app:
-    // sắp xếp và lọc tồn kho nằm trong nút phễu, đơn đã bán ở tab Đơn hàng (hình vẽ thanh tab cũ có "Cá nhân").
-    title: 'Bán hàng',
-    icon: 'shopping-cart',
-    image: {
-      source: require('../../assets/guide/guide-sales.jpg'),
-      label:
-        'Hình minh hoạ màn Bán hàng: nút Quét mã và Đọc đơn ở trên, ô tìm theo tên hoặc mã vạch, lưới món có nút cộng để thêm vào đơn, và nút Thêm món ngoài danh mục ở cuối',
-      ratio: 1080 / 720,
-    },
-    tone: colors.gold,
-    gradient: ['#F2C77A', '#F8E9C8', '#FFF8EA'],
-    description: 'Chọn món như hình, rồi bấm Thanh toán ở cuối màn để chốt đơn.',
-    tips: [
-      { title: 'Sắp xếp và lọc', body: 'Bấm nút phễu trong ô tìm để sắp theo tên, giá, tồn kho hoặc chỉ xem món sắp hết.' },
-      { title: 'Chọn cách thu', body: 'Tiền mặt, chuyển khoản hoặc ghi nợ. Ghi nợ cần tên khách.' },
-      { title: 'Đơn đã bán', body: 'Xem lại, tìm hoặc huỷ đơn ở tab Đơn hàng.' },
-    ],
-  },
-  {
-    // Hình có năm chú thích (doanh thu, nút vào nhanh, đổi kỳ, việc ưu tiên, gợi ý); chữ chỉ thêm điều hình chưa nói. Chú
-    // thích 1 của hình ghi "công nợ trong kỳ" nhưng số đó là nợ hiện tại của cả tiệm, nên nói rõ ở đây.
+    // Bước 2: Tổng quan
     title: 'Tổng quan',
     icon: 'bar-chart-2',
     image: {
-      source: require('../../assets/guide/guide-overview.jpg'),
+      source: require('../../assets/guide/guide-overview.png'),
       label:
-        'Hình minh hoạ màn Tổng quan: thẻ doanh thu với số đơn đã chốt và tiền còn nợ, bốn nút Đọc đơn, Chọn hàng, Quét mã, Trợ lý AI, nút đổi Hôm nay, Tuần này, Tháng này, mục Ưu tiên hôm nay và gợi ý từ dữ liệu đã chốt',
-      ratio: 1080 / 720,
+        'Hình minh hoạ màn Tổng quan: doanh thu hôm nay, bốn phím tắt lên đơn và trợ lý AI, cùng mục Ưu tiên hôm nay',
+      ratio: 1672 / 941,
     },
     tone: colors.purple,
     gradient: ['#8DB8F2', '#E4F0FF', '#F5F9FF'],
-    description: 'Màn đầu tiên khi mở app: xem tiệm đang thế nào và bắt đầu đơn mới.',
+    description: 'Màn hình chính khi mở app: nắm bắt tình hình kinh doanh trong ngày và vào nhanh các tính năng.',
     tips: [
-      { title: 'Bấm vào ô doanh thu', body: 'Mở Báo cáo: doanh thu theo ngày, thu chi và món bán chạy trong kỳ.' },
-      { title: 'Tiền còn nợ là của cả tiệm', body: 'Số này không đổi theo Hôm nay, Tuần này hay Tháng này.' },
-      { title: 'Chuông thông báo', body: 'Báo đơn bị huỷ, hàng sắp hết và tổng kết thu chi hôm qua.' },
+      { title: 'Theo dõi doanh thu & công nợ', body: 'Xem nhanh tiền bán trong ngày, số đơn đã chốt và tổng nợ toàn tiệm.' },
+      { title: 'Bốn cách lên đơn & hỏi đáp', body: 'Bấm nhanh Đọc đơn, Chọn hàng, Quét mã hoặc Trợ lý AI ngay tại trang chủ.' },
+      { title: 'Ưu tiên hôm nay', body: 'Nhắc nhở các việc gấp cần xử lý như thu khoản nợ đến hạn và kiểm tra hàng sắp hết.' },
     ],
   },
   {
-    // Hình gần vuông, đã giới thiệu Báo cáo, Hàng hoá, Chi phí, Công nợ. Khung Công nợ trong hình có tab "Nhà cung cấp"
-    // nhưng app chỉ theo dõi tiền khách nợ, nên chữ nói rõ để người dùng không đi tìm.
+    // Bước 3: Bán hàng
+    title: 'Bán hàng',
+    icon: 'shopping-cart',
+    image: {
+      source: require('../../assets/guide/guide-sales.png'),
+      label:
+        'Hình minh hoạ màn Bán hàng: quét mã, đọc đơn, tìm kiếm & lọc, nhấn để thêm món và nhấn giữ để giảm số lượng',
+      ratio: 1672 / 941,
+    },
+    tone: colors.gold,
+    gradient: ['#F2C77A', '#F8E9C8', '#FFF8EA'],
+    description: 'Lên đơn nhanh chóng bằng nhiều cách, kiểm tra giỏ hàng và thanh toán tức thì.',
+    tips: [
+      { title: 'Tìm kiếm & quét mã', body: 'Gõ tên món, lọc theo danh mục hoặc bấm Quét mã / Đọc đơn ở phía trên.' },
+      { title: 'Thao tác chạm đơn giản', body: 'Nhấn vào sản phẩm để thêm vào đơn, nhấn giữ để giảm nhanh số lượng món.' },
+      { title: 'Thanh toán & chọn cách thu', body: 'Bấm nút Thanh toán ở thanh dưới để chốt đơn bằng tiền mặt, chuyển khoản hoặc ghi nợ.' },
+    ],
+  },
+  {
+    // Bước 4: Quản lý
     title: 'Quản lý',
     icon: 'grid',
     image: {
-      source: require('../../assets/guide/guide-manage.jpg'),
+      source: require('../../assets/guide/guide-manage.png'),
       label:
-        'Hình minh hoạ tab Quản lý với các mục Báo cáo, Hàng hoá, Chi phí, Công nợ, Cài đặt và Đăng xuất, kèm ảnh nhỏ của từng màn',
-      ratio: 1080 / 1151,
+        'Hình minh hoạ tab Quản lý với các mục Báo cáo, Hàng hoá, Chi phí, Công nợ, Cài đặt, Xem lại hướng dẫn và Đăng xuất',
+      ratio: 1672 / 941,
     },
     tone: colors.red,
     gradient: ['#E9B8A8', '#F8E2DE', '#FFF5F2'],
-    description: 'Sổ sách và cài đặt của tiệm nằm ở tab Quản lý.',
+    description: 'Trung tâm quản lý sổ sách, hàng hoá, chi phí và cài đặt của toàn bộ cửa hàng.',
     tips: [
-      { title: 'Công nợ là tiền khách nợ', body: 'Bấm từng khoản để thu tiền hoặc nhắn tin nhắc. App chưa theo dõi tiền nợ nhà cung cấp.' },
-      { title: 'Hàng về thì nhập hàng', body: 'Trong Hàng hoá, bấm Nhập hàng ở món đó để cộng tồn kho.' },
-      { title: 'Xem lại hướng dẫn', body: 'Vào Cài đặt khi cần mở lại phần này.' },
+      { title: 'Hàng hoá & Chi phí', body: 'Thêm/sửa danh mục sản phẩm, nhập hàng và ghi nhận các khoản chi tiêu hàng ngày.' },
+      { title: 'Công nợ khách hàng', body: 'Theo dõi chi tiết từng khoản khách nợ, bấm vào để thu tiền hoặc gửi tin nhắn nhắc nợ.' },
+      { title: 'Báo cáo & Cài đặt', body: 'Tra cứu doanh thu lãi/lỗ theo thời gian và tùy chỉnh âm thanh, thông báo, in hóa đơn.' },
     ],
   },
 ];

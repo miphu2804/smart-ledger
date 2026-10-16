@@ -62,6 +62,13 @@ export const mockAuth: AuthClient = {
     unverified = false;
     return true;
   },
+  hasPassword: () => signedIn && emailAccounts.has(email),
+  async changePassword(currentPassword, newPassword) {
+    await sleep(400);
+    if (!signedIn || emailAccounts.get(email) !== currentPassword) throw new AuthError('invalid-credentials');
+    if (newPassword.length < 6) throw new AuthError('weak-password');
+    emailAccounts.set(email, newPassword);
+  },
   async getIdToken() {
     return signedIn ? 'mock-id-token' : null;
   },

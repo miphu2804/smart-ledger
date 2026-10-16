@@ -7,7 +7,9 @@ import { BarChart } from '../src/components/charts';
 import { Button, Card, EmptyState, Header, Row, Screen, SectionTitle, T } from '../src/components/ui';
 import type { Invoice } from '../src/data/types';
 import { useCoreData } from '../src/lib/useCoreData';
+import { type ReportTotals, useReportTotals } from '../src/lib/useReportTotals';
 import { vnd } from '../src/lib/format';
+import { reportPeriodOf } from '../src/lib/saleFilter';
 import { bestSellers, hourly, inPeriod, invoiceTotal, periodLabel, summary } from '../src/lib/stats';
 import { useApp } from '../src/store/AppStore';
 import { colors } from '../src/theme';
@@ -40,11 +42,9 @@ function weekDays(invoices: Invoice[], now = new Date()) {
 
 export default function Analytics() {
   const app = useApp(); // chỉ để lấy tên tiệm; số liệu lấy từ Core
-  const { invoices, products, debts, expenses: allExpenses, loading, error, reload } = useCoreData({
+  const { invoices, debts, loading: dataLoading, error: dataError, reload: reloadData } = useCoreData({
     invoices: true,
-    products: true,
     debts: true,
-    expenses: true,
   });
   const { period: requestedPeriod } = useLocalSearchParams<{ period?: string }>();
   const [period, setPeriod] = useState<ReportPeriod>(
@@ -52,10 +52,15 @@ export default function Analytics() {
   );
   const [selectedBar, setSelectedBar] = useState<number | null>(null);
 
-  const totals = summary(invoices, products, period);
-  const expenses = allExpenses.filter((expense) => inPeriod(expense.createdAt, period));
-  const expenseTotal = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-  const estimatedCost = totals.revenue - totals.profit;
+  // Biểu đồ và bán chạy vẫn cộng trên các đơn đã tải; doanh thu, giá vốn, lãi và đơn huỷ lấy từ báo cáo của Core
+  const totals = summary(invoices, period);
+  const core = useReportTotals(reportPeriodOf(period) ?? 'today');
+  const loading = dataLoading || core.loading;
+  const error = dataError || core.error;
+  const reload = () => {
+    void reloadData();
+    void core.reload();
+  };
   const debtLeft = debts.reduce((sum, debt) => sum + Math.max(0, debt.total - debt.paid), 0);
   const leaders = bestSellers(invoices, period).slice(0, 3);
   const trend = period === 'month' ? monthWeeks(invoices) : period === 'thisWeek' ? weekDays(invoices) : hourly(invoices, period);
@@ -96,6 +101,8 @@ export default function Analytics() {
       </Screen>
     );
   }
+  // Đã qua hai nhánh trên nên báo cáo của Core đã có
+  const { revenue, profit, summary: summaryView } = core.totals as ReportTotals;
 
   return (
     <Screen contentStyle={{ paddingBottom: 48 }}>
@@ -106,20 +113,20 @@ export default function Analytics() {
           DOANH THU {periodName.toUpperCase()}
         </T>
         <T w="extrabold" size={32} numberOfLines={1} adjustsFontSizeToFit style={styles.revenue}>
-          {vnd(totals.revenue)}
+          {vnd(revenue.revenueVnd)}
         </T>
         <T size={12} color={colors.muted}>
-          Từ đơn đã chốt trong kỳ
+          Từ đơn còn hiệu lực bán trong kỳ
         </T>
         <Row style={styles.heroMetrics} gap={14}>
           <View style={{ flex: 1 }}>
-            <T w="bold" size={17}>{totals.count} đơn</T>
+            <T w="bold" size={17}>{revenue.orderCount} đơn</T>
             <T size={12} color={colors.muted}>Đã chốt</T>
           </View>
           <View style={styles.divider} />
           <View style={{ flex: 1 }}>
             <T w="bold" size={17} numberOfLines={1} adjustsFontSizeToFit>
-              {vnd(totals.count ? totals.revenue / totals.count : 0)}
+              {vnd(revenue.orderCount ? Math.round(revenue.revenueVnd / revenue.orderCount) : 0)}
             </T>
             <T size={12} color={colors.muted}>Trung bình / đơn</T>
           </View>
@@ -150,19 +157,76 @@ export default function Analytics() {
 
       <SectionTitle title="Thu chi trong kỳ" />
       <Card style={{ paddingVertical: 6 }}>
-        <MetricRow label="Doanh thu" value={vnd(totals.revenue)} color={colors.data.revenue} />
-        <MetricRow label="Giá vốn ước tính" value={vnd(estimatedCost)} color={colors.data.product} />
-        <MetricRow label="Chi phí đã ghi" value={vnd(expenseTotal)} color={colors.data.expense} />
+        {/* Các dòng đều không âm và cộng trừ ra đúng lãi gộp của Core: Doanh thu − Giá vốn hàng đã bán − Huỷ đơn bán kỳ trước +
+            Giá vốn của đơn huỷ. Giá vốn ròng của Core (đã bán − đơn huỷ) có thể âm khi huỷ đơn kỳ trước nên tách ra cho dễ hiểu. */}
+        <MetricRow label="Doanh thu" value={vnd(revenue.revenueVnd)} color={colors.data.revenue} />
+        <MetricRow label="Giá vốn hàng đã bán" value={minus(profit.grossEstimatedCogsVnd)} color={colors.data.product} />
+        {revenue.cancelledEarlierVnd > 0 ? (
+          <MetricRow label="Huỷ đơn bán kỳ trước" value={minus(revenue.cancelledEarlierVnd)} color={colors.red} />
+        ) : null}
+        {profit.voidedEstimatedCogsVnd > 0 ? (
+          <MetricRow label="Giá vốn của đơn huỷ" value={`+${vnd(profit.voidedEstimatedCogsVnd)}`} color={colors.data.product} />
+        ) : null}
         <View style={styles.metricDivider} />
         <MetricRow
           label="Lãi gộp ước tính"
-          value={vnd(totals.profit)}
-          color={totals.profit >= 0 ? colors.data.profit : colors.red}
+          value={vnd(profit.estimatedGrossProfitVnd)}
+          color={profit.estimatedGrossProfitVnd >= 0 ? colors.data.profit : colors.red}
           strong
         />
+        <MetricRow label="Chi phí đã ghi" value={minus(profit.expenseVnd)} color={colors.data.expense} />
+        <View style={styles.metricDivider} />
+        <MetricRow
+          label="Lãi sau chi phí"
+          value={vnd(profit.estimatedOperatingProfitVnd)}
+          color={profit.estimatedOperatingProfitVnd >= 0 ? colors.data.profit : colors.red}
+          strong
+        />
+        {/* Giá vốn là giá vốn của từng món lúc bán (Core chốt khi xác nhận đơn), không phải giá vốn hiện tại hay mức đoán */}
         <T size={12} color={colors.faint} style={styles.note}>
-          Lãi gộp = doanh thu − giá vốn ước tính, chưa trừ chi phí đã ghi. Món chưa có giá vốn dùng mức ước tính.
+          Giá vốn lấy theo giá vốn của từng món lúc bán. Đơn bị huỷ không còn tính là đã bán nên giá vốn của nó được cộng lại.
         </T>
+        {!profit.isComplete ? (
+          <Card onPress={() => router.push('/products')} style={styles.costWarning}>
+            <Row gap={8} style={{ alignItems: 'flex-start' }}>
+              <Feather name="alert-circle" size={15} color={colors.gold} style={{ marginTop: 2 }} />
+              {/* Core đếm món thiếu giá vốn cả lúc bán lẫn lúc huỷ, nên đơn huỷ trong kỳ bị tính hai lần: chỉ nêu số khi kỳ không có đơn huỷ */}
+              <T size={12.5} color={colors.ink} style={{ flex: 1, lineHeight: 18 }}>
+                {profit.voidedRevenueVnd === 0
+                  ? `${profit.unknownCostItemCount} món trong kỳ chưa có giá vốn nên giá vốn và lãi đang thiếu phần của ${vnd(profit.unknownCostRevenueVnd)} doanh thu.`
+                  : 'Có món bán trong kỳ chưa có giá vốn nên giá vốn và lãi ở trên chưa đủ.'}{' '}
+                Thêm giá vốn trong Hàng hoá để lãi đủ hơn từ các đơn sau.
+              </T>
+            </Row>
+          </Card>
+        ) : null}
+      </Card>
+
+      <SectionTitle title="Đơn huỷ trong kỳ" />
+      <Card style={{ paddingVertical: 6 }}>
+        {summaryView.voidedOrderCount > 0 ? (
+          <>
+            <MetricRow label="Số đơn huỷ" value={`${summaryView.voidedOrderCount} đơn`} />
+            <MetricRow label="Giá trị các đơn huỷ" value={vnd(summaryView.voidedRevenueVnd)} color={colors.red} />
+            <MetricRow label="Đã hoàn tiền cho khách" value={vnd(summaryView.refundedVnd)} color={colors.ink} />
+            {/* Giá trị đơn huỷ gồm cả phần khách chưa trả: phần đó chỉ là nợ được xoá, không phải tiền trả lại */}
+            <T size={12} color={colors.faint} style={styles.note}>
+              Tính theo ngày huỷ, kể cả đơn bán từ kỳ trước. Giá trị đơn huỷ gồm cả phần khách còn nợ (nợ đó được xoá); chỉ "Đã hoàn tiền" là tiền trả lại khách.
+            </T>
+          </>
+        ) : (
+          <T size={14} color={colors.muted} style={styles.emptySmall}>
+            Không có đơn bị huỷ trong kỳ này
+          </T>
+        )}
+        <Button
+          title="Xem các đơn đã huỷ"
+          icon="x-circle"
+          variant="ghost"
+          small
+          onPress={() => router.push({ pathname: '/(tabs)/invoices', params: { status: 'voided' } })}
+          style={{ marginBottom: 6 }}
+        />
       </Card>
 
       <SectionTitle title="Bán chạy trong kỳ" action="Xem tất cả" onAction={() => router.push({ pathname: '/bestsellers', params: { period } })} />
@@ -204,6 +268,9 @@ export default function Analytics() {
   );
 }
 
+/** Số bị trừ trong bảng thu chi: có dấu trừ, trừ khi bằng 0 */
+const minus = (value: number) => (value > 0 ? `−${vnd(value)}` : vnd(0));
+
 function MetricRow({ label, value, color = colors.ink, strong = false }: { label: string; value: string; color?: string; strong?: boolean }) {
   return (
     <Row style={styles.metricRow} gap={8}>
@@ -226,6 +293,8 @@ const styles = StyleSheet.create({
   metricRow: { minHeight: 42, justifyContent: 'space-between' },
   metricDivider: { height: 1, backgroundColor: colors.border, marginVertical: 3 },
   note: { lineHeight: 18, marginTop: 7, marginBottom: 8 },
+  costWarning: { marginBottom: 8, padding: 10, backgroundColor: colors.goldSoft, borderColor: colors.goldSoft },
+  emptySmall: { paddingVertical: 14, textAlign: 'center' },
   sellerRow: { minHeight: 56, paddingVertical: 8 },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   debtIcon: { width: 38, height: 38, borderRadius: 11, backgroundColor: colors.goldSoft, alignItems: 'center', justifyContent: 'center' },

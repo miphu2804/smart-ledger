@@ -3,6 +3,7 @@
  *
  * Chỉ nhận tập markdown mà prompt của AI cho phép (backend/ai/src/prompt_templates/shop_agent.py):
  * `**đậm**`, `` `mã` ``, tiêu đề `#`, danh sách `-`/`1.`, bảng `|`, khối ``` và khối ```chart (JSON).
+ * Khối ```actions do AI service tự gắn cuối câu trả lời (backend/ai/src/agent/service.py), không phải model.
  * Ký hiệu khác giữ nguyên chữ. Khi `streaming` là true, phần đuôi chưa trọn được tự đóng hoặc giữ lại
  * để bong bóng không nháy ký hiệu thô rồi đổi dạng khi chữ tới đủ.
  */
@@ -18,6 +19,19 @@ export type ChartSpec = {
   data: ChartPoint[];
 };
 
+/** Màn hình mà nút dưới câu trả lời mở được; khoá trùng `Screen` trong backend/ai/src/agent/tools.py. */
+export const SCREEN_LINKS = {
+  sales: { label: 'Mở Bán hàng', route: '/(tabs)/sales' },
+  voice_order: { label: 'Mở Đọc đơn', route: '/voice' },
+  orders: { label: 'Mở Đơn hàng', route: '/(tabs)/invoices' },
+  products: { label: 'Mở Hàng hoá', route: '/products' },
+  debts: { label: 'Mở Công nợ', route: '/debts' },
+  expenses: { label: 'Mở Chi phí', route: '/expenses' },
+  reports: { label: 'Mở Báo cáo', route: '/analytics' },
+} as const;
+
+export type AppScreen = keyof typeof SCREEN_LINKS;
+
 export type ChatBlock =
   | { kind: 'paragraph' | 'heading' | 'bullet'; inlines: Inline[] }
   | { kind: 'ordered'; marker: string; inlines: Inline[] }
@@ -25,6 +39,7 @@ export type ChatBlock =
   | { kind: 'code'; text: string }
   | { kind: 'table'; header: Inline[][]; rows: Inline[][][] }
   | { kind: 'chart'; spec: ChartSpec }
+  | { kind: 'actions'; screens: AppScreen[] }
   // Khối ```chart chưa đóng khi đang stream, hoặc JSON không hợp lệ ở câu đã xong.
   | { kind: 'chartPending' | 'chartInvalid' };
 
@@ -87,7 +102,11 @@ function readFence(lines: string[], start: number, lang: string, streaming: bool
   // Dấu đóng đang gõ dở ("`", "``") không thuộc nội dung.
   if (!closed && streaming && /^\s*`{1,2}\s*$/.test(body.at(-1) ?? '')) body.pop();
 
-  if (lang === 'chart') {
+  if (lang === 'actions') {
+    // Nút chỉ hiện khi khối đã trọn; màn lạ bị bỏ, nên chữ trong khối không bao giờ thành route.
+    const screens = closed ? readScreens(body.join('\n')) : [];
+    if (screens.length) blocks.push({ kind: 'actions', screens });
+  } else if (lang === 'chart') {
     if (!closed && streaming) blocks.push({ kind: 'chartPending' });
     else {
       const spec = readChart(body.join('\n'));
@@ -176,6 +195,46 @@ function closeDangling(line: string) {
 function trimGaps(blocks: ChatBlock[]) {
   while (blocks.at(-1)?.kind === 'gap') blocks.pop();
   return blocks;
+}
+
+// Khối ```actions mà AI service gắn cuối câu đã lưu (SCREEN_BUTTONS trong backend/ai/src/agent/service.py).
+const ACTIONS_TAIL = /\n*```actions\n([\s\S]*?)\n```\s*$/;
+// Khi đang stream: khối ```actions ở đầu dòng cuối, kể cả dấu mở đang gõ dở ("`", "``", "```act"…).
+const ACTIONS_STREAMING = /\n+(?:`{1,3}|```a(?:c(?:t(?:i(?:o(?:n(?:s(?:\n[\s\S]*)?)?)?)?)?)?)?)$/;
+
+/** Chữ đang stream bỏ khối ```actions ở cuối; "```" đóng một khối mã đang mở thì giữ. */
+function withoutStreamingActions(text: string) {
+  const match = ACTIONS_STREAMING.exec(text);
+  if (!match) return text;
+  const head = text.slice(0, match.index);
+  const tail = match[0].trim();
+  if (tail === '```' && head.split('\n').filter((line) => FENCE_OPEN.test(line) || FENCE_CLOSE.test(line)).length % 2) {
+    return text;
+  }
+  return head;
+}
+
+/**
+ * Tách nút mở màn hình khỏi nội dung câu trả lời, để nút nằm ở thẻ riêng dưới bong bóng và không
+ * đổi chữ trong bong bóng. Khi `streaming` chỉ bỏ khối ở cuối: nút chỉ hiện khi câu đã xong.
+ */
+export function splitActions(text: string, streaming = false): { text: string; screens: AppScreen[] } {
+  if (streaming) return { text: withoutStreamingActions(text), screens: [] };
+  const match = ACTIONS_TAIL.exec(text);
+  if (!match) return { text, screens: [] };
+  return { text: text.slice(0, match.index), screens: readScreens(match[1]) };
+}
+
+/** Danh sách màn trong khối ```actions; JSON hỏng hoặc màn lạ thì bỏ qua. */
+export function readScreens(body: string): AppScreen[] {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(body);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((screen): screen is AppScreen => typeof screen === 'string' && Object.hasOwn(SCREEN_LINKS, screen));
 }
 
 /**

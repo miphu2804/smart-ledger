@@ -5,6 +5,7 @@ import type {
   AgentConversationView,
   AgentMemorySettings,
   AgentMemoryUsed,
+  AgentToolEvent,
 } from '../data/types';
 import { USE_MOCK } from '../config';
 import { ApiError, apiRequest, apiStream } from './api';
@@ -15,6 +16,10 @@ import { ApiError, apiRequest, apiStream } from './api';
  * Chat chờ tới 45 giây vì model có thể gọi công cụ đọc dữ liệu tiệm trước khi trả lời.
  */
 const CHAT_TIMEOUT_MS = 45000;
+const MOCK_THINK_MS = 1200;
+const MOCK_TOOL_MS = 1500;
+const MOCK_CHUNK = 12;
+const MOCK_CHUNK_MS = 60;
 
 export const agentApi = {
   /** POST /agent/chat — bỏ `conversation_id` để mở hội thoại mới */
@@ -29,15 +34,27 @@ export const agentApi = {
    * POST /agent/chat/stream — cùng lượt hỏi như `chat` nhưng trả lời dần: `onText` nhận toàn bộ chữ đã tới
    * (rỗng khi AI báo `reset`), Promise trả câu cuối từ sự kiện `done`. Sự kiện `error` mang mã lỗi như `chat`.
    * Sự kiện `memory` (trước chữ đầu tiên, chỉ khi trợ lý dùng ghi nhớ) đưa các ghi nhớ đó cho `onMemories`.
-   * Khi bật mock thì hỏi `chat` rồi hiện cả câu một lần.
+   * Sự kiện `tool_start` / `tool_end` (mỗi lần AI gọi tool) đi vào `onTool`; AI chỉ gửi tên tool, không gửi tham số.
+   * Khi bật mock thì hỏi `chat` rồi giả lập độ trễ, một bước tool và chữ đến từng đoạn.
    */
   chatStream: async (
     input: AgentChatRequest,
     onText: (text: string) => void,
     onMemories?: (used: AgentMemoryUsed[]) => void,
+    onTool?: (event: AgentToolEvent) => void,
   ): Promise<AgentChatMessageView> => {
     if (USE_MOCK) {
       const reply = await agentApi.chat(input);
+      // Giả lập một lượt thật để thấy dòng suy nghĩ: chờ model, một bước tool, rồi chữ đến từng đoạn.
+      const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+      await pause(MOCK_THINK_MS);
+      onTool?.({ phase: 'start', callId: 'mock', name: 'query_shop_data' });
+      await pause(MOCK_TOOL_MS);
+      onTool?.({ phase: 'end', callId: 'mock' });
+      for (let end = MOCK_CHUNK; end < reply.answer.length; end += MOCK_CHUNK) {
+        onText(reply.answer.slice(0, end));
+        await pause(MOCK_CHUNK_MS);
+      }
       onText(reply.answer);
       return reply;
     }
@@ -47,6 +64,10 @@ export const agentApi = {
       if (event === 'delta') onText((text += (data as { text: string }).text));
       else if (event === 'reset') onText((text = ''));
       else if (event === 'memory') onMemories?.((data as { used: AgentMemoryUsed[] }).used);
+      else if (event === 'tool_start') {
+        const { call_id, name } = data as { call_id: string; name: string };
+        onTool?.({ phase: 'start', callId: call_id, name });
+      } else if (event === 'tool_end') onTool?.({ phase: 'end', callId: (data as { call_id: string }).call_id });
       else if (event === 'done') reply = data as AgentChatMessageView;
       else if (event === 'error') {
         const code = (data as { detail?: string }).detail ?? 'ai_unavailable';

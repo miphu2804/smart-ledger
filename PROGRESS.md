@@ -1,3 +1,239 @@
+### [2026-10-16 18:26 UTC+07:00] — [Fix] Guide pictures for Bán hàng and Quản lý match the app
+
+**Done:** In the guide pictures from #274, the Bán hàng phone highlighted "Quản lý" in the tab bar and its bar ran past the screen, and the Quản lý phone lacked the "Xem lại hướng dẫn" row (#257) while its notes had a garbled character in "số lượng" and wrote "Quản lí". The Quản lý phone screen is now a capture of the real tab from the mock web build (same sample shop and numbers), with the floating Bobi and the version line hidden; the arrows that ended inside the old screen are redrawn to the same rows, and the Hàng hoá, Chi phí and Công nợ notes are rewritten in Plus Jakarta Sans. The Bán hàng phone keeps its screen but gets the real tab bar with "Bán hàng" highlighted. Same 1672 × 941 size; the bobi and overview pictures are unchanged. The manage picture's accessibility label lists the new row.
+
+**Changed files:** `frontend/mobile/assets/guide/guide-manage.png`, `frontend/mobile/assets/guide/guide-sales.png`, `frontend/mobile/src/components/AssistantIntroModal.tsx` — modified; this entry.
+
+**Check:** Both pictures inspected at full size and zoomed at the edited areas (tab bar, arrow heads, rewritten notes). **Not verified:** how they look inside the guide on a phone.
+
+### [2026-10-16 18:06 UTC+07:00] — [Feature] Change the password inside the app
+
+**Done:** Testers had to sign out and go through "Quên mật khẩu" to change a password. The Quản lý tab now has "Đổi mật khẩu" for accounts that signed up with email (Facebook and Google accounts have no password here, so the row is hidden). The new screen asks for the current password and the new one twice (at least 6 characters, different from the current one); the app re-authenticates with the current password and then updates it in Firebase, so the user stays signed in. A wrong current password shows under that field. "Quên mật khẩu hiện tại? Gửi thư đặt lại" sends the reset email to the signed-in address without signing out. `AuthClient` gains `hasPassword()` and `changePassword()` for native Firebase, web Firebase and the mock. Core is unchanged (it never stores passwords). `FR-010` mentions the in-app change; new criterion `AC-080`.
+
+**Changed files:** `frontend/mobile/app/change-password.tsx` — added; `frontend/mobile/app/(tabs)/more.tsx`, `frontend/mobile/src/lib/auth/types.ts`, `frontend/mobile/src/lib/auth/firebase.ts`, `frontend/mobile/src/lib/auth/firebase.web.ts`, `frontend/mobile/src/lib/auth/mock.ts`, `docs/product/product-requirements.md` (`FR-010`, `AC-080`) — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors; mock web build in headless Chrome (6/6): a new email account (ZZ-TEST) sees "Đổi mật khẩu" in Quản lý; a wrong current password shows "Mật khẩu hiện tại chưa đúng"; a mismatched repeat is flagged; the correct one shows "Đã đổi mật khẩu" and returns to Quản lý still signed in; after signing out the old password is refused and the new one signs in. **Not verified:** real Firebase on a phone (re-authentication and `updatePassword` against the staging project).
+
+### [2026-10-16 17:58 UTC+07:00] — [Fix] An account without a shop no longer lands in the sample shop
+
+**Done:** A tester creating an account pressed Android back on "Tiệm của bạn tên gì?" and landed in the tabs showing "Tiệm tạp hoá cô Thỏ". The app state starts with the sample shop until Core returns a session with a shop, and nothing stopped the tabs from opening before that, so going back from shop setup (or signing out from a screen stacked on the tabs) exposed the sample data as if it were a real account. The tabs layout now opens only for a signed-in account with a shop: before the session is restored it shows a blank screen, signed out it redirects to the sign-in screen, and without a shop to shop setup. On shop setup, Android back and a new "Dùng tài khoản khác" link ask "Dừng tạo tiệm?"; confirming signs out and returns to sign-in. New criterion `AC-079`.
+
+**Changed files:** `frontend/mobile/app/(tabs)/_layout.tsx`, `frontend/mobile/app/(auth)/setup.tsx`, `docs/product/product-requirements.md` (`AC-079`) — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors; mock web build in headless Chrome (5/5): signed out, opening `/invoices` lands on sign-in with no sample shop; "Vào app" opens Tổng quan; signing out from Quản lý returns to sign-in; on `/setup`, "Dùng tài khoản khác" asks "Dừng tạo tiệm?" and confirming returns to sign-in. **Not verified:** Android back on a real phone during a real sign-up.
+
+### [2026-10-16 17:55 UTC+07:00] — [Mobile/AI] Tool step keeps its shimmer, screen button in brand purple, numbered lists
+
+**Done:** A tool step in `ThoughtLine` keeps its shimmer after the tool ends, because the model is still writing the reply; the running dot is gone and the tick sits after the label, so the label starts where the waiting phrase does. `suggest_screen` gets its own step label instead of the generic one. The screen-button card under a reply drops the "Mở nhanh" label and shows brand-purple buttons with a purple shadow. The shop agent prompt asks for numbered lists only, and the mock replies follow it.
+
+**Changed files:** `frontend/mobile/src/components/ThoughtLine.tsx`, `frontend/mobile/src/components/ChatText.tsx`, `frontend/mobile/src/lib/toolSteps.ts`, `frontend/mobile/tests/toolSteps.test.ts`, `frontend/mobile/src/lib/mockCore.ts`, `backend/ai/src/prompt_templates/shop_agent.py`, `docs/contracts/api-contracts.md` — modified; this entry.
+
+**Flow explained:** tool `start` → the step replaces the waiting phrase, types in with shimmer → tool `end` → tick after the label, shimmer continues → first `delta` → the line is replaced by the reply.
+
+**Check:** `tsc --noEmit` clean, `toolSteps` tests 6 passed, AI unit tests 342 passed; checked in the Expo web build with mock data. **Not verified:** on a device, and the numbered-list rule against the real model.
+
+### [2026-10-16] — [Mobile] Thought line shows only the latest tool step, with shimmer
+
+**Done:** `ThoughtLine` now shows one step at a time: each new tool call replaces the waiting phrase or the step before it instead of lining up beside it. A running step's label types in and then gets the same shimmer sweep as the waiting phrase; a finished step stays still in the faint color with a tick.
+
+**Changed files:** `frontend/mobile/src/components/ThoughtLine.tsx` — modified; this entry.
+
+**Flow explained:** tool `start` → the step slides in and its label types in with shimmer → tool `end` → tick, shimmer stops → next tool `start` → the new step replaces it.
+
+**Check:** `tsc --noEmit` clean, `npm test` 107 passed. **Not verified:** on a device or in the Expo web build.
+
+### [2026-10-16 15:25 UTC+07:00] — [CI] CI runs only the jobs whose area changed
+
+**Done:** New job `changes` in `ci.yml` (`dorny/paths-filter@v4.0.3`) marks which of `ai`, `core`, `mobile`, `landing`, `containers` a pull request or push touched. Each test job, `deploy-web` and `deploy-landing` run only for their area; `deploy` runs when `ai` or `core` changed and deploys only the changed service. Skipped jobs count as passed, so required checks and the `mobile-release.yml` gate still work. A change to `ci.yml` runs everything. It replaces the landing-only `Detect landing changes` step, and keeps its rule that a re-run always deploys, now for every deploy job.
+
+**Changed files:** `.github/workflows/ci.yml`, `docs/development/ci-cd.md`, `CONTRIBUTING.md` — modified; this entry.
+
+**Flow explained:** `changes` → test jobs gated by area → `summary` (skipped rows) → deploy jobs gated by area and by no failed test job.
+
+**Check:** `actionlint` passes. **Not verified:** a real run on GitHub; the PR of this change touches `ci.yml`, so it runs every job, and the skip path shows only on a later docs-only or single-area PR.
+
+### [2026-10-16 14:15 UTC+07:00] — [Feature] App guide updated with refreshed illustrations, 16:9 ratio, and aligned copy
+
+**Done:** The app guide in `AssistantIntroModal.tsx` now follows the updated visual mockups across all 4 steps in sequential order: Trợ lý Bobi, Tổng quan, Bán hàng, and Quản lý. The 4 legacy JPEG illustrations were replaced with clean PNG assets (`guide-bobi.png`, `guide-overview.png`, `guide-sales.png`, `guide-manage.png`) rendered at their native 1672×941 ratio (16:9) to prevent clipping callout bubbles. The step descriptions and bullet tips were rewritten and aligned with the callouts in each illustration.
+
+**Changed files:** `frontend/mobile/src/components/AssistantIntroModal.tsx` — modified; `frontend/mobile/assets/guide/guide-bobi.png`, `guide-overview.png`, `guide-sales.png`, `guide-manage.png` — created; `frontend/mobile/assets/guide/bobi-menu.jpg`, `guide-overview.jpg`, `guide-sales.jpg`, `guide-manage.jpg` — deleted; this entry.
+
+**Check:** `tsc --noEmit` clean (0 errors), `npm test` clean, `npm run export:web` built `dist` without errors.
+
+### [2026-10-16] — [Chore] Core-only Zalo domain verification
+
+**Done:** Added the supplied Zalo verification HTML as a Core static resource and allowed anonymous GET of that exact filename only. This branch does not contain the unfinished Zalo login/link implementation, new configuration, or a database migration.
+
+**Changed files:** `backend/core/src/main/resources/static/zalo_verifierMysnBA7R831YqgKCwDCT0HgaYGlsqb9MCpOu.html`, `backend/core/src/main/java/com/smartledger/core/config/SecurityConfiguration.java`, `backend/core/src/test/java/com/smartledger/core/config/ZaloDomainVerificationHttpTest.java`; this entry. Existing progress entries retained unchanged.
+
+**Flow explained:** After merging into staging and deploying Core, open `https://<Core-domain>/zalo_verifierMysnBA7R831YqgKCwDCT0HgaYGlsqb9MCpOu.html` without a Bearer token, then use Zalo Developers' domain-verification action. The file is not the OAuth callback. Other files, business APIs and unreleased Zalo routes remain authenticated; no wildcard exception was added.
+
+**Check:** Verified test-first RED: 14 HTTP cases executed, with the expected GET failing as 401 instead of 200. After the fix, `mvnw.cmd '-Dtest=ZaloDomainVerificationHttpTest,ApiDocumentationHttpTest,ApiDocumentationWebTest,CorsWebTest,BearerTokenAuthenticationFilterTest' test` passes 43 tests, 0 failures/errors/skipped. The 14 new cases use a real loopback HTTP server and cover exact HTML delivery, six non-GET methods and seven unrelated paths. JaCoCo reports SecurityConfiguration line coverage 36/39 (92.31%); this is not whole-Core coverage. Supplied HTML matches after line-ending normalization. No business DB or real Firebase/Zalo calls. Railway delivery and Zalo's actual verification remain unverified until the team merges/deploys this branch.
+
+### [2026-10-16 12:57 UTC+07:00] — [Mobile] A running tool step replaces the waiting phrase in the thought line
+
+**Done:** When the assistant calls a tool, the step label now takes the place of the shimmering waiting phrase instead of standing beside it, so the first slot of the thought line shows the one thing happening now. The waiting phrase still rotates until the first tool call, and a finished step stays on the line with a check.
+
+**Changed files:** `frontend/mobile/src/components/ThoughtLine.tsx` and this entry.
+
+**Check:** `npm run typecheck` clean; `npm test` 107 passed; the Metro iOS bundle builds (HTTP 200) and carries the new comment. Not run on a real device: only the iOS simulator.
+
+### [2026-10-16 14:00 UTC+07:00] — [Feature] Agent chat shows tool steps in a "Thought Line" and streams text smoothly
+
+**Done:** AI emits `tool_start {call_id,name}` / `tool_end {call_id}` SSE events for each tool call (name only, never arguments or results); Core relays unknown event names verbatim, so Java is untouched. The mobile chat replaces `ThinkingStatus` with `ThoughtLine` (React Bits Thought Line port): the lattice-dots indicator in place of the star, a live clock, the steps the assistant ran (Vietnamese labels live in the app) inline after the waiting phrase and wrapping to the next line when they run out of room; the thought line has no bubble of its own, so it reads as a status line rather than a second answer, and it stays until the answer bubble takes its place. The answer then streams in a separate bubble with the Bobi label. The waiting label is semibold with a shimmer band sweeping its letters; phrase changes and each step slide up and fade in, and a step label streams in one character at a time. Streamed answer text now reveals a few characters per frame (`useSmoothText`) instead of jumping a token burst at a time. The reveal is timed in ms (half-life 80 ms), not per frame, so a slow device does not fall behind and dump the tail when the turn ends. The streaming bubble now carries the same Bobi label as a saved answer, and the label text and memory icon are larger. Reduce-motion keeps the label static.
+
+**Changed files:**
+- `backend/ai/src/agent/tool_events.py` — created (only module reading pydantic-ai tool events)
+- `backend/ai/src/agent/service.py`, `router.py` — modified
+- `backend/ai/tests/unit_tests/test_agent_service.py`, `tests/integration_tests/test_agent_chat.py` — modified
+- `docs/contracts/api-contracts.md` — modified (`tool_start`, `tool_end`)
+- `frontend/mobile/src/components/ThoughtLine.tsx` — renamed from `ThinkingStatus.tsx`, rewritten
+- `frontend/mobile/src/components/ChatText.tsx` — modified (`StreamingChatText`)
+- `frontend/mobile/app/ai.tsx`, `src/data/types.ts`, `src/lib/agentApi.ts` — modified
+- `frontend/mobile/src/lib/toolSteps.ts`, `src/lib/smoothText.ts`, `tests/toolSteps.test.ts`, `tests/smoothText.test.ts` — created
+
+**Flow explained:** `agent.iter()` → each `CallToolsNode` is streamed → `tool_progress` maps call/result events → `ToolStarted`/`ToolFinished` → SSE `tool_start`/`tool_end` → Core → `chatStream` `onTool` → `applyToolEvent` builds the steps → `ThoughtLine`. Draft text goes through `useSmoothText` before the markdown parser.
+
+**Check:** backend 383 passed, ruff clean; mobile 99 node tests pass, `tsc --noEmit` clean; Expo web mock in a browser shows the shimmer sweeping, slide-in, lattice dots and the fold to "Đã suy nghĩ". **Not verified:** a real model end to end (mock emits no tool events and returns the whole answer at once, so the per-frame reveal is covered by unit tests only); on-device motion and the native driver; the contract still has no end-to-end acceptance.
+
+### [2026-10-16 11:39 UTC+07:00] — [Fix] Mobile release scripts: Node drift, one-shot fix menu, simulator and emulator by default
+
+**Done:** `scripts/ios-device-release.sh` and `scripts/android-release.sh` share one Node check in `scripts/lib/preflight.sh`. When the Node first on PATH is another major than `NODE_MAJOR` (or does not run, e.g. Homebrew's node after an `icu4c` upgrade) and the pinned major is installed through Homebrew `node@<major>`, nvm, fnm, Volta, asdf, mise or n, the scripts put it first on PATH for that run, also with `--skip-preflight`. The suggested fix is now `nvm install`, `fnm install` or `brew install node@<major>`, without the `brew link --overwrite --force` that failed next to Homebrew's unversioned node. `node_modules` is reinstalled when the last install ran under another Node major, and the iOS script rewrites `ios/.xcode.env.local` so Xcode's bundling phase uses the same Node. The fix menu no longer asks "Pick a number" again after a fix ran: a successful command re-runs the checks with the same arguments, an opened page or app stops the script. iOS now defaults to the iOS Simulator (a booted iPhone simulator, else the newest runtime's first iPhone), preselected in the menu next to paired iPhones; `--simulator` skips the menu and `--device` also takes a simulator's name or UDID; signing checks run only for an iPhone, and a missing runtime offers `xcodebuild -downloadPlatform iOS`. Android defaults locally to an emulator: a running one, else it boots an AVD while Gradle runs and offers to create one with `sdkmanager` and `avdmanager`; it builds only the emulator's ABI, installs and opens the app. `--build-only` keeps the previous default, which stays the default in GitHub Actions and with `--aab` or `--out`. Both builds use staging Core unless `EXPO_PUBLIC_API_ENDPOINT` says otherwise.
+
+**Changed files:** `scripts/lib/preflight.sh`, `scripts/ios-device-release.sh`, `scripts/android-release.sh`, `frontend/mobile/README.md`, `docs/development/ci-cd.md`, `docs/development/mobile-ios-device-release.md` — modified; this entry.
+
+**Check:** `bash -n` and `shellcheck` on the three scripts (only the earlier `pairing` unused warning remains); stubbed runs on Linux of the Node switch (nvm 22.9 and 22.11 beside Node 24 on PATH: picks 22.11), a broken node, the fix menu in a pseudo-terminal, iOS target selection (default, `--simulator`, simulator by name, untrusted and unknown device, no runtime, menu Enter and down-arrow) and the Android emulator preflight (no AVD, AVD to start, running emulator, `--abis` mismatch, CI and `--build-only` defaults). **Not verified:** a real build on a Mac in the iOS Simulator or on an Android emulator (no macOS or emulator here); whether every native library (for example `react-native-sherpa-onnx`) ships a simulator slice.
+
+### [2026-10-16 10:25 UTC+07:00] — [Docs] AI docs and diagrams re-checked against the AI service (supersedes #212)
+
+**Done:** Moved the 13 findings of #212 onto a fresh branch from `staging` (#212 was far behind) and re-checked them in four audit rounds against `backend/ai/src`, Core's Agent proxy, `supabase/migrations` and `ci.yml`. Docs now cover: the Core stream relay and memory settings proxy (eight Agent routes), guardrail `422` codes kept by Core, the reader pool and eight `ai_read` views, long-term memory behind `AGENT_MEMORY_ENABLED` (off by default, awaiting PO approval) with its tables in the ERD, the current-time line after the new message, `suggest_screen` and the ```` ```actions ```` block (stripped from replayed history, appended after the answer screen), and CI/CD details (landing deploy and approval, PR previews off, pool sizes, memory variables on Railway). Diagrams were re-exported from source: `ci-cd`, `auth-request-flow` (sign-in by email, Facebook or Google), `agent-memory`, and the two `06-ai` walkthrough diagrams.
+
+**Changed files:** `README.md`, `backend/ai/README.md`, `backend/ai/.env.example` (comments and blank keys only), `docs/README.md`, `docs/contracts/api-contracts.md`, `docs/architecture/technical-design.md`, `docs/architecture/erd-description.md`, `docs/architecture/diagrams/src/erd.dbml`, `docs/architecture/adr/0002-agent-long-term-memory.md`, `docs/architecture/service-walkthrough/README.md` and `06-ai/*.svg`, `docs/development/ci-cd.md`, `docs/architecture/diagrams/src/{ci-cd,auth-request-flow,agent-memory}.drawio` and their SVGs — modified; this entry.
+
+**Flow explained:** each round, one slice per doc group was checked sentence by sentence against the code; every claimed drift was verified against the cited code before it was applied. A claim the code cannot show (Railway, Vercel or Firebase settings) was left open, not written as fact.
+
+**Check:** `dbml2sql` parses `erd.dbml`; every `.drawio` and SVG parses as XML; Mermaid re-rendered; local link and anchor check reports 0 bad links. **Not verified:** whether staging or production set `AGENT_MEMORY_ENABLED` or Cloudflare variables; `vercel-production` secrets, Firebase authorized domains and `CORS_ALLOWED_ORIGINS` on `railway-production`.
+
+### [2026-10-16 10:23 UTC+07:00] — [Fix] Overview compact bar buttons on one line
+
+**Done:** After scrolling Tổng quan, the four quick buttons of the compact bar (Đọc đơn, Quét mã, Chọn hàng, Trợ lý) showed the icon above the label (#254), which took two lines of height. Each button now has the icon tile and the label on one line, 34 px high instead of 50 px; buttons are as wide as their label instead of equal, so "Chọn hàng" fits beside the short "Trợ lý". `HEADER_COLLAPSED` goes from 115 to 99, so the collapsed bar is 16 px lower. On screens narrower than 360 px the label shrinks to fit instead of wrapping (native only).
+
+**Changed files:** `frontend/mobile/app/(tabs)/index.tsx` — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors; mock web build in headless Chrome at 360 and 393 px after scrolling: the four buttons share one row, each 34 px high with icon and label on one line, no label cut and no button past the bar (10/10). **Not verified:** a real phone.
+
+### [2026-10-16 15:30 UTC+07:00] — [Feature] Shorter Bobi intro and scope, history fits a 100k-token window
+
+**Done:** The shop prompt no longer says who Bobi is twice or lists the shop topics twice: voice, identity and the off-topic reply now take one paragraph each (3.5k → 3.0k characters); rules and the current-time line are unchanged. `AGENT_HISTORY_TURNS` defaults to 30 (was 100), so one request stays inside a 100k-token context window.
+
+**Changed files:** `backend/ai/src/prompt_templates/shop_agent.py`, `backend/ai/src/app_config.py`, `backend/ai/.env.example`, `backend/ai/README.md`, `docs/contracts/api-contracts.md`, `docs/architecture/technical-design.md`, `docs/architecture/adr/0002-agent-long-term-memory.md` — modified; this entry.
+
+**Flow explained:** 100 exchanges at the 2000-character input cap plus answers can pass 100k tokens of Vietnamese; 30 leaves room for the system prompt and tool results.
+
+**Check:** AI unit tests 331 passed, ruff clean. **Not verified:** live replies to greetings and off-topic questions; whether a deployed env overrides `AGENT_HISTORY_TURNS`.
+
+### [2026-10-16 14:30 UTC+07:00] — [Feature] Bobi guides the owner around the app and links replies to screens
+
+**Done:** The agent prompt now describes the app's tabs, screens and buttons, so Bobi can say how to sell, record a debt payment, add an expense or open a report. A new `suggest_screen` tool lets Bobi add up to two buttons under a reply (e.g. "Mở Công nợ" after an answer about open debts); the mobile chat renders them and opens the screen with `router.navigate`.
+
+**Changed files:** `backend/ai/src/prompt_templates/app_guide.py` — created; `backend/ai/src/prompt_templates/__init__.py`, `backend/ai/src/agent/tools.py`, `backend/ai/src/agent/service.py` — modified; `backend/ai/tests/unit_tests/test_screen_buttons.py` — created; `test_agent_service.py`, `test_shop_data_tool.py`, `test_restock_tool.py` — modified; `frontend/mobile/src/lib/chatMarkdown.ts`, `frontend/mobile/src/components/ChatText.tsx`, `frontend/mobile/tests/chatMarkdown.test.ts` — modified; `docs/contracts/api-contracts.md`, `backend/ai/README.md`, `frontend/mobile/README.md` — modified; this entry.
+
+**Flow explained:** model calls `suggest_screen(screen)` (closed `Literal`, so an unlisted screen is retried) → the tool returns the screen as `ToolReturn` metadata → after the run `AgentService` reads it from the new messages, dedupes, caps at 2 and appends a ```` ```actions ```` block to `answer` → the block is stored and reaches the app as the last `delta` and in `done`, so Core is unchanged → history replay strips it → mobile maps names through `SCREEN_LINKS` and draws the buttons once the block is closed. A Pydantic AI `CustomEvent` was considered and not used: the answer must carry the buttons anyway to show them again from history, so a separate SSE event would duplicate it.
+
+**Check:** AI unit tests 337 passed, ruff clean; mobile `npm test` 83 passed, `tsc --noEmit` reports only two modules missing from the local `node_modules` in an untouched file. **Not verified:** live model behaviour (when Bobi chooses to add a button) and tapping the buttons on a device.
+
+### [2026-10-16 10:10 UTC+07:00] — [Feature] Agent prompt cache: time after the message, Anthropic cache breakpoints, cache usage in logs
+
+**Done:** The current-time line moved out of the system instructions to the end of the owner's new message, behind a `CachePoint`, so the instructions and the whole stored history stay a byte-identical prefix from turn to turn. The Anthropic model now sets explicit cache breakpoints on tools, instructions and the last message (not the top-level automatic mode, which the gateway may not forward). Each turn logs cache read and write tokens and the hit ratio next to the usage.
+
+**Changed files:** `backend/ai/src/agent/service.py`, `backend/ai/src/providers/factory.py`, `backend/ai/src/prompt_templates/shop_agent.py`, `backend/ai/tests/support.py`, `backend/ai/tests/unit_tests/test_agent_service.py`, `test_shop_data_tool.py`, `test_restock_tool.py`, `test_agent_guardrails.py`, `test_agent_memory.py`, `test_provider_factory.py` — modified; this entry.
+
+**Flow explained:** request = `[instructions][stored history][new message | CachePoint | current time]`. The time is never stored, so it must come after the breakpoint: the next turn repeats the previous request up to that breakpoint and the provider finds it in its cache. Putting the time before the message was measured and rejected: cache reads stayed flat at the instructions while the history was re-written every turn.
+
+**Check:** 320 unit tests pass, integration 40 passed / 52 skipped (no DB env), ruff clean. Live against the gateway (`claude-haiku-5-5`), real `AgentService`, three turns: cache read 0 → 992 → 1124 tokens, hit 0% → 85% → 87%, and the model answered "thứ Sáu, 16/10/2026" from the moved time line. **Not verified:** turns with tool calls and recalled memories: memory-wrapped prompts are not stored as sent, so the turn after a recall misses the history cache from that message on.
+
+### [2026-10-16 08:30 UTC+07:00] — [Feature] Chat prompts speak as Bobi of Sổ Nghe Lời, query prompt matches the SQL guard
+
+**Done:** The shop chat prompt now introduces the assistant as Bobi of Sổ Nghe Lời (was "SmartLedger's assistant"): Bobi refers to itself as "Bobi", addresses the owner as "anh/chị", leads with the answer, uses today when no period is named, and lists the matches when a product name is ambiguous. The query prompt now lists exactly the functions and casts `SqlGuard` accepts (it omitted CASE, row_number, substring and others), defines today/yesterday/this week/this month in shop time, shows how to fold Vietnamese names for `name_folded`, and adds examples for today, yesterday and revenue per day this month; sums use `coalesce(..., 0)` so an empty period reads as zero sales.
+
+**Changed files:** `backend/ai/src/prompt_templates/shop_agent.py`, `backend/ai/src/prompt_templates/sql_agent.py` — modified; this entry.
+
+**Flow explained:** `AgentService` still joins the static shop prompt, the query prompt, the restock prompt and the memory prompt in that order, then the current time, so the cacheable prefix layout is unchanged.
+
+**Check:** `uv run pytest tests/unit_tests` 319 passed; ruff clean; all 14 example queries and every function named in rule 7 pass `SqlGuard.validate_and_wrap`. **Not verified:** the new examples against staging data, and live replies from the model.
+
+### [2026-10-16 03:21 UTC+07:00] — [Fix] Guide button on the Quản lý tab; report cost warning no longer counts voided orders twice
+
+**Done:** The button that replays the welcome guide sat at the bottom of Settings, two taps deep. It is now a row "Xem lại hướng dẫn" in the "Tài khoản & ứng dụng" group of the Quản lý tab, between Cài đặt and Đăng xuất; it still goes to Tổng quan and opens the guide there. Settings no longer has the button, and the guide's own tip now points to the Quản lý tab.
+
+Testing #256 on a real phone against staging Core showed the report's missing-cost card saying 42.859.626đ of revenue lacked a cost while the day's revenue was 217.000đ. Core's `/reports/profit-estimate` counts lines without a cost both when sold and when voided (`ReportAggregationRepository.profitEstimate`), so a sale made and voided in the same period counts twice (217.000 + 2 × 21.321.313). The card now gives the item count and revenue only when the period has no voided order; otherwise it says the cost and profit above are incomplete. Core is unchanged.
+
+The report criterion added by #256 reused the number `AC-076`, which the Agent ledger criterion already had; it is now `AC-078`.
+
+**Changed files:** `frontend/mobile/app/(tabs)/more.tsx`, `frontend/mobile/app/settings.tsx`, `frontend/mobile/src/components/AssistantIntroModal.tsx`, `frontend/mobile/src/store/AppStore.tsx`, `frontend/mobile/app/analytics.tsx`, `docs/product/product-requirements.md` (`FR-025`, `AC-018`, `AC-078`) — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors.
+### [2026-10-16 03:00 UTC+07:00] — [CI] Deploy the landing only when it changed
+
+**Done:** `deploy-landing` now runs on a push only when the push changes `frontend/web/` or `.github/workflows/ci.yml`; a re-run always deploys. Every push to `staging` and `main` used to spend two Vercel deployments (web and landing) even when only the backend changed, and the production deploy of release #249 hit the Hobby limit of 100 a day (`api-deployments-free-per-day`).
+
+**Changed files:** `.github/workflows/ci.yml`, `docs/development/ci-cd.md` — modified; this entry.
+
+**Flow explained:** push → job `landing` diffs `github.event.before`..`GITHUB_SHA` → `changed=true|false` → `deploy-landing` runs when `true` or on a re-run.
+
+**Check:** YAML parses and actionlint passes; the step script run locally against real commit pairs gives `false` for a backend-only push and `true` for a push touching `frontend/web/`, an all-zero `before` and an unknown commit. **Not verified:** a real push on GitHub (this PR's merge into `staging` touches `ci.yml`, so it will deploy; the first push after it that leaves the landing alone should skip).
+
+### [2026-10-16 02:47 UTC+07:00] — [Fix] Tabs switch without fading; overview compact bar and best sellers tidied
+
+**Done:** On an Android phone, switching to Quản lý sometimes showed only a blank screen with Bobi and the tab bar. The bottom tabs still faded on phones (#224 turned the fade off only on the web) and the fade can get stuck at zero opacity (inferred from the screenshot; not reproducible on the web). Tabs now switch without animation everywhere, and the scene background is the app background so any gap is not pure white. On Tổng quan, the compact bar shown after scrolling looked as if its icons were cut: the dark purple parts of the small icons disappeared into the purple bar, and at 360 px the labels were cut ("Đọc …", "Chọ…"). Each compact button now shows its icon on a light rounded tile above the label (buttons 50 instead of 42 px tall, which still fits the 115 px bar). In "Bán chạy", product names and quantities use the same line height without Android font padding so the quantity no longer sits higher than the name.
+
+**Changed files:** `frontend/mobile/app/(tabs)/_layout.tsx`, `frontend/mobile/app/(tabs)/index.tsx` (`CompactAction`) — modified; this entry.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (only the 2 known errors in #230's files). Mock web build in headless Chrome at 360×780, 8/8: name and quantity centres in "Bán chạy" match (0 px), the four compact buttons show icon tiles with full labels inside the buttons, and 250 ms after tapping Đơn hàng, Bán hàng, Quản lý, Tổng quan and Quản lý again each screen's title is fully visible. **Not verified:** the blank-tab fix on an Android phone.
+
+### [2026-10-16 02:46 UTC+07:00] — [Fix] Voice orders ask before saving a longer name as a shorter product
+
+**Done:** With "Cà phê" in the catalog, saying "cà phê sữa" recorded "Cà phê" and dropped "sữa". When the spoken name is longer than the matched product and no other product contains it, Đọc đơn now asks: pick the matched product, or "Thêm món mới" with the spoken name, which opens the usual add-to-catalog dialog (price, quantity, unit). The choice card is titled "Chọn món cho …" and its skip button is "Bỏ qua". Words like "nữa", "thôi", "luôn", "giúp", "dùm" are treated as filler so "hai cà phê nữa" still records 2 Cà phê.
+
+**Changed files:** `frontend/mobile/src/lib/parseOrder.ts`, `frontend/mobile/app/voice.tsx`, `frontend/mobile/tests/parseOrder.test.ts`, `docs/product/product-requirements.md` (`AC-074`) — modified; this entry.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (only the 2 known errors in #230's files); `node --test tests/*.test.ts` 80/80 (5 new). Mock web build in headless Chrome, 3/3: "hai trà đá nữa" records 2 Trà đá, "một trà đá chanh" asks with Trà đá as the option, and "Thêm món mới" opens the dialog to add "Trà đá chanh". **Not verified:** speech on a phone.
+
+### [2026-10-16 02:45 UTC+07:00] — [Feature] Report uses Core's estimated cost and shows the money of voided orders
+
+**Done:** "Giá vốn ước tính" on the Báo cáo screen was computed on the phone from each product's current cost, or 60% of the price when the product had none, which FR-006 rules out. The report now reads Core: revenue is the confirmed orders sold in the period (`/sales/summary`, never negative), and cost and profit come from `/reports/profit-estimate`, which uses the cost snapshotted at sale time. Core's net cost (sold minus voided) can go negative when an earlier order is voided, so the screen shows non-negative parts that add up exactly to Core's gross profit: revenue − cost of goods sold − orders sold earlier and voided now + cost of voided orders = gross profit, then − recorded expenses = profit after expenses. When some items have no cost, it says how many and how much revenue they cover, and links to Hàng hoá. A new "Đơn huỷ trong kỳ" block shows the number and value of orders voided in the period and how much was refunded, and explains that the rest of a voided order's value is only cancelled debt; its "Xem các đơn đã huỷ" button opens Orders with a new "Đã huỷ" filter, where the summary card shows the value of voided orders and day headers count voided orders. `stats.summary` no longer estimates cost at all, and the report stops loading the whole product list for it.
+
+**Changed files:** `frontend/mobile/app/analytics.tsx`, `frontend/mobile/app/(tabs)/invoices.tsx`, `frontend/mobile/src/lib/stats.ts`, `docs/product/product-requirements.md` (new `AC-076`) — modified; `frontend/mobile/src/lib/useReportTotals.ts` — new; this entry.
+
+**Flow explained:** report period → `useReportTotals` → `/reports/summary` + `/reports/profit-estimate` + `/sales/summary` → `periodRevenue` → rows from `grossEstimatedCogsVnd`, `cancelledEarlierVnd`, `voidedEstimatedCogsVnd`, `estimatedGrossProfitVnd`, `expenseVnd`, `estimatedOperatingProfitVnd`; voided block from `voidedOrderCount`, `voidedRevenueVnd`, `refundedVnd`. Orders "Đã huỷ" adds `saleStatus=VOIDED` to the list, the summary and each day's summary.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (only the 2 known errors in #230's files); `node --test tests/*.test.ts` 76/76. Mock web build in headless Chrome, 12/12: before and after voiding yesterday's 379.000đ order the rows add up (265.000 − 195.500 − 379.000 + 323.000 = 13.500) with no negative row, the old "dùng mức ước tính" note is gone, the voided block shows 1 order, 379.000đ, refunded 0đ, and "Xem các đơn đã huỷ" opens Orders with only that order and a 379.000đ "Giá trị đơn huỷ" card. **Not verified:** staging Core, a phone, the missing-cost warning (the mock has no item without cost in the period).
+
+### [2026-10-16 02:44 UTC+07:00] — [Fix] "Xem lại hướng dẫn" replays the guide on Tổng quan
+
+**Done:** The Settings button "Xem lại hướng dẫn" (#233) opened the guide on top of Settings. It now goes to Tổng quan and shows the guide there, as on the first sign-in; closing it leaves the user on Tổng quan. `AppStore` gains `showGuide()` (sets `guideDismissed` to false), and Settings no longer renders its own copy of the guide.
+
+**Changed files:** `frontend/mobile/app/settings.tsx`, `frontend/mobile/src/store/AppStore.tsx`, `docs/product/product-requirements.md` (`AC-018`) — modified; this entry.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (only the 2 known errors in #230's files). Mock web build in headless Chrome, 2/2: from Settings the guide opens on the Bobi step over Tổng quan, and after closing, Tổng quan is shown and Settings is not. **Not verified:** a phone.
+
+### [2026-10-16 02:43 UTC+07:00] — [Fix] Sales: pinned Scan and Read buttons work after scrolling
+
+**Done:** After scrolling the Sales list, tapping "Quét mã" or "Đọc đơn" on the pinned bar did nothing. The large header above the list only fades out when collapsed, and it sits on top of the pinned bar, so it kept taking the taps. The collapsible header now tracks when it crosses the collapse point (a listener that sets state only on crossing) and lets only the visible layer take touches: the large header while expanded, the pinned bar once collapsed.
+
+**Changed files:** `frontend/mobile/app/pos.tsx` (`PosCollapsibleHeader`) — modified; this entry.
+
+**Check:** `tsc --noEmit` has no errors in this PR's files (its only 2 errors are in #230's files: `expo-application` and `expo-intent-launcher` are not installed on this machine). Mock web build in headless Chrome at 393×852, 3/3: before scrolling the centre of the large "Quét mã" button hits that button; after scrolling the centre of the pinned "Quét mã" hits the pinned button and tapping it opens the scanner. **Not verified:** a phone.
+### [2026-10-16 10:06 UTC+07:00] — [Feature] Memory switch moves into the chat's assistant settings
+
+**Done:** The long-term memory switch now lives in a "Cài đặt trợ lý" sheet opened from the chat header, and the "Đã dùng ghi nhớ" text chip on answers is a small bookmark icon (with a count when several memories were used). The sheet loads on every open and shows an error with a retry button, so one failed call while the AI service wakes from idle no longer hides the switch silently. The "Trợ lý AI" section is removed from Cài đặt. No API or contract change.
+
+**Changed files:** `frontend/mobile/app/ai.tsx`, `frontend/mobile/app/settings.tsx`, `docs/contracts/api-contracts.md`, `docs/architecture/adr/0002-agent-long-term-memory.md` — modified; this entry.
+
+**Flow explained:** chat header → sliders button → sheet → `GET /agent/memory/settings` (`available` false shows "chưa được bật", error shows retry) → toggle → `PUT /agent/memory/settings`, reverted with an inline error on failure.
+
+**Check:** `tsc --noEmit` reports no error in `ai.tsx` or `settings.tsx`; the only errors are missing `expo-application` and `expo-intent-launcher` in `src/lib/appUpdateInstall.native.ts`, a file this change does not touch. Not run on a device or simulator.
+
 ### [2026-10-16 10:30 UTC+07:00] — [Fix] Agent memory writes semantic facts by default
 
 **Done:** The default for `AGENT_MEMORY_TYPES` is now `preference,procedural,semantic`, matching what staging and production run. With the old default the extractor dropped stable facts such as suppliers while the agent still told the owner "Đã ghi nhớ". ADR 0002 records the change and its reason; PO approval of the type list is still open.

@@ -6,9 +6,56 @@ on:
     branches: [main, staging]
 
 jobs:
-  ### Test: lint, tests and builds on every pull request and push ###
+  ### Changes: which areas this pull request or push touched ###
+
+  # Each test and deploy job below runs only when its area changed, so a docs-only or web-only change
+  # skips the backend. A skipped job counts as passed for required checks and for the `gate` of
+  # mobile-release.yml. Filtering here, not with `on.paths`, keeps every check reporting a result.
+  # A change to this workflow runs everything.
+  changes:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      ai: ${{ steps.filter.outputs.ai }}
+      core: ${{ steps.filter.outputs.core }}
+      mobile: ${{ steps.filter.outputs.mobile }}
+      landing: ${{ steps.filter.outputs.landing }}
+      containers: ${{ steps.filter.outputs.containers }}
+    steps:
+      - uses: actions/checkout@v7
+      # A pull request is compared with its base branch; a push with the commit before the push.
+      - uses: dorny/paths-filter@v4.0.3
+        id: filter
+        with:
+          base: ${{ github.ref_name }}
+          filters: |
+            ai:
+              - .github/workflows/ci.yml
+              - backend/ai/**
+              # The AI integration tests apply these migrations.
+              - supabase/**
+            core:
+              - .github/workflows/ci.yml
+              - backend/core/**
+            mobile:
+              - .github/workflows/ci.yml
+              - frontend/mobile/**
+            landing:
+              - .github/workflows/ci.yml
+              - frontend/web/**
+            containers:
+              - .github/workflows/ci.yml
+              - compose.yaml
+              - backend/ai/**
+              - backend/core/**
+
+  ### Test: lint, tests and builds for the areas that changed ###
 
   ai:
+    needs: [changes]
+    if: needs.changes.outputs.ai == 'true'
     runs-on: ubuntu-24.04
     services:
       postgres:
@@ -67,6 +114,8 @@ jobs:
           PY
 
   core:
+    needs: [changes]
+    if: needs.changes.outputs.core == 'true'
     runs-on: ubuntu-24.04
     services:
       postgres:
@@ -146,6 +195,8 @@ jobs:
           PY
 
   mobile-web:
+    needs: [changes]
+    if: needs.changes.outputs.mobile == 'true'
     runs-on: ubuntu-24.04
     env:
       EXPO_PUBLIC_USE_MOCK: "true"
@@ -167,6 +218,8 @@ jobs:
       - run: npm run export:web
 
   landing:
+    needs: [changes]
+    if: needs.changes.outputs.landing == 'true'
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -183,6 +236,8 @@ jobs:
       - run: npm run build
 
   container-images:
+    needs: [changes]
+    if: needs.changes.outputs.containers == 'true'
     runs-on: ubuntu-24.04
     env:
       DATABASE_URL: jdbc:postgresql://ci-placeholder:5432/ci
@@ -245,12 +300,18 @@ jobs:
   ### Deploy backend: Railway `ai` and `core` after a push to `staging` or `main` ###
 
   # Deploys backend services to Railway after a push to `staging` or `main` passes the jobs in `needs`; `landing` is not one of them.
+  # Runs only when `ai` or `core` changed, and deploys only the changed service; a skipped test job
+  # counts as passed, a failed or cancelled one blocks the deploy. A re-run deploys both services,
+  # so a changed environment variable can be picked up by re-running all jobs.
   # Each GitHub environment holds its own environment-scoped Railway project token and branch
   # policy; `railway-production` requires approval. The environment is set on this job, not in a
   # called workflow, so its secret reaches the job.
   deploy:
-    if: github.event_name == 'push'
-    needs: [ai, core, mobile-web, container-images]
+    if: >-
+      !failure() && !cancelled()
+      && github.event_name == 'push'
+      && (needs.changes.outputs.ai == 'true' || needs.changes.outputs.core == 'true' || github.run_attempt > 1)
+    needs: [changes, ai, core, mobile-web, container-images]
     permissions:
       contents: read
     runs-on: ubuntu-24.04
@@ -318,9 +379,11 @@ jobs:
       # AI first: Core calls AI, so the new Core should not start against an old AI.
       - name: Deploy ai
         id: deploy_ai
+        if: needs.changes.outputs.ai == 'true' || github.run_attempt > 1
         run: railway up backend/ai --path-as-root --service ai --ci
       - name: Deploy core
         id: deploy_core
+        if: needs.changes.outputs.core == 'true' || github.run_attempt > 1
         run: railway up backend/core --path-as-root --service core --ci
       - name: Build deploy report
         if: always()
@@ -365,8 +428,11 @@ jobs:
     # Push only: pull-request previews used up the Vercel Hobby limit of 100 deployments a day and
     # blocked the staging and production deploys. The PR-only steps below stay so previews can
     # return with `|| github.event.pull_request.head.repo.full_name == github.repository`.
-    if: github.event_name == 'push'
-    needs: [mobile-web]
+    # A re-run always deploys, as in deploy-landing.
+    if: >-
+      !failure() && !cancelled() && github.event_name == 'push'
+      && (needs.changes.outputs.mobile == 'true' || github.run_attempt > 1)
+    needs: [changes, mobile-web]
     permissions:
       contents: read
       pull-requests: write
@@ -499,9 +565,13 @@ jobs:
   # smart-ledger-landing-pr-<number> in the run summary and no PR comment, because deploy-web
   # already edits the bot's last PR comment.
   deploy-landing:
-    # Push only, like deploy-web.
-    if: github.event_name == 'push'
-    needs: [landing]
+    # Push only, like deploy-web, and only when the landing changed. A re-run always deploys, so a
+    # changed environment variable can be picked up by re-running all jobs; `landing` is then
+    # skipped, so a skipped need must not block this job.
+    if: >-
+      !failure() && !cancelled() && github.event_name == 'push'
+      && (needs.changes.outputs.landing == 'true' || github.run_attempt > 1)
+    needs: [changes, landing]
     permissions:
       contents: read
     runs-on: ubuntu-24.04

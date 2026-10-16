@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import httpx
 import pytest
 from fastapi.testclient import TestClient
-from pydantic_ai.messages import ModelResponse, TextPart
+from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 from tests.support import TEST_GUARDRAIL_LIMITS, ScriptedModel, echo_user_prompts
 
@@ -335,6 +335,41 @@ def test_stream_sends_deltas_then_done_with_the_persisted_turn(
         user_message="today's revenue?",
         assistant_message=answer,
     )
+
+
+def test_stream_sends_tool_start_and_end_before_the_answer(client: TestClient) -> None:
+    class ShopData:
+        def run(self, shop_id: int, sql: str) -> dict:
+            return {"columns": ["n"], "rows": [[1]], "truncated": False}
+
+    app.state.agent = AgentService(
+        ScriptedModel(
+            ModelResponse(
+                parts=[
+                    ToolCallPart(
+                        "query_shop_data",
+                        {"sql": "SELECT 1 FROM v_shop_profile"},
+                        tool_call_id="call-1",
+                    )
+                ]
+            ),
+            "One product is on sale.",
+        ),
+        app.state.conversations,
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
+        shop_data=ShopData(),
+    )
+
+    events = sse_events(stream_chat(client))
+
+    tools = [(name, data) for name, data in events if name.startswith("tool_")]
+    assert tools == [
+        ("tool_start", {"call_id": "call-1", "name": "query_shop_data"}),
+        ("tool_end", {"call_id": "call-1"}),
+    ]
+    assert [name for name, _ in events].index("tool_end") < [
+        name for name, _ in events
+    ].index("done")
 
 
 def test_stream_retries_a_leaking_answer_without_showing_it(

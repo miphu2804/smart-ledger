@@ -71,8 +71,9 @@ class AppConfig(BaseSettings):
     # stored
     AGENT_TURN_TIMEOUT_SECONDS: float = Field(default=35.0, gt=0)
 
-    # most recent owner/assistant exchanges sent to the model with each turn
-    AGENT_HISTORY_TURNS: int = Field(default=100, gt=0)
+    # most recent owner/assistant exchanges sent to the model with each turn; 30 at
+    # the 2000-char input cap keeps one request well inside a 100k-token window
+    AGENT_HISTORY_TURNS: int = Field(default=30, gt=0)
 
     # long-term memory across conversations (ADR-0002); off until the PO approves it.
     # Needs the `memory` dependency group and the agent_memories migration, whose
