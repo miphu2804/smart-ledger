@@ -130,6 +130,30 @@ export const firebaseAuth: AuthClient = {
     }
   },
 
+  hasPassword() {
+    try {
+      const user = load().auth.currentUser;
+      return !!user?.email && (user.providerData ?? []).some((p: { providerId?: string }) => p?.providerId === 'password');
+    } catch {
+      return false;
+    }
+  },
+
+  async changePassword(currentPassword, newPassword) {
+    const { m, auth } = load();
+    const user = auth.currentUser;
+    if (!user?.email) throw new AuthError('unknown');
+    debugLog('auth', 'changePassword (web) →');
+    try {
+      // Firebase đòi đăng nhập gần đây mới cho đổi mật khẩu: xác thực lại bằng mật khẩu hiện tại ngay trước khi đổi
+      await m.reauthenticateWithCredential(user, m.EmailAuthProvider.credential(user.email, currentPassword));
+      await m.updatePassword(user, newPassword);
+      debugLog('auth', 'changePassword (web) ✓');
+    } catch (e) {
+      throw mapFirebaseError(e);
+    }
+  },
+
   async getIdToken(forceRefresh) {
     return (await load().auth.currentUser?.getIdToken(forceRefresh)) ?? null;
   },

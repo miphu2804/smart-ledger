@@ -96,7 +96,7 @@ const steps: readonly {
     image: {
       source: require('../../assets/guide/guide-manage.png'),
       label:
-        'Hình minh hoạ tab Quản lý với các mục Báo cáo, Hàng hoá, Chi phí, Công nợ, Cài đặt và Đăng xuất',
+        'Hình minh hoạ tab Quản lý với các mục Báo cáo, Hàng hoá, Chi phí, Công nợ, Cài đặt, Xem lại hướng dẫn và Đăng xuất',
       ratio: 1672 / 941,
     },
     tone: colors.red,

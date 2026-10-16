@@ -1,3 +1,27 @@
+### [2026-10-16 18:26 UTC+07:00] — [Fix] Guide pictures for Bán hàng and Quản lý match the app
+
+**Done:** In the guide pictures from #274, the Bán hàng phone highlighted "Quản lý" in the tab bar and its bar ran past the screen, and the Quản lý phone lacked the "Xem lại hướng dẫn" row (#257) while its notes had a garbled character in "số lượng" and wrote "Quản lí". The Quản lý phone screen is now a capture of the real tab from the mock web build (same sample shop and numbers), with the floating Bobi and the version line hidden; the arrows that ended inside the old screen are redrawn to the same rows, and the Hàng hoá, Chi phí and Công nợ notes are rewritten in Plus Jakarta Sans. The Bán hàng phone keeps its screen but gets the real tab bar with "Bán hàng" highlighted. Same 1672 × 941 size; the bobi and overview pictures are unchanged. The manage picture's accessibility label lists the new row.
+
+**Changed files:** `frontend/mobile/assets/guide/guide-manage.png`, `frontend/mobile/assets/guide/guide-sales.png`, `frontend/mobile/src/components/AssistantIntroModal.tsx` — modified; this entry.
+
+**Check:** Both pictures inspected at full size and zoomed at the edited areas (tab bar, arrow heads, rewritten notes). **Not verified:** how they look inside the guide on a phone.
+
+### [2026-10-16 18:06 UTC+07:00] — [Feature] Change the password inside the app
+
+**Done:** Testers had to sign out and go through "Quên mật khẩu" to change a password. The Quản lý tab now has "Đổi mật khẩu" for accounts that signed up with email (Facebook and Google accounts have no password here, so the row is hidden). The new screen asks for the current password and the new one twice (at least 6 characters, different from the current one); the app re-authenticates with the current password and then updates it in Firebase, so the user stays signed in. A wrong current password shows under that field. "Quên mật khẩu hiện tại? Gửi thư đặt lại" sends the reset email to the signed-in address without signing out. `AuthClient` gains `hasPassword()` and `changePassword()` for native Firebase, web Firebase and the mock. Core is unchanged (it never stores passwords). `FR-010` mentions the in-app change; new criterion `AC-080`.
+
+**Changed files:** `frontend/mobile/app/change-password.tsx` — added; `frontend/mobile/app/(tabs)/more.tsx`, `frontend/mobile/src/lib/auth/types.ts`, `frontend/mobile/src/lib/auth/firebase.ts`, `frontend/mobile/src/lib/auth/firebase.web.ts`, `frontend/mobile/src/lib/auth/mock.ts`, `docs/product/product-requirements.md` (`FR-010`, `AC-080`) — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors; mock web build in headless Chrome (6/6): a new email account (ZZ-TEST) sees "Đổi mật khẩu" in Quản lý; a wrong current password shows "Mật khẩu hiện tại chưa đúng"; a mismatched repeat is flagged; the correct one shows "Đã đổi mật khẩu" and returns to Quản lý still signed in; after signing out the old password is refused and the new one signs in. **Not verified:** real Firebase on a phone (re-authentication and `updatePassword` against the staging project).
+
+### [2026-10-16 17:58 UTC+07:00] — [Fix] An account without a shop no longer lands in the sample shop
+
+**Done:** A tester creating an account pressed Android back on "Tiệm của bạn tên gì?" and landed in the tabs showing "Tiệm tạp hoá cô Thỏ". The app state starts with the sample shop until Core returns a session with a shop, and nothing stopped the tabs from opening before that, so going back from shop setup (or signing out from a screen stacked on the tabs) exposed the sample data as if it were a real account. The tabs layout now opens only for a signed-in account with a shop: before the session is restored it shows a blank screen, signed out it redirects to the sign-in screen, and without a shop to shop setup. On shop setup, Android back and a new "Dùng tài khoản khác" link ask "Dừng tạo tiệm?"; confirming signs out and returns to sign-in. New criterion `AC-079`.
+
+**Changed files:** `frontend/mobile/app/(tabs)/_layout.tsx`, `frontend/mobile/app/(auth)/setup.tsx`, `docs/product/product-requirements.md` (`AC-079`) — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors; mock web build in headless Chrome (5/5): signed out, opening `/invoices` lands on sign-in with no sample shop; "Vào app" opens Tổng quan; signing out from Quản lý returns to sign-in; on `/setup`, "Dùng tài khoản khác" asks "Dừng tạo tiệm?" and confirming returns to sign-in. **Not verified:** Android back on a real phone during a real sign-up.
+
 ### [2026-10-16 17:55 UTC+07:00] — [Mobile/AI] Tool step keeps its shimmer, screen button in brand purple, numbered lists
 
 **Done:** A tool step in `ThoughtLine` keeps its shimmer after the tool ends, because the model is still writing the reply; the running dot is gone and the tick sits after the label, so the label starts where the waiting phrase does. `suggest_screen` gets its own step label instead of the generic one. The screen-button card under a reply drops the "Mở nhanh" label and shows brand-purple buttons with a purple shadow. The shop agent prompt asks for numbered lists only, and the mock replies follow it.
@@ -89,6 +113,14 @@
 **Flow explained:** each round, one slice per doc group was checked sentence by sentence against the code; every claimed drift was verified against the cited code before it was applied. A claim the code cannot show (Railway, Vercel or Firebase settings) was left open, not written as fact.
 
 **Check:** `dbml2sql` parses `erd.dbml`; every `.drawio` and SVG parses as XML; Mermaid re-rendered; local link and anchor check reports 0 bad links. **Not verified:** whether staging or production set `AGENT_MEMORY_ENABLED` or Cloudflare variables; `vercel-production` secrets, Firebase authorized domains and `CORS_ALLOWED_ORIGINS` on `railway-production`.
+
+### [2026-10-16 10:23 UTC+07:00] — [Fix] Overview compact bar buttons on one line
+
+**Done:** After scrolling Tổng quan, the four quick buttons of the compact bar (Đọc đơn, Quét mã, Chọn hàng, Trợ lý) showed the icon above the label (#254), which took two lines of height. Each button now has the icon tile and the label on one line, 34 px high instead of 50 px; buttons are as wide as their label instead of equal, so "Chọn hàng" fits beside the short "Trợ lý". `HEADER_COLLAPSED` goes from 115 to 99, so the collapsed bar is 16 px lower. On screens narrower than 360 px the label shrinks to fit instead of wrapping (native only).
+
+**Changed files:** `frontend/mobile/app/(tabs)/index.tsx` — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors; mock web build in headless Chrome at 360 and 393 px after scrolling: the four buttons share one row, each 34 px high with icon and label on one line, no label cut and no button past the bar (10/10). **Not verified:** a real phone.
 
 ### [2026-10-16 15:30 UTC+07:00] — [Feature] Shorter Bobi intro and scope, history fits a 100k-token window
 
