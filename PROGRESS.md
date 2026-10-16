@@ -90,6 +90,14 @@
 
 **Check:** `dbml2sql` parses `erd.dbml`; every `.drawio` and SVG parses as XML; Mermaid re-rendered; local link and anchor check reports 0 bad links. **Not verified:** whether staging or production set `AGENT_MEMORY_ENABLED` or Cloudflare variables; `vercel-production` secrets, Firebase authorized domains and `CORS_ALLOWED_ORIGINS` on `railway-production`.
 
+### [2026-10-16 10:23 UTC+07:00] — [Fix] Overview compact bar buttons on one line
+
+**Done:** After scrolling Tổng quan, the four quick buttons of the compact bar (Đọc đơn, Quét mã, Chọn hàng, Trợ lý) showed the icon above the label (#254), which took two lines of height. Each button now has the icon tile and the label on one line, 34 px high instead of 50 px; buttons are as wide as their label instead of equal, so "Chọn hàng" fits beside the short "Trợ lý". `HEADER_COLLAPSED` goes from 115 to 99, so the collapsed bar is 16 px lower. On screens narrower than 360 px the label shrinks to fit instead of wrapping (native only).
+
+**Changed files:** `frontend/mobile/app/(tabs)/index.tsx` — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors; mock web build in headless Chrome at 360 and 393 px after scrolling: the four buttons share one row, each 34 px high with icon and label on one line, no label cut and no button past the bar (10/10). **Not verified:** a real phone.
+
 ### [2026-10-16 15:30 UTC+07:00] — [Feature] Shorter Bobi intro and scope, history fits a 100k-token window
 
 **Done:** The shop prompt no longer says who Bobi is twice or lists the shop topics twice: voice, identity and the off-topic reply now take one paragraph each (3.5k → 3.0k characters); rules and the current-time line are unchanged. `AGENT_HISTORY_TURNS` defaults to 30 (was 100), so one request stays inside a 100k-token context window.
