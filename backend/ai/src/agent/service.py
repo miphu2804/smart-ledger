@@ -22,6 +22,7 @@ from pydantic_ai.models import Model
 
 from src.agent.guardrails import GuardrailLimits, GuardrailService
 from src.agent.repository import AgentConversationRepository
+from src.agent.tool_events import ToolFinished, ToolStarted, tool_progress
 from src.agent.tools import (
     AgentContext,
     build_restock_tool,
@@ -84,7 +85,9 @@ class Done:
     result: AgentChatResult
 
 
-AgentStreamEvent = MemoryRecalled | TextDelta | Reset | Done
+AgentStreamEvent = (
+    MemoryRecalled | ToolStarted | ToolFinished | TextDelta | Reset | Done
+)
 
 
 class AgentService:
@@ -319,6 +322,9 @@ class AgentService:
             # extends, rather than a preamble it replaces.
             kept = False
             async for node in run:
+                if Agent.is_call_tools_node(node):
+                    await self._queue_tool_events(node, run, events)
+                    continue
                 if not Agent.is_model_request_node(node):
                     continue
                 response_text = ""
@@ -361,6 +367,18 @@ class AgentService:
                     kept = False
             result = run.result
         return delivered, result
+
+    @staticmethod
+    async def _queue_tool_events(
+        node, run, events: asyncio.Queue[AgentStreamEvent | Exception]
+    ) -> None:
+        """Queue when each tool call starts and ends. Streaming the node is also what
+        runs its tools, so this replaces the plain step of the run loop."""
+        async with node.stream(run.ctx) as stream:
+            async for event in stream:
+                progress = tool_progress(event)
+                if progress is not None:
+                    events.put_nowait(progress)
 
     def _read_result(self, result: AgentRunResult[str]) -> tuple[str, str]:
         """Log the turn's token use; return the answer, with its screen buttons, and
