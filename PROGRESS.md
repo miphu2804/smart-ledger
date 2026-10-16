@@ -1,3 +1,11 @@
+### [2026-10-16 14:15 UTC+07:00] — [Feature] App guide updated with refreshed illustrations, 16:9 ratio, and aligned copy
+
+**Done:** The app guide in `AssistantIntroModal.tsx` now follows the updated visual mockups across all 4 steps in sequential order: Trợ lý Bobi, Tổng quan, Bán hàng, and Quản lý. The 4 legacy JPEG illustrations were replaced with clean PNG assets (`guide-bobi.png`, `guide-overview.png`, `guide-sales.png`, `guide-manage.png`) rendered at their native 1672×941 ratio (16:9) to prevent clipping callout bubbles. The step descriptions and bullet tips were rewritten and aligned with the callouts in each illustration.
+
+**Changed files:** `frontend/mobile/src/components/AssistantIntroModal.tsx` — modified; `frontend/mobile/assets/guide/guide-bobi.png`, `guide-overview.png`, `guide-sales.png`, `guide-manage.png` — created; `frontend/mobile/assets/guide/bobi-menu.jpg`, `guide-overview.jpg`, `guide-sales.jpg`, `guide-manage.jpg` — deleted; this entry.
+
+**Check:** `tsc --noEmit` clean (0 errors), `npm test` clean, `npm run export:web` built `dist` without errors.
+
 ### [2026-10-16] — [Chore] Core-only Zalo domain verification
 
 **Done:** Added the supplied Zalo verification HTML as a Core static resource and allowed anonymous GET of that exact filename only. This branch does not contain the unfinished Zalo login/link implementation, new configuration, or a database migration.
