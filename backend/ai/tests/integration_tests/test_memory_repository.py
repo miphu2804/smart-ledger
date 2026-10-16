@@ -377,3 +377,60 @@ def test_memory_is_on_until_the_owner_turns_it_off(memory_db) -> None:
     memories.set_memory_enabled(shop, user, True)
     assert memories.memory_enabled(shop, user) is True
     assert memories.memory_enabled(ids["shop_b"], ids["user_b"]) is True
+
+
+def test_similar_finds_close_live_memories_without_recording_a_use(
+    memory_db,
+) -> None:
+    admin, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    conversation_a = new_conversation(postgres, ids["user_a"], ids["shop_a"])
+    conversation_b = new_conversation(postgres, ids["user_b"], ids["shop_b"])
+    memories.add(
+        ids["shop_a"],
+        ids["user_a"],
+        conversation_a,
+        [
+            memory("gạo chú Tư", 1, 0),
+            memory("gạo cô Ba", 1, 0.2),
+            memory("đóng cửa 22h", 0, 1),
+        ],
+    )
+    memories.add(
+        ids["shop_b"], ids["user_b"], conversation_b, [memory("gạo shop B", 1, 0)]
+    )
+    recalled_id = admin.execute(
+        "SELECT id FROM agent_memories WHERE content = 'gạo chú Tư'"
+    ).fetchone()[0]
+
+    found = memories.similar(
+        ids["shop_a"], ids["user_a"], [vector(1, 0)], 0.7, 3, [recalled_id]
+    )
+
+    # The recalled fact is skipped, the unrelated one and shop B's stay out.
+    assert [item.content for item in found] == ["gạo cô Ba"]
+    assert admin.execute(
+        "SELECT count(*) FROM agent_memories WHERE last_used_at IS NOT NULL"
+    ).fetchone() == (0,)
+
+
+def test_a_often_used_memory_outranks_an_equally_relevant_unused_one(
+    memory_db,
+) -> None:
+    admin, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    conversation_id = new_conversation(postgres, ids["user_a"], ids["shop_a"])
+    memories.add(
+        ids["shop_a"],
+        ids["user_a"],
+        conversation_id,
+        [memory("gạo chú Tư", 1, 0.1), memory("gạo cô Ba", 1, -0.1)],
+    )
+    admin.execute(
+        "UPDATE agent_memories SET use_count = 20, last_used_at = created_at"
+        " WHERE content = 'gạo cô Ba'"
+    )
+
+    found = memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 5)
+
+    assert [item.content for item in found] == ["gạo cô Ba", "gạo chú Tư"]

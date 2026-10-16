@@ -104,6 +104,13 @@ So với [agent memory repo](https://cognition.com/agent-memory-repo) của Cogn
 - **Luôn nạp preference:** `search` lấy trước tối đa 10 memory `preference` còn hiệu lực (chưa bị thay, chưa hết hạn), xếp theo `importance` rồi mới nhất, bất kể câu hỏi; sau đó tìm theo cosine và suy giảm thêm tối đa 5 memory khác, bỏ các dòng đã lấy. Preference vượt giới hạn vẫn được tìm như memory thường. Mỗi dòng trong prompt ghi ngày và loại; `MEMORY_PROMPT` dặn model áp preference (định dạng, độ dài, giọng, cách xưng hô) cho mọi câu trả lời. Preference được nạp cũng vào danh sách `[id]` của bước trích xuất, nên chủ tiệm đổi ý thì fact mới thay được preference cũ.
 - **Biểu tượng dẫn về hội thoại gốc:** sự kiện `memory` gửi thêm `source_conversation_id` và `created_at` (đã có trong bảng). Chạm biểu tượng để xem từng ghi nhớ, chạm một ghi nhớ mở hội thoại sinh ra nó; ghi nhớ từ chính hội thoại đang mở chỉ hiện ngày. Hội thoại gốc luôn còn, vì xóa hội thoại thì memory của nó mất theo (`ON DELETE CASCADE`).
 
+## Bổ sung theo Hy Memory
+
+So với chế độ `pro` của [Hy Memory](https://github.com/Tencent-Hunyuan/Hy-Memory), bước trích xuất chỉ so fact mới với các memory vừa được dùng trong lượt, nên chủ tiệm nhắc lại hoặc đổi một fact cũ trong câu hỏi về chủ đề khác thì fact cũ không được thay và memory giữ hai phiên bản. Cùng cờ `AGENT_MEMORY_ENABLED`, cùng chờ PO duyệt, không thêm migration:
+
+- **Hòa giải theo memory giống nhất:** fact mới chưa đặt `replaces` được embed rồi `similar` lấy tối đa 3 memory còn hiệu lực gần nhất cho mỗi fact, với cosine từ 0,6 trở lên, bỏ các memory lượt này đã dùng, và không ghi lần dùng. Ngưỡng đo ngày 2026-10-17 với embeddinggemma trên staging: cặp cùng chủ đề 0,66–0,95, cặp khác chủ đề 0,53–0,67, và fact đổi nhà cung cấp gạo do model trích ra chỉ đạt 0,65 so với fact cũ. Ngưỡng thấp chỉ để chọn ứng viên; model hòa giải mới tách các chuyện khác nhau. Có ứng viên thì một lời gọi model (`MEMORY_RECONCILE_PROMPT`) chọn cho từng fact: `new`, `replaces` một id hoặc `known` (bỏ fact). Code chỉ nhận id model được xem; model lỗi thì lưu fact như cũ. Không có ứng viên thì không gọi model.
+- **Tần suất dùng trong điểm xếp hạng:** trọng số nhân thêm `1 + ln(max(use_count, 1))`, theo strength `(1 + ln(access_count))` của Hy Memory; memory chưa dùng hoặc dùng một lần giữ trọng số cũ. Rủi ro: `use_count` tăng với mọi memory được trả về, kể cả memory ít liên quan lọt vào top 5, nên memory hay dùng tự mạnh dần (30 lần dùng ≈ 4,4 lần).
+
 ## Câu hỏi mở trước khi Accepted
 
 - PO: chủ tiệm có cần agent nhớ qua hội thoại không và có cần màn xem/xóa từng memory riêng không (hiện chỉ có biểu tượng ghi nhớ và công tắc bật/tắt)?

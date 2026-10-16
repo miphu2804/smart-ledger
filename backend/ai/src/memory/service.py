@@ -6,14 +6,17 @@ by Tencent's decay and places them before the question as reference material. Th
 owner's standing preferences lead every turn whatever the message, like the always
 loaded MEMORY.md of Cognition's agent memory repo. Writing
 appends records with Tencent's INSERT; Tencent leaves open how a memory's text is
-produced, so here a model distills each saved exchange into a few facts. Tencent's
-compression then has a model merge the owner's memories older than 7 days.
+produced, so here a model distills each saved exchange into a few facts, and, after
+Hy Memory's reconcile, checks them against the owner's similar memories so an update
+replaces the old fact instead of sitting beside it. Tencent's compression then has a
+model merge the owner's memories older than 7 days.
 """
 
 import asyncio
 import logging
 import re
 import uuid
+from dataclasses import replace
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -30,6 +33,8 @@ from src.prompt_templates import (
     MEMORY_CONTEXT,
     MEMORY_EXTRACT_INPUT,
     MEMORY_EXTRACT_PROMPT,
+    MEMORY_RECONCILE_INPUT,
+    MEMORY_RECONCILE_PROMPT,
     MEMORY_SUMMARY_INPUT,
     MEMORY_SUMMARY_PROMPT,
 )
@@ -66,11 +71,34 @@ class MemorySummary(BaseModel):
     facts: list[MemoryFact] = Field(min_length=1, max_length=5)
 
 
+class MemoryDecision(BaseModel):
+    """What one new fact does to the remembered ones, after Hy Memory's reconcile."""
+
+    # 1-based number of the new fact, as listed to the model.
+    fact: int
+    action: Literal["new", "replaces", "known"]
+    replaces: int | None = None
+
+
+class MemoryDecisions(BaseModel):
+    """Structured output schema the reconcile model must return."""
+
+    decisions: list[MemoryDecision] = Field(max_length=5)
+
+
 class AgentMemoryService:
     # Tencent compresses memories older than 7 days.
     SUMMARY_AGE_DAYS = 7
     # Groups summarized after one turn, so a backlog costs a few model calls per turn.
     SUMMARY_GROUPS_PER_TURN = 3
+    # Cosine relevance from which a remembered fact may be about the same thing as a
+    # new one. Measured on 2026-10-17 with embeddinggemma-300m on 14 owner-style
+    # pairs: same-subject pairs scored 0.66-0.95, unrelated ones 0.53-0.67, and an
+    # extracted supplier change scored 0.65 against the fact it updates. The low bar
+    # only picks candidates; the reconcile model keeps different things apart.
+    RECONCILE_MIN_RELEVANCE = 0.6
+    # Remembered facts checked per new fact.
+    RECONCILE_CANDIDATES = 3
 
     def __init__(
         self,
@@ -96,6 +124,11 @@ class AgentMemoryService:
             model,
             output_type=PromptedOutput(MemoryFacts),
             instructions=MEMORY_EXTRACT_PROMPT,
+        )
+        self.reconciler = Agent(
+            model,
+            output_type=PromptedOutput(MemoryDecisions),
+            instructions=MEMORY_RECONCILE_PROMPT,
         )
         self.summarizer = Agent(
             model,
@@ -176,18 +209,19 @@ class AgentMemoryService:
             facts = await self._extract(question, answer, recalled)
             if not facts:
                 return
+            memories = await self._reconcile(
+                shop_id, user_id, await self._embed(facts), recalled
+            )
+            if not memories:
+                return
             await asyncio.to_thread(
-                self.repository.add,
-                shop_id,
-                user_id,
-                conversation_id,
-                await self._embed(facts),
+                self.repository.add, shop_id, user_id, conversation_id, memories
             )
             logger.info(
                 "memory stored: shop=%s conversation=%s facts=%d",
                 shop_id,
                 conversation_id,
-                len(facts),
+                len(memories),
             )
         except Exception:
             logger.warning(
@@ -196,6 +230,78 @@ class AgentMemoryService:
                 conversation_id,
                 exc_info=True,
             )
+
+    async def _reconcile(
+        self,
+        shop_id: int,
+        user_id: int,
+        memories: list[NewMemory],
+        recalled: list[RecalledMemory],
+    ) -> list[NewMemory]:
+        """`memories` checked against the owner's similar memories the turn missed.
+
+        The extractor saw only what the turn recalled, which follows the message, so
+        an update to a memory about another topic would sit next to it as a second
+        version. After Hy Memory's reconcile, each new fact's nearest remembered ones
+        go to a model that marks the fact new, a replacement or already known. Facts
+        that already replace a recalled memory are kept as they are. A failed check
+        stores the facts unchecked rather than lose them.
+        """
+        open_facts = [memory for memory in memories if memory.supersedes is None]
+        if not open_facts:
+            return memories
+        try:
+            similar = await asyncio.to_thread(
+                self.repository.similar,
+                shop_id,
+                user_id,
+                [memory.embedding for memory in open_facts],
+                self.RECONCILE_MIN_RELEVANCE,
+                self.RECONCILE_CANDIDATES,
+                [memory.id for memory in recalled],
+            )
+            if not similar:
+                return memories
+            result = await self.reconciler.run(
+                MEMORY_RECONCILE_INPUT.format(
+                    remembered="\n".join(
+                        f"[{memory.id}] {memory.content}" for memory in similar
+                    ),
+                    facts="\n".join(
+                        f"{number}. {memory.content}"
+                        for number, memory in enumerate(open_facts, 1)
+                    ),
+                ),
+                model_settings=session_settings(uuid.uuid4().hex),
+            )
+        except Exception:
+            logger.warning("memory not reconciled: shop=%s", shop_id, exc_info=True)
+            return memories
+        decisions = {decision.fact: decision for decision in result.output.decisions}
+        known_ids = {memory.id for memory in similar}
+        checked = []
+        for number, memory in enumerate(open_facts, 1):
+            decision = decisions.get(number)
+            if decision is not None and decision.action == "known":
+                continue
+            # Only a memory shown to the model may be replaced.
+            if (
+                decision is not None
+                and decision.action == "replaces"
+                and decision.replaces in known_ids
+            ):
+                memory = replace(memory, supersedes=decision.replaces)
+            checked.append(memory)
+        logger.info(
+            "memory reconciled: shop=%s candidates=%d facts=%d kept=%d replaced=%d",
+            shop_id,
+            len(similar),
+            len(open_facts),
+            len(checked),
+            sum(memory.supersedes is not None for memory in checked),
+        )
+        superseding = [memory for memory in memories if memory.supersedes is not None]
+        return superseding + checked
 
     async def _summarize(self, shop_id: int, user_id: int) -> None:
         try:

@@ -145,20 +145,13 @@ class AgentMemoryRepository:
         the same thing. The shop and user replace Tencent's agent_id filter, and both
         come from the request.
 
-        Two departures from Tencent, after Sakana Chat's "My Fish" and Generative
-        Agents: age counts from the last recall, not from creation, so a memory the
-        owner keeps relying on stays fresh; and the memories returned have their use
+        Departures from Tencent, after Sakana Chat's "My Fish", Generative Agents and
+        Hy Memory's strength: age counts from the last recall, not from creation, so a
+        memory the owner keeps relying on stays fresh; a memory recalled often weighs
+        more, by 1 + ln(use count); and the memories returned have their use
         recorded, which the owner sees. Superseded memories are skipped.
         """
-        live = (
-            AgentMemory.shop_id == shop_id,
-            AgentMemory.user_id == user_id,
-            AgentMemory.superseded_by.is_(None),
-            or_(
-                AgentMemory.expires_at.is_(None),
-                AgentMemory.expires_at > func.now(),
-            ),
-        )
+        live = self._live(shop_id, user_id)
         preferences = (
             select(
                 AgentMemory.id,
@@ -216,6 +209,7 @@ class AgentMemoryRepository:
                     "touched_at"
                 ),
                 AgentMemory.importance,
+                AgentMemory.use_count,
                 (1 - distance).label("relevance"),
                 AgentMemory.source_conversation_id,
             )
@@ -225,7 +219,13 @@ class AgentMemoryRepository:
             .subquery()
         )
         age_days = extract("epoch", func.now() - candidates.c.touched_at) / 86400
-        weight = candidates.c.importance * func.exp(-self.DECAY_PER_DAY * age_days)
+        # A memory never or once recalled keeps its weight, as in Hy Memory's strength.
+        frequency = 1 + func.ln(func.greatest(candidates.c.use_count, 1))
+        weight = (
+            candidates.c.importance
+            * func.exp(-self.DECAY_PER_DAY * age_days)
+            * frequency
+        )
         return (
             select(
                 candidates.c.id,
@@ -238,6 +238,66 @@ class AgentMemoryRepository:
             .order_by((candidates.c.relevance * weight).desc())
             .limit(limit)
         )
+
+    @staticmethod
+    def _live(shop_id: int, user_id: int) -> tuple:
+        """Conditions of the owner's memories in force: not replaced, not expired."""
+        return (
+            AgentMemory.shop_id == shop_id,
+            AgentMemory.user_id == user_id,
+            AgentMemory.superseded_by.is_(None),
+            or_(
+                AgentMemory.expires_at.is_(None),
+                AgentMemory.expires_at > func.now(),
+            ),
+        )
+
+    def similar(
+        self,
+        shop_id: int,
+        user_id: int,
+        embeddings: list[list[float]],
+        min_relevance: float,
+        limit: int,
+        skipped: list[int],
+    ) -> list[StoredMemory]:
+        """Live memories at least `min_relevance` close to any of `embeddings`.
+
+        Up to `limit` per embedding, nearest first, minus `skipped`, each memory once.
+        Unlike `search` this is no recall: it records no use.
+        """
+        found: dict[int, StoredMemory] = {}
+        with self.postgres.session() as session:
+            for embedding in embeddings:
+                distance = AgentMemory.embedding.cosine_distance(embedding)
+                rows = session.execute(
+                    select(
+                        AgentMemory.id,
+                        AgentMemory.memory_type,
+                        AgentMemory.content,
+                        AgentMemory.importance,
+                        AgentMemory.created_at,
+                    )
+                    .where(
+                        *self._live(shop_id, user_id),
+                        AgentMemory.id.not_in(skipped),
+                        distance <= 1 - min_relevance,
+                    )
+                    .order_by(distance)
+                    .limit(limit)
+                ).all()
+                for row in rows:
+                    found.setdefault(
+                        row.id,
+                        StoredMemory(
+                            row.id,
+                            row.memory_type,
+                            row.content,
+                            row.importance,
+                            row.created_at,
+                        ),
+                    )
+        return list(found.values())
 
     def add(
         self,
@@ -303,14 +363,8 @@ class AgentMemoryRepository:
                 group_size.label("group_size"),
             )
             .where(
-                AgentMemory.shop_id == shop_id,
-                AgentMemory.user_id == user_id,
+                *self._live(shop_id, user_id),
                 AgentMemory.created_at < func.now() - timedelta(days=older_than_days),
-                AgentMemory.superseded_by.is_(None),
-                or_(
-                    AgentMemory.expires_at.is_(None),
-                    AgentMemory.expires_at > func.now(),
-                ),
                 ~AgentMemory.details.has_key(self.SUMMARY_KEY),
             )
             .subquery()
