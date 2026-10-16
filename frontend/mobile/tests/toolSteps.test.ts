@@ -26,6 +26,11 @@ describe('applyToolEvent', () => {
     assert.equal(steps.length, 2);
   });
 
+  it('labels the screen-button tool so it does not show the generic label', () => {
+    const [step] = applyToolEvent([], { phase: 'start', callId: 'c1', name: 'suggest_screen' });
+    assert.equal(step.label, 'Thêm nút mở màn hình');
+  });
+
   it('falls back to a generic label for a tool the app does not know', () => {
     const [step] = applyToolEvent([], { phase: 'start', callId: 'c1', name: 'new_tool' });
     assert.equal(step.label, 'Xử lý yêu cầu');
