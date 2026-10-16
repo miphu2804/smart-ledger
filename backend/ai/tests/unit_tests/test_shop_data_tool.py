@@ -8,7 +8,6 @@ from sqlalchemy.exc import DBAPIError
 from tests.support import (
     TEST_GUARDRAIL_LIMITS,
     ScriptedModel,
-    static_instructions,
     tool_call,
     tool_results,
     transcript,
@@ -18,6 +17,7 @@ from src.agent.service import AgentService
 from src.agent.tools import AgentContext, build_shop_data_tool
 from src.infra.postgre_db_client import PostgreDBClient
 from src.prompt_templates import (
+    APP_GUIDE_PROMPT,
     QUERY_RESULT_HEADER,
     SHOP_AGENT_SYSTEM_PROMPT,
     SQL_AGENT_PROMPT,
@@ -89,7 +89,7 @@ async def test_tools_sent_to_the_model_expose_only_sql() -> None:
 
     await build_agent(model, FakeShopData()).chat(user_id=3, shop_id=15, message="m")
 
-    (spec,) = model.requests[0][1].function_tools
+    spec, _ = model.requests[0][1].function_tools
     assert spec.name == "query_shop_data"
     assert list(spec.parameters_json_schema["properties"]) == ["sql"]
     assert spec.parameters_json_schema["required"] == ["sql"]
@@ -167,14 +167,13 @@ async def test_instructions_are_static_and_carry_the_sql_rules() -> None:
     await build_agent(without_tool).chat(user_id=3, shop_id=15, message="m")
 
     instructions = with_tool.requests[0][1].instructions
-    assert (
-        static_instructions(instructions)
-        == f"{SHOP_AGENT_SYSTEM_PROMPT}\n\n{SQL_AGENT_PROMPT}"
+    assert instructions == (
+        f"{SHOP_AGENT_SYSTEM_PROMPT}\n\n{APP_GUIDE_PROMPT}\n\n{SQL_AGENT_PROMPT}"
     )
-    assert "15" not in static_instructions(instructions)
+    assert "15" not in instructions
     messages, info = without_tool.requests[0]
-    assert static_instructions(info.instructions) == SHOP_AGENT_SYSTEM_PROMPT
-    assert transcript(messages) == [("user", "m")]
+    assert info.instructions == f"{SHOP_AGENT_SYSTEM_PROMPT}\n\n{APP_GUIDE_PROMPT}"
+    assert transcript(messages) == [("user", "m"), ("time", "")]
 
 
 @pytest.mark.parametrize(
@@ -250,7 +249,7 @@ async def test_no_repository_means_no_shop_data_tool() -> None:
 
     await build_agent(model).chat(user_id=3, shop_id=15, message="m")
 
-    assert model.tool_names() == []
+    assert model.tool_names() == ["suggest_screen"]
 
 
 def test_result_payload_marks_truncation() -> None:

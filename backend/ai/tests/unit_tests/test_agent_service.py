@@ -2,12 +2,11 @@ import asyncio
 from dataclasses import replace
 
 import pytest
-from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.messages import CachePoint, ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 from tests.support import (
     TEST_GUARDRAIL_LIMITS,
     ScriptedModel,
-    static_instructions,
     transcript,
 )
 
@@ -19,7 +18,7 @@ from src.agent.service import (
     Reset,
     TextDelta,
 )
-from src.prompt_templates import SHOP_AGENT_SYSTEM_PROMPT
+from src.prompt_templates import APP_GUIDE_PROMPT, SHOP_AGENT_SYSTEM_PROMPT
 from src.utils import get_time
 
 pytestmark = pytest.mark.anyio
@@ -79,8 +78,8 @@ async def test_chat_sends_the_instructions_and_persists_the_exchange() -> None:
     assert (result.answer, result.conversation_id, result.message_id) == ("ok", 41, 72)
     assert (result.model, result.model_version) == ("test-model", "test-model")
     messages, info = model.requests[0]
-    assert static_instructions(info.instructions) == SHOP_AGENT_SYSTEM_PROMPT
-    assert transcript(messages) == [("user", "today's revenue?")]
+    assert info.instructions == f"{SHOP_AGENT_SYSTEM_PROMPT}\n\n{APP_GUIDE_PROMPT}"
+    assert transcript(messages) == [("user", "today's revenue?"), ("time", "")]
     assert conversations.saved_exchange == {
         "user_id": 3,
         "shop_id": 15,
@@ -112,6 +111,7 @@ async def test_chat_adds_scoped_conversation_history_to_model_context() -> None:
         ("user", "hello"),
         ("assistant", "hi there"),
         ("user", "today's revenue?"),
+        ("time", ""),
     ]
 
 
@@ -147,7 +147,9 @@ async def test_chat_sends_only_the_latest_turns_of_a_long_conversation() -> None
     await agent.chat(user_id=3, shop_id=15, conversation_id=41, message="next")
 
     assert conversations.history_request == (41, 3, 15, 4)
-    assert [text for _, text in transcript(model.requests[0][0])] == [
+    assert [
+        text for kind, text in transcript(model.requests[0][0]) if kind != "time"
+    ] == [
         "USER 3",
         "ASSISTANT 4",
         "USER 5",
@@ -400,14 +402,27 @@ async def test_pre_stream_refusals_raise_on_await_before_any_event() -> None:
     assert model.requests == []
 
 
-async def test_each_run_tells_the_model_the_shop_time() -> None:
+async def test_each_run_tells_the_model_the_shop_time_after_the_history() -> None:
     model = ScriptedModel("ok")
-    agent = AgentService(
-        model, FakeConversationRepository(), guardrail_limits=TEST_GUARDRAIL_LIMITS
+    conversations = FakeConversationRepository(
+        [
+            {"message_id": 1, "role": "USER", "content": "hello"},
+            {"message_id": 2, "role": "ASSISTANT", "content": "hi there"},
+        ]
+    )
+    agent = AgentService(model, conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS)
+
+    await agent.chat(
+        user_id=3, shop_id=15, conversation_id=41, message="hôm nay thứ mấy?"
     )
 
-    await agent.chat(user_id=3, shop_id=15, message="hôm nay thứ mấy?")
-
-    current_time = model.requests[0][1].instructions.rpartition("\n\n")[2]
+    # The time follows the message behind a cache breakpoint, so the instructions,
+    # the history and the message stay byte-identical from one minute to the next.
+    messages, info = model.requests[0]
+    question, breakpoint, current_time = messages[-1].parts[-1].content
+    assert question == "hôm nay thứ mấy?"
+    assert isinstance(breakpoint, CachePoint)
     assert current_time.startswith("Current time at the shop (Vietnam, UTC+07:00): ")
     assert get_time().date().isoformat() in current_time
+    assert "Current time" not in info.instructions
+    assert conversations.saved_exchange["user_message"] == "hôm nay thứ mấy?"

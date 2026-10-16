@@ -1,9 +1,10 @@
+import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
-import { parseChatMarkdown, type ChartSpec, type ChatBlock, type Inline } from '../lib/chatMarkdown';
+import { parseChatMarkdown, SCREEN_LINKS, type AppScreen, type ChartSpec, type ChatBlock, type Inline } from '../lib/chatMarkdown';
 import { colors, font } from '../theme';
 import { AreaChart, BarChart } from './charts';
-import { T } from './ui';
+import { Button, T } from './ui';
 
 const SIZE = 13.5;
 // Bề ngang tối thiểu cho mỗi điểm biểu đồ, đủ cho nhãn hai chữ như "Giặt tẩy" ở cỡ 12.
@@ -49,6 +50,22 @@ function ChartCard({ spec }: { spec: ChartSpec }) {
           )}
         </View>
       </ScrollView>
+    </View>
+  );
+}
+
+function ScreenButtons({ screens }: { screens: AppScreen[] }) {
+  return (
+    <View style={styles.actions}>
+      {screens.map((screen) => (
+        <Button
+          key={screen}
+          title={SCREEN_LINKS[screen].label}
+          variant="outline"
+          small
+          onPress={() => router.navigate(SCREEN_LINKS[screen].route)}
+        />
+      ))}
     </View>
   );
 }
@@ -113,6 +130,8 @@ function BlockView({ block, color }: BlockProps) {
     }
     case 'chart':
       return <ChartCard spec={block.spec} />;
+    case 'actions':
+      return <ScreenButtons screens={block.screens} />;
     case 'chartPending':
       return (
         <View style={[styles.card, styles.chartNote]}>
@@ -187,4 +206,5 @@ const styles = StyleSheet.create({
   cell: { paddingHorizontal: 8, paddingVertical: 6, lineHeight: 18 },
   card: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 10, marginVertical: 4 },
   chartNote: { alignItems: 'center', paddingVertical: 16 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
 });

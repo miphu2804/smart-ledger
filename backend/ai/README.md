@@ -19,7 +19,7 @@ The AI service does not create or migrate tables at startup. `ai_request_id` rem
 
 ## Chat context
 
-Each chat turn sends the static system prompt, then the conversation's latest `AGENT_HISTORY_TURNS` owner and assistant exchanges verbatim (default 100 turns, that is 200 messages, oldest first), then the new owner message. Older messages do not reach the model. Nothing is summarized: there is no summary model, no background fold after a turn and no history search tool. Owners chat little, and the chat model handles a 100-turn window comfortably.
+Each chat turn sends the static system prompt, then the conversation's latest `AGENT_HISTORY_TURNS` owner and assistant exchanges verbatim (default 30 turns, that is 60 messages, oldest first), then the new owner message. Older messages do not reach the model. Nothing is summarized: there is no summary model, no background fold after a turn and no history search tool. Owners chat little; 30 turns at the 2000-character input cap keep one request well inside a 100k-token context window.
 
 `AgentConversationRepository.recent_messages(conversation_id, user_id, shop_id, limit)` reads the history. It first checks that the conversation belongs to that user and shop; otherwise the request fails with `404 conversation_not_found`.
 
@@ -103,6 +103,10 @@ When the read-only executor is configured, the agent also gets a `suggest_restoc
 - `COVER_DAYS` in `src/restock/policy.py` is the only tunable. It currently defaults to 7 days, and the periods `last_7_days` (the default when the owner names no period) and `last_30_days` are likewise provisional: all three await product-owner sign-off and are not yet agreed product behaviour.
 - The service runs one fixed `SELECT` through the same guard and read-only executor as `query_shop_data`, so the shop scope, statement timeout and row cap apply unchanged. The candidate list is capped at the fastest-selling rows the row cap returns, and the result flags when that cap was hit so the agent can say the list is partial.
 - `RestockSuggestion.reason` is a fixed Vietnamese sentence built from the period's sales and the current stock; the agent copies `suggested_qty`, `unit` and `reason` verbatim rather than recomputing them.
+
+## App guide and screen buttons
+
+The agent always gets `APP_GUIDE_PROMPT` (`src/prompt_templates/app_guide.py`), which names the app's tabs, screens and buttons so it can tell the owner how to do something, and the `suggest_screen` tool. The tool takes one closed-set `screen` and returns its choice as `ToolReturn` metadata, which the model never reads back. After the run, `AgentService` appends the accepted screens, deduplicated and capped at two, to the answer as a ```` ```actions ```` block, and strips that block from stored answers before replaying history. The block format is in the [API contract](../../docs/contracts/api-contracts.md). Keep the prompt in step with the mobile routes when a screen moves or is renamed.
 
 ## Text drafts
 

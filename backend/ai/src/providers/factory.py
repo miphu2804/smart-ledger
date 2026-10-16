@@ -131,6 +131,14 @@ def _build_anthropic(model_name: str, config: AppConfig) -> Model | None:
             anthropic_effort=None
             if config.MODEL_REASONING_EFFORT == "none"
             else config.MODEL_REASONING_EFFORT,
+            # Anthropic caches only up to explicit breakpoints: the tools, the static
+            # instructions and the last message, so each later request of a turn and
+            # the next turn read the shared prefix at a tenth of the input price.
+            # Explicit `cache_control` blocks, not the top-level automatic mode,
+            # because the gateway may not forward that parameter.
+            anthropic_cache_tool_definitions=True,
+            anthropic_cache_instructions=True,
+            anthropic_cache_messages=True,
         ),
     )
 

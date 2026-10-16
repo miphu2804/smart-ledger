@@ -1,3 +1,43 @@
+### [2026-10-16 15:30 UTC+07:00] — [Feature] Shorter Bobi intro and scope, history fits a 100k-token window
+
+**Done:** The shop prompt no longer says who Bobi is twice or lists the shop topics twice: voice, identity and the off-topic reply now take one paragraph each (3.5k → 3.0k characters); rules and the current-time line are unchanged. `AGENT_HISTORY_TURNS` defaults to 30 (was 100), so one request stays inside a 100k-token context window.
+
+**Changed files:** `backend/ai/src/prompt_templates/shop_agent.py`, `backend/ai/src/app_config.py`, `backend/ai/.env.example`, `backend/ai/README.md`, `docs/contracts/api-contracts.md`, `docs/architecture/technical-design.md`, `docs/architecture/adr/0002-agent-long-term-memory.md` — modified; this entry.
+
+**Flow explained:** 100 exchanges at the 2000-character input cap plus answers can pass 100k tokens of Vietnamese; 30 leaves room for the system prompt and tool results.
+
+**Check:** AI unit tests 331 passed, ruff clean. **Not verified:** live replies to greetings and off-topic questions; whether a deployed env overrides `AGENT_HISTORY_TURNS`.
+
+### [2026-10-16 14:30 UTC+07:00] — [Feature] Bobi guides the owner around the app and links replies to screens
+
+**Done:** The agent prompt now describes the app's tabs, screens and buttons, so Bobi can say how to sell, record a debt payment, add an expense or open a report. A new `suggest_screen` tool lets Bobi add up to two buttons under a reply (e.g. "Mở Công nợ" after an answer about open debts); the mobile chat renders them and opens the screen with `router.navigate`.
+
+**Changed files:** `backend/ai/src/prompt_templates/app_guide.py` — created; `backend/ai/src/prompt_templates/__init__.py`, `backend/ai/src/agent/tools.py`, `backend/ai/src/agent/service.py` — modified; `backend/ai/tests/unit_tests/test_screen_buttons.py` — created; `test_agent_service.py`, `test_shop_data_tool.py`, `test_restock_tool.py` — modified; `frontend/mobile/src/lib/chatMarkdown.ts`, `frontend/mobile/src/components/ChatText.tsx`, `frontend/mobile/tests/chatMarkdown.test.ts` — modified; `docs/contracts/api-contracts.md`, `backend/ai/README.md`, `frontend/mobile/README.md` — modified; this entry.
+
+**Flow explained:** model calls `suggest_screen(screen)` (closed `Literal`, so an unlisted screen is retried) → the tool returns the screen as `ToolReturn` metadata → after the run `AgentService` reads it from the new messages, dedupes, caps at 2 and appends a ```` ```actions ```` block to `answer` → the block is stored and reaches the app as the last `delta` and in `done`, so Core is unchanged → history replay strips it → mobile maps names through `SCREEN_LINKS` and draws the buttons once the block is closed. A Pydantic AI `CustomEvent` was considered and not used: the answer must carry the buttons anyway to show them again from history, so a separate SSE event would duplicate it.
+
+**Check:** AI unit tests 337 passed, ruff clean; mobile `npm test` 83 passed, `tsc --noEmit` reports only two modules missing from the local `node_modules` in an untouched file. **Not verified:** live model behaviour (when Bobi chooses to add a button) and tapping the buttons on a device.
+
+### [2026-10-16 10:10 UTC+07:00] — [Feature] Agent prompt cache: time after the message, Anthropic cache breakpoints, cache usage in logs
+
+**Done:** The current-time line moved out of the system instructions to the end of the owner's new message, behind a `CachePoint`, so the instructions and the whole stored history stay a byte-identical prefix from turn to turn. The Anthropic model now sets explicit cache breakpoints on tools, instructions and the last message (not the top-level automatic mode, which the gateway may not forward). Each turn logs cache read and write tokens and the hit ratio next to the usage.
+
+**Changed files:** `backend/ai/src/agent/service.py`, `backend/ai/src/providers/factory.py`, `backend/ai/src/prompt_templates/shop_agent.py`, `backend/ai/tests/support.py`, `backend/ai/tests/unit_tests/test_agent_service.py`, `test_shop_data_tool.py`, `test_restock_tool.py`, `test_agent_guardrails.py`, `test_agent_memory.py`, `test_provider_factory.py` — modified; this entry.
+
+**Flow explained:** request = `[instructions][stored history][new message | CachePoint | current time]`. The time is never stored, so it must come after the breakpoint: the next turn repeats the previous request up to that breakpoint and the provider finds it in its cache. Putting the time before the message was measured and rejected: cache reads stayed flat at the instructions while the history was re-written every turn.
+
+**Check:** 320 unit tests pass, integration 40 passed / 52 skipped (no DB env), ruff clean. Live against the gateway (`claude-haiku-5-5`), real `AgentService`, three turns: cache read 0 → 992 → 1124 tokens, hit 0% → 85% → 87%, and the model answered "thứ Sáu, 16/10/2026" from the moved time line. **Not verified:** turns with tool calls and recalled memories: memory-wrapped prompts are not stored as sent, so the turn after a recall misses the history cache from that message on.
+
+### [2026-10-16 08:30 UTC+07:00] — [Feature] Chat prompts speak as Bobi of Sổ Nghe Lời, query prompt matches the SQL guard
+
+**Done:** The shop chat prompt now introduces the assistant as Bobi of Sổ Nghe Lời (was "SmartLedger's assistant"): Bobi refers to itself as "Bobi", addresses the owner as "anh/chị", leads with the answer, uses today when no period is named, and lists the matches when a product name is ambiguous. The query prompt now lists exactly the functions and casts `SqlGuard` accepts (it omitted CASE, row_number, substring and others), defines today/yesterday/this week/this month in shop time, shows how to fold Vietnamese names for `name_folded`, and adds examples for today, yesterday and revenue per day this month; sums use `coalesce(..., 0)` so an empty period reads as zero sales.
+
+**Changed files:** `backend/ai/src/prompt_templates/shop_agent.py`, `backend/ai/src/prompt_templates/sql_agent.py` — modified; this entry.
+
+**Flow explained:** `AgentService` still joins the static shop prompt, the query prompt, the restock prompt and the memory prompt in that order, then the current time, so the cacheable prefix layout is unchanged.
+
+**Check:** `uv run pytest tests/unit_tests` 319 passed; ruff clean; all 14 example queries and every function named in rule 7 pass `SqlGuard.validate_and_wrap`. **Not verified:** the new examples against staging data, and live replies from the model.
+
 ### [2026-10-16 03:21 UTC+07:00] — [Fix] Guide button on the Quản lý tab; report cost warning no longer counts voided orders twice
 
 **Done:** The button that replays the welcome guide sat at the bottom of Settings, two taps deep. It is now a row "Xem lại hướng dẫn" in the "Tài khoản & ứng dụng" group of the Quản lý tab, between Cài đặt and Đăng xuất; it still goes to Tổng quan and opens the guide there. Settings no longer has the button, and the guide's own tip now points to the Quản lý tab.
@@ -9,7 +49,6 @@ The report criterion added by #256 reused the number `AC-076`, which the Agent l
 **Changed files:** `frontend/mobile/app/(tabs)/more.tsx`, `frontend/mobile/app/settings.tsx`, `frontend/mobile/src/components/AssistantIntroModal.tsx`, `frontend/mobile/src/store/AppStore.tsx`, `frontend/mobile/app/analytics.tsx`, `docs/product/product-requirements.md` (`FR-025`, `AC-018`, `AC-078`) — modified; this entry.
 
 **Check:** `npx tsc --noEmit` shows no new errors.
-
 ### [2026-10-16 03:00 UTC+07:00] — [CI] Deploy the landing only when it changed
 
 **Done:** `deploy-landing` now runs on a push only when the push changes `frontend/web/` or `.github/workflows/ci.yml`; a re-run always deploys. Every push to `staging` and `main` used to spend two Vercel deployments (web and landing) even when only the backend changed, and the production deploy of release #249 hit the Hobby limit of 100 a day (`api-deployments-free-per-day`).
