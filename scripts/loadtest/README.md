@@ -14,6 +14,8 @@ Each account in `accounts.csv` needs an Email/Password Firebase user in the targ
 
 `FIREBASE_API_KEY` is the Web API key of that Firebase project (the same value as `EXPO_PUBLIC_FIREBASE_API_KEY`). Tokens are fetched once per account and refreshed before they expire; Firebase calls are not counted in the results.
 
+To keep settings in a file instead of the shell, copy [`.env.example`](.env.example) to `.env.staging` or `.env.production` (git-ignored) and run `uv run --env-file .env.staging locust --headless --csv reports/smoke --html reports/smoke.html`; `LOCUST_HOST` in the file replaces `-H`.
+
 For a local Core with the Auth emulator, set `AUTH_MODE=static` and put one ID token per line in `tokens.txt` (git-ignored).
 
 ## Run
