@@ -214,7 +214,8 @@ class ProductBarcodeMigrationPostgresTest {
         properties.setProperty("currentSchema", schema);
         source.setConnectionProperties(properties);
         var configuration = Flyway.configure().dataSource(source).schemas(schema).defaultSchema(schema)
-                .locations("classpath:db/migration");
+                // This suite exercises V16; ZaloMigrationPostgresTest exercises the V17 upgrade separately.
+                .locations("classpath:db/migration").target("16");
         if (target != null) {
             configuration.target(target);
         }
