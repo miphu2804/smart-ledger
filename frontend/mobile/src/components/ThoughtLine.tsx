@@ -18,6 +18,8 @@ const GRID = DOT * 3 + GAP * 2;
 const PHRASE_MS = 3500;
 const SLIDE_MS = 240;
 const SLIDE_PX = 6;
+// Nhãn bước chạy chữ dần: mỗi chữ một nhịp, đủ nhanh để đọc như chữ đang được gõ ra.
+const STREAM_MS_PER_CHAR = 18;
 // Dải sáng của nhãn: một lượt quét 1.8s, chữ ngoài dải mờ còn DIM (shimmer của React Bits).
 const SHIMMER_MS = 1800;
 const SHIMMER_DIM = 0.4;
@@ -77,24 +79,18 @@ export function ThoughtLine({ steps = [], color = colors.brand }: ThoughtLinePro
         <SlideIn trigger={phrase} style={styles.label}>
           <ShimmerText text={phrase} color={colors.ink} />
         </SlideIn>
+        {steps.map((step) => (
+          <SlideIn key={step.id} trigger={step.id} style={styles.step}>
+            <View style={styles.mark}>
+              {step.done ? <Feather name="check" size={11} color={colors.faint} /> : <View style={[styles.running, { backgroundColor: color }]} />}
+            </View>
+            <StreamedLabel text={step.label} color={step.done ? colors.faint : colors.muted} />
+          </SlideIn>
+        ))}
         <T w="medium" size={11.5} color={colors.faint} style={{ fontFamily: MONO }}>
           {elapsedText(tenths)}
         </T>
       </View>
-      {steps.length ? (
-        <View style={styles.steps}>
-          {steps.map((step) => (
-            <SlideIn key={step.id} trigger={step.id} style={styles.step}>
-              <View style={styles.mark}>
-                {step.done ? <Feather name="check" size={11} color={colors.faint} /> : <View style={[styles.running, { backgroundColor: color }]} />}
-              </View>
-              <T w="medium" size={12.5} color={step.done ? colors.faint : colors.muted}>
-                {step.label}
-              </T>
-            </SlideIn>
-          ))}
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -133,13 +129,54 @@ function ShimmerText({ text, color }: { text: string; color: string }) {
     };
   }, [sweep]);
 
+  return <CharRun chars={chars} opacities={opacities} w="semibold" size={13} color={color} />;
+}
+
+/**
+ * Nhãn của bước đang làm, chạy chữ dần như đang được gõ ra. Mọi chữ đã nằm sẵn trong hàng nên bề rộng
+ * không đổi: bong bóng và đồng hồ không nhảy theo từng chữ, chỉ độ hiện của từng chữ tăng dần.
+ */
+function StreamedLabel({ text, color }: { text: string; color: string }) {
+  const progress = useRef(new Animated.Value(0)).current;
+  const chars = useMemo(() => Array.from(text), [text]);
+  const opacities = useMemo(
+    () =>
+      chars.map((_, i) =>
+        progress.interpolate({
+          inputRange: [i / chars.length, (i + 1) / chars.length],
+          outputRange: [0, 1],
+          extrapolate: 'clamp',
+        }),
+      ),
+    [chars, progress],
+  );
+
+  useEffect(() => {
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: chars.length * STREAM_MS_PER_CHAR,
+      easing: Easing.linear,
+      useNativeDriver: USE_NATIVE,
+    }).start();
+  }, [progress, chars.length]);
+
+  return <CharRun chars={chars} opacities={opacities} w="medium" size={12.5} color={color} />;
+}
+
+/** Mỗi chữ một view vì opacity không áp được lên đoạn Text lồng nhau; nhãn quét sáng và nhãn chạy chữ dùng chung. */
+function CharRun({
+  chars,
+  opacities,
+  ...text
+}: {
+  chars: string[];
+  opacities: Animated.AnimatedInterpolation<number>[];
+} & React.ComponentProps<typeof T>) {
   return (
     <View style={styles.shimmer}>
       {chars.map((char, i) => (
         <Animated.View key={i} style={{ opacity: opacities[i] }}>
-          <T w="semibold" size={13} color={color}>
-            {char === ' ' ? '\u00A0' : char}
-          </T>
+          <T {...text}>{char === ' ' ? '\u00A0' : char}</T>
         </Animated.View>
       ))}
     </View>
@@ -187,13 +224,12 @@ function elapsedText(tenths: number) {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  // Câu chờ, các bước và đồng hồ chung một hàng; hết chỗ thì bước xuống dòng.
+  row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 9, rowGap: 4 },
   grid: { width: GRID, flexDirection: 'row', flexWrap: 'wrap', gap: GAP },
   dot: { width: DOT, height: DOT, borderRadius: DOT / 2 },
   label: { flexShrink: 1 },
   shimmer: { flexDirection: 'row', flexWrap: 'wrap' },
-  // Lệch vào dưới nhãn, qua cột lưới chấm.
-  steps: { gap: 6, paddingTop: 8, paddingLeft: GRID + 9 },
   step: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   mark: { width: 11, height: 11, alignItems: 'center', justifyContent: 'center' },
   running: { width: 5, height: 5, borderRadius: 2.5 },
