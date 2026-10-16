@@ -8,6 +8,14 @@
 
 **Check:** Verified test-first RED: 14 HTTP cases executed, with the expected GET failing as 401 instead of 200. After the fix, `mvnw.cmd '-Dtest=ZaloDomainVerificationHttpTest,ApiDocumentationHttpTest,ApiDocumentationWebTest,CorsWebTest,BearerTokenAuthenticationFilterTest' test` passes 43 tests, 0 failures/errors/skipped. The 14 new cases use a real loopback HTTP server and cover exact HTML delivery, six non-GET methods and seven unrelated paths. JaCoCo reports SecurityConfiguration line coverage 36/39 (92.31%); this is not whole-Core coverage. Supplied HTML matches after line-ending normalization. No business DB or real Firebase/Zalo calls. Railway delivery and Zalo's actual verification remain unverified until the team merges/deploys this branch.
 
+### [2026-10-16 12:57 UTC+07:00] — [Mobile] A running tool step replaces the waiting phrase in the thought line
+
+**Done:** When the assistant calls a tool, the step label now takes the place of the shimmering waiting phrase instead of standing beside it, so the first slot of the thought line shows the one thing happening now. The waiting phrase still rotates until the first tool call, and a finished step stays on the line with a check.
+
+**Changed files:** `frontend/mobile/src/components/ThoughtLine.tsx` and this entry.
+
+**Check:** `npm run typecheck` clean; `npm test` 107 passed; the Metro iOS bundle builds (HTTP 200) and carries the new comment. Not run on a real device: only the iOS simulator.
+
 ### [2026-10-16 14:00 UTC+07:00] — [Feature] Agent chat shows tool steps in a "Thought Line" and streams text smoothly
 
 **Done:** AI emits `tool_start {call_id,name}` / `tool_end {call_id}` SSE events for each tool call (name only, never arguments or results); Core relays unknown event names verbatim, so Java is untouched. The mobile chat replaces `ThinkingStatus` with `ThoughtLine` (React Bits Thought Line port): the lattice-dots indicator in place of the star, a live clock, the steps the assistant ran (Vietnamese labels live in the app) inline after the waiting phrase and wrapping to the next line when they run out of room; the thought line has no bubble of its own, so it reads as a status line rather than a second answer, and it stays until the answer bubble takes its place. The answer then streams in a separate bubble with the Bobi label. The waiting label is semibold with a shimmer band sweeping its letters; phrase changes and each step slide up and fade in, and a step label streams in one character at a time. Streamed answer text now reveals a few characters per frame (`useSmoothText`) instead of jumping a token burst at a time. The reveal is timed in ms (half-life 80 ms), not per frame, so a slow device does not fall behind and dump the tail when the turn ends. The streaming bubble now carries the same Bobi label as a saved answer, and the label text and memory icon are larger. Reduce-motion keeps the label static.
