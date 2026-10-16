@@ -1,0 +1,366 @@
+{
+  "title": "SmartLedger load and activity",
+  "uid": "smartledger-load",
+  "tags": [
+    "smartledger",
+    "loadtest"
+  ],
+  "timezone": "Asia/Ho_Chi_Minh",
+  "schemaVersion": 39,
+  "editable": true,
+  "refresh": "10s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "prometheus",
+        "label": "Metrics",
+        "type": "datasource",
+        "query": "prometheus"
+      },
+      {
+        "name": "postgres",
+        "label": "Core DB (read-only)",
+        "type": "datasource",
+        "query": "grafana-postgresql-datasource"
+      },
+      {
+        "name": "env",
+        "label": "Environment",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${prometheus}"
+        },
+        "query": {
+          "query": "label_values(locust_users, env)",
+          "refId": "env"
+        },
+        "refresh": 2
+      },
+      {
+        "name": "run_id",
+        "label": "Run",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${prometheus}"
+        },
+        "query": {
+          "query": "label_values(locust_users{env=\"$env\"}, run_id)",
+          "refId": "run_id"
+        },
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "sort": 2
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Load test (Locust)",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Running users",
+      "description": "Simulated users running. At the default 3-10 s think time one user is about one concurrent app user (CCU).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prometheus}"
+          },
+          "expr": "locust_users{env=\"$env\", run_id=~\"$run_id\", name=\"all\"}",
+          "legendFormat": "{{run_id}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Requests per second",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prometheus}"
+          },
+          "expr": "locust_rps{env=\"$env\", run_id=~\"$run_id\", name=\"all\"}",
+          "legendFormat": "{{run_id}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "p95 by request group",
+      "description": "Slowest p95 among the requests in each group (auth, read, report, write, chat), over Locust's last 10 s window. SLO limits: read 500 ms, others 1000 ms, chat 20000 ms.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prometheus}"
+          },
+          "expr": "max by (run_id, group) (locust_p95_ms{env=\"$env\", run_id=~\"$run_id\", group!=\"\"})",
+          "legendFormat": "{{run_id}} {{group}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Failure ratio",
+      "description": "Failed requests / all requests. The SLO gate fails the run above 1%; stress stops a step above 5%.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${prometheus}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 9,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "drawStyle": "line"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${prometheus}"
+          },
+          "expr": "locust_fail_ratio{env=\"$env\", run_id=~\"$run_id\", name=\"all\"}",
+          "legendFormat": "{{run_id}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "Activity (DAU proxy from Core writes)",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Daily active users (writes)",
+      "description": "Distinct users who created a sale, draft, expense or audited action per day (Asia/Ho_Chi_Minh). A lower bound: read-only users are not counted. Set the time range to 30 days.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${postgres}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${postgres}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "WITH activity AS (\n  SELECT actor_user_id AS user_id, created_at FROM audit_logs\n  UNION ALL SELECT created_by_user_id, created_at FROM sales\n  UNION ALL SELECT created_by_user_id, created_at FROM sale_drafts\n  UNION ALL SELECT created_by_user_id, created_at FROM expenses\n)\nSELECT\n  date_trunc('day', a.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh') AT TIME ZONE 'Asia/Ho_Chi_Minh' AS time,\n  count(DISTINCT a.user_id) AS \"DAU (writes)\"\nFROM activity a\nJOIN users u ON u.id = a.user_id\nWHERE $__timeFilter(a.created_at)\n  AND coalesce(u.email, '') NOT LIKE 'loadtest+%'\nGROUP BY 1\nORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Active users per hour",
+      "description": "Distinct writing users per hour. The busiest hour over DAU is the peak-hour share used to size PEAK_USERS.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${postgres}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 18,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${postgres}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "WITH activity AS (\n  SELECT actor_user_id AS user_id, created_at FROM audit_logs\n  UNION ALL SELECT created_by_user_id, created_at FROM sales\n  UNION ALL SELECT created_by_user_id, created_at FROM sale_drafts\n  UNION ALL SELECT created_by_user_id, created_at FROM expenses\n)\nSELECT\n  date_trunc('hour', a.created_at) AS time,\n  count(DISTINCT a.user_id) AS \"active users per hour\"\nFROM activity a\nJOIN users u ON u.id = a.user_id\nWHERE $__timeFilter(a.created_at)\n  AND coalesce(u.email, '') NOT LIKE 'loadtest+%'\nGROUP BY 1\nORDER BY 1"
+        }
+      ]
+    }
+  ]
+}
