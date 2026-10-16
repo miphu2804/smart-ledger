@@ -67,6 +67,11 @@ export default function More() {
   const debtLeft = ready ? debts.reduce((a, d) => a + Math.max(0, d.total - d.paid), 0) : 0;
   const productSubtitle = ready ? `${products.length} mặt hàng` : error ? 'Hàng hoá và tồn kho' : 'Đang tải…';
   const contact = app.user.phone || app.user.email;
+  // Xem lại phần giới thiệu như lần đầu vào app: về Tổng quan rồi hiện ở đó (Tổng quan mở phần giới thiệu khi chưa đóng)
+  const replayGuide = () => {
+    router.navigate('/(tabs)');
+    app.showGuide();
+  };
 
   return (
     <Screen bg={colors.bg} padded={false} contentStyle={styles.content}>
@@ -143,6 +148,12 @@ export default function More() {
           title="Cài đặt"
           subtitle="Âm thanh, thông báo, in hoá đơn"
           onPress={() => router.push('/settings')}
+        />
+        <ManagementRow
+          icon="help-circle"
+          title="Xem lại hướng dẫn"
+          subtitle="Mở lại phần giới thiệu ở Tổng quan"
+          onPress={replayGuide}
         />
         <ManagementRow
           image={managementIcons.logout}

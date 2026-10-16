@@ -14,6 +14,7 @@ from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
     TextPart,
+    ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
 )
@@ -21,6 +22,7 @@ from pydantic_ai.models import Model
 
 from src.agent.guardrails import GuardrailLimits, GuardrailService
 from src.agent.repository import AgentConversationRepository
+from src.agent.tool_events import ToolFinished, ToolStarted, tool_progress
 from src.agent.tools import (
     AgentContext,
     build_restock_tool,
@@ -48,6 +50,8 @@ logger = logging.getLogger(__name__)
 MAX_SCREEN_BUTTONS = 2
 # The screen-button block _with_screen_buttons appends to a stored answer.
 SCREEN_BUTTONS = re.compile(r"\n*```actions\n.*?\n```\s*$", re.DOTALL)
+# Joins answer text written before a screen-button call to the text after it.
+ANSWER_JOIN = "\n\n"
 
 
 @dataclass(frozen=True)
@@ -81,7 +85,9 @@ class Done:
     result: AgentChatResult
 
 
-AgentStreamEvent = MemoryRecalled | TextDelta | Reset | Done
+AgentStreamEvent = (
+    MemoryRecalled | ToolStarted | ToolFinished | TextDelta | Reset | Done
+)
 
 
 class AgentService:
@@ -312,30 +318,67 @@ class AgentService:
                 model_settings=session_settings(session_id),
             ) as run,
         ):
+            # Whether the text delivered so far is answer text the next response
+            # extends, rather than a preamble it replaces.
+            kept = False
             async for node in run:
+                if Agent.is_call_tools_node(node):
+                    await self._queue_tool_events(node, run, events)
+                    continue
                 if not Agent.is_model_request_node(node):
                     continue
                 response_text = ""
                 released = ""
+
+                def release(fresh: str) -> None:
+                    nonlocal delivered
+                    if not released and delivered:
+                        # Answer text written before a screen-button call is
+                        # extended. Other text an earlier response sent is replaced:
+                        # a preamble before a data tool call, or an answer the screen
+                        # rejected.
+                        if kept:
+                            fresh = ANSWER_JOIN + fresh
+                        else:
+                            events.put_nowait(Reset())
+                            delivered = ""
+                    delivered += fresh
+                    events.put_nowait(TextDelta(fresh))
+
                 async with node.stream(run.ctx) as stream:
                     async for delta in stream.stream_text(delta=True, debounce_by=None):
                         response_text += delta
                         safe = self.guardrails.screened_prefix(response_text)
                         # The prefix can shrink when a view name at the end gets
                         # extended (`v_products` then `_x`); only growth is sent.
-                        if len(safe) <= len(released):
-                            continue
-                        # Text an earlier response sent is replaced, not extended: a
-                        # preamble before a tool call, or an answer the screen rejected.
-                        if not released and delivered:
-                            events.put_nowait(Reset())
-                            delivered = ""
-                        fresh = safe[len(released) :]
-                        released = safe
-                        delivered += fresh
-                        events.put_nowait(TextDelta(fresh))
+                        if len(safe) > len(released):
+                            release(safe[len(released) :])
+                            released = safe
+                    response = stream.response
+                text = self._kept_text(response)
+                if text.startswith(released) and text[len(released) :]:
+                    # The screen held back the tail while it could still become a
+                    # leak; the whole text passed, so the tail goes out now.
+                    release(text[len(released) :])
+                # Mirrors _answer_text, so the text sent matches the answer stored.
+                if text:
+                    kept = True
+                elif self._calls(response) - {suggest_screen.__name__}:
+                    kept = False
             result = run.result
         return delivered, result
+
+    @staticmethod
+    async def _queue_tool_events(
+        node, run, events: asyncio.Queue[AgentStreamEvent | Exception]
+    ) -> None:
+        """Queue when each tool call starts and ends. Streaming the node is also what
+        runs its tools, so this replaces the plain step of the run loop."""
+        async with node.stream(run.ctx) as stream:
+            async for event in stream:
+                progress = tool_progress(event)
+                if progress is not None:
+                    events.put_nowait(progress)
 
     def _read_result(self, result: AgentRunResult[str]) -> tuple[str, str]:
         """Log the turn's token use; return the answer, with its screen buttons, and
@@ -350,8 +393,45 @@ class AgentService:
             usage.cache_write_tokens,
             100 * usage.cache_hit_ratio,
         )
-        answer = self._with_screen_buttons(result.output, self._screens(result))
+        answer = self._with_screen_buttons(
+            self._answer_text(result), self._screens(result)
+        )
         return answer, result.response.model_name or self.model_name
+
+    def _answer_text(self, result: AgentRunResult[str]) -> str:
+        """The run's answer: the final output, after any answer text the model wrote
+        before calling suggest_screen.
+
+        A model often writes the whole answer, then calls suggest_screen and adds one
+        line about the button. That earlier text is the answer, so it is kept; text
+        before a data tool call is a preamble and is dropped.
+        """
+        pieces: list[str] = []
+        for message in result.new_messages():
+            if not isinstance(message, ModelResponse) or not self._calls(message):
+                continue
+            if text := self._kept_text(message):
+                pieces.append(text)
+            elif self._calls(message) - {suggest_screen.__name__}:
+                pieces = []
+        return ANSWER_JOIN.join([*pieces, result.output])
+
+    @staticmethod
+    def _calls(response: ModelResponse) -> set[str]:
+        """The names of the tools a model response calls."""
+        return {
+            part.tool_name for part in response.parts if isinstance(part, ToolCallPart)
+        }
+
+    def _kept_text(self, response: ModelResponse) -> str:
+        """The answer text of a response that only adds screen buttons, if the screen
+        passes it; otherwise empty."""
+        if self._calls(response) != {suggest_screen.__name__}:
+            return ""
+        text = "".join(
+            part.content for part in response.parts if isinstance(part, TextPart)
+        ).rstrip()
+        return text if self.guardrails.allows_answer(text) else ""
 
     @staticmethod
     def _screens(result: AgentRunResult[str]) -> list[str]:

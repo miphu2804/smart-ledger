@@ -190,8 +190,12 @@ export default function Analytics() {
           <Card onPress={() => router.push('/products')} style={styles.costWarning}>
             <Row gap={8} style={{ alignItems: 'flex-start' }}>
               <Feather name="alert-circle" size={15} color={colors.gold} style={{ marginTop: 2 }} />
+              {/* Core đếm món thiếu giá vốn cả lúc bán lẫn lúc huỷ, nên đơn huỷ trong kỳ bị tính hai lần: chỉ nêu số khi kỳ không có đơn huỷ */}
               <T size={12.5} color={colors.ink} style={{ flex: 1, lineHeight: 18 }}>
-                {profit.unknownCostItemCount} món trong kỳ chưa có giá vốn nên giá vốn và lãi đang thiếu phần của {vnd(profit.unknownCostRevenueVnd)} doanh thu. Thêm giá vốn trong Hàng hoá để lãi đủ hơn từ các đơn sau.
+                {profit.voidedRevenueVnd === 0
+                  ? `${profit.unknownCostItemCount} món trong kỳ chưa có giá vốn nên giá vốn và lãi đang thiếu phần của ${vnd(profit.unknownCostRevenueVnd)} doanh thu.`
+                  : 'Có món bán trong kỳ chưa có giá vốn nên giá vốn và lãi ở trên chưa đủ.'}{' '}
+                Thêm giá vốn trong Hàng hoá để lãi đủ hơn từ các đơn sau.
               </T>
             </Row>
           </Card>

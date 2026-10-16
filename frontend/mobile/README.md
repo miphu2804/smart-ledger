@@ -13,11 +13,12 @@ npm run web             # hoặc bấm w: chạy trên trình duyệt (khung gi�
 npm run typecheck
 npm test                # test parser câu trả lời của trợ lý (node --test, không cần thiết bị)
 npm run export:web      # build web tĩnh ra dist/
-../../scripts/ios-device-release.sh   # kiểm tra Mac và iPhone (Xcode, CocoaPods, Apple ID, profile ký app…), build Release và cài lên iPhone; --check chỉ kiểm tra
-../../scripts/android-release.sh [--abis arm64-v8a] [--install [--device <serial>]]   # kiểm tra toolchain theo bản ghim của CI, build APK Release giống hệt CI, in dung lượng; --install cài qua adb, --check chỉ kiểm tra
+../../scripts/ios-device-release.sh   # mặc định: build Release (Core staging) và cài lên iOS Simulator; menu cho chọn iPhone đã ghép; --simulator, --device <tên|UDID>, --check chỉ kiểm tra
+../../scripts/android-release.sh      # mặc định trên máy: build APK Release (Core staging) cho ABI của emulator, cài và mở trên Android emulator (tự bật AVD nếu chưa chạy)
+../../scripts/android-release.sh --build-only [--abis arm64-v8a]   # chỉ build APK giống hệt CI và in dung lượng; --install [--device <serial>] cài lên điện thoại qua adb; --check chỉ kiểm tra
 ```
 
-Hai script build trên máy tự kiểm tra môi trường trước khi build. Máy mới cài thiếu gì (Xcode, license, CocoaPods, JDK 17, Android Studio và SDK, file Firebase, Apple ID, provisioning profile, iPhone chưa bấm Trust, Developer Mode, USB debugging, điện thoại không hợp ABI hoặc Android quá cũ, máy đã cài bản ký key khác…) thì script liệt kê đủ các lỗi, mỗi lỗi kèm cách sửa, rồi hỏi có muốn mở trang tải, mở Xcode hoặc Android Studio, hay chạy lệnh sửa không. Thông báo trong terminal viết bằng tiếng Anh.
+Hai script build trên máy tự kiểm tra môi trường trước khi build. Máy mới cài thiếu gì (Xcode, license, CocoaPods, JDK 17, Android Studio và SDK, file Firebase, Apple ID, provisioning profile, iPhone chưa bấm Trust, Developer Mode, USB debugging, điện thoại không hợp ABI hoặc Android quá cũ, máy đã cài bản ký key khác…) thì script liệt kê đủ các lỗi, mỗi lỗi kèm cách sửa, rồi hỏi có muốn mở trang tải, mở Xcode hoặc Android Studio, hay chạy lệnh sửa không. Mỗi lần chỉ chạy một cách sửa: lệnh chạy thành công thì script tự kiểm tra lại từ đầu, còn mở trang hay mở app thì script dừng để bạn làm xong rồi chạy lại. Thiếu iOS Simulator runtime hoặc chưa có AVD thì script đề xuất lệnh tải hoặc tạo. Nếu Node đầu PATH khác bản ghim (`NODE_MAJOR` trong `mobile-release.yml`) mà bản ghim đã cài qua Homebrew `node@22`, nvm, fnm, Volta, asdf, mise hoặc n, script tự dùng bản ghim cho lần chạy đó (không đổi Node mặc định của máy), cài lại `node_modules` khi lần cài trước chạy bằng major khác, và ghi lại đường dẫn Node cho Xcode trong `ios/.xcode.env.local`. Thông báo trong terminal viết bằng tiếng Anh.
 
 ## Xem thử với dữ liệu mẫu
 
@@ -48,7 +49,7 @@ Hai script build trên máy tự kiểm tra môi trường trước khi build. M
 | `/profile` | Sửa thông tin tiệm (tên, địa chỉ, ngành hàng) lưu lên Core qua `PATCH /api/v1/shops/{shopId}`; họ tên, email, Facebook và tài khoản ngân hàng chỉ lưu trên máy |
 | `/settings` | Âm thanh, rung, đọc lại đơn, tự mở in |
 | `/notifications` | Thông báo trong app |
-| `/ai` | Hỏi đáp với trợ lý qua `src/lib/agentApi.ts` → Core `/api/v1/agent/*`; lịch sử hội thoại. Câu trả lời của trợ lý qua `components/ChatText.tsx`, đọc bằng `lib/chatMarkdown.ts` cho cả chữ đang stream lẫn câu đã lưu: `**đậm**`, `` `mã` ``, tiêu đề, danh sách `-`/`1.`, bảng, khối ```chart (biểu đồ cột/vùng) và khối ```actions (nút mở màn hình theo `SCREEN_LINKS`); ký hiệu khác hiện nguyên chữ. Khi bật mock, `mockCore` trả lời giả; hỏi có chữ "biểu đồ" hoặc "bảng" để xem bảng và biểu đồ |
+| `/ai` | Hỏi đáp với trợ lý qua `src/lib/agentApi.ts` → Core `/api/v1/agent/*`; lịch sử hội thoại. Câu trả lời của trợ lý qua `components/ChatText.tsx`, đọc bằng `lib/chatMarkdown.ts` cho cả chữ đang stream lẫn câu đã lưu: `**đậm**`, `` `mã` ``, tiêu đề, danh sách `-`/`1.`, bảng, khối ```chart (biểu đồ cột/vùng) và khối ```actions (`splitActions` tách khỏi chữ; nút mở màn hình theo `SCREEN_LINKS` hiện ở thẻ riêng dưới bong bóng, chỉ khi câu đã xong); ký hiệu khác hiện nguyên chữ. Khi bật mock, `mockCore` trả lời giả; hỏi có chữ "biểu đồ" hoặc "bảng" để xem bảng và biểu đồ, hỏi "sắp hết hàng" để xem thẻ nút mở màn hình dưới bong bóng |
 | `/printer` | Màn cấu hình máy in K80/K58; chưa có kết nối thiết bị |
 | `/debug` | Chẩn đoán kết nối, chỉ có ở bản dev (xem [Debug](#debug)) |
 

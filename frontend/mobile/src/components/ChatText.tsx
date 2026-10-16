@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { parseChatMarkdown, SCREEN_LINKS, type AppScreen, type ChartSpec, type ChatBlock, type Inline } from '../lib/chatMarkdown';
+import { useSmoothText } from '../lib/smoothText';
 import { colors, font } from '../theme';
 import { AreaChart, BarChart } from './charts';
 import { Button, T } from './ui';
@@ -66,6 +67,22 @@ function ScreenButtons({ screens }: { screens: AppScreen[] }) {
           onPress={() => router.navigate(SCREEN_LINKS[screen].route)}
         />
       ))}
+    </View>
+  );
+}
+
+/**
+ * Thẻ nút mở màn hình, đặt riêng dưới bong bóng trả lời (`splitActions` tách khối ```actions ra khỏi
+ * chữ), để nút không chen vào nội dung câu trả lời.
+ */
+export function ScreenActions({ screens }: { screens: AppScreen[] }) {
+  if (!screens.length) return null;
+  return (
+    <View style={styles.actionsCard}>
+      <T size={11.5} color={colors.muted}>
+        Mở nhanh
+      </T>
+      <ScreenButtons screens={screens} />
     </View>
   );
 }
@@ -192,11 +209,17 @@ export const ChatText = React.memo(function ChatText({
   );
 });
 
+/** Câu đang stream: chữ chảy đều từng khung hình qua `useSmoothText` rồi mới vào cùng bộ parse với câu đã lưu. */
+export function StreamingChatText({ text }: { text: string }) {
+  return <ChatText text={useSmoothText(text)} streaming />;
+}
+
 const styles = StyleSheet.create({
   wrap: { flexShrink: 1, gap: 2 },
   gap: { height: 8 },
   listRow: { flexDirection: 'row', gap: 6 },
-  marker: { lineHeight: 20.5, minWidth: 8 },
+  // Không co lại: dòng dài đẩy số thứ tự hai chữ số xuống dòng ("10" rồi ".").
+  marker: { lineHeight: 20.5, minWidth: 8, flexShrink: 0 },
   line: { lineHeight: 20.5, flexShrink: 1, flexWrap: 'wrap' },
   inlineCode: { fontFamily: MONO, backgroundColor: colors.primarySoft },
   codeBlock: { backgroundColor: colors.primarySoft, borderRadius: 10, marginVertical: 4 },
@@ -207,4 +230,16 @@ const styles = StyleSheet.create({
   card: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 10, marginVertical: 4 },
   chartNote: { alignItems: 'center', paddingVertical: 16 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
+  actionsCard: {
+    // Kéo sát bong bóng phía trên (danh sách tin nhắn cách nhau 12) để thấy thẻ thuộc câu trả lời đó.
+    marginTop: -4,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
 });

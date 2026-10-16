@@ -18,6 +18,68 @@
 
 **Check:** Against a local stub server (scratch only, not in the repo, not a performance target): the guards refuse a missing `TARGET_ENV`, production without confirmation or with writes, and `local` with a remote host, exit code 2; a smoke run with writes and chat sent every scenario request and passed the gate; a stress run stopped at the step whose error ratio passed 5% and exited 1; the probe reported pass, wrong status and connection refused and exited 1. `ruff check`/`ruff format --check` clean, `actionlint` clean on the workflow. **Not verified:** any run against staging or production (this environment's network policy denied the Railway and Vercel hosts), Firebase sign-in and refresh with real accounts, the workflow on GitHub (it only runs from `main`), and every SLO number, which is a proposal.
 
+### [2026-10-16 14:15 UTC+07:00] — [Feature] App guide updated with refreshed illustrations, 16:9 ratio, and aligned copy
+
+**Done:** The app guide in `AssistantIntroModal.tsx` now follows the updated visual mockups across all 4 steps in sequential order: Trợ lý Bobi, Tổng quan, Bán hàng, and Quản lý. The 4 legacy JPEG illustrations were replaced with clean PNG assets (`guide-bobi.png`, `guide-overview.png`, `guide-sales.png`, `guide-manage.png`) rendered at their native 1672×941 ratio (16:9) to prevent clipping callout bubbles. The step descriptions and bullet tips were rewritten and aligned with the callouts in each illustration.
+
+**Changed files:** `frontend/mobile/src/components/AssistantIntroModal.tsx` — modified; `frontend/mobile/assets/guide/guide-bobi.png`, `guide-overview.png`, `guide-sales.png`, `guide-manage.png` — created; `frontend/mobile/assets/guide/bobi-menu.jpg`, `guide-overview.jpg`, `guide-sales.jpg`, `guide-manage.jpg` — deleted; this entry.
+
+**Check:** `tsc --noEmit` clean (0 errors), `npm test` clean, `npm run export:web` built `dist` without errors.
+
+### [2026-10-16] — [Chore] Core-only Zalo domain verification
+
+**Done:** Added the supplied Zalo verification HTML as a Core static resource and allowed anonymous GET of that exact filename only. This branch does not contain the unfinished Zalo login/link implementation, new configuration, or a database migration.
+
+**Changed files:** `backend/core/src/main/resources/static/zalo_verifierMysnBA7R831YqgKCwDCT0HgaYGlsqb9MCpOu.html`, `backend/core/src/main/java/com/smartledger/core/config/SecurityConfiguration.java`, `backend/core/src/test/java/com/smartledger/core/config/ZaloDomainVerificationHttpTest.java`; this entry. Existing progress entries retained unchanged.
+
+**Flow explained:** After merging into staging and deploying Core, open `https://<Core-domain>/zalo_verifierMysnBA7R831YqgKCwDCT0HgaYGlsqb9MCpOu.html` without a Bearer token, then use Zalo Developers' domain-verification action. The file is not the OAuth callback. Other files, business APIs and unreleased Zalo routes remain authenticated; no wildcard exception was added.
+
+**Check:** Verified test-first RED: 14 HTTP cases executed, with the expected GET failing as 401 instead of 200. After the fix, `mvnw.cmd '-Dtest=ZaloDomainVerificationHttpTest,ApiDocumentationHttpTest,ApiDocumentationWebTest,CorsWebTest,BearerTokenAuthenticationFilterTest' test` passes 43 tests, 0 failures/errors/skipped. The 14 new cases use a real loopback HTTP server and cover exact HTML delivery, six non-GET methods and seven unrelated paths. JaCoCo reports SecurityConfiguration line coverage 36/39 (92.31%); this is not whole-Core coverage. Supplied HTML matches after line-ending normalization. No business DB or real Firebase/Zalo calls. Railway delivery and Zalo's actual verification remain unverified until the team merges/deploys this branch.
+
+### [2026-10-16 12:57 UTC+07:00] — [Mobile] A running tool step replaces the waiting phrase in the thought line
+
+**Done:** When the assistant calls a tool, the step label now takes the place of the shimmering waiting phrase instead of standing beside it, so the first slot of the thought line shows the one thing happening now. The waiting phrase still rotates until the first tool call, and a finished step stays on the line with a check.
+
+**Changed files:** `frontend/mobile/src/components/ThoughtLine.tsx` and this entry.
+
+**Check:** `npm run typecheck` clean; `npm test` 107 passed; the Metro iOS bundle builds (HTTP 200) and carries the new comment. Not run on a real device: only the iOS simulator.
+
+### [2026-10-16 14:00 UTC+07:00] — [Feature] Agent chat shows tool steps in a "Thought Line" and streams text smoothly
+
+**Done:** AI emits `tool_start {call_id,name}` / `tool_end {call_id}` SSE events for each tool call (name only, never arguments or results); Core relays unknown event names verbatim, so Java is untouched. The mobile chat replaces `ThinkingStatus` with `ThoughtLine` (React Bits Thought Line port): the lattice-dots indicator in place of the star, a live clock, the steps the assistant ran (Vietnamese labels live in the app) inline after the waiting phrase and wrapping to the next line when they run out of room; the thought line has no bubble of its own, so it reads as a status line rather than a second answer, and it stays until the answer bubble takes its place. The answer then streams in a separate bubble with the Bobi label. The waiting label is semibold with a shimmer band sweeping its letters; phrase changes and each step slide up and fade in, and a step label streams in one character at a time. Streamed answer text now reveals a few characters per frame (`useSmoothText`) instead of jumping a token burst at a time. The reveal is timed in ms (half-life 80 ms), not per frame, so a slow device does not fall behind and dump the tail when the turn ends. The streaming bubble now carries the same Bobi label as a saved answer, and the label text and memory icon are larger. Reduce-motion keeps the label static.
+
+**Changed files:**
+- `backend/ai/src/agent/tool_events.py` — created (only module reading pydantic-ai tool events)
+- `backend/ai/src/agent/service.py`, `router.py` — modified
+- `backend/ai/tests/unit_tests/test_agent_service.py`, `tests/integration_tests/test_agent_chat.py` — modified
+- `docs/contracts/api-contracts.md` — modified (`tool_start`, `tool_end`)
+- `frontend/mobile/src/components/ThoughtLine.tsx` — renamed from `ThinkingStatus.tsx`, rewritten
+- `frontend/mobile/src/components/ChatText.tsx` — modified (`StreamingChatText`)
+- `frontend/mobile/app/ai.tsx`, `src/data/types.ts`, `src/lib/agentApi.ts` — modified
+- `frontend/mobile/src/lib/toolSteps.ts`, `src/lib/smoothText.ts`, `tests/toolSteps.test.ts`, `tests/smoothText.test.ts` — created
+
+**Flow explained:** `agent.iter()` → each `CallToolsNode` is streamed → `tool_progress` maps call/result events → `ToolStarted`/`ToolFinished` → SSE `tool_start`/`tool_end` → Core → `chatStream` `onTool` → `applyToolEvent` builds the steps → `ThoughtLine`. Draft text goes through `useSmoothText` before the markdown parser.
+
+**Check:** backend 383 passed, ruff clean; mobile 99 node tests pass, `tsc --noEmit` clean; Expo web mock in a browser shows the shimmer sweeping, slide-in, lattice dots and the fold to "Đã suy nghĩ". **Not verified:** a real model end to end (mock emits no tool events and returns the whole answer at once, so the per-frame reveal is covered by unit tests only); on-device motion and the native driver; the contract still has no end-to-end acceptance.
+
+### [2026-10-16 11:39 UTC+07:00] — [Fix] Mobile release scripts: Node drift, one-shot fix menu, simulator and emulator by default
+
+**Done:** `scripts/ios-device-release.sh` and `scripts/android-release.sh` share one Node check in `scripts/lib/preflight.sh`. When the Node first on PATH is another major than `NODE_MAJOR` (or does not run, e.g. Homebrew's node after an `icu4c` upgrade) and the pinned major is installed through Homebrew `node@<major>`, nvm, fnm, Volta, asdf, mise or n, the scripts put it first on PATH for that run, also with `--skip-preflight`. The suggested fix is now `nvm install`, `fnm install` or `brew install node@<major>`, without the `brew link --overwrite --force` that failed next to Homebrew's unversioned node. `node_modules` is reinstalled when the last install ran under another Node major, and the iOS script rewrites `ios/.xcode.env.local` so Xcode's bundling phase uses the same Node. The fix menu no longer asks "Pick a number" again after a fix ran: a successful command re-runs the checks with the same arguments, an opened page or app stops the script. iOS now defaults to the iOS Simulator (a booted iPhone simulator, else the newest runtime's first iPhone), preselected in the menu next to paired iPhones; `--simulator` skips the menu and `--device` also takes a simulator's name or UDID; signing checks run only for an iPhone, and a missing runtime offers `xcodebuild -downloadPlatform iOS`. Android defaults locally to an emulator: a running one, else it boots an AVD while Gradle runs and offers to create one with `sdkmanager` and `avdmanager`; it builds only the emulator's ABI, installs and opens the app. `--build-only` keeps the previous default, which stays the default in GitHub Actions and with `--aab` or `--out`. Both builds use staging Core unless `EXPO_PUBLIC_API_ENDPOINT` says otherwise.
+
+**Changed files:** `scripts/lib/preflight.sh`, `scripts/ios-device-release.sh`, `scripts/android-release.sh`, `frontend/mobile/README.md`, `docs/development/ci-cd.md`, `docs/development/mobile-ios-device-release.md` — modified; this entry.
+
+**Check:** `bash -n` and `shellcheck` on the three scripts (only the earlier `pairing` unused warning remains); stubbed runs on Linux of the Node switch (nvm 22.9 and 22.11 beside Node 24 on PATH: picks 22.11), a broken node, the fix menu in a pseudo-terminal, iOS target selection (default, `--simulator`, simulator by name, untrusted and unknown device, no runtime, menu Enter and down-arrow) and the Android emulator preflight (no AVD, AVD to start, running emulator, `--abis` mismatch, CI and `--build-only` defaults). **Not verified:** a real build on a Mac in the iOS Simulator or on an Android emulator (no macOS or emulator here); whether every native library (for example `react-native-sherpa-onnx`) ships a simulator slice.
+
+### [2026-10-16 10:25 UTC+07:00] — [Docs] AI docs and diagrams re-checked against the AI service (supersedes #212)
+
+**Done:** Moved the 13 findings of #212 onto a fresh branch from `staging` (#212 was far behind) and re-checked them in four audit rounds against `backend/ai/src`, Core's Agent proxy, `supabase/migrations` and `ci.yml`. Docs now cover: the Core stream relay and memory settings proxy (eight Agent routes), guardrail `422` codes kept by Core, the reader pool and eight `ai_read` views, long-term memory behind `AGENT_MEMORY_ENABLED` (off by default, awaiting PO approval) with its tables in the ERD, the current-time line after the new message, `suggest_screen` and the ```` ```actions ```` block (stripped from replayed history, appended after the answer screen), and CI/CD details (landing deploy and approval, PR previews off, pool sizes, memory variables on Railway). Diagrams were re-exported from source: `ci-cd`, `auth-request-flow` (sign-in by email, Facebook or Google), `agent-memory`, and the two `06-ai` walkthrough diagrams.
+
+**Changed files:** `README.md`, `backend/ai/README.md`, `backend/ai/.env.example` (comments and blank keys only), `docs/README.md`, `docs/contracts/api-contracts.md`, `docs/architecture/technical-design.md`, `docs/architecture/erd-description.md`, `docs/architecture/diagrams/src/erd.dbml`, `docs/architecture/adr/0002-agent-long-term-memory.md`, `docs/architecture/service-walkthrough/README.md` and `06-ai/*.svg`, `docs/development/ci-cd.md`, `docs/architecture/diagrams/src/{ci-cd,auth-request-flow,agent-memory}.drawio` and their SVGs — modified; this entry.
+
+**Flow explained:** each round, one slice per doc group was checked sentence by sentence against the code; every claimed drift was verified against the cited code before it was applied. A claim the code cannot show (Railway, Vercel or Firebase settings) was left open, not written as fact.
+
+**Check:** `dbml2sql` parses `erd.dbml`; every `.drawio` and SVG parses as XML; Mermaid re-rendered; local link and anchor check reports 0 bad links. **Not verified:** whether staging or production set `AGENT_MEMORY_ENABLED` or Cloudflare variables; `vercel-production` secrets, Firebase authorized domains and `CORS_ALLOWED_ORIGINS` on `railway-production`.
+
 ### [2026-10-16 15:30 UTC+07:00] — [Feature] Shorter Bobi intro and scope, history fits a 100k-token window
 
 **Done:** The shop prompt no longer says who Bobi is twice or lists the shop topics twice: voice, identity and the off-topic reply now take one paragraph each (3.5k → 3.0k characters); rules and the current-time line are unchanged. `AGENT_HISTORY_TURNS` defaults to 30 (was 100), so one request stays inside a 100k-token context window.
@@ -27,6 +89,7 @@
 **Flow explained:** 100 exchanges at the 2000-character input cap plus answers can pass 100k tokens of Vietnamese; 30 leaves room for the system prompt and tool results.
 
 **Check:** AI unit tests 331 passed, ruff clean. **Not verified:** live replies to greetings and off-topic questions; whether a deployed env overrides `AGENT_HISTORY_TURNS`.
+
 ### [2026-10-16 14:30 UTC+07:00] — [Feature] Bobi guides the owner around the app and links replies to screens
 
 **Done:** The agent prompt now describes the app's tabs, screens and buttons, so Bobi can say how to sell, record a debt payment, add an expense or open a report. A new `suggest_screen` tool lets Bobi add up to two buttons under a reply (e.g. "Mở Công nợ" after an answer about open debts); the mobile chat renders them and opens the screen with `router.navigate`.
@@ -56,6 +119,18 @@
 **Flow explained:** `AgentService` still joins the static shop prompt, the query prompt, the restock prompt and the memory prompt in that order, then the current time, so the cacheable prefix layout is unchanged.
 
 **Check:** `uv run pytest tests/unit_tests` 319 passed; ruff clean; all 14 example queries and every function named in rule 7 pass `SqlGuard.validate_and_wrap`. **Not verified:** the new examples against staging data, and live replies from the model.
+
+### [2026-10-16 03:21 UTC+07:00] — [Fix] Guide button on the Quản lý tab; report cost warning no longer counts voided orders twice
+
+**Done:** The button that replays the welcome guide sat at the bottom of Settings, two taps deep. It is now a row "Xem lại hướng dẫn" in the "Tài khoản & ứng dụng" group of the Quản lý tab, between Cài đặt and Đăng xuất; it still goes to Tổng quan and opens the guide there. Settings no longer has the button, and the guide's own tip now points to the Quản lý tab.
+
+Testing #256 on a real phone against staging Core showed the report's missing-cost card saying 42.859.626đ of revenue lacked a cost while the day's revenue was 217.000đ. Core's `/reports/profit-estimate` counts lines without a cost both when sold and when voided (`ReportAggregationRepository.profitEstimate`), so a sale made and voided in the same period counts twice (217.000 + 2 × 21.321.313). The card now gives the item count and revenue only when the period has no voided order; otherwise it says the cost and profit above are incomplete. Core is unchanged.
+
+The report criterion added by #256 reused the number `AC-076`, which the Agent ledger criterion already had; it is now `AC-078`.
+
+**Changed files:** `frontend/mobile/app/(tabs)/more.tsx`, `frontend/mobile/app/settings.tsx`, `frontend/mobile/src/components/AssistantIntroModal.tsx`, `frontend/mobile/src/store/AppStore.tsx`, `frontend/mobile/app/analytics.tsx`, `docs/product/product-requirements.md` (`FR-025`, `AC-018`, `AC-078`) — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors.
 ### [2026-10-16 03:00 UTC+07:00] — [CI] Deploy the landing only when it changed
 
 **Done:** `deploy-landing` now runs on a push only when the push changes `frontend/web/` or `.github/workflows/ci.yml`; a re-run always deploys. Every push to `staging` and `main` used to spend two Vercel deployments (web and landing) even when only the backend changed, and the production deploy of release #249 hit the Hobby limit of 100 a day (`api-deployments-free-per-day`).
@@ -107,6 +182,15 @@
 **Changed files:** `frontend/mobile/app/pos.tsx` (`PosCollapsibleHeader`) — modified; this entry.
 
 **Check:** `tsc --noEmit` has no errors in this PR's files (its only 2 errors are in #230's files: `expo-application` and `expo-intent-launcher` are not installed on this machine). Mock web build in headless Chrome at 393×852, 3/3: before scrolling the centre of the large "Quét mã" button hits that button; after scrolling the centre of the pinned "Quét mã" hits the pinned button and tapping it opens the scanner. **Not verified:** a phone.
+### [2026-10-16 10:06 UTC+07:00] — [Feature] Memory switch moves into the chat's assistant settings
+
+**Done:** The long-term memory switch now lives in a "Cài đặt trợ lý" sheet opened from the chat header, and the "Đã dùng ghi nhớ" text chip on answers is a small bookmark icon (with a count when several memories were used). The sheet loads on every open and shows an error with a retry button, so one failed call while the AI service wakes from idle no longer hides the switch silently. The "Trợ lý AI" section is removed from Cài đặt. No API or contract change.
+
+**Changed files:** `frontend/mobile/app/ai.tsx`, `frontend/mobile/app/settings.tsx`, `docs/contracts/api-contracts.md`, `docs/architecture/adr/0002-agent-long-term-memory.md` — modified; this entry.
+
+**Flow explained:** chat header → sliders button → sheet → `GET /agent/memory/settings` (`available` false shows "chưa được bật", error shows retry) → toggle → `PUT /agent/memory/settings`, reverted with an inline error on failure.
+
+**Check:** `tsc --noEmit` reports no error in `ai.tsx` or `settings.tsx`; the only errors are missing `expo-application` and `expo-intent-launcher` in `src/lib/appUpdateInstall.native.ts`, a file this change does not touch. Not run on a device or simulator.
 
 ### [2026-10-16 10:30 UTC+07:00] — [Fix] Agent memory writes semantic facts by default
 

@@ -1,5 +1,6 @@
-import React from 'react';
-import { StyleProp, View, ViewStyle } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { dur, easeOut, useReducedMotion } from '../motion';
 import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Path, Polygon, Rect, Stop } from 'react-native-svg';
 
 export type TabIconName = 'home' | 'receipt' | 'box' | 'grid';
@@ -482,6 +483,56 @@ export function ActionIcon({ name, size = 25, color = '#FFFFFF', style }: Action
           </>
         )}
       </Svg>
+    </View>
+  );
+}
+
+// Pointy-top hexagon and a four-point sparkle, both on the 24-unit grid.
+const HEX = 'M12 2.5L20.2 7.25V16.75L12 21.5L3.8 16.75V7.25Z';
+// Same hexagon with corners already rounded, so the filled state needs no stroke that would shrink the cut-out.
+const HEX_SOLID = 'M10.09 2.60Q12.00 1.50 13.91 2.60L19.19 5.65Q21.09 6.75 21.09 8.95L21.09 15.05Q21.09 17.25 19.19 18.35L13.91 21.40Q12.00 22.50 10.09 21.40L4.81 18.35Q2.91 17.25 2.91 15.05L2.91 8.95Q2.91 6.75 4.81 5.65Z';
+const SPARKLE = 'M12 7.4Q12.7 11.3 16.6 12Q12.7 12.7 12 16.6Q11.3 12.7 7.4 12Q11.3 11.3 12 7.4Z';
+
+/**
+ * Long-term memory mark. `filled` is the on state: a solid hexagon with the sparkle cut out, in
+ * `color`; off is the outline in `offColor`. The two states are stacked and cross-fade, so shape and
+ * color change together.
+ */
+export function BusinessIcon({
+  size = 16,
+  color = '#78746B',
+  offColor = color,
+  filled = false,
+}: {
+  size?: number;
+  color?: string;
+  offColor?: string;
+  filled?: boolean;
+}) {
+  const reducedMotion = useReducedMotion();
+  const progress = useRef(new Animated.Value(filled ? 1 : 0)).current;
+  useEffect(() => {
+    const toValue = filled ? 1 : 0;
+    if (reducedMotion) {
+      progress.setValue(toValue);
+      return;
+    }
+    Animated.timing(progress, { toValue, duration: dur.base, easing: easeOut, useNativeDriver: true }).start();
+  }, [filled, progress, reducedMotion]);
+  const off = progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
+  return (
+    <View style={{ width: size, height: size }}>
+      <Animated.View style={[StyleSheet.absoluteFill, { opacity: off }]}>
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+          <Path d={HEX} stroke={offColor} strokeWidth={2} strokeLinejoin="round" />
+          <Path d={SPARKLE} fill={offColor} stroke={offColor} strokeWidth={0.6} strokeLinejoin="round" />
+        </Svg>
+      </Animated.View>
+      <Animated.View style={[StyleSheet.absoluteFill, { opacity: progress }]}>
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+          <Path d={`${HEX_SOLID}${SPARKLE}`} fill={color} fillRule="evenodd" />
+        </Svg>
+      </Animated.View>
     </View>
   );
 }

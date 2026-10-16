@@ -2,9 +2,13 @@
 # Build a Release of the Android app (frontend/mobile) from the current checkout and print where its size goes. The same
 # script runs on a developer machine and in .github/workflows/mobile-release.yml, so a local build matches CI.
 #
-#   ./scripts/android-release.sh                         APK with the release ABIs: armeabi-v7a,arm64-v8a
+#   ./scripts/android-release.sh                         locally: APK for the emulator's ABI, installed and opened on an
+#                                                        Android emulator (a running one, else it starts an AVD)
+#   ./scripts/android-release.sh --emulator              the same, explicitly (also with --abis or --device emulator-5554)
+#   ./scripts/android-release.sh --build-only            APK with the release ABIs (armeabi-v7a,arm64-v8a), no install;
+#                                                        the default in GitHub Actions and with --aab or --out
 #   ./scripts/android-release.sh --abis arm64-v8a        one ABI, faster (most phones)
-#   ./scripts/android-release.sh --install               also install the APK on a phone connected over adb (menu if several)
+#   ./scripts/android-release.sh --install               install the APK on a phone connected over adb (menu if several)
 #   ./scripts/android-release.sh --install --device <serial>   pick the phone without the menu (serial from `adb devices`)
 #   ./scripts/android-release.sh --aab                   Android App Bundle for Google Play instead of an APK
 #   ./scripts/android-release.sh --out <file>            copy the APK or AAB to <file>
@@ -12,36 +16,54 @@
 #   ./scripts/android-release.sh --skip-preflight        build even if a check fails
 #
 # Before building it checks the machine (Node, JDK, Android SDK packages pinned at the top of mobile-release.yml, the
-# Firebase file) and, for --install, the phone (USB debugging allowed, an ABI this build contains, Android new enough,
-# an older install signed with another key), and in a terminal offers to open or run the fix for what is missing.
+# Firebase file), then the target: for the emulator the Emulator package and an AVD (it offers to create one); for
+# --install the phone (USB debugging allowed, an ABI this build contains, Android new enough, an older install signed
+# with another key). In a terminal it offers to open or run the fix for what is missing. When another Node than the
+# pinned one is first on PATH, it uses the pinned one if installed.
 # Locally, like scripts/ios-device-release.sh: mocks are off (real Firebase and Core) and Core defaults to staging,
 # overridable with EXPO_PUBLIC_API_ENDPOINT in .env or the shell. In GitHub Actions every EXPO_PUBLIC_* value comes from
 # the environment as given. Signs with RELEASE_KEYSTORE, KEYSTORE_PASSWORD and RELEASE_KEY_ALIAS when RELEASE_KEYSTORE
 # is set, otherwise with the template's public debug key.
 set -euo pipefail
 
+# pf_finish runs the script again with these arguments after a fix it started has succeeded.
+pf_rerun=("$(cd "$(dirname "$0")" && pwd)/$(basename "$0")" "$@")
 abis="armeabi-v7a,arm64-v8a"
+abis_set=false
 format=apk
-install=false
+target="" # build (no install), phone (--install) or emulator
 out=""
 serial=""
 preflight=true
 check_only=false
 while [ $# -gt 0 ]; do
   case "$1" in
-    --abis) abis="${2:?--abis needs a value}"; shift 2 ;;
+    --abis) abis="${2:?--abis needs a value}"; abis_set=true; shift 2 ;;
     --aab) format=aab; shift ;;
-    --install) install=true; shift ;;
-    --device) serial="${2:?--device needs a value}"; install=true; shift 2 ;;
+    --install) target=phone; shift ;;
+    --emulator) target=emulator; shift ;;
+    --build-only) target=build; shift ;;
+    --device) serial="${2:?--device needs a value}"; shift 2 ;;
     --out) out="${2:?--out needs a value}"; shift 2 ;;
     --check) check_only=true; shift ;;
     --skip-preflight) preflight=false; shift ;;
-    -h | --help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $1 (see --help)" >&2; exit 2 ;;
   esac
 done
+if [ -z "$target" ]; then
+  if [ -n "$serial" ]; then
+    target=phone
+  elif [ "${GITHUB_ACTIONS:-}" = true ] || [ "$format" = aab ] || [ -n "$out" ]; then
+    target=build
+  else
+    target=emulator
+  fi
+fi
+install=false
+[ "$target" = build ] || install=true
 if $install && [ "$format" = aab ]; then
-  echo "--install works with an APK, not with --aab." >&2
+  echo "--install and --emulator work with an APK, not with --aab (add --build-only)." >&2
   exit 2
 fi
 
@@ -66,6 +88,8 @@ has_brew() { command -v brew >/dev/null; }
 pinned() { sed -n "s/^  $1: *\"\{0,1\}\([^\" ]*\)\"\{0,1\} *$/\1/p" "$root/.github/workflows/mobile-release.yml"; }
 node_major="$(pinned NODE_MAJOR)" java_major="$(pinned JAVA_MAJOR)" platform="$(pinned ANDROID_PLATFORM)"
 build_tools="$(pinned ANDROID_BUILD_TOOLS)" ndk="$(pinned ANDROID_NDK)"
+# Put the pinned Node first on PATH when another one is (also with --skip-preflight, so the build uses it).
+pf_use_node "$node_major"
 
 # JDK: JAVA_HOME, else the pinned major version if macOS has it installed (/usr/libexec/java_home), else the one bundled
 # with Android Studio, else java on PATH. Android Studio bundles a newer JDK than the pinned one, so it comes last.
@@ -182,28 +206,83 @@ check_phone() {
   fi
 }
 
+# The emulator target: a running emulator (the --device serial, else the first one), else an AVD to start. Sets
+# `serial` for a running one, `avd` for one to start, and `emu_abi`; without --abis the build carries only that ABI.
+avd="" emu_abi=""
+check_emulator() {
+  local adb="${sdk:+$sdk/platform-tools/adb}" emu="${sdk:+$sdk/emulator/emulator}" sm="" avdm="" running names avds
+  local line name host_abi image avd_home
+  pf_section "Android emulator (the default target; --build-only builds without installing)"
+  if [ -z "$sdk" ]; then
+    pf_fail "No Android SDK, so no emulator" "Install the SDK first (see above)."
+    return 0
+  fi
+  sm="$(ls "$sdk"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1 || true)"
+  avdm="$(ls "$sdk"/cmdline-tools/*/bin/avdmanager 2>/dev/null | head -1 || true)"
+  if [ ! -x "$adb" ] || [ ! -x "$emu" ]; then
+    if [ -n "$sm" ]; then
+      pf_fail "The Android Emulator or adb is not installed" "Both come as SDK packages (emulator, platform-tools)." \
+        "Install the emulator and platform-tools with sdkmanager" "yes | '$sm' --sdk_root='$sdk' emulator platform-tools"
+    else
+      pf_fail "The Android Emulator or adb is not installed" "Android Studio › Settings › Android SDK › SDK Tools: tick Android Emulator and Android SDK Platform-Tools." \
+        "Open Android Studio" "pf_open -a 'Android Studio'"
+    fi
+    return 0
+  fi
+
+  running="$("$adb" devices 2>/dev/null | awk '$1 ~ /^emulator-/ && $2 == "device" { print $1 }' || true)"
+  if [ -n "$serial" ]; then
+    if ! grep -qxF "$serial" <<<"$running"; then
+      pf_fail "No running emulator $serial (see adb devices)" "Start it, or leave out --device to let the script start one."
+      return 0
+    fi
+  elif [ -n "$running" ]; then
+    serial="$(head -1 <<<"$running")"
+  fi
+  if [ -n "$serial" ]; then
+    name="$("$adb" -s "$serial" emu avd name 2>/dev/null | head -1 | tr -d '\r' || true)"
+    emu_abi="$("$adb" -s "$serial" shell getprop ro.product.cpu.abi 2>/dev/null | tr -d '\r' || true)"
+    pf_ok "Running emulator ${name:-$serial} ($serial, ${emu_abi:-unknown ABI})"
+  else
+    # Recent emulators print INFO lines before the AVD names.
+    avds="$("$emu" -list-avds 2>/dev/null | grep -v '^INFO' | sed '/^[[:space:]]*$/d' || true)"
+    if [ -z "$avds" ]; then
+      case "$(uname -m)" in arm64 | aarch64) host_abi=arm64-v8a ;; *) host_abi=x86_64 ;; esac
+      image="system-images;android-$platform;google_apis;$host_abi"
+      if [ -n "$sm" ] && [ -n "$avdm" ]; then
+        pf_fail "No Android Virtual Device (AVD) exists" "Create one in Android Studio › Device Manager, or let the script create SmartLedger_API_$platform\n(downloads the $image system image, about 1.5 GB)." \
+          "Create the SmartLedger_API_$platform emulator with sdkmanager and avdmanager" \
+          "yes | '$sm' --sdk_root='$sdk' emulator '$image' && echo no | '$avdm' create avd -n SmartLedger_API_$platform -k '$image' -d pixel_7"
+      else
+        pf_fail "No Android Virtual Device (AVD) exists" "Android Studio › Device Manager › Create Virtual Device (a Pixel with a recent system image)." \
+          "Open Android Studio" "pf_open -a 'Android Studio'"
+      fi
+      return 0
+    fi
+    names=()
+    while IFS= read -r line; do names+=("$line"); done <<<"$avds"
+    avd="${names[0]}"
+    if [ "${#names[@]}" -gt 1 ] && [ -t 0 ] && [ -t 1 ] && ! $ci; then
+      echo "  Several emulators exist; pick one to start:"
+      pf_pick "${names[@]}"
+      avd="${names[choice]}"
+    fi
+    avd_home="${ANDROID_AVD_HOME:-${ANDROID_USER_HOME:-$HOME/.android}/avd}"
+    emu_abi="$(sed -n 's/^abi\.type *= *//p' "$avd_home/$avd.avd/config.ini" 2>/dev/null | head -1 | tr -d '\r' || true)"
+    pf_ok "Emulator $avd (${emu_abi:-unknown ABI}); it starts in the background before the build"
+  fi
+  if ! $abis_set && [ -n "$emu_abi" ]; then
+    abis="$emu_abi"
+  elif [ -n "$emu_abi" ] && ! printf '%s\n' "${abis//,/$'\n'}" | grep -qxF "$emu_abi"; then
+    pf_fail "The emulator runs $emu_abi, which this build ($abis) does not contain" "Leave out --abis, or add $emu_abi to it."
+  fi
+}
+
 run_checks() {
-  local node_found java_found major what sm="" missing pkgs adb devices
+  local java_found major what sm="" missing pkgs
 
   pf_section "Toolchain (pinned in .github/workflows/mobile-release.yml)"
-  if ! command -v node >/dev/null; then
-    if has_brew; then
-      pf_fail "Node.js is not installed" "Install Node $node_major." "Install Node $node_major with Homebrew" "brew install node@$node_major"
-    else
-      pf_fail "Node.js is not installed" "Install Node $node_major from nodejs.org." "Open the Node.js download page" "pf_open https://nodejs.org/en/download"
-    fi
-  else
-    node_found="$(node -p 'process.versions.node')"
-    if [ "${node_found%%.*}" = "$node_major" ]; then
-      pf_ok "Node $node_found"
-    elif has_brew; then
-      pf_fail "Node $node_major required, found $node_found" "Install Node $node_major and put it first on PATH (or switch with nvm or fnm)." \
-        "Install Node $node_major with Homebrew" "brew install node@$node_major && brew link --overwrite --force node@$node_major"
-    else
-      pf_fail "Node $node_major required, found $node_found" "Install Node $node_major (nodejs.org, nvm or fnm)." \
-        "Open the Node.js download page" "pf_open https://nodejs.org/en/download"
-    fi
-  fi
+  pf_check_node "$node_major"
 
   # `java -version` prints to stderr, e.g. `openjdk version "17.0.20" ...`.
   java_found="$("$java_bin" -version 2>&1 || true)"
@@ -284,8 +363,10 @@ run_checks() {
     pf_ok "Signing with the release keystore $RELEASE_KEYSTORE"
   fi
 
-  if $install; then
+  if [ "$target" = phone ]; then
     check_phone
+  elif [ "$target" = emulator ]; then
+    check_emulator
   fi
 }
 
@@ -294,11 +375,20 @@ commit="$(git log -1 --format='%h %s' 2>/dev/null || echo '?')"
 echo "${bold}Sổ Nghe Lời: Android Release build${reset}"
 echo "  Branch: ${cyan}$branch${reset}"
 echo "  Commit: $commit"
-echo "  Output: ${cyan}$format${reset}, ABIs ${cyan}$abis${reset}"
+case "$target" in
+  emulator) echo "  Output: ${cyan}$format${reset}, installed and opened on an ${cyan}Android emulator${reset} (--build-only to skip)" ;;
+  phone) echo "  Output: ${cyan}$format${reset}, installed on a connected phone" ;;
+  *) echo "  Output: ${cyan}$format${reset}, ABIs ${cyan}$abis${reset}" ;;
+esac
 [ -z "$(git status --porcelain -- . 2>/dev/null)" ] || echo "  ${yellow}! Uncommitted changes in frontend/mobile are built into the app.${reset}"
 
 if $preflight || $check_only; then
   run_checks
+  pf_finish
+elif [ "$target" = emulator ]; then
+  # Without an emulator there is nothing to install on, so this part is checked even with --skip-preflight.
+  pf_begin
+  check_emulator
   pf_finish
 fi
 $check_only && exit 0
@@ -333,13 +423,25 @@ if [ "${EXPO_PUBLIC_USE_MOCK:-}" = true ] || [ "${EXPO_PUBLIC_MOCK_CORE:-}" = tr
 fi
 case "${EXPO_PUBLIC_API_ENDPOINT:-}" in *10.0.2.2* | *localhost* | *127.0.0.1*) die "EXPO_PUBLIC_API_ENDPOINT points at this machine: $EXPO_PUBLIC_API_ENDPOINT" ;; esac
 
+adb="${sdk:+$sdk/platform-tools/adb}"
+emu_pid=""
+emu_log=""
+if [ "$target" = emulator ] && [ -z "$serial" ]; then
+  # Boot the AVD while the app builds; it is waited for only before the install. The port fixes its adb serial.
+  port=5554
+  while "$adb" devices 2>/dev/null | awk '{ print $1 }' | grep -qx "emulator-$port"; do port=$((port + 2)); done
+  serial="emulator-$port"
+  emu_log="${TMPDIR:-/tmp}/emulator-$avd.log"
+  echo "${bold}→ Starting emulator $avd ($serial) in the background${reset} ${pf_dim}log: $emu_log${pf_reset}"
+  nohup "$sdk/emulator/emulator" -avd "$avd" -port "$port" >"$emu_log" 2>&1 &
+  emu_pid=$!
+fi
+
 if $ci; then
   echo "${bold}→ npm ci${reset}"
   npm ci
-elif [ ! -f node_modules/.package-lock.json ] || [ package-lock.json -nt node_modules/.package-lock.json ]; then
-  # Reinstall when package-lock.json is newer than the last install (after a pull or a branch switch).
-  echo "${bold}→ npm install${reset}"
-  npm install
+else
+  pf_npm_install
 fi
 mark install
 
@@ -357,7 +459,7 @@ task=assembleRelease built="$PWD/android/app/build/outputs/apk/release/app-relea
 if [ "$format" = aab ]; then
   task=bundleRelease built="$PWD/android/app/build/outputs/bundle/release/app-release.aab"
 fi
-echo "${bold}→ gradlew $task${reset}"
+echo "${bold}→ gradlew $task${reset} ${pf_dim}(ABIs $abis)${pf_reset}"
 start=$(date +%s)
 (cd android && ./gradlew "$task" "-PreactNativeArchitectures=$abis" \
   "-Dorg.gradle.jvmargs=${GRADLE_JVM_ARGS:--Xmx6g -XX:MaxMetaspaceSize=1g}" ${signing[@]+"${signing[@]}"})
@@ -382,11 +484,32 @@ if [ "$format" = apk ]; then
   fi
 fi
 
+if [ -n "$emu_pid" ]; then
+  echo "${bold}→ Waiting for $serial to finish booting${reset}"
+  booted=""
+  for _ in $(seq 1 90); do
+    if ! kill -0 "$emu_pid" 2>/dev/null; then
+      tail -5 "$emu_log" >&2
+      die "The emulator stopped while booting (last lines of $emu_log above)."
+    fi
+    booted="$("$adb" -s "$serial" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+    [ "$booted" != 1 ] || break
+    sleep 2
+  done
+  [ "$booted" = 1 ] || die "$serial did not finish booting in 3 minutes (see $emu_log)."
+fi
+
 if $install; then
-  adb="$sdk/platform-tools/adb"
   echo "${bold}→ adb install on ${serial:-the connected phone}${reset}"
   if result="$("$adb" ${serial:+-s "$serial"} install -r "$built" 2>&1)"; then
     printf '%s\n' "$result"
+    if [ "$target" = emulator ]; then
+      if "$adb" -s "$serial" shell monkey -p "$app_id" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1; then
+        echo "  Opened $app_id on $serial."
+      else
+        echo "  ${yellow}Installed; open the app on the emulator yourself.${reset}"
+      fi
+    fi
   else
     printf '%s\n' "$result"
     # adb's install errors, in words.
