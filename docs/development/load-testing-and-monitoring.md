@@ -60,10 +60,22 @@ Read from the configuration on `staging`; none of these is measured.
 2. Seed data: test shops with production-like numbers of products, sales and customers.
 3. Run `smoke`, then `load` at the expected peak. Without traffic data, start from a guess (for example 50) and say so in the result.
 4. Run `stress` to find the ceiling, `spike` at twice the peak, then `soak` at 70% of the ceiling.
-5. During every run, watch the [server-side signals](#monitoring) next to Locust: Railway CPU and memory of `core`, Supabase connections and slow queries. A Locust p95 rising while Core CPU is idle points to the database pool or the database.
-6. Record each result in [`PROGRESS.md`](../../PROGRESS.md) with commit, environment sizes, data volume, profile settings and the Locust CSV/HTML.
+5. Start each run from Actions → **Load test** → **Run workflow** (see [Where to watch](#where-to-watch)). During the run, watch the Grafana dashboard next to the [server-side signals](#monitoring): Railway CPU and memory of `core`, Supabase connections and slow queries. A Locust p95 rising while Core CPU is idle points to the database pool or the database.
+6. Record each result in [`PROGRESS.md`](../../PROGRESS.md) with commit, environment sizes, data volume, profile settings and a link to the workflow run, whose artifact holds the CSV, HTML and `summary.json`.
 
-To compare with real traffic: a Locust user with 3–10 s think time sends about one request every 6–7 s, roughly one person actively using the app. Concurrent users (CCU) are therefore close to Locust users at the default think time. Daily active users (DAU) are not concurrent; the peak CCU of a day is usually a small share of DAU, but that share has to come from analytics.
+### From DAU to `PEAK_USERS`
+
+A Locust user with 3–10 s think time sends about one request every 6–7 s, roughly one person actively using the app, so at the default think time `PEAK_USERS` ≈ peak concurrent users (CCU). Daily active users (DAU) are not concurrent; convert them with:
+
+```text
+CCU_peak ≈ DAU × peak-hour share × (average session minutes / 60)
+```
+
+- **DAU** and **peak-hour share** come from [`activity.sql`](../../scripts/monitor/activity.sql) or the *Activity* row of the Grafana dashboard: query 1 gives DAU per day, query 2 the share of a day's active users seen in each hour; use the busiest hour.
+- **Average session minutes** has no source until product analytics exist; state the value used in the result (for example 5 minutes).
+- Example: 400 DAU × 0.25 × (5 / 60) ≈ 8 CCU. Test `load` at that peak and expect `stress` to show at least 1.5–2 × it.
+
+Both inputs are lower bounds: Core keeps no sign-in or last-seen time, so `activity.sql` counts only users who wrote something (a sale, draft, expense or audited action). An OWNER who only opened reports is not counted. Load-test accounts must use emails starting with `loadtest+` so the query leaves them out.
 
 ## SLI and SLO proposal
 
@@ -85,14 +97,14 @@ The load-test gate in [`slo.py`](../../scripts/loadtest/slo.py) uses the same la
 
 | Layer | Watch | Tool available now | During a load test |
 |---|---|---|---|
-| Uptime | Core liveness and readiness (readiness includes the database), Core auth gate returns 401, web returns 200 | [`synthetic-monitor.yml`](../../.github/workflows/synthetic-monitor.yml) | Not needed |
+| Uptime | Core liveness and readiness (readiness includes the database), Core auth gate returns 401, web returns 200 | Grafana Synthetic Monitoring once set up; [`synthetic-monitor.yml`](../../.github/workflows/synthetic-monitor.yml) as backup | Not needed |
 | Core and AI runtime | CPU, memory, network, restarts, logs | Railway service metrics and logs | Yes: CPU near the limit or memory climbing in `soak` |
 | AI agent turns | Time per turn, per model call and per tool call, token counts, errors, by `shop_id` | Logfire, when `LOGFIRE_TOKEN` is set ([AI README](../../backend/ai/README.md#tracing-logfire)); no message content is sent | Yes for chat runs: splits a slow turn into model time and tool time |
-| Database | Connections, CPU, slow queries | Supabase dashboard: Reports and Query Performance | Yes: connections near the limit, new slow queries |
+| Database | Connections, CPU, slow queries | Supabase dashboard: Reports and Query Performance; Supabase metrics in Grafana once scraped | Yes: connections near the limit, new slow queries |
 | Redis | Memory, connections | Redis Cloud dashboard | Low priority; no AI feature reads Redis yet |
 | Web | Deploy state, runtime errors | Vercel dashboard | No |
-| Client view | Request rate, p50/p95/p99, failures per endpoint | Locust web UI, `--csv`, `--html` | Yes |
-| Product use | DAU, MAU, CCU | None integrated | — |
+| Client view | Request rate, p95 per request group, failures, running users | Grafana dashboard (live, 14 days); workflow artifact (90 days); Locust web UI for local runs | Yes |
+| Product use | DAU, CCU | DAU lower bound from Core writes: [`activity.sql`](../../scripts/monitor/activity.sql) and the dashboard *Activity* row. No CCU or read-only activity until product analytics exist | Sizes `PEAK_USERS` |
 
 The synthetic monitor runs every 10 minutes and on demand (Actions → **Synthetic monitor** → **Run workflow**). It opens one issue titled *Synthetic monitor failing* when a check fails twice in a row within a run, comments on it while the failure lasts, and closes it on the next passing run. GitHub runs schedules only from the default branch, so it starts after this file reaches `main`, and it may delay or skip runs under load; treat it as a backup signal. Repository variables (Settings → Secrets and variables → Actions → Variables):
 
@@ -105,6 +117,55 @@ The synthetic monitor runs every 10 minutes and on demand (Actions → **Synthet
 
 AI has no public domain and is not probed; Core readiness does not include AI. Only a chat through Core checks it end to end.
 
+## Where to watch
+
+Everything is meant to be read in one Grafana Cloud stack, so the load a test sends and the database's reaction share one time axis:
+
+| What | Where | Kept |
+|---|---|---|
+| A running or recent load test: users, req/s, p95 per group, failure ratio | Grafana dashboard *SmartLedger load and activity*, filtered by environment and run (`<env>-<profile>-<GitHub run id>`) | 14 days (free tier) |
+| A finished load test: SLO table, stage results, RTT | The workflow run's job summary, and its artifact `load-test-…` (CSV, HTML, `summary.json`) | 90 days |
+| Results worth keeping | [`PROGRESS.md`](../../PROGRESS.md), linking the workflow run | Permanent |
+| DAU and busiest hours | Dashboard *Activity* row, or [`activity.sql`](../../scripts/monitor/activity.sql) in the Supabase SQL editor | Live data |
+| Uptime | Grafana Synthetic Monitoring; the GitHub synthetic monitor as backup | — |
+| Core request rate, latency per endpoint, DB pool, JVM | Not available: needs the OpenTelemetry Java agent in Core, see [Gaps](#gaps) | — |
+
+`summary.json` records `rtt_ms`, the median round trip from the GitHub runner to Core liveness. Every p95 measured from the runner includes it; when Core runs far from the runner, compare runs with it in mind or run Locust from the same region.
+
+### Set up Grafana Cloud
+
+Owned by the team organization with the repository admin as Grafana admin. Steps, once:
+
+1. Create a Grafana Cloud stack under the team organization. In **Connections → Add new connection → InfluxDB**, read the metrics write URL and instance ID, and create an access-policy token with only the `metrics:write` scope for the load test.
+2. In GitHub (Settings → Environments), create `loadtest-staging` and `loadtest-production`. Give `loadtest-production` required reviewers. In each:
+
+   | Name | Kind | Value |
+   |---|---|---|
+   | `LOADTEST_CORE_URL` | Variable | Core base URL of that environment |
+   | `GRAFANA_PUSH_URL` | Variable | `<metrics write URL>/api/v1/push/influx/write` |
+   | `GRAFANA_PUSH_USER` | Variable | Metrics instance ID |
+   | `GRAFANA_PUSH_TOKEN` | Secret | The `metrics:write` token |
+   | `FIREBASE_API_KEY` | Secret | Firebase web API key of that environment |
+   | `LOADTEST_ACCOUNTS_CSV` | Secret | Full `accounts.csv` content: test OWNER accounts with emails starting `loadtest+`, each with one ACTIVE shop |
+
+   Without the three `GRAFANA_PUSH_*` values the run still works and keeps only the artifact.
+3. Create a read-only database role in the Supabase SQL editor, limited to the columns the dashboard reads, then add it in Grafana as a PostgreSQL datasource. Use the transaction pooler (port 6543) and set **Max open connections** to 1: the session pooler has one free client left (see [Expected limits](#expected-limits-before-measuring)).
+
+   ```sql
+   CREATE ROLE grafana_reader LOGIN PASSWORD '<generated>';
+   ALTER ROLE grafana_reader SET statement_timeout = '10s';
+   GRANT USAGE ON SCHEMA public TO grafana_reader;
+   GRANT SELECT (id, email) ON users TO grafana_reader;
+   GRANT SELECT (actor_user_id, created_at) ON audit_logs TO grafana_reader;
+   GRANT SELECT (created_by_user_id, created_at) ON sales, sale_drafts, expenses TO grafana_reader;
+   ```
+
+4. Import [`scripts/monitor/grafana/smartledger-load.json`](../../scripts/monitor/grafana/smartledger-load.json) (Dashboards → New → Import) and pick the stack's Prometheus datasource and the PostgreSQL datasource from step 3. Export it back to this file after editing it in the UI.
+5. Scrape Supabase metrics: add a Metrics Endpoint scrape job for the project's [metrics endpoint](https://supabase.com/docs/guides/telemetry/metrics), one job per environment, and add its database connection and CPU panels to the dashboard.
+6. In **Testing & synthetics → Synthetic Monitoring**, add HTTP checks for the URLs in the [synthetic monitor table](#monitoring) every 1–5 minutes, and route alerts to the team channel.
+
+Locust pushes metrics through Grafana's Influx line-protocol endpoint: `locust,<labels> rps=…` is stored as `locust_rps{…}`. The series are `locust_users`, `locust_rps`, `locust_fail_ratio` and `locust_p95_ms`, labelled `env`, `profile`, `run_id`, and per request `group`, `name` and `method`; `name="all"` is the whole run. A failed push is logged and never fails the run.
+
 ## Gaps
 
 Each needs a decision or work outside this change.
@@ -114,7 +175,7 @@ Each needs a decision or work outside this change.
 | Core exposes only `health` from Actuator; no request rate, latency or DB-pool metrics | The availability and latency SLOs cannot be measured on real traffic, only in tests | Add Micrometer with a Prometheus endpoint, or the OpenTelemetry Java agent, sending to a hosted backend such as Grafana Cloud | Core owner |
 | Logfire covers AI agent runs only: FastAPI requests are not instrumented and Core has no traces | A slow chat cannot be followed from Core into AI in one trace | OpenTelemetry in Core with trace propagation to AI, under the `NFR-008` rule of no tokens or raw media in traces | Core and AI owners |
 | Session pooler at 15 clients with 14 in use | Scaling Core to a second replica, or raising AI pools, exhausts database clients | Set an explicit Hikari pool size per replica, or move Core to the transaction pooler; measure with `stress` before and after | Core owner |
-| No external uptime checker | GitHub schedules are best effort and can be skipped | A hosted checker (for example UptimeRobot, Better Stack or Checkly) at 1–5 minute intervals hitting the same URLs | Product owner (account and cost) |
-| No product analytics | No DAU or CCU, so the load model is a guess | Firebase Analytics in the mobile app (the project already uses Firebase), or PostHog | Product owner (privacy review first) |
+| No external uptime checker yet | GitHub schedules are best effort and can be skipped | Grafana Synthetic Monitoring, set up in [Where to watch](#set-up-grafana-cloud) | Repository admin |
+| No product analytics | DAU is a write-based lower bound and session length is a guess, so the load model is partly assumed | Firebase Analytics in the mobile app (the project already uses Firebase), or PostHog | Product owner (privacy review first) |
 | No backend post-deploy smoke | A deploy can succeed while Core cannot reach AI (see [CI/CD](ci-cd.md#railway-service-variables)) | Run `probe.py` for the deployed environment at the end of the `deploy` job | CI owner |
 | No alert routing beyond the GitHub issue | Nobody is paged | Route the issue or the uptime checker to a chat channel | Team |
