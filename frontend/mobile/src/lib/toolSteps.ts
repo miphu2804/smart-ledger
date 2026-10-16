@@ -4,6 +4,7 @@ import type { AgentToolEvent, ThoughtStep } from '../data/types';
 const STEP_LABELS: Record<string, string> = {
   query_shop_data: 'Tra cứu dữ liệu tiệm',
   suggest_restock: 'Tính gợi ý nhập hàng',
+  suggest_screen: 'Thêm nút mở màn hình',
 };
 const UNKNOWN_STEP = 'Xử lý yêu cầu';
 

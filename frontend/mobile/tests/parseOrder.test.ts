@@ -106,6 +106,13 @@ describe('parseOrder: tên dài hơn món khớp được', () => {
       [10],
     );
   });
+
+  it('bỏ qua từ mô tả ở giữa tên sản phẩm khi chỉ còn một ứng viên', () => {
+    const r = parseOrder('một sting dâu', [{ id: 20, name: 'Sting hương dâu', price: 12_000 }]);
+    assert.deepEqual(r.items.map((i) => [i.productId, i.qty]), [[20, 1]]);
+    assert.equal(r.disambiguations?.length, 0);
+    assert.equal(r.unknown.length, 0);
+  });
 });
 
 describe('parseOrder: tên dài hơn món duy nhất trong danh mục', () => {

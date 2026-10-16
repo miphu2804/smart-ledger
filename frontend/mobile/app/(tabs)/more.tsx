@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Image, ImageSourcePropType, Pressable, StyleSheet, View } from 'react-native';
 import { Badge, Dialog, Row, Screen, T } from '../../src/components/ui';
+import { authClient } from '../../src/lib/auth';
 import { vnd } from '../../src/lib/format';
 import { useCoreData } from '../../src/lib/useCoreData';
 import { useApp } from '../../src/store/AppStore';
@@ -149,6 +150,15 @@ export default function More() {
           subtitle="Âm thanh, thông báo, in hoá đơn"
           onPress={() => router.push('/settings')}
         />
+        {/* Chỉ tài khoản đăng ký bằng email mới có mật khẩu; Facebook, Google đổi mật khẩu ở chính dịch vụ đó */}
+        {authClient.hasPassword() ? (
+          <ManagementRow
+            icon="lock"
+            title="Đổi mật khẩu"
+            subtitle="Không cần đăng xuất"
+            onPress={() => router.push('/change-password')}
+          />
+        ) : null}
         <ManagementRow
           icon="help-circle"
           title="Xem lại hướng dẫn"

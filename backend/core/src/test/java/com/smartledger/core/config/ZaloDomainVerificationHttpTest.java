@@ -75,8 +75,8 @@ class ZaloDomainVerificationHttpTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"/zalo_verifier-other.html", "/nested/" + FILE, PATH + "/extra",
-            "/api/v1/me", "/api/v1/products", "/api/v1/auth/zalo/authorize", "/api/v1/auth/zalo/callback"})
-    void unrelatedFilesBusinessApisAndUnreleasedZaloRoutesStillRequireAuthentication(String path) throws Exception {
+            "/api/v1/me", "/api/v1/products", "/api/v1/auth/zalo/link", "/api/v1/auth/zalo/unknown"})
+    void unrelatedFilesBusinessApisAndAuthenticatedZaloRoutesStillRequireAuthentication(String path) throws Exception {
         assertThat(request("GET", path).statusCode()).isEqualTo(401);
     }
 

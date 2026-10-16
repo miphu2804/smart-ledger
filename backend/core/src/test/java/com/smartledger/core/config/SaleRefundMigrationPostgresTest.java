@@ -584,7 +584,9 @@ class SaleRefundMigrationPostgresTest {
     private Flyway flyway(String target) {
         var config = Flyway.configure().dataSource(System.getenv("CORE_TEST_POSTGRES_URL"),
                 System.getenv("CORE_TEST_POSTGRES_USERNAME"), System.getenv("CORE_TEST_POSTGRES_PASSWORD"))
-                .schemas(schema).defaultSchema(schema).locations("classpath:db/migration");
+                .schemas(schema).defaultSchema(schema).locations("classpath:db/migration")
+                // Historical V1–V16 assertions stay stable; V17 has its own fresh/upgrade/failure suite.
+                .target("16");
         if (target != null) {
             config.target(target);
         }

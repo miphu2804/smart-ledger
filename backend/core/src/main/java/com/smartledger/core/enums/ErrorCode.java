@@ -7,6 +7,16 @@ import org.springframework.http.HttpStatus;
 @Getter
 @RequiredArgsConstructor
 public enum ErrorCode {
+    ZALO_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "zalo_unavailable", "Zalo sign-in is unavailable. Start again later."),
+    INVALID_ZALO_REQUEST(HttpStatus.BAD_REQUEST, "invalid_zalo_request", "The Zalo sign-in request is invalid."),
+    ZALO_SESSION_INVALID(HttpStatus.BAD_REQUEST, "zalo_session_invalid", "This Zalo attempt is invalid or has already been used. Start again."),
+    ZALO_SESSION_EXPIRED(HttpStatus.BAD_REQUEST, "zalo_session_expired", "This Zalo attempt has expired. Start again."),
+    ZALO_CONSENT_DENIED(HttpStatus.BAD_REQUEST, "zalo_consent_denied", "Zalo sign-in was not authorized."),
+    ZALO_IDENTITY_CONFLICT(HttpStatus.CONFLICT, "zalo_identity_conflict", "This Zalo identity belongs to another account and cannot be moved."),
+    ZALO_REAUTHENTICATION_REQUIRED(HttpStatus.UNAUTHORIZED, "zalo_reauthentication_required", "Sign in again to the existing account before linking Zalo."),
+    ZALO_PROVIDER_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "zalo_provider_unavailable", "The identity provider is unavailable. Start a new attempt later."),
+    ZALO_ACCOUNT_NOT_ALLOWED(HttpStatus.FORBIDDEN, "zalo_account_not_allowed", "This account cannot use OWNER Zalo sign-in or linking."),
+    ZALO_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "zalo_rate_limited", "Too many Zalo requests. Please retry later."),
     INVALID_PRODUCT_QUERY(HttpStatus.BAD_REQUEST, "invalid_product_query", "Use valid filters, page >= 0, size 1-100 and offset <= 2147483647."),
     INVALID_SALE_QUERY(HttpStatus.BAD_REQUEST, "invalid_sale_query", "Use valid filters, page >= 0, size 1-100 and offset <= 2147483647."),
     SALE_SUMMARY_OVERFLOW(HttpStatus.CONFLICT, "sale_summary_overflow", "Filtered sale value exceeds the supported 64-bit VND range; narrow the filters."),
