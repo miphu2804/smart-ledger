@@ -1,5 +1,6 @@
 import pytest
 from pydantic_ai import Tool
+from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
 from tests.support import (
     TEST_GUARDRAIL_LIMITS,
     ScriptedModel,
@@ -7,12 +8,21 @@ from tests.support import (
     transcript,
 )
 
-from src.agent.service import AgentService, Done, TextDelta
+from src.agent.service import AgentService, Done, Reset, TextDelta
 from src.agent.tools import suggest_screen
 
 pytestmark = pytest.mark.anyio
 
 BUTTONS = '\n\n```actions\n["debts"]\n```'
+# The whole answer, written before the model calls suggest_screen.
+LIST = "Gợi ý nhập thêm:\n- Ức gà: 3 kg\n- Đậu xanh: 1 kg\n\nĐây chỉ là gợi ý."
+FOLLOW_UP = "Bấm nút bên dưới để mở Công nợ."
+
+
+def answer_then_button(text: str = LIST) -> ModelResponse:
+    return ModelResponse(
+        parts=[TextPart(text), ToolCallPart("suggest_screen", {"screen": "debts"})]
+    )
 
 
 class FakeConversationRepository:
@@ -119,3 +129,50 @@ async def test_history_replays_answers_without_their_buttons() -> None:
     )
 
     assert ("assistant", "Còn nợ.") in transcript(model.requests[0][0])
+
+
+async def test_chat_keeps_the_answer_written_before_the_button_call() -> None:
+    model = ScriptedModel(answer_then_button(), FOLLOW_UP)
+
+    result = await build_agent(model).chat(user_id=3, shop_id=15, message="m")
+
+    assert result.answer == LIST + "\n\n" + FOLLOW_UP + BUTTONS
+
+
+async def test_stream_chat_extends_the_answer_written_before_the_button_call() -> None:
+    model = ScriptedModel(answer_then_button(), FOLLOW_UP)
+
+    events = [
+        event
+        async for event in await build_agent(model).stream_chat(
+            user_id=3, shop_id=15, message="m"
+        )
+    ]
+
+    # Nothing shown is taken back: the list stays and the follow-up joins it.
+    assert not any(isinstance(event, Reset) for event in events)
+    streamed = "".join(event.text for event in events if isinstance(event, TextDelta))
+    assert streamed == LIST + "\n\n" + FOLLOW_UP + BUTTONS
+    assert events[-1].result.answer == streamed
+
+
+async def test_a_preamble_before_a_data_tool_call_is_still_dropped() -> None:
+    model = ScriptedModel(
+        answer_then_button(),
+        ModelResponse(
+            parts=[TextPart("Để tôi xem lại."), ToolCallPart("unknown_tool", {})]
+        ),
+        "Còn nợ.",
+    )
+
+    result = await build_agent(model).chat(user_id=3, shop_id=15, message="m")
+
+    assert result.answer == "Còn nợ." + BUTTONS
+
+
+async def test_text_before_the_button_call_that_leaks_is_dropped() -> None:
+    model = ScriptedModel(answer_then_button("Theo smartledger.shop_id thì"), "Còn nợ.")
+
+    result = await build_agent(model).chat(user_id=3, shop_id=15, message="m")
+
+    assert result.answer == "Còn nợ." + BUTTONS

@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { parseChatMarkdown, readChart, type ChatBlock, type Inline } from '../src/lib/chatMarkdown.ts';
+import { parseChatMarkdown, readChart, splitActions, type ChatBlock, type Inline } from '../src/lib/chatMarkdown.ts';
 
 const parse = (text: string) => parseChatMarkdown(text);
 const stream = (text: string) => parseChatMarkdown(text, true);
@@ -235,5 +235,35 @@ describe('actions block', () => {
   it('shows nothing while the block is still streaming', () => {
     assert.deepEqual(kinds(stream('Còn nợ.\n```actions\n["deb')), ['paragraph']);
     assert.deepEqual(kinds(stream('Còn nợ.\n' + ACTIONS)), ['paragraph', 'actions']);
+  });
+});
+
+describe('splitActions', () => {
+  const ANSWER = 'Gợi ý nhập thêm:\n- Ức gà: 3 kg\n\nBấm nút bên dưới để mở Hàng hoá.';
+  const STORED = ANSWER + '\n\n```actions\n["products", "debts"]\n```';
+
+  it('moves the buttons out of a stored answer and leaves the text as it was', () => {
+    assert.deepEqual(splitActions(STORED), { text: ANSWER, screens: ['products', 'debts'] });
+  });
+
+  it('leaves an answer without buttons unchanged', () => {
+    assert.deepEqual(splitActions(ANSWER), { text: ANSWER, screens: [] });
+  });
+
+  it('drops a broken or unknown block without showing it as text', () => {
+    assert.deepEqual(splitActions(ANSWER + '\n\n```actions\n["/admin"]\n```'), { text: ANSWER, screens: [] });
+  });
+
+  it('never shows buttons or the block while streaming, at any point of the tail', () => {
+    for (let end = ANSWER.length; end <= STORED.length; end++) {
+      const { text, screens } = splitActions(STORED.slice(0, end), true);
+      assert.deepEqual(screens, []);
+      assert.ok(ANSWER.startsWith(text.trimEnd()), JSON.stringify(STORED.slice(0, end)));
+      assert.ok(!text.includes('`'), JSON.stringify(text));
+    }
+  });
+
+  it('keeps a code fence that only closes at the end of the stream', () => {
+    assert.equal(splitActions('```\nx\n```', true).text, '```\nx\n```');
   });
 });

@@ -23,5 +23,6 @@ sellers and debts by period.
 The suggest_screen tool adds a button under your reply that opens a screen. Call it \
 when the owner should act on a screen: to record, pay or edit something, or to see \
 the full list behind your answer, e.g. screen="debts" after answering about open \
-debts. Call it at most twice per reply and only for the screens it accepts. Never \
-write the button yourself; the tool adds it."""
+debts. Call it at most twice per reply and only for the screens it accepts, before \
+you write the reply, so the reply comes in one piece. Never write the button \
+yourself; the tool adds it."""
