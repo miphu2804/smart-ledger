@@ -100,6 +100,15 @@ The report criterion added by #256 reused the number `AC-076`, which the Agent l
 **Changed files:** `frontend/mobile/app/pos.tsx` (`PosCollapsibleHeader`) — modified; this entry.
 
 **Check:** `tsc --noEmit` has no errors in this PR's files (its only 2 errors are in #230's files: `expo-application` and `expo-intent-launcher` are not installed on this machine). Mock web build in headless Chrome at 393×852, 3/3: before scrolling the centre of the large "Quét mã" button hits that button; after scrolling the centre of the pinned "Quét mã" hits the pinned button and tapping it opens the scanner. **Not verified:** a phone.
+### [2026-10-16 10:06 UTC+07:00] — [Feature] Memory switch moves into the chat's assistant settings
+
+**Done:** The long-term memory switch now lives in a "Cài đặt trợ lý" sheet opened from the chat header, and the "Đã dùng ghi nhớ" text chip on answers is a small bookmark icon (with a count when several memories were used). The sheet loads on every open and shows an error with a retry button, so one failed call while the AI service wakes from idle no longer hides the switch silently. The "Trợ lý AI" section is removed from Cài đặt. No API or contract change.
+
+**Changed files:** `frontend/mobile/app/ai.tsx`, `frontend/mobile/app/settings.tsx`, `docs/contracts/api-contracts.md`, `docs/architecture/adr/0002-agent-long-term-memory.md` — modified; this entry.
+
+**Flow explained:** chat header → sliders button → sheet → `GET /agent/memory/settings` (`available` false shows "chưa được bật", error shows retry) → toggle → `PUT /agent/memory/settings`, reverted with an inline error on failure.
+
+**Check:** `tsc --noEmit` reports no error in `ai.tsx` or `settings.tsx`; the only errors are missing `expo-application` and `expo-intent-launcher` in `src/lib/appUpdateInstall.native.ts`, a file this change does not touch. Not run on a device or simulator.
 
 ### [2026-10-16 10:30 UTC+07:00] — [Fix] Agent memory writes semantic facts by default
 
