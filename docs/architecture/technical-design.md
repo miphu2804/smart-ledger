@@ -89,7 +89,7 @@ Phần barcode CORE-012 không đổi ranh giới thành phần hoặc thêm Red
 | Redis | Cache/giới hạn tốc độ/tác vụ ngắn hạn; không là nguồn dữ liệu chuẩn. Tính năng dựa trên Redis hoãn sau bản phát hành đầu tiên; AI đã kết nối Redis lúc khởi động nhưng chưa tính năng nào dùng, Core không dùng |
 | LiteLLM | Chọn model và quản lý khóa model ở phía server. Hoãn sau bản phát hành đầu tiên; AI hiện không dùng (model đi qua gateway OpenCode Go, xem §1) |
 | Langfuse | Trace AI; không ghi audio/ảnh hoặc dữ liệu nhạy cảm thô mặc định. Hoãn sau bản phát hành đầu tiên; AI hiện không dùng |
-| Logfire | Trace từng lượt Agent chat (thời gian, model, token, tên tool, lỗi, `shop_id`), không gửi nội dung câu hỏi, câu trả lời, SQL hay kết quả tool. Chỉ bật khi đặt `LOGFIRE_TOKEN`; xem [AI README](../../backend/ai/README.md#tracing-logfire) |
+| Logfire | Trace từng lượt Agent chat (thời gian, model, token, tên tool, lỗi, `shop_id`), gửi kèm nội dung câu hỏi, câu trả lời, SQL và kết quả tool ở mọi môi trường (`LOGFIRE_INCLUDE_CONTENT=false` để tắt; không che số điện thoại, xem NFR-008). Chỉ bật khi đặt `LOGFIRE_TOKEN`; xem [AI README](../../backend/ai/README.md#tracing-logfire) |
 
 Chỉ Core có API công khai. FE không gọi AI, PostgreSQL, Redis, LiteLLM hoặc Langfuse trực tiếp.
 
