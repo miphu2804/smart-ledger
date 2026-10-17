@@ -13,7 +13,8 @@ import { colors, shadow } from '../../src/theme';
 
 /**
  * Cách đăng nhập: email + mật khẩu và Google dùng được; Facebook tạm khoá; Zalo dùng được trên bản web khi bật
- * EXPO_PUBLIC_ZALO_LOGIN, còn lại ghi "Sắp có". Không còn đăng nhập bằng số điện thoại.
+ * EXPO_PUBLIC_ZALO_LOGIN và trên Android khi có EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID, còn lại ghi "Sắp có". Không còn đăng nhập
+ * bằng số điện thoại.
  */
 export default function Welcome() {
   const toast = useToast();

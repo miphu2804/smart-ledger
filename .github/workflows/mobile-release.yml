@@ -140,6 +140,8 @@ jobs:
       EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN }}
       EXPO_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_PROJECT_ID }}
       EXPO_PUBLIC_FIREBASE_APP_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_APP_ID }}
+      # Zalo login on Android: the Core's ZALO_NATIVE_CLIENT_ID for this environment; empty leaves the button "Sắp có".
+      EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID: ${{ vars.EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID }}
       # Gradle needs more than its 2 GB default: with it the daemon ran out of Metaspace and stalled.
       GRADLE_JVM_ARGS: -Xmx6g -XX:MaxMetaspaceSize=1g
     steps:

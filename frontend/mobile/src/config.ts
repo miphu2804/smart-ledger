@@ -47,9 +47,17 @@ export const APP_UPDATE_URL = (process.env.EXPO_PUBLIC_UPDATE_URL ?? '').trim();
 /**
  * Bật nút "Zalo" trên bản web (đăng nhập qua cửa sổ Zalo, hợp đồng Zalo CORE-015). Chỉ đặt `true` khi Core của môi trường
  * đó đã bật `ZALO_ENABLED` và có origin của trang web trong `ZALO_CLIENT_ORIGINS`; để trống thì nút ghi "Sắp có".
- * App Android/iOS chưa dùng cờ này (Core chưa có luồng Zalo cho app).
+ * App Android dùng `ZALO_NATIVE_CLIENT_ID` bên dưới thay cho cờ này.
  */
 export const ZALO_LOGIN_ENABLED = process.env.EXPO_PUBLIC_ZALO_LOGIN === 'true';
+
+/**
+ * Đăng nhập Zalo trên app Android (hợp đồng Zalo CORE-016): đúng giá trị `ZALO_NATIVE_CLIENT_ID` của Core môi trường đó.
+ * Đặt lúc build thì nút "Zalo" trên Android bấm được và APK khai App Link `https://<Core>/mobile/auth/zalo/complete`
+ * (xem app.config.js); để trống thì nút ghi "Sắp có". Core cũng phải bật `ZALO_NATIVE_ENABLED` với package và SHA-256
+ * chứng chỉ ký của đúng APK đó, nếu không App Link không mở lại app.
+ */
+export const ZALO_NATIVE_CLIENT_ID = (process.env.EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID ?? '').trim();
 
 /** Email hỗ trợ hiện ở màn xác minh email; để trống thì không hiện dòng liên hệ. */
 export const SUPPORT_EMAIL = (process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? '').trim();
