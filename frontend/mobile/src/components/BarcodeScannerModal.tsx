@@ -51,7 +51,7 @@ import { productApi } from '../lib/catalogApi';
 import { errorMessage } from '../lib/errors';
 import { triggerFeedback } from '../lib/feedback';
 import { CUSTOM_NAME_MAX, CUSTOM_UNIT_MAX, upsertCustomLine } from '../lib/customLines';
-import { vnd } from '../lib/format';
+import { capMoney, vnd } from '../lib/format';
 import { useReducedMotion } from '../motion';
 import { colors, font, shadow } from '../theme';
 import { T } from './ui';
@@ -1053,7 +1053,7 @@ export function BarcodeScannerModal({
                   <TextInput
                     value={configPrice ? Number(configPrice).toLocaleString('vi-VN') : ''}
                     onChangeText={(t) => {
-                      setConfigPrice(t.replace(/\D/g, ''));
+                      setConfigPrice(capMoney(t, configPrice));
                       setConfigErr('');
                     }}
                     placeholder="0"

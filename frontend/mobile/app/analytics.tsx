@@ -102,7 +102,7 @@ export default function Analytics() {
     );
   }
   // Đã qua hai nhánh trên nên báo cáo của Core đã có
-  const { revenue, profit, summary: summaryView } = core.totals as ReportTotals;
+  const { revenue, profit, profitError, summary: summaryView } = core.totals as ReportTotals;
 
   return (
     <Screen contentStyle={{ paddingBottom: 48 }}>
@@ -160,46 +160,65 @@ export default function Analytics() {
         {/* Các dòng đều không âm và cộng trừ ra đúng lãi gộp của Core: Doanh thu − Giá vốn hàng đã bán − Huỷ đơn bán kỳ trước +
             Giá vốn của đơn huỷ. Giá vốn ròng của Core (đã bán − đơn huỷ) có thể âm khi huỷ đơn kỳ trước nên tách ra cho dễ hiểu. */}
         <MetricRow label="Doanh thu" value={vnd(revenue.revenueVnd)} color={colors.data.revenue} />
-        <MetricRow label="Giá vốn hàng đã bán" value={minus(profit.grossEstimatedCogsVnd)} color={colors.data.product} />
-        {revenue.cancelledEarlierVnd > 0 ? (
-          <MetricRow label="Huỷ đơn bán kỳ trước" value={minus(revenue.cancelledEarlierVnd)} color={colors.red} />
-        ) : null}
-        {profit.voidedEstimatedCogsVnd > 0 ? (
-          <MetricRow label="Giá vốn của đơn huỷ" value={`+${vnd(profit.voidedEstimatedCogsVnd)}`} color={colors.data.product} />
-        ) : null}
-        <View style={styles.metricDivider} />
-        <MetricRow
-          label="Lãi gộp ước tính"
-          value={vnd(profit.estimatedGrossProfitVnd)}
-          color={profit.estimatedGrossProfitVnd >= 0 ? colors.data.profit : colors.red}
-          strong
-        />
-        <MetricRow label="Chi phí đã ghi" value={minus(profit.expenseVnd)} color={colors.data.expense} />
-        <View style={styles.metricDivider} />
-        <MetricRow
-          label="Lãi sau chi phí"
-          value={vnd(profit.estimatedOperatingProfitVnd)}
-          color={profit.estimatedOperatingProfitVnd >= 0 ? colors.data.profit : colors.red}
-          strong
-        />
-        {/* Giá vốn là giá vốn của từng món lúc bán (Core chốt khi xác nhận đơn), không phải giá vốn hiện tại hay mức đoán */}
-        <T size={12} color={colors.faint} style={styles.note}>
-          Giá vốn lấy theo giá vốn của từng món lúc bán. Đơn bị huỷ không còn tính là đã bán nên giá vốn của nó được cộng lại.
-        </T>
-        {!profit.isComplete ? (
-          <Card onPress={() => router.push('/products')} style={styles.costWarning}>
-            <Row gap={8} style={{ alignItems: 'flex-start' }}>
-              <Feather name="alert-circle" size={15} color={colors.gold} style={{ marginTop: 2 }} />
-              {/* Core đếm món thiếu giá vốn cả lúc bán lẫn lúc huỷ, nên đơn huỷ trong kỳ bị tính hai lần: chỉ nêu số khi kỳ không có đơn huỷ */}
-              <T size={12.5} color={colors.ink} style={{ flex: 1, lineHeight: 18 }}>
-                {profit.voidedRevenueVnd === 0
-                  ? `${profit.unknownCostItemCount} món trong kỳ chưa có giá vốn nên giá vốn và lãi đang thiếu phần của ${vnd(profit.unknownCostRevenueVnd)} doanh thu.`
-                  : 'Có món bán trong kỳ chưa có giá vốn nên giá vốn và lãi ở trên chưa đủ.'}{' '}
-                Thêm giá vốn trong Hàng hoá để lãi đủ hơn từ các đơn sau.
-              </T>
-            </Row>
-          </Card>
-        ) : null}
+        {!profit ? (
+          <>
+            {revenue.cancelledEarlierVnd > 0 ? (
+              <MetricRow label="Huỷ đơn bán kỳ trước" value={minus(revenue.cancelledEarlierVnd)} color={colors.red} />
+            ) : null}
+            <View style={styles.profitError}>
+              <Row gap={8} style={{ alignItems: 'flex-start' }}>
+                <Feather name="alert-circle" size={15} color={colors.red} style={{ marginTop: 2 }} />
+                <T size={12.5} color={colors.ink} style={{ flex: 1, lineHeight: 18 }}>
+                  Chưa tính được giá vốn và lãi của kỳ này ({profitError}). Doanh thu và đơn huỷ ở đây vẫn đúng.
+                </T>
+              </Row>
+              <Button title="Tính lại" variant="outline" small onPress={reload} style={{ marginTop: 8 }} />
+            </View>
+          </>
+        ) : (
+          <>
+            <MetricRow label="Giá vốn hàng đã bán" value={minus(profit.grossEstimatedCogsVnd)} color={colors.data.product} />
+            {revenue.cancelledEarlierVnd > 0 ? (
+              <MetricRow label="Huỷ đơn bán kỳ trước" value={minus(revenue.cancelledEarlierVnd)} color={colors.red} />
+            ) : null}
+            {profit.voidedEstimatedCogsVnd > 0 ? (
+              <MetricRow label="Giá vốn của đơn huỷ" value={`+${vnd(profit.voidedEstimatedCogsVnd)}`} color={colors.data.product} />
+            ) : null}
+            <View style={styles.metricDivider} />
+            <MetricRow
+              label="Lãi gộp ước tính"
+              value={vnd(profit.estimatedGrossProfitVnd)}
+              color={profit.estimatedGrossProfitVnd >= 0 ? colors.data.profit : colors.red}
+              strong
+            />
+            <MetricRow label="Chi phí đã ghi" value={minus(profit.expenseVnd)} color={colors.data.expense} />
+            <View style={styles.metricDivider} />
+            <MetricRow
+              label="Lãi sau chi phí"
+              value={vnd(profit.estimatedOperatingProfitVnd)}
+              color={profit.estimatedOperatingProfitVnd >= 0 ? colors.data.profit : colors.red}
+              strong
+            />
+            {/* Giá vốn là giá vốn của từng món lúc bán (Core chốt khi xác nhận đơn), không phải giá vốn hiện tại hay mức đoán */}
+            <T size={12} color={colors.faint} style={styles.note}>
+              Giá vốn lấy theo giá vốn của từng món lúc bán. Đơn bị huỷ không còn tính là đã bán nên giá vốn của nó được cộng lại.
+            </T>
+            {!profit.isComplete ? (
+              <Card onPress={() => router.push('/products')} style={styles.costWarning}>
+                <Row gap={8} style={{ alignItems: 'flex-start' }}>
+                  <Feather name="alert-circle" size={15} color={colors.gold} style={{ marginTop: 2 }} />
+                  {/* Core đếm món thiếu giá vốn cả lúc bán lẫn lúc huỷ, nên đơn huỷ trong kỳ bị tính hai lần: chỉ nêu số khi kỳ không có đơn huỷ */}
+                  <T size={12.5} color={colors.ink} style={{ flex: 1, lineHeight: 18 }}>
+                    {profit.voidedRevenueVnd === 0
+                      ? `${profit.unknownCostItemCount} món trong kỳ chưa có giá vốn nên giá vốn và lãi đang thiếu phần của ${vnd(profit.unknownCostRevenueVnd)} doanh thu.`
+                      : 'Có món bán trong kỳ chưa có giá vốn nên giá vốn và lãi ở trên chưa đủ.'}{' '}
+                    Thêm giá vốn trong Hàng hoá để lãi đủ hơn từ các đơn sau.
+                  </T>
+                </Row>
+              </Card>
+            ) : null}
+          </>
+        )}
       </Card>
 
       <SectionTitle title="Đơn huỷ trong kỳ" />
@@ -294,6 +313,7 @@ const styles = StyleSheet.create({
   metricDivider: { height: 1, backgroundColor: colors.border, marginVertical: 3 },
   note: { lineHeight: 18, marginTop: 7, marginBottom: 8 },
   costWarning: { marginBottom: 8, padding: 10, backgroundColor: colors.goldSoft, borderColor: colors.goldSoft },
+  profitError: { marginVertical: 8, padding: 10, borderRadius: 12, backgroundColor: colors.redSoft },
   emptySmall: { paddingVertical: 14, textAlign: 'center' },
   sellerRow: { minHeight: 56, paddingVertical: 8 },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },

@@ -44,6 +44,13 @@ export const STT_MODEL_URL = process.env.EXPO_PUBLIC_STT_MODEL_URL ?? '';
  */
 export const APP_UPDATE_URL = (process.env.EXPO_PUBLIC_UPDATE_URL ?? '').trim();
 
+/**
+ * Bật nút "Zalo" trên bản web (đăng nhập qua cửa sổ Zalo, hợp đồng Zalo CORE-015). Chỉ đặt `true` khi Core của môi trường
+ * đó đã bật `ZALO_ENABLED` và có origin của trang web trong `ZALO_CLIENT_ORIGINS`; để trống thì nút ghi "Sắp có".
+ * App Android/iOS chưa dùng cờ này (Core chưa có luồng Zalo cho app).
+ */
+export const ZALO_LOGIN_ENABLED = process.env.EXPO_PUBLIC_ZALO_LOGIN === 'true';
+
 /** Email hỗ trợ hiện ở màn xác minh email; để trống thì không hiện dòng liên hệ. */
 export const SUPPORT_EMAIL = (process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? '').trim();
 

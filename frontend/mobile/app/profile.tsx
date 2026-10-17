@@ -20,6 +20,7 @@ export default function Profile() {
   const [fb, setFb] = useState(app.user.facebook);
   const [store, setStore] = useState(app.store.name);
   const [address, setAddress] = useState(app.store.address);
+  const [shopPhone, setShopPhone] = useState(app.store.phone);
   const [industries, setIndustries] = useState<string[]>(app.store.industries);
   const [bankName, setBankName] = useState(app.store.bankName);
   const [bankAccount, setBankAccount] = useState(app.store.bankAccount);
@@ -27,15 +28,17 @@ export default function Profile() {
   const [busy, setBusy] = useState(false);
 
   const emailErr = email && !/^\S+@\S+\.\S+$/.test(email) ? 'Email chưa đúng định dạng' : '';
+  // Số điện thoại tiệm lưu ở Core (tối đa 30 ký tự): chỉ nhận số, dấu cách, chấm, gạch và dấu + ở đầu
+  const phoneErr = shopPhone.trim() && !/^\+?[0-9 .-]{8,20}$/.test(shopPhone.trim()) ? 'Số điện thoại chưa đúng' : '';
   const chosen = industryList.filter((i) => industries.includes(i.id));
   // Core bắt buộc có ngành; xoá hết ngành sẽ bị từ chối nên chặn ngay ở màn này.
   const noIndustry = industries.length === 0;
 
   const save = async () => {
     if (busy) return;
-    const next = { name: store.trim(), address: address.trim(), industries };
+    const next = { name: store.trim(), address: address.trim(), phone: shopPhone.trim(), industries };
     const changes = shopChanges(
-      { name: app.store.name, address: app.store.address, industries: app.store.industries },
+      { name: app.store.name, address: app.store.address, phone: app.store.phone, industries: app.store.industries },
       next,
     );
     setBusy(true);
@@ -47,10 +50,11 @@ export default function Profile() {
         shop = {
           name: saved.name,
           address: saved.address ?? '',
+          phone: saved.phone ?? '',
           industries: saved.industries ?? industriesFromCore(saved.industry),
         };
       }
-      // Phần còn lại (họ tên, email, Facebook, ngân hàng) Core chưa có chỗ lưu nên chỉ giữ trên máy.
+      // Phần còn lại (họ tên, email, Facebook, ngân hàng) Core chưa có chỗ lưu nên lưu trên máy (đăng xuất không mất).
       app.updateProfile(
         { name: name.trim(), email, facebook: fb },
         { ...shop, bankName: bankName.trim(), bankAccount: bankAccount.replace(/\s/g, '') },
@@ -72,7 +76,7 @@ export default function Profile() {
         <Button
           title="Lưu thay đổi"
           loading={busy}
-          disabled={busy || !name.trim() || !store.trim() || noIndustry || !!emailErr}
+          disabled={busy || !name.trim() || !store.trim() || noIndustry || !!emailErr || !!phoneErr}
           onPress={save}
         />
       }
@@ -83,7 +87,6 @@ export default function Profile() {
           THÔNG TIN CÁ NHÂN
         </T>
         <Field label="Họ và tên" value={name} onChangeText={setName} />
-        <Field label="Số điện thoại" value={app.user.phone} editable={false} inputStyle={{ color: colors.faint }} />
         <Field
           label="Email"
           placeholder="email@gmail.com"
@@ -95,7 +98,7 @@ export default function Profile() {
         />
         <Field label="Link Facebook" placeholder="facebook.com/tenban" autoCapitalize="none" value={fb} onChangeText={setFb} />
         <T size={12} color={colors.faint}>
-          Họ tên, email và Facebook hiện chỉ lưu trên máy này
+          Họ tên, email và Facebook lưu trên máy này (đăng xuất không mất), chưa đồng bộ sang máy khác
         </T>
       </Card>
       <Card style={{ marginTop: 12 }}>
@@ -103,6 +106,15 @@ export default function Profile() {
           THÔNG TIN TIỆM
         </T>
         <Field label="Tên tiệm" value={store} onChangeText={setStore} />
+        <Field
+          label="Số điện thoại tiệm"
+          placeholder="VD: 0901 234 567"
+          keyboardType="phone-pad"
+          maxLength={20}
+          value={shopPhone}
+          onChangeText={setShopPhone}
+          error={phoneErr || undefined}
+        />
         <Field label="Địa chỉ" value={address} onChangeText={setAddress} />
         <T w="semibold" size={12} color={colors.muted} style={{ marginBottom: 6 }}>
           Ngành hàng
@@ -132,7 +144,7 @@ export default function Profile() {
           onChangeText={setBankAccount}
         />
         <T size={12} color={colors.faint}>
-          Hiện khi khách chọn chuyển khoản lúc thanh toán. Thông tin này hiện chỉ lưu trên máy này
+          Hiện khi khách chọn chuyển khoản lúc thanh toán. Lưu trên máy này (đăng xuất không mất), chưa đồng bộ sang máy khác
         </T>
       </Card>
 

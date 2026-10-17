@@ -72,6 +72,11 @@ export interface AuthClient {
    * Native cần bản build có thư viện Google Sign-In và Web client ID (đọc từ google-services.json lúc build); web mở popup.
    */
   signInWithGoogle(): Promise<void>;
+  /**
+   * Đăng nhập Firebase bằng custom token do Core cấp (luồng Zalo: `/auth/zalo/exchange` trả `firebaseCustomToken`).
+   * Token là bí mật dùng một lần: không ghi log, không lưu lại.
+   */
+  signInWithCustomToken(token: string): Promise<void>;
   /** true khi người đang đăng nhập có mật khẩu (đăng ký bằng email); tài khoản Facebook hay Google không có mật khẩu để đổi. */
   hasPassword(): boolean;
   /**

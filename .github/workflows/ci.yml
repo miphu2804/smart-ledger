@@ -459,6 +459,8 @@ jobs:
       EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN }}
       EXPO_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_PROJECT_ID }}
       EXPO_PUBLIC_FIREBASE_APP_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_APP_ID }}
+      # Nút Zalo trên web; chỉ đặt "true" khi Core của môi trường đã bật Zalo và nhận origin của trang này
+      EXPO_PUBLIC_ZALO_LOGIN: ${{ vars.EXPO_PUBLIC_ZALO_LOGIN }}
     steps:
       - uses: actions/checkout@v7
         with:

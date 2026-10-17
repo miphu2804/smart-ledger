@@ -136,6 +136,18 @@ export const firebaseAuth: AuthClient = {
     }
   },
 
+  async signInWithCustomToken(token) {
+    const { m, auth } = load();
+    debugLog('auth', 'signInWithCustomToken →');
+    try {
+      if (typeof m.signInWithCustomToken === 'function') await m.signInWithCustomToken(auth, token);
+      else await auth.signInWithCustomToken(token);
+      debugLog('auth', 'signInWithCustomToken ✓');
+    } catch (e) {
+      throw mapFirebaseError(e);
+    }
+  },
+
   async sendPasswordReset(email) {
     const { m, auth } = load();
     debugLog('auth', 'sendPasswordReset →', maskId(email));
