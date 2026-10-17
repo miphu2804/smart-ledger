@@ -14,6 +14,26 @@
 
 **Check:** `uv run pytest` 390 passed, 64 skipped; ruff clean. Through `POST /internal/v1/agent/chat/stream` against staging (shop 3): an old rice-supplier fact left out of recall was superseded by "anh Tâm" said inside a revenue question (`memory reconciled ... candidates=1 replaced=1`); the first try at threshold 0.7 missed it (cosine 0.652), hence 0.6. Test conversations deleted. **Not verified:** the new integration tests (need `POSTGRES_TEST_URL`, run in CI).
 
+### [2026-10-17 00:25 UTC+07:00] — [Fix] Bobi no longer shows the same answer twice
+
+**Done:** After #262 kept the answer a model writes before calling `suggest_screen`, a model that then wrote the same answer again (after the tool returned) had both copies joined, so the chat showed every paragraph twice ("Xóa đơn hàng #225", the matcha latte profit question). A later response that only repeats the kept answer (spacing ignored) is now dropped, both in the stored answer and in the stream; while a response still reads like the start of the kept answer, the stream holds it back until it differs, so nothing is sent and taken back.
+
+**Changed files:** `backend/ai/src/agent/service.py`, `backend/ai/tests/unit_tests/test_screen_buttons.py` — modified; this entry.
+
+**Check:** New tests failed before the fix (answer and stream held the list twice) and pass after; `uv run ruff check`, `uv run ruff format --check`, `uv run pytest -q tests`: 386 passed, 62 skipped. **Not verified:** against the real model on staging.
+
+### [2026-10-16 19:53 UTC+07:00] — [Fix] Debt repayment in two steps; "Dùng tài khoản khác" on the name step; Bobi hint no longer cut
+
+**Done:** The debt sheet showed the amount field, the cash/transfer choice and both buttons at once, and "Trả hết" recorded the whole balance on a single tap. It now opens with two buttons under "Khách trả nợ": "Trả một phần" shows the amount field ("Còn nợ …" as placeholder, an error when the amount is above the balance), the payment method and "Quay lại" / "Ghi nhận …"; after recording, the sheet returns to the two buttons. "Trả đủ" opens "Khách trả đủ nợ?" with the customer, amount, sale number and payment method; "Huỷ" records nothing and "Xác nhận đã trả" settles the debt. `AC-075` describes the two steps.
+
+On "Bạn tên gì?" the link "Dùng số điện thoại khác" is now "Dùng tài khoản khác", like on shop setup: sign-in by phone number is gone and the link just signs out to pick another account.
+
+A tester's phone showed the "Giữ để đọc đơn" hint beside Bobi cut to "Giữ để đọc đơ": the bubble started a fixed 94 px left of Bobi, so its end slid under Bobi, more so with large system text. The bubble is now anchored by its right edge 8 px from Bobi (by its left edge when Bobi sits on the left), stays on one line and stops growing at 1.3× system text.
+
+**Changed files:** `frontend/mobile/app/debts.tsx`, `frontend/mobile/app/(auth)/profile.tsx`, `frontend/mobile/src/components/ZenRing.tsx`, `docs/product/product-requirements.md` (`AC-075`) — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors; mock web build in headless Chrome (7/7): the sheet opens with only the two buttons and no amount field; "Trả một phần" shows the field and "Quay lại"; an amount above the balance is flagged; recording 10.000đ of 379.000đ leaves 369.000đ and returns to the two buttons; "Trả đủ" asks "Khách trả đủ nợ?", "Huỷ" keeps 369.000đ, "Xác nhận đã trả" leaves 0đ and "Khách đã trả đủ"; the hint bubble ends 8 px left of Bobi with its text uncut, also with the hint text at 15.6 px (4/4). **Not verified:** a real phone against staging Core.
+
 ### [2026-10-17] — [Chore] Resolve PR 293 progress conflict with staging
 
 **Done:** Synchronized staging `6caa9b2` into `feat/zalo-android` for PR #293, retaining all progress entries from both parents. The only conflict was this log; the incoming AI fix and its tests are kept exactly as staged upstream.
@@ -43,14 +63,6 @@
 **Flow explained:** V18 extends only transient OAuth sessions with WEB-default channel/client/target/native reference hash/expiry and channel-aware constraints; existing account/shop/mapping and WEB session values remain. One transaction, 5-second lock timeout and 60-second statement timeout bound the ordinary locked unique-index/constraint build; early/late/schema/lock failure rolls back all V18 changes without adopting unexpected schema. RLS/public-access restrictions remain. After merge and verified V18, review/copy staging variables to Railway for APK acceptance; the example contains no secret/DB/migration switch and is not auto-loaded. Recovery disables native and retains V18/mappings, never deletes users or identity history. AC-092 clarifies controlled staging testing versus separate APK/production acceptance.
 
 **Check:** Test-first missing-migration/config RED: 9 tests, 1 failure / 7 errors / 0 skipped; focused GREEN: all 7 migration and 2 staging-configuration tests pass on isolated PostgreSQL 16 loopback/tmpfs. The first full run exposed a test-only Mockito restubbing error in the new V17 compatibility setup; corrected with doAnswer, keeping the real transaction assertion. Final fresh Java 21 Maven `verify` with JaCoCo 0.8.14 passed **1,358 tests / 100 suites, 0 failures / 0 errors / 0 skipped**; all 15 mandatory PostgreSQL suites pass, including 7 V18 migration and 14 native-flow cases. Node helpers/landing (8 + 3), three Chrome popup scenarios and all 13 report-gate self-tests pass with synthetic data. Native repository/controller/service/page and DTO/result retain full measured Java line coverage; properties 40/42. JAR includes V1–V18, no fixture/manual tooling/staging example/private config. Runtime default, public configuration allowlist, unchanged V1–V17, document links/anchors, acceptance-ID and append-only-history checks pass. Remote CI/CodeQL, real APK/provider and live rollout remain unverified.
-
-### [2026-10-17 00:25 UTC+07:00] — [Fix] Bobi no longer shows the same answer twice
-
-**Done:** After #262 kept the answer a model writes before calling `suggest_screen`, a model that then wrote the same answer again (after the tool returned) had both copies joined, so the chat showed every paragraph twice ("Xóa đơn hàng #225", the matcha latte profit question). A later response that only repeats the kept answer (spacing ignored) is now dropped, both in the stored answer and in the stream; while a response still reads like the start of the kept answer, the stream holds it back until it differs, so nothing is sent and taken back.
-
-**Changed files:** `backend/ai/src/agent/service.py`, `backend/ai/tests/unit_tests/test_screen_buttons.py` — modified; this entry.
-
-**Check:** New tests failed before the fix (answer and stream held the list twice) and pass after; `uv run ruff check`, `uv run ruff format --check`, `uv run pytest -q tests`: 386 passed, 62 skipped. **Not verified:** against the real model on staging.
 
 ### [2026-10-17] — [Fix] Keep Bobi in Vietnamese when the owner asks for another language
 
