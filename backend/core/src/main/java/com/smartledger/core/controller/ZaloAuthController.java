@@ -28,6 +28,8 @@ import jakarta.validation.Valid;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseCookie;
@@ -46,6 +48,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Zalo authentication", description = "Web popup flow; disabled until its schema and runtime configuration are ready")
 @SecurityRequirements
 public class ZaloAuthController {
+    private static final Logger log = LoggerFactory.getLogger(ZaloAuthController.class);
     private final ZaloAuthService service;
     private final ZaloCallbackPage page;
     private final ZaloNativeAuthService nativeService;
@@ -53,6 +56,7 @@ public class ZaloAuthController {
     public ZaloAuthController(ZaloAuthService service, ZaloCallbackPage page,
             ZaloNativeAuthService nativeService, ZaloNativePage nativePage) {
         this.service = service; this.page = page; this.nativeService = nativeService; this.nativePage = nativePage;
+        log.info("zalo_callback_diagnostics_ready version=1");
     }
 
     @GetMapping("/authorize")
@@ -99,20 +103,66 @@ public class ZaloAuthController {
                     + "WEB returns a nonce-protected popup message to the exact originating frontend; validate message origin/source/requestId/purpose. "
                     + "ANDROID redirects to the fixed HTTPS return target with only verifier-bound handoffReference and request metadata in fragment, never provider/Firebase tokens.")
     public ResponseEntity<String> callback(@Parameter(hidden = true) @RequestParam MultiValueMap<String, String> params, HttpServletRequest request) {
-        singleParameters(params, Set.of("state", "code", "error", "code_challenge"));
-        String state = params.getFirst("state");
-        if (state == null || !state.matches("[A-Za-z0-9_-]{43}")) throw new BusinessException(ErrorCode.INVALID_ZALO_REQUEST);
-        String name = ZaloAuthServiceImpl.cookieName(state);
-        var matching = request.getCookies() == null ? java.util.List.<Cookie>of()
-                : Arrays.stream(request.getCookies()).filter(cookie -> name.equals(cookie.getName())).toList();
-        if (matching.size() != 1) throw new BusinessException(ErrorCode.ZALO_SESSION_INVALID);
-        if (nativeService.isNativeCallback(state)) {
-            return nativePage.callback(nativeService.callback(state, params.getFirst("code"), params.getFirst("error"),
-                    params.getFirst("code_challenge"), matching.getFirst().getValue()), cookie(name, "", 0));
+        long started = System.nanoTime();
+        String channel = "unknown";
+        try {
+            singleParameters(params, Set.of("state", "code", "error", "code_challenge"));
+            String state = params.getFirst("state");
+            if (state == null || !state.matches("[A-Za-z0-9_-]{43}")) throw new BusinessException(ErrorCode.INVALID_ZALO_REQUEST);
+            String name = ZaloAuthServiceImpl.cookieName(state);
+            var matching = request.getCookies() == null ? java.util.List.<Cookie>of()
+                    : Arrays.stream(request.getCookies()).filter(cookie -> name.equals(cookie.getName())).toList();
+            if (matching.size() != 1) throw new BusinessException(ErrorCode.ZALO_SESSION_INVALID);
+            if (nativeService.isNativeCallback(state)) {
+                channel = "android";
+                var result = nativeService.callback(state, params.getFirst("code"), params.getFirst("error"),
+                        params.getFirst("code_challenge"), matching.getFirst().getValue());
+                var response = nativePage.callback(result, cookie(name, "", 0));
+                handoffDiagnostic(channel, response, result.errorCode(), result.handoffReference() != null, started);
+                return response;
+            }
+            channel = "web";
+            var result = service.callback(state, params.getFirst("code"), params.getFirst("error"),
+                    params.getFirst("code_challenge"), matching.getFirst().getValue());
+            var response = page.render(result, cookie(name, "", 0));
+            handoffDiagnostic(channel, response, result.errorCode(), result.proof() != null, started);
+            return response;
+        } catch (BusinessException failure) {
+            callbackDiagnostic(channel, "rejected", failure.getErrorCode().getHttpStatus().value(),
+                    diagnosticError(failure.getErrorCode().getCode()), false, started);
+            throw failure;
+        } catch (RuntimeException failure) {
+            callbackDiagnostic(channel, "exception", 0, "other_error", false, started);
+            throw failure;
         }
-        var result = service.callback(state, params.getFirst("code"), params.getFirst("error"),
-                params.getFirst("code_challenge"), matching.getFirst().getValue());
-        return page.render(result, cookie(name, "", 0));
+    }
+
+    private static void handoffDiagnostic(String channel, ResponseEntity<String> response, String error,
+            boolean credentialPresent, long started) {
+        boolean ready = error == null && credentialPresent;
+        callbackDiagnostic(channel, ready ? "handoff_ready" : "error_returned", response.getStatusCode().value(),
+                error == null && !credentialPresent ? "other_error" : diagnosticError(error), credentialPresent, started);
+    }
+
+    private static void callbackDiagnostic(String channel, String outcome, int status, String error,
+            boolean credentialPresent, long started) {
+        // Fixed metadata only: never add callback parameters, payloads, URLs, identifiers or exceptions here.
+        var event = "handoff_ready".equals(outcome) ? log.atInfo() : log.atWarn();
+        event.log("zalo_callback_result channel={} outcome={} http_status={} error_code={} credential_present={} elapsed_ms={}",
+                channel, outcome, status, error, credentialPresent, (System.nanoTime() - started) / 1_000_000);
+    }
+
+    private static String diagnosticError(String code) {
+        return switch (code) {
+            case null -> "none";
+            case "invalid_zalo_request" -> "invalid_zalo_request";
+            case "zalo_session_invalid" -> "zalo_session_invalid";
+            case "zalo_session_expired" -> "zalo_session_expired";
+            case "zalo_consent_denied" -> "zalo_consent_denied";
+            case "zalo_unavailable" -> "zalo_unavailable";
+            case "zalo_provider_unavailable" -> "zalo_provider_unavailable";
+            default -> "other_error";
+        };
     }
 
     @PostMapping(value = "/exchange", consumes = MediaType.APPLICATION_JSON_VALUE)

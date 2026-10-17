@@ -83,6 +83,39 @@ An `authorize` response of `503 zalo_unavailable` happens before provider I/O an
 
 Local validation on 2026-10-17: test-first diagnostics RED (19 assertion failures, no errors, across 20 cases), followed by GREEN and expanded coverage. All 160 Zalo unit/HTTP/loopback tests in 19 suites pass with zero failures/errors/skips; PostgreSQL suites were explicitly excluded, not executed against shared databases. A separate fresh JaCoCo run of 37 focused tests measures gateway coverage at 94/95 lines and 89/104 branches. These tests use synthetic payloads, including hostile provider messages/exception details, and assert one sanitized WARN per failure, unchanged public error codes, no retries, deadline/cancellation behavior and no raw identity/credential output. They do not verify a real Zalo account, Railway log delivery or the actual cause of the reported staging failure.
 
+## Callback outcome diagnostics (WEB and Android)
+
+After merge/deploy, use **Core Deploy Logs**, not Network Logs or the browser Console:
+
+1. Clear the log filter and locate the INFO startup marker `zalo_callback_diagnostics_ready version=1` in the active deployment. It identifies this instrumentation being initialized, not provider/config/schema readiness or a successful login. If absent, check the deployed revision, log time range and logger level before inferring an auth failure. This marker requires INFO enabled for `com.smartledger.core.controller.ZaloAuthController`; do not enable raw HTTP logging.
+2. Start one fresh login from the app/web. Note its time and channel; do not reuse old callback URLs.
+3. Filter for `zalo_callback_result` and share only that fixed-metadata line and timestamp. Error outcomes are WARN; prepared handoffs are INFO. No extra variable or migration is required; changes are not active before the new code is deployed.
+
+Synthetic examples (not findings from staging):
+
+```text
+zalo_callback_result channel=web outcome=error_returned http_status=200 error_code=zalo_provider_unavailable credential_present=false elapsed_ms=545
+zalo_callback_result channel=android outcome=handoff_ready http_status=302 error_code=none credential_present=true elapsed_ms=320
+```
+
+| Field / outcome | Meaning and next boundary |
+|---|---|
+| `channel` | `web` or `android` selected by existing server session dispatch; `unknown` if rejection/failure happens before dispatch completes. Never taken from a callback channel parameter. |
+| `handoff_ready` | Core constructed the existing HTML/redirect response with a proof/reference and no error. It does **not** prove delivery to `window.opener`, Android App Link handling, `/exchange`, Firebase or Core-session completion. Check those next if login still fails. |
+| `error_returned` | Core constructed an error handoff; WEB can still have HTTP 200 and Android HTTP 302. `credential_present` only indicates whether a proof/reference exists, never its value. |
+| `rejected` | A business exception escaped the callback; the original exception and HTTP mapping remain unchanged. `http_status` is its existing mapped status. Missing/duplicate binding cookie or invalid state/parameters can reject before calling Zalo. |
+| `exception` | A runtime exception escaped dispatch, service or rendering. `http_status=0` means no controller response was constructed, **not** the final edge HTTP status. The exception is rethrown unchanged; no exception message/cause/stack is added to this event. |
+| `error_code` | Only `invalid_zalo_request`, `zalo_session_invalid`, `zalo_session_expired`, `zalo_consent_denied`, `zalo_unavailable`, `zalo_provider_unavailable`, `none` or `other_error`. Unknown text and incomplete handoffs become `other_error`; the existing client response is unchanged. |
+| `elapsed_ms` | Monotonic elapsed time within the callback controller, not complete login time. |
+
+For `zalo_provider_unavailable`, also look for the existing `zalo_provider_failure` event near the same time to distinguish token/profile/transport failures. No provider event by itself proves neither failure nor success. For a prepared handoff but no exchange, examine FE reception/browser return next; do not conclude the provider failed from HTTP 200 alone. Timestamp/channel help during a single controlled test, but do not uniquely correlate simultaneous attempts.
+
+One outcome event is emitted per callback **invocation reaching this controller**, including early validation failures. Requests rejected by the edge, security/rate filters or argument binding before controller invocation are outside this event; inspect their sanitized HTTP status separately. Log filtering/levels/retention can also hide events.
+
+Both events exclude query data, request/session IDs, state, code/challenge/verifier, cookies, URLs/origins, proof/reference values, tokens, profile and arbitrary errors. Never share a callback URL, response HTML/Location, HAR export, cookie, token or secret. This instrumentation preserves callback payloads, nonce/CSP, cookie clearing, routing, status codes, validations and service calls; it does not retry, change login behavior or diagnose the current staging root cause without a fresh event.
+
+Local validation on 2026-10-17: the initial 25 callback-diagnostic cases failed assertions before implementation (zero test errors); the expanded 28 cases pass. The fresh Zalo non-PostgreSQL regression passes 188 tests across 20 suites, with zero failures/errors/skips. A separate JaCoCo data file records full line/branch coverage of `callback`, `handoffDiagnostic`, `callbackDiagnostic` and `diagnosticError`; the complete controller reaches 72/72 lines and 44/46 branches. Tests assert response/cookie/CSP compatibility, unchanged exception identity, one outcome event per invocation, hostile-error sanitization and absence of synthetic sensitive data in formatted logs, arguments and throwable metadata. PostgreSQL, real-provider/APK acceptance and Railway log delivery were not rerun or verified by this diagnostic-only change.
+
 ## Verification and remaining APK acceptance
 
 - Core real-PostgreSQL suites `ZaloNativeMigrationPostgresTest` and `ZaloNativeFlowPostgresTest` are mandatory in the Core report gate; provider/Firebase are stubs. Migration tests cover fresh/upgrade/no-op, data preservation, early/late rollback, lock timeout and RLS; flow tests use actual V18 for concurrency/replay/expiry/UID/LINK safeguards and a separate real V17 schema for WEB compatibility/missing-V18 fail-closed behavior.
