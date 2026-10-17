@@ -1,12 +1,13 @@
 /**
  * Hồ sơ tiệm lưu ở Core qua `PATCH /api/v1/shops/{shopId}` (docs/contracts/api-contracts.md mục 1): `name`, `industry`,
- * `phone`, `address`. Màn "Chỉnh sửa thông tin" chỉ sửa tên, ngành và địa chỉ; tên người dùng, email, Facebook và tài khoản
- * ngân hàng chưa có chỗ lưu ở Core nên vẫn chỉ nằm trên máy.
+ * `phone`, `address`. Màn "Chỉnh sửa thông tin" sửa tên, ngành, số điện thoại và địa chỉ của tiệm; tên người dùng, email,
+ * Facebook và tài khoản ngân hàng chưa có chỗ lưu ở Core nên lưu trên máy (`localProfile`).
  */
 
 export interface ShopFields {
   name: string;
   address: string;
+  phone: string;
   industries: string[];
 }
 
@@ -14,6 +15,7 @@ export interface ShopFields {
 export interface ShopChanges {
   name?: string;
   address?: string;
+  phone?: string;
   industries?: string[];
 }
 
@@ -44,6 +46,9 @@ export function shopChanges(current: ShopFields, next: ShopFields): ShopChanges 
   // Địa chỉ rỗng là cách xoá địa chỉ: Core coi chuỗi rỗng của phone/address là xoá, còn bỏ trường thì giữ nguyên.
   const address = next.address.trim();
   if (address !== current.address.trim()) changes.address = address;
+  // Số điện thoại tiệm: rỗng cũng là xoá, như địa chỉ
+  const phone = next.phone.trim();
+  if (phone !== current.phone.trim()) changes.phone = phone;
   if (asSet(current.industries) !== asSet(next.industries)) changes.industries = next.industries;
   return Object.keys(changes).length ? changes : null;
 }

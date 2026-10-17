@@ -27,7 +27,7 @@ import { debugLog } from '../src/lib/debug';
 import { errorMessage } from '../src/lib/errors';
 import { expenseApi } from '../src/lib/expenseApi';
 import { triggerFeedback } from '../src/lib/feedback';
-import { abbr, hashIndex, hhmm, vnd } from '../src/lib/format';
+import { abbr, capMoney, hashIndex, hhmm, vnd } from '../src/lib/format';
 import { type PrepareProgress, type SpeechSession, speechEngine } from '../src/lib/speech';
 import { type DisambiguationItem, type ParsedExpenseItem, parseOrder } from '../src/lib/parseOrder';
 import { itemsTotal } from '../src/lib/stats';
@@ -1322,7 +1322,7 @@ export default function Voice() {
             value={newPrice}
             error={priceErr || undefined}
             onChangeText={(t) => {
-              setNewPrice(t);
+              setNewPrice(capMoney(t, newPrice));
               setPriceErr('');
             }}
           />

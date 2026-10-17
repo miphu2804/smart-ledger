@@ -25,7 +25,7 @@ import {
 import type { CategoryView, ProductView } from '../src/data/types';
 import { categoryApi, productApi } from '../src/lib/catalogApi';
 import { errorMessage } from '../src/lib/errors';
-import { normalizeText, vnd } from '../src/lib/format';
+import { capMoney, normalizeText, vnd } from '../src/lib/format';
 import { triggerFeedback } from '../src/lib/feedback';
 import { buildProductPatch, isWholeNumber, resolveThreshold, stockLevel } from '../src/lib/productForm';
 import { PHOTO_SOURCE, PhotoError, pickImageOnWeb, type PickedImage } from '../src/lib/productPhoto';
@@ -689,7 +689,7 @@ function ProductForm({
               keyboardType="number-pad"
               placeholder="5000"
               value={price}
-              onChangeText={setPrice}
+              onChangeText={(t) => setPrice(capMoney(t, price))}
               style={{ flex: 1 }}
             />
             <Field
@@ -697,7 +697,7 @@ function ProductForm({
               keyboardType="number-pad"
               placeholder="Tuỳ chọn"
               value={cost}
-              onChangeText={setCost}
+              onChangeText={(t) => setCost(capMoney(t, cost))}
               style={{ flex: 1 }}
             />
           </Row>

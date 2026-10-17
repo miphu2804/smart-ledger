@@ -6,6 +6,18 @@ export function vnd(n: number, withUnit = true): string {
   return withUnit ? `${s}đ` : s;
 }
 
+/**
+ * Số tiền lớn nhất một ô nhập nhận (10 tỷ đồng). Người test từng nhập giá 1.000.000.000.000.000.000đ: số vượt
+ * Number.MAX_SAFE_INTEGER nên bị làm tròn (doanh thu lệch vài chục đồng) và tổng báo cáo làm tràn số ở Core (lỗi 500).
+ */
+export const MAX_MONEY_VND = 10_000_000_000;
+
+/** Chỉ giữ chữ số của ô nhập tiền; vượt MAX_MONEY_VND thì giữ giá trị cũ (ô không nhận thêm chữ số). */
+export function capMoney(text: string, prev: string): string {
+  const digits = text.replace(/\D/g, '');
+  return digits && Number(digits) > MAX_MONEY_VND ? prev : digits;
+}
+
 /** 1250000 -> "1,25tr" ; 980000 -> "980k" */
 export function compact(n: number): string {
   const abs = Math.abs(n);

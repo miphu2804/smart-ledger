@@ -92,6 +92,7 @@ function mockUpdateShop(changes: ShopChanges): ShopView {
     ...shop,
     name: changes.name ?? shop.name,
     address: changes.address === undefined ? shop.address : changes.address || null,
+    phone: changes.phone === undefined ? shop.phone : changes.phone || null,
     industries: changes.industries ?? shop.industries,
   };
   return acc.shop;
@@ -134,6 +135,7 @@ export const sessionApi = {
             ...(changes.name !== undefined && { name: changes.name }),
             ...(changes.industries !== undefined && { industry: industriesToCore(changes.industries) }),
             ...(changes.address !== undefined && { address: changes.address }),
+            ...(changes.phone !== undefined && { phone: changes.phone }),
           },
         }),
 };
