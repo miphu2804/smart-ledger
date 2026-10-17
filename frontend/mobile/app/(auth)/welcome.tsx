@@ -27,8 +27,12 @@ export default function Welcome() {
     try {
       // Zalo mở cửa sổ ngay trong lượt bấm (trước mọi await) để trình duyệt không chặn; tên Zalo dùng khi tạo tài khoản mới
       let displayName: string | undefined;
-      if (provider === 'zalo') displayName = (await signInWithZalo()).displayName;
-      else await (provider === 'google' ? authClient.signInWithGoogle() : authClient.signInWithFacebook());
+      if (provider === 'zalo') {
+        // Tên Zalo chỉ là gợi ý cho tài khoản mới: Zalo cho tới 255 ký tự, `/auth/session` nhận tối đa 150. Tên rỗng hay quá dài
+        // thì không gửi: tài khoản mới khi đó bị Core hỏi tên và đi qua màn "Bạn tên gì?", tài khoản cũ vào thẳng như thường.
+        const name = (await signInWithZalo()).displayName?.trim();
+        displayName = name && name.length <= MAX_DISPLAY_NAME ? name : undefined;
+      } else await (provider === 'google' ? authClient.signInWithGoogle() : authClient.signInWithFacebook());
       const session = await app.signIn(displayName); // gửi Firebase ID token xuống Core (POST /auth/session)
       router.replace(session.needsOnboarding ? '/(auth)/setup' : '/(tabs)');
     } catch (e) {
@@ -112,6 +116,8 @@ export default function Welcome() {
 }
 
 type SocialProvider = 'facebook' | 'google' | 'zalo';
+/** Giới hạn `displayName` của `POST /auth/session` (cùng `maxLength` ở màn "Bạn tên gì?"). */
+const MAX_DISPLAY_NAME = 150;
 type SocialIcon = SocialProvider;
 const SOCIAL_COLOR: Record<SocialIcon, string> = { google: '#EA4335', facebook: '#1877F2', zalo: '#0068FF' };
 
