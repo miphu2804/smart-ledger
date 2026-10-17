@@ -1,8 +1,8 @@
 import { AuthError } from './auth';
 
 /**
- * Đăng nhập Zalo trên Android/iOS: Core mới có luồng cho web (popup + postMessage), chưa có cách đưa kết quả về app
- * (App Link), nên app vẫn ghi "Sắp có". Bản web dùng `zaloLogin.web.ts`.
+ * Đăng nhập Zalo trên Android/iOS: app chưa làm. Core đã có luồng Android riêng (CORE-016: trình duyệt ngoài + HTTPS App Link,
+ * `/auth/zalo/native/*`), còn iOS chưa có, nên app vẫn ghi "Sắp có". Bản web dùng `zaloLogin.web.ts`.
  */
 export const ZALO_LOGIN_AVAILABLE = false;
 
