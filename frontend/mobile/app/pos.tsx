@@ -14,7 +14,7 @@ import type { CategoryView, LineItem, ProductView } from '../src/data/types';
 import { categoryApi, productApi, type ProductListQuery } from '../src/lib/catalogApi';
 import { errorMessage } from '../src/lib/errors';
 import { triggerFeedback } from '../src/lib/feedback';
-import { abbr, hashIndex, normalizeText, vnd } from '../src/lib/format';
+import { abbr, capMoney, hashIndex, normalizeText, vnd } from '../src/lib/format';
 import { ProductImage } from '../src/components/ProductImage';
 import { upsertCustomLine } from '../src/lib/customLines';
 import { itemsTotal } from '../src/lib/stats';
@@ -1077,7 +1077,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
       {/* Custom Item Sheet */}
       <Sheet visible={customOpen} onClose={() => setCustomOpen(false)} title="Món ngoài danh mục">
         <Field label="Tên món" placeholder="VD: Bánh bao" value={cName} onChangeText={setCName} />
-        <Field label="Giá bán (đ)" placeholder="VD: 12000" keyboardType="number-pad" value={cPrice} onChangeText={setCPrice} />
+        <Field label="Giá bán (đ)" placeholder="VD: 12000" keyboardType="number-pad" value={cPrice} onChangeText={(t) => setCPrice(capMoney(t, cPrice))} />
         <Field label="Đơn vị" placeholder="VD: cái, ly, phần" value={cUnit} onChangeText={setCUnit} />
         {cErr ? (
           <T size={12} color={colors.red} style={{ marginBottom: 8 }}>

@@ -20,6 +20,7 @@ import { fromE164VN } from '../lib/auth/phone';
 import { debugLog } from '../lib/debug';
 import { describeError, isDisplayNameRequired } from '../lib/errors';
 import { sessionApi } from '../lib/sessionApi';
+import { loadLocalProfile, saveLocalProfile } from '../lib/localProfile';
 import { industriesFromCore } from '../lib/shopProfile';
 
 /** Đơn nháp đang chờ thanh toán (từ màn Giọng nói / POS / Nhập tay). */
@@ -40,6 +41,8 @@ interface State {
   onboarded: boolean;
   /** id tiệm đang dùng (gửi qua header X-Shop-Id); null khi chưa có / đang mock */
   shopId: string | null;
+  /** id tài khoản Core, dùng làm khoá hồ sơ lưu trên máy (`localProfile`); null khi chưa đăng nhập */
+  userId: string | null;
   user: typeof mockUser;
   store: typeof mockStore;
   products: Product[];
@@ -62,6 +65,7 @@ function initialState(): State {
     loggedIn: false,
     onboarded: true,
     shopId: null,
+    userId: null,
     user: { ...mockUser },
     store: { ...mockStore },
     products: mockProducts.map((p) => ({ ...p })),
@@ -88,6 +92,7 @@ function sessionPatch(st: State, s: SessionView): Partial<State> {
     needsEmailVerification: false,
     onboarded: !s.needsOnboarding,
     shopId: shop ? String(shop.id) : null,
+    userId: String(s.user.id),
     user: {
       ...st.user,
       name: s.user.displayName || (USE_MOCK ? st.user.name : 'Bạn'),
@@ -100,12 +105,18 @@ function sessionPatch(st: State, s: SessionView): Partial<State> {
           ...st.store,
           name: shop.name,
           address: shop.address ?? (USE_MOCK ? st.store.address : ''),
+          phone: shop.phone ?? (USE_MOCK ? st.store.phone : ''),
           industries: industries ?? st.store.industries,
           bankName: USE_MOCK ? st.store.bankName : '',
           bankAccount: USE_MOCK ? st.store.bankAccount : '',
         }
       : st.store,
   };
+}
+
+/** Bỏ các trường `undefined` (chuỗi rỗng giữ lại: người dùng xoá trắng một ô cũng phải được lưu). */
+function definedOnly<T extends Record<string, string | undefined>>(o: T): Partial<Record<keyof T, string>> {
+  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<Record<keyof T, string>>;
 }
 
 let seq = 5000;
@@ -116,6 +127,8 @@ function useStoreValue() {
   const patch = useCallback((fn: (s: State) => Partial<State>) => setS((prev) => ({ ...prev, ...fn(prev) })), []);
   // Bản đồng bộ của s.loggedIn để các callback bất đồng bộ (Firebase, 401) đọc được giá trị mới nhất
   const loggedInRef = useRef(false);
+  // id tài khoản hiện tại cho các action (đọc/ghi hồ sơ trên máy)
+  const userIdRef = useRef<string | null>(null);
 
   const actions = useMemo(
     () => ({
@@ -142,7 +155,7 @@ function useStoreValue() {
       },
       logout: async () => {
         loggedInRef.current = false;
-        patch(() => ({ loggedIn: false, needsProfile: false, needsEmailVerification: false, shopId: null }));
+        patch(() => ({ loggedIn: false, needsProfile: false, needsEmailVerification: false, shopId: null, userId: null }));
         await authClient.signOut().catch(() => undefined);
       },
       enterDevApp: () => {
@@ -155,7 +168,7 @@ function useStoreValue() {
         const wasLoggedIn = loggedInRef.current;
         debugLog('session', 'forceSignOut', wasLoggedIn ? '(đang đăng nhập → về màn đăng nhập)' : '(chưa đăng nhập)');
         loggedInRef.current = false;
-        patch(() => ({ loggedIn: false, needsProfile: false, needsEmailVerification: false, shopId: null }));
+        patch(() => ({ loggedIn: false, needsProfile: false, needsEmailVerification: false, shopId: null, userId: null }));
         await authClient.signOut().catch(() => undefined);
         if (wasLoggedIn) {
           try {
@@ -174,8 +187,23 @@ function useStoreValue() {
           store: { ...st.store, name: shop.name || st.store.name, industries },
         }));
       },
-      updateProfile: (user: Partial<State['user']>, store: Partial<State['store']>) =>
-        patch((st) => ({ user: { ...st.user, ...user }, store: { ...st.store, ...store } })),
+      /**
+       * Sửa hồ sơ trên máy. Họ tên, email, Facebook và tài khoản nhận chuyển khoản Core chưa có chỗ lưu nên ghi thêm vào hồ sơ
+       * trên máy của tài khoản này (`localProfile`), để đăng xuất rồi đăng nhập lại vẫn còn.
+       */
+      updateProfile: (user: Partial<State['user']>, store: Partial<State['store']>) => {
+        patch((st) => ({ user: { ...st.user, ...user }, store: { ...st.store, ...store } }));
+        const id = userIdRef.current;
+        if (!id) return;
+        const changed = definedOnly({
+          name: user.name,
+          email: user.email,
+          facebook: user.facebook,
+          bankName: store.bankName,
+          bankAccount: store.bankAccount,
+        });
+        void loadLocalProfile(id).then((prev) => saveLocalProfile(id, { ...prev, ...changed }));
+      },
       dismissGuide: () => patch(() => ({ guideDismissed: true })),
       /** Mở lại phần giới thiệu ở Tổng quan (mục "Xem lại hướng dẫn" ở tab Quản lý) */
       showGuide: () => patch(() => ({ guideDismissed: false })),
@@ -336,6 +364,24 @@ function useStoreValue() {
   useLayoutEffect(() => {
     setActiveShop(s.shopId);
   }, [s.shopId]);
+
+  // Đăng nhập (hoặc khôi phục phiên) xong: phủ phần hồ sơ đã lưu trên máy của tài khoản này lên dữ liệu từ Core
+  useEffect(() => {
+    userIdRef.current = s.userId;
+    if (!s.userId) return;
+    let alive = true;
+    void loadLocalProfile(s.userId).then((saved) => {
+      if (!alive || !saved) return;
+      const { name, email, facebook, bankName, bankAccount } = saved;
+      patch((st) => ({
+        user: { ...st.user, ...definedOnly({ name, email, facebook }) },
+        store: { ...st.store, ...definedOnly({ bankName, bankAccount }) },
+      }));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [s.userId, patch]);
 
   // Khởi động: chờ SDK khôi phục phiên Firebase đã lưu; còn đăng nhập thì lấy lại phiên ở Core (GET /me).
   useEffect(() => {
