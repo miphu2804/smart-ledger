@@ -4,6 +4,16 @@ import { AuthError } from './auth/types';
 /** Core trả thông báo tiếng Anh; đổi các mã đã biết sang tiếng Việt cho người dùng. */
 const CORE_MESSAGES: Record<string, string> = {
   account_disabled: 'Tài khoản này đã bị khoá. Vui lòng liên hệ hỗ trợ.',
+  // Zalo CORE-015
+  zalo_unavailable: 'Đăng nhập Zalo đang tạm ngưng. Vui lòng chọn cách khác hoặc thử lại sau',
+  zalo_provider_unavailable: 'Zalo chưa phản hồi. Vui lòng thử lại sau',
+  zalo_rate_limited: 'Bạn thử quá nhiều lần. Vui lòng đợi một phút rồi thử lại',
+  invalid_zalo_request: 'Lượt đăng nhập Zalo không hợp lệ. Vui lòng thử lại',
+  zalo_session_invalid: 'Lượt đăng nhập Zalo không hợp lệ. Vui lòng thử lại',
+  zalo_session_expired: 'Lượt đăng nhập Zalo đã hết hạn. Vui lòng thử lại',
+  zalo_account_not_allowed: 'Tài khoản này không đăng nhập bằng Zalo được',
+  zalo_identity_conflict: 'Tài khoản Zalo này đã gắn với một tài khoản khác',
+  zalo_reauthentication_required: 'Vui lòng đăng nhập lại rồi thử liên kết Zalo',
   auth_profile_not_found: 'Tài khoản chưa được tạo. Vui lòng đăng nhập lại.',
   unauthorized: 'Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.',
   validation_failed: 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại.',

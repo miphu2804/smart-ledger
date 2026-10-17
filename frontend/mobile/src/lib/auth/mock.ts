@@ -24,6 +24,8 @@ function loginAs(kind: { email: string }, needsVerification = false) {
 const MOCK_FACEBOOK_EMAIL = 'facebook.demo@example.com';
 /** Tài khoản Google giả lập, tương tự Facebook. */
 const MOCK_GOOGLE_EMAIL = 'google.demo@example.com';
+/** Tài khoản Zalo giả lập (custom token của Core): luôn cùng một người dùng mẫu mới. */
+const MOCK_ZALO_EMAIL = 'zalo.demo@example.com';
 
 export const mockAuth: AuthClient = {
   async signInWithFacebook() {
@@ -33,6 +35,10 @@ export const mockAuth: AuthClient = {
   async signInWithGoogle() {
     await sleep(500);
     loginAs({ email: MOCK_GOOGLE_EMAIL });
+  },
+  async signInWithCustomToken() {
+    await sleep(500);
+    loginAs({ email: MOCK_ZALO_EMAIL });
   },
   async signInWithEmail(rawEmail, password) {
     await sleep(400);

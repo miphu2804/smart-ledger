@@ -120,7 +120,7 @@ Phủ `FR-010`, `FR-011`, `NFR-003`; dashboard `FR-022` vẫn cần tích hợp.
 
 ### Zalo CORE-015
 
-**Trạng thái:** Core trên `feat/zalo-login`, tiếp nối staging `120779d`; V17 được chuẩn bị, mặc định `ZALO_ENABLED=false`. Người dùng xác nhận LOGIN qua bộ thử local ngày 2026-10-16; chưa nghiệm thu FE, LINK với provider thật, Railway hoặc native. Chủ boundary: Core cung cấp, FE/mobile tiêu thụ; chủ sản phẩm duyệt hành vi. Contract tham số/DTO được phản ánh ở OpenAPI `/v3/api-docs` của runtime đã cấu hình; test OpenAPI/HTTP phải kiểm chứng response thực, không suy ra nghiệm thu consumer.
+**Trạng thái:** Core trên `feat/zalo-login`, tiếp nối staging `120779d`; V17 được chuẩn bị, mặc định `ZALO_ENABLED=false`. Người dùng xác nhận LOGIN qua bộ thử local ngày 2026-10-16; chưa nghiệm thu FE, LINK với provider thật, Railway hoặc native. FE web (bản web của app mobile) gọi luồng LOGIN sau cờ build `EXPO_PUBLIC_ZALO_LOGIN`: mở popup trước mọi `await`, kiểm tra `event.origin`, `event.source`, `requestId`, `purpose`, đổi proof rồi `signInWithCustomToken` và `/auth/session`; chưa làm LINK, chưa thử với provider thật. Chủ boundary: Core cung cấp, FE/mobile tiêu thụ; chủ sản phẩm duyệt hành vi. Contract tham số/DTO được phản ánh ở OpenAPI `/v3/api-docs` của runtime đã cấu hình; test OpenAPI/HTTP phải kiểm chứng response thực, không suy ra nghiệm thu consumer.
 
 | Method | Đường | Request | Response / quyền |
 |---|---|---|---|
