@@ -1,0 +1,90 @@
+name: Load test
+
+# Runs the Locust suite in scripts/loadtest against one environment. Live numbers
+# go to Grafana Cloud while the run is going; CSV, HTML and summary.json stay as
+# artifacts after Grafana's metric retention ends. The run's exit code is the SLO
+# gate. See docs/development/load-testing-and-monitoring.md.
+on:
+  workflow_dispatch:
+    inputs:
+      target_env:
+        description: Environment to load
+        type: choice
+        options: [staging, production]
+        default: staging
+      profile:
+        description: Load profile
+        type: choice
+        options: [smoke, load, stress, spike, soak]
+        default: smoke
+      peak_users:
+        description: PEAK_USERS, the concurrent users being tested
+        default: "50"
+      hold_seconds:
+        description: HOLD_SECONDS; empty keeps the profile default
+        default: ""
+      writes:
+        description: Create sales and expenses (staging only)
+        type: boolean
+        default: false
+      confirm_host:
+        description: Production only; type the production Core URL to confirm
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  # One run per environment: two runs at once would measure each other.
+  group: load-test-${{ inputs.target_env }}
+  cancel-in-progress: false
+
+jobs:
+  locust:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    # The environment holds the test accounts and tokens; production should require
+    # a reviewer so a load run is never started by one person alone.
+    environment: loadtest-${{ inputs.target_env }}
+    defaults:
+      run:
+        working-directory: scripts/loadtest
+    env:
+      TARGET_ENV: ${{ inputs.target_env }}
+      LOAD_PROFILE: ${{ inputs.profile }}
+      PEAK_USERS: ${{ inputs.peak_users }}
+      HOLD_SECONDS: ${{ inputs.hold_seconds }}
+      LOADTEST_WRITES: ${{ inputs.writes }}
+      LOADTEST_CONFIRM_HOST: ${{ inputs.confirm_host }}
+      CORE_URL: ${{ vars.LOADTEST_CORE_URL }}
+      FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+      GRAFANA_PUSH_URL: ${{ vars.GRAFANA_PUSH_URL }}
+      GRAFANA_PUSH_USER: ${{ vars.GRAFANA_PUSH_USER }}
+      GRAFANA_PUSH_TOKEN: ${{ secrets.GRAFANA_PUSH_TOKEN }}
+      LOADTEST_RUN_ID: ${{ inputs.target_env }}-${{ inputs.profile }}-${{ github.run_id }}
+      SUMMARY_FILE: reports/summary.json
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts/loadtest
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          python-version: "3.11"
+      - name: Write test accounts
+        env:
+          ACCOUNTS_CSV: ${{ secrets.LOADTEST_ACCOUNTS_CSV }}
+        run: |
+          test -n "$ACCOUNTS_CSV" || { echo "secret LOADTEST_ACCOUNTS_CSV is empty"; exit 2; }
+          printf '%s\n' "$ACCOUNTS_CSV" > accounts.csv
+          mkdir -p reports
+      - run: uv sync --frozen
+      - name: Run Locust
+        run: |
+          uv run locust --headless -H "$CORE_URL" \
+            --csv "reports/$LOAD_PROFILE" --html "reports/$LOAD_PROFILE.html"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: load-test-${{ inputs.target_env }}-${{ inputs.profile }}-${{ github.run_id }}
+          path: scripts/loadtest/reports/
+          retention-days: 90
