@@ -55,6 +55,34 @@ The return URL must be exact HTTPS on the same origin as `ZALO_CALLBACK_URL`, wi
 
 Native endpoints accept only documented fields, share the bounded rate/body guard (30/minute per endpoint/IP bucket, 8 KiB body), and do not loosen web CORS or web Origin validation. Wrong request/channel/purpose/verifier, expiry or replay returns `400 zalo_session_invalid`; disabled/missing schema/config returns `503 zalo_unavailable`. Start a new flow after cancel, timeout, consume or lost verifier. If Firebase fails after consume, the next flow reuses the committed canonical UID, not the consumed reference.
 
+## Provider failure diagnostics (WEB and Android)
+
+Filter **Core Deploy Logs** for `zalo_provider_failure` after deploying this change. These are application logs, not Railway's HTTP access log. Each failed provider operation emits one WARN line with fixed metadata only:
+
+```text
+zalo_provider_failure stage=profile reason=invalid_error_field http_status=200 provider_error=unknown error_shape=absent elapsed_ms=120
+```
+
+This is a synthetic example, not a finding from staging. `stage=token` means the code-to-token operation; `stage=profile` means the subsequent user-profile operation. The client still receives the existing `zalo_provider_unavailable`; diagnostic details are not returned to FE or placed in the callback/App Link.
+
+| Field / reason | Interpretation |
+|---|---|
+| `http_status` | Received status; `0` means no complete HTTP response was available to the gateway (including a body-transfer failure after headers). It is not a provider status code. |
+| `provider_error` | Signed 32-bit integer from a parsed JSON `error` field, or `unknown`. Non-200 responses are not parsed for this field. Never infer a particular cause from `unknown`. |
+| `error_shape` | `absent`, `non_integer`, `integer`, `out_of_range`, or `unknown`; never the raw value. |
+| `http_error`, `provider_error` | HTTP status rejected, or a parsed provider error. Compare the numeric provider code with Zalo's documentation before changing credentials or permissions. |
+| `missing_access_token`, `invalid_access_token` | Token field absent/invalid, or unsafe for an HTTP header. |
+| `invalid_error_field`, `invalid_profile` | Profile/error structure fails existing validation. Missing `error` remains rejected; this logging change does not relax authentication. |
+| `invalid_json`, `invalid_response`, `response_too_large` | JSON parsing, shape/empty body, or the existing 64 KiB body bound failed. |
+| `timeout`, `dns_error`, `tls_error`, `connect_error`, `io_error`, `transport_error`, `interrupted` | Allowlisted transport classification; exception messages/stack traces are not logged. |
+| `elapsed_ms` | Monotonic elapsed time for the failed operation, not total login time. |
+
+Never enable raw HTTP wire/request/response logging to diagnose this flow. This event excludes app secret/ID, authorization code, verifiers, tokens, cookies, URLs, headers, provider messages, user IDs/names and arbitrary exception details. Success does not produce a provider diagnostic line. Existing rate limits/deadlines/no-retry behavior remain unchanged.
+
+An `authorize` response of `503 zalo_unavailable` happens before provider I/O and will not produce this event; check the active deployment's feature/config/schema/store instead. No provider event also does **not** prove success or that Firebase/FE/App Links work. After a fresh test, share only the timestamp and sanitized diagnostic line. This change needs no migration or new environment variable; it does not activate or deploy itself.
+
+Local validation on 2026-10-17: test-first diagnostics RED (19 assertion failures, no errors, across 20 cases), followed by GREEN and expanded coverage. All 160 Zalo unit/HTTP/loopback tests in 19 suites pass with zero failures/errors/skips; PostgreSQL suites were explicitly excluded, not executed against shared databases. A separate fresh JaCoCo run of 37 focused tests measures gateway coverage at 94/95 lines and 89/104 branches. These tests use synthetic payloads, including hostile provider messages/exception details, and assert one sanitized WARN per failure, unchanged public error codes, no retries, deadline/cancellation behavior and no raw identity/credential output. They do not verify a real Zalo account, Railway log delivery or the actual cause of the reported staging failure.
+
 ## Verification and remaining APK acceptance
 
 - Core real-PostgreSQL suites `ZaloNativeMigrationPostgresTest` and `ZaloNativeFlowPostgresTest` are mandatory in the Core report gate; provider/Firebase are stubs. Migration tests cover fresh/upgrade/no-op, data preservation, early/late rollback, lock timeout and RLS; flow tests use actual V18 for concurrency/replay/expiry/UID/LINK safeguards and a separate real V17 schema for WEB compatibility/missing-V18 fail-closed behavior.
