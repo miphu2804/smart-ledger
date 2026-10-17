@@ -1,5 +1,6 @@
 import { API_ENDPOINT, USE_MOCK, ZALO_LOGIN_ENABLED } from '../config';
 import { apiRequest } from './api';
+import { ApiError } from './apiError';
 import { authClient, AuthError } from './auth';
 import { challengeFor, randomToken, readZaloMessage, type ZaloPurpose } from './auth/zaloProof';
 import { debugLog } from './debug';
@@ -67,12 +68,13 @@ function zaloProof(purpose: ZaloPurpose): Promise<{ proof: string; clientVerifie
       if (result.kind === 'proof') finish(() => resolve({ proof: result.proof, clientVerifier }));
       else {
         debugLog('auth', 'zalo popup ✗', result.error);
-        // Người dùng từ chối cấp quyền trên Zalo: coi như huỷ, không báo lỗi
+        // Người dùng từ chối cấp quyền trên Zalo: coi như huỷ, không báo lỗi. Mã lỗi khác (Zalo không phản hồi, hết hạn,
+        // đang tắt…) hiện như lỗi Core cùng mã, giống bản Android; mã lạ thì câu chung
         finish(() =>
           reject(
             result.error === 'zalo_consent_denied'
               ? new AuthError('cancelled')
-              : new AuthError('unknown', 'Không đăng nhập được bằng Zalo. Vui lòng thử lại'),
+              : new ApiError(0, result.error, 'Không đăng nhập được bằng Zalo. Vui lòng thử lại'),
           ),
         );
       }
