@@ -16,6 +16,10 @@
  * Tự cập nhật APK: `ANDROID_VERSION_CODE` (CD đặt bằng số lần chạy workflow) là versionCode của APK; phải tăng sau mỗi lần
  * phát hành để Android cho cài đè và để app so với version.json. Thiếu thì là 1. Có `EXPO_PUBLIC_UPDATE_URL` thì khai
  * quyền cài APK; bản không có biến này (dev, Play Store) không xin quyền đó vì Play không cho phép.
+ *
+ * Đăng nhập Zalo (hợp đồng Zalo CORE-016): có `EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID` và Core HTTPS thì khai App Link cho đúng
+ * một đường `https://<Core>/mobile/auth/zalo/complete` (không bắt các đường khác của Core). `autoVerify` để Android kiểm
+ * `/.well-known/assetlinks.json` của Core: chứng chỉ ký APK phải nằm trong file đó, nếu không link mở trình duyệt thay vì app.
  */
 const fs = require('fs');
 const path = require('path');
@@ -38,6 +42,19 @@ function readGoogleWebClientId(file, packageName) {
   return undefined;
 }
 
+/** App Link Zalo trả về; thiếu client id hoặc Core không phải HTTPS (máy dev) thì không khai. */
+function zaloReturnIntentFilter() {
+  const clientId = process.env.EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID?.trim();
+  const host = /^https:\/\/([^/?#:]+)\/?$/i.exec(process.env.EXPO_PUBLIC_API_ENDPOINT?.trim() ?? '')?.[1];
+  if (!clientId || !host) return undefined;
+  return {
+    action: 'VIEW',
+    autoVerify: true,
+    data: [{ scheme: 'https', host: host.toLowerCase(), path: '/mobile/auth/zalo/complete' }],
+    category: ['BROWSABLE', 'DEFAULT'],
+  };
+}
+
 module.exports = ({ config }) => {
   const facebookAppId = process.env.FACEBOOK_APP_ID;
   const facebookClientToken = process.env.FACEBOOK_CLIENT_TOKEN;
@@ -45,6 +62,7 @@ module.exports = ({ config }) => {
   const googleServicesFile = process.env.GOOGLE_SERVICES_JSON ?? config.android?.googleServicesFile;
   const googleWebClientId = readGoogleWebClientId(googleServicesFile, config.android?.package);
   const selfUpdate = Boolean(process.env.EXPO_PUBLIC_UPDATE_URL?.trim());
+  const zaloReturn = zaloReturnIntentFilter();
 
   return {
     ...config,
@@ -53,6 +71,7 @@ module.exports = ({ config }) => {
       googleServicesFile,
       versionCode: Number(process.env.ANDROID_VERSION_CODE) || 1,
       permissions: [...(config.android?.permissions ?? []), ...(selfUpdate ? ['android.permission.REQUEST_INSTALL_PACKAGES'] : [])],
+      intentFilters: [...(config.android?.intentFilters ?? []), ...(zaloReturn ? [zaloReturn] : [])],
     },
     plugins: [
       ...(config.plugins ?? []),
