@@ -1,3 +1,11 @@
+### [2026-10-17 09:44 UTC+07:00] — [Change] Facebook sign-in button locked; Zalo button turned on for the staging web
+
+**Done:** On request, the Facebook button on the sign-in screen is greyed out with "Tạm khoá" and cannot be tapped, on web and in the app; the Facebook flow itself is unchanged and can be switched back by restoring the button. `SocialBtn` takes a `note` for that label (default "Sắp có"). The GitHub environment `vercel-staging` gets `EXPO_PUBLIC_ZALO_LOGIN=true`, so the staging web shows an active Zalo button after its next deploy. Core staging still answered `503 zalo_unavailable` on 2026-10-17 09:41 (probe with a deliberately wrong origin, so no sign-in attempt was created): until BE enables Zalo on Railway, tapping Zalo shows "Đăng nhập Zalo đang tạm ngưng…". `FR-010` notes the locked Facebook button.
+
+**Changed files:** `frontend/mobile/app/(auth)/welcome.tsx`, `docs/product/product-requirements.md` (`FR-010`) — modified; this entry. Configuration: GitHub environment variable `EXPO_PUBLIC_ZALO_LOGIN` in `vercel-staging`.
+
+**Check:** `npx tsc --noEmit` shows no new errors. **Not verified:** the deployed staging page.
+
 ### [2026-10-17 09:37 UTC+07:00] — [Fix] Zalo name hint sent only when Core accepts it
 
 **Done:** CodeRabbit on #289: the Zalo exchange returns a name hint of up to 255 characters, but `POST /auth/session` accepts at most 150, so a long or blank Zalo name made sign-in fail with a validation error toast. The sign-in screen now trims the hint and sends it only when it is 1–150 characters; otherwise it sends no name, so an existing account signs in as usual and a new account gets Core's "name required" answer and goes to "Bạn tên gì?" (whose field is capped at 150). CodeRabbit's suggestion sent every such case to that screen, which would also ask existing accounts for a name. The code reached `staging` through #296.

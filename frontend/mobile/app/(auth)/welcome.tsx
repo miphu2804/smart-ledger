@@ -12,8 +12,8 @@ import { useApp } from '../../src/store/AppStore';
 import { colors, shadow } from '../../src/theme';
 
 /**
- * Cách đăng nhập: email + mật khẩu, Facebook và Google dùng được; Zalo dùng được trên bản web khi bật EXPO_PUBLIC_ZALO_LOGIN,
- * còn lại ghi "Sắp có". Không còn đăng nhập bằng số điện thoại.
+ * Cách đăng nhập: email + mật khẩu và Google dùng được; Facebook tạm khoá; Zalo dùng được trên bản web khi bật
+ * EXPO_PUBLIC_ZALO_LOGIN, còn lại ghi "Sắp có". Không còn đăng nhập bằng số điện thoại.
  */
 export default function Welcome() {
   const toast = useToast();
@@ -93,7 +93,8 @@ export default function Welcome() {
         <View style={styles.line} />
       </Row>
       <Row gap={8} style={{ alignItems: 'stretch' }}>
-        <SocialBtn name="Facebook" icon="facebook" busy={busy === 'facebook'} disabled={!!busy && busy !== 'facebook'} onPress={() => signInWith('facebook')} />
+        {/* Facebook tạm khoá theo yêu cầu nhóm: nút mờ, ghi "Tạm khoá", không bấm được (luồng signInWith('facebook') giữ nguyên) */}
+        <SocialBtn name="Facebook" icon="facebook" soon note="Tạm khoá" />
         <SocialBtn name="Google" icon="google" busy={busy === 'google'} disabled={!!busy && busy !== 'google'} onPress={() => signInWith('google')} />
         <SocialBtn
           name="Zalo"
@@ -121,12 +122,14 @@ const MAX_DISPLAY_NAME = 150;
 type SocialIcon = SocialProvider;
 const SOCIAL_COLOR: Record<SocialIcon, string> = { google: '#EA4335', facebook: '#1877F2', zalo: '#0068FF' };
 
-function SocialBtn({ name, icon, onPress, soon = false, busy = false, disabled = false }: {
+function SocialBtn({ name, icon, onPress, soon = false, note = 'Sắp có', busy = false, disabled = false }: {
   name: string;
   icon: SocialIcon;
   onPress?: () => void;
-  /** true = chưa có: nút mờ, có nhãn "Sắp có" và không bấm được */
+  /** true = chưa dùng được: nút mờ, có nhãn `note` và không bấm được */
   soon?: boolean;
+  /** Nhãn dưới tên khi `soon`: "Sắp có" (chưa làm) hoặc "Tạm khoá" (có nhưng đang tắt) */
+  note?: string;
   busy?: boolean;
   /** true khi đang chờ cách đăng nhập khác: không bấm được nhưng không mờ như "Sắp có" */
   disabled?: boolean;
@@ -137,7 +140,7 @@ function SocialBtn({ name, icon, onPress, soon = false, busy = false, disabled =
       onPress={onPress}
       disabled={soon || busy || disabled}
       accessibilityRole="button"
-      accessibilityLabel={soon ? `${name}, sắp có` : `Đăng nhập bằng ${name}`}
+      accessibilityLabel={soon ? `${name}, ${note.toLowerCase()}` : `Đăng nhập bằng ${name}`}
       accessibilityState={{ busy, disabled: soon || disabled }}
       style={({ pressed }) => [styles.social, soon && styles.socialSoon, (pressed || busy) && { opacity: 0.75 }]}
     >
@@ -155,7 +158,7 @@ function SocialBtn({ name, icon, onPress, soon = false, busy = false, disabled =
       </Row>
       {soon ? (
         <T size={10} color={colors.faint} style={{ marginTop: 2 }}>
-          Sắp có
+          {note}
         </T>
       ) : null}
     </Pressable>
