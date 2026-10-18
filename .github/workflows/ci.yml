@@ -570,8 +570,9 @@ jobs:
     # Push only, like deploy-web, and only when the landing changed. A re-run always deploys, so a
     # changed environment variable can be picked up by re-running all jobs; `landing` is then
     # skipped, so a skipped need must not block this job.
+    # TEMP: allow PR run for landing preview test; revert before merge.
     if: >-
-      !failure() && !cancelled() && github.event_name == 'push'
+      !failure() && !cancelled() && (github.event_name == 'push' || github.event_name == 'pull_request')
       && (needs.changes.outputs.landing == 'true' || github.run_attempt > 1)
     needs: [changes, landing]
     permissions:
