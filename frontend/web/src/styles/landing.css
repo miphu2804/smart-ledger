@@ -561,10 +561,6 @@
   padding: 0;
   list-style: none;
 }
-.pain-list li {
-  padding-top: 20px;
-  border-top: 1px solid rgba(0, 0, 0, 0.12);
-}
 .pain-list h3 {
   font-size: 21px;
   font-weight: 700;
