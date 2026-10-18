@@ -1019,6 +1019,111 @@ html:not(.has-scroll-fx) .story-voice {
   }
 }
 
+/* ---------- Trợ lý Bobi: bốn bước hỏi, trả lời, ghi nhớ ---------- */
+.lp-assistant {
+  background:
+    radial-gradient(900px 520px at 85% 0%, rgba(91, 58, 214, 0.35), transparent 70%),
+    var(--night);
+  color: #f5f5f7;
+}
+.assistant-head {
+  position: relative;
+  max-width: 760px;
+}
+.assistant-bobi {
+  position: absolute;
+  top: -24px;
+  right: -180px;
+  width: 150px;
+  filter: drop-shadow(0 18px 24px rgba(0, 0, 0, 0.5));
+  animation: lpBob 4.8s ease-in-out infinite;
+}
+.lp-assistant .lp-display {
+  margin-top: 12px;
+}
+.assistant-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 28px;
+  margin: clamp(48px, 8vh, 80px) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.assistant-steps .phone {
+  margin-bottom: 24px;
+}
+.assistant-steps .story-num {
+  display: block;
+  color: var(--accent);
+}
+.assistant-steps h3 {
+  margin-top: 6px;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.assistant-steps p {
+  margin-top: 8px;
+  font-size: 16px;
+  line-height: 1.5;
+  color: rgba(245, 245, 247, 0.68);
+}
+.assistant-note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: clamp(40px, 7vh, 64px);
+  font-size: 15px;
+  line-height: 1.5;
+  color: rgba(245, 245, 247, 0.6);
+}
+.assistant-note svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent);
+}
+@media (max-width: 960px) {
+  .assistant-steps {
+    grid-template-columns: repeat(2, 1fr);
+    row-gap: 48px;
+  }
+  .assistant-bobi {
+    right: 0;
+    width: 110px;
+  }
+  .assistant-head {
+    padding-right: 120px;
+  }
+}
+@media (max-width: 560px) {
+  /* Điện thoại hẹp: các bước thành dải vuốt ngang, mỗi lần dừng đúng một máy */
+  .assistant-steps {
+    display: flex;
+    gap: 16px;
+    margin-inline: -24px;
+    padding: 0 24px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+  .assistant-steps li {
+    flex: 0 0 78%;
+    scroll-snap-align: center;
+  }
+  .assistant-bobi {
+    top: -8px;
+    width: 88px;
+  }
+  .assistant-head {
+    padding-right: 92px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .assistant-bobi {
+    animation: none;
+  }
+}
+
 /* ---------- Giao diện: cuộn dọc kéo dải máy chạy ngang ---------- */
 .lp-gallery {
   --p: 0;

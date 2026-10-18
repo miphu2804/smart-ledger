@@ -393,6 +393,69 @@ function Features() {
 
 /* ------------------------------------------------------------------ */
 
+/* Ảnh chụp từ app bản staging với dữ liệu tiệm thử; ghi nhớ dài hạn còn chờ PO duyệt nên ghi rõ là thử nghiệm. */
+const ASSISTANT = [
+  {
+    src: '/screens/ai-lookup.webp',
+    alt: 'Hỏi "Doanh thu 7 ngày qua?", trợ lý Bobi đang tra cứu dữ liệu',
+    title: 'Hỏi bằng lời thường.',
+    text: 'Gõ hoặc nói câu hỏi. Bobi tra cứu trên chính dữ liệu tiệm bạn: đơn, hàng hoá, công nợ.',
+  },
+  {
+    src: '/screens/ai-answer.webp',
+    alt: 'Bobi trả lời tiệm đang có 16.988.324 VND chưa thu từ 32 khách, kèm nút Mở Công nợ',
+    title: 'Trả lời bằng số liệu thật.',
+    text: 'Câu trả lời ghi rõ số tiền, số khách và dẫn thẳng tới màn cần xem.',
+  },
+  {
+    src: '/screens/ai-remember.webp',
+    alt: 'Người dùng nhờ Bobi nhớ tiệm chốt sổ theo tuần và nhập hàng vào thứ Hai; Bobi xác nhận đã ghi nhớ',
+    title: 'Nhớ cách tiệm bạn làm.',
+    text: 'Dặn một lần, như chốt sổ theo tuần hay nhập hàng thứ Hai. Bobi giữ lại cho những lần hỏi sau.',
+  },
+  {
+    src: '/screens/ai-recall.webp',
+    alt: 'Ở hội thoại mới, câu trả lời có nhãn 2 ghi nhớ, liệt kê từng điều đã nhớ và liên kết mở hội thoại gốc',
+    title: 'Dùng lại, nói rõ nguồn.',
+    text: 'Hội thoại mới vẫn nhớ. Chạm nhãn "ghi nhớ" để xem Bobi đã dựa vào điều gì, nhớ từ hôm nào.',
+  },
+]
+
+/** Luồng trợ lý Bobi: hỏi → tra cứu → trả lời → ghi nhớ dài hạn, mỗi bước một ảnh chụp app. */
+function Assistant() {
+  return (
+    <section className="lp-section lp-assistant" id="tro-ly">
+      <div className="lp-container">
+        <div className="assistant-head" data-reveal>
+          <img className="assistant-bobi" src="/brand/agent-idea.webp" alt="" width={360} height={345} loading="lazy" />
+          <span className="lp-eyebrow is-dark">Trợ lý Bobi</span>
+          <h2 className="lp-display">
+            Hỏi về tiệm mình.
+            <br />
+            <span className="is-muted">Bobi tra sổ giúp bạn.</span>
+          </h2>
+        </div>
+        <ol className="assistant-steps">
+          {ASSISTANT.map((s, i) => (
+            <li key={s.src} data-reveal style={delay(i)}>
+              <PhoneFrame src={s.src} alt={s.alt} />
+              <span className="story-num">0{i + 1}</span>
+              <h3>{s.title}</h3>
+              <p>{s.text}</p>
+            </li>
+          ))}
+        </ol>
+        <p className="assistant-note">
+          <ShieldCheck size={18} /> Bobi chỉ đọc dữ liệu, không tự tạo hay sửa đơn. Ghi nhớ dài hạn đang thử nghiệm, bật hoặc tắt trong Cài đặt
+          trợ lý.
+        </p>
+      </div>
+    </section>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+
 const SCREENS = [
   { src: '/screens/home.webp', title: 'Tổng quan', text: 'Doanh thu theo kỳ, việc cần xử lý', light: true },
   { src: '/screens/pos.webp', title: 'Bán hàng', text: 'Chọn hàng có ảnh, lọc và sắp xếp' },
@@ -637,6 +700,7 @@ export default function LandingPage() {
         <Statement />
         <Story />
         <Features />
+        <Assistant />
         <Gallery />
         <Compare />
         <Faq />
