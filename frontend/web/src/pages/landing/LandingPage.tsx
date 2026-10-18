@@ -202,6 +202,7 @@ function Hero() {
             <span>Đơn nháp · 2 món</span>
             <b>55.000đ</b>
           </span>
+          <img className="hero-bobi" src="/brand/robot.webp" alt="" width={360} height={345} />
         </div>
         <div className="hero-side is-right">
           <PhoneFrame src="/screens/reports.webp" alt="Màn Báo cáo: doanh thu tuần, biểu đồ theo ngày, lãi gộp ước tính" eager />
