@@ -274,7 +274,7 @@
 .lp-burger {
   display: none;
 }
-.lp-mobile-menu {
+.lp-mobile-menu-wrap {
   display: none;
 }
 @media (max-width: 960px) {
@@ -289,11 +289,28 @@
   .lp-burger {
     display: inline-grid;
   }
+  /* Menu luôn nằm trong DOM; chiều cao trượt từ 0 để mở ra êm thay vì bật ra đột ngột */
+  .lp-mobile-menu-wrap {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition:
+      grid-template-rows 0.4s var(--ease),
+      opacity 0.3s var(--ease);
+  }
+  .lp-mobile-menu-wrap[data-open='true'] {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
   .lp-mobile-menu {
     display: flex;
     flex-direction: column;
-    padding: 4px 18px 18px;
-    animation: lpFade 0.25s var(--ease);
+    min-height: 0;
+    overflow: hidden;
+    padding: 0 18px;
+  }
+  .lp-mobile-menu-wrap[data-open='true'] .lp-mobile-menu {
+    padding-bottom: 18px;
   }
   .lp-mobile-menu a:not(.lp-pill):not(.btn) {
     padding: 12px 0;
@@ -318,13 +335,6 @@
     border: 0;
   }
 }
-@keyframes lpFade {
-  from {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-}
-
 /* ---------- Khung điện thoại ---------- */
 /* Tỉ lệ theo iPhone Pro Max đời 6.9″ (thân 78 mm, màn 440×956 pt, bo góc màn ~62 pt).
    Viền và bo góc tính theo cqw nên khung giữ đúng tỉ lệ ở mọi kích thước; 1 pt màn hình = 0.2136cqw. */
