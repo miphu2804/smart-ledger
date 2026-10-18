@@ -1,6 +1,6 @@
-/** Logo Sổ Nghe Lời: cuốn sổ + sóng âm, cùng hình với icon ứng dụng (frontend/mobile/assets/brand-logo.png). */
+/** Logo Sổ Nghe Lời: Bobi ló ra từ cuốn sổ, cùng hình với frontend/mobile/assets/bubblelogo.png. */
 export function LogoMark({ size = 40 }: { size?: number }) {
-  return <img className="logo-mark-sm" src="/brand/logo.webp" alt="" width={size} height={Math.round(size * 0.886)} />
+  return <img className="logo-mark-sm" src="/brand/logo.webp" alt="" width={size} height={Math.round(size * 0.959)} />
 }
 
 export default function Logo() {
