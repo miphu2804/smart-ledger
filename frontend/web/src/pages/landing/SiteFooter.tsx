@@ -32,7 +32,7 @@ export default function SiteFooter({ onHome = false }: { onHome?: boolean }) {
               <a href={h('hoi-dap')}>Hỏi đáp</a>
               {CONTACT_EMAIL && <a href={`mailto:${CONTACT_EMAIL}`}>Liên hệ</a>}
             </nav>
-            <nav className="lp-footer-col" aria-label="Pháp lý">
+            <nav className="lp-footer-col" aria-label="Pháp lý" hidden={onHome}>
               <h4>Pháp lý</h4>
               <Link to="/privacy">Chính sách quyền riêng tư</Link>
               <Link to="/data-deletion">Xoá dữ liệu người dùng</Link>

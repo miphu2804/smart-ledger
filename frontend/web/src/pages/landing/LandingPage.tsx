@@ -20,6 +20,31 @@ const NAV = [
 /** Độ trễ hiện dần (giây) cho phần tử thứ i trong một nhóm */
 const delay = (i: number): CSSProperties => ({ ['--d' as string]: `${i * 0.07}s` })
 
+type Shot = { src: string; alt: string; lightStatus?: boolean }
+
+/** Ảnh chụp app, khai báo một lần; Hero, luồng cuộn, thư viện và cuối trang cùng dùng. */
+const SHOT = {
+  home: {
+    src: '/screens/home.webp',
+    alt: 'Màn Tổng quan: doanh thu tuần và bốn lối vào đọc đơn, chọn hàng, quét mã, trợ lý AI',
+    lightStatus: true,
+  },
+  voice: { src: '/screens/voice.webp', alt: 'Màn Đọc đơn: câu nói được tách thành ba món có số lượng và giá, tổng 80.000đ' },
+  pos: { src: '/screens/pos.webp', alt: 'Màn Bán hàng: chọn hàng có ảnh, lọc và sắp xếp' },
+  checkout: { src: '/screens/checkout.webp', alt: 'Màn Thanh toán: danh sách món, hình thức tiền mặt, chuyển khoản hoặc ghi nợ' },
+  orders: { src: '/screens/orders.webp', alt: 'Màn Đơn hàng: các đơn theo ngày, lọc hôm nay, hôm qua, 7 ngày' },
+  products: { src: '/screens/products.webp', alt: 'Màn Hàng hoá: giá bán, tồn kho, hàng sắp hết' },
+  reports: { src: '/screens/reports.webp', alt: 'Màn Báo cáo: doanh thu tuần, biểu đồ theo ngày, thu chi và lãi gộp ước tính' },
+  /* Ảnh chụp Bobi từ app bản staging với dữ liệu tiệm thử. */
+  bobiAsk: { src: '/screens/ai-lookup.webp', alt: 'Hỏi "Doanh thu 7 ngày qua?", trợ lý Bobi đang tra cứu dữ liệu' },
+  bobiAnswer: { src: '/screens/ai-answer.webp', alt: 'Bobi trả lời tiệm đang có 16.988.324 VND chưa thu từ 32 khách, kèm nút Mở Công nợ' },
+  bobiRemember: { src: '/screens/ai-remember.webp', alt: 'Người dùng nhờ Bobi nhớ tiệm chốt sổ theo tuần và nhập hàng vào thứ Hai; Bobi xác nhận đã ghi nhớ' },
+  bobiRecall: { src: '/screens/ai-recall.webp', alt: 'Ở hội thoại mới, câu trả lời có nhãn 2 ghi nhớ, liệt kê từng điều đã nhớ và liên kết mở hội thoại gốc' },
+}
+
+/** Câu nói mẫu dùng xuyên trang; khớp với ảnh màn Đọc đơn để không lệch số liệu. */
+const VOICE_SAMPLE = 'Hai bánh mì thịt, một cà phê sữa đá, một bạc xỉu'
+
 /* ------------------------------------------------------------------ */
 
 function Nav() {
@@ -191,21 +216,21 @@ function Hero() {
 
       <div className="hero-stage" aria-label="Ảnh ứng dụng Sổ Nghe Lời">
         <div className="hero-side is-left">
-          <PhoneFrame src="/screens/voice.webp" alt="Màn Đọc đơn: câu nói được tách thành ba món có số lượng và giá" eager />
+          <PhoneFrame {...SHOT.voice} eager />
         </div>
         <div className="hero-main">
-          <PhoneFrame src="/screens/home.webp" alt="Màn Tổng quan: doanh thu tuần, lối vào đọc đơn, chọn hàng, quét mã, trợ lý AI" eager lightStatus />
+          <PhoneFrame {...SHOT.home} eager />
           <span className="hero-bubble">
-            <Mic size={16} /> “Hai bánh mì thịt, một cà phê sữa đá”
+            <Mic size={16} /> “{VOICE_SAMPLE}”
           </span>
           <span className="hero-result">
-            <span>Đơn nháp · 2 món</span>
-            <b>55.000đ</b>
+            <span>Đơn nháp · 4 món</span>
+            <b>80.000đ</b>
           </span>
           <img className="hero-bobi" src="/brand/robot.webp" alt="" width={360} height={345} />
         </div>
         <div className="hero-side is-right">
-          <PhoneFrame src="/screens/reports.webp" alt="Màn Báo cáo: doanh thu tuần, biểu đồ theo ngày, lãi gộp ước tính" eager />
+          <PhoneFrame {...SHOT.reports} eager />
         </div>
       </div>
     </section>
@@ -252,39 +277,54 @@ function Statement() {
 
 /* ------------------------------------------------------------------ */
 
-const FLOW: { src: string; alt: string; title: string; text: string; tap?: { x: string; y: string } }[] = [
+const FLOW: { shot: Shot; title: string; text: string; tap?: { x: string; y: string } }[] = [
   {
-    src: '/screens/home.webp',
-    alt: 'Màn Tổng quan: doanh thu tuần và bốn lối vào đọc đơn, chọn hàng, quét mã, trợ lý AI',
+    shot: SHOT.home,
     title: 'Mở app, chạm Đọc đơn.',
     text: 'Màn Tổng quan có sẵn doanh thu kỳ này và bốn cách lên đơn: đọc đơn, chọn hàng, quét mã, hỏi trợ lý AI.',
     tap: { x: '24%', y: '43%' },
   },
   {
-    src: '/screens/voice.webp',
-    alt: 'Màn Đọc đơn: câu nói được tách thành ba món có số lượng và giá, tổng 80.000đ',
+    shot: SHOT.voice,
     title: 'Nói như nói chuyện.',
     text: 'Nhấn giữ nút ghi âm và đọc đơn, hoặc gõ khi quán ồn. Ứng dụng tách món, số lượng và giá.',
     tap: { x: '47%', y: '72%' },
   },
   {
-    src: '/screens/checkout.webp',
-    alt: 'Màn Thanh toán: danh sách món, hình thức tiền mặt, chuyển khoản hoặc ghi nợ',
+    shot: SHOT.checkout,
     title: 'Kiểm tra, rồi thanh toán.',
     text: 'Sửa số lượng nếu cần, chọn tiền mặt, chuyển khoản (chỉ ghi nhận) hoặc ghi nợ. Đơn vào sổ khi bạn bấm Hoàn tất.',
     tap: { x: '77%', y: '93.6%' },
   },
   {
-    src: '/screens/orders.webp',
-    alt: 'Màn Đơn hàng: các đơn theo ngày, lọc hôm nay, hôm qua, 7 ngày',
+    shot: SHOT.orders,
     title: 'Đơn đã vào sổ.',
     text: 'Mỗi đơn lưu kèm giờ bán trong Đơn hàng, lọc nhanh theo hôm nay, hôm qua hoặc 7 ngày.',
   },
   {
-    src: '/screens/reports.webp',
-    alt: 'Màn Báo cáo: doanh thu tuần, biểu đồ theo ngày, thu chi và lãi gộp ước tính',
+    shot: SHOT.reports,
     title: 'Xem số liệu.',
     text: 'Doanh thu, số đơn, lãi gộp ước tính và món bán chạy theo ngày, tuần, tháng.',
+  },
+  {
+    shot: SHOT.bobiAsk,
+    title: 'Hỏi bằng lời thường.',
+    text: 'Gõ hoặc nói câu hỏi. Bobi tra cứu trên chính dữ liệu tiệm bạn, chỉ đọc, không tự tạo hay sửa đơn.',
+  },
+  {
+    shot: SHOT.bobiAnswer,
+    title: 'Trả lời bằng số liệu thật.',
+    text: 'Câu trả lời ghi rõ số tiền, số khách và dẫn thẳng tới màn cần xem.',
+  },
+  {
+    shot: SHOT.bobiRemember,
+    title: 'Nhớ cách tiệm bạn làm.',
+    text: 'Dặn một lần, như chốt sổ theo tuần hay nhập hàng thứ Hai. Bobi giữ lại cho những lần hỏi sau. Đang thử nghiệm, bật hoặc tắt trong Cài đặt trợ lý.',
+  },
+  {
+    shot: SHOT.bobiRecall,
+    title: 'Dùng lại, nói rõ nguồn.',
+    text: 'Hội thoại mới vẫn nhớ. Chạm nhãn "ghi nhớ" để xem Bobi đã dựa vào điều gì, nhớ từ hôm nào.',
   },
 ]
 
@@ -293,7 +333,7 @@ const FLOW_INTRO = 0.14
 
 /**
  * Mục ghim kể luồng dùng app theo vị trí cuộn: mở đầu cận cảnh màn hình rồi lùi ra như trang iPhone,
- * sau đó mỗi đoạn cuộn là một màn trong luồng Tổng quan → Đọc đơn → Thanh toán → Đơn hàng → Báo cáo.
+ * sau đó mỗi đoạn cuộn là một màn trong luồng Tổng quan → Đọc đơn → Thanh toán → Đơn hàng → Báo cáo → Bobi.
  * Màn mới trượt vào từ phải như chuyển trang trên iOS; ngón tay ảo chạm nút dẫn sang màn kế, lần cuối là vuốt.
  */
 function Story() {
@@ -312,7 +352,7 @@ function Story() {
           <span className="lp-eyebrow is-dark">Cách hoạt động</span>
           <ol className="story-steps">
             {FLOW.map((s, i) => (
-              <li key={s.src} className="story-step" data-i={i}>
+              <li key={s.title} className="story-step" data-i={i}>
                 <span className="story-num">0{i + 1}</span>
                 <h2>{s.title}</h2>
                 <p>{s.text}</p>
@@ -321,19 +361,19 @@ function Story() {
           </ol>
           <div className="story-dots" aria-hidden="true">
             {FLOW.map((s, i) => (
-              <i key={s.src} data-i={i} />
+              <i key={s.title} data-i={i} />
             ))}
           </div>
         </div>
 
         <div className="story-device">
           <span className="story-voice" aria-hidden="true">
-            <Mic size={15} /> “Hai bánh mì thịt, một cà phê sữa đá, một bạc xỉu”
+            <Mic size={15} /> “{VOICE_SAMPLE}”
           </span>
           <PhoneFrame>
             {FLOW.map((s, i) => (
-              <div key={s.src} className="flow-screen" style={{ ['--k' as string]: i }}>
-                <img src={s.src} alt={s.alt} width={660} height={1434} loading={i ? 'lazy' : 'eager'} decoding="async" />
+              <div key={s.title} className="flow-screen" style={{ ['--k' as string]: i }}>
+                <img src={s.shot.src} alt={s.shot.alt} width={660} height={1434} loading={i ? 'lazy' : 'eager'} decoding="async" />
                 {s.tap && <span className="flow-tap" style={{ left: s.tap.x, top: s.tap.y }} aria-hidden="true" />}
               </div>
             ))}
@@ -393,76 +433,13 @@ function Features() {
 
 /* ------------------------------------------------------------------ */
 
-/* Ảnh chụp từ app bản staging với dữ liệu tiệm thử; ghi nhớ dài hạn còn chờ PO duyệt nên ghi rõ là thử nghiệm. */
-const ASSISTANT = [
-  {
-    src: '/screens/ai-lookup.webp',
-    alt: 'Hỏi "Doanh thu 7 ngày qua?", trợ lý Bobi đang tra cứu dữ liệu',
-    title: 'Hỏi bằng lời thường.',
-    text: 'Gõ hoặc nói câu hỏi. Bobi tra cứu trên chính dữ liệu tiệm bạn: đơn, hàng hoá, công nợ.',
-  },
-  {
-    src: '/screens/ai-answer.webp',
-    alt: 'Bobi trả lời tiệm đang có 16.988.324 VND chưa thu từ 32 khách, kèm nút Mở Công nợ',
-    title: 'Trả lời bằng số liệu thật.',
-    text: 'Câu trả lời ghi rõ số tiền, số khách và dẫn thẳng tới màn cần xem.',
-  },
-  {
-    src: '/screens/ai-remember.webp',
-    alt: 'Người dùng nhờ Bobi nhớ tiệm chốt sổ theo tuần và nhập hàng vào thứ Hai; Bobi xác nhận đã ghi nhớ',
-    title: 'Nhớ cách tiệm bạn làm.',
-    text: 'Dặn một lần, như chốt sổ theo tuần hay nhập hàng thứ Hai. Bobi giữ lại cho những lần hỏi sau.',
-  },
-  {
-    src: '/screens/ai-recall.webp',
-    alt: 'Ở hội thoại mới, câu trả lời có nhãn 2 ghi nhớ, liệt kê từng điều đã nhớ và liên kết mở hội thoại gốc',
-    title: 'Dùng lại, nói rõ nguồn.',
-    text: 'Hội thoại mới vẫn nhớ. Chạm nhãn "ghi nhớ" để xem Bobi đã dựa vào điều gì, nhớ từ hôm nào.',
-  },
-]
-
-/** Luồng trợ lý Bobi: hỏi → tra cứu → trả lời → ghi nhớ dài hạn, mỗi bước một ảnh chụp app. */
-function Assistant() {
-  return (
-    <section className="lp-section lp-assistant" id="tro-ly">
-      <div className="lp-container">
-        <div className="assistant-head" data-reveal>
-          <img className="assistant-bobi" src="/brand/agent-idea.webp" alt="" width={360} height={345} loading="lazy" />
-          <span className="lp-eyebrow is-dark">Trợ lý Bobi</span>
-          <h2 className="lp-display">
-            Hỏi về tiệm mình.
-            <br />
-            <span className="is-muted">Bobi tra sổ giúp bạn.</span>
-          </h2>
-        </div>
-        <ol className="assistant-steps">
-          {ASSISTANT.map((s, i) => (
-            <li key={s.src} data-reveal style={delay(i)}>
-              <PhoneFrame src={s.src} alt={s.alt} />
-              <span className="story-num">0{i + 1}</span>
-              <h3>{s.title}</h3>
-              <p>{s.text}</p>
-            </li>
-          ))}
-        </ol>
-        <p className="assistant-note">
-          <ShieldCheck size={18} /> Bobi chỉ đọc dữ liệu, không tự tạo hay sửa đơn. Ghi nhớ dài hạn đang thử nghiệm, bật hoặc tắt trong Cài đặt
-          trợ lý.
-        </p>
-      </div>
-    </section>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-
-const SCREENS = [
-  { src: '/screens/home.webp', title: 'Tổng quan', text: 'Doanh thu theo kỳ, việc cần xử lý', light: true },
-  { src: '/screens/pos.webp', title: 'Bán hàng', text: 'Chọn hàng có ảnh, lọc và sắp xếp' },
-  { src: '/screens/checkout.webp', title: 'Thanh toán', text: 'Tiền mặt, chuyển khoản hoặc ghi nợ' },
-  { src: '/screens/orders.webp', title: 'Đơn hàng', text: 'Lịch sử theo ngày, lọc nhanh' },
-  { src: '/screens/products.webp', title: 'Hàng hoá', text: 'Giá bán, tồn kho, hàng sắp hết' },
-  { src: '/screens/reports.webp', title: 'Báo cáo', text: 'Doanh thu, lãi gộp ước tính' },
+const SCREENS: { shot: Shot; title: string; text: string }[] = [
+  { shot: SHOT.home, title: 'Tổng quan', text: 'Doanh thu theo kỳ, việc cần xử lý' },
+  { shot: SHOT.pos, title: 'Bán hàng', text: 'Chọn hàng có ảnh, lọc và sắp xếp' },
+  { shot: SHOT.checkout, title: 'Thanh toán', text: 'Tiền mặt, chuyển khoản hoặc ghi nợ' },
+  { shot: SHOT.orders, title: 'Đơn hàng', text: 'Lịch sử theo ngày, lọc nhanh' },
+  { shot: SHOT.products, title: 'Hàng hoá', text: 'Giá bán, tồn kho, hàng sắp hết' },
+  { shot: SHOT.reports, title: 'Báo cáo', text: 'Doanh thu, lãi gộp ước tính' },
 ]
 
 /** Mục ghim: cuộn dọc kéo dải điện thoại chạy ngang, như phần "Xem điểm nổi bật" trên trang iPhone. */
@@ -480,8 +457,8 @@ function Gallery() {
         <div className="gallery-viewport" tabIndex={0} aria-label="Các màn hình của ứng dụng">
           <div className="gallery-track" data-track>
             {SCREENS.map((s) => (
-              <figure key={s.src} className="gallery-item">
-                <PhoneFrame src={s.src} alt={`Màn hình ${s.title}`} lightStatus={s.light} />
+              <figure key={s.title} className="gallery-item">
+                <PhoneFrame {...s.shot} />
                 <figcaption>
                   <strong>{s.title}</strong>
                   <span>{s.text}</span>
@@ -623,13 +600,16 @@ function Faq() {
   return (
     <section className="lp-section lp-faq" id="hoi-dap">
       <div className="lp-container lp-faq-grid">
-        <div className="lp-sec-head" data-reveal>
-          <h2 className="lp-display">Hỏi đáp.</h2>
-          <p>
-            {CONTACT_EMAIL
-              ? 'Chưa thấy câu trả lời bạn cần? Hãy nhắn cho chúng tôi qua mục Liên hệ ở cuối trang.'
-              : 'Những điều người bán hay hỏi trước khi dùng thử.'}
-          </p>
+        <div className="lp-faq-aside">
+          <div className="lp-sec-head" data-reveal>
+            <h2 className="lp-display">Hỏi đáp.</h2>
+            <p>
+              {CONTACT_EMAIL
+                ? 'Chưa thấy câu trả lời bạn cần? Hãy nhắn cho chúng tôi qua mục Liên hệ ở cuối trang.'
+                : 'Những điều người bán hay hỏi trước khi dùng thử.'}
+            </p>
+          </div>
+          <img src="/brand/agent-question.webp" alt="" width={194} height={237} loading="lazy" />
         </div>
         <div className="faq-list">
           {FAQS.map((f, i) => {
@@ -680,7 +660,7 @@ function Closing() {
         </div>
       </div>
       <div className="closing-phone">
-        <PhoneFrame src="/screens/voice.webp" alt="Màn Đọc đơn của Sổ Nghe Lời" />
+        <PhoneFrame {...SHOT.voice} />
       </div>
     </section>
   )
@@ -700,7 +680,6 @@ export default function LandingPage() {
         <Statement />
         <Story />
         <Features />
-        <Assistant />
         <Gallery />
         <Compare />
         <Faq />

@@ -621,7 +621,8 @@
   --dx: min(250px, 21vw);
   --dy: 0px;
   position: relative;
-  height: 640vh;
+  /* 128vh mỗi màn: mỗi bước cuộn khoảng 110vh, đúng như khi luồng còn năm màn */
+  height: calc(var(--n) * 128vh);
   background: #000;
   color: #f5f5f7;
 }
@@ -665,7 +666,11 @@
 .lp-story[data-step='1'] .story-step[data-i='1'],
 .lp-story[data-step='2'] .story-step[data-i='2'],
 .lp-story[data-step='3'] .story-step[data-i='3'],
-.lp-story[data-step='4'] .story-step[data-i='4'] {
+.lp-story[data-step='4'] .story-step[data-i='4'],
+.lp-story[data-step='5'] .story-step[data-i='5'],
+.lp-story[data-step='6'] .story-step[data-i='6'],
+.lp-story[data-step='7'] .story-step[data-i='7'],
+.lp-story[data-step='8'] .story-step[data-i='8'] {
   opacity: 1;
   transform: none;
   pointer-events: auto;
@@ -707,7 +712,11 @@
 .lp-story[data-step='1'] .story-dots i[data-i='1'],
 .lp-story[data-step='2'] .story-dots i[data-i='2'],
 .lp-story[data-step='3'] .story-dots i[data-i='3'],
-.lp-story[data-step='4'] .story-dots i[data-i='4'] {
+.lp-story[data-step='4'] .story-dots i[data-i='4'],
+.lp-story[data-step='5'] .story-dots i[data-i='5'],
+.lp-story[data-step='6'] .story-dots i[data-i='6'],
+.lp-story[data-step='7'] .story-dots i[data-i='7'],
+.lp-story[data-step='8'] .story-dots i[data-i='8'] {
   width: 28px;
   background: #f5f5f7;
 }
@@ -733,11 +742,11 @@
    rồi lùi sang trái 30% và tối đi khi màn k+1 vào (--out), giống chuyển trang trên iOS. */
 .flow-screen {
   --in: clamp(0, (var(--qn) - var(--k)) * 4 + 1, 1);
-  --out: clamp(0, (var(--qn) - var(--k) - 1) * 4 + 1, 1);
+  /* Màn cuối không có màn kế nên đứng yên, không lùi và tối đi khi kết thúc phần ghim */
+  --out: calc(clamp(0, (var(--qn) - var(--k) - 1) * 4 + 1, 1) * clamp(0, var(--n) - 1 - var(--k), 1));
   position: absolute;
   inset: 0;
   translate: calc((1 - var(--in)) * 100% - var(--out) * 30%) 0;
-  box-shadow: -12px 0 32px rgba(0, 0, 0, calc((1 - var(--in)) * 0.35));
   background: var(--bg);
 }
 .flow-screen::after {
@@ -763,7 +772,7 @@
   opacity: min(1, var(--t) * 5, (1 - var(--t)) * 4);
   scale: calc(0.5 + var(--t) * 0.8);
 }
-/* Lần chuyển cuối (Đơn hàng → Báo cáo) là cú vuốt: ngón tay kéo từ phải sang trái cùng màn mới */
+/* Lần chuyển cuối là cú vuốt: ngón tay kéo từ phải sang trái cùng màn mới */
 .flow-swipe {
   --t: clamp(0, (var(--qn) - var(--n) + 1) * 4 + 1, 1);
   position: absolute;
@@ -870,8 +879,9 @@
   .story-voice {
     right: auto;
     left: 50%;
-    /* Đặt giữa máy để không che nút Thanh toán mà ngón tay ảo sắp chạm */
-    top: 34%;
+    /* Đặt dưới máy, không che nội dung màn hình (danh sách món, nút Thanh toán) */
+    top: auto;
+    bottom: -72px;
     width: 230px;
     margin-left: -115px;
     background: rgba(22, 20, 31, 0.85);
@@ -880,7 +890,7 @@
     display: none;
   }
 }
-/* Không có hiệu ứng cuộn (giảm chuyển động hoặc chưa chạy JS): bố cục tĩnh, hiện màn đầu và cả năm bước */
+/* Không có hiệu ứng cuộn (giảm chuyển động hoặc chưa chạy JS): bố cục tĩnh, hiện màn đầu và tất cả các bước */
 html:not(.has-scroll-fx) .lp-story {
   --z: 1;
   height: auto;
@@ -1016,111 +1026,6 @@ html:not(.has-scroll-fx) .story-voice {
   }
   .bento-tile.is-hero {
     min-height: 420px;
-  }
-}
-
-/* ---------- Trợ lý Bobi: bốn bước hỏi, trả lời, ghi nhớ ---------- */
-.lp-assistant {
-  background:
-    radial-gradient(900px 520px at 85% 0%, rgba(91, 58, 214, 0.35), transparent 70%),
-    var(--night);
-  color: #f5f5f7;
-}
-.assistant-head {
-  position: relative;
-  max-width: 760px;
-}
-.assistant-bobi {
-  position: absolute;
-  top: -24px;
-  right: -180px;
-  width: 150px;
-  filter: drop-shadow(0 18px 24px rgba(0, 0, 0, 0.5));
-  animation: lpBob 4.8s ease-in-out infinite;
-}
-.lp-assistant .lp-display {
-  margin-top: 12px;
-}
-.assistant-steps {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 28px;
-  margin: clamp(48px, 8vh, 80px) 0 0;
-  padding: 0;
-  list-style: none;
-}
-.assistant-steps .phone {
-  margin-bottom: 24px;
-}
-.assistant-steps .story-num {
-  display: block;
-  color: var(--accent);
-}
-.assistant-steps h3 {
-  margin-top: 6px;
-  font-size: 21px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-.assistant-steps p {
-  margin-top: 8px;
-  font-size: 16px;
-  line-height: 1.5;
-  color: rgba(245, 245, 247, 0.68);
-}
-.assistant-note {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  margin-top: clamp(40px, 7vh, 64px);
-  font-size: 15px;
-  line-height: 1.5;
-  color: rgba(245, 245, 247, 0.6);
-}
-.assistant-note svg {
-  flex: none;
-  margin-top: 2px;
-  color: var(--accent);
-}
-@media (max-width: 960px) {
-  .assistant-steps {
-    grid-template-columns: repeat(2, 1fr);
-    row-gap: 48px;
-  }
-  .assistant-bobi {
-    right: 0;
-    width: 110px;
-  }
-  .assistant-head {
-    padding-right: 120px;
-  }
-}
-@media (max-width: 560px) {
-  /* Điện thoại hẹp: các bước thành dải vuốt ngang, mỗi lần dừng đúng một máy */
-  .assistant-steps {
-    display: flex;
-    gap: 16px;
-    margin-inline: -24px;
-    padding: 0 24px;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    scrollbar-width: none;
-  }
-  .assistant-steps li {
-    flex: 0 0 78%;
-    scroll-snap-align: center;
-  }
-  .assistant-bobi {
-    top: -8px;
-    width: 88px;
-  }
-  .assistant-head {
-    padding-right: 92px;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .assistant-bobi {
-    animation: none;
   }
 }
 
@@ -1332,9 +1237,13 @@ html:not(.has-scroll-fx) .gallery-progress {
   gap: 56px;
   align-items: start;
 }
-.lp-faq-grid .lp-sec-head {
+.lp-faq-aside {
   position: sticky;
   top: 96px;
+}
+.lp-faq-aside img {
+  width: 150px;
+  margin-top: 8px;
 }
 .faq-list {
   border-top: 1px solid rgba(0, 0, 0, 0.12);
@@ -1400,8 +1309,11 @@ html:not(.has-scroll-fx) .gallery-progress {
     grid-template-columns: 1fr;
     gap: 8px;
   }
-  .lp-faq-grid .lp-sec-head {
+  .lp-faq-aside {
     position: static;
+  }
+  .lp-faq-aside img {
+    display: none;
   }
   .faq button {
     font-size: 17px;
@@ -1521,6 +1433,10 @@ main:has(.lp-closing) + .lp-footer {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+/* Cột [hidden] phải có rule này: display: flex ở trên sẽ đè thuộc tính hidden của trình duyệt */
+.lp-footer-col[hidden] {
+  display: none;
 }
 .lp-footer-col h4 {
   margin: 0 0 4px;
