@@ -98,7 +98,7 @@ function Nav() {
           </button>
         </div>
       </div>
-      {open && (
+      <div className="lp-mobile-menu-wrap" data-open={open} inert={!open}>
         <div className="lp-mobile-menu">
           {NAV.map((n) => (
             <a key={n.href} href={n.href} onClick={() => setOpen(false)}>
@@ -119,7 +119,7 @@ function Nav() {
             <SocialLinks />
           </div>
         </div>
-      )}
+      </div>
     </header>
   )
 }
