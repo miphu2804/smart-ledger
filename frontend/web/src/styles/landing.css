@@ -191,10 +191,8 @@
   margin: 12px auto 0;
   border-radius: 20px;
   color: var(--ink);
-  background: rgba(247, 246, 242, 0.72);
+  background: var(--bg);
   border: 1px solid rgba(0, 0, 0, 0.06);
-  backdrop-filter: saturate(1.8) blur(20px);
-  -webkit-backdrop-filter: saturate(1.8) blur(20px);
   transition: box-shadow 0.3s var(--ease);
 }
 .lp-nav.is-scrolled,
@@ -289,10 +287,18 @@
   .lp-burger {
     display: inline-grid;
   }
-  /* Menu luôn nằm trong DOM; chiều cao trượt từ 0 để mở ra êm thay vì bật ra đột ngột */
+  /* Menu luôn nằm trong DOM; chiều cao trượt từ 0 để mở ra êm thay vì bật ra đột ngột.
+     Nổi dưới thanh nav (absolute) và nền đặc để mở menu không đẩy nội dung trang xuống */
   .lp-mobile-menu-wrap {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
     display: grid;
     grid-template-rows: 0fr;
+    background: var(--bg);
+    border-radius: 20px;
+    box-shadow: 0 12px 32px -16px rgba(0, 0, 0, 0.28);
     opacity: 0;
     transition:
       grid-template-rows 0.4s var(--ease),
