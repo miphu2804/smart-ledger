@@ -6,9 +6,8 @@ const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
  * Gắn biến CSS `--p` (0 → 1) cho mọi phần tử có `data-scroll`, để CSS tự dựng hiệu ứng theo vị trí cuộn.
  *
  * - `data-scroll="pin"`: mục cao hơn màn hình có con `position: sticky`; 0 khi mép trên chạm đỉnh màn hình,
- *   1 khi mép dưới chạm đáy. Có `data-steps="n"` thì thêm `data-step` (0…n-1) để đổi nội dung theo bước;
- *   `data-steps-start` (0…1) dành phần đầu quãng cuộn cho cảnh mở đầu trước bước 0.
- *   Có con `[data-track]` thì thêm `--shift` (px) là phần dải ngang còn tràn ra ngoài màn hình.
+ *   1 khi mép dưới chạm đáy. Có con `[data-track]` thì thêm `--shift` (px) là phần dải ngang còn tràn ra
+ *   ngoài màn hình, và `data-active` là chỉ số phần tử của dải đang được nhấn mạnh theo tiến độ cuộn.
  * - `data-scroll="view"`: 0 khi mép trên vừa ló ở đáy màn hình, 1 khi mép trên chạm đỉnh.
  * - `data-scroll="exit"`: 0 khi mép trên ở đỉnh màn hình, 1 khi phần tử đã cuộn hết lên trên.
  *
@@ -30,15 +29,18 @@ export function useScrollProgress() {
         const p =
           mode === 'pin' ? clamp01(-r.top / Math.max(1, r.height - vh)) : mode === 'view' ? clamp01((vh - r.top) / vh) : clamp01(-r.top / r.height)
         el.style.setProperty('--p', p.toFixed(4))
-        const steps = Number(el.dataset.steps)
-        if (steps) {
-          // Bước đổi ở giữa mỗi lần chuyển màn (1/8 bước trước mốc), không đợi màn mới trượt xong
-          const start = Number(el.dataset.stepsStart ?? 0)
-          const q = clamp01((p - start) / (1 - start))
-          el.dataset.step = String(Math.min(steps - 1, Math.floor(q * steps + 0.125)))
-        }
         const track = el.querySelector<HTMLElement>('[data-track]')
-        if (track) el.style.setProperty('--shift', `${Math.max(0, track.scrollWidth - document.documentElement.clientWidth)}px`)
+        if (track) {
+          const vw = document.documentElement.clientWidth
+          el.style.setProperty('--shift', `${Math.max(0, track.scrollWidth - vw)}px`)
+          // Dải được đệm hai đầu nên màn thứ i dừng giữa khung nhìn khi tiến độ là i/(n-1)
+          // Giữ máy đầu và máy cuối đứng yên một đoạn cuộn, để vuốt nhanh không trôi tuột qua mục
+          const held = clamp01((p - 0.06) / 0.88)
+          const active = Math.round(held * (track.children.length - 1))
+          el.dataset.active = String(active)
+          el.style.setProperty('--a', String(active))
+          el.style.setProperty('--n', String(track.children.length))
+        }
       }
     }
     const request = () => {

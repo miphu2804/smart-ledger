@@ -24,7 +24,6 @@ export default function SiteFooter({ onHome = false }: { onHome?: boolean }) {
               <h4>Sản phẩm</h4>
               <a href={h('tinh-nang')}>Tính năng</a>
               <a href={h('cach-hoat-dong')}>Cách hoạt động</a>
-              <a href={h('giao-dien')}>Giao diện</a>
               <a href={h('so-sanh')}>So sánh với POS</a>
             </nav>
             <nav className="lp-footer-col" aria-label="Hỗ trợ">

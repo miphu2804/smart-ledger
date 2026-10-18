@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ChevronRight, Download, Menu, Mic, ShieldCheck, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Download, Menu, Mic, X } from 'lucide-react'
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ADMIN_ENABLED, ANDROID_APK_URL } from '../../config'
@@ -13,14 +13,14 @@ import SocialLinks from './SocialLinks'
 const NAV = [
   { href: '#cach-hoat-dong', label: 'Cách hoạt động' },
   { href: '#tinh-nang', label: 'Tính năng' },
-  { href: '#giao-dien', label: 'Giao diện' },
   { href: '#hoi-dap', label: 'Hỏi đáp' },
 ]
 
 /** Độ trễ hiện dần (giây) cho phần tử thứ i trong một nhóm */
 const delay = (i: number): CSSProperties => ({ ['--d' as string]: `${i * 0.07}s` })
 
-type Shot = { src: string; alt: string; lightStatus?: boolean }
+/** `video`: đoạn quay màn hình thật của app, `src` là khung hình hiện trước khi video tải xong */
+type Shot = { src: string; alt: string; lightStatus?: boolean; video?: string }
 
 /** Ảnh chụp app, khai báo một lần; Hero, luồng cuộn, thư viện và cuối trang cùng dùng. */
 const SHOT = {
@@ -31,15 +31,13 @@ const SHOT = {
   },
   voice: { src: '/screens/voice.webp', alt: 'Màn Đọc đơn: câu nói được tách thành ba món có số lượng và giá, tổng 80.000đ' },
   pos: { src: '/screens/pos.webp', alt: 'Màn Bán hàng: chọn hàng có ảnh, lọc và sắp xếp' },
+  scan: { src: '/screens/scan.webp', alt: 'Màn Quét mã vạch: đưa mã sản phẩm vào khung camera để thêm vào đơn', lightStatus: true },
   checkout: { src: '/screens/checkout.webp', alt: 'Màn Thanh toán: danh sách món, hình thức tiền mặt, chuyển khoản hoặc ghi nợ' },
   orders: { src: '/screens/orders.webp', alt: 'Màn Đơn hàng: các đơn theo ngày, lọc hôm nay, hôm qua, 7 ngày' },
   products: { src: '/screens/products.webp', alt: 'Màn Hàng hoá: giá bán, tồn kho, hàng sắp hết' },
   reports: { src: '/screens/reports.webp', alt: 'Màn Báo cáo: doanh thu tuần, biểu đồ theo ngày, thu chi và lãi gộp ước tính' },
   /* Ảnh chụp Bobi từ app bản staging với dữ liệu tiệm thử. */
-  bobiAsk: { src: '/screens/ai-lookup.webp', alt: 'Hỏi "Doanh thu 7 ngày qua?", trợ lý Bobi đang tra cứu dữ liệu' },
-  bobiAnswer: { src: '/screens/ai-answer.webp', alt: 'Bobi trả lời tiệm đang có 16.988.324 VND chưa thu từ 32 khách, kèm nút Mở Công nợ' },
-  bobiRemember: { src: '/screens/ai-remember.webp', alt: 'Người dùng nhờ Bobi nhớ tiệm chốt sổ theo tuần và nhập hàng vào thứ Hai; Bobi xác nhận đã ghi nhớ' },
-  bobiRecall: { src: '/screens/ai-recall.webp', alt: 'Ở hội thoại mới, câu trả lời có nhãn 2 ghi nhớ, liệt kê từng điều đã nhớ và liên kết mở hội thoại gốc' },
+  bobiRecall: { src: '/screens/ai-recall.webp', video: '/screens/ai-recall.mp4', alt: 'Ở hội thoại mới, câu trả lời có nhãn 2 ghi nhớ, liệt kê từng điều đã nhớ và liên kết mở hội thoại gốc' },
 }
 
 /** Câu nói mẫu dùng xuyên trang; khớp với ảnh màn Đọc đơn để không lệch số liệu. */
@@ -135,12 +133,14 @@ function Nav() {
 function PhoneFrame({
   src,
   alt = '',
+  video,
   eager = false,
   lightStatus = false,
   children,
 }: {
   src?: string
   alt?: string
+  video?: string
   eager?: boolean
   lightStatus?: boolean
   children?: ReactNode
@@ -149,7 +149,12 @@ function PhoneFrame({
     <div className="phone">
       <div className="phone-body">
         <div className="phone-screen">
-          {children ?? <img src={src} alt={alt} loading={eager ? 'eager' : 'lazy'} width={660} height={1434} decoding="async" />}
+          {children ??
+            (video ? (
+              <video src={video} poster={src} aria-label={alt} autoPlay muted loop playsInline preload="none" width={660} height={1434} />
+            ) : (
+              <img src={src} alt={alt} loading={eager ? 'eager' : 'lazy'} width={660} height={1434} decoding="async" />
+            ))}
           <div className={`phone-status${lightStatus ? ' is-light' : ''}`} aria-hidden="true">
             <svg className="phone-time" viewBox="0 0 40 13" fill="currentColor">
               <text y="12.5" fontSize="17" fontWeight="600">
@@ -199,7 +204,7 @@ function Hero() {
   return (
     <section className="lp-hero" id="top" data-scroll="exit">
       <div className="lp-container lp-hero-copy">
-        <span className="lp-eyebrow">Sổ bán hàng cho quán nhỏ</span>
+        <span className="lp-eyebrow">Sổ bán hàng cho tiểu thương</span>
         <h1>
           Nói một câu.
           <br />
@@ -227,7 +232,7 @@ function Hero() {
             <span>Đơn nháp · 4 món</span>
             <b>80.000đ</b>
           </span>
-          <img className="hero-bobi" src="/brand/robot.webp" alt="" width={360} height={345} />
+          <img className="hero-bobi" src="/brand/bobi-notebook.webp" alt="" width={360} height={345} />
         </div>
         <div className="hero-side is-right">
           <PhoneFrame {...SHOT.reports} eager />
@@ -277,117 +282,6 @@ function Statement() {
 
 /* ------------------------------------------------------------------ */
 
-const FLOW: { shot: Shot; title: string; text: string; tap?: { x: string; y: string } }[] = [
-  {
-    shot: SHOT.home,
-    title: 'Mở app, chạm Đọc đơn.',
-    text: 'Màn Tổng quan có sẵn doanh thu kỳ này và bốn cách lên đơn: đọc đơn, chọn hàng, quét mã, hỏi trợ lý AI.',
-    tap: { x: '24%', y: '43%' },
-  },
-  {
-    shot: SHOT.voice,
-    title: 'Nói như nói chuyện.',
-    text: 'Nhấn giữ nút ghi âm và đọc đơn, hoặc gõ khi quán ồn. Ứng dụng tách món, số lượng và giá.',
-    tap: { x: '47%', y: '72%' },
-  },
-  {
-    shot: SHOT.checkout,
-    title: 'Kiểm tra, rồi thanh toán.',
-    text: 'Sửa số lượng nếu cần, chọn tiền mặt, chuyển khoản (chỉ ghi nhận) hoặc ghi nợ. Đơn vào sổ khi bạn bấm Hoàn tất.',
-    tap: { x: '77%', y: '93.6%' },
-  },
-  {
-    shot: SHOT.orders,
-    title: 'Đơn đã vào sổ.',
-    text: 'Mỗi đơn lưu kèm giờ bán trong Đơn hàng, lọc nhanh theo hôm nay, hôm qua hoặc 7 ngày.',
-  },
-  {
-    shot: SHOT.reports,
-    title: 'Xem số liệu.',
-    text: 'Doanh thu, số đơn, lãi gộp ước tính và món bán chạy theo ngày, tuần, tháng.',
-  },
-  {
-    shot: SHOT.bobiAsk,
-    title: 'Hỏi bằng lời thường.',
-    text: 'Gõ hoặc nói câu hỏi. Bobi tra cứu trên chính dữ liệu tiệm bạn, chỉ đọc, không tự tạo hay sửa đơn.',
-  },
-  {
-    shot: SHOT.bobiAnswer,
-    title: 'Trả lời bằng số liệu thật.',
-    text: 'Câu trả lời ghi rõ số tiền, số khách và dẫn thẳng tới màn cần xem.',
-  },
-  {
-    shot: SHOT.bobiRemember,
-    title: 'Nhớ cách tiệm bạn làm.',
-    text: 'Dặn một lần, như chốt sổ theo tuần hay nhập hàng thứ Hai. Bobi giữ lại cho những lần hỏi sau. Đang thử nghiệm, bật hoặc tắt trong Cài đặt trợ lý.',
-  },
-  {
-    shot: SHOT.bobiRecall,
-    title: 'Dùng lại, nói rõ nguồn.',
-    text: 'Hội thoại mới vẫn nhớ. Chạm nhãn "ghi nhớ" để xem Bobi đã dựa vào điều gì, nhớ từ hôm nào.',
-  },
-]
-
-/** Phần quãng cuộn đầu mục dành cho cảnh máy lùi từ cận cảnh ra toàn thân; phải khớp với 0.14 trong landing.css. */
-const FLOW_INTRO = 0.14
-
-/**
- * Mục ghim kể luồng dùng app theo vị trí cuộn: mở đầu cận cảnh màn hình rồi lùi ra như trang iPhone,
- * sau đó mỗi đoạn cuộn là một màn trong luồng Tổng quan → Đọc đơn → Thanh toán → Đơn hàng → Báo cáo → Bobi.
- * Màn mới trượt vào từ phải như chuyển trang trên iOS; ngón tay ảo chạm nút dẫn sang màn kế, lần cuối là vuốt.
- */
-function Story() {
-  return (
-    <section
-      className="lp-story"
-      id="cach-hoat-dong"
-      data-scroll="pin"
-      data-steps={FLOW.length}
-      data-steps-start={FLOW_INTRO}
-      data-step="0"
-      style={{ ['--n' as string]: FLOW.length }}
-    >
-      <div className="story-sticky">
-        <div className="lp-container story-copy">
-          <span className="lp-eyebrow is-dark">Cách hoạt động</span>
-          <ol className="story-steps">
-            {FLOW.map((s, i) => (
-              <li key={s.title} className="story-step" data-i={i}>
-                <span className="story-num">0{i + 1}</span>
-                <h2>{s.title}</h2>
-                <p>{s.text}</p>
-              </li>
-            ))}
-          </ol>
-          <div className="story-dots" aria-hidden="true">
-            {FLOW.map((s, i) => (
-              <i key={s.title} data-i={i} />
-            ))}
-          </div>
-        </div>
-
-        <div className="story-device">
-          <span className="story-voice" aria-hidden="true">
-            <Mic size={15} /> “{VOICE_SAMPLE}”
-          </span>
-          <PhoneFrame>
-            {FLOW.map((s, i) => (
-              <div key={s.title} className="flow-screen" style={{ ['--k' as string]: i }}>
-                <img src={s.shot.src} alt={s.shot.alt} width={660} height={1434} loading={i ? 'lazy' : 'eager'} decoding="async" />
-                {s.tap && <span className="flow-tap" style={{ left: s.tap.x, top: s.tap.y }} aria-hidden="true" />}
-              </div>
-            ))}
-            <span className="flow-swipe" aria-hidden="true" />
-          </PhoneFrame>
-        </div>
-        <p className="story-note">
-          <ShieldCheck size={18} /> Không có đơn nào vào sổ nếu bạn chưa xác nhận.
-        </p>
-      </div>
-    </section>
-  )
-}
-
 /* ------------------------------------------------------------------ */
 
 const FEATURES: { icon: string; title: string; text: string; size?: 'wide' }[] = [
@@ -425,6 +319,24 @@ function Features() {
               <p>{f.text}</p>
             </article>
           ))}
+          <article className="bento-tile is-full" data-reveal>
+            <img src="/brand/bobi-idea.webp" alt="" width={110} height={116} loading="lazy" />
+            <div>
+              <h3>Trợ lý Bobi</h3>
+              <p>Hỏi bằng lời thường về doanh thu, công nợ, hàng sắp hết. Bobi chỉ đọc số liệu của tiệm, không tự tạo hay sửa đơn.</p>
+              <p className="bobi-memory">
+                <BobiMark />
+                <span>
+                  <b>Ghi nhớ dài hạn.</b> Dặn một lần, như chốt sổ theo tuần hay nhập hàng thứ Hai, lần sau Bobi vẫn nhớ.
+                </span>
+              </p>
+              <div className="bento-chips">
+                <span>“Doanh thu 7 ngày qua?”</span>
+                <span>“Ai đang nợ tiệm nhiều nhất?”</span>
+                <span>“Gợi ý nhập hàng”</span>
+              </div>
+            </div>
+          </article>
         </div>
       </div>
     </section>
@@ -433,19 +345,39 @@ function Features() {
 
 /* ------------------------------------------------------------------ */
 
-const SCREENS: { shot: Shot; title: string; text: string }[] = [
-  { shot: SHOT.home, title: 'Tổng quan', text: 'Doanh thu theo kỳ, việc cần xử lý' },
-  { shot: SHOT.pos, title: 'Bán hàng', text: 'Chọn hàng có ảnh, lọc và sắp xếp' },
-  { shot: SHOT.checkout, title: 'Thanh toán', text: 'Tiền mặt, chuyển khoản hoặc ghi nợ' },
-  { shot: SHOT.orders, title: 'Đơn hàng', text: 'Lịch sử theo ngày, lọc nhanh' },
-  { shot: SHOT.products, title: 'Hàng hoá', text: 'Giá bán, tồn kho, hàng sắp hết' },
-  { shot: SHOT.reports, title: 'Báo cáo', text: 'Doanh thu, lãi gộp ước tính' },
+/** Biểu tượng ghi nhớ dài hạn của Bobi, cùng nét vẽ với BusinessIcon (trạng thái bật) trong app: lục giác đặc, ngôi sao khoét rỗng. */
+function BobiMark() {
+  return (
+    <svg className="bobi-mark" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        d="M10.09 2.60Q12.00 1.50 13.91 2.60L19.19 5.65Q21.09 6.75 21.09 8.95L21.09 15.05Q21.09 17.25 19.19 18.35L13.91 21.40Q12.00 22.50 10.09 21.40L4.81 18.35Q2.91 17.25 2.91 15.05L2.91 8.95Q2.91 6.75 4.81 5.65ZM12 7.4Q12.7 11.3 16.6 12Q12.7 12.7 12 16.6Q11.3 12.7 7.4 12Q11.3 11.3 12 7.4Z"
+      />
+    </svg>
+  )
+}
+
+/** Mỗi màn là một tính năng; màn nằm giữa dòng chữ tiêu đề khi cuộn thì phần giới thiệu bên dưới đổi theo. */
+const SCREENS: { shot: Shot; title: string; text: string; bobi?: boolean }[] = [
+  { shot: SHOT.home, title: 'Tổng quan', text: 'Doanh thu kỳ này và bốn cách lên đơn: đọc đơn, chọn hàng, quét mã, hỏi trợ lý AI.' },
+  { shot: SHOT.voice, title: 'Đọc đơn bằng giọng nói', text: 'Nhấn giữ nút ghi âm và đọc đơn, hoặc gõ khi quán ồn. Ứng dụng tách món, số lượng và giá.' },
+  { shot: SHOT.pos, title: 'Bán hàng', text: 'Chọn hàng có ảnh, lọc theo nhóm, sắp xếp theo tên hoặc tồn kho; chạm là thêm vào đơn.' },
+  { shot: SHOT.scan, title: 'Quét mã vạch', text: 'Đưa mã sản phẩm vào camera, hàng có sẵn trong danh mục sẽ tự thêm vào đơn.' },
+  { shot: SHOT.checkout, title: 'Thanh toán', text: 'Sửa số lượng nếu cần, chọn tiền mặt, chuyển khoản (chỉ ghi nhận) hoặc ghi nợ. Đơn vào sổ khi bạn bấm Hoàn tất.' },
+  { shot: SHOT.orders, title: 'Đơn hàng', text: 'Mỗi đơn lưu kèm giờ bán; lọc nhanh theo hôm nay, hôm qua hoặc 7 ngày.' },
+  { shot: SHOT.products, title: 'Hàng hoá', text: 'Giá bán, số tồn và cảnh báo hàng sắp hết.' },
+  { shot: SHOT.reports, title: 'Báo cáo', text: 'Doanh thu, số đơn, lãi gộp ước tính và món bán chạy theo ngày, tuần, tháng.' },
+  { shot: SHOT.bobiRecall, bobi: true, title: 'Bobi nhớ cách bạn làm', text: 'Bạn dặn một lần, lần sau Bobi vẫn nhớ. Mở "ghi nhớ" để xem nhớ từ hôm nào.' },
 ]
 
-/** Mục ghim: cuộn dọc kéo dải điện thoại chạy ngang, như phần "Xem điểm nổi bật" trên trang iPhone. */
+/**
+ * Mục ghim: cuộn dọc kéo dải điện thoại chạy ngang; màn nằm giữa dòng chữ tiêu đề là màn đang giới thiệu
+ * (`data-active` do useScrollProgress đặt theo vị trí các `.gallery-item`).
+ */
 function Gallery() {
   return (
-    <section className="lp-gallery" id="giao-dien" data-scroll="pin">
+    <section className="lp-gallery" id="cach-hoat-dong" data-scroll="pin" data-active="0">
       <div className="gallery-sticky">
         <div className="lp-container">
           <h2 className="lp-display">
@@ -453,16 +385,23 @@ function Gallery() {
             <br />
             <span className="is-muted">Chữ to, nút lớn, cho người đang bận tay.</span>
           </h2>
+          <ol className="gallery-intro" aria-live="polite">
+            {SCREENS.map((s, i) => (
+              <li key={s.title} data-i={i}>
+                <strong>
+                  {s.bobi && <BobiMark />}
+                  {s.title}
+                </strong>
+                <span>{s.text}</span>
+              </li>
+            ))}
+          </ol>
         </div>
         <div className="gallery-viewport" tabIndex={0} aria-label="Các màn hình của ứng dụng">
           <div className="gallery-track" data-track>
-            {SCREENS.map((s) => (
-              <figure key={s.title} className="gallery-item">
+            {SCREENS.map((s, i) => (
+              <figure key={s.title} className="gallery-item" data-i={i}>
                 <PhoneFrame {...s.shot} />
-                <figcaption>
-                  <strong>{s.title}</strong>
-                  <span>{s.text}</span>
-                </figcaption>
               </figure>
             ))}
           </div>
@@ -507,7 +446,7 @@ function Compare() {
   return (
     <section className="lp-section lp-compare" id="so-sanh">
       <div className="lp-container">
-        <div className="lp-sec-head" data-reveal>
+        <div className="lp-sec-head">
           <h2 className="lp-display">
             Một việc nhỏ.
             <br />
@@ -515,7 +454,7 @@ function Compare() {
           </h2>
           <p>Sổ Nghe Lời không thay thế phần mềm quản lý bán hàng lớn. Đây là cách so với POS truyền thống.</p>
         </div>
-        <div className="cmp" role="table" aria-label="Bảng so sánh" data-reveal>
+        <div className="cmp" role="table" aria-label="Bảng so sánh">
           <div className="cmp-row cmp-head" role="row">
             <span role="columnheader" className="cmp-label">
               Tiêu chí
@@ -601,7 +540,7 @@ function Faq() {
     <section className="lp-section lp-faq" id="hoi-dap">
       <div className="lp-container lp-faq-grid">
         <div className="lp-faq-aside">
-          <div className="lp-sec-head" data-reveal>
+          <div className="lp-sec-head">
             <h2 className="lp-display">Hỏi đáp.</h2>
             <p>
               {CONTACT_EMAIL
@@ -660,7 +599,15 @@ function Closing() {
         </div>
       </div>
       <div className="closing-phone">
-        <PhoneFrame {...SHOT.voice} />
+        <PhoneFrame>
+          <div className="splash">
+            <img src="/brand/bobi-notebook.webp" alt="" width={120} height={115} />
+            <strong>
+              Sổ Nghe <b>Lời</b>
+            </strong>
+            <span>AI VOICE POS</span>
+          </div>
+        </PhoneFrame>
       </div>
     </section>
   )
@@ -678,9 +625,8 @@ export default function LandingPage() {
       <main>
         <Hero />
         <Statement />
-        <Story />
-        <Features />
         <Gallery />
+        <Features />
         <Compare />
         <Faq />
         <Closing />

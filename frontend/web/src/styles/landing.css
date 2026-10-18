@@ -379,7 +379,8 @@
   border-radius: 13.3cqw;
   background: var(--bg);
 }
-.phone-screen img {
+.phone-screen img,
+.phone-screen video {
   display: block;
   width: 100%;
   height: 100%;
@@ -537,20 +538,28 @@
   }
 }
 @media (max-width: 760px) {
+  /* Màn hẹp: hai máy bên thò ra hai mép máy giữa, để câu nói và thẻ đơn nháp có máy đi kèm */
   .hero-side {
-    display: none;
+    width: 56vw;
+    margin-top: 48px;
+  }
+  .hero-side.is-left {
+    margin-right: -40vw;
+  }
+  .hero-side.is-right {
+    margin-left: -40vw;
   }
   .hero-bubble {
     right: auto;
     left: -14px;
-    top: 10%;
+    top: 58%;
     width: 170px;
     font-size: 12.5px;
   }
   .hero-result {
     left: auto;
     right: -14px;
-    top: 34%;
+    top: 74%;
   }
   .hero-bobi {
     top: -9%;
@@ -611,321 +620,6 @@
   }
 }
 
-/* ---------- Cách hoạt động: mục ghim kể luồng dùng app theo cuộn ---------- */
-.lp-story {
-  --p: 0;
-  /* --z: cảnh mở đầu, máy lùi từ cận cảnh ra (0 → 1 trong 14% đầu quãng cuộn, khớp FLOW_INTRO).
-     --qn: vị trí trong luồng tính theo màn (0 → --n); màn k vào hẳn khi --qn = k. */
-  --z: clamp(0, var(--p) / 0.14, 1);
-  --qn: calc(clamp(0, (var(--p) - 0.14) / 0.86, 1) * var(--n));
-  --dx: min(250px, 21vw);
-  --dy: 0px;
-  position: relative;
-  /* 128vh mỗi màn: mỗi bước cuộn khoảng 110vh, đúng như khi luồng còn năm màn */
-  height: calc(var(--n) * 128vh);
-  background: #000;
-  color: #f5f5f7;
-}
-.story-sticky {
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  height: 100svh;
-  overflow: hidden;
-  background: radial-gradient(640px 520px at calc(50% + var(--z) * var(--dx)) 55%, rgba(72, 42, 172, calc(var(--z) * 0.45)), transparent 70%);
-}
-
-/* Chữ nằm bên trái, chỉ hiện sau khi máy đã lùi ra */
-.story-copy {
-  position: absolute;
-  inset: 0 0 auto;
-  top: 50%;
-  translate: 0 -50%;
-  opacity: clamp(0, (var(--p) - 0.11) * 25, 1);
-}
-.story-copy > * {
-  max-width: min(440px, calc(50% - 40px));
-}
-.story-steps {
-  display: grid;
-  margin: 18px 0 0;
-  padding: 0;
-  list-style: none;
-}
-/* Các bước chồng lên cùng một ô lưới; bước ứng với data-step hiện ra, các bước khác mờ đi */
-.story-step {
-  grid-area: 1 / 1;
-  opacity: 0;
-  transform: translateY(20px);
-  transition:
-    opacity 0.5s var(--ease),
-    transform 0.5s var(--ease);
-  pointer-events: none;
-}
-.lp-story[data-step='0'] .story-step[data-i='0'],
-.lp-story[data-step='1'] .story-step[data-i='1'],
-.lp-story[data-step='2'] .story-step[data-i='2'],
-.lp-story[data-step='3'] .story-step[data-i='3'],
-.lp-story[data-step='4'] .story-step[data-i='4'],
-.lp-story[data-step='5'] .story-step[data-i='5'],
-.lp-story[data-step='6'] .story-step[data-i='6'],
-.lp-story[data-step='7'] .story-step[data-i='7'],
-.lp-story[data-step='8'] .story-step[data-i='8'] {
-  opacity: 1;
-  transform: none;
-  pointer-events: auto;
-}
-.story-num {
-  font-size: 15px;
-  font-weight: 600;
-  color: rgba(245, 245, 247, 0.5);
-  font-variant-numeric: tabular-nums;
-}
-.story-step h2 {
-  margin-top: 8px;
-  font-size: clamp(34px, 4.6vw, 56px);
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  line-height: 1.05;
-}
-.story-step p {
-  margin-top: 16px;
-  font-size: clamp(17px, 1.6vw, 21px);
-  line-height: 1.5;
-  color: rgba(245, 245, 247, 0.68);
-}
-.story-dots {
-  display: flex;
-  gap: 8px;
-  margin-top: 32px;
-}
-.story-dots i {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: rgba(245, 245, 247, 0.28);
-  transition:
-    width 0.5s var(--ease),
-    background 0.5s;
-}
-.lp-story[data-step='0'] .story-dots i[data-i='0'],
-.lp-story[data-step='1'] .story-dots i[data-i='1'],
-.lp-story[data-step='2'] .story-dots i[data-i='2'],
-.lp-story[data-step='3'] .story-dots i[data-i='3'],
-.lp-story[data-step='4'] .story-dots i[data-i='4'],
-.lp-story[data-step='5'] .story-dots i[data-i='5'],
-.lp-story[data-step='6'] .story-dots i[data-i='6'],
-.lp-story[data-step='7'] .story-dots i[data-i='7'],
-.lp-story[data-step='8'] .story-dots i[data-i='8'] {
-  width: 28px;
-  background: #f5f5f7;
-}
-
-/* Máy: bắt đầu phóng to 2.6 lần, nghiêng như đang quay, ở giữa màn; lùi về cỡ thật và dạt sang phải */
-.story-device {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: min(320px, 36vh);
-  translate: calc(-50% + var(--z) * var(--dx)) calc(-50% + var(--z) * var(--dy));
-  scale: calc(2.6 - var(--z) * 1.6);
-}
-.story-device .phone {
-  transform: perspective(1600px) rotateY(calc((1 - var(--z)) * -24deg)) rotateX(calc((1 - var(--z)) * 10deg));
-}
-/* Màn Tổng quan có đầu màu tím: thanh trạng thái chữ trắng khi đang ở màn đầu */
-.lp-story[data-step='0'] .phone-status {
-  color: #fff;
-}
-
-/* Mỗi màn chồng lên nhau. Màn k trượt vào từ phải trong 1/4 màn cuối trước mốc k (--in),
-   rồi lùi sang trái 30% và tối đi khi màn k+1 vào (--out), giống chuyển trang trên iOS. */
-.flow-screen {
-  --in: clamp(0, (var(--qn) - var(--k)) * 4 + 1, 1);
-  /* Màn cuối không có màn kế nên đứng yên, không lùi và tối đi khi kết thúc phần ghim */
-  --out: calc(clamp(0, (var(--qn) - var(--k) - 1) * 4 + 1, 1) * clamp(0, var(--n) - 1 - var(--k), 1));
-  position: absolute;
-  inset: 0;
-  translate: calc((1 - var(--in)) * 100% - var(--out) * 30%) 0;
-  background: var(--bg);
-}
-.flow-screen::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: #000;
-  opacity: calc(var(--out) * 0.3);
-  pointer-events: none;
-}
-/* Chạm vào nút dẫn sang màn kế, ngay trước khi màn kế trượt vào */
-.flow-tap {
-  --t: clamp(0, (var(--qn) - var(--k) - 0.45) * 3.3, 1);
-  position: absolute;
-  z-index: 1;
-  width: 14cqw;
-  aspect-ratio: 1;
-  margin: -7cqw 0 0 -7cqw;
-  border-radius: 50%;
-  border: 0.8cqw solid rgba(255, 255, 255, 0.95);
-  background: rgba(72, 42, 172, 0.35);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-  opacity: min(1, var(--t) * 5, (1 - var(--t)) * 4);
-  scale: calc(0.5 + var(--t) * 0.8);
-}
-/* Lần chuyển cuối là cú vuốt: ngón tay kéo từ phải sang trái cùng màn mới */
-.flow-swipe {
-  --t: clamp(0, (var(--qn) - var(--n) + 1) * 4 + 1, 1);
-  position: absolute;
-  z-index: 3;
-  top: 55%;
-  left: calc(88% - var(--t) * 70%);
-  width: 15cqw;
-  aspect-ratio: 1;
-  margin: -7.5cqw 0 0 -7.5cqw;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.6);
-  box-shadow:
-    0 0 0 1.2cqw rgba(255, 255, 255, 0.22),
-    0 6px 18px rgba(0, 0, 0, 0.25);
-  opacity: min(1, var(--t) * 6, (1 - var(--t)) * 6);
-  pointer-events: none;
-}
-.story-voice {
-  position: absolute;
-  z-index: 4;
-  top: 16%;
-  right: calc(100% - 36px);
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  width: 220px;
-  padding: 12px 14px;
-  border-radius: 18px 18px 6px 18px;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.35;
-  opacity: 0;
-  transform: translateY(12px);
-  transition:
-    opacity 0.5s var(--ease),
-    transform 0.5s var(--ease);
-}
-.lp-story[data-step='1'] .story-voice {
-  opacity: 1;
-  transform: none;
-}
-.story-voice svg {
-  flex: none;
-  margin-top: 1px;
-  color: var(--accent);
-}
-.story-note {
-  position: absolute;
-  inset: auto 0 clamp(16px, 4vh, 36px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 0 16px;
-  font-size: 14px;
-  color: rgba(245, 245, 247, 0.6);
-  text-align: center;
-  opacity: clamp(0, (var(--p) - 0.11) * 25, 1);
-}
-.story-note svg {
-  flex: none;
-  color: var(--accent);
-}
-@media (max-width: 860px) {
-  /* Màn hẹp: chữ ở trên, máy lùi xuống giữa phần còn lại */
-  .lp-story {
-    --dx: 0px;
-    --dy: 13svh;
-  }
-  .story-copy {
-    top: 92px;
-    translate: none;
-    text-align: center;
-  }
-  .story-copy > * {
-    max-width: 520px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-  .story-copy .lp-eyebrow {
-    display: none;
-  }
-  .story-steps {
-    margin-top: 0;
-  }
-  .story-step h2 {
-    font-size: clamp(26px, 7vw, 40px);
-  }
-  .story-step p {
-    margin-top: 8px;
-    font-size: 15px;
-  }
-  .story-dots {
-    justify-content: center;
-    margin-top: 14px;
-  }
-  .story-device {
-    width: min(240px, 25svh);
-  }
-  .story-voice {
-    right: auto;
-    left: 50%;
-    /* Đặt dưới máy, không che nội dung màn hình (danh sách món, nút Thanh toán) */
-    top: auto;
-    bottom: -72px;
-    width: 230px;
-    margin-left: -115px;
-    background: rgba(22, 20, 31, 0.85);
-  }
-  .story-note {
-    display: none;
-  }
-}
-/* Không có hiệu ứng cuộn (giảm chuyển động hoặc chưa chạy JS): bố cục tĩnh, hiện màn đầu và tất cả các bước */
-html:not(.has-scroll-fx) .lp-story {
-  --z: 1;
-  height: auto;
-}
-html:not(.has-scroll-fx) .story-sticky {
-  position: static;
-  height: auto;
-  display: grid;
-  justify-items: center;
-  gap: 40px;
-  padding: 96px 0;
-}
-html:not(.has-scroll-fx) .story-copy,
-html:not(.has-scroll-fx) .story-device,
-html:not(.has-scroll-fx) .story-note {
-  position: static;
-  translate: none;
-  scale: none;
-  opacity: 1;
-}
-html:not(.has-scroll-fx) .story-steps {
-  gap: 32px;
-}
-html:not(.has-scroll-fx) .story-step {
-  grid-area: auto;
-  opacity: 1;
-  transform: none;
-}
-html:not(.has-scroll-fx) .story-dots,
-html:not(.has-scroll-fx) .flow-tap,
-html:not(.has-scroll-fx) .flow-swipe,
-html:not(.has-scroll-fx) .story-voice {
-  display: none;
-}
-
 /* ---------- Tính năng: lưới bento ---------- */
 .lp-features {
   background: var(--bg);
@@ -971,6 +665,46 @@ html:not(.has-scroll-fx) .story-voice {
 }
 .bento-tile.is-wide {
   grid-column: span 2;
+}
+.bento-tile.is-full {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  align-items: center;
+  gap: 28px;
+  padding: 32px 36px;
+  background: var(--brand-tint);
+}
+.bento-tile.is-full img {
+  flex: none;
+  width: 110px;
+  height: auto;
+}
+.bento-tile.is-full h3 {
+  margin-top: 0;
+}
+.bento-tile.is-full p {
+  max-width: 560px;
+}
+.bento-tile .bobi-memory {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 560px;
+  font-size: 15px;
+}
+.bento-tile .bobi-memory .bobi-mark {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+}
+.bento-tile .bobi-memory b {
+  color: var(--ink);
+}
+.bento-tile.is-full .bento-chips span {
+  background: #fff;
+  color: var(--primary);
+  box-shadow: var(--shadow-sm);
 }
 .bento-tile.is-hero {
   grid-column: span 2;
@@ -1020,9 +754,16 @@ html:not(.has-scroll-fx) .story-voice {
     grid-template-columns: 1fr;
   }
   .bento-tile.is-hero,
-  .bento-tile.is-wide {
+  .bento-tile.is-wide,
+  .bento-tile.is-full {
     grid-column: auto;
     grid-row: auto;
+  }
+  .bento-tile.is-full {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 18px;
+    padding: 28px;
   }
   .bento-tile.is-hero {
     min-height: 420px;
@@ -1033,8 +774,9 @@ html:not(.has-scroll-fx) .story-voice {
 .lp-gallery {
   --p: 0;
   --shift: 0px;
+  --gw: min(240px, 19svh, 58vw);
   position: relative;
-  height: 300vh;
+  height: 900vh;
   background: var(--surface);
 }
 .gallery-sticky {
@@ -1050,46 +792,150 @@ html:not(.has-scroll-fx) .story-voice {
   overflow: hidden;
 }
 .gallery-viewport {
-  margin-top: clamp(24px, 5vh, 56px);
+  margin-top: calc(clamp(24px, 5vh, 56px) + var(--gw) * 2.17 * (var(--focus, 1.82) - 1) / 2);
 }
 @media (max-width: 560px) {
+  /* Màn hẹp: máy được chiếu phóng to hơn cho dễ đọc, dải giãn rộng để không đè hẳn lên máy bên cạnh */
+  .lp-gallery {
+    --focus: 1.3;
+  }
   /* Màn hẹp: tiêu đề nhỏ lại để cả tiêu đề và dải máy vừa một màn hình đang ghim */
   .gallery-sticky .lp-display {
     font-size: 28px;
   }
 }
+/* Máy phóng to cao ~ gw × 2.17 × focus, nên màn thấp phải giảm focus để máy không tràn khỏi màn hình ghim */
+@media (max-height: 1100px) {
+  .lp-gallery {
+    --focus: 1.6;
+  }
+}
+@media (max-height: 960px) {
+  .lp-gallery {
+    --focus: 1.35;
+  }
+}
+@media (max-height: 860px) {
+  .lp-gallery {
+    --focus: 1.25;
+  }
+}
 .gallery-track {
   display: flex;
-  gap: clamp(24px, 4vw, 56px);
+  /* Khoảng hở cộng thêm phần máy được chiếu phình ra mỗi bên, để máy phóng to không đè lên máy bên cạnh */
+  gap: calc(clamp(24px, 3vw, 44px) + var(--gw) * (var(--focus, 1.82) - 1) / 2);
   width: max-content;
-  padding: 0 max(24px, calc((100vw - 1080px) / 2 + 24px));
-  translate: calc(var(--p) * var(--shift) * -1) 0;
+  /* Đệm hai đầu để màn đầu và màn cuối cũng dừng đúng giữa khung nhìn */
+  padding: 0 calc(50% - var(--gw) / 2);
+  /* Dải dừng hẳn ở từng màn (không trượt lưng chừng) nên máy được chiếu luôn nằm đúng giữa */
+  translate: calc(var(--a, 0) / (var(--n, 2) - 1) * var(--shift) * -1) 0;
+  transition: translate 0.6s cubic-bezier(0.22, 0.7, 0.2, 1);
 }
 .gallery-item {
   flex: none;
-  width: min(240px, 26svh * 1.05, 58vw);
+  width: var(--gw);
   margin: 0;
-  text-align: center;
+  opacity: 0.82;
+  scale: 0.9;
+  translate: 0 0;
+  transition:
+    opacity 0.45s ease,
+    scale 0.45s ease,
+    translate 0.45s ease;
 }
-.gallery-item figcaption {
-  margin-top: 18px;
+.gallery-item .phone-body {
+  transition: box-shadow 0.45s ease;
 }
-.gallery-item strong {
+/* Phần giới thiệu nằm ngay dưới tiêu đề; chỉ mục của màn đang ở giữa được hiện */
+.gallery-intro {
+  position: relative;
+  height: 4.6em;
+  margin: clamp(10px, 2vh, 20px) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: clamp(15px, 1.6vw, 19px);
+  line-height: 1.4;
+}
+.gallery-intro li {
+  position: absolute;
+  inset: 0 auto auto 0;
+  max-width: 640px;
+  opacity: 0;
+  translate: 0 8px;
+  transition:
+    opacity 0.35s ease,
+    translate 0.35s ease;
+}
+.gallery-intro strong {
   display: block;
-  font-size: 17px;
+  font-size: 1.15em;
   font-weight: 700;
   letter-spacing: -0.01em;
 }
-.gallery-item span {
+.bento-tile .bobi-mark,
+.gallery-intro .bobi-mark {
+  display: inline-block;
+  width: 1.1em;
+  height: 1.1em;
+  margin-right: 0.4em;
+  vertical-align: -0.15em;
+  color: var(--primary);
+}
+.gallery-intro span {
   display: block;
   margin-top: 2px;
-  font-size: 14px;
   color: var(--muted);
+}
+.lp-gallery[data-active='0'] .gallery-intro li[data-i='0'],
+.lp-gallery[data-active='1'] .gallery-intro li[data-i='1'],
+.lp-gallery[data-active='2'] .gallery-intro li[data-i='2'],
+.lp-gallery[data-active='3'] .gallery-intro li[data-i='3'],
+.lp-gallery[data-active='4'] .gallery-intro li[data-i='4'],
+.lp-gallery[data-active='5'] .gallery-intro li[data-i='5'],
+.lp-gallery[data-active='6'] .gallery-intro li[data-i='6'],
+.lp-gallery[data-active='7'] .gallery-intro li[data-i='7'],
+.lp-gallery[data-active='8'] .gallery-intro li[data-i='8'],
+.lp-gallery[data-active='9'] .gallery-intro li[data-i='9'],
+.lp-gallery[data-active='10'] .gallery-intro li[data-i='10'] {
+  opacity: 1;
+  translate: 0 0;
+}
+.lp-gallery[data-active='0'] .gallery-item[data-i='0'],
+.lp-gallery[data-active='1'] .gallery-item[data-i='1'],
+.lp-gallery[data-active='2'] .gallery-item[data-i='2'],
+.lp-gallery[data-active='3'] .gallery-item[data-i='3'],
+.lp-gallery[data-active='4'] .gallery-item[data-i='4'],
+.lp-gallery[data-active='5'] .gallery-item[data-i='5'],
+.lp-gallery[data-active='6'] .gallery-item[data-i='6'],
+.lp-gallery[data-active='7'] .gallery-item[data-i='7'],
+.lp-gallery[data-active='8'] .gallery-item[data-i='8'],
+.lp-gallery[data-active='9'] .gallery-item[data-i='9'],
+.lp-gallery[data-active='10'] .gallery-item[data-i='10'] {
+  opacity: 1;
+  scale: var(--focus, 1.82);
+  translate: 0 0;
+  z-index: 1;
+}
+.lp-gallery[data-active='0'] .gallery-item[data-i='0'] .phone-body,
+.lp-gallery[data-active='1'] .gallery-item[data-i='1'] .phone-body,
+.lp-gallery[data-active='2'] .gallery-item[data-i='2'] .phone-body,
+.lp-gallery[data-active='3'] .gallery-item[data-i='3'] .phone-body,
+.lp-gallery[data-active='4'] .gallery-item[data-i='4'] .phone-body,
+.lp-gallery[data-active='5'] .gallery-item[data-i='5'] .phone-body,
+.lp-gallery[data-active='6'] .gallery-item[data-i='6'] .phone-body,
+.lp-gallery[data-active='7'] .gallery-item[data-i='7'] .phone-body,
+.lp-gallery[data-active='8'] .gallery-item[data-i='8'] .phone-body,
+.lp-gallery[data-active='9'] .gallery-item[data-i='9'] .phone-body,
+.lp-gallery[data-active='10'] .gallery-item[data-i='10'] .phone-body {
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.12),
+    0 28px 48px -12px rgba(0, 0, 0, 0.32),
+    0 48px 90px -20px rgba(40, 24, 110, 0.28);
 }
 .gallery-progress {
   width: min(220px, 50vw);
   height: 3px;
-  margin: clamp(20px, 4vh, 36px) auto 0;
+  margin: calc(clamp(20px, 4vh, 36px) + var(--gw) * 2.17 * (var(--focus, 1.82) - 1) / 2) auto 0;
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.08);
   overflow: hidden;
@@ -1118,8 +964,13 @@ html:not(.has-scroll-fx) .gallery-viewport {
   overflow-x: auto;
   padding-bottom: 16px;
 }
-html:not(.has-scroll-fx) .gallery-progress {
+html:not(.has-scroll-fx) .gallery-progress,
+html:not(.has-scroll-fx) .gallery-intro {
   display: none;
+}
+html:not(.has-scroll-fx) .gallery-item {
+  opacity: 1;
+  scale: 1;
 }
 
 /* ---------- So sánh ---------- */
@@ -1188,40 +1039,41 @@ html:not(.has-scroll-fx) .gallery-progress {
   height: auto;
 }
 @media (max-width: 720px) {
-  .cmp-row {
-    grid-template-columns: 1fr;
-  }
-  .cmp-row > span {
-    padding: 10px 16px;
-  }
-  .cmp-row .cmp-label {
-    padding-top: 16px;
-    background: transparent;
-  }
-  .cmp-head .cmp-label,
-  .cmp-head .cmp-pos {
+  /* Hai cột cạnh nhau như bản desktop: nhãn tiêu chí một dòng, bên dưới là Sổ Nghe Lời và POS song song */
+  .cmp-head {
     display: none;
   }
-  /* Nhãn cột nằm riêng một dòng phía trên để nội dung dùng hết chiều ngang, không bị ép xuống dòng */
-  .cmp-row:not(.cmp-head) > span:not(.cmp-label) {
-    flex-wrap: wrap;
-    row-gap: 4px;
+  .cmp-row {
+    grid-template-columns: 1fr 1fr;
   }
-  .cmp-row:not(.cmp-head) > span > span:not(.cmp-mark) {
+  .cmp-row > span {
+    flex-wrap: wrap;
+    align-content: flex-start;
+    row-gap: 4px;
+    padding: 10px 14px 14px;
+    font-size: 14px;
+  }
+  .cmp-row .cmp-label {
+    grid-column: 1 / -1;
+    padding: 14px 14px 8px;
+    font-size: 15px;
+    background: transparent;
+  }
+  .cmp-row > span > span:not(.cmp-mark) {
     flex: 1;
     min-width: 0;
   }
-  .cmp-row:not(.cmp-head) .cmp-us::before,
-  .cmp-row:not(.cmp-head) .cmp-pos::before {
+  .cmp-row .cmp-us::before,
+  .cmp-row .cmp-pos::before {
     flex-basis: 100%;
-    font-size: 12.5px;
+    font-size: 12px;
     font-weight: 700;
   }
-  .cmp-row:not(.cmp-head) .cmp-us::before {
+  .cmp-row .cmp-us::before {
     content: 'Sổ Nghe Lời';
     color: var(--primary);
   }
-  .cmp-row:not(.cmp-head) .cmp-pos::before {
+  .cmp-row .cmp-pos::before {
     content: 'POS truyền thống';
     color: var(--muted-2);
   }
@@ -1356,10 +1208,42 @@ html:not(.has-scroll-fx) .gallery-progress {
   width: min(320px, 70vw);
   margin: clamp(48px, 8vh, 80px) auto 0;
   /* Máy chỉ ló nửa trên; càng cuộn tới footer càng nhô lên và thẳng đứng */
-  margin-bottom: calc(-1 * min(320px, 70vw) * 1.1);
-  translate: 0 calc((1 - var(--p)) * 180px);
-  rotate: x calc((1 - var(--p)) * 24deg);
+  margin-bottom: calc(-1 * min(320px, 70vw) * 0.75);
+  /* Cuộn tới đáy trang --p mới chỉ khoảng 0.3, nên nhân 3 để máy kịp nhô lên và thẳng đứng, logo nằm giữa phần ló ra */
+  --q: min(1, calc(var(--p) * 3));
+  translate: 0 calc((1 - var(--q)) * 180px);
+  rotate: x calc((1 - var(--q)) * 24deg);
   transform-origin: 50% 100%;
+}
+/* Màn khởi động của app: logo, tên và dòng mô tả giữa nền kem */
+.splash {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 2.4cqw;
+  /* Máy chỉ ló nửa trên nên dồn nội dung lên phần nhìn thấy */
+  padding-top: 40cqw;
+  aspect-ratio: 660 / 1434;
+  background: var(--bg);
+  text-align: center;
+}
+.splash img {
+  width: 30cqw;
+  height: auto;
+}
+.splash strong {
+  font-size: 8.6cqw;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+.splash b {
+  color: var(--primary);
+}
+.splash span {
+  font-size: 3cqw;
+  letter-spacing: 0.4em;
+  color: var(--muted-2);
 }
 main:has(.lp-closing) + .lp-footer {
   padding-top: 32px;
