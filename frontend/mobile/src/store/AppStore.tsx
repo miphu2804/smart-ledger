@@ -15,10 +15,13 @@ import type {
   Staff,
 } from '../data/types';
 import { ApiError, setActiveShop, setUnauthorizedHandler } from '../lib/api';
+import { DEFAULT_APP_SETTINGS, type AppSettings } from '../lib/appSettings';
+import { loadAppSettings, saveAppSettings } from '../lib/appSettingsStorage';
 import { authClient, AuthError } from '../lib/auth';
 import { fromE164VN } from '../lib/auth/phone';
 import { debugLog } from '../lib/debug';
 import { describeError, isDisplayNameRequired } from '../lib/errors';
+import { setFeedbackEnabled } from '../lib/feedback';
 import { sessionApi } from '../lib/sessionApi';
 import { loadLocalProfile, saveLocalProfile } from '../lib/localProfile';
 import { industriesFromCore } from '../lib/shopProfile';
@@ -129,6 +132,30 @@ function useStoreValue() {
   const loggedInRef = useRef(false);
   // id tài khoản hiện tại cho các action (đọc/ghi hồ sơ trên máy)
   const userIdRef = useRef<string | null>(null);
+
+  // Tuỳ chọn ở Cài đặt (rung, cảnh báo hàng): theo máy chứ không theo tài khoản, nên để ngoài `s` (đăng xuất không đặt lại).
+  // Chỉ ghi xuống máy sau khi đã đọc xong bản đã lưu, để giá trị mặc định lúc mở app không đè lên lựa chọn cũ.
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const settingsLoaded = useRef(false);
+  useEffect(() => {
+    let alive = true;
+    void loadAppSettings().then((saved) => {
+      if (!alive) return;
+      settingsLoaded.current = true;
+      setSettings(saved);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  useEffect(() => {
+    setFeedbackEnabled(settings.haptics);
+    if (settingsLoaded.current) void saveAppSettings(settings);
+  }, [settings]);
+  const setSetting = useCallback(
+    <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => setSettings((prev) => ({ ...prev, [key]: value })),
+    [],
+  );
 
   const actions = useMemo(
     () => ({
@@ -428,7 +455,7 @@ function useStoreValue() {
     };
   }, [actions, patch]);
 
-  return { ...s, ...actions };
+  return { ...s, ...actions, settings, setSetting };
 }
 
 type Store = ReturnType<typeof useStoreValue>;

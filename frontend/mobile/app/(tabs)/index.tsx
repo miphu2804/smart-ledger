@@ -102,7 +102,9 @@ export default function Home() {
   // Món cần nhập theo ngưỡng riêng của từng món (Core); chỉ nhắc 2 món, tổng số món ở `restockTotal`
   const restockTotal = overview.restock?.total ?? 0;
   const lowStock = restockRows(overview.restock?.items ?? []);
-  const priorityCount = Number(totalDebt > 0) + Number(restockTotal > 0);
+  // Tắt "Cảnh báo sắp hết hàng" ở Cài đặt thì không nhắc nhập hàng ở đây
+  const showRestock = app.settings.stockAlerts && restockTotal > 0;
+  const priorityCount = Number(totalDebt > 0) + Number(showRestock);
   const revenueChange =
     period === 'today' && totals ? changeVsYesterday(totals.revenue, local.yesterdayRevenue) : null;
   // Thông báo: kho hàng, đơn bị huỷ và tình trạng tiệm lấy từ inbox Core (chỉ cần trang đầu để xem trước); đơn mới, công nợ, thu chi tính trên máy.
@@ -235,10 +237,10 @@ export default function Home() {
                     title="Thu khoản còn nợ"
                     subtitle={`${openDebtCount != null ? `${openDebtCount} khoản nợ · ` : ''}${vnd(totalDebt)} chưa thu`}
                     onPress={() => router.push('/debts')}
-                    last={restockTotal === 0}
+                    last={!showRestock}
                   />
                 ) : null}
-                {restockTotal > 0 ? (
+                {showRestock ? (
                   <PriorityRow
                     icon="lowStock"
                     tone="danger"
