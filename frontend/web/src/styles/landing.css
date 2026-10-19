@@ -818,11 +818,15 @@
   .lp-statement {
     padding-bottom: clamp(24px, 4vh, 40px);
   }
-  /* Màn hẹp: tiêu đề thu lại theo cuộn (--p do useScrollProgress đặt), dòng tính năng lên thay chỗ và máy có thêm chiều cao; không có JS thì tiêu đề vẫn hiện */
+  /* Màn hẹp: tiêu đề thu lại khi cuộn qua mốc đầu mục (data-settled do useScrollProgress đặt), dòng tính năng lên thay chỗ và máy có thêm chiều cao; không có JS thì tiêu đề vẫn hiện */
   .gallery-sticky .lp-display {
-    --k: clamp(0, calc(1 - var(--p, 0) * 20), 1);
+    --k: 1;
     /* Trần phải cao hơn tiêu đề thật (4 dòng ≈ 112px ở 375px), nếu không dòng cuối bị cắt */
     max-height: calc(6em * var(--k));
+    transition:
+      max-height 0.3s ease,
+      margin-bottom 0.3s ease,
+      opacity 0.3s ease;
     margin-bottom: calc(0.5em * var(--k));
     opacity: var(--k);
     overflow: hidden;
@@ -858,11 +862,18 @@
 }
 /* Điện thoại đứng: máy đang chiếu to hơn để đọc; chiều cao màn vẫn chặn cỡ máy (22svh) để không tràn khỏi màn ghim */
 @media (max-width: 560px) {
-  /* Máy to dần theo cuộn: 1.2 lúc vừa vào mục, 1.4 khi tiêu đề đã thu hết; quãng ghim ngắn hơn desktop (900svh) */
+  /* Máy to ra: 1.2 lúc vừa vào mục, 1.4 khi tiêu đề đã thu hết; quãng ghim ngắn hơn desktop (900svh) */
   .lp-gallery {
-    --focus: calc(1.2 + 0.2 * clamp(0, var(--p, 0) * 20, 1));
+    --focus: 1.2;
     --gw: min(240px, 22svh, 58vw);
     height: 600svh;
+  }
+  /* data-settled do useScrollProgress đặt khi cuộn qua mốc đầu mục; đổi một lần có chuyển động thay vì tính lại layout theo từng điểm cuộn */
+  .lp-gallery[data-settled='1'] {
+    --focus: 1.4;
+  }
+  .lp-gallery[data-settled='1'] .gallery-sticky .lp-display {
+    --k: 0;
   }
 }
 .gallery-sticky .lp-display {
