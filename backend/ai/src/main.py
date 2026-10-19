@@ -1,4 +1,5 @@
 import logging
+import sys
 from contextlib import asynccontextmanager
 
 import pydantic_ai
@@ -15,6 +16,7 @@ from src.app_config import app_config
 from src.calculation.service import CalculationLimits, CalculationService
 from src.infra.postgre_db_client import PostgreDBClient
 from src.infra.redis_db_client import RedisDBClient
+from src.log_formatter import LevelColorFormatter
 from src.memory.repository import EMBEDDING_DIMENSIONS, AgentMemoryRepository
 from src.memory.service import AgentMemoryService
 from src.memory.workers_ai_embedding import WorkersAIEmbeddingModel
@@ -25,9 +27,17 @@ from src.sandbox.wrapper import Sandbox, SandboxLimits
 from src.security import require_internal_token
 from src.sql.repository import ShopDataRepository
 
+# Railway marks every stderr line as an error, so records below ERROR go to stdout
+# and only ERROR and above go to stderr.
+stdout_handler = logging.StreamHandler(sys.stdout)
+stdout_handler.addFilter(lambda record: record.levelno < logging.ERROR)
+stderr_handler = logging.StreamHandler(sys.stderr)
+stderr_handler.setLevel(logging.ERROR)
+for handler in (stdout_handler, stderr_handler):
+    handler.setFormatter(LevelColorFormatter())
 logging.basicConfig(
     level=getattr(logging, app_config.LOG_LEVEL.upper(), logging.INFO),
-    format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+    handlers=[stdout_handler, stderr_handler],
 )
 logger = logging.getLogger(__name__)
 # stdout is the log contract, so Pydantic AI's one-off observability promo stays out.
@@ -243,4 +253,7 @@ if __name__ == "__main__":
         app,
         host=app_config.SERVER_HOST,
         port=app_config.SERVER_PORT,
+        # Uvicorn's own config writes its INFO lines to stderr; without it, its
+        # loggers propagate to the root handlers above.
+        log_config=None,
     )
