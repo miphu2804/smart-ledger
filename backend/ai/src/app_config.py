@@ -75,6 +75,26 @@ class AppConfig(BaseSettings):
     # the 2000-char input cap keeps one request well inside a 100k-token window
     AGENT_HISTORY_TURNS: int = Field(default=30, gt=0)
 
+    # arithmetic capability (src/calculation/), per chat turn. The calculate tool
+    # runs the closed op set in-process; defaults are provisional, awaiting PO sign-off.
+    CALC_ENABLED: bool = True
+    # steps per calculate call; a longer chain is refused as TOO_MANY_OPERATIONS
+    CALC_MAX_OPERATIONS: int = Field(default=20, gt=0)
+    # |value| bound for every operand and result; 1e15 stays inside float's exact
+    # integer range (2**53 ~ 9e15), so VND totals keep full precision
+    CALC_MAX_OPERAND_VALUE: float = Field(default=1e15, gt=0)
+
+    # Code Mode sandbox (src/sandbox/wrapper.py): an agent option on its own, not
+    # tied to the calculation service. The model reaches it only by writing a
+    # run_code snippet, so a turn without one never starts a sandbox. The memory
+    # value is the Monty heap limit (a MemoryError becomes a model retry), not a
+    # process RAM limit; the OS or container limit stays the last bound.
+    SANDBOX_ENABLED: bool = True
+    SANDBOX_MAX_MEMORY_BYTES: int = Field(default=64 * 1024 * 1024, gt=0)
+    SANDBOX_MAX_DURATION_SECS: float = Field(default=5.0, gt=0)
+    SANDBOX_MAX_TOOL_CALLS: int = Field(default=25, gt=0)
+    SANDBOX_MAX_SUSPENSIONS: int = Field(default=1000, gt=0)
+
     # long-term memory across conversations (ADR-0002); off until the PO approves it.
     # Needs the `memory` dependency group and the agent_memories migration, whose
     # vector size must match the embedding model.

@@ -8,7 +8,9 @@ dependencies = [
     "logfire>=4",
     "pgvector>=0.4",
     "psycopg[binary]>=3.2",
-    "pydantic-ai-harness>=0.55.0",
+    # The codemode extra pulls in pydantic-monty, the sandbox behind Code Mode
+    # (src/calc/sandbox.py); without it the sandbox capability stays off.
+    "pydantic-ai-harness[codemode]>=0.55.0",
     "pydantic-ai-slim[anthropic,openai]>=2.55.0",
     "pydantic-settings>=2.6",
     "redis>=5.0",
