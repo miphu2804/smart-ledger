@@ -1,4 +1,5 @@
 import logging
+import sys
 from contextlib import asynccontextmanager
 
 import pydantic_ai
@@ -12,20 +13,31 @@ from src.agent.repository import AgentConversationRepository
 from src.agent.router import router as agent_router
 from src.agent.service import AgentService
 from src.app_config import app_config
+from src.calculation.service import CalculationLimits, CalculationService
 from src.infra.postgre_db_client import PostgreDBClient
 from src.infra.redis_db_client import RedisDBClient
+from src.log_formatter import LevelColorFormatter
 from src.memory.repository import EMBEDDING_DIMENSIONS, AgentMemoryRepository
 from src.memory.service import AgentMemoryService
 from src.memory.workers_ai_embedding import WorkersAIEmbeddingModel
 from src.observability import configure_tracing
 from src.providers.factory import build_chat_model
 from src.restock.service import RestockService
+from src.sandbox.wrapper import Sandbox, SandboxLimits
 from src.security import require_internal_token
 from src.sql.repository import ShopDataRepository
 
+# Railway marks every stderr line as an error, so records below ERROR go to stdout
+# and only ERROR and above go to stderr.
+stdout_handler = logging.StreamHandler(sys.stdout)
+stdout_handler.addFilter(lambda record: record.levelno < logging.ERROR)
+stderr_handler = logging.StreamHandler(sys.stderr)
+stderr_handler.setLevel(logging.ERROR)
+for handler in (stdout_handler, stderr_handler):
+    handler.setFormatter(LevelColorFormatter())
 logging.basicConfig(
     level=getattr(logging, app_config.LOG_LEVEL.upper(), logging.INFO),
-    format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+    handlers=[stdout_handler, stderr_handler],
 )
 logger = logging.getLogger(__name__)
 # stdout is the log contract, so Pydantic AI's one-off observability promo stays out.
@@ -44,6 +56,50 @@ def build_shop_data(reader: PostgreDBClient) -> ShopDataRepository | None:
         timeout_ms=app_config.SQL_TIMEOUT_MS,
         row_limit=app_config.SQL_ROW_LIMIT,
     )
+
+
+def build_calculation() -> CalculationService | None:
+    if not app_config.CALC_ENABLED:
+        return None
+    return CalculationService(
+        CalculationLimits(
+            max_operations=app_config.CALC_MAX_OPERATIONS,
+            max_operand=app_config.CALC_MAX_OPERAND_VALUE,
+        )
+    )
+
+
+# Tools the sandbox folds in, by name. Unregistered names match nothing, so this
+# list is safe to hand to Sandbox with any tool set: with the reader URL unset the
+# model gets a run_code tool with no data functions in it.
+SANDBOX_TOOLS = ("query_shop_data", "suggest_restock")
+
+# Pure in-process tools that stay callable past the per-turn tool-call guardrail:
+# the calculation prompt sends every sum through calculate, so sharing the data
+# tools' budget would cut off ordinary answers. Nothing here does I/O.
+TOOL_CALL_EXEMPT = frozenset({"calculate"})
+
+
+def build_sandbox() -> Sandbox | None:
+    if not app_config.SANDBOX_ENABLED:
+        return None
+    try:
+        return Sandbox(
+            SandboxLimits(
+                tools=SANDBOX_TOOLS,
+                max_memory_bytes=app_config.SANDBOX_MAX_MEMORY_BYTES,
+                max_duration_secs=app_config.SANDBOX_MAX_DURATION_SECS,
+                # Kept at the per-turn tool-call guardrail: nested data calls do not
+                # count against ToolCallLimit, so a larger budget would multiply the
+                # DB load the guardrail bounds. Raise it together with the guardrail.
+                max_tool_calls=app_config.SANDBOX_MAX_TOOL_CALLS,
+                max_suspensions=app_config.SANDBOX_MAX_SUSPENSIONS,
+            )
+        )
+    except RuntimeError as error:
+        # A missing codemode extra turns the option off instead of failing the service.
+        logger.error("%s; sandbox off", error)
+        return None
 
 
 def build_memory_service(
@@ -130,12 +186,17 @@ async def lifespan(app: FastAPI):
             max_input_chars=app_config.AGENT_MAX_INPUT_CHARS,
             model_call_limit=app_config.AGENT_MODEL_CALL_LIMIT,
             tool_call_limit=app_config.AGENT_TOOL_CALL_LIMIT,
+            tool_call_exempt=(
+                TOOL_CALL_EXEMPT if app_config.CALC_ENABLED else frozenset()
+            ),
             turn_token_limit=app_config.AGENT_TURN_TOKEN_LIMIT,
             turn_timeout_seconds=app_config.AGENT_TURN_TIMEOUT_SECONDS,
         ),
         shop_data=shop_data,
         restock=RestockService(shop_data) if shop_data else None,
         memory=memory,
+        calculation=build_calculation(),
+        sandbox=build_sandbox(),
         history_turns=app_config.AGENT_HISTORY_TURNS,
     )
     try:
@@ -192,4 +253,7 @@ if __name__ == "__main__":
         app,
         host=app_config.SERVER_HOST,
         port=app_config.SERVER_PORT,
+        # Uvicorn's own config writes its INFO lines to stderr; without it, its
+        # loggers propagate to the root handlers above.
+        log_config=None,
     )
