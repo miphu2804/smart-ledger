@@ -1,3 +1,11 @@
+### [2026-10-19 15:11 UTC+07:00] — [Change] Settings shows which options exist yet
+
+**Done:** On request, the Settings screen no longer offers switches that do nothing. All six switches were local screen state: nothing saved them and nothing in the app read them, so they reset on leaving the screen. Checking what each option stands for: the app plays no sounds, has no spoken read-back, cannot print and has no backup, and the printer screen is a mock (its test print always reports no connection; printers are outside the MVP PRD). Those four rows are now greyed out with "Sắp có", and the printer button is disabled as "Kết nối máy in · Sắp có". Vibration and low-stock alerts do work but are always on, so those two rows say "Luôn bật" instead of a switch. The Settings hints on Manage and in the quick menu now read "Rung, cảnh báo sắp hết hàng, máy in" instead of advertising sound and printing.
+
+**Changed files:** `frontend/mobile/app/settings.tsx`, `frontend/mobile/app/(tabs)/more.tsx`, `frontend/mobile/src/lib/quickNav.ts` — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors; `node --test tests/quickNav.test.ts` 6/6; mock web build at 375 px: Manage shows the new hint, Settings has no switch left, four rows read "sắp có" and two "luôn bật" to screen readers, the printer button is disabled. **Not verified:** a real phone.
+
 ### [2026-10-19 15:10 UTC+07:00] — [Feature] Long-term memory map in Cài đặt trợ lý, with delete
 
 **Done:** Chat answers no longer show the "· N ghi nhớ" label or the memory list. Cài đặt trợ lý now shows "Trợ lý đang nhớ N điều" and a map of live memories after Sakana's "My Fish": one quadrant per memory type, closer to the centre means used more recently, bigger dot means used more, memories unused for over 30 days sit faded on the outer ring. A dot's angle comes from its id, so dots keep their place when others are added or removed. Tapping a dot shows a fixed-height card with the full text, usage, "Mở hội thoại gốc" and "Xoá ghi nhớ". Deleting removes the memory and the older versions it superseded, so they do not come back through `superseded_by ON DELETE SET NULL`. The sheet loads settings and memories in parallel and keeps the last data while reloading. Core gains two proxy routes, approved by the owner as an exception to the no-Core-changes rule.
