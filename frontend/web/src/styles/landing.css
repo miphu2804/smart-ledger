@@ -790,14 +790,15 @@
   --shift: 0px;
   --gw: min(240px, 19svh, 58vw);
   position: relative;
-  height: 900vh;
+  height: 900svh;
   background: var(--surface);
 }
 .gallery-sticky {
   position: sticky;
   top: 0;
+  /* svh, không phải dvh: thanh địa chỉ co giãn lúc vuốt không làm khung ghim đổi cao và nhảy bố cục */
   height: 100vh;
-  height: 100dvh;
+  height: 100svh;
   padding: 80px 0 20px;
   box-sizing: border-box;
   display: flex;
@@ -857,11 +858,11 @@
 }
 /* Điện thoại đứng: máy đang chiếu to hơn để đọc; chiều cao màn vẫn chặn cỡ máy (22svh) để không tràn khỏi màn ghim */
 @media (max-width: 560px) {
-  /* Máy to dần theo cuộn: 1.2 lúc vừa vào mục, 1.4 khi tiêu đề đã thu hết; quãng ghim ngắn hơn desktop (900vh) */
+  /* Máy to dần theo cuộn: 1.2 lúc vừa vào mục, 1.4 khi tiêu đề đã thu hết; quãng ghim ngắn hơn desktop (900svh) */
   .lp-gallery {
     --focus: calc(1.2 + 0.2 * clamp(0, var(--p, 0) * 20, 1));
     --gw: min(240px, 22svh, 58vw);
-    height: 600vh;
+    height: 600svh;
   }
 }
 .gallery-sticky .lp-display {

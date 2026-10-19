@@ -390,7 +390,7 @@ function Gallery() {
       // Mốc tiến độ ở giữa màn `next`, khớp với cách useScrollProgress tính `data-active`
       const p = 0.06 + (0.88 * next) / last
       const top = section.getBoundingClientRect().top + window.scrollY
-      window.scrollTo({ top: top + p * (section.offsetHeight - window.innerHeight), behavior: 'smooth' })
+      window.scrollTo({ top: top + p * (section.offsetHeight - (section.firstElementChild?.clientHeight ?? window.innerHeight)), behavior: 'smooth' })
     }
     viewport.addEventListener('touchstart', onTouchStart, { passive: true })
     viewport.addEventListener('touchend', onTouchEnd, { passive: true })

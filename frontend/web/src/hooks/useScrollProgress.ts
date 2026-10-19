@@ -35,8 +35,10 @@ export function useScrollProgress() {
         const r = rects[i]
         if (r.bottom < -vh || r.top > vh * 2) return
         const mode = el.dataset.scroll
+        // Mục ghim đo theo chiều cao khung sticky (svh, cố định), không theo innerHeight vốn đổi khi thanh địa chỉ co giãn
+        const pinH = el.firstElementChild?.clientHeight || vh
         const p =
-          mode === 'pin' ? clamp01(-r.top / Math.max(1, r.height - vh)) : mode === 'view' ? clamp01((vh - r.top) / vh) : clamp01(-r.top / r.height)
+          mode === 'pin' ? clamp01(-r.top / Math.max(1, r.height - pinH)) : mode === 'view' ? clamp01((vh - r.top) / vh) : clamp01(-r.top / r.height)
         el.style.setProperty('--p', p.toFixed(4))
         const track = tracks.get(el)
         if (track) {
