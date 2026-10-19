@@ -267,8 +267,8 @@ function Statement() {
           ))}
         </p>
         <ul className="pain-list">
-          {PAINS.map((p, i) => (
-            <li key={p.title} data-reveal style={delay(i)}>
+          {PAINS.map((p) => (
+            <li key={p.title}>
               <h3>{p.title}</h3>
               <p>{p.text}</p>
               <p className="pain-fix">{p.fix}</p>
@@ -535,7 +535,7 @@ const FAQS: { q: string; a: ReactNode }[] = [
 ]
 
 function Faq() {
-  const [open, setOpen] = useState<number | null>(0)
+  const [open, setOpen] = useState<number | null>(null)
   return (
     <section className="lp-section lp-faq" id="hoi-dap">
       <div className="lp-container lp-faq-grid">
