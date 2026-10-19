@@ -320,8 +320,9 @@ class AgentService:
         ):
             # The answer text the last screen-button response wrote, which the next
             # response extends; empty when the text delivered so far is a preamble
-            # it replaces.
+            # it replaces. kept_before is the text on screen before that answer.
             kept = ""
+            kept_before = ""
             async for node in run:
                 if Agent.is_call_tools_node(node):
                     await self._queue_tool_events(node, run, events)
@@ -330,19 +331,28 @@ class AgentService:
                     continue
                 response_text = ""
                 released = ""
+                # The text on screen before this response's own text.
+                before = ""
 
-                def release(fresh: str) -> None:
-                    nonlocal delivered
+                def release(full: str) -> None:
+                    nonlocal before, delivered
+                    fresh = full[len(released) :]
                     if not released and delivered:
                         # Answer text written before a screen-button call is
-                        # extended. Other text an earlier response sent is replaced:
-                        # a preamble before a data tool call, or an answer the screen
-                        # rejected.
-                        if kept:
+                        # extended, unless this response writes it again: the copy on
+                        # screen is then replaced. Other text an earlier response sent
+                        # is replaced too: a preamble before a data tool call, or an
+                        # answer the screen rejected.
+                        if kept and not self._rewrites(full, kept):
+                            before = delivered
                             fresh = ANSWER_JOIN + fresh
                         else:
                             events.put_nowait(Reset())
                             delivered = ""
+                            # The Reset cleared the text before the kept answer too.
+                            if kept and kept_before:
+                                before = kept_before
+                                fresh = before + ANSWER_JOIN + fresh
                     delivered += fresh
                     events.put_nowait(TextDelta(fresh))
 
@@ -355,7 +365,7 @@ class AgentService:
                         # Text that may still turn out to repeat the kept answer
                         # waits until it differs.
                         if len(safe) > len(released) and not self._repeats(safe, kept):
-                            release(safe[len(released) :])
+                            release(safe)
                             released = safe
                     response = stream.response
                 text = self._kept_text(response)
@@ -364,8 +374,9 @@ class AgentService:
                     if text.startswith(released) and text[len(released) :]:
                         # The screen held back the tail while it could still become
                         # a leak; the whole text passed, so the tail goes out now.
-                        release(text[len(released) :])
+                        release(text)
                     kept = text
+                    kept_before = before
                 elif not text and self._calls(response) - {suggest_screen.__name__}:
                     kept = ""
             result = run.result
@@ -408,19 +419,26 @@ class AgentService:
         A model often writes the whole answer, then calls suggest_screen and adds one
         line about the button. That earlier text is the answer, so it is kept; text
         before a data tool call is a preamble and is dropped. Models also often write
-        the kept answer again after the tool returns; that repeat is dropped.
+        the kept answer again after the tool returns: a plain repeat is dropped, and a
+        repeat with a new ending replaces the kept answer.
         """
         pieces: list[str] = []
         for message in result.new_messages():
             if not isinstance(message, ModelResponse) or not self._calls(message):
                 continue
             if text := self._kept_text(message):
-                if not (pieces and self._repeats(text, pieces[-1])):
+                if pieces and self._repeats(text, pieces[-1]):
+                    continue
+                if pieces and self._rewrites(text, pieces[-1]):
+                    pieces[-1] = text
+                else:
                     pieces.append(text)
             elif self._calls(message) - {suggest_screen.__name__}:
                 pieces = []
         if pieces and self._repeats(result.output, pieces[-1]):
             return ANSWER_JOIN.join(pieces)
+        if pieces and self._rewrites(result.output, pieces[-1]):
+            pieces.pop()
         return ANSWER_JOIN.join([*pieces, result.output])
 
     @staticmethod
@@ -429,6 +447,14 @@ class AgentService:
         is ignored."""
         words = " ".join(text.split())
         return bool(words) and " ".join(kept.split()).startswith(words)
+
+    @staticmethod
+    def _rewrites(text: str, kept: str) -> bool:
+        """Whether text starts like the kept answer, so it is that answer written again
+        with changes after its start; spacing is ignored. Only a kept answer of 40
+        characters or more counts: a shorter start could match an unrelated reply."""
+        head = " ".join(kept.split())[:40]
+        return len(head) == 40 and " ".join(text.split()).startswith(head)
 
     @staticmethod
     def _calls(response: ModelResponse) -> set[str]:
