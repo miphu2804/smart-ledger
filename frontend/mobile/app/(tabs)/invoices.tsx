@@ -6,6 +6,7 @@ import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, Sec
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DateRangeSheet } from '../../src/components/DateRangeSheet';
 import { RowListSkeleton } from '../../src/components/ListSkeleton';
+import { QuickNavButton } from '../../src/components/QuickNav';
 import { TAB_HEADER_SIDE, TAB_HEADER_TOP, TabSearchBar } from '../../src/components/TabSearchBar';
 import { Button, EmptyState, Row, T } from '../../src/components/ui';
 import type { SaleSummaryView, SaleView } from '../../src/data/types';
@@ -348,6 +349,7 @@ export default function Invoices() {
           }}
           filterActive={period === 'custom'}
           filterLabel={period === 'custom' ? `Lọc theo ngày, đang chọn ${saleFilterTimeLabel(filter)}` : 'Lọc theo ngày'}
+          leading={from === 'chat' ? undefined : <QuickNavButton />}
         />
 
         {/* Period Chips Filter */}

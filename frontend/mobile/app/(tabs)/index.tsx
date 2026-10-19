@@ -5,6 +5,7 @@ import { Animated, Image, ImageSourcePropType, ImageStyle, Pressable, StyleSheet
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ReportPeriodTabs, type ReportPeriod } from '../../src/components/ReportPeriodTabs';
 import { AssistantIntroModal } from '../../src/components/AssistantIntroModal';
+import { QuickNavButton } from '../../src/components/QuickNav';
 import { Button, Card, EmptyState, Row, T } from '../../src/components/ui';
 import { CountUp, Reveal, Skeleton } from '../../src/components/reveal';
 import { vnd } from '../../src/lib/format';
@@ -376,6 +377,7 @@ export default function Home() {
             ]}
           >
             <Row style={styles.brandRow}>
+              <QuickNavButton tone="dark" />
               <Tab1Icon name="logo" size={42} style={styles.logoIcon} />
               <View style={{ flex: 1 }}>
                 <T w="bold" size={17} color={colors.white} numberOfLines={1}>{app.store.name}</T>
