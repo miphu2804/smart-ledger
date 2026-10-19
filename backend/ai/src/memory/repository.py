@@ -22,7 +22,7 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.dialects.postgresql import JSONB, insert
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, load_only, mapped_column
 
 from src.infra.postgre_db_client import Base, PostgreDBClient
 from src.utils import SHOP_TIMEZONE
@@ -116,6 +116,9 @@ class AgentMemoryRepository:
     CANDIDATES = 20
     # Marks a summary, so it is never summarized again.
     SUMMARY_KEY = "summarized_from"
+    # Most memories the owner's view lists; the map cannot draw many more, and the
+    # least recently used ones are the ones left out.
+    LIST_LIMIT = 200
 
     def __init__(self, postgres: PostgreDBClient) -> None:
         self.postgres = postgres
@@ -473,12 +476,25 @@ class AgentMemoryRepository:
         with self.postgres.session() as session:
             return list(
                 session.scalars(
+                    # The view needs no embedding or metadata, the heavy columns.
                     select(AgentMemory)
+                    .options(
+                        load_only(
+                            AgentMemory.id,
+                            AgentMemory.memory_type,
+                            AgentMemory.content,
+                            AgentMemory.use_count,
+                            AgentMemory.last_used_at,
+                            AgentMemory.created_at,
+                            AgentMemory.source_conversation_id,
+                        )
+                    )
                     .where(*self._live(shop_id, user_id))
                     .order_by(
                         AgentMemory.last_used_at.desc().nulls_last(),
                         AgentMemory.created_at.desc(),
                     )
+                    .limit(self.LIST_LIMIT)
                 )
             )
 
