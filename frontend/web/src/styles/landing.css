@@ -813,6 +813,10 @@
   touch-action: pan-y;
 }
 @media (max-width: 560px) {
+  /* Dòng nỗi đau nằm ngay trên gallery, gallery đã có đệm đầu nên đệm dưới của mục này được bớt để hai đoạn không bị thưa */
+  .lp-statement {
+    padding-bottom: clamp(24px, 4vh, 40px);
+  }
   /* Màn hẹp: tiêu đề thu lại theo cuộn (--p do useScrollProgress đặt), dòng tính năng lên thay chỗ và máy có thêm chiều cao; không có JS thì tiêu đề vẫn hiện */
   .gallery-sticky .lp-display {
     --k: clamp(0, calc(1 - var(--p, 0) * 20), 1);
