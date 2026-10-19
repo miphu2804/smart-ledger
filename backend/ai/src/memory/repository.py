@@ -468,6 +468,47 @@ class AgentMemoryRepository:
             return False
         return True
 
+    def list_live(self, shop_id: int, user_id: int) -> list[AgentMemory]:
+        """The owner's memories in force, most recently used first, for their view."""
+        with self.postgres.session() as session:
+            return list(
+                session.scalars(
+                    select(AgentMemory)
+                    .where(*self._live(shop_id, user_id))
+                    .order_by(
+                        AgentMemory.last_used_at.desc().nulls_last(),
+                        AgentMemory.created_at.desc(),
+                    )
+                )
+            )
+
+    def forget(self, shop_id: int, user_id: int, memory_id: int) -> bool:
+        """Delete one memory with the older versions it replaced; False if not theirs.
+
+        The older versions go too: superseded_by is ON DELETE SET NULL, so keeping them
+        would bring the fact the owner just removed back to life.
+        """
+        owner = (AgentMemory.shop_id == shop_id, AgentMemory.user_id == user_id)
+        with self.postgres.session() as session:
+            ids = list(
+                session.scalars(
+                    select(AgentMemory.id).where(*owner, AgentMemory.id == memory_id)
+                )
+            )
+            frontier = ids
+            while frontier:
+                frontier = list(
+                    session.scalars(
+                        select(AgentMemory.id).where(
+                            *owner, AgentMemory.superseded_by.in_(frontier)
+                        )
+                    )
+                )
+                ids += frontier
+            if ids:
+                session.execute(delete(AgentMemory).where(AgentMemory.id.in_(ids)))
+        return bool(ids)
+
     def memory_enabled(self, shop_id: int, user_id: int) -> bool:
         """The owner's switch; on until they turn it off."""
         with self.postgres.session() as session:
