@@ -5,7 +5,13 @@ from typing import Literal
 
 from pydantic_ai import RunContext, Tool, ToolReturn
 
-from src.prompt_templates import QUERY_RESULT_HEADER, RESTOCK_RESULT_HEADER
+from src.calculation.ops import CalculationStep
+from src.calculation.service import CalculationService
+from src.prompt_templates import (
+    CALC_RESULT_HEADER,
+    QUERY_RESULT_HEADER,
+    RESTOCK_RESULT_HEADER,
+)
 from src.restock.service import RestockService
 from src.sql.repository import ShopDataRepository
 
@@ -55,7 +61,10 @@ def build_shop_data_tool(shop_data: ShopDataRepository) -> Tool[AgentContext]:
     """
 
     def query_shop_data(ctx: RunContext[AgentContext], sql: str) -> str:
-        """Run one read-only SELECT on the shop's views. Returns JSON or Error[CODE]."""
+        """Run one read-only SELECT on the shop's views. Returns a header line, then
+        JSON (columns, rows, row_count, truncated); a rejected query returns
+        Error[CODE] to rewrite and retry.
+        """
         # A rejected or failed query goes back to the model as text so it can rewrite
         # the query. Anything else, such as an unreachable reader database, propagates
         # and the router answers 503 ai_unavailable.
@@ -85,7 +94,10 @@ def build_restock_tool(restock: RestockService) -> Tool[AgentContext]:
         ctx: RunContext[AgentContext],
         period: Literal["last_7_days", "last_30_days"],
     ) -> str:
-        """Suggest what to restock from confirmed sales. Returns JSON or Error[CODE]."""
+        """Suggest what to restock from confirmed sales. Returns a header line, then
+        JSON (period, days, suggestions, truncated); a rejected request returns
+        Error[CODE].
+        """
         # A failed query goes back to the model as text, like query_shop_data.
         try:
             result = restock.suggest(ctx.deps.shop_id, period)
@@ -102,3 +114,41 @@ def build_restock_tool(restock: RestockService) -> Tool[AgentContext]:
         return f"{RESTOCK_RESULT_HEADER}\n{json.dumps(payload, ensure_ascii=False)}"
 
     return Tool(suggest_restock, takes_ctx=True)
+
+
+def build_calculation_tool(calc: CalculationService) -> Tool[AgentContext]:
+    """Arithmetic tool; the service is injected here, so the plan limits live in it.
+
+    The steps are a Pydantic model list with extra keys forbidden, so the model sees
+    the op enum and the `$` placeholder in the schema and cannot pass an unknown op
+    or an argument key no op takes; a misspelled key fails validation naming the key,
+    instead of being dropped silently.
+    """
+
+    def calculate(operations: list[CalculationStep]) -> str:
+        """Compute a chain of arithmetic steps. Returns a header line, then JSON
+        (result, steps); a rejected plan returns Error[CODE] to fix and retry.
+        """
+        # A rejected plan goes back to the model as text so it can fix the steps,
+        # like query_shop_data. Nothing else can raise here: the service is pure.
+        try:
+            outcome = calc.calculate(operations)
+        except ValueError as error:
+            return f"{_model_error(error)} Fix the steps and retry."
+        payload = {
+            # Rounded to 6 places, so 0.1 + 0.2 reads as 0.3; the trail stays raw
+            # as the audit of what was computed.
+            "result": round(outcome.result, 6),
+            "steps": [
+                {
+                    "op": trace.op.value,
+                    "a": trace.a,
+                    "b": trace.b,
+                    "result": trace.result,
+                }
+                for trace in outcome.steps
+            ],
+        }
+        return f"{CALC_RESULT_HEADER}\n{json.dumps(payload, ensure_ascii=False)}"
+
+    return Tool(calculate)

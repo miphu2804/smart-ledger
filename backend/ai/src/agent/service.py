@@ -25,22 +25,29 @@ from src.agent.repository import AgentConversationRepository
 from src.agent.tool_events import ToolFinished, ToolStarted, tool_progress
 from src.agent.tools import (
     AgentContext,
+    build_calculation_tool,
     build_restock_tool,
     build_shop_data_tool,
     suggest_screen,
 )
+from src.calculation.service import CalculationService
 from src.memory.repository import RecalledMemory
 from src.memory.service import AgentMemoryService
 from src.prompt_templates import (
     APP_GUIDE_PROMPT,
+    CALC_PROMPT,
     CURRENT_TIME,
     MEMORY_PROMPT,
     RESTOCK_PROMPT,
+    RESTOCK_SANDBOX_PROMPT,
+    RUN_CODE_PROMPT,
     SHOP_AGENT_SYSTEM_PROMPT,
     SQL_AGENT_PROMPT,
+    SQL_SANDBOX_PROMPT,
 )
 from src.providers.factory import session_settings
 from src.restock.service import RestockService
+from src.sandbox.wrapper import Sandbox
 from src.sql.repository import ShopDataRepository
 from src.utils import get_time
 
@@ -99,6 +106,8 @@ class AgentService:
         shop_data: ShopDataRepository | None = None,
         restock: RestockService | None = None,
         memory: AgentMemoryService | None = None,
+        calculation: CalculationService | None = None,
+        sandbox: Sandbox | None = None,
         history_turns: int = 100,
     ) -> None:
         self.model_name = model.model_name if model is not None else ""
@@ -110,18 +119,40 @@ class AgentService:
         # arrives per request through AgentContext and never appears in the prompt.
         # The current time travels with the new message instead (_with_current_time),
         # so the instructions and the history both stay a cacheable prefix.
-        # Each optional capability adds its own tool and prompt section.
+        # Each optional capability adds its own tool and prompt section. The access
+        # instructions name the path the model actually has: with the sandbox on, the
+        # folded data tools are callable only inside run_code, so their prompts must
+        # not tell the model to call them directly.
         tools = []
         prompt_parts = [SHOP_AGENT_SYSTEM_PROMPT, APP_GUIDE_PROMPT]
         if shop_data is not None:
             tools.append(build_shop_data_tool(shop_data))
-            prompt_parts.append(SQL_AGENT_PROMPT)
+            prompt_parts.append(
+                SQL_AGENT_PROMPT if sandbox is None else SQL_SANDBOX_PROMPT
+            )
         if restock is not None:
             tools.append(build_restock_tool(restock))
-            prompt_parts.append(RESTOCK_PROMPT)
+            prompt_parts.append(
+                RESTOCK_PROMPT if sandbox is None else RESTOCK_SANDBOX_PROMPT
+            )
+        if calculation is not None:
+            tools.append(build_calculation_tool(calculation))
+            prompt_parts.append(CALC_PROMPT)
         if memory is not None:
             prompt_parts.append(MEMORY_PROMPT)
         tools.append(Tool(suggest_screen))
+        # The sandbox option runs model-written code from one run_code tool; the
+        # arithmetic tool and the screen buttons stay native, so a plain
+        # calculation never starts Monty. Its prompt section is appended only here,
+        # so a model never reads run_code guidance when the tool is not registered:
+        # an unusable sandbox (no codemode extra) or SANDBOX_ENABLED=false arrives
+        # as None, so it turns off without failing the service.
+        if sandbox is not None:
+            prompt_parts.append(RUN_CODE_PROMPT)
+        capabilities = [
+            *self.guardrails.capabilities,
+            *([sandbox.capability] if sandbox is not None else []),
+        ]
         self.memory = memory
         # Memory writes run after the reply; held here so they are not garbage
         # collected mid-run.
@@ -135,7 +166,7 @@ class AgentService:
                 # The limits arrive from the composition root, so this module reads no
                 # global settings and guardrails cannot be switched off by a caller.
                 retries=self.guardrails.retries,
-                capabilities=self.guardrails.capabilities,
+                capabilities=capabilities,
                 # Tags the run's trace, so one shop's turns can be filtered (NFR-007).
                 metadata=lambda ctx: {"shop_id": ctx.deps.shop_id},
             )
