@@ -151,7 +151,7 @@ export default function More() {
         <ManagementRow
           icon="settings"
           title="Cài đặt"
-          subtitle="Âm thanh, thông báo, in hoá đơn"
+          subtitle="Rung, cảnh báo sắp hết hàng, máy in"
           onPress={() => router.push('/settings')}
         />
         {/* Chỉ tài khoản đăng ký bằng email mới có mật khẩu; Facebook, Google đổi mật khẩu ở chính dịch vụ đó */}

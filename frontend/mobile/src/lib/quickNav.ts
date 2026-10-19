@@ -36,7 +36,7 @@ export const QUICK_NAV_SECTIONS: QuickNavSection[] = [
     title: 'KHÁC',
     items: [
       { key: 'ai', label: 'Trợ lý AI', hint: 'Hỏi Bobi về sổ bán hàng', icon: 'message-circle', href: '/ai' },
-      { key: 'settings', label: 'Cài đặt', hint: 'Âm thanh, thông báo, in hoá đơn', icon: 'settings', href: '/settings' },
+      { key: 'settings', label: 'Cài đặt', hint: 'Rung, cảnh báo sắp hết hàng, máy in', icon: 'settings', href: '/settings' },
     ],
   },
 ];
