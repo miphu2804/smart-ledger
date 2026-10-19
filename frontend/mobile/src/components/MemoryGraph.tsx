@@ -192,8 +192,9 @@ function layout(items: AgentMemoryItem[], size: number, now: number): Node[] {
       const r = Math.min(5 + 1.5 * Math.log1p(item.use_count), 11);
       const at = (d: number) => ({ x: c + Math.cos(a) * d, y: c + Math.sin(a) * d });
       let p = at(dist);
-      // Đè chấm đã đặt thì lùi dần ra ngoài; giới hạn để chấm không ra khỏi vòng ngoài.
-      for (let d = dist; d < c * STALE_R && placed.some((n) => Math.hypot(n.x - p.x, n.y - p.y) < n.r + r + 14);) {
+      // Đè chấm đã đặt thì lùi dần ra ngoài, kể cả chấm đã cũ (đã nằm sẵn trên vòng ngoài);
+      // dừng ở mép khung để chấm không bị cắt.
+      for (let d = dist; d < c - r - 6 && placed.some((n) => Math.hypot(n.x - p.x, n.y - p.y) < n.r + r + 14);) {
         d += 8;
         p = at(d);
       }
