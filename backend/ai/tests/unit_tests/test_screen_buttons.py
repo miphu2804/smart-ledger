@@ -17,12 +17,25 @@ BUTTONS = '\n\n```actions\n["debts"]\n```'
 # The whole answer, written before the model calls suggest_screen.
 LIST = "Gợi ý nhập thêm:\n- Ức gà: 3 kg\n- Đậu xanh: 1 kg\n\nĐây chỉ là gợi ý."
 FOLLOW_UP = "Bấm nút bên dưới để mở Công nợ."
+# The same answer written again after a button call, with a changed last sentence.
+REWRITE = LIST.replace("Đây chỉ là gợi ý.", "Đây chỉ là gợi ý!")
 
 
 def answer_then_button(text: str = LIST) -> ModelResponse:
     return ModelResponse(
         parts=[TextPart(text), ToolCallPart("suggest_screen", {"screen": "debts"})]
     )
+
+
+def shown(events: list) -> str:
+    """The text on screen: a Reset clears what was shown before it."""
+    text = ""
+    for event in events:
+        if isinstance(event, Reset):
+            text = ""
+        elif isinstance(event, TextDelta):
+            text += event.text
+    return text
 
 
 class FakeConversationRepository:
@@ -131,15 +144,17 @@ async def test_history_replays_answers_without_their_buttons() -> None:
     assert ("assistant", "Còn nợ.") in transcript(model.requests[0][0])
 
 
-async def test_chat_keeps_the_answer_written_before_the_button_call() -> None:
+async def test_chat_ends_on_the_answer_written_with_the_button_call() -> None:
     model = ScriptedModel(answer_then_button(), FOLLOW_UP)
 
     result = await build_agent(model).chat(user_id=3, shop_id=15, message="m")
 
-    assert result.answer == LIST + "\n\n" + FOLLOW_UP + BUTTONS
+    # The model is not asked again, so it cannot write the answer a second time.
+    assert result.answer == LIST + BUTTONS
+    assert len(model.requests) == 1
 
 
-async def test_stream_chat_extends_the_answer_written_before_the_button_call() -> None:
+async def test_stream_chat_ends_on_the_answer_written_with_the_button_call() -> None:
     model = ScriptedModel(answer_then_button(), FOLLOW_UP)
 
     events = [
@@ -149,25 +164,44 @@ async def test_stream_chat_extends_the_answer_written_before_the_button_call() -
         )
     ]
 
-    # Nothing shown is taken back: the list stays and the follow-up joins it.
     assert not any(isinstance(event, Reset) for event in events)
     streamed = "".join(event.text for event in events if isinstance(event, TextDelta))
-    assert streamed == LIST + "\n\n" + FOLLOW_UP + BUTTONS
+    assert streamed == LIST + BUTTONS
     assert events[-1].result.answer == streamed
+    assert len(model.requests) == 1
+
+
+async def test_a_reworded_answer_after_the_button_call_is_never_requested() -> None:
+    # Seen in the app: the answer, a button call, then the same figures reworded.
+    answer = (
+        "Hiện tiệm còn nợ khoảng 33.470.920 VND, của 33 khách hàng.\n\n"
+        "Nếu anh/chị muốn xem từng khoản nợ, hãy mở màn hình Công nợ."
+    )
+    reworded = "Tổng nợ hiện tại là 33.470.920 VND, từ 33 khách."
+    model = ScriptedModel(answer_then_button(answer), reworded)
+
+    result = await build_agent(model).chat(user_id=3, shop_id=15, message="m")
+
+    assert result.answer == answer + BUTTONS
 
 
 async def test_a_preamble_before_a_data_tool_call_is_still_dropped() -> None:
     model = ScriptedModel(
-        answer_then_button(),
         ModelResponse(
             parts=[TextPart("Để tôi xem lại."), ToolCallPart("unknown_tool", {})]
         ),
-        "Còn nợ.",
+        answer_then_button("Còn nợ."),
     )
 
-    result = await build_agent(model).chat(user_id=3, shop_id=15, message="m")
+    events = [
+        event
+        async for event in await build_agent(model).stream_chat(
+            user_id=3, shop_id=15, message="m"
+        )
+    ]
 
-    assert result.answer == "Còn nợ." + BUTTONS
+    assert shown(events) == "Còn nợ." + BUTTONS
+    assert events[-1].result.answer == shown(events)
 
 
 async def test_text_before_the_button_call_that_leaks_is_dropped() -> None:

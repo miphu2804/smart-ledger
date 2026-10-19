@@ -23,6 +23,7 @@ export default function EmailAuth() {
   const [mode, setMode] = useState<Mode>(params.mode === 'register' ? 'register' : 'login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   /**
@@ -34,7 +35,10 @@ export default function EmailAuth() {
   const cooldown = useCooldown(30);
 
   const emailOk = EMAIL_RE.test(email.trim());
-  const valid = mode === 'reset' ? emailOk : emailOk && password.length >= 6;
+  const valid =
+    mode === 'reset'
+      ? emailOk
+      : emailOk && password.length >= 6 && (mode === 'login' || confirm === password);
 
   const switchMode = (m: Mode) => {
     setMode(m);
@@ -148,7 +152,25 @@ export default function EmailAuth() {
             setHint(false);
           }}
           onSubmitEditing={submit}
-          error={err || undefined}
+          error={mode === 'register' ? undefined : err || undefined}
+        />
+      ) : null}
+
+      {/* Đăng ký: gõ lại mật khẩu để bắt lỗi gõ nhầm trước khi tạo tài khoản */}
+      {mode === 'register' ? (
+        <Field
+          label="Nhập lại mật khẩu"
+          placeholder="Gõ lại mật khẩu ở trên"
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          value={confirm}
+          onChangeText={(t) => {
+            setConfirm(t);
+            setErr('');
+          }}
+          onSubmitEditing={submit}
+          error={(confirm && confirm !== password ? 'Hai mật khẩu chưa giống nhau' : '') || err || undefined}
         />
       ) : null}
 

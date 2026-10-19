@@ -93,8 +93,6 @@ export interface ChatMessage {
   id: string;
   from: 'user' | 'ai';
   text: string;
-  /** Ghi nhớ trợ lý đã dùng cho câu trả lời này; chỉ có ở lượt vừa chat, không lưu vào lịch sử. */
-  memories?: AgentMemoryUsed[];
 }
 
 /** Một bước trong dòng suy nghĩ lúc chờ trả lời, ứng với một lần AI gọi tool (sự kiện `tool_start` / `tool_end`). */
@@ -127,6 +125,19 @@ export interface AgentMemoryUsed {
   source_conversation_id: number;
   /** ISO 8601 */
   created_at: string;
+}
+
+/** Một ghi nhớ còn hiệu lực trong màn "Bộ nhớ của trợ lý" (GET /agent/memory/items) */
+export interface AgentMemoryItem {
+  id: number;
+  /** preference | semantic | procedural | episodic */
+  memory_type: string;
+  content: string;
+  use_count: number;
+  /** ISO 8601; null khi chưa từng được dùng */
+  last_used_at: string | null;
+  created_at: string;
+  source_conversation_id: number;
 }
 
 export interface AgentMemorySettings {

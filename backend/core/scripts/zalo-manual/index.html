@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="vi">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Thử Core Zalo local</title></head>
+<body>
+  <h1>Thử đăng nhập Zalo vào Core local</h1>
+  <p>Chỉ dùng tài khoản thử của chính bạn. Core dùng PostgreSQL tạm, không phải DB staging.</p>
+  <p>Firebase thật thuộc project dev/staging: đăng nhập có thể tạo tài khoản Firebase thật.
+    Nếu muốn giữ tài khoản/tiệm đã có, không thử LOGIN trước khi kiểm tra luồng liên kết riêng.</p>
+  <p>Không nhập App Secret, service-account JSON hoặc ID token vào trang này.</p>
+  <label>Firebase Web API key của project smart-ledger-c2892
+    <input id="apiKey" type="password" autocomplete="off" size="55">
+  </label>
+  <p><label><input id="consent" type="checkbox">Tôi đồng ý thử bằng tài khoản riêng trên Firebase dev/staging.</label></p>
+  <button id="login" disabled>Đăng nhập bằng Zalo</button>
+  <button id="reset">Xóa kết quả trên trang</button>
+  <p id="status" role="status">Đang kiểm tra quyền truy cập tạm…</p>
+  <pre id="result"></pre>
+  <p>Không gửi URL callback có code, token, khóa truy cập hoặc file open.html cho người khác.
+    Bản thử này chỉ kiểm tra LOGIN; chưa có giao diện LINK.</p>
+  <script type="module" src="/client.mjs"></script>
+</body>
+</html>

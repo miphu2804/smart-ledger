@@ -7,6 +7,7 @@ import {
   Badge,
   Button,
   Chips,
+  Dialog,
   EmptyState,
   Field,
   Header,
@@ -282,11 +283,16 @@ function DebtSheet({
   const [busy, setBusy] = useState(false);
   const [payments, setPayments] = useState<PaymentView[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  // Thu nợ hai bước: chọn "Trả một phần" (hiện ô nhập số tiền) hoặc "Trả đủ" (hỏi xác nhận rồi mới ghi)
+  const [step, setStep] = useState<'choose' | 'partial'>('choose');
+  const [confirmFull, setConfirmFull] = useState(false);
 
   useEffect(() => {
     setAmount('');
     setMethod('CASH');
     setReference('');
+    setStep('choose');
+    setConfirmFull(false);
     if (!debt) {
       setPayments([]);
       return;
@@ -334,6 +340,7 @@ function DebtSheet({
       setPayments((cur) => [...cur, res.payment]);
       setAmount('');
       setReference('');
+      setStep('choose');
       if (v >= left) triggerFeedback('success');
       toast(v >= left ? `${debt.name} đã trả hết nợ` : `Đã ghi nhận ${debt.name} trả ${vnd(v)} (${METHOD_LABEL[method].toLowerCase()})`);
     } catch (e) {
@@ -407,47 +414,65 @@ function DebtSheet({
         <Feather name="chevron-right" size={16} color={colors.primary} />
       </Pressable>
 
-      {left > 0 ? (
+      {left > 0 && step === 'choose' ? (
         <View style={styles.payBox}>
-          <Field
-            label="Khách trả (đ)"
-            keyboardType="number-pad"
-            placeholder={`Tối đa ${vnd(left)}`}
-            value={amount}
-            onChangeText={setAmount}
-            style={{ marginBottom: 8 }}
-          />
-          <Chips<Method>
-            scroll={false}
-            value={method}
-            onChange={setMethod}
-            options={[
-              { key: 'CASH', label: METHOD_LABEL.CASH },
-              { key: 'TRANSFER', label: METHOD_LABEL.TRANSFER },
-            ]}
-            style={{ marginBottom: 8 }}
-          />
-          {method === 'TRANSFER' ? (
-            <Field
-              placeholder="Mã giao dịch (không bắt buộc)"
-              value={reference}
-              onChangeText={setReference}
-              maxLength={255}
-              autoCapitalize="characters"
-              style={{ marginBottom: 8 }}
-            />
-          ) : null}
+          <T w="semibold" size={13} color={colors.muted} style={{ marginBottom: 8 }}>
+            Khách trả nợ
+          </T>
           <Row>
             <Button
               title="Trả một phần"
+              icon="edit-3"
               variant="outline"
               small
               style={{ flex: 1, height: 44 }}
-              disabled={!num || num >= left || busy}
+              disabled={busy}
+              onPress={() => setStep('partial')}
+            />
+            <Button
+              title="Trả đủ"
+              icon="check"
+              small
+              style={{ flex: 1, height: 44 }}
+              disabled={busy}
+              loading={busy}
+              onPress={() => setConfirmFull(true)}
+            />
+          </Row>
+        </View>
+      ) : left > 0 ? (
+        <View style={styles.payBox}>
+          <Field
+            label="Số tiền khách trả (đ)"
+            keyboardType="number-pad"
+            placeholder={`Còn nợ ${vnd(left)}`}
+            value={amount}
+            onChangeText={setAmount}
+            autoFocus
+            error={num > left ? `Nhiều hơn số còn nợ (${vnd(left)})` : undefined}
+            style={{ marginBottom: 8 }}
+          />
+          <PayMethod method={method} onMethod={setMethod} reference={reference} onReference={setReference} />
+          <Row>
+            <Button
+              title="Quay lại"
+              variant="outline"
+              small
+              style={{ flex: 1, height: 44 }}
+              disabled={busy}
+              onPress={() => {
+                setStep('choose');
+                setAmount('');
+              }}
+            />
+            <Button
+              title={num && num <= left ? `Ghi nhận ${vnd(num)}` : 'Ghi nhận'}
+              small
+              style={{ flex: 1, height: 44 }}
+              disabled={!num || num > left || busy}
               loading={busy}
               onPress={() => pay(num)}
             />
-            <Button title="Trả hết" small style={{ flex: 1, height: 44 }} disabled={busy} loading={busy} onPress={() => pay(left)} />
           </Row>
         </View>
       ) : (
@@ -493,7 +518,63 @@ function DebtSheet({
           );
         })
       )}
+
+      <Dialog
+        visible={confirmFull}
+        icon="check-circle"
+        title="Khách trả đủ nợ?"
+        message={`${debt.name} trả ${vnd(left)} cho đơn #${debt.saleId}. Khoản nợ này sẽ được ghi là đã trả xong.`}
+        confirm="Xác nhận đã trả"
+        cancel="Huỷ"
+        onCancel={() => setConfirmFull(false)}
+        onConfirm={() => {
+          setConfirmFull(false);
+          void pay(left);
+        }}
+      >
+        <View style={{ marginTop: 14 }}>
+          <PayMethod method={method} onMethod={setMethod} reference={reference} onReference={setReference} />
+        </View>
+      </Dialog>
     </Sheet>
+  );
+}
+
+/** Cách khách trả (tiền mặt / chuyển khoản, kèm mã giao dịch tuỳ chọn), dùng chung cho trả một phần và trả đủ. */
+function PayMethod({
+  method,
+  onMethod,
+  reference,
+  onReference,
+}: {
+  method: Method;
+  onMethod: (m: Method) => void;
+  reference: string;
+  onReference: (r: string) => void;
+}) {
+  return (
+    <>
+      <Chips<Method>
+        scroll={false}
+        value={method}
+        onChange={onMethod}
+        options={[
+          { key: 'CASH', label: METHOD_LABEL.CASH },
+          { key: 'TRANSFER', label: METHOD_LABEL.TRANSFER },
+        ]}
+        style={{ marginBottom: 8 }}
+      />
+      {method === 'TRANSFER' ? (
+        <Field
+          placeholder="Mã giao dịch (không bắt buộc)"
+          value={reference}
+          onChangeText={onReference}
+          maxLength={255}
+          autoCapitalize="characters"
+          style={{ marginBottom: 8 }}
+        />
+      ) : null}
+    </>
   );
 }
 

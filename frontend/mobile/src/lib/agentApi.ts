@@ -3,6 +3,7 @@ import type {
   AgentChatRequest,
   AgentConversationSummary,
   AgentConversationView,
+  AgentMemoryItem,
   AgentMemorySettings,
   AgentMemoryUsed,
   AgentToolEvent,
@@ -87,6 +88,12 @@ export const agentApi = {
       body: { memory_enabled: enabled },
       withShop: true,
     }),
+  /** GET /agent/memory/items — ghi nhớ còn hiệu lực, dùng gần nhất trước */
+  listMemories: (): Promise<AgentMemoryItem[]> =>
+    apiRequest<AgentMemoryItem[]>('/agent/memory/items', { withShop: true }),
+  /** DELETE — xoá ghi nhớ cùng các bản cũ nó đã thay */
+  deleteMemory: (memoryId: number): Promise<void> =>
+    apiRequest<void>(`/agent/memory/items/${memoryId}`, { method: 'DELETE', withShop: true }),
   /** GET /agent/conversations — hội thoại của user/tiệm hiện tại */
   listConversations: (): Promise<AgentConversationSummary[]> =>
     apiRequest<AgentConversationSummary[]>('/agent/conversations', { withShop: true }),

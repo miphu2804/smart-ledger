@@ -97,6 +97,35 @@ class PostgresGateTest(unittest.TestCase):
             ElementTree.ElementTree(suite).write(report)
         verify(self.reports)
 
+    def test_rejects_missing_or_skipped_zalo_suites_and_removed_critical_methods(self):
+        for name, methods in REQUIRED.items():
+            if "Zalo" not in name:
+                continue
+            report = self.reports / f"TEST-{name}.xml"
+            original = report.read_bytes()
+            with self.subTest(suite=name, scenario="missing"):
+                report.unlink()
+                with self.assertRaisesRegex(SystemExit, f"{name}: report missing"):
+                    verify(self.reports)
+                report.write_bytes(original)
+            with self.subTest(suite=name, scenario="skipped"):
+                suite = ElementTree.parse(report).getroot()
+                ElementTree.SubElement(suite.find("testcase"), "skipped")
+                ElementTree.ElementTree(suite).write(report)
+                with self.assertRaisesRegex(SystemExit, f"{name}: tests skipped or failed"):
+                    verify(self.reports)
+                report.write_bytes(original)
+            for method in methods:
+                with self.subTest(suite=name, scenario="removed", method=method):
+                    suite = ElementTree.parse(report).getroot()
+                    case = next(case for case in suite.findall("testcase") if case.get("name") == method)
+                    suite.remove(case)
+                    ElementTree.ElementTree(suite).write(report)
+                    with self.assertRaisesRegex(SystemExit, "required tests missing") as raised:
+                        verify(self.reports)
+                    self.assertIn(method, str(raised.exception))
+                    report.write_bytes(original)
+
     def test_rejects_missing_concurrency_suite(self):
         for name in REQUIRED:
             if "ConcurrencyPostgresTest" not in name:

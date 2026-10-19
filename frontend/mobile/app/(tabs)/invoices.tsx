@@ -6,6 +6,7 @@ import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, Sec
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DateRangeSheet } from '../../src/components/DateRangeSheet';
 import { RowListSkeleton } from '../../src/components/ListSkeleton';
+import { QuickNavButton } from '../../src/components/QuickNav';
 import { TAB_HEADER_SIDE, TAB_HEADER_TOP, TabSearchBar } from '../../src/components/TabSearchBar';
 import { Button, EmptyState, Row, T } from '../../src/components/ui';
 import type { SaleSummaryView, SaleView } from '../../src/data/types';
@@ -58,7 +59,7 @@ function formatGroupDateTitle(date: Date): string {
 
 export default function Invoices() {
   const insets = useSafeAreaInsets();
-  const { period: queryPeriod, status: queryStatus } = useLocalSearchParams<{ period?: string; status?: string }>();
+  const { period: queryPeriod, status: queryStatus, from } = useLocalSearchParams<{ period?: string; status?: string; from?: string }>();
   const initialPeriod: Period = queryPeriod === 'yesterday' || queryPeriod === 'month' ? queryPeriod : 'all';
   // Chỉ xem đơn đã huỷ (nút "Đã huỷ" ở hàng lọc, hoặc mở từ Báo cáo với `status=voided`): thẻ tổng và tiêu đề ngày đổi sang
   // số và giá trị của các đơn huỷ
@@ -322,6 +323,11 @@ export default function Invoices() {
         {/* Cùng cỡ chữ và lề với tiêu đề Bán hàng để chuyển tab qua lại ô tìm không xê dịch */}
         <Row style={styles.heroRow} gap={8}>
           <View style={{ flex: 1 }}>
+            {from === 'chat' ? (
+              <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))} style={styles.backBtn} accessibilityLabel="Quay lại">
+                <Feather name="chevron-left" size={18} color={colors.ink} />
+              </Pressable>
+            ) : null}
             <T w="extrabold" size={26} color={colors.ink}>
               Đơn hàng
             </T>
@@ -343,6 +349,7 @@ export default function Invoices() {
           }}
           filterActive={period === 'custom'}
           filterLabel={period === 'custom' ? `Lọc theo ngày, đang chọn ${saleFilterTimeLabel(filter)}` : 'Lọc theo ngày'}
+          leading={from === 'chat' ? undefined : <QuickNavButton />}
         />
 
         {/* Period Chips Filter */}
@@ -595,6 +602,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  backBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
   },
   // Như `heroRow` của Bán hàng
   heroRow: {

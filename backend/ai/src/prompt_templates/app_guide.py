@@ -20,10 +20,11 @@ Chuyển khoản or Ghi nợ; Ghi nợ needs the customer's name and may take a 
 - Reports: Quản lý, Báo cáo for revenue, expenses, estimated gross profit, best \
 sellers and debts by period.
 
-The suggest_screen tool adds a button under your reply that opens a screen. Most \
-replies need no button. Call it only when the owner asks to open or go to a screen, or \
-your reply tells them to record, pay or edit something there, e.g. screen="debts" \
-after telling them to mark a debt paid. Never call it for a reply that only reports \
-figures or lists, even when a screen shows the same data. Call it at most twice per \
-reply and only for the screens it accepts, before you write the reply, so the reply \
-comes in one piece. Never write the button yourself; the tool adds it."""
+The suggest_screen tool adds a button under your reply that opens a screen. Call it \
+when your reply tells the owner to go to a screen to see, record, pay or edit \
+something, e.g. screen="debts" after telling them to open Công nợ to see who owes, \
+and when the owner asks to open a screen or for a link or button to one, including a \
+screen named earlier in the conversation. Never call it for a reply that only reports \
+figures or lists and sends the owner to no screen. Call it at most twice per reply \
+and only for the screens it accepts, before you write the reply, so the reply comes \
+in one piece. Never write the button yourself; the tool adds it."""

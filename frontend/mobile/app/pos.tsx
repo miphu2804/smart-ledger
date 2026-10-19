@@ -8,13 +8,14 @@ import { BarcodeScannerModal } from '../src/components/BarcodeScannerModal';
 import { useToast } from '../src/components/brand';
 import { PageControls } from '../src/components/PageControls';
 import { ProductGridSkeleton, RowListSkeleton } from '../src/components/ListSkeleton';
+import { QuickNavButton } from '../src/components/QuickNav';
 import { TAB_HEADER_SIDE, TAB_HEADER_TOP, TabSearchBar } from '../src/components/TabSearchBar';
 import { Button, Chips, Dialog, EmptyState, Field, Row, Sheet, Stepper, T } from '../src/components/ui';
 import type { CategoryView, LineItem, ProductView } from '../src/data/types';
 import { categoryApi, productApi, type ProductListQuery } from '../src/lib/catalogApi';
 import { errorMessage } from '../src/lib/errors';
 import { triggerFeedback } from '../src/lib/feedback';
-import { abbr, hashIndex, normalizeText, vnd } from '../src/lib/format';
+import { abbr, capMoney, hashIndex, normalizeText, vnd } from '../src/lib/format';
 import { ProductImage } from '../src/components/ProductImage';
 import { upsertCustomLine } from '../src/lib/customLines';
 import { itemsTotal } from '../src/lib/stats';
@@ -754,6 +755,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
         onBodyHeight={setHeaderBodyHeight}
         pinned={
           <Row gap={8} style={styles.pinnedHeader}>
+            {inTab ? <QuickNavButton compact /> : null}
             <PosSearchBox value={q} onChangeText={setQ} compact />
             <PosActionButton tone="gold" icon="maximize" label="Quét mã" compact onPress={() => setScannerOpen(true)} />
             <PosActionButton tone="purple" icon="mic" label="Đọc đơn" compact onPress={() => router.push('/voice')} />
@@ -790,6 +792,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
             }}
             filterActive={filterActive}
             filterLabel={filterActive ? `Bộ lọc, đang chọn ${filterSummary}` : 'Bộ lọc'}
+            leading={inTab ? <QuickNavButton /> : undefined}
           />
           <PosCategoryChips value={cat} onChange={setCat} options={cats.map((c) => ({ key: c, label: catLabel(c) }))} />
         </View>
@@ -1077,7 +1080,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
       {/* Custom Item Sheet */}
       <Sheet visible={customOpen} onClose={() => setCustomOpen(false)} title="Món ngoài danh mục">
         <Field label="Tên món" placeholder="VD: Bánh bao" value={cName} onChangeText={setCName} />
-        <Field label="Giá bán (đ)" placeholder="VD: 12000" keyboardType="number-pad" value={cPrice} onChangeText={setCPrice} />
+        <Field label="Giá bán (đ)" placeholder="VD: 12000" keyboardType="number-pad" value={cPrice} onChangeText={(t) => setCPrice(capMoney(t, cPrice))} />
         <Field label="Đơn vị" placeholder="VD: cái, ly, phần" value={cUnit} onChangeText={setCUnit} />
         {cErr ? (
           <T size={12} color={colors.red} style={{ marginBottom: 8 }}>

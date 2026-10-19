@@ -23,7 +23,7 @@ import { expenseCategoryMeta } from '../src/data/mock';
 import type { Expense, ExpenseCategory, ExpenseView, SaleView } from '../src/data/types';
 import { errorMessage } from '../src/lib/errors';
 import { triggerFeedback } from '../src/lib/feedback';
-import { compact, ddmm, hhmm, vnd } from '../src/lib/format';
+import { capMoney, compact, ddmm, hhmm, vnd } from '../src/lib/format';
 import { expenseApi } from '../src/lib/expenseApi';
 import { parseExpenseVoice } from '../src/lib/expenseVoiceParser';
 import { useVoiceRecorder } from '../src/lib/speech/useVoiceRecorder';
@@ -454,7 +454,7 @@ function AddExpenseSheet({
           placeholder="0"
           keyboardType="number-pad"
           value={amt ? amt.toLocaleString('vi-VN') : ''}
-          onChangeText={setAmount}
+          onChangeText={(t) => setAmount(capMoney(t, amount))}
         />
         <T w="semibold" size={12} color={colors.muted} style={{ marginBottom: 6 }}>
           Loại chi

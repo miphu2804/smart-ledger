@@ -9,7 +9,15 @@ const durations: Record<FeedbackLevel, number | number[]> = {
   error: Platform.OS === 'android' ? [0, 45, 55, 70] : 70,
 };
 
+let enabled = true;
+
+/** Tuỳ chọn "Rung phản hồi" ở Cài đặt; AppStore đặt lại sau khi đọc tuỳ chọn đã lưu và mỗi khi người dùng đổi. */
+export function setFeedbackEnabled(value: boolean) {
+  enabled = value;
+}
+
 export function triggerFeedback(level: FeedbackLevel) {
+  if (!enabled) return;
   if (Platform.OS === 'web') {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(durations[level]);
     return;

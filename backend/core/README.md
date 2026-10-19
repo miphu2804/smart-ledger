@@ -301,11 +301,11 @@ With the same disposable PostgreSQL variables, run:
 .\mvnw.cmd '-Dtest=AdminDashboardControllerWebTest,AdminAccessAuditServiceTest,AdminDashboardPostgresTest' test
 ```
 
-`AdminDashboardPostgresTest` applies the actual V1–V16 Flyway migrations inside a generated `core_admin_test_*` schema, then removes that schema. It exercises the migrated schema without manual constraint fixtures. No additional audit table is created. Do not point test variables at staging or production.
+`AdminDashboardPostgresTest` applies the actual Flyway migrations (currently V1–V18) inside a generated `core_admin_test_*` schema, then removes that schema. It exercises the migrated schema without manual constraint fixtures. No additional audit table is created. Do not point test variables at staging or production.
 
 ADMIN and OWNER events share the existing `audit_logs`; ADMIN reads are separated by their `ADMIN_*` actions and API whitelists. Shop status changes reuse the existing `SHOP_INACTIVATED`/`SHOP_REACTIVATED` event once. V11 extends action/target constraints and allows missing shop/target IDs only for the corresponding ADMIN reads; business events still require both IDs. Existing history, V10 foreign keys and append-only triggers are preserved. Failed audit persistence returns `503 admin_audit_unavailable` and rolls back the operation.
 
-For a fresh disposable local database, use `FLYWAY_ENABLED=true` and `SPRING_JPA_HIBERNATE_DDL_AUTO=validate` to apply V1–V16 and validate the entity mappings. A Flyway-managed database already at V10 can apply V11/V12/V13/V14/V15 in order. Follow the repository's merged-code migration policy for shared environments. Do not enable Flyway blindly on a Hibernate-created database without migration history: V10 rejects pre-existing ADMIN read events. Use a fresh local database or a separately reviewed adoption plan, preserving the original database. The migrations do not baseline or repair migration history.
+For a fresh disposable local database, use `FLYWAY_ENABLED=true` and `SPRING_JPA_HIBERNATE_DDL_AUTO=validate` to apply V1–V18 and validate the entity mappings. A Flyway-managed database already at V10 applies subsequent versions in order; review the V17 Zalo rollout below and [V18 Android rollout](docs/zalo-android-preparation.md#staging-activation-after-merge) before a shared-environment deployment. Follow the repository's merged-code migration policy for shared environments. Do not enable Flyway blindly on a Hibernate-created database without migration history: V10 rejects pre-existing ADMIN read events. Use a fresh local database or a separately reviewed adoption plan, preserving the original database. The migrations do not baseline or repair migration history.
 
 If V11 validation fails, PostgreSQL rolls back its schema changes; review the offending records before retrying. Recovery uses a forward fix retaining audit history. Restoring V10 constraints or older readers that cannot handle `ADMIN_*` events is unsafe after these records exist. Integrated Firebase/FE UAT and document alignment remain pending.
 
@@ -374,6 +374,61 @@ SET TIME ZONE 'Asia/Ho_Chi_Minh';
 
 This affects only that connection's display, not stored data or teammates' connections. Reapply after reconnecting, or use the SQL client's session initialization setting.
 
+## Zalo authentication (CORE-015, local backend implementation)
+
+Zalo is **disabled by default**. CORE-015 adds Core login/link and additive V17; it does not enable the live frontend button. Apply V17 to a shared database only from reviewed, merged staging code under the repo migration procedure. `ddl-auto=validate` remains unchanged; normal Core never creates these tables at runtime. Missing tables fail closed with `503 zalo_unavailable`. With Zalo disabled, existing Firebase login works without the new tables or Zalo credentials. The user confirmed LOGIN on the isolated real-provider local helper; this is not FE/LINK/native/staging acceptance.
+
+Configuration placeholders are in [`.env.example`](.env.example):
+
+| Variable | Meaning |
+| --- | --- |
+| `ZALO_ENABLED` | Default `false`; keep off until V17 and runtime/FE/operational acceptance are complete. |
+| `ZALO_APP_ID`, `ZALO_APP_SECRET` | App identifier and server-only secret from Zalo Developers. Never put the secret in FE, git, logs or chat. |
+| `ZALO_CALLBACK_URL` | Exact public HTTPS Core URL ending in `/api/v1/auth/zalo/callback`; register this in Zalo Developers. The static domain-verification HTML is not the application callback. |
+| `ZALO_CLIENT_ORIGINS` | Comma-separated exact HTTPS FE origins, without trailing slash/path/wildcard. Also configure the existing `CORS_ALLOWED_ORIGINS` for POST completion. |
+| `ZALO_SESSION_ENCRYPTION_KEY` | Standard Base64 of a separate, cryptographically random 32-byte AES key. Not the app secret or Firebase credential. Rotation invalidates in-flight flows. |
+| `ZALO_SESSION_TTL_SECONDS` | Default 300, allowed 60–600. |
+| `ZALO_PROOF_TTL_SECONDS` | Default 90, allowed 15–90, not greater than the session TTL. |
+| `ZALO_HTTP_TIMEOUT_SECONDS` | Default 10, allowed 1–30 per provider request. |
+
+The authoritative consumer boundary is the [Zalo API contract](../../docs/contracts/api-contracts.md#zalo-core-015), with generated OpenAPI checked over HTTP. [The implementation plan](docs/zalo-auth-implementation-plan.md) links to it; schema rollout/recovery is in [the ERD description](../../docs/architecture/erd-description.md#zalo-core-015-v17).
+
+For an opt-in real-provider test without deploying, use [the isolated manual login guide](docs/zalo-manual-login.md). It uses a test-only Core entry point, disposable loopback PostgreSQL and a restricted HTTPS gateway; it never points to a business database. Firebase calls are real dev/staging calls and may create a test Firebase user. The helper is not enabled in the packaged application and does not implement a LINK UI.
+
+1. FE generates a 32-byte random base64url `clientVerifier` (43 characters), its SHA-256 base64url `clientChallenge`, and a random `requestId` (16–100 URL-safe characters). Keep the verifier only in the initiating browser flow.
+2. Open `GET /api/v1/auth/zalo/authorize?purpose=LOGIN|LINK&clientOrigin=...&requestId=...&clientChallenge=...` in a popup. Core creates a browser-bound Secure/HttpOnly/SameSite=Lax host cookie and redirects to Zalo. No target UID, ID token or secret goes in this URL.
+3. Callback HTML posts `{type: "smartledger:zalo", requestId, purpose, proof, error}` only to that exact client origin. FE must validate `event.origin` equals the configured Core origin, `event.source` equals the popup it opened, and the expected requestId/purpose. Keep a compatible opener relationship: `noopener` or an incompatible COOP policy breaks this handoff. No opener means restart, not a token-in-URL fallback.
+4. For LOGIN, POST `{proof, clientVerifier}` to `/api/v1/auth/zalo/exchange` with the initiating Origin. The response is `{firebaseCustomToken, displayName}`. Use Firebase `signInWithCustomToken`; only the resulting Firebase **ID token** is a Core Bearer token. Open the existing `/api/v1/auth/session` to create/load the Core OWNER. `displayName` is an optional initial hint (up to 255 characters), not an instruction to overwrite an existing profile. The session request still allows at most 150 characters; validate the hint and let the user edit it before submitting a new profile.
+5. For LINK, prove ownership of the existing Firebase account through recent reauthentication, then POST the same proof body to `/api/v1/auth/zalo/link` with its Bearer ID token and Origin. Firebase revocation is checked; `auth_time` must be within five minutes. Link returns 204 without minting a token. A Zalo identity already bound to another UID returns `409 zalo_identity_conflict`; do not merge/move existing accounts or shops automatically. Link before a separate first Zalo login if the user wants to keep the original account.
+
+Proofs are one-use and purpose/origin/challenge-bound. Replay, browser mismatch or an expired flow requires a fresh authorization attempt. Mapping is committed before Firebase I/O so a failed mint/new OAuth flow reuses the canonical UID. Local/Firebase disabled accounts and ADMIN linking/login are rejected; linking preserves role/status/profile/media/shop data.
+
+Zalo routes hash the path and socket `remoteAddr` with a private per-instance salt into 4096 fixed buckets, each allowing at most 30 requests per 60-second window; completion bodies are limited to 8 KiB. Colliding clients conservatively share a bucket and can receive 429 earlier. New keys are not rejected just because a key map is full, and key churn cannot evict/reset counters. This bounded guard is neither distributed protection nor a DDoS guarantee. Before deployment, verify trusted-proxy handling so the address is meaningful; do not trust arbitrary `X-Forwarded-For`. Configure edge throttling and redact callback query strings, proof bodies, Authorization, cookies and custom tokens from proxy/APM/access logs. Core does not log provider bodies or credentials. A scheduled worker removes expired OAuth sessions; identity mappings remain.
+
+Point `CORE_TEST_POSTGRES_*` only at a disposable DB. Web/native tests apply actual Flyway migrations in UUID-named schemas and remove only those schemas. Historical V17 migration tests pin that version; Android migration/flow tests use V18, with a separate V17 compatibility schema. The web compatibility flow starts Hibernate on V16 before applying the exact V17 SQL; it proves feature-off behavior with the old schema as well. No duplicate prospective native schema fixture remains:
+
+```powershell
+.\mvnw.cmd '-Dtest=*Zalo*' test
+.\mvnw.cmd clean verify
+python scripts/test_verify_postgres_tests.py
+python scripts/verify_postgres_tests.py target/surefire-reports
+node --test scripts/test_zalo_popup.mjs
+```
+
+The optional browser regression needs Node 22+ and Chrome (`CHROME_PATH` may override the executable), and consumes synthetic HTML emitted by `ZaloCallbackPageTest`. Provider/Firebase APIs are mocked; PostgreSQL, transaction/unique-key concurrency and popup HTML/CSP are real. These checks do not replace FE integration, real Firebase signing/revocation, real Zalo callback/cookie behavior on HTTPS, external-user UAT or deployment verification. See [local verification evidence](docs/zalo-auth.tdd.md).
+
+Staging preparation (do not copy `ZALO_MANUAL_*` variables into Railway):
+
+1. Before merging, confirm `FLYWAY_ENABLED`: turning Zalo off does not stop automatic startup migrations. Review the intended DB, backup/recovery owner and migration window first. Merge/deploy with `ZALO_ENABLED=false`; apply V17 only from merged code under that procedure. V17 enables RLS with no public policies and removes public/anon/authenticated grants on its two stores; verify Core's trusted SQL role has the intended owner/reviewed access before enabling, never add public allow-all policies.
+2. Set `ZALO_APP_ID`, server-only `ZALO_APP_SECRET`, `ZALO_CALLBACK_URL=https://core-staging-01d2.up.railway.app/api/v1/auth/zalo/callback`, `ZALO_CLIENT_ORIGINS=https://smart-ledger-staging.vercel.app`, a persistent 32-byte Base64 `ZALO_SESSION_ENCRYPTION_KEY`, and matching existing `CORS_ALLOWED_ORIGINS`. Preserve any other approved existing origins. No temporary tunnel origins.
+3. Reuse the existing staging Firebase project/credential configuration; a local `ZALO_MANUAL_FIREBASE_CREDENTIALS` filesystem path is not a Railway credential. Verify actual custom-token signing and ID-token verification in that runtime.
+4. Verify callback registration, HTTPS cookie/popup opener, log redaction (callback query/body/Authorization/cookies), trusted proxy behavior and edge/shared throttling. FE must validate origin/source/requestId/purpose and reauthenticate before LINK. Keep the feature off until owners approve integration testing; enabling does not deploy FE.
+5. Recovery: turn Zalo off/roll back application code but retain V17 tables and identity mappings. Do not drop mappings or delete Firebase accounts as rollback; key rotation invalidates active OAuth sessions. Any destructive removal needs a separately reviewed forward migration.
+
+
+## Zalo Android Core preparation — CORE-016
+
+Android LOGIN/LINK on `feat/zalo-android` (#276) adds separate `/api/v1/auth/zalo/native/authorize`, `/api/v1/auth/zalo/native/exchange`, `/api/v1/auth/zalo/native/link` endpoints, shared provider callback dispatch, exact HTTPS App Link fallback and environment-specific `/.well-known/assetlinks.json`. The approved migration `V18__add_zalo_android_handoff.sql` is now included; native remains **OFF by runtime default**. [The reviewed staging example](config/zalo-native-staging.env.example) sets `ZALO_NATIVE_ENABLED=true` only when explicitly copied to Railway staging **after merge/migration**; it does not auto-enable a deployment. V17 WEB stays supported, missing V18 fails closed, and production is not activated. See [the integration/rollout guide](docs/zalo-android-preparation.md) and [canonical contract](../../docs/contracts/api-contracts.md#zalo-android-core-016). FE/APK and real-provider/device acceptance remain separate work.
 
 ## OWNER in-app notifications
 
