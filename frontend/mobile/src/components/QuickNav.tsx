@@ -56,6 +56,8 @@ export function QuickNavProvider({ children }: { children: React.ReactNode }) {
   const panelWidth = Math.min(320, Math.round(width * 0.82));
   const progress = useRef(new Animated.Value(0)).current;
   const [visible, setVisible] = useState(false);
+  // Đang trượt đóng: lớp menu (kể cả nền tối đã gần trong suốt) thôi nhận chạm ngay, để chạm vào màn bên dưới không bị nuốt
+  const [closing, setClosing] = useState(false);
   const widthRef = useRef(panelWidth);
   widthRef.current = panelWidth;
   const visibleRef = useRef(false);
@@ -64,6 +66,7 @@ export function QuickNavProvider({ children }: { children: React.ReactNode }) {
   /** `velocity` (phần bảng mỗi giây) có khi thả tay sau khi kéo: chạy tiếp bằng lò xo từ vận tốc đó để không bị khựng. */
   const animateTo = useCallback(
     (to: 0 | 1, velocity?: number) => {
+      setClosing(to === 0);
       const done = ({ finished }: { finished: boolean }) => {
         if (finished && to === 0) setVisible(false);
       };
@@ -125,6 +128,7 @@ export function QuickNavProvider({ children }: { children: React.ReactNode }) {
         onPanResponderGrant: (_, g) => {
           progress.stopAnimation();
           progress.setValue(clamp01(g.moveX / widthRef.current));
+          setClosing(false);
           setVisible(true);
         },
         onPanResponderMove: (_, g) => progress.setValue(clamp01(g.moveX / widthRef.current)),
@@ -175,7 +179,14 @@ export function QuickNavProvider({ children }: { children: React.ReactNode }) {
       <View style={styles.root} {...edgePan.panHandlers}>
         {children}
         {visible ? (
-          <QuickNavPanel progress={progress} panelWidth={panelWidth} onClose={close} onSelect={go} panHandlers={overlayPan.panHandlers} />
+          <QuickNavPanel
+            progress={progress}
+            panelWidth={panelWidth}
+            interactive={!closing}
+            onClose={close}
+            onSelect={go}
+            panHandlers={overlayPan.panHandlers}
+          />
         ) : null}
       </View>
     </QuickNavContext.Provider>
@@ -189,12 +200,14 @@ export function useQuickNav() {
 function QuickNavPanel({
   progress,
   panelWidth,
+  interactive,
   onClose,
   onSelect,
   panHandlers,
 }: {
   progress: Animated.Value;
   panelWidth: number;
+  interactive: boolean;
   onClose: () => void;
   onSelect: (item: QuickNavItem) => void;
   panHandlers: ReturnType<typeof PanResponder.create>['panHandlers'];
@@ -206,7 +219,7 @@ function QuickNavPanel({
   const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [-panelWidth, 0] });
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.layer]} {...panHandlers}>
+    <View style={[StyleSheet.absoluteFill, styles.layer]} pointerEvents={interactive ? 'auto' : 'none'} {...panHandlers}>
       {/* Bảng trắng nằm dưới thanh trạng thái: chữ và biểu tượng của thanh trạng thái phải tối (Tổng quan đang để sáng) */}
       <StatusBar style="dark" />
       <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: progress }]}>
