@@ -600,19 +600,27 @@ function AssistantSettingsSheet({
   const [memories, setMemories] = useState<AgentMemoryItem[]>([]);
   const [deleting, setDeleting] = useState<AgentMemoryItem | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  // Đổi mỗi lần tải hoặc thao tác của chủ shop; kết quả tải về sau khi số này đã đổi là cũ và bị bỏ.
+  const version = useRef(0);
 
   const load = async () => {
+    const started = ++version.current;
     setError(null);
+    setLoadFailed(false);
     // AI trả danh sách rỗng khi bộ nhớ tắt, nên gọi song song thay vì chờ cài đặt trước.
     // Danh sách lỗi riêng không được che công tắc, nên hai kết quả xử lý tách nhau.
     const [loaded, items] = await Promise.allSettled([agentApi.getMemorySettings(), agentApi.listMemories()]);
+    if (started !== version.current) return;
     if (loaded.status === 'rejected') {
       setError(historyErrorMessage(loaded.reason, 'Chưa tải được cài đặt ghi nhớ.'));
+      setLoadFailed(true);
       return;
     }
     setSettings(loaded.value);
     if (items.status === 'rejected') {
       setError('Chưa tải được danh sách ghi nhớ.');
+      setLoadFailed(true);
       return;
     }
     setMemories(loaded.value.available ? items.value : []);
@@ -624,6 +632,7 @@ function AssistantSettingsSheet({
   }, [visible]);
 
   const change = async (enabled: boolean) => {
+    version.current++;
     setError(null);
     setSettings((s) => s && { ...s, memory_enabled: enabled });
     try {
@@ -638,6 +647,7 @@ function AssistantSettingsSheet({
     const target = deleting;
     setDeleting(null);
     if (!target) return;
+    version.current++;
     setError(null);
     try {
       await agentApi.deleteMemory(target.id);
@@ -654,7 +664,7 @@ function AssistantSettingsSheet({
           <T size={13} color={colors.red} accessibilityRole="alert">
             {error}
           </T>
-          {settings === null ? <Button title="Thử lại" variant="soft" small onPress={load} style={{ marginTop: 10 }} /> : null}
+          {loadFailed ? <Button title="Thử lại" variant="soft" small onPress={load} style={{ marginTop: 10 }} /> : null}
         </View>
       ) : null}
       {settings === null && !error ? (
