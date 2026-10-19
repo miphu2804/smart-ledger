@@ -860,12 +860,12 @@
     --gw: min(240px, 16svh, 58vw);
   }
 }
-/* Điện thoại đứng: máy đang chiếu to hơn để đọc; chiều cao màn vẫn chặn cỡ máy (22svh) để không tràn khỏi màn ghim */
+/* Điện thoại đứng: máy đang chiếu to hơn để đọc; chiều cao màn vẫn chặn cỡ máy (19svh, vì khung ghim cao 100svh) để không tràn khỏi màn ghim */
 @media (max-width: 560px) {
   /* Máy to ra: 1.2 lúc vừa vào mục, 1.4 khi tiêu đề đã thu hết; quãng ghim ngắn hơn desktop (900svh) */
   .lp-gallery {
     --focus: 1.2;
-    --gw: min(240px, 22svh, 58vw);
+    --gw: min(240px, 19svh, 58vw);
     height: 600svh;
   }
   /* data-settled do useScrollProgress đặt khi cuộn qua mốc đầu mục; đổi một lần có chuyển động thay vì tính lại layout theo từng điểm cuộn */
