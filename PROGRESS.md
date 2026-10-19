@@ -1,3 +1,13 @@
+### [2026-10-19 10:03 UTC+07:00] — [Fix] Desktop landing gallery fits tall windows
+
+**Done:** On desktop above 1100 px of viewport height, the focused phone was scaled by 1.82 with no shorter-screen tier, so on a 1142 px window its bottom, the progress bar and the fineprint fell below the window edge. The default `--focus` is now 1.3, the value the 1100 px tier already uses; the shorter-screen tiers still apply below it. Mobile sets its own focus and is unchanged.
+
+**Changed files:** `frontend/web/src/styles/landing.css` — modified; this entry.
+
+**Flow explained:** the `--focus` value feeds the phone's `scale` and the `margin-top` and `gap` that leave room for the scaled phone inside the pinned screen.
+
+**Check:** `npm run build` passes. In the browser, the phone bottom and fineprint sit inside the viewport at 1440×900, 1920×1200, 2000×1142 and 2560×1440; at 2000×1142 the heading starts 13 px below the nav. At 375×812 the focus is still the mobile value and the phone ends at 773 px.
+
 ### [2026-10-19 09:59 UTC+07:00] — [Fix] Mobile landing gallery, FAQ and pain list
 
 **Done:** On mobile, the gallery heading was capped at 96 px, which clipped its fourth line at 375 px. The cap is now `6em` of the heading font, so the full heading shows at start and still collapses on scroll. The gallery pins for 600vh instead of 900vh, and the phones grow from 1.2x to 1.4x as the heading collapses. Bobi stays visible beside the FAQ heading, the first FAQ item starts closed, and the pain list lines no longer reveal on scroll. On desktop, overflowing gallery content aligns to the top (`safe center`) so the fixed nav does not cover the heading.
