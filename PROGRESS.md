@@ -1,3 +1,13 @@
+### [2026-10-19 10:07 UTC+07:00] — [Feature] Swipe between landing gallery screens on touch
+
+**Done:** A horizontal swipe on the gallery moves to the previous or next screen by scrolling to that screen's progress point; vertical scroll is unchanged (`touch-action: pan-y`). The scroll hook now reads every position before writing styles and measures the track width and screen count only on resize, so each frame does less layout work. The nav shadow shows at page load instead of after scrolling, and the nav no longer listens to scroll.
+
+**Changed files:** `frontend/web/src/hooks/useScrollProgress.ts`, `frontend/web/src/pages/landing/LandingPage.tsx`, `frontend/web/src/styles/landing.css` — modified; this entry.
+
+**Flow explained:** a swipe reads `data-active` from the gallery section and scrolls to `0.06 + 0.88 × index / (n-1)`, the progress point that useScrollProgress maps back to that screen.
+
+**Check:** typecheck and build pass. In the browser at 375 px, a left swipe moves to screen 1 and a right swipe back; a vertical swipe changes nothing; no horizontal overflow. Smooth scroll stalled in the pane until the next event, so the final position was read after a second swipe. Scroll smoothness and swipe on a real device not verified.
+
 ### [2026-10-19 10:03 UTC+07:00] — [Fix] Desktop landing gallery fits tall windows
 
 **Done:** On desktop above 1100 px of viewport height, the focused phone was scaled by 1.82 with no shorter-screen tier, so on a 1142 px window its bottom, the progress bar and the fineprint fell below the window edge. The default `--focus` is now 1.3, the value the 1100 px tier already uses; the shorter-screen tiers still apply below it. Mobile sets its own focus and is unchanged.
