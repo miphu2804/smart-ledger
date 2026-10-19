@@ -23,6 +23,7 @@ export function useScrollProgress() {
       if (track) tracks.set(el, track)
     }
     let frame = 0
+    let resized = false
 
     const update = () => {
       frame = 0
@@ -30,28 +31,39 @@ export function useScrollProgress() {
       const vw = document.documentElement.clientWidth
       // Đọc hết vị trí trước rồi mới ghi, để trình duyệt không phải tính lại layout sau từng lần ghi
       const rects = els.map((el) => el.getBoundingClientRect())
-      const visible: [HTMLElement, HTMLElement][] = []
+      const remeasure: [HTMLElement, HTMLElement][] = []
+      if (resized) {
+        resized = false
+        tracks.forEach((_, el) => el.style.removeProperty('--shift'))
+      }
       els.forEach((el, i) => {
         const r = rects[i]
         if (r.bottom < -vh || r.top > vh * 2) return
         const mode = el.dataset.scroll
+        // Mục ghim đo theo chiều cao khung sticky (svh, cố định), không theo innerHeight vốn đổi khi thanh địa chỉ co giãn
+        const pinH = el.firstElementChild?.clientHeight || vh
         const p =
-          mode === 'pin' ? clamp01(-r.top / Math.max(1, r.height - vh)) : mode === 'view' ? clamp01((vh - r.top) / vh) : clamp01(-r.top / r.height)
+          mode === 'pin' ? clamp01(-r.top / Math.max(1, r.height - pinH)) : mode === 'view' ? clamp01((vh - r.top) / vh) : clamp01(-r.top / r.height)
         el.style.setProperty('--p', p.toFixed(4))
         const track = tracks.get(el)
         if (track) {
-          visible.push([el, track])
           // Dải được đệm hai đầu nên màn thứ i dừng giữa khung nhìn khi tiến độ là i/(n-1)
           // Giữ máy đầu và máy cuối đứng yên một đoạn cuộn, để vuốt nhanh không trôi tuột qua mục
           const held = clamp01((p - 0.06) / 0.88)
           const active = Math.round(held * (track.children.length - 1))
           el.dataset.active = String(active)
           el.style.setProperty('--a', String(active))
+          // Bố cục điện thoại (tiêu đề thu, máy to ra) đổi một lần khi qua mốc này thay vì liên tục theo --p,
+          // nên cuộn không bắt trình duyệt tính lại layout ở mỗi khung hình
+          const settled = p > 0.05 ? '1' : '0'
+          if (el.dataset.settled !== settled || !el.style.getPropertyValue('--shift')) {
+            el.dataset.settled = settled
+            remeasure.push([el, track])
+          }
         }
       })
-      // Độ tràn của dải đổi theo --p trên điện thoại (khoảng cách giữa các máy phụ thuộc --focus), nên phải đo sau khi
-      // đã ghi --p. Đo trước thì --shift lệch một khung hình và vẫn lệch khi cuộn đã dừng
-      for (const [el, track] of visible) {
+      // Độ tràn của dải phụ thuộc khoảng cách giữa các máy (--focus), nên đo sau khi đã ghi và chỉ khi bố cục đổi
+      for (const [el, track] of remeasure) {
         el.style.setProperty('--shift', `${Math.max(0, track.scrollWidth - vw)}px`)
       }
     }
@@ -63,11 +75,15 @@ export function useScrollProgress() {
     for (const [el, track] of tracks) el.style.setProperty('--n', String(track.children.length))
     update()
     window.addEventListener('scroll', request, { passive: true })
-    window.addEventListener('resize', request)
+    const onResize = () => {
+      resized = true
+      request()
+    }
+    window.addEventListener('resize', onResize)
     return () => {
       cancelAnimationFrame(frame)
       window.removeEventListener('scroll', request)
-      window.removeEventListener('resize', request)
+      window.removeEventListener('resize', onResize)
       document.documentElement.classList.remove('has-scroll-fx')
     }
   }, [])
