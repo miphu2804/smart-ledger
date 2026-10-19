@@ -288,8 +288,19 @@ function QuickNavPanel({
   );
 }
 
-/** Nút ☰ mở menu chuyển nhanh, đặt ở đầu các tab chính. `dark` dùng trên nền tím của Tổng quan. */
-export function QuickNavButton({ tone = 'light', style }: { tone?: 'light' | 'dark'; style?: StyleProp<ViewStyle> }) {
+/**
+ * Nút ☰ mở menu chuyển nhanh, đặt ở đầu các tab chính. `dark` dùng trên nền tím của Tổng quan; `compact` là cỡ nhỏ cho phần
+ * đầu đã thu gọn khi cuộn (cùng cỡ với các nút gọn của Bán hàng), để mở được menu mà không phải cuộn lên.
+ */
+export function QuickNavButton({
+  tone = 'light',
+  compact = false,
+  style,
+}: {
+  tone?: 'light' | 'dark';
+  compact?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
   const nav = useQuickNav();
   if (!nav) return null;
   return (
@@ -298,9 +309,14 @@ export function QuickNavButton({ tone = 'light', style }: { tone?: 'light' | 'da
       hitSlop={6}
       accessibilityRole="button"
       accessibilityLabel="Mở menu chuyển nhanh"
-      style={({ pressed }) => [tone === 'dark' ? styles.buttonDark : styles.buttonLight, pressed && styles.pressed, style]}
+      style={({ pressed }) => [
+        tone === 'dark' ? styles.buttonDark : styles.buttonLight,
+        compact && styles.buttonCompact,
+        pressed && styles.pressed,
+        style,
+      ]}
     >
-      <Feather name="menu" size={tone === 'dark' ? 22 : 20} color={tone === 'dark' ? colors.white : colors.ink} />
+      <Feather name="menu" size={compact ? 18 : tone === 'dark' ? 22 : 20} color={tone === 'dark' ? colors.white : colors.ink} />
     </Pressable>
   );
 }
@@ -399,5 +415,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  buttonCompact: { width: 36, height: 36, borderRadius: 11 },
   pressed: { opacity: 0.75 },
 });

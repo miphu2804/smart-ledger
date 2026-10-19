@@ -755,6 +755,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
         onBodyHeight={setHeaderBodyHeight}
         pinned={
           <Row gap={8} style={styles.pinnedHeader}>
+            {inTab ? <QuickNavButton compact /> : null}
             <PosSearchBox value={q} onChangeText={setQ} compact />
             <PosActionButton tone="gold" icon="maximize" label="Quét mã" compact onPress={() => setScannerOpen(true)} />
             <PosActionButton tone="purple" icon="mic" label="Đọc đơn" compact onPress={() => router.push('/voice')} />

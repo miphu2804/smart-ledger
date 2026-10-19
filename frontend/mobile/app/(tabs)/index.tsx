@@ -539,6 +539,7 @@ export default function Home() {
           >
             {/* Tier 1: Context on left + Prominent Revenue on right */}
             <View style={styles.compactTier1}>
+              <QuickNavButton tone="dark" compact style={{ marginRight: 10 }} />
               <View style={styles.compactContext}>
                 <T w="bold" size={16} color={colors.white} numberOfLines={1}>
                   Tổng quan
