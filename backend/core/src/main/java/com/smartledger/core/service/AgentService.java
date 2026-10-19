@@ -25,4 +25,8 @@ public interface AgentService {
     JsonNode setMemoryEnabled(VerifiedFirebaseToken token, String shopId, boolean enabled);
 
     void deleteConversation(VerifiedFirebaseToken token, String shopId, long conversationId);
+
+    JsonNode listMemories(VerifiedFirebaseToken token, String shopId);
+
+    void deleteMemory(VerifiedFirebaseToken token, String shopId, long memoryId);
 }

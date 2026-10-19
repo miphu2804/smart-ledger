@@ -38,6 +38,7 @@ public class AgentServiceImpl implements AgentService {
     private static final String AGENT_PATH = "/internal/v1/agent";
     private static final String CONVERSATION_PATH = AGENT_PATH + "/conversations/{id}";
     private static final String MEMORY_SETTINGS_PATH = AGENT_PATH + "/memory/settings";
+    private static final String MEMORY_ITEMS_PATH = AGENT_PATH + "/memory/items";
     private static final ObjectMapper JSON = new ObjectMapper();
     /** A turn the AI's guardrails stop answers 422 with one of these codes (api-contracts.md section 6). */
     private static final Map<String, ErrorCode> GUARDRAIL_CODES = Map.of(
@@ -116,6 +117,22 @@ public class AgentServiceImpl implements AgentService {
         Shop shop = shopService.requireOwnedActiveShop(token, shopId);
         callAi(() -> send(aiClient.delete()
                 .uri(uri -> scoped(uri.path(CONVERSATION_PATH), shop).build(conversationId)))
+                .toBodilessEntity());
+    }
+
+    @Override
+    public JsonNode listMemories(VerifiedFirebaseToken token, String shopId) {
+        Shop shop = shopService.requireOwnedActiveShop(token, shopId);
+        return callAi(() -> send(aiClient.get()
+                .uri(uri -> scoped(uri.path(MEMORY_ITEMS_PATH), shop).build()))
+                .body(JsonNode.class));
+    }
+
+    @Override
+    public void deleteMemory(VerifiedFirebaseToken token, String shopId, long memoryId) {
+        Shop shop = shopService.requireOwnedActiveShop(token, shopId);
+        callAi(() -> send(aiClient.delete()
+                .uri(uri -> scoped(uri.path(MEMORY_ITEMS_PATH + "/{id}"), shop).build(memoryId)))
                 .toBodilessEntity());
     }
 
