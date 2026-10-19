@@ -17,12 +17,25 @@ BUTTONS = '\n\n```actions\n["debts"]\n```'
 # The whole answer, written before the model calls suggest_screen.
 LIST = "Gợi ý nhập thêm:\n- Ức gà: 3 kg\n- Đậu xanh: 1 kg\n\nĐây chỉ là gợi ý."
 FOLLOW_UP = "Bấm nút bên dưới để mở Công nợ."
+# The same answer written again after a button call, with a changed last sentence.
+REWRITE = LIST.replace("Đây chỉ là gợi ý.", "Đây chỉ là gợi ý!")
 
 
 def answer_then_button(text: str = LIST) -> ModelResponse:
     return ModelResponse(
         parts=[TextPart(text), ToolCallPart("suggest_screen", {"screen": "debts"})]
     )
+
+
+def shown(events: list) -> str:
+    """The text on screen: a Reset clears what was shown before it."""
+    text = ""
+    for event in events:
+        if isinstance(event, Reset):
+            text = ""
+        elif isinstance(event, TextDelta):
+            text += event.text
+    return text
 
 
 class FakeConversationRepository:
@@ -203,7 +216,7 @@ async def test_stream_chat_does_not_send_a_repeated_answer_twice() -> None:
     assert events[-1].result.answer == streamed
 
 
-async def test_a_reply_that_starts_like_the_answer_but_goes_on_is_kept() -> None:
+async def test_a_reply_that_rewrites_the_answer_is_shown_once() -> None:
     model = ScriptedModel(answer_then_button(), LIST + " Bấm nút bên dưới.")
 
     events = [
@@ -213,6 +226,53 @@ async def test_a_reply_that_starts_like_the_answer_but_goes_on_is_kept() -> None
         )
     ]
 
-    streamed = "".join(event.text for event in events if isinstance(event, TextDelta))
-    assert streamed == LIST + "\n\n" + LIST + " Bấm nút bên dưới." + BUTTONS
-    assert events[-1].result.answer == streamed
+    assert shown(events) == LIST + " Bấm nút bên dưới." + BUTTONS
+    assert events[-1].result.answer == shown(events)
+
+
+async def test_stream_chat_replaces_the_shown_answer_on_a_second_button_call() -> None:
+    model = ScriptedModel(answer_then_button(), answer_then_button(REWRITE), "Xong.")
+
+    events = [
+        event
+        async for event in await build_agent(model).stream_chat(
+            user_id=3, shop_id=15, message="m"
+        )
+    ]
+
+    assert any(isinstance(event, Reset) for event in events)
+    assert shown(events) == REWRITE + "\n\nXong." + BUTTONS
+    assert events[-1].result.answer == shown(events)
+
+
+async def test_chat_replaces_the_answer_that_a_rewrite_changes_at_the_end() -> None:
+    model = ScriptedModel(answer_then_button(), REWRITE)
+
+    result = await build_agent(model).chat(user_id=3, shop_id=15, message="m")
+
+    assert result.answer == REWRITE + BUTTONS
+
+
+async def test_a_rewrite_of_a_later_answer_keeps_the_text_before_it() -> None:
+    later = "Bấm nút bên dưới để mở Công nợ và xem từng khoản nợ."
+    later_rewritten = later.replace("nợ.", "nợ!")
+    model = ScriptedModel(
+        answer_then_button(),
+        answer_then_button(later),
+        answer_then_button(later_rewritten),
+        "Xong.",
+    )
+
+    events = [
+        event
+        async for event in await build_agent(model).stream_chat(
+            user_id=3, shop_id=15, message="m"
+        )
+    ]
+
+    # The rewrite is the only Reset: the list before it is sent again after the Reset.
+    resets = [index for index, event in enumerate(events) if isinstance(event, Reset)]
+    assert len(resets) == 1
+    assert shown(events[resets[0] :]).startswith(LIST + "\n\n")
+    assert shown(events) == LIST + "\n\n" + later_rewritten + "\n\nXong." + BUTTONS
+    assert events[-1].result.answer == shown(events)
