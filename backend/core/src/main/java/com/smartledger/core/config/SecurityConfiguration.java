@@ -46,6 +46,11 @@ public class SecurityConfiguration {
                                 "/actuator/health/liveness", "/actuator/health/readiness").permitAll()
                         .requestMatchers(HttpMethod.GET,
                                 "/zalo_verifierMysnBA7R831YqgKCwDCT0HgaYGlsqb9MCpOu.html").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/zalo/authorize", "/api/v1/auth/zalo/callback").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/zalo/exchange").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/zalo/native/authorize",
+                                "/mobile/auth/zalo/complete", "/.well-known/assetlinks.json").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/zalo/native/exchange").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(bearerTokenAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();

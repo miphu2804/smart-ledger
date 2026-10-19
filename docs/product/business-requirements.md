@@ -5,7 +5,7 @@
 | Trạng thái | Core: quy tắc dưới đây đã chốt; AI/dashboard: đích MVP, cần nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ kinh doanh/sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; chủ thuế cho `BR-INV-*` |
-| Cập nhật lần cuối | 2026-10-12 (barcode Core; không rà soát lại căn cứ pháp lý) |
+| Cập nhật lần cuối | 2026-10-17 (Zalo Android/V18; không rà soát lại căn cứ pháp lý) |
 
 ## Tài liệu liên quan
 
@@ -100,8 +100,19 @@ Hóa đơn điện tử là initiative kế tiếp, không mặc nhiên thuộc 
 | `BR-019` | OWNER có thể lưu một ảnh chính cho Product, logo cho Shop và avatar hồ sơ. Core là bên duy nhất gọi kho media có credential; client không nhận secret hoặc provider public ID. Retry upload không tạo thêm thay đổi/audit. Thay/xóa ảnh commit dữ liệu và job dọn asset cũ cùng nhau; cleanup retry sau commit và không xóa asset còn được sử dụng. Avatar là authenticated media; Product/logo có URL công khai. Avatar tùy chỉnh ưu tiên hiển thị nhưng giữ fallback Firebase, bỏ avatar tùy chỉnh trở về fallback. |
 | `BR-020` | OWNER có hộp thông báo trong app cho tồn thấp/hết hàng, hủy sale và ADMIN tạm ngưng/kích hoạt tiệm. Ngưỡng tồn thấp tùy từng Product; không tự đặt ngưỡng cho dữ liệu cũ. Thông báo và người nhận commit/rollback cùng nghiệp vụ, retry không tạo trùng; trạng thái đã đọc riêng và giữ lần đọc đầu tiên. Chỉ OWNER hoạt động đọc dữ liệu của mình và tiệm mình sở hữu; tiệm INACTIVE chỉ lộ thông báo trạng thái, ARCHIVED không hiển thị. Notification không thay audit/sổ nghiệp vụ và chưa bao gồm push, email/SMS hay AI reminder. |
 | `BR-021` | Barcode là mã định danh tùy chọn của mặt hàng trong tiệm: khớp chính xác, phân biệt hoa thường, giữ chữ/dấu/số 0 đầu. Chỉ sản phẩm ACTIVE giữ quyền dùng mã; archive giải phóng mã cho sản phẩm khác nhưng giữ nguyên sản phẩm và tham chiếu lịch sử sale/draft. OWNER chỉ tra mã trong tiệm ACTIVE mình sở hữu; không dùng danh mục tiệm khác hoặc sản phẩm giả để thay thế kết quả không tìm thấy/lỗi. |
+| `BR-022` | OWNER có thể đăng nhập Zalo hoặc chủ động liên kết Zalo vào tài khoản đang sở hữu. Liên kết phải chứng minh quyền sở hữu cả Zalo và tài khoản hiện tại; không tự gộp theo tên/email/ảnh, không chuyển identity đang thuộc tài khoản khác. Đăng nhập lại giữ một tài khoản chuẩn và dữ liệu tiệm; không khôi phục tài khoản bị khóa hoặc nâng quyền. Core tiếp tục chỉ nhận Firebase ID token cho API nghiệp vụ. |
 
 `BR-003` giữ nguyên ý: người bán quyết định số liệu được ghi.
+
+### Zalo CORE-015 đã chốt — 2026-10-16
+
+- `BR-009`/`BR-022` bổ sung đăng nhập và liên kết Zalo có xác nhận, không mở thêm role hay tự gộp tiệm. Một Zalo đã LOGIN riêng không tự chuyển sang tài khoản Email/Google/Facebook đã có; cần LINK trước nếu muốn giữ tài khoản đó.
+- Đợt này là backend web-popup; người dùng xác nhận LOGIN trên bộ thử local thành công. Không suy ra đã nghiệm thu LINK với provider thật, FE staging hoặc Android/iOS. Chi tiết trạng thái và rollout nằm trong [thiết kế kỹ thuật](../architecture/technical-design.md#zalo-core-015).
+
+### Zalo Android CORE-016 đã chốt — 2026-10-16
+
+- Theo `BR-009`/`BR-022`, Android dùng trình duyệt ngoài/Custom Tabs rồi quay về APK qua HTTPS App Link đã xác minh. Không tích hợp Zalo Android SDK hoặc WebView trong đợt này; LOGIN và LINK giữ cùng tài khoản chuẩn và quy tắc sở hữu của CORE-015.
+- Tiếp nối duyệt schema/API, đã duyệt tạo V18 và chuẩn bị cấu hình bật native **staging sau khi merge** trên `feat/zalo-android` (#276). V18 có trong nhánh, chưa áp dụng DB dùng chung hoặc bật Railway; runtime mặc định vẫn tắt, production cần phê duyệt riêng. Chưa nghiệm thu APK/provider thật; FE/AI không thuộc thay đổi này. Không suy ra đã hoàn thành rollout chỉ từ việc cấu hình package/chứng chỉ/domain trên Zalo Developer. Ranh giới triển khai tại [thiết kế kỹ thuật](../architecture/technical-design.md#zalo-android-core-016).
 
 ### Barcode Core đã chốt — 2026-10-12
 
@@ -201,6 +212,8 @@ Copy UI viện dẫn nghị định trên màn bản ghi bán hàng **không** b
 | `BO-002`, `BR-007`, `BR-009`, `BR-016`, `BR-017`, `BR-018` | `FR-009`, `FR-030`, `AC-044`–`AC-048` | Nhập kho Core; FE/staging cần nghiệm thu |
 | `BR-007`, `BR-009`, `BR-017`, `BR-019` | `FR-011`, `FR-031`, `NFR-003`, `NFR-010`, `AC-053`–`AC-054` | Media Core có trên nhánh; FE/staging và migration shared DB cần nghiệm thu |
 | `BR-009` | `FR-010`, `FR-011`, `NFR-003` | tạm thời — MVP đã chấp nhận; không tuyên bố sẵn sàng sản xuất |
+| `BR-009`, `BR-022` | `FR-010`, `NFR-003`, `AC-081`–`AC-086` | CORE-015 #238: backend Zalo web-popup trên feat/zalo-login; LOGIN local do người dùng xác nhận, FE/LINK thật/staging còn nghiệm thu |
+| `BR-009`, `BR-022` | `FR-010`, `NFR-003`, `AC-087`–`AC-092` | CORE-016 #276: Core/V18 và cấu hình bật staging trên feat/zalo-android; chưa áp dụng shared DB/bật Railway/nghiệm thu FE/APK; runtime mặc định tắt |
 | `BR-013`, `BR-014` | `FR-022`–`FR-024`, `NFR-003`, `NFR-009`, `AC-015`–`AC-017`, `AC-040`–`AC-043` | Core có API hỗ trợ/audit; dashboard web và staging cần nghiệm thu riêng |
 | `BR-010` | `FR-014` | tạm thời — MVP đã chấp nhận |
 | `BR-015` | `FR-011`, `AC-025` | tạm thời — cần kiểm chứng với FE |
@@ -209,5 +222,6 @@ Copy UI viện dẫn nghị định trên màn bản ghi bán hàng **không** b
 | `BR-002`, `BR-003`, `BR-011`, `BR-012` | `FR-008`, `FR-017`, `FR-018`, `FR-020`, `FR-021`, `FR-025`, `NFR-006`–`NFR-008`, `AC-076`–`AC-077` | tạm thời — đích MVP; Agent đọc công nợ/thu tiền/chi phí có test DB, chưa nghiệm thu đầu-cuối với model thật |
 | `BO-003`, `BR-011`, `BR-012` | `FR-019`, `AC-012` | tạm thời — đích MVP; mới bật extension `pgvector`, chưa có truy xuất vector |
 | `BO-003`, `BR-002`, `BR-004` | `FR-026`, `AC-019` | tạm thời — cần nghiệm thu trên mobile |
+| `BR-001` | `FR-035`, `AC-096` | tạm thời — cần nghiệm thu trên mobile |
 | `BO-003`, `BR-012` | `FR-027`, `AC-020`–`AC-023` | Core proxy và AI Agent chat đã có; cần nghiệm thu FE/staging |
 | `BO-004`, `BR-INV-001`–`BR-INV-008` | `FR-INV-001`–`FR-INV-007` | Hoãn, chờ `OQ-INV-001`–`OQ-INV-005` và phê duyệt pháp lý |

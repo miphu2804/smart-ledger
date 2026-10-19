@@ -5,6 +5,7 @@ import { Animated, Image, ImageSourcePropType, ImageStyle, Pressable, StyleSheet
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ReportPeriodTabs, type ReportPeriod } from '../../src/components/ReportPeriodTabs';
 import { AssistantIntroModal } from '../../src/components/AssistantIntroModal';
+import { QuickNavButton } from '../../src/components/QuickNav';
 import { Button, Card, EmptyState, Row, T } from '../../src/components/ui';
 import { CountUp, Reveal, Skeleton } from '../../src/components/reveal';
 import { vnd } from '../../src/lib/format';
@@ -60,11 +61,17 @@ export default function Home() {
   const [period, setPeriod] = useState<ReportPeriod>('today');
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // Chỉ chốt trạng thái thu gọn (để chọn lớp header nhận chạm) khi cuộn dừng: không đổi state mỗi khung hình trong lúc cuộn.
-  const settleCollapsed = useCallback(
-    (offsetY: number) => setIsCollapsed(offsetY >= headerScrollDistance * 0.9),
-    [headerScrollDistance],
-  );
+  // Trạng thái thu gọn chọn lớp header nhận chạm: lớp đầy đủ chỉ mờ đi chứ vẫn nằm trên, nên khi đã thu gọn mà nó còn nhận chạm
+  // thì bấm nút ☰ hay các nút gọn sẽ trúng thẻ "Đọc đơn"… bên dưới. Theo dõi độ cuộn như phần đầu của Bán hàng, chỉ đổi state
+  // khi vượt mốc: chốt lúc thả tay sau khi kéo thì cuộn bằng chuột, bàn di hay cuộn tới vị trí khác không bao giờ cập nhật.
+  useEffect(() => {
+    const threshold = headerScrollDistance * 0.9;
+    const id = scrollY.addListener(({ value }) => {
+      const next = value >= threshold;
+      setIsCollapsed((cur) => (cur === next ? cur : next));
+    });
+    return () => scrollY.removeListener(id);
+  }, [scrollY, headerScrollDistance]);
   const now = new Date();
 
   // Số liệu lấy từ báo cáo của Core (tính trên toàn tiệm ở Core), không tải toàn bộ đơn, hàng, nợ về máy để cộng.
@@ -95,7 +102,9 @@ export default function Home() {
   // Món cần nhập theo ngưỡng riêng của từng món (Core); chỉ nhắc 2 món, tổng số món ở `restockTotal`
   const restockTotal = overview.restock?.total ?? 0;
   const lowStock = restockRows(overview.restock?.items ?? []);
-  const priorityCount = Number(totalDebt > 0) + Number(restockTotal > 0);
+  // Tắt "Cảnh báo sắp hết hàng" ở Cài đặt thì không nhắc nhập hàng ở đây
+  const showRestock = app.settings.stockAlerts && restockTotal > 0;
+  const priorityCount = Number(totalDebt > 0) + Number(showRestock);
   const revenueChange =
     period === 'today' && totals ? changeVsYesterday(totals.revenue, local.yesterdayRevenue) : null;
   // Thông báo: kho hàng, đơn bị huỷ và tình trạng tiệm lấy từ inbox Core (chỉ cần trang đầu để xem trước); đơn mới, công nợ, thu chi tính trên máy.
@@ -198,8 +207,6 @@ export default function Home() {
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={16}
           onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
-          onScrollEndDrag={(event) => settleCollapsed(event.nativeEvent.contentOffset.y)}
-          onMomentumScrollEnd={(event) => settleCollapsed(event.nativeEvent.contentOffset.y)}
         >
           <View style={styles.contentSheet}>
             <View style={styles.periodTabs}>
@@ -230,10 +237,10 @@ export default function Home() {
                     title="Thu khoản còn nợ"
                     subtitle={`${openDebtCount != null ? `${openDebtCount} khoản nợ · ` : ''}${vnd(totalDebt)} chưa thu`}
                     onPress={() => router.push('/debts')}
-                    last={restockTotal === 0}
+                    last={!showRestock}
                   />
                 ) : null}
-                {restockTotal > 0 ? (
+                {showRestock ? (
                   <PriorityRow
                     icon="lowStock"
                     tone="danger"
@@ -376,6 +383,7 @@ export default function Home() {
             ]}
           >
             <Row style={styles.brandRow}>
+              <QuickNavButton tone="dark" />
               <Tab1Icon name="logo" size={42} style={styles.logoIcon} />
               <View style={{ flex: 1 }}>
                 <T w="bold" size={17} color={colors.white} numberOfLines={1}>{app.store.name}</T>
@@ -537,6 +545,7 @@ export default function Home() {
           >
             {/* Tier 1: Context on left + Prominent Revenue on right */}
             <View style={styles.compactTier1}>
+              <QuickNavButton tone="dark" compact style={{ marginRight: 10 }} />
               <View style={styles.compactContext}>
                 <T w="bold" size={16} color={colors.white} numberOfLines={1}>
                   Tổng quan

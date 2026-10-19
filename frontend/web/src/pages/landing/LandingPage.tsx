@@ -1,51 +1,52 @@
-import {
-  ArrowRight,
-  Brain,
-  Check,
-  CheckCircle2,
-  ChevronDown,
-  Download,
-  Menu,
-  MessageSquareText,
-  Mic,
-  NotebookPen,
-  SearchX,
-  ShieldCheck,
-  X,
-  type LucideIcon,
-} from 'lucide-react'
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { Check, ChevronDown, ChevronRight, Download, Menu, Mic, X } from 'lucide-react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ADMIN_ENABLED, ANDROID_APK_URL } from '../../config'
 import Logo, { LogoMark } from '../../components/Logo'
 import { useReveal } from '../../hooks/useReveal'
+import { useScrollProgress } from '../../hooks/useScrollProgress'
 import '../../styles/landing.css'
 import { CONTACT_EMAIL } from '../legal/legalConfig'
 import SiteFooter from './SiteFooter'
 import SocialLinks from './SocialLinks'
 
 const NAV = [
-  { href: '#tinh-nang', label: 'Tính năng' },
   { href: '#cach-hoat-dong', label: 'Cách hoạt động' },
-  { href: '#giao-dien', label: 'Giao diện' },
+  { href: '#tinh-nang', label: 'Tính năng' },
   { href: '#hoi-dap', label: 'Hỏi đáp' },
 ]
 
 /** Độ trễ hiện dần (giây) cho phần tử thứ i trong một nhóm */
 const delay = (i: number): CSSProperties => ({ ['--d' as string]: `${i * 0.07}s` })
 
+/** `video`: đoạn quay màn hình thật của app, `src` là khung hình hiện trước khi video tải xong */
+type Shot = { src: string; alt: string; lightStatus?: boolean; video?: string }
+
+/** Ảnh chụp app, khai báo một lần; Hero, luồng cuộn, thư viện và cuối trang cùng dùng. */
+const SHOT = {
+  home: {
+    src: '/screens/home.webp',
+    alt: 'Màn Tổng quan: doanh thu tuần và bốn lối vào đọc đơn, chọn hàng, quét mã, trợ lý AI',
+    lightStatus: true,
+  },
+  voice: { src: '/screens/voice.webp', alt: 'Màn Đọc đơn: câu nói được tách thành ba món có số lượng và giá, tổng 80.000đ' },
+  pos: { src: '/screens/pos.webp', alt: 'Màn Bán hàng: chọn hàng có ảnh, lọc và sắp xếp' },
+  scan: { src: '/screens/scan.webp', alt: 'Màn Quét mã vạch: đưa mã sản phẩm vào khung camera để thêm vào đơn', lightStatus: true },
+  checkout: { src: '/screens/checkout.webp', alt: 'Màn Thanh toán: danh sách món, hình thức tiền mặt, chuyển khoản hoặc ghi nợ' },
+  orders: { src: '/screens/orders.webp', alt: 'Màn Đơn hàng: các đơn theo ngày, lọc hôm nay, hôm qua, 7 ngày' },
+  products: { src: '/screens/products.webp', alt: 'Màn Hàng hoá: giá bán, tồn kho, hàng sắp hết' },
+  reports: { src: '/screens/reports.webp', alt: 'Màn Báo cáo: doanh thu tuần, biểu đồ theo ngày, thu chi và lãi gộp ước tính' },
+  /* Ảnh chụp Bobi từ app bản staging với dữ liệu tiệm thử. */
+  bobiRecall: { src: '/screens/ai-recall.webp', video: '/screens/ai-recall.mp4', alt: 'Ở hội thoại mới, câu trả lời có nhãn 2 ghi nhớ, liệt kê từng điều đã nhớ và liên kết mở hội thoại gốc' },
+}
+
+/** Câu nói mẫu dùng xuyên trang; khớp với ảnh màn Đọc đơn để không lệch số liệu. */
+const VOICE_SAMPLE = 'Hai bánh mì thịt, một cà phê sữa đá, một bạc xỉu'
+
 /* ------------------------------------------------------------------ */
 
 function Nav() {
   const [open, setOpen] = useState(false)
-  const [scrolled, setScrolled] = useState(false)
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8)
-    onScroll()
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [])
 
   useEffect(() => {
     const onResize = () => window.innerWidth > 960 && setOpen(false)
@@ -53,10 +54,8 @@ function Nav() {
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  const state = open || scrolled ? `${scrolled ? ' is-scrolled' : ''}${open ? ' is-open' : ''}` : ' is-top'
-
   return (
-    <header className={`lp-nav${state}`}>
+    <header className="lp-nav">
       <div className="lp-container lp-nav-inner">
         <a href="#top" className="lp-brand" aria-label="Sổ Nghe Lời — về đầu trang">
           <Logo />
@@ -76,8 +75,8 @@ function Nav() {
             </Link>
           )}
           {ANDROID_APK_URL && (
-            <a href={ANDROID_APK_URL} className="btn btn-accent btn-sm lp-nav-cta">
-              <Download size={16} /> Tải ứng dụng
+            <a href={ANDROID_APK_URL} className="lp-pill lp-pill-sm lp-nav-cta">
+              Tải ứng dụng
             </a>
           )}
           <button
@@ -91,7 +90,7 @@ function Nav() {
           </button>
         </div>
       </div>
-      {open && (
+      <div className="lp-mobile-menu-wrap" data-open={open} inert={!open}>
         <div className="lp-mobile-menu">
           {NAV.map((n) => (
             <a key={n.href} href={n.href} onClick={() => setOpen(false)}>
@@ -100,7 +99,7 @@ function Nav() {
           ))}
           <div className="lp-mobile-menu-foot">
             {ANDROID_APK_URL && (
-              <a href={ANDROID_APK_URL} className="btn btn-primary btn-block" onClick={() => setOpen(false)}>
+              <a href={ANDROID_APK_URL} className="lp-pill" onClick={() => setOpen(false)}>
                 <Download size={16} /> Tải ứng dụng
               </a>
             )}
@@ -112,20 +111,42 @@ function Nav() {
             <SocialLinks />
           </div>
         </div>
-      )}
+      </div>
     </header>
   )
 }
 
 /* ------------------------------------------------------------------ */
 
-/** `lightStatus`: thanh trạng thái chữ trắng, dùng cho ảnh có đầu màn hình màu tối. */
-function PhoneFrame({ src, alt, eager = false, lightStatus = false }: { src: string; alt: string; eager?: boolean; lightStatus?: boolean }) {
+/**
+ * Khung iPhone. Mặc định hiện một ảnh chụp màn hình; truyền `children` để tự dựng nội dung màn hình.
+ * `lightStatus`: thanh trạng thái chữ trắng, dùng cho ảnh có đầu màn hình màu tối.
+ */
+function PhoneFrame({
+  src,
+  alt = '',
+  video,
+  eager = false,
+  lightStatus = false,
+  children,
+}: {
+  src?: string
+  alt?: string
+  video?: string
+  eager?: boolean
+  lightStatus?: boolean
+  children?: ReactNode
+}) {
   return (
     <div className="phone">
       <div className="phone-body">
         <div className="phone-screen">
-          <img src={src} alt={alt} loading={eager ? 'eager' : 'lazy'} width={660} height={1434} decoding="async" />
+          {children ??
+            (video ? (
+              <video src={video} poster={src} aria-label={alt} autoPlay muted loop playsInline preload="none" width={660} height={1434} />
+            ) : (
+              <img src={src} alt={alt} loading={eager ? 'eager' : 'lazy'} width={660} height={1434} decoding="async" />
+            ))}
           <div className={`phone-status${lightStatus ? ' is-light' : ''}`} aria-hidden="true">
             <svg className="phone-time" viewBox="0 0 40 13" fill="currentColor">
               <text y="12.5" fontSize="17" fontWeight="600">
@@ -157,233 +178,157 @@ function PhoneFrame({ src, alt, eager = false, lightStatus = false }: { src: str
   )
 }
 
+function DownloadCta({ label = 'Tải cho Android' }: { label?: string }) {
+  return ANDROID_APK_URL ? (
+    <a href={ANDROID_APK_URL} className="lp-pill">
+      <Download size={17} /> {label}
+    </a>
+  ) : (
+    <button type="button" className="lp-pill" disabled>
+      <Download size={17} /> {label} · Sắp ra mắt
+    </button>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+
 function Hero() {
   return (
-    <section className="lp-hero" id="top">
-      <div className="lp-container lp-hero-grid">
-        <div className="lp-hero-copy">
-          <span className="lp-eyebrow">
-            <i /> Sổ bán hàng cho quán nhỏ
-          </span>
-          <h1>
-            Nói một câu,
-            <br /> có ngay đơn
-            <br /> <span className="hl">để kiểm tra.</span>
-          </h1>
-          <p className="lp-lead">
-            Sổ Nghe Lời biến câu nói hoặc nội dung bạn gõ thành bản nháp đơn bán. Bạn xem lại, sửa nếu cần rồi mới xác nhận ghi vào sổ.
-          </p>
-          <div className="lp-hero-cta">
-            {ANDROID_APK_URL ? (
-              <a href={ANDROID_APK_URL} className="btn btn-accent btn-lg">
-                <Download size={18} /> Tải cho Android
-              </a>
-            ) : (
-              <button type="button" className="btn btn-accent btn-lg" disabled>
-                <Download size={18} /> Tải cho Android · Sắp ra mắt
-              </button>
-            )}
-          </div>
-          <ul className="lp-hero-points">
-            <li>
-              <CheckCircle2 size={16} /> Luôn xem lại trước khi ghi sổ
-            </li>
-            <li>
-              <CheckCircle2 size={16} /> Nhận dạng tiếng Việt ngay trên điện thoại
-            </li>
-            <li>
-              <CheckCircle2 size={16} /> Chỉ cần điện thoại
-            </li>
-          </ul>
+    <section className="lp-hero" id="top" data-scroll="exit">
+      <div className="lp-container lp-hero-copy">
+        <span className="lp-eyebrow">Sổ bán hàng cho tiểu thương</span>
+        <h1>
+          Nói một câu.
+          <br />
+          <span className="lp-gradient-text">Có ngay đơn.</span>
+        </h1>
+        <p className="lp-lead">Sổ Nghe Lời biến câu nói hoặc nội dung bạn gõ thành bản nháp đơn bán. Bạn xem lại, sửa nếu cần rồi mới ghi vào sổ.</p>
+        <div className="lp-hero-cta">
+          <DownloadCta />
+          <a href="#cach-hoat-dong" className="lp-link">
+            Xem cách hoạt động <ChevronRight size={18} />
+          </a>
         </div>
+      </div>
 
-        <div className="lp-hero-visual">
-          <div className="hero-stage">
-            <PhoneFrame src="/screens/home.webp" alt="Màn hình Tổng quan của ứng dụng Sổ Nghe Lời: doanh thu tuần, lối vào đọc đơn, chọn hàng, quét mã, trợ lý AI" eager lightStatus />
-            <span className="hero-bubble">
-              <Mic size={16} /> “Hai bánh mì thịt, một cà phê sữa đá”
-            </span>
-            <span className="hero-result">
-              <span>Đơn nháp · 2 món</span>
-              <b>55.000đ</b>
-            </span>
-            <img className="hero-robot" src="/brand/robot.webp" alt="" width={360} height={345} />
-          </div>
+      <div className="hero-stage" aria-label="Ảnh ứng dụng Sổ Nghe Lời">
+        <div className="hero-side is-left">
+          <PhoneFrame {...SHOT.voice} eager />
+        </div>
+        <div className="hero-main">
+          <PhoneFrame {...SHOT.home} eager />
+          <span className="hero-bubble">
+            <Mic size={16} /> “{VOICE_SAMPLE}”
+          </span>
+          <span className="hero-result">
+            <span>Đơn nháp · 4 món</span>
+            <b>80.000đ</b>
+          </span>
+          <img className="hero-bobi" src="/brand/bobi-notebook.webp" alt="" width={360} height={345} />
+        </div>
+        <div className="hero-side is-right">
+          <PhoneFrame {...SHOT.reports} eager />
         </div>
       </div>
     </section>
   )
 }
 
-const TILES = [
-  { icon: '/brand/icons/doc-don.webp', title: 'Đọc đơn', sub: 'Giọng nói' },
-  { icon: '/brand/icons/chon-hang.webp', title: 'Chọn hàng', sub: 'Thủ công' },
-  { icon: '/brand/icons/quet-ma.webp', title: 'Quét mã', sub: 'Mã vạch / QR' },
-  { icon: '/brand/icons/tro-li-ai.webp', title: 'Trợ lý AI', sub: 'Hỏi đáp về tiệm' },
+/* ------------------------------------------------------------------ */
+
+const STATEMENT =
+  'Phần lớn quán nước, xe trái cây, sạp chợ vẫn ghi sổ tay, hoặc không ghi gì cả. Không phải vì lười, mà vì chưa có cách nào đủ nhanh.'
+
+const PAINS = [
+  { title: 'Ghi sổ tay', text: 'Đông khách thì ghi vội. Tối cộng lại mới thấy lệch tiền.', fix: 'Mỗi đơn lưu kèm giờ bán, tổng tiền tự cộng.' },
+  { title: 'Nhớ bằng đầu', text: 'Bán lẻ từng món nhỏ, “để lát nhớ”, hết ngày quên phân nửa.', fix: 'Nói một câu, không cần dừng tay.' },
+  { title: 'Nhập hàng cảm tính', text: 'Món đắt hết sớm, món ế tồn lại, tiền nằm chết trong kho.', fix: 'Món bán chạy và hàng sắp hết hiện ngay ở Tổng quan.' },
 ]
 
-function Tiles() {
+/** Đoạn văn sáng dần từng chữ theo vị trí cuộn, kiểu trang giới thiệu sản phẩm của Apple. */
+function Statement() {
+  const words = STATEMENT.split(' ')
   return (
-    <div className="lp-tiles-wrap">
+    <section className="lp-section lp-statement">
       <div className="lp-container">
-        <ul className="lp-tiles" aria-label="Các cách lên đơn trong ứng dụng">
-          {TILES.map((t, i) => (
-            <li key={t.title} className="lp-tile" data-reveal style={delay(i)}>
-              <img src={t.icon} alt="" width={54} height={54} loading="lazy" />
-              <div>
-                <strong>{t.title}</strong>
-                <span>{t.sub}</span>
-              </div>
+        <p className="statement-text" data-scroll="view" style={{ ['--n' as string]: words.length }}>
+          {words.map((w, i) => (
+            <span key={i} style={{ ['--i' as string]: i }}>
+              {w}{' '}
+            </span>
+          ))}
+        </p>
+        <ul className="pain-list">
+          {PAINS.map((p) => (
+            <li key={p.title}>
+              <h3>{p.title}</h3>
+              <p>{p.text}</p>
+              <p className="pain-fix">{p.fix}</p>
             </li>
           ))}
         </ul>
       </div>
-    </div>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-
-function SectionHead({ kicker, title, children, center = true }: { kicker: string; title: ReactNode; children?: ReactNode; center?: boolean }) {
-  return (
-    <div className={`lp-sec-head${center ? ' is-center' : ''}`} data-reveal>
-      <span className="lp-kicker">{kicker}</span>
-      <h2>{title}</h2>
-      {children && <p>{children}</p>}
-    </div>
-  )
-}
-
-const PAINS: { icon: LucideIcon; tone: string; title: string; text: string; fix: string }[] = [
-  {
-    icon: NotebookPen,
-    tone: 'red',
-    title: 'Ghi sổ tay',
-    text: 'Đông khách thì ghi vội, chữ lem, trang rách. Tối về cộng lại mới thấy lệch tiền mà không biết lệch ở đâu.',
-    fix: 'Mỗi đơn lưu kèm giờ bán, tổng tiền tự cộng.',
-  },
-  {
-    icon: Brain,
-    tone: 'gold',
-    title: 'Nhớ bằng đầu',
-    text: 'Bán lẻ từng món nhỏ, không kịp ghi nên “để lát nhớ”. Hết ngày thì quên mất phân nửa.',
-    fix: 'Nói một câu, không cần dừng tay.',
-  },
-  {
-    icon: SearchX,
-    tone: 'purple',
-    title: 'Không biết món nào bán chạy',
-    text: 'Nhập hàng theo cảm tính: món đắt thì hết sớm, món ế thì tồn lại, tiền nằm chết trong kho.',
-    fix: 'Món bán chạy và hàng sắp hết hiện ngay ở màn Tổng quan.',
-  },
-]
-
-function Pains() {
-  return (
-    <section className="lp-section lp-pains">
-      <div className="lp-container">
-        <SectionHead kicker="Vấn đề quen thuộc" title="App thì đắt, mà sổ sách thì rối">
-          Phần lớn quán nước, xe trái cây, sạp chợ vẫn ghi sổ tay hoặc không ghi gì cả. Không phải vì lười, mà vì chưa có cách nào đủ nhanh.
-        </SectionHead>
-        <div className="pain-grid">
-          {PAINS.map((p, i) => (
-            <article key={p.title} className="pain-card" data-reveal style={delay(i)}>
-              <span className={`pain-icon tone-${p.tone}`}>
-                <p.icon size={22} />
-              </span>
-              <h3>{p.title}</h3>
-              <p>{p.text}</p>
-              <div className="pain-fix">
-                <ArrowRight size={16} />
-                <span>{p.fix}</span>
-              </div>
-            </article>
-          ))}
-        </div>
-      </div>
     </section>
   )
 }
 
 /* ------------------------------------------------------------------ */
 
-function Steps() {
-  return (
-    <section className="lp-section lp-steps" id="cach-hoat-dong">
-      <div className="lp-container">
-        <SectionHead kicker="Cách hoạt động" title="3 bước, từ câu nói đến báo cáo">
-          Không cần cài đặt phức tạp. Bạn bán tới đâu, nói tới đó.
-        </SectionHead>
-        <ol className="step-grid">
-          <li className="step" data-reveal>
-            <PhoneFrame src="/screens/voice.webp" alt="Màn Đọc đơn: câu nói được tách thành ba món có số lượng và giá, tổng 80.000đ" />
-            <div className="step-body">
-              <span className="step-num">1</span>
-              <h3>Nói hoặc gõ</h3>
-              <p>Nhấn giữ nút ghi âm và đọc đơn như nói chuyện, hoặc gõ khi quán ồn. Ứng dụng tách món, số lượng và giá.</p>
-              <div className="step-say">
-                <span className="say-chip">
-                  <Mic size={13} /> hai bánh mì thịt, một cà phê sữa đá
-                </span>
-                <span className="say-chip">
-                  <MessageSquareText size={13} /> bánh mì 20k cà phê 25k
-                </span>
-              </div>
-            </div>
-          </li>
-          <li className="step" data-reveal style={delay(1)}>
-            <PhoneFrame src="/screens/checkout.webp" alt="Màn Thanh toán: danh sách món, hình thức tiền mặt, chuyển khoản hoặc ghi nợ" />
-            <div className="step-body">
-              <span className="step-num">2</span>
-              <h3>Kiểm tra rồi thanh toán</h3>
-              <p>Xem lại món, sửa số lượng nếu cần, chọn tiền mặt, chuyển khoản (chỉ ghi nhận) hoặc ghi nợ. Đơn vào sổ khi bạn bấm Hoàn tất.</p>
-            </div>
-          </li>
-          <li className="step" data-reveal style={delay(2)}>
-            <PhoneFrame src="/screens/reports.webp" alt="Màn Báo cáo: doanh thu tuần, biểu đồ theo ngày, thu chi và lãi gộp ước tính" />
-            <div className="step-body">
-              <span className="step-num">3</span>
-              <h3>Xem số liệu</h3>
-              <p>Doanh thu, số đơn, lãi gộp ước tính và món bán chạy theo ngày, tuần, tháng.</p>
-            </div>
-          </li>
-        </ol>
-        <p className="step-note" data-reveal>
-          <ShieldCheck size={22} />
-          <span>Kết quả từ giọng nói hay AI chỉ là bản nháp. Không có đơn nào vào sổ nếu bạn chưa xác nhận.</span>
-        </p>
-      </div>
-    </section>
-  )
-}
-
 /* ------------------------------------------------------------------ */
 
-const FEATURES: { icon: string; title: string; text: string }[] = [
-  { icon: 'doc-don', title: 'Đọc đơn bằng giọng nói', text: 'Nhấn giữ nút ghi âm, đọc đơn. Giọng nói được nhận dạng ngay trên điện thoại, bạn xem lại danh sách món trước khi lưu.' },
-  { icon: 'chon-hang', title: 'Chọn hàng nhanh', text: 'Lưới hoặc danh sách hàng có ảnh, chạm là thêm vào đơn. Lọc theo nhóm, sắp xếp theo tên hoặc tồn kho.' },
-  { icon: 'quet-ma', title: 'Quét mã vạch', text: 'Quét mã vạch hoặc mã QR bằng camera để thêm đúng mặt hàng vào đơn.' },
-  { icon: 'products', title: 'Hàng hoá và tồn kho', text: 'Giá bán, số lượng tồn, cảnh báo sắp hết và giá trị tồn kho.' },
-  { icon: 'debts', title: 'Công nợ', text: 'Ghi nợ khi khách chưa trả, theo dõi ai còn nợ bao nhiêu và ghi nhận từng lần thu.' },
-  { icon: 'expenses', title: 'Chi phí', text: 'Ghi tiền nhập hàng, điện nước, mặt bằng để xem lãi gộp ước tính của kỳ.' },
-  { icon: 'reports', title: 'Báo cáo', text: 'Doanh thu, số đơn, giờ bán đông và món bán chạy theo ngày, tuần, tháng.' },
+const FEATURES: { icon: string; title: string; text: string; size?: 'wide' }[] = [
+  { icon: 'chon-hang', title: 'Chọn hàng nhanh', text: 'Lưới hàng có ảnh, chạm là thêm vào đơn.' },
+  { icon: 'quet-ma', title: 'Quét mã vạch', text: 'Quét mã vạch hoặc QR bằng camera.' },
+  { icon: 'products', title: 'Hàng hoá, tồn kho', text: 'Giá bán, số tồn, cảnh báo sắp hết.' },
+  { icon: 'debts', title: 'Công nợ', text: 'Ai còn nợ bao nhiêu, ghi từng lần thu.' },
+  { icon: 'expenses', title: 'Chi phí', text: 'Tiền nhập hàng, điện nước, mặt bằng để tính lãi gộp ước tính.', size: 'wide' },
+  { icon: 'reports', title: 'Báo cáo', text: 'Doanh thu, số đơn, giờ bán đông và món bán chạy theo ngày, tuần, tháng.', size: 'wide' },
 ]
 
 function Features() {
   return (
     <section className="lp-section lp-features" id="tinh-nang">
       <div className="lp-container">
-        <SectionHead kicker="Tính năng" title="Đủ dùng cho quán nhỏ, không thừa một nút">
-          Những thứ người bán thật sự cần mỗi ngày, gói gọn trong một ứng dụng.
-        </SectionHead>
-        <div className="feat-grid">
+        <h2 className="lp-display" data-reveal>
+          Đủ dùng cho quán nhỏ.
+          <br />
+          <span className="is-muted">Không thừa một nút.</span>
+        </h2>
+        <div className="bento">
+          <article className="bento-tile is-hero" data-reveal>
+            <img src="/brand/icons/doc-don.webp" alt="" width={96} height={96} loading="lazy" />
+            <h3>Đọc đơn bằng giọng nói</h3>
+            <p>Giọng nói được nhận dạng ngay trên điện thoại. Bạn xem lại danh sách món trước khi lưu.</p>
+            <div className="bento-chips">
+              <span>“hai bánh mì thịt”</span>
+              <span>“cà phê hai mươi lăm nghìn”</span>
+            </div>
+          </article>
           {FEATURES.map((f, i) => (
-            <article key={f.title} className="feat" data-reveal style={delay(i % 4)}>
-              <img src={`/brand/icons/${f.icon}.webp`} alt="" width={58} height={58} loading="lazy" />
+            <article key={f.title} className={`bento-tile${f.size ? ` is-${f.size}` : ''}`} data-reveal style={delay(i % 4)}>
+              <img src={`/brand/icons/${f.icon}.webp`} alt="" width={56} height={56} loading="lazy" />
               <h3>{f.title}</h3>
               <p>{f.text}</p>
             </article>
           ))}
+          <article className="bento-tile is-full" data-reveal>
+            <img src="/brand/bobi-idea.webp" alt="" width={110} height={116} loading="lazy" />
+            <div>
+              <h3>Trợ lý Bobi</h3>
+              <p>Hỏi bằng lời thường về doanh thu, công nợ, hàng sắp hết. Bobi chỉ đọc số liệu của tiệm, không tự tạo hay sửa đơn.</p>
+              <p className="bobi-memory">
+                <BobiMark />
+                <span>
+                  <b>Ghi nhớ dài hạn.</b> Dặn một lần, như chốt sổ theo tuần hay nhập hàng thứ Hai, lần sau Bobi vẫn nhớ.
+                </span>
+              </p>
+              <div className="bento-chips">
+                <span>“Doanh thu 7 ngày qua?”</span>
+                <span>“Ai đang nợ tiệm nhiều nhất?”</span>
+                <span>“Gợi ý nhập hàng”</span>
+              </div>
+            </div>
+          </article>
         </div>
       </div>
     </section>
@@ -392,35 +337,104 @@ function Features() {
 
 /* ------------------------------------------------------------------ */
 
-const SCREENS = [
-  { src: '/screens/home.webp', title: 'Tổng quan', text: 'Doanh thu theo kỳ, việc cần xử lý' },
-  { src: '/screens/orders.webp', title: 'Đơn hàng', text: 'Lịch sử theo ngày, lọc nhanh' },
-  { src: '/screens/pos.webp', title: 'Bán hàng', text: 'Chọn hàng có ảnh, lọc và sắp xếp' },
-  { src: '/screens/products.webp', title: 'Hàng hoá', text: 'Giá bán, tồn kho, hàng sắp hết' },
+/** Biểu tượng ghi nhớ dài hạn của Bobi, cùng nét vẽ với BusinessIcon (trạng thái bật) trong app: lục giác đặc, ngôi sao khoét rỗng. */
+function BobiMark() {
+  return (
+    <svg className="bobi-mark" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        d="M10.09 2.60Q12.00 1.50 13.91 2.60L19.19 5.65Q21.09 6.75 21.09 8.95L21.09 15.05Q21.09 17.25 19.19 18.35L13.91 21.40Q12.00 22.50 10.09 21.40L4.81 18.35Q2.91 17.25 2.91 15.05L2.91 8.95Q2.91 6.75 4.81 5.65ZM12 7.4Q12.7 11.3 16.6 12Q12.7 12.7 12 16.6Q11.3 12.7 7.4 12Q11.3 11.3 12 7.4Z"
+      />
+    </svg>
+  )
+}
+
+/** Mỗi màn là một tính năng; màn nằm giữa dòng chữ tiêu đề khi cuộn thì phần giới thiệu bên dưới đổi theo. */
+const SCREENS: { shot: Shot; title: string; text: string; bobi?: boolean }[] = [
+  { shot: SHOT.home, title: 'Tổng quan', text: 'Doanh thu kỳ này và bốn cách lên đơn: đọc đơn, chọn hàng, quét mã, hỏi trợ lý AI.' },
+  { shot: SHOT.voice, title: 'Đọc đơn bằng giọng nói', text: 'Nhấn giữ nút ghi âm và đọc đơn, hoặc gõ khi quán ồn. Ứng dụng tách món, số lượng và giá.' },
+  { shot: SHOT.pos, title: 'Bán hàng', text: 'Chọn hàng có ảnh, lọc theo nhóm, sắp xếp theo tên hoặc tồn kho; chạm là thêm vào đơn.' },
+  { shot: SHOT.scan, title: 'Quét mã vạch', text: 'Đưa mã sản phẩm vào camera, hàng có sẵn trong danh mục sẽ tự thêm vào đơn.' },
+  { shot: SHOT.checkout, title: 'Thanh toán', text: 'Sửa số lượng nếu cần, chọn tiền mặt, chuyển khoản (chỉ ghi nhận) hoặc ghi nợ. Đơn vào sổ khi bạn bấm Hoàn tất.' },
+  { shot: SHOT.orders, title: 'Đơn hàng', text: 'Mỗi đơn lưu kèm giờ bán; lọc nhanh theo hôm nay, hôm qua hoặc 7 ngày.' },
+  { shot: SHOT.products, title: 'Hàng hoá', text: 'Giá bán, số tồn và cảnh báo hàng sắp hết.' },
+  { shot: SHOT.reports, title: 'Báo cáo', text: 'Doanh thu, số đơn, lãi gộp ước tính và món bán chạy theo ngày, tuần, tháng.' },
+  { shot: SHOT.bobiRecall, bobi: true, title: 'Bobi nhớ cách bạn làm', text: 'Bạn dặn một lần, lần sau Bobi vẫn nhớ. Mở "ghi nhớ" để xem nhớ từ hôm nào.' },
 ]
 
-function Showcase() {
+/**
+ * Mục ghim: cuộn dọc kéo dải điện thoại chạy ngang; màn nằm giữa dòng chữ tiêu đề là màn đang giới thiệu
+ * (`data-active` do useScrollProgress đặt theo vị trí các `.gallery-item`).
+ */
+function Gallery() {
+  const sectionRef = useRef<HTMLElement>(null)
+
+  // Vuốt ngang trên dải máy sang màn trước hoặc sau: cuộn trang tới mốc tiến độ của màn đó, nên dải chạy như khi cuộn
+  useEffect(() => {
+    const section = sectionRef.current
+    const viewport = section?.querySelector<HTMLElement>('.gallery-viewport')
+    if (!section || !viewport) return
+    let startX = 0
+    let startY = 0
+    const onTouchStart = (e: TouchEvent) => {
+      startX = e.touches[0].clientX
+      startY = e.touches[0].clientY
+    }
+    const onTouchEnd = (e: TouchEvent) => {
+      const dx = e.changedTouches[0].clientX - startX
+      const dy = e.changedTouches[0].clientY - startY
+      if (Math.abs(dx) < 40 || Math.abs(dx) < 1.5 * Math.abs(dy)) return
+      const last = SCREENS.length - 1
+      const next = Math.min(last, Math.max(0, Number(section.dataset.active) + (dx < 0 ? 1 : -1)))
+      // Mốc tiến độ ở giữa màn `next`, khớp với cách useScrollProgress tính `data-active`
+      const p = 0.06 + (0.88 * next) / last
+      const top = section.getBoundingClientRect().top + window.scrollY
+      window.scrollTo({ top: top + p * (section.offsetHeight - (section.firstElementChild?.clientHeight ?? window.innerHeight)), behavior: 'smooth' })
+    }
+    viewport.addEventListener('touchstart', onTouchStart, { passive: true })
+    viewport.addEventListener('touchend', onTouchEnd, { passive: true })
+    return () => {
+      viewport.removeEventListener('touchstart', onTouchStart)
+      viewport.removeEventListener('touchend', onTouchEnd)
+    }
+  }, [])
+
   return (
-    <section className="lp-section lp-showcase" id="giao-dien">
-      <div className="lp-container">
-        <SectionHead kicker="Giao diện" title="Gọn trong một chiếc điện thoại">
-          Chữ to, nút lớn, màu dễ nhìn, thiết kế cho người bán đang bận tay.
-        </SectionHead>
-      </div>
-      <div className="showcase-scroller" tabIndex={0} aria-label="Các màn hình của ứng dụng, cuộn ngang để xem thêm">
-        <div className="showcase-row">
-          {SCREENS.map((s, i) => (
-            <figure key={s.src} className="showcase-item" data-reveal style={delay(i)}>
-              <PhoneFrame src={s.src} alt={`Màn hình ${s.title}`} lightStatus={s.src === '/screens/home.webp'} />
-              <figcaption>
-                <strong>{s.title}</strong>
+    <section ref={sectionRef} className="lp-gallery" id="cach-hoat-dong" data-scroll="pin" data-active="0">
+      <div className="gallery-sticky">
+        <div className="lp-container">
+          <h2 className="lp-display">
+            Gọn trong một chiếc điện thoại.
+            <br />
+            <span className="is-muted">Chữ to, nút lớn, cho người đang bận tay.</span>
+          </h2>
+          <ol className="gallery-intro" aria-live="polite">
+            {SCREENS.map((s, i) => (
+              <li key={s.title} data-i={i}>
+                <strong>
+                  {s.bobi && <BobiMark />}
+                  {s.title}
+                </strong>
                 <span>{s.text}</span>
-              </figcaption>
-            </figure>
-          ))}
+              </li>
+            ))}
+          </ol>
         </div>
+        <div className="gallery-viewport" tabIndex={0} aria-label="Các màn hình của ứng dụng">
+          <div className="gallery-track" data-track>
+            {SCREENS.map((s, i) => (
+              <figure key={s.title} className="gallery-item" data-i={i}>
+                <PhoneFrame {...s.shot} />
+              </figure>
+            ))}
+          </div>
+        </div>
+        <div className="gallery-progress" aria-hidden="true">
+          <i />
+        </div>
+        <p className="lp-fineprint">Số liệu trong ảnh là dữ liệu mẫu.</p>
       </div>
-      <p className="lp-showcase-foot">Số liệu trong ảnh là dữ liệu mẫu.</p>
     </section>
   )
 }
@@ -456,10 +470,15 @@ function Compare() {
   return (
     <section className="lp-section lp-compare" id="so-sanh">
       <div className="lp-container">
-        <SectionHead kicker="So sánh" title="Sổ Nghe Lời so với phần mềm POS truyền thống">
-          Chúng tôi không thay thế phần mềm quản lý bán hàng lớn. Chúng tôi làm một việc nhỏ hơn và làm cho thật dễ.
-        </SectionHead>
-        <div className="cmp" role="table" aria-label="Bảng so sánh" data-reveal>
+        <div className="lp-sec-head">
+          <h2 className="lp-display">
+            Một việc nhỏ.
+            <br />
+            <span className="is-muted">Làm cho thật dễ.</span>
+          </h2>
+          <p>Sổ Nghe Lời không thay thế phần mềm quản lý bán hàng lớn. Đây là cách so với POS truyền thống.</p>
+        </div>
+        <div className="cmp" role="table" aria-label="Bảng so sánh">
           <div className="cmp-row cmp-head" role="row">
             <span role="columnheader" className="cmp-label">
               Tiêu chí
@@ -487,7 +506,7 @@ function Compare() {
             </div>
           ))}
         </div>
-        <p className="cmp-note">
+        <p className="lp-fineprint">
           So sánh mang tính định tính, dựa trên đặc điểm chung của các phần mềm quản lý bán hàng phổ biến như Sapo, KiotViet, MISA AMIS. Mỗi sản
           phẩm có thể khác nhau; nếu bạn cần kế toán hay quản lý chuỗi, đó vẫn là lựa chọn phù hợp hơn.
         </p>
@@ -508,22 +527,12 @@ const FAQS: { q: string; a: ReactNode }[] = [
     a: 'Giọng nói được nhận dạng ngay trên điện thoại, không cần gửi âm thanh đi. Nhưng để lưu sổ lên tài khoản, ứng dụng cần kết nối Internet (Wi‑Fi hoặc 4G).',
   },
   {
-    q: 'Dữ liệu bán hàng của tôi có an toàn không?',
-    a: (
-      <>
-        Sổ gắn với tài khoản của bạn, đăng nhập bằng Facebook hoặc email; nhân viên quản trị chỉ xem được thông tin hỗ trợ ở mức tối thiểu và mọi lần
-        xem đều được ghi lại. Chi tiết nằm ở <Link to="/privacy">Chính sách quyền riêng tư</Link>.
-      </>
-    ),
+    q: 'Đăng nhập bằng gì và sổ được lưu ở đâu?',
+    a: 'Bạn đăng nhập bằng tài khoản Facebook hoặc Zalo. Sổ được lưu gắn với tài khoản đó; lưu lên tài khoản cần kết nối Internet.',
   },
   {
-    q: 'Làm sao để xoá tài khoản và dữ liệu của tôi?',
-    a: (
-      <>
-        Bạn gửi yêu cầu theo hướng dẫn tại trang <Link to="/data-deletion">Xoá dữ liệu người dùng</Link>. Trang đó cũng chỉ cách gỡ quyền của ứng
-        dụng khỏi tài khoản Facebook.
-      </>
-    ),
+    q: 'Muốn ngừng dùng thì làm thế nào?',
+    a: 'Nếu bạn muốn ngừng dùng hoặc xoá sổ, hãy nhắn cho chúng tôi qua các kênh liên hệ trên trang này.',
   },
   {
     q: 'Sổ Nghe Lời khác gì KiotViet, Sapo?',
@@ -540,23 +549,26 @@ const FAQS: { q: string; a: ReactNode }[] = [
 ]
 
 function Faq() {
-  const [open, setOpen] = useState<number | null>(0)
+  const [open, setOpen] = useState<number | null>(null)
   return (
     <section className="lp-section lp-faq" id="hoi-dap">
       <div className="lp-container lp-faq-grid">
         <div className="lp-faq-aside">
-          <SectionHead kicker="Hỏi đáp" title="Câu hỏi thường gặp" center={false}>
-            {CONTACT_EMAIL
-              ? 'Chưa thấy câu trả lời bạn cần? Hãy nhắn cho chúng tôi qua mục Liên hệ ở cuối trang.'
-              : 'Những điều người bán hay hỏi trước khi dùng thử.'}
-          </SectionHead>
+          <div className="lp-sec-head">
+            <h2 className="lp-display">Hỏi đáp.</h2>
+            <p>
+              {CONTACT_EMAIL
+                ? 'Chưa thấy câu trả lời bạn cần? Hãy nhắn cho chúng tôi qua mục Liên hệ ở cuối trang.'
+                : 'Những điều người bán hay hỏi trước khi dùng thử.'}
+            </p>
+          </div>
           <img src="/brand/agent-question.webp" alt="" width={194} height={237} loading="lazy" />
         </div>
         <div className="faq-list">
           {FAQS.map((f, i) => {
             const isOpen = open === i
             return (
-              <div key={f.q} className="faq" data-open={isOpen} data-reveal style={delay(i % 4)}>
+              <div key={f.q} className="faq" data-open={isOpen}>
                 <h3>
                   <button
                     type="button"
@@ -583,8 +595,41 @@ function Faq() {
   )
 }
 
+/* ------------------------------------------------------------------ */
+
+/** Lời mời cuối trang: điện thoại nâng dần lên theo cuộn cho tới khi chạm footer. */
+function Closing() {
+  return (
+    <section className="lp-closing" data-scroll="view">
+      <div className="lp-container closing-copy">
+        <h2>
+          Miệng nói.
+          <br />
+          <span className="lp-gradient-text is-light">Sổ ghi.</span>
+        </h2>
+        <p>Bán tới đâu, nói tới đó. Chỉ cần chiếc điện thoại bạn đang có.</p>
+        <div className="lp-hero-cta">
+          <DownloadCta label="Tải ứng dụng" />
+        </div>
+      </div>
+      <div className="closing-phone">
+        <PhoneFrame>
+          <div className="splash">
+            <img src="/brand/bobi-notebook.webp" alt="" width={120} height={115} />
+            <strong>
+              Sổ Nghe <b>Lời</b>
+            </strong>
+            <span>AI VOICE POS</span>
+          </div>
+        </PhoneFrame>
+      </div>
+    </section>
+  )
+}
+
 export default function LandingPage() {
   useReveal()
+  useScrollProgress()
   useEffect(() => {
     document.title = 'Sổ Nghe Lời — Miệng nói, sổ ghi.'
   }, [])
@@ -593,13 +638,12 @@ export default function LandingPage() {
       <Nav />
       <main>
         <Hero />
-        <Tiles />
-        <Pains />
-        <Steps />
+        <Statement />
+        <Gallery />
         <Features />
-        <Showcase />
         <Compare />
         <Faq />
+        <Closing />
       </main>
       <SiteFooter onHome />
     </div>

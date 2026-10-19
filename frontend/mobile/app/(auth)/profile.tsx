@@ -8,8 +8,8 @@ import { useApp } from '../../src/store/AppStore';
 import { colors } from '../../src/theme';
 
 /**
- * Đăng nhập lần đầu: Firebase đã xác thực số điện thoại nhưng Core chưa có tài khoản → hỏi tên rồi mở phiên
- * (POST /auth/session { displayName }). Số điện thoại không kèm tên nên Core bắt buộc phải có bước này.
+ * Đăng nhập lần đầu: Firebase đã xác thực (email, Facebook hoặc Google) nhưng Core chưa có tài khoản → hỏi tên rồi mở phiên
+ * (POST /auth/session { displayName }). "Dùng tài khoản khác" đăng xuất để vào bằng tài khoản khác, như ở bước tạo tiệm.
  */
 export default function Profile() {
   const { signIn, logout } = useApp();
@@ -71,7 +71,7 @@ export default function Profile() {
         style={{ alignSelf: 'center', marginTop: 20, minHeight: 44, justifyContent: 'center' }}
       >
         <T size={13} color={colors.faint}>
-          Dùng số điện thoại khác
+          Dùng tài khoản khác
         </T>
       </Pressable>
     </Screen>

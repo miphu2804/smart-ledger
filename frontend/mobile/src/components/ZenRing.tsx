@@ -306,7 +306,12 @@ export function ZenRing() {
   ];
   const slideX = menuSide === 'left' ? 36 : menuSide === 'right' ? -36 : 0;
   const slideY = menuSide === 'below' ? -20 : 0;
-  const hintLeft = anchor.current?.side === 'left' ? point.current.x + RING_SIZE + 8 : point.current.x - 94;
+  // Gợi ý nằm hẳn bên cạnh ring: ring ở phải thì neo mép phải của gợi ý vào mép trái ring (không đoán bề rộng chữ). Trước đây
+  // gợi ý bắt đầu cách ring 94 px nên phần cuối chữ lọt dưới ring ("Giữ để đọc đơ…"), nhất là khi máy để cỡ chữ lớn.
+  const hintPlacement =
+    anchor.current?.side === 'left'
+      ? { left: point.current.x + RING_SIZE + 8 }
+      : { right: viewport.width - point.current.x + 8 };
 
   return (
     <View
@@ -362,8 +367,10 @@ export function ZenRing() {
             </View>
           ) : null}
           {showHint && !isSales ? (
-            <View pointerEvents="none" style={[styles.hint, { left: hintLeft, top: point.current.y + 13 }]}>
-              <T w="semibold" size={12} color={colors.muted}>Giữ để đọc đơn</T>
+            <View pointerEvents="none" style={[styles.hint, hintPlacement, { top: point.current.y + 13 }]}>
+              <T w="semibold" size={12} color={colors.muted} numberOfLines={1} maxFontSizeMultiplier={1.3}>
+                Giữ để đọc đơn
+              </T>
             </View>
           ) : null}
           <Animated.View

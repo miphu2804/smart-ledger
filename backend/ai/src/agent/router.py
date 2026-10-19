@@ -21,6 +21,7 @@ from src.agent.schema import (
     AgentConversationRenameRequest,
     AgentConversationSummary,
     AgentConversationView,
+    AgentMemoryItem,
     AgentMemorySettings,
     AgentMemorySettingsRequest,
 )
@@ -234,3 +235,31 @@ async def put_memory_settings(payload: AgentMemorySettingsRequest, memory: Memor
         payload.shop_id, payload.user_id, payload.memory_enabled
     )
     return AgentMemorySettings(memory_enabled=payload.memory_enabled, available=True)
+
+
+@router.get("/memory/items", response_model=list[AgentMemoryItem])
+async def list_memories(
+    memory: MemoryDep,
+    user_id: int = Query(gt=0),
+    shop_id: int = Query(gt=0),
+):
+    if memory is None:
+        return []
+    return [
+        AgentMemoryItem.model_validate(item, from_attributes=True)
+        for item in await memory.list_memories(shop_id, user_id)
+    ]
+
+
+@router.delete("/memory/items/{memory_id}", status_code=204)
+async def delete_memory(
+    memory_id: int,
+    memory: MemoryDep,
+    user_id: int = Query(gt=0),
+    shop_id: int = Query(gt=0),
+) -> Response:
+    if memory is None:
+        raise HTTPException(status_code=409, detail="memory_unavailable")
+    if not await memory.forget(shop_id, user_id, memory_id):
+        raise HTTPException(status_code=404, detail="memory_not_found")
+    return Response(status_code=204)

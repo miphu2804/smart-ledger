@@ -6,6 +6,53 @@ from xml.etree import ElementTree
 
 
 REQUIRED = {
+    "com.smartledger.core.config.ZaloNativeMigrationPostgresTest": {
+        "freshV18CreatesNativeColumnsAndRerunIsNoOp",
+        "upgradeFromV17PreservesWebSessionsMappingsAndBusinessData",
+        "v18RejectsMixedChannelsDuplicateReferenceAndInvalidExpiry",
+        "earlyColumnCollisionRollsBackWithoutAdoptingUnexpectedSchema",
+        "lateConstraintCollisionRollsBackAllColumnsAndRetainsWebConstraint",
+        "lockTimeoutLeavesV17UsableAndRetrySucceeds",
+        "nativeColumnsRetainRlsAndNoPublicPoliciesOrGrants",
+    },
+    "com.smartledger.core.service.ZaloNativeFlowPostgresTest": {
+        "nativeOffAndMissingV18FailClosedWhileV17WebKeepsWorking",
+        "loginUsesVerifierBoundReferenceWithoutPersistingCredentialsAndReusesWebIdentity",
+        "wrongVerifierRequestClientPurposeOrChannelCannotConsumeNativeHandoff",
+        "concurrentCallbacksAndExchangesHaveExactlyOneWinner",
+        "handoffAndSessionExpiryAreExclusiveAndProviderDelayDoesNotExtendSession",
+        "linkUsesRecentVerifiedUidPreservesProfileAndNeverMovesConflictingIdentity",
+        "linkRejectsMissingStaleOrMismatchedFirebaseProofWithoutConsumingHandoff",
+        "disabledAndAdminAccountsCannotLoginOrLinkAndNoProfileIsCreatedImplicitly",
+        "firebaseFailureKeepsCanonicalUidAndFreshFlowRecoversWithoutReferenceReplay",
+        "competingNativeLinksHaveOneOwnerAndSuspensionDuringMintDoesNotReturnToken",
+        "v18EnforcesChannelIsolationReferenceUniquenessAndExpiry",
+    },
+    "com.smartledger.core.config.ZaloMigrationPostgresTest": {
+        "freshMigrationCreatesBothStoresAndExpiryIndexWithoutCoreProfileForeignKey",
+        "upgradeFromV16PreservesExistingOwnerIdentityShopAndCreatesNoMappings",
+        "migrationFailureRollsBackNewTableAndHistoryWithoutAdoptingUnexpectedTables",
+        "rerunIsNoOpAndProviderAppScopeUniquenessPreservesCanonicalUid",
+        "databaseRejectsInvalidSessionLifecycleAndDuplicateHandoffProof",
+        "nonOwnerRolesCannotReadOrInsertEvenWithBroadTablePrivileges",
+    },
+    "com.smartledger.core.repository.ZaloOAuthPostgresTest": {
+        "concurrentCallbacksHaveOnlyOneWinner",
+        "concurrentProofExchangesHaveOnlyOneWinner",
+        "sessionTransitionsCommitBeforeSurroundingTransactionRollsBack",
+        "concurrentFirstLoginAlwaysResolvesTheSameCanonicalUid",
+        "competingLinksCannotReassignIdentity",
+        "linkingWaitsForConcurrentDisableAndDoesNotCommitTheNewMapping",
+        "verifiedProofIsBoundToPurposeOriginChallengeAndBothExpiries",
+    },
+    "com.smartledger.core.service.ZaloAuthFlowPostgresTest": {
+        "disabledWorksWithOnlyOldSchemaAndMissingNewTablesFailClosedWhenEnabled",
+        "repeatedLoginUsesOneFirebaseUidAndCreatesCoreOwnerOnlyThroughExistingSession",
+        "linkedLoginKeepsExistingOwnerProfileShopRoleAndPrivateAvatar",
+        "conflictingLinkNeverMovesTheIdentityOrChangesEitherOwner",
+        "disabledMappedOwnerCannotObtainFirebaseCustomToken",
+        "freshOAuthAfterFirebaseFailureReusesReservedUidWithoutReusingConsumedProof",
+    },
     "com.smartledger.core.config.SaleRefundMigrationPostgresTest": {
         "notificationUpgradePreservesExistingBusinessDataWithoutBackfill",
         "notificationMigrationAdoptsLocalTablesAndPreservesReadHistory",

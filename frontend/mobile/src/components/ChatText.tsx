@@ -72,7 +72,7 @@ function ScreenButtons({
           title={SCREEN_LINKS[screen].label}
           variant={variant}
           small
-          style={variant === 'primary' && styles.brandShadow}
+          style={variant === 'primary' && [styles.pill, styles.brandShadow]}
           onPress={() => router.navigate(SCREEN_LINKS[screen].route)}
         />
       ))}
@@ -244,6 +244,7 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
   },
   actionsInCard: { marginTop: 0 },
+  pill: { borderRadius: 999 },
   // Bóng ngả tím theo màu nút, đậm hơn shadow(3) xám để nút nổi khỏi nền kem.
   brandShadow: Platform.select<ViewStyle>({
     web: { boxShadow: '0 6px 16px rgba(72,42,172,0.32)' } as ViewStyle,

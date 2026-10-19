@@ -5,6 +5,7 @@ from collections.abc import Iterator
 import psycopg
 import pytest
 from psycopg import sql
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.engine import make_url
 from tests.support import REPO_ROOT, apply_ai_baseline, apply_core_migrations
 
@@ -305,6 +306,49 @@ def test_a_superseded_memory_is_hidden_until_the_newer_one_is_forgotten(
     assert [item.content for item in found] == ["họp lúc 8h"]
 
 
+def test_forgetting_a_replaced_version_forgets_the_whole_fact(memory_db) -> None:
+    _, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    shop, user = ids["shop_a"], ids["user_a"]
+    chat = new_conversation(postgres, user, shop)
+    memories.add(shop, user, chat, [memory("họp lúc 8h", 1, 0)])
+    (old,) = memories.search(shop, user, vector(1, 0), 5)
+    memories.add(shop, user, chat, [memory("họp lúc 9h", 1, 0.1, supersedes=old.id)])
+
+    assert memories.forget(shop, user, old.id)
+
+    assert memories.search(shop, user, vector(1, 0), 5) == []
+    assert memories.list_live(shop, user) == []
+    assert not memories.forget(shop, user, old.id)
+
+
+def test_forget_cannot_reach_another_owners_memory(memory_db) -> None:
+    _, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    chat = new_conversation(postgres, ids["user_a"], ids["shop_a"])
+    memories.add(ids["shop_a"], ids["user_a"], chat, [memory("họp lúc 8h", 1, 0)])
+    (mine,) = memories.list_live(ids["shop_a"], ids["user_a"])
+
+    assert not memories.forget(ids["shop_b"], ids["user_b"], mine.id)
+    assert len(memories.list_live(ids["shop_a"], ids["user_a"])) == 1
+
+
+def test_list_live_caps_the_list_and_loads_only_what_the_view_shows(
+    memory_db, monkeypatch
+) -> None:
+    _, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    shop, user = ids["shop_a"], ids["user_a"]
+    chat = new_conversation(postgres, user, shop)
+    memories.add(shop, user, chat, [memory(f"fact {n}", 1, n / 10) for n in range(3)])
+    monkeypatch.setattr(AgentMemoryRepository, "LIST_LIMIT", 2)
+
+    listed = memories.list_live(shop, user)
+
+    assert len(listed) == 2
+    assert {"embedding", "details"} <= set(sa_inspect(listed[0]).unloaded)
+
+
 def test_supersede_cannot_reach_another_owners_memory(memory_db) -> None:
     _, postgres, ids = memory_db
     memories = AgentMemoryRepository(postgres)
@@ -377,3 +421,60 @@ def test_memory_is_on_until_the_owner_turns_it_off(memory_db) -> None:
     memories.set_memory_enabled(shop, user, True)
     assert memories.memory_enabled(shop, user) is True
     assert memories.memory_enabled(ids["shop_b"], ids["user_b"]) is True
+
+
+def test_similar_finds_close_live_memories_without_recording_a_use(
+    memory_db,
+) -> None:
+    admin, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    conversation_a = new_conversation(postgres, ids["user_a"], ids["shop_a"])
+    conversation_b = new_conversation(postgres, ids["user_b"], ids["shop_b"])
+    memories.add(
+        ids["shop_a"],
+        ids["user_a"],
+        conversation_a,
+        [
+            memory("gạo chú Tư", 1, 0),
+            memory("gạo cô Ba", 1, 0.2),
+            memory("đóng cửa 22h", 0, 1),
+        ],
+    )
+    memories.add(
+        ids["shop_b"], ids["user_b"], conversation_b, [memory("gạo shop B", 1, 0)]
+    )
+    recalled_id = admin.execute(
+        "SELECT id FROM agent_memories WHERE content = 'gạo chú Tư'"
+    ).fetchone()[0]
+
+    found = memories.similar(
+        ids["shop_a"], ids["user_a"], [vector(1, 0)], 0.7, 3, [recalled_id]
+    )
+
+    # The recalled fact is skipped, the unrelated one and shop B's stay out.
+    assert [item.content for item in found] == ["gạo cô Ba"]
+    assert admin.execute(
+        "SELECT count(*) FROM agent_memories WHERE last_used_at IS NOT NULL"
+    ).fetchone() == (0,)
+
+
+def test_a_often_used_memory_outranks_an_equally_relevant_unused_one(
+    memory_db,
+) -> None:
+    admin, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    conversation_id = new_conversation(postgres, ids["user_a"], ids["shop_a"])
+    memories.add(
+        ids["shop_a"],
+        ids["user_a"],
+        conversation_id,
+        [memory("gạo chú Tư", 1, 0.1), memory("gạo cô Ba", 1, -0.1)],
+    )
+    admin.execute(
+        "UPDATE agent_memories SET use_count = 20, last_used_at = created_at"
+        " WHERE content = 'gạo cô Ba'"
+    )
+
+    found = memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 5)
+
+    assert [item.content for item in found] == ["gạo cô Ba", "gạo chú Tư"]

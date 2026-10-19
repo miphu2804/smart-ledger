@@ -7,22 +7,34 @@ import { Button, Row, Screen, T } from '../../src/components/ui';
 import { AuthError, authClient } from '../../src/lib/auth';
 import { debugLog } from '../../src/lib/debug';
 import { describeError, errorMessage, isDisplayNameRequired } from '../../src/lib/errors';
+import { signInWithZalo, ZALO_LOGIN_AVAILABLE } from '../../src/lib/zaloLogin';
 import { useApp } from '../../src/store/AppStore';
 import { colors, shadow } from '../../src/theme';
 
-/** Cách đăng nhập: email + mật khẩu, Facebook và Google dùng được; Zalo ghi "Sắp có". Không còn đăng nhập bằng số điện thoại. */
+/**
+ * Cách đăng nhập: email + mật khẩu và Google dùng được; Facebook tạm khoá; Zalo dùng được trên bản web khi bật
+ * EXPO_PUBLIC_ZALO_LOGIN và trên Android khi có EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID, còn lại ghi "Sắp có". Không còn đăng nhập
+ * bằng số điện thoại.
+ */
 export default function Welcome() {
   const toast = useToast();
   const app = useApp();
   const [busy, setBusy] = useState<SocialProvider | null>(null);
 
-  // Facebook/Google → Firebase → phiên Core, cùng luồng với email: tài khoản mới (Core đòi tên) đi tiếp qua màn đăng ký.
+  // Facebook/Google/Zalo → Firebase → phiên Core, cùng luồng với email: tài khoản mới (Core đòi tên) đi tiếp qua màn đăng ký.
   const signInWith = async (provider: SocialProvider) => {
     if (busy) return;
     setBusy(provider);
     try {
-      await (provider === 'google' ? authClient.signInWithGoogle() : authClient.signInWithFacebook());
-      const session = await app.signIn(); // gửi Firebase ID token xuống Core (POST /auth/session)
+      // Zalo mở cửa sổ ngay trong lượt bấm (trước mọi await) để trình duyệt không chặn; tên Zalo dùng khi tạo tài khoản mới
+      let displayName: string | undefined;
+      if (provider === 'zalo') {
+        // Tên Zalo chỉ là gợi ý cho tài khoản mới: Zalo cho tới 255 ký tự, `/auth/session` nhận tối đa 150. Tên rỗng hay quá dài
+        // thì không gửi: tài khoản mới khi đó bị Core hỏi tên và đi qua màn "Bạn tên gì?", tài khoản cũ vào thẳng như thường.
+        const name = (await signInWithZalo()).displayName?.trim();
+        displayName = name && name.length <= MAX_DISPLAY_NAME ? name : undefined;
+      } else await (provider === 'google' ? authClient.signInWithGoogle() : authClient.signInWithFacebook());
+      const session = await app.signIn(displayName); // gửi Firebase ID token xuống Core (POST /auth/session)
       router.replace(session.needsOnboarding ? '/(auth)/setup' : '/(tabs)');
     } catch (e) {
       if (e instanceof AuthError && e.code === 'cancelled') return; // người dùng tự đóng, không phải lỗi
@@ -82,9 +94,17 @@ export default function Welcome() {
         <View style={styles.line} />
       </Row>
       <Row gap={8} style={{ alignItems: 'stretch' }}>
-        <SocialBtn name="Facebook" icon="facebook" busy={busy === 'facebook'} disabled={busy === 'google'} onPress={() => signInWith('facebook')} />
-        <SocialBtn name="Google" icon="google" busy={busy === 'google'} disabled={busy === 'facebook'} onPress={() => signInWith('google')} />
-        <SocialBtn name="Zalo" icon="zalo" soon />
+        {/* Facebook tạm khoá theo yêu cầu nhóm: nút mờ, ghi "Tạm khoá", không bấm được (luồng signInWith('facebook') giữ nguyên) */}
+        <SocialBtn name="Facebook" icon="facebook" soon note="Tạm khoá" />
+        <SocialBtn name="Google" icon="google" busy={busy === 'google'} disabled={!!busy && busy !== 'google'} onPress={() => signInWith('google')} />
+        <SocialBtn
+          name="Zalo"
+          icon="zalo"
+          soon={!ZALO_LOGIN_AVAILABLE}
+          busy={busy === 'zalo'}
+          disabled={!!busy && busy !== 'zalo'}
+          onPress={() => signInWith('zalo')}
+        />
       </Row>
 
       <Row style={{ justifyContent: 'center', marginTop: 24 }} gap={6}>
@@ -97,16 +117,20 @@ export default function Welcome() {
   );
 }
 
-type SocialProvider = 'facebook' | 'google';
-type SocialIcon = SocialProvider | 'zalo';
+type SocialProvider = 'facebook' | 'google' | 'zalo';
+/** Giới hạn `displayName` của `POST /auth/session` (cùng `maxLength` ở màn "Bạn tên gì?"). */
+const MAX_DISPLAY_NAME = 150;
+type SocialIcon = SocialProvider;
 const SOCIAL_COLOR: Record<SocialIcon, string> = { google: '#EA4335', facebook: '#1877F2', zalo: '#0068FF' };
 
-function SocialBtn({ name, icon, onPress, soon = false, busy = false, disabled = false }: {
+function SocialBtn({ name, icon, onPress, soon = false, note = 'Sắp có', busy = false, disabled = false }: {
   name: string;
   icon: SocialIcon;
   onPress?: () => void;
-  /** true = chưa có: nút mờ, có nhãn "Sắp có" và không bấm được */
+  /** true = chưa dùng được: nút mờ, có nhãn `note` và không bấm được */
   soon?: boolean;
+  /** Nhãn dưới tên khi `soon`: "Sắp có" (chưa làm) hoặc "Tạm khoá" (có nhưng đang tắt) */
+  note?: string;
   busy?: boolean;
   /** true khi đang chờ cách đăng nhập khác: không bấm được nhưng không mờ như "Sắp có" */
   disabled?: boolean;
@@ -117,7 +141,7 @@ function SocialBtn({ name, icon, onPress, soon = false, busy = false, disabled =
       onPress={onPress}
       disabled={soon || busy || disabled}
       accessibilityRole="button"
-      accessibilityLabel={soon ? `${name}, sắp có` : `Đăng nhập bằng ${name}`}
+      accessibilityLabel={soon ? `${name}, ${note.toLowerCase()}` : `Đăng nhập bằng ${name}`}
       accessibilityState={{ busy, disabled: soon || disabled }}
       style={({ pressed }) => [styles.social, soon && styles.socialSoon, (pressed || busy) && { opacity: 0.75 }]}
     >
@@ -135,7 +159,7 @@ function SocialBtn({ name, icon, onPress, soon = false, busy = false, disabled =
       </Row>
       {soon ? (
         <T size={10} color={colors.faint} style={{ marginTop: 2 }}>
-          Sắp có
+          {note}
         </T>
       ) : null}
     </Pressable>

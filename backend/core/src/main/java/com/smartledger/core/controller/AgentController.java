@@ -93,6 +93,21 @@ public class AgentController {
         return service.setMemoryEnabled(token, shopId, request.memoryEnabled());
     }
 
+    @GetMapping("/memory/items")
+    @Operation(summary = "List the long-term memories the assistant keeps for the owner")
+    public JsonNode memories(@AuthenticationPrincipal VerifiedFirebaseToken token,
+            @RequestHeader("X-Shop-Id") String shopId) {
+        return service.listMemories(token, shopId);
+    }
+
+    @DeleteMapping("/memory/items/{memoryId}")
+    @Operation(summary = "Forget one long-term memory and the older versions it replaced")
+    public ResponseEntity<Void> deleteMemory(@AuthenticationPrincipal VerifiedFirebaseToken token,
+            @RequestHeader("X-Shop-Id") String shopId, @PathVariable long memoryId) {
+        service.deleteMemory(token, shopId, memoryId);
+        return ResponseEntity.noContent().build();
+    }
+
     @DeleteMapping("/conversations/{conversationId}")
     @Operation(summary = "Delete a conversation and its history")
     public ResponseEntity<Void> delete(@AuthenticationPrincipal VerifiedFirebaseToken token,
