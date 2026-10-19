@@ -527,22 +527,12 @@ const FAQS: { q: string; a: ReactNode }[] = [
     a: 'Giọng nói được nhận dạng ngay trên điện thoại, không cần gửi âm thanh đi. Nhưng để lưu sổ lên tài khoản, ứng dụng cần kết nối Internet (Wi‑Fi hoặc 4G).',
   },
   {
-    q: 'Dữ liệu bán hàng của tôi có an toàn không?',
-    a: (
-      <>
-        Sổ gắn với tài khoản của bạn, đăng nhập bằng Facebook hoặc email; nhân viên quản trị chỉ xem được thông tin hỗ trợ ở mức tối thiểu và mọi lần
-        xem đều được ghi lại. Chi tiết nằm ở <Link to="/privacy">Chính sách quyền riêng tư</Link>.
-      </>
-    ),
+    q: 'Đăng nhập bằng gì và sổ được lưu ở đâu?',
+    a: 'Bạn đăng nhập bằng tài khoản Facebook hoặc Zalo. Sổ được lưu gắn với tài khoản đó; lưu lên tài khoản cần kết nối Internet.',
   },
   {
-    q: 'Làm sao để xoá tài khoản và dữ liệu của tôi?',
-    a: (
-      <>
-        Bạn gửi yêu cầu theo hướng dẫn tại trang <Link to="/data-deletion">Xoá dữ liệu người dùng</Link>. Trang đó cũng chỉ cách gỡ quyền của ứng
-        dụng khỏi tài khoản Facebook.
-      </>
-    ),
+    q: 'Muốn ngừng dùng thì làm thế nào?',
+    a: 'Nếu bạn muốn ngừng dùng hoặc xoá sổ, hãy nhắn cho chúng tôi qua các kênh liên hệ trên trang này.',
   },
   {
     q: 'Sổ Nghe Lời khác gì KiotViet, Sapo?',
