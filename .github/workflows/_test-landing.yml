@@ -1,0 +1,26 @@
+name: Test landing
+
+# Called by ci.yml when frontend/web or this file changed.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend/web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build

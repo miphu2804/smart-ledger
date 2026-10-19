@@ -1,3 +1,19 @@
+### [2026-10-19 14:30 UTC+07:00] — [CI/CD] CD runs as its own workflow; every run uploads a summary table
+
+**Done:** Deploys moved out of `ci.yml` into `cd.yml`. After a push to `staging` or `main` passes `ci-gate`, job `cd` (*Dispatch CD*) starts `cd.yml` on the same branch with the commit and the changed areas. CD's `gate` checks the commit is on the branch and has a passing `ci-gate` in a CI push run, then runs `deploy-ai` → `deploy-core`, `deploy-web` and `deploy-landing`; production approvals now happen in the CD run. Redeploy without a change = **Actions → CD → Run workflow**. `.github/scripts/run-summary.sh` writes one table (job, result, time, failed step) to the run page and to an artifact: `ci-summary` (with test counts), `cd-summary` (with the checked URLs) and `build-images-summary` (manual runs). The per-service `deploy-summary-*` artifact and the unused PR preview steps were removed from the deploy modules.
+
+**Changed files:** `.github/workflows/cd.yml`, `.github/scripts/run-summary.sh` — created; `.github/workflows/ci.yml`, `_build-images.yml`, `_deploy-railway.yml`, `_deploy-web.yml`, `_deploy-landing.yml`, `docs/development/ci-cd.md`, `CONTRIBUTING.md` — modified; this entry.
+
+**Check:** `actionlint` 1.7.12 passes; `run-summary.sh` printed the expected table for runs 38995093186 and 38798529864 locally. **Not verified:** a CD run started by `GITHUB_TOKEN` on GitHub, environment secrets reaching the modules through `secrets: inherit`, and the branch protection change to `ci-gate`.
+
+### [2026-10-19 11:05 UTC+07:00] — [CI/CD] Split ci.yml into called modules with one required check
+
+**Done:** `ci.yml` is now an orchestrator: job `changes` picks the areas, then calls `_test-ai.yml`, `_test-core.yml`, `_test-mobile-web.yml`, `_test-landing.yml`, `_build-images.yml`, `_deploy-railway.yml` (jobs `deploy-ai`, then `deploy-core`), `_deploy-web.yml` and `_deploy-landing.yml`. Job `ci-gate` fails when any module failed or was cancelled and is meant to be the only required check. Skips: Markdown never triggers an area; editing one module runs only its area; images build only when a Dockerfile, `.dockerignore`, dependency manifest or `compose.yaml` changed (or by hand from **Build images**), with a per-service GitHub Actions layer cache. A new pull request commit cancels the older run; pushes are never cancelled. Every job has `timeout-minutes`; `setup-uv` caches. Deploy modules get `secrets: inherit`, the piece missing from the `cd.yml` attempt of 2026-10-05.
+
+**Changed files:** `.github/workflows/ci.yml` — modified; `.github/workflows/_test-ai.yml`, `_test-core.yml`, `_test-mobile-web.yml`, `_test-landing.yml`, `_build-images.yml`, `_deploy-railway.yml`, `_deploy-web.yml`, `_deploy-landing.yml` — created; `docs/development/ci-cd.md`, `CONTRIBUTING.md` — modified; this entry.
+
+**Check:** `actionlint` 1.7.12 passes with shellcheck off; with shellcheck on, only the two `SC2034` warnings the old `ci.yml` already had. The filter globs were checked with picomatch. **Not verified:** a run on GitHub, environment secrets reaching the deploy modules, and the branch protection change from the four old checks to `ci-gate`.
+
 ### [2026-10-19 10:17 UTC+07:00] — [Fix] Keep the mobile landing gallery centred and tighten the gap before it
 
 **Done:** On phones the active screen drifted off-centre while scrolling. The track overflow (`--shift`) was measured only on mount and resize, but the gap between screens depends on `--focus`, which changes with scroll. The hook now measures the overflow each frame, after it writes `--p`, so the value matches the layout. On phones the blank space between the pain list and the gallery heading is about halved, by trimming the statement section's bottom padding. The two FAQ questions about data safety and account deletion are replaced with questions that do not link to the legal pages, which are hidden at this stage.

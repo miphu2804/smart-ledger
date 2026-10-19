@@ -1,0 +1,155 @@
+name: CD
+
+# Deploys one tested commit of `staging` or `main`. ci.yml dispatches it after a green push run,
+# naming the commit and the areas that changed; run it by hand (Actions → CD → Run workflow) to
+# redeploy after changing an environment variable. It runs on the branch it was dispatched on, so
+# `github.ref_name` is `staging` or `main` and the environment branch policies apply; a
+# `workflow_run` trigger would run on the default branch instead.
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit to deploy; empty deploys the branch tip
+        type: string
+        default: ""
+      ai:
+        description: Deploy Railway service ai
+        type: boolean
+        default: false
+      core:
+        description: Deploy Railway service core
+        type: boolean
+        default: false
+      web:
+        description: Deploy the mobile web to Vercel
+        type: boolean
+        default: false
+      landing:
+        description: Deploy the landing page to Vercel
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  ### Gate: only a commit of this branch with a green CI run ###
+
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require a tested commit of staging or main
+        id: commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          case "$GITHUB_REF_NAME" in
+            staging|main) ;;
+            *) echo "::error::CD deploys only staging or main, got $GITHUB_REF_NAME."; exit 1 ;;
+          esac
+          sha=$(git rev-parse --verify "${INPUT_SHA:-$GITHUB_SHA}^{commit}")
+          if ! git merge-base --is-ancestor "$sha" "$GITHUB_SHA"; then
+            echo "::error::${sha::7} is not on $GITHUB_REF_NAME."; exit 1
+          fi
+          # ci.yml dispatches this run before its own run has finished, so a passed `ci-gate` job
+          # counts as a green CI run.
+          passed=false
+          for id in $(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$sha" --event push --json databaseId --jq '.[].databaseId'); do
+            if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs" --paginate \
+              --jq '.jobs[] | select(.name == "ci-gate" and .conclusion == "success") | .id' | grep -q .; then
+              passed=true; break
+            fi
+          done
+          if [ "$passed" != true ]; then
+            echo "::error::No CI push run with a passed ci-gate for ${sha::7}. Wait for CI to pass, or re-run it."; exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+  ### Deploy: each area in its own module ###
+
+  deploy-ai:
+    needs: [gate]
+    if: inputs.ai
+    uses: ./.github/workflows/_deploy-railway.yml
+    with:
+      service: ai
+      sha: ${{ needs.gate.outputs.sha }}
+    secrets: inherit
+
+  # After deploy-ai: Core calls AI, so the new Core should not start against an old AI. A skipped
+  # deploy-ai (AI unchanged) does not block it; a failed one does.
+  deploy-core:
+    needs: [gate, deploy-ai]
+    if: ${{ !failure() && !cancelled() && inputs.core }}
+    uses: ./.github/workflows/_deploy-railway.yml
+    with:
+      service: core
+      sha: ${{ needs.gate.outputs.sha }}
+    secrets: inherit
+
+  deploy-web:
+    needs: [gate]
+    if: inputs.web
+    uses: ./.github/workflows/_deploy-web.yml
+    with:
+      sha: ${{ needs.gate.outputs.sha }}
+    secrets: inherit
+
+  deploy-landing:
+    needs: [gate]
+    if: inputs.landing
+    uses: ./.github/workflows/_deploy-landing.yml
+    with:
+      sha: ${{ needs.gate.outputs.sha }}
+    secrets: inherit
+
+  ### Report: one table per run, on the run page and as artifact `cd-summary` ###
+
+  summary:
+    if: always()
+    needs: [gate, deploy-ai, deploy-core, deploy-web, deploy-landing]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+      - name: List deployed URLs
+        env:
+          WEB_URL: ${{ needs.deploy-web.outputs.url }}
+          LANDING_URL: ${{ needs.deploy-landing.outputs.url }}
+          TARGET: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+        run: |
+          {
+            echo "| Area | Environment | URL |"
+            echo "|---|---|---|"
+            echo "| web | $TARGET | ${WEB_URL:-—} |"
+            echo "| landing | $TARGET | ${LANDING_URL:-—} |"
+          } > urls.md
+      - name: Write the run summary
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPORT_SHA: ${{ needs.gate.outputs.sha }}
+        run: bash .github/scripts/run-summary.sh urls.md
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cd-summary
+          path: run-summary.md
+          if-no-files-found: error
+          retention-days: 14
