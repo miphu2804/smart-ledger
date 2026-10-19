@@ -1,3 +1,11 @@
+### [2026-10-19 16:48 UTC+07:00] — [Change] Opening Notifications marks them as read
+
+**Done:** On request, the Notifications screen no longer needs the "Đọc hết" button: once it has loaded, everything counts as seen. The device-side notifications are marked read and Core's inbox is marked read across all pages (`markAllRead`, batch by batch), so the bell on Overview loses its dot. Notifications that were unread on arrival stay bold with a dot for the rest of that visit, the header says "N thông báo mới" and the "Chưa đọc" filter is now "Mới", so it is still clear which ones came in. A notification arriving while the screen is open is marked the same way; a Core call that is still running is not repeated, and a failure shows the usual error toast, with opening a notification still marking it read. The "Đọc hết" fuse button and the swipe-to-mark-read row action are gone. The PRD note on the mobile inbox describes the new behaviour.
+
+**Changed files:** `frontend/mobile/app/notifications.tsx`, `docs/product/product-requirements.md` — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors; mock web build at 375 px: the bell had its dot, the first visit showed "16 thông báo mới" with 16 rows marked new and no "Đọc hết" button, back on Overview the dot was gone, and the second visit showed "Không có thông báo mới" with no row marked. **Not verified:** a real phone, staging Core.
+
 ### [2026-10-19 15:11 UTC+07:00] — [Change] Settings shows which options exist yet
 
 **Done:** On request, the Settings screen no longer offers switches that do nothing. All six switches were local screen state: nothing saved them and nothing in the app read them, so they reset on leaving the screen. Checking what each option stands for: the app plays no sounds, has no spoken read-back, cannot print and has no backup, and the printer screen is a mock (its test print always reports no connection; printers are outside the MVP PRD). Those four rows are now greyed out with "Sắp có", and the printer button is disabled as "Kết nối máy in · Sắp có". Vibration and low-stock alerts do work but are always on, so those two rows say "Luôn bật" instead of a switch. The Settings hints on Manage and in the quick menu now read "Rung, cảnh báo sắp hết hàng, máy in" instead of advertising sound and printing.
