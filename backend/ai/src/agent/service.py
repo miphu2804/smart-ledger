@@ -7,7 +7,7 @@ from collections.abc import AsyncGenerator
 from contextlib import suppress
 from dataclasses import dataclass
 
-from pydantic_ai import Agent, AgentRunResult, Tool
+from pydantic_ai import Agent, AgentRun, Tool
 from pydantic_ai.messages import (
     CachePoint,
     ModelMessage,
@@ -50,8 +50,6 @@ logger = logging.getLogger(__name__)
 MAX_SCREEN_BUTTONS = 2
 # The screen-button block _with_screen_buttons appends to a stored answer.
 SCREEN_BUTTONS = re.compile(r"\n*```actions\n.*?\n```\s*$", re.DOTALL)
-# Joins answer text written before a screen-button call to the text after it.
-ANSWER_JOIN = "\n\n"
 
 
 @dataclass(frozen=True)
@@ -226,15 +224,26 @@ class AgentService:
         session_id: str,
     ) -> tuple[str, str]:
         """Run the agent; return the screened answer and the model version."""
-        async with self.guardrails.run_limits():
-            result = await self.agent.run(
+        async with (
+            self.guardrails.run_limits(),
+            self.agent.iter(
                 self._with_current_time(prompt),
                 message_history=self._model_messages(history),
                 deps=context,
                 usage_limits=self.guardrails.usage_limits,
                 model_settings=session_settings(session_id),
-            )
-        return self._read_result(result)
+            ) as run,
+        ):
+            answer = ""
+            returns = None
+            async for node in run:
+                if answer:
+                    # The button calls have returned; see _stream_run.
+                    returns = node.request
+                    break
+                if Agent.is_call_tools_node(node):
+                    answer = self._kept_text(node.model_response)
+            return self._read_result(run, answer, returns)
 
     async def _stream_events(
         self,
@@ -280,10 +289,9 @@ class AgentService:
         try:
             if recalled:
                 events.put_nowait(MemoryRecalled(recalled))
-            delivered, result = await self._stream_run(
+            delivered, answer, version = await self._stream_run(
                 prompt, history, context, self._session_id(conversation_id), events
             )
-            answer, version = self._read_result(result)
             if not answer.startswith(delivered):
                 events.put_nowait(Reset())
                 delivered = ""
@@ -304,9 +312,10 @@ class AgentService:
         context: AgentContext,
         session_id: str,
         events: asyncio.Queue[AgentStreamEvent | Exception],
-    ) -> tuple[str, AgentRunResult[str]]:
-        """Queue the text each model response releases; return the text the owner was
-        sent since the last Reset, and the run result."""
+    ) -> tuple[str, str, str]:
+        """Queue the text each model response releases; return the text the owner
+        was sent since the last Reset, the answer with its buttons, and the model
+        version."""
         delivered = ""
         async with (
             self.guardrails.run_limits(),
@@ -318,69 +327,42 @@ class AgentService:
                 model_settings=session_settings(session_id),
             ) as run,
         ):
-            # The answer text the last screen-button response wrote, which the next
-            # response extends; empty when the text delivered so far is a preamble
-            # it replaces. kept_before is the text on screen before that answer.
-            kept = ""
-            kept_before = ""
+            # The answer a response wrote alongside screen-button calls only.
+            answer = ""
+            returns = None
             async for node in run:
                 if Agent.is_call_tools_node(node):
                     await self._queue_tool_events(node, run, events)
                     continue
+                if answer:
+                    # The button calls have returned, so the answer is complete. The
+                    # model is not asked again: it would write the answer a second
+                    # time, often reworded, and no text check tells the copy apart.
+                    returns = node.request
+                    break
                 if not Agent.is_model_request_node(node):
                     continue
                 response_text = ""
                 released = ""
-                # The text on screen before this response's own text.
-                before = ""
-
-                def release(full: str) -> None:
-                    nonlocal before, delivered
-                    fresh = full[len(released) :]
-                    if not released and delivered:
-                        # Answer text written before a screen-button call is
-                        # extended, unless this response writes it again: the copy on
-                        # screen is then replaced. Other text an earlier response sent
-                        # is replaced too: a preamble before a data tool call, or an
-                        # answer the screen rejected.
-                        if kept and not self._rewrites(full, kept):
-                            before = delivered
-                            fresh = ANSWER_JOIN + fresh
-                        else:
-                            events.put_nowait(Reset())
-                            delivered = ""
-                            # The Reset cleared the text before the kept answer too.
-                            if kept and kept_before:
-                                before = kept_before
-                                fresh = before + ANSWER_JOIN + fresh
-                    delivered += fresh
-                    events.put_nowait(TextDelta(fresh))
-
                 async with node.stream(run.ctx) as stream:
                     async for delta in stream.stream_text(delta=True, debounce_by=None):
                         response_text += delta
                         safe = self.guardrails.screened_prefix(response_text)
                         # The prefix can shrink when a view name at the end gets
                         # extended (`v_products` then `_x`); only growth is sent.
-                        # Text that may still turn out to repeat the kept answer
-                        # waits until it differs.
-                        if len(safe) > len(released) and not self._repeats(safe, kept):
-                            release(safe)
-                            released = safe
-                    response = stream.response
-                text = self._kept_text(response)
-                # Mirrors _answer_text, so the text sent matches the answer stored.
-                if text and not self._repeats(text, kept):
-                    if text.startswith(released) and text[len(released) :]:
-                        # The screen held back the tail while it could still become
-                        # a leak; the whole text passed, so the tail goes out now.
-                        release(text)
-                    kept = text
-                    kept_before = before
-                elif not text and self._calls(response) - {suggest_screen.__name__}:
-                    kept = ""
-            result = run.result
-        return delivered, result
+                        if len(safe) <= len(released):
+                            continue
+                        if not released and delivered:
+                            # Text an earlier response sent is replaced: a preamble
+                            # before a data tool call, or an answer the screen rejected.
+                            events.put_nowait(Reset())
+                            delivered = ""
+                        fresh = safe[len(released) :]
+                        delivered += fresh
+                        events.put_nowait(TextDelta(fresh))
+                        released = safe
+                    answer = self._kept_text(stream.response)
+            return (delivered, *self._read_result(run, answer, returns))
 
     @staticmethod
     async def _queue_tool_events(
@@ -394,12 +376,19 @@ class AgentService:
                 if progress is not None:
                     events.put_nowait(progress)
 
-    def _read_result(self, result: AgentRunResult[str]) -> tuple[str, str]:
+    def _read_result(
+        self, run: AgentRun, answer: str, returns: ModelRequest | None
+    ) -> tuple[str, str]:
         """Log the turn's token use; return the answer, with its screen buttons, and
-        the model version."""
+        the model version.
+
+        `answer` is the text a response wrote alongside screen-button calls only, which
+        ended the run early; empty when the run ended on its final output. `returns`
+        is the request the early end never sent, which holds those calls' returns.
+        """
         # Token counts per turn, to size AGENT_TURN_TOKEN_LIMIT from real traffic and
         # to see how much of the prompt the provider served from its cache.
-        usage = result.usage
+        usage = run.usage
         logger.info(
             "agent turn usage: %s, cache read %d, cache write %d, cache hit %.0f%%",
             usage,
@@ -407,54 +396,18 @@ class AgentService:
             usage.cache_write_tokens,
             100 * usage.cache_hit_ratio,
         )
-        answer = self._with_screen_buttons(
-            self._answer_text(result), self._screens(result)
+        messages = run.new_messages()
+        if not answer:
+            answer = run.result.output
+        model_name = next(
+            message.model_name
+            for message in reversed(messages)
+            if isinstance(message, ModelResponse)
         )
-        return answer, result.response.model_name or self.model_name
-
-    def _answer_text(self, result: AgentRunResult[str]) -> str:
-        """The run's answer: the final output, after any answer text the model wrote
-        before calling suggest_screen.
-
-        A model often writes the whole answer, then calls suggest_screen and adds one
-        line about the button. That earlier text is the answer, so it is kept; text
-        before a data tool call is a preamble and is dropped. Models also often write
-        the kept answer again after the tool returns: a plain repeat is dropped, and a
-        repeat with a new ending replaces the kept answer.
-        """
-        pieces: list[str] = []
-        for message in result.new_messages():
-            if not isinstance(message, ModelResponse) or not self._calls(message):
-                continue
-            if text := self._kept_text(message):
-                if pieces and self._repeats(text, pieces[-1]):
-                    continue
-                if pieces and self._rewrites(text, pieces[-1]):
-                    pieces[-1] = text
-                else:
-                    pieces.append(text)
-            elif self._calls(message) - {suggest_screen.__name__}:
-                pieces = []
-        if pieces and self._repeats(result.output, pieces[-1]):
-            return ANSWER_JOIN.join(pieces)
-        if pieces and self._rewrites(result.output, pieces[-1]):
-            pieces.pop()
-        return ANSWER_JOIN.join([*pieces, result.output])
-
-    @staticmethod
-    def _repeats(text: str, kept: str) -> bool:
-        """Whether text is the kept answer again, or so far only its start; spacing
-        is ignored."""
-        words = " ".join(text.split())
-        return bool(words) and " ".join(kept.split()).startswith(words)
-
-    @staticmethod
-    def _rewrites(text: str, kept: str) -> bool:
-        """Whether text starts like the kept answer, so it is that answer written again
-        with changes after its start; spacing is ignored. Only a kept answer of 40
-        characters or more counts: a shorter start could match an unrelated reply."""
-        head = " ".join(kept.split())[:40]
-        return len(head) == 40 and " ".join(text.split()).startswith(head)
+        if returns is not None:
+            messages = [*messages, returns]
+        answer = self._with_screen_buttons(answer, self._screens(messages))
+        return answer, model_name or self.model_name
 
     @staticmethod
     def _calls(response: ModelResponse) -> set[str]:
@@ -465,7 +418,13 @@ class AgentService:
 
     def _kept_text(self, response: ModelResponse) -> str:
         """The answer text of a response that only adds screen buttons, if the screen
-        passes it; otherwise empty."""
+        passes it; otherwise empty.
+
+        A model often writes the whole answer and calls suggest_screen in one response.
+        That text is the answer, and the run ends once the calls return. Text before a
+        data tool call is a preamble and is dropped. The Harness screens only the final
+        output, so this text is screened here.
+        """
         if self._calls(response) != {suggest_screen.__name__}:
             return ""
         text = "".join(
@@ -474,10 +433,10 @@ class AgentService:
         return text if self.guardrails.allows_answer(text) else ""
 
     @staticmethod
-    def _screens(result: AgentRunResult[str]) -> list[str]:
+    def _screens(messages: list[ModelMessage]) -> list[str]:
         """The screens suggest_screen accepted this run, in order, without repeats."""
         screens = []
-        for message in result.new_messages():
+        for message in messages:
             for part in message.parts:
                 if (
                     isinstance(part, ToolReturnPart)
