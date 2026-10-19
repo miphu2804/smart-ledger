@@ -1,0 +1,79 @@
+name: Test ai
+
+# Called by ci.yml when backend/ai, supabase or this file changed.
+on:
+  workflow_call:
+    outputs:
+      tests:
+        value: ${{ jobs.test.outputs.tests }}
+      failures:
+        value: ${{ jobs.test.outputs.failures }}
+      errors:
+        value: ${{ jobs.test.outputs.errors }}
+      skipped:
+        value: ${{ jobs.test.outputs.skipped }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: smartledger_test
+          POSTGRES_USER: smartledger
+          POSTGRES_PASSWORD: smartledger
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U smartledger -d smartledger_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_TEST_URL: postgresql://smartledger:smartledger@localhost:5432/smartledger_test
+    outputs:
+      tests: ${{ steps.test-results.outputs.tests }}
+      failures: ${{ steps.test-results.outputs.failures }}
+      errors: ${{ steps.test-results.outputs.errors }}
+      skipped: ${{ steps.test-results.outputs.skipped }}
+    defaults:
+      run:
+        working-directory: backend/ai
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          python-version: "3.11"
+          enable-cache: true
+          cache-dependency-glob: backend/ai/uv.lock
+      - run: uv sync --group dev
+      - run: uv run ruff check
+      - run: uv run ruff format --check
+      - run: uv run pytest --junitxml=pytest-results.xml
+      - name: Capture test counts
+        id: test-results
+        if: always()
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          from pathlib import Path
+          from xml.etree import ElementTree
+
+          report = Path("pytest-results.xml")
+          counts = {name: "n/a" for name in ("tests", "failures", "errors", "skipped")}
+          if report.exists():
+              root = ElementTree.parse(report).getroot()
+              suites = [root] if root.tag == "testsuite" else root.findall(".//testsuite")
+              if not suites:
+                  suites = [root]
+              counts = {
+                  name: str(sum(int(suite.get(name, "0")) for suite in suites))
+                  for name in counts
+              }
+          for name, value in counts.items():
+              print(f"{name}={value}")
+          PY

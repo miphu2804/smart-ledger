@@ -1,0 +1,96 @@
+name: Deploy railway
+
+# Called by cd.yml, once per service to deploy. It runs in the caller's context, so `github.ref_name` is the pushed branch and the environment branch policies
+# apply. Each GitHub environment holds its own environment-scoped Railway project token;
+# `railway-production` requires approval.
+# The environment is declared on the job here and the caller passes `secrets: inherit`: an
+# earlier called workflow without `secrets: inherit` read an empty RAILWAY_TOKEN (see PROGRESS.md,
+# 2026-10-05).
+on:
+  workflow_call:
+    inputs:
+      service:
+        description: Railway service and backend/ folder to deploy (ai or core)
+        type: string
+        required: true
+      sha:
+        description: Commit to deploy, already checked by the gate of cd.yml
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: ${{ github.ref_name == 'main' && 'railway-production' || 'railway-staging' }}
+    concurrency:
+      group: deploy-${{ github.ref_name }}-${{ inputs.service }}
+      cancel-in-progress: false
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha }}
+          persist-credentials: false
+      - name: Install Railway CLI
+        run: npm install --global @railway/cli@5.63.1
+      # GitHub owns the browser origins Core allows, so a manual edit on Railway cannot drift or
+      # crash Core: Core refuses to start on any whitespace, wildcard or path inside an origin.
+      # Skipped while the environment variable is unset, leaving the Railway value untouched.
+      - name: Sync core CORS origins
+        if: inputs.service == 'core' && vars.CORS_ALLOWED_ORIGINS != ''
+        env:
+          CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
+        run: |
+          set -euo pipefail
+          if [[ "$CORS_ALLOWED_ORIGINS" =~ [[:space:]*] ]]; then
+            echo "::error::CORS_ALLOWED_ORIGINS must be comma-separated origins without spaces or wildcards"
+            exit 1
+          fi
+          railway variable set "CORS_ALLOWED_ORIGINS=$CORS_ALLOWED_ORIGINS" --service core --skip-deploys
+      # GitHub owns the AI model settings (backend/ai/.env.example), so the deploy below starts the
+      # new AI with them. Each unset setting leaves its Railway value untouched.
+      - name: Sync ai model settings
+        if: inputs.service == 'ai'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+          MODEL_PROVIDER: ${{ vars.MODEL_PROVIDER }}
+          MODEL_NAME: ${{ vars.MODEL_NAME }}
+          MODEL_FALLBACKS: ${{ vars.MODEL_FALLBACKS }}
+          MODEL_REASONING_EFFORT: ${{ vars.MODEL_REASONING_EFFORT }}
+        run: |
+          set -euo pipefail
+          for name in OPENAI_API_KEY OPENAI_BASE_URL MODEL_PROVIDER MODEL_NAME MODEL_FALLBACKS MODEL_REASONING_EFFORT; do
+            if [[ -n "${!name}" ]]; then
+              # stdin keeps the key out of the runner's process list
+              printf '%s' "${!name}" | railway variable set "$name" --stdin --service ai --skip-deploys
+            fi
+          done
+      # GitHub also owns the Logfire token (backend/ai/README.md#tracing-logfire), one per
+      # environment, so it is rotated in one place. The environment name and the deployed commit
+      # are derived here, so each trace shows which environment and release produced it. An unset
+      # token leaves the Railway value untouched.
+      - name: Sync ai tracing settings
+        if: inputs.service == 'ai'
+        env:
+          LOGFIRE_TOKEN: ${{ secrets.LOGFIRE_TOKEN }}
+          LOGFIRE_ENVIRONMENT: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+          LOGFIRE_SERVICE_VERSION: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          for name in LOGFIRE_TOKEN LOGFIRE_ENVIRONMENT LOGFIRE_SERVICE_VERSION; do
+            if [[ -n "${!name}" ]]; then
+              # stdin keeps the token out of the runner's process list
+              printf '%s' "${!name}" | railway variable set "$name" --stdin --service ai --skip-deploys
+            fi
+          done
+      - name: Deploy ${{ inputs.service }}
+        id: deploy
+        env:
+          SERVICE: ${{ inputs.service }}
+        run: railway up "backend/$SERVICE" --path-as-root --service "$SERVICE" --ci

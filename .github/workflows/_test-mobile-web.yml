@@ -1,0 +1,31 @@
+name: Test mobile web
+
+# Called by ci.yml when frontend/mobile or this file changed.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      EXPO_PUBLIC_USE_MOCK: "true"
+      EXPO_PUBLIC_MOCK_CORE: "true"
+      EXPO_PUBLIC_MOCK_SHOPS: "true"
+      EXPO_PUBLIC_API_ENDPOINT: http://localhost:8000
+    defaults:
+      run:
+        working-directory: frontend/mobile
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/mobile/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run export:web

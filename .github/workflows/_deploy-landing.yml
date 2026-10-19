@@ -1,0 +1,94 @@
+name: Deploy landing
+
+# Called by cd.yml. Same shape as _deploy-web.yml, with its own Vercel project and GitHub
+# environments. Vercel's Git deployments are off in frontend/web/vercel.json, so only this module
+# deploys the landing.
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: Commit to deploy, already checked by the gate of cd.yml
+        type: string
+        required: true
+    outputs:
+      url:
+        description: LANDING_URL the deploy was checked at
+        value: ${{ jobs.deploy.outputs.url }}
+
+jobs:
+  deploy:
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: ${{ github.ref_name == 'main' && 'landing-production' || 'landing-staging' }}
+    concurrency:
+      group: deploy-landing-${{ github.ref_name }}
+      cancel-in-progress: true
+    outputs:
+      url: ${{ vars.LANDING_URL }}
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TARGET: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
+      VITE_LEGAL_DRAFT: ${{ vars.VITE_LEGAL_DRAFT }}
+      VITE_ANDROID_APK_URL: ${{ vars.VITE_ANDROID_APK_URL }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/web/package-lock.json
+      - name: Install Vercel CLI
+        run: npm install --global vercel@62.2.0
+      - run: vercel pull --yes --environment="$VERCEL_TARGET" --token="$VERCEL_TOKEN"
+      - run: vercel build ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN"
+      # Vercel project variables are pulled into the build, so a VITE_ADMIN_ENABLED=true set there would publish admin.
+      - name: Check no admin code in the build
+        run: |
+          # The chunk name follows the lazy import in App.tsx; admin123 is a mock password and may change.
+          if [ -n "$(find .vercel/output/static -name 'AdminRoutes-*')" ] || grep -rqF admin123 .vercel/output/static; then
+            echo "::error::admin code is in the landing build; remove VITE_ADMIN_ENABLED from the Vercel project"
+            exit 1
+          fi
+      - name: Deploy
+        id: deploy
+        run: |
+          url=$(vercel deploy --prebuilt ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      # REST alias, as in _deploy-web.yml: `vercel alias set` fails for team tokens.
+      - name: Alias staging
+        if: github.ref_name == 'staging'
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+          STAGING_URL: ${{ vars.LANDING_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$STAGING_URL" || { echo "::error::LANDING_URL is not set on landing-staging"; exit 1; }
+          alias="${STAGING_URL#https://}"
+          api=https://api.vercel.com
+          auth="Authorization: Bearer $VERCEL_TOKEN"
+          id=$(curl -fsS -H "$auth" "$api/v13/deployments/${URL#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
+          curl -fsS -X POST -H "$auth" -H "Content-Type: application/json" \
+            -d "$(jq -n --arg alias "$alias" '{alias: $alias}')" \
+            "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID"
+          echo "alias: $STAGING_URL -> $URL"
+      - name: Smoke test
+        env:
+          URL: ${{ vars.LANDING_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$URL" || { echo "::error::LANDING_URL is not set for this environment"; exit 1; }
+          # A fresh alias can take a few seconds to route, so retry before failing.
+          for _ in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$URL/" || true)
+            [ "$code" = 200 ] && break
+            sleep 5
+          done
+          test "$code" = 200
+          echo "page: 200 at $URL"

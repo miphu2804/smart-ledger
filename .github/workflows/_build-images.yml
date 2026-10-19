@@ -1,0 +1,71 @@
+name: Build images
+
+# Proves the service Dockerfiles still build. ci.yml calls it only when an image input changed
+# (Dockerfile, .dockerignore, dependency manifests, compose.yaml): plain source changes are
+# compiled by the test modules and rebuilt from the same Dockerfile by the Railway staging deploy.
+# Run it by hand from the Actions tab to check an image without such a change.
+on:
+  workflow_call:
+    inputs:
+      services:
+        description: JSON array of services to build, e.g. ["ai","core"]
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      services:
+        description: Services to build
+        type: choice
+        options:
+          - '["ai","core"]'
+          - '["ai"]'
+          - '["core"]'
+        default: '["ai","core"]'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(inputs.services) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v3
+      # Build only, no push; the layer cache in GitHub Actions is scoped per service.
+      - name: Build ${{ matrix.service }}
+        uses: docker/build-push-action@v6
+        with:
+          context: backend/${{ matrix.service }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  # A manual run reports like ci.yml and cd.yml; when ci.yml calls this module, its own summary covers it.
+  summary:
+    if: always() && github.event_name == 'workflow_dispatch'
+    needs: [build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+      - name: Write the run summary
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/run-summary.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: build-images-summary
+          path: run-summary.md
+          if-no-files-found: error
+          retention-days: 14
