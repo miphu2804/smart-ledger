@@ -24,20 +24,13 @@ export function useScrollProgress() {
     }
     let frame = 0
 
-    // Độ tràn của dải và số máy chỉ đổi khi kích thước màn đổi, nên đo ở đây thay vì mỗi khung hình
-    const measure = () => {
-      const vw = document.documentElement.clientWidth
-      for (const [el, track] of tracks) {
-        el.style.setProperty('--shift', `${Math.max(0, track.scrollWidth - vw)}px`)
-        el.style.setProperty('--n', String(track.children.length))
-      }
-    }
-
     const update = () => {
       frame = 0
       const vh = window.innerHeight
+      const vw = document.documentElement.clientWidth
       // Đọc hết vị trí trước rồi mới ghi, để trình duyệt không phải tính lại layout sau từng lần ghi
       const rects = els.map((el) => el.getBoundingClientRect())
+      const visible: [HTMLElement, HTMLElement][] = []
       els.forEach((el, i) => {
         const r = rects[i]
         if (r.bottom < -vh || r.top > vh * 2) return
@@ -47,6 +40,7 @@ export function useScrollProgress() {
         el.style.setProperty('--p', p.toFixed(4))
         const track = tracks.get(el)
         if (track) {
+          visible.push([el, track])
           // Dải được đệm hai đầu nên màn thứ i dừng giữa khung nhìn khi tiến độ là i/(n-1)
           // Giữ máy đầu và máy cuối đứng yên một đoạn cuộn, để vuốt nhanh không trôi tuột qua mục
           const held = clamp01((p - 0.06) / 0.88)
@@ -55,24 +49,25 @@ export function useScrollProgress() {
           el.style.setProperty('--a', String(active))
         }
       })
+      // Độ tràn của dải đổi theo --p trên điện thoại (khoảng cách giữa các máy phụ thuộc --focus), nên phải đo sau khi
+      // đã ghi --p. Đo trước thì --shift lệch một khung hình và vẫn lệch khi cuộn đã dừng
+      for (const [el, track] of visible) {
+        el.style.setProperty('--shift', `${Math.max(0, track.scrollWidth - vw)}px`)
+      }
     }
     const request = () => {
       if (!frame) frame = requestAnimationFrame(update)
     }
-    const onResize = () => {
-      measure()
-      request()
-    }
 
     document.documentElement.classList.add('has-scroll-fx')
-    measure()
+    for (const [el, track] of tracks) el.style.setProperty('--n', String(track.children.length))
     update()
     window.addEventListener('scroll', request, { passive: true })
-    window.addEventListener('resize', onResize)
+    window.addEventListener('resize', request)
     return () => {
       cancelAnimationFrame(frame)
       window.removeEventListener('scroll', request)
-      window.removeEventListener('resize', onResize)
+      window.removeEventListener('resize', request)
       document.documentElement.classList.remove('has-scroll-fx')
     }
   }, [])
