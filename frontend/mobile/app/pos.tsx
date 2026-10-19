@@ -8,6 +8,7 @@ import { BarcodeScannerModal } from '../src/components/BarcodeScannerModal';
 import { useToast } from '../src/components/brand';
 import { PageControls } from '../src/components/PageControls';
 import { ProductGridSkeleton, RowListSkeleton } from '../src/components/ListSkeleton';
+import { QuickNavButton } from '../src/components/QuickNav';
 import { TAB_HEADER_SIDE, TAB_HEADER_TOP, TabSearchBar } from '../src/components/TabSearchBar';
 import { Button, Chips, Dialog, EmptyState, Field, Row, Sheet, Stepper, T } from '../src/components/ui';
 import type { CategoryView, LineItem, ProductView } from '../src/data/types';
@@ -754,6 +755,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
         onBodyHeight={setHeaderBodyHeight}
         pinned={
           <Row gap={8} style={styles.pinnedHeader}>
+            {inTab ? <QuickNavButton compact /> : null}
             <PosSearchBox value={q} onChangeText={setQ} compact />
             <PosActionButton tone="gold" icon="maximize" label="Quét mã" compact onPress={() => setScannerOpen(true)} />
             <PosActionButton tone="purple" icon="mic" label="Đọc đơn" compact onPress={() => router.push('/voice')} />
@@ -790,6 +792,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
             }}
             filterActive={filterActive}
             filterLabel={filterActive ? `Bộ lọc, đang chọn ${filterSummary}` : 'Bộ lọc'}
+            leading={inTab ? <QuickNavButton /> : undefined}
           />
           <PosCategoryChips value={cat} onChange={setCat} options={cats.map((c) => ({ key: c, label: catLabel(c) }))} />
         </View>

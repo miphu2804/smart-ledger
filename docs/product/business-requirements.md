@@ -222,5 +222,6 @@ Copy UI viện dẫn nghị định trên màn bản ghi bán hàng **không** b
 | `BR-002`, `BR-003`, `BR-011`, `BR-012` | `FR-008`, `FR-017`, `FR-018`, `FR-020`, `FR-021`, `FR-025`, `NFR-006`–`NFR-008`, `AC-076`–`AC-077` | tạm thời — đích MVP; Agent đọc công nợ/thu tiền/chi phí có test DB, chưa nghiệm thu đầu-cuối với model thật |
 | `BO-003`, `BR-011`, `BR-012` | `FR-019`, `AC-012` | tạm thời — đích MVP; mới bật extension `pgvector`, chưa có truy xuất vector |
 | `BO-003`, `BR-002`, `BR-004` | `FR-026`, `AC-019` | tạm thời — cần nghiệm thu trên mobile |
+| `BR-001` | `FR-035`, `AC-096` | tạm thời — cần nghiệm thu trên mobile |
 | `BO-003`, `BR-012` | `FR-027`, `AC-020`–`AC-023` | Core proxy và AI Agent chat đã có; cần nghiệm thu FE/staging |
 | `BO-004`, `BR-INV-001`–`BR-INV-008` | `FR-INV-001`–`FR-INV-007` | Hoãn, chờ `OQ-INV-001`–`OQ-INV-005` và phê duyệt pháp lý |
