@@ -653,6 +653,11 @@ function AssistantSettingsSheet({
       await agentApi.deleteMemory(target.id);
       setMemories((list) => list.filter((m) => m.id !== target.id));
     } catch (err) {
+      // Core đổi mọi 404 của AI thành conversation_not_found; xoá ghi nhớ chỉ có thể 404 khi nó đã mất.
+      if (err instanceof ApiError && err.code === 'conversation_not_found') {
+        setMemories((list) => list.filter((m) => m.id !== target.id));
+        return;
+      }
       setError(historyErrorMessage(err, 'Chưa xoá được ghi nhớ.'));
     }
   };
