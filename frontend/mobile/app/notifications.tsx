@@ -124,7 +124,7 @@ export default function Notifications() {
         options={[
           { key: 'all', label: 'Tất cả', icon: 'grid' },
           { key: 'unread', label: 'Mới', icon: 'bell', count: newOnes.length },
-          ...NOTIF_CATEGORIES.map((c) => ({
+          ...NOTIF_CATEGORIES.filter((c) => app.settings.stockAlerts || c !== 'stock').map((c) => ({
             key: c,
             label: notifCategoryMeta[c].label,
             icon: notifCategoryMeta[c].icon,

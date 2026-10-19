@@ -1,37 +1,33 @@
 import { Feather } from '@expo/vector-icons';
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
-import { Badge, Button, Card, Header, Screen, T } from '../src/components/ui';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Badge, Button, Card, Header, Screen, T, Toggle } from '../src/components/ui';
+import { useApp } from '../src/store/AppStore';
 import { colors } from '../src/theme';
 
 /**
- * Trạng thái của từng mục cài đặt. Chưa mục nào có công tắc thật (chưa lưu tuỳ chọn ở đâu và chưa nơi nào đọc), nên không
- * hiện công tắc bấm được:
- * - `soon`: app chưa có tính năng này (âm thanh, đọc lại đơn, in hoá đơn, sao lưu); làm mờ và ghi "Sắp có".
- * - `always`: tính năng đang chạy và luôn bật (rung, cảnh báo sắp hết hàng), chưa cho tắt; ghi "Luôn bật".
- * Khi một mục có công tắc thật thì thay trạng thái ở đây bằng `Toggle` nối với tuỳ chọn đã lưu.
+ * Mục cài đặt. Có hai loại:
+ * - Có công tắc thật (`value`/`onChange`): rung phản hồi và cảnh báo sắp hết hàng, lưu trên máy (`settings` của AppStore).
+ *   Chạm cả dòng hay chạm công tắc đều đổi.
+ * - `soon`: app chưa có tính năng này (âm thanh, đọc lại đơn, in hoá đơn, sao lưu); làm mờ và ghi "Sắp có", không bấm được.
  */
-type SettingStatus = 'soon' | 'always';
-
 function SettingRow({
   icon,
   title,
   subtitle,
-  status,
+  soon = false,
+  value = false,
+  onChange,
 }: {
   icon: React.ComponentProps<typeof Feather>['name'];
   title: string;
   subtitle: string;
-  status: SettingStatus;
+  soon?: boolean;
+  value?: boolean;
+  onChange?: (value: boolean) => void;
 }) {
-  const soon = status === 'soon';
-  return (
-    <View
-      style={[styles.row, soon && styles.rowSoon]}
-      accessible
-      accessibilityLabel={`${title}, ${soon ? 'sắp có' : 'luôn bật'}`}
-      accessibilityState={{ disabled: soon }}
-    >
+  const content = (
+    <>
       <View style={[styles.iconBox, soon && styles.iconBoxSoon]}>
         <Feather name={icon} size={19} color={soon ? colors.disabled : colors.brand} />
       </View>
@@ -43,15 +39,39 @@ function SettingRow({
           {subtitle}
         </T>
       </View>
-      {/* Badge tự canh lên đầu (alignSelf flex-start): bọc lại để nằm giữa dòng như công tắc trước đây */}
-      <View style={styles.badgeSlot}>
-        {soon ? <Badge text="Sắp có" /> : <Badge text="Luôn bật" color={colors.green} bg={colors.greenSoft} />}
+    </>
+  );
+  if (soon || !onChange) {
+    return (
+      <View style={[styles.row, styles.rowSoon]} accessible accessibilityLabel={`${title}, sắp có`} aria-disabled>
+        {content}
+        {/* Badge tự canh lên đầu (alignSelf flex-start): bọc lại để nằm giữa dòng như công tắc */}
+        <View style={styles.badgeSlot}>
+          <Badge text="Sắp có" />
+        </View>
       </View>
-    </View>
+    );
+  }
+  return (
+    <Pressable
+      onPress={() => onChange(!value)}
+      style={({ pressed }) => [styles.row, pressed && { opacity: 0.85 }]}
+      accessibilityRole="switch"
+      accessibilityLabel={title}
+      accessibilityHint={subtitle}
+      aria-checked={value}
+    >
+      {content}
+      {/* Cả dòng đã là công tắc cho trình đọc màn hình: ẩn công tắc con để không đọc hai lần */}
+      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <Toggle value={value} onChange={onChange} />
+      </View>
+    </Pressable>
   );
 }
 
 export default function Settings() {
+  const { settings, setSetting } = useApp();
   return (
     <Screen>
       <Header title="Cài đặt" subtitle="Tuỳ chỉnh cách app phản hồi khi bán hàng" />
@@ -60,18 +80,30 @@ export default function Settings() {
         Trải nghiệm bán hàng
       </T>
       <Card style={styles.card}>
-        <SettingRow icon="volume-2" title="Âm thanh thao tác" subtitle="Phát tiếng khi thêm món, quét mã, lưu đơn" status="soon" />
-        <SettingRow icon="smartphone" title="Rung phản hồi" subtitle="Rung nhẹ khi chọn sản phẩm hoặc hoàn tất đơn" status="always" />
-        <SettingRow icon="mic" title="Đọc lại đơn bằng giọng nói" subtitle="Nhắc lại món đã nghe trước khi thanh toán" status="soon" />
+        <SettingRow icon="volume-2" title="Âm thanh thao tác" subtitle="Phát tiếng khi thêm món, quét mã, lưu đơn" soon />
+        <SettingRow
+          icon="smartphone"
+          title="Rung phản hồi"
+          subtitle="Rung nhẹ khi chọn sản phẩm hoặc hoàn tất đơn"
+          value={settings.haptics}
+          onChange={(on) => setSetting('haptics', on)}
+        />
+        <SettingRow icon="mic" title="Đọc lại đơn bằng giọng nói" subtitle="Nhắc lại món đã nghe trước khi thanh toán" soon />
       </Card>
 
       <T w="bold" size={14} color={colors.muted} style={styles.sectionTitle}>
         Vận hành cửa hàng
       </T>
       <Card style={styles.card}>
-        <SettingRow icon="printer" title="Tự mở in hoá đơn" subtitle="Hiện màn in sau khi lưu đơn thành công" status="soon" />
-        <SettingRow icon="bell" title="Cảnh báo sắp hết hàng" subtitle="Nhắc khi sản phẩm theo dõi kho còn thấp" status="always" />
-        <SettingRow icon="cloud" title="Sao lưu tự động" subtitle="Đồng bộ dữ liệu khi có kết nối mạng" status="soon" />
+        <SettingRow icon="printer" title="Tự mở in hoá đơn" subtitle="Hiện màn in sau khi lưu đơn thành công" soon />
+        <SettingRow
+          icon="bell"
+          title="Cảnh báo sắp hết hàng"
+          subtitle="Nhắc ở Tổng quan và Thông báo khi hàng sắp hết hoặc đã hết"
+          value={settings.stockAlerts}
+          onChange={(on) => setSetting('stockAlerts', on)}
+        />
+        <SettingRow icon="cloud" title="Sao lưu tự động" subtitle="Đồng bộ dữ liệu khi có kết nối mạng" soon />
       </Card>
 
       {/* Màn kết nối máy in mới là bản mẫu (In thử luôn báo chưa kết nối); máy in nằm ngoài PRD MVP */}
