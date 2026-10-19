@@ -499,18 +499,29 @@ class AgentMemoryRepository:
             )
 
     def forget(self, shop_id: int, user_id: int, memory_id: int) -> bool:
-        """Delete one memory with the older versions it replaced; False if not theirs.
+        """Delete a fact with every version of it; False if not theirs.
 
-        The older versions go too: superseded_by is ON DELETE SET NULL, so keeping them
-        would bring the fact the owner just removed back to life.
+        The owner may name a version a newer one has since replaced, so the fact is
+        resolved to its newest version first. The older versions go too:
+        superseded_by is ON DELETE SET NULL, so keeping them would bring the fact the
+        owner just removed back to life.
         """
         owner = (AgentMemory.shop_id == shop_id, AgentMemory.user_id == user_id)
         with self.postgres.session() as session:
-            ids = list(
-                session.scalars(
-                    select(AgentMemory.id).where(*owner, AgentMemory.id == memory_id)
-                )
-            )
+            newest = None
+            current = memory_id
+            while current is not None:
+                row = session.execute(
+                    select(AgentMemory.id, AgentMemory.superseded_by).where(
+                        *owner, AgentMemory.id == current
+                    )
+                ).one_or_none()
+                if row is None:
+                    break
+                newest, current = row
+            if newest is None:
+                return False
+            ids = [newest]
             frontier = ids
             while frontier:
                 frontier = list(
@@ -521,9 +532,8 @@ class AgentMemoryRepository:
                     )
                 )
                 ids += frontier
-            if ids:
-                session.execute(delete(AgentMemory).where(AgentMemory.id.in_(ids)))
-        return bool(ids)
+            session.execute(delete(AgentMemory).where(AgentMemory.id.in_(ids)))
+        return True
 
     def memory_enabled(self, shop_id: int, user_id: int) -> bool:
         """The owner's switch; on until they turn it off."""

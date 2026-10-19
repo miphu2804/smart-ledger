@@ -5,6 +5,7 @@ from collections.abc import Iterator
 import psycopg
 import pytest
 from psycopg import sql
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.engine import make_url
 from tests.support import REPO_ROOT, apply_ai_baseline, apply_core_migrations
 
@@ -303,6 +304,49 @@ def test_a_superseded_memory_is_hidden_until_the_newer_one_is_forgotten(
     )
     found = memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 5)
     assert [item.content for item in found] == ["họp lúc 8h"]
+
+
+def test_forgetting_a_replaced_version_forgets_the_whole_fact(memory_db) -> None:
+    _, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    shop, user = ids["shop_a"], ids["user_a"]
+    chat = new_conversation(postgres, user, shop)
+    memories.add(shop, user, chat, [memory("họp lúc 8h", 1, 0)])
+    (old,) = memories.search(shop, user, vector(1, 0), 5)
+    memories.add(shop, user, chat, [memory("họp lúc 9h", 1, 0.1, supersedes=old.id)])
+
+    assert memories.forget(shop, user, old.id)
+
+    assert memories.search(shop, user, vector(1, 0), 5) == []
+    assert memories.list_live(shop, user) == []
+    assert not memories.forget(shop, user, old.id)
+
+
+def test_forget_cannot_reach_another_owners_memory(memory_db) -> None:
+    _, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    chat = new_conversation(postgres, ids["user_a"], ids["shop_a"])
+    memories.add(ids["shop_a"], ids["user_a"], chat, [memory("họp lúc 8h", 1, 0)])
+    (mine,) = memories.list_live(ids["shop_a"], ids["user_a"])
+
+    assert not memories.forget(ids["shop_b"], ids["user_b"], mine.id)
+    assert len(memories.list_live(ids["shop_a"], ids["user_a"])) == 1
+
+
+def test_list_live_caps_the_list_and_loads_only_what_the_view_shows(
+    memory_db, monkeypatch
+) -> None:
+    _, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    shop, user = ids["shop_a"], ids["user_a"]
+    chat = new_conversation(postgres, user, shop)
+    memories.add(shop, user, chat, [memory(f"fact {n}", 1, n / 10) for n in range(3)])
+    monkeypatch.setattr(AgentMemoryRepository, "LIST_LIMIT", 2)
+
+    listed = memories.list_live(shop, user)
+
+    assert len(listed) == 2
+    assert {"embedding", "details"} <= set(sa_inspect(listed[0]).unloaded)
 
 
 def test_supersede_cannot_reach_another_owners_memory(memory_db) -> None:
