@@ -39,8 +39,11 @@ from src.prompt_templates import (
     CURRENT_TIME,
     MEMORY_PROMPT,
     RESTOCK_PROMPT,
+    RESTOCK_SANDBOX_PROMPT,
+    RUN_CODE_PROMPT,
     SHOP_AGENT_SYSTEM_PROMPT,
     SQL_AGENT_PROMPT,
+    SQL_SANDBOX_PROMPT,
 )
 from src.providers.factory import session_settings
 from src.restock.service import RestockService
@@ -116,15 +119,22 @@ class AgentService:
         # arrives per request through AgentContext and never appears in the prompt.
         # The current time travels with the new message instead (_with_current_time),
         # so the instructions and the history both stay a cacheable prefix.
-        # Each optional capability adds its own tool and prompt section.
+        # Each optional capability adds its own tool and prompt section. The access
+        # instructions name the path the model actually has: with the sandbox on, the
+        # folded data tools are callable only inside run_code, so their prompts must
+        # not tell the model to call them directly.
         tools = []
         prompt_parts = [SHOP_AGENT_SYSTEM_PROMPT, APP_GUIDE_PROMPT]
         if shop_data is not None:
             tools.append(build_shop_data_tool(shop_data))
-            prompt_parts.append(SQL_AGENT_PROMPT)
+            prompt_parts.append(
+                SQL_AGENT_PROMPT if sandbox is None else SQL_SANDBOX_PROMPT
+            )
         if restock is not None:
             tools.append(build_restock_tool(restock))
-            prompt_parts.append(RESTOCK_PROMPT)
+            prompt_parts.append(
+                RESTOCK_PROMPT if sandbox is None else RESTOCK_SANDBOX_PROMPT
+            )
         if calculation is not None:
             tools.append(build_calculation_tool(calculation))
             prompt_parts.append(CALC_PROMPT)
@@ -133,8 +143,12 @@ class AgentService:
         tools.append(Tool(suggest_screen))
         # The sandbox option runs model-written code from one run_code tool; the
         # arithmetic tool and the screen buttons stay native, so a plain
-        # calculation never starts Monty. An unusable sandbox (no codemode extra)
-        # arrives as None, so it turns off without failing the service.
+        # calculation never starts Monty. Its prompt section is appended only here,
+        # so a model never reads run_code guidance when the tool is not registered:
+        # an unusable sandbox (no codemode extra) or SANDBOX_ENABLED=false arrives
+        # as None, so it turns off without failing the service.
+        if sandbox is not None:
+            prompt_parts.append(RUN_CODE_PROMPT)
         capabilities = [
             *self.guardrails.capabilities,
             *([sandbox.capability] if sandbox is not None else []),

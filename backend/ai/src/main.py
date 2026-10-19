@@ -64,6 +64,11 @@ def build_calculation() -> CalculationService | None:
 # model gets a run_code tool with no data functions in it.
 SANDBOX_TOOLS = ("query_shop_data", "suggest_restock")
 
+# Pure in-process tools that stay callable past the per-turn tool-call guardrail:
+# the calculation prompt sends every sum through calculate, so sharing the data
+# tools' budget would cut off ordinary answers. Nothing here does I/O.
+TOOL_CALL_EXEMPT = frozenset({"calculate"})
+
 
 def build_sandbox() -> Sandbox | None:
     if not app_config.SANDBOX_ENABLED:
@@ -74,6 +79,9 @@ def build_sandbox() -> Sandbox | None:
                 tools=SANDBOX_TOOLS,
                 max_memory_bytes=app_config.SANDBOX_MAX_MEMORY_BYTES,
                 max_duration_secs=app_config.SANDBOX_MAX_DURATION_SECS,
+                # Kept at the per-turn tool-call guardrail: nested data calls do not
+                # count against ToolCallLimit, so a larger budget would multiply the
+                # DB load the guardrail bounds. Raise it together with the guardrail.
                 max_tool_calls=app_config.SANDBOX_MAX_TOOL_CALLS,
                 max_suspensions=app_config.SANDBOX_MAX_SUSPENSIONS,
             )
@@ -168,6 +176,9 @@ async def lifespan(app: FastAPI):
             max_input_chars=app_config.AGENT_MAX_INPUT_CHARS,
             model_call_limit=app_config.AGENT_MODEL_CALL_LIMIT,
             tool_call_limit=app_config.AGENT_TOOL_CALL_LIMIT,
+            tool_call_exempt=(
+                TOOL_CALL_EXEMPT if app_config.CALC_ENABLED else frozenset()
+            ),
             turn_token_limit=app_config.AGENT_TURN_TOKEN_LIMIT,
             turn_timeout_seconds=app_config.AGENT_TURN_TIMEOUT_SECONDS,
         ),

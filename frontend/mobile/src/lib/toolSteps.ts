@@ -5,6 +5,8 @@ const STEP_LABELS: Record<string, string> = {
   query_shop_data: 'Tra cứu dữ liệu tiệm',
   suggest_restock: 'Tính gợi ý nhập hàng',
   suggest_screen: 'Thêm nút mở màn hình',
+  calculate: 'Tính toán',
+  run_code: 'Chạy mã trong sandbox',
 };
 const UNKNOWN_STEP = 'Xử lý yêu cầu';
 

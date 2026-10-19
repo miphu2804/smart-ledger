@@ -92,7 +92,11 @@ class AppConfig(BaseSettings):
     SANDBOX_ENABLED: bool = True
     SANDBOX_MAX_MEMORY_BYTES: int = Field(default=64 * 1024 * 1024, gt=0)
     SANDBOX_MAX_DURATION_SECS: float = Field(default=5.0, gt=0)
-    SANDBOX_MAX_TOOL_CALLS: int = Field(default=25, gt=0)
+    # Nested data calls per run_code snippet, kept at the per-turn tool-call
+    # guardrail: nested calls do not count against AGENT_TOOL_CALL_LIMIT, so a
+    # larger budget would multiply the DB load the guardrail bounds. Raise it
+    # together with the guardrail if a snippet legitimately needs more calls.
+    SANDBOX_MAX_TOOL_CALLS: int = Field(default=3, gt=0)
     SANDBOX_MAX_SUSPENSIONS: int = Field(default=1000, gt=0)
 
     # long-term memory across conversations (ADR-0002); off until the PO approves it.

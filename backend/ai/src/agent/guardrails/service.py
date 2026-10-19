@@ -61,6 +61,9 @@ class GuardrailLimits:
     max_input_chars: int
     model_call_limit: int
     tool_call_limit: int
+    # Pure in-process tools that stay callable past the tool-call limit; the
+    # composition root names them, so the guardrail stays caller-configured.
+    tool_call_exempt: frozenset[str] = frozenset()
     turn_token_limit: int
     turn_timeout_seconds: float
 
@@ -82,7 +85,7 @@ class GuardrailService:
         # Shared by every run: `ToolCallLimit.for_run` gives each run its own count.
         self.capabilities = [
             OutputGuardrail(guard=AnswerScreen.check),
-            ToolCallLimit(limits.tool_call_limit),
+            ToolCallLimit(limits.tool_call_limit, exempt=limits.tool_call_exempt),
         ]
 
     def check_input(self, message: str) -> str:

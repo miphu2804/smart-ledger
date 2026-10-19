@@ -23,7 +23,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class CalculationOp(StrEnum):
@@ -43,7 +43,14 @@ class CalculationOp(StrEnum):
 
 class CalculationStep(BaseModel):
     """One operation of a plan. `a` or `b` may be the string `$`, which stands for the
-    previous step's result; the first step may not use it."""
+    previous step's result; the first step may not use it.
+
+    Unknown keys are forbidden at the schema: a misspelled or unsupported key (say
+    `decimals` for `digits`) fails validation naming the key, instead of being
+    dropped silently and the step running without it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
     op: CalculationOp
     a: float | Literal["$"]
@@ -70,21 +77,29 @@ class CalculationOutcome:
     steps: list[StepTrace]
 
 
-# Each op: its function and the argument names it reads from the step, so a plan
-# cannot pass an argument an op does not take.
-_OPERATIONS: dict[CalculationOp, tuple[Callable[..., float], tuple[str, ...]]] = {
+# Each op: its function, the argument names it reads from the step, and defaults for
+# optional arguments — so a plan cannot pass an argument an op does not take, and an
+# omitted optional argument gets its default.
+_OPERATIONS: dict[
+    CalculationOp, tuple[Callable[..., float], tuple[str, ...], dict[str, float]]
+] = {
     CalculationOp.ADD: (lambda a, b: a + b, ("a", "b"), {}),
     CalculationOp.SUBTRACT: (lambda a, b: a - b, ("a", "b"), {}),
     CalculationOp.MULTIPLY: (lambda a, b: a * b, ("a", "b"), {}),
     CalculationOp.DIVIDE: (lambda a, b: a / b, ("a", "b"), {}),
     CalculationOp.PERCENTAGE: (lambda a, b: a / 100 * b, ("a", "b"), {}),
     # Half-up, the money convention: Python's round is banker's rounding, so
-    # round(12500.5) would be 12500 where a shop owner expects 12501.
+    # round(12500.5) would be 12500 where a shop owner expects 12501. A computed
+    # float can sit one ulp below the exact value (35% of 170 is 59.4999…), so the
+    # value first settles on a scale far finer than digits can be (MAX_ROUND_DIGITS
+    # is 6); a genuine non-halfway value stays put at that scale, and only float
+    # noise of a computed result moves. The final half-up quantize then sees the
+    # exact boundary the arithmetic meant.
     CalculationOp.ROUND: (
         lambda a, digits=0: float(
-            Decimal(str(a)).quantize(
-                Decimal("1").scaleb(-digits), rounding=ROUND_HALF_UP
-            )
+            Decimal(str(a))
+            .quantize(Decimal("1e-9"), rounding=ROUND_HALF_UP)
+            .quantize(Decimal("1").scaleb(-digits), rounding=ROUND_HALF_UP)
         ),
         ("a",),
         {"digits": 0},
@@ -155,8 +170,8 @@ def _operand(
 ) -> float:
     """Resolve one operand: `$` to the previous result, then the value checks.
 
-    Args other than `a`, `b` and `digits` never reach here: the round digits are an
-    int, not an operand, and the plan bounds them above instead.
+    Round's digits passes through here too: it is always a finite int the checks
+    hold for, and the plan bounds it to 0-6 in `evaluate_plan` instead.
     """
     if value == _PREVIOUS:
         if previous is None:

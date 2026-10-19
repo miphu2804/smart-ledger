@@ -31,6 +31,13 @@ describe('applyToolEvent', () => {
     assert.equal(step.label, 'Thêm nút mở màn hình');
   });
 
+  it('labels the agent arithmetic and sandbox tools so they do not show the generic label', () => {
+    const [calc] = applyToolEvent([], { phase: 'start', callId: 'c1', name: 'calculate' });
+    assert.equal(calc.label, 'Tính toán');
+    const [code] = applyToolEvent([], { phase: 'start', callId: 'c2', name: 'run_code' });
+    assert.equal(code.label, 'Chạy mã trong sandbox');
+  });
+
   it('falls back to a generic label for a tool the app does not know', () => {
     const [step] = applyToolEvent([], { phase: 'start', callId: 'c1', name: 'new_tool' });
     assert.equal(step.label, 'Xử lý yêu cầu');

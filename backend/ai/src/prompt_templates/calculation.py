@@ -1,8 +1,10 @@
-"""Prompt for the calculate tool and the run_code sandbox: what each is for.
+"""Prompts for the calculate tool and the run_code sandbox: what each is for.
 
-Appended to the static shop prompt, after the SQL prompt, so the prefix a provider can
-cache stays unchanged. The shop id never appears: it reaches the tool through the
-runtime context.
+CALC_PROMPT is appended whenever the calculation option is on; RUN_CODE_PROMPT is
+appended only when the sandbox option is on, so the model never sees run_code
+guidance for a tool that is not registered. Both join the static shop prompt, after
+the SQL prompt, so the prefix a provider can cache stays unchanged. The shop id
+never appears: it reaches the tools through the runtime context.
 """
 
 CALC_RESULT_HEADER = (
@@ -26,10 +28,19 @@ previous step's result. Example, 10% of 60000 minus 5000:
 The result is rounded to 6 decimal places; money stays in VND, so round to 0 digits \
 unless the owner asks otherwise.
 
-When to use run_code instead: only when one answer needs several tool results \
-combined in a loop, a filter or a longer program, such as summing sales by category. \
-Write run_code then; it runs in a sandbox with strict time and memory limits, so keep \
-the program small. Inside run_code, do the arithmetic in the code itself.
 Never invent input values: every number comes from the owner or from a tool result. \
 If a calculation fails with Error[DIVISION_BY_ZERO] or a similar code, fix the inputs \
 or tell the owner the calculation is not possible."""
+
+RUN_CODE_PROMPT = """\
+When one answer needs several shop-data results combined — in a loop, a filter or a \
+longer program, such as summing sales by category — write one run_code program \
+instead of calling the data tools one by one. The program runs in a sandbox with \
+strict time and memory limits, so keep it small.
+
+Inside the program, call the shop-data tools as functions: query_shop_data(sql) runs \
+one PostgreSQL SELECT, suggest_restock(period) reads confirmed sales, and the rules \
+for what to select and what the results mean are in their instructions above. While \
+run_code is on, those tools are not callable directly. Do the arithmetic in the code \
+itself and never invent input values: every number comes from the owner or from a \
+function result."""

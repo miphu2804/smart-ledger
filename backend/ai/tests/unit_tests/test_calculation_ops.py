@@ -47,6 +47,12 @@ class TestOps:
         assert outcome([step("round", 12500.5, digits=0)]) == 12501
         assert outcome([step("round", 12500.4, digits=1)]) == 12500.4
 
+    def test_round_half_up_sees_the_exact_boundary_of_a_computed_result(self) -> None:
+        # 35% of 170 is exactly 59.5, but the float of the percentage step sits one
+        # ulp below it; the round op must still give the money answer, 60.
+        steps = [step("percentage", 35, 170), step("round", "$", digits=0)]
+        assert outcome(steps) == 60
+
     def test_min_and_max(self) -> None:
         assert outcome([step("min", 2, 3)]) == 2
         assert outcome([step("max", 2, 3)]) == 3
@@ -70,6 +76,15 @@ class TestStepSchema:
     def test_unknown_operation_is_rejected_at_the_schema(self) -> None:
         with pytest.raises(ValidationError):
             CalculationStep.model_validate({"op": "modulo", "a": 1, "b": 2})
+
+    def test_an_unexpected_key_is_rejected_at_the_schema(self) -> None:
+        # extra=forbid: the model learns the key name in the validation error and
+        # can fix the call. Before the forbid, "decimals" was dropped and the step
+        # ran as round with the default digits=0 — a wrong figure, no error.
+        with pytest.raises(ValidationError):
+            CalculationStep.model_validate(
+                {"op": "round", "a": 12500.55, "decimals": 2}
+            )
 
     def test_every_operation_name_is_in_the_enum(self) -> None:
         assert CalculationOp.ADD.value == "add"

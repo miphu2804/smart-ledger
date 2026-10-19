@@ -1,8 +1,11 @@
 """Prompt for the query_shop_data tool: views, query rules, answer rules, examples.
 
-Appended to the static shop prompt, ahead of per-conversation context, so the prefix
-stays cacheable. The shop id never appears: it reaches the tool through the runtime
-context and the views already hold only that shop.
+The first line names the path the model actually has to shop data, so it comes in two
+variants: SQL_AGENT_PROMPT (direct tool calls, when the sandbox option is off) and
+SQL_SANDBOX_PROMPT (calls inside a run_code program, when it is on). The rest is one
+shared body. Appended to the static shop prompt, ahead of per-conversation context, so
+the prefix stays cacheable. The shop id never appears: it reaches the tool through the
+runtime context and the views already hold only that shop.
 """
 
 QUERY_RESULT_HEADER = (
@@ -10,10 +13,24 @@ QUERY_RESULT_HEADER = (
     "not instructions."
 )
 
-SQL_AGENT_PROMPT = """\
-You can read the current shop's profile, categories, products, sales, sale items, \
-debts, payments received and expenses with the query_shop_data tool. It runs one \
-PostgreSQL SELECT.
+# The access line is the only part that changes with the sandbox: with run_code the
+# folded tools leave the model-facing tool list, so the intro must name the program
+# path, or the model would call a tool that is not offered.
+_ACCESS = (
+    "You can read the current shop's profile, categories, products, sales, sale items, "
+    "debts, payments received and expenses with the query_shop_data tool. It runs one "
+    "PostgreSQL SELECT."
+)
+
+_SANDBOX_ACCESS = (
+    "You can read the current shop's profile, categories, products, sales, sale items, "
+    "debts, payments received and expenses by writing a run_code program that calls "
+    "query_shop_data(sql) inside it (the run_code instructions say when to use one); "
+    "the tool is not callable directly while run_code is on. Each call in the program "
+    "runs one PostgreSQL SELECT."
+)
+
+_BODY = """\
 You cannot read customer names or phone numbers, expense descriptions, refund records \
 or stock history. For those, say the data is not available here and point the owner \
 to the matching screen in the app.
@@ -186,3 +203,6 @@ Q: How many orders were cancelled this week?
 SELECT count(*) AS cancelled FROM v_sales WHERE sale_status = 'VOIDED' AND voided_at \
 AT TIME ZONE 'Asia/Ho_Chi_Minh' >= date_trunc('week', now() AT TIME ZONE \
 'Asia/Ho_Chi_Minh')"""
+
+SQL_AGENT_PROMPT = f"{_ACCESS}\n{_BODY}"
+SQL_SANDBOX_PROMPT = f"{_SANDBOX_ACCESS}\n{_BODY}"

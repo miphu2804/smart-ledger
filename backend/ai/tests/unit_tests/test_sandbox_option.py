@@ -8,7 +8,12 @@ from tests.support import TEST_GUARDRAIL_LIMITS, ScriptedModel
 
 from src.agent.service import AgentService
 from src.calculation.service import CalculationLimits, CalculationService
-from src.prompt_templates import CALC_PROMPT
+from src.prompt_templates import (
+    CALC_PROMPT,
+    RUN_CODE_PROMPT,
+    SQL_AGENT_PROMPT,
+    SQL_SANDBOX_PROMPT,
+)
 from src.sandbox.wrapper import Sandbox, SandboxLimits
 
 pytestmark = pytest.mark.anyio
@@ -84,6 +89,29 @@ async def test_the_calculation_and_sandbox_options_are_independent() -> None:
     assert "run_code" in names
     assert "calculate" not in names
     assert CALC_PROMPT not in model.requests[0][1].instructions
+
+
+async def test_the_sandbox_prompt_names_the_run_code_path() -> None:
+    model = ScriptedModel("ok")
+    await chat(model, sandbox=Sandbox(LIMITS))
+
+    instructions = model.requests[0][1].instructions
+    # The folded tools are not offered directly, so the sandbox-on prompt names the
+    # program path and the sandbox-off prompt is gone.
+    assert RUN_CODE_PROMPT in instructions
+    assert SQL_SANDBOX_PROMPT in instructions
+    assert SQL_AGENT_PROMPT not in instructions
+
+
+async def test_without_the_sandbox_the_sql_prompt_names_the_direct_tool() -> None:
+    model = ScriptedModel("ok")
+    await chat(model)
+
+    instructions = model.requests[0][1].instructions
+    assert SQL_AGENT_PROMPT in instructions
+    assert SQL_SANDBOX_PROMPT not in instructions
+    # No run_code guidance for a tool that is not registered.
+    assert RUN_CODE_PROMPT not in instructions
 
 
 async def test_agent_with_calculation_adds_the_tool_and_prompt() -> None:

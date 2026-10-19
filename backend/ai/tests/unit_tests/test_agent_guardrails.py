@@ -11,6 +11,7 @@ from src.agent.guardrails.answer_screen import AnswerScreen
 from src.agent.guardrails.input_redaction import InputRedaction
 from src.agent.guardrails.tool_call_limit import ToolCallLimit
 from src.agent.service import AgentService
+from src.calculation.service import CalculationLimits, CalculationService
 
 pytestmark = pytest.mark.anyio
 
@@ -287,6 +288,40 @@ async def test_each_turn_gets_its_own_tool_budget() -> None:
 
     assert shop_data.calls == TOOL_CALL_LIMIT + 1
     assert result.answer == "second"
+
+
+async def test_the_pure_calculate_tool_stays_callable_past_the_tool_limit() -> None:
+    # The calculation prompt sends every sum through calculate, so the pure tool
+    # must not share the data tools' budget: after the limit, only it stays offered
+    # and its calls are not counted.
+    shop_data = CountingShopData()
+    calculation = CalculationService(
+        CalculationLimits(max_operations=5, max_operand=1_000_000)
+    )
+    model = ScriptedModel(
+        *[tool_call("query_shop_data", QUERY) for _ in range(TOOL_CALL_LIMIT)],
+        tool_call("calculate", {"operations": [{"op": "add", "a": 2, "b": 3}]}),
+        "answer from the sum",
+    )
+
+    result = await AgentService(
+        model,
+        Conversations(),
+        GuardrailLimits(
+            max_input_chars=MAX_INPUT_CHARS,
+            # One request per tool call plus the answer, so the scripted sequence fits.
+            model_call_limit=TOOL_CALL_LIMIT + 2,
+            tool_call_limit=TOOL_CALL_LIMIT,
+            tool_call_exempt=frozenset({"calculate"}),
+            turn_token_limit=TURN_TOKEN_LIMIT,
+            turn_timeout_seconds=TURN_TIMEOUT_SECONDS,
+        ),
+        shop_data=shop_data,
+        calculation=calculation,
+    ).chat(user_id=3, shop_id=15, message="m")
+
+    assert shop_data.calls == TOOL_CALL_LIMIT
+    assert result.answer == "answer from the sum"
 
 
 async def test_token_budget_stops_the_turn() -> None:
