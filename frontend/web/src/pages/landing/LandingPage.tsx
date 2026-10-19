@@ -1,5 +1,5 @@
 import { Check, ChevronDown, ChevronRight, Download, Menu, Mic, X } from 'lucide-react'
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ADMIN_ENABLED, ANDROID_APK_URL } from '../../config'
 import Logo, { LogoMark } from '../../components/Logo'
@@ -47,14 +47,6 @@ const VOICE_SAMPLE = 'Hai bánh mì thịt, một cà phê sữa đá, một b�
 
 function Nav() {
   const [open, setOpen] = useState(false)
-  const [scrolled, setScrolled] = useState(false)
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8)
-    onScroll()
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [])
 
   useEffect(() => {
     const onResize = () => window.innerWidth > 960 && setOpen(false)
@@ -63,7 +55,7 @@ function Nav() {
   }, [])
 
   return (
-    <header className={`lp-nav${scrolled ? ' is-scrolled' : ''}${open ? ' is-open' : ''}`}>
+    <header className="lp-nav">
       <div className="lp-container lp-nav-inner">
         <a href="#top" className="lp-brand" aria-label="Sổ Nghe Lời — về đầu trang">
           <Logo />
@@ -376,8 +368,40 @@ const SCREENS: { shot: Shot; title: string; text: string; bobi?: boolean }[] = [
  * (`data-active` do useScrollProgress đặt theo vị trí các `.gallery-item`).
  */
 function Gallery() {
+  const sectionRef = useRef<HTMLElement>(null)
+
+  // Vuốt ngang trên dải máy sang màn trước hoặc sau: cuộn trang tới mốc tiến độ của màn đó, nên dải chạy như khi cuộn
+  useEffect(() => {
+    const section = sectionRef.current
+    const viewport = section?.querySelector<HTMLElement>('.gallery-viewport')
+    if (!section || !viewport) return
+    let startX = 0
+    let startY = 0
+    const onTouchStart = (e: TouchEvent) => {
+      startX = e.touches[0].clientX
+      startY = e.touches[0].clientY
+    }
+    const onTouchEnd = (e: TouchEvent) => {
+      const dx = e.changedTouches[0].clientX - startX
+      const dy = e.changedTouches[0].clientY - startY
+      if (Math.abs(dx) < 40 || Math.abs(dx) < 1.5 * Math.abs(dy)) return
+      const last = SCREENS.length - 1
+      const next = Math.min(last, Math.max(0, Number(section.dataset.active) + (dx < 0 ? 1 : -1)))
+      // Mốc tiến độ ở giữa màn `next`, khớp với cách useScrollProgress tính `data-active`
+      const p = 0.06 + (0.88 * next) / last
+      const top = section.getBoundingClientRect().top + window.scrollY
+      window.scrollTo({ top: top + p * (section.offsetHeight - window.innerHeight), behavior: 'smooth' })
+    }
+    viewport.addEventListener('touchstart', onTouchStart, { passive: true })
+    viewport.addEventListener('touchend', onTouchEnd, { passive: true })
+    return () => {
+      viewport.removeEventListener('touchstart', onTouchStart)
+      viewport.removeEventListener('touchend', onTouchEnd)
+    }
+  }, [])
+
   return (
-    <section className="lp-gallery" id="cach-hoat-dong" data-scroll="pin" data-active="0">
+    <section ref={sectionRef} className="lp-gallery" id="cach-hoat-dong" data-scroll="pin" data-active="0">
       <div className="gallery-sticky">
         <div className="lp-container">
           <h2 className="lp-display">

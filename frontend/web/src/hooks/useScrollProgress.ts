@@ -17,44 +17,62 @@ export function useScrollProgress() {
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const els = Array.from(document.querySelectorAll<HTMLElement>('[data-scroll]'))
+    const tracks = new Map<HTMLElement, HTMLElement>()
+    for (const el of els) {
+      const track = el.querySelector<HTMLElement>('[data-track]')
+      if (track) tracks.set(el, track)
+    }
     let frame = 0
+
+    // Độ tràn của dải và số máy chỉ đổi khi kích thước màn đổi, nên đo ở đây thay vì mỗi khung hình
+    const measure = () => {
+      const vw = document.documentElement.clientWidth
+      for (const [el, track] of tracks) {
+        el.style.setProperty('--shift', `${Math.max(0, track.scrollWidth - vw)}px`)
+        el.style.setProperty('--n', String(track.children.length))
+      }
+    }
 
     const update = () => {
       frame = 0
       const vh = window.innerHeight
-      for (const el of els) {
-        const r = el.getBoundingClientRect()
-        if (r.bottom < -vh || r.top > vh * 2) continue
+      // Đọc hết vị trí trước rồi mới ghi, để trình duyệt không phải tính lại layout sau từng lần ghi
+      const rects = els.map((el) => el.getBoundingClientRect())
+      els.forEach((el, i) => {
+        const r = rects[i]
+        if (r.bottom < -vh || r.top > vh * 2) return
         const mode = el.dataset.scroll
         const p =
           mode === 'pin' ? clamp01(-r.top / Math.max(1, r.height - vh)) : mode === 'view' ? clamp01((vh - r.top) / vh) : clamp01(-r.top / r.height)
         el.style.setProperty('--p', p.toFixed(4))
-        const track = el.querySelector<HTMLElement>('[data-track]')
+        const track = tracks.get(el)
         if (track) {
-          const vw = document.documentElement.clientWidth
-          el.style.setProperty('--shift', `${Math.max(0, track.scrollWidth - vw)}px`)
           // Dải được đệm hai đầu nên màn thứ i dừng giữa khung nhìn khi tiến độ là i/(n-1)
           // Giữ máy đầu và máy cuối đứng yên một đoạn cuộn, để vuốt nhanh không trôi tuột qua mục
           const held = clamp01((p - 0.06) / 0.88)
           const active = Math.round(held * (track.children.length - 1))
           el.dataset.active = String(active)
           el.style.setProperty('--a', String(active))
-          el.style.setProperty('--n', String(track.children.length))
         }
-      }
+      })
     }
     const request = () => {
       if (!frame) frame = requestAnimationFrame(update)
     }
+    const onResize = () => {
+      measure()
+      request()
+    }
 
     document.documentElement.classList.add('has-scroll-fx')
+    measure()
     update()
     window.addEventListener('scroll', request, { passive: true })
-    window.addEventListener('resize', request)
+    window.addEventListener('resize', onResize)
     return () => {
       cancelAnimationFrame(frame)
       window.removeEventListener('scroll', request)
-      window.removeEventListener('resize', request)
+      window.removeEventListener('resize', onResize)
       document.documentElement.classList.remove('has-scroll-fx')
     }
   }, [])

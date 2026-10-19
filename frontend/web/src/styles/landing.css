@@ -193,10 +193,6 @@
   color: var(--ink);
   background: var(--bg);
   border: 1px solid rgba(0, 0, 0, 0.06);
-  transition: box-shadow 0.3s var(--ease);
-}
-.lp-nav.is-scrolled,
-.lp-nav.is-open {
   box-shadow: 0 12px 32px -16px rgba(0, 0, 0, 0.28);
 }
 .lp-nav-inner {
@@ -813,6 +809,8 @@
 }
 .gallery-viewport {
   margin-top: calc(clamp(24px, 5vh, 56px) + var(--gw) * 2.17 * (var(--focus, 1.3) - 1) / 2);
+  /* Vuốt ngang để đổi màn; cuộn dọc vẫn do trình duyệt xử lý */
+  touch-action: pan-y;
 }
 @media (max-width: 560px) {
   /* Màn hẹp: tiêu đề thu lại theo cuộn (--p do useScrollProgress đặt), dòng tính năng lên thay chỗ và máy có thêm chiều cao; không có JS thì tiêu đề vẫn hiện */
