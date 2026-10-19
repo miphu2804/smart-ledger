@@ -1,3 +1,13 @@
+### [2026-10-19 10:17 UTC+07:00] — [Fix] Keep the mobile landing gallery centred and tighten the gap before it
+
+**Done:** On phones the active screen drifted off-centre while scrolling. The track overflow (`--shift`) was measured only on mount and resize, but the gap between screens depends on `--focus`, which changes with scroll. The hook now measures the overflow each frame, after it writes `--p`, so the value matches the layout. On phones the blank space between the pain list and the gallery heading is about halved, by trimming the statement section's bottom padding. The two FAQ questions about data safety and account deletion are replaced with questions that do not link to the legal pages, which are hidden at this stage.
+
+**Changed files:** `frontend/web/src/hooks/useScrollProgress.ts`, `frontend/web/src/pages/landing/LandingPage.tsx`, `frontend/web/src/styles/landing.css` — modified; this entry.
+
+**Flow explained:** each frame the hook writes `--p`, then reads the track `scrollWidth` once and writes `--shift`. The track's `translate` is `--a / (n-1) × --shift`, so the active screen lands in the middle of the viewport. Below 560 px the statement section's bottom padding drops from about 134 px to about 38 px, so the heading sits 137 px below the pain list at 440 px wide instead of 233 px.
+
+**Check:** typecheck, `oxlint` on the landing files and `npm run build` pass. In the browser at 375, 440 and 1440 px the active screen centre is 0 px from the viewport centre at each sampled scroll point, with transitions disabled because the pane does not advance them, and the stored `--shift` equals the measured overflow. The footer still links to `/privacy` and `/data-deletion`; left unchanged. Scroll feel and spacing on a physical phone not verified.
+
 ### [2026-10-19 10:07 UTC+07:00] — [Feature] Swipe between landing gallery screens on touch
 
 **Done:** A horizontal swipe on the gallery moves to the previous or next screen by scrolling to that screen's progress point; vertical scroll is unchanged (`touch-action: pan-y`). The scroll hook now reads every position before writing styles and measures the track width and screen count only on resize, so each frame does less layout work. The nav shadow shows at page load instead of after scrolling, and the nav no longer listens to scroll.
