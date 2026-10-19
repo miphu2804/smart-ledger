@@ -22,7 +22,7 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.dialects.postgresql import JSONB, insert
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, load_only, mapped_column
 
 from src.infra.postgre_db_client import Base, PostgreDBClient
 from src.utils import SHOP_TIMEZONE
@@ -116,6 +116,9 @@ class AgentMemoryRepository:
     CANDIDATES = 20
     # Marks a summary, so it is never summarized again.
     SUMMARY_KEY = "summarized_from"
+    # Most memories the owner's view lists; the map cannot draw many more, and the
+    # least recently used ones are the ones left out.
+    LIST_LIMIT = 200
 
     def __init__(self, postgres: PostgreDBClient) -> None:
         self.postgres = postgres
@@ -466,6 +469,70 @@ class AgentMemoryRepository:
                     raise LookupError("memory group changed")
         except LookupError:
             return False
+        return True
+
+    def list_live(self, shop_id: int, user_id: int) -> list[AgentMemory]:
+        """The owner's memories in force, most recently used first, for their view."""
+        with self.postgres.session() as session:
+            return list(
+                session.scalars(
+                    # The view needs no embedding or metadata, the heavy columns.
+                    select(AgentMemory)
+                    .options(
+                        load_only(
+                            AgentMemory.id,
+                            AgentMemory.memory_type,
+                            AgentMemory.content,
+                            AgentMemory.use_count,
+                            AgentMemory.last_used_at,
+                            AgentMemory.created_at,
+                            AgentMemory.source_conversation_id,
+                        )
+                    )
+                    .where(*self._live(shop_id, user_id))
+                    .order_by(
+                        AgentMemory.last_used_at.desc().nulls_last(),
+                        AgentMemory.created_at.desc(),
+                    )
+                    .limit(self.LIST_LIMIT)
+                )
+            )
+
+    def forget(self, shop_id: int, user_id: int, memory_id: int) -> bool:
+        """Delete a fact with every version of it; False if not theirs.
+
+        The owner may name a version a newer one has since replaced, so the fact is
+        resolved to its newest version first. The older versions go too:
+        superseded_by is ON DELETE SET NULL, so keeping them would bring the fact the
+        owner just removed back to life.
+        """
+        owner = (AgentMemory.shop_id == shop_id, AgentMemory.user_id == user_id)
+        with self.postgres.session() as session:
+            newest = None
+            current = memory_id
+            while current is not None:
+                row = session.execute(
+                    select(AgentMemory.id, AgentMemory.superseded_by).where(
+                        *owner, AgentMemory.id == current
+                    )
+                ).one_or_none()
+                if row is None:
+                    break
+                newest, current = row
+            if newest is None:
+                return False
+            ids = [newest]
+            frontier = ids
+            while frontier:
+                frontier = list(
+                    session.scalars(
+                        select(AgentMemory.id).where(
+                            *owner, AgentMemory.superseded_by.in_(frontier)
+                        )
+                    )
+                )
+                ids += frontier
+            session.execute(delete(AgentMemory).where(AgentMemory.id.in_(ids)))
         return True
 
     def memory_enabled(self, shop_id: int, user_id: int) -> bool:

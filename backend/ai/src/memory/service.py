@@ -24,6 +24,7 @@ from pydantic_ai import Agent, Embedder, PromptedOutput
 from pydantic_ai.models import Model
 
 from src.memory.repository import (
+    AgentMemory,
     AgentMemoryRepository,
     MemoryGroup,
     NewMemory,
@@ -168,6 +169,14 @@ class AgentMemoryService:
     ) -> None:
         await asyncio.to_thread(
             self.repository.set_memory_enabled, shop_id, user_id, enabled
+        )
+
+    async def list_memories(self, shop_id: int, user_id: int) -> list[AgentMemory]:
+        return await asyncio.to_thread(self.repository.list_live, shop_id, user_id)
+
+    async def forget(self, shop_id: int, user_id: int, memory_id: int) -> bool:
+        return await asyncio.to_thread(
+            self.repository.forget, shop_id, user_id, memory_id
         )
 
     async def remember(
