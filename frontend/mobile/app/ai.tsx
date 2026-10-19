@@ -13,6 +13,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChatText, ScreenActions, StreamingChatText } from '../src/components/ChatText';
 import { BusinessIcon } from '../src/components/icons';
+import { MemoryGraph } from '../src/components/MemoryGraph';
 import { SlingSendButton } from '../src/components/SlingSendButton';
 import { ThoughtLine } from '../src/components/ThoughtLine';
 import { VoicePillButton } from '../src/components/VoicePillButton';
@@ -21,7 +22,7 @@ import type {
   AgentConversationSummary,
   AgentConversationView,
   AgentMemorySettings,
-  AgentMemoryUsed,
+  AgentMemoryItem,
   AgentMessageView,
   ChatMessage,
   ThoughtStep,
@@ -85,74 +86,15 @@ function lastActive(iso: string): string {
   return `${relDay(d)} · ${hhmm(d)}`;
 }
 
-/**
- * Nhãn "Trợ lý Bobi" đầu bong bóng; biểu tượng sáng khi tiệm bật ghi nhớ. Câu trả lời đã dùng ghi nhớ thì nhãn
- * chạm được để xem đủ nội dung, ngày nhớ và mở hội thoại gốc (trừ khi ghi nhớ đến từ chính hội thoại đang mở).
- */
-function BobiLabel({
-  memoryOn,
-  memories,
-  currentId,
-  onOpenSource,
-}: {
-  memoryOn: boolean;
-  memories: AgentMemoryUsed[];
-  currentId: number | null;
-  onOpenSource: (conversationId: number) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const label = (
-    <Row gap={3} style={{ alignItems: 'center' }}>
-      <BusinessIcon size={19} color={colors.brand} offColor={colors.faint} filled={memoryOn || memories.length > 0} />
+/** Nhãn "Trợ lý Bobi" đầu bong bóng; biểu tượng sáng khi tiệm bật ghi nhớ. Ghi nhớ xem ở Cài đặt trợ lý. */
+function BobiLabel({ memoryOn }: { memoryOn: boolean }) {
+  return (
+    <Row gap={3} style={[styles.assistantBubbleHeader, { alignItems: 'center' }]}>
+      <BusinessIcon size={19} color={colors.brand} offColor={colors.faint} filled={memoryOn} />
       <T w="bold" size={13.5} color={colors.brand} style={{ marginLeft: 3 }}>
         Trợ lý Bobi
       </T>
-      {/* Nói rõ là số ghi nhớ; một con số trần sau nhãn đọc thành tên "Trợ lý Bobi 3". */}
-      {memories.length ? (
-        <T size={12} color={colors.muted}>
-          {` · ${memories.length} ghi nhớ`}
-        </T>
-      ) : null}
     </Row>
-  );
-  return (
-    <View style={styles.assistantBubbleHeader}>
-      {memories.length ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Xem ${memories.length} ghi nhớ trợ lý đã dùng`}
-          hitSlop={10}
-          onPress={() => setOpen((v) => !v)}
-          style={({ pressed }) => pressed && styles.pressed}
-        >
-          {label}
-        </Pressable>
-      ) : (
-        label
-      )}
-      {open
-        ? memories.map((m) => {
-            const fromHere = m.source_conversation_id === currentId;
-            return (
-              <Pressable
-                key={m.id}
-                accessibilityRole={fromHere ? 'text' : 'link'}
-                accessibilityLabel={fromHere ? undefined : `Mở hội thoại gốc của ghi nhớ: ${m.content}`}
-                disabled={fromHere}
-                onPress={() => onOpenSource(m.source_conversation_id)}
-                style={({ pressed }) => [styles.memoryItem, pressed && styles.pressed]}
-              >
-                <T size={12} color={colors.muted} style={{ lineHeight: 17 }}>
-                  • {m.content}
-                </T>
-                <T size={11} color={fromHere ? colors.muted : colors.brand}>
-                  {`  Nhớ từ ${ddmmyyyy(new Date(m.created_at))}${fromHere ? ' · hội thoại này' : ' · Mở hội thoại gốc ›'}`}
-                </T>
-              </Pressable>
-            );
-          })
-        : null}
-    </View>
   );
 }
 
@@ -210,7 +152,7 @@ export default function Ai() {
     setHistoryOpen(false);
   };
 
-  // Chạm ghi nhớ trên chip → mở hội thoại sinh ra nó, để chủ tiệm xem lại mình đã nói gì.
+  // Chạm "Mở hội thoại gốc" ở bản đồ ghi nhớ → mở hội thoại sinh ra nó, để chủ tiệm xem lại mình đã nói gì.
   const openSource = async (sourceId: number) => {
     if (typing) return;
     try {
@@ -259,17 +201,16 @@ export default function Ai() {
         setDraft(latest);
       });
     };
-    let memories: AgentMemoryUsed[] = [];
     let turnSteps: ThoughtStep[] = [];
     try {
       const reply = await agentApi.chatStream(
         { conversation_id: conversationId, message },
         showDraft,
-        (used) => (memories = used),
+        undefined,
         (event) => setSteps((turnSteps = applyToolEvent(turnSteps, event))),
       );
       setConversationId(reply.conversation_id);
-      setMsgs((m) => [...m, { id: `a${reply.message_id}`, from: 'ai', text: reply.answer, memories }]);
+      setMsgs((m) => [...m, { id: `a${reply.message_id}`, from: 'ai', text: reply.answer }]);
     } catch (err) {
       if (err instanceof ApiError && err.code === 'conversation_not_found') setConversationId(null);
       // Không mất câu đã gõ: gỡ bong bóng chưa gửi được và trả câu về ô nhập (trừ khi đã gõ câu khác).
@@ -308,12 +249,7 @@ export default function Ai() {
                 <View style={[styles.messageRow, isUser && styles.userMessageRow]}>
                   <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
                     {!isUser ? (
-                      <BobiLabel
-                        memoryOn={memoryOn}
-                        memories={m.memories ?? []}
-                        currentId={conversationId}
-                        onOpenSource={openSource}
-                      />
+<BobiLabel memoryOn={memoryOn} />
                     ) : null}
                     {isUser ? (
                       <T size={13.5} color={colors.white} style={styles.messageText}>
@@ -334,7 +270,7 @@ export default function Ai() {
             <View style={styles.messageRow}>
               {draft ? (
                 <View style={[styles.bubble, styles.assistantBubble]}>
-                  <BobiLabel memoryOn={memoryOn} memories={[]} currentId={conversationId} onOpenSource={openSource} />
+                  <BobiLabel memoryOn={memoryOn} />
                   <StreamingChatText text={splitActions(draft, true).text} />
                 </View>
               ) : (
@@ -464,7 +400,14 @@ export default function Ai() {
         </View>
       </View>
 
-      <AssistantSettingsSheet visible={settingsOpen} onClose={closeSettings} />
+      <AssistantSettingsSheet
+        visible={settingsOpen}
+        onClose={closeSettings}
+        onOpenSource={(id) => {
+          closeSettings();
+          void openSource(id);
+        }}
+      />
       <HistorySheet
         visible={historyOpen}
         activeId={conversationId}
@@ -641,26 +584,38 @@ function HistorySheet({
 }
 
 /**
- * Cài đặt trợ lý: công tắc ghi nhớ dài hạn. Tải mỗi lần mở; lỗi hiện kèm nút thử lại, vì AI có thể
- * đang khởi động lại và lần gọi đầu bị từ chối.
+ * Cài đặt trợ lý: công tắc ghi nhớ dài hạn và bản đồ các ghi nhớ trợ lý đang giữ, xoá được từng cái.
+ * Tải mỗi lần mở; lỗi hiện kèm nút thử lại, vì AI có thể đang khởi động lại và lần gọi đầu bị từ chối.
  */
-function AssistantSettingsSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+function AssistantSettingsSheet({
+  visible,
+  onClose,
+  onOpenSource,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onOpenSource: (conversationId: number) => void;
+}) {
   const [settings, setSettings] = useState<AgentMemorySettings | null>(null);
+  const [memories, setMemories] = useState<AgentMemoryItem[]>([]);
+  const [deleting, setDeleting] = useState<AgentMemoryItem | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
     setError(null);
     try {
-      setSettings(await agentApi.getMemorySettings());
+      // AI trả danh sách rỗng khi bộ nhớ tắt, nên gọi song song thay vì chờ cài đặt trước.
+      const [loaded, items] = await Promise.all([agentApi.getMemorySettings(), agentApi.listMemories()]);
+      setMemories(loaded.available ? items : []);
+      setSettings(loaded);
     } catch (err) {
       setError(historyErrorMessage(err, 'Chưa tải được cài đặt ghi nhớ.'));
     }
   };
 
   useEffect(() => {
-    if (!visible) return;
-    setSettings(null);
-    void load();
+    // Giữ dữ liệu lần mở trước trong lúc tải lại để sheet không hiện vòng tải mỗi lần mở.
+    if (visible) void load();
   }, [visible]);
 
   const change = async (enabled: boolean) => {
@@ -671,6 +626,19 @@ function AssistantSettingsSheet({ visible, onClose }: { visible: boolean; onClos
     } catch (err) {
       setSettings((s) => s && { ...s, memory_enabled: !enabled });
       setError(historyErrorMessage(err, 'Chưa đổi được cài đặt ghi nhớ.'));
+    }
+  };
+
+  const confirmDelete = async () => {
+    const target = deleting;
+    setDeleting(null);
+    if (!target) return;
+    setError(null);
+    try {
+      await agentApi.deleteMemory(target.id);
+      setMemories((list) => list.filter((m) => m.id !== target.id));
+    } catch (err) {
+      setError(historyErrorMessage(err, 'Chưa xoá được ghi nhớ.'));
     }
   };
 
@@ -708,6 +676,30 @@ function AssistantSettingsSheet({ visible, onClose }: { visible: boolean; onClos
           <Toggle value={settings.memory_enabled} onChange={change} />
         </Row>
       ) : null}
+      {settings?.available ? (
+        <View style={{ marginTop: 12 }}>
+          <T w="bold" size={15} color={colors.ink}>
+            {`Trợ lý đang nhớ ${memories.length} điều`}
+          </T>
+          {memories.length ? (
+            <MemoryGraph items={memories} onDelete={setDeleting} onOpenSource={onOpenSource} />
+          ) : (
+            <T size={12.5} color={colors.muted} style={{ marginTop: 3 }}>
+              Chưa có ghi nhớ nào. Trợ lý sẽ nhớ dần khi bạn trò chuyện.
+            </T>
+          )}
+        </View>
+      ) : null}
+      <Dialog
+        visible={deleting !== null}
+        danger
+        icon="trash-2"
+        title="Xoá ghi nhớ này?"
+        message={deleting ? `Trợ lý sẽ quên: "${deleting.content}"` : undefined}
+        confirm="Xoá"
+        onCancel={() => setDeleting(null)}
+        onConfirm={confirmDelete}
+      />
     </Sheet>
   );
 }
@@ -745,9 +737,6 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   messages: { gap: 12 },
-  memoryItem: {
-    maxWidth: '86%',
-  },
   messageRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
