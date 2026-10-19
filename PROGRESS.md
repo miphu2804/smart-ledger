@@ -1,3 +1,13 @@
+### [2026-10-19 09:59 UTC+07:00] — [Fix] Mobile landing gallery, FAQ and pain list
+
+**Done:** On mobile, the gallery heading was capped at 96 px, which clipped its fourth line at 375 px. The cap is now `6em` of the heading font, so the full heading shows at start and still collapses on scroll. The gallery pins for 600vh instead of 900vh, and the phones grow from 1.2x to 1.4x as the heading collapses. Bobi stays visible beside the FAQ heading, the first FAQ item starts closed, and the pain list lines no longer reveal on scroll. On desktop, overflowing gallery content aligns to the top (`safe center`) so the fixed nav does not cover the heading.
+
+**Changed files:** `frontend/web/src/styles/landing.css`, `frontend/web/src/pages/landing/LandingPage.tsx` — modified; this entry.
+
+**Flow explained:** `--p` from `useScrollProgress` drives the heading's `--k`, which sets its `max-height`, `margin-bottom` and `opacity`, and the phones' `--focus`.
+
+**Check:** `npm run typecheck` and `npm run build` pass. In the browser at 320, 375 and 393 px the heading is not clipped at the top and collapses at p≈0.03 (verified). Real-device scroll feel not verified.
+
 ### [2026-10-19 09:10 UTC+07:00] — [Fix] Quick switch menu button in the collapsed headers
 
 **Done:** CodeRabbit on #309: once Overview or Sales is scrolled and its header collapses, the ☰ button scrolled away with the full header, and with Android gesture navigation the left-edge swipe belongs to the system, so the menu could not be opened without scrolling back up. Both collapsed headers now start with a compact ☰ (36 px, the size of Sales' compact buttons; white on Overview's purple bar). `AC-096` now says that opening the menu from Manage highlights no item, since Manage has no entry of its own (CodeRabbit's second note), and `FR-035` mentions the compact buttons.
