@@ -24,7 +24,6 @@ export default function SiteFooter({ onHome = false }: { onHome?: boolean }) {
               <h4>Sản phẩm</h4>
               <a href={h('tinh-nang')}>Tính năng</a>
               <a href={h('cach-hoat-dong')}>Cách hoạt động</a>
-              <a href={h('giao-dien')}>Giao diện</a>
               <a href={h('so-sanh')}>So sánh với POS</a>
             </nav>
             <nav className="lp-footer-col" aria-label="Hỗ trợ">
@@ -32,7 +31,7 @@ export default function SiteFooter({ onHome = false }: { onHome?: boolean }) {
               <a href={h('hoi-dap')}>Hỏi đáp</a>
               {CONTACT_EMAIL && <a href={`mailto:${CONTACT_EMAIL}`}>Liên hệ</a>}
             </nav>
-            <nav className="lp-footer-col" aria-label="Pháp lý">
+            <nav className="lp-footer-col" aria-label="Pháp lý" hidden={onHome}>
               <h4>Pháp lý</h4>
               <Link to="/privacy">Chính sách quyền riêng tư</Link>
               <Link to="/data-deletion">Xoá dữ liệu người dùng</Link>

@@ -12,7 +12,8 @@ export const TAB_HEADER_TOP = 4;
 
 /**
  * Ô tìm của phần đầu tab: kính lúp, ô nhập, nút xoá khi có chữ và nút phễu nằm trong ô ở mép phải. Phễu tô màu khi bộ lọc
- * đang khác mặc định. Bán hàng và Đơn hàng dùng chung để hai ô trùng kích thước và vị trí.
+ * đang khác mặc định. Bán hàng và Đơn hàng dùng chung để hai ô trùng kích thước và vị trí. `leading` (nút mở menu chuyển
+ * nhanh) nằm bên trái ô, cùng chiều cao.
  */
 export function TabSearchBar({
   value,
@@ -22,6 +23,7 @@ export function TabSearchBar({
   onFilterPress,
   filterActive,
   filterLabel,
+  leading,
 }: {
   value: string;
   onChangeText: (value: string) => void;
@@ -32,39 +34,45 @@ export function TabSearchBar({
   filterActive: boolean;
   /** Nhãn đọc màn hình của nút phễu, nên nói bộ lọc đang chọn */
   filterLabel: string;
+  leading?: React.ReactNode;
 }) {
   return (
-    <View style={styles.box}>
-      <Feather name="search" size={18} color={colors.faint} />
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor="#9CA3AF"
-        style={styles.input}
-        returnKeyType="search"
-        accessibilityLabel={searchLabel}
-      />
-      {value ? (
-        <Pressable onPress={() => onChangeText('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Xoá tìm kiếm">
-          <Feather name="x-circle" size={15} color={colors.muted} />
+    <View style={styles.row}>
+      {leading}
+      <View style={styles.box}>
+        <Feather name="search" size={18} color={colors.faint} />
+        <TextInput
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor="#9CA3AF"
+          style={styles.input}
+          returnKeyType="search"
+          accessibilityLabel={searchLabel}
+        />
+        {value ? (
+          <Pressable onPress={() => onChangeText('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Xoá tìm kiếm">
+            <Feather name="x-circle" size={15} color={colors.muted} />
+          </Pressable>
+        ) : null}
+        <Pressable
+          onPress={onFilterPress}
+          hitSlop={6}
+          style={({ pressed }) => [styles.filterBtn, filterActive && styles.filterBtnActive, pressed && { opacity: 0.75 }]}
+          accessibilityRole="button"
+          accessibilityLabel={filterLabel}
+        >
+          <Feather name="filter" size={16} color={filterActive ? colors.brand : colors.inkSecondary} />
         </Pressable>
-      ) : null}
-      <Pressable
-        onPress={onFilterPress}
-        hitSlop={6}
-        style={({ pressed }) => [styles.filterBtn, filterActive && styles.filterBtnActive, pressed && { opacity: 0.75 }]}
-        accessibilityRole="button"
-        accessibilityLabel={filterLabel}
-      >
-        <Feather name="filter" size={16} color={filterActive ? colors.brand : colors.inkSecondary} />
-      </Pressable>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   box: {
+    flex: 1,
     height: 42,
     borderRadius: 13,
     backgroundColor: colors.card,
@@ -75,7 +83,6 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingLeft: 12,
     paddingRight: 5,
-    marginBottom: 8,
   },
   input: {
     flex: 1,

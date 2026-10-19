@@ -2,6 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Image, ImageSourcePropType, Pressable, StyleSheet, View } from 'react-native';
+import { QuickNavButton } from '../../src/components/QuickNav';
 import { Badge, Dialog, Row, Screen, T } from '../../src/components/ui';
 import { authClient } from '../../src/lib/auth';
 import { vnd } from '../../src/lib/format';
@@ -76,14 +77,17 @@ export default function More() {
 
   return (
     <Screen bg={colors.bg} padded={false} contentStyle={styles.content}>
-      <View style={styles.header}>
-        <T w="extrabold" size={24} color={colors.ink}>
-          Quản lý
-        </T>
-        <T w="medium" size={13} color={colors.muted} style={styles.headerSubtitle}>
-          Quản lý cửa hàng của bạn
-        </T>
-      </View>
+      <Row gap={10} style={styles.header}>
+        <QuickNavButton />
+        <View style={{ flex: 1 }}>
+          <T w="extrabold" size={24} color={colors.ink}>
+            Quản lý
+          </T>
+          <T w="medium" size={13} color={colors.muted} style={styles.headerSubtitle}>
+            Quản lý cửa hàng của bạn
+          </T>
+        </View>
+      </Row>
 
       <Pressable
         onPress={() => router.push('/profile')}

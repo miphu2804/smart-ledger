@@ -5,6 +5,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, Pressable, StyleSheet, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TabIcon, type TabIconName } from '../../src/components/icons';
+import { QuickNavProvider } from '../../src/components/QuickNav';
 import { T } from '../../src/components/ui';
 import { ZenRing } from '../../src/components/ZenRing';
 import { triggerFeedback } from '../../src/lib/feedback';
@@ -220,16 +221,19 @@ export default function TabsLayout() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <Tabs
-        screenOptions={{ headerShown: false, animation: TAB_ANIMATION, sceneStyle: { backgroundColor: colors.bg } }}
-        tabBar={(p) => <TabBar {...p} />}
-      >
-        <Tabs.Screen name="index" />
-        <Tabs.Screen name="invoices" />
-        <Tabs.Screen name="sales" />
-        <Tabs.Screen name="more" />
-      </Tabs>
-      <ZenRing />
+      {/* Menu chuyển nhanh bên trái phủ lên cả thanh tab và mascot */}
+      <QuickNavProvider>
+        <Tabs
+          screenOptions={{ headerShown: false, animation: TAB_ANIMATION, sceneStyle: { backgroundColor: colors.bg } }}
+          tabBar={(p) => <TabBar {...p} />}
+        >
+          <Tabs.Screen name="index" />
+          <Tabs.Screen name="invoices" />
+          <Tabs.Screen name="sales" />
+          <Tabs.Screen name="more" />
+        </Tabs>
+        <ZenRing />
+      </QuickNavProvider>
     </View>
   );
 }
