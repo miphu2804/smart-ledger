@@ -1,5 +1,5 @@
 import { Check, ChevronDown, ChevronRight, Download, Menu, Mic, X } from 'lucide-react'
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ADMIN_ENABLED, ANDROID_APK_URL } from '../../config'
 import Logo, { LogoMark } from '../../components/Logo'
@@ -47,14 +47,6 @@ const VOICE_SAMPLE = 'Hai bánh mì thịt, một cà phê sữa đá, một b�
 
 function Nav() {
   const [open, setOpen] = useState(false)
-  const [scrolled, setScrolled] = useState(false)
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8)
-    onScroll()
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [])
 
   useEffect(() => {
     const onResize = () => window.innerWidth > 960 && setOpen(false)
@@ -63,7 +55,7 @@ function Nav() {
   }, [])
 
   return (
-    <header className={`lp-nav${scrolled ? ' is-scrolled' : ''}${open ? ' is-open' : ''}`}>
+    <header className="lp-nav">
       <div className="lp-container lp-nav-inner">
         <a href="#top" className="lp-brand" aria-label="Sổ Nghe Lời — về đầu trang">
           <Logo />
@@ -267,8 +259,8 @@ function Statement() {
           ))}
         </p>
         <ul className="pain-list">
-          {PAINS.map((p, i) => (
-            <li key={p.title} data-reveal style={delay(i)}>
+          {PAINS.map((p) => (
+            <li key={p.title}>
               <h3>{p.title}</h3>
               <p>{p.text}</p>
               <p className="pain-fix">{p.fix}</p>
@@ -376,8 +368,40 @@ const SCREENS: { shot: Shot; title: string; text: string; bobi?: boolean }[] = [
  * (`data-active` do useScrollProgress đặt theo vị trí các `.gallery-item`).
  */
 function Gallery() {
+  const sectionRef = useRef<HTMLElement>(null)
+
+  // Vuốt ngang trên dải máy sang màn trước hoặc sau: cuộn trang tới mốc tiến độ của màn đó, nên dải chạy như khi cuộn
+  useEffect(() => {
+    const section = sectionRef.current
+    const viewport = section?.querySelector<HTMLElement>('.gallery-viewport')
+    if (!section || !viewport) return
+    let startX = 0
+    let startY = 0
+    const onTouchStart = (e: TouchEvent) => {
+      startX = e.touches[0].clientX
+      startY = e.touches[0].clientY
+    }
+    const onTouchEnd = (e: TouchEvent) => {
+      const dx = e.changedTouches[0].clientX - startX
+      const dy = e.changedTouches[0].clientY - startY
+      if (Math.abs(dx) < 40 || Math.abs(dx) < 1.5 * Math.abs(dy)) return
+      const last = SCREENS.length - 1
+      const next = Math.min(last, Math.max(0, Number(section.dataset.active) + (dx < 0 ? 1 : -1)))
+      // Mốc tiến độ ở giữa màn `next`, khớp với cách useScrollProgress tính `data-active`
+      const p = 0.06 + (0.88 * next) / last
+      const top = section.getBoundingClientRect().top + window.scrollY
+      window.scrollTo({ top: top + p * (section.offsetHeight - window.innerHeight), behavior: 'smooth' })
+    }
+    viewport.addEventListener('touchstart', onTouchStart, { passive: true })
+    viewport.addEventListener('touchend', onTouchEnd, { passive: true })
+    return () => {
+      viewport.removeEventListener('touchstart', onTouchStart)
+      viewport.removeEventListener('touchend', onTouchEnd)
+    }
+  }, [])
+
   return (
-    <section className="lp-gallery" id="cach-hoat-dong" data-scroll="pin" data-active="0">
+    <section ref={sectionRef} className="lp-gallery" id="cach-hoat-dong" data-scroll="pin" data-active="0">
       <div className="gallery-sticky">
         <div className="lp-container">
           <h2 className="lp-display">
@@ -503,22 +527,12 @@ const FAQS: { q: string; a: ReactNode }[] = [
     a: 'Giọng nói được nhận dạng ngay trên điện thoại, không cần gửi âm thanh đi. Nhưng để lưu sổ lên tài khoản, ứng dụng cần kết nối Internet (Wi‑Fi hoặc 4G).',
   },
   {
-    q: 'Dữ liệu bán hàng của tôi có an toàn không?',
-    a: (
-      <>
-        Sổ gắn với tài khoản của bạn, đăng nhập bằng Facebook hoặc email; nhân viên quản trị chỉ xem được thông tin hỗ trợ ở mức tối thiểu và mọi lần
-        xem đều được ghi lại. Chi tiết nằm ở <Link to="/privacy">Chính sách quyền riêng tư</Link>.
-      </>
-    ),
+    q: 'Đăng nhập bằng gì và sổ được lưu ở đâu?',
+    a: 'Bạn đăng nhập bằng tài khoản Facebook hoặc Zalo. Sổ được lưu gắn với tài khoản đó; lưu lên tài khoản cần kết nối Internet.',
   },
   {
-    q: 'Làm sao để xoá tài khoản và dữ liệu của tôi?',
-    a: (
-      <>
-        Bạn gửi yêu cầu theo hướng dẫn tại trang <Link to="/data-deletion">Xoá dữ liệu người dùng</Link>. Trang đó cũng chỉ cách gỡ quyền của ứng
-        dụng khỏi tài khoản Facebook.
-      </>
-    ),
+    q: 'Muốn ngừng dùng thì làm thế nào?',
+    a: 'Nếu bạn muốn ngừng dùng hoặc xoá sổ, hãy nhắn cho chúng tôi qua các kênh liên hệ trên trang này.',
   },
   {
     q: 'Sổ Nghe Lời khác gì KiotViet, Sapo?',
@@ -535,7 +549,7 @@ const FAQS: { q: string; a: ReactNode }[] = [
 ]
 
 function Faq() {
-  const [open, setOpen] = useState<number | null>(0)
+  const [open, setOpen] = useState<number | null>(null)
   return (
     <section className="lp-section lp-faq" id="hoi-dap">
       <div className="lp-container lp-faq-grid">

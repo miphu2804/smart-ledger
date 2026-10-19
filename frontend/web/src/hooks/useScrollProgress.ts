@@ -17,30 +17,42 @@ export function useScrollProgress() {
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const els = Array.from(document.querySelectorAll<HTMLElement>('[data-scroll]'))
+    const tracks = new Map<HTMLElement, HTMLElement>()
+    for (const el of els) {
+      const track = el.querySelector<HTMLElement>('[data-track]')
+      if (track) tracks.set(el, track)
+    }
     let frame = 0
 
     const update = () => {
       frame = 0
       const vh = window.innerHeight
-      for (const el of els) {
-        const r = el.getBoundingClientRect()
-        if (r.bottom < -vh || r.top > vh * 2) continue
+      const vw = document.documentElement.clientWidth
+      // Đọc hết vị trí trước rồi mới ghi, để trình duyệt không phải tính lại layout sau từng lần ghi
+      const rects = els.map((el) => el.getBoundingClientRect())
+      const visible: [HTMLElement, HTMLElement][] = []
+      els.forEach((el, i) => {
+        const r = rects[i]
+        if (r.bottom < -vh || r.top > vh * 2) return
         const mode = el.dataset.scroll
         const p =
           mode === 'pin' ? clamp01(-r.top / Math.max(1, r.height - vh)) : mode === 'view' ? clamp01((vh - r.top) / vh) : clamp01(-r.top / r.height)
         el.style.setProperty('--p', p.toFixed(4))
-        const track = el.querySelector<HTMLElement>('[data-track]')
+        const track = tracks.get(el)
         if (track) {
-          const vw = document.documentElement.clientWidth
-          el.style.setProperty('--shift', `${Math.max(0, track.scrollWidth - vw)}px`)
+          visible.push([el, track])
           // Dải được đệm hai đầu nên màn thứ i dừng giữa khung nhìn khi tiến độ là i/(n-1)
           // Giữ máy đầu và máy cuối đứng yên một đoạn cuộn, để vuốt nhanh không trôi tuột qua mục
           const held = clamp01((p - 0.06) / 0.88)
           const active = Math.round(held * (track.children.length - 1))
           el.dataset.active = String(active)
           el.style.setProperty('--a', String(active))
-          el.style.setProperty('--n', String(track.children.length))
         }
+      })
+      // Độ tràn của dải đổi theo --p trên điện thoại (khoảng cách giữa các máy phụ thuộc --focus), nên phải đo sau khi
+      // đã ghi --p. Đo trước thì --shift lệch một khung hình và vẫn lệch khi cuộn đã dừng
+      for (const [el, track] of visible) {
+        el.style.setProperty('--shift', `${Math.max(0, track.scrollWidth - vw)}px`)
       }
     }
     const request = () => {
@@ -48,6 +60,7 @@ export function useScrollProgress() {
     }
 
     document.documentElement.classList.add('has-scroll-fx')
+    for (const [el, track] of tracks) el.style.setProperty('--n', String(track.children.length))
     update()
     window.addEventListener('scroll', request, { passive: true })
     window.addEventListener('resize', request)

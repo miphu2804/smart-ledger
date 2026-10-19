@@ -1,3 +1,43 @@
+### [2026-10-19 10:17 UTC+07:00] — [Fix] Keep the mobile landing gallery centred and tighten the gap before it
+
+**Done:** On phones the active screen drifted off-centre while scrolling. The track overflow (`--shift`) was measured only on mount and resize, but the gap between screens depends on `--focus`, which changes with scroll. The hook now measures the overflow each frame, after it writes `--p`, so the value matches the layout. On phones the blank space between the pain list and the gallery heading is about halved, by trimming the statement section's bottom padding. The two FAQ questions about data safety and account deletion are replaced with questions that do not link to the legal pages, which are hidden at this stage.
+
+**Changed files:** `frontend/web/src/hooks/useScrollProgress.ts`, `frontend/web/src/pages/landing/LandingPage.tsx`, `frontend/web/src/styles/landing.css` — modified; this entry.
+
+**Flow explained:** each frame the hook writes `--p`, then reads the track `scrollWidth` once and writes `--shift`. The track's `translate` is `--a / (n-1) × --shift`, so the active screen lands in the middle of the viewport. Below 560 px the statement section's bottom padding drops from about 134 px to about 38 px, so the heading sits 137 px below the pain list at 440 px wide instead of 233 px.
+
+**Check:** typecheck, `oxlint` on the landing files and `npm run build` pass. In the browser at 375, 440 and 1440 px the active screen centre is 0 px from the viewport centre at each sampled scroll point, with transitions disabled because the pane does not advance them, and the stored `--shift` equals the measured overflow. The footer still links to `/privacy` and `/data-deletion`; left unchanged. Scroll feel and spacing on a physical phone not verified.
+
+### [2026-10-19 10:07 UTC+07:00] — [Feature] Swipe between landing gallery screens on touch
+
+**Done:** A horizontal swipe on the gallery moves to the previous or next screen by scrolling to that screen's progress point; vertical scroll is unchanged (`touch-action: pan-y`). The scroll hook now reads every position before writing styles and measures the track width and screen count only on resize, so each frame does less layout work. The nav shadow shows at page load instead of after scrolling, and the nav no longer listens to scroll.
+
+**Changed files:** `frontend/web/src/hooks/useScrollProgress.ts`, `frontend/web/src/pages/landing/LandingPage.tsx`, `frontend/web/src/styles/landing.css` — modified; this entry.
+
+**Flow explained:** a swipe reads `data-active` from the gallery section and scrolls to `0.06 + 0.88 × index / (n-1)`, the progress point that useScrollProgress maps back to that screen.
+
+**Check:** typecheck and build pass. In the browser at 375 px, a left swipe moves to screen 1 and a right swipe back; a vertical swipe changes nothing; no horizontal overflow. Smooth scroll stalled in the pane until the next event, so the final position was read after a second swipe. Scroll smoothness and swipe on a real device not verified.
+
+### [2026-10-19 10:03 UTC+07:00] — [Fix] Desktop landing gallery fits tall windows
+
+**Done:** On desktop above 1100 px of viewport height, the focused phone was scaled by 1.82 with no shorter-screen tier, so on a 1142 px window its bottom, the progress bar and the fineprint fell below the window edge. The default `--focus` is now 1.3, the value the 1100 px tier already uses; the shorter-screen tiers still apply below it. Mobile sets its own focus and is unchanged.
+
+**Changed files:** `frontend/web/src/styles/landing.css` — modified; this entry.
+
+**Flow explained:** the `--focus` value feeds the phone's `scale` and the `margin-top` and `gap` that leave room for the scaled phone inside the pinned screen.
+
+**Check:** `npm run build` passes. In the browser, the phone bottom and fineprint sit inside the viewport at 1440×900, 1920×1200, 2000×1142 and 2560×1440; at 2000×1142 the heading starts 13 px below the nav. At 375×812 the focus is still the mobile value and the phone ends at 773 px.
+
+### [2026-10-19 09:59 UTC+07:00] — [Fix] Mobile landing gallery, FAQ and pain list
+
+**Done:** On mobile, the gallery heading was capped at 96 px, which clipped its fourth line at 375 px. The cap is now `6em` of the heading font, so the full heading shows at start and still collapses on scroll. The gallery pins for 600vh instead of 900vh, and the phones grow from 1.2x to 1.4x as the heading collapses. Bobi stays visible beside the FAQ heading, the first FAQ item starts closed, and the pain list lines no longer reveal on scroll. On desktop, overflowing gallery content aligns to the top (`safe center`) so the fixed nav does not cover the heading.
+
+**Changed files:** `frontend/web/src/styles/landing.css`, `frontend/web/src/pages/landing/LandingPage.tsx` — modified; this entry.
+
+**Flow explained:** `--p` from `useScrollProgress` drives the heading's `--k`, which sets its `max-height`, `margin-bottom` and `opacity`, and the phones' `--focus`.
+
+**Check:** `npm run typecheck` and `npm run build` pass. In the browser at 320, 375 and 393 px the heading is not clipped at the top and collapses at p≈0.03 (verified). Real-device scroll feel not verified.
+
 ### [2026-10-19 09:10 UTC+07:00] — [Fix] Quick switch menu button in the collapsed headers
 
 **Done:** CodeRabbit on #309: once Overview or Sales is scrolled and its header collapses, the ☰ button scrolled away with the full header, and with Android gesture navigation the left-edge swipe belongs to the system, so the menu could not be opened without scrolling back up. Both collapsed headers now start with a compact ☰ (36 px, the size of Sales' compact buttons; white on Overview's purple bar). `AC-096` now says that opening the menu from Manage highlights no item, since Manage has no entry of its own (CodeRabbit's second note), and `FR-035` mentions the compact buttons.

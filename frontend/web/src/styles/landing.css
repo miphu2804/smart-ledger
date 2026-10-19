@@ -193,10 +193,6 @@
   color: var(--ink);
   background: var(--bg);
   border: 1px solid rgba(0, 0, 0, 0.06);
-  transition: box-shadow 0.3s var(--ease);
-}
-.lp-nav.is-scrolled,
-.lp-nav.is-open {
   box-shadow: 0 12px 32px -16px rgba(0, 0, 0, 0.28);
 }
 .lp-nav-inner {
@@ -789,6 +785,8 @@
 /* ---------- Giao diện: cuộn dọc kéo dải máy chạy ngang ---------- */
 .lp-gallery {
   --p: 0;
+  /* Máy đang chiếu phóng to vừa phải; màn thấp hơn 1100px còn được giảm thêm bên dưới */
+  --focus: 1.3;
   --shift: 0px;
   --gw: min(240px, 19svh, 58vw);
   position: relative;
@@ -805,19 +803,28 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
+  /* Nội dung cao hơn màn thì căn đầu thay vì đẩy phần trên xuống dưới thanh điều hướng */
+  justify-content: safe center;
   overflow: hidden;
 }
 .gallery-viewport {
-  margin-top: calc(clamp(24px, 5vh, 56px) + var(--gw) * 2.17 * (var(--focus, 1.82) - 1) / 2);
+  margin-top: calc(clamp(24px, 5vh, 56px) + var(--gw) * 2.17 * (var(--focus, 1.3) - 1) / 2);
+  /* Vuốt ngang để đổi màn; cuộn dọc vẫn do trình duyệt xử lý */
+  touch-action: pan-y;
 }
 @media (max-width: 560px) {
-  /* Màn hẹp: máy được chiếu phóng to hơn cho dễ đọc, dải giãn rộng để không đè hẳn lên máy bên cạnh */
-  .lp-gallery {
-    --focus: 1.2;
+  /* Dòng nỗi đau nằm ngay trên gallery, gallery đã có đệm đầu nên đệm dưới của mục này được bớt để hai đoạn không bị thưa */
+  .lp-statement {
+    padding-bottom: clamp(24px, 4vh, 40px);
   }
-  /* Màn hẹp: tiêu đề nhỏ lại để cả tiêu đề và dải máy vừa một màn hình đang ghim */
+  /* Màn hẹp: tiêu đề thu lại theo cuộn (--p do useScrollProgress đặt), dòng tính năng lên thay chỗ và máy có thêm chiều cao; không có JS thì tiêu đề vẫn hiện */
   .gallery-sticky .lp-display {
-    font-size: 26px;
+    --k: clamp(0, calc(1 - var(--p, 0) * 20), 1);
+    /* Trần phải cao hơn tiêu đề thật (4 dòng ≈ 112px ở 375px), nếu không dòng cuối bị cắt */
+    max-height: calc(6em * var(--k));
+    margin-bottom: calc(0.5em * var(--k));
+    opacity: var(--k);
+    overflow: hidden;
   }
   .gallery-sticky {
     padding-top: 84px;
@@ -848,19 +855,28 @@
     --gw: min(240px, 16svh, 58vw);
   }
 }
+/* Điện thoại đứng: máy đang chiếu to hơn để đọc; chiều cao màn vẫn chặn cỡ máy (22svh) để không tràn khỏi màn ghim */
+@media (max-width: 560px) {
+  /* Máy to dần theo cuộn: 1.2 lúc vừa vào mục, 1.4 khi tiêu đề đã thu hết; quãng ghim ngắn hơn desktop (900vh) */
+  .lp-gallery {
+    --focus: calc(1.2 + 0.2 * clamp(0, var(--p, 0) * 20, 1));
+    --gw: min(240px, 22svh, 58vw);
+    height: 600vh;
+  }
+}
 .gallery-sticky .lp-display {
   font-size: clamp(26px, min(5.6vw, 5.8svh), 64px);
 }
 .gallery-track {
   display: flex;
   /* Khoảng hở cộng thêm phần máy được chiếu phình ra mỗi bên, để máy phóng to không đè lên máy bên cạnh */
-  gap: calc(clamp(24px, 3vw, 44px) + var(--gw) * (var(--focus, 1.82) - 1) / 2);
+  gap: calc(clamp(24px, 3vw, 44px) + var(--gw) * (var(--focus, 1.3) - 1) / 2);
   width: max-content;
   /* Đệm hai đầu để màn đầu và màn cuối cũng dừng đúng giữa khung nhìn */
   padding: 0 calc(50% - var(--gw) / 2);
   /* Dải dừng hẳn ở từng màn (không trượt lưng chừng) nên máy được chiếu luôn nằm đúng giữa */
   translate: calc(var(--a, 0) / (var(--n, 2) - 1) * var(--shift) * -1) 0;
-  transition: translate 0.6s cubic-bezier(0.22, 0.7, 0.2, 1);
+  transition: translate 0.3s cubic-bezier(0.22, 0.7, 0.2, 1);
 }
 .gallery-item {
   flex: none;
@@ -870,12 +886,12 @@
   scale: 0.9;
   translate: 0 0;
   transition:
-    opacity 0.45s ease,
-    scale 0.45s ease,
-    translate 0.45s ease;
+    opacity 0.3s ease,
+    scale 0.3s ease,
+    translate 0.3s ease;
 }
 .gallery-item .phone-body {
-  transition: box-shadow 0.45s ease;
+  transition: box-shadow 0.3s ease;
 }
 /* Phần giới thiệu nằm ngay dưới tiêu đề; chỉ mục của màn đang ở giữa được hiện */
 .gallery-intro {
@@ -894,8 +910,8 @@
   opacity: 0;
   translate: 0 8px;
   transition:
-    opacity 0.35s ease,
-    translate 0.35s ease;
+    opacity 0.2s ease,
+    translate 0.2s ease;
 }
 .gallery-intro strong {
   display: block;
@@ -943,7 +959,7 @@
 .lp-gallery[data-active='9'] .gallery-item[data-i='9'],
 .lp-gallery[data-active='10'] .gallery-item[data-i='10'] {
   opacity: 1;
-  scale: var(--focus, 1.82);
+  scale: var(--focus, 1.3);
   translate: 0 0;
   z-index: 1;
 }
@@ -966,7 +982,7 @@
 .gallery-progress {
   width: min(220px, 50vw);
   height: 3px;
-  margin: calc(clamp(20px, 4vh, 36px) + var(--gw) * 2.17 * (var(--focus, 1.82) - 1) / 2) auto 0;
+  margin: calc(clamp(20px, 4vh, 36px) + var(--gw) * 2.17 * (var(--focus, 1.3) - 1) / 2) auto 0;
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.08);
   overflow: hidden;
@@ -1192,11 +1208,22 @@ html:not(.has-scroll-fx) .gallery-item {
     grid-template-columns: 1fr;
     gap: 8px;
   }
+  /* Bobi nằm cạnh tiêu đề Hỏi đáp thay vì bị ẩn */
   .lp-faq-aside {
     position: static;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .lp-faq-aside .lp-sec-head {
+    flex: 1;
+    min-width: 0;
   }
   .lp-faq-aside img {
-    display: none;
+    width: 110px;
+    height: auto;
+    margin-top: 0;
   }
   .faq button {
     font-size: 17px;
