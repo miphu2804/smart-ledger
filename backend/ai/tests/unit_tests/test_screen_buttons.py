@@ -144,64 +144,18 @@ async def test_history_replays_answers_without_their_buttons() -> None:
     assert ("assistant", "Còn nợ.") in transcript(model.requests[0][0])
 
 
-async def test_chat_keeps_the_answer_written_before_the_button_call() -> None:
+async def test_chat_ends_on_the_answer_written_with_the_button_call() -> None:
     model = ScriptedModel(answer_then_button(), FOLLOW_UP)
 
     result = await build_agent(model).chat(user_id=3, shop_id=15, message="m")
 
-    assert result.answer == LIST + "\n\n" + FOLLOW_UP + BUTTONS
-
-
-async def test_stream_chat_extends_the_answer_written_before_the_button_call() -> None:
-    model = ScriptedModel(answer_then_button(), FOLLOW_UP)
-
-    events = [
-        event
-        async for event in await build_agent(model).stream_chat(
-            user_id=3, shop_id=15, message="m"
-        )
-    ]
-
-    # Nothing shown is taken back: the list stays and the follow-up joins it.
-    assert not any(isinstance(event, Reset) for event in events)
-    streamed = "".join(event.text for event in events if isinstance(event, TextDelta))
-    assert streamed == LIST + "\n\n" + FOLLOW_UP + BUTTONS
-    assert events[-1].result.answer == streamed
-
-
-async def test_a_preamble_before_a_data_tool_call_is_still_dropped() -> None:
-    model = ScriptedModel(
-        answer_then_button(),
-        ModelResponse(
-            parts=[TextPart("Để tôi xem lại."), ToolCallPart("unknown_tool", {})]
-        ),
-        "Còn nợ.",
-    )
-
-    result = await build_agent(model).chat(user_id=3, shop_id=15, message="m")
-
-    assert result.answer == "Còn nợ." + BUTTONS
-
-
-async def test_text_before_the_button_call_that_leaks_is_dropped() -> None:
-    model = ScriptedModel(answer_then_button("Theo smartledger.shop_id thì"), "Còn nợ.")
-
-    result = await build_agent(model).chat(user_id=3, shop_id=15, message="m")
-
-    assert result.answer == "Còn nợ." + BUTTONS
-
-
-async def test_chat_drops_a_reply_that_repeats_the_answer_before_the_button() -> None:
-    # After suggest_screen returns, models often write the same answer again.
-    model = ScriptedModel(answer_then_button(), LIST)
-
-    result = await build_agent(model).chat(user_id=3, shop_id=15, message="m")
-
+    # The model is not asked again, so it cannot write the answer a second time.
     assert result.answer == LIST + BUTTONS
+    assert len(model.requests) == 1
 
 
-async def test_stream_chat_does_not_send_a_repeated_answer_twice() -> None:
-    model = ScriptedModel(answer_then_button(), answer_then_button(), LIST + "\n")
+async def test_stream_chat_ends_on_the_answer_written_with_the_button_call() -> None:
+    model = ScriptedModel(answer_then_button(), FOLLOW_UP)
 
     events = [
         event
@@ -214,53 +168,29 @@ async def test_stream_chat_does_not_send_a_repeated_answer_twice() -> None:
     streamed = "".join(event.text for event in events if isinstance(event, TextDelta))
     assert streamed == LIST + BUTTONS
     assert events[-1].result.answer == streamed
+    assert len(model.requests) == 1
 
 
-async def test_a_reply_that_rewrites_the_answer_is_shown_once() -> None:
-    model = ScriptedModel(answer_then_button(), LIST + " Bấm nút bên dưới.")
-
-    events = [
-        event
-        async for event in await build_agent(model).stream_chat(
-            user_id=3, shop_id=15, message="m"
-        )
-    ]
-
-    assert shown(events) == LIST + " Bấm nút bên dưới." + BUTTONS
-    assert events[-1].result.answer == shown(events)
-
-
-async def test_stream_chat_replaces_the_shown_answer_on_a_second_button_call() -> None:
-    model = ScriptedModel(answer_then_button(), answer_then_button(REWRITE), "Xong.")
-
-    events = [
-        event
-        async for event in await build_agent(model).stream_chat(
-            user_id=3, shop_id=15, message="m"
-        )
-    ]
-
-    assert any(isinstance(event, Reset) for event in events)
-    assert shown(events) == REWRITE + "\n\nXong." + BUTTONS
-    assert events[-1].result.answer == shown(events)
-
-
-async def test_chat_replaces_the_answer_that_a_rewrite_changes_at_the_end() -> None:
-    model = ScriptedModel(answer_then_button(), REWRITE)
+async def test_a_reworded_answer_after_the_button_call_is_never_requested() -> None:
+    # Seen in the app: the answer, a button call, then the same figures reworded.
+    answer = (
+        "Hiện tiệm còn nợ khoảng 33.470.920 VND, của 33 khách hàng.\n\n"
+        "Nếu anh/chị muốn xem từng khoản nợ, hãy mở màn hình Công nợ."
+    )
+    reworded = "Tổng nợ hiện tại là 33.470.920 VND, từ 33 khách."
+    model = ScriptedModel(answer_then_button(answer), reworded)
 
     result = await build_agent(model).chat(user_id=3, shop_id=15, message="m")
 
-    assert result.answer == REWRITE + BUTTONS
+    assert result.answer == answer + BUTTONS
 
 
-async def test_a_rewrite_of_a_later_answer_keeps_the_text_before_it() -> None:
-    later = "Bấm nút bên dưới để mở Công nợ và xem từng khoản nợ."
-    later_rewritten = later.replace("nợ.", "nợ!")
+async def test_a_preamble_before_a_data_tool_call_is_still_dropped() -> None:
     model = ScriptedModel(
-        answer_then_button(),
-        answer_then_button(later),
-        answer_then_button(later_rewritten),
-        "Xong.",
+        ModelResponse(
+            parts=[TextPart("Để tôi xem lại."), ToolCallPart("unknown_tool", {})]
+        ),
+        answer_then_button("Còn nợ."),
     )
 
     events = [
@@ -270,9 +200,13 @@ async def test_a_rewrite_of_a_later_answer_keeps_the_text_before_it() -> None:
         )
     ]
 
-    # The rewrite is the only Reset: the list before it is sent again after the Reset.
-    resets = [index for index, event in enumerate(events) if isinstance(event, Reset)]
-    assert len(resets) == 1
-    assert shown(events[resets[0] :]).startswith(LIST + "\n\n")
-    assert shown(events) == LIST + "\n\n" + later_rewritten + "\n\nXong." + BUTTONS
+    assert shown(events) == "Còn nợ." + BUTTONS
     assert events[-1].result.answer == shown(events)
+
+
+async def test_text_before_the_button_call_that_leaks_is_dropped() -> None:
+    model = ScriptedModel(answer_then_button("Theo smartledger.shop_id thì"), "Còn nợ.")
+
+    result = await build_agent(model).chat(user_id=3, shop_id=15, message="m")
+
+    assert result.answer == "Còn nợ." + BUTTONS

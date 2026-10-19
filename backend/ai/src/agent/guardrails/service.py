@@ -117,6 +117,6 @@ class GuardrailService:
         """Whether the screen passes `text` as answer text the owner may keep.
 
         The Harness screens only the final output, so text a response wrote before a
-        screen-button call is checked here before it joins the answer.
+        screen-button call is checked here before it becomes the answer.
         """
         return AnswerScreen.check(text).action == "allow"
