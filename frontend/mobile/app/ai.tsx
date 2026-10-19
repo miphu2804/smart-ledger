@@ -30,7 +30,7 @@ import type {
 import { agentApi } from '../src/lib/agentApi';
 import { ApiError } from '../src/lib/api';
 import { splitActions } from '../src/lib/chatMarkdown';
-import { ddmmyyyy, hhmm, relDay } from '../src/lib/format';
+import { hhmm, relDay } from '../src/lib/format';
 import { applyToolEvent } from '../src/lib/toolSteps';
 import { useApp } from '../src/store/AppStore';
 import { colors, font, shadow } from '../src/theme';
@@ -603,14 +603,19 @@ function AssistantSettingsSheet({
 
   const load = async () => {
     setError(null);
-    try {
-      // AI trả danh sách rỗng khi bộ nhớ tắt, nên gọi song song thay vì chờ cài đặt trước.
-      const [loaded, items] = await Promise.all([agentApi.getMemorySettings(), agentApi.listMemories()]);
-      setMemories(loaded.available ? items : []);
-      setSettings(loaded);
-    } catch (err) {
-      setError(historyErrorMessage(err, 'Chưa tải được cài đặt ghi nhớ.'));
+    // AI trả danh sách rỗng khi bộ nhớ tắt, nên gọi song song thay vì chờ cài đặt trước.
+    // Danh sách lỗi riêng không được che công tắc, nên hai kết quả xử lý tách nhau.
+    const [loaded, items] = await Promise.allSettled([agentApi.getMemorySettings(), agentApi.listMemories()]);
+    if (loaded.status === 'rejected') {
+      setError(historyErrorMessage(loaded.reason, 'Chưa tải được cài đặt ghi nhớ.'));
+      return;
     }
+    setSettings(loaded.value);
+    if (items.status === 'rejected') {
+      setError('Chưa tải được danh sách ghi nhớ.');
+      return;
+    }
+    setMemories(loaded.value.available ? items.value : []);
   };
 
   useEffect(() => {
