@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from dataclasses import asdict, dataclass
 from typing import Literal
@@ -17,6 +18,8 @@ from src.sql.repository import ShopDataRepository
 
 # The guard and the repository raise ValueError("CODE: reason") for a query the model
 # can fix. Any other ValueError is a bug and must not reach the model.
+logger = logging.getLogger(__name__)
+
 MODEL_ERROR = re.compile(r"([A-Z][A-Z_]*): (.*)", re.DOTALL)
 
 
@@ -26,6 +29,7 @@ def _model_error(error: ValueError) -> str:
     if match is None:
         raise error
     code, reason = match.groups()
+    logger.warning("tool rejected: %s: %s", code, reason)
     return f"Error[{code}]: {reason}."
 
 

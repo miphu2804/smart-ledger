@@ -41,6 +41,13 @@ class Sandbox:
             raise RuntimeError(
                 "sandbox enabled but the codemode extra is missing"
             ) from error
+        logger.info(
+            "sandbox on: tools=%s memory=%d bytes duration=%ss tool calls=%d",
+            ",".join(limits.tools),
+            limits.max_memory_bytes,
+            limits.max_duration_secs,
+            limits.max_tool_calls,
+        )
         self._capability = CodeMode(
             tools=list(limits.tools),
             max_tool_calls=limits.max_tool_calls,

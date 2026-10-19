@@ -22,7 +22,12 @@ from pydantic_ai.models import Model
 
 from src.agent.guardrails import GuardrailLimits, GuardrailService
 from src.agent.repository import AgentConversationRepository
-from src.agent.tool_events import ToolFinished, ToolStarted, tool_progress
+from src.agent.tool_events import (
+    ToolFinished,
+    ToolStarted,
+    log_tool_event,
+    tool_progress,
+)
 from src.agent.tools import (
     AgentContext,
     build_calculation_tool,
@@ -273,6 +278,7 @@ class AgentService:
                     returns = node.request
                     break
                 if Agent.is_call_tools_node(node):
+                    await self._queue_tool_events(node, run, None)
                     answer = self._kept_text(node.model_response)
             return self._read_result(run, answer, returns)
 
@@ -397,14 +403,16 @@ class AgentService:
 
     @staticmethod
     async def _queue_tool_events(
-        node, run, events: asyncio.Queue[AgentStreamEvent | Exception]
+        node, run, events: asyncio.Queue[AgentStreamEvent | Exception] | None
     ) -> None:
-        """Queue when each tool call starts and ends. Streaming the node is also what
-        runs its tools, so this replaces the plain step of the run loop."""
+        """Log each tool call and queue when it starts and ends; the JSON route
+        passes no queue. Streaming the node is also what runs its tools, so this
+        replaces the plain step of the run loop."""
         async with node.stream(run.ctx) as stream:
             async for event in stream:
+                log_tool_event(event)
                 progress = tool_progress(event)
-                if progress is not None:
+                if progress is not None and events is not None:
                     events.put_nowait(progress)
 
     def _read_result(
