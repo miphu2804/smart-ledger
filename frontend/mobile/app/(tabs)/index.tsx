@@ -61,11 +61,17 @@ export default function Home() {
   const [period, setPeriod] = useState<ReportPeriod>('today');
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // Chỉ chốt trạng thái thu gọn (để chọn lớp header nhận chạm) khi cuộn dừng: không đổi state mỗi khung hình trong lúc cuộn.
-  const settleCollapsed = useCallback(
-    (offsetY: number) => setIsCollapsed(offsetY >= headerScrollDistance * 0.9),
-    [headerScrollDistance],
-  );
+  // Trạng thái thu gọn chọn lớp header nhận chạm: lớp đầy đủ chỉ mờ đi chứ vẫn nằm trên, nên khi đã thu gọn mà nó còn nhận chạm
+  // thì bấm nút ☰ hay các nút gọn sẽ trúng thẻ "Đọc đơn"… bên dưới. Theo dõi độ cuộn như phần đầu của Bán hàng, chỉ đổi state
+  // khi vượt mốc: chốt lúc thả tay sau khi kéo thì cuộn bằng chuột, bàn di hay cuộn tới vị trí khác không bao giờ cập nhật.
+  useEffect(() => {
+    const threshold = headerScrollDistance * 0.9;
+    const id = scrollY.addListener(({ value }) => {
+      const next = value >= threshold;
+      setIsCollapsed((cur) => (cur === next ? cur : next));
+    });
+    return () => scrollY.removeListener(id);
+  }, [scrollY, headerScrollDistance]);
   const now = new Date();
 
   // Số liệu lấy từ báo cáo của Core (tính trên toàn tiệm ở Core), không tải toàn bộ đơn, hàng, nợ về máy để cộng.
@@ -199,8 +205,6 @@ export default function Home() {
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={16}
           onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
-          onScrollEndDrag={(event) => settleCollapsed(event.nativeEvent.contentOffset.y)}
-          onMomentumScrollEnd={(event) => settleCollapsed(event.nativeEvent.contentOffset.y)}
         >
           <View style={styles.contentSheet}>
             <View style={styles.periodTabs}>

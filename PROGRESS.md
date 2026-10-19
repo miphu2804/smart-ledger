@@ -8,6 +8,14 @@
 
 **Check:** AI `ruff` clean, `pytest` 398 passed, 64 skipped (DB integration tests); Core compiles and runs; mobile `tsc` clean. iOS Simulator against staging (AI :8011, Core :8090): the map shows 3 memories, deleting id 74 returns `204` and the map shows 2; the remaining dots' angles and radii match the formula within 1° and 1 px. **Not verified:** Android; the DB-backed `forget` chain test; Core maps an AI `404` on delete to `conversation_not_found`.
 
+### [2026-10-19 13:07 UTC+07:00] — [Fix] Taps on Overview's collapsed header hit the hidden full header
+
+**Done:** Reported on the staging web: with Overview scrolled and its header collapsed, tapping the quick menu ☰ opened "Đọc đơn" instead. Overview switched which header layer takes touches only when a drag or fling ended (`onScrollEndDrag`/`onMomentumScrollEnd`). A mouse wheel, a trackpad or any scroll without that end event left the faded-out full header on top, so taps on the collapsed bar (☰ and its compact Đọc đơn, Quét mã, Chọn hàng, Trợ lý buttons) landed on the full header's cards underneath; scrolling back up the same way left the full header unable to take taps. Overview now follows the scroll offset and flips the layer when it crosses the threshold, as Sales' header already did. The quick menu also stops taking touches as soon as it starts closing, so a tap right after closing reaches the screen instead of the fading backdrop.
+
+**Changed files:** `frontend/mobile/app/(tabs)/index.tsx`, `frontend/mobile/src/components/QuickNav.tsx` — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors; `node --test tests/quickNav.test.ts` 6/6; mock web build at 375 px with real mouse-wheel scrolling: on collapsed Overview the point under ☰ is the ☰ itself and it opens the menu with Tổng quan highlighted (before the fix that point was "Đọc đơn"), the compact Đọc đơn opens `/voice`, scrolling back up returns taps to the full header's ☰ and cards; the menu opens from the top of Overview, Orders, Sales and Manage with the right item highlighted (none on Manage), and from collapsed Sales; 100 ms after closing, the point under ☰ already reaches the screen. **Not verified:** a real phone.
+
 ### [2026-10-19 10:17 UTC+07:00] — [Fix] Keep the mobile landing gallery centred and tighten the gap before it
 
 **Done:** On phones the active screen drifted off-centre while scrolling. The track overflow (`--shift`) was measured only on mount and resize, but the gap between screens depends on `--focus`, which changes with scroll. The hook now measures the overflow each frame, after it writes `--p`, so the value matches the layout. On phones the blank space between the pain list and the gallery heading is about halved, by trimming the statement section's bottom padding. The two FAQ questions about data safety and account deletion are replaced with questions that do not link to the legal pages, which are hidden at this stage.
