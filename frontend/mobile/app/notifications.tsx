@@ -1,9 +1,12 @@
-import { Feather } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useToast } from '../src/components/brand';
-import { Badge, Button, Card, EmptyState, Header, Row, Screen, T } from '../src/components/ui';
+import { SwipeRow } from '../src/components/SwipeRow';
+import { Badge, Button, Card, Dialog, EmptyState, Header, Row, Screen, T } from '../src/components/ui';
+import { isCategoryEnabled } from '../src/lib/appSettings';
 import { errorMessage } from '../src/lib/errors';
 import { ddmm, ddmmyyyy, hhmm, relDay } from '../src/lib/format';
 import {
@@ -28,8 +31,9 @@ type Filter = 'all' | 'unread' | NotifCategory;
  * Thông báo gồm hai nguồn: inbox Core (kho hàng, đơn bị huỷ, tình trạng tiệm; phân trang thật, bấm "Tải thêm" để lấy trang kế)
  * và các thông báo tính trên máy (đơn mới, công nợ, thu chi). Bộ lọc áp lên những thông báo đã tải.
  *
- * Mở màn là coi như đã xem: tải xong thì đánh dấu đọc hết (cả trên máy lẫn mọi trang ở Core) nên chuông ở Tổng quan hết số,
- * không cần bấm "Đọc hết". Những thông báo chưa đọc lúc vào vẫn được tô là "mới" suốt lượt xem này để biết cái nào mới tới.
+ * Thông báo giữ chưa đọc tới khi người dùng mở nó, vuốt dòng đó sang trái ("Đã đọc") hoặc bấm nút đọc hết (✓✓) ở đầu màn.
+ * Nút bánh răng mở menu: "Xoá toàn bộ thông báo" (Core chưa có API xoá nên chỉ ẩn trên máy này: đánh dấu đọc hết rồi ẩn mọi
+ * thông báo tới trước lúc xoá, xem `clearNotifications` của AppStore) và "Cài đặt thông báo" (chọn nhóm muốn nhận).
  */
 export default function Notifications() {
   const app = useApp();
@@ -51,39 +55,9 @@ export default function Notifications() {
   const read = useMemo(() => new Set(app.readNotifs), [app.readNotifs]);
   // Đếm thông báo trên máy từ danh sách đầy đủ `local`, không phải `all` đã bị ẩn bớt khi Core còn trang chưa tải.
   const unreadTotal = totalUnread(local, read, core.unreadCount);
+  const unread = all.filter((n) => isNotifUnread(n, read));
 
-  // Những thông báo chưa đọc lúc thấy ở lượt xem này: vẫn tô là "mới" sau khi đã tự đánh dấu đọc.
-  const [fresh, setFresh] = useState<ReadonlySet<string>>(() => new Set());
-  const isNew = (n: Notif) => fresh.has(n.id) || isNotifUnread(n, read);
-  const newOnes = all.filter(isNew);
-
-  // Tự đánh dấu đọc hết khi đã tải xong, và mỗi khi có thông báo chưa đọc mới tới trong lúc đang xem. Core đánh dấu từng lô rồi
-  // tải lại, nên không gọi chồng khi lượt trước chưa xong; lỗi thì báo một lần, lần sau vào màn sẽ thử lại.
-  const markingCore = useRef(false);
-  const unreadKey = all.filter((n) => isNotifUnread(n, read)).map((n) => n.id).join('|');
-  useEffect(() => {
-    if (!ready || unreadTotal === 0) return;
-    const localIds = local.filter((n) => !read.has(n.id)).map((n) => n.id);
-    const seen = all.filter((n) => isNotifUnread(n, read)).map((n) => n.id);
-    setFresh((prev) => {
-      const next = new Set(prev);
-      for (const id of [...localIds, ...seen]) next.add(id);
-      return next;
-    });
-    if (localIds.length) app.markNotifsRead(localIds);
-    if (core.unreadCount > 0 && !markingCore.current) {
-      markingCore.current = true;
-      core
-        .markAllRead()
-        .catch((e) => toast(errorMessage(e), 'err'))
-        .finally(() => {
-          markingCore.current = false;
-        });
-    }
-    // Chỉ chạy lại khi tải xong hoặc có thông báo chưa đọc khác đi; `local`, `all`, `app`, `core` đổi theo mỗi lần vẽ.
-  }, [ready, unreadKey, unreadTotal]);
-
-  const shown = filter === 'all' ? all : filter === 'unread' ? newOnes : all.filter((n) => n.category === filter);
+  const shown = filter === 'all' ? all : filter === 'unread' ? unread : all.filter((n) => n.category === filter);
 
   // Gom theo ngày: Hôm nay / Hôm qua / 3 ngày trước…
   const groups = useMemo(() => {
@@ -99,23 +73,110 @@ export default function Notifications() {
     return out;
   }, [shown]);
 
-  const count = (c: NotifCategory) => newOnes.filter((n) => n.category === c).length;
+  const count = (c: NotifCategory) => unread.filter((n) => n.category === c).length;
+
+  const markRead = (n: Notif) => {
+    if (!isNotifUnread(n, read)) return;
+    if (n.coreId != null) core.markRead([n.coreId]).catch((e) => toast(errorMessage(e), 'err'));
+    else app.markNotifsRead([n.id]);
+  };
 
   const open = (n: Notif) => {
-    // Thường đã được đánh dấu đọc lúc vào màn; còn chưa đọc (lượt tự đánh dấu lỗi, thông báo vừa tới) thì đánh dấu khi mở
-    if (isNotifUnread(n, read)) {
-      if (n.coreId != null) core.markRead([n.coreId]).catch((e) => toast(errorMessage(e), 'err'));
-      else app.markNotifsRead([n.id]);
-    }
+    markRead(n);
     triggerFeedback('selection');
     if (n.href) router.push(n.href);
+  };
+
+  // Đọc hết: thông báo trên máy đánh dấu ngay; Core đánh dấu mọi trang (kể cả trang chưa tải) theo từng lô. Trả về false khi Core lỗi.
+  const markAllRead = async () => {
+    const localIds = local.filter((n) => !read.has(n.id)).map((n) => n.id);
+    if (localIds.length) app.markNotifsRead(localIds);
+    if (core.unreadCount === 0) return true;
+    try {
+      await core.markAllRead();
+      return true;
+    } catch (e) {
+      toast(errorMessage(e), 'err');
+      return false;
+    }
+  };
+
+  const readAll = async () => {
+    triggerFeedback('selection');
+    if (await markAllRead()) toast('Đã đánh dấu đọc hết');
+  };
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  // Xoá toàn bộ: đọc hết trước (để số trên chuông khớp), rồi ẩn mọi thông báo đang có trên máy này
+  const clearAll = async () => {
+    setConfirmClear(false);
+    if (!(await markAllRead())) return;
+    // Mốc xoá không sớm hơn thông báo mới nhất đang có: giờ trên máy lệch với Core thì vẫn ẩn hết những gì đang thấy
+    const newest = [...local, ...coreNotifs].reduce((max, n) => Math.max(max, Date.parse(n.at) || 0), Date.now());
+    app.clearNotifications(new Date(newest).toISOString());
+    setFilter('all');
+    toast('Đã xoá toàn bộ thông báo');
   };
 
   return (
     <Screen onEndReached={core.hasMore && !core.moreError ? core.loadMore : undefined}>
       <Header
         title="Thông báo"
-        subtitle={!ready ? undefined : newOnes.length ? `${newOnes.length} thông báo mới` : 'Không có thông báo mới'}
+        subtitle={!ready ? undefined : unreadTotal ? `${unreadTotal} thông báo chưa đọc` : 'Không có thông báo mới'}
+        right={
+          <Row gap={8}>
+            <Pressable
+              onPress={readAll}
+              disabled={!ready || unreadTotal === 0}
+              accessibilityRole="button"
+              accessibilityLabel="Đánh dấu đọc hết"
+              aria-disabled={!ready || unreadTotal === 0}
+              style={({ pressed }) => [styles.headerBtn, pressed && { opacity: 0.75 }]}
+            >
+              <MaterialCommunityIcons
+                name="check-all"
+                size={22}
+                color={ready && unreadTotal ? colors.brand : colors.disabled}
+              />
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                triggerFeedback('selection');
+                setMenuOpen(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Tuỳ chọn thông báo"
+              style={({ pressed }) => [styles.headerBtn, pressed && { opacity: 0.75 }]}
+            >
+              <Feather name="settings" size={19} color={colors.ink} />
+            </Pressable>
+          </Row>
+        }
+      />
+
+      <NotifMenu
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        onClear={() => {
+          setMenuOpen(false);
+          setConfirmClear(true);
+        }}
+        onSettings={() => {
+          setMenuOpen(false);
+          router.push('/notification-settings');
+        }}
+      />
+      <Dialog
+        visible={confirmClear}
+        icon="trash-2"
+        danger
+        title="Xoá toàn bộ thông báo?"
+        message="Các thông báo hiện có sẽ được đánh dấu đã đọc và ẩn khỏi máy này. Thông báo mới về sau vẫn hiện bình thường."
+        confirm="Xoá"
+        cancel="Huỷ"
+        onConfirm={clearAll}
+        onCancel={() => setConfirmClear(false)}
       />
 
       <FilterPills
@@ -123,8 +184,9 @@ export default function Notifications() {
         onChange={setFilter}
         options={[
           { key: 'all', label: 'Tất cả', icon: 'grid' },
-          { key: 'unread', label: 'Mới', icon: 'bell', count: newOnes.length },
-          ...NOTIF_CATEGORIES.filter((c) => app.settings.stockAlerts || c !== 'stock').map((c) => ({
+          { key: 'unread', label: 'Chưa đọc', icon: 'bell', count: unreadTotal },
+          // Nhóm đã tắt ở Cài đặt thông báo không có nút lọc (không còn thông báo nào để lọc)
+          ...NOTIF_CATEGORIES.filter((c) => isCategoryEnabled(app.settings, c)).map((c) => ({
             key: c,
             label: notifCategoryMeta[c].label,
             icon: notifCategoryMeta[c].icon,
@@ -167,10 +229,14 @@ export default function Notifications() {
                       <NotifRow
                         key={n.id}
                         n={n}
-                        fresh={isNew(n)}
+                        unread={isNotifUnread(n, read)}
                         showCategory={filter === 'all' || filter === 'unread'}
                         last={i === g.items.length - 1}
                         onPress={() => open(n)}
+                        onMarkRead={() => {
+                          triggerFeedback('selection');
+                          markRead(n);
+                        }}
                       />
                     ))}
                   </View>
@@ -180,7 +246,7 @@ export default function Notifications() {
           ) : (
             <EmptyState
               icon="bell-off"
-              title={filter === 'unread' ? 'Không có thông báo mới' : 'Chưa có thông báo'}
+              title={filter === 'unread' ? 'Không còn thông báo chưa đọc' : 'Chưa có thông báo'}
               hint={
                 core.hasMore
                   ? 'Chưa thấy thông báo nào ở các trang đã tải. Bấm "Tải thêm" để xem tiếp.'
@@ -243,7 +309,7 @@ function FilterPills<K extends string>({
               }}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
-              accessibilityLabel={o.count ? `${o.label}, ${o.count} mới` : o.label}
+              accessibilityLabel={o.count ? `${o.label}, ${o.count} chưa đọc` : o.label}
               style={({ pressed }) => [styles.pill, active && styles.pillActive, pressed && { opacity: 0.8 }]}
             >
               <Feather name={o.icon} size={14} color={ink} />
@@ -266,27 +332,71 @@ function FilterPills<K extends string>({
   );
 }
 
-/** `fresh`: thông báo mới tới (chưa đọc lúc vào màn) — chữ đậm và chấm màu, dù đã được tự đánh dấu đọc. */
+/** Menu của nút bánh răng: xoá toàn bộ thông báo (chữ đỏ) và mở Cài đặt thông báo; chạm ra ngoài để đóng. */
+function NotifMenu({
+  visible,
+  onClose,
+  onClear,
+  onSettings,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onClear: () => void;
+  onSettings: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel="Đóng menu" />
+      <View style={[styles.menu, { top: insets.top + 64 }]} accessibilityViewIsModal>
+        <Pressable
+          onPress={onClear}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.menuItem, styles.menuItemBorder, pressed && { backgroundColor: colors.redSoft }]}
+        >
+          <Feather name="trash-2" size={18} color={colors.red} />
+          <T w="semibold" size={15} color={colors.red}>
+            Xoá toàn bộ thông báo
+          </T>
+        </Pressable>
+        <Pressable
+          onPress={onSettings}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.menuItem, pressed && { backgroundColor: colors.primaryTint }]}
+        >
+          <Feather name="settings" size={18} color={colors.inkSecondary} />
+          <T w="semibold" size={15} color={colors.ink}>
+            Cài đặt thông báo
+          </T>
+        </Pressable>
+      </View>
+    </Modal>
+  );
+}
+
+/** Thông báo chưa đọc: chữ đậm, chấm màu và vuốt sang trái để đánh dấu "Đã đọc". */
 function NotifRow({
   n,
-  fresh,
+  unread,
   showCategory,
   last,
   onPress,
+  onMarkRead,
 }: {
   n: Notif;
-  fresh: boolean;
+  unread: boolean;
   showCategory: boolean;
   last: boolean;
   onPress: () => void;
+  onMarkRead: () => void;
 }) {
   const meta = notifCategoryMeta[n.category];
   const tint = n.urgent ? colors.red : meta.color;
-  return (
+  const body = (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={fresh ? `Mới: ${n.title}` : n.title}
+      accessibilityLabel={unread ? `Chưa đọc: ${n.title}` : n.title}
       style={({ pressed }) => [
         styles.row,
         !last && styles.rowBorder,
@@ -298,7 +408,7 @@ function NotifRow({
       </View>
       <View style={{ flex: 1 }}>
         <Row gap={6}>
-          <T w={fresh ? 'bold' : 'semibold'} size={14} style={{ flex: 1 }} numberOfLines={1}>
+          <T w={unread ? 'bold' : 'semibold'} size={14} style={{ flex: 1 }} numberOfLines={1}>
             {n.title}
           </T>
           <T size={12} color={colors.faint}>
@@ -316,13 +426,42 @@ function NotifRow({
           </Row>
         ) : null}
       </View>
-      {fresh ? <View style={styles.dot} /> : null}
+      {unread ? <View style={styles.dot} /> : null}
     </Pressable>
+  );
+  // Chỉ thông báo chưa đọc mới có nút "Đã đọc" khi vuốt; thông báo đã đọc không có gì để vuốt.
+  return unread ? (
+    <SwipeRow actionLabel="Đã đọc" actionIcon="check" onCommit={onMarkRead}>
+      {body}
+    </SwipeRow>
+  ) : (
+    body
   );
 }
 
 const styles = StyleSheet.create({
   clip: { borderRadius: radius.md - 1, overflow: 'hidden' },
+  headerBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menu: {
+    position: 'absolute',
+    right: 16,
+    minWidth: 240,
+    borderRadius: 18,
+    backgroundColor: colors.card,
+    overflow: 'hidden',
+    ...shadow(3),
+  },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 15 },
+  menuItemBorder: { borderBottomWidth: 1, borderBottomColor: colors.borderLight },
   // paddingTop chừa chỗ cho badge nhô lên khỏi pill, vì ScrollView ngang cắt nội dung tràn ra ngoài.
   pills: { gap: 6, paddingRight: 16, paddingTop: 7 },
   badge: {

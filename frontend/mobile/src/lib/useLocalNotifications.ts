@@ -1,5 +1,7 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { useApp } from '../store/AppStore';
+import { isNotificationShown } from './appSettings';
 import { expenseToLegacy, saleToInvoice } from './coreAdapters';
 import { debtApi } from './debtApi';
 import { errorMessage } from './errors';
@@ -70,5 +72,12 @@ export function useLocalNotifications() {
     }, [load]),
   );
 
-  return { notifications, yesterdayRevenue, openDebtCount, loading, error, reload: load };
+  // Bỏ các nhóm đã tắt ở Cài đặt thông báo và các thông báo tới trước lần "Xoá toàn bộ"
+  const { settings, notifClearedAt } = useApp();
+  const shown = useMemo(
+    () => notifications.filter((n) => isNotificationShown(n, settings, notifClearedAt)),
+    [notifications, settings, notifClearedAt],
+  );
+
+  return { notifications: shown, yesterdayRevenue, openDebtCount, loading, error, reload: load };
 }
