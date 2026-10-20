@@ -1,3 +1,11 @@
+### [2026-10-20 08:58 UTC+07:00] — [Fix] Search and text boxes cut off Vietnamese accents on some Android phones
+
+**Done:** Reported with an Android screenshot: in Sales' collapsed header the search placeholder read "Iim theo ten hoạc ma vạch", with the tops of the letters and the accents cut off. Android pads a `TextInput` by about 10dp above and below; in a box with a fixed height (32 px in the compact search) what is left is shorter than one line of text. The single-line inputs with a fixed height now have `paddingVertical: 0`, so the text uses the whole box (Android centres single-line text): Sales' search (full and compact), the shared `TabSearchBar` (Orders and Sales), the assistant chat box, the manual entry box on Đọc đơn and `Field`. Web and iOS add no such padding, so they look the same as before.
+
+**Changed files:** `frontend/mobile/app/pos.tsx`, `frontend/mobile/app/ai.tsx`, `frontend/mobile/app/voice.tsx`, `frontend/mobile/src/components/TabSearchBar.tsx`, `frontend/mobile/src/components/ui.tsx` — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors. **Not verified:** an Android phone or emulator (none was connected).
+
 ### [2026-10-19 17:03 UTC+07:00] — [Feature] Vibration and stock alerts can be switched off in Settings
 
 **Done:** On request, "Rung phản hồi" and "Cảnh báo sắp hết hàng" in Settings are real switches again instead of "Luôn bật"; the whole row and the switch both flip it. The two choices are saved on the device, not per account (`app-settings.json` in the app's document folder on Android/iOS, `localStorage` on the web), so signing out keeps them; a saved file missing a key or with a wrong value falls back to that key's default (both on). Vibration off makes `triggerFeedback` do nothing everywhere. Stock alerts off hides the "Kiểm tra hàng sắp hết" priority on Overview (the count of things to check drops with it), hides Core's `LOW_STOCK`/`OUT_OF_STOCK` notifications from the Notifications list and the "Kho hàng" filter, and takes them out of the bell count (Core's unread count minus the unread count of those two types). Screen readers get the switch state through `aria-checked` and the "Sắp có" rows through `aria-disabled`, since React Native Web does not turn `accessibilityState` into ARIA. The PRD note on the mobile inbox mentions the switch.

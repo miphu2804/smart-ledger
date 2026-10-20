@@ -936,7 +936,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   inputFocused: { borderColor: colors.brand, backgroundColor: colors.white },
-  input: { flex: 1, fontFamily: font.medium, fontSize: 15, color: colors.ink, height: '100%', outlineStyle: 'none' } as never,
+  // paddingVertical 0: Android tự đệm trên dưới cho TextInput, ô cao cố định dễ cắt mất dấu tiếng Việt phía trên
+  input: { flex: 1, fontFamily: font.medium, fontSize: 15, color: colors.ink, height: '100%', paddingVertical: 0, outlineStyle: 'none' } as never,
   footer: {
     paddingHorizontal: 16,
     paddingTop: 12,

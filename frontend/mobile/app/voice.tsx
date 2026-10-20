@@ -1495,6 +1495,8 @@ const styles = StyleSheet.create({
   manualTextInput: {
     flex: 1,
     height: 38,
+    // Android tự đệm trên dưới cho TextInput, làm ô cao cố định cắt mất dấu tiếng Việt phía trên; bỏ đệm dọc
+    paddingVertical: 0,
     fontSize: 14,
     fontFamily: font.medium,
     color: voiceTheme.ink,
