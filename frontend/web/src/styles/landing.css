@@ -487,9 +487,11 @@
   animation: lpRise 0.9s var(--ease) 0.5s both;
 }
 .hero-bubble {
-  top: 16%;
-  right: calc(100% - 24px);
-  width: 200px;
+  /* Nằm trên đầu máy bên, xoay ngược để đứng thẳng */
+  top: -6%;
+  left: -8%;
+  rotate: 8deg;
+  width: 220px;
   gap: 8px;
   align-items: flex-start;
   padding: 12px 14px;
@@ -504,8 +506,9 @@
   color: var(--primary);
 }
 .hero-result {
-  top: 38%;
-  left: calc(100% - 24px);
+  top: -4%;
+  right: -6%;
+  rotate: -8deg;
   flex-direction: column;
   gap: 2px;
   padding: 12px 18px;
@@ -550,28 +553,9 @@
   }
 }
 @media (max-width: 760px) {
-  /* Màn hẹp: hai máy bên thò ra hai mép máy giữa, để câu nói và thẻ đơn nháp có máy đi kèm */
+  /* Màn hẹp: chỉ giữ máy giữa; câu nói và các màn khác đã được giới thiệu ở mục bên dưới */
   .hero-side {
-    width: 56vw;
-    margin-top: 48px;
-  }
-  .hero-side.is-left {
-    margin-right: -40vw;
-  }
-  .hero-side.is-right {
-    margin-left: -40vw;
-  }
-  .hero-bubble {
-    right: auto;
-    left: -14px;
-    top: 58%;
-    width: 170px;
-    font-size: 12.5px;
-  }
-  .hero-result {
-    left: auto;
-    right: -14px;
-    top: 74%;
+    display: none;
   }
   .hero-bobi {
     top: -9%;
@@ -675,26 +659,25 @@
   line-height: 1.5;
   color: var(--muted);
 }
-.bento-tile.is-wide {
-  grid-column: span 2;
-}
-.bento-tile.is-full {
-  grid-column: 1 / -1;
+.bento-tile.is-ai {
+  grid-column: 1 / span 2;
+  grid-row: 3;
   flex-direction: row;
-  align-items: center;
-  gap: 28px;
-  padding: 32px 36px;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 28px;
   background: var(--brand-tint);
 }
-.bento-tile.is-full img {
+.bento-tile.is-ai img {
   flex: none;
-  width: 110px;
+  /* Ảnh và ví dụ nhỏ lại để ô Bobi cao ngang các ô sổ sách cùng hàng */
+  width: 56px;
   height: auto;
 }
-.bento-tile.is-full h3 {
+.bento-tile.is-ai h3 {
   margin-top: 0;
 }
-.bento-tile.is-full p {
+.bento-tile.is-ai p {
   max-width: 560px;
 }
 .bento-tile .bobi-memory {
@@ -713,7 +696,13 @@
 .bento-tile .bobi-memory b {
   color: var(--ink);
 }
-.bento-tile.is-full .bento-chips span {
+.bento-tile.is-ai .bento-chips {
+  margin-top: 14px;
+  gap: 6px;
+}
+.bento-tile.is-ai .bento-chips span {
+  padding: 5px 11px;
+  font-size: 13px;
   background: #fff;
   color: var(--primary);
   box-shadow: var(--shadow-sm);
@@ -760,18 +749,22 @@
   .bento {
     grid-template-columns: repeat(2, 1fr);
   }
+  /* Lưới 2 cột: Bobi xuống cuối, chiếm cả hàng; các ô sổ sách xếp hai ô một hàng */
+  .bento-tile.is-ai {
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
 }
 @media (max-width: 560px) {
   .bento {
     grid-template-columns: 1fr;
   }
   .bento-tile.is-hero,
-  .bento-tile.is-wide,
-  .bento-tile.is-full {
+  .bento-tile.is-ai {
     grid-column: auto;
     grid-row: auto;
   }
-  .bento-tile.is-full {
+  .bento-tile.is-ai {
     flex-direction: column;
     align-items: flex-start;
     gap: 18px;
@@ -790,7 +783,7 @@
   --shift: 0px;
   --gw: min(240px, 19svh, 58vw);
   position: relative;
-  height: 900svh;
+  height: 600svh;
   background: var(--surface);
 }
 .gallery-sticky {
@@ -817,19 +810,6 @@
   /* Dòng nỗi đau nằm ngay trên gallery, gallery đã có đệm đầu nên đệm dưới của mục này được bớt để hai đoạn không bị thưa */
   .lp-statement {
     padding-bottom: clamp(24px, 4vh, 40px);
-  }
-  /* Màn hẹp: tiêu đề thu lại khi cuộn qua mốc đầu mục (data-settled do useScrollProgress đặt), dòng tính năng lên thay chỗ và máy có thêm chiều cao; không có JS thì tiêu đề vẫn hiện */
-  .gallery-sticky .lp-display {
-    --k: 1;
-    /* Trần phải cao hơn tiêu đề thật (4 dòng ≈ 112px ở 375px), nếu không dòng cuối bị cắt */
-    max-height: calc(6em * var(--k));
-    transition:
-      max-height 0.3s ease,
-      margin-bottom 0.3s ease,
-      opacity 0.3s ease;
-    margin-bottom: calc(0.5em * var(--k));
-    opacity: var(--k);
-    overflow: hidden;
   }
   .gallery-sticky {
     padding-top: 84px;
@@ -862,18 +842,27 @@
 }
 /* Điện thoại đứng: máy đang chiếu to hơn để đọc; chiều cao màn vẫn chặn cỡ máy (19svh, vì khung ghim cao 100svh) để không tràn khỏi màn ghim */
 @media (max-width: 560px) {
-  /* Máy to ra: 1.2 lúc vừa vào mục, 1.4 khi tiêu đề đã thu hết; quãng ghim ngắn hơn desktop (900svh) */
+  /* Bố cục cố định suốt quãng ghim (cỡ máy không đổi) để cuộn qua đầu và cuối mục không nhảy */
   .lp-gallery {
-    --focus: 1.2;
+    --focus: 1.35;
     --gw: min(240px, 19svh, 58vw);
-    height: 600svh;
+    height: 400svh;
   }
-  /* data-settled do useScrollProgress đặt khi cuộn qua mốc đầu mục; đổi một lần có chuyển động thay vì tính lại layout theo từng điểm cuộn */
-  .lp-gallery[data-settled='1'] {
-    --focus: 1.4;
+  /* Tiêu đề và dòng tính năng chồng cùng một ô: qua mốc đầu mục (data-settled) tiêu đề mờ đi, dòng tính năng hiện lên,
+     chỉ đổi độ mờ nên máy bên dưới không bị đẩy lên xuống */
+  .gallery-sticky .lp-container {
+    display: grid;
   }
-  .lp-gallery[data-settled='1'] .gallery-sticky .lp-display {
-    --k: 0;
+  .gallery-sticky .lp-display,
+  .gallery-sticky .gallery-intro {
+    grid-area: 1 / 1;
+    align-self: end;
+    margin: 0;
+    transition: opacity 0.3s ease;
+  }
+  .lp-gallery[data-settled='1'] .gallery-sticky .lp-display,
+  .lp-gallery:not([data-settled='1']) .gallery-intro {
+    opacity: 0;
   }
 }
 .gallery-sticky .lp-display {
