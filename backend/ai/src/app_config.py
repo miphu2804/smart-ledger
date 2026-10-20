@@ -122,7 +122,8 @@ class AppConfig(BaseSettings):
     CLOUDFLARE_API_TOKEN: str | None = None
 
     # model gateway shared by every model: OpenAI, or an OpenAI-compatible gateway
-    # such as OpenCode Go (https://opencode.ai/inference/go/v1)
+    # such as OpenCode Go (https://opencode.ai/inference/go/v1) or Inception for Mercury
+    # (https://api.inceptionlabs.ai/v1)
     OPENAI_API_KEY: str | None = None
     OPENAI_BASE_URL: str | None = None
 
