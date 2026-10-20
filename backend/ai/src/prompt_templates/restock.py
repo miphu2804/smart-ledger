@@ -1,8 +1,6 @@
 """Prompt for the suggest_restock tool: when to call it and how to answer.
 
-Like the SQL prompt, the access line comes in two variants that name the path the
-model actually has: RESTOCK_PROMPT (direct tool calls, sandbox off) and
-RESTOCK_SANDBOX_PROMPT (calls inside a run_code program, sandbox on). Appended to the
+Appended to the
 static shop prompt, after the SQL prompt, so the prefix a provider can cache stays
 unchanged. The shop id never appears: it reaches the tool through the runtime
 context.
@@ -15,13 +13,6 @@ RESTOCK_RESULT_HEADER = (
 
 _ACCESS = (
     "You can suggest what to restock with the suggest_restock tool. It reads this "
-    "shop's confirmed sales and current stock; it changes nothing."
-)
-
-_SANDBOX_ACCESS = (
-    "You can suggest what to restock by writing a run_code program that calls "
-    "suggest_restock(period) inside it (the run_code instructions say when to use "
-    "one); the tool is not callable directly while run_code is on. It reads this "
     "shop's confirmed sales and current stock; it changes nothing."
 )
 
@@ -44,4 +35,3 @@ enough confirmed sales in the period to suggest anything. Never invent an item.
 5. If truncated is true, say the list covers only the fastest-selling items."""
 
 RESTOCK_PROMPT = f"{_ACCESS}\n{_REST}"
-RESTOCK_SANDBOX_PROMPT = f"{_SANDBOX_ACCESS}\n{_REST}"
