@@ -1,3 +1,11 @@
+### [2026-10-20 08:58 UTC+07:00] — [Fix] Search and text boxes cut off Vietnamese accents on some Android phones
+
+**Done:** Reported with an Android screenshot: in Sales' collapsed header the search placeholder read "Iim theo ten hoạc ma vạch", with the tops of the letters and the accents cut off. Android pads a `TextInput` by about 10dp above and below; in a box with a fixed height (32 px in the compact search) what is left is shorter than one line of text. The single-line inputs with a fixed height now have `paddingVertical: 0`, so the text uses the whole box (Android centres single-line text): Sales' search (full and compact), the shared `TabSearchBar` (Orders and Sales), the assistant chat box, the manual entry box on Đọc đơn and `Field`. Web and iOS add no such padding, so they look the same as before.
+
+**Changed files:** `frontend/mobile/app/pos.tsx`, `frontend/mobile/app/ai.tsx`, `frontend/mobile/app/voice.tsx`, `frontend/mobile/src/components/TabSearchBar.tsx`, `frontend/mobile/src/components/ui.tsx` — modified; this entry.
+
+**Check:** `npx tsc --noEmit` shows no new errors. **Not verified:** an Android phone or emulator (none was connected).
+
 ### [2026-10-20 08:53 UTC+07:00] — [Feature] Notification controls: read all, swipe to read, clear all, choose groups
 
 **Done:** On request, with the reference screens as the design:

@@ -1256,6 +1256,9 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     height: 38,
+    // Android tự đệm trên dưới ~10dp cho TextInput: với chiều cao cố định, phần còn lại thấp hơn một dòng chữ nên dấu tiếng Việt
+    // ở trên bị cắt ("Tìm" thành "Iim"). Bỏ đệm dọc để chữ dùng hết chiều cao ô (Android canh giữa ô một dòng).
+    paddingVertical: 0,
     fontFamily: font.medium,
     fontSize: 14,
     color: salesColors.ink,
