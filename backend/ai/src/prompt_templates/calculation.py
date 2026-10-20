@@ -33,14 +33,10 @@ If a calculation fails with Error[DIVISION_BY_ZERO] or a similar code, fix the i
 or tell the owner the calculation is not possible."""
 
 RUN_CODE_PROMPT = """\
-When one answer needs several shop-data results combined — in a loop, a filter or a \
-longer program, such as summing sales by category — write one run_code program \
-instead of calling the data tools one by one. The program runs in a sandbox with \
-strict time and memory limits, so keep it small.
-
-Inside the program, call the shop-data tools as functions: query_shop_data(sql) runs \
-one PostgreSQL SELECT, suggest_restock(period) reads confirmed sales, and the rules \
-for what to select and what the results mean are in their instructions above. While \
-run_code is on, those tools are not callable directly. Do the arithmetic in the code \
-itself and never invent input values: every number comes from the owner or from a \
-function result."""
+Call the shop-data tools directly: one question is usually one query_shop_data call \
+(use GROUP BY, SUM and JOIN in the SQL to combine rows) or one suggest_restock call. \
+Use run_code only when an answer needs a program that neither one SQL query nor the \
+calculate tool can express, such as a loop over several tool results. The program runs \
+in a sandbox with strict time and memory limits and cannot call any tool: pass in the \
+values it needs from earlier tool results, keep it small, and never invent input \
+values."""

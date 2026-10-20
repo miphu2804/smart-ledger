@@ -1,3 +1,9 @@
+### [2026-10-20 12:10 UTC+07:00] — [Fix] Read-only shop-data questions no longer run in the AI sandbox
+
+**Done:** With the sandbox on, `query_shop_data` and `suggest_restock` were folded into `run_code`, so every read-only data question started Monty. They now stay native tools; only model-written `run_code` programs run in the sandbox. On staging (shop 8, 18 turns) sandbox turns fell from 18 to 0, but median latency did not drop (6.01s → 6.14s): model round trips, not Monty, dominate.
+
+**Changed files:** `backend/ai/src/main.py`, `backend/ai/src/agent/service.py`, `backend/ai/src/prompt_templates/{__init__,calculation,restock,sql_agent}.py`, `backend/ai/tests/unit_tests/test_sandbox_option.py` — modified; this entry.
+
 ### [2026-10-20 08:58 UTC+07:00] — [Fix] Search and text boxes cut off Vietnamese accents on some Android phones
 
 **Done:** Reported with an Android screenshot: in Sales' collapsed header the search placeholder read "Iim theo ten hoạc ma vạch", with the tops of the letters and the accents cut off. Android pads a `TextInput` by about 10dp above and below; in a box with a fixed height (32 px in the compact search) what is left is shorter than one line of text. The single-line inputs with a fixed height now have `paddingVertical: 0`, so the text uses the whole box (Android centres single-line text): Sales' search (full and compact), the shared `TabSearchBar` (Orders and Sales), the assistant chat box, the manual entry box on Đọc đơn and `Field`. Web and iOS add no such padding, so they look the same as before.
