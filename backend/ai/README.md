@@ -197,3 +197,21 @@ uv run ruff check --fix
 uv run ruff format
 uv run pytest
 ```
+
+## Evaluation
+
+`evaluation/` scores which tools the shop agent calls for 30 ground-truth questions (`cases.yaml`). It runs the production agent with the sandbox on and the shop data stubbed, so it needs a model key and no database, and it scores tool choice rather than answers.
+
+Each case sends the shop's current time with the question, as a chat turn does, and asserts `ToolSelectionAccuracy`: the distinct tools called must be exactly the expected set, in any order. A repeated call is allowed on purpose, because the SQL prompt tells the model to retry a query that matched nothing or errored and the eval's shop stub returns no rows. A graded `TrajectoryMatch` score sits beside it, so two models that both miss a case can still be told apart, and three budgets bound one turn: at most 4 tool calls, 4 model requests and 60 seconds. The run exits 1 when a model passes fewer than 40% of the cases. Baseline runs scored 19/30 and 16/30 on `claude-haiku-5-5`, and the first run after the metric moved to distinct tool sets scored 21/30, so one run is noisy to about three cases and the bar is a regression tripwire rather than a correctness claim. The misses are real prompt-adherence defects in the agent, recorded in [`PROGRESS.md`](../PROGRESS.md).
+
+The span-based metrics read the OpenTelemetry span tree, so the eval installs its own tracer provider when none is set, which is why it needs no `LOGFIRE_TOKEN` and works in CI. Content capture stays off: the metrics read tool names and counts, never the question, the SQL or the answer, so even on a developer machine, where Logfire has already installed its own provider, the spans carry no owner data, as [`observability.py`](src/observability.py) promises.
+
+A model name the gateway does not serve fails every case with `Model is unavailable`, so the summary shows 30 cases failed to run rather than a low score. Cases run four at a time. Running all 30 at once tripped the gateway's rate limit, and a 429 then read as a wrong tool instead of as a request that failed; the summary prints how many cases failed to run beside the pass rate.
+
+```bash
+uv run python -m evaluation
+# One report and pass rate per model, for comparing them
+uv run python -m evaluation --models anthropic:claude-haiku-5-5,openai-chat:deepseek-v4.1-flash
+```
+
+Without `--models` it evaluates the configured `MODEL_PROVIDER:MODEL_NAME`. The `AI eval` workflow (`.github/workflows/ai-eval.yml`) runs the same command by hand from the Actions tab, with an optional `models` input; left blank it uses `MODEL_PROVIDER` and `MODEL_NAME` from the repository variables. It never runs on push or pull request.

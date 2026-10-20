@@ -1,8 +1,77 @@
+### [2026-10-20 21:12 UTC+07:00] — [Refactor] Move the eval's span capture to the composition root
+
+**Done:** Two placement fixes from a `/design-pattern` review of `backend/ai/evaluation`, plus a `/distill` pass. (1) `EvalRunner._capture_spans` mutated process-global state (`trace.set_tracer_provider`, class-level `Agent.instrument_all`) from inside `run()`, so the composition root never knew the tracer provider was swapped, and the privacy test could only reach the setup by monkeypatching `Agent.instrument_all`. It is now the module-level `capture_spans()` in `run_eval.py`, called by `main` before the tasks are built, and the runner no longer imports `opentelemetry.trace`, `TracerProvider`, `Agent` or `InstrumentationSettings`. (2) `TOOL_SELECTION` was the literal `"ToolSelectionAccuracy"`, duplicating the class name that is the assertion key: renaming the class would have left `_judge` finding no assertion and reporting "0/30 passed" as if the model had failed. It is now `ToolSelectionAccuracy.__name__`. The distill pass removed a doubly-checked condition in `ToolSelectionAccuracy.evaluate`: `not missing and not unexpected` plus two `if`s became one `if not reasons`, read off the list it had just built.
+
+**Changed files:**
+- `backend/ai/evaluation/eval_runner.py` — modified (span capture moved out, `TOOL_SELECTION` derived from the class, four imports dropped; 140 to 107 lines)
+- `backend/ai/evaluation/run_eval.py` — modified (`capture_spans()` at the composition root, called by `main`)
+- `backend/ai/evaluation/tool_selection_accuracy.py` — modified (one condition instead of two)
+- `backend/ai/tests/unit_tests/test_evaluation.py` — modified (imports `capture_spans` instead of calling the private method)
+
+**Flow explained:** `python -m evaluation` now installs the tracer provider and the content-free agent instrumentation in `run_eval.main`, the only module allowed to build collaborators, and hands the runner nothing but tasks. The eval still has to run as its own process, because `Agent.instrument_all` is class-level: importing `run_eval` into a running service would replace that service's instrumentation. Verified: `ruff check` and `ruff format --check` clean, 16 eval tests and 402 unit tests pass, no reference to `_capture_spans` remains anywhere, `capture_spans()` still leaves `include_content=False`, and `python -m evaluation --help` still works. A live end-to-end eval run through the CLI after the move was not repeated.
+
+### [2026-10-20 19:57 UTC+07:00] — [Change] Remove the render_chart spike and its ADR
+
+**Done:** Removed the unapproved `render_chart` experiment: the ADR, the two temporary dev screens that rendered charts, the Skia demo component, the 8 MB `canvaskit.wasm` it loaded, and the six chart dependencies that had been added to `frontend/mobile/package.json` and the lockfile. Each dev screen carried a note to delete it before merge, and the ADR was still Proposed with "no code until approved". Nothing tracked imported any of the chart libraries, so no code path changed. The ADR row is gone from the docs map and `docs/architecture/adr/` is back to 0001 and 0002. The chart libraries are still installed in `frontend/mobile/node_modules` locally; `npm install` prunes them.
+
+**Changed files:**
+- `docs/architecture/adr/0003-agent-render-chart.md` — deleted
+- `frontend/mobile/app/dev-charts.tsx` — deleted
+- `frontend/mobile/app/dev-skia-charts.tsx` — deleted
+- `frontend/mobile/src/components/DevSkiaCharts.tsx` — deleted
+- `frontend/mobile/public/canvaskit.wasm` — deleted
+- `frontend/mobile/package.json`, `frontend/mobile/package-lock.json` — reverted to HEAD
+- `docs/README.md` — reverted to HEAD (the ADR-0003 row was its only uncommitted change)
+
+**Flow explained:** This removes an experiment rather than adding behavior. The two dev screens existed only as Expo Router routes for comparing `gifted-charts` against `victory-native` on Skia, and they were the only importers of those libraries, which is why reverting the dependency block leaves the app unchanged. Reconsidering charts means a new ADR and a fresh spike.
+
+### [2026-10-20 18:56 UTC+07:00] — [Fix] Close the eval's privacy leak, its broken CI gate and its false misses
+
+**Done:** Acted on an adversarial review of the eval harness. Four defects were real. (1) Privacy: `_capture_spans` guarded on `opentelemetry.trace.ProxyTracerProvider`, but Logfire installs `logfire._internal.tracer.ProxyTracerProvider`, which inherits `TracerProvider` instead of that proxy, so the check was always False. On a developer machine the eval therefore reused Logfire's provider with `include_content=True` and sent the owner's question, the model's SQL and the answer to Logfire, breaking the promise in `src/observability.py`. Content capture is now off, which the metrics do not need because they read tool names and counts, and the docstring states the real behaviour. (2) CI: `ai-eval.yml` read `OPENAI_BASE_URL` from `secrets` while `ci.yml` reads it from `vars`, so the URL arrived empty, `build_chat_model` returned None for the default `anthropic` model, and every manual run failed at once. It now reads the same variables, and a `Resolve models` step fills a blank input from `vars.MODEL_PROVIDER` and `vars.MODEL_NAME`, checking that both are set because an unset GitHub variable arrives as an empty string that would replace the code default with nothing. (3) False misses: `ToolCorrectness` compares multisets, so a repeated call counted as a wrong tool, while the SQL prompt tells the model to retry a query that matched nothing and the eval's stub always returns no rows. The gate is now `ToolSelectionAccuracy`, comparing distinct sets, and the report and the metric agree because the task already returned deduplicated names. (4) Fidelity: production sends the shop's current time with every message and `shop_agent.py` rule 5 says it does, but the eval sent the bare question, so the cases asking about "hôm nay" ran on a message shape the prompt contradicts. `AgentService.with_current_time` and `current_time` are public now and the eval sends the same shape. Cases also run four at a time instead of all 30, which is what tripped the gateway's rate limit, and the summary prints how many cases failed to run beside the rate. Two ground-truth ambiguities are recorded in `cases.yaml` rather than changed silently: the restock prompt sends "which items are running out" to `suggest_restock` while `sql_agent.py` answers "Which products are running low?" with a `query_shop_data` example, and `record_draft_no_write` forbids the `suggest_screen("voice_order")` that `app_guide.py` invites. Both need a product decision. Tests grew from 6 to 13: the wrong-tool test now asserts the tool it did call, so a crash cannot pass as a wrong choice; the denominator and the inclusive threshold are pinned by 2-of-5 and 2-of-7 datasets; a repeated tool call passes; the time line is asserted; the span capture is asserted through a budget metric; and dropping the configured fallbacks is covered. Verified against live models afterwards: `anthropic:claude-haiku-5-5` scored 21/30 (70%) and `openai-chat:deepseek-v4.1-flash` 23/30 (77%), neither with a case failing to run, and both clearing the gate. They fail the same way, mostly `suggest_screen` on replies that only report figures and `calculate` skipped on arithmetic. A run against `openai-chat:mercury-3` scored 0/30 with all 30 failing to run: the gateway does not serve that name, and the README, the CLI help and the workflow input had all been citing it as the example, so they now name `deepseek-v4.1-flash`, which is the model the project's own docs already use for `MODEL_FALLBACKS`. The span capture is now pinned by a test that reads `include_content` off the real capture and asserts no span carries the question, the SQL or the answer, and that test was shown to fail when content capture is turned on.
+
+**Changed files:**
+- `backend/ai/evaluation/eval_runner.py` — modified (set-based gate, content-free spans, `max_concurrency`, failure count in the summary)
+- `backend/ai/evaluation/tool_selection_accuracy.py` — created (distinct-set comparison, not a duplicate of `ToolCorrectness`, which compares multisets)
+- `backend/ai/evaluation/chatbot_task.py` — modified (takes the service, sends the production message shape, documents what is still not reproduced)
+- `backend/ai/evaluation/run_eval.py` — modified (`build_service` returns the service; `entry_config` makes the dropped fallbacks testable)
+- `backend/ai/evaluation/cases.yaml` — modified (set semantics in the header; the two prompt conflicts recorded)
+- `backend/ai/tests/unit_tests/test_evaluation.py` — modified (13 tests)
+- `backend/ai/src/agent/service.py` — modified (`with_current_time` and `current_time` public, so the eval sends the same message shape)
+- `.github/workflows/ai-eval.yml` — modified (variables instead of secrets; the models input resolved)
+- `backend/ai/README.md` — modified (metric, content capture, concurrency)
+
+**Flow explained:** `run_eval` builds one `AgentService` per `api:model` entry with the shop data stubbed, then `EvalRunner` loads `cases.yaml`, attaches `ToolSelectionAccuracy` and `TrajectoryMatch` per case from that case's `expected_output`, installs a content-free tracer provider, and evaluates every model in turn. The gate reads the tool names the task observed; the graded score and the three budgets read the span tree.
+
+### [2026-10-20 18:45 UTC+07:00] — [Feature] Per-model tool-calling eval with real metrics
+
+**Done:** Rebuilt the chatbot eval so it can score several models and more than one thing. The ground truth was wrong: `cases.yaml` expected `run_code` for every shop-data question, but `RUN_CODE_PROMPT` sends a plain data question to one `query_shop_data` call and reserves `run_code` for a program that neither one SQL query nor `calculate` can express. The expected sets now follow the prompts (`query_shop_data`, `suggest_restock`, `calculate`, `suggest_screen`), and a live run confirmed it: every data question called `query_shop_data`, never `run_code`. The hand-written `ToolSelectionAccuracy` is deleted — the library's `ToolCorrectness` does the same job and names the missing and unexpected tools — with a graded `TrajectoryMatch` score beside it and three per-turn budgets (`MaxToolCalls` 4, `MaxModelRequests` 4, `MaxDuration` 60s). Every agentic metric reads the OpenTelemetry span tree, and with no tracer provider each one silently returns False; that is what CI had, because it sets no `LOGFIRE_TOKEN` and `configure_tracing` then no-ops. The runner installs its own provider with tool arguments included, and the spans stay in the process. `--models api:model,api:model` evaluates several models in one run; the summary prints a pass rate per model and one compact line per miss. Two baseline runs scored 19/30 and 16/30 on `claude-haiku-5-5`, so the gate is set to 40%: a regression tripwire, not a correctness claim. The misses are real agent defects rather than ground-truth noise — 7 data answers also called `suggest_screen`, which `APP_GUIDE_PROMPT` forbids on a reply that only reports figures, and 4 arithmetic answers skipped `calculate`.
+
+**Changed files:**
+- `backend/ai/evaluation/cases.yaml` — modified (expected sets follow the prompts; three dataset-level budgets)
+- `backend/ai/evaluation/eval_runner.py` — modified (per-case library metrics, span capture, per-model runs, compact miss lines, 40% bar)
+- `backend/ai/evaluation/run_eval.py` — created (composition root, `--models`, per-model `api:model` building)
+- `backend/ai/evaluation/__main__.py` — modified (thin entry point)
+- `backend/ai/evaluation/tool_selection_accuracy.py` — deleted (duplicated `ToolCorrectness`)
+- `backend/ai/tests/unit_tests/test_evaluation.py` — created (hermetic harness tests, no model calls)
+- `backend/ai/pyproject.toml`, `backend/ai/uv.lock` — modified (`opentelemetry-sdk` dev dependency)
+- `.github/workflows/ai-eval.yml` — modified (optional `models` input)
+- `backend/ai/README.md`, `docs/development/ci-cd.md` — modified; this entry.
+
+**Flow explained:** `python -m evaluation` builds one `ChatbotTask` per `api:model` entry from a copy of `app_config` with fallbacks dropped, so a fallback cannot answer for the model under test. `EvalRunner` then loads `cases.yaml`, turns each case's `expected_output` into its own `ToolCorrectness` and `TrajectoryMatch` (so `expected_output` stays the only copy of the ground truth), installs the span provider, and evaluates the dataset once per model. The gate reads only `ToolCorrectness`; the budgets bound cost and latency, and the graded score separates two models that both miss.
+
 ### [2026-10-20 12:10 UTC+07:00] — [Fix] Read-only shop-data questions no longer run in the AI sandbox
 
 **Done:** With the sandbox on, `query_shop_data` and `suggest_restock` were folded into `run_code`, so every read-only data question started Monty. They now stay native tools; only model-written `run_code` programs run in the sandbox. On staging (shop 8, 18 turns) sandbox turns fell from 18 to 0, but median latency did not drop (6.01s → 6.14s): model round trips, not Monty, dominate.
 
 **Changed files:** `backend/ai/src/main.py`, `backend/ai/src/agent/service.py`, `backend/ai/src/prompt_templates/{__init__,calculation,restock,sql_agent}.py`, `backend/ai/tests/unit_tests/test_sandbox_option.py` — modified; this entry.
+
+### [2026-10-20 09:09 UTC+07:00] — [Feature] Tool-selection eval for the shop chatbot
+
+**Done:** Added a tool-selection eval for the AI shop agent: 30 ground-truth questions, scored on whether the tools called match the expected set exactly. It runs the production agent with the sandbox on and shop data stubbed, so it needs a model key but no database. The run exits 1 below 80% passed. A manual `AI eval` workflow runs it on a live model. First local run: 24/30 passed (80%). The misses are 4 cases that answered arithmetic without `calculate`, plus 2 judgement calls in the ground truth (`restock_suggest` also opened a screen; `record_draft_no_write` queried data). The ground truth is not tuned to the results.
+
+**Changed files:** `backend/ai/evaluation/` (`cases.yaml`, `chatbot_task.py`, `tool_selection_accuracy.py`, `eval_runner.py`, `__main__.py`) — added; `.github/workflows/ai-eval.yml` — added; `backend/ai/pyproject.toml`, `backend/ai/uv.lock` (`pydantic-evals` dev dependency, `evaluation` as first-party) — modified; `backend/ai/README.md` — modified; this entry.
+
+**Flow explained:** `python -m evaluation` builds the production `AgentService` with `build_chat_model` and `build_sandbox`, stubs the shop data and conversation store, then runs each case as one agent run. `ChatbotTask` returns the sorted tool names from the run's messages, and `ToolSelectionAccuracy` compares that set with `expected_output`. `EvalRunner` loads the cases, reports the pass rate, and compares it with `PASS_RATE_THRESHOLD` (80%, a starting value to tune after the baseline).
 
 ### [2026-10-20 08:58 UTC+07:00] — [Fix] Search and text boxes cut off Vietnamese accents on some Android phones
 

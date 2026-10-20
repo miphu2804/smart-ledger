@@ -1,0 +1,124 @@
+# Ground truth for the Bobi tool-selection eval. `expected_output` lists the top-level
+# tools the agent must call; the runner turns each list into a per-case
+# ToolSelectionAccuracy assertion, which compares the distinct tools called with this
+# list, so the set must match exactly, in any order and however often a tool is called.
+# [] means no tool call.
+#
+# Expectations follow RUN_CODE_PROMPT (prompt_templates/calculation.py), which routes a
+# plain data question to one query_shop_data call and reserves run_code for a program
+# that neither one SQL query nor calculate can express. CALC_PROMPT sends every sum
+# through calculate, and the restock prompt sends stock questions to suggest_restock.
+# None of the questions below needs a loop over several tool results, so none expects
+# run_code.
+name: bobi-tool-selection
+# Cross-cutting budgets, the same for every case. The model names the tools it wants;
+# these bound how much work one turn may cost.
+evaluators:
+  - MaxToolCalls: {max_calls: 4}
+  - MaxModelRequests: {max_requests: 4}
+  - MaxDuration: {seconds: 60}
+cases:
+  - name: sales_today
+    inputs: "Hôm nay shop bán được bao nhiêu tiền?"
+    expected_output: [query_shop_data]
+  - name: revenue_week
+    inputs: "Tuần này doanh thu của shop là bao nhiêu?"
+    expected_output: [query_shop_data]
+  - name: revenue_compare
+    inputs: "So với tuần trước, doanh thu tuần này tăng hay giảm?"
+    expected_output: [query_shop_data]
+  - name: orders_month
+    inputs: "Tháng này shop có bao nhiêu đơn hàng?"
+    expected_output: [query_shop_data]
+  - name: top_product
+    inputs: "Sản phẩm nào bán chạy nhất tháng này?"
+    expected_output: [query_shop_data]
+  - name: payments_yesterday
+    inputs: "Hôm qua shop thu về bao nhiêu tiền từ khách?"
+    expected_output: [query_shop_data]
+  - name: debts_total
+    inputs: "Hiện còn bao nhiêu tiền khách đang nợ shop?"
+    expected_output: [query_shop_data]
+  - name: expenses_last_month
+    inputs: "Chi phí tháng trước của shop là bao nhiêu?"
+    expected_output: [query_shop_data]
+  - name: top_category
+    inputs: "Danh mục nào có doanh thu cao nhất tuần này?"
+    expected_output: [query_shop_data]
+  # The restock prompt sends "which items are running out" to suggest_restock, but
+  # sql_agent.py answers "Which products are running low?" with a query_shop_data
+  # example, so the two prompts disagree on this question. The case follows the restock
+  # prompt, which owns the tool; the SQL example is the side to fix. Until it is, a model
+  # that follows the example misses here, and the miss is a prompt defect rather than a
+  # tool chosen wrongly.
+  - name: restock_suggest
+    inputs: "Mặt hàng nào sắp hết và nên nhập thêm?"
+    expected_output: [suggest_restock]
+  - name: calc_percent
+    inputs: "Tính giúp tôi 15% của 2.450.000 đồng"
+    expected_output: [calculate]
+  - name: calc_sum
+    inputs: "Cộng 120.000, 85.000 và 40.000 đồng là bao nhiêu?"
+    expected_output: [calculate]
+  - name: calc_margin
+    inputs: "Giá nhập 38.000 đồng, giá bán 55.000 đồng thì lãi bao nhiêu phần trăm?"
+    expected_output: [calculate]
+  - name: calc_split
+    inputs: "Chia 1.200.000 đồng cho 8 người thì mỗi người được bao nhiêu?"
+    expected_output: [calculate]
+  - name: calc_discount
+    inputs: "Giảm 10% cho đơn 680.000 đồng thì còn bao nhiêu?"
+    expected_output: [calculate]
+  - name: calc_chain
+    inputs: "Lấy 300.000 trừ đi 45.000 rồi nhân 4 là bao nhiêu?"
+    expected_output: [calculate]
+  # Both a data read and arithmetic. The model may fold them into one run_code snippet
+  # instead of two native calls; the baseline run decides whether that is a miss worth
+  # recording or a ground truth worth relaxing.
+  - name: combined_sales_plus
+    inputs: "Doanh thu hôm nay cộng thêm 500.000 đồng tiền mặt là bao nhiêu?"
+    expected_output: [calculate, query_shop_data]
+  - name: combined_debts_split
+    inputs: "Tổng nợ khách hiện tại chia đều cho 4 người thì mỗi người bao nhiêu?"
+    expected_output: [calculate, query_shop_data]
+  - name: screen_sales
+    inputs: "Mở màn hình bán hàng giúp tôi"
+    expected_output: [suggest_screen]
+  - name: screen_orders
+    inputs: "Cho tôi xem danh sách đơn hàng"
+    expected_output: [suggest_screen]
+  - name: screen_expenses
+    inputs: "Tôi muốn vào chỗ ghi chi phí"
+    expected_output: [suggest_screen]
+  - name: screen_reports
+    inputs: "Cho tôi vào trang báo cáo"
+    expected_output: [suggest_screen]
+  - name: greet
+    inputs: "Xin chào Bobi"
+    expected_output: []
+  - name: who_are_you
+    inputs: "Bạn là ai vậy?"
+    expected_output: []
+  - name: thanks
+    inputs: "Cảm ơn nhé"
+    expected_output: []
+  - name: greet_morning
+    inputs: "Chào buổi sáng, hôm nay bạn khỏe không?"
+    expected_output: []
+  - name: offscope_weather
+    inputs: "Hôm nay thời tiết Hà Nội thế nào?"
+    expected_output: []
+  - name: offscope_poem
+    inputs: "Viết giúp tôi một bài thơ về mùa xuân"
+    expected_output: []
+  - name: offscope_invest
+    inputs: "Nên mua cổ phiếu nào để lời nhiều nhất?"
+    expected_output: []
+  # The agent has no write tool, so recording a draft must not call one. Left strict on
+  # purpose: shop_agent.py rule 6 asks for a draft plus a note that the owner saves it in
+  # the app, while app_guide.py asks for suggest_screen whenever the reply sends the owner
+  # to a screen, so a reply naming the voice-order screen is defensible here and this case
+  # calls it a miss. Relaxing it, or the prompt, is a product decision, not a metric one.
+  - name: record_draft_no_write
+    inputs: "Ghi giúp tôi đơn mới: 2 ly cà phê sữa, khách trả 50.000 đồng"
+    expected_output: []

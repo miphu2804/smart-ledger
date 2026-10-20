@@ -1841,6 +1841,23 @@ wheels = [
 ]
 
 [[package]]
+name = "pydantic-evals"
+version = "2.55.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "logfire-api" },
+    { name = "pydantic" },
+    { name = "pydantic-ai-slim" },
+    { name = "pyyaml" },
+    { name = "rich" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/73/a8/32f739b8978b3862176a0dbe32ebf1831107b0a75e47f6d334874539572f/pydantic_evals-2.55.0.tar.gz", hash = "sha256:092676e8fc4765a9b921f242d31ebfd9f766b48f94cc0ff0882cb288ea3dddba", size = 91875, upload-time = "2026-10-09T19:40:56.076Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/dc/80/fd87eac335810bf63c8bc975e579fd8c457e69e1c4831576cdf9c7c601fc/pydantic_evals-2.55.0-py3-none-any.whl", hash = "sha256:78e07e9ece6c36e1232c3141537584d402b15d29a82080f50e50ec869719b301", size = 107149, upload-time = "2026-10-09T19:40:43.171Z" },
+]
+
+[[package]]
 name = "pydantic-graph"
 version = "2.55.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2564,6 +2581,8 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "httpx" },
+    { name = "opentelemetry-sdk" },
+    { name = "pydantic-evals" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -2589,6 +2608,8 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "httpx", specifier = ">=0.27" },
+    { name = "opentelemetry-sdk", specifier = ">=1.45.1" },
+    { name = "pydantic-evals", specifier = ">=2.55.0" },
     { name = "pytest", specifier = ">=8.3" },
     { name = "ruff", specifier = ">=0.8" },
 ]
