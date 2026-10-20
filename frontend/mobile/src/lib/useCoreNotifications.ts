@@ -1,8 +1,9 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import type { NotificationView } from '../data/types';
+import type { NotificationType, NotificationView } from '../data/types';
 import { useApp } from '../store/AppStore';
-import { isStockAlert, STOCK_ALERT_TYPES } from './appSettings';
+import { isCategoryEnabled, isNotificationShown } from './appSettings';
+import { CORE_CATEGORY } from './notifications';
 import { errorMessage } from './errors';
 import { MARK_READ_BATCH, notificationApi } from './notificationApi';
 
@@ -16,11 +17,15 @@ const MARK_ALL_MAX_BATCHES = 20;
  * Inbox thông báo của Core, phân trang thật: lần đầu và mỗi lần màn hình được focus tải lại trang đầu (`page=0`), `loadMore` tải
  * trang kế (`page+1`) và nối vào cuối. `unreadCount` đếm trên toàn bộ inbox ở Core, không chỉ các trang đã tải.
  * Dữ liệu dịch chuyển giữa các lần tải (có thông báo mới) có thể làm một thông báo lặp lại ở trang kế nên danh sách được lọc trùng theo ID.
- * Tắt "Cảnh báo sắp hết hàng" ở Cài đặt thì ẩn thông báo kho hàng (`STOCK_ALERT_TYPES`) khỏi danh sách và trừ chúng khỏi
- * `unreadCount` (Core đếm được theo từng loại), nên chuông và màn Thông báo không còn nhắc hàng.
+ * Tắt một nhóm ở Cài đặt thông báo (vd. Kho hàng, Đơn hàng) thì ẩn các loại thông báo Core thuộc nhóm đó khỏi danh sách và trừ
+ * chúng khỏi `unreadCount` (Core đếm được theo từng loại), nên chuông và màn Thông báo không còn nhắc nhóm đó. Thông báo tới
+ * trước lần "Xoá toàn bộ" cũng bị ẩn (lúc xoá đã đánh dấu đọc hết nên không cần trừ khỏi số chưa đọc).
  */
 export function useCoreNotifications(pageSize = NOTIFICATION_PAGE_SIZE) {
-  const hideStock = !useApp().settings.stockAlerts;
+  const { settings, notifClearedAt } = useApp();
+  // Loại thông báo Core của các nhóm đang tắt; chuỗi khoá để chỉ tải lại khi danh sách này đổi
+  const hiddenTypes = (Object.keys(CORE_CATEGORY) as NotificationType[]).filter((t) => !isCategoryEnabled(settings, CORE_CATEGORY[t]));
+  const hiddenKey = hiddenTypes.join(',');
   const [items, setItems] = useState<NotificationView[]>([]);
   const [page, setPage] = useState(-1);
   const [totalPages, setTotalPages] = useState(0);
@@ -41,16 +46,17 @@ export function useCoreNotifications(pageSize = NOTIFICATION_PAGE_SIZE) {
     setError('');
     setMoreError('');
     try {
-      const [first, count, ...stock] = await Promise.all([
+      const hidden = hiddenKey ? (hiddenKey.split(',') as NotificationType[]) : [];
+      const [first, count, ...hiddenCounts] = await Promise.all([
         notificationApi.list({ page: 0, size: pageSize }),
         notificationApi.unreadCount(),
-        ...(hideStock ? STOCK_ALERT_TYPES.map((type) => notificationApi.unreadCount({ type })) : []),
+        ...hidden.map((type) => notificationApi.unreadCount({ type })),
       ]);
       if (mine !== seq.current) return;
       setItems(first.items);
       setPage(first.page);
       setTotalPages(first.totalPages);
-      setUnreadCount(Math.max(0, count.unreadCount - stock.reduce((sum, c) => sum + c.unreadCount, 0)));
+      setUnreadCount(Math.max(0, count.unreadCount - hiddenCounts.reduce((sum, c) => sum + c.unreadCount, 0)));
       hasLoaded.current = true;
     } catch (e) {
       if (mine !== seq.current) return;
@@ -58,7 +64,7 @@ export function useCoreNotifications(pageSize = NOTIFICATION_PAGE_SIZE) {
     } finally {
       if (mine === seq.current) setLoading(false);
     }
-  }, [pageSize, hideStock]);
+  }, [pageSize, hiddenKey]);
 
   useFocusEffect(
     useCallback(() => {
@@ -66,7 +72,10 @@ export function useCoreNotifications(pageSize = NOTIFICATION_PAGE_SIZE) {
     }, [refresh]),
   );
 
-  const hasMore = page + 1 < totalPages;
+  // Danh sách mới nhất trước: thông báo cũ nhất đã tải nằm trước lần "Xoá toàn bộ" thì mọi trang sau cũng đã bị ẩn, khỏi tải thêm
+  const oldestLoaded = items.length ? Date.parse(items[items.length - 1].createdAt) : NaN;
+  const pastCleared = notifClearedAt != null && !Number.isNaN(oldestLoaded) && oldestLoaded <= Date.parse(notifClearedAt);
+  const hasMore = page + 1 < totalPages && !pastCleared;
 
   const loadMore = useCallback(async () => {
     if (busyMore.current || !hasMore) return;
@@ -97,7 +106,7 @@ export function useCoreNotifications(pageSize = NOTIFICATION_PAGE_SIZE) {
    */
   const markRead = useCallback(
     async (ids: number[]) => {
-      const unread = ids.filter((id) => items.some((n) => n.id === id && n.readAt === null && !(hideStock && isStockAlert(n.type))));
+      const unread = ids.filter((id) => items.some((n) => n.id === id && n.readAt === null && !hiddenTypes.includes(n.type)));
       if (!unread.length) return;
       const at = new Date().toISOString();
       setItems((cur) => cur.map((n) => (unread.includes(n.id) && n.readAt === null ? { ...n, readAt: at } : n)));
@@ -110,7 +119,7 @@ export function useCoreNotifications(pageSize = NOTIFICATION_PAGE_SIZE) {
         throw e;
       }
     },
-    [items, refresh, hideStock],
+    [items, refresh, hiddenKey],
   );
 
   /**
@@ -130,7 +139,10 @@ export function useCoreNotifications(pageSize = NOTIFICATION_PAGE_SIZE) {
     }
   }, [refresh]);
 
-  const visible = useMemo(() => (hideStock ? items.filter((n) => !isStockAlert(n.type)) : items), [items, hideStock]);
+  const visible = useMemo(
+    () => items.filter((n) => isNotificationShown({ category: CORE_CATEGORY[n.type], at: n.createdAt }, settings, notifClearedAt)),
+    [items, settings, notifClearedAt],
+  );
 
   return { items: visible, unreadCount, loading, loadingMore, error, moreError, hasMore, refresh, loadMore, markRead, markAllRead };
 }

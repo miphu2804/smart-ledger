@@ -1,75 +1,15 @@
-import { Feather } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { Badge, Button, Card, Header, Screen, T, Toggle } from '../src/components/ui';
+import { StyleSheet } from 'react-native';
+import { SettingRow } from '../src/components/SettingRow';
+import { Button, Card, Header, Screen, T } from '../src/components/ui';
 import { useApp } from '../src/store/AppStore';
 import { colors } from '../src/theme';
 
 /**
- * Mục cài đặt. Có hai loại:
- * - Có công tắc thật (`value`/`onChange`): rung phản hồi và cảnh báo sắp hết hàng, lưu trên máy (`settings` của AppStore).
- *   Chạm cả dòng hay chạm công tắc đều đổi.
- * - `soon`: app chưa có tính năng này (âm thanh, đọc lại đơn, in hoá đơn, sao lưu); làm mờ và ghi "Sắp có", không bấm được.
+ * Cài đặt của app. Rung phản hồi và cảnh báo sắp hết hàng là công tắc thật (lưu trên máy, `settings` của AppStore); cảnh báo
+ * hàng cũng là nhóm Kho hàng ở Cài đặt thông báo. Các mục app chưa có (âm thanh, đọc lại đơn, in hoá đơn, sao lưu) ghi "Sắp có".
  */
-function SettingRow({
-  icon,
-  title,
-  subtitle,
-  soon = false,
-  value = false,
-  onChange,
-}: {
-  icon: React.ComponentProps<typeof Feather>['name'];
-  title: string;
-  subtitle: string;
-  soon?: boolean;
-  value?: boolean;
-  onChange?: (value: boolean) => void;
-}) {
-  const content = (
-    <>
-      <View style={[styles.iconBox, soon && styles.iconBoxSoon]}>
-        <Feather name={icon} size={19} color={soon ? colors.disabled : colors.brand} />
-      </View>
-      <View style={{ flex: 1 }}>
-        <T w="bold" size={15} color={soon ? colors.muted : colors.ink}>
-          {title}
-        </T>
-        <T size={12.5} color={colors.muted} style={{ marginTop: 3 }}>
-          {subtitle}
-        </T>
-      </View>
-    </>
-  );
-  if (soon || !onChange) {
-    return (
-      <View style={[styles.row, styles.rowSoon]} accessible accessibilityLabel={`${title}, sắp có`} aria-disabled>
-        {content}
-        {/* Badge tự canh lên đầu (alignSelf flex-start): bọc lại để nằm giữa dòng như công tắc */}
-        <View style={styles.badgeSlot}>
-          <Badge text="Sắp có" />
-        </View>
-      </View>
-    );
-  }
-  return (
-    <Pressable
-      onPress={() => onChange(!value)}
-      style={({ pressed }) => [styles.row, pressed && { opacity: 0.85 }]}
-      accessibilityRole="switch"
-      accessibilityLabel={title}
-      accessibilityHint={subtitle}
-      aria-checked={value}
-    >
-      {content}
-      {/* Cả dòng đã là công tắc cho trình đọc màn hình: ẩn công tắc con để không đọc hai lần */}
-      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        <Toggle value={value} onChange={onChange} />
-      </View>
-    </Pressable>
-  );
-}
-
 export default function Settings() {
   const { settings, setSetting } = useApp();
   return (
@@ -95,9 +35,15 @@ export default function Settings() {
         Vận hành cửa hàng
       </T>
       <Card style={styles.card}>
-        <SettingRow icon="printer" title="Tự mở in hoá đơn" subtitle="Hiện màn in sau khi lưu đơn thành công" soon />
         <SettingRow
           icon="bell"
+          title="Cài đặt thông báo"
+          subtitle="Chọn nhận thông báo về đơn hàng, kho hàng, công nợ, thu chi"
+          onPress={() => router.push('/notification-settings')}
+        />
+        <SettingRow icon="printer" title="Tự mở in hoá đơn" subtitle="Hiện màn in sau khi lưu đơn thành công" soon />
+        <SettingRow
+          icon="alert-triangle"
           title="Cảnh báo sắp hết hàng"
           subtitle="Nhắc ở Tổng quan và Thông báo khi hàng sắp hết hoặc đã hết"
           value={settings.stockAlerts}
@@ -120,31 +66,5 @@ const styles = StyleSheet.create({
   },
   card: {
     paddingVertical: 4,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    minHeight: 72,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  rowSoon: {
-    opacity: 0.6,
-  },
-  badgeSlot: {
-    alignSelf: 'center',
-  },
-  iconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 13,
-    backgroundColor: colors.brandSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconBoxSoon: {
-    backgroundColor: colors.primarySoft,
   },
 });

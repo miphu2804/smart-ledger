@@ -56,8 +56,10 @@ interface State {
   cart: Record<string, number>;
   draft: Draft | null;
   guideDismissed: boolean;
-  /** id các thông báo đã đọc */
+  /** id các thông báo tính trên máy đã đọc (lưu theo tài khoản ở hồ sơ trên máy) */
   readNotifs: string[];
+  /** Lần "Xoá toàn bộ thông báo" gần nhất (ISO), null là chưa xoá; lưu theo tài khoản ở hồ sơ trên máy */
+  notifClearedAt: string | null;
 }
 
 function initialState(): State {
@@ -80,6 +82,7 @@ function initialState(): State {
     draft: null,
     guideDismissed: true,
     readNotifs: [],
+    notifClearedAt: null,
   };
 }
 
@@ -123,6 +126,8 @@ function definedOnly<T extends Record<string, string | undefined>>(o: T): Partia
 }
 
 let seq = 5000;
+/** Số id thông báo đã đọc giữ lại trong hồ sơ trên máy */
+const READ_NOTIFS_KEPT = 300;
 const uid = (p: string) => `${p}${++seq}`;
 
 function useStoreValue() {
@@ -234,6 +239,8 @@ function useStoreValue() {
       dismissGuide: () => patch(() => ({ guideDismissed: true })),
       /** Mở lại phần giới thiệu ở Tổng quan (mục "Xem lại hướng dẫn" ở tab Quản lý) */
       showGuide: () => patch(() => ({ guideDismissed: false })),
+      /** Ẩn mọi thông báo tới trước `at` (ISO) trên máy này: "Xoá toàn bộ thông báo" khi Core chưa có API xoá */
+      clearNotifications: (at: string) => patch(() => ({ notifClearedAt: at })),
       markNotifsRead: (ids: string[]) =>
         patch((st) => ({ readNotifs: Array.from(new Set([...st.readNotifs, ...ids])) })),
       resetMock: () => setS((prev) => ({ ...initialState(), loggedIn: true, authReady: true, shopId: prev.shopId })),
@@ -392,18 +399,34 @@ function useStoreValue() {
     setActiveShop(s.shopId);
   }, [s.shopId]);
 
+  // Đã đọc / đã xoá thông báo: ghi xuống hồ sơ trên máy của tài khoản, chỉ sau khi đã đọc xong bản đã lưu (không đè bằng
+  // danh sách rỗng lúc mới đăng nhập). Chỉ giữ các id gần nhất để file không phình mãi.
+  const notifLoadedFor = useRef<string | null>(null);
+  useEffect(() => {
+    const id = s.userId;
+    if (!id || notifLoadedFor.current !== id) return;
+    const changed = { readNotifs: s.readNotifs.slice(-READ_NOTIFS_KEPT), ...definedOnly({ notifClearedAt: s.notifClearedAt ?? undefined }) };
+    void loadLocalProfile(id).then((prev) => saveLocalProfile(id, { ...prev, ...changed }));
+  }, [s.userId, s.readNotifs, s.notifClearedAt]);
+
   // Đăng nhập (hoặc khôi phục phiên) xong: phủ phần hồ sơ đã lưu trên máy của tài khoản này lên dữ liệu từ Core
   useEffect(() => {
     userIdRef.current = s.userId;
     if (!s.userId) return;
     let alive = true;
-    void loadLocalProfile(s.userId).then((saved) => {
-      if (!alive || !saved) return;
-      const { name, email, facebook, bankName, bankAccount } = saved;
-      patch((st) => ({
-        user: { ...st.user, ...definedOnly({ name, email, facebook }) },
-        store: { ...st.store, ...definedOnly({ bankName, bankAccount }) },
-      }));
+    const userId = s.userId;
+    void loadLocalProfile(userId).then((saved) => {
+      if (!alive) return;
+      if (saved) {
+        const { name, email, facebook, bankName, bankAccount } = saved;
+        patch((st) => ({
+          user: { ...st.user, ...definedOnly({ name, email, facebook }) },
+          store: { ...st.store, ...definedOnly({ bankName, bankAccount }) },
+          readNotifs: Array.from(new Set([...(saved.readNotifs ?? []), ...st.readNotifs])),
+          notifClearedAt: saved.notifClearedAt ?? st.notifClearedAt,
+        }));
+      }
+      notifLoadedFor.current = userId;
     });
     return () => {
       alive = false;
