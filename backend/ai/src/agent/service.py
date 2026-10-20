@@ -120,7 +120,7 @@ class AgentService:
         self.history_messages = 2 * history_turns
         # The instructions are static so providers can cache them; the shop scope
         # arrives per request through AgentContext and never appears in the prompt.
-        # The current time travels with the new message instead (_with_current_time),
+        # The current time travels with the new message instead (with_current_time),
         # so the instructions and the history both stay a cacheable prefix.
         # Each optional capability adds its own tool and prompt section.
         tools = []
@@ -254,7 +254,7 @@ class AgentService:
         async with (
             self.guardrails.run_limits(),
             self.agent.iter(
-                self._with_current_time(prompt),
+                self.with_current_time(prompt),
                 message_history=self._model_messages(history),
                 deps=context,
                 usage_limits=self.guardrails.usage_limits,
@@ -348,7 +348,7 @@ class AgentService:
         async with (
             self.guardrails.run_limits(),
             self.agent.iter(
-                self._with_current_time(prompt),
+                self.with_current_time(prompt),
                 message_history=self._model_messages(history),
                 deps=context,
                 usage_limits=self.guardrails.usage_limits,
@@ -534,19 +534,21 @@ class AgentService:
         task.add_done_callback(self.memory_writes.discard)
 
     @staticmethod
-    def _current_time() -> str:
+    def current_time() -> str:
         """Lets the model resolve "today" or "last week" without asking."""
         return CURRENT_TIME.format(time=get_time().strftime("%A %Y-%m-%d %H:%M"))
 
     @staticmethod
-    def _with_current_time(prompt: str) -> list[str | CachePoint]:
+    def with_current_time(prompt: str) -> list[str | CachePoint]:
         """The new message, a cache breakpoint, then the current time.
+
+        Public: the eval runs the agent itself and must send the same shape.
 
         The time is never stored, so it comes after the message: the next turn's
         history then repeats this request up to the breakpoint, and the provider
         serves the instructions and the whole history from its cache.
         """
-        return [prompt, CachePoint(), AgentService._current_time()]
+        return [prompt, CachePoint(), AgentService.current_time()]
 
     @staticmethod
     def _model_messages(history: list[dict]) -> list[ModelMessage]:

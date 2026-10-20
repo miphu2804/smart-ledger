@@ -1,0 +1,54 @@
+name: AI eval
+
+# Runs the chatbot eval on a live model, so it costs model calls and never runs on push
+# or pull request. Start it by hand after a change to the AI service.
+on:
+  workflow_dispatch:
+    inputs:
+      models:
+        description: >-
+          Comma-separated api:model entries to evaluate, for example
+          anthropic:claude-haiku-5-5,openai-chat:deepseek-v4.1-flash.
+          Leave blank for the repository's configured MODEL_PROVIDER:MODEL_NAME.
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  eval:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      # A variable, as in ci.yml: the gateway URL is not a secret, and both workflows
+      # have to read it from the same place.
+      OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+    defaults:
+      run:
+        working-directory: backend/ai
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          python-version: "3.11"
+      - run: uv sync --group dev
+      # A blank input means the repository's configured model, which lives in variables.
+      # An unset variable arrives as an empty string, and passing that on would replace
+      # the code default with nothing, so both parts are checked before use. The eval
+      # treats a blank value as "use the configured model" either way.
+      - name: Resolve models
+        id: models
+        env:
+          MODELS: ${{ inputs.models }}
+          MODEL_PROVIDER: ${{ vars.MODEL_PROVIDER }}
+          MODEL_NAME: ${{ vars.MODEL_NAME }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$MODELS" && -n "$MODEL_PROVIDER" && -n "$MODEL_NAME" ]]; then
+            MODELS="$MODEL_PROVIDER:$MODEL_NAME"
+          fi
+          echo "value=$MODELS" >> "$GITHUB_OUTPUT"
+      # The eval installs its own tracer provider, so it needs no Logfire token.
+      - run: uv run python -m evaluation --models "${{ steps.models.outputs.value }}"
