@@ -283,8 +283,8 @@ const FEATURES: { icon: string; title: string; text: string }[] = [
   { icon: 'quet-ma', title: 'Quét mã vạch', text: 'Quét mã vạch hoặc QR bằng camera.' },
   { icon: 'products', title: 'Hàng hoá, tồn kho', text: 'Giá bán, số tồn, cảnh báo sắp hết.' },
   { icon: 'debts', title: 'Công nợ', text: 'Ai còn nợ bao nhiêu, ghi từng lần thu.' },
-  { icon: 'expenses', title: 'Chi phí', text: 'Tiền nhập hàng, điện nước, mặt bằng để tính lãi gộp ước tính.' },
-  { icon: 'reports', title: 'Báo cáo', text: 'Doanh thu, số đơn, giờ bán đông và món bán chạy theo ngày, tuần, tháng.' },
+  { icon: 'expenses', title: 'Chi phí', text: 'Nhập hàng, điện nước, mặt bằng để tính lãi gộp.' },
+  { icon: 'reports', title: 'Báo cáo', text: 'Doanh thu, lãi gộp, món bán chạy theo kỳ.' },
 ]
 
 function Features() {
@@ -318,15 +318,16 @@ function Features() {
             <img src="/brand/bobi-idea.webp" alt="" width={110} height={116} loading="lazy" />
             <div>
               <h3>Trợ lý Bobi</h3>
-              <p>Hỏi bằng lời thường về doanh thu, công nợ, hàng sắp hết. Bobi chỉ đọc số liệu, không tự tạo hay sửa đơn.</p>
+              <p>Hỏi số liệu của tiệm; Bobi chỉ đọc, không sửa đơn.</p>
               <p className="bobi-memory">
                 <BobiMark />
                 <span>
-                  <b>Ghi nhớ dài hạn.</b> Dặn một lần, lần sau Bobi vẫn nhớ.
+                  <b>Ghi nhớ dài hạn:</b> dặn một lần là Bobi nhớ.
                 </span>
               </p>
               <div className="bento-chips">
-                <span>“Ai đang nợ tiệm nhiều nhất?”</span>
+                <span>“Doanh thu tuần này?”</span>
+                <span>“Thứ Hai nhắc nhập hàng”</span>
               </div>
             </div>
           </article>
