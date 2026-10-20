@@ -701,13 +701,7 @@ function AssistantSettingsSheet({
           <T w="bold" size={15} color={colors.ink}>
             {`Trợ lý đang nhớ ${memories.length} điều`}
           </T>
-          {memories.length ? (
-            <MemoryGraph items={memories} onDelete={setDeleting} onOpenSource={onOpenSource} />
-          ) : (
-            <T size={12.5} color={colors.muted} style={{ marginTop: 3 }}>
-              Chưa có ghi nhớ nào. Trợ lý sẽ nhớ dần khi bạn trò chuyện.
-            </T>
-          )}
+          <MemoryGraph items={memories} onDelete={setDeleting} onOpenSource={onOpenSource} />
         </View>
       ) : null}
       <Dialog

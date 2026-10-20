@@ -147,7 +147,8 @@ export function MemoryGraph({
           </Animated.View>
         ) : (
           <T size={12.5} color={colors.muted}>
-            Chạm một chấm trên bản đồ để xem và xoá ghi nhớ.
+            {/* Chưa có ghi nhớ thì bản đồ vẫn giữ nguyên cỡ, chỉ trống chấm, để khung cài đặt không đổi bố cục khi có ghi nhớ đầu tiên */}
+            {items.length ? 'Chạm một chấm trên bản đồ để xem và xoá ghi nhớ.' : 'Chưa có ghi nhớ nào. Trợ lý sẽ nhớ dần khi bạn trò chuyện.'}
           </T>
         )}
       </View>
