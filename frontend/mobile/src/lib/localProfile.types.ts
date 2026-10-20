@@ -8,6 +8,10 @@ export interface LocalProfile {
   facebook?: string;
   bankName?: string;
   bankAccount?: string;
+  /** id các thông báo tính trên máy đã đọc (đơn mới, công nợ, thu chi); chỉ giữ các id gần nhất */
+  readNotifs?: string[];
+  /** Lần "Xoá toàn bộ thông báo" gần nhất (ISO): thông báo tới trước mốc này không hiện nữa trên máy này */
+  notifClearedAt?: string;
 }
 
 /** Tên file/khoá an toàn từ id tài khoản của Core. */
