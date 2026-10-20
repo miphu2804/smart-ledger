@@ -53,11 +53,9 @@ export function useScrollProgress() {
           const active = Math.round(held * (track.children.length - 1))
           el.dataset.active = String(active)
           el.style.setProperty('--a', String(active))
-          // Bố cục điện thoại (tiêu đề thu, máy to ra) đổi một lần khi qua mốc này thay vì liên tục theo --p,
-          // nên cuộn không bắt trình duyệt tính lại layout ở mỗi khung hình
-          const settled = p > 0.05 ? '1' : '0'
-          if (el.dataset.settled !== settled || !el.style.getPropertyValue('--shift')) {
-            el.dataset.settled = settled
+          // Điện thoại: tiêu đề nhường chỗ cho dòng tính năng khi qua mốc này (CSS chỉ đổi độ mờ, không đổi bố cục)
+          el.dataset.settled = p > 0.05 ? '1' : '0'
+          if (!el.style.getPropertyValue('--shift')) {
             remeasure.push([el, track])
           }
         }

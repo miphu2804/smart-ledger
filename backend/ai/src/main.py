@@ -69,10 +69,11 @@ def build_calculation() -> CalculationService | None:
     )
 
 
-# Tools the sandbox folds in, by name. Unregistered names match nothing, so this
-# list is safe to hand to Sandbox with any tool set: with the reader URL unset the
-# model gets a run_code tool with no data functions in it.
-SANDBOX_TOOLS = ("query_shop_data", "suggest_restock")
+# Tools the sandbox folds in, by name. A folded tool leaves the model-facing list, so
+# every call to it starts Monty. The data tools are read-only (one SELECT on the shop's
+# own views, a restock read), so folding them sent every safe data question through the
+# sandbox; they stay native and only model-written code runs in Monty.
+SANDBOX_TOOLS: tuple[str, ...] = ()
 
 # Pure in-process tools that stay callable past the per-turn tool-call guardrail:
 # the calculation prompt sends every sum through calculate, so sharing the data

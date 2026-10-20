@@ -26,13 +26,11 @@ from src.prompt_templates.memory import (
 from src.prompt_templates.restock import (
     RESTOCK_PROMPT,
     RESTOCK_RESULT_HEADER,
-    RESTOCK_SANDBOX_PROMPT,
 )
 from src.prompt_templates.shop_agent import CURRENT_TIME, SHOP_AGENT_SYSTEM_PROMPT
 from src.prompt_templates.sql_agent import (
     QUERY_RESULT_HEADER,
     SQL_AGENT_PROMPT,
-    SQL_SANDBOX_PROMPT,
 )
 
 __all__ = [
@@ -56,9 +54,7 @@ __all__ = [
     "QUERY_RESULT_HEADER",
     "RESTOCK_PROMPT",
     "RESTOCK_RESULT_HEADER",
-    "RESTOCK_SANDBOX_PROMPT",
     "RUN_CODE_PROMPT",
     "SHOP_AGENT_SYSTEM_PROMPT",
     "SQL_AGENT_PROMPT",
-    "SQL_SANDBOX_PROMPT",
 ]

@@ -138,7 +138,7 @@ export function buildLocalNotifications(data: LocalNotificationData, now = new D
   return list.sort((a, b) => b.at.localeCompare(a.at));
 }
 
-const CORE_CATEGORY: Record<NotificationType, NotifCategory> = {
+export const CORE_CATEGORY: Record<NotificationType, NotifCategory> = {
   LOW_STOCK: 'stock',
   OUT_OF_STOCK: 'stock',
   SALE_VOIDED: 'order',

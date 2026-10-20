@@ -33,6 +33,7 @@ const SHOT = {
   pos: { src: '/screens/pos.webp', alt: 'Màn Bán hàng: chọn hàng có ảnh, lọc và sắp xếp' },
   scan: { src: '/screens/scan.webp', alt: 'Màn Quét mã vạch: đưa mã sản phẩm vào khung camera để thêm vào đơn', lightStatus: true },
   checkout: { src: '/screens/checkout.webp', alt: 'Màn Thanh toán: danh sách món, hình thức tiền mặt, chuyển khoản hoặc ghi nợ' },
+  debts: { src: '/screens/debts.webp', alt: 'Màn Công nợ: tổng còn nợ, khách đang nợ và từng đơn chưa trả' },
   orders: { src: '/screens/orders.webp', alt: 'Màn Đơn hàng: các đơn theo ngày, lọc hôm nay, hôm qua, 7 ngày' },
   products: { src: '/screens/products.webp', alt: 'Màn Hàng hoá: giá bán, tồn kho, hàng sắp hết' },
   reports: { src: '/screens/reports.webp', alt: 'Màn Báo cáo: doanh thu tuần, biểu đồ theo ngày, thu chi và lãi gộp ước tính' },
@@ -212,22 +213,23 @@ function Hero() {
       </div>
 
       <div className="hero-stage" aria-label="Ảnh ứng dụng Sổ Nghe Lời">
+        {/* Mỗi thẻ nổi nằm trên máy có nội dung khớp: câu nói trên màn Đọc đơn, doanh thu trên màn Báo cáo */}
         <div className="hero-side is-left">
           <PhoneFrame {...SHOT.voice} eager />
-        </div>
-        <div className="hero-main">
-          <PhoneFrame {...SHOT.home} eager />
           <span className="hero-bubble">
             <Mic size={16} /> “{VOICE_SAMPLE}”
           </span>
-          <span className="hero-result">
-            <span>Đơn nháp · 4 món</span>
-            <b>80.000đ</b>
-          </span>
+        </div>
+        <div className="hero-main">
+          <PhoneFrame {...SHOT.home} eager />
           <img className="hero-bobi" src="/brand/bobi-notebook.webp" alt="" width={360} height={345} />
         </div>
         <div className="hero-side is-right">
           <PhoneFrame {...SHOT.reports} eager />
+          <span className="hero-result">
+            <span>Doanh thu tuần này</span>
+            <b>772.000đ</b>
+          </span>
         </div>
       </div>
     </section>
@@ -237,10 +239,10 @@ function Hero() {
 /* ------------------------------------------------------------------ */
 
 const STATEMENT =
-  'Phần lớn quán nước, xe trái cây, sạp chợ vẫn ghi sổ tay, hoặc không ghi gì cả. Không phải vì lười, mà vì chưa có cách nào đủ nhanh.'
+  'Từ quán cà phê mang đi, tiệm trà sữa đến xe trái cây, sạp chợ, nhiều nơi vẫn ghi sổ tay, ghi chú điện thoại, hoặc không ghi gì cả. Không phải vì lười, mà vì chưa có cách nào đủ nhanh.'
 
 const PAINS = [
-  { title: 'Ghi sổ tay', text: 'Đông khách thì ghi vội. Tối cộng lại mới thấy lệch tiền.', fix: 'Mỗi đơn lưu kèm giờ bán, tổng tiền tự cộng.' },
+  { title: 'Ghi sổ tay, ghi chú rời', text: 'Đông khách thì ghi vội vào sổ hay ghi chú điện thoại. Tối cộng lại mới thấy lệch tiền.', fix: 'Mỗi đơn lưu kèm giờ bán, tổng tiền tự cộng.' },
   { title: 'Nhớ bằng đầu', text: 'Bán lẻ từng món nhỏ, “để lát nhớ”, hết ngày quên phân nửa.', fix: 'Nói một câu, không cần dừng tay.' },
   { title: 'Nhập hàng cảm tính', text: 'Món đắt hết sớm, món ế tồn lại, tiền nằm chết trong kho.', fix: 'Món bán chạy và hàng sắp hết hiện ngay ở Tổng quan.' },
 ]
@@ -276,13 +278,13 @@ function Statement() {
 
 /* ------------------------------------------------------------------ */
 
-const FEATURES: { icon: string; title: string; text: string; size?: 'wide' }[] = [
+const FEATURES: { icon: string; title: string; text: string }[] = [
   { icon: 'chon-hang', title: 'Chọn hàng nhanh', text: 'Lưới hàng có ảnh, chạm là thêm vào đơn.' },
   { icon: 'quet-ma', title: 'Quét mã vạch', text: 'Quét mã vạch hoặc QR bằng camera.' },
   { icon: 'products', title: 'Hàng hoá, tồn kho', text: 'Giá bán, số tồn, cảnh báo sắp hết.' },
   { icon: 'debts', title: 'Công nợ', text: 'Ai còn nợ bao nhiêu, ghi từng lần thu.' },
-  { icon: 'expenses', title: 'Chi phí', text: 'Tiền nhập hàng, điện nước, mặt bằng để tính lãi gộp ước tính.', size: 'wide' },
-  { icon: 'reports', title: 'Báo cáo', text: 'Doanh thu, số đơn, giờ bán đông và món bán chạy theo ngày, tuần, tháng.', size: 'wide' },
+  { icon: 'expenses', title: 'Chi phí', text: 'Nhập hàng, điện nước, mặt bằng để tính lãi gộp.' },
+  { icon: 'reports', title: 'Báo cáo', text: 'Doanh thu, lãi gộp, món bán chạy theo kỳ.' },
 ]
 
 function Features() {
@@ -294,6 +296,7 @@ function Features() {
           <br />
           <span className="is-muted">Không thừa một nút.</span>
         </h2>
+        {/* Cột trái: tính năng AI (đọc đơn, Bobi); cột phải: các tính năng sổ sách */}
         <div className="bento">
           <article className="bento-tile is-hero" data-reveal>
             <img src="/brand/icons/doc-don.webp" alt="" width={96} height={96} loading="lazy" />
@@ -305,27 +308,26 @@ function Features() {
             </div>
           </article>
           {FEATURES.map((f, i) => (
-            <article key={f.title} className={`bento-tile${f.size ? ` is-${f.size}` : ''}`} data-reveal style={delay(i % 4)}>
+            <article key={f.title} className="bento-tile" data-reveal style={delay(i % 4)}>
               <img src={`/brand/icons/${f.icon}.webp`} alt="" width={56} height={56} loading="lazy" />
               <h3>{f.title}</h3>
               <p>{f.text}</p>
             </article>
           ))}
-          <article className="bento-tile is-full" data-reveal>
+          <article className="bento-tile is-ai" data-reveal>
             <img src="/brand/bobi-idea.webp" alt="" width={110} height={116} loading="lazy" />
             <div>
               <h3>Trợ lý Bobi</h3>
-              <p>Hỏi bằng lời thường về doanh thu, công nợ, hàng sắp hết. Bobi chỉ đọc số liệu của tiệm, không tự tạo hay sửa đơn.</p>
+              <p>Hỏi số liệu của tiệm; Bobi chỉ đọc, không sửa đơn.</p>
               <p className="bobi-memory">
                 <BobiMark />
                 <span>
-                  <b>Ghi nhớ dài hạn.</b> Dặn một lần, như chốt sổ theo tuần hay nhập hàng thứ Hai, lần sau Bobi vẫn nhớ.
+                  <b>Ghi nhớ dài hạn:</b> dặn một lần là Bobi nhớ.
                 </span>
               </p>
               <div className="bento-chips">
-                <span>“Doanh thu 7 ngày qua?”</span>
-                <span>“Ai đang nợ tiệm nhiều nhất?”</span>
-                <span>“Gợi ý nhập hàng”</span>
+                <span>“Doanh thu tuần này?”</span>
+                <span>“Thứ Hai nhắc nhập hàng”</span>
               </div>
             </div>
           </article>
@@ -352,13 +354,10 @@ function BobiMark() {
 
 /** Mỗi màn là một tính năng; màn nằm giữa dòng chữ tiêu đề khi cuộn thì phần giới thiệu bên dưới đổi theo. */
 const SCREENS: { shot: Shot; title: string; text: string; bobi?: boolean }[] = [
-  { shot: SHOT.home, title: 'Tổng quan', text: 'Doanh thu kỳ này và bốn cách lên đơn: đọc đơn, chọn hàng, quét mã, hỏi trợ lý AI.' },
   { shot: SHOT.voice, title: 'Đọc đơn bằng giọng nói', text: 'Nhấn giữ nút ghi âm và đọc đơn, hoặc gõ khi quán ồn. Ứng dụng tách món, số lượng và giá.' },
-  { shot: SHOT.pos, title: 'Bán hàng', text: 'Chọn hàng có ảnh, lọc theo nhóm, sắp xếp theo tên hoặc tồn kho; chạm là thêm vào đơn.' },
-  { shot: SHOT.scan, title: 'Quét mã vạch', text: 'Đưa mã sản phẩm vào camera, hàng có sẵn trong danh mục sẽ tự thêm vào đơn.' },
-  { shot: SHOT.checkout, title: 'Thanh toán', text: 'Sửa số lượng nếu cần, chọn tiền mặt, chuyển khoản (chỉ ghi nhận) hoặc ghi nợ. Đơn vào sổ khi bạn bấm Hoàn tất.' },
   { shot: SHOT.orders, title: 'Đơn hàng', text: 'Mỗi đơn lưu kèm giờ bán; lọc nhanh theo hôm nay, hôm qua hoặc 7 ngày.' },
-  { shot: SHOT.products, title: 'Hàng hoá', text: 'Giá bán, số tồn và cảnh báo hàng sắp hết.' },
+  { shot: SHOT.pos, title: 'Bán hàng', text: 'Chọn hàng có ảnh, lọc theo nhóm, sắp xếp theo tên hoặc tồn kho; chạm là thêm vào đơn.' },
+  { shot: SHOT.debts, title: 'Công nợ', text: 'Ghi nợ khi thanh toán; xem ai còn nợ bao nhiêu, từ hôm nào và ghi từng lần thu.' },
   { shot: SHOT.reports, title: 'Báo cáo', text: 'Doanh thu, số đơn, lãi gộp ước tính và món bán chạy theo ngày, tuần, tháng.' },
   { shot: SHOT.bobiRecall, bobi: true, title: 'Bobi nhớ cách bạn làm', text: 'Bạn dặn một lần, lần sau Bobi vẫn nhớ. Mở "ghi nhớ" để xem nhớ từ hôm nào.' },
 ]
@@ -370,33 +369,64 @@ const SCREENS: { shot: Shot; title: string; text: string; bobi?: boolean }[] = [
 function Gallery() {
   const sectionRef = useRef<HTMLElement>(null)
 
-  // Vuốt ngang trên dải máy sang màn trước hoặc sau: cuộn trang tới mốc tiến độ của màn đó, nên dải chạy như khi cuộn
   useEffect(() => {
     const section = sectionRef.current
     const viewport = section?.querySelector<HTMLElement>('.gallery-viewport')
     if (!section || !viewport) return
+
+    // Vuốt ngang trên dải máy sang màn trước hoặc sau: cuộn trang tới mốc tiến độ của màn đó, nên dải chạy như khi cuộn
     let startX = 0
     let startY = 0
     const onTouchStart = (e: TouchEvent) => {
       startX = e.touches[0].clientX
       startY = e.touches[0].clientY
     }
-    const onTouchEnd = (e: TouchEvent) => {
-      const dx = e.changedTouches[0].clientX - startX
-      const dy = e.changedTouches[0].clientY - startY
-      if (Math.abs(dx) < 40 || Math.abs(dx) < 1.5 * Math.abs(dy)) return
+    // Sang màn trước hoặc sau: cuộn trang tới mốc tiến độ ở giữa màn đó, khớp với cách useScrollProgress tính `data-active`
+    const step = (dir: 1 | -1) => {
       const last = SCREENS.length - 1
-      const next = Math.min(last, Math.max(0, Number(section.dataset.active) + (dx < 0 ? 1 : -1)))
-      // Mốc tiến độ ở giữa màn `next`, khớp với cách useScrollProgress tính `data-active`
+      const next = Math.min(last, Math.max(0, Number(section.dataset.active) + dir))
       const p = 0.06 + (0.88 * next) / last
       const top = section.getBoundingClientRect().top + window.scrollY
       window.scrollTo({ top: top + p * (section.offsetHeight - (section.firstElementChild?.clientHeight ?? window.innerHeight)), behavior: 'smooth' })
     }
+    const onTouchEnd = (e: TouchEvent) => {
+      const dx = e.changedTouches[0].clientX - startX
+      const dy = e.changedTouches[0].clientY - startY
+      if (Math.abs(dx) < 40 || Math.abs(dx) < 1.5 * Math.abs(dy)) return
+      step(dx < 0 ? 1 : -1)
+    }
+    // Vuốt ngang hai ngón trên trackpad: mỗi cú vuốt sang đúng một màn. Cú vuốt kết thúc khi ngừng nhận sự kiện 200ms,
+    // nên đuôi quán tính của macOS (vẫn bắn deltaX cùng chiều thêm ~1s) không cộng vào cú vuốt ngược sau đó
+    let wheelX = 0
+    let fired = false
+    let idle = 0
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return
+      e.preventDefault()
+      window.clearTimeout(idle)
+      idle = window.setTimeout(() => {
+        wheelX = 0
+        fired = false
+      }, 200)
+      // Quán tính không bao giờ đổi chiều, nên deltaX ngược dấu là cú vuốt mới
+      if (wheelX !== 0 && Math.sign(e.deltaX) !== Math.sign(wheelX)) {
+        wheelX = 0
+        fired = false
+      }
+      if (fired) return
+      wheelX += e.deltaX
+      if (Math.abs(wheelX) < 40) return
+      step(wheelX > 0 ? 1 : -1)
+      fired = true
+    }
     viewport.addEventListener('touchstart', onTouchStart, { passive: true })
     viewport.addEventListener('touchend', onTouchEnd, { passive: true })
+    viewport.addEventListener('wheel', onWheel, { passive: false })
     return () => {
       viewport.removeEventListener('touchstart', onTouchStart)
       viewport.removeEventListener('touchend', onTouchEnd)
+      viewport.removeEventListener('wheel', onWheel)
+      window.clearTimeout(idle)
     }
   }, [])
 
@@ -407,7 +437,7 @@ function Gallery() {
           <h2 className="lp-display">
             Gọn trong một chiếc điện thoại.
             <br />
-            <span className="is-muted">Chữ to, nút lớn, cho người đang bận tay.</span>
+            <span className="is-muted">Ít bước, dễ nhìn, dùng được cả khi đang bận tay.</span>
           </h2>
           <ol className="gallery-intro" aria-live="polite">
             {SCREENS.map((s, i) => (
@@ -448,7 +478,7 @@ const COMPARE: { label: string; us: Cell; pos: Cell }[] = [
   { label: 'Thiết bị cần có', us: { text: 'Điện thoại sẵn có', mark: 'yes' }, pos: { text: 'Thường kèm máy POS, máy quét, máy in' } },
   { label: 'Báo cáo', us: { text: 'Ngắn gọn: doanh thu, lãi gộp ước tính, bán chạy' }, pos: { text: 'Rất nhiều báo cáo chuyên sâu', mark: 'yes' } },
   { label: 'Kế toán, hoá đơn điện tử, chuỗi cửa hàng', us: { text: 'Chưa hỗ trợ', mark: 'no' }, pos: { text: 'Hỗ trợ đầy đủ', mark: 'yes' } },
-  { label: 'Phù hợp nhất với', us: { text: 'Quán nước, xe đẩy, sạp chợ, tạp hoá nhỏ' }, pos: { text: 'Cửa hàng vừa và lớn, chuỗi, doanh nghiệp' } },
+  { label: 'Phù hợp nhất với', us: { text: 'Quán nước, tiệm trà sữa, xe đẩy, sạp chợ, tạp hoá nhỏ' }, pos: { text: 'Cửa hàng vừa và lớn, chuỗi, doanh nghiệp' } },
 ]
 
 function Mark({ m }: { m?: Cell['mark'] }) {

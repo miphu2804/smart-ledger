@@ -701,13 +701,7 @@ function AssistantSettingsSheet({
           <T w="bold" size={15} color={colors.ink}>
             {`Trợ lý đang nhớ ${memories.length} điều`}
           </T>
-          {memories.length ? (
-            <MemoryGraph items={memories} onDelete={setDeleting} onOpenSource={onOpenSource} />
-          ) : (
-            <T size={12.5} color={colors.muted} style={{ marginTop: 3 }}>
-              Chưa có ghi nhớ nào. Trợ lý sẽ nhớ dần khi bạn trò chuyện.
-            </T>
-          )}
+          <MemoryGraph items={memories} onDelete={setDeleting} onOpenSource={onOpenSource} />
         </View>
       ) : null}
       <Dialog
@@ -850,6 +844,8 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 40,
     paddingHorizontal: 10,
+    // Android tự đệm trên dưới cho TextInput, làm ô cao cố định cắt mất dấu tiếng Việt phía trên; bỏ đệm dọc
+    paddingVertical: 0,
     fontFamily: font.medium,
     fontSize: 13.5,
     color: colors.ink,

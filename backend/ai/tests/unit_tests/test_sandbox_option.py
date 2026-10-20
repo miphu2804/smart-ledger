@@ -1,25 +1,26 @@
 """The sandbox option: the wrapper, its injection into the agent, and what the model
 sees when it is on or off. Independent of the calculation service: each option is
-injected on its own, and the sandbox folds only the tool names it is given."""
+injected on its own. With the production tool list the read-only data tools stay
+native, so only model-written code runs in the sandbox."""
 
 import pytest
-from pydantic_ai.messages import ModelResponse, ToolCallPart
+from pydantic_ai.messages import ModelResponse, ToolCallPart, ToolReturnPart
 from tests.support import TEST_GUARDRAIL_LIMITS, ScriptedModel
 
 from src.agent.service import AgentService
 from src.calculation.service import CalculationLimits, CalculationService
+from src.main import SANDBOX_TOOLS
 from src.prompt_templates import (
     CALC_PROMPT,
     RUN_CODE_PROMPT,
     SQL_AGENT_PROMPT,
-    SQL_SANDBOX_PROMPT,
 )
 from src.sandbox.wrapper import Sandbox, SandboxLimits
 
 pytestmark = pytest.mark.anyio
 
 LIMITS = SandboxLimits(
-    tools=("query_shop_data",),
+    tools=SANDBOX_TOOLS,
     max_memory_bytes=64 * 1024 * 1024,
     max_duration_secs=5.0,
     max_tool_calls=10,
@@ -62,14 +63,34 @@ async def chat(model, **kwargs) -> str:
     return (await agent.chat(user_id=3, shop_id=15, message="compute")).answer
 
 
-async def test_agent_offers_run_code_and_folds_the_given_tools() -> None:
+async def test_agent_offers_run_code_and_keeps_the_data_tools_native() -> None:
     model = ScriptedModel("ok")
     await chat(model, sandbox=Sandbox(LIMITS))
 
     names = model.tool_names(0)
     assert "run_code" in names
-    # The folded tool leaves the model-facing list; it is callable from code only.
-    assert "query_shop_data" not in names
+    # The read-only data tool is not folded, so calling it never starts Monty.
+    assert "query_shop_data" in names
+
+
+async def test_a_read_only_data_question_never_enters_the_sandbox() -> None:
+    model = ScriptedModel(
+        ModelResponse(
+            parts=[ToolCallPart("query_shop_data", {"sql": "SELECT selling_price_vnd"})]
+        ),
+        "Revenue is 30000.",
+    )
+    assert await chat(model, sandbox=Sandbox(LIMITS)) == "Revenue is 30000."
+    # The call ran as a native tool: its result came straight back, not a retry for
+    # an unknown tool, and the model never had to write run_code.
+    returns = [
+        part
+        for message in model.requests[1][0]
+        for part in getattr(message, "parts", [])
+        if isinstance(part, ToolReturnPart)
+    ]
+    assert [part.tool_name for part in returns] == ["query_shop_data"]
+    assert "20000" in returns[0].content
 
 
 async def test_agent_without_the_sandbox_keeps_the_data_tools_native() -> None:
@@ -96,11 +117,9 @@ async def test_the_sandbox_prompt_names_the_run_code_path() -> None:
     await chat(model, sandbox=Sandbox(LIMITS))
 
     instructions = model.requests[0][1].instructions
-    # The folded tools are not offered directly, so the sandbox-on prompt names the
-    # program path and the sandbox-off prompt is gone.
+    # The data tools stay native, so the direct-call SQL prompt stays too.
     assert RUN_CODE_PROMPT in instructions
-    assert SQL_SANDBOX_PROMPT in instructions
-    assert SQL_AGENT_PROMPT not in instructions
+    assert SQL_AGENT_PROMPT in instructions
 
 
 async def test_without_the_sandbox_the_sql_prompt_names_the_direct_tool() -> None:
@@ -109,7 +128,6 @@ async def test_without_the_sandbox_the_sql_prompt_names_the_direct_tool() -> Non
 
     instructions = model.requests[0][1].instructions
     assert SQL_AGENT_PROMPT in instructions
-    assert SQL_SANDBOX_PROMPT not in instructions
     # No run_code guidance for a tool that is not registered.
     assert RUN_CODE_PROMPT not in instructions
 
@@ -125,16 +143,8 @@ async def test_agent_with_calculation_adds_the_tool_and_prompt() -> None:
     assert CALC_PROMPT in model.requests[0][1].instructions
 
 
-async def test_run_code_computes_over_a_folded_tool_result() -> None:
-    code = "\n".join(
-        [
-            "raw = await query_shop_data(sql='SELECT selling_price_vnd')",
-            "import json",
-            "rows = json.loads(raw.splitlines()[1])['rows']",
-            "result = sum(row[0] for row in rows) * 2",
-            "result",
-        ]
-    )
+async def test_model_written_code_still_runs_in_the_sandbox() -> None:
+    code = "prices = [10000, 20000]\nsum(p * 2 for p in prices)"
     model = ScriptedModel(run_code_call(code), "The doubled revenue is 60000.")
 
     assert await chat(model, sandbox=Sandbox(LIMITS)) == "The doubled revenue is 60000."
