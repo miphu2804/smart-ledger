@@ -73,7 +73,7 @@ Giao diện theo app mobile mới: tím thương hiệu `#482AAC`, nền kem `#F
 
 | Đường dẫn | Nguồn |
 | --- | --- |
-| `screens/{home,voice,checkout,orders,pos,reports,products}.webp` | Ảnh chụp app mobile ở chế độ mock (`EXPO_PUBLIC_USE_MOCK=true`), chụp toàn màn hình trên iOS Simulator iPhone 17 Pro Max (440×956 pt), xuất 660×1434. Đã xoá thanh trạng thái (giờ, sóng, pin, Dynamic Island). Dữ liệu trong ảnh là dữ liệu mẫu; ẩn mascot nổi khi chụp để không đè nội dung |
+| `screens/{home,voice,checkout,orders,pos,reports,products,debts}.webp` | Ảnh chụp app mobile ở chế độ mock (`EXPO_PUBLIC_USE_MOCK=true`), chụp toàn màn hình trên iOS Simulator iPhone 17 Pro Max (440×956 pt), xuất 660×1434. Đã xoá thanh trạng thái (giờ, sóng, pin, Dynamic Island). Dữ liệu trong ảnh là dữ liệu mẫu; ẩn mascot nổi khi chụp để không đè nội dung. Riêng `debts.webp` chụp từ bản web mock (`npm run web` trong `../mobile`, khung 440×956, chừa 62 pt trên cho thanh trạng thái) |
 | `brand/logo.webp`, `favicon.png`, `apple-touch-icon.png` | `frontend/mobile/assets/brand-logo.png` (icon của app) |
 | `brand/robot.webp`, `brand/agent-*.webp` | `frontend/mobile/assets/bubblelogo.png`, `assets/voice/agent-*.png` |
 | `brand/icons/*.webp` | Icon 3D trong `frontend/mobile/assets/tab1-overview` và `tab4-management` |
