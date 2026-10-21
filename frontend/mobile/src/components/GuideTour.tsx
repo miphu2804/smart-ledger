@@ -60,7 +60,10 @@ export function GuideTourProvider({
   return (
     <GuideContext.Provider value={registry}>
       <View style={styles.root}>
-        {children}
+        {/* Hướng dẫn mở thì ẩn nội dung nền khỏi TalkBack: `accessibilityViewIsModal` của lớp phủ chỉ có tác dụng trên iOS */}
+        <View style={styles.content} importantForAccessibility={active ? 'no-hide-descendants' : 'auto'}>
+          {children}
+        </View>
         {active ? <GuideOverlay nodes={nodes} onFinish={onFinish} userName={userName} /> : null}
       </View>
     </GuideContext.Provider>
@@ -312,6 +315,7 @@ const DIM = 'rgba(17, 12, 38, 0.72)';
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  content: { flex: 1 },
   // Trên menu chuyển nhanh (200), thanh tab (40) và mascot (10)
   layer: { zIndex: 300, elevation: 40 },
   dim: { position: 'absolute', backgroundColor: DIM },
