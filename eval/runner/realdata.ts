@@ -42,8 +42,8 @@ const REPORTS = join(REPO, 'eval/reports');
 /**
  * Below this many lines the runner refuses to fit the gate.
  *
- * `tuneGateRules` grid-searches three thresholds and picks whatever maximises
- * silent answers on the lines it is given. On a handful of lines that search has
+ * `tuneGateRules` grid-searches three thresholds and picks whatever answers the
+ * most in-catalog lines on the lines it is given. On a handful of lines that search has
  * nothing to constrain it: a five-line example in this repository produced
  * `sFloor -0.01`, a floor below every score, which turned a product the shop does
  * not sell into an `ASK` instead of the `NEW` it should be. A report whose gate

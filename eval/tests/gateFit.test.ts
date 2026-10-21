@@ -50,6 +50,10 @@ describe('gateFit: scoreRules', () => {
     assert.equal(score.correctAutos, 1);
     assert.equal(score.askRate, 1 / 5);
     assert.equal(score.far, 1 / 5);
+    // One refusal on an in-catalog line and one ask: both leave the line
+    // unanswered. The refusal on the out-of-catalog line costs nothing.
+    assert.equal(score.newsInCatalog, 1);
+    assert.equal(score.unansweredRate, 2 / 5);
   });
 
   it('sends a line under the score floor to NEW rather than ASK', () => {
@@ -80,7 +84,8 @@ describe('gateFit: scoreRules', () => {
     assert.deepEqual(scoreRules([], RULES), {
       askRate: 0,
       newRate: 0,
-      nonAutoRate: 0,
+      newsInCatalog: 0,
+      unansweredRate: 0,
       far: 0,
       autos: 0,
       wrongAutos: 0,
@@ -98,29 +103,39 @@ describe('gateFit: tuneGateRules', () => {
     wrong(0.2),
   ];
 
-  it('answers as many lines as possible inside the false-auto budget', () => {
+  it('answers as many in-catalog lines as possible inside the false-auto budget', () => {
     const tuned = tuneGateRules(lines, { farMax: 0.25 });
     assert.ok(tuned.score.far <= 0.25, `far ${tuned.score.far}`);
-    // The budget affords exactly one wrong auto, so the tuner spends it on the
-    // third line and answers the first two silently; the two low-score lines are
-    // asked about rather than declared NEW, because nothing here is below the
-    // noise floor.
+    // The budget affords exactly one wrong auto, and spending it on the third
+    // line buys three silent answers instead of two. The out-of-catalog line is
+    // refused rather than written, which costs nothing; the in-catalog line
+    // between the floor and the auto threshold is asked about, which costs a
+    // full share.
     assert.equal(tuned.score.autos, 3);
-    assert.equal(tuned.score.askRate, 0.4);
-    assert.equal(tuned.score.newRate, 0);
+    assert.equal(tuned.score.newRate, 0.2);
+    assert.equal(tuned.score.unansweredRate, 0.2);
   });
 
-  it('does not dodge into NEW when auto-applying is achievable', () => {
-    // The objective used to be the ask rate alone, which made NEW a free way to
-    // dodge: a gate that answered NEW to everything had zero asks and zero
-    // false autos, so the search returned it and the row resolved nothing while
-    // reporting FAR 0. NEW is a failure to answer as much as an ask is.
+  it('answers every in-catalog line and refuses the one that is not in the catalog', () => {
+    // The objective used to count every refusal as a failure to answer, which
+    // made writing an out-of-catalog line look like an improvement even though
+    // such an auto is always wrong. A refusal there is the right answer, so the
+    // tuner leaves it alone and spends nothing on it.
     const obvious = [right(0.9), right(0.9), right(0.9), right(0.9), outOfCatalog(0.05)];
     const tuned = tuneGateRules(obvious, { farMax: 0.2 });
-    // The budget tolerates one wrong auto, and the objective spends it: five
-    // answers with one mistake beats four answers with none.
-    assert.ok(tuned.score.far <= 0.2, `far ${tuned.score.far}`);
-    assert.equal(tuned.score.autos, 5, 'the tuner chose silence over answering');
+    assert.equal(tuned.score.unansweredRate, 0, 'every in-catalog line got an answer');
+    assert.equal(tuned.score.autos, 4);
+    assert.equal(tuned.score.wrongAutos, 0);
+    assert.equal(tuned.score.newRate, 0.2, 'the out-of-catalog line is refused, not written');
+  });
+
+  it('charges a refusal only when the item was in the catalog', () => {
+    // Both lines sit below the floor, so both are refused. Only the in-catalog
+    // one is a failure to answer.
+    const score = scoreRules([right(0.1), outOfCatalog(0.1)], { sFloor: 0.5, sAuto: 0.9, mMin: 0 });
+    assert.equal(score.newRate, 1);
+    assert.equal(score.newsInCatalog, 1);
+    assert.equal(score.unansweredRate, 0.5);
   });
 
   it('prefers an ask over a NEW when both cost the same', () => {

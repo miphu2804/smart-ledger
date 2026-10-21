@@ -6,11 +6,12 @@
  * `harness.ts` and `report.ts`.
  *
  *   node eval/runner/run.ts [--limit N] [--rows R1,R3] [--out DIR] [--seed N]
+ *                            [--splits FILE]
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { cpus, platform, release } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { buildCatalogRegistry, type CatalogRegistry, type DatasetCounts, type EvalRecord, type Splits } from '../lib/corpus.ts';
@@ -28,11 +29,18 @@ interface Args {
   outDir: string;
   seed: number;
   runId: string;
+  /** Which split file to hold out. Defaults to the frozen `splits.json`. */
+  splitsPath: string;
 }
 
 /** Parse the handful of flags this runner takes. */
 export function parseArgs(argv: string[]): Args {
-  const args: Args = { outDir: REPORTS, seed: 1, runId: `bakeoff_${new Date().toISOString().slice(0, 10)}` };
+  const args: Args = {
+    outDir: REPORTS,
+    seed: 1,
+    runId: `bakeoff_${new Date().toISOString().slice(0, 10)}`,
+    splitsPath: join(DATA, 'splits.json'),
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     const value = argv[i + 1];
@@ -41,6 +49,7 @@ export function parseArgs(argv: string[]): Args {
     else if (flag === '--out') args.outDir = resolve(value);
     else if (flag === '--seed') args.seed = Number(value);
     else if (flag === '--run-id') args.runId = value;
+    else if (flag === '--splits') args.splitsPath = resolve(value);
     else continue;
     i += 1;
   }
@@ -102,7 +111,7 @@ function d2Composition(records: EvalRecord[], catalogs: CatalogRegistry): string
  * The plan's departures from its own plan, assembled here so the report states
  * them next to the numbers they affect rather than in a separate document.
  */
-export function deviationsOf(records: EvalRecord[], catalogs: CatalogRegistry): string[] {
+export function deviationsOf(records: EvalRecord[], catalogs: CatalogRegistry, splitsPath: string): string[] {
   const deviations = [
     'D1 is written reference transcripts, not recorded audio. No audio exists in this repository, so plan section 7.1’s D1 and the whole P5 STT axis (greedy vs beam vs hotwords, silence pad, overlapped processing) could not be run.',
     'Because an in-catalog D1 span is the catalog name `parseOrder` matched, D1 scores at the ceiling for every resolver. It validates the pipeline and detects regressions; it does not discriminate. D2 carries the discrimination.',
@@ -131,6 +140,16 @@ export function deviationsOf(records: EvalRecord[], catalogs: CatalogRegistry): 
       : `${withUnit} of ${records.length} lines carry a spoken unit. The rest leave \`unit_ok\` at \`unknown\`, so the gate's unit rule could only fire on those ${withUnit}.`,
   );
 
+  // A second holdout is a departure worth stating next to the numbers it
+  // produced: section 9B.3 evaluates a lockbox once, and the first holdout has
+  // now been read by two runs.
+  const splitsName = basename(splitsPath);
+  if (splitsName !== 'splits.json') {
+    deviations.push(
+      `Measured on \`eval/data/${splitsName}\`, a second holdout drawn from the same families rather than the frozen \`splits.json\`. Section 9B.3 evaluates a lockbox once, and the first holdout has now been read by bakeoff_v1 and bakeoff_v2, so confirming anything formed from those runs needs a holdout they never saw. It is a fresh partition of the same data, not fresh data. The split function and its seed are in \`eval/lib/corpus.ts\`.`,
+    );
+  }
+
   const d2 = d2Composition(records, catalogs);
   if (d2 !== null) deviations.push(d2);
   return deviations;
@@ -142,7 +161,7 @@ export function main(argv: string[] = process.argv.slice(2)): void {
   const catalogs = buildCatalogRegistry();
   const counts = readCounts();
   const records = [readJsonl(join(DATA, 'd1.jsonl')), readJsonl(join(DATA, 'd2.jsonl')), readJsonl(join(DATA, 'd3.jsonl'))].flat();
-  const splits = JSON.parse(readFileSync(join(DATA, 'splits.json'), 'utf8')) as Splits;
+  const splits = JSON.parse(readFileSync(args.splitsPath, 'utf8')) as Splits;
   const rule = JSON.parse(readFileSync(join(REPO, 'eval/configs/selection_rule.json'), 'utf8')) as SelectionRule;
 
   const rows: BakeoffRow[] = matrix().filter((row) => args.rows === undefined || args.rows.includes(row.id));
@@ -167,7 +186,7 @@ export function main(argv: string[] = process.argv.slice(2)): void {
       d1Dropped: counts.d1Dropped ?? null,
       d1WithoutMatchedItem: counts.d1WithoutMatchedItem ?? null,
     },
-    deviations: deviationsOf(records, catalogs),
+    deviations: deviationsOf(records, catalogs, args.splitsPath),
     environment: { node: process.version, platform: `${platform()} ${release()}`, cpu: cpus()[0]?.model ?? 'unknown' },
   };
 

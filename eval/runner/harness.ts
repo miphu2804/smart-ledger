@@ -186,20 +186,20 @@ export function tune(spec: ConfigSpec, calibration: ResolvedLine[]): TunedGate {
     // for the same reason as the G1 grid: an RRF score lives near 0.016, where a
     // fixed 0–0.5 list would put every line on the same side of every floor.
     const sFloors = quantiles(lines.map((line) => line.features.s1), 5).filter((value) => value > 0);
-    let best: { sFloor: number; thetaAuto: number; nonAutoRate: number; newRate: number; far: number } | null = null;
+    let best: { sFloor: number; thetaAuto: number; unansweredRate: number; newRate: number; far: number } | null = null;
     for (const sFloor of sFloors) {
       const tuned = tuneTheta(lines, model, { farMax: spec.farMax, sFloor });
       // Same objective as the G1 grid: maximize silent answers, count NEW as a
       // line that got no answer, and prefer an ask over a NEW on a tie.
       const better =
         best === null ||
-        tuned.nonAutoRate < best.nonAutoRate ||
-        (tuned.nonAutoRate === best.nonAutoRate && (tuned.far < best.far || (tuned.far === best.far && tuned.newRate < best.newRate)));
+        tuned.unansweredRate < best.unansweredRate ||
+        (tuned.unansweredRate === best.unansweredRate && (tuned.far < best.far || (tuned.far === best.far && tuned.newRate < best.newRate)));
       if (better) {
-        best = { sFloor, thetaAuto: tuned.thetaAuto, nonAutoRate: tuned.nonAutoRate, newRate: tuned.newRate, far: tuned.far };
+        best = { sFloor, thetaAuto: tuned.thetaAuto, unansweredRate: tuned.unansweredRate, newRate: tuned.newRate, far: tuned.far };
       }
     }
-    const chosen = best ?? { sFloor: 0, thetaAuto: 1, nonAutoRate: 1, newRate: 1, far: 0 };
+    const chosen = best ?? { sFloor: 0, thetaAuto: 1, unansweredRate: 1, newRate: 1, far: 0 };
     return {
       config: { gate: 'G2', rules: { sFloor: chosen.sFloor, sAuto: 1, mMin: 0 }, model, thetaAuto: chosen.thetaAuto, sFloor: chosen.sFloor, aliasMinConfirmations },
       calibrationFar: chosen.far,

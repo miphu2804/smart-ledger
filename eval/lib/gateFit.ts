@@ -31,14 +31,24 @@ export interface RuleScore {
   askRate: number;
   /** Lines the gate sent to NEW, where the user gets no candidate at all. */
   newRate: number;
+  /** NEW decisions on lines whose gold item is in the catalog. */
+  newsInCatalog: number;
   /**
-   * Fraction of lines that get neither a silent answer nor a question.
+   * Fraction of in-catalog lines the gate left unanswered, by asking or by
+   * refusing.
    *
-   * This, not `askRate`, is what the tuning minimizes. Counting only asks makes
-   * NEW a free way to dodge: a gate that answers NEW to everything has zero
-   * asks and zero false autos, and the search would pick it every time.
+   * This, not `askRate`, is what the tuning minimizes, and a NEW on a line whose
+   * item really is out of catalog is free: refusing an item the shop does not
+   * sell is the right answer, not a failure to answer. Counting every NEW as a
+   * failure instead, which this file did until 2026-10-21, rewards turning one
+   * into an AUTO; since an auto on an out-of-catalog line is always wrong, the
+   * search spent its whole false-auto budget there and drove the score floor
+   * below every reachable value. See `docs/voice-resolution/DISCOVERY.md`.
+   *
+   * Minimizing `askRate` alone is the plan's wording and is degenerate: a gate
+   * that answers NEW to everything has zero asks and zero false autos.
    */
-  nonAutoRate: number;
+  unansweredRate: number;
   /** Wrong autos over all lines. The constraint the objective is subject to. */
   far: number;
   autos: number;
@@ -56,6 +66,7 @@ export interface RuleScore {
 export function scoreRules(lines: TuningLine[], rules: GateRules): RuleScore {
   let asks = 0;
   let news = 0;
+  let newsInCatalog = 0;
   let autos = 0;
   let wrongAutos = 0;
 
@@ -82,6 +93,7 @@ export function scoreRules(lines: TuningLine[], rules: GateRules): RuleScore {
       asks += 1;
     } else {
       news += 1;
+      if (line.goldProductId !== null) newsInCatalog += 1;
     }
   }
 
@@ -91,7 +103,8 @@ export function scoreRules(lines: TuningLine[], rules: GateRules): RuleScore {
   return {
     askRate,
     newRate,
-    nonAutoRate: askRate + newRate,
+    newsInCatalog,
+    unansweredRate: n === 0 ? 0 : (asks + newsInCatalog) / n,
     far: n === 0 ? 0 : wrongAutos / n,
     autos,
     wrongAutos,
@@ -145,15 +158,17 @@ function defaultGrid(lines: TuningLine[]): { sFloor: number[]; sAuto: number[]; 
 /**
  * Grid-search the G1 thresholds.
  *
- * Objective: answer as many lines silently as possible, subject to
- * FAR <= `farMax`. Ask and NEW are both failures to answer, so the objective is
- * `nonAutoRate`, not the ask rate alone. Optimizing the ask rate alone lets NEW
- * absorb everything: the search returns the gate that sends every line to NEW,
- * which reports zero asks and zero false autos while resolving nothing.
+ * Objective: answer as many in-catalog lines as possible, subject to
+ * FAR <= `farMax`. An ask and a refusal both leave an in-catalog line
+ * unanswered, so the objective is `unansweredRate`; a refusal on a line whose
+ * item really is out of catalog is the right answer and costs nothing. See
+ * `RuleScore.unansweredRate` for why neither the ask rate alone nor a count of
+ * every refusal will do.
  *
- * Ties go to the rule set that writes fewer wrong autos, then to the higher
- * auto threshold, then to the higher score floor, so the choice is deterministic
- * and errs toward asking rather than to a guess.
+ * Ties go to the rule set that writes fewer wrong autos, then to the one that
+ * refuses fewer lines, then to the higher auto threshold and the higher score
+ * floor, so the choice is deterministic and errs toward asking rather than to a
+ * guess.
  */
 export function tuneGateRules(lines: TuningLine[], options: TuneOptions): { rules: GateRules; score: RuleScore } {
   const grid = options.grid ?? defaultGrid(lines);
@@ -184,7 +199,7 @@ export function tuneGateRules(lines: TuningLine[], options: TuneOptions): { rule
 }
 
 function better(score: RuleScore, rules: GateRules, bestScore: RuleScore, bestRules: GateRules): boolean {
-  if (score.nonAutoRate !== bestScore.nonAutoRate) return score.nonAutoRate < bestScore.nonAutoRate;
+  if (score.unansweredRate !== bestScore.unansweredRate) return score.unansweredRate < bestScore.unansweredRate;
   if (score.wrongAutos !== bestScore.wrongAutos) return score.wrongAutos < bestScore.wrongAutos;
   // Same coverage and the same mistakes: prefer asking over declaring NEW. An
   // ask offers candidates; a NEW refuses without offering anything, so when the
@@ -327,7 +342,7 @@ export function tuneTheta(
   lines: TuningLine[],
   model: GateModel,
   options: { farMax: number; sFloor: number; candidates?: number[] },
-): { thetaAuto: number; far: number; askRate: number; nonAutoRate: number; newRate: number } {
+): { thetaAuto: number; far: number; askRate: number; unansweredRate: number; newRate: number } {
   const candidates = options.candidates ?? Array.from({ length: 20 }, (_, i) => (i + 1) / 20);
   const probabilities = lines.map((line) => {
     const row = featureVector(line.features);
@@ -336,12 +351,13 @@ export function tuneTheta(
     return 1 / (1 + Math.exp(-logit));
   });
 
-  let best: { thetaAuto: number; far: number; askRate: number; nonAutoRate: number; newRate: number; wrongAutos: number } | null = null;
+  let best: { thetaAuto: number; far: number; askRate: number; unansweredRate: number; newRate: number; wrongAutos: number } | null = null;
   for (const thetaAuto of candidates) {
     let autos = 0;
     let wrongAutos = 0;
     let asks = 0;
     let news = 0;
+    let newsInCatalog = 0;
     lines.forEach((line, i) => {
       if (probabilities[i] >= thetaAuto) {
         autos += 1;
@@ -350,6 +366,7 @@ export function tuneTheta(
         asks += 1;
       } else {
         news += 1;
+        if (line.goldProductId !== null) newsInCatalog += 1;
       }
     });
     const n = lines.length;
@@ -357,12 +374,12 @@ export function tuneTheta(
     if (far > options.farMax) continue;
     const askRate = n === 0 ? 0 : asks / n;
     const newRate = n === 0 ? 0 : news / n;
-    const nonAutoRate = n === 0 ? 0 : (asks + news) / n;
-    const candidate = { thetaAuto, askRate, newRate, nonAutoRate, wrongAutos };
+    const unansweredRate = n === 0 ? 0 : (asks + newsInCatalog) / n;
+    const candidate = { thetaAuto, askRate, newRate, unansweredRate, wrongAutos };
     if (best === null || betterTheta(candidate, best)) best = { ...candidate, far };
   }
-  if (best === null) return { thetaAuto: 1, far: 0, askRate: 1, nonAutoRate: 1, newRate: 1 };
-  return { thetaAuto: best.thetaAuto, far: best.far, askRate: best.askRate, nonAutoRate: best.nonAutoRate, newRate: best.newRate };
+  if (best === null) return { thetaAuto: 1, far: 0, askRate: 1, unansweredRate: 1, newRate: 1 };
+  return { thetaAuto: best.thetaAuto, far: best.far, askRate: best.askRate, unansweredRate: best.unansweredRate, newRate: best.newRate };
 }
 
 /**
@@ -372,10 +389,10 @@ export function tuneTheta(
  * apart.
  */
 function betterTheta(
-  candidate: { nonAutoRate: number; newRate: number; wrongAutos: number; thetaAuto: number },
-  best: { nonAutoRate: number; newRate: number; wrongAutos: number; thetaAuto: number },
+  candidate: { unansweredRate: number; newRate: number; wrongAutos: number; thetaAuto: number },
+  best: { unansweredRate: number; newRate: number; wrongAutos: number; thetaAuto: number },
 ): boolean {
-  if (candidate.nonAutoRate !== best.nonAutoRate) return candidate.nonAutoRate < best.nonAutoRate;
+  if (candidate.unansweredRate !== best.unansweredRate) return candidate.unansweredRate < best.unansweredRate;
   if (candidate.wrongAutos !== best.wrongAutos) return candidate.wrongAutos < best.wrongAutos;
   if (candidate.newRate !== best.newRate) return candidate.newRate < best.newRate;
   return candidate.thetaAuto > best.thetaAuto;

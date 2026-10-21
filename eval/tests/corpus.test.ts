@@ -156,3 +156,47 @@ test('corpus: buildSplits keeps real D1/D2 source sets together', () => {
     assert.ok(share >= 0.4 && share <= 0.8, `${dataset} calibration share ${share}`);
   }
 });
+
+test('corpus: a seeded split re-draws the partition and keeps every family on one side', () => {
+  // Twenty same-sized components. A pool with many similar components balances
+  // under any order, which is what lets a seed re-draw it. D3's four very
+  // unequal catalogs are the opposite case: largest-first is the only order that
+  // keeps its sides sane, so a seed leaves them alone.
+  const record = (id: string, family: string): EvalRecord => ({
+    id,
+    dataset: 'd1',
+    catalogId: `c-${family}`,
+    category: `cat-${family}`,
+    family,
+    goldProductId: '1',
+    tags: [],
+    line: { rawProductSpan: 'x' },
+    referenceSpan: 'x',
+  });
+  const records: EvalRecord[] = [];
+  for (let f = 0; f < 20; f += 1) for (let i = 0; i < 3; i += 1) records.push(record(`f${f}-${i}`, `fam${f}`));
+
+  const side = (splits: ReturnType<typeof buildSplits>): Map<string, string> => {
+    const m = new Map<string, string>();
+    for (const bucket of Object.values(splits)) {
+      for (const id of bucket.calibration) m.set(id, 'calibration');
+      for (const id of bucket.test) m.set(id, 'test');
+    }
+    return m;
+  };
+
+  const plain = side(buildSplits(records));
+  const seeded = buildSplits(records, 7);
+  const seededSide = side(seeded);
+
+  assert.equal(seededSide.size, records.length, 'every record lands on exactly one side');
+  for (let f = 0; f < 20; f += 1) {
+    const sides = new Set([0, 1, 2].map((i) => seededSide.get(`f${f}-${i}`)));
+    assert.equal(sides.size, 1, `family fam${f} crossed the boundary`);
+  }
+  assert.deepEqual(buildSplits(records, 7), seeded, 'the same seed draws the same split');
+  const moved = records.filter((r) => plain.get(r.id) !== seededSide.get(r.id)).length;
+  assert.ok(moved > 0, 'the seed drew the same partition, so it moves nothing');
+  const share = records.filter((r) => seededSide.get(r.id) === 'calibration').length / records.length;
+  assert.ok(Math.abs(share - 0.6) < 0.1, `calibration share ${share}`);
+});

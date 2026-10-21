@@ -55,6 +55,22 @@ sign-off and a plan amendment rather than an agent's silent change.
 **Blocked on.** The owner's decision on the objective. Section 4 rule 8 says
 stop here.
 
+**Resolved 2026-10-21.** The owner took the proposal above: count a refusal as a
+failure only when the gold item was in the catalog. `eval/lib/gateFit.ts` now
+minimizes `unansweredRate = (asks + newsInCatalog) / lines` for both G1 and G2,
+with `FAR <= FAR_MAX` unchanged as the constraint and the tie-break order kept.
+Plan sections 5.6 and 9B.1 still read "minimize ask_rate"; this file is the
+record of the approved deviation, and amending the plan text is the owner's call.
+
+Confirming the change needs a holdout the earlier runs never read, so
+`eval/data/splits_lockbox2.json` was added, drawn by
+`buildSplits(records, LOCKBOX2_SEED)` in `eval/lib/corpus.ts`. It re-draws D1 and
+D2, where 55% and 56% of the old test lines change side, and leaves D3 alone:
+D3's four catalogs are atomic source sets, and largest-first is the only order
+that does not leave its test side nearly empty or holding the whole 20 000-item
+catalog. D3's numbers in the next run are therefore a re-measurement, not fresh
+evidence, and `--splits` selects the file.
+
 ## Open question 2 — no rule bounds how often the held-out split may be read
 
 Section 9B.3 states "Lockbox evaluated exactly once" and explains why: repeated

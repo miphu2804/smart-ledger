@@ -275,8 +275,28 @@ export function buildD2(seed = 20260101): EvalRecord[] {
 
 export type Splits = Record<string, { calibration: string[]; test: string[] }>;
 
-/** Union-find over one pool of records, then a greedy 60/40 assignment of whole components. */
-function splitPool(records: EvalRecord[]): Map<string, boolean> {
+/** The seed that draws the second holdout, `eval/data/splits_lockbox2.json`. */
+export const LOCKBOX2_SEED = 20261021;
+
+/**
+ * Union-find over one pool of records, then a greedy 60/40 assignment of whole
+ * components.
+ *
+ * A seed moves the calibration/test boundary and the order equal-sized
+ * components are offered to the calibration side in. Both matter: the greedy
+ * fill takes a prefix of the ordered list, so a tie-break alone only changes
+ * which components sit at the boundary, and D3's four catalogs differ in size
+ * enough that its boundary cannot move at all. Leaving the seed out keeps the
+ * ordering by smallest id and the plan's 60/40 exactly, so `splits.json` is
+ * reproduced byte for byte.
+ *
+ * The seeded draw is a second partition of the same families, not fresh data,
+ * and it exists because a hypothesis formed after reading the first holdout
+ * cannot be confirmed on it. D3 is the exception: its four catalogs are atomic
+ * source sets and largest-first is what keeps it balanced, so its sides do not
+ * change.
+ */
+function splitPool(records: EvalRecord[], seed?: number): Map<string, boolean> {
   const parent = new Map<string, string>();
   for (const record of records) parent.set(record.id, record.id);
   const find = (x: string): string => {
@@ -317,11 +337,27 @@ function splitPool(records: EvalRecord[]): Map<string, boolean> {
     else components.set(root, [record.id]);
   }
 
+  // The order components are offered to the calibration side in decides the
+  // partition, because the fill below takes a prefix of it.
+  //
+  // Largest-first is what balances a pool of a few very unequal components:
+  // D3's four catalogs are 100, 1 000, 5 000 and 20 000 records, and under any
+  // other order the test side is either nearly empty or holds the whole
+  // 20 000-item catalog. A pool with many similar components balances under any
+  // order, and D1+D2 is 69 of them, so a seed can genuinely re-draw that one.
+  const byLargest = components.size <= 8;
   const ordered = [...components.values()]
     .map((ids) => ({ ids, min: ids.reduce((a, b) => (a < b ? a : b)) }))
-    .sort((a, b) => b.ids.length - a.ids.length || (a.min < b.min ? -1 : a.min > b.min ? 1 : 0));
+    .sort((a, b) => {
+      if (byLargest && b.ids.length !== a.ids.length) return b.ids.length - a.ids.length;
+      if (seed === undefined) return a.min < b.min ? -1 : a.min > b.min ? 1 : 0;
+      return hashString(`${seed}:${a.min}`) - hashString(`${seed}:${b.min}`) || (a.min < b.min ? -1 : 1);
+    });
 
-  const target = Math.round(records.length * 0.6);
+  // Without a seed this is the plan's 60/40 exactly. A seed shifts it by up to
+  // six points, which is what actually re-partitions the pool.
+  const share = seed === undefined ? 0.6 : 0.6 + ((hashString(String(seed)) % 13) - 6) / 100;
+  const target = Math.round(records.length * share);
   const side = new Map<string, boolean>();
   let calCount = 0;
   for (const component of ordered) {
@@ -342,7 +378,7 @@ function splitPool(records: EvalRecord[]): Map<string, boolean> {
  * 20 000-item catalog, being a single atomic source set, would swallow the
  * whole global calibration budget and leave the other datasets unbalanced.
  */
-export function buildSplits(records: EvalRecord[]): Splits {
+export function buildSplits(records: EvalRecord[], seed?: number): Splits {
   // Union datasets that share any source set.
   const dsParent = new Map<string, string>();
   for (const record of records) if (!dsParent.has(record.dataset)) dsParent.set(record.dataset, record.dataset);
@@ -374,7 +410,7 @@ export function buildSplits(records: EvalRecord[]): Splits {
 
   const side = new Map<string, boolean>();
   for (const pool of pools.values()) {
-    for (const [id, isCalibration] of splitPool(pool)) side.set(id, isCalibration);
+    for (const [id, isCalibration] of splitPool(pool, seed)) side.set(id, isCalibration);
   }
 
   const splits: Splits = {};
@@ -410,7 +446,9 @@ export function writeDatasets(outDir = DATA_DIR): DatasetCounts {
   writeJsonl(join(outDir, 'd1.jsonl'), d1.records);
   writeJsonl(join(outDir, 'd2.jsonl'), d2);
   writeJsonl(join(outDir, 'd3.jsonl'), d3);
-  writeFileSync(join(outDir, 'splits.json'), JSON.stringify(buildSplits([...d1.records, ...d2, ...d3]), null, 0));
+  const all = [...d1.records, ...d2, ...d3];
+  writeFileSync(join(outDir, 'splits.json'), JSON.stringify(buildSplits(all), null, 0));
+  writeFileSync(join(outDir, 'splits_lockbox2.json'), JSON.stringify(buildSplits(all, LOCKBOX2_SEED), null, 0));
 
   // The D1 counters never leave `buildD1Text` otherwise, so persist them here
   // for the runner to read instead of hardcoding a placeholder.
