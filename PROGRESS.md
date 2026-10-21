@@ -1,3 +1,9 @@
+### [2026-10-21 17:20 UTC+07:00] — [Change] Zalo sign-in is shown as "Sắp có" for now
+
+**Done:** On request, the Zalo button on the sign-in screen is greyed out with "Sắp có" and cannot be tapped on every build, including builds that set `EXPO_PUBLIC_ZALO_LOGIN` or `EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID`, like the Facebook button. The Zalo sign-in code and Core's Zalo endpoints are unchanged, so turning it back on is a one-line change (noted in the code). The PRD's FR-010 says the button is "Sắp có" for now.
+
+**Changed files:** `frontend/mobile/app/(auth)/welcome.tsx`, `docs/product/product-requirements.md` — modified; this entry.
+
 ### [2026-10-20 12:10 UTC+07:00] — [Fix] Read-only shop-data questions no longer run in the AI sandbox
 
 **Done:** With the sandbox on, `query_shop_data` and `suggest_restock` were folded into `run_code`, so every read-only data question started Monty. They now stay native tools; only model-written `run_code` programs run in the sandbox. On staging (shop 8, 18 turns) sandbox turns fell from 18 to 0, but median latency did not drop (6.01s → 6.14s): model round trips, not Monty, dominate.
