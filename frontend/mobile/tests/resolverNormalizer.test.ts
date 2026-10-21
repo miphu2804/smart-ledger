@@ -75,6 +75,14 @@ describe('normalizer: phon', () => {
     assert.equal(phon('da'), phon('gia'));
   });
 
+  it('keeps "kh" as its own onset', () => {
+    // Regression: the longest-first lookup fell through to the one-character
+    // "k" (which maps to "c"), so every kh- syllable collapsed onto ch-/tr-.
+    assert.equal(phon('khăn'), 'khan');
+    assert.equal(phon('chăn'), 'chan');
+    assert.notEqual(phon('khăn'), phon('chăn'));
+  });
+
   it('collapses the merged finals of the rule set', () => {
     assert.equal(phon('tan'), phon('tang'));
     assert.equal(phon('tac'), phon('tat'));

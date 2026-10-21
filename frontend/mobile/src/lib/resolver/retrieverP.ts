@@ -75,10 +75,17 @@ export class RetrieverP implements Retriever {
     return hits.slice(0, k);
   }
 
-  /** The product ids to score: whole catalog when small, else the injected provider. */
+  /**
+   * The product ids to score: whole catalog when small, else the injected provider.
+   *
+   * Same reason as E: an empty provider means the trigram filter kept nothing,
+   * which is not the same as nothing matching, and P would otherwise report a
+   * miss for a span it can score.
+   */
   private candidateIds(line: QueryLine): string[] {
     if (this.ids.length <= this.pBruteMax) return this.ids;
-    if (this.candidates !== undefined) return this.candidates(line, P_CANDIDATES);
-    return this.ids;
+    if (this.candidates === undefined) return this.ids;
+    const provided = this.candidates(line, P_CANDIDATES);
+    return provided.length === 0 ? this.ids : provided;
   }
 }

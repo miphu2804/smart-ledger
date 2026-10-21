@@ -14,7 +14,7 @@
 
 import { AliasTable } from './alias.ts';
 import { decide, gateProbability } from './gate.ts';
-import { fuse } from './fusion.ts';
+import { fuse, scalesOf } from './fusion.ts';
 import { folded } from './normalizer.ts';
 import { SEED_ALIASES, type SeedAlias } from './seed_aliases.vi.ts';
 import { RetrieverAnd } from './retrieverAnd.ts';
@@ -33,9 +33,6 @@ import type {
   ResolverConfig,
   Retriever,
 } from './types.ts';
-
-/** How many ids E and P ask a candidate provider for when the catalog is too large to brute-force. */
-const CANDIDATE_REQUEST = 50;
 
 export interface BuildResolverOptions {
   catalog: CatalogItem[];
@@ -144,16 +141,45 @@ function installSeeds(catalog: CatalogItem[], seeds: SeedAlias[], trustedAt: num
  */
 export function buildResolver(options: BuildResolverOptions): Resolver {
   const { catalog, config, gate } = options;
+
+  // `max` picks the largest score, so a config that mixes a bounded similarity
+  // with an unbounded BM25 sum would let the wider axis decide every ranking.
+  // No shipped row mixes them; refusing here keeps a future one from silently
+  // measuring the wrong thing.
+  const scales = scalesOf(config.retrievers);
+  if (config.fusion === 'max' && scales.length > 1) {
+    throw new Error(`max fusion needs every retriever on one score scale, got ${scales.join(' and ')}`);
+  }
+
   const retrievers = buildRetrievers(catalog, config);
   const productById = new Map(catalog.map((item) => [item.id, item]));
 
+  // The shop's own confirmations are the better evidence, so they are laid over
+  // the seeds rather than under them: a seed must never overwrite what this shop
+  // taught the resolver. An alias whose product is no longer in the catalog is
+  // dropped, because indexing it would let a deleted product be auto-applied.
+  const known = new Set(catalog.map((item) => item.id));
   const table = new AliasTable([
-    ...(options.aliases ?? []),
     ...installSeeds(catalog, options.seeds ?? SEED_ALIASES, gate.aliasMinConfirmations),
+    ...(options.aliases ?? []).filter((entry) => known.has(entry.productId)),
   ]);
-  for (const entry of table.entries()) {
+
+  // Which (phrase, product) pairs are already documents. Repeating a confirmation
+  // must not add the same document twice, which would skew the retrievers'
+  // document frequencies, but pointing a phrase at a *different* product must
+  // index it, or the correction never takes effect.
+  //
+  // The document a re-pointed phrase had for its old product is left where it is:
+  // removing one needs an index delete the retrievers do not have. Trust is
+  // decided by the alias table, so a stale document can only add a candidate.
+  const indexed = new Set<string>();
+  function indexAlias(entry: AliasEntry): void {
+    const key = `${entry.productId}|${entry.folded}`;
+    if (indexed.has(key)) return;
+    indexed.add(key);
     for (const retriever of retrievers) retriever.addDocument(entry.folded, entry.productId);
   }
+  for (const entry of table.entries()) indexAlias(entry);
 
   function resolve(line: QueryLine): ResolveResult {
     const hits: Record<string, { productId: string; score: number }[]> = {};
@@ -162,7 +188,10 @@ export function buildResolver(options: BuildResolverOptions): Resolver {
     const topK = fuse(hits, config);
     const top1 = topK[0];
     const s1 = top1?.score ?? 0;
-    const s2 = topK[1]?.score ?? s1;
+    // A missing runner-up is the strongest possible margin, not the weakest. The
+    // old default of `s1` made `margin` 0, so the one result with nothing to be
+    // confused with could never clear the gate's margin rule.
+    const s2 = topK[1]?.score ?? 0;
 
     const returning = retrievers.filter((retriever) => (hits[retriever.name] ?? []).length > 0);
     const agreeing = returning.filter((retriever) => hits[retriever.name][0].productId === top1?.productId);
@@ -176,8 +205,11 @@ export function buildResolver(options: BuildResolverOptions): Resolver {
 
     const unit = line.unit ?? null;
     const candidateUnit = top1 ? (productById.get(top1.productId)?.unit ?? null) : null;
+    // Catalog units arrive toned ("hộp", "gói") while the spoken unit is folded
+    // ("hop", "goi"), so comparing them raw called every same-unit pair a
+    // mismatch and the gate then refused to auto-apply any of them.
     const unitOk: GateFeatures['unit_ok'] =
-      unit === null || candidateUnit === null ? 'unknown' : unit === candidateUnit ? 'ok' : 'mismatch';
+      unit === null || candidateUnit === null ? 'unknown' : folded(unit) === folded(candidateUnit) ? 'ok' : 'mismatch';
 
     const features: GateFeatures = {
       s1,
@@ -199,13 +231,8 @@ export function buildResolver(options: BuildResolverOptions): Resolver {
   }
 
   function upsertAlias(entry: AliasEntry): void {
-    const isNew = table.lookup(entry.folded) === undefined;
     table.confirm(entry.folded, entry.productId);
-    // Index only on first sight: repeating the same confirmation must not add
-    // the same document again and skew the retrievers' document frequencies.
-    if (isNew) {
-      for (const retriever of retrievers) retriever.addDocument(entry.folded, entry.productId);
-    }
+    indexAlias(entry);
   }
 
   return { resolve, upsertAlias };

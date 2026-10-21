@@ -20,6 +20,10 @@ export const PHONETIC_RULES: PhoneticRuleSet = {
   initials: [
     ['x', 's'],
     ['ch', 'tr'],
+    // 'kh' is its own onset. Without this entry the longest-first lookup matches
+    // the one-character 'k', which maps to 'c', so every kh- syllable collapsed
+    // onto ch-/tr- ("khăn" and "chăn" both became "chan").
+    ['kh'],
     ['d', 'gi', 'r', 'v'],
     ['c', 'k', 'q'],
   ],

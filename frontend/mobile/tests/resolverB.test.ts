@@ -44,6 +44,17 @@ describe('retriever B: unit-word stoplist is a switch', () => {
     const hits = new RetrieverB(catalog, { useUnitStoplist: true }).retrieve({ rawProductSpan: 'sting dau chai' }, 5);
     assert.equal(hits[0]?.productId, '1');
   });
+
+  it('on: a word that is also a real name is not dropped', () => {
+    // Regression: "lon" (lợn, pork), "goi" (gỏi), "cai" (cải), "can" (cần tây),
+    // "loc" (lọc), "phan" (phấn), "to" (tỏ) were stoplisted as unit words, so a
+    // product named by one of them could not be matched at all.
+    for (const name of ['Lợn', 'Gỏi', 'Cải']) {
+      const one = [{ id: '1', name }];
+      const hits = new RetrieverB(one, { useUnitStoplist: true }).retrieve({ rawProductSpan: name.toLowerCase() }, 5);
+      assert.equal(hits[0]?.productId, '1', `${name} must still be retrievable`);
+    }
+  });
 });
 
 describe('retriever B: avg_len comes from the catalog', () => {

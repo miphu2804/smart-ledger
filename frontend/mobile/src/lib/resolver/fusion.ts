@@ -14,6 +14,29 @@
 
 import type { Candidate, RetrievalHit, ResolverConfig } from './types.ts';
 
+/**
+ * The score scale each retriever reports on.
+ *
+ * `max` compares scores across retrievers, which only means something within one
+ * scale: a BM25 sum runs unbounded while a similarity sits in [0, 1], so the
+ * wider axis would decide every ranking and the other retriever would only break
+ * ties. The plan's F1 is a max over one scale, and a mixed set would need a
+ * normalization the plan does not define.
+ */
+export const RETRIEVER_SCALE: Record<string, string> = {
+  E: 'similarity',
+  P: 'similarity',
+  'Q-cos': 'similarity',
+  'Q-bm25': 'bm25',
+  B: 'bm25',
+  AND: 'trigram-coverage',
+};
+
+/** The distinct score scales a retriever set spans, sorted. */
+export function scalesOf(names: string[]): string[] {
+  return [...new Set(names.map((name) => RETRIEVER_SCALE[name] ?? `unknown:${name}`))].sort();
+}
+
 /** One retriever's hits, best first. */
 export type RetrieverHits = Record<string, RetrievalHit[]>;
 

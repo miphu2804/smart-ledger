@@ -96,10 +96,21 @@ export class RetrieverE implements Retriever {
     return hits.slice(0, k);
   }
 
-  /** The product ids to score: whole catalog when small, else the injected provider. */
+  /**
+   * The product ids to score: whole catalog when small, else the injected provider.
+   *
+   * Q's count filter is lossless for a *full-string* edit distance, so it drops a
+   * short spoken span that is a prefix of a longer catalog name: "Sting dâu"
+   * against "Sting dâu chai 330ml" shares 8 trigrams where the threshold asks for
+   * 9. E scores that pair 0.471 against 0.167 for the nearest distractor, so it
+   * would rank it first, but above `eBruteMax` it only ever sees what Q handed it.
+   * An empty provider therefore means "Q found nothing", not "nothing matches",
+   * and the honest answer is to scan rather than report a miss.
+   */
   private candidateIds(line: QueryLine): string[] {
     if (this.ids.length <= this.eBruteMax) return this.ids;
-    if (this.candidates !== undefined) return this.candidates(line, E_CANDIDATES);
-    return this.ids;
+    if (this.candidates === undefined) return this.ids;
+    const provided = this.candidates(line, E_CANDIDATES);
+    return provided.length === 0 ? this.ids : provided;
   }
 }

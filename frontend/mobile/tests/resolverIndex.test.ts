@@ -97,6 +97,16 @@ describe('buildResolver', () => {
     assert.equal(resolver.resolve({ rawProductSpan: 'sting dau', unit: 'lon' }).features.unit_ok, 'mismatch');
     assert.equal(resolver.resolve({ rawProductSpan: 'sting dau', unit: 'chai' }).features.unit_ok, 'ok');
   });
+
+  it('matches a toned catalog unit against the folded unit the ASR hands over', () => {
+    // Regression: the two sides were compared raw. Catalog units are toned
+    // ("hộp") and the spoken unit arrives folded ("hop"), so every same-unit
+    // pair read as a mismatch and the gate refused to auto-apply any of them.
+    const withUnits: CatalogItem[] = [{ id: 'p1', name: 'Sting dâu', unit: 'hộp' }];
+    const resolver = buildResolver({ catalog: withUnits, config: config(), gate: gate() });
+    assert.equal(resolver.resolve({ rawProductSpan: 'sting dau', unit: 'hop' }).features.unit_ok, 'ok');
+    assert.equal(resolver.resolve({ rawProductSpan: 'sting dau', unit: 'lon' }).features.unit_ok, 'mismatch');
+  });
 });
 
 describe('buildResolver: alias feedback loop', () => {
@@ -139,6 +149,53 @@ describe('buildResolver: alias feedback loop', () => {
     });
     const result = resolver.resolve({ rawProductSpan: 'tai go' });
     assert.equal(result.features.alias, 0);
+  });
+
+  it('lets the shop override a seed alias for the same phrase', () => {
+    // Regression: the seed list was laid over the shop's own confirmations, so
+    // a seed silently overwrote what this shop had taught the resolver.
+    const resolver = buildResolver({
+      catalog,
+      config: config(),
+      gate: gate(),
+      aliases: [{ folded: 'tai go', productId: 'p1', confirmedCount: 2 }],
+    });
+    const result = resolver.resolve({ rawProductSpan: 'tai go' });
+    assert.equal(result.features.alias, 1);
+    assert.equal(result.productId, 'p1');
+  });
+
+  it('drops a taught alias whose product is no longer in the catalog', () => {
+    // Regression: the entry was indexed anyway, so a deleted product could come
+    // back as a candidate and be auto-applied.
+    const resolver = buildResolver({
+      catalog,
+      config: config(),
+      gate: gate(),
+      aliases: [{ folded: 'xiting', productId: 'gone', confirmedCount: 5 }],
+    });
+    const result = resolver.resolve({ rawProductSpan: 'xiting' });
+    assert.equal(result.features.alias, 0);
+    assert.ok(result.topK.every((candidate) => candidate.productId !== 'gone'));
+  });
+
+  it('re-points a taught phrase at the corrected product', () => {
+    // Regression: only the first sight of a phrase was indexed, so correcting a
+    // phrase to another product left that product scoring the phrase on its
+    // catalog name alone and the correction never took effect.
+    //
+    // The score is what changes, not the ranking: once both products hold the
+    // phrase as a document they tie at 1 and the productId tiebreak decides, so
+    // asserting on the rank would pass either way.
+    const resolver = buildResolver({ catalog, config: config(), gate: gate() });
+    const scoreOf = (productId: string): number =>
+      resolver.resolve({ rawProductSpan: 'xiting' }).topK.find((candidate) => candidate.productId === productId)?.score ?? 0;
+
+    resolver.upsertAlias({ folded: 'xiting', productId: 'p1', confirmedCount: 1 });
+    const before = scoreOf('p2');
+    resolver.upsertAlias({ folded: 'xiting', productId: 'p2', confirmedCount: 1 });
+    assert.ok(scoreOf('p2') > before, 'the re-pointed product must score the phrase higher');
+    assert.equal(scoreOf('p2'), 1);
   });
 });
 
@@ -193,8 +250,63 @@ describe('buildResolver: retriever sets', () => {
   });
 
   it('still reaches the same product through Q when Q is configured', () => {
-    const resolver = buildResolver({ catalog: largeCatalog(), config: config({ retrievers: ['E', 'Q-bm25'], eBruteMax: 500 }), gate: gate() });
+    // RRF, not `max`: E scores a similarity in [0, 1] and Q-bm25 an unbounded
+    // sum, which `max` refuses to combine (see the mixed-scale test below).
+    const resolver = buildResolver({
+      catalog: largeCatalog(),
+      config: config({ retrievers: ['E', 'Q-bm25'], fusion: 'rrf', eBruteMax: 500 }),
+      gate: gate(),
+    });
     const result = resolver.resolve({ rawProductSpan: 'Sting dâu chai 330ml' });
     assert.equal(result.topK[0]?.productId, 'target');
+  });
+
+  it('brute-forces in E when Q hands back no candidate above eBruteMax', () => {
+    // Regression: E only ever scored what Q passed it, so a short spoken span
+    // that Q's count filter prunes ("sting dau" against "sting dau chai 330ml")
+    // came back as "no match" instead of the near-exact hit E can score.
+    const resolver = buildResolver({
+      catalog: largeCatalog(),
+      config: config({ retrievers: ['E', 'Q-bm25'], fusion: 'rrf', eBruteMax: 500 }),
+      gate: gate(),
+    });
+    assert.equal(resolver.resolve({ rawProductSpan: 'sting dau' }).topK[0]?.productId, 'target');
+  });
+
+  it('gives a lone candidate the full margin rather than a zero one', () => {
+    // Regression: the runner-up defaulted to `s1`, so a result with nothing to
+    // be confused with scored margin 0 and could never clear the gate's margin
+    // rule. Only the shop's own alias can auto-apply such a line.
+    const resolver = buildResolver({
+      catalog: [{ id: 'p1', name: 'Sting dâu chai 330ml' }],
+      config: config(),
+      gate: gate(),
+    });
+    const result = resolver.resolve({ rawProductSpan: 'sting dau chai 330ml' });
+    assert.equal(result.topK.length, 1);
+    assert.equal(result.features.margin, result.features.s1);
+    assert.ok(result.features.margin > 0);
+  });
+
+  it('refuses `max` over retrievers that score on different scales', () => {
+    // E and Q-cos are similarities in [0, 1]; Q-bm25 and B are unbounded sums.
+    // Under `max` the wider axis decides every ranking, so the config would
+    // silently measure one retriever plus tie-breaking from the others.
+    assert.throws(
+      () =>
+        buildResolver({
+          catalog,
+          config: config({ retrievers: ['E', 'Q-bm25'], fusion: 'max' }),
+          gate: gate(),
+        }),
+      /one score scale/,
+    );
+    assert.doesNotThrow(() =>
+      buildResolver({
+        catalog,
+        config: config({ retrievers: ['E', 'P', 'Q-cos'], fusion: 'max' }),
+        gate: gate(),
+      }),
+    );
   });
 });

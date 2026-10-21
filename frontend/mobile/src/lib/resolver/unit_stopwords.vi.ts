@@ -12,15 +12,14 @@
  *
  * Deliberately conservative: ambiguous words that collide with a product name
  * once folded are left out. `bó` is excluded because it folds to `bo`, the same
- * token as `bò` (beef), so dropping it would erase real names.
+ * token as `bò` (beef), so dropping it would erase real names. The same rule
+ * removed `lon` (lợn, pork), `goi` (gỏi), `can` (cần, cần tây), `cai` (cải),
+ * `loc` (lọc), `phan` (phấn, phân) and `to` (tỏ, tô).
  */
 
 export const UNIT_STOPWORDS: readonly string[] = [
   'chai',
-  'lon',
-  'goi',
   'hop',
-  'loc',
   'vi',
   'thung',
   'bao',
@@ -31,11 +30,7 @@ export const UNIT_STOPWORDS: readonly string[] = [
   'ly',
   'tui',
   'chiec',
-  'cai',
-  'phan',
   'mieng',
-  'to',
-  'can',
   'kg',
   'gam',
   'ml',
