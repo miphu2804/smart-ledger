@@ -91,7 +91,7 @@ export function readPriorCatalogsRaw(): Record<string, RawCatalogItem[]> {
 }
 
 /** The three real catalogs with ids stringified into the frozen `CatalogItem` shape. */
-function readPriorCatalogs(): CatalogRegistry {
+export function readPriorCatalogs(): CatalogRegistry {
   const raw = readPriorCatalogsRaw();
   const registry: CatalogRegistry = {};
   for (const [catalogId, items] of Object.entries(raw)) {
