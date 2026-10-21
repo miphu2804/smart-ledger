@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "frozen": "2026-10-21",
+  "note": "Pre-registered selection rule from plan section 8.3. Frozen before the bake-off ran. A change to any value here must be recorded as a deviation in the report with its reason.",
+  "farMax": 0.01,
+  "recall3TolerancePp": 2,
+  "askRateTolerancePp": 2,
+  "simplicityOrder": ["R1", "R2", "R3", "R4", "R5", "R6"],
+  "gateSimplicityOrder": ["G1", "G2"],
+  "latencyBudgets": {
+    "resolveP95MsN5k": 15,
+    "aliasUpsertMs": 5,
+    "fullBuildMsN5k": 300,
+    "resolverRssMbN5k": 15,
+    "releaseToUiP95LowEndHotwordsMs": 150,
+    "releaseToUiP95LowEndMs": 30,
+    "apkDeltaMb": 1
+  },
+  "datasets": {
+    "primary": "d1",
+    "secondary": ["d2", "d3"],
+    "note": "d1 here is written reference transcripts segmented by parseOrder, not recorded audio. Plan section 7.1's real-audio D1 does not exist in this repository."
+  }
+}
