@@ -119,6 +119,18 @@ export function deviationsOf(records: EvalRecord[], catalogs: CatalogRegistry): 
     '`RetrieverE` and `RetrieverP` received a candidate provider even when the config named no Q retriever. That provider returned an empty list, so above `eBruteMax` they scored nothing and reported it as "no match". Fixed in `frontend/mobile/src/lib/resolver/index.ts`; every E-only and P-only row in this report is measured after that fix.',
   ];
 
+  // The gate's unit rule needs a spoken unit and a catalog unit. The catalogs
+  // carry units; no dataset line does. So `unit_ok` was `unknown` on every line
+  // and the rule that refuses a mismatch never fired. This is measured from the
+  // records rather than asserted, because it decides how the ask rate below may
+  // be read.
+  const withUnit = records.filter((record) => record.line.unit !== null && record.line.unit !== undefined).length;
+  deviations.push(
+    withUnit === 0
+      ? `No line in any dataset carries a spoken unit: \`line.unit\` is null on all ${records.length}. The gate's \`unit_ok\` feature was therefore \`unknown\` everywhere and the rule that refuses a unit mismatch never fired, so the ask rate and FAR below are measured with the unit check disabled. They are not the app's numbers, where hearing "chai" against a catalog "lon" is a real case.`
+      : `${withUnit} of ${records.length} lines carry a spoken unit. The rest leave \`unit_ok\` at \`unknown\`, so the gate's unit rule could only fire on those ${withUnit}.`,
+  );
+
   const d2 = d2Composition(records, catalogs);
   if (d2 !== null) deviations.push(d2);
   return deviations;
