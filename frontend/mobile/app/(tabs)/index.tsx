@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Image, ImageSourcePropType, ImageStyle, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Animated, Image, ImageSourcePropType, ImageStyle, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ReportPeriodTabs, type ReportPeriod } from '../../src/components/ReportPeriodTabs';
 import { useGuideTarget } from '../../src/components/GuideTour';
@@ -576,15 +576,15 @@ function HomeSectionHeading({ title, side, onPress }: { title: string; side?: st
 type QuickAction = 'readOrder' | 'selectGoods' | 'scanCode' | 'assistant';
 
 /**
- * Màu riêng cho bốn nút lên đơn trên nền tím (trước đây cả bốn cùng nền tím trong suốt, khó phân biệt): ô biểu tượng màu pastel
- * đặc để biểu tượng nổi trên nền tím, viền và nền thẻ cùng tông nhưng nhạt để thẻ vẫn hoà vào phần đầu.
- * Vàng: Đọc đơn (giọng nói, chức năng chính) · Xanh dương: Chọn hàng · Xanh lá: Quét mã · Hồng: Trợ lý Bobi.
+ * Bốn nút lên đơn là thẻ trắng đặc trên phần đầu tím (chữ đậm màu mực, dễ đọc), mỗi nút phân biệt bằng ô biểu tượng màu nhạt
+ * lấy từ bảng màu thương hiệu: vàng Đọc đơn (chức năng chính, màu nhấn của logo), xanh dương Chọn hàng, xanh lá Quét mã, tím
+ * Trợ lý Bobi (màu của Bobi). Trước đây thẻ trong suốt có viền màu trên nền tím trông đục và khó phân biệt.
  */
-const ACTION_TONES: Record<QuickAction, { chip: string; border: string; bg: string; bgPressed: string }> = {
-  readOrder: { chip: '#FFF1C2', border: 'rgba(255, 214, 102, 0.45)', bg: 'rgba(255, 214, 102, 0.10)', bgPressed: 'rgba(255, 214, 102, 0.2)' },
-  selectGoods: { chip: '#DCEBFF', border: 'rgba(122, 176, 255, 0.45)', bg: 'rgba(122, 176, 255, 0.10)', bgPressed: 'rgba(122, 176, 255, 0.2)' },
-  scanCode: { chip: '#DDF5D2', border: 'rgba(143, 219, 110, 0.45)', bg: 'rgba(143, 219, 110, 0.10)', bgPressed: 'rgba(143, 219, 110, 0.2)' },
-  assistant: { chip: '#FBE0EF', border: 'rgba(255, 150, 200, 0.45)', bg: 'rgba(255, 150, 200, 0.10)', bgPressed: 'rgba(255, 150, 200, 0.2)' },
+const ACTION_TONES: Record<QuickAction, { chip: string }> = {
+  readOrder: { chip: '#FFF1C7' },
+  selectGoods: { chip: '#E3EEFF' },
+  scanCode: { chip: colors.greenSoft },
+  assistant: { chip: colors.brandSoft },
 };
 
 /** Một nút lên đơn ở phần đầu Tổng quan; `guideRef` để phần hướng dẫn khoanh sáng đúng nút này. */
@@ -606,11 +606,7 @@ function ActionCard({
     <Pressable
       ref={guideRef}
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.actionButton,
-        { borderColor: tone.border, backgroundColor: pressed ? tone.bgPressed : tone.bg },
-        pressed && styles.actionButtonPressed,
-      ]}
+      style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
       accessibilityRole="button"
       accessibilityLabel={title}
     >
@@ -618,14 +614,14 @@ function ActionCard({
         <Tab1Icon name={icon} size={24} />
       </View>
       <View style={styles.actionTextCol}>
-        <T w="bold" size={14.5} color="#FFFFFF" numberOfLines={1}>
+        <T w="bold" size={14.5} color={colors.ink} numberOfLines={1}>
           {title}
         </T>
-        <T size={10.5} color="rgba(255, 255, 255, 0.62)" numberOfLines={1} style={{ marginTop: 2 }}>
+        <T size={10.5} color={colors.muted} numberOfLines={1} style={{ marginTop: 2 }}>
           {subtitle}
         </T>
       </View>
-      <Feather name="chevron-right" size={14} color="rgba(255, 255, 255, 0.4)" />
+      <Feather name="chevron-right" size={14} color={colors.faint} />
     </Pressable>
   );
 }
@@ -806,9 +802,11 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     minWidth: 140,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    backgroundColor: colors.card,
+    ...Platform.select({
+      web: { boxShadow: '0 4px 12px rgba(17, 12, 38, 0.18)' } as ViewStyle,
+      default: { shadowColor: '#110C26', shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
+    }),
     // Ô biểu tượng màu chiếm chỗ hơn biểu tượng trần trước đây: đệm và khoảng cách gọn lại để "Chọn hàng", "Trợ lý Bobi"
     // vẫn đủ một dòng ở màn 360–375 px
     paddingLeft: 10,
@@ -820,6 +818,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionButtonPressed: {
+    backgroundColor: colors.brandTint,
     transform: [{ scale: 0.985 }],
   },
   actionIcon: {

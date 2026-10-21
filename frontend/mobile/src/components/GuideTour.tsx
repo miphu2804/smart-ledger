@@ -4,6 +4,7 @@ import {
   Animated,
   BackHandler,
   Easing,
+  Image,
   Platform,
   Pressable,
   StyleSheet,
@@ -12,14 +13,14 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { triggerFeedback } from '../lib/feedback';
-import { GUIDE_STEPS, type GuideTarget } from '../lib/guideSteps';
+import { GUIDE_STEPS, personalizeStep, type GuideTarget } from '../lib/guideSteps';
 import { useReducedMotion } from '../motion';
 import { colors } from '../theme';
 import { T } from './ui';
 
 /**
  * Hướng dẫn dạng lớp phủ trên các tab chính: làm tối màn hình, chừa sáng đúng nút đang nói tới (khung sáng chạy từ nút này sang
- * nút kia) và một thẻ giải thích với Quay lại / Tiếp / Bỏ qua. Chạm vào chính nút đang sáng cũng sang bước kế (không mở nút đó).
+ * nút kia) và một thẻ Bobi giải thích với Quay lại / Tiếp / Bỏ qua. Chạm vào chính nút đang sáng cũng sang bước kế (không mở nút đó).
  * Các nút tự đăng ký vị trí bằng `useGuideTarget(key)` (gắn vào `ref`); lớp phủ đo bằng `measureInWindow` lúc tới bước đó và trừ
  * vị trí của chính lớp phủ, nên đúng cả trên web (khung app nằm giữa trang). Không đo được (nút chưa hiện) thì thẻ nằm giữa màn.
  * Bật/tắt do AppStore (`guideDismissed`): chạy một lần cho mỗi tài khoản trên máy, xem lại ở tab Quản lý.
@@ -37,10 +38,13 @@ export function useGuideTarget(key: GuideTarget) {
 export function GuideTourProvider({
   active,
   onFinish,
+  userName,
   children,
 }: {
   active: boolean;
   onFinish: () => void;
+  /** Họ tên chủ tiệm: Bobi gọi tên trong lời chào và lời kết */
+  userName?: string;
   children: React.ReactNode;
 }) {
   const nodes = useRef(new Map<GuideTarget, View>()).current;
@@ -57,7 +61,7 @@ export function GuideTourProvider({
     <GuideContext.Provider value={registry}>
       <View style={styles.root}>
         {children}
-        {active ? <GuideOverlay nodes={nodes} onFinish={onFinish} /> : null}
+        {active ? <GuideOverlay nodes={nodes} onFinish={onFinish} userName={userName} /> : null}
       </View>
     </GuideContext.Provider>
   );
@@ -68,15 +72,18 @@ type Rect = { x: number; y: number; w: number; h: number };
 /** Khoảng hở quanh nút trong khung sáng */
 const PAD = 6;
 const MOVE_MS = 260;
+/** Bo góc của khung sáng (trừ mascot tròn) */
+const RADIUS = 16;
+const BOBI = require('../../assets/bobi-bubble.png');
 
-function GuideOverlay({ nodes, onFinish }: { nodes: Map<GuideTarget, View>; onFinish: () => void }) {
+function GuideOverlay({ nodes, onFinish, userName }: { nodes: Map<GuideTarget, View>; onFinish: () => void; userName?: string }) {
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
   const rootRef = useRef<View>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [index, setIndex] = useState(0);
   const [rect, setRect] = useState<Rect | null>(null);
-  const step = GUIDE_STEPS[index];
+  const step = useMemo(() => personalizeStep(GUIDE_STEPS[index], userName), [index, userName]);
   const last = index === GUIDE_STEPS.length - 1;
 
   const fade = useRef(new Animated.Value(0)).current;
@@ -182,7 +189,8 @@ function GuideOverlay({ nodes, onFinish }: { nodes: Map<GuideTarget, View>; onFi
       ? { top: rect.y + rect.h + 14 }
       : { bottom: Math.max(16, size.height - rect.y + 14) };
 
-  const dim = styles.dim;
+  // Độ dày viền của lớp tối: đủ phủ hết màn từ bất kỳ vị trí nào của lỗ
+  const span = Math.max(size.width, size.height, 1000);
   return (
     <View
       ref={rootRef}
@@ -194,35 +202,38 @@ function GuideOverlay({ nodes, onFinish }: { nodes: Map<GuideTarget, View>; onFi
       <Animated.View style={[StyleSheet.absoluteFill, { opacity: fade }]} pointerEvents="box-none">
         {rect ? (
           <>
-            {/* Bốn mảng tối quanh khung sáng; chạm vào đó không làm gì (chặn thao tác bên dưới) */}
-            <Animated.View style={[dim, { left: 0, right: 0, top: 0, height: hole.y }]} onStartShouldSetResponder={() => true} />
+            {/* Lớp tối có lỗ bo góc đúng bằng khung sáng: một khung viền rất dày (dày hơn cả màn hình) ôm quanh lỗ, bo góc ngoài
+                = bo góc lỗ + độ dày viền nên góc trong cũng bo đúng, không lộ bốn góc sáng như khi ghép bốn mảng chữ nhật.
+                Chạm vào phần tối không làm gì (chặn thao tác bên dưới). */}
             <Animated.View
-              style={[dim, { left: 0, right: 0, top: Animated.add(hole.y, hole.h), bottom: 0 }]}
+              style={[
+                styles.frame,
+                {
+                  borderWidth: span,
+                  left: Animated.subtract(hole.x, span),
+                  top: Animated.subtract(hole.y, span),
+                  width: Animated.add(hole.w, span * 2),
+                  height: Animated.add(hole.h, span * 2),
+                  borderRadius: step.round ? Animated.add(Animated.multiply(hole.h, 0.5), span) : RADIUS + span,
+                },
+              ]}
               onStartShouldSetResponder={() => true}
             />
             <Animated.View
-              style={[dim, { left: 0, top: hole.y, height: hole.h, width: hole.x }]}
-              onStartShouldSetResponder={() => true}
-            />
-            <Animated.View
-              style={[dim, { top: hole.y, height: hole.h, left: Animated.add(hole.x, hole.w), right: 0 }]}
-              onStartShouldSetResponder={() => true}
-            />
-            <Animated.View
-              pointerEvents="box-none"
+              pointerEvents="none"
               style={[styles.ring, step.round && styles.ringRound, { left: hole.x, top: hole.y, width: hole.w, height: hole.h }]}
-            >
-              {/* Chạm vào nút đang sáng: sang bước kế thay vì mở nút đó */}
-              <Pressable
-                style={StyleSheet.absoluteFill}
-                onPress={next}
-                accessibilityRole="button"
-                accessibilityLabel={last ? 'Xong hướng dẫn' : 'Sang bước tiếp theo'}
-              />
-            </Animated.View>
+            />
+            {/* Chạm vào nút đang sáng: sang bước kế thay vì mở nút đó. Đặt theo vị trí đã đo (không theo khung đang chạy): trên
+                Android một nút con nằm trong khung chạy bằng Animated không được tính lại kích thước nên chạm bị lọt xuống nút thật. */}
+            <Pressable
+              style={{ position: 'absolute', left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
+              onPress={next}
+              accessibilityRole="button"
+              accessibilityLabel={last ? 'Xong hướng dẫn' : 'Sang bước tiếp theo'}
+            />
           </>
         ) : (
-          <View style={[StyleSheet.absoluteFill, dim]} onStartShouldSetResponder={() => true} />
+          <View style={[StyleSheet.absoluteFill, styles.dim]} onStartShouldSetResponder={() => true} />
         )}
 
         <Animated.View
@@ -235,24 +246,35 @@ function GuideOverlay({ nodes, onFinish }: { nodes: Map<GuideTarget, View>; onFi
             },
           ]}
         >
-          <View style={styles.cardHead}>
-            <T w="bold" size={11.5} color={colors.brand} style={styles.counter}>
-              {index === 0 ? 'HƯỚNG DẪN NHANH' : `BƯỚC ${index}/${GUIDE_STEPS.length - 1}`}
-            </T>
-            {!last ? (
-              <Pressable onPress={finish} hitSlop={10} accessibilityRole="button" accessibilityLabel="Bỏ qua hướng dẫn">
-                <T w="semibold" size={13} color={colors.muted}>
-                  Bỏ qua
+          <View style={styles.cardMain}>
+            {/* Bobi "nói" lời hướng dẫn: dấu thương hiệu ở mọi bước, to hơn ở thẻ chào */}
+            <Image
+              source={BOBI}
+              style={index === 0 ? styles.bobiLarge : styles.bobi}
+              resizeMode="contain"
+              accessibilityIgnoresInvertColors
+            />
+            <View style={styles.cardText}>
+              <View style={styles.cardHead}>
+                <T w="bold" size={11} color={colors.brand} style={styles.counter}>
+                  {index === 0 ? 'HƯỚNG DẪN NHANH' : `BƯỚC ${index}/${GUIDE_STEPS.length - 1}`}
                 </T>
-              </Pressable>
-            ) : null}
+                {!last ? (
+                  <Pressable onPress={finish} hitSlop={10} accessibilityRole="button" accessibilityLabel="Bỏ qua hướng dẫn">
+                    <T w="semibold" size={13} color={colors.muted}>
+                      Bỏ qua
+                    </T>
+                  </Pressable>
+                ) : null}
+              </View>
+              <T w="extrabold" size={17} color={colors.ink} style={{ marginTop: 2 }}>
+                {step.title}
+              </T>
+              <T size={13.5} color={colors.inkSecondary} style={styles.body}>
+                {step.body}
+              </T>
+            </View>
           </View>
-          <T w="extrabold" size={17} color={colors.ink} style={{ marginTop: 6 }}>
-            {step.title}
-          </T>
-          <T size={13.5} color={colors.inkSecondary} style={styles.body}>
-            {step.body}
-          </T>
           <View style={styles.actions}>
             <View style={styles.dots}>
               {GUIDE_STEPS.map((s, i) => (
@@ -286,14 +308,17 @@ function GuideOverlay({ nodes, onFinish }: { nodes: Map<GuideTarget, View>; onFi
   );
 }
 
+const DIM = 'rgba(17, 12, 38, 0.72)';
+
 const styles = StyleSheet.create({
   root: { flex: 1 },
   // Trên menu chuyển nhanh (200), thanh tab (40) và mascot (10)
   layer: { zIndex: 300, elevation: 40 },
-  dim: { position: 'absolute', backgroundColor: 'rgba(17, 12, 38, 0.72)' },
+  dim: { position: 'absolute', backgroundColor: DIM },
+  frame: { position: 'absolute', borderColor: DIM },
   ring: {
     position: 'absolute',
-    borderRadius: 16,
+    borderRadius: RADIUS,
     borderWidth: 2,
     borderColor: '#FFFFFF',
   },
@@ -318,9 +343,13 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  cardMain: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  cardText: { flex: 1, minWidth: 0 },
+  bobi: { width: 52, height: 52 },
+  bobiLarge: { width: 68, height: 68 },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   counter: { letterSpacing: 0.6 },
-  body: { marginTop: 6, lineHeight: 20 },
+  body: { marginTop: 4, lineHeight: 20 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 },
   dots: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.border },

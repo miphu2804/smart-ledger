@@ -1,3 +1,15 @@
+### [2026-10-21 17:40 UTC+07:00] — [Fix] Guide overlay works on Android, Bobi speaks in it, order buttons are white cards
+
+**Done:** Tested PR #339 on the Android emulator and changed it on request:
+- **Tapping the lit button opened that screen on Android** instead of moving to the next step: the invisible button sat inside the animated ring, and Android did not resize it, so it stayed 0×0 and the tap fell through. It is now placed by the measured position. The dim layer is one frame with a rounded hole, so the four corners around the ring are no longer left bright.
+- **Shorter, warmer text with Bobi.** Every card shows Bobi and one short line in Bobi's voice ("mình"), at most 80 characters; the welcome and the last card call the owner by the given name (last word of the name, "bạn" when there is none or it is long).
+- **Order buttons.** The tinted see-through cards looked muddy on the purple header, so they are now white cards like the revenue card above, each told apart by a soft icon tile from the brand colours: yellow Đọc đơn, blue Chọn hàng, green Quét mã, lavender Trợ lý Bobi.
+- FR-025 and AC-018 mention Bobi and the name.
+
+**Changed files:** `frontend/mobile/src/components/GuideTour.tsx`, `frontend/mobile/src/lib/guideSteps.ts`, `frontend/mobile/tests/guideSteps.test.ts`, `frontend/mobile/app/(tabs)/_layout.tsx`, `frontend/mobile/app/(tabs)/index.tsx`, `docs/product/product-requirements.md` — modified; this entry.
+
+**Check:** `node --test tests/guideSteps.test.ts` 8/8; `npx tsc --noEmit` shows no new errors; Android emulator (CI build #39 with a locally built JS bundle and x86_64 libraries added, debug-signed): the tour opened by itself on the first sign-in of a new install; Android back steps back; all nine rings sit on their buttons, round for the mascot, with no bright corners; tapping the lit button moves on without opening it, and on the last step closes the tour; the welcome card greets the signed-in account by name. **Not verified:** a real phone; Đọc đơn on that emulator build (the speech library does not load in the hand-made x86_64 build).
+
 ### [2026-10-21 09:24 UTC+07:00] — [Feature] Interactive guide overlay on Overview and distinct colours for the order buttons
 
 **Done:** On request, the guide is now an overlay that points at the real buttons instead of a picture dialog:
