@@ -63,6 +63,7 @@ function loadGoogle(): any {
     throw new AuthError(
       'not-configured',
       'Bản build này chưa có Web client ID của Google: google-services.json lúc build thiếu oauth_client client_type 3 (bật Google trong Firebase rồi tải lại file)',
+      'google-no-web-client',
     );
   }
   try {
@@ -73,7 +74,7 @@ function loadGoogle(): any {
     }
     return g;
   } catch {
-    throw new AuthError('not-configured', 'Bản build này chưa có thư viện Google Sign-In: cần build lại APK');
+    throw new AuthError('not-configured', 'Bản build này chưa có thư viện Google Sign-In: cần build lại APK', 'google-no-lib');
   }
 }
 
@@ -89,8 +90,14 @@ function mapGoogleError(e: unknown, statusCodes: Record<string, string>): AuthEr
   // DEVELOPER_ERROR (10): Google không nhận cặp tên gói + SHA-1 của khoá đã ký bản này
   if (code === '10' || code === 'DEVELOPER_ERROR') {
     debugLog('auth', 'Google lỗi DEVELOPER_ERROR:', (e as { message?: string })?.message ?? '');
-    return new AuthError('not-configured', 'Google từ chối bản build này (DEVELOPER_ERROR): SHA-1 của khoá ký chưa có trong Firebase project');
+    return new AuthError(
+      'not-configured',
+      'Google từ chối bản build này (DEVELOPER_ERROR): SHA-1 của khoá ký chưa có trong Firebase project',
+      'google-10',
+    );
   }
+  // Mã khác của thư viện Google (số hoặc tên, không có tiền tố "auth/") thì gắn tiền tố google- để phân biệt với lỗi Firebase
+  if (code && !code.includes('/')) return new AuthError('unknown', undefined, `google-${code}`);
   return mapFirebaseError(e);
 }
 
@@ -104,7 +111,7 @@ export const firebaseAuth: AuthClient = {
       const result = await GoogleSignin.signIn();
       if (result?.type === 'cancelled') throw new AuthError('cancelled');
       const idToken = result?.data?.idToken;
-      if (!idToken) throw new AuthError('unknown', 'Google không trả về mã đăng nhập. Vui lòng thử lại');
+      if (!idToken) throw new AuthError('unknown', 'Google không trả về mã đăng nhập. Vui lòng thử lại', 'google-no-id-token');
       const provider = m.GoogleAuthProvider ?? m.default?.GoogleAuthProvider;
       const credential = provider.credential(idToken);
       if (typeof m.signInWithCredential === 'function') await m.signInWithCredential(auth, credential);
