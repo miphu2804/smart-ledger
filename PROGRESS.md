@@ -1,3 +1,17 @@
+### [2026-10-21 08:50 UTC+07:00] — [Docs] Voice-order resolver: pipeline diagram and algorithm explainer
+
+**Done:** The configuration the bake-off selected (R2, Q-cos + gate G1) now has two documents that did not exist: an editable draw.io pipeline diagram and a written explainer page. The diagram is seven horizontal bands, English labels, the `smartledger` preset, and validates at 0 errors, 0 warnings, 0 crossings, 0 edge-through-vertex. The explainer carries the held-out numbers, the gate's rule order, the measured Q-before-E argument, the per-tag weakness, and the five integration findings cited at the bottom.
+
+Two figures were re-derived rather than copied. The tuned G1 thresholds (`sFloor` 0.587, `sAuto` 1.0, `mMin` 0) were lost with the gitignored run JSON, so R0/R2/R3 were re-run to recover them; the R2 row reproduced the published report exactly (recall@3 93.6%, top-1 87.5%, MRR 0.903, FAR 0.1%, 700 autos, ask rate 24.3%), which is what makes those thresholds safe to print. The F4 linear fusion control, which the plan expected to be weaker, was measured as a local probe and is in fact the strongest row in the matrix: 96.9% recall@3, 90.5% top-1, FAR 2.8%, 1108 autos. The budget still excludes it, so it stays out of the committed matrix and is recorded as a deviation in the explainer instead.
+
+**Changed files:**
+- `docs/architecture/diagrams/src/voice-order-resolver.drawio` — created
+- `docs/architecture/diagrams/images/voice-order-resolver.svg` — created
+- `eval/reports/voice-order-resolver-explainer.html` — created
+- `PROGRESS.md` — this entry
+
+**Flow explained:** `parseOrder` hands the resolver a `QueryLine`. The normalizer folds the span three ways and the trigram index prunes candidates with the Ukkonen count filter, which is lossless for edit distance 2 because trigram overlap lower-bounds edit distance. Q-cos then scores what survives with an IDF-weighted cosine, F1 max passes the score through unchanged, and the gate turns the top-5 and its features into AUTO, ASK or NEW by the rule order alias, floor, then the four-condition auto test. A shop correction on an ASK re-enters the index as an extra document, so the loop closes without a rebuild. Diagram and page were authored from the resolver source, not from the plan's prose, so the formulas and thresholds are the shipped ones.
+
 ### [2026-10-20 12:10 UTC+07:00] — [Fix] Read-only shop-data questions no longer run in the AI sandbox
 
 **Done:** With the sandbox on, `query_shop_data` and `suggest_restock` were folded into `run_code`, so every read-only data question started Monty. They now stay native tools; only model-written `run_code` programs run in the sandbox. On staging (shop 8, 18 turns) sandbox turns fell from 18 to 0, but median latency did not drop (6.01s → 6.14s): model round trips, not Monty, dominate.
