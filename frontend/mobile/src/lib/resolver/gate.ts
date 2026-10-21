@@ -78,12 +78,14 @@ export function decide(features: GateFeatures, config: GateConfig): Decision {
     return 'ASK';
   }
 
-  if (features.alias === 1) return 'AUTO';
+  // A heard unit the trusted product is not sold in ("chai" against a "lon"
+  // row) is a different product or a mishearing, so even a confirmed alias asks.
+  if (features.alias === 1) return features.unit_ok === 'mismatch' ? 'ASK' : 'AUTO';
   if (features.s1 < config.rules.sFloor) return 'NEW';
   if (
     features.s1 >= config.rules.sAuto &&
     features.margin >= config.rules.mMin &&
-    features.agree === 1 &&
+    features.agree >= (config.rules.agreeMin ?? 1) &&
     features.unit_ok !== 'mismatch'
   ) {
     return 'AUTO';

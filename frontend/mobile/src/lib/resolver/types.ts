@@ -138,6 +138,18 @@ export interface ResolverConfig {
   eBruteMax: number;
   /** Whether B drops unit words (`chai`, `lon`, ...) before scoring. */
   useUnitStoplist: boolean;
+  /** Second-stage rerank of the fused shortlist. Absent keeps the fused order and score. */
+  rerank?: RerankConfig;
+}
+
+/** A bounded similarity the reranker can weigh; see `rerank.ts`. */
+export type RerankSignal = 'E' | 'P' | 'T' | 'R';
+
+/** Rerank stage: how many fused candidates to re-score, and how to weigh the signals. */
+export interface RerankConfig {
+  pool: number;
+  /** Non-negative; normalized to sum to 1. */
+  weights: Partial<Record<RerankSignal, number>>;
 }
 
 /** G1 rule thresholds. */
@@ -145,6 +157,8 @@ export interface GateRules {
   sFloor: number;
   sAuto: number;
   mMin: number;
+  /** Share of retrievers whose top-1 must be the fused top-1. Absent means all of them. */
+  agreeMin?: number;
 }
 
 /** G2 logistic weights plus its isotonic calibration map. */

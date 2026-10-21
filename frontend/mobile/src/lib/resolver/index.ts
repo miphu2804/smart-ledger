@@ -22,6 +22,7 @@ import { RetrieverB } from './retrieverB.ts';
 import { RetrieverE } from './retrieverE.ts';
 import { RetrieverP } from './retrieverP.ts';
 import { RetrieverQ } from './retrieverQ.ts';
+import { Reranker } from './rerank.ts';
 import type {
   AliasEntry,
   CatalogItem,
@@ -152,6 +153,8 @@ export function buildResolver(options: BuildResolverOptions): Resolver {
   }
 
   const retrievers = buildRetrievers(catalog, config);
+  const reranker = config.rerank ? new Reranker(config.rerank) : undefined;
+  if (reranker) for (const item of catalog) reranker.addDocument(item.name, item.id);
   const productById = new Map(catalog.map((item) => [item.id, item]));
 
   // The shop's own confirmations are the better evidence, so they are laid over
@@ -178,6 +181,7 @@ export function buildResolver(options: BuildResolverOptions): Resolver {
     if (indexed.has(key)) return;
     indexed.add(key);
     for (const retriever of retrievers) retriever.addDocument(entry.folded, entry.productId);
+    reranker?.addDocument(entry.folded, entry.productId);
   }
   for (const entry of table.entries()) indexAlias(entry);
 
@@ -185,7 +189,11 @@ export function buildResolver(options: BuildResolverOptions): Resolver {
     const hits: Record<string, { productId: string; score: number }[]> = {};
     for (const retriever of retrievers) hits[retriever.name] = retriever.retrieve(line, config.topK);
 
-    const topK = fuse(hits, config);
+    // With a reranker, fuse a wider shortlist, re-score it on an absolute
+    // scale, then keep `topK`; the gate then reads the reranked score.
+    const topK = reranker
+      ? reranker.rerank(line, fuse(hits, { ...config, topK: Math.max(config.topK, reranker.pool) })).slice(0, config.topK)
+      : fuse(hits, config);
     const top1 = topK[0];
     const s1 = top1?.score ?? 0;
     // A missing runner-up is the strongest possible margin, not the weakest. The
