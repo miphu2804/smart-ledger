@@ -5,6 +5,8 @@ interface ImportMetaEnv {
   readonly VITE_USE_MOCK?: string
   readonly VITE_ADMIN_ENABLED?: string
   readonly VITE_ANDROID_APK_URL?: string
+  readonly VITE_FIREBASE_API_KEY?: string
+  readonly VITE_FIREBASE_AUTH_EMULATOR_HOST?: string
 }
 
 interface ImportMeta {

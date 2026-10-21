@@ -94,7 +94,11 @@ export default function LoginPage() {
               <strong>Sổ Nghe Lời</strong>
             </div>
             <h1>Đăng nhập quản trị</h1>
-            <p className="sub">Chỉ dành cho tài khoản ADMIN của đội vận hành.</p>
+            <p className="sub">
+              {USE_MOCK
+                ? 'Chỉ dành cho tài khoản ADMIN của đội vận hành.'
+                : 'Đăng nhập bằng email và mật khẩu Firebase của tài khoản có quyền ADMIN trong Sổ Nghe Lời.'}
+            </p>
 
             {error && (
               <div className="notice notice-danger" role="alert" style={{ marginBottom: 14 }}>
