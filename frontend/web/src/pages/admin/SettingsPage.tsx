@@ -20,6 +20,7 @@ import { NavLink, Navigate, useOutletContext, useParams } from 'react-router-dom
 import { Avatar, Panel, SearchInput } from '../../components/admin/ui'
 import { EmptyState, ErrorState, LoadingState, ReadOnlyState } from '../../components/States'
 import { useToast } from '../../components/Toast'
+import { USE_MOCK } from '../../config'
 import { useAsync } from '../../hooks/useAsync'
 import { listAuditLog, now } from '../../services/accountService'
 import { getSession } from '../../services/authService'
@@ -32,11 +33,13 @@ const TABS: { id: Tab; label: string; icon: Icon }[] = [
   { id: 'profile', label: 'Hồ sơ', icon: User },
   { id: 'appearance', label: 'Giao diện', icon: Palette },
   { id: 'security', label: 'Bảo mật & quyền', icon: ShieldCheck },
-  { id: 'audit', label: 'Nhật ký', icon: ClockCounterClockwise },
+  // Chế độ thật: nhật ký nằm ở trang riêng /admin/access-logs (đọc từ Core)
+  ...(USE_MOCK ? [{ id: 'audit' as const, label: 'Nhật ký', icon: ClockCounterClockwise }] : []),
 ]
 
 export default function SettingsPage() {
   const { tab = 'profile' } = useParams()
+  if (!USE_MOCK && tab === 'audit') return <Navigate to="/admin/access-logs" replace />
   if (!TABS.some((t) => t.id === tab)) return <Navigate to="/admin/settings/profile" replace />
   return (
     <div className="settings">

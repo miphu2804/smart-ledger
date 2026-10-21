@@ -669,3 +669,107 @@ jobs:
           URL: ${{ steps.preview.outputs.url || steps.deploy.outputs.url }}
         run: |
           echo "Landing deploy: $URL" >> "$GITHUB_STEP_SUMMARY"
+
+  ### Deploy admin: a separate Vercel project built from frontend/web with the admin enabled ###
+  # Same source as the landing, but VITE_ADMIN_ENABLED=true and real Core data, so the public landing never
+  # carries admin code. It reuses the landing-* environments (same Vercel team token and production approval)
+  # with its own project and ADMIN_* variables. Until those are set the job only prints a notice.
+  deploy-admin:
+    if: >-
+      !failure() && !cancelled() && github.event_name == 'push'
+      && (github.ref_name == 'staging' || github.ref_name == 'main')
+      && (needs.changes.outputs.landing == 'true' || github.run_attempt > 1)
+    needs: [changes, landing]
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    environment: ${{ github.ref_name == 'main' && 'landing-production' || 'landing-staging' }}
+    concurrency:
+      group: deploy-admin-${{ github.ref_name }}
+      cancel-in-progress: true
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.ADMIN_VERCEL_PROJECT_ID }}
+      VERCEL_TARGET: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
+      VITE_ADMIN_ENABLED: "true"
+      VITE_USE_MOCK: "false"
+      VITE_API_ENDPOINT: ${{ vars.ADMIN_API_ENDPOINT }}
+      VITE_FIREBASE_API_KEY: ${{ vars.ADMIN_FIREBASE_API_KEY }}
+      ADMIN_URL: ${{ vars.ADMIN_URL }}
+    steps:
+      - name: Check the environment is set up
+        id: ready
+        run: |
+          missing=""
+          # Names as set on the environment (the job maps the ADMIN_* variables to VITE_* for the build)
+          check() { [ -n "$2" ] || missing="$missing $1"; }
+          check VERCEL_TOKEN "$VERCEL_TOKEN"
+          check VERCEL_ORG_ID "$VERCEL_ORG_ID"
+          check ADMIN_VERCEL_PROJECT_ID "$VERCEL_PROJECT_ID"
+          check ADMIN_API_ENDPOINT "$VITE_API_ENDPOINT"
+          check ADMIN_FIREBASE_API_KEY "$VITE_FIREBASE_API_KEY"
+          check ADMIN_URL "$ADMIN_URL"
+          if [ -n "$missing" ]; then
+            echo "::notice::Admin deploy skipped: set$missing on the ${{ github.ref_name == 'main' && 'landing-production' || 'landing-staging' }} environment"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v7
+        if: steps.ready.outputs.ready == 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        if: steps.ready.outputs.ready == 'true'
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/web/package-lock.json
+      - name: Install Vercel CLI
+        if: steps.ready.outputs.ready == 'true'
+        run: npm install --global vercel@62.2.0
+      - if: steps.ready.outputs.ready == 'true'
+        run: vercel pull --yes --environment="$VERCEL_TARGET" --token="$VERCEL_TOKEN"
+      - if: steps.ready.outputs.ready == 'true'
+        run: vercel build ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN"
+      # The admin must be the real one: admin routes present, no mock demo accounts, pointed at this Core.
+      - name: Check the admin build
+        if: steps.ready.outputs.ready == 'true'
+        run: |
+          out=.vercel/output/static
+          [ -n "$(find "$out" -name 'AdminRoutes-*')" ] || { echo "::error::admin routes are missing; VITE_ADMIN_ENABLED did not reach the build"; exit 1; }
+          if grep -rqF admin123 "$out"; then echo "::error::mock demo accounts are in the admin build; VITE_USE_MOCK must be false"; exit 1; fi
+          grep -rqF "$VITE_API_ENDPOINT" "$out" || { echo "::error::the build does not point at ADMIN_API_ENDPOINT"; exit 1; }
+      - name: Deploy
+        id: deploy
+        if: steps.ready.outputs.ready == 'true'
+        run: |
+          url=$(vercel deploy --prebuilt ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      # Staging deploys are previews; give them the fixed ADMIN_URL alias. Production uses the project's domain.
+      - name: Alias staging
+        if: steps.ready.outputs.ready == 'true' && github.ref_name == 'staging'
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+          alias="${ADMIN_URL#https://}"
+          api=https://api.vercel.com
+          auth="Authorization: Bearer $VERCEL_TOKEN"
+          id=$(curl -fsS -H "$auth" "$api/v13/deployments/${URL#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
+          curl -fsS -X POST -H "$auth" -H "Content-Type: application/json" \
+            -d "$(jq -n --arg alias "$alias" '{alias: $alias}')" \
+            "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID"
+          echo "alias: $ADMIN_URL -> $URL"
+      - name: Smoke test
+        if: steps.ready.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$ADMIN_URL/admin/login" || true)
+            [ "$code" = 200 ] && break
+            sleep 5
+          done
+          test "$code" = 200
+          echo "admin login page: 200 at $ADMIN_URL/admin/login" >> "$GITHUB_STEP_SUMMARY"

@@ -1,47 +1,54 @@
 /**
- * HTTP client tối giản cho backend thật (dùng khi USE_MOCK = false).
- * TODO(backend): thống nhất định dạng lỗi & đường dẫn với nhóm backend.
+ * HTTP client cho Core (dùng khi USE_MOCK = false). Mọi đường dẫn tương đối với `/api/v1`, gửi kèm ID token Firebase
+ * còn hạn (tự làm mới). Lỗi đọc theo định dạng của Core: `{ code, message, traceId }`.
  */
 import { API_ENDPOINT } from '../config'
-import { clearSession, getSession } from './authService'
+import { clearSession, getIdToken } from './authService'
+
+export const API_BASE = `${API_ENDPOINT}/api/v1`
 
 export class ApiError extends Error {
   status: number
-  constructor(status: number, message: string) {
+  code?: string
+  constructor(status: number, message: string, code?: string) {
     super(message)
     this.status = status
+    this.code = code
   }
 }
 
-function currentToken(): string | null {
-  return getSession()?.accessToken ?? null
-}
-
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = currentToken()
-  const res = await fetch(`${API_ENDPOINT}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init.headers,
-    },
-  })
+  const token = await getIdToken()
+  let res: Response
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init.headers,
+      },
+    })
+  } catch {
+    throw new ApiError(0, 'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.')
+  }
   if (!res.ok) {
     let message = `Lỗi máy chủ (${res.status})`
+    let code: string | undefined
     try {
-      const body = (await res.json()) as { message?: string; detail?: string }
+      const body = (await res.json()) as { code?: string; message?: string; detail?: string }
+      code = body.code
       message = body.message ?? body.detail ?? message
     } catch {
       /* body không phải JSON */
     }
     // 401: phiên hết hạn -> xoá phiên rồi về trang đăng nhập (không xoá thì LoginPage thấy phiên cũ và đẩy ngược về /admin).
-    // Không gọi logout() ở đây: nó gọi backend, gặp 401 nữa sẽ lặp. 403 do trang tự hiển thị.
     if (res.status === 401) {
       clearSession()
       if (typeof window !== 'undefined' && window.location.pathname !== '/admin/login') window.location.assign('/admin/login')
     }
-    throw new ApiError(res.status, message)
+    if (res.status === 403) message = 'Tài khoản không có quyền thực hiện thao tác này.'
+    throw new ApiError(res.status, message, code)
   }
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
