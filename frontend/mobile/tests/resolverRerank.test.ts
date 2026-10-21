@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import { decide } from '../src/lib/resolver/gate.ts';
 import { buildResolver } from '../src/lib/resolver/index.ts';
 import { normalizedWeights, Reranker } from '../src/lib/resolver/rerank.ts';
-import type { Candidate, CatalogItem, GateConfig, ResolverConfig } from '../src/lib/resolver/types.ts';
+import type { Candidate, CatalogItem, GateConfig, GateFeatures, ResolverConfig } from '../src/lib/resolver/types.ts';
 
 const candidate = (productId: string, score: number): Candidate => ({ productId, score, scores: {}, ranks: {} });
 
@@ -93,7 +93,7 @@ describe('buildResolver with a rerank stage', () => {
 
 describe('gate order', () => {
   it('asks instead of auto-applying a trusted alias when the heard unit does not match', () => {
-    const features = { s1: 1, s2: 0, margin: 1, disp: 0, agree: 1, jacc: 1, unit_ok: 'mismatch' as const, alias: 1, len_q: 2, stt_conf: null };
+    const features: GateFeatures = { s1: 1, s2: 0, margin: 1, disp: 0, agree: 1, jacc: 1, unit_ok: 'mismatch', alias: 1, len_q: 2, stt_conf: null };
     assert.equal(decide(features, gate), 'ASK');
     assert.equal(decide({ ...features, unit_ok: 'ok' }, gate), 'AUTO');
   });
