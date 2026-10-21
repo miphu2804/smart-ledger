@@ -7,14 +7,13 @@ import { Button, Row, Screen, T } from '../../src/components/ui';
 import { AuthError, authClient } from '../../src/lib/auth';
 import { debugLog } from '../../src/lib/debug';
 import { describeError, errorMessage, isDisplayNameRequired } from '../../src/lib/errors';
-import { signInWithZalo, ZALO_LOGIN_AVAILABLE } from '../../src/lib/zaloLogin';
+import { signInWithZalo } from '../../src/lib/zaloLogin';
 import { useApp } from '../../src/store/AppStore';
 import { colors, shadow } from '../../src/theme';
 
 /**
- * Cách đăng nhập: email + mật khẩu và Google dùng được; Facebook tạm khoá; Zalo dùng được trên bản web khi bật
- * EXPO_PUBLIC_ZALO_LOGIN và trên Android khi có EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID, còn lại ghi "Sắp có". Không còn đăng nhập
- * bằng số điện thoại.
+ * Cách đăng nhập: email + mật khẩu và Google dùng được; Facebook tạm khoá; Zalo tạm ghi "Sắp có" trên mọi bản (kể cả khi
+ * build có EXPO_PUBLIC_ZALO_LOGIN hay EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID). Không còn đăng nhập bằng số điện thoại.
  */
 export default function Welcome() {
   const toast = useToast();
@@ -97,14 +96,9 @@ export default function Welcome() {
         {/* Facebook tạm khoá theo yêu cầu nhóm: nút mờ, ghi "Tạm khoá", không bấm được (luồng signInWith('facebook') giữ nguyên) */}
         <SocialBtn name="Facebook" icon="facebook" soon note="Tạm khoá" />
         <SocialBtn name="Google" icon="google" busy={busy === 'google'} disabled={!!busy && busy !== 'google'} onPress={() => signInWith('google')} />
-        <SocialBtn
-          name="Zalo"
-          icon="zalo"
-          soon={!ZALO_LOGIN_AVAILABLE}
-          busy={busy === 'zalo'}
-          disabled={!!busy && busy !== 'zalo'}
-          onPress={() => signInWith('zalo')}
-        />
+        {/* Zalo tạm khoá theo yêu cầu nhóm: nút mờ, ghi "Sắp có", không bấm được dù build có cấu hình Zalo (luồng
+            signInWith('zalo') giữ nguyên; mở lại thì trả `soon={!ZALO_LOGIN_AVAILABLE}` từ src/lib/zaloLogin) */}
+        <SocialBtn name="Zalo" icon="zalo" soon />
       </Row>
 
       <Row style={{ justifyContent: 'center', marginTop: 24 }} gap={6}>

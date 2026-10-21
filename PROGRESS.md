@@ -10,6 +10,12 @@
 
 **Check:** `node --test tests/guideSteps.test.ts` 8/8; `npx tsc --noEmit` shows no new errors; Android emulator (CI build #39 with a locally built JS bundle and x86_64 libraries added, debug-signed): the tour opened by itself on the first sign-in of a new install; Android back steps back; all nine rings sit on their buttons, round for the mascot, with no bright corners; tapping the lit button moves on without opening it, and on the last step closes the tour; the welcome card greets the signed-in account by name. **Not verified:** a real phone; Đọc đơn on that emulator build (the speech library does not load in the hand-made x86_64 build).
 
+### [2026-10-21 17:20 UTC+07:00] — [Change] Zalo sign-in is shown as "Sắp có" for now
+
+**Done:** On request, the Zalo button on the sign-in screen is greyed out with "Sắp có" and cannot be tapped on every build, including builds that set `EXPO_PUBLIC_ZALO_LOGIN` or `EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID`, like the Facebook button. The Zalo sign-in code and Core's Zalo endpoints are unchanged, so turning it back on is a one-line change (noted in the code). The PRD's FR-010 says the button is "Sắp có" for now.
+
+**Changed files:** `frontend/mobile/app/(auth)/welcome.tsx`, `docs/product/product-requirements.md` — modified; this entry.
+
 ### [2026-10-21 09:24 UTC+07:00] — [Feature] Interactive guide overlay on Overview and distinct colours for the order buttons
 
 **Done:** On request, the guide is now an overlay that points at the real buttons instead of a picture dialog:
