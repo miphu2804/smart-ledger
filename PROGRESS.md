@@ -1,3 +1,24 @@
+### [2026-10-21 07:55 UTC+07:00] — [Feature] Voice-order product resolver: eval harness, datasets, and first bake-off
+
+**Done:** Built the offline evaluation that `.plans/stt-optimization-plan.md` §7–§8 asks for, and ran the resolver bake-off on it.
+
+- **Resolver library** (`frontend/mobile/src/lib/resolver/`): normalizer with three views, retrievers E (edit distance, spaced and solid spelling), Q (character trigrams, cosine and BM25), B (syllable BM25), P (phonetic key) and the rejected AND-trigram control; fusion F1–F4; gate G1 (rules) and G2 (logistic plus isotonic); alias learning; `buildResolver`.
+- **Datasets** (`eval/`): D1-text from the prior PoC corpus (1087 records, written transcripts), D2 synthetic ASR noise (1015), D3 catalog stress at 100 / 1 000 / 5 000 / 20 000 items (26 100). Group splits by product family and source set.
+- **Bake-off** (`eval/reports/bakeoff_v1.md`): the pre-registered matrix and selection rule from §8.3, with bootstrap CIs, McNemar against R0, risk–coverage, a failure gallery and an explicit deviations section.
+
+**Result.** R2 (Q-cos, G1) is the rule's choice: recall@3 93.6%, top-1 87.5%, FAR 0.1% (95% CI 0.0–0.3%) over 700 autos, ask rate 24.3%. The current `parseOrder` matcher (R0) reaches 48.3% recall@3. R5 (E+Q+B) has the best recall@3 at 96.3% but FAR 2.8%, over the 1% budget, so the rule excludes it: the extra retrievers buy recall the gate cannot make safe. Not measured: recorded audio (none exists in the repository), device latency, the Qdrant Edge parity oracle.
+
+**Five defects found and fixed, each of which had produced a plausible-looking number:**
+1. `index.ts` injected an empty candidate provider into E and P even with no Q configured, so an E-only config resolved nothing above `eBruteMax` and reported it as "no match".
+2. `corpus.ts` `loadCatalogs()` returned only the three real catalogs, so all 26 100 D3 lines resolved against an empty catalog.
+3. `--limit` sampled the pooled corpus, and D3 is 26 100 of 28 202 records, so a small run described D3 while looking like it described everything.
+4. The gate tuner minimized the ask rate alone, making NEW a free dodge: R4/R5/R6 reported FAR 0.0% with 0 autos, and the selection rule picked a config that resolved nothing. A NEW now counts as a failure to answer, and the fallback asks rather than declaring NEW.
+5. The G1 threshold grid assumed a 0–1 score scale; RRF scores are about 0.016, so no RRF row could ever auto-apply. Thresholds are now searched over the observed distribution.
+
+**Changed files:** `frontend/mobile/src/lib/resolver/**` — added; `frontend/mobile/src/lib/resolver/index.ts` — modified (defect 1); `frontend/mobile/tests/resolver*.test.ts` — added (8 files, 128 tests); `eval/**` — added (harness, datasets, notes, report); `PROGRESS.md` — this entry.
+
+**Check:** `node --test eval/tests/*.test.ts` 94/94; `node --test frontend/mobile/tests/resolver*.test.ts` 128/128; `npx tsc --noEmit` in `frontend/mobile` reports no new errors; `node eval/runner/run.ts --limit 700` reproduces the report. **Not verified:** an Android device, real ASR audio, or that the synthetic D2 weights match this app's recognizer.
+
 ### [2026-10-20 12:10 UTC+07:00] — [Fix] Read-only shop-data questions no longer run in the AI sandbox
 
 **Done:** With the sandbox on, `query_shop_data` and `suggest_restock` were folded into `run_code`, so every read-only data question started Monty. They now stay native tools; only model-written `run_code` programs run in the sandbox. On staging (shop 8, 18 turns) sandbox turns fell from 18 to 0, but median latency did not drop (6.01s → 6.14s): model round trips, not Monty, dominate.
