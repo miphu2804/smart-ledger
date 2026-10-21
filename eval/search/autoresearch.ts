@@ -197,6 +197,17 @@ function quantileValues(values: number[], count: number): number[] {
   return [...out];
 }
 
+/** Expected taps per decision (protocol v2). Unset means v1: an ASK and a wrong NEW cost the same. */
+let TAP_COST: Record<string, number> | undefined;
+
+function tapsOf(row: Row, decision: 'AUTO' | 'ASK' | 'NEW'): number {
+  if (!TAP_COST) return decision === 'ASK' || (decision === 'NEW' && row.gold !== null) ? 1 : 0;
+  if (decision === 'AUTO') return TAP_COST.AUTO;
+  if (decision === 'NEW') return row.gold === null ? TAP_COST.NEW_goldOutOfCatalog : TAP_COST.NEW_otherwise;
+  if (row.gold === null) return TAP_COST.ASK_goldOutOfCatalog;
+  return row.ranked.slice(0, 3).includes(row.gold) ? TAP_COST.ASK_goldInTop3 : TAP_COST.ASK_otherwise;
+}
+
 function decideRow(row: Row, rules: GateRules): 'AUTO' | 'ASK' | 'NEW' {
   if (row.s1 < rules.sFloor) return 'NEW';
   if (row.s1 >= rules.sAuto && row.margin >= rules.mMin && row.agree >= (rules.agreeMin ?? 1)) return 'AUTO';
@@ -252,10 +263,7 @@ export function fitGate(rows: Row[], farMax: number, delta: number): GateRules {
     if (sFloor > best.sAuto) continue;
     const rules = { ...best, sFloor };
     let cost = 0;
-    for (const row of rows) {
-      const decision = decideRow(row, rules);
-      if (decision === 'ASK' || (decision === 'NEW' && row.gold !== null)) cost += 1;
-    }
+    for (const row of rows) cost += tapsOf(row, decideRow(row, rules));
     if (cost < bestCost) {
       bestCost = cost;
       bestFloor = sFloor;
@@ -277,6 +285,7 @@ interface Metrics {
   top1: number;
   recall3: number;
   oocFar: number;
+  taps: number;
 }
 
 function measure(rows: Row[], rules: GateRules): Metrics {
@@ -290,8 +299,10 @@ function measure(rows: Row[], rules: GateRules): Metrics {
   let inCat = 0;
   let ooc = 0;
   let oocWrong = 0;
+  let taps = 0;
   for (const row of rows) {
     const decision = decideRow(row, rules);
+    taps += tapsOf(row, decision);
     if (row.gold !== null) {
       inCat += 1;
       if (row.ranked[0] === row.gold) top1 += 1;
@@ -323,6 +334,7 @@ function measure(rows: Row[], rules: GateRules): Metrics {
     top1: inCat ? top1 / inCat : 0,
     recall3: inCat ? recall3 / inCat : 0,
     oocFar: ooc ? oocWrong / ooc : 0,
+    taps: taps / Math.max(1, n),
   };
 }
 
@@ -344,6 +356,7 @@ function objectiveOf(val: Metrics, farMax: number): number {
 function better(a: Trial, b: Trial | undefined): boolean {
   if (!b) return true;
   if (a.objective !== b.objective) return a.objective > b.objective;
+  if (TAP_COST && a.val.taps !== b.val.taps) return a.val.taps < b.val.taps;
   if (a.val.recall3 !== b.val.recall3) return a.val.recall3 > b.val.recall3;
   const sa = Object.values(a.spec.weights).filter((w) => (w ?? 0) > 0).length;
   const sb = Object.values(b.spec.weights).filter((w) => (w ?? 0) > 0).length;
@@ -393,7 +406,9 @@ function main(): void {
   };
   const outDir = resolve(arg('--out', join(REPO, 'eval/reports')));
   const runId = arg('--run-id', 'autoresearch_v1');
-  const protocol = JSON.parse(readFileSync(join(REPO, 'eval/configs/autoresearch_protocol.json'), 'utf8'));
+  const protocolPath = arg('--protocol', 'eval/configs/autoresearch_protocol.json');
+  const protocol = JSON.parse(readFileSync(join(REPO, protocolPath), 'utf8'));
+  TAP_COST = protocol.tapCost;
   const { farMax, lttDelta: delta } = protocol;
   // `--smoke N` caps dev lines and stops before the lockbox, so the pipeline
   // can be checked without spending the lockbox's single read.
@@ -428,9 +443,12 @@ function main(): void {
     return trial;
   };
 
-  // Stage 1: the whole coarse grid.
+  // Stage 1: the whole coarse grid, over the shortlists inside the latency budget.
   const weightGrid = [{}, ...simplex(protocol.searchSpace.stage1WeightStep)];
-  for (const retrievers of retrieverSets) {
+  const maxMs = protocol.maxShortlistMsPerLine as number | undefined;
+  const allowed = retrieverSets.filter((set) => maxMs === undefined || cache.get(set.join('+'))!.msPerLine <= maxMs);
+  if (allowed.length < retrieverSets.length) log(`over the ${maxMs} ms/line budget, not searched: ${retrieverSets.filter((s) => !allowed.includes(s)).map((s) => s.join('+')).join(', ')}`);
+  for (const retrievers of allowed) {
     for (const pool of protocol.searchSpace.pool as number[]) {
       for (const weights of weightGrid) run({ retrievers, pool, weights }, 'grid');
     }
@@ -512,20 +530,20 @@ function main(): void {
   const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
   const pct2 = (v: number) => `${(v * 100).toFixed(2)}%`;
   const metricRow = (name: string, m: Metrics, ms?: number) =>
-    `| ${name} | ${m.n} | ${pct(m.correctAuto)} | ${pct(m.autos)} | ${pct2(m.far)} (${m.wrongAutos}) | ${pct2(m.farUpper)} | ${pct(m.askRate)} | ${pct(m.newRate)} | ${pct(m.wrongNew)} | ${pct(m.top1)} | ${pct(m.recall3)} | ${pct(m.oocFar)} |${ms === undefined ? '' : ` ${ms.toFixed(2)} |`}`;
-  const header = '| Config | lines | correct AUTO | AUTO | FAR (wrong) | FAR 95% upper | ASK | NEW | in-catalog NEW | top-1 | recall@3 | OOC auto-applied |';
-  const sep = '|---|---|---|---|---|---|---|---|---|---|---|---|';
+    `| ${name} | ${m.n} | ${pct(m.correctAuto)} | ${pct(m.autos)} | ${pct2(m.far)} (${m.wrongAutos}) | ${pct2(m.farUpper)} | ${pct(m.askRate)} | ${pct(m.newRate)} | ${pct(m.wrongNew)} | ${pct(m.top1)} | ${pct(m.recall3)} | ${pct(m.oocFar)} | ${m.taps.toFixed(2)} |${ms === undefined ? '' : ` ${ms.toFixed(2)} |`}`;
+  const header = '| Config | lines | correct AUTO | AUTO | FAR (wrong) | FAR 95% upper | ASK | NEW | in-catalog NEW | top-1 | recall@3 | OOC auto-applied | taps/line |';
+  const sep = '|---|---|---|---|---|---|---|---|---|---|---|---|---|';
   const top = ranked().slice(0, 10);
-  const byRetrievers = retrieverSets.map((set) => {
-    const best = ranked().find((t) => t.spec.retrievers.join('+') === set.join('+'))!;
-    return metricRow(label(best.spec), best.val);
+  const byRetrievers = retrieverSets.flatMap((set) => {
+    const best = ranked().find((t) => t.spec.retrievers.join('+') === set.join('+'));
+    return best ? [metricRow(label(best.spec), best.val)] : [`| ${set.join(' + ')}: over the latency budget, not searched |`];
   });
   const noRerank = ranked().find((t) => Object.keys(t.spec.weights).length === 0)!;
 
   const report = `# Resolver auto-research — ${runId}
 
 Generated ${new Date().toISOString()} by \`eval/search/autoresearch.ts\` on Node ${process.version}, ${platform()} ${release()}, ${cpus()[0]?.model ?? 'unknown CPU'}.
-Protocol: \`eval/configs/autoresearch_protocol.json\` v${protocol.version}, frozen ${protocol.frozen}. FAR budget ${pct(farMax)}, LTT delta ${delta}.
+Protocol: \`${protocolPath}\` v${protocol.version}, frozen ${protocol.frozen}. FAR budget ${pct(farMax)}, LTT delta ${delta}.
 
 ## Winner
 
