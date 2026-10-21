@@ -23,7 +23,7 @@ export function mapFirebaseError(e: unknown): AuthError {
     case 'weak-password':
       return new AuthError('weak-password');
     case 'operation-not-allowed':
-      return new AuthError('provider-disabled');
+      return new AuthError('provider-disabled', undefined, code);
     // Email của tài khoản Facebook/Google đã gắn với cách đăng nhập khác trong Firebase (cài đặt "một tài khoản cho mỗi email")
     case 'account-exists-with-different-credential':
       return new AuthError('account-exists');
@@ -38,7 +38,8 @@ export function mapFirebaseError(e: unknown): AuthError {
     case 'network-request-failed':
       return new AuthError('network');
     default:
-      // Lỗi cấu hình (sai SHA, domain chưa được phép…) — hiện mã khi dev để dễ dò
-      return new AuthError('unknown', __DEV__ && code ? `Không đăng nhập được (${code})` : undefined);
+      // Lỗi cấu hình (sai SHA, domain chưa được phép, Google chặn ứng dụng…): kèm mã gốc vào thông báo, cả ở bản release,
+      // để biết đúng lỗi khi người dùng báo lại
+      return new AuthError('unknown', undefined, code || undefined);
   }
 }

@@ -27,22 +27,37 @@ const MESSAGES: Record<AuthErrorCode, string> = {
   'not-configured': 'Cách đăng nhập này chưa dùng được lúc này. Vui lòng chọn cách khác hoặc thử lại sau',
   'not-owner': 'Tài khoản quản trị chỉ đăng nhập trên trang web quản trị',
   cancelled: 'Bạn đã huỷ đăng nhập',
-  'account-exists': 'Email này đã đăng ký bằng một cách đăng nhập khác (email, Facebook hoặc Google). Hãy dùng cách đó để vào app',
+  'account-exists':
+    'Email này đã đăng ký bằng một cách đăng nhập khác (email, Facebook hoặc Google). Hãy dùng cách đó để vào app',
   unknown: 'Không đăng nhập được. Vui lòng thử lại',
 };
 
 /** Các mã lỗi cấu hình: thông điệp chi tiết của chúng chỉ để ghi log, không hiện cho người dùng. */
 const CONFIG_CODES: ReadonlySet<AuthErrorCode> = new Set(['provider-disabled', 'not-configured']);
 
+/**
+ * Mã chẩn đoán gắn vào cuối thông báo, cả ở bản release, để người dùng chụp màn hình là biết lỗi gốc (vd. "auth/internal-error",
+ * "google-10"). Chỉ nhận chuỗi ngắn gồm chữ, số và `/ . _ -`: không bao giờ chứa token, email hay thông điệp tự do của SDK.
+ */
+export function safeDiagCode(raw: unknown): string | undefined {
+  const s = typeof raw === 'string' || typeof raw === 'number' ? String(raw).trim() : '';
+  return /^[A-Za-z0-9_./-]{1,48}$/.test(s) ? s : undefined;
+}
+
 export class AuthError extends Error {
   readonly code: AuthErrorCode;
   /** Chi tiết kỹ thuật (chỉ dành cho log); `message` luôn là câu thân thiện với người dùng. */
   readonly detail?: string;
-  constructor(code: AuthErrorCode, detail?: string) {
-    super(CONFIG_CODES.has(code) ? MESSAGES[code] : (detail ?? MESSAGES[code]));
+  /** Mã chẩn đoán an toàn đã gắn vào `message` (xem `safeDiagCode`) */
+  readonly diag?: string;
+  constructor(code: AuthErrorCode, detail?: string, diag?: string) {
+    const safe = safeDiagCode(diag);
+    const base = CONFIG_CODES.has(code) ? MESSAGES[code] : (detail ?? MESSAGES[code]);
+    super(safe ? `${base} (mã: ${safe})` : base);
     this.name = 'AuthError';
     this.code = code;
     this.detail = CONFIG_CODES.has(code) ? detail : undefined;
+    this.diag = safe;
   }
 }
 
