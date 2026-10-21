@@ -174,7 +174,7 @@ function useStoreValue() {
           const session = await sessionApi.create(displayName);
           if (session.role !== 'OWNER') throw new AuthError('not-owner');
           loggedInRef.current = true;
-          patch((st) => ({ ...sessionPatch(st, session), guideDismissed: false }));
+          patch((st) => sessionPatch(st, session));
           debugLog('session', 'signIn ✓', `role=${session.role}`, `needsOnboarding=${session.needsOnboarding}`);
           return session;
         } catch (e) {
@@ -236,7 +236,12 @@ function useStoreValue() {
         });
         void loadLocalProfile(id).then((prev) => saveLocalProfile(id, { ...prev, ...changed }));
       },
-      dismissGuide: () => patch(() => ({ guideDismissed: true })),
+      /** Đóng hướng dẫn (xong hoặc bỏ qua) và nhớ trên máy cho tài khoản này để lần sau không tự mở lại */
+      dismissGuide: () => {
+        patch(() => ({ guideDismissed: true }));
+        const id = userIdRef.current;
+        if (id) void loadLocalProfile(id).then((prev) => saveLocalProfile(id, { ...prev, guideSeen: true }));
+      },
       /** Mở lại phần giới thiệu ở Tổng quan (mục "Xem lại hướng dẫn" ở tab Quản lý) */
       showGuide: () => patch(() => ({ guideDismissed: false })),
       /** Ẩn mọi thông báo tới trước `at` (ISO) trên máy này: "Xoá toàn bộ thông báo" khi Core chưa có API xoá */
@@ -426,6 +431,8 @@ function useStoreValue() {
           notifClearedAt: saved.notifClearedAt ?? st.notifClearedAt,
         }));
       }
+      // Tài khoản chưa xem hướng dẫn trên máy này (mới đăng ký, lần đầu đăng nhập ở máy này): mở hướng dẫn ở Tổng quan
+      if (!saved?.guideSeen) patch(() => ({ guideDismissed: false }));
       notifLoadedFor.current = userId;
     });
     return () => {

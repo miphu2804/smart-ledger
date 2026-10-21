@@ -1,10 +1,10 @@
 import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Image, ImageSourcePropType, ImageStyle, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Animated, Image, ImageSourcePropType, ImageStyle, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ReportPeriodTabs, type ReportPeriod } from '../../src/components/ReportPeriodTabs';
-import { AssistantIntroModal } from '../../src/components/AssistantIntroModal';
+import { useGuideTarget } from '../../src/components/GuideTour';
 import { QuickNavButton } from '../../src/components/QuickNav';
 import { Button, Card, EmptyState, Row, T } from '../../src/components/ui';
 import { CountUp, Reveal, Skeleton } from '../../src/components/reveal';
@@ -122,10 +122,22 @@ export default function Home() {
   const topSeller = topSellers[0];
   // Quét mã chạy trong màn Bán hàng: ở đó có danh mục, giỏ và kiểm tra tồn. `scan=1` mở thẳng màn quét.
   const openScanner = () => router.push({ pathname: '/pos', params: { scan: '1' } });
-  const openAssistant = (path: '/voice' | '/ai') => {
-    app.dismissGuide();
-    router.push(path);
+  const openAssistant = (path: '/voice' | '/ai') => router.push(path);
+
+  // Hướng dẫn dạng lớp phủ khoanh sáng các nút này (src/components/GuideTour.tsx); khi hướng dẫn mở thì cuộn về đầu để
+  // phần đầu đầy đủ (bốn nút lên đơn) hiện ra
+  const guide = {
+    readOrder: useGuideTarget('readOrder'),
+    selectGoods: useGuideTarget('selectGoods'),
+    scanCode: useGuideTarget('scanCode'),
+    assistant: useGuideTarget('assistant'),
+    bell: useGuideTarget('bell'),
+    quickNav: useGuideTarget('quickNav'),
   };
+  const scrollRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    if (!app.guideDismissed) scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [app.guideDismissed]);
 
   const playBellShake = useCallback(() => {
     if (!unreadNotifications) return;
@@ -202,6 +214,7 @@ export default function Home() {
           style={[styles.topBlackUnderlay, { height: 800 + insets.top + 24 }]}
         />
         <Animated.ScrollView
+          ref={scrollRef}
           style={styles.scroll}
           contentContainerStyle={[styles.scrollContent, { paddingTop: headerExpanded + insets.top }]}
           showsVerticalScrollIndicator={false}
@@ -383,13 +396,16 @@ export default function Home() {
             ]}
           >
             <Row style={styles.brandRow}>
-              <QuickNavButton tone="dark" />
+              <View ref={guide.quickNav} collapsable={false}>
+                <QuickNavButton tone="dark" />
+              </View>
               <Tab1Icon name="logo" size={42} style={styles.logoIcon} />
               <View style={{ flex: 1 }}>
                 <T w="bold" size={17} color={colors.white} numberOfLines={1}>{app.store.name}</T>
                 <T size={12} color="#B8B5AE">Sổ bán hàng của bạn</T>
               </View>
               <Pressable
+                ref={guide.bell}
                 onPress={() => router.push('/notifications')}
                 accessibilityRole="button"
                 accessibilityLabel="Thông báo"
@@ -457,77 +473,10 @@ export default function Home() {
                 </T>
               </Row>
               <View style={styles.expandedActionGrid}>
-                <Pressable
-                  onPress={() => openAssistant('/voice')}
-                  style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Đọc đơn"
-                >
-                  <Tab1Icon name="readOrder" size={30} />
-                  <View style={styles.actionTextCol}>
-                    <T w="bold" size={14.5} color="#FFFFFF" numberOfLines={1}>
-                      Đọc đơn
-                    </T>
-                    <T size={10.5} color="rgba(255, 255, 255, 0.58)" numberOfLines={1} style={{ marginTop: 2 }}>
-                      Giọng nói
-                    </T>
-                  </View>
-                  <Feather name="chevron-right" size={14} color="rgba(255, 255, 255, 0.35)" />
-                </Pressable>
-
-                <Pressable
-                  onPress={() => router.push('/pos')}
-                  style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Chọn hàng"
-                >
-                  <Tab1Icon name="selectGoods" size={30} />
-                  <View style={styles.actionTextCol}>
-                    <T w="bold" size={14.5} color="#FFFFFF" numberOfLines={1}>
-                      Chọn hàng
-                    </T>
-                    <T size={10.5} color="rgba(255, 255, 255, 0.58)" numberOfLines={1} style={{ marginTop: 2 }}>
-                      Thủ công
-                    </T>
-                  </View>
-                  <Feather name="chevron-right" size={14} color="rgba(255, 255, 255, 0.35)" />
-                </Pressable>
-
-                <Pressable
-                  onPress={openScanner}
-                  style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Quét mã"
-                >
-                  <Tab1Icon name="scanCode" size={30} />
-                  <View style={styles.actionTextCol}>
-                    <T w="bold" size={14.5} color="#FFFFFF" numberOfLines={1}>
-                      Quét mã
-                    </T>
-                    <T size={10.5} color="rgba(255, 255, 255, 0.58)" numberOfLines={1} style={{ marginTop: 2 }}>
-                      Mã vạch / QR
-                    </T>
-                  </View>
-                  <Feather name="chevron-right" size={14} color="rgba(255, 255, 255, 0.35)" />
-                </Pressable>
-
-                <Pressable
-                  onPress={() => openAssistant('/ai')}
-                  style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Trợ lý Bobi"
-                >
-                  <Tab1Icon name="assistant" size={30} />
-                  <View style={styles.actionTextCol}>
-                    <T w="bold" size={14.5} color="#FFFFFF" numberOfLines={1}>
-                      Trợ lý Bobi
-                    </T>
-                    <T size={10.5} color="rgba(255, 255, 255, 0.58)" numberOfLines={1} style={{ marginTop: 2 }}>
-                      Gợi ý bán
-                    </T>
-                  </View>
-                  <Feather name="chevron-right" size={14} color="rgba(255, 255, 255, 0.35)" />
-                </Pressable>
+                <ActionCard icon="readOrder" title="Đọc đơn" subtitle="Giọng nói" guideRef={guide.readOrder} onPress={() => openAssistant('/voice')} />
+                <ActionCard icon="selectGoods" title="Chọn hàng" subtitle="Thủ công" guideRef={guide.selectGoods} onPress={() => router.push('/pos')} />
+                <ActionCard icon="scanCode" title="Quét mã" subtitle="Mã vạch / QR" guideRef={guide.scanCode} onPress={openScanner} />
+                <ActionCard icon="assistant" title="Trợ lý Bobi" subtitle="Gợi ý bán" guideRef={guide.assistant} onPress={() => openAssistant('/ai')} />
               </View>
             </View>
           </Animated.View>
@@ -603,12 +552,6 @@ export default function Home() {
           <Animated.View pointerEvents="none" style={[styles.headerDivider, { opacity: dividerOpacity }]} />
         </Animated.View>
       </View>
-      <AssistantIntroModal
-        visible={!app.guideDismissed}
-        onDismiss={app.dismissGuide}
-        onVoice={() => openAssistant('/voice')}
-        onChat={() => openAssistant('/ai')}
-      />
     </>
   );
 }
@@ -627,6 +570,63 @@ function HomeSectionHeading({ title, side, onPress }: { title: string; side?: st
         <T w="semibold" size={12} color={colors.muted}>{side}</T>
       ) : null}
     </Row>
+  );
+}
+
+type QuickAction = 'readOrder' | 'selectGoods' | 'scanCode' | 'assistant';
+
+/**
+ * Màu riêng cho bốn nút lên đơn trên nền tím (trước đây cả bốn cùng nền tím trong suốt, khó phân biệt): ô biểu tượng màu pastel
+ * đặc để biểu tượng nổi trên nền tím, viền và nền thẻ cùng tông nhưng nhạt để thẻ vẫn hoà vào phần đầu.
+ * Vàng: Đọc đơn (giọng nói, chức năng chính) · Xanh dương: Chọn hàng · Xanh lá: Quét mã · Hồng: Trợ lý Bobi.
+ */
+const ACTION_TONES: Record<QuickAction, { chip: string; border: string; bg: string; bgPressed: string }> = {
+  readOrder: { chip: '#FFF1C2', border: 'rgba(255, 214, 102, 0.45)', bg: 'rgba(255, 214, 102, 0.10)', bgPressed: 'rgba(255, 214, 102, 0.2)' },
+  selectGoods: { chip: '#DCEBFF', border: 'rgba(122, 176, 255, 0.45)', bg: 'rgba(122, 176, 255, 0.10)', bgPressed: 'rgba(122, 176, 255, 0.2)' },
+  scanCode: { chip: '#DDF5D2', border: 'rgba(143, 219, 110, 0.45)', bg: 'rgba(143, 219, 110, 0.10)', bgPressed: 'rgba(143, 219, 110, 0.2)' },
+  assistant: { chip: '#FBE0EF', border: 'rgba(255, 150, 200, 0.45)', bg: 'rgba(255, 150, 200, 0.10)', bgPressed: 'rgba(255, 150, 200, 0.2)' },
+};
+
+/** Một nút lên đơn ở phần đầu Tổng quan; `guideRef` để phần hướng dẫn khoanh sáng đúng nút này. */
+function ActionCard({
+  icon,
+  title,
+  subtitle,
+  onPress,
+  guideRef,
+}: {
+  icon: QuickAction;
+  title: string;
+  subtitle: string;
+  onPress: () => void;
+  guideRef: (node: View | null) => void;
+}) {
+  const tone = ACTION_TONES[icon];
+  return (
+    <Pressable
+      ref={guideRef}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.actionButton,
+        { borderColor: tone.border, backgroundColor: pressed ? tone.bgPressed : tone.bg },
+        pressed && styles.actionButtonPressed,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+    >
+      <View style={[styles.actionIcon, { backgroundColor: tone.chip }]}>
+        <Tab1Icon name={icon} size={24} />
+      </View>
+      <View style={styles.actionTextCol}>
+        <T w="bold" size={14.5} color="#FFFFFF" numberOfLines={1}>
+          {title}
+        </T>
+        <T size={10.5} color="rgba(255, 255, 255, 0.62)" numberOfLines={1} style={{ marginTop: 2 }}>
+          {subtitle}
+        </T>
+      </View>
+      <Feather name="chevron-right" size={14} color="rgba(255, 255, 255, 0.4)" />
+    </Pressable>
   );
 }
 
@@ -653,7 +653,7 @@ function CompactAction({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
     >
-      <View style={styles.compactActionIcon}>
+      <View style={[styles.compactActionIcon, { backgroundColor: ACTION_TONES[icon as QuickAction]?.chip ?? 'rgba(255, 255, 255, 0.94)' }]}>
         <Tab1Icon name={icon} size={13} />
       </View>
       <T
@@ -809,17 +809,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.12)',
     backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    paddingHorizontal: 12,
+    // Ô biểu tượng màu chiếm chỗ hơn biểu tượng trần trước đây: đệm và khoảng cách gọn lại để "Chọn hàng", "Trợ lý Bobi"
+    // vẫn đủ một dòng ở màn 360–375 px
+    paddingLeft: 10,
+    paddingRight: 8,
     paddingVertical: 11,
     minHeight: 62,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
   actionButtonPressed: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderColor: 'rgba(255, 255, 255, 0.22)',
     transform: [{ scale: 0.985 }],
+  },
+  actionIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   actionTextCol: {
     flex: 1,

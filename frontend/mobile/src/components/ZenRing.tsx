@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { dur, spring, useReducedMotion } from '../motion';
 import { colors } from '../theme';
+import { useGuideTarget } from './GuideTour';
 import { MascotBadge } from './MascotBadge';
 import { T } from './ui';
 
@@ -67,6 +68,7 @@ export function ZenRing() {
   const pathname = usePathname();
   const isSales = pathname === '/sales';
   const reduced = useReducedMotion();
+  const guideRef = useGuideTarget('mascot');
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuMounted, setMenuMounted] = useState(false);
@@ -374,6 +376,7 @@ export function ZenRing() {
             </View>
           ) : null}
           <Animated.View
+            ref={guideRef}
             {...pan.panHandlers}
             accessible
             accessibilityRole="button"

@@ -1,9 +1,10 @@
-import { Redirect } from 'expo-router';
+import { Redirect, usePathname } from 'expo-router';
 import { Tabs } from 'expo-router/js-tabs';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, Pressable, StyleSheet, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { GuideTourProvider, useGuideTarget } from '../../src/components/GuideTour';
 import { TabIcon, type TabIconName } from '../../src/components/icons';
 import { QuickNavProvider } from '../../src/components/QuickNav';
 import { T } from '../../src/components/ui';
@@ -43,6 +44,9 @@ function TabBar({ state, navigation }: TabBarProps) {
   const tabWidth = barWidth > 8 ? (barWidth - 8) / tabNames.length : 0;
 
   const iconScales = useRef(tabNames.map(() => new Animated.Value(1))).current;
+  // Hướng dẫn khoanh sáng tab Đơn hàng và Quản lý
+  const invoicesGuideRef = useGuideTarget('tabInvoices');
+  const moreGuideRef = useGuideTarget('tabMore');
 
   const triggerIconBounce = (index: number) => {
     if (reducedMotion) return;
@@ -174,6 +178,7 @@ function TabBar({ state, navigation }: TabBarProps) {
           return (
             <Pressable
               key={route.key}
+              ref={name === 'invoices' ? invoicesGuideRef : name === 'more' ? moreGuideRef : undefined}
               accessibilityRole="tab"
               accessibilityState={{ selected: focused }}
               onPressIn={handlePressIn}
@@ -212,7 +217,8 @@ function TabBar({ state, navigation }: TabBarProps) {
 }
 
 export default function TabsLayout() {
-  const { authReady, loggedIn, onboarded } = useApp();
+  const { authReady, loggedIn, onboarded, guideDismissed, dismissGuide } = useApp();
+  const pathname = usePathname();
   // Các tab chỉ mở khi đã có tài khoản và tiệm. Trước khi có phiên, state còn là tiệm mẫu ("Tiệm tạp hoá cô Thỏ"): bấm back ở
   // bước tạo tiệm hay đăng xuất từ một màn mở chồng lên tab từng để lộ tiệm mẫu này như một tài khoản thật.
   if (!authReady) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
@@ -221,6 +227,8 @@ export default function TabsLayout() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      {/* Hướng dẫn dạng lớp phủ chạy trên Tổng quan, phủ lên cả menu chuyển nhanh, thanh tab và mascot */}
+      <GuideTourProvider active={!guideDismissed && pathname === '/'} onFinish={dismissGuide}>
       {/* Menu chuyển nhanh bên trái phủ lên cả thanh tab và mascot */}
       <QuickNavProvider>
         <Tabs
@@ -234,6 +242,7 @@ export default function TabsLayout() {
         </Tabs>
         <ZenRing />
       </QuickNavProvider>
+      </GuideTourProvider>
     </View>
   );
 }
