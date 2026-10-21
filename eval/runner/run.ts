@@ -142,17 +142,40 @@ export function deviationsOf(records: EvalRecord[], catalogs: CatalogRegistry, s
 
   // A second holdout is a departure worth stating next to the numbers it
   // produced: section 9B.3 evaluates a lockbox once, and the first holdout has
-  // now been read by two runs.
+  // now been read by two runs. How much of the second one is not new is worth
+  // stating too, because a reader told only that it is a fresh draw will
+  // over-read the numbers it produces.
   const splitsName = basename(splitsPath);
   if (splitsName !== 'splits.json') {
     deviations.push(
-      `Measured on \`eval/data/${splitsName}\`, a second holdout drawn from the same families rather than the frozen \`splits.json\`. Section 9B.3 evaluates a lockbox once, and the first holdout has now been read by bakeoff_v1 and bakeoff_v2, so confirming anything formed from those runs needs a holdout they never saw. It is a fresh partition of the same data, not fresh data. The split function and its seed are in \`eval/lib/corpus.ts\`.`,
+      `Measured on \`eval/data/${splitsName}\`, a fresh partition of the same families rather than the frozen \`splits.json\`. Section 9B.3 evaluates a lockbox once and the first holdout has now been read by bakeoff_v1 and bakeoff_v2, so a hypothesis formed on it cannot be confirmed on it. This draw is not unseen data${reusedNote(splitsPath)}. Read the numbers below as a re-measurement on a re-drawn partition, not as independent confirmation. The split function and its seed are in \`eval/lib/corpus.ts\`.`,
     );
   }
 
   const d2 = d2Composition(records, catalogs);
   if (d2 !== null) deviations.push(d2);
   return deviations;
+}
+
+/**
+ * How much of a re-drawn holdout the earlier runs already held out.
+ *
+ * Whole families move together, so re-drawing cannot make the two test sides
+ * disjoint, and D3's four catalogs cannot move at all. The count is taken from
+ * the two split files rather than from the lines this run happened to sample,
+ * so it does not depend on `--limit`.
+ */
+function reusedNote(splitsPath: string): string {
+  const frozen = JSON.parse(readFileSync(join(DATA, 'splits.json'), 'utf8')) as Splits;
+  const drawn = JSON.parse(readFileSync(splitsPath, 'utf8')) as Splits;
+  const parts = Object.keys(drawn)
+    .sort()
+    .map((dataset) => {
+      const before = new Set(frozen[dataset]?.test ?? []);
+      const after = drawn[dataset].test;
+      return `${dataset} ${after.filter((id) => before.has(id)).length} of ${after.length}`;
+    });
+  return `: of its held-out lines, ${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]} were already held out in those runs, because whole families move together and D3's four catalogs cannot move at all`;
 }
 
 /** Run the matrix and write both report artifacts. */

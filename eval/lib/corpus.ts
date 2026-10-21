@@ -282,19 +282,24 @@ export const LOCKBOX2_SEED = 20261021;
  * Union-find over one pool of records, then a greedy 60/40 assignment of whole
  * components.
  *
- * A seed moves the calibration/test boundary and the order equal-sized
- * components are offered to the calibration side in. Both matter: the greedy
- * fill takes a prefix of the ordered list, so a tie-break alone only changes
- * which components sit at the boundary, and D3's four catalogs differ in size
- * enough that its boundary cannot move at all. Leaving the seed out keeps the
- * ordering by smallest id and the plan's 60/40 exactly, so `splits.json` is
- * reproduced byte for byte.
+ * A seed moves the calibration/test boundary and reorders the components, and
+ * the greedy fill below takes a prefix of the ordered list, so the two together
+ * land on a different set. Both matter: a boundary shift alone only moves the
+ * components sitting at the edge, and D3's four catalogs are unequal enough
+ * that its boundary cannot move at all.
+ *
+ * Leaving the seed out reproduces the frozen `splits.json` exactly, because it
+ * keeps the comparator that drew that file. That is load-bearing rather than
+ * tidy: `writeDatasets` rewrites `splits.json` from this function.
  *
  * The seeded draw is a second partition of the same families, not fresh data,
  * and it exists because a hypothesis formed after reading the first holdout
- * cannot be confirmed on it. D3 is the exception: its four catalogs are atomic
- * source sets and largest-first is what keeps it balanced, so its sides do not
- * change.
+ * cannot be confirmed on it. It is not fully unseen either — the two draws
+ * share families, and 1059 of the 1544 test lines bakeoff_v3 scored on the
+ * seeded draw were already test lines of the frozen one. D3 is the extreme
+ * case: its four catalogs are atomic source sets and largest-first is what
+ * keeps it balanced, so its sides do not change at all and its numbers are a
+ * re-measurement rather than fresh evidence.
  */
 function splitPool(records: EvalRecord[], seed?: number): Map<string, boolean> {
   const parent = new Map<string, string>();
@@ -349,13 +354,18 @@ function splitPool(records: EvalRecord[], seed?: number): Map<string, boolean> {
   const ordered = [...components.values()]
     .map((ids) => ({ ids, min: ids.reduce((a, b) => (a < b ? a : b)) }))
     .sort((a, b) => {
+      // Without a seed this is exactly the comparator that drew the frozen
+      // `splits.json`, and it has to stay that way: `writeDatasets` regenerates
+      // that file from this function, so any other order silently re-partitions
+      // a split the plan marks as protected.
+      if (seed === undefined) return b.ids.length - a.ids.length || (a.min < b.min ? -1 : a.min > b.min ? 1 : 0);
       if (byLargest && b.ids.length !== a.ids.length) return b.ids.length - a.ids.length;
-      if (seed === undefined) return a.min < b.min ? -1 : a.min > b.min ? 1 : 0;
       return hashString(`${seed}:${a.min}`) - hashString(`${seed}:${b.min}`) || (a.min < b.min ? -1 : 1);
     });
 
   // Without a seed this is the plan's 60/40 exactly. A seed shifts it by up to
-  // six points, which is what actually re-partitions the pool.
+  // six points and reorders the components by hash; the reordering is what does
+  // most of the re-partitioning, since the fill below takes a prefix.
   const share = seed === undefined ? 0.6 : 0.6 + ((hashString(String(seed)) % 13) - 6) / 100;
   const target = Math.round(records.length * share);
   const side = new Map<string, boolean>();

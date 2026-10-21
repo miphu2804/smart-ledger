@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { loadCatalogs, buildD1Text, buildD2, buildSplits, buildCatalogRegistry } from '../lib/corpus.ts';
 import type { EvalRecord } from '../lib/corpus.ts';
@@ -199,4 +200,20 @@ test('corpus: a seeded split re-draws the partition and keeps every family on on
   assert.ok(moved > 0, 'the seed drew the same partition, so it moves nothing');
   const share = records.filter((r) => seededSide.get(r.id) === 'calibration').length / records.length;
   assert.ok(Math.abs(share - 0.6) < 0.1, `calibration share ${share}`);
+});
+
+test('corpus: the unseeded split still reproduces the frozen splits.json', () => {
+  // `writeDatasets` regenerates `splits.json` from `buildSplits`, so the
+  // unseeded order is load-bearing: change it and the next dataset rebuild
+  // silently re-partitions a split the plan marks as protected, which breaks
+  // comparability with every earlier bake-off.
+  const dataDir = new URL('../data/', import.meta.url).pathname;
+  const readJsonl = (name: string): EvalRecord[] =>
+    readFileSync(`${dataDir}${name}`, 'utf8')
+      .split('\n')
+      .filter((line) => line.trim().length > 0)
+      .map((line) => JSON.parse(line) as EvalRecord);
+  const all = [...readJsonl('d1.jsonl'), ...readJsonl('d2.jsonl'), ...readJsonl('d3.jsonl')];
+  const frozen: unknown = JSON.parse(readFileSync(`${dataDir}splits.json`, 'utf8'));
+  assert.deepEqual(buildSplits(all), frozen);
 });

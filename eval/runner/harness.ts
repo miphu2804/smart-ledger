@@ -189,8 +189,9 @@ export function tune(spec: ConfigSpec, calibration: ResolvedLine[]): TunedGate {
     let best: { sFloor: number; thetaAuto: number; unansweredRate: number; newRate: number; far: number } | null = null;
     for (const sFloor of sFloors) {
       const tuned = tuneTheta(lines, model, { farMax: spec.farMax, sFloor });
-      // Same objective as the G1 grid: maximize silent answers, count NEW as a
-      // line that got no answer, and prefer an ask over a NEW on a tie.
+      // Same objective as the G1 grid: leave as few lines unanswered as
+      // possible, counting an ask anywhere and a refusal on an in-catalog line,
+      // and prefer an ask over a NEW on a tie.
       const better =
         best === null ||
         tuned.unansweredRate < best.unansweredRate ||

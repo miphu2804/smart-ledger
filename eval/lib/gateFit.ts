@@ -34,8 +34,8 @@ export interface RuleScore {
   /** NEW decisions on lines whose gold item is in the catalog. */
   newsInCatalog: number;
   /**
-   * Fraction of in-catalog lines the gate left unanswered, by asking or by
-   * refusing.
+   * Fraction of lines the gate left unanswered: every ask, plus a refusal on a
+   * line whose gold item is in the catalog. Both are counted over all lines.
    *
    * This, not `askRate`, is what the tuning minimizes, and a NEW on a line whose
    * item really is out of catalog is free: refusing an item the shop does not
@@ -46,7 +46,10 @@ export interface RuleScore {
    * below every reachable value. See `docs/voice-resolution/DISCOVERY.md`.
    *
    * Minimizing `askRate` alone is the plan's wording and is degenerate: a gate
-   * that answers NEW to everything has zero asks and zero false autos.
+   * that answers NEW to everything has zero asks and zero false autos. This
+   * objective is degenerate in a smaller way — an ask and an in-catalog refusal
+   * cost the same, so the search is indifferent between them, and the tie-break
+   * below is the only thing that keeps the ask channel open.
    */
   unansweredRate: number;
   /** Wrong autos over all lines. The constraint the objective is subject to. */
@@ -158,12 +161,11 @@ function defaultGrid(lines: TuningLine[]): { sFloor: number[]; sAuto: number[]; 
 /**
  * Grid-search the G1 thresholds.
  *
- * Objective: answer as many in-catalog lines as possible, subject to
- * FAR <= `farMax`. An ask and a refusal both leave an in-catalog line
- * unanswered, so the objective is `unansweredRate`; a refusal on a line whose
- * item really is out of catalog is the right answer and costs nothing. See
- * `RuleScore.unansweredRate` for why neither the ask rate alone nor a count of
- * every refusal will do.
+ * Objective: leave as few lines unanswered as possible, subject to
+ * FAR <= `farMax`. An ask anywhere and a refusal on an in-catalog line both
+ * count; a refusal on a line the shop cannot answer does not, because that is
+ * the right answer. See `RuleScore.unansweredRate` for why neither the ask rate
+ * alone nor a count of every refusal will do.
  *
  * Ties go to the rule set that writes fewer wrong autos, then to the one that
  * refuses fewer lines, then to the higher auto threshold and the higher score
@@ -334,9 +336,10 @@ export function fitGateModel(lines: TuningLine[], options: { epochs?: number; le
 /**
  * Choose `thetaAuto` for a fitted model.
  *
- * Same objective as G1: answer as many lines silently as possible while FAR
- * stays inside budget, counting a NEW as a line that got no answer. Only the
- * probability threshold is searched — the weights are already fitted.
+ * Same objective as G1: leave as few lines unanswered as possible while FAR
+ * stays inside budget, counting an ask anywhere and a refusal on an in-catalog
+ * line. Only the probability threshold is searched — the weights are already
+ * fitted.
  */
 export function tuneTheta(
   lines: TuningLine[],
@@ -383,8 +386,8 @@ export function tuneTheta(
 }
 
 /**
- * On a tie in the non-auto rate and the false-auto count, prefer the lower NEW
- * rate and then the higher threshold. The higher threshold auto-applies fewer
+ * On a tie in the unanswered rate and the false-auto count, prefer the lower
+ * NEW rate and then the higher threshold. The higher threshold auto-applies fewer
  * lines, which is the safe direction when the data cannot tell the candidates
  * apart.
  */
