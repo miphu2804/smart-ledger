@@ -24,7 +24,7 @@ Hai script build trên máy tự kiểm tra môi trường trước khi build. M
 
 - Chọn **Đăng nhập bằng email**, tab **Tạo tài khoản**, nhập email và mật khẩu bất kỳ (từ 6 ký tự); màn xác minh email chỉ cần bấm **Tôi đã xác minh**. Nút Facebook đăng nhập thẳng vào người dùng mẫu.
 - Email nào cũng là người dùng mới: sau khi xác minh sẽ đi qua bước tạo tiệm (tên + ngành hàng). Chỉ nút Facebook (mock) mới vào thẳng tiệm mẫu “Tiệm tạp hoá cô Thỏ”.
-- Sau khi đăng nhập, Home mở phần giới thiệu `src/components/AssistantIntroModal.tsx` (Trợ lý, Bán hàng, Tổng quan, Quản lý); phần giới thiệu không hiện lại trong phiên đó.
+- Lần đầu một tài khoản vào Tổng quan trên máy, app chạy hướng dẫn dạng lớp phủ `src/components/GuideTour.tsx` (các bước ở `src/lib/guideSteps.ts`): khoanh sáng từng nút (Đọc đơn, Chọn hàng, Quét mã, Trợ lý, Bobi, Thông báo, menu chuyển nhanh, tab Đơn hàng, tab Quản lý). Xong hoặc bỏ qua thì nhớ trên máy, không tự mở lại; xem lại ở Quản lý → Xem lại hướng dẫn.
 - Tải lại app (reload) để đưa dữ liệu trong bộ nhớ về trạng thái ban đầu.
 
 ## Màn hình

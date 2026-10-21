@@ -1,8 +1,32 @@
+### [2026-10-21 17:40 UTC+07:00] — [Fix] Guide overlay works on Android, Bobi speaks in it, order buttons are white cards
+
+**Done:** Tested PR #339 on the Android emulator and changed it on request:
+- **Tapping the lit button opened that screen on Android** instead of moving to the next step: the invisible button sat inside the animated ring, and Android did not resize it, so it stayed 0×0 and the tap fell through. It is now placed by the measured position. The dim layer is one frame with a rounded hole, so the four corners around the ring are no longer left bright.
+- **Shorter, warmer text with Bobi.** Every card shows Bobi and one short line in Bobi's voice ("mình"), at most 80 characters; the welcome and the last card call the owner by the given name (last word of the name, "bạn" when there is none or it is long).
+- **Order buttons.** The tinted see-through cards looked muddy on the purple header, so they are now white cards like the revenue card above, each told apart by a soft icon tile from the brand colours: yellow Đọc đơn, blue Chọn hàng, green Quét mã, lavender Trợ lý Bobi.
+- FR-025 and AC-018 mention Bobi and the name.
+
+**Changed files:** `frontend/mobile/src/components/GuideTour.tsx`, `frontend/mobile/src/lib/guideSteps.ts`, `frontend/mobile/tests/guideSteps.test.ts`, `frontend/mobile/app/(tabs)/_layout.tsx`, `frontend/mobile/app/(tabs)/index.tsx`, `docs/product/product-requirements.md` — modified; this entry.
+
+**Check:** `node --test tests/guideSteps.test.ts` 8/8; `npx tsc --noEmit` shows no new errors; Android emulator (CI build #39 with a locally built JS bundle and x86_64 libraries added, debug-signed): the tour opened by itself on the first sign-in of a new install; Android back steps back; all nine rings sit on their buttons, round for the mascot, with no bright corners; tapping the lit button moves on without opening it, and on the last step closes the tour; the welcome card greets the signed-in account by name. **Not verified:** a real phone; Đọc đơn on that emulator build (the speech library does not load in the hand-made x86_64 build).
+
 ### [2026-10-21 17:20 UTC+07:00] — [Change] Zalo sign-in is shown as "Sắp có" for now
 
 **Done:** On request, the Zalo button on the sign-in screen is greyed out with "Sắp có" and cannot be tapped on every build, including builds that set `EXPO_PUBLIC_ZALO_LOGIN` or `EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID`, like the Facebook button. The Zalo sign-in code and Core's Zalo endpoints are unchanged, so turning it back on is a one-line change (noted in the code). The PRD's FR-010 says the button is "Sắp có" for now.
 
 **Changed files:** `frontend/mobile/app/(auth)/welcome.tsx`, `docs/product/product-requirements.md` — modified; this entry.
+
+### [2026-10-21 09:24 UTC+07:00] — [Feature] Interactive guide overlay on Overview and distinct colours for the order buttons
+
+**Done:** On request, the guide is now an overlay that points at the real buttons instead of a picture dialog:
+- **Tour.** The screen dims and a ring lights one button at a time, with a card that says what it does: welcome, Đọc đơn (order by voice), Chọn hàng (cart and payment, including Ghi nợ), Quét mã (barcode, adding a new item when the code is unknown), Trợ lý Bobi, the Bobi mascot, the bell, the quick menu ☰, the Đơn hàng tab and the Quản lý tab (where "Xem lại hướng dẫn" replays it). Tapping the lit button or "Tiếp" moves on; "Quay lại" and Android back go back; "Bỏ qua" closes it. Other buttons are blocked while it is open, and Overview scrolls to the top so every target is on screen. Steps live in `src/lib/guideSteps.ts`; targets register with `useGuideTarget` and are measured on screen, so the ring follows the real layout.
+- **Runs once.** It opens on Overview only while the account has not seen it on this device (`guideSeen` in the account's local profile); finishing or skipping saves that. Signing in again no longer reopens it. "Xem lại hướng dẫn" in Quản lý opens it again.
+- **Colours.** The four order buttons shared one translucent purple and looked alike. Each now has its own pastel icon tile with a matching faint border and fill on the purple header: yellow Đọc đơn, blue Chọn hàng, green Quét mã, pink Trợ lý Bobi. The compact row shown after scrolling uses the same tiles.
+- The old `AssistantIntroModal` and its four pictures are removed. FR-025 and AC-018 in the PRD describe the overlay.
+
+**Changed files:** `frontend/mobile/src/components/GuideTour.tsx`, `frontend/mobile/src/lib/guideSteps.ts`, `frontend/mobile/tests/guideSteps.test.ts` — added; `frontend/mobile/app/(tabs)/_layout.tsx`, `frontend/mobile/app/(tabs)/index.tsx`, `frontend/mobile/src/components/ZenRing.tsx`, `frontend/mobile/src/lib/localProfile.types.ts`, `frontend/mobile/src/store/AppStore.tsx`, `frontend/mobile/README.md`, `docs/product/product-requirements.md` — modified; `frontend/mobile/src/components/AssistantIntroModal.tsx`, `frontend/mobile/assets/guide/guide-{bobi,overview,sales,manage}.png` — removed; this entry.
+
+**Check:** `node --test tests/guideSteps.test.ts` 4/4; mock web build at 375 px: "Xem lại hướng dẫn" opens the welcome card on Overview (also after scrolling down, which scrolls back to the top); each of the nine rings sits on its button; tapping the ring advances without opening the screen; the last step shows "Xong" without "Bỏ qua" and closes; "Bỏ qua" closes and taps reach Đọc đơn again. **Not verified:** the first-run start and the saved `guideSeen` (mock mode has no account id), a real phone.
 
 ### [2026-10-20 12:10 UTC+07:00] — [Fix] Read-only shop-data questions no longer run in the AI sandbox
 
