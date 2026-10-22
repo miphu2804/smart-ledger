@@ -7,17 +7,18 @@
  * corrections of wrong AUTO lines are fed back through `upsertAlias`, and the
  * tail of the stream is scored against a twin resolver that never learns.
  *
- *   node eval/alias/stream.ts --seeds 20261401,20261402,20261403 [--habit 0.5] [--out result.json]
+ *   node backend/ai/evaluation/voice_order/alias_stream.ts --seeds 20261401,20261402,20261403 [--habit 0.5] [--out result.json]
  */
 
 import { writeFileSync } from 'node:fs';
 
-import { buildResolver } from '../../frontend/mobile/src/lib/resolver/index.ts';
-import { folded } from '../../frontend/mobile/src/lib/resolver/normalizer.ts';
-import type { CatalogItem, GateConfig, ResolverConfig } from '../../frontend/mobile/src/lib/resolver/types.ts';
-import { mulberry32 } from '../lib/stats.ts';
-import { synthesize } from '../lib/synth.ts';
-import { lockboxData } from '../search/data.ts';
+import { buildResolver } from '../../../../frontend/mobile/src/lib/resolver/index.ts';
+import { folded } from '../../../../frontend/mobile/src/lib/resolver/normalizer.ts';
+import type { CatalogItem } from '../../../../frontend/mobile/src/lib/resolver/types.ts';
+import { mulberry32 } from '../../../../eval/lib/stats.ts';
+import { synthesize } from '../../../../eval/lib/synth.ts';
+import { lockboxData } from '../../../../eval/search/data.ts';
+import { WINNER_CONFIG, winnerGate } from './pipeline.ts';
 
 const STREAM = 800;
 const WARMUP = 400;
@@ -26,29 +27,6 @@ const MISTAP = 0.02;
 const NOTICE_WRONG_AUTO = 0.5;
 const CATALOGS = ['tap_hoa', 'ca_phe', 'quan_com', 'd3_100', 'd3_1000'];
 const ARMS = [0, 1, 2, 3] as const; // 0 = no learning, else aliasMinConfirmations
-
-const CONFIG: ResolverConfig = {
-  retrievers: ['E', 'Q-bm25', 'B'],
-  fusion: 'rrf',
-  rrfK: 60,
-  weights: {},
-  topK: 5,
-  qMaxEditDistance: 2,
-  eBruteMax: 500,
-  useUnitStoplist: false,
-  rerank: { pool: 10, weights: { E: 0.45, P: 0.05, T: 0.5 } },
-};
-
-function gate(minConfirmations: number): GateConfig {
-  return {
-    gate: 'G1',
-    rules: { sFloor: -Infinity, sAuto: 0.72, mMin: 0.1217, agreeMin: 1 },
-    model: null,
-    thetaAuto: 2,
-    sFloor: -Infinity,
-    aliasMinConfirmations: minConfirmations,
-  };
-}
 
 function arg(name: string, fallback: string): string {
   const index = process.argv.indexOf(`--${name}`);
@@ -105,7 +83,7 @@ function shopStream(items: CatalogItem[], seed: number, habit: number): { catalo
 /** Replays one stream through one arm and tallies the held-out tail. */
 function replay(catalog: CatalogItem[], stream: Utterance[], minConfirmations: number, seed: number): Tally {
   const rng = mulberry32(seed ^ 0x5eed);
-  const resolver = buildResolver({ catalog, config: CONFIG, gate: gate(Math.max(1, minConfirmations)), seeds: [] });
+  const resolver = buildResolver({ catalog, config: WINNER_CONFIG, gate: winnerGate(Math.max(1, minConfirmations)), seeds: [] });
   const learn = minConfirmations > 0;
   const tally = emptyTally();
 
