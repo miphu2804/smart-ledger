@@ -232,8 +232,18 @@ def run(seed: int, strategy: str) -> dict:
         )
         != (d, it.intent)
     ]
+    # A product whose own create landed but whose intent then adopted another
+    # product is an extra copy too; retry duplicates already count the rest.
+    adopted_from = {(d, it.intent) for d, it in adopted}
+    orphaned = sum(
+        1
+        for p in core.products.values()
+        if (p["device"], p["intent"]) in adopted_from
+        and per_entry[(p["device"], p["intent"])] == 1
+    )
     return {
         "retry_duplicates": sum(n - 1 for n in per_entry.values() if n > 1),
+        "orphaned_by_adoption": orphaned,
         "lost_intents": lost,
         "false_merges": sum(
             1

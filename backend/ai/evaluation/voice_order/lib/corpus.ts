@@ -28,6 +28,7 @@ import { join } from 'node:path';
 
 import { parseOrder } from '../../../../../frontend/mobile/src/lib/parseOrder.ts';
 import type { CatalogItem } from '../../../../../frontend/mobile/src/lib/resolver/types.ts';
+import { hashString } from './stats.ts';
 import { synthesize, rulesToTags } from './synth.ts';
 import { buildD3, buildD3CatalogRegistry } from './d3.ts';
 
@@ -227,16 +228,6 @@ export function buildD1Text(): D1TextResult {
 }
 
 // ─── D2 ──────────────────────────────────────────────────────────────────────
-
-/** Deterministic 32-bit string hash, for per-record seeds. */
-function hashString(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i += 1) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
 
 /**
  * D2: the clean product span (the gold product's name) rewritten by the

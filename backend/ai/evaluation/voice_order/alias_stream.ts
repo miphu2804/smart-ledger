@@ -15,8 +15,9 @@ import { writeFileSync } from 'node:fs';
 import { buildResolver } from '../../../../frontend/mobile/src/lib/resolver/index.ts';
 import { folded } from '../../../../frontend/mobile/src/lib/resolver/normalizer.ts';
 import type { CatalogItem } from '../../../../frontend/mobile/src/lib/resolver/types.ts';
-import { mulberry32 } from './lib/stats.ts';
+import { hashString, mulberry32 } from './lib/stats.ts';
 import { synthesize } from './lib/synth.ts';
+import { clopperPearsonUpper } from './search/autoresearch.ts';
 import { lockboxData } from './search/data.ts';
 import { WINNER_CONFIG, winnerGate } from './pipeline.ts';
 
@@ -31,15 +32,6 @@ const ARMS = [0, 1, 2, 3] as const; // 0 = no learning, else aliasMinConfirmatio
 function arg(name: string, fallback: string): string {
   const index = process.argv.indexOf(`--${name}`);
   return index >= 0 ? process.argv[index + 1] : fallback;
-}
-
-function hash(text: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < text.length; i += 1) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
 }
 
 interface Utterance {
@@ -62,11 +54,11 @@ const emptyTally = (): Tally => ({ lines: 0, correctAuto: 0, wrongAuto: 0, wrong
 /** One shop's stream: Zipf popularity, a habitual spoken form per item, 10% of items missing from the catalog. */
 function shopStream(items: CatalogItem[], seed: number, habit: number): { catalog: CatalogItem[]; stream: Utterance[] } {
   const rng = mulberry32(seed);
-  const order = [...items].sort((a, b) => hash(`${seed}:order:${a.id}`) - hash(`${seed}:order:${b.id}`));
-  const missing = new Set(order.filter((item) => hash(`${seed}:ooc:${item.id}`) / 2 ** 32 < OOC_FRACTION).map((item) => item.id));
+  const order = [...items].sort((a, b) => hashString(`${seed}:order:${a.id}`) - hashString(`${seed}:order:${b.id}`));
+  const missing = new Set(order.filter((item) => hashString(`${seed}:ooc:${item.id}`) / 2 ** 32 < OOC_FRACTION).map((item) => item.id));
   const weights = order.map((_, rank) => 1 / (rank + 1));
   const total = weights.reduce((sum, w) => sum + w, 0);
-  const habitual = new Map(order.map((item) => [item.id, synthesize(item.name, { seed: hash(`${seed}:habit:${item.id}`) }).text]));
+  const habitual = new Map(order.map((item) => [item.id, synthesize(item.name, { seed: hashString(`${seed}:habit:${item.id}`) }).text]));
 
   const stream: Utterance[] = [];
   for (let t = 0; t < STREAM; t += 1) {
@@ -74,7 +66,7 @@ function shopStream(items: CatalogItem[], seed: number, habit: number): { catalo
     let index = 0;
     while (pick > weights[index] && index < weights.length - 1) pick -= weights[index++];
     const item = order[index];
-    const span = rng() < habit ? habitual.get(item.id)! : synthesize(item.name, { seed: hash(`${seed}:fresh:${t}`) }).text;
+    const span = rng() < habit ? habitual.get(item.id)! : synthesize(item.name, { seed: hashString(`${seed}:fresh:${t}`) }).text;
     stream.push({ span, gold: missing.has(item.id) ? null : item.id });
   }
   return { catalog: items.filter((item) => !missing.has(item.id)), stream };
@@ -124,34 +116,12 @@ function replay(catalog: CatalogItem[], stream: Utterance[], minConfirmations: n
   return tally;
 }
 
-/** One-sided 95% Clopper-Pearson upper bound, by bisection on the binomial CDF. */
-function upper95(k: number, n: number): number {
-  if (n === 0) return 1;
-  const cdf = (p: number): number => {
-    let term = (1 - p) ** n;
-    let sum = term;
-    for (let i = 1; i <= k; i += 1) {
-      term *= ((n - i + 1) / i) * (p / (1 - p));
-      sum += term;
-    }
-    return sum;
-  };
-  let lo = k / n;
-  let hi = 1;
-  for (let i = 0; i < 60; i += 1) {
-    const mid = (lo + hi) / 2;
-    if (cdf(mid) > 0.05) lo = mid;
-    else hi = mid;
-  }
-  return hi;
-}
-
 function summary(t: Tally): Record<string, number> {
   return {
     lines: t.lines,
     correctAuto: t.correctAuto / t.lines,
     far: t.wrongAuto / t.lines,
-    farUpper: upper95(t.wrongAuto, t.lines),
+    farUpper: clopperPearsonUpper(t.wrongAuto, t.lines),
     wrongAuto: t.wrongAuto,
     wrongAutoViaAlias: t.wrongAutoViaAlias,
     ask: t.ask / t.lines,
@@ -182,9 +152,9 @@ function main(): void {
     const box = lockboxData({ lockbox: { d2Seed: seed, d3Seed: seed, oocSeed: seed, oocFraction: OOC_FRACTION } });
     for (const name of CATALOGS) {
       const items = box.catalogs[name] ?? box.catalogs[`${name}@${seed}`];
-      const { catalog, stream } = shopStream(items, hash(`${seed}:${name}`), habit);
+      const { catalog, stream } = shopStream(items, hashString(`${seed}:${name}`), habit);
       for (const arm of ARMS) {
-        const tally = replay(catalog, stream, arm, hash(`${seed}:${name}:user`));
+        const tally = replay(catalog, stream, arm, hashString(`${seed}:${name}:user`));
         pooled.set(arm, add(pooled.get(arm)!, tally));
         rows.push({ seed, catalog: name, arm, ...summary(tally) });
       }

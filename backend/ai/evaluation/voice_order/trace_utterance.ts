@@ -46,7 +46,8 @@ function main(): void {
   // An empty catalog makes the parser return every line as unknown: the spoken
   // span and quantity, which is all the resolver takes.
   const parsed = parseOrder(sentence, []);
-  const resolver = buildResolver({ catalog, config: WINNER_CONFIG, gate: winnerGate(2), seeds: [] });
+  const newResolver = () => buildResolver({ catalog, config: WINNER_CONFIG, gate: winnerGate(2), seeds: [] });
+  const resolver = newResolver();
   const signals = signalReaders(catalog);
 
   const lines = parsed.unknown.map((line) => {
@@ -76,7 +77,8 @@ function main(): void {
       decision: result.decision,
       chosen: nameOf(result.productId),
       gold: nameOf(gold),
-      afterTwoConfirmations: gold === null ? null : confirmTwice(resolver, query, gold, nameOf),
+      // A fresh resolver, so this line's learned alias never reaches the next line's untrained trace.
+      afterTwoConfirmations: gold === null ? null : confirmTwice(newResolver(), query, gold, nameOf),
     };
   });
 

@@ -31,6 +31,16 @@ export function mulberry32(seed: number): () => number {
   };
 }
 
+/** 32-bit FNV-1a hash of a string, for seeding per-item randomness. */
+export function hashString(text: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
 /** Linear-interpolated percentile of an ascending array. */
 export function percentile(ascending: number[], p: number): number {
   if (ascending.length === 0) return Number.NaN;

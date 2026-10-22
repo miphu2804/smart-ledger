@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import type { CatalogItem } from '../../../../../frontend/mobile/src/lib/resolver/types.ts';
 import { buildCatalogRegistry, buildD2, readPriorCatalogs, type CatalogRegistry, type EvalRecord, type Splits } from '../lib/corpus.ts';
 import { buildD3, buildD3CatalogRegistry } from '../lib/d3.ts';
+import { hashString } from '../lib/stats.ts';
 import { rulesToTags, synthesize } from '../lib/synth.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -27,15 +28,6 @@ export interface Dataset {
   catalogs: CatalogRegistry;
 }
 
-function hash(text: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < text.length; i += 1) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
 /**
  * Out-of-catalog lines: for each source catalog, drop `fraction` of its items
  * (chosen by seeded hash) into a reduced catalog, and ask for each dropped item.
@@ -44,11 +36,11 @@ export function buildOoc(sources: CatalogRegistry, seed: number, fraction: numbe
   const records: EvalRecord[] = [];
   const catalogs: CatalogRegistry = {};
   for (const [sourceId, items] of Object.entries(sources)) {
-    const dropped = (item: CatalogItem) => hash(`${seed}:${sourceId}:${item.id}`) / 2 ** 32 < fraction;
+    const dropped = (item: CatalogItem) => hashString(`${seed}:${sourceId}:${item.id}`) / 2 ** 32 < fraction;
     const catalogId = `${sourceId}__ooc${seed}`;
     catalogs[catalogId] = items.filter((item) => !dropped(item));
     items.filter(dropped).forEach((item, index) => {
-      const result = synthesize(item.name, { seed: seed + hash(`${catalogId}:${index}`) });
+      const result = synthesize(item.name, { seed: seed + hashString(`${catalogId}:${index}`) });
       records.push({
         id: `ooc-${catalogId}-${item.id}`,
         dataset: 'ooc' as EvalRecord['dataset'],
@@ -76,7 +68,7 @@ function readJsonl(path: string): EvalRecord[] {
 function oocSplits(records: EvalRecord[], seed: number): Splits {
   const calibration: string[] = [];
   const test: string[] = [];
-  for (const record of records) (hash(`split:${seed}:${record.id}`) / 2 ** 32 < 0.6 ? calibration : test).push(record.id);
+  for (const record of records) (hashString(`split:${seed}:${record.id}`) / 2 ** 32 < 0.6 ? calibration : test).push(record.id);
   return { ooc: { calibration, test } };
 }
 

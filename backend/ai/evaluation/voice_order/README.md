@@ -9,7 +9,7 @@ Everything here runs on synthetic data: fixture and generated catalogs, syntheti
 | Part | Result (test seeds, read once) | Recommendation |
 |---|---|---|
 | Learned alias table | Correct AUTO 56.8% → 71.2% with trust after 2 confirmations; FAR 0.10% (95% upper bound 0.20%); taps per line 0.58 → 0.43 | Ship with `aliasMinConfirmations: 2` |
-| Offline outbox for new products | Re-reading the catalog before retrying a timed-out create: 0 duplicates, 0 lost, 14 wrong merges in 6016 creates. Blind retry: 625 duplicates | Works on today's Core; `Idempotency-Key` on `POST /products` is the clean fix (a Core change) |
+| Offline outbox for new products | Re-reading the catalog before retrying a timed-out create: 0 retry duplicates but 9 orphaned copies, 0 lost, 14 wrong merges in 6016 creates. Blind retry: 625 duplicates | Works on today's Core; `Idempotency-Key` on `POST /products` is the clean fix (a Core change) |
 | Haiku correcting the draft | Not re-run. `reports/escalation_v1.md`: auto-applying ASK lines raises FAR 0.5% → 9.0%, p50 1.3 s | Do not let it auto-apply |
 | One sentence through the pipeline | `reports/pipeline-walkthrough.html` (seed 4180) | Two parser bugs found, below |
 
@@ -30,14 +30,14 @@ The gain holds on every seed (56.5→67.4, 49.4→66.4, 64.6→80.2 for trust af
 
 `POST /products` takes no `Idempotency-Key` and product names are not unique ([API contract](../../../../docs/contracts/api-contracts.md), section 0 and barcode CORE-012). The simulation fakes Core with those rules, loses 10% of requests before Core and 10% of responses after Core applied them, adds offline windows, and runs two devices of one shop for 500 actions each over 10 seeds.
 
-| Strategy | Duplicates from retries | Lost actions | Wrong merges | Same item from two devices merged |
-|---|---|---|---|---|
-| S0 today: direct call, one manual retry | 424 | 1725 | 0 | 0 |
-| S1 outbox, blind retry | 625 | 0 | 0 | 0 |
-| S2 outbox, read back by normalized name before retrying | 0 | 0 | 14 | 11 |
-| S3 outbox with `Idempotency-Key` on product create (needs Core) | 0 | 0 | 0 | 0 |
+| Strategy | Duplicates from retries | Orphaned by adoption | Lost actions | Wrong merges | Same item from two devices merged |
+|---|---|---|---|---|---|
+| S0 today: direct call, one manual retry | 424 | 0 | 1725 | 0 | 0 |
+| S1 outbox, blind retry | 625 | 0 | 0 | 0 | 0 |
+| S2 outbox, read back by normalized name before retrying | 0 | 9 | 0 | 14 | 11 |
+| S3 outbox with `Idempotency-Key` on product create (needs Core) | 0 | 0 | 0 | 0 | 0 |
 
-S2 adopts a product only if its id was not in the local replica when the action was queued; every wrong merge is another device creating a different product with the same name in that window. Expenses already carry a key, so none was written twice. `docs/product` has no offline requirement yet.
+S2 adopts a product only if its id was not in the local replica when the action was queued; every wrong merge is another device creating a different product with the same name in that window. When the device's own timed-out create had landed and the read-back adopts the other device's product instead, its own copy stays in the catalog unreferenced: 9 such orphaned copies (0.15%). The device cannot tell its own copy apart because Core does not return who created a product, so S2 does not reach zero extra products; S3 does. Expenses already carry a key, so none was written twice. `docs/product` has no offline requirement yet.
 
 ### Bugs the trace found
 

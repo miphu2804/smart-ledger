@@ -19,6 +19,7 @@ jobs:
       pull-requests: read
     outputs:
       ai: ${{ steps.filter.outputs.ai }}
+      ai_service: ${{ steps.filter.outputs.ai_service }}
       core: ${{ steps.filter.outputs.core }}
       mobile: ${{ steps.filter.outputs.mobile }}
       landing: ${{ steps.filter.outputs.landing }}
@@ -36,6 +37,12 @@ jobs:
               - backend/ai/**
               # The AI integration tests apply these migrations.
               - supabase/**
+            # What the AI image ships: `backend/ai/evaluation/` is offline research that the
+            # Dockerfile never copies, so a change there alone runs the AI tests but no build or deploy.
+            ai_service:
+              - .github/workflows/ci.yml
+              - backend/ai/*
+              - backend/ai/!(evaluation)/**
             core:
               - .github/workflows/ci.yml
               - backend/core/**
@@ -48,7 +55,8 @@ jobs:
             containers:
               - .github/workflows/ci.yml
               - compose.yaml
-              - backend/ai/**
+              - backend/ai/*
+              - backend/ai/!(evaluation)/**
               - backend/core/**
 
   ### Test: lint, tests and builds for the areas that changed ###
@@ -310,7 +318,7 @@ jobs:
     if: >-
       !failure() && !cancelled()
       && github.event_name == 'push'
-      && (needs.changes.outputs.ai == 'true' || needs.changes.outputs.core == 'true' || github.run_attempt > 1)
+      && (needs.changes.outputs.ai_service == 'true' || needs.changes.outputs.core == 'true' || github.run_attempt > 1)
     needs: [changes, ai, core, mobile-web, container-images]
     permissions:
       contents: read
@@ -379,7 +387,7 @@ jobs:
       # AI first: Core calls AI, so the new Core should not start against an old AI.
       - name: Deploy ai
         id: deploy_ai
-        if: needs.changes.outputs.ai == 'true' || github.run_attempt > 1
+        if: needs.changes.outputs.ai_service == 'true' || github.run_attempt > 1
         run: railway up backend/ai --path-as-root --service ai --ci
       - name: Deploy core
         id: deploy_core
