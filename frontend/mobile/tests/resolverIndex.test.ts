@@ -107,6 +107,20 @@ describe('buildResolver', () => {
     assert.equal(resolver.resolve({ rawProductSpan: 'sting dau', unit: 'hop' }).features.unit_ok, 'ok');
     assert.equal(resolver.resolve({ rawProductSpan: 'sting dau', unit: 'lon' }).features.unit_ok, 'mismatch');
   });
+
+  it('treats spellings of one unit as the same unit and reads only its first word', () => {
+    const resolver = (unit: string) =>
+      buildResolver({ catalog: [{ id: 'p1', name: 'Sting dâu', unit }], config: config(), gate: gate() });
+    assert.equal(resolver('Kg').resolve({ rawProductSpan: 'sting dau', unit: 'ky' }).features.unit_ok, 'ok');
+    assert.equal(resolver('cốc').resolve({ rawProductSpan: 'sting dau', unit: 'ly' }).features.unit_ok, 'ok');
+    assert.equal(resolver('lon 330ml').resolve({ rawProductSpan: 'sting dau', unit: 'lon' }).features.unit_ok, 'ok');
+    assert.equal(resolver('lon 330ml').resolve({ rawProductSpan: 'sting dau', unit: 'chai' }).features.unit_ok, 'mismatch');
+  });
+
+  it('reports a catalog unit it cannot read as unknown, not as a mismatch', () => {
+    const resolver = buildResolver({ catalog: [{ id: 'p1', name: 'Sting dâu', unit: 'set quà' }], config: config(), gate: gate() });
+    assert.equal(resolver.resolve({ rawProductSpan: 'sting dau', unit: 'chai' }).features.unit_ok, 'unknown');
+  });
 });
 
 describe('buildResolver: alias feedback loop', () => {
@@ -136,9 +150,18 @@ describe('buildResolver: alias feedback loop', () => {
 
   it('installs the seed aliases the web regexes used to hard-code', () => {
     const resolver = buildResolver({ catalog, config: config(), gate: gate() });
-    const result = resolver.resolve({ rawProductSpan: 'tai go' });
-    assert.equal(result.features.alias, 1);
-    assert.equal(result.topK[0]?.productId, 'p3');
+    for (const span of ['tai go', 'taigo', 'bia tai gơ']) {
+      const result = resolver.resolve({ rawProductSpan: span });
+      assert.equal(result.features.alias, 1, span);
+      assert.equal(result.topK[0]?.productId, 'p3', span);
+    }
+  });
+
+  it('installs every regex spelling of the Sting seed when the shop sells one Sting', () => {
+    const resolver = buildResolver({ catalog: [{ id: 's', name: 'Sting dâu' }, ...catalog.slice(2)], config: config(), gate: gate() });
+    for (const span of ['xì ting', 'xiting', 'siting', 'xì tin', 'xi tin', 'xitin', 'tin dâu']) {
+      assert.equal(resolver.resolve({ rawProductSpan: span }).features.alias, 1, span);
+    }
   });
 
   it('drops a seed alias whose product this shop does not sell', () => {
@@ -196,6 +219,31 @@ describe('buildResolver: alias feedback loop', () => {
     resolver.upsertAlias({ folded: 'xiting', productId: 'p2', confirmedCount: 1 });
     assert.ok(scoreOf('p2') > before, 'the re-pointed product must score the phrase higher');
     assert.equal(scoreOf('p2'), 1);
+  });
+
+  it('removes the old document of a re-pointed phrase so the old product stops tying', () => {
+    // Regression: the old (phrase, product) document stayed indexed, so both
+    // products scored 1 and the productId tiebreak kept p1 first for good.
+    const resolver = buildResolver({ catalog, config: config(), gate: gate() });
+    resolver.upsertAlias({ folded: 'xiting', productId: 'p1', confirmedCount: 1 });
+    resolver.upsertAlias({ folded: 'xiting', productId: 'p2', confirmedCount: 1 });
+    const result = resolver.resolve({ rawProductSpan: 'xiting' });
+    assert.equal(result.topK[0]?.productId, 'p2');
+    assert.ok((result.topK.find((candidate) => candidate.productId === 'p1')?.score ?? 0) < 1);
+  });
+
+  it('removes the old document from every retriever and the reranker', () => {
+    const withAll = config({
+      retrievers: ['Q-bm25', 'B', 'AND', 'P'],
+      fusion: 'rrf',
+      rerank: { pool: 10, weights: { E: 1 } },
+    });
+    const resolver = buildResolver({ catalog, config: withAll, gate: gate() });
+    resolver.upsertAlias({ folded: 'xiting', productId: 'p1', confirmedCount: 1 });
+    resolver.upsertAlias({ folded: 'xiting', productId: 'p2', confirmedCount: 1 });
+    const result = resolver.resolve({ rawProductSpan: 'xiting' });
+    assert.equal(result.topK[0]?.productId, 'p2');
+    for (const name of ['Q-bm25', 'B', 'AND']) assert.equal(result.topK[0]?.ranks[name], 1, name);
   });
 });
 

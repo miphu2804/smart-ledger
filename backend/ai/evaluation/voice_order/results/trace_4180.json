@@ -1,0 +1,256 @@
+{
+ "seed": 4180,
+ "catalog": "tap_hoa",
+ "catalogSize": 30,
+ "sentence": "cho hai Đườngl trắng 1kg với ba Nước măm Chinsu 50ml",
+ "normalized": "cho hai duongl trang 1kg voi ba nuoc mam chinsu 50ml",
+ "lines": [
+  {
+   "spoken": {
+    "said": "Đường trắng 1kg",
+    "qty": 2,
+    "heard": "Đườngl trắng 1kg",
+    "noise": [
+     "char_edit"
+    ]
+   },
+   "parsed": {
+    "span": "Đườngl trắng",
+    "qty": 2
+   },
+   "views": {
+    "toned": "đừơngl trắng",
+    "folded": "duongl trang",
+    "phon": "duongl chan"
+   },
+   "top": [
+    {
+     "productId": "111",
+     "name": "Đường trắng 1kg",
+     "reranked": 0.5884615384615385,
+     "rrf": 0.04918032786885246,
+     "retrieverScores": {
+      "E": 0.6923076923076923,
+      "Q-bm25": 21.880698205905627,
+      "B": 3.4732195311414498
+     },
+     "ranks": {
+      "E": 1,
+      "Q-bm25": 1,
+      "B": 1
+     },
+     "E": 0.6923076923076923,
+     "P": 0.5384615384615384,
+     "T": 0.5
+    },
+    {
+     "productId": "112",
+     "name": "Muối i-ốt 500g",
+     "reranked": 0.17435064935064934,
+     "rrf": 0.016129032258064516,
+     "retrieverScores": {
+      "E": 0.36363636363636365
+     },
+     "ranks": {
+      "E": 2
+     },
+     "E": 0.36363636363636365,
+     "P": 0.2142857142857143,
+     "T": 0
+    },
+    {
+     "productId": "128",
+     "name": "Dầu gội Clear 180ml",
+     "reranked": 0.15378289473684212,
+     "rrf": 0.015873015873015872,
+     "retrieverScores": {
+      "E": 0.3125
+     },
+     "ranks": {
+      "E": 3
+     },
+     "E": 0.3125,
+     "P": 0.26315789473684215,
+     "T": 0
+    },
+    {
+     "productId": "103",
+     "name": "Nước mắm Nam Ngư 500ml",
+     "reranked": 0.13636363636363635,
+     "rrf": 0.015625,
+     "retrieverScores": {
+      "E": 0.2777777777777778
+     },
+     "ranks": {
+      "E": 4
+     },
+     "E": 0.2777777777777778,
+     "P": 0.2272727272727273,
+     "T": 0
+    },
+    {
+     "productId": "123",
+     "name": "Sữa đặc Ông Thọ lon",
+     "reranked": 0.13111111111111112,
+     "rrf": 0.015384615384615385,
+     "retrieverScores": {
+      "E": 0.2666666666666667
+     },
+     "ranks": {
+      "E": 5
+     },
+     "E": 0.2666666666666667,
+     "P": 0.2222222222222222,
+     "T": 0
+    }
+   ],
+   "features": {
+    "s1": 0.5884615384615385,
+    "s2": 0.17435064935064934,
+    "margin": 0.4141108891108891,
+    "disp": 0.17647390866400234,
+    "agree": 1,
+    "jacc": 0.2,
+    "unit_ok": "unknown",
+    "alias": 0,
+    "len_q": 2,
+    "stt_conf": null
+   },
+   "decision": "ASK",
+   "chosen": null,
+   "gold": "Đường trắng 1kg",
+   "afterTwoConfirmations": {
+    "decision": "AUTO",
+    "chosen": "Đường trắng 1kg",
+    "alias": 1
+   }
+  },
+  {
+   "spoken": {
+    "said": "Nước mắm Chinsu 500ml",
+    "qty": 3,
+    "heard": "Nước măm Chinsu 50ml",
+    "noise": [
+     "tone_loss",
+     "char_edit"
+    ]
+   },
+   "parsed": {
+    "span": "Nước măm Chinsu",
+    "qty": 3
+   },
+   "views": {
+    "toned": "nước măm chinsu",
+    "folded": "nuoc mam chinsu",
+    "phon": "nuot mam chinsu"
+   },
+   "top": [
+    {
+     "productId": "104",
+     "name": "Nước mắm Chinsu 500ml",
+     "reranked": 0.8607142857142858,
+     "rrf": 0.04918032786885246,
+     "retrieverScores": {
+      "E": 0.7222222222222222,
+      "Q-bm25": 30.079369536415932,
+      "B": 7.534268428788499
+     },
+     "ranks": {
+      "E": 1,
+      "Q-bm25": 1,
+      "B": 1
+     },
+     "E": 0.7222222222222222,
+     "P": 0.7142857142857143,
+     "T": 1
+    },
+    {
+     "productId": "103",
+     "name": "Nước mắm Nam Ngư 500ml",
+     "reranked": 0.5833333333333333,
+     "rrf": 0.03225806451612903,
+     "retrieverScores": {
+      "E": 0.5,
+      "B": 4.009062677877473
+     },
+     "ranks": {
+      "E": 2,
+      "B": 2
+     },
+     "E": 0.5,
+     "P": 0.5,
+     "T": 0.6666666666666666
+    },
+    {
+     "productId": "126",
+     "name": "Nước rửa chén Sunlight 750ml",
+     "reranked": 0.36130952380952386,
+     "rrf": 0.03125763125763126,
+     "retrieverScores": {
+      "E": 0.3928571428571429,
+      "B": 1.6323835969521945
+     },
+     "ranks": {
+      "E": 3,
+      "B": 5
+     },
+     "E": 0.3928571428571429,
+     "P": 0.3571428571428571,
+     "T": 0.3333333333333333
+    },
+    {
+     "productId": "119",
+     "name": "Nước suối Aquafina 500ml",
+     "reranked": 0.33333333333333337,
+     "rrf": 0.031009615384615385,
+     "retrieverScores": {
+      "E": 0.33333333333333337,
+      "B": 1.7907535470697271
+     },
+     "ranks": {
+      "E": 5,
+      "B": 4
+     },
+     "E": 0.33333333333333337,
+     "P": 0.33333333333333337,
+     "T": 0.3333333333333333
+    },
+    {
+     "productId": "105",
+     "name": "Nước tương Maggi 300ml",
+     "reranked": 0.32651515151515154,
+     "rrf": 0.015873015873015872,
+     "retrieverScores": {
+      "B": 1.7907535470697271
+     },
+     "ranks": {
+      "B": 3
+     },
+     "E": 0.31818181818181823,
+     "P": 0.33333333333333337,
+     "T": 0.3333333333333333
+    }
+   ],
+   "features": {
+    "s1": 0.8607142857142858,
+    "s2": 0.5833333333333333,
+    "margin": 0.2773809523809525,
+    "disp": 0.206846285589889,
+    "agree": 1,
+    "jacc": 0.2,
+    "unit_ok": "unknown",
+    "alias": 0,
+    "len_q": 3,
+    "stt_conf": null
+   },
+   "decision": "AUTO",
+   "chosen": "Nước mắm Chinsu 500ml",
+   "gold": "Nước mắm Chinsu 500ml",
+   "afterTwoConfirmations": {
+    "decision": "AUTO",
+    "chosen": "Nước mắm Chinsu 500ml",
+    "alias": 1
+   }
+  }
+ ]
+}

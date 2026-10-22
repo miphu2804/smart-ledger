@@ -59,4 +59,8 @@ export class RetrieverAnd implements Retriever {
   addDocument(text: string, productId: string): void {
     this.index.addDocument(text, productId);
   }
+
+  removeDocument(text: string, productId: string): boolean {
+    return this.index.removeDocument(text, productId);
+  }
 }

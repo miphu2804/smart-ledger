@@ -4,6 +4,11 @@ Plan section 4 rule 8 sends contradictions between plan and code here, and
 rule 6 sends justifications for a new runtime dependency here. Neither the file
 nor this directory existed before 2026-10-21, although both rules reference it.
 
+"The plan" is PLAN v3.1, Voice Order Product Resolution, which the owner keeps
+outside the repo. The eval harness files and reports cited below arrive with the
+stacked eval pull requests (#345, moved under `backend/ai/evaluation/voice_order/`
+by #347); until those merge, the paths below do not exist on `staging`.
+
 ## Open question 1 — the gate tuning objective contradicts the plan
 
 **Plan says.** Section 5.6, "Objective for both": *minimize ask_rate subject to
@@ -11,7 +16,7 @@ false_auto_rate ≤ FAR_MAX*. Section 9B.1 repeats it as the loop contract:
 *Minimize `ask_rate` subject to FAR ≤ `FAR_MAX` on calibration; tie-break by
 `recall@3`.*
 
-**Code does.** `eval/lib/gateFit.ts`, `tuneGateRules` over `scoreRules`,
+**Code does.** `backend/ai/evaluation/voice_order/lib/gateFit.ts`, `tuneGateRules` over `scoreRules`,
 minimizes `nonAutoRate = askRate + newRate`, which counts a `NEW` as a failure to
 answer. The function's own comment gives the reason: minimizing `ask_rate` alone
 lets `NEW` absorb everything, so the search returns a gate that sends every line
@@ -28,7 +33,7 @@ to `NEW` with zero asks and zero false autos.
   branch became unreachable and the budget was spent auto-applying
   out-of-catalog lines, the one class of auto that is guaranteed wrong.
 
-**Measured consequence.** `eval/reports/bakeoff_v2.md`, R2: `new_P` and `new_R`
+**Measured consequence.** `backend/ai/evaluation/voice_order/reports/bakeoff_v2.md`, R2: `new_P` and `new_R`
 both 0.0%, 1103 autos of which 16 wrong, FAR 1.1% (95% CI 0.6–1.6%). Against
 `bakeoff_v1`: 700 autos, 2 wrong, FAR 0.1%. Every resolver row now breaches the
 1% budget, so section 8.3 excludes all of them and the rule selects R0, the
@@ -40,7 +45,7 @@ which stopped it clearing `mMin`. That accident, not the tuner, is what kept
 v1's `sFloor` above zero. The v1 numbers were propped up by a bug, so this is a
 correction rather than a regression.
 
-**Not recorded anywhere.** `eval/runner/run.ts`'s `deviationsOf` does not
+**Not recorded anywhere.** `backend/ai/evaluation/voice_order/runner/run.ts`'s `deviationsOf` does not
 mention the objective, and neither report does. Section 4 rule 5 requires a
 justified change to be recorded as a deviation with its reason.
 
@@ -56,15 +61,15 @@ sign-off and a plan amendment rather than an agent's silent change.
 stop here.
 
 **Resolved 2026-10-21.** The owner took the proposal above: count a refusal as a
-failure only when the gold item was in the catalog. `eval/lib/gateFit.ts` now
+failure only when the gold item was in the catalog. `backend/ai/evaluation/voice_order/lib/gateFit.ts` now
 minimizes `unansweredRate = (asks + newsInCatalog) / lines` for both G1 and G2,
 with `FAR <= FAR_MAX` unchanged as the constraint and the tie-break order kept.
 Plan sections 5.6 and 9B.1 still read "minimize ask_rate"; this file is the
 record of the approved deviation, and amending the plan text is the owner's call.
 
 Confirming the change needs a holdout the earlier runs never read, so
-`eval/data/splits_lockbox2.json` was added, drawn by
-`buildSplits(records, LOCKBOX2_SEED)` in `eval/lib/corpus.ts`. It re-draws D1 and
+`backend/ai/evaluation/voice_order/data/splits_lockbox2.json` was added, drawn by
+`buildSplits(records, LOCKBOX2_SEED)` in `backend/ai/evaluation/voice_order/lib/corpus.ts`. It re-draws D1 and
 D2, where 55% and 56% of the old test lines change side, and leaves D3 alone:
 D3's four catalogs are atomic source sets, and largest-first is the only order
 that does not leave its test side nearly empty or holding the whole 20 000-item
@@ -81,5 +86,5 @@ split twice (`bakeoff_v1`, `bakeoff_v2`).
 
 v2 was run because PR #335 changed the resolver, which is a legitimate reason to
 re-measure. But any hypothesis formed by reading v2 needs a fresh split before it
-can be confirmed, and `eval/data/**` is protected. This is a gap in section 8
+can be confirmed, and `backend/ai/evaluation/voice_order/data/**` is protected. This is a gap in section 8
 rather than a violation of section 9B.3.

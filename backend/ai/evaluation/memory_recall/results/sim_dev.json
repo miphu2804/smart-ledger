@@ -1,0 +1,608 @@
+{
+ "dense": "sim",
+ "configs": 823,
+ "baseline": {
+  "R@5": 0.27424749163879597,
+  "n": 2392,
+  "R@5_lex": 0.2875675675675676,
+  "R@5_unacc": 0.24974093264248703,
+  "R@5_sem": 0.2968127490039841,
+  "top1": 0.12123745819397994,
+  "stale_only": 0.17766497461928935,
+  "n_stale": 197,
+  "noise": 5.0,
+  "injected": 5.0
+ },
+ "cosine": {
+  "R@5": 0.8235785953177257,
+  "n": 2392,
+  "R@5_lex": 0.9837837837837838,
+  "R@5_unacc": 0.6839378238341969,
+  "R@5_sem": 0.796812749003984,
+  "top1": 0.5907190635451505,
+  "stale_only": 0.09137055837563451,
+  "n_stale": 197,
+  "noise": 5.0,
+  "injected": 5.0
+ },
+ "winner": {
+  "config": {
+   "name": "grid",
+   "channels": "hybrid",
+   "fusion": "mix",
+   "rrf_k": 60,
+   "mix_alpha": 0.2,
+   "weight": "none",
+   "decay": 0.01,
+   "decay_from": "last_used",
+   "use_importance": false,
+   "freq": "none",
+   "add_w": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "floor": 0.66,
+   "lex_cover": 0.4,
+   "prior_weight": 0.0
+  },
+  "dev": {
+   "R@5": 0.8963210702341137,
+   "n": 2392,
+   "R@5_lex": 0.9978378378378379,
+   "R@5_unacc": 0.8528497409326425,
+   "R@5_sem": 0.7928286852589641,
+   "top1": 0.7136287625418061,
+   "stale_only": 0.1065989847715736,
+   "n_stale": 197,
+   "noise": 0.6577868852459017,
+   "injected": 3.4770833333333333
+  }
+ },
+ "best_no_floor": {
+  "config": {
+   "name": "grid",
+   "channels": "hybrid",
+   "fusion": "mix",
+   "rrf_k": 60,
+   "mix_alpha": 0.3,
+   "weight": "add",
+   "decay": 0.01,
+   "decay_from": "last_used",
+   "use_importance": false,
+   "freq": "none",
+   "add_w": [
+    0.1,
+    0.1,
+    0.0
+   ],
+   "floor": null,
+   "lex_cover": 0.6,
+   "prior_weight": 0.0
+  },
+  "dev": {
+   "R@5": 0.9368729096989966,
+   "n": 2392,
+   "R@5_lex": 1.0,
+   "R@5_unacc": 0.9575129533678757,
+   "R@5_sem": 0.7808764940239044,
+   "top1": 0.7274247491638796,
+   "stale_only": 0.07614213197969544,
+   "n_stale": 197,
+   "noise": 5.0,
+   "injected": 5.0
+  }
+ },
+ "top": [
+  {
+   "config": {
+    "name": "grid",
+    "channels": "hybrid",
+    "fusion": "mix",
+    "rrf_k": 60,
+    "mix_alpha": 0.2,
+    "weight": "none",
+    "decay": 0.01,
+    "decay_from": "last_used",
+    "use_importance": false,
+    "freq": "none",
+    "add_w": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "floor": 0.66,
+    "lex_cover": 0.4,
+    "prior_weight": 0.0
+   },
+   "dev": {
+    "R@5": 0.8963210702341137,
+    "n": 2392,
+    "R@5_lex": 0.9978378378378379,
+    "R@5_unacc": 0.8528497409326425,
+    "R@5_sem": 0.7928286852589641,
+    "top1": 0.7136287625418061,
+    "stale_only": 0.1065989847715736,
+    "n_stale": 197,
+    "noise": 0.6577868852459017,
+    "injected": 3.4770833333333333
+   }
+  },
+  {
+   "config": {
+    "name": "grid",
+    "channels": "hybrid",
+    "fusion": "mix",
+    "rrf_k": 60,
+    "mix_alpha": 0.2,
+    "weight": "none",
+    "decay": 0.01,
+    "decay_from": "last_used",
+    "use_importance": false,
+    "freq": "none",
+    "add_w": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "floor": 0.66,
+    "lex_cover": 0.4,
+    "prior_weight": 5.0
+   },
+   "dev": {
+    "R@5": 0.8963210702341137,
+    "n": 2392,
+    "R@5_lex": 0.9978378378378379,
+    "R@5_unacc": 0.8518134715025907,
+    "R@5_sem": 0.7948207171314741,
+    "top1": 0.7132107023411371,
+    "stale_only": 0.1065989847715736,
+    "n_stale": 197,
+    "noise": 0.6577868852459017,
+    "injected": 3.4763888888888888
+   }
+  },
+  {
+   "config": {
+    "name": "grid",
+    "channels": "hybrid",
+    "fusion": "mix",
+    "rrf_k": 60,
+    "mix_alpha": 0.2,
+    "weight": "none",
+    "decay": 0.01,
+    "decay_from": "last_used",
+    "use_importance": false,
+    "freq": "none",
+    "add_w": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "floor": 0.66,
+    "lex_cover": 0.4,
+    "prior_weight": 20.0
+   },
+   "dev": {
+    "R@5": 0.8963210702341137,
+    "n": 2392,
+    "R@5_lex": 0.9978378378378379,
+    "R@5_unacc": 0.8528497409326425,
+    "R@5_sem": 0.7928286852589641,
+    "top1": 0.7123745819397993,
+    "stale_only": 0.1065989847715736,
+    "n_stale": 197,
+    "noise": 0.6577868852459017,
+    "injected": 3.4767361111111112
+   }
+  },
+  {
+   "config": {
+    "name": "grid",
+    "channels": "hybrid",
+    "fusion": "mix",
+    "rrf_k": 60,
+    "mix_alpha": 0.2,
+    "weight": "none",
+    "decay": 0.01,
+    "decay_from": "last_used",
+    "use_importance": false,
+    "freq": "none",
+    "add_w": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "floor": 0.66,
+    "lex_cover": 0.4,
+    "prior_weight": 80.0
+   },
+   "dev": {
+    "R@5": 0.895066889632107,
+    "n": 2392,
+    "R@5_lex": 0.9978378378378379,
+    "R@5_unacc": 0.8497409326424871,
+    "R@5_sem": 0.7928286852589641,
+    "top1": 0.7119565217391305,
+    "stale_only": 0.1065989847715736,
+    "n_stale": 197,
+    "noise": 0.6577868852459017,
+    "injected": 3.4756944444444446
+   }
+  },
+  {
+   "config": {
+    "name": "grid",
+    "channels": "hybrid",
+    "fusion": "mix",
+    "rrf_k": 60,
+    "mix_alpha": 0.2,
+    "weight": "none",
+    "decay": 0.01,
+    "decay_from": "last_used",
+    "use_importance": false,
+    "freq": "none",
+    "add_w": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "floor": 0.67,
+    "lex_cover": 0.4,
+    "prior_weight": 0.0
+   },
+   "dev": {
+    "R@5": 0.8913043478260869,
+    "n": 2392,
+    "R@5_lex": 0.9978378378378379,
+    "R@5_unacc": 0.8404145077720208,
+    "R@5_sem": 0.7928286852589641,
+    "top1": 0.7132107023411371,
+    "stale_only": 0.09644670050761421,
+    "n_stale": 197,
+    "noise": 0.32172131147540983,
+    "injected": 3.2423611111111112
+   }
+  },
+  {
+   "config": {
+    "name": "grid",
+    "channels": "hybrid",
+    "fusion": "mix",
+    "rrf_k": 60,
+    "mix_alpha": 0.2,
+    "weight": "none",
+    "decay": 0.01,
+    "decay_from": "last_used",
+    "use_importance": false,
+    "freq": "none",
+    "add_w": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "floor": 0.66,
+    "lex_cover": 0.5,
+    "prior_weight": 0.0
+   },
+   "dev": {
+    "R@5": 0.8862876254180602,
+    "n": 2392,
+    "R@5_lex": 0.9978378378378379,
+    "R@5_unacc": 0.827979274611399,
+    "R@5_sem": 0.7928286852589641,
+    "top1": 0.7094481605351171,
+    "stale_only": 0.1065989847715736,
+    "n_stale": 197,
+    "noise": 0.6577868852459017,
+    "injected": 3.469097222222222
+   }
+  },
+  {
+   "config": {
+    "name": "grid",
+    "channels": "hybrid",
+    "fusion": "mix",
+    "rrf_k": 60,
+    "mix_alpha": 0.15,
+    "weight": "none",
+    "decay": 0.01,
+    "decay_from": "last_used",
+    "use_importance": false,
+    "freq": "none",
+    "add_w": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "floor": 0.66,
+    "lex_cover": 0.4,
+    "prior_weight": 0.0
+   },
+   "dev": {
+    "R@5": 0.8858695652173914,
+    "n": 2392,
+    "R@5_lex": 0.9978378378378379,
+    "R@5_unacc": 0.8259067357512954,
+    "R@5_sem": 0.7948207171314741,
+    "top1": 0.709866220735786,
+    "stale_only": 0.10152284263959391,
+    "n_stale": 197,
+    "noise": 0.6577868852459017,
+    "injected": 3.4770833333333333
+   }
+  },
+  {
+   "config": {
+    "name": "grid",
+    "channels": "hybrid",
+    "fusion": "mix",
+    "rrf_k": 60,
+    "mix_alpha": 0.2,
+    "weight": "none",
+    "decay": 0.01,
+    "decay_from": "last_used",
+    "use_importance": false,
+    "freq": "none",
+    "add_w": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "floor": 0.68,
+    "lex_cover": 0.4,
+    "prior_weight": 0.0
+   },
+   "dev": {
+    "R@5": 0.882943143812709,
+    "n": 2392,
+    "R@5_lex": 0.9956756756756757,
+    "R@5_unacc": 0.8290155440414507,
+    "R@5_sem": 0.7788844621513944,
+    "top1": 0.7119565217391305,
+    "stale_only": 0.1065989847715736,
+    "n_stale": 197,
+    "noise": 0.1721311475409836,
+    "injected": 3.026736111111111
+   }
+  },
+  {
+   "config": {
+    "name": "grid",
+    "channels": "hybrid",
+    "fusion": "mix",
+    "rrf_k": 60,
+    "mix_alpha": 0.1,
+    "weight": "none",
+    "decay": 0.01,
+    "decay_from": "last_used",
+    "use_importance": false,
+    "freq": "none",
+    "add_w": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "floor": 0.66,
+    "lex_cover": 0.4,
+    "prior_weight": 0.0
+   },
+   "dev": {
+    "R@5": 0.8720735785953178,
+    "n": 2392,
+    "R@5_lex": 0.9967567567567568,
+    "R@5_unacc": 0.7917098445595855,
+    "R@5_sem": 0.796812749003984,
+    "top1": 0.6927257525083612,
+    "stale_only": 0.09644670050761421,
+    "n_stale": 197,
+    "noise": 0.6577868852459017,
+    "injected": 3.4770833333333333
+   }
+  },
+  {
+   "config": {
+    "name": "grid",
+    "channels": "hybrid",
+    "fusion": "mix",
+    "rrf_k": 60,
+    "mix_alpha": 0.2,
+    "weight": "add",
+    "decay": 0.01,
+    "decay_from": "last_used",
+    "use_importance": false,
+    "freq": "none",
+    "add_w": [
+     0.1,
+     0.0,
+     0.0
+    ],
+    "floor": 0.66,
+    "lex_cover": 0.6,
+    "prior_weight": 0.0
+   },
+   "dev": {
+    "R@5": 0.8645484949832776,
+    "n": 2392,
+    "R@5_lex": 0.9967567567567568,
+    "R@5_unacc": 0.7730569948186529,
+    "R@5_sem": 0.796812749003984,
+    "top1": 0.7015050167224081,
+    "stale_only": 0.10152284263959391,
+    "n_stale": 197,
+    "noise": 0.6577868852459017,
+    "injected": 3.459722222222222
+   }
+  },
+  {
+   "config": {
+    "name": "grid",
+    "channels": "hybrid",
+    "fusion": "mix",
+    "rrf_k": 60,
+    "mix_alpha": 0.2,
+    "weight": "none",
+    "decay": 0.01,
+    "decay_from": "last_used",
+    "use_importance": false,
+    "freq": "none",
+    "add_w": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "floor": 0.66,
+    "lex_cover": 0.6,
+    "prior_weight": 0.0
+   },
+   "dev": {
+    "R@5": 0.8637123745819398,
+    "n": 2392,
+    "R@5_lex": 0.9967567567567568,
+    "R@5_unacc": 0.7730569948186529,
+    "R@5_sem": 0.7928286852589641,
+    "top1": 0.7010869565217391,
+    "stale_only": 0.1065989847715736,
+    "n_stale": 197,
+    "noise": 0.6577868852459017,
+    "injected": 3.459722222222222
+   }
+  },
+  {
+   "config": {
+    "name": "grid",
+    "channels": "hybrid",
+    "fusion": "mix",
+    "rrf_k": 60,
+    "mix_alpha": 0.5,
+    "weight": "add",
+    "decay": 0.01,
+    "decay_from": "last_used",
+    "use_importance": false,
+    "freq": "none",
+    "add_w": [
+     0.1,
+     0.3,
+     0.0
+    ],
+    "floor": 0.66,
+    "lex_cover": 0.6,
+    "prior_weight": 0.0
+   },
+   "dev": {
+    "R@5": 0.8632943143812709,
+    "n": 2392,
+    "R@5_lex": 0.9978378378378379,
+    "R@5_unacc": 0.7761658031088083,
+    "R@5_sem": 0.7828685258964143,
+    "top1": 0.7019230769230769,
+    "stale_only": 0.10152284263959391,
+    "n_stale": 197,
+    "noise": 0.6577868852459017,
+    "injected": 3.459722222222222
+   }
+  },
+  {
+   "config": {
+    "name": "grid",
+    "channels": "hybrid",
+    "fusion": "mix",
+    "rrf_k": 60,
+    "mix_alpha": 0.15,
+    "weight": "none",
+    "decay": 0.01,
+    "decay_from": "last_used",
+    "use_importance": false,
+    "freq": "none",
+    "add_w": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "floor": 0.66,
+    "lex_cover": 0.6,
+    "prior_weight": 0.0
+   },
+   "dev": {
+    "R@5": 0.8616220735785953,
+    "n": 2392,
+    "R@5_lex": 0.9967567567567568,
+    "R@5_unacc": 0.7668393782383419,
+    "R@5_sem": 0.7948207171314741,
+    "top1": 0.7019230769230769,
+    "stale_only": 0.10152284263959391,
+    "n_stale": 197,
+    "noise": 0.6577868852459017,
+    "injected": 3.459722222222222
+   }
+  },
+  {
+   "config": {
+    "name": "grid",
+    "channels": "hybrid",
+    "fusion": "rrf",
+    "rrf_k": 10,
+    "mix_alpha": 0.0,
+    "weight": "add",
+    "decay": 0.01,
+    "decay_from": "last_used",
+    "use_importance": false,
+    "freq": "none",
+    "add_w": [
+     0.1,
+     0.0,
+     0.0
+    ],
+    "floor": 0.66,
+    "lex_cover": 0.6,
+    "prior_weight": 0.0
+   },
+   "dev": {
+    "R@5": 0.8612040133779264,
+    "n": 2392,
+    "R@5_lex": 0.9967567567567568,
+    "R@5_unacc": 0.7668393782383419,
+    "R@5_sem": 0.7928286852589641,
+    "top1": 0.6446488294314381,
+    "stale_only": 0.10152284263959391,
+    "n_stale": 197,
+    "noise": 0.6577868852459017,
+    "injected": 3.459722222222222
+   }
+  },
+  {
+   "config": {
+    "name": "grid",
+    "channels": "hybrid",
+    "fusion": "mix",
+    "rrf_k": 60,
+    "mix_alpha": 0.2,
+    "weight": "none",
+    "decay": 0.01,
+    "decay_from": "last_used",
+    "use_importance": false,
+    "freq": "none",
+    "add_w": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "floor": 0.66,
+    "lex_cover": 0.6,
+    "prior_weight": 5.0
+   },
+   "dev": {
+    "R@5": 0.8612040133779264,
+    "n": 2392,
+    "R@5_lex": 0.9956756756756757,
+    "R@5_unacc": 0.7668393782383419,
+    "R@5_sem": 0.7948207171314741,
+    "top1": 0.7006688963210702,
+    "stale_only": 0.1065989847715736,
+    "n_stale": 197,
+    "noise": 0.6577868852459017,
+    "injected": 3.457638888888889
+   }
+  }
+ ]
+}

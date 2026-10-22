@@ -76,10 +76,20 @@ describe('RetrieverP: boundary and degenerate cases', () => {
       { id: 'siting', name: 'Sì ting' },
       { id: 'other', name: 'Other' },
     ];
+    // "xì tiing" is not a prefix of "sì ting", so only the provider's ids are scored.
     const injected = new RetrieverP(catalog, { pBruteMax: 1, candidates: () => ['other'] });
-    assert.deepEqual(injected.retrieve({ rawProductSpan: 'xì ting' }, 5).map((h) => h.productId), ['other']);
+    assert.deepEqual(injected.retrieve({ rawProductSpan: 'xì tiing' }, 5).map((h) => h.productId), ['other']);
 
     const fallback = new RetrieverP(catalog, { pBruteMax: 1 });
     assert.deepEqual(fallback.retrieve({ rawProductSpan: 'xì ting' }, 5).map((h) => h.productId), ['siting', 'other']);
+  });
+
+  it('scores a long name the span is a prefix of even when the provider returned other ids', () => {
+    const catalog: CatalogItem[] = [
+      { id: 'short', name: 'Sữa' },
+      { id: 'target', name: 'Sì ting dâu chai 330ml' },
+    ];
+    const r = new RetrieverP(catalog, { pBruteMax: 1, candidates: () => ['short'] });
+    assert.equal(r.retrieve({ rawProductSpan: 'xì ting dâu' }, 5)[0].productId, 'target');
   });
 });

@@ -63,6 +63,8 @@ export interface Retriever {
   retrieve(line: QueryLine, k: number): RetrievalHit[];
   /** Index one extra string for a product (catalog insert or alias upsert). */
   addDocument(text: string, productId: string): void;
+  /** Undo one `addDocument` with the same text and product; false when there was none. */
+  removeDocument(text: string, productId: string): boolean;
 }
 
 /** A candidate after fusion, carrying its per-retriever provenance. */
@@ -188,9 +190,9 @@ export interface GateConfig {
   gate: GateName;
   rules: GateRules;
   model: GateModel | null;
-  /** AUTO when p >= thetaAuto. */
+  /** G2 only: AUTO when p >= thetaAuto. */
   thetaAuto: number;
-  /** NEW when s1 < sFloor. */
+  /** G2 only: NEW when s1 < sFloor. G1 reads `rules.sFloor` instead. */
   sFloor: number;
   /** Alias trust threshold. */
   aliasMinConfirmations: number;

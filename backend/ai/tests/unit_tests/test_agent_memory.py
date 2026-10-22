@@ -42,10 +42,10 @@ class FakeMemoryRepository:
         self.added: list[tuple] = []
         self.replaced: list[tuple] = []
 
-    def search(self, shop_id, user_id, query, limit, preference_limit=0):
+    def search(self, shop_id, user_id, query, limit, preference_limit=0, text=""):
         if self.error is not None:
             raise self.error
-        self.searches.append((shop_id, user_id, query, limit, preference_limit))
+        self.searches.append((shop_id, user_id, query, limit, preference_limit, text))
         return self.recalled
 
     def similar(self, shop_id, user_id, embeddings, min_relevance, limit, skipped):
@@ -144,8 +144,9 @@ async def test_recalled_memories_lead_the_prompt_but_not_the_stored_message() ->
     await agent.chat(user_id=3, shop_id=15, message="nhập gạo ở đâu?")
     await asyncio.gather(*agent.memory_writes)
 
-    (shop_id, user_id, _, limit, preference_limit) = repository.searches[0]
+    (shop_id, user_id, _, limit, preference_limit, text) = repository.searches[0]
     assert (shop_id, user_id, limit, preference_limit) == (15, 3, 5, 10)
+    assert text == "nhập gạo ở đâu?"
     assert sent_prompt(chat_model) == (
         "Earlier facts from this owner, with date and type, preferences first, then"
         " most relevant:\n"

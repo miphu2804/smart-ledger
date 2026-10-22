@@ -114,6 +114,10 @@ describe('gate: G2 logistic', () => {
     assert.equal(decide(features({ s1: -5 }), g2(s1Only())), 'NEW');
   });
 
+  it('asks instead of auto-applying when the parsed unit contradicts the candidate unit', () => {
+    assert.equal(decide(features({ s1: 2, unit_ok: 'mismatch' }), g2(s1Only())), 'ASK');
+  });
+
   it('interpolates the calibration map piecewise and clamps at both ends', () => {
     const model = s1Only({ calibration: [[0.4, 0], [0.6, 1]] });
     const at = (s1: number) => gateProbability(features({ s1 }), model);

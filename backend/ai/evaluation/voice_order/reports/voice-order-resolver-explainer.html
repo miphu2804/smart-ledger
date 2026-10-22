@@ -1,0 +1,333 @@
+<title>Voice-Order Resolver</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* Layout: one reading column on a faint blue-biased neutral, with a full-bleed
+     stat strip and numbered pipeline stages that are genuinely sequential. */
+  :root {
+    --bg: #fbfcfe;
+    --surface: #ffffff;
+    --sunken: #f2f5fa;
+    --ink: #16202e;
+    --muted: #5c6879;
+    --line: #dbe3ee;
+    --accent: #3363cc;
+    --accent-soft: #eef4ff;
+    --good: #2c7a4c;
+    --warn: #9a6a0c;
+    --bad: #b93b37;
+    --alt: #6446b8;
+    --display: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+    --body: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f131b;
+      --surface: #161d28;
+      --sunken: #131922;
+      --ink: #e5ebf4;
+      --muted: #98a5b7;
+      --line: #26313f;
+      --accent: #7ba2f7;
+      --accent-soft: #1a2333;
+      --good: #6dc08c;
+      --warn: #d9ab4e;
+      --bad: #e2817f;
+      --alt: #a98bea;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f131b;
+    --surface: #161d28;
+    --sunken: #131922;
+    --ink: #e5ebf4;
+    --muted: #98a5b7;
+    --line: #26313f;
+    --accent: #7ba2f7;
+    --accent-soft: #1a2333;
+    --good: #6dc08c;
+    --warn: #d9ab4e;
+    --bad: #e2817f;
+    --alt: #a98bea;
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.62;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding-block: 40px 72px; }
+  .col { max-width: 68ch; }
+
+  h1, h2, h3 { font-family: var(--display); text-wrap: balance; line-height: 1.16; margin: 0; }
+  h1 { font-size: clamp(2rem, 5.5vw, 2.9rem); font-weight: 700; letter-spacing: -0.02em; }
+  h2 { font-size: clamp(1.25rem, 3vw, 1.6rem); font-weight: 600; letter-spacing: -0.01em; }
+  h3 { font-size: 1.02rem; font-weight: 600; }
+  p { margin: 0; }
+  code, .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  code { font-size: 0.875em; background: var(--sunken); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: 0.72rem; font-weight: 500;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+  }
+  .lede { font-size: 1.1rem; color: var(--muted); max-width: 62ch; }
+  header .stack { display: flex; flex-direction: column; gap: 14px; }
+  .chosen {
+    display: inline-flex; align-items: baseline; gap: 10px;
+    background: var(--accent-soft); border: 1px solid var(--accent);
+    color: var(--accent); border-radius: 999px; padding: 5px 14px;
+    font-family: var(--mono); font-size: 0.8rem; font-weight: 500;
+  }
+  .chosen b { color: var(--accent); font-weight: 600; }
+
+  section { margin-top: 52px; display: flex; flex-direction: column; gap: 16px; }
+  section > h2 { padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+
+  /* Stat strip: the four numbers the selection rule actually turned on. */
+  .stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line);
+    border-radius: 10px; overflow: hidden; margin-top: 26px;
+  }
+  .stat { background: var(--surface); padding: 16px 18px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .stat .v { font-family: var(--display); font-size: 1.65rem; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .stat .k { font-size: 0.78rem; color: var(--muted); }
+  .stat .n { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); }
+  .v.good { color: var(--good); }
+  .v.warn { color: var(--warn); }
+
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.86rem; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { font-family: var(--mono); font-size: 0.7rem; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  td.n, th.n { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  tr.self td { background: var(--accent-soft); font-weight: 500; }
+  tr.out td { color: var(--muted); }
+
+  ol.stages { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  ol.stages > li { background: var(--surface); padding: 16px 18px; display: grid; grid-template-columns: 34px 1fr; gap: 16px; }
+  .idx { font-family: var(--mono); font-size: 0.78rem; font-weight: 500; color: var(--accent); padding-top: 3px; }
+  .stage-body { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+  .stage-body .why { color: var(--muted); font-size: 0.92rem; }
+  .formula { font-family: var(--mono); font-size: 0.82rem; background: var(--sunken); border: 1px solid var(--line); border-radius: 6px; padding: 8px 11px; overflow-x: auto; }
+  .tag { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+
+  ul.chain { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+  ul.chain li { display: grid; grid-template-columns: 26px 1fr; gap: 12px; align-items: start; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 8px; justify-self: center; }
+  .dot.a { background: var(--alt); }
+  .dot.b { background: var(--bad); }
+  .dot.c { background: var(--good); }
+  .dot.d { background: var(--warn); }
+
+  .note { border-left: 3px solid var(--line); padding-left: 16px; color: var(--muted); font-size: 0.93rem; }
+  .note.alert { border-left-color: var(--bad); }
+
+  ul.findings { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 14px; counter-reset: f; }
+  ul.findings > li { display: grid; grid-template-columns: 34px 1fr; gap: 16px; }
+  ul.findings > li::before {
+    counter-increment: f; content: counter(f);
+    font-family: var(--mono); font-size: 0.78rem; color: var(--bad);
+    border: 1px solid var(--bad); border-radius: 50%;
+    width: 24px; height: 24px; display: grid; place-items: center; margin-top: 2px;
+  }
+  .refs { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); line-height: 1.9; }
+  .refs a { color: var(--accent); }
+  .refs li { min-width: 0; overflow-wrap: anywhere; }
+  footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.82rem; }
+  a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="wrap">
+
+  <header class="stack">
+    <div class="eyebrow">Algorithm explainer &middot; resolver bake-off v1</div>
+    <h1>Voice-Order Resolver</h1>
+    <p class="lede">The Vietnamese voice-order pipeline that turns a spoken product name into a catalog product, or asks the shopkeeper which one they meant. This page explains the configuration the bake-off selected and the evidence it rests on.</p>
+    <div class="chosen">Selected by the frozen rule: <b>R2 &mdash; Q-cos + gate G1</b></div>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><span class="v good">93.6%</span><span class="k">recall@3, held out</span><span class="n">R0 baseline 48.3%</span></div>
+    <div class="stat"><span class="v">87.5%</span><span class="k">top-1 accuracy</span><span class="n">R0 baseline 48.3%</span></div>
+    <div class="stat"><span class="v good">0.1%</span><span class="k">false-auto rate</span><span class="n">95% CI 0.0&ndash;0.3%</span></div>
+    <div class="stat"><span class="v warn">24.3%</span><span class="k">asked instead of answering</span><span class="n">700 silent answers</span></div>
+  </div>
+
+  <section>
+    <h2>Why this configuration</h2>
+    <div class="col" style="display:flex;flex-direction:column;gap:14px">
+      <p>The selection rule in <code>backend/ai/evaluation/voice_order/configs/selection_rule.json</code> was written and frozen before any of these numbers existed. It excludes every row whose false-auto rate has a 95% confidence interval reaching above 1%, then picks the simplest remaining row within 2 percentage points of the best recall.</p>
+      <p>Nine of the fourteen rows failed the budget. The highest recall in the whole matrix came from rows that auto-apply far too eagerly, so the rule could not use them.</p>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Row</th><th>Configuration</th><th class="n">recall@3</th><th class="n">top-1</th><th class="n">FAR</th><th class="n">autos</th><th>Verdict</th></tr></thead>
+        <tbody>
+          <tr class="out"><td>R0</td><td>current <code>parseOrder</code> matcher</td><td class="n">48.3%</td><td class="n">48.3%</td><td class="n">0.1%</td><td class="n">700</td><td>baseline</td></tr>
+          <tr class="out"><td>R1</td><td>edit distance only</td><td class="n">95.4%</td><td class="n">91.1%</td><td class="n">7.2%</td><td class="n">1375</td><td>over budget</td></tr>
+          <tr class="self"><td>R2</td><td>Q-cos, trigram cosine</td><td class="n">93.6%</td><td class="n">87.5%</td><td class="n">0.1%</td><td class="n">700</td><td>selected</td></tr>
+          <tr class="out"><td>R3</td><td>Q-bm25</td><td class="n">94.0%</td><td class="n">87.4%</td><td class="n">0.3%</td><td class="n">656</td><td>best eligible, asks 56.5%</td></tr>
+          <tr class="out"><td>R5</td><td>E + Q + B, RRF</td><td class="n">96.3%</td><td class="n">89.3%</td><td class="n">2.8%</td><td class="n">1108</td><td>over budget</td></tr>
+          <tr class="out"><td>R5-linear</td><td>E + Q + B, linear blend</td><td class="n">96.9%</td><td class="n">90.5%</td><td class="n">2.8%</td><td class="n">1108</td><td>over budget</td></tr>
+          <tr class="out"><td>Rx</td><td>AND-trigram control</td><td class="n">48.5%</td><td class="n">48.3%</td><td class="n">0.1%</td><td class="n">700</td><td>historical control</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">The linear blend scored the highest recall@3 and top-1 of any row, which contradicts the plan's expectation that F4 would be the weaker fusion. It still spends 2.8% of all lines on a wrong silent answer, so the budget excludes it. That result is measured but not part of the committed matrix.</p>
+  </section>
+
+  <section>
+    <h2>The pipeline</h2>
+    <p class="col">Each stage below is a real step in <code>frontend/mobile/src/lib/resolver/</code>. The resolver is synchronous and does no I/O, so the app and the offline harness run the same code.</p>
+    <ol class="stages">
+      <li>
+        <span class="idx">01</span>
+        <div class="stage-body">
+          <h3>Normalize the span</h3>
+          <div class="formula">toned() &rarr; folded() &rarr; spaceRemovedFold()</div>
+          <p class="why">Canonical Vietnamese tone placement first, so both written styles of a syllable converge. Then every diacritic is stripped and <code>&#273;</code> is mapped to <code>d</code> by hand, because NFD leaves it alone. Spaces go last: the index is built on one unbroken string.</p>
+        </div>
+      </li>
+      <li>
+        <span class="idx">02</span>
+        <div class="stage-body">
+          <h3>Generate candidates with a count filter</h3>
+          <div class="formula">&#964; = max(|q|, |d|) &minus; 3 + 1 &minus; 3K &nbsp;&middot;&nbsp; q = 3, K = 2</div>
+          <p class="why">The query's padded trigrams are looked up in an inverted index. Each document is kept when it shares at least &#964; of them with the query. Ukkonen's q-gram lemma lower-bounds edit distance by trigram overlap, so pruning at that bound cannot discard a document within edit distance 2. Posting lists are walked and counted, never intersected.</p>
+        </div>
+      </li>
+      <li>
+        <span class="idx">03</span>
+        <div class="stage-body">
+          <h3>Score with IDF-weighted cosine</h3>
+          <div class="formula">idf(t) = ln((N &minus; df + 0.5) / (df + 0.5) + 1)</div>
+          <p class="why">Cosine between the query's and the document's trigram term-frequency vectors, each term weighted by its inverse document frequency. Rare trigrams carry the decision; the ones every catalog name shares carry almost nothing. Scores land in [0, 1], which the gate's floor depends on.</p>
+        </div>
+      </li>
+      <li>
+        <span class="idx">04</span>
+        <div class="stage-body">
+          <h3>Fuse and cut to five</h3>
+          <div class="formula">F1 max &middot; raw score, no max-normalize</div>
+          <p class="why">With one retriever, fusion is a pass-through. The variant matters anyway: max-normalizing would force every query's top hit to exactly 1, which makes the score constant and puts the gate's floor out of reach, so an unmatched line would look as confident as a perfect one.</p>
+        </div>
+      </li>
+      <li>
+        <span class="idx">05</span>
+        <div class="stage-body">
+          <h3>Decide: answer, ask, or offer a new item</h3>
+          <div class="formula">AUTO &middot; ASK &middot; NEW</div>
+          <p class="why">The gate reads the fused score, the margin to the runner-up, the dispersion of the candidate scores, inter-retriever agreement, unit agreement, alias trust and query length. The rule chain is the next section.</p>
+        </div>
+      </li>
+      <li>
+        <span class="idx">06</span>
+        <div class="stage-body">
+          <h3>Learn from the correction</h3>
+          <div class="formula">upsertAlias() &middot; trusted at 2 confirmations</div>
+          <p class="why">When the shop corrects an ASK, the corrected phrase is recorded and indexed as an extra document on first sight, so the next utterance that sounds like it reaches the right product without a rebuild. Re-confirming does not add the document again, which would skew document frequencies.</p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>The gate, in order</h2>
+    <p class="col">The order is load-bearing. An alias hit auto-applies even at a low score, and a low score becomes NEW before anything else is considered. Thresholds are tuned on the calibration split only, against a 1% false-auto budget.</p>
+    <ul class="chain">
+      <li><span class="dot a"></span><div><p>A trusted alias resolves to the top-1 product &rarr; <b>AUTO</b></p></div></li>
+      <li><span class="dot b"></span><div><p><code>s1 &lt; sFloor</code> &rarr; <b>NEW</b> &nbsp;<span class="tag">sFloor = 0.587</span></p></div></li>
+      <li><span class="dot c"></span><div><p><code>s1 &#8805; sAuto</code> and <code>margin &#8805; mMin</code> and <code>agree = 1</code> and <code>unit_ok &#8800; mismatch</code> &rarr; <b>AUTO</b> &nbsp;<span class="tag">sAuto = 1.0, mMin = 0</span></p></div></li>
+      <li><span class="dot d"></span><div><p>otherwise &rarr; <b>ASK</b></p></div></li>
+    </ul>
+    <p class="note alert">The thresholds come from the calibration split's own score distribution, not a fixed 0 to 1 ladder. An earlier fixed ladder could never be cleared by an RRF score, which lives near 0.016, and every such row silently auto-applied nothing.</p>
+  </section>
+
+  <section>
+    <h2>Why candidate generation runs before edit distance</h2>
+    <p class="col">Above 500 catalog items, the edit-distance and phonetic retrievers score only the ids the trigram index hands them. This is the plan's argument for Q-before-E, and it is measured rather than assumed.</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Configuration</th><th>Full 26,100-line D3 pass</th><th class="n">recall@3</th><th class="n">FAR</th></tr></thead>
+        <tbody>
+          <tr><td>E pruned by Q</td><td>93.8 seconds</td><td class="n">93.1%</td><td class="n">0.0%</td></tr>
+          <tr><td>E scanning a 20,000-item catalog</td><td>stopped after 12 minutes</td><td class="n">&mdash;</td><td class="n">&mdash;</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Timings are Node wall-clock on an Apple M4 Pro. The plan's latency budgets are stated for a low-end Android device, and no row was excluded for latency because that budget was never measured.</p>
+  </section>
+
+  <section>
+    <h2>Where it is weak</h2>
+    <div class="col" style="display:flex;flex-direction:column;gap:14px">
+      <p>Recall splits sharply by noise type. On clean written spans the resolver is at the ceiling. On dialect-confused spans it drops to 70.9%, and on names that differ from a catalog row only by a word or two it finds nothing at all, because a near duplicate is exactly where a character-trigram score cannot separate two candidates.</p>
+      <p>D3 carries the discrimination: 88.6% recall@3 over catalogs from 100 to 20,000 items, with a 0.3% false-auto rate. D1 is a ceiling rather than a result, because an in-catalog D1 span is the catalog name the segmenter matched.</p>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Tag</th><th class="n">lines</th><th class="n">recall@3</th><th class="n">top-1</th><th class="n">ask rate</th></tr></thead>
+        <tbody>
+          <tr><td>clean</td><td class="n">202</td><td class="n">100.0%</td><td class="n">100.0%</td><td class="n">0.0%</td></tr>
+          <tr><td>dialect</td><td class="n">182</td><td class="n">70.9%</td><td class="n">63.2%</td><td class="n">31.9%</td></tr>
+          <tr><td>loanword</td><td class="n">65</td><td class="n">80.0%</td><td class="n">70.8%</td><td class="n">26.2%</td></tr>
+          <tr><td>near_duplicate</td><td class="n">30</td><td class="n">0.0%</td><td class="n">0.0%</td><td class="n">16.7%</td></tr>
+          <tr><td>out_of_catalog</td><td class="n">34</td><td class="n">0.0%</td><td class="n">0.0%</td><td class="n">2.9%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Paired against R0 on the same held-out lines, top-1 correctness improves decisively (567 lines won against 2 lost, McNemar p &lt; 0.0001). On the narrower question of whether the line it chose to answer silently was right, the two are indistinguishable: 34 lines each way, p = 1.0000. The gain is in ranking, not in the confidence of the autos.</p>
+  </section>
+
+  <section>
+    <h2>What these numbers do not support</h2>
+    <div class="col" style="display:flex;flex-direction:column;gap:14px">
+      <p>D1 is written reference transcripts, not recorded audio. No audio exists in this repository, so the whole STT axis of the plan, greedy against beam search, hotwords, silence padding, could not be run. The D2 confusion weights are start values rather than weights fitted to real ASR output.</p>
+      <p>No device latency was measured, and the Qdrant Edge parity oracle has no implementation, because the harness is pure TypeScript with no new dependencies by design. Neither result should be read as a production claim.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Findings this rests on</h2>
+    <p class="col">Five defects were found only when the three independently built parts were joined. Each one produced a plausible number rather than a crash, so each is worth knowing about before reading any single figure above.</p>
+    <ul class="findings">
+      <li><div><p><b>The edit-distance and phonetic retrievers scored nothing above the brute-force cap in any configuration without Q.</b> The candidate provider was injected unconditionally and returned an empty list when no Q retriever existed. Every E-only row in an earlier run looked like a weak retriever when it had in fact searched nothing. Fixed in <code>index.ts</code> and guarded by two tests.</p></div></li>
+      <li><div><p><b>The catalog loader returned only the three real catalogs.</b> All 26,100 D3 lines resolved against an empty catalog. The giveaway was that a brute-force retriever also found nothing. Symptom as first measured: D1 100%, D2 100%, D3 0%.</p></div></li>
+      <li><div><p><b>Sampling pooled every dataset together.</b> D3 is 26,100 of 28,202 records, so a 40-line sample was 35 D3 lines, and the headline described D3 while looking like it described the corpus. Replaced with a per-dataset sample.</p></div></li>
+      <li><div><p><b>The gate tuner learned to answer NEW to everything.</b> Neither tuner counted a NEW as a cost, so raising the floor above every candidate satisfied the budget perfectly. R4, R5 and R6 all reported FAR 0.0% with zero autos, and the rule picked a configuration that resolved nothing. In that run NEW precision was 4.2%, so almost none of those NEW decisions were actually out of catalog. The objective is now the non-auto rate, which makes that gate score worst instead of best.</p></div></li>
+      <li><div><p><b>The threshold grid assumed one score scale.</b> A raw similarity lives in 0 to 1, an RRF score near 0.016, and the grid's lowest auto threshold was 0.3, so no RRF score could clear it. Candidate thresholds now come from the calibration split's own feature distribution, and the fallback flipped from NEW-everything to ask-everything.</p></div></li>
+    </ul>
+    <h3 style="margin-top:8px">References</h3>
+    <ul class="refs" style="list-style:none;padding:0;margin:0">
+      <li>backend/ai/evaluation/voice_order/notes/coordinator.md &sect; Integration defects 1&ndash;5, &sect; The D3 scale finding, &sect; What the numbers can and cannot support</li>
+      <li>backend/ai/evaluation/voice_order/reports/bakeoff_v1.md &sect; Headline, &sect; Selection, &sect; Paired comparisons, &sect; Breakdowns, &sect; Deviations from the plan</li>
+      <li>backend/ai/evaluation/voice_order/configs/selection_rule.json &mdash; frozen 2026-10-21, FAR budget 0.01, tolerances 2 pp</li>
+      <li>frontend/mobile/src/lib/resolver/trigramIndex.ts &mdash; <code>countThreshold</code>, <code>candidates</code>, <code>idf</code></li>
+      <li>frontend/mobile/src/lib/resolver/retrieverQ.ts &mdash; <code>cosineScore</code>, <code>bm25Score</code>, <code>rankHits</code></li>
+      <li>frontend/mobile/src/lib/resolver/gate.ts &mdash; <code>decide</code>, <code>gateProbability</code></li>
+      <li>frontend/mobile/src/lib/resolver/fusion.ts &mdash; <code>fuse</code>, <code>fuseScore</code></li>
+      <li>frontend/mobile/src/lib/resolver/index.ts &mdash; <code>buildResolver</code>, <code>buildRetrievers</code></li>
+      <li>backend/ai/evaluation/voice_order/lib/gateFit.ts &mdash; <code>quantiles</code>, <code>tuneGateRules</code>, <code>tuneTheta</code></li>
+      <li>backend/ai/evaluation/voice_order/runner/harness.ts &mdash; <code>stratifiedSample</code>, <code>resolveAll</code>, <code>tune</code>, <code>evaluate</code></li>
+      <li>.plans/stt-optimization-plan.md &sect; 5.1&ndash;5.8, &sect; 7, &sect; 8.3 &mdash; the plan these numbers answer to</li>
+      <li>Pull requests #335 &ndash; #338 &mdash; resolver library, datasets and metrics, bake-off runner, report and notes</li>
+    </ul>
+  </section>
+
+  <footer>
+    Numbers are held-out results from <code>bakeoff_v1</code>, config hash <code>fdffbcc6bc47b2e1</code>, Node v22.23.3 on darwin, Apple M4 Pro. The diagram of this pipeline lives at <code>docs/architecture/diagrams/src/voice-order-resolver.drawio</code>.
+  </footer>
+
+</div>
