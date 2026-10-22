@@ -45,14 +45,14 @@
   {
    "arm": 3,
    "lines": 6000,
-   "correctAuto": 0.7105,
+   "correctAuto": 0.7106666666666667,
    "far": 0.0008333333333333334,
    "farUpper": 0.001751367601541543,
    "wrongAuto": 5,
    "wrongAutoViaAlias": 0,
-   "ask": 0.2886666666666667,
+   "ask": 0.2885,
    "new": 0,
-   "tapsPerLine": 0.43216666666666664
+   "tapsPerLine": 0.432
   }
  ],
  "rows": [
@@ -887,14 +887,14 @@
    "catalog": "d3_1000",
    "arm": 3,
    "lines": 400,
-   "correctAuto": 0.5925,
+   "correctAuto": 0.595,
    "far": 0.0025,
    "farUpper": 0.011804304453987002,
    "wrongAuto": 1,
    "wrongAutoViaAlias": 0,
-   "ask": 0.405,
+   "ask": 0.4025,
    "new": 0,
-   "tapsPerLine": 0.495
+   "tapsPerLine": 0.4925
   }
  ]
 }

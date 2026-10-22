@@ -22,9 +22,11 @@ Each shop speaks an 800-line stream (Zipf popularity, one habitual spoken form p
 | No learning | 56.8% | 0.03% (0.10%) | 0 | 43.2% | 0.58 |
 | Trust after 1 (PREREG pick) | 71.3% | 0.10% (0.20%) | 4 | 28.6% | 0.43 |
 | Trust after 2 | 71.2% | 0.10% (0.20%) | 0 | 28.7% | 0.43 |
-| Trust after 3 | 71.0% | 0.08% (0.18%) | 0 | 28.9% | 0.43 |
+| Trust after 3 | 71.1% | 0.08% (0.18%) | 0 | 28.9% | 0.43 |
 
-The gain holds on every seed (56.5→67.4, 49.4→66.4, 64.6→80.2 for trust after 1) and grows with how often a shop repeats its own wording: +8.5 points at 20% habitual, +21.3 at 80%. Almost all of it comes from indexing the learned phrase into the retrievers, not from letting a trusted alias skip the gate, which is why trust after 2 costs only 0.1 point. Not measured: storing aliases in PostgreSQL and merging corrections from several devices.
+The gain holds on every seed (56.5→67.4, 49.4→66.4, 64.6→80.2 for trust after 1) and grows with how often a shop repeats its own wording: +8.5 points at 20% habitual, +21.4 at 80%. Almost all of it comes from indexing the learned phrase into the retrievers, not from letting a trusted alias skip the gate, which is why trust after 2 costs only 0.1 point. Not measured: storing aliases in PostgreSQL and merging corrections from several devices.
+
+The numbers above are from the resolver with the #344 review fixes (unit stoplist, `linear` fusion keeping similarities raw, unit comparison); against the resolver before them every number moved by at most 0.1 point and the trace of seed 4180 did not change. Rerunning the spent test seeds against a changed resolver checks the result still holds; it chooses nothing.
 
 ### Offline outbox
 

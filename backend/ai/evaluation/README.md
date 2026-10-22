@@ -5,7 +5,7 @@ Offline evaluations of the AI features: what each one measures, where its number
 | Feature | Directory | Measures | Rerun (details in its README) |
 |---|---|---|---|
 | Voice order | [`voice_order/`](voice_order/README.md) | Which retrievers, fusion, rerank and gate turn a spoken line into AUTO / ASK / NEW at FAR ≤ 1%; alias learning, offline outbox, one sentence traced through the pipeline | `node backend/ai/evaluation/voice_order/search/autoresearch.ts`; `node backend/ai/evaluation/voice_order/alias_stream.ts …` |
-| Agent memory recall | `memory_recall/` (PR #346) | Which ranking finds the memory a chat message needs | `uv run python evaluation/memory_recall/autoresearch.py --dense sim` |
+| Agent memory recall | [`memory_recall/`](memory_recall/README.md) | Which ranking finds the memory a chat message needs | `uv run python evaluation/memory_recall/autoresearch.py --dense sim` |
 
 ## Rules every evaluation here follows
 
