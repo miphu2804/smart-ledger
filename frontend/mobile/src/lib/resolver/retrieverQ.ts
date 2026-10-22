@@ -88,6 +88,10 @@ export class RetrieverQ implements Retriever {
     this.index.addDocument(text, productId);
   }
 
+  removeDocument(text: string, productId: string): boolean {
+    return this.index.removeDocument(text, productId);
+  }
+
   /** IDF-weighted cosine between the query's and the document's trigram tf vectors. */
   private cosineScore(queryTf: Map<string, number>, doc: IndexedDoc): number {
     let dot = 0;

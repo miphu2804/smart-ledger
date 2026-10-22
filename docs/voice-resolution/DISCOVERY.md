@@ -4,6 +4,11 @@ Plan section 4 rule 8 sends contradictions between plan and code here, and
 rule 6 sends justifications for a new runtime dependency here. Neither the file
 nor this directory existed before 2026-10-21, although both rules reference it.
 
+"The plan" is PLAN v3.1, Voice Order Product Resolution, which the owner keeps
+outside the repo. The eval harness files and reports cited below arrive with the
+stacked eval pull requests (#345, moved under `backend/ai/evaluation/voice_order/`
+by #347); until those merge, the paths below do not exist on `staging`.
+
 ## Open question 1 — the gate tuning objective contradicts the plan
 
 **Plan says.** Section 5.6, "Objective for both": *minimize ask_rate subject to

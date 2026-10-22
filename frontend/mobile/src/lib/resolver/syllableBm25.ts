@@ -32,6 +32,8 @@ interface SyllableDoc {
   length: number;
   /** Distinct tokens and their term frequencies. */
   tf: Map<string, number>;
+  /** The kept tokens joined by spaces, so `removeDocument` can find this document again. */
+  key: string;
 }
 
 export class SyllableBm25 {
@@ -62,10 +64,30 @@ export class SyllableBm25 {
     for (const token of tokens) tf.set(token, (tf.get(token) ?? 0) + 1);
 
     const docId = this.docs.length;
-    this.docs.push({ productId, length: tokens.length, tf });
+    this.docs.push({ productId, length: tokens.length, tf, key: tokens.join(' ') });
     this.totalLength += tokens.length;
     for (const token of tf.keys()) this.documentFrequency.set(token, (this.documentFrequency.get(token) ?? 0) + 1);
     return docId;
+  }
+
+  /**
+   * Remove the most recently added document of `productId` that tokenizes like
+   * `text`. Returns false when there is none. Ids returned by earlier
+   * `addDocument` calls are positions and shift after a removal.
+   */
+  removeDocument(text: string, productId: string): boolean {
+    const key = this.tokenize(text).join(' ');
+    const index = this.docs.findLastIndex((doc) => doc.productId === productId && doc.key === key);
+    if (index < 0) return false;
+
+    const [doc] = this.docs.splice(index, 1);
+    this.totalLength -= doc.length;
+    for (const token of doc.tf.keys()) {
+      const df = (this.documentFrequency.get(token) as number) - 1;
+      if (df === 0) this.documentFrequency.delete(token);
+      else this.documentFrequency.set(token, df);
+    }
+    return true;
   }
 
   get documentCount(): number {

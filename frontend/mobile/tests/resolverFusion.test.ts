@@ -121,24 +121,34 @@ describe('fusion: max', () => {
 });
 
 describe('fusion: linear', () => {
-  it('blends min-max normalized scores by weight', () => {
+  it('blends raw similarities with min-max normalized BM25 by weight', () => {
     const hits = {
       E: [
         { productId: 'A', score: 0.9 },
         { productId: 'B', score: 0.1 },
       ],
-      Q: [
+      'Q-bm25': [
         { productId: 'B', score: 10 },
         { productId: 'A', score: 0 },
       ],
     };
-    const fused = fuse(hits, config({ fusion: 'linear', weights: { E: 1, Q: 1 } }));
-    // A: E 1.0 + Q 0.0 = 1.0; B: E 0.0 + Q 1.0 = 1.0 -> tie broken by id.
+    const fused = fuse(hits, config({ fusion: 'linear', weights: { E: 1, 'Q-bm25': 1 } }));
+    // A: E 0.9 + Q 0.0 = 0.9; B: E 0.1 + Q 1.0 = 1.1.
     assert.deepEqual(
       fused.map((candidate) => candidate.productId),
-      ['A', 'B'],
+      ['B', 'A'],
     );
-    close(fused[0].score, 1);
+    close(fused[0].score, 1.1);
+    close(fused[1].score, 0.9);
+  });
+
+  it('keeps a weak similarity weak, so the score floor can still say NEW', () => {
+    // Regression: min-max put every retriever's best hit at 1, so a garbage
+    // top-1 scored exactly like a perfect one.
+    const garbage = fuse({ E: [{ productId: 'A', score: 0.2 }], P: [{ productId: 'A', score: 0.1 }] }, config({ fusion: 'linear' }));
+    const exact = fuse({ E: [{ productId: 'A', score: 1 }], P: [{ productId: 'A', score: 1 }] }, config({ fusion: 'linear' }));
+    close(garbage[0].score, 0.3);
+    close(exact[0].score, 2);
   });
 });
 

@@ -69,10 +69,15 @@ export interface IndexedDoc {
   tf: Map<string, number>;
   /** Total trigram tokens, repeats included, equal to `length + 1`. */
   trigramCount: number;
+  /** The space-removed folded string, kept so `removeDocument` can find this document again. */
+  text: string;
 }
 
 export class TrigramIndex {
-  private readonly docs: IndexedDoc[] = [];
+  // A removed document leaves a hole rather than shifting the array, because
+  // postings refer to documents by position.
+  private readonly docs: (IndexedDoc | undefined)[] = [];
+  private live = 0;
   private readonly postings = new Map<string, number[]>();
   private readonly documentFrequency = new Map<string, number>();
   private totalTrigrams = 0;
@@ -87,7 +92,8 @@ export class TrigramIndex {
     for (const trigram of trigrams) tf.set(trigram, (tf.get(trigram) ?? 0) + 1);
 
     const docId = this.docs.length;
-    this.docs.push({ productId, length: s.length, tf, trigramCount: trigrams.length });
+    this.docs.push({ productId, length: s.length, tf, trigramCount: trigrams.length, text: s });
+    this.live += 1;
     this.totalTrigrams += trigrams.length;
 
     for (const trigram of tf.keys()) {
@@ -102,19 +108,47 @@ export class TrigramIndex {
     return docId;
   }
 
+  /**
+   * Remove the most recently added document of `productId` whose text folds to
+   * the same string as `text`. Returns false when there is none.
+   *
+   * The latest match is the one removed so that an alias spelled exactly like
+   * its product's catalog name takes out the alias document, not the name.
+   */
+  removeDocument(text: string, productId: string): boolean {
+    const s = spaceRemovedFold(text);
+    let docId = this.docs.length - 1;
+    while (docId >= 0 && (this.docs[docId]?.productId !== productId || this.docs[docId]?.text !== s)) docId -= 1;
+    if (docId < 0) return false;
+
+    const doc = this.docs[docId] as IndexedDoc;
+    this.docs[docId] = undefined;
+    this.live -= 1;
+    this.totalTrigrams -= doc.trigramCount;
+    for (const trigram of doc.tf.keys()) {
+      const posting = this.postings.get(trigram) as number[];
+      posting.splice(posting.indexOf(docId), 1);
+      if (posting.length === 0) this.postings.delete(trigram);
+      const df = (this.documentFrequency.get(trigram) as number) - 1;
+      if (df === 0) this.documentFrequency.delete(trigram);
+      else this.documentFrequency.set(trigram, df);
+    }
+    return true;
+  }
+
   /** Number of indexed documents N_docs. */
   get size(): number {
-    return this.docs.length;
+    return this.live;
   }
 
   /** Mean trigram token count over the indexed documents; 0 when empty. */
   get avgTrigramCount(): number {
-    return this.docs.length === 0 ? 0 : this.totalTrigrams / this.docs.length;
+    return this.live === 0 ? 0 : this.totalTrigrams / this.live;
   }
 
   /** The document behind an internal id. */
   doc(docId: number): IndexedDoc {
-    return this.docs[docId];
+    return this.docs[docId] as IndexedDoc;
   }
 
   /** The posting list of a trigram, or `undefined` when no document has it. */
@@ -128,7 +162,7 @@ export class TrigramIndex {
    * once the document count has moved more than 5% since the last build.
    */
   idf(trigram: string): number {
-    const n = this.docs.length;
+    const n = this.live;
     if (n === 0) return 0;
     this.refreshIdfIfStale();
     const cached = this.idfCache?.get(trigram);
@@ -152,13 +186,13 @@ export class TrigramIndex {
 
     const out: number[] = [];
     for (const [docId, count] of shared) {
-      if (count >= countThreshold(queryLength, this.docs[docId].length, maxEditDistance)) out.push(docId);
+      if (count >= countThreshold(queryLength, (this.docs[docId] as IndexedDoc).length, maxEditDistance)) out.push(docId);
     }
     return out;
   }
 
   private refreshIdfIfStale(): void {
-    const n = this.docs.length;
+    const n = this.live;
     if (this.idfCache !== null && Math.abs(n - this.idfBuiltAt) <= 0.05 * this.idfBuiltAt) return;
     const cache = new Map<string, number>();
     for (const [trigram, df] of this.documentFrequency) {

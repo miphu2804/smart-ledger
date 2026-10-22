@@ -91,7 +91,15 @@ export function fuse(hits: RetrieverHits, config: ResolverConfig): Candidate[] {
   const scaled: Record<string, Map<string, number>> = {};
   const ranks: Record<string, Map<string, number>> = {};
   for (const name of names) {
-    scaled[name] = config.fusion === 'linear' ? minMaxNormalize(hits[name]) : rawScores(hits[name]);
+    // `linear` stretches only the unbounded scales onto [0, 1]. A similarity is
+    // kept raw for the same reason `max` keeps it raw: min-max puts every
+    // retriever's best hit at exactly 1, so `s1` would be the sum of the weights
+    // for a perfect match and for garbage alike, and the score floor could not
+    // tell an out-of-catalog line from an exact hit. A set of only BM25
+    // retrievers still has that blind spot; the rerank stage is what gives such
+    // a set an absolute score.
+    scaled[name] =
+      config.fusion === 'linear' && RETRIEVER_SCALE[name] !== 'similarity' ? minMaxNormalize(hits[name]) : rawScores(hits[name]);
     ranks[name] = ranksOf(hits[name]);
   }
 
