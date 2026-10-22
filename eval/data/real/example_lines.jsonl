@@ -1,0 +1,5 @@
+{"id":"x1","span":"sting dau","goldProductId":"1","qty":2,"unit":"chai","note":"example: spoken span is a prefix of the catalogue name"}
+{"id":"x2","span":"bia tiger","goldProductId":"2","qty":1,"unit":"lon","note":"example: unit agrees"}
+{"id":"x3","span":"ca phe sua","goldProductId":"3","qty":1,"unit":"ly","note":"example: exact name, no tone marks"}
+{"id":"x4","span":"xi ting","goldProductId":"1","qty":1,"unit":"chai","note":"example: x/s confusion in the onset"}
+{"id":"x5","span":"nuoc cam","goldProductId":null,"qty":1,"unit":"ly","note":"example: not sold here, must not be AUTO"}
