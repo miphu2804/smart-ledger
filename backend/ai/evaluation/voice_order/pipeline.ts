@@ -1,6 +1,6 @@
 /**
  * The resolver the voice-order experiments run: the auto-research v3 winner
- * (`eval/reports/autoresearch_v3.md`), with its gate thresholds fitted on dev
+ * (`backend/ai/evaluation/voice_order/reports/autoresearch_v3.md`), with its gate thresholds fitted on dev
  * calibration. Change it here when a new round picks another config.
  */
 

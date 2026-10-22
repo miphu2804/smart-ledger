@@ -3030,3 +3030,11 @@ The report criterion added by #256 reused the number `AC-076`, which the Agent l
 **Changed files:** `backend/ai/evaluation/README.md`, `backend/ai/evaluation/voice_order/` (new: `PREREG.md`, `README.md`, `pipeline.ts`, `alias_stream.ts` moved from `eval/alias/stream.ts`, `offline_outbox.py`, `trace_utterance.ts`, `results/`, `reports/pipeline-walkthrough.html`) and this entry.
 
 **Check:** Alias stream rerun from its new path reproduces the dev and test numbers exactly; outbox simulation over 10 seeds; trace for seeds 3605, 12123 and 4180; the walkthrough renders at 1200 px and 400 px without horizontal page scroll. In `backend/ai`, `uv run ruff check` and `uv run ruff format --check` pass. **Not verified:** anything on recorded speech, a real shop's corrections or a phone.
+
+### [2026-10-22 13:00 UTC+07:00] — [AI][Eval] Move the voice-order harness into backend/ai/evaluation
+
+**Done:** The resolver bake-off and auto-research harness moves from `eval/` at the repository root to `backend/ai/evaluation/voice_order/`, beside the experiments that already import it, so every evaluation lives under the AI module and the runtime code (the resolver on the phone, the agent in `backend/ai/src/`) stays where it is deployed. Paths in code, configs, reports, notes, `BLOCKERS.md`, `docs/voice-resolution/DISCOVERY.md`, `.plans/stt-optimization-plan.md` and the resolver diagram follow the move; earlier entries of this log keep the old paths. No behaviour or number changes.
+
+**Changed files:** `eval/**` → `backend/ai/evaluation/voice_order/**` (reports merged into its `reports/`), `backend/ai/evaluation/README.md`, `backend/ai/evaluation/voice_order/README.md`, `PREREG.md`, the documents above and this entry.
+
+**Check:** After regenerating `data/`, `node --test 'backend/ai/evaluation/voice_order/tests/*.test.ts'` passes 106 of 106, as it did at `eval/` before the move; `trace_utterance.ts --seed 4180` reproduces `results/trace_4180.json` byte for byte; every relative import of the moved TypeScript resolves.

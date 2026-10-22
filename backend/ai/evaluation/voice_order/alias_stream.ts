@@ -15,9 +15,9 @@ import { writeFileSync } from 'node:fs';
 import { buildResolver } from '../../../../frontend/mobile/src/lib/resolver/index.ts';
 import { folded } from '../../../../frontend/mobile/src/lib/resolver/normalizer.ts';
 import type { CatalogItem } from '../../../../frontend/mobile/src/lib/resolver/types.ts';
-import { mulberry32 } from '../../../../eval/lib/stats.ts';
-import { synthesize } from '../../../../eval/lib/synth.ts';
-import { lockboxData } from '../../../../eval/search/data.ts';
+import { mulberry32 } from './lib/stats.ts';
+import { synthesize } from './lib/synth.ts';
+import { lockboxData } from './search/data.ts';
 import { WINNER_CONFIG, winnerGate } from './pipeline.ts';
 
 const STREAM = 800;

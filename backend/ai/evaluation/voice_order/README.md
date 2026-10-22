@@ -1,6 +1,6 @@
-# Voice-order experiments
+# Voice-order evaluation
 
-Tests of the proposed parts of the voice-order pipeline that are not in the app yet, and a step-by-step trace of one spoken order through the real parser and resolver. The resolver itself lives in `frontend/mobile/src/lib/resolver/` (it runs on the phone); its bake-offs and auto-research live in the repository's `eval/`. These scripts import both and change neither.
+Everything that measures the voice-order resolver: the bake-offs and auto-research that chose its retrievers, rerank and gate, tests of the proposed parts that are not in the app yet, and a step-by-step trace of one spoken order through the real parser and resolver. The resolver itself lives in `frontend/mobile/src/lib/resolver/` because it runs on the phone; this directory imports it and never changes it.
 
 Everything here runs on synthetic data: fixture and generated catalogs, synthetic ASR noise, simulated users. No recorded speech, no real shop, no phone.
 
@@ -10,7 +10,7 @@ Everything here runs on synthetic data: fixture and generated catalogs, syntheti
 |---|---|---|
 | Learned alias table | Correct AUTO 56.8% → 71.2% with trust after 2 confirmations; FAR 0.10% (95% upper bound 0.20%); taps per line 0.58 → 0.43 | Ship with `aliasMinConfirmations: 2` |
 | Offline outbox for new products | Re-reading the catalog before retrying a timed-out create: 0 duplicates, 0 lost, 14 wrong merges in 6016 creates. Blind retry: 625 duplicates | Works on today's Core; `Idempotency-Key` on `POST /products` is the clean fix (a Core change) |
-| Haiku correcting the draft | Not re-run. `eval/reports/escalation_v1.md`: auto-applying ASK lines raises FAR 0.5% → 9.0%, p50 1.3 s | Do not let it auto-apply |
+| Haiku correcting the draft | Not re-run. `reports/escalation_v1.md`: auto-applying ASK lines raises FAR 0.5% → 9.0%, p50 1.3 s | Do not let it auto-apply |
 | One sentence through the pipeline | `reports/pipeline-walkthrough.html` (seed 4180) | Two parser bugs found, below |
 
 ### Alias table
@@ -49,6 +49,15 @@ S2 adopts a product only if its id was not in the local replica when the action 
 
 | File | What it does |
 |---|---|
+| `lib/` | Corpus and synthetic ASR noise, metrics and Clopper–Pearson bounds, gate fitting, the R0 baseline |
+| `runner/` | Bake-off harness, report writer, the real-data runner (`data/real/README.md`) |
+| `search/` | Auto-research over the frozen search space in `configs/` |
+| `escalation/` | LLM escalation of ASK lines (`reports/escalation_v1.md`) |
+| `configs/` | Frozen selection rule and auto-research protocols |
+| `data/` | Prior catalogs and labelled lines (tracked), generated splits (git-ignored, see Rerun) |
+| `tests/` | Unit tests of the harness (`node --test`) |
+| `notes/` | Research notes and the briefs of the earlier rounds |
+| `reports/` | Bake-off, auto-research and escalation reports, the resolver explainer and the walkthrough |
 | `PREREG.md` | Questions, metrics, seeds and success criteria, written before the runs; deviations at the end |
 | `pipeline.ts` | The resolver config and gate the experiments share (auto-research v3 winner) |
 | `alias_stream.ts` | Alias learning over simulated shop streams |
@@ -62,6 +71,13 @@ S2 adopts a product only if its id was not in the local replica when the action 
 From the repository root (Node 22 runs the TypeScript directly; `uv` from `backend/ai`):
 
 ```bash
+# Once after a fresh checkout: generate the git-ignored data, then test the harness
+node -e "import('./backend/ai/evaluation/voice_order/lib/corpus.ts').then((m) => m.writeDatasets())"
+node --test 'backend/ai/evaluation/voice_order/tests/*.test.ts'
+
+# Auto-research (writes a report into reports/; read the protocol in configs/ first)
+node backend/ai/evaluation/voice_order/search/autoresearch.ts --protocol backend/ai/evaluation/voice_order/configs/autoresearch_protocol_v3.json
+
 # Alias learning: dev, then the test seeds (about 1.5 min each)
 node backend/ai/evaluation/voice_order/alias_stream.ts --seeds 20261401,20261402,20261403 --habit 0.5 \
   --out backend/ai/evaluation/voice_order/results/alias_dev_h0.5.json
@@ -78,6 +94,6 @@ node backend/ai/evaluation/voice_order/trace_utterance.ts --seed 4180
 ## Maintaining it
 
 - **The resolver config changes** (a new auto-research winner): update `pipeline.ts`, rerun the alias stream on dev, and regenerate the trace and the walkthrough numbers.
-- **New seeds:** the test seeds above have been read. Seeds already used across the voice work: 20261024, 20261101–08, 20261111–13, 20261122, 20261201–03, 20261301–02, 20261401–03, 20261411–13 (as recorded in the reports; check `eval/reports/` before reusing one). Pick unused ones and write the PREREG first.
+- **New seeds:** the test seeds above have been read. Seeds already used across the voice work: 20261024, 20261101–08, 20261111–13, 20261122, 20261201–03, 20261301–02, 20261401–03, 20261411–13 (as recorded in the reports; check `reports/` before reusing one). Pick unused ones and write the PREREG first.
 - **Real data:** when recorded shop speech or real correction logs exist, replace the simulated user (`replay` in `alias_stream.ts`) with the logged picks before trusting the alias numbers.
 - **The walkthrough** is static HTML; every number in it is in `results/trace_4180.json`. After a resolver change, rerun the trace and update the step tables.

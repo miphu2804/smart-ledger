@@ -31,7 +31,7 @@ Question: can product creation queued offline be replayed without duplicate prod
 
 ## D. Haiku correction branch
 
-`eval/reports/escalation_v1.md` (PR #345) already measured Haiku auto-applying ASK lines on a fresh lockbox: FAR 0.5% → 9.0%, p50 1.3 s. Re-ranking the top-3 instead needs the per-line LLM picks; if that output file still exists it is re-scored offline (top-1-of-ASK accuracy, gate order vs LLM pick first), otherwise this part is reported as not run.
+`backend/ai/evaluation/voice_order/reports/escalation_v1.md` (PR #345) already measured Haiku auto-applying ASK lines on a fresh lockbox: FAR 0.5% → 9.0%, p50 1.3 s. Re-ranking the top-3 instead needs the per-line LLM picks; if that output file still exists it is re-scored offline (top-1-of-ASK accuracy, gate order vs LLM pick first), otherwise this part is reported as not run.
 
 ## Deviations, recorded after the test read
 

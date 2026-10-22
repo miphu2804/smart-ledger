@@ -92,7 +92,7 @@ All resolver components are pure TypeScript functions in a shared package used b
 3. All app behavior changes go behind flags (§12), default off. With flags off, behavior is byte-identical to today.
 4. One PR per phase. The PR body contains measured numbers and confidence intervals, not adjectives.
 5. Selection is by the **pre-registered rule in §8**. Do not change the rule after seeing results. If a change is justified, record it as a deviation with its reason.
-6. No new runtime dependency in the app without justification in `docs/voice-resolution/DISCOVERY.md`. Dev/eval dependencies (Python: `qdrant-edge-py`, `sherpa-onnx`, `jiwer`, `numpy`, `scipy`) are allowed in `eval/`.
+6. No new runtime dependency in the app without justification in `docs/voice-resolution/DISCOVERY.md`. Dev/eval dependencies (Python: `qdrant-edge-py`, `sherpa-onnx`, `jiwer`, `numpy`, `scipy`) are allowed in `backend/ai/evaluation/voice_order/`.
 7. Never upload raw utterances or audio to remote services. Eval data stays in the repo or a private bucket the owner controls; obtain speaker consent for recordings.
 8. Contradictions between plan and code → stop, record under "Open questions" in DISCOVERY.
 
@@ -229,9 +229,9 @@ The `phon` mapping rules live in a **data file** (`phonetic_rules.vi.json`), not
 |---|---|---|---|
 | **P0** Discovery + instrumentation | Facts and timing | `DISCOVERY.md` (parseOrder matching rules, catalog source and size distribution, binding API for hotwords/confidence, model tokenizer files, license text); per-utterance timestamps `t_release, t_mic_stopped, t_queue_drained, t_decode_done, t_result, t_parse_done, t_resolve_done, t_ui_committed` | Traces captured on 2 device tiers |
 | **P1** Single source of truth | Remove parser drift | Golden suite from `src/sst/order_parser` + existing tests + web regex cases; delete `src/sst/` | All green; divergences documented, not silently fixed |
-| **P2** Eval harness + datasets | Measurement before building | §7 datasets D1–D3, metric library, report generator, Python reference (Qdrant Edge) | `eval/run.py --config baseline` produces a full report with CIs |
+| **P2** Eval harness + datasets | Measurement before building | §7 datasets D1–D3, metric library, report generator, Python reference (Qdrant Edge) | `backend/ai/evaluation/voice_order/run.py --config baseline` produces a full report with CIs |
 | **P3** Algorithm library (TS) | Implement §5 | `@smartledger/resolver`: N, E, Q (both scorers), B, P, F1–F4, G1/G2, alias index updates; Node runner for the harness | Unit tests incl. hand-computed values; **parity test vs Qdrant Edge ≥ 99% top-5 identity on D2** (§7.5) |
-| **P4** Offline bake-off | Pick resolver + gate | Matrix §8.1 over D1-text, D2, D3; selection per §8.3 | Signed-off report `eval/reports/bakeoff_v1.md` |
+| **P4** Offline bake-off | Pick resolver + gate | Matrix §8.1 over D1-text, D2, D3; selection per §8.3 | Signed-off report `backend/ai/evaluation/voice_order/reports/bakeoff_v1.md` |
 | **P5** STT axis (on device) | Measure biasing and tail latency | greedy vs beam vs beam+hotwords on D1 audio; RTF, latency, false insertions. Also: (a) silence pad 0.5 s vs 0.3 s vs 0.2 s, measuring tail latency and final-word deletion rate; (b) **overlapped processing**: run parse + resolve on each endpoint-finalized sentence while the orb is still held, so release only processes the last sentence | Report; go/no-go per §8.3 budgets; adopt the smallest pad with no significant final-word deletion increase |
 | **P6** Integrate winner | Ship behind flags | Index builder, incremental updates, gate config JSON, feedback loop, trace ring buffer | Integration tests: ASK → pick → repeat → AUTO after N confirmations |
 | **P7** Shadow + rollout | Validate on real usage | Shadow mode (compute + log, UI unchanged) for 1–2 weeks; recalibrate; enable | Shadow metrics within CIs of bake-off |
@@ -329,7 +329,7 @@ The `phon` mapping rules live in a **data file** (`phonetic_rules.vi.json`), not
 
 ### 7.5 Qdrant Edge reference and parity
 
-- In `eval/reference/qdrant_edge_ref.py`, build an Edge Shard per catalog with:
+- In `backend/ai/evaluation/voice_order/reference/qdrant_edge_ref.py`, build an Edge Shard per catalog with:
   - (a) sparse vector `tri` with `Modifier.Idf`, documents = space-joined padded trigram tokens embedded by the built-in BM25 embedder (`tokenizer="whitespace"`, no stemming/stopwords, `avg_len` = catalog mean)
   - (b) sparse vector `syl` = BM25 over syllables with `ascii_folding=True`
   - (c) fusion via RRF
@@ -339,7 +339,7 @@ The `phon` mapping rules live in a **data file** (`phonetic_rules.vi.json`), not
   - Each mismatch logged with both rankings.
 - Qdrant Edge is beta; pin the package version and record it in the report.
 
-### 7.6 Report format (`eval/reports/<run_id>.md`)
+### 7.6 Report format (`backend/ai/evaluation/voice_order/reports/<run_id>.md`)
 
 1. Config hash and dataset versions
 2. Headline table with CIs
@@ -364,7 +364,7 @@ The `phon` mapping rules live in a **data file** (`phonetic_rules.vi.json`), not
 ### 8.2 Execution
 
 - Offline first (P4), then rerun the top 2 resolver×gate configs on S1/S2 transcripts (P5).
-- Every run is reproducible from `eval/configs/*.yaml`.
+- Every run is reproducible from `backend/ai/evaluation/voice_order/configs/*.yaml`.
 
 ### 8.3 Pre-registered selection rule
 
@@ -466,7 +466,7 @@ Promote a challenger only if **all** hold:
 |---|---|
 | Budget | **10 iterations** max; wall-clock cap `AGENT_MAX_HOURS` *(start 4 h)*; stop early after 3 consecutive non-improving iterations |
 | Allowed to change | `config/resolver.json`, `config/gate.json`, `phonetic_rules.vi.json`, and code under `packages/resolver/src/**` (scorers, fusion, features), behind the existing interfaces |
-| **Protected (read-only)** | `eval/data/**`, `eval/splits/**`, `eval/metrics/**`, `eval/configs/selection_rule.yaml`, golden test expectations, §7.4 budgets |
+| **Protected (read-only)** | `backend/ai/evaluation/voice_order/data/**`, `backend/ai/evaluation/voice_order/splits/**`, `backend/ai/evaluation/voice_order/metrics/**`, `backend/ai/evaluation/voice_order/configs/selection_rule.yaml`, golden test expectations, §7.4 budgets |
 | Protection mechanism | sha256 manifest of protected paths checked before every run. Any mismatch → iteration invalid, counted against budget, change reverted |
 | Visible to the agent | Calibration-split metrics, per-tag breakdowns, calibration failure gallery, Node latency benchmark |
 | **Hidden from the agent** | Held-out split ("lockbox"). Evaluated **once**, by the harness, after the loop ends |
@@ -474,7 +474,7 @@ Promote a challenger only if **all** hold:
 
 ### 9B.2 Iteration protocol
 
-1. **Write the hypothesis first** to `eval/agent_runs/<run_id>/iter_<k>.json`: the failure pattern seen in the calibration gallery, the proposed change, and the expected effect on which metric/tag.
+1. **Write the hypothesis first** to `backend/ai/evaluation/voice_order/agent_runs/<run_id>/iter_<k>.json`: the failure pattern seen in the calibration gallery, the proposed change, and the expected effect on which metric/tag.
 2. Make the change on branch `agent/<run_id>/iter-<k>`. Unit tests and golden suite must pass.
 3. Run the harness on the calibration split.
 4. **Accept** only if the paired bootstrap 95% CI of the objective difference vs best-so-far excludes 0 **and** no constraint is violated. Otherwise **revert**.

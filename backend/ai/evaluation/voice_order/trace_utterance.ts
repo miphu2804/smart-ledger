@@ -16,9 +16,9 @@ import { buildResolver } from '../../../../frontend/mobile/src/lib/resolver/inde
 import { folded, phon, toned } from '../../../../frontend/mobile/src/lib/resolver/normalizer.ts';
 import { Reranker } from '../../../../frontend/mobile/src/lib/resolver/rerank.ts';
 import type { CatalogItem, QueryLine } from '../../../../frontend/mobile/src/lib/resolver/types.ts';
-import { readPriorCatalogs } from '../../../../eval/lib/corpus.ts';
-import { mulberry32 } from '../../../../eval/lib/stats.ts';
-import { synthesize } from '../../../../eval/lib/synth.ts';
+import { readPriorCatalogs } from './lib/corpus.ts';
+import { mulberry32 } from './lib/stats.ts';
+import { synthesize } from './lib/synth.ts';
 import { WINNER_CONFIG, winnerGate } from './pipeline.ts';
 
 const CATALOG = 'tap_hoa';
