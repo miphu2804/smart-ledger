@@ -3078,3 +3078,11 @@ The report criterion added by #256 reused the number `AC-076`, which the Agent l
 **Changed files:** `frontend/mobile/src/lib/resolver/*`, `frontend/mobile/tests/resolver*.test.ts`, `docs/voice-resolution/DISCOVERY.md`, `docs/README.md` and this entry.
 
 **Check:** In `frontend/mobile`, `node --test tests/resolver*.test.ts`: 156 passed (11 new, each failing on the code before the fix); `npx tsc --noEmit`: 0 errors. **Not verified:** the eval harness (#345, #347) was not rerun, so its bake-off numbers predate the stoplist, `linear` and unit changes.
+
+### [2026-10-22 17:45 UTC+07:00] — [AI][Eval] Run the offline outbox against a running Core
+
+**Done:** `offline_outbox.py --core <url>` runs the outbox strategies against Core over HTTP instead of the fake Core: Core from `backend/core` on a local PostgreSQL, signed in through the Firebase Auth Emulator, one fresh shop per run, faults injected on the client. All 10 seeds give the fake's numbers for S0–S2 (S2: 0 retry duplicates, 9 orphaned copies, 14 wrong merges in 6016 creates), so the simulation's model of Core holds for `POST /products`, `GET /products?q=` and `POST /expenses`. S3 gets 625 duplicates like blind retry: Core accepts an `Idempotency-Key` on product create and ignores it, so the clean fix still needs a Core change.
+
+**Changed files:** `backend/ai/evaluation/voice_order/offline_outbox.py`, `results/outbox_core_http.json` (new), `README.md`, `PREREG.md` and this entry.
+
+**Check:** The fake run reproduces `results/outbox.json` byte for byte after the refactor; `uv run ruff check` and `uv run ruff format --check` in `backend/ai` pass. **Not verified:** devices racing in real time, a phone's network, staging.

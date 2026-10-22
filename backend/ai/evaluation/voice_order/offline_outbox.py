@@ -4,13 +4,23 @@ Core facts this models (docs/contracts/api-contracts.md, verified 2026-10-22):
 POST /products has no Idempotency-Key and no replay guarantee; product names are
 not unique; POST /expenses requires Idempotency-Key and replays the first result.
 
+The same strategies run against the fake Core below or, with `--core`, against a
+running Core over HTTP (`HttpCore`): the faults are injected on the client, so a
+lost request is never sent and a lost response is read and then dropped.
+
   uv run python evaluation/voice_order/offline_outbox.py  # writes results/outbox.json
+  uv run python evaluation/voice_order/offline_outbox.py --core http://localhost:8090 \
+      --emulator 127.0.0.1:9099  # writes results/outbox_core_http.json
 """
 
+import argparse
 import json
 import os
 import random
 import unicodedata
+import urllib.error
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass, field
 
 P_LOST_BEFORE = 0.10  # request never reaches Core
@@ -86,6 +96,122 @@ class Core:
     def ids(self) -> set[int]:
         return set(self.products)
 
+    def state(self) -> tuple[dict[int, dict], list[dict]]:
+        """What Core holds at the end: products by id, and expenses."""
+        return self.products, self.expenses
+
+
+class HttpCore:
+    """The fake Core's interface over a running Core, for one fresh shop.
+
+    Core stores no intent, so each product carries its intent's number in
+    `costPriceVnd` and each expense its intent in `description`; nothing the
+    strategies read depends on either. `product_keys` sends an `Idempotency-Key` on
+    product creation, which today's Core ignores.
+    """
+
+    def __init__(self, rng: random.Random, product_keys: bool, url: str, token: str):
+        self.rng, self.product_keys, self.url, self.token = (
+            rng,
+            product_keys,
+            url,
+            token,
+        )
+        self.codes: dict[tuple[str, str], int] = {}
+        self.shop = None
+        # Creates the owner on first sign-in, returns it after.
+        self._http("POST", "/auth/session", {"displayName": "Outbox test"})
+        self.shop = self._http(
+            "POST", "/shops", {"name": "Outbox", "industry": "test"}
+        )["id"]
+
+    def _http(self, method: str, path: str, body=None, key: str | None = None):
+        headers = {"Authorization": f"Bearer {self.token}"}
+        if body is not None:
+            headers["Content-Type"] = "application/json"
+        if self.shop is not None:
+            headers["X-Shop-Id"] = str(self.shop)
+        if key is not None:
+            headers["Idempotency-Key"] = key
+        request = urllib.request.Request(
+            f"{self.url}/api/v1{path}",
+            data=None if body is None else json.dumps(body).encode(),
+            headers=headers,
+            method=method,
+        )
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return json.load(response)
+
+    def _call(self, send):
+        if self.rng.random() < P_LOST_BEFORE:
+            raise Ambiguous
+        result = send()
+        if self.rng.random() < P_LOST_AFTER:
+            raise Ambiguous
+        return result
+
+    def create_product(self, name: str, intent: str, key: str | None, device: str = ""):
+        code = self.codes.setdefault((device, intent), len(self.codes) + 1)
+        body = {"name": name, "unit": "cái", "sellingPriceVnd": 1000}
+        body |= {"costPriceVnd": code, "tracked": False}
+        key = key if self.product_keys else None
+        return self._call(lambda: self._http("POST", "/products", body, key)["id"])
+
+    def create_expense(self, amount: int, intent: str, key: str):
+        body = {"description": intent, "amountVnd": amount}
+        return self._call(lambda: self._http("POST", "/expenses", body, key))
+
+    def search_products(self, name: str) -> list[int]:
+        query = urllib.parse.urlencode({"q": name, "size": 100})
+        return self._call(
+            lambda: [
+                p["id"]
+                for p in self._http("GET", f"/products?{query}")["items"]
+                if norm(p["name"]) == norm(name)
+            ]
+        )
+
+    def _all(self, path: str) -> list[dict]:
+        rows, page = [], 0
+        while True:
+            body = self._http("GET", f"{path}?page={page}&size=100")
+            rows += body["items"]
+            page += 1
+            if page >= body["totalPages"]:
+                return rows
+
+    def ids(self) -> set[int]:
+        return {p["id"] for p in self._all("/products")}
+
+    def state(self) -> tuple[dict[int, dict], list[dict]]:
+        owner = {code: entry for entry, code in self.codes.items()}
+        products = {}
+        for p in self._all("/products"):
+            device, intent = owner[p["costPriceVnd"]]
+            products[p["id"]] = {"name": p["name"], "intent": intent, "device": device}
+        expenses = [{"intent": e["description"]} for e in self._all("/expenses")]
+        return products, expenses
+
+
+def emulator_token(emulator: str, email: str) -> str:
+    """An ID token from the Firebase Auth Emulator, signing the owner up once."""
+    base = f"http://{emulator}/identitytoolkit.googleapis.com/v1/accounts"
+    body = json.dumps(
+        {"email": email, "password": "outbox-test", "returnSecureToken": True}
+    )
+    for action in ("signInWithPassword", "signUp"):
+        request = urllib.request.Request(
+            f"{base}:{action}?key=emulator",
+            data=body.encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(request) as response:
+                return json.load(response)["idToken"]
+        except urllib.error.HTTPError:
+            continue
+    raise RuntimeError("the Auth Emulator refused both sign-in and sign-up")
+
 
 @dataclass
 class Intent:
@@ -134,9 +260,9 @@ def workload(rng: random.Random) -> tuple[list[Intent], list[Intent]]:
     return devices[0], devices[1]
 
 
-def run(seed: int, strategy: str) -> dict:
+def run(seed: int, strategy: str, make_core=Core) -> dict:
     rng = random.Random(seed)
-    core = Core(random.Random(seed * 7), product_keys=(strategy == "S3"))
+    core = make_core(random.Random(seed * 7), product_keys=(strategy == "S3"))
     w1, w2 = workload(rng)
     devices = []
     for name, intents in (("d1", w1), ("d2", w2)):
@@ -214,8 +340,9 @@ def run(seed: int, strategy: str) -> dict:
         lost = sum(len(p) for p in pending.values())
 
     # Score against what the owners meant.
+    products, expenses = core.state()
     per_entry: dict[tuple[str, str], int] = {}
-    for p in core.products.values():
+    for p in products.values():
         per_entry[(p["device"], p["intent"])] = (
             per_entry.get((p["device"], p["intent"]), 0) + 1
         )
@@ -227,8 +354,8 @@ def run(seed: int, strategy: str) -> dict:
         for d, it in intents
         if it.done
         and (
-            core.products[it.product_id]["device"],
-            core.products[it.product_id]["intent"],
+            products[it.product_id]["device"],
+            products[it.product_id]["intent"],
         )
         != (d, it.intent)
     ]
@@ -237,7 +364,7 @@ def run(seed: int, strategy: str) -> dict:
     adopted_from = {(d, it.intent) for d, it in adopted}
     orphaned = sum(
         1
-        for p in core.products.values()
+        for p in products.values()
         if (p["device"], p["intent"]) in adopted_from
         and per_entry[(p["device"], p["intent"])] == 1
     )
@@ -246,32 +373,38 @@ def run(seed: int, strategy: str) -> dict:
         "orphaned_by_adoption": orphaned,
         "lost_intents": lost,
         "false_merges": sum(
-            1
-            for _, it in adopted
-            if core.products[it.product_id]["intent"] != it.intent
+            1 for _, it in adopted if products[it.product_id]["intent"] != it.intent
         ),
         "same_item_merged": sum(
-            1
-            for _, it in adopted
-            if core.products[it.product_id]["intent"] == it.intent
+            1 for _, it in adopted if products[it.product_id]["intent"] == it.intent
         ),
-        "expenses_doubled": len(core.expenses)
-        - len({e["intent"] for e in core.expenses}),
+        "expenses_doubled": len(expenses) - len({e["intent"] for e in expenses}),
         "product_intents": len(intents),
     }
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--core", help="base URL of a running Core; default: fake")
+    parser.add_argument("--emulator", default="127.0.0.1:9099")
+    parser.add_argument("--seeds", type=int, default=10)
+    args = parser.parse_args()
+    make_core, name = Core, "outbox.json"
+    if args.core:
+        name = "outbox_core_http.json"
+
+        def make_core(rng, product_keys):
+            token = emulator_token(args.emulator, "outbox@test.local")
+            return HttpCore(rng, product_keys, args.core.rstrip("/"), token)
+
     results = {}
     for strategy in ("S0", "S1", "S2", "S3"):
-        rows = [run(seed, strategy) for seed in range(1, 11)]
+        rows = [run(seed, strategy, make_core) for seed in range(1, args.seeds + 1)]
         results[strategy] = {k: sum(r[k] for r in rows) for k in rows[0]}
     print(f"{'':4}" + "".join(f"{k:>18}" for k in results["S0"]))
     for s, r in results.items():
         print(f"{s:4}" + "".join(f"{v:>18}" for v in r.values()))
-    out = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "results", "outbox.json"
-    )
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results", name)
     json.dump(results, open(out, "w"), indent=1)
 
 

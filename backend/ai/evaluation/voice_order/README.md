@@ -9,7 +9,7 @@ Everything here runs on synthetic data: fixture and generated catalogs, syntheti
 | Part | Result (test seeds, read once) | Recommendation |
 |---|---|---|
 | Learned alias table | Correct AUTO 56.8% → 71.2% with trust after 2 confirmations; FAR 0.10% (95% upper bound 0.20%); taps per line 0.58 → 0.43 | Ship with `aliasMinConfirmations: 2` |
-| Offline outbox for new products | Re-reading the catalog before retrying a timed-out create: 0 retry duplicates but 9 orphaned copies, 0 lost, 14 wrong merges in 6016 creates. Blind retry: 625 duplicates | Works on today's Core; `Idempotency-Key` on `POST /products` is the clean fix (a Core change) |
+| Offline outbox for new products | Re-reading the catalog before retrying a timed-out create: 0 retry duplicates but 9 orphaned copies, 0 lost, 14 wrong merges in 6016 creates. Blind retry: 625 duplicates. The same numbers against a running Core over HTTP | Works on today's Core; `Idempotency-Key` on `POST /products` is the clean fix (a Core change: today's Core ignores the header) |
 | Haiku correcting the draft | Not re-run. `reports/escalation_v1.md`: auto-applying ASK lines raises FAR 0.5% → 9.0%, p50 1.3 s | Do not let it auto-apply |
 | One sentence through the pipeline | `reports/pipeline-walkthrough.html` (seed 4180) | Two parser bugs found, below |
 
@@ -41,6 +41,8 @@ The numbers above are from the resolver with the #344 review fixes (unit stoplis
 
 S2 adopts a product only if its id was not in the local replica when the action was queued; every wrong merge is another device creating a different product with the same name in that window. When the device's own timed-out create had landed and the read-back adopts the other device's product instead, its own copy stays in the catalog unreferenced: 9 such orphaned copies (0.15%). The device cannot tell its own copy apart because Core does not return who created a product, so S2 does not reach zero extra products; S3 does. Expenses already carry a key, so none was written twice. `docs/product` has no offline requirement yet.
 
+**Against a running Core.** With `--core`, the same run sends every call to Core over HTTP: Core from `backend/core` on a local PostgreSQL, signed in through the Firebase Auth Emulator, one fresh shop per run. Faults are injected on the client: a lost request is never sent, a lost response is read and then dropped. All 10 seeds give the fake Core's numbers for S0, S1 and S2 (`results/outbox_core_http.json`), so the fake follows Core on everything these strategies touch: `POST /products` creates a second product for the same body, `GET /products?q=bia sai gon` finds “Bia Sài Gòn”, and `POST /expenses` replays on its `Idempotency-Key`. S3 gets 625 duplicates, as S1 does: today's Core accepts an `Idempotency-Key` on product create and ignores it, so S3 needs the Core change. Not covered: two devices racing in real time (the run is sequential, like the simulation), a phone's network stack, and staging.
+
 ### Bugs the trace found
 
 - Seed 3605, “cho năm Bia Sài Gòn ron 330ml với một Gáo támthơm 5kg”: `parseOrder` drops the beer line entirely, probably because “năm” is both a number and part of a product name (inferred, not traced in the parser).
@@ -63,7 +65,7 @@ S2 adopts a product only if its id was not in the local replica when the action 
 | `PREREG.md` | Questions, metrics, seeds and success criteria, written before the runs; deviations at the end |
 | `pipeline.ts` | The resolver config and gate the experiments share (auto-research v3 winner) |
 | `alias_stream.ts` | Alias learning over simulated shop streams |
-| `offline_outbox.py` | Outbox strategies against a fake Core that follows the contract |
+| `offline_outbox.py` | Outbox strategies against a fake Core that follows the contract, or against a running Core with `--core` |
 | `trace_utterance.ts` | One random spoken order through `parseOrder` and the resolver, every intermediate value |
 | `results/` | Raw outputs of the runs above |
 | `reports/pipeline-walkthrough.html` | The pipeline diagram with the traced sentence and the source of each method |
@@ -88,6 +90,12 @@ node backend/ai/evaluation/voice_order/alias_stream.ts --seeds 20261411,20261412
 
 # Outbox simulation (seconds)
 (cd backend/ai && uv run python evaluation/voice_order/offline_outbox.py)
+
+# Outbox against a running Core (about 14 minutes): start the Firebase Auth Emulator, then
+# Core on a throwaway database with FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 and
+# SERVER_PORT=8090 (backend/core/README.md); FIREBASE_SERVICE_ACCOUNT_JSON can be any
+# well-formed service-account JSON with a throwaway key, the emulator does not check it
+(cd backend/ai && uv run python evaluation/voice_order/offline_outbox.py --core http://localhost:8090 --emulator 127.0.0.1:9099)
 
 # Trace: a fixed sentence, or drop --seed for a new random one
 node backend/ai/evaluation/voice_order/trace_utterance.ts --seed 4180

@@ -1,0 +1,38 @@
+{
+ "S0": {
+  "retry_duplicates": 424,
+  "orphaned_by_adoption": 0,
+  "lost_intents": 1725,
+  "false_merges": 0,
+  "same_item_merged": 0,
+  "expenses_doubled": 0,
+  "product_intents": 6016
+ },
+ "S1": {
+  "retry_duplicates": 625,
+  "orphaned_by_adoption": 0,
+  "lost_intents": 0,
+  "false_merges": 0,
+  "same_item_merged": 0,
+  "expenses_doubled": 0,
+  "product_intents": 6016
+ },
+ "S2": {
+  "retry_duplicates": 0,
+  "orphaned_by_adoption": 9,
+  "lost_intents": 0,
+  "false_merges": 14,
+  "same_item_merged": 11,
+  "expenses_doubled": 0,
+  "product_intents": 6016
+ },
+ "S3": {
+  "retry_duplicates": 625,
+  "orphaned_by_adoption": 0,
+  "lost_intents": 0,
+  "false_merges": 0,
+  "same_item_merged": 0,
+  "expenses_doubled": 0,
+  "product_intents": 6016
+ }
+}
