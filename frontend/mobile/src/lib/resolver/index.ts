@@ -17,6 +17,7 @@ import { decide, gateProbability } from './gate.ts';
 import { fuse, scalesOf } from './fusion.ts';
 import { folded } from './normalizer.ts';
 import { SEED_ALIASES, type SeedAlias } from './seed_aliases.vi.ts';
+import { UNIT_CANONICAL } from './units.vi.ts';
 import { RetrieverAnd } from './retrieverAnd.ts';
 import { RetrieverB } from './retrieverB.ts';
 import { RetrieverE } from './retrieverE.ts';
@@ -50,6 +51,21 @@ function syllableCount(text: string): number {
   return folded(text).split(' ').filter(Boolean).length;
 }
 
+/**
+ * The canonical unit a spoken or catalog unit names, or null when it names none.
+ *
+ * Catalog units are free text the shop typed ("Hộp", "lon 330ml", "Kí"), while
+ * the spoken unit comes from parseOrder's vocabulary, so a raw comparison
+ * called most same-unit pairs a mismatch and the gate then refused to
+ * auto-apply them. Only the first token is read, and a word outside
+ * `UNIT_CANONICAL` is unknown rather than a mismatch: a unit the resolver
+ * cannot read is no evidence against the candidate.
+ */
+function canonicalUnit(unit: string | null | undefined): string | null {
+  const first = unit ? folded(unit).split(' ')[0] : '';
+  return UNIT_CANONICAL[first] ?? null;
+}
+
 /** Jaccard overlap of two id lists taken as sets. */
 function jaccard(a: string[], b: string[]): number {
   const setA = new Set(a);
@@ -67,8 +83,16 @@ function dispersion(values: number[]): number {
   return Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length);
 }
 
-/** Build every retriever the config names, in the config's order. */
-function buildRetrievers(catalog: CatalogItem[], config: ResolverConfig): Retriever[] {
+/**
+ * Build every retriever the config names, in the config's order.
+ *
+ * `forgetCandidates` drops the provider's remembered Q answer; `resolve` calls it
+ * before each line so an alias indexed since the last call is never missed.
+ */
+function buildRetrievers(
+  catalog: CatalogItem[],
+  config: ResolverConfig,
+): { retrievers: Retriever[]; forgetCandidates: () => void } {
   // E and P need candidate ids once the catalog is too large to brute-force, and
   // Q is the cheap filter the plan puts in front of them. The retriever instance
   // is resolved lazily because the list below is still being filled.
@@ -77,13 +101,22 @@ function buildRetrievers(catalog: CatalogItem[], config: ResolverConfig): Retrie
   // an E-only config has no Q to ask, and a provider that always returns [] would
   // make E score nothing above `eBruteMax` and report that as "no match" rather
   // than brute-forcing as its own contract says it will.
+  //
+  // E and P ask for the same line as `resolve` asks Q for, so the provider keeps
+  // Q's answer for the current line instead of running Q twice more.
   const built: Retriever[] = [];
   const qName = config.retrievers.find((name) => name.startsWith('Q'));
+  let last: { line: QueryLine; k: number; ids: string[] } | undefined;
   const provider =
     qName === undefined
       ? undefined
-      : (line: QueryLine, k: number): string[] =>
-          built.find((retriever) => retriever.name === qName)?.retrieve(line, k).map((hit) => hit.productId) ?? [];
+      : (line: QueryLine, k: number): string[] => {
+          if (last === undefined || last.line !== line || last.k !== k) {
+            const q = built.find((retriever) => retriever.name === qName);
+            last = { line, k, ids: q?.retrieve(line, k).map((hit) => hit.productId) ?? [] };
+          }
+          return last.ids;
+        };
 
   for (const name of config.retrievers) {
     switch (name) {
@@ -107,7 +140,7 @@ function buildRetrievers(catalog: CatalogItem[], config: ResolverConfig): Retrie
         break;
     }
   }
-  return built;
+  return { retrievers: built, forgetCandidates: () => (last = undefined) };
 }
 
 /**
@@ -152,7 +185,7 @@ export function buildResolver(options: BuildResolverOptions): Resolver {
     throw new Error(`max fusion needs every retriever on one score scale, got ${scales.join(' and ')}`);
   }
 
-  const retrievers = buildRetrievers(catalog, config);
+  const { retrievers, forgetCandidates } = buildRetrievers(catalog, config);
   const reranker = config.rerank ? new Reranker(config.rerank) : undefined;
   if (reranker) for (const item of catalog) reranker.addDocument(item.name, item.id);
   const productById = new Map(catalog.map((item) => [item.id, item]));
@@ -167,25 +200,28 @@ export function buildResolver(options: BuildResolverOptions): Resolver {
     ...(options.aliases ?? []).filter((entry) => known.has(entry.productId)),
   ]);
 
-  // Which (phrase, product) pairs are already documents. Repeating a confirmation
-  // must not add the same document twice, which would skew the retrievers'
-  // document frequencies, but pointing a phrase at a *different* product must
-  // index it, or the correction never takes effect.
-  //
-  // The document a re-pointed phrase had for its old product is left where it is:
-  // removing one needs an index delete the retrievers do not have. Trust is
-  // decided by the alias table, so a stale document can only add a candidate.
-  const indexed = new Set<string>();
+  // The product each phrase is indexed under. Repeating a confirmation must not
+  // add the same document twice, which would skew the retrievers' document
+  // frequencies. Pointing a phrase at a *different* product must index it and
+  // also remove the old document: left in place, the old product scores exactly
+  // as well as the new one, and the productId tiebreak can keep the old one
+  // first forever.
+  const indexedUnder = new Map<string, string>();
   function indexAlias(entry: AliasEntry): void {
-    const key = `${entry.productId}|${entry.folded}`;
-    if (indexed.has(key)) return;
-    indexed.add(key);
+    const previous = indexedUnder.get(entry.folded);
+    if (previous === entry.productId) return;
+    if (previous !== undefined) {
+      for (const retriever of retrievers) retriever.removeDocument(entry.folded, previous);
+      reranker?.removeDocument(entry.folded, previous);
+    }
+    indexedUnder.set(entry.folded, entry.productId);
     for (const retriever of retrievers) retriever.addDocument(entry.folded, entry.productId);
     reranker?.addDocument(entry.folded, entry.productId);
   }
   for (const entry of table.entries()) indexAlias(entry);
 
   function resolve(line: QueryLine): ResolveResult {
+    forgetCandidates();
     const hits: Record<string, { productId: string; score: number }[]> = {};
     for (const retriever of retrievers) hits[retriever.name] = retriever.retrieve(line, config.topK);
 
@@ -211,13 +247,10 @@ export function buildResolver(options: BuildResolverOptions): Resolver {
     const aliasEntry = table.lookup(spanFolded);
     const aliasTrusted = table.isTrusted(spanFolded, gate.aliasMinConfirmations);
 
-    const unit = line.unit ?? null;
-    const candidateUnit = top1 ? (productById.get(top1.productId)?.unit ?? null) : null;
-    // Catalog units arrive toned ("hộp", "gói") while the spoken unit is folded
-    // ("hop", "goi"), so comparing them raw called every same-unit pair a
-    // mismatch and the gate then refused to auto-apply any of them.
+    const unit = canonicalUnit(line.unit);
+    const candidateUnit = canonicalUnit(top1 ? productById.get(top1.productId)?.unit : undefined);
     const unitOk: GateFeatures['unit_ok'] =
-      unit === null || candidateUnit === null ? 'unknown' : folded(unit) === folded(candidateUnit) ? 'ok' : 'mismatch';
+      unit === null || candidateUnit === null ? 'unknown' : unit === candidateUnit ? 'ok' : 'mismatch';
 
     const features: GateFeatures = {
       s1,

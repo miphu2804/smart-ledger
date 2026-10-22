@@ -73,6 +73,20 @@ export class RetrieverE implements Retriever {
     bucket.push(views(text));
   }
 
+  /** Remove the most recently added string of `productId` equal to `text` once normalized. */
+  removeDocument(text: string, productId: string): boolean {
+    const bucket = this.docs.get(productId);
+    const target = folded(text);
+    const index = bucket?.findLastIndex((doc) => doc.spaced === target) ?? -1;
+    if (bucket === undefined || index < 0) return false;
+    bucket.splice(index, 1);
+    if (bucket.length === 0) {
+      this.docs.delete(productId);
+      this.ids.splice(this.ids.indexOf(productId), 1);
+    }
+    return true;
+  }
+
   retrieve(line: QueryLine, k: number): RetrievalHit[] {
     if (k <= 0 || this.ids.length === 0) return [];
 
@@ -104,13 +118,21 @@ export class RetrieverE implements Retriever {
    * against "Sting dâu chai 330ml" shares 8 trigrams where the threshold asks for
    * 9. E scores that pair 0.471 against 0.167 for the nearest distractor, so it
    * would rank it first, but above `eBruteMax` it only ever sees what Q handed it.
-   * An empty provider therefore means "Q found nothing", not "nothing matches",
-   * and the honest answer is to scan rather than report a miss.
+   * Q returning *something* does not fix that: one short unrelated name sharing
+   * a trigram is enough to crowd the target out. So the products with a string
+   * the span is a prefix of are always added to what Q provides, and an empty
+   * result from both still means scan rather than report a miss.
    */
   private candidateIds(line: QueryLine): string[] {
     if (this.ids.length <= this.eBruteMax) return this.ids;
     if (this.candidates === undefined) return this.ids;
-    const provided = this.candidates(line, E_CANDIDATES);
-    return provided.length === 0 ? this.ids : provided;
+    const ids = new Set(this.candidates(line, E_CANDIDATES));
+    const prefix = views(line.rawProductSpan).nospace;
+    if (prefix !== '') {
+      for (const [productId, bucket] of this.docs) {
+        if (bucket.some((doc) => doc.nospace.startsWith(prefix))) ids.add(productId);
+      }
+    }
+    return ids.size === 0 ? this.ids : [...ids];
   }
 }

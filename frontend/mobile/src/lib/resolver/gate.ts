@@ -72,21 +72,24 @@ export function gateProbability(features: GateFeatures, model: GateModel): numbe
  * to the algorithm, not to its parameters.
  */
 export function decide(features: GateFeatures, config: GateConfig): Decision {
+  // A heard unit the product is not sold in ("chai" against a "lon" row) is a
+  // different product or a mishearing, so neither variant auto-applies it, not
+  // even for a confirmed alias.
+  const unitMismatch = features.unit_ok === 'mismatch';
+
   if (config.gate === 'G2' && config.model) {
-    if (gateProbability(features, config.model) >= config.thetaAuto) return 'AUTO';
+    if (!unitMismatch && gateProbability(features, config.model) >= config.thetaAuto) return 'AUTO';
     if (features.s1 < config.sFloor) return 'NEW';
     return 'ASK';
   }
 
-  // A heard unit the trusted product is not sold in ("chai" against a "lon"
-  // row) is a different product or a mishearing, so even a confirmed alias asks.
-  if (features.alias === 1) return features.unit_ok === 'mismatch' ? 'ASK' : 'AUTO';
+  if (features.alias === 1) return unitMismatch ? 'ASK' : 'AUTO';
   if (features.s1 < config.rules.sFloor) return 'NEW';
   if (
     features.s1 >= config.rules.sAuto &&
     features.margin >= config.rules.mMin &&
     features.agree >= (config.rules.agreeMin ?? 1) &&
-    features.unit_ok !== 'mismatch'
+    !unitMismatch
   ) {
     return 'AUTO';
   }

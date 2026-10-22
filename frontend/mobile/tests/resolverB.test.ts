@@ -47,9 +47,10 @@ describe('retriever B: unit-word stoplist is a switch', () => {
 
   it('on: a word that is also a real name is not dropped', () => {
     // Regression: "lon" (lợn, pork), "goi" (gỏi), "cai" (cải), "can" (cần tây),
-    // "loc" (lọc), "phan" (phấn), "to" (tỏ) were stoplisted as unit words, so a
-    // product named by one of them could not be matched at all.
-    for (const name of ['Lợn', 'Gỏi', 'Cải']) {
+    // "loc" (lọc), "phan" (phấn), "to" (tỏ), "bao" (bánh bao), "hu" (hủ tiếu),
+    // "vi" (vị) and "binh" (bình) were stoplisted as unit words, so a product
+    // named by one of them could not be matched at all.
+    for (const name of ['Lợn', 'Gỏi', 'Cải', 'Bao', 'Hủ', 'Vị', 'Bình']) {
       const one = [{ id: '1', name }];
       const hits = new RetrieverB(one, { useUnitStoplist: true }).retrieve({ rawProductSpan: name.toLowerCase() }, 5);
       assert.equal(hits[0]?.productId, '1', `${name} must still be retrievable`);

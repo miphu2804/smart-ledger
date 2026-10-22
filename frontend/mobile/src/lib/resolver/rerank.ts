@@ -66,6 +66,19 @@ export class Reranker {
     bucket.push(docOf(text));
   }
 
+  /** Remove the most recently added string of `productId` equal to `text` once normalized. */
+  removeDocument(text: string, productId: string): boolean {
+    const bucket = this.docs.get(productId);
+    const target = folded(text);
+    const index = bucket?.findLastIndex((doc) => doc.spaced === target) ?? -1;
+    if (bucket === undefined || index < 0) return false;
+    bucket.splice(index, 1);
+    if (bucket.length === 0) {
+      this.docs.delete(productId);
+    }
+    return true;
+  }
+
   /** How many fused candidates the reranker wants to see. */
   get pool(): number {
     return this.config.pool;

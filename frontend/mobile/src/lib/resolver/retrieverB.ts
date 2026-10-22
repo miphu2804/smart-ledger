@@ -50,4 +50,8 @@ export class RetrieverB implements Retriever {
   addDocument(text: string, productId: string): void {
     this.bm25.addDocument(text, productId);
   }
+
+  removeDocument(text: string, productId: string): boolean {
+    return this.bm25.removeDocument(text, productId);
+  }
 }

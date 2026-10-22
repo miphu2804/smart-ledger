@@ -134,10 +134,28 @@ describe('RetrieverE', () => {
       { id: 'sting', name: 'Sting' },
       { id: 'other', name: 'Other' },
     ];
+    // "stinh" is not a prefix of "sting", so only the provider's ids are scored.
     const injected = new RetrieverE(catalog, { eBruteMax: 1, candidates: () => ['other'] });
-    assert.deepEqual(injected.retrieve({ rawProductSpan: 'sting' }, 5).map((h) => h.productId), ['other']);
+    assert.deepEqual(injected.retrieve({ rawProductSpan: 'stinh' }, 5).map((h) => h.productId), ['other']);
 
     const fallback = new RetrieverE(catalog, { eBruteMax: 1 });
     assert.deepEqual(fallback.retrieve({ rawProductSpan: 'sting' }, 5).map((h) => h.productId), ['sting', 'other']);
+  });
+
+  it('scores a long name the span is a prefix of even when the provider returned other ids', () => {
+    const catalog: CatalogItem[] = [
+      { id: 'short', name: 'Sữa' },
+      { id: 'target', name: 'Sting dâu chai 330ml' },
+    ];
+    const r = new RetrieverE(catalog, { eBruteMax: 1, candidates: () => ['short'] });
+    assert.equal(r.retrieve({ rawProductSpan: 'sting dâu' }, 5)[0].productId, 'target');
+  });
+
+  it('removes one added string and forgets a product left with none', () => {
+    const r = new RetrieverE([{ id: 'a', name: 'Sting' }]);
+    r.addDocument('xi ting', 'b');
+    assert.equal(r.removeDocument('xì ting', 'b'), true);
+    assert.equal(r.removeDocument('xì ting', 'b'), false);
+    assert.deepEqual(r.retrieve({ rawProductSpan: 'xi ting' }, 5).map((h) => h.productId), ['a']);
   });
 });

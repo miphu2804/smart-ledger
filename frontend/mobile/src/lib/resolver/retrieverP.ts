@@ -54,6 +54,20 @@ export class RetrieverP implements Retriever {
     bucket.push(phon(text));
   }
 
+  /** Remove the most recently added string of `productId` equal to `text` once normalized. */
+  removeDocument(text: string, productId: string): boolean {
+    const bucket = this.docs.get(productId);
+    const target = phon(text);
+    const index = bucket?.findLastIndex((doc) => doc === target) ?? -1;
+    if (bucket === undefined || index < 0) return false;
+    bucket.splice(index, 1);
+    if (bucket.length === 0) {
+      this.docs.delete(productId);
+      this.ids.splice(this.ids.indexOf(productId), 1);
+    }
+    return true;
+  }
+
   retrieve(line: QueryLine, k: number): RetrievalHit[] {
     if (k <= 0 || this.ids.length === 0) return [];
 
@@ -78,14 +92,20 @@ export class RetrieverP implements Retriever {
   /**
    * The product ids to score: whole catalog when small, else the injected provider.
    *
-   * Same reason as E: an empty provider means the trigram filter kept nothing,
-   * which is not the same as nothing matching, and P would otherwise report a
-   * miss for a span it can score.
+   * Same reason as E: the trigram filter drops a short span that is a prefix of
+   * a longer name, so products whose phonetic key starts with the span's are
+   * always added, and an empty result still means scan rather than miss.
    */
   private candidateIds(line: QueryLine): string[] {
     if (this.ids.length <= this.pBruteMax) return this.ids;
     if (this.candidates === undefined) return this.ids;
-    const provided = this.candidates(line, P_CANDIDATES);
-    return provided.length === 0 ? this.ids : provided;
+    const ids = new Set(this.candidates(line, P_CANDIDATES));
+    const prefix = phon(line.rawProductSpan);
+    if (prefix !== '') {
+      for (const [productId, bucket] of this.docs) {
+        if (bucket.some((doc) => doc.startsWith(prefix))) ids.add(productId);
+      }
+    }
+    return ids.size === 0 ? this.ids : [...ids];
   }
 }
