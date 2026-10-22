@@ -10,11 +10,9 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
-    Select,
     String,
     Text,
     delete,
-    extract,
     func,
     null,
     or_,
@@ -22,9 +20,11 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.dialects.postgresql import JSONB, insert
-from sqlalchemy.orm import Mapped, load_only, mapped_column
+from sqlalchemy.engine import Row
+from sqlalchemy.orm import Mapped, Session, load_only, mapped_column
 
 from src.infra.postgre_db_client import Base, PostgreDBClient
+from src.memory import ranking
 from src.utils import SHOP_TIMEZONE
 
 # Size of agent_memories.embedding, fixed by its migration; every embedder is cut to it.
@@ -110,10 +110,6 @@ class MemoryGroup:
 class AgentMemoryRepository:
     """Reads and appends one owner's memories; every statement is scoped to them."""
 
-    # Tencent's decay rate: a memory keeps exp(-0.01) of its weight per day of age.
-    DECAY_PER_DAY = 0.01
-    # Nearest memories by cosine that decay then re-ranks; the HNSW index serves this.
-    CANDIDATES = 20
     # Marks a summary, so it is never summarized again.
     SUMMARY_KEY = "summarized_from"
     # Most memories the owner's view lists; the map cannot draw many more, and the
@@ -130,9 +126,9 @@ class AgentMemoryRepository:
         query: list[float],
         limit: int,
         preference_limit: int = 0,
+        text: str = "",
     ) -> list[RecalledMemory]:
-        """The owner's standing preferences, then Tencent's semantic search re-ranked
-        by Tencent's decay.
+        """The owner's standing preferences, then the memories nearest the message.
 
         Up to `preference_limit` live preferences come first, most important and newest
         first, whatever the message: "answer in tables" rarely resembles the question
@@ -140,19 +136,13 @@ class AgentMemoryRepository:
         loaded MEMORY.md of Cognition's agent memory repo. The search then fills
         `limit` more from the other memories.
 
-        "Agent Long-Term Memory", Feature Overview: skip expired rows, take the nearest
-        by cosine distance with relevance as 1 - distance, and weigh each memory by
-        importance * exp(-0.01 * age in days). Tencent shows the two as separate
-        queries; here the decay weight multiplies the relevance of the cosine
-        candidates, so an old or minor memory yields to a fresh, important one about
-        the same thing. The shop and user replace Tencent's agent_id filter, and both
-        come from the request.
-
-        Departures from Tencent, after Sakana Chat's "My Fish", Generative Agents and
-        Hy Memory's strength: age counts from the last recall, not from creation, so a
-        memory the owner keeps relying on stays fresh; a memory recalled often weighs
-        more, by 1 + ln(use count); and the memories returned have their use
-        recorded, which the owner sees. Superseded memories are skipped.
+        Candidates are the nearest by cosine plus the best BM25 matches of `text`,
+        ranked by `ranking.rank`. Decay, importance and use
+        count no longer rank: weighed into every recall they locked onto a few often
+        used memories and buried relevant ones (Recall@5 0.28 against 0.86 for this
+        rank on real embeddinggemma vectors).
+        The memories returned still have their use recorded, which the owner sees.
+        Superseded and expired memories are skipped.
         """
         live = self._live(shop_id, user_id)
         preferences = (
@@ -170,9 +160,9 @@ class AgentMemoryRepository:
         )
         with self.postgres.session() as session:
             rows = session.execute(preferences).all() if preference_limit else []
-            rows += session.execute(
-                self._searched(live, query, limit, [row.id for row in rows])
-            ).all()
+            rows += self._searched(
+                session, live, query, text, limit, [row.id for row in rows]
+            )
             if rows:
                 session.execute(
                     update(AgentMemory)
@@ -198,49 +188,39 @@ class AgentMemoryRepository:
         ]
 
     def _searched(
-        self, live: tuple, query: list[float], limit: int, skipped: list[int]
-    ) -> Select:
-        """The `limit` live memories nearest `query` after decay, minus `skipped`."""
-        distance = AgentMemory.embedding.cosine_distance(query)
-        candidates = (
-            select(
-                AgentMemory.id,
-                AgentMemory.content,
-                AgentMemory.memory_type,
-                AgentMemory.created_at,
-                func.coalesce(AgentMemory.last_used_at, AgentMemory.created_at).label(
-                    "touched_at"
-                ),
-                AgentMemory.importance,
-                AgentMemory.use_count,
-                (1 - distance).label("relevance"),
-                AgentMemory.source_conversation_id,
+        self,
+        session: Session,
+        live: tuple,
+        query: list[float],
+        text: str,
+        limit: int,
+        skipped: list[int],
+    ) -> list[Row]:
+        """The `limit` live memories best matching `query` and `text`, not `skipped`."""
+        # Cosine over every live memory, not the HNSW index: PostgreSQL applies the
+        # owner filter after the index's 40 nearest of all owners, so a shop holding
+        # a few percent of the rows got fewer than 20 candidates. BM25 needs every
+        # live memory's words anyway (ADR-0002, "Giới hạn mở rộng").
+        rows = {
+            row.id: row
+            for row in session.execute(
+                select(
+                    AgentMemory.id,
+                    AgentMemory.content,
+                    AgentMemory.memory_type,
+                    AgentMemory.created_at,
+                    (1 - AgentMemory.embedding.cosine_distance(query)).label(
+                        "relevance"
+                    ),
+                    AgentMemory.source_conversation_id,
+                ).where(*live, AgentMemory.id.not_in(skipped))
             )
-            .where(*live, AgentMemory.id.not_in(skipped))
-            .order_by(distance)
-            .limit(self.CANDIDATES)
-            .subquery()
-        )
-        age_days = extract("epoch", func.now() - candidates.c.touched_at) / 86400
-        # A memory never or once recalled keeps its weight, as in Hy Memory's strength.
-        frequency = 1 + func.ln(func.greatest(candidates.c.use_count, 1))
-        weight = (
-            candidates.c.importance
-            * func.exp(-self.DECAY_PER_DAY * age_days)
-            * frequency
-        )
-        return (
-            select(
-                candidates.c.id,
-                candidates.c.content,
-                candidates.c.memory_type,
-                candidates.c.created_at,
-                candidates.c.relevance,
-                candidates.c.source_conversation_id,
-            )
-            .order_by((candidates.c.relevance * weight).desc())
-            .limit(limit)
-        )
+        }
+        relevance = {memory_id: row.relevance for memory_id, row in rows.items()}
+        lexical = ranking.bm25(text, ((row.id, row.content) for row in rows.values()))
+        return [
+            rows[memory_id] for memory_id in ranking.rank(relevance, lexical)[:limit]
+        ]
 
     @staticmethod
     def _live(shop_id: int, user_id: int) -> tuple:
