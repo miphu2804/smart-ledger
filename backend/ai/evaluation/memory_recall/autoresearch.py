@@ -3,8 +3,10 @@
     python autoresearch.py --dense sim            # cloud run, simulated cosines
     python autoresearch.py --dense cloudflare     # real embeddinggemma via Workers AI
     python autoresearch.py --dense sim --test     # the one test read, after dev
+    python autoresearch.py --dense cloudflare --round 2 [--test]   # PREREG round 2
 
-Dev results go to results/<dense>_dev.json; --test reads the stored winner from it.
+Dev results go to results/<dense>_dev.json (round 2: <dense>_dev2.json); --test reads
+the stored winner from it.
 """
 
 import argparse
@@ -190,25 +192,136 @@ def test(kind, devres):
     return res
 
 
+# --- round 2 (PREREG.md, "Round 2") -----------------------------------------------
+
+SHIPPED = Config(
+    name="shipped",
+    channels="hybrid",
+    fusion="mix",
+    mix_alpha=0.1,
+    weight="none",
+    use_importance=False,
+    freq="none",
+)
+
+
+def grid2():
+    lexical = [dict(mix_alpha=0.0)] + [
+        dict(mix_alpha=a, lex_norm=n)
+        for a in (0.025, 0.05, 0.075, 0.1, 0.125, 0.15, 0.2)
+        for n in ("max", "cover")
+    ]
+    recency = [dict()] + [
+        dict(recency_w=w, recency_tau=t) for w in (0.01, 0.02, 0.04) for t in (30, 90)
+    ]
+    floors = [dict()]
+    for lc in (0.6, 1.01):
+        floors += [dict(floor=0.30 + 0.025 * i, lex_cover=lc) for i in range(13)]
+        floors += [dict(floor_rel=r, lex_cover=lc) for r in (0.05, 0.1, 0.15, 0.2)]
+    for x, r, f in itertools.product(lexical, recency, floors):
+        yield replace(SHIPPED, name="grid2", **x, **r, **f)
+
+
+def choose2(results, cos):
+    """PREREG round 2: feasible, within 1 point of the best Recall@5, least noise."""
+    ok = [(c, m) for c, m in results if m["stale_only"] <= cos["stale_only"] + 0.02]
+    best = max(m["R@5"] for _, m in ok)
+    near = [(c, m) for c, m in ok if m["R@5"] >= best - 0.01]
+    quiet = min(m["noise"] for _, m in near)
+    near = [(c, m) for c, m in near if m["noise"] <= quiet + 0.1]
+    return min(near, key=lambda cm: (cm[0].parts(), -cm[1]["R@5"], -cm[1]["top1"]))
+
+
+def dev2(kind, procs):
+    with Pool(procs, initializer=init, initargs=("dev2", kind)) as pool:
+        cfgs = [COSINE, BASELINE, SHIPPED, *grid2()]
+        seen = dict(pool.imap(score, cfgs, chunksize=8))
+    cos = seen[COSINE]
+    winner = choose2([(c, m) for c, m in seen.items() if c.name == "grid2"], cos)
+    ranked = sorted(
+        ((c, m) for c, m in seen.items() if c.name == "grid2"),
+        key=lambda cm: -cm[1]["R@5"],
+    )
+    return {
+        "dense": kind,
+        "configs": len(cfgs),
+        "baseline": seen[BASELINE],
+        "cosine": cos,
+        "shipped": seen[SHIPPED],
+        "winner": {"config": asdict(winner[0]), "dev": winner[1]},
+        "top": [{"config": asdict(c), "dev": m} for c, m in ranked[:15]],
+        "sweeps": _sweeps(seen),
+    }
+
+
+def _sweeps(seen):
+    """One-factor slices around the shipped config, for the README."""
+
+    def row(c, m):
+        keep = ("R@5", "R@5_lex", "R@5_unacc", "R@5_sem", "top1", "stale_only", "noise")
+        knobs = ("mix_alpha", "lex_norm", "recency_w", "recency_tau", "floor")
+        return {**{k: getattr(c, k) for k in knobs + ("floor_rel", "lex_cover")}} | {
+            k: round(m[k], 4) for k in keep
+        }
+
+    plain = dict(recency_w=0.0, floor=None, floor_rel=None)
+    out = {"lexical": [], "recency": [], "floor": []}
+    for c, m in seen.items():
+        if c.name != "grid2":
+            continue
+        d = asdict(c)
+        if all(d[k] == v for k, v in plain.items()):
+            out["lexical"].append(row(c, m))
+        elif c.mix_alpha == 0.1 and c.lex_norm == "max":
+            if c.floor is None and c.floor_rel is None:
+                out["recency"].append(row(c, m))
+            elif c.recency_w == 0.0:
+                out["floor"].append(row(c, m))
+    return out
+
+
+def test2(kind, devres):
+    init("test2", kind)
+    cfgs = {
+        "winner": Config(**{**devres["winner"]["config"], "add_w": (0.0, 0.0, 0.0)}),
+        "shipped": SHIPPED,
+        "cosine": COSINE,
+        "baseline": BASELINE,
+    }
+    res, hits = {}, {}
+    for name, cfg in cfgs.items():
+        m, recs = evaluate(cfg, G["shops"], G["dense"], G["prior"], by_size=True)
+        res[name] = m
+        hits[name] = [float(q.gold in g) for q, g in recs if q.gold is not None]
+    res["ci_winner_minus_shipped"] = bootstrap(hits["winner"], hits["shipped"])
+    res["ci_shipped_minus_cosine"] = bootstrap(hits["shipped"], hits["cosine"])
+    res["ci_winner_minus_cosine"] = bootstrap(hits["winner"], hits["cosine"])
+    lower = res["ci_winner_minus_shipped"][1]
+    res["ships"] = "winner" if lower >= -0.01 else "shipped"
+    return res
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--dense", default="sim")
     ap.add_argument("--test", action="store_true")
     ap.add_argument("--procs", type=int, default=os.cpu_count())
+    ap.add_argument("--round", type=int, default=1, choices=(1, 2))
     a = ap.parse_args()
     os.makedirs(os.path.join(HERE, "results"), exist_ok=True)
     tag = a.dense.replace(":", "_").replace("/", "_")
-    path = os.path.join(HERE, "results", f"{tag}_dev.json")
+    suffix = "" if a.round == 1 else "2"
+    path = os.path.join(HERE, "results", f"{tag}_dev{suffix}.json")
     if a.test:
         devres = json.load(open(path))
-        out = test(a.dense, devres)
+        out = (test if a.round == 1 else test2)(a.dense, devres)
         json.dump(
             out,
-            open(os.path.join(HERE, "results", f"{tag}_test.json"), "w"),
+            open(os.path.join(HERE, "results", f"{tag}_test{suffix}.json"), "w"),
             indent=1,
             default=str,
         )
     else:
-        out = dev(a.dense, a.procs)
+        out = (dev if a.round == 1 else dev2)(a.dense, a.procs)
         json.dump(out, open(path, "w"), indent=1, default=str)
     print(json.dumps(out, indent=1, default=str)[:4000])

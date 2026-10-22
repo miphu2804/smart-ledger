@@ -4,9 +4,12 @@ from data import build
 from systems import Lexical, metrics, run_shop
 
 SPLITS = {
-    # seeds and lexicon half; sizes cover a new owner (15) to a heavy one (120)
-    "dev": dict(seeds=range(1, 9), half="A"),
-    "test": dict(seeds=range(1001, 1009), half="B"),
+    # (seeds, lexicon half) parts; sizes cover a new owner (15) to a heavy one (120)
+    "dev": [(range(1, 9), "A")],
+    "test": [(range(1001, 1009), "B")],
+    # Round 2 (PREREG.md): tunes on both round-1 halves, reads the unseen half C once.
+    "dev2": [(range(2001, 2009), "A"), (range(1001, 1009), "B")],
+    "test2": [(range(3001, 3009), "C")],
 }
 SIZES = (15, 40, 120)
 # a store a month old (today's production) and one half a year old
@@ -14,10 +17,10 @@ AGES = (30.0, 180.0)
 
 
 def shops(split):
-    s = SPLITS[split]
     return [
-        build(seed, s["half"], size, max_age=age)
-        for seed in s["seeds"]
+        build(seed, half, size, max_age=age)
+        for seeds, half in SPLITS[split]
+        for seed in seeds
         for size in SIZES
         for age in AGES
     ]

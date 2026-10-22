@@ -212,6 +212,15 @@ class Config:
     floor: float | None = None  # min cosine to inject (dense / hybrid)
     lex_cover: float = 0.6  # a lexical match counts past the floor at this IDF share
     prior_weight: float = 0.0
+    # Round 2. BM25 term in "mix": share of the best match ("max") or share of the
+    # query's IDF mass matched ("cover", an absolute scale, Bruch et al. 2023).
+    lex_norm: str = "max"
+    # Additive recency by creation date, w * exp(-age / tau): a newer version of a fact
+    # edges out an older one that reconcile missed, with no use-count feedback.
+    recency_w: float = 0.0
+    recency_tau: float = 30.0
+    # Keep only candidates within this cosine of the best one (relative floor).
+    floor_rel: float | None = None
 
     def parts(self) -> int:
         """How many departures from plain cosine top-5 the config carries."""
@@ -221,8 +230,10 @@ class Config:
                 self.weight != "none",
                 self.weight == "mult" and self.use_importance,
                 self.weight == "mult" and self.freq != "none",
-                self.floor is not None,
+                self.floor is not None or self.floor_rel is not None,
                 self.prior_weight > 0,
+                self.lex_norm != "max",
+                self.recency_w > 0,
             ]
         )
 
@@ -272,8 +283,19 @@ def rank(
         scale = 2 / (cfg.rrf_k + 1)
         rel = {m: v / scale for m, v in rel.items()}
     else:  # mix
-        top = max(bm.values()) if bm else 1.0
-        rel = {m: cos[m] + cfg.mix_alpha * bm.get(m, 0) / top for m in cands}
+        if cfg.lex_norm == "cover":
+            lex = {m: cover.get(m, 0.0) for m in cands}
+        else:
+            top = max(bm.values()) if bm else 1.0
+            lex = {m: bm.get(m, 0) / top for m in cands}
+        rel = {m: cos[m] + cfg.mix_alpha * lex[m] for m in cands}
+    if cfg.recency_w:
+        rel = {
+            m: v
+            + cfg.recency_w
+            * math.exp(-max(now - by_id[m].created_day, 0.0) / cfg.recency_tau)
+            for m, v in rel.items()
+        }
     # Floor: inject only what is close enough by cosine, or clearly matched by words.
     if cfg.floor is not None:
         keep = {
@@ -282,6 +304,13 @@ def rank(
             if (cos.get(m, -1) >= cfg.floor) or (cover.get(m, 0) >= cfg.lex_cover)
         }
         rel = {m: v for m, v in rel.items() if m in keep}
+    if cfg.floor_rel is not None and cos:
+        best = max(cos[m] for m in cands)
+        rel = {
+            m: v
+            for m, v in rel.items()
+            if cos[m] >= best - cfg.floor_rel or cover.get(m, 0) >= cfg.lex_cover
+        }
     if not rel:
         return []
 
@@ -343,7 +372,8 @@ def run_shop(cfg: Config, shop: Shop, dense, prior, history_days=30.0):
             by_id[mid].last_used_day = now
         return got
 
-    for i, q in enumerate(shop.history):
+    # Use counts and last-use dates only matter to configs that weigh them.
+    for i, q in enumerate(shop.history if cfg.weight != "none" else []):
         step(q, -history_days + history_days * i / max(n, 1), False)
     records = []
     for q in shop.queries:

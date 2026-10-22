@@ -6,15 +6,16 @@ Every shop gets a store of facts in the shapes MEMORY_EXTRACT_PROMPT asks for
 surface forms (accented, typed without diacritics, paraphrase with no shared content
 word), plus queries that need no memory at all.
 
-The lexicon and query templates are split in two halves: dev uses half A, the
-held-out test uses half B, so a config cannot win by fitting names or phrasings.
+The lexicon and query templates are split in parts: round 1 tuned on half A and read
+half B once; round 2 tunes on A and B and reads half C once, so a config cannot win by
+fitting names or phrasings.
 """
 
 import random
 import unicodedata
 from dataclasses import dataclass, field
 
-# --- lexicon, split A (dev) / B (test) -------------------------------------------
+# --- lexicon, split A / B / C (see common.SPLITS) ---------------------------------
 
 PRODUCTS = {
     "A": [
@@ -40,6 +41,18 @@ PRODUCTS = {
         ("rau muống", "đồ xanh nấu canh"),
         ("thịt heo", "đồ tươi từ lợn"),
         ("than tổ ong", "chất đốt nấu bếp"),
+    ],
+    "C": [
+        ("nước suối Lavie", "chai uống không vị"),
+        ("tương ớt Chinsu", "đồ chấm cay màu đỏ"),
+        ("khăn giấy Pulppy", "thứ lau miệng sau bữa"),
+        ("bánh tráng", "lá mỏng để cuốn"),
+        ("muối i-ốt", "hạt mặn nêm nồi"),
+        ("bình gas", "nhiên liệu cho bếp nấu"),
+        ("chè Thái Nguyên", "lá khô pha ấm nóng"),
+        ("dầu gội Clear", "thứ làm sạch tóc"),
+        ("nước tăng lực Sting", "chai đỏ uống cho tỉnh"),
+        ("hột vịt lộn", "món luộc ăn với rau răm"),
     ],
 }
 PEOPLE = {
@@ -70,6 +83,20 @@ PEOPLE = {
         "chú Hai",
         "anh Lộc",
         "cô Trinh",
+    ],
+    "C": [
+        "chị Hằng",
+        "anh Sơn",
+        "cô Loan",
+        "anh Tài",
+        "chú Chín",
+        "chị Yến",
+        "bé Na",
+        "anh Bình",
+        "bà Sáu",
+        "chú Ba",
+        "anh Nhân",
+        "cô Thủy",
     ],
 }
 WEEKDAYS = ["thứ hai", "thứ ba", "thứ tư", "thứ năm", "thứ sáu", "thứ bảy", "chủ nhật"]
@@ -106,44 +133,58 @@ QUERIES = {
     "supplier": {
         "A": ["{p} mình lấy của ai vậy?", "Ai giao {p} cho tiệm?"],
         "B": ["Mối {p} là ai nhỉ?", "Hết {p} thì gọi ai giao?"],
+        "C": ["Nhà cung cấp {p} là ai?", "{p} đặt bên nào?"],
         "semA": ["{q} mình nhập ở đâu?"],
         "semB": ["Muốn đặt thêm {q} thì gọi ai?"],
+        "semC": ["Ai bỏ mối {q} cho mình?"],
     },
     "price": {
         "A": ["Bán {p} cho khách sỉ bớt bao nhiêu?"],
         "B": ["Khách mua sỉ {p} thì giảm giá sao?"],
+        "C": ["Giá sỉ {p} bớt mấy nghìn?"],
         "semA": ["Người mua nhiều {q} được bớt bao nhiêu?"],
         "semB": ["Bớt cho mối lớn lấy {q} thế nào?"],
+        "semC": ["Lấy số lượng lớn {q} thì chiết khấu ra sao?"],
     },
     "stock": {
         "A": ["{p} còn mấy thùng thì đặt thêm?"],
         "B": ["Khi nào cần nhập lại {p}?"],
+        "C": ["{p} xuống mức nào thì báo?"],
         "semA": ["Mức tối thiểu của {q} là bao nhiêu?"],
         "semB": ["Bao giờ phải gom hàng {q} lại?"],
+        "semC": ["Kho sắp cạn {q} thì làm gì?"],
     },
     "staff": {
         "A": ["{x} làm ca nào?"],
         "B": ["Lịch làm của {x} sao?"],
+        "C": ["{x} đi làm buổi nào?"],
+        "semC": None,
         "semA": None,
         "semB": None,
     },
     "debt": {
         "A": ["{x} được nợ tối đa bao nhiêu?"],
         "B": ["Hạn mức ghi sổ của {x}?"],
+        "C": ["{x} thiếu được tới bao nhiêu?"],
+        "semC": None,
         "semA": None,
         "semB": None,
     },
     "customer": {
         "A": ["{x} hay mua gì?"],
         "B": ["{x} thường lấy món nào?"],
+        "C": ["{x} hay ghé mua cái gì?"],
+        "semC": None,
         "semA": None,
         "semB": None,
     },
     "event": {
         "A": ["Ai làm đổ két {p}?"],
         "B": ["Vụ đổ {p} tuần rồi là ai?"],
+        "C": ["Két {p} bị đổ là do ai?"],
         "semA": ["Ai làm vỡ {q} hôm trước?"],
         "semB": ["Chuyện rơi hàng {q} là ai?"],
+        "semC": ["Đứa nào làm hư {q} bữa trước?"],
     },
 }
 NO_MEMORY = {
@@ -158,6 +199,12 @@ NO_MEMORY = {
         "Hôm qua thu được bao nhiêu tiền?",
         "Tồn kho tổng cộng còn bao nhiêu?",
         "Đơn nào lớn nhất hôm nay?",
+    ],
+    "C": [
+        "Chi phí tháng này hết bao nhiêu?",
+        "Sáng nay bán được bao nhiêu?",
+        "Mặt hàng nào sắp hết?",
+        "Tháng này lời hay lỗ?",
     ],
 }
 
