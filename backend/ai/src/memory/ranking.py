@@ -1,8 +1,9 @@
 """Pure rules that rank an owner's memories against a chat message (ADR-0002).
 
-No I/O: the repository loads candidates and their cosine relevance, and this module
-scores the words and orders them, so the ranking is testable without a database and
-the recall benchmark (`evaluation/memory_recall/`) measures the same rule.
+No I/O: the repository loads the owner's memories with their cosine relevance, and
+this module scores the words, picks the candidates and orders them, so the ranking is
+testable without a database and the recall benchmark (`evaluation/memory_recall/`)
+measures the same rule.
 
 A memory ranks by cosine relevance + `LEXICAL_WEIGHT` * its share of the best BM25
 score. BM25 runs over unaccented syllables and adjacent pairs, so "gao" finds "gạo"
@@ -59,18 +60,24 @@ def bm25(text: str, memories: Iterable[tuple[int, str]]) -> dict[int, float]:
     return scores
 
 
-def best_matches(lexical: dict[int, float]) -> list[int]:
-    """The `CANDIDATES` ids with the highest BM25, best first."""
-    return sorted(lexical, key=lexical.__getitem__, reverse=True)[:CANDIDATES]
-
-
 def rank(relevance: dict[int, float], lexical: dict[int, float]) -> list[int]:
-    """Ids of `relevance` best first, by cosine plus the weighted BM25 share."""
+    """Candidate ids best first, by cosine plus the weighted BM25 share.
+
+    `relevance` holds every memory's cosine and `lexical` its BM25 (`bm25`). The
+    candidates are the `CANDIDATES` nearest by cosine and the `CANDIDATES` best by
+    BM25, as the recall benchmark measured.
+    """
     best = max(lexical.values(), default=1.0)
+    candidates = {*_top(relevance), *_top(lexical)}
     return sorted(
-        relevance,
+        candidates,
         key=lambda memory_id: (
             relevance[memory_id] + LEXICAL_WEIGHT * lexical.get(memory_id, 0.0) / best
         ),
         reverse=True,
     )
+
+
+def _top(scores: dict[int, float]) -> list[int]:
+    """The `CANDIDATES` ids with the highest score."""
+    return sorted(scores, key=scores.__getitem__, reverse=True)[:CANDIDATES]

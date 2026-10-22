@@ -23,13 +23,15 @@ def test_no_memories_score_nothing():
     assert ranking.bm25("gạo", []) == {}
 
 
-def test_best_matches_keep_the_candidate_count():
-    lexical = {memory_id: float(memory_id) for memory_id in range(50)}
+def test_only_the_candidates_of_either_channel_rank():
+    relevance = {memory_id: memory_id / 100 for memory_id in range(50)}
+    lexical = {0: 1.0}
 
-    best = ranking.best_matches(lexical)
+    ranked = ranking.rank(relevance, lexical)
 
-    assert len(best) == ranking.CANDIDATES
-    assert best[0] == 49
+    assert len(ranked) == ranking.CANDIDATES + 1
+    assert ranked[0] == 49
+    assert 0 in ranked and 1 not in ranked
 
 
 def test_a_word_match_breaks_a_near_tie_in_cosine():

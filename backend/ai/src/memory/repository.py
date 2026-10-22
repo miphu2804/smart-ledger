@@ -136,8 +136,8 @@ class AgentMemoryRepository:
         loaded MEMORY.md of Cognition's agent memory repo. The search then fills
         `limit` more from the other memories.
 
-        Candidates are the nearest by cosine (the HNSW index serves this) plus the best
-        BM25 matches of `text`, ranked by `ranking.rank`. Decay, importance and use
+        Candidates are the nearest by cosine plus the best BM25 matches of `text`,
+        ranked by `ranking.rank`. Decay, importance and use
         count no longer rank: weighed into every recall they locked onto a few often
         used memories and buried relevant ones (Recall@5 0.28 against 0.86 for this
         rank on real embeddinggemma vectors).
@@ -197,22 +197,10 @@ class AgentMemoryRepository:
         skipped: list[int],
     ) -> list[Row]:
         """The `limit` live memories best matching `query` and `text`, not `skipped`."""
-        pool = (*live, AgentMemory.id.not_in(skipped))
-        nearest = session.scalars(
-            select(AgentMemory.id)
-            .where(*pool)
-            .order_by(AgentMemory.embedding.cosine_distance(query))
-            .limit(ranking.CANDIDATES)
-        ).all()
-        # BM25 needs every live memory's words; summaries keep an owner's count low
-        # (see "Scaling" in ADR-0002 for when this should move into PostgreSQL).
-        lexical = ranking.bm25(
-            text,
-            session.execute(select(AgentMemory.id, AgentMemory.content).where(*pool)),
-        )
-        candidates = {*nearest, *ranking.best_matches(lexical)}
-        if not candidates:
-            return []
+        # Cosine over every live memory, not the HNSW index: PostgreSQL applies the
+        # owner filter after the index's 40 nearest of all owners, so a shop holding
+        # a few percent of the rows got fewer than 20 candidates. BM25 needs every
+        # live memory's words anyway (ADR-0002, "Giới hạn mở rộng").
         rows = {
             row.id: row
             for row in session.execute(
@@ -225,10 +213,11 @@ class AgentMemoryRepository:
                         "relevance"
                     ),
                     AgentMemory.source_conversation_id,
-                ).where(AgentMemory.id.in_(candidates))
+                ).where(*live, AgentMemory.id.not_in(skipped))
             )
         }
         relevance = {memory_id: row.relevance for memory_id, row in rows.items()}
+        lexical = ranking.bm25(text, ((row.id, row.content) for row in rows.values()))
         return [
             rows[memory_id] for memory_id in ranking.rank(relevance, lexical)[:limit]
         ]
