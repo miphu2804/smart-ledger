@@ -384,6 +384,7 @@ class AgentMemoryService:
             list(query[0]),
             self.recall_limit,
             self.preference_limit,
+            message,
         )
 
     async def _extract(

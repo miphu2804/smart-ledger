@@ -111,6 +111,14 @@ So với chế độ `pro` của [Hy Memory](https://github.com/Tencent-Hunyuan/
 - **Hòa giải theo memory giống nhất:** fact mới chưa đặt `replaces` được embed rồi `similar` lấy tối đa 3 memory còn hiệu lực gần nhất cho mỗi fact, với cosine từ 0,6 trở lên, bỏ các memory lượt này đã dùng, và không ghi lần dùng. Ngưỡng đo ngày 2026-10-17 với embeddinggemma trên staging: cặp cùng chủ đề 0,66–0,95, cặp khác chủ đề 0,53–0,67, và fact đổi nhà cung cấp gạo do model trích ra chỉ đạt 0,65 so với fact cũ. Ngưỡng thấp chỉ để chọn ứng viên; model hòa giải mới tách các chuyện khác nhau. Có ứng viên thì một lời gọi model (`MEMORY_RECONCILE_PROMPT`) chọn cho từng fact: `new`, `replaces` một id hoặc `known` (bỏ fact). Code chỉ nhận id model được xem; model lỗi thì lưu fact như cũ. Không có ứng viên thì không gọi model.
 - **Tần suất dùng trong điểm xếp hạng:** trọng số nhân thêm `1 + ln(max(use_count, 1))`, theo strength `(1 + ln(access_count))` của Hy Memory; memory chưa dùng hoặc dùng một lần giữ trọng số cũ. Rủi ro: `use_count` tăng với mọi memory được trả về, kể cả memory ít liên quan lọt vào top 5, nên memory hay dùng tự mạnh dần (30 lần dùng ≈ 4,4 lần).
 
+## Bổ sung: xếp hạng lai thay cho suy giảm
+
+Đo ngày 2026-10-22 trên bench recall (embeddinggemma qua Cloudflare, tập test đọc một lần): công thức `relevance × importance × exp(-0.01 × số ngày) × (1 + ln use_count)` đạt Recall@5 0,284, cosine thuần 0,807. Vì mọi memory trả về đều được tăng `use_count`, vài memory hay dùng tự mạnh dần và đẩy memory liên quan ra khỏi top 5 (rủi ro đã ghi ở mục Hy Memory). Cùng cờ `AGENT_MEMORY_ENABLED`, cùng chờ PO duyệt, không thêm migration:
+
+- **Ứng viên:** 20 memory gần nhất theo cosine (index HNSW) cộng 20 memory khớp tốt nhất theo BM25 của câu hỏi. BM25 tính trong AI service trên âm tiết bỏ dấu và cặp âm tiết liền nhau của chính chủ tiệm, nên "gao" tìm được "gạo" mà không cần `unaccent` hay cấu hình text search tiếng Việt.
+- **Điểm:** `cosine + 0,1 × BM25 / BM25 cao nhất`; Recall@5 0,860 trên cùng bench. Importance, suy giảm và `use_count` không còn tham gia xếp hạng; `last_used_at` và `use_count` vẫn được ghi để chủ tiệm thấy.
+- **Đã kiểm trên PostgreSQL 16 + pgvector:** thứ tự trùng với bench (khác nhau chỉ giữa các memory bằng điểm), p95 mỗi lần `search` dưới 20 ms với tiệm 120 memory. Embedding trong lần kiểm này là bản thay thế, không phải embeddinggemma.
+
 ## Câu hỏi mở trước khi Accepted
 
 - PO: chủ tiệm có cần agent nhớ qua hội thoại không và có cần màn xem/xóa từng memory riêng không (hiện chỉ có biểu tượng ghi nhớ và công tắc bật/tắt)?

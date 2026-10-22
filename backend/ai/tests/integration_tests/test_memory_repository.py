@@ -177,9 +177,7 @@ def age(admin: psycopg.Connection, content: str, days: int) -> None:
     )
 
 
-def test_decay_lets_a_fresh_memory_beat_an_old_one_on_the_same_topic(
-    memory_db,
-) -> None:
+def test_age_does_not_bury_the_closer_memory(memory_db) -> None:
     admin, postgres, ids = memory_db
     memories = AgentMemoryRepository(postgres)
     conversation_id = new_conversation(postgres, ids["user_a"], ids["shop_a"])
@@ -189,13 +187,33 @@ def test_decay_lets_a_fresh_memory_beat_an_old_one_on_the_same_topic(
         conversation_id,
         [memory("gạo chú Tư", 1, 0), memory("gạo cô Ba", 1, 0.2)],
     )
-    # exp(-0.01 * 200) leaves the older, closer fact about 14% of its weight.
     age(admin, "gạo chú Tư", 200)
 
     found = memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 5)
 
-    assert [item.content for item in found] == ["gạo cô Ba", "gạo chú Tư"]
-    assert found[0].relevance < found[1].relevance
+    assert [item.content for item in found] == ["gạo chú Tư", "gạo cô Ba"]
+    assert found[0].relevance > found[1].relevance
+
+
+def test_a_matching_word_lifts_a_memory_the_embedding_ranks_lower(memory_db) -> None:
+    _, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    conversation_id = new_conversation(postgres, ids["user_a"], ids["shop_a"])
+    memories.add(
+        ids["shop_a"],
+        ids["user_a"],
+        conversation_id,
+        [memory("tiền điện tháng trước", 1, 0.3), memory("giao hàng thứ Hai", 1, 0.2)],
+    )
+
+    found = memories.search(
+        ids["shop_a"], ids["user_a"], vector(1, 0), 5, text="tien dien bao nhieu"
+    )
+
+    assert [item.content for item in found] == [
+        "tiền điện tháng trước",
+        "giao hàng thứ Hai",
+    ]
 
 
 def test_old_memories_of_a_chat_day_are_swapped_for_their_summary(memory_db) -> None:
@@ -458,9 +476,7 @@ def test_similar_finds_close_live_memories_without_recording_a_use(
     ).fetchone() == (0,)
 
 
-def test_a_often_used_memory_outranks_an_equally_relevant_unused_one(
-    memory_db,
-) -> None:
+def test_a_often_used_memory_does_not_outrank_a_closer_one(memory_db) -> None:
     admin, postgres, ids = memory_db
     memories = AgentMemoryRepository(postgres)
     conversation_id = new_conversation(postgres, ids["user_a"], ids["shop_a"])
@@ -468,13 +484,13 @@ def test_a_often_used_memory_outranks_an_equally_relevant_unused_one(
         ids["shop_a"],
         ids["user_a"],
         conversation_id,
-        [memory("gạo chú Tư", 1, 0.1), memory("gạo cô Ba", 1, -0.1)],
+        [memory("gạo chú Tư", 1, 0.1), memory("gạo cô Ba", 1, -0.5)],
     )
     admin.execute(
-        "UPDATE agent_memories SET use_count = 20, last_used_at = created_at"
+        "UPDATE agent_memories SET use_count = 30, last_used_at = created_at"
         " WHERE content = 'gạo cô Ba'"
     )
 
     found = memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 5)
 
-    assert [item.content for item in found] == ["gạo cô Ba", "gạo chú Tư"]
+    assert [item.content for item in found] == ["gạo chú Tư", "gạo cô Ba"]

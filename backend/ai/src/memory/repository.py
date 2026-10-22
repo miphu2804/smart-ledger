@@ -1,3 +1,7 @@
+import math
+import re
+import unicodedata
+from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from itertools import groupby
@@ -10,11 +14,9 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
-    Select,
     String,
     Text,
     delete,
-    extract,
     func,
     null,
     or_,
@@ -22,7 +24,8 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.dialects.postgresql import JSONB, insert
-from sqlalchemy.orm import Mapped, load_only, mapped_column
+from sqlalchemy.engine import Row
+from sqlalchemy.orm import Mapped, Session, load_only, mapped_column
 
 from src.infra.postgre_db_client import Base, PostgreDBClient
 from src.utils import SHOP_TIMEZONE
@@ -110,10 +113,11 @@ class MemoryGroup:
 class AgentMemoryRepository:
     """Reads and appends one owner's memories; every statement is scoped to them."""
 
-    # Tencent's decay rate: a memory keeps exp(-0.01) of its weight per day of age.
-    DECAY_PER_DAY = 0.01
-    # Nearest memories by cosine that decay then re-ranks; the HNSW index serves this.
+    # Candidates from each channel: nearest by cosine (the HNSW index serves this)
+    # and best by BM25.
     CANDIDATES = 20
+    # Weight of the BM25 share added to cosine relevance, chosen on the recall bench.
+    LEXICAL_WEIGHT = 0.1
     # Marks a summary, so it is never summarized again.
     SUMMARY_KEY = "summarized_from"
     # Most memories the owner's view lists; the map cannot draw many more, and the
@@ -130,9 +134,9 @@ class AgentMemoryRepository:
         query: list[float],
         limit: int,
         preference_limit: int = 0,
+        text: str = "",
     ) -> list[RecalledMemory]:
-        """The owner's standing preferences, then Tencent's semantic search re-ranked
-        by Tencent's decay.
+        """The owner's standing preferences, then the memories nearest the message.
 
         Up to `preference_limit` live preferences come first, most important and newest
         first, whatever the message: "answer in tables" rarely resembles the question
@@ -140,19 +144,14 @@ class AgentMemoryRepository:
         loaded MEMORY.md of Cognition's agent memory repo. The search then fills
         `limit` more from the other memories.
 
-        "Agent Long-Term Memory", Feature Overview: skip expired rows, take the nearest
-        by cosine distance with relevance as 1 - distance, and weigh each memory by
-        importance * exp(-0.01 * age in days). Tencent shows the two as separate
-        queries; here the decay weight multiplies the relevance of the cosine
-        candidates, so an old or minor memory yields to a fresh, important one about
-        the same thing. The shop and user replace Tencent's agent_id filter, and both
-        come from the request.
-
-        Departures from Tencent, after Sakana Chat's "My Fish", Generative Agents and
-        Hy Memory's strength: age counts from the last recall, not from creation, so a
-        memory the owner keeps relying on stays fresh; a memory recalled often weighs
-        more, by 1 + ln(use count); and the memories returned have their use
-        recorded, which the owner sees. Superseded memories are skipped.
+        Candidates are the nearest by cosine plus the best BM25 matches of `text` over
+        unaccented syllables, so "gao" finds "gạo" even when the embedding misses it.
+        Each is ranked by cosine relevance + LEXICAL_WEIGHT * its BM25 share of the best
+        BM25. Decay, importance and use count no longer rank: weighed into every
+        recall they locked onto a few often used memories and buried relevant ones
+        (Recall@5 0.28 against 0.86 for this rank on real embeddinggemma vectors).
+        The memories returned still have their use recorded, which the owner sees.
+        Superseded and expired memories are skipped.
         """
         live = self._live(shop_id, user_id)
         preferences = (
@@ -170,9 +169,9 @@ class AgentMemoryRepository:
         )
         with self.postgres.session() as session:
             rows = session.execute(preferences).all() if preference_limit else []
-            rows += session.execute(
-                self._searched(live, query, limit, [row.id for row in rows])
-            ).all()
+            rows += self._searched(
+                session, live, query, text, limit, [row.id for row in rows]
+            )
             if rows:
                 session.execute(
                     update(AgentMemory)
@@ -198,49 +197,88 @@ class AgentMemoryRepository:
         ]
 
     def _searched(
-        self, live: tuple, query: list[float], limit: int, skipped: list[int]
-    ) -> Select:
-        """The `limit` live memories nearest `query` after decay, minus `skipped`."""
-        distance = AgentMemory.embedding.cosine_distance(query)
-        candidates = (
+        self,
+        session: Session,
+        live: tuple,
+        query: list[float],
+        text: str,
+        limit: int,
+        skipped: list[int],
+    ) -> list[Row]:
+        """The `limit` live memories best matching `query` and `text`, not `skipped`."""
+        pool = (*live, AgentMemory.id.not_in(skipped))
+        nearest = session.scalars(
+            select(AgentMemory.id)
+            .where(*pool)
+            .order_by(AgentMemory.embedding.cosine_distance(query))
+            .limit(self.CANDIDATES)
+        ).all()
+        lexical = self._bm25(
+            text,
+            session.execute(select(AgentMemory.id, AgentMemory.content).where(*pool)),
+        )
+        matched = sorted(lexical, key=lexical.__getitem__, reverse=True)
+        candidates = {*nearest, *matched[: self.CANDIDATES]}
+        if not candidates:
+            return []
+        rows = session.execute(
             select(
                 AgentMemory.id,
                 AgentMemory.content,
                 AgentMemory.memory_type,
                 AgentMemory.created_at,
-                func.coalesce(AgentMemory.last_used_at, AgentMemory.created_at).label(
-                    "touched_at"
-                ),
-                AgentMemory.importance,
-                AgentMemory.use_count,
-                (1 - distance).label("relevance"),
+                (1 - AgentMemory.embedding.cosine_distance(query)).label("relevance"),
                 AgentMemory.source_conversation_id,
-            )
-            .where(*live, AgentMemory.id.not_in(skipped))
-            .order_by(distance)
-            .limit(self.CANDIDATES)
-            .subquery()
+            ).where(AgentMemory.id.in_(candidates))
+        ).all()
+        best = max(lexical.values(), default=1.0)
+        ranked = sorted(
+            rows,
+            key=lambda row: (
+                row.relevance + self.LEXICAL_WEIGHT * lexical.get(row.id, 0.0) / best
+            ),
+            reverse=True,
         )
-        age_days = extract("epoch", func.now() - candidates.c.touched_at) / 86400
-        # A memory never or once recalled keeps its weight, as in Hy Memory's strength.
-        frequency = 1 + func.ln(func.greatest(candidates.c.use_count, 1))
-        weight = (
-            candidates.c.importance
-            * func.exp(-self.DECAY_PER_DAY * age_days)
-            * frequency
+        return ranked[:limit]
+
+    @classmethod
+    def _bm25(cls, text: str, memories) -> dict[int, float]:
+        """BM25 of `text` against each memory, over the owner's memories alone.
+
+        Terms are unaccented syllables and adjacent syllable pairs, so "gao" matches
+        "gạo" and "tiền điện" outranks a memory that only says "tiền".
+        """
+        docs = {memory_id: cls._terms(content) for memory_id, content in memories}
+        if not docs:
+            return {}
+        average = sum(len(terms) for terms in docs.values()) / len(docs)
+        frequency = Counter(term for terms in docs.values() for term in set(terms))
+        k1, b = 1.2, 0.75
+        scores = {}
+        for memory_id, terms in docs.items():
+            counts = Counter(terms)
+            score = 0.0
+            for term in dict.fromkeys(cls._terms(text)):
+                if counts[term]:
+                    df = frequency[term]
+                    idf = math.log(1 + (len(docs) - df + 0.5) / (df + 0.5))
+                    norm = 1 - b + b * len(terms) / average
+                    score += idf * counts[term] * (k1 + 1) / (counts[term] + k1 * norm)
+            if score > 0:
+                scores[memory_id] = score
+        return scores
+
+    @staticmethod
+    def _terms(text: str) -> list[str]:
+        """Lowercased unaccented syllables, then each adjacent pair joined by "_"."""
+        text = text.replace("đ", "d").replace("Đ", "D")
+        plain = "".join(
+            c
+            for c in unicodedata.normalize("NFD", text)
+            if unicodedata.category(c) != "Mn"
         )
-        return (
-            select(
-                candidates.c.id,
-                candidates.c.content,
-                candidates.c.memory_type,
-                candidates.c.created_at,
-                candidates.c.relevance,
-                candidates.c.source_conversation_id,
-            )
-            .order_by((candidates.c.relevance * weight).desc())
-            .limit(limit)
-        )
+        syllables = re.findall(r"\w+", plain.lower())
+        return syllables + [f"{a}_{b}" for a, b in zip(syllables, syllables[1:])]
 
     @staticmethod
     def _live(shop_id: int, user_id: int) -> tuple:
