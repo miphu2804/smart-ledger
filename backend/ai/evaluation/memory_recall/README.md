@@ -14,7 +14,7 @@ Test split, read once, Recall@5 on the 2374 queries that need a memory:
 
 - With real embeddings the new ranking beats cosine by +0.053 (paired bootstrap 95% CI 0.042–0.064). By query form: exact words 0.951, unaccented 0.899, reworded 0.627; stale-only 0.039 against 0.221 before.
 - The old ranking raised `use_count` on every memory it returned, so a few often used memories won every turn: a fact at cosine 0.85 lost to unrelated ones at 0.58 used 30 times.
-- `e2e.py` runs the real `search` on PostgreSQL 16 + pgvector 0.8. It returns the same top 5 as the bench's `rank()` on 97.7–98.0% of queries; every other query has the same scores in another order (ties). p95 latency is 18 ms or less per `search` on shops with 120+ memories. Its stand-in embedder (hashed character 3-grams) checks the code, not embedding quality.
+- `e2e.py` runs the real `search` on PostgreSQL 16 + pgvector 0.8. It returns the same top 5 as the bench's `rank()` on 97.7–98.7% of queries; every other query has the same scores in another order (ties). p95 latency is 18 ms or less per `search` on shops with 120+ memories. Its stand-in embedder (hashed character 3-grams) checks the code, not embedding quality.
 - The pre-registered winner (`hybrid rrf k10, floor 0.60`) failed on test (0.230): its floor grid was tuned on simulated cosines, and embeddinggemma's scale is lower. The ranking that shipped is the best dev config without a floor, reported on test beside it as `PREREG.md` required. A floor needs a new round on fresh seeds.
 
 ## Files
@@ -51,7 +51,7 @@ POSTGRES_TEST_URL=postgresql://user:pass@localhost:5432/db \
 
 ## Maintaining it
 
-- **Changing the ranking in `src/memory/repository.py`:** mirror it as a `Config` in `systems.py`, run `e2e.py --hybrid` and keep parity at 100% by score, then rerun the grid on `--dense cloudflare`.
+- **Changing the ranking in `src/memory/ranking.py`:** mirror it as a `Config` in `systems.py`, run `e2e.py --hybrid` and keep parity at 100% by score, then rerun the grid on `--dense cloudflare`.
 - **A new grid round:** the test split (seeds 1001–1008, lexicon half B) has been read. Add fresh seeds and a new lexicon half in `common.SPLITS` and write a new `PREREG.md` before running `--test`.
 - **A new embedder:** add a dense class with `scores(query, memories, by_id)` and select it in `autoresearch.make_dense`. Changing the production model also means re-embedding `agent_memories` (see the AI README).
 - The data is synthetic Vietnamese shop facts. No real owner's memories were used; the numbers are not product behaviour until the PO approves long-term memory.

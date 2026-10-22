@@ -118,6 +118,8 @@ So với chế độ `pro` của [Hy Memory](https://github.com/Tencent-Hunyuan/
 - **Ứng viên:** 20 memory gần nhất theo cosine (index HNSW) cộng 20 memory khớp tốt nhất theo BM25 của câu hỏi. BM25 tính trong AI service trên âm tiết bỏ dấu và cặp âm tiết liền nhau của chính chủ tiệm, nên "gao" tìm được "gạo" mà không cần `unaccent` hay cấu hình text search tiếng Việt.
 - **Điểm:** `cosine + 0,1 × BM25 / BM25 cao nhất`; Recall@5 0,860 trên cùng bench. Importance, suy giảm và `use_count` không còn tham gia xếp hạng; `last_used_at` và `use_count` vẫn được ghi để chủ tiệm thấy.
 - **Đã kiểm trên PostgreSQL 16 + pgvector:** thứ tự trùng với bench (khác nhau chỉ giữa các memory bằng điểm), p95 mỗi lần `search` dưới 20 ms với tiệm 120 memory. Embedding trong lần kiểm này là bản thay thế, không phải embeddinggemma.
+- **Vị trí code:** công thức nằm trong `backend/ai/src/memory/ranking.py`, một module thuần không I/O như `restock/policy.py` và `drafts/matching.py`; `AgentMemoryRepository.search` chỉ nạp ứng viên và điểm cosine rồi gọi nó. Bench trong `backend/ai/evaluation/memory_recall/` đo đúng quy tắc này qua `e2e.py`.
+- **Giới hạn mở rộng:** mỗi lần `search`, BM25 đọc nội dung mọi memory còn hiệu lực của chủ tiệm, nên thời gian tăng theo số memory (p50 khoảng 6 ms ở 15 memory, 10 ms ở 130). Việc tóm tắt memory cũ giữ con số này thấp. Ngoại suy tuyến tính (ước tính, chưa đo) cho khoảng 50 ms ở 1.000 memory. Khi một chủ tiệm vượt mức đó hoặc p95 vượt ngân sách, chuyển BM25 vào PostgreSQL: thêm cột `tsvector` trên nội dung đã bỏ dấu cùng index GIN (cần migration), giữ nguyên công thức điểm.
 
 ## Câu hỏi mở trước khi Accepted
 

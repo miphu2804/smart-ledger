@@ -1,7 +1,3 @@
-import math
-import re
-import unicodedata
-from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from itertools import groupby
@@ -28,6 +24,7 @@ from sqlalchemy.engine import Row
 from sqlalchemy.orm import Mapped, Session, load_only, mapped_column
 
 from src.infra.postgre_db_client import Base, PostgreDBClient
+from src.memory import ranking
 from src.utils import SHOP_TIMEZONE
 
 # Size of agent_memories.embedding, fixed by its migration; every embedder is cut to it.
@@ -113,11 +110,6 @@ class MemoryGroup:
 class AgentMemoryRepository:
     """Reads and appends one owner's memories; every statement is scoped to them."""
 
-    # Candidates from each channel: nearest by cosine (the HNSW index serves this)
-    # and best by BM25.
-    CANDIDATES = 20
-    # Weight of the BM25 share added to cosine relevance, chosen on the recall bench.
-    LEXICAL_WEIGHT = 0.1
     # Marks a summary, so it is never summarized again.
     SUMMARY_KEY = "summarized_from"
     # Most memories the owner's view lists; the map cannot draw many more, and the
@@ -144,12 +136,11 @@ class AgentMemoryRepository:
         loaded MEMORY.md of Cognition's agent memory repo. The search then fills
         `limit` more from the other memories.
 
-        Candidates are the nearest by cosine plus the best BM25 matches of `text` over
-        unaccented syllables, so "gao" finds "gạo" even when the embedding misses it.
-        Each is ranked by cosine relevance + LEXICAL_WEIGHT * its BM25 share of the best
-        BM25. Decay, importance and use count no longer rank: weighed into every
-        recall they locked onto a few often used memories and buried relevant ones
-        (Recall@5 0.28 against 0.86 for this rank on real embeddinggemma vectors).
+        Candidates are the nearest by cosine (the HNSW index serves this) plus the best
+        BM25 matches of `text`, ranked by `ranking.rank`. Decay, importance and use
+        count no longer rank: weighed into every recall they locked onto a few often
+        used memories and buried relevant ones (Recall@5 0.28 against 0.86 for this
+        rank on real embeddinggemma vectors).
         The memories returned still have their use recorded, which the owner sees.
         Superseded and expired memories are skipped.
         """
@@ -211,74 +202,36 @@ class AgentMemoryRepository:
             select(AgentMemory.id)
             .where(*pool)
             .order_by(AgentMemory.embedding.cosine_distance(query))
-            .limit(self.CANDIDATES)
+            .limit(ranking.CANDIDATES)
         ).all()
-        lexical = self._bm25(
+        # BM25 needs every live memory's words; summaries keep an owner's count low
+        # (see "Scaling" in ADR-0002 for when this should move into PostgreSQL).
+        lexical = ranking.bm25(
             text,
             session.execute(select(AgentMemory.id, AgentMemory.content).where(*pool)),
         )
-        matched = sorted(lexical, key=lexical.__getitem__, reverse=True)
-        candidates = {*nearest, *matched[: self.CANDIDATES]}
+        candidates = {*nearest, *ranking.best_matches(lexical)}
         if not candidates:
             return []
-        rows = session.execute(
-            select(
-                AgentMemory.id,
-                AgentMemory.content,
-                AgentMemory.memory_type,
-                AgentMemory.created_at,
-                (1 - AgentMemory.embedding.cosine_distance(query)).label("relevance"),
-                AgentMemory.source_conversation_id,
-            ).where(AgentMemory.id.in_(candidates))
-        ).all()
-        best = max(lexical.values(), default=1.0)
-        ranked = sorted(
-            rows,
-            key=lambda row: (
-                row.relevance + self.LEXICAL_WEIGHT * lexical.get(row.id, 0.0) / best
-            ),
-            reverse=True,
-        )
-        return ranked[:limit]
-
-    @classmethod
-    def _bm25(cls, text: str, memories) -> dict[int, float]:
-        """BM25 of `text` against each memory, over the owner's memories alone.
-
-        Terms are unaccented syllables and adjacent syllable pairs, so "gao" matches
-        "gạo" and "tiền điện" outranks a memory that only says "tiền".
-        """
-        docs = {memory_id: cls._terms(content) for memory_id, content in memories}
-        if not docs:
-            return {}
-        average = sum(len(terms) for terms in docs.values()) / len(docs)
-        frequency = Counter(term for terms in docs.values() for term in set(terms))
-        k1, b = 1.2, 0.75
-        scores = {}
-        for memory_id, terms in docs.items():
-            counts = Counter(terms)
-            score = 0.0
-            for term in dict.fromkeys(cls._terms(text)):
-                if counts[term]:
-                    df = frequency[term]
-                    idf = math.log(1 + (len(docs) - df + 0.5) / (df + 0.5))
-                    norm = 1 - b + b * len(terms) / average
-                    score += idf * counts[term] * (k1 + 1) / (counts[term] + k1 * norm)
-            if score > 0:
-                scores[memory_id] = score
-        return scores
-
-    @staticmethod
-    def _terms(text: str) -> list[str]:
-        """Lowercased unaccented syllables, then each adjacent pair joined by "_"."""
-        text = text.replace("đ", "d").replace("Đ", "D")
-        plain = "".join(
-            c
-            for c in unicodedata.normalize("NFD", text)
-            if unicodedata.category(c) != "Mn"
-        )
-        syllables = re.findall(r"\w+", plain.lower())
-        return syllables + [f"{a}_{b}" for a, b in zip(syllables, syllables[1:])]
+        rows = {
+            row.id: row
+            for row in session.execute(
+                select(
+                    AgentMemory.id,
+                    AgentMemory.content,
+                    AgentMemory.memory_type,
+                    AgentMemory.created_at,
+                    (1 - AgentMemory.embedding.cosine_distance(query)).label(
+                        "relevance"
+                    ),
+                    AgentMemory.source_conversation_id,
+                ).where(AgentMemory.id.in_(candidates))
+            )
+        }
+        relevance = {memory_id: row.relevance for memory_id, row in rows.items()}
+        return [
+            rows[memory_id] for memory_id in ranking.rank(relevance, lexical)[:limit]
+        ]
 
     @staticmethod
     def _live(shop_id: int, user_id: int) -> tuple:
