@@ -1,0 +1,6 @@
+{
+  "name": "smartledger-eval",
+  "private": true,
+  "type": "module",
+  "description": "Offline evaluation harness for the voice-order resolver. No dependencies: it runs on Node type stripping."
+}

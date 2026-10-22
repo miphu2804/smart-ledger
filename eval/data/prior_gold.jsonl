@@ -1,0 +1,260 @@
+{"id": "th-001", "split": "test", "catalog": "tap_hoa", "category": "simple", "text": "lấy ba chai nước mắm nam ngư năm trăm ml nha em", "lines": [{"product_id": 103, "qty": 3}], "expenses": []}
+{"id": "th-002", "split": "dev", "catalog": "tap_hoa", "category": "simple", "text": "ban 2 bao gao st25 nha", "lines": [{"product_id": 101, "qty": 2}], "expenses": []}
+{"id": "th-003", "split": "test", "catalog": "tap_hoa", "category": "simple", "text": "cho anh 2 lon coca cola nhé", "lines": [{"product_id": 115, "qty": 2}], "expenses": []}
+{"id": "th-004", "split": "test", "catalog": "tap_hoa", "category": "simple", "text": "ghi cho chị hai gói omachi sườn hầm", "lines": [{"product_id": 107, "qty": 2}], "expenses": []}
+{"id": "th-005", "split": "test", "catalog": "tap_hoa", "category": "simple", "text": "tính cho anh năm vỉ trứng gà vỉ mười", "lines": [{"product_id": 109, "qty": 5}], "expenses": [], "note": "vỉ mười là quy cách 10 quả nằm trong tên sản phẩm, không phải số lượng"}
+{"id": "th-006", "split": "test", "catalog": "tap_hoa", "category": "simple", "text": "khach lay mot loc giay ve sinh pulppy", "lines": [{"product_id": 129, "qty": 1}], "expenses": []}
+{"id": "th-007", "split": "dev", "catalog": "tap_hoa", "category": "simple", "text": "ba chai sting dâu nha", "lines": [{"product_id": 117, "qty": 3}], "expenses": []}
+{"id": "th-008", "split": "test", "catalog": "tap_hoa", "category": "simple", "text": "cho chị bốn gói bột ngọt ajinomoto bốn trăm gam", "lines": [{"product_id": 113, "qty": 4}], "expenses": []}
+{"id": "th-009", "split": "test", "catalog": "tap_hoa", "category": "simple", "text": "lấy hai hộp chocopie mười hai cái", "lines": [{"product_id": 124, "qty": 2}], "expenses": [], "note": "mười hai cái là quy cách hộp, không phải số lượng"}
+{"id": "th-010", "split": "dev", "catalog": "tap_hoa", "category": "simple", "text": "một bịch bột giặt omo tám trăm gam", "lines": [{"product_id": 125, "qty": 1}], "expenses": []}
+{"id": "th-011", "split": "dev", "catalog": "tap_hoa", "category": "simple", "text": "ghi ba chai nước rửa chén sunlight cho chị", "lines": [{"product_id": 126, "qty": 3}], "expenses": []}
+{"id": "th-012", "split": "test", "catalog": "tap_hoa", "category": "simple", "text": "ban 2 tuyp kem danh rang p s", "lines": [{"product_id": 127, "qty": 2}], "expenses": []}
+{"id": "th-013", "split": "dev", "catalog": "tap_hoa", "category": "simple", "text": "năm cây xúc xích vissan đi em", "lines": [{"product_id": 130, "qty": 5}], "expenses": []}
+{"id": "th-014", "split": "test", "catalog": "tap_hoa", "category": "partial_name", "text": "hai ký đường nha em", "lines": [{"product_id": 111, "qty": 2}], "expenses": []}
+{"id": "th-015", "split": "test", "catalog": "tap_hoa", "category": "partial_name", "text": "lấy bao gạo st thôi", "lines": [{"product_id": 101, "qty": 1}], "expenses": []}
+{"id": "th-016", "split": "test", "catalog": "tap_hoa", "category": "partial_name", "text": "hai bao gạo tám", "lines": [{"product_id": 102, "qty": 2}], "expenses": []}
+{"id": "th-017", "split": "test", "catalog": "tap_hoa", "category": "partial_name", "text": "2 gói hảo hảo", "lines": [{"product_id": 106, "qty": 2}], "expenses": []}
+{"id": "th-018", "split": "dev", "catalog": "tap_hoa", "category": "partial_name", "text": "mì ly lẩu thái đi em", "lines": [{"product_id": 108, "qty": 1}], "expenses": []}
+{"id": "th-019", "split": "test", "catalog": "tap_hoa", "category": "partial_name", "text": "một omachi sườn hầm nha", "lines": [{"product_id": 107, "qty": 1}], "expenses": []}
+{"id": "th-020", "split": "dev", "catalog": "tap_hoa", "category": "partial_name", "text": "lay chai nam ngu", "lines": [{"product_id": 103, "qty": 1}], "expenses": []}
+{"id": "th-021", "split": "test", "catalog": "tap_hoa", "category": "partial_name", "text": "ba chai maggi", "lines": [{"product_id": 105, "qty": 3}], "expenses": []}
+{"id": "th-022", "split": "test", "catalog": "tap_hoa", "category": "partial_name", "text": "lấy một lon ông thọ", "lines": [{"product_id": 123, "qty": 1}], "expenses": []}
+{"id": "th-023", "split": "dev", "catalog": "tap_hoa", "category": "partial_name", "text": "2 hop vinamilk nha", "lines": [{"product_id": 122, "qty": 2}], "expenses": []}
+{"id": "th-024", "split": "test", "catalog": "tap_hoa", "category": "partial_name", "text": "ba vỉ trứng vịt", "lines": [{"product_id": 110, "qty": 3}], "expenses": []}
+{"id": "th-025", "split": "dev", "catalog": "tap_hoa", "category": "partial_name", "text": "hai lon bia sài gòn", "lines": [{"product_id": 121, "qty": 2}], "expenses": []}
+{"id": "th-026", "split": "test", "catalog": "tap_hoa", "category": "partial_name", "text": "ba tuýp kem đánh răng", "lines": [{"product_id": 127, "qty": 3}], "expenses": []}
+{"id": "th-027", "split": "dev", "catalog": "tap_hoa", "category": "partial_name", "text": "một cây xúc xích", "lines": [{"product_id": 130, "qty": 1}], "expenses": []}
+{"id": "th-028", "split": "dev", "catalog": "tap_hoa", "category": "reorder", "text": "nước mắm nam ngư hai chai", "lines": [{"product_id": 103, "qty": 2}], "expenses": []}
+{"id": "th-029", "split": "test", "catalog": "tap_hoa", "category": "reorder", "text": "trứng gà hai vỉ thôi", "lines": [{"product_id": 109, "qty": 2}], "expenses": []}
+{"id": "th-030", "split": "test", "catalog": "tap_hoa", "category": "reorder", "text": "dầu ăn neptune một chai", "lines": [{"product_id": 114, "qty": 1}], "expenses": []}
+{"id": "th-031", "split": "test", "catalog": "tap_hoa", "category": "reorder", "text": "sting dâu ba chai", "lines": [{"product_id": 117, "qty": 3}], "expenses": []}
+{"id": "th-032", "split": "test", "catalog": "tap_hoa", "category": "reorder", "text": "bia tiger bốn lon", "lines": [{"product_id": 120, "qty": 4}], "expenses": []}
+{"id": "th-033", "split": "dev", "catalog": "tap_hoa", "category": "reorder", "text": "mì hảo hảo năm gói", "lines": [{"product_id": 106, "qty": 5}], "expenses": []}
+{"id": "th-034", "split": "test", "catalog": "tap_hoa", "category": "reorder", "text": "giấy vệ sinh pulppy hai lốc", "lines": [{"product_id": 129, "qty": 2}], "expenses": []}
+{"id": "th-035", "split": "dev", "catalog": "tap_hoa", "category": "reorder", "text": "gạo st25 hai bao", "lines": [{"product_id": 101, "qty": 2}], "expenses": []}
+{"id": "th-036", "split": "test", "catalog": "tap_hoa", "category": "reorder", "text": "đường trắng hai ký", "lines": [{"product_id": 111, "qty": 2}], "expenses": []}
+{"id": "th-037", "split": "dev", "catalog": "tap_hoa", "category": "reorder", "text": "xúc xích vissan bốn cây", "lines": [{"product_id": 130, "qty": 4}], "expenses": []}
+{"id": "th-038", "split": "test", "catalog": "tap_hoa", "category": "no_connector", "text": "hai gói mì hảo hảo một chai nước mắm nam ngư bốn lon coca", "lines": [{"product_id": 106, "qty": 2}, {"product_id": 103, "qty": 1}, {"product_id": 115, "qty": 4}], "expenses": []}
+{"id": "th-039", "split": "test", "catalog": "tap_hoa", "category": "no_connector", "text": "ba chai sting dâu hai lốc giấy vệ sinh năm vỉ trứng vịt", "lines": [{"product_id": 117, "qty": 3}, {"product_id": 129, "qty": 2}, {"product_id": 110, "qty": 5}], "expenses": []}
+{"id": "th-040", "split": "dev", "catalog": "tap_hoa", "category": "no_connector", "text": "một gói bột ngọt hai hộp chocopie ba chai aquafina", "lines": [{"product_id": 113, "qty": 1}, {"product_id": 124, "qty": 2}, {"product_id": 119, "qty": 3}], "expenses": []}
+{"id": "th-041", "split": "test", "catalog": "tap_hoa", "category": "no_connector", "text": "hai lon bia tiger ba lon bia sài gòn", "lines": [{"product_id": 120, "qty": 2}, {"product_id": 121, "qty": 3}], "expenses": []}
+{"id": "th-042", "split": "test", "catalog": "tap_hoa", "category": "no_connector", "text": "năm vỉ trứng gà bốn cây xúc xích hai ký đường", "lines": [{"product_id": 109, "qty": 5}, {"product_id": 130, "qty": 4}, {"product_id": 111, "qty": 2}], "expenses": []}
+{"id": "th-043", "split": "dev", "catalog": "tap_hoa", "category": "no_connector", "text": "bốn tuýp kem đánh răng hai chai dầu gội clear một chai sunlight", "lines": [{"product_id": 127, "qty": 4}, {"product_id": 128, "qty": 2}, {"product_id": 126, "qty": 1}], "expenses": []}
+{"id": "th-044", "split": "dev", "catalog": "tap_hoa", "category": "no_connector", "text": "gạo tám hai bao nước suối năm chai", "lines": [{"product_id": 102, "qty": 2}, {"product_id": 119, "qty": 5}], "expenses": []}
+{"id": "th-045", "split": "dev", "catalog": "tap_hoa", "category": "no_connector", "text": "một chai nước tương maggi hai gói omachi", "lines": [{"product_id": 105, "qty": 1}, {"product_id": 107, "qty": 2}], "expenses": []}
+{"id": "th-046", "split": "dev", "catalog": "tap_hoa", "category": "no_connector", "text": "ba lốc pulppy hai lon sữa đặc", "lines": [{"product_id": 129, "qty": 3}, {"product_id": 123, "qty": 2}], "expenses": []}
+{"id": "th-047", "split": "test", "catalog": "tap_hoa", "category": "no_connector", "text": "năm lon coca hai lon pepsi ba chai sting vàng", "lines": [{"product_id": 115, "qty": 5}, {"product_id": 116, "qty": 2}, {"product_id": 118, "qty": 3}], "expenses": []}
+{"id": "th-048", "split": "test", "catalog": "tap_hoa", "category": "no_connector", "text": "một bao gạo st25 hai hộp chocopie bốn cây xúc xích", "lines": [{"product_id": 101, "qty": 1}, {"product_id": 124, "qty": 2}, {"product_id": 130, "qty": 4}], "expenses": []}
+{"id": "th-049", "split": "dev", "catalog": "tap_hoa", "category": "no_connector", "text": "ba gói hảo hảo hai vỉ trứng vịt một lốc giấy", "lines": [{"product_id": 106, "qty": 3}, {"product_id": 110, "qty": 2}, {"product_id": 129, "qty": 1}], "expenses": []}
+{"id": "th-050", "split": "test", "catalog": "tap_hoa", "category": "filler", "text": "ờ cho chị lấy à hai gói mì hảo hảo nha em", "lines": [{"product_id": 106, "qty": 2}], "expenses": []}
+{"id": "th-051", "split": "test", "catalog": "tap_hoa", "category": "filler", "text": "ừm à thôi cho anh một lon bia tiger nha", "lines": [{"product_id": 120, "qty": 1}], "expenses": []}
+{"id": "th-052", "split": "dev", "catalog": "tap_hoa", "category": "filler", "text": "ờ em ơi ghi cho chị ba chai nước suối nhé", "lines": [{"product_id": 119, "qty": 3}], "expenses": []}
+{"id": "th-053", "split": "dev", "catalog": "tap_hoa", "category": "filler", "text": "à ờ cái này nữa, hai bịch bột giặt omo rồi xong", "lines": [{"product_id": 125, "qty": 2}], "expenses": []}
+{"id": "th-054", "split": "test", "catalog": "tap_hoa", "category": "filler", "text": "ơi chú ơi cho cháu năm gói omachi nha chú", "lines": [{"product_id": 107, "qty": 5}], "expenses": []}
+{"id": "th-055", "split": "test", "catalog": "tap_hoa", "category": "filler", "text": "ờ thì bán chị cái sunlight hai chai đi", "lines": [{"product_id": 126, "qty": 2}], "expenses": []}
+{"id": "th-056", "split": "test", "catalog": "tap_hoa", "category": "filler", "text": "dạ ừm cho con năm cây xúc xích vissan à", "lines": [{"product_id": 130, "qty": 5}], "expenses": []}
+{"id": "th-057", "split": "test", "catalog": "tap_hoa", "category": "filler", "text": "ờ để chị xem à có đường không, hai ký đường nha", "lines": [{"product_id": 111, "qty": 2}], "expenses": []}
+{"id": "th-058", "split": "dev", "catalog": "tap_hoa", "category": "filler", "text": "mmm à lấy cho chị một chai nước mắm nam ngư đi", "lines": [{"product_id": 103, "qty": 1}], "expenses": []}
+{"id": "th-059", "split": "test", "catalog": "tap_hoa", "category": "filler", "text": "à ừ bán thêm hai vỉ trứng gà nha em", "lines": [{"product_id": 109, "qty": 2}], "expenses": []}
+{"id": "th-060", "split": "dev", "catalog": "tap_hoa", "category": "filler", "text": "ờ ờ dạ cho anh ba lon ông thọ luôn", "lines": [{"product_id": 123, "qty": 3}], "expenses": []}
+{"id": "th-061", "split": "test", "catalog": "tap_hoa", "category": "out_of_catalog", "text": "lấy ba bịch bánh tráng với một chai nước mắm nam ngư", "lines": [{"product_id": null, "name": "bánh tráng", "qty": 3}, {"product_id": 103, "qty": 1}], "expenses": []}
+{"id": "th-062", "split": "test", "catalog": "tap_hoa", "category": "out_of_catalog", "text": "thêm dưa hấu không em", "lines": [{"product_id": null, "name": "dưa hấu", "qty": null}], "expenses": []}
+{"id": "th-063", "split": "test", "catalog": "tap_hoa", "category": "out_of_catalog", "text": "cho anh một gói kẹo dẻo", "lines": [{"product_id": null, "name": "kẹo dẻo", "qty": 1}], "expenses": []}
+{"id": "th-064", "split": "dev", "catalog": "tap_hoa", "category": "out_of_catalog", "text": "hai chai nước giặt ariel ơi", "lines": [{"product_id": null, "name": "nước giặt ariel", "qty": 2}], "expenses": []}
+{"id": "th-065", "split": "dev", "catalog": "tap_hoa", "category": "out_of_catalog", "text": "bán chị hai con cá basa với năm bó hành lá", "lines": [{"product_id": null, "name": "cá basa", "qty": 2}, {"product_id": null, "name": "hành lá", "qty": 5}], "expenses": []}
+{"id": "th-066", "split": "dev", "catalog": "tap_hoa", "category": "out_of_catalog", "text": "bánh pía hai cái, sting vàng ba chai", "lines": [{"product_id": null, "name": "bánh pía", "qty": 2}, {"product_id": 118, "qty": 3}], "expenses": []}
+{"id": "th-067", "split": "test", "catalog": "tap_hoa", "category": "out_of_catalog", "text": "hai cây kem que nha em, thêm hai lon coca", "lines": [{"product_id": null, "name": "kem que", "qty": 2}, {"product_id": 115, "qty": 2}], "expenses": []}
+{"id": "th-068", "split": "test", "catalog": "tap_hoa", "category": "out_of_catalog", "text": "hạt nêm mười gói thôi", "lines": [{"product_id": null, "name": "hạt nêm", "qty": 10}], "expenses": []}
+{"id": "th-069", "split": "dev", "catalog": "tap_hoa", "category": "ambiguous", "text": "bán chị hai bao gạo", "lines": [{"product_id": null, "options": [101, 102], "qty": 2}], "expenses": [], "note": "gạo không kèm tên: ST25 hay tám thơm, cần hỏi lại chủ"}
+{"id": "th-070", "split": "test", "catalog": "tap_hoa", "category": "ambiguous", "text": "lấy chai nước mắm", "lines": [{"product_id": null, "options": [103, 104], "qty": 1}], "expenses": [], "note": "nước mắm không kèm hiệu: Nam Ngư hay Chinsu"}
+{"id": "th-071", "split": "test", "catalog": "tap_hoa", "category": "ambiguous", "text": "ba lon bia", "lines": [{"product_id": null, "options": [120, 121], "qty": 3}], "expenses": [], "note": "Tiger hay Sài Gòn, cùng là lon 330ml"}
+{"id": "th-072", "split": "dev", "catalog": "tap_hoa", "category": "ambiguous", "text": "một chai dầu", "lines": [{"product_id": null, "options": [114, 128], "qty": 1}], "expenses": [], "note": "dầu ăn hay dầu gội"}
+{"id": "th-073", "split": "test", "catalog": "tap_hoa", "category": "ambiguous", "text": "hai sữa nha em", "lines": [{"product_id": null, "options": [122, 123], "qty": 2}], "expenses": [], "note": "sữa tươi hộp hay sữa đặc lon"}
+{"id": "th-074", "split": "dev", "catalog": "tap_hoa", "category": "ambiguous", "text": "bốn gói mì", "lines": [{"product_id": null, "options": [106, 107], "qty": 4}], "expenses": [], "note": "Hảo Hảo hay Omachi, mì ly không tính vì đơn vị là ly"}
+{"id": "th-075", "split": "test", "catalog": "tap_hoa", "category": "ambiguous", "text": "năm sting", "lines": [{"product_id": null, "options": [117, 118], "qty": 5}], "expenses": [], "note": "Sting dâu hay Sting vàng"}
+{"id": "th-076", "split": "dev", "catalog": "tap_hoa", "category": "expense", "text": "chi năm trăm nghìn tiền điện tháng này", "lines": [], "expenses": [{"amount": 500000}]}
+{"id": "th-077", "split": "test", "catalog": "tap_hoa", "category": "expense", "text": "trả tiền đá ba chục nghìn", "lines": [], "expenses": [{"amount": 30000}]}
+{"id": "th-078", "split": "test", "catalog": "tap_hoa", "category": "expense", "text": "nhập hàng hết hai triệu", "lines": [], "expenses": [{"amount": 2000000}]}
+{"id": "th-079", "split": "test", "catalog": "tap_hoa", "category": "expense", "text": "tiền xe giao hàng hai chục nghìn", "lines": [], "expenses": [{"amount": 20000}]}
+{"id": "th-080", "split": "dev", "catalog": "tap_hoa", "category": "expense", "text": "trả tiền nước 20k", "lines": [], "expenses": [{"amount": 20000}]}
+{"id": "th-081", "split": "dev", "catalog": "tap_hoa", "category": "expense", "text": "mua thêm kệ hết một triệu rưỡi", "lines": [], "expenses": [{"amount": 1500000}]}
+{"id": "th-082", "split": "test", "catalog": "tap_hoa", "category": "expense", "text": "chi tiền internet tám trăm nghìn", "lines": [], "expenses": [{"amount": 800000}]}
+{"id": "th-083", "split": "dev", "catalog": "tap_hoa", "category": "expense", "text": "đóng tiền nước sáu chục nghìn", "lines": [], "expenses": [{"amount": 60000}]}
+{"id": "th-084", "split": "dev", "catalog": "tap_hoa", "category": "mixed", "text": "bán hai gói mì omachi trả tiền đá hai chục nghìn", "lines": [{"product_id": 107, "qty": 2}], "expenses": [{"amount": 20000}]}
+{"id": "th-085", "split": "dev", "catalog": "tap_hoa", "category": "mixed", "text": "lấy một lon coca với chi bảy chục nghìn tiền bao nilon", "lines": [{"product_id": 115, "qty": 1}], "expenses": [{"amount": 70000}]}
+{"id": "th-086", "split": "test", "catalog": "tap_hoa", "category": "mixed", "text": "3 chai nước suối, chi 15k tiền xăng", "lines": [{"product_id": 119, "qty": 3}], "expenses": [{"amount": 15000}]}
+{"id": "th-087", "split": "dev", "catalog": "tap_hoa", "category": "mixed", "text": "cho anh hai gói bột ngọt rồi nhập hàng hết năm trăm nghìn", "lines": [{"product_id": 113, "qty": 2}], "expenses": [{"amount": 500000}]}
+{"id": "th-088", "split": "test", "catalog": "tap_hoa", "category": "mixed", "text": "năm lốc pulppy ghi, chi ba trăm nghìn tiền điện", "lines": [{"product_id": 129, "qty": 5}], "expenses": [{"amount": 300000}]}
+{"id": "th-089", "split": "dev", "catalog": "tap_hoa", "category": "mixed", "text": "lấy chai dầu ăn neptune, trả tiền giao hàng sáu chục nghìn", "lines": [{"product_id": 114, "qty": 1}], "expenses": [{"amount": 60000}]}
+{"id": "th-090", "split": "test", "catalog": "tap_hoa", "category": "no_item", "text": "thôi để chị xem lại đã nha", "lines": [], "expenses": []}
+{"id": "th-091", "split": "dev", "catalog": "tap_hoa", "category": "no_item", "text": "hôm nay vắng khách quá em ơi", "lines": [], "expenses": []}
+{"id": "th-092", "split": "dev", "catalog": "tap_hoa", "category": "no_item", "text": "ờ mai tính tiếp nha, giờ đóng cửa rồi", "lines": [], "expenses": []}
+{"id": "th-093", "split": "dev", "catalog": "tap_hoa", "category": "no_item", "text": "tính lại tổng tiền hôm nay giúp anh", "lines": [], "expenses": []}
+{"id": "th-094", "split": "test", "catalog": "tap_hoa", "category": "no_item", "text": "để tôi xem sổ cái xong rồi tính", "lines": [], "expenses": []}
+{"id": "th-095", "split": "test", "catalog": "tap_hoa", "category": "stt_noise", "text": "cho em hai gói mì hảo hão nha", "lines": [{"product_id": 106, "qty": 2}], "expenses": [], "note": "STT lỗi dấu thanh: hão là hảo"}
+{"id": "th-096", "split": "dev", "catalog": "tap_hoa", "category": "stt_noise", "text": "cocacola hai lon", "lines": [{"product_id": 115, "qty": 2}], "expenses": [], "note": "STT gộp hai từ: cocacola là Coca-Cola"}
+{"id": "th-097", "split": "dev", "catalog": "tap_hoa", "category": "stt_noise", "text": "ba chai nước mấm nam ngư", "lines": [{"product_id": 103, "qty": 3}], "expenses": [], "note": "STT lỗi dấu thanh: mấm là mắm"}
+{"id": "th-098", "split": "test", "catalog": "tap_hoa", "category": "stt_noise", "text": "chin su một chai", "lines": [{"product_id": 104, "qty": 1}], "expenses": [], "note": "STT tách từ: chin su là Chinsu"}
+{"id": "th-099", "split": "test", "catalog": "tap_hoa", "category": "stt_noise", "text": "xúc xích vi san bốn cây", "lines": [{"product_id": 130, "qty": 4}], "expenses": [], "note": "STT tách từ: vi san là Vissan"}
+{"id": "th-100", "split": "test", "catalog": "tap_hoa", "category": "stt_noise", "text": "pép si hai lon", "lines": [{"product_id": 116, "qty": 2}], "expenses": [], "note": "STT phiên âm sai: pép si là Pepsi"}
+{"id": "th-101", "split": "test", "catalog": "tap_hoa", "category": "stt_noise", "text": "bia tigơ ba lon", "lines": [{"product_id": 120, "qty": 3}], "expenses": [], "note": "STT sai nguyên âm: tigơ là Tiger"}
+{"id": "th-102", "split": "dev", "catalog": "tap_hoa", "category": "stt_noise", "text": "giấy vệ xinh hai lốc", "lines": [{"product_id": 129, "qty": 2}], "expenses": [], "note": "STT đồng âm: xinh là sinh"}
+{"id": "th-103", "split": "test", "catalog": "tap_hoa", "category": "stt_noise", "text": "sting giâu ba chai", "lines": [{"product_id": 117, "qty": 3}], "expenses": [], "note": "STT lỗi phụ âm: giâu là dâu"}
+{"id": "th-104", "split": "test", "catalog": "tap_hoa", "category": "stt_noise", "text": "chôcô pai hai hộp", "lines": [{"product_id": 124, "qty": 2}], "expenses": [], "note": "STT phiên âm sai: chôcô pai là Chocopie"}
+{"id": "th-105", "split": "test", "catalog": "tap_hoa", "category": "stt_noise", "text": "bột dặt omo hai bịch", "lines": [{"product_id": 125, "qty": 2}], "expenses": [], "note": "STT lỗi phụ âm: dặt là giặt"}
+{"id": "th-106", "split": "dev", "catalog": "tap_hoa", "category": "stt_noise", "text": "trứng vít năm vỉ", "lines": [{"product_id": 110, "qty": 5}], "expenses": [], "note": "STT đồng âm: vít là vịt"}
+{"id": "th-107", "split": "test", "catalog": "tap_hoa", "category": "stt_noise", "text": "gạo tam thơm hai bao", "lines": [{"product_id": 102, "qty": 2}], "expenses": [], "note": "STT lỗi dấu: tam là tám, gạo tám thơm 102"}
+{"id": "th-108", "split": "dev", "catalog": "tap_hoa", "category": "stt_noise", "text": "dầu gọi clear một chai", "lines": [{"product_id": 128, "qty": 1}], "expenses": [], "note": "STT đồng âm: gọi là gội"}
+{"id": "th-109", "split": "dev", "catalog": "tap_hoa", "category": "stt_noise", "text": "nước ruả chén sunlight hai chai", "lines": [{"product_id": 126, "qty": 2}], "expenses": [], "note": "STT lỗi dấu: ruả là rửa"}
+{"id": "th-110", "split": "test", "catalog": "tap_hoa", "category": "stt_noise", "text": "xì dầu maggi một chai", "lines": [{"product_id": 105, "qty": 1}], "expenses": [], "note": "STT: xì dầu là nước tương"}
+{"id": "cp-001", "split": "test", "catalog": "ca_phe", "category": "simple", "text": "cho anh hai cà phê sữa đá nha", "lines": [{"product_id": 202, "qty": 2}], "expenses": []}
+{"id": "cp-002", "split": "dev", "catalog": "ca_phe", "category": "simple", "text": "bán em một bạc xỉu", "lines": [{"product_id": 205, "qty": 1}], "expenses": []}
+{"id": "cp-003", "split": "dev", "catalog": "ca_phe", "category": "simple", "text": "lấy ba ly trà đào cam sả", "lines": [{"product_id": 207, "qty": 3}], "expenses": []}
+{"id": "cp-004", "split": "test", "catalog": "ca_phe", "category": "simple", "text": "năm ly sinh tố xoài đi", "lines": [{"product_id": 215, "qty": 5}], "expenses": []}
+{"id": "cp-005", "split": "dev", "catalog": "ca_phe", "category": "simple", "text": "cho chị 2 cà phê đen nóng", "lines": [{"product_id": 203, "qty": 2}], "expenses": []}
+{"id": "cp-006", "split": "test", "catalog": "ca_phe", "category": "simple", "text": "tính cho anh một matcha đá xay", "lines": [{"product_id": 218, "qty": 1}], "expenses": []}
+{"id": "cp-007", "split": "dev", "catalog": "ca_phe", "category": "simple", "text": "hai trà tắc không đường nha", "lines": [{"product_id": 210, "qty": 2}], "expenses": []}
+{"id": "cp-008", "split": "dev", "catalog": "ca_phe", "category": "simple", "text": "ghi cho chị ba ly nước cam ép", "lines": [{"product_id": 212, "qty": 3}], "expenses": []}
+{"id": "cp-009", "split": "test", "catalog": "ca_phe", "category": "simple", "text": "hai cái bánh flan nha", "lines": [{"product_id": 219, "qty": 2}], "expenses": []}
+{"id": "cp-010", "split": "test", "catalog": "ca_phe", "category": "partial_name", "text": "cà phê muối hai ly", "lines": [{"product_id": 206, "qty": 2}], "expenses": []}
+{"id": "cp-011", "split": "dev", "catalog": "ca_phe", "category": "partial_name", "text": "trà đào hai ly", "lines": [{"product_id": 207, "qty": 2}], "expenses": []}
+{"id": "cp-012", "split": "test", "catalog": "ca_phe", "category": "partial_name", "text": "một ly trà sữa đi", "lines": [{"product_id": 209, "qty": 1}], "expenses": []}
+{"id": "cp-013", "split": "dev", "catalog": "ca_phe", "category": "partial_name", "text": "lay cacao hai ly em", "lines": [{"product_id": 217, "qty": 2}], "expenses": []}
+{"id": "cp-014", "split": "test", "catalog": "ca_phe", "category": "partial_name", "text": "một bịch hướng dương", "lines": [{"product_id": 220, "qty": 1}], "expenses": []}
+{"id": "cp-015", "split": "dev", "catalog": "ca_phe", "category": "partial_name", "text": "ba cái flan nha", "lines": [{"product_id": 219, "qty": 3}], "expenses": []}
+{"id": "cp-016", "split": "test", "catalog": "ca_phe", "category": "partial_name", "text": "ba sữa chua", "lines": [{"product_id": 216, "qty": 3}], "expenses": []}
+{"id": "cp-017", "split": "test", "catalog": "ca_phe", "category": "partial_name", "text": "một bơ đi em", "lines": [{"product_id": 214, "qty": 1}], "expenses": []}
+{"id": "cp-018", "split": "test", "catalog": "ca_phe", "category": "partial_name", "text": "hai vải", "lines": [{"product_id": 208, "qty": 2}], "expenses": []}
+{"id": "cp-019", "split": "dev", "catalog": "ca_phe", "category": "partial_name", "text": "chanh hai ly", "lines": [{"product_id": 213, "qty": 2}], "expenses": []}
+{"id": "cp-020", "split": "test", "catalog": "ca_phe", "category": "partial_name", "text": "hai bạc đi", "lines": [{"product_id": 205, "qty": 2}], "expenses": []}
+{"id": "cp-021", "split": "test", "catalog": "ca_phe", "category": "reorder", "text": "cà phê sữa đá hai ly", "lines": [{"product_id": 202, "qty": 2}], "expenses": []}
+{"id": "cp-022", "split": "test", "catalog": "ca_phe", "category": "reorder", "text": "bạc xỉu hai ly", "lines": [{"product_id": 205, "qty": 2}], "expenses": []}
+{"id": "cp-023", "split": "test", "catalog": "ca_phe", "category": "reorder", "text": "trà tắc ba ly", "lines": [{"product_id": 210, "qty": 3}], "expenses": []}
+{"id": "cp-024", "split": "dev", "catalog": "ca_phe", "category": "reorder", "text": "trà đá năm ly", "lines": [{"product_id": 211, "qty": 5}], "expenses": []}
+{"id": "cp-025", "split": "dev", "catalog": "ca_phe", "category": "reorder", "text": "sinh tố xoài hai ly", "lines": [{"product_id": 215, "qty": 2}], "expenses": []}
+{"id": "cp-026", "split": "dev", "catalog": "ca_phe", "category": "reorder", "text": "trà sữa trân châu một ly", "lines": [{"product_id": 209, "qty": 1}], "expenses": []}
+{"id": "cp-027", "split": "test", "catalog": "ca_phe", "category": "reorder", "text": "nước cam ép hai ly", "lines": [{"product_id": 212, "qty": 2}], "expenses": []}
+{"id": "cp-028", "split": "test", "catalog": "ca_phe", "category": "reorder", "text": "cà phê muối một ly", "lines": [{"product_id": 206, "qty": 1}], "expenses": []}
+{"id": "cp-029", "split": "test", "catalog": "ca_phe", "category": "no_connector", "text": "hai cà phê sữa đá một bạc xỉu ba trà đá", "lines": [{"product_id": 202, "qty": 2}, {"product_id": 205, "qty": 1}, {"product_id": 211, "qty": 3}], "expenses": []}
+{"id": "cp-030", "split": "test", "catalog": "ca_phe", "category": "no_connector", "text": "một sinh tố bơ hai trà đào ba cacao đá", "lines": [{"product_id": 214, "qty": 1}, {"product_id": 207, "qty": 2}, {"product_id": 217, "qty": 3}], "expenses": []}
+{"id": "cp-031", "split": "test", "catalog": "ca_phe", "category": "no_connector", "text": "bốn nước chanh hai sữa chua đá", "lines": [{"product_id": 213, "qty": 4}, {"product_id": 216, "qty": 2}], "expenses": []}
+{"id": "cp-032", "split": "test", "catalog": "ca_phe", "category": "no_connector", "text": "ba matcha đá xay một cà phê đen đá hai bánh flan", "lines": [{"product_id": 218, "qty": 3}, {"product_id": 201, "qty": 1}, {"product_id": 219, "qty": 2}], "expenses": []}
+{"id": "cp-033", "split": "test", "catalog": "ca_phe", "category": "no_connector", "text": "năm trà vải hai trà tắc", "lines": [{"product_id": 208, "qty": 5}, {"product_id": 210, "qty": 2}], "expenses": []}
+{"id": "cp-034", "split": "dev", "catalog": "ca_phe", "category": "no_connector", "text": "hai cà phê đen nóng một hạt hướng dương", "lines": [{"product_id": 203, "qty": 2}, {"product_id": 220, "qty": 1}], "expenses": []}
+{"id": "cp-035", "split": "dev", "catalog": "ca_phe", "category": "no_connector", "text": "ba cà phê sữa nóng hai sinh tố xoài một bánh flan", "lines": [{"product_id": 204, "qty": 3}, {"product_id": 215, "qty": 2}, {"product_id": 219, "qty": 1}], "expenses": []}
+{"id": "cp-036", "split": "test", "catalog": "ca_phe", "category": "filler", "text": "ờ em ơi cho chị hai ly cà phê sữa đá nha", "lines": [{"product_id": 202, "qty": 2}], "expenses": []}
+{"id": "cp-037", "split": "test", "catalog": "ca_phe", "category": "filler", "text": "ừm à cho anh đi, một bạc xỉu nha em", "lines": [{"product_id": 205, "qty": 1}], "expenses": []}
+{"id": "cp-038", "split": "dev", "catalog": "ca_phe", "category": "filler", "text": "dạ à ghi cho con ba ly trà đào cam sả nha", "lines": [{"product_id": 207, "qty": 3}], "expenses": []}
+{"id": "cp-039", "split": "dev", "catalog": "ca_phe", "category": "filler", "text": "à ờ thôi đi, cho anh năm trà đá luôn", "lines": [{"product_id": 211, "qty": 5}], "expenses": []}
+{"id": "cp-040", "split": "test", "catalog": "ca_phe", "category": "filler", "text": "ơi em ờ lấy cho chị hai ly nước chanh đi", "lines": [{"product_id": 213, "qty": 2}], "expenses": []}
+{"id": "cp-041", "split": "dev", "catalog": "ca_phe", "category": "filler", "text": "chị đang cần à, ba cà phê đen nóng đi em", "lines": [{"product_id": 203, "qty": 3}], "expenses": []}
+{"id": "cp-042", "split": "dev", "catalog": "ca_phe", "category": "filler", "text": "dạ ờ để em, sinh tố xoài năm ly nhé", "lines": [{"product_id": 215, "qty": 5}], "expenses": []}
+{"id": "cp-043", "split": "test", "catalog": "ca_phe", "category": "filler", "text": "à ờ bán em cái này cacao đá hai ly nha", "lines": [{"product_id": 217, "qty": 2}], "expenses": []}
+{"id": "cp-044", "split": "dev", "catalog": "ca_phe", "category": "out_of_catalog", "text": "cho anh một bánh mì, thêm hai nước dừa tươi", "lines": [{"product_id": null, "name": "bánh mì", "qty": 1}, {"product_id": null, "name": "nước dừa tươi", "qty": 2}], "expenses": []}
+{"id": "cp-045", "split": "dev", "catalog": "ca_phe", "category": "out_of_catalog", "text": "ba ly trà ô long", "lines": [{"product_id": null, "name": "trà ô long", "qty": 3}], "expenses": []}
+{"id": "cp-046", "split": "dev", "catalog": "ca_phe", "category": "out_of_catalog", "text": "bạc xỉu hai ly với một phần bánh tiêu", "lines": [{"product_id": 205, "qty": 2}, {"product_id": null, "name": "bánh tiêu", "qty": 1}], "expenses": []}
+{"id": "cp-047", "split": "test", "catalog": "ca_phe", "category": "out_of_catalog", "text": "lấy chè thập cẩm", "lines": [{"product_id": null, "name": "chè thập cẩm", "qty": null}], "expenses": []}
+{"id": "cp-048", "split": "dev", "catalog": "ca_phe", "category": "out_of_catalog", "text": "cà phê sữa đá hai ly, thêm hai xiên khoai lang", "lines": [{"product_id": 202, "qty": 2}, {"product_id": null, "name": "khoai lang", "qty": 2}], "expenses": []}
+{"id": "cp-049", "split": "test", "catalog": "ca_phe", "category": "out_of_catalog", "text": "hai ly sữa đậu nành đi em", "lines": [{"product_id": null, "name": "sữa đậu nành", "qty": 2}], "expenses": []}
+{"id": "cp-050", "split": "test", "catalog": "ca_phe", "category": "ambiguous", "text": "hai cà phê đá", "lines": [{"product_id": null, "options": [201, 202], "qty": 2}], "expenses": [], "note": "cà phê đá: đen đá hay sữa đá, cần hỏi lại"}
+{"id": "cp-051", "split": "test", "catalog": "ca_phe", "category": "ambiguous", "text": "một cà phê nóng", "lines": [{"product_id": null, "options": [203, 204], "qty": 1}], "expenses": [], "note": "đen nóng hay sữa nóng"}
+{"id": "cp-052", "split": "dev", "catalog": "ca_phe", "category": "ambiguous", "text": "hai cà phê sữa", "lines": [{"product_id": null, "options": [202, 204], "qty": 2}], "expenses": [], "note": "sữa đá hay sữa nóng"}
+{"id": "cp-053", "split": "test", "catalog": "ca_phe", "category": "ambiguous", "text": "ba sinh tố", "lines": [{"product_id": null, "options": [214, 215], "qty": 3}], "expenses": [], "note": "sinh tố bơ hay sinh tố xoài"}
+{"id": "cp-054", "split": "dev", "catalog": "ca_phe", "category": "ambiguous", "text": "hai trà", "lines": [{"product_id": null, "options": [207, 208, 209, 210, 211], "qty": 2}], "expenses": [], "note": "năm loại trà trong menu, cần hỏi lại"}
+{"id": "cp-055", "split": "dev", "catalog": "ca_phe", "category": "ambiguous", "text": "hai nước", "lines": [{"product_id": null, "options": [212, 213], "qty": 2}], "expenses": [], "note": "nước cam ép hay nước chanh"}
+{"id": "cp-056", "split": "dev", "catalog": "ca_phe", "category": "expense", "text": "chi hai trăm nghìn tiền sữa đặc", "lines": [], "expenses": [{"amount": 200000}]}
+{"id": "cp-057", "split": "test", "catalog": "ca_phe", "category": "expense", "text": "trả tiền đá bảy chục nghìn", "lines": [], "expenses": [{"amount": 70000}]}
+{"id": "cp-058", "split": "test", "catalog": "ca_phe", "category": "expense", "text": "nhập cà phê hết năm trăm nghìn", "lines": [], "expenses": [{"amount": 500000}]}
+{"id": "cp-059", "split": "test", "catalog": "ca_phe", "category": "expense", "text": "chi tiền gas một triệu hai", "lines": [], "expenses": [{"amount": 1200000}]}
+{"id": "cp-060", "split": "test", "catalog": "ca_phe", "category": "expense", "text": "trả tiền sữa tươi 150k", "lines": [], "expenses": [{"amount": 150000}]}
+{"id": "cp-061", "split": "test", "catalog": "ca_phe", "category": "expense", "text": "tiền điện tháng này ba trăm nghìn chi nha", "lines": [], "expenses": [{"amount": 300000}]}
+{"id": "cp-062", "split": "test", "catalog": "ca_phe", "category": "mixed", "text": "hai cà phê sữa đá chi tiền đá mười nghìn", "lines": [{"product_id": 202, "qty": 2}], "expenses": [{"amount": 10000}]}
+{"id": "cp-063", "split": "test", "catalog": "ca_phe", "category": "mixed", "text": "ba bạc xỉu rồi chi bốn chục nghìn tiền đường", "lines": [{"product_id": 205, "qty": 3}], "expenses": [{"amount": 40000}]}
+{"id": "cp-064", "split": "test", "catalog": "ca_phe", "category": "mixed", "text": "một trà đào, trả tiền nước 20k", "lines": [{"product_id": 207, "qty": 1}], "expenses": [{"amount": 20000}]}
+{"id": "cp-065", "split": "test", "catalog": "ca_phe", "category": "mixed", "text": "lấy năm trà đá nha, chi tiền đá hai chục nghìn", "lines": [{"product_id": 211, "qty": 5}], "expenses": [{"amount": 20000}]}
+{"id": "cp-066", "split": "test", "catalog": "ca_phe", "category": "no_item", "text": "hôm nay khách vắng quá em ạ", "lines": [], "expenses": []}
+{"id": "cp-067", "split": "dev", "catalog": "ca_phe", "category": "no_item", "text": "thôi để anh tính sổ lại đã", "lines": [], "expenses": []}
+{"id": "cp-068", "split": "test", "catalog": "ca_phe", "category": "no_item", "text": "ờ để mai đổi giá nha em", "lines": [], "expenses": []}
+{"id": "cp-069", "split": "test", "catalog": "ca_phe", "category": "no_item", "text": "tắt máy đi, hết ca rồi", "lines": [], "expenses": []}
+{"id": "cp-070", "split": "test", "catalog": "ca_phe", "category": "no_item", "text": "đọc lại sổ hôm qua giúp chị", "lines": [], "expenses": []}
+{"id": "cp-071", "split": "test", "catalog": "ca_phe", "category": "stt_noise", "text": "cà phê sữa đa hai ly", "lines": [{"product_id": 202, "qty": 2}], "expenses": [], "note": "STT lỗi dấu thanh: đa là đá"}
+{"id": "cp-072", "split": "test", "catalog": "ca_phe", "category": "stt_noise", "text": "bạc sỉu ba ly", "lines": [{"product_id": 205, "qty": 3}], "expenses": [], "note": "STT lỗi dấu thanh: sỉu là xỉu"}
+{"id": "cp-073", "split": "dev", "catalog": "ca_phe", "category": "stt_noise", "text": "tra đào cam xả hai ly", "lines": [{"product_id": 207, "qty": 2}], "expenses": [], "note": "STT lỗi dấu: xả là sả"}
+{"id": "cp-074", "split": "test", "catalog": "ca_phe", "category": "stt_noise", "text": "sinh tố bo một ly", "lines": [{"product_id": 214, "qty": 1}], "expenses": [], "note": "STT mất dấu: bo là bơ"}
+{"id": "cp-075", "split": "dev", "catalog": "ca_phe", "category": "stt_noise", "text": "cacao đa năm ly", "lines": [{"product_id": 217, "qty": 5}], "expenses": [], "note": "STT lỗi dấu: đa là đá"}
+{"id": "cp-076", "split": "test", "catalog": "ca_phe", "category": "stt_noise", "text": "ca phe muối hai ly", "lines": [{"product_id": 206, "qty": 2}], "expenses": [], "note": "STT mất dấu: ca phe là cà phê"}
+{"id": "cp-077", "split": "dev", "catalog": "ca_phe", "category": "stt_noise", "text": "nươc cam ep hai ly", "lines": [{"product_id": 212, "qty": 2}], "expenses": [], "note": "STT mất dấu: nươc, ep là nước, ép"}
+{"id": "cp-078", "split": "dev", "catalog": "ca_phe", "category": "stt_noise", "text": "trà tác ba ly", "lines": [{"product_id": 210, "qty": 3}], "expenses": [], "note": "STT lỗi dấu: tác là tắc"}
+{"id": "cp-079", "split": "dev", "catalog": "ca_phe", "category": "stt_noise", "text": "tà đá năm ly", "lines": [{"product_id": 211, "qty": 5}], "expenses": [], "note": "STT lỗi phụ âm đầu: tà là trà"}
+{"id": "cp-080", "split": "test", "catalog": "ca_phe", "category": "stt_noise", "text": "matcha đa xay hai ly", "lines": [{"product_id": 218, "qty": 2}], "expenses": [], "note": "STT lỗi dấu: đa là đá"}
+{"id": "qc-001", "split": "test", "catalog": "quan_com", "category": "simple", "text": "cho em hai phần cơm sườn nướng", "lines": [{"product_id": 301, "qty": 2}], "expenses": []}
+{"id": "qc-002", "split": "dev", "catalog": "quan_com", "category": "simple", "text": "bán tôi một phở gà", "lines": [{"product_id": 306, "qty": 1}], "expenses": []}
+{"id": "qc-003", "split": "test", "catalog": "quan_com", "category": "simple", "text": "ba tô bún bò huế nha", "lines": [{"product_id": 307, "qty": 3}], "expenses": []}
+{"id": "qc-004", "split": "test", "catalog": "quan_com", "category": "simple", "text": "năm cái khăn lạnh", "lines": [{"product_id": 317, "qty": 5}], "expenses": []}
+{"id": "qc-005", "split": "test", "catalog": "quan_com", "category": "simple", "text": "lấy hai ổ bánh mì ốp la", "lines": [{"product_id": 311, "qty": 2}], "expenses": []}
+{"id": "qc-006", "split": "test", "catalog": "quan_com", "category": "simple", "text": "một dĩa cơm chiên dương châu", "lines": [{"product_id": 304, "qty": 1}], "expenses": []}
+{"id": "qc-007", "split": "dev", "catalog": "quan_com", "category": "simple", "text": "2 ly trà đá", "lines": [{"product_id": 316, "qty": 2}], "expenses": []}
+{"id": "qc-008", "split": "test", "catalog": "quan_com", "category": "simple", "text": "bốn lon pepsi", "lines": [{"product_id": 315, "qty": 4}], "expenses": []}
+{"id": "qc-009", "split": "test", "catalog": "quan_com", "category": "partial_name", "text": "cơm tấm hai phần", "lines": [{"product_id": 303, "qty": 2}], "expenses": []}
+{"id": "qc-010", "split": "test", "catalog": "quan_com", "category": "partial_name", "text": "một phần bì chả", "lines": [{"product_id": 303, "qty": 1}], "expenses": [], "note": "bì chả chỉ nằm trong cơm tấm bì chả"}
+{"id": "qc-011", "split": "test", "catalog": "quan_com", "category": "partial_name", "text": "một phở tái", "lines": [{"product_id": 305, "qty": 1}], "expenses": []}
+{"id": "qc-012", "split": "dev", "catalog": "quan_com", "category": "partial_name", "text": "hai phần bún chả đi em", "lines": [{"product_id": 308, "qty": 2}], "expenses": []}
+{"id": "qc-013", "split": "dev", "catalog": "quan_com", "category": "partial_name", "text": "một tô hủ tiếu nha", "lines": [{"product_id": 309, "qty": 1}], "expenses": []}
+{"id": "qc-014", "split": "dev", "catalog": "quan_com", "category": "partial_name", "text": "một tô canh cá lóc", "lines": [{"product_id": 312, "qty": 1}], "expenses": [], "note": "canh chua cá lóc"}
+{"id": "qc-015", "split": "dev", "catalog": "quan_com", "category": "partial_name", "text": "bốn phần chả giò", "lines": [{"product_id": 313, "qty": 4}], "expenses": []}
+{"id": "qc-016", "split": "test", "catalog": "quan_com", "category": "partial_name", "text": "hai dĩa dương châu", "lines": [{"product_id": 304, "qty": 2}], "expenses": []}
+{"id": "qc-017", "split": "test", "catalog": "quan_com", "category": "partial_name", "text": "ba khăn", "lines": [{"product_id": 317, "qty": 3}], "expenses": []}
+{"id": "qc-018", "split": "dev", "catalog": "quan_com", "category": "partial_name", "text": "thêm cơm nha", "lines": [{"product_id": 318, "qty": 1}], "expenses": [], "note": "cơm thêm, qty 1 vì không đọc số"}
+{"id": "qc-019", "split": "dev", "catalog": "quan_com", "category": "reorder", "text": "phở bò tái hai tô", "lines": [{"product_id": 305, "qty": 2}], "expenses": []}
+{"id": "qc-020", "split": "test", "catalog": "quan_com", "category": "reorder", "text": "bún bò huế hai tô đi", "lines": [{"product_id": 307, "qty": 2}], "expenses": []}
+{"id": "qc-021", "split": "test", "catalog": "quan_com", "category": "reorder", "text": "cơm gà xối mỡ một phần", "lines": [{"product_id": 302, "qty": 1}], "expenses": []}
+{"id": "qc-022", "split": "test", "catalog": "quan_com", "category": "reorder", "text": "hủ tiếu nam vang ba tô", "lines": [{"product_id": 309, "qty": 3}], "expenses": []}
+{"id": "qc-023", "split": "dev", "catalog": "quan_com", "category": "reorder", "text": "bánh mì thịt hai ổ", "lines": [{"product_id": 310, "qty": 2}], "expenses": []}
+{"id": "qc-024", "split": "dev", "catalog": "quan_com", "category": "reorder", "text": "trà đá năm ly", "lines": [{"product_id": 316, "qty": 5}], "expenses": []}
+{"id": "qc-025", "split": "test", "catalog": "quan_com", "category": "reorder", "text": "cơm thêm hai phần", "lines": [{"product_id": 318, "qty": 2}], "expenses": []}
+{"id": "qc-026", "split": "test", "catalog": "quan_com", "category": "no_connector", "text": "hai phở gà một bún chả ba bánh mì thịt", "lines": [{"product_id": 306, "qty": 2}, {"product_id": 308, "qty": 1}, {"product_id": 310, "qty": 3}], "expenses": []}
+{"id": "qc-027", "split": "dev", "catalog": "quan_com", "category": "no_connector", "text": "hai cơm sườn nướng một trà đá ba pepsi lon", "lines": [{"product_id": 301, "qty": 2}, {"product_id": 316, "qty": 1}, {"product_id": 315, "qty": 3}], "expenses": []}
+{"id": "qc-028", "split": "test", "catalog": "quan_com", "category": "no_connector", "text": "một canh chua cá lóc hai ly trà đá", "lines": [{"product_id": 312, "qty": 1}, {"product_id": 316, "qty": 2}], "expenses": []}
+{"id": "qc-029", "split": "dev", "catalog": "quan_com", "category": "no_connector", "text": "ba khăn lạnh hai cơm gà xối mỡ", "lines": [{"product_id": 317, "qty": 3}, {"product_id": 302, "qty": 2}], "expenses": []}
+{"id": "qc-030", "split": "test", "catalog": "quan_com", "category": "no_connector", "text": "bốn chả giò một cơm tấm bì chả", "lines": [{"product_id": 313, "qty": 4}, {"product_id": 303, "qty": 1}], "expenses": []}
+{"id": "qc-031", "split": "test", "catalog": "quan_com", "category": "no_connector", "text": "hai bánh mì ốp la năm trứng ốp la", "lines": [{"product_id": 311, "qty": 2}, {"product_id": 314, "qty": 5}], "expenses": []}
+{"id": "qc-032", "split": "dev", "catalog": "quan_com", "category": "filler", "text": "ờ chị ơi cho em hai phần cơm gà xối mỡ à nha", "lines": [{"product_id": 302, "qty": 2}], "expenses": []}
+{"id": "qc-033", "split": "test", "catalog": "quan_com", "category": "filler", "text": "ừm à cho anh một bún bò huế nha chủ quán", "lines": [{"product_id": 307, "qty": 1}], "expenses": []}
+{"id": "qc-034", "split": "test", "catalog": "quan_com", "category": "filler", "text": "dạ à em ơi cho chị ba trà đá luôn", "lines": [{"product_id": 316, "qty": 3}], "expenses": []}
+{"id": "qc-035", "split": "dev", "catalog": "quan_com", "category": "filler", "text": "ờ ghi cho bác hai canh chua cá lóc nhé", "lines": [{"product_id": 312, "qty": 2}], "expenses": []}
+{"id": "qc-036", "split": "test", "catalog": "quan_com", "category": "filler", "text": "à thôi, cho con năm khăn lạnh đi", "lines": [{"product_id": 317, "qty": 5}], "expenses": []}
+{"id": "qc-037", "split": "test", "catalog": "quan_com", "category": "filler", "text": "ơi à cho cô một phở bò tái đi", "lines": [{"product_id": 305, "qty": 1}], "expenses": []}
+{"id": "qc-038", "split": "test", "catalog": "quan_com", "category": "out_of_catalog", "text": "cho anh một tô bún riêu", "lines": [{"product_id": null, "name": "bún riêu", "qty": 1}], "expenses": []}
+{"id": "qc-039", "split": "dev", "catalog": "quan_com", "category": "out_of_catalog", "text": "gỏi cuốn cho chị", "lines": [{"product_id": null, "name": "gỏi cuốn", "qty": null}], "expenses": []}
+{"id": "qc-040", "split": "test", "catalog": "quan_com", "category": "out_of_catalog", "text": "hai phần bò kho nha", "lines": [{"product_id": null, "name": "bò kho", "qty": 2}], "expenses": []}
+{"id": "qc-041", "split": "test", "catalog": "quan_com", "category": "out_of_catalog", "text": "xôi gà ba phần", "lines": [{"product_id": null, "name": "xôi gà", "qty": 3}], "expenses": [], "note": "xôi gà không có trong danh mục, không phải 302 hay 306"}
+{"id": "qc-042", "split": "test", "catalog": "quan_com", "category": "out_of_catalog", "text": "chè đậu xanh", "lines": [{"product_id": null, "name": "chè đậu xanh", "qty": null}], "expenses": []}
+{"id": "qc-043", "split": "test", "catalog": "quan_com", "category": "out_of_catalog", "text": "nem nướng hai phần rồi thêm hai ly trà đá", "lines": [{"product_id": null, "name": "nem nướng", "qty": 2}, {"product_id": 316, "qty": 2}], "expenses": []}
+{"id": "qc-044", "split": "test", "catalog": "quan_com", "category": "ambiguous", "text": "hai phở", "lines": [{"product_id": null, "options": [305, 306], "qty": 2}], "expenses": [], "note": "phở bò tái hay phở gà"}
+{"id": "qc-045", "split": "dev", "catalog": "quan_com", "category": "ambiguous", "text": "một bánh mì", "lines": [{"product_id": null, "options": [310, 311], "qty": 1}], "expenses": [], "note": "bánh mì thịt hay bánh mì ốp la"}
+{"id": "qc-046", "split": "dev", "catalog": "quan_com", "category": "ambiguous", "text": "ốp la hai cái", "lines": [{"product_id": null, "options": [311, 314], "qty": 2}], "expenses": [], "note": "bánh mì ốp la hay trứng ốp la"}
+{"id": "qc-047", "split": "test", "catalog": "quan_com", "category": "ambiguous", "text": "một phần gà", "lines": [{"product_id": null, "options": [302, 306], "qty": 1}], "expenses": [], "note": "cơm gà xối mỡ hay phở gà"}
+{"id": "qc-048", "split": "test", "catalog": "quan_com", "category": "ambiguous", "text": "hai tô bò", "lines": [{"product_id": null, "options": [305, 307], "qty": 2}], "expenses": [], "note": "phở bò tái hay bún bò huế"}
+{"id": "qc-049", "split": "test", "catalog": "quan_com", "category": "ambiguous", "text": "ba cơm", "lines": [{"product_id": null, "options": [301, 302, 303, 304, 318], "qty": 3}], "expenses": [], "note": "nhiều món cơm, cần hỏi lại; cơm thêm có thể là 318"}
+{"id": "qc-050", "split": "test", "catalog": "quan_com", "category": "ambiguous", "text": "một chả", "lines": [{"product_id": null, "options": [303, 308, 313], "qty": 1}], "expenses": [], "note": "bì chả, bún chả hay chả giò"}
+{"id": "qc-051", "split": "test", "catalog": "quan_com", "category": "expense", "text": "chi hai trăm nghìn tiền ga", "lines": [], "expenses": [{"amount": 200000}]}
+{"id": "qc-052", "split": "dev", "catalog": "quan_com", "category": "expense", "text": "trả tiền gạo bốn trăm nghìn", "lines": [], "expenses": [{"amount": 400000}]}
+{"id": "qc-053", "split": "dev", "catalog": "quan_com", "category": "expense", "text": "nhập thịt sườn hết một triệu hai", "lines": [], "expenses": [{"amount": 1200000}]}
+{"id": "qc-054", "split": "test", "catalog": "quan_com", "category": "expense", "text": "tiền rau 50k chi giúp chị", "lines": [], "expenses": [{"amount": 50000}]}
+{"id": "qc-055", "split": "test", "catalog": "quan_com", "category": "expense", "text": "trả tiền đá mười lăm nghìn", "lines": [], "expenses": [{"amount": 15000}]}
+{"id": "qc-056", "split": "dev", "catalog": "quan_com", "category": "expense", "text": "chi tiền nước rửa chén hai chục nghìn", "lines": [], "expenses": [{"amount": 20000}]}
+{"id": "qc-057", "split": "dev", "catalog": "quan_com", "category": "mixed", "text": "hai phở gà rồi chi ba trăm nghìn tiền điện", "lines": [{"product_id": 306, "qty": 2}], "expenses": [{"amount": 300000}]}
+{"id": "qc-058", "split": "test", "catalog": "quan_com", "category": "mixed", "text": "một cơm sườn nướng, chi bốn trăm nghìn tiền thịt", "lines": [{"product_id": 301, "qty": 1}], "expenses": [{"amount": 400000}]}
+{"id": "qc-059", "split": "test", "catalog": "quan_com", "category": "mixed", "text": "ba ly trà đá chi mười lăm nghìn tiền nước đá", "lines": [{"product_id": 316, "qty": 3}], "expenses": [{"amount": 15000}]}
+{"id": "qc-060", "split": "test", "catalog": "quan_com", "category": "mixed", "text": "lấy hai bánh mì thịt rồi chi hai mươi nghìn tiền đá", "lines": [{"product_id": 310, "qty": 2}], "expenses": [{"amount": 20000}]}
+{"id": "qc-061", "split": "dev", "catalog": "quan_com", "category": "mixed", "text": "khăn lạnh hai cái, chi năm trăm nghìn tiền than", "lines": [{"product_id": 317, "qty": 2}], "expenses": [{"amount": 500000}]}
+{"id": "qc-062", "split": "dev", "catalog": "quan_com", "category": "no_item", "text": "hôm nay trời mưa nên vắng khách quá", "lines": [], "expenses": []}
+{"id": "qc-063", "split": "test", "catalog": "quan_com", "category": "no_item", "text": "thôi em đóng cửa đi", "lines": [], "expenses": []}
+{"id": "qc-064", "split": "test", "catalog": "quan_com", "category": "no_item", "text": "để chị gọi điện hỏi lại chồng đã", "lines": [], "expenses": []}
+{"id": "qc-065", "split": "test", "catalog": "quan_com", "category": "no_item", "text": "ờ chưa có gì hết, lát bán tiếp", "lines": [], "expenses": []}
+{"id": "qc-066", "split": "dev", "catalog": "quan_com", "category": "no_item", "text": "hôm qua bán đắt quá, hôm nay chậm", "lines": [], "expenses": []}
+{"id": "qc-067", "split": "test", "catalog": "quan_com", "category": "stt_noise", "text": "cho em hai phở bồ tái", "lines": [{"product_id": 305, "qty": 2}], "expenses": [], "note": "STT lỗi dấu: bồ là bò"}
+{"id": "qc-068", "split": "test", "catalog": "quan_com", "category": "stt_noise", "text": "bún chã hà nội một phần", "lines": [{"product_id": 308, "qty": 1}], "expenses": [], "note": "STT lỗi dấu: chã là chả"}
+{"id": "qc-069", "split": "test", "catalog": "quan_com", "category": "stt_noise", "text": "cơm tầm bì chả hai phần", "lines": [{"product_id": 303, "qty": 2}], "expenses": [], "note": "STT đồng âm: tầm là tấm"}
+{"id": "qc-070", "split": "dev", "catalog": "quan_com", "category": "stt_noise", "text": "chả dò bốn cái", "lines": [{"product_id": 313, "qty": 4}], "expenses": [], "note": "STT đồng âm: dò là giò"}

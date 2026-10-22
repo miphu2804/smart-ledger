@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "frozen": "2026-10-21",
+  "note": "Pre-registered before the search ran. The search may only read the dev data; the lockbox is generated from seeds nobody has drawn and is scored exactly once, for the selected config and the R4 baseline. Changing a value here after the search started is a deviation and must be reported.",
+  "farMax": 0.01,
+  "lttDelta": 0.05,
+  "farDefinition": "wrong AUTO lines / all lines, as in the bake-off",
+  "dev": {
+    "splits": "eval/data/splits_lockbox2.json",
+    "datasets": ["d1", "d2", "d3", "ooc"],
+    "oocSeed": 20261101,
+    "oocFraction": 0.1,
+    "limitPerDataset": 700,
+    "fit": "calibration side",
+    "select": "test side (already read by bakeoff_v3; it is a dev set here, not a holdout)"
+  },
+  "lockbox": {
+    "d2Seed": 20261022,
+    "d3Seed": 20261022,
+    "oocSeed": 20261022,
+    "oocFraction": 0.1,
+    "limitPerDataset": 700,
+    "note": "D1 cannot be regenerated, so it is not in the lockbox. Gate thresholds are the ones fitted on dev calibration, transferred unchanged."
+  },
+  "searchSpace": {
+    "candidateRetrievers": [["Q-bm25", "B"], ["Q-cos", "B"], ["Q-bm25"], ["E", "Q-bm25", "B"], ["Q-bm25", "B", "P"]],
+    "fusion": "rrf",
+    "pool": [5, 10, 20],
+    "rerankSignals": ["E", "P", "T", "R"],
+    "stage1WeightStep": 0.25,
+    "stage2": "coordinate ascent on the weights, step 0.05, from the 3 best stage-1 configs, until no step improves the objective",
+    "gate": "G1 with sAuto, mMin, agreeMin chosen by Learn-then-Test fixed-sequence testing on calibration (binomial tail p-value, Bonferroni over paths); sFloor then minimizes (asks + in-catalog NEWs) / lines"
+  },
+  "objective": "maximize correct AUTO lines / lines on the dev test side, subject to the dev test side's one-sided 95% Clopper-Pearson upper bound on FAR <= farMax",
+  "tieBreak": ["recall@3 on dev test", "fewer rerank signals", "smaller pool", "faster resolve"],
+  "lockboxReport": ["selected config", "R4 as in bakeoff_v3 with its own G1 tuner"]
+}
