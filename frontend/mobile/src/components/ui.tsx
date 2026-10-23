@@ -1,5 +1,4 @@
 import { Feather } from '@expo/vector-icons';
-import { GlassSheen } from './GlassSheen';
 import { router } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -182,12 +181,11 @@ export function IconBtn({
       accessibilityLabel={label}
       hitSlop={Math.max(6, (44 - size) / 2)}
       style={({ pressed }) => [
-        { width: size, height: size, borderRadius: 16, backgroundColor: bg === colors.white ? 'rgba(255,255,255,0.8)' : bg, alignItems: 'center', justifyContent: 'center' },
+        { width: size, height: size, borderRadius: 12, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' },
         bg === colors.white && shadow(0),
         pressed && { opacity: 0.78 },
       ]}
     >
-      {bg === colors.white ? <GlassSheen radius={16} /> : null}
       <Animated.View style={{ transform: [{ scale: press.scale }] }}>
         <Feather name={name} size={size * 0.47} color={color} />
       </Animated.View>
@@ -378,7 +376,6 @@ export function Button({
         style,
       ]}
     >
-      {!disabled && !loading && variant !== 'ghost' && variant !== 'danger' ? <GlassSheen radius={small ? 12 : 18} tinted={emphasized || variant === 'gold'} /> : null}
       <Animated.View style={[styles.buttonContent, { transform: [{ scale: press.scale }] }]}>
         {loading ? (
           <ActivityIndicator color={v.fg} />
@@ -401,7 +398,7 @@ const btnVariants: Record<BtnVariant, { bg: string; fg: string; border?: string 
   primary: { bg: colors.brand, fg: colors.brandInk },
   gold: { bg: colors.brand, fg: colors.brandInk },
   voice: { bg: colors.brand, fg: colors.brandInk },
-  outline: { bg: 'rgba(255,255,255,0.8)', fg: colors.ink, border: colors.white },
+  outline: { bg: colors.white, fg: colors.ink, border: colors.border },
   soft: { bg: colors.brandSoft, fg: colors.brand },
   ghost: { bg: 'transparent', fg: colors.muted },
   danger: { bg: colors.redSoft, fg: colors.red },

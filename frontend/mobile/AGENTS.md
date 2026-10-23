@@ -10,7 +10,7 @@ These instructions apply to changes under `frontend/mobile`.
 
 ### Shared surfaces
 
-- Button glass styling uses `GlassSheen` for shared `Button` and default `IconBtn`. Keep highlights static and pointerEvents disabled. Preserve destructive/disabled states and text contrast; this is a translucent visual treatment, not native Liquid Glass refraction.
+- Shared `Button` and `IconBtn` keep their standard surfaces. Apply glass only to explicitly requested frequent-use controls in the main sales/chat flow (currently Read order / Scan code and Bobi toolbar/composer); do not propagate it to auth, settings, dialogs or secondary screens. Keep highlights static and non-interactive, preserving contrast and disabled/destructive states.
 
 - Page/root/scroll backgrounds use `colors.bg`; cards, sheets and navigation surfaces use `colors.card`; recessed inputs, placeholders and neutral controls use `colors.surfaceMuted`.
 - Do not add screen-specific neutral HEX backgrounds. Brand headers, semantic status surfaces, camera previews and image artwork retain their intentional colors.
