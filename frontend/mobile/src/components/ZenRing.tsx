@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, PanResponder, Platform, Pressable, StyleSheet, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
-import { dur, spring, useReducedMotion } from '../motion';
+import { ACTION_MENU_DURATION, dur, spring, useReducedMotion } from '../motion';
 import { colors } from '../theme';
 import { useGuideTarget } from './GuideTour';
 import { MascotBadge } from './MascotBadge';
@@ -254,11 +254,14 @@ export function ZenRing() {
     if (menuOpen) setMenuMounted(true);
     wake(menuOpen);
     const step = (value: Animated.Value) =>
-      menuOpen && !reduced
-        ? Animated.spring(value, { toValue: 1, ...spring.soft, useNativeDriver: true })
-        : Animated.timing(value, { toValue: target, duration: menuOpen ? dur.fast : 130, useNativeDriver: true });
+      Animated.timing(value, {
+        toValue: target,
+        duration: reduced ? 0 : ACTION_MENU_DURATION,
+        easing: menuOpen ? Easing.out(Easing.cubic) : Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      });
     const run = Animated.parallel([
-      Animated.timing(scrim, { toValue: target, duration: menuOpen ? dur.base : 130, useNativeDriver: true }),
+      Animated.timing(scrim, { toValue: target, duration: reduced ? 0 : ACTION_MENU_DURATION, useNativeDriver: true }),
       Animated.stagger(menuOpen && !reduced ? 45 : 0, items.map(step)),
     ]);
     run.start(({ finished }) => {

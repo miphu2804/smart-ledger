@@ -14,10 +14,12 @@ describe('các bước hướng dẫn', () => {
     assert.equal(new Set(rest.map((s) => s.target)).size, rest.length);
   });
 
-  it('có các bước người dùng cần: gọi món bằng giọng nói, chọn hàng (ghi nợ), quét mã, trợ lý', () => {
+  it('giới thiệu Tạo đơn và Bobi theo thanh điều hướng hiện tại', () => {
     const targets = GUIDE_STEPS.map((s) => s.target);
-    for (const t of ['readOrder', 'selectGoods', 'scanCode', 'assistant'] as const) assert.ok(targets.includes(t), t);
-    assert.match(GUIDE_STEPS.find((s) => s.target === 'selectGoods')!.body, /Ghi nợ/);
+    for (const t of ['tabSales', 'tabBobi'] as const) assert.ok(targets.includes(t), t);
+    const sales = GUIDE_STEPS.find((s) => s.target === 'tabSales')!.body;
+    for (const action of ['Chọn hàng', 'Đọc đơn', 'Quét mã', 'Ghi nợ']) assert.ok(sales.includes(action), action);
+    for (const removed of ['readOrder', 'selectGoods', 'scanCode', 'mascot']) assert.ok(!targets.some((t) => t === removed));
   });
 
   it('bước cuối chỉ chỗ xem lại hướng dẫn', () => {

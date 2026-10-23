@@ -5,7 +5,17 @@
  * đa `GUIDE_BODY_MAX` ký tự) để đọc lướt được. Tách khỏi component để kiểm thử bằng `node --test`.
  */
 export type GuideTarget =
-  'readOrder' | 'selectGoods' | 'scanCode' | 'assistant' | 'mascot' | 'bell' | 'quickNav' | 'tabInvoices' | 'tabMore';
+  | 'tabSales'
+  | 'tabBobi'
+  | 'readOrder'
+  | 'selectGoods'
+  | 'scanCode'
+  | 'assistant'
+  | 'mascot'
+  | 'bell'
+  | 'quickNav'
+  | 'tabInvoices'
+  | 'tabMore';
 
 export interface GuideStep {
   target: GuideTarget | null;
@@ -23,37 +33,25 @@ export const GUIDE_STEPS: readonly GuideStep[] = [
   {
     target: null,
     title: 'Chào {name}, mình là Bobi!',
-    body: 'Để mình dẫn bạn đi một vòng nhé, chưa tới một phút đâu.',
-  },
-  { target: 'readOrder', title: 'Bán bằng giọng nói', body: 'Khách gọi gì, bạn cứ đọc “hai cà phê sữa”, mình lên đơn liền!' },
-  {
-    target: 'selectGoods',
-    title: 'Thích chạm hơn nói?',
-    body: 'Chọn món vào giỏ rồi thanh toán. Khách quen mua chịu thì bấm Ghi nợ.',
+    body: 'Mình sẽ chỉ bạn chỗ tạo đơn, xem đơn đã bán và hỏi về tiệm nhé.',
   },
   {
-    target: 'scanCode',
-    title: 'Có mã vạch là nhanh nhất',
-    body: 'Đưa mã vào khung là món vô giỏ. Mã lạ thì mình hỏi để thêm món mới.',
+    target: 'tabSales',
+    title: 'Bắt đầu từ Tạo đơn',
+    body: 'Chọn hàng, Đọc đơn hoặc Quét mã. Kiểm tra giỏ rồi thanh toán hay Ghi nợ.',
   },
   {
-    target: 'assistant',
-    title: 'Cần số liệu? Hỏi mình!',
-    body: 'Hôm nay bán được bao nhiêu, món nào chạy, ai còn nợ… mình trả lời liền.',
+    target: 'tabInvoices',
+    title: 'Xem lại đơn đã bán',
+    body: 'Tìm đơn, xem chi tiết và theo dõi thanh toán. Cần huỷ đơn cũng vào đây.',
   },
   {
-    target: 'mascot',
-    round: true,
-    title: 'Mình luôn ở đây nè',
-    body: 'Chạm để gọi mình, giữ lâu để đọc đơn ngay. Vướng thì kéo mình qua chỗ khác.',
+    target: 'tabBobi',
+    title: 'Có câu hỏi? Gặp Bobi',
+    body: 'Hỏi về doanh thu, hàng hoá và tình hình tiệm trong màn trò chuyện với mình.',
   },
   { target: 'bell', title: 'Có gì mới, mình báo', body: 'Đơn mới, hàng sắp hết hay khoản nợ chưa thu đều hiện ở chuông này.' },
   { target: 'quickNav', title: 'Đi tắt cho nhanh', body: 'Mở menu này để tới ngay Công nợ, Hàng hoá, Báo cáo hay Chi phí.' },
-  {
-    target: 'tabInvoices',
-    title: 'Đơn đã bán nằm đây',
-    body: 'Tìm lại đơn theo tên khách hoặc món, xem chi tiết hay huỷ khi cần.',
-  },
   {
     target: 'tabMore',
     title: 'Xong rồi đó {name}!',

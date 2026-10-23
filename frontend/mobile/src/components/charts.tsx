@@ -152,9 +152,10 @@ export function BarChart({
                 style={{
                   width: '72%',
                   maxWidth: 30,
-                  height: Math.max(4, (d.value / max) * (height - 22)),
+                  height: d.value === 0 ? 0 : Math.max(2, (d.value / max) * (height - 22)),
                   borderRadius: 8,
-                  backgroundColor: active ? color : colors.data.revenueSoft,
+                  backgroundColor: color,
+                  opacity: active ? 1 : 0.35,
                 }}
               />
             </Pressable>

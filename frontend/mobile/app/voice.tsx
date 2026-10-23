@@ -34,6 +34,7 @@ import { itemsTotal } from '../src/lib/stats';
 import { ProductImage } from '../src/components/ProductImage';
 import { useApp } from '../src/store/AppStore';
 import { colors, font, shadow } from '../src/theme';
+import { SCREEN_ENTER } from '../src/motion';
 
 type Msg = {
   id: number;
@@ -301,6 +302,13 @@ function hasWebSpeech(): boolean {
   return typeof window !== 'undefined' && !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 }
 
+function voiceCapabilityLabel(): string {
+  if (Platform.OS === 'web') {
+    return hasWebSpeech() ? 'Nhận giọng nói qua trình duyệt' : 'Trình duyệt chưa hỗ trợ nhận giọng nói';
+  }
+  return speechEngine.supported ? 'Nhận giọng nói trên thiết bị' : 'Chưa có mô-đun nhận giọng nói';
+}
+
 /** Trạng thái model giọng nói trên máy (chỉ dùng khi không có Web Speech). */
 interface SttStatus {
   state: 'idle' | 'preparing' | 'ready' | 'error';
@@ -324,6 +332,7 @@ export default function Voice() {
   const app = useApp();
   const toast = useToast();
   const insets = useSafeAreaInsets();
+  const enterProgress = useRef(new Animated.Value(0)).current;
   const scroll = useRef<ScrollView>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const recognitionRef = useRef<any>(null);
@@ -331,6 +340,17 @@ export default function Voice() {
   const sessionRef = useRef<SpeechSession | null>(null);
   /** Người dùng đã thả nút trước khi micro kịp bật (hộp thoại xin quyền, nạp model...): bỏ phiên vừa mở xong. */
   const releasedRef = useRef(false);
+
+  useEffect(() => {
+    const animation = Animated.timing(enterProgress, {
+      toValue: 1,
+      duration: SCREEN_ENTER.duration,
+      easing: SCREEN_ENTER.easing,
+      useNativeDriver: Platform.OS !== 'web',
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [enterProgress]);
   /** Mức mic lớn nhất trong lần ghi này, để báo "micro không thu được tiếng" khi không nhận ra chữ nào. */
   const peakLevelRef = useRef(0);
   const mountedRef = useRef(true);
@@ -798,10 +818,20 @@ export default function Voice() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior={KEYBOARD_AVOID_BEHAVIOR}
+    <Animated.View
+      style={[
+        styles.screen,
+        {
+          opacity: enterProgress,
+          transform: [
+            {
+              translateY: enterProgress.interpolate({ inputRange: [0, 1], outputRange: [SCREEN_ENTER.distance, 0] }),
+            },
+          ],
+        },
+      ]}
     >
+      <KeyboardAvoidingView style={styles.screen} behavior={KEYBOARD_AVOID_BEHAVIOR}>
       <StatusBar style="dark" />
 
       {/* Top Header Bar */}
@@ -1289,9 +1319,9 @@ export default function Voice() {
               ? 'Đang lắng nghe… Thả tay để xử lý'
               : stt.state === 'preparing'
                 ? `Đang tải model giọng nói… ${stt.percent}%`
-                : stt.state === 'error'
+                  : stt.state === 'error'
                   ? `Chưa dùng được giọng nói: ${stt.message}`
-                  : 'Nhấn để ghi âm đơn hàng'}
+                  : voiceCapabilityLabel()}
           </T>
           {!recording && stt.state === 'error' ? (
             <Pressable onPress={prepareSpeech} style={{ alignSelf: 'center', minHeight: 44, justifyContent: 'center' }} hitSlop={8}>
@@ -1371,7 +1401,8 @@ export default function Voice() {
           toast(`Đã thêm ${li.name}`);
         }}
       />
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </Animated.View>
   );
 }
 
@@ -1475,7 +1506,7 @@ const styles = StyleSheet.create({
 
   // Manual Input Dock (Thanh phụ kiện bàn phím đồng bộ)
   manualDock: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
     paddingHorizontal: 12,
@@ -1483,7 +1514,7 @@ const styles = StyleSheet.create({
   },
   manualInputCard: {
     height: 44,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceMuted,
     borderRadius: 22,
     borderWidth: 1,
     borderColor: '#E5E7EB',
@@ -1548,7 +1579,7 @@ const styles = StyleSheet.create({
   },
   spiralRingsCol: {
     width: 24,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.bg,
     borderRightWidth: 1,
     borderRightColor: '#EEF2F6',
     alignItems: 'center',
@@ -1620,7 +1651,7 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 10,
     overflow: 'hidden',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
@@ -1634,7 +1665,7 @@ const styles = StyleSheet.create({
   stepperWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F1F5F9',
+    backgroundColor: colors.surfaceMuted,
     borderRadius: 8,
     paddingHorizontal: 3,
     paddingVertical: 2,
@@ -1850,7 +1881,7 @@ const styles = StyleSheet.create({
     width: 54,
     height: 42,
     borderRadius: 21,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderWidth: 2,
     borderColor: voiceTheme.primary,
     alignItems: 'center',
@@ -1870,7 +1901,7 @@ const styles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
   },
   mascotEarLeft: {
     position: 'absolute',
@@ -1915,7 +1946,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 24,
     borderRadius: 6,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderWidth: 1.5,
     borderColor: voiceTheme.primary,
     alignItems: 'center',

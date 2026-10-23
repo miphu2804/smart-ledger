@@ -1,18 +1,18 @@
-import { Redirect, usePathname } from 'expo-router';
+import { Redirect, usePathname, useRouter } from 'expo-router';
 import { Tabs } from 'expo-router/js-tabs';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Platform, Pressable, StyleSheet, View, ViewStyle } from 'react-native';
+import React, { useState } from 'react';
+import { Image, Platform, Pressable, StyleSheet, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Path } from 'react-native-svg';
 import { GuideTourProvider, useGuideTarget } from '../../src/components/GuideTour';
 import { TabIcon, type TabIconName } from '../../src/components/icons';
 import { QuickNavProvider } from '../../src/components/QuickNav';
 import { T } from '../../src/components/ui';
-import { ZenRing } from '../../src/components/ZenRing';
 import { triggerFeedback } from '../../src/lib/feedback';
-import { useReducedMotion } from '../../src/motion';
 import { useApp } from '../../src/store/AppStore';
-import { colors } from '../../src/theme';
+import { colors, shadow } from '../../src/theme';
+import { SCREEN_ANIMATION } from '../../src/motion';
 
 type TabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>['tabBar']>>[0];
 
@@ -21,189 +21,124 @@ type TabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>['tab
  * kẹt ở độ đậm 0: bấm sang tab khác chỉ thấy màn trắng với Bobi và thanh tab. Phần dữ liệu đang tải hiện skeleton của từng màn;
  * nền của vùng màn hình cùng màu nền app để nếu có chớp cũng không trắng tinh.
  */
-const TAB_ANIMATION = 'none';
+const TAB_ANIMATION = SCREEN_ANIMATION;
+const BAR_HEIGHT = 100;
+const SHAPE_OFFSET = 28;
+const CURVE_HEIGHT = 28;
+const CURVE_PEAK = 14;
+const SHAPE_HEIGHT = BAR_HEIGHT + SHAPE_OFFSET;
 
-const TABS: Record<string, { label: string; icon: TabIconName }> = {
-  index: { label: 'Tổng quan', icon: 'home' },
-  invoices: { label: 'Đơn hàng', icon: 'receipt' },
-  sales: { label: 'Bán hàng', icon: 'box' },
-  more: { label: 'Quản lý', icon: 'grid' },
-};
+const TABS = [
+  { name: 'index', label: 'Tổng quan', icon: 'home' as TabIconName },
+  { name: 'invoices', label: 'Đơn hàng', icon: 'receipt' as TabIconName },
+  { name: 'sales', label: 'Tạo đơn', icon: 'plus' as TabIconName },
+  { name: 'expenses', label: 'Trợ lý Bobi', icon: 'chat' as TabIconName },
+  { name: 'more', label: 'Quản lý', icon: 'grid' as TabIconName },
+];
 
 function TabBar({ state, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
-  const reducedMotion = useReducedMotion();
   const selectedTab = state.routes[state.index]?.name;
+  const pathname = usePathname();
+  const router = useRouter();
   const [barWidth, setBarWidth] = useState(0);
-  const indicatorX = useRef(new Animated.Value(0)).current;
-  const bubbleScaleX = useRef(new Animated.Value(1)).current;
-  const bubbleScaleY = useRef(new Animated.Value(1)).current;
-  const tabNames = Object.keys(TABS);
-  const selectedIndex = Math.max(0, tabNames.indexOf(selectedTab));
-  const prevIndexRef = useRef(selectedIndex);
-  const tabWidth = barWidth > 8 ? (barWidth - 8) / tabNames.length : 0;
-
-  const iconScales = useRef(tabNames.map(() => new Animated.Value(1))).current;
+  const tabWidth = barWidth / TABS.length;
   // Hướng dẫn khoanh sáng tab Đơn hàng và Quản lý
   const invoicesGuideRef = useGuideTarget('tabInvoices');
   const moreGuideRef = useGuideTarget('tabMore');
-
-  const triggerIconBounce = (index: number) => {
-    if (reducedMotion) return;
-    const s = iconScales[index];
-    if (!s) return;
-    s.setValue(1);
-    Animated.sequence([
-      Animated.timing(s, {
-        toValue: 1.09,
-        duration: 90,
-        easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
-      }),
-      Animated.spring(s, {
-        toValue: 1,
-        stiffness: 420,
-        damping: 19,
-        mass: 0.65,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
-
-  const handlePressIn = () => {
-    if (reducedMotion) return;
-    Animated.parallel([
-      Animated.spring(bubbleScaleX, { toValue: 1.05, stiffness: 450, damping: 20, useNativeDriver: true }),
-      Animated.spring(bubbleScaleY, { toValue: 0.95, stiffness: 450, damping: 20, useNativeDriver: true }),
-    ]).start();
-  };
-
-  const handlePressOut = () => {
-    if (reducedMotion) return;
-    Animated.parallel([
-      Animated.spring(bubbleScaleX, { toValue: 1, stiffness: 450, damping: 18, useNativeDriver: true }),
-      Animated.spring(bubbleScaleY, { toValue: 1, stiffness: 450, damping: 18, useNativeDriver: true }),
-    ]).start();
-  };
-
-  useEffect(() => {
-    if (!tabWidth) return;
-    const isChangingTab = prevIndexRef.current !== selectedIndex;
-    prevIndexRef.current = selectedIndex;
-
-    const targetX = selectedIndex * tabWidth;
-
-    if (reducedMotion) {
-      indicatorX.setValue(targetX);
-      bubbleScaleX.setValue(1);
-      bubbleScaleY.setValue(1);
-      return;
-    }
-
-    Animated.spring(indicatorX, {
-      toValue: targetX,
-      stiffness: 340,
-      damping: 28,
-      mass: 0.75,
-      useNativeDriver: true,
-    }).start();
-
-    if (isChangingTab) {
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(bubbleScaleX, {
-            toValue: 1.10,
-            duration: 80,
-            easing: Easing.out(Easing.quad),
-            useNativeDriver: true,
-          }),
-          Animated.spring(bubbleScaleX, {
-            toValue: 1,
-            stiffness: 440,
-            damping: 18,
-            mass: 0.6,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.sequence([
-          Animated.timing(bubbleScaleY, {
-            toValue: 0.94,
-            duration: 80,
-            easing: Easing.out(Easing.quad),
-            useNativeDriver: true,
-          }),
-          Animated.spring(bubbleScaleY, {
-            toValue: 1,
-            stiffness: 440,
-            damping: 18,
-            mass: 0.6,
-            useNativeDriver: true,
-          }),
-        ]),
-      ]).start();
-    }
-
-    triggerIconBounce(selectedIndex);
-  }, [indicatorX, bubbleScaleX, bubbleScaleY, reducedMotion, selectedIndex, tabWidth]);
+  const salesGuideRef = useGuideTarget('tabSales');
+  const bobiGuideRef = useGuideTarget('tabBobi');
 
   return (
     <View
       pointerEvents="box-none"
-      style={[styles.shell, { paddingBottom: Math.max(insets.bottom, 10) }]}
+      style={[styles.shell, { bottom: -insets.bottom, height: BAR_HEIGHT + insets.bottom }]}
     >
-      <View onLayout={(event) => setBarWidth(event.nativeEvent.layout.width)} style={styles.bar}>
-        {tabWidth ? (
-          <Animated.View
+      <View pointerEvents="none" style={styles.safeAreaFill} />
+      <View
+        onLayout={(event) => setBarWidth(event.nativeEvent.layout.width)}
+        style={styles.bar}
+      >
+        {barWidth > 0 ? (
+          <Svg
             pointerEvents="none"
-            style={[
-              styles.indicator,
-              {
-                width: tabWidth,
-                transform: [
-                  { translateX: indicatorX },
-                  { scaleX: bubbleScaleX },
-                  { scaleY: bubbleScaleY },
-                ],
-              },
-            ]}
-          />
+            style={styles.barShape}
+            width={barWidth}
+            height={SHAPE_HEIGHT}
+            viewBox={`0 0 ${barWidth} ${SHAPE_HEIGHT}`}
+          >
+            <Path
+              d={[
+                `M 0 ${CURVE_HEIGHT}`,
+                `L ${barWidth / 2 - 64} ${CURVE_HEIGHT}`,
+                `C ${barWidth / 2 - 42} ${CURVE_HEIGHT} ${barWidth / 2 - 30} ${CURVE_PEAK} ${barWidth / 2} ${CURVE_PEAK}`,
+                `C ${barWidth / 2 + 30} ${CURVE_PEAK} ${barWidth / 2 + 42} ${CURVE_HEIGHT} ${barWidth / 2 + 64} ${CURVE_HEIGHT}`,
+                `L ${barWidth} ${CURVE_HEIGHT}`,
+                `L ${barWidth} ${SHAPE_HEIGHT} L 0 ${SHAPE_HEIGHT} Z`,
+              ].join(' ')}
+              fill={colors.card}
+              stroke="none"
+            />
+          </Svg>
         ) : null}
-        {Object.entries(TABS).map(([name, meta], idx) => {
+        {TABS.map((meta, index) => {
+          const { name } = meta;
           const route = state.routes.find((item) => item.name === name);
-          if (!route) return null;
-          const focused = selectedTab === name;
-          const routeFocused = state.routes[state.index]?.key === route.key;
-          const iconScale = iconScales[idx];
+          const focused = selectedTab === name || (name === 'expenses' && pathname.startsWith('/ai'));
+          const routeFocused = route && state.routes[state.index]?.key === route.key;
 
           return (
             <Pressable
-              key={route.key}
-              ref={name === 'invoices' ? invoicesGuideRef : name === 'more' ? moreGuideRef : undefined}
+              key={route?.key ?? name}
+              ref={name === 'invoices' ? invoicesGuideRef : name === 'more' ? moreGuideRef : name === 'sales' ? salesGuideRef : name === 'expenses' ? bobiGuideRef : undefined}
               accessibilityRole="tab"
               accessibilityState={{ selected: focused }}
-              onPressIn={handlePressIn}
-              onPressOut={handlePressOut}
               onPress={() => {
                 triggerFeedback('selection');
-                triggerIconBounce(idx);
+                if (!route) {
+                  router.replace('/ai');
+                  return;
+                }
                 const e = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
                 if (!routeFocused && !e.defaultPrevented) navigation.navigate(route.name);
               }}
-              style={styles.tab}
+              style={[
+                styles.tab,
+                name === 'sales' ? styles.centerTab : styles.regularTab,
+                { left: index * tabWidth, width: tabWidth },
+              ]}
             >
-              <Animated.View style={{ transform: [{ scale: iconScale }] }}>
+              {focused && name !== 'sales' && name !== 'expenses' ? (
+                <View pointerEvents="none" style={styles.selectedSurface} />
+              ) : null}
+              {name === 'sales' ? (
+                <View style={styles.fabStack}>
+                  <View style={styles.fab}>
+                    <Image
+                      source={require('../../assets/create-order-tab-v2.png')}
+                      resizeMode="contain"
+                      accessibilityIgnoresInvertColors
+                      style={styles.createOrderLogo}
+                    />
+                  </View>
+                </View>
+              ) : name === 'expenses' ? (
+                <View style={styles.iconSlot}><Image source={require('../../assets/bobi-tab-v2.png')} resizeMode="contain" style={{ width: 40, height: 34 }} /></View>
+              ) : (
+                <View style={styles.iconSlot}>
                 <TabIcon
                   name={meta.icon}
                   variant={focused ? 'filled' : 'outline'}
-                  size={23}
-                  color={focused ? colors.brandInk : colors.muted}
+                  size={24}
+                  color={focused ? colors.brand : colors.faint}
                 />
-              </Animated.View>
+                </View>
+              )}
               <T
                 w={focused ? 'bold' : 'medium'}
-                size={11.5}
-                color={focused ? colors.brandInk : colors.muted}
-                style={{ marginTop: 2.5 }}
+                size={10.5}
+                color={focused ? colors.brand : colors.muted}
+                style={{ marginTop: 6 }}
               >
                 {meta.label}
               </T>
@@ -240,7 +175,6 @@ export default function TabsLayout() {
           <Tabs.Screen name="sales" />
           <Tabs.Screen name="more" />
         </Tabs>
-        <ZenRing />
       </QuickNavProvider>
       </GuideTourProvider>
     </View>
@@ -253,18 +187,25 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: 16,
     zIndex: 40,
   },
-  bar: {
-    height: 64,
-    flexDirection: 'row',
+  safeAreaFill: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    top: BAR_HEIGHT,
     backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 32,
-    paddingHorizontal: 4,
-    position: 'relative',
+  },
+  bar: {
+    height: BAR_HEIGHT,
+    flexDirection: 'row',
+    paddingHorizontal: 0,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    overflow: 'visible',
     ...(Platform.select({
       web: {
         boxShadow: '0 8px 24px rgba(26, 25, 22, 0.08), 0 2px 6px rgba(26, 25, 22, 0.03)',
@@ -278,15 +219,40 @@ const styles = StyleSheet.create({
       },
     })),
   },
-  indicator: {
+  barShape: { position: 'absolute', top: -SHAPE_OFFSET, left: 0, zIndex: 0 },
+  tab: { minHeight: BAR_HEIGHT, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  regularTab: { position: 'absolute' },
+  centerTab: { position: 'absolute', overflow: 'visible' },
+  iconSlot: { height: 34, justifyContent: 'center', alignItems: 'center' },
+  selectedSurface: {
     position: 'absolute',
-    left: 4,
-    top: 5,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: colors.brand,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
+    left: 5,
+    right: 5,
+    height: 68,
+    borderRadius: 23,
+    backgroundColor: colors.brandTint,
   },
-  tab: { flex: 1, minHeight: 62, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  fabStack: {
+    width: 68,
+    height: 62,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -12,
+  },
+  fab: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    borderWidth: 3,
+    borderColor: colors.brandSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand,
+    ...shadow(3),
+  },
+  createOrderLogo: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+  },
 });

@@ -21,16 +21,13 @@ import { colors } from '../../src/theme';
 
 const weekdayNames = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
 // Thanh gọn: dòng tiêu đề và doanh thu (38) + 8 + một hàng nút (34) + khoảng đệm dưới
-const HEADER_COLLAPSED = 99;
+const HEADER_COLLAPSED = 96;
 const overviewHeaderPurple = '#482AAC';
 type Tab1IconName =
   | 'logo'
   | 'revenue'
   | 'closedOrders'
   | 'shopDebt'
-  | 'readOrder'
-  | 'selectGoods'
-  | 'scanCode'
   | 'assistant'
   | 'dataSuggestion'
   | 'lowStock'
@@ -41,9 +38,6 @@ const tab1Icons: Record<Tab1IconName, ImageSourcePropType> = {
   revenue: require('../../assets/tab1-overview/doanh-thu.png'),
   closedOrders: require('../../assets/tab1-overview/da-chot-trong-ky.png'),
   shopDebt: require('../../assets/tab1-overview/con-no-toan-tiem.png'),
-  readOrder: require('../../assets/tab1-overview/doc-don.png'),
-  selectGoods: require('../../assets/tab1-overview/chon-hang.png'),
-  scanCode: require('../../assets/tab1-overview/quet-ma.png'),
   assistant: require('../../assets/tab1-overview/tro-li-ai.png'),
   dataSuggestion: require('../../assets/tab1-overview/goi-y-tu-du-lieu.png'),
   lowStock: require('../../assets/tab1-overview/kiem-tra-hang-sap-het.png'),
@@ -54,7 +48,8 @@ export default function Home() {
   const app = useApp();
   const insets = useSafeAreaInsets();
   const { height: viewportHeight } = useWindowDimensions();
-  const headerExpanded = Math.min(500, Math.max(500, viewportHeight * 0.62));
+  // Tổng quan không còn cụm nút tạo đơn; giữ header theo nội dung số liệu để không tạo khoảng trống giả.
+  const headerExpanded = Math.min(390, Math.max(360, viewportHeight * 0.45));
   const headerScrollDistance = headerExpanded - HEADER_COLLAPSED;
   const scrollY = useRef(new Animated.Value(0)).current;
   const bellShake = useRef(new Animated.Value(0)).current;
@@ -121,16 +116,11 @@ export default function Home() {
   const periodName = periodLabel[period];
   const topSeller = topSellers[0];
   // Quét mã chạy trong màn Bán hàng: ở đó có danh mục, giỏ và kiểm tra tồn. `scan=1` mở thẳng màn quét.
-  const openScanner = () => router.push({ pathname: '/pos', params: { scan: '1' } });
-  const openAssistant = (path: '/voice' | '/ai') => router.push(path);
+  const openAssistant = (path: '/ai') => router.push(path);
 
   // Hướng dẫn dạng lớp phủ khoanh sáng các nút này (src/components/GuideTour.tsx); khi hướng dẫn mở thì cuộn về đầu để
   // phần đầu đầy đủ (bốn nút lên đơn) hiện ra
   const guide = {
-    readOrder: useGuideTarget('readOrder'),
-    selectGoods: useGuideTarget('selectGoods'),
-    scanCode: useGuideTarget('scanCode'),
-    assistant: useGuideTarget('assistant'),
     bell: useGuideTarget('bell'),
     quickNav: useGuideTarget('quickNav'),
   };
@@ -465,20 +455,14 @@ export default function Home() {
                   <T size={11.5} color={colors.muted}>Còn nợ toàn tiệm</T>
                 </View>
               </Row>
-            </Card>
-            <View style={styles.expandedSalesSection}>
-              <Row style={styles.expandedSalesHeading}>
-                <T w="bold" size={15.5} color={colors.white}>
-                  Đơn hàng mới
+              <Row style={styles.revenueFooter} gap={8}>
+                <Feather name="bar-chart-2" size={16} color={colors.brand} />
+                <T size={12} color={colors.muted} style={{ flex: 1 }}>
+                  {totals && totals.count > 0 ? `Trung bình ${vnd(totals.revenue / totals.count)} / đơn` : 'Xem chi tiết doanh thu theo kỳ'}
                 </T>
+                <Feather name="arrow-up-right" size={18} color={colors.brand} />
               </Row>
-              <View style={styles.expandedActionGrid}>
-                <ActionCard icon="readOrder" title="Đọc đơn" subtitle="Giọng nói" guideRef={guide.readOrder} onPress={() => openAssistant('/voice')} />
-                <ActionCard icon="selectGoods" title="Chọn hàng" subtitle="Thủ công" guideRef={guide.selectGoods} onPress={() => router.push('/pos')} />
-                <ActionCard icon="scanCode" title="Quét mã" subtitle="Mã vạch / QR" guideRef={guide.scanCode} onPress={openScanner} />
-                <ActionCard icon="assistant" title="Trợ lý Bobi" subtitle="Gợi ý bán" guideRef={guide.assistant} onPress={() => openAssistant('/ai')} />
-              </View>
-            </View>
+            </Card>
           </Animated.View>
 
           <Animated.View
@@ -527,7 +511,7 @@ export default function Home() {
                     value={totals.revenue}
                     format={vnd}
                     w="extrabold"
-                    size={20}
+                    size={26}
                     color={colors.white}
                     numberOfLines={1}
                     adjustsFontSizeToFit
@@ -541,13 +525,6 @@ export default function Home() {
               </Pressable>
             </View>
 
-            {/* Tier 2: 4 quick actions */}
-            <View style={styles.compactTier2}>
-              <CompactAction icon="readOrder" label="Đọc đơn" onPress={() => openAssistant('/voice')} />
-              <CompactAction icon="scanCode" label="Quét mã" onPress={openScanner} />
-              <CompactAction icon="selectGoods" label="Chọn hàng" onPress={() => router.push('/pos')} />
-              <CompactAction icon="assistant" label="Trợ lý" accessibilityLabel="Trợ lý Bobi" onPress={() => openAssistant('/ai')} />
-            </View>
           </Animated.View>
           <Animated.View pointerEvents="none" style={[styles.headerDivider, { opacity: dividerOpacity }]} />
         </Animated.View>
@@ -570,101 +547,6 @@ function HomeSectionHeading({ title, side, onPress }: { title: string; side?: st
         <T w="semibold" size={12} color={colors.muted}>{side}</T>
       ) : null}
     </Row>
-  );
-}
-
-type QuickAction = 'readOrder' | 'selectGoods' | 'scanCode' | 'assistant';
-
-/**
- * Bốn nút lên đơn là thẻ trắng đặc trên phần đầu tím (chữ đậm màu mực, dễ đọc), mỗi nút phân biệt bằng ô biểu tượng màu nhạt
- * lấy từ bảng màu thương hiệu: vàng Đọc đơn (chức năng chính, màu nhấn của logo), xanh dương Chọn hàng, xanh lá Quét mã, tím
- * Trợ lý Bobi (màu của Bobi). Trước đây thẻ trong suốt có viền màu trên nền tím trông đục và khó phân biệt.
- */
-const ACTION_TONES: Record<QuickAction, { chip: string }> = {
-  readOrder: { chip: '#FFF1C7' },
-  selectGoods: { chip: '#E3EEFF' },
-  scanCode: { chip: colors.greenSoft },
-  assistant: { chip: colors.brandSoft },
-};
-
-/** Một nút lên đơn ở phần đầu Tổng quan; `guideRef` để phần hướng dẫn khoanh sáng đúng nút này. */
-function ActionCard({
-  icon,
-  title,
-  subtitle,
-  onPress,
-  guideRef,
-}: {
-  icon: QuickAction;
-  title: string;
-  subtitle: string;
-  onPress: () => void;
-  guideRef: (node: View | null) => void;
-}) {
-  const tone = ACTION_TONES[icon];
-  return (
-    <Pressable
-      ref={guideRef}
-      onPress={onPress}
-      style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
-      accessibilityRole="button"
-      accessibilityLabel={title}
-    >
-      <View style={[styles.actionIcon, { backgroundColor: tone.chip }]}>
-        <Tab1Icon name={icon} size={24} />
-      </View>
-      <View style={styles.actionTextCol}>
-        <T w="bold" size={14.5} color={colors.ink} numberOfLines={1}>
-          {title}
-        </T>
-        <T size={10.5} color={colors.muted} numberOfLines={1} style={{ marginTop: 2 }}>
-          {subtitle}
-        </T>
-      </View>
-      <Feather name="chevron-right" size={14} color={colors.faint} />
-    </Pressable>
-  );
-}
-
-/**
- * Nút vào nhanh của thanh gọn (đã cuộn). Biểu tượng nằm trên ô nền sáng: ở cỡ nhỏ, phần tím đậm của biểu tượng chìm vào nền
- * tím của thanh nên trông như bị cắt. Biểu tượng và chữ cùng một dòng để thanh gọn thấp. Nút rộng theo chữ (không chia đều)
- * vì "Chọn hàng" dài hơn "Trợ lý" nhiều, nhờ vậy cả bốn vừa màn 360 px; màn hẹp hơn thì chữ tự thu nhỏ, không xuống dòng.
- */
-function CompactAction({
-  icon,
-  label,
-  accessibilityLabel,
-  onPress,
-}: {
-  icon: Tab1IconName;
-  label: string;
-  accessibilityLabel?: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.compactActionBtn, pressed && styles.compactActionBtnPressed]}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? label}
-    >
-      <View style={[styles.compactActionIcon, { backgroundColor: ACTION_TONES[icon as QuickAction]?.chip ?? 'rgba(255, 255, 255, 0.94)' }]}>
-        <Tab1Icon name={icon} size={13} />
-      </View>
-      <T
-        w="semibold"
-        size={11}
-        color="#FFFFFF"
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.8}
-        maxFontSizeMultiplier={1.1}
-        style={styles.compactActionLabel}
-      >
-        {label}
-      </T>
-    </Pressable>
   );
 }
 
@@ -730,7 +612,7 @@ function PriorityRow({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#FFFFFF' },
+  screen: { flex: 1, backgroundColor: colors.bg },
   topBlackUnderlay: {
     position: 'absolute',
     top: -800,
@@ -744,7 +626,7 @@ const styles = StyleSheet.create({
     minHeight: 650,
     paddingHorizontal: 16,
     paddingTop: 4,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bg,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingBottom: 110,
@@ -783,7 +665,8 @@ const styles = StyleSheet.create({
   },
   overviewMeta: { minHeight: 30, justifyContent: 'space-between', alignItems: 'center' },
   headerDivider: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 1, backgroundColor: 'rgba(255,255,255,0.08)' },
-  expandedRevenueCard: { marginTop: 12, paddingVertical: 14 },
+  expandedRevenueCard: { marginTop: 14, paddingVertical: 18, borderRadius: 24, backgroundColor: colors.card },
+  revenueFooter: { marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border, alignItems: 'center' },
   revenueHeader: { minHeight: 22, justifyContent: 'space-between' },
   expandedRevenueValue: { marginTop: 4, lineHeight: 42 },
   financeRow: { marginTop: 10, paddingTop: 9, borderTopWidth: 1, borderTopColor: colors.border, alignItems: 'stretch' },
@@ -843,7 +726,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: 38,
+    minHeight: 72,
     paddingHorizontal: 2,
   },
   compactContext: {
@@ -855,7 +738,11 @@ const styles = StyleSheet.create({
   compactRevenueBox: {
     alignItems: 'flex-end',
     justifyContent: 'center',
-    maxWidth: '55%',
+    maxWidth: '65%',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: colors.brandPressed,
   },
   compactRevenueMeta: {
     flexDirection: 'row',
@@ -864,7 +751,7 @@ const styles = StyleSheet.create({
   },
   compactRevenueValue: {
     marginTop: 1,
-    lineHeight: 22,
+    lineHeight: 32,
     textAlign: 'right',
   },
   compactTier2: {
