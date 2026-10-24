@@ -1,3 +1,11 @@
+### [2026-10-24 14:30 UTC+07:00] — [Feature] Landing introduces the team
+
+**Done:** The course asks the landing to show who built the product, and it had no team information. A new "Đội ngũ" section (after the POS comparison, linked from the top menu and the footer) shows the six members' own "Đội ngũ Sổ Nghe Lời" posters uncropped, as Orei asked: Minh Thọ (Leader), Minh Phú (AI Engineer), Thượng Hiệp (Frontend Developer), Thu Thảo (Backend Developer), Quỳnh Như (Business Analyst), Kiều Chinh (Marketing), with a line about Team HEXA, EXE201, FPT University. Posters are WebP (940×788, about 70 KB each), lazy-loaded, with name and role in `alt`. The FAQ answer on sign-in said Facebook or Zalo; it now says email and password or Google, which is what the app offers (Facebook is paused, Zalo shows "Sắp có").
+
+**Changed files:** `frontend/web/public/team/{minh-tho,minh-phu,thuong-hiep,thu-thao,quynh-nhu,kieu-chinh}.webp` — added; `frontend/web/src/pages/landing/LandingPage.tsx`, `frontend/web/src/pages/landing/SiteFooter.tsx`, `frontend/web/src/styles/landing.css` — modified; this entry.
+
+**Check:** `npm run typecheck`, `npm run lint` (no new warnings) and `npm run build` in `frontend/web`; dev server at 1280 px shows the six posters in three columns, all loaded, "Đội ngũ" in the menu and footer; the grid drops to two columns under 960 px and one under 560 px with no horizontal overflow at 375 px.
+
 ### [2026-10-24 10:30 UTC+07:00] — [Change] Admin dashboard ships inside the landing at /admin
 
 **Done:** For the course submission the admin needs one public link, and the separate admin Vercel project would have lived in another team's account. The landing deploy now carries the admin at `/admin` (real Core data) when its GitHub environment sets `VITE_ADMIN_ENABLED=true` with `VITE_API_ENDPOINT` and `VITE_FIREBASE_API_KEY`; without the flag the landing has no admin code, as before. Job `deploy-admin` from #342 is removed. The build check now fails on the mock demo password in any case, on missing admin routes or settings when the flag is on, and on admin code when it is off; with the flag on, the smoke test opens `/admin/login` and fails when Core still rejects a CORS preflight from the landing after 5 minutes.
