@@ -4,6 +4,14 @@ on:
   pull_request:
   push:
     branches: [main, staging]
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: self-hosted runs every job on the repository's self-hosted machine, for when GitHub-hosted runners are unavailable
+        type: choice
+        required: true
+        default: github-hosted
+        options: [github-hosted, self-hosted]
 
 jobs:
   ### Changes: which areas this pull request or push touched ###
@@ -13,7 +21,11 @@ jobs:
   # mobile-release.yml. Filtering here, not with `on.paths`, keeps every check reporting a result.
   # A change to this workflow runs everything.
   changes:
-    runs-on: ubuntu-24.04
+    # Every job uses this runner. GitHub-hosted is the default; the self-hosted machine is used when the run is started
+    # with runner=self-hosted or the repository variable CI_RUNNER is self-hosted. Pull requests from forks always stay
+    # GitHub-hosted, because the repository is public and a fork must not run code on the self-hosted machine.
+    # Service containers (the Postgres of `ai` and `core`) need a Linux runner.
+    runs-on: &runner ${{ ((inputs.runner || vars.CI_RUNNER) == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted"]') || 'ubuntu-24.04' }}
     permissions:
       contents: read
       pull-requests: read
@@ -56,10 +68,11 @@ jobs:
   ai:
     needs: [changes]
     if: needs.changes.outputs.ai == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: *runner
     services:
       postgres:
-        image: pgvector/pgvector:pg17
+        # Empty on the self-hosted runner, which cannot run service containers; `Start PostgreSQL` replaces it there.
+        image: ${{ !((inputs.runner || vars.CI_RUNNER) == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && 'pgvector/pgvector:pg17' || '' }}
         env:
           POSTGRES_DB: smartledger_test
           POSTGRES_USER: smartledger
@@ -71,8 +84,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
-    env:
-      POSTGRES_TEST_URL: postgresql://smartledger:smartledger@localhost:5432/smartledger_test
     outputs:
       tests: ${{ steps.test-results.outputs.tests }}
       failures: ${{ steps.test-results.outputs.failures }}
@@ -86,15 +97,31 @@ jobs:
       - uses: astral-sh/setup-uv@v10.1.0
         with:
           python-version: "3.11"
+      - name: Start PostgreSQL
+        if: runner.environment == 'self-hosted'
+        working-directory: .
+        run: |
+          # A per-job name and a free host port, so jobs running side by side on one machine do not collide.
+          docker rm -f ci-postgres-${{ github.run_id }}-${{ github.job }} >/dev/null 2>&1 || true
+          docker run -d --name ci-postgres-${{ github.run_id }}-${{ github.job }} -p 127.0.0.1::5432 \
+            -e POSTGRES_DB=smartledger_test -e POSTGRES_USER=smartledger -e POSTGRES_PASSWORD=smartledger pgvector/pgvector:pg17
+          until docker exec ci-postgres-${{ github.run_id }}-${{ github.job }} pg_isready -U smartledger -d smartledger_test >/dev/null 2>&1; do sleep 1; done
+          echo "PG_PORT=$(docker port ci-postgres-${{ github.run_id }}-${{ github.job }} 5432/tcp | head -1 | sed 's/.*://')" >> "$GITHUB_ENV"
       - run: uv sync --group dev
       - run: uv run ruff check
       - run: uv run ruff format --check
       - run: uv run pytest --junitxml=pytest-results.xml
+        env:
+          POSTGRES_TEST_URL: postgresql://smartledger:smartledger@localhost:${{ env.PG_PORT || '5432' }}/smartledger_test
+      - name: Stop PostgreSQL
+        if: always() && runner.environment == 'self-hosted'
+        working-directory: .
+        run: docker rm -f ci-postgres-${{ github.run_id }}-${{ github.job }}
       - name: Capture test counts
         id: test-results
         if: always()
         run: |
-          python - <<'PY' >> "$GITHUB_OUTPUT"
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
           from pathlib import Path
           from xml.etree import ElementTree
 
@@ -116,10 +143,11 @@ jobs:
   core:
     needs: [changes]
     if: needs.changes.outputs.core == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: *runner
     services:
       postgres:
-        image: postgres:16
+        # Empty on the self-hosted runner, which cannot run service containers; `Start PostgreSQL` replaces it there.
+        image: ${{ !((inputs.runner || vars.CI_RUNNER) == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && 'postgres:16' || '' }}
         env:
           POSTGRES_DB: smartledger
           POSTGRES_USER: smartledger
@@ -145,10 +173,20 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-          cache: maven
+          cache: ${{ runner.environment == 'github-hosted' && 'maven' || '' }}
+      - name: Start PostgreSQL
+        if: runner.environment == 'self-hosted'
+        working-directory: .
+        run: |
+          # A per-job name and a free host port, so jobs running side by side on one machine do not collide.
+          docker rm -f ci-postgres-${{ github.run_id }}-${{ github.job }} >/dev/null 2>&1 || true
+          docker run -d --name ci-postgres-${{ github.run_id }}-${{ github.job }} -p 127.0.0.1::5432 \
+            -e POSTGRES_DB=smartledger -e POSTGRES_USER=smartledger -e POSTGRES_PASSWORD=smartledger postgres:16
+          until docker exec ci-postgres-${{ github.run_id }}-${{ github.job }} pg_isready -U smartledger -d smartledger >/dev/null 2>&1; do sleep 1; done
+          echo "PG_PORT=$(docker port ci-postgres-${{ github.run_id }}-${{ github.job }} 5432/tcp | head -1 | sed 's/.*://')" >> "$GITHUB_ENV"
       - name: Verify Core with PostgreSQL tests enabled
         env:
-          CORE_TEST_POSTGRES_URL: jdbc:postgresql://127.0.0.1:5432/smartledger
+          CORE_TEST_POSTGRES_URL: jdbc:postgresql://127.0.0.1:${{ env.PG_PORT || '5432' }}/smartledger
           CORE_TEST_POSTGRES_USERNAME: smartledger
           CORE_TEST_POSTGRES_PASSWORD: smartledger
         run: bash ./mvnw --batch-mode --no-transfer-progress verify
@@ -161,7 +199,7 @@ jobs:
           docker run --rm --network host \
             --volume "$GITHUB_WORKSPACE/backend/core/src/main/resources/db/migration:/flyway/sql:ro" \
             flyway/flyway:13.7.0 \
-            -url=jdbc:postgresql://127.0.0.1:5432/smartledger \
+            "-url=jdbc:postgresql://127.0.0.1:${PG_PORT:-5432}/smartledger" \
             -user=smartledger \
             -password=smartledger \
             -locations=filesystem:/flyway/sql \
@@ -170,9 +208,13 @@ jobs:
       - name: Verify Core tables exist
         run: |
           table_count="$(docker run --rm --network host -e PGPASSWORD=smartledger postgres:16 \
-            psql -h 127.0.0.1 -U smartledger -d smartledger -Atc \
+            psql -h 127.0.0.1 -p "${PG_PORT:-5432}" -U smartledger -d smartledger -Atc \
             "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename IN ('users', 'auth_identities', 'shops')")"
           test "$table_count" = "3"
+      - name: Stop PostgreSQL
+        if: always() && runner.environment == 'self-hosted'
+        working-directory: .
+        run: docker rm -f ci-postgres-${{ github.run_id }}-${{ github.job }}
       - name: Capture test counts
         id: test-results
         if: always()
@@ -197,7 +239,7 @@ jobs:
   mobile-web:
     needs: [changes]
     if: needs.changes.outputs.mobile == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: *runner
     env:
       EXPO_PUBLIC_USE_MOCK: "true"
       EXPO_PUBLIC_MOCK_CORE: "true"
@@ -211,7 +253,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-          cache: npm
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
           cache-dependency-path: frontend/mobile/package-lock.json
       - run: npm ci
       - run: npm run typecheck
@@ -220,7 +262,7 @@ jobs:
   landing:
     needs: [changes]
     if: needs.changes.outputs.landing == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: *runner
     defaults:
       run:
         working-directory: frontend/web
@@ -229,7 +271,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-          cache: npm
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
           cache-dependency-path: frontend/web/package-lock.json
       - run: npm ci
       - run: npm run lint
@@ -238,7 +280,7 @@ jobs:
   container-images:
     needs: [changes]
     if: needs.changes.outputs.containers == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: *runner
     env:
       DATABASE_URL: jdbc:postgresql://ci-placeholder:5432/ci
       DATABASE_USERNAME: ci-placeholder
@@ -258,7 +300,7 @@ jobs:
     name: CI result summary
     if: always()
     needs: [ai, core, mobile-web, landing, container-images]
-    runs-on: ubuntu-24.04
+    runs-on: *runner
     steps:
       - name: Build compact report
         env:
@@ -291,6 +333,8 @@ jobs:
           } > ci-summary.md
           cat ci-summary.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
+        # The summary is already in the job summary; a full artifact quota must not fail CI or skip deploys.
+        continue-on-error: true
         with:
           name: ci-summary
           path: ci-summary.md
@@ -314,7 +358,7 @@ jobs:
     needs: [changes, ai, core, mobile-web, container-images]
     permissions:
       contents: read
-    runs-on: ubuntu-24.04
+    runs-on: *runner
     environment: ${{ github.ref_name == 'main' && 'railway-production' || 'railway-staging' }}
     concurrency:
       group: deploy-${{ github.ref_name }}
@@ -326,7 +370,17 @@ jobs:
         with:
           persist-credentials: false
       - name: Install Railway CLI
-        run: npm install --global @railway/cli@5.63.1
+        # A job-local prefix, so the self-hosted machine's own CLI (e.g. Homebrew's) is neither clashed with nor replaced.
+        run: |
+          npm install --prefix "$RUNNER_TEMP/cli" @railway/cli@5.63.1
+          echo "$RUNNER_TEMP/cli/node_modules/.bin" >> "$GITHUB_PATH"
+      # On the self-hosted machine the CLI would read the owner's ~/.railway login before RAILWAY_TOKEN; an empty HOME
+      # leaves the token as its only credential.
+      - name: Isolate the Railway CLI config
+        if: runner.environment == 'self-hosted'
+        run: |
+          mkdir -p "$RUNNER_TEMP/home"
+          echo "HOME=$RUNNER_TEMP/home" >> "$GITHUB_ENV"
       # GitHub owns the browser origins Core allows, so a manual edit on Railway cannot drift or
       # crash Core: Core refuses to start on any whitespace, wildcard or path inside an origin.
       # Skipped while the environment variable is unset, leaving the Railway value untouched.
@@ -411,6 +465,8 @@ jobs:
           } > deploy-summary.md
           cat deploy-summary.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
+        # The summary is already in the job summary; a full artifact quota must not fail CI or skip deploys.
+        continue-on-error: true
         if: always()
         with:
           name: deploy-summary-${{ github.ref_name }}
@@ -436,7 +492,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    runs-on: ubuntu-24.04
+    runs-on: *runner
     # `url` links the GitHub Deployments sidebar to the fixed domains; previews get none because
     # their alias depends on the PR number and is already commented on the PR.
     environment:
@@ -468,10 +524,13 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-          cache: npm
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
           cache-dependency-path: frontend/mobile/package-lock.json
       - name: Install Vercel CLI
-        run: npm install --global vercel@62.2.0
+        # A job-local prefix, so the self-hosted machine's own CLI (e.g. Homebrew's) is neither clashed with nor replaced.
+        run: |
+          npm install --prefix "$RUNNER_TEMP/cli" vercel@62.2.0
+          echo "$RUNNER_TEMP/cli/node_modules/.bin" >> "$GITHUB_PATH"
       - run: vercel pull --yes --environment="$VERCEL_TARGET" --token="$VERCEL_TOKEN"
       # Job env wins over values pulled from Vercel, so GitHub stays the source of EXPO_PUBLIC_*.
       - run: vercel build ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN"
@@ -576,7 +635,7 @@ jobs:
     needs: [changes, landing]
     permissions:
       contents: read
-    runs-on: ubuntu-24.04
+    runs-on: *runner
     environment: ${{ github.event_name == 'pull_request' && 'landing-preview' || (github.ref_name == 'main' && 'landing-production' || 'landing-staging') }}
     concurrency:
       group: deploy-landing-${{ github.head_ref || github.ref_name }}
@@ -588,6 +647,12 @@ jobs:
       VERCEL_TARGET: ${{ github.ref_name == 'main' && github.event_name == 'push' && 'production' || 'preview' }}
       VITE_LEGAL_DRAFT: ${{ vars.VITE_LEGAL_DRAFT }}
       VITE_ANDROID_APK_URL: ${{ vars.VITE_ANDROID_APK_URL }}
+      # Admin at /admin on the landing, reading the real Core admin API. Off unless the environment sets
+      # VITE_ADMIN_ENABLED=true together with VITE_API_ENDPOINT (Core root) and VITE_FIREBASE_API_KEY.
+      VITE_ADMIN_ENABLED: ${{ vars.VITE_ADMIN_ENABLED }}
+      VITE_USE_MOCK: "false"
+      VITE_API_ENDPOINT: ${{ vars.VITE_API_ENDPOINT }}
+      VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -595,19 +660,32 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-          cache: npm
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
           cache-dependency-path: frontend/web/package-lock.json
       - name: Install Vercel CLI
-        run: npm install --global vercel@62.2.0
+        # A job-local prefix, so the self-hosted machine's own CLI (e.g. Homebrew's) is neither clashed with nor replaced.
+        run: |
+          npm install --prefix "$RUNNER_TEMP/cli" vercel@62.2.0
+          echo "$RUNNER_TEMP/cli/node_modules/.bin" >> "$GITHUB_PATH"
       - run: vercel pull --yes --environment="$VERCEL_TARGET" --token="$VERCEL_TOKEN"
       - run: vercel build ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN"
-      # Vercel project variables are pulled into the build, so a VITE_ADMIN_ENABLED=true set there would publish admin.
-      - name: Check no admin code in the build
+      # Admin follows the GitHub environment only: without VITE_ADMIN_ENABLED=true there must be no admin code (a value set
+      # in the Vercel project would otherwise slip in through `vercel pull`); with it, the admin must be the real one.
+      - name: Check the admin in the build
         run: |
-          # The chunk name follows the lazy import in App.tsx; admin123 is a mock password and may change.
-          if [ -n "$(find .vercel/output/static -name 'AdminRoutes-*')" ] || grep -rqF admin123 .vercel/output/static; then
-            echo "::error::admin code is in the landing build; remove VITE_ADMIN_ENABLED from the Vercel project"
-            exit 1
+          out=.vercel/output/static
+          has_admin=$([ -n "$(find "$out" -name 'AdminRoutes-*')" ] && echo yes || echo no)
+          # admin123 is a mock demo password; it must never be published
+          if grep -rqF admin123 "$out"; then
+            echo "::error::mock demo accounts are in the build; VITE_USE_MOCK must stay false"; exit 1
+          fi
+          if [ "$VITE_ADMIN_ENABLED" = true ]; then
+            [ "$has_admin" = yes ] || { echo "::error::VITE_ADMIN_ENABLED=true but the admin routes are missing"; exit 1; }
+            [ -n "$VITE_API_ENDPOINT" ] && [ -n "$VITE_FIREBASE_API_KEY" ] \
+              || { echo "::error::set VITE_API_ENDPOINT and VITE_FIREBASE_API_KEY on this environment for the admin"; exit 1; }
+            grep -rqF "$VITE_API_ENDPOINT" "$out" || { echo "::error::the admin does not point at VITE_API_ENDPOINT"; exit 1; }
+          elif [ "$has_admin" = yes ]; then
+            echo "::error::admin code is in the landing build; remove VITE_ADMIN_ENABLED from the Vercel project"; exit 1
           fi
       - name: Deploy
         id: deploy
@@ -663,6 +741,23 @@ jobs:
           done
           test "$code" = 200
           echo "page: 200 at $URL"
+          if [ "$VITE_ADMIN_ENABLED" = true ]; then
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$URL/admin/login" || true)
+            test "$code" = 200 || { echo "::error::admin login page returned $code"; exit 1; }
+            echo "admin login page: 200 at $URL/admin/login"
+            # The browser calls Core from this origin, so the admin is unusable until Core allows it. Core may still be
+            # deploying a new CORS_ALLOWED_ORIGINS in the same run (job `deploy`), so wait up to 5 minutes, then fail.
+            for attempt in $(seq 1 20); do
+              cors=$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS "$VITE_API_ENDPOINT/api/v1/me"                 -H "Origin: $URL" -H 'Access-Control-Request-Method: GET' -H 'Access-Control-Request-Headers: authorization' || true)
+              [ "$cors" = 200 ] && break
+              sleep 15
+            done
+            if [ "$cors" != 200 ]; then
+              echo "::error::Core at $VITE_API_ENDPOINT still answers $cors to a CORS preflight from $URL after 5 minutes; add $URL to CORS_ALLOWED_ORIGINS of the matching railway-* environment and redeploy Core"
+              exit 1
+            fi
+            echo "Core accepts $URL (CORS)"
+          fi
       - name: Report URL
         if: always() && steps.deploy.outputs.url != ''
         env:

@@ -22,8 +22,10 @@ Biến môi trường (xem `.env.example`):
 
 | Biến | Mặc định | Ý nghĩa |
 | --- | --- | --- |
-| `VITE_API_ENDPOINT` | `http://localhost:8000` | Địa chỉ backend |
-| `VITE_USE_MOCK` | (bật) | Đặt `false` để gọi API thật thay vì dữ liệu mẫu |
+| `VITE_API_ENDPOINT` | `http://localhost:8080` | Địa chỉ Core, không kèm `/api/v1` |
+| `VITE_USE_MOCK` | (bật) | Đặt `false` để trang quản trị đọc API thật của Core thay vì dữ liệu mẫu |
+| `VITE_FIREBASE_API_KEY` | (trống) | Chế độ thật: Web API key của dự án Firebase mà Core dùng để kiểm token (đăng nhập quản trị bằng email + mật khẩu) |
+| `VITE_FIREBASE_AUTH_EMULATOR_HOST` | (trống) | Chỉ khi chạy thử trên máy: host của Firebase Auth Emulator, vd. `localhost:9099` |
 | `VITE_ANDROID_APK_URL` | (trống) | Liên kết tải APK Android trên trang giới thiệu (xem [Publish the APK for the landing page](../../docs/development/ci-cd.md#publish-the-apk-for-the-landing-page)). Để trống thì nút tải hiện "Sắp ra mắt" và không bấm được |
 | `VITE_ADMIN_ENABLED` | (tắt) | `true` bật trang quản trị `/admin`. Tắt thì bản build không có mã admin, tài khoản demo cũng không lọt vào bundle. Đặt `true` trong `.env.local` khi phát triển |
 | `VITE_LEGAL_DRAFT` | `true` | Hai trang pháp lý hiện nhãn "Bản nháp" cho đến khi chủ sản phẩm duyệt; đặt `false` lúc build để gỡ nhãn |
@@ -32,7 +34,14 @@ Thông tin liên hệ công khai nằm trong [`site.yaml`](site.yaml), không ph
 
 ## Trang quản trị
 
-Chỉ chạy khi `VITE_ADMIN_ENABLED=true` (mặc định tắt). Khi phát triển, đặt trong `.env.local`; các bản deploy không đặt biến này.
+Chỉ chạy khi `VITE_ADMIN_ENABLED=true` (mặc định tắt). Khi phát triển, đặt trong `.env.local`. Bản deploy bật admin khi GitHub environment `landing-*` đặt `VITE_ADMIN_ENABLED=true` cùng `VITE_API_ENDPOINT` và `VITE_FIREBASE_API_KEY`: trang quản trị nằm ở `/admin` của chính landing, đọc dữ liệu thật của Core (xem [Landing page on Vercel](../../docs/development/ci-cd.md#landing-page-on-vercel)).
+
+**Hai chế độ:**
+
+- **Dữ liệu thật** (`VITE_USE_MOCK=false`): các trang trong `src/pages/admin/core/` đọc API quản trị của Core (`/api/v1/admin/*`, [API contracts §7](../../docs/contracts/api-contracts.md)) qua `src/services/adminApi.ts`. Đăng nhập Firebase bằng email + mật khẩu qua REST (`src/services/firebaseAuth.ts`, không cài SDK `firebase`), rồi `GET /api/v1/me`: chỉ tài khoản Core có `role` ADMIN mới vào được. Tài khoản quản trị là một user email/mật khẩu trong Firebase của môi trường đó, có hồ sơ Core `system_role=ADMIN` và ACTIVE (Core không tự nâng quyền). ID token chỉ nằm trong bộ nhớ và tự làm mới; refresh token được lưu (localStorage khi "Ghi nhớ đăng nhập", sessionStorage khi không) để tải lại trang không phải đăng nhập lại; đăng xuất xoá cả hai. Core có tổng quan, chủ tiệm, cửa hàng (kèm lịch sử trạng thái, tạm ngưng / mở lại qua `PATCH /api/v1/shops/{id}/status`) và nhật ký truy cập của chính ADMIN; Core chưa có task, AI Support, tìm nhanh hay thông báo, nên các mục đó ẩn.
+- **Dữ liệu mẫu** (mặc định): các trang cũ chạy trên `localStorage`, có thêm AI Support và Tasks để demo (xem [Dữ liệu mẫu](#dữ-liệu-mẫu-mock)).
+
+Chạy thử chế độ thật trên máy: Core chạy ở `localhost:8080` với `CORS_ALLOWED_ORIGINS` có `http://localhost:5173`, rồi `VITE_ADMIN_ENABLED=true VITE_USE_MOCK=false VITE_FIREBASE_API_KEY=<key> npm run dev`.
 
 Giao diện "calm operations": nền trung tính ấm, accent xanh lá (#2F7A43 / #8FD17D), radius 16/10/999, font Geist, icon Phosphor (regular). Token nằm đầu `src/styles/admin.css`, toàn bộ CSS admin nằm trong `.adm` nên không ảnh hưởng trang giới thiệu.
 
@@ -42,13 +51,14 @@ Giao diện "calm operations": nền trung tính ấm, accent xanh lá (#2F7A43 
 | `/privacy` | Chính sách quyền riêng tư (bản nháp, chờ duyệt) |
 | `/data-deletion` | Hướng dẫn xoá dữ liệu người dùng (Meta yêu cầu cho Facebook Login) |
 | `/admin/login` | Đăng nhập (chỉ ADMIN vào được) |
-| `/admin` | Dashboard: 4 KPI · xu hướng hỗ trợ (8 cột) + Cần chú ý (4 cột, chỉ đọc) · cơ sở/OWNER mới + truy cập gần đây của ADMIN |
-| `/admin/customers?tab=owners\|shops` | Tab OWNER / Cơ sở, tìm theo tên, email, SĐT, tên cơ sở; lọc; phân trang. Bấm dòng → drawer chi tiết bên phải (`&owner=` / `&shop=`), mỗi lần mở đều ghi audit |
-| `/admin/ai` | AI Support: hội thoại (240) · chat (gợi ý, tin nhắn, composer + phạm vi) · ngữ cảnh cơ sở (320). Câu trả lời có phạm vi, bằng chứng, giới hạn; task draft chỉ tạo khi ADMIN xác nhận |
-| `/admin/tasks` | Kanban Inbox / Đang điều tra / Chờ phản hồi / Đã xử lý; lọc người phụ trách, mức độ, nguồn, hạn, "Của tôi"; kéo thả; drawer chi tiết + lịch sử; đề xuất AI chỉ để xem lại |
-| `/admin/settings/profile\|appearance\|security\|audit` | Hồ sơ (tên, màu avatar, ngôn ngữ) · Giao diện (sáng/theo hệ thống, mật độ — lưu trên trình duyệt) · Bảo mật & quyền (chỉ đọc) · Nhật ký (luôn bật) |
+| `/admin` | Thật: chủ tiệm và cửa hàng theo trạng thái, số mới trong 7/30/90 ngày, 5 cửa hàng mới nhất, truy cập gần đây. Mock: 4 KPI · xu hướng hỗ trợ · Cần chú ý · cơ sở/OWNER mới |
+| `/admin/customers?tab=owners\|shops` | Tab Chủ tiệm / Cửa hàng, tìm, lọc trạng thái, phân trang. Bấm dòng → drawer chi tiết (`&owner=` / `&shop=`); drawer cửa hàng có lịch sử trạng thái và nút tạm ngưng / mở lại (chế độ thật). Mỗi lần tìm và mở đều được ghi nhật ký |
+| `/admin/access-logs` | Chỉ chế độ thật: nhật ký truy cập quản trị của chính ADMIN, lọc theo thao tác, mã cửa hàng, khoảng ngày |
+| `/admin/ai` | Chỉ mock: AI Support (hội thoại · chat · ngữ cảnh cơ sở); task draft chỉ tạo khi ADMIN xác nhận |
+| `/admin/tasks` | Chỉ mock: Kanban hỗ trợ; kéo thả; drawer chi tiết + lịch sử |
+| `/admin/settings/profile\|appearance\|security\|audit` | Hồ sơ · Giao diện (lưu trên trình duyệt) · Bảo mật & quyền (chỉ đọc) · Nhật ký (chỉ mock; chế độ thật chuyển sang `/admin/access-logs`) |
 
-URL cũ vẫn chạy: `/admin/customers/:id` → drawer cơ sở, `/admin/logs` → `/admin/settings/audit`, `/admin/accounts` → `/admin/customers`.
+URL cũ vẫn chạy: `/admin/customers/:id` → drawer cơ sở, `/admin/logs` → nhật ký, `/admin/accounts` → `/admin/customers`. Chế độ thật: `/admin/ai` và `/admin/tasks` về Dashboard.
 
 **Phân quyền:** chưa đăng nhập → `/admin/login`. Tài khoản không phải ADMIN (vd. OWNER) → mọi URL `/admin/*` hiện trang **403**, không có menu quản trị.
 
@@ -58,7 +68,7 @@ URL cũ vẫn chạy: `/admin/customers/:id` → drawer cơ sở, `/admin/logs` 
 
 **Responsive:** ≥1280 sidebar 248px · 768–1279 sidebar 72px, cột phụ xuống dưới · <768 sidebar thành drawer, KPI cuộn ngang, bảng thành danh sách, Kanban cuộn ngang có snap. Có skip link, focus rõ, vùng bấm 40px, tôn trọng `prefers-reduced-motion`.
 
-**Tài khoản demo** (trang đăng nhập có nút "Điền"):
+**Tài khoản demo** (chỉ chế độ mock; trang đăng nhập có nút "Điền"):
 
 | Email | Mật khẩu | Role | Kết quả |
 | --- | --- | --- | --- |
@@ -101,20 +111,13 @@ Thiết lập một lần trên Vercel: New Project → import repo này → Roo
 
 Kiểm tra nhanh (chế độ mock): thêm `?mock=slow`, `?mock=empty` hoặc `?mock=error` vào URL admin, hoặc chọn ở ô **Dữ liệu mẫu** cuối sidebar. `?mock=normal` để tắt. Khi AI Support lỗi, nội dung câu hỏi được giữ lại để bấm Thử lại.
 
-## Dữ liệu mẫu (mock) — chưa có backend
+## Dữ liệu mẫu (mock)
 
 - `src/types.ts` mô tả hợp đồng API **giả định** (`AdminOverviewView`, `AdminUserItem`, `AdminShopDetailView`, `SupportTask`, `AiMessage`…). Các field của `AdminOverviewView` là giả định, cần khoá lại với backend.
 - `src/mocks/accounts.ts` sinh 48 OWNER / 53 cơ sở; `src/mocks/tasks.ts` sinh 11 support task. Chỉ có dữ liệu hỗ trợ. "Hôm nay" của dữ liệu mẫu là `MOCK_TODAY` (16/09/2026).
 - `src/services/mockStore.ts` là "backend giả" lưu trong `localStorage` (`snl_mock_db`, `snl_mock_tasks`, `snl_mock_ai`, `snl_mock_audit`, `snl_mock_idem`). Nút **Khôi phục dữ liệu mẫu** đưa về ban đầu. Tuỳ chọn cá nhân lưu ở `snl_admin_prefs`.
 - AI Support trong mock là bộ trả lời theo luật (`src/services/aiService.ts`), không gọi model thật.
-- Khi có backend: đặt `VITE_USE_MOCK=false`. Core chưa có các endpoint dưới đây: Core xác thực bằng Firebase ID token qua `POST /api/v1/auth/session` (không có `/auth/login`), và API ADMIN duy nhất hiện có là `PATCH /api/v1/shops/{shopId}/status`. Hợp đồng đích của dashboard nằm trong [API contracts §7](../../docs/contracts/api-contracts.md#7-dashboard-quản-trị--hợp-đồng-đích). Endpoint giả định trong code (đánh dấu `TODO(backend)`):
-  - `POST /auth/login`
-  - `GET /admin/overview?days=`
-  - `GET /admin/users` · `GET /admin/users/{id}`
-  - `GET /admin/shops` · `GET /admin/shops/{id}`
-  - `GET /admin/support-tasks` · `POST /admin/support-tasks` (header `Idempotency-Key`) · `PATCH /admin/support-tasks/{id}` (kèm `version`) · `GET /admin/support-tasks/suggestions` · `GET /admin/members`
-  - `GET /admin/ai/conversations` · `POST /admin/ai/conversations[/{id}]/messages` · `DELETE /admin/ai/conversations/{id}`
-  - `GET /admin/audit-logs`
+- Các trang mock (`DashboardPage`, `CustomersPage`, `AiSupportPage`, `TasksPage`, nhật ký trong Cài đặt) dùng hợp đồng giả định trong `src/types.ts` và `accountService`/`taskService`/`aiService`, khác API thật của Core; chế độ thật dùng `src/pages/admin/core/` thay cho chúng. Core chưa có task, thành viên, hội thoại AI, gói, thiết bị hay xu hướng, nên các phần đó chỉ có ở mock.
 
 ## Cấu trúc
 

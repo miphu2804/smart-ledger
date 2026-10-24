@@ -1,8 +1,9 @@
 import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { LinearGradient } from 'expo-linear-gradient';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Animated, Image, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarcodeScannerModal } from '../src/components/BarcodeScannerModal';
 import { useToast } from '../src/components/brand';
@@ -17,6 +18,7 @@ import { errorMessage } from '../src/lib/errors';
 import { triggerFeedback } from '../src/lib/feedback';
 import { abbr, capMoney, hashIndex, normalizeText, vnd } from '../src/lib/format';
 import { ProductImage } from '../src/components/ProductImage';
+import { ActionIcon, type ActionIconName } from '../src/components/icons';
 import { upsertCustomLine } from '../src/lib/customLines';
 import { itemsTotal } from '../src/lib/stats';
 import { LIST_PAGE_SIZE } from '../src/lib/usePagedList';
@@ -110,7 +112,7 @@ function PosActionButton({
   compact,
   tone = 'purple',
 }: {
-  icon: React.ComponentProps<typeof Feather>['name'];
+  icon: ActionIconName;
   label: string;
   onPress: () => void;
   compact?: boolean;
@@ -136,13 +138,10 @@ function PosActionButton({
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <Feather
-        name={icon}
-        size={compact ? 17 : 16}
-        color={isPurple ? '#F8DF69' : colors.brand}
-      />
+      {!compact ? <LinearGradient pointerEvents="none" colors={['rgba(255,255,255,0.85)', 'rgba(239,234,255,0.2)', 'rgba(255,255,255,0.45)']} style={[StyleSheet.absoluteFill, { borderRadius: 13 }]} /> : null}
+      <Image source={icon === 'mic' ? require('../assets/voice-order-v2.png') : require('../assets/scan-order-v2.png')} resizeMode="contain" style={{ width: compact ? 26 : 32, height: compact ? 26 : 32 }} />
       {!compact ? (
-        <T w="bold" size={13} color={isPurple ? colors.white : colors.ink} numberOfLines={1}>
+        <T w="bold" size={13} color={colors.ink} numberOfLines={1}>
           {label}
         </T>
       ) : null}
@@ -714,7 +713,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
 
   // 4 = khoảng cách từ mép trên, 6 = khoảng đệm dưới của posHeaderBody; 152 là chiều cao tối thiểu trước khi đo xong.
   const headerHeight = Math.max(152, Math.ceil(headerBodyHeight) + 10);
-  const collapsedHeaderHeight = 56;
+  const collapsedHeaderHeight = 116;
 
   const addCustomItem = async () => {
     const price = parseInt(cPrice.replace(/\D/g, ''), 10) || 0;
@@ -754,12 +753,17 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
         collapsedHeight={collapsedHeaderHeight}
         onBodyHeight={setHeaderBodyHeight}
         pinned={
+          <View style={{ paddingTop: 8, paddingBottom: 8 }}>
           <Row gap={8} style={styles.pinnedHeader}>
             {inTab ? <QuickNavButton compact /> : null}
             <PosSearchBox value={q} onChangeText={setQ} compact />
-            <PosActionButton tone="gold" icon="maximize" label="Quét mã" compact onPress={() => setScannerOpen(true)} />
+            <PosActionButton tone="gold" icon="scan" label="Quét mã" compact onPress={() => setScannerOpen(true)} />
             <PosActionButton tone="purple" icon="mic" label="Đọc đơn" compact onPress={() => router.push('/voice')} />
           </Row>
+          <View style={{ marginTop: 12 }}>
+            <PosCategoryChips value={cat} onChange={setCat} options={cats.map((c) => ({ key: c, label: catLabel(c) }))} />
+          </View>
+          </View>
         }
       >
         <View style={styles.headerBlock}>
@@ -770,15 +774,17 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
                   <Feather name="chevron-left" size={18} color={salesColors.ink} />
                 </Pressable>
               ) : null}
-              <T w="extrabold" size={26} color={salesColors.ink}>
-                Bán hàng
+              <T w="extrabold" size={26} color={colors.white}>
+                Tạo đơn
               </T>
-              <T w="medium" size={13} color={salesColors.muted} style={{ marginTop: 1 }}>
+              <T w="medium" size={13} color={colors.brandSoft} style={{ marginTop: 1 }}>
                 {loading ? 'Đang tải…' : `${productTotal} sản phẩm`}
               </T>
             </View>
-            <PosActionButton tone="gold" icon="maximize" label="Quét mã" onPress={() => setScannerOpen(true)} />
+          </Row>
+          <Row gap={12} style={{ marginVertical: 16 }}>
             <PosActionButton tone="purple" icon="mic" label="Đọc đơn" onPress={() => router.push('/voice')} />
+            <PosActionButton tone="gold" icon="scan" label="Quét mã" onPress={() => setScannerOpen(true)} />
           </Row>
 
           <TabSearchBar
@@ -1148,9 +1154,9 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 20,
     overflow: 'hidden',
-    backgroundColor: salesColors.pageBg,
-    borderBottomWidth: 1,
-    borderBottomColor: salesColors.border,
+    backgroundColor: colors.brand,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
   },
   posHeaderBody: {
     position: 'absolute',
@@ -1169,7 +1175,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerBlock: {
-    paddingBottom: 2,
+    paddingBottom: 16,
   },
   pinnedHeader: {
     alignItems: 'center',
@@ -1186,11 +1192,12 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   actionHeroPurple: {
-    height: 38,
+    flex: 1,
+    minHeight: 56,
     borderRadius: 13,
-    backgroundColor: colors.brand,
-    borderWidth: 1,
-    borderColor: colors.brandPressed,
+    backgroundColor: 'rgba(255,255,255,0.78)',
+    borderWidth: 1.5,
+    borderColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 12,
@@ -1199,11 +1206,12 @@ const styles = StyleSheet.create({
     ...shadow(1),
   },
   actionHeroGold: {
-    height: 38,
+    flex: 1,
+    minHeight: 56,
     borderRadius: 13,
-    backgroundColor: colors.goldSoft,
-    borderWidth: 1.2,
-    borderColor: colors.goldBright,
+    backgroundColor: 'rgba(255,255,255,0.78)',
+    borderWidth: 1.5,
+    borderColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 12,
@@ -1215,9 +1223,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 11,
-    backgroundColor: colors.brand,
+    backgroundColor: colors.card,
     borderWidth: 1,
-    borderColor: colors.brandPressed,
+    borderColor: colors.card,
     alignItems: 'center',
     justifyContent: 'center',
     ...shadow(1),
@@ -1226,9 +1234,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 11,
-    backgroundColor: colors.goldSoft,
+    backgroundColor: colors.card,
     borderWidth: 1.2,
-    borderColor: colors.goldBright,
+    borderColor: colors.card,
     alignItems: 'center',
     justifyContent: 'center',
     ...shadow(1),
@@ -1297,7 +1305,7 @@ const styles = StyleSheet.create({
   viewToggle: {
     height: 34,
     borderRadius: 10,
-    backgroundColor: '#ECEEF5',
+    backgroundColor: colors.surfaceMuted,
     flexDirection: 'row',
     alignItems: 'center',
     padding: 2.5,
@@ -1352,7 +1360,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
     overflow: 'hidden',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceMuted,
     alignSelf: 'stretch',
   },
   productGridImage: {
@@ -1431,7 +1439,7 @@ const styles = StyleSheet.create({
   cartBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceMuted,
     borderRadius: 8,
     paddingHorizontal: 2,
     paddingVertical: 2,
@@ -1478,7 +1486,7 @@ const styles = StyleSheet.create({
     height: 54,
     borderRadius: 14,
     overflow: 'hidden',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
     borderColor: salesColors.border,
     alignItems: 'center',
@@ -1494,7 +1502,7 @@ const styles = StyleSheet.create({
     height: 42,
     borderRadius: 10,
     overflow: 'hidden',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
     borderColor: salesColors.border,
   },
@@ -1507,7 +1515,7 @@ const styles = StyleSheet.create({
     bottom: -3,
     right: -3,
     borderRadius: 6,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     paddingHorizontal: 4,
     paddingVertical: 1,
     borderWidth: 1,
@@ -1524,7 +1532,7 @@ const styles = StyleSheet.create({
   listCartControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceMuted,
     borderRadius: 8,
     padding: 2,
     gap: 2,

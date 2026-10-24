@@ -2,6 +2,7 @@ import {
   Bell,
   CaretUpDown,
   ChatCircleDots,
+  ClockCounterClockwise,
   Flask,
   GearSix,
   Kanban,
@@ -47,7 +48,12 @@ const META: { match: (p: string) => boolean; title: string; sub?: string }[] = [
   {
     match: (p) => p.startsWith('/admin/customers'),
     title: 'Khách hàng',
-    sub: 'OWNER và cơ sở · chỉ đọc',
+    sub: USE_MOCK ? 'OWNER và cơ sở · chỉ đọc' : 'Chủ tiệm và cửa hàng · dữ liệu hỗ trợ tối thiểu',
+  },
+  {
+    match: (p) => p.startsWith('/admin/access-logs'),
+    title: 'Nhật ký truy cập',
+    sub: 'Các lần bạn xem hoặc thay đổi dữ liệu quản trị',
   },
   {
     match: (p) => p.startsWith('/admin/ai'),
@@ -100,7 +106,9 @@ export default function AdminLayout() {
   const openCreateTask = useCallback((prefill?: TaskPrefill) => setTaskModal({ open: true, prefill }), [])
 
   useEffect(() => setNavOpen(false), [pathname])
+  // Task chỉ có ở chế độ mock (Core chưa có API task)
   useEffect(() => {
+    if (!USE_MOCK) return
     listTasks()
       .then((t) => setOpenTasks(t.filter((x) => x.status !== 'resolved').length))
       .catch(() => setOpenTasks(null))
@@ -129,12 +137,19 @@ export default function AdminLayout() {
   }
 
   const collapsed = prefs.sidebarCollapsed
-  const nav = [
-    { to: '/admin', end: true, label: 'Dashboard', icon: SquaresFour },
-    { to: '/admin/customers', label: 'Khách hàng', icon: Storefront },
-    { to: '/admin/ai', label: 'AI Support', icon: ChatCircleDots },
-    { to: '/admin/tasks', label: 'Tasks', icon: Kanban, badge: openTasks },
-  ]
+  // Chế độ thật chỉ có các mục Core có API: tổng quan, khách hàng và nhật ký truy cập; AI Support và Tasks chỉ có ở mock
+  const nav: { to: string; end?: boolean; label: string; icon: typeof SquaresFour; badge?: number | null }[] = USE_MOCK
+    ? [
+        { to: '/admin', end: true, label: 'Dashboard', icon: SquaresFour },
+        { to: '/admin/customers', label: 'Khách hàng', icon: Storefront },
+        { to: '/admin/ai', label: 'AI Support', icon: ChatCircleDots },
+        { to: '/admin/tasks', label: 'Tasks', icon: Kanban, badge: openTasks },
+      ]
+    : [
+        { to: '/admin', end: true, label: 'Dashboard', icon: SquaresFour },
+        { to: '/admin/customers', label: 'Khách hàng', icon: Storefront },
+        { to: '/admin/access-logs', label: 'Nhật ký truy cập', icon: ClockCounterClockwise },
+      ]
 
   return (
     <div className="adm" data-theme={theme} data-density={prefs.density}>
@@ -223,17 +238,22 @@ export default function AdminLayout() {
               <p>{subtitle}</p>
             </div>
             <div className="tb-right">
-              <GlobalSearch
-                onOpenShop={(id) => navigate(`/admin/customers?tab=shops&shop=${id}`)}
-                onOpenUser={(id) => navigate(`/admin/customers?tab=owners&owner=${id}`)}
-              />
-              <Link to="/admin/ai" className="icon-btn tb-hide-md" aria-label="Hỏi AI Support" title="Hỏi AI Support">
-                <Sparkle size={20} />
-              </Link>
-              <Notifications dataVersion={dataVersion} />
-              <button type="button" className="btn btn-primary tb-primary" onClick={() => openCreateTask()} aria-label="Tạo task">
-                <Plus size={18} weight="bold" /> <span>Tạo task</span>
-              </button>
+              {/* Tìm nhanh, AI, thông báo và task đọc dữ liệu mẫu: chỉ ở chế độ mock */}
+              {USE_MOCK && (
+                <>
+                  <GlobalSearch
+                    onOpenShop={(id) => navigate(`/admin/customers?tab=shops&shop=${id}`)}
+                    onOpenUser={(id) => navigate(`/admin/customers?tab=owners&owner=${id}`)}
+                  />
+                  <Link to="/admin/ai" className="icon-btn tb-hide-md" aria-label="Hỏi AI Support" title="Hỏi AI Support">
+                    <Sparkle size={20} />
+                  </Link>
+                  <Notifications dataVersion={dataVersion} />
+                  <button type="button" className="btn btn-primary tb-primary" onClick={() => openCreateTask()} aria-label="Tạo task">
+                    <Plus size={18} weight="bold" /> <span>Tạo task</span>
+                  </button>
+                </>
+              )}
               <UserMenu onLogout={onLogout} />
             </div>
           </header>

@@ -24,7 +24,30 @@ import { describeError, isDisplayNameRequired } from '../lib/errors';
 import { setFeedbackEnabled } from '../lib/feedback';
 import { sessionApi } from '../lib/sessionApi';
 import { loadLocalProfile, saveLocalProfile } from '../lib/localProfile';
+import type { LocalProfile } from '../lib/localProfile.types';
 import { industriesFromCore } from '../lib/shopProfile';
+
+/**
+ * Hồ sơ trên máy được đọc rồi ghi lại cả khối, nên hai lần cập nhật chạy chồng nhau (sửa hồ sơ, xem xong hướng dẫn, đã đọc
+ * thông báo) có thể làm mất thay đổi của nhau. Mỗi tài khoản xếp hàng các lần cập nhật: lần sau đọc hồ sơ sau khi lần trước ghi xong.
+ */
+const localProfileWrites = new Map<string, Promise<void>>();
+
+function updateLocalProfile(userId: string, changed: Partial<LocalProfile>): Promise<void> {
+  const previous = localProfileWrites.get(userId) ?? Promise.resolve();
+  const current = previous
+    .catch(() => undefined)
+    .then(async () => {
+      const prev = await loadLocalProfile(userId);
+      await saveLocalProfile(userId, { ...prev, ...changed });
+    });
+  localProfileWrites.set(userId, current);
+  const clear = () => {
+    if (localProfileWrites.get(userId) === current) localProfileWrites.delete(userId);
+  };
+  current.then(clear, clear);
+  return current;
+}
 
 /** Đơn nháp đang chờ thanh toán (từ màn Giọng nói / POS / Nhập tay). */
 export interface Draft {
@@ -174,7 +197,7 @@ function useStoreValue() {
           const session = await sessionApi.create(displayName);
           if (session.role !== 'OWNER') throw new AuthError('not-owner');
           loggedInRef.current = true;
-          patch((st) => ({ ...sessionPatch(st, session), guideDismissed: false }));
+          patch((st) => sessionPatch(st, session));
           debugLog('session', 'signIn ✓', `role=${session.role}`, `needsOnboarding=${session.needsOnboarding}`);
           return session;
         } catch (e) {
@@ -234,9 +257,14 @@ function useStoreValue() {
           bankName: store.bankName,
           bankAccount: store.bankAccount,
         });
-        void loadLocalProfile(id).then((prev) => saveLocalProfile(id, { ...prev, ...changed }));
+        void updateLocalProfile(id, changed);
       },
-      dismissGuide: () => patch(() => ({ guideDismissed: true })),
+      /** Đóng hướng dẫn (xong hoặc bỏ qua) và nhớ trên máy cho tài khoản này để lần sau không tự mở lại */
+      dismissGuide: () => {
+        patch(() => ({ guideDismissed: true }));
+        const id = userIdRef.current;
+        if (id) void updateLocalProfile(id, { guideSeen: true });
+      },
       /** Mở lại phần giới thiệu ở Tổng quan (mục "Xem lại hướng dẫn" ở tab Quản lý) */
       showGuide: () => patch(() => ({ guideDismissed: false })),
       /** Ẩn mọi thông báo tới trước `at` (ISO) trên máy này: "Xoá toàn bộ thông báo" khi Core chưa có API xoá */
@@ -406,7 +434,7 @@ function useStoreValue() {
     const id = s.userId;
     if (!id || notifLoadedFor.current !== id) return;
     const changed = { readNotifs: s.readNotifs.slice(-READ_NOTIFS_KEPT), ...definedOnly({ notifClearedAt: s.notifClearedAt ?? undefined }) };
-    void loadLocalProfile(id).then((prev) => saveLocalProfile(id, { ...prev, ...changed }));
+    void updateLocalProfile(id, changed);
   }, [s.userId, s.readNotifs, s.notifClearedAt]);
 
   // Đăng nhập (hoặc khôi phục phiên) xong: phủ phần hồ sơ đã lưu trên máy của tài khoản này lên dữ liệu từ Core
@@ -426,6 +454,9 @@ function useStoreValue() {
           notifClearedAt: saved.notifClearedAt ?? st.notifClearedAt,
         }));
       }
+      // Tài khoản chưa xem hướng dẫn trên máy này (mới đăng ký, lần đầu đăng nhập ở máy này) thì mở hướng dẫn ở Tổng quan; đã
+      // xem thì đóng, kể cả khi tài khoản trước trên máy còn để hướng dẫn mở
+      patch(() => ({ guideDismissed: Boolean(saved?.guideSeen) }));
       notifLoadedFor.current = userId;
     });
     return () => {

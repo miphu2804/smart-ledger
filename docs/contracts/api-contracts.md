@@ -619,7 +619,7 @@ Model không tự viết khối này: agent gọi tool `suggest_screen(screen)` 
 
 ## 7. Dashboard quản trị — đã có trong Core
 
-Cả 7 GET dưới đây đã có controller/service Core. Yêu cầu Firebase ID token hợp lệ và profile DB `ADMIN`/`ACTIVE`; role không lấy từ client hoặc claim tự tạo. Không cần `X-Shop-Id`; header này và param `actorUserId` không đổi phạm vi truy cập. Response thành công có `Cache-Control: no-store`. Dashboard web còn cần tích hợp theo contract này, không suy ra đã nghiệm thu từ việc API tồn tại.
+Cả 7 GET dưới đây đã có controller/service Core. Yêu cầu Firebase ID token hợp lệ và profile DB `ADMIN`/`ACTIVE`; role không lấy từ client hoặc claim tự tạo. Không cần `X-Shop-Id`; header này và param `actorUserId` không đổi phạm vi truy cập. Response thành công có `Cache-Control: no-store`. Dashboard web (`frontend/web`, build với `VITE_USE_MOCK=false`) đọc đúng contract này qua `src/services/adminApi.ts`, đăng nhập bằng Firebase email/mật khẩu rồi `GET /api/v1/me` kiểm `role` ADMIN; mới kiểm bằng server giả trên máy, chưa nghiệm thu với Firebase thật và UAT staging.
 
 | Method | Đường | Query | Response |
 |---|---|---|---|

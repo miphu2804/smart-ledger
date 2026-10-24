@@ -12,6 +12,8 @@ export interface LocalProfile {
   readNotifs?: string[];
   /** Lần "Xoá toàn bộ thông báo" gần nhất (ISO): thông báo tới trước mốc này không hiện nữa trên máy này */
   notifClearedAt?: string;
+  /** Đã xem (hoặc bỏ qua) phần hướng dẫn trên máy này: không tự mở lại, chỉ mở khi bấm "Xem lại hướng dẫn" */
+  guideSeen?: boolean;
 }
 
 /** Tên file/khoá an toàn từ id tài khoản của Core. */

@@ -3,12 +3,15 @@
  *
  * - USE_MOCK: mặc định dùng dữ liệu giả (localStorage). Đặt VITE_USE_MOCK=false
  *   trong file .env để chuyển sang gọi API thật.
- * - API_ENDPOINT: địa chỉ backend, lấy từ VITE_API_ENDPOINT (xem .env.example).
+ * - API_ENDPOINT: địa chỉ Core (không kèm /api/v1), lấy từ VITE_API_ENDPOINT (xem .env.example).
+ * - FIREBASE_API_KEY: Web API key của dự án Firebase mà Core dùng để xác thực, cho đăng nhập quản trị ở chế độ thật.
  * - ADMIN_ENABLED: bật trang quản trị /admin. Mặc định tắt, nên bản build không có mã admin.
  */
 export const USE_MOCK: boolean = import.meta.env.VITE_USE_MOCK !== 'false'
 
-export const API_ENDPOINT: string = (import.meta.env.VITE_API_ENDPOINT ?? 'http://localhost:8000').replace(/\/+$/, '')
+export const API_ENDPOINT: string = (import.meta.env.VITE_API_ENDPOINT ?? 'http://localhost:8080').replace(/\/+$/, '')
+
+export const FIREBASE_API_KEY: string = (import.meta.env.VITE_FIREBASE_API_KEY ?? '').trim()
 
 export const ADMIN_ENABLED: boolean = import.meta.env.VITE_ADMIN_ENABLED === 'true'
 

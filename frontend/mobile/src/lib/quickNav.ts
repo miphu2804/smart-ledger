@@ -19,7 +19,7 @@ export const QUICK_NAV_SECTIONS: QuickNavSection[] = [
     title: 'BÁN HÀNG',
     items: [
       { key: 'overview', label: 'Tổng quan', hint: 'Doanh thu và việc cần làm hôm nay', icon: 'home', href: '/', tab: true },
-      { key: 'sales', label: 'Bán hàng', hint: 'Chọn món, quét mã, đọc đơn', icon: 'shopping-bag', href: '/sales', tab: true },
+      { key: 'sales', label: 'Tạo đơn', hint: 'Chọn hàng, quét mã hoặc đọc đơn', icon: 'shopping-bag', href: '/sales', tab: true },
       { key: 'invoices', label: 'Đơn hàng', hint: 'Đơn đã bán và đơn chờ thu', icon: 'file-text', href: '/invoices', tab: true },
     ],
   },
@@ -35,7 +35,7 @@ export const QUICK_NAV_SECTIONS: QuickNavSection[] = [
   {
     title: 'KHÁC',
     items: [
-      { key: 'ai', label: 'Trợ lý AI', hint: 'Hỏi Bobi về sổ bán hàng', icon: 'message-circle', href: '/ai' },
+      { key: 'ai', label: 'Trợ lý Bobi', hint: 'Hỏi Bobi về sổ bán hàng', icon: 'message-circle', href: '/ai' },
       { key: 'settings', label: 'Cài đặt', hint: 'Rung, cảnh báo sắp hết hàng, máy in', icon: 'settings', href: '/settings' },
     ],
   },

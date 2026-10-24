@@ -19,7 +19,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { triggerFeedback } from '../lib/feedback';
 import { activeQuickNavKey, opensAfterDrag, QUICK_NAV_SECTIONS, type QuickNavItem } from '../lib/quickNav';
-import { useReducedMotion } from '../motion';
+import { ACTION_MENU_DURATION, useReducedMotion } from '../motion';
 import { useApp } from '../store/AppStore';
 import { colors } from '../theme';
 import { T } from './ui';
@@ -41,8 +41,8 @@ const QuickNavContext = createContext<QuickNavApi | null>(null);
 const EDGE_WIDTH = 24;
 /** Quãng ngón tay phải đi ngang (và ngang rõ hơn dọc) trước khi menu nhận cử chỉ, để không cướp thao tác cuộn hay chạm. */
 const DRAG_SLOP = 8;
-const OPEN_MS = 260;
-const CLOSE_MS = 200;
+const OPEN_MS = ACTION_MENU_DURATION;
+const CLOSE_MS = ACTION_MENU_DURATION;
 // Đường cong "emphasized" của Material 3: mở thì lao ra rồi chậm dần, đóng thì tăng tốc dần rồi biến mất
 const OPEN_EASING = Easing.bezier(0.05, 0.7, 0.1, 1);
 const CLOSE_EASING = Easing.bezier(0.3, 0, 0.8, 0.15);
