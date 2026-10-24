@@ -15,6 +15,7 @@ import { ToastProvider } from '../src/components/brand';
 import { UpdatePrompt } from '../src/components/UpdatePrompt';
 import { AppStoreProvider } from '../src/store/AppStore';
 import { colors, WEB_FRAME_MAX_WIDTH } from '../src/theme';
+import { SCREEN_ANIMATION } from '../src/motion';
 
 export default function RootLayout() {
   const [loaded] = useFonts({
@@ -45,14 +46,14 @@ export default function RootLayout() {
                 screenOptions={{
                   headerShown: false,
                   contentStyle: { backgroundColor: colors.bg },
-                  animation: 'slide_from_right',
+                  animation: SCREEN_ANIMATION,
                 }}
               >
-                <Stack.Screen name="index" options={{ animation: 'fade' }} />
-                <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
-                <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
-                <Stack.Screen name="voice" options={{ animation: 'slide_from_bottom' }} />
-                <Stack.Screen name="ai" options={{ animation: 'slide_from_bottom' }} />
+                <Stack.Screen name="index" />
+                <Stack.Screen name="(auth)" />
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="voice" options={{ animation: SCREEN_ANIMATION }} />
+                <Stack.Screen name="ai" options={{ animation: SCREEN_ANIMATION }} />
               </Stack>
               <UpdatePrompt />
             </ToastProvider>
