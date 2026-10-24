@@ -3,8 +3,10 @@ import { Animated, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { dur, easeOut, useReducedMotion } from '../motion';
 import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Path, Polygon, Rect, Stop } from 'react-native-svg';
 
-export type TabIconName = 'home' | 'receipt' | 'box' | 'grid';
+export type TabIconName = 'home' | 'receipt' | 'box' | 'wallet' | 'grid' | 'plus' | 'chat';
 export type TabIconVariant = 'outline' | 'filled';
+
+const TAB_ICON_STROKE = 1.8;
 
 export interface TabIconProps {
   name: TabIconName;
@@ -47,21 +49,21 @@ export function TabIcon({
               <Path
                 d="M3.5 10.2L12 3.5l8.5 6.7"
                 stroke={color}
-                strokeWidth={2.2}
+                strokeWidth={TAB_ICON_STROKE}
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
               <Path
                 d="M5.5 9.2V19.4c0 .9.7 1.6 1.6 1.6h9.8c.9 0 1.6-.7 1.6-1.6V9.2"
                 stroke={color}
-                strokeWidth={2.2}
+                strokeWidth={TAB_ICON_STROKE}
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
               <Path
                 d="M10 21v-4.5a2 2 0 014 0V21"
                 stroke={color}
-                strokeWidth={2.2}
+                strokeWidth={TAB_ICON_STROKE}
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
@@ -88,14 +90,14 @@ export function TabIcon({
                 height="18"
                 rx="2.5"
                 stroke={color}
-                strokeWidth={2.2}
+                strokeWidth={TAB_ICON_STROKE}
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
               <Path
                 d="M8.5 8h7M8.5 12h7M8.5 16h4.5"
                 stroke={color}
-                strokeWidth={2.2}
+                strokeWidth={TAB_ICON_STROKE}
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
@@ -122,14 +124,14 @@ export function TabIcon({
                 height="15.2"
                 rx="2.5"
                 stroke={color}
-                strokeWidth={2.2}
+                strokeWidth={TAB_ICON_STROKE}
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
               <Path
                 d="M4.5 10h15M12 10v4"
                 stroke={color}
-                strokeWidth={2.2}
+                strokeWidth={TAB_ICON_STROKE}
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
@@ -156,7 +158,7 @@ export function TabIcon({
                 height="6.6"
                 rx="2"
                 stroke={color}
-                strokeWidth={2.2}
+                strokeWidth={TAB_ICON_STROKE}
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
@@ -194,6 +196,40 @@ export function TabIcon({
                 strokeLinejoin="round"
               />
             </>
+          )
+        )}
+
+        {name === 'wallet' && (
+          isFilled ? (
+            <Path
+              fillRule="evenodd"
+              clipRule="evenodd"
+              d="M4.5 5.5A2.5 2.5 0 017 3h9.5a2 2 0 012 2v1h1A2.5 2.5 0 0122 8.5v9A2.5 2.5 0 0119.5 20h-12A3.5 3.5 0 014 16.5v-10a1 1 0 011-1h-.5zM16 13a1.5 1.5 0 100 3h4v-3h-4z"
+              fill={color}
+            />
+          ) : (
+            <>
+              <Path d="M5.5 6.5h13A2.5 2.5 0 0121 9v8.5a2.5 2.5 0 01-2.5 2.5h-12A2.5 2.5 0 014 17.5V7a2.5 2.5 0 012.5-2.5H17" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+              <Path d="M15.5 13H21v3h-5.5a1.5 1.5 0 010-3z" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+            </>
+          )
+        )}
+
+        {name === 'plus' && (
+          <Path d="M12 5v14M5 12h14" stroke={color} strokeWidth={isFilled ? 2.6 : TAB_ICON_STROKE} strokeLinecap="round" />
+        )}
+
+        {name === 'chat' && (
+          isFilled ? (
+            <>
+              <Path d="M5 4.5h14A2.5 2.5 0 0121.5 7v7A2.5 2.5 0 0119 16.5h-7l-4.5 3v-3H5A2.5 2.5 0 012.5 14V7A2.5 2.5 0 015 4.5z" fill={color} />
+              <Circle cx="8.2" cy="10.5" r="1.1" fill="#FFFFFF" />
+              <Circle cx="12" cy="10.5" r="1.1" fill="#FFFFFF" />
+              <Circle cx="15.8" cy="10.5" r="1.1" fill="#FFFFFF" />
+              <Path d="M18.8 3.2v3.4M17.1 4.9h3.4" stroke="#FFFFFF" strokeWidth="1.5" strokeLinecap="round" />
+            </>
+          ) : (
+            <Path d="M5 4.5h14A2.5 2.5 0 0121.5 7v7A2.5 2.5 0 0119 16.5h-7l-4.5 3v-3H5A2.5 2.5 0 012.5 14V7A2.5 2.5 0 015 4.5z" stroke={color} strokeWidth={TAB_ICON_STROKE} strokeLinejoin="round" />
           )
         )}
       </Svg>

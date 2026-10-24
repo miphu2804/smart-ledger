@@ -2,8 +2,11 @@ import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Animated,
+  Image,
   KeyboardAvoidingView,
-  LayoutAnimation,
+  Keyboard,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,6 +17,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChatText, ScreenActions, StreamingChatText } from '../src/components/ChatText';
 import { BusinessIcon } from '../src/components/icons';
 import { MemoryGraph } from '../src/components/MemoryGraph';
+import { MascotBadge } from '../src/components/MascotBadge';
+import { ACTION_MENU_DURATION, easeOut, useReducedMotion } from '../src/motion';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SlingSendButton } from '../src/components/SlingSendButton';
 import { ThoughtLine } from '../src/components/ThoughtLine';
 import { VoicePillButton } from '../src/components/VoicePillButton';
@@ -90,7 +96,7 @@ function lastActive(iso: string): string {
 function BobiLabel({ memoryOn }: { memoryOn: boolean }) {
   return (
     <Row gap={3} style={[styles.assistantBubbleHeader, { alignItems: 'center' }]}>
-      <BusinessIcon size={19} color={colors.brand} offColor={colors.faint} filled={memoryOn} />
+      <Image source={require('../assets/voice/agent-default.png')} resizeMode="contain" style={{ width: 22, height: 22 }} />
       <T w="bold" size={13.5} color={colors.brand} style={{ marginLeft: 3 }}>
         Trợ lý Bobi
       </T>
@@ -102,6 +108,18 @@ function BobiLabel({ memoryOn }: { memoryOn: boolean }) {
 const HEADER_BTN = 40;
 
 export default function Ai() {
+  const reducedMotion = useReducedMotion();
+  const welcomeProgress = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (reducedMotion) { welcomeProgress.setValue(1); return; }
+    welcomeProgress.setValue(0);
+    const animation = Animated.timing(welcomeProgress, {
+      toValue: 1, duration: ACTION_MENU_DURATION, easing: easeOut,
+      useNativeDriver: Platform.OS !== 'web',
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [reducedMotion, welcomeProgress]);
   const app = useApp();
   const insets = useSafeAreaInsets();
   const scroll = useRef<ScrollView>(null);
@@ -120,6 +138,16 @@ export default function Ai() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Trạng thái công tắc "Ghi nhớ dài hạn"; chưa tải được hoặc tiệm chưa bật ghi nhớ thì coi là tắt.
   const [memoryOn, setMemoryOn] = useState(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardOpen(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardOpen(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   const loadMemoryOn = useCallback(() => {
     agentApi
@@ -163,9 +191,15 @@ export default function Ai() {
   };
 
   useEffect(() => {
-    const t = setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 60);
+    const t = setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 140);
     return () => clearTimeout(t);
-  }, [msgs, typing, draft]);
+  }, [msgs, typing]);
+
+  useEffect(() => {
+    if (!typing || !draft) return;
+    const t = setTimeout(() => scroll.current?.scrollToEnd({ animated: false }), 90);
+    return () => clearTimeout(t);
+  }, [draft, typing]);
 
   // Chữ nói ra được đổ vào ô nhập, nối sau phần đã gõ; người dùng xem lại rồi bấm gửi.
   const dictate = (spoken: string, done = false) => {
@@ -188,16 +222,10 @@ export default function Ai() {
     // Delta tới theo từng token; gom về một lần render mỗi khung hình thay vì một lần mỗi token.
     let frame: number | null = null;
     let latest = '';
-    let started = false;
     const showDraft = (draftText: string) => {
       latest = draftText;
       frame ??= requestAnimationFrame(() => {
         frame = null;
-        // Chữ đầu tiên thay dòng suy nghĩ bằng bong bóng trả lời: cho bong bóng hiện ra có chuyển động thay vì nhảy thẳng.
-        if (!started && latest) {
-          started = true;
-          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        }
         setDraft(latest);
       });
     };
@@ -230,17 +258,31 @@ export default function Ai() {
   return (
     <KeyboardAvoidingView
       style={styles.screen}
-      behavior={KEYBOARD_AVOID_BEHAVIOR}
+      behavior={Platform.OS === 'web' ? undefined : KEYBOARD_AVOID_BEHAVIOR}
     >
+      <LinearGradient pointerEvents="none" colors={[colors.brandTint, colors.bg, colors.brandSoft]} style={StyleSheet.absoluteFill} />
       <ScrollView
         ref={scroll}
         style={styles.chat}
-        contentContainerStyle={[styles.chatContent, { paddingTop: insets.top + 6 + HEADER_BTN + 14 }]}
+        contentContainerStyle={[styles.chatContent, { paddingTop: insets.top + HEADER_BTN + 28 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.messages}>
-          {msgs.map((m) => {
+          {msgs.length === 1 && msgs[0].id === 'hi' ? (
+            <Animated.View style={[styles.welcomeHero, { opacity: welcomeProgress, transform: [{ translateY: welcomeProgress.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }]}>
+              <View style={styles.welcomeMark}>
+                <Image source={require('../assets/voice/agent-default.png')} resizeMode="contain" style={{ width: 96, height: 96 }} accessibilityLabel="Bobi chào bạn" />
+              </View>
+              <T w="bold" size={28} color={colors.ink} style={styles.welcomeTitle}>
+                Chào {app.user.name.split(' ').slice(-1)[0]}
+              </T>
+              <T size={17} color={colors.muted} style={styles.welcomeSubtitle}>
+                Tôi có thể giúp bạn hiểu số liệu và điều hành cửa hàng nhanh hơn.
+              </T>
+            </Animated.View>
+          ) : null}
+          {msgs.filter((m) => !(msgs.length === 1 && m.id === 'hi')).map((m) => {
             const isUser = m.from === 'user';
             // Nút mở màn hình nằm ở thẻ riêng dưới bong bóng; bong bóng chỉ giữ nội dung trả lời.
             const reply = isUser ? null : splitActions(m.text);
@@ -294,7 +336,13 @@ export default function Ai() {
         >
           <Feather name="chevron-left" size={20} color={colors.ink} />
         </Pressable>
-        <Row gap={10}>
+        <View pointerEvents="none" style={styles.titleWrap}>
+          <T w="bold" size={15} color={colors.ink}>
+            Trợ lý Bobi
+          </T>
+        </View>
+        <View style={styles.toolbar}>
+        <Row gap={0}>
           <View style={styles.floatBtn}>
             <IconBtn
               name="edit"
@@ -311,10 +359,11 @@ export default function Ai() {
             <IconBtn name="sliders" label="Cài đặt trợ lý" size={HEADER_BTN} onPress={() => setSettingsOpen(true)} />
           </View>
         </Row>
+        </View>
       </View>
 
       {/* Suggestion Chips & Composer Bar (Đề xuất nằm ngay sát trên thanh nhập) */}
-      <View style={[styles.composerWrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+      <View style={[styles.composerWrap, { paddingBottom: keyboardOpen ? 8 : Math.max(insets.bottom, 10) }]}>
         {error ? (
           <View style={styles.errorCard} accessibilityRole="alert">
             <View style={styles.errorHeader}>
@@ -389,6 +438,8 @@ export default function Ai() {
             value={text}
             onChangeText={setText}
             onSubmitEditing={() => send(text)}
+            multiline
+            textAlignVertical="center"
             placeholder="Nhập câu hỏi cho trợ lý…"
             placeholderTextColor={colors.faint}
             accessibilityLabel="Tin nhắn cho trợ lý"
@@ -726,17 +777,27 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
+    paddingBottom: 10,
+    backgroundColor: 'rgba(252,252,253,0.92)',
     zIndex: 1,
     paddingHorizontal: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  titleWrap: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 7,
+    marginHorizontal: 10,
+  },
   // Bóng đậm hơn shadow(0) của IconBtn để nút nổi rõ khi tin nhắn trôi bên dưới.
   floatBtn: {
-    borderRadius: 12,
-    backgroundColor: colors.white,
-    ...shadow(2),
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.65)',
   },
   backBtn: {
     width: HEADER_BTN,
@@ -747,10 +808,37 @@ const styles = StyleSheet.create({
   chat: { flex: 1 },
   chatContent: {
     flexGrow: 1,
-    paddingHorizontal: 14,
-    paddingBottom: 16,
+    paddingHorizontal: 18,
+    paddingBottom: 24,
   },
-  messages: { gap: 12 },
+  toolbar: {
+    flexDirection: 'row',
+    padding: 4,
+    borderRadius: 26,
+    backgroundColor: 'rgba(255,255,255,0.76)',
+    borderWidth: 1,
+    borderColor: colors.white,
+    ...shadow(1),
+  },
+  messages: { gap: 16 },
+  welcomeHero: {
+    flex: 1,
+    minHeight: 280,
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    paddingBottom: 24,
+  },
+  welcomeMark: {
+    width: 96,
+    height: 96,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+    backgroundColor: 'transparent',
+    marginBottom: 22,
+  },
+  welcomeTitle: { letterSpacing: -0.7, lineHeight: 34 },
+  welcomeSubtitle: { maxWidth: 330, lineHeight: 25, marginTop: 10 },
   messageRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -770,11 +858,9 @@ const styles = StyleSheet.create({
     // Không có avatar và rộng hết hàng để bảng, biểu đồ và câu dài có đủ chỗ trên điện thoại.
     flex: 1,
     minWidth: 0,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: 'transparent',
+    paddingHorizontal: 0,
     borderTopLeftRadius: 4,
-    ...shadow(1),
   },
   assistantBubbleHeader: {
     alignItems: 'flex-start',
@@ -821,29 +907,29 @@ const styles = StyleSheet.create({
     ...shadow(0),
   },
   composerWrap: {
-    paddingHorizontal: 14,
-    paddingTop: 6,
-    backgroundColor: colors.bg,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    backgroundColor: 'transparent',
+    borderTopWidth: 0,
   },
   composer: {
-    minHeight: 48,
+    minHeight: 58,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    backgroundColor: colors.card,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    backgroundColor: 'rgba(255,255,255,0.88)',
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 18,
-    ...shadow(1),
+    borderColor: colors.white,
+    borderRadius: 30,
+    ...shadow(2),
   },
   input: {
     flex: 1,
-    height: 40,
-    paddingHorizontal: 10,
+    minHeight: 42,
+    maxHeight: 112,
+    paddingHorizontal: 12,
     // Android tự đệm trên dưới cho TextInput, làm ô cao cố định cắt mất dấu tiếng Việt phía trên; bỏ đệm dọc
     paddingVertical: 0,
     fontFamily: font.medium,
