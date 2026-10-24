@@ -141,3 +141,7 @@ src/
 ## App mobile
 
 App Expo nằm ở thư mục cùng cấp `../mobile` — xem `../mobile/README.md`.
+
+### Giao diện góp ý landing
+
+Mục `/#gop-y` là bản xem trước theo yêu cầu: họ tên, số điện thoại, loại góp ý và nội dung. Các ô bắt buộc dùng validation trình duyệt; nút Gửi chỉ hiện thông báo bản xem trước, không gọi API, không lưu localStorage và không báo gửi thành công. Chưa có dịch vụ tiếp nhận; chưa thay đổi phạm vi nghiệp vụ Core hoặc yêu cầu nhận góp ý thật.

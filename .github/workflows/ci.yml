@@ -255,6 +255,11 @@ jobs:
           node-version: "22"
           cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
           cache-dependency-path: frontend/mobile/package-lock.json
+      - name: Keep the Metro cache job-local
+        # Metro caches transformed modules (with EXPO_PUBLIC_* inlined) under TMPDIR; on a shared machine
+        # the mock build of mobile-web would otherwise leak into the real bundle of deploy-web.
+        if: runner.environment == 'self-hosted'
+        run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
       - run: npm ci
       - run: npm run typecheck
       - run: npm run export:web
@@ -531,6 +536,11 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/cli" vercel@62.2.0
           echo "$RUNNER_TEMP/cli/node_modules/.bin" >> "$GITHUB_PATH"
+      - name: Keep the Metro cache job-local
+        # Metro caches transformed modules (with EXPO_PUBLIC_* inlined) under TMPDIR; on a shared machine
+        # the mock build of mobile-web would otherwise leak into the real bundle of deploy-web.
+        if: runner.environment == 'self-hosted'
+        run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
       - run: vercel pull --yes --environment="$VERCEL_TARGET" --token="$VERCEL_TOKEN"
       # Job env wins over values pulled from Vercel, so GitHub stays the source of EXPO_PUBLIC_*.
       - run: vercel build ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN"

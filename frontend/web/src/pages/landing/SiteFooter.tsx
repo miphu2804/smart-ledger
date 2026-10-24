@@ -30,6 +30,7 @@ export default function SiteFooter({ onHome = false }: { onHome?: boolean }) {
             <nav className="lp-footer-col" aria-label="Hỗ trợ">
               <h4>Hỗ trợ</h4>
               <a href={h('hoi-dap')}>Hỏi đáp</a>
+              <a href={h('gop-y')}>Góp ý sản phẩm</a>
               {CONTACT_EMAIL && <a href={`mailto:${CONTACT_EMAIL}`}>Liên hệ</a>}
             </nav>
             <nav className="lp-footer-col" aria-label="Pháp lý" hidden={onHome}>

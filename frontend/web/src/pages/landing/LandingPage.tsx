@@ -9,12 +9,14 @@ import '../../styles/landing.css'
 import { CONTACT_EMAIL } from '../legal/legalConfig'
 import SiteFooter from './SiteFooter'
 import SocialLinks from './SocialLinks'
+import FeedbackSection from './FeedbackSection'
 
 const NAV = [
   { href: '#cach-hoat-dong', label: 'Cách hoạt động' },
   { href: '#tinh-nang', label: 'Tính năng' },
   { href: '#hoi-dap', label: 'Hỏi đáp' },
   { href: '#doi-ngu', label: 'Đội ngũ' },
+  { href: '#gop-y', label: 'Góp ý' },
 ]
 
 /** Độ trễ hiện dần (giây) cho phần tử thứ i trong một nhóm */
@@ -548,41 +550,43 @@ function Compare() {
 
 /* ------------------------------------------------------------------ */
 
-/**
- * Đội ngũ làm sản phẩm (Team HEXA, môn EXE201, Trường Đại học FPT): poster Đội ngũ của từng thành viên, giữ nguyên khổ
- * (`public/team/<slug>.webp`, 940×788). Tên và vai trò đã in trên poster; `alt` lặp lại cho trình đọc màn hình.
- */
+/** Thông tin thành viên Team HEXA, giữ tên và vai trò từ nội dung hiện có. */
 const TEAM: { slug: string; name: string; role: string }[] = [
-  { slug: 'minh-tho', name: 'Minh Thọ', role: 'Leader' },
-  { slug: 'minh-phu', name: 'Minh Phú', role: 'AI Engineer' },
-  { slug: 'thuong-hiep', name: 'Thượng Hiệp', role: 'Frontend Developer' },
-  { slug: 'thu-thao', name: 'Thu Thảo', role: 'Backend Developer' },
-  { slug: 'quynh-nhu', name: 'Quỳnh Như', role: 'Business Analyst' },
-  { slug: 'kieu-chinh', name: 'Kiều Chinh', role: 'Marketing' },
+  { slug: 'minh-tho', name: 'Minh Thọ', role: 'Giúp Sổ Nghe Lời hiểu bạn hơn' },
+  { slug: 'minh-phu', name: 'Minh Phú', role: 'Giúp Sổ Nghe Lời thông minh hơn' },
+  { slug: 'thuong-hiep', name: 'Thượng Hiệp', role: 'Giúp mỗi lần chạm dễ dàng hơn' },
+  { slug: 'thu-thao', name: 'Thu Thảo', role: 'Giúp cuốn sổ chạy trơn tru hơn' },
+  { slug: 'quynh-nhu', name: 'Quỳnh Như', role: 'Lắng nghe những điều bạn cần' },
+  { slug: 'kieu-chinh', name: 'Kiều Chinh', role: 'Mang cuốn sổ đến gần bạn hơn' },
 ]
 
 function Team() {
   return (
-    <section className="lp-section lp-team" id="doi-ngu">
+    <section className="lp-section lp-team" id="doi-ngu" aria-labelledby="team-title">
       <div className="lp-container">
-        <div className="lp-sec-head team-head">
-          <div>
-            <h2 className="lp-display" data-reveal>
-              Đội ngũ.
-              <br />
-              <span className="is-muted">Sáu người, một cuốn sổ.</span>
-            </h2>
-            <p>Nhóm sinh viên Team HEXA, môn EXE201 tại Trường Đại học FPT, làm Sổ Nghe Lời từ ý tưởng tới ứng dụng.</p>
-          </div>
-          <img src="/brand/agent-happy.webp" alt="" width={150} height={150} loading="lazy" />
+        <div className="team-intro lp-sec-head">
+            <h2 className="lp-display" id="team-title">Chúng mình là HEXA.</h2>
+            <p>Sáu người bạn ở Trường Đại học FPT, cùng lên ý tưởng, chia việc và làm Sổ Nghe Lời.</p>
         </div>
-        <ul className="team-grid">
-          {TEAM.map((m, i) => (
-            <li key={m.slug} className="team-card" data-reveal style={delay(i % 3)}>
-              <img src={`/team/${m.slug}.webp`} alt={`${m.name}, ${m.role}`} width={940} height={788} loading="lazy" />
-            </li>
-          ))}
-        </ul>
+        <div className="team-content">
+          <div className="team-story">
+            <h3>Bán cả ngày,<br />tối còn cộng sổ.</h3>
+            <p>Thấy người bán ghi từng giao dịch vào sổ tay để cuối ngày cộng lại, chúng mình bắt đầu nghĩ: làm sao để việc ghi chép nhẹ hơn một chút?</p>
+            <p>Đó là lý do Sổ Nghe Lời ra đời. Nhóm vẫn đang hoàn thiện ứng dụng và rất muốn nghe những điều bạn thấy tiện, thấy khó khi dùng.</p>
+            <a href="#gop-y" className="lp-link team-story-link">Góp ý cho chúng mình <ChevronRight size={18} aria-hidden="true" /></a>
+          </div>
+          <div className="team-people">
+            <h3>Mỗi người góp một tay.</h3>
+            <ul className="team-grid">
+              {TEAM.map((m) => (
+                <li key={m.slug} className="team-card">
+                  <h4>{m.name}</h4>
+                  <p>{m.role}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
       </div>
     </section>
   )
@@ -717,6 +721,7 @@ export default function LandingPage() {
         <Compare />
         <Team />
         <Faq />
+        <FeedbackSection />
         <Closing />
       </main>
       <SiteFooter onHome />
