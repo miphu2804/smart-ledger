@@ -14,6 +14,7 @@ const NAV = [
   { href: '#cach-hoat-dong', label: 'Cách hoạt động' },
   { href: '#tinh-nang', label: 'Tính năng' },
   { href: '#hoi-dap', label: 'Hỏi đáp' },
+  { href: '#doi-ngu', label: 'Đội ngũ' },
 ]
 
 /** Độ trễ hiện dần (giây) cho phần tử thứ i trong một nhóm */
@@ -547,6 +548,48 @@ function Compare() {
 
 /* ------------------------------------------------------------------ */
 
+/**
+ * Đội ngũ làm sản phẩm (Team HEXA, môn EXE201, Trường Đại học FPT): poster Đội ngũ của từng thành viên, giữ nguyên khổ
+ * (`public/team/<slug>.webp`, 940×788). Tên và vai trò đã in trên poster; `alt` lặp lại cho trình đọc màn hình.
+ */
+const TEAM: { slug: string; name: string; role: string }[] = [
+  { slug: 'minh-tho', name: 'Minh Thọ', role: 'Leader' },
+  { slug: 'minh-phu', name: 'Minh Phú', role: 'AI Engineer' },
+  { slug: 'thuong-hiep', name: 'Thượng Hiệp', role: 'Frontend Developer' },
+  { slug: 'thu-thao', name: 'Thu Thảo', role: 'Backend Developer' },
+  { slug: 'quynh-nhu', name: 'Quỳnh Như', role: 'Business Analyst' },
+  { slug: 'kieu-chinh', name: 'Kiều Chinh', role: 'Marketing' },
+]
+
+function Team() {
+  return (
+    <section className="lp-section lp-team" id="doi-ngu">
+      <div className="lp-container">
+        <div className="lp-sec-head team-head">
+          <div>
+            <h2 className="lp-display" data-reveal>
+              Đội ngũ.
+              <br />
+              <span className="is-muted">Sáu người, một cuốn sổ.</span>
+            </h2>
+            <p>Nhóm sinh viên Team HEXA, môn EXE201 tại Trường Đại học FPT, làm Sổ Nghe Lời từ ý tưởng tới ứng dụng.</p>
+          </div>
+          <img src="/brand/agent-happy.webp" alt="" width={150} height={150} loading="lazy" />
+        </div>
+        <ul className="team-grid">
+          {TEAM.map((m, i) => (
+            <li key={m.slug} className="team-card" data-reveal style={delay(i % 3)}>
+              <img src={`/team/${m.slug}.webp`} alt={`${m.name}, ${m.role}`} width={940} height={788} loading="lazy" />
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+
 const FAQS: { q: string; a: ReactNode }[] = [
   {
     q: 'Tôi nói giọng miền Tây, miền Trung, ứng dụng có hiểu không?',
@@ -558,7 +601,7 @@ const FAQS: { q: string; a: ReactNode }[] = [
   },
   {
     q: 'Đăng nhập bằng gì và sổ được lưu ở đâu?',
-    a: 'Bạn đăng nhập bằng tài khoản Facebook hoặc Zalo. Sổ được lưu gắn với tài khoản đó; lưu lên tài khoản cần kết nối Internet.',
+    a: 'Bạn đăng nhập bằng email và mật khẩu hoặc tài khoản Google. Sổ được lưu gắn với tài khoản đó; lưu lên tài khoản cần kết nối Internet.',
   },
   {
     q: 'Muốn ngừng dùng thì làm thế nào?',
@@ -672,6 +715,7 @@ export default function LandingPage() {
         <Gallery />
         <Features />
         <Compare />
+        <Team />
         <Faq />
         <Closing />
       </main>
