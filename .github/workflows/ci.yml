@@ -84,8 +84,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
-    env:
-      POSTGRES_TEST_URL: postgresql://smartledger:smartledger@localhost:5432/smartledger_test
     outputs:
       tests: ${{ steps.test-results.outputs.tests }}
       failures: ${{ steps.test-results.outputs.failures }}
@@ -103,18 +101,22 @@ jobs:
         if: runner.environment == 'self-hosted'
         working-directory: .
         run: |
-          docker rm -f ci-postgres >/dev/null 2>&1 || true
-          docker run -d --name ci-postgres -p 5432:5432 \
+          # A per-job name and a free host port, so jobs running side by side on one machine do not collide.
+          docker rm -f ci-postgres-${{ github.run_id }}-${{ github.job }} >/dev/null 2>&1 || true
+          docker run -d --name ci-postgres-${{ github.run_id }}-${{ github.job }} -p 127.0.0.1::5432 \
             -e POSTGRES_DB=smartledger_test -e POSTGRES_USER=smartledger -e POSTGRES_PASSWORD=smartledger pgvector/pgvector:pg17
-          until docker exec ci-postgres pg_isready -U smartledger -d smartledger_test >/dev/null 2>&1; do sleep 1; done
+          until docker exec ci-postgres-${{ github.run_id }}-${{ github.job }} pg_isready -U smartledger -d smartledger_test >/dev/null 2>&1; do sleep 1; done
+          echo "PG_PORT=$(docker port ci-postgres-${{ github.run_id }}-${{ github.job }} 5432/tcp | head -1 | sed 's/.*://')" >> "$GITHUB_ENV"
       - run: uv sync --group dev
       - run: uv run ruff check
       - run: uv run ruff format --check
       - run: uv run pytest --junitxml=pytest-results.xml
+        env:
+          POSTGRES_TEST_URL: postgresql://smartledger:smartledger@localhost:${{ env.PG_PORT || '5432' }}/smartledger_test
       - name: Stop PostgreSQL
         if: always() && runner.environment == 'self-hosted'
         working-directory: .
-        run: docker rm -f ci-postgres
+        run: docker rm -f ci-postgres-${{ github.run_id }}-${{ github.job }}
       - name: Capture test counts
         id: test-results
         if: always()
@@ -176,13 +178,15 @@ jobs:
         if: runner.environment == 'self-hosted'
         working-directory: .
         run: |
-          docker rm -f ci-postgres >/dev/null 2>&1 || true
-          docker run -d --name ci-postgres -p 5432:5432 \
+          # A per-job name and a free host port, so jobs running side by side on one machine do not collide.
+          docker rm -f ci-postgres-${{ github.run_id }}-${{ github.job }} >/dev/null 2>&1 || true
+          docker run -d --name ci-postgres-${{ github.run_id }}-${{ github.job }} -p 127.0.0.1::5432 \
             -e POSTGRES_DB=smartledger -e POSTGRES_USER=smartledger -e POSTGRES_PASSWORD=smartledger postgres:16
-          until docker exec ci-postgres pg_isready -U smartledger -d smartledger >/dev/null 2>&1; do sleep 1; done
+          until docker exec ci-postgres-${{ github.run_id }}-${{ github.job }} pg_isready -U smartledger -d smartledger >/dev/null 2>&1; do sleep 1; done
+          echo "PG_PORT=$(docker port ci-postgres-${{ github.run_id }}-${{ github.job }} 5432/tcp | head -1 | sed 's/.*://')" >> "$GITHUB_ENV"
       - name: Verify Core with PostgreSQL tests enabled
         env:
-          CORE_TEST_POSTGRES_URL: jdbc:postgresql://127.0.0.1:5432/smartledger
+          CORE_TEST_POSTGRES_URL: jdbc:postgresql://127.0.0.1:${{ env.PG_PORT || '5432' }}/smartledger
           CORE_TEST_POSTGRES_USERNAME: smartledger
           CORE_TEST_POSTGRES_PASSWORD: smartledger
         run: bash ./mvnw --batch-mode --no-transfer-progress verify
@@ -195,7 +199,7 @@ jobs:
           docker run --rm --network host \
             --volume "$GITHUB_WORKSPACE/backend/core/src/main/resources/db/migration:/flyway/sql:ro" \
             flyway/flyway:13.7.0 \
-            -url=jdbc:postgresql://127.0.0.1:5432/smartledger \
+            "-url=jdbc:postgresql://127.0.0.1:${PG_PORT:-5432}/smartledger" \
             -user=smartledger \
             -password=smartledger \
             -locations=filesystem:/flyway/sql \
@@ -204,13 +208,13 @@ jobs:
       - name: Verify Core tables exist
         run: |
           table_count="$(docker run --rm --network host -e PGPASSWORD=smartledger postgres:16 \
-            psql -h 127.0.0.1 -U smartledger -d smartledger -Atc \
+            psql -h 127.0.0.1 -p "${PG_PORT:-5432}" -U smartledger -d smartledger -Atc \
             "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename IN ('users', 'auth_identities', 'shops')")"
           test "$table_count" = "3"
       - name: Stop PostgreSQL
         if: always() && runner.environment == 'self-hosted'
         working-directory: .
-        run: docker rm -f ci-postgres
+        run: docker rm -f ci-postgres-${{ github.run_id }}-${{ github.job }}
       - name: Capture test counts
         id: test-results
         if: always()
