@@ -370,6 +370,13 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/cli" @railway/cli@5.63.1
           echo "$RUNNER_TEMP/cli/node_modules/.bin" >> "$GITHUB_PATH"
+      # On the self-hosted machine the CLI would read the owner's ~/.railway login before RAILWAY_TOKEN; an empty HOME
+      # leaves the token as its only credential.
+      - name: Isolate the Railway CLI config
+        if: runner.environment == 'self-hosted'
+        run: |
+          mkdir -p "$RUNNER_TEMP/home"
+          echo "HOME=$RUNNER_TEMP/home" >> "$GITHUB_ENV"
       # GitHub owns the browser origins Core allows, so a manual edit on Railway cannot drift or
       # crash Core: Core refuses to start on any whitespace, wildcard or path inside an origin.
       # Skipped while the environment variable is unset, leaving the Railway value untouched.
