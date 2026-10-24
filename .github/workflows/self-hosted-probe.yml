@@ -1,0 +1,12 @@
+name: Self-hosted probe
+
+# Temporary: checks whether jobs still start on the self-hosted runner while the account is billing-locked.
+on:
+  push:
+    branches: [ci/self-hosted-probe]
+
+jobs:
+  probe:
+    runs-on: [self-hosted]
+    steps:
+      - run: echo "self-hosted runner started on $(uname -a)"
