@@ -1,0 +1,65 @@
+name: Synthetic monitor
+
+# Probes Core health, the Core auth gate and the web for staging and production.
+# GitHub runs schedules only from the default branch (main) and may delay or drop
+# them under load, so this is a backup signal, not the uptime record for an SLO;
+# see docs/development/load-testing-and-monitoring.md.
+on:
+  schedule:
+    # Every 10 minutes, off the top of the hour when GitHub delays schedules most.
+    - cron: "4,14,24,34,44,54 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: synthetic-monitor
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      # Repository variables override these; production Core has no default because
+      # its domain is not recorded in the repository.
+      MONITOR_STAGING_CORE_URL: ${{ vars.MONITOR_STAGING_CORE_URL || 'https://core-staging-01d2.up.railway.app' }}
+      MONITOR_STAGING_WEB_URL: ${{ vars.MONITOR_STAGING_WEB_URL || 'https://smart-ledger-staging.vercel.app' }}
+      MONITOR_PRODUCTION_CORE_URL: ${{ vars.MONITOR_PRODUCTION_CORE_URL }}
+      MONITOR_PRODUCTION_WEB_URL: ${{ vars.MONITOR_PRODUCTION_WEB_URL || 'https://smart-ledger-prod.vercel.app' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts/monitor
+      - name: Probe
+        id: probe
+        shell: bash
+        run: python3 scripts/monitor/probe.py | tee probe-results.jsonl
+      - name: Open or update the outage issue
+        if: failure() && steps.probe.conclusion == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Synthetic monitor failing"
+          number=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number')
+          failed=$(jq -r 'select(.ok == false) | "- \(.environment) \(.name): \(.error)"' probe-results.jsonl)
+          body=$(printf 'Run: %s\n\n%s\n' "$RUN_URL" "$failed")
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
+      - name: Close the outage issue after recovery
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Synthetic monitor failing"
+          number=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number')
+          if [ -n "$number" ]; then
+            gh issue close "$number" --comment "Recovered: $RUN_URL"
+          fi

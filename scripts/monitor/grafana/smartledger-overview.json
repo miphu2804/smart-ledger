@@ -1,0 +1,113 @@
+{
+  "title": "SmartLedger overview",
+  "uid": "smartledger-overview",
+  "description": "Start page: is each service up, is it inside its SLO, and where to click next. Detailed metrics live in the linked dashboards and consoles.",
+  "tags": ["smartledger"],
+  "timezone": "Asia/Ho_Chi_Minh",
+  "schemaVersion": 39,
+  "editable": true,
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "links": [
+    { "title": "Load tests", "type": "link", "url": "/d/smartledger-load", "icon": "dashboard" },
+    { "title": "SLOs", "type": "link", "url": "/a/grafana-slo-app/manage-slos", "icon": "info" },
+    { "title": "Synthetic checks", "type": "link", "url": "/a/grafana-synthetic-monitoring-app/checks", "icon": "info" },
+    { "title": "Alerts", "type": "link", "url": "/alerting/list", "icon": "bolt" }
+  ],
+  "templating": {
+    "list": [
+      { "name": "prometheus", "label": "Metrics", "type": "datasource", "query": "prometheus", "hide": 2 }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Status now",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Up",
+      "description": "Last synthetic check per service, from all probes. DOWN when any probe failed.",
+      "datasource": { "type": "prometheus", "uid": "${prometheus}" },
+      "gridPos": { "x": 0, "y": 1, "w": 8, "h": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] },
+          "links": [ { "title": "Open checks", "url": "/a/grafana-synthetic-monitoring-app/checks" } ]
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value_and_name", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${prometheus}" }, "expr": "min by (env, job) (probe_success)", "legendFormat": "{{env}} {{job}}", "instant": true }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Availability, last 28 days (SLO 99.5%)",
+      "description": "Successful synthetic checks / all checks. Red below the 99.5% SLO.",
+      "datasource": { "type": "prometheus", "uid": "${prometheus}" },
+      "gridPos": { "x": 8, "y": 1, "w": 8, "h": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 2,
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 0.995 } ] },
+          "links": [ { "title": "Open SLOs", "url": "/a/grafana-slo-app/manage-slos" } ]
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "value", "graphMode": "none", "textMode": "value_and_name", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${prometheus}" },
+          "expr": "sum by (env, job) (increase(probe_all_success_sum[28d])) / sum by (env, job) (increase(probe_all_success_count[28d]))",
+          "legendFormat": "{{env}} {{job}}",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Response time from probes",
+      "description": "Synthetic request duration, Asia probes. Includes network from Singapore/Tokyo, so it is an upper bound for users in Vietnam.",
+      "datasource": { "type": "prometheus", "uid": "${prometheus}" },
+      "gridPos": { "x": 16, "y": 1, "w": 8, "h": 6 },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${prometheus}" }, "expr": "avg by (env, job) (probe_duration_seconds)", "legendFormat": "{{env}} {{job}}" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "row",
+      "title": "Where to look next",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 7, "w": 24, "h": 1 },
+      "panels": []
+    },
+    {
+      "id": 6,
+      "type": "text",
+      "title": "Consoles",
+      "description": "Links open the provider console; pick the SmartLedger project there. Replace a link with the project's own URL to land on it directly.",
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 11 },
+      "options": {
+        "mode": "markdown",
+        "content": "| Area | Question it answers | Open |\n|---|---|---|\n| **Core** (Java API) | Deploys, logs, CPU and RAM of the container | [Railway](https://railway.com/dashboard) |\n| **AI** (Agent) | Slow or failed chats, model calls, tokens, tools | [Logfire](https://logfire.pydantic.dev/) |\n| **Database** | Slow queries, connections, CPU, disk; DAU query | [Supabase](https://supabase.com/dashboard/projects) |\n| **Web** | Deploys, build and function logs | [Vercel](https://vercel.com/dashboard) |\n| **Auth** | Sign-ins, users, quota | [Firebase](https://console.firebase.google.com/) |\n| **Mobile** | Builds and updates | [Expo](https://expo.dev/) |\n| **Load tests** | Users, req/s, p95, failures per run | [Dashboard](/d/smartledger-load) · [Run one](https://github.com/miphu2804/smart-ledger/actions/workflows/load-test.yml) |\n| **Uptime** | Which check failed and from where | [Checks](/a/grafana-synthetic-monitoring-app/checks) · [Scheduled probe](https://github.com/miphu2804/smart-ledger/actions/workflows/synthetic-monitor.yml) |\n| **Releases** | What was deployed and whether CI passed | [GitHub Actions](https://github.com/miphu2804/smart-ledger/actions) |\n\nNot in Grafana yet: Core latency and 5xx (issue #269), Supabase metrics, Redis (deferred)."
+      }
+    }
+  ]
+}
