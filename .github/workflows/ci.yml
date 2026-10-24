@@ -366,7 +366,10 @@ jobs:
         with:
           persist-credentials: false
       - name: Install Railway CLI
-        run: npm install --global @railway/cli@5.63.1
+        # A job-local prefix, so the self-hosted machine's own CLI (e.g. Homebrew's) is neither clashed with nor replaced.
+        run: |
+          npm install --prefix "$RUNNER_TEMP/cli" @railway/cli@5.63.1
+          echo "$RUNNER_TEMP/cli/node_modules/.bin" >> "$GITHUB_PATH"
       # GitHub owns the browser origins Core allows, so a manual edit on Railway cannot drift or
       # crash Core: Core refuses to start on any whitespace, wildcard or path inside an origin.
       # Skipped while the environment variable is unset, leaving the Railway value untouched.
@@ -513,7 +516,10 @@ jobs:
           cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
           cache-dependency-path: frontend/mobile/package-lock.json
       - name: Install Vercel CLI
-        run: npm install --global vercel@62.2.0
+        # A job-local prefix, so the self-hosted machine's own CLI (e.g. Homebrew's) is neither clashed with nor replaced.
+        run: |
+          npm install --prefix "$RUNNER_TEMP/cli" vercel@62.2.0
+          echo "$RUNNER_TEMP/cli/node_modules/.bin" >> "$GITHUB_PATH"
       - run: vercel pull --yes --environment="$VERCEL_TARGET" --token="$VERCEL_TOKEN"
       # Job env wins over values pulled from Vercel, so GitHub stays the source of EXPO_PUBLIC_*.
       - run: vercel build ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN"
@@ -646,7 +652,10 @@ jobs:
           cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
           cache-dependency-path: frontend/web/package-lock.json
       - name: Install Vercel CLI
-        run: npm install --global vercel@62.2.0
+        # A job-local prefix, so the self-hosted machine's own CLI (e.g. Homebrew's) is neither clashed with nor replaced.
+        run: |
+          npm install --prefix "$RUNNER_TEMP/cli" vercel@62.2.0
+          echo "$RUNNER_TEMP/cli/node_modules/.bin" >> "$GITHUB_PATH"
       - run: vercel pull --yes --environment="$VERCEL_TARGET" --token="$VERCEL_TOKEN"
       - run: vercel build ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN"
       # Admin follows the GitHub environment only: without VITE_ADMIN_ENABLED=true there must be no admin code (a value set
