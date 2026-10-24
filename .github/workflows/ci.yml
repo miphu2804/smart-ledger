@@ -71,7 +71,8 @@ jobs:
     runs-on: *runner
     services:
       postgres:
-        image: pgvector/pgvector:pg17
+        # Empty on the self-hosted runner, which cannot run service containers; `Start PostgreSQL` replaces it there.
+        image: ${{ !((inputs.runner || vars.CI_RUNNER) == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && 'pgvector/pgvector:pg17' || '' }}
         env:
           POSTGRES_DB: smartledger_test
           POSTGRES_USER: smartledger
@@ -98,15 +99,27 @@ jobs:
       - uses: astral-sh/setup-uv@v10.1.0
         with:
           python-version: "3.11"
+      - name: Start PostgreSQL
+        if: runner.environment == 'self-hosted'
+        working-directory: .
+        run: |
+          docker rm -f ci-postgres >/dev/null 2>&1 || true
+          docker run -d --name ci-postgres -p 5432:5432 \
+            -e POSTGRES_DB=smartledger_test -e POSTGRES_USER=smartledger -e POSTGRES_PASSWORD=smartledger pgvector/pgvector:pg17
+          until docker exec ci-postgres pg_isready -U smartledger -d smartledger_test >/dev/null 2>&1; do sleep 1; done
       - run: uv sync --group dev
       - run: uv run ruff check
       - run: uv run ruff format --check
       - run: uv run pytest --junitxml=pytest-results.xml
+      - name: Stop PostgreSQL
+        if: always() && runner.environment == 'self-hosted'
+        working-directory: .
+        run: docker rm -f ci-postgres
       - name: Capture test counts
         id: test-results
         if: always()
         run: |
-          python - <<'PY' >> "$GITHUB_OUTPUT"
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
           from pathlib import Path
           from xml.etree import ElementTree
 
@@ -131,7 +144,8 @@ jobs:
     runs-on: *runner
     services:
       postgres:
-        image: postgres:16
+        # Empty on the self-hosted runner, which cannot run service containers; `Start PostgreSQL` replaces it there.
+        image: ${{ !((inputs.runner || vars.CI_RUNNER) == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && 'postgres:16' || '' }}
         env:
           POSTGRES_DB: smartledger
           POSTGRES_USER: smartledger
@@ -157,7 +171,15 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-          cache: maven
+          cache: ${{ runner.environment == 'github-hosted' && 'maven' || '' }}
+      - name: Start PostgreSQL
+        if: runner.environment == 'self-hosted'
+        working-directory: .
+        run: |
+          docker rm -f ci-postgres >/dev/null 2>&1 || true
+          docker run -d --name ci-postgres -p 5432:5432 \
+            -e POSTGRES_DB=smartledger -e POSTGRES_USER=smartledger -e POSTGRES_PASSWORD=smartledger postgres:16
+          until docker exec ci-postgres pg_isready -U smartledger -d smartledger >/dev/null 2>&1; do sleep 1; done
       - name: Verify Core with PostgreSQL tests enabled
         env:
           CORE_TEST_POSTGRES_URL: jdbc:postgresql://127.0.0.1:5432/smartledger
@@ -185,6 +207,10 @@ jobs:
             psql -h 127.0.0.1 -U smartledger -d smartledger -Atc \
             "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename IN ('users', 'auth_identities', 'shops')")"
           test "$table_count" = "3"
+      - name: Stop PostgreSQL
+        if: always() && runner.environment == 'self-hosted'
+        working-directory: .
+        run: docker rm -f ci-postgres
       - name: Capture test counts
         id: test-results
         if: always()
@@ -223,7 +249,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-          cache: npm
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
           cache-dependency-path: frontend/mobile/package-lock.json
       - run: npm ci
       - run: npm run typecheck
@@ -241,7 +267,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-          cache: npm
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
           cache-dependency-path: frontend/web/package-lock.json
       - run: npm ci
       - run: npm run lint
@@ -480,7 +506,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-          cache: npm
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
           cache-dependency-path: frontend/mobile/package-lock.json
       - name: Install Vercel CLI
         run: npm install --global vercel@62.2.0
@@ -613,7 +639,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-          cache: npm
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
           cache-dependency-path: frontend/web/package-lock.json
       - name: Install Vercel CLI
         run: npm install --global vercel@62.2.0
