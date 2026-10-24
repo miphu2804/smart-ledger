@@ -1,3 +1,11 @@
+### [2026-10-24 14:30 UTC+07:00] — [Feature] Landing introduces the team
+
+**Done:** The course asks the landing to show who built the product, and it had no team information. A new "Đội ngũ" section (after the POS comparison, linked from the top menu and the footer) shows the six members' own "Đội ngũ Sổ Nghe Lời" posters uncropped, as Orei asked: Minh Thọ (Leader), Minh Phú (AI Engineer), Thượng Hiệp (Frontend Developer), Thu Thảo (Backend Developer), Quỳnh Như (Business Analyst), Kiều Chinh (Marketing), with a line about Team HEXA, EXE201, FPT University. Posters are WebP (940×788, about 70 KB each), lazy-loaded, with name and role in `alt`. The FAQ answer on sign-in said Facebook or Zalo; it now says email and password or Google, which is what the app offers (Facebook is paused, Zalo shows "Sắp có").
+
+**Changed files:** `frontend/web/public/team/{minh-tho,minh-phu,thuong-hiep,thu-thao,quynh-nhu,kieu-chinh}.webp` — added; `frontend/web/src/pages/landing/LandingPage.tsx`, `frontend/web/src/pages/landing/SiteFooter.tsx`, `frontend/web/src/styles/landing.css` — modified; this entry.
+
+**Check:** `npm run typecheck`, `npm run lint` (no new warnings) and `npm run build` in `frontend/web`; dev server at 1280 px shows the six posters in three columns, all loaded, "Đội ngũ" in the menu and footer; the grid drops to two columns under 960 px and one under 560 px with no horizontal overflow at 375 px.
+
 ### [2026-10-21 20:40 UTC+07:00] — [Feature] Web admin dashboard reads the real Core admin API
 
 **Done:** The admin pages in `frontend/web` called endpoints Core never had (`/auth/login`, `/admin/overview?days=`, `/admin/audit-logs`, no `/api/v1` prefix) and only worked on mock data. With `VITE_USE_MOCK=false` they now use Core:
