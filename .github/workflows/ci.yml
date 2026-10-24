@@ -683,12 +683,18 @@ jobs:
             code=$(curl -s -o /dev/null -w '%{http_code}' "$URL/admin/login" || true)
             test "$code" = 200 || { echo "::error::admin login page returned $code"; exit 1; }
             echo "admin login page: 200 at $URL/admin/login"
-            # The browser calls Core from this origin. Core may still be deploying a new CORS_ALLOWED_ORIGINS in the
-            # same run, so a rejected preflight is a warning, not a failure.
-            cors=$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS "$VITE_API_ENDPOINT/api/v1/me"               -H "Origin: $URL" -H 'Access-Control-Request-Method: GET' -H 'Access-Control-Request-Headers: authorization' || true)
-            if [ "$cors" = 200 ]; then echo "Core accepts $URL (CORS)"
-            else echo "::warning::Core at $VITE_API_ENDPOINT answered $cors to a CORS preflight from $URL; add $URL to CORS_ALLOWED_ORIGINS of the matching railway-* environment"
+            # The browser calls Core from this origin, so the admin is unusable until Core allows it. Core may still be
+            # deploying a new CORS_ALLOWED_ORIGINS in the same run (job `deploy`), so wait up to 5 minutes, then fail.
+            for attempt in $(seq 1 20); do
+              cors=$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS "$VITE_API_ENDPOINT/api/v1/me"                 -H "Origin: $URL" -H 'Access-Control-Request-Method: GET' -H 'Access-Control-Request-Headers: authorization' || true)
+              [ "$cors" = 200 ] && break
+              sleep 15
+            done
+            if [ "$cors" != 200 ]; then
+              echo "::error::Core at $VITE_API_ENDPOINT still answers $cors to a CORS preflight from $URL after 5 minutes; add $URL to CORS_ALLOWED_ORIGINS of the matching railway-* environment and redeploy Core"
+              exit 1
             fi
+            echo "Core accepts $URL (CORS)"
           fi
       - name: Report URL
         if: always() && steps.deploy.outputs.url != ''
