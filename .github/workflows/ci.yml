@@ -329,6 +329,8 @@ jobs:
           } > ci-summary.md
           cat ci-summary.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
+        # The summary is already in the job summary; a full artifact quota must not fail CI or skip deploys.
+        continue-on-error: true
         with:
           name: ci-summary
           path: ci-summary.md
@@ -449,6 +451,8 @@ jobs:
           } > deploy-summary.md
           cat deploy-summary.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
+        # The summary is already in the job summary; a full artifact quota must not fail CI or skip deploys.
+        continue-on-error: true
         if: always()
         with:
           name: deploy-summary-${{ github.ref_name }}
