@@ -1,0 +1,9 @@
+# Runtime-only image for a jar built by CI; Railway's free build window is too short for the Maven stage in Dockerfile.
+FROM eclipse-temurin:21-jre-jammy
+WORKDIR /app
+RUN groupadd --system --gid 10001 smartledger \
+    && useradd --system --uid 10001 --gid smartledger --create-home --home-dir /app smartledger
+COPY --chown=smartledger:smartledger app.jar /app/app.jar
+USER smartledger
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

@@ -440,10 +440,25 @@ jobs:
         id: deploy_ai
         if: needs.changes.outputs.ai == 'true' || github.run_attempt > 1
         run: railway up backend/ai --path-as-root --service ai --ci
+      # Railway's free build window is too short for a Maven build, so the runner builds the jar and
+      # Railway only wraps it in a JRE image.
+      - uses: actions/setup-java@v6
+        if: needs.changes.outputs.core == 'true' || github.run_attempt > 1
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Build core jar
+        if: needs.changes.outputs.core == 'true' || github.run_attempt > 1
+        working-directory: backend/core
+        run: |
+          bash ./mvnw --batch-mode --no-transfer-progress -DskipTests package
+          mkdir -p "$RUNNER_TEMP/core-prebuilt"
+          cp target/core-0.0.1-SNAPSHOT.jar "$RUNNER_TEMP/core-prebuilt/app.jar"
+          cp Dockerfile.prebuilt "$RUNNER_TEMP/core-prebuilt/Dockerfile"
       - name: Deploy core
         id: deploy_core
         if: needs.changes.outputs.core == 'true' || github.run_attempt > 1
-        run: railway up backend/core --path-as-root --service core --ci
+        run: railway up "$RUNNER_TEMP/core-prebuilt" --path-as-root --service core --ci
       - name: Build deploy report
         if: always()
         env:
