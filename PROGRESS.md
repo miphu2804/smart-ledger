@@ -3048,3 +3048,11 @@ The report criterion added by #256 reused the number `AC-076`, which the Agent l
 **Changed files:** `backend/ai/src/memory/ranking.py`, `backend/ai/src/memory/repository.py`, `backend/ai/tests/unit_tests/test_memory_ranking.py`, `backend/ai/evaluation/memory_recall/results/e2e_hybrid.json`, `docs/architecture/adr/0002-agent-long-term-memory.md` and this entry.
 
 **Check:** In `backend/ai`, `uv run ruff check`, `uv run ruff format --check` and `uv run pytest` with `POSTGRES_TEST_URL` on PostgreSQL 16 + pgvector: 492 passed, 13 skipped. `evaluation/memory_recall/e2e.py --hybrid`: Recall@5 0.721 as before, same top 5 as the benchmark on 98.1% of queries (the rest are ties), p95 at most 16 ms on shops with 120+ memories. **Not verified:** staging, real embeddings end to end. `similar` (reconcile candidates) still orders by the index with the same filter and is left as a follow-up.
+
+### [2026-10-22 16:50 UTC+07:00] — [Mobile] Voice-order resolver library and its review fixes
+
+**Done:** `frontend/mobile/src/lib/resolver/` adds the voice-order resolver (normalizer, E/P/Q/B/AND retrievers, fusion, rerank, G1/G2 gate, alias learning); nothing in the app calls it yet. Review fixes on PR #344: re-pointing an alias now removes the phrase's document from the old product in every retriever and the reranker (it used to tie with the new one and win on the productId tiebreak); above `eBruteMax`, E and P also score every product the span is a prefix of, not only Q's candidates; G2 no longer auto-applies on a unit mismatch; `unit_ok` reads the first word of each unit through a synonym table (`units.vi.ts`: `ky`/`ki`/`kg`, `ly`/`coc`, ...) and calls an unreadable catalog unit unknown; `bao`, `hu`, `vi` and `binh` leave B's unit stoplist; the seed aliases carry every `app/voice.tsx` regex spelling; `linear` fusion keeps similarities raw; E and P share one Q run per line.
+
+**Changed files:** `frontend/mobile/src/lib/resolver/*`, `frontend/mobile/tests/resolver*.test.ts`, `docs/voice-resolution/DISCOVERY.md`, `docs/README.md` and this entry.
+
+**Check:** In `frontend/mobile`, `node --test tests/resolver*.test.ts`: 156 passed (11 new, each failing on the code before the fix); `npx tsc --noEmit`: 0 errors. **Not verified:** the eval harness (#345, #347) was not rerun, so its bake-off numbers predate the stoplist, `linear` and unit changes.
