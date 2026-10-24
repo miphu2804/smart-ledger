@@ -4,6 +4,14 @@ on:
   pull_request:
   push:
     branches: [main, staging]
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: self-hosted runs every job on the repository's self-hosted machine, for when GitHub-hosted runners are unavailable
+        type: choice
+        required: true
+        default: github-hosted
+        options: [github-hosted, self-hosted]
 
 jobs:
   ### Changes: which areas this pull request or push touched ###
@@ -13,7 +21,11 @@ jobs:
   # mobile-release.yml. Filtering here, not with `on.paths`, keeps every check reporting a result.
   # A change to this workflow runs everything.
   changes:
-    runs-on: ubuntu-24.04
+    # Every job uses this runner. GitHub-hosted is the default; the self-hosted machine is used when the run is started
+    # with runner=self-hosted or the repository variable CI_RUNNER is self-hosted. Pull requests from forks always stay
+    # GitHub-hosted, because the repository is public and a fork must not run code on the self-hosted machine.
+    # Service containers (the Postgres of `ai` and `core`) need a Linux runner.
+    runs-on: &runner ${{ ((inputs.runner || vars.CI_RUNNER) == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted"]') || 'ubuntu-24.04' }}
     permissions:
       contents: read
       pull-requests: read
@@ -56,10 +68,11 @@ jobs:
   ai:
     needs: [changes]
     if: needs.changes.outputs.ai == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: *runner
     services:
       postgres:
-        image: pgvector/pgvector:pg17
+        # Empty on the self-hosted runner, which cannot run service containers; `Start PostgreSQL` replaces it there.
+        image: ${{ !((inputs.runner || vars.CI_RUNNER) == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && 'pgvector/pgvector:pg17' || '' }}
         env:
           POSTGRES_DB: smartledger_test
           POSTGRES_USER: smartledger
@@ -86,15 +99,27 @@ jobs:
       - uses: astral-sh/setup-uv@v10.1.0
         with:
           python-version: "3.11"
+      - name: Start PostgreSQL
+        if: runner.environment == 'self-hosted'
+        working-directory: .
+        run: |
+          docker rm -f ci-postgres >/dev/null 2>&1 || true
+          docker run -d --name ci-postgres -p 5432:5432 \
+            -e POSTGRES_DB=smartledger_test -e POSTGRES_USER=smartledger -e POSTGRES_PASSWORD=smartledger pgvector/pgvector:pg17
+          until docker exec ci-postgres pg_isready -U smartledger -d smartledger_test >/dev/null 2>&1; do sleep 1; done
       - run: uv sync --group dev
       - run: uv run ruff check
       - run: uv run ruff format --check
       - run: uv run pytest --junitxml=pytest-results.xml
+      - name: Stop PostgreSQL
+        if: always() && runner.environment == 'self-hosted'
+        working-directory: .
+        run: docker rm -f ci-postgres
       - name: Capture test counts
         id: test-results
         if: always()
         run: |
-          python - <<'PY' >> "$GITHUB_OUTPUT"
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
           from pathlib import Path
           from xml.etree import ElementTree
 
@@ -116,10 +141,11 @@ jobs:
   core:
     needs: [changes]
     if: needs.changes.outputs.core == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: *runner
     services:
       postgres:
-        image: postgres:16
+        # Empty on the self-hosted runner, which cannot run service containers; `Start PostgreSQL` replaces it there.
+        image: ${{ !((inputs.runner || vars.CI_RUNNER) == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && 'postgres:16' || '' }}
         env:
           POSTGRES_DB: smartledger
           POSTGRES_USER: smartledger
@@ -145,7 +171,15 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-          cache: maven
+          cache: ${{ runner.environment == 'github-hosted' && 'maven' || '' }}
+      - name: Start PostgreSQL
+        if: runner.environment == 'self-hosted'
+        working-directory: .
+        run: |
+          docker rm -f ci-postgres >/dev/null 2>&1 || true
+          docker run -d --name ci-postgres -p 5432:5432 \
+            -e POSTGRES_DB=smartledger -e POSTGRES_USER=smartledger -e POSTGRES_PASSWORD=smartledger postgres:16
+          until docker exec ci-postgres pg_isready -U smartledger -d smartledger >/dev/null 2>&1; do sleep 1; done
       - name: Verify Core with PostgreSQL tests enabled
         env:
           CORE_TEST_POSTGRES_URL: jdbc:postgresql://127.0.0.1:5432/smartledger
@@ -173,6 +207,10 @@ jobs:
             psql -h 127.0.0.1 -U smartledger -d smartledger -Atc \
             "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename IN ('users', 'auth_identities', 'shops')")"
           test "$table_count" = "3"
+      - name: Stop PostgreSQL
+        if: always() && runner.environment == 'self-hosted'
+        working-directory: .
+        run: docker rm -f ci-postgres
       - name: Capture test counts
         id: test-results
         if: always()
@@ -197,7 +235,7 @@ jobs:
   mobile-web:
     needs: [changes]
     if: needs.changes.outputs.mobile == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: *runner
     env:
       EXPO_PUBLIC_USE_MOCK: "true"
       EXPO_PUBLIC_MOCK_CORE: "true"
@@ -211,7 +249,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-          cache: npm
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
           cache-dependency-path: frontend/mobile/package-lock.json
       - run: npm ci
       - run: npm run typecheck
@@ -220,7 +258,7 @@ jobs:
   landing:
     needs: [changes]
     if: needs.changes.outputs.landing == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: *runner
     defaults:
       run:
         working-directory: frontend/web
@@ -229,7 +267,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-          cache: npm
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
           cache-dependency-path: frontend/web/package-lock.json
       - run: npm ci
       - run: npm run lint
@@ -238,7 +276,7 @@ jobs:
   container-images:
     needs: [changes]
     if: needs.changes.outputs.containers == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: *runner
     env:
       DATABASE_URL: jdbc:postgresql://ci-placeholder:5432/ci
       DATABASE_USERNAME: ci-placeholder
@@ -258,7 +296,7 @@ jobs:
     name: CI result summary
     if: always()
     needs: [ai, core, mobile-web, landing, container-images]
-    runs-on: ubuntu-24.04
+    runs-on: *runner
     steps:
       - name: Build compact report
         env:
@@ -291,6 +329,8 @@ jobs:
           } > ci-summary.md
           cat ci-summary.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
+        # The summary is already in the job summary; a full artifact quota must not fail CI or skip deploys.
+        continue-on-error: true
         with:
           name: ci-summary
           path: ci-summary.md
@@ -314,7 +354,7 @@ jobs:
     needs: [changes, ai, core, mobile-web, container-images]
     permissions:
       contents: read
-    runs-on: ubuntu-24.04
+    runs-on: *runner
     environment: ${{ github.ref_name == 'main' && 'railway-production' || 'railway-staging' }}
     concurrency:
       group: deploy-${{ github.ref_name }}
@@ -411,6 +451,8 @@ jobs:
           } > deploy-summary.md
           cat deploy-summary.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
+        # The summary is already in the job summary; a full artifact quota must not fail CI or skip deploys.
+        continue-on-error: true
         if: always()
         with:
           name: deploy-summary-${{ github.ref_name }}
@@ -436,7 +478,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    runs-on: ubuntu-24.04
+    runs-on: *runner
     # `url` links the GitHub Deployments sidebar to the fixed domains; previews get none because
     # their alias depends on the PR number and is already commented on the PR.
     environment:
@@ -468,7 +510,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-          cache: npm
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
           cache-dependency-path: frontend/mobile/package-lock.json
       - name: Install Vercel CLI
         run: npm install --global vercel@62.2.0
@@ -576,7 +618,7 @@ jobs:
     needs: [changes, landing]
     permissions:
       contents: read
-    runs-on: ubuntu-24.04
+    runs-on: *runner
     environment: ${{ github.event_name == 'pull_request' && 'landing-preview' || (github.ref_name == 'main' && 'landing-production' || 'landing-staging') }}
     concurrency:
       group: deploy-landing-${{ github.head_ref || github.ref_name }}
@@ -601,7 +643,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-          cache: npm
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
           cache-dependency-path: frontend/web/package-lock.json
       - name: Install Vercel CLI
         run: npm install --global vercel@62.2.0
