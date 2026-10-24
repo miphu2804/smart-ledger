@@ -3048,3 +3048,105 @@ The report criterion added by #256 reused the number `AC-076`, which the Agent l
 **Changed files:** `backend/ai/src/memory/ranking.py`, `backend/ai/src/memory/repository.py`, `backend/ai/tests/unit_tests/test_memory_ranking.py`, `backend/ai/evaluation/memory_recall/results/e2e_hybrid.json`, `docs/architecture/adr/0002-agent-long-term-memory.md` and this entry.
 
 **Check:** In `backend/ai`, `uv run ruff check`, `uv run ruff format --check` and `uv run pytest` with `POSTGRES_TEST_URL` on PostgreSQL 16 + pgvector: 492 passed, 13 skipped. `evaluation/memory_recall/e2e.py --hybrid`: Recall@5 0.721 as before, same top 5 as the benchmark on 98.1% of queries (the rest are ties), p95 at most 16 ms on shops with 120+ memories. **Not verified:** staging, real embeddings end to end. `similar` (reconcile candidates) still orders by the index with the same filter and is left as a follow-up.
+
+### [2026-10-24] — Landing feedback UI preview
+
+**Done:** Added a feedback section and navigation/footer links, with name, phone, feedback category and message. User requested UI only; submitting shows an explicit preview notice, with no network request or persistent storage.
+
+**Changed files:** `frontend/web/src/pages/landing/FeedbackSection.tsx`, `LandingPage.tsx`, `SiteFooter.tsx`, `frontend/web/src/styles/landing.css`, `frontend/web/README.md`, `PROGRESS.md`.
+
+**Flow explained:** Open `/#gop-y`, complete required fields, then try the submit action. The form retains input and says the feedback has not been sent. No Core/API or business requirements changed.
+
+**Check:** Web TypeScript passed; oxlint passed with warnings in unrelated admin files. Responsive CSS added; browser screenshot verification pending.
+
+### [2026-10-24] — Refine landing team and feedback copy
+
+**Done:** Replaced team posters with a responsive text roster showing existing names and roles; simplified the team heading and description. Removed the requested inline feedback preview sentence beside the submit button; the form still states its preview status above and after submission.
+
+**Changed files:** `frontend/web/src/pages/landing/LandingPage.tsx`, `FeedbackSection.tsx`, `frontend/web/src/styles/landing.css`, `PROGRESS.md`.
+
+**Flow explained:** Visitors read member information directly instead of reading text embedded in posters. Feedback remains UI only.
+
+**Check:** Web TypeScript passed; visual browser check not run for this revision.
+
+### [2026-10-24] — Team origin story, text-only design
+
+**Done:** Used the requested taste skill and researched official Linear, Notion and Stripe about pages. The user supplied the origin (vendors recording every transaction in notebooks for end-of-day totals) and requested no pictures. The team section now pairs that story with the existing six names/roles, in a two-page composition; no biographies or achievements were invented. Existing roles await any user corrections.
+
+**Changed files:** `frontend/web/src/pages/landing/LandingPage.tsx`, `frontend/web/src/styles/landing.css`, `PROGRESS.md`.
+
+**Flow explained:** Read the short origin story, meet HEXA, then follow the link to the existing feedback section. The notebook composition keeps the existing brand; scope is limited to the team section.
+
+**Check:** TypeScript passed; taste lint reported zero failures (one existing hero eyebrow warning); git diff --check passed. Local server returned HTTP 200. Browser inspector attempted; see follow-up verification result.
+
+**Visual verification:** Inspector could not capture screenshots: CDP timeout at Page.enable. Desktop/phone screenshot QA remains unverified.
+
+### [2026-10-24] — Friendlier team introduction for small retailers
+
+**Done:** Responded to user feedback on inconsistent team styling. Replaced the purple split panel with the landing's existing cream background, display heading and plain text layout. Rewrote the introduction as six friends building the app, kept the supplied notebook origin, and expressed existing roles in everyday Vietnamese rather than English job titles.
+
+**Changed files:** `frontend/web/src/pages/landing/LandingPage.tsx`, `frontend/web/src/styles/landing.css`, `PROGRESS.md`.
+
+**Flow explained:** Visitors read why the group started, see each member's area of work, and can follow the feedback link. Text only, as requested; no invented customer stories or achievements.
+
+**Check:** TypeScript and git diff --check passed. Browser screenshot QA not completed; previous inspector attempts timed out at Page.enable.
+
+### [2026-10-24] — Clarify collaborative team roles
+
+**Done:** Updated Minh Thọ's introduction toward AI work, as confirmed by the user; described the six members as jointly planning and sharing the work rather than assigning one person coordination ownership.
+
+**Changed files:** `frontend/web/src/pages/landing/LandingPage.tsx`, `PROGRESS.md`.
+
+**Flow explained:** Text-only team introduction correction; no functional behavior change.
+
+**Check:** Reviewed the two changed text strings; no tests needed for this copy change.
+
+### [2026-10-24] — Softer wording for shared AI work
+
+**Done:** Used the same friendly, less technical description for Minh Thọ and Minh Phú: “Giúp Sổ Nghe Lời hiểu bạn hơn”, per user feedback.
+
+**Changed files:** `frontend/web/src/pages/landing/LandingPage.tsx`, `PROGRESS.md`.
+
+**Flow explained:** Team copy only; no behavior change.
+
+**Check:** Reviewed both text replacements; no tests needed.
+
+### [2026-10-24] — Consistent friendly team copy
+
+**Done:** Reworded the four remaining member descriptions in the same plain, visitor-facing style as the shared AI description, retaining their existing areas of work.
+
+**Changed files:** `frontend/web/src/pages/landing/LandingPage.tsx`, `PROGRESS.md`.
+
+**Flow explained:** Copy only; no behavior change.
+
+**Check:** Reviewed the four text replacements; no tests needed.
+
+### [2026-10-24] — Distinct introductions for AI contributors
+
+**Done:** Kept Minh Thọ's friendly introduction and gave Minh Phú a distinct phrase about turning spoken words into notes, as requested. This describes the team member's area of work, not acceptance of voice functionality.
+
+**Changed files:** `frontend/web/src/pages/landing/LandingPage.tsx`, `PROGRESS.md`.
+
+**Flow explained:** Copy only; no behavior change.
+
+**Check:** Reviewed the text replacement; no tests needed.
+
+### [2026-10-24] — More abstract member introduction
+
+**Done:** Changed Minh Phú's introduction to “Góp chút thông minh cho cuốn sổ”, following the user's request for more abstract wording.
+
+**Changed files:** `frontend/web/src/pages/landing/LandingPage.tsx`, `PROGRESS.md`.
+
+**Flow explained:** Copy only; no behavior change.
+
+**Check:** Reviewed the text replacement; no tests needed.
+
+### [2026-10-24] — Confirm Minh Phú introduction
+
+**Done:** Set Minh Phú's introduction to the user's exact requested wording: “Giúp Sổ Nghe Lời thông minh hơn”.
+
+**Changed files:** `frontend/web/src/pages/landing/LandingPage.tsx`, `PROGRESS.md`.
+
+**Flow explained:** Copy only; no behavior change.
+
+**Check:** Reviewed the text replacement; no tests needed.
