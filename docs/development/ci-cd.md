@@ -1,6 +1,6 @@
 # CI/CD to Railway and Vercel
 
-This document traces a change from a feature branch to Railway for `backend/core` and `backend/ai`, and to Vercel for the mobile web and the landing page. Everything runs in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), split into `###` sections: **Test**, **Report**, **Deploy backend** (job `deploy`, after the backend, mobile web and container image jobs pass), **Deploy web** (job `deploy-web`, see [Mobile web on Vercel](#mobile-web-on-vercel)) **Deploy landing** (job `deploy-landing`, see [Landing page on Vercel](#landing-page-on-vercel)) and **Deploy admin** (job `deploy-admin`, see [Admin dashboard on Vercel](#admin-dashboard-on-vercel)). Branch and review rules live in [CONTRIBUTING](../../CONTRIBUTING.md). The Android app is built by a separate manual workflow, [`mobile-release.yml`](../../.github/workflows/mobile-release.yml); see [Android build](#android-build).
+This document traces a change from a feature branch to Railway for `backend/core` and `backend/ai`, and to Vercel for the mobile web and the landing page. Everything runs in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), split into `###` sections: **Test**, **Report**, **Deploy backend** (job `deploy`, after the backend, mobile web and container image jobs pass), **Deploy web** (job `deploy-web`, see [Mobile web on Vercel](#mobile-web-on-vercel)) and **Deploy landing** (job `deploy-landing`, see [Landing page on Vercel](#landing-page-on-vercel); it also carries the admin dashboard at `/admin`). Branch and review rules live in [CONTRIBUTING](../../CONTRIBUTING.md). The Android app is built by a separate manual workflow, [`mobile-release.yml`](../../.github/workflows/mobile-release.yml); see [Android build](#android-build).
 
 ## Overview
 
@@ -23,7 +23,7 @@ Diagram source: [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio); edi
 | `ai` | `backend/ai/**`, `supabase/**` | `ai`, `container-images`, `deploy` (step `Deploy ai`) |
 | `core` | `backend/core/**` | `core`, `container-images`, `deploy` (step `Deploy core`) |
 | `mobile` | `frontend/mobile/**` | `mobile-web`, `deploy-web` |
-| `landing` | `frontend/web/**` | `landing`, `deploy-landing`, `deploy-admin` |
+| `landing` | `frontend/web/**` | `landing`, `deploy-landing` |
 | `containers` | `compose.yaml` | `container-images` |
 
 A change to `.github/workflows/ci.yml` runs every job; a docs-only change runs only `changes` and `summary`. A re-run (`github.run_attempt > 1`) always runs `deploy` (both services), `deploy-web` and `deploy-landing` on a push: after changing an environment variable alone, open the latest run on that branch and choose **Re-run all jobs**. If a deploy was cancelled or failed, re-run that run, not a later one that did not touch the area.
@@ -42,8 +42,8 @@ The backend deploy (`deploy`) waits for `ai`, `core`, `mobile-web` and `containe
 | `vercel-staging` | `staging` | No | Same as above | `EXPO_PUBLIC_*`, `VERCEL_STAGING_ALIAS` |
 | `vercel-production` | `main` | Yes | Same as above | `EXPO_PUBLIC_*` |
 | `landing-preview` (unused while PR previews are off) | Any branch (PR) | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` of the `landing` project | `VITE_LEGAL_DRAFT` |
-| `landing-staging` | `staging` | No | Same as above | `VITE_LEGAL_DRAFT`, `LANDING_URL`; admin: `ADMIN_VERCEL_PROJECT_ID`, `ADMIN_URL`, `ADMIN_API_ENDPOINT`, `ADMIN_FIREBASE_API_KEY` |
-| `landing-production` | `main` | Yes | Same as above | `VITE_LEGAL_DRAFT`, `LANDING_URL`, `VITE_ANDROID_APK_URL`; admin: the same four `ADMIN_*` |
+| `landing-staging` | `staging` | No | Same as above | `VITE_LEGAL_DRAFT`, `LANDING_URL`; admin: `VITE_ADMIN_ENABLED`, `VITE_API_ENDPOINT`, `VITE_FIREBASE_API_KEY` |
+| `landing-production` | `main` | Yes | Same as above | `VITE_LEGAL_DRAFT`, `LANDING_URL`, `VITE_ANDROID_APK_URL`; admin: the same three |
 | `android-dev` | None; job `gate` pairs it with branches other than `main` and `staging` | No | `ANDROID_GOOGLE_SERVICES_JSON`: Firebase config of the dev/staging project | `EXPO_PUBLIC_*` |
 | `android-staging` | `staging` | No | `ANDROID_GOOGLE_SERVICES_JSON`: Firebase config of the staging project | `EXPO_PUBLIC_*` |
 | `android-production` | `main` | Yes | `ANDROID_GOOGLE_SERVICES_JSON`: Firebase config of the production project; `ANDROID_KEYSTORE_*` ([Release signing](#release-signing)); `R2_*` ([Publish the APK](#publish-the-apk-for-the-landing-page)) | `EXPO_PUBLIC_*`, `R2_BUCKET` |
@@ -201,17 +201,9 @@ Job `landing` runs `npm run lint` and `npm run build` in `frontend/web` on every
 - `VITE_LEGAL_DRAFT` must stay unset or `true` until the product owner approves the legal pages; set `false` only in `landing-production` after approval. The contact email and the Facebook/TikTok links are not environment variables: they live in [`frontend/web/site.yaml`](../../frontend/web/site.yaml).
 - `deploy-landing` runs only when the push changes `frontend/web/` or `.github/workflows/ci.yml` (see [path filtering](#path-filtering)), so a push that leaves the landing alone does not spend one of Vercel's 100 daily deployments. A re-run always deploys: after changing a `landing-*` variable, choose **Re-run all jobs** on the latest run. If a landing deploy was cancelled or failed, re-run that run, not a later one that did not touch the landing.
 - Vercel Authentication (Settings → Deployment Protection) must stay off on the `landing` project. With it on, preview deployments redirect to the Vercel login (`302`) and the smoke test fails on pull requests and on `staging`.
-- Admin (`/admin/*`) is hidden unless the build has `VITE_ADMIN_ENABLED=true`. No GitHub environment sets it. Step `Check no admin code in the build` in `deploy-landing` fails the job if the build output has an `AdminRoutes-*` chunk or the mock password `admin123`, which catches a `VITE_ADMIN_ENABLED=true` set in the Vercel project `landing` (`vercel pull` brings those variables into the build).
-
-## Admin dashboard on Vercel
-
-The admin dashboard is the same `frontend/web` source built with `VITE_ADMIN_ENABLED=true` and `VITE_USE_MOCK=false`, deployed by job `deploy-admin` to a second Vercel project, `admin`, so the public landing never carries admin code. It reuses the `landing-*` environments, so it shares their Vercel team token (`VERCEL_TOKEN`, `VERCEL_ORG_ID`) and the production approval, and adds its own variables: `ADMIN_VERCEL_PROJECT_ID` (project ID of `admin`, an identifier, not a credential), `ADMIN_URL`, `ADMIN_API_ENDPOINT` and `ADMIN_FIREBASE_API_KEY`. It runs on pushes to `staging` (`landing-staging`, preview deploy aliased to `ADMIN_URL`) and `main` (`landing-production`, production deploy after approval) when `frontend/web/` changed, like `deploy-landing`. Pull requests do not deploy it.
-
-- Until the environment has all of these, the job prints a notice and skips, so CI stays green.
-- Vercel project `admin`: **Root Directory** `frontend/web`, Git deployments off (already in `vercel.json`), Vercel Authentication off (the smoke test opens `ADMIN_URL/admin/login`). Do not set `VITE_ADMIN_ENABLED` on the `landing` project.
-- `ADMIN_API_ENDPOINT` is the Core root of that environment (no `/api/v1`); `ADMIN_FIREBASE_API_KEY` is the Web API key of the Firebase project that Core verifies tokens against (the same value as `EXPO_PUBLIC_FIREBASE_API_KEY` of `vercel-*`). Both are public client values, so they are variables, not secrets; the job passes them to the build as `VITE_API_ENDPOINT` and `VITE_FIREBASE_API_KEY`.
-- Add the admin origin (`ADMIN_URL`) to `CORS_ALLOWED_ORIGINS` of the matching `railway-*` environment and redeploy Core; otherwise the browser blocks every admin call.
-- Step `Check the admin build` fails the job if the admin routes are missing, the mock demo accounts (`admin123`) are in the build, or the bundle does not contain `ADMIN_API_ENDPOINT`.
+- **Admin dashboard at `/admin`:** the landing build includes the admin (real Core data, `VITE_USE_MOCK=false`) when the GitHub environment sets `VITE_ADMIN_ENABLED=true` with `VITE_API_ENDPOINT` (Core root of that environment, no `/api/v1`) and `VITE_FIREBASE_API_KEY` (Web API key of the Firebase project Core verifies tokens against, the same value as `EXPO_PUBLIC_FIREBASE_API_KEY` of `vercel-*`). Both are public client values, so they are variables, not secrets. Without the flag the build has no admin code.
+- Step `Check the admin in the build` fails the job if the mock demo password `admin123` is in the output, if the flag is on but the admin routes, `VITE_API_ENDPOINT` or `VITE_FIREBASE_API_KEY` are missing, or if the flag is off but an `AdminRoutes-*` chunk is there (a `VITE_ADMIN_ENABLED=true` set in the Vercel project `landing` would come in through `vercel pull`). With the flag on, the smoke test also opens `LANDING_URL/admin/login` and warns when Core rejects a CORS preflight from `LANDING_URL`.
+- Add `LANDING_URL` to `CORS_ALLOWED_ORIGINS` of the matching `railway-*` environment; Core applies it on its next deploy. Until then the browser blocks every admin call.
 - Admin accounts are Firebase email/password users of that environment whose Core profile has `system_role=ADMIN` and is ACTIVE; Core never promotes anyone, so a teammate with database access sets the role.
 
 ## Android build

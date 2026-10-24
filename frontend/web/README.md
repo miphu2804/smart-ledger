@@ -34,7 +34,7 @@ Thông tin liên hệ công khai nằm trong [`site.yaml`](site.yaml), không ph
 
 ## Trang quản trị
 
-Chỉ chạy khi `VITE_ADMIN_ENABLED=true` (mặc định tắt). Khi phát triển, đặt trong `.env.local`. Bản landing công khai không đặt biến này; trang quản trị được deploy riêng từ cùng mã nguồn bằng job `deploy-admin` (xem [Admin dashboard on Vercel](../../docs/development/ci-cd.md#admin-dashboard-on-vercel)).
+Chỉ chạy khi `VITE_ADMIN_ENABLED=true` (mặc định tắt). Khi phát triển, đặt trong `.env.local`. Bản deploy bật admin khi GitHub environment `landing-*` đặt `VITE_ADMIN_ENABLED=true` cùng `VITE_API_ENDPOINT` và `VITE_FIREBASE_API_KEY`: trang quản trị nằm ở `/admin` của chính landing, đọc dữ liệu thật của Core (xem [Landing page on Vercel](../../docs/development/ci-cd.md#landing-page-on-vercel)).
 
 **Hai chế độ:**
 
