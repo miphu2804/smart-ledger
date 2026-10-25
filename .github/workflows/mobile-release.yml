@@ -92,34 +92,12 @@ jobs:
   ### Pick the runner: a free self-hosted machine, else GitHub-hosted ###
 
   select-runner:
-    runs-on: ${{ inputs.runner == 'self-hosted' && fromJSON('["self-hosted"]') || 'ubuntu-24.04' }}
-    outputs:
-      runs_on: ${{ steps.pick.outputs.runs_on }}
-      reason: ${{ steps.pick.outputs.reason }}
-    steps:
-      # Listing runners needs a token with Administration: read; the default GITHUB_TOKEN cannot do it, so without
-      # RUNNERS_READ_TOKEN `auto` always resolves to GitHub-hosted.
-      - name: Pick the runner
-        id: pick
-        env:
-          CHOICE: ${{ inputs.runner }}
-          REPO: ${{ github.repository }}
-          RUNNERS_READ_TOKEN: ${{ secrets.RUNNERS_READ_TOKEN }}
-        run: |
-          hosted='["ubuntu-24.04"]'
-          selfhosted='["self-hosted","android-build"]'
-          pick() { echo "runs_on=$1" >> "$GITHUB_OUTPUT"; echo "reason=$2" >> "$GITHUB_OUTPUT"; echo "Runner: $2"; exit 0; }
-          [ "$CHOICE" = github-hosted ] && pick "$hosted" "chosen: github-hosted"
-          [ "$CHOICE" = self-hosted ] && pick "$selfhosted" "chosen: self-hosted"
-          [ -n "$RUNNERS_READ_TOKEN" ] || pick "$hosted" "auto: RUNNERS_READ_TOKEN not set, fell back to github-hosted"
-          if ! free=$(GH_TOKEN="$RUNNERS_READ_TOKEN" gh api "repos/$REPO/actions/runners" --paginate \
-            --jq '.runners[] | select(.status=="online" and .busy==false and any(.labels[]; .name=="android-build")) | .name' 2>&1); then
-            pick "$hosted" "auto: runner list failed, fell back to github-hosted"
-          fi
-          if [ -n "$free" ]; then
-            pick "$selfhosted" "auto: self-hosted online ($(echo "$free" | head -1))"
-          fi
-          pick "$hosted" "auto: no free self-hosted runner, fell back to github-hosted"
+    uses: ./.github/workflows/select-runner.yml
+    with:
+      choice: ${{ inputs.runner }}
+      label: android-build
+    secrets:
+      RUNNERS_READ_TOKEN: ${{ secrets.RUNNERS_READ_TOKEN }}
 
   ### Build ###
 

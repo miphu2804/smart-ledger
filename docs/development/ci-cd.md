@@ -1,6 +1,6 @@
 # CI/CD to Railway and Vercel
 
-This document traces a change from a feature branch to Railway for `backend/core` and `backend/ai`, and to Vercel for the mobile web and the landing page. Everything runs in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), split into `###` sections: **Test**, **Report**, **Deploy backend** (job `deploy`, after the backend, mobile web and container image jobs pass), **Deploy web** (job `deploy-web`, see [Mobile web on Vercel](#mobile-web-on-vercel)) and **Deploy landing** (job `deploy-landing`, see [Landing page on Vercel](#landing-page-on-vercel); it also carries the admin dashboard at `/admin`). Branch and review rules live in [CONTRIBUTING](../../CONTRIBUTING.md). The Android app is built by a separate manual workflow, [`mobile-release.yml`](../../.github/workflows/mobile-release.yml); see [Android build](#android-build).
+This document traces a change from a feature branch to Railway for `backend/core` and `backend/ai`, and to Vercel for the mobile web and the landing page. [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) picks the runner ([Runners](#ci-runners)), decides which areas changed, runs the **Test** and **Report** jobs, then calls one deploy workflow per area: **Deploy backend** (job `deploy-backend`, [`deploy-backend.yml`](../../.github/workflows/deploy-backend.yml), after the backend and container image jobs pass), **Deploy web** (job `deploy-web`, [`deploy-web.yml`](../../.github/workflows/deploy-web.yml), see [Mobile web on Vercel](#mobile-web-on-vercel)) and **Deploy landing** (job `deploy-landing`, [`deploy-landing.yml`](../../.github/workflows/deploy-landing.yml), see [Landing page on Vercel](#landing-page-on-vercel); it also carries the admin dashboard at `/admin`). The Actions tab shows each deploy as `<caller job> / deploy`. Branch and review rules live in [CONTRIBUTING](../../CONTRIBUTING.md). The Android app is built by a separate manual workflow, [`mobile-release.yml`](../../.github/workflows/mobile-release.yml); see [Android build](#android-build).
 
 ## Overview
 
@@ -10,25 +10,38 @@ Diagram source: [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio); edi
 
 ## Steps
 
-1. **PR into `staging`:** CI runs the tests, checks migrations on a throwaway PostgreSQL and builds the images. Job `deploy` is skipped because the event is `pull_request`.
-2. **Merge into `staging`:** CI runs again on the merged commit. When the push changed `ai` or `core` and none of `ai`, `core`, `mobile-web` and `container-images` failed (skipped is fine, see [path filtering](#path-filtering)), job `deploy` uses environment `railway-staging` and deploys to Railway staging. No approval is needed.
+1. **PR into `staging`:** CI runs the tests, checks migrations on a throwaway PostgreSQL and builds the images. The deploy jobs are skipped because the event is `pull_request`.
+2. **Merge into `staging`:** CI runs again on the merged commit. When the push changed `ai` or `core` and none of `ai`, `core` and `container-images` failed (skipped is fine, see [path filtering](#path-filtering)), job `deploy-backend` uses environment `railway-staging` and deploys to Railway staging. No approval is needed.
 3. **PR `staging` → `main`:** open it only after checking staging (see [Target branch](../../CONTRIBUTING.md#target-branch)).
-4. **Merge into `main`:** use a merge commit, never a squash. If `staging` and `main` conflict, release from a `release/staging-to-main-<date>` branch as described in [CONTRIBUTING](../../CONTRIBUTING.md#target-branch). CI runs again on `main`; jobs `deploy` (`railway-production`) and `deploy-web` (`vercel-production`), plus `deploy-landing` (`landing-production`) when `frontend/web/` changed, wait in *Waiting*. A reviewer opens the run in the Actions tab → **Review deployments** → approves each of them. Only then does a job receive its production token and deploy.
+4. **Merge into `main`:** use a merge commit, never a squash. If `staging` and `main` conflict, release from a `release/staging-to-main-<date>` branch as described in [CONTRIBUTING](../../CONTRIBUTING.md#target-branch). CI runs again on `main`; jobs `deploy-backend` (`railway-production`) and `deploy-web` (`vercel-production`), plus `deploy-landing` (`landing-production`) when `frontend/web/` changed, wait in *Waiting*. A reviewer opens the run in the Actions tab → **Review deployments** → approves each of them. Only then does a job receive its production token and deploy.
 5. **Check production, then tag:** the web smoke test runs against `https://smart-ledger-prod.vercel.app` and must pass; open the app and sign in. Then create the release on the commit that ran, for example `gh release create vX.Y.Z --target <merge commit> --generate-notes`. Tags are created by a person, not by CI.
 
 <a id="path-filtering"></a>Job `changes` runs first and decides which areas a pull request (against its base branch) or a push (against the commit before the push) touched. Each test and deploy job runs only for its area; the others show as *Skipped*, which counts as passed for required checks and for the `gate` of `mobile-release.yml`:
 
 | Area | Paths | Jobs |
 |---|---|---|
-| `ai` | `backend/ai/**`, `supabase/**` | `ai`, `container-images`, `deploy` (step `Deploy ai`) |
-| `core` | `backend/core/**` | `core`, `container-images`, `deploy` (step `Deploy core`) |
+| `ai` | `backend/ai/**`, `supabase/**` | `ai`, `container-images`, `deploy-backend` (step `Deploy ai`) |
+| `core` | `backend/core/**` | `core`, `container-images`, `deploy-backend` (step `Deploy core`) |
 | `mobile` | `frontend/mobile/**` | `mobile-web`, `deploy-web` |
 | `landing` | `frontend/web/**` | `landing`, `deploy-landing` |
 | `containers` | `compose.yaml` | `container-images` |
 
-A change to `.github/workflows/ci.yml` runs every job; a docs-only change runs only `changes` and `summary`. A re-run (`github.run_attempt > 1`) always runs `deploy` (both services), `deploy-web` and `deploy-landing` on a push: after changing an environment variable alone, open the latest run on that branch and choose **Re-run all jobs**. If a deploy was cancelled or failed, re-run that run, not a later one that did not touch the area.
+A change to `ci.yml` or `select-runner.yml` runs every job, and a change to a deploy file runs its area (`deploy-backend.yml` counts as `ai` and `core`, `deploy-web.yml` as `mobile`, `deploy-landing.yml` as `landing`); a docs-only change runs only `select-runner`, `changes` and `summary`. A re-run (`github.run_attempt > 1`) always runs `deploy-backend` (both services), `deploy-web` and `deploy-landing` on a push: after changing an environment variable alone, open the latest run on that branch and choose **Re-run all jobs**. If a deploy was cancelled or failed, re-run that run, not a later one that did not touch the area.
 
-The backend deploy (`deploy`) waits for `ai`, `core`, `mobile-web` and `container-images`, not for `landing`, so a red landing does not hold back the backend. `deploy-web` waits for `mobile-web`, and `deploy-landing` waits for `landing` only, so a red `core` does not hold back the landing. The backend deploy (`deploy`) uploads a `deploy-summary-<branch>` artifact (environment, commit, `ai`/`core` result) and a summary table on the run page; `deploy-web` and `deploy-landing` only add a URL line to the run summary.
+Each deploy waits only for the checks of its own area: `deploy-backend` for `ai`, `core` and `container-images`, so a red `mobile-web` or `landing` does not hold back the backend. `deploy-web` waits for `mobile-web`, and `deploy-landing` waits for `landing` only, so a red `core` does not hold back the landing. The backend deploy uploads a `deploy-summary-<branch>` artifact (environment, commit, `ai`/`core` result) and a summary table on the run page; `deploy-web` and `deploy-landing` only add a URL line to the run summary.
+
+<a id="ci-runners"></a>**Runners.** Every CI job runs where the first job, `select-runner` ([`select-runner.yml`](../../.github/workflows/select-runner.yml), shared with `mobile-release.yml`), picks. A manual run (**Run workflow**, input `runner`) wins over the repository variable `CI_RUNNER` (Settings → Secrets and variables → Actions → Variables); unset means `github-hosted`:
+
+| Value | Result |
+|---|---|
+| `github-hosted` | `ubuntu-24.04` |
+| `self-hosted` | Any machine labelled `self-hosted`; jobs wait while every machine is busy. `select-runner` itself also runs there, so the run needs no GitHub-hosted minute |
+| `auto` | A free online self-hosted machine, otherwise `ubuntu-24.04`. Needs secret `RUNNERS_READ_TOKEN` (see [Android runners](#android-runners)); without it, `ubuntu-24.04` |
+
+- When GitHub-hosted runners cannot start (for example a billing lock), set `CI_RUNNER=self-hosted`. `auto` cannot help then: its own pick runs on `ubuntu-24.04`.
+- A pull request from a fork always runs on `ubuntu-24.04`, whatever the setting: the repository is public, and a fork must not run code on a self-hosted machine.
+- PostgreSQL for `ai` and `core` is started with `docker run` on every runner (self-hosted machines cannot run service containers), on a free port per job, so jobs on one machine do not collide. A self-hosted machine needs Docker, Node 22, Python 3 and the JDK that `actions/setup-java` installs.
+- Artifact uploads and the GitHub cache still use GitHub storage on a self-hosted runner. The summary uploads are `continue-on-error`, so a full artifact quota does not block a deploy.
 
 ## Configuration
 
@@ -177,7 +190,7 @@ Job `deploy-web` builds `frontend/mobile` on the runner (`vercel build`) and upl
 | Push `staging` | `vercel-staging` | Preview deploy, then aliased to `VERCEL_STAGING_ALIAS`; the GitHub Deployments link is `https://smart-ledger-staging.vercel.app` |
 | Push `main` | `vercel-production` | Production deploy after approval; the smoke test and the GitHub Deployments link use `https://smart-ledger-prod.vercel.app` |
 
-- The `url` of `vercel-staging` and `vercel-production` is set on job `deploy-web` in `ci.yml` and fixed to the two domains above, so the repository's Deployments panel links to them. `vercel-preview` has no `url`: its alias depends on the PR number and is already commented on the PR. If a domain changes in Vercel (Project → Settings → Domains), update `ci.yml` too.
+- The `url` of `vercel-staging` and `vercel-production` is set in `deploy-web.yml` and fixed to the two domains above, so the repository's Deployments panel links to them. `vercel-preview` has no `url`: its alias depends on the PR number and is already commented on the PR. If a domain changes in Vercel (Project → Settings → Domains), update `deploy-web.yml` too.
 - Pull requests get no web preview. Previews used up the Vercel Hobby limit of 100 deployments a day, and once it ran out the `staging` and `main` deploys failed too. To bring them back, add `|| github.event.pull_request.head.repo.full_name == github.repository` to the `if` of `deploy-web` and `deploy-landing`; the PR-only steps (alias, PR comment) are still in `ci.yml`, and the `vercel-preview` and `landing-preview` environments still exist.
 - Only job `mobile-web` must pass; the web does not wait for the backend deploy.
 - `EXPO_PUBLIC_*` values are baked into the bundle at build time, so set them as **Variables** (not Secrets) of each environment: `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS`, `EXPO_PUBLIC_API_ENDPOINT`, `EXPO_PUBLIC_FIREBASE_API_KEY`, `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`, `EXPO_PUBLIC_FIREBASE_PROJECT_ID`, `EXPO_PUBLIC_FIREBASE_APP_ID`, and optionally `EXPO_PUBLIC_ZALO_LOGIN` (`true` only once that environment's Core has `ZALO_ENABLED=true` and lists the web origin in `ZALO_CLIENT_ORIGINS`; unset keeps the Zalo button at "Sắp có"). Re-run the job after changing one so the web picks it up.
@@ -199,7 +212,7 @@ Job `landing` runs `npm run lint` and `npm run build` in `frontend/web` on every
 - Vercel project `landing`: **Root Directory** `frontend/web`. Store its project ID as `VERCEL_PROJECT_ID` in each `landing-*` environment; `VERCEL_TOKEN` and `VERCEL_ORG_ID` are the same team values as `vercel-*`.
 - `LANDING_URL` is the fixed domain (`https://…`) of the environment. Set it in `landing-staging` and `landing-production`.
 - `VITE_LEGAL_DRAFT` must stay unset or `true` until the product owner approves the legal pages; set `false` only in `landing-production` after approval. The contact email and the Facebook/TikTok links are not environment variables: they live in [`frontend/web/site.yaml`](../../frontend/web/site.yaml).
-- `deploy-landing` runs only when the push changes `frontend/web/` or `.github/workflows/ci.yml` (see [path filtering](#path-filtering)), so a push that leaves the landing alone does not spend one of Vercel's 100 daily deployments. A re-run always deploys: after changing a `landing-*` variable, choose **Re-run all jobs** on the latest run. If a landing deploy was cancelled or failed, re-run that run, not a later one that did not touch the landing.
+- `deploy-landing` runs only when the push changes `frontend/web/`, `ci.yml`, `select-runner.yml` or `deploy-landing.yml` (see [path filtering](#path-filtering)), so a push that leaves the landing alone does not spend one of Vercel's 100 daily deployments. A re-run always deploys: after changing a `landing-*` variable, choose **Re-run all jobs** on the latest run. If a landing deploy was cancelled or failed, re-run that run, not a later one that did not touch the landing.
 - Vercel Authentication (Settings → Deployment Protection) must stay off on the `landing` project. With it on, preview deployments redirect to the Vercel login (`302`) and the smoke test fails on pull requests and on `staging`.
 - **Admin dashboard at `/admin`:** the landing build includes the admin (real Core data, `VITE_USE_MOCK=false`) when the GitHub environment sets `VITE_ADMIN_ENABLED=true` with `VITE_API_ENDPOINT` (Core root of that environment, no `/api/v1`) and `VITE_FIREBASE_API_KEY` (Web API key of the Firebase project Core verifies tokens against, the same value as `EXPO_PUBLIC_FIREBASE_API_KEY` of `vercel-*`). Both are public client values, so they are variables, not secrets. Without the flag the build has no admin code.
 - Step `Check the admin in the build` fails the job if the mock demo password `admin123` is in the output, if the flag is on but the admin routes, `VITE_API_ENDPOINT` or `VITE_FIREBASE_API_KEY` are missing, or if the flag is off but an `AdminRoutes-*` chunk is there (a `VITE_ADMIN_ENABLED=true` set in the Vercel project `landing` would come in through `vercel pull`). With the flag on, the smoke test also opens `LANDING_URL/admin/login` and fails if Core still rejects a CORS preflight from `LANDING_URL` after 5 minutes (it waits for a Core deploy running in the same CI run).
@@ -232,9 +245,10 @@ The branch picks the code and the environment picks the config (Firebase file, `
 
 Job `gate` rejects a branch and environment that do not pair as above, or a staging or production commit without a successful `ci.yml` run, before any runner starts. Only people with write access can run a workflow, and forks cannot.
 
+<a id="android-runners"></a>
 ### Runners
 
-Job `select-runner` resolves input `runner`:
+Job `select-runner` (the shared [`select-runner.yml`](../../.github/workflows/select-runner.yml), with label `android-build`; CI uses it too, see [Runners](#ci-runners)) resolves input `runner`:
 
 | Input | Result |
 |---|---|

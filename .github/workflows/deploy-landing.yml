@@ -1,0 +1,150 @@
+name: Deploy landing
+
+# Called by ci.yml once `landing` passes. Same shape as deploy-web.yml, with its own Vercel project `landing` and
+# GitHub environments. Vercel's Git deployments are off in frontend/web/vercel.json, so only this workflow deploys
+# the landing. Pull requests get no preview (see deploy-web.yml). When previews return, each PR gets the alias
+# smart-ledger-landing-pr-<number> in the run summary and no PR comment, because deploy-web already edits the bot's
+# last PR comment. See docs/development/ci-cd.md#landing-page-on-vercel.
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: JSON for `runs-on`, from select-runner.yml
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    environment: ${{ github.event_name == 'pull_request' && 'landing-preview' || (github.ref_name == 'main' && 'landing-production' || 'landing-staging') }}
+    concurrency:
+      group: deploy-landing-${{ github.head_ref || github.ref_name }}
+      cancel-in-progress: true
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TARGET: ${{ github.ref_name == 'main' && github.event_name == 'push' && 'production' || 'preview' }}
+      VITE_LEGAL_DRAFT: ${{ vars.VITE_LEGAL_DRAFT }}
+      VITE_ANDROID_APK_URL: ${{ vars.VITE_ANDROID_APK_URL }}
+      # Admin at /admin on the landing, reading the real Core admin API. Off unless the environment sets
+      # VITE_ADMIN_ENABLED=true together with VITE_API_ENDPOINT (Core root) and VITE_FIREBASE_API_KEY.
+      VITE_ADMIN_ENABLED: ${{ vars.VITE_ADMIN_ENABLED }}
+      VITE_USE_MOCK: "false"
+      VITE_API_ENDPOINT: ${{ vars.VITE_API_ENDPOINT }}
+      VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
+          cache-dependency-path: frontend/web/package-lock.json
+      - name: Install Vercel CLI
+        # A job-local prefix, so the self-hosted machine's own CLI (e.g. Homebrew's) is neither clashed with nor replaced.
+        run: |
+          npm install --prefix "$RUNNER_TEMP/cli" vercel@62.2.0
+          echo "$RUNNER_TEMP/cli/node_modules/.bin" >> "$GITHUB_PATH"
+      - run: vercel pull --yes --environment="$VERCEL_TARGET" --token="$VERCEL_TOKEN"
+      - run: vercel build ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN"
+      # Admin follows the GitHub environment only: without VITE_ADMIN_ENABLED=true there must be no admin code (a value set
+      # in the Vercel project would otherwise slip in through `vercel pull`); with it, the admin must be the real one.
+      - name: Check the admin in the build
+        run: |
+          out=.vercel/output/static
+          has_admin=$([ -n "$(find "$out" -name 'AdminRoutes-*')" ] && echo yes || echo no)
+          # admin123 is a mock demo password; it must never be published
+          if grep -rqF admin123 "$out"; then
+            echo "::error::mock demo accounts are in the build; VITE_USE_MOCK must stay false"; exit 1
+          fi
+          if [ "$VITE_ADMIN_ENABLED" = true ]; then
+            [ "$has_admin" = yes ] || { echo "::error::VITE_ADMIN_ENABLED=true but the admin routes are missing"; exit 1; }
+            [ -n "$VITE_API_ENDPOINT" ] && [ -n "$VITE_FIREBASE_API_KEY" ] \
+              || { echo "::error::set VITE_API_ENDPOINT and VITE_FIREBASE_API_KEY on this environment for the admin"; exit 1; }
+            grep -rqF "$VITE_API_ENDPOINT" "$out" || { echo "::error::the admin does not point at VITE_API_ENDPOINT"; exit 1; }
+          elif [ "$has_admin" = yes ]; then
+            echo "::error::admin code is in the landing build; remove VITE_ADMIN_ENABLED from the Vercel project"; exit 1
+          fi
+      - name: Deploy
+        id: deploy
+        run: |
+          url=$(vercel deploy --prebuilt ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      # REST alias, as in deploy-web: `vercel alias set` fails for team tokens.
+      - name: Alias preview
+        id: preview
+        if: github.event_name == 'pull_request'
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          alias="smart-ledger-landing-pr-$PR.vercel.app"
+          api=https://api.vercel.com
+          auth="Authorization: Bearer $VERCEL_TOKEN"
+          id=$(curl -fsS -H "$auth" "$api/v13/deployments/${URL#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
+          curl -fsS -X POST -H "$auth" -H "Content-Type: application/json" \
+            -d "$(jq -n --arg alias "$alias" '{alias: $alias}')" \
+            "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID"
+          echo "url=https://$alias" >> "$GITHUB_OUTPUT"
+          echo "alias: https://$alias -> $URL"
+      - name: Alias staging
+        if: github.event_name == 'push' && github.ref_name == 'staging'
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+          STAGING_URL: ${{ vars.LANDING_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$STAGING_URL" || { echo "::error::LANDING_URL is not set on landing-staging"; exit 1; }
+          alias="${STAGING_URL#https://}"
+          api=https://api.vercel.com
+          auth="Authorization: Bearer $VERCEL_TOKEN"
+          id=$(curl -fsS -H "$auth" "$api/v13/deployments/${URL#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
+          curl -fsS -X POST -H "$auth" -H "Content-Type: application/json" \
+            -d "$(jq -n --arg alias "$alias" '{alias: $alias}')" \
+            "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID"
+          echo "alias: $STAGING_URL -> $URL"
+      # Pull requests check their PR alias; staging and main check the fixed LANDING_URL.
+      - name: Smoke test
+        env:
+          URL: ${{ github.event_name == 'pull_request' && steps.preview.outputs.url || vars.LANDING_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$URL" || { echo "::error::LANDING_URL is not set for this environment"; exit 1; }
+          # A fresh alias can take a few seconds to route, so retry before failing.
+          for attempt in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$URL/" || true)
+            [ "$code" = 200 ] && break
+            sleep 5
+          done
+          test "$code" = 200
+          echo "page: 200 at $URL"
+          if [ "$VITE_ADMIN_ENABLED" = true ]; then
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$URL/admin/login" || true)
+            test "$code" = 200 || { echo "::error::admin login page returned $code"; exit 1; }
+            echo "admin login page: 200 at $URL/admin/login"
+            # The browser calls Core from this origin, so the admin is unusable until Core allows it. Core may still be
+            # deploying a new CORS_ALLOWED_ORIGINS in the same run (job `deploy`), so wait up to 5 minutes, then fail.
+            for attempt in $(seq 1 20); do
+              cors=$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS "$VITE_API_ENDPOINT/api/v1/me"                 -H "Origin: $URL" -H 'Access-Control-Request-Method: GET' -H 'Access-Control-Request-Headers: authorization' || true)
+              [ "$cors" = 200 ] && break
+              sleep 15
+            done
+            if [ "$cors" != 200 ]; then
+              echo "::error::Core at $VITE_API_ENDPOINT still answers $cors to a CORS preflight from $URL after 5 minutes; add $URL to CORS_ALLOWED_ORIGINS of the matching railway-* environment and redeploy Core"
+              exit 1
+            fi
+            echo "Core accepts $URL (CORS)"
+          fi
+      - name: Report URL
+        if: always() && steps.deploy.outputs.url != ''
+        env:
+          URL: ${{ steps.preview.outputs.url || steps.deploy.outputs.url }}
+        run: |
+          echo "Landing deploy: $URL" >> "$GITHUB_STEP_SUMMARY"
