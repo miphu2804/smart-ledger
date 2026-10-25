@@ -1,6 +1,6 @@
 name: Deploy landing
 
-# Called by ci.yml once `landing` passes. Same shape as deploy-web.yml, with its own Vercel project `landing` and
+# Called by cd.yml for a commit whose `landing` passed. Same shape as deploy-web.yml, with its own Vercel project `landing` and
 # GitHub environments. Vercel's Git deployments are off in frontend/web/vercel.json, so only this workflow deploys
 # the landing. Pull requests get no preview (see deploy-web.yml). When previews return, each PR gets the alias
 # smart-ledger-landing-pr-<number> in the run summary and no PR comment, because deploy-web already edits the bot's
@@ -11,6 +11,10 @@ on:
     inputs:
       runs-on:
         description: JSON for `runs-on`, from select-runner.yml
+        type: string
+        required: true
+      sha:
+        description: Commit to deploy; CI tested it
         type: string
         required: true
 
@@ -28,7 +32,7 @@ jobs:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      VERCEL_TARGET: ${{ github.ref_name == 'main' && github.event_name == 'push' && 'production' || 'preview' }}
+      VERCEL_TARGET: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
       VITE_LEGAL_DRAFT: ${{ vars.VITE_LEGAL_DRAFT }}
       VITE_ANDROID_APK_URL: ${{ vars.VITE_ANDROID_APK_URL }}
       # Admin at /admin on the landing, reading the real Core admin API. Off unless the environment sets
@@ -40,6 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
@@ -95,7 +100,7 @@ jobs:
           echo "url=https://$alias" >> "$GITHUB_OUTPUT"
           echo "alias: https://$alias -> $URL"
       - name: Alias staging
-        if: github.event_name == 'push' && github.ref_name == 'staging'
+        if: github.ref_name == 'staging'
         env:
           URL: ${{ steps.deploy.outputs.url }}
           STAGING_URL: ${{ vars.LANDING_URL }}

@@ -32,7 +32,7 @@ jobs:
   # Each test and deploy job below runs only when its area changed, so a docs-only or web-only change
   # skips the backend. A skipped job counts as passed for required checks and for the `gate` of
   # mobile-release.yml. Filtering here, not with `on.paths`, keeps every check reporting a result.
-  # A change to this workflow or to select-runner.yml runs everything; a change to a deploy file runs its area.
+  # A change to this workflow, cd.yml or select-runner.yml runs everything; a change to a deploy file runs its area.
   changes:
     needs: [select-runner]
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
@@ -56,6 +56,7 @@ jobs:
             ai:
               - .github/workflows/ci.yml
               - .github/workflows/select-runner.yml
+              - .github/workflows/cd.yml
               - .github/workflows/deploy-backend.yml
               - backend/ai/**
               # The AI integration tests apply these migrations.
@@ -63,21 +64,25 @@ jobs:
             core:
               - .github/workflows/ci.yml
               - .github/workflows/select-runner.yml
+              - .github/workflows/cd.yml
               - .github/workflows/deploy-backend.yml
               - backend/core/**
             mobile:
               - .github/workflows/ci.yml
               - .github/workflows/select-runner.yml
+              - .github/workflows/cd.yml
               - .github/workflows/deploy-web.yml
               - frontend/mobile/**
             landing:
               - .github/workflows/ci.yml
               - .github/workflows/select-runner.yml
+              - .github/workflows/cd.yml
               - .github/workflows/deploy-landing.yml
               - frontend/web/**
             containers:
               - .github/workflows/ci.yml
               - .github/workflows/select-runner.yml
+              - .github/workflows/cd.yml
               - compose.yaml
               - backend/ai/**
               - backend/core/**
@@ -339,54 +344,52 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  ### Deploy: each area deploys after its own checks, in its own workflow file ###
+  ### Hand-off to CD: start cd.yml for the areas whose checks passed ###
 
-  # Push to `staging` or `main` only. A skipped test job counts as passed, a failed or cancelled one blocks its deploy.
-  # A re-run (`github.run_attempt > 1`) deploys every target, so a changed environment variable can be picked up by
-  # re-running all jobs. Each deploy file sets its GitHub environment itself, so its secrets reach it.
-
-  # Railway `ai` and `core`; waits for the backend checks only.
-  deploy-backend:
+  # Push to `staging` or `main` only. Each area is judged on its own checks, so a red `landing` does not hold back the
+  # backend: an area deploys when it changed and its checks passed or were skipped. A re-run (`github.run_attempt > 1`)
+  # hands off every area whose checks pass, so a changed environment variable can be picked up by re-running all jobs
+  # (or by starting CD by hand). CD runs on its own runner (CD_RUNNER), from this branch's cd.yml.
+  cd:
     if: >-
-      !failure() && !cancelled()
-      && github.event_name == 'push'
-      && (needs.changes.outputs.ai == 'true' || needs.changes.outputs.core == 'true' || github.run_attempt > 1)
-    needs: [select-runner, changes, ai, core, container-images]
+      !cancelled() && github.event_name == 'push' && needs.changes.result == 'success'
+    needs: [select-runner, changes, ai, core, mobile-web, landing, container-images]
+    runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
     permissions:
-      contents: read
-    uses: ./.github/workflows/deploy-backend.yml
-    with:
-      runs-on: ${{ needs.select-runner.outputs.runs_on }}
-      ai: ${{ needs.changes.outputs.ai == 'true' || github.run_attempt > 1 }}
-      core: ${{ needs.changes.outputs.core == 'true' || github.run_attempt > 1 }}
-    secrets: inherit
-
-  # Mobile web on Vercel. Push only: pull-request previews used up the Vercel Hobby limit of 100 deployments a day and
-  # blocked the staging and production deploys. The PR-only steps in deploy-web.yml stay so previews can return with
-  # `|| github.event.pull_request.head.repo.full_name == github.repository`.
-  deploy-web:
-    if: >-
-      !failure() && !cancelled() && github.event_name == 'push'
-      && (needs.changes.outputs.mobile == 'true' || github.run_attempt > 1)
-    needs: [select-runner, changes, mobile-web]
-    permissions:
-      contents: read
-      pull-requests: write
-    uses: ./.github/workflows/deploy-web.yml
-    with:
-      runs-on: ${{ needs.select-runner.outputs.runs_on }}
-    secrets: inherit
-
-  # Landing (with the admin at /admin) on Vercel project `landing`. On a re-run `landing` is skipped, so a skipped need
-  # must not block this job.
-  deploy-landing:
-    if: >-
-      !failure() && !cancelled() && github.event_name == 'push'
-      && (needs.changes.outputs.landing == 'true' || github.run_attempt > 1)
-    needs: [select-runner, changes, landing]
-    permissions:
-      contents: read
-    uses: ./.github/workflows/deploy-landing.yml
-    with:
-      runs-on: ${{ needs.select-runner.outputs.runs_on }}
-    secrets: inherit
+      actions: write
+    steps:
+      - name: Start CD
+        env:
+          # A workflow_dispatch from GITHUB_TOKEN starts a new run, unlike most events it triggers.
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RERUN: ${{ github.run_attempt > 1 }}
+          CHANGED_AI: ${{ needs.changes.outputs.ai }}
+          CHANGED_CORE: ${{ needs.changes.outputs.core }}
+          CHANGED_MOBILE: ${{ needs.changes.outputs.mobile }}
+          CHANGED_LANDING: ${{ needs.changes.outputs.landing }}
+          AI_RESULT: ${{ needs.ai.result }}
+          CORE_RESULT: ${{ needs.core.result }}
+          CONTAINERS_RESULT: ${{ needs['container-images'].result }}
+          MOBILE_RESULT: ${{ needs['mobile-web'].result }}
+          LANDING_RESULT: ${{ needs.landing.result }}
+        run: |
+          set -euo pipefail
+          ok() { local r; for r in "$@"; do [ "$r" = success ] || [ "$r" = skipped ] || return 1; done; }
+          want() { [ "$RERUN" = true ] || [ "$1" = true ]; }
+          backend_ok=false; ok "$AI_RESULT" "$CORE_RESULT" "$CONTAINERS_RESULT" && backend_ok=true
+          ai=false; core=false; web=false; landing=false
+          [ "$backend_ok" = true ] && want "$CHANGED_AI" && ai=true
+          [ "$backend_ok" = true ] && want "$CHANGED_CORE" && core=true
+          ok "$MOBILE_RESULT" && want "$CHANGED_MOBILE" && web=true
+          ok "$LANDING_RESULT" && want "$CHANGED_LANDING" && landing=true
+          echo "backend-ai=$ai backend-core=$core web=$web landing=$landing"
+          if [ "$ai$core$web$landing" = falsefalsefalsefalse ]; then
+            echo "Nothing to deploy."; exit 0
+          fi
+          gh workflow run cd.yml --repo "$REPO" --ref "$REF_NAME" -f runner=default -f sha="$SHA" -f ci-run-id="$RUN_ID" \
+            -f backend-ai="$ai" -f backend-core="$core" -f web="$web" -f landing="$landing"
+          echo "Started CD for ${SHA::7} on $REF_NAME: backend-ai=$ai backend-core=$core web=$web landing=$landing" >> "$GITHUB_STEP_SUMMARY"

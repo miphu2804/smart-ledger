@@ -1,6 +1,6 @@
 name: Deploy web
 
-# Called by ci.yml once `mobile-web` passes. Builds the mobile web bundle on the runner and uploads it to Vercel, so
+# Called by cd.yml for a commit whose `mobile-web` passed. Builds the mobile web bundle on the runner and uploads it to Vercel, so
 # each GitHub environment owns its EXPO_PUBLIC_* values (baked in at build time) and Vercel token.
 # `staging` gets a fixed alias and `main` goes to production; pull requests get no preview.
 # Vercel's own Git deployments are off in frontend/mobile/vercel.json to avoid double deploys.
@@ -11,6 +11,10 @@ on:
     inputs:
       runs-on:
         description: JSON for `runs-on`, from select-runner.yml
+        type: string
+        required: true
+      sha:
+        description: Commit to deploy; CI tested it
         type: string
         required: true
 
@@ -34,7 +38,7 @@ jobs:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      VERCEL_TARGET: ${{ github.ref_name == 'main' && github.event_name == 'push' && 'production' || 'preview' }}
+      VERCEL_TARGET: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
       EXPO_PUBLIC_USE_MOCK: ${{ vars.EXPO_PUBLIC_USE_MOCK }}
       EXPO_PUBLIC_MOCK_CORE: ${{ vars.EXPO_PUBLIC_MOCK_CORE }}
       EXPO_PUBLIC_MOCK_SHOPS: ${{ vars.EXPO_PUBLIC_MOCK_SHOPS }}
@@ -48,6 +52,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
@@ -96,7 +101,7 @@ jobs:
       # not the per-deploy hash URL.
       - name: Alias staging
         id: staging
-        if: github.event_name == 'push' && github.ref_name == 'staging'
+        if: github.ref_name == 'staging'
         env:
           STAGING_ALIAS: ${{ vars.VERCEL_STAGING_ALIAS }}
           URL: ${{ steps.deploy.outputs.url }}

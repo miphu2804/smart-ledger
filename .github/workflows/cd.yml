@@ -1,0 +1,160 @@
+name: CD
+
+# Deploys one tested commit of `staging` or `main`. ci.yml starts it after a push, once the checks of an area pass,
+# with the areas to deploy; a person can start it too (Actions → CD → Run workflow, branch = the one to deploy), e.g. to
+# redeploy after changing an environment variable. It picks its own runner, so CI and CD can run on different
+# machines. Each area deploys from its own file and waits for nothing but the gate. See docs/development/ci-cd.md#steps.
+
+run-name: CD ${{ github.ref_name }} ${{ inputs.sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: default reads the repository variable CD_RUNNER (unset → github-hosted); see docs/development/ci-cd.md#ci-runners
+        type: choice
+        required: true
+        default: default
+        options: [default, github-hosted, self-hosted, auto]
+      sha:
+        description: Full commit SHA on this branch; its CI run must have passed the checks of each chosen area
+        type: string
+        required: true
+      ci-run-id:
+        description: CI run that tested the commit; empty uses the latest push run of CI for it
+        type: string
+        default: ""
+      backend-ai:
+        description: Deploy Railway `ai`
+        type: boolean
+        default: false
+      backend-core:
+        description: Deploy Railway `core`
+        type: boolean
+        default: false
+      web:
+        description: Deploy the mobile web on Vercel
+        type: boolean
+        default: false
+      landing:
+        description: Deploy the landing on Vercel
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  ### Runner: every job below runs where this job picks ###
+
+  select-runner:
+    uses: ./.github/workflows/select-runner.yml
+    with:
+      choice: ${{ inputs.runner != 'default' && inputs.runner || vars.CD_RUNNER || 'github-hosted' }}
+    secrets:
+      RUNNERS_READ_TOKEN: ${{ secrets.RUNNERS_READ_TOKEN }}
+
+  ### Gate: the branch, the commit and its CI result ###
+
+  # The GitHub environments still decide who may deploy where (branch policy, production approval); this job makes
+  # sure only a commit of this branch whose CI checks passed reaches them.
+  gate:
+    needs: [select-runner]
+    runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check the branch, the commit and its CI run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ inputs.sha }}
+          CI_RUN_ID: ${{ inputs.ci-run-id }}
+          AI: ${{ inputs.backend-ai }}
+          CORE: ${{ inputs.backend-core }}
+          WEB: ${{ inputs.web }}
+          LANDING: ${{ inputs.landing }}
+        run: |
+          set -euo pipefail
+          if [ "$REF_TYPE" != branch ] || { [ "$REF_NAME" != staging ] && [ "$REF_NAME" != main ]; }; then
+            echo "::error::Run CD from branch staging or main, not $REF_NAME."; exit 1
+          fi
+          if ! [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::sha must be a full 40-character commit SHA."; exit 1
+          fi
+          if ! git merge-base --is-ancestor "$SHA" "origin/$REF_NAME"; then
+            echo "::error::Commit ${SHA::7} is not on $REF_NAME."; exit 1
+          fi
+          if [ "$AI$CORE$WEB$LANDING" = falsefalsefalsefalse ]; then
+            echo "::error::Choose at least one area to deploy."; exit 1
+          fi
+          if [ -z "$CI_RUN_ID" ]; then
+            CI_RUN_ID=$(gh run list --repo "$REPO" --workflow ci.yml --commit "$SHA" --event push --limit 1 \
+              --json databaseId --jq '.[0].databaseId // empty')
+            [ -n "$CI_RUN_ID" ] || { echo "::error::No CI push run for ${SHA::7}."; exit 1; }
+          fi
+          run_sha=$(gh api "repos/$REPO/actions/runs/$CI_RUN_ID" --jq .head_sha)
+          if [ "$run_sha" != "$SHA" ]; then
+            echo "::error::CI run $CI_RUN_ID tested ${run_sha::7}, not ${SHA::7}."; exit 1
+          fi
+          # The latest attempt of each job; a skipped check counts as passed, as for the required checks.
+          results=$(gh api "repos/$REPO/actions/runs/$CI_RUN_ID/jobs" --paginate --jq '.jobs[] | "\(.name)=\(.conclusion)"')
+          need() {
+            local job result
+            for job in "$@"; do
+              result=$(echo "$results" | awk -F= -v name="$job" '$1 == name { print $2 }' | tail -1)
+              case "$result" in
+                success|skipped) echo "$job: $result" ;;
+                *) echo "::error::CI job $job of run $CI_RUN_ID is '${result:-missing}'; not deploying."; exit 1 ;;
+              esac
+            done
+          }
+          if [ "$AI" = true ] || [ "$CORE" = true ]; then need ai core container-images; fi
+          if [ "$WEB" = true ]; then need mobile-web; fi
+          if [ "$LANDING" = true ]; then need landing; fi
+
+  ### Deploy: one file per area, each with its own GitHub environment ###
+
+  # AI first inside deploy-backend.yml: Core calls AI, so the new Core should not start against an old AI.
+  deploy-backend:
+    if: inputs.backend-ai || inputs.backend-core
+    needs: [select-runner, gate]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/deploy-backend.yml
+    with:
+      runs-on: ${{ needs.select-runner.outputs.runs_on }}
+      sha: ${{ inputs.sha }}
+      ai: ${{ inputs.backend-ai }}
+      core: ${{ inputs.backend-core }}
+    secrets: inherit
+
+  deploy-web:
+    if: inputs.web
+    needs: [select-runner, gate]
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/deploy-web.yml
+    with:
+      runs-on: ${{ needs.select-runner.outputs.runs_on }}
+      sha: ${{ inputs.sha }}
+    secrets: inherit
+
+  deploy-landing:
+    if: inputs.landing
+    needs: [select-runner, gate]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/deploy-landing.yml
+    with:
+      runs-on: ${{ needs.select-runner.outputs.runs_on }}
+      sha: ${{ inputs.sha }}
+    secrets: inherit

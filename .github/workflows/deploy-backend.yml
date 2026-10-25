@@ -1,6 +1,6 @@
 name: Deploy backend
 
-# Called by ci.yml after a push to `staging` or `main` once `ai`, `core` and `container-images` pass; it deploys
+# Called by cd.yml for a commit of `staging` or `main` whose `ai`, `core` and `container-images` passed; it deploys
 # Railway `ai` and `core`. Kept apart from the tests so a change here cannot break a required check, and so the
 # backend deploy waits only for the backend jobs. See docs/development/ci-cd.md#steps.
 # Each GitHub environment holds its own environment-scoped Railway project token and branch policy;
@@ -12,6 +12,10 @@ on:
     inputs:
       runs-on:
         description: JSON for `runs-on`, from select-runner.yml
+        type: string
+        required: true
+      sha:
+        description: Commit to deploy; CI tested it
         type: string
         required: true
       ai:
@@ -38,6 +42,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.sha }}
           persist-credentials: false
       - name: Install Railway CLI
         # A job-local prefix, so the self-hosted machine's own CLI (e.g. Homebrew's) is neither clashed with nor replaced.
@@ -91,7 +96,7 @@ jobs:
         env:
           LOGFIRE_TOKEN: ${{ secrets.LOGFIRE_TOKEN }}
           LOGFIRE_ENVIRONMENT: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
-          LOGFIRE_SERVICE_VERSION: ${{ github.sha }}
+          LOGFIRE_SERVICE_VERSION: ${{ inputs.sha }}
         run: |
           set -euo pipefail
           for name in LOGFIRE_TOKEN LOGFIRE_ENVIRONMENT LOGFIRE_SERVICE_VERSION; do
@@ -131,6 +136,7 @@ jobs:
           CORE_OUTCOME: ${{ steps.deploy_core.outcome }}
           TARGET_ENV: ${{ github.ref_name == 'main' && 'railway-production' || 'railway-staging' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ inputs.sha }}
         run: |
           {
             echo "# Deploy results"
@@ -139,7 +145,7 @@ jobs:
             echo "|---|---|"
             echo "| Environment | $TARGET_ENV |"
             echo "| Branch | ${GITHUB_REF_NAME} |"
-            echo "| Commit | ${GITHUB_SHA::7} |"
+            echo "| Commit | ${SHA::7} |"
             echo "| Triggered by | ${GITHUB_ACTOR} |"
             echo "| Run | $RUN_URL |"
             echo
