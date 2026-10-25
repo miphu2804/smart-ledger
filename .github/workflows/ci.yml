@@ -349,7 +349,7 @@ jobs:
   # Push to `staging` or `main` only. Each area is judged on its own checks, so a red `landing` does not hold back the
   # backend: an area deploys when it changed and its checks passed or were skipped. A re-run (`github.run_attempt > 1`)
   # hands off every area whose checks pass, so a changed environment variable can be picked up by re-running all jobs
-  # (or by starting CD by hand). CD runs on its own runner (CD_RUNNER), from this branch's cd.yml.
+  # (or by starting CD by hand). CD picks its own runner (CD_RUNNER, else CI_RUNNER), from this branch's cd.yml.
   cd:
     if: >-
       !cancelled() && github.event_name == 'push' && needs.changes.result == 'success'

@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       runner:
-        description: default reads the repository variable CD_RUNNER (unset → github-hosted); see docs/development/ci-cd.md#ci-runners
+        description: default reads the repository variable CD_RUNNER, else CI_RUNNER, else github-hosted; see docs/development/ci-cd.md#ci-runners
         type: choice
         required: true
         default: default
@@ -50,7 +50,7 @@ jobs:
   select-runner:
     uses: ./.github/workflows/select-runner.yml
     with:
-      choice: ${{ inputs.runner != 'default' && inputs.runner || vars.CD_RUNNER || 'github-hosted' }}
+      choice: ${{ inputs.runner != 'default' && inputs.runner || vars.CD_RUNNER || vars.CI_RUNNER || 'github-hosted' }}
     secrets:
       RUNNERS_READ_TOKEN: ${{ secrets.RUNNERS_READ_TOKEN }}
 

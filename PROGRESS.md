@@ -1,3 +1,11 @@
+### [2026-10-25 21:00 UTC+07:00] — [Change] CD follows CI_RUNNER when CD_RUNNER is unset
+
+**Done:** With only `CI_RUNNER=self-hosted` set during a billing lock, CD still picked GitHub-hosted and its deploys could not start. CD now reads its input `runner`, else `CD_RUNNER`, else `CI_RUNNER`, else github-hosted, so one variable moves tests and deploys; `CD_RUNNER` is only needed to run deploys somewhere else than tests.
+
+**Changed files:** `.github/workflows/cd.yml`, `.github/workflows/ci.yml` (comment), `.github/workflows/select-runner.yml` (comment), `docs/development/ci-cd.md`; this entry.
+
+**Check:** actionlint 1.7.8 reports no errors. **Not verified:** a CD run on GitHub.
+
 ### [2026-10-25 18:30 UTC+07:00] — [Change] CD is its own workflow with its own runner
 
 **Done:** Deploys moved out of CI into `cd.yml`, which starts with its own `select-runner` (input `runner`, else variable `CD_RUNNER`, else github-hosted), so tests and deploys can run on different machines. On a push to `staging` or `main`, CI's last job `cd` judges each area on its own checks (backend on `ai`, `core`, `container-images`; web on `mobile-web`; landing on `landing`) and starts CD with `workflow_dispatch` on that branch for the commit, the CI run and the areas that changed and passed; a re-run of CI hands off every passing area. CD's `gate` refuses another branch, a commit not on the branch, or a CI run that tested another commit or failed a needed job, then calls `deploy-backend.yml`, `deploy-web.yml` and `deploy-landing.yml`, which now check out the given commit. A person can start CD by hand to redeploy without testing again. Production approval and branch policies stay on the GitHub environments.

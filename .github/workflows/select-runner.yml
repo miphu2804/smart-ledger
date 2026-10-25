@@ -1,6 +1,6 @@
 name: Select runner
 
-# Called first by ci.yml and mobile-release.yml; every later job runs on `runs_on`, so one setting moves a whole run
+# Called first by ci.yml, cd.yml and mobile-release.yml; every later job runs on `runs_on`, so one setting moves a whole run
 # between GitHub-hosted runners and the self-hosted machines, e.g. while GitHub-hosted runners are unavailable.
 # This job itself runs on a self-hosted machine when self-hosted is chosen, so that choice needs no GitHub-hosted
 # minute at all; `auto` runs it on GitHub-hosted, so set self-hosted while GitHub-hosted runners cannot start.
