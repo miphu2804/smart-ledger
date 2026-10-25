@@ -47,7 +47,8 @@ jobs:
   ### Gate: branch policy and a green CI run, before any runner is used ###
 
   gate:
-    runs-on: ubuntu-24.04
+    # Choosing self-hosted keeps the whole run off GitHub-hosted runners, e.g. while they are unavailable.
+    runs-on: ${{ inputs.runner == 'self-hosted' && fromJSON('["self-hosted"]') || 'ubuntu-24.04' }}
     permissions:
       contents: read
       actions: read
@@ -91,7 +92,7 @@ jobs:
   ### Pick the runner: a free self-hosted machine, else GitHub-hosted ###
 
   select-runner:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner == 'self-hosted' && fromJSON('["self-hosted"]') || 'ubuntu-24.04' }}
     outputs:
       runs_on: ${{ steps.pick.outputs.runs_on }}
       reason: ${{ steps.pick.outputs.reason }}
