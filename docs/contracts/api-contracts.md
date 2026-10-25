@@ -4,7 +4,7 @@
 |---|---|
 | Trạng thái | đích MVP; các endpoint đã triển khai được đánh dấu riêng bên dưới |
 | Chủ sở hữu | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-10-16 |
+| Cập nhật lần cuối | 2026-10-26 |
 
 ## Tài liệu liên quan
 
@@ -619,11 +619,12 @@ Model không tự viết khối này: agent gọi tool `suggest_screen(screen)` 
 
 ## 7. Dashboard quản trị — đã có trong Core
 
-Cả 7 GET dưới đây đã có controller/service Core. Yêu cầu Firebase ID token hợp lệ và profile DB `ADMIN`/`ACTIVE`; role không lấy từ client hoặc claim tự tạo. Không cần `X-Shop-Id`; header này và param `actorUserId` không đổi phạm vi truy cập. Response thành công có `Cache-Control: no-store`. Dashboard web (`frontend/web`, build với `VITE_USE_MOCK=false`) đọc đúng contract này qua `src/services/adminApi.ts`, đăng nhập bằng Firebase email/mật khẩu rồi `GET /api/v1/me` kiểm `role` ADMIN; mới kiểm bằng server giả trên máy, chưa nghiệm thu với Firebase thật và UAT staging.
+Bảy GET nền đã có controller/service Core; nhánh `feat/admin-dashboard-growth` bổ sung GET `overview/growth` thành endpoint thứ tám, chưa xác nhận deploy. Yêu cầu Firebase ID token hợp lệ và profile DB `ADMIN`/`ACTIVE`; role không lấy từ client hoặc claim tự tạo. Không cần `X-Shop-Id`; header này và param `actorUserId` không đổi phạm vi truy cập. Response thành công có `Cache-Control: no-store`. Dashboard web (`frontend/web`, build với `VITE_USE_MOCK=false`) đọc contract nền qua `src/services/adminApi.ts`, đăng nhập bằng Firebase email/mật khẩu rồi `GET /api/v1/me` kiểm `role` ADMIN; chart growth chưa tích hợp. Kiểm thử Core không thay nghiệm thu Firebase/FE thật và UAT staging.
 
 | Method | Đường | Query | Response |
 |---|---|---|---|
 | `GET` | `/api/v1/admin/overview` | `fromDate?`, `toDate?` | `200 Overview` |
+| `GET` | `/api/v1/admin/overview/growth` | `fromDate?`, `toDate?` | `200 Growth` — mới trong feat/admin-dashboard-growth |
 | `GET` | `/api/v1/admin/users` | `query?`, `status?`, `page=0`, `size=20` | `200 AdminPageResponse<OwnerSummary>` |
 | `GET` | `/api/v1/admin/users/{userId}` | — | `200 OwnerDetail` |
 | `GET` | `/api/v1/admin/shops` | `query?`, `status?`, `ownerId?`, `page=0`, `size=20` | `200 AdminPageResponse<ShopSummary>` |
@@ -648,6 +649,8 @@ Tên dưới đây khớp DTO Core; thông tin liên hệ có thể null. ID là
 Overview = { asOf, timezone, fromDate, toDate, owners, shops }
 owners = { total, active, disabled, createdInPeriod }
 shops = { total, active, inactive, archived, createdInPeriod }
+Growth = { asOf, timezone, fromDate, toDate, points: GrowthPoint[] }
+GrowthPoint = { date, ownersCreated, shopsCreated }
 OwnerSummary = { id, displayName, maskedEmail, maskedPhone, status, createdAt, shopCount }
 OwnerDetail = { id, displayName, email, phone, status, createdAt, updatedAt, shopCount }
 OwnerContact = { id, displayName, email, phone, status }
@@ -659,7 +662,48 @@ AccessLog = { id, actorUserId, actorRole, action, targetType, targetId, shopId, 
               requestId, occurredAt, beforeStatus, afterStatus, reason }
 ```
 
-Danh sách che email thành `***@***`, phone thành `***` + ba ký tự cuối (phone dài không quá 4 ký tự chỉ `***`; thiếu liên hệ trả null). Chi tiết OWNER/tiệm có liên hệ đầy đủ phục vụ hỗ trợ; tiệm của OWNER DISABLED vẫn được tra cứu. Không trả Firebase UID/identity, token, secret, sale/payment/refund/debt/expense/product hoặc audit nghiệp vụ OWNER. Overview chỉ có số lượng, không doanh thu/lợi nhuận/trend/quota/task. Không có giả danh OWNER, API ADMIN sửa sổ, `/admin/audit-logs`, `/auth/login` hoặc token Core riêng.
+Danh sách che email thành `***@***`, phone thành `***` + ba ký tự cuối (phone dài không quá 4 ký tự chỉ `***`; thiếu liên hệ trả null). Chi tiết OWNER/tiệm có liên hệ đầy đủ phục vụ hỗ trợ; tiệm của OWNER DISABLED vẫn được tra cứu. Không trả Firebase UID/identity, token, secret, sale/payment/refund/debt/expense/product hoặc audit nghiệp vụ OWNER. Overview nền chỉ có số lượng; chuỗi tạo mới nằm riêng ở Growth, không có doanh thu/lợi nhuận/quota/task. Không có giả danh OWNER, API ADMIN sửa sổ, `/admin/audit-logs`, `/auth/login` hoặc token Core riêng.
+
+### Chuỗi tạo mới theo ngày — admin-growth
+
+`GET /api/v1/admin/overview/growth` tuân theo cặp `fromDate`/`toDate`, mặc định,
+giới hạn năm và 366 ngày của overview. Không nhận quy ước `days=`/grouping từ mock.
+FE chọn 7/30/90 ngày bằng `fromDate = hôm nay - (N - 1)` và `toDate = hôm nay`
+theo giờ Việt Nam. `date`, `fromDate`, `toDate` là `YYYY-MM-DD`; `timezone` cố định
+`Asia/Ho_Chi_Minh`; `asOf` theo quy ước timestamp Core. Ví dụ minh họa, không phải
+số liệu môi trường thật:
+
+```json
+{
+  "asOf": "2026-10-26T10:00:00+07:00",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "fromDate": "2026-10-25",
+  "toDate": "2026-10-26",
+  "points": [
+    { "date": "2026-10-25", "ownersCreated": 2, "shopsCreated": 3 },
+    { "date": "2026-10-26", "ownersCreated": 0, "shopsCreated": 0 }
+  ]
+}
+```
+
+- Một điểm cho mỗi ngày, tăng dần, gồm cả ngày bằng 0; tối đa 366 điểm. Hai count
+  là số nguyên không âm kiểu long, đếm theo `created_at`, không theo `updated_at`.
+- OWNER được lọc bằng role OWNER hiện tại, gồm cả DISABLED, không gồm ADMIN; tiệm
+  gồm mọi trạng thái. Đếm độc lập hai nguồn, không nhân OWNER theo số tiệm sở hữu.
+- Ranh giới `[đầu fromDate, đầu ngày sau toDate)` và nhóm ngày đều theo Việt Nam,
+  không phụ thuộc timezone DB. Không đo số đăng nhập, mức sử dụng hay retention.
+- Trong cùng snapshot/kỳ, tổng mỗi chuỗi bằng `createdInPeriod` tương ứng. Hai HTTP
+  request riêng có thể lệch nếu dữ liệu/role thay đổi giữa hai lần đọc.
+- Growth không trả lại trạng thái lịch sử. Chart trạng thái dùng `shops.active`,
+  `shops.inactive`, `shops.archived` của overview nền, luôn là số hiện tại.
+- Guard, mã lỗi và no-store như các GET ADMIN. Mỗi lượt đọc dùng
+  `ADMIN_OVERVIEW_VIEWED`/`SYSTEM`, target/shop null, metadata
+  `{ "queryPresent": false, "resultCount": 1 }`: một response tổng quan, không phải
+  số ngày. Access logs không phân biệt growth và overview nền. Audit lỗi trả 503,
+  không trả chart; không thêm action, bảng, index, biến môi trường hoặc migration.
+- Truy vết `BR-013`/`BR-014` → `FR-024` → `AC-097`–`AC-100`. Endpoint đã triển khai
+  trong nhánh feature; FE/staging còn cần nghiệm thu. Phép tổng hợp DB bị giới hạn
+  đầu ra, không yêu cầu client tải toàn bộ danh sách để tự đếm.
 
 ### Audit ADMIN và ranh giới lịch sử
 
@@ -686,7 +730,7 @@ Thiếu/sai token: `401 unauthorized`; OWNER: `403 admin_access_required`; ADMIN
 
 Không lưu được audit ADMIN (hoặc không đọc được access history): `503 admin_audit_unavailable`, không trả dữ liệu được bảo vệ. Đổi trạng thái tiệm ở mục 1 rollback cả trạng thái/lý do và audit khi ghi audit thất bại. Request bị từ chối/validation/không tìm thấy không tạo audit SUCCESS; chưa có contract audit FAILURE/bảo mật. V10 giữ trigger chặn UPDATE/DELETE/TRUNCATE; V11 không sửa lịch sử hay bỏ bảo vệ đó. Không suy ra DB đã chạy V11 từ việc service khởi động.
 
-Phủ `BR-013`/`BR-014` → `FR-022`–`FR-024`, `NFR-003`/`NFR-009` → `AC-015`–`AC-017`, `AC-040`–`AC-043`. Kiểm chứng API/DB tách riêng Firebase thật, dashboard web và UAT staging; không coi mock web là bằng chứng nghiệm thu.
+Phủ `BR-013`/`BR-014` → `FR-022`–`FR-024`, `NFR-003`/`NFR-009` → `AC-015`–`AC-017`, `AC-040`–`AC-043`, `AC-097`–`AC-100`. Kiểm chứng API/DB tách riêng Firebase thật, dashboard web và UAT staging; không coi mock web là bằng chứng nghiệm thu.
 
 
 ## 8. Notification OWNER — đã có trên `feat/app-notifications`

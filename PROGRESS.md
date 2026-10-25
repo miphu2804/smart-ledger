@@ -1,3 +1,13 @@
+### [2026-10-26] — [Feature] Admin daily creation chart API; PostgreSQL rerun pending
+
+**Done:** Added `GET /api/v1/admin/overview/growth` on `feat/admin-dashboard-growth`, with bounded daily OWNER/shop creation aggregates, zero-filled Vietnam dates, active DB ADMIN checks and fail-closed overview audit. Existing overview stays unchanged. Synchronized the approved scope through BR-013/BR-014 → FR-024 → AC-097–AC-100 and the canonical API contract; no new migration, index, dependency or environment variable. Fast-forwarded the feature base to staging `0e2b1de`; no push or deploy.
+
+**Changed files:** Core admin controller/DTO/repository/service, web/PostgreSQL tests, Core README and chart handoff; BRD, PRD/AC, API contract, technical design, document index and this new entry. Existing Zalo callback, frontend lockfile and IDE changes were preserved and are outside this feature.
+
+**Flow explained:** ADMIN authenticates → date range is validated → separate SQL source aggregates join at most 366 dates → the same transaction records ADMIN_OVERVIEW_VIEWED/SYSTEM → response. Series count creation, not activity or historical status; the status chart continues using current overview counts. Canonical field/error/audit rules are in the [growth contract](docs/contracts/api-contracts.md#chuỗi-tạo-mới-theo-ngày--admin-growth); FE chart integration and staging acceptance remain pending.
+
+**Check:** Verified `mvnw.cmd verify` on 2026-10-26: 1,306 reported cases, zero failures/errors, 256 skipped (1,050 executed); `git diff --check` passed. Earlier, 47 targeted tests passed against disposable PostgreSQL on 2026-10-22. The new explicit UTC DB-session assertion and full PostgreSQL rerun are **not verified** yet: Docker Desktop did not expose its Linux engine after a start request. No business/local/staging/production DB was used for this rerun. Static-analysis/CVE/coverage tools are not configured in the Core POM and were not newly installed; no coverage percentage or CVE clearance is claimed. Final push still requires user approval after validation.
+
 ### [2026-10-25 21:45 UTC+07:00] — [Docs] CI/CD diagram shows the CI and CD split
 
 **Done:** The pipeline band of the CI/CD diagram now shows `ci.yml` (select-runner with `CI_RUNNER`, changes, the five test jobs), the hand-off by job `cd` with `workflow_dispatch`, and `cd.yml` (select-runner with `CD_RUNNER`, gate, the three deploy jobs, production approval).

@@ -33,6 +33,17 @@ public class AdminDashboardController {
         return service.overview(token, fromDate, toDate);
     }
 
+    @GetMapping("/overview/growth")
+    @Operation(summary = "Read daily OWNER and shop creation counts for dashboard charts",
+            description = "Both dates or neither; default last 30 Vietnam days, maximum 366 inclusive days. "
+                    + "Points are ascending and zero-filled. Counts include currently disabled OWNERs and inactive/archived shops; "
+                    + "they measure creation, not logins, usage or historical status. Audited as an overview read.")
+    public Growth growth(@AuthenticationPrincipal VerifiedFirebaseToken token,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate) {
+        return service.growth(token, fromDate, toDate);
+    }
+
     @GetMapping("/users")
     @Operation(summary = "Search OWNER profiles with masked contacts",
             description = "Literal case-insensitive name/email/phone search. page starts at 0; size 1-100; createdAt/id descending.")

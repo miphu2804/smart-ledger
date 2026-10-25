@@ -5,6 +5,7 @@ import com.smartledger.core.enums.ShopStatus;
 import com.smartledger.core.enums.UserStatus;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.List;
 
 /** Explicit support projections: no ledger, Firebase identity, arbitrary metadata or subscription fields. */
 public final class AdminDashboardViews {
@@ -14,6 +15,11 @@ public final class AdminDashboardViews {
     public record ShopCounts(long total, long active, long inactive, long archived, long createdInPeriod) { }
     public record Overview(OffsetDateTime asOf, String timezone, LocalDate fromDate, LocalDate toDate,
             OwnerCounts owners, ShopCounts shops) { }
+    public record GrowthPoint(LocalDate date, long ownersCreated, long shopsCreated) { }
+    public record Growth(OffsetDateTime asOf, String timezone, LocalDate fromDate, LocalDate toDate,
+            List<GrowthPoint> points) {
+        public Growth { points = List.copyOf(points); }
+    }
     public record OwnerSummary(Long id, String displayName, String maskedEmail, String maskedPhone,
             UserStatus status, OffsetDateTime createdAt, long shopCount) { }
     public record OwnerDetail(Long id, String displayName, String email, String phone, UserStatus status,

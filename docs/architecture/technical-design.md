@@ -5,7 +5,7 @@
 | Trạng thái | đích MVP; Core hiện có được phân biệt với phần chưa tích hợp |
 | Chủ sở hữu | Chủ kỹ thuật |
 | Người rà soát | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-10-16 |
+| Cập nhật lần cuối | 2026-10-26 |
 
 ## Tài liệu liên quan
 
@@ -50,6 +50,28 @@ Mục này là nơi duy nhất ghi hiện trạng triển khai; tài liệu khá
 **CORE-012 #163/#164 trên `feat/core-barcode`, ngày 2026-10-12:** chuẩn hóa barcode và lookup đã có; hoàn thiện precheck ACTIVE-only, 409 details và V16. Chưa chạy shared migration hoặc nghiệm thu FE. Xem [§4.3](#43-barcode-core-core-012-163164), [contract](../contracts/api-contracts.md#barcode-core-012), `FR-034`/`AC-064`–`AC-067`.
 
 **CORE-014 #213 trên `feat/sales-filter-summary`, ngày 2026-10-15 (base staging `df69819642fc420b7686d6f66073b946df2f13c2`):** Core có GET `/api/v1/sales/summary` để trả count/giá trị toàn bộ sale khớp filter, dùng chung predicate với list và một query aggregate. Không đổi schema, API ghi hoặc báo cáo kỳ; chưa tích hợp FE hay nghiệm thu staging. Truy vết `BR-004`/`BR-005`/`BR-009` → `FR-006`/`FR-033` → `AC-069`–`AC-072`; [§4.5](#45-tổng-danh-sách-sale-core-014) mô tả triển khai, [contract](../contracts/api-contracts.md#tổng-danh-sách-sale-theo-bộ-lọc-core-014) giữ ý nghĩa field/lỗi.
+
+### Tổng quan ADMIN theo ngày — admin-growth
+
+Trên `feat/admin-dashboard-growth`, Core bổ sung `GET /api/v1/admin/overview/growth`
+cho phạm vi `BR-013`/`BR-014` → `FR-024` → `AC-097`–`AC-100`; chưa xác nhận merge,
+deploy hoặc nghiệm thu FE/staging. Bảy GET nền giữ contract cũ; tổng số GET ADMIN
+trong nhánh là tám. Response/ngày/lỗi/audit nằm ở
+[contract growth](../contracts/api-contracts.md#chuỗi-tạo-mới-theo-ngày--admin-growth),
+hướng dẫn kiểm chứng ở [Core handoff](../../backend/core/docs/admin-dashboard-growth.md).
+
+- Guard đọc profile ADMIN/ACTIVE trong DB; query và ghi audit nằm cùng transaction
+  REPEATABLE_READ, không readOnly. Growth dùng action tổng quan hiện có; không cần
+  migration, không sửa bảng/index hoặc tạo một kho audit khác.
+- Repository aggregate độc lập users role OWNER và shops theo ngày Việt Nam, rồi
+  left join với dãy ngày giới hạn 366 điểm. Không tải entity để đếm và không join
+  user-shop trước khi aggregate, tránh nhân số lượng; dữ liệu rỗng được điền 0.
+- Chart trạng thái lấy overview nền, không tái dựng snapshot trạng thái từ hiện tại.
+  Không đọc sổ doanh thu/nợ/tồn, lịch sử ADMIN khác hoặc dữ liệu AI.
+- Test controller và PostgreSQL kiểm quyền, ranh giới ngày/năm nhuận/ngày trống,
+  giới hạn kỳ, tính nhất quán với overview và audit fail-closed. Kết quả local không
+  chứng minh performance trên dữ liệu lớn hoặc chart FE đã tích hợp; cần xem query
+  plan trước khi đề xuất migration index và phải được duyệt riêng.
 
 ### Zalo CORE-015
 
@@ -108,7 +130,7 @@ Lỗi confirm/repay/void rollback toàn bộ thay đổi tiền/nợ/tồn, noti
 
 Luồng text/voice/image → AI proposal → draft vẫn là đích: AI không được tự tạo sale/payment/debt/expense. Core mới gọi AI cho chat trợ lý (proxy Agent), chưa gọi cho luồng proposal; timeout/fallback cần nghiệm thu khi tích hợp.
 
-Luồng ADMIN hiện có: xác minh token → profile ADMIN/ACTIVE trong DB → đọc projection hỗ trợ → ghi audit → commit → trả response. 7 GET `/api/v1/admin/*` gồm overview, danh sách/chi tiết OWNER, danh sách/chi tiết tiệm, lịch sử trạng thái tiệm và lịch sử truy cập của chính ADMIN. Các GET này dùng transaction có khả năng ghi, isolation REPEATABLE_READ, không dùng readOnly vì phải lưu audit. Không lưu được audit trả 503 admin_audit_unavailable, không trả profile được bảo vệ. Chi tiết query/DTO/phạm vi nằm trong [contract ADMIN](../contracts/api-contracts.md#7-dashboard-quản-trị--đã-có-trong-core).
+Luồng ADMIN: xác minh token → profile ADMIN/ACTIVE trong DB → đọc projection hỗ trợ → ghi audit → commit → trả response. Bảy GET nền `/api/v1/admin/*` gồm overview, danh sách/chi tiết OWNER, danh sách/chi tiết tiệm, lịch sử trạng thái tiệm và lịch sử truy cập của chính ADMIN; nhánh admin-growth bổ sung GET thứ tám cho chuỗi tạo mới. Các GET này dùng transaction có khả năng ghi, isolation REPEATABLE_READ, không dùng readOnly vì phải lưu audit. Không lưu được audit trả 503 admin_audit_unavailable, không trả dữ liệu được bảo vệ. Chi tiết query/DTO/phạm vi nằm trong [contract ADMIN](../contracts/api-contracts.md#7-dashboard-quản-trị--đã-có-trong-core).
 
 `PATCH /api/v1/shops/{shopId}/status` vẫn nằm ngoài prefix admin; tạm ngưng/kích hoạt kèm lý do, ghi một event SHOP_INACTIVATED/SHOP_REACTIVATED dùng chung cho lịch sử OWNER và projection ADMIN. Thay đổi trạng thái và audit cùng transaction, lỗi audit rollback. ADMIN không giả danh OWNER hay sửa sổ; triển khai Core không tự chứng minh web/staging đạt BR-014/NFR-009.
 

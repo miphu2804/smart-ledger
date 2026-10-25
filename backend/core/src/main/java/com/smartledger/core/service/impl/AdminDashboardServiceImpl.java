@@ -37,17 +37,20 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
     @Override
     public Overview overview(VerifiedFirebaseToken token, LocalDate fromDate, LocalDate toDate) {
         var admin = guard.requireAdmin(token);
-        LocalDate today = LocalDate.now(ZONE);
-        if ((fromDate == null) != (toDate == null)) { throw invalid(); }
-        LocalDate from = fromDate == null ? today.minusDays(29) : fromDate;
-        LocalDate to = toDate == null ? today : toDate;
-        if (from.getYear() < 1 || to.getYear() > 9998 || to.isBefore(from) || ChronoUnit.DAYS.between(from, to) >= 366) {
-            throw invalid();
-        }
-        var start = from.atStartOfDay(ZONE).toOffsetDateTime();
-        var end = to.plusDays(1).atStartOfDay(ZONE).toOffsetDateTime();
-        var response = new Overview(OffsetDateTime.now(ZoneOffset.UTC), ZONE.getId(), from, to,
-                repository.ownerCounts(start, end), repository.shopCounts(start, end));
+        var range = dateRange(fromDate, toDate);
+        var response = new Overview(OffsetDateTime.now(ZoneOffset.UTC), ZONE.getId(), range.from(), range.to(),
+                repository.ownerCounts(range.start(), range.end()), repository.shopCounts(range.start(), range.end()));
+        audit.record(admin.getId(), AdminAccessAction.OVERVIEW_VIEWED, null, null, false, 1);
+        return response;
+    }
+
+    @Override
+    public Growth growth(VerifiedFirebaseToken token, LocalDate fromDate, LocalDate toDate) {
+        var admin = guard.requireAdmin(token);
+        var range = dateRange(fromDate, toDate);
+        var points = repository.dailyGrowth(range.from(), range.to(), range.start(), range.end());
+        var response = new Growth(OffsetDateTime.now(ZoneOffset.UTC), ZONE.getId(), range.from(), range.to(), points);
+        // A daily projection of the same overview, using the existing SYSTEM audit action and schema.
         audit.record(admin.getId(), AdminAccessAction.OVERVIEW_VIEWED, null, null, false, 1);
         return response;
     }
@@ -120,6 +123,20 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         audit.record(admin.getId(), AdminAccessAction.ACCESS_LOGS_VIEWED, null, null, false, response.items().size());
         return response;
     }
+
+    private DateRange dateRange(LocalDate fromDate, LocalDate toDate) {
+        LocalDate today = LocalDate.now(ZONE);
+        if ((fromDate == null) != (toDate == null)) { throw invalid(); }
+        LocalDate from = fromDate == null ? today.minusDays(29) : fromDate;
+        LocalDate to = toDate == null ? today : toDate;
+        if (from.getYear() < 1 || to.getYear() > 9998 || to.isBefore(from) || ChronoUnit.DAYS.between(from, to) >= 366) {
+            throw invalid();
+        }
+        return new DateRange(from, to, from.atStartOfDay(ZONE).toOffsetDateTime(),
+                to.plusDays(1).atStartOfDay(ZONE).toOffsetDateTime());
+    }
+
+    private record DateRange(LocalDate from, LocalDate to, OffsetDateTime start, OffsetDateTime end) { }
 
     private void validatePage(int page, int size) {
         if (page < 0 || size < 1 || size > 100 || (long) page * size > Integer.MAX_VALUE) { throw invalid(); }

@@ -11,6 +11,7 @@ import java.time.OffsetDateTime;
 
 public interface AdminDashboardService {
     Overview overview(VerifiedFirebaseToken token, LocalDate fromDate, LocalDate toDate);
+    Growth growth(VerifiedFirebaseToken token, LocalDate fromDate, LocalDate toDate);
     AdminPageResponse<OwnerSummary> owners(VerifiedFirebaseToken token, String query, UserStatus status, int page, int size);
     OwnerDetail owner(VerifiedFirebaseToken token, long id);
     AdminPageResponse<ShopSummary> shops(VerifiedFirebaseToken token, String query, ShopStatus status, Long ownerId, int page, int size);

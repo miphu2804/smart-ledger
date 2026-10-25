@@ -295,6 +295,10 @@ Tests exercise actual create/replace services and Hibernate SQL with 1/20/100 se
 
 ### Admin dashboard development tests
 
+The additive daily chart endpoint `GET /api/v1/admin/overview/growth` is described in
+[Core chart handoff](docs/admin-dashboard-growth.md), including date rules, response,
+audit reuse and FE integration boundaries. No migration is introduced for it.
+
 With the same disposable PostgreSQL variables, run:
 
 ```powershell
