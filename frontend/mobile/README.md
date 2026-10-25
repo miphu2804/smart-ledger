@@ -244,6 +244,6 @@ Ghi chú: mã QR chuyển khoản chỉ để minh hoạ, không xác nhận gia
 
 ## Vercel preview trên trình duyệt
 
-`vercel.json` cấu hình Expo export ra `dist/` và chuyển các đường dẫn Expo Router về SPA entry. CI build web và tải lên Vercel (job `deploy-web`): `staging` có alias cố định, `main` là production; PR tạm không có preview vì vượt giới hạn 100 deploy/ngày của Vercel Hobby. Biến `EXPO_PUBLIC_*` đặt ở GitHub Environment `vercel-preview`/`vercel-staging`/`vercel-production`, không đặt trên Vercel; xem [CI/CD](../../docs/development/ci-cd.md#mobile-web-on-vercel).
+`vercel.json` cấu hình Expo export ra `dist/` và chuyển các đường dẫn Expo Router về SPA entry. CD build web và tải lên Vercel (job `deploy-web` trong `cd.yml`, CI gọi sau khi job `mobile-web` qua): `staging` có alias cố định, `main` là production; PR tạm không có preview vì vượt giới hạn 100 deploy/ngày của Vercel Hobby. Biến `EXPO_PUBLIC_*` đặt ở GitHub Environment `vercel-preview`/`vercel-staging`/`vercel-production`, không đặt trên Vercel; xem [CI/CD](../../docs/development/ci-cd.md#mobile-web-on-vercel).
 
 Các biến `EXPO_PUBLIC_*` được đóng vào bundle trình duyệt, vì vậy không đặt service-account keys ở đó. Preview web giúp kiểm tra giao diện responsive và luồng với Core staging; nó không thay thế kiểm tra native trên iOS/Android.

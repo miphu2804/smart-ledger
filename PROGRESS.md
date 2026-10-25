@@ -1,3 +1,35 @@
+### [2026-10-25 21:45 UTC+07:00] — [Docs] CI/CD diagram shows the CI and CD split
+
+**Done:** The pipeline band of the CI/CD diagram now shows `ci.yml` (select-runner with `CI_RUNNER`, changes, the five test jobs), the hand-off by job `cd` with `workflow_dispatch`, and `cd.yml` (select-runner with `CD_RUNNER`, gate, the three deploy jobs, production approval).
+
+**Changed files:** `docs/architecture/diagrams/src/ci-cd.drawio`, `docs/architecture/diagrams/images/ci-cd.svg` (re-exported with draw.io 28.2.5 using the command in `docs/development/ci-cd.md`); this entry.
+
+**Check:** exported a PNG preview and checked the pipeline band: labels fit and do not overlap the icons.
+
+### [2026-10-25 21:00 UTC+07:00] — [Change] CD follows CI_RUNNER when CD_RUNNER is unset
+
+**Done:** With only `CI_RUNNER=self-hosted` set during a billing lock, CD still picked GitHub-hosted and its deploys could not start. CD now reads its input `runner`, else `CD_RUNNER`, else `CI_RUNNER`, else github-hosted, so one variable moves tests and deploys; `CD_RUNNER` is only needed to run deploys somewhere else than tests.
+
+**Changed files:** `.github/workflows/cd.yml`, `.github/workflows/ci.yml` (comment), `.github/workflows/select-runner.yml` (comment), `docs/development/ci-cd.md`; this entry.
+
+**Check:** actionlint 1.7.8 reports no errors. **Not verified:** a CD run on GitHub.
+
+### [2026-10-25 18:30 UTC+07:00] — [Change] CD is its own workflow with its own runner
+
+**Done:** Deploys moved out of CI into `cd.yml`, which starts with its own `select-runner` (input `runner`, else variable `CD_RUNNER`, else github-hosted), so tests and deploys can run on different machines. On a push to `staging` or `main`, CI's last job `cd` judges each area on its own checks (backend on `ai`, `core`, `container-images`; web on `mobile-web`; landing on `landing`) and starts CD with `workflow_dispatch` on that branch for the commit, the CI run and the areas that changed and passed; a re-run of CI hands off every passing area. CD's `gate` refuses another branch, a commit not on the branch, or a CI run that tested another commit or failed a needed job, then calls `deploy-backend.yml`, `deploy-web.yml` and `deploy-landing.yml`, which now check out the given commit. A person can start CD by hand to redeploy without testing again. Production approval and branch policies stay on the GitHub environments.
+
+**Changed files:** `.github/workflows/cd.yml` — added; `.github/workflows/{ci,deploy-backend,deploy-web,deploy-landing}.yml`, `docs/development/ci-cd.md`, `CONTRIBUTING.md`, `frontend/mobile/README.md`, `frontend/web/README.md` — modified; this entry.
+
+**Check:** actionlint 1.7.8 reports no errors; the hand-off script picks the right areas for a backend change with a red landing, a docs-only push and a re-run with a red core; the gate script, with a stubbed `gh`, passes a backend deploy and refuses a failed `mobile-web`, a run for another commit, a commit not on `staging` and a feature branch. **Not verified:** a run on GitHub, that a `workflow_dispatch` from `GITHUB_TOKEN` starts CD here, environment secrets in the called deploy workflows, a real deploy.
+
+### [2026-10-25 17:30 UTC+07:00] — [Change] CI picks its runner first and deploys each area from its own workflow
+
+**Done:** The deploy jobs lived in `ci.yml` beside the tests, every job repeated the runner expression, and the backend deploy waited for `mobile-web`. Now the first job, `select-runner`, picks the runner for the whole run from the shared `select-runner.yml` (also used by `mobile-release.yml`): `CI_RUNNER` or the manual input `runner` takes `github-hosted` (default), `self-hosted` or the new `auto` (a free self-hosted machine, else `ubuntu-24.04`); pull requests from forks stay GitHub-hosted. With `self-hosted` the pick also runs on the self-hosted machine, so a run needs no GitHub-hosted minute. The deploy jobs moved unchanged into `deploy-backend.yml`, `deploy-web.yml` and `deploy-landing.yml`, called by `ci.yml`; each sets its own GitHub environment, and `deploy-backend` now waits only for `ai`, `core` and `container-images`. PostgreSQL for `ai` and `core` starts with `docker run` on every runner instead of a service container on GitHub-hosted, with a TCP readiness check. Required check names are unchanged.
+
+**Changed files:** `.github/workflows/{select-runner,deploy-backend,deploy-web,deploy-landing}.yml` — added; `.github/workflows/ci.yml`, `.github/workflows/mobile-release.yml`, `docs/development/ci-cd.md` — modified; this entry.
+
+**Check:** actionlint 1.7.8 reports no errors on all workflows; the moved deploy steps, environments, env and concurrency compare equal to the old jobs; the pick script returns the expected runner for github-hosted, self-hosted (with and without a label), a fork pull request, auto without a token and an unknown value. **Not verified:** a run on GitHub (GitHub-hosted, self-hosted and auto), environment secrets reaching the called deploy workflows, a real deploy.
+
 ### [2026-10-24 14:30 UTC+07:00] — [Feature] Landing introduces the team
 
 **Done:** The course asks the landing to show who built the product, and it had no team information. A new "Đội ngũ" section (after the POS comparison, linked from the top menu and the footer) shows the six members' own "Đội ngũ Sổ Nghe Lời" posters uncropped, as Orei asked: Minh Thọ (Leader), Minh Phú (AI Engineer), Thượng Hiệp (Frontend Developer), Thu Thảo (Backend Developer), Quỳnh Như (Business Analyst), Kiều Chinh (Marketing), with a line about Team HEXA, EXE201, FPT University. Posters are WebP (940×788, about 70 KB each), lazy-loaded, with name and role in `alt`. The FAQ answer on sign-in said Facebook or Zalo; it now says email and password or Google, which is what the app offers (Facebook is paused, Zalo shows "Sắp có").
