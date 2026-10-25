@@ -52,7 +52,15 @@ suite creates and drops its own test schema; never point it at business database
 - The pre-push rerun and review are recorded in [PROGRESS.md](../../../PROGRESS.md).
 - 2026-10-26: verify without DB variables passed again on staging base
   `0e2b1de`: 1,050 executed, 256 skipped, zero failures/errors. The explicit UTC
-  DB-session assertion compiled but was skipped. Full PostgreSQL verification
-  remains pending while the Docker Linux engine is unavailable.
+  DB-session assertion compiled but was skipped. At that checkpoint, full
+  PostgreSQL verification was pending because the Docker Linux engine was unavailable.
+- 2026-10-26, after Docker recovered: full `mvnw.cmd -B verify` passed on committed
+  code `976be02` in a clean temporary checkout against separate PostgreSQL 16.15:
+  1,422 testcases, zero failures/errors/skips, BUILD SUCCESS in 13:31. Maven totals
+  agree with the XML testcase counts. The dashboard controller's 22 cases and
+  PostgreSQL suite's 18 cases passed, including the explicit UTC-session assertion.
+  Existing migrations ran only in disposable test schemas; no business database
+  was used. Local log: `backend/core/target/admin-growth-full-verify-20261026.log`
+  (ignored). The validation blocker is resolved; push awaits user approval.
 - No new migration was authored. FE/Firebase end-to-end, deployment and load testing
   are outside this automated result.

@@ -1,12 +1,12 @@
-### [2026-10-26] — [Validation] Chưa chạy đủ hồi quy PostgreSQL cho admin growth
+### [2026-10-26] — [Validation] Đã hoàn tất hồi quy PostgreSQL cho admin growth
 
-**Status:** Open
+**Status:** Resolved
 
-**Blocked by:** Docker Desktop trên máy báo lỗi process khi khởi chạy (người dùng xác nhận); CLI không kết nối được Linux engine. Không restart cưỡng bức vì có thể ảnh hưởng container khác.
+**Blocked by:** Trước đó Docker Desktop báo lỗi process và CLI không kết nối được Linux engine. Người dùng đã khôi phục Docker; lượt kiểm tra lại đã hoàn tất.
 
-**Impact:** Nhánh `feat/admin-dashboard-growth` đã build/verify không DB thành công (1.050 test thực thi, 256 bỏ qua), nhưng chưa xác nhận toàn bộ PostgreSQL và assertion phiên DB UTC mới thêm. Bộ 47 test tập trung đã đạt trên DB tạm ngày 2026-10-22 không thay cho lượt chạy lại này. Không đánh dấu sẵn sàng push/merge chỉ từ kiểm tra không DB.
+**Resolution:** `mvnw.cmd -B verify` trên đúng commit `976be02` trong checkout tạm sạch, dùng PostgreSQL 16.15 riêng, đạt BUILD SUCCESS: 1.422 test, không failure/error/skip. Đối chiếu tổng Maven với các testcase XML; gồm 22 test controller và 18 test PostgreSQL của dashboard, có assertion phiên DB UTC. Log local: `backend/core/target/admin-growth-full-verify-20261026.log` (ignored). Không dùng DB nghiệp vụ local/staging/production, không tạo migration mới.
 
-**Next action:** Người dùng cung cấp nguyên văn lỗi Docker và khôi phục Engine running; sau đó chạy Core verify với PostgreSQL tạm riêng, cập nhật bằng chứng và trạng thái blocker. Không dùng DB nghiệp vụ local/staging/production; chỉ push sau khi người dùng duyệt.
+**Next action:** Chỉ push sau khi người dùng duyệt. FE integration, staging smoke/UAT và đánh giá tải thực tế vẫn là các bước nghiệm thu sau; kết quả local không thay thế các bước này.
 
 ### [2026-09-15 21:46 UTC+07:00] — [Planning] Chưa gán được issue dashboard cho Hiep
 

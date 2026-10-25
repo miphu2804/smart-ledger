@@ -1,3 +1,13 @@
+### [2026-10-26] — [Validation] Complete full PostgreSQL regression for admin growth
+
+**Done:** After Docker recovered, verified committed Core code `976be02` in a clean temporary checkout against a separate disposable PostgreSQL 16.15 container. Resolved the Docker/PostgreSQL validation blocker; no new migration, dependency, environment setting or application-code change in this validation follow-up. No push or deployment.
+
+**Changed files:** `BLOCKERS.md`, `backend/core/docs/admin-dashboard-growth.md` and this new entry. Existing Zalo, frontend lockfile and IDE changes remain outside the feature commits.
+
+**Flow explained:** Temporary PostgreSQL → existing migration/test suites → Maven verify and executable JAR packaging. This checks the committed branch independently of unrelated working-tree edits; FE integration, real Firebase sign-in, staging UAT and realistic growth-query load testing remain pending.
+
+**Check:** `mvnw.cmd -B verify` completed with BUILD SUCCESS in 13:31: 1,422 testcases, zero failures/errors/skips; Maven totals agree with XML testcase counts. Dashboard controller: 22 passed; dashboard PostgreSQL: 18 passed, including the explicit UTC DB-session assertion. Log retained locally at `backend/core/target/admin-growth-full-verify-20261026.log` (ignored). Only a dedicated disposable DB was used; business local/staging/production databases were not used. Push still requires user approval.
+
 ### [2026-10-26] — [Feature] Admin daily creation chart API; PostgreSQL rerun pending
 
 **Done:** Added `GET /api/v1/admin/overview/growth` on `feat/admin-dashboard-growth`, with bounded daily OWNER/shop creation aggregates, zero-filled Vietnam dates, active DB ADMIN checks and fail-closed overview audit. Existing overview stays unchanged. Synchronized the approved scope through BR-013/BR-014 → FR-024 → AC-097–AC-100 and the canonical API contract; no new migration, index, dependency or environment variable. Fast-forwarded the feature base to staging `0e2b1de`; no push or deploy.
