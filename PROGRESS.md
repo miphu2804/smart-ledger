@@ -1,3 +1,11 @@
+### [2026-10-25 22:05 UTC+07:00] — [Change] Zalo sign-in button follows the build again
+
+**Done:** The Zalo button on the sign-in screen is enabled again where the build turns Zalo on (`EXPO_PUBLIC_ZALO_LOGIN` on web, `EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID` on Android) and shows "Sắp có" elsewhere, undoing the lock from #340. Staging web already builds with `EXPO_PUBLIC_ZALO_LOGIN=true`; production does not set it.
+
+**Changed files:** `frontend/mobile/app/(auth)/welcome.tsx`, `docs/product/product-requirements.md` (main flow and FR-010); this entry.
+
+**Check:** `npx tsc --noEmit` in `frontend/mobile` reports no errors. **Not verified:** the button on a deployed staging web.
+
 ### [2026-10-25 21:45 UTC+07:00] — [Docs] CI/CD diagram shows the CI and CD split
 
 **Done:** The pipeline band of the CI/CD diagram now shows `ci.yml` (select-runner with `CI_RUNNER`, changes, the five test jobs), the hand-off by job `cd` with `workflow_dispatch`, and `cd.yml` (select-runner with `CD_RUNNER`, gate, the three deploy jobs, production approval).
