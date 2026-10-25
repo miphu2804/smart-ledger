@@ -1,0 +1,166 @@
+name: Deploy backend
+
+# Called by cd.yml for a commit of `staging` or `main` whose `ai`, `core` and `container-images` passed; it deploys
+# Railway `ai` and `core`. Kept apart from the tests so a change here cannot break a required check, and so the
+# backend deploy waits only for the backend jobs. See docs/development/ci-cd.md#steps.
+# Each GitHub environment holds its own environment-scoped Railway project token and branch policy;
+# `railway-production` requires approval. The environment is set on the job below, so its secrets reach the job
+# without the caller passing them.
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: JSON for `runs-on`, from select-runner.yml
+        type: string
+        required: true
+      sha:
+        description: Commit to deploy; CI tested it
+        type: string
+        required: true
+      ai:
+        description: Deploy Railway service `ai`
+        type: boolean
+        required: true
+      core:
+        description: Deploy Railway service `core`
+        type: boolean
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    environment: ${{ github.ref_name == 'main' && 'railway-production' || 'railway-staging' }}
+    concurrency:
+      group: deploy-${{ github.ref_name }}
+      cancel-in-progress: false
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha }}
+          persist-credentials: false
+      - name: Install Railway CLI
+        # A job-local prefix, so the self-hosted machine's own CLI (e.g. Homebrew's) is neither clashed with nor replaced.
+        run: |
+          npm install --prefix "$RUNNER_TEMP/cli" @railway/cli@5.63.1
+          echo "$RUNNER_TEMP/cli/node_modules/.bin" >> "$GITHUB_PATH"
+      # On the self-hosted machine the CLI would read the owner's ~/.railway login before RAILWAY_TOKEN; an empty HOME
+      # leaves the token as its only credential.
+      - name: Isolate the Railway CLI config
+        if: runner.environment == 'self-hosted'
+        run: |
+          mkdir -p "$RUNNER_TEMP/home"
+          echo "HOME=$RUNNER_TEMP/home" >> "$GITHUB_ENV"
+      # GitHub owns the browser origins Core allows, so a manual edit on Railway cannot drift or
+      # crash Core: Core refuses to start on any whitespace, wildcard or path inside an origin.
+      # Skipped while the environment variable is unset, leaving the Railway value untouched.
+      - name: Sync core CORS origins
+        if: vars.CORS_ALLOWED_ORIGINS != ''
+        env:
+          CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
+        run: |
+          set -euo pipefail
+          if [[ "$CORS_ALLOWED_ORIGINS" =~ [[:space:]*] ]]; then
+            echo "::error::CORS_ALLOWED_ORIGINS must be comma-separated origins without spaces or wildcards"
+            exit 1
+          fi
+          railway variable set "CORS_ALLOWED_ORIGINS=$CORS_ALLOWED_ORIGINS" --service core --skip-deploys
+      # GitHub owns the AI model settings (backend/ai/.env.example), so the deploy below starts the
+      # new AI with them. Each unset setting leaves its Railway value untouched.
+      - name: Sync ai model settings
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+          MODEL_PROVIDER: ${{ vars.MODEL_PROVIDER }}
+          MODEL_NAME: ${{ vars.MODEL_NAME }}
+          MODEL_FALLBACKS: ${{ vars.MODEL_FALLBACKS }}
+          MODEL_REASONING_EFFORT: ${{ vars.MODEL_REASONING_EFFORT }}
+        run: |
+          set -euo pipefail
+          for name in OPENAI_API_KEY OPENAI_BASE_URL MODEL_PROVIDER MODEL_NAME MODEL_FALLBACKS MODEL_REASONING_EFFORT; do
+            if [[ -n "${!name}" ]]; then
+              # stdin keeps the key out of the runner's process list
+              printf '%s' "${!name}" | railway variable set "$name" --stdin --service ai --skip-deploys
+            fi
+          done
+      # GitHub also owns the Logfire token (backend/ai/README.md#tracing-logfire), one per
+      # environment, so it is rotated in one place. The environment name and the deployed commit
+      # are derived here, so each trace shows which environment and release produced it. An unset
+      # token leaves the Railway value untouched.
+      - name: Sync ai tracing settings
+        env:
+          LOGFIRE_TOKEN: ${{ secrets.LOGFIRE_TOKEN }}
+          LOGFIRE_ENVIRONMENT: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+          LOGFIRE_SERVICE_VERSION: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          for name in LOGFIRE_TOKEN LOGFIRE_ENVIRONMENT LOGFIRE_SERVICE_VERSION; do
+            if [[ -n "${!name}" ]]; then
+              # stdin keeps the token out of the runner's process list
+              printf '%s' "${!name}" | railway variable set "$name" --stdin --service ai --skip-deploys
+            fi
+          done
+      # AI first: Core calls AI, so the new Core should not start against an old AI.
+      - name: Deploy ai
+        id: deploy_ai
+        if: inputs.ai
+        run: railway up backend/ai --path-as-root --service ai --ci
+      # Railway's free build window is too short for a Maven build, so the runner builds the jar and
+      # Railway only wraps it in a JRE image.
+      - uses: actions/setup-java@v6
+        if: inputs.core
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Build core jar
+        if: inputs.core
+        working-directory: backend/core
+        run: |
+          bash ./mvnw --batch-mode --no-transfer-progress -DskipTests package
+          mkdir -p "$RUNNER_TEMP/core-prebuilt"
+          cp target/core-0.0.1-SNAPSHOT.jar "$RUNNER_TEMP/core-prebuilt/app.jar"
+          cp Dockerfile.prebuilt "$RUNNER_TEMP/core-prebuilt/Dockerfile"
+      - name: Deploy core
+        id: deploy_core
+        if: inputs.core
+        run: railway up "$RUNNER_TEMP/core-prebuilt" --path-as-root --service core --ci
+      - name: Build deploy report
+        if: always()
+        env:
+          AI_OUTCOME: ${{ steps.deploy_ai.outcome }}
+          CORE_OUTCOME: ${{ steps.deploy_core.outcome }}
+          TARGET_ENV: ${{ github.ref_name == 'main' && 'railway-production' || 'railway-staging' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ inputs.sha }}
+        run: |
+          {
+            echo "# Deploy results"
+            echo
+            echo "| Item | Value |"
+            echo "|---|---|"
+            echo "| Environment | $TARGET_ENV |"
+            echo "| Branch | ${GITHUB_REF_NAME} |"
+            echo "| Commit | ${SHA::7} |"
+            echo "| Triggered by | ${GITHUB_ACTOR} |"
+            echo "| Run | $RUN_URL |"
+            echo
+            echo "| Service | Result |"
+            echo "|---|---|"
+            echo "| ai | $AI_OUTCOME |"
+            echo "| core | $CORE_OUTCOME |"
+          } > deploy-summary.md
+          cat deploy-summary.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        # The summary is already in the job summary; a full artifact quota must not fail CI or skip deploys.
+        continue-on-error: true
+        if: always()
+        with:
+          name: deploy-summary-${{ github.ref_name }}
+          path: deploy-summary.md
+          if-no-files-found: error
+          retention-days: 14
