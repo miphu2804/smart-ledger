@@ -1,3 +1,13 @@
+### [2026-10-26] — [CI] PR #368 chờ runner hoặc xử lý billing của chủ repository
+
+**Status:** Open
+
+**Blocked by:** [CI #785](https://github.com/miphu2804/smart-ledger/actions/runs/40218136882) mất kết nối self-hosted runner trước bước build/test. [CI #786](https://github.com/miphu2804/smart-ledger/actions/runs/40277351366) trên nhánh feature vẫn chờ runner. Lượt thủ công [CI #787](https://github.com/miphu2804/smart-ledger/actions/runs/40278406256) chạy nhánh main bị GitHub chặn trước khi cấp runner vì tài khoản chủ repository bị khóa do billing; summary sau đó lỗi fromJSON vì không có runner output. Người dùng không quản lý máy M4 Pro.
+
+**Impact:** Chưa có CI pass cho HEAD của PR #368. Kiểm thử local đã đạt không thay required checks. Quota artifact đã chặn upload summary ở #785, nhưng upload đó là optional/continue-on-error và không phải nguyên nhân hai job Core/container thất bại.
+
+**Next action:** Chủ repository xử lý billing hoặc người quản lý M4 Pro khôi phục runner/mạng, sau đó chạy CI trên đúng `feat/admin-dashboard-growth` và kiểm tra các job thực sự thực thi. Không bỏ required checks, tự đổi biến runner, xóa artifact hay merge để né blocker.
+
 ### [2026-10-26] — [Validation] Đã hoàn tất hồi quy PostgreSQL cho admin growth
 
 **Status:** Resolved

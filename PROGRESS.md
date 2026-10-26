@@ -1,3 +1,13 @@
+### [2026-10-26] — [Docs] Finish admin growth documentation review
+
+**Done:** CodeRabbit reviewed `9ae18a4`: Javadoc coverage reached 84.78% (80% threshold); PR title/description passed and the Core-exception finding was addressed. Corrected two remaining documentation issues: the active PostgreSQL guidance now says V1–V18, and the growth design keeps implementation decisions while linking API rules to the canonical contract.
+
+**Changed files:** `docs/architecture/technical-design.md`, a CI item in `BLOCKERS.md` and this new entry; no code, schema, configuration or workflow change.
+
+**Flow explained:** The contract owns public date/count/error/audit rules; technical design explains SQL aggregation, transaction boundaries and validation limits. CI on feature HEAD still needs a runner. Manual CI #787 was launched on main and could not start because the repository owner's account is locked by billing; downstream summary also received an empty runner output. GitHub-hosted reruns cannot bypass that billing lock, and the user does not manage the disconnected M4 Pro runners.
+
+**Check:** Compared the remaining findings with current documentation and the prior migrated-DB evidence; `git diff --check` passed. Earlier full Core PostgreSQL verify (1,422 passing cases) and review-follow-up verify (29 passing cases) remain the local evidence; no new test run is claimed for this docs-only follow-up. No merge/deploy or billing/runner administration was performed.
+
 ### [2026-10-26] — [Docs] Address admin growth PR review and stale handoff notes
 
 **Done:** Recorded the owner's narrowly scoped Core exception for PR #368 in AGENTS.md; added Javadoc for the ADMIN support API and growth invariants/tests; corrected stale root/Core README and technical-design statements about real FE integration, existing V18 migrations and publication status. No Java behavior, schema, dependency or runtime-setting change. PR title/description and review state are handled on GitHub; no merge or deployment is authorized by this follow-up.

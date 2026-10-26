@@ -60,18 +60,14 @@ trong nhánh là tám. Response/ngày/lỗi/audit nằm ở
 [contract growth](../contracts/api-contracts.md#chuỗi-tạo-mới-theo-ngày--admin-growth),
 hướng dẫn kiểm chứng ở [Core handoff](../../backend/core/docs/admin-dashboard-growth.md).
 
-- Guard đọc profile ADMIN/ACTIVE trong DB; query và ghi audit nằm cùng transaction
-  REPEATABLE_READ, không readOnly. Growth dùng action tổng quan hiện có; không cần
-  migration, không sửa bảng/index hoặc tạo một kho audit khác.
-- Repository aggregate độc lập users role OWNER và shops theo ngày Việt Nam, rồi
-  left join với dãy ngày giới hạn 366 điểm. Không tải entity để đếm và không join
-  user-shop trước khi aggregate, tránh nhân số lượng; dữ liệu rỗng được điền 0.
-- Chart trạng thái lấy overview nền, không tái dựng snapshot trạng thái từ hiện tại.
-  Không đọc sổ doanh thu/nợ/tồn, lịch sử ADMIN khác hoặc dữ liệu AI.
-- Test controller và PostgreSQL kiểm quyền, ranh giới ngày/năm nhuận/ngày trống,
-  giới hạn kỳ, tính nhất quán với overview và audit fail-closed. Kết quả local không
-  chứng minh performance trên dữ liệu lớn hoặc chart FE đã tích hợp; cần xem query
-  plan trước khi đề xuất migration index và phải được duyệt riêng.
+- Repository tổng hợp bằng SQL thay vì tải entity vào JVM; các nguồn được tổng hợp
+  độc lập trước khi nối kết quả để tránh nhân số lượng qua quan hệ một-nhiều.
+- Service giữ snapshot REPEATABLE_READ và ghi audit trong cùng transaction có thể
+  ghi. Tái sử dụng dữ liệu/lưu trữ hiện có nên không cần thay đổi schema hoặc index.
+- Controller/PostgreSQL tests kiểm chứng contract được liên kết ở trên; phạm vi và
+  kết quả nằm trong Core handoff. Chưa có benchmark growth trên dữ liệu lớn hoặc
+  nghiệm thu chart FE; đánh giá query plan trước khi đề xuất index, và xin duyệt
+  migration riêng nếu cần.
 
 ### Zalo CORE-015
 
@@ -249,7 +245,7 @@ Khi `FIREBASE_SERVICE_ACCOUNT_JSON` có giá trị không rỗng, Core dùng JSO
 
 ## 7. Kiểm chứng trước merge
 
-Đối chiếu code/schema không thay thế chạy lại hệ thống. Suite Core có test controller, service, validation, timestamp, concurrency và migration (SaleRefundMigrationPostgresTest, DebtVoidPostgresTest, AdminDashboardControllerWebTest, AdminDashboardPostgresTest, ReportAggregationPostgresTest). Test PostgreSQL là opt-in: Maven skip khi thiếu `CORE_TEST_POSTGRES_URL` (job `core` của CI có đặt biến này); phải bật môi trường test DB để kiểm chứng V1–V16, rollback và khóa đồng thời. Media test kiểm input, public-ID prefix, idempotency replay, adapter, worker và schema V13/V14; vẫn cần upload thật bằng credential staging an toàn. NotificationPostgresTest dùng migration V1–V16 thật để kiểm stock episodes, cùng-key/khác-key confirm/void, rollback khi notification lỗi, batch read/concurrency và tenant/status filtering; migration tests kiểm fresh validation/upgrade/adoption/rollback. Lệnh trong [Core README](../../backend/core/README.md), kết quả từng lượt trong PROGRESS.md không thay UAT.
+Đối chiếu code/schema không thay thế chạy lại hệ thống. Suite Core có test controller, service, validation, timestamp, concurrency và migration (SaleRefundMigrationPostgresTest, DebtVoidPostgresTest, AdminDashboardControllerWebTest, AdminDashboardPostgresTest, ReportAggregationPostgresTest). Test PostgreSQL là opt-in: Maven skip khi thiếu `CORE_TEST_POSTGRES_URL` (job `core` của CI có đặt biến này); phải bật môi trường test DB để kiểm chứng V1–V18, rollback và khóa đồng thời. Media test kiểm input, public-ID prefix, idempotency replay, adapter, worker và schema V13/V14; vẫn cần upload thật bằng credential staging an toàn. NotificationPostgresTest dùng migration V1–V18 thật để kiểm stock episodes, cùng-key/khác-key confirm/void, rollback khi notification lỗi, batch read/concurrency và tenant/status filtering; migration tests kiểm fresh validation/upgrade/adoption/rollback. Lệnh trong [Core README](../../backend/core/README.md), kết quả từng lượt trong PROGRESS.md không thay UAT.
 
 Kiểm thử chống N+1 trên PostgreSQL thật (không chỉ mock repository):
 
