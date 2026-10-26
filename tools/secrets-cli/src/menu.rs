@@ -12,14 +12,6 @@ use ratatui::widgets::Paragraph;
 use ratatui::{DefaultTerminal, Frame};
 
 
-const BANNER: [&str; 6] = [
-    "███████╗██╗     ",
-    "██╔════╝██║     ",
-    "███████╗██║     ",
-    "╚════██║██║     ",
-    "███████║███████╗",
-    "╚══════╝╚══════╝",
-];
 const ENVIRONMENTS: [&str; 2] = ["staging", "production"];
 const ACTIONS: [(&str, &str); 7] = [
     ("Pull", "Download and decrypt every environment you can read"),
@@ -283,14 +275,11 @@ fn pick(terminal: &mut DefaultTerminal, header: &str, choices: &[Choice], footer
 
 fn draw(frame: &mut Frame, header: &str, status: &[String], choices: &[Choice], selected: usize, footer: &str, numbered: bool) {
     let mut lines: Vec<Line> = vec![Line::raw("")];
-    for (row, art) in BANNER.iter().enumerate() {
-        let side = match row {
-            1 => Span::styled("SmartLedger secrets", Style::new().fg(Color::Blue).bold()),
-            2 => Span::styled("pull, push, apply and audit env files", Style::new().fg(Color::DarkGray)),
-            _ => Span::raw(""),
-        };
-        lines.push(Line::from(vec![Span::raw("  "), Span::styled(*art, Style::new().fg(Color::Yellow)), Span::raw("  "), side]));
-    }
+    lines.push(Line::from(vec![
+        Span::raw("  "),
+        Span::styled("SmartLedger secrets", Style::new().fg(Color::Blue).bold()),
+        Span::styled("  pull, push, apply and audit env files", Style::new().fg(Color::DarkGray)),
+    ]));
     lines.push(Line::raw(""));
     for text in status {
         lines.push(Line::from(vec![Span::raw("  "), Span::styled(text.clone(), Style::new().fg(Color::DarkGray))]));
