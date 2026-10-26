@@ -20,6 +20,7 @@ jobs:
   # from forks always stay GitHub-hosted, because the repository is public and a fork must not run code on a self-hosted
   # machine. See docs/development/ci-cd.md#ci-runners.
   select-runner:
+    name: "setup / runner"
     uses: ./.github/workflows/select-runner.yml
     with:
       choice: ${{ inputs.runner || vars.CI_RUNNER || 'github-hosted' }}
@@ -34,6 +35,7 @@ jobs:
   # mobile-release.yml. Filtering here, not with `on.paths`, keeps every check reporting a result.
   # A change to this workflow, cd.yml or select-runner.yml runs everything; a change to a deploy file runs its area.
   changes:
+    name: "setup / detect changes"
     needs: [select-runner]
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
     permissions:
@@ -90,6 +92,7 @@ jobs:
   ### Test: lint, tests and builds for the areas that changed ###
 
   ai:
+    name: "test / ai (python)"
     needs: [select-runner, changes]
     if: needs.changes.outputs.ai == 'true'
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
@@ -152,6 +155,7 @@ jobs:
           PY
 
   core:
+    name: "test / core (java)"
     needs: [select-runner, changes]
     if: needs.changes.outputs.core == 'true'
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
@@ -235,6 +239,7 @@ jobs:
           PY
 
   mobile-web:
+    name: "test / mobile web (expo)"
     needs: [select-runner, changes]
     if: needs.changes.outputs.mobile == 'true'
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
@@ -263,6 +268,7 @@ jobs:
       - run: npm run export:web
 
   landing:
+    name: "test / landing page"
     needs: [select-runner, changes]
     if: needs.changes.outputs.landing == 'true'
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
@@ -281,6 +287,7 @@ jobs:
       - run: npm run build
 
   container-images:
+    name: "build / container images"
     needs: [select-runner, changes]
     if: needs.changes.outputs.containers == 'true'
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
@@ -300,7 +307,7 @@ jobs:
   ### Report: one table of test results per run ###
 
   summary:
-    name: CI result summary
+    name: "report / test results"
     if: always()
     needs: [select-runner, ai, core, mobile-web, landing, container-images]
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
@@ -326,12 +333,12 @@ jobs:
             echo
             echo "| Suite | Result | Tests | Failures | Errors | Skipped |"
             echo "|---|---:|---:|---:|---:|---:|"
-            printf '| AI (Python) | %s | %s | %s | %s | %s |\n' \
+            printf '| AI service (Python) | %s | %s | %s | %s | %s |\n' \
               "$AI_RESULT" "${AI_TESTS:-n/a}" "${AI_FAILURES:-n/a}" "${AI_ERRORS:-n/a}" "${AI_SKIPPED:-n/a}"
-            printf '| Core (Java) | %s | %s | %s | %s | %s |\n' \
+            printf '| Core service (Java) | %s | %s | %s | %s | %s |\n' \
               "$CORE_RESULT" "${CORE_TESTS:-n/a}" "${CORE_FAILURES:-n/a}" "${CORE_ERRORS:-n/a}" "${CORE_SKIPPED:-n/a}"
-            printf '| Mobile web | %s | n/a | n/a | n/a | n/a |\n' "$MOBILE_RESULT"
-            printf '| Landing (web) | %s | n/a | n/a | n/a | n/a |\n' "$LANDING_RESULT"
+            printf '| Mobile web (Expo) | %s | n/a | n/a | n/a | n/a |\n' "$MOBILE_RESULT"
+            printf '| Landing page | %s | n/a | n/a | n/a | n/a |\n' "$LANDING_RESULT"
             printf '| Container images | %s | n/a | n/a | n/a | n/a |\n' "$CONTAINER_RESULT"
           } > ci-summary.md
           cat ci-summary.md >> "$GITHUB_STEP_SUMMARY"
@@ -351,6 +358,7 @@ jobs:
   # hands off every area whose checks pass, so a changed environment variable can be picked up by re-running all jobs
   # (or by starting CD by hand). CD picks its own runner (CD_RUNNER, else CI_RUNNER), from this branch's cd.yml.
   cd:
+    name: "release / start cd"
     if: >-
       !cancelled() && github.event_name == 'push' && needs.changes.result == 'success'
     needs: [select-runner, changes, ai, core, mobile-web, landing, container-images]
@@ -398,6 +406,7 @@ jobs:
 
   # Uploads `meta-ci-<environment>-<run id>-<attempt>`; artifact-cleanup.yml keeps the newest ones.
   metadata:
+    name: "report / run metadata"
     if: always()
     needs: [select-runner, changes, ai, core, mobile-web, landing, container-images, summary, cd]
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}

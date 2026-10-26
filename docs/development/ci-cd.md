@@ -1,8 +1,28 @@
 # CI/CD to Railway and Vercel
 
-This document traces a change from a feature branch to Railway for `backend/core` and `backend/ai`, and to Vercel for the mobile web and the landing page. Two workflows, each picking its own runner ([Runners](#ci-runners)): **CI** ([`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)) decides which areas changed and runs the **Test** and **Report** jobs; on a push to `staging` or `main` its last job, `cd`, starts **CD** ([`.github/workflows/cd.yml`](../../.github/workflows/cd.yml)) for the commit and the areas whose checks passed. CD checks the commit and its CI result (job `gate`), then calls one deploy workflow per area: **Deploy backend** (job `deploy-backend`, [`deploy-backend.yml`](../../.github/workflows/deploy-backend.yml), when the backend and container image jobs passed), **Deploy web** (job `deploy-web`, [`deploy-web.yml`](../../.github/workflows/deploy-web.yml), see [Mobile web on Vercel](#mobile-web-on-vercel)) and **Deploy landing** (job `deploy-landing`, [`deploy-landing.yml`](../../.github/workflows/deploy-landing.yml), see [Landing page on Vercel](#landing-page-on-vercel); it also carries the admin dashboard at `/admin`). The Actions tab lists CD runs as `CD <branch> <commit>` and each deploy as `<caller job> / deploy`. Branch and review rules live in [CONTRIBUTING](../../CONTRIBUTING.md). The Android app is built by a separate manual workflow, [`mobile-release.yml`](../../.github/workflows/mobile-release.yml); see [Android build](#android-build).
+This document traces a change from a feature branch to Railway for `backend/core` and `backend/ai`, and to Vercel for the mobile web and the landing page. Two workflows, each picking its own runner ([Runners](#ci-runners)): **CI** ([`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)) decides which areas changed and runs the **Test** and **Report** jobs; on a push to `staging` or `main` its last job, `cd`, starts **CD** ([`.github/workflows/cd.yml`](../../.github/workflows/cd.yml)) for the commit and the areas whose checks passed. CD checks the commit and its CI result (job `gate`), then calls one deploy workflow per area: **Deploy backend** (job `deploy-backend`, [`deploy-backend.yml`](../../.github/workflows/deploy-backend.yml), when the backend and container image jobs passed), **Deploy web** (job `deploy-web`, [`deploy-web.yml`](../../.github/workflows/deploy-web.yml), see [Mobile web on Vercel](#mobile-web-on-vercel)) and **Deploy landing** (job `deploy-landing`, [`deploy-landing.yml`](../../.github/workflows/deploy-landing.yml), see [Landing page on Vercel](#landing-page-on-vercel); it also carries the admin dashboard at `/admin`). The Actions tab lists CD runs as `CD <branch> <commit>` and each deploy as `<job name> / deploy`. Branch and review rules live in [CONTRIBUTING](../../CONTRIBUTING.md). The Android app is built by a separate manual workflow, [`mobile-release.yml`](../../.github/workflows/mobile-release.yml); see [Android build](#android-build).
 
 ## Overview
+
+The Actions tab and the checks list show each job by its name, `<stage> / <part> (<detail>)`; this document and the workflow files use the job id. Production or staging in a CD name follows the branch.
+
+| Workflow | Job id | Job name |
+|---|---|---|
+| CI, CD, Preview | `select-runner` | `setup / runner` |
+| CI | `changes` | `setup / detect changes` |
+| CI | `ai` | `test / ai (python)` |
+| CI | `core` | `test / core (java)` |
+| CI | `mobile-web` | `test / mobile web (expo)` |
+| CI | `landing` | `test / landing page` |
+| CI | `container-images` | `build / container images` |
+| CI | `summary` | `report / test results` |
+| CI | `cd` | `release / start cd` |
+| CI, CD | `metadata` | `report / run metadata` |
+| CD | `gate` | `verify / commit and ci` |
+| CD | `deploy-backend` | `deploy / backend: ai + core (staging)` |
+| CD, Preview | `deploy-web` | `deploy / mobile web (staging)`, `(preview)` in Preview |
+| CD, Preview | `deploy-landing` | `deploy / landing page (staging)`, `(preview)` in Preview |
+| Preview | `pull-request` | `verify / pull request` |
 
 ![CI, CD and Preview workflows](../architecture/diagrams/images/ci-cd.svg)
 

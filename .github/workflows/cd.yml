@@ -48,6 +48,7 @@ jobs:
   ### Runner: every job below runs where this job picks ###
 
   select-runner:
+    name: "setup / runner"
     uses: ./.github/workflows/select-runner.yml
     with:
       choice: ${{ inputs.runner != 'default' && inputs.runner || vars.CD_RUNNER || vars.CI_RUNNER || 'github-hosted' }}
@@ -59,6 +60,7 @@ jobs:
   # The GitHub environments still decide who may deploy where (branch policy, production approval); this job makes
   # sure only a commit of this branch whose CI checks passed reaches them.
   gate:
+    name: "verify / commit and ci"
     needs: [select-runner]
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
     permissions:
@@ -106,24 +108,29 @@ jobs:
           fi
           # The latest attempt of each job; a skipped check counts as passed, as for the required checks.
           results=$(gh api "repos/$REPO/actions/runs/$CI_RUN_ID/jobs" --paginate --jq '.jobs[] | "\(.name)=\(.conclusion)"')
+          # need <job name> <name before the stage rename>: CI runs from before the rename still deploy, e.g. a
+          # redeploy of an older commit after an outage.
           need() {
-            local job result
-            for job in "$@"; do
-              result=$(echo "$results" | awk -F= -v name="$job" '$1 == name { print $2 }' | tail -1)
-              case "$result" in
-                success|skipped) echo "$job: $result" ;;
-                *) echo "::error::CI job $job of run $CI_RUN_ID is '${result:-missing}'; not deploying."; exit 1 ;;
-              esac
-            done
+            local result
+            result=$(echo "$results" | awk -F= -v name="$1" -v old="$2" '$1 == name || $1 == old { print $2 }' | tail -1)
+            case "$result" in
+              success|skipped) echo "$1: $result" ;;
+              *) echo "::error::CI job '$1' of run $CI_RUN_ID is '${result:-missing}'; not deploying."; exit 1 ;;
+            esac
           }
-          if [ "$AI" = true ] || [ "$CORE" = true ]; then need ai core container-images; fi
-          if [ "$WEB" = true ]; then need mobile-web; fi
-          if [ "$LANDING" = true ]; then need landing; fi
+          if [ "$AI" = true ] || [ "$CORE" = true ]; then
+            need "test / ai (python)" ai
+            need "test / core (java)" core
+            need "build / container images" container-images
+          fi
+          if [ "$WEB" = true ]; then need "test / mobile web (expo)" mobile-web; fi
+          if [ "$LANDING" = true ]; then need "test / landing page" landing; fi
 
   ### Deploy: one file per area, each with its own GitHub environment ###
 
   # AI first inside deploy-backend.yml: Core calls AI, so the new Core should not start against an old AI.
   deploy-backend:
+    name: "deploy / backend: ai + core (${{ github.ref_name == 'main' && 'production' || 'staging' }})"
     if: inputs.backend-ai || inputs.backend-core
     needs: [select-runner, gate]
     permissions:
@@ -137,6 +144,7 @@ jobs:
     secrets: inherit
 
   deploy-web:
+    name: "deploy / mobile web (${{ github.ref_name == 'main' && 'production' || 'staging' }})"
     if: inputs.web
     needs: [select-runner, gate]
     permissions:
@@ -149,6 +157,7 @@ jobs:
     secrets: inherit
 
   deploy-landing:
+    name: "deploy / landing page (${{ github.ref_name == 'main' && 'production' || 'staging' }})"
     if: inputs.landing
     needs: [select-runner, gate]
     permissions:
@@ -163,6 +172,7 @@ jobs:
 
   # Uploads `meta-cd-<environment>-<run id>-<attempt>`; artifact-cleanup.yml keeps the newest ones.
   metadata:
+    name: "report / run metadata"
     if: always()
     needs: [select-runner, gate, deploy-backend, deploy-web, deploy-landing]
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}

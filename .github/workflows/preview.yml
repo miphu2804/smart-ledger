@@ -34,6 +34,7 @@ permissions:
 
 jobs:
   select-runner:
+    name: "setup / runner"
     uses: ./.github/workflows/select-runner.yml
     with:
       choice: ${{ inputs.runner != 'default' && inputs.runner || vars.CD_RUNNER || vars.CI_RUNNER || 'github-hosted' }}
@@ -43,6 +44,7 @@ jobs:
   # Preview environments hold Vercel tokens, so only an open pull request from this repository may reach them;
   # a fork's code never runs with these secrets.
   pull-request:
+    name: "verify / pull request"
     needs: [select-runner]
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
     permissions:
@@ -69,6 +71,7 @@ jobs:
           echo "Preview PR #$PR at ${sha::7}: web=$WEB landing=$LANDING" >> "$GITHUB_STEP_SUMMARY"
 
   deploy-web:
+    name: "deploy / mobile web (preview)"
     if: inputs.web
     needs: [select-runner, pull-request]
     permissions:
@@ -82,6 +85,7 @@ jobs:
     secrets: inherit
 
   deploy-landing:
+    name: "deploy / landing page (preview)"
     if: inputs.landing
     needs: [select-runner, pull-request]
     permissions:
