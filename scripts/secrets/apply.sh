@@ -9,7 +9,8 @@ cd "$(git rev-parse --show-toplevel)" || exit 1
 main() {
   sections=$(mktemp -d) || exit 1
   trap 'rm -rf "$sections"' EXIT
-  for bundle in secrets/*.env; do
+  for bundle in secrets/.env.*; do
+    case "$bundle" in *.age | *.dvc) continue ;; esac
     [ -f "$bundle" ] || continue
     split_sections "$bundle" "$sections"
   done
@@ -35,7 +36,8 @@ main() {
 # Writes every section of bundle $1 to its own file in directory $2: the target path, then the body.
 split_sections() {
   umask 077
-  awk -v dir="$2" -v name="$(basename "$1")" '
+  # Section files drop the bundle's leading dot so the "$sections"/* glob sees them.
+  awk -v dir="$2" -v name="$(basename "$1" | sed 's/^\.//')" '
     /^# .+ -> [^ ]+$/ {
       if (out) close(out)
       out = sprintf("%s/%s.%03d", dir, name, ++count)
