@@ -20,7 +20,7 @@ cd frontend/mobile && npm install
 cd frontend/web && npm install
 ```
 
-Fill in `backend/core/.env` and `backend/ai/.env` from their `.env.example`, or write them with `scripts/secrets/apply.sh --apply` (see [Secrets and env files](docs/development/secrets-and-env.md)); both files carry the staging database credentials. Frontends default to mock data and need no backend.
+Get the team's credentials by following [`secrets/README.md`](secrets/README.md): it pulls them encrypted and writes `backend/core/.env`, `backend/ai/.env` and `frontend/mobile/.env`, with the staging database credentials. Without access, fill those files from their `.env.example`. Frontends default to mock data and need no backend.
 
 ## Run
 
