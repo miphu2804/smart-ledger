@@ -1,0 +1,77 @@
+{
+  "$schema": "../schema.json",
+  "name": "smartledger",
+  "version": 1,
+  "source": {
+    "type": "xml",
+    "path": "docs/architecture/diagrams/src/ci-cd.drawio"
+  },
+  "confidence": "high",
+  "palette": {
+    "primary": {
+      "fillColor": "#eef4ff",
+      "strokeColor": "#5b8def"
+    },
+    "success": {
+      "fillColor": "#dff5e3",
+      "strokeColor": "#3c9d5d"
+    },
+    "warning": {
+      "fillColor": "#fff4cc",
+      "strokeColor": "#d4a017"
+    },
+    "accent": {
+      "fillColor": "#ffe9d6",
+      "strokeColor": "#e07b24"
+    },
+    "danger": {
+      "fillColor": "#fde2e1",
+      "strokeColor": "#d9534f"
+    },
+    "neutral": {
+      "fillColor": "#fafafa",
+      "strokeColor": "#7a7a7a"
+    },
+    "secondary": {
+      "fillColor": "#efe6ff",
+      "strokeColor": "#8a63d2"
+    }
+  },
+  "roles": {
+    "service": "primary",
+    "database": "success",
+    "queue": "warning",
+    "gateway": "accent",
+    "error": "danger",
+    "external": "neutral",
+    "security": "secondary"
+  },
+  "shapes": {
+    "service": "rounded=1",
+    "database": "shape=cylinder3",
+    "queue": "rounded=1",
+    "decision": "rhombus",
+    "external": "rounded=1;dashed=1",
+    "container": "rounded=1;arcSize=3;dashed=1;dashPattern=8 4;verticalAlign=top;align=left;spacingLeft=12;spacingTop=6;container=1;pointerEvents=0"
+  },
+  "font": {
+    "fontFamily": "Helvetica",
+    "fontSize": 12,
+    "titleFontSize": 14,
+    "titleBold": true
+  },
+  "edges": {
+    "style": "edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#ffffff;fontSize=11",
+    "arrow": "endArrow=block;endSize=7",
+    "dashedFor": [
+      "optional",
+      "serves"
+    ]
+  },
+  "extras": {
+    "sketch": false,
+    "globalStrokeWidth": 1,
+    "fontColor": "#1f2d3d",
+    "background": "#ffffff"
+  }
+}

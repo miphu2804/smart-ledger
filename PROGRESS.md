@@ -1,3 +1,13 @@
+### [2026-10-26] — [Docs] Synchronize the documentation branch with staging
+
+**Done:** Fetched remote refs and merged `origin/staging` `1228978` into `docs/core-documentation-alignment` for PR #371. The incoming #370 adds the draw.io skill/preset and diagram-guide conventions. Git merged the guide automatically; no conflict needed manual resolution. Retained both the Core audit/renderer notes and staging's added guidance.
+
+**Changed files:** Incoming staging files and the merged diagram guide, plus this new progress entry. The PR's own changes remain documentation/diagram updates; no application code or migration was changed. Pre-existing Zalo Java, frontend lockfile and IDE edits remain outside the merge commit.
+
+**Flow explained:** Refresh staging → merge into the docs branch → check the combined guide, links and source preservation → push the branch to update the existing PR. This is branch synchronization, not merging PR #371 into staging or deploying it.
+
+**Check:** No unmerged paths; staged whitespace check passed. Rechecked documentation inventory: 87 controller routes, 22 Core tables, 14 Mermaid exports, local Markdown links/fragments and all 371 Core source hashes. Unrelated Java/FE file hashes matched their pre-merge values. No image source changed during this merge, so no new renderer or Maven/runtime/UAT result is claimed.
+
 ### [2026-10-26] — [Docs] Prepare a separate Core documentation branch for approval
 
 **Done:** Created local `docs/core-documentation-alignment` from refreshed `origin/staging` `d4dc743`, after confirming PR #368 was merged and its tree equals audited feature HEAD `3e93dd1`. Updated the current growth handoff/status to record that merge without claiming deployment or FE acceptance. Prepared the documentation changes for a local commit; push and PR creation await the user's acceptance.
