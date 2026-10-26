@@ -73,8 +73,13 @@ fn menu(terminal: &mut DefaultTerminal) -> io::Result<()> {
 fn pick_action(terminal: &mut DefaultTerminal, status: &[String], environment: &mut usize, selected: &mut usize) -> io::Result<Option<usize>> {
     let choices: Vec<Choice> = ACTIONS.iter().map(|(label, detail)| choice(label, detail, None)).collect();
     loop {
-        let footer = "↑↓  |  Enter  |  1-7 Jump  |  E Env  |  Q Quit";
-        let header = format!("Environment: {}", ENVIRONMENTS[*environment]);
+        let footer = "↑↓  |  Enter  |  1-7 Jump  |  ←→ or E Environment  |  Q Quit";
+        let tabs: Vec<String> = ENVIRONMENTS
+            .iter()
+            .enumerate()
+            .map(|(index, name)| if index == *environment { format!("● {name}") } else { format!("○ {name}") })
+            .collect();
+        let header = format!("Environment:  {}      ←→ to switch", tabs.join("   "));
         terminal.draw(|frame| draw(frame, &header, status, &choices, *selected, footer, true))?;
         let Some(key) = next_key()? else { continue };
         match key {
@@ -84,7 +89,7 @@ fn pick_action(terminal: &mut DefaultTerminal, status: &[String], environment: &
                 *selected = digit as usize - '1' as usize;
                 return Ok(Some(*selected));
             }
-            KeyCode::Char('e' | 'E') => *environment = (*environment + 1) % ENVIRONMENTS.len(),
+            KeyCode::Char('e' | 'E') | KeyCode::Left | KeyCode::Right | KeyCode::Tab => *environment = (*environment + 1) % ENVIRONMENTS.len(),
             KeyCode::Enter => return Ok(Some(*selected)),
             KeyCode::Char('q' | 'Q') | KeyCode::Esc => return Ok(None),
             _ => {}
