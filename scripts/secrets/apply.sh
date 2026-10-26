@@ -3,6 +3,7 @@
 # By default it is a dry run listing which keys would be added (+), changed (~) or dropped (-);
 # values are never printed. Pass --apply to write; each replaced file is kept as <file>.bak.
 cd "$(git rev-parse --show-toplevel)" || exit 1
+. scripts/secrets/lib.sh
 [ "$1" = "--apply" ] && apply=1
 
 main() {
@@ -27,21 +28,6 @@ copy() {
   [ -f "$2" ] && cp -p "$2" "$2.bak"
   mkdir -p "$(dirname "$2")"
   (umask 077 && cp "$1" "$2")
-}
-
-# Compares KEY=value lines of the new file ($1) against the current one ($2) by key name.
-key_changes() {
-  awk '
-    !/^[A-Za-z_][A-Za-z0-9_]*=/ { next }
-    { key = substr($0, 1, index($0, "=") - 1); value = substr($0, index($0, "=") + 1) }
-    FILENAME == ARGV[1] { incoming[key] = value; next }
-    { existing[key] = value }
-    END {
-      for (key in incoming)
-        if (!(key in existing)) print "  + " key
-        else if (incoming[key] != existing[key]) print "  ~ " key
-      for (key in existing) if (!(key in incoming)) print "  - " key
-    }' "$1" "$2" | sort -k2
 }
 
 main
