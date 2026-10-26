@@ -2,6 +2,8 @@
 
 The team's env files, encrypted, one folder per environment. After setup, `git pull` keeps `staging/env/` current and one command copies the files the services read. How it works, the file format and what each file holds: [Secrets and env files](../docs/development/secrets-and-env.md).
 
+![Secrets sync flow](../docs/architecture/diagrams/images/secrets-sync.svg)
+
 ## Set up once
 
 1. Install the tools and the git hooks:

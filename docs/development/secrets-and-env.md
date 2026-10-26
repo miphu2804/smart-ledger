@@ -2,6 +2,10 @@
 
 Every credential the team shares (local `.env` files, Railway service variables, GitHub Actions variables) is kept as one folder of env files per environment. Git holds a small pointer to each folder, R2 holds the encrypted files, and age decides who can read them. `git pull` brings a new version into `secrets/<environment>/env/`; tools read most files there directly, and `scripts/secrets/apply.sh` copies the few that a tool reads at a fixed path.
 
+![Secrets sync flow](../architecture/diagrams/images/secrets-sync.svg)
+
+Green steps change a secret; orange steps bring it to a developer machine. Edit [`secrets-sync.drawio`](../architecture/diagrams/src/secrets-sync.drawio) and re-export the SVG.
+
 ## Layout
 
 ```
