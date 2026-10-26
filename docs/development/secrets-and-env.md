@@ -103,7 +103,7 @@ ZALO_APP_ID=...
 | `.env.release` | Android APK release: R2 bucket, keystore | no | yes |
 | `.env.loadtest`, `.env.monitor` | load test and uptime monitor | yes | loadtest only |
 | `.env.railway.core`, `.env.railway.ai` | copy of the Railway service variables | yes | yes |
-| `.env.railway.tokens` | Railway API tokens for CD | no | yes |
+| `.env.railway.tokens` | `RAILWAY_TOKEN`, the Railway project token of that environment for the CLI | yes | yes |
 | `github/.env.<environment>` | copy of a GitHub Actions environment | 7 environments | 4 environments |
 
 Files are named `.env.<name>`, like `.env.local` and `.env.production` in Next.js; the folder already says which environment they belong to. `targets` lists the copied files. Everything else is read in place, for example `docker compose --env-file secrets/production/env/.env.core --env-file secrets/production/env/.env.ai`, so there is no second copy to drift.
