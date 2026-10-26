@@ -1,8 +1,9 @@
 # Dev and staging share the staging Supabase database and Redis Cloud database;
 # there are no local PostgreSQL or Redis containers. Run with
-#   docker compose --env-file .env.staging --env-file backend/core/.env up --build
-# `.env.staging` supplies database credentials; `backend/core/.env` supplies
-# FIREBASE_PROJECT_ID and the host path of the service-account key to mount.
+#   docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build
+# `backend/core/.env` supplies Core's database credentials, FIREBASE_PROJECT_ID and
+# the host path of the service-account key to mount; `backend/ai/.env` supplies
+# POSTGRES_URL and REDIS_URL.
 # AI reads its own settings (model, API keys) from `backend/ai/.env`.
 # Flyway is off by default because the database is shared; only the migration
 # owner runs `FLYWAY_ENABLED=true docker compose ...` from merged `staging` code.
