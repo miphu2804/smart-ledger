@@ -1,3 +1,11 @@
+### [2026-10-27 01:20 UTC+07:00] — [Feature] Secrets sync: local database, apply, sl menu and one env file per service
+
+**Done:** A dev machine now gets every env file from one command: `scripts/secrets/pull.sh` decrypts `secrets/<env>/env/` from R2, `scripts/local-db.sh` starts the local Postgres with Core and AI migrations, and `scripts/secrets/apply.sh staging dev --apply` writes `backend/core/.env`, `backend/ai/.env`, `frontend/mobile/.env`, `scripts/loadtest/.env.staging` and `scripts/monitor/.env`, with `secrets/local.env.*` put over the staging values. Core and AI keep one file each per environment, `.env.core` and `.env.ai`, equal to the live Railway service variables with references resolved; the separate `.env.railway.core` and `.env.railway.ai` copies are gone. `scripts/secrets/github.sh` sets the GitHub secrets of `railway-<env>` from those files. The `sl` menu (Rust, `tools/secrets-cli`) wraps pull, push, history, apply, members, and admin-only config, migrate and clean.
+
+**Changed files:** `scripts/local-db.sh`, `scripts/secrets/{apply,config,migrate,clean,check,lib,github}.sh`, `tools/secrets-cli/`, `secrets/admins.txt`, `secrets/local.env.{core,ai}`, `secrets/staging/targets`, `secrets/{staging,production}/env.age.dvc`, the three `.env.example` files, `docs/development/secrets-and-env.md`, `secrets/README.md`, `backend/ai/README.md`; this entry.
+
+**Check:** every key of `.env.core` and `.env.ai` in both environments equals Railway; AI and Core started from the applied files against the local database, Core reached readiness and AI accepted Core's internal token; `apply` recreated a deleted target at its path; a fresh clone pulled and applied every target. **Not verified:** a deploy with the `RAILWAY_TOKEN` now set in GitHub; `docker compose` against the local database (containers cannot reach 127.0.0.1).
+
 ### [2026-10-25 21:45 UTC+07:00] — [Docs] CI/CD diagram shows the CI and CD split
 
 **Done:** The pipeline band of the CI/CD diagram now shows `ci.yml` (select-runner with `CI_RUNNER`, changes, the five test jobs), the hand-off by job `cd` with `workflow_dispatch`, and `cd.yml` (select-runner with `CD_RUNNER`, gate, the three deploy jobs, production approval).
