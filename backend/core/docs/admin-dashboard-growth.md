@@ -4,13 +4,14 @@ Core handoff for `feat/admin-dashboard-growth`. The canonical API shape, date ru
 examples, errors, data boundaries and audit semantics now live in the
 [API contract](../../../docs/contracts/api-contracts.md#chuỗi-tạo-mới-theo-ngày--admin-growth).
 The approved behavior is [FR-024 / AC-097–AC-100](../../../docs/product/product-requirements.md#nghiệm-thu-tổng-quan-admin-theo-ngày).
-Branch implementation status is in the
+Implementation status is in the
 [technical design](../../../docs/architecture/technical-design.md#tổng-quan-admin-theo-ngày--admin-growth).
 This handoff does not establish FE or staging acceptance.
 
-The owner approved publication and the branch was pushed through `6381054`.
-[PR #368](https://github.com/miphu2804/smart-ledger/pull/368) targets `staging`;
-merge, staging deployment and FE acceptance are separate steps. The first CI run
+The owner approved publication; [PR #368](https://github.com/miphu2804/smart-ledger/pull/368)
+was merged into `staging` at `d4dc743` on 2026-10-26, carrying feature HEAD
+`3e93dd1`. Deployment and FE acceptance have not been verified by this documentation
+handoff. The first CI run
 lost its self-hosted runners before build/test; its report upload also hit the
 artifact-storage quota. Those operational failures do not replace CI verification.
 

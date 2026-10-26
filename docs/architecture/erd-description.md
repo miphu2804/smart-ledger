@@ -2,6 +2,13 @@
 
 ## 1. Overview
 
+Core was re-checked on 2026-10-26 against `feat/admin-dashboard-growth` at
+`3e93dd1`: the checked-in migration set is V1–V18, with 22 Core tables. This is
+a source/mapping check, not evidence that a shared database has been migrated.
+The dated feature notes below preserve their original preparation boundaries.
+The `.dbml` file owns the logical schema; `.dbdiagram` is only the editor's table
+layout. AI tables and the planned `ai_requests` table retain their own status.
+
 CORE-015 #238 on `feat/zalo-login`, prepared 2026-10-16 against staging `120779d`: additive V17 creates external Zalo identity mappings and short-lived OAuth sessions. Schema details and operational recovery are [below](#zalo-core-015-v17); preparation and disposable-PostgreSQL verification do not assert shared-DB rollout.
 
 CORE-016 #276 on `feat/zalo-android`: approved V18 extends the session store for Android; [migration and recovery](#zalo-android-core-016-v18) and the reviewed staging configuration are checked in, not applied to a shared DB or Railway. Native remains off by runtime default; production activation and APK acceptance are separate.
@@ -10,7 +17,7 @@ CORE-012 #163/#164 on `feat/core-barcode`, reviewed 2026-10-12: V16 replaces arc
 
 This ERD describes the target PostgreSQL database for **SmartLedger Phase 1**, an AI-assisted bookkeeping system for small businesses. It includes planned tables and relationships that are not yet in Core's Flyway migrations.
 
-The logical ERD includes authentication, shops, products, customers, drafts, sales, payments, refunds, debts, expenses, media cleanup jobs, Agent chat history, Agent long-term memory, AI request traces, idempotency, and audit logs. Core migrations V1–V15 implement the business tables, idempotency, shared OWNER/ADMIN audit logs, nullable sale-item estimated-cost snapshot, and Cloudinary media references/outbox; the AI baseline `supabase/migrations/20261005000000_ai_baseline.sql` creates the chat tables, enables the `vector` extension (pgvector), creates the read-only `ai_read` views (including `v_sales` and `v_sale_items`) and the `ai_sql_reader` role; later AI migrations in the same folder add `v_debts`, `v_payments` and `v_expenses` and the `agent_memories` and `agent_memory_settings` tables. V15 adds OWNER notification events/recipients and nullable product thresholds; `ai_requests` remains target design. This does not assert deployment.
+The logical ERD includes authentication, shops, products, customers, drafts, sales, payments, refunds, debts, expenses, media cleanup jobs, Agent chat history, Agent long-term memory, AI request traces, idempotency, and audit logs. Core migrations V1–V18 implement the business tables, idempotency, shared OWNER/ADMIN audit logs, nullable sale-item estimated-cost snapshot, Cloudinary media references/outbox, OWNER notifications, ACTIVE-only barcode uniqueness, external Zalo mappings and WEB/ANDROID OAuth sessions; the AI baseline `supabase/migrations/20261005000000_ai_baseline.sql` creates the chat tables, enables the `vector` extension (pgvector), creates the read-only `ai_read` views (including `v_sales` and `v_sale_items`) and the `ai_sql_reader` role; later AI migrations in the same folder add `v_debts`, `v_payments` and `v_expenses` and the `agent_memories` and `agent_memory_settings` tables. V15 adds OWNER notification events/recipients and nullable product thresholds; `ai_requests` remains target design. This does not assert deployment.
 
 Business decisions are owned by the [BRD](../product/business-requirements.md) and [PRD](../product/product-requirements.md); endpoint/JSON details are owned by the [API contract](../contracts/api-contracts.md). Core audit/schema alignment reviewed against `staging` commit `b1de421c461d59473b3bb73aae103027afd67a89` on 2026-10-06; AI sections were re-checked against `supabase/migrations/` and `backend/ai/src` at `staging` commit `f1a4818` on 2026-10-16.
 
@@ -91,7 +98,7 @@ Drafts do not affect revenue, stock, payments, or debts until confirmed.
 - A **chat conversation** belongs to one user and one shop and contains multiple **chat messages**; it can be the source of multiple **agent memories**, which are deleted with it.
 - An **agent memory** belongs to one user and one shop and can point to the newer memory that superseded it; a user has at most one **agent memory settings** row per shop.
 - A planned **AI request** can be linked to a sale draft created from AI voice input once that flow is implemented.
-- Every **audit log** references an actor **user** with an actor-role snapshot. A shop FK is optional only for scoped ADMIN read events that do not target a shop; business audit always requires a shop and entity target. The polymorphic entity_id has no generic entity FK; entity_type/action/target checks constrain its meaning.
+- Every **audit log** references an actor **user** with an actor-role snapshot. A shop FK may be null for supported ADMIN read events that do not target a shop, and for the actor-scoped `USER_AVATAR_UPDATED` event added in V13. The avatar event requires `entity_type = USER`, `shop_id = null`, `entity_id = actor_user_id`, and null reason/idempotency_key; it can record either an OWNER or ADMIN updating their own avatar. Ledger business audit requires a shop and entity target. The polymorphic entity_id has no generic entity FK; entity_type/action/target checks constrain its meaning.
 
 ## 4. Main Data Flow
 

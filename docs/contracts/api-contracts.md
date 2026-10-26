@@ -13,12 +13,12 @@
 
 ## Phạm vi
 
-- API công khai cho mobile OWNER và dashboard web ADMIN nằm dưới `/api/v1`; base URL do môi trường cấu hình.
+- API nghiệp vụ cho mobile OWNER và dashboard web ADMIN nằm dưới `/api/v1`; base URL do môi trường cấu hình. Các route xác thực domain/HTTPS App Link và probe là ngoại lệ công khai có chủ đích, không mở quyền đọc sổ.
 - API Core ↔ AI nằm dưới `/internal/v1` và không công khai cho FE.
 - Không dùng cổng trong sơ đồ kiến trúc làm hợp đồng API.
 - Redis, Langfuse và LiteLLM không có API công khai. FE không gọi trực tiếp các thành phần này.
 
-**Hiện trạng Core (đối chiếu `staging` tại `b1de421c461d59473b3bb73aae103027afd67a89`, ngày 2026-10-06):** mục 1–4 và 7 là API Core đã có. Mục 5–6 và đoạn AI ở trên được đối chiếu lại với `backend/ai/src` và `backend/core` tại `staging` `f1a4818` ngày 2026-10-16; trạng thái endpoint dựa trên code, không phải triển khai staging. Có trong code không đồng nghĩa đã deploy staging hay nghiệm thu FE; hiện trạng triển khai/kiểm thử nằm trong [thiết kế kỹ thuật](../architecture/technical-design.md#1-phạm-vi).
+**Đối chiếu Core ngày 2026-10-26:** kiểm tra 17 controller/87 route tường minh tại `feat/admin-dashboard-growth` `3e93dd1`, nền staging `0e2b1de`; các route đã có đều được mô tả trong tài liệu này. PR #368 đã merge growth vào staging tại `d4dc743`; chưa xác nhận deploy hoặc nghiệm thu FE. AI giữ các mốc đối chiếu riêng được ghi trong [thiết kế kỹ thuật](../architecture/technical-design.md#1-phạm-vi). Các ghi chú theo đợt bên dưới bảo tồn lịch sử chuẩn bị; có code không đồng nghĩa môi trường đã bật hoặc FE đã nghiệm thu.
 
 **Bổ sung Core ngày 2026-10-06 trên `feat/core-stock-in` (base staging `99ed97a9d03656fe782ae43c81526e68a8c0cc08`):** endpoint stock-in, contract PATCH product và ba report nâng cao dưới đây có trong nhánh này, chưa xác nhận đã merge/deploy staging. Mobile chưa được sửa để dùng các contract mới.
 
