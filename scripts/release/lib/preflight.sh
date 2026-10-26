@@ -1,4 +1,4 @@
-# Shared helpers for the device build scripts (scripts/ios-device-release.sh, scripts/android-release.sh): the
+# Shared helpers for the device build scripts (scripts/release/ios-device-release.sh, scripts/release/android-release.sh): the
 # preflight report and the arrow-key menu that picks a phone.
 # Every check prints one line (✓ passed, ! warning, ✗ failed). A failure says how to fix it and can register an action
 # (open a page or an app, or run a command); pf_finish then lists those actions so the user can start one from the

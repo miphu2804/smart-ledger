@@ -2,25 +2,25 @@
 # Build a Release of the Android app (frontend/mobile) from the current checkout and print where its size goes. The same
 # script runs on a developer machine and in .github/workflows/mobile-release.yml, so a local build matches CI.
 #
-#   ./scripts/android-release.sh                         locally: APK for the emulator's ABI, installed and opened on an
+#   ./scripts/release/android-release.sh                         locally: APK for the emulator's ABI, installed and opened on an
 #                                                        Android emulator (a running one, else it starts an AVD)
-#   ./scripts/android-release.sh --emulator              the same, explicitly (also with --abis or --device emulator-5554)
-#   ./scripts/android-release.sh --build-only            APK with the release ABIs (armeabi-v7a,arm64-v8a), no install;
+#   ./scripts/release/android-release.sh --emulator              the same, explicitly (also with --abis or --device emulator-5554)
+#   ./scripts/release/android-release.sh --build-only            APK with the release ABIs (armeabi-v7a,arm64-v8a), no install;
 #                                                        the default in GitHub Actions and with --aab or --out
-#   ./scripts/android-release.sh --abis arm64-v8a        one ABI, faster (most phones)
-#   ./scripts/android-release.sh --install               install the APK on a phone connected over adb (menu if several)
-#   ./scripts/android-release.sh --install --device <serial>   pick the phone without the menu (serial from `adb devices`)
-#   ./scripts/android-release.sh --aab                   Android App Bundle for Google Play instead of an APK
-#   ./scripts/android-release.sh --out <file>            copy the APK or AAB to <file>
-#   ./scripts/android-release.sh --check                 only run the preflight checks
-#   ./scripts/android-release.sh --skip-preflight        build even if a check fails
+#   ./scripts/release/android-release.sh --abis arm64-v8a        one ABI, faster (most phones)
+#   ./scripts/release/android-release.sh --install               install the APK on a phone connected over adb (menu if several)
+#   ./scripts/release/android-release.sh --install --device <serial>   pick the phone without the menu (serial from `adb devices`)
+#   ./scripts/release/android-release.sh --aab                   Android App Bundle for Google Play instead of an APK
+#   ./scripts/release/android-release.sh --out <file>            copy the APK or AAB to <file>
+#   ./scripts/release/android-release.sh --check                 only run the preflight checks
+#   ./scripts/release/android-release.sh --skip-preflight        build even if a check fails
 #
 # Before building it checks the machine (Node, JDK, Android SDK packages pinned at the top of mobile-release.yml, the
 # Firebase file), then the target: for the emulator the Emulator package and an AVD (it offers to create one); for
 # --install the phone (USB debugging allowed, an ABI this build contains, Android new enough, an older install signed
 # with another key). In a terminal it offers to open or run the fix for what is missing. When another Node than the
 # pinned one is first on PATH, it uses the pinned one if installed.
-# Locally, like scripts/ios-device-release.sh: mocks are off (real Firebase and Core) and Core defaults to staging,
+# Locally, like scripts/release/ios-device-release.sh: mocks are off (real Firebase and Core) and Core defaults to staging,
 # overridable with EXPO_PUBLIC_API_ENDPOINT in .env or the shell. In GitHub Actions every EXPO_PUBLIC_* value comes from
 # the environment as given. Signs with RELEASE_KEYSTORE, KEYSTORE_PASSWORD and RELEASE_KEY_ALIAS when RELEASE_KEYSTORE
 # is set, otherwise with the template's public debug key.
@@ -67,9 +67,9 @@ if $install && [ "$format" = aab ]; then
   exit 2
 fi
 
-root="$(cd "$(dirname "$0")/.." && pwd)"
+root="$(cd "$(dirname "$0")/../.." && pwd)"
 # shellcheck source=lib/preflight.sh
-. "$root/scripts/lib/preflight.sh"
+. "$root/scripts/release/lib/preflight.sh"
 cd "$root/frontend/mobile"
 ci=false
 pf_ci && ci=true
@@ -478,9 +478,9 @@ echo
 if [ "$format" = apk ]; then
   # Where the APK size goes (native libraries per ABI, dex, assets); in CI also on the run page.
   if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-    bash "$root/scripts/apk-contents.sh" "$built" | tee -a "$GITHUB_STEP_SUMMARY"
+    bash "$root/scripts/release/apk-contents.sh" "$built" | tee -a "$GITHUB_STEP_SUMMARY"
   else
-    bash "$root/scripts/apk-contents.sh" "$built"
+    bash "$root/scripts/release/apk-contents.sh" "$built"
   fi
 fi
 
