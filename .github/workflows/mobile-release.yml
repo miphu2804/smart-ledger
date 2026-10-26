@@ -33,7 +33,7 @@ concurrency:
   group: mobile-release-${{ inputs.environment }}-${{ github.ref_name }}
   cancel-in-progress: false
 
-# Single source of the toolchain: the hosted setup installs these versions, and the preflight of scripts/android-release.sh
+# Single source of the toolchain: the hosted setup installs these versions, and the preflight of scripts/release/android-release.sh
 # (run on every build, here or on a laptop) checks them.
 env:
   NODE_MAJOR: "22"
@@ -190,7 +190,7 @@ jobs:
         if: runner.environment == 'github-hosted'
 
       # A self-hosted machine keeps its toolchain and Gradle/npm caches on disk: pulling GitHub's cache or the NDK over
-      # a home connection is slower than the build itself, so nothing is installed there. scripts/android-release.sh
+      # a home connection is slower than the build itself, so nothing is installed there. scripts/release/android-release.sh
       # checks the versions before it builds, on either runner.
       - name: Mark setup done
         run: echo "setup=$(date +%s)" >> "$TIMINGS"
@@ -249,7 +249,7 @@ jobs:
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
           echo "RELEASE_KEYSTORE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
 
-      # scripts/android-release.sh does what a local build does (npm ci, expo prebuild --clean, Gradle, APK report), so
+      # scripts/release/android-release.sh does what a local build does (npm ci, expo prebuild --clean, Gradle, APK report), so
       # a build on a laptop matches this one. The workflow keeps only what needs CI: branch gate, runner, toolchain,
       # secrets, publish and artifacts.
       - name: Build
@@ -270,7 +270,7 @@ jobs:
           out="$RUNNER_TEMP/android-out/smart-ledger-${ENVIRONMENT#android-}-${branch}-${SHA::7}.$FORMAT"
           args=(--abis "$ABIS" --out "$out")
           [ "$FORMAT" = aab ] && args+=(--aab)
-          ./scripts/android-release.sh "${args[@]}"
+          ./scripts/release/android-release.sh "${args[@]}"
           echo "path=$out" >> "$GITHUB_OUTPUT"
       - name: Remove the release keystore
         if: always()

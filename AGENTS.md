@@ -28,6 +28,7 @@ Core restriction continues to apply outside this scope.
 - Do not present provisional requirements, a single-shop demo, or the current auth gap as production-ready behavior.
 - Legal or tax assumptions require a current official source, a named owner, and explicit approval before becoming requirements.
 - Keep `PROGRESS.md` append-only; it is a progress log, not the source of truth for scope.
+- Write complete sentences on one line and let the viewer wrap them. Break a line by hand only where the format needs it (a list item, a table row, a code block, a tree drawing), not to shorten a sentence that still fits; the same applies to diagram labels.
 
 ## Working and Git practices
 

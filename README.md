@@ -20,7 +20,7 @@ cd frontend/mobile && npm install
 cd frontend/web && npm install
 ```
 
-Fill in `backend/core/.env` and `backend/ai/.env` from their `.env.example`; database credentials come from the root `.env.staging` (see [Local Compose](#local-compose)). Frontends default to mock data and need no backend.
+Get the team's credentials by following [`secrets/README.md`](secrets/README.md): it pulls them encrypted and writes `backend/core/.env`, `backend/ai/.env` and `frontend/mobile/.env`, with the staging database credentials. Without access, fill those files from their `.env.example`. Frontends default to mock data and need no backend.
 
 ## Run
 
@@ -30,7 +30,7 @@ cd backend/ai && uv run python -m src.main
 
 # Core, :8080. Spring does not read .env, so export it into the shell first.
 # Flyway stays off against the shared database (see Database migrations)
-cd backend/core && set -a && source ../../.env.staging && source .env && set +a && FLYWAY_ENABLED=false bash ./mvnw spring-boot:run
+cd backend/core && set -a && source .env && set +a && FLYWAY_ENABLED=false bash ./mvnw spring-boot:run
 
 # Mobile
 cd frontend/mobile && npx expo start
@@ -39,7 +39,7 @@ cd frontend/mobile && npx expo start
 cd frontend/web && npm run dev
 
 # AI + Core in Docker (Core :8000, AI :8001)
-docker compose --env-file .env.staging --env-file backend/core/.env up --build
+docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build
 ```
 
 Core does not change the database schema in these commands; see [Database migrations](#database-migrations).
@@ -84,10 +84,10 @@ Python 3.11+, [uv](https://docs.astral.sh/uv/). See [backend/ai/README.md](backe
 
 ## Local Compose
 
-Dev and staging share the staging Supabase project and Redis Cloud database; production uses a separate Supabase project and Redis Cloud database. There are no local PostgreSQL or Redis containers. Credentials live in Git-ignored files at the repository root: `.env.staging` and `.env.production` each define `DATABASE_URL` (JDBC), `DATABASE_USERNAME`, `DATABASE_PASSWORD` for Core and `POSTGRES_URL`, `REDIS_URL` for AI (use `rediss://` when TLS is enabled on Redis Cloud; no feature reads Redis yet). Compose passes only those two AI values from these files; the optional `AI_SQL_READER_URL` for the shop-data tool goes in `backend/ai/.env`, which Compose loads. Service settings stay in each service's own file: `backend/core/.env` supplies `FIREBASE_PROJECT_ID` and `GOOGLE_APPLICATION_CREDENTIALS` (absolute host path of the service-account key, mounted read-only into the container), and Compose loads `backend/ai/.env` for model and API keys. Core calls AI at `AI_BASE_URL` (Compose sets `http://ai:8001`) with the shared `INTERNAL_API_TOKEN`: put the same value in `backend/ai/.env` and in one of the `--env-file` files; a missing or mismatched value makes every Agent call fail (`401` from AI, `503 ai_unavailable` from Core). Default stack is Core and AI. AI sends Pydantic Logfire traces only when `LOGFIRE_TOKEN` is set in `backend/ai/.env` (no message content); Langfuse is not enabled, and no code reads its keys.
+Dev and staging share the staging Supabase project and Redis Cloud database; production uses a separate Supabase project and Redis Cloud database. There are no local PostgreSQL or Redis containers. Credentials live in each service's Git-ignored env file: `backend/core/.env` defines `DATABASE_URL` (JDBC), `DATABASE_USERNAME`, `DATABASE_PASSWORD`, and `backend/ai/.env` defines `POSTGRES_URL`, `REDIS_URL` (use `rediss://` when TLS is enabled on Redis Cloud; no feature reads Redis yet) and the optional `AI_SQL_READER_URL` for the shop-data tool. Production values are in `secrets/production/env/`. Service settings stay in each service's own file: `backend/core/.env` supplies `FIREBASE_PROJECT_ID` and `GOOGLE_APPLICATION_CREDENTIALS` (absolute host path of the service-account key, mounted read-only into the container), and Compose loads `backend/ai/.env` for model and API keys. Core calls AI at `AI_BASE_URL` (Compose sets `http://ai:8001`) with the shared `INTERNAL_API_TOKEN`: put the same value in `backend/ai/.env` and `backend/core/.env`; a missing or mismatched value makes every Agent call fail (`401` from AI, `503 ai_unavailable` from Core). Default stack is Core and AI. AI sends Pydantic Logfire traces only when `LOGFIRE_TOKEN` is set in `backend/ai/.env` (no message content); Langfuse is not enabled, and no code reads its keys.
 
 ```bash
-docker compose --env-file .env.staging --env-file backend/core/.env up --build
+docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build
 ```
 
 Do not run the app with the production bootstrap credentials; production values belong in the `production` environment's secret store. Automated tests use a disposable PostgreSQL (CI service containers), never Supabase: AI integration tests read `POSTGRES_TEST_URL`, Core PostgreSQL tests read `CORE_TEST_POSTGRES_URL` (see [Core README](backend/core/README.md#run-tests)).
@@ -97,8 +97,9 @@ Do not run the app with the production bootstrap credentials; production values 
 Dev and staging share one database, so a migration that runs from a developer machine changes the schema for everyone. Core runs Flyway at startup when `FLYWAY_ENABLED=true` (the Core default); the commands above set it to `false`, and Core then only checks that the schema matches its entities.
 
 - **Never migrate the shared database from a feature branch.** A migration applied there and later edited, or a second branch that uses the same version number, makes Flyway reject the checksum and stops Core for everyone. A column change that is not merged yet breaks the code running on `staging`.
+- **Develop against the local database.** `scripts/local-db.sh` starts it with Core and AI migrations applied, and `scripts/secrets/apply.sh staging dev --apply` points Core and AI at it; see [Secrets and env files](docs/development/secrets-and-env.md#3-set-up-a-machine).
 - **Develop a migration on a disposable database.** Start one with `docker run --rm -p 5432:5432 -e POSTGRES_DB=smartledger -e POSTGRES_USER=smartledger -e POSTGRES_PASSWORD=smartledger pgvector/pgvector:pg17`, point `DATABASE_URL=jdbc:postgresql://localhost:5432/smartledger` (and `POSTGRES_URL` for AI) at it, and run Core with `FLYWAY_ENABLED=true`. CI repeats this on every pull request. A branch whose entities need a migration that staging lacks cannot start against the shared database, because the schema check fails.
-- **Migrate staging only from merged code.** After a pull request with a Core or AI migration merges, one person checks out `origin/staging`, runs Core once with `FLYWAY_ENABLED=true` (for Compose: `FLYWAY_ENABLED=true docker compose --env-file .env.staging --env-file backend/core/.env up --build core`), pushes the AI migrations with `npx supabase@2.119.0 db push --db-url "$POSTGRES_URL"` as in the [AI README](backend/ai/README.md#chat-history-schema), and tells the team. This manual step stands in for the staging deploy until one exists.
+- **Migrate staging only from merged code.** After a pull request with a Core or AI migration merges, one person checks out `origin/staging`, runs Core once with `FLYWAY_ENABLED=true` (for Compose: `FLYWAY_ENABLED=true docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build core`), pushes the AI migrations with `npx supabase@2.119.0 db push --db-url "$POSTGRES_URL"` as in the [AI README](backend/ai/README.md#chat-history-schema), and tells the team. This manual step stands in for the staging deploy until one exists.
 - **Never edit a migration that has run on staging**; add a new version instead. Production follows the same steps after the release is approved.
 
 ## References

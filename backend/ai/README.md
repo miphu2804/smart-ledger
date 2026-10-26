@@ -9,7 +9,7 @@ Frontend must not call this service.
 The AI schema (chat history, the `vector` extension and the `ai_read` views) lives in the Supabase CLI migrations at [`supabase/migrations/`](../../supabase/migrations/); the first file is a baseline that folds the earlier AI migrations together. It reads Core's tables, so run Core's Flyway migrations first. On the shared dev/staging database, push only after the pull request merges (see [Database migrations](../../README.md#database-migrations)). From the repository root:
 
 ```bash
-set -a && . ./.env.staging && set +a
+set -a && . backend/ai/.env && set +a
 npx supabase@2.119.0 db push --db-url "$POSTGRES_URL"
 ```
 
@@ -169,18 +169,17 @@ Host and port come from `SERVER_HOST` and `SERVER_PORT`.
 From the repository root. Starts Core and this service against the shared staging Supabase and Redis Cloud databases; there are no local PostgreSQL or Redis containers. Langfuse is not part of the default stack. See the root [README](../../README.md#local-compose) for the env files.
 
 ```bash
-docker compose --env-file .env.staging --env-file backend/core/.env up --build
+docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build
 ```
 
 - AI: `http://localhost:8001/health`
 - Compose ports use the defaults in `compose.yaml` and can be overridden with shell environment variables.
 
-To run this app on the host, export `POSTGRES_URL` and `REDIS_URL` from the repo-root `.env.staging` (dev shares the staging databases). `AppConfig` reads them from the process environment, which takes precedence over the local `.env`:
+To run this app on the host, put `POSTGRES_URL` and `REDIS_URL` in `.env` (`scripts/secrets/apply.sh staging dev --apply` writes them, pointing PostgreSQL at the local database from `scripts/local-db.sh`):
 
 ```bash
 uv sync --group dev
 cp .env.example .env
-set -a && source ../../.env.staging && set +a
 uv run python -m src.main
 ```
 
