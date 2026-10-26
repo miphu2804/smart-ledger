@@ -54,7 +54,6 @@ ZALO_APP_ID=...
 |---|---|---|---|
 | `.env.core`, `.env.ai` | Core and AI, also the two `docker compose --env-file` files; staging copies go to `backend/core/.env` and `backend/ai/.env` | yes | yes (read in place) |
 | `.env.mobile` | mobile app; copied to `frontend/mobile/.env` | yes | no |
-| `.env.ai-mercury` | AI with the Mercury model; swap in by hand | yes | no |
 | `.env.release` | Android APK release: R2 bucket, keystore | no | yes |
 | `.env.loadtest`, `.env.monitor` | load test and uptime monitor | yes | loadtest only |
 | `.env.railway.core`, `.env.railway.ai` | copy of the Railway service variables | yes | yes |
