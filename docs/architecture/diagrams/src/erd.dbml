@@ -5,8 +5,9 @@
 // ID: BIGINT IDENTITY → Java Long
 // Money: BIGINT VND
 // Time: TIMESTAMPTZ, UTC internally; Core JSON displays +07:00
-// Core schema: Flyway V1-V15 (business tables, idempotency, shared OWNER/ADMIN audit_logs, cost snapshot, media outbox and upload leases).
-// Core audit alignment: staging b1de421c461d, 2026-10-06; AI sections re-checked at staging f1a4818, 2026-10-16.
+// Core schema: checked-in Flyway V1-V18; 22 Core tables including notifications, media leases, Zalo mapping and channel-aware OAuth sessions.
+// Core schema re-checked against feat/admin-dashboard-growth at 3e93dd1, 2026-10-26; this is not shared-DB deployment evidence.
+// AI sections retain their separately dated review; Core audit does not re-approve AI scope or planned tables.
 // AI schema: supabase/migrations AI baseline (chat_conversations, chat_messages, vector extension, ai_read views, ai_sql_reader role),
 // ledger views (v_debts, v_payments, v_expenses) and agent memory (agent_memories, agent_memory_settings; ADR-0002, off by default).
 // V15 implements OWNER notifications/thresholds on feat/app-notifications; ai_requests remains planned.
@@ -147,7 +148,7 @@ Table users {
     system_role
   }
 
-  Note: 'No password_hash. Phone and Google authentication are handled by Firebase.'
+  Note: 'No password_hash. Firebase handles authentication; system_role and application status are stored in this table. The phone field is profile data, not an OTP login flow.'
 }
 
 
@@ -162,7 +163,7 @@ Table auth_identities {
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 
-  Note: 'One application user maps to one Firebase account. provider_subject stores the Firebase UID. Phone and Google are linked sign-in methods under that account.'
+  Note: 'One application user maps to one Firebase account. provider_subject stores the Firebase UID. Firebase sign-in methods are linked under that account; the MVP has no phone/OTP login flow. Zalo subjects use external_auth_identities.'
 }
 
 // Firebase UID here is a logical reference, not an FK: mapping may precede the Core user/profile.
@@ -887,7 +888,8 @@ Ref: users.id < sale_drafts.created_by_user_id
 Ref: customers.id < sale_drafts.customer_id
 // Planned, add when ai_requests exists: Ref: ai_requests.id < sale_drafts.source_ai_request_id
 
-Ref: sale_drafts.confirmed_sale_id - sales.id
+// DBML short-form one-to-one: the second column is the FK (V4).
+Ref: sales.id - sale_drafts.confirmed_sale_id
 
 Ref: sale_drafts.id < sale_draft_items.draft_id
 Ref: products.id < sale_draft_items.product_id

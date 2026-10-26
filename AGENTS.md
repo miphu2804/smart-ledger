@@ -4,6 +4,15 @@
 
 SmartLedger is currently a documentation-first MVP. Core is Java under `backend/core` — do not modify it. AI is a Python FastAPI service under `backend/ai` that serves internal Agent chat to Core; do not assume APIs, commands, or product behavior beyond what [`docs/contracts/api-contracts.md`](docs/contracts/api-contracts.md) marks as implemented.
 
+### Approved Core exception — PR #368
+
+The project owner explicitly approved Core changes on `feat/admin-dashboard-growth`
+for PR #368: the additive ADMIN daily-creation API, its controller/DTO/service/
+repository implementation, tests, Javadoc and related documentation. This exception
+does not authorize other Core features, new migrations, or shared-environment
+deployment. New migrations still require separate owner approval. The general
+Core restriction continues to apply outside this scope.
+
 ## Before changing anything
 
 1. Check the working tree with `git status --short`.
