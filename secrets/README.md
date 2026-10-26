@@ -38,6 +38,7 @@ The team's env files, encrypted, one folder per environment. After setup, `git p
 | Task | Command |
 |---|---|
 | Get the latest secrets | `git pull`; the hook runs `pull.sh` into `staging/env/` |
+| See who changed what in the last 5 versions | `scripts/secrets/check.sh staging` |
 | See what would change in `backend/core/.env`, `backend/ai/.env`, `frontend/mobile/.env` | `scripts/secrets/apply.sh` |
 | Write those files, keeping the old ones as `.bak` | `scripts/secrets/apply.sh --apply` |
 | Run the backend | `docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build` |
@@ -51,4 +52,4 @@ scripts/secrets/push.sh staging
 git add secrets/staging/env.age.dvc && git commit -m "chore(secrets): <what changed>"
 ```
 
-Only `recipients.txt`, `targets` and `env.age.dvc` are committed; the `secrets-guard` hook refuses anything else here. To add or remove a person, see [Add or remove a person](../docs/development/secrets-and-env.md#add-or-remove-a-person).
+Only `recipients.txt`, `targets` and `env.age.dvc` are committed; the `secrets-guard` hook refuses anything else here. To add or remove a person, see [Add or remove a person](../docs/development/secrets-and-env.md#6-add-or-remove-a-person).
