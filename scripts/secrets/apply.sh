@@ -20,8 +20,9 @@ main() {
     tail -n +2 "$section" > "$body"
     current="$target"
     [ -f "$current" ] || current=/dev/null
+    cmp -s "$body" "$current" && { echo "$target: up to date"; continue; }
     changes=$(key_changes "$body" "$current")
-    [ -n "$changes" ] || { echo "$target: up to date"; continue; }
+    [ -n "$changes" ] || changes="  (comments or layout only)"
     echo "$target:"
     echo "$changes"
     [ -n "$apply" ] || continue
