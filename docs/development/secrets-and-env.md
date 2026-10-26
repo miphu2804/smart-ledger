@@ -1,6 +1,6 @@
 # Secrets and env files
 
-Every credential the team shares (local `.env` files, Railway service variables, GitHub Actions variables) is kept as one folder of env files per environment. Git holds a small pointer to each folder, R2 holds the encrypted files, and age decides who can read them. `git pull` brings a new version into `secrets/<environment>/env/`; tools read most files there directly, and `scripts/secrets/apply.sh` copies the few that a tool reads at a fixed path.
+Every credential the team shares (local `.env` files, Railway service variables, GitHub Actions variables) is kept as one folder of env files per environment. Git holds a small pointer to each folder, R2 holds the encrypted files, and age decides who can read them. `git pull` brings a new version into `secrets/<environment>/env/`; tools read most files there directly, and `scripts/secrets/apply.sh staging dev` copies the few that a tool reads at a fixed path, pointing them at a local database.
 
 ![Secrets sync flow](../architecture/diagrams/images/secrets-sync.svg)
 
@@ -22,12 +22,13 @@ smart-ledger/
 │   │   ├── env.age.dvc        # DVC pointer to env.age/; in git
 │   │   ├── recipients.txt     # who can decrypt; in git
 │   │   └── targets            # files apply.sh copies out; in git
-│   └── production/            # the same, without targets
+│   ├── production/            # the same, without targets
+│   └── local.env.core, local.env.ai  # keys that differ on a dev machine; in git
 └── scripts/secrets/
     ├── pull.sh                # R2 → env/; runs on pull, checkout
     ├── push.sh                # env/ → R2; after changing a secret
     ├── check.sh               # recent versions and their changes
-    ├── apply.sh               # copy targets out; dry run by default
+    ├── apply.sh               # staging ⇄ dev; dry run by default
     ├── guard.sh               # pre-commit: no secrets in git
     └── lib.sh                 # helpers the scripts share
 ```
@@ -141,17 +142,26 @@ Not in `secrets/`: `.env.r2.secrets` (the R2 tokens DVC needs to reach the files
    ```bash
    git pull
    scripts/secrets/pull.sh
-   scripts/secrets/apply.sh
-   scripts/secrets/apply.sh --apply
+   scripts/local-db.sh
+   scripts/secrets/apply.sh staging dev
+   scripts/secrets/apply.sh staging dev --apply
    ```
+
+   `scripts/local-db.sh` runs PostgreSQL with pgvector in Docker at `127.0.0.1:54322`, applies Core's Flyway migrations, then the AI migrations in `supabase/migrations`, and creates the read-only `ai_reader` login. Every step is safe to re-run, and data stays in the `smartledger-local-db` volume.
 
 ## 4. Daily use
 
 - `git pull` and `git checkout` run `pull.sh`, which rebuilds `secrets/<environment>/env/` when `env.age.dvc` points at a new version. It never touches the files listed in `targets`.
 - `pull.sh` leaves `env/` alone while it holds edits you have not pushed, and keeps the old `env/` if any file fails to decrypt. It tells edits apart through `env/.pulled`; an `env/` made before that file existed counts as edited, so delete it once and run `pull.sh`.
-- `scripts/secrets/apply.sh` is a dry run: per file in `targets` it lists keys that would be added (`+`), changed (`~`) or dropped (`-`), or `(comments or layout only)`. Values are never printed.
+- `scripts/secrets/apply.sh staging dev` is a dry run: per file in `targets` it builds the staging file with the keys of `secrets/local.<name>` (the local database) put over it, and lists keys that would be added (`+`), changed (`~`) or dropped (`-`), or `(comments or layout only)`. Values are never printed. `--use-staging KEY` keeps the staging value of one local key, for example to reach the shared staging database.
 - `scripts/secrets/check.sh staging [count]` shows the last 5 versions (or `count`): version, time, who committed the pointer, and which files and keys each added (`+`), changed (`~`) or dropped (`-`). It fetches old versions from R2 and decrypts them in a temporary folder, so it needs your age key; values are never printed. A renamed file shows as `-` and `+`.
-- `scripts/secrets/apply.sh --apply` writes the files and keeps each replaced one as `<file>.bak`. A key you added only on your machine shows as `-` and is lost on apply; move it into `env/` and push first.
+- `scripts/secrets/apply.sh staging dev --apply` writes the files and keeps each replaced one as `<file>.bak` (`--no-backup` skips it). A key you added only on your machine shows as `-` and is lost on apply; send it to staging first.
+- `scripts/secrets/apply.sh dev staging` does the reverse: it copies the keys you edited in each target into `secrets/staging/env/`, keeping the staging value of every key in `secrets/local.<name>`, so a localhost URL never reaches staging. Add `--apply`, then `push.sh staging` as in [Change a secret](#5-change-a-secret). It keeps no `.bak`, because `push.sh` would encrypt it and R2 keeps every version.
+- Copying to or from production is not supported.
+
+### 4.1 The `sl` menu
+
+`sl` puts these scripts behind one menu (Pull, Push, History, Apply, Members) with the version and `env/` state of each environment on top. Install it once with `cargo install --path tools/secrets-cli`. In the menu, `E` switches the environment, and Apply staging → dev lists the keys of `secrets/local.env.*` ticked; untick one with Space to keep its staging value. Every step that writes asks first. With arguments it runs the script directly, for example `sl push staging` or `sl apply staging dev --apply`.
 
 ## 5. Change a secret
 
