@@ -60,6 +60,21 @@
 
 ## Điều cần biết trước khi dùng
 
+### Đối chiếu với Core — 2026-10-26
+
+Các ảnh bên trên giữ nguyên snapshot/mock đã ghi ở mục nguồn, không được đổi
+nhãn thành ảnh nghiệm thu backend. Năng lực Core được mô tả bởi contract:
+
+| Nhóm ảnh | Ranh giới khi giới thiệu năng lực Core |
+|---|---|
+| `dashboard/` | Core có report summary, top-products, sales-series và profit-estimate; số liệu trong ảnh vẫn là mock. Sales-series Core hiện chỉ có granularity DAY, nên biểu đồ theo giờ trong ảnh không chứng minh có API chuỗi theo giờ |
+| `barcode/` | Core có lookup barcode của Product ACTIVE; camera/nhận diện khung hình thuộc FE. Ảnh không chứng minh máy thật/provider đã được nghiệm thu |
+| `voice/` | Core nhận draft đã có cấu trúc để kiểm tra/chốt; chưa có API Core parse giọng nói/ảnh thành draft. Nguồn ảnh đã nêu dùng Nhập tay, không phải bằng chứng STT backend |
+| `chat/` | Core có proxy Agent chat/stream, nhưng câu trả lời trong bộ ảnh là mock; không thay kiểm thử FE → Core → AI/provider thật |
+
+Chi tiết có một nguồn tại [API contract](../contracts/api-contracts.md), còn
+hiện trạng code ở [thiết kế kỹ thuật](../architecture/technical-design.md#1-phạm-vi).
+
 - **Toàn bộ là dữ liệu mẫu.** Tên tiệm, tên khách, số điện thoại, doanh thu và công nợ đến từ chế độ xem trước của app, không phải dữ liệu của tiệm thật.
 - **Trợ lý AI trong ảnh là trợ lý của chế độ xem trước**, không phải mô hình AI thật. Câu trả lời có dòng "(Số liệu giả lập từ danh mục mẫu của tiệm hiện tại.)". Ảnh `chat/` phù hợp để minh hoạ giao diện; muốn giới thiệu chất lượng trả lời thì cần chụp lại từ một tài khoản thật.
 - **Khung hình camera trong `barcode/` là hình minh hoạ tự vẽ** (gói hàng và mã vạch EAN-13), không phải ảnh sản phẩm thật. Việc đọc mã trong ảnh là thật: app tự đọc mã từ khung hình đó.

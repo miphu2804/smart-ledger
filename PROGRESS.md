@@ -1,3 +1,29 @@
+### [2026-10-26] — [Docs] Prepare a separate Core documentation branch for approval
+
+**Done:** Created local `docs/core-documentation-alignment` from refreshed `origin/staging` `d4dc743`, after confirming PR #368 was merged and its tree equals audited feature HEAD `3e93dd1`. Updated the current growth handoff/status to record that merge without claiming deployment or FE acceptance. Prepared the documentation changes for a local commit; push and PR creation await the user's acceptance.
+
+**Changed files:** The accumulated Core documentation and diagram updates listed in the two entries below, plus the growth handoff and current status notes. Only documentation, diagram sources/exports and this append-only entry belong in the commit; pre-existing Java, frontend lockfile and IDE edits stay outside it.
+
+**Check:** Compared feature/staging tree hashes and fetched PR #368 merge metadata. The new branch has no extra API changes relative to its staging base. Documentation/link/schema/render checks from the review follow-up remain the evidence; final staged-file/whitespace and source-preservation checks are required before committing. No push, PR, merge or deploy performed in this preparation step.
+
+### [2026-10-26] — [Docs] Correct FK direction and avatar/inbox scope after review
+
+**Done:** Accepted the three documentation findings. Reversed the DBML draft-to-sale one-to-one declaration so `sale_drafts.confirmed_sale_id` is the FK, matching V4 and DBML's second-column rule. Added the V13 actor-scoped avatar exception to the relationship summary for audit logs. Split avatar and inbox in both Core overview figures: avatar accepts the current ACTIVE OWNER or ADMIN, while inbox requires an ACTIVE OWNER plus recipient/shop ownership and event-visibility checks.
+
+**Changed files:** ERD DBML/description, walkthrough source and its two regenerated overview SVGs, and this new entry. No Java, migration, role policy or runtime change; existing unrelated changes remain intact.
+
+**Check:** Compared with V4/V13, AuthController, MediaServiceImpl, MediaWriteTransactionService, NotificationServiceImpl and NotificationRecipientRepository; checked all four DBML one-to-one declarations. Mermaid 11.12.0 rendered both SVGs locally. Local file/fragment, route/table/declared-column/enum, SVG XML and image-load checks passed; hashes of 371 Core source/test/resource files stayed unchanged and `git diff --check` passed. The earlier inventory alone did not prove relationship direction or guard semantics; those missed cases required this source review. No new Maven/runtime acceptance result, commit or push.
+
+### [2026-10-26] — [Docs] Align Core documentation and diagram exports with branch code
+
+**Done:** Audited Core documentation against `feat/admin-dashboard-growth` at `3e93dd1` (staging base `0e2b1de`). Updated the current module map and migration descriptions; clarified Firebase JSON/ADC/emulator and Compose setup; removed stale phone/OTP wording in ERD notes; completed the dbdiagram layout. Classified target architecture, dated walkthroughs and mock marketing captures separately from implementation/acceptance evidence. No new requirement or BRD/PRD/AC approval is implied.
+
+**Changed files:** Root/Core READMEs, docs index, API contract status notes, technical design, ERD description/DBML/layout, diagram guide, walkthrough source/two Core overview SVGs, four draw.io sources and matching SVGs (plus architecture PNG), marketing README and this new entry. No application code, runtime config, schema or migration changes; pre-existing Zalo/FE/IDE edits were preserved.
+
+**Flow explained:** Canonical API contract → current module/guard map → SQL/ERD ownership → diagrams with explicit scope. New overview diagrams distinguish session/user/profile access, active-shop ledger access, ADMIN guards/audit, Zalo handoff, media/outbox, notifications and Agent proxy. Marketing's hourly report and voice/chat mock captures are not evidence of hourly Core APIs, voice/image parsing or real-provider acceptance. The architecture image is visibly labeled MVP target.
+
+**Check:** Static inventory matched all 87 explicit route-method pairs from 17 controllers to API tables, all 22 Core tables to DBML, 194 declared columns in 19 entities and 13 shared enums. Checked local files/fragments in 24 Markdown documents, 14 Mermaid blocks/exports, all 42 image loads, 19 SVG XML documents and five draw.io embedded-source/cell/edge mappings. Updated exports used local Mermaid 11.12.0/draw.io 28.2.5; contact sheets were reviewed offline. Hashes of all 371 Core source/test/resource files stayed unchanged; `git diff --check` passed. Dated audit evidence is in ignored `backend/core/target/core-docs-audit/`; no new Maven/runtime/UAT result, commit, push, merge or deploy is claimed.
+
 ### [2026-10-26] — [Docs] Finish admin growth documentation review
 
 **Done:** CodeRabbit reviewed `9ae18a4`: Javadoc coverage reached 84.78% (80% threshold); PR title/description passed and the Core-exception finding was addressed. Corrected two remaining documentation issues: the active PostgreSQL guidance now says V1–V18, and the growth design keeps implementation decisions while linking API rules to the canonical contract.
