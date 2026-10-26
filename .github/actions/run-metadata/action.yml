@@ -1,0 +1,51 @@
+name: Run metadata
+description: Upload a run-metadata.json artifact for the current run
+
+# Writes run-metadata.json for the current run (who started it, when, how long, the result of each job) and uploads it as
+# artifact `meta-<workflow>-<environment>-<run id>-<attempt>`. Call it from a last job with `if: always()` that needs
+# every other job, and grant it `actions: read`. artifact-cleanup.yml keeps the newest `meta-*` artifacts.
+# See docs/development/ci-cd.md#run-metadata.
+
+inputs:
+  workflow:
+    description: Short workflow name used in the artifact name, e.g. ci or cd
+    required: true
+  environment:
+    description: Where the run tested or deployed, e.g. staging, production or pr
+    required: true
+  token:
+    description: Token with actions:read, to read the run and its jobs
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Write run-metadata.json
+      id: meta
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        WORKFLOW: ${{ inputs.workflow }}
+        ENVIRONMENT: ${{ inputs.environment }}
+        REPO: ${{ github.repository }}
+        RUN_ID: ${{ github.run_id }}
+        ATTEMPT: ${{ github.run_attempt }}
+        JOB_NAME: ${{ github.job }}
+      run: |
+        set -euo pipefail
+        gh api "repos/$REPO/actions/runs/$RUN_ID/attempts/$ATTEMPT" > run.json
+        gh api "repos/$REPO/actions/runs/$RUN_ID/attempts/$ATTEMPT/jobs" --paginate --jq '.jobs[]' > jobs.ndjson
+        python3 "$GITHUB_ACTION_PATH/run_metadata.py" run.json jobs.ndjson > run-metadata.json
+        rm run.json jobs.ndjson
+        jq -r '"| \(.workflow) | \(.environment) | \(.status) | \(.duration_s)s | \(.triggering_actor) |"' run-metadata.json \
+          | { echo "| Workflow | Environment | Status | Duration | Started by |"; echo "|---|---|---|---:|---|"; cat; } \
+          >> "$GITHUB_STEP_SUMMARY"
+        echo "name=meta-$WORKFLOW-$ENVIRONMENT-$RUN_ID-$ATTEMPT" >> "$GITHUB_OUTPUT"
+    - uses: actions/upload-artifact@v7
+      # The metadata is also on the run page; a full artifact quota must not fail the run.
+      continue-on-error: true
+      with:
+        name: ${{ steps.meta.outputs.name }}
+        path: run-metadata.json
+        if-no-files-found: error
+        retention-days: 90

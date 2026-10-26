@@ -393,3 +393,24 @@ jobs:
           gh workflow run cd.yml --repo "$REPO" --ref "$REF_NAME" -f runner=default -f sha="$SHA" -f ci-run-id="$RUN_ID" \
             -f backend-ai="$ai" -f backend-core="$core" -f web="$web" -f landing="$landing"
           echo "Started CD for ${SHA::7} on $REF_NAME: backend-ai=$ai backend-core=$core web=$web landing=$landing" >> "$GITHUB_STEP_SUMMARY"
+
+  ### Metadata: who started this run, when, how long, each job's result ###
+
+  # Uploads `meta-ci-<environment>-<run id>-<attempt>`; artifact-cleanup.yml keeps the newest ones.
+  metadata:
+    if: always()
+    needs: [select-runner, changes, ai, core, mobile-web, landing, container-images, summary, cd]
+    runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - uses: ./.github/actions/run-metadata
+        with:
+          workflow: ci
+          environment: ${{ github.event_name == 'pull_request' && 'pr' || (github.ref_name == 'main' && 'production' || (github.ref_name == 'staging' && 'staging' || 'other')) }}
+          token: ${{ github.token }}

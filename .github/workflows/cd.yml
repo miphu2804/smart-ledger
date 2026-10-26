@@ -158,3 +158,24 @@ jobs:
       runs-on: ${{ needs.select-runner.outputs.runs_on }}
       sha: ${{ inputs.sha }}
     secrets: inherit
+
+  ### Metadata: who started this run, when, how long, each job's result ###
+
+  # Uploads `meta-cd-<environment>-<run id>-<attempt>`; artifact-cleanup.yml keeps the newest ones.
+  metadata:
+    if: always()
+    needs: [select-runner, gate, deploy-backend, deploy-web, deploy-landing]
+    runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - uses: ./.github/actions/run-metadata
+        with:
+          workflow: cd
+          environment: ${{ github.ref_name == 'main' && 'production' || (github.ref_name == 'staging' && 'staging' || 'other') }}
+          token: ${{ github.token }}

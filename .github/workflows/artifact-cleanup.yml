@@ -1,0 +1,55 @@
+name: Artifact cleanup
+
+# Keeps the newest `meta-*` run-metadata artifacts (written by .github/actions/run-metadata) and deletes the older ones,
+# so the history stays bounded by count, not only by the 90-day retention. Other artifacts keep their retention-days.
+# See docs/development/ci-cd.md#run-metadata.
+
+on:
+  schedule:
+    - cron: "17 19 * * *" # 02:17 UTC+07:00
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: How many of the newest meta-* artifacts to keep
+        type: number
+        default: 500
+      dry-run:
+        description: List what would be deleted without deleting
+        type: boolean
+        default: true
+
+permissions: {}
+
+jobs:
+  select-runner:
+    uses: ./.github/workflows/select-runner.yml
+    with:
+      choice: ${{ vars.CI_RUNNER || 'github-hosted' }}
+    secrets:
+      RUNNERS_READ_TOKEN: ${{ secrets.RUNNERS_READ_TOKEN }}
+
+  cleanup:
+    needs: [select-runner]
+    runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
+    permissions:
+      actions: write
+    steps:
+      - name: Delete meta-* artifacts beyond the newest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          KEEP: ${{ inputs.keep || 500 }}
+          DRY_RUN: ${{ inputs.dry-run || false }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPO/actions/artifacts?per_page=100" --paginate \
+            --jq '.artifacts[] | select(.name | startswith("meta-")) | select(.expired | not) | "\(.created_at)\t\(.id)\t\(.name)"' \
+            | sort -r > artifacts.tsv
+          total=$(wc -l < artifacts.tsv | tr -d ' ')
+          tail -n +"$((KEEP + 1))" artifacts.tsv > delete.tsv
+          count=$(wc -l < delete.tsv | tr -d ' ')
+          echo "meta-* artifacts: $total, keeping $KEEP, deleting $count (dry run: $DRY_RUN)" | tee -a "$GITHUB_STEP_SUMMARY"
+          while IFS=$'\t' read -r created id name; do
+            echo "$created $name"
+            [ "$DRY_RUN" = true ] || gh api -X DELETE "repos/$REPO/actions/artifacts/$id" --silent
+          done < delete.tsv

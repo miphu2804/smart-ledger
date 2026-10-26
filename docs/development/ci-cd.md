@@ -43,6 +43,12 @@ Each area is handed to CD on its own checks: the backend on `ai`, `core` and `co
 - PostgreSQL for `ai` and `core` is started with `docker run` on every runner (self-hosted machines cannot run service containers), on a free port per job, so jobs on one machine do not collide. A self-hosted machine needs Docker, Node 22, Python 3 and the JDK that `actions/setup-java` installs.
 - Artifact uploads and the GitHub cache still use GitHub storage on a self-hosted runner. The summary uploads are `continue-on-error`, so a full artifact quota does not block a deploy.
 
+## Run metadata
+
+The last job of `ci.yml` and `cd.yml`, `metadata`, runs even when an earlier job failed and uploads `meta-<workflow>-<environment>-<run id>-<attempt>` with one `run-metadata.json`: workflow, environment (`staging`, `production`, `pr` or `other`), event, branch, commit, `actor` and `triggering_actor`, start and finish time (UTC), duration in seconds, a status, and each job with its result, runner and duration. The status is `refused` when CD's `gate` stopped the run, else the worst job result (`failure`, `timed_out`, `cancelled`, `action_required`), `skipped` when every job was skipped, or `success`. A CD run started by CI shows `github-actions[bot]` as the actor; the person who pushed is in the metadata of the CI run named by `ci-run-id`. The same row is on the run page. The step is [`.github/actions/run-metadata`](../../.github/actions/run-metadata/action.yml).
+
+These artifacts are kept 90 days, and [`artifact-cleanup.yml`](../../.github/workflows/artifact-cleanup.yml) keeps only the newest 500 every night (02:17 UTC+07:00). Run it by hand to change `keep`; a manual run is a dry run unless `dry-run` is cleared.
+
 ## Configuration
 
 ### GitHub Environments
