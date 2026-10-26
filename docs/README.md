@@ -50,7 +50,7 @@ Start with the path that matches your task; each step links to the next level of
 | [Mobile UI style and migration](design/mobile-ui-style-migration.md) | Visual direction and implementation checks for the mobile app |
 | [Mobile wording review](design/mobile-wording-review.md) | Proposed UI wording, icon and feedback mapping pending product approval |
 | [Mobile iOS device release](development/mobile-ios-device-release.md) | Build and install a Release configuration on a connected iPhone |
-| [Secrets and env files](development/secrets-and-env.md) | Encrypted per-environment bundles (DVC, age, R2), the env file format, onboarding, changing a secret, adding or removing a person |
+| [Secrets and env files](development/secrets-and-env.md) | Encrypted env files per environment (DVC, age, R2), the env file format, onboarding, changing a secret, adding or removing a person |
 | [CI/CD to Railway and Vercel](development/ci-cd.md) | Flow from feature branch to Railway and Vercel, GitHub environments, Railway variables and Core CORS origins |
 | [Marketing screenshots](marketing/README.md) | Phone-ratio screenshots of the app per product flow (dashboard, chat, barcode, voice) for marketing; demo data, not a source of truth for behavior |
 
