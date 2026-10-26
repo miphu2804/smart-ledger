@@ -11,9 +11,12 @@ for pointer in secrets/*/env.age.dvc; do
   # Rebuild env/ so a file deleted upstream disappears here too.
   rm -rf "$environment/env"
   (umask 077 && mkdir "$environment/env")
-  for encrypted in "$environment"/env.age/.env.*.age; do
-    plain="$environment/env/$(basename "$encrypted" .age)"
-    (umask 077 && age -d -i "$KEY" -o "$plain" "$encrypted") \
+  # env.age/ mirrors env/: files at the top and one level of folders, such as github/.
+  for encrypted in "$environment"/env.age/.env.*.age "$environment"/env.age/*/.env.*.age; do
+    [ -f "$encrypted" ] || continue
+    plain="$environment/env/${encrypted#"$environment"/env.age/}"
+    plain="${plain%.age}"
+    (umask 077 && mkdir -p "$(dirname "$plain")" && age -d -i "$KEY" -o "$plain" "$encrypted") \
       || echo "secrets: $KEY cannot decrypt $encrypted" >&2
   done
 done

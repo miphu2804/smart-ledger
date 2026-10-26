@@ -7,7 +7,7 @@ Every credential the team shares (local `.env` files, Railway service variables,
 ```
 secrets/
   staging/
-    env/             decrypted env files, one per service, this machine only (git-ignored)
+    env/             decrypted env files, one per service, plus github/ with one per GitHub environment (git-ignored)
     env.age/         the same files encrypted, stored in R2 bucket smart-ledger-staging-creds (git-ignored)
     env.age.dvc      DVC pointer: md5, size and R2 remote of env.age/ (in git)
     recipients.txt   age public keys allowed to decrypt staging (in git)
@@ -58,11 +58,11 @@ ZALO_APP_ID=...
 | `.env.loadtest`, `.env.monitor` | load test and uptime monitor | yes | loadtest only |
 | `.env.railway.core`, `.env.railway.ai` | copy of the Railway service variables | yes | yes |
 | `.env.railway.tokens` | Railway API tokens for CD | no | yes |
-| `.env.github.<environment>` | copy of a GitHub Actions environment | 7 environments | 4 environments |
+| `github/.env.<environment>` | copy of a GitHub Actions environment | 7 environments | 4 environments |
 
 Files are named `.env.<name>`, like `.env.local` and `.env.production` in Next.js; the folder already says which environment they belong to. `targets` lists the copied files. Everything else is read in place, for example `docker compose --env-file secrets/production/env/.env.core --env-file secrets/production/env/.env.ai`, so there is no second copy to drift.
 
-`.env.railway.*` keep Railway's own reference syntax (`${{core.DATABASE_PASSWORD}}`) where Railway uses it. `.env.github.*` hold the environment's variables; its secrets are listed by name only, because GitHub never returns a secret's value.
+`.env.railway.*` keep Railway's own reference syntax (`${{core.DATABASE_PASSWORD}}`) where Railway uses it. `github/.env.*` hold the environment's variables; its secrets are listed by name only, because GitHub never returns a secret's value.
 
 Not in `secrets/`: `.env.r2.secrets` (the R2 tokens DVC needs to reach the files), `.env.example` files (committed templates), and generated files such as `supabase/.temp` and `frontend/mobile/ios/.xcode.env`.
 
@@ -116,7 +116,7 @@ git add secrets/staging/env.age.dvc
 git commit -m "chore(secrets): <what changed>"
 ```
 
-`push.sh` uploads to R2 before the commit, so teammates never pull a pointer to files that are not there. Updating Railway or GitHub itself is still a separate step; `.env.railway.*` and `.env.github.*` are copies, not the deploy source.
+`push.sh` uploads to R2 before the commit, so teammates never pull a pointer to files that are not there. Updating Railway or GitHub itself is still a separate step; `.env.railway.*` and `github/` are copies, not the deploy source.
 
 ## Add or remove a person
 
