@@ -4,7 +4,7 @@
 KEY="${SMARTLEDGER_AGE_KEY:-$HOME/.config/smartledger/age.key}"
 cd "$(git rev-parse --show-toplevel)" || exit 0
 
-for pointer in secrets/.env.*.age.dvc; do
+for pointer in secrets/*/.env.age.dvc; do
   [ -f "$pointer" ] || continue
   encrypted="${pointer%.dvc}"
   plain="${encrypted%.age}"

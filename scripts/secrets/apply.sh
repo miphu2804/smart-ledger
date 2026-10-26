@@ -1,5 +1,5 @@
 #!/bin/sh
-# Writes each section of the decrypted bundles in secrets/ to the env file it names.
+# Writes each section of the decrypted bundles secrets/<environment>/.env to the env file it names.
 # A bundle section starts at a "# <title> -> <path>" line and runs to the next one.
 # By default it is a dry run listing which keys would be added (+), changed (~) or dropped (-);
 # values are never printed. Pass --apply to write; each replaced file is kept as <file>.bak.
@@ -9,8 +9,7 @@ cd "$(git rev-parse --show-toplevel)" || exit 1
 main() {
   sections=$(mktemp -d) || exit 1
   trap 'rm -rf "$sections"' EXIT
-  for bundle in secrets/.env.*; do
-    case "$bundle" in *.age | *.dvc) continue ;; esac
+  for bundle in secrets/*/.env; do
     [ -f "$bundle" ] || continue
     split_sections "$bundle" "$sections"
   done
@@ -36,8 +35,8 @@ main() {
 # Writes every section of bundle $1 to its own file in directory $2: the target path, then the body.
 split_sections() {
   umask 077
-  # Section files drop the bundle's leading dot so the "$sections"/* glob sees them.
-  awk -v dir="$2" -v name="$(basename "$1" | sed 's/^\.//')" '
+  # Section files are named after the environment folder; a dotted name would hide them from the glob.
+  awk -v dir="$2" -v name="$(basename "$(dirname "$1")")" '
     /^# .+ -> [^ ]+$/ {
       if (out) close(out)
       out = sprintf("%s/%s.%03d", dir, name, ++count)
