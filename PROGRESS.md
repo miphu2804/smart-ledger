@@ -1,3 +1,13 @@
+### [2026-10-26] — [Docs] Address admin growth PR review and stale handoff notes
+
+**Done:** Recorded the owner's narrowly scoped Core exception for PR #368 in AGENTS.md; added Javadoc for the ADMIN support API and growth invariants/tests; corrected stale root/Core README and technical-design statements about real FE integration, existing V18 migrations and publication status. No Java behavior, schema, dependency or runtime-setting change. PR title/description and review state are handled on GitHub; no merge or deployment is authorized by this follow-up.
+
+**Changed files:** AGENTS.md, BLOCKERS.md, root/Core READMEs, Core chart handoff, technical design, the seven Java files already touched by the growth feature, and this new entry. Existing Zalo, frontend lockfile and IDE changes were preserved outside the commit.
+
+**Flow explained:** Existing ADMIN read → validated Vietnam date projection → mandatory audit stays unchanged. Source comments now explain this flow and its tests; the PR distinguishes local verification from CI and FE/staging acceptance. The first CI run lost both self-hosted runners before executing steps; artifact quota affected only the optional summary upload, already configured to continue on error.
+
+**Check:** Comment/whitespace-stripped Java comparison against HEAD passed for all seven edited Java files. `mvnw.cmd -B -Dtest=AdminDashboardControllerWebTest,AdminAccessAuditServiceTest verify` passed: 29 tests, zero failures/errors/skips, executable JAR packaged; local log `backend/core/target/admin-growth-pr368-review-verify.log` (ignored). Prior full PostgreSQL evidence remains 1,422 passing testcases on `976be02`; it was not rerun for this comments-only follow-up. New GitHub CI and CodeRabbit results must be read from PR #368 rather than inferred from these local checks.
+
 ### [2026-10-26] — [Validation] Complete full PostgreSQL regression for admin growth
 
 **Done:** After Docker recovered, verified committed Core code `976be02` in a clean temporary checkout against a separate disposable PostgreSQL 16.15 container. Resolved the Docker/PostgreSQL validation blocker; no new migration, dependency, environment setting or application-code change in this validation follow-up. No push or deployment.

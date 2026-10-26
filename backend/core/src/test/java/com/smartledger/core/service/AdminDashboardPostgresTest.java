@@ -143,6 +143,7 @@ class AdminDashboardPostgresTest {
         assertThat(jdbc.queryForObject("select shop_id from audit_logs where actor_user_id=?", Long.class, adminId)).isNull();
     }
 
+    /** Verifies leap-day buckets in a UTC session, independent source counts and overview audit scope. */
     @Test
     void growthUsesVietnamDatesZeroFillsAndMatchesOverviewWithoutMultiplyingCounts() {
         long disabledOwner = user(token("growth-disabled"), SystemRole.OWNER, UserStatus.DISABLED);
@@ -188,6 +189,7 @@ class AdminDashboardPostgresTest {
         });
     }
 
+    /** Exercises empty dates and the inclusive 366-day boundary against the migrated database. */
     @Test
     void growthSupportsSingleEmptyDayAndTheFullLeapYearLimit() {
         var day = LocalDate.parse("1996-02-29");
@@ -206,6 +208,7 @@ class AdminDashboardPostgresTest {
         assertThat(ownCount(adminId)).isEqualTo(2);
     }
 
+    /** Checks DB role/status guards and rollback/retry when PostgreSQL rejects the overview audit. */
     @Test
     void growthIsAdminOnlyAndFailsClosedWhenAuditCannotCommit() {
         expectCode(() -> dashboard.growth(owner, null, null), ErrorCode.ADMIN_ACCESS_REQUIRED);

@@ -16,14 +16,17 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+/** HTTP support projections; authorization and fail-closed audit are enforced before returning data. */
 @RestController
 @RequestMapping("/api/v1/admin")
 @Tag(name = "Admin Dashboard", description = "Support-only projections; active DB ADMIN required. Every successful read is audited.")
 @SecurityRequirement(name = "bearerAuth")
 public class AdminDashboardController {
     private final AdminDashboardService service;
+    /** Binds the audited dashboard service used by all ADMIN reads. */
     public AdminDashboardController(AdminDashboardService service) { this.service = service; }
 
+    /** Returns current status totals and creation counts for the requested Vietnam date range. */
     @GetMapping("/overview")
     @Operation(summary = "Read platform support counts, not financial reports",
             description = "Both dates or neither. Inclusive Vietnam dates, maximum 366 days; default last 30 days. Status counts are current, not historical.")
@@ -33,6 +36,7 @@ public class AdminDashboardController {
         return service.overview(token, fromDate, toDate);
     }
 
+    /** Returns ascending, zero-filled creation counts; each request is audited as an overview read. */
     @GetMapping("/overview/growth")
     @Operation(summary = "Read daily OWNER and shop creation counts for dashboard charts",
             description = "Both dates or neither; default last 30 Vietnam days, maximum 366 inclusive days. "
@@ -44,6 +48,7 @@ public class AdminDashboardController {
         return service.growth(token, fromDate, toDate);
     }
 
+    /** Searches only OWNER profiles and exposes masked contacts in a bounded page. */
     @GetMapping("/users")
     @Operation(summary = "Search OWNER profiles with masked contacts",
             description = "Literal case-insensitive name/email/phone search. page starts at 0; size 1-100; createdAt/id descending.")
@@ -53,6 +58,7 @@ public class AdminDashboardController {
         return service.owners(token, query, status, page, size);
     }
 
+    /** Returns an OWNER support profile with audited full contact access. */
     @GetMapping("/users/{userId}")
     @Operation(summary = "Read an OWNER support profile with audited full contact",
             description = "Related shops are paginated via GET /admin/shops?ownerId=...; no Firebase identities or business ledgers.")
@@ -60,6 +66,7 @@ public class AdminDashboardController {
         return service.owner(token, userId);
     }
 
+    /** Searches shops across current statuses without exposing business ledgers. */
     @GetMapping("/shops")
     @Operation(summary = "Search shops, including INACTIVE and ARCHIVED, with masked shop phone")
     public AdminPageResponse<ShopSummary> shops(@AuthenticationPrincipal VerifiedFirebaseToken token,
@@ -69,6 +76,7 @@ public class AdminDashboardController {
         return service.shops(token, query, status, ownerId, page, size);
     }
 
+    /** Returns the support profile of a shop, including inactive or archived shops. */
     @GetMapping("/shops/{shopId}")
     @Operation(summary = "Read an audited shop support profile, including archived shops",
             description = "No sale, payment, refund, debt, expense, product or business audit metadata is disclosed.")
@@ -76,6 +84,7 @@ public class AdminDashboardController {
         return service.shop(token, shopId);
     }
 
+    /** Lists only ADMIN activation and inactivation events for the selected shop. */
     @GetMapping("/shops/{shopId}/status-history")
     @Operation(summary = "Read only ADMIN inactivation/reactivation history of this shop")
     public AdminPageResponse<ShopStatusEvent> history(@AuthenticationPrincipal VerifiedFirebaseToken token,
@@ -84,6 +93,7 @@ public class AdminDashboardController {
         return service.statusHistory(token, shopId, page, size);
     }
 
+    /** Lists the caller's administrative history; client filters cannot select another actor. */
     @GetMapping("/access-logs")
     @Operation(summary = "Read only the current ADMIN's administrative access history",
             description = "Not OWNER business audit. No actor filter; from inclusive, to exclusive. The read itself is audited after selecting the page.")

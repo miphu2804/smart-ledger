@@ -15,9 +15,12 @@ public final class AdminDashboardViews {
     public record ShopCounts(long total, long active, long inactive, long archived, long createdInPeriod) { }
     public record Overview(OffsetDateTime asOf, String timezone, LocalDate fromDate, LocalDate toDate,
             OwnerCounts owners, ShopCounts shops) { }
+    /** Creations on one Vietnam date, including disabled OWNERs and shops in every status. */
     public record GrowthPoint(LocalDate date, long ownersCreated, long shopsCreated) { }
+    /** Bounded, ascending, zero-filled creation series; status history and usage are not inferred. */
     public record Growth(OffsetDateTime asOf, String timezone, LocalDate fromDate, LocalDate toDate,
             List<GrowthPoint> points) {
+        /** Copies the projection so callers cannot mutate the response's list after construction. */
         public Growth { points = List.copyOf(points); }
     }
     public record OwnerSummary(Long id, String displayName, String maskedEmail, String maskedPhone,

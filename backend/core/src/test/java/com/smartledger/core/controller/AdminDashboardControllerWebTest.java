@@ -153,6 +153,7 @@ class AdminDashboardControllerWebTest {
                 OffsetDateTime.parse("2026-10-02T00:00:00+07:00"));
     }
 
+    /** Checks the public growth shape, Vietnam bounds, privacy and reuse of the overview audit action. */
     @Test
     void growthReturnsDailyCountsWithoutIdentityOrFinancialDataAndAuditsOverviewRead() throws Exception {
         var from = LocalDate.parse("2026-10-01");
@@ -178,6 +179,7 @@ class AdminDashboardControllerWebTest {
                 && event.getEntityId() == null && Integer.valueOf(1).equals(event.getMetadata().get("resultCount"))));
     }
 
+    /** Keeps growth date defaults and invalid-range behavior aligned with the original overview. */
     @Test
     void growthDefaultsToThirtyVietnamDaysAndDoesNotAcceptInvalidOrPartialRanges() throws Exception {
         when(dashboard.dailyGrowth(any(), any(), any(), any())).thenReturn(List.of());
@@ -200,6 +202,7 @@ class AdminDashboardControllerWebTest {
         verifyNoInteractions(dashboard, audit);
     }
 
+    /** Proves that an audit write failure cannot disclose an otherwise available growth projection. */
     @Test
     void growthNeverReturnsDataIfAuditFails() throws Exception {
         when(dashboard.dailyGrowth(any(), any(), any(), any()))
@@ -264,6 +267,7 @@ class AdminDashboardControllerWebTest {
         assertThat(body).doesNotContain("private@test", "Secret", "secret database");
     }
 
+    /** Ensures every supported ADMIN read, including growth, rejects mutation methods before service access. */
     @ParameterizedTest
     @ValueSource(strings = {"overview", "overview/growth", "users", "users/12", "shops", "shops/7", "shops/7/status-history", "access-logs"})
     void adminReadEndpointsDoNotAcceptWrites(String route) throws Exception {

@@ -311,7 +311,7 @@ ADMIN and OWNER events share the existing `audit_logs`; ADMIN reads are separate
 
 For a fresh disposable local database, use `FLYWAY_ENABLED=true` and `SPRING_JPA_HIBERNATE_DDL_AUTO=validate` to apply V1–V18 and validate the entity mappings. A Flyway-managed database already at V10 applies subsequent versions in order; review the V17 Zalo rollout below and [V18 Android rollout](docs/zalo-android-preparation.md#staging-activation-after-merge) before a shared-environment deployment. Follow the repository's merged-code migration policy for shared environments. Do not enable Flyway blindly on a Hibernate-created database without migration history: V10 rejects pre-existing ADMIN read events. Use a fresh local database or a separately reviewed adoption plan, preserving the original database. The migrations do not baseline or repair migration history.
 
-If V11 validation fails, PostgreSQL rolls back its schema changes; review the offending records before retrying. Recovery uses a forward fix retaining audit history. Restoring V10 constraints or older readers that cannot handle `ADMIN_*` events is unsafe after these records exist. Integrated Firebase/FE UAT and document alignment remain pending.
+If V11 validation fails, PostgreSQL rolls back its schema changes; review the offending records before retrying. Recovery uses a forward fix retaining audit history. Restoring V10 constraints or older readers that cannot handle `ADMIN_*` events is unsafe after these records exist. Documentation for the daily ADMIN endpoint is aligned with the [canonical contract](../../docs/contracts/api-contracts.md#chuỗi-tạo-mới-theo-ngày--admin-growth); integrated Firebase/FE UAT remains pending.
 
 To run **all** Core tests, including migration, audit/checkout rollback and real PostgreSQL readiness coverage, keep the three test-only variables above and run `.\mvnw.cmd verify` (or `./mvnw verify`). The migration/audit suites manage their own randomly named schemas; use a disposable database with schema-creation permission. The readiness test checks connectivity with valid and deliberately invalid test credentials, so an expected database-health warning can appear in the logs.
 
@@ -325,7 +325,7 @@ With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
 .\mvnw.cmd '-Dtest=ProductStockInServiceTest,ProductServiceTest,CoreBusinessContractWebTest,ApiDocumentationWebTest,IdempotencyServiceTest,AuditLogPostgresTest' test
 ```
 
-`AuditLogPostgresTest` applies V1–V16 in a generated `core_audit_test_*` schema and removes only that schema. It checks concurrent receipts/retries and contention with checkout/void/PATCH/archive, audit/idempotency-write rollback, authorization and numeric overflow. Do not use shared/staging/production databases. Manual Swagger checks and mobile UAT remain separate.
+`AuditLogPostgresTest` applies the current migration set (V1–V18) in a generated `core_audit_test_*` schema and removes only that schema. It checks concurrent receipts/retries and contention with checkout/void/PATCH/archive, audit/idempotency-write rollback, authorization and numeric overflow. Do not use shared/staging/production databases. Manual Swagger checks and mobile UAT remain separate.
 
 ### Advanced report development tests
 
@@ -337,7 +337,7 @@ With the disposable `CORE_TEST_POSTGRES_*` variables above, run:
 .\mvnw.cmd '-Dtest=AdvancedReportServiceTest,ExpenseReportControllerWebTest,ReportAggregationPostgresTest,SaleDraftServiceTest' test
 ```
 
-`ReportAggregationPostgresTest` applies V1–V16 in a generated `core_report_test_*` schema and removes only that schema. It verifies the nullable/nonnegative snapshot constraint, discounted item revenue, catalog/custom grouping, a prior-period void, daily event buckets and incomplete profit estimates. Mobile still computes its existing local analytics until FE integrates these endpoints; Core tests are not FE/staging UAT.
+`ReportAggregationPostgresTest` applies the current migration set (V1–V18) in a generated `core_report_test_*` schema and removes only that schema. It verifies the nullable/nonnegative snapshot constraint, discounted item revenue, catalog/custom grouping, a prior-period void, daily event buckets and incomplete profit estimates. Mobile still computes its existing local analytics until FE integrates these endpoints; Core tests are not FE/staging UAT.
 
 ### Cloudinary media development tests
 
@@ -449,4 +449,4 @@ Bearer OWNER token is required, but no `X-Shop-Id` or idempotency header for:
 
 Pages start at 0; size 1–100 and offset <=2147483647. OWNER must be ACTIVE, have a recipient and still own the shop. INACTIVE shops expose only status notifications; ARCHIVED shops are excluded. Retry/parallel reads preserve the first readAt. Any inaccessible ID rejects the whole batch with 404. See [notification contract](../../docs/contracts/api-contracts.md#8-notification-owner--đã-có-trên-featapp-notifications) and PRD AC-055–058.
 
-`NotificationPostgresTest` runs in a generated `core_notification_test_*` schema with actual V1–V16 and Hibernate validation, without a supplemental schema fixture. It covers event lifecycle, notification-write rollback, replay/concurrent checkout/void, read concurrency and cross-shop/status isolation. `SaleRefundMigrationPostgresTest` additionally tests V15 upgrade, local-table adoption and atomic migration failure/retry. Supply all `CORE_TEST_POSTGRES_*` variables pointing only to a disposable PostgreSQL DB. No push delivery/device registration/FCM/email/SMS/debt reminders or notification FE integration is implemented by this change.
+`NotificationPostgresTest` runs in a generated `core_notification_test_*` schema with the current migration set (V1–V18) and Hibernate validation, without a supplemental schema fixture. It covers event lifecycle, notification-write rollback, replay/concurrent checkout/void, read concurrency and cross-shop/status isolation. `SaleRefundMigrationPostgresTest` additionally tests V15 upgrade, local-table adoption and atomic migration failure/retry. Supply all `CORE_TEST_POSTGRES_*` variables pointing only to a disposable PostgreSQL DB. No push delivery/device registration/FCM/email/SMS/debt reminders or notification FE integration is implemented by this change.

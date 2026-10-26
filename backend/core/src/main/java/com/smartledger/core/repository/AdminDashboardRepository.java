@@ -57,7 +57,11 @@ public class AdminDashboardRepository {
                 rs.getLong("active"), rs.getLong("inactive"), rs.getLong("archived"), rs.getLong("created")));
     }
 
-    /** Aggregate each source before joining, so multiple shops never multiply OWNER counts. */
+    /**
+     * Aggregates OWNERs and shops independently before joining a bounded Vietnam date series.
+     * Timestamp bounds are half-open; display dates are inclusive. Current OWNER role is used,
+     * every shop status is included, and empty dates remain zero regardless of DB session timezone.
+     */
     public List<GrowthPoint> dailyGrowth(LocalDate fromDate, LocalDate toDate, OffsetDateTime from, OffsetDateTime to) {
         return jdbc.query("""
                 with days as (

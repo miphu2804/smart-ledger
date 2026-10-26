@@ -8,6 +8,12 @@ Branch implementation status is in the
 [technical design](../../../docs/architecture/technical-design.md#tổng-quan-admin-theo-ngày--admin-growth).
 This handoff does not establish FE or staging acceptance.
 
+The owner approved publication and the branch was pushed through `6381054`.
+[PR #368](https://github.com/miphu2804/smart-ledger/pull/368) targets `staging`;
+merge, staging deployment and FE acceptance are separate steps. The first CI run
+lost its self-hosted runners before build/test; its report upload also hit the
+artifact-storage quota. Those operational failures do not replace CI verification.
+
 ## Integration and rollout
 
 - New additive route: `GET /api/v1/admin/overview/growth`; the original overview
@@ -61,6 +67,6 @@ suite creates and drops its own test schema; never point it at business database
   PostgreSQL suite's 18 cases passed, including the explicit UTC-session assertion.
   Existing migrations ran only in disposable test schemas; no business database
   was used. Local log: `backend/core/target/admin-growth-full-verify-20261026.log`
-  (ignored). The validation blocker is resolved; push awaits user approval.
+  (ignored). The validation blocker was resolved; push was awaiting approval at that checkpoint.
 - No new migration was authored. FE/Firebase end-to-end, deployment and load testing
   are outside this automated result.
