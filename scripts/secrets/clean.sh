@@ -15,7 +15,9 @@ export AWS_ACCESS_KEY_ID="$(dvc config --local "remote.$old.access_key_id")"
 export AWS_SECRET_ACCESS_KEY="$(dvc config --local "remote.$old.secret_access_key")"
 export AWS_DEFAULT_REGION="$(dvc config "remote.r2-$1.region" 2>/dev/null || echo auto)"
 endpoint="$(dvc config --local "remote.$old.endpointurl")"
-count="$(aws s3 ls "$url" --recursive --endpoint-url "$endpoint" | wc -l | tr -d ' ')" || exit 1
+# Listed apart from the count, so a wrong token stops here instead of reading as an empty bucket.
+listing="$(aws s3 ls "$url" --recursive --endpoint-url "$endpoint")" || exit 1
+count="$(printf '%s' "$listing" | grep -c .)"
 if [ "$2" != "--apply" ]; then
   echo "$url holds $count objects; rerun with --apply to delete them all"
   exit 0

@@ -30,7 +30,8 @@ The team's env files, encrypted, one folder per environment. After setup, `git p
 
    ```bash
    scripts/secrets/pull.sh
-   scripts/secrets/apply.sh --apply
+   scripts/local-db.sh
+   scripts/secrets/apply.sh staging dev --apply
    ```
 
 ## Use
@@ -39,8 +40,10 @@ The team's env files, encrypted, one folder per environment. After setup, `git p
 |---|---|
 | Get the latest secrets | `git pull`; the hook runs `pull.sh` into `staging/env/` |
 | See who changed what in the last 5 versions | `scripts/secrets/check.sh staging` |
-| See what would change in `backend/core/.env`, `backend/ai/.env`, `frontend/mobile/.env` | `scripts/secrets/apply.sh` |
-| Write those files, keeping the old ones as `.bak` | `scripts/secrets/apply.sh --apply` |
+| Do any of the tasks below from a menu | `sl` (install once with `cargo install --path tools/secrets-cli`) |
+| See what would change in `backend/core/.env`, `backend/ai/.env`, `frontend/mobile/.env` | `scripts/secrets/apply.sh staging dev` |
+| Write those files with the local database keys from `local.env.*`, keeping the old ones as `.bak` | `scripts/secrets/apply.sh staging dev --apply` |
+| Send keys you edited in those files back to `staging/env/` | `scripts/secrets/apply.sh dev staging --apply`, then push as below |
 | Run the backend | `docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build` |
 | Read any other file (Railway, GitHub, load test, monitor) | Open it in `staging/env/`; it is not copied anywhere |
 
@@ -52,4 +55,4 @@ scripts/secrets/push.sh staging
 git add secrets/staging/env.age.dvc && git commit -m "chore(secrets): <what changed>"
 ```
 
-Only `recipients.txt`, `targets` and `env.age.dvc` are committed; the `secrets-guard` hook refuses anything else here. To add or remove a person, see [Add or remove a person](../docs/development/secrets-and-env.md#6-add-or-remove-a-person).
+Only `recipients.txt`, `targets` and `env.age.dvc` are committed inside an environment folder; the `secrets-guard` hook refuses anything else here. To add or remove a person, see [Add or remove a person](../docs/development/secrets-and-env.md#6-add-or-remove-a-person).

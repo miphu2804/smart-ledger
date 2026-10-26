@@ -175,7 +175,7 @@ docker compose --env-file backend/core/.env --env-file backend/ai/.env up --buil
 - AI: `http://localhost:8001/health`
 - Compose ports use the defaults in `compose.yaml` and can be overridden with shell environment variables.
 
-To run this app on the host, put `POSTGRES_URL` and `REDIS_URL` in `.env` (dev shares the staging databases; `scripts/secrets/apply.sh --apply` writes them):
+To run this app on the host, put `POSTGRES_URL` and `REDIS_URL` in `.env` (`scripts/secrets/apply.sh staging dev --apply` writes them, pointing PostgreSQL at the local database from `scripts/local-db.sh`):
 
 ```bash
 uv sync --group dev
