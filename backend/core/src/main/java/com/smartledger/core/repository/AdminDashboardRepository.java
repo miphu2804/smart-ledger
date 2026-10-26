@@ -8,7 +8,9 @@ import com.smartledger.core.enums.ShopStatus;
 import com.smartledger.core.enums.UserStatus;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import javax.sql.DataSource;
@@ -53,6 +55,36 @@ public class AdminDashboardRepository {
                 count(*) filter(where created_at>=:from and created_at<:to) as created from shops
                 """, Map.of("from", from, "to", to), (rs, row) -> new ShopCounts(rs.getLong("total"),
                 rs.getLong("active"), rs.getLong("inactive"), rs.getLong("archived"), rs.getLong("created")));
+    }
+
+    /**
+     * Aggregates OWNERs and shops independently before joining a bounded Vietnam date series.
+     * Timestamp bounds are half-open; display dates are inclusive. Current OWNER role is used,
+     * every shop status is included, and empty dates remain zero regardless of DB session timezone.
+     */
+    public List<GrowthPoint> dailyGrowth(LocalDate fromDate, LocalDate toDate, OffsetDateTime from, OffsetDateTime to) {
+        return jdbc.query("""
+                with days as (
+                    select cast(:fromDate as date) + n as day
+                    from generate_series(0, cast(:toDate as date) - cast(:fromDate as date)) as series(n)
+                ), owners as (
+                    select (created_at at time zone 'Asia/Ho_Chi_Minh')::date as day, count(*) as created
+                    from users
+                    where system_role='OWNER' and created_at>=:from and created_at<:to
+                    group by 1
+                ), shops_created as (
+                    select (created_at at time zone 'Asia/Ho_Chi_Minh')::date as day, count(*) as created
+                    from shops where created_at>=:from and created_at<:to
+                    group by 1
+                )
+                select days.day, coalesce(owners.created, 0) as owners_created,
+                    coalesce(shops_created.created, 0) as shops_created
+                from days left join owners on owners.day=days.day
+                    left join shops_created on shops_created.day=days.day
+                order by days.day
+                """, Map.of("fromDate", fromDate, "toDate", toDate, "from", from, "to", to),
+                (rs, row) -> new GrowthPoint(rs.getObject("day", LocalDate.class),
+                        rs.getLong("owners_created"), rs.getLong("shops_created")));
     }
 
     public AdminPageResponse<OwnerSummary> owners(String query, UserStatus status, int page, int size) {

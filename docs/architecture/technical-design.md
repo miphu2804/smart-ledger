@@ -5,7 +5,7 @@
 | Trạng thái | đích MVP; Core hiện có được phân biệt với phần chưa tích hợp |
 | Chủ sở hữu | Chủ kỹ thuật |
 | Người rà soát | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-10-16 |
+| Cập nhật lần cuối | 2026-10-26 |
 
 ## Tài liệu liên quan
 
@@ -31,7 +31,7 @@ Mục này là nơi duy nhất ghi hiện trạng triển khai; tài liệu khá
 - **AI — ghi nhớ dài hạn (có trong code sau cờ `AGENT_MEMORY_ENABLED`, mặc định tắt; chưa phải hành vi sản phẩm, chờ PO duyệt [ADR-0002](adr/0002-agent-long-term-memory.md)):** khi bật, trước mỗi lượt AI tìm theo cosine trong `agent_memories` của đúng shop và user, đưa tối đa 10 ghi nhớ `preference` và 5 ghi nhớ khớp câu hỏi vào trước tin nhắn; sau khi lưu lượt, một tác vụ nền trích tối đa 5 fact từ lời của OWNER trong lượt đó (model trích đọc cả câu trả lời làm ngữ cảnh) và gộp ghi nhớ cũ hơn 7 ngày. Embedding dùng sentence-transformers trong process (image Docker không có group `memory`, nên bật cờ chỉ ghi log lỗi và ghi nhớ vẫn tắt) hoặc Cloudflare Workers AI (`CLOUDFLARE_*`, gửi tin nhắn và fact sang Cloudflare). OWNER tắt/bật qua `agent_memory_settings`; xóa hội thoại xóa ghi nhớ sinh từ nó. Chi tiết: [AI README](../../backend/ai/README.md#long-term-memory-off-by-default).
 - **AI — chưa triển khai:** `src/drafts/` có `DraftService.parse` (SALE/EXPENSE từ text) và test, nhưng chưa có route HTTP; `POST /internal/v1/drafts/parse` là đích, xem [contract §6](../contracts/api-contracts.md#6-core--ai-nội-bộ). Voice và ảnh chưa có trong AI.
 - **Mobile** (đối chiếu `staging` tại `b1de421c461d`, ngày 2026-10-06): mặc định dùng mock; khi tắt mock gọi Firebase và Core cho đơn hàng, hàng hoá, công nợ, chi phí, thanh toán và hồ sơ tiệm. Home/Analytics tải danh sách dữ liệu từ Core rồi tính chỉ số cục bộ, chưa gọi `/api/v1/reports/summary`; lãi là ước tính, không tương đương báo cáo gross/voided/net của Core (xem [Chỉ số trên Home/Analytics](../../frontend/mobile/README.md#chỉ-số-trên-homeanalytics)). Confirm chống trùng theo draft ID; tạo chi phí, trả nợ và void dùng `Idempotency-Key`. Nhận diện đơn vẫn dùng parser rule-based trên máy; mic chỉ nhận giọng nói trên web.
-- **Web admin:** mặc định mock; nhánh gọi thật chưa khớp auth/DTO/query của Core (còn `/auth/login`, `overview?days=`, `/admin/audit-logs` và các field giả định). Core đã có API hỗ trợ tối thiểu theo [contract ADMIN](../contracts/api-contracts.md#7-dashboard-quản-trị--đã-có-trong-core); chưa có bằng chứng web → Firebase → Core đã tích hợp/nghiệm thu.
+- **Web admin** (đối chiếu code trong nhánh ngày 2026-10-26): có chế độ thật `VITE_USE_MOCK=false`, Firebase email/mật khẩu → `GET /api/v1/me` kiểm ADMIN và client `adminApi.ts` gọi bảy GET nền đúng DTO/query Core. Chart growth chưa tích hợp; đăng nhập Firebase thật và UAT staging chưa được xác nhận bởi kiểm thử Core. Xem [contract ADMIN](../contracts/api-contracts.md#7-dashboard-quản-trị--đã-có-trong-core).
 
 **Bổ sung media trên nhánh hiện tại ngày 2026-10-08:** Core có port `MediaStorage` và adapter Cloudinary; Product image/Shop logo là public delivery, avatar là authenticated delivery. Cả ba upload reserve PENDING trong V14 `media_upload_keys` trước provider, dùng scope SHOP hoặc USER. Lease hết hạn được claim lại nguyên tử; token cũ không thể ghi/giải phóng lượt mới. Transaction ghi khóa lại và kiểm tra Shop/Product/User cùng lease trước khi đổi tham chiếu/audit/replay. Thay/xóa enqueue outbox V13 `media_cleanup_jobs`; worker khóa job `SKIP LOCKED` và public ID, bỏ qua asset đang gắn entity, hoãn upload đang có lease; retry chỉ cập nhật PENDING. Transaction cleanup giữ khóa trong lúc gọi delete provider. Mobile/web chưa gọi endpoint và nhánh này chưa xác nhận staging deploy/UAT.
 
@@ -39,7 +39,7 @@ Mục này là nơi duy nhất ghi hiện trạng triển khai; tài liệu khá
 
 **Bổ sung trên `feat/core-stock-in` ngày 2026-10-06 (base staging `99ed97a9d03656fe782ae43c81526e68a8c0cc08`):** Core có API nhập kho cộng dồn và tách PATCH product khỏi số tồn tuyệt đối theo `BR-018`/`FR-030`; đồng thời V12 snapshot giá vốn sale item và Core có top-products, sales-series, profit-estimate theo `FR-006`. [API contract](../contracts/api-contracts.md) là nguồn request/response. Chưa merge/deploy hoặc nghiệm thu mobile; không sửa FE trong thay đổi này.
 
-**Còn là đích MVP/chưa triển khai:** luồng AI proposal (text/voice/image → bản nháp); danh sách gợi ý nhập hàng trên màn tổng quan và UI gọi API nhập kho (#103); UI notification/push và FE dùng ba report nâng cao. API nhập kho/report đã có trên nhánh nêu trên, không đồng nghĩa #103 hoặc Home/Analytics hoàn tất. Gợi ý nhập hàng và câu hỏi số liệu đã có trong code `staging` qua `/api/v1/agent/chat` (tool `suggest_restock`, `query_shop_data`), nhưng chưa có bằng chứng nghiệm thu đầu-cuối và không xác nhận đã deploy staging. Hoàn tiền/trả hàng từng phần và ledger điều chỉnh kho độc lập chưa triển khai. Dashboard web vẫn cần tích hợp contract ADMIN đã có; API/audit không phải nghiệm thu giao diện. Năng lực end-to-end chỉ được nghiệm thu qua AC tương ứng trong [PRD](../product/product-requirements.md).
+**Còn là đích MVP/chưa triển khai:** luồng AI proposal (text/voice/image → bản nháp); danh sách gợi ý nhập hàng trên màn tổng quan và UI gọi API nhập kho (#103); UI notification/push và FE dùng ba report nâng cao. API nhập kho/report đã có trên nhánh nêu trên, không đồng nghĩa #103 hoặc Home/Analytics hoàn tất. Gợi ý nhập hàng và câu hỏi số liệu đã có trong code `staging` qua `/api/v1/agent/chat` (tool `suggest_restock`, `query_shop_data`), nhưng chưa có bằng chứng nghiệm thu đầu-cuối và không xác nhận đã deploy staging. Hoàn tiền/trả hàng từng phần và ledger điều chỉnh kho độc lập chưa triển khai. Chart growth của dashboard web vẫn cần tích hợp; client API nền đã có, còn API/audit không phải nghiệm thu giao diện. Năng lực end-to-end chỉ được nghiệm thu qua AC tương ứng trong [PRD](../product/product-requirements.md).
 
 **Notification trên `feat/app-notifications` ngày 2026-10-08 (base staging `a1b97f8`):** V15 thêm ngưỡng tồn riêng Product nullable và hai bảng inbox/read-state. Core có 4 API OWNER, phát 5 loại event trong transaction Product/confirm/stock-in/void/đổi trạng thái tiệm; khóa nguồn, unique episode/recipient và partial unique stock ngăn trùng. LOW/OUT chỉ giữ một cảnh báo mở; giải quyết giữ lịch sử và không tự đánh dấu đọc. List/count/read kiểm recipient và quyền tiệm: INACTIVE chỉ thấy event trạng thái, ARCHIVED bị loại; batch read nguyên tử, giữ readAt đầu tiên. Không có push/FCM/reminder/AI event; chưa sửa UI hoặc nghiệm thu staging.
 
@@ -50,6 +50,24 @@ Mục này là nơi duy nhất ghi hiện trạng triển khai; tài liệu khá
 **CORE-012 #163/#164 trên `feat/core-barcode`, ngày 2026-10-12:** chuẩn hóa barcode và lookup đã có; hoàn thiện precheck ACTIVE-only, 409 details và V16. Chưa chạy shared migration hoặc nghiệm thu FE. Xem [§4.3](#43-barcode-core-core-012-163164), [contract](../contracts/api-contracts.md#barcode-core-012), `FR-034`/`AC-064`–`AC-067`.
 
 **CORE-014 #213 trên `feat/sales-filter-summary`, ngày 2026-10-15 (base staging `df69819642fc420b7686d6f66073b946df2f13c2`):** Core có GET `/api/v1/sales/summary` để trả count/giá trị toàn bộ sale khớp filter, dùng chung predicate với list và một query aggregate. Không đổi schema, API ghi hoặc báo cáo kỳ; chưa tích hợp FE hay nghiệm thu staging. Truy vết `BR-004`/`BR-005`/`BR-009` → `FR-006`/`FR-033` → `AC-069`–`AC-072`; [§4.5](#45-tổng-danh-sách-sale-core-014) mô tả triển khai, [contract](../contracts/api-contracts.md#tổng-danh-sách-sale-theo-bộ-lọc-core-014) giữ ý nghĩa field/lỗi.
+
+### Tổng quan ADMIN theo ngày — admin-growth
+
+Trên `feat/admin-dashboard-growth`, Core bổ sung `GET /api/v1/admin/overview/growth`
+cho phạm vi `BR-013`/`BR-014` → `FR-024` → `AC-097`–`AC-100`; chưa xác nhận merge,
+deploy hoặc nghiệm thu FE/staging. Bảy GET nền giữ contract cũ; tổng số GET ADMIN
+trong nhánh là tám. Response/ngày/lỗi/audit nằm ở
+[contract growth](../contracts/api-contracts.md#chuỗi-tạo-mới-theo-ngày--admin-growth),
+hướng dẫn kiểm chứng ở [Core handoff](../../backend/core/docs/admin-dashboard-growth.md).
+
+- Repository tổng hợp bằng SQL thay vì tải entity vào JVM; các nguồn được tổng hợp
+  độc lập trước khi nối kết quả để tránh nhân số lượng qua quan hệ một-nhiều.
+- Service giữ snapshot REPEATABLE_READ và ghi audit trong cùng transaction có thể
+  ghi. Tái sử dụng dữ liệu/lưu trữ hiện có nên không cần thay đổi schema hoặc index.
+- Controller/PostgreSQL tests kiểm chứng contract được liên kết ở trên; phạm vi và
+  kết quả nằm trong Core handoff. Chưa có benchmark growth trên dữ liệu lớn hoặc
+  nghiệm thu chart FE; đánh giá query plan trước khi đề xuất index, và xin duyệt
+  migration riêng nếu cần.
 
 ### Zalo CORE-015
 
@@ -108,7 +126,7 @@ Lỗi confirm/repay/void rollback toàn bộ thay đổi tiền/nợ/tồn, noti
 
 Luồng text/voice/image → AI proposal → draft vẫn là đích: AI không được tự tạo sale/payment/debt/expense. Core mới gọi AI cho chat trợ lý (proxy Agent), chưa gọi cho luồng proposal; timeout/fallback cần nghiệm thu khi tích hợp.
 
-Luồng ADMIN hiện có: xác minh token → profile ADMIN/ACTIVE trong DB → đọc projection hỗ trợ → ghi audit → commit → trả response. 7 GET `/api/v1/admin/*` gồm overview, danh sách/chi tiết OWNER, danh sách/chi tiết tiệm, lịch sử trạng thái tiệm và lịch sử truy cập của chính ADMIN. Các GET này dùng transaction có khả năng ghi, isolation REPEATABLE_READ, không dùng readOnly vì phải lưu audit. Không lưu được audit trả 503 admin_audit_unavailable, không trả profile được bảo vệ. Chi tiết query/DTO/phạm vi nằm trong [contract ADMIN](../contracts/api-contracts.md#7-dashboard-quản-trị--đã-có-trong-core).
+Luồng ADMIN: xác minh token → profile ADMIN/ACTIVE trong DB → đọc projection hỗ trợ → ghi audit → commit → trả response. Bảy GET nền `/api/v1/admin/*` gồm overview, danh sách/chi tiết OWNER, danh sách/chi tiết tiệm, lịch sử trạng thái tiệm và lịch sử truy cập của chính ADMIN; nhánh admin-growth bổ sung GET thứ tám cho chuỗi tạo mới. Các GET này dùng transaction có khả năng ghi, isolation REPEATABLE_READ, không dùng readOnly vì phải lưu audit. Không lưu được audit trả 503 admin_audit_unavailable, không trả dữ liệu được bảo vệ. Chi tiết query/DTO/phạm vi nằm trong [contract ADMIN](../contracts/api-contracts.md#7-dashboard-quản-trị--đã-có-trong-core).
 
 `PATCH /api/v1/shops/{shopId}/status` vẫn nằm ngoài prefix admin; tạm ngưng/kích hoạt kèm lý do, ghi một event SHOP_INACTIVATED/SHOP_REACTIVATED dùng chung cho lịch sử OWNER và projection ADMIN. Thay đổi trạng thái và audit cùng transaction, lỗi audit rollback. ADMIN không giả danh OWNER hay sửa sổ; triển khai Core không tự chứng minh web/staging đạt BR-014/NFR-009.
 
@@ -227,7 +245,7 @@ Khi `FIREBASE_SERVICE_ACCOUNT_JSON` có giá trị không rỗng, Core dùng JSO
 
 ## 7. Kiểm chứng trước merge
 
-Đối chiếu code/schema không thay thế chạy lại hệ thống. Suite Core có test controller, service, validation, timestamp, concurrency và migration (SaleRefundMigrationPostgresTest, DebtVoidPostgresTest, AdminDashboardControllerWebTest, AdminDashboardPostgresTest, ReportAggregationPostgresTest). Test PostgreSQL là opt-in: Maven skip khi thiếu `CORE_TEST_POSTGRES_URL` (job `core` của CI có đặt biến này); phải bật môi trường test DB để kiểm chứng V1–V16, rollback và khóa đồng thời. Media test kiểm input, public-ID prefix, idempotency replay, adapter, worker và schema V13/V14; vẫn cần upload thật bằng credential staging an toàn. NotificationPostgresTest dùng migration V1–V16 thật để kiểm stock episodes, cùng-key/khác-key confirm/void, rollback khi notification lỗi, batch read/concurrency và tenant/status filtering; migration tests kiểm fresh validation/upgrade/adoption/rollback. Lệnh trong [Core README](../../backend/core/README.md), kết quả từng lượt trong PROGRESS.md không thay UAT.
+Đối chiếu code/schema không thay thế chạy lại hệ thống. Suite Core có test controller, service, validation, timestamp, concurrency và migration (SaleRefundMigrationPostgresTest, DebtVoidPostgresTest, AdminDashboardControllerWebTest, AdminDashboardPostgresTest, ReportAggregationPostgresTest). Test PostgreSQL là opt-in: Maven skip khi thiếu `CORE_TEST_POSTGRES_URL` (job `core` của CI có đặt biến này); phải bật môi trường test DB để kiểm chứng V1–V18, rollback và khóa đồng thời. Media test kiểm input, public-ID prefix, idempotency replay, adapter, worker và schema V13/V14; vẫn cần upload thật bằng credential staging an toàn. NotificationPostgresTest dùng migration V1–V18 thật để kiểm stock episodes, cùng-key/khác-key confirm/void, rollback khi notification lỗi, batch read/concurrency và tenant/status filtering; migration tests kiểm fresh validation/upgrade/adoption/rollback. Lệnh trong [Core README](../../backend/core/README.md), kết quả từng lượt trong PROGRESS.md không thay UAT.
 
 Kiểm thử chống N+1 trên PostgreSQL thật (không chỉ mock repository):
 
@@ -241,7 +259,7 @@ Query count, SQL/plan và tính đúng đắn là kiểm chứng hồi quy; th�
 
 | Nhóm | Bằng chứng bắt buộc |
 |---|---|
-| Core | V1–V16 từ DB rỗng/upgrade; controller contract theo mục 1–4 và 7; chống N+1 cho list sale/draft, prepare, khóa confirm/void và đọc cảnh báo mở theo §4.1; confirm/repay/void rollback, replay và cạnh tranh khóa; report aggregate/giá vốn thiếu/ngày trống; media validation/idempotency/cleanup worker; test chéo shop, ADMIN projection/actor scope và audit fail-closed/rollback. DB local kiểm thử không thay nghiệm thu Supabase staging hoặc FE |
+| Core | Migration hiện có đến V18 trên schema test riêng, gồm fresh/upgrade theo từng suite; controller contract theo mục 1–4 và 7; chống N+1 cho list sale/draft, prepare, khóa confirm/void và đọc cảnh báo mở theo §4.1; confirm/repay/void rollback, replay và cạnh tranh khóa; report aggregate/giá vốn thiếu/ngày trống; media validation/idempotency/cleanup worker; test chéo shop, ADMIN projection/actor scope, growth theo ngày Việt Nam/phiên UTC và audit fail-closed/rollback; bằng chứng lượt verify trong [Core handoff](../../backend/core/docs/admin-dashboard-growth.md#verification-history). DB local kiểm thử không thay nghiệm thu Supabase staging hoặc FE |
 | AI | contract test Core ↔ AI; timeout/fallback; output schema; truy xuất đúng phạm vi `shop_id` |
 | FE | OWNER: login → chọn shop → tạo/chốt → báo cáo; ADMIN: login → tra cứu cơ sở → xem tổng quan; test role guard và trạng thái loading/error/empty |
 | Ops | CI kiểm migration; staging dùng Supabase project riêng; deploy production cần phê duyệt |

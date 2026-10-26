@@ -32,6 +32,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.IllegalTransactionStateException;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -140,6 +141,88 @@ class AdminDashboardPostgresTest {
         assertThat(result.shops().total()).isEqualTo(result.shops().active() + result.shops().inactive() + result.shops().archived());
         assertThat(result.owners().total()).isEqualTo(result.owners().active() + result.owners().disabled());
         assertThat(jdbc.queryForObject("select shop_id from audit_logs where actor_user_id=?", Long.class, adminId)).isNull();
+    }
+
+    /** Verifies leap-day buckets in a UTC session, independent source counts and overview audit scope. */
+    @Test
+    void growthUsesVietnamDatesZeroFillsAndMatchesOverviewWithoutMultiplyingCounts() {
+        long disabledOwner = user(token("growth-disabled"), SystemRole.OWNER, UserStatus.DISABLED);
+        long outsideOwner = user(token("growth-outside"), SystemRole.OWNER, UserStatus.ACTIVE);
+        long secondShop = shops.create(owner, new ShopCreateRequest("Growth second", "Retail", null, null)).id();
+        long thirdShop = shops.create(owner, new ShopCreateRequest("Growth third", "Retail", null, null)).id();
+        long beforeShop = shops.create(owner, new ShopCreateRequest("Before", "Retail", null, null)).id();
+        long afterShop = shops.create(owner, new ShopCreateRequest("After", "Retail", null, null)).id();
+        jdbc.update("update users set created_at=?::timestamptz where id=?", "2024-02-28T17:00:00Z", ownerId);
+        jdbc.update("update users set created_at=?::timestamptz where id=?", "2024-02-29T16:59:59.999999Z", disabledOwner);
+        jdbc.update("update users set created_at=?::timestamptz where id=?", "2024-03-02T17:00:00Z", outsideOwner);
+        jdbc.update("update users set created_at=?::timestamptz where id=?", "2024-02-28T17:00:00Z", adminId);
+        jdbc.update("update shops set created_at=?::timestamptz where id=?", "2024-02-27T17:00:00Z", shopId);
+        jdbc.update("update shops set status='INACTIVE',inactive_reason='Paused',created_at=?::timestamptz where id=?",
+                "2024-02-28T17:00:00Z", secondShop);
+        jdbc.update("update shops set status='ARCHIVED',archived_at=now(),archived_reason='Closed',created_at=?::timestamptz where id=?",
+                "2024-02-29T16:59:59.999999Z", thirdShop);
+        jdbc.update("update shops set created_at=?::timestamptz where id=?", "2024-02-27T16:59:59.999999Z", beforeShop);
+        jdbc.update("update shops set created_at=?::timestamptz where id=?", "2024-03-02T17:00:00Z", afterShop);
+        var from = LocalDate.parse("2024-02-28");
+        var to = LocalDate.parse("2024-03-02");
+        var transaction = new TransactionTemplate(transactions);
+        transaction.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
+        var growth = transaction.execute(status -> {
+            jdbc.execute("set local time zone 'UTC'");
+            assertThat(jdbc.queryForObject("show timezone", String.class)).isEqualTo("UTC");
+            return dashboard.growth(admin, from, to);
+        });
+        assertThat(growth.timezone()).isEqualTo("Asia/Ho_Chi_Minh");
+        assertThat(growth.points()).extracting(p -> p.date()).containsExactly(from, from.plusDays(1), from.plusDays(2), to);
+        assertThat(growth.points()).extracting(p -> p.ownersCreated()).containsExactly(0L, 2L, 0L, 0L);
+        assertThat(growth.points()).extracting(p -> p.shopsCreated()).containsExactly(1L, 2L, 0L, 0L);
+        var overview = dashboard.overview(admin, from, to);
+        assertThat(growth.points().stream().mapToLong(p -> p.ownersCreated()).sum()).isEqualTo(overview.owners().createdInPeriod());
+        assertThat(growth.points().stream().mapToLong(p -> p.shopsCreated()).sum()).isEqualTo(overview.shops().createdInPeriod());
+        var ownHistory = dashboard.accessLogs(admin, AdminAccessAction.OVERVIEW_VIEWED, null, null, null, 0, 20);
+        assertThat(ownHistory.items()).hasSize(2).allSatisfy(e -> {
+            assertThat(e.action()).isEqualTo(AdminAccessAction.OVERVIEW_VIEWED);
+            assertThat(e.actorUserId()).isEqualTo(adminId);
+            assertThat(e.targetType()).isEqualTo("SYSTEM");
+            assertThat(e.targetId()).isNull();
+            assertThat(e.shopId()).isNull();
+        });
+    }
+
+    /** Exercises empty dates and the inclusive 366-day boundary against the migrated database. */
+    @Test
+    void growthSupportsSingleEmptyDayAndTheFullLeapYearLimit() {
+        var day = LocalDate.parse("1996-02-29");
+        var single = dashboard.growth(admin, day, day);
+        assertThat(single.points()).hasSize(1);
+        assertThat(single.points().getFirst().date()).isEqualTo(day);
+        assertThat(single.points().getFirst().ownersCreated()).isZero();
+        assertThat(single.points().getFirst().shopsCreated()).isZero();
+        var year = dashboard.growth(admin, LocalDate.parse("1996-01-01"), LocalDate.parse("1996-12-31"));
+        assertThat(year.points()).hasSize(366).allSatisfy(p -> {
+            assertThat(p.ownersCreated()).isZero();
+            assertThat(p.shopsCreated()).isZero();
+        });
+        expectCode(() -> dashboard.growth(admin, LocalDate.parse("1996-01-01"), LocalDate.parse("1997-01-01")),
+                ErrorCode.INVALID_ADMIN_QUERY);
+        assertThat(ownCount(adminId)).isEqualTo(2);
+    }
+
+    /** Checks DB role/status guards and rollback/retry when PostgreSQL rejects the overview audit. */
+    @Test
+    void growthIsAdminOnlyAndFailsClosedWhenAuditCannotCommit() {
+        expectCode(() -> dashboard.growth(owner, null, null), ErrorCode.ADMIN_ACCESS_REQUIRED);
+        expectCode(() -> dashboard.growth(disabledAdmin, null, null), ErrorCode.ACCOUNT_DISABLED);
+        expectCode(() -> dashboard.growth(token("unknown"), null, null), ErrorCode.AUTH_PROFILE_NOT_FOUND);
+        assertThat(ownCount(adminId)).isZero();
+        jdbc.execute("alter table audit_logs add constraint test_reject_growth check(actor_user_id<>" + adminId
+                + " or action<>'ADMIN_OVERVIEW_VIEWED')");
+        try {
+            expectCode(() -> dashboard.growth(admin, null, null), ErrorCode.ADMIN_AUDIT_UNAVAILABLE);
+            assertThat(ownCount(adminId)).isZero();
+        } finally { jdbc.execute("alter table audit_logs drop constraint test_reject_growth"); }
+        dashboard.growth(admin, null, null);
+        assertThat(ownCount(adminId)).isEqualTo(1);
     }
 
     @Test

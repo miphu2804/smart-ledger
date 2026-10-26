@@ -36,7 +36,7 @@ import org.springframework.test.web.servlet.MockMvc;
         BearerTokenAuthenticationFilter.class, RestAuthenticationEntryPoint.class, ApiExceptionHandler.class,
         AdminDashboardServiceImpl.class, AdminAccessAuditService.class})
 class AdminDashboardControllerWebTest {
-    private static final String[] ROUTES = {"overview", "users", "users/12", "shops", "shops/7", "shops/7/status-history", "access-logs"};
+    private static final String[] ROUTES = {"overview", "overview/growth", "users", "users/12", "shops", "shops/7", "shops/7/status-history", "access-logs"};
     private static final OffsetDateTime TIME = OffsetDateTime.parse("2026-10-01T14:30:00Z");
     @Autowired MockMvc mvc;
     @MockitoBean FirebaseTokenVerifier verifier;
@@ -153,6 +153,67 @@ class AdminDashboardControllerWebTest {
                 OffsetDateTime.parse("2026-10-02T00:00:00+07:00"));
     }
 
+    /** Checks the public growth shape, Vietnam bounds, privacy and reuse of the overview audit action. */
+    @Test
+    void growthReturnsDailyCountsWithoutIdentityOrFinancialDataAndAuditsOverviewRead() throws Exception {
+        var from = LocalDate.parse("2026-10-01");
+        when(dashboard.dailyGrowth(eq(from), eq(from.plusDays(1)), any(), any()))
+                .thenReturn(List.of(new GrowthPoint(from, 2, 3), new GrowthPoint(from.plusDays(1), 0, 0)));
+        var body = mvc.perform(get("/api/v1/admin/overview/growth").header("Authorization", "Bearer admin")
+                        .param("fromDate", "2026-10-01").param("toDate", "2026-10-02"))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.timezone").value("Asia/Ho_Chi_Minh"))
+                .andExpect(jsonPath("$.fromDate").value("2026-10-01"))
+                .andExpect(jsonPath("$.toDate").value("2026-10-02"))
+                .andExpect(jsonPath("$.points.length()").value(2))
+                .andExpect(jsonPath("$.points[0].date").value("2026-10-01"))
+                .andExpect(jsonPath("$.points[0].ownersCreated").value(2))
+                .andExpect(jsonPath("$.points[0].shopsCreated").value(3))
+                .andExpect(jsonPath("$.points[1].ownersCreated").value(0))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(body).doesNotContain("email", "phone", "uid", "revenue", "metadata");
+        verify(dashboard).dailyGrowth(from, from.plusDays(1),
+                OffsetDateTime.parse("2026-10-01T00:00:00+07:00"), OffsetDateTime.parse("2026-10-03T00:00:00+07:00"));
+        verify(audit).append(argThat(event -> event.getActorUserId() == 42
+                && event.getAction() == AuditAction.ADMIN_OVERVIEW_VIEWED && event.getShopId() == null
+                && event.getEntityId() == null && Integer.valueOf(1).equals(event.getMetadata().get("resultCount"))));
+    }
+
+    /** Keeps growth date defaults and invalid-range behavior aligned with the original overview. */
+    @Test
+    void growthDefaultsToThirtyVietnamDaysAndDoesNotAcceptInvalidOrPartialRanges() throws Exception {
+        when(dashboard.dailyGrowth(any(), any(), any(), any())).thenReturn(List.of());
+        LocalDate before = LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+        mvc.perform(get("/api/v1/admin/overview/growth").header("Authorization", "Bearer admin"))
+                .andExpect(status().isOk());
+        LocalDate after = LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+        verify(dashboard).dailyGrowth(argThat(d -> d.equals(before.minusDays(29)) || d.equals(after.minusDays(29))),
+                argThat(d -> d.equals(before) || d.equals(after)), any(), any());
+        clearInvocations(dashboard, audit);
+        for (String[] range : new String[][] {{"2026-10-02", "2026-10-01"}, {"2025-01-01", "2026-01-02"},
+                {"2026-10-01", ""}, {"", "2026-10-01"}, {"0000-01-01", "0000-01-02"}, {"9999-01-01", "9999-01-02"}}) {
+            var request = get("/api/v1/admin/overview/growth").header("Authorization", "Bearer admin");
+            if (!range[0].isEmpty()) { request.param("fromDate", range[0]); }
+            if (!range[1].isEmpty()) { request.param("toDate", range[1]); }
+            mvc.perform(request).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("invalid_admin_query"));
+        }
+        mvc.perform(get("/api/v1/admin/overview/growth").header("Authorization", "Bearer admin").param("fromDate", "bad"))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(dashboard, audit);
+    }
+
+    /** Proves that an audit write failure cannot disclose an otherwise available growth projection. */
+    @Test
+    void growthNeverReturnsDataIfAuditFails() throws Exception {
+        when(dashboard.dailyGrowth(any(), any(), any(), any()))
+                .thenReturn(List.of(new GrowthPoint(LocalDate.parse("2026-10-01"), 123, 456)));
+        doThrow(new DataAccessResourceFailureException("private failure")).when(audit).append(any());
+        var body = mvc.perform(get("/api/v1/admin/overview/growth").header("Authorization", "Bearer admin"))
+                .andExpect(status().isServiceUnavailable()).andExpect(jsonPath("$.code").value("admin_audit_unavailable"))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(body).doesNotContain("ownersCreated", "shopsCreated", "private failure");
+    }
+
     @Test
     void invalidFiltersRangesAndPaginationNeverReadOrAudit() throws Exception {
         for (String[] param : new String[][] {{"page", "-1"}, {"size", "0"}, {"size", "101"},
@@ -206,8 +267,9 @@ class AdminDashboardControllerWebTest {
         assertThat(body).doesNotContain("private@test", "Secret", "secret database");
     }
 
+    /** Ensures every supported ADMIN read, including growth, rejects mutation methods before service access. */
     @ParameterizedTest
-    @ValueSource(strings = {"overview", "users", "users/12", "shops", "shops/7", "shops/7/status-history", "access-logs"})
+    @ValueSource(strings = {"overview", "overview/growth", "users", "users/12", "shops", "shops/7", "shops/7/status-history", "access-logs"})
     void adminReadEndpointsDoNotAcceptWrites(String route) throws Exception {
         for (var request : List.of(post("/api/v1/admin/" + route), patch("/api/v1/admin/" + route), delete("/api/v1/admin/" + route))) {
             mvc.perform(request.header("Authorization", "Bearer admin")).andExpect(status().isMethodNotAllowed());
