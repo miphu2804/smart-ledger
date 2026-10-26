@@ -219,7 +219,7 @@ Host và port thuộc cấu hình môi trường, không phải API contract. [C
 Khi `FIREBASE_SERVICE_ACCOUNT_JSON` có giá trị không rỗng, Core dùng JSON đó trước ADC; khi trống, Core dùng ADC. Cloudinary secret chỉ thuộc runtime Core; prefix phải khác theo local/staging/production hoặc dùng account/provider credential tách riêng. Cấu hình Railway theo từng environment, CORS allowlist và cách cấp secret nằm trong [CI/CD — Biến của service trên Railway](../development/ci-cd.md#railway-service-variables). `FLYWAY_ENABLED` kiểm soát migration lúc startup; việc chạy migration trên DB dùng chung phải theo [quy trình migration](../../README.md#database-migrations).
 
 - Dev và staging dùng chung một Supabase project và một Redis Cloud database, không chứa dữ liệu production; không có PostgreSQL hay Redis container local. Test tự động dùng PostgreSQL tạm: AI đọc `POSTGRES_TEST_URL`, Core đọc `CORE_TEST_POSTGRES_*`.
-- Sơ đồ môi trường và CI/CD: [ci-cd.drawio](diagrams/src/ci-cd.drawio) ([SVG](diagrams/images/ci-cd.svg)).
+- Sơ đồ CI/CD: [ci-cd.drawio](diagrams/src/ci-cd.drawio) ([SVG](diagrams/images/ci-cd.svg)).
 - Production: một Supabase project và một Redis Cloud database khác; credential staging và production không dùng chung file hay biến. Cách chạy Compose xem [README](../../README.md#local-compose).
 - Runtime dùng connection pooler; migration, `pg_dump` và `pg_restore` dùng kết nối PostgreSQL phù hợp cho tác vụ dài.
 - Môi trường dùng chung: secret ở GitHub Environment/secret manager. Local: file env/service-account không commit; mount credential vào container và đặt GOOGLE_APPLICATION_CREDENTIALS. Emulator chỉ dùng để test local, không dùng token emulator cho production.

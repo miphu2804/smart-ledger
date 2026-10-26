@@ -4,9 +4,9 @@ This document traces a change from a feature branch to Railway for `backend/core
 
 ## Overview
 
-![Backend CI/CD flow](../architecture/diagrams/images/ci-cd.svg)
+![CI, CD and Preview workflows](../architecture/diagrams/images/ci-cd.svg)
 
-Diagram source: [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio); edit it in draw.io, then re-export the SVG (`drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/ci-cd.svg docs/architecture/diagrams/src/ci-cd.drawio`). Green numbers are the deploy pipeline; orange numbers are the runtime request flow.
+Diagram source: [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio); edit it in draw.io, then re-export the SVG (`drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/ci-cd.svg docs/architecture/diagrams/src/ci-cd.drawio`). It shows the three workflows (CI, CD, Preview), what each job checks or deploys, and where it deploys; the runtime services are in the [architecture diagram](../architecture/diagrams/images/architecture.svg).
 
 ## Steps
 
@@ -51,10 +51,10 @@ Each area is handed to CD on its own checks: the backend on `ai`, `core` and `co
 |---|---|---|---|---|
 | `railway-staging` | `staging` | No | `RAILWAY_TOKEN`: project token of the Railway staging environment; `OPENAI_API_KEY` ([AI model settings](#ai-model-settings)); `LOGFIRE_TOKEN` (optional, [AI tracing settings](#ai-tracing-settings)) | `CORS_ALLOWED_ORIGINS`, AI model settings |
 | `railway-production` | `main` | Yes | `RAILWAY_TOKEN`: project token of the Railway production environment; `OPENAI_API_KEY`; `LOGFIRE_TOKEN` (optional) | `CORS_ALLOWED_ORIGINS` (optional), AI model settings |
-| `vercel-preview` (unused while PR previews are off) | Any branch (PR) | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `EXPO_PUBLIC_*` |
+| `vercel-preview` | Any branch ([Preview](#pull-request-previews)) | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `EXPO_PUBLIC_*` |
 | `vercel-staging` | `staging` | No | Same as above | `EXPO_PUBLIC_*`, `VERCEL_STAGING_ALIAS` |
 | `vercel-production` | `main` | Yes | Same as above | `EXPO_PUBLIC_*` |
-| `landing-preview` (unused while PR previews are off) | Any branch (PR) | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` of the `landing` project | `VITE_LEGAL_DRAFT` |
+| `landing-preview` | Any branch ([Preview](#pull-request-previews)) | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` of the `landing` project | `VITE_LEGAL_DRAFT` |
 | `landing-staging` | `staging` | No | Same as above | `VITE_LEGAL_DRAFT`, `LANDING_URL`; admin: `VITE_ADMIN_ENABLED`, `VITE_API_ENDPOINT`, `VITE_FIREBASE_API_KEY` |
 | `landing-production` | `main` | Yes | Same as above | `VITE_LEGAL_DRAFT`, `LANDING_URL`, `VITE_ANDROID_APK_URL`; admin: the same three |
 | `android-dev` | None; job `gate` pairs it with branches other than `main` and `staging` | No | `ANDROID_GOOGLE_SERVICES_JSON`: Firebase config of the dev/staging project | `EXPO_PUBLIC_*` |
@@ -157,7 +157,7 @@ Staging value:
 https://smart-ledger-staging.vercel.app,https://smart-ledger-preview-00.vercel.app,…,https://smart-ledger-preview-09.vercel.app
 ```
 
-The ten `smart-ledger-preview-0N` origins belong to pull-request previews, which are off for now (see below); keep them so previews can return; the same domains must also be listed in Firebase Authorized domains for sign-in to work.
+The ten `smart-ledger-preview-0N` origins belong to [pull-request previews](#pull-request-previews); the same domains must also be listed in Firebase Authorized domains for sign-in to work.
 
 ## Production environment checklist
 
@@ -191,7 +191,7 @@ Job `deploy-web` builds `frontend/mobile` on the runner (`vercel build`) and upl
 | Push `main` | `vercel-production` | Production deploy after approval; the smoke test and the GitHub Deployments link use `https://smart-ledger-prod.vercel.app` |
 
 - The `url` of `vercel-staging` and `vercel-production` is set in `deploy-web.yml` and fixed to the two domains above, so the repository's Deployments panel links to them. `vercel-preview` has no `url`: its alias depends on the PR number and is already commented on the PR. If a domain changes in Vercel (Project → Settings → Domains), update `deploy-web.yml` too.
-- Pull requests get no web preview. Previews used up the Vercel Hobby limit of 100 deployments a day, and once it ran out the `staging` and `main` deploys failed too. To bring them back, call `deploy-web.yml` and `deploy-landing.yml` from a job in `ci.yml` limited to pull requests from this repository (`github.event.pull_request.head.repo.full_name == github.repository`), with `sha` set to the pull request head; CD never runs for a pull request. The PR-only steps (alias, PR comment) are still in those files, and the `vercel-preview` and `landing-preview` environments still exist.
+- <a id="pull-request-previews"></a>Pull requests get a preview only on demand: Actions → Preview → Run workflow, with the PR number and `web`, `landing` or both. Automatic previews used up the Vercel Hobby limit of 100 deployments a day, and once it ran out the `staging` and `main` deploys failed too. [`preview.yml`](../../.github/workflows/preview.yml) deploys the head of an open PR from this repository (never a fork, since the preview environments hold Vercel tokens) through `deploy-web.yml` and `deploy-landing.yml` with input `pr`; the web preview takes the alias `smart-ledger-preview-0<PR number % 10>` and edits the bot's last PR comment with the URL, the landing takes `smart-ledger-landing-pr-<PR number>`. CD never runs for a pull request. The Preview workflow can be started only once it is on `main`.
 - Only job `mobile-web` must pass; the web does not wait for the backend deploy.
 - `EXPO_PUBLIC_*` values are baked into the bundle at build time, so set them as **Variables** (not Secrets) of each environment: `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS`, `EXPO_PUBLIC_API_ENDPOINT`, `EXPO_PUBLIC_FIREBASE_API_KEY`, `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`, `EXPO_PUBLIC_FIREBASE_PROJECT_ID`, `EXPO_PUBLIC_FIREBASE_APP_ID`, and optionally `EXPO_PUBLIC_ZALO_LOGIN` (`true` only once that environment's Core has `ZALO_ENABLED=true` and lists the web origin in `ZALO_CLIENT_ORIGINS`; unset keeps the Zalo button at "Sắp có"). Re-run the job after changing one so the web picks it up.
 - `EXPO_PUBLIC_API_ENDPOINT`, `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE` and `EXPO_PUBLIC_MOCK_SHOPS` have no default in code: `frontend/mobile/src/config.ts` stops the app at launch when one is missing or a flag is not `true`/`false`.
