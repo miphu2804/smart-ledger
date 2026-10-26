@@ -23,11 +23,15 @@ smart-ledger/
 │   │   ├── recipients.txt     # who can decrypt; in git
 │   │   └── targets            # files apply.sh copies out; in git
 │   ├── production/            # the same, without targets
-│   └── local.env.core, local.env.ai  # keys that differ on a dev machine; in git
+│   ├── local.env.core, local.env.ai  # keys that differ on a dev machine; in git
+│   └── admins.txt             # keys allowed to change or move a bucket; in git
 └── scripts/secrets/
     ├── pull.sh                # R2 → env/; runs on pull, checkout
     ├── push.sh                # env/ → R2; after changing a secret
     ├── check.sh               # recent versions and their changes
+    ├── config.sh              # bucket, endpoint and R2 token of an environment
+    ├── migrate.sh             # copy an environment to a new bucket
+    ├── clean.sh               # empty the bucket migrate.sh moved away from
     ├── apply.sh               # staging ⇄ dev; dry run by default
     ├── guard.sh               # pre-commit: no secrets in git
     └── lib.sh                 # helpers the scripts share
@@ -161,7 +165,7 @@ Not in `secrets/`: `.env.r2.secrets` (the R2 tokens DVC needs to reach the files
 
 ### 4.1 The `sl` menu
 
-`sl` puts these scripts behind one menu (Pull, Push, History, Apply, Members) with the version and `env/` state of each environment on top. Install it once with `cargo install --path tools/secrets-cli`. In the menu, `E` switches the environment, and Apply staging → dev lists the keys of `secrets/local.env.*` ticked; untick one with Space to keep its staging value. Every step that writes asks first. With arguments it runs the script directly, for example `sl push staging` or `sl apply staging dev --apply`.
+`sl` puts these scripts behind one menu (Pull, Push, History, Apply, Members, Config, Migrate) with the version and `env/` state of each environment on top. Install it once with `cargo install --path tools/secrets-cli`. In the menu, `E` switches the environment, and Apply staging → dev lists the keys of `secrets/local.env.*` ticked; untick one with Space to keep its staging value. Every step that writes asks first. With arguments it runs the script directly, for example `sl push staging` or `sl apply staging dev --apply`.
 
 ## 5. Change a secret
 
@@ -181,6 +185,17 @@ git commit -m "chore(secrets): <what changed>"
 - **Add:** append their public key to `secrets/<environment>/recipients.txt`, then run `push.sh` as in [Change a secret](#5-change-a-secret).
 - **Remove:** delete their line, run `push.sh` again, and rotate every secret in that environment that they could read. They may still have the old file, and old versions stay in R2.
 
-## 7. Guard
+## 7. Move to another bucket
+
+Only the keys listed in `secrets/admins.txt` (one age public key per line, in git) can change or move a bucket. `config.sh` with options, `migrate.sh`, `clean.sh` and the Config and Migrate items of `sl` check it first. This guards against mistakes only; the real limit is that only the maintainer holds a write token for R2.
+
+1. `scripts/secrets/config.sh <environment>` shows the bucket, endpoint and token in use; `--url`, `--endpoint`, `--key-id` and `--secret` change one. The bucket and endpoint go to `.dvc/config`, which the team shares, and the token stays in `.dvc/config.local`.
+2. `scripts/secrets/migrate.sh <environment> --url s3://<new bucket> --key-id <id> --secret <secret>` copies every object of the current bucket, which is every pushed version and still encrypted, to the new one through a temporary folder, checks the count, and only then switches `r2-<environment>` to it. Add `--endpoint` when the new bucket lives in another Cloudflare account. The old bucket is not touched; this machine remembers it as `r2-<environment>-old` in `.dvc/config.local`.
+3. Commit `.dvc/config` and give each teammate a token for the new bucket ([Set up a machine](#3-set-up-a-machine), step 3).
+4. Once everyone has pulled from the new bucket, `scripts/secrets/clean.sh <environment>` counts the objects in the old one and `--apply` deletes them all. This cannot be undone. In `sl` it asks you to type the environment name first.
+
+`check.sh` reads old pointers through the current bucket, so history keeps working after the old bucket is emptied. Copying needs the AWS CLI (`brew install awscli`).
+
+## 8. Guard
 
 The `secrets-guard` pre-commit hook refuses a commit that stages anything in `secrets/<environment>/` other than `recipients.txt`, `targets` and `env.age.dvc`, or a pointer that tracks anything but `env.age`. `.dvc/config.local` holds the R2 tokens and is ignored by `.dvc/.gitignore`.

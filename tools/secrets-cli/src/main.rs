@@ -6,7 +6,6 @@
 
 mod menu;
 
-use std::io::{self, BufRead, Write};
 use std::process::{Command, ExitCode};
 
 const USAGE: &str = "usage: sl [pull | push <env> | history <env> [count] | apply <from> <to> [options] | members <env>]";
@@ -35,7 +34,16 @@ fn main() -> ExitCode {
         "push" => script("push.sh", rest),
         "history" => script("check.sh", rest),
         "apply" => script("apply.sh", rest),
-        "members" if rest.len() == 1 => members(&rest[0]),
+        "members" if rest.len() == 1 => match members(&rest[0]) {
+            Ok(text) => {
+                print!("{text}");
+                true
+            }
+            Err(error) => {
+                eprintln!("sl: {error}");
+                false
+            }
+        },
         _ => {
             eprintln!("{USAGE}");
             false
@@ -50,7 +58,7 @@ fn repo_root() -> Option<String> {
 }
 
 /// Runs `scripts/secrets/<name>` with the terminal attached, so its own output and errors show as they are.
-pub fn script(name: &str, args: &[String]) -> bool {
+fn script(name: &str, args: &[String]) -> bool {
     Command::new("sh")
         .arg(format!("scripts/secrets/{name}"))
         .args(args)
@@ -58,27 +66,16 @@ pub fn script(name: &str, args: &[String]) -> bool {
         .is_ok_and(|status| status.success())
 }
 
-/// Prints who can decrypt an environment: one age public key per line of its recipients.txt.
-pub fn members(environment: &str) -> bool {
-    let Ok(text) = std::fs::read_to_string(format!("secrets/{environment}/recipients.txt")) else {
-        eprintln!("sl: secrets/{environment}/recipients.txt not found");
-        return false;
-    };
+/// Lists who can decrypt an environment: one age public key per line of its recipients.txt.
+pub fn members(environment: &str) -> Result<String, String> {
+    let path = format!("secrets/{environment}/recipients.txt");
+    let text = std::fs::read_to_string(&path).map_err(|_| format!("{path} not found"))?;
     let keys: Vec<&str> = text.lines().filter(|line| line.starts_with("age1") || line.starts_with("ssh-")).collect();
-    println!("Keys that can decrypt {environment} ({}):", keys.len());
+    let mut out = format!("Keys that can decrypt {environment} ({}):\n", keys.len());
     for key in keys {
         let shown: String = key.chars().take(24).collect();
-        println!("  {shown}…");
+        out += &format!("  {shown}…\n");
     }
-    println!("To add one, append their public key to secrets/{environment}/recipients.txt and push {environment}.");
-    true
-}
-
-/// Asks a yes/no question on the plain terminal; anything but y or yes is no.
-pub fn confirm(question: &str) -> bool {
-    print!("{question} [y/N] ");
-    let _ = io::stdout().flush();
-    let mut answer = String::new();
-    let _ = io::stdin().lock().read_line(&mut answer);
-    matches!(answer.trim().to_lowercase().as_str(), "y" | "yes")
+    out += &format!("To add one, append their public key to {path} and push {environment}.\n");
+    Ok(out)
 }

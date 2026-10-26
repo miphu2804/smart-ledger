@@ -39,3 +39,13 @@ key_changes() {
       for (key in existing) if (!(key in incoming)) print "  - " key
     }' "$1" "$2" | sort -k2
 }
+
+# Exits unless this machine's age key is listed in secrets/admins.txt. Changing or moving a bucket is kept to the
+# maintainer; this only stops a teammate from doing it by mistake, because the real limit is which R2 tokens they hold.
+require_admin() {
+  key="${SMARTLEDGER_AGE_KEY:-$HOME/.config/smartledger/age.key}"
+  mine="$(age-keygen -y "$key" 2>/dev/null || ssh-keygen -y -f "$key" 2>/dev/null | cut -d' ' -f1,2)"
+  [ -n "$mine" ] && grep -qxF "$mine" secrets/admins.txt 2>/dev/null && return
+  echo "secrets: only keys in secrets/admins.txt can change or move a bucket" >&2
+  exit 1
+}

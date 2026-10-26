@@ -12,14 +12,21 @@ count="${2:-5}"
 # Old versions are decrypted here to compare them, then deleted on exit.
 umask 077
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
+# DVC reads each old pointer from here instead of through --all-commits, which resolves the remote from every old
+# commit's .dvc/config and so still asks the bucket that migrate.sh moved away from.
+history="$environment/.history"
+trap 'rm -rf "$work" "$history"' EXIT
 
 main() {
-  dvc fetch -q --all-commits -r "r2-$name" "$environment/env.age.dvc" 2>/dev/null \
-    || echo "secrets: could not fetch old versions from R2; their changes show as unavailable" >&2
   # One version more than shown, so the oldest row still has a version to compare against.
   git log -n "$((count + 1))" --format='%h|%an|%ad' --date=format:'%Y-%m-%d %H:%M' \
     -- "$environment/env.age.dvc" > "$work/log"
+  while IFS='|' read -r commit author date; do
+    mkdir -p "$history/$commit"
+    git show "$commit:$environment/env.age.dvc" > "$history/$commit/env.age.dvc"
+  done < "$work/log"
+  dvc fetch -q -r "r2-$name" "$history"/*/env.age.dvc 2>/dev/null \
+    || echo "secrets: could not fetch old versions from R2; their changes show as unavailable" >&2
   total=$(wc -l < "$work/log")
   i=0
   while IFS='|' read -r commit author date; do
