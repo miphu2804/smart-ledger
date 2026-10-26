@@ -2,7 +2,7 @@ name: Deploy web
 
 # Called by cd.yml for a commit whose `mobile-web` passed. Builds the mobile web bundle on the runner and uploads it to Vercel, so
 # each GitHub environment owns its EXPO_PUBLIC_* values (baked in at build time) and Vercel token.
-# `staging` gets a fixed alias and `main` goes to production; pull requests get no preview.
+# `staging` gets a fixed alias and `main` goes to production; preview.yml calls it with `pr` for a pull request preview.
 # Vercel's own Git deployments are off in frontend/mobile/vercel.json to avoid double deploys.
 # See docs/development/ci-cd.md#mobile-web-on-vercel.
 
@@ -14,9 +14,13 @@ on:
         type: string
         required: true
       sha:
-        description: Commit to deploy; CI tested it
+        description: Commit to deploy; CI tested it, or a pull request head for a preview
         type: string
         required: true
+      pr:
+        description: Pull request number; set by preview.yml for a preview, empty for staging and main
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -28,17 +32,17 @@ jobs:
     # `url` links the GitHub Deployments sidebar to the fixed domains; previews get none because
     # their alias depends on the PR number and is already commented on the PR.
     environment:
-      name: ${{ github.event_name == 'pull_request' && 'vercel-preview' || (github.ref_name == 'main' && 'vercel-production' || 'vercel-staging') }}
-      url: ${{ github.event_name == 'pull_request' && '' || (github.ref_name == 'main' && 'https://smart-ledger-prod.vercel.app' || 'https://smart-ledger-staging.vercel.app') }}
+      name: ${{ inputs.pr != '' && 'vercel-preview' || (github.ref_name == 'main' && 'vercel-production' || 'vercel-staging') }}
+      url: ${{ inputs.pr != '' && '' || (github.ref_name == 'main' && 'https://smart-ledger-prod.vercel.app' || 'https://smart-ledger-staging.vercel.app') }}
     concurrency:
-      group: deploy-web-${{ github.head_ref || github.ref_name }}
+      group: deploy-web-${{ inputs.pr != '' && format('pr-{0}', inputs.pr) || github.ref_name }}
       cancel-in-progress: true
     # Vercel CLI runs from the repo root: the project's Root Directory setting already points at frontend/mobile.
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      VERCEL_TARGET: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
+      VERCEL_TARGET: ${{ inputs.pr == '' && github.ref_name == 'main' && 'production' || 'preview' }}
       EXPO_PUBLIC_USE_MOCK: ${{ vars.EXPO_PUBLIC_USE_MOCK }}
       EXPO_PUBLIC_MOCK_CORE: ${{ vars.EXPO_PUBLIC_MOCK_CORE }}
       EXPO_PUBLIC_MOCK_SHOPS: ${{ vars.EXPO_PUBLIC_MOCK_SHOPS }}
@@ -82,10 +86,10 @@ jobs:
       # each other, and re-running the job takes the slot back.
       - name: Alias preview
         id: preview
-        if: github.event_name == 'pull_request'
+        if: inputs.pr != ''
         env:
           URL: ${{ steps.deploy.outputs.url }}
-          PR: ${{ github.event.pull_request.number }}
+          PR: ${{ inputs.pr }}
         run: |
           set -euo pipefail
           alias="smart-ledger-preview-0$((PR % 10)).vercel.app"
@@ -101,7 +105,7 @@ jobs:
       # not the per-deploy hash URL.
       - name: Alias staging
         id: staging
-        if: github.ref_name == 'staging'
+        if: inputs.pr == '' && github.ref_name == 'staging'
         env:
           STAGING_ALIAS: ${{ vars.VERCEL_STAGING_ALIAS }}
           URL: ${{ steps.deploy.outputs.url }}
@@ -123,7 +127,7 @@ jobs:
       # or Core rejecting this origin's CORS preflight.
       - name: Smoke test
         env:
-          URL: ${{ steps.preview.outputs.url || steps.staging.outputs.url || (github.ref_name == 'main' && 'https://smart-ledger-prod.vercel.app') || steps.deploy.outputs.url }}
+          URL: ${{ steps.preview.outputs.url || steps.staging.outputs.url || (inputs.pr == '' && github.ref_name == 'main' && 'https://smart-ledger-prod.vercel.app') || steps.deploy.outputs.url }}
         run: |
           set -euo pipefail
           # A fresh alias can take a few seconds to route, so retry before failing.
@@ -147,11 +151,12 @@ jobs:
         if: always() && steps.deploy.outputs.url != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          URL: ${{ steps.preview.outputs.url || steps.staging.outputs.url || (github.ref_name == 'main' && 'https://smart-ledger-prod.vercel.app') || steps.deploy.outputs.url }}
-          PR: ${{ github.event.pull_request.number }}
+          URL: ${{ steps.preview.outputs.url || steps.staging.outputs.url || (inputs.pr == '' && github.ref_name == 'main' && 'https://smart-ledger-prod.vercel.app') || steps.deploy.outputs.url }}
+          PR: ${{ inputs.pr }}
+          SHA: ${{ inputs.sha }}
         run: |
           echo "Web deploy: $URL" >> "$GITHUB_STEP_SUMMARY"
           if [ -n "$PR" ]; then
             gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --edit-last --create-if-none \
-              --body "Web preview (commit ${GITHUB_SHA::7}): $URL"
+              --body "Web preview (commit ${SHA::7}): $URL"
           fi

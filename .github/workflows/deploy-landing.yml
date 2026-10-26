@@ -2,7 +2,7 @@ name: Deploy landing
 
 # Called by cd.yml for a commit whose `landing` passed. Same shape as deploy-web.yml, with its own Vercel project `landing` and
 # GitHub environments. Vercel's Git deployments are off in frontend/web/vercel.json, so only this workflow deploys
-# the landing. Pull requests get no preview (see deploy-web.yml). When previews return, each PR gets the alias
+# the landing. preview.yml calls it with `pr` for a pull request preview, which gets the alias
 # smart-ledger-landing-pr-<number> in the run summary and no PR comment, because deploy-web already edits the bot's
 # last PR comment. See docs/development/ci-cd.md#landing-page-on-vercel.
 
@@ -14,9 +14,13 @@ on:
         type: string
         required: true
       sha:
-        description: Commit to deploy; CI tested it
+        description: Commit to deploy; CI tested it, or a pull request head for a preview
         type: string
         required: true
+      pr:
+        description: Pull request number; set by preview.yml for a preview, empty for staging and main
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -24,15 +28,15 @@ permissions:
 jobs:
   deploy:
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    environment: ${{ github.event_name == 'pull_request' && 'landing-preview' || (github.ref_name == 'main' && 'landing-production' || 'landing-staging') }}
+    environment: ${{ inputs.pr != '' && 'landing-preview' || (github.ref_name == 'main' && 'landing-production' || 'landing-staging') }}
     concurrency:
-      group: deploy-landing-${{ github.head_ref || github.ref_name }}
+      group: deploy-landing-${{ inputs.pr != '' && format('pr-{0}', inputs.pr) || github.ref_name }}
       cancel-in-progress: true
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      VERCEL_TARGET: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
+      VERCEL_TARGET: ${{ inputs.pr == '' && github.ref_name == 'main' && 'production' || 'preview' }}
       VITE_LEGAL_DRAFT: ${{ vars.VITE_LEGAL_DRAFT }}
       VITE_ANDROID_APK_URL: ${{ vars.VITE_ANDROID_APK_URL }}
       # Admin at /admin on the landing, reading the real Core admin API. Off unless the environment sets
@@ -84,10 +88,10 @@ jobs:
       # REST alias, as in deploy-web: `vercel alias set` fails for team tokens.
       - name: Alias preview
         id: preview
-        if: github.event_name == 'pull_request'
+        if: inputs.pr != ''
         env:
           URL: ${{ steps.deploy.outputs.url }}
-          PR: ${{ github.event.pull_request.number }}
+          PR: ${{ inputs.pr }}
         run: |
           set -euo pipefail
           alias="smart-ledger-landing-pr-$PR.vercel.app"
@@ -100,7 +104,7 @@ jobs:
           echo "url=https://$alias" >> "$GITHUB_OUTPUT"
           echo "alias: https://$alias -> $URL"
       - name: Alias staging
-        if: github.ref_name == 'staging'
+        if: inputs.pr == '' && github.ref_name == 'staging'
         env:
           URL: ${{ steps.deploy.outputs.url }}
           STAGING_URL: ${{ vars.LANDING_URL }}
@@ -118,7 +122,7 @@ jobs:
       # Pull requests check their PR alias; staging and main check the fixed LANDING_URL.
       - name: Smoke test
         env:
-          URL: ${{ github.event_name == 'pull_request' && steps.preview.outputs.url || vars.LANDING_URL }}
+          URL: ${{ inputs.pr != '' && steps.preview.outputs.url || vars.LANDING_URL }}
         run: |
           set -euo pipefail
           test -n "$URL" || { echo "::error::LANDING_URL is not set for this environment"; exit 1; }

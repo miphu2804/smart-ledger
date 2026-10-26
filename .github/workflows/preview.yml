@@ -1,0 +1,94 @@
+name: Preview
+
+# Deploys a pull request's head to Vercel previews when a person starts it (Actions → Preview → Run workflow), so
+# previews spend the Vercel Hobby limit of 100 deployments a day only on demand. The mobile web takes the fixed alias
+# smart-ledger-preview-0<PR number % 10>, which Core CORS and Firebase list, and the landing takes
+# smart-ledger-landing-pr-<PR number>. See docs/development/ci-cd.md#pull-request-previews.
+
+run-name: Preview PR ${{ inputs.pr }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number
+        type: number
+        required: true
+      web:
+        description: Deploy the mobile web preview
+        type: boolean
+        default: true
+      landing:
+        description: Deploy the landing page preview
+        type: boolean
+        default: false
+      runner:
+        description: default reads the repository variable CD_RUNNER, else CI_RUNNER, else github-hosted
+        type: choice
+        required: true
+        default: default
+        options: [default, github-hosted, self-hosted, auto]
+
+permissions:
+  contents: read
+
+jobs:
+  select-runner:
+    uses: ./.github/workflows/select-runner.yml
+    with:
+      choice: ${{ inputs.runner != 'default' && inputs.runner || vars.CD_RUNNER || vars.CI_RUNNER || 'github-hosted' }}
+    secrets:
+      RUNNERS_READ_TOKEN: ${{ secrets.RUNNERS_READ_TOKEN }}
+
+  # Preview environments hold Vercel tokens, so only an open pull request from this repository may reach them;
+  # a fork's code never runs with these secrets.
+  pull-request:
+    needs: [select-runner]
+    runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
+    permissions:
+      pull-requests: read
+    outputs:
+      sha: ${{ steps.check.outputs.sha }}
+    steps:
+      - name: Check the pull request
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ inputs.pr }}
+          WEB: ${{ inputs.web }}
+          LANDING: ${{ inputs.landing }}
+        run: |
+          set -euo pipefail
+          if [ "$WEB$LANDING" = falsefalse ]; then echo "::error::Choose web, landing or both."; exit 1; fi
+          read -r state fork sha < <(gh pr view "$PR" --repo "$REPO" --json state,isCrossRepository,headRefOid \
+            --jq '"\(.state) \(.isCrossRepository) \(.headRefOid)"')
+          [ "$state" = OPEN ] || { echo "::error::PR #$PR is $state, not open."; exit 1; }
+          [ "$fork" = false ] || { echo "::error::PR #$PR comes from a fork; previews run only for branches of this repository."; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Preview PR #$PR at ${sha::7}: web=$WEB landing=$LANDING" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-web:
+    if: inputs.web
+    needs: [select-runner, pull-request]
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/deploy-web.yml
+    with:
+      runs-on: ${{ needs.select-runner.outputs.runs_on }}
+      sha: ${{ needs.pull-request.outputs.sha }}
+      pr: ${{ inputs.pr }}
+    secrets: inherit
+
+  deploy-landing:
+    if: inputs.landing
+    needs: [select-runner, pull-request]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/deploy-landing.yml
+    with:
+      runs-on: ${{ needs.select-runner.outputs.runs_on }}
+      sha: ${{ needs.pull-request.outputs.sha }}
+      pr: ${{ inputs.pr }}
+    secrets: inherit
