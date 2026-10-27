@@ -2,9 +2,9 @@
 # Print where the size of an APK goes, as Markdown: the total, the raw and stored size of the native libraries per ABI,
 # dex, resources and assets, and the 40 largest entries. Stored = the size inside the APK (compressed when deflated).
 #
-#   ./scripts/apk-contents.sh path/to/app.apk
+#   ./scripts/release/apk-contents.sh path/to/app.apk
 #
-# Used by scripts/android-release.sh, which runs both locally and in .github/workflows/mobile-release.yml.
+# Used by scripts/release/android-release.sh, which runs both locally and in .github/workflows/mobile-release.yml.
 set -euo pipefail
 
 apk="${1:?usage: $0 <file.apk>}"

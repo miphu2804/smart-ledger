@@ -9,7 +9,7 @@
  *   node scripts/dev-cors-proxy.js
  *   rồi đặt EXPO_PUBLIC_API_ENDPOINT=http://127.0.0.1:8010 trong .env và chạy `npm run web`.
  *
- * Biến môi trường: CORE_URL (mặc định http://localhost:8000; Core staging: https://core-staging-01d2.up.railway.app),
+ * Biến môi trường: CORE_URL (mặc định http://localhost:8000; Core staging: https://103-162-31-93.sslip.io),
  * PORT (mặc định 8010).
  * Chỉ lắng nghe ở 127.0.0.1 nên máy khác trong mạng không dùng được.
  */

@@ -1,5 +1,11 @@
 # Service walkthrough
 
+Core documentation audit, 2026-10-26, against `feat/admin-dashboard-growth` at
+`3e93dd1`: the request/service overview below now includes the implemented
+ADMIN, Zalo, media and notification boundaries. The detailed sale/money/report
+diagrams retain their dated review history. This is source-code alignment;
+runtime enablement, deployment and integrated acceptance remain separate.
+
 Core diagrams reviewed against `staging` commit [`b1de421c461d59473b3bb73aae103027afd67a89`](https://github.com/miphu2804/smart-ledger/tree/b1de421c461d59473b3bb73aae103027afd67a89) on 2026-10-06. AI diagrams (§8) were reviewed separately against `staging` commit [`f1a4818800446e82b0b3cb9eec24d2fa809f9436`](https://github.com/miphu2804/smart-ledger/tree/f1a4818800446e82b0b3cb9eec24d2fa809f9436) on 2026-10-16.
 
 Query-optimization update (#138), reviewed on 2026-10-10 against `perf/query-optimization` commit [`b6e4169dcfb9ffb2534b20baa9aa5e368b86d9b3`](https://github.com/miphu2804/smart-ledger/tree/b6e4169dcfb9ffb2534b20baa9aa5e368b86d9b3): the preparation note in §5.2 and confirm/void diagrams in §5.3/§6.3 reflect #134–#137. This is a branch-code review, not confirmation of staging deployment or FE acceptance; other diagrams retain the baseline above. Query budgets and regression evidence are described in [technical design §4.1](../technical-design.md#41-truy-vấn-theo-lô) and [§7](../technical-design.md#7-kiểm-chứng-trước-merge).
@@ -23,119 +29,152 @@ Re-render after editing this file: `./export.sh` (SVG, lossless zoom).
 
 ## 1. Request Resolution Logic
 
-Every business request follows one path: Firebase auth → controller → service → shop ownership check → repository.
+Protected OWNER ledger requests follow Firebase auth → controller → service →
+active-shop ownership guard → repository. Auth/session, avatar, OWNER inbox,
+ADMIN support and public Zalo bootstrap use different guards. Avatar writes
+resolve the current UID to an ACTIVE user (OWNER or ADMIN); they use no shop or
+notification-recipient scope. Inbox requires an ACTIVE OWNER and checks recipient,
+shop ownership and visibility: ACTIVE shops expose eligible events; INACTIVE
+shops expose only shop-status events, and ARCHIVED shops expose none. The diagram
+keeps those paths separate. Public OAuth callbacks do not authenticate ledger requests.
 
 ```mermaid
-flowchart LR
-    subgraph Client["Client Space"]
-        APP["Mobile app (Expo)<br/>Bearer Firebase ID token<br/>X-Shop-Id header"]
+flowchart TB
+    subgraph Clients["Clients"]
+        OWNER["OWNER app / web<br/>Firebase ID token; shop header when required"]
+        ADMIN["ADMIN web<br/>Firebase ID token; DB role check"]
+        PUBLIC["Zalo LOGIN bootstrap<br/>public, feature-gated"]
     end
-
-    subgraph Core["Core Space (Spring Boot)"]
+    subgraph Core["Core · Spring Boot"]
         FILTER["BearerTokenAuthenticationFilter"]
-        CTRL["*Controller<br/>/api/v1/..."]
-        SVC["*ServiceImpl"]
-        GUARD["ShopService<br/>requireOwnedActiveShop()"]
-        IDEM["IdempotencyService<br/>execute()"]
-        AUDIT["AuditLogService<br/>recordOwner()"]
-        AICLIENT["AgentServiceImpl<br/>RestClient"]
+        CTRL["Controllers"]
+        AUTH["AuthSessionService<br/>session / me; no shop header"]
+        AVATAR["Current user's avatar<br/>own UID + ACTIVE user<br/>OWNER or ADMIN"]
+        INBOX["NotificationService · OWNER inbox<br/>ACTIVE OWNER + recipient<br/>shop ownership / event visibility"]
+        PROFILE["ShopService<br/>owned profile; INACTIVE remains readable"]
+        SHOP["ShopService<br/>active owned shop guard"]
+        SUPPORT["AdminAccessGuard<br/>dashboard support reads"]
+        STATUS["ShopService.updateStatus<br/>DB ADMIN / ACTIVE"]
+        SVC["Ledger / catalog / report services"]
+        ADM["AdminDashboardService<br/>read + mandatory audit transaction"]
+        MEDIA["MediaService<br/>resource scope, lease, outbox"]
+        OAUTH["ZaloAuthService / ZaloNativeAuthService<br/>browser binding, one-use proof/handoff<br/>LINK also requires verified recent OWNER"]
+        IDEM["IdempotencyService<br/>supported expense / repay / void / stock-in"]
+        AUDIT["Audit writers<br/>profile / ledger writes and ADMIN reads"]
+        AGENT["AgentServiceImpl<br/>verified OWNER + shop scope"]
     end
-
-    subgraph AI["AI Space (FastAPI)"]
-        AIROUTER["/internal/v1/agent/*"]
+    subgraph External["Provider boundaries"]
+        ZALO["Zalo OAuth / profile"]
+        FIREBASE["Firebase Admin<br/>verification / custom token"]
+        CLOUD["Cloudinary"]
+        AI["AI /internal/v1/agent/*<br/>X-Internal-Token"]
     end
-
-    subgraph Data["Data Space (PostgreSQL)"]
-        PG[("core tables")]
-        VIEWS[("ai_read views")]
-        CHAT[("chat history")]
-    end
-
-    APP -->|"HTTPS"| FILTER -->|"VerifiedFirebaseToken"| CTRL --> SVC
-    SVC -->|"ownership"| GUARD
-    SVC -->|"money writes"| IDEM
-    SVC -->|"audit trail"| AUDIT
-    SVC -->|"JPA"| PG
-    SVC -->|"agent calls"| AICLIENT -->|"X-Internal-Token<br/>verified user_id, shop_id"| AIROUTER
-    AIROUTER -->|"history"| CHAT
-    AIROUTER -->|"read-only SQL"| VIEWS
+    PG[("Core PostgreSQL tables")]
+    CHAT[("AI chat / memory / read-only views")]
+    OWNER --> FILTER
+    ADMIN --> FILTER
+    FILTER --> FIREBASE
+    FILTER --> CTRL
+    PUBLIC --> OAUTH
+    CTRL --> AUTH
+    CTRL --> AVATAR
+    CTRL --> INBOX
+    CTRL --> PROFILE
+    CTRL --> SHOP
+    CTRL --> SUPPORT --> ADM
+    CTRL --> STATUS
+    CTRL -->|"authenticated LINK"| OAUTH
+    SHOP --> SVC
+    AVATAR --> MEDIA
+    SHOP --> MEDIA
+    SHOP --> AGENT --> AI --> CHAT
+    SVC --> IDEM
+    SVC -->|"audited writes"| AUDIT
+    ADM --> AUDIT
+    STATUS --> AUDIT
+    STATUS --> PG
+    AUTH --> PG
+    INBOX --> PG
+    PROFILE --> PG
+    SVC --> PG
+    IDEM --> PG
+    AUDIT --> PG
+    MEDIA --> PG
+    MEDIA --> AUDIT
+    MEDIA --> CLOUD
+    OAUTH --> ZALO
+    OAUTH --> FIREBASE
+    OAUTH --> PG
     classDef default fill:#eef4ff,stroke:#5b8def,color:#1f2d3d
-    classDef decision fill:#fff4cc,stroke:#d4a017,color:#5c4400
-    classDef error fill:#fde2e1,stroke:#d9534f,color:#8a1f1b
-    classDef terminal fill:#dff5e3,stroke:#3c9d5d,color:#1e5631
     classDef store fill:#efe6ff,stroke:#8a63d2,color:#3d2a6b
     classDef shared fill:#ffe9d6,stroke:#e07b24,color:#6b3500
-    class PG,VIEWS,CHAT store
-    style Client fill:#f3f8ff,stroke:#9dbcf5
-    style Core fill:#f4fbf2,stroke:#a8d5a2
-    style AI fill:#fff9ee,stroke:#f0c987
-    style Data fill:#faf3ff,stroke:#cfa8f0
+    class PG,CHAT store
+    class FILTER,SHOP,SUPPORT,IDEM,AUDIT shared
 ```
 
 ## 2. Core Service Interfaces
 
-Every public method takes `VerifiedFirebaseToken` + `shopId` (`X-Shop-Id`) and calls `requireOwnedActiveShop` first — except `AuthSessionService` and some `ShopService` methods.
+OWNER ledger services take `VerifiedFirebaseToken` and `X-Shop-Id`. Session,
+avatar, inbox, ADMIN and Zalo methods have their own scopes, so a shop header
+does not replace those checks. The map lists interfaces, not an API contract;
+request/response and error rules remain in the canonical contract.
 
 ```mermaid
 flowchart TB
-    subgraph Catalog["Catalog Space"]
-        PROD["ProductService<br/>create / list / getById<br/>patch / archive"]
-        CAT["CategoryService<br/>create / list / getById<br/>replace / archive"]
-        CUST["CustomerService<br/>create / list / getById<br/>replace / archive"]
+    subgraph Catalog["OWNER catalog"]
+        PROD["ProductService<br/>CRUD / lookup / stockIn"]
+        CAT["CategoryService<br/>CRUD"]
+        CUST["CustomerService<br/>CRUD; no automatic merging"]
     end
-
-    subgraph Sales["Sales Space"]
-        DRAFT["SaleDraftService<br/>create / replace / cancel<br/>confirm → SaleResponse"]
-        SALE["SaleService<br/>list / getById"]
-        PAYS["PaymentService<br/>listForSale / getById"]
+    subgraph Sales["OWNER sales and money"]
+        DRAFT["SaleDraftService<br/>prepare / confirm / draft replay"]
+        SALE["SaleService<br/>paged list / detail / filtered summary"]
+        PAY["PaymentService / DebtService<br/>history / repayment"]
+        VOID["SaleVoidService<br/>void / full refund"]
+        EXP["ExpenseService<br/>CRUD / period or range"]
     end
-
-    subgraph Money["Money Write Space"]
-        VOID["SaleVoidService<br/>voidSale(key) / getRefund"]
-        DEBT["DebtService<br/>list / getById / repay(key)"]
-        EXP["ExpenseService<br/>create(key) / list(period)<br/>getById / patch / archive"]
+    subgraph Reads["OWNER reads and Agent"]
+        REP["ReportService<br/>summary / topProducts<br/>salesSeries / profitEstimate"]
+        AQ["AuditLogQueryService<br/>OWNER projection"]
+        AG["AgentService<br/>chat / stream / conversations<br/>memory settings / items"]
     end
-
-    subgraph Read["Read and Agent Space"]
-        REP["ReportService<br/>summary(period)"]
-        AQ["AuditLogQueryService<br/>list(filters, page)"]
-        AG["AgentService<br/>chat / list / get<br/>rename / delete"]
+    subgraph UserScope["Session, media, OWNER inbox and Zalo"]
+        AUTH["AuthSessionService<br/>session / me"]
+        MEDIA["MediaService<br/>product / logo: OWNER + ACTIVE shop<br/>avatar: own ACTIVE user, OWNER or ADMIN"]
+        INBOX["NotificationService<br/>ACTIVE OWNER; list / count / mark read<br/>recipient + shop ownership / visibility"]
+        ZAUTH["ZaloAuthService<br/>ZaloNativeAuthService<br/>LOGIN / recent-auth LINK"]
     end
-
-    subgraph Session["Session Space"]
-        AUTH["AuthSessionService<br/>openSession<br/>getCurrentSession<br/>(no shop scope)"]
+    subgraph Admin["ADMIN support"]
+        ADM["AdminDashboardService<br/>overview / growth / users / shops<br/>status history / own access logs"]
+        AAD["AdminAccessGuard + AdminAccessAuditService"]
     end
-
-    subgraph Shared["Shared Services"]
-        SHOP{{"ShopService<br/>requireOwnedActiveShop()<br/>create / getById / updateById<br/>archiveById / updateStatus (ADMIN)"}}
-        IDEM{{"IdempotencyService<br/>execute(op, key, request, action)"}}
-        AUDIT{{"AuditLogService<br/>record() / recordOwner()"}}
+    subgraph Shared["Shared transaction helpers"]
+        SHOP["ShopService<br/>owned-shop access / profile / status"]
+        IDEM["IdempotencyService<br/>money and stock-in keys"]
+        AUDIT["AuditLogService<br/>append-only event writes"]
+        NOTIFY["NotificationEventService<br/>transactional events / stock episodes"]
+        OUTBOX["Media cleanup worker<br/>durable upload leases / cleanup jobs"]
     end
-
-
-    Catalog -->|"ownership"| SHOP
-    Sales -->|"ownership"| SHOP
-    Money -->|"ownership"| SHOP
-    Read -->|"ownership"| SHOP
-    VOID -->|"SALE_VOID"| IDEM
-    DEBT -->|"DEBT_REPAYMENT"| IDEM
-    EXP -->|"EXPENSE_CREATE"| IDEM
-    DRAFT -->|"SALE_CONFIRMED"| AUDIT
-    Money -->|"audit events"| AUDIT
-    SHOP -->|"SHOP_ARCHIVED"| AUDIT
+    Catalog --> SHOP
+    Sales --> SHOP
+    Reads --> SHOP
+    PROD --> IDEM
+    PAY --> IDEM
+    VOID --> IDEM
+    EXP --> IDEM
+    PROD --> AUDIT
+    CAT --> AUDIT
+    Sales --> AUDIT
+    DRAFT -->|"confirm stock changes"| NOTIFY
+    PROD --> NOTIFY
+    VOID --> NOTIFY
+    SHOP --> NOTIFY
+    MEDIA --> OUTBOX
+    ADM --> AAD --> AUDIT
     classDef default fill:#eef4ff,stroke:#5b8def,color:#1f2d3d
-    classDef decision fill:#fff4cc,stroke:#d4a017,color:#5c4400
-    classDef error fill:#fde2e1,stroke:#d9534f,color:#8a1f1b
-    classDef terminal fill:#dff5e3,stroke:#3c9d5d,color:#1e5631
     classDef store fill:#efe6ff,stroke:#8a63d2,color:#3d2a6b
     classDef shared fill:#ffe9d6,stroke:#e07b24,color:#6b3500
-    class SHOP,IDEM,AUDIT shared
-    style Catalog fill:#f3f8ff,stroke:#9dbcf5
-    style Sales fill:#f4fbf2,stroke:#a8d5a2
-    style Money fill:#fff9ee,stroke:#f0c987
-    style Read fill:#faf3ff,stroke:#cfa8f0
-    style Session fill:#effafa,stroke:#8fd3d3
-    style Shared fill:#fff4f4,stroke:#f0a8a8
+    class SHOP,IDEM,AUDIT,NOTIFY,OUTBOX,AAD shared
 ```
 
 ## 3. Shop Access Guard — `requireOwnedActiveShop`

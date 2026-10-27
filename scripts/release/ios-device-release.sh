@@ -2,13 +2,13 @@
 # Build a Release of the mobile app (frontend/mobile) from the current checkout, against staging Core, and install it on
 # the iOS Simulator (the default) or on a real iPhone paired with this Mac (cable or Wi-Fi), for quick testing.
 #
-#   ./scripts/ios-device-release.sh                  pick the target from a menu: the iOS Simulator (preselected, Enter)
+#   ./scripts/release/ios-device-release.sh                  pick the target from a menu: the iOS Simulator (preselected, Enter)
 #                                                    or a paired iPhone (up/down or j/k, Enter; q to quit)
-#   ./scripts/ios-device-release.sh --simulator      the iOS Simulator without the menu (a booted iPhone, else the newest)
-#   ./scripts/ios-device-release.sh --device <id>    skip the menu: UDID or name of a paired iPhone or of a simulator
-#   ./scripts/ios-device-release.sh --clean          regenerate ios/ from app.json first (after native config changes)
-#   ./scripts/ios-device-release.sh --check          only run the preflight checks
-#   ./scripts/ios-device-release.sh --skip-preflight build even if a check fails
+#   ./scripts/release/ios-device-release.sh --simulator      the iOS Simulator without the menu (a booted iPhone, else the newest)
+#   ./scripts/release/ios-device-release.sh --device <id>    skip the menu: UDID or name of a paired iPhone or of a simulator
+#   ./scripts/release/ios-device-release.sh --clean          regenerate ios/ from app.json first (after native config changes)
+#   ./scripts/release/ios-device-release.sh --check          only run the preflight checks
+#   ./scripts/release/ios-device-release.sh --skip-preflight build even if a check fails
 #
 # Before building it checks the Mac (Xcode, its first-launch setup, CocoaPods, Node, the Firebase file), then the
 # target: for the Simulator an installed iOS runtime; for an iPhone an Apple ID and a signing certificate in Xcode,
@@ -43,9 +43,9 @@ if $simulator && [ -n "$device" ]; then
   exit 2
 fi
 
-root="$(cd "$(dirname "$0")/.." && pwd)"
+root="$(cd "$(dirname "$0")/../.." && pwd)"
 # shellcheck source=lib/preflight.sh
-. "$root/scripts/lib/preflight.sh"
+. "$root/scripts/release/lib/preflight.sh"
 cd "$root/frontend/mobile"
 
 bold="$pf_bold" dim="$pf_dim" cyan=$'\033[36m' yellow="$pf_yellow" red="$pf_red" reset="$pf_reset"
@@ -325,7 +325,7 @@ echo "  Commit: $commit"
 # exported mock flags cannot be turned back on by .env.
 export EXPO_PUBLIC_USE_MOCK=false EXPO_PUBLIC_MOCK_CORE=false EXPO_PUBLIC_MOCK_SHOPS=false
 api="${EXPO_PUBLIC_API_ENDPOINT:-$(sed -n 's/^EXPO_PUBLIC_API_ENDPOINT=//p' .env 2>/dev/null | tail -1 || true)}"
-export EXPO_PUBLIC_API_ENDPOINT="${api:-https://core-staging-01d2.up.railway.app}"
+export EXPO_PUBLIC_API_ENDPOINT="${api:-https://103-162-31-93.sslip.io}"
 echo "  Mode:   real (mocks off), Core ${cyan}$EXPO_PUBLIC_API_ENDPOINT${reset}"
 
 if $checks; then

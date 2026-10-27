@@ -1,0 +1,66 @@
+# Backend stack of one environment: Core joins the external `edge` network as core-<environment>, where the shared
+# Caddy in deploy/edge/ reaches it; AI is reachable only from Core inside this project's own network. Staging and
+# production run side by side on one VPS, each in its own app directory (/opt/smartledger, /opt/smartledger-production)
+# next to these files, none of which are in Git:
+#   .env               CORE_ALIAS, CORE_IMAGE, AI_IMAGE; the deploy rewrites the image lines
+#   core.env, ai.env   service variables, resolved copies of secrets/<env>/env/.env.core and .env.ai
+#   github.core.env, github.ai.env
+#                      settings GitHub owns (CORS, model, tracing); the deploy rewrites them and
+#                      they override the files above
+# See docs/development/ci-cd.md#vps.
+services:
+  core:
+    image: ${CORE_IMAGE:?CORE_IMAGE is required}
+    env_file:
+      - core.env
+      - path: github.core.env
+        required: false
+    environment:
+      SERVER_PORT: 8080
+      AI_BASE_URL: http://ai:8001
+      # The database is shared with the migration owner's manual runs; see README "Database migrations".
+      FLYWAY_ENABLED: "false"
+    depends_on:
+      ai:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      start_period: 90s
+      retries: 6
+    networks:
+      default:
+      edge:
+        aliases:
+          - ${CORE_ALIAS:?CORE_ALIAS is required, core-staging or core-production}
+    # The VPS resolver appends a search domain with wildcard DNS (bkcloud.vn): while AI is down, `ai` would
+    # resolve to an outside host and Core would send it the internal token and shop data.
+    dns_search: .
+    restart: unless-stopped
+    logging: &logging
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  ai:
+    image: ${AI_IMAGE:?AI_IMAGE is required}
+    env_file:
+      - ai.env
+      - path: github.ai.env
+        required: false
+    environment:
+      SERVER_PORT: 8001
+    healthcheck:
+      # The slim image has no curl.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=4)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 6
+    restart: unless-stopped
+    logging: *logging
+
+networks:
+  edge:
+    external: true
