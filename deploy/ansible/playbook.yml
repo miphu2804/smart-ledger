@@ -4,18 +4,24 @@
 # secrets, with that environment's secrets/<environment>/env/.env.vps loaded into the shell:
 #   set -a; . secrets/staging/env/.env.vps; set +a
 #   ansible-playbook -i deploy/ansible/inventory.ini deploy/ansible/playbook.yml --limit staging
+# Staging and production share one VPS: run it once per environment. Both .env.vps files must hold the same
+# VPS_SSH_PUBLIC_KEY, because the deploy user keeps only that one key.
 # Needs the full `ansible` package (community.general and ansible.posix) and an admin login with
 # sudo on the VPS; the playbook itself never uses the `deploy` user to log in.
 - name: Prepare the SmartLedger backend VPS
   hosts: all
   become: true
   vars:
-    app_dir: /opt/smartledger
+    # Staging keeps the directory it had before production joined the VPS.
+    app_dir: "{{ '/opt/smartledger' if smartledger_env == 'staging' else '/opt/smartledger-' + smartledger_env }}"
+    # The shared Caddy (deploy/edge/), which proxies each environment's domain to its Core.
+    edge_dir: /opt/smartledger-edge
     deploy_user: deploy
     swap_size_mb: 2048
     # Resolved env files of this environment, pulled by scripts/secrets (docs/development/secrets-and-env.md).
     env_dir: "{{ playbook_dir }}/../../secrets/{{ smartledger_env }}/env"
-    # Public name of Core that resolves to this VPS, for example 203-0-113-10.sslip.io or api.<domain>.
+    # Public name of this environment's Core that resolves to the VPS, for example 203-0-113-10.sslip.io,
+    # prod.203-0-113-10.sslip.io or api.<domain>.
     caddy_domain: "{{ lookup('env', 'CADDY_DOMAIN') }}"
     # Public half of the CI deploy key whose private half is secret VPS_SSH_KEY.
     deploy_public_key: "{{ lookup('env', 'VPS_SSH_PUBLIC_KEY') }}"
@@ -90,6 +96,11 @@
         key: "{{ deploy_public_key }}"
         exclusive: true
 
+    # Caddy and every environment's Core meet on this network; AI stays on its project's own network.
+    - name: Create the edge network
+      ansible.builtin.shell: docker network inspect edge >/dev/null 2>&1 || docker network create edge
+      changed_when: false
+
     - name: Create the app directory
       ansible.builtin.file:
         path: "{{ app_dir }}"
@@ -122,16 +133,41 @@
       notify: Apply the stack
 
     # Only this line: the deploy rewrites the image lines of the same file.
-    - name: Set the Caddy domain
+    - name: Name Core on the edge network
       ansible.builtin.lineinfile:
         path: "{{ app_dir }}/.env"
         create: true
         owner: "{{ deploy_user }}"
         group: "{{ deploy_user }}"
         mode: "0600"
-        regexp: "^CADDY_DOMAIN="
-        line: "CADDY_DOMAIN={{ caddy_domain }}"
+        regexp: "^CORE_ALIAS="
+        line: "CORE_ALIAS=core-{{ smartledger_env }}"
       notify: Apply the stack
+
+    - name: Create the edge directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: ["{{ edge_dir }}", "{{ edge_dir }}/sites"]
+
+    - name: Upload the shared Caddy
+      ansible.builtin.copy:
+        src: "../edge/{{ item }}"
+        dest: "{{ edge_dir }}/{{ item }}"
+        mode: "0644"
+      loop: [compose.yaml, Caddyfile]
+      notify: Apply the edge
+
+    - name: Route this environment's domain to its Core
+      ansible.builtin.copy:
+        dest: "{{ edge_dir }}/sites/{{ smartledger_env }}.caddy"
+        mode: "0644"
+        content: |
+          {{ caddy_domain }} {
+          	reverse_proxy core-{{ smartledger_env }}:8080
+          }
+      notify: Apply the edge
 
     - name: Log in to GHCR with the read-only token
       ansible.builtin.command:
@@ -150,10 +186,19 @@
         state: reloaded
 
     # Before the first deploy there are no images to start; the first CD run starts the stack.
+    # --remove-orphans drops the per-environment Caddy of the older layout, which held ports 80 and 443.
     - name: Apply the stack
-      ansible.builtin.shell: grep -q '^CORE_IMAGE=' .env && grep -q '^AI_IMAGE=' .env && docker compose up -d --wait || true
+      ansible.builtin.shell: grep -q '^CORE_IMAGE=' .env && grep -q '^AI_IMAGE=' .env && docker compose up -d --wait --remove-orphans || true
       args:
         chdir: "{{ app_dir }}"
       become: true
       become_user: "{{ deploy_user }}"
+      changed_when: true
+
+    # Runs after the stack, so the older per-environment Caddy has freed ports 80 and 443. The reload picks up
+    # a changed site file in a container that was already running.
+    - name: Apply the edge
+      ansible.builtin.shell: docker compose up -d && docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+      args:
+        chdir: "{{ edge_dir }}"
       changed_when: true

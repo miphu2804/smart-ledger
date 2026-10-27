@@ -27,8 +27,8 @@ for service in ai core; do
   docker compose up -d --wait --wait-timeout 180 "$service"
 done
 
-docker compose up -d caddy
-# Every deploy pulls a new tag, so old images keep their tags and only -a removes them. A rollback pulls its
-# image again from GHCR, which keeps the latest 10 (staging) or 20 (production) versions.
+# Every deploy pulls a new tag, so old images keep their tags and only -a removes them. Images the other environment
+# or the shared Caddy run are in use and stay. A rollback pulls its image again from GHCR, which keeps the latest
+# 10 (staging) or 20 (production) versions.
 docker image prune -af
 docker compose ps
