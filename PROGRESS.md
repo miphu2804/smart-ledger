@@ -6,6 +6,15 @@
 
 Check: `npx tsc --noEmit` shows only the two existing errors for the missing `expo-application` and `expo-intent-launcher`; Settings, Notification settings and debt history checked on the mock web build (the last history row measures `0px` border). Not verified on screen: checkout, assistant history, the add-item sheet, voice expenses, and a real phone. Commit: the one that adds this entry.
 
+
+### 2026-10-28 — Backend GitHub environments named backend-staging and backend-production
+
+| Area | Change |
+|---|---|
+| CI | • `deploy-backend` uses environments `backend-staging` and `backend-production` instead of `railway-*`, so their names no longer depend on the host<br>• The new environments carry the same branch rules, production approval, variables and secrets, except `RAILWAY_TOKEN`, which CD does not use |
+| Docs | • The CI/CD guide uses the new names and keeps the `railway-*` environments only for a rollback to Railway |
+
+Check: `actionlint`, the deploy key in each new environment matches its public key, and a staging CD run deploys through `backend-staging`. Not verified: production, which switches on the next release to `main`. Commit: the merge of this branch.
 ### 2026-10-28 — Staging Core answers on staging.103-162-31-93.sslip.io
 
 | Area | Change |
@@ -182,19 +191,3 @@ Check: link and anchor check over the edited files passes. Commit: the one that 
 **Changed files:** `.github/workflows/{select-runner,deploy-backend,deploy-web,deploy-landing}.yml` — added; `.github/workflows/ci.yml`, `.github/workflows/mobile-release.yml`, `docs/development/ci-cd.md` — modified; this entry.
 
 **Check:** actionlint 1.7.8 reports no errors on all workflows; the moved deploy steps, environments, env and concurrency compare equal to the old jobs; the pick script returns the expected runner for github-hosted, self-hosted (with and without a label), a fork pull request, auto without a token and an unknown value. **Not verified:** a run on GitHub (GitHub-hosted, self-hosted and auto), environment secrets reaching the called deploy workflows, a real deploy.
-
-### [2026-10-24 14:30 UTC+07:00] — [Feature] Landing introduces the team
-
-**Done:** The course asks the landing to show who built the product, and it had no team information. A new "Đội ngũ" section (after the POS comparison, linked from the top menu and the footer) shows the six members' own "Đội ngũ Sổ Nghe Lời" posters uncropped, as Orei asked: Minh Thọ (Leader), Minh Phú (AI Engineer), Thượng Hiệp (Frontend Developer), Thu Thảo (Backend Developer), Quỳnh Như (Business Analyst), Kiều Chinh (Marketing), with a line about Team HEXA, EXE201, FPT University. Posters are WebP (940×788, about 70 KB each), lazy-loaded, with name and role in `alt`. The FAQ answer on sign-in said Facebook or Zalo; it now says email and password or Google, which is what the app offers (Facebook is paused, Zalo shows "Sắp có").
-
-**Changed files:** `frontend/web/public/team/{minh-tho,minh-phu,thuong-hiep,thu-thao,quynh-nhu,kieu-chinh}.webp` — added; `frontend/web/src/pages/landing/LandingPage.tsx`, `frontend/web/src/pages/landing/SiteFooter.tsx`, `frontend/web/src/styles/landing.css` — modified; this entry.
-
-**Check:** `npm run typecheck`, `npm run lint` (no new warnings) and `npm run build` in `frontend/web`; dev server at 1280 px shows the six posters in three columns, all loaded, "Đội ngũ" in the menu and footer; the grid drops to two columns under 960 px and one under 560 px with no horizontal overflow at 375 px.
-
-### [2026-10-24 10:30 UTC+07:00] — [Change] Admin dashboard ships inside the landing at /admin
-
-**Done:** For the course submission the admin needs one public link, and the separate admin Vercel project would have lived in another team's account. The landing deploy now carries the admin at `/admin` (real Core data) when its GitHub environment sets `VITE_ADMIN_ENABLED=true` with `VITE_API_ENDPOINT` and `VITE_FIREBASE_API_KEY`; without the flag the landing has no admin code, as before. Job `deploy-admin` from #342 is removed. The build check now fails on the mock demo password in any case, on missing admin routes or settings when the flag is on, and on admin code when it is off; with the flag on, the smoke test opens `/admin/login` and fails when Core still rejects a CORS preflight from the landing after 5 minutes.
-
-**Changed files:** `.github/workflows/ci.yml`, `docs/development/ci-cd.md`, `frontend/web/README.md` — modified; this entry.
-
-**Check:** YAML parses; the new build check, run by hand on two local builds, passes a plain landing and a landing with the admin, and fails an admin build without the flag and a plain build with the flag. **Not verified:** the job on GitHub, sign-in on the deployed landing (needs the landing origin in Core's `CORS_ALLOWED_ORIGINS` and an ADMIN account).
