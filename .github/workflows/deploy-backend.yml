@@ -30,6 +30,10 @@ on:
 
 permissions:
   contents: read
+  # cd.yml's calling job grants packages: write; a reusable workflow can only maintain or reduce the
+  # caller's grant, and this block was reducing it away, so the first GHCR push failed with
+  # "denied: installation not allowed to Create organization package".
+  packages: write
 
 jobs:
   deploy:
