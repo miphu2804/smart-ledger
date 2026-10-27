@@ -1,0 +1,34 @@
+# Caddy shared by every environment on the VPS: only one container can publish ports 80 and 443, so this
+# project owns them, gets a free Let's Encrypt certificate per domain and proxies each one to that
+# environment's Core over the external `edge` network. Lives in /opt/smartledger-edge next to Caddyfile and
+# sites/<environment>.caddy, which deploy/ansible/playbook.yml writes. See docs/development/ci-cd.md#vps.
+services:
+  caddy:
+    image: caddy:2.11.6-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./sites:/etc/caddy/sites:ro
+      # Certificates and the ACME account; losing them hits Let's Encrypt rate limits on restart.
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [edge]
+    # The VPS resolver appends a search domain with wildcard DNS (bkcloud.vn): while a Core is down, its name
+    # would resolve to an outside host and Caddy would forward users' requests and tokens there.
+    dns_search: .
+    restart: unless-stopped
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  edge:
+    external: true
+
+volumes:
+  caddy_data:
+  caddy_config:
