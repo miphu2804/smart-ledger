@@ -11,9 +11,9 @@ Diagram source: [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio); edi
 ## Steps
 
 1. **PR into `staging`:** CI runs the tests, checks migrations on a throwaway PostgreSQL and builds the images. Job `cd` is skipped because the event is `pull_request`, so nothing deploys.
-2. **Merge into `staging`:** CI runs again on the merged commit. When the push changed `ai` or `core` and none of `ai`, `core` and `container-images` failed (skipped is fine, see [path filtering](#path-filtering)), CI starts CD, whose job `deploy-backend` uses environment `railway-staging` and deploys to the staging VPS. No approval is needed.
+2. **Merge into `staging`:** CI runs again on the merged commit. When the push changed `ai` or `core` and none of `ai`, `core` and `container-images` failed (skipped is fine, see [path filtering](#path-filtering)), CI starts CD, whose job `deploy-backend` uses environment `backend-staging` and deploys to the staging VPS. No approval is needed.
 3. **PR `staging` → `main`:** open it only after checking staging (see [Target branch](../../CONTRIBUTING.md#target-branch)).
-4. **Merge into `main`:** use a merge commit, never a squash. If `staging` and `main` conflict, release from a `release/staging-to-main-<date>` branch as described in [CONTRIBUTING](../../CONTRIBUTING.md#target-branch). CI runs again on `main` and starts CD; its jobs `deploy-backend` (`railway-production`) and `deploy-web` (`vercel-production`), plus `deploy-landing` (`landing-production`) when `frontend/web/` changed, wait in *Waiting*. A reviewer opens the CD run in the Actions tab → **Review deployments** → approves each of them. Only then does a job receive its production token and deploy.
+4. **Merge into `main`:** use a merge commit, never a squash. If `staging` and `main` conflict, release from a `release/staging-to-main-<date>` branch as described in [CONTRIBUTING](../../CONTRIBUTING.md#target-branch). CI runs again on `main` and starts CD; its jobs `deploy-backend` (`backend-production`) and `deploy-web` (`vercel-production`), plus `deploy-landing` (`landing-production`) when `frontend/web/` changed, wait in *Waiting*. A reviewer opens the CD run in the Actions tab → **Review deployments** → approves each of them. Only then does a job receive its production token and deploy.
 5. **Check production, then tag:** the web smoke test runs against `https://smart-ledger-prod.vercel.app` and must pass; open the app and sign in. Then create the release on the commit that ran, for example `gh release create vX.Y.Z --target <merge commit> --generate-notes`. Tags are created by a person, not by CI.
 
 <a id="path-filtering"></a>Job `changes` runs first and decides which areas a pull request (against its base branch) or a push (against the commit before the push) touched. Each test and deploy job runs only for its area; the others show as *Skipped*, which counts as passed for required checks and for the `gate` of `mobile-release.yml`:
@@ -49,8 +49,8 @@ Each area is handed to CD on its own checks: the backend on `ai`, `core` and `co
 
 | Environment | Allowed branches | Approval | Secrets | Variables |
 |---|---|---|---|---|
-| `railway-staging` | `staging` | No | `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS` ([VPS](#vps)); `OPENAI_API_KEY` ([AI model settings](#ai-model-settings)); `LOGFIRE_TOKEN` (optional, [AI tracing settings](#ai-tracing-settings)) | `VPS_HOST`, `VPS_USER`, `VPS_APP_DIR`, `CORS_ALLOWED_ORIGINS`, AI model settings |
-| `railway-production` | `main` | Yes | Same as `railway-staging` | Same as `railway-staging`, plus `VPS_APP_DIR=/opt/smartledger-production`; `CORS_ALLOWED_ORIGINS` optional |
+| `backend-staging` | `staging` | No | `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS` ([VPS](#vps)); `OPENAI_API_KEY` ([AI model settings](#ai-model-settings)); `LOGFIRE_TOKEN` (optional, [AI tracing settings](#ai-tracing-settings)) | `VPS_HOST`, `VPS_USER`, `VPS_APP_DIR`, `CORS_ALLOWED_ORIGINS`, AI model settings |
+| `backend-production` | `main` | Yes | Same as `backend-staging` | Same as `backend-staging`, plus `VPS_APP_DIR=/opt/smartledger-production`; `CORS_ALLOWED_ORIGINS` optional |
 | `vercel-preview` (unused while PR previews are off) | Any branch (PR) | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `EXPO_PUBLIC_*` |
 | `vercel-staging` | `staging` | No | Same as above | `EXPO_PUBLIC_*`, `VERCEL_STAGING_ALIAS` |
 | `vercel-production` | `main` | Yes | Same as above | `EXPO_PUBLIC_*` |
@@ -63,17 +63,17 @@ Each area is handed to CD on its own checks: the backend on `ai`, `core` and `co
 
 Do not put backend secrets in the `vercel-*` or `landing-*` environments.
 
-The `railway-*` names are kept from the Railway setup so their secrets and approval rules carry over. Both environments deploy to the same VPS with the same deploy key, and user `deploy` is in group `docker`, so a job running with `railway-staging` can reach production containers too; the production approval guards only the `main` deploy itself. The project owner accepted this to run production on the staging VPS.
+The environments are named after the component and the stage, not the host, so moving to another host keeps their names. The old `railway-staging` and `railway-production` environments stay, unused by CD, only for the `RAILWAY_TOKEN` a rollback to Railway needs; delete them when Railway is shut down. Both environments deploy to the same VPS with the same deploy key, and user `deploy` is in group `docker`, so a job running with `backend-staging` can reach production containers too; the production approval guards only the `main` deploy itself. The project owner accepted this to run production on the staging VPS.
 
 <a id="vps"></a>
 
 ### VPS
 
-Staging and production run side by side on one VPS, each as its own Compose project with the stack in [`deploy/vps/`](../../deploy/vps/): staging in `/opt/smartledger`, production in `/opt/smartledger-production`. In each, `ai` is reachable only from that environment's `core`, and `core` also joins the external Docker network `edge` as `core-staging` or `core-production` (`CORE_ALIAS` in the project `.env`). One shared Caddy in [`deploy/edge/`](../../deploy/edge/), in `/opt/smartledger-edge`, publishes ports 80 and 443, gets and renews a free Let's Encrypt certificate for each environment's `CADDY_DOMAIN` and proxies it to that environment's Core; each environment's route is the file `sites/<environment>.caddy`. Until the project owns a domain, both use [sslip.io](https://sslip.io) names of the VPS address `103.162.31.93`; sslip.io accepts a prefix, so the production name resolves to the same address:
+Staging and production run side by side on one VPS, each as its own Compose project with the stack in [`deploy/vps/`](../../deploy/vps/): staging in `/opt/smartledger`, production in `/opt/smartledger-production`. In each, `ai` is reachable only from that environment's `core`, and `core` also joins the external Docker network `edge` as `core-staging` or `core-production` (`CORE_ALIAS` in the project `.env`). One shared Caddy in [`deploy/edge/`](../../deploy/edge/), in `/opt/smartledger-edge`, publishes ports 80 and 443, gets and renews a free Let's Encrypt certificate for each environment's `CADDY_DOMAIN` and proxies it to that environment's Core; each environment's route is the file `sites/<environment>.caddy`. Until the project owns a domain, both use [sslip.io](https://sslip.io) names of the VPS address `103.162.31.93`; sslip.io accepts a prefix, so both names resolve to the same address:
 
 | Environment | Public name of Core | Caddy proxies to | App directory |
 |---|---|---|---|
-| `staging` | `103-162-31-93.sslip.io` | `core-staging:8080` | `/opt/smartledger` |
+| `staging` | `staging.103-162-31-93.sslip.io` (the bare `103-162-31-93.sslip.io` still answers until every client has moved) | `core-staging:8080` | `/opt/smartledger` |
 | `production` | `prod.103-162-31-93.sslip.io` | `core-production:8080` | `/opt/smartledger-production` |
 
 With a domain, point `A` records such as `api.<domain>` and `api-staging.<domain>` at the VPS and change `CADDY_DOMAIN`, with no other change. One VPS means one point of failure: an outage or a staging service that exhausts memory takes production down too. The VPS address is public, so the firewall opens only ports 22, 80 and 443. Supabase, Redis Cloud, Cloudinary and Firebase stay external services.
@@ -126,12 +126,12 @@ The first deploy must include both services (start CD by hand with `backend-ai` 
 | `LOGFIRE_TOKEN`, `LOGFIRE_ENVIRONMENT`, `LOGFIRE_SERVICE_VERSION` | Managed from GitHub, see [AI tracing settings](#ai-tracing-settings). Do not edit them on the VPS. |
 | `AGENT_MEMORY_ENABLED`, `AGENT_MEMORY_TYPES`, `AGENT_MEMORY_EMBEDDING_PROVIDER`, `AGENT_MEMORY_EMBEDDING_MODEL`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | Optional, set in `ai.env` only; GitHub does not sync them. Long-term memory stays off unless `AGENT_MEMORY_ENABLED=true`, and it is not product behavior until the PO approves it ([ADR-0002](../architecture/adr/0002-agent-long-term-memory.md)). The image leaves out the `memory` dependency group, so memory runs only with `AGENT_MEMORY_EMBEDDING_PROVIDER=cloudflare`, a Workers AI model in `AGENT_MEMORY_EMBEDDING_MODEL` and both `CLOUDFLARE_*` values, after both agent memory migrations are pushed. See [AI README](../../backend/ai/README.md#long-term-memory-off-by-default). |
 
-- Backend secrets live only on the VPS, except `OPENAI_API_KEY` and `LOGFIRE_TOKEN`, which the deploy copies from the `railway-*` GitHub environment. The mobile web Vercel project receives only `EXPO_PUBLIC_*`.
+- Backend secrets live only on the VPS, except `OPENAI_API_KEY` and `LOGFIRE_TOKEN`, which the deploy copies from the `backend-*` GitHub environment. The mobile web Vercel project receives only `EXPO_PUBLIC_*`.
 - Before enabling Cloudinary in staging/production, run V13 from merged code under the approved migration workflow, then set the variables above and run a controlled upload/replace/delete smoke check. Use separate Cloudinary credentials or at least non-overlapping prefixes per environment. `CLOUDINARY_API_SECRET` must never be placed in `EXPO_PUBLIC_*`, GitHub Variables, client source, Swagger request data, audit metadata or logs.
 
 ### AI model settings
 
-Step `Upload ai settings` writes these from the `railway-staging` or `railway-production` GitHub environment to `github.ai.env` on the VPS before deploying `ai`, so the new AI starts with them. A setting left unset on GitHub keeps its `ai.env` value.
+Step `Upload ai settings` writes these from the `backend-staging` or `backend-production` GitHub environment to `github.ai.env` on the VPS before deploying `ai`, so the new AI starts with them. A setting left unset on GitHub keeps its `ai.env` value.
 
 | Name | Kind | Value |
 |---|---|---|
@@ -149,7 +149,7 @@ Step `Upload ai settings` writes these to `github.ai.env` as well. Traces carry 
 
 | Name | Source | Value |
 |---|---|---|
-| `LOGFIRE_TOKEN` | Secret of the `railway-staging` or `railway-production` GitHub environment | Write token of the Logfire project, a separate token per environment so one can be revoked alone. Unset: the step skips it and AI sends traces only if `ai.env` holds a token |
+| `LOGFIRE_TOKEN` | Secret of the `backend-staging` or `backend-production` GitHub environment | Write token of the Logfire project, a separate token per environment so one can be revoked alone. Unset: the step skips it and AI sends traces only if `ai.env` holds a token |
 | `LOGFIRE_ENVIRONMENT` | Derived from the branch | `staging` on `staging`, `production` on `main` |
 | `LOGFIRE_SERVICE_VERSION` | Derived | The deployed commit (`github.sha`), shown on each trace |
 
@@ -163,7 +163,7 @@ Diagram source: [`auth-request-flow.drawio`](../architecture/diagrams/src/auth-r
 
 Core accepts browser calls only from the exact origins in `CORS_ALLOWED_ORIGINS`: comma-separated, `http(s)` only, no wildcard, path or trailing `/`. Core trims spaces and line breaks around each entry, but one inside an entry (for example two origins joined by a line break instead of a comma) is invalid, and Core **refuses to start** on any invalid entry, so such a value pasted on the VPS takes staging down. The GitHub sync step rejects any whitespace.
 
-The value is kept in the **Variables** of GitHub environments `railway-staging` and `railway-production`. Before deploying Core, step `Upload core settings` rejects whitespace or wildcards and writes the value to `github.core.env` on the VPS. When the GitHub variable is unset, the `core.env` value applies. A change takes effect on the next push to the branch, or by re-running the `deploy` job.
+The value is kept in the **Variables** of GitHub environments `backend-staging` and `backend-production`. Before deploying Core, step `Upload core settings` rejects whitespace or wildcards and writes the value to `github.core.env` on the VPS. When the GitHub variable is unset, the `core.env` value applies. A change takes effect on the next push to the branch, or by re-running the `deploy` job.
 
 Staging value:
 
@@ -179,12 +179,12 @@ Check each item before deploying to a new production environment. A deploy can r
 
 | Check | Where | Symptom when missing |
 |---|---|---|
-| `VPS_HOST`, `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS` and `VPS_APP_DIR=/opt/smartledger-production` in `railway-production`, and the [one-time setup](#vps) done for production | GitHub environment; the VPS | Step `Start ssh-agent` or `Upload core settings` fails with `Permission denied` or `Host key verification failed`; no backend deploy |
+| `VPS_HOST`, `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS` and `VPS_APP_DIR=/opt/smartledger-production` in `backend-production`, and the [one-time setup](#vps) done for production | GitHub environment; the VPS | Step `Start ssh-agent` or `Upload core settings` fails with `Permission denied` or `Host key verification failed`; no backend deploy |
 | A production domain that resolves to the VPS, and its route in `/opt/smartledger-edge/sites/production.caddy` | DNS provider; the VPS | Caddy cannot get a certificate and the app gets TLS errors; the deploy itself still succeeds |
 | Email/Password (and Phone, if used) enabled; the web domain listed under Authorized domains | Firebase Console of the production project → Authentication | Sign-in returns 400 `signInWithPassword`; the app says the sign-in method is not enabled |
 | AI baseline applied to the production database | [Database migrations](local-development.md#database-migrations): run `db push` with `--dry-run` first | Chat returns 503 `ai_unavailable`; the `ai` log shows `relation "chat_conversations" does not exist` |
 | All Core migrations applied | [Database migrations](local-development.md#database-migrations) | Core fails the schema check or queries fail |
-| `CORS_ALLOWED_ORIGINS` set on `railway-production` to `https://smart-ledger-prod.vercel.app` | GitHub environment variable | Smoke test fails with `Core CORS does not allow <URL>`; browser calls to Core are blocked |
+| `CORS_ALLOWED_ORIGINS` set on `backend-production` to `https://smart-ledger-prod.vercel.app` | GitHub environment variable | Smoke test fails with `Core CORS does not allow <URL>`; browser calls to Core are blocked |
 | Supabase Data API off for staging and production | Supabase → Settings → Data API | The `public` tables are readable through the anon key; Core and AI connect directly and do not use it |
 
 A new Firebase project limits SMS to 10 a day until a billing account is attached, which affects phone sign-in only.
@@ -231,7 +231,7 @@ Job `landing` runs `npm run lint` and `npm run build` in `frontend/web` on every
 - Vercel Authentication (Settings → Deployment Protection) must stay off on the `landing` project. With it on, preview deployments redirect to the Vercel login (`302`) and the smoke test fails on pull requests and on `staging`.
 - **Admin dashboard at `/admin`:** the landing build includes the admin (real Core data, `VITE_USE_MOCK=false`) when the GitHub environment sets `VITE_ADMIN_ENABLED=true` with `VITE_API_ENDPOINT` (Core root of that environment, no `/api/v1`) and `VITE_FIREBASE_API_KEY` (Web API key of the Firebase project Core verifies tokens against, the same value as `EXPO_PUBLIC_FIREBASE_API_KEY` of `vercel-*`). Both are public client values, so they are variables, not secrets. Without the flag the build has no admin code.
 - Step `Check the admin in the build` fails the job if the mock demo password `admin123` is in the output, if the flag is on but the admin routes, `VITE_API_ENDPOINT` or `VITE_FIREBASE_API_KEY` are missing, or if the flag is off but an `AdminRoutes-*` chunk is there (a `VITE_ADMIN_ENABLED=true` set in the Vercel project `landing` would come in through `vercel pull`). With the flag on, the smoke test also opens `LANDING_URL/admin/login` and fails if Core still rejects a CORS preflight from `LANDING_URL` after 5 minutes (it waits for a Core deploy running in the same CI run).
-- Add `LANDING_URL` to `CORS_ALLOWED_ORIGINS` of the matching `railway-*` environment; Core applies it on its next deploy. Until then the browser blocks every admin call.
+- Add `LANDING_URL` to `CORS_ALLOWED_ORIGINS` of the matching `backend-*` environment; Core applies it on its next deploy. Until then the browser blocks every admin call.
 - Admin accounts are Firebase email/password users of that environment whose Core profile has `system_role=ADMIN` and is ACTIVE; Core never promotes anyone, so a teammate with database access sets the role.
 
 ## Android build
