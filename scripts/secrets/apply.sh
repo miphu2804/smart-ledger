@@ -97,6 +97,11 @@ write() {
   changes=$(key_changes "$1" "$current")
   echo "$2:"
   echo "${changes:-  (comments or layout only)}"
+  # dev staging copies the whole target, so a key it lacks is dropped from staging. Often that key is one a
+  # teammate added after this machine last applied, so it is called out instead of left as one - line.
+  if [ "$to" = staging ] && printf '%s\n' "$changes" | grep -q '^  - '; then
+    echo "  warning: keys marked - will be removed from staging; if $target is older than staging, run apply.sh staging dev first"
+  fi
   [ -n "$apply" ] || return
   [ -n "$backup" ] && [ -f "$2" ] && cp -p "$2" "$2.bak"
   mkdir -p "$(dirname "$2")"
