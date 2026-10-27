@@ -28,5 +28,7 @@ for service in ai core; do
 done
 
 docker compose up -d cloudflared
-docker image prune -f
+# Every deploy pulls a new tag, so old images keep their tags and only -a removes them. A rollback pulls its
+# image again from GHCR, which keeps the latest 20 versions.
+docker image prune -af
 docker compose ps

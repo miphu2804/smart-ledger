@@ -128,6 +128,7 @@ jobs:
     needs: [select-runner, gate]
     permissions:
       contents: read
+      packages: write
     uses: ./.github/workflows/deploy-backend.yml
     with:
       runs-on: ${{ needs.select-runner.outputs.runs_on }}

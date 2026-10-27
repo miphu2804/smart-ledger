@@ -16,9 +16,9 @@
     env_dir: "{{ playbook_dir }}/../../secrets/{{ smartledger_env }}/env"
     # Token of this environment's Cloudflare Tunnel (Zero Trust → Networks → Tunnels).
     tunnel_token: "{{ lookup('env', 'CLOUDFLARE_TUNNEL_TOKEN') }}"
-    # Read-only Docker Hub token for a private repository; empty skips `docker login`.
-    dockerhub_username: "{{ lookup('env', 'DOCKERHUB_USERNAME') }}"
-    dockerhub_read_token: "{{ lookup('env', 'DOCKERHUB_READ_TOKEN') }}"
+    # A classic token with only `read:packages`, for private GHCR packages; empty skips `docker login`.
+    ghcr_username: "{{ lookup('env', 'GHCR_USERNAME') }}"
+    ghcr_read_token: "{{ lookup('env', 'GHCR_READ_TOKEN') }}"
 
   tasks:
     - name: Install Docker, Compose and the firewall
@@ -127,13 +127,13 @@
       no_log: true
       notify: Apply the stack
 
-    - name: Log in to Docker Hub with the read-only token
+    - name: Log in to GHCR with the read-only token
       ansible.builtin.command:
-        cmd: docker login --username {{ dockerhub_username }} --password-stdin
-        stdin: "{{ dockerhub_read_token }}"
+        cmd: docker login ghcr.io --username {{ ghcr_username }} --password-stdin
+        stdin: "{{ ghcr_read_token }}"
       become: true
       become_user: "{{ deploy_user }}"
-      when: dockerhub_read_token | length > 0
+      when: ghcr_read_token | length > 0
       changed_when: false
       no_log: true
 

@@ -1,7 +1,7 @@
 name: Deploy backend
 
 # Called by cd.yml for a commit of `staging` or `main` whose `ai`, `core` and `container-images` passed. It builds the
-# `ai` and `core` images, pushes them to Docker Hub and runs deploy/vps/deploy.sh on the VPS over SSH. Kept apart from
+# `ai` and `core` images, pushes them to GitHub Container Registry (GHCR) and runs deploy/vps/deploy.sh on the VPS over SSH. Kept apart from
 # the tests so a change here cannot break a required check, and so the backend deploy waits only for the backend jobs.
 # See docs/development/ci-cd.md#vps.
 # Each GitHub environment holds its own VPS address, SSH key and settings, plus its branch policy;
@@ -39,10 +39,12 @@ jobs:
       group: deploy-${{ github.ref_name }}
       cancel-in-progress: false
     env:
-      # One Docker Hub repository holds both services, told apart by tag, so a free plan's single private repository
-      # is enough.
-      AI_IMAGE: ${{ vars.DOCKERHUB_REPOSITORY }}:ai-${{ inputs.sha }}
-      CORE_IMAGE: ${{ vars.DOCKERHUB_REPOSITORY }}:core-${{ inputs.sha }}
+      # One GHCR package per service, tagged by commit, so the cleanup below keeps the latest versions of each.
+      # Image names must be lowercase, which this repository's owner and name are.
+      AI_IMAGE: ghcr.io/${{ github.repository }}-ai:${{ inputs.sha }}
+      CORE_IMAGE: ghcr.io/${{ github.repository }}-core:${{ inputs.sha }}
+      # The label links each package to this repository, which lets this job's GITHUB_TOKEN push and delete its versions.
+      IMAGE_SOURCE: ${{ github.server_url }}/${{ github.repository }}
       APP_DIR: ${{ vars.VPS_APP_DIR || '/opt/smartledger' }}
     steps:
       - uses: actions/checkout@v7
@@ -55,10 +57,9 @@ jobs:
         run: |
           echo "DOCKER_CONFIG=$RUNNER_TEMP/docker" >> "$GITHUB_ENV"
           echo "SSH_CONFIG=$RUNNER_TEMP/ssh/config" >> "$GITHUB_ENV"
-      - name: Log in to Docker Hub
+      - name: Log in to GHCR
         env:
-          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           mkdir -p "$DOCKER_CONFIG"
@@ -66,11 +67,14 @@ jobs:
           if [ -d "$HOME/.docker/cli-plugins" ]; then
             ln -sfn "$HOME/.docker/cli-plugins" "$DOCKER_CONFIG/cli-plugins"
           fi
-          printf '%s' "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+          printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
       # The VPS is linux/amd64 while a self-hosted machine may be arm64, so every image names its platform.
+      # Without provenance each push is one tagged version, so the cleanup counts only deployable images.
       - name: Build and push ai
         if: inputs.ai
-        run: docker buildx build --platform linux/amd64 --tag "$AI_IMAGE" --push backend/ai
+        run: |
+          docker buildx build --platform linux/amd64 --provenance=false --label "org.opencontainers.image.source=$IMAGE_SOURCE" \
+            --tag "$AI_IMAGE" --push backend/ai
       # The runner builds the jar and the image only wraps it in a JRE, so the image build needs no Maven.
       - uses: actions/setup-java@v6
         if: inputs.core
@@ -85,8 +89,8 @@ jobs:
           bash ./mvnw --batch-mode --no-transfer-progress -DskipTests package
           mkdir -p "$RUNNER_TEMP/core-prebuilt"
           cp target/core-0.0.1-SNAPSHOT.jar "$RUNNER_TEMP/core-prebuilt/app.jar"
-          docker buildx build --platform linux/amd64 --file Dockerfile.prebuilt --tag "$CORE_IMAGE" --push \
-            "$RUNNER_TEMP/core-prebuilt"
+          docker buildx build --platform linux/amd64 --provenance=false --label "org.opencontainers.image.source=$IMAGE_SOURCE" \
+            --file Dockerfile.prebuilt --tag "$CORE_IMAGE" --push "$RUNNER_TEMP/core-prebuilt"
       # The private key lives only in a job-local ssh-agent; the known_hosts secret pins the VPS host key, so a
       # spoofed server is refused instead of trusted on first use.
       - name: Start ssh-agent
@@ -156,11 +160,27 @@ jobs:
           ssh -F "$SSH_CONFIG" vps \
             "APP_DIR='$APP_DIR' AI_IMAGE='$DEPLOY_AI_IMAGE' CORE_IMAGE='$DEPLOY_CORE_IMAGE' bash -s" \
             < deploy/vps/deploy.sh
+      # Keeps the 20 latest versions of each package, shared by staging and production, as the rollback window
+      # (docs/development/ci-cd.md#vps). Only after a successful deploy, so the running image is never the one removed.
+      - name: Delete old ai images
+        if: inputs.ai
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ github.event.repository.name }}-ai
+          package-type: container
+          min-versions-to-keep: 20
+      - name: Delete old core images
+        if: inputs.core
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ github.event.repository.name }}-core
+          package-type: container
+          min-versions-to-keep: 20
       - name: Stop ssh-agent and log out
         if: always()
         run: |
           if [ -n "${SSH_AGENT_PID:-}" ]; then ssh-agent -k; fi
-          docker logout || true
+          docker logout ghcr.io || true
           rm -rf "$RUNNER_TEMP/ssh" "$DOCKER_CONFIG"
       - name: Build deploy report
         if: always()

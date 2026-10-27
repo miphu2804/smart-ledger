@@ -1,3 +1,11 @@
+### [2026-10-27 22:51 UTC+07:00] — [Deploy] Ship the backend to a VPS through GHCR and a Cloudflare Tunnel
+
+**Done:** Job `deploy-backend` no longer uses the Railway CLI: it builds `ai` and `core` for `linux/amd64`, pushes them to GHCR as `ghcr.io/<owner>/<repo>-ai:<sha>` and `-core:<sha>` with the job's `GITHUB_TOKEN`, runs `deploy/vps/deploy.sh` over SSH with a pinned host key, then keeps the 20 latest versions of each package as the rollback window. The VPS runs `core`, `ai` and `cloudflared` in one Compose stack and publishes no port; Cloudflare carries HTTPS to Core through a remotely managed tunnel. `deploy/ansible/playbook.yml` provisions a new VPS (Docker, ufw with only SSH, swap, deploy user and key, env files, tunnel token, optional GHCR login). The CI/CD guide and diagram describe the VPS setup and mark Bifrost, Langfuse, pgvector and the Grafana stack as planned.
+
+**Changed files:** `.github/workflows/deploy-backend.yml`, `.github/workflows/cd.yml`, `deploy/vps/compose.yaml`, `deploy/vps/deploy.sh`, `docs/development/ci-cd.md`, `docs/architecture/technical-design.md`, `docs/architecture/diagrams/src/ci-cd.drawio`, `docs/architecture/diagrams/images/ci-cd.svg`, `.gitignore` — modified; `deploy/ansible/playbook.yml`, `deploy/ansible/inventory.example.ini` — added; this entry.
+
+**Check:** `actionlint` passes on both workflows; `docker compose config -q` passes with the three variables set and fails without `TUNNEL_TOKEN`; `bash -n deploy.sh` passes; the playbook parses as YAML; the diagram validates with 0 errors. **Not verified:** a real deploy, the playbook against a VPS, the tunnel, and whether `GITHUB_TOKEN` may delete package versions on the first run.
+
 ### [2026-10-27 15:26 UTC+07:00] — [Fix] Warn when apply.sh dev staging removes keys from staging
 
 **Done:** `apply.sh dev staging` copies each target as a whole into `secrets/staging/env/`, so a key the target lacks, typically one a teammate added after this machine last ran `apply.sh staging dev`, is removed from staging. The output now prints a warning under the `-` lines that names the target and says to run `apply.sh staging dev` first. Behavior is unchanged; nothing is blocked. The guide's sentence that said it copies only the edited keys now says it copies the whole target.
