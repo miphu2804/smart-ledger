@@ -43,7 +43,7 @@ The team's env files, encrypted, one folder per environment. After setup, `git p
 | Do any of the tasks below from a menu | `sl` (install once with `cargo install --path tools/secrets-cli`) |
 | See what would change in `backend/core/.env`, `backend/ai/.env`, `frontend/mobile/.env` | `scripts/secrets/apply.sh staging dev` |
 | Write those files with the local database keys from `local.env.*`, keeping the old ones as `.bak` | `scripts/secrets/apply.sh staging dev --apply` |
-| Send keys you edited in those files back to `staging/env/` | `scripts/secrets/apply.sh dev staging --apply`, then push as below |
+| Add or change a key for the team | Edit it in `staging/env/` and push as below (maintainer only); copying runs one way, from staging to those files |
 | Run the backend | `docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build` |
 | Read any other file (Railway, GitHub, load test, monitor) | Open it in `staging/env/`; it is not copied anywhere |
 
