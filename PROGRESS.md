@@ -6,6 +6,15 @@
 
 Check: `npx tsc --noEmit` shows only the two existing errors for the missing `expo-application` and `expo-intent-launcher`; Settings, Notification settings and debt history checked on the mock web build (the last history row measures `0px` border). Not verified on screen: checkout, assistant history, the add-item sheet, voice expenses, and a real phone. Commit: the one that adds this entry.
 
+### 2026-10-28 — Staging Core answers on staging.103-162-31-93.sslip.io
+
+| Area | Change |
+|---|---|
+| Deploy | • The staging site of the shared Caddy serves `staging.103-162-31-93.sslip.io` and, until every client has moved, the bare `103-162-31-93.sslip.io`, so both environments carry their name |
+| Clients | • Staging web, preview, landing, Android, monitor, load test and release-script defaults use the `staging.` name |
+
+Check: both names answer HTTPS health 200 through the shared Caddy. Commit: the merge of this branch.
+
 ### 2026-10-28 — Staging and production share one VPS behind one Caddy
 
 | Area | Change |
