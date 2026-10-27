@@ -1,6 +1,6 @@
 # One-time setup of a backend VPS, safe to re-run: it brings the machine back to this state and
 # uploads the env files again. It covers the VPS part of docs/development/ci-cd.md#vps; the GitHub
-# secrets and the Cloudflare Tunnel stay manual. Run from the repository root after pulling the
+# secrets stay manual. Run from the repository root after pulling the
 # secrets, with that environment's secrets/<environment>/env/.env.vps loaded into the shell:
 #   set -a; . secrets/staging/env/.env.vps; set +a
 #   ansible-playbook -i deploy/ansible/inventory.ini deploy/ansible/playbook.yml --limit staging
@@ -15,8 +15,8 @@
     swap_size_mb: 2048
     # Resolved env files of this environment, pulled by scripts/secrets (docs/development/secrets-and-env.md).
     env_dir: "{{ playbook_dir }}/../../secrets/{{ smartledger_env }}/env"
-    # Token of this environment's Cloudflare Tunnel (Zero Trust → Networks → Tunnels).
-    tunnel_token: "{{ lookup('env', 'CLOUDFLARE_TUNNEL_TOKEN') }}"
+    # Public name of Core that resolves to this VPS, for example 203-0-113-10.sslip.io or api.<domain>.
+    caddy_domain: "{{ lookup('env', 'CADDY_DOMAIN') }}"
     # Public half of the CI deploy key whose private half is secret VPS_SSH_KEY.
     deploy_public_key: "{{ lookup('env', 'VPS_SSH_PUBLIC_KEY') }}"
     # A classic token with only `read:packages`, for private GHCR packages; empty skips `docker login`.
@@ -29,17 +29,21 @@
         name: [docker.io, docker-compose-v2, ufw, unattended-upgrades]
         update_cache: true
 
-    - name: Fail without the tunnel token or deploy key
+    - name: Fail without the domain or deploy key
       ansible.builtin.assert:
-        that: tunnel_token | length > 0 and deploy_public_key | length > 0
-        fail_msg: Load secrets/<environment>/env/.env.vps with CLOUDFLARE_TUNNEL_TOKEN and VPS_SSH_PUBLIC_KEY set.
+        that: caddy_domain | length > 0 and deploy_public_key | length > 0
+        fail_msg: Load secrets/<environment>/env/.env.vps with CADDY_DOMAIN and VPS_SSH_PUBLIC_KEY set.
 
-    # The tunnel dials out, so web traffic needs no inbound rule.
-    - name: Allow only SSH
+    # SSH for Ansible and CI, 80 for the ACME challenge and redirect, 443 (TCP and QUIC) for Caddy.
+    - name: Allow SSH, HTTP and HTTPS
       community.general.ufw:
         rule: allow
-        port: "22"
-        proto: tcp
+        port: "{{ item.port }}"
+        proto: "{{ item.proto }}"
+      loop:
+        - { port: "22", proto: tcp }
+        - { port: "80", proto: tcp }
+        - { port: "443", proto: any }
 
     - name: Enable the firewall, denying other inbound traffic
       community.general.ufw:
@@ -118,16 +122,15 @@
       notify: Apply the stack
 
     # Only this line: the deploy rewrites the image lines of the same file.
-    - name: Set the tunnel token
+    - name: Set the Caddy domain
       ansible.builtin.lineinfile:
         path: "{{ app_dir }}/.env"
         create: true
         owner: "{{ deploy_user }}"
         group: "{{ deploy_user }}"
         mode: "0600"
-        regexp: "^TUNNEL_TOKEN="
-        line: "TUNNEL_TOKEN={{ tunnel_token }}"
-      no_log: true
+        regexp: "^CADDY_DOMAIN="
+        line: "CADDY_DOMAIN={{ caddy_domain }}"
       notify: Apply the stack
 
     - name: Log in to GHCR with the read-only token

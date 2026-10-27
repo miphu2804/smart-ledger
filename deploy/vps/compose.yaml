@@ -1,7 +1,7 @@
-# Backend stack on one VPS: a Cloudflare Tunnel carries HTTPS traffic to Core, so the VPS publishes
-# no port; AI is reachable only from Core inside the Compose network. Lives in the app directory on the VPS (default /opt/smartledger)
+# Backend stack on one VPS: Caddy publishes ports 80 and 443, gets a free Let's Encrypt certificate
+# for CADDY_DOMAIN and proxies to Core; AI is reachable only from Core inside the Compose network. Lives in the app directory on the VPS (default /opt/smartledger)
 # next to these files, none of which are in Git:
-#   .env               TUNNEL_TOKEN, CORE_IMAGE, AI_IMAGE; the deploy rewrites the image lines
+#   .env               CADDY_DOMAIN, CORE_IMAGE, AI_IMAGE; the deploy rewrites the image lines
 #   core.env, ai.env   service variables, resolved copies of secrets/<env>/env/.env.core and .env.ai
 #   github.core.env, github.ai.env
 #                      settings GitHub owns (CORS, model, tracing); the deploy rewrites them and
@@ -52,14 +52,24 @@ services:
     restart: unless-stopped
     logging: *logging
 
-  # Remotely managed tunnel: its public hostname and the origin http://core:8080 are set in the
-  # Cloudflare dashboard, and the connector only dials out, so no inbound port is open.
-  cloudflared:
-    image: cloudflare/cloudflared:2026.10.0
-    command: tunnel --no-autoupdate run
-    environment:
-      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?TUNNEL_TOKEN is required}
+  # CADDY_DOMAIN must resolve to this VPS: an sslip.io name such as 203-0-113-10.sslip.io until a
+  # real domain exists, then that domain; changing it only needs a restart of this service.
+  caddy:
+    image: caddy:2.11.6-alpine
+    command: caddy reverse-proxy --from ${CADDY_DOMAIN:?CADDY_DOMAIN is required} --to core:8080
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      # Certificates and the ACME account; losing them hits Let's Encrypt rate limits on restart.
+      - caddy_data:/data
+      - caddy_config:/config
     depends_on:
       - core
     restart: unless-stopped
     logging: *logging
+
+volumes:
+  caddy_data:
+  caddy_config:
