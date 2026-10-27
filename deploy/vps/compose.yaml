@@ -1,7 +1,8 @@
-# Backend stack on one VPS: Caddy publishes ports 80 and 443, gets a free Let's Encrypt certificate
-# for CADDY_DOMAIN and proxies to Core; AI is reachable only from Core inside the Compose network. Lives in the app directory on the VPS (default /opt/smartledger)
+# Backend stack of one environment: Core joins the external `edge` network as core-<environment>, where the shared
+# Caddy in deploy/edge/ reaches it; AI is reachable only from Core inside this project's own network. Staging and
+# production run side by side on one VPS, each in its own app directory (/opt/smartledger, /opt/smartledger-production)
 # next to these files, none of which are in Git:
-#   .env               CADDY_DOMAIN, CORE_IMAGE, AI_IMAGE; the deploy rewrites the image lines
+#   .env               CORE_ALIAS, CORE_IMAGE, AI_IMAGE; the deploy rewrites the image lines
 #   core.env, ai.env   service variables, resolved copies of secrets/<env>/env/.env.core and .env.ai
 #   github.core.env, github.ai.env
 #                      settings GitHub owns (CORS, model, tracing); the deploy rewrites them and
@@ -28,6 +29,14 @@ services:
       timeout: 5s
       start_period: 90s
       retries: 6
+    networks:
+      default:
+      edge:
+        aliases:
+          - ${CORE_ALIAS:?CORE_ALIAS is required, core-staging or core-production}
+    # The VPS resolver appends a search domain with wildcard DNS (bkcloud.vn): while AI is down, `ai` would
+    # resolve to an outside host and Core would send it the internal token and shop data.
+    dns_search: .
     restart: unless-stopped
     logging: &logging
       options:
@@ -52,24 +61,6 @@ services:
     restart: unless-stopped
     logging: *logging
 
-  # CADDY_DOMAIN must resolve to this VPS: an sslip.io name such as 203-0-113-10.sslip.io until a
-  # real domain exists, then that domain; changing it only needs a restart of this service.
-  caddy:
-    image: caddy:2.11.6-alpine
-    command: caddy reverse-proxy --from ${CADDY_DOMAIN:?CADDY_DOMAIN is required} --to core:8080
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    volumes:
-      # Certificates and the ACME account; losing them hits Let's Encrypt rate limits on restart.
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - core
-    restart: unless-stopped
-    logging: *logging
-
-volumes:
-  caddy_data:
-  caddy_config:
+networks:
+  edge:
+    external: true

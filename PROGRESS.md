@@ -1,3 +1,13 @@
+### 2026-10-28 — Staging and production share one VPS behind one Caddy
+
+| Area | Change |
+|---|---|
+| Deploy | • Caddy moves to its own project in `deploy/edge/` (`/opt/smartledger-edge`) that owns ports 80 and 443 and routes `103-162-31-93.sslip.io` to `core-staging` and `prod.103-162-31-93.sslip.io` to `core-production` over the Docker network `edge`<br>• Each environment keeps its own Compose project (`/opt/smartledger`, `/opt/smartledger-production`); Core joins `edge` under `CORE_ALIAS`, AI stays on the project network<br>• Caddy and Core resolve without the VPS search domain, whose wildcard DNS sent `core-production` to an outside host<br>• The playbook runs once per environment and writes `sites/<environment>.caddy` |
+| Clients | • Staging web, landing, Android, preview, monitor, load test and release-script defaults point at the VPS instead of Railway |
+| Docs | • The CI/CD guide records the shared VPS, its domains and the accepted loss of isolation between staging and production |
+
+Check: playbook applied to the VPS for staging and production; staging HTTPS health 200 through the shared Caddy with the copied certificate, Core reaches AI, production domain gets its certificate and answers 502 until its first deploy. Not verified: a production deploy, which needs the release to `main`. Commit: the merge of this branch.
+
 ### 2026-10-27 — Backend on a VPS through GHCR and Caddy
 
 | Area | Change |
