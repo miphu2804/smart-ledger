@@ -1,9 +1,10 @@
 name: Deploy backend
 
-# Called by cd.yml for a commit of `staging` or `main` whose `ai`, `core` and `container-images` passed; it deploys
-# Railway `ai` and `core`. Kept apart from the tests so a change here cannot break a required check, and so the
-# backend deploy waits only for the backend jobs. See docs/development/ci-cd.md#steps.
-# Each GitHub environment holds its own environment-scoped Railway project token and branch policy;
+# Called by cd.yml for a commit of `staging` or `main` whose `ai`, `core` and `container-images` passed. It builds the
+# `ai` and `core` images, pushes them to Docker Hub and runs deploy/vps/deploy.sh on the VPS over SSH. Kept apart from
+# the tests so a change here cannot break a required check, and so the backend deploy waits only for the backend jobs.
+# See docs/development/ci-cd.md#vps.
+# Each GitHub environment holds its own VPS address, SSH key and settings, plus its branch policy;
 # `railway-production` requires approval. The environment is set on the job below, so its secrets reach the job
 # without the caller passing them.
 
@@ -19,11 +20,11 @@ on:
         type: string
         required: true
       ai:
-        description: Deploy Railway service `ai`
+        description: Deploy service `ai`
         type: boolean
         required: true
       core:
-        description: Deploy Railway service `core`
+        description: Deploy service `core`
         type: boolean
         required: true
 
@@ -38,29 +39,82 @@ jobs:
       group: deploy-${{ github.ref_name }}
       cancel-in-progress: false
     env:
-      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      # One Docker Hub repository holds both services, told apart by tag, so a free plan's single private repository
+      # is enough.
+      AI_IMAGE: ${{ vars.DOCKERHUB_REPOSITORY }}:ai-${{ inputs.sha }}
+      CORE_IMAGE: ${{ vars.DOCKERHUB_REPOSITORY }}:core-${{ inputs.sha }}
+      APP_DIR: ${{ vars.VPS_APP_DIR || '/opt/smartledger' }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.sha }}
           persist-credentials: false
-      - name: Install Railway CLI
-        # A job-local prefix, so the self-hosted machine's own CLI (e.g. Homebrew's) is neither clashed with nor replaced.
+      # On the self-hosted machine the Docker and SSH clients would otherwise read and write the owner's
+      # ~/.docker and ~/.ssh; these job-local paths keep the owner's logins, keys and known hosts untouched.
+      - name: Isolate the Docker and SSH config
         run: |
-          npm install --prefix "$RUNNER_TEMP/cli" @railway/cli@5.63.1
-          echo "$RUNNER_TEMP/cli/node_modules/.bin" >> "$GITHUB_PATH"
-      # On the self-hosted machine the CLI would read the owner's ~/.railway login before RAILWAY_TOKEN; an empty HOME
-      # leaves the token as its only credential.
-      - name: Isolate the Railway CLI config
-        if: runner.environment == 'self-hosted'
+          echo "DOCKER_CONFIG=$RUNNER_TEMP/docker" >> "$GITHUB_ENV"
+          echo "SSH_CONFIG=$RUNNER_TEMP/ssh/config" >> "$GITHUB_ENV"
+      - name: Log in to Docker Hub
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
-          mkdir -p "$RUNNER_TEMP/home"
-          echo "HOME=$RUNNER_TEMP/home" >> "$GITHUB_ENV"
-      # GitHub owns the browser origins Core allows, so a manual edit on Railway cannot drift or
-      # crash Core: Core refuses to start on any whitespace, wildcard or path inside an origin.
-      # Skipped while the environment variable is unset, leaving the Railway value untouched.
-      - name: Sync core CORS origins
-        if: vars.CORS_ALLOWED_ORIGINS != ''
+          set -euo pipefail
+          mkdir -p "$DOCKER_CONFIG"
+          # Docker Desktop keeps buildx under ~/.docker/cli-plugins, which the job-local DOCKER_CONFIG hides.
+          if [ -d "$HOME/.docker/cli-plugins" ]; then
+            ln -sfn "$HOME/.docker/cli-plugins" "$DOCKER_CONFIG/cli-plugins"
+          fi
+          printf '%s' "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+      # The VPS is linux/amd64 while a self-hosted machine may be arm64, so every image names its platform.
+      - name: Build and push ai
+        if: inputs.ai
+        run: docker buildx build --platform linux/amd64 --tag "$AI_IMAGE" --push backend/ai
+      # The runner builds the jar and the image only wraps it in a JRE, so the image build needs no Maven.
+      - uses: actions/setup-java@v6
+        if: inputs.core
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Build and push core
+        if: inputs.core
+        working-directory: backend/core
+        run: |
+          set -euo pipefail
+          bash ./mvnw --batch-mode --no-transfer-progress -DskipTests package
+          mkdir -p "$RUNNER_TEMP/core-prebuilt"
+          cp target/core-0.0.1-SNAPSHOT.jar "$RUNNER_TEMP/core-prebuilt/app.jar"
+          docker buildx build --platform linux/amd64 --file Dockerfile.prebuilt --tag "$CORE_IMAGE" --push \
+            "$RUNNER_TEMP/core-prebuilt"
+      # The private key lives only in a job-local ssh-agent; the known_hosts secret pins the VPS host key, so a
+      # spoofed server is refused instead of trusted on first use.
+      - name: Start ssh-agent
+        env:
+          VPS_HOST: ${{ vars.VPS_HOST }}
+          VPS_USER: ${{ vars.VPS_USER || 'deploy' }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ssh" && chmod 700 "$RUNNER_TEMP/ssh"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$RUNNER_TEMP/ssh/known_hosts"
+          cat > "$SSH_CONFIG" <<EOF
+          Host vps
+            HostName $VPS_HOST
+            User $VPS_USER
+            UserKnownHostsFile $RUNNER_TEMP/ssh/known_hosts
+            StrictHostKeyChecking yes
+            BatchMode yes
+          EOF
+          eval "$(ssh-agent -s)"
+          printf '%s\n' "$VPS_SSH_KEY" | tr -d '\r' | ssh-add -
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
+      # GitHub owns the browser origins Core allows, so a manual edit on the VPS cannot drift or crash Core: Core
+      # refuses to start on any whitespace, wildcard or path inside an origin. Unset leaves the VPS core.env value.
+      - name: Upload core settings
+        if: inputs.core
         env:
           CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
         run: |
@@ -69,10 +123,14 @@ jobs:
             echo "::error::CORS_ALLOWED_ORIGINS must be comma-separated origins without spaces or wildcards"
             exit 1
           fi
-          railway variable set "CORS_ALLOWED_ORIGINS=$CORS_ALLOWED_ORIGINS" --service core --skip-deploys
-      # GitHub owns the AI model settings (backend/ai/.env.example), so the deploy below starts the
-      # new AI with them. Each unset setting leaves its Railway value untouched.
-      - name: Sync ai model settings
+          {
+            if [ -n "$CORS_ALLOWED_ORIGINS" ]; then echo "CORS_ALLOWED_ORIGINS=$CORS_ALLOWED_ORIGINS"; fi
+          } | ssh -F "$SSH_CONFIG" vps "umask 077 && cat > '$APP_DIR/github.core.env'"
+      # GitHub also owns the AI model settings (backend/ai/.env.example) and the Logfire token
+      # (backend/ai/README.md#tracing-logfire). The file goes over stdin, so no value shows in a process list.
+      # Each unset setting leaves its VPS ai.env value.
+      - name: Upload ai settings
+        if: inputs.ai
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
@@ -80,60 +138,36 @@ jobs:
           MODEL_NAME: ${{ vars.MODEL_NAME }}
           MODEL_FALLBACKS: ${{ vars.MODEL_FALLBACKS }}
           MODEL_REASONING_EFFORT: ${{ vars.MODEL_REASONING_EFFORT }}
-        run: |
-          set -euo pipefail
-          for name in OPENAI_API_KEY OPENAI_BASE_URL MODEL_PROVIDER MODEL_NAME MODEL_FALLBACKS MODEL_REASONING_EFFORT; do
-            if [[ -n "${!name}" ]]; then
-              # stdin keeps the key out of the runner's process list
-              printf '%s' "${!name}" | railway variable set "$name" --stdin --service ai --skip-deploys
-            fi
-          done
-      # GitHub also owns the Logfire token (backend/ai/README.md#tracing-logfire), one per
-      # environment, so it is rotated in one place. The environment name and the deployed commit
-      # are derived here, so each trace shows which environment and release produced it. An unset
-      # token leaves the Railway value untouched.
-      - name: Sync ai tracing settings
-        env:
           LOGFIRE_TOKEN: ${{ secrets.LOGFIRE_TOKEN }}
           LOGFIRE_ENVIRONMENT: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
           LOGFIRE_SERVICE_VERSION: ${{ inputs.sha }}
         run: |
           set -euo pipefail
-          for name in LOGFIRE_TOKEN LOGFIRE_ENVIRONMENT LOGFIRE_SERVICE_VERSION; do
-            if [[ -n "${!name}" ]]; then
-              # stdin keeps the token out of the runner's process list
-              printf '%s' "${!name}" | railway variable set "$name" --stdin --service ai --skip-deploys
-            fi
-          done
-      # AI first: Core calls AI, so the new Core should not start against an old AI.
-      - name: Deploy ai
-        id: deploy_ai
-        if: inputs.ai
-        run: railway up backend/ai --path-as-root --service ai --ci
-      # Railway's free build window is too short for a Maven build, so the runner builds the jar and
-      # Railway only wraps it in a JRE image.
-      - uses: actions/setup-java@v6
-        if: inputs.core
-        with:
-          distribution: temurin
-          java-version: "21"
-      - name: Build core jar
-        if: inputs.core
-        working-directory: backend/core
+          for name in OPENAI_API_KEY OPENAI_BASE_URL MODEL_PROVIDER MODEL_NAME MODEL_FALLBACKS MODEL_REASONING_EFFORT \
+            LOGFIRE_TOKEN LOGFIRE_ENVIRONMENT LOGFIRE_SERVICE_VERSION; do
+            if [[ -n "${!name}" ]]; then printf '%s=%s\n' "$name" "${!name}"; fi
+          done | ssh -F "$SSH_CONFIG" vps "umask 077 && cat > '$APP_DIR/github.ai.env'"
+      - name: Deploy
+        id: deploy
+        env:
+          DEPLOY_AI_IMAGE: ${{ inputs.ai && env.AI_IMAGE || '' }}
+          DEPLOY_CORE_IMAGE: ${{ inputs.core && env.CORE_IMAGE || '' }}
         run: |
-          bash ./mvnw --batch-mode --no-transfer-progress -DskipTests package
-          mkdir -p "$RUNNER_TEMP/core-prebuilt"
-          cp target/core-0.0.1-SNAPSHOT.jar "$RUNNER_TEMP/core-prebuilt/app.jar"
-          cp Dockerfile.prebuilt "$RUNNER_TEMP/core-prebuilt/Dockerfile"
-      - name: Deploy core
-        id: deploy_core
-        if: inputs.core
-        run: railway up "$RUNNER_TEMP/core-prebuilt" --path-as-root --service core --ci
+          ssh -F "$SSH_CONFIG" vps \
+            "APP_DIR='$APP_DIR' AI_IMAGE='$DEPLOY_AI_IMAGE' CORE_IMAGE='$DEPLOY_CORE_IMAGE' bash -s" \
+            < deploy/vps/deploy.sh
+      - name: Stop ssh-agent and log out
+        if: always()
+        run: |
+          if [ -n "${SSH_AGENT_PID:-}" ]; then ssh-agent -k; fi
+          docker logout || true
+          rm -rf "$RUNNER_TEMP/ssh" "$DOCKER_CONFIG"
       - name: Build deploy report
         if: always()
         env:
-          AI_OUTCOME: ${{ steps.deploy_ai.outcome }}
-          CORE_OUTCOME: ${{ steps.deploy_core.outcome }}
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          AI: ${{ inputs.ai }}
+          CORE: ${{ inputs.core }}
           TARGET_ENV: ${{ github.ref_name == 'main' && 'railway-production' || 'railway-staging' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           SHA: ${{ inputs.sha }}
@@ -146,13 +180,10 @@ jobs:
             echo "| Environment | $TARGET_ENV |"
             echo "| Branch | ${GITHUB_REF_NAME} |"
             echo "| Commit | ${SHA::7} |"
+            echo "| Services | $([ "$AI" = true ] && echo -n 'ai ')$([ "$CORE" = true ] && echo -n core) |"
+            echo "| Result | $DEPLOY_OUTCOME |"
             echo "| Triggered by | ${GITHUB_ACTOR} |"
             echo "| Run | $RUN_URL |"
-            echo
-            echo "| Service | Result |"
-            echo "|---|---|"
-            echo "| ai | $AI_OUTCOME |"
-            echo "| core | $CORE_OUTCOME |"
           } > deploy-summary.md
           cat deploy-summary.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7

@@ -25,11 +25,11 @@ on:
         type: string
         default: ""
       backend-ai:
-        description: Deploy Railway `ai`
+        description: Deploy backend `ai` to the VPS
         type: boolean
         default: false
       backend-core:
-        description: Deploy Railway `core`
+        description: Deploy backend `core` to the VPS
         type: boolean
         default: false
       web:
