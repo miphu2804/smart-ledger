@@ -39,10 +39,14 @@ jobs:
       group: deploy-${{ github.ref_name }}
       cancel-in-progress: false
     env:
-      # One GHCR package per service, tagged by commit, so the cleanup below keeps the latest versions of each.
-      # Image names must be lowercase, which this repository's owner and name are.
-      AI_IMAGE: ghcr.io/${{ github.repository }}-ai:${{ inputs.sha }}
-      CORE_IMAGE: ghcr.io/${{ github.repository }}-core:${{ inputs.sha }}
+      # One GHCR package per service and environment, tagged by commit, so staging deploys never push a production
+      # image out of its rollback window. Image names must be lowercase, which this repository's owner and name are.
+      DEPLOY_ENV: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+      AI_IMAGE: ghcr.io/${{ github.repository }}-ai-${{ github.ref_name == 'main' && 'production' || 'staging' }}:${{ inputs.sha }}
+      CORE_IMAGE: ghcr.io/${{ github.repository }}-core-${{ github.ref_name == 'main' && 'production' || 'staging' }}:${{ inputs.sha }}
+      # Rollback window per environment (docs/development/ci-cd.md#vps): production releases are rare, staging deploys
+      # several times a day and rarely rolls back far.
+      KEEP_IMAGES: ${{ github.ref_name == 'main' && 20 || 10 }}
       # The label links each package to this repository, which lets this job's GITHUB_TOKEN push and delete its versions.
       IMAGE_SOURCE: ${{ github.server_url }}/${{ github.repository }}
       APP_DIR: ${{ vars.VPS_APP_DIR || '/opt/smartledger' }}
@@ -160,22 +164,22 @@ jobs:
           ssh -F "$SSH_CONFIG" vps \
             "APP_DIR='$APP_DIR' AI_IMAGE='$DEPLOY_AI_IMAGE' CORE_IMAGE='$DEPLOY_CORE_IMAGE' bash -s" \
             < deploy/vps/deploy.sh
-      # Keeps the 20 latest versions of each package, shared by staging and production, as the rollback window
-      # (docs/development/ci-cd.md#vps). Only after a successful deploy, so the running image is never the one removed.
+      # Keeps the KEEP_IMAGES latest versions of this environment's packages. Only after a successful deploy, so the
+      # running image is never the one removed.
       - name: Delete old ai images
         if: inputs.ai
         uses: actions/delete-package-versions@v5
         with:
-          package-name: ${{ github.event.repository.name }}-ai
+          package-name: ${{ github.event.repository.name }}-ai-${{ env.DEPLOY_ENV }}
           package-type: container
-          min-versions-to-keep: 20
+          min-versions-to-keep: ${{ env.KEEP_IMAGES }}
       - name: Delete old core images
         if: inputs.core
         uses: actions/delete-package-versions@v5
         with:
-          package-name: ${{ github.event.repository.name }}-core
+          package-name: ${{ github.event.repository.name }}-core-${{ env.DEPLOY_ENV }}
           package-type: container
-          min-versions-to-keep: 20
+          min-versions-to-keep: ${{ env.KEEP_IMAGES }}
       - name: Stop ssh-agent and log out
         if: always()
         run: |

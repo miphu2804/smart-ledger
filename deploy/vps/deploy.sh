@@ -29,6 +29,6 @@ done
 
 docker compose up -d cloudflared
 # Every deploy pulls a new tag, so old images keep their tags and only -a removes them. A rollback pulls its
-# image again from GHCR, which keeps the latest 20 versions.
+# image again from GHCR, which keeps the latest 10 (staging) or 20 (production) versions.
 docker image prune -af
 docker compose ps
