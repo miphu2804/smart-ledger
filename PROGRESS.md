@@ -17,6 +17,14 @@ Check: `actionlint` on both workflows, `docker compose config -q` (fails without
 
 Check: link and anchor check over the edited files passes. Commit: the one that adds this entry.
 
+### [2026-10-28 00:20 UTC+07:00] — [Chore] Clear the web admin lint warnings
+
+**Done:** `npm run lint` in `frontend/web` (shown as warnings in CI) reported six warnings in the admin code; now it reports none. `colorFor` and `initialsOf` in `components/admin/ui.tsx` are only used there, so they are no longer exported and the file exports only components. Four `useEffect`s that set state right away were rewritten the way React recommends: the phone menu remembers the page it was opened on, so it closes on navigation without an effect; the quick search clears old results and shows "Đang tìm…" from the input handler, and its effect only schedules the search; AI Support copies newly loaded conversations into its local list during render when the data changes; the create-task dialog resets its form during render when it opens or its prefill changes, and its effect only loads shops and members.
+
+**Changed files:** `frontend/web/src/components/admin/ui.tsx`, `frontend/web/src/pages/admin/AdminLayout.tsx`, `frontend/web/src/pages/admin/AiSupportPage.tsx`, `frontend/web/src/pages/admin/tasks/TaskFormModal.tsx` — modified; this entry.
+
+**Check:** `npm run lint` shows no warnings; `npm run typecheck` and `npm run build` pass. Mock admin in the browser: at 375 px the menu opens, closes when a page is chosen, reopens and closes on the backdrop; quick search shows "Đang tìm…" then results for a 2-letter term, closes at 1 letter, searches again for a new term; AI Support lists its 3 conversations; the create-task dialog opens empty with 58 shops, and after typing a title and cancelling it opens empty again. **Not verified:** the admin against real Core (these pages are mock-only except the menu).
+
 ### [2026-10-27 19:49 UTC+07:00] — [Fix] Copy env files one way, from staging to this machine
 
 **Done:** `apply.sh dev staging` is removed. It sent a whole target back without knowing which staging version it was built from, so a target older than staging dropped keys a teammate had added (the warning from #376) and also put back old values of keys they had rotated, with no warning at all. Staging is now changed only by editing `secrets/staging/env/` and running `push.sh`, which already refuses to overwrite a newer version; only the maintainer holds the R2 write token for that. `apply.sh dev staging` exits with a message pointing there, and the `sl` Apply item goes straight to staging → dev without the direction picker. `apply.sh staging dev` output is unchanged.
