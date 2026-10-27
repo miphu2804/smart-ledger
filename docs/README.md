@@ -31,7 +31,7 @@ Start with the path that matches your task; each step links to the next level of
 - Keep each document in its current language: most of `docs/` and the frontend READMEs are Vietnamese; the root and backend READMEs and the ERD description are English. Code identifiers stay as written in code.
 - Requirement documents start with a metadata table (`Trạng thái`, `Chủ sở hữu`, `Cập nhật lần cuối`).
 - IDs are stable and never reused: `BO-*`, `BR-*`, `FR-*`, `NFR-*`, `AC-*`, `OQ-*`; invoice items use the `-INV-` infix.
-- [`PROGRESS.md`](../PROGRESS.md) is an append-only log and [`BLOCKERS.md`](../BLOCKERS.md) lists open blockers; neither defines scope.
+- [`PROGRESS.md`](../PROGRESS.md) is a newest-first log of recent work (200 lines or fewer, older entries in Git history) and [`BLOCKERS.md`](../BLOCKERS.md) lists open blockers; neither defines scope.
 
 ## Document map
 
