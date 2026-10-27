@@ -9,11 +9,11 @@ import { EMAIL_RE } from '../../utils/format'
 import '@fontsource-variable/geist'
 import '../../styles/admin.css'
 
+// Chỉ nêu việc làm được cả khi nối Core thật (AI Support và task chỉ có ở bản mock)
 const POINTS = [
-  'Tìm OWNER và cơ sở theo tên, email, số điện thoại',
-  'Theo dõi support task trên Kanban',
-  'AI Support trả lời kèm bằng chứng, bạn xác nhận trước khi tạo task',
-  'Chỉ đọc dữ liệu hỗ trợ — mọi lượt xem đều được ghi nhật ký',
+  'Tìm chủ tiệm và cửa hàng theo tên, email, số điện thoại',
+  'Xem tình trạng cửa hàng và lịch sử đổi trạng thái',
+  'Chỉ đọc dữ liệu hỗ trợ, mọi lượt xem đều được ghi nhật ký',
 ]
 
 export default function LoginPage() {
@@ -67,17 +67,23 @@ export default function LoginPage() {
       <div className="auth">
         <aside className="auth-aside" aria-hidden="true">
           <div className="brand-inline">
-            <BrandMark size={36} />
-            <strong>Sổ Nghe Lời</strong>
+            <BrandMark size={44} />
+            <div className="brand-stack">
+              <strong>Sổ Nghe Lời</strong>
+              <span>Trang quản trị</span>
+            </div>
           </div>
-          <div>
-            <h2>Vận hành và hỗ trợ chủ cơ sở, gọn trong một nơi.</h2>
-            <p>Trang quản trị dành cho đội vận hành Team HEXA.</p>
+          <div className="auth-hero">
+            <img className="auth-bobi" src="/brand/bobi-wave.webp" alt="" width={280} height={273} />
+            <div>
+              <h2>Hỗ trợ chủ tiệm, gọn trong một nơi.</h2>
+              <p>Trang quản trị dành cho đội vận hành Team HEXA.</p>
+            </div>
           </div>
           <ul className="auth-points">
             {POINTS.map((p) => (
               <li key={p}>
-                <CheckCircle size={18} weight="fill" /> {p}
+                <CheckCircle size={20} weight="fill" /> {p}
               </li>
             ))}
           </ul>
@@ -89,15 +95,14 @@ export default function LoginPage() {
           </Link>
 
           <div className="panel auth-card">
-            <div className="brand-inline" style={{ marginBottom: 20 }}>
-              <BrandMark size={32} />
-              <strong>Sổ Nghe Lời</strong>
+            <div className="auth-card-brand">
+              <BrandMark size={56} />
             </div>
             <h1>Đăng nhập quản trị</h1>
             <p className="sub">
               {USE_MOCK
                 ? 'Chỉ dành cho tài khoản ADMIN của đội vận hành.'
-                : 'Đăng nhập bằng email và mật khẩu Firebase của tài khoản có quyền ADMIN trong Sổ Nghe Lời.'}
+                : 'Dùng email và mật khẩu Firebase của tài khoản có quyền ADMIN.'}
             </p>
 
             {error && (
@@ -116,7 +121,7 @@ export default function LoginPage() {
                     id="email"
                     type="email"
                     className={`input${emailErr ? ' has-error' : ''}`}
-                    placeholder="ten@songhloi.vn"
+                    placeholder="ten@vidu.com"
                     autoComplete="username"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
