@@ -1,8 +1,9 @@
 # One-time setup of a backend VPS, safe to re-run: it brings the machine back to this state and
-# uploads the env files again. It covers the VPS part of docs/development/ci-cd.md#vps; the deploy
-# key in GitHub and the Cloudflare Tunnel stay manual. Run from the repository root with the token
-# of that environment's tunnel:
-#   CLOUDFLARE_TUNNEL_TOKEN=... ansible-playbook -i deploy/ansible/inventory.ini deploy/ansible/playbook.yml --limit staging
+# uploads the env files again. It covers the VPS part of docs/development/ci-cd.md#vps; the GitHub
+# secrets and the Cloudflare Tunnel stay manual. Run from the repository root after pulling the
+# secrets, with that environment's secrets/<environment>/env/.env.vps loaded into the shell:
+#   set -a; . secrets/staging/env/.env.vps; set +a
+#   ansible-playbook -i deploy/ansible/inventory.ini deploy/ansible/playbook.yml --limit staging
 # Needs the full `ansible` package (community.general and ansible.posix) and an admin login with
 # sudo on the VPS; the playbook itself never uses the `deploy` user to log in.
 - name: Prepare the SmartLedger backend VPS
@@ -16,6 +17,8 @@
     env_dir: "{{ playbook_dir }}/../../secrets/{{ smartledger_env }}/env"
     # Token of this environment's Cloudflare Tunnel (Zero Trust → Networks → Tunnels).
     tunnel_token: "{{ lookup('env', 'CLOUDFLARE_TUNNEL_TOKEN') }}"
+    # Public half of the CI deploy key whose private half is secret VPS_SSH_KEY.
+    deploy_public_key: "{{ lookup('env', 'VPS_SSH_PUBLIC_KEY') }}"
     # A classic token with only `read:packages`, for private GHCR packages; empty skips `docker login`.
     ghcr_username: "{{ lookup('env', 'GHCR_USERNAME') }}"
     ghcr_read_token: "{{ lookup('env', 'GHCR_READ_TOKEN') }}"
@@ -26,10 +29,10 @@
         name: [docker.io, docker-compose-v2, ufw, unattended-upgrades]
         update_cache: true
 
-    - name: Fail without the tunnel token
+    - name: Fail without the tunnel token or deploy key
       ansible.builtin.assert:
-        that: tunnel_token | length > 0
-        fail_msg: Set CLOUDFLARE_TUNNEL_TOKEN to the token of this environment's tunnel.
+        that: tunnel_token | length > 0 and deploy_public_key | length > 0
+        fail_msg: Load secrets/<environment>/env/.env.vps with CLOUDFLARE_TUNNEL_TOKEN and VPS_SSH_PUBLIC_KEY set.
 
     # The tunnel dials out, so web traffic needs no inbound rule.
     - name: Allow only SSH
@@ -80,7 +83,7 @@
     - name: Authorize the CI deploy key
       ansible.posix.authorized_key:
         user: "{{ deploy_user }}"
-        key: "{{ lookup('file', deploy_public_key_file) }}"
+        key: "{{ deploy_public_key }}"
         exclusive: true
 
     - name: Create the app directory

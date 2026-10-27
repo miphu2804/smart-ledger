@@ -116,7 +116,8 @@ jobs:
             BatchMode yes
           EOF
           eval "$(ssh-agent -s)"
-          printf '%s\n' "$VPS_SSH_KEY" | tr -d '\r' | ssh-add -
+          # Stored base64 on one line, so it fits the one-line env files of scripts/secrets (.env.vps).
+          printf '%s' "$VPS_SSH_KEY" | base64 -d | ssh-add -
           echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
           echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
       # GitHub owns the browser origins Core allows, so a manual edit on the VPS cannot drift or crash Core: Core
