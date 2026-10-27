@@ -27,6 +27,6 @@ for service in ai core; do
   docker compose up -d --wait --wait-timeout 180 "$service"
 done
 
-docker compose up -d caddy
+docker compose up -d cloudflared
 docker image prune -f
 docker compose ps

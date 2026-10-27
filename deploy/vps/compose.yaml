@@ -1,7 +1,7 @@
-# Backend stack on one VPS: Caddy terminates HTTPS for Core; AI is reachable only from Core
-# inside the Compose network. Lives in the app directory on the VPS (default /opt/smartledger)
+# Backend stack on one VPS: a Cloudflare Tunnel carries HTTPS traffic to Core, so the VPS publishes
+# no port; AI is reachable only from Core inside the Compose network. Lives in the app directory on the VPS (default /opt/smartledger)
 # next to these files, none of which are in Git:
-#   .env               CORE_DOMAIN, CORE_IMAGE, AI_IMAGE; the deploy rewrites the image lines
+#   .env               TUNNEL_TOKEN, CORE_IMAGE, AI_IMAGE; the deploy rewrites the image lines
 #   core.env, ai.env   service variables, resolved copies of secrets/<env>/env/.env.core and .env.ai
 #   github.core.env, github.ai.env
 #                      settings GitHub owns (CORS, model, tracing); the deploy rewrites them and
@@ -52,22 +52,14 @@ services:
     restart: unless-stopped
     logging: *logging
 
-  caddy:
-    image: caddy:2.10
-    ports:
-      - "80:80"
-      - "443:443"
+  # Remotely managed tunnel: its public hostname and the origin http://core:8080 are set in the
+  # Cloudflare dashboard, and the connector only dials out, so no inbound port is open.
+  cloudflared:
+    image: cloudflare/cloudflared:2026.10.0
+    command: tunnel --no-autoupdate run
     environment:
-      CORE_DOMAIN: ${CORE_DOMAIN:?CORE_DOMAIN is required}
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?TUNNEL_TOKEN is required}
     depends_on:
       - core
     restart: unless-stopped
     logging: *logging
-
-volumes:
-  caddy_data:
-  caddy_config:

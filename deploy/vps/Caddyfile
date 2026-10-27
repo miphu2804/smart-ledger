@@ -1,4 +1,0 @@
-# Caddy obtains and renews the certificate for CORE_DOMAIN itself; its DNS record must point at the VPS.
-{$CORE_DOMAIN} {
-	reverse_proxy core:8080
-}
