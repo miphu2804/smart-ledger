@@ -175,8 +175,8 @@ Check each item before deploying to a new production environment. A deploy can r
 | `VPS_HOST`, `VPS_SSH_KEY` and `VPS_KNOWN_HOSTS` of the **production** VPS in `railway-production`, and the [one-time setup](#vps) done on it | GitHub environment; the VPS | Step `Start ssh-agent` or `Upload core settings` fails with `Permission denied` or `Host key verification failed`; no backend deploy |
 | A Cloudflare Tunnel for production whose public hostname points at `http://core:8080`, and its token in the production VPS `.env` | Cloudflare Zero Trust → Networks → Tunnels; the VPS | The tunnel shows Down or the app gets Cloudflare error 1033 or 502; the deploy itself still succeeds |
 | Email/Password (and Phone, if used) enabled; the web domain listed under Authorized domains | Firebase Console of the production project → Authentication | Sign-in returns 400 `signInWithPassword`; the app says the sign-in method is not enabled |
-| AI baseline applied to the production database | [Database migrations](../../README.md#database-migrations): run `db push` with `--dry-run` first | Chat returns 503 `ai_unavailable`; the `ai` log shows `relation "chat_conversations" does not exist` |
-| All Core migrations applied | [Database migrations](../../README.md#database-migrations) | Core fails the schema check or queries fail |
+| AI baseline applied to the production database | [Database migrations](local-development.md#database-migrations): run `db push` with `--dry-run` first | Chat returns 503 `ai_unavailable`; the `ai` log shows `relation "chat_conversations" does not exist` |
+| All Core migrations applied | [Database migrations](local-development.md#database-migrations) | Core fails the schema check or queries fail |
 | `CORS_ALLOWED_ORIGINS` set on `railway-production` to `https://smart-ledger-prod.vercel.app` | GitHub environment variable | Smoke test fails with `Core CORS does not allow <URL>`; browser calls to Core are blocked |
 | Supabase Data API off for staging and production | Supabase → Settings → Data API | The `public` tables are readable through the anon key; Core and AI connect directly and do not use it |
 
@@ -184,7 +184,7 @@ A new Firebase project limits SMS to 10 a day until a billing account is attache
 
 ## What this flow does not do yet
 
-- No database migrations. Flyway stays off (`FLYWAY_ENABLED=false` in `deploy/vps/compose.yaml` and the Compose default; Core itself runs it when the variable is unset) and `supabase db push` is not in CI; the migration owner runs them by hand following [Database migrations](../../README.md#database-migrations), on staging before production.
+- No database migrations. Flyway stays off (`FLYWAY_ENABLED=false` in `deploy/vps/compose.yaml` and the Compose default; Core itself runs it when the variable is unset) and `supabase db push` is not in CI; the migration owner runs them by hand following [Database migrations](local-development.md#database-migrations), on staging before production.
 - No path filtering: every push to `staging` or `main` redeploys both `ai` and `core`, even for a mobile-only change.
 - Rollback: start CD by hand with the earlier commit's SHA (GHCR keeps the latest 10 staging or 20 production images of each service), or on the VPS run `deploy.sh` with `AI_IMAGE`/`CORE_IMAGE` of that commit; there is no automated step.
 

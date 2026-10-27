@@ -31,7 +31,7 @@ Set these environment variables in the process that launches Core. [`.env.exampl
 | `MEDIA_UPLOAD_LEASE_SECONDS` | PENDING Product/logo/avatar upload lease, defaults to `300`; an expired lease can be safely claimed again with the same key/file |
 | `CLOUDINARY_CLEANUP_FIXED_DELAY_MS` | Optional cleanup worker delay; defaults to `60000` ms and is useful as a short value only in local testing |
 
-With `FLYWAY_ENABLED=true` (the default in `application.yml`) Flyway runs committed migrations at startup; JPA then validates the schema. The shared dev/staging database is migrated only from merged code, so set `FLYWAY_ENABLED=false` when you point Core at it (see [Database migrations](../../README.md#database-migrations)). Use the same Firebase project ID for the backend and any locally generated test tokens.
+With `FLYWAY_ENABLED=true` (the default in `application.yml`) Flyway runs committed migrations at startup; JPA then validates the schema. The shared dev/staging database is migrated only from merged code, so set `FLYWAY_ENABLED=false` when you point Core at it (see [Database migrations](../../docs/development/local-development.md#database-migrations)). Use the same Firebase project ID for the backend and any locally generated test tokens.
 
 Choose credentials for the same Firebase project as the FE build. Keep JSON text
 and key files out of Git and browser variables. Leave `FIREBASE_AUTH_EMULATOR_HOST`
@@ -77,7 +77,7 @@ Open `backend/core` as a Maven project and use JDK 21. Run `com.smartledger.core
 
 ## Docker Compose
 
-Run this from the **repository root** with Docker Desktop/Engine running. Compose has no PostgreSQL container: database credentials come from the root `.env.staging`, and `backend/core/.env` supplies `FIREBASE_PROJECT_ID` and `GOOGLE_APPLICATION_CREDENTIALS` as an absolute path to the JSON file on the host. See the root [README](../../README.md#local-compose) for the env files.
+Run this from the **repository root** with Docker Desktop/Engine running. Compose has no PostgreSQL container: database credentials come from the root `.env.staging`, and `backend/core/.env` supplies `FIREBASE_PROJECT_ID` and `GOOGLE_APPLICATION_CREDENTIALS` as an absolute path to the JSON file on the host. See [Local Compose](../../docs/development/local-development.md#local-compose) for the env files.
 
 ```powershell
 docker compose --env-file .env.staging --env-file backend/core/.env up --build core
@@ -191,7 +191,7 @@ To run focused tests, set the three `CORE_TEST_POSTGRES_*` variables above to a 
 
 #### V16 rollout and recovery
 
-- Do not run feature-branch migrations against the business local DB, staging or production. Shared rollout follows the [migration workflow](../../README.md#database-migrations): reviewed code merged into staging, backup, migration owner, staging verification, then controlled production release.
+- Do not run feature-branch migrations against the business local DB, staging or production. Shared rollout follows the [migration workflow](../../docs/development/local-development.md#database-migrations): reviewed code merged into staging, backup, migration owner, staging verification, then controlled production release.
 - V16 changes an **index/constraint**, not a column. `ddl-auto=update` cannot safely replace the old `UNIQUE(shop_id, barcode)`; reuse remains blocked until V16 runs.
 - Review the actual current schema first, including unexpected dependent FKs and any locally added indexes. Check for duplicate ACTIVE non-null codes before migration:
 
