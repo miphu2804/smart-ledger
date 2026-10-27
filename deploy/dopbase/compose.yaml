@@ -1,0 +1,29 @@
+# Dopbase, the team's secrets manager, shared by every environment on the VPS. It publishes no port: the shared
+# Caddy in deploy/edge/ reaches it as `dopbase` on the external `edge` network. Lives in /opt/dopbase with its own
+# lifecycle, so an app deploy never restarts it. Its SQLite database and master key live in the dopbase_data
+# volume, which is the only copy until off-site backups exist.
+services:
+  dopbase:
+    build: .
+    image: smartledger/dopbase:local
+    environment:
+      DOPBASE_PUBLIC_URL: ${DOPBASE_PUBLIC_URL:?DOPBASE_PUBLIC_URL is required}
+    volumes:
+      - dopbase_data:/data
+    networks:
+      edge:
+        aliases: [dopbase]
+    # Same reason as the app stack: the VPS resolver appends a search domain with wildcard DNS.
+    dns_search: .
+    restart: unless-stopped
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  edge:
+    external: true
+
+volumes:
+  dopbase_data:

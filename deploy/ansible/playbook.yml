@@ -16,6 +16,10 @@
     app_dir: "{{ '/opt/smartledger' if smartledger_env == 'staging' else '/opt/smartledger-' + smartledger_env }}"
     # The shared Caddy (deploy/edge/), which proxies each environment's domain to its Core.
     edge_dir: /opt/smartledger-edge
+    # The team's secrets manager (deploy/dopbase/), shared by every environment.
+    dopbase_dir: /opt/dopbase
+    # Public name of Dopbase that resolves to the VPS, for example secrets.<domain>; empty skips Dopbase.
+    dopbase_domain: "{{ lookup('env', 'DOPBASE_DOMAIN') }}"
     deploy_user: deploy
     swap_size_mb: 2048
     # Resolved env files of this environment, pulled by scripts/secrets (docs/development/secrets-and-env.md).
@@ -169,6 +173,47 @@
           }
       notify: Apply the edge
 
+    - name: Create the Dopbase directory
+      ansible.builtin.file:
+        path: "{{ dopbase_dir }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0750"
+      when: dopbase_domain | length > 0
+
+    - name: Upload Dopbase
+      ansible.builtin.copy:
+        src: "../dopbase/{{ item }}"
+        dest: "{{ dopbase_dir }}/{{ item }}"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0644"
+      loop: [compose.yaml, Dockerfile]
+      when: dopbase_domain | length > 0
+      notify: Apply Dopbase
+
+    - name: Set the Dopbase public URL
+      ansible.builtin.copy:
+        dest: "{{ dopbase_dir }}/.env"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0600"
+        content: "DOPBASE_PUBLIC_URL=https://{{ dopbase_domain }}\n"
+      when: dopbase_domain | length > 0
+      notify: Apply Dopbase
+
+    - name: Route the Dopbase domain to Dopbase
+      ansible.builtin.copy:
+        dest: "{{ edge_dir }}/sites/dopbase.caddy"
+        mode: "0644"
+        content: |
+          {{ dopbase_domain }} {
+          	reverse_proxy dopbase:8840
+          }
+      when: dopbase_domain | length > 0
+      notify: Apply the edge
+
     - name: Log in to GHCR with the read-only token
       ansible.builtin.command:
         cmd: docker login ghcr.io --username {{ ghcr_username }} --password-stdin
@@ -191,6 +236,15 @@
       ansible.builtin.shell: grep -q '^CORE_IMAGE=' .env && grep -q '^AI_IMAGE=' .env && docker compose up -d --wait --remove-orphans || true
       args:
         chdir: "{{ app_dir }}"
+      become: true
+      become_user: "{{ deploy_user }}"
+      changed_when: true
+
+    # On first start Dopbase prints a protected setup link: read it with `docker compose logs dopbase`.
+    - name: Apply Dopbase
+      ansible.builtin.command: docker compose up -d --build --wait
+      args:
+        chdir: "{{ dopbase_dir }}"
       become: true
       become_user: "{{ deploy_user }}"
       changed_when: true
