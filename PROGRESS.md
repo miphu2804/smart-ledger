@@ -1,3 +1,11 @@
+### [2026-10-27 15:26 UTC+07:00] — [Fix] Warn when apply.sh dev staging removes keys from staging
+
+**Done:** `apply.sh dev staging` copies each target as a whole into `secrets/staging/env/`, so a key the target lacks, typically one a teammate added after this machine last ran `apply.sh staging dev`, is removed from staging. The output now prints a warning under the `-` lines that names the target and says to run `apply.sh staging dev` first. Behavior is unchanged; nothing is blocked. The guide's sentence that said it copies only the edited keys now says it copies the whole target.
+
+**Changed files:** `scripts/secrets/apply.sh`, `docs/development/secrets-and-env.md` — modified; this entry.
+
+**Check:** dry runs in a scratch repo: a target missing a staging key prints the warning, a complete target and `staging dev` do not; `sh -n` passes. **Not verified:** the warning inside the `sl` menu.
+
 ### [2026-10-27 09:15 UTC+07:00] — [Docs] Refresh the marketing screenshots and keep the capture script
 
 **Done:** The 21 phone-ratio screenshots in `docs/marketing/` dated from 2026-10-12 and no longer matched the app: the tab bar is now Tổng quan · Đơn hàng · Tạo đơn · Trợ lý Bobi · Quản lý, Đọc đơn and Quét mã sit on the Tạo đơn screen, and products without a photo show their initial instead of a stock photo (#193). All 21 were captured again from `staging` at `7d65486` with the same names, size (1170 × 2532 PNG, 390 × 844 at 3x) and flows, so existing links keep working. The capture script is now in the repo (`frontend/mobile/scripts/marketing-screenshots/`, Node 22 and Chrome only, no new packages): it drives headless Chrome over the DevTools Protocol, replaces the camera with a drawn EAN-13 package so the scanner decodes it for real, and types the voice sentences through "Nhập tay". The README lists the new contents, the source commit and how to capture again; the Unsplash note is gone because the app no longer uses those photos.
