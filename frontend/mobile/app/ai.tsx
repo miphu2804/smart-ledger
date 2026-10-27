@@ -564,8 +564,8 @@ function HistorySheet({
       {history?.length === 0 ? (
         <EmptyState icon="message-circle" title="Chưa có cuộc trò chuyện" hint="Hỏi trợ lý một câu để bắt đầu." />
       ) : null}
-      {history?.map((c) => (
-        <View key={c.conversation_id} style={styles.historyRow}>
+      {history?.map((c, i) => (
+        <View key={c.conversation_id} style={[styles.historyRow, i < history.length - 1 && styles.historyRowBorder]}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Mở ${conversationTitle(c)}`}
@@ -965,9 +965,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
+  historyRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   historyMain: { flex: 1, gap: 2 },
   renameField: { marginTop: 14, marginBottom: 0 },
 });

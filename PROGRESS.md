@@ -1,3 +1,11 @@
+### 2026-10-28 — No divider under the last row of a list
+
+| Area | Change |
+|---|---|
+| Mobile | • `SettingRow` takes `last`: the last row of each card in Settings and Notification settings no longer draws a line just above the card edge (reported by Phú)<br>• Same fix for the last item at checkout, the last debt history entry, the last conversation in the assistant history, the last product in the add-item sheet and the last pending expense in voice orders |
+
+Check: `npx tsc --noEmit` shows only the two existing errors for the missing `expo-application` and `expo-intent-launcher`; Settings, Notification settings and debt history checked on the mock web build (the last history row measures `0px` border). Not verified on screen: checkout, assistant history, the add-item sheet, voice expenses, and a real phone. Commit: the one that adds this entry.
+
 ### 2026-10-27 — Backend on a VPS through GHCR and Caddy
 
 | Area | Change |
@@ -183,11 +191,3 @@ Check: link and anchor check over the edited files passes. Commit: the one that 
 **Changed files:** `frontend/web/src/pages/admin/core/{CoreDashboardPage,CoreCustomersPage,CoreAccessLogsPage,parts}.tsx`, `frontend/web/src/pages/admin/core/coreUtils.ts`, `frontend/web/src/services/{adminApi,firebaseAuth}.ts` — added; `frontend/web/src/{AdminRoutes.tsx,config.ts,vite-env.d.ts}`, `frontend/web/src/services/{api,authService}.ts`, `frontend/web/src/pages/admin/{AdminLayout,LoginPage,SettingsPage}.tsx`, `frontend/web/.env.example`, `frontend/web/.gitignore` (ignore `.vercel`), `frontend/web/README.md`, `.github/workflows/ci.yml`, `docs/development/ci-cd.md`, `docs/contracts/api-contracts.md` — modified; this entry.
 
 **Check:** `npm run typecheck`, `npm run lint` (no new warnings) and `npm run build` in `frontend/web`; the landing build has no `AdminRoutes` chunk and no `admin123`; a real-mode admin build has the admin routes and no mock accounts. Local run against a fake Core and a fake Firebase Auth emulator (test data only): an OWNER account is refused, the ADMIN account reaches the dashboard, owner paging (20 + 3), search, owner and shop drawers, pausing a shop (button locked until a reason is typed, status, history and access log update), access-log filters, the invalid date range warning, reload keeping the session, mock-only routes redirecting, and sign-out clearing storage. A trial copy of this branch is deployed by hand (Vercel CLI) to a separate Vercel project, `smart-ledger-admin.vercel.app`, pointed at Core staging; its login page loads and the bundle has the admin routes, the Core staging URL and no mock accounts. **Not verified:** real Firebase and Core sign-in (Core staging still rejects that origin's CORS preflight with 403 until `CORS_ALLOWED_ORIGINS` includes it, and an ADMIN account is needed), the `deploy-admin` job on GitHub.
-
-### [2026-10-21 20:05 UTC+07:00] — [Fix] Sign-in errors show a safe diagnostic code in release builds
-
-**Done:** Google sign-in stopped working on the production web and Play builds while staging still works, and the app only said "Không đăng nhập được. Vui lòng thử lại", so the cause could not be told apart. Sign-in errors that are not mapped to a specific message now end with a short code, also in release builds: the Firebase code (e.g. "(mã: auth/internal-error)"), or `google-<code>` for codes from the Google Sign-In library (`google-10` for DEVELOPER_ERROR, `google-no-web-client`, `google-no-lib`, `google-no-id-token`). Only short codes of letters, digits and `/ . _ -` are shown, never SDK messages, tokens or emails; mapped errors (wrong password, cancelled…) keep their messages unchanged.
-
-**Changed files:** `frontend/mobile/src/lib/auth/types.ts`, `frontend/mobile/src/lib/auth/firebaseErrors.ts`, `frontend/mobile/src/lib/auth/firebase.ts` — modified; `frontend/mobile/tests/authErrors.test.ts` — added; this entry.
-
-**Check:** `node --test tests/authErrors.test.ts` 4/4; `npx tsc --noEmit` shows no new errors. **Not verified:** a real sign-in failure on a release build.

@@ -20,6 +20,7 @@ export function SettingRow({
   onChange,
   onPress,
   always = false,
+  last = false,
   tint = colors.brand,
   tintBg = colors.brandSoft,
 }: {
@@ -30,6 +31,8 @@ export function SettingRow({
   onChange?: (value: boolean) => void;
   onPress?: () => void;
   always?: boolean;
+  /** Dòng cuối trong thẻ: bỏ đường kẻ dưới */
+  last?: boolean;
   /** Màu biểu tượng và nền ô biểu tượng (mặc định tím thương hiệu) */
   tint?: string;
   tintBg?: string;
@@ -58,7 +61,7 @@ export function SettingRow({
     return (
       <Pressable
         onPress={() => onChange(!on)}
-        style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.row, !last && styles.rowBorder, pressed && styles.pressed]}
         accessibilityRole="switch"
         accessibilityLabel={title}
         accessibilityHint={subtitle}
@@ -77,7 +80,7 @@ export function SettingRow({
     return (
       <Pressable
         onPress={onPress}
-        style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.row, !last && styles.rowBorder, pressed && styles.pressed]}
         accessibilityRole="button"
         accessibilityLabel={title}
         accessibilityHint={subtitle}
@@ -90,7 +93,7 @@ export function SettingRow({
 
   return (
     <View
-      style={[styles.row, soon && styles.rowSoon]}
+      style={[styles.row, !last && styles.rowBorder, soon && styles.rowSoon]}
       accessible
       accessibilityLabel={`${title}, ${soon ? 'sắp có' : 'luôn bật'}`}
       aria-disabled={soon}
@@ -111,9 +114,8 @@ const styles = StyleSheet.create({
     gap: 12,
     minHeight: 72,
     paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
+  rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   rowSoon: { opacity: 0.6 },
   pressed: { opacity: 0.85 },
   badgeSlot: { alignSelf: 'center' },
