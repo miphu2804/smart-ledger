@@ -22,6 +22,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
+/** Executes each protected projection and its audit in one writable repeatable-read transaction. */
 @Service
 @Transactional(isolation = Isolation.REPEATABLE_READ)
 public class AdminDashboardServiceImpl implements AdminDashboardService {
@@ -30,28 +31,35 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
     private final AdminDashboardRepository repository;
     private final AdminAccessAuditService audit;
 
+    /** Shares the DB role guard, bounded projection queries and mandatory audit writer. */
     public AdminDashboardServiceImpl(AdminAccessGuard guard, AdminDashboardRepository repository, AdminAccessAuditService audit) {
         this.guard = guard; this.repository = repository; this.audit = audit;
     }
 
+    /** {@inheritDoc} */
     @Override
     public Overview overview(VerifiedFirebaseToken token, LocalDate fromDate, LocalDate toDate) {
         var admin = guard.requireAdmin(token);
-        LocalDate today = LocalDate.now(ZONE);
-        if ((fromDate == null) != (toDate == null)) { throw invalid(); }
-        LocalDate from = fromDate == null ? today.minusDays(29) : fromDate;
-        LocalDate to = toDate == null ? today : toDate;
-        if (from.getYear() < 1 || to.getYear() > 9998 || to.isBefore(from) || ChronoUnit.DAYS.between(from, to) >= 366) {
-            throw invalid();
-        }
-        var start = from.atStartOfDay(ZONE).toOffsetDateTime();
-        var end = to.plusDays(1).atStartOfDay(ZONE).toOffsetDateTime();
-        var response = new Overview(OffsetDateTime.now(ZoneOffset.UTC), ZONE.getId(), from, to,
-                repository.ownerCounts(start, end), repository.shopCounts(start, end));
+        var range = dateRange(fromDate, toDate);
+        var response = new Overview(OffsetDateTime.now(ZoneOffset.UTC), ZONE.getId(), range.from(), range.to(),
+                repository.ownerCounts(range.start(), range.end()), repository.shopCounts(range.start(), range.end()));
         audit.record(admin.getId(), AdminAccessAction.OVERVIEW_VIEWED, null, null, false, 1);
         return response;
     }
 
+    /** {@inheritDoc} */
+    @Override
+    public Growth growth(VerifiedFirebaseToken token, LocalDate fromDate, LocalDate toDate) {
+        var admin = guard.requireAdmin(token);
+        var range = dateRange(fromDate, toDate);
+        var points = repository.dailyGrowth(range.from(), range.to(), range.start(), range.end());
+        var response = new Growth(OffsetDateTime.now(ZoneOffset.UTC), ZONE.getId(), range.from(), range.to(), points);
+        // A daily projection of the same overview, using the existing SYSTEM audit action and schema.
+        audit.record(admin.getId(), AdminAccessAction.OVERVIEW_VIEWED, null, null, false, 1);
+        return response;
+    }
+
+    /** {@inheritDoc} */
     @Override
     public AdminPageResponse<OwnerSummary> owners(VerifiedFirebaseToken token, String query, UserStatus status, int page, int size) {
         var admin = guard.requireAdmin(token);
@@ -62,6 +70,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         return response;
     }
 
+    /** {@inheritDoc} */
     @Override
     public OwnerDetail owner(VerifiedFirebaseToken token, long id) {
         var admin = guard.requireAdmin(token);
@@ -71,6 +80,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         return response;
     }
 
+    /** {@inheritDoc} */
     @Override
     public AdminPageResponse<ShopSummary> shops(VerifiedFirebaseToken token, String query, ShopStatus status, Long ownerId, int page, int size) {
         var admin = guard.requireAdmin(token);
@@ -82,6 +92,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         return response;
     }
 
+    /** {@inheritDoc} */
     @Override
     public ShopDetail shop(VerifiedFirebaseToken token, long id) {
         var admin = guard.requireAdmin(token);
@@ -91,6 +102,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         return response;
     }
 
+    /** {@inheritDoc} */
     @Override
     public AdminPageResponse<ShopStatusEvent> statusHistory(VerifiedFirebaseToken token, long shopId, int page, int size) {
         var admin = guard.requireAdmin(token);
@@ -101,6 +113,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         return response;
     }
 
+    /** {@inheritDoc} */
     @Override
     public AdminPageResponse<AccessLog> accessLogs(VerifiedFirebaseToken token, AdminAccessAction action, Long shopId,
             OffsetDateTime from, OffsetDateTime to, int page, int size) {
@@ -121,15 +134,35 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         return response;
     }
 
+    /** Defaults to 30 Vietnam dates and validates paired endpoints, supported years and the 366-day cap. */
+    private DateRange dateRange(LocalDate fromDate, LocalDate toDate) {
+        LocalDate today = LocalDate.now(ZONE);
+        if ((fromDate == null) != (toDate == null)) { throw invalid(); }
+        LocalDate from = fromDate == null ? today.minusDays(29) : fromDate;
+        LocalDate to = toDate == null ? today : toDate;
+        if (from.getYear() < 1 || to.getYear() > 9998 || to.isBefore(from) || ChronoUnit.DAYS.between(from, to) >= 366) {
+            throw invalid();
+        }
+        return new DateRange(from, to, from.atStartOfDay(ZONE).toOffsetDateTime(),
+                to.plusDays(1).atStartOfDay(ZONE).toOffsetDateTime());
+    }
+
+    /** Inclusive display dates with half-open timestamp bounds for all creation-count queries. */
+    private record DateRange(LocalDate from, LocalDate to, OffsetDateTime start, OffsetDateTime end) { }
+
+    /** Bounds page size and offset before any repository read. */
     private void validatePage(int page, int size) {
         if (page < 0 || size < 1 || size > 100 || (long) page * size > Integer.MAX_VALUE) { throw invalid(); }
     }
+    /** Rejects invalid support-resource identifiers without querying the database. */
     private void positive(long id) { if (id <= 0) { throw invalid(); } }
+    /** Trims an optional literal search string and enforces its length limit. */
     private String query(String value) {
         if (value == null) { return ""; }
         String trimmed = value.trim();
         if (trimmed.length() > 150) { throw invalid(); }
         return trimmed;
     }
+    /** Uses the common ADMIN filter-validation error without leaking filter values. */
     private BusinessException invalid() { return new BusinessException(ErrorCode.INVALID_ADMIN_QUERY); }
 }

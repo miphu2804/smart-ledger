@@ -5,7 +5,7 @@
 | Trạng thái | Core: quy tắc dưới đây đã chốt; AI/dashboard: đích MVP, cần nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ kinh doanh/sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; chủ thuế cho `BR-INV-*` |
-| Cập nhật lần cuối | 2026-10-17 (Zalo Android/V18; không rà soát lại căn cứ pháp lý) |
+| Cập nhật lần cuối | 2026-10-26 (tổng quan ADMIN theo ngày; không rà soát lại căn cứ pháp lý) |
 
 ## Tài liệu liên quan
 
@@ -92,7 +92,7 @@ Hóa đơn điện tử là initiative kế tiếp, không mặc nhiên thuộc 
 | `BR-011` | Gợi ý và câu trả lời AI phải nêu căn cứ đủ để người bán hiểu; không được trình bày như quyết định kế toán hoặc thuế. |
 | `BR-012` | Input, dữ liệu vector nếu có sử dụng, truy xuất dữ liệu, trace và output AI phải được cô lập theo cửa hàng và không làm lộ dữ liệu nhạy cảm sang nhà cung cấp ngoài cấu hình đã duyệt. |
 | `BR-013` | ADMIN chỉ dùng web dashboard để hỗ trợ cơ sở khách hàng; không dùng mobile như OWNER và không trực tiếp sửa sổ bán hàng trong MVP. |
-| `BR-014` | ADMIN chỉ đọc thông tin tối thiểu để hỗ trợ: danh sách che thông tin liên hệ, chi tiết hồ sơ có liên hệ đầy đủ khi được phân quyền, tổng quan số lượng và lịch sử trạng thái tiệm. Không mở sổ tiền/nợ/tồn hoặc audit nghiệp vụ OWNER. Mọi truy cập thành công và hành động hỗ trợ phải lưu audit; không trả dữ liệu được bảo vệ khi không lưu được audit. ADMIN chỉ xem lịch sử truy cập của chính mình, không dùng quyền hỗ trợ để xem lịch sử ADMIN khác. |
+| `BR-014` | ADMIN chỉ đọc thông tin tối thiểu để hỗ trợ: danh sách che thông tin liên hệ, chi tiết hồ sơ có liên hệ đầy đủ khi được phân quyền, tổng quan số lượng, số OWNER/tiệm tạo mới theo ngày và lịch sử trạng thái tiệm. Số tạo mới không đại diện cho đăng nhập, mức sử dụng hay doanh thu; trạng thái hiện tại không phải trạng thái lịch sử. Không mở sổ tiền/nợ/tồn hoặc audit nghiệp vụ OWNER. Mọi truy cập thành công và hành động hỗ trợ phải lưu audit; không trả dữ liệu được bảo vệ khi không lưu được audit. ADMIN chỉ xem lịch sử truy cập của chính mình, không dùng quyền hỗ trợ để xem lịch sử ADMIN khác. |
 | `BR-015` | OWNER không thể lưu trữ một tiệm đang bị ADMIN tạm ngưng; lý do tạm ngưng phải còn để OWNER biết cách liên hệ hỗ trợ. |
 | `BR-016` | Gửi lại cùng một yêu cầu trả nợ, tạo chi phí, hủy sale hoặc nhập kho do mạng lỗi không được ghi thu/chi, hoàn tiền, hoàn tồn hay cộng tồn lần nữa. Xác nhận lại cùng draft không được tạo sale/payment hoặc trừ tồn lần nữa. |
 | `BR-017` | Các thao tác ghi Core đã chốt về sale, thu/hoàn tiền, nợ, tồn, chi phí, danh mục và hồ sơ/trạng thái tiệm phải có audit thành công cùng giao dịch nghiệp vụ: đúng người thực hiện, tiệm, hành động, đối tượng và thời điểm. Audit chỉ bổ sung, không sửa/xóa lịch sử; lỗi/rollback hoặc replay các luồng được chống ghi trùng theo BR-016 không tạo audit thành công mới. OWNER chỉ tra cứu lịch sử của tiệm ACTIVE mình sở hữu; dữ liệu phụ được giới hạn, không ghi token hoặc thông tin liên hệ khách. Audit không thay thế các bản ghi nghiệp vụ làm nguồn số liệu. |
@@ -149,6 +149,15 @@ Hóa đơn điện tử là initiative kế tiếp, không mặc nhiên thuộc 
 - `BR-013`/`BR-014` giới hạn dashboard ở hồ sơ OWNER/tiệm, số lượng hỗ trợ và lịch sử tạm ngưng/kích hoạt. Không bổ sung doanh thu hệ thống, sổ nghiệp vụ, giả danh OWNER, gói dịch vụ hoặc quản lý tác vụ hỗ trợ từ dữ liệu mock của web.
 - Audit ADMIN và OWNER dùng chung lưu trữ append-only nhưng khác phạm vi đọc: OWNER không thấy event đọc `ADMIN_*`; ADMIN không thấy event tiền/nợ/tồn của OWNER. Event ADMIN đổi trạng thái tiệm có thể xuất hiện ở cả hai góc nhìn đúng quyền, không tạo hai event cho cùng thao tác.
 - Quy ước API/nhóm event nằm trong [hợp đồng dashboard](../contracts/api-contracts.md#7-dashboard-quản-trị--đã-có-trong-core). Hiện trạng và phần tích hợp web còn thiếu nằm trong [thiết kế kỹ thuật](../architecture/technical-design.md#1-phạm-vi); đồng bộ tài liệu không phải nghiệm thu dashboard hoặc môi trường thật.
+
+### Bổ sung tổng quan ADMIN theo ngày — 2026-10-26
+
+Phạm vi ADMIN đã được chủ sản phẩm duyệt bổ sung cho `feat/admin-dashboard-growth`:
+giữ bốn thẻ tổng quan, thêm biểu đồ tạo mới OWNER/tiệm theo ngày và biểu đồ trạng thái
+tiệm hiện tại, bảng tiệm mới nhất và nhật ký cá nhân. Truy vết `BR-013`/`BR-014` →
+`FR-024` → `AC-097`–`AC-100`. Ngành nghề, OWNER chưa có tiệm, doanh thu, tác vụ hỗ trợ
+và đo mức sử dụng nằm ngoài đợt này; không suy ra quyền đọc dữ liệu kinh doanh từ
+quyền xem biểu đồ. Đây là duyệt phạm vi, không phải nghiệm thu FE/staging.
 
 ## 5. Quy tắc kinh doanh cho sáng kiến hóa đơn điện tử
 
@@ -214,7 +223,7 @@ Copy UI viện dẫn nghị định trên màn bản ghi bán hàng **không** b
 | `BR-009` | `FR-010`, `FR-011`, `NFR-003` | tạm thời — MVP đã chấp nhận; không tuyên bố sẵn sàng sản xuất |
 | `BR-009`, `BR-022` | `FR-010`, `NFR-003`, `AC-081`–`AC-086` | CORE-015 #238: backend Zalo web-popup trên feat/zalo-login; LOGIN local do người dùng xác nhận, FE/LINK thật/staging còn nghiệm thu |
 | `BR-009`, `BR-022` | `FR-010`, `NFR-003`, `AC-087`–`AC-092` | CORE-016 #276: Core/V18 và cấu hình bật staging trên feat/zalo-android; chưa áp dụng shared DB/bật Railway/nghiệm thu FE/APK; runtime mặc định tắt |
-| `BR-013`, `BR-014` | `FR-022`–`FR-024`, `NFR-003`, `NFR-009`, `AC-015`–`AC-017`, `AC-040`–`AC-043` | Core có API hỗ trợ/audit; dashboard web và staging cần nghiệm thu riêng |
+| `BR-013`, `BR-014` | `FR-022`–`FR-024`, `NFR-003`, `NFR-009`, `AC-015`–`AC-017`, `AC-040`–`AC-043`, `AC-097`–`AC-100` | Core có API hỗ trợ/audit; nhánh feat/admin-dashboard-growth bổ sung chuỗi tạo mới theo ngày; FE/staging cần nghiệm thu riêng |
 | `BR-010` | `FR-014` | tạm thời — MVP đã chấp nhận |
 | `BR-015` | `FR-011`, `AC-025` | tạm thời — cần kiểm chứng với FE |
 | `BR-016` | `FR-005`, `FR-015`, `FR-016`, `FR-030`, `AC-024`, `AC-030`, `AC-046`–`AC-047` | Core đã triển khai; cần nghiệm thu FE/staging |

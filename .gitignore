@@ -14,3 +14,6 @@ venv/
 
 # CodeGraph generated index
 .codegraph/
+
+# Ansible inventory with real VPS addresses
+deploy/ansible/inventory.ini

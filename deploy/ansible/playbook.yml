@@ -1,0 +1,204 @@
+# One-time setup of a backend VPS, safe to re-run: it brings the machine back to this state and
+# uploads the env files again. It covers the VPS part of docs/development/ci-cd.md#vps; the GitHub
+# secrets stay manual. Run from the repository root after pulling the
+# secrets, with that environment's secrets/<environment>/env/.env.vps loaded into the shell:
+#   set -a; . secrets/staging/env/.env.vps; set +a
+#   ansible-playbook -i deploy/ansible/inventory.ini deploy/ansible/playbook.yml --limit staging
+# Staging and production share one VPS: run it once per environment. Both .env.vps files must hold the same
+# VPS_SSH_PUBLIC_KEY, because the deploy user keeps only that one key.
+# Needs the full `ansible` package (community.general and ansible.posix) and an admin login with
+# sudo on the VPS; the playbook itself never uses the `deploy` user to log in.
+- name: Prepare the SmartLedger backend VPS
+  hosts: all
+  become: true
+  vars:
+    # Staging keeps the directory it had before production joined the VPS.
+    app_dir: "{{ '/opt/smartledger' if smartledger_env == 'staging' else '/opt/smartledger-' + smartledger_env }}"
+    # The shared Caddy (deploy/edge/), which proxies each environment's domain to its Core.
+    edge_dir: /opt/smartledger-edge
+    deploy_user: deploy
+    swap_size_mb: 2048
+    # Resolved env files of this environment, pulled by scripts/secrets (docs/development/secrets-and-env.md).
+    env_dir: "{{ playbook_dir }}/../../secrets/{{ smartledger_env }}/env"
+    # Public name of this environment's Core that resolves to the VPS, for example 203-0-113-10.sslip.io,
+    # prod.203-0-113-10.sslip.io or api.<domain>.
+    caddy_domain: "{{ lookup('env', 'CADDY_DOMAIN') }}"
+    # Public half of the CI deploy key whose private half is secret VPS_SSH_KEY.
+    deploy_public_key: "{{ lookup('env', 'VPS_SSH_PUBLIC_KEY') }}"
+    # A classic token with only `read:packages`, for private GHCR packages; empty skips `docker login`.
+    ghcr_username: "{{ lookup('env', 'GHCR_USERNAME') }}"
+    ghcr_read_token: "{{ lookup('env', 'GHCR_READ_TOKEN') }}"
+
+  tasks:
+    - name: Install Docker, Compose and the firewall
+      ansible.builtin.apt:
+        name: [docker.io, docker-compose-v2, ufw, unattended-upgrades]
+        update_cache: true
+
+    - name: Fail without the domain or deploy key
+      ansible.builtin.assert:
+        that: caddy_domain | length > 0 and deploy_public_key | length > 0
+        fail_msg: Load secrets/<environment>/env/.env.vps with CADDY_DOMAIN and VPS_SSH_PUBLIC_KEY set.
+
+    # SSH for Ansible and CI, 80 for the ACME challenge and redirect, 443 (TCP and QUIC) for Caddy.
+    - name: Allow SSH, HTTP and HTTPS
+      community.general.ufw:
+        rule: allow
+        port: "{{ item.port }}"
+        proto: "{{ item.proto }}"
+      loop:
+        - { port: "22", proto: tcp }
+        - { port: "80", proto: tcp }
+        - { port: "443", proto: any }
+
+    - name: Enable the firewall, denying other inbound traffic
+      community.general.ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+
+    - name: Allow SSH by key only
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config.d/10-smartledger.conf
+        create: true
+        mode: "0644"
+        regexp: "^{{ item.split(' ')[0] }} "
+        line: "{{ item }}"
+      loop:
+        - PasswordAuthentication no
+        - KbdInteractiveAuthentication no
+        - PermitRootLogin prohibit-password
+      notify: Reload sshd
+
+    # Core and AI together need more than a 2 GB VPS has at startup.
+    - name: Create the swap file
+      ansible.builtin.command: >-
+        bash -c "fallocate -l {{ swap_size_mb }}M /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile"
+      args:
+        creates: /swapfile
+
+    - name: Keep the swap file after reboot
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        line: /swapfile none swap sw 0 0
+
+    - name: Create the deploy user that CI logs in as
+      ansible.builtin.user:
+        name: "{{ deploy_user }}"
+        groups: docker
+        append: true
+        shell: /bin/bash
+        password: "!"
+
+    - name: Authorize the CI deploy key
+      ansible.posix.authorized_key:
+        user: "{{ deploy_user }}"
+        key: "{{ deploy_public_key }}"
+        exclusive: true
+
+    # Caddy and every environment's Core meet on this network; AI stays on its project's own network.
+    - name: Create the edge network
+      ansible.builtin.shell: docker network inspect edge >/dev/null 2>&1 || docker network create edge
+      changed_when: false
+
+    - name: Create the app directory
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0750"
+
+    - name: Upload the Compose stack
+      ansible.builtin.copy:
+        src: "../vps/{{ item }}"
+        dest: "{{ app_dir }}/{{ item }}"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0644"
+      loop: [compose.yaml]
+      notify: Apply the stack
+
+    - name: Upload the service env files
+      ansible.builtin.copy:
+        src: "{{ env_dir }}/{{ item.src }}"
+        dest: "{{ app_dir }}/{{ item.dest }}"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0600"
+      loop:
+        - { src: .env.core, dest: core.env }
+        - { src: .env.ai, dest: ai.env }
+      no_log: true
+      notify: Apply the stack
+
+    # Only this line: the deploy rewrites the image lines of the same file.
+    - name: Name Core on the edge network
+      ansible.builtin.lineinfile:
+        path: "{{ app_dir }}/.env"
+        create: true
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0600"
+        regexp: "^CORE_ALIAS="
+        line: "CORE_ALIAS=core-{{ smartledger_env }}"
+      notify: Apply the stack
+
+    - name: Create the edge directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: ["{{ edge_dir }}", "{{ edge_dir }}/sites"]
+
+    - name: Upload the shared Caddy
+      ansible.builtin.copy:
+        src: "../edge/{{ item }}"
+        dest: "{{ edge_dir }}/{{ item }}"
+        mode: "0644"
+      loop: [compose.yaml, Caddyfile]
+      notify: Apply the edge
+
+    - name: Route this environment's domain to its Core
+      ansible.builtin.copy:
+        dest: "{{ edge_dir }}/sites/{{ smartledger_env }}.caddy"
+        mode: "0644"
+        content: |
+          {{ caddy_domain }} {
+          	reverse_proxy core-{{ smartledger_env }}:8080
+          }
+      notify: Apply the edge
+
+    - name: Log in to GHCR with the read-only token
+      ansible.builtin.command:
+        cmd: docker login ghcr.io --username {{ ghcr_username }} --password-stdin
+        stdin: "{{ ghcr_read_token }}"
+      become: true
+      become_user: "{{ deploy_user }}"
+      when: ghcr_read_token | length > 0
+      changed_when: false
+      no_log: true
+
+  handlers:
+    - name: Reload sshd
+      ansible.builtin.service:
+        name: ssh
+        state: reloaded
+
+    # Before the first deploy there are no images to start; the first CD run starts the stack.
+    # --remove-orphans drops the per-environment Caddy of the older layout, which held ports 80 and 443.
+    - name: Apply the stack
+      ansible.builtin.shell: grep -q '^CORE_IMAGE=' .env && grep -q '^AI_IMAGE=' .env && docker compose up -d --wait --remove-orphans || true
+      args:
+        chdir: "{{ app_dir }}"
+      become: true
+      become_user: "{{ deploy_user }}"
+      changed_when: true
+
+    # Runs after the stack, so the older per-environment Caddy has freed ports 80 and 443. The reload picks up
+    # a changed site file in a container that was already running.
+    - name: Apply the edge
+      ansible.builtin.shell: docker compose up -d && docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+      args:
+        chdir: "{{ edge_dir }}"
+      changed_when: true

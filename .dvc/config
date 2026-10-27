@@ -1,0 +1,10 @@
+[core]
+    autostage = true
+['remote "r2-staging"']
+    url = s3://smart-ledger-staging-creds
+    endpointurl = https://0ff153387b32b918abe2c467d69b3a79.r2.cloudflarestorage.com
+    region = auto
+['remote "r2-production"']
+    url = s3://smart-ledger-production-creds
+    endpointurl = https://0ff153387b32b918abe2c467d69b3a79.r2.cloudflarestorage.com
+    region = auto
