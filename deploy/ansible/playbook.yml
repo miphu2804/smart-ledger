@@ -1,0 +1,153 @@
+# One-time setup of a backend VPS, safe to re-run: it brings the machine back to this state and
+# uploads the env files again. It covers the VPS part of docs/development/ci-cd.md#vps; the deploy
+# key in GitHub and the Cloudflare Tunnel stay manual. Run from the repository root with the token
+# of that environment's tunnel:
+#   CLOUDFLARE_TUNNEL_TOKEN=... ansible-playbook -i deploy/ansible/inventory.ini deploy/ansible/playbook.yml --limit staging
+# Needs the full `ansible` package (community.general and ansible.posix) and an admin login with
+# sudo on the VPS; the playbook itself never uses the `deploy` user to log in.
+- name: Prepare the SmartLedger backend VPS
+  hosts: all
+  become: true
+  vars:
+    app_dir: /opt/smartledger
+    deploy_user: deploy
+    swap_size_mb: 2048
+    # Resolved env files of this environment, pulled by scripts/secrets (docs/development/secrets-and-env.md).
+    env_dir: "{{ playbook_dir }}/../../secrets/{{ smartledger_env }}/env"
+    # Token of this environment's Cloudflare Tunnel (Zero Trust → Networks → Tunnels).
+    tunnel_token: "{{ lookup('env', 'CLOUDFLARE_TUNNEL_TOKEN') }}"
+    # Read-only Docker Hub token for a private repository; empty skips `docker login`.
+    dockerhub_username: "{{ lookup('env', 'DOCKERHUB_USERNAME') }}"
+    dockerhub_read_token: "{{ lookup('env', 'DOCKERHUB_READ_TOKEN') }}"
+
+  tasks:
+    - name: Install Docker, Compose and the firewall
+      ansible.builtin.apt:
+        name: [docker.io, docker-compose-v2, ufw, unattended-upgrades]
+        update_cache: true
+
+    - name: Fail without the tunnel token
+      ansible.builtin.assert:
+        that: tunnel_token | length > 0
+        fail_msg: Set CLOUDFLARE_TUNNEL_TOKEN to the token of this environment's tunnel.
+
+    # The tunnel dials out, so web traffic needs no inbound rule.
+    - name: Allow only SSH
+      community.general.ufw:
+        rule: allow
+        port: "22"
+        proto: tcp
+
+    - name: Enable the firewall, denying other inbound traffic
+      community.general.ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+
+    - name: Allow SSH by key only
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config.d/10-smartledger.conf
+        create: true
+        mode: "0644"
+        regexp: "^{{ item.split(' ')[0] }} "
+        line: "{{ item }}"
+      loop:
+        - PasswordAuthentication no
+        - KbdInteractiveAuthentication no
+        - PermitRootLogin prohibit-password
+      notify: Reload sshd
+
+    # Core and AI together need more than a 2 GB VPS has at startup.
+    - name: Create the swap file
+      ansible.builtin.command: >-
+        bash -c "fallocate -l {{ swap_size_mb }}M /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile"
+      args:
+        creates: /swapfile
+
+    - name: Keep the swap file after reboot
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        line: /swapfile none swap sw 0 0
+
+    - name: Create the deploy user that CI logs in as
+      ansible.builtin.user:
+        name: "{{ deploy_user }}"
+        groups: docker
+        append: true
+        shell: /bin/bash
+        password: "!"
+
+    - name: Authorize the CI deploy key
+      ansible.posix.authorized_key:
+        user: "{{ deploy_user }}"
+        key: "{{ lookup('file', deploy_public_key_file) }}"
+        exclusive: true
+
+    - name: Create the app directory
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0750"
+
+    - name: Upload the Compose stack
+      ansible.builtin.copy:
+        src: "../vps/{{ item }}"
+        dest: "{{ app_dir }}/{{ item }}"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0644"
+      loop: [compose.yaml]
+      notify: Apply the stack
+
+    - name: Upload the service env files
+      ansible.builtin.copy:
+        src: "{{ env_dir }}/{{ item.src }}"
+        dest: "{{ app_dir }}/{{ item.dest }}"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0600"
+      loop:
+        - { src: .env.core, dest: core.env }
+        - { src: .env.ai, dest: ai.env }
+      no_log: true
+      notify: Apply the stack
+
+    # Only this line: the deploy rewrites the image lines of the same file.
+    - name: Set the tunnel token
+      ansible.builtin.lineinfile:
+        path: "{{ app_dir }}/.env"
+        create: true
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0600"
+        regexp: "^TUNNEL_TOKEN="
+        line: "TUNNEL_TOKEN={{ tunnel_token }}"
+      no_log: true
+      notify: Apply the stack
+
+    - name: Log in to Docker Hub with the read-only token
+      ansible.builtin.command:
+        cmd: docker login --username {{ dockerhub_username }} --password-stdin
+        stdin: "{{ dockerhub_read_token }}"
+      become: true
+      become_user: "{{ deploy_user }}"
+      when: dockerhub_read_token | length > 0
+      changed_when: false
+      no_log: true
+
+  handlers:
+    - name: Reload sshd
+      ansible.builtin.service:
+        name: ssh
+        state: reloaded
+
+    # Before the first deploy there are no images to start; the first CD run starts the stack.
+    - name: Apply the stack
+      ansible.builtin.shell: grep -q '^CORE_IMAGE=' .env && grep -q '^AI_IMAGE=' .env && docker compose up -d --wait || true
+      args:
+        chdir: "{{ app_dir }}"
+      become: true
+      become_user: "{{ deploy_user }}"
+      changed_when: true
