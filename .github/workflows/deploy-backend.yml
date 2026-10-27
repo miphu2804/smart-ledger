@@ -169,22 +169,36 @@ jobs:
           ssh -F "$SSH_CONFIG" vps \
             "APP_DIR='$APP_DIR' AI_IMAGE='$DEPLOY_AI_IMAGE' CORE_IMAGE='$DEPLOY_CORE_IMAGE' bash -s" \
             < deploy/vps/deploy.sh
-      # Keeps the KEEP_IMAGES latest versions of this environment's packages. Only after a successful deploy, so the
-      # running image is never the one removed.
-      - name: Delete old ai images
-        if: inputs.ai
-        uses: actions/delete-package-versions@v5
-        with:
-          package-name: ${{ github.event.repository.name }}-ai-${{ env.DEPLOY_ENV }}
-          package-type: container
-          min-versions-to-keep: ${{ env.KEEP_IMAGES }}
-      - name: Delete old core images
-        if: inputs.core
-        uses: actions/delete-package-versions@v5
-        with:
-          package-name: ${{ github.event.repository.name }}-core-${{ env.DEPLOY_ENV }}
-          package-type: container
-          min-versions-to-keep: ${{ env.KEEP_IMAGES }}
+      # Keeps the KEEP_IMAGES latest versions of this environment's packages, newest first by creation, so the
+      # running image is never the one removed. A plain REST call with the job's own GITHUB_TOKEN, which the source
+      # label's repository link already authorizes: actions/delete-package-versions@v5 crashes on macOS runners
+      # (TypeError in macosRelease, actions/delete-package-versions#196) and the self-hosted runner is macOS.
+      - name: Delete old images
+        if: inputs.ai || inputs.core
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          DEPLOY_ENV: ${{ env.DEPLOY_ENV }}
+          KEEP_IMAGES: ${{ env.KEEP_IMAGES }}
+        run: |
+          services=""
+          [ "${{ inputs.ai }}" = true ] && services="$services ai"
+          [ "${{ inputs.core }}" = true ] && services="$services core"
+          for service in $services; do
+            package="$REPO-$service-$DEPLOY_ENV"
+            ids=$(gh api --paginate "users/$OWNER/packages/container/$package/versions" \
+              -q "sort_by(.created_at) | reverse | .[$KEEP_IMAGES:] | .[].id")
+            if [ -n "$ids" ]; then
+              for id in $ids; do
+                gh api -X DELETE "users/$OWNER/packages/container/$package/versions/$id"
+                echo "Deleted $package version $id"
+              done
+            else
+              kept=$(gh api "users/$OWNER/packages/container/$package/versions" -q 'length')
+              echo "$package: $kept version(s), none beyond the keep window"
+            fi
+          done
       - name: Stop ssh-agent and log out
         if: always()
         run: |
