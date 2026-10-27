@@ -6,7 +6,6 @@
 
 Check: `npx tsc --noEmit` shows only the two existing errors for the missing `expo-application` and `expo-intent-launcher`; Settings, Notification settings and debt history checked on the mock web build (the last history row measures `0px` border). Not verified on screen: checkout, assistant history, the add-item sheet, voice expenses, and a real phone. Commit: the one that adds this entry.
 
-
 ### 2026-10-28 — Backend GitHub environments named backend-staging and backend-production
 
 | Area | Change |
