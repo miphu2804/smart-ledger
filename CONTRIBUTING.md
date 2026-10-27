@@ -81,10 +81,10 @@ git switch -c feat/<short-description>
 
 - Pull requests into `staging` and `main` must pass configured checks before merge.
 - Deploy the same tested commit or artifact from staging to production; environment-specific values belong in secrets or environment configuration.
-- Run database migrations on staging before production, and only from code merged into `staging`; never from a feature branch, because dev shares the staging database (see [Database migrations](README.md#database-migrations)). Destructive migrations require an explicit rollback or recovery plan.
+- Run database migrations on staging before production, and only from code merged into `staging`; never from a feature branch, because dev shares the staging database (see [Database migrations](docs/development/local-development.md#database-migrations)). Destructive migrations require an explicit rollback or recovery plan.
 - Required CI checks are `ai` (lint and tests), `core` (Maven verify plus Flyway migration against a fresh PostgreSQL service), `container-images` (Docker Compose build of custom service images), and `mobile-web` (TypeScript and Expo web export). Each runs only when its area changed and otherwise shows as skipped, which counts as passed (see [path filtering](docs/development/ci-cd.md#path-filtering)).
 - The mobile web is built and uploaded to Vercel by job `deploy-web` of the CD workflow, which CI starts after `mobile-web` passes: `staging` gets a fixed alias and `main` production; pull requests get no preview, to stay within Vercel's daily deployment limit. See [CI/CD](docs/development/ci-cd.md#mobile-web-on-vercel).
-- CI verifies migrations from an empty database. Staging and production use separate Supabase projects with separate credential files and dev shares the staging database (see [Local Compose](README.md#local-compose)); backup/restore, rollback, and moving production credentials into an environment-scoped secret store still require an operational smoke check before production release.
+- CI verifies migrations from an empty database. Staging and production use separate Supabase projects with separate credential files and dev shares the staging database (see [Local Compose](docs/development/local-development.md#local-compose)); backup/restore, rollback, and moving production credentials into an environment-scoped secret store still require an operational smoke check before production release.
 
 ### Pull request title
 
@@ -144,14 +144,22 @@ Open them with [`.github/PULL_REQUEST_TEMPLATE/release.md`](.github/PULL_REQUEST
 
 ## Progress log
 
-After each completed substantive change, update [`PROGRESS.md`](PROGRESS.md) at the top of the file. Keep the entry short and include:
+After each completed substantive change, add an entry at the top of [`PROGRESS.md`](PROGRESS.md):
 
-- **Done:** work completed;
-- **Changed files:** files created, modified, or deleted;
-- **Flow explained:** behavior or flow that changed;
-- **Check:** checks that were run, if any.
+```markdown
+### YYYY-MM-DD — Short title
 
-`PROGRESS.md` is a newest-first log, not the source of truth for project scope.
+| Area | Change |
+|---|---|
+| CI | • What changed and why, one line<br>• Next change |
+
+Check: what was run, or not verified and why. Commit: `abc1234`.
+```
+
+- One row per area (Core, AI, Mobile, Web, CI, Docs). No file lists: the commit traces the files.
+- Keep the file at 200 lines or fewer by deleting the oldest entries; Git history keeps them. Never cut inside an entry, even one longer than 200 lines.
+
+`PROGRESS.md` is a log of recent work, not the source of truth for project scope.
 
 ## Blockers
 

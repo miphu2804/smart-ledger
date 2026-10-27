@@ -6,7 +6,7 @@ Frontend must not call this service.
 
 ## Chat history schema
 
-The AI schema (chat history, the `vector` extension and the `ai_read` views) lives in the Supabase CLI migrations at [`supabase/migrations/`](../../supabase/migrations/); the first file is a baseline that folds the earlier AI migrations together. It reads Core's tables, so run Core's Flyway migrations first. On the shared dev/staging database, push only after the pull request merges (see [Database migrations](../../README.md#database-migrations)). From the repository root:
+The AI schema (chat history, the `vector` extension and the `ai_read` views) lives in the Supabase CLI migrations at [`supabase/migrations/`](../../supabase/migrations/); the first file is a baseline that folds the earlier AI migrations together. It reads Core's tables, so run Core's Flyway migrations first. On the shared dev/staging database, push only after the pull request merges (see [Database migrations](../../docs/development/local-development.md#database-migrations)). From the repository root:
 
 ```bash
 set -a && . backend/ai/.env && set +a
@@ -166,7 +166,7 @@ Host and port come from `SERVER_HOST` and `SERVER_PORT`.
 
 ## Local Compose
 
-From the repository root. Starts Core and this service against the shared staging Supabase and Redis Cloud databases; there are no local PostgreSQL or Redis containers. Langfuse is not part of the default stack. See the root [README](../../README.md#local-compose) for the env files.
+From the repository root. Starts Core and this service against the shared staging Supabase and Redis Cloud databases; there are no local PostgreSQL or Redis containers. Langfuse is not part of the default stack. See [Local Compose](../../docs/development/local-development.md#local-compose) for the env files.
 
 ```bash
 docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build

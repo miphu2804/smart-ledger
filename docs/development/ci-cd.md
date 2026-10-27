@@ -167,8 +167,8 @@ Check each item before deploying to a new production environment. A deploy can r
 |---|---|---|
 | Project token of the **production** Railway environment stored as `RAILWAY_TOKEN` in `railway-production` | Railway → project → Settings → Tokens | Step `Sync core CORS origins` fails with `Invalid RAILWAY_TOKEN`; no backend deploy |
 | Email/Password (and Phone, if used) enabled; the web domain listed under Authorized domains | Firebase Console of the production project → Authentication | Sign-in returns 400 `signInWithPassword`; the app says the sign-in method is not enabled |
-| AI baseline applied to the production database | [Database migrations](../../README.md#database-migrations): run `db push` with `--dry-run` first | Chat returns 503 `ai_unavailable`; the `ai` log shows `relation "chat_conversations" does not exist` |
-| All Core migrations applied | [Database migrations](../../README.md#database-migrations) | Core fails the schema check or queries fail |
+| AI baseline applied to the production database | [Database migrations](local-development.md#database-migrations): run `db push` with `--dry-run` first | Chat returns 503 `ai_unavailable`; the `ai` log shows `relation "chat_conversations" does not exist` |
+| All Core migrations applied | [Database migrations](local-development.md#database-migrations) | Core fails the schema check or queries fail |
 | `CORS_ALLOWED_ORIGINS` set on `railway-production` to `https://smart-ledger-prod.vercel.app` | GitHub environment variable | Smoke test fails with `Core CORS does not allow <URL>`; browser calls to Core are blocked |
 | Supabase Data API off for staging and production | Supabase → Settings → Data API | The `public` tables are readable through the anon key; Core and AI connect directly and do not use it |
 
@@ -176,7 +176,7 @@ A new Firebase project limits SMS to 10 a day until a billing account is attache
 
 ## What this flow does not do yet
 
-- No database migrations. Flyway stays off (`FLYWAY_ENABLED=false` on Railway and the Compose default; Core itself runs it when the variable is unset) and `supabase db push` is not in CI; the migration owner runs them by hand following [Database migrations](../../README.md#database-migrations), on staging before production.
+- No database migrations. Flyway stays off (`FLYWAY_ENABLED=false` on Railway and the Compose default; Core itself runs it when the variable is unset) and `supabase db push` is not in CI; the migration owner runs them by hand following [Database migrations](local-development.md#database-migrations), on staging before production.
 - No path filtering: every push to `staging` or `main` redeploys both `ai` and `core`, even for a mobile-only change.
 - Rollback: pick the previous deploy on the Railway dashboard → **Redeploy**; there is no automated step.
 

@@ -16,7 +16,7 @@ Start with the path that matches your task; each step links to the next level of
 | Integrate admin dashboard charts | [Growth API contract](contracts/api-contracts.md#chuỗi-tạo-mới-theo-ngày--admin-growth) → [implementation status](architecture/technical-design.md#tổng-quan-admin-theo-ngày--admin-growth) → [Core test handoff](../backend/core/docs/admin-dashboard-growth.md); no migration, current statuses stay separate from daily creation counts, FE/staging acceptance pending |
 | Understand a Core or AI code path | [Service walkthrough](architecture/service-walkthrough/README.md); it explains code, the documents above decide behavior |
 | Audit Core documentation against code | [Core module map](architecture/technical-design.md#bản-đồ-đối-chiếu-core--2026-10-26) → [API contracts](contracts/api-contracts.md) → [ERD](architecture/erd-description.md) → [diagram scopes](architecture/diagrams/README.md#reading-scope--core-audit-2026-10-26); current code, target architecture, dated snapshots and mock captures have different evidential roles |
-| Run or deploy | [Root README](../README.md), [Core](../backend/core/README.md), [AI](../backend/ai/README.md), [Mobile](../frontend/mobile/README.md), [Web](../frontend/web/README.md), [CONTRIBUTING](../CONTRIBUTING.md), [`development/`](development/) |
+| Run or deploy | [Local development](development/local-development.md), [Core](../backend/core/README.md), [AI](../backend/ai/README.md), [Mobile](../frontend/mobile/README.md), [Web](../frontend/web/README.md), [CONTRIBUTING](../CONTRIBUTING.md), [`development/`](development/) |
 | Work on mobile UI | [`design/`](design/) for visual direction and wording, then the mobile README |
 
 ### Target versus implemented
@@ -31,7 +31,7 @@ Start with the path that matches your task; each step links to the next level of
 - Keep each document in its current language: most of `docs/` and the frontend READMEs are Vietnamese; the root and backend READMEs and the ERD description are English. Code identifiers stay as written in code.
 - Requirement documents start with a metadata table (`Trạng thái`, `Chủ sở hữu`, `Cập nhật lần cuối`).
 - IDs are stable and never reused: `BO-*`, `BR-*`, `FR-*`, `NFR-*`, `AC-*`, `OQ-*`; invoice items use the `-INV-` infix.
-- [`PROGRESS.md`](../PROGRESS.md) is an append-only log and [`BLOCKERS.md`](../BLOCKERS.md) lists open blockers; neither defines scope.
+- [`PROGRESS.md`](../PROGRESS.md) is a newest-first log of recent work (200 lines or fewer, older entries in Git history) and [`BLOCKERS.md`](../BLOCKERS.md) lists open blockers; neither defines scope.
 
 ## Document map
 
@@ -51,6 +51,7 @@ Start with the path that matches your task; each step links to the next level of
 | [Service walkthrough](architecture/service-walkthrough/README.md) | Reading notes with diagrams of Core and AI service flows; not a source of truth |
 | [Mobile UI style and migration](design/mobile-ui-style-migration.md) | Visual direction and implementation checks for the mobile app |
 | [Mobile wording review](design/mobile-wording-review.md) | Proposed UI wording, icon and feedback mapping pending product approval |
+| [Local development](development/local-development.md) | Setup, run commands, pre-PR checks, local Compose, the local database and the shared-database migration workflow |
 | [Mobile iOS device release](development/mobile-ios-device-release.md) | Build and install a Release configuration on a connected iPhone |
 | [Secrets and env files](development/secrets-and-env.md) | Encrypted env files per environment (DVC, age, R2), the env file format, onboarding, changing a secret, adding or removing a person; flow in the [secrets sync diagram](architecture/diagrams/images/secrets-sync.svg) (edit [`secrets-sync.drawio`](architecture/diagrams/src/secrets-sync.drawio) and re-export the SVG) |
 | [CI/CD to Railway and Vercel](development/ci-cd.md) | Flow from feature branch to Railway and Vercel, GitHub environments, Railway variables and Core CORS origins |
@@ -66,6 +67,6 @@ Start with the path that matches your task; each step links to the next level of
 | Database schema | `erd.dbml` and the ERD description |
 | Something becomes implemented | Technical design §1 and the endpoint status in API contracts |
 | Architectural decision | A new ADR in [`architecture/adr/`](architecture/adr/) |
-| Commands, env variables or setup | The README of the affected service |
+| Commands, env variables or setup | The README of the affected service; cross-service setup, Compose and migrations in [Local development](development/local-development.md) |
 
 Repository branching, review, and deployment rules are defined in [CONTRIBUTING.md](../CONTRIBUTING.md).
