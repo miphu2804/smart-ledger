@@ -1,3 +1,20 @@
+### 2026-10-28 — Backend GitHub environments named backend-staging and backend-production
+
+| Area | Change |
+|---|---|
+| CI | • `deploy-backend` uses environments `backend-staging` and `backend-production` instead of `railway-*`, so their names no longer depend on the host<br>• The new environments carry the same branch rules, production approval, variables and secrets, except `RAILWAY_TOKEN`, which CD does not use |
+| Docs | • The CI/CD guide uses the new names and keeps the `railway-*` environments only for a rollback to Railway |
+
+Check: `actionlint`, the deploy key in each new environment matches its public key, and a staging CD run deploys through `backend-staging`. Not verified: production, which switches on the next release to `main`. Commit: the merge of this branch.
+### 2026-10-28 — Staging Core answers on staging.103-162-31-93.sslip.io
+
+| Area | Change |
+|---|---|
+| Deploy | • The staging site of the shared Caddy serves `staging.103-162-31-93.sslip.io` and, until every client has moved, the bare `103-162-31-93.sslip.io`, so both environments carry their name |
+| Clients | • Staging web, preview, landing, Android, monitor, load test and release-script defaults use the `staging.` name |
+
+Check: both names answer HTTPS health 200 through the shared Caddy. Commit: the merge of this branch.
+
 ### 2026-10-28 — Staging and production share one VPS behind one Caddy
 
 | Area | Change |
