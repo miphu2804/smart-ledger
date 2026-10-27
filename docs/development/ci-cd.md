@@ -6,7 +6,7 @@ This document traces a change from a feature branch to a VPS for `backend/core` 
 
 ![Backend CI/CD flow](../architecture/diagrams/images/ci-cd.svg)
 
-Diagram source: [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio); edit it in draw.io, then re-export the SVG (`drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/ci-cd.svg docs/architecture/diagrams/src/ci-cd.drawio`). Green numbers are the deploy pipeline; orange numbers are the runtime request flow.
+Diagram source: [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio); edit it in draw.io, then re-export the SVG (`drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/ci-cd.svg docs/architecture/diagrams/src/ci-cd.drawio`). Green numbers are the deploy pipeline, purple numbers the one-time VPS setup with Ansible, and orange numbers the runtime request flow; grey dashed edges carry data only. Each box with the Docker icon is a container, and the port under the service is the one it listens on inside the Compose network; the VPS publishes no port, since the Cloudflare Tunnel connector dials out. The diagram shows the target observability and model setup, which is not built yet: today AI calls OpenCode Go directly and sends traces to Logfire, while pgvector in Supabase for AI, the Bifrost gateway, Langfuse tracing and the Grafana stack (Prometheus for metrics, Loki for logs, Grafana alerts to a Discord webhook) are still to come.
 
 ## Steps
 
@@ -69,17 +69,17 @@ The `railway-*` names are kept from the Railway setup so their secrets and appro
 
 ### VPS
 
-Each environment, `staging` and `production`, runs on its own VPS with the stack in [`deploy/vps/`](../../deploy/vps/): `core` behind Caddy, which obtains the HTTPS certificate for `CORE_DOMAIN`, and `ai`, which has no published port and is reachable only from `core` inside the Compose network. Supabase, Redis Cloud, Cloudinary and Firebase stay external services.
+Each environment, `staging` and `production`, runs on its own VPS with the stack in [`deploy/vps/`](../../deploy/vps/): `core`, which `cloudflared` exposes through a Cloudflare Tunnel, and `ai`, which is reachable only from `core` inside the Compose network. The tunnel connector only dials out to Cloudflare, so the VPS publishes no port: Cloudflare holds the HTTPS certificate, hides the VPS address and absorbs DDoS traffic. Cloudflare decrypts requests at its edge before they enter the tunnel, which the security review must accept for financial data. Supabase, Redis Cloud, Cloudinary and Firebase stay external services.
 
 Job `deploy-backend` builds the images on the runner and pushes them to Docker Hub as `<DOCKERHUB_REPOSITORY>:ai-<sha>` and `:core-<sha>`, for `linux/amd64` whatever the runner's own architecture. Core's jar is built by Maven on the runner and [`Dockerfile.prebuilt`](../../backend/core/Dockerfile.prebuilt) only wraps it in a JRE. The job then loads the deploy key into a job-local `ssh-agent`, uploads the settings GitHub owns and streams [`deploy/vps/deploy.sh`](../../deploy/vps/deploy.sh) over SSH. The script writes the new image names into the project `.env`, pulls them and starts `ai` before `core` with `docker compose up --wait`, so the deploy fails when a container does not become healthy.
 
-**One-time setup of a VPS** (Ubuntu 24.04, at least 2 GB RAM plus swap):
+**One-time setup of a VPS** (Ubuntu 24.04, at least 2 GB RAM plus swap). Steps 2–4 are manual. [`deploy/ansible/playbook.yml`](../../deploy/ansible/playbook.yml) does steps 1, 5 and 6 and can be re-run at any time to bring a VPS back to that state or to upload changed env files: copy [`inventory.example.ini`](../../deploy/ansible/inventory.example.ini) to `inventory.ini` (ignored by Git), fill in each VPS, then run `ansible-playbook -i deploy/ansible/inventory.ini deploy/ansible/playbook.yml --limit staging` from the repository root with the full `ansible` package, after pulling the secrets; set `CLOUDFLARE_TUNNEL_TOKEN` in the shell to the token of that environment's tunnel, and `DOCKERHUB_USERNAME` and `DOCKERHUB_READ_TOKEN` for a private repository.
 
-1. Create user `deploy` in group `docker`, allow SSH by key only, and open only ports 22, 80 and 443 (`ufw`).
+1. Create user `deploy` in group `docker`, allow SSH by key only, and open only port 22 (`ufw`).
 2. Generate a key pair used only by CI, `ssh-keygen -t ed25519 -f deploy_key -N "" -C github-actions-deploy`; append `deploy_key.pub` to `~deploy/.ssh/authorized_keys`, store `deploy_key` as secret `VPS_SSH_KEY`, then delete both local files.
 3. Store the output of `ssh-keyscan <VPS_HOST>` as secret `VPS_KNOWN_HOSTS`, after checking its fingerprint against the provider's console. SSH refuses any other host key.
-4. Point the DNS record of `CORE_DOMAIN` at the VPS.
-5. Copy `compose.yaml` and `Caddyfile` from `deploy/vps/` into the app directory (`VPS_APP_DIR`, default `/opt/smartledger`). Next to them, create `core.env` and `ai.env` with mode `600` from `secrets/<environment>/env/.env.core` and `.env.ai` ([Secrets and env files](secrets-and-env.md)), and a `.env` holding `CORE_DOMAIN=<domain>`.
+4. In Cloudflare Zero Trust → Networks → Tunnels, create one tunnel per environment (type `cloudflared`), add the public hostname of Core (for example `api.<domain>`, on a zone in this Cloudflare account) with service `http://core:8080`, and copy the tunnel token.
+5. Copy `compose.yaml` from `deploy/vps/` into the app directory (`VPS_APP_DIR`, default `/opt/smartledger`). Next to them, create `core.env` and `ai.env` with mode `600` from `secrets/<environment>/env/.env.core` and `.env.ai` ([Secrets and env files](secrets-and-env.md)), and a `.env` with mode `600` holding `TUNNEL_TOKEN=<token>`.
 6. If the Docker Hub repository is private, run `docker login` once as `deploy` with an access token that can only read.
 7. Check that the VPS reaches the database: Supabase's direct host is IPv6 only, so a VPS without IPv6 needs the session pooler URL in `DATABASE_URL` and `POSTGRES_URL`; add the VPS address to Supabase Network Restrictions and the Redis Cloud allowlist when they are on.
 
@@ -173,6 +173,7 @@ Check each item before deploying to a new production environment. A deploy can r
 | Check | Where | Symptom when missing |
 |---|---|---|
 | `VPS_HOST`, `VPS_SSH_KEY` and `VPS_KNOWN_HOSTS` of the **production** VPS in `railway-production`, and the [one-time setup](#vps) done on it | GitHub environment; the VPS | Step `Start ssh-agent` or `Upload core settings` fails with `Permission denied` or `Host key verification failed`; no backend deploy |
+| A Cloudflare Tunnel for production whose public hostname points at `http://core:8080`, and its token in the production VPS `.env` | Cloudflare Zero Trust → Networks → Tunnels; the VPS | The tunnel shows Down or the app gets Cloudflare error 1033 or 502; the deploy itself still succeeds |
 | Email/Password (and Phone, if used) enabled; the web domain listed under Authorized domains | Firebase Console of the production project → Authentication | Sign-in returns 400 `signInWithPassword`; the app says the sign-in method is not enabled |
 | AI baseline applied to the production database | [Database migrations](../../README.md#database-migrations): run `db push` with `--dry-run` first | Chat returns 503 `ai_unavailable`; the `ai` log shows `relation "chat_conversations" does not exist` |
 | All Core migrations applied | [Database migrations](../../README.md#database-migrations) | Core fails the schema check or queries fail |
