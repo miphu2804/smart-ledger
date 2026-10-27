@@ -6,6 +6,16 @@
 
 Check: `npx tsc --noEmit` shows only the two existing errors for the missing `expo-application` and `expo-intent-launcher`; Settings, Notification settings and debt history checked on the mock web build (the last history row measures `0px` border). Not verified on screen: checkout, assistant history, the add-item sheet, voice expenses, and a real phone. Commit: the one that adds this entry.
 
+### 2026-10-28 — Staging and production share one VPS behind one Caddy
+
+| Area | Change |
+|---|---|
+| Deploy | • Caddy moves to its own project in `deploy/edge/` (`/opt/smartledger-edge`) that owns ports 80 and 443 and routes `103-162-31-93.sslip.io` to `core-staging` and `prod.103-162-31-93.sslip.io` to `core-production` over the Docker network `edge`<br>• Each environment keeps its own Compose project (`/opt/smartledger`, `/opt/smartledger-production`); Core joins `edge` under `CORE_ALIAS`, AI stays on the project network<br>• Caddy and Core resolve without the VPS search domain, whose wildcard DNS sent `core-production` to an outside host<br>• The playbook runs once per environment and writes `sites/<environment>.caddy` |
+| Clients | • Staging web, landing, Android, preview, monitor, load test and release-script defaults point at the VPS instead of Railway |
+| Docs | • The CI/CD guide records the shared VPS, its domains and the accepted loss of isolation between staging and production |
+
+Check: playbook applied to the VPS for staging and production; staging HTTPS health 200 through the shared Caddy with the copied certificate, Core reaches AI, production domain gets its certificate and answers 502 until its first deploy. Not verified: a production deploy, which needs the release to `main`. Commit: the merge of this branch.
+
 ### 2026-10-27 — Backend on a VPS through GHCR and Caddy
 
 | Area | Change |
@@ -179,15 +189,3 @@ Check: link and anchor check over the edited files passes. Commit: the one that 
 **Changed files:** `.github/workflows/ci.yml`, `docs/development/ci-cd.md`, `frontend/web/README.md` — modified; this entry.
 
 **Check:** YAML parses; the new build check, run by hand on two local builds, passes a plain landing and a landing with the admin, and fails an admin build without the flag and a plain build with the flag. **Not verified:** the job on GitHub, sign-in on the deployed landing (needs the landing origin in Core's `CORS_ALLOWED_ORIGINS` and an ADMIN account).
-
-### [2026-10-21 20:40 UTC+07:00] — [Feature] Web admin dashboard reads the real Core admin API
-
-**Done:** The admin pages in `frontend/web` called endpoints Core never had (`/auth/login`, `/admin/overview?days=`, `/admin/audit-logs`, no `/api/v1` prefix) and only worked on mock data. With `VITE_USE_MOCK=false` they now use Core:
-- **Sign-in:** Firebase email + password through the Firebase Auth REST API (no `firebase` package added), then `GET /api/v1/me`; only a Core account with role ADMIN gets in, others see "Tài khoản này không có quyền quản trị". The ID token stays in memory and refreshes itself; only the refresh token is kept (localStorage with "Ghi nhớ đăng nhập", sessionStorage without), so a reload stays signed in; sign-out clears both.
-- **Pages** (`src/pages/admin/core/`, service `src/services/adminApi.ts` typed after Core's DTOs, 0-based pages): Dashboard (owners and shops by status, new in 7/30/90 days, 5 newest shops, recent access), Khách hàng (Chủ tiệm / Cửa hàng tabs, search, status filter, paging; owner drawer with their shops; shop drawer with status history and pause/reopen through `PATCH /api/v1/shops/{id}/status`, a reason required to pause) and a new Nhật ký truy cập page (`/admin/access-logs`, filters by action, shop and dates).
-- AI Support, Tasks, quick search, notifications and the settings audit tab need APIs Core does not have, so they only show in mock mode; mock mode is unchanged.
-- **Deploy:** the admin is the same source deployed to a separate Vercel project by a new CI job `deploy-admin`, which reuses the `landing-staging`/`landing-production` environments (same Vercel team token, production approval) with its own `ADMIN_VERCEL_PROJECT_ID`, `ADMIN_URL`, `ADMIN_API_ENDPOINT` and `ADMIN_FIREBASE_API_KEY`, so the public landing still has no admin code. The job skips with a notice until those are set; it checks the build has the admin routes, no mock demo accounts and the right Core URL, then smoke-tests `ADMIN_URL/admin/login`.
-
-**Changed files:** `frontend/web/src/pages/admin/core/{CoreDashboardPage,CoreCustomersPage,CoreAccessLogsPage,parts}.tsx`, `frontend/web/src/pages/admin/core/coreUtils.ts`, `frontend/web/src/services/{adminApi,firebaseAuth}.ts` — added; `frontend/web/src/{AdminRoutes.tsx,config.ts,vite-env.d.ts}`, `frontend/web/src/services/{api,authService}.ts`, `frontend/web/src/pages/admin/{AdminLayout,LoginPage,SettingsPage}.tsx`, `frontend/web/.env.example`, `frontend/web/.gitignore` (ignore `.vercel`), `frontend/web/README.md`, `.github/workflows/ci.yml`, `docs/development/ci-cd.md`, `docs/contracts/api-contracts.md` — modified; this entry.
-
-**Check:** `npm run typecheck`, `npm run lint` (no new warnings) and `npm run build` in `frontend/web`; the landing build has no `AdminRoutes` chunk and no `admin123`; a real-mode admin build has the admin routes and no mock accounts. Local run against a fake Core and a fake Firebase Auth emulator (test data only): an OWNER account is refused, the ADMIN account reaches the dashboard, owner paging (20 + 3), search, owner and shop drawers, pausing a shop (button locked until a reason is typed, status, history and access log update), access-log filters, the invalid date range warning, reload keeping the session, mock-only routes redirecting, and sign-out clearing storage. A trial copy of this branch is deployed by hand (Vercel CLI) to a separate Vercel project, `smart-ledger-admin.vercel.app`, pointed at Core staging; its login page loads and the bundle has the admin routes, the Core staging URL and no mock accounts. **Not verified:** real Firebase and Core sign-in (Core staging still rejects that origin's CORS preflight with 403 until `CORS_ALLOWED_ORIGINS` includes it, and an ADMIN account is needed), the `deploy-admin` job on GitHub.

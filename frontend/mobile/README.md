@@ -170,7 +170,7 @@ Khi dev mobile, app gọi Core staging trên Railway (bản deploy từ nhánh `
 EXPO_PUBLIC_USE_MOCK=false
 EXPO_PUBLIC_MOCK_CORE=false
 EXPO_PUBLIC_MOCK_SHOPS=false
-EXPO_PUBLIC_API_ENDPOINT=https://core-staging-01d2.up.railway.app
+EXPO_PUBLIC_API_ENDPOINT=https://103-162-31-93.sslip.io
 ```
 
 - Dữ liệu tạo từ app nằm trong database staging, dùng chung với cả nhóm và môi trường UAT.
@@ -232,7 +232,7 @@ Thư viện có mã native nên phải build lại APK. Plugin `@react-native-go
 - **Màn “Chẩn đoán kết nối”** (`/debug`, chỉ dùng nội bộ ở bản dev): hiện chế độ (mock/thật), `API_ENDPOINT`, trạng thái Firebase, nút **Kiểm tra kết nối Core** (gọi `/v3/api-docs` không cần token), **Xem token** (aud/iss/hạn dùng; Core cần `FIREBASE_PROJECT_ID` trùng `aud`), **Gọi GET /me**, và nhật ký gần đây. Màn này không nằm trong tab Quản lý.
 - **Chạy bản web để thử nhanh (không cần build APK):** `npm run web`, đăng nhập bằng email. Core chỉ nhận origin trong `CORS_ALLOWED_ORIGINS` (xem [CI/CD](../../docs/development/ci-cd.md)), nên `localhost` của máy dev bị chặn; chạy thêm proxy dev ở một terminal khác rồi trỏ app vào proxy:
   ```bash
-  CORE_URL=https://core-staging-01d2.up.railway.app node scripts/dev-cors-proxy.js
+  CORE_URL=https://103-162-31-93.sslip.io node scripts/dev-cors-proxy.js
   ```
   và đặt `EXPO_PUBLIC_API_ENDPOINT=http://127.0.0.1:8010` trong `.env` (chạy lại `npm run web -- --clear` sau khi đổi). Bỏ `CORE_URL` thì proxy trỏ về Core trên máy (`http://localhost:8000`). Chỉ Firebase mà chưa cần Core thì đặt `EXPO_PUBLIC_MOCK_CORE=true`, không cần proxy. Web không thử được: adapter native, đăng nhập SĐT trên máy thật, mạng Android.
 - **Timeout:** mọi lời gọi Core tự dừng sau 15 giây (`ApiError` code `timeout`) thay vì quay vô hạn khi sai IP hoặc tường lửa chặn.
