@@ -17,7 +17,7 @@ const ACTIONS: [(&str, &str); 7] = [
     ("Pull", "Download and decrypt every environment you can read"),
     ("Push", "Encrypt env/ and upload it to R2"),
     ("History", "Recent versions and which keys changed"),
-    ("Apply", "Copy env files between staging and this machine"),
+    ("Apply", "Write backend/*/.env from staging with your local keys"),
     ("Members", "Who can decrypt this environment"),
     ("Config", "R2 bucket, endpoint and token of this environment"),
     ("Migrate", "Move this environment to a new R2 bucket, or empty the old one"),
@@ -31,10 +31,6 @@ const CONFIG_FIELDS: [(&str, &str, &str); 4] = [
 const MIGRATE: [(&str, &str); 2] = [
     ("Copy to a new bucket", "Upload every version there and switch this environment to it"),
     ("Empty the old bucket", "Delete everything in the bucket used before the last migrate"),
-];
-const DIRECTIONS: [(&str, &str); 2] = [
-    ("staging → dev", "Write backend/*/.env from staging with your local keys"),
-    ("dev → staging", "Send keys edited in backend/*/.env to secrets/staging/env"),
 ];
 const BACKUP: [(&str, &str); 2] = [("Keep .bak", "Save each replaced file as <file>.bak"), ("No backup", "Replace the files in place")];
 
@@ -200,25 +196,19 @@ fn input(terminal: &mut DefaultTerminal, prompt: &str, secret: bool) -> io::Resu
 }
 
 fn apply(terminal: &mut DefaultTerminal) -> io::Result<()> {
-    let directions: Vec<Choice> = DIRECTIONS.iter().map(|(label, detail)| choice(label, detail, None)).collect();
-    let Some(direction) = pick(terminal, "Apply: copy from", &directions, "↑↓  |  Enter  |  Esc Back")? else {
+    let mut args: Vec<String> = vec!["staging".into(), "dev".into()];
+    let mut keys = local_keys();
+    if !keys.is_empty() && !tick(terminal, &mut keys)? {
         return Ok(());
-    };
-    let mut args: Vec<String> = if direction == 0 { vec!["staging".into(), "dev".into()] } else { vec!["dev".into(), "staging".into()] };
-    if direction == 0 {
-        let mut keys = local_keys();
-        if !keys.is_empty() && !tick(terminal, &mut keys)? {
-            return Ok(());
-        }
-        for key in keys.iter().filter(|key| key.ticked == Some(false)) {
-            args.extend(["--use-staging".to_string(), key.label.clone()]);
-        }
-        let backup: Vec<Choice> = BACKUP.iter().map(|(label, detail)| choice(label, detail, None)).collect();
-        match pick(terminal, "Apply: replaced files", &backup, "↑↓  |  Enter  |  Esc Back")? {
-            None => return Ok(()),
-            Some(1) => args.push("--no-backup".into()),
-            Some(_) => {}
-        }
+    }
+    for key in keys.iter().filter(|key| key.ticked == Some(false)) {
+        args.extend(["--use-staging".to_string(), key.label.clone()]);
+    }
+    let backup: Vec<Choice> = BACKUP.iter().map(|(label, detail)| choice(label, detail, None)).collect();
+    match pick(terminal, "Apply: replaced files", &backup, "↑↓  |  Enter  |  Esc Back")? {
+        None => return Ok(()),
+        Some(1) => args.push("--no-backup".into()),
+        Some(_) => {}
     }
     let (ok, preview) = capture("apply.sh", &args);
     if !ok || preview.lines().all(|line| line.ends_with("up to date") || line.starts_with("dry run")) {
@@ -229,10 +219,7 @@ fn apply(terminal: &mut DefaultTerminal) -> io::Result<()> {
         return Ok(());
     }
     args.push("--apply".into());
-    let (_, mut output) = capture("apply.sh", &args);
-    if direction == 1 {
-        output += "\nNow push staging (menu 2) and commit secrets/staging/env.age.dvc.\n";
-    }
+    let (_, output) = capture("apply.sh", &args);
     show(terminal, "Apply", &output)
 }
 

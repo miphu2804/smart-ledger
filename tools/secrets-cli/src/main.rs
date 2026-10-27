@@ -8,7 +8,7 @@ mod menu;
 
 use std::process::{Command, ExitCode};
 
-const USAGE: &str = "usage: sl [pull | push <env> | history <env> [count] | apply <from> <to> [options] | members <env>]";
+const USAGE: &str = "usage: sl [pull | push <env> | history <env> [count] | apply staging dev [options] | members <env>]";
 
 fn main() -> ExitCode {
     let Some(root) = repo_root() else {

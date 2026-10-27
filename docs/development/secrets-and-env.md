@@ -32,7 +32,7 @@ smart-ledger/
     ├── config.sh              # bucket, endpoint and R2 token of an environment
     ├── migrate.sh             # copy an environment to a new bucket
     ├── clean.sh               # empty the bucket migrate.sh moved away from
-    ├── apply.sh               # staging ⇄ dev; dry run by default
+    ├── apply.sh               # staging → dev; dry run by default
     ├── guard.sh               # pre-commit: no secrets in git
     └── lib.sh                 # helpers the scripts share
 ```
@@ -158,8 +158,8 @@ Not in `secrets/`: `.env.r2.secrets` (the R2 tokens DVC needs to reach the files
 - `pull.sh` leaves `env/` alone while it holds edits you have not pushed, and keeps the old `env/` if any file fails to decrypt. It tells edits apart through `env/.pulled`; an `env/` made before that file existed counts as edited, so delete it once and run `pull.sh`.
 - `scripts/secrets/apply.sh staging dev` is a dry run: per file in `targets` it builds the staging file with the keys of `secrets/local.<name>` (the local database) put over it, and lists keys that would be added (`+`), changed (`~`) or dropped (`-`), or `(comments or layout only)`. Values are never printed. `--use-staging KEY` keeps the staging value of one local key, for example to reach the shared staging database.
 - `scripts/secrets/check.sh staging [count]` shows the last 5 versions (or `count`): version, time, who committed the pointer, and which files and keys each added (`+`), changed (`~`) or dropped (`-`). It fetches old versions from R2 and decrypts them in a temporary folder, so it needs your age key; values are never printed. A renamed file shows as `-` and `+`.
-- `scripts/secrets/apply.sh staging dev --apply` writes the files and keeps each replaced one as `<file>.bak` (`--no-backup` skips it). A key you added only on your machine shows as `-` and is lost on apply; send it to staging first.
-- `scripts/secrets/apply.sh dev staging` does the reverse: it copies each target as a whole into `secrets/staging/env/`, keeping the staging value of every key in `secrets/local.<name>`, so a localhost URL never reaches staging. A key the target lacks is removed from staging, and the output warns when that happens; usually it means a teammate added the key after your last `apply.sh staging dev`, so run that first. Add `--apply`, then `push.sh staging` as in [Change a secret](#5-change-a-secret). It keeps no `.bak`, because `push.sh` would encrypt it and R2 keeps every version.
+- `scripts/secrets/apply.sh staging dev --apply` writes the files and keeps each replaced one as `<file>.bak` (`--no-backup` skips it). A key you added only on your machine shows as `-` and is lost on apply; add it to `secrets/staging/env/` first.
+- Copying runs one way, from staging to this machine. A target is a derived copy with no record of the staging version it was built from, so sending it back could not tell your edits from keys a teammate added or rotated since, and would quietly undo theirs. To add or change a key for the team, edit it in `secrets/staging/env/` and push it as in [Change a secret](#5-change-a-secret), where `push.sh` refuses to overwrite a newer version; then `apply.sh staging dev --apply` brings it to your files. Pushing needs the R2 write token, which only the maintainer holds, so teammates send new keys to the maintainer.
 - Copying to or from production is not supported.
 
 ### 4.1 The `sl` menu
