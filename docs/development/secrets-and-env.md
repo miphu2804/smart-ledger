@@ -107,7 +107,8 @@ ZALO_APP_ID=...
 | `.env.mobile` | mobile app; copied to `frontend/mobile/.env` | yes | no |
 | `.env.release` | Android APK release: R2 bucket, keystore | no | yes |
 | `.env.loadtest`, `.env.monitor` | load test and uptime monitor; staging copies go to `scripts/loadtest/.env.staging` and `scripts/monitor/.env` | yes | loadtest only |
-| `.env.railway.tokens` | `RAILWAY_TOKEN`, the Railway project token of that environment for the CLI | yes | yes |
+| `.env.vps` | the VPS of that environment: `VPS_HOST`, `VPS_KNOWN_HOSTS`, the CI deploy key (`VPS_SSH_KEY` in base64, `VPS_SSH_PUBLIC_KEY`) and `CLOUDFLARE_TUNNEL_TOKEN`; read by the Ansible playbook and `github.sh` ([VPS](ci-cd.md#vps)) | yes | yes |
+| `.env.railway.tokens` | `RAILWAY_TOKEN`, the Railway project token of that environment for the CLI, until Railway is shut down | yes | yes |
 | `github/.env.<environment>` | copy of a GitHub Actions environment | 7 environments | 4 environments |
 
 Files are named `.env.<name>`, like `.env.local` and `.env.production` in Next.js; the folder already says which environment they belong to. `targets` lists the copied files. Everything else is read in place, for example `docker compose --env-file secrets/production/env/.env.core --env-file secrets/production/env/.env.ai`, so there is no second copy to drift.
@@ -177,7 +178,7 @@ git add secrets/staging/env.age.dvc
 git commit -m "chore(secrets): <what changed>"
 ```
 
-`push.sh` uploads to R2 before the commit, so teammates never pull a pointer to files that are not there. It refuses to upload when `origin/staging` has a newer `env.age.dvc` or when `env/` was not pulled from the pointer in your checkout, so one person's push cannot silently replace another's; merge, pull, then edit again. Updating Railway or GitHub itself is still a separate step; `.env.core`, `.env.ai` and `github/` are copies, not the deploy source. For a secret the deploy workflow reads from GitHub (`OPENAI_API_KEY`, `LOGFIRE_TOKEN`, `RAILWAY_TOKEN` in `railway-<environment>`), `scripts/secrets/github.sh <environment>` lists which GitHub secrets it can take from `.env.core`, `.env.ai` and `.env.railway.tokens`, and `--apply` sets them; the next deploy then writes them to Railway. Secrets not in those files (Vercel, Android signing) are set in GitHub by hand.
+`push.sh` uploads to R2 before the commit, so teammates never pull a pointer to files that are not there. It refuses to upload when `origin/staging` has a newer `env.age.dvc` or when `env/` was not pulled from the pointer in your checkout, so one person's push cannot silently replace another's; merge, pull, then edit again. Updating Railway or GitHub itself is still a separate step; `.env.core`, `.env.ai` and `github/` are copies, not the deploy source. For a secret the deploy workflow reads from GitHub (`OPENAI_API_KEY`, `LOGFIRE_TOKEN`, `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS` in `railway-<environment>`), `scripts/secrets/github.sh <environment>` lists which GitHub secrets it can take from `.env.core`, `.env.ai`, `.env.vps` and `.env.railway.tokens`, and `--apply` sets them; the next deploy then copies the AI settings to the VPS. Secrets not in those files (Vercel, Android signing) are set in GitHub by hand.
 
 ## 6. Add or remove a person
 

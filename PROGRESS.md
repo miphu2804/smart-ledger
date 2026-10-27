@@ -1,3 +1,13 @@
+### 2026-10-27 — Backend on a VPS through GHCR and Caddy
+
+| Area | Change |
+|---|---|
+| CI | • `deploy-backend` replaces the Railway CLI: it builds `ai` and `core` for `linux/amd64`, pushes them to GHCR with the job's `GITHUB_TOKEN` and runs `deploy/vps/deploy.sh` over SSH with a pinned host key<br>• One package per service and environment, keeping the latest 10 staging or 20 production images as the rollback window |
+| Deploy | • The VPS runs `core`, `ai` and `caddy` in one Compose stack; Caddy publishes 80 and 443 with a free Let's Encrypt certificate for `CADDY_DOMAIN` (an sslip.io name until a domain exists)<br>• `deploy/ansible/playbook.yml` provisions a new VPS: Docker, ufw with SSH, HTTP and HTTPS, swap, deploy user and key, env files, Caddy domain, optional GHCR login |
+| Docs | • The CI/CD guide and diagram describe the VPS setup and mark Bifrost, Langfuse, pgvector and the Grafana stack as planned |
+
+Check: `actionlint` on both workflows, `docker compose config -q` (fails without `CADDY_DOMAIN` as intended), `bash -n deploy.sh`, playbook YAML parse and diagram validation pass. Not verified: a real deploy, the playbook against a VPS, the certificate, and whether `GITHUB_TOKEN` may delete package versions. Commit: the merge of this branch.
+
 ### 2026-10-27 — Root README trimmed, local development page, progress format
 
 | Area | Change |
@@ -181,15 +191,3 @@ Check: link and anchor check over the edited files passes. Commit: the one that 
 **Changed files:** `frontend/mobile/src/lib/auth/types.ts`, `frontend/mobile/src/lib/auth/firebaseErrors.ts`, `frontend/mobile/src/lib/auth/firebase.ts` — modified; `frontend/mobile/tests/authErrors.test.ts` — added; this entry.
 
 **Check:** `node --test tests/authErrors.test.ts` 4/4; `npx tsc --noEmit` shows no new errors. **Not verified:** a real sign-in failure on a release build.
-
-### [2026-10-21 17:40 UTC+07:00] — [Fix] Guide overlay works on Android, Bobi speaks in it, order buttons are white cards
-
-**Done:** Tested PR #339 on the Android emulator and changed it on request:
-- **Tapping the lit button opened that screen on Android** instead of moving to the next step: the invisible button sat inside the animated ring, and Android did not resize it, so it stayed 0×0 and the tap fell through. It is now placed by the measured position. The dim layer is one frame with a rounded hole, so the four corners around the ring are no longer left bright.
-- **Shorter, warmer text with Bobi.** Every card shows Bobi and one short line in Bobi's voice ("mình"), at most 80 characters; the welcome and the last card call the owner by the given name (last word of the name, "bạn" when there is none or it is long).
-- **Order buttons.** The tinted see-through cards looked muddy on the purple header, so they are now white cards like the revenue card above, each told apart by a soft icon tile from the brand colours: yellow Đọc đơn, blue Chọn hàng, green Quét mã, lavender Trợ lý Bobi.
-- FR-025 and AC-018 mention Bobi and the name.
-
-**Changed files:** `frontend/mobile/src/components/GuideTour.tsx`, `frontend/mobile/src/lib/guideSteps.ts`, `frontend/mobile/tests/guideSteps.test.ts`, `frontend/mobile/app/(tabs)/_layout.tsx`, `frontend/mobile/app/(tabs)/index.tsx`, `docs/product/product-requirements.md` — modified; this entry.
-
-**Check:** `node --test tests/guideSteps.test.ts` 8/8; `npx tsc --noEmit` shows no new errors; Android emulator (CI build #39 with a locally built JS bundle and x86_64 libraries added, debug-signed): the tour opened by itself on the first sign-in of a new install; Android back steps back; all nine rings sit on their buttons, round for the mascot, with no bright corners; tapping the lit button moves on without opening it, and on the last step closes the tour; the welcome card greets the signed-in account by name. **Not verified:** a real phone; Đọc đơn on that emulator build (the speech library does not load in the hand-made x86_64 build).

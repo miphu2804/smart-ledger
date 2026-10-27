@@ -1,0 +1,75 @@
+# Backend stack on one VPS: Caddy publishes ports 80 and 443, gets a free Let's Encrypt certificate
+# for CADDY_DOMAIN and proxies to Core; AI is reachable only from Core inside the Compose network. Lives in the app directory on the VPS (default /opt/smartledger)
+# next to these files, none of which are in Git:
+#   .env               CADDY_DOMAIN, CORE_IMAGE, AI_IMAGE; the deploy rewrites the image lines
+#   core.env, ai.env   service variables, resolved copies of secrets/<env>/env/.env.core and .env.ai
+#   github.core.env, github.ai.env
+#                      settings GitHub owns (CORS, model, tracing); the deploy rewrites them and
+#                      they override the files above
+# See docs/development/ci-cd.md#vps.
+services:
+  core:
+    image: ${CORE_IMAGE:?CORE_IMAGE is required}
+    env_file:
+      - core.env
+      - path: github.core.env
+        required: false
+    environment:
+      SERVER_PORT: 8080
+      AI_BASE_URL: http://ai:8001
+      # The database is shared with the migration owner's manual runs; see README "Database migrations".
+      FLYWAY_ENABLED: "false"
+    depends_on:
+      ai:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      start_period: 90s
+      retries: 6
+    restart: unless-stopped
+    logging: &logging
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  ai:
+    image: ${AI_IMAGE:?AI_IMAGE is required}
+    env_file:
+      - ai.env
+      - path: github.ai.env
+        required: false
+    environment:
+      SERVER_PORT: 8001
+    healthcheck:
+      # The slim image has no curl.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=4)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 6
+    restart: unless-stopped
+    logging: *logging
+
+  # CADDY_DOMAIN must resolve to this VPS: an sslip.io name such as 203-0-113-10.sslip.io until a
+  # real domain exists, then that domain; changing it only needs a restart of this service.
+  caddy:
+    image: caddy:2.11.6-alpine
+    command: caddy reverse-proxy --from ${CADDY_DOMAIN:?CADDY_DOMAIN is required} --to core:8080
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      # Certificates and the ACME account; losing them hits Let's Encrypt rate limits on restart.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - core
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  caddy_data:
+  caddy_config:
