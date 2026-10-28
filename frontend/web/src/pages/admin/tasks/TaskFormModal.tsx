@@ -39,17 +39,25 @@ export default function TaskFormModal({
   const [touched, setTouched] = useState(false)
   const [key, setKey] = useState(newKey)
 
+  // Mỗi lần mở (hoặc đổi gợi ý) thì đặt lại form: làm ngay lúc render khi prop đổi, không qua effect
+  const [openedWith, setOpenedWith] = useState<{ open: boolean; prefill?: TaskPrefill }>({ open: false })
+  if (openedWith.open !== open || openedWith.prefill !== prefill) {
+    setOpenedWith({ open, prefill })
+    if (open) {
+      setTitle(prefill?.title ?? '')
+      setDescription(prefill?.description ?? '')
+      setShopId(prefill?.shopId ?? '')
+      setSeverity(prefill?.severity ?? 'medium')
+      setAssigneeId(currentMemberId())
+      setDue('')
+      setError(null)
+      setTouched(false)
+      setKey(newKey())
+    }
+  }
+
   useEffect(() => {
     if (!open) return
-    setTitle(prefill?.title ?? '')
-    setDescription(prefill?.description ?? '')
-    setShopId(prefill?.shopId ?? '')
-    setSeverity(prefill?.severity ?? 'medium')
-    setAssigneeId(currentMemberId())
-    setDue('')
-    setError(null)
-    setTouched(false)
-    setKey(newKey())
     listShops({ pageSize: 100, sortBy: 'businessName', sortDir: 'asc' })
       .then((r) => setShops(r.items))
       .catch(() => setShops([]))
