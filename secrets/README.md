@@ -45,7 +45,7 @@ The team's env files, encrypted, one folder per environment. After setup, `git p
 | Write those files with the local database keys from `local.env.*`, keeping the old ones as `.bak` | `scripts/secrets/apply.sh staging dev --apply` |
 | Add or change a key for the team | Edit it in `staging/env/` and push as below (maintainer only); copying runs one way, from staging to those files |
 | Run the backend | `docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build` |
-| Read any other file (Railway, GitHub, load test, monitor) | Open it in `staging/env/`; it is not copied anywhere |
+| Read any other file (VPS, GitHub, load test, monitor) | Open it in `staging/env/`; it is not copied anywhere |
 
 ## Change a secret
 

@@ -23,6 +23,10 @@ export function mapFirebaseError(e: unknown): AuthError {
     case 'weak-password':
       return new AuthError('weak-password');
     case 'operation-not-allowed':
+    // Custom token của Core (Zalo) ký bằng service account của project Firebase khác project của bản build: thử lại không
+    // khỏi, nên báo chọn cách khác thay cho "thử lại"
+    case 'custom-token-mismatch':
+    case 'invalid-custom-token':
       return new AuthError('provider-disabled', undefined, code);
     // Email của tài khoản Facebook/Google đã gắn với cách đăng nhập khác trong Firebase (cài đặt "một tài khoản cho mỗi email")
     case 'account-exists-with-different-credential':

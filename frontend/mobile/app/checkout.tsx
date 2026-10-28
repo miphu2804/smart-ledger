@@ -205,7 +205,7 @@ export default function Checkout() {
           </Row>
         </Row>
         {items.map((it, idx) => (
-          <Row key={`${it.productId ?? it.custom?.barcode ?? it.name}-${idx}`} style={[styles.line, { alignItems: 'center' }]}>
+          <Row key={`${it.productId ?? it.custom?.barcode ?? it.name}-${idx}`} style={[styles.line, idx < items.length - 1 && styles.lineBorder, { alignItems: 'center' }]}>
             <View style={styles.checkoutThumbWrap}>
               <ProductImage name={it.name} uri={products.find((p) => p.id === it.productId)?.imageUrl} style={styles.checkoutThumb} />
             </View>
@@ -517,7 +517,8 @@ function Success({
 }
 
 const styles = StyleSheet.create({
-  line: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
+  line: { paddingVertical: 10 },
+  lineBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   checkoutThumbWrap: {
     width: 44,
     height: 44,

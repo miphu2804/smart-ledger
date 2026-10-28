@@ -2,12 +2,18 @@
 # Caddy in deploy/edge/ reaches it; AI is reachable only from Core inside this project's own network. Staging and
 # production run side by side on one VPS, each in its own app directory (/opt/smartledger, /opt/smartledger-production)
 # next to these files, none of which are in Git:
-#   .env               CORE_ALIAS, CORE_IMAGE, AI_IMAGE; the deploy rewrites the image lines
+#   .env               ENVIRONMENT, CORE_ALIAS, CORE_IMAGE, AI_IMAGE; the deploy rewrites the image lines
 #   core.env, ai.env   service variables, resolved copies of secrets/<env>/env/.env.core and .env.ai
 #   github.core.env, github.ai.env
 #                      settings GitHub owns (CORS, model, tracing); the deploy rewrites them and
 #                      they override the files above
 # See docs/development/ci-cd.md#vps.
+
+# The project name sets the container and volume prefix, and both app directories would otherwise name the
+# project after themselves (smartledger, smartledger-production). ENVIRONMENT keeps it kebab-case like the
+# repository and the GHCR images, without renaming the directories the deploy and the playbook write to.
+name: smart-ledger-${ENVIRONMENT:?ENVIRONMENT is required, staging or production}
+
 services:
   core:
     image: ${CORE_IMAGE:?CORE_IMAGE is required}

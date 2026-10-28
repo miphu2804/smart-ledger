@@ -494,7 +494,7 @@ function DebtSheet({
           const d = new Date(h.at);
           const payment = h.amount < 0;
           return (
-            <Row key={i} style={styles.hist}>
+            <Row key={i} style={[styles.hist, i < history.length - 1 && styles.histBorder]}>
               <View style={[styles.histIcon, payment && { backgroundColor: colors.greenSoft }]}>
                 <Feather
                   name={payment ? 'arrow-down-left' : 'shopping-bag'}
@@ -602,7 +602,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primarySoft,
   },
   payBox: { marginTop: 16, backgroundColor: colors.bg, borderRadius: 16, padding: 12 },
-  hist: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
+  hist: { paddingVertical: 10 },
+  histBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
   histIcon: {
     width: 32,
     height: 32,
