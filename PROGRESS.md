@@ -6,6 +6,21 @@
 
 Check: `npx tsc --noEmit` shows only the two existing errors for the missing `expo-application` and `expo-intent-launcher`; Settings, Notification settings and debt history checked on the mock web build (the last history row measures `0px` border). Not verified on screen: checkout, assistant history, the add-item sheet, voice expenses, and a real phone. Commit: the one that adds this entry.
 
+### 2026-10-28 — A deploy of one service no longer fails on the other's image
+
+| Area | Change |
+|---|---|
+| Deploy | • `deploy/vps/deploy.sh` reads `AI_IMAGE` and `CORE_IMAGE` into local variables and unsets them before any Compose command, so the empty image the workflow passes for a service this deploy leaves alone no longer overrides the image already named in `.env`<br>• The service loop becomes a `deploy_service` function called once per service, which removes the indirect variable lookup |
+
+Check: the CD staging run of 2026-10-28 02:55 failed with `required variable CORE_IMAGE is missing a value` on an AI-only deploy; reproduced against the real `deploy/vps/compose.yaml` with a stubbed `docker`, where the previous script fails and this one deploys AI only, Core only, both, and neither, leaving the other service's image in `.env` untouched. `shellcheck` and `bash -n` pass. Not verified: a real deploy against the VPS.
+### 2026-10-28 — Compose projects on the VPS are named smart-ledger
+
+| Area | Change |
+|---|---|
+| Deploy | • `deploy/vps/compose.yaml` and `deploy/edge/compose.yaml` set `name:`, so the projects are `smart-ledger-staging`, `smart-ledger-production` and `smart-ledger-edge` instead of being named after their directories<br>• `deploy/vps/deploy.sh` and `deploy/ansible/playbook.yml` write `ENVIRONMENT` to the project `.env`, which `compose.yaml` interpolates into the name; the app directories and `VPS_APP_DIR` are unchanged<br>• `deploy-backend.yml` forwards its `DEPLOY_ENV` to `deploy.sh` as `ENVIRONMENT` |
+| Docs | • The VPS section of `docs/development/ci-cd.md` lists each environment's Compose project and records that renaming a project needs the old project taken down and the Caddy certificate volume copied first |
+
+Check: `docker compose config` resolves `smart-ledger-staging`, `smart-ledger-production` and `smart-ledger-edge`, and fails when `ENVIRONMENT` is unset; `shellcheck` and `bash -n` pass on `deploy.sh`; `ansible-playbook --syntax-check` passes. The VPS itself is not migrated yet. Commit: the squash merge of this branch.
 ### 2026-10-28 — Dopbase on the VPS with a nightly off-site backup
 
 | Area | Change |
@@ -180,13 +195,3 @@ Check: link and anchor check over the edited files passes. Commit: the one that 
 **Flow explained:** Existing ADMIN read → validated Vietnam date projection → mandatory audit stays unchanged. Source comments now explain this flow and its tests; the PR distinguishes local verification from CI and FE/staging acceptance. The first CI run lost both self-hosted runners before executing steps; artifact quota affected only the optional summary upload, already configured to continue on error.
 
 **Check:** Comment/whitespace-stripped Java comparison against HEAD passed for all seven edited Java files. `mvnw.cmd -B -Dtest=AdminDashboardControllerWebTest,AdminAccessAuditServiceTest verify` passed: 29 tests, zero failures/errors/skips, executable JAR packaged; local log `backend/core/target/admin-growth-pr368-review-verify.log` (ignored). Prior full PostgreSQL evidence remains 1,422 passing testcases on `976be02`; it was not rerun for this comments-only follow-up. New GitHub CI and CodeRabbit results must be read from PR #368 rather than inferred from these local checks.
-
-### [2026-10-26] — [Validation] Complete full PostgreSQL regression for admin growth
-
-**Done:** After Docker recovered, verified committed Core code `976be02` in a clean temporary checkout against a separate disposable PostgreSQL 16.15 container. Resolved the Docker/PostgreSQL validation blocker; no new migration, dependency, environment setting or application-code change in this validation follow-up. No push or deployment.
-
-**Changed files:** `BLOCKERS.md`, `backend/core/docs/admin-dashboard-growth.md` and this new entry. Existing Zalo, frontend lockfile and IDE changes remain outside the feature commits.
-
-**Flow explained:** Temporary PostgreSQL → existing migration/test suites → Maven verify and executable JAR packaging. This checks the committed branch independently of unrelated working-tree edits; FE integration, real Firebase sign-in, staging UAT and realistic growth-query load testing remain pending.
-
-**Check:** `mvnw.cmd -B verify` completed with BUILD SUCCESS in 13:31: 1,422 testcases, zero failures/errors/skips; Maven totals agree with XML testcase counts. Dashboard controller: 22 passed; dashboard PostgreSQL: 18 passed, including the explicit UTC DB-session assertion. Log retained locally at `backend/core/target/admin-growth-full-verify-20261026.log` (ignored). Only a dedicated disposable DB was used; business local/staging/production databases were not used. Push still requires user approval.
