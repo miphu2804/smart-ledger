@@ -29,7 +29,7 @@ jobs:
     # their alias depends on the PR number and is already commented on the PR.
     environment:
       name: ${{ github.event_name == 'pull_request' && 'vercel-preview' || (github.ref_name == 'main' && 'vercel-production' || 'vercel-staging') }}
-      url: ${{ github.event_name == 'pull_request' && '' || (github.ref_name == 'main' && 'https://smart-ledger-prod.vercel.app' || 'https://smart-ledger-staging.vercel.app') }}
+      url: ${{ github.event_name == 'pull_request' && '' || (github.ref_name == 'main' && 'https://app-production.songheloi.id.vn' || 'https://app-staging.songheloi.id.vn') }}
     concurrency:
       group: deploy-web-${{ github.head_ref || github.ref_name }}
       cancel-in-progress: true
@@ -149,7 +149,7 @@ jobs:
       # or Core rejecting this origin's CORS preflight.
       - name: Smoke test
         env:
-          URL: ${{ steps.preview.outputs.url || steps.staging.outputs.url || (github.ref_name == 'main' && 'https://smart-ledger-prod.vercel.app') || steps.deploy.outputs.url }}
+          URL: ${{ steps.preview.outputs.url || steps.staging.outputs.url || (github.ref_name == 'main' && 'https://app-production.songheloi.id.vn') || steps.deploy.outputs.url }}
         run: |
           set -euo pipefail
           # A fresh alias can take a few seconds to route, so retry before failing.
@@ -173,7 +173,7 @@ jobs:
         if: always() && steps.deploy.outputs.url != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          URL: ${{ steps.preview.outputs.url || steps.staging.outputs.url || (github.ref_name == 'main' && 'https://smart-ledger-prod.vercel.app') || steps.deploy.outputs.url }}
+          URL: ${{ steps.preview.outputs.url || steps.staging.outputs.url || (github.ref_name == 'main' && 'https://app-production.songheloi.id.vn') || steps.deploy.outputs.url }}
           PR: ${{ github.event.pull_request.number }}
         run: |
           echo "Web deploy: $URL" >> "$GITHUB_STEP_SUMMARY"

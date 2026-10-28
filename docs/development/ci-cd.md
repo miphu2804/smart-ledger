@@ -26,7 +26,7 @@ drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/archi
 2. **Merge into `staging`:** CI runs again and CD deploys the changed areas to staging, with no approval.
 3. **PR `staging` → `main`:** open it after checking staging ([Target branch](../../CONTRIBUTING.md#target-branch)).
 4. **Merge into `main`:** use a merge commit, never a squash; on conflicts, release from a `release/staging-to-main-<date>` branch. The production deploy jobs wait until a reviewer opens the CD run → **Review deployments** → approves each one.
-5. **Check production, then tag:** the web smoke test against `https://smart-ledger-prod.vercel.app` must pass; open the app and sign in. Then tag by hand: `gh release create vX.Y.Z --target <merge commit> --generate-notes`.
+5. **Check production, then tag:** the web smoke test against `https://app-production.songheloi.id.vn` must pass; open the app and sign in. Then tag by hand: `gh release create vX.Y.Z --target <merge commit> --generate-notes`.
 
 <a id="path-filtering"></a>
 
@@ -216,7 +216,7 @@ A browser request must pass Firebase Authorized domains and Core CORS, and Core 
 Staging:
 
 ```text
-https://smart-ledger-staging.vercel.app,https://smart-ledger-preview-00.vercel.app,…,https://smart-ledger-preview-09.vercel.app
+https://app-staging.songheloi.id.vn,https://smart-ledger-staging.vercel.app,https://smart-ledger-preview-00.vercel.app,…,https://smart-ledger-preview-09.vercel.app
 ```
 
 The `preview-0N` origins are kept for when PR previews return; Firebase Authorized domains must list them too.
@@ -231,7 +231,7 @@ A deploy can succeed while production still does not work. Check these first:
 | Domain resolves to the VPS, route in `sites/production.caddy` | TLS errors in the app |
 | Firebase Email/Password enabled, web domain in Authorized domains | Sign-in returns 400 `signInWithPassword` |
 | AI baseline and all Core migrations applied ([Database migrations](local-development.md#database-migrations)) | Chat returns 503 `ai_unavailable`, or Core fails its schema check |
-| `CORS_ALLOWED_ORIGINS=https://smart-ledger-prod.vercel.app` | Smoke test fails with `Core CORS does not allow <URL>` |
+| `CORS_ALLOWED_ORIGINS=https://app-production.songheloi.id.vn` | Smoke test fails with `Core CORS does not allow <URL>` |
 | Supabase Data API off | `public` tables readable through the anon key |
 
 A new Firebase project sends at most 10 SMS a day until billing is attached.
@@ -249,13 +249,14 @@ A new Firebase project sends at most 10 SMS a day until billing is attached.
 | Event | Environment | Result |
 |---|---|---|
 | PR | — | No deploy |
-| Push `staging` | `vercel-staging` | Deploy aliased to `https://smart-ledger-staging.vercel.app` |
-| Push `main` | `vercel-production` | Deploy after approval to `https://smart-ledger-prod.vercel.app` |
+| Push `staging` | `vercel-staging` | Deploy aliased to `https://app-staging.songheloi.id.vn` |
+| Push `main` | `vercel-production` | Deploy after approval to `https://app-production.songheloi.id.vn` |
 
 - `EXPO_PUBLIC_*` are baked in at build time, so they are **variables**, not secrets: `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS`, `EXPO_PUBLIC_API_ENDPOINT`, `EXPO_PUBLIC_FIREBASE_API_KEY`, `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`, `EXPO_PUBLIC_FIREBASE_PROJECT_ID`, `EXPO_PUBLIC_FIREBASE_APP_ID`. Re-run the deploy after changing one.
 - The app stops at launch if the API endpoint or a mock flag is missing ([`config.ts`](../../frontend/mobile/src/config.ts)).
 - `EXPO_PUBLIC_ZALO_LOGIN=true` only once that Core has `ZALO_ENABLED=true` and lists the web origin in `ZALO_CLIENT_ORIGINS`.
 - The smoke test fails if the page is not 200, the bundle has no API endpoint, or Core rejects the CORS preflight. Mock builds skip the Core checks.
+- `app-staging.songheloi.id.vn` carries the git branch `staging` in its Vercel domain settings. Without it Vercel counts the domain as a production domain and a `main` deploy takes the alias away from staging, so the staging page serves the production build until the next staging deploy.
 - PR previews are off: they used up Vercel Hobby's 100 deployments a day and broke `staging` and `main` deploys. To restore them, call `deploy-web.yml` and `deploy-landing.yml` from `ci.yml` for same-repository PRs with `sha` set to the PR head.
 - If a domain changes in Vercel, update the `url` in `deploy-web.yml`.
 - `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` are in Project Settings → General; create `VERCEL_TOKEN` under Account Settings → Tokens.
