@@ -7,13 +7,14 @@ import { Button, Row, Screen, T } from '../../src/components/ui';
 import { AuthError, authClient } from '../../src/lib/auth';
 import { debugLog } from '../../src/lib/debug';
 import { describeError, errorMessage, isDisplayNameRequired } from '../../src/lib/errors';
-import { signInWithZalo } from '../../src/lib/zaloLogin';
+import { signInWithZalo, ZALO_LOGIN_AVAILABLE } from '../../src/lib/zaloLogin';
 import { useApp } from '../../src/store/AppStore';
 import { colors, shadow } from '../../src/theme';
 
 /**
- * Cách đăng nhập: email + mật khẩu và Google dùng được; Facebook tạm khoá; Zalo tạm ghi "Sắp có" trên mọi bản (kể cả khi
- * build có EXPO_PUBLIC_ZALO_LOGIN hay EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID). Không còn đăng nhập bằng số điện thoại.
+ * Cách đăng nhập: email + mật khẩu và Google dùng được; Facebook tạm khoá; Zalo dùng được khi build có cấu hình Zalo
+ * (Android: EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID, web: EXPO_PUBLIC_ZALO_LOGIN), còn lại ghi "Sắp có". Không còn đăng nhập bằng
+ * số điện thoại.
  */
 export default function Welcome() {
   const toast = useToast();
@@ -96,9 +97,15 @@ export default function Welcome() {
         {/* Facebook tạm khoá theo yêu cầu nhóm: nút mờ, ghi "Tạm khoá", không bấm được (luồng signInWith('facebook') giữ nguyên) */}
         <SocialBtn name="Facebook" icon="facebook" soon note="Tạm khoá" />
         <SocialBtn name="Google" icon="google" busy={busy === 'google'} disabled={!!busy && busy !== 'google'} onPress={() => signInWith('google')} />
-        {/* Zalo tạm khoá theo yêu cầu nhóm: nút mờ, ghi "Sắp có", không bấm được dù build có cấu hình Zalo (luồng
-            signInWith('zalo') giữ nguyên; mở lại thì trả `soon={!ZALO_LOGIN_AVAILABLE}` từ src/lib/zaloLogin) */}
-        <SocialBtn name="Zalo" icon="zalo" soon />
+        {/* Zalo: build thiếu cấu hình (hay iOS, Core chưa có luồng) thì nút mờ, ghi "Sắp có" */}
+        <SocialBtn
+          name="Zalo"
+          icon="zalo"
+          soon={!ZALO_LOGIN_AVAILABLE}
+          busy={busy === 'zalo'}
+          disabled={!!busy && busy !== 'zalo'}
+          onPress={() => signInWith('zalo')}
+        />
       </Row>
 
       <Row style={{ justifyContent: 'center', marginTop: 24 }} gap={6}>
