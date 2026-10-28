@@ -1,3 +1,12 @@
+### 2026-10-28 — Web deploys check the real domains
+
+| Area | Change |
+|---|---|
+| Deploy | • `deploy-web.yml` names `app-production.songheloi.id.vn` and `app-staging.songheloi.id.vn` in the GitHub environment URL and in the smoke test, instead of the Vercel domains the project no longer lists in `CORS_ALLOWED_ORIGINS`<br>• `app-staging.songheloi.id.vn` carries the git branch `staging` in its Vercel domain settings, so a `main` deploy no longer takes the alias |
+| Docs | • The CI/CD guide names the same domains in the release steps, the staging CORS list, the production checklist and the Vercel event table, and records why the staging domain needs its branch |
+
+Check: the production CD run of 2026-10-28 12:17 failed its smoke test with `Core CORS does not allow https://smart-ledger-prod.vercel.app`, and the production deploy had taken `app-staging.songheloi.id.vn`; after the branch was set and CD staging web re-run, `app-production` serves the production bundle and `app-staging` the staging one, each allowed by its own Core. `actionlint` reports only the pre-existing `SC2034` of the smoke test step. Not verified: the next production deploy keeping its hands off the staging alias.
+
 ### 2026-10-28 — Zalo sign-in tested on a phone; clearer config error
 
 | Area | Change |
