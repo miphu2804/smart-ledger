@@ -8,7 +8,7 @@ name: smart-ledger-monitoring
 
 services:
   alloy:
-    image: grafana/alloy:v1.10.2
+    image: grafana/alloy:v1.15.0
     command: [run, /etc/alloy/config.alloy, --storage.path=/var/lib/alloy/data]
     volumes:
       - ./config.alloy:/etc/alloy/config.alloy:ro
@@ -16,12 +16,16 @@ services:
       - alloy_data:/var/lib/alloy/data
       # Container metrics (cAdvisor) and logs read the Docker socket and cgroups; host metrics read /proc and /sys.
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Docker 29 keeps image layers in containerd's snapshotter, which cAdvisor asks for each container's layer.
+      - /run/containerd/containerd.sock:/run/containerd/containerd.sock:ro
       - /:/host/root:ro,rslave
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /var/lib/docker:/var/lib/docker:ro
-    # cAdvisor needs it to read every container's cgroup.
+    # cAdvisor needs both to read every container's cgroup: with cgroup v2 a private cgroup namespace shows only
+    # Alloy's own.
     privileged: true
+    cgroup: host
     mem_limit: 256m
     depends_on: [prometheus, loki]
     restart: unless-stopped
@@ -40,7 +44,7 @@ services:
       - --web.enable-remote-write-receiver
     volumes:
       - prometheus_data:/prometheus
-    mem_limit: 320m
+    mem_limit: 192m
     restart: unless-stopped
     logging: *logging
 
@@ -69,7 +73,7 @@ services:
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana_data:/var/lib/grafana
-    mem_limit: 160m
+    mem_limit: 256m
     depends_on: [prometheus, loki]
     networks:
       default:

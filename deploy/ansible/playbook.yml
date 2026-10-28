@@ -367,13 +367,14 @@
       notify: Apply monitoring
 
     # Alloy reloads this file by itself; each run of the playbook adds or updates only its own environment.
+    # CADDY_DOMAIN may list several comma-separated names for one site; the first is probed.
     - name: Probe this environment's Core over HTTPS
       ansible.builtin.copy:
         dest: "{{ monitoring_dir }}/targets/{{ smartledger_env }}.json"
         owner: "{{ deploy_user }}"
         group: "{{ deploy_user }}"
         mode: "0644"
-        content: "{{ [{'targets': ['https://' + caddy_domain + '/actuator/health/liveness'], 'labels': {'env': smartledger_env}}] | to_json }}\n"
+        content: "{{ [{'targets': ['https://' + (caddy_domain.split(',') | first | trim) + '/actuator/health/liveness'], 'labels': {'env': smartledger_env}}] | to_json }}\n"
       when: monitor_domain | length > 0
 
     - name: Route the monitoring domain to Grafana
