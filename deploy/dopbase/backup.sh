@@ -33,10 +33,10 @@ trap 'docker compose start >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
 
 archive="dopbase-$(date -u +%Y-%m-%dT%H-%M-%SZ).tar.gz.age"
 docker compose stop >/dev/null
-# The volume carries the Compose project prefix, and `docker run` would silently create an empty volume under
-# any other name, so the archive would upload as a valid but empty backup.
-docker volume inspect dopbase_dopbase_data >/dev/null
-docker run --rm -v dopbase_dopbase_data:/data:ro -v "$work":/out alpine:3.21 \
+# `docker run` silently creates an empty volume for a name that does not exist, so a wrong name here would
+# upload a valid but empty backup.
+docker volume inspect dopbase_data >/dev/null
+docker run --rm -v dopbase_data:/data:ro -v "$work":/out alpine:3.21 \
   tar -czf /out/data.tar.gz -C /data .
 docker compose start >/dev/null
 

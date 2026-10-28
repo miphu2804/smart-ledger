@@ -2,14 +2,20 @@
 # Caddy in deploy/edge/ reaches it as `dopbase` on the external `edge` network. Lives in /opt/dopbase with its own
 # lifecycle, so an app deploy never restarts it. Its SQLite database and master key live in the dopbase_data
 # volume, copied off-site every night by backup.sh.
+# The project is named here instead of after the directory, so the volume is `dopbase_data` rather than the
+# doubled `dopbase_dopbase_data`, and `container_name` keeps the container `dopbase` instead of
+# `dopbase-dopbase-1`; only one instance ever runs, so a fixed name costs nothing.
+name: dopbase
+
 services:
   dopbase:
+    container_name: dopbase
     build: .
-    image: smartledger/dopbase:local
+    image: smart-ledger/dopbase:local
     environment:
       DOPBASE_PUBLIC_URL: ${DOPBASE_PUBLIC_URL:?DOPBASE_PUBLIC_URL is required}
     volumes:
-      - dopbase_data:/data
+      - data:/data
     networks:
       edge:
         aliases: [dopbase]
@@ -26,6 +32,6 @@ networks:
     external: true
 
 volumes:
-  # Compose names it dopbase_dopbase_data after the project directory; backup.sh mounts that name. Renaming it
-  # here would point the running instance at a new, empty volume and orphan the live database.
-  dopbase_data:
+  # `dopbase` plus `data` is the volume `dopbase_data` that backup.sh mounts. An instance created before this
+  # rename keeps its data in `dopbase_dopbase_data`, which has to be copied over before the first `up`.
+  data:
