@@ -6,6 +6,14 @@
 
 Check: `npx tsc --noEmit` shows only the two existing errors for the missing `expo-application` and `expo-intent-launcher`; Settings, Notification settings and debt history checked on the mock web build (the last history row measures `0px` border). Not verified on screen: checkout, assistant history, the add-item sheet, voice expenses, and a real phone. Commit: the one that adds this entry.
 
+### 2026-10-28 — CI/CD guide reads as a reference
+
+| Area | Change |
+|---|---|
+| Docs | • `docs/development/ci-cd.md` is rewritten as short tables, numbered steps and command blocks, from 7,525 to 3,259 words, keeping every fact a reader needs and every anchor other files link to<br>• The stale "No path filtering" limit is removed, since CI filters by path |
+
+Check: every relative link and linked anchor resolves; facts not re-checked against the workflow files. Commit: the squash merge of this branch.
+
 ### 2026-10-28 — README reads as tables
 
 | Area | Change |
@@ -183,11 +191,3 @@ Check: link and anchor check over the edited files passes. Commit: the one that 
 **Flow explained:** ADMIN authenticates → date range is validated → separate SQL source aggregates join at most 366 dates → the same transaction records ADMIN_OVERVIEW_VIEWED/SYSTEM → response. Series count creation, not activity or historical status; the status chart continues using current overview counts. Canonical field/error/audit rules are in the [growth contract](docs/contracts/api-contracts.md#chuỗi-tạo-mới-theo-ngày--admin-growth); FE chart integration and staging acceptance remain pending.
 
 **Check:** Verified `mvnw.cmd verify` on 2026-10-26: 1,306 reported cases, zero failures/errors, 256 skipped (1,050 executed); `git diff --check` passed. Earlier, 47 targeted tests passed against disposable PostgreSQL on 2026-10-22. The new explicit UTC DB-session assertion and full PostgreSQL rerun are **not verified** yet: Docker Desktop did not expose its Linux engine after a start request. No business/local/staging/production DB was used for this rerun. Static-analysis/CVE/coverage tools are not configured in the Core POM and were not newly installed; no coverage percentage or CVE clearance is claimed. Final push still requires user approval after validation.
-
-### [2026-10-25 21:45 UTC+07:00] — [Docs] CI/CD diagram shows the CI and CD split
-
-**Done:** The pipeline band of the CI/CD diagram now shows `ci.yml` (select-runner with `CI_RUNNER`, changes, the five test jobs), the hand-off by job `cd` with `workflow_dispatch`, and `cd.yml` (select-runner with `CD_RUNNER`, gate, the three deploy jobs, production approval).
-
-**Changed files:** `docs/architecture/diagrams/src/ci-cd.drawio`, `docs/architecture/diagrams/images/ci-cd.svg` (re-exported with draw.io 28.2.5 using the command in `docs/development/ci-cd.md`); this entry.
-
-**Check:** exported a PNG preview and checked the pipeline band: labels fit and do not overlap the icons.
