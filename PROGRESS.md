@@ -1,3 +1,104 @@
+### 2026-10-28 — Zalo sign-in tested on a phone; clearer config error
+
+| Area | Change |
+|---|---|
+| Mobile | • A Firebase custom token from another project (`auth/custom-token-mismatch`, `auth/invalid-custom-token`) now reads "Cách đăng nhập này chưa dùng được lúc này. Vui lòng chọn cách khác hoặc thử lại sau" with the code, instead of "Vui lòng thử lại", since retrying cannot fix it |
+| Test | • Zalo LOGIN on Android passed against staging Core on a Samsung SM-A528B (Android 14): `POST /auth/zalo/native/exchange` 200, Firebase custom token sign-in, `POST /auth/session` 200 as OWNER<br>• The APK was hand-repacked: the JS of #399 on a dev build with Firebase `smart-ledger-c2892`, signed with the debug key. Its App Link still named the old Railway host, so the return link was passed to the app over `adb` from the browser's DevTools<br>• A first try on a production-based APK failed with `auth/custom-token-mismatch`: native Firebase reads `google-services.json`, which pointed at `smart-ledger-production` while staging Core signs for `smart-ledger-c2892`. Test Zalo only with an APK whose Firebase project matches the Core |
+
+Check: `npx tsc --noEmit` and `npm test` (frontend/mobile); app log on the phone with `debugLog` turned on in the test bundle only. Not verified: the App Link opening the app by itself, which needs a CI APK built from `staging`, and iOS. Commit: the one that adds this entry.
+
+### 2026-10-28 — No divider under the last row of a list
+
+| Area | Change |
+|---|---|
+| Mobile | • `SettingRow` takes `last`: the last row of each card in Settings and Notification settings no longer draws a line just above the card edge (reported by Phú)<br>• Same fix for the last item at checkout, the last debt history entry, the last conversation in the assistant history, the last product in the add-item sheet and the last pending expense in voice orders |
+
+Check: `npx tsc --noEmit` shows only the two existing errors for the missing `expo-application` and `expo-intent-launcher`; Settings, Notification settings and debt history checked on the mock web build (the last history row measures `0px` border). Not verified on screen: checkout, assistant history, the add-item sheet, voice expenses, and a real phone. Commit: the one that adds this entry.
+
+### 2026-10-28 — Admin uses the Bobi logo and a brand login page
+
+| Area | Change |
+|---|---|
+| Web | • The admin sidebar, login and 403 pages show the Bobi notebook logo from the landing instead of the grey microphone mark; the sidebar subtitle reads "Trang quản trị"<br>• The login page uses the brand purple: a purple panel with a waving Bobi (the mobile `bobi-tab-v2.png` as a 560 px webp, 36 KB), a heading and three points that hold with the real Core (search, shop status history, audited reads), and a purple button, checkbox and focus ring<br>• On phones the purple panel hides and the card shows the logo; the placeholder email no longer has a misspelled domain |
+
+Check: `npm run typecheck` and `npm run build` pass; `npm run lint` shows only the four warnings that #381 fixes; login, the dashboard sidebar (open and collapsed), the 403 page and the phone layout checked in the browser on a mock build. Not verified: a build against the real Core. Commit: the one that adds this entry.
+
+### 2026-10-28 — Web admin lint warnings cleared
+
+| Area | Change |
+|---|---|
+| Web | • `npm run lint` in `frontend/web` reported six warnings in the admin code and now reports none<br>• `colorFor` and `initialsOf` in `components/admin/ui.tsx` are no longer exported, so the file exports only components<br>• Four `useEffect`s that set state right away follow React's pattern: the phone menu remembers the page it opened on and closes on navigation without an effect; quick search clears old results and shows "Đang tìm…" from the input handler; AI Support copies newly loaded conversations during render; the create-task dialog resets its form during render when it opens, and its effect only loads shops and members |
+
+Check: `npm run lint` shows no warnings; `npm run typecheck` and `npm run build` pass. Mock admin at 375 px: the menu opens, closes when a page is chosen and on the backdrop; quick search shows "Đang tìm…" then results, closes at 1 letter; AI Support lists its 3 conversations; the create-task dialog opens empty with 58 shops and again after cancelling. Not verified: the admin against real Core. Commit: the one that adds this entry.
+
+### 2026-10-28 — Zalo sign-in button works again
+
+| Area | Change |
+|---|---|
+| Mobile | • The Zalo button on the sign-in screen signs in again when the build carries Zalo settings (`EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID` on Android, `EXPO_PUBLIC_ZALO_LOGIN=true` on the web); iOS and builds without them still show "Sắp có"<br>• The `android-dev` and `android-staging` builds and the `vercel-staging` web build already set these, so their button turns on; production does not<br>• The mobile README says when the button is on |
+
+Check: `npx tsc --noEmit` shows only the two existing errors for the missing `expo-application` and `expo-intent-launcher`; `npm test` fails only the two existing cases in `parseOrder` and `quickNav`; staging Core answers `400 invalid_zalo_request` (feature on) to a malformed request on both Zalo authorize endpoints and serves `assetlinks.json` with the certificate of CI test APKs, while production answers `503 zalo_unavailable`. Not verified: a full Zalo sign-in on a phone. Commit: the one that adds this entry.
+
+### 2026-10-28 — A deploy of one service no longer fails on the other's image
+
+| Area | Change |
+|---|---|
+| Deploy | • `deploy/vps/deploy.sh` reads `AI_IMAGE` and `CORE_IMAGE` into local variables and unsets them before any Compose command, so the empty image the workflow passes for a service this deploy leaves alone no longer overrides the image already named in `.env`<br>• The service loop becomes a `deploy_service` function called once per service, which removes the indirect variable lookup |
+
+Check: the CD staging run of 2026-10-28 02:55 failed with `required variable CORE_IMAGE is missing a value` on an AI-only deploy; reproduced against the real `deploy/vps/compose.yaml` with a stubbed `docker`, where the previous script fails and this one deploys AI only, Core only, both, and neither, leaving the other service's image in `.env` untouched. `shellcheck` and `bash -n` pass. Not verified: a real deploy against the VPS.
+
+### 2026-10-28 — Compose projects on the VPS are named smart-ledger
+
+| Area | Change |
+|---|---|
+| Deploy | • `deploy/vps/compose.yaml` and `deploy/edge/compose.yaml` set `name:`, so the projects are `smart-ledger-staging`, `smart-ledger-production` and `smart-ledger-edge` instead of being named after their directories<br>• `deploy/vps/deploy.sh` and `deploy/ansible/playbook.yml` write `ENVIRONMENT` to the project `.env`, which `compose.yaml` interpolates into the name; the app directories and `VPS_APP_DIR` are unchanged<br>• `deploy-backend.yml` forwards its `DEPLOY_ENV` to `deploy.sh` as `ENVIRONMENT` |
+| Docs | • The VPS section of `docs/development/ci-cd.md` lists each environment's Compose project and records that renaming a project needs the old project taken down and the Caddy certificate volume copied first |
+
+Check: `docker compose config` resolves `smart-ledger-staging`, `smart-ledger-production` and `smart-ledger-edge`, and fails when `ENVIRONMENT` is unset; `shellcheck` and `bash -n` pass on `deploy.sh`; `ansible-playbook --syntax-check` passes. The VPS itself is not migrated yet. Commit: the squash merge of this branch.
+
+### 2026-10-28 — Dopbase on the VPS with a nightly off-site backup
+
+| Area | Change |
+|---|---|
+| Deploy | • Dopbase, the team's secrets manager, runs as its own Compose project in `/opt/dopbase` behind the shared Caddy, built from the pinned 0.1.10 release and set up only when `DOPBASE_DOMAIN` is set<br>• `deploy/dopbase/backup.sh` stops Dopbase for the copy, tars the `dopbase_data` volume, encrypts it with age for a key the VPS never holds and uploads it to R2; the playbook installs `age` and `rclone`, writes `/opt/dopbase/.env.backup` and adds a 03:00 cron job for user `deploy`<br>• The volume is named `dopbase_data` outright so the backup can mount it by one fixed name<br>• lazydocker 0.25.2 installed from its release for container, log and stats views over SSH |
+| Secrets | • `scripts/secrets/dopbase-sync.sh push\|pull <environment>` moves the env files of one environment between `secrets/<environment>/env/` and Dopbase, one project per file |
+| Docs | • The CI/CD guide records the Dopbase setup, its backup inputs, the lifecycle retention and the restore steps |
+
+Check: `shellcheck` on both scripts, playbook syntax check, `docker compose config -q`, image build and setup page, sync roundtrip against a throwaway local Dopbase, relative links of the guide resolve. Not verified: the playbook against the VPS, which needs DNS for the Dopbase domain and an operator run, and a real backup and restore. Commit: the merge of this branch.
+
+### 2026-10-28 — CI/CD guide reads as a reference
+
+| Area | Change |
+|---|---|
+| Docs | • `docs/development/ci-cd.md` is rewritten as short tables, numbered steps and command blocks, from 7,525 to 3,259 words, keeping every fact a reader needs and every anchor other files link to<br>• The stale "No path filtering" limit is removed, since CI filters by path |
+
+Check: every relative link and linked anchor resolves; facts not re-checked against the workflow files. Commit: the squash merge of this branch.
+
+### 2026-10-28 — README reads as tables
+
+| Area | Change |
+|---|---|
+| Docs | • The README drops the Highlights list and gains Overview, Tech stack, color legend and Getting started tables, so each section scans without reading a paragraph<br>• The Overview lists only what Core and AI do today |
+
+Check: badge URLs resolve (18 checked earlier, Redis removed since no feature reads it); README not rendered on GitHub. Commit: the squash merge of this branch.
+
+### 2026-10-28 — README shows the system architecture and tech stack
+
+| Area | Change |
+|---|---|
+| Docs | • The README opens with a tech stack badge row, a short summary and highlights, and shows `ci-cd.svg` as the system architecture instead of the older `architecture.svg`<br>• The parts table gains a "Runs on" column and no longer names Railway |
+
+Check: all 18 badge URLs return 200 with a logo; the page was not rendered on GitHub. Commit: the squash merge of this branch.
+
+### 2026-10-28 — Production Core answers on production.103-162-31-93.sslip.io
+
+| Area | Change |
+|---|---|
+| Deploy | • The production Caddy site serves `production.103-162-31-93.sslip.io` instead of the shorthand `prod.103-162-31-93.sslip.io`, which no client used yet |
+| Docs | • The CI/CD guide uses the new name and records that environment names are spelled out, never shortened |
+
+Check: playbook applied for production; `https://production.103-162-31-93.sslip.io/actuator/health` returns 200 `UP` with its own certificate, Core and AI still run `4a4f714`, staging still answers. Commit: the merge of this branch.
+
 ### 2026-10-28 — Backend GitHub environments named backend-staging and backend-production
 
 | Area | Change |
@@ -6,6 +107,7 @@
 | Docs | • The CI/CD guide uses the new names and keeps the `railway-*` environments only for a rollback to Railway |
 
 Check: `actionlint`, the deploy key in each new environment matches its public key, and a staging CD run deploys through `backend-staging`. Not verified: production, which switches on the next release to `main`. Commit: the merge of this branch.
+
 ### 2026-10-28 — Staging Core answers on staging.103-162-31-93.sslip.io
 
 | Area | Change |
@@ -75,6 +177,7 @@ Check: link and anchor check over the edited files passes. Commit: the one that 
 **Changed files:** `scripts/local-db.sh`, `scripts/secrets/{apply,config,migrate,clean,check,lib,github}.sh`, `tools/secrets-cli/`, `secrets/admins.txt`, `secrets/local.env.{core,ai}`, `secrets/staging/targets`, `secrets/{staging,production}/env.age.dvc`, the three `.env.example` files, `docs/development/secrets-and-env.md`, `secrets/README.md`, `backend/ai/README.md`; this entry.
 
 **Check:** every key of `.env.core` and `.env.ai` in both environments equals Railway; AI and Core started from the applied files against the local database, Core reached readiness and AI accepted Core's internal token; `apply` recreated a deleted target at its path; a fresh clone pulled and applied every target. **Not verified:** a deploy with the `RAILWAY_TOKEN` now set in GitHub; `docker compose` against the local database (containers cannot reach 127.0.0.1).
+
 ### [2026-10-26] — [Docs] Synchronize the documentation branch with staging
 
 **Done:** Fetched remote refs and merged `origin/staging` `1228978` into `docs/core-documentation-alignment` for PR #371. The incoming #370 adds the draw.io skill/preset and diagram-guide conventions. Git merged the guide automatically; no conflict needed manual resolution. Retained both the Core audit/renderer notes and staging's added guidance.
@@ -120,101 +223,3 @@ Check: link and anchor check over the edited files passes. Commit: the one that 
 **Flow explained:** The contract owns public date/count/error/audit rules; technical design explains SQL aggregation, transaction boundaries and validation limits. CI on feature HEAD still needs a runner. Manual CI #787 was launched on main and could not start because the repository owner's account is locked by billing; downstream summary also received an empty runner output. GitHub-hosted reruns cannot bypass that billing lock, and the user does not manage the disconnected M4 Pro runners.
 
 **Check:** Compared the remaining findings with current documentation and the prior migrated-DB evidence; `git diff --check` passed. Earlier full Core PostgreSQL verify (1,422 passing cases) and review-follow-up verify (29 passing cases) remain the local evidence; no new test run is claimed for this docs-only follow-up. No merge/deploy or billing/runner administration was performed.
-
-### [2026-10-26] — [Docs] Address admin growth PR review and stale handoff notes
-
-**Done:** Recorded the owner's narrowly scoped Core exception for PR #368 in AGENTS.md; added Javadoc for the ADMIN support API and growth invariants/tests; corrected stale root/Core README and technical-design statements about real FE integration, existing V18 migrations and publication status. No Java behavior, schema, dependency or runtime-setting change. PR title/description and review state are handled on GitHub; no merge or deployment is authorized by this follow-up.
-
-**Changed files:** AGENTS.md, BLOCKERS.md, root/Core READMEs, Core chart handoff, technical design, the seven Java files already touched by the growth feature, and this new entry. Existing Zalo, frontend lockfile and IDE changes were preserved outside the commit.
-
-**Flow explained:** Existing ADMIN read → validated Vietnam date projection → mandatory audit stays unchanged. Source comments now explain this flow and its tests; the PR distinguishes local verification from CI and FE/staging acceptance. The first CI run lost both self-hosted runners before executing steps; artifact quota affected only the optional summary upload, already configured to continue on error.
-
-**Check:** Comment/whitespace-stripped Java comparison against HEAD passed for all seven edited Java files. `mvnw.cmd -B -Dtest=AdminDashboardControllerWebTest,AdminAccessAuditServiceTest verify` passed: 29 tests, zero failures/errors/skips, executable JAR packaged; local log `backend/core/target/admin-growth-pr368-review-verify.log` (ignored). Prior full PostgreSQL evidence remains 1,422 passing testcases on `976be02`; it was not rerun for this comments-only follow-up. New GitHub CI and CodeRabbit results must be read from PR #368 rather than inferred from these local checks.
-
-### [2026-10-26] — [Validation] Complete full PostgreSQL regression for admin growth
-
-**Done:** After Docker recovered, verified committed Core code `976be02` in a clean temporary checkout against a separate disposable PostgreSQL 16.15 container. Resolved the Docker/PostgreSQL validation blocker; no new migration, dependency, environment setting or application-code change in this validation follow-up. No push or deployment.
-
-**Changed files:** `BLOCKERS.md`, `backend/core/docs/admin-dashboard-growth.md` and this new entry. Existing Zalo, frontend lockfile and IDE changes remain outside the feature commits.
-
-**Flow explained:** Temporary PostgreSQL → existing migration/test suites → Maven verify and executable JAR packaging. This checks the committed branch independently of unrelated working-tree edits; FE integration, real Firebase sign-in, staging UAT and realistic growth-query load testing remain pending.
-
-**Check:** `mvnw.cmd -B verify` completed with BUILD SUCCESS in 13:31: 1,422 testcases, zero failures/errors/skips; Maven totals agree with XML testcase counts. Dashboard controller: 22 passed; dashboard PostgreSQL: 18 passed, including the explicit UTC DB-session assertion. Log retained locally at `backend/core/target/admin-growth-full-verify-20261026.log` (ignored). Only a dedicated disposable DB was used; business local/staging/production databases were not used. Push still requires user approval.
-
-### [2026-10-26] — [Feature] Admin daily creation chart API; PostgreSQL rerun pending
-
-**Done:** Added `GET /api/v1/admin/overview/growth` on `feat/admin-dashboard-growth`, with bounded daily OWNER/shop creation aggregates, zero-filled Vietnam dates, active DB ADMIN checks and fail-closed overview audit. Existing overview stays unchanged. Synchronized the approved scope through BR-013/BR-014 → FR-024 → AC-097–AC-100 and the canonical API contract; no new migration, index, dependency or environment variable. Fast-forwarded the feature base to staging `0e2b1de`; no push or deploy.
-
-**Changed files:** Core admin controller/DTO/repository/service, web/PostgreSQL tests, Core README and chart handoff; BRD, PRD/AC, API contract, technical design, document index and this new entry. Existing Zalo callback, frontend lockfile and IDE changes were preserved and are outside this feature.
-
-**Flow explained:** ADMIN authenticates → date range is validated → separate SQL source aggregates join at most 366 dates → the same transaction records ADMIN_OVERVIEW_VIEWED/SYSTEM → response. Series count creation, not activity or historical status; the status chart continues using current overview counts. Canonical field/error/audit rules are in the [growth contract](docs/contracts/api-contracts.md#chuỗi-tạo-mới-theo-ngày--admin-growth); FE chart integration and staging acceptance remain pending.
-
-**Check:** Verified `mvnw.cmd verify` on 2026-10-26: 1,306 reported cases, zero failures/errors, 256 skipped (1,050 executed); `git diff --check` passed. Earlier, 47 targeted tests passed against disposable PostgreSQL on 2026-10-22. The new explicit UTC DB-session assertion and full PostgreSQL rerun are **not verified** yet: Docker Desktop did not expose its Linux engine after a start request. No business/local/staging/production DB was used for this rerun. Static-analysis/CVE/coverage tools are not configured in the Core POM and were not newly installed; no coverage percentage or CVE clearance is claimed. Final push still requires user approval after validation.
-
-### [2026-10-25 21:45 UTC+07:00] — [Docs] CI/CD diagram shows the CI and CD split
-
-**Done:** The pipeline band of the CI/CD diagram now shows `ci.yml` (select-runner with `CI_RUNNER`, changes, the five test jobs), the hand-off by job `cd` with `workflow_dispatch`, and `cd.yml` (select-runner with `CD_RUNNER`, gate, the three deploy jobs, production approval).
-
-**Changed files:** `docs/architecture/diagrams/src/ci-cd.drawio`, `docs/architecture/diagrams/images/ci-cd.svg` (re-exported with draw.io 28.2.5 using the command in `docs/development/ci-cd.md`); this entry.
-
-**Check:** exported a PNG preview and checked the pipeline band: labels fit and do not overlap the icons.
-
-### [2026-10-25 21:00 UTC+07:00] — [Change] CD follows CI_RUNNER when CD_RUNNER is unset
-
-**Done:** With only `CI_RUNNER=self-hosted` set during a billing lock, CD still picked GitHub-hosted and its deploys could not start. CD now reads its input `runner`, else `CD_RUNNER`, else `CI_RUNNER`, else github-hosted, so one variable moves tests and deploys; `CD_RUNNER` is only needed to run deploys somewhere else than tests.
-
-**Changed files:** `.github/workflows/cd.yml`, `.github/workflows/ci.yml` (comment), `.github/workflows/select-runner.yml` (comment), `docs/development/ci-cd.md`; this entry.
-
-**Check:** actionlint 1.7.8 reports no errors. **Not verified:** a CD run on GitHub.
-
-### [2026-10-25 18:30 UTC+07:00] — [Change] CD is its own workflow with its own runner
-
-**Done:** Deploys moved out of CI into `cd.yml`, which starts with its own `select-runner` (input `runner`, else variable `CD_RUNNER`, else github-hosted), so tests and deploys can run on different machines. On a push to `staging` or `main`, CI's last job `cd` judges each area on its own checks (backend on `ai`, `core`, `container-images`; web on `mobile-web`; landing on `landing`) and starts CD with `workflow_dispatch` on that branch for the commit, the CI run and the areas that changed and passed; a re-run of CI hands off every passing area. CD's `gate` refuses another branch, a commit not on the branch, or a CI run that tested another commit or failed a needed job, then calls `deploy-backend.yml`, `deploy-web.yml` and `deploy-landing.yml`, which now check out the given commit. A person can start CD by hand to redeploy without testing again. Production approval and branch policies stay on the GitHub environments.
-
-**Changed files:** `.github/workflows/cd.yml` — added; `.github/workflows/{ci,deploy-backend,deploy-web,deploy-landing}.yml`, `docs/development/ci-cd.md`, `CONTRIBUTING.md`, `frontend/mobile/README.md`, `frontend/web/README.md` — modified; this entry.
-
-**Check:** actionlint 1.7.8 reports no errors; the hand-off script picks the right areas for a backend change with a red landing, a docs-only push and a re-run with a red core; the gate script, with a stubbed `gh`, passes a backend deploy and refuses a failed `mobile-web`, a run for another commit, a commit not on `staging` and a feature branch. **Not verified:** a run on GitHub, that a `workflow_dispatch` from `GITHUB_TOKEN` starts CD here, environment secrets in the called deploy workflows, a real deploy.
-
-### [2026-10-25 17:30 UTC+07:00] — [Change] CI picks its runner first and deploys each area from its own workflow
-
-**Done:** The deploy jobs lived in `ci.yml` beside the tests, every job repeated the runner expression, and the backend deploy waited for `mobile-web`. Now the first job, `select-runner`, picks the runner for the whole run from the shared `select-runner.yml` (also used by `mobile-release.yml`): `CI_RUNNER` or the manual input `runner` takes `github-hosted` (default), `self-hosted` or the new `auto` (a free self-hosted machine, else `ubuntu-24.04`); pull requests from forks stay GitHub-hosted. With `self-hosted` the pick also runs on the self-hosted machine, so a run needs no GitHub-hosted minute. The deploy jobs moved unchanged into `deploy-backend.yml`, `deploy-web.yml` and `deploy-landing.yml`, called by `ci.yml`; each sets its own GitHub environment, and `deploy-backend` now waits only for `ai`, `core` and `container-images`. PostgreSQL for `ai` and `core` starts with `docker run` on every runner instead of a service container on GitHub-hosted, with a TCP readiness check. Required check names are unchanged.
-
-**Changed files:** `.github/workflows/{select-runner,deploy-backend,deploy-web,deploy-landing}.yml` — added; `.github/workflows/ci.yml`, `.github/workflows/mobile-release.yml`, `docs/development/ci-cd.md` — modified; this entry.
-
-**Check:** actionlint 1.7.8 reports no errors on all workflows; the moved deploy steps, environments, env and concurrency compare equal to the old jobs; the pick script returns the expected runner for github-hosted, self-hosted (with and without a label), a fork pull request, auto without a token and an unknown value. **Not verified:** a run on GitHub (GitHub-hosted, self-hosted and auto), environment secrets reaching the called deploy workflows, a real deploy.
-
-### [2026-10-24 14:30 UTC+07:00] — [Feature] Landing introduces the team
-
-**Done:** The course asks the landing to show who built the product, and it had no team information. A new "Đội ngũ" section (after the POS comparison, linked from the top menu and the footer) shows the six members' own "Đội ngũ Sổ Nghe Lời" posters uncropped, as Orei asked: Minh Thọ (Leader), Minh Phú (AI Engineer), Thượng Hiệp (Frontend Developer), Thu Thảo (Backend Developer), Quỳnh Như (Business Analyst), Kiều Chinh (Marketing), with a line about Team HEXA, EXE201, FPT University. Posters are WebP (940×788, about 70 KB each), lazy-loaded, with name and role in `alt`. The FAQ answer on sign-in said Facebook or Zalo; it now says email and password or Google, which is what the app offers (Facebook is paused, Zalo shows "Sắp có").
-
-**Changed files:** `frontend/web/public/team/{minh-tho,minh-phu,thuong-hiep,thu-thao,quynh-nhu,kieu-chinh}.webp` — added; `frontend/web/src/pages/landing/LandingPage.tsx`, `frontend/web/src/pages/landing/SiteFooter.tsx`, `frontend/web/src/styles/landing.css` — modified; this entry.
-
-**Check:** `npm run typecheck`, `npm run lint` (no new warnings) and `npm run build` in `frontend/web`; dev server at 1280 px shows the six posters in three columns, all loaded, "Đội ngũ" in the menu and footer; the grid drops to two columns under 960 px and one under 560 px with no horizontal overflow at 375 px.
-
-### [2026-10-24 10:30 UTC+07:00] — [Change] Admin dashboard ships inside the landing at /admin
-
-**Done:** For the course submission the admin needs one public link, and the separate admin Vercel project would have lived in another team's account. The landing deploy now carries the admin at `/admin` (real Core data) when its GitHub environment sets `VITE_ADMIN_ENABLED=true` with `VITE_API_ENDPOINT` and `VITE_FIREBASE_API_KEY`; without the flag the landing has no admin code, as before. Job `deploy-admin` from #342 is removed. The build check now fails on the mock demo password in any case, on missing admin routes or settings when the flag is on, and on admin code when it is off; with the flag on, the smoke test opens `/admin/login` and fails when Core still rejects a CORS preflight from the landing after 5 minutes.
-
-**Changed files:** `.github/workflows/ci.yml`, `docs/development/ci-cd.md`, `frontend/web/README.md` — modified; this entry.
-
-**Check:** YAML parses; the new build check, run by hand on two local builds, passes a plain landing and a landing with the admin, and fails an admin build without the flag and a plain build with the flag. **Not verified:** the job on GitHub, sign-in on the deployed landing (needs the landing origin in Core's `CORS_ALLOWED_ORIGINS` and an ADMIN account).
-
-### [2026-10-21 20:40 UTC+07:00] — [Feature] Web admin dashboard reads the real Core admin API
-
-**Done:** The admin pages in `frontend/web` called endpoints Core never had (`/auth/login`, `/admin/overview?days=`, `/admin/audit-logs`, no `/api/v1` prefix) and only worked on mock data. With `VITE_USE_MOCK=false` they now use Core:
-- **Sign-in:** Firebase email + password through the Firebase Auth REST API (no `firebase` package added), then `GET /api/v1/me`; only a Core account with role ADMIN gets in, others see "Tài khoản này không có quyền quản trị". The ID token stays in memory and refreshes itself; only the refresh token is kept (localStorage with "Ghi nhớ đăng nhập", sessionStorage without), so a reload stays signed in; sign-out clears both.
-- **Pages** (`src/pages/admin/core/`, service `src/services/adminApi.ts` typed after Core's DTOs, 0-based pages): Dashboard (owners and shops by status, new in 7/30/90 days, 5 newest shops, recent access), Khách hàng (Chủ tiệm / Cửa hàng tabs, search, status filter, paging; owner drawer with their shops; shop drawer with status history and pause/reopen through `PATCH /api/v1/shops/{id}/status`, a reason required to pause) and a new Nhật ký truy cập page (`/admin/access-logs`, filters by action, shop and dates).
-- AI Support, Tasks, quick search, notifications and the settings audit tab need APIs Core does not have, so they only show in mock mode; mock mode is unchanged.
-- **Deploy:** the admin is the same source deployed to a separate Vercel project by a new CI job `deploy-admin`, which reuses the `landing-staging`/`landing-production` environments (same Vercel team token, production approval) with its own `ADMIN_VERCEL_PROJECT_ID`, `ADMIN_URL`, `ADMIN_API_ENDPOINT` and `ADMIN_FIREBASE_API_KEY`, so the public landing still has no admin code. The job skips with a notice until those are set; it checks the build has the admin routes, no mock demo accounts and the right Core URL, then smoke-tests `ADMIN_URL/admin/login`.
-
-**Changed files:** `frontend/web/src/pages/admin/core/{CoreDashboardPage,CoreCustomersPage,CoreAccessLogsPage,parts}.tsx`, `frontend/web/src/pages/admin/core/coreUtils.ts`, `frontend/web/src/services/{adminApi,firebaseAuth}.ts` — added; `frontend/web/src/{AdminRoutes.tsx,config.ts,vite-env.d.ts}`, `frontend/web/src/services/{api,authService}.ts`, `frontend/web/src/pages/admin/{AdminLayout,LoginPage,SettingsPage}.tsx`, `frontend/web/.env.example`, `frontend/web/.gitignore` (ignore `.vercel`), `frontend/web/README.md`, `.github/workflows/ci.yml`, `docs/development/ci-cd.md`, `docs/contracts/api-contracts.md` — modified; this entry.
-
-**Check:** `npm run typecheck`, `npm run lint` (no new warnings) and `npm run build` in `frontend/web`; the landing build has no `AdminRoutes` chunk and no `admin123`; a real-mode admin build has the admin routes and no mock accounts. Local run against a fake Core and a fake Firebase Auth emulator (test data only): an OWNER account is refused, the ADMIN account reaches the dashboard, owner paging (20 + 3), search, owner and shop drawers, pausing a shop (button locked until a reason is typed, status, history and access log update), access-log filters, the invalid date range warning, reload keeping the session, mock-only routes redirecting, and sign-out clearing storage. A trial copy of this branch is deployed by hand (Vercel CLI) to a separate Vercel project, `smart-ledger-admin.vercel.app`, pointed at Core staging; its login page loads and the bundle has the admin routes, the Core staging URL and no mock accounts. **Not verified:** real Firebase and Core sign-in (Core staging still rejects that origin's CORS preflight with 403 until `CORS_ALLOWED_ORIGINS` includes it, and an ADMIN account is needed), the `deploy-admin` job on GitHub.
-
-### [2026-10-21 20:05 UTC+07:00] — [Fix] Sign-in errors show a safe diagnostic code in release builds
-
-**Done:** Google sign-in stopped working on the production web and Play builds while staging still works, and the app only said "Không đăng nhập được. Vui lòng thử lại", so the cause could not be told apart. Sign-in errors that are not mapped to a specific message now end with a short code, also in release builds: the Firebase code (e.g. "(mã: auth/internal-error)"), or `google-<code>` for codes from the Google Sign-In library (`google-10` for DEVELOPER_ERROR, `google-no-web-client`, `google-no-lib`, `google-no-id-token`). Only short codes of letters, digits and `/ . _ -` are shown, never SDK messages, tokens or emails; mapped errors (wrong password, cancelled…) keep their messages unchanged.
-
-**Changed files:** `frontend/mobile/src/lib/auth/types.ts`, `frontend/mobile/src/lib/auth/firebaseErrors.ts`, `frontend/mobile/src/lib/auth/firebase.ts` — modified; `frontend/mobile/tests/authErrors.test.ts` — added; this entry.
-
-**Check:** `node --test tests/authErrors.test.ts` 4/4; `npx tsc --noEmit` shows no new errors. **Not verified:** a real sign-in failure on a release build.

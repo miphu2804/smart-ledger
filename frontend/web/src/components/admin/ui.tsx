@@ -31,25 +31,18 @@ import {
   type TaskStatus,
 } from '../../types'
 
+/** Logo Sổ Nghe Lời (Bobi ló ra từ cuốn sổ), cùng hình với landing; luôn đi kèm chữ nên để alt rỗng. */
 export function BrandMark({ size = 32 }: { size?: number }) {
-  return (
-    <svg className="sb-brand-mark" width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
-      <rect width="32" height="32" rx="9" fill="var(--tile)" />
-      <rect x="12.5" y="6.5" width="7" height="12" rx="3.5" fill="var(--tile-fg)" />
-      <path d="M9.5 15a6.5 6.5 0 0 0 13 0" fill="none" stroke="var(--tile-fg)" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M16 21.5v3.5M12.5 25h7" stroke="var(--tile-fg)" strokeWidth="1.8" strokeLinecap="round" />
-      <circle cx="24" cy="8" r="2.6" fill="var(--accent-soft)" />
-    </svg>
-  )
+  return <img className="sb-brand-mark" src="/brand/logo.webp" alt="" width={size} height={size} style={{ width: size, height: size }} />
 }
 
 const PALETTE = ['#2F7A43', '#3478F6', '#C47A16', '#8A5CF6', '#C84337', '#0E7C86', '#5B6B2E']
-export function colorFor(key: string) {
+function colorFor(key: string) {
   let h = 0
   for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0
   return PALETTE[h % PALETTE.length]
 }
-export function initialsOf(name: string) {
+function initialsOf(name: string) {
   const w = name.trim().split(/\s+/)
   const last = w[w.length - 1]?.[0] ?? '?'
   return (w.length > 1 ? (w[0][0] ?? '') + last : last).toUpperCase()
