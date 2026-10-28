@@ -191,7 +191,7 @@ Home và Analytics lấy danh sách sale/product/debt/expense qua [`useCoreData.
 
 ### Đăng nhập bằng email + mật khẩu
 
-Màn đầu có nút **Đăng nhập bằng email** và liên kết **Tạo tài khoản** (`app/(auth)/welcome.tsx` → `app/(auth)/email.tsx`). Facebook và Google ở hàng nút bên dưới; Zalo hiện nhãn “Sắp có”; app không còn đăng nhập bằng số điện thoại.
+Màn đầu có nút **Đăng nhập bằng email** và liên kết **Tạo tài khoản** (`app/(auth)/welcome.tsx` → `app/(auth)/email.tsx`). Facebook, Google và Zalo ở hàng nút bên dưới; Zalo bấm được khi build có cấu hình Zalo (Android: `EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID`, web: `EXPO_PUBLIC_ZALO_LOGIN=true`), còn lại hiện nhãn “Sắp có”; app không còn đăng nhập bằng số điện thoại.
 
 - **Tạo tài khoản** tự đăng ký bằng Firebase (`createUserWithEmailAndPassword`, không cần ai thêm user trong Console), gửi thư xác minh (`sendEmailVerification`) rồi chuyển sang `app/(auth)/verify-email.tsx`. Chỉ khi người dùng bấm **Tôi đã xác minh** và Firebase báo `emailVerified` thì app mới gửi Firebase ID token xuống Core (`POST /auth/session`). Mở lại app khi chưa xác minh vẫn quay về màn này. Đây là chặn ở phía app; Core chưa kiểm tra `email_verified`.
 - **Đăng nhập** bằng email chưa xác minh cũng đi qua màn xác minh (không tự gửi lại thư; bấm **Gửi lại thư xác minh**, chờ 60 giây giữa hai lần). Sai email hoặc mật khẩu hiện gợi ý “tạo tài khoản” hoặc “đặt lại mật khẩu” thay vì báo lỗi.
@@ -238,7 +238,7 @@ Thư viện có mã native nên phải build lại APK. Plugin `@react-native-go
 - **Timeout:** mọi lời gọi Core tự dừng sau 15 giây (`ApiError` code `timeout`) thay vì quay vô hạn khi sai IP hoặc tường lửa chặn.
 - **Lỗi thường gặp:** `network` = không tới được Core (IP, tường lửa, Android chặn HTTP); `timeout` = tường lửa thả gói; `401 unauthorized` = token không khớp project của Core; `400 validation_failed` ở `/auth/session` = tài khoản mới cần `displayName` (bình thường); `provider-disabled` = chưa bật phương thức đăng nhập trong Firebase Console.
 
-Chưa làm: đăng nhập Google/Apple (bản thật hiện báo “sắp có”; Facebook xem mục trên), Zalo (Firebase không có sẵn provider — cần Core cấp custom token), nhận diện đơn bằng AI (màn Đọc đơn vẫn dùng `parseOrder()` trên máy).
+Chưa làm: đăng nhập Google/Apple (bản thật hiện báo “sắp có”; Facebook xem mục trên), Zalo trên iOS (Core chưa có luồng), nhận diện đơn bằng AI (màn Đọc đơn vẫn dùng `parseOrder()` trên máy).
 
 Ghi chú: mã QR chuyển khoản chỉ để minh hoạ, không xác nhận giao dịch ngân hàng.
 

@@ -1,3 +1,11 @@
+### 2026-10-28 — Zalo sign-in button works again
+
+| Area | Change |
+|---|---|
+| Mobile | • The Zalo button on the sign-in screen signs in again when the build carries Zalo settings (`EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID` on Android, `EXPO_PUBLIC_ZALO_LOGIN=true` on the web); iOS and builds without them still show "Sắp có"<br>• The `android-dev` and `android-staging` builds and the `vercel-staging` web build already set these, so their button turns on; production does not<br>• The mobile README says when the button is on |
+
+Check: `npx tsc --noEmit` shows only the two existing errors for the missing `expo-application` and `expo-intent-launcher`; `npm test` fails only the two existing cases in `parseOrder` and `quickNav`; staging Core answers `400 invalid_zalo_request` (feature on) to a malformed request on both Zalo authorize endpoints and serves `assetlinks.json` with the certificate of CI test APKs, while production answers `503 zalo_unavailable`. Not verified: a full Zalo sign-in on a phone. Commit: the one that adds this entry.
+
 ### 2026-10-28 — A deploy of one service no longer fails on the other's image
 
 | Area | Change |
@@ -187,31 +195,3 @@ Check: link and anchor check over the edited files passes. Commit: the one that 
 **Flow explained:** Existing ADMIN read → validated Vietnam date projection → mandatory audit stays unchanged. Source comments now explain this flow and its tests; the PR distinguishes local verification from CI and FE/staging acceptance. The first CI run lost both self-hosted runners before executing steps; artifact quota affected only the optional summary upload, already configured to continue on error.
 
 **Check:** Comment/whitespace-stripped Java comparison against HEAD passed for all seven edited Java files. `mvnw.cmd -B -Dtest=AdminDashboardControllerWebTest,AdminAccessAuditServiceTest verify` passed: 29 tests, zero failures/errors/skips, executable JAR packaged; local log `backend/core/target/admin-growth-pr368-review-verify.log` (ignored). Prior full PostgreSQL evidence remains 1,422 passing testcases on `976be02`; it was not rerun for this comments-only follow-up. New GitHub CI and CodeRabbit results must be read from PR #368 rather than inferred from these local checks.
-
-### [2026-10-26] — [Validation] Complete full PostgreSQL regression for admin growth
-
-**Done:** After Docker recovered, verified committed Core code `976be02` in a clean temporary checkout against a separate disposable PostgreSQL 16.15 container. Resolved the Docker/PostgreSQL validation blocker; no new migration, dependency, environment setting or application-code change in this validation follow-up. No push or deployment.
-
-**Changed files:** `BLOCKERS.md`, `backend/core/docs/admin-dashboard-growth.md` and this new entry. Existing Zalo, frontend lockfile and IDE changes remain outside the feature commits.
-
-**Flow explained:** Temporary PostgreSQL → existing migration/test suites → Maven verify and executable JAR packaging. This checks the committed branch independently of unrelated working-tree edits; FE integration, real Firebase sign-in, staging UAT and realistic growth-query load testing remain pending.
-
-**Check:** `mvnw.cmd -B verify` completed with BUILD SUCCESS in 13:31: 1,422 testcases, zero failures/errors/skips; Maven totals agree with XML testcase counts. Dashboard controller: 22 passed; dashboard PostgreSQL: 18 passed, including the explicit UTC DB-session assertion. Log retained locally at `backend/core/target/admin-growth-full-verify-20261026.log` (ignored). Only a dedicated disposable DB was used; business local/staging/production databases were not used. Push still requires user approval.
-
-### [2026-10-26] — [Feature] Admin daily creation chart API; PostgreSQL rerun pending
-
-**Done:** Added `GET /api/v1/admin/overview/growth` on `feat/admin-dashboard-growth`, with bounded daily OWNER/shop creation aggregates, zero-filled Vietnam dates, active DB ADMIN checks and fail-closed overview audit. Existing overview stays unchanged. Synchronized the approved scope through BR-013/BR-014 → FR-024 → AC-097–AC-100 and the canonical API contract; no new migration, index, dependency or environment variable. Fast-forwarded the feature base to staging `0e2b1de`; no push or deploy.
-
-**Changed files:** Core admin controller/DTO/repository/service, web/PostgreSQL tests, Core README and chart handoff; BRD, PRD/AC, API contract, technical design, document index and this new entry. Existing Zalo callback, frontend lockfile and IDE changes were preserved and are outside this feature.
-
-**Flow explained:** ADMIN authenticates → date range is validated → separate SQL source aggregates join at most 366 dates → the same transaction records ADMIN_OVERVIEW_VIEWED/SYSTEM → response. Series count creation, not activity or historical status; the status chart continues using current overview counts. Canonical field/error/audit rules are in the [growth contract](docs/contracts/api-contracts.md#chuỗi-tạo-mới-theo-ngày--admin-growth); FE chart integration and staging acceptance remain pending.
-
-**Check:** Verified `mvnw.cmd verify` on 2026-10-26: 1,306 reported cases, zero failures/errors, 256 skipped (1,050 executed); `git diff --check` passed. Earlier, 47 targeted tests passed against disposable PostgreSQL on 2026-10-22. The new explicit UTC DB-session assertion and full PostgreSQL rerun are **not verified** yet: Docker Desktop did not expose its Linux engine after a start request. No business/local/staging/production DB was used for this rerun. Static-analysis/CVE/coverage tools are not configured in the Core POM and were not newly installed; no coverage percentage or CVE clearance is claimed. Final push still requires user approval after validation.
-
-### [2026-10-25 21:45 UTC+07:00] — [Docs] CI/CD diagram shows the CI and CD split
-
-**Done:** The pipeline band of the CI/CD diagram now shows `ci.yml` (select-runner with `CI_RUNNER`, changes, the five test jobs), the hand-off by job `cd` with `workflow_dispatch`, and `cd.yml` (select-runner with `CD_RUNNER`, gate, the three deploy jobs, production approval).
-
-**Changed files:** `docs/architecture/diagrams/src/ci-cd.drawio`, `docs/architecture/diagrams/images/ci-cd.svg` (re-exported with draw.io 28.2.5 using the command in `docs/development/ci-cd.md`); this entry.
-
-**Check:** exported a PNG preview and checked the pipeline band: labels fit and do not overlap the icons.
