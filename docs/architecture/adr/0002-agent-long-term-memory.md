@@ -1,12 +1,12 @@
 # ADR-0002: Long-term memory cho Agent theo mẫu TencentDB for PostgreSQL, dựng trên pgvector của Supabase
 
-- **Trạng thái:** Proposed. Chưa có FR/AC riêng cho ghi nhớ (`FR-027`/`AC-022` chỉ nói về lịch sử chat); chưa là hành vi sản phẩm cho tới khi PO duyệt yêu cầu và team chấp nhận ADR này. [Contract](../../contracts/api-contracts.md) đã mô tả `memory/settings` và sự kiện SSE `memory`, chỉ hoạt động khi bật cờ và chờ PO duyệt. Phương án A đã có code sau cờ `AGENT_MEMORY_ENABLED` (mặc định tắt), xem [AI README](../../../backend/ai/README.md#long-term-memory-off-by-default); khi tắt, hành vi chat không đổi
+- **Trạng thái:** Accepted ngày 2026-10-28. Phương án A đã tích hợp và chạy sau cờ `AGENT_MEMORY_ENABLED` (mặc định tắt trong code, bật theo từng môi trường), xem [AI README](../../../backend/ai/README.md#long-term-memory-off-by-default). [Contract](../../contracts/api-contracts.md) mô tả `memory/settings` và sự kiện SSE `memory`. PRD chưa có FR/AC riêng cho ghi nhớ (`FR-027`/`AC-022` chỉ nói về lịch sử chat)
 - **Ngày:** 2026-10-14
-- **Owner:** chưa chỉ định
+- **Owner:** Nguyễn Minh Phú
 
 ![Agent long-term memory: Tencent reference and proposed SmartLedger flow](../diagrams/images/agent-memory.svg)
 
-Nguồn sơ đồ: [`agent-memory.drawio`](../diagrams/src/agent-memory.drawio), xuất như [sơ đồ CI/CD](../../development/ci-cd.md). Băng trên cùng là mẫu Tencent; phần dưới là luồng đề xuất cho SmartLedger. Số cam là một lượt chat (đọc memory), số xanh lá là ghi memory sau lượt; hộp và cạnh nét đứt chỉ chạy khi bật cờ `AGENT_MEMORY_ENABLED` (mặc định tắt, chờ PO duyệt).
+Nguồn sơ đồ: [`agent-memory.drawio`](../diagrams/src/agent-memory.drawio), xuất như [sơ đồ CI/CD](../../development/ci-cd.md). Băng trên cùng là mẫu Tencent; phần dưới là luồng đề xuất cho SmartLedger. Số cam là một lượt chat (đọc memory), số xanh lá là ghi memory sau lượt; hộp và cạnh nét đứt chỉ chạy khi bật cờ `AGENT_MEMORY_ENABLED` (mặc định tắt).
 
 ## Bối cảnh
 
@@ -72,7 +72,7 @@ Hướng dẫn mô tả cách tự dựng: người dùng tự tạo schema và 
 
 ## Đề xuất
 
-Giữ **D** cho tới khi PO duyệt yêu cầu. Nếu PO duyệt, làm theo **A** và theo các pattern đang có của `backend/ai`:
+Chọn **A**, làm và theo các pattern đang có của `backend/ai`:
 
 - **Schema:** migration [`20261014000000_agent_memories.sql`](../../../supabase/migrations/20261014000000_agent_memories.sql), không sửa baseline. Giữ các cột của `memory.records` (`memory_type`, `importance`, `metadata`, `expires_at`, index HNSW cosine); khóa `BIGINT` có foreign key, `shop_id` + `user_id` thay `tenant_id` + `agent_id`, `embedding vector(384) NOT NULL` theo model đang dùng, bật RLS không có policy để role API của Supabase không đọc được. `source_conversation_id ... ON DELETE CASCADE` giữ đúng contract "xóa chat loại tin nhắn khỏi lịch sử và ngữ cảnh assistant": `AgentConversationRepository.delete_conversation` xóa hội thoại thì fact sinh từ hội thoại đó mất trong cùng transaction.
 - **Đọc:** theo luồng của Tencent, code tìm memory theo câu hỏi hiện tại trước khi gọi model, không qua tool. `AgentMemoryService.with_memories` embed câu hỏi bằng `pydantic_ai.Embedder`, tìm theo cosine trong memory còn hạn của đúng shop và user, rồi đặt tối đa 5 fact tìm được (sau tối đa 10 memory `preference` luôn nạp, xem mục "Bổ sung theo Cognition") trước câu hỏi như phần "Reference Materials" trong prompt Agentic RAG của Tencent. Tin nhắn lưu vào DB là tin của chủ tiệm đã qua `GuardrailService.check_input` (che khóa và dữ liệu nhạy cảm), không kèm memory. Tìm lỗi thì trả lời không kèm memory. Không tốn lượt `AGENT_TOOL_CALL_LIMIT`, câu trả lời vẫn qua `AnswerScreen.check`.
@@ -88,7 +88,7 @@ Giữ **D** cho tới khi PO duyệt yêu cầu. Nếu PO duyệt, làm theo **A
 
 ## Bổ sung theo Sakana "My Fish"
 
-Migration [`20261015000000_agent_memory_visibility.sql`](../../../supabase/migrations/20261015000000_agent_memory_visibility.sql), cùng cờ `AGENT_MEMORY_ENABLED`, cùng chờ PO duyệt:
+Migration [`20261015000000_agent_memory_visibility.sql`](../../../supabase/migrations/20261015000000_agent_memory_visibility.sql), cùng cờ `AGENT_MEMORY_ENABLED`:
 
 - **Đếm dùng và suy giảm theo lần dùng cuối:** mỗi lần `search` trả memory, cột `last_used_at` và `use_count` được cập nhật trong cùng session; tuổi trong công thức suy giảm tính từ `coalesce(last_used_at, created_at)` (độ mới như Generative Agents). Bản tóm tắt giữ `last_used_at` lớn nhất và tổng `use_count` của nhóm.
 - **Thay thế (supersede) kiểu Mem0:** model trích xuất thấy các memory vừa dùng dạng `[id] nội dung` và có thể đặt `replaces` cho fact sửa lại một memory đó. Code chỉ nhận id nằm trong danh sách vừa dùng. Dòng cũ nhận `superseded_by` và không còn được tìm; không xóa, nên khi xóa hội thoại sinh ra fact mới thì `ON DELETE SET NULL` đưa fact cũ trở lại, giữ `AC-022`. Prompt đọc thêm quy tắc: hai fact mâu thuẫn thì fact có ngày muộn hơn thắng.

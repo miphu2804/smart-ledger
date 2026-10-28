@@ -25,7 +25,7 @@ Each chat turn sends the static system prompt, then the conversation's latest `A
 
 ### Long-term memory (off by default)
 
-`AGENT_MEMORY_ENABLED=true` turns on the [ADR-0002](../../docs/architecture/adr/0002-agent-long-term-memory.md) memory, which is not product behavior until the PO approves it. It needs both memory migrations ([`agent_memories`](../../supabase/migrations/20261014000000_agent_memories.sql), then [`agent_memory_visibility`](../../supabase/migrations/20261015000000_agent_memory_visibility.sql)) and an embedder, picked by `AGENT_MEMORY_EMBEDDING_PROVIDER`:
+`AGENT_MEMORY_ENABLED=true` turns on the [ADR-0002](../../docs/architecture/adr/0002-agent-long-term-memory.md) memory. It needs both memory migrations ([`agent_memories`](../../supabase/migrations/20261014000000_agent_memories.sql), then [`agent_memory_visibility`](../../supabase/migrations/20261015000000_agent_memory_visibility.sql)) and an embedder, picked by `AGENT_MEMORY_EMBEDDING_PROVIDER`:
 
 - `sentence-transformers` (default) runs `AGENT_MEMORY_EMBEDDING_MODEL` in this process and needs `uv sync --group memory`; the Docker image leaves that group out, so there the flag logs an error and stays off.
 - `cloudflare` calls Workers AI's OpenAI-compatible `/v1/embeddings` with `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`, so no local model is needed. Workers AI takes only the text, so `WorkersAIEmbeddingModel` (`src/memory/workers_ai_embedding.py`) adds the model's query and document prompts (embeddinggemma's are built in) and cuts the vector to the column's 384 dimensions. Owner messages and facts are sent to Cloudflare to be embedded.
