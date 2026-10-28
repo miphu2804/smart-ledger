@@ -159,10 +159,10 @@ export default function AdminLayout() {
       <div className={`shell${collapsed ? ' is-collapsed' : ''}${navOpenAt === pathname ? ' nav-open' : ''}`}>
         <aside className="sb" aria-label="Điều hướng quản trị">
           <div className="sb-brand">
-            <BrandMark />
+            <BrandMark size={36} />
             <div className="sb-brand-text">
               <strong>Sổ Nghe Lời</strong>
-              <span>Admin workspace</span>
+              <span>Trang quản trị</span>
             </div>
             <CaretUpDown size={16} className="ico-chev" aria-hidden="true" />
           </div>
