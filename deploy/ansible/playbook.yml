@@ -20,6 +20,15 @@
     dopbase_dir: /opt/dopbase
     # Public name of Dopbase that resolves to the VPS, for example secrets.<domain>; empty skips Dopbase.
     dopbase_domain: "{{ lookup('env', 'DOPBASE_DOMAIN') }}"
+    # Nightly off-site copy of the Dopbase volume (deploy/dopbase/backup.sh). An empty bucket skips the cron job,
+    # so Dopbase can run before the bucket exists. The recipient is the age public key whose private half the
+    # maintainer keeps off the VPS; the token needs object write on that bucket only.
+    dopbase_backup_bucket: "{{ lookup('env', 'DOPBASE_BACKUP_BUCKET') }}"
+    dopbase_backup_endpoint: "{{ lookup('env', 'DOPBASE_BACKUP_ENDPOINT') }}"
+    dopbase_backup_recipient: "{{ lookup('env', 'DOPBASE_BACKUP_RECIPIENT') }}"
+    dopbase_backup_key_id: "{{ lookup('env', 'DOPBASE_BACKUP_KEY_ID') }}"
+    dopbase_backup_secret: "{{ lookup('env', 'DOPBASE_BACKUP_SECRET') }}"
+    dopbase_backup_hour: 3
     deploy_user: deploy
     lazydocker_version: 0.25.2
     lazydocker_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'x86_64' }}"
@@ -214,6 +223,15 @@
       when: dopbase_domain | length > 0
       notify: Apply Dopbase
 
+    - name: Upload the Dopbase backup script
+      ansible.builtin.copy:
+        src: ../dopbase/backup.sh
+        dest: "{{ dopbase_dir }}/backup.sh"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0750"
+      when: dopbase_domain | length > 0
+
     - name: Set the Dopbase public URL
       ansible.builtin.copy:
         dest: "{{ dopbase_dir }}/.env"
@@ -234,6 +252,50 @@
           }
       when: dopbase_domain | length > 0
       notify: Apply the edge
+
+    # age encrypts the archive before it leaves the machine and rclone uploads it; Ubuntu packages both.
+    - name: Install the Dopbase backup tools
+      ansible.builtin.apt:
+        name: [age, rclone]
+        update_cache: true
+      when: dopbase_domain | length > 0 and dopbase_backup_bucket | length > 0
+
+    - name: Set the Dopbase backup settings
+      ansible.builtin.copy:
+        dest: "{{ dopbase_dir }}/.env.backup"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0600"
+        content: |
+          DOPBASE_BACKUP_BUCKET={{ dopbase_backup_bucket }}
+          DOPBASE_BACKUP_ENDPOINT={{ dopbase_backup_endpoint }}
+          DOPBASE_BACKUP_RECIPIENT={{ dopbase_backup_recipient }}
+          DOPBASE_BACKUP_KEY_ID={{ dopbase_backup_key_id }}
+          DOPBASE_BACKUP_SECRET={{ dopbase_backup_secret }}
+      when: dopbase_domain | length > 0 and dopbase_backup_bucket | length > 0
+      no_log: true
+
+    # Every environment shares one Dopbase, so the job is defined once; a second run only rewrites the same line.
+    - name: Back up Dopbase every night
+      ansible.builtin.cron:
+        name: dopbase-backup
+        user: "{{ deploy_user }}"
+        minute: "0"
+        hour: "{{ dopbase_backup_hour }}"
+        job: "cd {{ dopbase_dir }} && ./backup.sh >>/var/log/dopbase-backup.log 2>&1"
+        state: "{{ 'present' if dopbase_backup_bucket | length > 0 else 'absent' }}"
+      when: dopbase_domain | length > 0
+
+    - name: Let the deploy user write the backup log
+      ansible.builtin.file:
+        path: /var/log/dopbase-backup.log
+        state: touch
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0640"
+        modification_time: preserve
+        access_time: preserve
+      when: dopbase_domain | length > 0 and dopbase_backup_bucket | length > 0
 
     - name: Log in to GHCR with the read-only token
       ansible.builtin.command:

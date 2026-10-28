@@ -1,7 +1,7 @@
 # Dopbase, the team's secrets manager, shared by every environment on the VPS. It publishes no port: the shared
 # Caddy in deploy/edge/ reaches it as `dopbase` on the external `edge` network. Lives in /opt/dopbase with its own
 # lifecycle, so an app deploy never restarts it. Its SQLite database and master key live in the dopbase_data
-# volume, which is the only copy until off-site backups exist.
+# volume, copied off-site every night by backup.sh.
 services:
   dopbase:
     build: .
@@ -26,4 +26,6 @@ networks:
     external: true
 
 volumes:
+  # Named explicitly, not as <project>_dopbase_data, so deploy/dopbase/backup.sh can mount it by one fixed name.
   dopbase_data:
+    name: dopbase_data
