@@ -21,6 +21,11 @@
     # Public name of Dopbase that resolves to the VPS, for example secrets.<domain>; empty skips Dopbase.
     dopbase_domain: "{{ lookup('env', 'DOPBASE_DOMAIN') }}"
     deploy_user: deploy
+    lazydocker_version: 0.25.2
+    lazydocker_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'x86_64' }}"
+    lazydocker_sha256:
+      x86_64: 0d9dbfc26068b218e7ed84b104748cadc6e3cf733c0afd35465306fb39b9523c
+      arm64: 005c38b685aaa557e7d646d83a3dadb5024340eeed8c6a2e1949eee6f530de23
     swap_size_mb: 2048
     # Resolved env files of this environment, pulled by scripts/secrets (docs/development/secrets-and-env.md).
     env_dir: "{{ playbook_dir }}/../../secrets/{{ smartledger_env }}/env"
@@ -38,6 +43,22 @@
       ansible.builtin.apt:
         name: [docker.io, docker-compose-v2, ufw, unattended-upgrades]
         update_cache: true
+
+    # lazydocker shows every container, its logs and stats from an SSH session; Ubuntu has no package for it,
+    # so the pinned release is checked against its digest. To upgrade, change lazydocker_version and the digests.
+    - name: Download lazydocker
+      ansible.builtin.get_url:
+        url: "https://github.com/jesseduffield/lazydocker/releases/download/v{{ lazydocker_version }}/lazydocker_{{ lazydocker_version }}_Linux_{{ lazydocker_arch }}.tar.gz"
+        dest: "/tmp/lazydocker-{{ lazydocker_version }}.tar.gz"
+        checksum: "sha256:{{ lazydocker_sha256[lazydocker_arch] }}"
+        mode: "0644"
+
+    - name: Install lazydocker
+      ansible.builtin.unarchive:
+        src: "/tmp/lazydocker-{{ lazydocker_version }}.tar.gz"
+        remote_src: true
+        dest: /usr/local/bin
+        include: [lazydocker]
 
     - name: Fail without the domain or deploy key
       ansible.builtin.assert:
