@@ -2,6 +2,11 @@
 # project owns them, gets a free Let's Encrypt certificate per domain and proxies each one to that
 # environment's Core over the external `edge` network. Lives in /opt/smartledger-edge next to Caddyfile and
 # sites/<environment>.caddy, which deploy/ansible/playbook.yml writes. See docs/development/ci-cd.md#vps.
+
+# Without this the project is named after its directory (smartledger-edge); the fixed name keeps the
+# containers and the certificate volume kebab-case like the repository.
+name: smart-ledger-edge
+
 services:
   caddy:
     image: caddy:2.11.6-alpine
