@@ -1,3 +1,12 @@
+### 2026-10-28 — Production Core answers on production.103-162-31-93.sslip.io
+
+| Area | Change |
+|---|---|
+| Deploy | • The production Caddy site serves `production.103-162-31-93.sslip.io` instead of the shorthand `prod.103-162-31-93.sslip.io`, which no client used yet |
+| Docs | • The CI/CD guide uses the new name and records that environment names are spelled out, never shortened |
+
+Check: playbook applied for production; `https://production.103-162-31-93.sslip.io/actuator/health` returns 200 `UP` with its own certificate, Core and AI still run `4a4f714`, staging still answers. Commit: the merge of this branch.
+
 ### 2026-10-28 — Backend GitHub environments named backend-staging and backend-production
 
 | Area | Change |

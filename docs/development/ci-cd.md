@@ -74,7 +74,9 @@ Staging and production run side by side on one VPS, each as its own Compose proj
 | Environment | Public name of Core | Caddy proxies to | App directory |
 |---|---|---|---|
 | `staging` | `staging.103-162-31-93.sslip.io` (the bare `103-162-31-93.sslip.io` still answers until every client has moved) | `core-staging:8080` | `/opt/smartledger` |
-| `production` | `prod.103-162-31-93.sslip.io` | `core-production:8080` | `/opt/smartledger-production` |
+| `production` | `production.103-162-31-93.sslip.io` | `core-production:8080` | `/opt/smartledger-production` |
+
+Every name spells out the environment, `staging` or `production`, never a shorthand such as `prod` or `stg`, so a domain, a GitHub environment, a directory and a network alias of the same environment read the same.
 
 With a domain, point `A` records such as `api.<domain>` and `api-staging.<domain>` at the VPS and change `CADDY_DOMAIN`, with no other change. One VPS means one point of failure: an outage or a staging service that exhausts memory takes production down too. The VPS address is public, so the firewall opens only ports 22, 80 and 443. Supabase, Redis Cloud, Cloudinary and Firebase stay external services.
 
