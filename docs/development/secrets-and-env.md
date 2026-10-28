@@ -1,6 +1,6 @@
 # Secrets and env files
 
-Every credential the team shares (local `.env` files, Railway service variables, GitHub Actions variables) is kept as one folder of env files per environment. Git holds a small pointer to each folder, R2 holds the encrypted files, and age decides who can read them. `git pull` brings a new version into `secrets/<environment>/env/`; tools read most files there directly, and `scripts/secrets/apply.sh staging dev` copies the few that a tool reads at a fixed path, pointing them at a local database.
+Every credential the team shares (local `.env` files, VPS service env files, GitHub Actions variables) is kept as one folder of env files per environment. Git holds a small pointer to each folder, R2 holds the encrypted files, and age decides who can read them. `git pull` brings a new version into `secrets/<environment>/env/`; tools read most files there directly, and `scripts/secrets/apply.sh staging dev` copies the few that a tool reads at a fixed path, pointing them at a local database.
 
 ![Secrets sync flow](../architecture/diagrams/images/secrets-sync.svg)
 
@@ -103,17 +103,16 @@ ZALO_APP_ID=...
 
 | File in `env/` | Used by | staging | production |
 |---|---|---|---|
-| `.env.core`, `.env.ai` | Core and AI: the variables of the Railway service, with Railway references resolved, plus settings Railway leaves at their code default; staging copies go to `backend/core/.env` and `backend/ai/.env` with `local.env.*` put over them | yes | yes (read in place) |
+| `.env.core`, `.env.ai` | Core and AI: the env files the Ansible playbook uploads to the VPS, plus settings left at their code default; staging copies go to `backend/core/.env` and `backend/ai/.env` with `local.env.*` put over them | yes | yes (read in place) |
 | `.env.mobile` | mobile app; copied to `frontend/mobile/.env` | yes | no |
 | `.env.release` | Android APK release: R2 bucket, keystore | no | yes |
 | `.env.loadtest`, `.env.monitor` | load test and uptime monitor; staging copies go to `scripts/loadtest/.env.staging` and `scripts/monitor/.env` | yes | loadtest only |
 | `.env.vps` | the VPS of that environment: `VPS_HOST`, `VPS_KNOWN_HOSTS`, the CI deploy key (`VPS_SSH_KEY` in base64, `VPS_SSH_PUBLIC_KEY`) and `CLOUDFLARE_TUNNEL_TOKEN`; read by the Ansible playbook and `github.sh` ([VPS](ci-cd.md#vps)) | yes | yes |
-| `.env.railway.tokens` | `RAILWAY_TOKEN`, the Railway project token of that environment for the CLI, until Railway is shut down | yes | yes |
 | `github/.env.<environment>` | copy of a GitHub Actions environment | 7 environments | 4 environments |
 
 Files are named `.env.<name>`, like `.env.local` and `.env.production` in Next.js; the folder already says which environment they belong to. `targets` lists the copied files. Everything else is read in place, for example `docker compose --env-file secrets/production/env/.env.core --env-file secrets/production/env/.env.ai`, so there is no second copy to drift.
 
-`.env.core` and `.env.ai` hold the values Railway resolves, not its reference syntax (`${{ai.RAILWAY_PRIVATE_DOMAIN}}`), so they can be read anywhere; `LOGFIRE_SERVICE_VERSION` is left out because every deploy sets it to the commit. The deploy workflow writes the `railway-<environment>` GitHub variables and secrets to Railway, so change those keys in GitHub as well, or the next deploy puts the old value back. `github/.env.*` have two sections, `## Variables ##` and `## Secrets (write-only in GitHub, values not pulled) ##`, each grouped by topic like the other files. Secrets are listed as `# NAME` lines, by name only, because GitHub never returns a secret's value.
+`.env.core` and `.env.ai` hold plain values that can be read anywhere; `LOGFIRE_SERVICE_VERSION` is left out because every deploy sets it to the commit. `github/.env.*` have two sections, `## Variables ##` and `## Secrets (write-only in GitHub, values not pulled) ##`, each grouped by topic like the other files. Secrets are listed as `# NAME` lines, by name only, because GitHub never returns a secret's value.
 
 Not in `secrets/`: `.env.r2.secrets` (the R2 tokens DVC needs to reach the files), `.env.example` files (committed templates), and generated files such as `supabase/.temp` and `frontend/mobile/ios/.xcode.env`.
 
@@ -178,7 +177,7 @@ git add secrets/staging/env.age.dvc
 git commit -m "chore(secrets): <what changed>"
 ```
 
-`push.sh` uploads to R2 before the commit, so teammates never pull a pointer to files that are not there. It refuses to upload when `origin/staging` has a newer `env.age.dvc` or when `env/` was not pulled from the pointer in your checkout, so one person's push cannot silently replace another's; merge, pull, then edit again. Updating Railway or GitHub itself is still a separate step; `.env.core`, `.env.ai` and `github/` are copies, not the deploy source. For a secret the deploy workflow reads from GitHub (`OPENAI_API_KEY`, `LOGFIRE_TOKEN`, `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS` in `railway-<environment>`), `scripts/secrets/github.sh <environment>` lists which GitHub secrets it can take from `.env.core`, `.env.ai`, `.env.vps` and `.env.railway.tokens`, and `--apply` sets them; the next deploy then copies the AI settings to the VPS. Secrets not in those files (Vercel, Android signing) are set in GitHub by hand.
+`push.sh` uploads to R2 before the commit, so teammates never pull a pointer to files that are not there. It refuses to upload when `origin/staging` has a newer `env.age.dvc` or when `env/` was not pulled from the pointer in your checkout, so one person's push cannot silently replace another's; merge, pull, then edit again. Updating the VPS or GitHub itself is still a separate step; `.env.core`, `.env.ai` and `github/` are copies, not the deploy source. For a secret the deploy workflow reads from GitHub (`OPENAI_API_KEY`, `LOGFIRE_TOKEN`, `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS` in `backend-<environment>`), `scripts/secrets/github.sh <environment>` lists which GitHub secrets it can take from `.env.core`, `.env.ai`, `.env.vps` and `.env.railway.tokens`, and `--apply` sets them; the next deploy then copies the AI settings to the VPS. Secrets not in those files (Vercel, Android signing) are set in GitHub by hand.
 
 ## 6. Add or remove a person
 

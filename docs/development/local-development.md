@@ -1,6 +1,6 @@
 # Local development
 
-How to install, run and check each service on a developer machine, how the local Compose stack reaches the databases, and how schema migrations reach the shared environments. Deployment to Railway and Vercel is in [CI/CD](ci-cd.md); each service README has its own commands and variables. Run every command below from the repository root.
+How to install, run and check each service on a developer machine, how the local Compose stack reaches the databases, and how schema migrations reach the shared environments. Deployment to the VPS and Vercel is in [CI/CD](ci-cd.md); each service README has its own commands and variables. Run every command below from the repository root.
 
 ## Prerequisites
 
