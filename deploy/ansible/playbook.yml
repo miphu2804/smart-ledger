@@ -150,7 +150,7 @@
         owner: "{{ deploy_user }}"
         group: "{{ deploy_user }}"
         mode: "0644"
-      loop: [compose.yaml]
+      loop: [compose.yaml, bifrost.json]
       notify: Apply the stack
 
     - name: Upload the service env files
@@ -163,6 +163,7 @@
       loop:
         - { src: .env.core, dest: core.env }
         - { src: .env.ai, dest: ai.env }
+        - { src: .env.bifrost, dest: bifrost.env }
       no_log: true
       notify: Apply the stack
 

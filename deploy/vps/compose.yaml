@@ -3,7 +3,8 @@
 # production run side by side on one VPS, each in its own app directory (/opt/smartledger, /opt/smartledger-production)
 # next to these files, none of which are in Git:
 #   .env               ENVIRONMENT, CORE_ALIAS, CORE_IMAGE, AI_IMAGE; the deploy rewrites the image lines
-#   core.env, ai.env   service variables, resolved copies of secrets/<env>/env/.env.core and .env.ai
+#   core.env, ai.env, bifrost.env
+#                      service variables, resolved copies of secrets/<env>/env/.env.core, .env.ai and .env.bifrost
 #   github.core.env, github.ai.env
 #                      settings GitHub owns (CORS, model, tracing); the deploy rewrites them and
 #                      they override the files above
@@ -66,6 +67,36 @@ services:
       retries: 6
     restart: unless-stopped
     logging: *logging
+
+  # Model gateway (Bifrost) for AI, reachable only inside this project's network at http://bifrost:8080. Pinned by
+  # digest (v2.3.2) and not rolled by deploy.sh: the playbook starts it, and a new version is a change to this file.
+  # bifrost.json is authoritative over the config store in the volume; bifrost.env holds the provider key and the
+  # virtual key it references, a resolved copy of secrets/<env>/env/.env.bifrost.
+  bifrost:
+    image: maximhq/bifrost:v2.3.2@sha256:f5b18826349fe9e1c402c10d19f1cbb5567a3c800ad928580d07f72e69106ec7
+    env_file:
+      - bifrost.env
+    environment:
+      # About 90% of mem_limit, per the Bifrost Docker tuning guide; chat traffic is a few requests per second.
+      GOMEMLIMIT: 460MiB
+    mem_limit: 512m
+    cpus: 1
+    volumes:
+      - bifrost-data:/app/data
+      - ./bifrost.json:/app/data/config.json:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    # Same wildcard-DNS guard as Core: provider hostnames must not resolve through the VPS search domain.
+    dns_search: .
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  bifrost-data:
 
 networks:
   edge:
