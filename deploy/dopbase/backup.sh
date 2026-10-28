@@ -33,9 +33,16 @@ trap 'docker compose start >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
 
 archive="dopbase-$(date -u +%Y-%m-%dT%H-%M-%SZ).tar.gz.age"
 docker compose stop >/dev/null
-docker run --rm -v dopbase_data:/data:ro -v "$work":/out alpine:3.21 \
+# The volume carries the Compose project prefix, and `docker run` would silently create an empty volume under
+# any other name, so the archive would upload as a valid but empty backup.
+docker volume inspect dopbase_dopbase_data >/dev/null
+docker run --rm -v dopbase_dopbase_data:/data:ro -v "$work":/out alpine:3.21 \
   tar -czf /out/data.tar.gz -C /data .
 docker compose start >/dev/null
+
+# A readable archive holding the database is the only proof the copy worked; age would happily encrypt nothing.
+tar -tzf "$work/data.tar.gz" >/dev/null
+[ "$(stat -c %s "$work/data.tar.gz")" -ge 4096 ] || { echo "dopbase-backup: archive is too small to be the database" >&2; exit 1; }
 
 age -r "$DOPBASE_BACKUP_RECIPIENT" -o "$work/$archive" "$work/data.tar.gz"
 rclone copyto "$work/$archive" "r2:$DOPBASE_BACKUP_BUCKET/$archive"

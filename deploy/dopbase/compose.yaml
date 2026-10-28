@@ -26,6 +26,6 @@ networks:
     external: true
 
 volumes:
-  # Named explicitly, not as <project>_dopbase_data, so deploy/dopbase/backup.sh can mount it by one fixed name.
+  # Compose names it dopbase_dopbase_data after the project directory; backup.sh mounts that name. Renaming it
+  # here would point the running instance at a new, empty volume and orphan the live database.
   dopbase_data:
-    name: dopbase_data
