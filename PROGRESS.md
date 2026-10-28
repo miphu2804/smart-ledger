@@ -6,6 +6,15 @@
 
 Check: `npx tsc --noEmit` shows only the two existing errors for the missing `expo-application` and `expo-intent-launcher`; Settings, Notification settings and debt history checked on the mock web build (the last history row measures `0px` border). Not verified on screen: checkout, assistant history, the add-item sheet, voice expenses, and a real phone. Commit: the one that adds this entry.
 
+### 2026-10-28 — Production Core answers on production.103-162-31-93.sslip.io
+
+| Area | Change |
+|---|---|
+| Deploy | • The production Caddy site serves `production.103-162-31-93.sslip.io` instead of the shorthand `prod.103-162-31-93.sslip.io`, which no client used yet |
+| Docs | • The CI/CD guide uses the new name and records that environment names are spelled out, never shortened |
+
+Check: playbook applied for production; `https://production.103-162-31-93.sslip.io/actuator/health` returns 200 `UP` with its own certificate, Core and AI still run `4a4f714`, staging still answers. Commit: the merge of this branch.
+
 ### 2026-10-28 — Backend GitHub environments named backend-staging and backend-production
 
 | Area | Change |
@@ -182,11 +191,3 @@ Check: link and anchor check over the edited files passes. Commit: the one that 
 **Changed files:** `.github/workflows/cd.yml` — added; `.github/workflows/{ci,deploy-backend,deploy-web,deploy-landing}.yml`, `docs/development/ci-cd.md`, `CONTRIBUTING.md`, `frontend/mobile/README.md`, `frontend/web/README.md` — modified; this entry.
 
 **Check:** actionlint 1.7.8 reports no errors; the hand-off script picks the right areas for a backend change with a red landing, a docs-only push and a re-run with a red core; the gate script, with a stubbed `gh`, passes a backend deploy and refuses a failed `mobile-web`, a run for another commit, a commit not on `staging` and a feature branch. **Not verified:** a run on GitHub, that a `workflow_dispatch` from `GITHUB_TOKEN` starts CD here, environment secrets in the called deploy workflows, a real deploy.
-
-### [2026-10-25 17:30 UTC+07:00] — [Change] CI picks its runner first and deploys each area from its own workflow
-
-**Done:** The deploy jobs lived in `ci.yml` beside the tests, every job repeated the runner expression, and the backend deploy waited for `mobile-web`. Now the first job, `select-runner`, picks the runner for the whole run from the shared `select-runner.yml` (also used by `mobile-release.yml`): `CI_RUNNER` or the manual input `runner` takes `github-hosted` (default), `self-hosted` or the new `auto` (a free self-hosted machine, else `ubuntu-24.04`); pull requests from forks stay GitHub-hosted. With `self-hosted` the pick also runs on the self-hosted machine, so a run needs no GitHub-hosted minute. The deploy jobs moved unchanged into `deploy-backend.yml`, `deploy-web.yml` and `deploy-landing.yml`, called by `ci.yml`; each sets its own GitHub environment, and `deploy-backend` now waits only for `ai`, `core` and `container-images`. PostgreSQL for `ai` and `core` starts with `docker run` on every runner instead of a service container on GitHub-hosted, with a TCP readiness check. Required check names are unchanged.
-
-**Changed files:** `.github/workflows/{select-runner,deploy-backend,deploy-web,deploy-landing}.yml` — added; `.github/workflows/ci.yml`, `.github/workflows/mobile-release.yml`, `docs/development/ci-cd.md` — modified; this entry.
-
-**Check:** actionlint 1.7.8 reports no errors on all workflows; the moved deploy steps, environments, env and concurrency compare equal to the old jobs; the pick script returns the expected runner for github-hosted, self-hosted (with and without a label), a fork pull request, auto without a token and an unknown value. **Not verified:** a run on GitHub (GitHub-hosted, self-hosted and auto), environment secrets reaching the called deploy workflows, a real deploy.
