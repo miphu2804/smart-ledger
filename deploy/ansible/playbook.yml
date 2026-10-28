@@ -41,6 +41,8 @@
     # Public name of this environment's Core that resolves to the VPS, for example 203-0-113-10.sslip.io,
     # prod.203-0-113-10.sslip.io or api.<domain>.
     caddy_domain: "{{ lookup('env', 'CADDY_DOMAIN') }}"
+    # Public name of this environment's Bifrost admin UI, for example gateway-staging.<domain>; empty serves no UI.
+    gateway_domain: "{{ lookup('env', 'GATEWAY_DOMAIN') }}"
     # Public half of the CI deploy key whose private half is secret VPS_SSH_KEY.
     deploy_public_key: "{{ lookup('env', 'VPS_SSH_PUBLIC_KEY') }}"
     # A classic token with only `read:packages`, for private GHCR packages; empty skips `docker login`.
@@ -206,6 +208,21 @@
           {{ caddy_domain }} {
           	reverse_proxy core-{{ smartledger_env }}:8080
           }
+      notify: Apply the edge
+
+    # Only the admin UI and its API go public. Model calls stay internal to AI: the virtual key already guards them,
+    # and refusing the inference prefixes here keeps a leaked key from being spent from outside.
+    - name: Route this environment's gateway domain to the Bifrost admin UI
+      ansible.builtin.copy:
+        dest: "{{ edge_dir }}/sites/gateway-{{ smartledger_env }}.caddy"
+        mode: "0644"
+        content: |
+          {{ gateway_domain }} {
+          	@inference path /v1/* /openai/* /anthropic/* /genai/* /bedrock/* /cohere/* /litellm/* /langchain/* /pydanticai/*
+          	respond @inference 404
+          	reverse_proxy gateway-{{ smartledger_env }}:8080
+          }
+      when: gateway_domain | length > 0
       notify: Apply the edge
 
     - name: Create the Dopbase directory

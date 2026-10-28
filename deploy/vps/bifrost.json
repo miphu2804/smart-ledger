@@ -21,6 +21,11 @@
           { "provider": "opencode-go", "allowed_models": ["*"], "key_ids": ["*"] }
         ]
       }
-    ]
+    ],
+    "auth_config": {
+      "is_enabled": true,
+      "admin_username": "env.BIFROST_ADMIN_USERNAME",
+      "admin_password": "env.BIFROST_ADMIN_PASSWORD"
+    }
   }
 }

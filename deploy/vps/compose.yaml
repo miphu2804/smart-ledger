@@ -68,10 +68,11 @@ services:
     restart: unless-stopped
     logging: *logging
 
-  # Model gateway (Bifrost) for AI, reachable only inside this project's network at http://bifrost:8080. Pinned by
-  # digest (v2.3.2) and not rolled by deploy.sh: the playbook starts it, and a new version is a change to this file.
-  # bifrost.json is authoritative over the config store in the volume; bifrost.env holds the provider key and the
-  # virtual key it references, a resolved copy of secrets/<env>/env/.env.bifrost.
+  # Model gateway (Bifrost) for AI at http://bifrost:8080. It also joins `edge` as gateway-<environment>, where Caddy
+  # serves its admin UI behind the admin login and refuses its inference routes. Pinned by digest (v2.3.2) and not
+  # rolled by deploy.sh: the playbook starts it, and a new version is a change to this file. bifrost.json is
+  # authoritative over the config store in the volume; bifrost.env holds the provider key, the virtual key and the
+  # admin login it references, a resolved copy of secrets/<env>/env/.env.bifrost.
   bifrost:
     image: maximhq/bifrost:v2.3.2@sha256:f5b18826349fe9e1c402c10d19f1cbb5567a3c800ad928580d07f72e69106ec7
     env_file:
@@ -90,6 +91,11 @@ services:
       timeout: 5s
       start_period: 10s
       retries: 3
+    networks:
+      default:
+      edge:
+        aliases:
+          - gateway-${ENVIRONMENT}
     # Same wildcard-DNS guard as Core: provider hostnames must not resolve through the VPS search domain.
     dns_search: .
     restart: unless-stopped
