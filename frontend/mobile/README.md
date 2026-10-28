@@ -164,7 +164,7 @@ Các API nghiệp vụ (danh mục/sản phẩm, khách, POS/checkout tạo đơ
 
 Checkout mobile hiện yêu cầu mỗi món có `productId`. Luồng “Món ngoài danh mục” tạo nhanh một Product với `tracked=false` rồi thêm vào giỏ; chưa dùng custom item `productId=null` dù Core đã hỗ trợ.
 
-Khi dev mobile, app gọi Core staging trên Railway (bản deploy từ nhánh `staging`, xem [CI/CD](../../docs/development/ci-cd.md)), nên máy dev không cần chạy backend hay Docker. Domain Railway gắn với service và environment, không đổi sau mỗi lần deploy. `.env`:
+Khi dev mobile, app gọi Core staging trên VPS (bản deploy từ nhánh `staging`, xem [CI/CD](../../docs/development/ci-cd.md)), nên máy dev không cần chạy backend hay Docker. Domain staging cố định, không đổi sau mỗi lần deploy. `.env`:
 
 ```
 EXPO_PUBLIC_USE_MOCK=false
