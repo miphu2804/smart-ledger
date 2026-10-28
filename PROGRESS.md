@@ -6,6 +6,14 @@
 
 Check: `npx tsc --noEmit` shows only the two existing errors for the missing `expo-application` and `expo-intent-launcher`; Settings, Notification settings and debt history checked on the mock web build (the last history row measures `0px` border). Not verified on screen: checkout, assistant history, the add-item sheet, voice expenses, and a real phone. Commit: the one that adds this entry.
 
+### 2026-10-28 — README shows the system architecture and tech stack
+
+| Area | Change |
+|---|---|
+| Docs | • The README opens with a tech stack badge row, a short summary and highlights, and shows `ci-cd.svg` as the system architecture instead of the older `architecture.svg`<br>• The parts table gains a "Runs on" column and no longer names Railway |
+
+Check: all 18 badge URLs return 200 with a logo; the page was not rendered on GitHub. Commit: the squash merge of this branch.
+
 ### 2026-10-28 — Production Core answers on production.103-162-31-93.sslip.io
 
 | Area | Change |
@@ -183,11 +191,3 @@ Check: link and anchor check over the edited files passes. Commit: the one that 
 **Changed files:** `.github/workflows/cd.yml`, `.github/workflows/ci.yml` (comment), `.github/workflows/select-runner.yml` (comment), `docs/development/ci-cd.md`; this entry.
 
 **Check:** actionlint 1.7.8 reports no errors. **Not verified:** a CD run on GitHub.
-
-### [2026-10-25 18:30 UTC+07:00] — [Change] CD is its own workflow with its own runner
-
-**Done:** Deploys moved out of CI into `cd.yml`, which starts with its own `select-runner` (input `runner`, else variable `CD_RUNNER`, else github-hosted), so tests and deploys can run on different machines. On a push to `staging` or `main`, CI's last job `cd` judges each area on its own checks (backend on `ai`, `core`, `container-images`; web on `mobile-web`; landing on `landing`) and starts CD with `workflow_dispatch` on that branch for the commit, the CI run and the areas that changed and passed; a re-run of CI hands off every passing area. CD's `gate` refuses another branch, a commit not on the branch, or a CI run that tested another commit or failed a needed job, then calls `deploy-backend.yml`, `deploy-web.yml` and `deploy-landing.yml`, which now check out the given commit. A person can start CD by hand to redeploy without testing again. Production approval and branch policies stay on the GitHub environments.
-
-**Changed files:** `.github/workflows/cd.yml` — added; `.github/workflows/{ci,deploy-backend,deploy-web,deploy-landing}.yml`, `docs/development/ci-cd.md`, `CONTRIBUTING.md`, `frontend/mobile/README.md`, `frontend/web/README.md` — modified; this entry.
-
-**Check:** actionlint 1.7.8 reports no errors; the hand-off script picks the right areas for a backend change with a red landing, a docs-only push and a re-run with a red core; the gate script, with a stubbed `gh`, passes a backend deploy and refuses a failed `mobile-web`, a run for another commit, a commit not on `staging` and a feature branch. **Not verified:** a run on GitHub, that a `workflow_dispatch` from `GITHUB_TOKEN` starts CD here, environment secrets in the called deploy workflows, a real deploy.
