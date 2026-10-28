@@ -5,7 +5,7 @@ name: Deploy backend
 # the tests so a change here cannot break a required check, and so the backend deploy waits only for the backend jobs.
 # See docs/development/ci-cd.md#vps.
 # Each GitHub environment holds its own VPS address, SSH key and settings, plus its branch policy;
-# `railway-production` requires approval. The environment is set on the job below, so its secrets reach the job
+# `backend-production` requires approval. The environment is set on the job below, so its secrets reach the job
 # without the caller passing them.
 
 on:
@@ -38,7 +38,7 @@ permissions:
 jobs:
   deploy:
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    environment: ${{ github.ref_name == 'main' && 'railway-production' || 'railway-staging' }}
+    environment: ${{ github.ref_name == 'main' && 'backend-production' || 'backend-staging' }}
     concurrency:
       group: deploy-${{ github.ref_name }}
       cancel-in-progress: false
@@ -211,7 +211,7 @@ jobs:
           DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
           AI: ${{ inputs.ai }}
           CORE: ${{ inputs.core }}
-          TARGET_ENV: ${{ github.ref_name == 'main' && 'railway-production' || 'railway-staging' }}
+          TARGET_ENV: ${{ github.ref_name == 'main' && 'backend-production' || 'backend-staging' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           SHA: ${{ inputs.sha }}
         run: |
