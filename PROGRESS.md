@@ -1,3 +1,11 @@
+### 2026-10-28 — README shows the system architecture and tech stack
+
+| Area | Change |
+|---|---|
+| Docs | • The README opens with a tech stack badge row, a short summary and highlights, and shows `ci-cd.svg` as the system architecture instead of the older `architecture.svg`<br>• The parts table gains a "Runs on" column and no longer names Railway |
+
+Check: all 18 badge URLs return 200 with a logo; the page was not rendered on GitHub. Commit: the squash merge of this branch.
+
 ### 2026-10-28 — Production Core answers on production.103-162-31-93.sslip.io
 
 | Area | Change |
