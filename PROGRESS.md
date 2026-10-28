@@ -1,3 +1,12 @@
+### 2026-10-28 — Zalo sign-in tested on a phone; clearer config error
+
+| Area | Change |
+|---|---|
+| Mobile | • A Firebase custom token from another project (`auth/custom-token-mismatch`, `auth/invalid-custom-token`) now reads "Cách đăng nhập này chưa dùng được lúc này. Vui lòng chọn cách khác hoặc thử lại sau" with the code, instead of "Vui lòng thử lại", since retrying cannot fix it |
+| Test | • Zalo LOGIN on Android passed against staging Core on a Samsung SM-A528B (Android 14): `POST /auth/zalo/native/exchange` 200, Firebase custom token sign-in, `POST /auth/session` 200 as OWNER<br>• The APK was hand-repacked: the JS of #399 on a dev build with Firebase `smart-ledger-c2892`, signed with the debug key. Its App Link still named the old Railway host, so the return link was passed to the app over `adb` from the browser's DevTools<br>• A first try on a production-based APK failed with `auth/custom-token-mismatch`: native Firebase reads `google-services.json`, which pointed at `smart-ledger-production` while staging Core signs for `smart-ledger-c2892`. Test Zalo only with an APK whose Firebase project matches the Core |
+
+Check: `npx tsc --noEmit` and `npm test` (frontend/mobile); app log on the phone with `debugLog` turned on in the test bundle only. Not verified: the App Link opening the app by itself, which needs a CI APK built from `staging`, and iOS. Commit: the one that adds this entry.
+
 ### 2026-10-28 — Zalo sign-in button works again
 
 | Area | Change |
@@ -185,13 +194,3 @@ Check: link and anchor check over the edited files passes. Commit: the one that 
 **Flow explained:** The contract owns public date/count/error/audit rules; technical design explains SQL aggregation, transaction boundaries and validation limits. CI on feature HEAD still needs a runner. Manual CI #787 was launched on main and could not start because the repository owner's account is locked by billing; downstream summary also received an empty runner output. GitHub-hosted reruns cannot bypass that billing lock, and the user does not manage the disconnected M4 Pro runners.
 
 **Check:** Compared the remaining findings with current documentation and the prior migrated-DB evidence; `git diff --check` passed. Earlier full Core PostgreSQL verify (1,422 passing cases) and review-follow-up verify (29 passing cases) remain the local evidence; no new test run is claimed for this docs-only follow-up. No merge/deploy or billing/runner administration was performed.
-
-### [2026-10-26] — [Docs] Address admin growth PR review and stale handoff notes
-
-**Done:** Recorded the owner's narrowly scoped Core exception for PR #368 in AGENTS.md; added Javadoc for the ADMIN support API and growth invariants/tests; corrected stale root/Core README and technical-design statements about real FE integration, existing V18 migrations and publication status. No Java behavior, schema, dependency or runtime-setting change. PR title/description and review state are handled on GitHub; no merge or deployment is authorized by this follow-up.
-
-**Changed files:** AGENTS.md, BLOCKERS.md, root/Core READMEs, Core chart handoff, technical design, the seven Java files already touched by the growth feature, and this new entry. Existing Zalo, frontend lockfile and IDE changes were preserved outside the commit.
-
-**Flow explained:** Existing ADMIN read → validated Vietnam date projection → mandatory audit stays unchanged. Source comments now explain this flow and its tests; the PR distinguishes local verification from CI and FE/staging acceptance. The first CI run lost both self-hosted runners before executing steps; artifact quota affected only the optional summary upload, already configured to continue on error.
-
-**Check:** Comment/whitespace-stripped Java comparison against HEAD passed for all seven edited Java files. `mvnw.cmd -B -Dtest=AdminDashboardControllerWebTest,AdminAccessAuditServiceTest verify` passed: 29 tests, zero failures/errors/skips, executable JAR packaged; local log `backend/core/target/admin-growth-pr368-review-verify.log` (ignored). Prior full PostgreSQL evidence remains 1,422 passing testcases on `976be02`; it was not rerun for this comments-only follow-up. New GitHub CI and CodeRabbit results must be read from PR #368 rather than inferred from these local checks.
