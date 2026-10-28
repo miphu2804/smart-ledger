@@ -91,8 +91,21 @@ jobs:
           alias="smart-ledger-preview-0$((PR % 10)).vercel.app"
           api=https://api.vercel.com
           auth="Authorization: Bearer $VERCEL_TOKEN"
-          id=$(curl -fsS -H "$auth" "$api/v13/deployments/${URL#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
-          curl -fsS -X POST -H "$auth" -H "Content-Type: application/json" \
+          # curl -f prints nothing of the response, so a rejected alias showed only "curl: (22)". Print the
+          # status and Vercel's own message, which names the cause (a domain missing from the project, say).
+          vercel_api() {
+            local response status body
+            response=$(curl -sS -w '\n%{http_code}' "$@") || return 1
+            status=${response##*$'\n'}
+            body=${response%$'\n'*}
+            if [ "${status#2}" = "$status" ]; then
+              echo "::error::Vercel API returned $status: $body"
+              return 1
+            fi
+            printf '%s\n' "$body"
+          }
+          id=$(vercel_api -H "$auth" "$api/v13/deployments/${URL#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
+          vercel_api -X POST -H "$auth" -H "Content-Type: application/json" \
             -d "$(jq -n --arg alias "$alias" '{alias: $alias}')" \
             "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID"
           echo "url=https://$alias" >> "$GITHUB_OUTPUT"
@@ -111,8 +124,21 @@ jobs:
           set -euo pipefail
           api=https://api.vercel.com
           auth="Authorization: Bearer $VERCEL_TOKEN"
-          id=$(curl -fsS -H "$auth" "$api/v13/deployments/${URL#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
-          curl -fsS -X POST -H "$auth" -H "Content-Type: application/json" \
+          # curl -f prints nothing of the response, so a rejected alias showed only "curl: (22)". Print the
+          # status and Vercel's own message, which names the cause (a domain missing from the project, say).
+          vercel_api() {
+            local response status body
+            response=$(curl -sS -w '\n%{http_code}' "$@") || return 1
+            status=${response##*$'\n'}
+            body=${response%$'\n'*}
+            if [ "${status#2}" = "$status" ]; then
+              echo "::error::Vercel API returned $status: $body"
+              return 1
+            fi
+            printf '%s\n' "$body"
+          }
+          id=$(vercel_api -H "$auth" "$api/v13/deployments/${URL#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
+          vercel_api -X POST -H "$auth" -H "Content-Type: application/json" \
             -d "$(jq -n --arg alias "$STAGING_ALIAS" '{alias: $alias}')" \
             "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID"
           echo "url=https://$STAGING_ALIAS" >> "$GITHUB_OUTPUT"
