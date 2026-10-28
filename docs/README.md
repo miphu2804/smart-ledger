@@ -53,7 +53,7 @@ Start with the path that matches your task; each step links to the next level of
 | [Mobile wording review](design/mobile-wording-review.md) | Proposed UI wording, icon and feedback mapping pending product approval |
 | [Local development](development/local-development.md) | Setup, run commands, pre-PR checks, local Compose, the local database and the shared-database migration workflow |
 | [Mobile iOS device release](development/mobile-ios-device-release.md) | Build and install a Release configuration on a connected iPhone |
-| [Secrets and env files](development/secrets-and-env.md) | Encrypted env files per environment (DVC, age, R2), the env file format, onboarding, changing a secret, adding or removing a person; flow in the [secrets sync diagram](architecture/diagrams/images/secrets-sync.svg) (edit [`secrets-sync.drawio`](architecture/diagrams/src/secrets-sync.drawio) and re-export the SVG) |
+| [Secrets and env files](development/secrets-and-env.md) | Env files per environment kept in Dopbase, the env file format, onboarding, changing a secret, adding or removing a person |
 | [CI/CD to the VPS and Vercel](development/ci-cd.md) | Flow from feature branch to the VPS and Vercel, GitHub environments, VPS provisioning and Core CORS origins |
 | [Marketing screenshots](marketing/README.md) | Phone-ratio screenshots of the app per product flow (dashboard, chat, barcode, voice) for marketing; demo data, not a source of truth for behavior |
 
