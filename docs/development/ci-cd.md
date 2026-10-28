@@ -233,6 +233,26 @@ https://app-staging.songheloi.id.vn,https://smart-ledger-staging.vercel.app,http
 
 The `preview-0N` origins are kept for when PR previews return; Firebase Authorized domains must list them too.
 
+<a id="monitoring"></a>
+
+## Monitoring
+
+[`deploy/monitoring/`](../../deploy/monitoring/) runs once per VPS in `/opt/smart-ledger-monitoring` and watches every environment: Alloy collects host, container and probe metrics plus container logs, Prometheus keeps metrics for 30 days, Loki keeps logs for 14 days, and Grafana shows them at `https://<MONITOR_DOMAIN>` and sends alerts to Discord. Each container has a memory limit, about 1 GB in total, so the stack cannot starve Core or AI.
+
+The playbook sets it up when `.env.vps` has `MONITOR_DOMAIN`, `GRAFANA_ADMIN_PASSWORD` and `MONITOR_DISCORD_WEBHOOK_URL`; each run also writes `targets/<environment>.json`, the HTTPS probe of that environment's Core health. Point an A record for `MONITOR_DOMAIN` at the VPS first. Sign-up and anonymous access are off; the admin password applies on the first start only.
+
+Datasources and alerts are provisioned from the repository and cannot be edited in the UI; change the files and re-run the playbook. The alerts are:
+
+| Alert | Fires when |
+|---|---|
+| Endpoint down | The HTTPS health probe of an environment fails for 2 minutes |
+| Container restarting | A container starts more than 3 times in 15 minutes |
+| Host memory high | VPS memory use stays above 90% for 5 minutes |
+| Host disk high | The root disk stays above 85% for 10 minutes |
+| Certificate expiring | A Core certificate expires in under 14 days |
+
+AI has no public URL, so a stopped AI container shows only through the restart alert or the Core errors it causes. Application metrics of Core, AI and Bifrost, and dashboards, are not built yet.
+
 ## Production checklist
 
 A deploy can succeed while production still does not work. Check these first:
