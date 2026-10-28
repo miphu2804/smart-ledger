@@ -1,0 +1,37 @@
+# Dopbase, the team's secrets manager, shared by every environment on the VPS. It publishes no port: the shared
+# Caddy in deploy/edge/ reaches it as `dopbase` on the external `edge` network. Lives in /opt/dopbase with its own
+# lifecycle, so an app deploy never restarts it. Its SQLite database and master key live in the dopbase_data
+# volume, copied off-site every night by backup.sh.
+# The project is named here instead of after the directory, so the volume is `dopbase_data` rather than the
+# doubled `dopbase_dopbase_data`, and `container_name` keeps the container `dopbase` instead of
+# `dopbase-dopbase-1`; only one instance ever runs, so a fixed name costs nothing.
+name: dopbase
+
+services:
+  dopbase:
+    container_name: dopbase
+    build: .
+    image: smart-ledger/dopbase:local
+    environment:
+      DOPBASE_PUBLIC_URL: ${DOPBASE_PUBLIC_URL:?DOPBASE_PUBLIC_URL is required}
+    volumes:
+      - data:/data
+    networks:
+      edge:
+        aliases: [dopbase]
+    # Same reason as the app stack: the VPS resolver appends a search domain with wildcard DNS.
+    dns_search: .
+    restart: unless-stopped
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  edge:
+    external: true
+
+volumes:
+  # `dopbase` plus `data` is the volume `dopbase_data` that backup.sh mounts. An instance created before this
+  # rename keeps its data in `dopbase_dopbase_data`, which has to be copied over before the first `up`.
+  data:
