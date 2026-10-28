@@ -167,7 +167,7 @@ jobs:
           DEPLOY_CORE_IMAGE: ${{ inputs.core && env.CORE_IMAGE || '' }}
         run: |
           ssh -F "$SSH_CONFIG" vps \
-            "APP_DIR='$APP_DIR' AI_IMAGE='$DEPLOY_AI_IMAGE' CORE_IMAGE='$DEPLOY_CORE_IMAGE' bash -s" \
+            "APP_DIR='$APP_DIR' ENVIRONMENT='$DEPLOY_ENV' AI_IMAGE='$DEPLOY_AI_IMAGE' CORE_IMAGE='$DEPLOY_CORE_IMAGE' bash -s" \
             < deploy/vps/deploy.sh
       # Keeps the KEEP_IMAGES latest versions of this environment's packages, newest first by creation, so the
       # running image is never the one removed. A plain REST call with the job's own GITHUB_TOKEN, which the source
