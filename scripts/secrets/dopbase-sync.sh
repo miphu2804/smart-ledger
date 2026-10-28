@@ -2,8 +2,9 @@
 # Moves the env files of one environment between secrets/<environment>/env/ and Dopbase, so every teammate
 # pulls the same values from one server. Each file is its own Dopbase project, so the web UI and access rules
 # split by service, and the stage is the Dopbase environment:
-#   secrets/staging/env/.env.core                    <->  smartledger-core/staging
-#   secrets/staging/env/github/.env.vercel-staging   <->  smartledger-github-vercel-staging/staging
+#   secrets/staging/env/.env.core                    <->  core/staging
+#   secrets/staging/env/github/.env.vercel-staging   <->  github-vercel-staging/staging
+# The Dopbase instance serves only SmartLedger, so every project on it maps to a file.
 # A file whose name holds `.` or `_` (.env.railway.tokens) is skipped: Dopbase project names allow neither.
 # The CLI asks for the password on every export, so a pull asks once per file.
 # Needs the dopbase CLI, logged in once with `dopbase client connect <url>` and `dopbase login`.
@@ -13,7 +14,6 @@ cd "$(git rev-parse --show-toplevel)"
 action="${1:?usage: dopbase-sync.sh push|pull <environment>}"
 environment="${2:?usage: dopbase-sync.sh push|pull <environment>}"
 dir="secrets/$environment/env"
-prefix="smartledger-"
 
 main() {
   case "$action" in
@@ -43,7 +43,7 @@ pull() {
   build="$(mktemp -d)"
   trap 'rm -rf "$build"' EXIT
   # A plain list, not a pipe into the loop: the password prompt of each export needs the terminal's stdin.
-  projects="$(dopbase project list --json | jq -r --arg p "$prefix" '.[].name | select(startswith($p))')"
+  projects="$(dopbase project list --json | jq -r '.[].name')"
   for project in $projects; do
     dopbase env show "$project/$environment" >/dev/null 2>&1 || continue
     file="$dir/$(file_of "$project")"
@@ -57,16 +57,15 @@ pull() {
 
 project_of() {
   case "${1#"$dir"/}" in
-    github/*) echo "${prefix}github-${1##*/.env.}" ;;
-    *) echo "$prefix${1##*/.env.}" ;;
+    github/*) echo "github-${1##*/.env.}" ;;
+    *) echo "${1##*/.env.}" ;;
   esac
 }
 
 file_of() {
-  name="${1#"$prefix"}"
-  case "$name" in
-    github-*) echo "github/.env.${name#github-}" ;;
-    *) echo ".env.$name" ;;
+  case "$1" in
+    github-*) echo "github/.env.${1#github-}" ;;
+    *) echo ".env.$1" ;;
   esac
 }
 
