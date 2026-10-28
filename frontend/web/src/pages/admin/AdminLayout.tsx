@@ -92,7 +92,8 @@ export default function AdminLayout() {
   const toast = useToast()
   const scenario = useSyncExternalStore(subscribeScenario, getScenario)
 
-  const [navOpen, setNavOpen] = useState(false)
+  // Menu trên điện thoại chỉ mở cho trang lúc bấm mở: đổi trang là tự đóng, không cần effect
+  const [navOpenAt, setNavOpenAt] = useState<string | null>(null)
   const [dataVersion, setDataVersion] = useState(0)
   const [openTasks, setOpenTasks] = useState<number | null>(null)
   const [resetOpen, setResetOpen] = useState(false)
@@ -105,7 +106,6 @@ export default function AdminLayout() {
   const bump = useCallback(() => setDataVersion((v) => v + 1), [])
   const openCreateTask = useCallback((prefill?: TaskPrefill) => setTaskModal({ open: true, prefill }), [])
 
-  useEffect(() => setNavOpen(false), [pathname])
   // Task chỉ có ở chế độ mock (Core chưa có API task)
   useEffect(() => {
     if (!USE_MOCK) return
@@ -156,13 +156,13 @@ export default function AdminLayout() {
       <a href="#main" className="skip-link">
         Bỏ qua điều hướng
       </a>
-      <div className={`shell${collapsed ? ' is-collapsed' : ''}${navOpen ? ' nav-open' : ''}`}>
+      <div className={`shell${collapsed ? ' is-collapsed' : ''}${navOpenAt === pathname ? ' nav-open' : ''}`}>
         <aside className="sb" aria-label="Điều hướng quản trị">
           <div className="sb-brand">
-            <BrandMark />
+            <BrandMark size={36} />
             <div className="sb-brand-text">
               <strong>Sổ Nghe Lời</strong>
-              <span>Admin workspace</span>
+              <span>Trang quản trị</span>
             </div>
             <CaretUpDown size={16} className="ico-chev" aria-hidden="true" />
           </div>
@@ -226,11 +226,11 @@ export default function AdminLayout() {
             </button>
           </div>
         </aside>
-        <div className="sb-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />
+        <div className="sb-backdrop" onClick={() => setNavOpenAt(null)} aria-hidden="true" />
 
         <div className="main">
           <header className="tb">
-            <button type="button" className="icon-btn tb-burger" onClick={() => setNavOpen(true)} aria-label="Mở menu">
+            <button type="button" className="icon-btn tb-burger" onClick={() => setNavOpenAt(pathname)} aria-label="Mở menu">
               <List size={20} />
             </button>
             <div className="tb-title">
@@ -353,12 +353,8 @@ function GlobalSearch({ onOpenShop, onOpenUser }: { onOpenShop: (id: string) => 
 
   useEffect(() => {
     const term = q.trim()
-    if (term.length < 2) {
-      setRes(null)
-      return
-    }
+    if (term.length < 2) return
     let alive = true
-    setLoading(true)
     const t = setTimeout(() => {
       quickSearch(term)
         .then((r) => alive && (setRes(r), setErr(false)))
@@ -402,8 +398,12 @@ function GlobalSearch({ onOpenShop, onOpenUser }: { onOpenShop: (id: string) => 
             value={q}
             onFocus={() => setOpen(true)}
             onChange={(e) => {
-              setQ(e.target.value)
+              const next = e.target.value
+              setQ(next)
               setOpen(true)
+              // Từ khoá quá ngắn thì bỏ kết quả cũ; đủ dài thì hiện "Đang tìm…" tới khi kết quả về
+              if (next.trim().length < 2) setRes(null)
+              else if (next.trim() !== q.trim()) setLoading(true)
             }}
           />
           <kbd aria-hidden="true">⌘K</kbd>

@@ -65,6 +65,7 @@ export default function NotificationSettings() {
           title="Hệ thống"
           subtitle="Tiệm bị tạm ngưng hoặc mở lại; luôn báo vì ảnh hưởng tới bán hàng"
           always
+          last
         />
       </Card>
 

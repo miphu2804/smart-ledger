@@ -1187,7 +1187,7 @@ export default function Voice() {
               </T>
             </Row>
             {pendingExpenses.map((e, idx) => (
-              <Row key={`${e.title}-${idx}`} style={styles.expenseRow}>
+              <Row key={`${e.title}-${idx}`} style={[styles.expenseRow, idx < pendingExpenses.length - 1 && styles.expenseRowBorder]}>
                 <T size={13.5} color={voiceTheme.ink} numberOfLines={1} style={{ flex: 1 }}>
                   {e.title}
                 </T>
@@ -1739,11 +1739,10 @@ const styles = StyleSheet.create({
   },
   expenseRow: {
     paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: voiceTheme.borderLight,
     alignItems: 'center',
     gap: 8,
   },
+  expenseRowBorder: { borderBottomWidth: 1, borderBottomColor: voiceTheme.borderLight },
   bigCheckoutBtn: {
     marginTop: 6,
     marginBottom: 14,
