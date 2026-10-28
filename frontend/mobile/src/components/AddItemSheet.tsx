@@ -21,7 +21,7 @@ export function AddItemSheet({
 }) {
   return (
     <Sheet visible={visible} onClose={onClose} title="Thêm món">
-      {products.length ? products.map((p) => (
+      {products.length ? products.map((p, i) => (
         <Pressable
           key={p.id}
           onPress={() => {
@@ -29,7 +29,7 @@ export function AddItemSheet({
             onPick({ productId: p.id, name: p.name, price: p.sellingPriceVnd, qty: 1 });
             onClose();
           }}
-          style={({ pressed }) => [styles.pick, pressed && { backgroundColor: colors.brandTint }]}
+          style={({ pressed }) => [styles.pick, i < products.length - 1 && styles.pickBorder, pressed && { backgroundColor: colors.brandTint }]}
         >
           <T w="semibold" size={14} style={{ flex: 1 }}>
             {p.name}
@@ -51,8 +51,7 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 13,
     paddingHorizontal: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
     borderRadius: 8,
   },
+  pickBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
 });

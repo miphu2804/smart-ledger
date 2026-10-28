@@ -28,7 +28,7 @@ export default function Settings() {
           value={settings.haptics}
           onChange={(on) => setSetting('haptics', on)}
         />
-        <SettingRow icon="mic" title="Đọc lại đơn bằng giọng nói" subtitle="Nhắc lại món đã nghe trước khi thanh toán" soon />
+        <SettingRow icon="mic" title="Đọc lại đơn bằng giọng nói" subtitle="Nhắc lại món đã nghe trước khi thanh toán" soon last />
       </Card>
 
       <T w="bold" size={14} color={colors.muted} style={styles.sectionTitle}>
@@ -49,7 +49,7 @@ export default function Settings() {
           value={settings.stockAlerts}
           onChange={(on) => setSetting('stockAlerts', on)}
         />
-        <SettingRow icon="cloud" title="Sao lưu tự động" subtitle="Đồng bộ dữ liệu khi có kết nối mạng" soon />
+        <SettingRow icon="cloud" title="Sao lưu tự động" subtitle="Đồng bộ dữ liệu khi có kết nối mạng" soon last />
       </Card>
 
       {/* Màn kết nối máy in mới là bản mẫu (In thử luôn báo chưa kết nối); máy in nằm ngoài PRD MVP */}
