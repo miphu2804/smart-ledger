@@ -1,3 +1,11 @@
+### 2026-10-28 — README reads as tables
+
+| Area | Change |
+|---|---|
+| Docs | • The README drops the Highlights list and gains Overview, Tech stack, color legend and Getting started tables, so each section scans without reading a paragraph<br>• The Overview lists only what Core and AI do today |
+
+Check: badge URLs resolve (18 checked earlier, Redis removed since no feature reads it); README not rendered on GitHub. Commit: the squash merge of this branch.
+
 ### 2026-10-28 — README shows the system architecture and tech stack
 
 | Area | Change |
