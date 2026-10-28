@@ -55,6 +55,7 @@ ZALO_APP_ID=...
 | File in `env/` | Used by | staging | production |
 |---|---|---|---|
 | `.env.core`, `.env.ai` | Core and AI: the env files the Ansible playbook uploads to the VPS, plus settings left at their code default; staging copies go to `backend/core/.env` and `backend/ai/.env` with `local.env.*` put over them | yes | yes (read in place) |
+| `.env.bifrost` | Bifrost model gateway: the provider key and the virtual key AI uses, uploaded to the VPS as `bifrost.env` ([CI/CD](ci-cd.md#service-variables)) | yes | yes |
 | `.env.mobile` | mobile app; copied to `frontend/mobile/.env` | yes | no |
 | `.env.release` | Android APK release: R2 bucket, keystore | no | yes |
 | `.env.loadtest`, `.env.monitor` | load test and uptime monitor; staging copies go to `scripts/loadtest/.env.staging` and `scripts/monitor/.env` | yes | loadtest only |
