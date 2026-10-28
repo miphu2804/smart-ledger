@@ -6,6 +6,66 @@
 
 Check: `npm run typecheck` and `npm run build` pass; `npm run lint` shows only the four warnings that #381 fixes; login, the dashboard sidebar (open and collapsed), the 403 page and the phone layout checked in the browser on a mock build. Not verified: a build against the real Core. Commit: the one that adds this entry.
 
+### 2026-10-28 — CI/CD guide reads as a reference
+
+| Area | Change |
+|---|---|
+| Docs | • `docs/development/ci-cd.md` is rewritten as short tables, numbered steps and command blocks, from 7,525 to 3,259 words, keeping every fact a reader needs and every anchor other files link to<br>• The stale "No path filtering" limit is removed, since CI filters by path |
+
+Check: every relative link and linked anchor resolves; facts not re-checked against the workflow files. Commit: the squash merge of this branch.
+
+### 2026-10-28 — README reads as tables
+
+| Area | Change |
+|---|---|
+| Docs | • The README drops the Highlights list and gains Overview, Tech stack, color legend and Getting started tables, so each section scans without reading a paragraph<br>• The Overview lists only what Core and AI do today |
+
+Check: badge URLs resolve (18 checked earlier, Redis removed since no feature reads it); README not rendered on GitHub. Commit: the squash merge of this branch.
+
+### 2026-10-28 — README shows the system architecture and tech stack
+
+| Area | Change |
+|---|---|
+| Docs | • The README opens with a tech stack badge row, a short summary and highlights, and shows `ci-cd.svg` as the system architecture instead of the older `architecture.svg`<br>• The parts table gains a "Runs on" column and no longer names Railway |
+
+Check: all 18 badge URLs return 200 with a logo; the page was not rendered on GitHub. Commit: the squash merge of this branch.
+
+### 2026-10-28 — Production Core answers on production.103-162-31-93.sslip.io
+
+| Area | Change |
+|---|---|
+| Deploy | • The production Caddy site serves `production.103-162-31-93.sslip.io` instead of the shorthand `prod.103-162-31-93.sslip.io`, which no client used yet |
+| Docs | • The CI/CD guide uses the new name and records that environment names are spelled out, never shortened |
+
+Check: playbook applied for production; `https://production.103-162-31-93.sslip.io/actuator/health` returns 200 `UP` with its own certificate, Core and AI still run `4a4f714`, staging still answers. Commit: the merge of this branch.
+
+### 2026-10-28 — Backend GitHub environments named backend-staging and backend-production
+
+| Area | Change |
+|---|---|
+| CI | • `deploy-backend` uses environments `backend-staging` and `backend-production` instead of `railway-*`, so their names no longer depend on the host<br>• The new environments carry the same branch rules, production approval, variables and secrets, except `RAILWAY_TOKEN`, which CD does not use |
+| Docs | • The CI/CD guide uses the new names and keeps the `railway-*` environments only for a rollback to Railway |
+
+Check: `actionlint`, the deploy key in each new environment matches its public key, and a staging CD run deploys through `backend-staging`. Not verified: production, which switches on the next release to `main`. Commit: the merge of this branch.
+### 2026-10-28 — Staging Core answers on staging.103-162-31-93.sslip.io
+
+| Area | Change |
+|---|---|
+| Deploy | • The staging site of the shared Caddy serves `staging.103-162-31-93.sslip.io` and, until every client has moved, the bare `103-162-31-93.sslip.io`, so both environments carry their name |
+| Clients | • Staging web, preview, landing, Android, monitor, load test and release-script defaults use the `staging.` name |
+
+Check: both names answer HTTPS health 200 through the shared Caddy. Commit: the merge of this branch.
+
+### 2026-10-28 — Staging and production share one VPS behind one Caddy
+
+| Area | Change |
+|---|---|
+| Deploy | • Caddy moves to its own project in `deploy/edge/` (`/opt/smartledger-edge`) that owns ports 80 and 443 and routes `103-162-31-93.sslip.io` to `core-staging` and `prod.103-162-31-93.sslip.io` to `core-production` over the Docker network `edge`<br>• Each environment keeps its own Compose project (`/opt/smartledger`, `/opt/smartledger-production`); Core joins `edge` under `CORE_ALIAS`, AI stays on the project network<br>• Caddy and Core resolve without the VPS search domain, whose wildcard DNS sent `core-production` to an outside host<br>• The playbook runs once per environment and writes `sites/<environment>.caddy` |
+| Clients | • Staging web, landing, Android, preview, monitor, load test and release-script defaults point at the VPS instead of Railway |
+| Docs | • The CI/CD guide records the shared VPS, its domains and the accepted loss of isolation between staging and production |
+
+Check: playbook applied to the VPS for staging and production; staging HTTPS health 200 through the shared Caddy with the copied certificate, Core reaches AI, production domain gets its certificate and answers 502 until its first deploy. Not verified: a production deploy, which needs the release to `main`. Commit: the merge of this branch.
+
 ### 2026-10-27 — Backend on a VPS through GHCR and Caddy
 
 | Area | Change |
@@ -139,55 +199,3 @@ Check: link and anchor check over the edited files passes. Commit: the one that 
 **Changed files:** `docs/architecture/diagrams/src/ci-cd.drawio`, `docs/architecture/diagrams/images/ci-cd.svg` (re-exported with draw.io 28.2.5 using the command in `docs/development/ci-cd.md`); this entry.
 
 **Check:** exported a PNG preview and checked the pipeline band: labels fit and do not overlap the icons.
-
-### [2026-10-25 21:00 UTC+07:00] — [Change] CD follows CI_RUNNER when CD_RUNNER is unset
-
-**Done:** With only `CI_RUNNER=self-hosted` set during a billing lock, CD still picked GitHub-hosted and its deploys could not start. CD now reads its input `runner`, else `CD_RUNNER`, else `CI_RUNNER`, else github-hosted, so one variable moves tests and deploys; `CD_RUNNER` is only needed to run deploys somewhere else than tests.
-
-**Changed files:** `.github/workflows/cd.yml`, `.github/workflows/ci.yml` (comment), `.github/workflows/select-runner.yml` (comment), `docs/development/ci-cd.md`; this entry.
-
-**Check:** actionlint 1.7.8 reports no errors. **Not verified:** a CD run on GitHub.
-
-### [2026-10-25 18:30 UTC+07:00] — [Change] CD is its own workflow with its own runner
-
-**Done:** Deploys moved out of CI into `cd.yml`, which starts with its own `select-runner` (input `runner`, else variable `CD_RUNNER`, else github-hosted), so tests and deploys can run on different machines. On a push to `staging` or `main`, CI's last job `cd` judges each area on its own checks (backend on `ai`, `core`, `container-images`; web on `mobile-web`; landing on `landing`) and starts CD with `workflow_dispatch` on that branch for the commit, the CI run and the areas that changed and passed; a re-run of CI hands off every passing area. CD's `gate` refuses another branch, a commit not on the branch, or a CI run that tested another commit or failed a needed job, then calls `deploy-backend.yml`, `deploy-web.yml` and `deploy-landing.yml`, which now check out the given commit. A person can start CD by hand to redeploy without testing again. Production approval and branch policies stay on the GitHub environments.
-
-**Changed files:** `.github/workflows/cd.yml` — added; `.github/workflows/{ci,deploy-backend,deploy-web,deploy-landing}.yml`, `docs/development/ci-cd.md`, `CONTRIBUTING.md`, `frontend/mobile/README.md`, `frontend/web/README.md` — modified; this entry.
-
-**Check:** actionlint 1.7.8 reports no errors; the hand-off script picks the right areas for a backend change with a red landing, a docs-only push and a re-run with a red core; the gate script, with a stubbed `gh`, passes a backend deploy and refuses a failed `mobile-web`, a run for another commit, a commit not on `staging` and a feature branch. **Not verified:** a run on GitHub, that a `workflow_dispatch` from `GITHUB_TOKEN` starts CD here, environment secrets in the called deploy workflows, a real deploy.
-
-### [2026-10-25 17:30 UTC+07:00] — [Change] CI picks its runner first and deploys each area from its own workflow
-
-**Done:** The deploy jobs lived in `ci.yml` beside the tests, every job repeated the runner expression, and the backend deploy waited for `mobile-web`. Now the first job, `select-runner`, picks the runner for the whole run from the shared `select-runner.yml` (also used by `mobile-release.yml`): `CI_RUNNER` or the manual input `runner` takes `github-hosted` (default), `self-hosted` or the new `auto` (a free self-hosted machine, else `ubuntu-24.04`); pull requests from forks stay GitHub-hosted. With `self-hosted` the pick also runs on the self-hosted machine, so a run needs no GitHub-hosted minute. The deploy jobs moved unchanged into `deploy-backend.yml`, `deploy-web.yml` and `deploy-landing.yml`, called by `ci.yml`; each sets its own GitHub environment, and `deploy-backend` now waits only for `ai`, `core` and `container-images`. PostgreSQL for `ai` and `core` starts with `docker run` on every runner instead of a service container on GitHub-hosted, with a TCP readiness check. Required check names are unchanged.
-
-**Changed files:** `.github/workflows/{select-runner,deploy-backend,deploy-web,deploy-landing}.yml` — added; `.github/workflows/ci.yml`, `.github/workflows/mobile-release.yml`, `docs/development/ci-cd.md` — modified; this entry.
-
-**Check:** actionlint 1.7.8 reports no errors on all workflows; the moved deploy steps, environments, env and concurrency compare equal to the old jobs; the pick script returns the expected runner for github-hosted, self-hosted (with and without a label), a fork pull request, auto without a token and an unknown value. **Not verified:** a run on GitHub (GitHub-hosted, self-hosted and auto), environment secrets reaching the called deploy workflows, a real deploy.
-
-### [2026-10-24 14:30 UTC+07:00] — [Feature] Landing introduces the team
-
-**Done:** The course asks the landing to show who built the product, and it had no team information. A new "Đội ngũ" section (after the POS comparison, linked from the top menu and the footer) shows the six members' own "Đội ngũ Sổ Nghe Lời" posters uncropped, as Orei asked: Minh Thọ (Leader), Minh Phú (AI Engineer), Thượng Hiệp (Frontend Developer), Thu Thảo (Backend Developer), Quỳnh Như (Business Analyst), Kiều Chinh (Marketing), with a line about Team HEXA, EXE201, FPT University. Posters are WebP (940×788, about 70 KB each), lazy-loaded, with name and role in `alt`. The FAQ answer on sign-in said Facebook or Zalo; it now says email and password or Google, which is what the app offers (Facebook is paused, Zalo shows "Sắp có").
-
-**Changed files:** `frontend/web/public/team/{minh-tho,minh-phu,thuong-hiep,thu-thao,quynh-nhu,kieu-chinh}.webp` — added; `frontend/web/src/pages/landing/LandingPage.tsx`, `frontend/web/src/pages/landing/SiteFooter.tsx`, `frontend/web/src/styles/landing.css` — modified; this entry.
-
-**Check:** `npm run typecheck`, `npm run lint` (no new warnings) and `npm run build` in `frontend/web`; dev server at 1280 px shows the six posters in three columns, all loaded, "Đội ngũ" in the menu and footer; the grid drops to two columns under 960 px and one under 560 px with no horizontal overflow at 375 px.
-
-### [2026-10-24 10:30 UTC+07:00] — [Change] Admin dashboard ships inside the landing at /admin
-
-**Done:** For the course submission the admin needs one public link, and the separate admin Vercel project would have lived in another team's account. The landing deploy now carries the admin at `/admin` (real Core data) when its GitHub environment sets `VITE_ADMIN_ENABLED=true` with `VITE_API_ENDPOINT` and `VITE_FIREBASE_API_KEY`; without the flag the landing has no admin code, as before. Job `deploy-admin` from #342 is removed. The build check now fails on the mock demo password in any case, on missing admin routes or settings when the flag is on, and on admin code when it is off; with the flag on, the smoke test opens `/admin/login` and fails when Core still rejects a CORS preflight from the landing after 5 minutes.
-
-**Changed files:** `.github/workflows/ci.yml`, `docs/development/ci-cd.md`, `frontend/web/README.md` — modified; this entry.
-
-**Check:** YAML parses; the new build check, run by hand on two local builds, passes a plain landing and a landing with the admin, and fails an admin build without the flag and a plain build with the flag. **Not verified:** the job on GitHub, sign-in on the deployed landing (needs the landing origin in Core's `CORS_ALLOWED_ORIGINS` and an ADMIN account).
-
-### [2026-10-21 20:40 UTC+07:00] — [Feature] Web admin dashboard reads the real Core admin API
-
-**Done:** The admin pages in `frontend/web` called endpoints Core never had (`/auth/login`, `/admin/overview?days=`, `/admin/audit-logs`, no `/api/v1` prefix) and only worked on mock data. With `VITE_USE_MOCK=false` they now use Core:
-- **Sign-in:** Firebase email + password through the Firebase Auth REST API (no `firebase` package added), then `GET /api/v1/me`; only a Core account with role ADMIN gets in, others see "Tài khoản này không có quyền quản trị". The ID token stays in memory and refreshes itself; only the refresh token is kept (localStorage with "Ghi nhớ đăng nhập", sessionStorage without), so a reload stays signed in; sign-out clears both.
-- **Pages** (`src/pages/admin/core/`, service `src/services/adminApi.ts` typed after Core's DTOs, 0-based pages): Dashboard (owners and shops by status, new in 7/30/90 days, 5 newest shops, recent access), Khách hàng (Chủ tiệm / Cửa hàng tabs, search, status filter, paging; owner drawer with their shops; shop drawer with status history and pause/reopen through `PATCH /api/v1/shops/{id}/status`, a reason required to pause) and a new Nhật ký truy cập page (`/admin/access-logs`, filters by action, shop and dates).
-- AI Support, Tasks, quick search, notifications and the settings audit tab need APIs Core does not have, so they only show in mock mode; mock mode is unchanged.
-- **Deploy:** the admin is the same source deployed to a separate Vercel project by a new CI job `deploy-admin`, which reuses the `landing-staging`/`landing-production` environments (same Vercel team token, production approval) with its own `ADMIN_VERCEL_PROJECT_ID`, `ADMIN_URL`, `ADMIN_API_ENDPOINT` and `ADMIN_FIREBASE_API_KEY`, so the public landing still has no admin code. The job skips with a notice until those are set; it checks the build has the admin routes, no mock demo accounts and the right Core URL, then smoke-tests `ADMIN_URL/admin/login`.
-
-**Changed files:** `frontend/web/src/pages/admin/core/{CoreDashboardPage,CoreCustomersPage,CoreAccessLogsPage,parts}.tsx`, `frontend/web/src/pages/admin/core/coreUtils.ts`, `frontend/web/src/services/{adminApi,firebaseAuth}.ts` — added; `frontend/web/src/{AdminRoutes.tsx,config.ts,vite-env.d.ts}`, `frontend/web/src/services/{api,authService}.ts`, `frontend/web/src/pages/admin/{AdminLayout,LoginPage,SettingsPage}.tsx`, `frontend/web/.env.example`, `frontend/web/.gitignore` (ignore `.vercel`), `frontend/web/README.md`, `.github/workflows/ci.yml`, `docs/development/ci-cd.md`, `docs/contracts/api-contracts.md` — modified; this entry.
-
-**Check:** `npm run typecheck`, `npm run lint` (no new warnings) and `npm run build` in `frontend/web`; the landing build has no `AdminRoutes` chunk and no `admin123`; a real-mode admin build has the admin routes and no mock accounts. Local run against a fake Core and a fake Firebase Auth emulator (test data only): an OWNER account is refused, the ADMIN account reaches the dashboard, owner paging (20 + 3), search, owner and shop drawers, pausing a shop (button locked until a reason is typed, status, history and access log update), access-log filters, the invalid date range warning, reload keeping the session, mock-only routes redirecting, and sign-out clearing storage. A trial copy of this branch is deployed by hand (Vercel CLI) to a separate Vercel project, `smart-ledger-admin.vercel.app`, pointed at Core staging; its login page loads and the bundle has the admin routes, the Core staging URL and no mock accounts. **Not verified:** real Firebase and Core sign-in (Core staging still rejects that origin's CORS preflight with 403 until `CORS_ALLOWED_ORIGINS` includes it, and an ADMIN account is needed), the `deploy-admin` job on GitHub.

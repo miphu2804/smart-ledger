@@ -27,7 +27,7 @@ from src.sandbox.wrapper import Sandbox, SandboxLimits
 from src.security import require_internal_token
 from src.sql.repository import ShopDataRepository
 
-# Railway marks every stderr line as an error, so records below ERROR go to stdout
+# Log viewers mark every stderr line as an error, so records below ERROR go to stdout
 # and only ERROR and above go to stderr.
 stdout_handler = logging.StreamHandler(sys.stdout)
 stdout_handler.addFilter(lambda record: record.levelno < logging.ERROR)

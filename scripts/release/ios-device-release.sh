@@ -325,7 +325,7 @@ echo "  Commit: $commit"
 # exported mock flags cannot be turned back on by .env.
 export EXPO_PUBLIC_USE_MOCK=false EXPO_PUBLIC_MOCK_CORE=false EXPO_PUBLIC_MOCK_SHOPS=false
 api="${EXPO_PUBLIC_API_ENDPOINT:-$(sed -n 's/^EXPO_PUBLIC_API_ENDPOINT=//p' .env 2>/dev/null | tail -1 || true)}"
-export EXPO_PUBLIC_API_ENDPOINT="${api:-https://core-staging-01d2.up.railway.app}"
+export EXPO_PUBLIC_API_ENDPOINT="${api:-https://staging.103-162-31-93.sslip.io}"
 echo "  Mode:   real (mocks off), Core ${cyan}$EXPO_PUBLIC_API_ENDPOINT${reset}"
 
 if $checks; then
