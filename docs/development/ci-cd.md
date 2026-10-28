@@ -80,7 +80,6 @@ CI reads input `runner`, else repository variable `CI_RUNNER`. CD reads input `r
 
 - Keep backend secrets out of `vercel-*` and `landing-*`.
 - `vercel-preview` and `landing-preview` exist but are unused while PR previews are off.
-- `railway-staging` and `railway-production` only keep `RAILWAY_TOKEN` for a rollback to Railway; delete them when Railway shuts down.
 - Both backend environments use the same VPS and deploy key, so a `backend-staging` job can reach production containers. The approval guards only the `main` deploy. The project owner accepted this.
 
 <a id="vps"></a>

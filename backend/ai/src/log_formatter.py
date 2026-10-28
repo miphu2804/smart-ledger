@@ -1,9 +1,9 @@
-"""Log line format shared by the dev terminal and Railway's log viewer."""
+"""Log line format shared by the dev terminal and `docker compose logs`."""
 
 import logging
 
 # ANSI colors on the level name only, so a line reads as success, warning, or error
-# at a glance. Railway's viewer and a dev terminal both render these codes.
+# at a glance. Docker logs and a dev terminal both render these codes.
 LEVEL_COLORS = {
     logging.DEBUG: "\033[2m",
     logging.INFO: "\033[32m",
