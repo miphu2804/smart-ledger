@@ -132,16 +132,20 @@
       no_log: true
       notify: Apply the stack
 
-    # Only this line: the deploy rewrites the image lines of the same file.
-    - name: Name Core on the edge network
+    # Only these lines: the deploy rewrites the image lines of the same file. ENVIRONMENT names the Compose
+    # project (smart-ledger-staging, smart-ledger-production), which the app directory would otherwise name.
+    - name: Name the Compose project and Core on the edge network
       ansible.builtin.lineinfile:
         path: "{{ app_dir }}/.env"
         create: true
         owner: "{{ deploy_user }}"
         group: "{{ deploy_user }}"
         mode: "0600"
-        regexp: "^CORE_ALIAS="
-        line: "CORE_ALIAS=core-{{ smartledger_env }}"
+        regexp: "^{{ item.key }}="
+        line: "{{ item.key }}={{ item.value }}"
+      loop:
+        - { key: ENVIRONMENT, value: "{{ smartledger_env }}" }
+        - { key: CORE_ALIAS, value: "core-{{ smartledger_env }}" }
       notify: Apply the stack
 
     - name: Create the edge directories

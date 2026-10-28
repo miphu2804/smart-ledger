@@ -1,3 +1,12 @@
+### 2026-10-28 — Compose projects on the VPS are named smart-ledger
+
+| Area | Change |
+|---|---|
+| Deploy | • `deploy/vps/compose.yaml` and `deploy/edge/compose.yaml` set `name:`, so the projects are `smart-ledger-staging`, `smart-ledger-production` and `smart-ledger-edge` instead of being named after their directories<br>• `deploy/vps/deploy.sh` and `deploy/ansible/playbook.yml` write `ENVIRONMENT` to the project `.env`, which `compose.yaml` interpolates into the name; the app directories and `VPS_APP_DIR` are unchanged<br>• `deploy-backend.yml` forwards its `DEPLOY_ENV` to `deploy.sh` as `ENVIRONMENT` |
+| Docs | • The VPS section of `docs/development/ci-cd.md` lists each environment's Compose project and records that renaming a project needs the old project taken down and the Caddy certificate volume copied first |
+
+Check: `docker compose config` resolves `smart-ledger-staging`, `smart-ledger-production` and `smart-ledger-edge`, and fails when `ENVIRONMENT` is unset; `shellcheck` and `bash -n` pass on `deploy.sh`; `ansible-playbook --syntax-check` passes. The VPS itself is not migrated yet. Commit: the squash merge of this branch.
+
 ### 2026-10-28 — CI/CD guide reads as a reference
 
 | Area | Change |

@@ -88,12 +88,15 @@ CI reads input `runner`, else repository variable `CI_RUNNER`. CD reads input `r
 
 One VPS (`103.162.31.93`, Ubuntu 24.04, 4 GB RAM plus swap) runs both environments as separate Compose projects from [`deploy/vps/`](../../deploy/vps/). A shared Caddy from [`deploy/edge/`](../../deploy/edge/) owns ports 80 and 443, gets Let's Encrypt certificates and routes each name to its Core over Docker network `edge`. `ai` is reachable only from its own `core`.
 
-| Environment | Public name | Caddy routes to | App directory |
-|---|---|---|---|
-| staging | `staging.103-162-31-93.sslip.io` | `core-staging:8080` | `/opt/smartledger` |
-| production | `production.103-162-31-93.sslip.io` | `core-production:8080` | `/opt/smartledger-production` |
+| Environment | Public name | Caddy routes to | App directory | Compose project |
+|---|---|---|---|---|
+| staging | `staging.103-162-31-93.sslip.io` | `core-staging:8080` | `/opt/smartledger` | `smart-ledger-staging` |
+| production | `production.103-162-31-93.sslip.io` | `core-production:8080` | `/opt/smartledger-production` | `smart-ledger-production` |
+
+Compose names a project after its directory unless the file sets `name:`, which would make the projects `smartledger` and `smartledger-production` while the repository and the GHCR images are kebab-case. Each compose file sets `name:` instead, so the containers are `smart-ledger-staging-core-1`, `smart-ledger-production-core-1` and `smart-ledger-edge-caddy-1`, and the shared Caddy keeps its certificates in `smart-ledger-edge_caddy_data`. The app directories are unchanged, so each stack reads its own environment from `ENVIRONMENT` in the project `.env`, which both `deploy.sh` and the playbook write.
 
 - The bare `103-162-31-93.sslip.io` still reaches staging until every client has moved.
+- Renaming a project changes the container and volume prefix, so Compose treats the old project as unrelated rather than as orphans: a VPS that still runs the `smartledger*` projects needs `docker compose down` in the old project before the first `up` under the new name, and the shared Caddy needs its certificate volume copied from `smartledger-edge_caddy_data` first, or it asks Let's Encrypt for every hostname again.
 - With a real domain, point `api.<domain>` and `api-staging.<domain>` at the VPS and change `CADDY_DOMAIN`; nothing else changes.
 - The firewall opens only 22, 80 and 443. Supabase, Redis Cloud, Cloudinary and Firebase stay external.
 - One VPS is one point of failure: a staging service that runs out of memory takes production down too.
@@ -103,7 +106,7 @@ One VPS (`103.162.31.93`, Ubuntu 24.04, 4 GB RAM plus swap) runs both environmen
 1. Maven builds Core's jar on the runner; [`Dockerfile.prebuilt`](../../backend/core/Dockerfile.prebuilt) wraps it in a JRE.
 2. Images are pushed for `linux/amd64` as `ghcr.io/<owner>/<repo>-<service>-<environment>:<sha>`, using the job's `GITHUB_TOKEN`.
 3. The job uploads the settings GitHub owns, then runs [`deploy/vps/deploy.sh`](../../deploy/vps/deploy.sh) over SSH.
-4. `deploy.sh` writes the new image names to `.env`, pulls, starts `ai` then `core` with `docker compose up --wait` (fails if a container is unhealthy) and prunes unused images.
+4. `deploy.sh` writes `ENVIRONMENT` and the new image names to `.env`, pulls, starts `ai` then `core` with `docker compose up --wait` (fails if a container is unhealthy) and prunes unused images.
 5. GHCR keeps the latest 10 staging and 20 production images per service; that is the rollback window.
 
 The run page shows a summary table and uploads a `deploy-summary-<branch>` artifact.
@@ -123,7 +126,7 @@ Add `GHCR_USERNAME` and `GHCR_READ_TOKEN` to the shell if the packages are priva
 2. Generate a CI-only key with `ssh-keygen -t ed25519 -f deploy_key -N "" -C github-actions-deploy`. In `secrets/<environment>/env/.env.vps`, set `VPS_SSH_KEY` to `base64 < deploy_key | tr -d '\n'` and `VPS_SSH_PUBLIC_KEY` to `deploy_key.pub`, then delete both files and run `scripts/secrets/github.sh <environment> --apply`.
 3. Set `VPS_KNOWN_HOSTS` to `ssh-keyscan -t ed25519 <VPS_HOST>` (check the fingerprint in the provider console) and `VPS_HOST` in both `.env.vps` and the GitHub environment variables.
 4. Set `CADDY_DOMAIN`; production copies the `VPS_*` values from staging, because `deploy` has one key. Run `scripts/secrets/push.sh <environment>`.
-5. Create network `edge`. In the app directory, put `compose.yaml` from `deploy/vps/`, and with mode `600` `core.env`, `ai.env` (from [secrets](secrets-and-env.md)) and `.env` with `CORE_ALIAS=core-<environment>`. In `/opt/smartledger-edge`, put `deploy/edge/` and `sites/<environment>.caddy`, then reload Caddy.
+5. Create network `edge`. In the app directory, put `compose.yaml` from `deploy/vps/`, and with mode `600` `core.env`, `ai.env` (from [secrets](secrets-and-env.md)) and `.env` with `ENVIRONMENT=<environment>` and `CORE_ALIAS=core-<environment>`. In `/opt/smartledger-edge`, put `deploy/edge/` and `sites/<environment>.caddy`, then reload Caddy.
 6. After the first deploy, make the two GHCR packages public, or `docker login ghcr.io` once as `deploy` with a `read:packages` token.
 7. Check database access: Supabase's direct host is IPv6-only, so a VPS without IPv6 uses the session pooler URL. Allowlist the VPS in Supabase and Redis Cloud if restrictions are on.
 
