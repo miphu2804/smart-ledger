@@ -6,6 +6,14 @@
 
 Check: `npx tsc --noEmit` shows only the two existing errors for the missing `expo-application` and `expo-intent-launcher`; Settings, Notification settings and debt history checked on the mock web build (the last history row measures `0px` border). Not verified on screen: checkout, assistant history, the add-item sheet, voice expenses, and a real phone. Commit: the one that adds this entry.
 
+### 2026-10-28 — README reads as tables
+
+| Area | Change |
+|---|---|
+| Docs | • The README drops the Highlights list and gains Overview, Tech stack, color legend and Getting started tables, so each section scans without reading a paragraph<br>• The Overview lists only what Core and AI do today |
+
+Check: badge URLs resolve (18 checked earlier, Redis removed since no feature reads it); README not rendered on GitHub. Commit: the squash merge of this branch.
+
 ### 2026-10-28 — README shows the system architecture and tech stack
 
 | Area | Change |
@@ -183,11 +191,3 @@ Check: link and anchor check over the edited files passes. Commit: the one that 
 **Changed files:** `docs/architecture/diagrams/src/ci-cd.drawio`, `docs/architecture/diagrams/images/ci-cd.svg` (re-exported with draw.io 28.2.5 using the command in `docs/development/ci-cd.md`); this entry.
 
 **Check:** exported a PNG preview and checked the pipeline band: labels fit and do not overlap the icons.
-
-### [2026-10-25 21:00 UTC+07:00] — [Change] CD follows CI_RUNNER when CD_RUNNER is unset
-
-**Done:** With only `CI_RUNNER=self-hosted` set during a billing lock, CD still picked GitHub-hosted and its deploys could not start. CD now reads its input `runner`, else `CD_RUNNER`, else `CI_RUNNER`, else github-hosted, so one variable moves tests and deploys; `CD_RUNNER` is only needed to run deploys somewhere else than tests.
-
-**Changed files:** `.github/workflows/cd.yml`, `.github/workflows/ci.yml` (comment), `.github/workflows/select-runner.yml` (comment), `docs/development/ci-cd.md`; this entry.
-
-**Check:** actionlint 1.7.8 reports no errors. **Not verified:** a CD run on GitHub.
