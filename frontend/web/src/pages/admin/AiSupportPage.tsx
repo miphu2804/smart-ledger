@@ -57,10 +57,13 @@ export default function AiSupportPage() {
   const threadRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  // đồng bộ danh sách tải về vào state cục bộ (để cập nhật lạc quan khi gửi)
-  useEffect(() => {
+  // đồng bộ danh sách tải về vào state cục bộ (để cập nhật lạc quan khi gửi): làm ngay lúc render khi dữ liệu đổi,
+  // không qua effect (https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes)
+  const [syncedFrom, setSyncedFrom] = useState(convs.data)
+  if (convs.data !== syncedFrom) {
+    setSyncedFrom(convs.data)
     if (convs.data) setList(convs.data)
-  }, [convs.data])
+  }
 
   const conv = list?.find((c) => c.id === activeId) ?? null
 
