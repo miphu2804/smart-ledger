@@ -7,6 +7,18 @@ import { Button, Card, Field, Header, Screen, Sheet, T } from '../src/components
 import { industryList } from '../src/data/mock';
 import { errorMessage } from '../src/lib/errors';
 import { triggerFeedback } from '../src/lib/feedback';
+import {
+  addressError,
+  bankAccountError,
+  bankNameError,
+  emailError,
+  facebookError,
+  nameError,
+  normalizeBankAccount,
+  PROFILE_MAX,
+  shopNameError,
+  shopPhoneError,
+} from '../src/lib/profileValidation';
 import { sessionApi } from '../src/lib/sessionApi';
 import { industriesFromCore, shopChanges } from '../src/lib/shopProfile';
 import { useApp } from '../src/store/AppStore';
@@ -27,15 +39,23 @@ export default function Profile() {
   const [pick, setPick] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const emailErr = email && !/^\S+@\S+\.\S+$/.test(email) ? 'Email chưa đúng định dạng' : '';
-  // Số điện thoại tiệm lưu ở Core (tối đa 30 ký tự): chỉ nhận số, dấu cách, chấm, gạch và dấu + ở đầu
-  const phoneErr = shopPhone.trim() && !/^\+?[0-9 .-]{8,20}$/.test(shopPhone.trim()) ? 'Số điện thoại chưa đúng' : '';
+  const errors = {
+    name: nameError(name),
+    email: emailError(email),
+    fb: facebookError(fb),
+    store: shopNameError(store),
+    phone: shopPhoneError(shopPhone),
+    address: addressError(address),
+    bankName: bankNameError(bankName, bankAccount),
+    bankAccount: bankAccountError(bankAccount, bankName),
+  };
   const chosen = industryList.filter((i) => industries.includes(i.id));
   // Core bắt buộc có ngành; xoá hết ngành sẽ bị từ chối nên chặn ngay ở màn này.
   const noIndustry = industries.length === 0;
+  const invalid = noIndustry || Object.values(errors).some(Boolean);
 
   const save = async () => {
-    if (busy) return;
+    if (busy || invalid) return;
     const next = { name: store.trim(), address: address.trim(), phone: shopPhone.trim(), industries };
     const changes = shopChanges(
       { name: app.store.name, address: app.store.address, phone: app.store.phone, industries: app.store.industries },
@@ -56,8 +76,8 @@ export default function Profile() {
       }
       // Phần còn lại (họ tên, email, Facebook, ngân hàng) Core chưa có chỗ lưu nên lưu trên máy (đăng xuất không mất).
       app.updateProfile(
-        { name: name.trim(), email, facebook: fb },
-        { ...shop, bankName: bankName.trim(), bankAccount: bankAccount.replace(/\s/g, '') },
+        { name: name.trim(), email: email.trim(), facebook: fb.trim() },
+        { ...shop, bankName: bankName.trim(), bankAccount: normalizeBankAccount(bankAccount) },
       );
       triggerFeedback('success');
       if (router.canGoBack()) router.back();
@@ -76,7 +96,7 @@ export default function Profile() {
         <Button
           title="Lưu thay đổi"
           loading={busy}
-          disabled={busy || !name.trim() || !store.trim() || noIndustry || !!emailErr || !!phoneErr}
+          disabled={busy || invalid}
           onPress={save}
         />
       }
@@ -86,17 +106,29 @@ export default function Profile() {
         <T w="bold" size={12} color={colors.faint} style={styles.section}>
           THÔNG TIN CÁ NHÂN
         </T>
-        <Field label="Họ và tên" value={name} onChangeText={setName} />
+        <Field label="Họ và tên" maxLength={PROFILE_MAX.name} value={name} onChangeText={setName} error={errors.name || undefined} />
         <Field
           label="Email"
           placeholder="email@gmail.com"
           keyboardType="email-address"
           autoCapitalize="none"
+          autoCorrect={false}
+          maxLength={PROFILE_MAX.email}
           value={email}
           onChangeText={setEmail}
-          error={emailErr}
+          error={errors.email || undefined}
         />
-        <Field label="Link Facebook" placeholder="facebook.com/tenban" autoCapitalize="none" value={fb} onChangeText={setFb} />
+        <Field
+          label="Link Facebook"
+          placeholder="facebook.com/tenban"
+          keyboardType="url"
+          autoCapitalize="none"
+          autoCorrect={false}
+          maxLength={PROFILE_MAX.facebook}
+          value={fb}
+          onChangeText={setFb}
+          error={errors.fb || undefined}
+        />
         <T size={12} color={colors.faint}>
           Họ tên, email và Facebook lưu trên máy này (đăng xuất không mất), chưa đồng bộ sang máy khác
         </T>
@@ -105,17 +137,23 @@ export default function Profile() {
         <T w="bold" size={12} color={colors.faint} style={styles.section}>
           THÔNG TIN TIỆM
         </T>
-        <Field label="Tên tiệm" value={store} onChangeText={setStore} />
+        <Field label="Tên tiệm" maxLength={PROFILE_MAX.shopName} value={store} onChangeText={setStore} error={errors.store || undefined} />
         <Field
           label="Số điện thoại tiệm"
           placeholder="VD: 0901 234 567"
           keyboardType="phone-pad"
-          maxLength={20}
+          maxLength={PROFILE_MAX.shopPhone}
           value={shopPhone}
           onChangeText={setShopPhone}
-          error={phoneErr || undefined}
+          error={errors.phone || undefined}
         />
-        <Field label="Địa chỉ" value={address} onChangeText={setAddress} />
+        <Field
+          label="Địa chỉ"
+          maxLength={PROFILE_MAX.address}
+          value={address}
+          onChangeText={setAddress}
+          error={errors.address || undefined}
+        />
         <T w="semibold" size={12} color={colors.muted} style={{ marginBottom: 6 }}>
           Ngành hàng
         </T>
@@ -135,13 +173,22 @@ export default function Profile() {
         <T w="bold" size={12} color={colors.faint} style={styles.section}>
           NHẬN CHUYỂN KHOẢN
         </T>
-        <Field label="Ngân hàng" placeholder="VD: Vietcombank" value={bankName} onChangeText={setBankName} />
+        <Field
+          label="Ngân hàng"
+          placeholder="VD: Vietcombank"
+          maxLength={PROFILE_MAX.bankName}
+          value={bankName}
+          onChangeText={setBankName}
+          error={errors.bankName || undefined}
+        />
         <Field
           label="Số tài khoản"
           placeholder="VD: 0123456789"
           keyboardType="number-pad"
+          maxLength={PROFILE_MAX.bankAccount}
           value={bankAccount}
           onChangeText={setBankAccount}
+          error={errors.bankAccount || undefined}
         />
         <T size={12} color={colors.faint}>
           Hiện khi khách chọn chuyển khoản lúc thanh toán. Lưu trên máy này (đăng xuất không mất), chưa đồng bộ sang máy khác
