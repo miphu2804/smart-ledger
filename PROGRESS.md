@@ -1,3 +1,12 @@
+### 2026-10-29 — Alerts for the database, AI and Bifrost
+
+| Area | Change |
+|---|---|
+| Deploy | • Alloy probes each Core's readiness over HTTPS beside liveness, so **Database down** fires when Core is up but cannot reach Supabase<br>• Alloy joins every app network that exists through a `compose.override.yaml` the playbook writes before starting monitoring, and probes `smart-ledger-<env>-ai-1:8001/health` and `smart-ledger-<env>-bifrost-1:8080/health` by container name, since `ai` and `bifrost` exist in both environments; **Service down** fires when either fails for 2 minutes<br>• Alloy gets `dns_search: .` so a stopped container's name cannot resolve through the VPS wildcard DNS |
+| Docs | • The CI/CD guide lists the new alerts and how Alloy reaches AI and Bifrost; the VPS network diagram shows the probes and is re-laid out with straight arrows |
+
+Check: throwaway containers with the real Alloy config: readiness 503 with liveness up fired only Database down, Core stopped only Endpoint down; the playbook's monitoring handler under `sh` and `dash` joined Alloy to a test `smart-ledger-staging_default`, the AI probe read 1 and the missing Bifrost 0, and stopping the fake AI raised the Service down series; `ansible-playbook --syntax-check` passes. Not verified: a playbook run on the VPS, and whether production's missing Bifrost starts with it or must be dropped from the probes. Commit: the one that adds this entry.
+
 ### 2026-10-29 — VPS network and port diagram
 
 | Area | Change |
@@ -186,11 +195,3 @@ Check: link and anchor check over the edited files passes. Commit: the one that 
 **Changed files:** `docs/marketing/{dashboard,chat,barcode,voice}/*.png` (21) and `docs/marketing/README.md` — modified; `frontend/mobile/scripts/marketing-screenshots/{capture.mjs,cdp.mjs,page-helpers.js}` — added; this entry.
 
 **Check:** a full run of the script captured all 21 images without errors; each image is 1170 × 2532 and every flow was reviewed on a contact sheet (the chat answer carries the "Số liệu giả lập" note, the scanner reads `8935049500544` and reports `8936079140014` as unknown, the voice order ends at 4 items and 98.000đ); `node --check` passes for the three script files. **Not verified:** the same screens on a real phone; the script on macOS or Linux (paths are configurable but only Windows was run).
-
-### [2026-10-27 01:20 UTC+07:00] — [Feature] Secrets sync: local database, apply, sl menu and one env file per service
-
-**Done:** A dev machine now gets every env file from one command: `scripts/secrets/pull.sh` decrypts `secrets/<env>/env/` from R2, `scripts/local-db.sh` starts the local Postgres with Core and AI migrations, and `scripts/secrets/apply.sh staging dev --apply` writes `backend/core/.env`, `backend/ai/.env`, `frontend/mobile/.env`, `scripts/loadtest/.env.staging` and `scripts/monitor/.env`, with `secrets/local.env.*` put over the staging values. Core and AI keep one file each per environment, `.env.core` and `.env.ai`, equal to the live Railway service variables with references resolved; the separate `.env.railway.core` and `.env.railway.ai` copies are gone. `scripts/secrets/github.sh` sets the GitHub secrets of `railway-<env>` from those files. The `sl` menu (Rust, `tools/secrets-cli`) wraps pull, push, history, apply, members, and admin-only config, migrate and clean.
-
-**Changed files:** `scripts/local-db.sh`, `scripts/secrets/{apply,config,migrate,clean,check,lib,github}.sh`, `tools/secrets-cli/`, `secrets/admins.txt`, `secrets/local.env.{core,ai}`, `secrets/staging/targets`, `secrets/{staging,production}/env.age.dvc`, the three `.env.example` files, `docs/development/secrets-and-env.md`, `secrets/README.md`, `backend/ai/README.md`; this entry.
-
-**Check:** every key of `.env.core` and `.env.ai` in both environments equals Railway; AI and Core started from the applied files against the local database, Core reached readiness and AI accepted Core's internal token; `apply` recreated a deleted target at its path; a fresh clone pulled and applied every target. **Not verified:** a deploy with the `RAILWAY_TOKEN` now set in GitHub; `docker compose` against the local database (containers cannot reach 127.0.0.1).

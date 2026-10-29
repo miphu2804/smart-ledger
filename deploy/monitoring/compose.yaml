@@ -1,6 +1,7 @@
 # Monitoring shared by every environment on the VPS: Alloy collects host, container and probe metrics plus container
 # logs, Prometheus and Loki store them, and Grafana shows them and sends alerts to Discord. Lives in
-# /opt/smart-ledger-monitoring next to these files; deploy/ansible/playbook.yml writes .env and targets/<environment>.json.
+# /opt/smart-ledger-monitoring next to these files; deploy/ansible/playbook.yml writes .env, targets/<environment>.json
+# and compose.override.yaml.
 # Each container has a memory limit so the stack stays under about 1 GB and cannot starve Core or AI on the 4 GB VPS.
 # See docs/development/ci-cd.md#monitoring.
 
@@ -28,6 +29,10 @@ services:
     cgroup: host
     mem_limit: 256m
     depends_on: [prometheus, loki]
+    # The playbook writes compose.override.yaml so Alloy also joins each app network that exists and can probe AI
+    # and Bifrost by container name. Same wildcard-DNS guard as Core: a stopped container's name must not resolve to
+    # an outside host that answers the probe.
+    dns_search: .
     restart: unless-stopped
     logging: &logging
       options:

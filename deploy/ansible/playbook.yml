@@ -367,13 +367,24 @@
 
     # Alloy reloads this file by itself; each run of the playbook adds or updates only its own environment.
     # CADDY_DOMAIN may list several comma-separated names for one site; the first is probed.
-    - name: Probe this environment's Core over HTTPS
+    # Liveness answers while Core runs; readiness also checks Core's database connection, so it fails when Supabase does.
+    # AI and Bifrost have no public URL: Alloy reaches them on the app network by container name, unique across
+    # environments where the service names `ai` and `bifrost` are not.
+    - name: Probe this environment's Core over HTTPS and its AI and Bifrost inside the app network
       ansible.builtin.copy:
         dest: "{{ monitoring_dir }}/targets/{{ smartledger_env }}.json"
         owner: "{{ deploy_user }}"
         group: "{{ deploy_user }}"
         mode: "0644"
-        content: "{{ [{'targets': ['https://' + (caddy_domain.split(',') | first | trim) + '/actuator/health/liveness'], 'labels': {'env': smartledger_env}}] | to_json }}\n"
+        content: "{{ probes | to_json }}\n"
+      vars:
+        core_url: "https://{{ caddy_domain.split(',') | first | trim }}"
+        container: "http://smart-ledger-{{ smartledger_env }}"
+        probes:
+          - { targets: ["{{ core_url }}/actuator/health/liveness"], labels: { env: "{{ smartledger_env }}", check: core } }
+          - { targets: ["{{ core_url }}/actuator/health/readiness"], labels: { env: "{{ smartledger_env }}", check: database } }
+          - { targets: ["{{ container }}-ai-1:8001/health"], labels: { env: "{{ smartledger_env }}", check: ai } }
+          - { targets: ["{{ container }}-bifrost-1:8080/health"], labels: { env: "{{ smartledger_env }}", check: bifrost } }
       when: monitor_domain | length > 0
 
     - name: Route the monitoring domain to Grafana
@@ -422,9 +433,24 @@
       become_user: "{{ deploy_user }}"
       changed_when: true
 
-    # Runs before the edge, so Caddy finds Grafana on the edge network when it reloads the new site.
+    # Runs before the edge, so Caddy finds Grafana on the edge network when it reloads the new site, and after the
+    # stack, so a new environment's network exists. Alloy joins only the app networks that exist: Compose refuses to
+    # start a container on a missing external network.
     - name: Apply monitoring
-      ansible.builtin.command: docker compose up -d --wait --remove-orphans
+      ansible.builtin.shell: |
+        set -eu
+        nets=""
+        for env in staging production; do
+          if docker network inspect "smart-ledger-${env}_default" >/dev/null 2>&1; then nets="$nets smart-ledger-${env}_default"; fi
+        done
+        {
+          printf 'services:\n  alloy:\n    networks:\n      default:\n'
+          for net in $nets; do printf '      %s:\n' "$net"; done
+          printf 'networks:\n'
+          for net in $nets; do printf '  %s:\n    external: true\n' "$net"; done
+        } > compose.override.yaml
+        [ -n "$nets" ] || rm compose.override.yaml
+        docker compose up -d --wait --remove-orphans
       args:
         chdir: "{{ monitoring_dir }}"
       become: true

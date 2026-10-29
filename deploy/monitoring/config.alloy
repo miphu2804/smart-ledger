@@ -20,8 +20,9 @@ prometheus.exporter.cadvisor "containers" {
   enabled_metrics  = ["cpu", "memory"]
 }
 
-// targets/<environment>.json holds that environment's public Core health URL with an `env` label, so each probe goes
-// through DNS, Caddy, the certificate and Core like a user's request.
+// targets/<environment>.json holds that environment's public Core liveness and readiness URLs, which go through DNS,
+// Caddy, the certificate and Core like a user's request, and its AI and Bifrost health URLs on the app network,
+// each with `env` and `check` labels.
 discovery.file "probes" {
   files = ["/etc/alloy/targets/*.json"]
 }
@@ -34,8 +35,10 @@ discovery.relabel "probes" {
     target_label  = "address"
   }
 
+  // Probe names must be unique, and each environment has two probes.
   rule {
-    source_labels = ["env"]
+    source_labels = ["env", "check"]
+    separator     = "-"
     target_label  = "name"
   }
 
