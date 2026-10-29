@@ -96,7 +96,7 @@ One VPS (`103.162.31.93`, Ubuntu 24.04, 4 GB RAM plus swap) runs both environmen
 
 ![VPS Docker networks and ports](../architecture/diagrams/images/vps-network.svg)
 
-Source: [`vps-network.drawio`](../architecture/diagrams/src/vps-network.drawio). Each dashed region is one Docker network, so a container drawn inside two regions is on both. Each `name:port` is what another container dials: the name is the container's DNS name on that network, prefixed `edge:` for its alias on `edge`, and the port is where the target listens inside its container. Only Caddy publishes host ports, so every other port is reachable only from a container on the same Docker network. Each Compose project has its own `default` network, and Core, Bifrost, Grafana and Dopbase also join `edge` so Caddy can reach them. Compose also registers each service name on `edge`, where `core` matches both environments' Core, so Caddy dials the unique aliases `core-<environment>` and `gateway-<environment>` instead. AI joins only its own project network, so only that environment's Core can call it. Alloy listens on no port: it reads containers through the Docker socket, writes to Prometheus and Loki on the monitoring network, and probes each Core through its public domain. Production runs no Bifrost.
+Source: [`vps-network.drawio`](../architecture/diagrams/src/vps-network.drawio). Each dashed region is one Docker network, so a container drawn inside two regions is on both. Each `name:port` is what another container dials: the name is the container's DNS name on that network, prefixed `edge:` for its alias on `edge`, and the port is where the target listens inside its container. Only Caddy publishes host ports, so every other port is reachable only from a container on the same Docker network. Each Compose project has its own `default` network, and Core, Bifrost, Grafana and Dopbase also join `edge` so Caddy can reach them. Compose also registers each service name on `edge`, where `core` matches both environments' Core, so Caddy dials the unique aliases `core-<environment>` and `gateway-<environment>` instead. AI joins only its own project network, so only that environment's Core can call it, and Alloy, which joins every app network to probe AI and Bifrost by container name. Alloy listens on no port: it reads containers through the Docker socket, writes to Prometheus and Loki on the monitoring network, and probes each Core through its public domain. Production runs no Bifrost.
 
 Compose names a project after its directory unless the file sets `name:`, which would make the projects `smartledger` and `smartledger-production` while the repository and the GHCR images are kebab-case. Each compose file sets `name:` instead, so the containers are `smart-ledger-staging-core-1`, `smart-ledger-production-core-1` and `smart-ledger-edge-caddy-1`, and the shared Caddy keeps its certificates in `smart-ledger-edge_caddy_data`. The app directories are unchanged, so each stack reads its own environment from `ENVIRONMENT` in the project `.env`, which both `deploy.sh` and the playbook write.
 
@@ -245,19 +245,21 @@ The `preview-0N` origins are kept for when PR previews return; Firebase Authoriz
 
 [`deploy/monitoring/`](../../deploy/monitoring/) runs once per VPS in `/opt/smart-ledger-monitoring` and watches every environment: Alloy collects host, container and probe metrics plus container logs, Prometheus keeps metrics for 30 days, Loki keeps logs for 14 days, and Grafana shows them at `https://<MONITOR_DOMAIN>` and sends alerts to Discord. Each container has a memory limit, about 1 GB in total, so the stack cannot starve Core or AI.
 
-The playbook sets it up when `.env.vps` has `MONITOR_DOMAIN`, `GRAFANA_ADMIN_PASSWORD` and `MONITOR_DISCORD_WEBHOOK_URL`; each run also writes `targets/<environment>.json`, the HTTPS probe of that environment's Core health. Point an A record for `MONITOR_DOMAIN` at the VPS first. Sign-up and anonymous access are off; the admin password applies on the first start only.
+The playbook sets it up when `.env.vps` has `MONITOR_DOMAIN`, `GRAFANA_ADMIN_PASSWORD` and `MONITOR_DISCORD_WEBHOOK_URL`; each run also writes `targets/<environment>.json`, the HTTPS probes of that environment's Core liveness and readiness plus the probes of its AI (`smart-ledger-<environment>-ai-1:8001/health`) and Bifrost (`smart-ledger-<environment>-bifrost-1:8080/health`). AI and Bifrost have no public URL, so Alloy joins each app network that exists through a `compose.override.yaml` the playbook writes before starting the stack, and dials them by container name because the service names `ai` and `bifrost` exist in both environments. Re-run the playbook after adding an environment so Alloy joins its network. Point an A record for `MONITOR_DOMAIN` at the VPS first. Sign-up and anonymous access are off; the admin password applies on the first start only.
 
 Datasources and alerts are provisioned from the repository and cannot be edited in the UI; change the files and re-run the playbook. The alerts are:
 
 | Alert | Fires when |
 |---|---|
-| Endpoint down | The HTTPS health probe of an environment fails for 2 minutes |
+| Endpoint down | The HTTPS liveness probe of an environment's Core fails for 2 minutes |
+| Database down | Core's readiness probe, which checks its database connection, fails for 2 minutes while liveness passes |
+| Service down | The in-network health probe of an environment's AI or Bifrost fails for 2 minutes |
 | Container restarting | A container starts more than 3 times in 15 minutes |
 | Host memory high | VPS memory use stays above 90% for 5 minutes |
 | Host disk high | The root disk stays above 85% for 10 minutes |
 | Certificate expiring | A Core certificate expires in under 14 days |
 
-AI has no public URL, so a stopped AI container shows only through the restart alert or the Core errors it causes. Application metrics of Core, AI and Bifrost, and dashboards, are not built yet.
+Application metrics of Core, AI and Bifrost, and dashboards, are not built yet.
 
 ## Production checklist
 
