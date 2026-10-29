@@ -16,9 +16,11 @@ smart-ledger/
 │   │   └── targets            # files apply.sh writes; in git
 │   ├── production/
 │   │   └── env/               # pulled from Dopbase; ignored
+│   ├── templates/             # groups and comments of every env file, no values; in git
 │   └── local.env.core, local.env.ai   # local database keys apply.sh puts over staging; in git
 └── scripts/secrets/
     ├── dopbase-sync.sh        # Dopbase <-> env/
+    ├── check-templates.sh     # templates vs Dopbase and the .env.example files
     ├── apply.sh               # staging env/ -> backend/core/.env and the other targets
     ├── github.sh              # env/ -> GitHub Actions secrets
     └── lib.sh                 # helpers
@@ -28,7 +30,7 @@ A file maps to a project by its name: `env/.env.core` is `core/<environment>` an
 
 ## 2. Env file format
 
-Each file in `env/` is one env file. Its first line names it; keys are grouped:
+Dopbase stores only `KEY=value`, so the groups and comments below live in `secrets/templates/.env.<name>` (`secrets/templates/github/.env.<service>` for a GitHub environment, shared by its stages). `dopbase-sync.sh pull` lays each export out by its template, so staging, production and the copies `apply.sh` writes all keep the same format. A template holds every key of every environment of its project with empty values, and a group none of whose keys an environment holds is left out of that environment's file. A key Dopbase has and its template lacks lands under `### Ungrouped ###` and is named on stderr; add it to the template, and run `scripts/secrets/check-templates.sh` to find such keys without pulling. Each file's first line names it; keys are grouped:
 
 ```
 # Core for local development
@@ -60,7 +62,7 @@ ZALO_APP_ID=...
 | `.env.release` | Android APK release: R2 bucket, keystore | no | yes |
 | `.env.loadtest`, `.env.monitor` | load test and uptime monitor; staging copies go to `scripts/loadtest/.env.staging` and `scripts/monitor/.env` | yes | loadtest only |
 | `.env.vps` | the VPS of that environment: `VPS_HOST`, `VPS_KNOWN_HOSTS`, the CI deploy key (`VPS_SSH_KEY` in base64, `VPS_SSH_PUBLIC_KEY`), `CLOUDFLARE_TUNNEL_TOKEN` and, for [monitoring](ci-cd.md#monitoring), `MONITOR_DOMAIN`, `GRAFANA_ADMIN_PASSWORD` and `MONITOR_DISCORD_WEBHOOK_URL`; read by the Ansible playbook and `github.sh` ([VPS](ci-cd.md#vps)) | yes | yes |
-| `github/.env.<environment>` | copy of a GitHub Actions environment | 7 environments | 4 environments |
+| `github/.env.<environment>` | copy of a GitHub Actions environment | 4 environments | 3 environments |
 
 Files are named `.env.<name>`, like `.env.local` and `.env.production` in Next.js; the folder already says which environment they belong to. `targets` lists the copied files. Everything else is read in place, for example `docker compose --env-file secrets/production/env/.env.core --env-file secrets/production/env/.env.ai`, so there is no second copy to drift.
 
