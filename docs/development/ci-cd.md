@@ -184,9 +184,26 @@ Bifrost also joins `edge` as `gateway-<environment>`. When `.env.vps` sets `GATE
 
 ### Dopbase and its backup
 
+![Dopbase secrets and nightly backup](../architecture/diagrams/images/dopbase-secrets-and-backup.svg)
+
+Source: [`dopbase-secrets-and-backup.drawio`](../architecture/diagrams/src/dopbase-secrets-and-backup.drawio). Green edges carry secrets in and out, orange is the nightly backup, and the dashed edges are the steps a person runs by hand. The numbers read as one flow:
+
+1. A maintainer sets a secret in the Dopbase admin UI, which stores it in `dopbase_data`: `dopbase.db` holds the values encrypted under `master.key`.
+2. `vps-playbook.sh` reads `vps/<environment>` before an Ansible run.
+3. The playbook writes those five backup values to `/opt/dopbase/.env.backup` on the VPS.
+4. The GitHub Actions deploy reads `core/<environment>` and `ai/<environment>` with its own runner token.
+5. At 03:00 the cron job runs `backup.sh`, which reads `.env.backup`.
+6. It stops Dopbase, tars the volume, and starts it again.
+7. It encrypts the tar with `age -r` and uploads it with `rclone`, logging to `/var/log/dopbase-backup.log`.
+8. A restore happens by hand on the maintainer's machine, the only place that holds the age private key.
+
+The VPS holds the age public key only, so it writes an archive that nothing on the VPS can read back.
+
 Dopbase, the team's self-hosted secrets manager, runs on the same VPS as its own Compose project in `/opt/dopbase` ([`deploy/dopbase/`](../../deploy/dopbase/)), shared by every environment and behind the same Caddy as Core. The playbook sets it up only when `DOPBASE_DOMAIN` holds a name that resolves to the VPS, `secrets.songheloi.id.vn`; without it every Dopbase task is skipped. The zone's nameservers are Mắt Bão, not Cloudflare, so Cloudflare Access cannot sit in front of it: until the zone moves, the login and setup pages are protected only by Dopbase's own password, and `sites/dopbase.caddy` is where an allowlist or `basic_auth` would go. On first start Dopbase prints a protected setup link, which an operator must open right away because the setup page is reachable by anyone who has the address: read it with `docker compose logs dopbase` in `/opt/dopbase`. Dopbase is the source of every service variable: the backend deploy exports `core/<environment>` and `ai/<environment>` with a runner token per service, and [`scripts/secrets/vps-playbook.sh`](../../scripts/secrets/vps-playbook.sh) exports the VPS files for the playbook. Create the tokens once per environment with `dopbase token create core/<environment> --name github-deploy` (and the same for `ai`), save them as `DOPBASE_CORE_TOKEN` and `DOPBASE_AI_TOKEN` on `backend-<environment>`, and set the variable `DOPBASE_URL` to `https://secrets.songheloi.id.vn`. Because Dopbase runs on the VPS it serves, a lost VPS is rebuilt in this order: restore Dopbase from its backup (below), then run the wrapper.
 
 Its SQLite database and master key live in the `dopbase_data` volume, which is the only copy of every stored secret, so [`deploy/dopbase/backup.sh`](../../deploy/dopbase/backup.sh) copies it off-site every night at 03:00 as a cron job of user `deploy`, logging to `/var/log/dopbase-backup.log`. The script stops Dopbase for the few seconds of the copy, because a tar of a running SQLite database can catch a torn write-ahead log, encrypts the archive with age before it leaves the machine, and uploads it to an R2 bucket as `dopbase-<timestamp>.tar.gz.age`. The private half of the age key stays with the maintainer and never reaches the VPS, so a leaked bucket or a leaked VPS token exposes nothing. Old archives are deleted by a lifecycle rule on the bucket, which keeps the token free of delete permission; set the rule to the retention the team wants, for example 30 days.
+
+Both environments share one VPS and one Dopbase, so set the same five values in `vps/staging` and `vps/production`: a playbook run for an environment that lacks them removes the cron job the other environment's run created.
 
 Keep these in Dopbase `vps/<environment>`, which the wrapper loads into the shell, all five or none; an empty `DOPBASE_BACKUP_BUCKET` removes the cron job again and leaves Dopbase running:
 
@@ -195,7 +212,17 @@ Keep these in Dopbase `vps/<environment>`, which the wrapper loads into the shel
 | `DOPBASE_BACKUP_BUCKET` | R2 bucket that holds only these archives, for example `smart-ledger-dopbase-backups` |
 | `DOPBASE_BACKUP_ENDPOINT` | `https://<account id>.r2.cloudflarestorage.com` |
 | `DOPBASE_BACKUP_RECIPIENT` | age public key of the backup key pair (`age1…`), generated with `age-keygen` off the VPS |
-| `DOPBASE_BACKUP_KEY_ID`, `DOPBASE_BACKUP_SECRET` | R2 API token for that bucket with object write only |
+| `DOPBASE_BACKUP_KEY_ID`, `DOPBASE_BACKUP_SECRET` | R2 API token scoped to that bucket with Object Read & Write, which a bucket policy narrows to writing only |
+
+**Creating the bucket:** it holds these archives only, so create it and its token apart from the public bucket that serves the [Android APK](#publish-the-apk-for-the-landing-page).
+
+1. Create a bucket named `smart-ledger-dopbase-backups` with the Asia-Pacific location hint and public access left off, because an archive is read back only by an operator during a restore.
+2. Add a lifecycle rule that deletes objects 30 days after creation and aborts incomplete multipart uploads after one day, so retention is enforced by the bucket and the token needs no delete permission.
+3. Create an R2 API token named after the bucket, with **Object Read & Write** applied to that bucket only, from **R2 Object Storage > API > Manage API tokens**; the account API token page issues a bearer token instead of the Access Key ID and Secret Access Key that rclone needs.
+4. Add a bucket policy that denies `s3:DeleteObject` and `s3:PutBucketPolicy` for every principal, because R2 has no write-only token preset and a `Deny` outranks the token's own permission; the lifecycle rule still deletes, as Cloudflare applies it server-side rather than through the token.
+5. On a machine that is not the VPS, run `age-keygen -o dopbase-backup.key` for `DOPBASE_BACKUP_RECIPIENT`, and keep the file in the team password manager, because it is the only thing that reads an archive and no restore works without it.
+
+Then run `./backup.sh` by hand in `/opt/dopbase` once: it prints the name and size it uploaded, and `rclone delete` against the same bucket with the same credentials must fail with `AccessDenied`.
 
 **Restore:** download the newest archive, then, on a machine that holds the backup private key, `age -d -i <key file> dopbase-<timestamp>.tar.gz.age | tar -xz -C <directory>`, and load that directory into a fresh `dopbase_data` volume with `docker run --rm -v dopbase_data:/data -v <directory>:/in alpine:3.21 cp -a /in/. /data` before starting Dopbase. Test a restore before the team depends on Dopbase as the only source of secrets.
 
