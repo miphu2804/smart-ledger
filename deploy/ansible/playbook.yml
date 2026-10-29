@@ -1,9 +1,8 @@
 # One-time setup of a backend VPS, safe to re-run: it brings the machine back to this state and
 # uploads the env files again. It covers the VPS part of docs/development/ci-cd.md#vps; the GitHub
-# secrets stay manual. Run from the repository root after pulling the
-# secrets, with that environment's secrets/<environment>/env/.env.vps loaded into the shell:
-#   set -a; . secrets/staging/env/.env.vps; set +a
-#   ansible-playbook -i deploy/ansible/inventory.ini deploy/ansible/playbook.yml --limit staging
+# secrets stay manual. Run it through the wrapper, which exports the environment's files from Dopbase into a
+# temporary directory, loads .env.vps into the shell and passes the directory as env_dir:
+#   scripts/secrets/vps-playbook.sh staging
 # Staging and production share one VPS: run it once per environment. Both .env.vps files must hold the same
 # VPS_SSH_PUBLIC_KEY, because the deploy user keeps only that one key.
 # Needs the full `ansible` package (community.general and ansible.posix) and an admin login with
