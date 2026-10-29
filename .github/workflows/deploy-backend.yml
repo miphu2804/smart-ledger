@@ -124,42 +124,60 @@ jobs:
           printf '%s' "$VPS_SSH_KEY" | base64 -d | ssh-add -
           echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
           echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
-      # GitHub owns the browser origins Core allows, so a manual edit on the VPS cannot drift or crash Core: Core
-      # refuses to start on any whitespace, wildcard or path inside an origin. Unset leaves the VPS core.env value.
+      # Dopbase (docs/development/secrets-and-env.md) is the one source of the service variables: each deploy writes
+      # core.env and ai.env from it, so a value changed there reaches the VPS on the next deploy. A job-local prefix
+      # and data dir keep the self-hosted machine's own CLI and login untouched. To upgrade, change the version and
+      # the digests from the release page of github.com/dopbase/dopbase, as in deploy/dopbase/Dockerfile.
+      - name: Install the Dopbase CLI
+        if: inputs.ai || inputs.core
+        env:
+          DOPBASE_VERSION: 0.1.10
+        run: |
+          set -euo pipefail
+          case "$RUNNER_OS-$RUNNER_ARCH" in
+            Linux-X64) target=linux_amd64 sha=b294f56057cb21f5ca22348944ac538ed4d6a751282b342c96761483a3114868 ;;
+            Linux-ARM64) target=linux_arm64 sha=6a5c973944ed222d398c0e542a05b6321de706201c56222de652fd85329007f5 ;;
+            macOS-X64) target=darwin_amd64 sha=e5947d00175f1690076171af0ad914ac460810426fad8451fe81d22b3ac54055 ;;
+            macOS-ARM64) target=darwin_arm64 sha=6bfd33102d4da2b5ec636f716f1e7c997d1dba2b0ce7c023372d163294d35d04 ;;
+            *) echo "::error::no Dopbase release for $RUNNER_OS-$RUNNER_ARCH"; exit 1 ;;
+          esac
+          archive="$RUNNER_TEMP/dopbase.tar.gz"
+          curl -fsSLo "$archive" "https://github.com/dopbase/dopbase/releases/download/$DOPBASE_VERSION/dopbase_${DOPBASE_VERSION}_$target.tar.gz"
+          echo "$sha  $archive" | shasum -a 256 -c -
+          mkdir -p "$RUNNER_TEMP/dopbase/bin" "$RUNNER_TEMP/dopbase/data"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/dopbase/bin" dopbase
+          echo "$RUNNER_TEMP/dopbase/bin" >> "$GITHUB_PATH"
+          echo "DOPBASE_DATA_DIR=$RUNNER_TEMP/dopbase/data" >> "$GITHUB_ENV"
+      # Each token is a runner token of one Dopbase environment (core/<env>, ai/<env>), so a leaked token reads only
+      # that service. The file goes over stdin, so no value shows in a process list.
       - name: Upload core settings
         if: inputs.core
         env:
-          CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
+          DOPBASE_URL: ${{ vars.DOPBASE_URL }}
+          DOPBASE_TOKEN: ${{ secrets.DOPBASE_CORE_TOKEN }}
         run: |
           set -euo pipefail
-          if [[ "$CORS_ALLOWED_ORIGINS" =~ [[:space:]*] ]]; then
-            echo "::error::CORS_ALLOWED_ORIGINS must be comma-separated origins without spaces or wildcards"
+          dopbase export "core/$DEPLOY_ENV" --stdout --format dotenv > "$RUNNER_TEMP/core.env"
+          # Core refuses to start on any whitespace or wildcard inside an origin, so stop here instead.
+          if grep -E '^CORS_ALLOWED_ORIGINS=' "$RUNNER_TEMP/core.env" | grep -qE '[[:space:]*]'; then
+            echo "::error::CORS_ALLOWED_ORIGINS in core/$DEPLOY_ENV must be comma-separated origins without spaces or wildcards"
             exit 1
           fi
-          {
-            if [ -n "$CORS_ALLOWED_ORIGINS" ]; then echo "CORS_ALLOWED_ORIGINS=$CORS_ALLOWED_ORIGINS"; fi
-          } | ssh -F "$SSH_CONFIG" vps "umask 077 && cat > '$APP_DIR/github.core.env'"
-      # GitHub also owns the AI model settings (backend/ai/.env.example) and the Logfire token
-      # (backend/ai/README.md#tracing-logfire). The file goes over stdin, so no value shows in a process list.
-      # Each unset setting leaves its VPS ai.env value.
+          ssh -F "$SSH_CONFIG" vps "umask 077 && cat > '$APP_DIR/core.env' && rm -f '$APP_DIR/github.core.env'" < "$RUNNER_TEMP/core.env"
+          rm -f "$RUNNER_TEMP/core.env"
+      # github.ai.env holds only what the deploy itself knows: the commit, for Logfire's service version.
       - name: Upload ai settings
         if: inputs.ai
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
-          MODEL_PROVIDER: ${{ vars.MODEL_PROVIDER }}
-          MODEL_NAME: ${{ vars.MODEL_NAME }}
-          MODEL_FALLBACKS: ${{ vars.MODEL_FALLBACKS }}
-          MODEL_REASONING_EFFORT: ${{ vars.MODEL_REASONING_EFFORT }}
-          LOGFIRE_TOKEN: ${{ secrets.LOGFIRE_TOKEN }}
-          LOGFIRE_ENVIRONMENT: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+          DOPBASE_URL: ${{ vars.DOPBASE_URL }}
+          DOPBASE_TOKEN: ${{ secrets.DOPBASE_AI_TOKEN }}
           LOGFIRE_SERVICE_VERSION: ${{ inputs.sha }}
         run: |
           set -euo pipefail
-          for name in OPENAI_API_KEY OPENAI_BASE_URL MODEL_PROVIDER MODEL_NAME MODEL_FALLBACKS MODEL_REASONING_EFFORT \
-            LOGFIRE_TOKEN LOGFIRE_ENVIRONMENT LOGFIRE_SERVICE_VERSION; do
-            if [[ -n "${!name}" ]]; then printf '%s=%s\n' "$name" "${!name}"; fi
-          done | ssh -F "$SSH_CONFIG" vps "umask 077 && cat > '$APP_DIR/github.ai.env'"
+          dopbase export "ai/$DEPLOY_ENV" --stdout --format dotenv > "$RUNNER_TEMP/ai.env"
+          ssh -F "$SSH_CONFIG" vps "umask 077 && cat > '$APP_DIR/ai.env'" < "$RUNNER_TEMP/ai.env"
+          rm -f "$RUNNER_TEMP/ai.env"
+          echo "LOGFIRE_SERVICE_VERSION=$LOGFIRE_SERVICE_VERSION" | ssh -F "$SSH_CONFIG" vps "umask 077 && cat > '$APP_DIR/github.ai.env'"
       - name: Deploy
         id: deploy
         env:

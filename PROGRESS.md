@@ -1,3 +1,11 @@
+### 2026-10-29 — VPS network and port diagram
+
+| Area | Change |
+|---|---|
+| Docs | • New `vps-network.drawio` and its SVG draw the four Docker networks on the VPS as overlapping regions, with the `name:port` each container is reached at, the `edge` aliases Caddy dials, and the Caddy, Core, AI, Bifrost and monitoring flows<br>• The CI/CD guide shows it under VPS with how to read it, and the diagram guide lists it |
+
+Check: networks and members from `docker network inspect` and `docker ps` on the VPS, ports and aliases from `deploy/*/compose.yaml` and the Caddy sites in the playbook; `validate.py` reports 0 errors and the SVG was read on a light and a dark page. Commit: the one that adds this entry.
+
 ### 2026-10-28 — Web deploys check the real domains
 
 | Area | Change |
@@ -186,49 +194,3 @@ Check: link and anchor check over the edited files passes. Commit: the one that 
 **Changed files:** `scripts/local-db.sh`, `scripts/secrets/{apply,config,migrate,clean,check,lib,github}.sh`, `tools/secrets-cli/`, `secrets/admins.txt`, `secrets/local.env.{core,ai}`, `secrets/staging/targets`, `secrets/{staging,production}/env.age.dvc`, the three `.env.example` files, `docs/development/secrets-and-env.md`, `secrets/README.md`, `backend/ai/README.md`; this entry.
 
 **Check:** every key of `.env.core` and `.env.ai` in both environments equals Railway; AI and Core started from the applied files against the local database, Core reached readiness and AI accepted Core's internal token; `apply` recreated a deleted target at its path; a fresh clone pulled and applied every target. **Not verified:** a deploy with the `RAILWAY_TOKEN` now set in GitHub; `docker compose` against the local database (containers cannot reach 127.0.0.1).
-
-### [2026-10-26] — [Docs] Synchronize the documentation branch with staging
-
-**Done:** Fetched remote refs and merged `origin/staging` `1228978` into `docs/core-documentation-alignment` for PR #371. The incoming #370 adds the draw.io skill/preset and diagram-guide conventions. Git merged the guide automatically; no conflict needed manual resolution. Retained both the Core audit/renderer notes and staging's added guidance.
-
-**Changed files:** Incoming staging files and the merged diagram guide, plus this new progress entry. The PR's own changes remain documentation/diagram updates; no application code or migration was changed. Pre-existing Zalo Java, frontend lockfile and IDE edits remain outside the merge commit.
-
-**Flow explained:** Refresh staging → merge into the docs branch → check the combined guide, links and source preservation → push the branch to update the existing PR. This is branch synchronization, not merging PR #371 into staging or deploying it.
-
-**Check:** No unmerged paths; staged whitespace check passed. Rechecked documentation inventory: 87 controller routes, 22 Core tables, 14 Mermaid exports, local Markdown links/fragments and all 371 Core source hashes. Unrelated Java/FE file hashes matched their pre-merge values. No image source changed during this merge, so no new renderer or Maven/runtime/UAT result is claimed.
-
-### [2026-10-26] — [Docs] Prepare a separate Core documentation branch for approval
-
-**Done:** Created local `docs/core-documentation-alignment` from refreshed `origin/staging` `d4dc743`, after confirming PR #368 was merged and its tree equals audited feature HEAD `3e93dd1`. Updated the current growth handoff/status to record that merge without claiming deployment or FE acceptance. Prepared the documentation changes for a local commit; push and PR creation await the user's acceptance.
-
-**Changed files:** The accumulated Core documentation and diagram updates listed in the two entries below, plus the growth handoff and current status notes. Only documentation, diagram sources/exports and this append-only entry belong in the commit; pre-existing Java, frontend lockfile and IDE edits stay outside it.
-
-**Check:** Compared feature/staging tree hashes and fetched PR #368 merge metadata. The new branch has no extra API changes relative to its staging base. Documentation/link/schema/render checks from the review follow-up remain the evidence; final staged-file/whitespace and source-preservation checks are required before committing. No push, PR, merge or deploy performed in this preparation step.
-
-### [2026-10-26] — [Docs] Correct FK direction and avatar/inbox scope after review
-
-**Done:** Accepted the three documentation findings. Reversed the DBML draft-to-sale one-to-one declaration so `sale_drafts.confirmed_sale_id` is the FK, matching V4 and DBML's second-column rule. Added the V13 actor-scoped avatar exception to the relationship summary for audit logs. Split avatar and inbox in both Core overview figures: avatar accepts the current ACTIVE OWNER or ADMIN, while inbox requires an ACTIVE OWNER plus recipient/shop ownership and event-visibility checks.
-
-**Changed files:** ERD DBML/description, walkthrough source and its two regenerated overview SVGs, and this new entry. No Java, migration, role policy or runtime change; existing unrelated changes remain intact.
-
-**Check:** Compared with V4/V13, AuthController, MediaServiceImpl, MediaWriteTransactionService, NotificationServiceImpl and NotificationRecipientRepository; checked all four DBML one-to-one declarations. Mermaid 11.12.0 rendered both SVGs locally. Local file/fragment, route/table/declared-column/enum, SVG XML and image-load checks passed; hashes of 371 Core source/test/resource files stayed unchanged and `git diff --check` passed. The earlier inventory alone did not prove relationship direction or guard semantics; those missed cases required this source review. No new Maven/runtime acceptance result, commit or push.
-
-### [2026-10-26] — [Docs] Align Core documentation and diagram exports with branch code
-
-**Done:** Audited Core documentation against `feat/admin-dashboard-growth` at `3e93dd1` (staging base `0e2b1de`). Updated the current module map and migration descriptions; clarified Firebase JSON/ADC/emulator and Compose setup; removed stale phone/OTP wording in ERD notes; completed the dbdiagram layout. Classified target architecture, dated walkthroughs and mock marketing captures separately from implementation/acceptance evidence. No new requirement or BRD/PRD/AC approval is implied.
-
-**Changed files:** Root/Core READMEs, docs index, API contract status notes, technical design, ERD description/DBML/layout, diagram guide, walkthrough source/two Core overview SVGs, four draw.io sources and matching SVGs (plus architecture PNG), marketing README and this new entry. No application code, runtime config, schema or migration changes; pre-existing Zalo/FE/IDE edits were preserved.
-
-**Flow explained:** Canonical API contract → current module/guard map → SQL/ERD ownership → diagrams with explicit scope. New overview diagrams distinguish session/user/profile access, active-shop ledger access, ADMIN guards/audit, Zalo handoff, media/outbox, notifications and Agent proxy. Marketing's hourly report and voice/chat mock captures are not evidence of hourly Core APIs, voice/image parsing or real-provider acceptance. The architecture image is visibly labeled MVP target.
-
-**Check:** Static inventory matched all 87 explicit route-method pairs from 17 controllers to API tables, all 22 Core tables to DBML, 194 declared columns in 19 entities and 13 shared enums. Checked local files/fragments in 24 Markdown documents, 14 Mermaid blocks/exports, all 42 image loads, 19 SVG XML documents and five draw.io embedded-source/cell/edge mappings. Updated exports used local Mermaid 11.12.0/draw.io 28.2.5; contact sheets were reviewed offline. Hashes of all 371 Core source/test/resource files stayed unchanged; `git diff --check` passed. Dated audit evidence is in ignored `backend/core/target/core-docs-audit/`; no new Maven/runtime/UAT result, commit, push, merge or deploy is claimed.
-
-### [2026-10-26] — [Docs] Finish admin growth documentation review
-
-**Done:** CodeRabbit reviewed `9ae18a4`: Javadoc coverage reached 84.78% (80% threshold); PR title/description passed and the Core-exception finding was addressed. Corrected two remaining documentation issues: the active PostgreSQL guidance now says V1–V18, and the growth design keeps implementation decisions while linking API rules to the canonical contract.
-
-**Changed files:** `docs/architecture/technical-design.md`, a CI item in `BLOCKERS.md` and this new entry; no code, schema, configuration or workflow change.
-
-**Flow explained:** The contract owns public date/count/error/audit rules; technical design explains SQL aggregation, transaction boundaries and validation limits. CI on feature HEAD still needs a runner. Manual CI #787 was launched on main and could not start because the repository owner's account is locked by billing; downstream summary also received an empty runner output. GitHub-hosted reruns cannot bypass that billing lock, and the user does not manage the disconnected M4 Pro runners.
-
-**Check:** Compared the remaining findings with current documentation and the prior migrated-DB evidence; `git diff --check` passed. Earlier full Core PostgreSQL verify (1,422 passing cases) and review-follow-up verify (29 passing cases) remain the local evidence; no new test run is claimed for this docs-only follow-up. No merge/deploy or billing/runner administration was performed.

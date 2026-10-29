@@ -1,9 +1,8 @@
 # One-time setup of a backend VPS, safe to re-run: it brings the machine back to this state and
 # uploads the env files again. It covers the VPS part of docs/development/ci-cd.md#vps; the GitHub
-# secrets stay manual. Run from the repository root after pulling the
-# secrets, with that environment's secrets/<environment>/env/.env.vps loaded into the shell:
-#   set -a; . secrets/staging/env/.env.vps; set +a
-#   ansible-playbook -i deploy/ansible/inventory.ini deploy/ansible/playbook.yml --limit staging
+# secrets stay manual. Run it through the wrapper, which exports the environment's files from Dopbase into a
+# temporary directory, loads .env.vps into the shell and passes the directory as env_dir:
+#   scripts/secrets/vps-playbook.sh staging
 # Staging and production share one VPS: run it once per environment. Both .env.vps files must hold the same
 # VPS_SSH_PUBLIC_KEY, because the deploy user keeps only that one key.
 # Needs the full `ansible` package (community.general and ansible.posix) and an admin login with
@@ -29,6 +28,12 @@
     dopbase_backup_key_id: "{{ lookup('env', 'DOPBASE_BACKUP_KEY_ID') }}"
     dopbase_backup_secret: "{{ lookup('env', 'DOPBASE_BACKUP_SECRET') }}"
     dopbase_backup_hour: 3
+    # Monitoring shared by every environment (deploy/monitoring/). An empty domain skips it; the password applies
+    # on Grafana's first start and the Discord webhook receives every alert.
+    monitoring_dir: /opt/smart-ledger-monitoring
+    monitor_domain: "{{ lookup('env', 'MONITOR_DOMAIN') }}"
+    grafana_admin_password: "{{ lookup('env', 'GRAFANA_ADMIN_PASSWORD') }}"
+    monitor_discord_webhook_url: "{{ lookup('env', 'MONITOR_DISCORD_WEBHOOK_URL') }}"
     deploy_user: deploy
     lazydocker_version: 0.25.2
     lazydocker_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'x86_64' }}"
@@ -41,6 +46,8 @@
     # Public name of this environment's Core that resolves to the VPS, for example 203-0-113-10.sslip.io,
     # prod.203-0-113-10.sslip.io or api.<domain>.
     caddy_domain: "{{ lookup('env', 'CADDY_DOMAIN') }}"
+    # Public name of this environment's Bifrost admin UI, for example gateway-staging.<domain>; empty serves no UI.
+    gateway_domain: "{{ lookup('env', 'GATEWAY_DOMAIN') }}"
     # Public half of the CI deploy key whose private half is secret VPS_SSH_KEY.
     deploy_public_key: "{{ lookup('env', 'VPS_SSH_PUBLIC_KEY') }}"
     # A classic token with only `read:packages`, for private GHCR packages; empty skips `docker login`.
@@ -150,7 +157,7 @@
         owner: "{{ deploy_user }}"
         group: "{{ deploy_user }}"
         mode: "0644"
-      loop: [compose.yaml]
+      loop: [compose.yaml, bifrost.json]
       notify: Apply the stack
 
     - name: Upload the service env files
@@ -163,6 +170,7 @@
       loop:
         - { src: .env.core, dest: core.env }
         - { src: .env.ai, dest: ai.env }
+        - { src: .env.bifrost, dest: bifrost.env }
       no_log: true
       notify: Apply the stack
 
@@ -205,6 +213,21 @@
           {{ caddy_domain }} {
           	reverse_proxy core-{{ smartledger_env }}:8080
           }
+      notify: Apply the edge
+
+    # Only the admin UI and its API go public. Model calls stay internal to AI: the virtual key already guards them,
+    # and refusing the inference prefixes here keeps a leaked key from being spent from outside.
+    - name: Route this environment's gateway domain to the Bifrost admin UI
+      ansible.builtin.copy:
+        dest: "{{ edge_dir }}/sites/gateway-{{ smartledger_env }}.caddy"
+        mode: "0644"
+        content: |
+          {{ gateway_domain }} {
+          	@inference path /v1/* /openai/* /anthropic/* /genai/* /bedrock/* /cohere/* /litellm/* /langchain/* /pydanticai/*
+          	respond @inference 404
+          	reverse_proxy gateway-{{ smartledger_env }}:8080
+          }
+      when: gateway_domain | length > 0
       notify: Apply the edge
 
     - name: Create the Dopbase directory
@@ -301,6 +324,69 @@
         access_time: preserve
       when: dopbase_domain | length > 0 and dopbase_backup_bucket | length > 0
 
+    - name: Fail without the Grafana password or Discord webhook
+      ansible.builtin.assert:
+        that: grafana_admin_password | length > 0 and monitor_discord_webhook_url | length > 0
+        fail_msg: With MONITOR_DOMAIN set, .env.vps also needs GRAFANA_ADMIN_PASSWORD and MONITOR_DISCORD_WEBHOOK_URL.
+      when: monitor_domain | length > 0
+
+    - name: Create the monitoring directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0750"
+      loop: ["{{ monitoring_dir }}", "{{ monitoring_dir }}/targets"]
+      when: monitor_domain | length > 0
+
+    - name: Upload the monitoring stack
+      ansible.builtin.copy:
+        src: ../monitoring/
+        dest: "{{ monitoring_dir }}/"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0644"
+        directory_mode: "0755"
+      when: monitor_domain | length > 0
+      notify: Apply monitoring
+
+    - name: Set the monitoring settings
+      ansible.builtin.copy:
+        dest: "{{ monitoring_dir }}/.env"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0600"
+        content: |
+          MONITOR_DOMAIN={{ monitor_domain }}
+          GRAFANA_ADMIN_PASSWORD={{ grafana_admin_password }}
+          DISCORD_WEBHOOK_URL={{ monitor_discord_webhook_url }}
+      when: monitor_domain | length > 0
+      no_log: true
+      notify: Apply monitoring
+
+    # Alloy reloads this file by itself; each run of the playbook adds or updates only its own environment.
+    # CADDY_DOMAIN may list several comma-separated names for one site; the first is probed.
+    - name: Probe this environment's Core over HTTPS
+      ansible.builtin.copy:
+        dest: "{{ monitoring_dir }}/targets/{{ smartledger_env }}.json"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0644"
+        content: "{{ [{'targets': ['https://' + (caddy_domain.split(',') | first | trim) + '/actuator/health/liveness'], 'labels': {'env': smartledger_env}}] | to_json }}\n"
+      when: monitor_domain | length > 0
+
+    - name: Route the monitoring domain to Grafana
+      ansible.builtin.copy:
+        dest: "{{ edge_dir }}/sites/monitoring.caddy"
+        mode: "0644"
+        content: |
+          {{ monitor_domain }} {
+          	reverse_proxy grafana:3000
+          }
+      when: monitor_domain | length > 0
+      notify: Apply the edge
+
     - name: Log in to GHCR with the read-only token
       ansible.builtin.command:
         cmd: docker login ghcr.io --username {{ ghcr_username }} --password-stdin
@@ -332,6 +418,15 @@
       ansible.builtin.command: docker compose up -d --build --wait
       args:
         chdir: "{{ dopbase_dir }}"
+      become: true
+      become_user: "{{ deploy_user }}"
+      changed_when: true
+
+    # Runs before the edge, so Caddy finds Grafana on the edge network when it reloads the new site.
+    - name: Apply monitoring
+      ansible.builtin.command: docker compose up -d --wait --remove-orphans
+      args:
+        chdir: "{{ monitoring_dir }}"
       become: true
       become_user: "{{ deploy_user }}"
       changed_when: true

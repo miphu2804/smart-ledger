@@ -64,8 +64,7 @@ smart-ledger/
 ├── compose.yaml         # Core + AI (Supabase + Redis Cloud)
 ├── .github/             # CI/CD workflows, PR templates, CI helper scripts
 ├── scripts/             # local database, secrets sync, Android and iOS release
-├── secrets/             # encrypted env files per environment (DVC + age + R2)
-├── tools/secrets-cli/   # `sl`, a menu over scripts/secrets
+├── secrets/             # env files per environment, pulled from Dopbase
 ├── supabase/            # AI schema migrations (Supabase CLI)
 ├── docs/                # source of truth; start at docs/README.md
 │   ├── product/         # product description, BRD, PRD

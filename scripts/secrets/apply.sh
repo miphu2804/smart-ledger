@@ -3,7 +3,7 @@
 # of secrets/local.<name> (localhost database and the like) put over it.
 #
 # Copying runs one way only. A target is a derived copy with no record of what it was built from, so sending it back
-# could not tell your edits from keys a teammate changed since; change staging in secrets/staging/env/ and push.sh it.
+# could not tell your edits from keys a teammate changed since; change staging in Dopbase and pull it.
 #
 # A dry run lists which keys would be added (+), changed (~) or dropped (-); values are never printed.
 # Options: --apply writes; --no-backup skips keeping the replaced target as <file>.bak;
@@ -14,7 +14,7 @@ cd "$(git rev-parse --show-toplevel)" || exit 1
 usage="apply.sh staging dev [--apply] [--no-backup] [--use-staging KEY]..."
 [ "$1 $2" = "staging dev" ] || {
   echo "$usage" >&2
-  echo "only staging to dev (this machine); change staging in secrets/staging/env/ and run push.sh staging" >&2
+  echo "only staging to dev (this machine); change staging in Dopbase and run dopbase-sync.sh pull staging" >&2
   exit 1
 }
 shift 2
@@ -35,7 +35,7 @@ main() {
   grep -v '^#' secrets/staging/targets | while read -r name target; do
     [ -n "$name" ] || continue
     staged="secrets/staging/env/$name"
-    [ -f "$staged" ] || { echo "$staged: missing; run scripts/secrets/pull.sh"; continue; }
+    [ -f "$staged" ] || { echo "$staged: missing; run scripts/secrets/dopbase-sync.sh pull staging"; continue; }
     built="$(mktemp)"
     local_keys "secrets/local$name" | put_over "$staged" > "$built"
     write "$built" "$target"

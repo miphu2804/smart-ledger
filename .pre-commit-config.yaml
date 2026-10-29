@@ -9,18 +9,3 @@ repos:
         files: ^backend/ai/
       - id: ruff-format
         files: ^backend/ai/
-  - repo: local
-    hooks:
-      - id: secrets-guard
-        name: refuse decrypted secrets
-        entry: scripts/secrets/guard.sh
-        language: script
-        files: ^secrets/
-        pass_filenames: false
-      - id: secrets-pull
-        name: pull and decrypt secrets
-        entry: scripts/secrets/pull.sh
-        language: script
-        stages: [post-merge, post-checkout]
-        always_run: true
-        pass_filenames: false

@@ -2,7 +2,7 @@ name: Deploy web
 
 # Called by cd.yml for a commit whose `mobile-web` passed. Builds the mobile web bundle on the runner and uploads it to Vercel, so
 # each GitHub environment owns its EXPO_PUBLIC_* values (baked in at build time) and Vercel token.
-# `staging` gets a fixed alias and `main` goes to production; pull requests get no preview.
+# `staging` gets a fixed alias and `main` goes to production.
 # Vercel's own Git deployments are off in frontend/mobile/vercel.json to avoid double deploys.
 # See docs/development/ci-cd.md#mobile-web-on-vercel.
 
@@ -20,18 +20,16 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   deploy:
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    # `url` links the GitHub Deployments sidebar to the fixed domains; previews get none because
-    # their alias depends on the PR number and is already commented on the PR.
+    # `url` links the GitHub Deployments sidebar to the fixed domains.
     environment:
-      name: ${{ github.event_name == 'pull_request' && 'vercel-preview' || (github.ref_name == 'main' && 'vercel-production' || 'vercel-staging') }}
-      url: ${{ github.event_name == 'pull_request' && '' || (github.ref_name == 'main' && 'https://app-production.songheloi.id.vn' || 'https://app-staging.songheloi.id.vn') }}
+      name: ${{ github.ref_name == 'main' && 'vercel-production' || 'vercel-staging' }}
+      url: ${{ github.ref_name == 'main' && 'https://app-production.songheloi.id.vn' || 'https://app-staging.songheloi.id.vn' }}
     concurrency:
-      group: deploy-web-${{ github.head_ref || github.ref_name }}
+      group: deploy-web-${{ github.ref_name }}
       cancel-in-progress: true
     # Vercel CLI runs from the repo root: the project's Root Directory setting already points at frontend/mobile.
     env:
@@ -77,39 +75,6 @@ jobs:
         run: |
           url=$(vercel deploy --prebuilt ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN")
           echo "url=$url" >> "$GITHUB_OUTPUT"
-      # A per-deploy URL carries a random hash, so Core CORS and Firebase cannot list it. Each PR
-      # takes the fixed alias of its number's last digit (00-09); PRs sharing a digit overwrite
-      # each other, and re-running the job takes the slot back.
-      - name: Alias preview
-        id: preview
-        if: github.event_name == 'pull_request'
-        env:
-          URL: ${{ steps.deploy.outputs.url }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          alias="smart-ledger-preview-0$((PR % 10)).vercel.app"
-          api=https://api.vercel.com
-          auth="Authorization: Bearer $VERCEL_TOKEN"
-          # curl -f prints nothing of the response, so a rejected alias showed only "curl: (22)". Print the
-          # status and Vercel's own message, which names the cause (a domain missing from the project, say).
-          vercel_api() {
-            local response status body
-            response=$(curl -sS -w '\n%{http_code}' "$@") || return 1
-            status=${response##*$'\n'}
-            body=${response%$'\n'*}
-            if [ "${status#2}" = "$status" ]; then
-              echo "::error::Vercel API returned $status: $body"
-              return 1
-            fi
-            printf '%s\n' "$body"
-          }
-          id=$(vercel_api -H "$auth" "$api/v13/deployments/${URL#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
-          vercel_api -X POST -H "$auth" -H "Content-Type: application/json" \
-            -d "$(jq -n --arg alias "$alias" '{alias: $alias}')" \
-            "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID"
-          echo "url=https://$alias" >> "$GITHUB_OUTPUT"
-          echo "alias: https://$alias -> $URL"
       # Runs before the smoke test so the test checks the fixed alias that Core CORS lists,
       # not the per-deploy hash URL.
       - name: Alias staging
@@ -149,7 +114,7 @@ jobs:
       # or Core rejecting this origin's CORS preflight.
       - name: Smoke test
         env:
-          URL: ${{ steps.preview.outputs.url || steps.staging.outputs.url || (github.ref_name == 'main' && 'https://app-production.songheloi.id.vn') || steps.deploy.outputs.url }}
+          URL: ${{ steps.staging.outputs.url || (github.ref_name == 'main' && 'https://app-production.songheloi.id.vn') || steps.deploy.outputs.url }}
         run: |
           set -euo pipefail
           # A fresh alias can take a few seconds to route, so retry before failing.
@@ -172,12 +137,6 @@ jobs:
       - name: Report URL
         if: always() && steps.deploy.outputs.url != ''
         env:
-          GH_TOKEN: ${{ github.token }}
-          URL: ${{ steps.preview.outputs.url || steps.staging.outputs.url || (github.ref_name == 'main' && 'https://app-production.songheloi.id.vn') || steps.deploy.outputs.url }}
-          PR: ${{ github.event.pull_request.number }}
+          URL: ${{ steps.staging.outputs.url || (github.ref_name == 'main' && 'https://app-production.songheloi.id.vn') || steps.deploy.outputs.url }}
         run: |
           echo "Web deploy: $URL" >> "$GITHUB_STEP_SUMMARY"
-          if [ -n "$PR" ]; then
-            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --edit-last --create-if-none \
-              --body "Web preview (commit ${GITHUB_SHA::7}): $URL"
-          fi
