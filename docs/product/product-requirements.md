@@ -5,7 +5,7 @@
 | Trạng thái | Core: hành vi đã chốt dưới đây; AI/dashboard và FE: cần nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; người rà soát kỹ thuật |
-| Cập nhật lần cuối | 2026-10-26 |
+| Cập nhật lần cuối | 2026-10-29 (CORE-018: FR-036, AC-101–103; không rà soát lại các feature khác) |
 
 ## Tài liệu liên quan
 
@@ -99,6 +99,7 @@ Luồng hỗ trợ: ADMIN đăng nhập dashboard web, tìm OWNER hoặc cơ s�
 | `FR-033` | `BR-004`, `BR-005`, `BR-006`, `BR-007`, `BR-008`, `BR-009` | OWNER đọc products/sales/sale-drafts/customers/debts/expenses bằng phân trang DB trên sáu endpoint hiện có, luôn trả object có items và tổng bản ghi theo filter, kể cả không gửi page/size. Tìm kiếm/lọc/sắp xếp diễn ra trước phân trang; sales/expenses nhận khoảng timestamp có offset, from inclusive/to exclusive. Giữ quyền tiệm, snapshot lịch sử và trạng thái draft hết hạn; detail/thao tác ghi không đổi. Sales có [summary riêng](../contracts/api-contracts.md#tổng-danh-sách-sale-theo-bộ-lọc-core-014) trả count và giá trị sau discount theo cùng filter trên toàn bộ dữ liệu, tách CONFIRMED/VOIDED hiện tại; không gọi giá trị đơn là tiền thực thu, lợi nhuận hoặc netRevenueVnd của FR-006. Mobile: Đơn hàng cuộn vô hạn và Bán hàng phân trang theo số trang, cùng 20 dòng mỗi lần/trang (`AC-068`); rollout list ở [quy ước OWNER](../contracts/api-contracts.md#phân-trang-danh-sách-owner). | CORE-011 #153; CORE-014 #213 trên feat/sales-filter-summary; tích hợp summary FE/staging cần nghiệm thu riêng |
 | `FR-034` | `BO-002`, `BR-007`, `BR-009`, `BR-021` | Create/PATCH/lookup dùng cùng chuẩn hóa barcode; OWNER tra đúng mã của Product ACTIVE trong tiệm ACTIVE mình sở hữu mà không tải danh sách. Barcode chỉ unique trên ACTIVE cùng tiệm; archive giải phóng mã nhưng giữ lịch sử. Trùng khi create/PATCH trả 409 với chi tiết Product đang giữ mã nếu service nhận diện; race DB có thể không có details. Quy ước trong [contract barcode](../contracts/api-contracts.md#barcode-core-012). | CORE-012 #163/#164 trên feat/core-barcode; cần V16 và phối hợp FE/nghiệm thu staging |
 | `FR-035` | `BR-001` | Trên bốn tab chính (Tổng quan, Đơn hàng, Bán hàng, Quản lý), OWNER mở menu chuyển nhanh trượt từ bên trái bằng nút ☰ (Tổng quan: cạnh logo; Quản lý: cạnh tiêu đề; Đơn hàng và Bán hàng: bên trái ô tìm; Tổng quan và Bán hàng còn có nút gọn ở phần đầu đã thu khi cuộn) hoặc vuốt từ mép trái. Menu liệt kê Tổng quan, Bán hàng, Đơn hàng, Công nợ, Hàng hoá, Báo cáo, Chi phí, Trợ lý AI và Cài đặt, đánh dấu màn đang mở; chạm một mục là chuyển ngay. Thanh tab dưới giữ nguyên. | P1 — MVP |
+| `FR-036` | `BO-003`, `BR-023` | Khi được bật sau migration, Core ghi tối đa một ngày hoạt động cho mỗi user ACTIVE có request API nghiệp vụ đã xác thực và phản hồi 2xx/3xx, gồm API đọc; ngày theo Asia/Ho_Chi_Minh tại lúc nhận request. Không tính public OAuth, health, OPTIONS hoặc 4xx/5xx. Lưu mã user/ngày trong 90 ngày gồm hôm nay; cache có giới hạn, lỗi ghi không đổi response nghiệp vụ và được thử lại. Grafana đọc DAU/MAU tách OWNER/ADMIN, bỏ email bắt đầu loadtest+; MAU là 30 ngày lịch gồm hôm nay. Không thêm API FE, không đo CCU hay hiệu quả câu trả lời AI. | CORE-018 #409; chủ sản phẩm duyệt ngày 2026-10-29; nhánh feat/core-daily-activity, chưa nghiệm thu staging |
 
 `FR-001`–`FR-009` giữ nguyên mã. `FR-007` không bị tái sử dụng cho yêu cầu khác.
 
@@ -274,6 +275,14 @@ chứng, không phải tuyên bố FE hoặc staging đã đạt.
 | `AC-098` | Growth nhận cả hai ngày hoặc không ngày nào, mặc định 30 ngày gồm hôm nay tại Việt Nam; một ngày hợp lệ trả một điểm. Tối đa 366 ngày tính cả hai đầu, năm 1–9998; thiếu một đầu, đảo kỳ hoặc vượt giới hạn trả 400 invalid_admin_query; sai định dạng ngày trả 400 validation_failed. Query/response bị giới hạn theo kỳ, không tải toàn bộ danh sách entity vào JVM. | `FR-024`, `NFR-003` |
 | `AC-099` | Growth giữ guard ADMIN/ACTIVE và mã 401/403/404 theo AC-040, không cấp quyền từ tham số/header FE, response có Cache-Control: no-store. Mỗi lần đọc thành công ghi ADMIN_OVERVIEW_VIEWED/SYSTEM, target/shop null, queryPresent=false/resultCount=1 trong cùng transaction; không phân biệt growth với overview trong access logs. Ghi audit thất bại trả 503 admin_audit_unavailable, không trả chuỗi dữ liệu. Không tạo bảng, event audit mới hoặc migration. | `FR-024`, `NFR-003`, `NFR-009` |
 | `AC-100` | Web ADMIN tích hợp bốn thẻ số, hai chart tăng trưởng/trạng thái và bảng tiệm mới nhất, nhật ký cá nhân riêng. Kỳ 7/30/90 ngày tính cả hôm nay và hiển thị giờ Việt Nam; đổi kỳ chỉ lọc số tạo mới, không biến trạng thái hiện tại thành lịch sử. Ngày/số lượng khớp API, dữ liệu bằng 0 không bị coi là lỗi, lỗi tải không hiển thị mock như dữ liệu thật; kiểm loading/error/empty, quyền ADMIN và audit trên staging. Chưa nghiệm thu chỉ từ test Core. | `FR-022`, `FR-024`, `NFR-003`, `NFR-009` |
+
+### Hoạt động người dùng CORE-018 — đã duyệt ngày 2026-10-29
+
+| ID | Xác minh | Liên kết |
+|---|---|---|
+| `AC-101` | API đọc/ghi thành công của OWNER hoặc ADMIN ACTIVE tạo đúng một dòng user/ngày, kể cả lần POST auth/session vừa tạo profile. Không có dòng cho token thiếu/sai, UID chưa có Core profile, tài khoản DISABLED, OPTIONS, health, public OAuth hoặc response 4xx/5xx. ID do server ánh xạ, không tin email/user ID do client gửi. | `FR-036`, `BR-023`, `NFR-003` |
+| `AC-102` | Ngày lấy theo Asia/Ho_Chi_Minh lúc nhận request; async chỉ ghi sau dispatch cuối thành công và giữ ngày bắt đầu qua nửa đêm. Retry/đồng thời/nhiều instance/restart không trùng user/ngày. Cache có trần và tự hết hạn; ghi DB thất bại không điền cache, không đổi response nghiệp vụ và request hợp lệ sau được thử lại; không ghi credential hay payload vào log. | `FR-036`, `BR-023`, `NFR-008` |
+| `AC-103` | V19 nâng cấp từ V18 giữ dữ liệu cũ, có FK/PK/index và RLS không mở quyền cho client. Dọn dữ liệu trước hôm nay trừ 89 ngày, giữ ngày biên; SQL Grafana dùng múi giờ Việt Nam, tách role, bỏ loadtest+, MAU distinct trong hôm nay và 29 ngày trước. Tính năng mặc định tắt, chỉ bật sau migration đã merge; SQL chạy bằng role chỉ đọc trên staging là nghiệm thu vận hành riêng. | `FR-036`, `BR-023` |
 
 ## 9. Phạm vi và câu hỏi mở
 

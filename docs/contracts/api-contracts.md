@@ -8,6 +8,8 @@
 
 ## Tài liệu liên quan
 
+CORE-018 #409 bổ sung telemetry nội bộ theo `FR-036`, không thêm endpoint hoặc thay JSON/HTTP status của API hiện có. Ghi nhận request đã xác thực thành công, V19/retention và SQL DAU/MAU thuộc [Core guide](../../backend/core/docs/user-daily-activity.md); lỗi thống kê không đổi response nghiệp vụ và không thay audit ADMIN bắt buộc. Tính năng mặc định tắt, chưa nghiệm thu staging.
+
 - [PRD](../product/product-requirements.md): `FR-*` mà hợp đồng phải phủ.
 - [Thiết kế kỹ thuật](../architecture/technical-design.md): module và luồng.
 

@@ -4,6 +4,8 @@ Core is a Java 21 / Spring Boot backend. This README covers how to run it locall
 
 ## Prerequisites
 
+For CORE-018 daily activity, V19 rollout, the default-off flag, 90-day retention and the read-only Grafana SQL, see [the daily activity guide](docs/user-daily-activity.md). This internal telemetry adds no client API and does not replace business audit or the ADMIN creation-growth endpoint.
+
 - JDK 21 for a host/IntelliJ run. The included Maven wrapper downloads the required Maven version; a separate Maven installation is not needed.
 - A PostgreSQL database: the shared staging Supabase database from the repo-root `.env.staging`, or your own local `smartledger` database.
 - Firebase project ID and a Firebase service-account JSON file. Keep the JSON outside the repository and do not commit it.
