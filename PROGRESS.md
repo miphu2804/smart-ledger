@@ -7,6 +7,15 @@
 
 Check: 27 CORE-018 tests passed on disposable PostgreSQL 16.15; full Maven verify passed 1449 tests with zero failures/errors/skips; PostgreSQL gate unit tests passed 13 cases. Shared-DB migration, Grafana provisioning and staging/production acceptance are not verified. Commit: the one that adds this entry.
 
+### 2026-10-29 — Monitoring config changes take effect on a playbook run
+
+| Area | Change |
+|---|---|
+| Deploy | • The playbook's monitoring handler recreates the monitoring containers, because Alloy, Loki and Grafana read their bind-mounted config only at start and Compose does not recreate a container for a changed mounted file; the first VPS run of the database, AI and Bifrost alerts left Grafana with the old five rules until its alerting was reloaded by hand |
+| Docs | • The CI/CD guide says the playbook recreates the monitoring containers |
+
+Check: on the VPS after the staging playbook run, Grafana listed five rules; `POST /api/admin/provisioning/alerting/reload` raised it to seven with Database down and Service down; `ansible-playbook --syntax-check` passes. Not verified: a playbook run with this change. Commit: the one that adds this entry.
+
 ### 2026-10-29 — Alerts for the database, AI and Bifrost
 
 | Area | Change |
@@ -188,11 +197,3 @@ Check: link and anchor check over the edited files passes. Commit: the one that 
 **Changed files:** `scripts/secrets/apply.sh`, `tools/secrets-cli/src/{menu,main}.rs`, `docs/development/secrets-and-env.md`, `secrets/README.md` — modified; this entry.
 
 **Check:** in a scratch repo the old and new `apply.sh staging dev` print the same output and write the same files (create, re-apply with an extra key, `--use-staging`); `apply.sh dev staging` and `sl apply dev staging` exit 1 with the new message; `sh -n` passes; `cargo build --release` and `cargo clippy` pass with no warnings. **Not verified:** the Apply item clicked through in the `sl` menu.
-
-### [2026-10-27 15:26 UTC+07:00] — [Fix] Warn when apply.sh dev staging removes keys from staging
-
-**Done:** `apply.sh dev staging` copies each target as a whole into `secrets/staging/env/`, so a key the target lacks, typically one a teammate added after this machine last ran `apply.sh staging dev`, is removed from staging. The output now prints a warning under the `-` lines that names the target and says to run `apply.sh staging dev` first. Behavior is unchanged; nothing is blocked. The guide's sentence that said it copies only the edited keys now says it copies the whole target.
-
-**Changed files:** `scripts/secrets/apply.sh`, `docs/development/secrets-and-env.md` — modified; this entry.
-
-**Check:** dry runs in a scratch repo: a target missing a staging key prints the warning, a complete target and `staging dev` do not; `sh -n` passes. **Not verified:** the warning inside the `sl` menu.
