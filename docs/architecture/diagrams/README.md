@@ -8,6 +8,7 @@ Sources live in [`src/`](src/), exports in [`images/`](images/). Reference: [`sr
 |---|---|---|
 | `architecture.mmd`, `architecture.drawio`, `architecture.svg/png` | MVP target, including future services/infrastructure | Use [technical design §1](../technical-design.md#1-phạm-vi) for code status; the target image does not prove those services exist |
 | `ci-cd.drawio/svg` | Pipeline and runtime topology | Core runs on container port 8080; Compose exposes host port 8000 by default. ADMIN can use the real Core behind its build flag; PR checks/deploy readiness depend on actual runs |
+| `vps-network.drawio/svg` | Docker networks, DNS aliases and ports on the VPS | Drawn from `deploy/*/compose.yaml`, the Caddy sites the playbook writes, and `docker network inspect` on the VPS on 2026-10-29 |
 | `auth-request-flow.drawio/svg` | Firebase browser sign-in, CORS and project matching | The image is not the Zalo OAuth/App Link flow; see [Zalo contract](../../contracts/api-contracts.md#zalo-core-015) and the Core service map. A permitted origin does not grant an application role |
 | `service-walkthrough/README.md` and its 14 SVG exports | Core/AI reading notes with dated source reviews | The two Core overview figures include current modules; detailed transaction diagrams keep their stated review scope, not FE or staging acceptance |
 | `erd.dbml` | Logical Core/AI schema and explicitly planned tables | Current Core migrations are V1–V18. SQL owns actual checks, triggers and partial indexes that DBML cannot fully express |
