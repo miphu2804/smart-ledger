@@ -29,6 +29,10 @@ services:
     cgroup: host
     mem_limit: 256m
     depends_on: [prometheus, loki]
+    # The edge network reaches Caddy's metrics; mapping form so the playbook's override can add the app networks.
+    networks:
+      default:
+      edge:
     # The playbook writes compose.override.yaml so Alloy also joins each app network that exists and can probe AI
     # and Bifrost by container name. Same wildcard-DNS guard as Core: a stopped container's name must not resolve to
     # an outside host that answers the probe.
@@ -41,13 +45,15 @@ services:
 
   prometheus:
     image: prom/prometheus:v3.5.0
-    # Alloy pushes every sample, so the image's default config (scraping itself) is enough.
+    # Alloy pushes every sample; the config only loads the recording rules that dashboards read.
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=30d
       - --web.enable-remote-write-receiver
     volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
       - prometheus_data:/prometheus
     mem_limit: 192m
     restart: unless-stopped

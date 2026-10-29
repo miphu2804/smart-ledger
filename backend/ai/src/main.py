@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 import pydantic_ai
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
+from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic_ai import Embedder
 
 from src.agent.errors import ConversationNotFoundError, GuardrailError
@@ -238,6 +239,15 @@ app.include_router(internal_router)
 app.add_exception_handler(ConversationNotFoundError, conversation_not_found)
 app.add_exception_handler(GuardrailError, guardrail_blocked)
 app.add_exception_handler(Exception, ai_unavailable)
+# Request rate, status class and latency per route for Grafana (deploy/monitoring/),
+# timed to the last streamed byte. /metrics skips the internal token: AI publishes no
+# port, so only containers on its project network reach it. Health checks every 10 s
+# would outnumber chat turns, so they are left out. The default buckets stop at 1 s,
+# while a chat turn with tool calls takes tens of seconds.
+Instrumentator(excluded_handlers=["/health", "/metrics"]).instrument(
+    app,
+    latency_lowr_buckets=(0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 20, 30, 60, 120),
+).expose(app, include_in_schema=False)
 
 
 @app.get("/health", tags=["system"])

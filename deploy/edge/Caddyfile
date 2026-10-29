@@ -1,3 +1,17 @@
+# HTTP metrics for every site, labeled by host, feed the per-service request rate, errors and latency in Grafana
+# (deploy/monitoring/prometheus/rules/service-red.yml). Only configured hosts are observed, so a scanner's random
+# Host header cannot grow the series without bound.
+{
+	metrics {
+		per_host
+	}
+}
+
+# Prometheus metrics for Alloy on the edge network only: compose.yaml publishes 80 and 443, not this port.
+:9180 {
+	metrics
+}
+
 # One site per environment, each `<domain> { reverse_proxy core-<environment>:8080 }`, written by
 # deploy/ansible/playbook.yml so an environment can be added without touching the others.
 import sites/*.caddy

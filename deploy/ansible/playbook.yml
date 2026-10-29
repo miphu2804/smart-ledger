@@ -337,7 +337,7 @@
         owner: "{{ deploy_user }}"
         group: "{{ deploy_user }}"
         mode: "0750"
-      loop: ["{{ monitoring_dir }}", "{{ monitoring_dir }}/targets"]
+      loop: ["{{ monitoring_dir }}", "{{ monitoring_dir }}/targets", "{{ monitoring_dir }}/targets/services"]
       when: monitor_domain | length > 0
 
     - name: Upload the monitoring stack
@@ -385,6 +385,19 @@
           - { targets: ["{{ core_url }}/actuator/health/readiness"], labels: { env: "{{ smartledger_env }}", check: database } }
           - { targets: ["{{ container }}-ai-1:8001/health"], labels: { env: "{{ smartledger_env }}", check: ai } }
           - { targets: ["{{ container }}-bifrost-1:8080/health"], labels: { env: "{{ smartledger_env }}", check: bifrost } }
+      when: monitor_domain | length > 0
+
+    # Services that export their own request metrics, scraped on the app network like the probes above.
+    - name: Scrape this environment's AI metrics inside the app network
+      ansible.builtin.copy:
+        dest: "{{ monitoring_dir }}/targets/services/{{ smartledger_env }}.json"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0644"
+        content: "{{ services | to_json }}\n"
+      vars:
+        services:
+          - { targets: ["smart-ledger-{{ smartledger_env }}-ai-1:8001"], labels: { env: "{{ smartledger_env }}", service: ai } }
       when: monitor_domain | length > 0
 
     - name: Route the monitoring domain to Grafana
