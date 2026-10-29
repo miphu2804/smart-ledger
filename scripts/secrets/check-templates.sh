@@ -27,11 +27,14 @@ check_project() {
   for key in $(comm -13 "$tmp/held" "$tmp/known"); do echo "$1: $key is in $template, not in Dopbase"; status=1; done
 }
 
-# Lists the template keys that example $2 lacks.
+# Lists the template keys and groups that example $2 lacks.
 check_example() {
   template_keys "$1" > "$tmp/known"
   template_keys "$2" > "$tmp/shown"
   for key in $(comm -23 "$tmp/known" "$tmp/shown"); do echo "note: $2 lacks $key from $1"; done
+  grep '^### ' "$1" | while IFS= read -r group; do
+    grep -qxF "$group" "$2" || echo "note: $2 lacks the group $group from $1"
+  done
 }
 
 for project in $(dopbase project list --json | jq -r '.[].name'); do
