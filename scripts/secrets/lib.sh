@@ -42,3 +42,40 @@ dopbase_export() {
     if {\$code != 0} { puts stderr [lindex [split [string trim \$out] \n] end] }
     exit \$code") || { echo "dopbase export of $1 failed" >&2; return 1; }
 }
+
+# Prints the KEY=value lines of file $2 in the order, groups and comments of template $1 (secrets/templates/).
+# Dopbase stores no groups, so a template is the only record of them. A group with none of its keys in $2 is left
+# out, so one template serves staging and production. A key the template lacks goes under "### Ungrouped ###",
+# and is named on stderr so someone adds it to the template.
+lay_out() {
+  awk -v template="$1" '
+    FNR == NR {
+      if ($0 !~ /^[A-Za-z_][A-Za-z0-9_]*=/) next
+      key = substr($0, 1, index($0, "=") - 1)
+      value[key] = $0; order[++count] = key
+      next
+    }
+    /^### .* ###$/ { group++ }
+    { line[++lines] = $0; owner[lines] = group }
+    /^[A-Za-z_][A-Za-z0-9_]*=/ {
+      key = substr($0, 1, index($0, "=") - 1)
+      known[key] = 1
+      if (key in value) present[group] = 1
+    }
+    END {
+      for (i = 1; i <= lines; i++) {
+        if (line[i] ~ /^[A-Za-z_][A-Za-z0-9_]*=/) {
+          key = substr(line[i], 1, index(line[i], "=") - 1)
+          if (key in value) out[++n] = value[key]
+        } else if (owner[i] == 0 || present[owner[i]]) out[++n] = line[i]
+      }
+      for (i = 1; i <= count; i++)
+        if (!(order[i] in known)) {
+          if (!extra++) { out[++n] = ""; out[++n] = "### Ungrouped ###" }
+          out[++n] = value[order[i]]
+          print "not in " template ": " order[i] > "/dev/stderr"
+        }
+      while (n > 0 && out[n] == "") n--
+      for (i = 1; i <= n; i++) print out[i]
+    }' "$2" "$1"
+}
