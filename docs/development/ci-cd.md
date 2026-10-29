@@ -14,7 +14,7 @@
 
 ![CI/CD flow](../architecture/diagrams/images/ci-cd.svg)
 
-Green numbers are the deploy, purple the one-time VPS setup, orange the runtime requests. The diagram shows the target setup: pgvector, the Bifrost gateway, Langfuse and the Grafana stack are not built yet; today AI calls OpenCode Go directly and traces to Logfire. Edit [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio) and re-export:
+Green numbers are the deploy, purple the one-time VPS setup, orange the runtime requests. Gray dashed arrows are secrets: the deploy exports `core` and `ai` from Dopbase with runner tokens kept in the GitHub environment, and `scripts/secrets/vps-playbook.sh` exports every VPS file from Dopbase for Ansible. The diagram shows the target setup: pgvector, the Bifrost gateway, Langfuse and the Grafana stack are not built yet; today AI calls OpenCode Go directly and traces to Logfire. Edit [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio) and re-export:
 
 ```bash
 drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/ci-cd.svg docs/architecture/diagrams/src/ci-cd.drawio
