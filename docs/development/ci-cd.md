@@ -79,7 +79,6 @@ CI reads input `runner`, else repository variable `CI_RUNNER`. CD reads input `r
 | `android-production` | `main` | Yes | `ANDROID_GOOGLE_SERVICES_JSON`, `ANDROID_KEYSTORE_*`, `R2_*` | `EXPO_PUBLIC_*`, `R2_BUCKET`, `R2_PUBLIC_URL` |
 
 - Keep backend secrets out of `vercel-*` and `landing-*`.
-- `vercel-preview` and `landing-preview` exist but are unused while PR previews are off.
 - Both backend environments use the same VPS and deploy key, so a `backend-staging` job can reach production containers. The approval guards only the `main` deploy. The project owner accepted this.
 
 <a id="vps"></a>
@@ -290,7 +289,7 @@ A new Firebase project sends at most 10 SMS a day until billing is attached.
 - `EXPO_PUBLIC_ZALO_LOGIN=true` only once that Core has `ZALO_ENABLED=true` and lists the web origin in `ZALO_CLIENT_ORIGINS`.
 - The smoke test fails if the page is not 200, the bundle has no API endpoint, or Core rejects the CORS preflight. Mock builds skip the Core checks.
 - `app-staging.songheloi.id.vn` carries the git branch `staging` in its Vercel domain settings. Without it Vercel counts the domain as a production domain and a `main` deploy takes the alias away from staging, so the staging page serves the production build until the next staging deploy.
-- PR previews are off: they used up Vercel Hobby's 100 deployments a day and broke `staging` and `main` deploys. To restore them, call `deploy-web.yml` and `deploy-landing.yml` from `ci.yml` for same-repository PRs with `sha` set to the PR head.
+- PR previews are off: they used up Vercel Hobby's 100 deployments a day and broke `staging` and `main` deploys. The preview environments and steps were removed from the deploy workflows; restoring them means bringing back the PR alias and comment steps from git history and calling `deploy-web.yml` and `deploy-landing.yml` from `ci.yml` for same-repository PRs with `sha` set to the PR head.
 - If a domain changes in Vercel, update the `url` in `deploy-web.yml`.
 - `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` are in Project Settings → General; create `VERCEL_TOKEN` under Account Settings → Tokens.
 
