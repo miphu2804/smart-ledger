@@ -24,6 +24,7 @@ import {
 import { saleApi } from '../../src/lib/salesApi';
 import { usePagedList } from '../../src/lib/usePagedList';
 import type { Period } from '../../src/lib/stats';
+import { TAB_BAR_CLEARANCE } from '../../src/tabBar';
 import { colors, shadow, tilePalette } from '../../src/theme';
 
 /**
@@ -501,7 +502,7 @@ export default function Invoices() {
           }
           stickySectionHeadersEnabled={false}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom + 84, 108) }]}
+          contentContainerStyle={styles.scrollContent}
           initialNumToRender={12}
           maxToRenderPerBatch={12}
           windowSize={7}
@@ -648,7 +649,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 100,
+    paddingBottom: TAB_BAR_CLEARANCE,
   },
   summaryCard: {
     backgroundColor: colors.card,

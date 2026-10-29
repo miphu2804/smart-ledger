@@ -13,6 +13,7 @@ import { triggerFeedback } from '../../src/lib/feedback';
 import { useApp } from '../../src/store/AppStore';
 import { colors, shadow } from '../../src/theme';
 import { SCREEN_ANIMATION } from '../../src/motion';
+import { TAB_BAR_HEIGHT } from '../../src/tabBar';
 
 type TabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>['tabBar']>>[0];
 
@@ -22,7 +23,7 @@ type TabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>['tab
  * nền của vùng màn hình cùng màu nền app để nếu có chớp cũng không trắng tinh.
  */
 const TAB_ANIMATION = SCREEN_ANIMATION;
-const BAR_HEIGHT = 100;
+const BAR_HEIGHT = TAB_BAR_HEIGHT;
 const SHAPE_OFFSET = 28;
 const CURVE_HEIGHT = 28;
 const CURVE_PEAK = 14;
