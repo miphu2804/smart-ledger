@@ -1,3 +1,12 @@
+### 2026-10-29 — Daily Core user activity (CORE-018)
+
+| Area | Change |
+|---|---|
+| Core | • Owner-approved V19 adds a private user/day table with PK, FK and date index; successful authenticated API reads and writes count once per Vietnam date for ACTIVE OWNER/ADMIN<br>• Default-off recorder has a bounded cache, independent committed writes, retry after telemetry errors and hourly 90-day retention; no client API or shared-environment activation |
+| Docs | • BR-023 → FR-036 → AC-101–103, ERD and rollout/rollback guide define the scope; read-only Grafana SQL separates roles and excludes loadtest accounts |
+
+Check: 27 CORE-018 tests passed on disposable PostgreSQL 16.15; full Maven verify passed 1449 tests with zero failures/errors/skips; PostgreSQL gate unit tests passed 13 cases. Shared-DB migration, Grafana provisioning and staging/production acceptance are not verified. Commit: the one that adds this entry.
+
 ### 2026-10-29 — Alerts for the database, AI and Bifrost
 
 | Area | Change |
@@ -187,11 +196,3 @@ Check: link and anchor check over the edited files passes. Commit: the one that 
 **Changed files:** `scripts/secrets/apply.sh`, `docs/development/secrets-and-env.md` — modified; this entry.
 
 **Check:** dry runs in a scratch repo: a target missing a staging key prints the warning, a complete target and `staging dev` do not; `sh -n` passes. **Not verified:** the warning inside the `sl` menu.
-
-### [2026-10-27 09:15 UTC+07:00] — [Docs] Refresh the marketing screenshots and keep the capture script
-
-**Done:** The 21 phone-ratio screenshots in `docs/marketing/` dated from 2026-10-12 and no longer matched the app: the tab bar is now Tổng quan · Đơn hàng · Tạo đơn · Trợ lý Bobi · Quản lý, Đọc đơn and Quét mã sit on the Tạo đơn screen, and products without a photo show their initial instead of a stock photo (#193). All 21 were captured again from `staging` at `7d65486` with the same names, size (1170 × 2532 PNG, 390 × 844 at 3x) and flows, so existing links keep working. The capture script is now in the repo (`frontend/mobile/scripts/marketing-screenshots/`, Node 22 and Chrome only, no new packages): it drives headless Chrome over the DevTools Protocol, replaces the camera with a drawn EAN-13 package so the scanner decodes it for real, and types the voice sentences through "Nhập tay". The README lists the new contents, the source commit and how to capture again; the Unsplash note is gone because the app no longer uses those photos.
-
-**Changed files:** `docs/marketing/{dashboard,chat,barcode,voice}/*.png` (21) and `docs/marketing/README.md` — modified; `frontend/mobile/scripts/marketing-screenshots/{capture.mjs,cdp.mjs,page-helpers.js}` — added; this entry.
-
-**Check:** a full run of the script captured all 21 images without errors; each image is 1170 × 2532 and every flow was reviewed on a contact sheet (the chat answer carries the "Số liệu giả lập" note, the scanner reads `8935049500544` and reports `8936079140014` as unknown, the voice order ends at 4 items and 98.000đ); `node --check` passes for the three script files. **Not verified:** the same screens on a real phone; the script on macOS or Linux (paths are configurable but only Windows was run).
