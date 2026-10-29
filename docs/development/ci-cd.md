@@ -166,7 +166,7 @@ Compose sets `AI_BASE_URL`, `SERVER_PORT` and `FLYWAY_ENABLED=false` itself. Bef
 | `POSTGRES_URL` | Supabase `postgresql://` URL of the environment |
 | `AI_SQL_READER_URL` | Read-only `ai_sql_reader` login as a `postgresql://` URL; empty means the agent cannot read shop data |
 | `REDIS_URL` | Redis Cloud of the environment |
-| `POSTGRES_POOL_MAX_SIZE`, `SQL_POOL_MAX_SIZE` | Optional, default `2`; they share the Supabase pooler limit with Core ([AI README](../../backend/ai/README.md#routes-and-database-access)) |
+| `POSTGRES_POOL_MAX_SIZE`, `SQL_POOL_MAX_SIZE` | Optional, default `2`; they share the Supabase pooler limit with Core ([AI README](../../backend/ai/README.md#database-access)) |
 | Model and Logfire variables | From GitHub, see below |
 | `AGENT_MEMORY_*`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | Optional, `ai.env` only; memory is off until the PO approves it ([ADR-0002](../architecture/adr/0002-agent-long-term-memory.md), [AI README](../../backend/ai/README.md#long-term-memory-off-by-default)) |
 
@@ -232,8 +232,8 @@ These live in Dopbase `ai/<environment>` with the other AI variables; step `Uplo
 
 | Name | Value |
 |---|---|
-| `OPENAI_API_KEY` | Gateway key shared by every model |
-| `OPENAI_BASE_URL` | `https://opencode.ai/inference/go/v1` (OpenCode Go) or `https://api.openai.com/v1`; required for `anthropic` models |
+| `OPENAI_API_KEY` | Gateway key shared by every model; `BIFROST_VIRTUAL_KEY` once AI calls Bifrost |
+| `OPENAI_BASE_URL` | Bifrost at `http://bifrost:8080` (being wired, see [`bifrost`](#service-variables)), or `https://opencode.ai/inference/go/v1` (OpenCode Go) or `https://api.openai.com/v1` directly; required for `anthropic` models |
 | `MODEL_PROVIDER`, `MODEL_NAME` | e.g. `anthropic` and `claude-haiku-5-5`; see [AI README](../../backend/ai/README.md) |
 | `MODEL_REASONING_EFFORT` | `none`, `low`, `medium` or `high` |
 | `MODEL_FALLBACKS` | Optional JSON list, e.g. `["openai-chat:deepseek-v4.1-flash"]` |
@@ -248,7 +248,7 @@ To remove a setting, delete it in Dopbase; the next deploy drops it from `ai.env
 | `LOGFIRE_ENVIRONMENT` | Dopbase `ai/<environment>` | `staging` or `production` |
 | `LOGFIRE_SERVICE_VERSION` | Commit | `github.sha` |
 
-Traces carry no message content ([AI README](../../backend/ai/README.md#tracing-logfire)). To turn tracing off, delete `LOGFIRE_TOKEN` in Dopbase and redeploy `ai`.
+Traces carry no message content ([AI README](../../backend/ai/README.md#observability)). To turn tracing off, delete `LOGFIRE_TOKEN` in Dopbase and redeploy `ai`.
 
 ### Core CORS origins
 

@@ -132,7 +132,7 @@ After a pull request with a Core or AI migration merges, one person checks out `
    FLYWAY_ENABLED=true docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build core
    ```
 
-2. Push the AI migrations, as in the [AI README](../../backend/ai/README.md#chat-history-schema):
+2. Push the AI migrations, as in the [AI README](../../backend/ai/README.md#schema-and-migrations):
 
    ```bash
    npx supabase@2.119.0 db push --db-url "$POSTGRES_URL"
