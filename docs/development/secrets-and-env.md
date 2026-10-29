@@ -24,7 +24,7 @@ smart-ledger/
     └── lib.sh                 # helpers
 ```
 
-A file maps to a project by its name: `env/.env.core` is `core/<environment>` and `env/github/.env.vercel-staging` is `github-vercel-staging/<environment>`. A file whose name holds `.` or `_` cannot be a Dopbase project and is skipped.
+A file maps to a project by its name: `env/.env.core` is `core/<environment>` and a GitHub environment file `env/github/.env.<service>-<stage>` is `github-<service>/<stage>`, so `.env.vercel-staging` is `github-vercel/staging` and `.env.android-dev` (kept in the staging folder) is `github-android/dev`. A file whose name holds `.` or `_` cannot be a Dopbase project and is skipped.
 
 ## 2. Env file format
 
@@ -89,7 +89,7 @@ Not in `secrets/`: `.env.example` files (committed templates), and generated fil
 
 ## 4. Daily use
 
-- `scripts/secrets/dopbase-sync.sh pull <environment>` replaces each file in `secrets/<environment>/env/` with its Dopbase project. Each export asks for your password, so a pull asks once per file; a failed export leaves that file as it was.
+- `scripts/secrets/dopbase-sync.sh pull <environment>` replaces each file in `secrets/<environment>/env/` with its Dopbase project. It asks for your Dopbase password once and types it into the confirmation of every export with `expect`; a failed export leaves that file as it was.
 - `scripts/secrets/apply.sh staging dev` is a dry run: per file in `targets` it builds the staging file with the keys of `secrets/local.<name>` (the local database) put over it, and lists keys that would be added (`+`), changed (`~`) or dropped (`-`), or `(comments or layout only)`. Values are never printed. `--use-staging KEY` keeps the staging value of one local key, for example to reach the shared staging database.
 - `scripts/secrets/apply.sh staging dev --apply` writes the files and keeps each replaced one as `<file>.bak` (`--no-backup` skips it). A key you added only on your machine shows as `-` and is lost on apply; add it to Dopbase first.
 - Copying runs one way, from staging to this machine, and copying to or from production is not supported.
@@ -97,7 +97,7 @@ Not in `secrets/`: `.env.example` files (committed templates), and generated fil
 
 ## 5. Change a secret
 
-Change it in the Dopbase web UI or with `dopbase secret set <project>/<environment> KEY=value`, then pull. To change many keys at once, edit `secrets/<environment>/env/` and run `scripts/secrets/dopbase-sync.sh push <environment>`. A push merges into Dopbase: a key deleted from a file stays there until `dopbase secret delete` removes it, and every value must stay on its key's line.
+Change it in the Dopbase web UI or with `dopbase secret set <project>/<environment> KEY=value`, then pull. Dopbase is the only place to change a value: the backend deploy reads `core` and `ai` from it, and `scripts/secrets/vps-playbook.sh` reads every VPS file from it, so an edit in `secrets/<environment>/env/` reaches nothing. For a new service, write its file and run `scripts/secrets/dopbase-sync.sh seed <environment>`, which loads only files whose Dopbase environment does not exist yet; every value must stay on its key's line.
 
 ## 6. Add or remove a person
 

@@ -22,3 +22,23 @@ key_changes() {
       for (key in existing) if (!(key in incoming)) print "  - " key
     }' "$1" "$2" | sort -k2
 }
+
+# Writes Dopbase environment $1 as a dotenv file $2, readable only by you. The CLI confirms every export with your
+# password on a terminal and reads no other input, so the password is asked once per script and typed into each
+# prompt by expect(1), which ships with macOS.
+dopbase_export() {
+  if [ -z "${dopbase_password:-}" ]; then
+    printf 'Dopbase password: ' >&2
+    stty -echo; IFS= read -r dopbase_password; stty echo; echo >&2
+  fi
+  rm -f "$2"
+  (umask 077 && DOPBASE_PASSWORD="$dopbase_password" expect -c "
+    log_user 0
+    spawn dopbase export {$1} --output {$2} --format dotenv
+    expect -re {[Pp]assword:} { send -- \"\$env(DOPBASE_PASSWORD)\r\" }
+    expect eof
+    set code [lindex [wait] 3]
+    regsub -all {\x1b\[[0-9;?]*[A-Za-z]} \$expect_out(buffer) {} out
+    if {\$code != 0} { puts stderr [lindex [split [string trim \$out] \n] end] }
+    exit \$code") || { echo "dopbase export of $1 failed" >&2; return 1; }
+}
