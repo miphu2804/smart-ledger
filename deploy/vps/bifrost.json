@@ -1,0 +1,31 @@
+{
+  "source_of_truth": "config.json",
+  "client": {
+    "enforce_auth_on_inference": true
+  },
+  "providers": {
+    "opencode-go": {
+      "network_config": { "default_request_timeout_in_seconds": 60 },
+      "keys": [
+        { "name": "opencode-go", "value": "env.OPENCODE_GO_API_KEY", "models": ["*"], "weight": 1.0 }
+      ]
+    }
+  },
+  "governance": {
+    "virtual_keys": [
+      {
+        "id": "vk-ai",
+        "name": "AI service",
+        "value": "env.BIFROST_VIRTUAL_KEY",
+        "provider_configs": [
+          { "provider": "opencode-go", "allowed_models": ["*"], "key_ids": ["*"] }
+        ]
+      }
+    ],
+    "auth_config": {
+      "is_enabled": true,
+      "admin_username": "env.BIFROST_ADMIN_USERNAME",
+      "admin_password": "env.BIFROST_ADMIN_PASSWORD"
+    }
+  }
+}

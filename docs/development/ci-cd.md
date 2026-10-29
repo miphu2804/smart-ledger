@@ -14,7 +14,7 @@
 
 ![CI/CD flow](../architecture/diagrams/images/ci-cd.svg)
 
-Green numbers are the deploy, purple the one-time VPS setup, orange the runtime requests. The diagram shows the target setup: pgvector, the Bifrost gateway, Langfuse and the Grafana stack are not built yet; today AI calls OpenCode Go directly and traces to Logfire. Edit [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio) and re-export:
+Green numbers are the deploy, purple the one-time VPS setup, orange the runtime requests. Gray dashed arrows are secrets: the deploy exports `core` and `ai` from Dopbase with runner tokens kept in the GitHub environment, and `scripts/secrets/vps-playbook.sh` exports every VPS file from Dopbase for Ansible. The diagram shows the target setup: pgvector, the Bifrost gateway, Langfuse and the Grafana stack are not built yet; today AI calls OpenCode Go directly and traces to Logfire. Edit [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio) and re-export:
 
 ```bash
 drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/ci-cd.svg docs/architecture/diagrams/src/ci-cd.drawio
@@ -68,7 +68,7 @@ CI reads input `runner`, else repository variable `CI_RUNNER`. CD reads input `r
 
 | Environment | Branch | Approval | Secrets | Variables |
 |---|---|---|---|---|
-| `backend-staging` | `staging` | No | `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS`, `OPENAI_API_KEY`, `LOGFIRE_TOKEN` (optional) | `VPS_HOST`, `VPS_USER`, `VPS_APP_DIR`, `CORS_ALLOWED_ORIGINS`, [AI model settings](#ai-model-settings) |
+| `backend-staging` | `staging` | No | `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS`, `DOPBASE_CORE_TOKEN`, `DOPBASE_AI_TOKEN` | `VPS_HOST`, `VPS_USER`, `VPS_APP_DIR`, `DOPBASE_URL` |
 | `backend-production` | `main` | Yes | Same | Same, with `VPS_APP_DIR=/opt/smartledger-production` |
 | `vercel-staging` | `staging` | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `EXPO_PUBLIC_*`, `VERCEL_STAGING_ALIAS` |
 | `vercel-production` | `main` | Yes | Same | `EXPO_PUBLIC_*` |
@@ -79,7 +79,6 @@ CI reads input `runner`, else repository variable `CI_RUNNER`. CD reads input `r
 | `android-production` | `main` | Yes | `ANDROID_GOOGLE_SERVICES_JSON`, `ANDROID_KEYSTORE_*`, `R2_*` | `EXPO_PUBLIC_*`, `R2_BUCKET`, `R2_PUBLIC_URL` |
 
 - Keep backend secrets out of `vercel-*` and `landing-*`.
-- `vercel-preview` and `landing-preview` exist but are unused while PR previews are off.
 - Both backend environments use the same VPS and deploy key, so a `backend-staging` job can reach production containers. The approval guards only the `main` deploy. The project owner accepted this.
 
 <a id="vps"></a>
@@ -92,6 +91,12 @@ One VPS (`103.162.31.93`, Ubuntu 24.04, 4 GB RAM plus swap) runs both environmen
 |---|---|---|---|---|
 | staging | `staging.103-162-31-93.sslip.io` | `core-staging:8080` | `/opt/smartledger` | `smart-ledger-staging` |
 | production | `production.103-162-31-93.sslip.io` | `core-production:8080` | `/opt/smartledger-production` | `smart-ledger-production` |
+
+### Networks and ports
+
+![VPS Docker networks and ports](../architecture/diagrams/images/vps-network.svg)
+
+Source: [`vps-network.drawio`](../architecture/diagrams/src/vps-network.drawio). Each dashed region is one Docker network, so a container drawn inside two regions is on both. Each `name:port` is what another container dials: the name is the container's DNS name on that network, prefixed `edge:` for its alias on `edge`, and the port is where the target listens inside its container. Only Caddy publishes host ports, so every other port is reachable only from a container on the same Docker network. Each Compose project has its own `default` network, and Core, Bifrost, Grafana and Dopbase also join `edge` so Caddy can reach them. Compose also registers each service name on `edge`, where `core` matches both environments' Core, so Caddy dials the unique aliases `core-<environment>` and `gateway-<environment>` instead. AI joins only its own project network, so only that environment's Core can call it. Alloy listens on no port: it reads containers through the Docker socket, writes to Prometheus and Loki on the monitoring network, and probes each Core through its public domain. Production runs no Bifrost.
 
 Compose names a project after its directory unless the file sets `name:`, which would make the projects `smartledger` and `smartledger-production` while the repository and the GHCR images are kebab-case. Each compose file sets `name:` instead, so the containers are `smart-ledger-staging-core-1`, `smart-ledger-production-core-1` and `smart-ledger-edge-caddy-1`, and the shared Caddy keeps its certificates in `smart-ledger-edge_caddy_data`. The app directories are unchanged, so each stack reads its own environment from `ENVIRONMENT` in the project `.env`, which both `deploy.sh` and the playbook write.
 
@@ -116,17 +121,18 @@ The run page shows a summary table and uploads a `deploy-summary-<branch>` artif
 [`deploy/ansible/playbook.yml`](../../deploy/ansible/playbook.yml) does steps 1, 5 and 6, and can be re-run to restore a VPS or upload changed env files. Copy [`inventory.example.ini`](../../deploy/ansible/inventory.example.ini) to `inventory.ini`, then for each environment:
 
 ```bash
-set -a; . secrets/staging/env/.env.vps; set +a
-ansible-playbook -i deploy/ansible/inventory.ini deploy/ansible/playbook.yml --limit staging
+scripts/secrets/vps-playbook.sh staging
 ```
+
+The wrapper exports `core`, `ai`, `bifrost` and `vps` of that environment from Dopbase into a temporary directory, loads `.env.vps` into the shell, runs the playbook and removes the directory.
 
 Add `GHCR_USERNAME` and `GHCR_READ_TOKEN` to the shell if the packages are private.
 
 1. Create user `deploy` in group `docker`, key-only SSH, `ufw` allowing port 22.
 2. Generate a CI-only key with `ssh-keygen -t ed25519 -f deploy_key -N "" -C github-actions-deploy`. In `secrets/<environment>/env/.env.vps`, set `VPS_SSH_KEY` to `base64 < deploy_key | tr -d '\n'` and `VPS_SSH_PUBLIC_KEY` to `deploy_key.pub`, then delete both files and run `scripts/secrets/github.sh <environment> --apply`.
 3. Set `VPS_KNOWN_HOSTS` to `ssh-keyscan -t ed25519 <VPS_HOST>` (check the fingerprint in the provider console) and `VPS_HOST` in both `.env.vps` and the GitHub environment variables.
-4. Set `CADDY_DOMAIN`; production copies the `VPS_*` values from staging, because `deploy` has one key. Run `scripts/secrets/push.sh <environment>`.
-5. Create network `edge`. In the app directory, put `compose.yaml` from `deploy/vps/`, and with mode `600` `core.env`, `ai.env` (from [secrets](secrets-and-env.md)) and `.env` with `ENVIRONMENT=<environment>` and `CORE_ALIAS=core-<environment>`. In `/opt/smartledger-edge`, put `deploy/edge/` and `sites/<environment>.caddy`, then reload Caddy.
+4. Set `CADDY_DOMAIN`; production copies the `VPS_*` values from staging, because `deploy` has one key. Save the `VPS_*` and `CADDY_DOMAIN` values in Dopbase `vps/<environment>`.
+5. Create network `edge`. In the app directory, put `compose.yaml` and `bifrost.json` from `deploy/vps/`, and with mode `600` `core.env`, `ai.env`, `bifrost.env` (from [secrets](secrets-and-env.md)) and `.env` with `ENVIRONMENT=<environment>` and `CORE_ALIAS=core-<environment>`. In `/opt/smartledger-edge`, put `deploy/edge/` and `sites/<environment>.caddy`, then reload Caddy.
 6. After the first deploy, make the two GHCR packages public, or `docker login ghcr.io` once as `deploy` with a `read:packages` token.
 7. Check database access: Supabase's direct host is IPv6-only, so a VPS without IPv6 uses the session pooler URL. Allowlist the VPS in Supabase and Redis Cloud if restrictions are on.
 
@@ -134,7 +140,7 @@ The first deploy must include both services (start CD by hand with `backend-ai` 
 
 ### Service variables
 
-`core.env` and `ai.env` hold the variables below. Every deploy rewrites `github.core.env` and `github.ai.env` with the values GitHub owns, which override them; do not edit those by hand. Write `$` as `$$`. After editing on the VPS, run `docker compose up -d <service>` and send one chat through Core: a missing variable can still leave a healthy container.
+`core.env` and `ai.env` hold the variables below. Every deploy of a service rewrites its file from Dopbase `core/<environment>` or `ai/<environment>`, so change values in Dopbase, not on the VPS. `github.ai.env` holds only `LOGFIRE_SERVICE_VERSION`, the deployed commit. Write `$` as `$$`. After editing on the VPS, run `docker compose up -d <service>` and send one chat through Core: a missing variable can still leave a healthy container.
 
 **`core`**
 
@@ -164,13 +170,25 @@ Compose sets `AI_BASE_URL`, `SERVER_PORT` and `FLYWAY_ENABLED=false` itself. Bef
 | Model and Logfire variables | From GitHub, see below |
 | `AGENT_MEMORY_*`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | Optional, `ai.env` only; memory is off until the PO approves it ([ADR-0002](../architecture/adr/0002-agent-long-term-memory.md), [AI README](../../backend/ai/README.md#long-term-memory-off-by-default)) |
 
+**`bifrost`**
+
+The model gateway in front of the providers, reachable by AI inside the project network at `http://bifrost:8080`. [`deploy/vps/bifrost.json`](../../deploy/vps/bifrost.json) declares the providers, the virtual key and the admin login, and wins over the store in the `bifrost-data` volume; `bifrost.env` holds the values it references. The playbook starts it; `deploy.sh` does not, so a new Bifrost version is a digest change in `compose.yaml` followed by the playbook.
+
+Bifrost also joins `edge` as `gateway-<environment>`. When `.env.vps` sets `GATEWAY_DOMAIN` (`gateway-staging.songheloi.id.vn`, `gateway-production.songheloi.id.vn`), the playbook writes `sites/gateway-<environment>.caddy`, which serves the admin UI and its API behind the admin login and answers 404 to the inference prefixes, so model calls stay internal to AI; without it there is no public UI and an SSH tunnel to the container reaches it instead.
+
+| Variable | Value |
+|---|---|
+| `OPENCODE_GO_API_KEY` | OpenCode Go key; only Bifrost holds it |
+| `BIFROST_VIRTUAL_KEY` | Random `sk-bf-` value, different per environment; a request without it gets 401 |
+| `BIFROST_ADMIN_USERNAME`, `BIFROST_ADMIN_PASSWORD` | Admin login of the UI and the management API; a long random password, because the domain is public |
+
 ### Dopbase and its backup
 
-Dopbase, the team's self-hosted secrets manager, runs on the same VPS as its own Compose project in `/opt/dopbase` ([`deploy/dopbase/`](../../deploy/dopbase/)), shared by every environment and behind the same Caddy as Core. The playbook sets it up only when `DOPBASE_DOMAIN` holds a name that resolves to the VPS, `secrets.songheloi.id.vn`; without it every Dopbase task is skipped. The zone's nameservers are Mắt Bão, not Cloudflare, so Cloudflare Access cannot sit in front of it: until the zone moves, the login and setup pages are protected only by Dopbase's own password, and `sites/dopbase.caddy` is where an allowlist or `basic_auth` would go. On first start Dopbase prints a protected setup link, which an operator must open right away because the setup page is reachable by anyone who has the address: read it with `docker compose logs dopbase` in `/opt/dopbase`. [`scripts/secrets/dopbase-sync.sh push|pull <environment>`](../../scripts/secrets/dopbase-sync.sh) moves the env files of one environment between `secrets/<environment>/env/` and Dopbase, one project per file.
+Dopbase, the team's self-hosted secrets manager, runs on the same VPS as its own Compose project in `/opt/dopbase` ([`deploy/dopbase/`](../../deploy/dopbase/)), shared by every environment and behind the same Caddy as Core. The playbook sets it up only when `DOPBASE_DOMAIN` holds a name that resolves to the VPS, `secrets.songheloi.id.vn`; without it every Dopbase task is skipped. The zone's nameservers are Mắt Bão, not Cloudflare, so Cloudflare Access cannot sit in front of it: until the zone moves, the login and setup pages are protected only by Dopbase's own password, and `sites/dopbase.caddy` is where an allowlist or `basic_auth` would go. On first start Dopbase prints a protected setup link, which an operator must open right away because the setup page is reachable by anyone who has the address: read it with `docker compose logs dopbase` in `/opt/dopbase`. Dopbase is the source of every service variable: the backend deploy exports `core/<environment>` and `ai/<environment>` with a runner token per service, and [`scripts/secrets/vps-playbook.sh`](../../scripts/secrets/vps-playbook.sh) exports the VPS files for the playbook. Create the tokens once per environment with `dopbase token create core/<environment> --name github-deploy` (and the same for `ai`), save them as `DOPBASE_CORE_TOKEN` and `DOPBASE_AI_TOKEN` on `backend-<environment>`, and set the variable `DOPBASE_URL` to `https://secrets.songheloi.id.vn`. Because Dopbase runs on the VPS it serves, a lost VPS is rebuilt in this order: restore Dopbase from its backup (below), then run the wrapper.
 
 Its SQLite database and master key live in the `dopbase_data` volume, which is the only copy of every stored secret, so [`deploy/dopbase/backup.sh`](../../deploy/dopbase/backup.sh) copies it off-site every night at 03:00 as a cron job of user `deploy`, logging to `/var/log/dopbase-backup.log`. The script stops Dopbase for the few seconds of the copy, because a tar of a running SQLite database can catch a torn write-ahead log, encrypts the archive with age before it leaves the machine, and uploads it to an R2 bucket as `dopbase-<timestamp>.tar.gz.age`. The private half of the age key stays with the maintainer and never reaches the VPS, so a leaked bucket or a leaked VPS token exposes nothing. Old archives are deleted by a lifecycle rule on the bucket, which keeps the token free of delete permission; set the rule to the retention the team wants, for example 30 days.
 
-Add these to the shell next to `.env.vps` before the playbook run, all five or none; an empty `DOPBASE_BACKUP_BUCKET` removes the cron job again and leaves Dopbase running:
+Keep these in Dopbase `vps/<environment>`, which the wrapper loads into the shell, all five or none; an empty `DOPBASE_BACKUP_BUCKET` removes the cron job again and leaves Dopbase running:
 
 | Variable | Value |
 |---|---|
@@ -183,27 +201,27 @@ Add these to the shell next to `.env.vps` before the playbook run, all five or n
 
 ### AI model settings
 
-Step `Upload ai settings` copies these from the `backend-*` environment into `github.ai.env` before deploying `ai`.
+These live in Dopbase `ai/<environment>` with the other AI variables; step `Upload ai settings` writes them into `ai.env` before deploying `ai`.
 
-| Name | Kind | Value |
-|---|---|---|
-| `OPENAI_API_KEY` | Secret | Gateway key shared by every model |
-| `OPENAI_BASE_URL` | Variable | `https://opencode.ai/inference/go/v1` (OpenCode Go) or `https://api.openai.com/v1`; required for `anthropic` models |
-| `MODEL_PROVIDER`, `MODEL_NAME` | Variable | e.g. `anthropic` and `claude-haiku-5-5`; see [AI README](../../backend/ai/README.md) |
-| `MODEL_REASONING_EFFORT` | Variable | `none`, `low`, `medium` or `high` |
-| `MODEL_FALLBACKS` | Variable | Optional JSON list, e.g. `["openai-chat:deepseek-v4.1-flash"]` |
+| Name | Value |
+|---|---|
+| `OPENAI_API_KEY` | Gateway key shared by every model |
+| `OPENAI_BASE_URL` | `https://opencode.ai/inference/go/v1` (OpenCode Go) or `https://api.openai.com/v1`; required for `anthropic` models |
+| `MODEL_PROVIDER`, `MODEL_NAME` | e.g. `anthropic` and `claude-haiku-5-5`; see [AI README](../../backend/ai/README.md) |
+| `MODEL_REASONING_EFFORT` | `none`, `low`, `medium` or `high` |
+| `MODEL_FALLBACKS` | Optional JSON list, e.g. `["openai-chat:deepseek-v4.1-flash"]` |
 
-An empty GitHub value is skipped, not cleared: to remove a setting, delete it from `ai.env` too.
+To remove a setting, delete it in Dopbase; the next deploy drops it from `ai.env`.
 
 ### AI tracing settings
 
 | Name | Source | Value |
 |---|---|---|
-| `LOGFIRE_TOKEN` | Secret of `backend-*` | Write token, one per environment; unset means no tracing unless `ai.env` has one |
-| `LOGFIRE_ENVIRONMENT` | Branch | `staging` or `production` |
+| `LOGFIRE_TOKEN` | Dopbase `ai/<environment>` | Write token, one per environment; unset means no tracing |
+| `LOGFIRE_ENVIRONMENT` | Dopbase `ai/<environment>` | `staging` or `production` |
 | `LOGFIRE_SERVICE_VERSION` | Commit | `github.sha` |
 
-Traces carry no message content ([AI README](../../backend/ai/README.md#tracing-logfire)). To turn tracing off, delete `LOGFIRE_TOKEN` on GitHub and in `ai.env`.
+Traces carry no message content ([AI README](../../backend/ai/README.md#tracing-logfire)). To turn tracing off, delete `LOGFIRE_TOKEN` in Dopbase and redeploy `ai`.
 
 ### Core CORS origins
 
@@ -211,7 +229,7 @@ Traces carry no message content ([AI README](../../backend/ai/README.md#tracing-
 
 A browser request must pass Firebase Authorized domains and Core CORS, and Core accepts only tokens from its own Firebase project. Source: [`auth-request-flow.drawio`](../architecture/diagrams/src/auth-request-flow.drawio).
 
-`CORS_ALLOWED_ORIGINS` is a comma-separated list of exact `http(s)` origins: no wildcard, path or trailing `/`. Core **refuses to start** on an invalid entry, so set it in the GitHub environment variables, not on the VPS; step `Upload core settings` rejects whitespace and wildcards. It applies on the next deploy.
+`CORS_ALLOWED_ORIGINS` is a comma-separated list of exact `http(s)` origins: no wildcard, path or trailing `/`. Core **refuses to start** on an invalid entry, so set it in Dopbase `core/<environment>`, not on the VPS; step `Upload core settings` rejects whitespace and wildcards before writing `core.env`. It applies on the next deploy of `core`.
 
 Staging:
 
@@ -220,6 +238,26 @@ https://app-staging.songheloi.id.vn,https://smart-ledger-staging.vercel.app,http
 ```
 
 The `preview-0N` origins are kept for when PR previews return; Firebase Authorized domains must list them too.
+
+<a id="monitoring"></a>
+
+## Monitoring
+
+[`deploy/monitoring/`](../../deploy/monitoring/) runs once per VPS in `/opt/smart-ledger-monitoring` and watches every environment: Alloy collects host, container and probe metrics plus container logs, Prometheus keeps metrics for 30 days, Loki keeps logs for 14 days, and Grafana shows them at `https://<MONITOR_DOMAIN>` and sends alerts to Discord. Each container has a memory limit, about 1 GB in total, so the stack cannot starve Core or AI.
+
+The playbook sets it up when `.env.vps` has `MONITOR_DOMAIN`, `GRAFANA_ADMIN_PASSWORD` and `MONITOR_DISCORD_WEBHOOK_URL`; each run also writes `targets/<environment>.json`, the HTTPS probe of that environment's Core health. Point an A record for `MONITOR_DOMAIN` at the VPS first. Sign-up and anonymous access are off; the admin password applies on the first start only.
+
+Datasources and alerts are provisioned from the repository and cannot be edited in the UI; change the files and re-run the playbook. The alerts are:
+
+| Alert | Fires when |
+|---|---|
+| Endpoint down | The HTTPS health probe of an environment fails for 2 minutes |
+| Container restarting | A container starts more than 3 times in 15 minutes |
+| Host memory high | VPS memory use stays above 90% for 5 minutes |
+| Host disk high | The root disk stays above 85% for 10 minutes |
+| Certificate expiring | A Core certificate expires in under 14 days |
+
+AI has no public URL, so a stopped AI container shows only through the restart alert or the Core errors it causes. Application metrics of Core, AI and Bifrost, and dashboards, are not built yet.
 
 ## Production checklist
 
@@ -257,7 +295,7 @@ A new Firebase project sends at most 10 SMS a day until billing is attached.
 - `EXPO_PUBLIC_ZALO_LOGIN=true` only once that Core has `ZALO_ENABLED=true` and lists the web origin in `ZALO_CLIENT_ORIGINS`.
 - The smoke test fails if the page is not 200, the bundle has no API endpoint, or Core rejects the CORS preflight. Mock builds skip the Core checks.
 - `app-staging.songheloi.id.vn` carries the git branch `staging` in its Vercel domain settings. Without it Vercel counts the domain as a production domain and a `main` deploy takes the alias away from staging, so the staging page serves the production build until the next staging deploy.
-- PR previews are off: they used up Vercel Hobby's 100 deployments a day and broke `staging` and `main` deploys. To restore them, call `deploy-web.yml` and `deploy-landing.yml` from `ci.yml` for same-repository PRs with `sha` set to the PR head.
+- PR previews are off: they used up Vercel Hobby's 100 deployments a day and broke `staging` and `main` deploys. The preview environments and steps were removed from the deploy workflows; restoring them means bringing back the PR alias and comment steps from git history and calling `deploy-web.yml` and `deploy-landing.yml` from `ci.yml` for same-repository PRs with `sha` set to the PR head.
 - If a domain changes in Vercel, update the `url` in `deploy-web.yml`.
 - `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` are in Project Settings → General; create `VERCEL_TOKEN` under Account Settings → Tokens.
 

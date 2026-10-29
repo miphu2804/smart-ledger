@@ -1,0 +1,129 @@
+# The minimal alert set for one small VPS, sent to Discord. Each query returns a series only while something is wrong,
+# with a positive value, so the threshold B fires on it and no data means healthy.
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: discord
+    receivers:
+      - uid: discord
+        type: discord
+        settings:
+          url: $DISCORD_WEBHOOK_URL
+
+policies:
+  - orgId: 1
+    receiver: discord
+    group_by: [alertname, env]
+    repeat_interval: 4h
+
+groups:
+  - orgId: 1
+    name: infra
+    folder: Infra
+    interval: 1m
+    rules:
+      - uid: endpoint-down
+        title: Endpoint down
+        condition: B
+        for: 2m
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model: { refId: A, instant: true, expr: "1 - probe_success > 0" }
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions: [{ evaluator: { type: gt, params: [0] } }]
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: critical }
+        annotations: { summary: "{{ $labels.env }} Core health over HTTPS fails: DNS, Caddy, certificate or Core is down" }
+
+      - uid: container-restarting
+        title: Container restarting
+        condition: B
+        for: 0s
+        data:
+          - refId: A
+            relativeTimeRange: { from: 900, to: 0 }
+            datasourceUid: prometheus
+            model: { refId: A, instant: true, expr: 'changes(container_start_time_seconds{name!=""}[15m]) > 3' }
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions: [{ evaluator: { type: gt, params: [0] } }]
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning }
+        annotations: { summary: "{{ $labels.name }} restarted more than 3 times in 15 minutes: crash loop or memory limit" }
+
+      - uid: host-memory
+        title: Host memory high
+        condition: B
+        for: 5m
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model: { refId: A, instant: true, expr: "(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 > 90" }
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions: [{ evaluator: { type: gt, params: [0] } }]
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning }
+        annotations: { summary: "VPS memory above 90% for 5 minutes; staging and production share it" }
+
+      - uid: host-disk
+        title: Host disk high
+        condition: B
+        for: 10m
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model: { refId: A, instant: true, expr: '(1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 > 85' }
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions: [{ evaluator: { type: gt, params: [0] } }]
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning }
+        annotations: { summary: "VPS root disk above 85%" }
+
+      - uid: cert-expiring
+        title: Certificate expiring
+        condition: B
+        for: 1h
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model: { refId: A, instant: true, expr: "(probe_ssl_earliest_cert_expiry - time()) / 86400 < 14" }
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions: [{ evaluator: { type: gt, params: [-1000] } }]
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning }
+        annotations: { summary: "{{ $labels.env }} certificate expires in under 14 days: Caddy renewal is failing" }
