@@ -9,11 +9,12 @@
 #   secrets/staging/env/github/.env.android-dev      <->  github-android/dev
 # The Dopbase instance serves only SmartLedger, so every project on it maps to a file.
 # A file whose name holds `.` or `_` (.env.railway.tokens) is skipped: Dopbase project names allow neither.
-# The CLI asks for the password on every export, so a pull asks once per file.
+# A pull asks for your Dopbase password once.
 # Needs the dopbase CLI, logged in once with `dopbase client connect <url>` and `dopbase login`.
 # Usage: scripts/secrets/dopbase-sync.sh seed|pull <environment>
 set -eu
 cd "$(git rev-parse --show-toplevel)"
+. scripts/secrets/lib.sh
 action="${1:?usage: dopbase-sync.sh seed|pull <environment>}"
 environment="${2:?usage: dopbase-sync.sh seed|pull <environment>}"
 dir="secrets/$environment/env"
@@ -49,7 +50,7 @@ seed() {
 pull() {
   build="$(mktemp -d)"
   trap 'rm -rf "$build"' EXIT
-  # A plain list, not a pipe into the loop: the password prompt of each export needs the terminal's stdin.
+  # A plain list, not a pipe into the loop: the password prompt needs the terminal's stdin.
   projects="$(dopbase project list --json | jq -r '.[].name')"
   for project in $projects; do
     case "$project" in
@@ -62,7 +63,7 @@ pull() {
 pull_one() {
   dopbase env show "$1" >/dev/null 2>&1 || return 0
   file="$dir/$2"
-  (umask 077 && dopbase export "$1" --stdout --format dotenv >"$build/env")
+  dopbase_export "$1" "$build/env"
   mkdir -p "$(dirname "$file")"
   mv "$build/env" "$file"
   chmod 600 "$file"

@@ -89,7 +89,7 @@ Not in `secrets/`: `.env.example` files (committed templates), and generated fil
 
 ## 4. Daily use
 
-- `scripts/secrets/dopbase-sync.sh pull <environment>` replaces each file in `secrets/<environment>/env/` with its Dopbase project. Each export asks for your password, so a pull asks once per file; a failed export leaves that file as it was.
+- `scripts/secrets/dopbase-sync.sh pull <environment>` replaces each file in `secrets/<environment>/env/` with its Dopbase project. It asks for your Dopbase password once and types it into the confirmation of every export with `expect`; a failed export leaves that file as it was.
 - `scripts/secrets/apply.sh staging dev` is a dry run: per file in `targets` it builds the staging file with the keys of `secrets/local.<name>` (the local database) put over it, and lists keys that would be added (`+`), changed (`~`) or dropped (`-`), or `(comments or layout only)`. Values are never printed. `--use-staging KEY` keeps the staging value of one local key, for example to reach the shared staging database.
 - `scripts/secrets/apply.sh staging dev --apply` writes the files and keeps each replaced one as `<file>.bak` (`--no-backup` skips it). A key you added only on your machine shows as `-` and is lost on apply; add it to Dopbase first.
 - Copying runs one way, from staging to this machine, and copying to or from production is not supported.
