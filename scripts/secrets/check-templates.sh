@@ -30,7 +30,8 @@ check_project() {
 # Lists the template keys and groups that example $2 lacks.
 check_example() {
   template_keys "$1" > "$tmp/known"
-  template_keys "$2" > "$tmp/shown"
+  # A key shown commented out, as `# KEY=`, counts: the VPS-only keys must not be empty on a dev machine.
+  grep -E '^(# )?[A-Za-z_][A-Za-z0-9_]*=' "$2" | sed -E 's/^# //; s/=.*//' | sort -u > "$tmp/shown"
   for key in $(comm -23 "$tmp/known" "$tmp/shown"); do echo "note: $2 lacks $key from $1"; done
   grep '^### ' "$1" | while IFS= read -r group; do
     grep -qxF "$group" "$2" || echo "note: $2 lacks the group $group from $1"
