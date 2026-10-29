@@ -1,0 +1,7 @@
+# Alloy pushes every sample through remote write, so Prometheus scrapes nothing itself; it only evaluates the
+# recording rules at the scrape interval.
+global:
+  evaluation_interval: 30s
+
+rule_files:
+  - /etc/prometheus/rules/*.yml

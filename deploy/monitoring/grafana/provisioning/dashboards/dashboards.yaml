@@ -1,0 +1,12 @@
+# Dashboards are provisioned from the JSON files next to this one and cannot be saved from the UI; change the JSON and
+# re-run the playbook. To edit visually, change a copy in the UI, export it as JSON and replace the file.
+apiVersion: 1
+
+providers:
+  - name: smart-ledger
+    folder: Infra
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/provisioning/dashboards
