@@ -435,7 +435,9 @@
 
     # Runs before the edge, so Caddy finds Grafana on the edge network when it reloads the new site, and after the
     # stack, so a new environment's network exists. Alloy joins only the app networks that exist: Compose refuses to
-    # start a container on a missing external network.
+    # start a container on a missing external network. Alloy, Loki and Grafana read their bind-mounted config only at
+    # start, and Compose does not recreate a container when only a mounted file changed, so every run recreates them;
+    # their data stays in named volumes.
     - name: Apply monitoring
       ansible.builtin.shell: |
         set -eu
@@ -450,7 +452,7 @@
           for net in $nets; do printf '  %s:\n    external: true\n' "$net"; done
         } > compose.override.yaml
         [ -n "$nets" ] || rm compose.override.yaml
-        docker compose up -d --wait --remove-orphans
+        docker compose up -d --wait --remove-orphans --force-recreate
       args:
         chdir: "{{ monitoring_dir }}"
       become: true
