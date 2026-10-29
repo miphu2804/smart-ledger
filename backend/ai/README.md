@@ -80,6 +80,7 @@ The agent runs on [Pydantic AI](https://ai.pydantic.dev/). Prompts live in `src/
 | `openai-chat` | `OpenAIChatModel` | `/chat/completions` |
 
 - Every model shares `OPENAI_API_KEY` and `OPENAI_BASE_URL`, so one gateway such as [OpenCode Go](https://opencode.ai/docs/go/) serves all three. The default model is `claude-haiku-5-5`.
+- On the VPS, Bifrost at `http://bifrost:8080` sits in front of OpenCode Go and holds its key; AI then sends the Bifrost virtual key as `OPENAI_API_KEY`. This wiring is in progress ([CI/CD](../../docs/development/ci-cd.md#service-variables)).
 - `MODEL_FALLBACKS` is a JSON list of `provider:model` tried in order; a fallback gets only what is left of the turn timeout, so it mainly covers fast failures.
 - OpenCode Go needs an `x-opencode-session` header: each turn sends `conversation-<id>`, and one-off ids for drafts and memory calls.
 - `MODEL_REASONING_EFFORT` maps to `openai_reasoning_effort` or `anthropic_effort`.

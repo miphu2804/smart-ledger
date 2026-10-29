@@ -232,8 +232,8 @@ These live in Dopbase `ai/<environment>` with the other AI variables; step `Uplo
 
 | Name | Value |
 |---|---|
-| `OPENAI_API_KEY` | Gateway key shared by every model |
-| `OPENAI_BASE_URL` | `https://opencode.ai/inference/go/v1` (OpenCode Go) or `https://api.openai.com/v1`; required for `anthropic` models |
+| `OPENAI_API_KEY` | Gateway key shared by every model; `BIFROST_VIRTUAL_KEY` once AI calls Bifrost |
+| `OPENAI_BASE_URL` | Bifrost at `http://bifrost:8080` (being wired, see [`bifrost`](#service-variables)), or `https://opencode.ai/inference/go/v1` (OpenCode Go) or `https://api.openai.com/v1` directly; required for `anthropic` models |
 | `MODEL_PROVIDER`, `MODEL_NAME` | e.g. `anthropic` and `claude-haiku-5-5`; see [AI README](../../backend/ai/README.md) |
 | `MODEL_REASONING_EFFORT` | `none`, `low`, `medium` or `high` |
 | `MODEL_FALLBACKS` | Optional JSON list, e.g. `["openai-chat:deepseek-v4.1-flash"]` |
