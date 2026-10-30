@@ -71,7 +71,13 @@ services:
 
   grafana:
     image: grafana/grafana:12.1.1
-    env_file: .env
+    # The playbook writes one Postgres file per environment, so a run for one environment keeps the other's.
+    env_file:
+      - .env
+      - path: postgres-staging.env
+        required: false
+      - path: postgres-production.env
+        required: false
     environment:
       GF_SERVER_ROOT_URL: https://${MONITOR_DOMAIN:?MONITOR_DOMAIN is required}
       # Applies on the first start only; later changes go through the Grafana UI or `grafana cli admin reset-admin-password`.
@@ -81,8 +87,11 @@ services:
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
       GF_NEWS_NEWS_FEED_ENABLED: "false"
+      # Signing in lands on the Overview instead of the empty Grafana home page.
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/overview.json
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/product:/etc/grafana/product:ro
       - grafana_data:/var/lib/grafana
     mem_limit: 256m
     depends_on: [prometheus, loki]

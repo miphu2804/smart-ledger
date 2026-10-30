@@ -1,0 +1,1361 @@
+{
+  "uid": "smart-ledger-product",
+  "title": "SmartLedger product",
+  "description": "How owners use SmartLedger: active users and retention, shop activation, feature adoption, AI use and sales. Reads Supabase through the read-only grafana_reader role (ADR-0003); load-test accounts are left out.",
+  "tags": [
+    "smart-ledger",
+    "layer-product"
+  ],
+  "editable": false,
+  "graphTooltip": 1,
+  "refresh": "5m",
+  "schemaVersion": 41,
+  "timezone": "Asia/Ho_Chi_Minh",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "5m",
+      "15m",
+      "1h"
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "smart-ledger"
+      ],
+      "asDropdown": false,
+      "includeVars": true,
+      "keepTime": true,
+      "title": "SmartLedger"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "env",
+        "label": "Environment",
+        "type": "custom",
+        "query": "staging,production",
+        "current": {
+          "text": "staging",
+          "value": "staging"
+        },
+        "includeAll": false,
+        "multi": false,
+        "options": [
+          {
+            "text": "staging",
+            "value": "staging",
+            "selected": true
+          },
+          {
+            "text": "production",
+            "value": "production",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "name": "action",
+        "label": "Action",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "smartledger-${env}-pg"
+        },
+        "query": "SELECT DISTINCT action FROM audit_logs ORDER BY 1",
+        "definition": "SELECT DISTINCT action FROM audit_logs ORDER BY 1",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "shop",
+        "label": "Shop id",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Users",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": [],
+      "id": 1
+    },
+    {
+      "type": "stat",
+      "title": "DAU",
+      "description": "Owners with at least one successful API request today (Vietnam date). Source: user_daily_activity (CORE-018).",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "smartledger-${env}-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "smartledger-${env}-pg"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(DISTINCT a.user_id) FROM user_daily_activity a JOIN users u ON u.id = a.user_id WHERE u.system_role = 'OWNER' AND coalesce(u.email, '') NOT ILIKE 'loadtest+%' AND a.activity_date > (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "id": 2
+    },
+    {
+      "type": "stat",
+      "title": "WAU",
+      "description": "Distinct owners active in the last 7 Vietnam dates including today.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "smartledger-${env}-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "smartledger-${env}-pg"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(DISTINCT a.user_id) FROM user_daily_activity a JOIN users u ON u.id = a.user_id WHERE u.system_role = 'OWNER' AND coalesce(u.email, '') NOT ILIKE 'loadtest+%' AND a.activity_date > (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - 7"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "id": 3
+    },
+    {
+      "type": "stat",
+      "title": "MAU",
+      "description": "Distinct owners active in the last 30 Vietnam dates including today, not the calendar month.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "smartledger-${env}-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "smartledger-${env}-pg"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(DISTINCT a.user_id) FROM user_daily_activity a JOIN users u ON u.id = a.user_id WHERE u.system_role = 'OWNER' AND coalesce(u.email, '') NOT ILIKE 'loadtest+%' AND a.activity_date > (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - 30"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "id": 4
+    },
+    {
+      "type": "stat",
+      "title": "Stickiness (DAU/MAU)",
+      "description": "Average DAU over the last 30 days divided by MAU. Near 100% means owners use the app every day; a daily bookkeeping app should aim high.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "smartledger-${env}-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "smartledger-${env}-pg"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH active AS (SELECT a.user_id, a.activity_date FROM user_daily_activity a JOIN users u ON u.id = a.user_id WHERE u.system_role = 'OWNER' AND coalesce(u.email, '') NOT ILIKE 'loadtest+%' AND a.activity_date > (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - 30) SELECT 100.0 * count(*) / 30 / nullif(count(DISTINCT user_id), 0) FROM active"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
+      "id": 5
+    },
+    {
+      "type": "stat",
+      "title": "New owners",
+      "description": "Owner accounts created in the selected time range.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "smartledger-${env}-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "smartledger-${env}-pg"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) FROM users u WHERE u.system_role = 'OWNER' AND coalesce(u.email, '') NOT ILIKE 'loadtest+%' AND $__timeFilter(u.created_at)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      },
+      "id": 6
+    },
+    {
+      "type": "stat",
+      "title": "New shops",
+      "description": "Shops created in the selected time range.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "smartledger-${env}-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "smartledger-${env}-pg"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) FROM shops s WHERE $__timeFilter(s.created_at) AND EXISTS (SELECT 1 FROM users u WHERE u.id = s.owner_id AND coalesce(u.email, '') NOT ILIKE 'loadtest+%')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
+      "id": 7
+    },
+    {
+      "type": "timeseries",
+      "title": "Daily active users by role",
+      "description": "Distinct users per Vietnam date. Empty until USER_ACTIVITY_ENABLED is on in the environment (CORE-018); ADMIN counts are the team itself.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "smartledger-${env}-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "smartledger-${env}-pg"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT a.activity_date::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh' AS \"time\", u.system_role AS metric, count(*) AS value FROM user_daily_activity a JOIN users u ON u.id = a.user_id WHERE $__timeFilter(a.activity_date::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh') AND coalesce(u.email, '') NOT ILIKE 'loadtest+%' GROUP BY 1, 2 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "id": 8
+    },
+    {
+      "type": "timeseries",
+      "title": "New owners and shops per day",
+      "description": "Sign-ups: owner accounts and shops created per Vietnam date.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "smartledger-${env}-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "smartledger-${env}-pg"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT date_trunc('day', u.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh') AT TIME ZONE 'Asia/Ho_Chi_Minh' AS \"time\", count(*) AS \"owners\" FROM users u WHERE u.system_role = 'OWNER' AND coalesce(u.email, '') NOT ILIKE 'loadtest+%' AND $__timeFilter(u.created_at) GROUP BY 1 ORDER BY 1"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "smartledger-${env}-pg"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT date_trunc('day', s.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh') AT TIME ZONE 'Asia/Ho_Chi_Minh' AS \"time\", count(*) AS \"shops\" FROM shops s WHERE $__timeFilter(s.created_at) AND EXISTS (SELECT 1 FROM users u WHERE u.id = s.owner_id AND coalesce(u.email, '') NOT ILIKE 'loadtest+%') GROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "id": 9
+    },
+    {
+      "type": "row",
+      "title": "Retention",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
+      "panels": [],
+      "id": 10
+    },
+    {
+      "type": "table",
+      "title": "Weekly cohort retention",
+      "description": "Owners grouped by the week they signed up (Monday start, Vietnam time); W1 is the share still active in their second week. Covers the last 12 cohorts and ignores the time picker; user_daily_activity keeps 90 days, so cells beyond about W12 cannot be computed. Empty cells are weeks that have not happened yet. Small cohorts swing widely: read W1 and W4 across several rows.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "smartledger-${env}-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "smartledger-${env}-pg"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH cohort AS (\n  SELECT u.id, date_trunc('week', u.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date AS week FROM users u\n  WHERE u.system_role = 'OWNER' AND coalesce(u.email, '') NOT ILIKE 'loadtest+%' AND u.created_at >= date_trunc('week', now() AT TIME ZONE 'Asia/Ho_Chi_Minh') - interval '12 weeks'\n), activity AS (\n  SELECT a.user_id, (a.activity_date - c.week) / 7 AS week_n FROM user_daily_activity a JOIN cohort c ON c.id = a.user_id\n)\nSELECT to_char(c.week, 'YYYY-MM-DD') AS \"Cohort week\", count(DISTINCT c.id) AS \"Owners\",\n       CASE WHEN c.week + 0 <= (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date THEN round(100.0 * count(DISTINCT a.user_id) FILTER (WHERE a.week_n = 0) / count(DISTINCT c.id)) END AS \"W0\",\n       CASE WHEN c.week + 7 <= (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date THEN round(100.0 * count(DISTINCT a.user_id) FILTER (WHERE a.week_n = 1) / count(DISTINCT c.id)) END AS \"W1\",\n       CASE WHEN c.week + 14 <= (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date THEN round(100.0 * count(DISTINCT a.user_id) FILTER (WHERE a.week_n = 2) / count(DISTINCT c.id)) END AS \"W2\",\n       CASE WHEN c.week + 21 <= (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date THEN round(100.0 * count(DISTINCT a.user_id) FILTER (WHERE a.week_n = 3) / count(DISTINCT c.id)) END AS \"W3\",\n       CASE WHEN c.week + 28 <= (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date THEN round(100.0 * count(DISTINCT a.user_id) FILTER (WHERE a.week_n = 4) / count(DISTINCT c.id)) END AS \"W4\",\n       CASE WHEN c.week + 35 <= (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date THEN round(100.0 * count(DISTINCT a.user_id) FILTER (WHERE a.week_n = 5) / count(DISTINCT c.id)) END AS \"W5\",\n       CASE WHEN c.week + 42 <= (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date THEN round(100.0 * count(DISTINCT a.user_id) FILTER (WHERE a.week_n = 6) / count(DISTINCT c.id)) END AS \"W6\",\n       CASE WHEN c.week + 49 <= (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date THEN round(100.0 * count(DISTINCT a.user_id) FILTER (WHERE a.week_n = 7) / count(DISTINCT c.id)) END AS \"W7\",\n       CASE WHEN c.week + 56 <= (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date THEN round(100.0 * count(DISTINCT a.user_id) FILTER (WHERE a.week_n = 8) / count(DISTINCT c.id)) END AS \"W8\"\nFROM cohort c LEFT JOIN activity a ON a.user_id = c.id\nGROUP BY c.week ORDER BY c.week DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "center"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^W[0-9]+$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "gradient"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "continuous-RdYlGr"
+                }
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 100
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "id": 11
+    },
+    {
+      "type": "row",
+      "title": "Shops and activation",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "panels": [],
+      "id": 12
+    },
+    {
+      "type": "timeseries",
+      "title": "Active shops per week",
+      "description": "Shops with at least one successful owner action in audit_logs that week. Reads alone are not audited, so a shop that only looks at reports does not count.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "smartledger-${env}-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "smartledger-${env}-pg"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT date_trunc('week', a.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh') AT TIME ZONE 'Asia/Ho_Chi_Minh' AS \"time\", count(DISTINCT a.shop_id) AS \"active shops\" FROM audit_logs a JOIN shops s ON s.id = a.shop_id WHERE $__timeFilter(a.created_at) AND a.actor_role = 'OWNER' AND EXISTS (SELECT 1 FROM users u WHERE u.id = s.owner_id AND coalesce(u.email, '') NOT ILIKE 'loadtest+%') GROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "id": 13
+    },
+    {
+      "type": "bargauge",
+      "title": "Activation funnel",
+      "description": "Shops created in the selected range, then how many added a product, confirmed a sale within 7 days of creation, and opened the AI assistant. The 7-day window is an assumption the PO has not confirmed.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "smartledger-${env}-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "smartledger-${env}-pg"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH new_shops AS (\n  SELECT s.id, s.created_at FROM shops s WHERE $__timeFilter(s.created_at) AND EXISTS (SELECT 1 FROM users u WHERE u.id = s.owner_id AND coalesce(u.email, '') NOT ILIKE 'loadtest+%')\n)\nSELECT count(*) AS \"1 shop created\",\n       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM products p WHERE p.shop_id = n.id)) AS \"2 has a product\",\n       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM sales x WHERE x.shop_id = n.id AND x.sale_status = 'CONFIRMED' AND x.sold_at < n.created_at + interval '7 days')) AS \"3 sale within 7 days\",\n       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM chat_conversations c WHERE c.shop_id = n.id)) AS \"4 used AI\"\nFROM new_shops n"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "id": 14
+    },
+    {
+      "type": "row",
+      "title": "Feature adoption",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "panels": [],
+      "id": 15
+    },
+    {
+      "type": "timeseries",
+      "title": "Shops using each feature per week",
+      "description": "Distinct shops with at least one successful owner action of the group. It counts what owners did, not what they opened; compare with Active shops for the share.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "smartledger-${env}-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "smartledger-${env}-pg"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT date_trunc('week', a.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh') AT TIME ZONE 'Asia/Ho_Chi_Minh' AS \"time\",\n       count(DISTINCT a.shop_id) FILTER (WHERE a.action LIKE 'SALE\\_%') AS \"sales\",\n       count(DISTINCT a.shop_id) FILTER (WHERE a.action LIKE 'PRODUCT\\_%') AS \"products\",\n       count(DISTINCT a.shop_id) FILTER (WHERE a.action LIKE 'CATEGORY\\_%') AS \"categories\",\n       count(DISTINCT a.shop_id) FILTER (WHERE a.action = 'STOCK_ADJUSTED') AS \"stock\",\n       count(DISTINCT a.shop_id) FILTER (WHERE a.action LIKE 'EXPENSE\\_%') AS \"expenses\",\n       count(DISTINCT a.shop_id) FILTER (WHERE a.action LIKE 'DEBT\\_%') AS \"debts\"\nFROM audit_logs a JOIN shops s ON s.id = a.shop_id\nWHERE $__timeFilter(a.created_at) AND a.actor_role = 'OWNER' AND EXISTS (SELECT 1 FROM users u WHERE u.id = s.owner_id AND coalesce(u.email, '') NOT ILIKE 'loadtest+%')\nGROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "id": 16
+    },
+    {
+      "type": "row",
+      "title": "AI",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 41
+      },
+      "panels": [],
+      "id": 17
+    },
+    {
+      "type": "timeseries",
+      "title": "AI conversations per day",
+      "description": "Conversations started and distinct shops that started one, per Vietnam date. Reads chat_conversations only, never message content.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "smartledger-${env}-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "smartledger-${env}-pg"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT date_trunc('day', c.started_at AT TIME ZONE 'Asia/Ho_Chi_Minh') AT TIME ZONE 'Asia/Ho_Chi_Minh' AS \"time\", count(*) AS \"conversations\", count(DISTINCT c.shop_id) AS \"shops\" FROM chat_conversations c JOIN shops s ON s.id = c.shop_id WHERE $__timeFilter(c.started_at) AND EXISTS (SELECT 1 FROM users u WHERE u.id = s.owner_id AND coalesce(u.email, '') NOT ILIKE 'loadtest+%') GROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 42
+      },
+      "id": 18
+    },
+    {
+      "type": "timeseries",
+      "title": "Sale drafts by source per week",
+      "description": "Drafts read from voice by AI against manual drafts, and how many AI drafts became a confirmed sale.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "smartledger-${env}-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "smartledger-${env}-pg"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT date_trunc('week', d.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh') AT TIME ZONE 'Asia/Ho_Chi_Minh' AS \"time\",\n       count(*) FILTER (WHERE d.source_type = 'AI_VOICE') AS \"AI voice\",\n       count(*) FILTER (WHERE d.source_type = 'AI_VOICE' AND d.confirmed_sale_id IS NOT NULL) AS \"AI voice confirmed\",\n       count(*) FILTER (WHERE d.source_type = 'MANUAL') AS \"manual\"\nFROM sale_drafts d JOIN shops s ON s.id = d.shop_id\nWHERE $__timeFilter(d.created_at) AND EXISTS (SELECT 1 FROM users u WHERE u.id = s.owner_id AND coalesce(u.email, '') NOT ILIKE 'loadtest+%')\nGROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 42
+      },
+      "id": 19
+    },
+    {
+      "type": "timeseries",
+      "title": "AI requests by route",
+      "description": "Requests per second per FastAPI route, from AI's own /metrics. The series appear after the first request since AI started.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (handler) (rate(http_requests_total{service=\"ai\", env=\"$env\"}[5m]))",
+          "legendFormat": "{{handler}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 50
+      },
+      "id": 20
+    },
+    {
+      "type": "timeseries",
+      "title": "AI p95 latency by route",
+      "description": "95th percentile time to the last byte, so a streamed chat answer counts in full.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, handler) (rate(http_request_duration_seconds_bucket{service=\"ai\", env=\"$env\"}[5m])))",
+          "legendFormat": "{{handler}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 50
+      },
+      "id": 21
+    },
+    {
+      "type": "row",
+      "title": "Business",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 58
+      },
+      "panels": [],
+      "id": 22
+    },
+    {
+      "type": "timeseries",
+      "title": "Sales per day",
+      "description": "Confirmed and voided sales by sale date (Vietnam). A void later moves an old day, the same way Core's reports count it.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "smartledger-${env}-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "smartledger-${env}-pg"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT date_trunc('day', x.sold_at AT TIME ZONE 'Asia/Ho_Chi_Minh') AT TIME ZONE 'Asia/Ho_Chi_Minh' AS \"time\",\n       count(*) FILTER (WHERE x.sale_status = 'CONFIRMED') AS \"confirmed\",\n       count(*) FILTER (WHERE x.sale_status = 'VOIDED') AS \"voided\"\nFROM sales x JOIN shops s ON s.id = x.shop_id\nWHERE $__timeFilter(x.sold_at) AND EXISTS (SELECT 1 FROM users u WHERE u.id = s.owner_id AND coalesce(u.email, '') NOT ILIKE 'loadtest+%')\nGROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 59
+      },
+      "id": 23
+    },
+    {
+      "type": "timeseries",
+      "title": "Revenue per day",
+      "description": "Sum of total_vnd of confirmed sales by sale date.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "smartledger-${env}-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "smartledger-${env}-pg"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT date_trunc('day', x.sold_at AT TIME ZONE 'Asia/Ho_Chi_Minh') AT TIME ZONE 'Asia/Ho_Chi_Minh' AS \"time\", coalesce(sum(x.total_vnd), 0) AS \"revenue\"\nFROM sales x JOIN shops s ON s.id = x.shop_id\nWHERE $__timeFilter(x.sold_at) AND x.sale_status = 'CONFIRMED' AND EXISTS (SELECT 1 FROM users u WHERE u.id = s.owner_id AND coalesce(u.email, '') NOT ILIKE 'loadtest+%')\nGROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyVND",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 59
+      },
+      "id": 24
+    },
+    {
+      "type": "row",
+      "title": "Data freshness",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 67
+      },
+      "panels": [],
+      "id": 25
+    },
+    {
+      "type": "stat",
+      "title": "Last audit event",
+      "description": "Age of the newest row. A large value on a busy day means the source stopped writing or the read role lost access; no value means the table is empty or not readable.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "smartledger-${env}-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "smartledger-${env}-pg"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT extract(epoch FROM now() - max(created_at)) FROM audit_logs"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 0,
+        "y": 68
+      },
+      "id": 26
+    },
+    {
+      "type": "stat",
+      "title": "Last sale",
+      "description": "Age of the newest row. A large value on a busy day means the source stopped writing or the read role lost access; no value means the table is empty or not readable.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "smartledger-${env}-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "smartledger-${env}-pg"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT extract(epoch FROM now() - max(sold_at)) FROM sales"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 8,
+        "y": 68
+      },
+      "id": 27
+    },
+    {
+      "type": "stat",
+      "title": "Last activity day",
+      "description": "Age of the newest row. A large value on a busy day means the source stopped writing or the read role lost access; no value means the table is empty or not readable.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "smartledger-${env}-pg"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "smartledger-${env}-pg"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - max(activity_date) FROM user_daily_activity"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "d",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 68
+      },
+      "id": 28
+    },
+    {
+      "type": "row",
+      "title": "Events",
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 72
+      },
+      "panels": [
+        {
+          "type": "table",
+          "title": "Audit events",
+          "description": "The latest 500 successful actions behind the figures above, filtered by action and shop. request_id is the only link back to a request; Core does not write it to its logs yet.",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "smartledger-${env}-pg"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "grafana-postgresql-datasource",
+                "uid": "smartledger-${env}-pg"
+              },
+              "editorMode": "code",
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT a.created_at AS \"time\", a.actor_role AS \"role\", a.action, a.entity_type AS \"entity\", a.entity_id,\n       a.shop_id, a.actor_user_id AS \"user_id\", a.request_id, a.metadata\nFROM audit_logs a\nWHERE $__timeFilter(a.created_at) AND a.action IN (${action:sqlstring})\n  AND ('$shop' = '' OR a.shop_id::text = '$shop')\nORDER BY a.created_at DESC LIMIT 500"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm"
+          },
+          "gridPos": {
+            "h": 12,
+            "w": 24,
+            "x": 0,
+            "y": 73
+          },
+          "id": 30
+        }
+      ],
+      "id": 29
+    }
+  ]
+}
