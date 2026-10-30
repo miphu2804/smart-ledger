@@ -1,3 +1,12 @@
+### 2026-10-30 — Alerts as Discord embeds and Telegram messages
+
+| Area | Change |
+|---|---|
+| Deploy | • `templates.yaml` builds each alert group once for both channels: headline with state, severity, alert, environment and count, one summary per alert, then Environment, Severity, Vietnam time and Source, then Overview, Silence and Alert rules links<br>• Discord gets a coloured embed with fields and Telegram an HTML message, both through Grafana's webhook integration; the chat ID rides in the Bot API URL because Grafana turns a chat ID read alone from the environment into a number<br>• The contact point is now `smartledger`; provisioning deletes the old `discord` one, and the playbook requires and writes `MONITOR_TELEGRAM_BOT_TOKEN` and `MONITOR_TELEGRAM_CHAT_ID` |
+| Docs | • The CI/CD and secrets guides describe both channels and the bot setup; the credential map lists the two keys |
+
+Check: on Grafana 12.1.1 provisioned from the repository, an upgrade from the old `discord` contact point kept 7 rules and the policy; test alerts reached a capture server as a Discord embed and a Telegram HTML body, and the template test rendered firing, two-alert and resolved groups; a real `sendMessage` with the chat ID in the query and a JSON body was accepted. Not verified: a real alert on the VPS.
+
 ### 2026-10-30 — Product analytics dashboard with cohort retention (ADR-0003 P1)
 
 | Area | Change |
@@ -186,12 +195,3 @@ Check: all 18 badge URLs return 200 with a logo; the page was not rendered on Gi
 | Docs | • The CI/CD guide uses the new name and records that environment names are spelled out, never shortened |
 
 Check: playbook applied for production; `https://production.103-162-31-93.sslip.io/actuator/health` returns 200 `UP` with its own certificate, Core and AI still run `4a4f714`, staging still answers. Commit: the merge of this branch.
-
-### 2026-10-28 — Backend GitHub environments named backend-staging and backend-production
-
-| Area | Change |
-|---|---|
-| CI | • `deploy-backend` uses environments `backend-staging` and `backend-production` instead of `railway-*`, so their names no longer depend on the host<br>• The new environments carry the same branch rules, production approval, variables and secrets, except `RAILWAY_TOKEN`, which CD does not use |
-| Docs | • The CI/CD guide uses the new names and keeps the `railway-*` environments only for a rollback to Railway |
-
-Check: `actionlint`, the deploy key in each new environment matches its public key, and a staging CD run deploys through `backend-staging`. Not verified: production, which switches on the next release to `main`. Commit: the merge of this branch.

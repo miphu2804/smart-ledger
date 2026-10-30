@@ -29,11 +29,13 @@
     dopbase_backup_secret: "{{ lookup('env', 'DOPBASE_BACKUP_SECRET') }}"
     dopbase_backup_hour: 3
     # Monitoring shared by every environment (deploy/monitoring/). An empty domain skips it; the password applies
-    # on Grafana's first start and the Discord webhook receives every alert.
+    # on Grafana's first start, and the Discord webhook and Telegram chat both receive every alert.
     monitoring_dir: /opt/smart-ledger-monitoring
     monitor_domain: "{{ lookup('env', 'MONITOR_DOMAIN') }}"
     grafana_admin_password: "{{ lookup('env', 'GRAFANA_ADMIN_PASSWORD') }}"
     monitor_discord_webhook_url: "{{ lookup('env', 'MONITOR_DISCORD_WEBHOOK_URL') }}"
+    monitor_telegram_bot_token: "{{ lookup('env', 'MONITOR_TELEGRAM_BOT_TOKEN') }}"
+    monitor_telegram_chat_id: "{{ lookup('env', 'MONITOR_TELEGRAM_CHAT_ID') }}"
     # This environment's read-only Supabase login for the product dashboards (ADR-0003), from its .env.monitor. An
     # empty host leaves that environment's datasource unconfigured.
     grafana_pg_host: "{{ lookup('env', 'GRAFANA_PG_HOST') }}"
@@ -339,10 +341,14 @@
         access_time: preserve
       when: dopbase_domain | length > 0 and dopbase_backup_bucket | length > 0
 
-    - name: Fail without the Grafana password or Discord webhook
+    - name: Fail without the Grafana password or an alert destination
       ansible.builtin.assert:
-        that: grafana_admin_password | length > 0 and monitor_discord_webhook_url | length > 0
-        fail_msg: With MONITOR_DOMAIN set, .env.vps also needs GRAFANA_ADMIN_PASSWORD and MONITOR_DISCORD_WEBHOOK_URL.
+        that:
+          - grafana_admin_password | length > 0
+          - monitor_discord_webhook_url | length > 0
+          - monitor_telegram_bot_token | length > 0
+          - monitor_telegram_chat_id | length > 0
+        fail_msg: With MONITOR_DOMAIN set, .env.vps also needs GRAFANA_ADMIN_PASSWORD, MONITOR_DISCORD_WEBHOOK_URL, MONITOR_TELEGRAM_BOT_TOKEN and MONITOR_TELEGRAM_CHAT_ID.
       when: monitor_domain | length > 0
 
     - name: Create the monitoring directories
@@ -376,6 +382,8 @@
           MONITOR_DOMAIN={{ monitor_domain }}
           GRAFANA_ADMIN_PASSWORD={{ grafana_admin_password }}
           DISCORD_WEBHOOK_URL={{ monitor_discord_webhook_url }}
+          TELEGRAM_BOT_TOKEN={{ monitor_telegram_bot_token }}
+          TELEGRAM_CHAT_ID={{ monitor_telegram_chat_id }}
       when: monitor_domain | length > 0
       no_log: true
       notify: Apply monitoring
