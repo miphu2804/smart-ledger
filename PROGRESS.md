@@ -1,3 +1,13 @@
+### 2026-10-30 — Product analytics dashboard with cohort retention (ADR-0003 P1)
+
+| Area | Change |
+|---|---|
+| Deploy | • Grafana provisions read-only PostgreSQL datasources `smartledger-staging-pg` and `smartledger-production-pg` (one connection, closed after each query) and the **SmartLedger product** dashboard in a Product folder: DAU, WAU, MAU, stickiness, weekly cohort retention, activation funnel, feature adoption, AI use, sales and data freshness, plus an Events row; load-test accounts are left out<br>• `vps-playbook.sh` loads the `monitor` group; the playbook refuses any login other than `grafana_reader` and writes `postgres-<environment>.env`, which Compose reads as optional files so each environment keeps the other's datasource |
+| Config | • `.env.example` of Core and AI and the Dopbase templates carry the pooler budget: Hikari 8, AI pools 2 and 2, so Core, AI and Grafana use 13 of 15 session pooler clients; Hikari keeps 2 connections while idle and fails a request after 5 s without a free connection instead of 30 s |
+| Docs | • ADR-0003 now records one dashboard instead of two, retention and stickiness definitions, why logout is not a metric, and login tracking as a P2 Core change; the CI/CD and secrets guides describe the datasource and its login; the credential map is regenerated |
+
+Check: on a throwaway PostgreSQL 16 with every Core migration, the AI chat table and the `grafana_reader` grants from the ADR, every SQL query of the dashboard ran through Grafana 12.1.1 provisioned from the repository and rendered in the browser; the grants alone were enough after the last-sale panel moved from `created_at` to `sold_at`; `ansible-playbook --syntax-check` and `docker compose config` with one optional file present pass. Not verified: the role on Supabase, the pooler login, real data and the AI Prometheus panels; Dopbase now holds Hikari 8, minimum idle 2 and a 5000 ms connection timeout for Core, 2 and 2 for AI's pools, and port 5432 and database `postgres` in `monitor/staging` and a new `monitor/production`; `GRAFANA_PG_HOST`, `GRAFANA_PG_USER` and `GRAFANA_PG_PASSWORD` are not set for production and were not checked for staging, because reading values needs an interactive password. Commit: the one that adds this entry.
+
 ### 2026-10-30 — Caddy reads its Caddyfile through a directory, and a scrape-down alert
 
 | Area | Change |
@@ -185,12 +195,3 @@ Check: playbook applied for production; `https://production.103-162-31-93.sslip.
 | Docs | • The CI/CD guide uses the new names and keeps the `railway-*` environments only for a rollback to Railway |
 
 Check: `actionlint`, the deploy key in each new environment matches its public key, and a staging CD run deploys through `backend-staging`. Not verified: production, which switches on the next release to `main`. Commit: the merge of this branch.
-
-### 2026-10-28 — Staging Core answers on staging.103-162-31-93.sslip.io
-
-| Area | Change |
-|---|---|
-| Deploy | • The staging site of the shared Caddy serves `staging.103-162-31-93.sslip.io` and, until every client has moved, the bare `103-162-31-93.sslip.io`, so both environments carry their name |
-| Clients | • Staging web, preview, landing, Android, monitor, load test and release-script defaults use the `staging.` name |
-
-Check: both names answer HTTPS health 200 through the shared Caddy. Commit: the merge of this branch.
