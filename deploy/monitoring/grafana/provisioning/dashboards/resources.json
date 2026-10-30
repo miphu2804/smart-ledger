@@ -1,7 +1,7 @@
 {
   "uid": "smart-ledger-resources",
   "title": "SmartLedger resources",
-  "description": "Layer 3: the VPS every environment shares and each container on it, filtered by Compose stack.",
+  "description": "Layer 3: the VPS every environment shares and every container on it, in one view.",
   "tags": [
     "smart-ledger",
     "layer-resources"
@@ -49,51 +49,10 @@
         "sort": 1,
         "includeAll": false,
         "multi": false
-      },
-      {
-        "name": "stack",
-        "label": "Stack",
-        "type": "query",
-        "datasource": {
-          "type": "prometheus",
-          "uid": "prometheus"
-        },
-        "query": {
-          "query": "label_values(container_memory_working_set_bytes{name!=\"\"}, name)",
-          "refId": "stack"
-        },
-        "definition": "label_values(container_memory_working_set_bytes{name!=\"\"}, name)",
-        "regex": "/^(smart-ledger-[a-z]+)-/",
-        "refresh": 2,
-        "sort": 1,
-        "includeAll": true,
-        "multi": true,
-        "allValue": ".*",
-        "current": {
-          "text": [
-            "All"
-          ],
-          "value": [
-            "$__all"
-          ]
-        }
       }
     ]
   },
   "panels": [
-    {
-      "type": "row",
-      "title": "VPS, shared by every environment",
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      },
-      "panels": [],
-      "id": 1
-    },
     {
       "id": 2,
       "type": "gauge",
@@ -106,7 +65,7 @@
         "h": 5,
         "w": 6,
         "x": 0,
-        "y": 1
+        "y": 0
       },
       "targets": [
         {
@@ -165,7 +124,7 @@
         "h": 5,
         "w": 6,
         "x": 6,
-        "y": 1
+        "y": 0
       },
       "targets": [
         {
@@ -224,7 +183,7 @@
         "h": 5,
         "w": 6,
         "x": 12,
-        "y": 1
+        "y": 0
       },
       "targets": [
         {
@@ -283,7 +242,7 @@
         "h": 5,
         "w": 6,
         "x": 18,
-        "y": 1
+        "y": 0
       },
       "targets": [
         {
@@ -340,7 +299,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 6
+        "y": 5
       },
       "targets": [
         {
@@ -402,19 +361,6 @@
       }
     },
     {
-      "type": "row",
-      "title": "Containers in $stack",
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 14
-      },
-      "panels": [],
-      "id": 7
-    },
-    {
       "id": 8,
       "type": "bargauge",
       "title": "Memory used of its limit",
@@ -427,12 +373,12 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 15
+        "y": 13
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "max by (name) (container_memory_working_set_bytes{name=~\"($stack)-.*\"}) / max by (name) (container_spec_memory_limit_bytes{name=~\"($stack)-.*\"} > 0) * 100",
+          "expr": "max by (name) (container_memory_working_set_bytes{name!=\"\"}) / max by (name) (container_spec_memory_limit_bytes{name!=\"\"} > 0) * 100",
           "legendFormat": "{{name}}",
           "instant": true
         }
@@ -490,12 +436,12 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 15
+        "y": 13
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "sort_desc(sum by (name) (changes(container_start_time_seconds{name=~\"($stack)-.*\"}[$__range])))",
+          "expr": "sort_desc(sum by (name) (changes(container_start_time_seconds{name!=\"\"}[$__range])))",
           "legendFormat": "{{name}}",
           "instant": true
         }
@@ -550,12 +496,12 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 24
+        "y": 22
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "max by (name) (container_memory_working_set_bytes{name=~\"($stack)-.*\"})",
+          "expr": "max by (name) (container_memory_working_set_bytes{name!=\"\"})",
           "legendFormat": "{{name}}"
         }
       ],
@@ -599,12 +545,12 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 24
+        "y": 22
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name=~\"($stack)-.*\"}[$__rate_interval]))",
+          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name!=\"\"}[$__rate_interval]))",
           "legendFormat": "{{name}}"
         }
       ],

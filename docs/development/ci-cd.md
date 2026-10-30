@@ -132,7 +132,7 @@ Add `GHCR_USERNAME` and `GHCR_READ_TOKEN` to the shell if the packages are priva
 2. Generate a CI-only key with `ssh-keygen -t ed25519 -f deploy_key -N "" -C github-actions-deploy`. In `secrets/<environment>/env/.env.vps`, set `VPS_SSH_KEY` to `base64 < deploy_key | tr -d '\n'` and `VPS_SSH_PUBLIC_KEY` to `deploy_key.pub`, then delete both files and run `scripts/secrets/github.sh <environment> --apply`.
 3. Set `VPS_KNOWN_HOSTS` to `ssh-keyscan -t ed25519 <VPS_HOST>` (check the fingerprint in the provider console) and `VPS_HOST` in both `.env.vps` and the GitHub environment variables.
 4. Set `CADDY_DOMAIN`; production copies the `VPS_*` values from staging, because `deploy` has one key. Save the `VPS_*` and `CADDY_DOMAIN` values in Dopbase `vps/<environment>`.
-5. Create network `edge`. In the app directory, put `compose.yaml` and `bifrost.json` from `deploy/vps/`, and with mode `600` `core.env`, `ai.env`, `bifrost.env` (from [secrets](secrets-and-env.md)) and `.env` with `ENVIRONMENT=<environment>` and `CORE_ALIAS=core-<environment>`. In `/opt/smartledger-edge`, put `deploy/edge/` and `sites/<environment>.caddy`, then reload Caddy.
+5. Create network `edge`. In the app directory, put `compose.yaml` and `bifrost.json` from `deploy/vps/`, and with mode `600` `core.env`, `ai.env`, `bifrost.env` (from [secrets](secrets-and-env.md)) and `.env` with `ENVIRONMENT=<environment>` and `CORE_ALIAS=core-<environment>`. In `/opt/smartledger-edge`, put `deploy/edge/compose.yaml`, the Caddyfile as `conf/Caddyfile` and `sites/<environment>.caddy`, then validate and reload Caddy. Caddy mounts `conf/` and `sites/` as directories because a single-file mount keeps the inode it started with: a file replaced by rename, as Ansible and most editors do, stays invisible to `caddy reload` until the container is recreated.
 6. After the first deploy, make the two GHCR packages public, or `docker login ghcr.io` once as `deploy` with a `read:packages` token.
 7. Check database access: Supabase's direct host is IPv6-only, so a VPS without IPv6 uses the session pooler URL. Allowlist the VPS in Supabase and Redis Cloud if restrictions are on.
 
@@ -281,18 +281,19 @@ Datasources, alerts and dashboards are provisioned from the repository and canno
 | Endpoint down | The HTTPS liveness probe of an environment's Core fails for 2 minutes |
 | Database down | Core's readiness probe, which checks its database connection, fails for 2 minutes while liveness passes |
 | Service down | The in-network health probe of an environment's AI or Bifrost fails for 2 minutes |
+| Metrics scrape down | Prometheus cannot scrape a target, such as Caddy's `:9180` or an AI `/metrics`, for 10 minutes, which leaves its dashboards empty while every probe passes |
 | Container restarting | A container starts more than 3 times in 15 minutes |
 | Host memory high | VPS memory use stays above 90% for 5 minutes |
 | Host disk high | The root disk stays above 85% for 10 minutes |
 | Certificate expiring | A Core certificate expires in under 14 days |
 
-Dashboards follow three layers, each one a level deeper, in the Infra folder ([`dashboards/`](../../deploy/monitoring/grafana/provisioning/dashboards/)). Each has an environment picker, and the link bar at the top lists every dashboard tagged `smart-ledger`, keeping the environment and time range:
+Dashboards follow three layers, each one a level deeper, in the Infra folder ([`dashboards/`](../../deploy/monitoring/grafana/provisioning/dashboards/)). Grafana opens on the Overview after sign-in through `GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH`. Each has an environment picker, and the link bar at the top lists every dashboard tagged `smart-ledger`, keeping the environment and time range:
 
 | Dashboard | Answers | Shows |
 |---|---|---|
 | **SmartLedger overview** | Is anything wrong in this environment, and where? | Up or down for Core, its database, AI and Bifrost; Core availability and certificate days left; firing and pending alerts; each service's request rate, 5xx share and p95 latency, which links to its Service dashboard |
 | **SmartLedger service** | How does one service behave? | Request rate by status class, 5xx share, p50/p95/p99 latency, its health probe, its container's memory against the limit, CPU and starts, and its logs with a regex search |
-| **SmartLedger resources** | Is the VPS or a container short of resources? | CPU, memory, root disk and load of the host every environment shares, and each container's memory against its limit, starts, memory and CPU, filtered by Compose stack |
+| **SmartLedger resources** | Is the VPS or a container short of resources? | CPU, memory, root disk and load of the host every environment shares, and every container's memory against its limit, starts, memory and CPU in one view |
 
 Request metrics follow one schema, so the dashboards do not depend on what exports them. The recording rules in [`service-red.yml`](../../deploy/monitoring/prometheus/rules/service-red.yml) turn each source into `service:http_requests:rate5m{env, service, code_class}` and `service:http_request_duration_seconds_bucket:rate5m{env, service, le}`. Core is measured at the shared Caddy, which serves request metrics per host on `smart-ledger-edge-caddy-1:9180` on the `edge` network only; the rules map each Core domain to its environment through the host on that environment's Core probe. AI exports its own request metrics on `/metrics` (prometheus-fastapi-instrumentator), timed to the last streamed byte and leaving out `/health`; the playbook lists `smart-ledger-<environment>-ai-1:8001` in `targets/services/<environment>.json`, which Alloy scrapes on the app network, so the endpoint needs no internal token and is not reachable from outside. Bifrost does not export request metrics to Alloy yet, because its `/metrics` requires the admin login, so the Service dashboard shows only its probe, container and logs. To add a service, give it a health probe whose `check` is the service name and, once it exports request metrics, add recording rules with the same names and labels; the Overview table and the Service picker then include it without dashboard changes.
 
