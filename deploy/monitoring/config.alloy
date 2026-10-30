@@ -1,5 +1,5 @@
-// Collects what the minimal alerts and Drilldown need, every 30 s: host CPU, memory and disk; container CPU, memory and
-// start time; one HTTPS probe per environment; and every container's logs.
+// Collects what the alerts and dashboards need, every 30 s: host CPU, memory and disk; container CPU, memory and start
+// time; the health probes of each environment; Caddy's request metrics; and every container's logs.
 
 prometheus.exporter.unix "host" {
   procfs_path     = "/host/proc"
@@ -20,8 +20,9 @@ prometheus.exporter.cadvisor "containers" {
   enabled_metrics  = ["cpu", "memory"]
 }
 
-// targets/<environment>.json holds that environment's public Core health URL with an `env` label, so each probe goes
-// through DNS, Caddy, the certificate and Core like a user's request.
+// targets/<environment>.json holds that environment's public Core liveness and readiness URLs, which go through DNS,
+// Caddy, the certificate and Core like a user's request, and its AI and Bifrost health URLs on the app network,
+// each with `env` and `check` labels.
 discovery.file "probes" {
   files = ["/etc/alloy/targets/*.json"]
 }
@@ -34,14 +35,23 @@ discovery.relabel "probes" {
     target_label  = "address"
   }
 
+  // Probe names must be unique, and each environment has two probes.
   rule {
-    source_labels = ["env"]
+    source_labels = ["env", "check"]
+    separator     = "-"
     target_label  = "name"
   }
 
   rule {
     target_label = "module"
     replacement  = "http_2xx"
+  }
+
+  // The probed host ties Caddy's per-host request metrics to their environment (prometheus/rules/service-red.yml).
+  rule {
+    source_labels = ["__address__"]
+    regex         = "https?://([^/:]+).*"
+    target_label  = "host"
   }
 }
 
@@ -50,8 +60,24 @@ prometheus.exporter.blackbox "probes" {
   targets = discovery.relabel.probes.output
 }
 
+// The shared Caddy's request metrics on the edge network (deploy/edge/Caddyfile), by container name like the probes.
+discovery.relabel "caddy" {
+  targets = [{ "__address__" = "smart-ledger-edge-caddy-1:9180" }]
+
+  rule {
+    target_label = "job"
+    replacement  = "caddy"
+  }
+}
+
+// targets/services/<environment>.json lists the services that export their own /metrics on the app network, each
+// with `env` and `service` labels; deploy/ansible/playbook.yml writes it.
+discovery.file "services" {
+  files = ["/etc/alloy/targets/services/*.json"]
+}
+
 prometheus.scrape "all" {
-  targets         = array.concat(prometheus.exporter.unix.host.targets, prometheus.exporter.cadvisor.containers.targets, prometheus.exporter.blackbox.probes.targets)
+  targets         = array.concat(prometheus.exporter.unix.host.targets, prometheus.exporter.cadvisor.containers.targets, prometheus.exporter.blackbox.probes.targets, discovery.relabel.caddy.output, discovery.file.services.targets)
   scrape_interval = "30s"
   forward_to      = [prometheus.remote_write.local.receiver]
 }

@@ -65,9 +65,18 @@ pull_one() {
   file="$dir/$2"
   dopbase_export "$1" "$build/env"
   mkdir -p "$(dirname "$file")"
-  mv "$build/env" "$file"
+  lay_out "$(template_of "$2")" "$build/env" > "$build/laid" || return 1
+  mv "$build/laid" "$file"
   chmod 600 "$file"
   echo "dopbase-sync: pulled $file"
+}
+
+# The template of an env file: .env.core -> secrets/templates/.env.core, github/.env.vercel-staging -> secrets/templates/github/.env.vercel.
+template_of() {
+  case "$1" in
+    github/*) name="${1##*/.env.}"; echo "secrets/templates/github/.env.${name%-*}" ;;
+    *) echo "secrets/templates/$1" ;;
+  esac
 }
 
 # The Dopbase project/environment of a file: .env.core -> core/<environment>, github/.env.vercel-staging -> github-vercel/staging.

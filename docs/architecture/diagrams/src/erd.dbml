@@ -5,7 +5,7 @@
 // ID: BIGINT IDENTITY → Java Long
 // Money: BIGINT VND
 // Time: TIMESTAMPTZ, UTC internally; Core JSON displays +07:00
-// Core schema: checked-in Flyway V1-V18; 22 Core tables including notifications, media leases, Zalo mapping and channel-aware OAuth sessions.
+// Core schema: checked-in Flyway V1-V19; 23 Core tables including daily activity (CORE-018, 2026-10-29).
 // Core schema re-checked against feat/admin-dashboard-growth at 3e93dd1, 2026-10-26; this is not shared-DB deployment evidence.
 // AI sections retain their separately dated review; Core audit does not re-approve AI scope or planned tables.
 // AI schema: supabase/migrations AI baseline (chat_conversations, chat_messages, vector extension, ai_read views, ai_sql_reader role),
@@ -151,6 +151,18 @@ Table users {
   Note: 'No password_hash. Firebase handles authentication; system_role and application status are stored in this table. The phone field is profile data, not an OTP login flow.'
 }
 
+
+Table user_daily_activity {
+  user_id bigint [not null]
+  activity_date date [not null, note: 'Vietnam date at initial authenticated API request admission.']
+
+  indexes {
+    (user_id, activity_date) [pk, name: 'pk_user_daily_activity']
+    (activity_date, user_id) [name: 'idx_user_daily_activity_date']
+  }
+
+  Note: 'V19 / CORE-018. ACTIVE OWNER/ADMIN successful business API use, one row per user/day. No IP, payload or credential. Retain today plus 89 dates; server-only RLS, explicit reviewed Grafana SELECT access. Feature defaults off; no historical backfill or shared-DB rollout implied.'
+}
 
 Table auth_identities {
   id bigint [pk, increment]
@@ -865,6 +877,7 @@ Table audit_logs {
 // ---------- AUTH ----------
 
 Ref: users.id - auth_identities.user_id
+Ref: users.id < user_daily_activity.user_id [delete: cascade]
 Ref: users.id < shops.owner_id
 
 

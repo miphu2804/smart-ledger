@@ -5,7 +5,7 @@
 | Trạng thái | Core: quy tắc dưới đây đã chốt; AI/dashboard: đích MVP, cần nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ kinh doanh/sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; chủ thuế cho `BR-INV-*` |
-| Cập nhật lần cuối | 2026-10-26 (tổng quan ADMIN theo ngày; không rà soát lại căn cứ pháp lý) |
+| Cập nhật lần cuối | 2026-10-29 (CORE-018: hoạt động theo ngày; không rà soát lại căn cứ pháp lý) |
 
 ## Tài liệu liên quan
 
@@ -101,6 +101,7 @@ Hóa đơn điện tử là initiative kế tiếp, không mặc nhiên thuộc 
 | `BR-020` | OWNER có hộp thông báo trong app cho tồn thấp/hết hàng, hủy sale và ADMIN tạm ngưng/kích hoạt tiệm. Ngưỡng tồn thấp tùy từng Product; không tự đặt ngưỡng cho dữ liệu cũ. Thông báo và người nhận commit/rollback cùng nghiệp vụ, retry không tạo trùng; trạng thái đã đọc riêng và giữ lần đọc đầu tiên. Chỉ OWNER hoạt động đọc dữ liệu của mình và tiệm mình sở hữu; tiệm INACTIVE chỉ lộ thông báo trạng thái, ARCHIVED không hiển thị. Notification không thay audit/sổ nghiệp vụ và chưa bao gồm push, email/SMS hay AI reminder. |
 | `BR-021` | Barcode là mã định danh tùy chọn của mặt hàng trong tiệm: khớp chính xác, phân biệt hoa thường, giữ chữ/dấu/số 0 đầu. Chỉ sản phẩm ACTIVE giữ quyền dùng mã; archive giải phóng mã cho sản phẩm khác nhưng giữ nguyên sản phẩm và tham chiếu lịch sử sale/draft. OWNER chỉ tra mã trong tiệm ACTIVE mình sở hữu; không dùng danh mục tiệm khác hoặc sản phẩm giả để thay thế kết quả không tìm thấy/lỗi. |
 | `BR-022` | OWNER có thể đăng nhập Zalo hoặc chủ động liên kết Zalo vào tài khoản đang sở hữu. Liên kết phải chứng minh quyền sở hữu cả Zalo và tài khoản hiện tại; không tự gộp theo tên/email/ảnh, không chuyển identity đang thuộc tài khoản khác. Đăng nhập lại giữ một tài khoản chuẩn và dữ liệu tiệm; không khôi phục tài khoản bị khóa hoặc nâng quyền. Core tiếp tục chỉ nhận Firebase ID token cho API nghiệp vụ. |
+| `BR-023` | Nhóm vận hành đo mức sử dụng bằng ngày có request API nghiệp vụ đã xác thực và thành công, kể cả chỉ đọc. Phân biệt OWNER/ADMIN và tài khoản load test; chỉ lưu mã user/ngày, giữ 90 ngày theo quyết định sản phẩm. Lỗi thống kê không cản nghiệp vụ; không coi số tạo mới, số request, DAU/MAU hoặc dữ liệu thống kê có thể mất khi lỗi là cùng một chỉ số hay sổ audit. |
 
 `BR-003` giữ nguyên ý: người bán quyết định số liệu được ghi.
 

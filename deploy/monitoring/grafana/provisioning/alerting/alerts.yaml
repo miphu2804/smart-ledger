@@ -1,19 +1,37 @@
-# The minimal alert set for one small VPS, sent to Discord. Each query returns a series only while something is wrong,
+# The minimal alert set for one small VPS, sent to Discord and Telegram. Each query returns a series only while something is wrong,
 # with a positive value, so the threshold B fires on it and no data means healthy.
 apiVersion: 1
 
 contactPoints:
   - orgId: 1
-    name: discord
+    name: smartledger
     receivers:
-      - uid: discord
-        type: discord
+      # Discord through its webhook API, so the payload in templates.yaml can build an embed with fields.
+      - uid: discord-webhook
+        type: webhook
         settings:
           url: $DISCORD_WEBHOOK_URL
+          httpMethod: POST
+          payload:
+            template: '{{ template "smartledger.discord.payload" . }}'
+      # Telegram through the Bot API too: Grafana turns a chat ID read alone from the environment into a number and
+      # rejects it, while inside the URL it stays text. The Bot API reads chat_id from the query and the rest from the body.
+      - uid: telegram-webhook
+        type: webhook
+        settings:
+          url: https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage?chat_id=$TELEGRAM_CHAT_ID
+          httpMethod: POST
+          payload:
+            template: '{{ template "smartledger.telegram.payload" . }}'
+
+# The contact point used to be named discord with this uid; deleting it lets the new one take over the policy.
+deleteContactPoints:
+  - orgId: 1
+    uid: discord
 
 policies:
   - orgId: 1
-    receiver: discord
+    receiver: smartledger
     group_by: [alertname, env]
     repeat_interval: 4h
 
@@ -31,7 +49,7 @@ groups:
           - refId: A
             relativeTimeRange: { from: 600, to: 0 }
             datasourceUid: prometheus
-            model: { refId: A, instant: true, expr: "1 - probe_success > 0" }
+            model: { refId: A, instant: true, expr: '1 - probe_success{check="core"} > 0' }
           - refId: B
             datasourceUid: __expr__
             model:
@@ -43,6 +61,73 @@ groups:
         execErrState: Error
         labels: { severity: critical }
         annotations: { summary: "{{ $labels.env }} Core health over HTTPS fails: DNS, Caddy, certificate or Core is down" }
+
+      # Readiness fails while Core is up only when its database check fails; Endpoint down covers Core itself.
+      - uid: database-down
+        title: Database down
+        condition: B
+        for: 2m
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model: { refId: A, instant: true, expr: '(1 - probe_success{check="database"}) > 0 and on(env) probe_success{check="core"} == 1' }
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions: [{ evaluator: { type: gt, params: [0] } }]
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: critical }
+        annotations: { summary: "{{ $labels.env }} Core cannot reach its database: Supabase, the pooler or its connection limit" }
+
+      # AI and Bifrost have no public URL; Alloy probes them on their app network.
+      - uid: service-down
+        title: Service down
+        condition: B
+        for: 2m
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model: { refId: A, instant: true, expr: '1 - probe_success{check=~"ai|bifrost"} > 0' }
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions: [{ evaluator: { type: gt, params: [0] } }]
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: critical }
+        annotations: { summary: "{{ $labels.env }} {{ $labels.check }} health fails inside its network: the container is stopped, starting or unhealthy" }
+
+      # A target that cannot be scraped leaves its dashboards empty without failing any probe; Caddy's metrics were
+      # down for a day this way when a reload kept reading the old Caddyfile.
+      - uid: scrape-down
+        title: Metrics scrape down
+        condition: B
+        for: 10m
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model: { refId: A, instant: true, expr: '1 - up > 0' }
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions: [{ evaluator: { type: gt, params: [0] } }]
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning }
+        annotations: { summary: "{{ $labels.instance }} ({{ $labels.job }}) cannot be scraped: the target is down, its port is closed or it has no /metrics" }
 
       - uid: container-restarting
         title: Container restarting
@@ -115,7 +200,7 @@ groups:
           - refId: A
             relativeTimeRange: { from: 600, to: 0 }
             datasourceUid: prometheus
-            model: { refId: A, instant: true, expr: "(probe_ssl_earliest_cert_expiry - time()) / 86400 < 14" }
+            model: { refId: A, instant: true, expr: '(probe_ssl_earliest_cert_expiry{check="core"} - time()) / 86400 < 14' }
           - refId: B
             datasourceUid: __expr__
             model:

@@ -1,3 +1,83 @@
+### 2026-10-30 — Alerts as Discord embeds and Telegram messages
+
+| Area | Change |
+|---|---|
+| Deploy | • `templates.yaml` builds each alert group once for both channels: headline with state, severity, alert, environment and count, one summary per alert, then Environment, Severity, Vietnam time and Source, then Overview, Silence and Alert rules links<br>• Discord gets a coloured embed with fields and Telegram an HTML message, both through Grafana's webhook integration; the chat ID rides in the Bot API URL because Grafana turns a chat ID read alone from the environment into a number<br>• The contact point is now `smartledger`; provisioning deletes the old `discord` one, and the playbook requires and writes `MONITOR_TELEGRAM_BOT_TOKEN` and `MONITOR_TELEGRAM_CHAT_ID` |
+| Docs | • The CI/CD and secrets guides describe both channels and the bot setup; the credential map lists the two keys |
+
+Check: on Grafana 12.1.1 provisioned from the repository, an upgrade from the old `discord` contact point kept 7 rules and the policy; test alerts reached a capture server as a Discord embed and a Telegram HTML body, and the template test rendered firing, two-alert and resolved groups; a real `sendMessage` with the chat ID in the query and a JSON body was accepted. Not verified: a real alert on the VPS.
+
+### 2026-10-30 — Product analytics dashboard with cohort retention (ADR-0003 P1)
+
+| Area | Change |
+|---|---|
+| Deploy | • Grafana provisions read-only PostgreSQL datasources `smartledger-staging-pg` and `smartledger-production-pg` (one connection, closed after each query) and the **SmartLedger product** dashboard in a Product folder: DAU, WAU, MAU, stickiness, weekly cohort retention, activation funnel, feature adoption, AI use, sales and data freshness, plus an Events row; load-test accounts are left out<br>• `vps-playbook.sh` loads the `monitor` group; the playbook refuses any login other than `grafana_reader` and writes `postgres-<environment>.env`, which Compose reads as optional files so each environment keeps the other's datasource |
+| Config | • `.env.example` of Core and AI and the Dopbase templates carry the pooler budget: Hikari 8, AI pools 2 and 2, so Core, AI and Grafana use 13 of 15 session pooler clients; Hikari keeps 2 connections while idle and fails a request after 5 s without a free connection instead of 30 s |
+| Docs | • ADR-0003 now records one dashboard instead of two, retention and stickiness definitions, why logout is not a metric, and login tracking as a P2 Core change; the CI/CD and secrets guides describe the datasource and its login; the credential map is regenerated |
+
+Check: on a throwaway PostgreSQL 16 with every Core migration, the AI chat table and the `grafana_reader` grants from the ADR, every SQL query of the dashboard ran through Grafana 12.1.1 provisioned from the repository and rendered in the browser; the grants alone were enough after the last-sale panel moved from `created_at` to `sold_at`; `ansible-playbook --syntax-check` and `docker compose config` with one optional file present pass. Not verified: the role on Supabase, the pooler login, real data and the AI Prometheus panels; Dopbase now holds Hikari 8, minimum idle 2 and a 5000 ms connection timeout for Core, 2 and 2 for AI's pools, and port 5432 and database `postgres` in `monitor/staging` and a new `monitor/production`; `GRAFANA_PG_HOST`, `GRAFANA_PG_USER` and `GRAFANA_PG_PASSWORD` are not set for production and were not checked for staging, because reading values needs an interactive password. Commit: the one that adds this entry.
+
+### 2026-10-30 — Caddy reads its Caddyfile through a directory, and a scrape-down alert
+
+| Area | Change |
+|---|---|
+| Deploy | • The shared Caddy mounts `conf/` instead of the single `Caddyfile`: Ansible replaces a file by rename, a single-file mount keeps the old inode, and `caddy reload` had kept serving the Caddyfile from before #422, so `:9180` never opened and the Overview showed only probes<br>• The edge handler runs `caddy validate` before `caddy reload`, and the playbook removes the old top-level `Caddyfile`<br>• Grafana alert **Metrics scrape down** fires when a target's `up` is 0 for 10 minutes<br>• Grafana opens on the Overview after sign-in, and the Resources dashboard shows every container in one view without the stack filter |
+| Docs | • The CI/CD guide explains the directory mount, lists the new alert and describes the Resources and home dashboard changes |
+
+Check: on the VPS, the container's `/etc/caddy/Caddyfile` had no `9180` while the host file did, and `up{job="caddy"}` was 0 for 24 hours; locally, Caddy started from the new layout served `:9180` and, after the Caddyfile was replaced by rename, `caddy reload` picked up the change; the playbook passes `--syntax-check`; a throwaway Grafana 12.1.1 provisions the eight alerts, opens on the Overview and loads the Resources dashboard; on the live Prometheus `1 - up > 0` returns Caddy and production AI. Not done: the playbook has not run on the VPS, and production AI still fails its scrape until a release carries `/metrics`. Commit: the one that adds this entry.
+
+### 2026-10-29 — Credential map pages for staging and production
+
+| Area | Change |
+|---|---|
+| Docs | • `docs/development/credential-map/` holds one page per environment listing every Dopbase and GitHub variable with its source, service, connection, kind, status, code references and the failure it causes, shown as a table grouped by service with a status strip, search, a service filter and a detail panel<br>• `scripts/secrets/credential_map.py` builds the pages from Dopbase key names and a scan of tracked files; connections, kinds and verified symptoms live in `scripts/secrets/credential-map.json` |
+
+Check: both pages generated (staging 208 keys, production 179); every local env value of 12 or more characters was searched for in the pages and only the VPS IP, already public in the docs, matched; both pages were opened in the in-app browser at 1440 px and 375 px with no horizontal page scroll and no console errors, and env template files under `secrets/templates/` are skipped by the scan so they do not mark every variable as used. Commit: the one that adds this entry.
+
+### 2026-10-29 — R2 bucket, token policy and key handling for the Dopbase backup
+
+| Area | Change |
+|---|---|
+| Docs | • A new `dopbase-secrets-and-backup` diagram shows the three bands — operator and CI, the VPS, and R2 — with who writes secrets in, what the nightly cron does, and where each key lives<br>• The CI/CD guide now says how to create the backup bucket: the bucket and its location hint, a lifecycle rule for retention and incomplete uploads, an R2 API token scoped to that bucket from the R2 page rather than the account API token page, a bucket policy that denies delete because R2 has no write-only preset, and the age key pair generated off the VPS and kept in the password manager<br>• The five backup variables belong in both `vps/staging` and `vps/production`, because a playbook run for an environment without them removes the cron job the other environment's run created<br>• A hand run of `backup.sh` plus a refused `rclone delete` is the check that the bucket is set up right |
+
+Check: a link and anchor pass over `docs/development/ci-cd.md` resolves every link and image added here; the diagram exports with the repository's own drawio flags and was read back as a PNG to check for overlapping labels and edges through nodes; `backup.sh` keeps the volume-tar approach, because `dopbase backup` reaches an administrator-only endpoint and a cron job would have to hold an admin token on the VPS. Not verified against Cloudflare: that R2 accepts `s3:PutBucketPolicy` in a bucket policy, the Asia-Pacific location hint, and the refused delete; no bucket, token or key pair exists yet. Two anchors that predate this change, `#android-runners` and `#ci-runners`, are still broken. Commit: the one that adds this entry.
+
+### 2026-10-29 — Layered Grafana dashboards with Core and AI request metrics
+
+| Area | Change |
+|---|---|
+| Deploy | • Grafana provisions three dashboards in Infra, read-only in the UI: **SmartLedger overview** (health, alerts, per-service RED), **SmartLedger service** (one service's RED, probe, container and logs) and **SmartLedger resources** (VPS and containers by stack), linked by the `smart-ledger` tag<br>• The shared Caddy serves per-host request metrics on `:9180`, unpublished; Alloy joins `edge` to scrape it and labels each probe with its `host`<br>• Prometheus loads recording rules that turn Caddy's metrics into `service:http_requests:rate5m` and `service:http_request_duration_seconds_bucket:rate5m` by `env` and `service`, so a new source adds rules and no dashboard changes<br>• AI exposes `/metrics` with request count, status class and latency per route up to 120 s, without `/health`; the playbook lists each environment's AI in `targets/services/` for Alloy to scrape on the app network |
+| Docs | • The CI/CD guide describes the three layers, the metric schema and how to add a service; the API contract lists AI's `GET /metrics`; the VPS network diagram shows Caddy's `:9180` and Alloy's scrapes |
+
+Check: on a local copy of the monitoring stack with a test Caddy over HTTPS and a fake `smart-ledger-staging-core-1`, every panel query of the three dashboards ran through Grafana without errors; with 1 in 10 requests failing the rules gave 9.99% 5xx; a local AI under uvicorn was scraped (`up=1`) and its rules gave the 4xx rate; the AI test suite passes; `caddy validate`, `promtool check rules` and `docker compose config` with the playbook's override pass. Not verified on the VPS: root disk, certificate days, AI and Bifrost probes, Caddy's host label for the real domains, and the AI scrape on the app network. Bifrost request metrics are not added. Commit: the one that adds this entry.
+
+### 2026-10-29 — Daily Core user activity (CORE-018)
+
+| Area | Change |
+|---|---|
+| Core | • Owner-approved V19 adds a private user/day table with PK, FK and date index; successful authenticated API reads and writes count once per Vietnam date for ACTIVE OWNER/ADMIN<br>• Default-off recorder has a bounded cache, independent committed writes, retry after telemetry errors and hourly 90-day retention; no client API or shared-environment activation |
+| Docs | • BR-023 → FR-036 → AC-101–103, ERD and rollout/rollback guide define the scope; read-only Grafana SQL separates roles and excludes loadtest accounts |
+
+Check: 27 CORE-018 tests passed on disposable PostgreSQL 16.15; full Maven verify passed 1449 tests with zero failures/errors/skips; PostgreSQL gate unit tests passed 13 cases. Shared-DB migration, Grafana provisioning and staging/production acceptance are not verified. Commit: the one that adds this entry.
+
+### 2026-10-29 — Monitoring config changes take effect on a playbook run
+
+| Area | Change |
+|---|---|
+| Deploy | • The playbook's monitoring handler recreates the monitoring containers, because Alloy, Loki and Grafana read their bind-mounted config only at start and Compose does not recreate a container for a changed mounted file; the first VPS run of the database, AI and Bifrost alerts left Grafana with the old five rules until its alerting was reloaded by hand |
+| Docs | • The CI/CD guide says the playbook recreates the monitoring containers |
+
+Check: on the VPS after the staging playbook run, Grafana listed five rules; `POST /api/admin/provisioning/alerting/reload` raised it to seven with Database down and Service down; `ansible-playbook --syntax-check` passes. Not verified: a playbook run with this change. Commit: the one that adds this entry.
+
+### 2026-10-29 — Alerts for the database, AI and Bifrost
+
+| Area | Change |
+|---|---|
+| Deploy | • Alloy probes each Core's readiness over HTTPS beside liveness, so **Database down** fires when Core is up but cannot reach Supabase<br>• Alloy joins every app network that exists through a `compose.override.yaml` the playbook writes before starting monitoring, and probes `smart-ledger-<env>-ai-1:8001/health` and `smart-ledger-<env>-bifrost-1:8080/health` by container name, since `ai` and `bifrost` exist in both environments; **Service down** fires when either fails for 2 minutes<br>• Alloy gets `dns_search: .` so a stopped container's name cannot resolve through the VPS wildcard DNS |
+| Docs | • The CI/CD guide lists the new alerts and how Alloy reaches AI and Bifrost; the VPS network diagram shows the probes and is re-laid out with straight arrows |
+
+Check: throwaway containers with the real Alloy config: readiness 503 with liveness up fired only Database down, Core stopped only Endpoint down; the playbook's monitoring handler under `sh` and `dash` joined Alloy to a test `smart-ledger-staging_default`, the AI probe read 1 and the missing Bifrost 0, and stopping the fake AI raised the Service down series; `ansible-playbook --syntax-check` passes. Not verified: a playbook run on the VPS, and whether production's missing Bifrost starts with it or must be dropped from the probes. Commit: the one that adds this entry.
+
 ### 2026-10-29 — VPS network and port diagram
 
 | Area | Change |
@@ -115,82 +195,3 @@ Check: all 18 badge URLs return 200 with a logo; the page was not rendered on Gi
 | Docs | • The CI/CD guide uses the new name and records that environment names are spelled out, never shortened |
 
 Check: playbook applied for production; `https://production.103-162-31-93.sslip.io/actuator/health` returns 200 `UP` with its own certificate, Core and AI still run `4a4f714`, staging still answers. Commit: the merge of this branch.
-
-### 2026-10-28 — Backend GitHub environments named backend-staging and backend-production
-
-| Area | Change |
-|---|---|
-| CI | • `deploy-backend` uses environments `backend-staging` and `backend-production` instead of `railway-*`, so their names no longer depend on the host<br>• The new environments carry the same branch rules, production approval, variables and secrets, except `RAILWAY_TOKEN`, which CD does not use |
-| Docs | • The CI/CD guide uses the new names and keeps the `railway-*` environments only for a rollback to Railway |
-
-Check: `actionlint`, the deploy key in each new environment matches its public key, and a staging CD run deploys through `backend-staging`. Not verified: production, which switches on the next release to `main`. Commit: the merge of this branch.
-
-### 2026-10-28 — Staging Core answers on staging.103-162-31-93.sslip.io
-
-| Area | Change |
-|---|---|
-| Deploy | • The staging site of the shared Caddy serves `staging.103-162-31-93.sslip.io` and, until every client has moved, the bare `103-162-31-93.sslip.io`, so both environments carry their name |
-| Clients | • Staging web, preview, landing, Android, monitor, load test and release-script defaults use the `staging.` name |
-
-Check: both names answer HTTPS health 200 through the shared Caddy. Commit: the merge of this branch.
-
-### 2026-10-28 — Staging and production share one VPS behind one Caddy
-
-| Area | Change |
-|---|---|
-| Deploy | • Caddy moves to its own project in `deploy/edge/` (`/opt/smartledger-edge`) that owns ports 80 and 443 and routes `103-162-31-93.sslip.io` to `core-staging` and `prod.103-162-31-93.sslip.io` to `core-production` over the Docker network `edge`<br>• Each environment keeps its own Compose project (`/opt/smartledger`, `/opt/smartledger-production`); Core joins `edge` under `CORE_ALIAS`, AI stays on the project network<br>• Caddy and Core resolve without the VPS search domain, whose wildcard DNS sent `core-production` to an outside host<br>• The playbook runs once per environment and writes `sites/<environment>.caddy` |
-| Clients | • Staging web, landing, Android, preview, monitor, load test and release-script defaults point at the VPS instead of Railway |
-| Docs | • The CI/CD guide records the shared VPS, its domains and the accepted loss of isolation between staging and production |
-
-Check: playbook applied to the VPS for staging and production; staging HTTPS health 200 through the shared Caddy with the copied certificate, Core reaches AI, production domain gets its certificate and answers 502 until its first deploy. Not verified: a production deploy, which needs the release to `main`. Commit: the merge of this branch.
-
-### 2026-10-27 — Backend on a VPS through GHCR and Caddy
-
-| Area | Change |
-|---|---|
-| CI | • `deploy-backend` replaces the Railway CLI: it builds `ai` and `core` for `linux/amd64`, pushes them to GHCR with the job's `GITHUB_TOKEN` and runs `deploy/vps/deploy.sh` over SSH with a pinned host key<br>• One package per service and environment, keeping the latest 10 staging or 20 production images as the rollback window |
-| Deploy | • The VPS runs `core`, `ai` and `caddy` in one Compose stack; Caddy publishes 80 and 443 with a free Let's Encrypt certificate for `CADDY_DOMAIN` (an sslip.io name until a domain exists)<br>• `deploy/ansible/playbook.yml` provisions a new VPS: Docker, ufw with SSH, HTTP and HTTPS, swap, deploy user and key, env files, Caddy domain, optional GHCR login |
-| Docs | • The CI/CD guide and diagram describe the VPS setup and mark Bifrost, Langfuse, pgvector and the Grafana stack as planned |
-
-Check: `actionlint` on both workflows, `docker compose config -q` (fails without `CADDY_DOMAIN` as intended), `bash -n deploy.sh`, playbook YAML parse and diagram validation pass. Not verified: a real deploy, the playbook against a VPS, the certificate, and whether `GITHUB_TOKEN` may delete package versions. Commit: the merge of this branch.
-
-### 2026-10-27 — Root README trimmed, local development page, progress format
-
-| Area | Change |
-|---|---|
-| Docs | • Root README keeps only status, architecture, layout and links, and says `main` deploys to production<br>• Setup, run, pre-PR checks, Compose, the local database and migrations moved to `docs/development/local-development.md`, grouped by service with one command per block<br>• Links to the old README anchors point to the new page<br>• Repository layout matches the real folders, including `secrets/` and `tools/` |
-| Process | • `PROGRESS.md` entries use the table format in CONTRIBUTING, without file lists, and the file stays at 200 lines or fewer |
-
-Check: link and anchor check over the edited files passes. Commit: the one that adds this entry.
-
-### [2026-10-27 19:49 UTC+07:00] — [Fix] Copy env files one way, from staging to this machine
-
-**Done:** `apply.sh dev staging` is removed. It sent a whole target back without knowing which staging version it was built from, so a target older than staging dropped keys a teammate had added (the warning from #376) and also put back old values of keys they had rotated, with no warning at all. Staging is now changed only by editing `secrets/staging/env/` and running `push.sh`, which already refuses to overwrite a newer version; only the maintainer holds the R2 write token for that. `apply.sh dev staging` exits with a message pointing there, and the `sl` Apply item goes straight to staging → dev without the direction picker. `apply.sh staging dev` output is unchanged.
-
-**Changed files:** `scripts/secrets/apply.sh`, `tools/secrets-cli/src/{menu,main}.rs`, `docs/development/secrets-and-env.md`, `secrets/README.md` — modified; this entry.
-
-**Check:** in a scratch repo the old and new `apply.sh staging dev` print the same output and write the same files (create, re-apply with an extra key, `--use-staging`); `apply.sh dev staging` and `sl apply dev staging` exit 1 with the new message; `sh -n` passes; `cargo build --release` and `cargo clippy` pass with no warnings. **Not verified:** the Apply item clicked through in the `sl` menu.
-
-### [2026-10-27 15:26 UTC+07:00] — [Fix] Warn when apply.sh dev staging removes keys from staging
-
-**Done:** `apply.sh dev staging` copies each target as a whole into `secrets/staging/env/`, so a key the target lacks, typically one a teammate added after this machine last ran `apply.sh staging dev`, is removed from staging. The output now prints a warning under the `-` lines that names the target and says to run `apply.sh staging dev` first. Behavior is unchanged; nothing is blocked. The guide's sentence that said it copies only the edited keys now says it copies the whole target.
-
-**Changed files:** `scripts/secrets/apply.sh`, `docs/development/secrets-and-env.md` — modified; this entry.
-
-**Check:** dry runs in a scratch repo: a target missing a staging key prints the warning, a complete target and `staging dev` do not; `sh -n` passes. **Not verified:** the warning inside the `sl` menu.
-
-### [2026-10-27 09:15 UTC+07:00] — [Docs] Refresh the marketing screenshots and keep the capture script
-
-**Done:** The 21 phone-ratio screenshots in `docs/marketing/` dated from 2026-10-12 and no longer matched the app: the tab bar is now Tổng quan · Đơn hàng · Tạo đơn · Trợ lý Bobi · Quản lý, Đọc đơn and Quét mã sit on the Tạo đơn screen, and products without a photo show their initial instead of a stock photo (#193). All 21 were captured again from `staging` at `7d65486` with the same names, size (1170 × 2532 PNG, 390 × 844 at 3x) and flows, so existing links keep working. The capture script is now in the repo (`frontend/mobile/scripts/marketing-screenshots/`, Node 22 and Chrome only, no new packages): it drives headless Chrome over the DevTools Protocol, replaces the camera with a drawn EAN-13 package so the scanner decodes it for real, and types the voice sentences through "Nhập tay". The README lists the new contents, the source commit and how to capture again; the Unsplash note is gone because the app no longer uses those photos.
-
-**Changed files:** `docs/marketing/{dashboard,chat,barcode,voice}/*.png` (21) and `docs/marketing/README.md` — modified; `frontend/mobile/scripts/marketing-screenshots/{capture.mjs,cdp.mjs,page-helpers.js}` — added; this entry.
-
-**Check:** a full run of the script captured all 21 images without errors; each image is 1170 × 2532 and every flow was reviewed on a contact sheet (the chat answer carries the "Số liệu giả lập" note, the scanner reads `8935049500544` and reports `8936079140014` as unknown, the voice order ends at 4 items and 98.000đ); `node --check` passes for the three script files. **Not verified:** the same screens on a real phone; the script on macOS or Linux (paths are configurable but only Windows was run).
-
-### [2026-10-27 01:20 UTC+07:00] — [Feature] Secrets sync: local database, apply, sl menu and one env file per service
-
-**Done:** A dev machine now gets every env file from one command: `scripts/secrets/pull.sh` decrypts `secrets/<env>/env/` from R2, `scripts/local-db.sh` starts the local Postgres with Core and AI migrations, and `scripts/secrets/apply.sh staging dev --apply` writes `backend/core/.env`, `backend/ai/.env`, `frontend/mobile/.env`, `scripts/loadtest/.env.staging` and `scripts/monitor/.env`, with `secrets/local.env.*` put over the staging values. Core and AI keep one file each per environment, `.env.core` and `.env.ai`, equal to the live Railway service variables with references resolved; the separate `.env.railway.core` and `.env.railway.ai` copies are gone. `scripts/secrets/github.sh` sets the GitHub secrets of `railway-<env>` from those files. The `sl` menu (Rust, `tools/secrets-cli`) wraps pull, push, history, apply, members, and admin-only config, migrate and clean.
-
-**Changed files:** `scripts/local-db.sh`, `scripts/secrets/{apply,config,migrate,clean,check,lib,github}.sh`, `tools/secrets-cli/`, `secrets/admins.txt`, `secrets/local.env.{core,ai}`, `secrets/staging/targets`, `secrets/{staging,production}/env.age.dvc`, the three `.env.example` files, `docs/development/secrets-and-env.md`, `secrets/README.md`, `backend/ai/README.md`; this entry.
-
-**Check:** every key of `.env.core` and `.env.ai` in both environments equals Railway; AI and Core started from the applied files against the local database, Core reached readiness and AI accepted Core's internal token; `apply` recreated a deleted target at its path; a fresh clone pulled and applied every target. **Not verified:** a deploy with the `RAILWAY_TOKEN` now set in GitHub; `docker compose` against the local database (containers cannot reach 127.0.0.1).

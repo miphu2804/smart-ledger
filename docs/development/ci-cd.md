@@ -96,7 +96,7 @@ One VPS (`103.162.31.93`, Ubuntu 24.04, 4 GB RAM plus swap) runs both environmen
 
 ![VPS Docker networks and ports](../architecture/diagrams/images/vps-network.svg)
 
-Source: [`vps-network.drawio`](../architecture/diagrams/src/vps-network.drawio). Each dashed region is one Docker network, so a container drawn inside two regions is on both. Each `name:port` is what another container dials: the name is the container's DNS name on that network, prefixed `edge:` for its alias on `edge`, and the port is where the target listens inside its container. Only Caddy publishes host ports, so every other port is reachable only from a container on the same Docker network. Each Compose project has its own `default` network, and Core, Bifrost, Grafana and Dopbase also join `edge` so Caddy can reach them. Compose also registers each service name on `edge`, where `core` matches both environments' Core, so Caddy dials the unique aliases `core-<environment>` and `gateway-<environment>` instead. AI joins only its own project network, so only that environment's Core can call it. Alloy listens on no port: it reads containers through the Docker socket, writes to Prometheus and Loki on the monitoring network, and probes each Core through its public domain. Production runs no Bifrost.
+Source: [`vps-network.drawio`](../architecture/diagrams/src/vps-network.drawio). Each dashed region is one Docker network, so a container drawn inside two regions is on both. Each `name:port` is what another container dials: the name is the container's DNS name on that network, prefixed `edge:` for its alias on `edge`, and the port is where the target listens inside its container. Only Caddy publishes host ports, so every other port is reachable only from a container on the same Docker network. Each Compose project has its own `default` network, and Core, Bifrost, Grafana and Dopbase also join `edge` so Caddy can reach them. Compose also registers each service name on `edge`, where `core` matches both environments' Core, so Caddy dials the unique aliases `core-<environment>` and `gateway-<environment>` instead. AI joins only its own project network, so only that environment's Core can call it, and Alloy, which joins every app network to probe AI and Bifrost by container name. Alloy listens on no port: it reads containers through the Docker socket, writes to Prometheus and Loki on the monitoring network, probes each Core through its public domain, joins `edge` to scrape Caddy's request metrics on `smart-ledger-edge-caddy-1:9180`, which Caddy does not publish, and scrapes AI's `/metrics` on each app network. Production runs no Bifrost.
 
 Compose names a project after its directory unless the file sets `name:`, which would make the projects `smartledger` and `smartledger-production` while the repository and the GHCR images are kebab-case. Each compose file sets `name:` instead, so the containers are `smart-ledger-staging-core-1`, `smart-ledger-production-core-1` and `smart-ledger-edge-caddy-1`, and the shared Caddy keeps its certificates in `smart-ledger-edge_caddy_data`. The app directories are unchanged, so each stack reads its own environment from `ENVIRONMENT` in the project `.env`, which both `deploy.sh` and the playbook write.
 
@@ -132,7 +132,7 @@ Add `GHCR_USERNAME` and `GHCR_READ_TOKEN` to the shell if the packages are priva
 2. Generate a CI-only key with `ssh-keygen -t ed25519 -f deploy_key -N "" -C github-actions-deploy`. In `secrets/<environment>/env/.env.vps`, set `VPS_SSH_KEY` to `base64 < deploy_key | tr -d '\n'` and `VPS_SSH_PUBLIC_KEY` to `deploy_key.pub`, then delete both files and run `scripts/secrets/github.sh <environment> --apply`.
 3. Set `VPS_KNOWN_HOSTS` to `ssh-keyscan -t ed25519 <VPS_HOST>` (check the fingerprint in the provider console) and `VPS_HOST` in both `.env.vps` and the GitHub environment variables.
 4. Set `CADDY_DOMAIN`; production copies the `VPS_*` values from staging, because `deploy` has one key. Save the `VPS_*` and `CADDY_DOMAIN` values in Dopbase `vps/<environment>`.
-5. Create network `edge`. In the app directory, put `compose.yaml` and `bifrost.json` from `deploy/vps/`, and with mode `600` `core.env`, `ai.env`, `bifrost.env` (from [secrets](secrets-and-env.md)) and `.env` with `ENVIRONMENT=<environment>` and `CORE_ALIAS=core-<environment>`. In `/opt/smartledger-edge`, put `deploy/edge/` and `sites/<environment>.caddy`, then reload Caddy.
+5. Create network `edge`. In the app directory, put `compose.yaml` and `bifrost.json` from `deploy/vps/`, and with mode `600` `core.env`, `ai.env`, `bifrost.env` (from [secrets](secrets-and-env.md)) and `.env` with `ENVIRONMENT=<environment>` and `CORE_ALIAS=core-<environment>`. In `/opt/smartledger-edge`, put `deploy/edge/compose.yaml`, the Caddyfile as `conf/Caddyfile` and `sites/<environment>.caddy`, then validate and reload Caddy. Caddy mounts `conf/` and `sites/` as directories because a single-file mount keeps the inode it started with: a file replaced by rename, as Ansible and most editors do, stays invisible to `caddy reload` until the container is recreated.
 6. After the first deploy, make the two GHCR packages public, or `docker login ghcr.io` once as `deploy` with a `read:packages` token.
 7. Check database access: Supabase's direct host is IPv6-only, so a VPS without IPv6 uses the session pooler URL. Allowlist the VPS in Supabase and Redis Cloud if restrictions are on.
 
@@ -166,7 +166,7 @@ Compose sets `AI_BASE_URL`, `SERVER_PORT` and `FLYWAY_ENABLED=false` itself. Bef
 | `POSTGRES_URL` | Supabase `postgresql://` URL of the environment |
 | `AI_SQL_READER_URL` | Read-only `ai_sql_reader` login as a `postgresql://` URL; empty means the agent cannot read shop data |
 | `REDIS_URL` | Redis Cloud of the environment |
-| `POSTGRES_POOL_MAX_SIZE`, `SQL_POOL_MAX_SIZE` | Optional, default `2`; they share the Supabase pooler limit with Core ([AI README](../../backend/ai/README.md#routes-and-database-access)) |
+| `POSTGRES_POOL_MAX_SIZE`, `SQL_POOL_MAX_SIZE` | Optional, default `2`; they share the Supabase pooler limit with Core ([AI README](../../backend/ai/README.md#database-access)) |
 | Model and Logfire variables | From GitHub, see below |
 | `AGENT_MEMORY_*`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | Optional, `ai.env` only; memory is off until the PO approves it ([ADR-0002](../architecture/adr/0002-agent-long-term-memory.md), [AI README](../../backend/ai/README.md#long-term-memory-off-by-default)) |
 
@@ -184,9 +184,26 @@ Bifrost also joins `edge` as `gateway-<environment>`. When `.env.vps` sets `GATE
 
 ### Dopbase and its backup
 
+![Dopbase secrets and nightly backup](../architecture/diagrams/images/dopbase-secrets-and-backup.svg)
+
+Source: [`dopbase-secrets-and-backup.drawio`](../architecture/diagrams/src/dopbase-secrets-and-backup.drawio). Green edges carry secrets in and out, orange is the nightly backup, and the dashed edges are the steps a person runs by hand. The numbers read as one flow:
+
+1. A maintainer sets a secret in the Dopbase admin UI, which stores it in `dopbase_data`: `dopbase.db` holds the values encrypted under `master.key`.
+2. `vps-playbook.sh` reads `vps/<environment>` before an Ansible run.
+3. The playbook writes those five backup values to `/opt/dopbase/.env.backup` on the VPS.
+4. The GitHub Actions deploy reads `core/<environment>` and `ai/<environment>` with its own runner token.
+5. At 03:00 the cron job runs `backup.sh`, which reads `.env.backup`.
+6. It stops Dopbase, tars the volume, and starts it again.
+7. It encrypts the tar with `age -r` and uploads it with `rclone`, logging to `/var/log/dopbase-backup.log`.
+8. A restore happens by hand on the maintainer's machine, the only place that holds the age private key.
+
+The VPS holds the age public key only, so it writes an archive that nothing on the VPS can read back.
+
 Dopbase, the team's self-hosted secrets manager, runs on the same VPS as its own Compose project in `/opt/dopbase` ([`deploy/dopbase/`](../../deploy/dopbase/)), shared by every environment and behind the same Caddy as Core. The playbook sets it up only when `DOPBASE_DOMAIN` holds a name that resolves to the VPS, `secrets.songheloi.id.vn`; without it every Dopbase task is skipped. The zone's nameservers are Mắt Bão, not Cloudflare, so Cloudflare Access cannot sit in front of it: until the zone moves, the login and setup pages are protected only by Dopbase's own password, and `sites/dopbase.caddy` is where an allowlist or `basic_auth` would go. On first start Dopbase prints a protected setup link, which an operator must open right away because the setup page is reachable by anyone who has the address: read it with `docker compose logs dopbase` in `/opt/dopbase`. Dopbase is the source of every service variable: the backend deploy exports `core/<environment>` and `ai/<environment>` with a runner token per service, and [`scripts/secrets/vps-playbook.sh`](../../scripts/secrets/vps-playbook.sh) exports the VPS files for the playbook. Create the tokens once per environment with `dopbase token create core/<environment> --name github-deploy` (and the same for `ai`), save them as `DOPBASE_CORE_TOKEN` and `DOPBASE_AI_TOKEN` on `backend-<environment>`, and set the variable `DOPBASE_URL` to `https://secrets.songheloi.id.vn`. Because Dopbase runs on the VPS it serves, a lost VPS is rebuilt in this order: restore Dopbase from its backup (below), then run the wrapper.
 
 Its SQLite database and master key live in the `dopbase_data` volume, which is the only copy of every stored secret, so [`deploy/dopbase/backup.sh`](../../deploy/dopbase/backup.sh) copies it off-site every night at 03:00 as a cron job of user `deploy`, logging to `/var/log/dopbase-backup.log`. The script stops Dopbase for the few seconds of the copy, because a tar of a running SQLite database can catch a torn write-ahead log, encrypts the archive with age before it leaves the machine, and uploads it to an R2 bucket as `dopbase-<timestamp>.tar.gz.age`. The private half of the age key stays with the maintainer and never reaches the VPS, so a leaked bucket or a leaked VPS token exposes nothing. Old archives are deleted by a lifecycle rule on the bucket, which keeps the token free of delete permission; set the rule to the retention the team wants, for example 30 days.
+
+Both environments share one VPS and one Dopbase, so set the same five values in `vps/staging` and `vps/production`: a playbook run for an environment that lacks them removes the cron job the other environment's run created.
 
 Keep these in Dopbase `vps/<environment>`, which the wrapper loads into the shell, all five or none; an empty `DOPBASE_BACKUP_BUCKET` removes the cron job again and leaves Dopbase running:
 
@@ -195,7 +212,17 @@ Keep these in Dopbase `vps/<environment>`, which the wrapper loads into the shel
 | `DOPBASE_BACKUP_BUCKET` | R2 bucket that holds only these archives, for example `smart-ledger-dopbase-backups` |
 | `DOPBASE_BACKUP_ENDPOINT` | `https://<account id>.r2.cloudflarestorage.com` |
 | `DOPBASE_BACKUP_RECIPIENT` | age public key of the backup key pair (`age1…`), generated with `age-keygen` off the VPS |
-| `DOPBASE_BACKUP_KEY_ID`, `DOPBASE_BACKUP_SECRET` | R2 API token for that bucket with object write only |
+| `DOPBASE_BACKUP_KEY_ID`, `DOPBASE_BACKUP_SECRET` | R2 API token scoped to that bucket with Object Read & Write, which a bucket policy narrows to writing only |
+
+**Creating the bucket:** it holds these archives only, so create it and its token apart from the public bucket that serves the [Android APK](#publish-the-apk-for-the-landing-page).
+
+1. Create a bucket named `smart-ledger-dopbase-backups` with the Asia-Pacific location hint and public access left off, because an archive is read back only by an operator during a restore.
+2. Add a lifecycle rule that deletes objects 30 days after creation and aborts incomplete multipart uploads after one day, so retention is enforced by the bucket and the token needs no delete permission.
+3. Create an R2 API token named after the bucket, with **Object Read & Write** applied to that bucket only, from **R2 Object Storage > API > Manage API tokens**; the account API token page issues a bearer token instead of the Access Key ID and Secret Access Key that rclone needs.
+4. Add a bucket policy that denies `s3:DeleteObject` and `s3:PutBucketPolicy` for every principal, because R2 has no write-only token preset and a `Deny` outranks the token's own permission; the lifecycle rule still deletes, as Cloudflare applies it server-side rather than through the token.
+5. On a machine that is not the VPS, run `age-keygen -o dopbase-backup.key` for `DOPBASE_BACKUP_RECIPIENT`, and keep the file in the team password manager, because it is the only thing that reads an archive and no restore works without it.
+
+Then run `./backup.sh` by hand in `/opt/dopbase` once: it prints the name and size it uploaded, and `rclone delete` against the same bucket with the same credentials must fail with `AccessDenied`.
 
 **Restore:** download the newest archive, then, on a machine that holds the backup private key, `age -d -i <key file> dopbase-<timestamp>.tar.gz.age | tar -xz -C <directory>`, and load that directory into a fresh `dopbase_data` volume with `docker run --rm -v dopbase_data:/data -v <directory>:/in alpine:3.21 cp -a /in/. /data` before starting Dopbase. Test a restore before the team depends on Dopbase as the only source of secrets.
 
@@ -205,8 +232,8 @@ These live in Dopbase `ai/<environment>` with the other AI variables; step `Uplo
 
 | Name | Value |
 |---|---|
-| `OPENAI_API_KEY` | Gateway key shared by every model |
-| `OPENAI_BASE_URL` | `https://opencode.ai/inference/go/v1` (OpenCode Go) or `https://api.openai.com/v1`; required for `anthropic` models |
+| `OPENAI_API_KEY` | Gateway key shared by every model; `BIFROST_VIRTUAL_KEY` once AI calls Bifrost |
+| `OPENAI_BASE_URL` | Bifrost at `http://bifrost:8080` (being wired, see [`bifrost`](#service-variables)), or `https://opencode.ai/inference/go/v1` (OpenCode Go) or `https://api.openai.com/v1` directly; required for `anthropic` models |
 | `MODEL_PROVIDER`, `MODEL_NAME` | e.g. `anthropic` and `claude-haiku-5-5`; see [AI README](../../backend/ai/README.md) |
 | `MODEL_REASONING_EFFORT` | `none`, `low`, `medium` or `high` |
 | `MODEL_FALLBACKS` | Optional JSON list, e.g. `["openai-chat:deepseek-v4.1-flash"]` |
@@ -221,7 +248,7 @@ To remove a setting, delete it in Dopbase; the next deploy drops it from `ai.env
 | `LOGFIRE_ENVIRONMENT` | Dopbase `ai/<environment>` | `staging` or `production` |
 | `LOGFIRE_SERVICE_VERSION` | Commit | `github.sha` |
 
-Traces carry no message content ([AI README](../../backend/ai/README.md#tracing-logfire)). To turn tracing off, delete `LOGFIRE_TOKEN` in Dopbase and redeploy `ai`.
+Traces carry no message content ([AI README](../../backend/ai/README.md#observability)). To turn tracing off, delete `LOGFIRE_TOKEN` in Dopbase and redeploy `ai`.
 
 ### Core CORS origins
 
@@ -243,21 +270,38 @@ The `preview-0N` origins are kept for when PR previews return; Firebase Authoriz
 
 ## Monitoring
 
-[`deploy/monitoring/`](../../deploy/monitoring/) runs once per VPS in `/opt/smart-ledger-monitoring` and watches every environment: Alloy collects host, container and probe metrics plus container logs, Prometheus keeps metrics for 30 days, Loki keeps logs for 14 days, and Grafana shows them at `https://<MONITOR_DOMAIN>` and sends alerts to Discord. Each container has a memory limit, about 1 GB in total, so the stack cannot starve Core or AI.
+[`deploy/monitoring/`](../../deploy/monitoring/) runs once per VPS in `/opt/smart-ledger-monitoring` and watches every environment: Alloy collects host, container and probe metrics plus container logs, Prometheus keeps metrics for 30 days, Loki keeps logs for 14 days, and Grafana shows them at `https://<MONITOR_DOMAIN>` and sends alerts to Discord and Telegram. Each container has a memory limit, about 1 GB in total, so the stack cannot starve Core or AI.
 
-The playbook sets it up when `.env.vps` has `MONITOR_DOMAIN`, `GRAFANA_ADMIN_PASSWORD` and `MONITOR_DISCORD_WEBHOOK_URL`; each run also writes `targets/<environment>.json`, the HTTPS probe of that environment's Core health. Point an A record for `MONITOR_DOMAIN` at the VPS first. Sign-up and anonymous access are off; the admin password applies on the first start only.
+The playbook sets it up when `.env.vps` has `MONITOR_DOMAIN`, `GRAFANA_ADMIN_PASSWORD`, `MONITOR_DISCORD_WEBHOOK_URL`, `MONITOR_TELEGRAM_BOT_TOKEN` and `MONITOR_TELEGRAM_CHAT_ID`; each run also writes `targets/<environment>.json`, the HTTPS probes of that environment's Core liveness and readiness plus the probes of its AI (`smart-ledger-<environment>-ai-1:8001/health`) and Bifrost (`smart-ledger-<environment>-bifrost-1:8080/health`). AI and Bifrost have no public URL, so Alloy joins each app network that exists through a `compose.override.yaml` the playbook writes before starting the stack, and dials them by container name because the service names `ai` and `bifrost` exist in both environments. Re-run the playbook after adding an environment so Alloy joins its network. Point an A record for `MONITOR_DOMAIN` at the VPS first. Sign-up and anonymous access are off; the admin password applies on the first start only.
 
-Datasources and alerts are provisioned from the repository and cannot be edited in the UI; change the files and re-run the playbook. The alerts are:
+Datasources, alerts and dashboards are provisioned from the repository and cannot be edited in the UI; change the files and re-run the playbook, which recreates the monitoring containers because Alloy, Loki and Grafana read their mounted config only at start. The alerts are:
 
 | Alert | Fires when |
 |---|---|
-| Endpoint down | The HTTPS health probe of an environment fails for 2 minutes |
+| Endpoint down | The HTTPS liveness probe of an environment's Core fails for 2 minutes |
+| Database down | Core's readiness probe, which checks its database connection, fails for 2 minutes while liveness passes |
+| Service down | The in-network health probe of an environment's AI or Bifrost fails for 2 minutes |
+| Metrics scrape down | Prometheus cannot scrape a target, such as Caddy's `:9180` or an AI `/metrics`, for 10 minutes, which leaves its dashboards empty while every probe passes |
 | Container restarting | A container starts more than 3 times in 15 minutes |
 | Host memory high | VPS memory use stays above 90% for 5 minutes |
 | Host disk high | The root disk stays above 85% for 10 minutes |
 | Certificate expiring | A Core certificate expires in under 14 days |
 
-AI has no public URL, so a stopped AI container shows only through the restart alert or the Core errors it causes. Application metrics of Core, AI and Bifrost, and dashboards, are not built yet.
+Grafana groups alerts by alert and environment and sends each group to Discord and Telegram, both written by [`templates.yaml`](../../deploy/monitoring/grafana/provisioning/alerting/templates.yaml) from the same parts: a headline with state, severity, alert, environment and alert count, one summary per alert (struck through once resolved), then Environment, Severity, the start or resolve time in Vietnam time and each alert's container or check, then links to the Overview for that environment, a silence for the whole group and the alert list. Discord gets a coloured embed whose fields hold those values; Telegram gets the same as HTML lines. Both go through Grafana's webhook integration because the Discord integration cannot build embed fields, and the Telegram integration rejects a numeric chat ID read from the environment, so the chat ID rides in the Bot API URL. For Telegram, create a bot with BotFather, add it to the alert group, and read the group's chat ID (it starts with `-100`) from `https://api.telegram.org/bot<token>/getUpdates` after posting a message there; store them as `MONITOR_TELEGRAM_BOT_TOKEN` and `MONITOR_TELEGRAM_CHAT_ID`.
+
+Dashboards follow three layers, each one a level deeper, in the Infra folder ([`dashboards/`](../../deploy/monitoring/grafana/provisioning/dashboards/)). Grafana opens on the Overview after sign-in through `GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH`. Each has an environment picker, and the link bar at the top lists every dashboard tagged `smart-ledger`, keeping the environment and time range:
+
+| Dashboard | Answers | Shows |
+|---|---|---|
+| **SmartLedger overview** | Is anything wrong in this environment, and where? | Up or down for Core, its database, AI and Bifrost; Core availability and certificate days left; firing and pending alerts; each service's request rate, 5xx share and p95 latency, which links to its Service dashboard |
+| **SmartLedger service** | How does one service behave? | Request rate by status class, 5xx share, p50/p95/p99 latency, its health probe, its container's memory against the limit, CPU and starts, and its logs with a regex search |
+| **SmartLedger resources** | Is the VPS or a container short of resources? | CPU, memory, root disk and load of the host every environment shares, and every container's memory against its limit, starts, memory and CPU in one view |
+
+Request metrics follow one schema, so the dashboards do not depend on what exports them. The recording rules in [`service-red.yml`](../../deploy/monitoring/prometheus/rules/service-red.yml) turn each source into `service:http_requests:rate5m{env, service, code_class}` and `service:http_request_duration_seconds_bucket:rate5m{env, service, le}`. Core is measured at the shared Caddy, which serves request metrics per host on `smart-ledger-edge-caddy-1:9180` on the `edge` network only; the rules map each Core domain to its environment through the host on that environment's Core probe. AI exports its own request metrics on `/metrics` (prometheus-fastapi-instrumentator), timed to the last streamed byte and leaving out `/health`; the playbook lists `smart-ledger-<environment>-ai-1:8001` in `targets/services/<environment>.json`, which Alloy scrapes on the app network, so the endpoint needs no internal token and is not reachable from outside. Bifrost does not export request metrics to Alloy yet, because its `/metrics` requires the admin login, so the Service dashboard shows only its probe, container and logs. To add a service, give it a health probe whose `check` is the service name and, once it exports request metrics, add recording rules with the same names and labels; the Overview table and the Service picker then include it without dashboard changes.
+
+**SmartLedger product**, in the Product folder ([`product.json`](../../deploy/monitoring/grafana/product/product.json)), shows how owners use the app: DAU, WAU, MAU and stickiness, weekly cohort retention, shop activation, feature adoption, AI use and sales. It reads each environment's Supabase through a read-only PostgreSQL datasource, `smartledger-staging-pg` or `smartledger-production-pg`, chosen by the environment picker; the metric definitions, the `grafana_reader` grants and what it cannot measure (logins, app sessions) are in [ADR-0003](../architecture/adr/0003-product-analytics-grafana.md). The login comes from `GRAFANA_PG_*` in the environment's `monitor` group in Dopbase, which `scripts/secrets/vps-playbook.sh` loads; the playbook writes it to `postgres-<environment>.env` beside the monitoring `.env`, so one environment's run keeps the other's datasource. Without `GRAFANA_PG_HOST` the playbook skips the file and that environment's SQL panels report a connection error. Grafana opens one connection per query and closes it, so it takes one of the 15 session pooler slots only while a panel refreshes.
+
+To change a dashboard, edit a copy in the UI, export it as JSON and replace the file.
 
 ## Production checklist
 

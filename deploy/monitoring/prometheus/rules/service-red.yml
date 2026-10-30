@@ -1,0 +1,45 @@
+# One schema for every service's HTTP traffic, so the dashboards read the same series whatever exports them:
+#   service:http_requests:rate5m{env, service, code_class}                  requests per second, code_class 2xx..5xx
+#   service:http_request_duration_seconds_bucket:rate5m{env, service, le}   latency histogram
+# A new source (Bifrost's own metrics, for example) adds a pair of rules with these names and its own `service`
+# label; the Overview and Service dashboards then show it without changes.
+groups:
+  - name: service-red
+    interval: 30s
+    rules:
+      # Caddy labels requests by host, not environment; each environment's Core probe carries both, so this maps
+      # every Core domain to its environment and leaves out the Grafana and Bifrost admin domains.
+      - record: env_host:core:info
+        expr: group by (env, host) (probe_success{check="core"})
+
+      # Core is measured at Caddy, as users see it: TLS, the proxy and Core, including the 502s Caddy returns while
+      # Core is down. Caddy's host label keeps a port the client sent, which the probe's host does not have.
+      - record: service:http_requests:rate5m
+        labels: { service: core }
+        expr: |
+          sum by (env, code_class) (
+            label_replace(
+              label_replace(rate(caddy_http_request_duration_seconds_count[5m]), "host", "$1", "host", "([^:]+)(:[0-9]+)?") * on (host) group_left (env) env_host:core:info,
+              "code_class", "${1}xx", "code", "([0-9]).*"
+            )
+          )
+
+      - record: service:http_request_duration_seconds_bucket:rate5m
+        labels: { service: core }
+        expr: |
+          sum by (env, le) (
+            label_replace(rate(caddy_http_request_duration_seconds_bucket[5m]), "host", "$1", "host", "([^:]+)(:[0-9]+)?") * on (host) group_left (env) env_host:core:info
+          )
+
+      # AI counts its own requests per route (prometheus-fastapi-instrumentator), timed to the last streamed byte of a
+      # chat turn and leaving out /health; its status label is already a class such as 4xx.
+      - record: service:http_requests:rate5m
+        labels: { service: ai }
+        expr: |
+          sum by (env, code_class) (
+            label_replace(rate(http_requests_total{service="ai"}[5m]), "code_class", "$1", "status", "(.*)")
+          )
+
+      - record: service:http_request_duration_seconds_bucket:rate5m
+        labels: { service: ai }
+        expr: sum by (env, le) (rate(http_request_duration_seconds_bucket{service="ai"}[5m]))

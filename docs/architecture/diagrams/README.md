@@ -11,7 +11,7 @@ Sources live in [`src/`](src/), exports in [`images/`](images/). Reference: [`sr
 | `vps-network.drawio/svg` | Docker networks, DNS aliases and ports on the VPS | Drawn from `deploy/*/compose.yaml`, the Caddy sites the playbook writes, and `docker network inspect` on the VPS on 2026-10-29 |
 | `auth-request-flow.drawio/svg` | Firebase browser sign-in, CORS and project matching | The image is not the Zalo OAuth/App Link flow; see [Zalo contract](../../contracts/api-contracts.md#zalo-core-015) and the Core service map. A permitted origin does not grant an application role |
 | `service-walkthrough/README.md` and its 14 SVG exports | Core/AI reading notes with dated source reviews | The two Core overview figures include current modules; detailed transaction diagrams keep their stated review scope, not FE or staging acceptance |
-| `erd.dbml` | Logical Core/AI schema and explicitly planned tables | Current Core migrations are V1–V18. SQL owns actual checks, triggers and partial indexes that DBML cannot fully express |
+| `erd.dbml` | Logical Core/AI schema and explicitly planned tables | Current branch adds V19 daily activity (CORE-018) to V1–V18; 23 Core tables. SQL owns actual RLS, checks, triggers and partial indexes that DBML cannot fully express; no shared-DB migration implied |
 | `erd.dbdiagram` | dbdiagram editor layout only | It does not contain schema definitions; table positions must cover the DBML tables, including newer media/Zalo/refund tables |
 | `agent-memory.drawio/svg`, `apk-release.drawio/svg` | Related AI design and mobile release pipeline | Separate from Core API implementation; retain their ADR/release ownership and dated evidence |
 

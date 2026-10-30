@@ -1,6 +1,7 @@
 # Monitoring shared by every environment on the VPS: Alloy collects host, container and probe metrics plus container
-# logs, Prometheus and Loki store them, and Grafana shows them and sends alerts to Discord. Lives in
-# /opt/smart-ledger-monitoring next to these files; deploy/ansible/playbook.yml writes .env and targets/<environment>.json.
+# logs, Prometheus and Loki store them, and Grafana shows them and sends alerts to Discord and Telegram. Lives in
+# /opt/smart-ledger-monitoring next to these files; deploy/ansible/playbook.yml writes .env, targets/<environment>.json
+# and compose.override.yaml.
 # Each container has a memory limit so the stack stays under about 1 GB and cannot starve Core or AI on the 4 GB VPS.
 # See docs/development/ci-cd.md#monitoring.
 
@@ -28,6 +29,14 @@ services:
     cgroup: host
     mem_limit: 256m
     depends_on: [prometheus, loki]
+    # The edge network reaches Caddy's metrics; mapping form so the playbook's override can add the app networks.
+    networks:
+      default:
+      edge:
+    # The playbook writes compose.override.yaml so Alloy also joins each app network that exists and can probe AI
+    # and Bifrost by container name. Same wildcard-DNS guard as Core: a stopped container's name must not resolve to
+    # an outside host that answers the probe.
+    dns_search: .
     restart: unless-stopped
     logging: &logging
       options:
@@ -36,13 +45,15 @@ services:
 
   prometheus:
     image: prom/prometheus:v3.5.0
-    # Alloy pushes every sample, so the image's default config (scraping itself) is enough.
+    # Alloy pushes every sample; the config only loads the recording rules that dashboards read.
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=30d
       - --web.enable-remote-write-receiver
     volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
       - prometheus_data:/prometheus
     mem_limit: 192m
     restart: unless-stopped
@@ -60,7 +71,13 @@ services:
 
   grafana:
     image: grafana/grafana:12.1.1
-    env_file: .env
+    # The playbook writes one Postgres file per environment, so a run for one environment keeps the other's.
+    env_file:
+      - .env
+      - path: postgres-staging.env
+        required: false
+      - path: postgres-production.env
+        required: false
     environment:
       GF_SERVER_ROOT_URL: https://${MONITOR_DOMAIN:?MONITOR_DOMAIN is required}
       # Applies on the first start only; later changes go through the Grafana UI or `grafana cli admin reset-admin-password`.
@@ -70,8 +87,11 @@ services:
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
       GF_NEWS_NEWS_FEED_ENABLED: "false"
+      # Signing in lands on the Overview instead of the empty Grafana home page.
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/overview.json
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/product:/etc/grafana/product:ro
       - grafana_data:/var/lib/grafana
     mem_limit: 256m
     depends_on: [prometheus, loki]

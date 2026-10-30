@@ -29,11 +29,20 @@
     dopbase_backup_secret: "{{ lookup('env', 'DOPBASE_BACKUP_SECRET') }}"
     dopbase_backup_hour: 3
     # Monitoring shared by every environment (deploy/monitoring/). An empty domain skips it; the password applies
-    # on Grafana's first start and the Discord webhook receives every alert.
+    # on Grafana's first start, and the Discord webhook and Telegram chat both receive every alert.
     monitoring_dir: /opt/smart-ledger-monitoring
     monitor_domain: "{{ lookup('env', 'MONITOR_DOMAIN') }}"
     grafana_admin_password: "{{ lookup('env', 'GRAFANA_ADMIN_PASSWORD') }}"
     monitor_discord_webhook_url: "{{ lookup('env', 'MONITOR_DISCORD_WEBHOOK_URL') }}"
+    monitor_telegram_bot_token: "{{ lookup('env', 'MONITOR_TELEGRAM_BOT_TOKEN') }}"
+    monitor_telegram_chat_id: "{{ lookup('env', 'MONITOR_TELEGRAM_CHAT_ID') }}"
+    # This environment's read-only Supabase login for the product dashboards (ADR-0003), from its .env.monitor. An
+    # empty host leaves that environment's datasource unconfigured.
+    grafana_pg_host: "{{ lookup('env', 'GRAFANA_PG_HOST') }}"
+    grafana_pg_port: "{{ lookup('env', 'GRAFANA_PG_PORT') | default('5432', true) }}"
+    grafana_pg_database: "{{ lookup('env', 'GRAFANA_PG_DATABASE') | default('postgres', true) }}"
+    grafana_pg_user: "{{ lookup('env', 'GRAFANA_PG_USER') }}"
+    grafana_pg_password: "{{ lookup('env', 'GRAFANA_PG_PASSWORD') }}"
     deploy_user: deploy
     lazydocker_version: 0.25.2
     lazydocker_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'x86_64' }}"
@@ -195,15 +204,23 @@
         path: "{{ item }}"
         state: directory
         mode: "0755"
-      loop: ["{{ edge_dir }}", "{{ edge_dir }}/sites"]
+      loop: ["{{ edge_dir }}", "{{ edge_dir }}/conf", "{{ edge_dir }}/sites"]
 
     - name: Upload the shared Caddy
       ansible.builtin.copy:
-        src: "../edge/{{ item }}"
-        dest: "{{ edge_dir }}/{{ item }}"
+        src: "../edge/{{ item.src }}"
+        dest: "{{ edge_dir }}/{{ item.dest }}"
         mode: "0644"
-      loop: [compose.yaml, Caddyfile]
+      loop:
+        - { src: compose.yaml, dest: compose.yaml }
+        - { src: Caddyfile, dest: conf/Caddyfile }
       notify: Apply the edge
+
+    # Mounted as a single file before conf/; left in place it would look like the live config.
+    - name: Remove the Caddyfile the edge no longer reads
+      ansible.builtin.file:
+        path: "{{ edge_dir }}/Caddyfile"
+        state: absent
 
     - name: Route this environment's domain to its Core
       ansible.builtin.copy:
@@ -324,10 +341,14 @@
         access_time: preserve
       when: dopbase_domain | length > 0 and dopbase_backup_bucket | length > 0
 
-    - name: Fail without the Grafana password or Discord webhook
+    - name: Fail without the Grafana password or an alert destination
       ansible.builtin.assert:
-        that: grafana_admin_password | length > 0 and monitor_discord_webhook_url | length > 0
-        fail_msg: With MONITOR_DOMAIN set, .env.vps also needs GRAFANA_ADMIN_PASSWORD and MONITOR_DISCORD_WEBHOOK_URL.
+        that:
+          - grafana_admin_password | length > 0
+          - monitor_discord_webhook_url | length > 0
+          - monitor_telegram_bot_token | length > 0
+          - monitor_telegram_chat_id | length > 0
+        fail_msg: With MONITOR_DOMAIN set, .env.vps also needs GRAFANA_ADMIN_PASSWORD, MONITOR_DISCORD_WEBHOOK_URL, MONITOR_TELEGRAM_BOT_TOKEN and MONITOR_TELEGRAM_CHAT_ID.
       when: monitor_domain | length > 0
 
     - name: Create the monitoring directories
@@ -337,7 +358,7 @@
         owner: "{{ deploy_user }}"
         group: "{{ deploy_user }}"
         mode: "0750"
-      loop: ["{{ monitoring_dir }}", "{{ monitoring_dir }}/targets"]
+      loop: ["{{ monitoring_dir }}", "{{ monitoring_dir }}/targets", "{{ monitoring_dir }}/targets/services"]
       when: monitor_domain | length > 0
 
     - name: Upload the monitoring stack
@@ -361,19 +382,68 @@
           MONITOR_DOMAIN={{ monitor_domain }}
           GRAFANA_ADMIN_PASSWORD={{ grafana_admin_password }}
           DISCORD_WEBHOOK_URL={{ monitor_discord_webhook_url }}
+          TELEGRAM_BOT_TOKEN={{ monitor_telegram_bot_token }}
+          TELEGRAM_CHAT_ID={{ monitor_telegram_chat_id }}
       when: monitor_domain | length > 0
+      no_log: true
+      notify: Apply monitoring
+
+    # The dashboards read only what grafana_reader is granted (ADR-0003); another login would show them every column.
+    - name: Fail unless the product analytics login is the read-only role
+      ansible.builtin.assert:
+        that: grafana_pg_user is match('grafana_reader([.]|$)')
+        fail_msg: GRAFANA_PG_USER must be the grafana_reader role (grafana_reader.<project-ref> through the pooler).
+      when: monitor_domain | length > 0 and grafana_pg_host | length > 0
+
+    # One file per environment, because .env above is rewritten by every environment's run.
+    - name: Set this environment's product analytics login
+      ansible.builtin.copy:
+        dest: "{{ monitoring_dir }}/postgres-{{ smartledger_env }}.env"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0600"
+        content: |
+          SMARTLEDGER_{{ smartledger_env | upper }}_PG_URL={{ grafana_pg_host }}:{{ grafana_pg_port }}
+          SMARTLEDGER_{{ smartledger_env | upper }}_PG_DATABASE={{ grafana_pg_database }}
+          SMARTLEDGER_{{ smartledger_env | upper }}_PG_USER={{ grafana_pg_user }}
+          SMARTLEDGER_{{ smartledger_env | upper }}_PG_PASSWORD={{ grafana_pg_password }}
+      when: monitor_domain | length > 0 and grafana_pg_host | length > 0
       no_log: true
       notify: Apply monitoring
 
     # Alloy reloads this file by itself; each run of the playbook adds or updates only its own environment.
     # CADDY_DOMAIN may list several comma-separated names for one site; the first is probed.
-    - name: Probe this environment's Core over HTTPS
+    # Liveness answers while Core runs; readiness also checks Core's database connection, so it fails when Supabase does.
+    # AI and Bifrost have no public URL: Alloy reaches them on the app network by container name, unique across
+    # environments where the service names `ai` and `bifrost` are not.
+    - name: Probe this environment's Core over HTTPS and its AI and Bifrost inside the app network
       ansible.builtin.copy:
         dest: "{{ monitoring_dir }}/targets/{{ smartledger_env }}.json"
         owner: "{{ deploy_user }}"
         group: "{{ deploy_user }}"
         mode: "0644"
-        content: "{{ [{'targets': ['https://' + (caddy_domain.split(',') | first | trim) + '/actuator/health/liveness'], 'labels': {'env': smartledger_env}}] | to_json }}\n"
+        content: "{{ probes | to_json }}\n"
+      vars:
+        core_url: "https://{{ caddy_domain.split(',') | first | trim }}"
+        container: "http://smart-ledger-{{ smartledger_env }}"
+        probes:
+          - { targets: ["{{ core_url }}/actuator/health/liveness"], labels: { env: "{{ smartledger_env }}", check: core } }
+          - { targets: ["{{ core_url }}/actuator/health/readiness"], labels: { env: "{{ smartledger_env }}", check: database } }
+          - { targets: ["{{ container }}-ai-1:8001/health"], labels: { env: "{{ smartledger_env }}", check: ai } }
+          - { targets: ["{{ container }}-bifrost-1:8080/health"], labels: { env: "{{ smartledger_env }}", check: bifrost } }
+      when: monitor_domain | length > 0
+
+    # Services that export their own request metrics, scraped on the app network like the probes above.
+    - name: Scrape this environment's AI metrics inside the app network
+      ansible.builtin.copy:
+        dest: "{{ monitoring_dir }}/targets/services/{{ smartledger_env }}.json"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0644"
+        content: "{{ services | to_json }}\n"
+      vars:
+        services:
+          - { targets: ["smart-ledger-{{ smartledger_env }}-ai-1:8001"], labels: { env: "{{ smartledger_env }}", service: ai } }
       when: monitor_domain | length > 0
 
     - name: Route the monitoring domain to Grafana
@@ -422,9 +492,26 @@
       become_user: "{{ deploy_user }}"
       changed_when: true
 
-    # Runs before the edge, so Caddy finds Grafana on the edge network when it reloads the new site.
+    # Runs before the edge, so Caddy finds Grafana on the edge network when it reloads the new site, and after the
+    # stack, so a new environment's network exists. Alloy joins only the app networks that exist: Compose refuses to
+    # start a container on a missing external network. Alloy, Loki and Grafana read their bind-mounted config only at
+    # start, and Compose does not recreate a container when only a mounted file changed, so every run recreates them;
+    # their data stays in named volumes.
     - name: Apply monitoring
-      ansible.builtin.command: docker compose up -d --wait --remove-orphans
+      ansible.builtin.shell: |
+        set -eu
+        nets=""
+        for env in staging production; do
+          if docker network inspect "smart-ledger-${env}_default" >/dev/null 2>&1; then nets="$nets smart-ledger-${env}_default"; fi
+        done
+        {
+          printf 'services:\n  alloy:\n    networks:\n      default:\n'
+          for net in $nets; do printf '      %s:\n' "$net"; done
+          printf 'networks:\n'
+          for net in $nets; do printf '  %s:\n    external: true\n' "$net"; done
+        } > compose.override.yaml
+        [ -n "$nets" ] || rm compose.override.yaml
+        docker compose up -d --wait --remove-orphans --force-recreate
       args:
         chdir: "{{ monitoring_dir }}"
       become: true
@@ -434,7 +521,11 @@
     # Runs after the stack, so the older per-environment Caddy has freed ports 80 and 443. The reload picks up
     # a changed site file in a container that was already running.
     - name: Apply the edge
-      ansible.builtin.shell: docker compose up -d && docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+      # Validate first: a config that fails stops the playbook and leaves Caddy serving the one it already runs.
+      ansible.builtin.shell: >-
+        docker compose up -d
+        && docker compose exec -T caddy caddy validate --config /etc/caddy/conf/Caddyfile --adapter caddyfile
+        && docker compose exec -T caddy caddy reload --config /etc/caddy/conf/Caddyfile --adapter caddyfile
       args:
         chdir: "{{ edge_dir }}"
       changed_when: true

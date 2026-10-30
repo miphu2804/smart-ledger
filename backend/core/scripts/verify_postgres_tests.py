@@ -6,6 +6,14 @@ from xml.etree import ElementTree
 
 
 REQUIRED = {
+    "com.smartledger.core.activity.UserDailyActivityPostgresTest": {
+        "upgradePreservesExistingDataAndOnlyAddsEmptyDailyActivity",
+        "firstRequestAfterUserCreationResolvesCanonicalIdAndDisabledUsersAreSkipped",
+        "concurrentIndependentInstancesAndRestartStillProduceOneRowPerDay",
+        "retentionKeepsBoundaryDayAndForeignKeyCascadesOnlyActivity",
+        "grafanaQueriesUseVietnamWindowsExcludeLoadTestsAndWorkWithColumnLimitedRole",
+        "conflictingTableAbortsMigrationWithoutAdoptingOrMutatingIt",
+    },
     "com.smartledger.core.config.ZaloNativeMigrationPostgresTest": {
         "freshV18CreatesNativeColumnsAndRerunIsNoOp",
         "upgradeFromV17PreservesWebSessionsMappingsAndBusinessData",
