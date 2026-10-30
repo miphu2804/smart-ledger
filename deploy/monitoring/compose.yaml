@@ -1,5 +1,5 @@
 # Monitoring shared by every environment on the VPS: Alloy collects host, container and probe metrics plus container
-# logs, Prometheus and Loki store them, and Grafana shows them and sends alerts to Discord. Lives in
+# logs, Prometheus and Loki store them, and Grafana shows them and sends alerts to Discord and Telegram. Lives in
 # /opt/smart-ledger-monitoring next to these files; deploy/ansible/playbook.yml writes .env, targets/<environment>.json
 # and compose.override.yaml.
 # Each container has a memory limit so the stack stays under about 1 GB and cannot starve Core or AI on the 4 GB VPS.

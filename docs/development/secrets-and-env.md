@@ -61,7 +61,7 @@ ZALO_APP_ID=...
 | `.env.mobile` | mobile app; copied to `frontend/mobile/.env` | yes | no |
 | `.env.release` | Android APK release: R2 bucket, keystore | no | yes |
 | `.env.loadtest`, `.env.monitor` | load test and uptime monitor; staging copies go to `scripts/loadtest/.env.staging` and `scripts/monitor/.env` | yes | loadtest only |
-| `.env.vps` | the VPS of that environment: `VPS_HOST`, `VPS_KNOWN_HOSTS`, the CI deploy key (`VPS_SSH_KEY` in base64, `VPS_SSH_PUBLIC_KEY`), `CLOUDFLARE_TUNNEL_TOKEN` and, for [monitoring](ci-cd.md#monitoring), `MONITOR_DOMAIN`, `GRAFANA_ADMIN_PASSWORD` and `MONITOR_DISCORD_WEBHOOK_URL`; read by the Ansible playbook and `github.sh` ([VPS](ci-cd.md#vps)) | yes | yes |
+| `.env.vps` | the VPS of that environment: `VPS_HOST`, `VPS_KNOWN_HOSTS`, the CI deploy key (`VPS_SSH_KEY` in base64, `VPS_SSH_PUBLIC_KEY`), `CLOUDFLARE_TUNNEL_TOKEN` and, for [monitoring](ci-cd.md#monitoring), `MONITOR_DOMAIN`, `GRAFANA_ADMIN_PASSWORD`, `MONITOR_DISCORD_WEBHOOK_URL`, `MONITOR_TELEGRAM_BOT_TOKEN` and `MONITOR_TELEGRAM_CHAT_ID`; read by the Ansible playbook and `github.sh` ([VPS](ci-cd.md#vps)) | yes | yes |
 | `github/.env.<environment>` | copy of a GitHub Actions environment | 4 environments | 3 environments |
 
 Files are named `.env.<name>`, like `.env.local` and `.env.production` in Next.js; the folder already says which environment they belong to. `targets` lists the copied files. Everything else is read in place, for example `docker compose --env-file secrets/production/env/.env.core --env-file secrets/production/env/.env.ai`, so there is no second copy to drift.

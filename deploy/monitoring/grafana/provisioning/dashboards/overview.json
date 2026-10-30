@@ -473,7 +473,7 @@
         "x": 0,
         "y": 5
       },
-      "description": "Every provisioned alert, for all environments; Discord receives the same.",
+      "description": "Every provisioned alert, for all environments; Discord and Telegram receive the same.",
       "options": {
         "viewMode": "list",
         "groupMode": "default",

@@ -1,19 +1,37 @@
-# The minimal alert set for one small VPS, sent to Discord. Each query returns a series only while something is wrong,
+# The minimal alert set for one small VPS, sent to Discord and Telegram. Each query returns a series only while something is wrong,
 # with a positive value, so the threshold B fires on it and no data means healthy.
 apiVersion: 1
 
 contactPoints:
   - orgId: 1
-    name: discord
+    name: smartledger
     receivers:
-      - uid: discord
-        type: discord
+      # Discord through its webhook API, so the payload in templates.yaml can build an embed with fields.
+      - uid: discord-webhook
+        type: webhook
         settings:
           url: $DISCORD_WEBHOOK_URL
+          httpMethod: POST
+          payload:
+            template: '{{ template "smartledger.discord.payload" . }}'
+      # Telegram through the Bot API too: Grafana turns a chat ID read alone from the environment into a number and
+      # rejects it, while inside the URL it stays text. The Bot API reads chat_id from the query and the rest from the body.
+      - uid: telegram-webhook
+        type: webhook
+        settings:
+          url: https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage?chat_id=$TELEGRAM_CHAT_ID
+          httpMethod: POST
+          payload:
+            template: '{{ template "smartledger.telegram.payload" . }}'
+
+# The contact point used to be named discord with this uid; deleting it lets the new one take over the policy.
+deleteContactPoints:
+  - orgId: 1
+    uid: discord
 
 policies:
   - orgId: 1
-    receiver: discord
+    receiver: smartledger
     group_by: [alertname, env]
     repeat_interval: 4h
 
