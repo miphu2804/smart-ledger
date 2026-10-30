@@ -276,6 +276,8 @@ The playbook sets it up when `.env.vps` has `MONITOR_DOMAIN`, `GRAFANA_ADMIN_PAS
 
 Dozzle tails live container logs for the operator; Loki in Grafana remains the place for history, cross-service search and alerts. It has no sign-in and reads the Docker socket, so it binds to `127.0.0.1:8081` on the VPS and must not get a Caddy site. Open a tunnel with `ssh -N -L 8081:127.0.0.1:8081 <user>@<vps>`, then browse to `http://localhost:8081`.
 
+Snoopy logs every command on the VPS with its SSH source to `/var/log/auth.log`; the playbook installs it and the `snooplog` shortcut, which shows the last 50 commands from SSH sessions. A command run through `sudo` loses its SSH source and is hidden by `snooplog`, so read the log directly for those. Snoopy runs in user space and a determined user can bypass it, so treat it as a record of routine work, not as a security control.
+
 Datasources, alerts and dashboards are provisioned from the repository and cannot be edited in the UI; change the files and re-run the playbook, which recreates the monitoring containers because Alloy, Loki and Grafana read their mounted config only at start. The alerts are:
 
 | Alert | Fires when |
