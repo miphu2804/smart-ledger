@@ -34,6 +34,13 @@
     monitor_domain: "{{ lookup('env', 'MONITOR_DOMAIN') }}"
     grafana_admin_password: "{{ lookup('env', 'GRAFANA_ADMIN_PASSWORD') }}"
     monitor_discord_webhook_url: "{{ lookup('env', 'MONITOR_DISCORD_WEBHOOK_URL') }}"
+    # This environment's read-only Supabase login for the product dashboards (ADR-0003), from its .env.monitor. An
+    # empty host leaves that environment's datasource unconfigured.
+    grafana_pg_host: "{{ lookup('env', 'GRAFANA_PG_HOST') }}"
+    grafana_pg_port: "{{ lookup('env', 'GRAFANA_PG_PORT') | default('5432', true) }}"
+    grafana_pg_database: "{{ lookup('env', 'GRAFANA_PG_DATABASE') | default('postgres', true) }}"
+    grafana_pg_user: "{{ lookup('env', 'GRAFANA_PG_USER') }}"
+    grafana_pg_password: "{{ lookup('env', 'GRAFANA_PG_PASSWORD') }}"
     deploy_user: deploy
     lazydocker_version: 0.25.2
     lazydocker_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'x86_64' }}"
@@ -362,6 +369,29 @@
           GRAFANA_ADMIN_PASSWORD={{ grafana_admin_password }}
           DISCORD_WEBHOOK_URL={{ monitor_discord_webhook_url }}
       when: monitor_domain | length > 0
+      no_log: true
+      notify: Apply monitoring
+
+    # The dashboards read only what grafana_reader is granted (ADR-0003); another login would show them every column.
+    - name: Fail unless the product analytics login is the read-only role
+      ansible.builtin.assert:
+        that: grafana_pg_user is match('grafana_reader([.]|$)')
+        fail_msg: GRAFANA_PG_USER must be the grafana_reader role (grafana_reader.<project-ref> through the pooler).
+      when: monitor_domain | length > 0 and grafana_pg_host | length > 0
+
+    # One file per environment, because .env above is rewritten by every environment's run.
+    - name: Set this environment's product analytics login
+      ansible.builtin.copy:
+        dest: "{{ monitoring_dir }}/postgres-{{ smartledger_env }}.env"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0600"
+        content: |
+          SMARTLEDGER_{{ smartledger_env | upper }}_PG_URL={{ grafana_pg_host }}:{{ grafana_pg_port }}
+          SMARTLEDGER_{{ smartledger_env | upper }}_PG_DATABASE={{ grafana_pg_database }}
+          SMARTLEDGER_{{ smartledger_env | upper }}_PG_USER={{ grafana_pg_user }}
+          SMARTLEDGER_{{ smartledger_env | upper }}_PG_PASSWORD={{ grafana_pg_password }}
+      when: monitor_domain | length > 0 and grafana_pg_host | length > 0
       no_log: true
       notify: Apply monitoring
 
