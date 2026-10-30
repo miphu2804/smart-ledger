@@ -88,6 +88,29 @@ groups:
         labels: { severity: critical }
         annotations: { summary: "{{ $labels.env }} {{ $labels.check }} health fails inside its network: the container is stopped, starting or unhealthy" }
 
+      # A target that cannot be scraped leaves its dashboards empty without failing any probe; Caddy's metrics were
+      # down for a day this way when a reload kept reading the old Caddyfile.
+      - uid: scrape-down
+        title: Metrics scrape down
+        condition: B
+        for: 10m
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model: { refId: A, instant: true, expr: '1 - up > 0' }
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions: [{ evaluator: { type: gt, params: [0] } }]
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning }
+        annotations: { summary: "{{ $labels.instance }} ({{ $labels.job }}) cannot be scraped: the target is down, its port is closed or it has no /metrics" }
+
       - uid: container-restarting
         title: Container restarting
         condition: B

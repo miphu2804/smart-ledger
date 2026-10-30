@@ -195,15 +195,23 @@
         path: "{{ item }}"
         state: directory
         mode: "0755"
-      loop: ["{{ edge_dir }}", "{{ edge_dir }}/sites"]
+      loop: ["{{ edge_dir }}", "{{ edge_dir }}/conf", "{{ edge_dir }}/sites"]
 
     - name: Upload the shared Caddy
       ansible.builtin.copy:
-        src: "../edge/{{ item }}"
-        dest: "{{ edge_dir }}/{{ item }}"
+        src: "../edge/{{ item.src }}"
+        dest: "{{ edge_dir }}/{{ item.dest }}"
         mode: "0644"
-      loop: [compose.yaml, Caddyfile]
+      loop:
+        - { src: compose.yaml, dest: compose.yaml }
+        - { src: Caddyfile, dest: conf/Caddyfile }
       notify: Apply the edge
+
+    # Mounted as a single file before conf/; left in place it would look like the live config.
+    - name: Remove the Caddyfile the edge no longer reads
+      ansible.builtin.file:
+        path: "{{ edge_dir }}/Caddyfile"
+        state: absent
 
     - name: Route this environment's domain to its Core
       ansible.builtin.copy:
@@ -475,7 +483,11 @@
     # Runs after the stack, so the older per-environment Caddy has freed ports 80 and 443. The reload picks up
     # a changed site file in a container that was already running.
     - name: Apply the edge
-      ansible.builtin.shell: docker compose up -d && docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+      # Validate first: a config that fails stops the playbook and leaves Caddy serving the one it already runs.
+      ansible.builtin.shell: >-
+        docker compose up -d
+        && docker compose exec -T caddy caddy validate --config /etc/caddy/conf/Caddyfile --adapter caddyfile
+        && docker compose exec -T caddy caddy reload --config /etc/caddy/conf/Caddyfile --adapter caddyfile
       args:
         chdir: "{{ edge_dir }}"
       changed_when: true
