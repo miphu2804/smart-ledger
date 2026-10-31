@@ -7,11 +7,11 @@ on:
   workflow_dispatch:
     inputs:
       runner:
-        description: self-hosted runs every job on the repository's self-hosted machines, for when GitHub-hosted runners are unavailable; auto uses a free self-hosted machine when one is online
+        description: self-hosted runs every job on the repository's self-hosted machines, for when GitHub-hosted runners are unavailable; auto uses a free self-hosted machine when one is online; blacksmith uses a Blacksmith cloud runner
         type: choice
         required: true
         default: github-hosted
-        options: [github-hosted, self-hosted, auto]
+        options: [github-hosted, self-hosted, auto, blacksmith]
 
 jobs:
   ### Runner: every job below runs where this job picks ###
@@ -169,7 +169,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-          cache: ${{ runner.environment == 'github-hosted' && 'maven' || '' }}
+          cache: ${{ !contains(needs.select-runner.outputs.runs_on, 'self-hosted') && 'maven' || '' }}
       # Started with docker on every runner, not as a service container, so one path serves GitHub-hosted and
       # self-hosted machines (which cannot run service containers).
       - name: Start PostgreSQL
@@ -251,7 +251,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
+          cache: ${{ !contains(needs.select-runner.outputs.runs_on, 'self-hosted') && 'npm' || '' }}
           cache-dependency-path: frontend/mobile/package-lock.json
       - name: Keep the Metro cache job-local
         # Metro caches transformed modules (with EXPO_PUBLIC_* inlined) under TMPDIR; on a shared machine
@@ -274,7 +274,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
+          cache: ${{ !contains(needs.select-runner.outputs.runs_on, 'self-hosted') && 'npm' || '' }}
           cache-dependency-path: frontend/web/package-lock.json
       - run: npm ci
       - run: npm run lint

@@ -59,9 +59,11 @@ CI reads input `runner`, else repository variable `CI_RUNNER`. CD reads input `r
 | `github-hosted` | `ubuntu-24.04` |
 | `self-hosted` | Any machine labelled `self-hosted`; needs Docker with buildx, Node 22, Python 3 and a JDK |
 | `auto` | A free self-hosted machine, else `ubuntu-24.04`; needs secret `RUNNERS_READ_TOKEN` ([Android runners](#android-runners)) |
+| `blacksmith` | `blacksmith-2vcpu-ubuntu-2404` (2 vCPU, 8 GB RAM, 80 GB disk); needs the Blacksmith GitHub App on this repository |
 
 - If GitHub-hosted runners are blocked (billing), set `CI_RUNNER=self-hosted` and clear `CD_RUNNER`. `auto` cannot help: its own pick runs on GitHub-hosted.
-- PRs from forks always run on `ubuntu-24.04`, so a fork never runs code on a teammate's machine.
+- `blacksmith` is meant for CI: set `CD_RUNNER=self-hosted` alongside `CI_RUNNER=blacksmith`, so deploy secrets stay on the team's machine. The free plan covers 3,000 minutes a month across the organization; when it runs short, set `CI_RUNNER=self-hosted` again.
+- PRs from forks always run on `ubuntu-24.04`, so a fork never runs code on a teammate's machine or spends Blacksmith minutes.
 - Tests start PostgreSQL with `docker run` on a free port, so jobs on one machine do not collide.
 
 ## GitHub environments
