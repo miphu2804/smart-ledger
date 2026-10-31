@@ -1,4 +1,4 @@
-# ADR-0003: Bifrost giữ routing và fallback upstream, AI chỉ chọn alias
+# ADR-0008: Bifrost giữ routing và fallback upstream, AI chỉ chọn alias
 
 - **Trạng thái:** Accepted — chủ dự án chốt hướng này ngày 2026-10-30
 - **Ngày:** 2026-10-30

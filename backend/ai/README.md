@@ -1,198 +1,292 @@
 # SmartLedger AI
 
-Internal AI API called only by Core, which proxies its public `/api/v1/agent/*` routes here. The service exposes `/health`, `POST /internal/v1/agent/chat`, `POST /internal/v1/agent/chat/stream` (Core relays it as `POST /api/v1/agent/chat/stream`, see [Streaming chat](#streaming-chat)), list/detail/rename/delete routes under `/internal/v1/agent/conversations`, and `GET`/`PUT /internal/v1/agent/memory/settings` for the owner's [long-term memory](#long-term-memory-off-by-default) switch. The agent can read the current shop's profile, categories, products, sales, debts, payments received and expenses through read-only SQL tools. Chat history is stored in PostgreSQL. PostgreSQL connects lazily on the first request that needs it, and the Redis client connects at process start; an unreachable or unreadable database URL is logged, does not stop the service, and makes database routes answer `503 ai_unavailable`. Every `/internal/v1` route requires the shared `X-Internal-Token` header. There are no invoice or expense endpoints.
+Internal FastAPI service that runs the owner's Agent chat. Only Core calls it: Core proxies its public `/api/v1/agent/*` routes here. Frontends must not call this service.
 
-Frontend must not call this service.
+| Need | Read |
+|---|---|
+| Request and response shapes | [API contracts §6](../../docs/contracts/api-contracts.md#6-core--ai-nội-bộ) |
+| Implementation status | [Technical design §1](../../docs/architecture/technical-design.md#1-phạm-vi) |
+| Code walkthrough with diagrams | [Service walkthrough §8](../../docs/architecture/service-walkthrough/README.md#8-ai-service) |
+| Vector store and long-term memory decisions | [ADR-0001](../../docs/architecture/adr/0001-vector-store-pgvector.md), [ADR-0002](../../docs/architecture/adr/0002-agent-long-term-memory.md) |
 
-## Chat history schema
+## Routes
 
-The AI schema (chat history, the `vector` extension and the `ai_read` views) lives in the Supabase CLI migrations at [`supabase/migrations/`](../../supabase/migrations/); the first file is a baseline that folds the earlier AI migrations together. It reads Core's tables, so run Core's Flyway migrations first. On the shared dev/staging database, push only after the pull request merges (see [Database migrations](../../docs/development/local-development.md#database-migrations)). From the repository root:
+`src/main.py` is the composition root. Every `/internal/v1` route inherits the `X-Internal-Token` check; a new flow adds one `include_router` line there.
 
-```bash
-set -a && . backend/ai/.env && set +a
-npx supabase@2.119.0 db push --db-url "$POSTGRES_URL"
-```
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/health` | Returns `{"status": "ok"}`; no token, checks no dependency |
+| `GET` | `/metrics` | Prometheus request metrics for Grafana; no token, reachable only on the container network |
+| `POST` | `/internal/v1/agent/chat` | One chat turn, JSON answer |
+| `POST` | `/internal/v1/agent/chat/stream` | Same turn as server-sent events; Core relays it as `/api/v1/agent/chat/stream` |
+| `GET` | `/internal/v1/agent/conversations` | List the owner's conversations |
+| `GET` `PATCH` `DELETE` | `/internal/v1/agent/conversations/{id}` | Read, rename or delete one conversation |
+| `GET` `PUT` | `/internal/v1/agent/memory/settings` | Read or set the owner's long-term memory switch |
+| `GET` | `/internal/v1/agent/memory/items` | List the owner's live memories |
+| `DELETE` | `/internal/v1/agent/memory/items/{id}` | Forget one memory |
 
-`db push` applies only the files not yet recorded in `supabase_migrations.schema_migrations`. Every baseline statement is safe to re-run, so it also applies over a database that already had the old `backend/ai/migrations` files. Add a change as a new file (`npx supabase@2.119.0 migration new <name>`); never edit a file that has been pushed.
+There are no invoice, expense or draft endpoints.
 
-The AI service does not create or migrate tables at startup. `ai_request_id` remains nullable; its foreign key is deferred until the `ai_requests` table is installed. For vectors, the baseline only enables the `vector` extension ([ADR-0001](../../docs/architecture/adr/0001-vector-store-pgvector.md)); the only table with embeddings is `agent_memories`, created by the [long-term memory](#long-term-memory-off-by-default) migrations.
+### Errors
 
-## Chat context
+| Status | `detail` | When |
+|---|---|---|
+| `401` | `unauthorized` | Missing or wrong `X-Internal-Token`; an unset token rejects every `/internal/v1` route |
+| `404` | `conversation_not_found`, `memory_not_found` | The conversation or memory is not the caller's user and shop |
+| `409` | `memory_unavailable` | Writing memory settings or items while long-term memory is not built |
+| `422` | `input_too_long`, `answer_unavailable`, `answer_timeout` | A [guardrail](#guardrails) stopped the turn; nothing is stored |
+| `503` | `ai_unavailable` | Any other failure, such as an unreachable database; the cause goes to the log |
 
-Each chat turn sends the static system prompt, then the conversation's latest `AGENT_HISTORY_TURNS` owner and assistant exchanges verbatim, except that each earlier answer's ```actions block is removed (default 30 turns, that is 60 messages, oldest first), then the new owner message. Older messages do not reach the model. The conversation history is never summarized: no summary model folds it, nothing runs on it after a turn and there is no history search tool. With [long-term memory](#long-term-memory-off-by-default) on, a separate background step extracts and merges memory facts, never the history. Owners chat little; 30 turns at the 2000-character input cap keep one request well inside a 100k-token context window.
+Core forwards the `422` codes as its own `code` and turns every other non-404 AI error into `503 ai_unavailable`.
 
-`AgentConversationRepository.recent_messages(conversation_id, user_id, shop_id, limit)` reads the history. It first checks that the conversation belongs to that user and shop; otherwise the request fails with `404 conversation_not_found`.
+## Agent tools
 
-### Long-term memory (off by default)
+The agent runs on [Pydantic AI](https://ai.pydantic.dev/). Prompts live in `src/prompt_templates/`, are English and static, and tell the agent to answer in Vietnamese.
 
-`AGENT_MEMORY_ENABLED=true` turns on the [ADR-0002](../../docs/architecture/adr/0002-agent-long-term-memory.md) memory, which is not product behavior until the PO approves it. It needs both memory migrations ([`agent_memories`](../../supabase/migrations/20261014000000_agent_memories.sql), then [`agent_memory_visibility`](../../supabase/migrations/20261015000000_agent_memory_visibility.sql)) and an embedder, picked by `AGENT_MEMORY_EMBEDDING_PROVIDER`:
+| Tool | Available when | Does |
+|---|---|---|
+| `query_shop_data` | `AI_SQL_READER_URL` is set | Runs one model-written `SELECT` over the [read-only views](#read-only-shop-data) |
+| `suggest_restock` | `AI_SQL_READER_URL` is set | Lists products whose stock is below the [restock cover](#restock-suggestions) |
+| `calculate` | `CALC_ENABLED` (default on) | Runs ordered [arithmetic steps](#calculation-and-sandbox) instead of mental math |
+| `run_code` | `SANDBOX_ENABLED` (default on) | Runs a small model-written Python program in the Monty sandbox; it calls no tool |
+| `suggest_screen` | Always | Adds an [app screen button](#app-guide-and-screen-buttons) to the answer |
 
-- `sentence-transformers` (default) runs `AGENT_MEMORY_EMBEDDING_MODEL` in this process and needs `uv sync --group memory`; the Docker image leaves that group out, so there the flag logs an error and stays off.
-- `cloudflare` calls Workers AI's OpenAI-compatible `/v1/embeddings` with `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`, so no local model is needed. Workers AI takes only the text, so `WorkersAIEmbeddingModel` (`src/memory/workers_ai_embedding.py`) adds the model's query and document prompts (embeddinggemma's are built in) and cuts the vector to the column's 384 dimensions. Owner messages and facts are sent to Cloudflare to be embedded.
+## How a chat turn runs
 
-Either way, vectors are cut to `EMBEDDING_DIMENSIONS` (384, the migration's size), which only a Matryoshka-trained model such as embeddinggemma survives. Changing the model leaves stored vectors in the old model's space: clear or re-embed `agent_memories` first. When on:
+1. Reject an owner message longer than `AGENT_MAX_INPUT_CHARS`.
+2. Redact secrets and personal data from the message; the redacted text is what gets stored.
+3. Load the last `AGENT_HISTORY_TURNS` exchanges verbatim, without earlier ```` ```actions ```` blocks.
+4. With long-term memory on, recall memories and place them before the message.
+5. Run the model under the request, token, time and tool-call limits.
+6. Screen the final answer and send a leaking or empty one back for a retry.
+7. Append accepted screen buttons, then save the exchange.
+8. With long-term memory on, extract new facts in the background.
 
-- Before the model answers, `AgentMemoryService.with_memories` embeds the owner's message with the configured Pydantic AI `Embedder`, searches the owner's unexpired memories, scoped to the request's shop and user (`src/memory/repository.py` loads, `src/memory/ranking.py` ranks): the 20 nearest by cosine plus the 20 best BM25 matches of the message over unaccented syllables, ranked by cosine + 0.1 × BM25 share of the best (no decay, importance or use count; see [the recall benchmark](evaluation/memory_recall/README.md)), and places the top five, each dated in shop time and typed, before the message under "Earlier facts from this owner", as Tencent's Agentic RAG prompt does. The model calls no tool, and the stored message is the owner's redacted message without the memories. A failed search answers without memories.
-- After a turn is saved, `AgentMemoryService.remember` asks the chat model for up to five durable facts the owner stated (the model reads the owner's message and the answer, and the prompt allows only the owner's words), with today's date so "last week" becomes a date, and embeds them. Facts that replace no recalled memory are checked, as in Hy Memory's reconcile, against up to three live memories each with cosine 0.6 or more that the turn did not recall: one model call marks each fact `new`, `replaces` one of those ids, or `known` (dropped); with no such memory there is no call, and a failed call keeps the facts. The rest are appended. It then compresses the owner's memories older than 7 days, as Tencent does: each conversation's memories from one shop day are merged by the chat model into one to five facts that replace them in one transaction, keep the latest date and carry `metadata.summarized_from`, so they are not merged again. At most three such groups per turn. It runs in the background; a failure is logged and never fails the turn.
-- Deleting a conversation deletes the memories it produced, summaries included (`ON DELETE CASCADE`).
+## Chat history and context
 
-Visibility and control, after Sakana Chat's "My Fish" (migration [`20261015000000_agent_memory_visibility.sql`](../../supabase/migrations/20261015000000_agent_memory_visibility.sql), applied after the first one):
+- History is never summarized: older messages than `AGENT_HISTORY_TURNS` (default 30 exchanges) simply do not reach the model. 30 turns at the 2000-character cap fit a 100k-token window.
+- The current shop time (`Asia/Ho_Chi_Minh`) follows the new message after a cache breakpoint and is never stored, so instructions and history stay a cacheable prefix.
+- `AgentConversationRepository.recent_messages` checks the conversation belongs to the user and shop before reading it.
+- `chat_conversations.summary` and `summary_through_message_id` are unused and kept only so the previous release can roll back.
 
-- Each recall sets `last_used_at` and adds to `use_count`, which the owner sees; neither ranks memories.
-- The extraction model sees the recalled memories as `[id] fact` and may set `replaces` on a fact that corrects one. The id is accepted only if that turn recalled it. The old row gets `superseded_by` and stops being recalled; deleting the newer fact's chat sets it back to NULL, so the old fact returns.
-- Only the types in `AGENT_MEMORY_TYPES` (default `preference,procedural,semantic`) are extracted; summaries keep their sources' types by prompt only, the code screens them just for phone numbers; facts holding a Vietnamese phone number are dropped, including from summaries.
-- Up to ten live `preference` memories (most important, then newest) lead every turn whatever the message, ahead of the five searched ones, which never repeat them: a preference such as "answer in tables" rarely resembles the question it should shape. This follows the always-loaded `MEMORY.md` of Cognition's [agent memory repo](https://cognition.com/agent-memory-repo).
-- When memories are recalled, the stream sends a `memory` event before the first `delta`, each memory with its `source_conversation_id` and `created_at`, so the app can open the chat it came from (see the [stream contract](../../docs/contracts/api-contracts.md#stream-trả-lời-chat)).
-- `GET`/`PUT /internal/v1/agent/memory/settings` read and set the owner's switch in `agent_memory_settings` (on when no row). Off stops recall and writes, deletes nothing. When the service is not built, `GET` answers `available: false` and `PUT` answers `409`.
+## Model provider
 
-Each new owner message is followed, after a cache breakpoint, by the current shop time (`get_time` in `src/utils.py`, Asia/Ho_Chi_Minh), which is never stored, so the static instructions and the history stay a cacheable prefix.
+`LLMFactory.create_model(alias)` in `src/providers/llm_factory.py` reads `MODEL_ALIASES`, a JSON object mapping each alias to a `protocol` and the `model` id. The application uses one alias, `chat`. The protocol picks the provider class:
 
-`chat_conversations.summary` and `summary_through_message_id` still exist, because the AI baseline migration created them. The code neither reads nor writes them. They are kept so the previous release can roll back, and a later migration drops them after this deploy.
+| `protocol` | Provider | API |
+|---|---|---|
+| `anthropic_messages` (default) | `AnthropicMessagesProvider` | `/v1/messages` |
+| `openai_responses` | `OpenAIResponsesProvider` | `/v1/responses` |
+| `openai_chat` | `OpenAIChatProvider` | `/chat/completions` |
 
-The agent runs on [Pydantic AI](https://ai.pydantic.dev/). `LLMFactory.create_model(alias)` in `src/providers/llm_factory.py` builds a model from `MODEL_ALIASES`, a JSON object mapping each alias to a `protocol` and the `model` id sent to the gateway. The protocol names the API the model speaks and picks the provider class: `openai_responses` (`OpenAIResponsesProvider`, `/v1/responses`; OpenAI reasoning models reject function tools on `/v1/chat/completions`), `openai_chat` (`OpenAIChatProvider`, `/chat/completions`) or `anthropic_messages` (`AnthropicMessagesProvider`, `/v1/messages`). The application uses one alias, `chat`. Every model shares `OPENAI_API_KEY`, which is the gateway credential: the Bifrost virtual key when AI calls Bifrost, and the gateway's own key when it calls OpenCode Go directly. `OPENAI_BASE_URL` is the base of the OpenAI APIs, and a blank value means the OpenAI default; `ANTHROPIC_BASE_URL` is the base of the Anthropic API, where Bifrost serves it at `/anthropic` next to `/openai` (for example `http://bifrost:8080/anthropic`), and when it is unset the factory drops the `/v1` suffix from `OPENAI_BASE_URL`, which is what a gateway with one prefix for both APIs needs; `anthropic_messages` needs one of the two set. Through Bifrost the model id has no provider prefix, because its routing rules in `deploy/vps/bifrost.json` pick the upstream and the fallback, and only Bifrost holds the provider keys. `MODEL_FALLBACKS` lists `protocol:model` entries, as JSON, tried in order through a `FallbackModel` when the previous model fails, for an environment that calls OpenCode Go directly; a fallback starts with what is left of `AGENT_TURN_TIMEOUT_SECONDS`, so it helps mostly with fast failures (HTTP errors, rate limits). OpenCode Go rejects a request without an `x-opencode-session` header, so each agent turn and draft parse runs with `session_settings`: the session is `conversation-<id>` (a one-off id for a conversation's first turn, each draft and each memory extraction or summary) and the User-Agent is `smartledger-ai/<version>`. The same call sends what Bifrost needs: `x-bf-session-id` groups the logs of a conversation, `x-bf-lh-shop-id` adds the shop to log metadata, and `x-bf-eh-*` copies of the session and User-Agent reach the provider. The default `chat` alias is Claude Haiku 5.5 (`anthropic_messages`, `claude-haiku-5-5`) on OpenCode Go. `MODEL_REASONING_EFFORT` (default `medium`) sets `openai_reasoning_effort` for the OpenAI protocols, where `none` is sent as is, and `anthropic_effort` for `anthropic_messages`, where `none` leaves the model default.
+- Every model shares `OPENAI_API_KEY`, the gateway credential: the Bifrost virtual key when AI calls Bifrost, and the gateway's own key when it calls [OpenCode Go](https://opencode.ai/docs/go/) directly. The default `chat` alias is `claude-haiku-5-5` over `anthropic_messages`.
+- `OPENAI_BASE_URL` is the base of the OpenAI APIs, and blank means the OpenAI default. `ANTHROPIC_BASE_URL` is the base of the Anthropic API, where Bifrost serves it at `/anthropic` next to `/openai`; when unset, the factory drops the `/v1` suffix from `OPENAI_BASE_URL`, and `anthropic_messages` needs one of the two.
+- Through Bifrost the model id has no provider prefix: routing rules in `deploy/vps/bifrost.json` pick the upstream and the fallback, and only Bifrost holds the provider keys ([ADR-0008](../../docs/architecture/adr/0008-bifrost-owns-routing-and-fallback.md)).
+- `MODEL_FALLBACKS` is a JSON list of `protocol:model` tried in order, for an environment that calls OpenCode Go directly; a fallback gets only what is left of the turn timeout, so it mainly covers fast failures.
+- OpenCode Go needs an `x-opencode-session` header: `session_settings` sends `conversation-<id>` for each turn and one-off ids for drafts and memory calls. It also sends what Bifrost needs: `x-bf-session-id` groups a conversation's logs, `x-bf-lh-shop-id` adds the shop to log metadata, and `x-bf-eh-*` copies of the session and User-Agent reach the provider.
+- `MODEL_REASONING_EFFORT` maps to `openai_reasoning_effort` or `anthropic_effort`.
 
-## Shop data tool (read-only SQL)
+## Read-only shop data
 
-When `AI_SQL_READER_URL` is set, the agent gets a `query_shop_data` tool that runs one model-written `SELECT` against the current shop's profile, categories, products, sales, sale items, debts, payments and expenses. Without it the agent still chats, only without that tool and without `suggest_restock`. There is no SQL HTTP endpoint.
+`query_shop_data` reads the shop profile, categories, products, sales, sale items, debts, payments and ACTIVE expenses. There is no SQL HTTP endpoint. Five layers keep a query read-only and inside the current shop:
 
-Five layers keep the query inside the current shop and read-only:
+| Layer | Where | Rule |
+|---|---|---|
+| Role | AI baseline migration | `NOLOGIN` role `ai_sql_reader` has `SELECT` on the eight `ai_read` views only |
+| Views | `ai_read.v_*` | `security_barrier` views filter on `smartledger.shop_id`; an unset setting returns no rows; customer names, phones, free-text notes and transfer references are left out |
+| Guard | `src/sql/guard.py` | Rejects SQL over 4000 characters, then `sqlglot` accepts exactly one `SELECT` over those views with allowlisted functions and casts and re-renders it under `LIMIT` |
+| Execution | `src/sql/repository.py` | Own pool (`SQL_POOL_MAX_SIZE`), one `READ ONLY` transaction, shop id bound from the request, `SQL_TIMEOUT_MS`, `SQL_ROW_LIMIT`, text cells cut at 200 characters |
+| Output | `src/agent/tools.py` | Rejected queries return `Error[CODE]: reason` for the model to fix; any other failure fails the turn with `503` |
 
-1. **Role.** The baseline creates the `NOLOGIN` group role `ai_sql_reader`, which has only `USAGE` on schema `ai_read` and `SELECT` on its views (five in the baseline, three more from `20261016000000_ai_read_ledger_views.sql`, eight in all), and no grant on Core's tables.
-2. **Views.** `ai_read.v_shop_profile`, `v_categories` and `v_products` filter on the transaction setting `smartledger.shop_id` and do not expose `shop_id`; an unset setting returns no rows. They are `security_barrier` views, so a failing filter cannot quote another shop's row in its error. `v_sales` and `v_sale_items` follow the same rule and deliberately leave out customer snapshots (PII) and the free-text `void_reason`. `v_debts`, `v_payments` and `v_expenses` (migration `20261016000000_ai_read_ledger_views.sql`, which needs Core's Flyway migrations through V9) follow the same rule; debts and payments are scoped through their sale. They leave out customer names and phone numbers (only the opaque `customer_id`, for counting customers), transfer references, the users who received or recorded money, the free-text expense description, and archived expenses.
-3. **Guard.** `SqlGuard` in `src/sql/guard.py` parses the SQL with `sqlglot` and accepts exactly one `SELECT` (with `WITH` and `UNION`) over those views. Functions and cast types come from an allowlist, so `set_config`, `current_setting`, `pg_*` and `dblink` are rejected along with `information_schema`, `pg_catalog`, base tables, `FOR UPDATE`, `SELECT INTO`, DML, DDL, `SET` and `COPY`. The statement that runs is the guard's own rendering, wrapped as `SELECT * FROM (...) q LIMIT n`.
-4. **Execution.** `ShopDataRepository` in `src/sql/repository.py` borrows a connection from its own `PostgreDBClient` pool for `AI_SQL_READER_URL` (at most `SQL_POOL_MAX_SIZE` connections, default 2), runs one `READ ONLY` transaction, sets `smartledger.shop_id` from the authenticated request as a bound parameter, applies `SQL_TIMEOUT_MS` (default 3000) and `SQL_ROW_LIMIT` (default 100) and cuts text cells at 200 characters. The scope, timeout and search path are transaction-local, so a connection goes back to the pool without them, and the read-only flag is reset on return. The guard's SQL is sent without bind parameters (`no_parameters`), so `:name` or `%` in it is never read as a placeholder. The tool reads the shop from the Pydantic AI run context (`RunContext[AgentContext]`, filled from the run's `deps`); the model only passes `sql`, and a call with any other argument is sent back for a retry without running.
-5. **Output.** Results reach the model as data with a header saying so. The guard and the repository raise `ValueError("CODE: reason")` for a query the guard or the database rejects, and the tool returns it as `Error[CODE]: reason` (for example `Error[UNSAFE_FUNCTION]`, `Error[QUERY_TIMEOUT]`, `Error[SQL_ERROR]`) so the model can rewrite it. Any other failure, such as an unreachable reader database, a full pool or an unconfigured reader, propagates and fails the turn with `503 ai_unavailable`.
+The model passes only `sql`; the shop comes from the run context. Refunds, stock-in history and customer contacts are not exposed yet.
 
-All prompt templates live in `src/prompt_templates/` (`shop_agent.py`, `app_guide.py`, `sql_agent.py`, `restock.py`, `calculation.py`, `draft_parse.py`, `memory.py`). Short tool results and guardrail retry notes stay next to their code (`src/agent/tools.py`, `src/agent/guardrails/`). Prompt text is English and static; the agent always answers the owner in Vietnamese.
-
-### Agent guardrails
-
-`AgentService` calls one `GuardrailService` facade (`src/agent/guardrails/service.py`), which holds the limits and applies the [Pydantic AI Harness guardrails](https://pydantic.dev/docs/ai/harness/guardrails/) around each Pydantic AI run, in order: a length check on the owner's latest message (`AGENT_MAX_INPUT_CHARS`, default 2000) stops the turn before any model call; `InputRedaction` (`input_redaction.py`) runs the Harness secret detector and then its personal-data detector on the owner's message before the model sees it, replacing API keys, bearer tokens, JWTs, private keys, IBANs, card numbers that pass the Luhn check and emails with `[redacted:<name>]` (the redacted text is what gets stored; the US SSN pattern is left out because its 3-2-4 digit shape matches order codes); per-turn limits on model requests and tokens (`UsageLimits`: `AGENT_MODEL_CALL_LIMIT` 4, and `AGENT_TURN_TOKEN_LIMIT` 200000 input plus output tokens across the turn's requests), a turn time limit (`GuardrailService.run_limits`, `AGENT_TURN_TIMEOUT_SECONDS` 35, below Core's 40 s read timeout so a turn Core gave up on is not stored; with long-term memory on, the recall runs before this clock starts, so a slow embedder can still let a JSON turn be stored after Core gave up) and tool calls (the `ToolCallLimit` capability in `tool_call_limit.py`, `AGENT_TOOL_CALL_LIMIT` 3), where a call over the limit is refused and the tools are hidden so the model answers from what it already has; and a Harness `OutputGuardrail` running `AnswerScreen.check` (`answer_screen.py`), which sends an empty answer, or one that leaks view names, scope settings, error codes or SQL, back to the model with a `retry` verdict so it answers again. Each retry is a model request, so the request limit bounds the retries.
-
-A guardrail that stops the turn raises `GuardrailError` (`run_limits` raises it for a run stopped by a limit), which the service maps to `422 {"detail": "<code>"}` and for which nothing is stored: `input_too_long` for an over-long message, `answer_unavailable` when the run reaches the request or token limit or the screen still rejects the answer after its retries, `answer_timeout` when it passes the time limit. Each answered turn logs its token usage so the token limit can be sized from real traffic; the defaults are provisional until the PO approves them. The service holds no owner-facing text; the app maps each code to its own copy. Core forwards these `422` codes as its own error `code` and turns any other non-404 AI error into `503 ai_unavailable`. All checks are deterministic: there is no model-based safety check, human approval step or LLM query checker, because each adds a model call and the guard plus the read-only role already bound what a query can do.
-
-Push the baseline as a user with `CREATEROLE` (first run only) and the `search_path` that holds Core's tables, then create the login the service uses. Keep the password in the environment's secrets, never in Git:
+Create the login the service uses once, after pushing the baseline as a user with `CREATEROLE`. Keep the password in the environment's secrets:
 
 ```sql
 CREATE ROLE smartledger_ai_reader LOGIN PASSWORD '<secret>' IN ROLE ai_sql_reader;
 ALTER ROLE smartledger_ai_reader SET default_transaction_read_only = on;
 ```
 
-```bash
-AI_SQL_READER_URL=postgresql://smartledger_ai_reader:<secret>@<host>:5432/<db>
-```
+## Guardrails
 
-Phase 1 covers the shop profile, categories, products, sales and sale lines (`sale_status` `CONFIRMED` and `VOIDED`), debts, payments and ACTIVE expenses. Customer names and contacts, expense descriptions, refunds and stock-in history are not exposed yet.
+`GuardrailService` (`src/agent/guardrails/service.py`) applies the [Pydantic AI Harness guardrails](https://pydantic.dev/docs/ai/harness/guardrails/) around each run. All checks are deterministic; there is no model-based safety check.
 
-## Streaming chat
+| Check | Setting (default) | On failure |
+|---|---|---|
+| Message length | `AGENT_MAX_INPUT_CHARS` (2000) | `422 input_too_long` before any model call |
+| Redaction (`input_redaction.py`) | — | Keys, tokens, JWTs, IBANs, Luhn-valid cards and emails become `[redacted:<name>]` |
+| Model requests | `AGENT_MODEL_CALL_LIMIT` (4) | `422 answer_unavailable` |
+| Tokens per turn | `AGENT_TURN_TOKEN_LIMIT` (200000) | `422 answer_unavailable` |
+| Turn time | `AGENT_TURN_TIMEOUT_SECONDS` (35, below Core's 40 s) | `422 answer_timeout` |
+| Tool calls (`tool_call_limit.py`) | `AGENT_TOOL_CALL_LIMIT` (3) | Further calls refused; the model answers with what it has |
+| Answer screen (`answer_screen.py`) | — | An empty answer or one leaking views, settings, error codes or SQL is retried; still failing gives `422 answer_unavailable` |
 
-`POST /internal/v1/agent/chat/stream` runs the same turn as `POST /internal/v1/agent/chat` and answers with `text/event-stream`. The request, pre-stream status codes, events and `done` body are defined in the [API contracts](../../docs/contracts/api-contracts.md#stream-trả-lời-chat); this section covers how the service produces them.
+Limits are provisional until the PO approves them; each answered turn logs its token usage to size them.
 
-- `AgentService.stream_chat` runs the history read and the input check before it yields anything, so a pre-stream failure raises before any byte is sent. The turn then runs through `agent.iter()`, and each model response is read with `stream_text(delta=True)`. `run_stream` is not used: it stops at the first final-looking output and skips later tool calls and the retry loop.
-- The Harness `OutputGuardrail` sees only the final output, not delta text. `AnswerScreen.screened_prefix` therefore releases only the prefix that no continuation can turn into a `LEAK_PATTERN` match. It holds back a short tail, and anything after a `select` that could still start a `select … from` match, until that match is ruled out or 400 characters have passed. `AnswerScreen.check` still runs in the output guardrail on every complete answer, so a rejected answer is retried.
-- The service sends `reset` when shown text must be discarded: a model response followed by a data tool call, or an answer the screen rejected and the model retried. Text a response writes before calling only `suggest_screen` is part of the answer, not a preamble: the screen checks it, the stream keeps it, and the next response's text follows it after a blank line, as in the stored answer. Before `done`, it releases the rest of the final answer; if the text already shown is not a prefix of that answer, it sends `reset` and then the whole answer. The text after the last `reset` therefore equals the stored answer.
-- Nothing is saved unless the run completes. A guardrail stop raises `GuardrailError` from the iterator, with the same codes, timeout and limits as the JSON route. Closing the stream early, for example when the caller disconnects, cancels the run; a disconnect that lands while the exchange is already being written cannot stop that write.
-- Core relays this route as `POST /api/v1/agent/chat/stream`; see [Stream trả lời chat](../../docs/contracts/api-contracts.md#stream-trả-lời-chat).
+## Streaming
+
+The [stream contract](../../docs/contracts/api-contracts.md#stream-trả-lời-chat) defines the events. How the service produces them:
+
+- History and input checks run before the first byte, so a pre-stream failure is a normal JSON error; a later failure ends the stream with an `error` event carrying the same code.
+- The run uses `agent.iter()` with `stream_text(delta=True)`; `run_stream` would stop at the first final-looking output and skip later tool calls.
+- `AnswerScreen.screened_prefix` releases only text no continuation can turn into a leak, holding back a short tail (up to 400 characters after a `select`).
+- `reset` discards shown text when a data tool call or a retry follows it. The text after the last `reset` always equals the stored answer.
+- Nothing is saved unless the run completes; closing the stream cancels the run.
 
 ## Restock suggestions
 
-When `AI_SQL_READER_URL` is set, the agent also gets a `suggest_restock` tool. It takes one argument, `period`, and returns the tracked ACTIVE products whose stock is below the cover the policy aims for, most urgent first: each item carries a suggested quantity and a short Vietnamese reason. It changes nothing.
+`suggest_restock(period)` returns tracked ACTIVE products below cover, most urgent first, each with a suggested quantity and a fixed Vietnamese reason. It changes nothing.
 
-- Only confirmed sales count: the service sums `v_sale_items.quantity` for rows whose `sale_status = 'CONFIRMED'` fall in the requested window, joins them to `v_products` and keeps tracked ACTIVE products. Voided sales are excluded.
-- A product is suggested only when `ceil(sold_qty / days * COVER_DAYS - max(stock_qty, 0))` is positive, where `days` is the length of the requested period; stock below zero counts as zero. A shop whose stock already covers the period gets no suggestions.
-- `COVER_DAYS` in `src/restock/policy.py` is the only tunable. It currently defaults to 7 days, and the periods `last_7_days` (the period `RESTOCK_PROMPT` tells the model to use when the owner names none; the tool's `period` argument has no default) and `last_30_days` are likewise provisional: all three await product-owner sign-off and are not yet agreed product behaviour.
-- The service runs one fixed `SELECT` through the same guard and shop-data pool (`ShopDataRepository`) as `query_shop_data`, so the shop scope, statement timeout and row cap apply unchanged. The candidate list is capped at the fastest-selling rows the row cap returns, and the result flags when that cap was hit so the agent can say the list is partial.
-- `RestockSuggestion.reason` is a fixed Vietnamese sentence built from the period's sales and the current stock; the agent copies `suggested_qty`, `unit` and `reason` verbatim rather than recomputing them.
+- Only `CONFIRMED` sales in the period count.
+- Suggested quantity is `ceil(sold_qty / days * COVER_DAYS - max(stock_qty, 0))`, shown only when positive.
+- `COVER_DAYS` (7, in `src/restock/policy.py`) and the periods `last_7_days` and `last_30_days` are provisional.
+- It runs one fixed `SELECT` through the same guard and pool as `query_shop_data` and flags a list cut by the row cap.
 
-## Calculations and the sandbox
+## Calculation and sandbox
 
-When `CALC_ENABLED` is set (default on), the agent also gets a `calculate` tool so it computes arithmetic instead of doing sums in its head. The model sends an ordered list of steps over a closed operation set (`add`, `subtract`, `multiply`, `divide`, `percentage` — `a` is the percent of `b` — `round` half-up with `digits` 0–6, `min`, `max`), and any step after the first may pass `$` for the previous step's result. The tool is an agent option injected like the others: the composition root builds `CalculationService` from `CALC_MAX_OPERATIONS` (20 steps per call) and `CALC_MAX_OPERAND_VALUE` (1e15, inside float's exact integer range) in `src/calculation/`, a framework-free package. A rejected plan returns `Error[CODE]: reason` (`DIVISION_BY_ZERO`, `BAD_OPERATION`, `OPERAND_TOO_LARGE`, `RESULT_TOO_LARGE`, `TOO_MANY_OPERATIONS`, `INVALID_NUMBER`) for the model to fix; the reported result is rounded to 6 decimal places and the step trail stays raw as the audit. The defaults are provisional and await PO sign-off.
+**`calculate`** (`src/calculation/`, framework-free) runs up to `CALC_MAX_OPERATIONS` (20) steps of `add`, `subtract`, `multiply`, `divide`, `percentage`, `round`, `min` and `max`; a step may use `$` for the previous result. Operands and results stay within `CALC_MAX_OPERAND_VALUE` (1e15). A bad plan returns `Error[CODE]` for the model to fix. It stays callable past the tool-call limit because it does no I/O.
 
-When `SANDBOX_ENABLED` is set (default on, needs the `codemode` extra of `pydantic-ai-harness`; without it the sandbox turns itself off and the service still runs), the agent gets one more tool, `run_code`: the model writes a Python program that runs in the [Monty](https://github.com/pydantic/monty) sandbox and may call `query_shop_data` and `suggest_restock` from inside the code, so multi-step work over shop data costs no extra model turns. `Sandbox` (`src/sandbox/wrapper.py`) is a thin wrapper around the Harness Code Mode capability and the only module that imports it; the agent receives it injected, and the tool names it folds in are the `tools` of `SandboxLimits` (main.py supplies `query_shop_data` and `suggest_restock`; unregistered names match nothing). Folded tools leave the model-facing tool list, so with the sandbox on the model reaches shop data only through `run_code`. Monty starts only when a turn actually contains a `run_code` call — plain chat, `calculate` and screen buttons never touch it.
+**`run_code`** (`src/sandbox/wrapper.py`) runs a model-written Python snippet in [Monty](https://github.com/pydantic/monty) through the Harness Code Mode capability. Monty starts only when a turn calls `run_code`. `RUN_CODE_PROMPT` keeps it for work that neither one SQL query nor `calculate` can express; the program gets its inputs from earlier tool results.
 
-- Each `run_code` snippet is bounded by `SANDBOX_MAX_DURATION_SECS` (5 s of execution; time awaiting a nested tool does not count) and `SANDBOX_MAX_MEMORY_BYTES` (64 MiB of Monty heap): an allocation past the heap raises `MemoryError` inside the snippet, and Code Mode returns it to the model as a retry, so a runaway program costs a retry, not a worker. `SANDBOX_MAX_TOOL_CALLS` (3) bounds nested tool calls per snippet and `SANDBOX_MAX_SUSPENSIONS` (1000) bounds cumulative host interactions. The heap value limits the sandbox only, not the AI process: the OS or container limit stays the last bound.
-- The `ToolCallLimit` guardrail counts `run_code` as one call; calls nested inside a snippet do not count against `AGENT_TOOL_CALL_LIMIT` (verified against the harness 0.55), so `SANDBOX_MAX_TOOL_CALLS` is kept at the guardrail's value: a snippet cannot multiply the database load the guardrail bounds. Raise both settings together if a snippet legitimately needs more calls. One snippet is one `tool_start`/`tool_end` pair, whatever it called inside.
-- The prompts match the tools the model actually has: `CALC_PROMPT` (calculate) is appended whenever calculation is on, and the `run_code` guidance only when the sandbox is on; the SQL and restock prompts name the direct tools when it is off and the program path when it is on. The pure `calculate` tool stays callable past the tool-call limit (it does no I/O), so a turn can query the data and still run every sum through it.
-- Limits and defaults are provisional and await PO sign-off.
+`SANDBOX_TOOLS` in `src/main.py` lists the tools folded into the sandbox and is empty: the read-only data tools stay direct, so a plain data question never starts Monty.
+
+| Limit | Setting (default) |
+|---|---|
+| Execution time per snippet | `SANDBOX_MAX_DURATION_SECS` (5) |
+| Monty heap | `SANDBOX_MAX_MEMORY_BYTES` (64 MiB); not a process limit |
+| Nested tool calls per snippet | `SANDBOX_MAX_TOOL_CALLS` (3) |
+| Host interactions per snippet | `SANDBOX_MAX_SUSPENSIONS` (1000) |
+
+The tool-call guardrail counts one `run_code` as one call and does not see calls nested inside it. If a tool is ever folded in, keep `SANDBOX_MAX_TOOL_CALLS` equal to `AGENT_TOOL_CALL_LIMIT` so a snippet cannot multiply the database load. All calculation and sandbox defaults are provisional.
 
 ## App guide and screen buttons
 
-The agent always gets `APP_GUIDE_PROMPT` (`src/prompt_templates/app_guide.py`), which names the app's tabs, screens and buttons so it can tell the owner how to do something, and the `suggest_screen` tool. The tool takes one closed-set `screen` and returns its choice as `ToolReturn` metadata, which the model never reads back. After the run, `AgentService` appends the accepted screens, deduplicated and capped at two, to the answer as a ```` ```actions ```` block, and strips that block from stored answers before replaying history. The block format is in the [API contract](../../docs/contracts/api-contracts.md). Keep the prompt in step with the mobile routes when a screen moves or is renamed.
+`APP_GUIDE_PROMPT` (`src/prompt_templates/app_guide.py`) names the app's tabs, screens and buttons. `suggest_screen(screen)` takes one screen from a closed set; after the run, `AgentService` appends up to two distinct screens as a ```` ```actions ```` block and strips it before replaying history. Update the prompt when a mobile route moves.
+
+## Long-term memory (off by default)
+
+`AGENT_MEMORY_ENABLED=true` turns on the [ADR-0002](../../docs/architecture/adr/0002-agent-long-term-memory.md) memory. It is not product behavior until the PO approves it. ADR-0002 owns the recall, ranking and reconcile design; [the recall benchmark](evaluation/memory_recall/README.md) measures it.
+
+- Needs the migrations `20261014000000_agent_memories.sql` and `20261015000000_agent_memory_visibility.sql`, and an embedder from `AGENT_MEMORY_EMBEDDING_PROVIDER`:
+  - `sentence-transformers` (default) runs locally and needs `uv sync --group memory`; the Docker image leaves that group out, so there the flag logs an error and stays off.
+  - `cloudflare` calls Workers AI with `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`; owner messages and facts are sent to Cloudflare.
+- Vectors are cut to 384 dimensions. Changing the model needs `agent_memories` cleared or re-embedded first.
+- Recall: up to ten `preference` memories lead every turn, then the five best matches by cosine plus BM25 (`src/memory/ranking.py`). A failed search answers without memories. The stream sends a `memory` event before the first `delta`.
+- Write: after a saved turn, the chat model extracts up to five facts of the types in `AGENT_MEMORY_TYPES`, reconciles them with similar live memories and merges memories older than 7 days. It runs in the background and never fails the turn. Facts with a Vietnamese phone number are dropped.
+- The owner's switch lives in `agent_memory_settings` (on when no row); off stops recall and writes and deletes nothing. Deleting a conversation deletes the memories it produced.
 
 ## Text drafts
 
-The async `DraftService.parse(shop_id, mode, text)` in `src/drafts/service.py` turns an owner's text or STT transcript into a `DraftView` without `request_id`, which the endpoint assigns. It changes nothing: no sale, expense or stock is written. The endpoint `/internal/v1/drafts/parse` and audio belong to #3; this module is the text step it calls.
+`DraftService.parse(shop_id, mode, text)` in `src/drafts/service.py` turns owner text or an STT transcript into a `DraftView`. It writes nothing and has no endpoint yet; the planned `/internal/v1/drafts/parse` and audio belong to #3.
 
-- `SALE` loads the shop's ACTIVE catalog through `ProductCatalogRepository` (`src/drafts/catalog.py`), puts `id | name | unit` into the prompt, and the model returns lines with `product_id`, `qty`, `confidence` and an `ambiguous` flag through native structured output (`NativeOutput(DraftOutput)`).
-- `src/drafts/matching.py` then decides, without I/O: an id outside the shop catalog, an ambiguous line, no match, or `confidence` below `MIN_MATCH_CONFIDENCE` (0.7, a provisional default) leaves `product_id`, `unit` and `unit_price` as `null` and adds a Vietnamese warning. A kept line takes name, unit and price from the catalog row; a price the owner says is ignored.
-- `EXPENSE` skips the catalog. Each expense is one line with `qty = 1`, the description in `name` and the amount in `unit_price`; a missing amount stays `null` with a warning.
-- Every model failure, invalid model output, missing model or catalog failure raises `DraftUnavailableError`, which the planned endpoint (#3) is to map to `503 ai_unavailable` so Core falls back to manual entry.
-- The Vietnamese text set (typos, no diacritics, abbreviations, ambiguous and unknown items) runs against the configured real model only when asked: `RUN_LIVE_MODEL_TESTS=1 uv run pytest tests/integration_tests/test_draft_parse_live.py`.
+- `SALE` matches lines against the shop's ACTIVE catalog; an unknown id, ambiguous line or `confidence` below 0.7 leaves the product empty with a Vietnamese warning, and a line with quantity 0 or less is dropped with one. Price always comes from the catalog.
+- `EXPENSE` makes one line per expense with the amount in `unit_price`.
+- Any model or catalog failure raises `DraftUnavailableError`, which the endpoint is to map to `503 ai_unavailable`.
 
-## Tracing (Logfire)
+## Observability
 
-When `LOGFIRE_TOKEN` is set, `src/observability.py` configures [Pydantic Logfire](https://logfire.pydantic.dev/docs/) at startup and traces every Pydantic AI agent run: one `invoke_agent` span per turn with a `chat` span per model request and an `execute_tool` span per tool call, carrying timing, model, token counts, tool names, errors and `metadata.shop_id`. Spans are recorded with `include_content=False`, so the owner's question, the history, the answer, tool arguments (the model's SQL) and tool results never leave the service; a test (`tests/unit_tests/test_observability.py`) checks a traced turn and a failed model call for them. Only the tool descriptions and schemas are sent. `LOGFIRE_ENVIRONMENT` (`staging`, `production`) separates the environments in one Logfire project. Logfire reads `LOGFIRE_SERVICE_VERSION` from the environment itself and shows it on each trace. On the VPS the deploy sets all three from GitHub ([AI tracing settings](../../docs/development/ci-cd.md#ai-tracing-settings)). A blank token configures nothing and sends nothing; stdout logging is unchanged either way, and an unreachable Logfire only prints a warning at startup. FastAPI requests are not instrumented, because Logfire's FastAPI integration records endpoint arguments, which include the message.
+- **Logs:** stdout at `LOG_LEVEL`. `src/agent/tool_events.py` logs each tool call with its arguments and result, each cut to 1000 characters, so server logs hold the model's SQL and shop data; a tool retry logs at `WARNING`.
+- **Traces:** with `LOGFIRE_TOKEN` set, `src/observability.py` sends one [Logfire](https://logfire.pydantic.dev/docs/) span per turn, model request and tool call, with timing, model, tokens, tool names, errors and `shop_id`. Content is never sent (`include_content=False`); `tests/unit_tests/test_observability.py` checks it. `LOGFIRE_ENVIRONMENT` separates staging and production. FastAPI requests are not instrumented because that would record the message.
+- **Metrics:** `/metrics` exposes request rate, status and latency per route through `prometheus-fastapi-instrumentator`, timed to the last streamed byte, for the dashboards in `deploy/monitoring/`.
 
-## Internal authentication
+## Database access
 
-`INTERNAL_API_TOKEN` is the credential shared with Core. Callers send it in the `X-Internal-Token` header; a missing or wrong value returns `401 unauthorized`. An unset or blank token fails closed, so every `/internal/v1` route returns `401` while `/health` keeps answering. Core sends the header from its own `INTERNAL_API_TOKEN`, so both services must hold the same value. Keep the staging and production values in those environments' secrets.
+| Connection | Setting | Pool (default) | Used for |
+|---|---|---|---|
+| Application database | `POSTGRES_URL` | `POSTGRES_POOL_MAX_SIZE` (2) | Chat history, memories, catalog for drafts |
+| Shop-data reader | `AI_SQL_READER_URL` | `SQL_POOL_MAX_SIZE` (2) | `query_shop_data` and `suggest_restock` |
+| Redis | `REDIS_URL` | — | Connected at startup; no feature uses it yet |
 
-## Routes and database access
+- URLs must be `postgresql://` or `postgres://`; libpq keyword strings are rejected.
+- The four connections fit the Supabase session pooler's 15 clients next to Core's 10.
+- PostgreSQL connects lazily on first use with a 3 s connect timeout; a request waits up to 5 s for a free connection. An unreachable database is logged, does not stop the service and makes database routes answer `503`.
+- Migrations own the schema; the service never creates a table.
 
-`src/main.py` is the composition root. It builds one `APIRouter` with prefix `/internal/v1` and the `X-Internal-Token` dependency, includes each flow's router under it, and mounts it on the app. Today the only flow router is `src/agent/router.py` (prefix `/agent`) for chat, conversation CRUD and the memory settings. Every `/internal/v1` route inherits the token check. A new flow adds one include line there; the planned `/internal/v1/drafts/parse` is not implemented yet.
+## Schema and migrations
 
-`main.py` maps `ConversationNotFoundError` to `404 conversation_not_found`, `GuardrailError` to `422` with its code, and any other unhandled exception to `503 ai_unavailable`, logging the cause; FastAPI's `HTTPException`s (`401 unauthorized`, `409 memory_unavailable`) and request-validation `422`s keep their status. The chat route is async: the agent awaits the model on the event loop, while the blocking database calls and the sync tools run in worker threads, so a slow model call holds no thread. `GET /health` is async too.
-
-The application database (`POSTGRES_URL`: chat history and the catalog) is reached through a SQLAlchemy 2 engine (`src/infra/postgre_db_client.py`, psycopg 3 driver) whose pool holds at most `POSTGRES_POOL_MAX_SIZE` connections (default 2, min 1) with no overflow. `POSTGRES_URL` must be a `postgresql://` or `postgres://` URL; a libpq keyword string (`host=... dbname=...`) is not accepted. The default is kept low because the Supabase session pooler (port 5432) allows 15 clients in total, and Core sets no Hikari pool size, so Spring's default lets it open up to 10. The pool checks a connection before lending it (`pool_pre_ping`) and replaces broken ones, so requests do not queue on a single connection and a dropped connection recovers without a restart. Repositories map only the columns they use as declarative ORM classes (`ChatConversation`, `ChatMessage`, `AgentMemory`, `AgentMemorySetting`, read-only `Product`); Core's Flyway and the Supabase migrations own the schema, so the service never creates a table. The read-only shop-data reader (`AI_SQL_READER_URL`, same URL rule) has a second `PostgreDBClient` with its own pool of at most `SQL_POOL_MAX_SIZE` connections (default 2), so with the defaults AI holds at most 4 database connections, which still fits the session pooler's 15 clients next to Core's 10. `ShopDataRepository` runs the guard's SQL as text through that pool rather than as ORM statements.
-
-`main.py` also connects a Redis client from `REDIS_URL` and keeps it on `app.state.redis`; no feature reads it yet. `QDRANT_URL`, `LITELLM_URL` and `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY`/`LANGFUSE_HOST` stay in `AppConfig` for planned integrations, but no code reads them; Langfuse and LiteLLM are deferred until after the first release.
-
-## Setup
+The AI schema (chat history, the `vector` extension, the `ai_read` views and memory tables) lives in [`supabase/migrations/`](../../supabase/migrations/). It reads Core's tables, so run Core's Flyway migrations first. On the shared staging database, push only after the pull request merges ([Database migrations](../../docs/development/local-development.md#database-migrations)). From the repository root:
 
 ```bash
-uv sync --group dev
-cp .env.example .env
+set -a && . backend/ai/.env && set +a
+npx supabase@2.119.0 db push --db-url "$POSTGRES_URL"
 ```
+
+Add a change as a new file with `npx supabase@2.119.0 migration new <name>`; never edit a pushed file.
+
+## Configuration
+
+Settings come from `src/app_config.py`, read from the environment or `.env`; blank values fall back to the default. Write `.env` with `scripts/secrets/apply.sh staging dev` ([Secrets and env files](../../docs/development/secrets-and-env.md)) or copy `.env.example`.
+
+| Group | Variable | Default | Purpose |
+|---|---|---|---|
+| Server | `APP_TITLE` | `SmartLedger AI` | FastAPI title |
+| | `SERVER_HOST`, `SERVER_PORT` | `0.0.0.0`, `8001` | Bind address |
+| | `LOG_LEVEL` | `INFO` | Root log level |
+| Core | `INTERNAL_API_TOKEN` | unset | Shared with Core; unset rejects every `/internal/v1` route |
+| Database | `POSTGRES_URL` | unset | Application database |
+| | `POSTGRES_POOL_MAX_SIZE` | `2` | Application pool size |
+| | `REDIS_URL` | unset | Redis client |
+| Shop data | `AI_SQL_READER_URL` | unset | Read-only login; unset removes the data tools |
+| | `SQL_POOL_MAX_SIZE` | `2` | Reader pool size |
+| | `SQL_TIMEOUT_MS` | `3000` | Statement timeout |
+| | `SQL_ROW_LIMIT` | `100` | Row cap per query |
+| Model | `MODEL_ALIASES` | `chat` on `claude-haiku-5-5` over `anthropic_messages` | Alias to `protocol` and `model` |
+| | `MODEL_FALLBACKS` | `[]` | JSON list of `provider:model` |
+| | `MODEL_TIMEOUT_SECONDS` | `20` | Timeout per model request |
+| | `MODEL_REASONING_EFFORT` | `medium` | `none`, `low`, `medium` or `high` |
+| | `OPENAI_API_KEY`, `OPENAI_BASE_URL` | unset | Shared by every model; blank URL means OpenAI |
+| Guardrails | `AGENT_MAX_INPUT_CHARS` | `2000` | See [Guardrails](#guardrails) |
+| | `AGENT_MODEL_CALL_LIMIT` | `4` | |
+| | `AGENT_TOOL_CALL_LIMIT` | `3` | |
+| | `AGENT_TURN_TOKEN_LIMIT` | `200000` | |
+| | `AGENT_TURN_TIMEOUT_SECONDS` | `35` | |
+| | `AGENT_HISTORY_TURNS` | `30` | Exchanges sent with each turn |
+| Calculation | `CALC_ENABLED` | `true` | See [Calculation and sandbox](#calculation-and-sandbox) |
+| | `CALC_MAX_OPERATIONS` | `20` | |
+| | `CALC_MAX_OPERAND_VALUE` | `1e15` | |
+| Sandbox | `SANDBOX_ENABLED` | `true` | |
+| | `SANDBOX_MAX_MEMORY_BYTES` | `67108864` | |
+| | `SANDBOX_MAX_DURATION_SECS` | `5` | |
+| | `SANDBOX_MAX_TOOL_CALLS` | `3` | |
+| | `SANDBOX_MAX_SUSPENSIONS` | `1000` | |
+| Memory | `AGENT_MEMORY_ENABLED` | `false` | See [Long-term memory](#long-term-memory-off-by-default) |
+| | `AGENT_MEMORY_TYPES` | `preference,procedural,semantic` | Types the model may write |
+| | `AGENT_MEMORY_EMBEDDING_PROVIDER` | `sentence-transformers` | Or `cloudflare` |
+| | `AGENT_MEMORY_EMBEDDING_MODEL` | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | Embedding model |
+| | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | unset | Workers AI embeddings |
+| Tracing | `LOGFIRE_TOKEN` | unset | Unset sends nothing |
+| | `LOGFIRE_ENVIRONMENT` | unset | `staging` or `production` |
+| Deferred | `QDRANT_URL`, `LITELLM_URL`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` | unset | Kept for planned integrations; no code reads them |
+
+On the VPS the deploy sets the Logfire values from GitHub ([AI tracing settings](../../docs/development/ci-cd.md#ai-tracing-settings)).
 
 ## Run
 
 ```bash
+uv sync --group dev
+cp .env.example .env
 uv run python -m src.main
 ```
 
-Host and port come from `SERVER_HOST` and `SERVER_PORT`.
+To run against the local database instead of staging, see [Develop against the local database](../../docs/development/local-development.md#develop-against-the-local-database).
 
-`GET /health` returns `{"status": "ok"}` and does not check dependencies.
+### Local Compose
 
-## Local Compose
-
-From the repository root. Starts Core and this service against the shared staging Supabase and Redis Cloud databases; there are no local PostgreSQL or Redis containers. Langfuse is not part of the default stack. See [Local Compose](../../docs/development/local-development.md#local-compose) for the env files.
+From the repository root, start Core and this service against the shared staging databases ([Local Compose](../../docs/development/local-development.md#local-compose)):
 
 ```bash
 docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build
 ```
 
-- AI: `http://localhost:8001/health`
-- Compose ports use the defaults in `compose.yaml` and can be overridden with shell environment variables.
-
-To run this app on the host, put `POSTGRES_URL` and `REDIS_URL` in `.env` (`scripts/secrets/apply.sh staging dev --apply` writes them, pointing PostgreSQL at the local database from `scripts/local-db.sh`):
-
-```bash
-uv sync --group dev
-cp .env.example .env
-uv run python -m src.main
-```
+AI answers on `http://localhost:8001/health`; override the port with `AI_PORT`.
 
 ## Check
 
-Ruff replaces isort (rule `I`) and Black (`ruff-format`). Auto-fix on commit:
-
 ```bash
 uvx pre-commit install
-```
-
-```bash
 uv run ruff check --fix
 uv run ruff format
 uv run pytest
 ```
+
+`pre-commit` runs Ruff (lint, import order and format) on commit. The live draft test runs only when asked: `RUN_LIVE_MODEL_TESTS=1 uv run pytest tests/integration_tests/test_draft_parse_live.py`.
