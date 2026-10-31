@@ -17,11 +17,13 @@ export type TocItem = { id: string; label: string }
 type Props = {
   title: string
   lead: ReactNode
+  /** Ngày cập nhật của riêng trang này; mặc định là LEGAL_UPDATED */
+  updated?: string
   toc?: TocItem[]
   children: ReactNode
 }
 
-export default function LegalLayout({ title, lead, toc, children }: Props) {
+export default function LegalLayout({ title, lead, updated = LEGAL_UPDATED, toc, children }: Props) {
   useEffect(() => {
     document.title = `${title} — Sổ Nghe Lời`
     window.scrollTo(0, 0)
@@ -43,7 +45,7 @@ export default function LegalLayout({ title, lead, toc, children }: Props) {
       <main className="lp-legal-main">
         <article className="lp-legal-doc">
           <h1>{title}</h1>
-          <p className="lp-legal-meta">Cập nhật lần cuối: {LEGAL_UPDATED}</p>
+          <p className="lp-legal-meta">Cập nhật lần cuối: {updated}</p>
 
           {LEGAL_DRAFT && (
             <div className="lp-draft" role="note">

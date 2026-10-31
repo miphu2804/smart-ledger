@@ -1,3 +1,11 @@
+### 2026-10-31 — Policy page for Google Play
+
+| Area | Change |
+|---|---|
+| Web | • `/chinh-sach` carries the privacy policy, terms of use and payment policy from the team's Google Doc dated 30/10/2026, adding Zalo sign-in and the VPS as data processors<br>• Details not decided yet show highlighted as "Cần điền" and the page keeps the draft label until approved<br>• `/delete-account` opens the data deletion page, and the footer links to the new page |
+
+Check: `npm run lint`, `tsc -b` and `vite build` pass; at 375 px the page has no horizontal scroll and shows 8 highlighted places. Not verified: legal review, and the in-app account deletion the page describes does not exist yet. Commit: the one that adds this entry.
+
 ### 2026-10-30 — LLMFactory, provider classes and Bifrost routing
 
 | Area | Change |
@@ -189,11 +197,3 @@ Check: `shellcheck` on both scripts, playbook syntax check, `docker compose conf
 | Docs | • `docs/development/ci-cd.md` is rewritten as short tables, numbered steps and command blocks, from 7,525 to 3,259 words, keeping every fact a reader needs and every anchor other files link to<br>• The stale "No path filtering" limit is removed, since CI filters by path |
 
 Check: every relative link and linked anchor resolves; facts not re-checked against the workflow files. Commit: the squash merge of this branch.
-
-### 2026-10-28 — README reads as tables
-
-| Area | Change |
-|---|---|
-| Docs | • The README drops the Highlights list and gains Overview, Tech stack, color legend and Getting started tables, so each section scans without reading a paragraph<br>• The Overview lists only what Core and AI do today |
-
-Check: badge URLs resolve (18 checked earlier, Redis removed since no feature reads it); README not rendered on GitHub. Commit: the squash merge of this branch.

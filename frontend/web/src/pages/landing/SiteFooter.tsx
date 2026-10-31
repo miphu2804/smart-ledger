@@ -35,6 +35,7 @@ export default function SiteFooter({ onHome = false }: { onHome?: boolean }) {
             </nav>
             <nav className="lp-footer-col" aria-label="Pháp lý" hidden={onHome}>
               <h4>Pháp lý</h4>
+              <Link to="/chinh-sach">Chính sách và điều khoản</Link>
               <Link to="/privacy">Chính sách quyền riêng tư</Link>
               <Link to="/data-deletion">Xoá dữ liệu người dùng</Link>
               {ADMIN_ENABLED && (

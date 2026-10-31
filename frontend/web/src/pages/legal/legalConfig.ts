@@ -11,8 +11,11 @@ export const CONTACT_EMAIL: string = (__SITE__.contact_email ?? '').trim()
 
 export const CONTROLLER = 'Team HEXA (dự án môn EXE201, Trường Đại học FPT)'
 
-/** Ngày cập nhật gần nhất của cả hai trang. */
+/** Ngày cập nhật gần nhất của /privacy và /data-deletion. */
 export const LEGAL_UPDATED = '14/10/2026'
+
+/** Ngày của bản chính sách gửi Google Play (/chinh-sach). */
+export const POLICY_UPDATED = '30/10/2026'
 
 /** Số ngày nhóm cam kết xử lý yêu cầu xoá dữ liệu — con số đề xuất, chờ chủ sản phẩm xác nhận. */
 export const DELETION_DAYS = 30
