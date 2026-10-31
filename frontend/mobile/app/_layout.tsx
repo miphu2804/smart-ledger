@@ -13,9 +13,33 @@ import { ActivityIndicator, Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ToastProvider } from '../src/components/brand';
 import { UpdatePrompt } from '../src/components/UpdatePrompt';
-import { AppStoreProvider } from '../src/store/AppStore';
+import { canOpenProtectedScreens, PROTECTED_SCREENS } from '../src/lib/authGate';
+import { AppStoreProvider, useApp } from '../src/store/AppStore';
 import { colors, WEB_FRAME_MAX_WIDTH } from '../src/theme';
 import { SCREEN_ANIMATION } from '../src/motion';
+
+function AppStack() {
+  const app = useApp();
+  return (
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: colors.bg },
+        animation: SCREEN_ANIMATION,
+      }}
+    >
+      <Stack.Screen name="index" />
+      <Stack.Screen name="(auth)" />
+      <Stack.Screen name="(tabs)" />
+      {/* Chưa đăng nhập thì mở thẳng đường dẫn (vd /ai) hay hết phiên khi đang ở màn này đều về splash, rồi tới màn đăng nhập */}
+      <Stack.Protected guard={canOpenProtectedScreens(app)}>
+        {PROTECTED_SCREENS.map((name) => (
+          <Stack.Screen key={name} name={name} />
+        ))}
+      </Stack.Protected>
+    </Stack>
+  );
+}
 
 export default function RootLayout() {
   const [loaded] = useFonts({
@@ -42,19 +66,7 @@ export default function RootLayout() {
           <AppStoreProvider>
             <ToastProvider>
               <StatusBar style="dark" />
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { backgroundColor: colors.bg },
-                  animation: SCREEN_ANIMATION,
-                }}
-              >
-                <Stack.Screen name="index" />
-                <Stack.Screen name="(auth)" />
-                <Stack.Screen name="(tabs)" />
-                <Stack.Screen name="voice" options={{ animation: SCREEN_ANIMATION }} />
-                <Stack.Screen name="ai" options={{ animation: SCREEN_ANIMATION }} />
-              </Stack>
+              <AppStack />
               <UpdatePrompt />
             </ToastProvider>
           </AppStoreProvider>
