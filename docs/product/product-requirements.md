@@ -5,7 +5,7 @@
 | Trạng thái | Core: hành vi đã chốt dưới đây; AI/dashboard và FE: cần nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; người rà soát kỹ thuật |
-| Cập nhật lần cuối | 2026-10-29 (CORE-018: FR-036, AC-101–103; không rà soát lại các feature khác) |
+| Cập nhật lần cuối | 2026-10-31 (CORE-019: FR-037, AC-104–108; không rà soát lại các feature khác) |
 
 ## Tài liệu liên quan
 
@@ -100,6 +100,7 @@ Luồng hỗ trợ: ADMIN đăng nhập dashboard web, tìm OWNER hoặc cơ s�
 | `FR-034` | `BO-002`, `BR-007`, `BR-009`, `BR-021` | Create/PATCH/lookup dùng cùng chuẩn hóa barcode; OWNER tra đúng mã của Product ACTIVE trong tiệm ACTIVE mình sở hữu mà không tải danh sách. Barcode chỉ unique trên ACTIVE cùng tiệm; archive giải phóng mã nhưng giữ lịch sử. Trùng khi create/PATCH trả 409 với chi tiết Product đang giữ mã nếu service nhận diện; race DB có thể không có details. Quy ước trong [contract barcode](../contracts/api-contracts.md#barcode-core-012). | CORE-012 #163/#164 trên feat/core-barcode; cần V16 và phối hợp FE/nghiệm thu staging |
 | `FR-035` | `BR-001` | Trên bốn tab chính (Tổng quan, Đơn hàng, Bán hàng, Quản lý), OWNER mở menu chuyển nhanh trượt từ bên trái bằng nút ☰ (Tổng quan: cạnh logo; Quản lý: cạnh tiêu đề; Đơn hàng và Bán hàng: bên trái ô tìm; Tổng quan và Bán hàng còn có nút gọn ở phần đầu đã thu khi cuộn) hoặc vuốt từ mép trái. Menu liệt kê Tổng quan, Bán hàng, Đơn hàng, Công nợ, Hàng hoá, Báo cáo, Chi phí, Trợ lý AI và Cài đặt, đánh dấu màn đang mở; chạm một mục là chuyển ngay. Thanh tab dưới giữ nguyên. | P1 — MVP |
 | `FR-036` | `BO-003`, `BR-023` | Khi được bật sau migration, Core ghi tối đa một ngày hoạt động cho mỗi user ACTIVE có request API nghiệp vụ đã xác thực và phản hồi 2xx/3xx, gồm API đọc; ngày theo Asia/Ho_Chi_Minh tại lúc nhận request. Không tính public OAuth, health, OPTIONS hoặc 4xx/5xx. Lưu mã user/ngày trong 90 ngày gồm hôm nay; cache có giới hạn, lỗi ghi không đổi response nghiệp vụ và được thử lại. Grafana đọc DAU/MAU tách OWNER/ADMIN, bỏ email bắt đầu loadtest+; MAU là 30 ngày lịch gồm hôm nay. Không thêm API FE, không đo CCU hay hiệu quả câu trả lời AI. | CORE-018 #409; chủ sản phẩm duyệt ngày 2026-10-29; nhánh feat/core-daily-activity, chưa nghiệm thu staging |
+| `FR-037` | `BR-024` | Core giới hạn thao tác thành công theo tài khoản; dùng chung giữa các instance, giữ qua restart và miễn replay hợp lệ. Nhóm, cửa sổ, lease, lỗi và retry theo [contract](../contracts/api-contracts.md#giới-hạn-thao-tác-core-019). | CORE-019 #430; đã duyệt ngày 2026-10-31, mặc định tắt, chưa nghiệm thu staging |
 
 `FR-001`–`FR-009` giữ nguyên mã. `FR-007` không bị tái sử dụng cho yêu cầu khác.
 
@@ -283,6 +284,16 @@ chứng, không phải tuyên bố FE hoặc staging đã đạt.
 | `AC-101` | API đọc/ghi thành công của OWNER hoặc ADMIN ACTIVE tạo đúng một dòng user/ngày, kể cả lần POST auth/session vừa tạo profile. Không có dòng cho token thiếu/sai, UID chưa có Core profile, tài khoản DISABLED, OPTIONS, health, public OAuth hoặc response 4xx/5xx. ID do server ánh xạ, không tin email/user ID do client gửi. | `FR-036`, `BR-023`, `NFR-003` |
 | `AC-102` | Ngày lấy theo Asia/Ho_Chi_Minh lúc nhận request; async chỉ ghi sau dispatch cuối thành công và giữ ngày bắt đầu qua nửa đêm. Retry/đồng thời/nhiều instance/restart không trùng user/ngày. Cache có trần và tự hết hạn; ghi DB thất bại không điền cache, không đổi response nghiệp vụ và request hợp lệ sau được thử lại; không ghi credential hay payload vào log. | `FR-036`, `BR-023`, `NFR-008` |
 | `AC-103` | V19 nâng cấp từ V18 giữ dữ liệu cũ, có FK/PK/index và RLS không mở quyền cho client. Dọn dữ liệu trước hôm nay trừ 89 ngày, giữ ngày biên; SQL Grafana dùng múi giờ Việt Nam, tách role, bỏ loadtest+, MAU distinct trong hôm nay và 29 ngày trước. Tính năng mặc định tắt, chỉ bật sau migration đã merge; SQL chạy bằng role chỉ đọc trên staging là nghiệm thu vận hành riêng. | `FR-036`, `BR-023` |
+
+### Giới hạn thao tác CORE-019 — đã duyệt ngày 2026-10-31
+
+| ID | Tiêu chí | Truy vết |
+|---|---|---|
+| `AC-104` | Cùng tài khoản có tổng tối đa 10 upload mới thành công/60 giây cho avatar, ảnh Product và logo trên mọi shop; tạo tiệm tối đa 5 thành công/24 giờ từ request đầu, không reset 00:00. Tài khoản và nhóm khác độc lập; không thay giới hạn tổng số tiệm. | `FR-037`, `BR-024` |
+| `AC-105` | Quota, thay đổi nghiệp vụ, audit và kết quả idempotency commit/rollback cùng nhau. Provider/DB lỗi không tăng thành công; replay đúng key/body được trả dù quota đã đầy và không upload/audit/tính lượt lần nữa. Đã commit nhưng mất response vẫn tính một lần; POST tạo shop chưa có idempotency. | `FR-037`, `BR-019`, `BR-017` |
+| `AC-106` | Hai instance và instance mới sau restart thấy cùng counter. Lượt PENDING chiếm chỗ tạm thời; lease hết hạn được thu hồi và request mất lease không được ghi nghiệp vụ. Hoàn tất trễ vẫn tính cửa sổ đã giữ chỗ. DB lỗi không fallback RAM; giới hạn không dựa trên token/email/ID do client tự khai báo. | `FR-037`, `NFR-003` |
+| `AC-107` | Proxy được tin cậy đưa đúng IP client đến Zalo limiter; peer không được tin cậy không đổi IP bằng header giả. 429 có Retry-After/no-store theo contract và FE đọc được header qua CORS; giữ 401/quyền OWNER/ADMIN và các route ngoài phạm vi. | `FR-037`, `NFR-003` |
+| `AC-108` | V20 nâng cấp V19 giữ dữ liệu cũ, có FK/index/constraint, RLS và không mở quyền client. Tính năng quota mặc định tắt; chỉ bật sau migration đã merge và toàn bộ writer được nâng cấp. Test PostgreSQL local không tự nghiệm thu Caddy/FE/staging/production. | `FR-037`, `BR-024` |
 
 ## 9. Phạm vi và câu hỏi mở
 

@@ -42,9 +42,10 @@ import org.springframework.transaction.annotation.*;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-@DataJpaTest(showSql = false, properties = {"spring.flyway.enabled=true", "spring.jpa.hibernate.ddl-auto=validate"})
+@DataJpaTest(showSql = false, properties = {"spring.flyway.enabled=true", "spring.jpa.hibernate.ddl-auto=validate",
+        "smartledger.rate-limit.enabled=true"})
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({MediaUploadKeyRepository.class, MediaIdempotencyReplay.class, MediaCleanupJobServiceImpl.class,
+@Import({com.smartledger.core.ratelimit.UserRateLimitService.class, com.smartledger.core.repository.UserRateLimitRepository.class, MediaUploadKeyRepository.class, MediaIdempotencyReplay.class, MediaCleanupJobServiceImpl.class,
         MediaWriteTransactionService.class, AuditLogServiceImpl.class, AuthSessionServiceImpl.class,
         ShopServiceImpl.class, NotificationEventServiceImpl.class, MediaConcurrencyPostgresTest.Config.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -67,6 +68,73 @@ class MediaConcurrencyPostgresTest {
     @Autowired ShopService shopProfiles;
     long userId;
     String uid;
+
+    @Test void concurrentAvatarCommitsDoNotDeadlockOrExceedSharedQuota() throws Exception {
+        var accepted=new java.util.concurrent.atomic.AtomicInteger();
+        try(var pool=Executors.newFixedThreadPool(12)) {
+            var tasks=java.util.stream.IntStream.range(0,18).mapToObj(n->pool.submit(()->{
+                try {
+                    var pending=reserve("concurrent-quota-"+n,"concurrent-asset-"+n);
+                    writes.saveAvatar(users.findById(userId).orElseThrow(),pending,new StoredMedia("concurrent-asset-"+n,"url"));
+                    accepted.incrementAndGet();
+                } catch(BusinessException error) { assertThat(error.getErrorCode()).isEqualTo(ErrorCode.RATE_LIMITED); }
+            })).toList();
+            for(var task:tasks) task.get(20,TimeUnit.SECONDS);
+        }
+        assertThat(accepted.get()).isEqualTo(10);
+        assertThat(jdbc.queryForObject("SELECT sum(successful_count) FROM user_rate_limit_windows WHERE user_id=?",Integer.class,userId)).isEqualTo(10);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs WHERE actor_user_id=?",Integer.class,userId)).isEqualTo(10);
+    }
+
+    @Test void replayRemainsFreeAfterTenCommittedUploadsAndConflictStaysConflict() {
+        for(int n=0;n<10;n++) {
+            var pending=reserve("quota-"+n,"quota-asset-"+n);
+            writes.saveAvatar(users.findById(userId).orElseThrow(),pending,new StoredMedia("quota-asset-"+n,"url"));
+        }
+        assertThat(replay.reserve(null,userId,"USER_AVATAR_UPLOAD","quota-0",
+                new MediaUploadRequest("quota-asset-0","hash"),MediaWriteTransactionService.SavedAvatar.class).isReplay()).isTrue();
+        expectCode(()->reserve("quota-0","changed-asset"),ErrorCode.IDEMPOTENCY_KEY_CONFLICT);
+        expectCode(()->reserve("quota-new","new-asset"),ErrorCode.RATE_LIMITED);
+        assertThat(jdbc.queryForObject("SELECT sum(successful_count) FROM user_rate_limit_windows WHERE user_id=?",Integer.class,userId)).isEqualTo(10);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs WHERE actor_user_id=?",Integer.class,userId)).isEqualTo(10);
+        assertThat(keys.findOptional("USER:"+userId,"USER_AVATAR_UPLOAD","quota-new")).isEmpty();
+        verifyNoInteractions(storage);
+    }
+
+    @Test void providerFailureReleasesBothLeasesAndRetryCountsOnlyCommittedWrite() {
+        var reader=mock(MultipartImageReader.class);
+        var ids=mock(MediaPublicIdFactory.class);
+        var file=mock(org.springframework.web.multipart.MultipartFile.class);
+        var image=new ValidatedImage(new byte[]{1},"image/png",1,1,"hash");
+        when(reader.read(file)).thenReturn(image);
+        when(ids.createAvatar(userId,"provider-retry","hash")).thenReturn("provider-retry-asset");
+        when(storage.upload(any())).thenThrow(new BusinessException(ErrorCode.MEDIA_UNAVAILABLE));
+        // Quota, idempotency and final writes use real PostgreSQL; provider calls remain mocked.
+        var identityLookup=mock(AuthIdentityRepository.class);
+        when(identityLookup.findWithUserByProviderSubject(uid)).thenReturn(Optional.of(
+                com.smartledger.core.entity.AuthIdentity.forFirebase(users.findById(userId).orElseThrow(),uid)));
+        var service=new MediaServiceImpl(shopProfiles,mock(ProductRepository.class),identityLookup,reader,ids,storage,replay,writes);
+        var token=new VerifiedFirebaseToken(uid,null,true,null,null,null);
+        expectCode(()->service.uploadAvatar(token,"provider-retry",file),ErrorCode.MEDIA_UNAVAILABLE);
+        assertThat(keys.findOptional("USER:"+userId,"USER_AVATAR_UPLOAD","provider-retry")).isEmpty();
+        assertThat(jdbc.queryForObject("SELECT sum(successful_count) FROM user_rate_limit_windows WHERE user_id=?",Integer.class,userId)).isZero();
+        doReturn(new StoredMedia("provider-retry-asset","url")).when(storage).upload(any());
+        service.uploadAvatar(token,"provider-retry",file);
+        assertThat(jdbc.queryForObject("SELECT sum(successful_count) FROM user_rate_limit_windows WHERE user_id=?",Integer.class,userId)).isEqualTo(1);
+    }
+
+    @Test void shopQuotaCommitsWithShopAndAuditAndRollsBackOnLateFailure() {
+        var token=new VerifiedFirebaseToken(uid,null,true,null,null,null);
+        var request=new com.smartledger.core.dto.request.ShopCreateRequest("Quota shop","IT",null,null);
+        assertThatThrownBy(()->new TransactionTemplate(tx).execute(s->{
+            shopProfiles.create(token,request); throw new IllegalStateException("late failure");
+        })).isInstanceOf(IllegalStateException.class);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM shops WHERE owner_id=?",Integer.class,userId)).isZero();
+        for(int n=0;n<5;n++) shopProfiles.create(token,request);
+        expectCode(()->shopProfiles.create(token,request),ErrorCode.RATE_LIMITED);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM shops WHERE owner_id=?",Integer.class,userId)).isEqualTo(5);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs WHERE actor_user_id=?",Integer.class,userId)).isEqualTo(5);
+    }
 
     @DynamicPropertySource static void schema(DynamicPropertyRegistry properties) {
         properties.add("spring.jpa.properties.hibernate.default_schema", () -> SCHEMA);

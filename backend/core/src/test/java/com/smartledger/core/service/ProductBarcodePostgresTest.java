@@ -45,7 +45,7 @@ import org.springframework.test.context.DynamicPropertySource;
 /** Uses existing migrations in a disposable schema; verifies exact lookup, permissions and SQL/index usage. */
 @DataJpaTest(showSql = false, properties = {"spring.flyway.enabled=true", "spring.jpa.hibernate.ddl-auto=validate"})
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({ProductServiceImpl.class, ShopServiceImpl.class, ProductBarcodePostgresTest.Config.class})
+@Import({com.smartledger.core.ratelimit.UserRateLimitService.class, com.smartledger.core.repository.UserRateLimitRepository.class, ProductServiceImpl.class, ShopServiceImpl.class, ProductBarcodePostgresTest.Config.class})
 @EnabledIfEnvironmentVariable(named = "CORE_TEST_POSTGRES_URL", matches = "jdbc:postgresql:.+")
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class ProductBarcodePostgresTest {

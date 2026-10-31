@@ -27,6 +27,15 @@ import org.springframework.web.multipart.support.MissingServletRequestPartExcept
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+    @ExceptionHandler(com.smartledger.core.ratelimit.RateLimitExceededException.class)
+    ResponseEntity<ApiErrorResponse> handleRateLimit(
+            com.smartledger.core.ratelimit.RateLimitExceededException exception, HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", Long.toString(exception.retryAfter()))
+                .header("Cache-Control", "no-store")
+                .body(new ApiErrorResponse(exception.getErrorCode().getCode(), exception.getMessage(),
+                        exception.getDetails(), traceId(request)));
+    }
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
     private static final Map<String, ErrorCode> UNIQUE_CONSTRAINTS = Map.of(
             // Support both V16 and older databases during controlled rollout.

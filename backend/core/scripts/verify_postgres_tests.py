@@ -6,6 +6,17 @@ from xml.etree import ElementTree
 
 
 REQUIRED = {
+    "com.smartledger.core.ratelimit.UserRateLimitPostgresTest": {
+        "migrationPreservesV19AndAddsPrivateConstrainedTables",
+        "migrationCollisionRollsBackBothTablesAndPreservesV19",
+        "independentInstancesAndRestartShareExactlyTenSuccessfulSlots",
+        "failureAndRollbackDoNotConsumeSuccessOrMoveWindowAnchor",
+        "shopWindowIsTwentyFourHoursAndUsersAndGroupsAreIndependent",
+        "pendingSlotsBlockOverbookingAndExpiredLeaseCannotCommit",
+        "lateCompletionStaysInItsOriginalWindow",
+        "missingStoreFailsClosedAndDisabledFeatureDoesNotQueryIt",
+        "cleanupRetainsLiveLeasesAndOnlyDeletesExpiredWindows",
+    },
     "com.smartledger.core.activity.UserDailyActivityPostgresTest": {
         "upgradePreservesExistingDataAndOnlyAddsEmptyDailyActivity",
         "firstRequestAfterUserCreationResolvesCanonicalIdAndDisabledUsersAreSkipped",
@@ -109,6 +120,10 @@ REQUIRED = {
         "omittedCategoryKeepsLatestAssignmentAfterPreloadedProductWaitsForAnotherPatch",
     },
     "com.smartledger.core.service.MediaConcurrencyPostgresTest": {
+        "replayRemainsFreeAfterTenCommittedUploadsAndConflictStaysConflict",
+        "concurrentAvatarCommitsDoNotDeadlockOrExceedSharedQuota",
+        "providerFailureReleasesBothLeasesAndRetryCountsOnlyCommittedWrite",
+        "shopQuotaCommitsWithShopAndAuditAndRollsBackOnLateFailure",
         "simultaneousSameAvatarKeyOnlyReservesOnce",
         "avatarAuditAndReferenceRollbackTogetherAndKeepPendingKey",
         "managedAvatarWriterPreservesSessionProfileCommittedDuringUpload",

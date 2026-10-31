@@ -5,7 +5,7 @@
 | Trạng thái | đích MVP; Core hiện có được phân biệt với phần chưa tích hợp |
 | Chủ sở hữu | Chủ kỹ thuật |
 | Người rà soát | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-10-29 (CORE-018) |
+| Cập nhật lần cuối | 2026-10-31 (CORE-019) |
 
 ## Tài liệu liên quan
 
@@ -15,6 +15,10 @@
 - Nguồn đối chiếu hiện tại: [`frontend/mobile`](../../frontend/mobile/README.md), [`frontend/web`](../../frontend/web/README.md), [`backend/core`](../../backend/core/src/main/java/com/smartledger/core/controller/AuthController.java) và [`backend/ai`](../../backend/ai/src/agent/router.py). FE EXE201 là nguồn lịch sử khi soạn phạm vi ban đầu.
 
 ## 1. Phạm vi
+
+### CORE-019 — quota thao tác thành công
+
+Core có policy theo nhóm, filter khởi tạo cửa sổ sau xác thực và service/repository quota PostgreSQL; V20 thêm hai bảng riêng. Quota hoàn tất cùng transaction shop/media/audit/idempotency, replay không tiêu lượt. `USER_RATE_LIMIT_ENABLED` mặc định false; migration shared DB, nâng cấp toàn bộ writer, bật flag và nghiệm thu Caddy/FE là các bước vận hành riêng. Native forwarded header dùng trust boundary Tomcat; không mặc định chỉ tin Docker network edge. Chi tiết hành vi ở [contract](../contracts/api-contracts.md#giới-hạn-thao-tác-core-019), schema và recovery ở [Core rollout](../../backend/core/docs/user-rate-limits.md).
 
 ### CORE-018 — hoạt động người dùng theo ngày
 

@@ -73,7 +73,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 @DataJpaTest(showSql = false, properties = {"spring.flyway.enabled=true", "spring.jpa.hibernate.ddl-auto=validate"})
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({SaleDraftServiceImpl.class, SaleVoidServiceImpl.class, ShopServiceImpl.class,
+@Import({com.smartledger.core.ratelimit.UserRateLimitService.class, com.smartledger.core.repository.UserRateLimitRepository.class, SaleDraftServiceImpl.class, SaleVoidServiceImpl.class, ShopServiceImpl.class,
         AuditLogServiceImpl.class, AdminAccessAuditService.class, NotificationEventServiceImpl.class,
         IdempotencyServiceImpl.class, IdempotencyKeyRepository.class, ProductBatchLockPostgresTest.Config.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
