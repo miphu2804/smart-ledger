@@ -10,7 +10,7 @@ Nguồn sơ đồ: [`agent-memory.drawio`](../diagrams/src/agent-memory.drawio),
 
 ## Bối cảnh
 
-- Agent hiện chỉ nhớ trong một hội thoại: mỗi lượt gửi `AGENT_HISTORY_TURNS` lượt gần nhất (mặc định 30), không tóm tắt, không có tool tìm lịch sử ([Ngữ cảnh chat](../../contracts/api-contracts.md#ngữ-cảnh-chat), [AI README](../../../backend/ai/README.md#chat-context)). Thói quen hay sở thích chủ tiệm nói ở hội thoại khác không tới được model.
+- Agent hiện chỉ nhớ trong một hội thoại: mỗi lượt gửi `AGENT_HISTORY_TURNS` lượt gần nhất (mặc định 30), không tóm tắt, không có tool tìm lịch sử ([Ngữ cảnh chat](../../contracts/api-contracts.md#ngữ-cảnh-chat), [AI README](../../../backend/ai/README.md#chat-history-and-context)). Thói quen hay sở thích chủ tiệm nói ở hội thoại khác không tới được model.
 - Team đã xem ba lựa chọn "long-term memory" của Tencent. Chỉ một lựa chọn chạy trên PostgreSQL: tính năng Agent Long-Term Memory của TencentDB for PostgreSQL, mô tả trong hướng dẫn chính thức.
 - [ADR-0001](0001-vector-store-pgvector.md) đã chốt: embedding nằm trong PostgreSQL của Supabase, mọi truy vấn vector lọc `shop_id` trong cùng câu SQL.
 - PRD chưa có yêu cầu nào về memory dài hạn. ADR này chỉ ghi phát hiện và hướng kiến trúc để PO quyết định có làm hay không.
@@ -81,7 +81,7 @@ Giữ **D** cho tới khi PO duyệt yêu cầu. Nếu PO duyệt, làm theo **A
 
 ## Hệ quả
 
-- Khi làm: thêm FR/NFR/AC vào PRD (và BRD nếu PO coi đây là phạm vi nghiệp vụ mới), cập nhật [Ngữ cảnh chat](../../contracts/api-contracts.md#ngữ-cảnh-chat), [AI README](../../../backend/ai/README.md#chat-context), [Technical design §1](../technical-design.md#1-phạm-vi), `erd.dbml` và trang quyền riêng tư nếu cần, vì nội dung chat được gửi thêm tới model chat để trích và tóm tắt fact.
+- Khi làm: thêm FR/NFR/AC vào PRD (và BRD nếu PO coi đây là phạm vi nghiệp vụ mới), cập nhật [Ngữ cảnh chat](../../contracts/api-contracts.md#ngữ-cảnh-chat), [AI README](../../../backend/ai/README.md#chat-history-and-context), [Technical design §1](../technical-design.md#1-phạm-vi), `erd.dbml` và trang quyền riêng tư nếu cần, vì nội dung chat được gửi thêm tới model chat để trích và tóm tắt fact.
 - Khi bật với provider `sentence-transformers`, image AI phải cài nhóm `memory` (sentence-transformers, `torch`), vì proxy chat hiện tại không phục vụ `/v1/embeddings`. Provider `cloudflare` không cần nhóm này nhưng gửi tin nhắn của chủ tiệm và fact tới Cloudflare để embed, và cần `CLOUDFLARE_ACCOUNT_ID` cùng `CLOUDFLARE_API_TOKEN`.
 - Mỗi lượt có memory tốn thêm một lần embed khi đọc (local, hoặc một lời gọi Workers AI với `cloudflare`); sau lượt thêm một lời gọi model và một lần embed fact khi ghi và, khi có memory cũ cần tóm tắt, tối đa 3 lời gọi model cùng 3 lần embed (mỗi nhóm một lời gọi model và một lần embed các fact thay thế).
 - Request và response của `/internal/v1/agent/chat` và `/api/v1/agent/chat` không đổi; endpoint `memory/settings` và sự kiện SSE `memory` của route stream được thêm ở các mục "Bổ sung" bên dưới.

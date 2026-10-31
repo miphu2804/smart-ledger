@@ -48,7 +48,7 @@ from src.prompt_templates import (
     SHOP_AGENT_SYSTEM_PROMPT,
     SQL_AGENT_PROMPT,
 )
-from src.providers.factory import session_settings
+from src.providers.session_settings import session_settings
 from src.restock.service import RestockService
 from src.sandbox.wrapper import Sandbox
 from src.sql.repository import ShopDataRepository
@@ -258,7 +258,7 @@ class AgentService:
                 message_history=self._model_messages(history),
                 deps=context,
                 usage_limits=self.guardrails.usage_limits,
-                model_settings=session_settings(session_id),
+                model_settings=session_settings(session_id, context.shop_id),
             ) as run,
         ):
             answer = ""
@@ -352,7 +352,7 @@ class AgentService:
                 message_history=self._model_messages(history),
                 deps=context,
                 usage_limits=self.guardrails.usage_limits,
-                model_settings=session_settings(session_id),
+                model_settings=session_settings(session_id, context.shop_id),
             ) as run,
         ):
             # The answer a response wrote alongside screen-button calls only.
