@@ -1,3 +1,12 @@
+### 2026-10-31 — Dozzle and Snoopy for VPS operators
+
+| Area | Change |
+|---|---|
+| Deploy | • The monitoring stack runs Dozzle `v11.4.0` for live container logs, bound to `127.0.0.1:8081` with a 64 MiB limit and reached through an SSH tunnel<br>• The playbook installs Snoopy, accepting its `ld.so.preload` prompt, and adds the `snooplog` shortcut |
+| Docs | • The CI/CD guide describes the tunnel, why Dozzle gets no Caddy site, and what Snoopy can and cannot prove |
+
+Check: a manual Dozzle container on the VPS listed all 13 containers through the tunnel, `docker compose config` accepted the service, `ansible-playbook --syntax-check` passed and the Snoopy debconf key matches the installed package. Not verified: a real playbook run, or the preseed on a new VPS.
+
 ### 2026-10-30 — Alerts as Discord embeds and Telegram messages
 
 | Area | Change |
@@ -186,12 +195,3 @@ Check: badge URLs resolve (18 checked earlier, Redis removed since no feature re
 | Docs | • The README opens with a tech stack badge row, a short summary and highlights, and shows `ci-cd.svg` as the system architecture instead of the older `architecture.svg`<br>• The parts table gains a "Runs on" column and no longer names Railway |
 
 Check: all 18 badge URLs return 200 with a logo; the page was not rendered on GitHub. Commit: the squash merge of this branch.
-
-### 2026-10-28 — Production Core answers on production.103-162-31-93.sslip.io
-
-| Area | Change |
-|---|---|
-| Deploy | • The production Caddy site serves `production.103-162-31-93.sslip.io` instead of the shorthand `prod.103-162-31-93.sslip.io`, which no client used yet |
-| Docs | • The CI/CD guide uses the new name and records that environment names are spelled out, never shortened |
-
-Check: playbook applied for production; `https://production.103-162-31-93.sslip.io/actuator/health` returns 200 `UP` with its own certificate, Core and AI still run `4a4f714`, staging still answers. Commit: the merge of this branch.

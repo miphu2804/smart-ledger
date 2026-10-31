@@ -85,6 +85,27 @@
         dest: /usr/local/bin
         include: [lazydocker]
 
+    # Snoopy logs every command with its SSH source to /var/log/auth.log, which shows who ran what on the shared root
+    # login. It only works through /etc/ld.so.preload, and its package asks before adding itself there. It is easy to
+    # bypass, so it records routine work and does not stop someone evading it on purpose.
+    - name: Accept Snoopy's preload prompt
+      ansible.builtin.debconf:
+        name: snoopy
+        question: snoopy/install-ld-preload
+        value: "true"
+        vtype: boolean
+
+    - name: Install Snoopy
+      ansible.builtin.apt:
+        name: snoopy
+
+    - name: Add the snooplog shortcut, which skips background jobs
+      ansible.builtin.copy:
+        dest: /etc/profile.d/snooplog.sh
+        mode: "0644"
+        content: |
+          alias snooplog="grep snoopy /var/log/auth.log | grep -v 'ssh:((undefined))' | tail -50"
+
     - name: Fail without the domain or deploy key
       ansible.builtin.assert:
         that: caddy_domain | length > 0 and deploy_public_key | length > 0
