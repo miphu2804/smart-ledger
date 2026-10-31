@@ -17,7 +17,8 @@ import org.junit.jupiter.api.Test;
 class MediaIdempotencyReplayTest {
     private final ObjectMapper mapper = new ObjectMapper();
     private final MediaUploadKeyRepository repository = mock(MediaUploadKeyRepository.class);
-    private final MediaIdempotencyReplay replay = new MediaIdempotencyReplay(repository, mapper, 30, 300);
+    private final MediaIdempotencyReplay replay = new MediaIdempotencyReplay(repository, mapper, 30, 300,
+            mock(com.smartledger.core.ratelimit.UserRateLimitService.class));
     private final MediaUploadRequest request = new MediaUploadRequest("public-id", "file-hash");
 
     @Test void rejectsPendingAndConflictingRequests() throws Exception {

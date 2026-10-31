@@ -7,6 +7,9 @@ import org.springframework.http.HttpStatus;
 @Getter
 @RequiredArgsConstructor
 public enum ErrorCode {
+    RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "rate_limited", "The operation quota is temporarily full. Retry later."),
+    RATE_LIMIT_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "rate_limit_unavailable", "The shared operation quota is unavailable. Retry later."),
+    RATE_LIMIT_RESERVATION_EXPIRED(HttpStatus.CONFLICT, "rate_limit_reservation_expired", "This operation lease expired. Retry with the same idempotency key."),
     ZALO_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "zalo_unavailable", "Zalo sign-in is unavailable. Start again later."),
     INVALID_ZALO_REQUEST(HttpStatus.BAD_REQUEST, "invalid_zalo_request", "The Zalo sign-in request is invalid."),
     ZALO_SESSION_INVALID(HttpStatus.BAD_REQUEST, "zalo_session_invalid", "This Zalo attempt is invalid or has already been used. Start again."),

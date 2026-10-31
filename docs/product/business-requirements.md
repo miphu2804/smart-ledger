@@ -5,7 +5,7 @@
 | Trạng thái | Core: quy tắc dưới đây đã chốt; AI/dashboard: đích MVP, cần nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ kinh doanh/sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; chủ thuế cho `BR-INV-*` |
-| Cập nhật lần cuối | 2026-10-29 (CORE-018: hoạt động theo ngày; không rà soát lại căn cứ pháp lý) |
+| Cập nhật lần cuối | 2026-10-31 (CORE-019: BR-024; không rà soát lại căn cứ pháp lý) |
 
 ## Tài liệu liên quan
 
@@ -102,6 +102,9 @@ Hóa đơn điện tử là initiative kế tiếp, không mặc nhiên thuộc 
 | `BR-021` | Barcode là mã định danh tùy chọn của mặt hàng trong tiệm: khớp chính xác, phân biệt hoa thường, giữ chữ/dấu/số 0 đầu. Chỉ sản phẩm ACTIVE giữ quyền dùng mã; archive giải phóng mã cho sản phẩm khác nhưng giữ nguyên sản phẩm và tham chiếu lịch sử sale/draft. OWNER chỉ tra mã trong tiệm ACTIVE mình sở hữu; không dùng danh mục tiệm khác hoặc sản phẩm giả để thay thế kết quả không tìm thấy/lỗi. |
 | `BR-022` | OWNER có thể đăng nhập Zalo hoặc chủ động liên kết Zalo vào tài khoản đang sở hữu. Liên kết phải chứng minh quyền sở hữu cả Zalo và tài khoản hiện tại; không tự gộp theo tên/email/ảnh, không chuyển identity đang thuộc tài khoản khác. Đăng nhập lại giữ một tài khoản chuẩn và dữ liệu tiệm; không khôi phục tài khoản bị khóa hoặc nâng quyền. Core tiếp tục chỉ nhận Firebase ID token cho API nghiệp vụ. |
 | `BR-023` | Nhóm vận hành đo mức sử dụng bằng ngày có request API nghiệp vụ đã xác thực và thành công, kể cả chỉ đọc. Phân biệt OWNER/ADMIN và tài khoản load test; chỉ lưu mã user/ngày, giữ 90 ngày theo quyết định sản phẩm. Lỗi thống kê không cản nghiệp vụ; không coi số tạo mới, số request, DAU/MAU hoặc dữ liệu thống kê có thể mất khi lỗi là cùng một chỉ số hay sổ audit. |
+| `BR-024` | Giới hạn upload ảnh và tạo tiệm theo tài khoản phải dùng chung giữa các instance và giữ qua restart. Chỉ thao tác đã commit tiêu lượt; lỗi/rollback và replay hợp lệ không tiêu thêm. Cửa sổ tạo tiệm là 24 giờ từ request đầu, không theo ngày lịch. Lượt giữ chỗ tạm thời ngăn vượt ngưỡng khi đồng thời; đây không phải giới hạn tổng số tiệm hoặc quota chat AI. |
+
+Truy vết CORE-019 đã được chủ dự án chốt ngày 2026-10-31: `BR-024` → `FR-037` → `AC-104`–`AC-108`; ngưỡng và lỗi API được định nghĩa tại [contract](../contracts/api-contracts.md#giới-hạn-thao-tác-core-019).
 
 `BR-003` giữ nguyên ý: người bán quyết định số liệu được ghi.
 

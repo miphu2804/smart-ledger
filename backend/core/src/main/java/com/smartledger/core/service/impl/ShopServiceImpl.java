@@ -22,6 +22,9 @@ import com.smartledger.core.repository.ShopRepository;
 import com.smartledger.core.security.VerifiedFirebaseToken;
 import com.smartledger.core.service.ShopService;
 import com.smartledger.core.service.NotificationEventService;
+import com.smartledger.core.ratelimit.UserRateLimitService;
+import com.smartledger.core.ratelimit.RateLimitPolicy;
+import java.util.UUID;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import java.util.List;
@@ -39,22 +42,26 @@ public class ShopServiceImpl implements ShopService {
     private final AuthIdentityRepository authIdentityRepository;
     private final ShopRepository shopRepository;
     private final EntityManager entityManager;
+    private final UserRateLimitService quota;
 
     public ShopServiceImpl(AuthIdentityRepository authIdentityRepository, ShopRepository shopRepository,
             AuditLogService auditLogService, AdminAccessAuditService adminAccessAuditService,
-            NotificationEventService notifications, EntityManager entityManager) {
+            NotificationEventService notifications, EntityManager entityManager, UserRateLimitService quota) {
         this.notifications = notifications;
         this.auditLogService = auditLogService;
         this.adminAccessAuditService = adminAccessAuditService;
         this.authIdentityRepository = authIdentityRepository;
         this.shopRepository = shopRepository;
         this.entityManager = entityManager;
+        this.quota = quota;
     }
 
     @Override
     @Transactional
     public ShopResponse create(VerifiedFirebaseToken firebaseToken, ShopCreateRequest request) {
         UserAccount owner = requireActiveOwner(firebaseToken);
+        UUID quotaToken = UUID.randomUUID();
+        quota.reserve(owner.getId(), RateLimitPolicy.SHOP_CREATE, quotaToken);
         Shop shop = Shop.create(
                 owner.getId(),
                 request.name().trim(),
@@ -63,6 +70,7 @@ public class ShopServiceImpl implements ShopService {
                 normalizeOptional(request.address()));
         shop = shopRepository.save(shop);
         auditLogService.recordOwner(shop, AuditAction.SHOP_CREATED, shop.getId(), null, null, Map.of());
+        quota.complete(owner.getId(), RateLimitPolicy.SHOP_CREATE, quotaToken);
         return toResponse(shop);
     }
 

@@ -49,7 +49,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Flyway migrates ONLY a generated test schema; no user DB changes. */
 @DataJpaTest(showSql = false, properties = {"spring.flyway.enabled=true", "spring.jpa.hibernate.ddl-auto=validate"})
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({AuditLogServiceImpl.class, AuditLogQueryServiceImpl.class, ShopServiceImpl.class,
+@Import({com.smartledger.core.ratelimit.UserRateLimitService.class, com.smartledger.core.repository.UserRateLimitRepository.class, AuditLogServiceImpl.class, AuditLogQueryServiceImpl.class, ShopServiceImpl.class,
         AdminAccessAuditService.class, NotificationEventServiceImpl.class,
         CategoryServiceImpl.class, ProductServiceImpl.class, SaleDraftServiceImpl.class, DebtServiceImpl.class,
         SaleVoidServiceImpl.class, SaleServiceImpl.class, PaymentServiceImpl.class,

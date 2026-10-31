@@ -58,7 +58,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 /** Actual OWNER/ADMIN services, row-lock coordination and audit/notification writes in a disposable schema. */
 @DataJpaTest(showSql = false, properties = {"spring.flyway.enabled=true", "spring.jpa.hibernate.ddl-auto=validate"})
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({ShopServiceImpl.class, AuditLogServiceImpl.class, AdminAccessAuditService.class,
+@Import({com.smartledger.core.ratelimit.UserRateLimitService.class, com.smartledger.core.repository.UserRateLimitRepository.class, ShopServiceImpl.class, AuditLogServiceImpl.class, AdminAccessAuditService.class,
         NotificationEventServiceImpl.class, ShopConcurrencyPostgresTest.Config.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @EnabledIfEnvironmentVariable(named = "CORE_TEST_POSTGRES_URL", matches = "jdbc:postgresql:.+")
