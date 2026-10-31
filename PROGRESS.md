@@ -2,8 +2,7 @@
 
 | Area | Change |
 |---|---|
-| CI | • `select-runner.yml` accepts `blacksmith` and picks `blacksmith-2vcpu-ubuntu-2404`, while fork pull requests stay on `ubuntu-24.04`<br>• CI restores the npm and Maven caches unless `self-hosted` was picked, because a Blacksmith runner would otherwise lose them |
-| Docs | • The CI/CD guide describes the value and keeps deploys on `CD_RUNNER=self-hosted` |
+| CI | • `select-runner.yml` accepts `blacksmith` and picks `blacksmith-2vcpu-ubuntu-2404`, while fork pull requests stay on `ubuntu-24.04`<br>• CI restores the npm and Maven caches unless `self-hosted` was picked, because a Blacksmith runner would otherwise lose them<br>• The CI/CD guide keeps deploys on `CD_RUNNER=self-hosted` |
 
 Check: `actionlint` passed and the pick script returned the expected runner for each choice. Commit: the one that adds this entry.
 

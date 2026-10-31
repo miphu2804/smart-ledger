@@ -2,8 +2,8 @@ name: Select runner
 
 # Called first by ci.yml, cd.yml and mobile-release.yml; every later job runs on `runs_on`, so one setting moves a whole run
 # between GitHub-hosted runners and the self-hosted machines, e.g. while GitHub-hosted runners are unavailable.
-# This job itself runs on a self-hosted machine when self-hosted is chosen, so that choice needs no GitHub-hosted
-# minute at all; `auto` and `blacksmith` run it on GitHub-hosted, so set self-hosted while GitHub-hosted runners cannot start.
+# This job itself runs on the chosen self-hosted machine or Blacksmith runner, so those choices need no GitHub-hosted
+# minute at all; `auto` runs it on GitHub-hosted, so do not use it while GitHub-hosted runners cannot start.
 # See docs/development/ci-cd.md#ci-runners.
 
 on:
@@ -36,7 +36,7 @@ permissions: {}
 
 jobs:
   pick:
-    runs-on: ${{ (inputs.choice == 'self-hosted' && inputs.allow-self-hosted) && fromJSON('["self-hosted"]') || 'ubuntu-24.04' }}
+    runs-on: ${{ (inputs.choice == 'self-hosted' && inputs.allow-self-hosted) && fromJSON('["self-hosted"]') || (inputs.choice == 'blacksmith' && inputs.allow-self-hosted) && 'blacksmith-2vcpu-ubuntu-2404' || 'ubuntu-24.04' }}
     outputs:
       runs_on: ${{ steps.pick.outputs.runs_on }}
       reason: ${{ steps.pick.outputs.reason }}
