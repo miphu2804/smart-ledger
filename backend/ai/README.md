@@ -71,18 +71,19 @@ The agent runs on [Pydantic AI](https://ai.pydantic.dev/). Prompts live in `src/
 
 ## Model provider
 
-`build_chat_model` in `src/providers/factory.py` picks the client from `MODEL_PROVIDER`:
+`LLMFactory.create_model(alias)` in `src/providers/llm_factory.py` reads `MODEL_ALIASES`, a JSON object mapping each alias to a `protocol` and the `model` id. The application uses one alias, `chat`. The protocol picks the provider class:
 
-| `MODEL_PROVIDER` | Client | API |
+| `protocol` | Provider | API |
 |---|---|---|
-| `anthropic` (default) | `AnthropicModel` | `/v1/messages`; needs `OPENAI_BASE_URL` |
-| `openai` | `OpenAIResponsesModel` | `/v1/responses` |
-| `openai-chat` | `OpenAIChatModel` | `/chat/completions` |
+| `anthropic_messages` (default) | `AnthropicMessagesProvider` | `/v1/messages` |
+| `openai_responses` | `OpenAIResponsesProvider` | `/v1/responses` |
+| `openai_chat` | `OpenAIChatProvider` | `/chat/completions` |
 
-- Every model shares `OPENAI_API_KEY` and `OPENAI_BASE_URL`, so one gateway such as [OpenCode Go](https://opencode.ai/docs/go/) serves all three. The default model is `claude-haiku-5-5`.
-- On the VPS, Bifrost at `http://bifrost:8080` sits in front of OpenCode Go and holds its key; AI then sends the Bifrost virtual key as `OPENAI_API_KEY`. This wiring is in progress ([CI/CD](../../docs/development/ci-cd.md#service-variables)).
-- `MODEL_FALLBACKS` is a JSON list of `provider:model` tried in order; a fallback gets only what is left of the turn timeout, so it mainly covers fast failures.
-- OpenCode Go needs an `x-opencode-session` header: each turn sends `conversation-<id>`, and one-off ids for drafts and memory calls.
+- Every model shares `OPENAI_API_KEY`, the gateway credential: the Bifrost virtual key when AI calls Bifrost, and the gateway's own key when it calls [OpenCode Go](https://opencode.ai/docs/go/) directly. The default `chat` alias is `claude-haiku-5-5` over `anthropic_messages`.
+- `OPENAI_BASE_URL` is the base of the OpenAI APIs, and blank means the OpenAI default. `ANTHROPIC_BASE_URL` is the base of the Anthropic API, where Bifrost serves it at `/anthropic` next to `/openai`; when unset, the factory drops the `/v1` suffix from `OPENAI_BASE_URL`, and `anthropic_messages` needs one of the two.
+- Through Bifrost the model id has no provider prefix: routing rules in `deploy/vps/bifrost.json` pick the upstream and the fallback, and only Bifrost holds the provider keys ([ADR-0008](../../docs/architecture/adr/0008-bifrost-owns-routing-and-fallback.md)).
+- `MODEL_FALLBACKS` is a JSON list of `protocol:model` tried in order, for an environment that calls OpenCode Go directly; a fallback gets only what is left of the turn timeout, so it mainly covers fast failures.
+- OpenCode Go needs an `x-opencode-session` header: `session_settings` sends `conversation-<id>` for each turn and one-off ids for drafts and memory calls. It also sends what Bifrost needs: `x-bf-session-id` groups a conversation's logs, `x-bf-lh-shop-id` adds the shop to log metadata, and `x-bf-eh-*` copies of the session and User-Agent reach the provider.
 - `MODEL_REASONING_EFFORT` maps to `openai_reasoning_effort` or `anthropic_effort`.
 
 ## Read-only shop data
@@ -229,8 +230,7 @@ Settings come from `src/app_config.py`, read from the environment or `.env`; bla
 | | `SQL_POOL_MAX_SIZE` | `2` | Reader pool size |
 | | `SQL_TIMEOUT_MS` | `3000` | Statement timeout |
 | | `SQL_ROW_LIMIT` | `100` | Row cap per query |
-| Model | `MODEL_PROVIDER` | `anthropic` | `anthropic`, `openai` or `openai-chat` |
-| | `MODEL_NAME` | `claude-haiku-5-5` | Chat model |
+| Model | `MODEL_ALIASES` | `chat` on `claude-haiku-5-5` over `anthropic_messages` | Alias to `protocol` and `model` |
 | | `MODEL_FALLBACKS` | `[]` | JSON list of `provider:model` |
 | | `MODEL_TIMEOUT_SECONDS` | `20` | Timeout per model request |
 | | `MODEL_REASONING_EFFORT` | `medium` | `none`, `low`, `medium` or `high` |
