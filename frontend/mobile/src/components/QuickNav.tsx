@@ -22,6 +22,7 @@ import { activeQuickNavKey, opensAfterDrag, QUICK_NAV_SECTIONS, type QuickNavIte
 import { ACTION_MENU_DURATION, useReducedMotion } from '../motion';
 import { useApp } from '../store/AppStore';
 import { colors } from '../theme';
+import { ShopSwitcher } from './ShopSwitcher';
 import { T } from './ui';
 
 /**
@@ -216,6 +217,7 @@ function QuickNavPanel({
   const app = useApp();
   const activeKey = activeQuickNavKey(usePathname());
   const storeName = app.store.name.trim();
+  const [shopsOpen, setShopsOpen] = useState(false);
   const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [-panelWidth, 0] });
 
   return (
@@ -234,19 +236,30 @@ function QuickNavPanel({
         ]}
       >
         <View style={styles.panelHeader}>
-          <View style={styles.avatar}>
-            <T w="extrabold" size={17} color={colors.white}>
-              {storeName.charAt(0).toUpperCase() || 'S'}
-            </T>
-          </View>
-          <View style={{ flex: 1 }}>
-            <T w="extrabold" size={15.5} color={colors.ink} numberOfLines={1}>
-              {storeName || 'Sổ Nghe Lời'}
-            </T>
-            <T size={12} color={colors.muted} numberOfLines={1} style={{ marginTop: 2 }}>
-              Chuyển nhanh
-            </T>
-          </View>
+          <Pressable
+            onPress={() => setShopsOpen((open) => !open)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: shopsOpen }}
+            accessibilityLabel={`${storeName || 'Sổ Nghe Lời'}, đổi hoặc tạo cửa hàng`}
+            style={({ pressed }) => [styles.shopToggle, pressed && styles.pressed]}
+          >
+            <View style={styles.avatar}>
+              <T w="extrabold" size={17} color={colors.white}>
+                {storeName.charAt(0).toUpperCase() || 'S'}
+              </T>
+            </View>
+            <View style={{ flex: 1 }}>
+              <T w="extrabold" size={15.5} color={colors.ink} numberOfLines={1}>
+                {storeName || 'Sổ Nghe Lời'}
+              </T>
+              <View style={styles.shopHint}>
+                <T size={12} color={colors.muted} numberOfLines={1}>
+                  Đổi hoặc tạo cửa hàng
+                </T>
+                <Feather name={shopsOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.muted} />
+              </View>
+            </View>
+          </Pressable>
           <Pressable
             onPress={onClose}
             hitSlop={8}
@@ -257,6 +270,15 @@ function QuickNavPanel({
             <Feather name="x" size={18} color={colors.ink} />
           </Pressable>
         </View>
+
+        {shopsOpen ? (
+          <ShopSwitcher
+            onDone={() => {
+              setShopsOpen(false);
+              onClose();
+            }}
+          />
+        ) : null}
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.list}>
           {QUICK_NAV_SECTIONS.map((section) => (
@@ -368,6 +390,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
   },
+  shopToggle: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
+  shopHint: { flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 2 },
   avatar: {
     width: 42,
     height: 42,

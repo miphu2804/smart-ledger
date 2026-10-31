@@ -12,6 +12,7 @@ import type {
   PayMethod,
   Product,
   SessionView,
+  ShopView,
   Staff,
 } from '../data/types';
 import { ApiError, setActiveShop, setUnauthorizedHandler } from '../lib/api';
@@ -24,8 +25,9 @@ import { describeError, isDisplayNameRequired } from '../lib/errors';
 import { setFeedbackEnabled } from '../lib/feedback';
 import { sessionApi } from '../lib/sessionApi';
 import { loadLocalProfile, saveLocalProfile } from '../lib/localProfile';
-import type { LocalProfile } from '../lib/localProfile.types';
+import type { LocalProfile, ShopBanks } from '../lib/localProfile.types';
 import { industriesFromCore } from '../lib/shopProfile';
+import { pickActiveShop } from '../lib/shopSwitch';
 
 /**
  * Hồ sơ trên máy được đọc rồi ghi lại cả khối, nên hai lần cập nhật chạy chồng nhau (sửa hồ sơ, xem xong hướng dẫn, đã đọc
@@ -67,6 +69,10 @@ interface State {
   onboarded: boolean;
   /** id tiệm đang dùng (gửi qua header X-Shop-Id); null khi chưa có / đang mock */
   shopId: string | null;
+  /** Các tiệm của tài khoản (Core không trả tiệm đã lưu trữ) */
+  shops: ShopView[];
+  /** Tài khoản nhận chuyển khoản của từng tiệm, theo id tiệm; lưu trên máy (`localProfile`) */
+  shopBanks: ShopBanks;
   /** id tài khoản Core, dùng làm khoá hồ sơ lưu trên máy (`localProfile`); null khi chưa đăng nhập */
   userId: string | null;
   user: typeof mockUser;
@@ -93,6 +99,8 @@ function initialState(): State {
     loggedIn: false,
     onboarded: true,
     shopId: null,
+    shops: [],
+    shopBanks: {},
     userId: null,
     user: { ...mockUser },
     store: { ...mockStore },
@@ -109,18 +117,36 @@ function initialState(): State {
   };
 }
 
+/** Dùng `shop` làm tiệm đang chọn: đổ hồ sơ tiệm và tài khoản nhận chuyển khoản của tiệm đó vào state. */
+function activeShopPatch(st: State, shop: ShopView, shopBanks: ShopBanks): Pick<State, 'shopId' | 'store'> {
+  const id = String(shop.id);
+  // Core lưu các ngành đã chọn thành MỘT chuỗi "food, drink"; tách lại, nếu không màn hồ sơ không nhận ra ngành nào.
+  const fromCore = industriesFromCore(shop.industry);
+  const bank = shopBanks[id];
+  return {
+    shopId: id,
+    store: {
+      ...st.store,
+      name: shop.name,
+      address: shop.address ?? (USE_MOCK ? mockStore.address : ''),
+      phone: shop.phone ?? (USE_MOCK ? mockStore.phone : ''),
+      industries: shop.industries ?? (fromCore.length ? fromCore : st.store.industries),
+      bankName: bank?.bankName ?? (USE_MOCK ? mockStore.bankName : ''),
+      bankAccount: bank?.bankAccount ?? (USE_MOCK ? mockStore.bankAccount : ''),
+    },
+  };
+}
+
 /** Đổ SessionView (từ Core hoặc mock) vào state. Ở chế độ thật, không để dữ liệu mẫu (email, Facebook, địa chỉ…) lẫn vào tài khoản. */
 function sessionPatch(st: State, s: SessionView): Partial<State> {
-  const shop = s.shops[0];
-  // Core lưu các ngành đã chọn thành MỘT chuỗi "food, drink"; tách lại, nếu không màn hồ sơ không nhận ra ngành nào.
-  const fromCore = industriesFromCore(shop?.industry);
-  const industries = shop?.industries ?? (fromCore.length ? fromCore : null);
+  const shop = pickActiveShop(s.shops, st.shopId);
   return {
     loggedIn: true,
     needsProfile: false,
     needsEmailVerification: false,
     onboarded: !s.needsOnboarding,
-    shopId: shop ? String(shop.id) : null,
+    shops: s.shops,
+    ...(shop ? activeShopPatch(st, shop, st.shopBanks) : { shopId: null }),
     userId: String(s.user.id),
     user: {
       ...st.user,
@@ -129,17 +155,6 @@ function sessionPatch(st: State, s: SessionView): Partial<State> {
       email: USE_MOCK ? st.user.email : (s.user.email ?? ''),
       facebook: USE_MOCK ? st.user.facebook : '',
     },
-    store: shop
-      ? {
-          ...st.store,
-          name: shop.name,
-          address: shop.address ?? (USE_MOCK ? st.store.address : ''),
-          phone: shop.phone ?? (USE_MOCK ? st.store.phone : ''),
-          industries: industries ?? st.store.industries,
-          bankName: USE_MOCK ? st.store.bankName : '',
-          bankAccount: USE_MOCK ? st.store.bankAccount : '',
-        }
-      : st.store,
   };
 }
 
@@ -210,7 +225,7 @@ function useStoreValue() {
       },
       logout: async () => {
         loggedInRef.current = false;
-        patch(() => ({ loggedIn: false, needsProfile: false, needsEmailVerification: false, shopId: null, userId: null }));
+        patch(() => ({ loggedIn: false, needsProfile: false, needsEmailVerification: false, shopId: null, shops: [], shopBanks: {}, userId: null }));
         await authClient.signOut().catch(() => undefined);
       },
       enterDevApp: () => {
@@ -223,7 +238,7 @@ function useStoreValue() {
         const wasLoggedIn = loggedInRef.current;
         debugLog('session', 'forceSignOut', wasLoggedIn ? '(đang đăng nhập → về màn đăng nhập)' : '(chưa đăng nhập)');
         loggedInRef.current = false;
-        patch(() => ({ loggedIn: false, needsProfile: false, needsEmailVerification: false, shopId: null, userId: null }));
+        patch(() => ({ loggedIn: false, needsProfile: false, needsEmailVerification: false, shopId: null, shops: [], shopBanks: {}, userId: null }));
         await authClient.signOut().catch(() => undefined);
         if (wasLoggedIn) {
           try {
@@ -233,31 +248,46 @@ function useStoreValue() {
           }
         }
       },
-      /** Tạo tiệm lần đầu (POST /shops). Lỗi được ném ra để màn hình hiển thị. */
+      /** Tạo tiệm (lần đầu hoặc tạo thêm, POST /shops) rồi dùng tiệm đó. Lỗi được ném ra để màn hình hiển thị. */
       finishOnboarding: async (storeName: string, industries: string[]) => {
-        const shop = await sessionApi.createShop({ name: storeName.trim(), industries });
+        const created = await sessionApi.createShop({ name: storeName.trim(), industries });
+        const shop = { ...created, name: created.name || storeName.trim(), industries };
         patch((st) => ({
           onboarded: true,
-          shopId: String(shop.id),
-          store: { ...st.store, name: shop.name || st.store.name, industries },
+          shops: [...st.shops, shop],
+          ...activeShopPatch(st, shop, st.shopBanks),
+          cart: {},
+          draft: null,
         }));
       },
+      /** Đổi tiệm đang dùng. Giỏ và đơn nháp thuộc tiệm cũ nên bỏ; thanh tab dựng lại các màn theo `shopId` (app/(tabs)/_layout.tsx). */
+      switchShop: (id: string) =>
+        patch((st) => {
+          const shop = st.shops.find((item) => String(item.id) === id);
+          if (!shop || id === st.shopId) return {};
+          return { ...activeShopPatch(st, shop, st.shopBanks), cart: {}, draft: null };
+        }),
       /**
        * Sửa hồ sơ trên máy. Họ tên, email, Facebook và tài khoản nhận chuyển khoản Core chưa có chỗ lưu nên ghi thêm vào hồ sơ
        * trên máy của tài khoản này (`localProfile`), để đăng xuất rồi đăng nhập lại vẫn còn.
        */
       updateProfile: (user: Partial<State['user']>, store: Partial<State['store']>) => {
-        patch((st) => ({ user: { ...st.user, ...user }, store: { ...st.store, ...store } }));
+        patch((st) => {
+          const next = { ...st.store, ...store };
+          return {
+            user: { ...st.user, ...user },
+            store: next,
+            shops: st.shops.map((shop) =>
+              String(shop.id) === st.shopId
+                ? { ...shop, name: next.name, address: next.address, phone: next.phone, industries: next.industries }
+                : shop,
+            ),
+            shopBanks: st.shopId ? { ...st.shopBanks, [st.shopId]: { bankName: next.bankName, bankAccount: next.bankAccount } } : st.shopBanks,
+          };
+        });
         const id = userIdRef.current;
         if (!id) return;
-        const changed = definedOnly({
-          name: user.name,
-          email: user.email,
-          facebook: user.facebook,
-          bankName: store.bankName,
-          bankAccount: store.bankAccount,
-        });
-        void updateLocalProfile(id, changed);
+        void updateLocalProfile(id, definedOnly({ name: user.name, email: user.email, facebook: user.facebook }));
       },
       /** Đóng hướng dẫn (xong hoặc bỏ qua) và nhớ trên máy cho tài khoản này để lần sau không tự mở lại */
       dismissGuide: () => {
@@ -433,9 +463,13 @@ function useStoreValue() {
   useEffect(() => {
     const id = s.userId;
     if (!id || notifLoadedFor.current !== id) return;
-    const changed = { readNotifs: s.readNotifs.slice(-READ_NOTIFS_KEPT), ...definedOnly({ notifClearedAt: s.notifClearedAt ?? undefined }) };
+    const changed = {
+      readNotifs: s.readNotifs.slice(-READ_NOTIFS_KEPT),
+      shopBanks: s.shopBanks,
+      ...definedOnly({ notifClearedAt: s.notifClearedAt ?? undefined, activeShopId: s.shopId ?? undefined }),
+    };
     void updateLocalProfile(id, changed);
-  }, [s.userId, s.readNotifs, s.notifClearedAt]);
+  }, [s.userId, s.readNotifs, s.notifClearedAt, s.shopBanks, s.shopId]);
 
   // Đăng nhập (hoặc khôi phục phiên) xong: phủ phần hồ sơ đã lưu trên máy của tài khoản này lên dữ liệu từ Core
   useEffect(() => {
@@ -447,12 +481,20 @@ function useStoreValue() {
       if (!alive) return;
       if (saved) {
         const { name, email, facebook, bankName, bankAccount } = saved;
-        patch((st) => ({
-          user: { ...st.user, ...definedOnly({ name, email, facebook }) },
-          store: { ...st.store, ...definedOnly({ bankName, bankAccount }) },
-          readNotifs: Array.from(new Set([...(saved.readNotifs ?? []), ...st.readNotifs])),
-          notifClearedAt: saved.notifClearedAt ?? st.notifClearedAt,
-        }));
+        patch((st) => {
+          // Bản cũ lưu một tài khoản nhận chuyển khoản cho cả hồ sơ, lúc đó app chỉ dùng tiệm đầu tiên: gán cho tiệm đó
+          const firstId = st.shops[0] ? String(st.shops[0].id) : null;
+          const legacy = firstId && (bankName || bankAccount) ? { [firstId]: { bankName, bankAccount } } : {};
+          const shopBanks = { ...legacy, ...saved.shopBanks };
+          const shop = pickActiveShop(st.shops, saved.activeShopId ?? st.shopId);
+          return {
+            user: { ...st.user, ...definedOnly({ name, email, facebook }) },
+            shopBanks,
+            ...(shop ? activeShopPatch(st, shop, shopBanks) : {}),
+            readNotifs: Array.from(new Set([...(saved.readNotifs ?? []), ...st.readNotifs])),
+            notifClearedAt: saved.notifClearedAt ?? st.notifClearedAt,
+          };
+        });
       }
       // Tài khoản chưa xem hướng dẫn trên máy này (mới đăng ký, lần đầu đăng nhập ở máy này) thì mở hướng dẫn ở Tổng quan; đã
       // xem thì đóng, kể cả khi tài khoản trước trên máy còn để hướng dẫn mở
