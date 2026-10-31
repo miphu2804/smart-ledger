@@ -1,0 +1,25 @@
+info:
+  name: Unread count
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/v1/me/notifications/unread-count"
+  params:
+    - name: shopId
+      value: ""
+      type: query
+      disabled: true
+    - name: type
+      value: ""
+      type: query
+      disabled: true
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true

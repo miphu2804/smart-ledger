@@ -1,0 +1,21 @@
+info:
+  name: List payments
+  type: http
+  seq: 4
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/v1/sales/{{saleId}}/payments"
+  auth: inherit
+
+runtime:
+  scripts:
+    - type: after-response
+      code: if (res.body?.length) bru.setVar("paymentId", res.body[0].id);
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
