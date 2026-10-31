@@ -1,3 +1,12 @@
+### 2026-10-29 — Shop and profile fields check their format
+
+| Area | Change |
+|---|---|
+| Mobile | • `src/lib/profileValidation.ts` checks the edit-profile fields: Facebook link must be a `facebook.com`, `fb.com` or `fb.me` link without spaces; bank account digits only, 6–19; shop phone a Vietnamese number (0 or +84, 10–11 digits); stricter email; bank name letters, digits and spaces; bank name and account go together; name, shop name and address need letters or digits<br>• Each field shows its error and the save button stays locked until all pass; length limits follow Core (shop name 200, phone 30, address 500); the create-shop step checks the shop name the same way |
+| Test | • `tests/profileValidation.test.ts` covers the tester's inputs (`dsa mipu gfd.,!@#$%^&*()`, a phone of dots, `324253432dsa2`) and valid ones |
+
+Check: 13 new tests pass; all mobile tests 170/172, the two failures in `parseOrder` and `quickNav` exist on `staging`; `npx tsc --noEmit` passes; on the mock web build the three tester inputs show errors with save locked, and valid values unlock it. Not verified: a real phone. Commit: the one that adds this entry.
+
 ### 2026-10-30 — LLMFactory, provider classes and Bifrost routing
 
 | Area | Change |
@@ -189,11 +198,3 @@ Check: `shellcheck` on both scripts, playbook syntax check, `docker compose conf
 | Docs | • `docs/development/ci-cd.md` is rewritten as short tables, numbered steps and command blocks, from 7,525 to 3,259 words, keeping every fact a reader needs and every anchor other files link to<br>• The stale "No path filtering" limit is removed, since CI filters by path |
 
 Check: every relative link and linked anchor resolves; facts not re-checked against the workflow files. Commit: the squash merge of this branch.
-
-### 2026-10-28 — README reads as tables
-
-| Area | Change |
-|---|---|
-| Docs | • The README drops the Highlights list and gains Overview, Tech stack, color legend and Getting started tables, so each section scans without reading a paragraph<br>• The Overview lists only what Core and AI do today |
-
-Check: badge URLs resolve (18 checked earlier, Redis removed since no feature reads it); README not rendered on GitHub. Commit: the squash merge of this branch.

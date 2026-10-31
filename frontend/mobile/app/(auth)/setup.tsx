@@ -5,6 +5,7 @@ import { BackHandler, Pressable, StyleSheet, View } from 'react-native';
 import { Button, Dialog, Field, Header, Progress, Screen, T } from '../../src/components/ui';
 import { industryList } from '../../src/data/mock';
 import { errorMessage } from '../../src/lib/errors';
+import { PROFILE_MAX, shopNameError } from '../../src/lib/profileValidation';
 import { useApp } from '../../src/store/AppStore';
 import { colors } from '../../src/theme';
 
@@ -17,6 +18,7 @@ export default function Setup() {
   const [err, setErr] = useState('');
   const [confirmLeave, setConfirmLeave] = useState(false);
   const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const nameErr = shopNameError(name);
 
   // Chưa có tiệm thì chưa vào app được: nút back của Android hỏi đăng xuất thay vì lùi về màn trước (có khi là các tab).
   useFocusEffect(
@@ -47,7 +49,7 @@ export default function Setup() {
           <Button
             title="Bắt đầu bán hàng"
             icon="arrow-right"
-            disabled={!name.trim() || !picked.length}
+            disabled={!!nameErr || !picked.length}
             loading={busy}
             onPress={async () => {
               setBusy(true);
@@ -73,7 +75,14 @@ export default function Setup() {
       <T size={14} color={colors.muted} style={{ marginTop: 6, marginBottom: 18 }}>
         Tên sẽ hiện trên đơn hàng và báo cáo
       </T>
-      <Field placeholder="VD: Tiệm tạp hoá cô Thỏ" value={name} onChangeText={setName} />
+      {/* Ô còn trống thì chỉ khoá nút, chưa báo lỗi */}
+      <Field
+        placeholder="VD: Tiệm tạp hoá cô Thỏ"
+        maxLength={PROFILE_MAX.shopName}
+        value={name}
+        onChangeText={setName}
+        error={name.trim() ? nameErr || undefined : undefined}
+      />
 
       <T w="bold" size={16} style={{ marginTop: 10 }}>
         Bạn bán gì?
