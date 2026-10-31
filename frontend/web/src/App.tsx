@@ -3,6 +3,7 @@ import { Route, Routes } from 'react-router-dom'
 import NotFound from './pages/NotFound'
 import LandingPage from './pages/landing/LandingPage'
 import DataDeletionPage from './pages/legal/DataDeletionPage'
+import PolicyPage from './pages/legal/PolicyPage'
 import PrivacyPage from './pages/legal/PrivacyPage'
 
 // Off by default. The admin chunk (mock accounts included) is emitted only when VITE_ADMIN_ENABLED=true at build time.
@@ -16,6 +17,8 @@ export default function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/data-deletion" element={<DataDeletionPage />} />
+      <Route path="/delete-account" element={<DataDeletionPage />} />
+      <Route path="/chinh-sach" element={<PolicyPage />} />
       {AdminRoutes && <Route path="/admin/*" element={<Suspense fallback={null}><AdminRoutes /></Suspense>} />}
       <Route path="*" element={<NotFound />} />
     </Routes>

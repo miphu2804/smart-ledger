@@ -49,7 +49,9 @@ Giao diện "calm operations": nền trung tính ấm, accent xanh lá (#2F7A43 
 | --- | --- |
 | `/` | Trang giới thiệu |
 | `/privacy` | Chính sách quyền riêng tư (bản nháp, chờ duyệt) |
+| `/chinh-sach` | Chính sách gửi Google Play: quyền riêng tư, điều khoản, thanh toán (bản nháp, chờ duyệt) |
 | `/data-deletion` | Hướng dẫn xoá dữ liệu người dùng (Meta yêu cầu cho Facebook Login) |
+| `/delete-account` | Cùng trang `/data-deletion`, URL xoá tài khoản khai trên Google Play |
 | `/admin/login` | Đăng nhập (chỉ ADMIN vào được) |
 | `/admin` | Thật: chủ tiệm và cửa hàng theo trạng thái, số mới trong 7/30/90 ngày, 5 cửa hàng mới nhất, truy cập gần đây. Mock: 4 KPI · xu hướng hỗ trợ · Cần chú ý · cơ sở/OWNER mới |
 | `/admin/customers?tab=owners\|shops` | Tab Chủ tiệm / Cửa hàng, tìm, lọc trạng thái, phân trang. Bấm dòng → drawer chi tiết (`&owner=` / `&shop=`); drawer cửa hàng có lịch sử trạng thái và nút tạm ngưng / mở lại (chế độ thật). Mỗi lần tìm và mở đều được ghi nhật ký |

@@ -1535,6 +1535,14 @@ main:has(.lp-closing) + .lp-footer {
     columns: 1;
   }
 }
+.lp-legal-pending {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: #fff1b8;
+  color: #6b4b00;
+  font-weight: 600;
+}
+
 .lp-legal-sec {
   margin-top: 40px;
 }
