@@ -39,7 +39,7 @@ from src.prompt_templates import (
     MEMORY_SUMMARY_INPUT,
     MEMORY_SUMMARY_PROMPT,
 )
-from src.providers.factory import session_settings
+from src.providers.session_settings import session_settings
 from src.utils import get_time
 
 logger = logging.getLogger(__name__)
@@ -215,7 +215,7 @@ class AgentMemoryService:
         recalled: list[RecalledMemory],
     ) -> None:
         try:
-            facts = await self._extract(question, answer, recalled)
+            facts = await self._extract(shop_id, question, answer, recalled)
             if not facts:
                 return
             memories = await self._reconcile(
@@ -281,7 +281,7 @@ class AgentMemoryService:
                         for number, memory in enumerate(open_facts, 1)
                     ),
                 ),
-                model_settings=session_settings(uuid.uuid4().hex),
+                model_settings=session_settings(uuid.uuid4().hex, shop_id),
             )
         except Exception:
             logger.warning("memory not reconciled: shop=%s", shop_id, exc_info=True)
@@ -334,7 +334,7 @@ class AgentMemoryService:
         )
         result = await self.summarizer.run(
             MEMORY_SUMMARY_INPUT.format(day=group.day.isoformat(), facts=listed),
-            model_settings=session_settings(uuid.uuid4().hex),
+            model_settings=session_settings(uuid.uuid4().hex, shop_id),
         )
         facts = [
             fact
@@ -388,7 +388,7 @@ class AgentMemoryService:
         )
 
     async def _extract(
-        self, question: str, answer: str, recalled: list[RecalledMemory]
+        self, shop_id: int, question: str, answer: str, recalled: list[RecalledMemory]
     ) -> list[MemoryFact]:
         result = await self.extractor.run(
             MEMORY_EXTRACT_INPUT.format(
@@ -401,7 +401,7 @@ class AgentMemoryService:
                 answer=answer,
             ),
             # The gateway rejects a request without a session; each call stands alone.
-            model_settings=session_settings(uuid.uuid4().hex),
+            model_settings=session_settings(uuid.uuid4().hex, shop_id),
         )
         known = {memory.id for memory in recalled}
         # The model could name any id; only a memory this turn recalled may be replaced.

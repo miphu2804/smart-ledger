@@ -12,7 +12,7 @@ import pytest
 from src.app_config import app_config
 from src.drafts.catalog import CatalogProduct
 from src.drafts.service import DraftService
-from src.providers.factory import build_chat_model
+from src.providers.llm_factory import LLMFactory
 
 pytestmark = [
     pytest.mark.skipif(
@@ -42,7 +42,7 @@ class StaticCatalog:
 
 @pytest.fixture
 def service() -> DraftService:
-    return DraftService(build_chat_model(app_config), StaticCatalog())
+    return DraftService(LLMFactory(app_config).create_model("chat"), StaticCatalog())
 
 
 def matched(draft) -> list[tuple[int | None, float]]:

@@ -22,7 +22,7 @@ from src.memory.repository import EMBEDDING_DIMENSIONS, AgentMemoryRepository
 from src.memory.service import AgentMemoryService
 from src.memory.workers_ai_embedding import WorkersAIEmbeddingModel
 from src.observability import configure_tracing
-from src.providers.factory import build_chat_model
+from src.providers.llm_factory import LLMFactory
 from src.restock.service import RestockService
 from src.sandbox.wrapper import Sandbox, SandboxLimits
 from src.security import require_internal_token
@@ -175,7 +175,7 @@ async def lifespan(app: FastAPI):
     redis = RedisDBClient(app_config.REDIS_URL)
     redis.connect()
     app.state.redis = redis
-    chat_model = build_chat_model(app_config)
+    chat_model = LLMFactory(app_config).create_model("chat")
     conversations = AgentConversationRepository(postgres)
     app.state.conversations = conversations
     shop_data = build_shop_data(reader)

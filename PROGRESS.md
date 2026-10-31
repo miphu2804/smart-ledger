@@ -1,3 +1,13 @@
+### 2026-10-30 — LLMFactory, provider classes and Bifrost routing
+
+| Area | Change |
+|---|---|
+| AI | • `LLMFactory.create_model(alias)` replaces `build_chat_model`; `OpenAIChatProvider`, `OpenAIResponsesProvider` and `AnthropicMessagesProvider` each own one protocol, and `MODEL_ALIASES` replaces `MODEL_PROVIDER` and `MODEL_NAME`<br>• `session_settings` moves to its own module, takes the shop and sends the `x-bf-*` headers Bifrost needs for session grouping, log metadata and forwarding<br>• `MODEL_FALLBACKS` stays, in `protocol:model` form, until production runs Bifrost |
+| Deploy | • `bifrost.json` splits OpenCode Go into an Anthropic and an OpenAI custom provider, adds OpenAI for the Luna fallback and routing rules, and stores logs for 14 days without message content (NFR-008) |
+| Docs | • AI README, technical design, CI/CD guide, service walkthrough and ADR-0003 describe the aliases and Bifrost owning routing and fallback |
+
+Check: `uv run pytest` passes with 442 tests and `uv run ruff check` passes. The pinned Bifrost v2.3.2 image was run against a mock upstream: Anthropic requests reach `/v1/messages` with `cache_control`, session and User-Agent are forwarded, a 429 falls back to OpenAI, and logs show the session, shop and rule without content. Not verified: real OpenCode Go and OpenAI calls, tool calls and streaming through Bifrost, and the Bifrost UI itself. The credential map was not regenerated because its script is not on this branch. Commit: not yet.
+
 ### 2026-10-29 — R2 bucket, token policy and key handling for the Dopbase backup
 
 | Area | Change |
@@ -177,23 +187,3 @@ Check: `actionlint`, the deploy key in each new environment matches its public k
 | Clients | • Staging web, preview, landing, Android, monitor, load test and release-script defaults use the `staging.` name |
 
 Check: both names answer HTTPS health 200 through the shared Caddy. Commit: the merge of this branch.
-
-### 2026-10-28 — Staging and production share one VPS behind one Caddy
-
-| Area | Change |
-|---|---|
-| Deploy | • Caddy moves to its own project in `deploy/edge/` (`/opt/smartledger-edge`) that owns ports 80 and 443 and routes `103-162-31-93.sslip.io` to `core-staging` and `prod.103-162-31-93.sslip.io` to `core-production` over the Docker network `edge`<br>• Each environment keeps its own Compose project (`/opt/smartledger`, `/opt/smartledger-production`); Core joins `edge` under `CORE_ALIAS`, AI stays on the project network<br>• Caddy and Core resolve without the VPS search domain, whose wildcard DNS sent `core-production` to an outside host<br>• The playbook runs once per environment and writes `sites/<environment>.caddy` |
-| Clients | • Staging web, landing, Android, preview, monitor, load test and release-script defaults point at the VPS instead of Railway |
-| Docs | • The CI/CD guide records the shared VPS, its domains and the accepted loss of isolation between staging and production |
-
-Check: playbook applied to the VPS for staging and production; staging HTTPS health 200 through the shared Caddy with the copied certificate, Core reaches AI, production domain gets its certificate and answers 502 until its first deploy. Not verified: a production deploy, which needs the release to `main`. Commit: the merge of this branch.
-
-### 2026-10-27 — Backend on a VPS through GHCR and Caddy
-
-| Area | Change |
-|---|---|
-| CI | • `deploy-backend` replaces the Railway CLI: it builds `ai` and `core` for `linux/amd64`, pushes them to GHCR with the job's `GITHUB_TOKEN` and runs `deploy/vps/deploy.sh` over SSH with a pinned host key<br>• One package per service and environment, keeping the latest 10 staging or 20 production images as the rollback window |
-| Deploy | • The VPS runs `core`, `ai` and `caddy` in one Compose stack; Caddy publishes 80 and 443 with a free Let's Encrypt certificate for `CADDY_DOMAIN` (an sslip.io name until a domain exists)<br>• `deploy/ansible/playbook.yml` provisions a new VPS: Docker, ufw with SSH, HTTP and HTTPS, swap, deploy user and key, env files, Caddy domain, optional GHCR login |
-| Docs | • The CI/CD guide and diagram describe the VPS setup and mark Bifrost, Langfuse, pgvector and the Grafana stack as planned |
-
-Check: `actionlint` on both workflows, `docker compose config -q` (fails without `CADDY_DOMAIN` as intended), `bash -n deploy.sh`, playbook YAML parse and diagram validation pass. Not verified: a real deploy, the playbook against a VPS, the certificate, and whether `GITHUB_TOKEN` may delete package versions. Commit: the merge of this branch.
