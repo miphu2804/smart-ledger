@@ -7,6 +7,7 @@ dependencies = [
     "fastapi>=0.115",
     "logfire>=4",
     "pgvector>=0.4",
+    "prometheus-fastapi-instrumentator>=8.1",
     "psycopg[binary]>=3.2",
     # The codemode extra pulls in pydantic-monty, the sandbox behind Code Mode
     # (src/sandbox/wrapper.py); without it the sandbox capability stays off.

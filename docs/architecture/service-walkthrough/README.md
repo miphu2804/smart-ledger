@@ -593,22 +593,23 @@ flowchart LR
 
 ### 8.1 Components (composition root: `main.lifespan`)
 
-`main.py` builds one `APIRouter` with prefix `/internal/v1` and the `X-Internal-Token` dependency, includes the agent router under it, and mounts it on the app, so every route under that prefix requires the token. `GET /health` sits outside the prefix and needs no token. The agent router exposes `POST /agent/chat`, `POST /agent/chat/stream`, the conversation list, get, rename and delete routes, and `GET`/`PUT /agent/memory/settings`; the endpoint contract is in [API contracts](../../contracts/api-contracts.md).
+`main.py` builds one `APIRouter` with prefix `/internal/v1` and the `X-Internal-Token` dependency, includes the agent router under it, and mounts it on the app, so every route under that prefix requires the token. `GET /health` and the Prometheus `GET /metrics` sit outside the prefix and need no token. The agent router exposes `POST /agent/chat`, `POST /agent/chat/stream`, the conversation list, get, rename and delete routes, `GET`/`PUT /agent/memory/settings`, and `GET /agent/memory/items` with `DELETE /agent/memory/items/{memory_id}`; the endpoint contract is in [API contracts](../../contracts/api-contracts.md).
 
-`lifespan` opens two `PostgreDBClient` pools: one for chat history (`POSTGRES_URL`, `POSTGRES_POOL_MAX_SIZE`) and one for the read-only SQL reader (`AI_SQL_READER_URL`, `SQL_POOL_MAX_SIZE`, used by `ShopDataRepository`). Both default to 2 connections. It connects Redis at startup, but no feature reads it yet. It builds the chat model with `build_chat_model`: `MODEL_PROVIDER` picks the API, and a `FallbackModel` wraps the primary model when at least one `MODEL_FALLBACKS` entry builds (an invalid entry is logged and dropped). Without `OPENAI_API_KEY`, or when the primary model cannot be built, the model is `None` and every chat turn answers `503 ai_unavailable`. `AgentService` then receives `shop_data` and `restock`; both are `None` when `AI_SQL_READER_URL` is unset, so chat still runs with only the `suggest_screen` tool, which the agent always has. It also receives `memory`, which `build_memory_service` builds only when `AGENT_MEMORY_ENABLED` is on (default off, awaiting PO approval), a chat model and the chat-history pool exist, and an embedder can be built (sentence-transformers in the process, or Cloudflare Workers AI); otherwise memory is `None` and the memory settings report `available: false`. `configure_tracing` runs at module import, before any agent runs, and sends Pydantic AI spans to Logfire only when `LOGFIRE_TOKEN` is set. Spans carry the run's `shop_id`, never message content.
+`lifespan` opens two `PostgreDBClient` pools: one for chat history (`POSTGRES_URL`, `POSTGRES_POOL_MAX_SIZE`) and one for the read-only SQL reader (`AI_SQL_READER_URL`, `SQL_POOL_MAX_SIZE`, used by `ShopDataRepository`). Both default to 2 connections. It connects Redis at startup, but no feature reads it yet. It builds the chat model with `LLMFactory.create_model("chat")`: the alias in `MODEL_ALIASES` picks the API and the model, and a `FallbackModel` wraps the primary model when at least one `MODEL_FALLBACKS` entry builds (an invalid entry is logged and dropped). Without `OPENAI_API_KEY`, or when the alias cannot be built, the model is `None` and every chat turn answers `503 ai_unavailable`. `AgentService` then receives `shop_data` and `restock`; both are `None` when `AI_SQL_READER_URL` is unset, so chat still runs without data tools; `suggest_screen` is always there. `calculation` is built while `CALC_ENABLED` is on (default), and `calculate` stays callable past the tool-call limit because it does no I/O. `sandbox` is built while `SANDBOX_ENABLED` is on (default) and gives the model `run_code`, which runs model-written Python in Monty and calls no tool ([ADR-0007](../adr/0007-sandbox-without-data-tools.md)). It also receives `memory`, which `build_memory_service` builds only when `AGENT_MEMORY_ENABLED` is on (off in code, awaiting PO approval; once on, each owner's switch is on until they turn it off), a chat model and the chat-history pool exist, and an embedder can be built (sentence-transformers in the process, or Cloudflare Workers AI); otherwise memory is `None` and the memory settings report `available: false`. `configure_tracing` runs at module import, before any agent runs, and sends Pydantic AI spans to Logfire only when `LOGFIRE_TOKEN` is set. Spans carry the run's `shop_id`, never message content.
 
 ```mermaid
 flowchart LR
     subgraph API["API Space"]
         MAIN["main.py lifespan<br/>pools, model, AgentService<br/>APIRouter /internal/v1 + X-Internal-Token"]
-        ROUTER["agent router<br/>/internal/v1/agent<br/>chat, chat/stream, conversations, memory/settings"]
+        ROUTER["agent router<br/>/internal/v1/agent<br/>chat, chat/stream, conversations, memory/settings, memory/items"]
     end
 
     subgraph Agent["Agent Space"]
         SVC["AgentService<br/>chat() / stream_chat()"]
         GUARD["GuardrailService<br/>input check + redaction<br/>call, token, time limits<br/>answer screen"]
-        MODEL["model gateway<br/>build_chat_model()<br/>FallbackModel when a MODEL_FALLBACKS entry builds"]
-        TOOLS["tools<br/>query_shop_data, suggest_restock<br/>suggest_screen (always)"]
+        MODEL["model gateway<br/>LLMFactory.create_model()<br/>FallbackModel when a MODEL_FALLBACKS entry builds"]
+        TOOLS["tools<br/>query_shop_data, suggest_restock<br/>suggest_screen (always)<br/>calculate, run_code"]
+        SANDBOX["Monty sandbox<br/>run_code only, calls no tool"]
         RESTOCK["RestockService<br/>suggest(shop_id, period)"]
         MEM["AgentMemoryService<br/>with_memories() / remember()<br/>only when AGENT_MEMORY_ENABLED"]
         EMB["Embedder<br/>sentence-transformers or Workers AI"]
@@ -643,10 +644,11 @@ flowchart LR
     SVC -.->|"run spans, no content"| LF
     TOOLS -->|"query_shop_data(sql)"| EXEC
     TOOLS -->|"suggest_restock(period)"| RESTOCK -->|"fixed query"| EXEC
+    TOOLS -->|"run_code(code)"| SANDBOX
     EXEC --> SG
     EXEC -->|"shop-scoped read-only txn"| VIEWS
     REPO -->|"postgres pool"| PG
-    ROUTER -->|"memory/settings"| MEM
+    ROUTER -->|"memory/settings, memory/items"| MEM
     SVC -.->|"recall before run, remember after save"| MEM
     MEM -->|"embed question and facts"| EMB
     MEM -->|"extract and merge facts"| MODEL

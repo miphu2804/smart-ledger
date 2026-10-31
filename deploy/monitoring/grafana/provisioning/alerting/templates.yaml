@@ -1,0 +1,88 @@
+# Alert messages for Discord and Telegram. Grafana groups by alertname and env, so a message holds one alert kind of one
+# environment: a headline (state, severity, alert, environment), each alert's summary, then a fixed table of
+# Environment, Severity, time and Source, then links. Discord gets an embed whose fields form that table and stack on a
+# phone; Telegram gets the same as HTML lines. No dollar signs: provisioning would read them as variables, so values are
+# built with tmpl.Exec instead of template variables.
+apiVersion: 1
+
+templates:
+  - orgId: 1
+    name: smartledger-alerts
+    template: |
+      {{ define "smartledger.headline" -}}
+      {{ if .Alerts.Firing -}}
+      {{ if eq .CommonLabels.severity "critical" }}🔴 Critical{{ else }}🟠 Warning{{ end }}: {{ .CommonLabels.alertname }}
+      {{- else -}}
+      ✅ Resolved: {{ .CommonLabels.alertname }}
+      {{- end }}{{ with .CommonLabels.env }} ({{ . }}){{ end }}
+      {{- if gt (len .Alerts.Firing) 1 }}, {{ len .Alerts.Firing }} alerts{{ end }}
+      {{- end }}
+
+      {{ define "smartledger.env" }}{{ with .CommonLabels.env }}{{ . }}{{ else }}VPS{{ end }}{{ end }}
+
+      {{ define "smartledger.time.label" }}{{ if .Alerts.Firing }}Since{{ else }}Resolved{{ end }}{{ end }}
+
+      {{ define "smartledger.time.value" -}}
+      {{ if .Alerts.Firing }}{{ template "smartledger.time" (index .Alerts.Firing 0).StartsAt }}
+      {{- else }}{{ template "smartledger.time" (index .Alerts.Resolved 0).EndsAt }}, started {{ template "smartledger.time" (index .Alerts.Resolved 0).StartsAt }}{{ end }}
+      {{- end }}
+
+      {{ define "smartledger.time" }}{{ . | tz "Asia/Ho_Chi_Minh" | date "15:04 02/01" }}{{ end }}
+
+      {{/* One line per alert: its container, its check, or the host. */}}
+      {{ define "smartledger.sources" -}}
+      {{ range .Alerts }}{{ if .Labels.name }}container {{ .Labels.name }}{{ else if .Labels.check }}check {{ .Labels.check }}{{ else }}host{{ end }}
+      {{ end }}
+      {{- end }}
+
+      {{/* ExternalURL ends with a slash. The silence matches the group, so it covers every alert in the message. */}}
+      {{ define "smartledger.overview" }}{{ .ExternalURL }}d/smart-ledger-overview{{ with .CommonLabels.env }}?var-env={{ . }}{{ end }}{{ end }}
+      {{ define "smartledger.silence" }}{{ .ExternalURL }}alerting/silence/new?alertmanager=grafana{{ range .GroupLabels.SortedPairs }}&matcher={{ .Name }}%3D{{ .Value | urlquery }}{{ end }}{{ end }}
+      {{ define "smartledger.rules" }}{{ .ExternalURL }}alerting/list{{ end }}
+
+      {{ define "smartledger.discord.summaries" -}}
+      {{ range .Alerts.Firing }}{{ .Annotations.summary }}
+      {{ end }}{{ range .Alerts.Resolved }}~~{{ .Annotations.summary }}~~
+      {{ end }}
+      {{- end }}
+
+      {{ define "smartledger.discord.color" }}{{ if not .Alerts.Firing }}3055683{{ else if eq .CommonLabels.severity "critical" }}14037554{{ else }}15901498{{ end }}{{ end }}
+
+      {{ define "smartledger.discord.links" -}}
+      [Overview]({{ template "smartledger.overview" . }}){{ if .Alerts.Firing }} | [Silence]({{ template "smartledger.silence" . }}){{ end }} | [Alert rules]({{ template "smartledger.rules" . }})
+      {{- end }}
+
+      {{/* Body of Discord's webhook API: one embed whose inline fields read as a table. */}}
+      {{ define "smartledger.discord.payload" -}}
+      {{ coll.Dict
+        "username" "SmartLedger alerts"
+        "embeds" (coll.Slice (coll.Dict
+          "title" (tmpl.Exec "smartledger.headline" .)
+          "url" (tmpl.Exec "smartledger.overview" .)
+          "description" (tmpl.Exec "smartledger.discord.summaries" .)
+          "color" (tmpl.Exec "smartledger.discord.color" . | data.JSON)
+          "fields" (coll.Slice
+            (coll.Dict "name" "Environment" "value" (tmpl.Exec "smartledger.env" .) "inline" true)
+            (coll.Dict "name" "Severity" "value" .CommonLabels.severity "inline" true)
+            (coll.Dict "name" (tmpl.Exec "smartledger.time.label" .) "value" (tmpl.Exec "smartledger.time.value" .) "inline" true)
+            (coll.Dict "name" "Source" "value" (tmpl.Exec "smartledger.sources" .) "inline" false)
+            (coll.Dict "name" "Links" "value" (tmpl.Exec "smartledger.discord.links" .) "inline" false))))
+        | data.ToJSON }}
+      {{- end }}
+
+      {{/* Telegram HTML: summaries and URLs are escaped because Telegram rejects a stray < or &. */}}
+      {{ define "smartledger.telegram.message" -}}
+      <b>{{ template "smartledger.headline" . }}</b>
+      {{ range .Alerts.Firing }}• {{ .Annotations.summary | html }}
+      {{ end }}{{ range .Alerts.Resolved }}• <s>{{ .Annotations.summary | html }}</s>
+      {{ end }}
+      <b>Environment:</b> {{ template "smartledger.env" . }}
+      <b>Severity:</b> {{ .CommonLabels.severity }}
+      <b>{{ template "smartledger.time.label" . }}:</b> {{ template "smartledger.time.value" . }}
+      <b>Source:</b> {{ tmpl.Exec "smartledger.sources" . | html }}
+      <a href="{{ tmpl.Exec "smartledger.overview" . | html }}">Overview</a>{{ if .Alerts.Firing }} | <a href="{{ tmpl.Exec "smartledger.silence" . | html }}">Silence</a>{{ end }}
+      {{- end }}
+
+      {{ define "smartledger.telegram.payload" -}}
+      {{ coll.Dict "text" (tmpl.Exec "smartledger.telegram.message" .) "parse_mode" "HTML" "link_preview_options" (coll.Dict "is_disabled" true) | data.ToJSON }}
+      {{- end }}

@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 import pydantic_ai
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
+from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic_ai import Embedder
 
 from src.agent.errors import ConversationNotFoundError, GuardrailError
@@ -21,7 +22,7 @@ from src.memory.repository import EMBEDDING_DIMENSIONS, AgentMemoryRepository
 from src.memory.service import AgentMemoryService
 from src.memory.workers_ai_embedding import WorkersAIEmbeddingModel
 from src.observability import configure_tracing
-from src.providers.factory import build_chat_model
+from src.providers.llm_factory import LLMFactory
 from src.restock.service import RestockService
 from src.sandbox.wrapper import Sandbox, SandboxLimits
 from src.security import require_internal_token
@@ -174,7 +175,7 @@ async def lifespan(app: FastAPI):
     redis = RedisDBClient(app_config.REDIS_URL)
     redis.connect()
     app.state.redis = redis
-    chat_model = build_chat_model(app_config)
+    chat_model = LLMFactory(app_config).create_model("chat")
     conversations = AgentConversationRepository(postgres)
     app.state.conversations = conversations
     shop_data = build_shop_data(reader)
@@ -238,6 +239,15 @@ app.include_router(internal_router)
 app.add_exception_handler(ConversationNotFoundError, conversation_not_found)
 app.add_exception_handler(GuardrailError, guardrail_blocked)
 app.add_exception_handler(Exception, ai_unavailable)
+# Request rate, status class and latency per route for Grafana (deploy/monitoring/),
+# timed to the last streamed byte. /metrics skips the internal token: AI publishes no
+# port, so only containers on its project network reach it. Health checks every 10 s
+# would outnumber chat turns, so they are left out. The default buckets stop at 1 s,
+# while a chat turn with tool calls takes tens of seconds.
+Instrumentator(excluded_handlers=["/health", "/metrics"]).instrument(
+    app,
+    latency_lowr_buckets=(0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 20, 30, 60, 120),
+).expose(app, include_in_schema=False)
 
 
 @app.get("/health", tags=["system"])
