@@ -1,3 +1,12 @@
+### 2026-10-31 — Playwright for the mobile web build
+
+| Area | Change |
+|---|---|
+| Test | • `npm run test:e2e` starts the Expo web build with mock data on port 8090 and runs `e2e/` in Chromium at a phone viewport (#438)<br>• `e2e/smoke.spec.ts` opens the sign-in screen, enters with the mock account and checks Tổng quan with no page error |
+| Docs | • The mobile README says how to install and run it |
+
+Check: the smoke test passes through `npx playwright test`; it failed first without `EXPO_PUBLIC_API_ENDPOINT`, so the config sets it; `npx tsc --noEmit` passes. Not run in CI, which the issue does not ask for. Commit: the one that adds this entry.
+
 ### 2026-10-30 — LLMFactory, provider classes and Bifrost routing
 
 | Area | Change |
@@ -189,11 +198,3 @@ Check: `shellcheck` on both scripts, playbook syntax check, `docker compose conf
 | Docs | • `docs/development/ci-cd.md` is rewritten as short tables, numbered steps and command blocks, from 7,525 to 3,259 words, keeping every fact a reader needs and every anchor other files link to<br>• The stale "No path filtering" limit is removed, since CI filters by path |
 
 Check: every relative link and linked anchor resolves; facts not re-checked against the workflow files. Commit: the squash merge of this branch.
-
-### 2026-10-28 — README reads as tables
-
-| Area | Change |
-|---|---|
-| Docs | • The README drops the Highlights list and gains Overview, Tech stack, color legend and Getting started tables, so each section scans without reading a paragraph<br>• The Overview lists only what Core and AI do today |
-
-Check: badge URLs resolve (18 checked earlier, Redis removed since no feature reads it); README not rendered on GitHub. Commit: the squash merge of this branch.
