@@ -31,7 +31,6 @@ jobs:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       VERCEL_TARGET: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
-      VITE_LEGAL_DRAFT: ${{ vars.VITE_LEGAL_DRAFT }}
       VITE_ANDROID_APK_URL: ${{ vars.VITE_ANDROID_APK_URL }}
       # Admin at /admin on the landing, reading the real Core admin API. Off unless the environment sets
       # VITE_ADMIN_ENABLED=true together with VITE_API_ENDPOINT (Core root) and VITE_FIREBASE_API_KEY.

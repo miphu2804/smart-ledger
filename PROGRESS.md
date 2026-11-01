@@ -6,6 +6,32 @@
 
 Check: 2 new tests pass; `npx tsc --noEmit` passes; on the mock web build `/ai` signed out lands on `/welcome` without "Lan", and signed in Bobi opens. Not verified: a 401 from real Core and a real phone. Commit: the one that adds this entry.
 
+### 2026-10-29 — Shop and profile fields check their format
+
+| Area | Change |
+|---|---|
+| Mobile | • `src/lib/profileValidation.ts` checks the edit-profile fields: Facebook link must be a `facebook.com`, `fb.com` or `fb.me` link without spaces; bank account digits only, 6–19; shop phone a Vietnamese number (0 or +84, or a 1800/1900 hotline); stricter email; bank name letters, digits, spaces and a few marks such as `,` and `/`; bank name and account go together; name, shop name and address need letters or digits<br>• Each field shows its error and the save button stays locked until all pass, except a value saved earlier and not edited, so old data does not lock the form; length limits follow Core (shop name 200, phone 30, address 500); the create-shop step checks the shop name the same way |
+| Test | • `tests/profileValidation.test.ts` covers the tester's inputs (`dsa mipu gfd.,!@#$%^&*()`, a phone of dots, `324253432dsa2`) and valid ones |
+
+Check: 16 new tests pass; all mobile tests 173/175, the two failures in `parseOrder` and `quickNav` exist on `staging`; `npx tsc --noEmit` passes; on the mock web build the three tester inputs show errors with save locked, and valid values unlock it. Not verified: a real phone. Commit: the one that adds this entry.
+
+### 2026-10-31 — Playwright for the mobile web build
+
+| Area | Change |
+|---|---|
+| Test | • `npm run test:e2e` starts the Expo web build with mock data on port 8090 and runs `e2e/` in Chromium at a phone viewport (#438)<br>• `e2e/smoke.spec.ts` opens the sign-in screen, enters with the mock account and checks Tổng quan with no page error |
+| Docs | • The mobile README says how to install and run it |
+
+Check: the smoke test passes through `npx playwright test`; it failed first without `EXPO_PUBLIC_API_ENDPOINT`, so the config sets it; `npx tsc --noEmit` passes. Not run in CI, which the issue does not ask for. Commit: the one that adds this entry.
+
+### 2026-10-31 — Policy page for Google Play
+
+| Area | Change |
+|---|---|
+| Web | • `/chinh-sach` carries the privacy policy, terms of use and payment policy from the team's Google Doc dated 30/10/2026, with its open details filled from the deploy config and code: AI providers, log retention, what is really collected<br>• `/delete-account` opens the data deletion page, the footer links to the new page, and `/privacy` redirects to it, so one privacy policy remains<br>• The draft label is gone from the legal pages, with `VITE_LEGAL_DRAFT` in the code, the landing workflow and the docs |
+
+Check: `npm run lint`, `tsc -b` and `vite build` pass; at 375 px the page has no horizontal scroll and no draft or "Cần điền" text, and `/privacy` redirects to it. Not verified: legal review. The app still has no in-app account deletion entry, which the page says plainly and Google Play requires. Commit: the one that adds this entry.
+
 ### 2026-10-29 — Tab screens end above the tab bar
 
 | Area | Change |
@@ -171,27 +197,3 @@ Check: `npx tsc --noEmit` shows only the two existing errors for the missing `ex
 | Web | • The admin sidebar, login and 403 pages show the Bobi notebook logo from the landing instead of the grey microphone mark; the sidebar subtitle reads "Trang quản trị"<br>• The login page uses the brand purple: a purple panel with a waving Bobi (the mobile `bobi-tab-v2.png` as a 560 px webp, 36 KB), a heading and three points that hold with the real Core (search, shop status history, audited reads), and a purple button, checkbox and focus ring<br>• On phones the purple panel hides and the card shows the logo; the placeholder email no longer has a misspelled domain |
 
 Check: `npm run typecheck` and `npm run build` pass; `npm run lint` shows only the four warnings that #381 fixes; login, the dashboard sidebar (open and collapsed), the 403 page and the phone layout checked in the browser on a mock build. Not verified: a build against the real Core. Commit: the one that adds this entry.
-
-### 2026-10-28 — Web admin lint warnings cleared
-
-| Area | Change |
-|---|---|
-| Web | • `npm run lint` in `frontend/web` reported six warnings in the admin code and now reports none<br>• `colorFor` and `initialsOf` in `components/admin/ui.tsx` are no longer exported, so the file exports only components<br>• Four `useEffect`s that set state right away follow React's pattern: the phone menu remembers the page it opened on and closes on navigation without an effect; quick search clears old results and shows "Đang tìm…" from the input handler; AI Support copies newly loaded conversations during render; the create-task dialog resets its form during render when it opens, and its effect only loads shops and members |
-
-Check: `npm run lint` shows no warnings; `npm run typecheck` and `npm run build` pass. Mock admin at 375 px: the menu opens, closes when a page is chosen and on the backdrop; quick search shows "Đang tìm…" then results, closes at 1 letter; AI Support lists its 3 conversations; the create-task dialog opens empty with 58 shops and again after cancelling. Not verified: the admin against real Core. Commit: the one that adds this entry.
-
-### 2026-10-28 — Zalo sign-in button works again
-
-| Area | Change |
-|---|---|
-| Mobile | • The Zalo button on the sign-in screen signs in again when the build carries Zalo settings (`EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID` on Android, `EXPO_PUBLIC_ZALO_LOGIN=true` on the web); iOS and builds without them still show "Sắp có"<br>• The `android-dev` and `android-staging` builds and the `vercel-staging` web build already set these, so their button turns on; production does not<br>• The mobile README says when the button is on |
-
-Check: `npx tsc --noEmit` shows only the two existing errors for the missing `expo-application` and `expo-intent-launcher`; `npm test` fails only the two existing cases in `parseOrder` and `quickNav`; staging Core answers `400 invalid_zalo_request` (feature on) to a malformed request on both Zalo authorize endpoints and serves `assetlinks.json` with the certificate of CI test APKs, while production answers `503 zalo_unavailable`. Not verified: a full Zalo sign-in on a phone. Commit: the one that adds this entry.
-
-### 2026-10-28 — A deploy of one service no longer fails on the other's image
-
-| Area | Change |
-|---|---|
-| Deploy | • `deploy/vps/deploy.sh` reads `AI_IMAGE` and `CORE_IMAGE` into local variables and unsets them before any Compose command, so the empty image the workflow passes for a service this deploy leaves alone no longer overrides the image already named in `.env`<br>• The service loop becomes a `deploy_service` function called once per service, which removes the indirect variable lookup |
-
-Check: the CD staging run of 2026-10-28 02:55 failed with `required variable CORE_IMAGE is missing a value` on an AI-only deploy; reproduced against the real `deploy/vps/compose.yaml` with a stubbed `docker`, where the previous script fails and this one deploys AI only, Core only, both, and neither, leaving the other service's image in `.env` untouched. `shellcheck` and `bash -n` pass. Not verified: a real deploy against the VPS.

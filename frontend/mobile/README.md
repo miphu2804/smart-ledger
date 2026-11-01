@@ -223,6 +223,17 @@ Cấu hình một lần, trên **từng** Firebase project (staging `smart-ledge
 
 Thư viện có mã native nên phải build lại APK. Plugin `@react-native-google-signin/google-signin` trong `app.json` gắn client iOS của `GoogleService-Info.plist` khi prebuild iOS; trên iOS thư viện tự dùng client đó nên không bắt buộc Web client ID (Android thì bắt buộc). Chưa kiểm tra: iOS. Giới hạn liên kết tài khoản giống Facebook (xem mục trên).
 
+## Test giao diện bằng Playwright
+
+Test trong `e2e/` chạy bản Expo web với dữ liệu mock trên cổng 8090, không cần Firebase hay Core. Playwright tự bật server rồi tắt khi xong; lần đầu Metro build mất vài phút.
+
+```bash
+npx playwright install chromium
+npm run test:e2e
+```
+
+Thêm `-- --headed` để xem trình duyệt chạy, `-- --ui` để chạy từng bước. Báo cáo nằm ở `e2e-report/`, ảnh và trace của test lỗi ở `e2e-results/`.
+
 ## Debug
 
 - **Log:** chỉ chạy ở bản dev (`__DEV__`), mọi thứ có tiền tố `[api]`, `[auth]`, `[session]`. Không ghi token, mật khẩu, SĐT/email đầy đủ. Xem ở terminal đang chạy `npx expo start --dev-client` (bấm `j` mở React Native DevTools), hoặc:
