@@ -1,0 +1,36 @@
+info:
+  name: Create shop
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/shops"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Bruno shop",
+        "industry": "Tạp hóa",
+        "phone": "0900000000",
+        "address": "Hà Nội"
+      }
+  auth: inherit
+
+runtime:
+  actions:
+    - type: set-variable
+      phase: after-response
+      selector:
+        expression: res.body.id
+        method: jsonq
+      variable:
+        name: shopId
+        scope: runtime
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true

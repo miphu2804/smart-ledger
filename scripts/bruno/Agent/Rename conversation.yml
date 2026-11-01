@@ -1,0 +1,22 @@
+info:
+  name: Rename conversation
+  type: http
+  seq: 5
+
+http:
+  method: PATCH
+  url: "{{baseUrl}}/api/v1/agent/conversations/{{conversationId}}"
+  body:
+    type: json
+    data: |-
+      {
+        "title": "Bruno test"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true

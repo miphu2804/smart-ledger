@@ -1,0 +1,12 @@
+name: staging
+variables:
+  - name: baseUrl
+    value: https://staging.103-162-31-93.sslip.io
+  - name: firebaseAuthUrl
+    value: https://identitytoolkit.googleapis.com
+  - secret: true
+    name: firebaseApiKey
+  - secret: true
+    name: firebaseEmail
+  - secret: true
+    name: firebasePassword

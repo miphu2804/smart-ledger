@@ -1,0 +1,32 @@
+info:
+  name: Update draft
+  type: http
+  seq: 4
+
+http:
+  method: PUT
+  url: "{{baseUrl}}/api/v1/sale-drafts/{{draftId}}"
+  body:
+    type: json
+    data: |-
+      {
+        "customerName": "Bruno customer",
+        "discountVnd": 0,
+        "initialPaidVnd": 10000,
+        "initialPaymentMethod": "CASH",
+        "items": [
+          {
+            "productId": {{productId}},
+            "quantity": 1,
+            "unitPriceVnd": 20000
+          }
+        ]
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
