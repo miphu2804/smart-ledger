@@ -28,7 +28,6 @@ Biến môi trường (xem `.env.example`):
 | `VITE_FIREBASE_AUTH_EMULATOR_HOST` | (trống) | Chỉ khi chạy thử trên máy: host của Firebase Auth Emulator, vd. `localhost:9099` |
 | `VITE_ANDROID_APK_URL` | (trống) | Liên kết tải APK Android trên trang giới thiệu (xem [Publish the APK for the landing page](../../docs/development/ci-cd.md#publish-the-apk-for-the-landing-page)). Để trống thì nút tải hiện "Sắp ra mắt" và không bấm được |
 | `VITE_ADMIN_ENABLED` | (tắt) | `true` bật trang quản trị `/admin`. Tắt thì bản build không có mã admin, tài khoản demo cũng không lọt vào bundle. Đặt `true` trong `.env.local` khi phát triển |
-| `VITE_LEGAL_DRAFT` | `true` | Hai trang pháp lý hiện nhãn "Bản nháp" cho đến khi chủ sản phẩm duyệt; đặt `false` lúc build để gỡ nhãn |
 
 Thông tin liên hệ công khai nằm trong [`site.yaml`](site.yaml), không phải biến môi trường: `contact_email` (hiện ở mục Liên hệ, `/privacy` và `/data-deletion`) và `social.facebook`, `social.tiktok`, `social.instagram` (icon trên thanh điều hướng và footer). Mục nào để trống thì trang không hiện mục đó.
 
@@ -48,8 +47,8 @@ Giao diện "calm operations": nền trung tính ấm, accent xanh lá (#2F7A43 
 | Đường dẫn | Nội dung |
 | --- | --- |
 | `/` | Trang giới thiệu |
-| `/privacy` | Chính sách quyền riêng tư (bản nháp, chờ duyệt) |
-| `/chinh-sach` | Chính sách gửi Google Play: quyền riêng tư, điều khoản, thanh toán (bản nháp, chờ duyệt) |
+| `/privacy` | Chuyển tới `/chinh-sach` |
+| `/chinh-sach` | Chính sách gửi Google Play: quyền riêng tư, điều khoản, thanh toán |
 | `/data-deletion` | Hướng dẫn xoá dữ liệu người dùng (Meta yêu cầu cho Facebook Login) |
 | `/delete-account` | Cùng trang `/data-deletion`, URL xoá tài khoản khai trên Google Play |
 | `/admin/login` | Đăng nhập (chỉ ADMIN vào được) |
@@ -93,7 +92,7 @@ Giao diện theo app mobile mới: tím thương hiệu `#482AAC`, nền kem `#F
 
 Chụp lại ảnh khi giao diện app đổi: chạy dev build trên simulator ở chế độ mock (`npx expo start --dev-client` trong `../mobile` với ba biến `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS` đặt `true`), chụp bằng `xcrun simctl io booted screenshot`, phủ 186 px trên cùng (thanh trạng thái @3x) bằng hàng điểm ảnh ngay bên dưới, rồi `cwebp -q 82 -resize 660 0`. Giữ đúng tỉ lệ 440:956 để ảnh khớp khung điện thoại trong `landing.css`.
 
-**Trang pháp lý** (`src/pages/legal/`) chưa được duyệt theo [AGENTS.md](../../AGENTS.md). Trước khi công khai: chủ sản phẩm duyệt nội dung (kể cả cam kết xử lý yêu cầu xoá trong `DELETION_DAYS`, `src/pages/legal/legalConfig.ts`) rồi đặt `VITE_LEGAL_DRAFT=false`.
+**Trang pháp lý** (`src/pages/legal/`) là văn bản công khai. Đổi nhà cung cấp, dữ liệu thu thập hay cam kết xử lý yêu cầu xoá (`DELETION_DAYS`) thì cập nhật nội dung và `POLICY_UPDATED` trong `legalConfig.ts`.
 
 **Triển khai:** job `deploy-landing` trong [`cd.yml`](../../.github/workflows/cd.yml) (CI gọi sau khi job `landing` qua) build web này và đẩy lên một dự án Vercel riêng tên `landing`. Vercel Git không deploy (`git.deploymentEnabled: false` trong `vercel.json`). Pull request tạm không deploy preview (giới hạn deploy/ngày của Vercel Hobby). Các môi trường, chi tiết ở [CI/CD](../../docs/development/ci-cd.md#landing-page-on-vercel):
 
@@ -102,7 +101,7 @@ Chụp lại ảnh khi giao diện app đổi: chạy dev build trên simulator 
 | Staging | `staging` | `LANDING_URL` của environment `landing-staging` |
 | Production | `main` (cần duyệt) | `LANDING_URL` của environment `landing-production` |
 
-Thiết lập một lần trên Vercel: New Project → import repo này → Root Directory `frontend/web` (framework Vite tự nhận). Lấy project ID đặt làm secret `VERCEL_PROJECT_ID` trong ba environment `landing-*`. Biến `VITE_LEGAL_DRAFT` và `LANDING_URL` đặt làm Variables của từng environment.
+Thiết lập một lần trên Vercel: New Project → import repo này → Root Directory `frontend/web` (framework Vite tự nhận). Lấy project ID đặt làm secret `VERCEL_PROJECT_ID` trong ba environment `landing-*`. Biến `LANDING_URL` đặt làm Variables của từng environment.
 
 `rewrites` trong `vercel.json` chuyển mọi đường dẫn về `index.html` để `/privacy`, `/data-deletion` mở trực tiếp được.
 

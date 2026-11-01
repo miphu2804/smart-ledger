@@ -2,9 +2,9 @@
 
 | Area | Change |
 |---|---|
-| Web | • `/chinh-sach` carries the privacy policy, terms of use and payment policy from the team's Google Doc dated 30/10/2026, adding Zalo sign-in and the VPS as data processors<br>• Details not decided yet show highlighted as "Cần điền" and the page keeps the draft label until approved<br>• `/delete-account` opens the data deletion page, and the footer links to the new page |
+| Web | • `/chinh-sach` carries the privacy policy, terms of use and payment policy from the team's Google Doc dated 30/10/2026, with its open details filled from the deploy config and code: AI providers, log retention, what is really collected<br>• `/delete-account` opens the data deletion page, the footer links to the new page, and `/privacy` redirects to it, so one privacy policy remains<br>• The draft label is gone from the legal pages, with `VITE_LEGAL_DRAFT` in the code, the landing workflow and the docs |
 
-Check: `npm run lint`, `tsc -b` and `vite build` pass; at 375 px the page has no horizontal scroll and shows 8 highlighted places. Not verified: legal review, and the in-app account deletion the page describes does not exist yet. Commit: the one that adds this entry.
+Check: `npm run lint`, `tsc -b` and `vite build` pass; at 375 px the page has no horizontal scroll and no draft or "Cần điền" text, and `/privacy` redirects to it. Not verified: legal review. The app still has no in-app account deletion entry, which the page says plainly and Google Play requires. Commit: the one that adds this entry.
 
 ### 2026-10-31 — Bruno collection for the Core API
 

@@ -11,11 +11,6 @@ const TOC: TocItem[] = [
   { id: 'thanh-toan', label: 'Thanh toán, gia hạn, huỷ và hoàn tiền' },
 ]
 
-/** Thông tin chủ sản phẩm chưa chốt: hiện rõ thay vì tự điền, và phải hết trước khi gỡ nhãn "Bản nháp". */
-function Pending({ children }: { children: ReactNode }) {
-  return <mark className="lp-legal-pending">[Cần điền: {children}]</mark>
-}
-
 function Website() {
   return <a href={WEBSITE}>songheloi.id.vn</a>
 }
@@ -51,9 +46,6 @@ export default function PolicyPage() {
             <li>
               Email hỗ trợ, quyền riêng tư và xoá dữ liệu: <ContactEmail />
             </li>
-            <li>
-              Địa chỉ liên hệ: <Pending>địa chỉ công khai</Pending>
-            </li>
           </ul>
         </Item>
 
@@ -63,8 +55,9 @@ export default function PolicyPage() {
             dữ liệu liên quan đến phương thức đăng nhập.
           </p>
           <p>
-            Sổ Nghe Lời dùng Firebase Authentication để xác thực. Khi bạn đăng nhập bằng Google, Zalo hoặc phương thức được hỗ trợ khác, chúng tôi chỉ
-            nhận thông tin mà bạn hoặc nhà cung cấp đó cho phép chia sẻ. Chúng tôi không lưu mật khẩu Google hay Zalo của bạn.
+            Sổ Nghe Lời dùng Firebase Authentication để xác thực. Bạn đăng nhập bằng email và mật khẩu, Google hoặc Zalo; đăng nhập Facebook đang tạm
+            khoá. Khi dùng tài khoản bên ngoài, chúng tôi chỉ nhận thông tin mà bạn hoặc nhà cung cấp đó cho phép chia sẻ. Mật khẩu email do Firebase quản
+            lý; máy chủ của chúng tôi không lưu mật khẩu, kể cả mật khẩu Google hay Zalo.
           </p>
         </Item>
 
@@ -78,7 +71,7 @@ export default function PolicyPage() {
 
         <Item title="4. Dữ liệu khách hàng của cửa hàng">
           <p>
-            Bạn có thể nhập tên, số điện thoại, địa chỉ, ghi chú, lịch sử mua hàng hoặc công nợ của khách hàng. Chủ cửa hàng chịu trách nhiệm bảo đảm có
+            Bạn có thể nhập tên, số điện thoại, lịch sử mua hàng và công nợ của khách hàng. Chủ cửa hàng chịu trách nhiệm bảo đảm có
             căn cứ hợp pháp để thu thập, sử dụng và nhập các dữ liệu này. Chúng tôi xử lý dữ liệu đó để cung cấp chức năng quản lý khách hàng, bán hàng
             và công nợ cho chính bạn, và không bán danh sách khách hàng cho bên thứ ba.
           </p>
@@ -86,8 +79,9 @@ export default function PolicyPage() {
 
         <Item title="5. Barcode, camera và hình ảnh">
           <p>
-            Ứng dụng có thể xin quyền camera khi bạn chủ động quét barcode hoặc chụp, tải ảnh sản phẩm. Dữ liệu barcode dùng để nhận diện hoặc tra cứu
-            sản phẩm. Ảnh đại diện, logo cửa hàng hoặc ảnh sản phẩm có thể được lưu qua Cloudinary.
+            Ứng dụng xin quyền camera khi bạn chủ động quét barcode hoặc chụp ảnh sản phẩm. Lúc quét, hình ảnh từ camera không được lưu và không được gửi
+            đi; mã barcode dùng để nhận diện hoặc tra cứu sản phẩm. Ảnh sản phẩm bạn chụp được tải lên và lưu qua Cloudinary để hiện trong danh mục hàng của
+            cửa hàng bạn.
           </p>
         </Item>
 
@@ -107,8 +101,9 @@ export default function PolicyPage() {
 
         <Item title="8. Hội thoại và trợ lý AI">
           <p>
-            Khi bạn dùng trợ lý AI, hệ thống có thể xử lý câu hỏi, transcript, prompt, phản hồi AI và phần dữ liệu nghiệp vụ cần thiết để trả lời. Lịch sử
-            hội thoại có thể được lưu trong PostgreSQL trên Supabase. Nhà cung cấp AI: <Pending>nhà cung cấp AI trên production</Pending>.
+            Khi bạn dùng trợ lý AI, hệ thống xử lý câu hỏi, transcript, prompt, phản hồi AI và phần dữ liệu nghiệp vụ cần thiết để trả lời. Nội dung này được
+            gửi tới nhà cung cấp mô hình OpenCode Go và OpenAI qua cổng Bifrost do chúng tôi tự vận hành để tạo câu trả lời. Bifrost không ghi nội dung tin
+            nhắn vào log. Lịch sử hội thoại được lưu trong PostgreSQL trên Supabase.
           </p>
           <p>Bạn không nên nhập mật khẩu, khoá API, thông tin thẻ thanh toán hoặc dữ liệu nhạy cảm không cần thiết vào hội thoại AI.</p>
         </Item>
@@ -116,7 +111,8 @@ export default function PolicyPage() {
         <Item title="9. Dữ liệu kỹ thuật, bảo mật và nhật ký">
           <p>
             Chúng tôi có thể xử lý địa chỉ IP, thời gian truy cập, phiên bản ứng dụng, loại thiết bị, hệ điều hành, nhật ký API, mã lỗi, dữ liệu chẩn đoán
-            và nhật ký kiểm toán để bảo vệ tài khoản, chống lạm dụng, xử lý lỗi và duy trì hệ thống.
+            và nhật ký kiểm toán để bảo vệ tài khoản, chống lạm dụng, xử lý lỗi và duy trì hệ thống. Chúng tôi cũng có thể ghi ngày bạn có hoạt động để thống
+            kê số người dùng. Nhân sự hỗ trợ của nhóm chỉ xem hồ sơ và cửa hàng ở mức cần để giúp bạn, không sửa được sổ bán hàng của bạn.
           </p>
         </Item>
 
@@ -133,15 +129,16 @@ export default function PolicyPage() {
           <ul>
             <li>Google Firebase: xác thực tài khoản.</li>
             <li>Google và Zalo: đăng nhập khi bạn chọn phương thức tương ứng.</li>
+            <li>
+              Meta: đăng nhập Facebook đang tạm khoá. Bộ công cụ Facebook trong ứng dụng đã tắt tự ghi sự kiện và thu thập mã quảng cáo; khi mở lại, ứng dụng chỉ
+              xin quyền hồ sơ công khai.
+            </li>
             <li>Supabase (PostgreSQL): cơ sở dữ liệu ứng dụng và lịch sử AI.</li>
-            <li>
-              Máy chủ chạy dịch vụ nghiệp vụ và AI: <Pending>nhà cung cấp VPS</Pending>.
-            </li>
-            <li>Cloudinary: lưu trữ và phân phối hình ảnh.</li>
-            <li>Vercel: phân phối website và giao diện web.</li>
-            <li>
-              Nhà cung cấp AI: <Pending>nhà cung cấp AI trên production</Pending>.
-            </li>
+            <li>Máy chủ riêng ảo (VPS) do nhóm thuê: chạy dịch vụ nghiệp vụ, AI và hệ thống giám sát.</li>
+            <li>Redis Cloud: bộ nhớ đệm.</li>
+            <li>Cloudinary: lưu trữ và phân phối ảnh sản phẩm.</li>
+            <li>Vercel và Cloudflare R2: phân phối website và file cài đặt Android.</li>
+            <li>OpenCode Go và OpenAI: tạo câu trả lời của trợ lý AI.</li>
             <li>Google Play: phân phối ứng dụng và xử lý thanh toán subscription nếu được triển khai.</li>
           </ul>
         </Item>
@@ -162,29 +159,27 @@ export default function PolicyPage() {
             <li>
               Xoá khỏi dữ liệu hoạt động chính: trong vòng {DELETION_DAYS} ngày kể từ khi xác minh được yêu cầu.
             </li>
+            <li>Bản sao lưu của nhà cung cấp hạ tầng: tự hết hạn theo chu kỳ của nhà cung cấp.</li>
+            <li>Log kỹ thuật: 14 ngày. Chỉ số giám sát hệ thống: 30 ngày.</li>
             <li>
-              Dữ liệu còn trong bản sao lưu: <Pending>thời gian tồn tại sau yêu cầu xoá</Pending>.
+              Nhật ký kiểm toán: chỉ thêm, không sửa hay xoá được qua ứng dụng. Khi xử lý yêu cầu xoá, chúng tôi xoá tên và thông tin liên hệ khỏi hồ sơ mà nhật ký
+              tham chiếu tới; dòng nhật ký không còn nhận ra bạn có thể được giữ lại.
             </li>
-            <li>
-              Log kỹ thuật và nhật ký kiểm toán: <Pending>thời gian lưu</Pending>.
-            </li>
-            <li>
-              Lịch sử hội thoại AI: <Pending>thời gian lưu</Pending>.
-            </li>
+            <li>Lịch sử hội thoại AI: tới khi bạn xoá cuộc trò chuyện hoặc yêu cầu xoá tài khoản.</li>
           </ul>
         </Item>
 
         <Item title="14. Xoá tài khoản và dữ liệu">
           <p>
-            Bạn có thể yêu cầu xoá tài khoản và dữ liệu liên quan trong ứng dụng hoặc tại trang công khai <Link to="/delete-account">Xoá tài khoản</Link>,
-            không cần cài ứng dụng. Sau khi xác minh yêu cầu hợp lệ, chúng tôi xoá hoặc ẩn danh dữ liệu không còn cần thiết. Một số dữ liệu có thể được giữ
+            Bạn có thể yêu cầu xoá tài khoản và dữ liệu liên quan theo hướng dẫn tại trang công khai <Link to="/delete-account">Xoá tài khoản</Link>, không cần
+            cài ứng dụng. Sau khi xác minh yêu cầu hợp lệ, chúng tôi xoá hoặc ẩn danh dữ liệu không còn cần thiết. Một số dữ liệu có thể được giữ
             lại trong thời gian giới hạn khi pháp luật hoặc yêu cầu bảo mật bắt buộc.
           </p>
         </Item>
 
         <Item title="15. Quyền của người dùng">
           <p>
-            Tuỳ quy định pháp luật áp dụng, bạn có thể yêu cầu truy cập, chỉnh sửa, xoá hoặc hạn chế xử lý dữ liệu; rút lại sự đồng ý đối với hoạt động dựa
+            Theo Luật Bảo vệ dữ liệu cá nhân số 91/2025/QH15 và quy định pháp luật áp dụng, bạn có thể yêu cầu truy cập, chỉnh sửa, xoá hoặc hạn chế xử lý dữ liệu; rút lại sự đồng ý đối với hoạt động dựa
             trên sự đồng ý; và thực hiện các quyền khác theo pháp luật. Gửi yêu cầu tới <ContactEmail />.
           </p>
         </Item>
@@ -224,7 +219,7 @@ export default function PolicyPage() {
         <Item title="2. Dịch vụ">
           <p>
             Sổ Nghe Lời cung cấp công cụ quản lý sản phẩm, barcode, khách hàng, đơn hàng, giao dịch, công nợ, chi phí, báo cáo và chức năng hỗ trợ bằng giọng
-            nói và AI. Tính năng có thể khác nhau theo phiên bản và gói dịch vụ.
+            nói và AI. Tính năng có thể khác nhau theo phiên bản.
           </p>
         </Item>
         <Item title="3. Trách nhiệm tài khoản">
@@ -245,7 +240,7 @@ export default function PolicyPage() {
         <Item title="7. Hành vi bị cấm">
           <p>
             Bạn không được dùng dịch vụ để vi phạm pháp luật; xâm phạm quyền của người khác; phát tán mã độc; truy cập trái phép; khai thác lỗ hổng khi chưa
-            được phép; né quota hoặc giới hạn gói; gây quá tải; gian lận thanh toán; hoặc dùng AI để hỗ trợ hành vi bất hợp pháp.
+            được phép; né giới hạn sử dụng; gây quá tải; gian lận thanh toán; hoặc dùng AI để hỗ trợ hành vi bất hợp pháp.
           </p>
         </Item>
         <Item title="8. Dịch vụ bên thứ ba">
@@ -259,20 +254,20 @@ export default function PolicyPage() {
         </Item>
         <Item title="10. Gói trả phí">
           <p>
-            Một số chức năng có thể yêu cầu subscription. Giá, quota, thời hạn và quyền lợi được hiển thị trước khi bạn mua. Trên bản Android phân phối qua
+            Sổ Nghe Lời hiện miễn phí. Sau này một số chức năng có thể yêu cầu subscription; giá, quota, thời hạn và quyền lợi được hiển thị trước khi bạn mua. Trên bản Android phân phối qua
             Google Play, subscription mở khoá tính năng số trong ứng dụng sẽ được triển khai qua Google Play Billing khi bắt đầu thu phí, trừ trường hợp thuộc
             ngoại lệ được Google Play cho phép.
           </p>
         </Item>
-        <Item title="11. Giới hạn AI">
-          <p>Gói dịch vụ có thể giới hạn theo phút voice, số yêu cầu AI hoặc tài nguyên khác. Khi đạt quota, tính năng liên quan có thể tạm dừng đến kỳ tiếp theo hoặc yêu cầu nâng cấp.</p>
+        <Item title="11. Giới hạn sử dụng">
+          <p>Để chống lạm dụng, hệ thống giới hạn tần suất một số thao tác như tạo cửa hàng và tải ảnh. Khi có gói trả phí, gói có thể giới hạn thêm theo phút voice, số yêu cầu AI hoặc tài nguyên khác; khi đạt quota, tính năng liên quan có thể tạm dừng đến kỳ tiếp theo hoặc yêu cầu nâng cấp.</p>
         </Item>
         <Item title="12. Khoá hoặc đình chỉ tài khoản">
           <p>Chúng tôi có thể tạm giới hạn tài khoản khi có nguy cơ bảo mật, gian lận, lạm dụng hoặc vi phạm Điều khoản. Vi phạm nghiêm trọng hoặc lặp lại có thể dẫn đến chấm dứt tài khoản.</p>
         </Item>
         <Item title="13. Xoá tài khoản">
           <p>
-            Bạn có thể yêu cầu xoá tài khoản trong ứng dụng hoặc qua trang <Link to="/delete-account">Xoá tài khoản</Link>. Xoá ứng dụng khỏi điện thoại không
+            Bạn có thể yêu cầu xoá tài khoản qua trang <Link to="/delete-account">Xoá tài khoản</Link>. Xoá ứng dụng khỏi điện thoại không
             đồng nghĩa với xoá tài khoản và cũng không tự động huỷ subscription Google Play.
           </p>
         </Item>
@@ -291,7 +286,7 @@ export default function PolicyPage() {
         <h2>III. Thanh toán, gia hạn, huỷ và hoàn tiền</h2>
 
         <Item title="1. Trạng thái hiện tại">
-          <p>Sổ Nghe Lời hiện chưa thu phí trong ứng dụng. Các gói dưới đây là phương án dự kiến, chưa mua được cho tới khi Google Play Billing được tích hợp và kiểm thử.</p>
+          <p>Sổ Nghe Lời hiện miễn phí và chưa có mua hàng trong ứng dụng. Các gói dưới đây là phương án dự kiến, chưa mua được. Các mục sau áp dụng khi bắt đầu thu phí qua Google Play Billing.</p>
         </Item>
         <Item title="2. Các gói dự kiến">
           <table className="lp-legal-table">
@@ -418,7 +413,7 @@ export default function PolicyPage() {
       <section className="lp-legal-sec" id="lien-he">
         <h2>Liên hệ</h2>
         <p>
-          Sổ Nghe Lời, {CONTROLLER}. Email: <ContactEmail />. Website: <Website />. Địa chỉ: <Pending>địa chỉ công khai</Pending>.
+          Sổ Nghe Lời, {CONTROLLER}. Email: <ContactEmail />. Website: <Website />.
         </p>
       </section>
     </LegalLayout>

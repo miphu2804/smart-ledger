@@ -88,7 +88,7 @@ export default function DataDeletionPage() {
           </span>
         </div>
         <p>
-          Xem thêm cách chúng tôi xử lý dữ liệu tại <Link to="/privacy">Chính sách quyền riêng tư</Link>. Câu hỏi khác: <ContactEmail />.
+          Xem thêm cách chúng tôi xử lý dữ liệu tại <Link to="/chinh-sach">Chính sách của Sổ Nghe Lời</Link>. Câu hỏi khác: <ContactEmail />.
         </p>
       </section>
     </LegalLayout>

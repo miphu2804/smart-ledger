@@ -1,10 +1,10 @@
-import { ArrowLeft, TriangleAlert } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { useEffect, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import Logo from '../../components/Logo'
 import SiteFooter from '../landing/SiteFooter'
 import '../../styles/landing.css'
-import { CONTACT_EMAIL, LEGAL_DRAFT, LEGAL_UPDATED } from './legalConfig'
+import { CONTACT_EMAIL, LEGAL_UPDATED } from './legalConfig'
 
 /** Email liên hệ; chưa cấu hình thì hiện chỗ trống rõ ràng thay vì bịa địa chỉ. */
 export function ContactEmail() {
@@ -46,23 +46,6 @@ export default function LegalLayout({ title, lead, updated = LEGAL_UPDATED, toc,
         <article className="lp-legal-doc">
           <h1>{title}</h1>
           <p className="lp-legal-meta">Cập nhật lần cuối: {updated}</p>
-
-          {LEGAL_DRAFT && (
-            <div className="lp-draft" role="note">
-              <TriangleAlert size={18} />
-              <div>
-                <strong>Bản nháp, đang chờ chủ sản phẩm xét duyệt.</strong> Nội dung chưa được đối chiếu với quy định pháp luật nên chưa dùng
-                làm văn bản chính thức.
-                {!CONTACT_EMAIL && (
-                  <ul>
-                    <li>
-                      Chưa có email liên hệ: điền <code>contact_email</code> trong <code>site.yaml</code>.
-                    </li>
-                  </ul>
-                )}
-              </div>
-            </div>
-          )}
 
           <p className="lp-legal-lead">{lead}</p>
 
