@@ -1,3 +1,12 @@
+### 2026-11-01 — snooplog runs from any shell
+
+| Area | Change |
+|---|---|
+| Deploy | • `snooplog` is a script in `/usr/local/bin` instead of an alias in `/etc/profile.d`, so tmux panes and other non-login shells can run it; the filter is unchanged |
+| Docs | • `ci-cd.md` calls it a command, not a shortcut |
+
+Check: `ansible-playbook --syntax-check` passes and the patch applies cleanly to `staging`; not run on the VPS yet, so the tmux case is inferred. Commit: the one that adds this entry.
+
 ### 2026-11-01 — Policy and account deletion links in the app
 
 | Area | Change |
@@ -79,6 +88,7 @@ Check: `npx tsc --noEmit` passes; on the mock web build at 375×812 the end of Q
 | Docs | • `scripts/bruno` adds Bruno requests for the Core API in OpenCollection YAML with `local` and `staging` environments, Firebase login and a read-only `Smoke` folder<br>• Production has no environment because most requests write data |
 
 Check: `bru run Smoke --env staging` passed 4 of 4 assertions; 65 of the 87 requests returned 2xx or their expected status in OWNER and ADMIN flows against local Core, PostgreSQL and the Firebase Auth Emulator; the 22 media, Zalo and Agent requests were not run because they need Cloudinary, Zalo or AI. Commit: the squash merge of this branch.
+
 ### 2026-10-31 — Durable operation quotas (CORE-019)
 
 | Area | Change |
@@ -186,11 +196,3 @@ Check: on the VPS after the staging playbook run, Grafana listed five rules; `PO
 | Docs | • The CI/CD guide lists the new alerts and how Alloy reaches AI and Bifrost; the VPS network diagram shows the probes and is re-laid out with straight arrows |
 
 Check: throwaway containers with the real Alloy config: readiness 503 with liveness up fired only Database down, Core stopped only Endpoint down; the playbook's monitoring handler under `sh` and `dash` joined Alloy to a test `smart-ledger-staging_default`, the AI probe read 1 and the missing Bifrost 0, and stopping the fake AI raised the Service down series; `ansible-playbook --syntax-check` passes. Not verified: a playbook run on the VPS, and whether production's missing Bifrost starts with it or must be dropped from the probes. Commit: the one that adds this entry.
-
-### 2026-10-29 — VPS network and port diagram
-
-| Area | Change |
-|---|---|
-| Docs | • New `vps-network.drawio` and its SVG draw the four Docker networks on the VPS as overlapping regions, with the `name:port` each container is reached at, the `edge` aliases Caddy dials, and the Caddy, Core, AI, Bifrost and monitoring flows<br>• The CI/CD guide shows it under VPS with how to read it, and the diagram guide lists it |
-
-Check: networks and members from `docker network inspect` and `docker ps` on the VPS, ports and aliases from `deploy/*/compose.yaml` and the Caddy sites in the playbook; `validate.py` reports 0 errors and the SVG was read on a light and a dark page. Commit: the one that adds this entry.
