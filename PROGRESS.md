@@ -1,3 +1,11 @@
+### 2026-11-01 — Playwright covers the main mobile flows
+
+| Area | Change |
+|---|---|
+| Test | • `e2e/` gains specs for sign-up, sales and payment, invoices, products, debts, expenses, home and reports, notifications, and account (#439 to #448), with shared steps in `e2e/helpers.ts` |
+
+Check: `npx playwright test` twice in a row, 23/23 both times on the mock web build with a cleared cache; `npx tsc --noEmit` passes; no app bug found. Not covered: real Core, a real phone, voiding an order, stock-in, paying a debt in full, deleting an expense, clearing all notifications. Commit: the one that adds this entry.
+
 ### 2026-11-01 — Policy and account deletion links in the app
 
 | Area | Change |
@@ -183,12 +191,3 @@ Check: throwaway containers with the real Alloy config: readiness 503 with liven
 | Docs | • New `vps-network.drawio` and its SVG draw the four Docker networks on the VPS as overlapping regions, with the `name:port` each container is reached at, the `edge` aliases Caddy dials, and the Caddy, Core, AI, Bifrost and monitoring flows<br>• The CI/CD guide shows it under VPS with how to read it, and the diagram guide lists it |
 
 Check: networks and members from `docker network inspect` and `docker ps` on the VPS, ports and aliases from `deploy/*/compose.yaml` and the Caddy sites in the playbook; `validate.py` reports 0 errors and the SVG was read on a light and a dark page. Commit: the one that adds this entry.
-
-### 2026-10-28 — Web deploys check the real domains
-
-| Area | Change |
-|---|---|
-| Deploy | • `deploy-web.yml` names `app-production.songheloi.id.vn` and `app-staging.songheloi.id.vn` in the GitHub environment URL and in the smoke test, instead of the Vercel domains the project no longer lists in `CORS_ALLOWED_ORIGINS`<br>• `app-staging.songheloi.id.vn` carries the git branch `staging` in its Vercel domain settings, so a `main` deploy no longer takes the alias |
-| Docs | • The CI/CD guide names the same domains in the release steps, the staging CORS list, the production checklist and the Vercel event table, and records why the staging domain needs its branch |
-
-Check: the production CD run of 2026-10-28 12:17 failed its smoke test with `Core CORS does not allow https://smart-ledger-prod.vercel.app`, and the production deploy had taken `app-staging.songheloi.id.vn`; after the branch was set and CD staging web re-run, `app-production` serves the production bundle and `app-staging` the staging one, each allowed by its own Core. `actionlint` reports only the pre-existing `SC2034` of the smoke test step. Not verified: the next production deploy keeping its hands off the staging alias.
