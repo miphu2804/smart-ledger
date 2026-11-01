@@ -152,7 +152,7 @@ function TabBar({ state, navigation }: TabBarProps) {
 }
 
 export default function TabsLayout() {
-  const { authReady, loggedIn, onboarded, guideDismissed, dismissGuide, user } = useApp();
+  const { authReady, loggedIn, onboarded, guideDismissed, dismissGuide, user, shopId } = useApp();
   const pathname = usePathname();
   // Các tab chỉ mở khi đã có tài khoản và tiệm. Trước khi có phiên, state còn là tiệm mẫu ("Tiệm tạp hoá cô Thỏ"): bấm back ở
   // bước tạo tiệm hay đăng xuất từ một màn mở chồng lên tab từng để lộ tiệm mẫu này như một tài khoản thật.
@@ -166,7 +166,9 @@ export default function TabsLayout() {
       <GuideTourProvider active={!guideDismissed && pathname === '/'} onFinish={dismissGuide} userName={user.name}>
       {/* Menu chuyển nhanh bên trái phủ lên cả thanh tab và mascot */}
       <QuickNavProvider>
+        {/* Đổi tiệm thì dựng lại các tab: không còn số liệu, giỏ hay ô tìm kiếm của tiệm cũ */}
         <Tabs
+          key={shopId ?? 'no-shop'}
           screenOptions={{ headerShown: false, animation: TAB_ANIMATION, sceneStyle: { backgroundColor: colors.bg } }}
           tabBar={(p) => <TabBar {...p} />}
         >

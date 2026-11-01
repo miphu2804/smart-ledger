@@ -19,6 +19,7 @@ export const PROTECTED_SCREENS = [
   'products',
   'profile',
   'settings',
+  'shop-new',
   'staff',
   'voice',
 ] as const;

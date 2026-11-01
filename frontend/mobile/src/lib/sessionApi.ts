@@ -19,7 +19,7 @@ import { industriesToCore, type ShopChanges } from './shopProfile';
 // ---- Core giả lập: mô phỏng đúng hành vi của Core thật (tài khoản mới phải gửi displayName) ----
 interface MockAccount {
   name: string;
-  shop?: ShopView;
+  shops: ShopView[];
 }
 const mockAccounts = new Map<string, MockAccount>(); // theo SĐT E.164
 
@@ -31,13 +31,15 @@ function mockAccountFor(phone: string): MockAccount | undefined {
   if (!mockAccounts.has(phone) && !phone.includes('@') && fromE164VN(phone).startsWith('09')) {
     mockAccounts.set(phone, {
       name: mockUser.name,
-      shop: {
-        id: 'mock-shop',
-        name: mockStore.name,
-        address: mockStore.address,
-        industries: mockStore.industries,
-        status: 'ACTIVE',
-      },
+      shops: [
+        {
+          id: 'mock-shop',
+          name: mockStore.name,
+          address: mockStore.address,
+          industries: mockStore.industries,
+          status: 'ACTIVE',
+        },
+      ],
     });
   }
   return mockAccounts.get(phone);
@@ -49,8 +51,8 @@ function mockView(phone: string, acc: MockAccount): SessionView {
       ? { id: 'mock-user', displayName: acc.name, email: phone, phone: null }
       : { id: 'mock-user', displayName: acc.name, phone },
     role: 'OWNER',
-    shops: acc.shop ? [acc.shop] : [],
-    needsOnboarding: !acc.shop,
+    shops: [...acc.shops],
+    needsOnboarding: acc.shops.length === 0,
   };
 }
 
@@ -63,7 +65,7 @@ function mockCreate(displayName?: string): SessionView {
         { field: 'displayName', issue: 'is required for a new account' },
       ]);
     }
-    acc = { name: displayName.trim() };
+    acc = { name: displayName.trim(), shops: [] };
     mockAccounts.set(phone, acc);
   }
   return mockView(phone, acc);
@@ -77,25 +79,27 @@ function mockMe(): SessionView {
 }
 
 function mockCreateShop(input: { name: string; industries: string[] }): ShopView {
-  const shop: ShopView = { id: 'mock-shop', name: input.name, industries: input.industries, status: 'ACTIVE' };
   const acc = mockAccounts.get(mockKey());
-  if (acc) acc.shop = shop;
+  const count = acc?.shops.length ?? 0;
+  const shop: ShopView = { id: count ? `mock-shop-${count + 1}` : 'mock-shop', name: input.name, industries: input.industries, status: 'ACTIVE' };
+  acc?.shops.push(shop);
   return shop;
 }
 
 /** Giống Core: chỉ đổi các trường được gửi; địa chỉ rỗng là xoá địa chỉ. */
-function mockUpdateShop(changes: ShopChanges): ShopView {
+function mockUpdateShop(shopId: string, changes: ShopChanges): ShopView {
   const acc = mockAccounts.get(mockKey());
-  if (!acc?.shop) throw new ApiError(404, 'shop_not_found', 'This shop is unavailable.');
-  const shop = acc.shop;
-  acc.shop = {
+  const index = acc?.shops.findIndex((item) => String(item.id) === shopId) ?? -1;
+  if (!acc || index < 0) throw new ApiError(404, 'shop_not_found', 'This shop is unavailable.');
+  const shop = acc.shops[index];
+  acc.shops[index] = {
     ...shop,
     name: changes.name ?? shop.name,
     address: changes.address === undefined ? shop.address : changes.address || null,
     phone: changes.phone === undefined ? shop.phone : changes.phone || null,
     industries: changes.industries ?? shop.industries,
   };
-  return acc.shop;
+  return acc.shops[index];
 }
 
 export const sessionApi = {
@@ -128,7 +132,7 @@ export const sessionApi = {
    */
   updateShop: async (shopId: string, changes: ShopChanges): Promise<ShopView> =>
     USE_MOCK_SHOPS
-      ? mockUpdateShop(changes)
+      ? mockUpdateShop(shopId, changes)
       : apiRequest<ShopView>(`/shops/${encodeURIComponent(shopId)}`, {
           method: 'PATCH',
           body: {
