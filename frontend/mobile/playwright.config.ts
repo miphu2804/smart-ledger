@@ -24,7 +24,8 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   webServer: {
-    command: `npx expo start --web --port ${PORT}`,
+    // --clear: các worktree dùng chung node_modules thì cache của Metro giữ đường dẫn app/ của worktree chạy trước, và test sẽ chạy nhầm màn
+    command: `npx expo start --web --port ${PORT} --clear`,
     url: `http://localhost:${PORT}`,
     timeout: 300_000,
     reuseExistingServer: false,

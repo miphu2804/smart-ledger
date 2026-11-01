@@ -41,6 +41,7 @@ Start with the path that matches your task; each step links to the next level of
 |---|---|
 | [Project overview](product/project-overview.md) | Product position, users, MVP boundary |
 | [Business requirements](product/business-requirements.md) | Outcomes, business rules, approvals |
+| [Google Play Data safety](product/google-play-data-safety.md) | Answers for the Play Console form, matched to the public policy page |
 | [Product requirements](product/product-requirements.md) | Observable behavior, `FR-*`, `NFR-*`, `AC-*` |
 | [Technical design](architecture/technical-design.md) | Implementation status (§1), MVP components, data, flows, verification |
 | [API contracts](contracts/api-contracts.md) | FE ↔ Core and Core ↔ AI contracts, per-endpoint status |

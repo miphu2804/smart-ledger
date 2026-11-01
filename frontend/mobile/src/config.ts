@@ -60,6 +60,9 @@ export const ZALO_LOGIN_ENABLED = process.env.EXPO_PUBLIC_ZALO_LOGIN === 'true';
 export const ZALO_NATIVE_CLIENT_ID = (process.env.EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID ?? '').trim();
 
 /** Email hỗ trợ hiện ở màn xác minh email; để trống thì không hiện dòng liên hệ. */
+/** Trang công khai của sản phẩm: chính sách (/chinh-sach) và hướng dẫn xoá tài khoản (/delete-account). */
+export const WEBSITE_URL = 'https://songheloi.id.vn';
+
 export const SUPPORT_EMAIL = (process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? '').trim();
 
 function requiredEnv(name: string, value: string | undefined): string {

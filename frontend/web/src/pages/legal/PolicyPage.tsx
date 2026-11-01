@@ -171,8 +171,8 @@ export default function PolicyPage() {
 
         <Item title="14. Xoá tài khoản và dữ liệu">
           <p>
-            Bạn có thể yêu cầu xoá tài khoản và dữ liệu liên quan theo hướng dẫn tại trang công khai <Link to="/delete-account">Xoá tài khoản</Link>, không cần
-            cài ứng dụng. Sau khi xác minh yêu cầu hợp lệ, chúng tôi xoá hoặc ẩn danh dữ liệu không còn cần thiết. Một số dữ liệu có thể được giữ
+            Bạn có thể yêu cầu xoá tài khoản và dữ liệu liên quan trong ứng dụng (Quản lý → Xoá tài khoản) hoặc tại trang công khai{' '}
+            <Link to="/delete-account">Xoá tài khoản</Link>, không cần cài ứng dụng. Sau khi xác minh yêu cầu hợp lệ, chúng tôi xoá hoặc ẩn danh dữ liệu không còn cần thiết. Một số dữ liệu có thể được giữ
             lại trong thời gian giới hạn khi pháp luật hoặc yêu cầu bảo mật bắt buộc.
           </p>
         </Item>
@@ -267,7 +267,7 @@ export default function PolicyPage() {
         </Item>
         <Item title="13. Xoá tài khoản">
           <p>
-            Bạn có thể yêu cầu xoá tài khoản qua trang <Link to="/delete-account">Xoá tài khoản</Link>. Xoá ứng dụng khỏi điện thoại không
+            Bạn có thể yêu cầu xoá tài khoản trong ứng dụng (Quản lý → Xoá tài khoản) hoặc qua trang <Link to="/delete-account">Xoá tài khoản</Link>. Xoá ứng dụng khỏi điện thoại không
             đồng nghĩa với xoá tài khoản và cũng không tự động huỷ subscription Google Play.
           </p>
         </Item>
