@@ -51,3 +51,7 @@ google-services.json
 # Speech model (about 49 MB): kept out of the public repo, see assets/models/README.md
 /assets/models/*
 !/assets/models/README.md
+
+# Playwright
+/e2e-results
+/e2e-report
