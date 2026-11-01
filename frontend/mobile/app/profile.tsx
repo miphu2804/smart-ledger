@@ -18,6 +18,7 @@ import {
   PROFILE_MAX,
   shopNameError,
   shopPhoneError,
+  unlessUnchanged,
 } from '../src/lib/profileValidation';
 import { sessionApi } from '../src/lib/sessionApi';
 import { industriesFromCore, shopChanges } from '../src/lib/shopProfile';
@@ -39,15 +40,18 @@ export default function Profile() {
   const [pick, setPick] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // Số tài khoản và tên ngân hàng đi cùng nhau, nên chỉ bỏ qua khi cả hai chưa sửa
+  const bankUnchanged =
+    bankName.trim() === app.store.bankName.trim() && normalizeBankAccount(bankAccount) === normalizeBankAccount(app.store.bankAccount);
   const errors = {
-    name: nameError(name),
-    email: emailError(email),
-    fb: facebookError(fb),
-    store: shopNameError(store),
-    phone: shopPhoneError(shopPhone),
-    address: addressError(address),
-    bankName: bankNameError(bankName, bankAccount),
-    bankAccount: bankAccountError(bankAccount, bankName),
+    name: unlessUnchanged(name, app.user.name, nameError(name)),
+    email: unlessUnchanged(email, app.user.email, emailError(email)),
+    fb: unlessUnchanged(fb, app.user.facebook, facebookError(fb)),
+    store: unlessUnchanged(store, app.store.name, shopNameError(store)),
+    phone: unlessUnchanged(shopPhone, app.store.phone, shopPhoneError(shopPhone)),
+    address: unlessUnchanged(address, app.store.address, addressError(address)),
+    bankName: bankUnchanged ? '' : bankNameError(bankName, bankAccount),
+    bankAccount: bankUnchanged ? '' : bankAccountError(bankAccount, bankName),
   };
   const chosen = industryList.filter((i) => industries.includes(i.id));
   // Core bắt buộc có ngành; xoá hết ngành sẽ bị từ chối nên chặn ngay ở màn này.

@@ -11,6 +11,7 @@ import {
   normalizeBankAccount,
   shopNameError,
   shopPhoneError,
+  unlessUnchanged,
 } from '../src/lib/profileValidation.ts';
 
 describe('họ tên và tên tiệm', () => {
@@ -36,7 +37,7 @@ describe('email', () => {
   });
 
   it('từ chối khoảng trắng, thiếu đuôi tên miền hay hai dấu chấm liền nhau', () => {
-    for (const bad of ['m ipu@student.fpt.edu.vn', 'mipu@gmail', 'mipu@gmail.c', 'mi..pu@gmail.com', 'mipu@@gmail.com', 'mipu@gmail.com!']) {
+    for (const bad of ['m ipu@student.fpt.edu.vn', 'mipu@gmail', 'mipu@gmail.c', 'mi..pu@gmail.com', 'mipu@@gmail.com', 'mipu@gmail.com!', '.ten@gmail.com', 'ten.@gmail.com']) {
       assert.notEqual(emailError(bad), '', bad);
     }
   });
@@ -44,7 +45,7 @@ describe('email', () => {
 
 describe('link Facebook', () => {
   it('nhận link có hoặc không có https và www', () => {
-    for (const ok of ['facebook.com/tenban', 'https://www.facebook.com/tiemcotho', 'm.facebook.com/profile.php?id=1000123', 'fb.com/tiem.co.tho', 'https://fb.me/tiemcotho']) {
+    for (const ok of ['facebook.com/tenban', 'https://www.facebook.com/tiemcotho', 'm.facebook.com/profile.php?id=1000123', 'fb.com/tiem.co.tho', 'https://fb.me/tiemcotho', 'facebook.com/search?q=tiem+co+tho']) {
       assert.equal(facebookError(ok), '', ok);
     }
   });
@@ -58,13 +59,13 @@ describe('link Facebook', () => {
 
 describe('số điện thoại tiệm', () => {
   it('nhận số di động, số bàn và +84, có thể chia nhóm', () => {
-    for (const ok of ['0909875643', '0901 234 567', '0901.234.567', '(028) 3822 1234', '+84 901 234 567', '']) {
+    for (const ok of ['0909875643', '0901 234 567', '0901.234.567', '(028) 3822 1234', '+84 901 234 567', '1900 6522', '1800 1234', '1900 123 456', '']) {
       assert.equal(shopPhoneError(ok), '', ok);
     }
   });
 
   it('từ chối toàn dấu chấm, có chữ, thiếu hay thừa số', () => {
-    for (const bad of ['........', '0909abc643', '090987564', '090987564312', '1900 6522', '84901234567']) {
+    for (const bad of ['........', '0909abc643', '090987564', '090987564312', '1900 65', '1900 65221', '84901234567']) {
       assert.notEqual(shopPhoneError(bad), '', bad);
     }
   });
@@ -75,6 +76,22 @@ describe('địa chỉ', () => {
     assert.equal(addressError(''), '');
     assert.equal(addressError('12 Lê Lợi, Q.1'), '');
     assert.equal(addressError('---'), 'Địa chỉ cần có chữ hoặc số');
+  });
+});
+
+describe('dữ liệu cũ không khoá màn', () => {
+  it('ô chưa sửa thì không báo lỗi, kể cả sai quy tắc mới', () => {
+    const old = '0901234567 / 0912345678';
+    assert.notEqual(shopPhoneError(old), '');
+    assert.equal(unlessUnchanged(old, old, shopPhoneError(old)), '');
+  });
+
+  it('sửa khác đi thì kiểm tra lại', () => {
+    assert.notEqual(unlessUnchanged('0901234567 / 09', '0901234567 / 0912345678', shopPhoneError('0901234567 / 09')), '');
+  });
+
+  it('ô bắt buộc để trống vẫn báo lỗi', () => {
+    assert.equal(unlessUnchanged('', '', nameError('')), 'Nhập họ và tên');
   });
 });
 
@@ -90,7 +107,7 @@ describe('nhận chuyển khoản', () => {
   });
 
   it('tên ngân hàng chỉ gồm chữ, số và khoảng trắng', () => {
-    for (const ok of ['Vietcombank', 'Nam A Bank', 'BIDV', 'MB Bank', 'Ngân hàng Á Châu (ACB)']) {
+    for (const ok of ['Vietcombank', 'Nam A Bank', 'BIDV', 'MB Bank', 'Ngân hàng Á Châu (ACB)', 'VP Bank, CN Hà Nội', 'Ngân hàng TMCP Đầu tư và Phát triển Việt Nam - BIDV']) {
       assert.equal(bankNameError(ok, '0123456789'), '', ok);
     }
     assert.notEqual(bankNameError('!@#$%', '0123456789'), '');

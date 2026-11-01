@@ -12,9 +12,18 @@ export const PROFILE_MAX = {
   shopName: 200,
   shopPhone: 30,
   address: 500,
-  bankName: 50,
+  bankName: 100,
   bankAccount: 23,
 } as const;
+
+/**
+ * Dữ liệu đã lưu từ trước có thể không đúng quy tắc mới (VD Core đang giữ "0901234567 / 0912345678"). Ô chưa sửa thì không báo
+ * lỗi, để một giá trị cũ không khoá nút Lưu của cả màn. Ô để trống vẫn theo kết quả kiểm tra.
+ */
+export function unlessUnchanged(value: string, saved: string, error: string): string {
+  const v = value.trim();
+  return v && v === saved.trim() ? '' : error;
+}
 
 const HAS_LETTER = /\p{L}/u;
 const HAS_LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
@@ -25,18 +34,18 @@ export function nameError(value: string): string {
   return HAS_LETTER.test(v) ? '' : 'Họ tên cần có chữ cái';
 }
 
-// Phần trước @ theo các ký tự email thường dùng; tên miền có ít nhất một dấu chấm và đuôi từ 2 chữ cái
-const EMAIL = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
+// Phần trước @ theo các ký tự email thường dùng, dấu chấm chỉ nằm giữa các chữ; tên miền có ít nhất một dấu chấm và đuôi từ 2 chữ cái
+const EMAIL = /^[A-Za-z0-9_%+-]+(\.[A-Za-z0-9_%+-]+)*@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
 
 export function emailError(value: string): string {
   const v = value.trim();
   if (!v) return '';
-  if (v.length > PROFILE_MAX.email || !EMAIL.test(v) || v.includes('..')) return 'Email chưa đúng định dạng, VD: ten@gmail.com';
+  if (v.length > PROFILE_MAX.email || !EMAIL.test(v)) return 'Email chưa đúng định dạng, VD: ten@gmail.com';
   return '';
 }
 
 // Có hoặc không có https://, tên miền Facebook, rồi đường dẫn tới trang cá nhân hay trang của tiệm (không có khoảng trắng)
-const FACEBOOK = /^(https?:\/\/)?((www|m|web|mobile)\.)?(facebook\.com|fb\.com|fb\.me)\/[A-Za-z0-9._\-/?=&%#]+$/i;
+const FACEBOOK = /^(https?:\/\/)?((www|m|web|mobile)\.)?(facebook\.com|fb\.com|fb\.me)\/[A-Za-z0-9._\-/?=&%#+]+$/i;
 
 export function facebookError(value: string): string {
   const v = value.trim();
@@ -51,14 +60,14 @@ export function shopNameError(value: string): string {
 }
 
 /**
- * Số điện thoại Việt Nam: 10–11 chữ số bắt đầu bằng 0, hoặc +84 rồi 9–10 chữ số. Cho phép khoảng trắng, dấu chấm, gạch và
- * ngoặc để dễ đọc (VD "0901 234 567", "(028) 3822 1234").
+ * Số điện thoại Việt Nam: 10–11 chữ số bắt đầu bằng 0, +84 rồi 9–10 chữ số, hoặc hotline 1800/1900 có 8 hay 10 chữ số. Cho phép
+ * khoảng trắng, dấu chấm, gạch và ngoặc để dễ đọc (VD "0901 234 567", "(028) 3822 1234", "1900 6522").
  */
 export function shopPhoneError(value: string): string {
   const v = value.trim();
   if (!v) return '';
   const digits = v.replace(/[\s.()-]/g, '');
-  if (!/^[0-9+\s.()-]+$/.test(v) || !/^(\+84|0)\d{9,10}$/.test(digits)) return 'Số điện thoại chưa đúng, VD: 0901 234 567';
+  if (!/^[0-9+\s.()-]+$/.test(v) || !/^((\+84|0)\d{9,10}|(1800|1900)(\d{4}|\d{6}))$/.test(digits)) return 'Số điện thoại chưa đúng, VD: 0901 234 567';
   return '';
 }
 
@@ -68,11 +77,11 @@ export function addressError(value: string): string {
   return HAS_LETTER_OR_DIGIT.test(v) ? '' : 'Địa chỉ cần có chữ hoặc số';
 }
 
-/** Tên ngân hàng: chữ, số, khoảng trắng và vài dấu có trong tên ngân hàng (VD "Nam A Bank", "BIDV", "Bac A Bank"). */
+/** Tên ngân hàng: chữ, số, khoảng trắng và vài dấu có trong tên đầy đủ hay tên chi nhánh (VD "BIDV", "VP Bank, CN Hà Nội"). */
 export function bankNameError(value: string, account: string): string {
   const v = value.trim();
   if (!v) return account.trim() ? 'Nhập tên ngân hàng của số tài khoản này' : '';
-  if (!/^[\p{L}\p{M}\p{N} .&()'-]+$/u.test(v) || !HAS_LETTER.test(v)) return 'Tên ngân hàng chỉ gồm chữ, số và khoảng trắng';
+  if (!/^[\p{L}\p{M}\p{N} .,&()/'-]+$/u.test(v) || !HAS_LETTER.test(v)) return "Tên ngân hàng cần có chữ, chỉ dùng thêm số và các dấu . , & ( ) / ' -";
   if (v.length < 2) return 'Tên ngân hàng quá ngắn';
   return '';
 }
