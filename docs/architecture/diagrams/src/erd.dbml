@@ -582,7 +582,7 @@ Table expenses {
 // AI TRACE
 // =====================================================
 
-// Planned (target design): no migration creates ai_requests yet. Runtime traces go to Logfire.
+// Planned (target design): no migration creates ai_requests yet. Runtime traces go to HoneyHive.
 Table ai_requests {
   id bigint [pk, increment]
   shop_id bigint [not null]

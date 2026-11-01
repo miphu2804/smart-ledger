@@ -14,7 +14,7 @@
 
 ![CI/CD flow](../architecture/diagrams/images/ci-cd.svg)
 
-Green numbers are the deploy, purple the one-time VPS setup, orange the runtime requests. Gray dashed arrows are secrets: the deploy exports `core` and `ai` from Dopbase with runner tokens kept in the GitHub environment, and `scripts/secrets/vps-playbook.sh` exports every VPS file from Dopbase for Ansible. The diagram shows the target setup: pgvector, the Bifrost gateway, Langfuse and the Grafana stack are not built yet; today AI calls OpenCode Go directly and traces to Logfire. Edit [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio) and re-export:
+Green numbers are the deploy, purple the one-time VPS setup, orange the runtime requests. Gray dashed arrows are secrets: the deploy exports `core` and `ai` from Dopbase with runner tokens kept in the GitHub environment, and `scripts/secrets/vps-playbook.sh` exports every VPS file from Dopbase for Ansible. The diagram shows the target setup: pgvector, the Bifrost gateway, Langfuse and the Grafana stack are not built yet; today AI calls OpenCode Go directly and traces to HoneyHive. Edit [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio) and re-export:
 
 ```bash
 drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/ci-cd.svg docs/architecture/diagrams/src/ci-cd.drawio
@@ -140,7 +140,7 @@ The first deploy must include both services (start CD by hand with `backend-ai` 
 
 ### Service variables
 
-`core.env` and `ai.env` hold the variables below. Every deploy of a service rewrites its file from Dopbase `core/<environment>` or `ai/<environment>`, so change values in Dopbase, not on the VPS. `github.ai.env` holds only `LOGFIRE_SERVICE_VERSION`, the deployed commit. Write `$` as `$$`. After editing on the VPS, run `docker compose up -d <service>` and send one chat through Core: a missing variable can still leave a healthy container.
+`core.env` and `ai.env` hold the variables below. Every deploy of a service rewrites its file from Dopbase `core/<environment>` or `ai/<environment>`, so change values in Dopbase, not on the VPS. Write `$` as `$$`. After editing on the VPS, run `docker compose up -d <service>` and send one chat through Core: a missing variable can still leave a healthy container.
 
 **`core`**
 
@@ -167,7 +167,7 @@ Compose sets `AI_BASE_URL`, `SERVER_PORT` and `FLYWAY_ENABLED=false` itself. Bef
 | `AI_SQL_READER_URL` | Read-only `ai_sql_reader` login as a `postgresql://` URL; empty means the agent cannot read shop data |
 | `REDIS_URL` | Redis Cloud of the environment |
 | `POSTGRES_POOL_MAX_SIZE`, `SQL_POOL_MAX_SIZE` | Optional, default `2`; they share the Supabase pooler limit with Core ([AI README](../../backend/ai/README.md#database-access)) |
-| Model and Logfire variables | From GitHub, see below |
+| Model and tracing variables | From GitHub, see below |
 | `AGENT_MEMORY_*`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | Optional, `ai.env` only; memory is off until the PO approves it ([ADR-0002](../architecture/adr/0002-agent-long-term-memory.md), [AI README](../../backend/ai/README.md#long-term-memory-off-by-default)) |
 
 **`bifrost`**
@@ -246,11 +246,12 @@ To remove a setting, delete it in Dopbase; the next deploy drops it from `ai.env
 
 | Name | Source | Value |
 |---|---|---|
-| `LOGFIRE_TOKEN` | Dopbase `ai/<environment>` | Write token, one per environment; unset means no tracing |
-| `LOGFIRE_ENVIRONMENT` | Dopbase `ai/<environment>` | `staging` or `production` |
-| `LOGFIRE_SERVICE_VERSION` | Commit | `github.sha` |
+| `HH_API_KEY` | Dopbase `ai/<environment>` | Project ingestion key; unset means no tracing |
+| `HH_API_URL` | Dopbase `ai/<environment>` | Data plane URL; unset uses the multi-tenant default |
+| `HH_PROJECT` | Dopbase `ai/<environment>` | HoneyHive project name |
+| `HH_SOURCE` | Dopbase `ai/<environment>` | `staging` or `production` |
 
-Traces carry no message content ([AI README](../../backend/ai/README.md#observability)). To turn tracing off, delete `LOGFIRE_TOKEN` in Dopbase and redeploy `ai`.
+Traces carry no message content ([AI README](../../backend/ai/README.md#observability)). To turn tracing off, delete `HH_API_KEY` in Dopbase and redeploy `ai`.
 
 ### Core CORS origins
 

@@ -9,7 +9,7 @@
 - AI cần gọi cùng một model qua nhiều upstream (OpenCode Go, OpenAI) và chuyển upstream khi gặp lỗi tạm thời như 429, mà không đổi code ở `agent`, `memory` và `drafts`.
 - Trước đây `build_chat_model` chọn API theo `MODEL_PROVIDER`, còn fallback nằm trong `MODEL_FALLBACKS` ở Python, nên mọi đổi upstream đều cần đổi cấu hình AI và deploy lại.
 - Bifrost tự host đã chạy ở staging. Nó ghi log từng request gồm provider, model, độ trễ, token, chi phí, chuỗi fallback và rule đã khớp, nên là nơi tự nhiên để xem request lên upstream.
-- `NFR-008` cấm nội dung tin nhắn trong trace và log. Logfire tiếp tục theo dõi tầng Agent với `include_content=False`.
+- `NFR-008` cấm nội dung tin nhắn trong trace và log. HoneyHive theo dõi tầng Agent với `include_content=False`.
 - Production chưa có Bifrost và gọi thẳng OpenCode Go.
 
 ## Quyết định

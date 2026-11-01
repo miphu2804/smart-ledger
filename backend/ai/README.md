@@ -186,7 +186,7 @@ The tool-call guardrail counts one `run_code` as one call and does not see calls
 ## Observability
 
 - **Logs:** stdout at `LOG_LEVEL`. `src/agent/tool_events.py` logs each tool call with its arguments and result, each cut to 1000 characters, so server logs hold the model's SQL and shop data; a tool retry logs at `WARNING`.
-- **Traces:** with `LOGFIRE_TOKEN` set, `src/observability.py` sends one [Logfire](https://logfire.pydantic.dev/docs/) span per turn, model request and tool call, with timing, model, tokens, tool names, errors and `shop_id`. Content is never sent (`include_content=False`); `tests/unit_tests/test_observability.py` checks it. `LOGFIRE_ENVIRONMENT` separates staging and production. FastAPI requests are not instrumented because that would record the message.
+- **Traces:** with `HH_API_KEY` set, `src/observability.py` sends one [HoneyHive](https://docs.honeyhive.ai/v2) span per turn, model request and tool call, with timing, model, tokens, tool names, errors and `shop_id`, grouped into one HoneyHive session per turn. Content is never sent (`include_content=False`); `tests/unit_tests/test_observability.py` checks it. `HH_SOURCE` separates staging and production. FastAPI requests are not instrumented because that would record the message. A turn waits at most one second for its session; if HoneyHive is slow or down the chat still answers, and that turn's spans are dropped because the SDK exports no span without a session.
 - **Metrics:** `/metrics` exposes request rate, status and latency per route through `prometheus-fastapi-instrumentator`, timed to the last streamed byte, for the dashboards in `deploy/monitoring/`.
 
 ## Database access
@@ -254,11 +254,13 @@ Settings come from `src/app_config.py`, read from the environment or `.env`; bla
 | | `AGENT_MEMORY_EMBEDDING_PROVIDER` | `sentence-transformers` | Or `cloudflare` |
 | | `AGENT_MEMORY_EMBEDDING_MODEL` | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | Embedding model |
 | | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | unset | Workers AI embeddings |
-| Tracing | `LOGFIRE_TOKEN` | unset | Unset sends nothing |
-| | `LOGFIRE_ENVIRONMENT` | unset | `staging` or `production` |
+| Tracing | `HH_API_KEY` | unset | Unset sends nothing |
+| | `HH_API_URL` | unset | Data plane URL; unset uses HoneyHive's multi-tenant default |
+| | `HH_PROJECT` | unset | HoneyHive project name |
+| | `HH_SOURCE` | unset | `staging` or `production` |
 | Deferred | `QDRANT_URL`, `LITELLM_URL`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` | unset | Kept for planned integrations; no code reads them |
 
-On the VPS the deploy sets the Logfire values from GitHub ([AI tracing settings](../../docs/development/ci-cd.md#ai-tracing-settings)).
+On the VPS the deploy sets the HoneyHive values from Dopbase ([AI tracing settings](../../docs/development/ci-cd.md#ai-tracing-settings)).
 
 ## Run
 
