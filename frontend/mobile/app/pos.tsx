@@ -24,6 +24,7 @@ import { itemsTotal } from '../src/lib/stats';
 import { LIST_PAGE_SIZE } from '../src/lib/usePagedList';
 import { usePagedPage } from '../src/lib/usePagedPage';
 import { useApp } from '../src/store/AppStore';
+import { TAB_BAR_CLEARANCE } from '../src/tabBar';
 import { colors, font, shadow } from '../src/theme';
 
 const salesColors = {
@@ -902,7 +903,8 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
           contentContainerStyle={{
             paddingHorizontal: 10,
             paddingTop: insets.top + headerHeight + 10,
-            paddingBottom: inTab ? (insets.bottom + (count > 0 ? 190 : 96)) : (insets.bottom + (count > 0 ? 110 : 28)),
+            // Trong tab, thanh tab chiếm một khoảng cố định từ đáy (không theo insets.bottom); thanh giỏ nằm ngay trên nó
+            paddingBottom: inTab ? TAB_BAR_CLEARANCE + (count > 0 ? 86 : 0) : (insets.bottom + (count > 0 ? 110 : 28)),
           }}
           initialNumToRender={10}
           maxToRenderPerBatch={10}
@@ -919,7 +921,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
           style={[
             styles.bar,
             {
-              bottom: inTab ? (insets.bottom + 104) : Math.max(insets.bottom, 24),
+              bottom: inTab ? TAB_BAR_CLEARANCE : Math.max(insets.bottom, 24),
               opacity: cartBarAnim,
               transform: [
                 {
