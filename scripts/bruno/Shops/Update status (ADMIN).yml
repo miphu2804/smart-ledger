@@ -1,0 +1,23 @@
+info:
+  name: Update status (ADMIN)
+  type: http
+  seq: 6
+
+http:
+  method: PATCH
+  url: "{{baseUrl}}/api/v1/shops/{{shopId}}/status"
+  body:
+    type: json
+    data: |-
+      {
+        "status": "INACTIVE",
+        "inactiveReason": "Bruno test"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true

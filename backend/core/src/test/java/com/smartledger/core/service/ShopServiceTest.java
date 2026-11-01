@@ -42,11 +42,13 @@ class ShopServiceTest {
     private final NotificationEventService notifications = Mockito.mock(NotificationEventService.class);
     private final EntityManager entityManager = Mockito.mock(EntityManager.class);
     private final ShopService service = new ShopServiceImpl(authIdentityRepository, shopRepository, auditLogService,
-            adminAccessAuditService, notifications, entityManager);
+            adminAccessAuditService, notifications, entityManager,
+            Mockito.mock(com.smartledger.core.ratelimit.UserRateLimitService.class));
 
     @Test
     void createsAnActiveShopForTheCurrentOwner() {
         UserAccount owner = owner();
+        ReflectionTestUtils.setField(owner, "id", 1L);
         authenticateAs(owner);
         when(shopRepository.save(any(Shop.class))).thenAnswer(invocation -> invocation.getArgument(0));
 

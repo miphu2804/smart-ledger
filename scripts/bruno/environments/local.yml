@@ -1,0 +1,12 @@
+name: local
+variables:
+  - name: baseUrl
+    value: http://localhost:8080
+  - name: firebaseAuthUrl
+    value: https://identitytoolkit.googleapis.com
+  - secret: true
+    name: firebaseApiKey
+  - secret: true
+    name: firebaseEmail
+  - secret: true
+    name: firebasePassword

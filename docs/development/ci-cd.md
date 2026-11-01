@@ -5,7 +5,7 @@
 | Workflow | Does |
 |---|---|
 | [`ci.yml`](../../.github/workflows/ci.yml) | Finds the changed areas, tests them, builds images; on a push to `staging` or `main`, job `cd` starts CD |
-| [`cd.yml`](../../.github/workflows/cd.yml) | Job `gate` re-checks the commit and its CI result, then calls the deploy workflows below |
+| [`cd.yml`](../../.github/workflows/cd.yml) | Job `gate` re-checks the commit and its CI result, then calls the deploy workflows below; job `smoke-staging` runs the Bruno `Smoke` folder after a staging backend deploy |
 | [`deploy-backend.yml`](../../.github/workflows/deploy-backend.yml) | Builds, pushes to GHCR and deploys `ai` and `core` to the VPS |
 | [`deploy-web.yml`](../../.github/workflows/deploy-web.yml) | Builds and deploys `frontend/mobile` to Vercel |
 | [`deploy-landing.yml`](../../.github/workflows/deploy-landing.yml) | Builds and deploys `frontend/web` to Vercel |
@@ -23,8 +23,8 @@ drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/archi
 ## Steps
 
 1. **PR into `staging`:** CI tests, checks migrations on a throwaway PostgreSQL and builds images. Nothing deploys.
-2. **Merge into `staging`:** CI runs again and CD deploys the changed areas to staging, with no approval.
-3. **PR `staging` → `main`:** open it after checking staging ([Target branch](../../CONTRIBUTING.md#target-branch)).
+2. **Merge into `staging`:** CI runs again and CD deploys the changed areas to staging, with no approval. After a backend deploy, job `smoke-staging` runs the read-only [Bruno `Smoke` folder](../../scripts/bruno/README.md) against staging; a failure marks the CD run but does not roll back or block a merge.
+3. **PR `staging` → `main`:** open it after checking staging, including `smoke-staging` ([Target branch](../../CONTRIBUTING.md#target-branch)).
 4. **Merge into `main`:** use a merge commit, never a squash; on conflicts, release from a `release/staging-to-main-<date>` branch. The production deploy jobs wait until a reviewer opens the CD run → **Review deployments** → approves each one.
 5. **Check production, then tag:** the web smoke test against `https://app-production.songheloi.id.vn` must pass; open the app and sign in. Then tag by hand: `gh release create vX.Y.Z --target <merge commit> --generate-notes`.
 

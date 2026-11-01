@@ -4,7 +4,7 @@
 |---|---|
 | Trạng thái | đích MVP; các endpoint đã triển khai được đánh dấu riêng bên dưới |
 | Chủ sở hữu | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-10-26 |
+| Cập nhật lần cuối | 2026-10-31 (CORE-019) |
 
 ## Tài liệu liên quan
 
@@ -93,6 +93,27 @@ Riêng lỗi trùng barcode, ApiErrorDetail có thêm hai field **tùy chọn** 
 **Bắt buộc `Idempotency-Key` (1–255 ký tự, không rỗng; được trim khi lưu)** trên bảy POST: `/debts/{debtId}/payments`, `/expenses`, `/sales/{saleId}/void`, `/products/{productId}/stock-in`, `/products/{productId}/image`, `/shops/{shopId}/logo`, `/me/avatar`. FE tạo key mới cho một hành động, giữ nguyên khi retry cùng body/path/file. Expense/repay/void/stock-in dùng key shop + operation trong V7; media dùng scope SHOP hoặc USER trong V14 (xem quy tắc media bên dưới). Replay trả response ban đầu (`200` cho stock-in/media, `201` cho ba luồng còn lại), không lặp tác động. Khác người dùng/nội dung trả `409 idempotency_key_conflict`; key hoàn tất hết hạn trả `409 idempotency_key_expired`; rỗng/quá dài trả `400 invalid_idempotency_key`. TTL mặc định 30 ngày, chưa có job dọn key; không tự xóa key quá hạn. Lỗi nghiệp vụ rollback reservation của thao tác tiền/tồn. Media reserve riêng trước provider, chỉ release lượt PENDING do request hiện tại sở hữu khi thất bại; xem lease/reclaim bên dưới.
 
 V7 tạo bảng key. Confirm draft chống trùng bằng draftId, không yêu cầu key. Các POST tạo customer/category/product/draft/shop chưa có bảo vệ key; không coi idempotency đã phủ toàn bộ API. GET không cần key.
+
+### Giới hạn thao tác CORE-019
+
+Đã triển khai trong thay đổi CORE-019, mặc định tắt qua `USER_RATE_LIMIT_ENABLED=false`; chưa xác nhận bật trên staging/production. Khi bật sau V20, quota lưu PostgreSQL theo Core user ID và nhóm, giữ qua restart và dùng chung giữa instance.
+
+| Nhóm | Route POST | Giới hạn |
+|---|---|---|
+| `MEDIA_UPLOAD` | `/api/v1/me/avatar`, `/api/v1/products/{id}/image`, `/api/v1/shops/{id}/logo` | Tổng 10 thao tác mới thành công/60 giây, cộng chung mọi loại ảnh và shop |
+| `SHOP_CREATE` | `/api/v1/shops` | 5 thao tác mới thành công/24 giờ |
+
+Cửa sổ cố định bắt đầu khi server nhận request thuộc nhóm của tài khoản đã xác thực, có Core profile hoạt động; không reset theo ngày lịch. Validation lỗi không tiêu lượt nhưng không đổi mốc đã tạo. Thành công là DB đã commit; mất response sau commit không hoàn quota. Lượt giữ chỗ PENDING chiếm chỗ tạm thời để chống vượt ngưỡng đồng thời, chưa là thành công; lỗi giải phóng, request chết được thu hồi theo lease media (mặc định 300 giây). Hoàn tất trễ nhưng lease còn hợp lệ tính cửa sổ đã giữ chỗ, không chuyển sang cửa sổ mới.
+
+Replay media đúng key và payload vẫn trả kết quả cũ khi quota đã đầy, không gọi provider hoặc tăng counter/audit; cùng key khác payload vẫn `409 idempotency_key_conflict`. Tạo shop chưa có idempotency; gửi POST mới có thể tạo thêm shop và tính lượt mới. GET/DELETE/OPTIONS, các API nghiệp vụ khác và quota chat AI ngoài phạm vi; quyền OWNER/ADMIN/DISABLED và ownership vẫn áp dụng.
+
+| HTTP | Code | Hành vi client |
+|---|---|---|
+| `429` | `rate_limited` | Có `Retry-After` giây dương và `Cache-Control: no-store`; chờ rồi thử lại, giữ nguyên media Idempotency-Key. Khi đầy bởi PENDING, delay lấy thời điểm sớm hơn giữa lease đầu tiên hết hạn và cửa sổ kết thúc; khi đủ thành công thì chờ hết cửa sổ. |
+| `503` | `rate_limit_unavailable` | Không chứng minh được quota; không fallback counter RAM. Không coi là thành công; retry có kiểm soát. |
+| `409` | `rate_limit_reservation_expired` | Request cũ đã mất/hết lease quota; bắt đầu lượt retry media cùng key để kiểm tra kết quả hoặc nhận lease mới. |
+
+Lỗi dùng envelope chung `code/message/details?/traceId`. CORS expose `Retry-After` cho origin được phép. Đây là quota thao tác thành công, không thay lớp chống spam request lỗi/replay ở edge. Guard Zalo 30/60 giây vẫn hữu hạn theo instance như mô tả riêng; xử lý forwarded header native chỉ sửa IP nhìn thấy, không đổi quota Zalo thành quota phân tán.
 
 ## 1. Auth và tiệm
 
