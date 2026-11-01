@@ -21,6 +21,8 @@ spring:
 
 server:
   port: ${SERVER_PORT:${PORT:8080}}
+  # Tomcat validates the proxy peer before using forwarded headers. See Core README for trust boundaries.
+  forward-headers-strategy: native
 
 firebase:
   project-id: ${FIREBASE_PROJECT_ID:}
@@ -61,6 +63,9 @@ ai:
   internal-token: ${INTERNAL_API_TOKEN:}
 
 smartledger:
+  rate-limit:
+    # Apply merged V20 and upgrade all writers before enabling on shared environments.
+    enabled: ${USER_RATE_LIMIT_ENABLED:false}
   user-activity:
     enabled: ${USER_ACTIVITY_ENABLED:false}
     cache-maximum-size: ${USER_ACTIVITY_CACHE_MAXIMUM_SIZE:10000}

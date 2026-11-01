@@ -63,7 +63,7 @@ smart-ledger/
 ├── BLOCKERS.md          # open blockers
 ├── compose.yaml         # Core + AI (Supabase + Redis Cloud)
 ├── .github/             # CI/CD workflows, PR templates, CI helper scripts
-├── scripts/             # local database, secrets sync, Android and iOS release
+├── scripts/             # local database, secrets sync, Bruno API collection, Android and iOS release
 ├── secrets/             # env files per environment, pulled from Dopbase
 ├── supabase/            # AI schema migrations (Supabase CLI)
 ├── docs/                # source of truth; start at docs/README.md

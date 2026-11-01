@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartledger.core.enums.ErrorCode;
 import com.smartledger.core.exception.BusinessException;
 import com.smartledger.core.repository.MediaUploadKeyRepository;
+import com.smartledger.core.ratelimit.UserRateLimitService;
+import com.smartledger.core.ratelimit.RateLimitPolicy;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.OffsetDateTime;
@@ -28,10 +30,12 @@ public class MediaIdempotencyReplay {
     private final ObjectMapper objectMapper;
     private final int ttlDays;
     private final int uploadLeaseSeconds;
+    private final UserRateLimitService quota;
 
     public MediaIdempotencyReplay(MediaUploadKeyRepository repository, ObjectMapper objectMapper,
             @Value("${smartledger.idempotency.ttl-days:30}") int ttlDays,
-            @Value("${smartledger.media.upload-lease-seconds:300}") int uploadLeaseSeconds) {
+            @Value("${smartledger.media.upload-lease-seconds:300}") int uploadLeaseSeconds,
+            UserRateLimitService quota) {
         if (ttlDays <= 0 || uploadLeaseSeconds <= 0) {
             throw new IllegalArgumentException("Media idempotency retention and upload lease must be positive");
         }
@@ -39,6 +43,7 @@ public class MediaIdempotencyReplay {
         this.objectMapper = objectMapper;
         this.ttlDays = ttlDays;
         this.uploadLeaseSeconds = uploadLeaseSeconds;
+        this.quota = quota;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -53,7 +58,10 @@ public class MediaIdempotencyReplay {
         OffsetDateTime pendingExpiresAt = now.plusSeconds(uploadLeaseSeconds);
         UUID leaseToken = UUID.randomUUID();
         String scope = scope(shopId, userId);
+        // Same lock order as media completion: quota first, media lease second.
+        quota.prepare(userId, RateLimitPolicy.MEDIA_UPLOAD);
         if (repository.reserve(scope, userId, operation, normalizedKey, requestHash, request.publicId(), leaseToken, pendingExpiresAt)) {
+            quota.reserve(userId, RateLimitPolicy.MEDIA_UPLOAD, leaseToken);
             return new Reservation<>(normalizedKey, requestHash, null, leaseToken);
         }
         // A failed request may release its short-lived reservation between our INSERT conflict and
@@ -62,6 +70,7 @@ public class MediaIdempotencyReplay {
                 normalizedKey);
         if (existing.isEmpty() && repository.reserve(scope, userId, operation, normalizedKey, requestHash,
                 request.publicId(), leaseToken, pendingExpiresAt)) {
+            quota.reserve(userId, RateLimitPolicy.MEDIA_UPLOAD, leaseToken);
             return new Reservation<>(normalizedKey, requestHash, null, leaseToken);
         }
         MediaUploadKeyRepository.StoredResult stored = existing.orElseThrow(
@@ -71,6 +80,8 @@ public class MediaIdempotencyReplay {
         }
         if (stored.responseBody() == null && !stored.expiresAt().isAfter(now)) {
             if (repository.reclaim(scope, operation, normalizedKey, stored.leaseToken(), leaseToken, pendingExpiresAt)) {
+                quota.release(userId, RateLimitPolicy.MEDIA_UPLOAD, stored.leaseToken());
+                quota.reserve(userId, RateLimitPolicy.MEDIA_UPLOAD, leaseToken);
                 return new Reservation<>(normalizedKey, requestHash, null, leaseToken);
             }
             throw new BusinessException(ErrorCode.MEDIA_UPLOAD_IN_PROGRESS);
@@ -93,6 +104,7 @@ public class MediaIdempotencyReplay {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void release(Long shopId, Long userId, String operation, Reservation<?> reservation) {
+        quota.release(userId, RateLimitPolicy.MEDIA_UPLOAD, reservation.leaseToken());
         repository.releasePending(scope(shopId, userId), operation, reservation.key(), reservation.leaseToken());
     }
 

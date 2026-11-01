@@ -1,0 +1,41 @@
+info:
+  name: Create product
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/products"
+  body:
+    type: json
+    data: |-
+      {
+        "categoryId": {{categoryId}},
+        "name": "Bruno product",
+        "barcode": "BRUNO-001",
+        "unit": "cái",
+        "sellingPriceVnd": 20000,
+        "costPriceVnd": 15000,
+        "tracked": true,
+        "stockQuantity": 10,
+        "lowStockThreshold": 2
+      }
+  auth: inherit
+
+runtime:
+  actions:
+    - type: set-variable
+      phase: after-response
+      selector:
+        expression: res.body.id
+        method: jsonq
+      variable:
+        name: productId
+        scope: runtime
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
