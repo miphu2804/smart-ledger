@@ -21,7 +21,7 @@ from src.log_formatter import LevelColorFormatter
 from src.memory.repository import EMBEDDING_DIMENSIONS, AgentMemoryRepository
 from src.memory.service import AgentMemoryService
 from src.memory.workers_ai_embedding import WorkersAIEmbeddingModel
-from src.observability import configure_tracing
+from src.observability import Observability
 from src.providers.llm_factory import LLMFactory
 from src.restock.service import RestockService
 from src.sandbox.wrapper import Sandbox, SandboxLimits
@@ -43,8 +43,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 # stdout is the log contract, so Pydantic AI's one-off observability promo stays out.
 pydantic_ai.BANNER_ENABLED = False
-# Before any agent runs, so every run is traced when a Logfire token is set.
-configure_tracing(app_config)
+# Before any agent runs, so every run is traced when a HoneyHive key is set.
+observability = Observability.start(app_config)
 
 
 def build_shop_data(reader: PostgreDBClient) -> ShopDataRepository | None:
@@ -184,6 +184,7 @@ async def lifespan(app: FastAPI):
     app.state.agent = AgentService(
         chat_model,
         conversations,
+        observability=observability,
         guardrail_limits=GuardrailLimits(
             max_input_chars=app_config.AGENT_MAX_INPUT_CHARS,
             model_call_limit=app_config.AGENT_MODEL_CALL_LIMIT,

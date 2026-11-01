@@ -257,7 +257,7 @@ Settings come from `src/app_config.py`, read from the environment or `.env`; bla
 | Tracing | `HH_API_KEY` | unset | Unset sends nothing |
 | | `HH_API_URL` | unset | Data plane URL; unset uses HoneyHive's multi-tenant default |
 | | `HH_PROJECT` | unset | HoneyHive project name |
-| | `HH_SOURCE` | unset | `staging` or `production` |
+| | `HH_SOURCE` | `local` | `staging` or `production` on the VPS |
 | Deferred | `QDRANT_URL`, `LITELLM_URL`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` | unset | Kept for planned integrations; no code reads them |
 
 On the VPS the deploy sets the HoneyHive values from Dopbase ([AI tracing settings](../../docs/development/ci-cd.md#ai-tracing-settings)).

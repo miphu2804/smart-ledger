@@ -5,7 +5,6 @@
 #   .env               ENVIRONMENT, CORE_ALIAS, CORE_IMAGE, AI_IMAGE; the deploy rewrites the image lines
 #   core.env, ai.env   service variables from Dopbase core/<env> and ai/<env>; every deploy rewrites them
 #   bifrost.env        Dopbase bifrost/<env>, written by deploy/ansible/
-#   github.ai.env      LOGFIRE_SERVICE_VERSION, the deployed commit
 # See docs/development/ci-cd.md#vps.
 
 # The project name sets the container and volume prefix, and both app directories would otherwise name the
@@ -50,8 +49,6 @@ services:
     image: ${AI_IMAGE:?AI_IMAGE is required}
     env_file:
       - ai.env
-      - path: github.ai.env
-        required: false
     environment:
       SERVER_PORT: 8001
     healthcheck:

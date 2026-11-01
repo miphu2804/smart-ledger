@@ -123,16 +123,19 @@ class AgentMemoryService:
         # gateway reject native structured output.
         self.extractor = Agent(
             model,
+            name="memory-extractor",
             output_type=PromptedOutput(MemoryFacts),
             instructions=MEMORY_EXTRACT_PROMPT,
         )
         self.reconciler = Agent(
             model,
+            name="memory-reconciler",
             output_type=PromptedOutput(MemoryDecisions),
             instructions=MEMORY_RECONCILE_PROMPT,
         )
         self.summarizer = Agent(
             model,
+            name="memory-summarizer",
             output_type=PromptedOutput(MemorySummary),
             instructions=MEMORY_SUMMARY_PROMPT,
         )

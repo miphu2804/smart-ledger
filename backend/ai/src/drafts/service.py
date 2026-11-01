@@ -73,7 +73,7 @@ class DraftService:
         # Native structured output: the provider constrains the reply to the schema,
         # like the JSON-schema mode the parser used before.
         self.agent = (
-            Agent(model, output_type=NativeOutput(DraftOutput))
+            Agent(model, name="draft", output_type=NativeOutput(DraftOutput))
             if model is not None
             else None
         )

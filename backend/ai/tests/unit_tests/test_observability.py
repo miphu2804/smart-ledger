@@ -1,4 +1,6 @@
+import asyncio
 import json
+from types import SimpleNamespace
 
 import pytest
 from opentelemetry.sdk.trace import TracerProvider
@@ -18,6 +20,7 @@ from tests.unit_tests.test_agent_service import (
 from src import observability
 from src.agent.service import AgentService
 from src.app_config import AppConfig
+from src.observability import Observability
 
 pytestmark = pytest.mark.anyio
 
@@ -31,7 +34,7 @@ PRIVATE_TEXT = ("0912345678", "0901234567", "chị Lan", "chi Lan", "v_shop_prof
 
 @pytest.fixture
 def spans():
-    """Trace every agent the way Logfire is configured, into memory."""
+    """Trace every agent the way HoneyHive is configured, into memory."""
     exporter = InMemorySpanExporter()
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
@@ -54,7 +57,7 @@ def exported(exporter: InMemorySpanExporter) -> str:
     )
 
 
-def traced_agent() -> AgentService:
+def traced_agent(tracer=None) -> AgentService:
     model = ScriptedModel(
         ModelResponse(parts=[ToolCallPart("query_shop_data", {"sql": SQL})]), ANSWER
     )
@@ -63,43 +66,106 @@ def traced_agent() -> AgentService:
         FakeConversationRepository(),
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
         shop_data=FakeShopData(),
+        observability=Observability(tracer),
     )
 
 
-def test_blank_token_leaves_tracing_off(monkeypatch) -> None:
+class RecordingTracer:
+    def __init__(self) -> None:
+        self.sessions: list[dict] = []
+        self.enrichments: list[dict] = []
+
+    async def acreate_session(self, **kwargs) -> None:
+        self.sessions.append(kwargs)
+
+    def enrich_session(self, **kwargs) -> None:
+        self.enrichments.append(kwargs)
+
+
+class HangingTracer(RecordingTracer):
+    async def acreate_session(self, **kwargs) -> None:
+        if not kwargs.get("skip_api_call"):
+            await asyncio.sleep(3600)
+
+
+def test_blank_key_leaves_tracing_off(monkeypatch) -> None:
     def must_not_run(*args, **kwargs):
-        raise AssertionError("logfire configured without a token")
+        raise AssertionError("honeyhive configured without a key")
 
-    monkeypatch.setattr(observability.logfire, "configure", must_not_run)
-    monkeypatch.setattr(observability.logfire, "instrument_pydantic_ai", must_not_run)
+    monkeypatch.setattr(observability.HoneyHiveTracer, "init", must_not_run)
 
-    assert observability.configure_tracing(AppConfig(LOGFIRE_TOKEN="  ")) is False
-    assert observability.configure_tracing(AppConfig(LOGFIRE_TOKEN=None)) is False
+    Observability.start(AppConfig(HH_API_KEY="  "))
+    Observability.start(AppConfig(HH_API_KEY=None))
 
 
-def test_token_traces_agents_without_message_content(monkeypatch) -> None:
+def test_key_traces_agents_without_message_content(monkeypatch) -> None:
     calls: dict = {}
-    monkeypatch.setattr(
-        observability.logfire,
-        "configure",
-        lambda **kwargs: calls.setdefault("configure", kwargs),
-    )
-    monkeypatch.setattr(
-        observability.logfire,
-        "instrument_pydantic_ai",
-        lambda **kwargs: calls.setdefault("instrument", kwargs),
-    )
-    config = AppConfig(LOGFIRE_TOKEN="token", LOGFIRE_ENVIRONMENT="staging")
+    tracer = SimpleNamespace(provider=TracerProvider())
 
-    assert observability.configure_tracing(config) is True
+    def init(**kwargs):
+        calls.update(kwargs)
+        return tracer
 
-    assert calls["configure"]["token"] == "token"
-    assert calls["configure"]["environment"] == "staging"
-    assert calls["configure"]["console"] is False
-    assert calls["instrument"] == {
-        "include_content": False,
-        "include_binary_content": False,
+    monkeypatch.setattr(observability.HoneyHiveTracer, "init", init)
+    previous = Agent._instrument_default
+    config = AppConfig(
+        HH_API_KEY="key",
+        HH_API_URL=None,
+        HH_PROJECT="smartledger",
+        HH_SOURCE="staging",
+    )
+
+    try:
+        Observability.start(config)
+        settings = Agent._instrument_default
+    finally:
+        Agent.instrument_all(previous)
+
+    assert calls == {
+        "api_key": "key",
+        "project": "smartledger",
+        "source": "staging",
+        "server_url": None,
+        "skip_backend_session_creation": True,
     }
+    assert settings.include_content is False
+    assert settings.include_binary_content is False
+
+
+async def test_turn_opens_a_session_with_ids_only() -> None:
+    tracer = RecordingTracer()
+    agent = traced_agent(tracer)
+
+    await agent.chat(user_id=3, shop_id=15, message=QUESTION)
+    await asyncio.gather(*agent.observability._background)
+
+    local, remote = tracer.sessions
+    assert local["skip_api_call"] is True
+    assert remote["session_id"] == local["session_id"]
+    assert remote["metadata"] == {"shop_id": 15, "conversation_id": None}
+
+
+async def test_new_conversation_is_linked_to_its_session_once_saved() -> None:
+    tracer = RecordingTracer()
+    agent = traced_agent(tracer)
+
+    result = await agent.chat(user_id=3, shop_id=15, message=QUESTION)
+    await asyncio.gather(*agent.observability._background)
+
+    assert tracer.enrichments == [
+        {"metadata": {"conversation_id": result.conversation_id}}
+    ]
+
+
+async def test_hung_honeyhive_does_not_hold_the_turn() -> None:
+    agent = traced_agent(HangingTracer())
+
+    async with asyncio.timeout(5):
+        result = await agent.chat(user_id=3, shop_id=15, message=QUESTION)
+
+    assert result.answer == ANSWER
+    for task in agent.observability._background:
+        task.cancel()
 
 
 @pytest.mark.parametrize("streamed", [False, True])

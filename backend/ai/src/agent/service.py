@@ -38,6 +38,7 @@ from src.agent.tools import (
 from src.calculation.service import CalculationService
 from src.memory.repository import RecalledMemory
 from src.memory.service import AgentMemoryService
+from src.observability import Observability
 from src.prompt_templates import (
     APP_GUIDE_PROMPT,
     CALC_PROMPT,
@@ -112,9 +113,11 @@ class AgentService:
         calculation: CalculationService | None = None,
         sandbox: Sandbox | None = None,
         history_turns: int = 100,
+        observability: Observability | None = None,
     ) -> None:
         self.model_name = model.model_name if model is not None else ""
         self.conversations = conversations
+        self.observability = observability or Observability()
         self.guardrails = GuardrailService(guardrail_limits)
         # Each turn stores the owner's message and the reply, so a turn is two messages.
         self.history_messages = 2 * history_turns
@@ -156,6 +159,7 @@ class AgentService:
         self.agent = (
             Agent(
                 model,
+                name="chat",
                 deps_type=AgentContext,
                 instructions="\n\n".join(prompt_parts),
                 tools=tools,
@@ -209,6 +213,7 @@ class AgentService:
         """Check the turn before any model call; return the question and the history."""
         if self.agent is None:
             raise RuntimeError("agent model unavailable")
+        await self.observability.start_turn_session(context.shop_id, conversation_id)
 
         # Read first, so a conversation outside the owner's scope fails before any model
         # call. Owners rarely reach the window, so it bounds the prompt for the odd long
@@ -501,6 +506,8 @@ class AgentService:
             user_message=question,
             assistant_message=answer,
         )
+        if conversation_id is None:
+            self.observability.link_conversation(saved_conversation_id)
         if self.memory is not None:
             self._remember(context, saved_conversation_id, question, answer, recalled)
         return AgentChatResult(

@@ -51,11 +51,14 @@ class AppConfig(BaseSettings):
     LANGFUSE_SECRET_KEY: str | None = None
     LANGFUSE_HOST: str | None = None
 
-    # logfire: Pydantic AI traces without message content (src/observability.py);
-    # an unset token sends nothing
-    LOGFIRE_TOKEN: str | None = None
-    # staging or production, so one Logfire project can hold both
-    LOGFIRE_ENVIRONMENT: str | None = None
+    # honeyhive: Pydantic AI traces without message content (src/observability.py);
+    # an unset key sends nothing
+    HH_API_KEY: str | None = None
+    # Data plane URL; unset uses HoneyHive's multi-tenant default
+    HH_API_URL: str | None = None
+    HH_PROJECT: str | None = None
+    # staging or production, so one HoneyHive project can hold both
+    HH_SOURCE: str = "local"
 
     # models the application asks for by alias, as a JSON object; protocol is the API
     # the model speaks: openai_responses, openai_chat or anthropic_messages

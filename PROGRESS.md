@@ -2,11 +2,11 @@
 
 | Area | Change |
 |---|---|
-| AI | • `src/observability.py` sends Pydantic AI spans to HoneyHive when `HH_API_KEY` is set, with `include_content=False`; each chat turn opens one session with ids only and waits at most one second for it<br>• `AppConfig` gains `HH_API_KEY`, `HH_API_URL`, `HH_PROJECT`, `HH_SOURCE`; the `logfire` dependency is gone |
+| AI | • `src/observability.py` sends Pydantic AI spans to HoneyHive when `HH_API_KEY` is set, with `include_content=False`; each chat turn gets a local session id at once and sends its ids to HoneyHive in the background, so the owner never waits on HoneyHive; a new conversation is tagged after the turn is saved<br>• `AppConfig` gains `HH_API_KEY`, `HH_API_URL`, `HH_PROJECT`, `HH_SOURCE`; the `logfire` dependency is gone |
 | Deploy | • The workflow and compose file no longer write `github.ai.env`; the `HH_*` values come from Dopbase `ai/<environment>` |
 | Docs | • AI README, technical design, CI/CD and env guides, service walkthrough and the credential map name HoneyHive |
 
-Check: `uv run pytest` and ruff passed; a scripted turn reached HoneyHive with its session, model and tool events and no message, SQL or phone number. Staging and production are not configured yet. Commit: not committed.
+Check: `uv run pytest` and ruff passed; real turns on the local database reached HoneyHive with their session, model and tool events and no message, and sessions filter by `metadata.conversation_id`. Staging and production are not configured yet. Commit: the one that adds this entry.
 
 ### 2026-10-31 — Create a second shop and switch between shops
 
