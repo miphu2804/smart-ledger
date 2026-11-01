@@ -1481,26 +1481,6 @@ main:has(.lp-closing) + .lp-footer {
   font-size: 14px;
   color: var(--muted-2);
 }
-.lp-draft {
-  display: flex;
-  gap: 12px;
-  margin: 24px 0 0;
-  padding: 14px 18px;
-  border-radius: 16px;
-  background: var(--gold-soft);
-  border: 1px solid #ecd49a;
-  color: #5f3d0b;
-  font-size: 14px;
-  line-height: 1.55;
-}
-.lp-draft svg {
-  flex: none;
-  margin-top: 2px;
-}
-.lp-draft ul {
-  margin: 6px 0 0;
-  padding-left: 18px;
-}
 .lp-legal-lead {
   margin-top: 24px;
   font-size: 17px;
