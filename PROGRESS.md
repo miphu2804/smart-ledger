@@ -1,3 +1,12 @@
+### 2026-10-31 — Playwright for the mobile web build
+
+| Area | Change |
+|---|---|
+| Test | • `npm run test:e2e` starts the Expo web build with mock data on port 8090 and runs `e2e/` in Chromium at a phone viewport (#438)<br>• `e2e/smoke.spec.ts` opens the sign-in screen, enters with the mock account and checks Tổng quan with no page error |
+| Docs | • The mobile README says how to install and run it |
+
+Check: the smoke test passes through `npx playwright test`; it failed first without `EXPO_PUBLIC_API_ENDPOINT`, so the config sets it; `npx tsc --noEmit` passes. Not run in CI, which the issue does not ask for. Commit: the one that adds this entry.
+
 ### 2026-10-31 — Policy page for Google Play
 
 | Area | Change |
@@ -187,11 +196,3 @@ Check: `npm run lint` shows no warnings; `npm run typecheck` and `npm run build`
 | Mobile | • The Zalo button on the sign-in screen signs in again when the build carries Zalo settings (`EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID` on Android, `EXPO_PUBLIC_ZALO_LOGIN=true` on the web); iOS and builds without them still show "Sắp có"<br>• The `android-dev` and `android-staging` builds and the `vercel-staging` web build already set these, so their button turns on; production does not<br>• The mobile README says when the button is on |
 
 Check: `npx tsc --noEmit` shows only the two existing errors for the missing `expo-application` and `expo-intent-launcher`; `npm test` fails only the two existing cases in `parseOrder` and `quickNav`; staging Core answers `400 invalid_zalo_request` (feature on) to a malformed request on both Zalo authorize endpoints and serves `assetlinks.json` with the certificate of CI test APKs, while production answers `503 zalo_unavailable`. Not verified: a full Zalo sign-in on a phone. Commit: the one that adds this entry.
-
-### 2026-10-28 — A deploy of one service no longer fails on the other's image
-
-| Area | Change |
-|---|---|
-| Deploy | • `deploy/vps/deploy.sh` reads `AI_IMAGE` and `CORE_IMAGE` into local variables and unsets them before any Compose command, so the empty image the workflow passes for a service this deploy leaves alone no longer overrides the image already named in `.env`<br>• The service loop becomes a `deploy_service` function called once per service, which removes the indirect variable lookup |
-
-Check: the CD staging run of 2026-10-28 02:55 failed with `required variable CORE_IMAGE is missing a value` on an AI-only deploy; reproduced against the real `deploy/vps/compose.yaml` with a stubbed `docker`, where the previous script fails and this one deploys AI only, Core only, both, and neither, leaving the other service's image in `.env` untouched. `shellcheck` and `bash -n` pass. Not verified: a real deploy against the VPS.
