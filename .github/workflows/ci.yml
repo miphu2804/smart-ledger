@@ -289,7 +289,6 @@ jobs:
       DATABASE_USERNAME: ci-placeholder
       DATABASE_PASSWORD: ci-placeholder
       POSTGRES_URL: postgresql://ci-placeholder:5432/ci
-      REDIS_URL: redis://ci-placeholder:6379/0
       FIREBASE_PROJECT_ID: ci-placeholder
       GOOGLE_APPLICATION_CREDENTIALS: ./backend/core/.env.example
     steps:

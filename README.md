@@ -61,7 +61,7 @@ smart-ledger/
 ├── CONTRIBUTING.md      # branches, commits, pull requests, releases
 ├── PROGRESS.md          # recent progress log
 ├── BLOCKERS.md          # open blockers
-├── compose.yaml         # Core + AI (Supabase + Redis Cloud)
+├── compose.yaml         # Core + AI (Supabase)
 ├── .github/             # CI/CD workflows, PR templates, CI helper scripts
 ├── scripts/             # local database, secrets sync, Bruno API collection, Android and iOS release
 ├── secrets/             # env files per environment, pulled from Dopbase

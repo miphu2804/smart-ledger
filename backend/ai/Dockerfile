@@ -28,6 +28,10 @@ COPY --from=builder --chown=app:app /app/src /app/src
 
 USER app
 
+# Last, so a new commit rebuilds only this layer; HoneyHive sessions carry it.
+ARG GIT_SHA
+ENV GIT_SHA=$GIT_SHA
+
 EXPOSE 8001
 
 CMD ["python", "-m", "src.main"]

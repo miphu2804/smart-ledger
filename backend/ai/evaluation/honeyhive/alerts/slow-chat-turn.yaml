@@ -1,0 +1,34 @@
+name: Slow chat turn
+description: 95th percentile of a chat agent run above 20 seconds over a day.
+frequency: DAILY
+alert_type: AGGREGATE
+aggregation: P95
+minimum_sample_size: 10
+projections:
+  - duration
+filters:
+  - field: event_name
+    operator: is
+    value: invoke_agent chat
+    type: string
+  # Local runs, staging and evaluation experiments would otherwise send critical emails.
+  - field: source
+    operator: is
+    value: production
+    type: string
+thresholds:
+  critical:
+    operator: greater_than
+    value: 20000
+  resolved:
+    operator: less_than
+    value: 12000
+notification_details:
+  critical:
+    channel: EMAIL
+    scope: ALL_PROJECT_MEMBERS
+    metadata: {}
+  resolved:
+    channel: EMAIL
+    scope: ALL_PROJECT_MEMBERS
+    metadata: {}
