@@ -7,11 +7,19 @@ http:
   method: GET
   url: "{{baseUrl}}/api/v1/auth/zalo/authorize"
   params:
-    - name: clientChallenge
+    - name: purpose
       value: ""
       type: query
       disabled: true
-    - name: state
+    - name: clientOrigin
+      value: ""
+      type: query
+      disabled: true
+    - name: requestId
+      value: ""
+      type: query
+      disabled: true
+    - name: clientChallenge
       value: ""
       type: query
       disabled: true
