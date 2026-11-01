@@ -1,3 +1,11 @@
+### 2026-10-31 — Policy page for Google Play
+
+| Area | Change |
+|---|---|
+| Web | • `/chinh-sach` carries the privacy policy, terms of use and payment policy from the team's Google Doc dated 30/10/2026, with its open details filled from the deploy config and code: AI providers, log retention, what is really collected<br>• `/delete-account` opens the data deletion page, the footer links to the new page, and `/privacy` redirects to it, so one privacy policy remains<br>• The draft label is gone from the legal pages, with `VITE_LEGAL_DRAFT` in the code, the landing workflow and the docs |
+
+Check: `npm run lint`, `tsc -b` and `vite build` pass; at 375 px the page has no horizontal scroll and no draft or "Cần điền" text, and `/privacy` redirects to it. Not verified: legal review. The app still has no in-app account deletion entry, which the page says plainly and Google Play requires. Commit: the one that adds this entry.
+
 ### 2026-10-29 — Tab screens end above the tab bar
 
 | Area | Change |
@@ -187,12 +195,3 @@ Check: `npx tsc --noEmit` shows only the two existing errors for the missing `ex
 | Deploy | • `deploy/vps/deploy.sh` reads `AI_IMAGE` and `CORE_IMAGE` into local variables and unsets them before any Compose command, so the empty image the workflow passes for a service this deploy leaves alone no longer overrides the image already named in `.env`<br>• The service loop becomes a `deploy_service` function called once per service, which removes the indirect variable lookup |
 
 Check: the CD staging run of 2026-10-28 02:55 failed with `required variable CORE_IMAGE is missing a value` on an AI-only deploy; reproduced against the real `deploy/vps/compose.yaml` with a stubbed `docker`, where the previous script fails and this one deploys AI only, Core only, both, and neither, leaving the other service's image in `.env` untouched. `shellcheck` and `bash -n` pass. Not verified: a real deploy against the VPS.
-
-### 2026-10-28 — Compose projects on the VPS are named smart-ledger
-
-| Area | Change |
-|---|---|
-| Deploy | • `deploy/vps/compose.yaml` and `deploy/edge/compose.yaml` set `name:`, so the projects are `smart-ledger-staging`, `smart-ledger-production` and `smart-ledger-edge` instead of being named after their directories<br>• `deploy/vps/deploy.sh` and `deploy/ansible/playbook.yml` write `ENVIRONMENT` to the project `.env`, which `compose.yaml` interpolates into the name; the app directories and `VPS_APP_DIR` are unchanged<br>• `deploy-backend.yml` forwards its `DEPLOY_ENV` to `deploy.sh` as `ENVIRONMENT` |
-| Docs | • The VPS section of `docs/development/ci-cd.md` lists each environment's Compose project and records that renaming a project needs the old project taken down and the Caddy certificate volume copied first |
-
-Check: `docker compose config` resolves `smart-ledger-staging`, `smart-ledger-production` and `smart-ledger-edge`, and fails when `ENVIRONMENT` is unset; `shellcheck` and `bash -n` pass on `deploy.sh`; `ansible-playbook --syntax-check` passes. The VPS itself is not migrated yet. Commit: the squash merge of this branch.

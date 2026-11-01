@@ -72,7 +72,7 @@ CI reads input `runner`, else repository variable `CI_RUNNER`. CD reads input `r
 | `backend-production` | `main` | Yes | Same | Same, with `VPS_APP_DIR=/opt/smartledger-production` |
 | `vercel-staging` | `staging` | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `EXPO_PUBLIC_*`, `VERCEL_STAGING_ALIAS` |
 | `vercel-production` | `main` | Yes | Same | `EXPO_PUBLIC_*` |
-| `landing-staging` | `staging` | No | Same, for Vercel project `landing` | `VITE_LEGAL_DRAFT`, `LANDING_URL`, admin variables |
+| `landing-staging` | `staging` | No | Same, for Vercel project `landing` | `LANDING_URL`, admin variables |
 | `landing-production` | `main` | Yes | Same | Same, plus `VITE_ANDROID_APK_URL` |
 | `android-dev` | Other branches (checked by `gate`) | No | `ANDROID_GOOGLE_SERVICES_JSON` | `EXPO_PUBLIC_*` |
 | `android-staging` | `staging` | No | `ANDROID_GOOGLE_SERVICES_JSON` | `EXPO_PUBLIC_*` |
@@ -360,7 +360,7 @@ Job `landing` lints and builds `frontend/web`. `deploy-landing` deploys it to Ve
 | Push `main` | `landing-production` | Deploy after approval, then smoke test |
 
 - `LANDING_URL` is the fixed `https://` domain of the environment.
-- `VITE_LEGAL_DRAFT` stays unset or `true` until the PO approves the legal pages. The contact email and social links live in [`site.yaml`](../../frontend/web/site.yaml).
+- The contact email and social links live in [`site.yaml`](../../frontend/web/site.yaml).
 - After changing a `landing-*` variable, start CD by hand with only `landing`.
 - Keep Vercel Authentication off on the `landing` project, or the smoke test gets a `302`.
 
