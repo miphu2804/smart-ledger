@@ -1,0 +1,38 @@
+info:
+  name: Firebase login
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{firebaseAuthUrl}}/v1/accounts:signInWithPassword?key={{firebaseApiKey}}"
+  params:
+    - name: key
+      value: "{{firebaseApiKey}}"
+      type: query
+  body:
+    type: json
+    data: |-
+      {
+        "email": "{{firebaseEmail}}",
+        "password": "{{firebasePassword}}",
+        "returnSecureToken": true
+      }
+
+runtime:
+  scripts:
+    - type: after-response
+      code: bru.setVar("idToken", res.body.idToken);
+    - type: tests
+      code: |-
+        test("returns an ID token", function () {
+          expect(res.status).to.equal(200);
+          expect(res.body.idToken).to.be.a("string");
+        });
+
+settings:
+  encodeUrl: false
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true

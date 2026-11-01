@@ -1,0 +1,23 @@
+info:
+  name: Update customer
+  type: http
+  seq: 4
+
+http:
+  method: PUT
+  url: "{{baseUrl}}/api/v1/customers/{{customerId}}"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Bruno customer",
+        "phone": "0900000000"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true

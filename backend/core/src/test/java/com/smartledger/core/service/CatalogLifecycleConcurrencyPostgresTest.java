@@ -68,7 +68,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 /** Actual catalog writes and PostgreSQL lock waits, including preloaded persistence contexts. */
 @DataJpaTest(showSql = false, properties = {"spring.flyway.enabled=true", "spring.jpa.hibernate.ddl-auto=validate"})
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({CustomerServiceImpl.class, CategoryServiceImpl.class, ShopServiceImpl.class,
+@Import({com.smartledger.core.ratelimit.UserRateLimitService.class, com.smartledger.core.repository.UserRateLimitRepository.class, CustomerServiceImpl.class, CategoryServiceImpl.class, ShopServiceImpl.class,
         AuditLogServiceImpl.class, AdminAccessAuditService.class, NotificationEventServiceImpl.class,
         SaleDraftServiceImpl.class, CatalogLifecycleConcurrencyPostgresTest.Config.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)

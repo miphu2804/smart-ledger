@@ -1,0 +1,43 @@
+info:
+  name: Create draft
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/sale-drafts"
+  body:
+    type: json
+    data: |-
+      {
+        "customerName": "Bruno customer",
+        "discountVnd": 0,
+        "initialPaidVnd": 10000,
+        "initialPaymentMethod": "CASH",
+        "items": [
+          {
+            "productId": {{productId}},
+            "quantity": 1,
+            "unitPriceVnd": 20000
+          }
+        ]
+      }
+  auth: inherit
+
+runtime:
+  actions:
+    - type: set-variable
+      phase: after-response
+      selector:
+        expression: res.body.id
+        method: jsonq
+      variable:
+        name: draftId
+        scope: runtime
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true

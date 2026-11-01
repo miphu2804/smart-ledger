@@ -1,0 +1,27 @@
+info:
+  name: Open session
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/auth/session"
+  body:
+    type: json
+    data: |-
+      {
+        "displayName": "Bruno owner"
+      }
+  auth: inherit
+
+runtime:
+  scripts:
+    - type: after-response
+      code: if (res.body.shops?.length) bru.setVar("shopId", res.body.shops[0].id);
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
