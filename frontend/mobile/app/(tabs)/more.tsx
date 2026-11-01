@@ -8,6 +8,7 @@ import { authClient } from '../../src/lib/auth';
 import { vnd } from '../../src/lib/format';
 import { useCoreData } from '../../src/lib/useCoreData';
 import { useApp } from '../../src/store/AppStore';
+import { TAB_BAR_CLEARANCE } from '../../src/tabBar';
 import { colors, shadow } from '../../src/theme';
 
 const managementIcons = {
@@ -210,7 +211,7 @@ export default function More() {
 const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
-    paddingBottom: 96,
+    paddingBottom: TAB_BAR_CLEARANCE,
     position: 'relative',
   },
   header: {
