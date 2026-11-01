@@ -59,13 +59,13 @@ Theo Google, chuyển dữ liệu cho **bên xử lý thay mình theo chỉ dẫ
 | Bên nhận | Dữ liệu | Căn cứ |
 |---|---|---|
 | Firebase, Supabase, Cloudinary, VPS, Vercel, Cloudflare R2 | Tuỳ dịch vụ | Bên xử lý cho hệ thống của nhóm |
-| OpenCode Go, OpenAI | Câu hỏi và dữ liệu cửa hàng liên quan, khi người dùng hỏi Bobi | Bên xử lý, và do người dùng chủ động hỏi |
+| OpenAI, Inception | Câu hỏi và dữ liệu cửa hàng liên quan, khi người dùng hỏi Bobi | Bên xử lý, và do người dùng chủ động hỏi |
 | HoneyHive | Câu hỏi đã che, dữ liệu trợ lý đã đọc, câu trả lời; có thể chứa tên và số điện thoại khách (`backend/ai/src/observability.py`). Không gồm ảnh hay âm thanh | Bên xử lý để nhóm tìm lỗi và cải thiện chất lượng |
 | Google, Zalo | Thông tin đăng nhập | Người dùng chủ động chọn cách đăng nhập |
 
 ## Việc người đứng tên cần xác nhận
 
-1. **OpenCode Go, OpenAI và HoneyHive:** điều khoản của họ có đúng là chỉ xử lý theo chỉ dẫn, không dùng dữ liệu cho mục đích riêng không. Chưa đọc điều khoản của ba bên này. Nếu không đúng, đổi các loại dữ liệu gửi cho bên đó sang **có chia sẻ**: tin nhắn, thông tin tài chính khác, lịch sử mua hàng, và tên, số điện thoại với HoneyHive.
+1. **OpenAI, Inception và HoneyHive:** điều khoản của họ có đúng là chỉ xử lý theo chỉ dẫn, không dùng dữ liệu cho mục đích riêng không. Chưa đọc điều khoản của ba bên này. Nếu không đúng, đổi các loại dữ liệu gửi cho bên đó sang **có chia sẻ**: tin nhắn, thông tin tài chính khác, lịch sử mua hàng, và tên, số điện thoại với HoneyHive.
 2. **Facebook SDK:** chưa xác nhận được bản production có kèm SDK không, vì giá trị `FACEBOOK_APP_ID` nằm trong secret. Trong code, SDK đã tắt tự ghi sự kiện và mã quảng cáo, nên bảng trên không khai thêm gì. Kiểm tra lại trên file AAB trước khi nộp.
 3. **Bản Android phân phối:** chưa kiểm tra trên AAB production thật, phần bằng chứng ở trên đọc từ code và cấu hình.
 4. **Thời gian lưu trên HoneyHive:** chưa biết, và mục 13 của trang chính sách chưa nêu. Lịch sử hội thoại xoá trong app không kéo theo bản ghi trên HoneyHive, nên kiểm tra việc này khi xử lý yêu cầu xoá tài khoản.
