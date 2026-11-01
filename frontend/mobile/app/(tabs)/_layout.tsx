@@ -23,11 +23,10 @@ type TabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>['tab
  * nền của vùng màn hình cùng màu nền app để nếu có chớp cũng không trắng tinh.
  */
 const TAB_ANIMATION = SCREEN_ANIMATION;
-const BAR_HEIGHT = TAB_BAR_HEIGHT;
 const SHAPE_OFFSET = 28;
 const CURVE_HEIGHT = 28;
 const CURVE_PEAK = 14;
-const SHAPE_HEIGHT = BAR_HEIGHT + SHAPE_OFFSET;
+const SHAPE_HEIGHT = TAB_BAR_HEIGHT + SHAPE_OFFSET;
 
 const TABS = [
   { name: 'index', label: 'Tổng quan', icon: 'home' as TabIconName },
@@ -53,7 +52,7 @@ function TabBar({ state, navigation }: TabBarProps) {
   return (
     <View
       pointerEvents="box-none"
-      style={[styles.shell, { bottom: -insets.bottom, height: BAR_HEIGHT + insets.bottom }]}
+      style={[styles.shell, { bottom: -insets.bottom, height: TAB_BAR_HEIGHT + insets.bottom }]}
     >
       <View pointerEvents="none" style={styles.safeAreaFill} />
       <View
@@ -195,11 +194,11 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    top: BAR_HEIGHT,
+    top: TAB_BAR_HEIGHT,
     backgroundColor: colors.card,
   },
   bar: {
-    height: BAR_HEIGHT,
+    height: TAB_BAR_HEIGHT,
     flexDirection: 'row',
     paddingHorizontal: 0,
     position: 'absolute',
@@ -221,7 +220,7 @@ const styles = StyleSheet.create({
     })),
   },
   barShape: { position: 'absolute', top: -SHAPE_OFFSET, left: 0, zIndex: 0 },
-  tab: { minHeight: BAR_HEIGHT, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  tab: { minHeight: TAB_BAR_HEIGHT, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
   regularTab: { position: 'absolute' },
   centerTab: { position: 'absolute', overflow: 'visible' },
   iconSlot: { height: 34, justifyContent: 'center', alignItems: 'center' },
