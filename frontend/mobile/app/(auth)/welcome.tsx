@@ -1,9 +1,10 @@
 import { FontAwesome } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, StyleSheet, View } from 'react-native';
 import { Logo, useToast } from '../../src/components/brand';
 import { Button, Row, Screen, T } from '../../src/components/ui';
+import { WEBSITE_URL } from '../../src/config';
 import { AuthError, authClient } from '../../src/lib/auth';
 import { debugLog } from '../../src/lib/debug';
 import { describeError, errorMessage, isDisplayNameRequired } from '../../src/lib/errors';
@@ -114,6 +115,16 @@ export default function Welcome() {
           An toàn & bảo mật
         </T>
       </Row>
+      <Pressable
+        onPress={() => void Linking.openURL(`${WEBSITE_URL}/chinh-sach`)}
+        accessibilityRole="link"
+        hitSlop={10}
+        style={{ alignSelf: 'center', marginTop: 10 }}
+      >
+        <T size={12} color={colors.muted} style={{ textDecorationLine: 'underline' }}>
+          Chính sách và điều khoản
+        </T>
+      </Pressable>
     </Screen>
   );
 }
