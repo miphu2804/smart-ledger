@@ -1,13 +1,64 @@
 {
   "source_of_truth": "config.json",
   "client": {
-    "enforce_auth_on_inference": true
+    "enforce_auth_on_inference": true,
+    "enable_logging": true,
+    "disable_content_logging": true,
+    "log_retention_days": 14
   },
   "providers": {
-    "opencode-go": {
-      "network_config": { "default_request_timeout_in_seconds": 60 },
+    "opencode-go-anthropic": {
+      "custom_provider_config": {
+        "base_provider_type": "anthropic"
+      },
+      "network_config": {
+        "base_url": "https://opencode.ai/inference/go",
+        "default_request_timeout_in_seconds": 60
+      },
       "keys": [
-        { "name": "opencode-go", "value": "env.OPENCODE_GO_API_KEY", "models": ["*"], "weight": 1.0 }
+        {
+          "name": "opencode-go-anthropic",
+          "value": "env.OPENCODE_GO_API_KEY",
+          "models": [
+            "claude-haiku-5-5"
+          ],
+          "weight": 1.0
+        }
+      ]
+    },
+    "opencode-go-openai": {
+      "custom_provider_config": {
+        "base_provider_type": "openai"
+      },
+      "network_config": {
+        "base_url": "https://opencode.ai/inference/go",
+        "default_request_timeout_in_seconds": 60
+      },
+      "keys": [
+        {
+          "name": "opencode-go-openai",
+          "value": "env.OPENCODE_GO_API_KEY",
+          "models": [
+            "gpt-6-luna",
+            "deepseek-v4.1-flash"
+          ],
+          "weight": 1.0
+        }
+      ]
+    },
+    "openai": {
+      "network_config": {
+        "default_request_timeout_in_seconds": 60
+      },
+      "keys": [
+        {
+          "name": "openai-official",
+          "value": "env.OPENAI_API_KEY",
+          "models": [
+            "gpt-6-luna"
+          ],
+          "weight": 1.0
+        }
       ]
     }
   },
@@ -18,8 +69,72 @@
         "name": "AI service",
         "value": "env.BIFROST_VIRTUAL_KEY",
         "provider_configs": [
-          { "provider": "opencode-go", "allowed_models": ["*"], "key_ids": ["*"] }
+          {
+            "provider": "opencode-go-anthropic",
+            "allowed_models": [
+              "claude-haiku-5-5"
+            ],
+            "key_ids": [
+              "*"
+            ],
+            "weight": 1.0
+          },
+          {
+            "provider": "opencode-go-openai",
+            "allowed_models": [
+              "gpt-6-luna",
+              "deepseek-v4.1-flash"
+            ],
+            "key_ids": [
+              "*"
+            ],
+            "weight": 1.0
+          },
+          {
+            "provider": "openai",
+            "allowed_models": [
+              "gpt-6-luna"
+            ],
+            "key_ids": [
+              "*"
+            ]
+          }
         ]
+      }
+    ],
+    "routing_rules": [
+      {
+        "id": "luna-fallback",
+        "name": "Luna on OpenCode Go, then OpenAI",
+        "enabled": true,
+        "cel_expression": "model == \"gpt-6-luna\"",
+        "targets": [
+          {
+            "provider": "opencode-go-openai",
+            "model": "gpt-6-luna",
+            "weight": 1.0
+          }
+        ],
+        "fallbacks": [
+          "openai/gpt-6-luna"
+        ],
+        "scope": "global",
+        "priority": 1
+      },
+      {
+        "id": "haiku-primary",
+        "name": "Haiku on OpenCode Go",
+        "enabled": true,
+        "cel_expression": "model == \"claude-haiku-5-5\"",
+        "targets": [
+          {
+            "provider": "opencode-go-anthropic",
+            "model": "claude-haiku-5-5",
+            "weight": 1.0
+          }
+        ],
+        "scope": "global",
+        "priority": 2
       }
     ],
     "auth_config": {

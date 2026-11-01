@@ -1,5 +1,12 @@
-from pydantic import Field
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class ModelAlias(BaseModel):
+    """The API a model speaks and the model id sent to the gateway."""
+
+    protocol: str
+    model: str
 
 
 class AppConfig(BaseSettings):
@@ -50,12 +57,14 @@ class AppConfig(BaseSettings):
     # staging or production, so one Logfire project can hold both
     LOGFIRE_ENVIRONMENT: str | None = None
 
-    # model provider: the API the model speaks, one of openai (Responses API),
-    # openai-chat (/chat/completions) or anthropic (/v1/messages)
-    MODEL_PROVIDER: str = "anthropic"
-    MODEL_NAME: str = "claude-haiku-5-5"
+    # models the application asks for by alias, as a JSON object; protocol is the API
+    # the model speaks: openai_responses, openai_chat or anthropic_messages
+    MODEL_ALIASES: dict[str, ModelAlias] = {
+        "chat": ModelAlias(protocol="anthropic_messages", model="claude-haiku-5-5")
+    }
     # models tried in order when the previous one fails, as a JSON list of
-    # "provider:model", e.g. ["openai-chat:deepseek-v4.1-flash"]
+    # "protocol:model", e.g. ["openai_chat:deepseek-v4.1-flash"]; through Bifrost,
+    # fallbacks belong in its routing rules instead
     MODEL_FALLBACKS: list[str] = []
     MODEL_TIMEOUT_SECONDS: float = 20.0
     # reasoning effort for the chat model: none, low, medium or high
@@ -121,10 +130,17 @@ class AppConfig(BaseSettings):
     CLOUDFLARE_ACCOUNT_ID: str | None = None
     CLOUDFLARE_API_TOKEN: str | None = None
 
-    # model gateway shared by every model: OpenAI, or an OpenAI-compatible gateway
-    # such as OpenCode Go (https://opencode.ai/inference/go/v1)
+    # model gateway: OpenAI, an OpenAI-compatible gateway such as OpenCode Go
+    # (https://opencode.ai/inference/go/v1), or Bifrost on the VPS. The key is the
+    # gateway credential; through Bifrost it is the virtual key, because Bifrost
+    # holds the provider key.
     OPENAI_API_KEY: str | None = None
+    # base of the OpenAI dialect, which appends /chat/completions or /responses
     OPENAI_BASE_URL: str | None = None
+    # base of the Anthropic dialect, which appends /v1/messages; Bifrost serves it at
+    # /anthropic. Unset drops the /v1 suffix from OPENAI_BASE_URL instead, which is
+    # what a gateway with one prefix for both APIs (OpenCode Go) needs.
+    ANTHROPIC_BASE_URL: str | None = None
 
 
 app_config = AppConfig()

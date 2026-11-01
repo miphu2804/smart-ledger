@@ -28,7 +28,7 @@ from src.prompt_templates import (
     DRAFT_SALE_INPUT,
     DRAFT_SALE_PROMPT,
 )
-from src.providers.factory import session_settings
+from src.providers.session_settings import session_settings
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ class DraftService:
         if self.agent is None:
             raise DraftUnavailableError("draft model unavailable")
         products = await self._load_catalog(shop_id) if mode == "SALE" else []
-        lines, version = await self._propose(mode, text, products)
+        lines, version = await self._propose(shop_id, mode, text, products)
         result = (
             matching.match_sale(lines, products)
             if mode == "SALE"
@@ -113,7 +113,7 @@ class DraftService:
             raise DraftUnavailableError("catalog unavailable") from error
 
     async def _propose(
-        self, mode: DraftMode, text: str, products: list[CatalogProduct]
+        self, shop_id: int, mode: DraftMode, text: str, products: list[CatalogProduct]
     ) -> tuple[list[ProposedLine], str]:
         instructions, user_input = self._prompt(mode, text, products)
         # Output that never fits the schema ends in UnexpectedModelBehavior after the
@@ -122,7 +122,7 @@ class DraftService:
             result = await self.agent.run(
                 user_input,
                 instructions=instructions,
-                model_settings=session_settings(uuid.uuid4().hex),
+                model_settings=session_settings(uuid.uuid4().hex, shop_id),
             )
         except Exception as error:
             logger.warning("draft model failed", exc_info=True)
