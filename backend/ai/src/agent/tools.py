@@ -29,7 +29,9 @@ def _model_error(error: ValueError) -> str:
     if match is None:
         raise error
     code, reason = match.groups()
-    logger.warning("tool rejected: %s: %s", code, reason)
+    # The reason can quote a value from the model's SQL, so it stays at DEBUG.
+    logger.warning("tool rejected: %s", code)
+    logger.debug("tool rejected: %s: %s", code, reason)
     return f"Error[{code}]: {reason}."
 
 

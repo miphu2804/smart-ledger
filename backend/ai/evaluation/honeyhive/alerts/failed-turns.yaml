@@ -1,0 +1,43 @@
+name: Failed chat turns
+description: More than five chat turns over a day ended on an error or a guardrail stop, such as the turn timeout, with no answer.
+frequency: DAILY
+alert_type: AGGREGATE
+aggregation: COUNT
+minimum_sample_size: 1
+projections:
+  - metadata.error
+# A cancelled turn is the owner closing the app or losing the connection, not a fault.
+filters:
+  - field: event_type
+    operator: is
+    value: session
+    type: string
+  - field: metadata.error
+    operator: exists
+    value: ""
+    type: string
+  - field: metadata.error
+    operator: is not
+    value: cancelled
+    type: string
+  # Local runs, staging and evaluation experiments would otherwise send critical emails.
+  - field: source
+    operator: is
+    value: production
+    type: string
+thresholds:
+  critical:
+    operator: greater_than
+    value: 5
+  resolved:
+    operator: less_than
+    value: 2
+notification_details:
+  critical:
+    channel: EMAIL
+    scope: ALL_PROJECT_MEMBERS
+    metadata: {}
+  resolved:
+    channel: EMAIL
+    scope: ALL_PROJECT_MEMBERS
+    metadata: {}

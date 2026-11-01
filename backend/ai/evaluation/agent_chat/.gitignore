@@ -1,0 +1,2 @@
+# Run outputs stay local; HoneyHive keeps the shared copy of each run.
+results/

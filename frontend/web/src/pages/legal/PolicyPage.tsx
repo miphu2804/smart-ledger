@@ -105,6 +105,10 @@ export default function PolicyPage() {
             gửi tới nhà cung cấp mô hình OpenCode Go và OpenAI qua cổng Bifrost do chúng tôi tự vận hành để tạo câu trả lời. Bifrost không ghi nội dung tin
             nhắn vào log. Lịch sử hội thoại được lưu trong PostgreSQL trên Supabase.
           </p>
+          <p>
+            Để tìm lỗi và cải thiện chất lượng trợ lý, câu hỏi (đã che email, số thẻ và khoá truy cập), dữ liệu cửa hàng trợ lý đã đọc và câu trả lời được
+            ghi lại trên HoneyHive. Bản ghi có thể chứa tên và số điện thoại khách mà bạn nhập; không gồm ảnh hay âm thanh.
+          </p>
           <p>Bạn không nên nhập mật khẩu, khoá API, thông tin thẻ thanh toán hoặc dữ liệu nhạy cảm không cần thiết vào hội thoại AI.</p>
         </Item>
 
@@ -135,10 +139,10 @@ export default function PolicyPage() {
             </li>
             <li>Supabase (PostgreSQL): cơ sở dữ liệu ứng dụng và lịch sử AI.</li>
             <li>Máy chủ riêng ảo (VPS) do nhóm thuê: chạy dịch vụ nghiệp vụ, AI và hệ thống giám sát.</li>
-            <li>Redis Cloud: bộ nhớ đệm.</li>
             <li>Cloudinary: lưu trữ và phân phối ảnh sản phẩm.</li>
             <li>Vercel và Cloudflare R2: phân phối website và file cài đặt Android.</li>
             <li>OpenCode Go và OpenAI: tạo câu trả lời của trợ lý AI.</li>
+            <li>HoneyHive: ghi lại hội thoại với trợ lý AI để tìm lỗi và cải thiện chất lượng.</li>
             <li>Google Play: phân phối ứng dụng và xử lý thanh toán subscription nếu được triển khai.</li>
           </ul>
         </Item>

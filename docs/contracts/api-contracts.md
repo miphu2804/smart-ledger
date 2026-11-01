@@ -18,7 +18,7 @@ CORE-018 #409 bổ sung telemetry nội bộ theo `FR-036`, không thêm endpoin
 - API nghiệp vụ cho mobile OWNER và dashboard web ADMIN nằm dưới `/api/v1`; base URL do môi trường cấu hình. Các route xác thực domain/HTTPS App Link và probe là ngoại lệ công khai có chủ đích, không mở quyền đọc sổ.
 - API Core ↔ AI nằm dưới `/internal/v1` và không công khai cho FE.
 - Không dùng cổng trong sơ đồ kiến trúc làm hợp đồng API.
-- Redis, Langfuse và LiteLLM không có API công khai. FE không gọi trực tiếp các thành phần này.
+- Bifrost và HoneyHive không có API công khai. FE không gọi trực tiếp các thành phần này.
 
 **Đối chiếu Core ngày 2026-10-26:** kiểm tra 17 controller/87 route tường minh tại `feat/admin-dashboard-growth` `3e93dd1`, nền staging `0e2b1de`; các route đã có đều được mô tả trong tài liệu này. PR #368 đã merge growth vào staging tại `d4dc743`; chưa xác nhận deploy hoặc nghiệm thu FE. AI giữ các mốc đối chiếu riêng được ghi trong [thiết kế kỹ thuật](../architecture/technical-design.md#1-phạm-vi). Các ghi chú theo đợt bên dưới bảo tồn lịch sử chuẩn bị; có code không đồng nghĩa môi trường đã bật hoặc FE đã nghiệm thu.
 
