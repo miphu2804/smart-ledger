@@ -22,4 +22,4 @@ The `Smoke` folder is read-only and needs no credentials:
 npx @usebruno/cli@4.3.0 run Smoke --env staging
 ```
 
-Run this from `scripts/bruno`. Do not run the whole collection against a shared environment: it voids sales and archives the shop.
+Run this from `scripts/bruno`. CD runs the same command after each staging backend deploy. Do not run the whole collection against a shared environment: it voids sales and archives the shop.
