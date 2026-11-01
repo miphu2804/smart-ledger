@@ -26,14 +26,14 @@ Mọi loại dưới đây: **Thu thập: có. Chia sẻ: không. Xử lý tạm
 
 | Nhóm | Loại dữ liệu | Bắt buộc hay tuỳ chọn | Mục đích | Trong app là gì |
 |---|---|---|---|---|
-| Thông tin cá nhân | Tên | Bắt buộc | Chức năng, Quản lý tài khoản | Tên chủ tiệm; tên khách trong sổ nợ |
+| Thông tin cá nhân | Tên | Bắt buộc | Chức năng, Quản lý tài khoản, Phân tích | Tên chủ tiệm; tên khách trong sổ nợ, có thể nằm trong bản ghi HoneyHive |
 | Thông tin cá nhân | Địa chỉ email | Bắt buộc | Chức năng, Quản lý tài khoản | Đăng nhập, xác minh email |
 | Thông tin cá nhân | ID người dùng | Bắt buộc | Chức năng, Quản lý tài khoản, Chống gian lận và bảo mật | Firebase UID, ID tài khoản Core |
 | Thông tin cá nhân | Địa chỉ | Tuỳ chọn | Chức năng | Địa chỉ cửa hàng |
-| Thông tin cá nhân | Số điện thoại | Tuỳ chọn | Chức năng | Số của tiệm và của khách |
-| Tài chính | Lịch sử mua hàng | Bắt buộc | Chức năng | Đơn bán và thanh toán của cửa hàng |
-| Tài chính | Thông tin tài chính khác | Bắt buộc | Chức năng | Doanh thu, chi phí, công nợ |
-| Tin nhắn | Tin nhắn khác trong ứng dụng | Tuỳ chọn | Chức năng | Hội thoại với trợ lý Bobi |
+| Thông tin cá nhân | Số điện thoại | Tuỳ chọn | Chức năng, Phân tích | Số của tiệm và của khách, có thể nằm trong bản ghi HoneyHive |
+| Tài chính | Lịch sử mua hàng | Bắt buộc | Chức năng, Phân tích | Đơn bán và thanh toán của cửa hàng; phần trợ lý đã đọc nằm trong bản ghi HoneyHive |
+| Tài chính | Thông tin tài chính khác | Bắt buộc | Chức năng, Phân tích | Doanh thu, chi phí, công nợ; phần trợ lý đã đọc nằm trong bản ghi HoneyHive |
+| Tin nhắn | Tin nhắn khác trong ứng dụng | Tuỳ chọn | Chức năng, Phân tích | Hội thoại với trợ lý Bobi; câu hỏi đã che email, số thẻ, khoá truy cập được ghi trên HoneyHive |
 | Ảnh và video | Ảnh | Tuỳ chọn | Chức năng | Ảnh sản phẩm tải lên |
 | Hoạt động trong ứng dụng | Lượt tương tác với ứng dụng | Bắt buộc | Phân tích, Chống gian lận và bảo mật | Nhật ký thao tác, ngày hoạt động để đếm người dùng |
 | Hoạt động trong ứng dụng | Lịch sử tìm kiếm trong ứng dụng | Tuỳ chọn | Chức năng | Từ khoá tìm hàng và đơn gửi lên Core, có thể nằm trong log |
@@ -58,12 +58,14 @@ Theo Google, chuyển dữ liệu cho **bên xử lý thay mình theo chỉ dẫ
 
 | Bên nhận | Dữ liệu | Căn cứ |
 |---|---|---|
-| Firebase, Supabase, Redis Cloud, Cloudinary, VPS, Vercel, Cloudflare R2 | Tuỳ dịch vụ | Bên xử lý cho hệ thống của nhóm |
-| OpenCode Go, OpenAI | Câu hỏi và dữ liệu cửa hàng liên quan, khi người dùng hỏi Bobi | Bên xử lý, và do người dùng chủ động hỏi. Agent không đọc tên, số điện thoại khách (`AC-077`) |
+| Firebase, Supabase, Cloudinary, VPS, Vercel, Cloudflare R2 | Tuỳ dịch vụ | Bên xử lý cho hệ thống của nhóm |
+| OpenCode Go, OpenAI | Câu hỏi và dữ liệu cửa hàng liên quan, khi người dùng hỏi Bobi | Bên xử lý, và do người dùng chủ động hỏi |
+| HoneyHive | Câu hỏi đã che, dữ liệu trợ lý đã đọc, câu trả lời; có thể chứa tên và số điện thoại khách (`backend/ai/src/observability.py`). Không gồm ảnh hay âm thanh | Bên xử lý để nhóm tìm lỗi và cải thiện chất lượng |
 | Google, Zalo | Thông tin đăng nhập | Người dùng chủ động chọn cách đăng nhập |
 
 ## Việc người đứng tên cần xác nhận
 
-1. **OpenCode Go và OpenAI:** điều khoản của họ có đúng là chỉ xử lý theo chỉ dẫn, không dùng dữ liệu cho mục đích riêng không. Chưa đọc điều khoản của hai bên này. Nếu không đúng, đổi "Tin nhắn khác trong ứng dụng" và "Thông tin tài chính khác" sang **có chia sẻ**, mục đích Chức năng.
+1. **OpenCode Go, OpenAI và HoneyHive:** điều khoản của họ có đúng là chỉ xử lý theo chỉ dẫn, không dùng dữ liệu cho mục đích riêng không. Chưa đọc điều khoản của ba bên này. Nếu không đúng, đổi các loại dữ liệu gửi cho bên đó sang **có chia sẻ**: tin nhắn, thông tin tài chính khác, lịch sử mua hàng, và tên, số điện thoại với HoneyHive.
 2. **Facebook SDK:** chưa xác nhận được bản production có kèm SDK không, vì giá trị `FACEBOOK_APP_ID` nằm trong secret. Trong code, SDK đã tắt tự ghi sự kiện và mã quảng cáo, nên bảng trên không khai thêm gì. Kiểm tra lại trên file AAB trước khi nộp.
 3. **Bản Android phân phối:** chưa kiểm tra trên AAB production thật, phần bằng chứng ở trên đọc từ code và cấu hình.
+4. **Thời gian lưu trên HoneyHive:** chưa biết, và mục 13 của trang chính sách chưa nêu. Lịch sử hội thoại xoá trong app không kéo theo bản ghi trên HoneyHive, nên kiểm tra việc này khi xử lý yêu cầu xoá tài khoản.
