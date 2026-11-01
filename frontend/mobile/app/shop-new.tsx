@@ -5,6 +5,7 @@ import { useToast } from '../src/components/brand';
 import { Button, Field, Header, Screen, T } from '../src/components/ui';
 import { industryList } from '../src/data/mock';
 import { errorMessage } from '../src/lib/errors';
+import { PROFILE_MAX, shopNameError } from '../src/lib/profileValidation';
 import { useApp } from '../src/store/AppStore';
 import { colors } from '../src/theme';
 
@@ -16,6 +17,7 @@ export default function ShopNew() {
   const [picked, setPicked] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const nameErr = shopNameError(name);
   const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
 
   const submit = async () => {
@@ -42,12 +44,20 @@ export default function ShopNew() {
               {err}
             </T>
           ) : null}
-          <Button title="Tạo cửa hàng" loading={busy} disabled={busy || !name.trim() || !picked.length} onPress={submit} />
+          <Button title="Tạo cửa hàng" loading={busy} disabled={busy || !!nameErr || !picked.length} onPress={submit} />
         </>
       }
     >
       <Header title="Tạo cửa hàng mới" subtitle="Mỗi cửa hàng có sổ riêng" />
-      <Field label="Tên cửa hàng" placeholder="VD: Tiệm tạp hoá cô Thỏ" maxLength={200} value={name} onChangeText={setName} />
+      {/* Ô còn trống thì chỉ khoá nút, chưa báo lỗi */}
+      <Field
+        label="Tên cửa hàng"
+        placeholder="VD: Tiệm tạp hoá cô Thỏ"
+        maxLength={PROFILE_MAX.shopName}
+        value={name}
+        onChangeText={setName}
+        error={name.trim() ? nameErr || undefined : undefined}
+      />
       <T w="semibold" size={12} color={colors.muted} style={{ marginBottom: 8 }}>
         Bán gì?
       </T>
