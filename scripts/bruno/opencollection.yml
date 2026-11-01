@@ -1,0 +1,19 @@
+opencollection: 1.0.0
+
+info:
+  name: SmartLedger Core API
+  version: "1"
+
+request:
+  headers:
+    - name: X-Shop-Id
+      value: "{{shopId}}"
+  auth:
+    type: bearer
+    token: "{{idToken}}"
+bundled: false
+extensions:
+  bruno:
+    ignore:
+      - node_modules
+      - .git

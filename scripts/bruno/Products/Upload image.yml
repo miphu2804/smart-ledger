@@ -1,0 +1,26 @@
+info:
+  name: Upload image
+  type: http
+  seq: 6
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/products/{{productId}}/image"
+  headers:
+    - name: Idempotency-Key
+      value: "{{$randomUUID}}"
+  body:
+    type: multipart-form
+    data:
+      - name: image
+        type: file
+        value:
+          - fixtures/pixel.png
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true

@@ -40,7 +40,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 /** Real Flyway V1-V13 in a UUID-named temporary schema; no manual schema fixture. */
 @DataJpaTest(showSql = false, properties = {"spring.flyway.enabled=true", "spring.jpa.hibernate.ddl-auto=validate"})
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({AdminDashboardServiceImpl.class, AdminAccessGuard.class, AdminDashboardRepository.class,
+@Import({com.smartledger.core.ratelimit.UserRateLimitService.class, com.smartledger.core.repository.UserRateLimitRepository.class, AdminDashboardServiceImpl.class, AdminAccessGuard.class, AdminDashboardRepository.class,
         AdminAccessAuditService.class, ShopServiceImpl.class, NotificationEventServiceImpl.class,
         AuditLogServiceImpl.class, AuditLogQueryServiceImpl.class, ProductServiceImpl.class,
         ExpenseServiceImpl.class, DebtServiceImpl.class, SaleVoidServiceImpl.class,

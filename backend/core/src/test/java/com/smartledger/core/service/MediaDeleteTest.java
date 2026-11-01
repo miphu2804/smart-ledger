@@ -21,7 +21,7 @@ class MediaDeleteTest {
     private final AuditLogService audit = mock(AuditLogService.class);
     private final MediaWriteTransactionService writes = new MediaWriteTransactionService(products, shops, users,
             mock(MediaIdempotencyReplay.class), jobs, audit, new UnavailableMediaStorage(), mock(JdbcTemplate.class),
-            mock(jakarta.persistence.EntityManager.class));
+            mock(jakarta.persistence.EntityManager.class), mock(com.smartledger.core.ratelimit.UserRateLimitService.class));
 
     @Test void disabledMediaDoesNotClearExistingProductLogoOrAvatar() {
         Shop shop = shop();

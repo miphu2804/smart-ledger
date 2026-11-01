@@ -24,6 +24,8 @@ import com.smartledger.core.repository.UserAccountRepository;
 import com.smartledger.core.service.AuditLogService;
 import com.smartledger.core.service.MediaCleanupJobService;
 import com.smartledger.core.media.MediaIdempotencyReplay;
+import com.smartledger.core.ratelimit.UserRateLimitService;
+import com.smartledger.core.ratelimit.RateLimitPolicy;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import java.util.List;
@@ -43,10 +45,11 @@ public class MediaWriteTransactionService {
     private final MediaStorage storage;
     private final JdbcTemplate jdbc;
     private final EntityManager entityManager;
+    private final UserRateLimitService quota;
 
     public MediaWriteTransactionService(ProductRepository products, ShopRepository shops, UserAccountRepository users,
             MediaIdempotencyReplay idempotency, MediaCleanupJobService cleanupJobs, AuditLogService audit,
-            MediaStorage storage, JdbcTemplate jdbc, EntityManager entityManager) {
+            MediaStorage storage, JdbcTemplate jdbc, EntityManager entityManager, UserRateLimitService quota) {
         this.products = products;
         this.shops = shops;
         this.users = users;
@@ -56,12 +59,14 @@ public class MediaWriteTransactionService {
         this.storage = storage;
         this.jdbc = jdbc;
         this.entityManager = entityManager;
+        this.quota = quota;
     }
 
     @Transactional
     public ProductResponse saveProductImage(Shop shop, Long productId,
             MediaIdempotencyReplay.Reservation<ProductResponse> reservation,
             StoredMedia stored) {
+        quota.complete(shop.getOwnerId(), RateLimitPolicy.MEDIA_UPLOAD, reservation.leaseToken());
         Shop lockedShop = lockActiveShop(shop);
         idempotency.lockPending(lockedShop.getId(), lockedShop.getOwnerId(), "PRODUCT_IMAGE_UPLOAD", reservation);
         lockAsset(stored.publicId());
@@ -94,6 +99,7 @@ public class MediaWriteTransactionService {
     @Transactional
     public ShopResponse saveShopLogo(Shop shop, MediaIdempotencyReplay.Reservation<ShopResponse> reservation,
             StoredMedia stored) {
+        quota.complete(shop.getOwnerId(), RateLimitPolicy.MEDIA_UPLOAD, reservation.leaseToken());
         Shop locked = lockActiveShop(shop);
         idempotency.lockPending(locked.getId(), locked.getOwnerId(), "SHOP_LOGO_UPLOAD", reservation);
         lockAsset(stored.publicId());
@@ -124,6 +130,7 @@ public class MediaWriteTransactionService {
     @Transactional
     public SavedAvatar saveAvatar(UserAccount user, MediaIdempotencyReplay.Reservation<SavedAvatar> reservation,
             StoredMedia stored) {
+        quota.complete(user.getId(), RateLimitPolicy.MEDIA_UPLOAD, reservation.leaseToken());
         UserAccount locked = lockActiveUser(user.getId());
         idempotency.lockPending(null, locked.getId(), "USER_AVATAR_UPLOAD", reservation);
         lockAsset(stored.publicId());

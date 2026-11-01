@@ -69,7 +69,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 /** Category assignment/archive races with actual services, bounded lock waits and Hibernate SQL assertions. */
 @DataJpaTest(showSql = false, properties = {"spring.flyway.enabled=true", "spring.jpa.hibernate.ddl-auto=validate"})
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({ProductServiceImpl.class, CategoryServiceImpl.class, ShopServiceImpl.class,
+@Import({com.smartledger.core.ratelimit.UserRateLimitService.class, com.smartledger.core.repository.UserRateLimitRepository.class, ProductServiceImpl.class, CategoryServiceImpl.class, ShopServiceImpl.class,
         AuditLogServiceImpl.class, AdminAccessAuditService.class, NotificationEventServiceImpl.class,
         CategoryAssignmentConcurrencyPostgresTest.Config.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)

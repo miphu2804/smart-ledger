@@ -1,5 +1,7 @@
 # SmartLedger Core — setup
 
+CORE-019 adds default-off durable success quotas for image uploads and shop creation. See [V20 activation and recovery](docs/user-rate-limits.md) and the [API contract](../../docs/contracts/api-contracts.md#giới-hạn-thao-tác-core-019). Apply the merged migration and upgrade all writers before setting `USER_RATE_LIMIT_ENABLED=true`; implementation does not activate shared environments.
+
 Core is a Java 21 / Spring Boot backend. This README covers how to run it locally on Windows, macOS/Linux, in IntelliJ IDEA, or with Docker Compose. For product behavior and API details, see the [documentation index](../../docs/README.md) and [API contracts](../../docs/contracts/api-contracts.md).
 
 ## Prerequisites
