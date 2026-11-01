@@ -185,8 +185,9 @@ The tool-call guardrail counts one `run_code` as one call and does not see calls
 
 ## Observability
 
-- **Logs:** stdout at `LOG_LEVEL`. `src/agent/tool_events.py` logs each tool call with its arguments and result, each cut to 1000 characters, so server logs hold the model's SQL and shop data; a tool retry logs at `WARNING`.
-- **Traces:** with `HH_API_KEY` set, `src/observability.py` sends one [HoneyHive](https://docs.honeyhive.ai/v2) span per turn, model request and tool call, with timing, model, tokens, tool names, errors and `shop_id`, grouped into one HoneyHive session per turn. Content is never sent (`include_content=False`); `tests/unit_tests/test_observability.py` checks it. `HH_SOURCE` separates staging and production. FastAPI requests are not instrumented because that would record the message. A turn waits at most one second for its session; if HoneyHive is slow or down the chat still answers, and that turn's spans are dropped because the SDK exports no span without a session.
+- **Logs:** stdout at `LOG_LEVEL`. At `INFO` and `WARNING`, `src/agent/tool_events.py` logs each tool call with its name, call id and the size of its arguments and result, and a rejected query, a turn without an answer or a failed memory step logs its code or error type, so server logs hold no shop data; the SQL, results and reasons, each cut to 1000 characters, and memory tracebacks log at `DEBUG` only. A tool retry logs at `WARNING`.
+- **Traces:** with `HH_API_KEY` set, `src/observability.py` sends one [HoneyHive](https://docs.honeyhive.ai/v2) span per turn, model request, tool call and memory embedding, with timing, model, tokens, tool names, errors, `shop_id` and the content, grouped into one HoneyHive session per turn. The content is the prompts, the redacted question, tool arguments, tool results and the answer, so customer names and phone numbers the owner types reach HoneyHive (`NFR-008`); raw media does not, and `InputRedaction` removes keys, tokens, card numbers, IBANs and emails before the session opens. `tests/unit_tests/test_observability.py` checks both. The session opens with the redacted question, `user_id`, `shop_id`, `conversation_id`, the model, `prompt_version` (a hash of the instructions and tool definitions) and `git_sha`, the commit the deploy workflow builds into the image, and closes with the answer and the turn's tokens, model requests and tool calls, plus `first_text_ms` for a streamed turn, the wait from the turn's arrival to the first words the owner sees, memory recall and any preamble included, so the session list reads like the chat and filters by prompt version or release. A turn that fails, times out or is cancelled instead gets `metadata.error`, the guardrail code such as `answer_timeout`, the exception type, or `cancelled` when the owner closed the stream. Each update waits for the session to be created first, up to five seconds, because HoneyHive loses an update for a session it does not have yet, and a session HoneyHive refuses logs a `WARNING`. Those updates are blocking HTTP calls, so they run on two threads of their own and a slow HoneyHive cannot hold the threads the database calls use. Only the chat agent opens sessions; memory runs inside the chat turn's session with its `shop_id`, and a draft run has none, so the SDK drops its spans. `HH_SAMPLE_RATE` (default 1) traces that share of turns; a turn outside the sample opens no session, so the SDK drops its spans too, and the SDK's warning for each dropped span is filtered out. A turn sends about seven events, more with tool calls, against the free plan's monthly cap. Cost stays 0 on HoneyHive, because Pydantic AI prices tokens with `genai-prices`, which has no price for `claude-haiku-5-5` yet. `HH_SOURCE` separates staging and production. FastAPI requests are not instrumented because that would record the unredacted message. The turn never waits on HoneyHive: the session id is set locally and the session fields go out in the background, so a slow or down HoneyHive only loses those fields and the spans. On shutdown the app waits up to ten seconds for memory writes, cancels any still running before the database pool closes, waits up to ten seconds for session updates, flushes queued spans for up to five seconds, then shuts the tracer down; `deploy/vps/compose.yaml` gives the container 60 seconds to stop, enough for an open stream to finish first. Tracing starts in `lifespan`, not at import, and the tests clear `HH_API_KEY`, so a test run sends nothing to HoneyHive.
+- **Online evaluators:** HoneyHive scores every new `query_shop_data` call for a refused query and every turn's answer, on its session, for leaked internals such as view names or SQL, with Python evaluators defined in [`evaluation/honeyhive`](evaluation/honeyhive/README.md); `apply.py` there pushes them and, with a control plane key, the alerts on a slow p95 turn, on the query error rate and on failed turns, all on `production` traffic only.
 - **Metrics:** `/metrics` exposes request rate, status and latency per route through `prometheus-fastapi-instrumentator`, timed to the last streamed byte, for the dashboards in `deploy/monitoring/`.
 
 ## Database access
@@ -195,7 +196,6 @@ The tool-call guardrail counts one `run_code` as one call and does not see calls
 |---|---|---|---|
 | Application database | `POSTGRES_URL` | `POSTGRES_POOL_MAX_SIZE` (2) | Chat history, memories, catalog for drafts |
 | Shop-data reader | `AI_SQL_READER_URL` | `SQL_POOL_MAX_SIZE` (2) | `query_shop_data` and `suggest_restock` |
-| Redis | `REDIS_URL` | — | Connected at startup; no feature uses it yet |
 
 - URLs must be `postgresql://` or `postgres://`; libpq keyword strings are rejected.
 - The four connections fit the Supabase session pooler's 15 clients next to Core's 10.
@@ -225,7 +225,6 @@ Settings come from `src/app_config.py`, read from the environment or `.env`; bla
 | Core | `INTERNAL_API_TOKEN` | unset | Shared with Core; unset rejects every `/internal/v1` route |
 | Database | `POSTGRES_URL` | unset | Application database |
 | | `POSTGRES_POOL_MAX_SIZE` | `2` | Application pool size |
-| | `REDIS_URL` | unset | Redis client |
 | Shop data | `AI_SQL_READER_URL` | unset | Read-only login; unset removes the data tools |
 | | `SQL_POOL_MAX_SIZE` | `2` | Reader pool size |
 | | `SQL_TIMEOUT_MS` | `3000` | Statement timeout |
@@ -256,9 +255,10 @@ Settings come from `src/app_config.py`, read from the environment or `.env`; bla
 | | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | unset | Workers AI embeddings |
 | Tracing | `HH_API_KEY` | unset | Unset sends nothing |
 | | `HH_API_URL` | unset | Data plane URL; unset uses HoneyHive's multi-tenant default |
-| | `HH_PROJECT` | unset | HoneyHive project name |
-| | `HH_SOURCE` | `local` | `staging` or `production` on the VPS |
-| Deferred | `QDRANT_URL`, `LITELLM_URL`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` | unset | Kept for planned integrations; no code reads them |
+| | `HH_SOURCE` | `local` | `staging` or `production` on the VPS; the alerts watch `production` only |
+| | `HH_SAMPLE_RATE` | `1` | Share of chat turns traced, 0 to 1 |
+| | `GIT_SHA` | unset | Set in the image by `deploy-backend.yml`; tags each session |
+| Deferred | `QDRANT_URL`, `LITELLM_URL` | unset | Kept for planned integrations; no code reads them |
 
 On the VPS the deploy sets the HoneyHive values from Dopbase ([AI tracing settings](../../docs/development/ci-cd.md#ai-tracing-settings)).
 

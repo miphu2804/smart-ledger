@@ -14,7 +14,6 @@ dependencies = [
     "pydantic-ai-harness[codemode]>=0.55.0",
     "pydantic-ai-slim[anthropic,openai]>=2.55.0",
     "pydantic-settings>=2.6",
-    "redis>=5.0",
     "sqlalchemy>=2.1.4",
     "sqlglot>=30.21.0",
     "uvicorn>=0.32",

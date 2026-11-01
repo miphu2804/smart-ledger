@@ -14,7 +14,7 @@
 
 ![CI/CD flow](../architecture/diagrams/images/ci-cd.svg)
 
-Green numbers are the deploy, purple the one-time VPS setup, orange the runtime requests. Gray dashed arrows are secrets: the deploy exports `core` and `ai` from Dopbase with runner tokens kept in the GitHub environment, and `scripts/secrets/vps-playbook.sh` exports every VPS file from Dopbase for Ansible. The diagram shows the target setup: pgvector, the Bifrost gateway, Langfuse and the Grafana stack are not built yet; today AI calls OpenCode Go directly and traces to HoneyHive. Edit [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio) and re-export:
+Green numbers are the deploy, purple the one-time VPS setup, orange the runtime requests. Gray dashed arrows are secrets: the deploy exports `core` and `ai` from Dopbase with runner tokens kept in the GitHub environment, and `scripts/secrets/vps-playbook.sh` exports every VPS file from Dopbase for Ansible. The diagram shows the target setup: pgvector, the Bifrost gateway in production and the Grafana stack are not built yet; today production AI calls OpenCode Go directly, and AI traces to HoneyHive in every environment where `HH_API_KEY` is set. Edit [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio) and re-export:
 
 ```bash
 drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/ci-cd.svg docs/architecture/diagrams/src/ci-cd.drawio
@@ -103,7 +103,7 @@ Compose names a project after its directory unless the file sets `name:`, which 
 - The bare `103-162-31-93.sslip.io` still reaches staging until every client has moved.
 - Renaming a project changes the container and volume prefix, so Compose treats the old project as unrelated rather than as orphans: a VPS that still runs the `smartledger*` projects needs `docker compose down` in the old project before the first `up` under the new name, and the shared Caddy needs its certificate volume copied from `smartledger-edge_caddy_data` first, or it asks Let's Encrypt for every hostname again. The Dopbase project in `/opt/dopbase` is already named `dopbase` and is not part of this rename, so leave it running.
 - With a real domain, point `api.<domain>` and `api-staging.<domain>` at the VPS and change `CADDY_DOMAIN`; nothing else changes.
-- The firewall opens only 22, 80 and 443. Supabase, Redis Cloud, Cloudinary and Firebase stay external.
+- The firewall opens only 22, 80 and 443. Supabase, Cloudinary and Firebase stay external.
 - One VPS is one point of failure: a staging service that runs out of memory takes production down too.
 
 ### How a backend deploy works
@@ -134,7 +134,7 @@ Add `GHCR_USERNAME` and `GHCR_READ_TOKEN` to the shell if the packages are priva
 4. Set `CADDY_DOMAIN`; production copies the `VPS_*` values from staging, because `deploy` has one key. Save the `VPS_*` and `CADDY_DOMAIN` values in Dopbase `vps/<environment>`.
 5. Create network `edge`. In the app directory, put `compose.yaml` and `bifrost.json` from `deploy/vps/`, and with mode `600` `core.env`, `ai.env`, `bifrost.env` (from [secrets](secrets-and-env.md)) and `.env` with `ENVIRONMENT=<environment>` and `CORE_ALIAS=core-<environment>`. In `/opt/smartledger-edge`, put `deploy/edge/compose.yaml`, the Caddyfile as `conf/Caddyfile` and `sites/<environment>.caddy`, then validate and reload Caddy. Caddy mounts `conf/` and `sites/` as directories because a single-file mount keeps the inode it started with: a file replaced by rename, as Ansible and most editors do, stays invisible to `caddy reload` until the container is recreated.
 6. After the first deploy, make the two GHCR packages public, or `docker login ghcr.io` once as `deploy` with a `read:packages` token.
-7. Check database access: Supabase's direct host is IPv6-only, so a VPS without IPv6 uses the session pooler URL. Allowlist the VPS in Supabase and Redis Cloud if restrictions are on.
+7. Check database access: Supabase's direct host is IPv6-only, so a VPS without IPv6 uses the session pooler URL. Allowlist the VPS in Supabase if restrictions are on.
 
 The first deploy must include both services (start CD by hand with `backend-ai` and `backend-core`).
 
@@ -165,7 +165,6 @@ Compose sets `AI_BASE_URL`, `SERVER_PORT` and `FLYWAY_ENABLED=false` itself. Bef
 | `INTERNAL_API_TOKEN` | Same as in `core.env` |
 | `POSTGRES_URL` | Supabase `postgresql://` URL of the environment |
 | `AI_SQL_READER_URL` | Read-only `ai_sql_reader` login as a `postgresql://` URL; empty means the agent cannot read shop data |
-| `REDIS_URL` | Redis Cloud of the environment |
 | `POSTGRES_POOL_MAX_SIZE`, `SQL_POOL_MAX_SIZE` | Optional, default `2`; they share the Supabase pooler limit with Core ([AI README](../../backend/ai/README.md#database-access)) |
 | Model and tracing variables | From GitHub, see below |
 | `AGENT_MEMORY_*`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | Optional, `ai.env` only; memory is off until the PO approves it ([ADR-0002](../architecture/adr/0002-agent-long-term-memory.md), [AI README](../../backend/ai/README.md#long-term-memory-off-by-default)) |
@@ -248,10 +247,11 @@ To remove a setting, delete it in Dopbase; the next deploy drops it from `ai.env
 |---|---|---|
 | `HH_API_KEY` | Dopbase `ai/<environment>` | Project ingestion key; unset means no tracing |
 | `HH_API_URL` | Dopbase `ai/<environment>` | Data plane URL; unset uses the multi-tenant default |
-| `HH_PROJECT` | Dopbase `ai/<environment>` | HoneyHive project name |
-| `HH_SOURCE` | Dopbase `ai/<environment>` | `staging` or `production` |
+| `HH_SOURCE` | Dopbase `ai/<environment>` | `staging` or `production`; the HoneyHive alerts watch `production` only |
+| `HH_SAMPLE_RATE` | Dopbase `ai/<environment>` | Share of chat turns traced, 0 to 1; unset traces every turn |
+| `GIT_SHA` | Image build argument | Set by `deploy-backend.yml` to the deployed commit; tags each HoneyHive session |
 
-Traces carry no message content ([AI README](../../backend/ai/README.md#observability)). To turn tracing off, delete `HH_API_KEY` in Dopbase and redeploy `ai`.
+Traces carry the redacted question, tool calls and the answer, so they hold customer names and phone numbers ([AI README](../../backend/ai/README.md#observability), [ADR-0009](../architecture/adr/0009-end-to-end-tracing.md)); HoneyHive infers the project from the key. To turn tracing off, delete `HH_API_KEY` in Dopbase and redeploy `ai`.
 
 ### Core CORS origins
 

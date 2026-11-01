@@ -40,25 +40,22 @@ class AppConfig(BaseSettings):
     SQL_TIMEOUT_MS: int = Field(default=3000, gt=0)
     SQL_ROW_LIMIT: int = Field(default=100, gt=0)
 
-    # redis
-    REDIS_URL: str | None = None
-
-    # qdrant, litellm and langfuse: kept for planned integrations, no feature reads
-    # them yet
+    # qdrant and litellm: kept for planned integrations, no feature reads them yet
     QDRANT_URL: str | None = None
     LITELLM_URL: str | None = None
-    LANGFUSE_PUBLIC_KEY: str | None = None
-    LANGFUSE_SECRET_KEY: str | None = None
-    LANGFUSE_HOST: str | None = None
 
-    # honeyhive: Pydantic AI traces without message content (src/observability.py);
-    # an unset key sends nothing
+    # honeyhive: Pydantic AI traces with the redacted message content
+    # (src/observability.py); an unset key sends nothing
     HH_API_KEY: str | None = None
     # Data plane URL; unset uses HoneyHive's multi-tenant default
     HH_API_URL: str | None = None
-    HH_PROJECT: str | None = None
     # staging or production, so one HoneyHive project can hold both
     HH_SOURCE: str = "local"
+    # Share of chat turns traced, from 0 to 1; the free plan caps events per month and
+    # a turn sends about a dozen
+    HH_SAMPLE_RATE: float = Field(default=1.0, ge=0, le=1)
+    # Commit the image was built from, set by the deploy workflow; tags each session
+    GIT_SHA: str | None = None
 
     # models the application asks for by alias, as a JSON object; protocol is the API
     # the model speaks: openai_responses, openai_chat or anthropic_messages

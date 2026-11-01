@@ -80,9 +80,11 @@ jobs:
       # Without provenance each push is one tagged version, so the cleanup counts only deployable images.
       - name: Build and push ai
         if: inputs.ai
+        env:
+          SHA: ${{ inputs.sha }}
         run: |
           docker buildx build --platform linux/amd64 --provenance=false --label "org.opencontainers.image.source=$IMAGE_SOURCE" \
-            --tag "$AI_IMAGE" --push backend/ai
+            --build-arg "GIT_SHA=$SHA" --tag "$AI_IMAGE" --push backend/ai
       # The runner builds the jar and the image only wraps it in a JRE, so the image build needs no Maven.
       - uses: actions/setup-java@v6
         if: inputs.core

@@ -1,11 +1,13 @@
 import asyncio
+import hashlib
 import json
 import logging
 import re
+import time
 import uuid
-from collections.abc import AsyncGenerator
-from contextlib import suppress
-from dataclasses import dataclass
+from collections.abc import AsyncGenerator, AsyncIterator
+from contextlib import asynccontextmanager, suppress
+from dataclasses import asdict, dataclass
 
 from pydantic_ai import Agent, AgentRun, Tool
 from pydantic_ai.messages import (
@@ -20,6 +22,7 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models import Model
 
+from src.agent.errors import GuardrailError
 from src.agent.guardrails import GuardrailLimits, GuardrailService
 from src.agent.repository import AgentConversationRepository
 from src.agent.tool_events import (
@@ -156,12 +159,23 @@ class AgentService:
         # Memory writes run after the reply; held here so they are not garbage
         # collected mid-run.
         self.memory_writes: set[asyncio.Task] = set()
+        instructions = "\n\n".join(prompt_parts)
+        # Short and stable, so traces and evaluation runs can be grouped by prompt. The
+        # tool definitions count too: the model reads their descriptions and schemas.
+        tool_definitions = json.dumps(
+            [asdict(tool.tool_def) for tool in tools],
+            sort_keys=True,
+            ensure_ascii=False,
+        )
+        self.prompt_version = hashlib.sha256(
+            f"{instructions}\n{tool_definitions}".encode()
+        ).hexdigest()[:12]
         self.agent = (
             Agent(
                 model,
                 name="chat",
                 deps_type=AgentContext,
-                instructions="\n\n".join(prompt_parts),
+                instructions=instructions,
                 tools=tools,
                 # The limits arrive from the composition root, so this module reads no
                 # global settings and guardrails cannot be switched off by a caller.
@@ -183,13 +197,14 @@ class AgentService:
     ) -> AgentChatResult:
         context = AgentContext(user_id=user_id, shop_id=shop_id)
         question, history = await self._prepare_turn(context, message, conversation_id)
-        prompt, recalled = await self._with_memories(context, question)
-        answer, version = await self._answer(
-            prompt, history, context, self._session_id(conversation_id)
-        )
-        return await self._save_turn(
-            context, conversation_id, question, answer, version, recalled
-        )
+        async with self._marks_failure():
+            prompt, recalled = await self._with_memories(context, question)
+            answer, version = await self._answer(
+                prompt, history, context, self._session_id(conversation_id)
+            )
+            return await self._save_turn(
+                context, conversation_id, question, answer, version, recalled
+            )
 
     async def stream_chat(
         self,
@@ -200,11 +215,13 @@ class AgentService:
     ) -> AsyncGenerator[AgentStreamEvent]:
         """Refuse a turn now, so the caller can answer with a status code; the returned
         iterator runs the model and yields the events."""
+        started = time.monotonic()
         context = AgentContext(user_id=user_id, shop_id=shop_id)
         question, history = await self._prepare_turn(context, message, conversation_id)
-        prompt, recalled = await self._with_memories(context, question)
+        async with self._marks_failure():
+            prompt, recalled = await self._with_memories(context, question)
         return self._stream_events(
-            question, prompt, recalled, history, context, conversation_id
+            question, prompt, recalled, history, context, conversation_id, started
         )
 
     async def _prepare_turn(
@@ -213,7 +230,6 @@ class AgentService:
         """Check the turn before any model call; return the question and the history."""
         if self.agent is None:
             raise RuntimeError("agent model unavailable")
-        await self.observability.start_turn_session(context.shop_id, conversation_id)
 
         # Read first, so a conversation outside the owner's scope fails before any model
         # call. Owners rarely reach the window, so it bounds the prompt for the odd long
@@ -232,7 +248,35 @@ class AgentService:
         # Stored as the model sees it, so a pasted key is not replayed with the history
         # on later turns.
         question = self.guardrails.check_input(message)
+        # After the redaction, so the session opens with the question the model sees.
+        await self.observability.start_turn_session(
+            context.shop_id,
+            context.user_id,
+            conversation_id,
+            question,
+            {"model": self.model_name, "prompt_version": self.prompt_version},
+        )
         return question, history
+
+    @asynccontextmanager
+    async def _marks_failure(self) -> AsyncIterator[None]:
+        """Mark the turn's session with what ended the turn early, then re-raise.
+
+        A cancelled stream is marked too: the owner closed the app or lost the
+        connection, and the session would otherwise look like a turn still running.
+        """
+        try:
+            yield
+        except asyncio.CancelledError:
+            self.observability.fail_turn("cancelled")
+            raise
+        except Exception as error:
+            self.observability.fail_turn(
+                error.code
+                if isinstance(error, GuardrailError)
+                else type(error).__name__
+            )
+            raise
 
     async def _with_memories(
         self, context: AgentContext, question: str
@@ -286,11 +330,19 @@ class AgentService:
         history: list[dict],
         context: AgentContext,
         conversation_id: int | None,
+        started: float,
     ) -> AsyncGenerator[AgentStreamEvent]:
         events: asyncio.Queue[AgentStreamEvent | Exception] = asyncio.Queue()
         producer = asyncio.create_task(
             self._produce_turn(
-                question, prompt, recalled, history, context, conversation_id, events
+                question,
+                prompt,
+                recalled,
+                history,
+                context,
+                conversation_id,
+                started,
+                events,
             )
         )
         try:
@@ -315,25 +367,32 @@ class AgentService:
         history: list[dict],
         context: AgentContext,
         conversation_id: int | None,
+        started: float,
         events: asyncio.Queue[AgentStreamEvent | Exception],
     ) -> None:
         # The run gets its own task: pydantic-ai binds its run state to the task that
         # opened it, so a generator suspended mid-run cannot be closed from outside.
         try:
-            if recalled:
-                events.put_nowait(MemoryRecalled(recalled))
-            delivered, answer, version = await self._stream_run(
-                prompt, history, context, self._session_id(conversation_id), events
-            )
-            if not answer.startswith(delivered):
-                events.put_nowait(Reset())
-                delivered = ""
-            if answer[len(delivered) :]:
-                events.put_nowait(TextDelta(answer[len(delivered) :]))
-            saved = await self._save_turn(
-                context, conversation_id, question, answer, version, recalled
-            )
-            events.put_nowait(Done(saved))
+            async with self._marks_failure():
+                if recalled:
+                    events.put_nowait(MemoryRecalled(recalled))
+                delivered, answer, version = await self._stream_run(
+                    prompt,
+                    history,
+                    context,
+                    self._session_id(conversation_id),
+                    started,
+                    events,
+                )
+                if not answer.startswith(delivered):
+                    events.put_nowait(Reset())
+                    delivered = ""
+                if answer[len(delivered) :]:
+                    events.put_nowait(TextDelta(answer[len(delivered) :]))
+                saved = await self._save_turn(
+                    context, conversation_id, question, answer, version, recalled
+                )
+                events.put_nowait(Done(saved))
         except Exception as error:
             # The consumer re-raises it, so the caller sees the same error as chat().
             events.put_nowait(error)
@@ -344,12 +403,16 @@ class AgentService:
         history: list[dict],
         context: AgentContext,
         session_id: str,
+        started: float,
         events: asyncio.Queue[AgentStreamEvent | Exception],
     ) -> tuple[str, str, str]:
         """Queue the text each model response releases; return the text the owner
         was sent since the last Reset, the answer with its buttons, and the model
         version."""
         delivered = ""
+        # How long the owner waited for the first words since the turn arrived, memory
+        # recall included: the latency they feel, even when a preamble is later reset.
+        first_text_ms = None
         async with (
             self.guardrails.run_limits(),
             self.agent.iter(
@@ -391,11 +454,20 @@ class AgentService:
                             events.put_nowait(Reset())
                             delivered = ""
                         fresh = safe[len(released) :]
+                        if first_text_ms is None:
+                            first_text_ms = round(1000 * (time.monotonic() - started))
                         delivered += fresh
                         events.put_nowait(TextDelta(fresh))
                         released = safe
                     answer = self._kept_text(stream.response)
-            return (delivered, *self._read_result(run, answer, returns))
+            if first_text_ms is None:
+                # Nothing passed the screen while streaming; the caller sends the answer
+                # as soon as this returns.
+                first_text_ms = round(1000 * (time.monotonic() - started))
+            return (
+                delivered,
+                *self._read_result(run, answer, returns, first_text_ms),
+            )
 
     @staticmethod
     async def _queue_tool_events(
@@ -412,7 +484,11 @@ class AgentService:
                     events.put_nowait(progress)
 
     def _read_result(
-        self, run: AgentRun, answer: str, returns: ModelRequest | None
+        self,
+        run: AgentRun,
+        answer: str,
+        returns: ModelRequest | None,
+        first_text_ms: int | None = None,
     ) -> tuple[str, str]:
         """Log the turn's token use; return the answer, with its screen buttons, and
         the model version.
@@ -442,6 +518,7 @@ class AgentService:
         if returns is not None:
             messages = [*messages, returns]
         answer = self._with_screen_buttons(answer, self._screens(messages))
+        self.observability.finish_turn(answer, usage, first_text_ms)
         return answer, model_name or self.model_name
 
     @staticmethod

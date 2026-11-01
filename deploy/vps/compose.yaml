@@ -58,6 +58,9 @@ services:
       timeout: 5s
       start_period: 30s
       retries: 6
+    # Docker's 10 s default kills AI mid-shutdown: an open chat stream may run to the 35 s turn limit, then
+    # memory writes wait up to 10 s, HoneyHive session updates 10 s and the span flush 5 s.
+    stop_grace_period: 60s
     restart: unless-stopped
     logging: *logging
 
