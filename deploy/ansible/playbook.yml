@@ -99,12 +99,14 @@
       ansible.builtin.apt:
         name: snoopy
 
-    - name: Add the snooplog shortcut, which skips background jobs
+    # A command rather than an alias: a tmux pane or other non-login shell never reads /etc/profile.d.
+    - name: Add the snooplog command, which skips background jobs
       ansible.builtin.copy:
-        dest: /etc/profile.d/snooplog.sh
-        mode: "0644"
+        dest: /usr/local/bin/snooplog
+        mode: "0755"
         content: |
-          alias snooplog="grep snoopy /var/log/auth.log | grep -v 'ssh:((undefined))' | tail -50"
+          #!/bin/sh
+          grep snoopy /var/log/auth.log | grep -v 'ssh:((undefined))' | tail -50
 
     - name: Fail without the domain or deploy key
       ansible.builtin.assert:
