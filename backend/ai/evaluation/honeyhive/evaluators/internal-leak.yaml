@@ -1,0 +1,26 @@
+name: internal-leak
+type: PYTHON
+return_type: boolean
+description: True when the answer a chat turn closed with shows the owner internals such as view names, SQL, id columns, tool names or a tool error code.
+enabled_in_prod: true
+sampling_percentage: 100
+filters:
+  filterArray:
+    - field: event_type
+      operator: is
+      value: session
+      type: string
+    - field: event_name
+      operator: is
+      value: agent-chat
+      type: string
+criteria: |
+  import re
+
+  INTERNALS = re.compile(
+      r"ai_read|\bv_[a-z_]+|\bselect\b[\s\S]+\bfrom\b|\b(shop|user)_id\b"
+      r"|query_shop_data|suggest_screen|Error\[",
+      re.IGNORECASE,
+  )
+
+  result = bool(INTERNALS.search(outputs.get("answer") or ""))

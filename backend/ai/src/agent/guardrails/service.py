@@ -109,7 +109,10 @@ class GuardrailService:
             # The model used up its requests or never gave an answer the screen
             # accepts. Provider errors are neither, so they still propagate and the
             # router answers 503.
-            logger.warning("agent run ended without an answer: %s", error)
+            # The message can carry the model's output, so only the type is logged.
+            logger.warning(
+                "agent run ended without an answer: %s", type(error).__name__
+            )
             raise GuardrailError("answer_unavailable") from error
 
     def screened_prefix(self, partial: str) -> str:

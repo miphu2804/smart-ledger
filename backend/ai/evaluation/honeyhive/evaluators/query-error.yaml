@@ -1,0 +1,18 @@
+name: query-error
+type: PYTHON
+return_type: boolean
+description: True when query_shop_data answered Error[CODE], so the model wrote SQL the guard or the database refused.
+enabled_in_prod: true
+sampling_percentage: 100
+filters:
+  filterArray:
+    - field: event_type
+      operator: is
+      value: tool
+      type: string
+    - field: event_name
+      operator: is
+      value: execute_tool query_shop_data
+      type: string
+criteria: |
+  result = (outputs.get("message") or "").startswith("Error[")

@@ -17,7 +17,12 @@ def no_application_database(monkeypatch: pytest.MonkeyPatch) -> None:
     # A local .env may point at the shared staging databases. Tests that need PostgreSQL
     # build their own client from POSTGRES_TEST_URL instead.
     monkeypatch.setattr(app_config, "POSTGRES_URL", None)
-    monkeypatch.setattr(app_config, "REDIS_URL", None)
+
+
+@pytest.fixture(autouse=True)
+def no_honeyhive(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A local .env may hold a real HoneyHive key; a test run must not send traces.
+    monkeypatch.setattr(app_config, "HH_API_KEY", None)
 
 
 @pytest.fixture(autouse=True)

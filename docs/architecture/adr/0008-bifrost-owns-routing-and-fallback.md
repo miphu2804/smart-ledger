@@ -9,7 +9,7 @@
 - AI cần gọi cùng một model qua nhiều upstream (OpenCode Go, OpenAI) và chuyển upstream khi gặp lỗi tạm thời như 429, mà không đổi code ở `agent`, `memory` và `drafts`.
 - Trước đây `build_chat_model` chọn API theo `MODEL_PROVIDER`, còn fallback nằm trong `MODEL_FALLBACKS` ở Python, nên mọi đổi upstream đều cần đổi cấu hình AI và deploy lại.
 - Bifrost tự host đã chạy ở staging. Nó ghi log từng request gồm provider, model, độ trễ, token, chi phí, chuỗi fallback và rule đã khớp, nên là nơi tự nhiên để xem request lên upstream.
-- `NFR-008` cấm nội dung tin nhắn trong trace và log. Logfire tiếp tục theo dõi tầng Agent với `include_content=False`.
+- Nội dung tin nhắn chỉ đi tới HoneyHive ở tầng Agent (`NFR-008`), nên log của Bifrost không cần giữ nội dung.
 - Production chưa có Bifrost và gọi thẳng OpenCode Go.
 
 ## Quyết định
@@ -23,6 +23,6 @@
 ## Hệ quả
 
 - Đổi upstream hoặc fallback chỉ cần sửa `bifrost.json` và deploy Bifrost, không deploy lại AI.
-- Bifrost UI chỉ hiện metadata, không hiện prompt và câu trả lời; muốn đọc nội dung phải đổi quyết định về `NFR-008`.
+- Bifrost UI chỉ hiện metadata, không hiện prompt và câu trả lời; muốn đọc nội dung thì xem trên HoneyHive.
 - Tạm thời có hai nơi định nghĩa fallback, tùy môi trường có Bifrost hay không.
 - Bifrost là một điểm lỗi mới trên đường gọi model ở staging; giám sát uptime theo dõi ở [issue #435](https://github.com/miphu2804/smart-ledger/issues/435).

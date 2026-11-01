@@ -1,0 +1,36 @@
+name: Query errors
+description: More than one query_shop_data call in five refused over a day, scored by the query-error evaluator.
+frequency: DAILY
+alert_type: AGGREGATE
+aggregation: AVERAGE
+minimum_sample_size: 10
+projections:
+  - metrics.query-error
+# Filtered on event_type: HoneyHive refused event_name with this metric as having no
+# schema data. Only query_shop_data events carry the metric, so the average is theirs.
+filters:
+  - field: event_type
+    operator: is
+    value: tool
+    type: string
+  # Local runs, staging and evaluation experiments would otherwise send critical emails.
+  - field: source
+    operator: is
+    value: production
+    type: string
+thresholds:
+  critical:
+    operator: greater_than
+    value: 0.2
+  resolved:
+    operator: less_than
+    value: 0.1
+notification_details:
+  critical:
+    channel: EMAIL
+    scope: ALL_PROJECT_MEMBERS
+    metadata: {}
+  resolved:
+    channel: EMAIL
+    scope: ALL_PROJECT_MEMBERS
+    metadata: {}

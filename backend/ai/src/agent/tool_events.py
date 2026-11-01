@@ -45,30 +45,37 @@ def tool_progress(event: ModelStreamEvent) -> ToolStarted | ToolFinished | None:
 
 
 def log_tool_event(event: ModelStreamEvent) -> None:
-    """Log each tool call with its arguments and outcome, so a turn can be traced on
-    the server. A retry (a rejected query, a sandbox error) logs at WARNING."""
+    """Log each tool call and how it ended, so a turn can be traced on the server.
+
+    Arguments and results carry shop data such as customer names and phone numbers,
+    so INFO and WARNING keep only the tool, the call id and the size; the content is
+    logged at DEBUG. A retry (a rejected query, a sandbox error) logs at WARNING.
+    """
     if isinstance(event, FunctionToolCallEvent):
-        logger.info(
-            "tool call %s [%s] args=%s",
-            event.part.tool_name,
-            event.tool_call_id,
-            _preview(event.part.args_as_json_str()),
-        )
+        name, call_id = event.part.tool_name, event.tool_call_id
+        args = event.part.args_as_json_str()
+        logger.info("tool call %s [%s] args=%d chars", name, call_id, len(args))
+        logger.debug("tool call %s [%s] args=%s", name, call_id, _preview(args))
     elif isinstance(event, FunctionToolResultEvent):
-        part = event.part
+        part, call_id = event.part, event.tool_call_id
         if isinstance(part, RetryPromptPart):
-            logger.warning(
+            logger.warning("tool retry %s [%s]", part.tool_name, call_id)
+            logger.debug(
                 "tool retry %s [%s]: %s",
                 part.tool_name,
-                event.tool_call_id,
+                call_id,
                 _preview(part.model_response()),
             )
         else:
+            result = part.model_response_str()
             logger.info(
-                "tool done %s [%s] result=%s",
+                "tool done %s [%s] result=%d chars",
                 part.tool_name,
-                event.tool_call_id,
-                _preview(part.model_response_str()),
+                call_id,
+                len(result),
+            )
+            logger.debug(
+                "tool done %s [%s] result=%s", part.tool_name, call_id, _preview(result)
             )
 
 

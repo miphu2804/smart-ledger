@@ -42,6 +42,8 @@ from src.prompt_templates import (
 from src.providers.session_settings import session_settings
 from src.utils import get_time
 
+# A failure here can carry the extractor model's output, which names customers, so
+# WARNING keeps the error type and the traceback goes to DEBUG.
 logger = logging.getLogger(__name__)
 
 # A Vietnamese phone number: 0, 84 or +84, then nine digits that spaces, dots or
@@ -123,16 +125,19 @@ class AgentMemoryService:
         # gateway reject native structured output.
         self.extractor = Agent(
             model,
+            name="memory-extractor",
             output_type=PromptedOutput(MemoryFacts),
             instructions=MEMORY_EXTRACT_PROMPT,
         )
         self.reconciler = Agent(
             model,
+            name="memory-reconciler",
             output_type=PromptedOutput(MemoryDecisions),
             instructions=MEMORY_RECONCILE_PROMPT,
         )
         self.summarizer = Agent(
             model,
+            name="memory-summarizer",
             output_type=PromptedOutput(MemorySummary),
             instructions=MEMORY_SUMMARY_PROMPT,
         )
@@ -149,8 +154,11 @@ class AgentMemoryService:
             if not await self.memory_enabled(shop_id, user_id):
                 return message, []
             memories = await self._recall(shop_id, user_id, message)
-        except Exception:
-            logger.warning("memory not recalled: shop=%s", shop_id, exc_info=True)
+        except Exception as error:
+            logger.warning(
+                "memory not recalled: shop=%s (%s)", shop_id, type(error).__name__
+            )
+            logger.debug("memory not recalled: shop=%s", shop_id, exc_info=True)
             return message, []
         if not memories:
             return message, []
@@ -199,8 +207,11 @@ class AgentMemoryService:
         try:
             if not await self.memory_enabled(shop_id, user_id):
                 return
-        except Exception:
-            logger.warning("memory not stored: shop=%s", shop_id, exc_info=True)
+        except Exception as error:
+            logger.warning(
+                "memory not stored: shop=%s (%s)", shop_id, type(error).__name__
+            )
+            logger.debug("memory not stored: shop=%s", shop_id, exc_info=True)
             return
         await self._store(shop_id, user_id, conversation_id, question, answer, recalled)
         await self._summarize(shop_id, user_id)
@@ -232,8 +243,14 @@ class AgentMemoryService:
                 conversation_id,
                 len(memories),
             )
-        except Exception:
+        except Exception as error:
             logger.warning(
+                "memory not stored: shop=%s conversation=%s (%s)",
+                shop_id,
+                conversation_id,
+                type(error).__name__,
+            )
+            logger.debug(
                 "memory not stored: shop=%s conversation=%s",
                 shop_id,
                 conversation_id,
@@ -282,9 +299,14 @@ class AgentMemoryService:
                     ),
                 ),
                 model_settings=session_settings(uuid.uuid4().hex, shop_id),
+                # Filters one shop's memory spans, like the chat agent's.
+                metadata={"shop_id": shop_id},
             )
-        except Exception:
-            logger.warning("memory not reconciled: shop=%s", shop_id, exc_info=True)
+        except Exception as error:
+            logger.warning(
+                "memory not reconciled: shop=%s (%s)", shop_id, type(error).__name__
+            )
+            logger.debug("memory not reconciled: shop=%s", shop_id, exc_info=True)
             return memories
         decisions = {decision.fact: decision for decision in result.output.decisions}
         known_ids = {memory.id for memory in similar}
@@ -322,8 +344,11 @@ class AgentMemoryService:
             )
             for group in groups[: self.SUMMARY_GROUPS_PER_TURN]:
                 await self._summarize_group(shop_id, user_id, group)
-        except Exception:
-            logger.warning("memory not summarized: shop=%s", shop_id, exc_info=True)
+        except Exception as error:
+            logger.warning(
+                "memory not summarized: shop=%s (%s)", shop_id, type(error).__name__
+            )
+            logger.debug("memory not summarized: shop=%s", shop_id, exc_info=True)
 
     async def _summarize_group(
         self, shop_id: int, user_id: int, group: MemoryGroup
@@ -335,6 +360,7 @@ class AgentMemoryService:
         result = await self.summarizer.run(
             MEMORY_SUMMARY_INPUT.format(day=group.day.isoformat(), facts=listed),
             model_settings=session_settings(uuid.uuid4().hex, shop_id),
+            metadata={"shop_id": shop_id},
         )
         facts = [
             fact
@@ -402,6 +428,7 @@ class AgentMemoryService:
             ),
             # The gateway rejects a request without a session; each call stands alone.
             model_settings=session_settings(uuid.uuid4().hex, shop_id),
+            metadata={"shop_id": shop_id},
         )
         known = {memory.id for memory in recalled}
         # The model could name any id; only a memory this turn recalled may be replaced.

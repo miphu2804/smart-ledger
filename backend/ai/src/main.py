@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import sys
 from contextlib import asynccontextmanager
@@ -16,12 +17,11 @@ from src.agent.service import AgentService
 from src.app_config import app_config
 from src.calculation.service import CalculationLimits, CalculationService
 from src.infra.postgre_db_client import PostgreDBClient
-from src.infra.redis_db_client import RedisDBClient
 from src.log_formatter import LevelColorFormatter
 from src.memory.repository import EMBEDDING_DIMENSIONS, AgentMemoryRepository
 from src.memory.service import AgentMemoryService
 from src.memory.workers_ai_embedding import WorkersAIEmbeddingModel
-from src.observability import configure_tracing
+from src.observability import Observability
 from src.providers.llm_factory import LLMFactory
 from src.restock.service import RestockService
 from src.sandbox.wrapper import Sandbox, SandboxLimits
@@ -43,8 +43,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 # stdout is the log contract, so Pydantic AI's one-off observability promo stays out.
 pydantic_ai.BANNER_ENABLED = False
-# Before any agent runs, so every run is traced when a Logfire token is set.
-configure_tracing(app_config)
 
 
 def build_shop_data(reader: PostgreDBClient) -> ShopDataRepository | None:
@@ -165,6 +163,9 @@ def build_memory_embedder() -> Embedder | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Here, not at import, so importing the app (as the tests do) sends no traces;
+    # still before any agent runs, so every run is traced when a key is set.
+    observability = Observability.start(app_config)
     postgres = PostgreDBClient(
         app_config.POSTGRES_URL, pool_size=app_config.POSTGRES_POOL_MAX_SIZE
     )
@@ -172,9 +173,6 @@ async def lifespan(app: FastAPI):
     reader = PostgreDBClient(
         app_config.AI_SQL_READER_URL, pool_size=app_config.SQL_POOL_MAX_SIZE
     )
-    redis = RedisDBClient(app_config.REDIS_URL)
-    redis.connect()
-    app.state.redis = redis
     chat_model = LLMFactory(app_config).create_model("chat")
     conversations = AgentConversationRepository(postgres)
     app.state.conversations = conversations
@@ -184,6 +182,7 @@ async def lifespan(app: FastAPI):
     app.state.agent = AgentService(
         chat_model,
         conversations,
+        observability=observability,
         guardrail_limits=GuardrailLimits(
             max_input_chars=app_config.AGENT_MAX_INPUT_CHARS,
             model_call_limit=app_config.AGENT_MODEL_CALL_LIMIT,
@@ -204,9 +203,22 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        # Memory writes still running would be lost on restart, and their spans
+        # belong to the turn's session, so they finish before the flush.
+        memory_writes = app.state.agent.memory_writes
+        if memory_writes:
+            _, unfinished = await asyncio.wait(memory_writes, timeout=10)
+            # Cancelled and awaited, so none is still writing when the pool closes.
+            for task in unfinished:
+                task.cancel()
+            if unfinished:
+                logger.warning(
+                    "memory writes cancelled at shutdown: %d", len(unfinished)
+                )
+                await asyncio.gather(*unfinished, return_exceptions=True)
+        await observability.flush()
         postgres.close()
         reader.close()
-        redis.close()
 
 
 # The handlers do no I/O, so they are async and answer without a worker thread.
