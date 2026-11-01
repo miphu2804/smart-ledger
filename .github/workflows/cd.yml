@@ -137,6 +137,24 @@ jobs:
       core: ${{ inputs.backend-core }}
     secrets: inherit
 
+  # A job of its own, so a failure marks the CD run without changing the deploy's result or its image cleanup. Staging
+  # only: the collection has no production environment. The Smoke folder is read-only and needs no credentials.
+  smoke-staging:
+    if: github.ref_name == 'staging' && needs.deploy-backend.result == 'success'
+    needs: [select-runner, deploy-backend]
+    runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Run the Bruno smoke folder
+        working-directory: scripts/bruno
+        run: npx --yes @usebruno/cli@4.3.0 run Smoke --env staging
+
   deploy-web:
     if: inputs.web
     needs: [select-runner, gate]
