@@ -1,3 +1,11 @@
+### 2026-10-31 — In-app screens need a signed-in session
+
+| Area | Change |
+|---|---|
+| Mobile | • `/ai` and the other screens outside the tabs opened without signing in, and `/ai` greeted the visitor with the sample name "Lan"; a 401 in chat then only showed "Chưa gửi được tin nhắn", because `forceSignOut` navigates only when the app was signed in<br>• The root stack puts those screens in `Stack.Protected`, open only once the session is restored, signed in and with a shop; otherwise they go to the splash and then sign-in<br>• `src/lib/authGate.ts` lists the screens and `tests/authGate.test.ts` fails when a new screen in `app/` is not on the list |
+
+Check: 2 new tests pass; `npx tsc --noEmit` passes; on the mock web build `/ai` signed out lands on `/welcome` without "Lan", and signed in Bobi opens. Not verified: a 401 from real Core and a real phone. Commit: the one that adds this entry.
+
 ### 2026-10-29 — Shop and profile fields check their format
 
 | Area | Change |
@@ -189,11 +197,3 @@ Check: `npx tsc --noEmit` shows only the two existing errors for the missing `ex
 | Web | • The admin sidebar, login and 403 pages show the Bobi notebook logo from the landing instead of the grey microphone mark; the sidebar subtitle reads "Trang quản trị"<br>• The login page uses the brand purple: a purple panel with a waving Bobi (the mobile `bobi-tab-v2.png` as a 560 px webp, 36 KB), a heading and three points that hold with the real Core (search, shop status history, audited reads), and a purple button, checkbox and focus ring<br>• On phones the purple panel hides and the card shows the logo; the placeholder email no longer has a misspelled domain |
 
 Check: `npm run typecheck` and `npm run build` pass; `npm run lint` shows only the four warnings that #381 fixes; login, the dashboard sidebar (open and collapsed), the 403 page and the phone layout checked in the browser on a mock build. Not verified: a build against the real Core. Commit: the one that adds this entry.
-
-### 2026-10-28 — Web admin lint warnings cleared
-
-| Area | Change |
-|---|---|
-| Web | • `npm run lint` in `frontend/web` reported six warnings in the admin code and now reports none<br>• `colorFor` and `initialsOf` in `components/admin/ui.tsx` are no longer exported, so the file exports only components<br>• Four `useEffect`s that set state right away follow React's pattern: the phone menu remembers the page it opened on and closes on navigation without an effect; quick search clears old results and shows "Đang tìm…" from the input handler; AI Support copies newly loaded conversations during render; the create-task dialog resets its form during render when it opens, and its effect only loads shops and members |
-
-Check: `npm run lint` shows no warnings; `npm run typecheck` and `npm run build` pass. Mock admin at 375 px: the menu opens, closes when a page is chosen and on the backdrop; quick search shows "Đang tìm…" then results, closes at 1 letter; AI Support lists its 3 conversations; the create-task dialog opens empty with 58 shops and again after cancelling. Not verified: the admin against real Core. Commit: the one that adds this entry.
