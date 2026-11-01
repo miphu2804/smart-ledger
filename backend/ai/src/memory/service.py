@@ -121,8 +121,8 @@ class AgentMemoryService:
         # Standing preferences sent every turn on top of the search, so a growing list
         # cannot crowd the prompt.
         self.preference_limit = preference_limit
-        # Prompted JSON works on every provider; the Anthropic models behind the
-        # gateway reject native structured output.
+        # Prompted JSON works on every provider, including those that reject native
+        # structured output.
         self.extractor = Agent(
             model,
             name="memory-extractor",
