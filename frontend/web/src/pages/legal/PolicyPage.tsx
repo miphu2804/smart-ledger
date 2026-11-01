@@ -102,7 +102,7 @@ export default function PolicyPage() {
         <Item title="8. Hội thoại và trợ lý AI">
           <p>
             Khi bạn dùng trợ lý AI, hệ thống xử lý câu hỏi, transcript, prompt, phản hồi AI và phần dữ liệu nghiệp vụ cần thiết để trả lời. Nội dung này được
-            gửi tới nhà cung cấp mô hình OpenCode Go và OpenAI qua cổng Bifrost do chúng tôi tự vận hành để tạo câu trả lời. Bifrost không ghi nội dung tin
+            gửi tới nhà cung cấp mô hình OpenAI và Inception qua cổng Bifrost do chúng tôi tự vận hành để tạo câu trả lời. Bifrost không ghi nội dung tin
             nhắn vào log. Lịch sử hội thoại được lưu trong PostgreSQL trên Supabase.
           </p>
           <p>
@@ -141,7 +141,7 @@ export default function PolicyPage() {
             <li>Máy chủ riêng ảo (VPS) do nhóm thuê: chạy dịch vụ nghiệp vụ, AI và hệ thống giám sát.</li>
             <li>Cloudinary: lưu trữ và phân phối ảnh sản phẩm.</li>
             <li>Vercel và Cloudflare R2: phân phối website và file cài đặt Android.</li>
-            <li>OpenCode Go và OpenAI: tạo câu trả lời của trợ lý AI.</li>
+            <li>OpenAI và Inception: tạo câu trả lời của trợ lý AI.</li>
             <li>HoneyHive: ghi lại hội thoại với trợ lý AI để tìm lỗi và cải thiện chất lượng.</li>
             <li>Google Play: phân phối ứng dụng và xử lý thanh toán subscription nếu được triển khai.</li>
           </ul>

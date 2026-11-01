@@ -30,7 +30,6 @@
 - The static instructions and the history form a cacheable prefix; the shop time follows the new message so it does not break the cache.
 - The agent forgets anything said more than 30 exchanges earlier in the same conversation, unless long-term memory holds it. Owners chat little, so this is expected to be rare; raise `AGENT_HISTORY_TURNS` if it is not.
 - `chat_conversations.summary` and `summary_through_message_id` are no longer read or written. They are kept so the previous release can roll back, and a later migration should drop them.
-- `SUMMARY_MODEL_NAME` is still listed in `backend/ai/.env.example` although no code reads it.
 
 ## Open questions
 

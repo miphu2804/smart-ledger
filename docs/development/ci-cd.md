@@ -14,7 +14,7 @@
 
 ![CI/CD flow](../architecture/diagrams/images/ci-cd.svg)
 
-Green numbers are the deploy, purple the one-time VPS setup, orange the runtime requests. Gray dashed arrows are secrets: the deploy exports `core` and `ai` from Dopbase with runner tokens kept in the GitHub environment, and `scripts/secrets/vps-playbook.sh` exports every VPS file from Dopbase for Ansible. The diagram shows the target setup: pgvector, the Bifrost gateway in production and the Grafana stack are not built yet; today production AI calls OpenCode Go directly, and AI traces to HoneyHive in every environment where `HH_API_KEY` is set. Edit [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio) and re-export:
+Green numbers are the deploy, purple the one-time VPS setup, orange the runtime requests. Gray dashed arrows are secrets: the deploy exports `core` and `ai` from Dopbase with runner tokens kept in the GitHub environment, and `scripts/secrets/vps-playbook.sh` exports every VPS file from Dopbase for Ansible. The diagram shows the target setup: pgvector, the Bifrost gateway in production and the Grafana stack are not built yet; today production AI calls its model provider directly, and AI traces to HoneyHive in every environment where `HH_API_KEY` is set. Edit [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio) and re-export:
 
 ```bash
 drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/ci-cd.svg docs/architecture/diagrams/src/ci-cd.drawio
@@ -171,14 +171,14 @@ Compose sets `AI_BASE_URL`, `SERVER_PORT` and `FLYWAY_ENABLED=false` itself. Bef
 
 **`bifrost`**
 
-The model gateway in front of the providers, reachable by AI inside the project network at `http://bifrost:8080`. [`deploy/vps/bifrost.json`](../../deploy/vps/bifrost.json) declares the providers, the routing rules and their fallback, the virtual key and the admin login, keeps logs for 14 days without message content (NFR-008), and wins over the store in the `bifrost-data` volume; `bifrost.env` holds the values it references. The playbook starts it; `deploy.sh` does not, so a new Bifrost version is a digest change in `compose.yaml` followed by the playbook. AI routes through it when `ai.env` sets `OPENAI_BASE_URL=http://bifrost:8080/openai`, `ANTHROPIC_BASE_URL=http://bifrost:8080/anthropic` and `OPENAI_API_KEY` to the virtual key, with model ids that have no provider prefix, because the routing rules pick the upstream; without those settings AI calls OpenCode Go directly, as production does because it runs no Bifrost.
+The model gateway in front of the providers, reachable by AI inside the project network at `http://bifrost:8080`. [`deploy/vps/bifrost.json`](../../deploy/vps/bifrost.json) declares the providers, any routing rules and their fallback, the virtual key and the admin login, keeps logs for 14 days without message content (NFR-008), and wins over the store in the `bifrost-data` volume; `bifrost.env` holds the values it references. The playbook starts it; `deploy.sh` does not, so a new Bifrost version is a digest change in `compose.yaml` followed by the playbook. AI routes through it when `ai.env` sets `OPENAI_BASE_URL=http://bifrost:8080/openai` and `OPENAI_API_KEY` to the virtual key, with model ids that have no provider prefix, because the virtual key's allowed models pick the upstream; AI sends the key in the `x-bf-vk` header too, which Bifrost needs for a virtual key without the `sk-bf-` prefix. Without those settings AI calls its provider directly, as production does because it runs no Bifrost.
 
 Bifrost also joins `edge` as `gateway-<environment>`. When `.env.vps` sets `GATEWAY_DOMAIN` (`gateway-staging.songheloi.id.vn`, `gateway-production.songheloi.id.vn`), the playbook writes `sites/gateway-<environment>.caddy`, which serves the admin UI and its API behind the admin login and answers 404 to the inference prefixes, so model calls stay internal to AI; without it there is no public UI and an SSH tunnel to the container reaches it instead.
 
 | Variable | Value |
 |---|---|
-| `OPENCODE_GO_API_KEY` | OpenCode Go key; only Bifrost holds it |
-| `OPENAI_API_KEY` | OpenAI key for the `gpt-6-luna` fallback; `bifrost.json` references it, so add it before deploying that file |
+| `OPENAI_API_KEY` | OpenAI key for `gpt-6-luna`; `bifrost.json` references it, so add it before deploying that file |
+| `INCEPTIONLABS_API_KEY` | Inception key for `mercury-3`; only Bifrost holds it, and `bifrost.json` references it, so add it before deploying that file |
 | `BIFROST_VIRTUAL_KEY` | Random `sk-bf-` value, different per environment; a request without it gets 401 |
 | `BIFROST_ADMIN_USERNAME`, `BIFROST_ADMIN_PASSWORD` | Admin login of the UI and the management API; a long random password, because the domain is public |
 
@@ -233,11 +233,10 @@ These live in Dopbase `ai/<environment>` with the other AI variables; step `Uplo
 | Name | Value |
 |---|---|
 | `OPENAI_API_KEY` | Gateway key shared by every model; the Bifrost virtual key when AI calls Bifrost |
-| `OPENAI_BASE_URL` | Base of the OpenAI dialect: `https://opencode.ai/inference/go/v1` (OpenCode Go), `https://api.openai.com/v1`, or `http://bifrost:8080/openai` |
-| `ANTHROPIC_BASE_URL` | Base of the Anthropic dialect, where the SDK appends `/v1/messages`: `http://bifrost:8080/anthropic`. Unset drops `/v1` from `OPENAI_BASE_URL`, as OpenCode Go needs |
-| `MODEL_ALIASES` | JSON object, e.g. `{"chat":{"protocol":"anthropic_messages","model":"claude-haiku-5-5"}}`; see [AI README](../../backend/ai/README.md) |
-| `MODEL_REASONING_EFFORT` | `none`, `low`, `medium` or `high` |
-| `MODEL_FALLBACKS` | Optional JSON list, e.g. `["openai_chat:deepseek-v4.1-flash"]`, for an environment that calls OpenCode Go directly |
+| `OPENAI_BASE_URL` | Base of the OpenAI dialect: `https://api.openai.com/v1` or `http://bifrost:8080/openai` |
+| `MODEL_ALIASES` | JSON object, e.g. `{"chat":{"protocol":"openai_responses","model":"gpt-6-luna","effort":"high"}}`; see [AI README](../../backend/ai/README.md) |
+| `MODEL_REASONING_EFFORT` | Effort of an alias that sets none; the values depend on the model |
+| `MODEL_FALLBACKS` | Optional JSON list, e.g. `["openai_chat:deepseek-v4.1-flash"]`, for an environment that calls a provider directly |
 
 To remove a setting, delete it in Dopbase; the next deploy drops it from `ai.env`.
 

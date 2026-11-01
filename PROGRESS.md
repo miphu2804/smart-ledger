@@ -6,6 +6,16 @@
 
 Check: `npx playwright test` twice in a row, 23/23 both times on the mock web build with a cleared cache; `npx tsc --noEmit` passes; no app bug found. Not covered: real Core, a real phone, voiding an order, stock-in, paying a debt in full, deleting an expense, clearing all notifications. Commit: the one that adds this entry.
 
+### 2026-11-01 — OpenAI native and Inception through Bifrost, Anthropic path removed
+
+| Area | Change |
+|---|---|
+| AI | • Every chat turn on staging failed with Bifrost 401 because the Anthropic SDK sends the virtual key as `x-api-key`, which Bifrost accepts only for `sk-bf-` keys; the OpenAI clients now send it in `x-bf-vk` on the client, since a run's `extra_headers` replace the model's whole<br>• `ModelAlias` gains `effort`, and `MODEL_REASONING_EFFORT` is the default for an alias without one; the default alias is `chat` on `gpt-6-luna` over `openai_responses` with effort `high`<br>• `anthropic_messages`, `AnthropicMessagesProvider`, `ANTHROPIC_BASE_URL`, the `anthropic` extra, `SUMMARY_MODEL_NAME` and the `x-opencode-session` and `x-bf-eh-*` headers are gone; `openai_chat` stays for Mercury |
+| Deploy | • `bifrost.json` serves `gpt-6-luna` from `openai` and `mercury-3` from a custom `inception` provider (key `INCEPTIONLABS_API_KEY`), `vk-ai` allows exactly those two, both retry once after 500 ms, and the OpenCode Go providers and routing rules are removed; no alias calls Mercury 3 yet, since it is untested<br>• The credential map was regenerated |
+| Docs | • ADR-0008 update, AI README, technical design, CI/CD, the memory diagram and the policy and Data safety pages name OpenAI and Inception |
+
+Check: `uv run pytest` 460 passed, ruff check and format pass; a local fake gateway received `x-bf-vk`, `x-bf-session-id`, `x-bf-lh-shop-id` and the per-alias effort (`high` on `/responses`, `instant` on `/chat/completions`); `bifrost.json` parses; `tsc --noEmit` and `tsc -b` pass on the web app. A local Bifrost v2.3.2 loaded `bifrost.json` and served both models; Bifrost ignores a `BIFROST_VIRTUAL_KEY` without the `sk-bf-` prefix and makes its own, so every header then fails with 401 `access not found`. Not verified: Mercury 3 quality (no alias calls it), staging, or whether the staging virtual key has the `sk-bf-` prefix. Production keeps the older image and OpenCode Go. Commit: the one that adds this entry.
+
 ### 2026-11-01 — snooplog runs from any shell
 
 | Area | Change |
@@ -186,12 +196,3 @@ Check: on a local copy of the monitoring stack with a test Caddy over HTTPS and 
 | Docs | • BR-023 → FR-036 → AC-101–103, ERD and rollout/rollback guide define the scope; read-only Grafana SQL separates roles and excludes loadtest accounts |
 
 Check: 27 CORE-018 tests passed on disposable PostgreSQL 16.15; full Maven verify passed 1449 tests with zero failures/errors/skips; PostgreSQL gate unit tests passed 13 cases. Shared-DB migration, Grafana provisioning and staging/production acceptance are not verified. Commit: the one that adds this entry.
-
-### 2026-10-29 — Monitoring config changes take effect on a playbook run
-
-| Area | Change |
-|---|---|
-| Deploy | • The playbook's monitoring handler recreates the monitoring containers, because Alloy, Loki and Grafana read their bind-mounted config only at start and Compose does not recreate a container for a changed mounted file; the first VPS run of the database, AI and Bifrost alerts left Grafana with the old five rules until its alerting was reloaded by hand |
-| Docs | • The CI/CD guide says the playbook recreates the monitoring containers |
-
-Check: on the VPS after the staging playbook run, Grafana listed five rules; `POST /api/admin/provisioning/alerting/reload` raised it to seven with Database down and Service down; `ansible-playbook --syntax-check` passes. Not verified: a playbook run with this change. Commit: the one that adds this entry.
