@@ -25,7 +25,7 @@ Keep the existing `ZALO_*` provider/Firebase settings. Each deployment explicitl
 |---|---|---|
 | `ZALO_NATIVE_CLIENT_ID` | `android-staging` | `android-production` |
 | `ZALO_NATIVE_RETURN_TARGET_ID` | `core-staging` | `core-production` |
-| `ZALO_NATIVE_RETURN_URL` | `https://staging.103-162-31-93.sslip.io/mobile/auth/zalo/complete` | `https://production.103-162-31-93.sslip.io/mobile/auth/zalo/complete` |
+| `ZALO_NATIVE_RETURN_URL` | `https://api-staging.songheloi.id.vn/mobile/auth/zalo/complete` | `https://api-production.songheloi.id.vn/mobile/auth/zalo/complete` |
 | `ZALO_NATIVE_PACKAGE_NAME` | `vn.teamhexa.songheloi` | `vn.teamhexa.songheloi` |
 | `ZALO_NATIVE_CERTIFICATE_SHA256` | `FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C` | `87:2C:CC:33:4C:2B:34:73:FF:63:15:A0:A7:AC:66:74:D1:92:79:9F:1E:4F:66:FC:55:5D:D3:FA:74:69:A8:48` |
 | `ZALO_NATIVE_HANDOFF_TTL_SECONDS` | `90` (15–90) | `90` (15–90) |
