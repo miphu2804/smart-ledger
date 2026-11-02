@@ -1,0 +1,54 @@
+name: invalid-chart
+type: PYTHON
+return_type: boolean
+description: True when the answer holds a chart block the mobile app cannot draw, by the same checks as readChart in frontend/mobile/src/lib/chatMarkdown.ts, or more than one chart block.
+enabled_in_prod: true
+sampling_percentage: 100
+filters:
+  filterArray:
+    - field: event_type
+      operator: is
+      value: session
+      type: string
+    - field: event_name
+      operator: is
+      value: agent-chat
+      type: string
+criteria: |
+  import json
+  import math
+  import re
+
+  # A block without its closing fence is caught by comparing openings with blocks.
+  BLOCK = re.compile(r"^[ \t]*```chart[ \t]*\n(.*?)^[ \t]*```[ \t]*$", re.DOTALL | re.MULTILINE)
+  OPENING = re.compile(r"^[ \t]*```chart[ \t]*$", re.MULTILINE)
+
+
+  def drawable(body):
+      # The app trims long labels and defaults the unit, so neither fails here.
+      try:
+          chart = json.loads(body)
+      except ValueError:
+          return False
+      if not isinstance(chart, dict) or chart.get("type") not in ("bar", "line"):
+          return False
+      data = chart.get("data")
+      if not isinstance(data, list) or not 1 <= len(data) <= 31:
+          return False
+      for point in data:
+          if not isinstance(point, dict) or not isinstance(point.get("label"), str):
+              return False
+          value = point.get("value")
+          # Python's json reads NaN and Infinity, which the app's JSON.parse refuses.
+          if isinstance(value, bool) or not isinstance(value, (int, float)):
+              return False
+          if not math.isfinite(value) or value < 0:
+              return False
+      return True
+
+
+  answer = outputs.get("answer") or ""
+  blocks = BLOCK.findall(answer)
+  openings = len(OPENING.findall(answer))
+  # The prompt allows at most one chart block per answer.
+  result = openings > 1 or len(blocks) != openings or not all(drawable(b) for b in blocks)
