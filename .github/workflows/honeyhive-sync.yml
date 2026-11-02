@@ -1,0 +1,43 @@
+name: Sync HoneyHive evaluators
+
+# Applies .honeyhive/evaluators to the HoneyHive project on every merge into main.
+# Follows https://docs.honeyhive.ai/v2/cli-reference/config-as-code-evaluators-datasets
+# and .honeyhive/README.md.
+
+on:
+  push:
+    branches: [main]
+    paths: [".honeyhive/evaluators/**", ".honeyhive/state.json", "sync-evaluators.sh"]
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: honeyhive-sync
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install HoneyHive CLI
+        # Pinned so runs are reproducible; yq v4 and jq come with the runner image.
+        run: curl -fsSL https://github.com/honeyhiveai/honeyhive-cli/releases/download/v1.9.0/install.sh | sh
+      - name: Check every evaluator has a committed ID
+        # An evaluator created here gets an ID this run cannot commit, so every later run would create it again.
+        # Create new evaluators locally with sync-evaluators.sh and commit state.json before merging.
+        run: |
+          set -euo pipefail
+          missing=0
+          for file in .honeyhive/evaluators/*.yaml; do
+            name=$(yq '.name' "$file")
+            if ! jq -e --arg n "$name" '.evaluators[$n]' .honeyhive/state.json > /dev/null; then
+              echo "::error file=$file::$name has no ID in .honeyhive/state.json"
+              missing=1
+            fi
+          done
+          exit "$missing"
+      - name: Apply evaluators
+        env:
+          HH_PROJECT_API_KEY: ${{ secrets.HH_PROJECT_API_KEY }}
+          HH_DATA_PLANE_URL: https://api.dp1.us.prod.honeyhive.ai
+        run: bash sync-evaluators.sh

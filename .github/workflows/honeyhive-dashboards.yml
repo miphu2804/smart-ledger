@@ -1,0 +1,32 @@
+name: Sync HoneyHive charts and alerts
+
+# Applies .honeyhive/charts and .honeyhive/alerts to every project in
+# .honeyhive/projects.yaml on every merge into main.
+# Follows https://docs.honeyhive.ai/v2/cli-reference/config-as-code-charts-alerts
+# and .honeyhive/README.md.
+
+on:
+  push:
+    branches: [main]
+    paths: [".honeyhive/charts/**", ".honeyhive/alerts/**", ".honeyhive/projects.yaml", "sync-dashboards.sh"]
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: honeyhive-dashboards
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install HoneyHive CLI
+        # Pinned so runs are reproducible; yq v4 and jq come with the runner image.
+        run: curl -fsSL https://github.com/honeyhiveai/honeyhive-cli/releases/download/v1.9.0/install.sh | sh
+      - name: Apply charts and alerts
+        env:
+          HH_DATA_PLANE_API_KEY: ${{ secrets.HH_DATA_PLANE_API_KEY }}
+          HH_CONTROL_PLANE_API_KEY: ${{ secrets.HH_CONTROL_PLANE_API_KEY }}
+          HH_DATA_PLANE_URL: https://api.dp1.us.prod.honeyhive.ai
+          HH_CONTROL_PLANE_URL: https://api.cp.us.honeyhive.ai
+        run: bash sync-dashboards.sh

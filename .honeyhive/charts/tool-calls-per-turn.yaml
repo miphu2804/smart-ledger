@@ -1,0 +1,13 @@
+name: Tool calls per turn
+description: Average tool calls per chat turn, by source; a rise means the agent retries queries or loops.
+metric: metrics.tool_calls
+func: avg
+groupBy: source
+bucketing: day
+dateRange:
+  relative: 30d
+query:
+  - field: event_name
+    operator: is
+    value: agent-chat
+    type: string

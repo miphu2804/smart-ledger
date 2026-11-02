@@ -1,0 +1,10 @@
+{
+  "evaluators": {
+    "internal-leak": "01M6AZ6XCQ4N44GWH7EKSZ3SFQ",
+    "query-error": "01M6AZ6XZJ19NJHQRB3M720P77",
+    "format-violation": "01M6EGEM9MZ49T1ZG3EBDT0T6S",
+    "invalid-chart": "01M6EGENS4JYK87BYM64DA0MS6",
+    "non-vietnamese-answer": "01M6EGEPFJKGSNB0NW8CWDJKCZ",
+    "unsupported-figure": "01M6EGEQXTE1NNQF2JZ316T5N9"
+  }
+}

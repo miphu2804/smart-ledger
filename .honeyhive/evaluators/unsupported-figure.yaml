@@ -1,0 +1,36 @@
+name: unsupported-figure
+type: PYTHON
+return_type: boolean
+description: True when a turn that called no tool answers with an amount, a quantity with a unit or a percentage that the owner's question does not contain, so the figure has no source.
+enabled_in_prod: true
+sampling_percentage: 100
+filters:
+  filterArray:
+    - field: event_type
+      operator: is
+      value: session
+      type: string
+    - field: event_name
+      operator: is
+      value: agent-chat
+      type: string
+criteria: |
+  import re
+
+  # Rule 3 of SHOP_AGENT_SYSTEM_PROMPT: figures come from the owner or a tool result.
+  # Grouped thousands or a number with a money, quantity or percent unit; dates,
+  # times and list numbers do not match.
+  FIGURE = re.compile(
+      r"\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?[ \t]*(?:đ|₫|vnđ|vnd|k\b|nghìn|ngàn|triệu|tr\b|cái|chai|hộp|gói|kg|%)",
+      re.IGNORECASE,
+  )
+
+
+  def digits(text):
+      return {re.sub(r"\D", "", figure) for figure in FIGURE.findall(text)}
+
+
+  answer = re.sub(r"```.*?```", "", outputs.get("answer") or "", flags=re.DOTALL)
+  # tool_calls is the session metric the AI service writes with the answer.
+  called_tool = ((metrics or {}).get("tool_calls") or 0) > 0
+  result = not called_tool and bool(digits(answer) - digits(inputs.get("question") or ""))
