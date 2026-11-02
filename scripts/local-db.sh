@@ -22,4 +22,4 @@ docker exec "$container" psql -q -U smartledger -d smartledger -c "
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'ai_reader') THEN CREATE ROLE ai_reader LOGIN PASSWORD 'ai_reader'; END IF;
   END \$\$;
   GRANT ai_sql_reader TO ai_reader;"
-echo "local-db: ready at 127.0.0.1:54322; run scripts/secrets/apply.sh staging dev --apply to point Core and AI at it"
+echo "local-db: ready at 127.0.0.1:54322; run scripts/secrets/apply.sh dev dev --apply to point Core and AI at it"

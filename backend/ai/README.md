@@ -214,7 +214,7 @@ Add a change as a new file with `npx supabase@2.119.0 migration new <name>`; nev
 
 ## Configuration
 
-Settings come from `src/app_config.py`, read from the environment or `.env`; blank values fall back to the default. Write `.env` with `scripts/secrets/apply.sh staging dev` ([Secrets and env files](../../docs/development/secrets-and-env.md)) or copy `.env.example`.
+Settings come from `src/app_config.py`, read from the environment or `.env`; blank values fall back to the default. Write `.env` with `scripts/secrets/apply.sh dev dev` ([Secrets and env files](../../docs/development/secrets-and-env.md)) or copy `.env.example`.
 
 | Group | Variable | Default | Purpose |
 |---|---|---|---|

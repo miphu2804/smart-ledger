@@ -106,7 +106,7 @@ scripts/local-db.sh
 ```
 
 ```bash
-scripts/secrets/apply.sh staging dev --apply
+scripts/secrets/apply.sh dev dev --apply
 ```
 
 ### Develop a migration on a disposable database

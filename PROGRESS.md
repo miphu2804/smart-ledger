@@ -1,3 +1,12 @@
+### 2026-11-02 — Dev machines pull the dev environment from Dopbase
+
+| Area | Change |
+|---|---|
+| Secrets | • `apply.sh` takes `dev` as the source and skips the loadtest and monitor targets, which only staging holds; `dopbase-sync.sh pull dev` writes `core/dev`, `ai/dev` and `mobile/dev` into `secrets/dev/env/`, so a dev machine no longer reads staging<br>• The templates list the dev-only Core keys and drop `HH_SAMPLE_RATE`; Dopbase lost the stale AI keys, `GOOGLE_APPLICATION_CREDENTIALS`, both `OPENCODE_GO_API_KEY` entries and the stray `USER_RATE_LIMIT_ENABLED` in vps, and gained `MODEL_ALIASES` in `ai/staging`, `USER_RATE_LIMIT_ENABLED=false` in core, the three tuned AI timeout and sandbox values in `ai/production` and `GATEWAY_DOMAIN` in `vps/production`; `LITELLM_URL` is gone from Dopbase, the template and `.env.example`, and `TYPESAFE_API_KEY` stays for future work |
+| Docs | • Local setup, secrets docs and the AI README pull and apply `dev`; `apply.sh staging dev` stays as the deliberate staging test; the credential map is regenerated |
+
+Check: `scripts/secrets/check-templates.sh` passes; `scripts/secrets/apply.sh dev dev` listed only `+ USER_RATE_LIMIT_ENABLED` in Core, the six removed AI keys and no change for mobile, then wrote the three files with `.bak` backups; `secrets/dev/env/.env.ai` no longer holds the removed keys. Commit: the one that adds this entry.
+
 ### 2026-11-02 — User flow map of the mobile app in docs
 
 | Area | Change |
