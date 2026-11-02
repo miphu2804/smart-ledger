@@ -1,0 +1,27 @@
+name: sql-parse-check
+type: PYTHON
+return_type: boolean
+description: True when the SQL the model sent to query_shop_data parses as PostgreSQL, by HoneyHive's SQL Parse Check template; False means the query had a syntax error before the guard or the database saw it.
+enabled_in_prod: true
+sampling_percentage: 100
+filters:
+  filterArray:
+    - field: event_type
+      operator: is
+      value: tool
+      type: string
+    - field: event_name
+      operator: is
+      value: execute_tool query_shop_data
+      type: string
+criteria: |
+  import sqlglot
+
+  # Pydantic AI records the call's arguments under `tool_arguments`; the tool takes one,
+  # `sql`. A call without it counts as unparsable.
+  sql = ((inputs or {}).get("tool_arguments") or {}).get("sql") or ""
+  try:
+      sqlglot.parse_one(sql, dialect="postgres")
+      result = True
+  except Exception:
+      result = False
