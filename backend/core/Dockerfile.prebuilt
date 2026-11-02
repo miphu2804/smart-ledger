@@ -1,4 +1,4 @@
-# Runtime-only image for a jar built by CI; Railway's free build window is too short for the Maven stage in Dockerfile.
+# Runtime-only image for a jar built by CI; the runner already built it, so the image skips the Maven stage in Dockerfile.
 FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 RUN groupadd --system --gid 10001 smartledger \

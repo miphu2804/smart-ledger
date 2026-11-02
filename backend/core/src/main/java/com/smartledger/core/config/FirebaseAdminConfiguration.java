@@ -30,7 +30,7 @@ public class FirebaseAdminConfiguration {
         return FirebaseApp.initializeApp(options.build());
     }
 
-    // Hosts such as Railway cannot mount a key file, so the key may arrive as env JSON text.
+    // Some hosts cannot mount a key file, so the key may arrive as env JSON text.
     private static GoogleCredentials credentials(FirebaseProperties properties) throws IOException {
         if (!StringUtils.hasText(properties.getServiceAccountJson())) {
             return GoogleCredentials.getApplicationDefault();

@@ -127,9 +127,9 @@ In Zalo Developers → Login with Zalo → Web, **add** and save:
 https://your-current-test-host.example/api/v1/auth/zalo/callback
 ```
 
-Keep the existing Railway callback for future staging use. The URL for this
+Keep the existing staging callback for future staging use. The URL for this
 manual run must point to the **same gateway** that opens authorization, because
-its browser binding cookie cannot move between Railway and the test hostname.
+its browser binding cookie cannot move between the VPS and the test hostname.
 
 If Zalo requests hostname/URL-prefix verification, the gateway serves the
 previously downloaded public verifier at:
@@ -155,7 +155,7 @@ Set-Location D:\Ki-8\EXE201\project\smart-ledger\backend\core
 Keep it running. The launcher compiles test tooling and runs the actual Core
 application with the pinned local database, real gateways and Hibernate
 validation. It rejects a production credential file. It does not replace any
-normal IntelliJ Core run or change Railway variables.
+normal IntelliJ Core run or change VPS variables.
 
 The launcher copies only `ZaloManualServer` and its inner classes into a fresh
 `target/zalo-manual/runtime-*` directory; migrations come from production classes. The whole

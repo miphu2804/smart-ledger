@@ -250,7 +250,7 @@ Giữ `AC-079`/`AC-080` đã có trên staging cho chặn truy cập khi chưa t
 
 ### Nghiệm thu Zalo Android CORE-016
 
-Phạm vi backend/V18 trên `feat/zalo-android` (#276), không thay thế tiêu chí WEB của CORE-015. Đã duyệt migration và chuẩn bị cấu hình bật staging sau merge, chưa chạy DB dùng chung hoặc bật Railway. `AC-087`–`AC-091` có kiểm thử Core với provider/Firebase giả lập và PostgreSQL tạm; `AC-092` là điều kiện tích hợp/rollout còn chờ, không được suy ra từ các test đó.
+Phạm vi backend/V18 trên `feat/zalo-android` (#276), không thay thế tiêu chí WEB của CORE-015. Đã duyệt migration và chuẩn bị cấu hình bật staging sau merge, chưa chạy DB dùng chung hoặc bật trên VPS. `AC-087`–`AC-091` có kiểm thử Core với provider/Firebase giả lập và PostgreSQL tạm; `AC-092` là điều kiện tích hợp/rollout còn chờ, không được suy ra từ các test đó.
 
 | ID | Tiêu chí | Truy vết |
 |---|---|---|
@@ -307,7 +307,7 @@ chứng, không phải tuyên bố FE hoặc staging đã đạt.
 - `OQ-001` đã chốt: STT thật thuộc đích MVP; FE hiện mới giả lập.
 - `FR-017`: phải chốt loại ảnh đầu tiên trong issue trước khi viết parser.
 - `FR-010`/`NFR-003`: CORE-015 #238 bổ sung backend Zalo và `AC-081`–`AC-086`; người dùng xác nhận LOGIN qua bộ thử local, chưa nghiệm thu LINK thật, FE/staging hoặc native. Snapshot UI Zalo “Sắp có” vẫn giữ đến khi FE triển khai. Email verification hiện chỉ ở app, Core chưa kiểm tra `email_verified`; không đổi hành vi này trong CORE-015. Firebase ID token vẫn là Bearer duy nhất cho API nghiệp vụ.
-- CORE-016 #276 có Android Core/V18 và cấu hình bật staging sau merge theo `AC-087`–`AC-092`; native vẫn mặc định tắt, chưa chạy migration shared DB/bật Railway hoặc sửa AI/nghiệm thu APK. FE Android đã có LOGIN (chưa LINK) nhưng chưa nghiệm thu `AC-092` trên APK ký thật. Điều kiện bật và ranh giới WEB/ANDROID theo [contract](../contracts/api-contracts.md#zalo-android-core-016).
+- CORE-016 #276 có Android Core/V18 và cấu hình bật staging sau merge theo `AC-087`–`AC-092`; native vẫn mặc định tắt, chưa chạy migration shared DB/bật trên VPS hoặc sửa AI/nghiệm thu APK. FE Android đã có LOGIN (chưa LINK) nhưng chưa nghiệm thu `AC-092` trên APK ký thật. Điều kiện bật và ranh giới WEB/ANDROID theo [contract](../contracts/api-contracts.md#zalo-android-core-016).
 - MVP chỉ có hai vai trò `OWNER` và `ADMIN`; quản lý nhân viên/thành viên (`FR-012`) đã bị loại khỏi phạm vi.
 - Toàn bộ `FR-INV-*` bị hoãn cho đến khi `OQ-INV-001`–`OQ-INV-005` trong BRD được giải quyết.
 - Máy in và gói dịch vụ ngoài PRD MVP.

@@ -203,5 +203,5 @@ disposable DB when using that launcher version.
 Before staging merge, review `FLYWAY_ENABLED` (Zalo feature-off does not stop
 startup migrations), backup/recovery ownership, intended Core SQL role and
 persistent encryption/signing credentials. Real-provider LINK, FE/web/native
-acceptance, edge/proxy logging and Railway behavior remain unverified. No
+acceptance, edge/proxy logging and VPS behavior remain unverified. No
 shared/business DB operation, commit, push, PR or deployment was performed.

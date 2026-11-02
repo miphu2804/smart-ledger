@@ -1,6 +1,6 @@
 # ADR-0009: Trace mỗi lượt Agent chat lên HoneyHive, che dữ liệu nhạy cảm trước
 
-- **Trạng thái:** Accepted cho phần AI, đã có code trên nhánh `feat/honeyhive-tracing`. Phần tương quan với Core ở mục 4 vẫn Proposed và cần owner duyệt riêng theo [AGENTS.md](../../../AGENTS.md#scope).
+- **Trạng thái:** Accepted cho phần AI, code đã merge vào `staging` qua PR #467. Phần tương quan với Core ở mục 4 vẫn Proposed và cần owner duyệt riêng theo [AGENTS.md](../../../AGENTS.md#scope).
 - **Ngày:** 2026-11-01
 - **Owner:** project owner quyết định gửi nội dung chat lên HoneyHive; owner AI service giữ code và test.
 - **Liên quan:** [`NFR-007`, `NFR-008`](../../product/product-requirements.md), [ADR-0006](0006-deterministic-agent-guardrails.md), [ADR-0008](0008-bifrost-owns-routing-and-fallback.md), [AI README](../../../backend/ai/README.md#observability), [`src/observability.py`](../../../backend/ai/src/observability.py), [bộ eval](../../../backend/ai/evaluation/agent_chat/README.md).

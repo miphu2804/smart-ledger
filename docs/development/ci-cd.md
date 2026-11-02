@@ -89,8 +89,8 @@ One VPS (`103.162.31.93`, Ubuntu 24.04, 4 GB RAM plus swap) runs both environmen
 
 | Environment | Public name | Caddy routes to | App directory | Compose project |
 |---|---|---|---|---|
-| staging | `staging.103-162-31-93.sslip.io` | `core-staging:8080` | `/opt/smartledger` | `smart-ledger-staging` |
-| production | `production.103-162-31-93.sslip.io` | `core-production:8080` | `/opt/smartledger-production` | `smart-ledger-production` |
+| staging | `api-staging.songheloi.id.vn` (also `staging.103-162-31-93.sslip.io`) | `core-staging:8080` | `/opt/smartledger` | `smart-ledger-staging` |
+| production | `api-production.songheloi.id.vn` (also `production.103-162-31-93.sslip.io`) | `core-production:8080` | `/opt/smartledger-production` | `smart-ledger-production` |
 
 ### Networks and ports
 

@@ -11,7 +11,7 @@ layout. AI tables and the planned `ai_requests` table retain their own status.
 
 CORE-015 #238 on `feat/zalo-login`, prepared 2026-10-16 against staging `120779d`: additive V17 creates external Zalo identity mappings and short-lived OAuth sessions. Schema details and operational recovery are [below](#zalo-core-015-v17); preparation and disposable-PostgreSQL verification do not assert shared-DB rollout.
 
-CORE-016 #276 on `feat/zalo-android`: approved V18 extends the session store for Android; [migration and recovery](#zalo-android-core-016-v18) and the reviewed staging configuration are checked in, not applied to a shared DB or Railway. Native remains off by runtime default; production activation and APK acceptance are separate.
+CORE-016 #276 on `feat/zalo-android`: approved V18 extends the session store for Android; [migration and recovery](#zalo-android-core-016-v18) and the reviewed staging configuration are checked in, not applied to a shared DB or the VPS. Native remains off by runtime default; production activation and APK acceptance are separate.
 
 CORE-012 #163/#164 on `feat/core-barcode`, reviewed 2026-10-12: V16 replaces archived-inclusive barcode uniqueness with an ACTIVE-only partial index. This branch addition does not assert shared-DB migration or mobile/staging acceptance; older schema/AI snapshots below remain dated as stated.
 
@@ -254,10 +254,10 @@ without a Firebase user or Core profile yet. That absence is intentional, not
 permission to create a new mapping/UID on every retry. Session cleanup clears
 expired transient profile metadata, not durable identities or user accounts.
 
-Deployment owner: the person operating Core/Railway and the shared DB; product
+Deployment owner: the person operating Core on the VPS and the shared DB; product
 owner approves enabling Zalo. Sequence:
 
-1. Before merge, confirm Railway's `FLYWAY_ENABLED` and the migration owner:
+1. Before merge, confirm `FLYWAY_ENABLED` in Core's VPS environment and the migration owner:
    `ZALO_ENABLED=false` does **not** disable Flyway. If startup migration is on,
    deploy may apply V17 automatically; arrange backup/review/window before merge
    or use the approved controlled migration procedure. Deploy Zalo off.
@@ -308,7 +308,7 @@ V18 is transactional DDL with `lock_timeout=5s` and `statement_timeout=60s`. Its
 
 The former native SQL fixture is removed. `ZaloNativeMigrationPostgresTest` uses real Flyway V18 for fresh/upgrade/no-op, WEB/account/mapping preservation, mixed-channel/reference/expiry rejection, early/late rollback, lock contention/retry and RLS. `ZaloNativeFlowPostgresTest` uses actual V18 for channel/concurrency/expiry/UID/LINK safeguards and a separate actual V17 schema for compatibility/missing-V18 fail-closed checks; no ad-hoc column downgrade or migration-history edit is used. Runtime repository never executes DDL or adopts/repairs schema.
 
-After merged V18 succeeds, the operator may review/copy [staging variables](../../backend/core/config/zalo-native-staging.env.example) to Railway staging to enable testing; Spring/Railway does not auto-load the file and it contains no secret/DB/migration switch. APK/provider acceptance remains pending and production needs separate release approval. See [implementation status](technical-design.md#zalo-android-core-016), [contract](../contracts/api-contracts.md#zalo-android-core-016) and [activation runbook](../../backend/core/docs/zalo-android-preparation.md#staging-activation-after-merge). Recovery disables native and retains V18/mappings/Firebase users/business data. There is no automatic destructive DOWN; any schema removal needs a separately approved forward migration, not column drops to roll back the app.
+After merged V18 succeeds, the operator may review/copy [staging variables](../../backend/core/config/zalo-native-staging.env.example) to VPS staging to enable testing; Spring and the VPS deploy do not auto-load the file and it contains no secret/DB/migration switch. APK/provider acceptance remains pending and production needs separate release approval. See [implementation status](technical-design.md#zalo-android-core-016), [contract](../contracts/api-contracts.md#zalo-android-core-016) and [activation runbook](../../backend/core/docs/zalo-android-preparation.md#staging-activation-after-merge). Recovery disables native and retains V18/mappings/Firebase users/business data. There is no automatic destructive DOWN; any schema removal needs a separately approved forward migration, not column drops to roll back the app.
 
 ### Earlier migrations and business schema
 

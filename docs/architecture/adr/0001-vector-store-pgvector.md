@@ -17,7 +17,7 @@ Lưu embedding trong PostgreSQL bằng extension `pgvector`, cùng DB với dữ
 
 - Bật extension bằng migration có phiên bản, không bật tay trên Supabase Dashboard.
 - Mọi bảng vector có cột `shop_id` và mọi truy vấn tương đồng lọc theo `shop_id` trong cùng câu SQL.
-- Redis giữ vai trò cache/giới hạn tốc độ; không dùng làm vector store.
+- Không dùng Redis: AI đã gỡ Redis từ PR #467, nên pgvector là kho vector duy nhất.
 
 ## Lý do
 
