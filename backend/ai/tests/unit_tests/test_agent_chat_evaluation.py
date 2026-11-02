@@ -278,3 +278,120 @@ def test_sync_creates_the_run_logs_each_case_then_completes_it(run) -> None:
     assert calls[0][1] == "pending"
     assert calls[1][1]["session"]["metadata"]["run_id"] == "run-1"
     assert calls[3][2:] == ("completed", ["s2", "s3"])
+
+
+def test_no_internal_leak_flags_views_sql_and_tool_names(run) -> None:
+    def leak(answer: str) -> int:
+        return run.no_internal_leak({"answer": answer}, {}, {})
+
+    assert leak("Tháng trước shop bán được 12.500.000đ.") == 1
+    assert leak("Em đọc từ ai_read.v_sales nhé.") == 0
+    assert leak("SELECT sum(total_vnd) FROM sales") == 0
+    assert leak("Error[SQL_REJECTED] unknown view") == 0
+
+
+def test_vietnamese_answer_ignores_blocks_and_empty_answers(run) -> None:
+    def vietnamese(answer: str) -> int:
+        return run.vietnamese_answer({"answer": answer}, {}, {})
+
+    assert vietnamese("Dạ, doanh thu hôm nay là 1.200.000đ.") == 1
+    assert vietnamese("Revenue today is 1,200,000 VND.") == 0
+    assert vietnamese('```chart\n{"type": "bar"}\n```') == 1
+    assert vietnamese("") == 1
+
+
+def test_averages_skip_rows_a_metric_does_not_apply_to(run) -> None:
+    rows = [
+        {"correct": 1, "recalled_expected": 1},
+        {"correct": 0, "recalled_expected": None},
+    ]
+
+    assert run.averages(rows) == {"correct": (0.5, 2), "recalled_expected": (1.0, 1)}
+
+
+def test_gate_fails_below_a_minimum_or_with_no_row(run) -> None:
+    means = {"correct": (0.85, 20), "tool_choice": (0.95, 20)}
+
+    failures = run.gate_failures(
+        means, {"correct": 0.9, "tool_choice": 0.9, "recalled_expected": 1.0}
+    )
+
+    assert failures == [
+        "correct: 0.85 < 0.9",
+        "recalled_expected: no row scored it",
+    ]
+
+
+def test_thresholds_gate_only_reported_metrics(run) -> None:
+    minimums = run.tomllib.loads((run.HERE / "thresholds.toml").read_text())["minimum"]
+    reported = {name for names in run.LAYERS.values() for name in names}
+
+    assert set(minimums) <= reported
+
+
+def test_markdown_report_shows_the_gate_layers_and_missed_cases(run) -> None:
+    rows = [
+        {
+            "case": "revenue_last_month",
+            "correct": 0,
+            "model": "gpt-6-luna",
+            "prompt_version": "p1",
+            "suite_version": "s1",
+        },
+        {"case": "greeting", "correct": 1},
+    ]
+    means = run.averages(rows)
+    failures = run.gate_failures(means, {"correct": 0.9})
+
+    markdown = run.markdown_report(rows, means, {"correct": 0.9}, failures, 3)
+
+    assert markdown.startswith("## agent_chat eval: gate failed")
+    assert "2/3 rows" in markdown
+    assert "| task | `correct` | 0.50 | 2 | 0.9 | fail |" in markdown
+    assert "- correct: 0.50 < 0.9" in markdown
+    assert "- `revenue_last_month` missed `correct`" in markdown
+
+
+async def test_a_failed_rating_leaves_only_its_metric_out(run) -> None:
+    async def rate(prompt: str) -> dict:
+        if "faithful" in prompt.casefold():
+            raise RuntimeError("gateway 502")
+        return {"score": 4, "reason": "ok"}
+
+    outputs = {
+        "answer": "Dạ, 12.500.000đ.",
+        "tools": ["query_shop_data"],
+        "tool_calls": [call()],
+        "available_tools": "[]",
+        "memories": [],
+    }
+    inputs = {"question": "Doanh thu tháng trước?", "follow_up": None}
+    truth = {"memory": None}
+
+    scores = await run.judged_scores(outputs, inputs, truth, rate)
+
+    assert "answer_faithfulness" not in scores
+    assert scores["tool_usage"] == 4
+    assert "gateway 502" in outputs["judge_errors"]["answer_faithfulness"]
+
+
+def test_report_rows_keep_the_tool_calls_metric(run, tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(run, "RESULTS", tmp_path)
+    result = {
+        "datapoint": {"ground_truth": {"case": "revenue", "numbers": [1], "names": []}},
+        "outputs": {
+            "answer": "1",
+            "tool_calls": [call()],
+            "seconds": 1.0,
+            "model": "m",
+            "prompt_version": "p",
+            "suite_version": "s",
+        },
+        "metrics": {"correct": 1, "tool_choice": 1, "tool_calls": 1, "seconds": 1.0},
+    }
+
+    rows = run.report("test", [result])
+
+    assert rows[0]["tool_calls"] == 1
+    assert rows[0]["tool_call_log"] == [call()]
+    assert run.averages(rows)["tool_calls"] == (1.0, 1)

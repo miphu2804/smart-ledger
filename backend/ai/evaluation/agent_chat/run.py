@@ -1,9 +1,10 @@
-"""Score the real chat agent on a made-up shop and sync only the scores to HoneyHive.
+"""Score the real chat agent on a made-up shop, gate the run and report it.
 
-The agent runs here with tracing off, every answer is scored here, and each case is then
-logged to HoneyHive as one session of an experiment run, with its inputs, outputs and
-scores but no spans, as in "Sync Offline Evaluations" in HoneyHive's docs. That keeps a
-run to one event per case and sends no span to HoneyHive.
+The agent runs here with tracing off and every answer is scored here, with metrics
+built on HoneyHive's evaluator templates. Nothing leaves the machine unless `--sync`
+asks for it: then each case is logged to HoneyHive as one session of an experiment run,
+with its inputs, outputs and scores but no spans, as in "Sync Offline Evaluations" in
+HoneyHive's docs.
 """
 
 import argparse
@@ -13,6 +14,7 @@ import json
 import re
 import sys
 import time
+import tomllib
 import uuid
 from datetime import date
 from pathlib import Path
@@ -513,6 +515,34 @@ def recalled_expected(outputs: dict, inputs: dict, ground_truth: dict) -> int | 
     )
 
 
+# The same patterns as `.honeyhive/evaluators/internal-leak.yaml` and
+# `non-vietnamese-answer.yaml`, which score production; those run on HoneyHive and
+# cannot import this file, so a change to one belongs in the other.
+INTERNALS = re.compile(
+    r"ai_read|\bv_[a-z_]+|\bselect\b[\s\S]+\bfrom\b|\b(shop|user)_id\b"
+    r"|query_shop_data|suggest_screen|Error\[",
+    re.IGNORECASE,
+)
+CODE_BLOCK = re.compile(r"```.*?```", re.DOTALL)
+VIETNAMESE = re.compile(
+    r"[àáảãạăằắẳẵặâầấẩẫậđèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ]",
+    re.IGNORECASE,
+)
+
+
+def no_internal_leak(outputs: dict, inputs: dict, ground_truth: dict) -> int:
+    """1 when the answer shows the owner no view name, SQL, id column, tool name or
+    tool error code."""
+    return int(not INTERNALS.search(outputs["answer"]))
+
+
+def vietnamese_answer(outputs: dict, inputs: dict, ground_truth: dict) -> int:
+    """1 unless the answer has words but not one Vietnamese letter with a diacritic;
+    chart and button blocks are JSON for the app, so they do not count."""
+    words = CODE_BLOCK.sub("", outputs["answer"]).strip()
+    return int(not words or bool(VIETNAMESE.search(words)))
+
+
 def numbers_in(answer_text: str) -> list[float]:
     """Each figure in a Vietnamese answer, with unit words applied.
 
@@ -724,13 +754,23 @@ JUDGED = {
 
 async def judged_scores(outputs: dict, inputs: dict, truth: dict, rate_prompt) -> dict:
     """Each template's rating for the cases it applies to, with the judge's reason in
-    the outputs so a low rating can be read."""
+    the outputs so a low rating can be read.
+
+    A rating that fails, such as a gateway error, leaves that metric out of the row and
+    its error in the outputs instead of dropping the whole case: one of some 300 judge
+    calls failing would otherwise fail the run. A gated metric no row scored still fails
+    the gate.
+    """
     scores = {}
     for name, build in JUDGED.items():
         prompt = build(outputs, inputs, truth)
         if prompt is None:
             continue
-        rating = await rate_prompt(prompt)
+        try:
+            rating = await rate_prompt(prompt)
+        except Exception as error:
+            outputs.setdefault("judge_errors", {})[name] = repr(error)
+            continue
         scores[name] = rating["score"]
         outputs.setdefault("judge_reasons", {})[name] = rating["reason"]
     return scores
@@ -842,6 +882,8 @@ async def score(
         "tool_calls": tool_calls(outputs, inputs, truth),
         "seconds": seconds(outputs, inputs, truth),
         "recalled_expected": recalled_expected(outputs, inputs, truth),
+        "no_internal_leak": no_internal_leak(outputs, inputs, truth),
+        "vietnamese_answer": vietnamese_answer(outputs, inputs, truth),
         **await judged_scores(
             outputs, inputs, truth, lambda prompt: rate(prompt, judge_alias)
         ),
@@ -856,12 +898,9 @@ async def score(
     }
 
 
-def report(name: str, results: list[dict], expected_rows: int) -> None:
+def report(name: str, results: list[dict]) -> list[dict]:
     """Prints each case's passes across its repeats, then the totals, and keeps every
-    row locally so a run can be read without opening HoneyHive. A datapoint that raised
-    has no row, so a short run fails instead of scoring only the rest."""
-    if not results:
-        raise SystemExit("no answers were recorded")
+    row locally so a run can be read without opening HoneyHive."""
     rows = [
         {
             "case": result["datapoint"]["ground_truth"]["case"],
@@ -869,8 +908,13 @@ def report(name: str, results: list[dict], expected_rows: int) -> None:
             "tool_choice": result["metrics"]["tool_choice"],
             "expected": result["datapoint"]["ground_truth"]["numbers"]
             + result["datapoint"]["ground_truth"]["names"],
+            # The metrics go last: `outputs` has its own `tool_calls`, the list of
+            # calls, which would otherwise replace the metric of the same name.
+            **{
+                ("tool_call_log" if key == "tool_calls" else key): value
+                for key, value in result["outputs"].items()
+            },
             **result["metrics"],
-            **result["outputs"],
         }
         for result in results
     ]
@@ -893,8 +937,99 @@ def report(name: str, results: list[dict], expected_rows: int) -> None:
     (RESULTS / f"{name}.json").write_text(
         json.dumps(rows, ensure_ascii=False, indent=1) + "\n"
     )
-    if len(rows) < expected_rows:
-        raise SystemExit(f"{expected_rows - len(rows)} datapoints failed; see the log")
+    return rows
+
+
+# Groups the metrics as the report shows them; a metric missing here is not shown.
+LAYERS = {
+    "task": ["correct"],
+    "tool_use": [
+        "tool_choice",
+        "tool_calls",
+        "tool_usage",
+        "tool_trajectory",
+        "failure_recovery",
+    ],
+    "memory": ["recalled_expected", "context_relevance"],
+    "response_quality": ["answer_faithfulness"],
+    "safety": ["no_internal_leak", "vietnamese_answer"],
+    "performance": ["seconds"],
+}
+
+
+def averages(rows: list[dict]) -> dict[str, tuple[float, int]]:
+    """Each metric's mean over the rows it applies to, with that row count."""
+    values: dict[str, list[float]] = {}
+    for row in rows:
+        for metric in (name for names in LAYERS.values() for name in names):
+            if row.get(metric) is not None:
+                values.setdefault(metric, []).append(row[metric])
+    return {
+        metric: (sum(scores) / len(scores), len(scores))
+        for metric, scores in values.items()
+    }
+
+
+def gate_failures(
+    means: dict[str, tuple[float, int]], minimums: dict[str, float]
+) -> list[str]:
+    """Each gated metric whose mean is below its minimum; one with no row fails too,
+    because a gate that measured nothing passed nothing."""
+    failures = []
+    for metric, minimum in minimums.items():
+        if metric not in means:
+            failures.append(f"{metric}: no row scored it")
+        elif means[metric][0] < minimum:
+            failures.append(f"{metric}: {means[metric][0]:.2f} < {minimum:g}")
+    return failures
+
+
+def markdown_report(
+    rows: list[dict],
+    means: dict[str, tuple[float, int]],
+    minimums: dict[str, float],
+    failures: list[str],
+    expected_rows: int,
+) -> str:
+    """The run as markdown for a job summary or a pull request comment: the gate, every
+    metric by layer, then the cases that missed a gated minimum."""
+    first = rows[0]
+    verdict = "failed" if failures else "passed"
+    lines = [
+        f"## agent_chat eval: gate {verdict}",
+        "",
+        f"Model `{first['model']}`, prompt `{first['prompt_version']}`, "
+        f"suite `{first['suite_version']}`, {len(rows)}/{expected_rows} rows.",
+        "",
+        "| Layer | Metric | Mean | Rows | Minimum | |",
+        "|---|---|---|---|---|---|",
+    ]
+    for layer, metrics in LAYERS.items():
+        for metric in metrics:
+            if metric not in means:
+                continue
+            mean, count = means[metric]
+            minimum = minimums.get(metric)
+            mark = "" if minimum is None else ("ok" if mean >= minimum else "fail")
+            shown = "" if minimum is None else f"{minimum:g}"
+            lines.append(
+                f"| {layer} | `{metric}` | {mean:.2f} | {count} | {shown} | {mark} |"
+            )
+    if failures:
+        lines += ["", "### Gate failures", ""] + [f"- {item}" for item in failures]
+    missed = sorted(
+        {
+            f"`{row['case']}` missed `{metric}`"
+            for row in rows
+            for metric, minimum in minimums.items()
+            if row.get(metric) is not None and row[metric] < minimum
+        }
+    )
+    if missed:
+        lines += ["", "### Cases below a minimum", ""] + [
+            f"- {item}" for item in missed
+        ]
+    return "\n".join(lines) + "\n"
 
 
 def session_payload(run_id: str, name: str, result: dict) -> dict:
@@ -976,6 +1111,15 @@ def main() -> None:
     # The chat model grades itself by default; a stronger alias gives fairer grades.
     parser.add_argument("--judge", default="chat", help="model alias for the judge")
     parser.add_argument(
+        "--sync",
+        action="store_true",
+        help="also sync the scores to HoneyHive as an experiment run",
+    )
+    parser.add_argument(
+        "--gate", type=Path, help="TOML of metric minimums; a miss exits 1"
+    )
+    parser.add_argument("--report", type=Path, help="write the run as markdown here")
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="build the dataset and show what would sync, asking no model and "
@@ -987,19 +1131,36 @@ def main() -> None:
     if arguments.dry_run:
         print_sync_plan(arguments.name, dataset)
         return
+    if arguments.sync and not HONEYHIVE_KEY:
+        raise SystemExit("--sync needs HH_API_KEY")
+    minimums = (
+        tomllib.loads(arguments.gate.read_text())["minimum"] if arguments.gate else {}
+    )
     results = asyncio.run(run_all(dataset, arguments.judge))
-    report(arguments.name, results, len(dataset))
-    if HONEYHIVE_KEY:
+    if not results:
+        raise SystemExit("no answers were recorded")
+    rows = report(arguments.name, results)
+    means = averages(rows)
+    failures = gate_failures(means, minimums)
+    if arguments.report:
+        arguments.report.write_text(
+            markdown_report(rows, means, minimums, failures, len(dataset))
+        )
+    if arguments.sync:
         sync_scores(
             HoneyHive(api_key=HONEYHIVE_KEY, server_url=app_config.HH_API_URL),
             arguments.name,
             results,
         )
-    else:
-        print("HH_API_KEY is unset; the scores stay in results/")
+    # A datapoint that raised has no row, so a short run fails instead of scoring
+    # only the rest.
+    if len(rows) < len(dataset):
+        raise SystemExit(f"{len(dataset) - len(rows)} datapoints failed; see the log")
     # The expected answers were computed before midnight; after it, "yesterday" moved.
     if shop_today() != started_on:
         raise SystemExit("the run crossed midnight shop time; run it again")
+    if failures:
+        raise SystemExit("gate failed: " + "; ".join(failures))
 
 
 if __name__ == "__main__":
