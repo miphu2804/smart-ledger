@@ -15,13 +15,19 @@ filters:
       value: execute_tool query_shop_data
       type: string
 criteria: |
+  import json
+
   import sqlglot
 
-  # Pydantic AI records the call's arguments under `tool_arguments`; the tool takes one,
-  # `sql`. A call without it counts as unparsable.
-  sql = ((inputs or {}).get("tool_arguments") or {}).get("sql") or ""
+  # Pydantic AI records the call's arguments under `tool_arguments`, a mapping on the
+  # events seen so far; a JSON string is read too. The tool takes one argument, `sql`.
+  # Anything unreadable counts as unparsable rather than raising, because an evaluator
+  # that errors too often is switched off.
   try:
-      sqlglot.parse_one(sql, dialect="postgres")
+      arguments = (inputs or {}).get("tool_arguments") or {}
+      if isinstance(arguments, str):
+          arguments = json.loads(arguments)
+      sqlglot.parse_one(arguments.get("sql") or "", dialect="postgres")
       result = True
   except Exception:
       result = False
