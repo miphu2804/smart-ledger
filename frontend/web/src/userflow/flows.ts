@@ -1,5 +1,5 @@
 /**
- * Các luồng người dùng của app mobile, vẽ trên trang `userflow.html` (`npm run userflow`).
+ * Các luồng người dùng của app mobile, vẽ trên trang `docs/product/userflow/index.html` (build bằng `npm run userflow`).
  *
  * Nguồn: điều hướng thật trong `frontend/mobile/app` (các lệnh router.push/replace và Redirect) và mã yêu cầu trong
  * `docs/product/product-requirements.md`. Ảnh chụp từ bản web staging (app-staging.songheloi.id.vn) với tài khoản thử
@@ -77,10 +77,9 @@ export interface Flow {
   edges: Edge[]
 }
 
-const shots = import.meta.glob('./screens/*.webp', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
-
+/** Ảnh nằm cạnh trang đã build, trong `docs/product/userflow/screens`. */
 export function screenUrl(image: string): string {
-  return shots[`./screens/${image}.webp`] ?? ''
+  return `screens/${image}.webp`
 }
 
 export const FLOWS: Flow[] = [

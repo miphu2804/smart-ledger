@@ -16,7 +16,7 @@ npm run build      # kiểm tra kiểu (tsc) rồi build ra dist/
 npm run preview    # chạy thử bản build
 npm run typecheck  # chỉ kiểm tra TypeScript
 npm run lint       # oxlint
-npm run userflow   # sơ đồ luồng người dùng của app mobile, xem mục Userflow
+npm run userflow   # build sơ đồ luồng người dùng vào docs/product/userflow, xem mục Userflow
 ```
 
 Biến môi trường (xem `.env.example`):
@@ -108,13 +108,7 @@ Thiết lập một lần trên Vercel: New Project → import repo này → Roo
 
 ## Userflow
 
-`npm run userflow` mở `userflow.html`, sơ đồ luồng người dùng của app mobile trên canvas tối: ảnh màn chụp từ staging, điểm rẽ, bước hệ thống và nhánh lỗi màu đỏ.
-Trang chỉ chạy bằng dev server: `vite build` chỉ build `index.html`, nên trang và ảnh chụp không vào bản deploy, và trang không cần đăng nhập quản trị.
-
-- Sáu luồng: đăng nhập và tạo tiệm; lên đơn và thanh toán; đơn hàng, báo cáo và thông báo; Trợ lý Bobi; quản lý tiệm; menu nhanh và đổi cửa hàng.
-- Kéo để di chuyển, Ctrl/Cmd + cuộn hoặc phím `+`/`-` để thu phóng, `0` để vừa màn hình. Bấm một nút để mở bảng chi tiết (tệp nguồn, mã FR, lối đi tiếp); `?flow=&node=` giữ luồng và nút đang chọn. Trang dành cho màn hình máy tính, không có bản cho điện thoại.
-- Luồng, toạ độ và chú thích khai báo trong `src/userflow/flows.ts`, theo điều hướng thật trong `../mobile/app`.
-- Ảnh trong `src/userflow/screens/` chụp từ `https://app-staging.songheloi.id.vn` bằng tài khoản thử trên tiệm "Tiệm Test Team", khung 390 × 844, rồi đổi sang WebP rộng 720px (`cwebp -q 78 -resize 720 0`); tên tệp là trường `image` của nút. Các màn không chụp được trên staging (quét mã cần camera, xác minh email và tạo tiệm vì tài khoản thử đã qua hai bước đó, nhập hàng vì tiệm thử không theo dõi tồn kho) là nút bước kèm ghi chú. Khi app đổi màn, chụp lại màn đó trên staging rồi sửa `flows.ts`.
+Mã nguồn của [sơ đồ luồng người dùng](../../docs/product/userflow/README.md) nằm ở `src/userflow`. `npm run userflow` build nó (cấu hình `vite.userflow.config.ts`) thành một tệp tự chứa `docs/product/userflow/index.html`, mở thẳng bằng trình duyệt; ảnh chụp nằm ở `docs/product/userflow/screens/`. `vite build` của web không đụng tới trang này nên nó không vào bản deploy.
 
 ## Trạng thái dùng chung
 
@@ -147,7 +141,7 @@ src/
   pages/admin/               Login, AdminLayout (AppShell), Dashboard, Customers, AiSupport, Tasks, Settings
   pages/admin/tasks/         TaskFormModal
   pages/ForbiddenPage        trang 403
-  userflow/                  trang userflow.html: flows.ts (nút, cạnh, toạ độ), FlowCanvas, NodeSheet, screens/*.webp
+  userflow/                  sơ đồ userflow build vào docs: flows.ts (nút, cạnh, toạ độ), FlowCanvas, NodeSheet
   styles/                    base, landing, admin (token theo plan)
 ```
 

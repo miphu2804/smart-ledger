@@ -43,6 +43,7 @@ Start with the path that matches your task; each step links to the next level of
 | [Business requirements](product/business-requirements.md) | Outcomes, business rules, approvals |
 | [Google Play Data safety](product/google-play-data-safety.md) | Answers for the Play Console form, matched to the public policy page |
 | [Product requirements](product/product-requirements.md) | Observable behavior, `FR-*`, `NFR-*`, `AC-*` |
+| [User flows](product/userflow/README.md) | Screen-to-screen map of the mobile app with staging screenshots, linked to source files and `FR-*` codes |
 | [Technical design](architecture/technical-design.md) | Implementation status (§1), MVP components, data, flows, verification |
 | [API contracts](contracts/api-contracts.md) | FE ↔ Core and Core ↔ AI contracts, per-endpoint status |
 | [ERD description](architecture/erd-description.md) and [`erd.dbml`](architecture/diagrams/src/erd.dbml) | Database entities, relationships, data flows and migration alignment |

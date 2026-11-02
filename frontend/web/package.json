@@ -9,7 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
-    "userflow": "vite --open /userflow.html"
+    "userflow": "vite build --config vite.userflow.config.ts"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",

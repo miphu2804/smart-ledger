@@ -1,4 +1,4 @@
-// Trang công cụ nội bộ, chỉ chạy bằng `npm run userflow`: `vite build` chỉ build index.html nên ảnh chụp màn không vào bản deploy.
+// Trang sơ đồ userflow trong docs: `npm run userflow` build nó thành docs/product/userflow/index.html, không vào bản deploy của web.
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import UserflowPage from './UserflowPage'
