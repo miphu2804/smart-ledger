@@ -1,22 +1,25 @@
 #!/bin/sh
-# Writes every file listed in secrets/staging/targets, such as backend/core/.env, as the staging file with the keys
-# of secrets/local.<name> (localhost database and the like) put over it.
+# Writes every file listed in secrets/staging/targets, such as backend/core/.env, as the file of the source
+# environment (dev or staging) with the keys of secrets/local.<name> (localhost database and the like) put over it.
+# The dev environment already holds local values and no staging credentials, so it is the source a dev machine uses.
 #
 # Copying runs one way only. A target is a derived copy with no record of what it was built from, so sending it back
 # could not tell your edits from keys a teammate changed since; change staging in Dopbase and pull it.
 #
 # A dry run lists which keys would be added (+), changed (~) or dropped (-); values are never printed.
 # Options: --apply writes; --no-backup skips keeping the replaced target as <file>.bak;
-# --use-staging KEY (repeatable) takes the staging value of one local key.
+# --use-staging KEY (repeatable) takes the source value of one local key.
 cd "$(git rev-parse --show-toplevel)" || exit 1
 . scripts/secrets/lib.sh
 
-usage="apply.sh staging dev [--apply] [--no-backup] [--use-staging KEY]..."
-[ "$1 $2" = "staging dev" ] || {
-  echo "$usage" >&2
-  echo "only staging to dev (this machine); change staging in Dopbase and run dopbase-sync.sh pull staging" >&2
-  exit 1
-}
+usage="apply.sh dev|staging dev [--apply] [--no-backup] [--use-staging KEY]..."
+case "$1 $2" in
+  "dev dev"|"staging dev") source="$1" ;;
+  *)
+    echo "$usage" >&2
+    echo "only dev or staging to dev (this machine); change the source in Dopbase and run dopbase-sync.sh pull <source>" >&2
+    exit 1 ;;
+esac
 shift 2
 backup=1 use_staging=" "
 while [ $# -gt 0 ]; do
@@ -34,8 +37,14 @@ done
 main() {
   grep -v '^#' secrets/staging/targets | while read -r name target; do
     [ -n "$name" ] || continue
-    staged="secrets/staging/env/$name"
-    [ -f "$staged" ] || { echo "$staged: missing; run scripts/secrets/dopbase-sync.sh pull staging"; continue; }
+    staged="secrets/$source/env/$name"
+    if [ ! -f "$staged" ]; then
+      case "$source $name" in
+        "dev .env.loadtest"|"dev .env.monitor") ;;
+        *) echo "$staged: missing; run scripts/secrets/dopbase-sync.sh pull $source" >&2 ;;
+      esac
+      continue
+    fi
     built="$(mktemp)"
     local_keys "secrets/local$name" | put_over "$staged" > "$built"
     write "$built" "$target"
