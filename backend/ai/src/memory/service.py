@@ -30,6 +30,7 @@ from src.memory.repository import (
     NewMemory,
     RecalledMemory,
 )
+from src.observability import Observability
 from src.prompt_templates import (
     MEMORY_CONTEXT,
     MEMORY_EXTRACT_INPUT,
@@ -111,7 +112,9 @@ class AgentMemoryService:
         allowed_types: frozenset[str],
         recall_limit: int = 5,
         preference_limit: int = 10,
+        observability: Observability | None = None,
     ) -> None:
+        self.observability = observability or Observability()
         self.repository = repository
         self.embedder = embedder
         # Memory types the model may write on its own.
@@ -402,16 +405,36 @@ class AgentMemoryService:
     async def _recall(
         self, shop_id: int, user_id: int, message: str
     ) -> list[RecalledMemory]:
-        query = await self.embedder.embed_query(message)
-        return await asyncio.to_thread(
-            self.repository.search,
-            shop_id,
-            user_id,
-            list(query[0]),
-            self.recall_limit,
-            self.preference_limit,
-            message,
-        )
+        # The span shows which memories the model was handed; the embedding call
+        # inside it is already traced on its own.
+        with self.observability.span(
+            "memory recall", inputs={"question": message}, metadata={"shop_id": shop_id}
+        ):
+            query = await self.embedder.embed_query(message)
+            memories = await asyncio.to_thread(
+                self.repository.search,
+                shop_id,
+                user_id,
+                list(query[0]),
+                self.recall_limit,
+                self.preference_limit,
+                message,
+            )
+            self.observability.enrich_span(
+                outputs={
+                    "memories": [
+                        {
+                            "id": memory.id,
+                            "content": memory.content,
+                            "memory_type": memory.memory_type,
+                            "score": memory.relevance,
+                        }
+                        for memory in memories
+                    ]
+                },
+                metrics={"recalled_count": len(memories)},
+            )
+            return memories
 
     async def _extract(
         self, shop_id: int, question: str, answer: str, recalled: list[RecalledMemory]
