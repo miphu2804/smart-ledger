@@ -1,3 +1,12 @@
+### 2026-11-02 — User flow map of the mobile app in docs
+
+| Area | Change |
+|---|---|
+| Docs | • `docs/product/userflow/index.html` is a dark pannable map of the mobile app's user flows with screenshots, decisions, system steps and red failure edges; clicking a node opens its source file, FR codes and next hops; it opens straight from disk like the credential map and targets desktop screens only<br>• Six flows follow the current navigation on `staging`: sign-in and shop setup, selling and checkout, orders with reports and notifications, the Bobi tab, the Quản lý tab, and the quick menu with shop switching; the removed mascot "Gợi ý" path is gone<br>• All 40 screenshots are taken on `staging` with the test account on "Tiệm Test Team", using real orders #27282 (debt), #27283 and #27284 (voice order typed through "Nhập tay") and one real Bobi answer; barcode scanning, email verification, shop setup and stock-in stay as step nodes without a picture, with a note saying why<br>• The folder README says how to open, rebuild and retake screenshots; the docs map links it |
+| Web | • The page source lives in `src/userflow`; `npm run userflow` builds it into the docs folder as one file with script, styles and font inlined, because browsers refuse module scripts and fonts from `file://`; the web app's own build does not include it |
+
+Check: `npm run typecheck`, `npm run lint` and `npm run build` pass in `frontend/web`, and `dist` holds no userflow file; headless Chrome opened `index.html` over `file://` for all six flows with every screenshot loaded (52 of 52) and the Geist font active; the design skill's inspector rendered all six flows at 1440 and 768 px with no layout failure. The three test orders and the Bobi conversation stay on the staging test shop. `staff` and `printer` are left out because the app has no way to reach them. Commit: the one that adds this entry.
+
 ### 2026-11-01 — OpenAI native and Inception through Bifrost, Anthropic path removed
 
 | Area | Change |
@@ -179,21 +188,3 @@ Check: a link and anchor pass over `docs/development/ci-cd.md` resolves every li
 | Docs | • The CI/CD guide describes the three layers, the metric schema and how to add a service; the API contract lists AI's `GET /metrics`; the VPS network diagram shows Caddy's `:9180` and Alloy's scrapes |
 
 Check: on a local copy of the monitoring stack with a test Caddy over HTTPS and a fake `smart-ledger-staging-core-1`, every panel query of the three dashboards ran through Grafana without errors; with 1 in 10 requests failing the rules gave 9.99% 5xx; a local AI under uvicorn was scraped (`up=1`) and its rules gave the 4xx rate; the AI test suite passes; `caddy validate`, `promtool check rules` and `docker compose config` with the playbook's override pass. Not verified on the VPS: root disk, certificate days, AI and Bifrost probes, Caddy's host label for the real domains, and the AI scrape on the app network. Bifrost request metrics are not added. Commit: the one that adds this entry.
-
-### 2026-10-29 — Daily Core user activity (CORE-018)
-
-| Area | Change |
-|---|---|
-| Core | • Owner-approved V19 adds a private user/day table with PK, FK and date index; successful authenticated API reads and writes count once per Vietnam date for ACTIVE OWNER/ADMIN<br>• Default-off recorder has a bounded cache, independent committed writes, retry after telemetry errors and hourly 90-day retention; no client API or shared-environment activation |
-| Docs | • BR-023 → FR-036 → AC-101–103, ERD and rollout/rollback guide define the scope; read-only Grafana SQL separates roles and excludes loadtest accounts |
-
-Check: 27 CORE-018 tests passed on disposable PostgreSQL 16.15; full Maven verify passed 1449 tests with zero failures/errors/skips; PostgreSQL gate unit tests passed 13 cases. Shared-DB migration, Grafana provisioning and staging/production acceptance are not verified. Commit: the one that adds this entry.
-
-### 2026-10-29 — Monitoring config changes take effect on a playbook run
-
-| Area | Change |
-|---|---|
-| Deploy | • The playbook's monitoring handler recreates the monitoring containers, because Alloy, Loki and Grafana read their bind-mounted config only at start and Compose does not recreate a container for a changed mounted file; the first VPS run of the database, AI and Bifrost alerts left Grafana with the old five rules until its alerting was reloaded by hand |
-| Docs | • The CI/CD guide says the playbook recreates the monitoring containers |
-
-Check: on the VPS after the staging playbook run, Grafana listed five rules; `POST /api/admin/provisioning/alerting/reload` raised it to seven with Database down and Service down; `ansible-playbook --syntax-check` passes. Not verified: a playbook run with this change. Commit: the one that adds this entry.

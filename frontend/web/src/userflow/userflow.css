@@ -1,0 +1,647 @@
+/* Trang userflow.html: canvas tối, nền đen phẳng. Màu chỉ dùng cho nút đang chọn và nhánh lỗi. */
+
+.uf {
+  --ground: #000;
+  --surface: #111;
+  --raised: #2a2a2a;
+  --border: #1a1a1a;
+  --rule: #161616;
+  --control: #444;
+  --text: #fff;
+  --muted: #b4b4b4;
+  --faint: #949494;
+  --negative: #e5484d;
+  --accent: #5b9bf5;
+  --edge: #5a5a5a;
+
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  background: var(--ground);
+  color: var(--text);
+  font-family: 'Geist Variable', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  color-scheme: dark;
+}
+
+.uf .num {
+  font-variant-numeric: tabular-nums;
+}
+
+.uf button {
+  font: inherit;
+  color: inherit;
+}
+
+.uf :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Thanh trên */
+
+.uf-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 56px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.uf-menu {
+  position: relative;
+}
+
+.uf-menu h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.uf-menu h1 button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  margin-left: -8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  font-weight: inherit;
+  cursor: pointer;
+}
+
+.uf-menu h1 button:hover {
+  background: var(--surface);
+}
+
+.uf-menu-list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  left: -8px;
+  min-width: 280px;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--raised);
+  border-radius: 12px;
+}
+
+.uf-menu-list button {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.uf-menu-list button:hover {
+  background: var(--raised);
+}
+
+.uf-menu-list button[aria-current='true'] {
+  color: var(--accent);
+}
+
+.uf-menu-count {
+  color: var(--faint);
+}
+
+.uf-meta {
+  margin: 0;
+  color: var(--muted);
+}
+
+.uf-stamp {
+  margin: 0 0 0 auto;
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.uf-summary {
+  margin: 0;
+  padding: 10px 16px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--rule);
+}
+
+/* Vùng chính: canvas và bảng chi tiết */
+
+.uf-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+}
+
+.uf-main.has-sheet {
+  grid-template-columns: minmax(0, 1fr) 400px;
+}
+
+.uf-canvas {
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.uf-canvas:active {
+  cursor: grabbing;
+}
+
+.uf-canvas:focus-visible {
+  outline-offset: -2px;
+}
+
+.uf-world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+.uf-edges {
+  position: absolute;
+  /* Reset chung đặt max-width: 100% cho svg; .uf-world không có bề rộng nên svg sẽ co về 0. */
+  max-width: none;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.uf-edge {
+  fill: none;
+  stroke-width: 1.5;
+  /* Giữ nét 1.5px trên màn hình ở mọi mức thu phóng. */
+  vector-effect: non-scaling-stroke;
+  transition: opacity 150ms ease;
+}
+
+.uf-edge--base {
+  stroke: var(--edge);
+}
+
+.uf-edge--fail {
+  stroke: var(--negative);
+}
+
+.uf-edge--on {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.uf-arrow {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.uf-arrow--base {
+  stroke: var(--edge);
+}
+
+.uf-arrow--fail {
+  stroke: var(--negative);
+}
+
+.uf-arrow--on {
+  stroke: var(--accent);
+}
+
+.uf-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 2px 6px;
+  background: var(--ground);
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+
+.uf-label.is-fail {
+  color: var(--negative);
+}
+
+.uf-label.is-on {
+  color: var(--text);
+}
+
+.uf .is-dim {
+  opacity: 0.25;
+}
+
+/* Nút */
+
+.uf-node {
+  position: absolute;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  transition: opacity 150ms ease;
+}
+
+.uf-node-title {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.uf-node-caption {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.uf-node--screen {
+  width: 180px;
+}
+
+.uf-node--screen .uf-node-title,
+.uf-node--screen .uf-node-caption {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.uf-node--screen img {
+  position: absolute;
+  top: 64px;
+  left: 0;
+  display: block;
+  width: 180px;
+  height: 390px;
+  border-radius: 18px;
+  outline: 1px solid var(--raised);
+  object-fit: cover;
+  object-position: top;
+  pointer-events: none;
+}
+
+.uf-node--screen {
+  height: 454px;
+}
+
+.uf-node--screen:hover img {
+  outline-color: var(--control);
+}
+
+.uf-node--screen.is-selected img {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.uf-node--decision {
+  display: grid;
+  place-items: center;
+  width: 168px;
+  height: 96px;
+}
+
+.uf-node--decision svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.uf-node--decision polygon {
+  fill: var(--surface);
+  stroke: var(--raised);
+  stroke-width: 1.5;
+}
+
+.uf-node--decision:hover polygon {
+  stroke: var(--control);
+}
+
+.uf-node--decision.is-selected polygon {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.uf-node--decision span {
+  position: relative;
+  max-width: 120px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.uf-node--step {
+  width: 180px;
+  height: 72px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--raised);
+  border-radius: 12px;
+}
+
+.uf-node--step:hover {
+  border-color: var(--control);
+}
+
+.uf-node--step.is-link {
+  border-style: dashed;
+}
+
+.uf-node--step.is-selected {
+  border-color: var(--accent);
+}
+
+/* Chú giải và thu phóng */
+
+.uf-legend,
+.uf-zoom {
+  position: absolute;
+  bottom: 16px;
+  display: flex;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--raised);
+  border-radius: 999px;
+}
+
+.uf-legend {
+  left: 16px;
+  gap: 16px;
+  padding: 8px 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.uf-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.uf-key {
+  display: inline-block;
+}
+
+.uf-key--edge,
+.uf-key--fail {
+  width: 16px;
+  height: 0;
+  border-top: 1.5px solid var(--edge);
+}
+
+.uf-key--fail {
+  border-color: var(--negative);
+}
+
+.uf-key--decision {
+  width: 14px;
+  height: 10px;
+  background: var(--raised);
+  clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+}
+
+.uf-key--step {
+  width: 14px;
+  height: 10px;
+  border: 1px solid var(--control);
+  border-radius: 3px;
+}
+
+.uf-zoom {
+  right: 16px;
+  gap: 2px;
+  padding: 4px;
+}
+
+.uf-zoom button {
+  display: grid;
+  place-items: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  cursor: pointer;
+}
+
+.uf-zoom button:hover {
+  background: var(--raised);
+}
+
+.uf-zoom output {
+  min-width: 44px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.uf-zoom .uf-zoom-fit {
+  margin-left: 4px;
+  padding: 0 14px;
+  background: var(--text);
+  color: var(--ground);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.uf-zoom .uf-zoom-fit:hover {
+  background: var(--muted);
+}
+
+/* Bảng chi tiết */
+
+.uf-sheet {
+  overflow-y: auto;
+  padding: 20px;
+  border-left: 1px solid var(--rule);
+  background: var(--ground);
+}
+
+.uf-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.uf-sheet-head h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.uf-chip {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--raised);
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.uf-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.uf-icon-btn:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.uf-sheet-caption {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.uf-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--ground) !important;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.uf-primary:hover {
+  background: var(--muted);
+}
+
+.uf-sheet-shot {
+  display: block;
+  width: 100%;
+  /* Đủ đọc chữ trong ảnh mà vẫn thấy phần Tệp và lối đi tiếp mà không phải cuộn xa. */
+  max-width: 280px;
+  height: auto;
+  margin-top: 20px;
+  border-radius: 24px;
+  outline: 1px solid var(--raised);
+}
+
+.uf-facts {
+  display: grid;
+  gap: 8px;
+  margin: 20px 0 0;
+}
+
+.uf-facts div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.uf-facts dt {
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.uf-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.uf-facts a {
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: var(--control);
+  text-underline-offset: 3px;
+}
+
+.uf-facts a:hover {
+  text-decoration-color: var(--text);
+}
+
+.uf-facts code {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+}
+
+.uf-note {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.uf-hops {
+  margin-top: 24px;
+}
+
+.uf-hops h3 {
+  margin: 0 0 8px;
+  color: var(--faint);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.uf-hops button {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-top: 1px solid var(--rule);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.uf-hops button:hover {
+  background: var(--surface);
+}
+
+.uf-hops button.is-fail span:first-child {
+  color: var(--negative);
+}
+
+.uf-hop-target {
+  color: var(--muted);
+  text-align: right;
+}
+
+@media (max-width: 1100px) {
+  .uf-stamp {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .uf * {
+    transition: none !important;
+  }
+}
