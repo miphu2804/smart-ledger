@@ -1,0 +1,22 @@
+info:
+  name: Update expense
+  type: http
+  seq: 4
+
+http:
+  method: PATCH
+  url: "{{baseUrl}}/api/v1/expenses/{{expenseId}}"
+  body:
+    type: json
+    data: |-
+      {
+        "amountVnd": 60000
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true

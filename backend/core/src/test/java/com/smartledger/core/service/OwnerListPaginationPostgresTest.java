@@ -31,7 +31,7 @@ import org.springframework.test.context.DynamicPropertySource;
 /** Real PostgreSQL filtering/count/tenant tests. All fixtures live in a disposable isolated schema. */
 @DataJpaTest(showSql = false, properties = {"spring.flyway.enabled=true", "spring.jpa.hibernate.ddl-auto=validate"})
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({ProductServiceImpl.class, SaleServiceImpl.class, SaleDraftServiceImpl.class,
+@Import({com.smartledger.core.ratelimit.UserRateLimitService.class, com.smartledger.core.repository.UserRateLimitRepository.class, ProductServiceImpl.class, SaleServiceImpl.class, SaleDraftServiceImpl.class,
         CustomerServiceImpl.class, DebtServiceImpl.class, ExpenseServiceImpl.class, ShopServiceImpl.class,
         OwnerListPaginationPostgresTest.Config.class})
 @EnabledIfEnvironmentVariable(named = "CORE_TEST_POSTGRES_URL", matches = "jdbc:postgresql:.+")

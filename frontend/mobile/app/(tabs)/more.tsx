@@ -1,13 +1,15 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { Image, ImageSourcePropType, Pressable, StyleSheet, View } from 'react-native';
+import { Image, ImageSourcePropType, Linking, Pressable, StyleSheet, View } from 'react-native';
 import { QuickNavButton } from '../../src/components/QuickNav';
 import { Badge, Dialog, Row, Screen, T } from '../../src/components/ui';
+import { WEBSITE_URL } from '../../src/config';
 import { authClient } from '../../src/lib/auth';
 import { vnd } from '../../src/lib/format';
 import { useCoreData } from '../../src/lib/useCoreData';
 import { useApp } from '../../src/store/AppStore';
+import { TAB_BAR_CLEARANCE } from '../../src/tabBar';
 import { colors, shadow } from '../../src/theme';
 
 const managementIcons = {
@@ -170,6 +172,20 @@ export default function More() {
           onPress={replayGuide}
         />
         <ManagementRow
+          icon="file-text"
+          title="Chính sách và điều khoản"
+          subtitle="Quyền riêng tư, điều khoản sử dụng"
+          onPress={() => void Linking.openURL(`${WEBSITE_URL}/chinh-sach`)}
+        />
+        {/* Google Play yêu cầu có đường xoá tài khoản ngay trong app; việc xoá do nhóm xử lý theo hướng dẫn ở trang này */}
+        <ManagementRow
+          icon="trash-2"
+          iconTone="danger"
+          title="Xoá tài khoản"
+          subtitle="Yêu cầu xoá tài khoản và dữ liệu"
+          onPress={() => void Linking.openURL(`${WEBSITE_URL}/delete-account`)}
+        />
+        <ManagementRow
           image={managementIcons.logout}
           iconTone="danger"
           title="Đăng xuất"
@@ -210,7 +226,7 @@ export default function More() {
 const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
-    paddingBottom: 96,
+    paddingBottom: TAB_BAR_CLEARANCE,
     position: 'relative',
   },
   header: {

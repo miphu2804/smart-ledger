@@ -1,13 +1,48 @@
 {
   "source_of_truth": "config.json",
   "client": {
-    "enforce_auth_on_inference": true
+    "enforce_auth_on_inference": true,
+    "enable_logging": true,
+    "disable_content_logging": true,
+    "log_retention_days": 14
   },
   "providers": {
-    "opencode-go": {
-      "network_config": { "default_request_timeout_in_seconds": 60 },
+    "openai": {
+      "network_config": {
+        "default_request_timeout_in_seconds": 60,
+        "max_retries": 1,
+        "retry_backoff_initial": 500
+      },
       "keys": [
-        { "name": "opencode-go", "value": "env.OPENCODE_GO_API_KEY", "models": ["*"], "weight": 1.0 }
+        {
+          "name": "openai-official",
+          "value": "env.OPENAI_API_KEY",
+          "models": [
+            "gpt-6-luna"
+          ],
+          "weight": 1.0
+        }
+      ]
+    },
+    "inception": {
+      "custom_provider_config": {
+        "base_provider_type": "openai"
+      },
+      "network_config": {
+        "base_url": "https://api.inceptionlabs.ai",
+        "default_request_timeout_in_seconds": 60,
+        "max_retries": 1,
+        "retry_backoff_initial": 500
+      },
+      "keys": [
+        {
+          "name": "inception",
+          "value": "env.INCEPTIONLABS_API_KEY",
+          "models": [
+            "mercury-3"
+          ],
+          "weight": 1.0
+        }
       ]
     }
   },
@@ -18,10 +53,28 @@
         "name": "AI service",
         "value": "env.BIFROST_VIRTUAL_KEY",
         "provider_configs": [
-          { "provider": "opencode-go", "allowed_models": ["*"], "key_ids": ["*"] }
+          {
+            "provider": "openai",
+            "allowed_models": [
+              "gpt-6-luna"
+            ],
+            "key_ids": [
+              "*"
+            ]
+          },
+          {
+            "provider": "inception",
+            "allowed_models": [
+              "mercury-3"
+            ],
+            "key_ids": [
+              "*"
+            ]
+          }
         ]
       }
     ],
+    "routing_rules": [],
     "auth_config": {
       "is_enabled": true,
       "admin_username": "env.BIFROST_ADMIN_USERNAME",

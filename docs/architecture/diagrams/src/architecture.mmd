@@ -25,15 +25,13 @@ flowchart TB
         direction TB
         data_access["Data access"]
         postgres[("PostgreSQL + pgvector")]
-        redis["Redis"]
         data_access --> postgres
-        data_access --> redis
     end
 
     subgraph ai_infra["AI infrastructure"]
         direction LR
-        langfuse["Langfuse · :3000"]
-        litellm["LiteLLM · :4000"]
+        honeyhive["HoneyHive"]
+        bifrost["Bifrost · :8080"]
     end
 
     subgraph ai["AI · HTTP :8001"]
@@ -51,9 +49,9 @@ flowchart TB
 
     mobile -->|"HTTP :8000"| core_hub
     admin_web -->|"HTTP :8000"| core_hub
-    core_hub -->|"SQL / cache / vectors"| data_access
+    core_hub -->|"SQL / vectors"| data_access
     core_hub -->|"provider API / delivery URL"| cloudinary
     core_hub -->|"HTTP :8001"| ai_hub
-    ai_hub -->|"SQL / cache / vectors"| data_access
-    ai_hub -->|"tracing"| langfuse
-    ai_hub -->|"routing"| litellm
+    ai_hub -->|"SQL / vectors"| data_access
+    ai_hub -->|"tracing"| honeyhive
+    ai_hub -->|"routing"| bifrost

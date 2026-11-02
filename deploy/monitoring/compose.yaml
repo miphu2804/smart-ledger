@@ -1,6 +1,6 @@
 # Monitoring shared by every environment on the VPS: Alloy collects host, container and probe metrics plus container
-# logs, Prometheus and Loki store them, and Grafana shows them and sends alerts to Discord and Telegram. Lives in
-# /opt/smart-ledger-monitoring next to these files; deploy/ansible/playbook.yml writes .env, targets/<environment>.json
+# logs, Prometheus and Loki store them, Grafana shows them and sends alerts to Discord and Telegram, and Dozzle tails
+# live container logs. Lives in /opt/smart-ledger-monitoring next to these files; deploy/ansible/playbook.yml writes .env, targets/<environment>.json
 # and compose.override.yaml.
 # Each container has a memory limit so the stack stays under about 1 GB and cannot starve Core or AI on the 4 GB VPS.
 # See docs/development/ci-cd.md#monitoring.
@@ -101,6 +101,20 @@ services:
         aliases: [grafana]
     # Same wildcard-DNS guard as Caddy and Core: an unresolved name must not reach an outside host.
     dns_search: .
+    restart: unless-stopped
+    logging: *logging
+
+  # Live container logs for the operator. Dozzle has no sign-in here and reads the Docker socket, so it listens on the
+  # VPS loopback only: reach it through an SSH tunnel, never through Caddy. Actions and shell stay off by default.
+  dozzle:
+    image: amir20/dozzle:v11.4.0
+    environment:
+      DOZZLE_NO_ANALYTICS: "true"
+    ports:
+      - 127.0.0.1:8081:8080
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    mem_limit: 64m
     restart: unless-stopped
     logging: *logging
 

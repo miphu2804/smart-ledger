@@ -66,7 +66,7 @@ ZALO_APP_ID=...
 
 Files are named `.env.<name>`, like `.env.local` and `.env.production` in Next.js; the folder already says which environment they belong to. `targets` lists the copied files. Everything else is read in place, for example `docker compose --env-file secrets/production/env/.env.core --env-file secrets/production/env/.env.ai`, so there is no second copy to drift.
 
-`.env.core` and `.env.ai` hold plain values that can be read anywhere; `LOGFIRE_SERVICE_VERSION` is left out because every deploy sets it to the commit. `github/.env.*` have two sections, `## Variables ##` and `## Secrets (write-only in GitHub, values not pulled) ##`, each grouped by topic like the other files. Secrets are listed as `# NAME` lines, by name only, because GitHub never returns a secret's value.
+`.env.core` and `.env.ai` hold plain values that can be read anywhere. `github/.env.*` have two sections, `## Variables ##` and `## Secrets (write-only in GitHub, values not pulled) ##`, each grouped by topic like the other files. Secrets are listed as `# NAME` lines, by name only, because GitHub never returns a secret's value.
 
 Not in `secrets/`: `.env.example` files (committed templates), and generated files such as `supabase/.temp` and `frontend/mobile/ios/.xcode.env`.
 

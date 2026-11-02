@@ -2,6 +2,8 @@ package com.smartledger.core.config;
 
 import com.smartledger.core.exception.RestAuthenticationEntryPoint;
 import com.smartledger.core.security.BearerTokenAuthenticationFilter;
+import com.smartledger.core.security.UserRateLimitFilter;
+import org.springframework.beans.factory.ObjectProvider;
 import jakarta.servlet.DispatcherType;
 import java.net.URI;
 import java.util.Arrays;
@@ -30,8 +32,9 @@ public class SecurityConfiguration {
             HttpSecurity http,
             BearerTokenAuthenticationFilter bearerTokenAuthenticationFilter,
             RestAuthenticationEntryPoint authenticationEntryPoint,
-            UrlBasedCorsConfigurationSource corsConfigurationSource) throws Exception {
-        return http
+            UrlBasedCorsConfigurationSource corsConfigurationSource,
+            ObjectProvider<UserRateLimitFilter> rateLimitFilter) throws Exception {
+        http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -52,8 +55,9 @@ public class SecurityConfiguration {
                                 "/mobile/auth/zalo/complete", "/.well-known/assetlinks.json").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/zalo/native/exchange").permitAll()
                         .anyRequest().authenticated())
-                .addFilterBefore(bearerTokenAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                .build();
+                .addFilterBefore(bearerTokenAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+        rateLimitFilter.ifAvailable(filter -> http.addFilterAfter(filter, BearerTokenAuthenticationFilter.class));
+        return http.build();
     }
 
     @Bean
@@ -66,6 +70,7 @@ public class SecurityConfiguration {
         cors.setAllowedOrigins(origins);
         cors.setAllowedMethods(List.of("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Shop-Id", "Idempotency-Key"));
+        cors.setExposedHeaders(List.of("Retry-After"));
         cors.setAllowCredentials(false);
         cors.setMaxAge(600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

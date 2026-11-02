@@ -5,7 +5,6 @@
 #   .env               ENVIRONMENT, CORE_ALIAS, CORE_IMAGE, AI_IMAGE; the deploy rewrites the image lines
 #   core.env, ai.env   service variables from Dopbase core/<env> and ai/<env>; every deploy rewrites them
 #   bifrost.env        Dopbase bifrost/<env>, written by deploy/ansible/
-#   github.ai.env      LOGFIRE_SERVICE_VERSION, the deployed commit
 # See docs/development/ci-cd.md#vps.
 
 # The project name sets the container and volume prefix, and both app directories would otherwise name the
@@ -50,8 +49,6 @@ services:
     image: ${AI_IMAGE:?AI_IMAGE is required}
     env_file:
       - ai.env
-      - path: github.ai.env
-        required: false
     environment:
       SERVER_PORT: 8001
     healthcheck:
@@ -61,6 +58,9 @@ services:
       timeout: 5s
       start_period: 30s
       retries: 6
+    # Docker's 10 s default kills AI mid-shutdown: an open chat stream may run to the 35 s turn limit, then
+    # memory writes wait up to 10 s, HoneyHive session updates 10 s and the span flush 5 s.
+    stop_grace_period: 60s
     restart: unless-stopped
     logging: *logging
 

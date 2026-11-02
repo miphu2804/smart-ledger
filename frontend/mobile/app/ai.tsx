@@ -342,7 +342,7 @@ export default function Ai() {
           </T>
         </View>
         <View style={styles.toolbar}>
-        <Row gap={0}>
+        <Row gap={8}>
           <View style={styles.floatBtn}>
             <IconBtn
               name="edit"
@@ -439,6 +439,7 @@ export default function Ai() {
             onChangeText={setText}
             onSubmitEditing={() => send(text)}
             multiline
+            numberOfLines={1}
             textAlignVertical="center"
             placeholder="Nhập câu hỏi cho trợ lý…"
             placeholderTextColor={colors.faint}
@@ -778,7 +779,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     paddingBottom: 10,
-    backgroundColor: 'rgba(252,252,253,0.92)',
     zIndex: 1,
     paddingHorizontal: 14,
     flexDirection: 'row',
@@ -797,7 +797,9 @@ const styles = StyleSheet.create({
   // Bóng đậm hơn shadow(0) của IconBtn để nút nổi rõ khi tin nhắn trôi bên dưới.
   floatBtn: {
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.65)',
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: 'rgba(69,47,160,0.16)',
   },
   backBtn: {
     width: HEADER_BTN,
@@ -811,15 +813,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingBottom: 24,
   },
-  toolbar: {
-    flexDirection: 'row',
-    padding: 4,
-    borderRadius: 26,
-    backgroundColor: 'rgba(255,255,255,0.76)',
-    borderWidth: 1,
-    borderColor: colors.white,
-    ...shadow(1),
-  },
+  toolbar: { flexDirection: 'row' },
   messages: { gap: 16 },
   welcomeHero: {
     flex: 1,
@@ -932,6 +926,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     // Android tự đệm trên dưới cho TextInput, làm ô cao cố định cắt mất dấu tiếng Việt phía trên; bỏ đệm dọc
     paddingVertical: 0,
+    // textAlignVertical chỉ có tác dụng trên Android; nơi khác đệm (minHeight - lineHeight) / 2 để chữ nằm giữa ô.
+    ...(Platform.OS === 'android' ? null : { paddingVertical: 11 }),
+    lineHeight: 20,
     fontFamily: font.medium,
     fontSize: 13.5,
     color: colors.ink,

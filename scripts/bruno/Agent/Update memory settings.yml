@@ -1,0 +1,22 @@
+info:
+  name: Update memory settings
+  type: http
+  seq: 7
+
+http:
+  method: PUT
+  url: "{{baseUrl}}/api/v1/agent/memory/settings"
+  body:
+    type: json
+    data: |-
+      {
+        "memory_enabled": true
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true

@@ -1,3 +1,132 @@
+### 2026-11-01 — OpenAI native and Inception through Bifrost, Anthropic path removed
+
+| Area | Change |
+|---|---|
+| AI | • Every chat turn on staging failed with Bifrost 401 because the Anthropic SDK sends the virtual key as `x-api-key`, which Bifrost accepts only for `sk-bf-` keys; the OpenAI clients now send it in `x-bf-vk` on the client, since a run's `extra_headers` replace the model's whole<br>• `ModelAlias` gains `effort`, and `MODEL_REASONING_EFFORT` is the default for an alias without one; the default alias is `chat` on `gpt-6-luna` over `openai_responses` with effort `high`<br>• `anthropic_messages`, `AnthropicMessagesProvider`, `ANTHROPIC_BASE_URL`, the `anthropic` extra, `SUMMARY_MODEL_NAME` and the `x-opencode-session` and `x-bf-eh-*` headers are gone; `openai_chat` stays for Mercury |
+| Deploy | • `bifrost.json` serves `gpt-6-luna` from `openai` and `mercury-3` from a custom `inception` provider (key `INCEPTIONLABS_API_KEY`), `vk-ai` allows exactly those two, both retry once after 500 ms, and the OpenCode Go providers and routing rules are removed; no alias calls Mercury 3 yet, since it is untested<br>• The credential map was regenerated |
+| Docs | • ADR-0008 update, AI README, technical design, CI/CD, the memory diagram and the policy and Data safety pages name OpenAI and Inception |
+
+Check: `uv run pytest` 460 passed, ruff check and format pass; a local fake gateway received `x-bf-vk`, `x-bf-session-id`, `x-bf-lh-shop-id` and the per-alias effort (`high` on `/responses`, `instant` on `/chat/completions`); `bifrost.json` parses; `tsc --noEmit` and `tsc -b` pass on the web app. A local Bifrost v2.3.2 loaded `bifrost.json` and served both models; Bifrost ignores a `BIFROST_VIRTUAL_KEY` without the `sk-bf-` prefix and makes its own, so every header then fails with 401 `access not found`. Not verified: Mercury 3 quality (no alias calls it), staging, or whether the staging virtual key has the `sk-bf-` prefix. Production keeps the older image and OpenCode Go. Commit: the one that adds this entry.
+
+### 2026-11-01 — snooplog runs from any shell
+
+| Area | Change |
+|---|---|
+| Deploy | • `snooplog` is a script in `/usr/local/bin` instead of an alias in `/etc/profile.d`, so tmux panes and other non-login shells can run it; the filter is unchanged |
+| Docs | • `ci-cd.md` calls it a command, not a shortcut |
+
+Check: `ansible-playbook --syntax-check` passes and the patch applies cleanly to `staging`; not run on the VPS yet, so the tmux case is inferred. Commit: the one that adds this entry.
+
+### 2026-11-01 — Policy and account deletion links in the app
+
+| Area | Change |
+|---|---|
+| Mobile | • Quản lý has "Chính sách và điều khoản" and "Xoá tài khoản", and the sign-in screen links the policy; they open `/chinh-sach` and `/delete-account` on the public site, which Google Play requires for account deletion |
+| Web | • The policy and the data deletion page say the request can start in the app; Minh Thọ is named as the owner of the legal content |
+| Docs | • `docs/product/google-play-data-safety.md` holds the answers for the Play Console form, matched to the policy, including what #467 sends to HoneyHive<br>• PRD `AC-110`; the multi-shop criterion moves to `AC-109`, because `AC-104` was already CORE-019's |
+| Test | • `e2e/legal-links.spec.ts` checks the three links<br>• `test:e2e` now starts Metro with `--clear`: with `node_modules` shared between worktrees the cached router path served another worktree's screens, so the check recorded for #461 did not hold |
+
+Check: `npx playwright test` 4/4 with a cleared cache, on the code of #420, #421, #458, #459, #460 and #461 together; `npx tsc --noEmit` passes; unit tests 182/184, with `parseOrder` and `quickNav` failing on `staging` too; web lint, `tsc -b` and `vite build` pass. Not verified: a real phone, the Data safety answers against the production AAB, and Minh Thọ's review. Commit: the one that adds this entry.
+
+### 2026-11-01 — HoneyHive replaces Logfire for AI traces
+
+| Area | Change |
+|---|---|
+| AI | • `src/observability.py` sends Pydantic AI spans to HoneyHive when `HH_API_KEY` is set, with message and tool content but no raw media (`NFR-008` now allows it); `InputRedaction` runs before the session opens, so the question, history and memory reach HoneyHive redacted<br>• Each chat turn is one HoneyHive session: it opens with the redacted question, `user_id`, `shop_id`, model and `prompt_version` (12 hex characters of the instructions' SHA-256), and closes with the answer and token counts; the calls run in the background, so the owner never waits on HoneyHive; tracing starts in `lifespan`, not at import, so tests (which clear `HH_API_KEY`) send nothing; on shutdown `lifespan` waits for memory writes and session updates, then flushes queued spans<br>• INFO and WARNING logs keep only tool names, call ids, sizes and error codes; SQL, tool results, error reasons and memory tracebacks log at DEBUG; session updates wait for the session to exist; `prompt_version` also hashes the tool definitions<br>• `AppConfig` gains `HH_API_KEY`, `HH_API_URL`, `HH_SOURCE`; `logfire`, `redis`, `REDIS_URL` and `LANGFUSE_*` are gone<br>• `evaluation/agent_chat` scores the real agent on 21 questions of a made-up shop, 3 times each; the seed sells at 00:30 and 23:30 shop time and has discounts, voided sales, repaid debts and an archived product, number cases must match SQL exactly, and a model judges the low-stock, out-of-scope and top-product cases; each run records model, `prompt_version` and `suite_version`<br>• `evaluation/honeyhive` holds two online Python evaluators, `query-error` on `query_shop_data` calls and `internal-leak` on each session's answer, and three daily alerts on a p95 turn above 20 seconds, a query error rate above 20% and more than five failed turns, all applied by `apply.py`<br>• A failed, timed-out or cancelled turn marks its session `metadata.error`; sessions carry `git_sha` and, when streamed, `first_text_ms`; `HH_SAMPLE_RATE` traces a share of turns; memory spans carry `shop_id` and embeddings are traced; a refused session logs a warning, and shutdown waits for session updates before the flush and then stops the tracer<br>• `first_text_ms` counts from the turn's arrival, memory recall included, and covers turns that stream nothing; session updates run on two HoneyHive threads instead of the default pool; the SDK's warning for each span of an unsampled turn is filtered; the alerts watch `source` `production` only |
+| Deploy | • The workflow and compose file no longer write `github.ai.env` or `REDIS_URL`; the `HH_*` values come from Dopbase `ai/<environment>`; `deploy-backend.yml` builds the deployed commit into the AI image as `GIT_SHA`; the VPS compose file gives the AI container 60 seconds to stop, so a flush is not killed at Docker's 10-second default |
+| Web | • The `/chinh-sach` policy page names HoneyHive and what it receives in the AI section and the processor list, and drops Redis Cloud |
+| Docs | • ADR-0009 accepted for the AI side; AI README, technical design, CI/CD and env guides, service walkthrough, the architecture and CI/CD diagrams and the credential map name HoneyHive and Bifrost and drop Redis and Langfuse |
+
+Check: `uv run pytest` (459 passed, including a turn outside the sample leaving no SDK warning, session updates off the default pool and the first-words timer, plus concurrent turns keeping their own sessions, failed and cancelled turns marking their session, and every fake tracer call binding to the real SDK signature) and ruff passed; real turns on the local database reached HoneyHive with their session, model and tool events, the local capture found the content in the OTLP bytes with email and card numbers redacted; the evaluation (suite `526027def191`, prompt `c0447592b804`) passed all 62 recorded turns of 63, and one turn dropped on a network `ReadError`, which the run reports as a failure; the judge passed the right answers and failed the four wrong ones that the earlier regex scoring accepted, and each seed trap changes the expected figure; both online evaluators are on the HoneyHive project, scored stored and crafted events correctly on HoneyHive's server, and scored a new local chat turn within about two minutes; a local turn then showed `git_sha`, `first_text_ms` and memory spans with `shop_id`, a timed-out turn showed `metadata.error = answer_timeout`, and a session closed three seconds late with leaked SQL scored `internal-leak = True`; the three alerts were deleted in the HoneyHive UI and recreated by `apply.py` with the `production` filter, and have not run yet; `tsc --noEmit` passed on the web app. Dopbase `ai/staging` and `ai/production` hold `HH_API_KEY`, `HH_API_URL` and `HH_SOURCE` and no longer hold `LOGFIRE_*`, `REDIS_URL` or `LANGFUSE_*`, and the credential map was regenerated; neither environment is deployed yet, and `evaluation/agent_chat/results/` stays out of Git. Commit: the one that adds this entry.
+
+### 2026-10-31 — Create a second shop and switch between shops
+
+| Area | Change |
+|---|---|
+| Mobile | • Tapping the shop name in the quick menu lists the account's shops and "Tạo cửa hàng mới"; `app/shop-new.tsx` takes a name and industries<br>• The app always used the first shop; the store now keeps the list, picks the last shop chosen on this device and skips suspended shops, which show as "Tạm ngưng" and cannot be chosen<br>• Switching rebuilds the tabs from `shopId` and clears the cart and draft; the bank account is stored per shop, and the old single account goes to the first shop |
+| Docs | • PRD `FR-011` and `AC-104` |
+
+Check: 7 new tests pass; all mobile tests 164/166, with `parseOrder` and `quickNav` failing on `staging` too; `npx tsc --noEmit` passes; a temporary Playwright run on the mock web build signed up, created two shops, switched both ways and kept each shop's bank account with no console error; the cart cleared on switching in a browser check. Not verified: real Core, data separation between shops (mock data is shared), reopening the app on the chosen shop, and a real phone. Commit: the one that adds this entry.
+
+### 2026-10-31 — In-app screens need a signed-in session
+
+| Area | Change |
+|---|---|
+| Mobile | • `/ai` and the other screens outside the tabs opened without signing in, and `/ai` greeted the visitor with the sample name "Lan"; a 401 in chat then only showed "Chưa gửi được tin nhắn", because `forceSignOut` navigates only when the app was signed in<br>• The root stack puts those screens in `Stack.Protected`, open only once the session is restored, signed in and with a shop; otherwise they go to the splash and then sign-in<br>• `src/lib/authGate.ts` lists the screens and `tests/authGate.test.ts` fails when a new screen in `app/` is not on the list |
+
+Check: 2 new tests pass; `npx tsc --noEmit` passes; on the mock web build `/ai` signed out lands on `/welcome` without "Lan", and signed in Bobi opens. Not verified: a 401 from real Core and a real phone. Commit: the one that adds this entry.
+
+### 2026-10-29 — Shop and profile fields check their format
+
+| Area | Change |
+|---|---|
+| Mobile | • `src/lib/profileValidation.ts` checks the edit-profile fields: Facebook link must be a `facebook.com`, `fb.com` or `fb.me` link without spaces; bank account digits only, 6–19; shop phone a Vietnamese number (0 or +84, or a 1800/1900 hotline); stricter email; bank name letters, digits, spaces and a few marks such as `,` and `/`; bank name and account go together; name, shop name and address need letters or digits<br>• Each field shows its error and the save button stays locked until all pass, except a value saved earlier and not edited, so old data does not lock the form; length limits follow Core (shop name 200, phone 30, address 500); the create-shop step checks the shop name the same way |
+| Test | • `tests/profileValidation.test.ts` covers the tester's inputs (`dsa mipu gfd.,!@#$%^&*()`, a phone of dots, `324253432dsa2`) and valid ones |
+
+Check: 16 new tests pass; all mobile tests 173/175, the two failures in `parseOrder` and `quickNav` exist on `staging`; `npx tsc --noEmit` passes; on the mock web build the three tester inputs show errors with save locked, and valid values unlock it. Not verified: a real phone. Commit: the one that adds this entry.
+
+### 2026-10-31 — Playwright for the mobile web build
+
+| Area | Change |
+|---|---|
+| Test | • `npm run test:e2e` starts the Expo web build with mock data on port 8090 and runs `e2e/` in Chromium at a phone viewport (#438)<br>• `e2e/smoke.spec.ts` opens the sign-in screen, enters with the mock account and checks Tổng quan with no page error |
+| Docs | • The mobile README says how to install and run it |
+
+Check: the smoke test passes through `npx playwright test`; it failed first without `EXPO_PUBLIC_API_ENDPOINT`, so the config sets it; `npx tsc --noEmit` passes. Not run in CI, which the issue does not ask for. Commit: the one that adds this entry.
+
+### 2026-10-31 — Policy page for Google Play
+
+| Area | Change |
+|---|---|
+| Web | • `/chinh-sach` carries the privacy policy, terms of use and payment policy from the team's Google Doc dated 30/10/2026, with its open details filled from the deploy config and code: AI providers, log retention, what is really collected<br>• `/delete-account` opens the data deletion page, the footer links to the new page, and `/privacy` redirects to it, so one privacy policy remains<br>• The draft label is gone from the legal pages, with `VITE_LEGAL_DRAFT` in the code, the landing workflow and the docs |
+
+Check: `npm run lint`, `tsc -b` and `vite build` pass; at 375 px the page has no horizontal scroll and no draft or "Cần điền" text, and `/privacy` redirects to it. Not verified: legal review. The app still has no in-app account deletion entry, which the page says plainly and Google Play requires. Commit: the one that adds this entry.
+
+### 2026-10-29 — Tab screens end above the tab bar
+
+| Area | Change |
+|---|---|
+| Mobile | • `src/tabBar.ts` holds the tab bar height (100) and the space a tab screen leaves at its end (124); the tab bar drew 100 above the screen edge whatever the bottom inset, but each screen reserved its own number<br>• Quản lý reserved 96, so "Phiên bản 1.0.0" sat under the bar; Đơn hàng reserved 108 and Tạo đơn `insets.bottom + 96`, both short on devices without a bottom inset; all three, and the Tạo đơn cart bar, now use the shared values |
+
+Check: `npx tsc --noEmit` passes; on the mock web build at 375×812 the end of Quản lý, Đơn hàng ("Đã hiện hết 6 đơn") and Tạo đơn with one item in the cart sit above the tab bar. Not verified: a real phone, and a phone with 3-button navigation, where the bar's labels may sit under the system buttons. Commit: the one that adds this entry.
+
+### 2026-10-31 — Bruno collection for the Core API
+
+| Area | Change |
+|---|---|
+| CI | • CD job `smoke-staging` runs the read-only `Smoke` folder after each staging backend deploy; a failure marks the run without rolling back |
+| Docs | • `scripts/bruno` adds Bruno requests for the Core API in OpenCollection YAML with `local` and `staging` environments, Firebase login and a read-only `Smoke` folder<br>• Production has no environment because most requests write data |
+
+Check: `bru run Smoke --env staging` passed 4 of 4 assertions; 65 of the 87 requests returned 2xx or their expected status in OWNER and ADMIN flows against local Core, PostgreSQL and the Firebase Auth Emulator; the 22 media, Zalo and Agent requests were not run because they need Cloudinary, Zalo or AI. Commit: the squash merge of this branch.
+
+### 2026-10-31 — Durable operation quotas (CORE-019)
+
+| Area | Change |
+|---|---|
+| Core | • Owner-approved V20 adds private quota windows and leases; commit-based media/shop limits survive restart and share state across instances<br>• Replay remains free at capacity, failures release pending slots and completion rolls back with business/audit/idempotency; default-off flag, native proxy handling and CORS Retry-After |
+| Docs | • BR-024 → FR-037 → AC-104–108, API contract, ERD and rollout/recovery guide capture the approved policy and separate local verification from shared-environment activation |
+
+Check: full Maven verify passed 1472 tests on disposable PostgreSQL 16.15 with zero failures/errors/skips; the execution gate passed all 17 required PostgreSQL suites and its 13 unit tests passed. DBML parser and 12 new local links/anchors passed; Core code/tests/migrations remain unchanged after staging integration. Credential map regeneration was attempted but Dopbase CLI is unavailable locally. Shared-DB migration, feature activation and real Caddy/FE/provider acceptance are not verified. Commit: the one that adds this entry.
+
+### 2026-10-30 — LLMFactory, provider classes and Bifrost routing
+
+| Area | Change |
+|---|---|
+| AI | • `LLMFactory.create_model(alias)` replaces `build_chat_model`; `OpenAIChatProvider`, `OpenAIResponsesProvider` and `AnthropicMessagesProvider` each own one protocol, and `MODEL_ALIASES` replaces `MODEL_PROVIDER` and `MODEL_NAME`<br>• `session_settings` moves to its own module, takes the shop and sends the `x-bf-*` headers Bifrost needs for session grouping, log metadata and forwarding<br>• `MODEL_FALLBACKS` stays, in `protocol:model` form, until production runs Bifrost |
+| Deploy | • `bifrost.json` splits OpenCode Go into an Anthropic and an OpenAI custom provider, adds OpenAI for the Luna fallback and routing rules, and stores logs for 14 days without message content (NFR-008) |
+| Docs | • AI README, technical design, CI/CD guide, service walkthrough and ADR-0008 describe the aliases and Bifrost owning routing and fallback |
+
+Check: `uv run pytest` passes with 442 tests and `uv run ruff check` passes. The pinned Bifrost v2.3.2 image was run against a mock upstream: Anthropic requests reach `/v1/messages` with `cache_control`, session and User-Agent are forwarded, a 429 falls back to OpenAI, and logs show the session, shop and rule without content. Not verified: real OpenCode Go and OpenAI calls, tool calls and streaming through Bifrost, and the Bifrost UI itself. Commit: the one that adds this entry.
+
+### 2026-10-31 — Dozzle and Snoopy for VPS operators
+
+| Area | Change |
+|---|---|
+| Deploy | • The monitoring stack runs Dozzle `v11.4.0` for live container logs, bound to `127.0.0.1:8081` with a 64 MiB limit and reached through an SSH tunnel<br>• The playbook installs Snoopy, accepting its `ld.so.preload` prompt, and adds the `snooplog` shortcut |
+| Docs | • The CI/CD guide describes the tunnel, why Dozzle gets no Caddy site, and what Snoopy can and cannot prove |
+
+Check: a manual Dozzle container on the VPS listed all 13 containers through the tunnel, `docker compose config` accepted the service, `ansible-playbook --syntax-check` passed and the Snoopy debconf key matches the installed package. Not verified: a real playbook run, or the preseed on a new VPS.
+
 ### 2026-10-30 — Alerts as Discord embeds and Telegram messages
 
 | Area | Change |
@@ -68,130 +197,3 @@ Check: 27 CORE-018 tests passed on disposable PostgreSQL 16.15; full Maven verif
 | Docs | • The CI/CD guide says the playbook recreates the monitoring containers |
 
 Check: on the VPS after the staging playbook run, Grafana listed five rules; `POST /api/admin/provisioning/alerting/reload` raised it to seven with Database down and Service down; `ansible-playbook --syntax-check` passes. Not verified: a playbook run with this change. Commit: the one that adds this entry.
-
-### 2026-10-29 — Alerts for the database, AI and Bifrost
-
-| Area | Change |
-|---|---|
-| Deploy | • Alloy probes each Core's readiness over HTTPS beside liveness, so **Database down** fires when Core is up but cannot reach Supabase<br>• Alloy joins every app network that exists through a `compose.override.yaml` the playbook writes before starting monitoring, and probes `smart-ledger-<env>-ai-1:8001/health` and `smart-ledger-<env>-bifrost-1:8080/health` by container name, since `ai` and `bifrost` exist in both environments; **Service down** fires when either fails for 2 minutes<br>• Alloy gets `dns_search: .` so a stopped container's name cannot resolve through the VPS wildcard DNS |
-| Docs | • The CI/CD guide lists the new alerts and how Alloy reaches AI and Bifrost; the VPS network diagram shows the probes and is re-laid out with straight arrows |
-
-Check: throwaway containers with the real Alloy config: readiness 503 with liveness up fired only Database down, Core stopped only Endpoint down; the playbook's monitoring handler under `sh` and `dash` joined Alloy to a test `smart-ledger-staging_default`, the AI probe read 1 and the missing Bifrost 0, and stopping the fake AI raised the Service down series; `ansible-playbook --syntax-check` passes. Not verified: a playbook run on the VPS, and whether production's missing Bifrost starts with it or must be dropped from the probes. Commit: the one that adds this entry.
-
-### 2026-10-29 — VPS network and port diagram
-
-| Area | Change |
-|---|---|
-| Docs | • New `vps-network.drawio` and its SVG draw the four Docker networks on the VPS as overlapping regions, with the `name:port` each container is reached at, the `edge` aliases Caddy dials, and the Caddy, Core, AI, Bifrost and monitoring flows<br>• The CI/CD guide shows it under VPS with how to read it, and the diagram guide lists it |
-
-Check: networks and members from `docker network inspect` and `docker ps` on the VPS, ports and aliases from `deploy/*/compose.yaml` and the Caddy sites in the playbook; `validate.py` reports 0 errors and the SVG was read on a light and a dark page. Commit: the one that adds this entry.
-
-### 2026-10-28 — Web deploys check the real domains
-
-| Area | Change |
-|---|---|
-| Deploy | • `deploy-web.yml` names `app-production.songheloi.id.vn` and `app-staging.songheloi.id.vn` in the GitHub environment URL and in the smoke test, instead of the Vercel domains the project no longer lists in `CORS_ALLOWED_ORIGINS`<br>• `app-staging.songheloi.id.vn` carries the git branch `staging` in its Vercel domain settings, so a `main` deploy no longer takes the alias |
-| Docs | • The CI/CD guide names the same domains in the release steps, the staging CORS list, the production checklist and the Vercel event table, and records why the staging domain needs its branch |
-
-Check: the production CD run of 2026-10-28 12:17 failed its smoke test with `Core CORS does not allow https://smart-ledger-prod.vercel.app`, and the production deploy had taken `app-staging.songheloi.id.vn`; after the branch was set and CD staging web re-run, `app-production` serves the production bundle and `app-staging` the staging one, each allowed by its own Core. `actionlint` reports only the pre-existing `SC2034` of the smoke test step. Not verified: the next production deploy keeping its hands off the staging alias.
-
-### 2026-10-28 — Zalo sign-in tested on a phone; clearer config error
-
-| Area | Change |
-|---|---|
-| Mobile | • A Firebase custom token from another project (`auth/custom-token-mismatch`, `auth/invalid-custom-token`) now reads "Cách đăng nhập này chưa dùng được lúc này. Vui lòng chọn cách khác hoặc thử lại sau" with the code, instead of "Vui lòng thử lại", since retrying cannot fix it |
-| Test | • Zalo LOGIN on Android passed against staging Core on a Samsung SM-A528B (Android 14): `POST /auth/zalo/native/exchange` 200, Firebase custom token sign-in, `POST /auth/session` 200 as OWNER<br>• The APK was hand-repacked: the JS of #399 on a dev build with Firebase `smart-ledger-c2892`, signed with the debug key. Its App Link still named the old Railway host, so the return link was passed to the app over `adb` from the browser's DevTools<br>• A first try on a production-based APK failed with `auth/custom-token-mismatch`: native Firebase reads `google-services.json`, which pointed at `smart-ledger-production` while staging Core signs for `smart-ledger-c2892`. Test Zalo only with an APK whose Firebase project matches the Core |
-
-Check: `npx tsc --noEmit` and `npm test` (frontend/mobile); app log on the phone with `debugLog` turned on in the test bundle only. Not verified: the App Link opening the app by itself, which needs a CI APK built from `staging`, and iOS. Commit: the one that adds this entry.
-
-### 2026-10-28 — No divider under the last row of a list
-
-| Area | Change |
-|---|---|
-| Mobile | • `SettingRow` takes `last`: the last row of each card in Settings and Notification settings no longer draws a line just above the card edge (reported by Phú)<br>• Same fix for the last item at checkout, the last debt history entry, the last conversation in the assistant history, the last product in the add-item sheet and the last pending expense in voice orders |
-
-Check: `npx tsc --noEmit` shows only the two existing errors for the missing `expo-application` and `expo-intent-launcher`; Settings, Notification settings and debt history checked on the mock web build (the last history row measures `0px` border). Not verified on screen: checkout, assistant history, the add-item sheet, voice expenses, and a real phone. Commit: the one that adds this entry.
-
-### 2026-10-28 — Admin uses the Bobi logo and a brand login page
-
-| Area | Change |
-|---|---|
-| Web | • The admin sidebar, login and 403 pages show the Bobi notebook logo from the landing instead of the grey microphone mark; the sidebar subtitle reads "Trang quản trị"<br>• The login page uses the brand purple: a purple panel with a waving Bobi (the mobile `bobi-tab-v2.png` as a 560 px webp, 36 KB), a heading and three points that hold with the real Core (search, shop status history, audited reads), and a purple button, checkbox and focus ring<br>• On phones the purple panel hides and the card shows the logo; the placeholder email no longer has a misspelled domain |
-
-Check: `npm run typecheck` and `npm run build` pass; `npm run lint` shows only the four warnings that #381 fixes; login, the dashboard sidebar (open and collapsed), the 403 page and the phone layout checked in the browser on a mock build. Not verified: a build against the real Core. Commit: the one that adds this entry.
-
-### 2026-10-28 — Web admin lint warnings cleared
-
-| Area | Change |
-|---|---|
-| Web | • `npm run lint` in `frontend/web` reported six warnings in the admin code and now reports none<br>• `colorFor` and `initialsOf` in `components/admin/ui.tsx` are no longer exported, so the file exports only components<br>• Four `useEffect`s that set state right away follow React's pattern: the phone menu remembers the page it opened on and closes on navigation without an effect; quick search clears old results and shows "Đang tìm…" from the input handler; AI Support copies newly loaded conversations during render; the create-task dialog resets its form during render when it opens, and its effect only loads shops and members |
-
-Check: `npm run lint` shows no warnings; `npm run typecheck` and `npm run build` pass. Mock admin at 375 px: the menu opens, closes when a page is chosen and on the backdrop; quick search shows "Đang tìm…" then results, closes at 1 letter; AI Support lists its 3 conversations; the create-task dialog opens empty with 58 shops and again after cancelling. Not verified: the admin against real Core. Commit: the one that adds this entry.
-
-### 2026-10-28 — Zalo sign-in button works again
-
-| Area | Change |
-|---|---|
-| Mobile | • The Zalo button on the sign-in screen signs in again when the build carries Zalo settings (`EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID` on Android, `EXPO_PUBLIC_ZALO_LOGIN=true` on the web); iOS and builds without them still show "Sắp có"<br>• The `android-dev` and `android-staging` builds and the `vercel-staging` web build already set these, so their button turns on; production does not<br>• The mobile README says when the button is on |
-
-Check: `npx tsc --noEmit` shows only the two existing errors for the missing `expo-application` and `expo-intent-launcher`; `npm test` fails only the two existing cases in `parseOrder` and `quickNav`; staging Core answers `400 invalid_zalo_request` (feature on) to a malformed request on both Zalo authorize endpoints and serves `assetlinks.json` with the certificate of CI test APKs, while production answers `503 zalo_unavailable`. Not verified: a full Zalo sign-in on a phone. Commit: the one that adds this entry.
-
-### 2026-10-28 — A deploy of one service no longer fails on the other's image
-
-| Area | Change |
-|---|---|
-| Deploy | • `deploy/vps/deploy.sh` reads `AI_IMAGE` and `CORE_IMAGE` into local variables and unsets them before any Compose command, so the empty image the workflow passes for a service this deploy leaves alone no longer overrides the image already named in `.env`<br>• The service loop becomes a `deploy_service` function called once per service, which removes the indirect variable lookup |
-
-Check: the CD staging run of 2026-10-28 02:55 failed with `required variable CORE_IMAGE is missing a value` on an AI-only deploy; reproduced against the real `deploy/vps/compose.yaml` with a stubbed `docker`, where the previous script fails and this one deploys AI only, Core only, both, and neither, leaving the other service's image in `.env` untouched. `shellcheck` and `bash -n` pass. Not verified: a real deploy against the VPS.
-
-### 2026-10-28 — Compose projects on the VPS are named smart-ledger
-
-| Area | Change |
-|---|---|
-| Deploy | • `deploy/vps/compose.yaml` and `deploy/edge/compose.yaml` set `name:`, so the projects are `smart-ledger-staging`, `smart-ledger-production` and `smart-ledger-edge` instead of being named after their directories<br>• `deploy/vps/deploy.sh` and `deploy/ansible/playbook.yml` write `ENVIRONMENT` to the project `.env`, which `compose.yaml` interpolates into the name; the app directories and `VPS_APP_DIR` are unchanged<br>• `deploy-backend.yml` forwards its `DEPLOY_ENV` to `deploy.sh` as `ENVIRONMENT` |
-| Docs | • The VPS section of `docs/development/ci-cd.md` lists each environment's Compose project and records that renaming a project needs the old project taken down and the Caddy certificate volume copied first |
-
-Check: `docker compose config` resolves `smart-ledger-staging`, `smart-ledger-production` and `smart-ledger-edge`, and fails when `ENVIRONMENT` is unset; `shellcheck` and `bash -n` pass on `deploy.sh`; `ansible-playbook --syntax-check` passes. The VPS itself is not migrated yet. Commit: the squash merge of this branch.
-
-### 2026-10-28 — Dopbase on the VPS with a nightly off-site backup
-
-| Area | Change |
-|---|---|
-| Deploy | • Dopbase, the team's secrets manager, runs as its own Compose project in `/opt/dopbase` behind the shared Caddy, built from the pinned 0.1.10 release and set up only when `DOPBASE_DOMAIN` is set<br>• `deploy/dopbase/backup.sh` stops Dopbase for the copy, tars the `dopbase_data` volume, encrypts it with age for a key the VPS never holds and uploads it to R2; the playbook installs `age` and `rclone`, writes `/opt/dopbase/.env.backup` and adds a 03:00 cron job for user `deploy`<br>• The volume is named `dopbase_data` outright so the backup can mount it by one fixed name<br>• lazydocker 0.25.2 installed from its release for container, log and stats views over SSH |
-| Secrets | • `scripts/secrets/dopbase-sync.sh push\|pull <environment>` moves the env files of one environment between `secrets/<environment>/env/` and Dopbase, one project per file |
-| Docs | • The CI/CD guide records the Dopbase setup, its backup inputs, the lifecycle retention and the restore steps |
-
-Check: `shellcheck` on both scripts, playbook syntax check, `docker compose config -q`, image build and setup page, sync roundtrip against a throwaway local Dopbase, relative links of the guide resolve. Not verified: the playbook against the VPS, which needs DNS for the Dopbase domain and an operator run, and a real backup and restore. Commit: the merge of this branch.
-
-### 2026-10-28 — CI/CD guide reads as a reference
-
-| Area | Change |
-|---|---|
-| Docs | • `docs/development/ci-cd.md` is rewritten as short tables, numbered steps and command blocks, from 7,525 to 3,259 words, keeping every fact a reader needs and every anchor other files link to<br>• The stale "No path filtering" limit is removed, since CI filters by path |
-
-Check: every relative link and linked anchor resolves; facts not re-checked against the workflow files. Commit: the squash merge of this branch.
-
-### 2026-10-28 — README reads as tables
-
-| Area | Change |
-|---|---|
-| Docs | • The README drops the Highlights list and gains Overview, Tech stack, color legend and Getting started tables, so each section scans without reading a paragraph<br>• The Overview lists only what Core and AI do today |
-
-Check: badge URLs resolve (18 checked earlier, Redis removed since no feature reads it); README not rendered on GitHub. Commit: the squash merge of this branch.
-
-### 2026-10-28 — README shows the system architecture and tech stack
-
-| Area | Change |
-|---|---|
-| Docs | • The README opens with a tech stack badge row, a short summary and highlights, and shows `ci-cd.svg` as the system architecture instead of the older `architecture.svg`<br>• The parts table gains a "Runs on" column and no longer names Railway |
-
-Check: all 18 badge URLs return 200 with a logo; the page was not rendered on GitHub. Commit: the squash merge of this branch.
-
-### 2026-10-28 — Production Core answers on production.103-162-31-93.sslip.io
-
-| Area | Change |
-|---|---|
-| Deploy | • The production Caddy site serves `production.103-162-31-93.sslip.io` instead of the shorthand `prod.103-162-31-93.sslip.io`, which no client used yet |
-| Docs | • The CI/CD guide uses the new name and records that environment names are spelled out, never shortened |
-
-Check: playbook applied for production; `https://production.103-162-31-93.sslip.io/actuator/health` returns 200 `UP` with its own certificate, Core and AI still run `4a4f714`, staging still answers. Commit: the merge of this branch.

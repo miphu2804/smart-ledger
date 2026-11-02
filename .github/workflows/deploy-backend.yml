@@ -80,9 +80,11 @@ jobs:
       # Without provenance each push is one tagged version, so the cleanup counts only deployable images.
       - name: Build and push ai
         if: inputs.ai
+        env:
+          SHA: ${{ inputs.sha }}
         run: |
           docker buildx build --platform linux/amd64 --provenance=false --label "org.opencontainers.image.source=$IMAGE_SOURCE" \
-            --tag "$AI_IMAGE" --push backend/ai
+            --build-arg "GIT_SHA=$SHA" --tag "$AI_IMAGE" --push backend/ai
       # The runner builds the jar and the image only wraps it in a JRE, so the image build needs no Maven.
       - uses: actions/setup-java@v6
         if: inputs.core
@@ -165,19 +167,16 @@ jobs:
           fi
           ssh -F "$SSH_CONFIG" vps "umask 077 && cat > '$APP_DIR/core.env' && rm -f '$APP_DIR/github.core.env'" < "$RUNNER_TEMP/core.env"
           rm -f "$RUNNER_TEMP/core.env"
-      # github.ai.env holds only what the deploy itself knows: the commit, for Logfire's service version.
       - name: Upload ai settings
         if: inputs.ai
         env:
           DOPBASE_URL: ${{ vars.DOPBASE_URL }}
           DOPBASE_TOKEN: ${{ secrets.DOPBASE_AI_TOKEN }}
-          LOGFIRE_SERVICE_VERSION: ${{ inputs.sha }}
         run: |
           set -euo pipefail
           dopbase export "ai/$DEPLOY_ENV" --stdout --format dotenv > "$RUNNER_TEMP/ai.env"
           ssh -F "$SSH_CONFIG" vps "umask 077 && cat > '$APP_DIR/ai.env'" < "$RUNNER_TEMP/ai.env"
           rm -f "$RUNNER_TEMP/ai.env"
-          echo "LOGFIRE_SERVICE_VERSION=$LOGFIRE_SERVICE_VERSION" | ssh -F "$SSH_CONFIG" vps "umask 077 && cat > '$APP_DIR/github.ai.env'"
       - name: Deploy
         id: deploy
         env:

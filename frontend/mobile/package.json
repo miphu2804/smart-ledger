@@ -34,6 +34,7 @@
     "react-native-web": "~0.21.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@types/react": "~19.2.2",
     "patch-package": "^8.0.1",
     "typescript": "~6.0.3"
@@ -45,6 +46,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test": "node --test 'tests/**/*.test.ts'",
+    "test:e2e": "playwright test",
     "export:web": "expo export --platform web",
     "postinstall": "patch-package"
   },

@@ -1,5 +1,15 @@
-from pydantic import Field
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class ModelAlias(BaseModel):
+    """The API a model speaks, the model id sent to the gateway and its effort."""
+
+    protocol: str
+    model: str
+    # reasoning effort of this model; unset uses MODEL_REASONING_EFFORT. The accepted
+    # values differ by model: OpenAI takes none to max, Mercury takes instant to high.
+    effort: str | None = None
 
 
 class AppConfig(BaseSettings):
@@ -33,32 +43,36 @@ class AppConfig(BaseSettings):
     SQL_TIMEOUT_MS: int = Field(default=3000, gt=0)
     SQL_ROW_LIMIT: int = Field(default=100, gt=0)
 
-    # redis
-    REDIS_URL: str | None = None
-
-    # qdrant, litellm and langfuse: kept for planned integrations, no feature reads
-    # them yet
+    # qdrant and litellm: kept for planned integrations, no feature reads them yet
     QDRANT_URL: str | None = None
     LITELLM_URL: str | None = None
-    LANGFUSE_PUBLIC_KEY: str | None = None
-    LANGFUSE_SECRET_KEY: str | None = None
-    LANGFUSE_HOST: str | None = None
 
-    # logfire: Pydantic AI traces without message content (src/observability.py);
-    # an unset token sends nothing
-    LOGFIRE_TOKEN: str | None = None
-    # staging or production, so one Logfire project can hold both
-    LOGFIRE_ENVIRONMENT: str | None = None
+    # honeyhive: Pydantic AI traces with the redacted message content
+    # (src/observability.py); an unset key sends nothing
+    HH_API_KEY: str | None = None
+    # Data plane URL; unset uses HoneyHive's multi-tenant default
+    HH_API_URL: str | None = None
+    # staging or production, so one HoneyHive project can hold both
+    HH_SOURCE: str = "local"
+    # Share of chat turns traced, from 0 to 1; the free plan caps events per month and
+    # a turn sends about a dozen
+    HH_SAMPLE_RATE: float = Field(default=1.0, ge=0, le=1)
+    # Commit the image was built from, set by the deploy workflow; tags each session
+    GIT_SHA: str | None = None
 
-    # model provider: the API the model speaks, one of openai (Responses API),
-    # openai-chat (/chat/completions) or anthropic (/v1/messages)
-    MODEL_PROVIDER: str = "anthropic"
-    MODEL_NAME: str = "claude-haiku-5-5"
+    # models the application asks for by alias, as a JSON object; protocol is the API
+    # the model speaks: openai_responses or openai_chat
+    MODEL_ALIASES: dict[str, ModelAlias] = {
+        "chat": ModelAlias(
+            protocol="openai_responses", model="gpt-6-luna", effort="high"
+        )
+    }
     # models tried in order when the previous one fails, as a JSON list of
-    # "provider:model", e.g. ["openai-chat:deepseek-v4.1-flash"]
+    # "protocol:model", e.g. ["openai_chat:deepseek-v4.1-flash"]; through Bifrost,
+    # fallbacks belong in its routing rules instead
     MODEL_FALLBACKS: list[str] = []
     MODEL_TIMEOUT_SECONDS: float = 20.0
-    # reasoning effort for the chat model: none, low, medium or high
+    # reasoning effort of an alias that sets no `effort` of its own
     MODEL_REASONING_EFFORT: str = "medium"
 
     # agent guardrails (src/agent/guardrails/), per chat turn
@@ -121,9 +135,10 @@ class AppConfig(BaseSettings):
     CLOUDFLARE_ACCOUNT_ID: str | None = None
     CLOUDFLARE_API_TOKEN: str | None = None
 
-    # model gateway shared by every model: OpenAI, or an OpenAI-compatible gateway
-    # such as OpenCode Go (https://opencode.ai/inference/go/v1)
+    # model gateway: OpenAI, or Bifrost on the VPS. The key is the gateway credential;
+    # through Bifrost it is the virtual key, because Bifrost holds the provider keys.
     OPENAI_API_KEY: str | None = None
+    # base of the OpenAI dialect, which appends /chat/completions or /responses
     OPENAI_BASE_URL: str | None = None
 
 

@@ -13,6 +13,7 @@ import { triggerFeedback } from '../../src/lib/feedback';
 import { useApp } from '../../src/store/AppStore';
 import { colors, shadow } from '../../src/theme';
 import { SCREEN_ANIMATION } from '../../src/motion';
+import { TAB_BAR_HEIGHT } from '../../src/tabBar';
 
 type TabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>['tabBar']>>[0];
 
@@ -22,11 +23,10 @@ type TabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>['tab
  * nền của vùng màn hình cùng màu nền app để nếu có chớp cũng không trắng tinh.
  */
 const TAB_ANIMATION = SCREEN_ANIMATION;
-const BAR_HEIGHT = 100;
 const SHAPE_OFFSET = 28;
 const CURVE_HEIGHT = 28;
 const CURVE_PEAK = 14;
-const SHAPE_HEIGHT = BAR_HEIGHT + SHAPE_OFFSET;
+const SHAPE_HEIGHT = TAB_BAR_HEIGHT + SHAPE_OFFSET;
 
 const TABS = [
   { name: 'index', label: 'Tổng quan', icon: 'home' as TabIconName },
@@ -52,7 +52,7 @@ function TabBar({ state, navigation }: TabBarProps) {
   return (
     <View
       pointerEvents="box-none"
-      style={[styles.shell, { bottom: -insets.bottom, height: BAR_HEIGHT + insets.bottom }]}
+      style={[styles.shell, { bottom: -insets.bottom, height: TAB_BAR_HEIGHT + insets.bottom }]}
     >
       <View pointerEvents="none" style={styles.safeAreaFill} />
       <View
@@ -152,7 +152,7 @@ function TabBar({ state, navigation }: TabBarProps) {
 }
 
 export default function TabsLayout() {
-  const { authReady, loggedIn, onboarded, guideDismissed, dismissGuide, user } = useApp();
+  const { authReady, loggedIn, onboarded, guideDismissed, dismissGuide, user, shopId } = useApp();
   const pathname = usePathname();
   // Các tab chỉ mở khi đã có tài khoản và tiệm. Trước khi có phiên, state còn là tiệm mẫu ("Tiệm tạp hoá cô Thỏ"): bấm back ở
   // bước tạo tiệm hay đăng xuất từ một màn mở chồng lên tab từng để lộ tiệm mẫu này như một tài khoản thật.
@@ -166,7 +166,9 @@ export default function TabsLayout() {
       <GuideTourProvider active={!guideDismissed && pathname === '/'} onFinish={dismissGuide} userName={user.name}>
       {/* Menu chuyển nhanh bên trái phủ lên cả thanh tab và mascot */}
       <QuickNavProvider>
+        {/* Đổi tiệm thì dựng lại các tab: không còn số liệu, giỏ hay ô tìm kiếm của tiệm cũ */}
         <Tabs
+          key={shopId ?? 'no-shop'}
           screenOptions={{ headerShown: false, animation: TAB_ANIMATION, sceneStyle: { backgroundColor: colors.bg } }}
           tabBar={(p) => <TabBar {...p} />}
         >
@@ -194,11 +196,11 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    top: BAR_HEIGHT,
+    top: TAB_BAR_HEIGHT,
     backgroundColor: colors.card,
   },
   bar: {
-    height: BAR_HEIGHT,
+    height: TAB_BAR_HEIGHT,
     flexDirection: 'row',
     paddingHorizontal: 0,
     position: 'absolute',
@@ -220,7 +222,7 @@ const styles = StyleSheet.create({
     })),
   },
   barShape: { position: 'absolute', top: -SHAPE_OFFSET, left: 0, zIndex: 0 },
-  tab: { minHeight: BAR_HEIGHT, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  tab: { minHeight: TAB_BAR_HEIGHT, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
   regularTab: { position: 'absolute' },
   centerTab: { position: 'absolute', overflow: 'visible' },
   iconSlot: { height: 34, justifyContent: 'center', alignItems: 'center' },

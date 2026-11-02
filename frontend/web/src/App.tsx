@@ -1,9 +1,9 @@
 import { lazy, Suspense } from 'react'
-import { Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import NotFound from './pages/NotFound'
 import LandingPage from './pages/landing/LandingPage'
 import DataDeletionPage from './pages/legal/DataDeletionPage'
-import PrivacyPage from './pages/legal/PrivacyPage'
+import PolicyPage from './pages/legal/PolicyPage'
 
 // Off by default. The admin chunk (mock accounts included) is emitted only when VITE_ADMIN_ENABLED=true at build time.
 // Compare the env value here, not through config.ts: vite.config.ts inlines it as a literal, and only a comparison
@@ -14,8 +14,10 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
-      <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/privacy" element={<Navigate to="/chinh-sach" replace />} />
       <Route path="/data-deletion" element={<DataDeletionPage />} />
+      <Route path="/delete-account" element={<DataDeletionPage />} />
+      <Route path="/chinh-sach" element={<PolicyPage />} />
       {AdminRoutes && <Route path="/admin/*" element={<Suspense fallback={null}><AdminRoutes /></Suspense>} />}
       <Route path="*" element={<NotFound />} />
     </Routes>

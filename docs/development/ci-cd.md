@@ -5,7 +5,7 @@
 | Workflow | Does |
 |---|---|
 | [`ci.yml`](../../.github/workflows/ci.yml) | Finds the changed areas, tests them, builds images; on a push to `staging` or `main`, job `cd` starts CD |
-| [`cd.yml`](../../.github/workflows/cd.yml) | Job `gate` re-checks the commit and its CI result, then calls the deploy workflows below |
+| [`cd.yml`](../../.github/workflows/cd.yml) | Job `gate` re-checks the commit and its CI result, then calls the deploy workflows below; job `smoke-staging` runs the Bruno `Smoke` folder after a staging backend deploy |
 | [`deploy-backend.yml`](../../.github/workflows/deploy-backend.yml) | Builds, pushes to GHCR and deploys `ai` and `core` to the VPS |
 | [`deploy-web.yml`](../../.github/workflows/deploy-web.yml) | Builds and deploys `frontend/mobile` to Vercel |
 | [`deploy-landing.yml`](../../.github/workflows/deploy-landing.yml) | Builds and deploys `frontend/web` to Vercel |
@@ -14,7 +14,7 @@
 
 ![CI/CD flow](../architecture/diagrams/images/ci-cd.svg)
 
-Green numbers are the deploy, purple the one-time VPS setup, orange the runtime requests. Gray dashed arrows are secrets: the deploy exports `core` and `ai` from Dopbase with runner tokens kept in the GitHub environment, and `scripts/secrets/vps-playbook.sh` exports every VPS file from Dopbase for Ansible. The diagram shows the target setup: pgvector, the Bifrost gateway, Langfuse and the Grafana stack are not built yet; today AI calls OpenCode Go directly and traces to Logfire. Edit [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio) and re-export:
+Green numbers are the deploy, purple the one-time VPS setup, orange the runtime requests. Gray dashed arrows are secrets: the deploy exports `core` and `ai` from Dopbase with runner tokens kept in the GitHub environment, and `scripts/secrets/vps-playbook.sh` exports every VPS file from Dopbase for Ansible. The diagram shows the target setup: pgvector, the Bifrost gateway in production and the Grafana stack are not built yet; today production AI calls its model provider directly, and AI traces to HoneyHive in every environment where `HH_API_KEY` is set. Edit [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio) and re-export:
 
 ```bash
 drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/ci-cd.svg docs/architecture/diagrams/src/ci-cd.drawio
@@ -23,8 +23,8 @@ drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/archi
 ## Steps
 
 1. **PR into `staging`:** CI tests, checks migrations on a throwaway PostgreSQL and builds images. Nothing deploys.
-2. **Merge into `staging`:** CI runs again and CD deploys the changed areas to staging, with no approval.
-3. **PR `staging` → `main`:** open it after checking staging ([Target branch](../../CONTRIBUTING.md#target-branch)).
+2. **Merge into `staging`:** CI runs again and CD deploys the changed areas to staging, with no approval. After a backend deploy, job `smoke-staging` runs the read-only [Bruno `Smoke` folder](../../scripts/bruno/README.md) against staging; a failure marks the CD run but does not roll back or block a merge.
+3. **PR `staging` → `main`:** open it after checking staging, including `smoke-staging` ([Target branch](../../CONTRIBUTING.md#target-branch)).
 4. **Merge into `main`:** use a merge commit, never a squash; on conflicts, release from a `release/staging-to-main-<date>` branch. The production deploy jobs wait until a reviewer opens the CD run → **Review deployments** → approves each one.
 5. **Check production, then tag:** the web smoke test against `https://app-production.songheloi.id.vn` must pass; open the app and sign in. Then tag by hand: `gh release create vX.Y.Z --target <merge commit> --generate-notes`.
 
@@ -72,7 +72,7 @@ CI reads input `runner`, else repository variable `CI_RUNNER`. CD reads input `r
 | `backend-production` | `main` | Yes | Same | Same, with `VPS_APP_DIR=/opt/smartledger-production` |
 | `vercel-staging` | `staging` | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `EXPO_PUBLIC_*`, `VERCEL_STAGING_ALIAS` |
 | `vercel-production` | `main` | Yes | Same | `EXPO_PUBLIC_*` |
-| `landing-staging` | `staging` | No | Same, for Vercel project `landing` | `VITE_LEGAL_DRAFT`, `LANDING_URL`, admin variables |
+| `landing-staging` | `staging` | No | Same, for Vercel project `landing` | `LANDING_URL`, admin variables |
 | `landing-production` | `main` | Yes | Same | Same, plus `VITE_ANDROID_APK_URL` |
 | `android-dev` | Other branches (checked by `gate`) | No | `ANDROID_GOOGLE_SERVICES_JSON` | `EXPO_PUBLIC_*` |
 | `android-staging` | `staging` | No | `ANDROID_GOOGLE_SERVICES_JSON` | `EXPO_PUBLIC_*` |
@@ -103,7 +103,7 @@ Compose names a project after its directory unless the file sets `name:`, which 
 - The bare `103-162-31-93.sslip.io` still reaches staging until every client has moved.
 - Renaming a project changes the container and volume prefix, so Compose treats the old project as unrelated rather than as orphans: a VPS that still runs the `smartledger*` projects needs `docker compose down` in the old project before the first `up` under the new name, and the shared Caddy needs its certificate volume copied from `smartledger-edge_caddy_data` first, or it asks Let's Encrypt for every hostname again. The Dopbase project in `/opt/dopbase` is already named `dopbase` and is not part of this rename, so leave it running.
 - With a real domain, point `api.<domain>` and `api-staging.<domain>` at the VPS and change `CADDY_DOMAIN`; nothing else changes.
-- The firewall opens only 22, 80 and 443. Supabase, Redis Cloud, Cloudinary and Firebase stay external.
+- The firewall opens only 22, 80 and 443. Supabase, Cloudinary and Firebase stay external.
 - One VPS is one point of failure: a staging service that runs out of memory takes production down too.
 
 ### How a backend deploy works
@@ -134,13 +134,13 @@ Add `GHCR_USERNAME` and `GHCR_READ_TOKEN` to the shell if the packages are priva
 4. Set `CADDY_DOMAIN`; production copies the `VPS_*` values from staging, because `deploy` has one key. Save the `VPS_*` and `CADDY_DOMAIN` values in Dopbase `vps/<environment>`.
 5. Create network `edge`. In the app directory, put `compose.yaml` and `bifrost.json` from `deploy/vps/`, and with mode `600` `core.env`, `ai.env`, `bifrost.env` (from [secrets](secrets-and-env.md)) and `.env` with `ENVIRONMENT=<environment>` and `CORE_ALIAS=core-<environment>`. In `/opt/smartledger-edge`, put `deploy/edge/compose.yaml`, the Caddyfile as `conf/Caddyfile` and `sites/<environment>.caddy`, then validate and reload Caddy. Caddy mounts `conf/` and `sites/` as directories because a single-file mount keeps the inode it started with: a file replaced by rename, as Ansible and most editors do, stays invisible to `caddy reload` until the container is recreated.
 6. After the first deploy, make the two GHCR packages public, or `docker login ghcr.io` once as `deploy` with a `read:packages` token.
-7. Check database access: Supabase's direct host is IPv6-only, so a VPS without IPv6 uses the session pooler URL. Allowlist the VPS in Supabase and Redis Cloud if restrictions are on.
+7. Check database access: Supabase's direct host is IPv6-only, so a VPS without IPv6 uses the session pooler URL. Allowlist the VPS in Supabase if restrictions are on.
 
 The first deploy must include both services (start CD by hand with `backend-ai` and `backend-core`).
 
 ### Service variables
 
-`core.env` and `ai.env` hold the variables below. Every deploy of a service rewrites its file from Dopbase `core/<environment>` or `ai/<environment>`, so change values in Dopbase, not on the VPS. `github.ai.env` holds only `LOGFIRE_SERVICE_VERSION`, the deployed commit. Write `$` as `$$`. After editing on the VPS, run `docker compose up -d <service>` and send one chat through Core: a missing variable can still leave a healthy container.
+`core.env` and `ai.env` hold the variables below. Every deploy of a service rewrites its file from Dopbase `core/<environment>` or `ai/<environment>`, so change values in Dopbase, not on the VPS. Write `$` as `$$`. After editing on the VPS, run `docker compose up -d <service>` and send one chat through Core: a missing variable can still leave a healthy container.
 
 **`core`**
 
@@ -165,20 +165,20 @@ Compose sets `AI_BASE_URL`, `SERVER_PORT` and `FLYWAY_ENABLED=false` itself. Bef
 | `INTERNAL_API_TOKEN` | Same as in `core.env` |
 | `POSTGRES_URL` | Supabase `postgresql://` URL of the environment |
 | `AI_SQL_READER_URL` | Read-only `ai_sql_reader` login as a `postgresql://` URL; empty means the agent cannot read shop data |
-| `REDIS_URL` | Redis Cloud of the environment |
 | `POSTGRES_POOL_MAX_SIZE`, `SQL_POOL_MAX_SIZE` | Optional, default `2`; they share the Supabase pooler limit with Core ([AI README](../../backend/ai/README.md#database-access)) |
-| Model and Logfire variables | From GitHub, see below |
+| Model and tracing variables | From GitHub, see below |
 | `AGENT_MEMORY_*`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | Optional, `ai.env` only; memory is off until the PO approves it ([ADR-0002](../architecture/adr/0002-agent-long-term-memory.md), [AI README](../../backend/ai/README.md#long-term-memory-off-by-default)) |
 
 **`bifrost`**
 
-The model gateway in front of the providers, reachable by AI inside the project network at `http://bifrost:8080`. [`deploy/vps/bifrost.json`](../../deploy/vps/bifrost.json) declares the providers, the virtual key and the admin login, and wins over the store in the `bifrost-data` volume; `bifrost.env` holds the values it references. The playbook starts it; `deploy.sh` does not, so a new Bifrost version is a digest change in `compose.yaml` followed by the playbook.
+The model gateway in front of the providers, reachable by AI inside the project network at `http://bifrost:8080`. [`deploy/vps/bifrost.json`](../../deploy/vps/bifrost.json) declares the providers, any routing rules and their fallback, the virtual key and the admin login, keeps logs for 14 days without message content (NFR-008), and wins over the store in the `bifrost-data` volume; `bifrost.env` holds the values it references. The playbook starts it; `deploy.sh` does not, so a new Bifrost version is a digest change in `compose.yaml` followed by the playbook. AI routes through it when `ai.env` sets `OPENAI_BASE_URL=http://bifrost:8080/openai` and `OPENAI_API_KEY` to the virtual key, with model ids that have no provider prefix, because the virtual key's allowed models pick the upstream; AI sends the key in the `x-bf-vk` header too, which Bifrost needs for a virtual key without the `sk-bf-` prefix. Without those settings AI calls its provider directly, as production does because it runs no Bifrost.
 
 Bifrost also joins `edge` as `gateway-<environment>`. When `.env.vps` sets `GATEWAY_DOMAIN` (`gateway-staging.songheloi.id.vn`, `gateway-production.songheloi.id.vn`), the playbook writes `sites/gateway-<environment>.caddy`, which serves the admin UI and its API behind the admin login and answers 404 to the inference prefixes, so model calls stay internal to AI; without it there is no public UI and an SSH tunnel to the container reaches it instead.
 
 | Variable | Value |
 |---|---|
-| `OPENCODE_GO_API_KEY` | OpenCode Go key; only Bifrost holds it |
+| `OPENAI_API_KEY` | OpenAI key for `gpt-6-luna`; `bifrost.json` references it, so add it before deploying that file |
+| `INCEPTIONLABS_API_KEY` | Inception key for `mercury-3`; only Bifrost holds it, and `bifrost.json` references it, so add it before deploying that file |
 | `BIFROST_VIRTUAL_KEY` | Random `sk-bf-` value, different per environment; a request without it gets 401 |
 | `BIFROST_ADMIN_USERNAME`, `BIFROST_ADMIN_PASSWORD` | Admin login of the UI and the management API; a long random password, because the domain is public |
 
@@ -232,11 +232,11 @@ These live in Dopbase `ai/<environment>` with the other AI variables; step `Uplo
 
 | Name | Value |
 |---|---|
-| `OPENAI_API_KEY` | Gateway key shared by every model; `BIFROST_VIRTUAL_KEY` once AI calls Bifrost |
-| `OPENAI_BASE_URL` | Bifrost at `http://bifrost:8080` (being wired, see [`bifrost`](#service-variables)), or `https://opencode.ai/inference/go/v1` (OpenCode Go) or `https://api.openai.com/v1` directly; required for `anthropic` models |
-| `MODEL_PROVIDER`, `MODEL_NAME` | e.g. `anthropic` and `claude-haiku-5-5`; see [AI README](../../backend/ai/README.md) |
-| `MODEL_REASONING_EFFORT` | `none`, `low`, `medium` or `high` |
-| `MODEL_FALLBACKS` | Optional JSON list, e.g. `["openai-chat:deepseek-v4.1-flash"]` |
+| `OPENAI_API_KEY` | Gateway key shared by every model; the Bifrost virtual key when AI calls Bifrost |
+| `OPENAI_BASE_URL` | Base of the OpenAI dialect: `https://api.openai.com/v1` or `http://bifrost:8080/openai` |
+| `MODEL_ALIASES` | JSON object, e.g. `{"chat":{"protocol":"openai_responses","model":"gpt-6-luna","effort":"high"}}`; see [AI README](../../backend/ai/README.md) |
+| `MODEL_REASONING_EFFORT` | Effort of an alias that sets none; the values depend on the model |
+| `MODEL_FALLBACKS` | Optional JSON list, e.g. `["openai_chat:deepseek-v4.1-flash"]`, for an environment that calls a provider directly |
 
 To remove a setting, delete it in Dopbase; the next deploy drops it from `ai.env`.
 
@@ -244,11 +244,13 @@ To remove a setting, delete it in Dopbase; the next deploy drops it from `ai.env
 
 | Name | Source | Value |
 |---|---|---|
-| `LOGFIRE_TOKEN` | Dopbase `ai/<environment>` | Write token, one per environment; unset means no tracing |
-| `LOGFIRE_ENVIRONMENT` | Dopbase `ai/<environment>` | `staging` or `production` |
-| `LOGFIRE_SERVICE_VERSION` | Commit | `github.sha` |
+| `HH_API_KEY` | Dopbase `ai/<environment>` | Project ingestion key; unset means no tracing |
+| `HH_API_URL` | Dopbase `ai/<environment>` | Data plane URL; unset uses the multi-tenant default |
+| `HH_SOURCE` | Dopbase `ai/<environment>` | `staging` or `production`; the HoneyHive alerts watch `production` only |
+| `HH_SAMPLE_RATE` | Dopbase `ai/<environment>` | Share of chat turns traced, 0 to 1; unset traces every turn |
+| `GIT_SHA` | Image build argument | Set by `deploy-backend.yml` to the deployed commit; tags each HoneyHive session |
 
-Traces carry no message content ([AI README](../../backend/ai/README.md#observability)). To turn tracing off, delete `LOGFIRE_TOKEN` in Dopbase and redeploy `ai`.
+Traces carry the redacted question, tool calls and the answer, so they hold customer names and phone numbers ([AI README](../../backend/ai/README.md#observability), [ADR-0009](../architecture/adr/0009-end-to-end-tracing.md)); HoneyHive infers the project from the key. To turn tracing off, delete `HH_API_KEY` in Dopbase and redeploy `ai`.
 
 ### Core CORS origins
 
@@ -273,6 +275,10 @@ The `preview-0N` origins are kept for when PR previews return; Firebase Authoriz
 [`deploy/monitoring/`](../../deploy/monitoring/) runs once per VPS in `/opt/smart-ledger-monitoring` and watches every environment: Alloy collects host, container and probe metrics plus container logs, Prometheus keeps metrics for 30 days, Loki keeps logs for 14 days, and Grafana shows them at `https://<MONITOR_DOMAIN>` and sends alerts to Discord and Telegram. Each container has a memory limit, about 1 GB in total, so the stack cannot starve Core or AI.
 
 The playbook sets it up when `.env.vps` has `MONITOR_DOMAIN`, `GRAFANA_ADMIN_PASSWORD`, `MONITOR_DISCORD_WEBHOOK_URL`, `MONITOR_TELEGRAM_BOT_TOKEN` and `MONITOR_TELEGRAM_CHAT_ID`; each run also writes `targets/<environment>.json`, the HTTPS probes of that environment's Core liveness and readiness plus the probes of its AI (`smart-ledger-<environment>-ai-1:8001/health`) and Bifrost (`smart-ledger-<environment>-bifrost-1:8080/health`). AI and Bifrost have no public URL, so Alloy joins each app network that exists through a `compose.override.yaml` the playbook writes before starting the stack, and dials them by container name because the service names `ai` and `bifrost` exist in both environments. Re-run the playbook after adding an environment so Alloy joins its network. Point an A record for `MONITOR_DOMAIN` at the VPS first. Sign-up and anonymous access are off; the admin password applies on the first start only.
+
+Dozzle tails live container logs for the operator; Loki in Grafana remains the place for history, cross-service search and alerts. It has no sign-in and reads the Docker socket, so it binds to `127.0.0.1:8081` on the VPS and must not get a Caddy site. Open a tunnel with `ssh -N -L 8081:127.0.0.1:8081 <user>@<vps>`, then browse to `http://localhost:8081`.
+
+Snoopy logs every command on the VPS with its SSH source to `/var/log/auth.log`; the playbook installs it and the `snooplog` command, which shows the last 50 commands from SSH sessions. A command run through `sudo` loses its SSH source and is hidden by `snooplog`, so read the log directly for those. Snoopy runs in user space and a determined user can bypass it, so treat it as a record of routine work, not as a security control.
 
 Datasources, alerts and dashboards are provisioned from the repository and cannot be edited in the UI; change the files and re-run the playbook, which recreates the monitoring containers because Alloy, Loki and Grafana read their mounted config only at start. The alerts are:
 
@@ -354,7 +360,7 @@ Job `landing` lints and builds `frontend/web`. `deploy-landing` deploys it to Ve
 | Push `main` | `landing-production` | Deploy after approval, then smoke test |
 
 - `LANDING_URL` is the fixed `https://` domain of the environment.
-- `VITE_LEGAL_DRAFT` stays unset or `true` until the PO approves the legal pages. The contact email and social links live in [`site.yaml`](../../frontend/web/site.yaml).
+- The contact email and social links live in [`site.yaml`](../../frontend/web/site.yaml).
 - After changing a `landing-*` variable, start CD by hand with only `landing`.
 - Keep Vercel Authentication off on the `landing` project, or the smoke test gets a `302`.
 

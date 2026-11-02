@@ -15,7 +15,7 @@ export default function DataDeletionPage() {
     <LegalLayout
       title="Xoá dữ liệu người dùng"
       toc={TOC}
-      lead="Bạn có thể yêu cầu xoá tài khoản Sổ Nghe Lời và dữ liệu cửa hàng đã nhập, kể cả khi bạn đăng nhập bằng Facebook. Hiện ứng dụng chưa có nút “Xoá tài khoản”, nên việc xoá do nhóm thực hiện sau khi bạn gửi yêu cầu theo các bước dưới đây."
+      lead="Bạn có thể yêu cầu xoá tài khoản Sổ Nghe Lời và dữ liệu cửa hàng đã nhập, kể cả khi bạn đăng nhập bằng Facebook. Trong ứng dụng, vào Quản lý → Xoá tài khoản để mở trang này. Việc xoá do nhóm thực hiện sau khi bạn gửi yêu cầu theo các bước dưới đây."
     >
       <section className="lp-legal-sec" id="cac-buoc">
         <h2>Cách xoá tài khoản và dữ liệu</h2>
@@ -88,7 +88,7 @@ export default function DataDeletionPage() {
           </span>
         </div>
         <p>
-          Xem thêm cách chúng tôi xử lý dữ liệu tại <Link to="/privacy">Chính sách quyền riêng tư</Link>. Câu hỏi khác: <ContactEmail />.
+          Xem thêm cách chúng tôi xử lý dữ liệu tại <Link to="/chinh-sach">Chính sách của Sổ Nghe Lời</Link>. Câu hỏi khác: <ContactEmail />.
         </p>
       </section>
     </LegalLayout>
