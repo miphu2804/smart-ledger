@@ -20,7 +20,7 @@ Set these environment variables in the process that launches Core. [`.env.exampl
 | `DATABASE_USERNAME`, `DATABASE_PASSWORD` | PostgreSQL credentials |
 | `FIREBASE_PROJECT_ID` | Firebase project used by this backend |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Absolute path to the service-account JSON **on the machine running Core** |
-| `FIREBASE_SERVICE_ACCOUNT_JSON` | Optional server-only JSON text for hosts such as Railway; when nonempty it takes precedence over Application Default Credentials/file credentials |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | Optional server-only JSON text for hosts that cannot mount a key file; when nonempty it takes precedence over Application Default Credentials/file credentials |
 | `SERVER_PORT`, `PORT` | Optional; `SERVER_PORT` takes precedence, then the hosted runtime's `PORT`, then `8080` |
 | `CORS_ALLOWED_ORIGINS` | Exact browser origins, comma-separated; empty by default (no cross-origin browser access) |
 | `OPENAPI_ENABLED`, `SWAGGER_UI_ENABLED` | Both default to `true` for local/staging; set both to `false` on production |
@@ -438,18 +438,18 @@ node --test scripts/test_zalo_popup.mjs
 
 The optional browser regression needs Node 22+ and Chrome (`CHROME_PATH` may override the executable), and consumes synthetic HTML emitted by `ZaloCallbackPageTest`. Provider/Firebase APIs are mocked; PostgreSQL, transaction/unique-key concurrency and popup HTML/CSP are real. These checks do not replace FE integration, real Firebase signing/revocation, real Zalo callback/cookie behavior on HTTPS, external-user UAT or deployment verification. See [local verification evidence](docs/zalo-auth.tdd.md).
 
-Staging preparation (do not copy `ZALO_MANUAL_*` variables into Railway):
+Staging preparation (do not copy `ZALO_MANUAL_*` variables into the VPS):
 
 1. Before merging, confirm `FLYWAY_ENABLED`: turning Zalo off does not stop automatic startup migrations. Review the intended DB, backup/recovery owner and migration window first. Merge/deploy with `ZALO_ENABLED=false`; apply V17 only from merged code under that procedure. V17 enables RLS with no public policies and removes public/anon/authenticated grants on its two stores; verify Core's trusted SQL role has the intended owner/reviewed access before enabling, never add public allow-all policies.
-2. Set `ZALO_APP_ID`, server-only `ZALO_APP_SECRET`, `ZALO_CALLBACK_URL=https://core-staging-01d2.up.railway.app/api/v1/auth/zalo/callback`, `ZALO_CLIENT_ORIGINS=https://smart-ledger-staging.vercel.app`, a persistent 32-byte Base64 `ZALO_SESSION_ENCRYPTION_KEY`, and matching existing `CORS_ALLOWED_ORIGINS`. Preserve any other approved existing origins. No temporary tunnel origins.
-3. Reuse the existing staging Firebase project/credential configuration; a local `ZALO_MANUAL_FIREBASE_CREDENTIALS` filesystem path is not a Railway credential. Verify actual custom-token signing and ID-token verification in that runtime.
+2. Set `ZALO_APP_ID`, server-only `ZALO_APP_SECRET`, `ZALO_CALLBACK_URL=https://staging.103-162-31-93.sslip.io/api/v1/auth/zalo/callback`, `ZALO_CLIENT_ORIGINS=https://smart-ledger-staging.vercel.app`, a persistent 32-byte Base64 `ZALO_SESSION_ENCRYPTION_KEY`, and matching existing `CORS_ALLOWED_ORIGINS`. Preserve any other approved existing origins. No temporary tunnel origins.
+3. Reuse the existing staging Firebase project/credential configuration; a local `ZALO_MANUAL_FIREBASE_CREDENTIALS` filesystem path is not a VPS credential. Verify actual custom-token signing and ID-token verification in that runtime.
 4. Verify callback registration, HTTPS cookie/popup opener, log redaction (callback query/body/Authorization/cookies), trusted proxy behavior and edge/shared throttling. FE must validate origin/source/requestId/purpose and reauthenticate before LINK. Keep the feature off until owners approve integration testing; enabling does not deploy FE.
 5. Recovery: turn Zalo off/roll back application code but retain V17 tables and identity mappings. Do not drop mappings or delete Firebase accounts as rollback; key rotation invalidates active OAuth sessions. Any destructive removal needs a separately reviewed forward migration.
 
 
 ## Zalo Android Core preparation — CORE-016
 
-Android LOGIN/LINK on `feat/zalo-android` (#276) adds separate `/api/v1/auth/zalo/native/authorize`, `/api/v1/auth/zalo/native/exchange`, `/api/v1/auth/zalo/native/link` endpoints, shared provider callback dispatch, exact HTTPS App Link fallback and environment-specific `/.well-known/assetlinks.json`. The approved migration `V18__add_zalo_android_handoff.sql` is now included; native remains **OFF by runtime default**. [The reviewed staging example](config/zalo-native-staging.env.example) sets `ZALO_NATIVE_ENABLED=true` only when explicitly copied to Railway staging **after merge/migration**; it does not auto-enable a deployment. V17 WEB stays supported, missing V18 fails closed, and production is not activated. See [the integration/rollout guide](docs/zalo-android-preparation.md) and [canonical contract](../../docs/contracts/api-contracts.md#zalo-android-core-016). FE/APK and real-provider/device acceptance remain separate work.
+Android LOGIN/LINK on `feat/zalo-android` (#276) adds separate `/api/v1/auth/zalo/native/authorize`, `/api/v1/auth/zalo/native/exchange`, `/api/v1/auth/zalo/native/link` endpoints, shared provider callback dispatch, exact HTTPS App Link fallback and environment-specific `/.well-known/assetlinks.json`. The approved migration `V18__add_zalo_android_handoff.sql` is now included; native remains **OFF by runtime default**. [The reviewed staging example](config/zalo-native-staging.env.example) sets `ZALO_NATIVE_ENABLED=true` only when explicitly copied to VPS staging **after merge/migration**; it does not auto-enable a deployment. V17 WEB stays supported, missing V18 fails closed, and production is not activated. See [the integration/rollout guide](docs/zalo-android-preparation.md) and [canonical contract](../../docs/contracts/api-contracts.md#zalo-android-core-016). FE/APK and real-provider/device acceptance remain separate work.
 
 ## OWNER in-app notifications
 
