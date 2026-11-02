@@ -16,6 +16,7 @@ npm run build      # kiểm tra kiểu (tsc) rồi build ra dist/
 npm run preview    # chạy thử bản build
 npm run typecheck  # chỉ kiểm tra TypeScript
 npm run lint       # oxlint
+npm run userflow   # build sơ đồ luồng người dùng vào docs/product/userflow, xem mục Userflow
 ```
 
 Biến môi trường (xem `.env.example`):
@@ -105,6 +106,10 @@ Thiết lập một lần trên Vercel: New Project → import repo này → Roo
 
 `rewrites` trong `vercel.json` chuyển mọi đường dẫn về `index.html` để `/privacy`, `/data-deletion` mở trực tiếp được.
 
+## Userflow
+
+Mã nguồn của [sơ đồ luồng người dùng](../../docs/product/userflow/README.md) nằm ở `src/userflow`. `npm run userflow` build nó (cấu hình `vite.userflow.config.ts`) thành một tệp tự chứa `docs/product/userflow/index.html`, mở thẳng bằng trình duyệt; ảnh chụp nằm ở `docs/product/userflow/screens/`. `vite build` của web không đụng tới trang này nên nó không vào bản deploy.
+
 ## Trạng thái dùng chung
 
 `src/components/States.tsx` — `LoadingState`, `EmptyState`, `ErrorState` (nút Thử lại), `ForbiddenState`, `ReadOnlyState`.
@@ -136,6 +141,7 @@ src/
   pages/admin/               Login, AdminLayout (AppShell), Dashboard, Customers, AiSupport, Tasks, Settings
   pages/admin/tasks/         TaskFormModal
   pages/ForbiddenPage        trang 403
+  userflow/                  sơ đồ userflow build vào docs: flows.ts (nút, cạnh, toạ độ), FlowCanvas, NodeSheet
   styles/                    base, landing, admin (token theo plan)
 ```
 

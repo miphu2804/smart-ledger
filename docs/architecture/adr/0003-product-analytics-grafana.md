@@ -52,7 +52,7 @@ Dựng lớp **Product** trong Grafana từ dữ liệu đã có, không sửa C
 | Phương án | Vì sao không chọn |
 |---|---|
 | Đếm sự kiện bằng Prometheus counter trong Core | Cần sửa Core, không có nhãn theo shop vì cardinality, và reset khi restart; để P2 sau khi owner duyệt |
-| Tempo/OpenTelemetry cho trace phân tán | Cần OTel agent trong Core (đóng băng) và thêm container 200–400 MB trên VPS 4 GB; AI chỉ có Logfire tuỳ chọn; không trả lời được câu hỏi product như dữ liệu nghiệp vụ |
+| Tempo/OpenTelemetry cho trace phân tán | Cần OTel agent trong Core (đóng băng) và thêm container 200–400 MB trên VPS 4 GB; trace của AI đi lên HoneyHive theo [ADR-0009](0009-end-to-end-tracing.md); không trả lời được câu hỏi product như dữ liệu nghiệp vụ |
 | PostHog/Umami/analytics SaaS | Cần SDK trong app, quyết định quyền riêng tư mới, chi phí và dữ liệu ra ngoài; team đã hoãn hạ tầng phụ trợ |
 | Bảng `product_events` mới do client ghi | Cần endpoint Core mới và migration; mạnh hơn P1 nhưng chặn bởi phạm vi Core; để P3 nếu PO cần phễu theo intent |
 | Đọc thẳng DB production bằng role owner | Vượt quyền tối thiểu, rủi ro ghi nhầm và lộ PII |

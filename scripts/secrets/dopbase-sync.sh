@@ -8,7 +8,7 @@
 #   secrets/staging/env/github/.env.vercel-staging   <->  github-vercel/staging
 #   secrets/staging/env/github/.env.android-dev      <->  github-android/dev
 # The Dopbase instance serves only SmartLedger, so every project on it maps to a file.
-# A file whose name holds `.` or `_` (.env.railway.tokens) is skipped: Dopbase project names allow neither.
+# A file whose name holds `.` or `_` (.env.vps.tokens) is skipped: Dopbase project names allow neither.
 # A pull asks for your Dopbase password once.
 # Needs the dopbase CLI, logged in once with `dopbase client connect <url>` and `dopbase login`.
 # Usage: scripts/secrets/dopbase-sync.sh seed|pull <environment>

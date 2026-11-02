@@ -35,7 +35,7 @@ class ZaloNativeStagingConfigurationTest {
         assertThat(nativeProperties.isEnabled()).isTrue();
         nativeProperties.requireClient("android-staging", callback);
         assertThat(nativeProperties.getReturnTargetId()).isEqualTo("core-staging");
-        assertThat(nativeProperties.getReturnUrl()).isEqualTo("https://core-staging-01d2.up.railway.app/mobile/auth/zalo/complete");
+        assertThat(nativeProperties.getReturnUrl()).isEqualTo("https://api-staging.songheloi.id.vn/mobile/auth/zalo/complete");
         assertThat(nativeProperties.getPackageName()).isEqualTo("vn.teamhexa.songheloi");
         assertThat(nativeProperties.getCertificateSha256()).containsExactly("FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C");
         assertThatThrownBy(() -> nativeProperties.requireClient("android-production", callback)).isInstanceOf(BusinessException.class);
