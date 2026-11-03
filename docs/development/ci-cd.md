@@ -43,7 +43,7 @@ Job `changes` runs [`scripts/ci/changes.sh`](../../scripts/ci/changes.sh), which
 | `containers` | `compose.yaml` | `container-images` |
 | `shell` | `**/*.sh`, `.github/workflows/**`, `.shellcheckrc` | `shellcheck` |
 
-- A change to `ci.yml`, `cd.yml` or `select-runner.yml` runs everything; a docs-only change deploys nothing.
+- A change to `ci.yml`, `cd.yml`, `select-runner.yml` or `scripts/ci/` runs everything, because the jobs and deploys run those scripts; a docs-only change deploys nothing.
 - Job `shellcheck` runs `actionlint` (which lints every `run:` block with shellcheck) and `shellcheck --severity=warning` on every tracked `*.sh` outside `backend/core`. It installs missing tools with Homebrew, so it works on the self-hosted machines, and it does not gate a deploy. It also runs `scripts/ci/check-provider-coupling.sh` (see [Scripts and variables](#scripts)). Run all three locally from the repository root before pushing a script or workflow change.
 - Each area deploys on its own checks: a red `landing` does not hold back the backend, and a red `core` does not hold back the web.
 - Re-running CI on a push hands every passing area to CD.

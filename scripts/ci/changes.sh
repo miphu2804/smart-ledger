@@ -5,10 +5,10 @@
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
-# The paths of an area. A change to a workflow that ci.yml, cd.yml or select-runner.yml names runs everything; the
-# deploy workflow of an area runs that area only.
+# The paths of an area. A change to ci.yml, cd.yml, select-runner.yml or scripts/ci/ runs everything, because the jobs
+# and deploys run those scripts; the deploy workflow of an area runs that area only.
 area_patterns() {
-  local common='.github/workflows/ci.yml .github/workflows/select-runner.yml .github/workflows/cd.yml'
+  local common='.github/workflows/ci.yml .github/workflows/select-runner.yml .github/workflows/cd.yml scripts/ci/*'
   case "$1" in
     ai) echo "$common .github/workflows/deploy-backend.yml backend/ai/* supabase/*" ;;
     core) echo "$common .github/workflows/deploy-backend.yml backend/core/*" ;;

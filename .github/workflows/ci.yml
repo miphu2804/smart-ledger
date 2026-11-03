@@ -32,7 +32,7 @@ jobs:
   # Each test and deploy job below runs only when its area changed, so a docs-only or web-only change
   # skips the backend. A skipped job counts as passed for required checks and for the `gate` of
   # mobile-release.yml. Filtering here, not with `on.paths`, keeps every check reporting a result.
-  # A change to this workflow, cd.yml or select-runner.yml runs everything; a change to a deploy file runs its area.
+  # A change to this workflow, cd.yml, select-runner.yml or scripts/ci/ runs everything; a change to a deploy file runs its area.
   changes:
     needs: [select-runner]
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
@@ -276,6 +276,7 @@ jobs:
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
     permissions:
       actions: write
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:
