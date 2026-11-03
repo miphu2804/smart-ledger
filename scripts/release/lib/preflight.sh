@@ -5,6 +5,9 @@
 # (open a page or an app, or run a command); pf_finish then lists those actions so the user can start one from the
 # terminal instead of looking up what to install. Written for the bash 3.2 that ships with macOS.
 
+# shellcheck source=../../ci/lib.sh
+. "$(dirname "${BASH_SOURCE[0]}")/../../ci/lib.sh"
+
 pf_failures=0
 pf_warnings=0
 pf_action_labels=()
@@ -17,7 +20,7 @@ else
   pf_bold="" pf_dim="" pf_green="" pf_yellow="" pf_red="" pf_reset=""
 fi
 
-pf_ci() { [ "${GITHUB_ACTIONS:-}" = true ]; }
+pf_ci() { ci_running; }
 
 pf_section() {
   echo

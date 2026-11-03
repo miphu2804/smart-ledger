@@ -1,27 +1,11 @@
 name: Set up the Dopbase CLI
 description: >-
   Installs the pinned Dopbase CLI into a job-local prefix and data dir, so a self-hosted machine's own CLI and
-  login stay untouched. To upgrade, change the version and the digests from the release page of
-  github.com/dopbase/dopbase, as in deploy/dopbase/Dockerfile.
+  login stay untouched. The version and digests are in scripts/ci/install-dopbase.sh.
 runs:
   using: composite
   steps:
     - shell: bash
       env:
-        DOPBASE_VERSION: 0.1.10
-      run: |
-        set -euo pipefail
-        case "$RUNNER_OS-$RUNNER_ARCH" in
-          Linux-X64) target=linux_amd64 sha=b294f56057cb21f5ca22348944ac538ed4d6a751282b342c96761483a3114868 ;;
-          Linux-ARM64) target=linux_arm64 sha=6a5c973944ed222d398c0e542a05b6321de706201c56222de652fd85329007f5 ;;
-          macOS-X64) target=darwin_amd64 sha=e5947d00175f1690076171af0ad914ac460810426fad8451fe81d22b3ac54055 ;;
-          macOS-ARM64) target=darwin_arm64 sha=6bfd33102d4da2b5ec636f716f1e7c997d1dba2b0ce7c023372d163294d35d04 ;;
-          *) echo "::error::no Dopbase release for $RUNNER_OS-$RUNNER_ARCH"; exit 1 ;;
-        esac
-        archive="$RUNNER_TEMP/dopbase.tar.gz"
-        curl -fsSLo "$archive" "https://github.com/dopbase/dopbase/releases/download/$DOPBASE_VERSION/dopbase_${DOPBASE_VERSION}_$target.tar.gz"
-        echo "$sha  $archive" | shasum -a 256 -c -
-        mkdir -p "$RUNNER_TEMP/dopbase/bin" "$RUNNER_TEMP/dopbase/data"
-        tar -xzf "$archive" -C "$RUNNER_TEMP/dopbase/bin" dopbase
-        echo "$RUNNER_TEMP/dopbase/bin" >> "$GITHUB_PATH"
-        echo "DOPBASE_DATA_DIR=$RUNNER_TEMP/dopbase/data" >> "$GITHUB_ENV"
+        ACTION_PATH: ${{ github.action_path }}
+      run: '"$ACTION_PATH/../../../scripts/ci/install-dopbase.sh"'

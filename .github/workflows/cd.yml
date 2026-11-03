@@ -72,53 +72,13 @@ jobs:
       - name: Check the branch, the commit and its CI run
         env:
           GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          REF_TYPE: ${{ github.ref_type }}
-          REF_NAME: ${{ github.ref_name }}
-          SHA: ${{ inputs.sha }}
-          CI_RUN_ID: ${{ inputs.ci-run-id }}
-          AI: ${{ inputs.backend-ai }}
-          CORE: ${{ inputs.backend-core }}
-          WEB: ${{ inputs.web }}
-          LANDING: ${{ inputs.landing }}
-        run: |
-          set -euo pipefail
-          if [ "$REF_TYPE" != branch ] || { [ "$REF_NAME" != staging ] && [ "$REF_NAME" != main ]; }; then
-            echo "::error::Run CD from branch staging or main, not $REF_NAME."; exit 1
-          fi
-          if ! [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::sha must be a full 40-character commit SHA."; exit 1
-          fi
-          if ! git merge-base --is-ancestor "$SHA" "origin/$REF_NAME"; then
-            echo "::error::Commit ${SHA::7} is not on $REF_NAME."; exit 1
-          fi
-          if [ "$AI$CORE$WEB$LANDING" = falsefalsefalsefalse ]; then
-            echo "::error::Choose at least one area to deploy."; exit 1
-          fi
-          if [ -z "$CI_RUN_ID" ]; then
-            CI_RUN_ID=$(gh run list --repo "$REPO" --workflow ci.yml --commit "$SHA" --event push --limit 1 \
-              --json databaseId --jq '.[0].databaseId // empty')
-            [ -n "$CI_RUN_ID" ] || { echo "::error::No CI push run for ${SHA::7}."; exit 1; }
-          fi
-          run_sha=$(gh api "repos/$REPO/actions/runs/$CI_RUN_ID" --jq .head_sha)
-          if [ "$run_sha" != "$SHA" ]; then
-            echo "::error::CI run $CI_RUN_ID tested ${run_sha::7}, not ${SHA::7}."; exit 1
-          fi
-          # The latest attempt of each job; a skipped check counts as passed, as for the required checks.
-          results=$(gh api "repos/$REPO/actions/runs/$CI_RUN_ID/jobs" --paginate --jq '.jobs[] | "\(.name)=\(.conclusion)"')
-          need() {
-            local job result
-            for job in "$@"; do
-              result=$(echo "$results" | awk -F= -v name="$job" '$1 == name { print $2 }' | tail -1)
-              case "$result" in
-                success|skipped) echo "$job: $result" ;;
-                *) echo "::error::CI job $job of run $CI_RUN_ID is '${result:-missing}'; not deploying."; exit 1 ;;
-              esac
-            done
-          }
-          if [ "$AI" = true ] || [ "$CORE" = true ]; then need ai core container-images; fi
-          if [ "$WEB" = true ]; then need mobile-web; fi
-          if [ "$LANDING" = true ]; then need landing; fi
+          SMARTLEDGER_COMMIT: ${{ inputs.sha }}
+          SMARTLEDGER_TESTED_RUN_ID: ${{ inputs.ci-run-id }}
+          SMARTLEDGER_DEPLOY_AI: ${{ inputs.backend-ai }}
+          SMARTLEDGER_DEPLOY_CORE: ${{ inputs.backend-core }}
+          SMARTLEDGER_DEPLOY_WEB: ${{ inputs.web }}
+          SMARTLEDGER_DEPLOY_LANDING: ${{ inputs.landing }}
+        run: scripts/ci/check-deploy-gate.sh
 
   ### Deploy: one file per area, each with its own GitHub environment ###
 

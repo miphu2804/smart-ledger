@@ -32,31 +32,11 @@ jobs:
       # its Homebrew install and only warns when the version differs. yq v4 and jq come with the Linux image and
       # with Homebrew on the self-hosted machines.
       - name: Install HoneyHive CLI
-        env:
-          HH_CLI_VERSION: 1.9.0
-        run: |
-          set -euo pipefail
-          if [ "$RUNNER_OS" = Linux ]; then
-            curl -fsSL "https://github.com/honeyhiveai/honeyhive-cli/releases/download/v$HH_CLI_VERSION/install.sh" | sh
-          else
-            command -v honeyhive > /dev/null || brew install honeyhiveai/tap/honeyhive
-            installed=$(honeyhive --version)
-            [ "$installed" = "$HH_CLI_VERSION" ] || echo "::warning::HoneyHive CLI $installed on this machine, workflow pinned to $HH_CLI_VERSION"
-          fi
+        run: scripts/ci/install-honeyhive.sh
       - name: Check every evaluator has a committed ID
         # An evaluator created here gets an ID this run cannot commit, so every later run would create it again.
         # Create new evaluators locally with sync-evaluators.sh and commit state.json before merging.
-        run: |
-          set -euo pipefail
-          missing=0
-          for file in .honeyhive/evaluators/*.yaml; do
-            name=$(yq '.name' "$file")
-            if ! jq -e --arg n "$name" '.evaluators[$n]' .honeyhive/state.json > /dev/null; then
-              echo "::error file=$file::$name has no ID in .honeyhive/state.json"
-              missing=1
-            fi
-          done
-          exit "$missing"
+        run: scripts/ci/check-evaluator-ids.sh
       - name: Apply evaluators
         env:
           # The CLI's names for the AI service's HH_API_KEY and HH_API_URL; the GitHub names match Dopbase ai/production.
