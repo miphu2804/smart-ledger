@@ -53,29 +53,15 @@ jobs:
       contents: read
       actions: read
     steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts/ci
+          persist-credentials: false
       - name: Check the branch matches the environment
         env:
-          ENVIRONMENT: ${{ inputs.environment }}
+          ANDROID_ENVIRONMENT: ${{ inputs.environment }}
           PUBLISH: ${{ inputs.publish }}
-          REF_TYPE: ${{ github.ref_type }}
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          if [ "$REF_TYPE" != branch ]; then
-            echo "::error::Run this workflow from a branch, not a tag."; exit 1
-          fi
-          # The branch decides the environment, so main can never be built with staging or dev config.
-          case "$REF_NAME" in
-            main) want=android-production ;;
-            staging) want=android-staging ;;
-            *) want=android-dev ;;
-          esac
-          if [ "$ENVIRONMENT" != "$want" ]; then
-            echo "::error::Branch $REF_NAME builds only with $want, got $ENVIRONMENT."; exit 1
-          fi
-          # The landing page links to one file, and it must be the build that talks to the production backend.
-          if [ "$PUBLISH" = true ] && [ "$ENVIRONMENT" != android-production ]; then
-            echo "::error::publish is only allowed with android-production, got $ENVIRONMENT."; exit 1
-          fi
+        run: scripts/ci/check-release-branch.sh
       # Any other branch of this repository builds as android-dev, so a pull request can be tested before it merges.
       - name: Require a green CI run for the commit
         if: inputs.environment != 'android-dev'
@@ -131,22 +117,9 @@ jobs:
       - name: Resolve build settings
         id: cfg
         env:
-          ENVIRONMENT: ${{ inputs.environment }}
+          ANDROID_ENVIRONMENT: ${{ inputs.environment }}
           PUBLISH: ${{ inputs.publish }}
-        run: |
-          # Staging and production carry the two ARM ABIs that phones use: arm64 for current phones and Apple Silicon
-          # emulators, armeabi-v7a for old 32-bit phones. x86 and x86_64 only served Intel emulators and added about
-          # 20 MB each to the APK. Dev stays arm64-only for a fast build on a real phone. A published production
-          # build is an APK because people install it straight from the landing page.
-          production_format=aab
-          [ "$PUBLISH" = true ] && production_format=apk
-          case "$ENVIRONMENT" in
-            android-production) { echo "format=$production_format"; echo "abis=armeabi-v7a,arm64-v8a"; } >> "$GITHUB_OUTPUT" ;;
-            android-staging) { echo "format=apk"; echo "abis=armeabi-v7a,arm64-v8a"; } >> "$GITHUB_OUTPUT" ;;
-            *) { echo "format=apk"; echo "abis=arm64-v8a"; } >> "$GITHUB_OUTPUT" ;;
-          esac
-          echo "TIMINGS=$RUNNER_TEMP/timings.txt" >> "$GITHUB_ENV"
-          echo "start=$(date +%s)" > "$RUNNER_TEMP/timings.txt"
+        run: scripts/ci/resolve-build-settings.sh
 
       # Fails before the build, which takes minutes, instead of at the upload.
       - name: Check the publish prerequisites
@@ -159,15 +132,8 @@ jobs:
           R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-        run: |
-          missing=""
-          for name in R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET R2_PUBLIC_URL ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD; do
-            [ -n "${!name}" ] || missing="$missing $name"
-          done
-          if [ -n "$missing" ]; then
-            echo "::error::Publishing needs these in environment ${{ inputs.environment }}:$missing"; exit 1
-          fi
-          command -v aws > /dev/null || { echo "::error::Publishing needs the aws CLI on this runner."; exit 1; }
+          ANDROID_ENVIRONMENT: ${{ inputs.environment }}
+        run: scripts/ci/check-publish-prerequisites.sh
 
 
       # GitHub-hosted runners are clean VMs, so the toolchain is installed (and cached) on every run.
@@ -207,47 +173,22 @@ jobs:
           AWS_DEFAULT_REGION: auto
           AWS_ENDPOINT_URL: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
           BUCKET: ${{ vars.R2_BUCKET }}
-        run: |
-          if [ -z "$STT_MODEL_BASE_URL" ]; then
-            [ "$PUBLISH" = true ] && { echo "::error::Publishing needs variable STT_MODEL_BASE_URL."; exit 1; }
-            echo "::warning::STT_MODEL_BASE_URL is not set: voice input in this build cannot download its model."; exit 0
-          fi
-          if ! line=$(node .github/scripts/stt-model.mjs check); then
-            if [ "$PUBLISH" != true ]; then
-              echo "${line//::error::/::warning::}"
-              echo "::warning::Voice input in this build cannot download its model; a publish uploads it."; exit 0
-            fi
-            echo "${line//::error::/::notice::}"
-            dir="$RUNNER_TEMP/stt-model"
-            version=$(node .github/scripts/stt-model.mjs fetch "$dir") || { echo "$version"; exit 1; }
-            aws s3 sync "$dir" "s3://$BUCKET/stt-model/$version/" --size-only
-            rm -rf "$dir"
-            line=$(node .github/scripts/stt-model.mjs check) || { echo "$line"; exit 1; }
-          fi
-          echo "$line"
-          echo "$line" >> "$GITHUB_ENV"
+        run: scripts/ci/resolve-speech-model.sh
 
       # app.config.js reads the Firebase file from the path in GOOGLE_SERVICES_JSON. The file is gitignored (public
       # repo), so it is written from the environment secret to a temp path and never lands in the workspace.
       - name: Write google-services.json
         env:
           ANDROID_GOOGLE_SERVICES_JSON: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON }}
-        run: |
-          if [ -z "$ANDROID_GOOGLE_SERVICES_JSON" ]; then
-            echo "::error::Secret ANDROID_GOOGLE_SERVICES_JSON is empty in environment ${{ inputs.environment }}."; exit 1
-          fi
-          printf '%s' "$ANDROID_GOOGLE_SERVICES_JSON" > "$RUNNER_TEMP/google-services.json"
-          echo "GOOGLE_SERVICES_JSON=$RUNNER_TEMP/google-services.json" >> "$GITHUB_ENV"
+          ANDROID_ENVIRONMENT: ${{ inputs.environment }}
+        run: scripts/ci/write-google-services.sh
 
       # Without the secret the build keeps the template's debug keystore, which is public: fine for a test build, never
       # for a published one. The keystore is PKCS12, so the key shares the store password.
       - name: Write the release keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: |
-          [ -n "$ANDROID_KEYSTORE_BASE64" ] || { echo "No release keystore in this environment: signing with the debug keystore."; exit 0; }
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
-          echo "RELEASE_KEYSTORE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+        run: scripts/ci/write-release-keystore.sh
 
       # scripts/release/android-release.sh does what a local build does (npm ci, expo prebuild --clean, Gradle, APK report), so
       # a build on a laptop matches this one. The workflow keeps only what needs CI: branch gate, runner, toolchain,
@@ -258,23 +199,15 @@ jobs:
           FORMAT: ${{ steps.cfg.outputs.format }}
           ABIS: ${{ steps.cfg.outputs.abis }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ENVIRONMENT: ${{ inputs.environment }}
-          REF_NAME: ${{ github.ref_name }}
-          SHA: ${{ github.sha }}
+          ANDROID_ENVIRONMENT: ${{ inputs.environment }}
           # Every build gets a higher versionCode than the last, so Android installs it over the old one. A published
           # APK also learns where to look for newer ones; other builds leave the URL empty and never ask.
           ANDROID_VERSION_CODE: ${{ github.run_number }}
           EXPO_PUBLIC_UPDATE_URL: ${{ inputs.publish && format('{0}/android/production/version.json', vars.R2_PUBLIC_URL) || '' }}
-        run: |
-          branch=$(echo "$REF_NAME" | tr -c 'A-Za-z0-9\n' '-')
-          out="$RUNNER_TEMP/android-out/smart-ledger-${ENVIRONMENT#android-}-${branch}-${SHA::7}.$FORMAT"
-          args=(--abis "$ABIS" --out "$out")
-          [ "$FORMAT" = aab ] && args+=(--aab)
-          ./scripts/release/android-release.sh "${args[@]}"
-          echo "path=$out" >> "$GITHUB_OUTPUT"
+        run: scripts/ci/build-android.sh
       - name: Remove the release keystore
         if: always()
-        run: rm -f "$RUNNER_TEMP/release.keystore"
+        run: rm -f "${RELEASE_KEYSTORE:-}"
 
       # builds/ keeps every published APK for rollback; latest.apk is the fixed URL the landing page links to.
       - name: Publish the APK to R2
@@ -289,29 +222,7 @@ jobs:
           APK: ${{ steps.build.outputs.path }}
           VERSION_CODE: ${{ github.run_number }}
           R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
-        run: |
-          # Anyone can sign an update with the debug key, so a debug-signed APK must never reach the download link.
-          sdk="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
-          certs=$("$sdk/build-tools/$ANDROID_BUILD_TOOLS/apksigner" verify --print-certs "$APK")
-          echo "$certs"
-          if echo "$certs" | grep -q "CN=Android Debug"; then
-            echo "::error::The APK is signed with the debug keystore; not publishing."; exit 1
-          fi
-          prefix="s3://$BUCKET/android/production"
-          type=application/vnd.android.package-archive
-          aws s3 cp "$APK" "$prefix/builds/$(basename "$APK")" --content-type "$type"
-          aws s3 cp "$APK" "$prefix/latest.apk" --content-type "$type" --cache-control no-cache \
-            --content-disposition 'attachment; filename="so-nghe-loi.apk"'
-          # Last, so a phone never reads a manifest whose APK is not uploaded yet. Installed apps compare versionCode
-          # with this file (frontend/mobile/src/lib/appUpdate.ts) and offer the APK in builds/, which is never overwritten.
-          base="${R2_PUBLIC_URL%/}"
-          # shellcheck disable=SC2016 # the JavaScript template literal must reach node unexpanded
-          BASE="$base" node -e 'const { expo } = require("./frontend/mobile/app.json");
-            console.log(JSON.stringify({ versionCode: Number(process.env.VERSION_CODE), versionName: expo.version,
-              apk: `${process.env.BASE}/android/production/builds/${require("path").basename(process.env.APK)}` }))' \
-            > "$RUNNER_TEMP/version.json"
-          cat "$RUNNER_TEMP/version.json"
-          aws s3 cp "$RUNNER_TEMP/version.json" "$prefix/version.json" --content-type application/json --cache-control no-cache
+        run: scripts/ci/publish-apk.sh
 
 
       - name: Write the build summary

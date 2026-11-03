@@ -51,10 +51,13 @@ while [ $# -gt 0 ]; do
     *) echo "Unknown option: $1 (see --help)" >&2; exit 2 ;;
   esac
 done
+root="$(cd "$(dirname "$0")/../.." && pwd)"
+# shellcheck source=../ci/lib.sh
+. "$root/scripts/ci/lib.sh"
 if [ -z "$target" ]; then
   if [ -n "$serial" ]; then
     target=phone
-  elif [ "${GITHUB_ACTIONS:-}" = true ] || [ "$format" = aab ] || [ -n "$out" ]; then
+  elif ci_running || [ "$format" = aab ] || [ -n "$out" ]; then
     target=build
   else
     target=emulator
@@ -67,7 +70,6 @@ if $install && [ "$format" = aab ]; then
   exit 2
 fi
 
-root="$(cd "$(dirname "$0")/../.." && pwd)"
 # shellcheck source=lib/preflight.sh
 . "$root/scripts/release/lib/preflight.sh"
 cd "$root/frontend/mobile"
@@ -477,11 +479,7 @@ echo
 
 if [ "$format" = apk ]; then
   # Where the APK size goes (native libraries per ABI, dex, assets); in CI also on the run page.
-  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-    bash "$root/scripts/release/apk-contents.sh" "$built" | tee -a "$GITHUB_STEP_SUMMARY"
-  else
-    bash "$root/scripts/release/apk-contents.sh" "$built"
-  fi
+  bash "$root/scripts/release/apk-contents.sh" "$built" | ci_summary
 fi
 
 if [ -n "$emu_pid" ]; then
