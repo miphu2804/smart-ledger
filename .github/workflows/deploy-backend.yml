@@ -73,7 +73,7 @@ jobs:
       SMARTLEDGER_IMAGE_SOURCE: ${{ github.server_url }}/${{ github.repository }}
       APP_DIR: ${{ vars.VPS_APP_DIR || '/opt/smartledger' }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.sha }}
           persist-credentials: false
@@ -91,7 +91,7 @@ jobs:
         if: inputs.ai
         run: scripts/ci/build-image.sh ai "$AI_IMAGE"
       # The runner builds the jar and the image only wraps it in a JRE, so the image build needs no Maven.
-      - uses: actions/setup-java@v6
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         if: inputs.core
         with:
           distribution: temurin
@@ -151,7 +151,7 @@ jobs:
           DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
           TARGET_ENV: ${{ github.ref_name == 'main' && 'backend-production' || 'backend-staging' }}
         run: scripts/ci/report-deploy.sh
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         # The summary is already in the job summary; a full artifact quota must not fail CI or skip deploys.
         continue-on-error: true
         if: always()

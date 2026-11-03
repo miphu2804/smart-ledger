@@ -1,0 +1,43 @@
+# Version updates for what CI/CD and the VPS run: GitHub Actions (pinned to commit SHAs, so Dependabot is what keeps
+# them current), the Dockerfiles of the AI service and the deploy tooling, and the images of the Compose stacks.
+# Application packages (uv, npm, Maven) and backend/core are left out: Core changes need the owner's approval
+# (AGENTS.md) and app upgrades are planned per feature. Pull requests target `staging`, like every other change
+# (CONTRIBUTING.md), and each ecosystem's updates arrive as one grouped pull request a week.
+# See docs/development/ci-cd.md#ownership-and-dependency-updates.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directories: ["/", "/.github/actions/*"]
+    target-branch: staging
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directories: ["/backend/ai", "/deploy/ansible", "/deploy/dopbase"]
+    target-branch: staging
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      docker:
+        patterns: ["*"]
+
+  - package-ecosystem: docker-compose
+    directories: ["/", "/deploy/dopbase", "/deploy/edge", "/deploy/monitoring", "/deploy/vps"]
+    target-branch: staging
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      docker-compose:
+        patterns: ["*"]
