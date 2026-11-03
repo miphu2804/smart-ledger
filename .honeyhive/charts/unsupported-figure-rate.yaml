@@ -1,0 +1,13 @@
+name: Unsupported figure rate
+description: Share of chat turns answering with a figure no tool or question supports, scored by the unsupported-figure evaluator, by source.
+metric: metrics.unsupported-figure
+func: avg
+groupBy: source
+bucketing: day
+dateRange:
+  relative: 30d
+query:
+  - field: event_name
+    operator: is
+    value: agent-chat
+    type: string

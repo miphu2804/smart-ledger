@@ -4,6 +4,7 @@ import json
 import logging
 import threading
 from collections import Counter
+from contextlib import contextmanager
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -18,6 +19,11 @@ from pydantic_ai.messages import ModelResponse, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.models.instrumented import InstrumentationSettings
 from tests.support import TEST_GUARDRAIL_LIMITS, ScriptedModel
+from tests.unit_tests.test_agent_memory import (
+    FakeMemoryRepository,
+    memory_service,
+    recalled,
+)
 from tests.unit_tests.test_agent_service import (
     FakeConversationRepository,
     FakeShopData,
@@ -178,6 +184,16 @@ def test_blank_key_leaves_tracing_off(monkeypatch) -> None:
     Observability.start(AppConfig(HH_API_KEY=None))
 
 
+@pytest.mark.parametrize("source", ["local", "staging"])
+def test_source_other_than_production_leaves_tracing_off(monkeypatch, source) -> None:
+    def must_not_run(*args, **kwargs):
+        raise AssertionError("honeyhive traced outside production")
+
+    monkeypatch.setattr(observability.HoneyHiveTracer, "init", must_not_run)
+
+    Observability.start(AppConfig(HH_API_KEY="key", HH_SOURCE=source))
+
+
 def test_key_traces_agents_with_message_content_but_no_media(monkeypatch) -> None:
     calls: dict = {}
     tracer = SimpleNamespace(provider=TracerProvider())
@@ -191,7 +207,7 @@ def test_key_traces_agents_with_message_content_but_no_media(monkeypatch) -> Non
     config = AppConfig(
         HH_API_KEY="key",
         HH_API_URL=None,
-        HH_SOURCE="staging",
+        HH_SOURCE="production",
     )
 
     try:
@@ -204,7 +220,7 @@ def test_key_traces_agents_with_message_content_but_no_media(monkeypatch) -> Non
 
     assert calls == {
         "api_key": "key",
-        "source": "staging",
+        "source": "production",
         "server_url": None,
         "skip_backend_session_creation": True,
     }
@@ -477,3 +493,79 @@ async def test_info_logs_hold_no_turn_content(caplog: pytest.LogCaptureFixture) 
     assert "tool done query_shop_data" in caplog.text
     for text in TURN_CONTENT:
         assert text not in caplog.text
+
+
+class SpanTracer(RecordingTracer):
+    """Records the spans opened with `trace` and what `enrich_span` put in them."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.spans: list[dict] = []
+
+    @contextmanager
+    def trace(self, name, event_type=None, **kwargs):
+        self.spans.append({"name": name, "event_type": event_type})
+        yield
+
+    def enrich_span(self, **fields) -> None:
+        self.spans[-1].update(fields)
+
+
+async def test_recall_span_lists_the_memories_the_turn_received() -> None:
+    tracer = SpanTracer()
+    observability = Observability(tracer)
+    service = memory_service(
+        ScriptedModel(), FakeMemoryRepository(recalled=[recalled()])
+    )
+    service.observability = observability
+    await observability.start_turn_session(15, 3, None, "gạo?", {})
+
+    await service.with_memories(15, 3, "gạo?")
+
+    assert tracer.spans == [
+        {
+            "name": "memory recall",
+            "event_type": "tool",
+            "inputs": {"question": "gạo?"},
+            "metadata": {"shop_id": 15},
+            "outputs": {
+                "memories": [
+                    {
+                        "id": 7,
+                        "content": recalled().content,
+                        "memory_type": "semantic",
+                        "score": 0.8,
+                    }
+                ]
+            },
+            "metrics": {"recalled_count": 1},
+        }
+    ]
+
+
+async def test_failed_recall_leaves_the_turn_and_span_standing() -> None:
+    tracer = SpanTracer()
+    observability = Observability(tracer)
+    service = memory_service(
+        ScriptedModel(), FakeMemoryRepository(error=RuntimeError("db down"))
+    )
+    service.observability = observability
+    await observability.start_turn_session(15, 3, None, "gạo?", {})
+
+    prompt, used = await service.with_memories(15, 3, "gạo?")
+
+    assert (prompt, used) == ("gạo?", [])
+    assert [span["name"] for span in tracer.spans] == ["memory recall"]
+
+
+async def test_untraced_turn_recalls_without_a_span() -> None:
+    tracer = SpanTracer()
+    service = memory_service(
+        ScriptedModel(), FakeMemoryRepository(recalled=[recalled()])
+    )
+    service.observability = Observability(tracer)
+
+    _, used = await service.with_memories(15, 3, "gạo?")
+
+    assert len(used) == 1
+    assert tracer.spans == []

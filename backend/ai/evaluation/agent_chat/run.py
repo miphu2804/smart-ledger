@@ -1,15 +1,20 @@
-"""Score the real chat agent on a made-up shop and log the run to HoneyHive.
+"""Score the real chat agent on a made-up shop, gate the run and report it.
 
-Each datapoint runs the app's own lifespan because `evaluate` gives an async function
-its own event loop.
+The agent runs here with tracing off and every answer is scored here, with metrics
+built on HoneyHive's evaluator templates. Nothing leaves the machine unless `--sync`
+asks for it: then each case is logged to HoneyHive as one session of an experiment run,
+with its inputs, outputs and scores but no spans, as in "Sync Offline Evaluations" in
+HoneyHive's docs.
 """
 
 import argparse
+import asyncio
 import hashlib
 import json
 import re
 import sys
 import time
+import tomllib
 import uuid
 from datetime import date
 from pathlib import Path
@@ -17,23 +22,41 @@ from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from honeyhive.experiments import evaluate  # noqa: E402
-from pydantic import BaseModel  # noqa: E402
+from honeyhive import HoneyHive  # noqa: E402
+from honeyhive.models import (  # noqa: E402
+    PostExperimentRunRequest,
+    PutExperimentRunRequest,
+)
+from opentelemetry.sdk.trace import TracerProvider  # noqa: E402
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor  # noqa: E402
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import (  # noqa: E402
+    InMemorySpanExporter,
+)
+from pydantic import BaseModel, Field  # noqa: E402
 from pydantic_ai import Agent  # noqa: E402
 from pydantic_ai.models.instrumented import InstrumentationSettings  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 
-from src.agent.service import Done, Reset, TextDelta, ToolStarted  # noqa: E402
+from src.agent.service import (  # noqa: E402
+    Done,
+    MemoryRecalled,
+    Reset,
+    TextDelta,
+    ToolStarted,
+)
 from src.app_config import app_config  # noqa: E402
 from src.infra.postgre_db_client import PostgreDBClient  # noqa: E402
+from src.memory.repository import NewMemory  # noqa: E402
+from src.memory.service import AgentMemoryService  # noqa: E402
 from src.providers.llm_factory import LLMFactory  # noqa: E402
 from src.providers.session_settings import session_settings  # noqa: E402
 
-# `evaluate` opens a tracer per datapoint, so the app must not start its own; memory is
-# off because what one run stores would change the next run's answers.
+# The app must not start its own tracer: the run sends scores, not spans. Memory is on
+# for recall only; `without_memory_writes` stops what a turn would store, because that
+# would change the next run's answers.
 HONEYHIVE_KEY = app_config.HH_API_KEY
 app_config.HH_API_KEY = None
-app_config.AGENT_MEMORY_ENABLED = False
+app_config.AGENT_MEMORY_ENABLED = True
 
 from src.main import app, lifespan  # noqa: E402
 
@@ -229,6 +252,24 @@ CASES = [
         "approximate": True,
     },
     {
+        "id": "memory_rice_supplier",
+        "question": "Gạo ST25 bên mình nhập của ai và giao vào ngày nào nhỉ?",
+        "memory": "rice_supplier",
+        "judge": "Shop nhập gạo ST25 từ cô Ba ở chợ Bến Thành, giao vào thứ Hai hằng "
+        "tuần. Đạt khi câu trả lời nói nhà cung cấp là cô Ba và ngày giao là thứ Hai. "
+        "Không đạt khi câu trả lời nêu người hoặc ngày khác, hoặc nói không biết.",
+        "needs_tool": False,
+    },
+    {
+        "id": "memory_debt_habit",
+        "question": "Anh Hùng thường trả nợ vào lúc nào trong tuần?",
+        "memory": "debt_habit",
+        "judge": "Anh Hùng hay hẹn trả nợ vào cuối tuần, thường là chiều thứ Bảy. Đạt "
+        "khi câu trả lời nói anh Hùng thường trả vào cuối tuần hoặc thứ Bảy. Không đạt "
+        "khi câu trả lời nêu ngày khác, hoặc nói không biết.",
+        "needs_tool": False,
+    },
+    {
         "id": "out_of_scope",
         "question": "Thời tiết Hà Nội hôm nay thế nào?",
         "judge": "Câu hỏi nằm ngoài dữ liệu cửa hàng. Đạt khi câu trả lời từ chối "
@@ -237,6 +278,21 @@ CASES = [
         "needs_tool": False,
     },
 ]
+# Facts stored before the run, each embedded the way the app embeds its own memories.
+# A case with `memory` is answerable only from that fact, and is scored on whether the
+# recall returned it.
+MEMORIES = {
+    "rice_supplier": {
+        "memory_type": "semantic",
+        "content": "Gạo ST25 của shop nhập từ cô Ba ở chợ Bến Thành, giao hàng vào "
+        "mỗi thứ Hai.",
+    },
+    "debt_habit": {
+        "memory_type": "semantic",
+        "content": "Anh Hùng hay mua chịu và hẹn trả nợ vào cuối tuần, thường là "
+        "chiều thứ Bảy.",
+    },
+}
 UNITS = {
     "tỷ": 1_000_000_000,
     "triệu": 1_000_000,
@@ -248,7 +304,13 @@ UNITS = {
 }
 # "chưa có đơn nào" answers a question whose expected figure is zero.
 NONE_SAID = re.compile(r"(chưa|không)\s+(có|bán|phát sinh|ghi nhận)")
-rows: list[dict] = []
+# The most a tool result or a memory takes in a prompt to the judge or in the outputs.
+RESULT_CHARS = 500
+RATING_INSTRUCTIONS = (
+    "Please act as an impartial judge. Your evaluation should consider the mentioned "
+    "criteria. Give a short explanation first, as objectively as possible, then rate "
+    "on a scale of 1 to 5."
+)
 
 
 class Verdict(BaseModel):
@@ -256,23 +318,75 @@ class Verdict(BaseModel):
     reason: str
 
 
-class ContentInstrumentor:
-    """Binds every agent to this run's tracer, since the app's own tracer is off."""
+class Rating(BaseModel):
+    reason: str
+    score: int = Field(ge=1, le=5)
 
-    def instrument(self, tracer_provider) -> None:
-        Agent.instrument_all(
-            InstrumentationSettings(
-                tracer_provider=tracer_provider,
-                include_content=True,
-                include_binary_content=False,
-            )
+
+def trace_tools() -> InMemorySpanExporter:
+    """Records every agent's spans in memory, which is where the arguments and results
+    of a turn's tool calls are read from; nothing leaves the process."""
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    Agent.instrument_all(
+        InstrumentationSettings(
+            tracer_provider=provider,
+            include_content=True,
+            include_binary_content=False,
         )
+    )
+    return exporter
 
-    def uninstrument(self) -> None:
-        Agent.instrument_all(False)
+
+def without_memory_writes(memory: AgentMemoryService) -> None:
+    """Keeps recall but drops what a turn would store."""
+
+    async def skip(*arguments, **keywords) -> None:
+        return None
+
+    memory.remember = skip
 
 
-async def answer(datapoint: dict) -> dict:
+def memory_for(
+    datapoint: dict, memory: AgentMemoryService
+) -> AgentMemoryService | None:
+    """Recall runs only in the memory cases.
+
+    The seeded facts would otherwise lead every other case's prompt, because recall
+    has no score cut-off, and their results would stop matching earlier runs.
+    """
+    return memory if datapoint["ground_truth"]["memory"] else None
+
+
+async def seed_memories(memory: AgentMemoryService, owner_id: int) -> None:
+    """Replaces the shop's memories with `MEMORIES`, stored under a new conversation."""
+    with memory.repository.postgres.session() as session:
+        session.execute(
+            text("DELETE FROM agent_memories WHERE shop_id = :shop"), {"shop": SHOP_ID}
+        )
+        conversation_id = session.execute(
+            text(
+                "INSERT INTO chat_conversations (user_id, shop_id, title) "
+                "VALUES (:owner, :shop, 'memory seed') RETURNING id"
+            ),
+            {"owner": owner_id, "shop": SHOP_ID},
+        ).scalar_one()
+    facts = list(MEMORIES.values())
+    vectors = await memory.embedder.embed_documents([fact["content"] for fact in facts])
+    await asyncio.to_thread(
+        memory.repository.add,
+        SHOP_ID,
+        owner_id,
+        conversation_id,
+        [
+            NewMemory(fact["memory_type"], fact["content"], 0.8, list(vector))
+            for fact, vector in zip(facts, vectors.embeddings, strict=True)
+        ],
+    )
+
+
+async def answer(agent, exporter: InMemorySpanExporter, datapoint: dict) -> dict:
     """Asks the question, then the follow-up in the same conversation if there is one;
     the outputs describe the last turn."""
     inputs = datapoint["inputs"]
@@ -282,37 +396,76 @@ async def answer(datapoint: dict) -> dict:
         else [inputs["question"]]
     )
     conversation_id = None
-    async with lifespan(app):
-        agent = app.state.agent
-        for question in turns:
-            reply = ""
-            model = ""
-            tools: list[str] = []
-            started = time.monotonic()
-            events = await agent.stream_chat(
-                inputs["owner_id"], SHOP_ID, question, conversation_id
-            )
-            async for event in events:
-                if isinstance(event, ToolStarted):
-                    tools.append(event.name)
-                elif isinstance(event, TextDelta):
-                    reply += event.text
-                elif isinstance(event, Reset):
-                    reply = ""
-                elif isinstance(event, Done):
-                    reply = event.result.answer
-                    model = event.result.model_version
-                    conversation_id = event.result.conversation_id
+    for question in turns:
+        exporter.clear()
+        reply = ""
+        model = ""
+        tools: list[str] = []
+        memories: list[dict] = []
+        started = time.monotonic()
+        events = await agent.stream_chat(
+            inputs["owner_id"], SHOP_ID, question, conversation_id
+        )
+        async for event in events:
+            if isinstance(event, ToolStarted):
+                tools.append(event.name)
+            elif isinstance(event, MemoryRecalled):
+                memories = [
+                    {
+                        "id": memory.id,
+                        "content": memory.content,
+                        "memory_type": memory.memory_type,
+                        "score": memory.relevance,
+                    }
+                    for memory in event.memories
+                ]
+            elif isinstance(event, TextDelta):
+                reply += event.text
+            elif isinstance(event, Reset):
+                reply = ""
+            elif isinstance(event, Done):
+                reply = event.result.answer
+                model = event.result.model_version
+                conversation_id = event.result.conversation_id
+    spans = sorted(exporter.get_finished_spans(), key=lambda span: span.start_time)
     # The model, prompt and suite version travel with every row, so two runs in
     # HoneyHive or in results/ show what changed between them.
     return {
         "answer": reply,
         "tools": tools,
+        "tool_calls": tool_calls_in(spans),
+        "available_tools": available_tools_in(spans),
+        "memories": memories,
         "seconds": round(time.monotonic() - started, 2),
         "model": model,
         "prompt_version": agent.prompt_version,
         "suite_version": inputs["suite_version"],
     }
+
+
+def tool_calls_in(spans: list) -> list[dict]:
+    """The tool calls of the turn in order, each result cut short."""
+    return [
+        {
+            "name": span.attributes["gen_ai.tool.name"],
+            "arguments": json.loads(span.attributes["gen_ai.tool.call.arguments"]),
+            "result": str(span.attributes["gen_ai.tool.call.result"])[:RESULT_CHARS],
+        }
+        for span in spans
+        if span.name.startswith("execute_tool ")
+    ]
+
+
+def available_tools_in(spans: list) -> str:
+    """The tool definitions the model was given, as its first request carried them."""
+    return next(
+        (
+            span.attributes["gen_ai.tool.definitions"]
+            for span in spans
+            if "gen_ai.tool.definitions" in span.attributes
+        ),
+        "[]",
+    )
 
 
 def correct(outputs: dict, inputs: dict, ground_truth: dict) -> dict:
@@ -347,6 +500,47 @@ def tool_calls(outputs: dict, inputs: dict, ground_truth: dict) -> int:
 
 def seconds(outputs: dict, inputs: dict, ground_truth: dict) -> float:
     return outputs["seconds"]
+
+
+def recalled_expected(outputs: dict, inputs: dict, ground_truth: dict) -> int | None:
+    """Whether the recall returned the fact the case can only be answered from; None
+    for a case that needs no memory."""
+    if ground_truth["memory"] is None:
+        return None
+    return int(
+        any(
+            memory["content"] == ground_truth["memory"]
+            for memory in outputs["memories"]
+        )
+    )
+
+
+# The same patterns as `.honeyhive/evaluators/internal-leak.yaml` and
+# `non-vietnamese-answer.yaml`, which score production; those run on HoneyHive and
+# cannot import this file, so a change to one belongs in the other.
+INTERNALS = re.compile(
+    r"ai_read|\bv_[a-z_]+|\bselect\b[\s\S]+\bfrom\b|\b(shop|user)_id\b"
+    r"|query_shop_data|suggest_screen|Error\[",
+    re.IGNORECASE,
+)
+CODE_BLOCK = re.compile(r"```.*?```", re.DOTALL)
+VIETNAMESE = re.compile(
+    r"[àáảãạăằắẳẵặâầấẩẫậđèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ]",
+    re.IGNORECASE,
+)
+
+
+def no_internal_leak(outputs: dict, inputs: dict, ground_truth: dict) -> int:
+    """1 when the answer shows the owner no view name, SQL, id column, tool name or
+    tool error code."""
+    return int(not INTERNALS.search(outputs["answer"]))
+
+
+def vietnamese_answer(outputs: dict, inputs: dict, ground_truth: dict) -> int:
+    """1 unless the answer has words but not one Vietnamese letter with a diacritic;
+    chart and button blocks are JSON for the app, so they do not count."""
+    words = CODE_BLOCK.sub("", outputs["answer"]).strip()
+    return int(not words or bool(VIETNAMESE.search(words)))
 
 
 def numbers_in(answer_text: str) -> list[float]:
@@ -409,25 +603,183 @@ def matches(expected: float, value: float, approximate: bool) -> bool:
 
 async def judge(question: str, answer_text: str, rubric: str, alias: str) -> dict:
     """Grades an answer against its rubric with a model from the app's own factory."""
-    grader = Agent(
-        LLMFactory(app_config).create_model(alias),
-        output_type=Verdict,
-        instructions="Bạn chấm câu trả lời của một trợ lý cửa hàng theo đúng tiêu "
+    return await grade(
+        alias,
+        Verdict,
+        "Bạn chấm câu trả lời của một trợ lý cửa hàng theo đúng tiêu "
         "chí được cho. Chỉ xét tiêu chí, không xét văn phong. reason ngắn, bằng "
         "tiếng Việt.",
+        f"Câu hỏi: {question}\n\nTiêu chí: {rubric}\n\nCâu trả lời:\n{answer_text}",
+    )
+
+
+async def rate(prompt: str, alias: str) -> dict:
+    """Rates 1 to 5 against a prompt adapted from a HoneyHive evaluator template."""
+    return await grade(alias, Rating, RATING_INSTRUCTIONS, prompt)
+
+
+async def grade(alias: str, output_type, instructions: str, prompt: str) -> dict:
+    grader = Agent(
+        LLMFactory(app_config).create_model(alias),
+        output_type=output_type,
+        instructions=instructions,
     )
     result = await grader.run(
-        f"Câu hỏi: {question}\n\nTiêu chí: {rubric}\n\nCâu trả lời:\n{answer_text}",
+        prompt,
         # The gateway rejects a request that names no session, as the app's runs do.
         model_settings=session_settings(uuid.uuid4().hex, SHOP_ID),
     )
     return result.output.model_dump()
 
 
+# The prompts below are HoneyHive's evaluator templates (docs.honeyhive.ai, "Evaluator
+# Templates"), with each field they read mapped to this case's outputs. A builder
+# returns None when the template does not apply to the case.
+
+
+def tool_usage_prompt(outputs: dict, inputs: dict, truth: dict) -> str:
+    """Tool Usage."""
+    return f"""[Criteria]
+1. Tool Selection: Did the assistant choose the most appropriate tool for the task?
+2. Tool Usage: Was the tool used correctly and effectively?
+3. Necessity: Was the tool usage necessary or could the task be accomplished without it?
+4. Integration: How well was the tool output integrated into the response?
+
+[The Start of Available Tools]
+{outputs["available_tools"]}
+[The End of Available Tools]
+
+[The Start of User Query]
+{question_of(inputs)}
+[The End of User Query]
+
+[The Start of Assistant's Actions]
+{actions_of(outputs)}
+[The End of Assistant's Actions]"""
+
+
+def failure_recovery_prompt(outputs: dict, inputs: dict, truth: dict) -> str | None:
+    """Failure Recovery, for a turn where a tool answered with an error."""
+    if not any(call["result"].startswith("Error[") for call in outputs["tool_calls"]):
+        return None
+    return f"""[Criteria]
+Failure Recovery: The agent should handle errors gracefully. It should:
+- Detect when errors or failures occur
+- Implement appropriate recovery strategies
+- Avoid cascading failures or error loops
+- Provide useful feedback about what went wrong and how it was addressed
+
+[User Input]
+{question_of(inputs)}
+[End of Input]
+
+[The Start of Agent Response with Error Handling]
+{actions_of(outputs)}
+
+Final answer: {outputs["answer"]}
+[The End of Agent Response]"""
+
+
+def answer_faithfulness_prompt(outputs: dict, inputs: dict, truth: dict) -> str:
+    """Answer Faithfulness, against the tool results and the recalled memories."""
+    context = [call["result"] for call in outputs["tool_calls"]]
+    context += [memory["content"] for memory in outputs["memories"]]
+    return f"""[Criteria]
+The answer generated by the AI assistant should be faithful to the provided
+context and should not include information that isn't supported by the context.
+
+[The Start of Provided Context]
+{chr(10).join(context) or "(none)"}
+[The End of Provided Context]
+
+[The Start of AI Assistant's Answer]
+{outputs["answer"]}
+[The End of AI Assistant's Answer]"""
+
+
+def context_relevance_prompt(outputs: dict, inputs: dict, truth: dict) -> str | None:
+    """Context Relevance, of the memories recalled, for a case that needs one."""
+    if truth["memory"] is None:
+        return None
+    retrieved = json.dumps(outputs["memories"], ensure_ascii=False)
+    return f"""[Criteria]
+The context fetched by the retriever should be relevant to the user's initial query.
+
+[The Start of User's Query]
+{question_of(inputs)}
+[The End of User's Query]
+
+[The Start of Retriever's Context]
+{retrieved}
+[The End of Retriever's Context]"""
+
+
+def tool_trajectory_prompt(outputs: dict, inputs: dict, truth: dict) -> str | None:
+    """Tool Trajectory, for a turn that called a tool."""
+    if not outputs["tool_calls"]:
+        return None
+    calls = "\n".join(
+        f"- {call['name']}({json.dumps(call['arguments'], ensure_ascii=False)[:200]})"
+        for call in outputs["tool_calls"]
+    )
+    return f"""Evaluate whether the agent called tools in a logical, minimal order to
+resolve the user's request. Below are the user's goal and the ordered tool calls.
+Rate 1 (wrong or wasteful tool use) to 5 (correct and efficient).
+
+[User goal]
+{question_of(inputs)[:400]}
+
+[Tool calls in order]
+{calls}"""
+
+
+def question_of(inputs: dict) -> str:
+    return inputs["follow_up"] or inputs["question"]
+
+
+def actions_of(outputs: dict) -> str:
+    if not outputs["tool_calls"]:
+        return "(no tool calls)"
+    return json.dumps(outputs["tool_calls"], ensure_ascii=False, indent=1)
+
+
+JUDGED = {
+    "tool_usage": tool_usage_prompt,
+    "failure_recovery": failure_recovery_prompt,
+    "answer_faithfulness": answer_faithfulness_prompt,
+    "context_relevance": context_relevance_prompt,
+    "tool_trajectory": tool_trajectory_prompt,
+}
+
+
+async def judged_scores(outputs: dict, inputs: dict, truth: dict, rate_prompt) -> dict:
+    """Each template's rating for the cases it applies to, with the judge's reason in
+    the outputs so a low rating can be read.
+
+    A rating that fails, such as a gateway error, leaves that metric out of the row and
+    its error in the outputs instead of dropping the whole case: one of some 300 judge
+    calls failing would otherwise fail the run. A gated metric no row scored still fails
+    the gate.
+    """
+    scores = {}
+    for name, build in JUDGED.items():
+        prompt = build(outputs, inputs, truth)
+        if prompt is None:
+            continue
+        try:
+            rating = await rate_prompt(prompt)
+        except Exception as error:
+            outputs.setdefault("judge_errors", {})[name] = repr(error)
+            continue
+        scores[name] = rating["score"]
+        outputs.setdefault("judge_reasons", {})[name] = rating["reason"]
+    return scores
+
+
 def suite_version() -> str:
     """Changes when a case or the seed changes, so runs on different suites are not
     compared as if only the prompt had moved."""
-    cases = json.dumps(CASES, sort_keys=True, ensure_ascii=False)
+    cases = json.dumps([CASES, MEMORIES], sort_keys=True, ensure_ascii=False)
     seed = (HERE / "seed.sql").read_text()
     return hashlib.sha256(f"{cases}\n{seed}".encode()).hexdigest()[:12]
 
@@ -470,6 +822,9 @@ def build_dataset(repeats: int) -> list[dict]:
                     and rubric.format(names=", ".join(names), numbers=numbers),
                     "approximate": case.get("approximate", False),
                     "needs_tool": case.get("needs_tool", True),
+                    "memory": MEMORIES[case["memory"]]["content"]
+                    if "memory" in case
+                    else None,
                 },
             }
             # The attempt keeps the repeats apart, since HoneyHive keys a datapoint
@@ -489,38 +844,80 @@ def column(connection, query: str | None) -> list:
     return [value if isinstance(value, str) else float(value or 0) for value in values]
 
 
-def recorded(function, judge_alias: str):
-    """Judge the answer where a case asks for it, and keep each row locally too, so a
-    run can be read without opening HoneyHive."""
+async def run_all(dataset: list[dict], judge_alias: str) -> list[dict]:
+    """Answers and scores every datapoint one after another, so `seconds` measures the
+    agent and not a shared rate limit. A datapoint that raises is logged and left
+    out."""
+    exporter = trace_tools()
+    results = []
+    async with lifespan(app):
+        agent = app.state.agent
+        memory = app.state.memory
+        without_memory_writes(memory)
+        await seed_memories(memory, dataset[0]["inputs"]["owner_id"])
+        for datapoint in dataset:
+            agent.memory = memory_for(datapoint, memory)
+            try:
+                results.append(await score(agent, exporter, datapoint, judge_alias))
+            except Exception as error:
+                print(
+                    f"{datapoint['ground_truth']['case']} failed: {error!r}",
+                    file=sys.stderr,
+                )
+    return results
 
-    async def answer_and_record(datapoint: dict) -> dict:
-        outputs = await function(datapoint)
-        inputs, truth = datapoint["inputs"], datapoint["ground_truth"]
-        if truth["judge"]:
-            question = inputs["follow_up"] or inputs["question"]
-            outputs["verdict"] = await judge(
-                question, outputs["answer"], truth["judge"], judge_alias
-            )
-        rows.append(
-            {
-                "case": truth["case"],
-                "correct": correct(outputs, inputs, truth)["score"],
-                "tool_choice": tool_choice(outputs, inputs, truth),
-                "expected": truth["numbers"] + truth["names"],
-                **outputs,
-            }
+
+async def score(
+    agent, exporter: InMemorySpanExporter, datapoint: dict, judge_alias: str
+) -> dict:
+    outputs = await answer(agent, exporter, datapoint)
+    inputs, truth = datapoint["inputs"], datapoint["ground_truth"]
+    if truth["judge"]:
+        outputs["verdict"] = await judge(
+            question_of(inputs), outputs["answer"], truth["judge"], judge_alias
         )
-        return outputs
+    metrics = {
+        "correct": correct(outputs, inputs, truth)["score"],
+        "tool_choice": tool_choice(outputs, inputs, truth),
+        "tool_calls": tool_calls(outputs, inputs, truth),
+        "seconds": seconds(outputs, inputs, truth),
+        "recalled_expected": recalled_expected(outputs, inputs, truth),
+        "no_internal_leak": no_internal_leak(outputs, inputs, truth),
+        "vietnamese_answer": vietnamese_answer(outputs, inputs, truth),
+        **await judged_scores(
+            outputs, inputs, truth, lambda prompt: rate(prompt, judge_alias)
+        ),
+    }
+    return {
+        "datapoint": datapoint,
+        "outputs": outputs,
+        # A case a metric does not apply to has no value for it.
+        "metrics": {
+            name: value for name, value in metrics.items() if value is not None
+        },
+    }
 
-    answer_and_record.__name__ = function.__name__
-    return answer_and_record
 
-
-def report(name: str, expected_rows: int) -> None:
-    """Prints each case's passes across its repeats, then the totals; a datapoint
-    that raised has no row, so a short run fails instead of scoring only the rest."""
-    if not rows:
-        raise SystemExit("no answers were recorded")
+def report(name: str, results: list[dict]) -> list[dict]:
+    """Prints each case's passes across its repeats, then the totals, and keeps every
+    row locally so a run can be read without opening HoneyHive."""
+    rows = [
+        {
+            "case": result["datapoint"]["ground_truth"]["case"],
+            "correct": result["metrics"]["correct"],
+            "tool_choice": result["metrics"]["tool_choice"],
+            "expected": result["datapoint"]["ground_truth"]["numbers"]
+            + result["datapoint"]["ground_truth"]["names"],
+            # The metrics go last: `outputs` has its own `tool_calls`, the list of
+            # calls, which would otherwise replace the metric of the same name.
+            **{
+                ("tool_call_log" if key == "tool_calls" else key): value
+                for key, value in result["outputs"].items()
+            },
+            **result["metrics"],
+        }
+        for result in results
+    ]
     by_case: dict[str, list[dict]] = {}
     for row in rows:
         by_case.setdefault(row["case"], []).append(row)
@@ -540,8 +937,166 @@ def report(name: str, expected_rows: int) -> None:
     (RESULTS / f"{name}.json").write_text(
         json.dumps(rows, ensure_ascii=False, indent=1) + "\n"
     )
-    if len(rows) < expected_rows:
-        raise SystemExit(f"{expected_rows - len(rows)} datapoints failed; see the log")
+    return rows
+
+
+# Groups the metrics as the report shows them; a metric missing here is not shown.
+LAYERS = {
+    "task": ["correct"],
+    "tool_use": [
+        "tool_choice",
+        "tool_calls",
+        "tool_usage",
+        "tool_trajectory",
+        "failure_recovery",
+    ],
+    "memory": ["recalled_expected", "context_relevance"],
+    "response_quality": ["answer_faithfulness"],
+    "safety": ["no_internal_leak", "vietnamese_answer"],
+    "performance": ["seconds"],
+}
+
+
+def averages(rows: list[dict]) -> dict[str, tuple[float, int]]:
+    """Each metric's mean over the rows it applies to, with that row count."""
+    values: dict[str, list[float]] = {}
+    for row in rows:
+        for metric in (name for names in LAYERS.values() for name in names):
+            if row.get(metric) is not None:
+                values.setdefault(metric, []).append(row[metric])
+    return {
+        metric: (sum(scores) / len(scores), len(scores))
+        for metric, scores in values.items()
+    }
+
+
+def gate_failures(
+    means: dict[str, tuple[float, int]], minimums: dict[str, float]
+) -> list[str]:
+    """Each gated metric whose mean is below its minimum; one with no row fails too,
+    because a gate that measured nothing passed nothing."""
+    failures = []
+    for metric, minimum in minimums.items():
+        if metric not in means:
+            failures.append(f"{metric}: no row scored it")
+        elif means[metric][0] < minimum:
+            failures.append(f"{metric}: {means[metric][0]:.2f} < {minimum:g}")
+    return failures
+
+
+def markdown_report(
+    rows: list[dict],
+    means: dict[str, tuple[float, int]],
+    minimums: dict[str, float],
+    failures: list[str],
+    expected_rows: int,
+) -> str:
+    """The run as markdown for a job summary or a pull request comment: the gate, every
+    metric by layer, then the cases that missed a gated minimum."""
+    first = rows[0]
+    verdict = "failed" if failures else "passed"
+    lines = [
+        f"## agent_chat eval: gate {verdict}",
+        "",
+        f"Model `{first['model']}`, prompt `{first['prompt_version']}`, "
+        f"suite `{first['suite_version']}`, {len(rows)}/{expected_rows} rows.",
+        "",
+        "| Layer | Metric | Mean | Rows | Minimum | |",
+        "|---|---|---|---|---|---|",
+    ]
+    for layer, metrics in LAYERS.items():
+        for metric in metrics:
+            if metric not in means:
+                continue
+            mean, count = means[metric]
+            minimum = minimums.get(metric)
+            mark = "" if minimum is None else ("ok" if mean >= minimum else "fail")
+            shown = "" if minimum is None else f"{minimum:g}"
+            lines.append(
+                f"| {layer} | `{metric}` | {mean:.2f} | {count} | {shown} | {mark} |"
+            )
+    if failures:
+        lines += ["", "### Gate failures", ""] + [f"- {item}" for item in failures]
+    missed = sorted(
+        {
+            f"`{row['case']}` missed `{metric}`"
+            for row in rows
+            for metric, minimum in minimums.items()
+            if row.get(metric) is not None and row[metric] < minimum
+        }
+    )
+    if missed:
+        lines += ["", "### Cases below a minimum", ""] + [
+            f"- {item}" for item in missed
+        ]
+    return "\n".join(lines) + "\n"
+
+
+def session_payload(run_id: str, name: str, result: dict) -> dict:
+    """One case as a session of the run: inputs, outputs and scores, no spans."""
+    datapoint = result["datapoint"]
+    case, attempt = datapoint["ground_truth"]["case"], datapoint["inputs"]["attempt"]
+    outputs = result["outputs"]
+    return {
+        "session": {
+            "session_name": f"agent-chat-{name}",
+            "source": "evaluation",
+            "session_id": str(uuid.uuid4()),
+            "inputs": datapoint["inputs"],
+            "outputs": outputs,
+            "metrics": result["metrics"],
+            "metadata": {
+                "run_id": run_id,
+                # The same for a case in every run, so HoneyHive pairs it across runs.
+                "datapoint_id": str(
+                    uuid.uuid5(uuid.NAMESPACE_URL, f"agent-chat/{case}/{attempt}")
+                ),
+                "case": case,
+                "model": outputs["model"],
+                "prompt_version": outputs["prompt_version"],
+                "suite_version": outputs["suite_version"],
+            },
+        }
+    }
+
+
+def sync_scores(client: HoneyHive, name: str, results: list[dict]) -> None:
+    """Creates the run, logs each case as a session and completes the run."""
+    run = client.experiments.create_run(
+        PostExperimentRunRequest(
+            name=f"agent-chat-{name}", event_ids=[], status="pending"
+        )
+    )
+    session_ids = [
+        client.sessions.start(session_payload(run.run_id, name, result)).session_id
+        for result in results
+    ]
+    client.experiments.update_run(
+        run.run_id, PutExperimentRunRequest(event_ids=session_ids, status="completed")
+    )
+    print(f"synced {len(session_ids)} sessions to run {run.run_id}")
+
+
+def print_sync_plan(name: str, dataset: list[dict]) -> None:
+    """Shows the run and the first session that a real run would send, with the answer
+    and the scores empty because a dry run asks no model."""
+    first = {
+        "datapoint": dataset[0],
+        "outputs": {
+            "model": "",
+            "prompt_version": "",
+            "suite_version": dataset[0]["inputs"]["suite_version"],
+        },
+        "metrics": {},
+    }
+    cases = {datapoint["ground_truth"]["case"] for datapoint in dataset}
+    print(f"{len(dataset)} datapoints from {len(cases)} cases")
+    print(f"would create run agent-chat-{name}, then log one session per datapoint:")
+    print(
+        json.dumps(
+            session_payload("<run_id>", name, first), ensure_ascii=False, indent=1
+        )
+    )
 
 
 def shop_today() -> date:
@@ -555,25 +1110,57 @@ def main() -> None:
     parser.add_argument("--repeats", type=int, default=3)
     # The chat model grades itself by default; a stronger alias gives fairer grades.
     parser.add_argument("--judge", default="chat", help="model alias for the judge")
+    parser.add_argument(
+        "--sync",
+        action="store_true",
+        help="also sync the scores to HoneyHive as an experiment run",
+    )
+    parser.add_argument(
+        "--gate", type=Path, help="TOML of metric minimums; a miss exits 1"
+    )
+    parser.add_argument("--report", type=Path, help="write the run as markdown here")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="build the dataset and show what would sync, asking no model and "
+        "calling no HoneyHive",
+    )
     arguments = parser.parse_args()
     started_on = shop_today()
     dataset = build_dataset(arguments.repeats)
-    evaluate(
-        recorded(answer, arguments.judge),
-        dataset=dataset,
-        evaluators=[correct, tool_choice, tool_calls, seconds],
-        instrumentors=[ContentInstrumentor],
-        api_key=HONEYHIVE_KEY,
-        server_url=app_config.HH_API_URL,
-        name=f"agent-chat-{arguments.name}",
-        # One at a time, so `seconds` measures the agent and not a shared rate limit.
-        max_workers=1,
-        print_results=False,
+    if arguments.dry_run:
+        print_sync_plan(arguments.name, dataset)
+        return
+    if arguments.sync and not HONEYHIVE_KEY:
+        raise SystemExit("--sync needs HH_API_KEY")
+    minimums = (
+        tomllib.loads(arguments.gate.read_text())["minimum"] if arguments.gate else {}
     )
-    report(arguments.name, len(dataset))
+    results = asyncio.run(run_all(dataset, arguments.judge))
+    if not results:
+        raise SystemExit("no answers were recorded")
+    rows = report(arguments.name, results)
+    means = averages(rows)
+    failures = gate_failures(means, minimums)
+    if arguments.report:
+        arguments.report.write_text(
+            markdown_report(rows, means, minimums, failures, len(dataset))
+        )
+    if arguments.sync:
+        sync_scores(
+            HoneyHive(api_key=HONEYHIVE_KEY, server_url=app_config.HH_API_URL),
+            arguments.name,
+            results,
+        )
+    # A datapoint that raised has no row, so a short run fails instead of scoring
+    # only the rest.
+    if len(rows) < len(dataset):
+        raise SystemExit(f"{len(dataset) - len(rows)} datapoints failed; see the log")
     # The expected answers were computed before midnight; after it, "yesterday" moved.
     if shop_today() != started_on:
         raise SystemExit("the run crossed midnight shop time; run it again")
+    if failures:
+        raise SystemExit("gate failed: " + "; ".join(failures))
 
 
 if __name__ == "__main__":

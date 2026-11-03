@@ -7,6 +7,26 @@
 
 Check: `mvn verify` passed 1514 tests with PostgreSQL enabled, zero failures/errors/skips; 13 gate self-tests passed. On 2026-11-03 Docker responded again: the official Python report gate passed all 17 required PostgreSQL suites and methods, and the temporary core021-postgres container was confirmed absent. No shared database or deployment was changed. Commit: the one that adds this entry.
 
+### 2026-11-02 — Agent chat eval offline with a manual CI gate, memory recall on the trace
+
+| Area | Change |
+|---|---|
+| AI | • A `memory recall` span in each chat session carries the question, the recalled memories with their scores and `recalled_count`<br>• `evaluation/agent_chat/run.py` scores locally with five HoneyHive evaluator templates judged through Bifrost, two seeded memory cases (recall only in those cases, writes off), and two safety metrics copied from the production evaluators; `--gate thresholds.toml` exits 1 below a minimum, `--report` writes markdown by layer, and only `--sync` sends scores to HoneyHive<br>• `.honeyhive/evaluators/sql-parse-check.yaml` parses each `query_shop_data` SQL in production |
+| CI | • `eval-regression.yml`, dispatched by hand from `staging`, runs the eval of input `ref` on a throwaway database with `ai/staging` settings and posts the report to the job summary and the pull request<br>• `scripts/local-db.sh` takes a container name and port, and pushes the AI migrations with `sslmode=disable`, without which `supabase db push` failed on a fresh database |
+| Docs | • The eval README, ADR-0009, `.honeyhive/README.md` and `ci-cd.md#eval-regression` |
+
+Check: 484 unit tests and ruff pass; actionlint passes; an Opus review found the report rows replacing the `tool_calls` metric with the list of calls (fixed, with a test on a row built by `report()`), one failed judge call dropping a whole case (now only that metric), and workflow hardening (fixed); the workflow's database step (throwaway container on a free port, owner insert, seed) ran locally and `run.py --dry-run --repeats 3` built 69 datapoints on it; `sql-parse-check` scored 691 real events without an exception and now also reads arguments sent as a JSON string. Not verified: a full run with models, the workflow on a runner, and the pull request comment. Commit: the one that adds this entry.
+
+### 2026-11-02 — HoneyHive config as code and four new answer evaluators
+
+| Area | Change |
+|---|---|
+| AI | • Evaluators and alerts move from `backend/ai/evaluation/honeyhive` to `.honeyhive/` at the repository root in the layout of HoneyHive's Config as Code guide; `apply.py` gives way to the guide's `sync-evaluators.sh` (IDs kept in `.honeyhive/state.json`, seeded with the two existing evaluators) and `sync-dashboards.sh` (charts upserted and alerts created by name for the projects in `projects.yaml`)<br>• Four Python evaluators score each `agent-chat` session against Bobi's prompt: `unsupported-figure` (a figure with no tool call and not in the question), `format-violation` (forbidden Markdown), `invalid-chart` (a chart block `readChart` in the app cannot draw) and `non-vietnamese-answer`; no LLM judge, because of `NFR-008`<br>• Four charts split by `source`: first-words wait p50, tool calls per turn, query error rate and unsupported figure rate |
+| CI | • `honeyhive-sync.yml` and `honeyhive-dashboards.yml` run the scripts on a merge into `main` with the CLI pinned to v1.9.0; the evaluator workflow fails when a run changes `state.json`, so an evaluator created in CI is not duplicated on the next run |
+| Docs | • `.honeyhive/README.md`, the AI README and ADR-0009 point at the new layout; the credential map was regenerated with the three GitHub secrets |
+
+Check: the CLI schemas validate every evaluator, chart and alert file, including as the scripts render them with `metric_id` or `project_id`; shellcheck and actionlint pass; the new evaluators pass 24 hand-written cases and, run locally on the last 99 `agent-chat` sessions, flag only test probes. Not verified: the scripts against HoneyHive, the chart metric names (a chart query needs a workspace data plane key), and that the evaluator sandbox exposes the session's `tool_calls` in `metrics`. Commit: the one that adds this entry.
+
 ### 2026-11-02 — Dev machines pull the dev environment from Dopbase
 
 | Area | Change |
@@ -172,28 +192,3 @@ Check: on Grafana 12.1.1 provisioned from the repository, an upgrade from the ol
 | Docs | • ADR-0003 now records one dashboard instead of two, retention and stickiness definitions, why logout is not a metric, and login tracking as a P2 Core change; the CI/CD and secrets guides describe the datasource and its login; the credential map is regenerated and `secrets-and-env.md` describes `.env.monitor` as the Grafana login only |
 
 Check: on a throwaway PostgreSQL 16 with every Core migration, the AI chat table and the `grafana_reader` grants from the ADR, every SQL query of the dashboard ran through Grafana 12.1.1 provisioned from the repository and rendered in the browser; the grants alone were enough after the last-sale panel moved from `created_at` to `sold_at`; `ansible-playbook --syntax-check` and `docker compose config` with one optional file present pass. Not verified: the role on Supabase, the pooler login, real data and the AI Prometheus panels; Dopbase now holds Hikari 8, minimum idle 2 and a 5000 ms connection timeout for Core, 2 and 2 for AI's pools, and port 5432 and database `postgres` in `monitor/staging` and a new `monitor/production`; `GRAFANA_PG_HOST`, `GRAFANA_PG_USER` and `GRAFANA_PG_PASSWORD` are not set for production and were not checked for staging, because reading values needs an interactive password. Commit: the one that adds this entry.
-
-### 2026-10-30 — Caddy reads its Caddyfile through a directory, and a scrape-down alert
-
-| Area | Change |
-|---|---|
-| Deploy | • The shared Caddy mounts `conf/` instead of the single `Caddyfile`: Ansible replaces a file by rename, a single-file mount keeps the old inode, and `caddy reload` had kept serving the Caddyfile from before #422, so `:9180` never opened and the Overview showed only probes<br>• The edge handler runs `caddy validate` before `caddy reload`, and the playbook removes the old top-level `Caddyfile`<br>• Grafana alert **Metrics scrape down** fires when a target's `up` is 0 for 10 minutes<br>• Grafana opens on the Overview after sign-in, and the Resources dashboard shows every container in one view without the stack filter |
-| Docs | • The CI/CD guide explains the directory mount, lists the new alert and describes the Resources and home dashboard changes |
-
-Check: on the VPS, the container's `/etc/caddy/Caddyfile` had no `9180` while the host file did, and `up{job="caddy"}` was 0 for 24 hours; locally, Caddy started from the new layout served `:9180` and, after the Caddyfile was replaced by rename, `caddy reload` picked up the change; the playbook passes `--syntax-check`; a throwaway Grafana 12.1.1 provisions the eight alerts, opens on the Overview and loads the Resources dashboard; on the live Prometheus `1 - up > 0` returns Caddy and production AI. Not done: the playbook has not run on the VPS, and production AI still fails its scrape until a release carries `/metrics`. Commit: the one that adds this entry.
-
-### 2026-10-29 — Credential map pages for staging and production
-
-| Area | Change |
-|---|---|
-| Docs | • `docs/development/credential-map/` holds one page per environment listing every Dopbase and GitHub variable with its source, service, connection, kind, status, code references and the failure it causes, shown as a table grouped by service with a status strip, search, a service filter and a detail panel<br>• `scripts/secrets/credential_map.py` builds the pages from Dopbase key names and a scan of tracked files; connections, kinds and verified symptoms live in `scripts/secrets/credential-map.json` |
-
-Check: both pages generated (staging 208 keys, production 179); every local env value of 12 or more characters was searched for in the pages and only the VPS IP, already public in the docs, matched; both pages were opened in the in-app browser at 1440 px and 375 px with no horizontal page scroll and no console errors, and env template files under `secrets/templates/` are skipped by the scan so they do not mark every variable as used. Commit: the one that adds this entry.
-
-### 2026-10-29 — R2 bucket, token policy and key handling for the Dopbase backup
-
-| Area | Change |
-|---|---|
-| Docs | • A new `dopbase-secrets-and-backup` diagram shows the three bands — operator and CI, the VPS, and R2 — with who writes secrets in, what the nightly cron does, and where each key lives<br>• The CI/CD guide now says how to create the backup bucket: the bucket and its location hint, a lifecycle rule for retention and incomplete uploads, an R2 API token scoped to that bucket from the R2 page rather than the account API token page, a bucket policy that denies delete because R2 has no write-only preset, and the age key pair generated off the VPS and kept in the password manager<br>• The five backup variables belong in both `vps/staging` and `vps/production`, because a playbook run for an environment without them removes the cron job the other environment's run created<br>• A hand run of `backup.sh` plus a refused `rclone delete` is the check that the bucket is set up right |
-
-Check: a link and anchor pass over `docs/development/ci-cd.md` resolves every link and image added here; the diagram exports with the repository's own drawio flags and was read back as a PNG to check for overlapping labels and edges through nodes; `backup.sh` keeps the volume-tar approach, because `dopbase backup` reaches an administrator-only endpoint and a cron job would have to hold an admin token on the VPS. Not verified against Cloudflare: that R2 accepts `s3:PutBucketPolicy` in a bucket policy, the Asia-Pacific location hint, and the refused delete; no bucket, token or key pair exists yet. Two anchors that predate this change, `#android-runners` and `#ci-runners`, are still broken. Commit: the one that adds this entry.
