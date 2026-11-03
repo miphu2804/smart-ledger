@@ -61,7 +61,7 @@ export const agentApi = {
   ): Promise<AgentChatMessageView> => {
     if (USE_MOCK) {
       const reply = await agentApi.chat(input);
-      // Giả lập một lượt thật để thấy dòng suy nghĩ: chờ model, một bước tool, rồi chữ đến từng đoạn.
+      // Giả lập một lượt thật để thấy ba chấm chờ: chờ model, một bước tool, rồi chữ đến từng đoạn.
       const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
       await pause(MOCK_THINK_MS);
       onTool?.({ phase: 'start', callId: 'mock', name: 'query_shop_data' });
