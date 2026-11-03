@@ -1,3 +1,12 @@
+### 2026-11-03 — Pinned actions, Dependabot, code owners and a security policy
+
+| Area | Change |
+|---|---|
+| CI | • Every third-party action is pinned to a full commit SHA with its release as a comment, because the repository is public and jobs run on the owner's self-hosted machines<br>• `.github/dependabot.yml` opens one grouped pull request a week against `staging` for GitHub Actions, the AI and deploy Dockerfiles and the Compose stacks; app packages and `backend/core` stay out<br>• `.github/CODEOWNERS` requests the owner's review on CI, deploy, scripts, secrets, HoneyHive config, `docs/development/` and Core |
+| Docs | • `SECURITY.md` asks for private vulnerability reports; `ci-cd.md` gains "Ownership and dependency updates" |
+
+Check: `actionlint` passes; `check-jsonschema` validates `dependabot.yml` and every workflow; each pinned SHA was resolved from its tag through the GitHub API. Not verified: Dependabot's first run, and private vulnerability reporting, which is still off in the repository settings. Commit: the one that adds this entry.
+
 ### 2026-11-03 — Infra plans only merged code and shares the VPS lock with the backend deploy
 
 | Area | Change |
@@ -181,13 +190,3 @@ Check: full Maven verify passed 1472 tests on disposable PostgreSQL 16.15 with z
 | Docs | • AI README, technical design, CI/CD guide, service walkthrough and ADR-0008 describe the aliases and Bifrost owning routing and fallback |
 
 Check: `uv run pytest` passes with 442 tests and `uv run ruff check` passes. The pinned Bifrost v2.3.2 image was run against a mock upstream: Anthropic requests reach `/v1/messages` with `cache_control`, session and User-Agent are forwarded, a 429 falls back to OpenAI, and logs show the session, shop and rule without content. Not verified: real OpenCode Go and OpenAI calls, tool calls and streaming through Bifrost, and the Bifrost UI itself. Commit: the one that adds this entry.
-
-### 2026-10-31 — Dozzle and Snoopy for VPS operators
-
-| Area | Change |
-|---|---|
-| Deploy | • The monitoring stack runs Dozzle `v11.4.0` for live container logs, bound to `127.0.0.1:8081` with a 64 MiB limit and reached through an SSH tunnel<br>• The playbook installs Snoopy, accepting its `ld.so.preload` prompt, and adds the `snooplog` shortcut |
-| Docs | • The CI/CD guide describes the tunnel, why Dozzle gets no Caddy site, and what Snoopy can and cannot prove |
-
-Check: a manual Dozzle container on the VPS listed all 13 containers through the tunnel, `docker compose config` accepted the service, `ansible-playbook --syntax-check` passed and the Snoopy debconf key matches the installed package. Not verified: a real playbook run, or the preseed on a new VPS.
-
