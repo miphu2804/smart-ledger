@@ -40,9 +40,11 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     environment: ${{ github.ref_name == 'main' && 'backend-production' || 'backend-staging' }}
     concurrency:
-      # Shared with infra.yml, whose apply writes the same app directory on the VPS.
+      # Shared with infra.yml, whose apply writes the same app directory on the VPS; `queue: max` keeps every waiting
+      # job instead of only the newest.
       group: vps-${{ github.ref_name == 'main' && 'production' || 'staging' }}
       cancel-in-progress: false
+      queue: max
     env:
       # One GHCR package per service and environment, tagged by commit, so staging deploys never push a production
       # image out of its rollback window. Image names must be lowercase, which this repository's owner and name are.

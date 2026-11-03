@@ -95,11 +95,12 @@ jobs:
     if: needs.prepare.outputs.runs != '[]'
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
     environment: ${{ matrix.secrets }}
-    # Shared with the backend deploy of deploy-backend.yml, which writes the same app directory. A running apply is
-    # never cancelled halfway.
+    # Shared with the backend deploy of deploy-backend.yml, which writes the same app directory. `queue: max` keeps
+    # every waiting job, where the default would cancel all but the newest, and a running one is never cancelled.
     concurrency:
       group: vps-${{ matrix.environment }}
       cancel-in-progress: false
+      queue: max
     strategy:
       # Sequential and in order, so a failed plan stops the apply after it.
       max-parallel: 1

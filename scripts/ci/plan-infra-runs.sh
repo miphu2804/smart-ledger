@@ -20,6 +20,8 @@ case "$SMARTLEDGER_TRIGGER" in
     fi
     ;;
   manual)
+    : "${INFRA_ENVIRONMENT:?set by the manual input environment}" "${INFRA_SCOPE:?set by the manual input scope}" \
+      "${INFRA_MODE:?set by the manual input mode}"
     secrets="$INFRA_ENVIRONMENT"
     [ "$INFRA_MODE" = apply ] || [ "$INFRA_ENVIRONMENT" = staging ] || secrets=production-plan
     runs="[$(run "$INFRA_MODE" "$INFRA_ENVIRONMENT" "$INFRA_SCOPE" "$secrets")]"
