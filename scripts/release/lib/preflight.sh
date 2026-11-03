@@ -1,8 +1,12 @@
+# shellcheck shell=bash
 # Shared helpers for the device build scripts (scripts/release/ios-device-release.sh, scripts/release/android-release.sh): the
 # preflight report and the arrow-key menu that picks a phone.
 # Every check prints one line (✓ passed, ! warning, ✗ failed). A failure says how to fix it and can register an action
 # (open a page or an app, or run a command); pf_finish then lists those actions so the user can start one from the
 # terminal instead of looking up what to install. Written for the bash 3.2 that ships with macOS.
+
+# shellcheck source=../../ci/lib.sh
+. "$(dirname "${BASH_SOURCE[0]}")/../../ci/lib.sh"
 
 pf_failures=0
 pf_warnings=0
@@ -16,7 +20,7 @@ else
   pf_bold="" pf_dim="" pf_green="" pf_yellow="" pf_red="" pf_reset=""
 fi
 
-pf_ci() { [ "${GITHUB_ACTIONS:-}" = true ]; }
+pf_ci() { ci_running; }
 
 pf_section() {
   echo

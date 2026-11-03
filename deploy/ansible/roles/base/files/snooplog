@@ -1,0 +1,2 @@
+#!/bin/sh
+grep snoopy /var/log/auth.log | grep -v 'ssh:((undefined))' | tail -50

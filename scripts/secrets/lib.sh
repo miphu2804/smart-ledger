@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Helpers sourced by the scripts in scripts/secrets/.
 
 # Exits with the usage line $2 unless $1 is an environment the team keeps env files for.

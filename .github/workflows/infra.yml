@@ -1,0 +1,144 @@
+name: Infra
+
+# Thin GitHub adapter over scripts/infra/run.sh, which holds the whole flow and knows nothing of GitHub: this file
+# picks the runner, builds deploy/ansible/Dockerfile, maps secrets to the script's neutral variables and runs it in
+# that image. See docs/development/ci-cd.md#vps.
+#   pull request touching deploy/** or scripts/infra/**   lint only: unmerged code never gets the VPS key
+#   push to staging                                       plan, then apply staging, app scope
+#   push to main                                          plan, then apply production, all scope
+#   by hand                                               the environment, scope and mode chosen
+# scripts/ci/plan-infra-runs.sh lists the runs. Each reads its secrets from a GitHub environment: infra-staging,
+# infra-production-plan or infra-production. Only infra-production requires reviewers, so a production apply waits
+# for a person while the plan before it does not.
+
+run-name: Infra ${{ github.event_name }} ${{ github.ref_name }}
+
+on:
+  pull_request:
+    paths: [deploy/**, scripts/infra/**, .github/workflows/infra.yml]
+  push:
+    branches: [staging, main]
+    paths: [deploy/**, scripts/infra/**, .github/workflows/infra.yml]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to plan or apply
+        type: choice
+        required: true
+        default: staging
+        options: [staging, production]
+      scope:
+        description: app writes the environment's own files; all also configures the shared host (production only)
+        type: choice
+        required: true
+        default: app
+        options: [app, all]
+      mode:
+        description: plan is a dry run, apply changes the VPS
+        type: choice
+        required: true
+        default: plan
+        options: [plan, apply]
+      runner:
+        description: default reads the repository variable CD_RUNNER, else CI_RUNNER, else github-hosted
+        type: choice
+        required: true
+        default: default
+        options: [default, github-hosted, self-hosted, auto]
+
+permissions:
+  contents: read
+
+jobs:
+  select-runner:
+    uses: ./.github/workflows/select-runner.yml
+    with:
+      choice: ${{ inputs.runner != 'default' && inputs.runner || vars.CD_RUNNER || vars.CI_RUNNER || 'github-hosted' }}
+      allow-self-hosted: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    secrets:
+      RUNNERS_READ_TOKEN: ${{ secrets.RUNNERS_READ_TOKEN }}
+
+  # No secrets: the playbook's syntax and ansible-lint. setup-uv, not setup-python, because setup-python cannot install
+  # into the self-hosted machines' tool cache.
+  lint:
+    needs: select-runner
+    runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.1.0
+      - name: Lint
+        run: scripts/infra/lint.sh
+
+  # The runs this event asks for, in order; none for a pull request.
+  prepare:
+    needs: select-runner
+    runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
+    outputs:
+      runs: ${{ steps.runs.outputs.runs }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: List the runs
+        id: runs
+        env:
+          SMARTLEDGER_TRIGGER: ${{ github.event_name == 'workflow_dispatch' && 'manual' || github.event_name == 'push' && 'push' || 'review' }}
+          INFRA_ENVIRONMENT: ${{ inputs.environment }}
+          INFRA_SCOPE: ${{ inputs.scope }}
+          INFRA_MODE: ${{ inputs.mode }}
+        run: scripts/ci/plan-infra-runs.sh
+
+  run:
+    needs: [select-runner, lint, prepare]
+    if: needs.prepare.outputs.runs != '[]'
+    runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
+    environment: ${{ matrix.secrets }}
+    # Shared with the backend deploy of deploy-backend.yml, which writes the same app directory. `queue: max` keeps
+    # every waiting job, where the default would cancel all but the newest, and a running one is never cancelled.
+    concurrency:
+      group: vps-${{ matrix.environment }}
+      cancel-in-progress: false
+      queue: max
+    strategy:
+      # Sequential and in order, so a failed plan stops the apply after it.
+      max-parallel: 1
+      matrix:
+        include: ${{ fromJSON(needs.prepare.outputs.runs) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Build the runtime image
+        run: docker build --tag smartledger-infra deploy/ansible
+      # The container runs as the runner's own user so the files it writes in the workspace can be cleaned up.
+      - name: Run
+        env:
+          SMARTLEDGER_VPS_HOST: ${{ vars.SMARTLEDGER_VPS_HOST }}
+          SMARTLEDGER_VPS_USER: ${{ vars.SMARTLEDGER_VPS_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          DOPBASE_URL: ${{ vars.DOPBASE_URL }}
+          DOPBASE_TOKEN_CORE: ${{ secrets.DOPBASE_TOKEN_CORE }}
+          DOPBASE_TOKEN_AI: ${{ secrets.DOPBASE_TOKEN_AI }}
+          DOPBASE_TOKEN_BIFROST: ${{ secrets.DOPBASE_TOKEN_BIFROST }}
+          DOPBASE_TOKEN_VPS: ${{ secrets.DOPBASE_TOKEN_VPS }}
+          DOPBASE_TOKEN_MONITOR: ${{ secrets.DOPBASE_TOKEN_MONITOR }}
+          MODE: ${{ matrix.mode }}
+          SMARTLEDGER_ENVIRONMENT: ${{ matrix.environment }}
+          SCOPE: ${{ matrix.scope }}
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/work" -w /work \
+            -e SMARTLEDGER_VPS_HOST -e SMARTLEDGER_VPS_USER -e SSH_PRIVATE_KEY -e SSH_KNOWN_HOSTS -e DOPBASE_URL \
+            -e DOPBASE_TOKEN_CORE -e DOPBASE_TOKEN_AI -e DOPBASE_TOKEN_BIFROST -e DOPBASE_TOKEN_VPS -e DOPBASE_TOKEN_MONITOR \
+            smartledger-infra scripts/infra/run.sh "$MODE" "$SMARTLEDGER_ENVIRONMENT" --scope "$SCOPE"
+      - uses: actions/upload-artifact@v7
+        # The plan is also in the job log; a full artifact quota must not fail the plan or skip the apply.
+        continue-on-error: true
+        if: always() && matrix.mode == 'plan'
+        with:
+          name: infra-plan-${{ matrix.environment }}
+          path: out/infra-plan-${{ matrix.environment }}.txt
+          if-no-files-found: ignore
+          retention-days: 14

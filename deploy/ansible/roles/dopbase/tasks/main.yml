@@ -1,0 +1,80 @@
+- name: Run Dopbase
+  when: dopbase_domain | length > 0
+  block:
+    - name: Set up the Dopbase files
+      module_defaults:
+        ansible.builtin.file: { owner: "{{ sl_deploy_user }}", group: "{{ sl_deploy_user }}" }
+        ansible.builtin.copy: { owner: "{{ sl_deploy_user }}", group: "{{ sl_deploy_user }}" }
+        ansible.builtin.template: { owner: "{{ sl_deploy_user }}", group: "{{ sl_deploy_user }}" }
+      block:
+        - name: Create the Dopbase directory
+          ansible.builtin.file:
+            path: "{{ sl_dopbase_dir }}"
+            state: directory
+            mode: "0750"
+
+        - name: Upload Dopbase
+          ansible.builtin.copy:
+            src: "{{ sl_deploy_src }}/dopbase/{{ item }}"
+            dest: "{{ sl_dopbase_dir }}/{{ item }}"
+            mode: "0644"
+          loop: [compose.yaml, Dockerfile]
+          notify: Apply Dopbase
+
+        - name: Upload the Dopbase backup script
+          ansible.builtin.copy:
+            src: "{{ sl_deploy_src }}/dopbase/backup.sh"
+            dest: "{{ sl_dopbase_dir }}/backup.sh"
+            mode: "0750"
+
+        - name: Set the Dopbase public URL
+          ansible.builtin.template:
+            src: env.j2
+            dest: "{{ sl_dopbase_dir }}/.env"
+            mode: "0600"
+          notify: Apply Dopbase
+
+    - name: Route the Dopbase domain to Dopbase
+      ansible.builtin.template:
+        src: dopbase.caddy.j2
+        dest: "{{ sl_edge_dir }}/sites/dopbase.caddy"
+        mode: "0644"
+      notify: Apply the edge
+
+    - name: Set up the nightly backup
+      when: dopbase_backup_bucket | length > 0
+      module_defaults:
+        ansible.builtin.file: { owner: "{{ sl_deploy_user }}", group: "{{ sl_deploy_user }}" }
+        ansible.builtin.template: { owner: "{{ sl_deploy_user }}", group: "{{ sl_deploy_user }}" }
+      block:
+        # age encrypts the archive before it leaves the machine and rclone uploads it; Ubuntu packages both.
+        - name: Install the Dopbase backup tools
+          ansible.builtin.apt:
+            name: [age, rclone]
+            update_cache: true
+            cache_valid_time: 3600
+
+        - name: Set the Dopbase backup settings
+          ansible.builtin.template:
+            src: env.backup.j2
+            dest: "{{ sl_dopbase_dir }}/.env.backup"
+            mode: "0600"
+          no_log: true
+
+        - name: Let the deploy user write the backup log
+          ansible.builtin.file:
+            path: /var/log/dopbase-backup.log
+            state: touch
+            mode: "0640"
+            modification_time: preserve
+            access_time: preserve
+
+    # Defined here only, so a run for another scope never touches it. An empty bucket removes the job.
+    - name: Back up Dopbase every night
+      ansible.builtin.cron:
+        name: dopbase-backup
+        user: "{{ sl_deploy_user }}"
+        minute: "0"
+        hour: "{{ dopbase_backup_hour }}"
+        job: "cd {{ sl_dopbase_dir }} && ./backup.sh >>/var/log/dopbase-backup.log 2>&1"
+        state: "{{ 'present' if dopbase_backup_bucket | length > 0 else 'absent' }}"

@@ -17,3 +17,6 @@ venv/
 
 # Ansible inventory with real VPS addresses
 deploy/ansible/inventory.ini
+
+# Output of scripts/infra/run.sh plan
+out/

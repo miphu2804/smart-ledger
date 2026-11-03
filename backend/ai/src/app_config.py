@@ -48,11 +48,13 @@ class AppConfig(BaseSettings):
     LITELLM_URL: str | None = None
 
     # honeyhive: Pydantic AI traces with the redacted message content
-    # (src/observability.py); an unset key sends nothing
+    # (src/observability.py); an unset key or a source other than production sends
+    # nothing
     HH_API_KEY: str | None = None
     # Data plane URL; unset uses HoneyHive's multi-tenant default
     HH_API_URL: str | None = None
-    # staging or production, so one HoneyHive project can hold both
+    # Traces go out only when this is production, so staging and local leave the free
+    # plan's monthly events to production; the value also tags the sessions
     HH_SOURCE: str = "local"
     # Share of chat turns traced, from 0 to 1; the free plan caps events per month and
     # a turn sends about a dozen

@@ -184,6 +184,16 @@ def test_blank_key_leaves_tracing_off(monkeypatch) -> None:
     Observability.start(AppConfig(HH_API_KEY=None))
 
 
+@pytest.mark.parametrize("source", ["local", "staging"])
+def test_source_other_than_production_leaves_tracing_off(monkeypatch, source) -> None:
+    def must_not_run(*args, **kwargs):
+        raise AssertionError("honeyhive traced outside production")
+
+    monkeypatch.setattr(observability.HoneyHiveTracer, "init", must_not_run)
+
+    Observability.start(AppConfig(HH_API_KEY="key", HH_SOURCE=source))
+
+
 def test_key_traces_agents_with_message_content_but_no_media(monkeypatch) -> None:
     calls: dict = {}
     tracer = SimpleNamespace(provider=TracerProvider())
@@ -197,7 +207,7 @@ def test_key_traces_agents_with_message_content_but_no_media(monkeypatch) -> Non
     config = AppConfig(
         HH_API_KEY="key",
         HH_API_URL=None,
-        HH_SOURCE="staging",
+        HH_SOURCE="production",
     )
 
     try:
@@ -210,7 +220,7 @@ def test_key_traces_agents_with_message_content_but_no_media(monkeypatch) -> Non
 
     assert calls == {
         "api_key": "key",
-        "source": "staging",
+        "source": "production",
         "server_url": None,
         "skip_backend_session_creation": True,
     }

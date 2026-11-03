@@ -1,0 +1,11 @@
+name: Set up the Dopbase CLI
+description: >-
+  Installs the pinned Dopbase CLI into a job-local prefix and data dir, so a self-hosted machine's own CLI and
+  login stay untouched. The version and digests are in scripts/ci/install-dopbase.sh.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: '"$ACTION_PATH/../../../scripts/ci/install-dopbase.sh"'

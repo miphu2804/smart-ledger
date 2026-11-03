@@ -60,7 +60,7 @@ ZALO_APP_ID=...
 | `.env.bifrost` | Bifrost model gateway: the provider key and the virtual key AI uses, uploaded to the VPS as `bifrost.env` ([CI/CD](ci-cd.md#service-variables)) | yes | yes |
 | `.env.mobile` | mobile app; copied to `frontend/mobile/.env` | yes | no |
 | `.env.release` | Android APK release: R2 bucket, keystore | no | yes |
-| `.env.loadtest`, `.env.monitor` | load test and the read-only `grafana_reader` login of the product dashboard in `.env.monitor`, which `vps-playbook.sh` loads ([CI/CD](ci-cd.md#monitoring)); staging copies go to `scripts/loadtest/.env.staging` and `scripts/monitor/.env` | yes | `.env.loadtest`, and `.env.monitor` with `GRAFANA_PG_*` only |
+| `.env.loadtest`, `.env.monitor` | load test and the read-only `grafana_reader` login of the product dashboard in `.env.monitor`, which `scripts/infra/run.sh` loads ([CI/CD](ci-cd.md#monitoring)); staging copies go to `scripts/loadtest/.env.staging` and `scripts/monitor/.env` | yes | `.env.loadtest`, and `.env.monitor` with `GRAFANA_PG_*` only |
 | `.env.vps` | the VPS of that environment: `VPS_HOST`, `VPS_KNOWN_HOSTS`, the CI deploy key (`VPS_SSH_KEY` in base64, `VPS_SSH_PUBLIC_KEY`), `CLOUDFLARE_TUNNEL_TOKEN` and, for [monitoring](ci-cd.md#monitoring), `MONITOR_DOMAIN`, `GRAFANA_ADMIN_PASSWORD`, `MONITOR_DISCORD_WEBHOOK_URL`, `MONITOR_TELEGRAM_BOT_TOKEN` and `MONITOR_TELEGRAM_CHAT_ID`; read by the Ansible playbook and `github.sh` ([VPS](ci-cd.md#vps)) | yes | yes |
 | `github/.env.<environment>` | copy of a GitHub Actions environment | 4 environments | 3 environments |
 
@@ -99,7 +99,7 @@ Not in `secrets/`: `.env.example` files (committed templates), and generated fil
 
 ## 5. Change a secret
 
-Change it in the Dopbase web UI or with `dopbase secret set <project>/<environment> KEY=value`, then pull. Dopbase is the only place to change a value: the backend deploy reads `core` and `ai` from it, and `scripts/secrets/vps-playbook.sh` reads every VPS file from it, so an edit in `secrets/<environment>/env/` reaches nothing. For a new service, write its file and run `scripts/secrets/dopbase-sync.sh seed <environment>`, which loads only files whose Dopbase environment does not exist yet; every value must stay on its key's line.
+Change it in the Dopbase web UI or with `dopbase secret set <project>/<environment> KEY=value`, then pull. Dopbase is the only place to change a value: the backend deploy reads `core` and `ai` from it, and `scripts/infra/run.sh` reads every VPS file from it, so an edit in `secrets/<environment>/env/` reaches nothing. For a new service, write its file and run `scripts/secrets/dopbase-sync.sh seed <environment>`, which loads only files whose Dopbase environment does not exist yet; every value must stay on its key's line.
 
 ## 6. Add or remove a person
 

@@ -59,22 +59,18 @@ jobs:
           cache-dependency-path: frontend/mobile/package-lock.json
       - name: Install Vercel CLI
         # A job-local prefix, so the self-hosted machine's own CLI (e.g. Homebrew's) is neither clashed with nor replaced.
-        run: |
-          npm install --prefix "$RUNNER_TEMP/cli" vercel@62.2.0
-          echo "$RUNNER_TEMP/cli/node_modules/.bin" >> "$GITHUB_PATH"
+        run: scripts/ci/install-vercel.sh
       - name: Keep the Metro cache job-local
         # Metro caches transformed modules (with EXPO_PUBLIC_* inlined) under TMPDIR; on a shared machine
         # the mock build of mobile-web would otherwise leak into the real bundle of deploy-web.
         if: runner.environment == 'self-hosted'
-        run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
+        run: scripts/ci/isolate-metro-cache.sh
       - run: vercel pull --yes --environment="$VERCEL_TARGET" --token="$VERCEL_TOKEN"
       # Job env wins over values pulled from Vercel, so GitHub stays the source of EXPO_PUBLIC_*.
-      - run: vercel build ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN"
+      - run: scripts/ci/vercel-build.sh
       - name: Deploy
         id: deploy
-        run: |
-          url=$(vercel deploy --prebuilt ${{ env.VERCEL_TARGET == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN")
-          echo "url=$url" >> "$GITHUB_OUTPUT"
+        run: scripts/ci/vercel-deploy.sh
       # Runs before the smoke test so the test checks the fixed alias that Core CORS lists,
       # not the per-deploy hash URL.
       - name: Alias staging
@@ -83,31 +79,7 @@ jobs:
         env:
           STAGING_ALIAS: ${{ vars.VERCEL_STAGING_ALIAS }}
           URL: ${{ steps.deploy.outputs.url }}
-        # Calls the REST API directly: `vercel alias set` first loads the token's user, which
-        # fails with "User not found" for this team token even though deploys succeed.
-        run: |
-          set -euo pipefail
-          api=https://api.vercel.com
-          auth="Authorization: Bearer $VERCEL_TOKEN"
-          # curl -f prints nothing of the response, so a rejected alias showed only "curl: (22)". Print the
-          # status and Vercel's own message, which names the cause (a domain missing from the project, say).
-          vercel_api() {
-            local response status body
-            response=$(curl -sS -w '\n%{http_code}' "$@") || return 1
-            status=${response##*$'\n'}
-            body=${response%$'\n'*}
-            if [ "${status#2}" = "$status" ]; then
-              echo "::error::Vercel API returned $status: $body"
-              return 1
-            fi
-            printf '%s\n' "$body"
-          }
-          id=$(vercel_api -H "$auth" "$api/v13/deployments/${URL#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
-          vercel_api -X POST -H "$auth" -H "Content-Type: application/json" \
-            -d "$(jq -n --arg alias "$STAGING_ALIAS" '{alias: $alias}')" \
-            "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID"
-          echo "url=https://$STAGING_ALIAS" >> "$GITHUB_OUTPUT"
-          echo "alias: https://$STAGING_ALIAS -> $URL"
+        run: scripts/ci/alias-vercel-deployment.sh "$URL" "$STAGING_ALIAS"
       # `main` is checked at the fixed production domain, the only origin Core CORS lists; the
       # per-deploy hash URL is never allowed.
       # Fails the job when the deployed web would not reach Core: page down, env not baked in,
@@ -115,28 +87,9 @@ jobs:
       - name: Smoke test
         env:
           URL: ${{ steps.staging.outputs.url || (github.ref_name == 'main' && 'https://app-production.songheloi.id.vn') || steps.deploy.outputs.url }}
-        run: |
-          set -euo pipefail
-          # A fresh alias can take a few seconds to route, so retry before failing.
-          for attempt in 1 2 3 4 5 6; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "$URL/")
-            [ "$code" = 200 ] && break
-            sleep 5
-          done
-          test "$code" = 200
-          echo "page: 200"
-          if [ "$EXPO_PUBLIC_USE_MOCK" = "true" ]; then echo "mock build, skipping Core checks"; exit 0; fi
-          grep -rqF "$EXPO_PUBLIC_API_ENDPOINT" .vercel/output/static
-          echo "bundle: API endpoint baked in"
-          allow=$(curl -s -o /dev/null -D - -X OPTIONS "$EXPO_PUBLIC_API_ENDPOINT/api/v1/auth/session" \
-            -H "Origin: $URL" -H "Access-Control-Request-Method: POST" \
-            -H "Access-Control-Request-Headers: authorization,content-type" \
-            | tr -d '\r' | awk -F': ' 'tolower($1)=="access-control-allow-origin"{print $2}')
-          if [ "$allow" != "$URL" ]; then echo "::error::Core CORS does not allow $URL"; exit 1; fi
-          echo "cors: Core allows $URL"
+        run: scripts/ci/smoke-web.sh
       - name: Report URL
         if: always() && steps.deploy.outputs.url != ''
         env:
           URL: ${{ steps.staging.outputs.url || (github.ref_name == 'main' && 'https://app-production.songheloi.id.vn') || steps.deploy.outputs.url }}
-        run: |
-          echo "Web deploy: $URL" >> "$GITHUB_STEP_SUMMARY"
+        run: scripts/ci/report-deploy-url.sh "Web deploy"

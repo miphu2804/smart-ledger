@@ -62,7 +62,14 @@ class Observability:
 
     @classmethod
     def start(cls, config: AppConfig) -> "Observability":
-        """Instrument every agent when a key is set; otherwise leave traces off."""
+        """Instrument every agent when a key is set and the source is production;
+        otherwise leave traces off, so staging and local keep the free plan's monthly
+        events for production."""
+        if config.HH_SOURCE != "production":
+            logger.info(
+                "honeyhive traces off outside production (%s)", config.HH_SOURCE
+            )
+            return cls()
         api_key = config.HH_API_KEY
         if api_key is None or not api_key.strip():
             logger.info("honeyhive unconfigured; traces off")

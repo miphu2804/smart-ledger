@@ -1,0 +1,117 @@
+- name: Install Docker, Compose and the firewall
+  ansible.builtin.apt:
+    name: [docker.io, docker-compose-v2, ufw, unattended-upgrades]
+    update_cache: true
+    cache_valid_time: 3600
+
+# lazydocker shows every container, its logs and stats from an SSH session; Ubuntu has no package for it,
+# so the pinned release is checked against its digest. To upgrade, change base_lazydocker_version and the digests.
+- name: Download lazydocker
+  ansible.builtin.get_url:
+    url: "{{ release }}/lazydocker_{{ base_lazydocker_version }}_Linux_{{ base_lazydocker_arch }}.tar.gz"
+    dest: "/tmp/lazydocker-{{ base_lazydocker_version }}.tar.gz"
+    checksum: "sha256:{{ base_lazydocker_sha256[base_lazydocker_arch] }}"
+    mode: "0644"
+  vars:
+    release: "https://github.com/jesseduffield/lazydocker/releases/download/v{{ base_lazydocker_version }}"
+
+- name: Install lazydocker
+  ansible.builtin.unarchive:
+    src: "/tmp/lazydocker-{{ base_lazydocker_version }}.tar.gz"
+    remote_src: true
+    dest: /usr/local/bin
+    include: [lazydocker]
+  # A plan on a host that has not downloaded the archive yet cannot unpack it.
+  ignore_errors: "{{ ansible_check_mode }}"
+
+# Snoopy logs every command with its SSH source to /var/log/auth.log, which shows who ran what on the shared root
+# login. It only works through /etc/ld.so.preload, and its package asks before adding itself there. It is easy to
+# bypass, so it records routine work and does not stop someone evading it on purpose.
+- name: Accept Snoopy's preload prompt
+  ansible.builtin.debconf:
+    name: snoopy
+    question: snoopy/install-ld-preload
+    value: "true"
+    vtype: boolean
+
+- name: Install Snoopy
+  ansible.builtin.apt:
+    name: snoopy
+
+# A command rather than an alias: a tmux pane or other non-login shell never reads /etc/profile.d.
+- name: Add the snooplog command, which skips background jobs
+  ansible.builtin.copy:
+    src: snooplog
+    dest: /usr/local/bin/snooplog
+    mode: "0755"
+
+# SSH for Ansible and CI, 80 for the ACME challenge and redirect, 443 (TCP and QUIC) for Caddy.
+- name: Allow SSH, HTTP and HTTPS
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+  loop:
+    - { port: "22", proto: tcp }
+    - { port: "80", proto: tcp }
+    - { port: "443", proto: any }
+
+- name: Enable the firewall, denying other inbound traffic
+  community.general.ufw:
+    state: enabled
+    policy: deny
+    direction: incoming
+
+- name: Allow SSH by key only
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config.d/10-smartledger.conf
+    create: true
+    mode: "0644"
+    regexp: "^{{ item.split(' ')[0] }} "
+    line: "{{ item }}"
+  loop:
+    - PasswordAuthentication no
+    - KbdInteractiveAuthentication no
+    - PermitRootLogin prohibit-password
+  notify: Reload sshd
+
+# Core and AI together need more than a 2 GB VPS has at startup.
+- name: Create the swap file
+  ansible.builtin.command: >-
+    bash -c "fallocate -l {{ base_swap_size_mb }}M /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile"
+  args:
+    creates: /swapfile
+
+- name: Keep the swap file after reboot
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    line: /swapfile none swap sw 0 0
+
+- name: Create the deploy user that CI logs in as
+  ansible.builtin.user:
+    name: "{{ sl_deploy_user }}"
+    groups: docker
+    append: true
+    shell: /bin/bash
+    password: "!"
+
+- name: Authorize the CI deploy key
+  ansible.posix.authorized_key:
+    user: "{{ sl_deploy_user }}"
+    key: "{{ base_deploy_public_key }}"
+    exclusive: true
+
+# Caddy and every environment's Core meet on this network; AI stays on its project's own network.
+- name: Create the edge network
+  ansible.builtin.shell: docker network inspect edge >/dev/null 2>&1 || docker network create edge
+  changed_when: false
+
+- name: Log in to GHCR with the read-only token
+  ansible.builtin.command:
+    cmd: docker login ghcr.io --username {{ base_ghcr_username }} --password-stdin
+    stdin: "{{ base_ghcr_read_token }}"
+  become: true
+  become_user: "{{ sl_deploy_user }}"
+  when: base_ghcr_read_token | length > 0
+  changed_when: false
+  no_log: true

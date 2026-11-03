@@ -1,0 +1,2 @@
+- name: Prepare the SmartLedger backend VPS
+  ansible.builtin.import_playbook: vps.yml

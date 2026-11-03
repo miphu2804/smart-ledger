@@ -1,6 +1,6 @@
 name: Select runner
 
-# Called first by ci.yml, cd.yml and mobile-release.yml; every later job runs on `runs_on`, so one setting moves a whole run
+# Called first by ci.yml, cd.yml, mobile-release.yml, eval-regression.yml and the two honeyhive-* workflows; every later job runs on `runs_on`, so one setting moves a whole run
 # between GitHub-hosted runners and the self-hosted machines, e.g. while GitHub-hosted runners are unavailable.
 # This job itself runs on a self-hosted machine when self-hosted is chosen, so that choice needs no GitHub-hosted
 # minute at all; `auto` runs it on GitHub-hosted, so set self-hosted while GitHub-hosted runners cannot start.
@@ -40,34 +40,20 @@ jobs:
     outputs:
       runs_on: ${{ steps.pick.outputs.runs_on }}
       reason: ${{ steps.pick.outputs.reason }}
+    permissions:
+      contents: read
     steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts/ci
+          persist-credentials: false
       # Listing runners needs a token with Administration: read; the default GITHUB_TOKEN cannot do it, so without
       # RUNNERS_READ_TOKEN `auto` always resolves to GitHub-hosted.
       - name: Pick the runner
         id: pick
         env:
-          CHOICE: ${{ inputs.choice }}
-          LABEL: ${{ inputs.label }}
-          ALLOW_SELF_HOSTED: ${{ inputs.allow-self-hosted }}
-          REPO: ${{ github.repository }}
+          SMARTLEDGER_RUNNER_CHOICE: ${{ inputs.choice }}
+          SMARTLEDGER_RUNNER_LABEL: ${{ inputs.label }}
+          SMARTLEDGER_ALLOW_SELF_HOSTED: ${{ inputs.allow-self-hosted }}
           RUNNERS_READ_TOKEN: ${{ secrets.RUNNERS_READ_TOKEN }}
-        run: |
-          hosted='["ubuntu-24.04"]'
-          if [ "$LABEL" = self-hosted ]; then selfhosted='["self-hosted"]'; else selfhosted="[\"self-hosted\",\"$LABEL\"]"; fi
-          pick() { echo "runs_on=$1" >> "$GITHUB_OUTPUT"; echo "reason=$2" >> "$GITHUB_OUTPUT"; echo "Runner: $2"; exit 0; }
-          [ "$ALLOW_SELF_HOSTED" = true ] || pick "$hosted" "github-hosted: self-hosted is not allowed for this run"
-          case "$CHOICE" in
-            github-hosted) pick "$hosted" "chosen: github-hosted" ;;
-            self-hosted) pick "$selfhosted" "chosen: self-hosted" ;;
-            auto) ;;
-            *) echo "::error::Unknown runner choice '$CHOICE'; use auto, github-hosted or self-hosted."; exit 1 ;;
-          esac
-          [ -n "$RUNNERS_READ_TOKEN" ] || pick "$hosted" "auto: RUNNERS_READ_TOKEN not set, fell back to github-hosted"
-          if ! free=$(GH_TOKEN="$RUNNERS_READ_TOKEN" gh api "repos/$REPO/actions/runners" --paginate \
-            --jq ".runners[] | select(.status==\"online\" and .busy==false and any(.labels[]; .name==\"$LABEL\")) | .name" 2>&1); then
-            pick "$hosted" "auto: runner list failed, fell back to github-hosted"
-          fi
-          if [ -n "$free" ]; then
-            pick "$selfhosted" "auto: self-hosted online ($(echo "$free" | head -1))"
-          fi
-          pick "$hosted" "auto: no free self-hosted runner, fell back to github-hosted"
+        run: scripts/ci/pick-runner.sh

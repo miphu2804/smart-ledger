@@ -13,29 +13,30 @@ permissions:
   contents: read
 
 jobs:
+  # The same runner choice as ci.yml, so the sync runs while GitHub-hosted runners cannot start.
+  select-runner:
+    uses: ./.github/workflows/select-runner.yml
+    with:
+      choice: ${{ vars.CI_RUNNER || 'github-hosted' }}
+    secrets:
+      RUNNERS_READ_TOKEN: ${{ secrets.RUNNERS_READ_TOKEN }}
+
   sync:
-    runs-on: ubuntu-24.04
+    needs: select-runner
+    runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
     concurrency:
       group: honeyhive-sync
     steps:
       - uses: actions/checkout@v7
+      # Pinned so runs are reproducible. HoneyHive's installer is Linux-only, so a macOS self-hosted machine uses
+      # its Homebrew install and only warns when the version differs. yq v4 and jq come with the Linux image and
+      # with Homebrew on the self-hosted machines.
       - name: Install HoneyHive CLI
-        # Pinned so runs are reproducible; yq v4 and jq come with the runner image.
-        run: curl -fsSL https://github.com/honeyhiveai/honeyhive-cli/releases/download/v1.9.0/install.sh | sh
+        run: scripts/ci/install-honeyhive.sh
       - name: Check every evaluator has a committed ID
         # An evaluator created here gets an ID this run cannot commit, so every later run would create it again.
         # Create new evaluators locally with sync-evaluators.sh and commit state.json before merging.
-        run: |
-          set -euo pipefail
-          missing=0
-          for file in .honeyhive/evaluators/*.yaml; do
-            name=$(yq '.name' "$file")
-            if ! jq -e --arg n "$name" '.evaluators[$n]' .honeyhive/state.json > /dev/null; then
-              echo "::error file=$file::$name has no ID in .honeyhive/state.json"
-              missing=1
-            fi
-          done
-          exit "$missing"
+        run: scripts/ci/check-evaluator-ids.sh
       - name: Apply evaluators
         env:
           # The CLI's names for the AI service's HH_API_KEY and HH_API_URL; the GitHub names match Dopbase ai/production.
