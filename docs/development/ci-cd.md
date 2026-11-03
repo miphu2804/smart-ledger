@@ -9,7 +9,7 @@
 | [`deploy-backend.yml`](../../.github/workflows/deploy-backend.yml) | Builds, pushes to GHCR and deploys `ai` and `core` to the VPS |
 | [`deploy-web.yml`](../../.github/workflows/deploy-web.yml) | Builds and deploys `frontend/mobile` to Vercel |
 | [`deploy-landing.yml`](../../.github/workflows/deploy-landing.yml) | Builds and deploys `frontend/web` to Vercel |
-| [`select-runner.yml`](../../.github/workflows/select-runner.yml) | Picks the runner for CI, CD and the Android build |
+| [`select-runner.yml`](../../.github/workflows/select-runner.yml) | Picks the runner for CI, CD, the Android build, the eval regression and the HoneyHive syncs |
 | [`mobile-release.yml`](../../.github/workflows/mobile-release.yml) | Builds the Android app, started by hand |
 
 ![CI/CD flow](../architecture/diagrams/images/ci-cd.svg)
