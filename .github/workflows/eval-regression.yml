@@ -67,82 +67,28 @@ jobs:
       # machine; the eval refuses any database that is not on localhost.
       - name: Start and seed the database
         working-directory: .
-        run: |
-          set -euo pipefail
-          # A ref from before this workflow has a local-db.sh that ignores LOCAL_DB_*, and would migrate a developer's
-          # own database on port 54322 of a self-hosted machine.
-          grep -q LOCAL_DB_PORT scripts/local-db.sh || { echo "::error::$GITHUB_SHA predates eval-regression"; exit 1; }
-          port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
-          echo "DB_PORT=$port" >> "$GITHUB_ENV"
-          LOCAL_DB_CONTAINER="$DB_CONTAINER" LOCAL_DB_PORT="$port" sh scripts/local-db.sh
-          # seed.sql gives the shop to the first user; a fresh database has none yet.
-          docker exec "$DB_CONTAINER" psql -q -U smartledger -d smartledger -v ON_ERROR_STOP=1 \
-            -c "INSERT INTO users (display_name) VALUES ('Eval owner')"
-          docker exec -i "$DB_CONTAINER" psql -q -U smartledger -d smartledger -v ON_ERROR_STOP=1 \
-            < backend/ai/evaluation/agent_chat/seed.sql
+        run: scripts/ci/start-eval-database.sh
       # The model gateway, embeddings and model aliases of ai/staging, pointed at the throwaway database. The HoneyHive
       # key stays only when the run syncs.
       - name: Write the AI settings
+        working-directory: .
         env:
           DOPBASE_URL: ${{ vars.DOPBASE_URL }}
           DOPBASE_TOKEN: ${{ secrets.DOPBASE_AI_TOKEN }}
           SYNC: ${{ inputs.sync }}
-        run: |
-          set -euo pipefail
-          umask 077
-          dropped='POSTGRES_URL|AI_SQL_READER_URL'
-          [ "$SYNC" = true ] || dropped="$dropped|HH_API_KEY"
-          # The database URLs go first: uv keeps the first value of a key and stops reading at a line it cannot
-          # parse, so these survive whatever the export holds.
-          {
-            echo "POSTGRES_URL=postgresql://smartledger:smartledger@127.0.0.1:$DB_PORT/smartledger"
-            echo "AI_SQL_READER_URL=postgresql://ai_reader:ai_reader@127.0.0.1:$DB_PORT/smartledger"
-            dopbase export ai/staging --stdout --format dotenv | grep -vE "^($dropped)="
-          } > "$RUNNER_TEMP/ai.env"
+        run: scripts/ci/write-eval-settings.sh
       - name: Run the eval
         env:
-          REF: ${{ inputs.ref }}
           SYNC: ${{ inputs.sync }}
-        run: |
-          set -euo pipefail
-          sync=""
-          [ "$SYNC" = true ] && sync="--sync"
-          # uv only warns about a line it cannot parse and drops the rest of the file, so a warning stops the run.
-          uv run --env-file "$RUNNER_TEMP/ai.env" python -c "" 2> "$RUNNER_TEMP/env-check.log" || true
-          if grep -qi "failed to parse" "$RUNNER_TEMP/env-check.log"; then
-            echo "::error::uv could not parse the ai/staging export; check its quoting"
-            exit 1
-          fi
-          uv run --env-file "$RUNNER_TEMP/ai.env" python evaluation/agent_chat/run.py \
-            --name "ci-$(git rev-parse --short HEAD)" --repeats 3 \
-            --gate evaluation/agent_chat/thresholds.toml --report "$RUNNER_TEMP/report.md" $sync
+        run: ../../scripts/ci/run-eval.sh
       - name: Publish the report
         if: always()
+        working-directory: .
         env:
           GH_TOKEN: ${{ github.token }}
-          REF: ${{ inputs.ref }}
-        run: |
-          set -euo pipefail
-          REPORT="$RUNNER_TEMP/report.md"
-          [ -f "$REPORT" ] || { echo "No report: the run stopped before scoring." >> "$GITHUB_STEP_SUMMARY"; exit 0; }
-          cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
-          pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$REF" --state open --json number --jq '.[0].number // empty')
-          [ -n "$pr" ] || exit 0
-          # One comment per pull request, found by its marker and edited on the next run.
-          marker='<!-- agent-chat-eval -->'
-          body="$(printf '%s\n%s\n\n[Workflow run](%s/%s/actions/runs/%s)\n' "$marker" "$(cat "$REPORT")" \
-            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
-          comment=$(gh api "repos/$GITHUB_REPOSITORY/issues/$pr/comments" --paginate \
-            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | sed -n 1p)
-          if [ -n "$comment" ]; then
-            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment" -f body="$body" >/dev/null
-          else
-            gh api "repos/$GITHUB_REPOSITORY/issues/$pr/comments" -f body="$body" >/dev/null
-          fi
+          SMARTLEDGER_REF: ${{ inputs.ref }}
+        run: scripts/ci/publish-eval-report.sh
       - name: Remove the database and settings
         if: always()
         working-directory: .
-        run: |
-          docker rm -f -v "$DB_CONTAINER" >/dev/null 2>&1 || true
-          docker volume rm "$DB_CONTAINER" >/dev/null 2>&1 || true
-          rm -f "$RUNNER_TEMP/ai.env"
+        run: scripts/ci/remove-eval-database.sh
