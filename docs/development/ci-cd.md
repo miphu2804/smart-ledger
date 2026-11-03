@@ -41,8 +41,10 @@ Job `changes` compares a PR with its base branch, or a push with the commit befo
 | `mobile` | `frontend/mobile/**`, `deploy-web.yml` | `mobile-web`, `deploy-web` |
 | `landing` | `frontend/web/**`, `deploy-landing.yml` | `landing`, `deploy-landing` |
 | `containers` | `compose.yaml` | `container-images` |
+| `shell` | `**/*.sh`, `.github/workflows/**`, `.shellcheckrc` | `shellcheck` |
 
 - A change to `ci.yml`, `cd.yml` or `select-runner.yml` runs everything; a docs-only change deploys nothing.
+- Job `shellcheck` runs `actionlint` (which lints every `run:` block with shellcheck) and `shellcheck --severity=warning` on every tracked `*.sh` outside `backend/core`. It installs missing tools with Homebrew, so it works on the self-hosted machines, and it does not gate a deploy. Run both locally from the repository root before pushing a script or workflow change.
 - Each area deploys on its own checks: a red `landing` does not hold back the backend, and a red `core` does not hold back the web.
 - Re-running CI on a push hands every passing area to CD.
 - To redeploy without testing (say, after changing a variable), start CD by hand: Actions → **CD** → **Run workflow**, with the branch, the full commit SHA and the areas. Leave `ci-run-id` empty to use the latest CI push run of that commit.

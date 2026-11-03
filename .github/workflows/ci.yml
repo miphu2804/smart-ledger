@@ -45,6 +45,7 @@ jobs:
       mobile: ${{ steps.filter.outputs.mobile }}
       landing: ${{ steps.filter.outputs.landing }}
       containers: ${{ steps.filter.outputs.containers }}
+      shell: ${{ steps.filter.outputs.shell }}
     steps:
       - uses: actions/checkout@v7
       # A pull request is compared with its base branch; a push with the commit before the push.
@@ -86,8 +87,29 @@ jobs:
               - compose.yaml
               - backend/ai/**
               - backend/core/**
+            shell:
+              - .shellcheckrc
+              - .github/workflows/**
+              - "**/*.sh"
 
   ### Test: lint, tests and builds for the areas that changed ###
+
+  # shellcheck lints every shell script and, through actionlint, every `run:` block in the workflows. Both come with the
+  # GitHub-hosted image and with Homebrew on the self-hosted machines. backend/core is not linted.
+  shellcheck:
+    needs: [select-runner, changes]
+    if: needs.changes.outputs.shell == 'true'
+    runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install shellcheck and actionlint
+        run: |
+          command -v shellcheck > /dev/null || brew install shellcheck
+          command -v actionlint > /dev/null || brew install actionlint
+      - name: Lint workflows and scripts
+        run: |
+          actionlint
+          git ls-files -z '*.sh' ':!backend/core' | xargs -0 shellcheck --severity=warning
 
   ai:
     needs: [select-runner, changes]
