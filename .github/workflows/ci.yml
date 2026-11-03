@@ -75,6 +75,7 @@ jobs:
         run: |
           actionlint
           git ls-files -z '*.sh' ':!backend/core' | xargs -0 shellcheck --severity=warning
+          scripts/ci/check-provider-coupling.sh
 
   ai:
     needs: [select-runner, changes]
