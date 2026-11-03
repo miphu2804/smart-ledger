@@ -259,7 +259,7 @@ To remove a setting, delete it in Dopbase; the next deploy drops it from `ai.env
 |---|---|---|
 | `HH_API_KEY` | Dopbase `ai/<environment>` | Project ingestion key; unset means no tracing |
 | `HH_API_URL` | Dopbase `ai/<environment>` | Data plane URL; unset uses the multi-tenant default |
-| `HH_SOURCE` | Dopbase `ai/<environment>` | `staging` or `production`; the HoneyHive alerts watch `production` only |
+| `HH_SOURCE` | Dopbase `ai/<environment>` | Traces go out only when this is `production`; the HoneyHive alerts watch `production` only |
 | `HH_SAMPLE_RATE` | Dopbase `ai/<environment>` | Share of chat turns traced, 0 to 1; unset traces every turn |
 | `GIT_SHA` | Image build argument | Set by `deploy-backend.yml` to the deployed commit; tags each HoneyHive session |
 
