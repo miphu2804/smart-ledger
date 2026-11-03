@@ -9,7 +9,7 @@
 | [`deploy-backend.yml`](../../.github/workflows/deploy-backend.yml) | Builds, pushes to GHCR and deploys `ai` and `core` to the VPS |
 | [`deploy-web.yml`](../../.github/workflows/deploy-web.yml) | Builds and deploys `frontend/mobile` to Vercel |
 | [`deploy-landing.yml`](../../.github/workflows/deploy-landing.yml) | Builds and deploys `frontend/web` to Vercel |
-| [`select-runner.yml`](../../.github/workflows/select-runner.yml) | Picks the runner for CI, CD and the Android build |
+| [`select-runner.yml`](../../.github/workflows/select-runner.yml) | Picks the runner for CI, CD, the Android build, the eval regression and the HoneyHive syncs |
 | [`mobile-release.yml`](../../.github/workflows/mobile-release.yml) | Builds the Android app, started by hand |
 
 ![CI/CD flow](../architecture/diagrams/images/ci-cd.svg)
@@ -41,8 +41,10 @@ Job `changes` compares a PR with its base branch, or a push with the commit befo
 | `mobile` | `frontend/mobile/**`, `deploy-web.yml` | `mobile-web`, `deploy-web` |
 | `landing` | `frontend/web/**`, `deploy-landing.yml` | `landing`, `deploy-landing` |
 | `containers` | `compose.yaml` | `container-images` |
+| `shell` | `**/*.sh`, `.github/workflows/**`, `.shellcheckrc` | `shellcheck` |
 
 - A change to `ci.yml`, `cd.yml` or `select-runner.yml` runs everything; a docs-only change deploys nothing.
+- Job `shellcheck` runs `actionlint` (which lints every `run:` block with shellcheck) and `shellcheck --severity=warning` on every tracked `*.sh` outside `backend/core`. It installs missing tools with Homebrew, so it works on the self-hosted machines, and it does not gate a deploy. Run both locally from the repository root before pushing a script or workflow change.
 - Each area deploys on its own checks: a red `landing` does not hold back the backend, and a red `core` does not hold back the web.
 - Re-running CI on a push hands every passing area to CD.
 - To redeploy without testing (say, after changing a variable), start CD by hand: Actions → **CD** → **Run workflow**, with the branch, the full commit SHA and the areas. Leave `ci-run-id` empty to use the latest CI push run of that commit.
@@ -80,6 +82,19 @@ CI reads input `runner`, else repository variable `CI_RUNNER`. CD reads input `r
 
 - Keep backend secrets out of `vercel-*` and `landing-*`.
 - Both backend environments use the same VPS and deploy key, so a `backend-staging` job can reach production containers. The approval guards only the `main` deploy. The project owner accepted this.
+
+<a id="eval-regression"></a>
+
+## Eval regression
+
+`eval-regression.yml` runs the [agent chat evaluation](../../backend/ai/evaluation/agent_chat/README.md) by hand, when a change to the agent or its memory needs one. It does not run on every change, because a run asks the models about 69 chat turns and their judges.
+
+- Dispatch it from `staging` (**Actions → Eval regression → Run workflow**, or `gh workflow run eval-regression.yml --ref staging -f ref=<branch>`). It reads `ai/staging` through `backend-staging`, which only `staging` may use; input `ref` picks the code that is evaluated. GitHub offers a manual run only for a workflow that is on the default branch, so it can be dispatched once this file is on `main`, and it must also be on `staging`. A `ref` from before the workflow existed is refused, because its `local-db.sh` would use the developer database on port 54322.
+- The job starts a throwaway PostgreSQL with `scripts/local-db.sh` on a free port, seeds shop 9001, takes the model gateway, embedding and model alias settings of `ai/staging` with the database URLs pointed at it, then runs `run.py --repeats 3 --gate thresholds.toml --report`.
+- The report goes to the job summary and to one comment on the open pull request of `ref`, edited on the next run. The job fails when a metric in [`thresholds.toml`](../../backend/ai/evaluation/agent_chat/thresholds.toml) misses its minimum.
+- Nothing reaches HoneyHive unless input `sync` is on; a synced run costs about 69 sessions of the monthly quota.
+- The checked-out `ref` runs with the `ai/staging` model and embedding keys. Dispatch only branches of this repository whose changes you have read.
+- Each run adds a deployment to `backend-staging` in the GitHub UI, because the job uses that environment for its token.
 
 <a id="vps"></a>
 
@@ -246,7 +261,7 @@ To remove a setting, delete it in Dopbase; the next deploy drops it from `ai.env
 |---|---|---|
 | `HH_API_KEY` | Dopbase `ai/<environment>` | Project ingestion key; unset means no tracing |
 | `HH_API_URL` | Dopbase `ai/<environment>` | Data plane URL; unset uses the multi-tenant default |
-| `HH_SOURCE` | Dopbase `ai/<environment>` | `staging` or `production`; the HoneyHive alerts watch `production` only |
+| `HH_SOURCE` | Dopbase `ai/<environment>` | Traces go out only when this is `production`; the HoneyHive alerts watch `production` only |
 | `HH_SAMPLE_RATE` | Dopbase `ai/<environment>` | Share of chat turns traced, 0 to 1; unset traces every turn |
 | `GIT_SHA` | Image build argument | Set by `deploy-backend.yml` to the deployed commit; tags each HoneyHive session |
 

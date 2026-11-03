@@ -1,0 +1,13 @@
+name: Query error rate
+description: Share of query_shop_data calls the guard or the database refused, scored by the query-error evaluator, by source.
+metric: metrics.query-error
+func: avg
+groupBy: source
+bucketing: day
+dateRange:
+  relative: 30d
+query:
+  - field: event_type
+    operator: is
+    value: tool
+    type: string

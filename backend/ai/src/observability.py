@@ -4,8 +4,9 @@ import functools
 import logging
 import random
 import uuid
-from collections.abc import Coroutine
+from collections.abc import Coroutine, Iterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from contextvars import ContextVar
 
 from honeyhive import HoneyHiveTracer
@@ -61,7 +62,14 @@ class Observability:
 
     @classmethod
     def start(cls, config: AppConfig) -> "Observability":
-        """Instrument every agent when a key is set; otherwise leave traces off."""
+        """Instrument every agent when a key is set and the source is production;
+        otherwise leave traces off, so staging and local keep the free plan's monthly
+        events for production."""
+        if config.HH_SOURCE != "production":
+            logger.info(
+                "honeyhive traces off outside production (%s)", config.HH_SOURCE
+            )
+            return cls()
         api_key = config.HH_API_KEY
         if api_key is None or not api_key.strip():
             logger.info("honeyhive unconfigured; traces off")
@@ -164,6 +172,22 @@ class Observability:
         if not self._traced():
             return
         self._enrich_session(metadata={"conversation_id": conversation_id})
+
+    @contextmanager
+    def span(self, name: str, **fields) -> Iterator[None]:
+        """Run the block inside a span of this turn's session; `fields` fill it up front
+        and `enrich_span` adds the rest. Without a traced turn the block just runs."""
+        if not self._traced():
+            yield
+            return
+        with self._tracer.trace(name, event_type="tool"):
+            self._tracer.enrich_span(**fields)
+            yield
+
+    def enrich_span(self, **fields) -> None:
+        """Add fields to the span the block is running in."""
+        if self._traced():
+            self._tracer.enrich_span(**fields)
 
     async def flush(self) -> None:
         """Send the session updates and spans still queued, then stop the tracer, so a

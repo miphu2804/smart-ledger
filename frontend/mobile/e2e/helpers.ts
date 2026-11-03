@@ -25,11 +25,9 @@ export async function signUpWithEmail(page: Page, email: string, password: strin
   await expect(page.getByRole('tab', { name: 'Quản lý' })).toBeVisible();
 }
 
-/** Các tab giữ nguyên trong trang và Tổng quan có hai nút ☰ (đầu màn và đầu đã thu gọn), nên chọn nút đang hiện. */
+/** Mở menu chuyển nhanh của màn đang hoạt động; Playwright bỏ qua tab nền có aria-hidden. */
 export async function openQuickNav(page: Page) {
-  await page.locator('[aria-label="Mở menu chuyển nhanh"]').evaluateAll((buttons) => {
-    (buttons.filter((button) => (button as HTMLElement).offsetParent).pop() as HTMLElement).click();
-  });
+  await page.getByRole('button', { name: 'Mở menu chuyển nhanh', exact: true }).first().click();
 }
 
 /** Mở một màn ngoài tab từ menu chuyển nhanh. */

@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { collectPageErrors } from './helpers';
 
 test('mở app thấy màn đăng nhập, vào app bằng tài khoản mock thấy Tổng quan', async ({ page }) => {
-  const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
+  const errors = collectPageErrors(page);
 
   await page.goto('/');
 

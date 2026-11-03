@@ -1,6 +1,6 @@
 # Secrets and env files
 
-Every credential the team shares (local `.env` files, VPS service env files, GitHub Actions variables) lives in Dopbase, the team's secrets manager at `https://secrets.songheloi.id.vn` ([setup](ci-cd.md)). Each env file is one Dopbase project and each environment is a Dopbase environment of that project. `scripts/secrets/dopbase-sync.sh pull <environment>` writes them into `secrets/<environment>/env/`, which git ignores; tools read most files there directly, and `scripts/secrets/apply.sh staging dev` copies the few that a tool reads at a fixed path, pointing them at a local database.
+Every credential the team shares (local `.env` files, VPS service env files, GitHub Actions variables) lives in Dopbase, the team's secrets manager at `https://secrets.songheloi.id.vn` ([setup](ci-cd.md)). Each env file is one Dopbase project and each environment is a Dopbase environment of that project. `scripts/secrets/dopbase-sync.sh pull <environment>` writes them into `secrets/<environment>/env/`, which git ignores; tools read most files there directly, and `scripts/secrets/apply.sh dev dev` copies the few that a tool reads at a fixed path, pointing them at a local database.
 
 ## 1. Layout
 
@@ -60,7 +60,7 @@ ZALO_APP_ID=...
 | `.env.bifrost` | Bifrost model gateway: the provider key and the virtual key AI uses, uploaded to the VPS as `bifrost.env` ([CI/CD](ci-cd.md#service-variables)) | yes | yes |
 | `.env.mobile` | mobile app; copied to `frontend/mobile/.env` | yes | no |
 | `.env.release` | Android APK release: R2 bucket, keystore | no | yes |
-| `.env.loadtest`, `.env.monitor` | load test and uptime monitor; staging copies go to `scripts/loadtest/.env.staging` and `scripts/monitor/.env`. `GRAFANA_PG_*` in `.env.monitor` is also the read-only `grafana_reader` login of the product dashboard, which `vps-playbook.sh` loads ([CI/CD](ci-cd.md#monitoring)); production holds only this login | yes | `.env.loadtest`, and `.env.monitor` with `GRAFANA_PG_*` only |
+| `.env.loadtest`, `.env.monitor` | load test and the read-only `grafana_reader` login of the product dashboard in `.env.monitor`, which `vps-playbook.sh` loads ([CI/CD](ci-cd.md#monitoring)); staging copies go to `scripts/loadtest/.env.staging` and `scripts/monitor/.env` | yes | `.env.loadtest`, and `.env.monitor` with `GRAFANA_PG_*` only |
 | `.env.vps` | the VPS of that environment: `VPS_HOST`, `VPS_KNOWN_HOSTS`, the CI deploy key (`VPS_SSH_KEY` in base64, `VPS_SSH_PUBLIC_KEY`), `CLOUDFLARE_TUNNEL_TOKEN` and, for [monitoring](ci-cd.md#monitoring), `MONITOR_DOMAIN`, `GRAFANA_ADMIN_PASSWORD`, `MONITOR_DISCORD_WEBHOOK_URL`, `MONITOR_TELEGRAM_BOT_TOKEN` and `MONITOR_TELEGRAM_CHAT_ID`; read by the Ansible playbook and `github.sh` ([VPS](ci-cd.md#vps)) | yes | yes |
 | `github/.env.<environment>` | copy of a GitHub Actions environment | 4 environments | 3 environments |
 
@@ -79,12 +79,12 @@ Not in `secrets/`: `.env.example` files (committed templates), and generated fil
    dopbase login
    ```
 
-2. Pull staging, start the local database and write the service env files:
+2. Pull the dev environment, start the local database and write the service env files:
 
    ```bash
-   scripts/secrets/dopbase-sync.sh pull staging
+   scripts/secrets/dopbase-sync.sh pull dev
    scripts/local-db.sh
-   scripts/secrets/apply.sh staging dev --apply
+   scripts/secrets/apply.sh dev dev --apply
    ```
 
    `scripts/local-db.sh` runs PostgreSQL with pgvector in Docker at `127.0.0.1:54322`, applies Core's Flyway migrations, then the AI migrations in `supabase/migrations`, and creates the read-only `ai_reader` login. Every step is safe to re-run, and data stays in the `smartledger-local-db` volume.
@@ -92,9 +92,9 @@ Not in `secrets/`: `.env.example` files (committed templates), and generated fil
 ## 4. Daily use
 
 - `scripts/secrets/dopbase-sync.sh pull <environment>` replaces each file in `secrets/<environment>/env/` with its Dopbase project. It asks for your Dopbase password once and types it into the confirmation of every export with `expect`; a failed export leaves that file as it was.
-- `scripts/secrets/apply.sh staging dev` is a dry run: per file in `targets` it builds the staging file with the keys of `secrets/local.<name>` (the local database) put over it, and lists keys that would be added (`+`), changed (`~`) or dropped (`-`), or `(comments or layout only)`. Values are never printed. `--use-staging KEY` keeps the staging value of one local key, for example to reach the shared staging database.
-- `scripts/secrets/apply.sh staging dev --apply` writes the files and keeps each replaced one as `<file>.bak` (`--no-backup` skips it). A key you added only on your machine shows as `-` and is lost on apply; add it to Dopbase first.
-- Copying runs one way, from staging to this machine, and copying to or from production is not supported.
+- `scripts/secrets/apply.sh dev dev` is a dry run: per file in `targets` it builds the file of the `dev` environment with the keys of `secrets/local.<name>` (the local database) put over it, and lists keys that would be added (`+`), changed (`~`) or dropped (`-`), or `(comments or layout only)`. Values are never printed. `--use-staging KEY` keeps the source value of one local key. Use `staging` as the source (`apply.sh staging dev`) only to test deliberately against staging values. A target the source does not hold, such as `.env.loadtest` and `.env.monitor` in `dev`, is skipped.
+- `scripts/secrets/apply.sh dev dev --apply` writes the files and keeps each replaced one as `<file>.bak` (`--no-backup` skips it). A key you added only on your machine shows as `-` and is lost on apply; add it to Dopbase first.
+- Copying runs one way, from `dev` (or `staging`) to this machine. The `dev` environment (`core/dev`, `ai/dev`, `mobile/dev`) holds localhost URLs, `ZALO_ENABLED=false` and no Zalo credentials, so a dev machine needs no staging access, and copying to or from production is not supported.
 - Dopbase keeps the history of every secret: `dopbase secret history <project>/<environment> <KEY>` and `dopbase secret rollback`.
 
 ## 5. Change a secret

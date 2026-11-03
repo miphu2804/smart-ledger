@@ -103,7 +103,7 @@ def build_sandbox() -> Sandbox | None:
 
 
 def build_memory_service(
-    chat_model, postgres: PostgreDBClient
+    chat_model, postgres: PostgreDBClient, observability: Observability
 ) -> AgentMemoryService | None:
     if not app_config.AGENT_MEMORY_ENABLED:
         return None
@@ -122,6 +122,7 @@ def build_memory_service(
             for item in app_config.AGENT_MEMORY_TYPES.split(",")
             if item.strip()
         ),
+        observability=observability,
     )
 
 
@@ -177,7 +178,7 @@ async def lifespan(app: FastAPI):
     conversations = AgentConversationRepository(postgres)
     app.state.conversations = conversations
     shop_data = build_shop_data(reader)
-    memory = build_memory_service(chat_model, postgres)
+    memory = build_memory_service(chat_model, postgres, observability)
     app.state.memory = memory
     app.state.agent = AgentService(
         chat_model,

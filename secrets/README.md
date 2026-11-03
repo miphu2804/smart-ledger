@@ -20,22 +20,23 @@ Never commit a value, paste one into a PR, or edit a pulled file to change it: a
 ```bash
 dopbase client connect https://secrets.songheloi.id.vn
 dopbase login
-scripts/secrets/dopbase-sync.sh pull staging
+scripts/secrets/dopbase-sync.sh pull dev
 scripts/local-db.sh
-scripts/secrets/apply.sh staging dev --apply
+scripts/secrets/apply.sh dev dev --apply
 ```
 
 ## Use
 
 | Task | Command |
 |---|---|
-| Get the latest staging or production secrets | `scripts/secrets/dopbase-sync.sh pull staging` or `pull production` |
-| See what would change in `backend/core/.env`, `backend/ai/.env`, `frontend/mobile/.env` and the other targets | `scripts/secrets/apply.sh staging dev` |
-| Write those files with the local database keys from `local.env.*`, keeping the old ones as `.bak` | `scripts/secrets/apply.sh staging dev --apply` |
+| Get the latest dev machine values | `scripts/secrets/dopbase-sync.sh pull dev` |
+| Get the latest staging or production secrets (runners and deploy tools) | `scripts/secrets/dopbase-sync.sh pull staging` or `pull production` |
+| See what would change in `backend/core/.env`, `backend/ai/.env`, `frontend/mobile/.env` and the other targets | `scripts/secrets/apply.sh dev dev` |
+| Write those files with the local database keys from `local.env.*`, keeping the old ones as `.bak` | `scripts/secrets/apply.sh dev dev --apply` |
 | Change a secret | Dopbase web UI, or `dopbase secret set <project>/<environment> KEY`, then pull |
 | Add a new key | Set it in Dopbase for every environment that needs it, add `KEY=` to its group in `templates/`, then pull |
 | Find keys missing from a template | `scripts/secrets/check-templates.sh` |
 | See who changed a key | `dopbase secret history <project>/<environment> <KEY>` |
 | Run the backend | `docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build` |
 
-Copying to a dev machine runs from staging only. Production is pulled for reading by the deploy tools and is never copied to a dev machine.
+A dev machine pulls the `dev` environment (`core/dev`, `ai/dev`, `mobile/dev`), which points at localhost and holds no Zalo credentials, so local testing does not depend on staging. `apply.sh staging dev` still works for a deliberate test against staging values. `apply.sh dev dev` skips the loadtest and monitor targets, which only staging holds. Staging and production are read by the runners and deploy tools; production is pulled for reading by the deploy tools and is never copied to a dev machine.

@@ -214,10 +214,10 @@ jobs:
           fi
           if ! line=$(node .github/scripts/stt-model.mjs check); then
             if [ "$PUBLISH" != true ]; then
-              echo "$line" | sed 's/::error::/::warning::/'
+              echo "${line//::error::/::warning::}"
               echo "::warning::Voice input in this build cannot download its model; a publish uploads it."; exit 0
             fi
-            echo "$line" | sed 's/::error::/::notice::/'
+            echo "${line//::error::/::notice::}"
             dir="$RUNNER_TEMP/stt-model"
             version=$(node .github/scripts/stt-model.mjs fetch "$dir") || { echo "$version"; exit 1; }
             aws s3 sync "$dir" "s3://$BUCKET/stt-model/$version/" --size-only
@@ -305,6 +305,7 @@ jobs:
           # Last, so a phone never reads a manifest whose APK is not uploaded yet. Installed apps compare versionCode
           # with this file (frontend/mobile/src/lib/appUpdate.ts) and offer the APK in builds/, which is never overwritten.
           base="${R2_PUBLIC_URL%/}"
+          # shellcheck disable=SC2016 # the JavaScript template literal must reach node unexpanded
           BASE="$base" node -e 'const { expo } = require("./frontend/mobile/app.json");
             console.log(JSON.stringify({ versionCode: Number(process.env.VERSION_CODE), versionName: expo.version,
               apk: `${process.env.BASE}/android/production/builds/${require("path").basename(process.env.APK)}` }))' \
