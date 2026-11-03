@@ -71,7 +71,7 @@ discovery.relabel "caddy" {
 }
 
 // targets/services/<environment>.json lists the services that export their own /metrics on the app network, each
-// with `env` and `service` labels; deploy/ansible/playbook.yml writes it.
+// with `env` and `service` labels; the app role of deploy/ansible writes it.
 discovery.file "services" {
   files = ["/etc/alloy/targets/services/*.json"]
 }

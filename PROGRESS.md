@@ -1,3 +1,13 @@
+### 2026-11-03 — Ansible flow in roles, a provider-neutral entrypoint and an infra workflow
+
+| Area | Change |
+|---|---|
+| Deploy | • `deploy/ansible/playbook.yml` becomes `site.yml` with five roles (`base`, `edge`, `dopbase`, `monitoring`, `app`) and a committed one-host inventory `smart-ledger-vps`, so host-wide tasks run once instead of once per pseudo-host<br>• Scope `app` (staging or production) writes only that environment's files; scope `all` (production only) also configures the host, Dopbase with its backup cron and the shared monitoring, so a staging run no longer rewrites them or deletes the backup cron<br>• All asserts run before the host changes, the stack handler no longer ends in `|| true`, apt uses `cache_valid_time`, the Alloy override is a template, and values read from the environment have no fallbacks |
+| CI | • `scripts/infra/run.sh <plan\|apply> <environment> [--scope app\|all]` replaces `scripts/secrets/vps-playbook.sh` and takes only neutral variables; `deploy/ansible/Dockerfile` is its runtime<br>• `infra.yml` lints, plans staging on pull requests, applies staging on a push to `staging` and plans then applies production on a push to `main` |
+| Docs | • `ci-cd.md` describes the roles, scopes, the entrypoint and the four GitHub environments |
+
+Check: `ansible-playbook --syntax-check`, `ansible-lint` (production profile), `shellcheck`, `actionlint` pass; `--list-tasks` for scope `app` lists no `base`, `edge`, `dopbase` or `monitoring` task; the new templates render byte-identical to the old inline content; a check-mode run of the `app` role against localhost passes; the image builds with Dopbase 0.1.10 verified by sha256. Not verified: any run against the VPS, the workflow on a runner, and the credential map pages (no logged-in Dopbase). Commit: the one that adds this entry.
+
 ### 2026-11-03 — GitHub Actions as a thin adapter over scripts/ci
 
 | Area | Change |
@@ -6,7 +16,6 @@
 | Docs | • `ci-cd.md#scripts` describes the adapter split, the variables and a runbook for deploying `ai` from a laptop |
 
 Check: shellcheck and actionlint pass; `changes.sh` matched the old dorny rules on 80 single-commit ranges of `staging`, a fake pull request merge commit and a push; 17 scripts ran locally with sample input, including `start-ssh-agent.sh` with a throwaway key. Not verified: any workflow on a runner (GitHub-hosted runners are billing-locked), the image push, the VPS deploy, the Vercel steps and the R2 publish. Commit: the one that adds this entry.
-
 ### 2026-11-03 — Reuse E2E helpers and select the active quick menu
 
 | Area | Change |
@@ -188,12 +197,3 @@ Check: `uv run pytest` passes with 442 tests and `uv run ruff check` passes. The
 | Docs | • The CI/CD guide describes the tunnel, why Dozzle gets no Caddy site, and what Snoopy can and cannot prove |
 
 Check: a manual Dozzle container on the VPS listed all 13 containers through the tunnel, `docker compose config` accepted the service, `ansible-playbook --syntax-check` passed and the Snoopy debconf key matches the installed package. Not verified: a real playbook run, or the preseed on a new VPS.
-
-### 2026-10-30 — Alerts as Discord embeds and Telegram messages
-
-| Area | Change |
-|---|---|
-| Deploy | • `templates.yaml` builds each alert group once for both channels: headline with state, severity, alert, environment and count, one summary per alert, then Environment, Severity, Vietnam time and Source, then Overview, Silence and Alert rules links<br>• Discord gets a coloured embed with fields and Telegram an HTML message, both through Grafana's webhook integration; the chat ID rides in the Bot API URL because Grafana turns a chat ID read alone from the environment into a number<br>• The contact point is now `smartledger`; provisioning deletes the old `discord` one, and the playbook requires and writes `MONITOR_TELEGRAM_BOT_TOKEN` and `MONITOR_TELEGRAM_CHAT_ID` |
-| Docs | • The CI/CD and secrets guides describe both channels and the bot setup; the credential map lists the two keys |
-
-Check: on Grafana 12.1.1 provisioned from the repository, an upgrade from the old `discord` contact point kept 7 rules and the policy; test alerts reached a capture server as a Discord embed and a Telegram HTML body, and the template test rendered firing, two-alert and resolved groups; a real `sendMessage` with the chat ID in the query and a JSON body was accepted. Not verified: a real alert on the VPS.

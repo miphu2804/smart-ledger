@@ -1,0 +1,13 @@
+# Runs after the stack, so the older per-environment Caddy has freed ports 80 and 443. The reload picks up
+# a changed site file in a container that was already running.
+# Validate first: a config that fails stops the run and leaves Caddy serving the one it already runs.
+- name: Apply the edge
+  ansible.builtin.shell: >-
+    docker compose up -d
+    && docker compose exec -T caddy caddy validate --config /etc/caddy/conf/Caddyfile --adapter caddyfile
+    && docker compose exec -T caddy caddy reload --config /etc/caddy/conf/Caddyfile --adapter caddyfile
+  args:
+    chdir: "{{ sl_edge_dir }}"
+  changed_when: true
+  # The directory may not exist yet in a plan, and a dry run starts nothing.
+  when: not ansible_check_mode

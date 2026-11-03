@@ -1,7 +1,7 @@
 #!/bin/sh
 # Off-site copy of the dopbase_data volume, which holds Dopbase's SQLite database and its master key and is
-# otherwise the only copy of every team secret. Runs on the VPS from cron (deploy/ansible/playbook.yml), as the
-# deploy user, from /opt/dopbase. Reads its settings from /opt/dopbase/.env.backup, written by the playbook.
+# otherwise the only copy of every team secret. Runs on the VPS from cron (roles/dopbase in deploy/ansible), as the
+# deploy user, from /opt/dopbase. Reads its settings from /opt/dopbase/.env.backup, written by the dopbase role.
 #
 # Dopbase is stopped for the few seconds of the copy: SQLite keeps a write-ahead log, so a tar of a running
 # database can catch a torn write, and stopping is the only snapshot that needs no knowledge of its file names.
@@ -11,7 +11,7 @@
 set -eu
 cd "$(dirname "$0")"
 
-# shellcheck disable=SC1091 # written on the VPS by the playbook, not in the repository.
+# shellcheck disable=SC1091 # written on the VPS by the dopbase role, not in the repository.
 . ./.env.backup
 : "${DOPBASE_BACKUP_BUCKET:?.env.backup must set DOPBASE_BACKUP_BUCKET}"
 : "${DOPBASE_BACKUP_ENDPOINT:?.env.backup must set DOPBASE_BACKUP_ENDPOINT}"

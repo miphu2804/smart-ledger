@@ -1,0 +1,12 @@
+services:
+  alloy:
+    networks:
+      default:
+{% for net in monitoring_app_networks %}
+      {{ net }}:
+{% endfor %}
+networks:
+{% for net in monitoring_app_networks %}
+  {{ net }}:
+    external: true
+{% endfor %}

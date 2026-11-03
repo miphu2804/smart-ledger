@@ -13,5 +13,5 @@
 }
 
 # One site per environment, each `<domain> { reverse_proxy core-<environment>:8080 }`, written by
-# deploy/ansible/playbook.yml so an environment can be added without touching the others.
+# the roles of deploy/ansible so an environment can be added without touching the others.
 import /etc/caddy/sites/*.caddy
