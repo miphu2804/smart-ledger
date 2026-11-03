@@ -27,6 +27,7 @@ jobs:
         env:
           HH_DATA_PLANE_API_KEY: ${{ secrets.HH_DATA_PLANE_API_KEY }}
           HH_CONTROL_PLANE_API_KEY: ${{ secrets.HH_CONTROL_PLANE_API_KEY }}
-          HH_DATA_PLANE_URL: https://api.dp1.us.prod.honeyhive.ai
-          HH_CONTROL_PLANE_URL: https://api.cp.us.honeyhive.ai
+          # HH_API_URL is the AI service's data plane URL; the GitHub names match Dopbase ai/production.
+          HH_DATA_PLANE_URL: ${{ vars.HH_API_URL }}
+          HH_CONTROL_PLANE_URL: ${{ vars.HH_CONTROL_PLANE_URL }}
         run: bash sync-dashboards.sh
