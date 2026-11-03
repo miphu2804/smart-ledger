@@ -6,7 +6,9 @@ test('mở app thấy màn đăng nhập, vào app bằng tài khoản mock th�
 
   await page.goto('/');
 
-  await expect(page.getByText('Đăng nhập', { exact: true })).toBeVisible();
+  await expect(page.getByText('Đăng nhập Sổ Nghe Lời', { exact: true })).toBeVisible();
+  // Màn đăng nhập đã bỏ Facebook
+  await expect(page.getByText('Facebook')).toHaveCount(0);
 
   await page.getByText('Vào app', { exact: true }).click();
 

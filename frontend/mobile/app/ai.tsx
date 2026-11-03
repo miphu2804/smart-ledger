@@ -33,7 +33,7 @@ import type {
   ChatMessage,
   ThoughtStep,
 } from '../src/data/types';
-import { agentApi } from '../src/lib/agentApi';
+import { agentApi, agentErrorMessage } from '../src/lib/agentApi';
 import { ApiError } from '../src/lib/api';
 import { splitActions } from '../src/lib/chatMarkdown';
 import { hhmm, relDay } from '../src/lib/format';
@@ -49,21 +49,6 @@ const QUICK = [
   { label: 'Năm món đắt nhất?', icon: 'award' },
   { label: 'Tiệm có bao nhiêu mặt hàng?', icon: 'grid' },
 ] as const;
-
-/** Lỗi gửi tin → câu báo tiếng Việt. Câu đã gõ được trả lại ô nhập để gửi lại (FR-021, AC-011). */
-function chatErrorMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    if (err.code === 'timeout') return 'Trợ lý trả lời quá lâu nên đã dừng chờ.';
-    if (err.code === 'network') return 'Không kết nối được máy chủ. Vui lòng kiểm tra mạng.';
-    // Mã guardrail của AI (docs/contracts/api-contracts.md §6): BE chỉ trả mã, câu hiển thị nằm ở FE.
-    if (err.code === 'input_too_long') return 'Tin nhắn dài quá nên trợ lý chưa đọc được. Bạn rút gọn câu hỏi rồi gửi lại nhé.';
-    if (err.code === 'answer_unavailable') return 'Trợ lý chưa trả lời được câu này, bạn thử hỏi lại cụ thể hơn nhé.';
-    if (err.code === 'answer_timeout') return 'Trợ lý trả lời quá lâu nên đã dừng chờ.';
-    if (err.code === 'ai_unavailable' || err.status === 503) return 'Trợ lý AI đang tạm lỗi hoặc quá tải.';
-    if (err.code === 'conversation_not_found') return 'Cuộc trò chuyện cũ không còn. Gửi lại để bắt đầu cuộc mới.';
-  }
-  return 'Chưa gửi được tin nhắn cho trợ lý.';
-}
 
 /** Lỗi khi xem/đổi tên/xoá lịch sử → câu báo tiếng Việt. */
 function historyErrorMessage(err: unknown, fallback = 'Chưa tải được lịch sử trò chuyện.'): string {
@@ -244,7 +229,7 @@ export default function Ai() {
       // Không mất câu đã gõ: gỡ bong bóng chưa gửi được và trả câu về ô nhập (trừ khi đã gõ câu khác).
       setMsgs((m) => m.filter((x) => x.id !== userMessage.id));
       setText((current) => (current.trim() ? current : message));
-      setError(chatErrorMessage(err));
+      setError(agentErrorMessage(err));
     } finally {
       // Khung hình còn chờ sẽ đặt lại chữ cũ sau khi bong bóng nháp đã được xoá.
       if (frame !== null) cancelAnimationFrame(frame);

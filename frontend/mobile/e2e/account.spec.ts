@@ -45,8 +45,9 @@ test('đổi mật khẩu: sai mật khẩu cũ thì báo lỗi, đúng thì đ�
   await page.getByText('Đăng xuất', { exact: true }).last().click();
   await expect(page).toHaveURL(/welcome/);
 
-  await page.getByText('Đăng nhập bằng email', { exact: true }).click();
-  await page.getByPlaceholder('ten@example.com').fill('zz-test-matkhau@example.com');
+  await page.getByPlaceholder('Nhập địa chỉ email của bạn').fill('zz-test-matkhau@example.com');
+  await page.getByRole('button', { name: /Tiếp tục$/ }).click();
+  await expect(page.getByPlaceholder('ten@example.com')).toHaveValue('zz-test-matkhau@example.com');
   await page.getByPlaceholder('Ít nhất 6 ký tự').fill('matkhaumoi456');
   await page.getByText('Đăng nhập', { exact: true }).last().click();
   await expect(page.getByRole('tab', { name: 'Quản lý' })).toBeVisible();

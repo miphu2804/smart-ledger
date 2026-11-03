@@ -9,7 +9,7 @@ name: smart-ledger-monitoring
 
 services:
   alloy:
-    image: grafana/alloy:v1.15.0
+    image: grafana/alloy:v1.21.3
     command: [run, /etc/alloy/config.alloy, --storage.path=/var/lib/alloy/data]
     volumes:
       - ./config.alloy:/etc/alloy/config.alloy:ro
@@ -44,7 +44,7 @@ services:
         max-file: "3"
 
   prometheus:
-    image: prom/prometheus:v3.5.0
+    image: prom/prometheus:v3.15.1
     # Alloy pushes every sample; the config only loads the recording rules that dashboards read.
     command:
       - --config.file=/etc/prometheus/prometheus.yml
@@ -60,7 +60,7 @@ services:
     logging: *logging
 
   loki:
-    image: grafana/loki:3.5.3
+    image: grafana/loki:3.7.9
     command: [-config.file=/etc/loki/loki.yaml]
     volumes:
       - ./loki.yaml:/etc/loki/loki.yaml:ro
@@ -70,7 +70,7 @@ services:
     logging: *logging
 
   grafana:
-    image: grafana/grafana:12.1.1
+    image: grafana/grafana:13.3.0
     # Ansible writes one Postgres file per environment, so a run for one environment keeps the other's.
     env_file:
       - .env
