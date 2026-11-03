@@ -5,8 +5,8 @@ name: Deploy backend
 # the tests so a change here cannot break a required check, and so the backend deploy waits only for the backend jobs.
 # See docs/development/ci-cd.md#vps.
 # Each GitHub environment holds its own VPS address, SSH key and settings, plus its branch policy;
-# `backend-production` requires approval. The environment is set on the job below, so its secrets reach the job
-# without the caller passing them.
+# a `main` deploy first waits in job approve, whose environment `production-approval` requires reviewers. The
+# environment is set on the deploy job, so its secrets reach the job without the caller passing them.
 
 on:
   workflow_call:
@@ -36,7 +36,19 @@ permissions:
   packages: write
 
 jobs:
+  # Outside the VPS lock: a job waiting for approval would already hold the concurrency group of the deploy job and
+  # block the Infra apply of that environment. It runs nothing and holds no secrets.
+  approve:
+    if: github.ref_name == 'main'
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    environment: production-approval
+    steps:
+      - run: echo "Production deploy approved"
+
   deploy:
+    needs: approve
+    # Runs after an approval, or with none for staging; a rejected approval fails approve and skips the deploy.
+    if: ${{ !cancelled() && !failure() }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     environment: ${{ github.ref_name == 'main' && 'backend-production' || 'backend-staging' }}
     concurrency:
