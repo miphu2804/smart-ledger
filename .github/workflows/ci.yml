@@ -38,7 +38,6 @@ jobs:
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
     permissions:
       contents: read
-      pull-requests: read
     outputs:
       ai: ${{ steps.filter.outputs.ai }}
       core: ${{ steps.filter.outputs.core }}
@@ -47,50 +46,16 @@ jobs:
       containers: ${{ steps.filter.outputs.containers }}
       shell: ${{ steps.filter.outputs.shell }}
     steps:
+      # The whole history, so changes.sh can diff against the base commit.
       - uses: actions/checkout@v7
-      # A pull request is compared with its base branch; a push with the commit before the push.
-      - uses: dorny/paths-filter@v4.0.3
-        id: filter
         with:
-          base: ${{ github.ref_name }}
-          filters: |
-            ai:
-              - .github/workflows/ci.yml
-              - .github/workflows/select-runner.yml
-              - .github/workflows/cd.yml
-              - .github/workflows/deploy-backend.yml
-              - backend/ai/**
-              # The AI integration tests apply these migrations.
-              - supabase/**
-            core:
-              - .github/workflows/ci.yml
-              - .github/workflows/select-runner.yml
-              - .github/workflows/cd.yml
-              - .github/workflows/deploy-backend.yml
-              - backend/core/**
-            mobile:
-              - .github/workflows/ci.yml
-              - .github/workflows/select-runner.yml
-              - .github/workflows/cd.yml
-              - .github/workflows/deploy-web.yml
-              - frontend/mobile/**
-            landing:
-              - .github/workflows/ci.yml
-              - .github/workflows/select-runner.yml
-              - .github/workflows/cd.yml
-              - .github/workflows/deploy-landing.yml
-              - frontend/web/**
-            containers:
-              - .github/workflows/ci.yml
-              - .github/workflows/select-runner.yml
-              - .github/workflows/cd.yml
-              - compose.yaml
-              - backend/ai/**
-              - backend/core/**
-            shell:
-              - .shellcheckrc
-              - .github/workflows/**
-              - "**/*.sh"
+          fetch-depth: 0
+      # A pull request is compared with its base commit; a push with the commit before the push.
+      - name: Find the changed areas
+        id: filter
+        env:
+          SMARTLEDGER_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: scripts/ci/changes.sh
 
   ### Test: lint, tests and builds for the areas that changed ###
 
@@ -132,14 +97,7 @@ jobs:
       # self-hosted machines (which cannot run service containers).
       - name: Start PostgreSQL
         working-directory: .
-        run: |
-          # A per-job name and a free host port, so jobs running side by side on one machine do not collide. The
-          # readiness check uses TCP: while initialising, the image runs a temporary server on its Unix socket only.
-          docker rm -f ci-postgres-${{ github.run_id }}-${{ github.job }} >/dev/null 2>&1 || true
-          docker run -d --name ci-postgres-${{ github.run_id }}-${{ github.job }} -p 127.0.0.1::5432 \
-            -e POSTGRES_DB=smartledger_test -e POSTGRES_USER=smartledger -e POSTGRES_PASSWORD=smartledger pgvector/pgvector:pg17
-          until docker exec ci-postgres-${{ github.run_id }}-${{ github.job }} pg_isready -h 127.0.0.1 -U smartledger -d smartledger_test >/dev/null 2>&1; do sleep 1; done
-          echo "PG_PORT=$(docker port ci-postgres-${{ github.run_id }}-${{ github.job }} 5432/tcp | head -1 | sed 's/.*://')" >> "$GITHUB_ENV"
+        run: scripts/ci/start-postgres.sh pgvector/pgvector:pg17 smartledger_test
       - run: uv sync --group dev
       - run: uv run ruff check
       - run: uv run ruff format --check
@@ -149,29 +107,12 @@ jobs:
       - name: Stop PostgreSQL
         if: always()
         working-directory: .
-        run: docker rm -f ci-postgres-${{ github.run_id }}-${{ github.job }}
+        run: scripts/ci/stop-postgres.sh
       - name: Capture test counts
         id: test-results
         if: always()
-        run: |
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          from pathlib import Path
-          from xml.etree import ElementTree
-
-          report = Path("pytest-results.xml")
-          counts = {name: "n/a" for name in ("tests", "failures", "errors", "skipped")}
-          if report.exists():
-              root = ElementTree.parse(report).getroot()
-              suites = [root] if root.tag == "testsuite" else root.findall(".//testsuite")
-              if not suites:
-                  suites = [root]
-              counts = {
-                  name: str(sum(int(suite.get(name, "0")) for suite in suites))
-                  for name in counts
-              }
-          for name, value in counts.items():
-              print(f"{name}={value}")
-          PY
+        working-directory: .
+        run: scripts/ci/capture-test-counts.sh junit backend/ai/pytest-results.xml
 
   core:
     needs: [select-runner, changes]
@@ -196,14 +137,7 @@ jobs:
       # self-hosted machines (which cannot run service containers).
       - name: Start PostgreSQL
         working-directory: .
-        run: |
-          # A per-job name and a free host port, so jobs running side by side on one machine do not collide. The
-          # readiness check uses TCP: while initialising, the image runs a temporary server on its Unix socket only.
-          docker rm -f ci-postgres-${{ github.run_id }}-${{ github.job }} >/dev/null 2>&1 || true
-          docker run -d --name ci-postgres-${{ github.run_id }}-${{ github.job }} -p 127.0.0.1::5432 \
-            -e POSTGRES_DB=smartledger -e POSTGRES_USER=smartledger -e POSTGRES_PASSWORD=smartledger postgres:16
-          until docker exec ci-postgres-${{ github.run_id }}-${{ github.job }} pg_isready -h 127.0.0.1 -U smartledger -d smartledger >/dev/null 2>&1; do sleep 1; done
-          echo "PG_PORT=$(docker port ci-postgres-${{ github.run_id }}-${{ github.job }} 5432/tcp | head -1 | sed 's/.*://')" >> "$GITHUB_ENV"
+        run: scripts/ci/start-postgres.sh postgres:16 smartledger
       - name: Verify Core with PostgreSQL tests enabled
         env:
           CORE_TEST_POSTGRES_URL: jdbc:postgresql://127.0.0.1:${{ env.PG_PORT }}/smartledger
@@ -215,46 +149,20 @@ jobs:
           python3 scripts/test_verify_postgres_tests.py
           python3 scripts/verify_postgres_tests.py target/surefire-reports
       - name: Migrate a fresh PostgreSQL database
-        run: |
-          docker run --rm --network host \
-            --volume "$GITHUB_WORKSPACE/backend/core/src/main/resources/db/migration:/flyway/sql:ro" \
-            flyway/flyway:13.7.0 \
-            "-url=jdbc:postgresql://127.0.0.1:$PG_PORT/smartledger" \
-            -user=smartledger \
-            -password=smartledger \
-            -locations=filesystem:/flyway/sql \
-            -connectRetries=10 \
-            migrate
+        working-directory: .
+        run: scripts/ci/migrate-core-database.sh
       - name: Verify Core tables exist
-        run: |
-          table_count="$(docker run --rm --network host -e PGPASSWORD=smartledger postgres:16 \
-            psql -h 127.0.0.1 -p "$PG_PORT" -U smartledger -d smartledger -Atc \
-            "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename IN ('users', 'auth_identities', 'shops')")"
-          test "$table_count" = "3"
+        working-directory: .
+        run: scripts/ci/check-core-tables.sh
       - name: Stop PostgreSQL
         if: always()
         working-directory: .
-        run: docker rm -f ci-postgres-${{ github.run_id }}-${{ github.job }}
+        run: scripts/ci/stop-postgres.sh
       - name: Capture test counts
         id: test-results
         if: always()
-        run: |
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          from pathlib import Path
-          from xml.etree import ElementTree
-
-          reports = sorted(Path("target/surefire-reports").glob("TEST-*.xml"))
-          totals = {name: 0 for name in ("tests", "failures", "errors", "skipped")}
-          if not reports:
-              totals = {name: "n/a" for name in totals}
-          else:
-              for report in reports:
-                  suite = ElementTree.parse(report).getroot()
-                  for name in totals:
-                      totals[name] += int(suite.get(name, "0"))
-          for name, value in totals.items():
-              print(f"{name}={value}")
-          PY
+        working-directory: .
+        run: scripts/ci/capture-test-counts.sh surefire backend/core/target/surefire-reports
 
   mobile-web:
     needs: [select-runner, changes]
@@ -279,7 +187,7 @@ jobs:
         # Metro caches transformed modules (with EXPO_PUBLIC_* inlined) under TMPDIR; on a shared machine
         # the mock build of mobile-web would otherwise leak into the real bundle of deploy-web.
         if: runner.environment == 'self-hosted'
-        run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
+        run: ../../scripts/ci/isolate-metro-cache.sh
       - run: npm ci
       - run: npm run typecheck
       - run: npm run export:web
@@ -326,6 +234,9 @@ jobs:
     needs: [select-runner, ai, core, mobile-web, landing, container-images]
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
     steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts/ci
       - name: Build compact report
         env:
           AI_RESULT: ${{ needs.ai.result }}
@@ -341,21 +252,7 @@ jobs:
           MOBILE_RESULT: "${{ needs['mobile-web'].result }}"
           LANDING_RESULT: "${{ needs.landing.result }}"
           CONTAINER_RESULT: "${{ needs['container-images'].result }}"
-        run: |
-          {
-            echo "# CI results"
-            echo
-            echo "| Suite | Result | Tests | Failures | Errors | Skipped |"
-            echo "|---|---:|---:|---:|---:|---:|"
-            printf '| AI (Python) | %s | %s | %s | %s | %s |\n' \
-              "$AI_RESULT" "${AI_TESTS:-n/a}" "${AI_FAILURES:-n/a}" "${AI_ERRORS:-n/a}" "${AI_SKIPPED:-n/a}"
-            printf '| Core (Java) | %s | %s | %s | %s | %s |\n' \
-              "$CORE_RESULT" "${CORE_TESTS:-n/a}" "${CORE_FAILURES:-n/a}" "${CORE_ERRORS:-n/a}" "${CORE_SKIPPED:-n/a}"
-            printf '| Mobile web | %s | n/a | n/a | n/a | n/a |\n' "$MOBILE_RESULT"
-            printf '| Landing (web) | %s | n/a | n/a | n/a | n/a |\n' "$LANDING_RESULT"
-            printf '| Container images | %s | n/a | n/a | n/a | n/a |\n' "$CONTAINER_RESULT"
-          } > ci-summary.md
-          cat ci-summary.md >> "$GITHUB_STEP_SUMMARY"
+        run: scripts/ci/summarize-ci.sh
       - uses: actions/upload-artifact@v7
         # The summary is already in the job summary; a full artifact quota must not fail CI or skip deploys.
         continue-on-error: true
@@ -379,14 +276,13 @@ jobs:
     permissions:
       actions: write
     steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts/ci
       - name: Start CD
         env:
           # A workflow_dispatch from GITHUB_TOKEN starts a new run, unlike most events it triggers.
           GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          REF_NAME: ${{ github.ref_name }}
-          SHA: ${{ github.sha }}
-          RUN_ID: ${{ github.run_id }}
           RERUN: ${{ github.run_attempt > 1 }}
           CHANGED_AI: ${{ needs.changes.outputs.ai }}
           CHANGED_CORE: ${{ needs.changes.outputs.core }}
@@ -397,20 +293,4 @@ jobs:
           CONTAINERS_RESULT: ${{ needs['container-images'].result }}
           MOBILE_RESULT: ${{ needs['mobile-web'].result }}
           LANDING_RESULT: ${{ needs.landing.result }}
-        run: |
-          set -euo pipefail
-          ok() { local r; for r in "$@"; do [ "$r" = success ] || [ "$r" = skipped ] || return 1; done; }
-          want() { [ "$RERUN" = true ] || [ "$1" = true ]; }
-          backend_ok=false; ok "$AI_RESULT" "$CORE_RESULT" "$CONTAINERS_RESULT" && backend_ok=true
-          ai=false; core=false; web=false; landing=false
-          [ "$backend_ok" = true ] && want "$CHANGED_AI" && ai=true
-          [ "$backend_ok" = true ] && want "$CHANGED_CORE" && core=true
-          ok "$MOBILE_RESULT" && want "$CHANGED_MOBILE" && web=true
-          ok "$LANDING_RESULT" && want "$CHANGED_LANDING" && landing=true
-          echo "backend-ai=$ai backend-core=$core web=$web landing=$landing"
-          if [ "$ai$core$web$landing" = falsefalsefalsefalse ]; then
-            echo "Nothing to deploy."; exit 0
-          fi
-          gh workflow run cd.yml --repo "$REPO" --ref "$REF_NAME" -f runner=default -f sha="$SHA" -f ci-run-id="$RUN_ID" \
-            -f backend-ai="$ai" -f backend-core="$core" -f web="$web" -f landing="$landing"
-          echo "Started CD for ${SHA::7} on $REF_NAME: backend-ai=$ai backend-core=$core web=$web landing=$landing" >> "$GITHUB_STEP_SUMMARY"
+        run: scripts/ci/start-cd.sh
