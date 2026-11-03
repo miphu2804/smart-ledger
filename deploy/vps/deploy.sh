@@ -34,8 +34,11 @@ deploy_service() {
   [[ -n "$image" ]] || return 0
   set_var "$(tr '[:lower:]' '[:upper:]' <<< "$service")_IMAGE" "$image"
   docker compose pull "$service"
-  # --wait fails the deploy when the container does not become healthy.
-  docker compose up -d --wait --wait-timeout 180 "$service"
+  # --wait fails the deploy when the container does not become healthy. Core's first start after a recreate can fail
+  # its database connection and restart, which --wait reports as unhealthy even though the restart comes up, so the
+  # wait runs once more before the deploy fails.
+  docker compose up -d --wait --wait-timeout 180 "$service" \
+    || { echo "$service did not become healthy; waiting once more" >&2; docker compose up -d --wait --wait-timeout 180 "$service"; }
 }
 
 # AI first: Core calls AI, so the new Core should not start against an old AI.

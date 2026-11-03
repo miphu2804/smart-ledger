@@ -29,7 +29,11 @@ services:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health/readiness"]
       interval: 10s
       timeout: 5s
-      start_period: 90s
+      # The VPS disk is the bottleneck: during the production Infra apply on 2026-11-03, iowait stayed at 40-58 % while
+      # Core, Bifrost and image pulls shared it, and Core took 151 s from its container start to the first database
+      # connection (62 s in a normal deploy). Failed checks inside this window do not count, and the first passing
+      # check still marks Core healthy at once.
+      start_period: 240s
       retries: 6
     networks:
       default:
@@ -85,7 +89,8 @@ services:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 30s
       timeout: 5s
-      start_period: 10s
+      # Bootstrap syncs the MCP library and the model catalog first; it took 43 s on production.
+      start_period: 90s
       retries: 3
     networks:
       default:

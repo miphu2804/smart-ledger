@@ -2,23 +2,24 @@ name: Infra
 
 # Thin GitHub adapter over scripts/infra/run.sh, which holds the whole flow and knows nothing of GitHub: this file
 # picks the runner, builds deploy/ansible/Dockerfile, maps secrets to the script's neutral variables and runs it in
-# that image. See docs/development/ci-cd.md#vps.
+# that image (infra-run.yml). See docs/development/ci-cd.md#vps.
 #   pull request touching deploy/** or scripts/infra/**   lint only: unmerged code never gets the VPS key
 #   push to staging                                       plan, then apply staging, app scope
 #   push to main                                          plan, then apply production, all scope
 #   by hand                                               the environment, scope and mode chosen
 # scripts/ci/plan-infra-runs.sh lists the runs. Each reads its secrets from a GitHub environment: infra-staging,
-# infra-production-plan or infra-production. Only infra-production requires reviewers, so a production apply waits
-# for a person while the plan before it does not.
+# infra-production-plan or infra-production. A production apply first waits in job approve, whose environment
+# production-approval requires reviewers, so a person approves after reading the plan and before the apply takes the
+# VPS lock; a backend deploy never waits behind an approval.
 
 run-name: Infra ${{ github.event_name }} ${{ github.ref_name }}
 
 on:
   pull_request:
-    paths: [deploy/**, scripts/infra/**, .github/workflows/infra.yml]
+    paths: [deploy/**, scripts/infra/**, .github/workflows/infra.yml, .github/workflows/infra-run.yml]
   push:
     branches: [staging, main]
-    paths: [deploy/**, scripts/infra/**, .github/workflows/infra.yml]
+    paths: [deploy/**, scripts/infra/**, .github/workflows/infra.yml, .github/workflows/infra-run.yml]
   workflow_dispatch:
     inputs:
       environment:
@@ -64,21 +65,23 @@ jobs:
     needs: select-runner
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
       - name: Lint
         run: scripts/infra/lint.sh
 
-  # The runs this event asks for, in order; none for a pull request.
+  # The runs this event asks for; none for a pull request.
   prepare:
     needs: select-runner
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
     outputs:
-      runs: ${{ steps.runs.outputs.runs }}
+      plan: ${{ steps.runs.outputs.plan }}
+      apply: ${{ steps.runs.outputs.apply }}
+      approval: ${{ steps.runs.outputs.approval }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: List the runs
@@ -90,53 +93,32 @@ jobs:
           INFRA_MODE: ${{ inputs.mode }}
         run: scripts/ci/plan-infra-runs.sh
 
-  run:
+  plan:
     needs: [select-runner, lint, prepare]
-    if: needs.prepare.outputs.runs != '[]'
+    if: needs.prepare.outputs.plan != ''
+    uses: ./.github/workflows/infra-run.yml
+    with:
+      runs-on: ${{ needs.select-runner.outputs.runs_on }}
+      mode: plan
+      run: ${{ needs.prepare.outputs.plan }}
+    secrets: inherit
+
+  # Outside the VPS lock, so a pending approval blocks nothing. It runs nothing and holds no secrets.
+  # `!cancelled() && !failure()` lets a skipped plan (a manual apply) through and stops after a failed one.
+  approve:
+    needs: [select-runner, lint, prepare, plan]
+    if: ${{ !cancelled() && !failure() && needs.prepare.outputs.approval == 'true' }}
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
-    environment: ${{ matrix.secrets }}
-    # Shared with the backend deploy of deploy-backend.yml, which writes the same app directory. `queue: max` keeps
-    # every waiting job, where the default would cancel all but the newest, and a running one is never cancelled.
-    concurrency:
-      group: vps-${{ matrix.environment }}
-      cancel-in-progress: false
-      queue: max
-    strategy:
-      # Sequential and in order, so a failed plan stops the apply after it.
-      max-parallel: 1
-      matrix:
-        include: ${{ fromJSON(needs.prepare.outputs.runs) }}
+    environment: production-approval
     steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - name: Build the runtime image
-        run: docker build --tag smartledger-infra deploy/ansible
-      # The container runs as the runner's own user so the files it writes in the workspace can be cleaned up.
-      - name: Run
-        env:
-          SMARTLEDGER_VPS_HOST: ${{ vars.SMARTLEDGER_VPS_HOST }}
-          SMARTLEDGER_VPS_USER: ${{ vars.SMARTLEDGER_VPS_USER }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
-          DOPBASE_URL: ${{ vars.DOPBASE_URL }}
-          DOPBASE_TOKEN_CORE: ${{ secrets.DOPBASE_TOKEN_CORE }}
-          DOPBASE_TOKEN_AI: ${{ secrets.DOPBASE_TOKEN_AI }}
-          DOPBASE_TOKEN_BIFROST: ${{ secrets.DOPBASE_TOKEN_BIFROST }}
-          DOPBASE_TOKEN_VPS: ${{ secrets.DOPBASE_TOKEN_VPS }}
-          DOPBASE_TOKEN_MONITOR: ${{ secrets.DOPBASE_TOKEN_MONITOR }}
-          MODE: ${{ matrix.mode }}
-          SMARTLEDGER_ENVIRONMENT: ${{ matrix.environment }}
-          SCOPE: ${{ matrix.scope }}
-        run: |
-          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/work" -w /work \
-            -e SMARTLEDGER_VPS_HOST -e SMARTLEDGER_VPS_USER -e SSH_PRIVATE_KEY -e SSH_KNOWN_HOSTS -e DOPBASE_URL \
-            -e DOPBASE_TOKEN_CORE -e DOPBASE_TOKEN_AI -e DOPBASE_TOKEN_BIFROST -e DOPBASE_TOKEN_VPS -e DOPBASE_TOKEN_MONITOR \
-            smartledger-infra scripts/infra/run.sh "$MODE" "$SMARTLEDGER_ENVIRONMENT" --scope "$SCOPE"
-      - uses: actions/upload-artifact@v7
-        if: always() && matrix.mode == 'plan'
-        with:
-          name: infra-plan-${{ matrix.environment }}
-          path: out/infra-plan-${{ matrix.environment }}.txt
-          if-no-files-found: ignore
-          retention-days: 14
+      - run: echo "Production apply approved"
+
+  apply:
+    needs: [select-runner, lint, prepare, plan, approve]
+    if: ${{ !cancelled() && !failure() && needs.prepare.outputs.apply != '' }}
+    uses: ./.github/workflows/infra-run.yml
+    with:
+      runs-on: ${{ needs.select-runner.outputs.runs_on }}
+      mode: apply
+      run: ${{ needs.prepare.outputs.apply }}
+    secrets: inherit

@@ -1,0 +1,72 @@
+name: Infra run
+
+# Called by infra.yml for its plan and its apply: one scripts/infra/run.sh call in the deploy/ansible image, with the
+# secrets of the GitHub environment the call names. See docs/development/ci-cd.md#vps.
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: JSON for `runs-on`, from select-runner.yml
+        type: string
+        required: true
+      mode:
+        description: plan or apply
+        type: string
+        required: true
+      run:
+        description: 'JSON {"environment", "scope", "secrets"} from scripts/ci/plan-infra-runs.sh'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    # No environment here requires reviewers: a job waiting for approval would already hold the concurrency group
+    # below and block every backend deploy of that environment. infra.yml asks for the approval in a job of its own.
+    environment: ${{ fromJSON(inputs.run).secrets }}
+    # Shared with the backend deploy of deploy-backend.yml, which writes the same app directory. `queue: max` keeps
+    # every waiting job, where the default would cancel all but the newest, and a running one is never cancelled.
+    concurrency:
+      group: vps-${{ fromJSON(inputs.run).environment }}
+      cancel-in-progress: false
+      queue: max
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the runtime image
+        run: docker build --tag smartledger-infra deploy/ansible
+      # The container runs as the runner's own user so the files it writes in the workspace can be cleaned up.
+      - name: Run
+        env:
+          SMARTLEDGER_VPS_HOST: ${{ vars.SMARTLEDGER_VPS_HOST }}
+          SMARTLEDGER_VPS_USER: ${{ vars.SMARTLEDGER_VPS_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          DOPBASE_URL: ${{ vars.DOPBASE_URL }}
+          DOPBASE_TOKEN_CORE: ${{ secrets.DOPBASE_TOKEN_CORE }}
+          DOPBASE_TOKEN_AI: ${{ secrets.DOPBASE_TOKEN_AI }}
+          DOPBASE_TOKEN_BIFROST: ${{ secrets.DOPBASE_TOKEN_BIFROST }}
+          DOPBASE_TOKEN_VPS: ${{ secrets.DOPBASE_TOKEN_VPS }}
+          DOPBASE_TOKEN_MONITOR: ${{ secrets.DOPBASE_TOKEN_MONITOR }}
+          MODE: ${{ inputs.mode }}
+          SMARTLEDGER_ENVIRONMENT: ${{ fromJSON(inputs.run).environment }}
+          SCOPE: ${{ fromJSON(inputs.run).scope }}
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/work" -w /work \
+            -e SMARTLEDGER_VPS_HOST -e SMARTLEDGER_VPS_USER -e SSH_PRIVATE_KEY -e SSH_KNOWN_HOSTS -e DOPBASE_URL \
+            -e DOPBASE_TOKEN_CORE -e DOPBASE_TOKEN_AI -e DOPBASE_TOKEN_BIFROST -e DOPBASE_TOKEN_VPS -e DOPBASE_TOKEN_MONITOR \
+            smartledger-infra scripts/infra/run.sh "$MODE" "$SMARTLEDGER_ENVIRONMENT" --scope "$SCOPE"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        # The plan is also in the job log; a full artifact quota must not fail the plan or skip the apply.
+        continue-on-error: true
+        if: always() && inputs.mode == 'plan'
+        with:
+          name: infra-plan-${{ fromJSON(inputs.run).environment }}
+          path: out/infra-plan-${{ fromJSON(inputs.run).environment }}.txt
+          if-no-files-found: ignore
+          retention-days: 14
