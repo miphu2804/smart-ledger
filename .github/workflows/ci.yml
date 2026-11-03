@@ -47,7 +47,7 @@ jobs:
       shell: ${{ steps.filter.outputs.shell }}
     steps:
       # The whole history, so changes.sh can diff against the base commit.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       # A pull request is compared with its base commit; a push with the commit before the push.
@@ -66,7 +66,7 @@ jobs:
     if: needs.changes.outputs.shell == 'true'
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install shellcheck and actionlint
         run: |
           command -v shellcheck > /dev/null || brew install shellcheck
@@ -90,8 +90,8 @@ jobs:
       run:
         working-directory: backend/ai
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: "3.11"
       # Started with docker on every runner, not as a service container, so one path serves GitHub-hosted and
@@ -128,8 +128,8 @@ jobs:
       run:
         working-directory: backend/core
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: "21"
@@ -178,8 +178,8 @@ jobs:
       run:
         working-directory: frontend/mobile
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
@@ -201,8 +201,8 @@ jobs:
       run:
         working-directory: frontend/web
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
@@ -223,7 +223,7 @@ jobs:
       FIREBASE_PROJECT_ID: ci-placeholder
       GOOGLE_APPLICATION_CREDENTIALS: ./backend/core/.env.example
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build custom service images
         run: docker compose build
 
@@ -235,7 +235,7 @@ jobs:
     needs: [select-runner, ai, core, mobile-web, landing, container-images]
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: scripts/ci
       - name: Build compact report
@@ -254,7 +254,7 @@ jobs:
           LANDING_RESULT: "${{ needs.landing.result }}"
           CONTAINER_RESULT: "${{ needs['container-images'].result }}"
         run: scripts/ci/summarize-ci.sh
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         # The summary is already in the job summary; a full artifact quota must not fail CI or skip deploys.
         continue-on-error: true
         with:
@@ -278,7 +278,7 @@ jobs:
       actions: write
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: scripts/ci
       - name: Start CD

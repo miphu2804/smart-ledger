@@ -142,6 +142,15 @@ Production still needs its approval: run the production deploy only after a revi
 - Both backend environments use the same VPS and deploy key, so a `backend-staging` job can reach production containers. The approval guards only the `main` deploy. The project owner accepted this.
 - `production-approval` holds no secrets; the backend deploy and the Infra apply wait in a job of their own that uses it, before the job that takes the `vps-<environment>` concurrency group. A job that waits for a reviewer already holds its concurrency group, so an approval on `backend-production` or `infra-production` itself would block the other workflow until someone approves or rejects it. Those two environments therefore have no reviewers and rely on their `main` branch rule, which the project owner accepted on 2026-11-03.
 
+## Ownership and dependency updates
+
+The repository is public and its jobs can run on the owner's self-hosted machines, so what a workflow executes is pinned and what changes it is reviewed.
+
+- **Pinned actions.** Every third-party action is pinned to a full commit SHA with its release as a comment (`actions/checkout@<sha> # v7.0.1`), as GitHub's [secure use reference](https://docs.github.com/en/actions/reference/security/secure-use) recommends: a moved or compromised tag cannot change what runs. Local actions and reusable workflows (`./.github/...`) need no pin, because they run from the same commit. Pin a new action the same way: `gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`.
+- **Dependabot.** [`.github/dependabot.yml`](../../.github/dependabot.yml) opens one grouped pull request a week against `staging` for each of GitHub Actions, the Dockerfiles of `backend/ai`, `deploy/ansible` and `deploy/dopbase`, and the Compose stacks. It updates the SHA and the version comment together. Application packages (uv, npm, Maven) and `backend/core` are left out: Core changes need the owner's approval and app upgrades are planned per feature.
+- **Code owners.** [`.github/CODEOWNERS`](../../.github/CODEOWNERS) requests the project owner's review on `.github/`, `deploy/`, `scripts/`, `secrets/`, the HoneyHive config, `docs/development/` and `backend/core/`. GitHub requests the review but does not block the merge until the `staging` and `main` rulesets require code-owner review.
+- **Vulnerability reports** go through GitHub's private reporting, as [`SECURITY.md`](../../SECURITY.md) describes.
+
 <a id="eval-regression"></a>
 
 ## Eval regression

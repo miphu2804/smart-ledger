@@ -22,6 +22,21 @@ const MOCK_TOOL_MS = 1500;
 const MOCK_CHUNK = 12;
 const MOCK_CHUNK_MS = 60;
 
+/** Lỗi gửi tin → câu báo tiếng Việt, dùng chung cho màn Trợ lý và bảng hỏi nhanh. Câu đã gõ được trả lại ô nhập để gửi lại (FR-021, AC-011). */
+export function agentErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.code === 'timeout') return 'Trợ lý trả lời quá lâu nên đã dừng chờ.';
+    if (err.code === 'network') return 'Không kết nối được máy chủ. Vui lòng kiểm tra mạng.';
+    // Mã guardrail của AI (docs/contracts/api-contracts.md §6): BE chỉ trả mã, câu hiển thị nằm ở FE.
+    if (err.code === 'input_too_long') return 'Tin nhắn dài quá nên trợ lý chưa đọc được. Bạn rút gọn câu hỏi rồi gửi lại nhé.';
+    if (err.code === 'answer_unavailable') return 'Trợ lý chưa trả lời được câu này, bạn thử hỏi lại cụ thể hơn nhé.';
+    if (err.code === 'answer_timeout') return 'Trợ lý trả lời quá lâu nên đã dừng chờ.';
+    if (err.code === 'ai_unavailable' || err.status === 503) return 'Trợ lý AI đang tạm lỗi hoặc quá tải.';
+    if (err.code === 'conversation_not_found') return 'Cuộc trò chuyện cũ không còn. Gửi lại để bắt đầu cuộc mới.';
+  }
+  return 'Chưa gửi được tin nhắn cho trợ lý.';
+}
+
 export const agentApi = {
   /** POST /agent/chat — bỏ `conversation_id` để mở hội thoại mới */
   chat: (input: AgentChatRequest): Promise<AgentChatMessageView> =>

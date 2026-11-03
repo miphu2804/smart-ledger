@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, SectionList, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AiAskSheet, AiSuggestions } from '../../src/components/AiAskSheet';
 import { DateRangeSheet } from '../../src/components/DateRangeSheet';
 import { RowListSkeleton } from '../../src/components/ListSkeleton';
 import { QuickNavButton } from '../../src/components/QuickNav';
@@ -161,6 +162,10 @@ export default function Invoices() {
     }, [refreshTop, loadReport]),
   );
 
+  // Câu đang hỏi trợ lý ở bảng hỏi nhanh; null là đóng. Rời màn hình (nút mở màn từ câu trả lời, mở Trợ lý) thì đóng bảng.
+  const [aiQuestion, setAiQuestion] = useState<string | null>(null);
+  useFocusEffect(useCallback(() => () => setAiQuestion(null), []));
+
   const pullToRefresh = () => {
     void reload();
     void loadReport();
@@ -311,6 +316,8 @@ export default function Invoices() {
             </Pressable>
           </View>
 
+          {/* Gợi ý hỏi trợ lý về doanh thu (như MoMo): chạm là mở bảng hỏi Bobi */}
+          <AiSuggestions onAsk={setAiQuestion} />
     </>
   );
 
@@ -520,6 +527,7 @@ export default function Invoices() {
           setFilterOpen(false);
         }}
       />
+      <AiAskSheet question={aiQuestion} onClose={() => setAiQuestion(null)} />
     </View>
   );
 }
