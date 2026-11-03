@@ -225,9 +225,9 @@ no_iphone_fix="Connect the iPhone by cable, unlock it and tap Trust. The first t
 
 # The chosen iPhone (its line from list_devices) and the profile that can sign the app for it.
 check_iphone() {
-  local line="$1" udid="" name="" model="" ios="" via="" devmode="" pairing="" sdk="" pbx="" team="" teams="" kind="" ws="" now=""
+  local line="$1" udid="" name="" model="" ios="" via="" devmode="" sdk="" pbx="" team="" teams="" kind="" ws="" now=""
   local f plist appid pteam exp pname devices seen="" ok="" fix=""
-  IFS=$'\t' read -r udid name model ios via devmode pairing <<<"$line"
+  IFS=$'\t' read -r udid name model ios via devmode _ <<<"$line"
 
   pf_section "iPhone"
   pf_ok "$name ($model, iOS $ios, $via)"
