@@ -57,6 +57,12 @@ class AppConfig(BaseSettings):
     # Share of chat turns traced, from 0 to 1; the free plan caps events per month and
     # a turn sends about a dozen
     HH_SAMPLE_RATE: float = Field(default=1.0, ge=0, le=1)
+    # Read only by sync-dashboards.sh through the HoneyHive CLI, not by the service:
+    # fine-grained keys for charts (data plane) and alerts (control plane), and the
+    # control plane URL; HH_API_URL above is the data plane URL for both
+    HH_DATA_PLANE_API_KEY: str | None = None
+    HH_CONTROL_PLANE_API_KEY: str | None = None
+    HH_CONTROL_PLANE_URL: str | None = None
     # Commit the image was built from, set by the deploy workflow; tags each session
     GIT_SHA: str | None = None
 
