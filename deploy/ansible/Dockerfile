@@ -1,7 +1,7 @@
 # Runtime of scripts/infra/run.sh: Ansible, its collections, the Dopbase CLI and an ssh client, so any runner with
 # Docker runs the same flow with no setup on the machine. The repository is mounted, not copied:
 #   docker build -t smartledger-infra deploy/ansible
-#   docker run --rm -v "$PWD:/work" -w /work -e SL_VPS_HOST -e SL_VPS_USER -e SSH_PRIVATE_KEY -e SSH_KNOWN_HOSTS \
+#   docker run --rm -v "$PWD:/work" -w /work -e SMARTLEDGER_VPS_HOST -e SMARTLEDGER_VPS_USER -e SSH_PRIVATE_KEY -e SSH_KNOWN_HOSTS \
 #     -e DOPBASE_URL -e DOPBASE_TOKEN_CORE -e DOPBASE_TOKEN_AI -e DOPBASE_TOKEN_BIFROST -e DOPBASE_TOKEN_VPS \
 #     -e DOPBASE_TOKEN_MONITOR smartledger-infra scripts/infra/run.sh plan staging --scope app
 FROM python:3.12.8-slim-bookworm
@@ -33,3 +33,8 @@ RUN case "${TARGETARCH:-amd64}" in \
     && echo "${sha}  /tmp/dopbase.tar.gz" | sha256sum -c - \
     && tar -xzf /tmp/dopbase.tar.gz -C /usr/local/bin dopbase \
     && rm /tmp/dopbase.tar.gz
+
+# Writable so entrypoint.sh can name the uid of `docker run --user`; the container is discarded after each run.
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod 0666 /etc/passwd
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

@@ -15,7 +15,8 @@
 
 - name: Attach Alloy to them
   ansible.builtin.template:
-    src: compose.override.yaml.j2
+    # An absolute path: this file runs from the app role's handler, where a bare name would search roles/app/templates.
+    src: "{{ playbook_dir }}/roles/monitoring/templates/compose.override.yaml.j2"
     dest: "{{ sl_monitoring_dir }}/compose.override.yaml"
     owner: "{{ sl_deploy_user }}"
     group: "{{ sl_deploy_user }}"

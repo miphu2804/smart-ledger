@@ -80,8 +80,8 @@ jobs:
       - name: Lint
         working-directory: deploy/ansible
         env:
-          SL_VPS_HOST: 203.0.113.1
-          SL_VPS_USER: root
+          SMARTLEDGER_VPS_HOST: 203.0.113.1
+          SMARTLEDGER_VPS_USER: root
         run: |
           set -euo pipefail
           ansible-galaxy collection install -r requirements.yml
@@ -156,8 +156,8 @@ jobs:
       # The container runs as the runner's own user so the files it writes in the workspace can be cleaned up.
       - name: Run
         env:
-          SL_VPS_HOST: ${{ vars.SL_VPS_HOST }}
-          SL_VPS_USER: ${{ vars.SL_VPS_USER }}
+          SMARTLEDGER_VPS_HOST: ${{ vars.SMARTLEDGER_VPS_HOST }}
+          SMARTLEDGER_VPS_USER: ${{ vars.SMARTLEDGER_VPS_USER }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
           DOPBASE_URL: ${{ vars.DOPBASE_URL }}
@@ -167,13 +167,13 @@ jobs:
           DOPBASE_TOKEN_VPS: ${{ secrets.DOPBASE_TOKEN_VPS }}
           DOPBASE_TOKEN_MONITOR: ${{ secrets.DOPBASE_TOKEN_MONITOR }}
           MODE: ${{ matrix.mode }}
-          TARGET: ${{ matrix.environment }}
+          SMARTLEDGER_ENVIRONMENT: ${{ matrix.environment }}
           SCOPE: ${{ matrix.scope }}
         run: |
           docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/work" -w /work \
-            -e SL_VPS_HOST -e SL_VPS_USER -e SSH_PRIVATE_KEY -e SSH_KNOWN_HOSTS -e DOPBASE_URL \
+            -e SMARTLEDGER_VPS_HOST -e SMARTLEDGER_VPS_USER -e SSH_PRIVATE_KEY -e SSH_KNOWN_HOSTS -e DOPBASE_URL \
             -e DOPBASE_TOKEN_CORE -e DOPBASE_TOKEN_AI -e DOPBASE_TOKEN_BIFROST -e DOPBASE_TOKEN_VPS -e DOPBASE_TOKEN_MONITOR \
-            smartledger-infra scripts/infra/run.sh "$MODE" "$TARGET" --scope "$SCOPE"
+            smartledger-infra scripts/infra/run.sh "$MODE" "$SMARTLEDGER_ENVIRONMENT" --scope "$SCOPE"
       - uses: actions/upload-artifact@v7
         if: always() && matrix.mode == 'plan'
         with:

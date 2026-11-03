@@ -145,7 +145,7 @@ A staging run therefore never rewrites the shared monitoring `.env`, the Grafana
 [`scripts/infra/run.sh`](../../scripts/infra/run.sh) is the one entrypoint; `plan` is a dry run (`--check --diff`) that also writes `out/infra-plan-<environment>.txt`, `apply` changes the VPS:
 
 ```bash
-export SL_VPS_HOST=<address> SL_VPS_USER=root
+export SMARTLEDGER_VPS_HOST=<address> SMARTLEDGER_VPS_USER=root
 scripts/infra/run.sh plan production --scope all
 scripts/infra/run.sh apply staging --scope app
 ```
@@ -154,12 +154,12 @@ The script exports `core`, `ai`, `bifrost`, `vps` and `monitor` of that environm
 
 ```bash
 docker build -t smartledger-infra deploy/ansible
-docker run --rm -v "$PWD:/work" -w /work -e SL_VPS_HOST -e SL_VPS_USER -e SSH_PRIVATE_KEY -e SSH_KNOWN_HOSTS -e DOPBASE_URL \
+docker run --rm -v "$PWD:/work" -w /work -e SMARTLEDGER_VPS_HOST -e SMARTLEDGER_VPS_USER -e SSH_PRIVATE_KEY -e SSH_KNOWN_HOSTS -e DOPBASE_URL \
   -e DOPBASE_TOKEN_CORE -e DOPBASE_TOKEN_AI -e DOPBASE_TOKEN_BIFROST -e DOPBASE_TOKEN_VPS -e DOPBASE_TOKEN_MONITOR \
   smartledger-infra scripts/infra/run.sh plan staging --scope app
 ```
 
-[`infra.yml`](../../.github/workflows/infra.yml) is the GitHub adapter and only maps secrets to those variables. A pull request that touches `deploy/` or `scripts/infra/` plans `staging` in scope `app` and uploads the plan; a push to `staging` applies it; a push to `main` plans and then applies `production` in scope `all`; Actions, Infra, Run workflow runs any combination by hand. Its `lint` job runs `ansible-playbook --syntax-check`, `ansible-lint`, `shellcheck` and `actionlint`, and fails when `GITHUB_` or `CI_` appears under `deploy/ansible/` or `scripts/infra/`. It needs four GitHub environments: `infra-plan` and `infra-staging` for `staging`, `infra-production-plan` and `infra-production` for `production`, the last with required reviewers. Each holds variables `SL_VPS_HOST`, `SL_VPS_USER` and `DOPBASE_URL` and secrets `SSH_PRIVATE_KEY` (base64 of an admin login's key with sudo, not the deploy key), `SSH_KNOWN_HOSTS` and the five `DOPBASE_TOKEN_*` runner tokens of that environment's groups.
+[`infra.yml`](../../.github/workflows/infra.yml) is the GitHub adapter and only maps secrets to those variables. A pull request that touches `deploy/` or `scripts/infra/` plans `staging` in scope `app` and uploads the plan; a push to `staging` applies it; a push to `main` plans and then applies `production` in scope `all`; Actions, Infra, Run workflow runs any combination by hand. Its `lint` job runs `ansible-playbook --syntax-check`, `ansible-lint`, `shellcheck` and `actionlint`, and fails when `GITHUB_` or `CI_` appears under `deploy/ansible/` or `scripts/infra/`. It needs four GitHub environments: `infra-plan` and `infra-staging` for `staging`, `infra-production-plan` and `infra-production` for `production`, the last with required reviewers. Each holds variables `SMARTLEDGER_VPS_HOST`, `SMARTLEDGER_VPS_USER` and `DOPBASE_URL` and secrets `SSH_PRIVATE_KEY` (base64 of an admin login's key with sudo, not the deploy key), `SSH_KNOWN_HOSTS` and the five `DOPBASE_TOKEN_*` runner tokens of that environment's groups.
 
 Dopbase owns every value, so the playbook has no fallbacks: it stops before it changes anything when `CADDY_DOMAIN`, `VPS_SSH_PUBLIC_KEY` (scope `all`) or, with `GRAFANA_PG_HOST` set, `GRAFANA_PG_PORT`, `GRAFANA_PG_DATABASE` and `GRAFANA_PG_PASSWORD` are empty. A domain or token left empty skips its feature.
 

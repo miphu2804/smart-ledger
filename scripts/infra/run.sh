@@ -2,7 +2,7 @@
 # Plans or applies deploy/ansible on the VPS for one environment, from any machine with Ansible and the Dopbase CLI
 # (the image of deploy/ansible/Dockerfile has both). It exports the environment's settings from Dopbase into a
 # private temporary directory, removed on exit, and takes everything else from neutral variables:
-#   SL_VPS_HOST, SL_VPS_USER   address and admin login (with sudo) of the VPS; required
+#   SMARTLEDGER_VPS_HOST, SMARTLEDGER_VPS_USER   address and admin login (with sudo) of the VPS; required
 #   SSH_PRIVATE_KEY            base64 of the login's key, held in a job-local ssh-agent; unset uses your ssh config
 #   SSH_KNOWN_HOSTS            pinned host keys, required with SSH_PRIVATE_KEY
 #   DOPBASE_URL                the Dopbase server
@@ -29,7 +29,7 @@ if [ "${1:-}" = --scope ]; then
   shift 2
 fi
 case "$scope" in app|all) ;; *) echo "usage: $usage" >&2; exit 1 ;; esac
-: "${SL_VPS_HOST:?SL_VPS_HOST is not set}" "${SL_VPS_USER:?SL_VPS_USER is not set}"
+: "${SMARTLEDGER_VPS_HOST:?SMARTLEDGER_VPS_HOST is not set}" "${SMARTLEDGER_VPS_USER:?SMARTLEDGER_VPS_USER is not set}"
 
 dir="$(mktemp -d)"
 chmod 700 "$dir"
