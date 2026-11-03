@@ -1,0 +1,167 @@
+name: Eval regression
+
+# Runs the agent_chat eval (backend/ai/evaluation/agent_chat) by hand, when a change to the agent or its memory needs
+# one; it does not run on every change, because each run asks the models about 69 chat turns plus their judges. It
+# scores everything on the runner with metrics built on HoneyHive's evaluator templates, writes the report to the job
+# summary and to the open pull request of `ref`, and fails when a metric in thresholds.toml misses its minimum.
+# Nothing is sent to HoneyHive unless `sync` is on. Dispatch it from `staging`: the ai/staging settings come through
+# the backend-staging environment, which only `staging` may use; `ref` picks the code that is evaluated.
+# See docs/development/ci-cd.md#eval-regression.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to evaluate
+        type: string
+        required: true
+      sync:
+        description: Also sync the scores to HoneyHive as an experiment run (about 69 sessions of the monthly quota)
+        type: boolean
+        default: false
+      runner:
+        description: github-hosted, self-hosted or auto, as in ci.yml
+        type: choice
+        required: true
+        default: self-hosted
+        options: [github-hosted, self-hosted, auto]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  select-runner:
+    uses: ./.github/workflows/select-runner.yml
+    with:
+      choice: ${{ inputs.runner }}
+    secrets:
+      RUNNERS_READ_TOKEN: ${{ secrets.RUNNERS_READ_TOKEN }}
+
+  eval:
+    needs: select-runner
+    runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
+    environment: backend-staging
+    timeout-minutes: 60
+    env:
+      DB_CONTAINER: eval-db-${{ github.run_id }}-${{ github.run_attempt }}
+    defaults:
+      run:
+        working-directory: backend/ai
+    steps:
+      # The checked-out code runs with the job's settings; keeping the token out of .git/config keeps it from that
+      # code. The report step passes its own token.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          python-version: "3.11"
+      # scripts/local-db.sh pushes the AI migrations with the Supabase CLI through npx.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      # The same pinned release and digests as deploy-backend.yml; change both together.
+      - name: Install the Dopbase CLI
+        env:
+          DOPBASE_VERSION: 0.1.10
+        run: |
+          set -euo pipefail
+          case "$RUNNER_OS-$RUNNER_ARCH" in
+            Linux-X64) target=linux_amd64 sha=b294f56057cb21f5ca22348944ac538ed4d6a751282b342c96761483a3114868 ;;
+            Linux-ARM64) target=linux_arm64 sha=6a5c973944ed222d398c0e542a05b6321de706201c56222de652fd85329007f5 ;;
+            macOS-X64) target=darwin_amd64 sha=e5947d00175f1690076171af0ad914ac460810426fad8451fe81d22b3ac54055 ;;
+            macOS-ARM64) target=darwin_arm64 sha=6bfd33102d4da2b5ec636f716f1e7c997d1dba2b0ce7c023372d163294d35d04 ;;
+            *) echo "::error::no Dopbase release for $RUNNER_OS-$RUNNER_ARCH"; exit 1 ;;
+          esac
+          archive="$RUNNER_TEMP/dopbase.tar.gz"
+          curl -fsSLo "$archive" "https://github.com/dopbase/dopbase/releases/download/$DOPBASE_VERSION/dopbase_${DOPBASE_VERSION}_$target.tar.gz"
+          echo "$sha  $archive" | shasum -a 256 -c -
+          mkdir -p "$RUNNER_TEMP/dopbase/bin" "$RUNNER_TEMP/dopbase/data"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/dopbase/bin" dopbase
+          echo "$RUNNER_TEMP/dopbase/bin" >> "$GITHUB_PATH"
+          echo "DOPBASE_DATA_DIR=$RUNNER_TEMP/dopbase/data" >> "$GITHUB_ENV"
+      # A throwaway database on a free port, so a run never touches a developer's smartledger-local-db on the same
+      # machine; the eval refuses any database that is not on localhost.
+      - name: Start and seed the database
+        working-directory: .
+        run: |
+          set -euo pipefail
+          # A ref from before this workflow has a local-db.sh that ignores LOCAL_DB_*, and would migrate a developer's
+          # own database on port 54322 of a self-hosted machine.
+          grep -q LOCAL_DB_PORT scripts/local-db.sh || { echo "::error::$GITHUB_SHA predates eval-regression"; exit 1; }
+          port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
+          echo "DB_PORT=$port" >> "$GITHUB_ENV"
+          LOCAL_DB_CONTAINER="$DB_CONTAINER" LOCAL_DB_PORT="$port" sh scripts/local-db.sh
+          # seed.sql gives the shop to the first user; a fresh database has none yet.
+          docker exec "$DB_CONTAINER" psql -q -U smartledger -d smartledger -v ON_ERROR_STOP=1 \
+            -c "INSERT INTO users (display_name) VALUES ('Eval owner')"
+          docker exec -i "$DB_CONTAINER" psql -q -U smartledger -d smartledger -v ON_ERROR_STOP=1 \
+            < backend/ai/evaluation/agent_chat/seed.sql
+      # The model gateway, embeddings and model aliases of ai/staging, pointed at the throwaway database. The HoneyHive
+      # key stays only when the run syncs.
+      - name: Write the AI settings
+        env:
+          DOPBASE_URL: ${{ vars.DOPBASE_URL }}
+          DOPBASE_TOKEN: ${{ secrets.DOPBASE_AI_TOKEN }}
+          SYNC: ${{ inputs.sync }}
+        run: |
+          set -euo pipefail
+          umask 077
+          dropped='POSTGRES_URL|AI_SQL_READER_URL'
+          [ "$SYNC" = true ] || dropped="$dropped|HH_API_KEY"
+          # The database URLs go first: uv keeps the first value of a key and stops reading at a line it cannot
+          # parse, so these survive whatever the export holds.
+          {
+            echo "POSTGRES_URL=postgresql://smartledger:smartledger@127.0.0.1:$DB_PORT/smartledger"
+            echo "AI_SQL_READER_URL=postgresql://ai_reader:ai_reader@127.0.0.1:$DB_PORT/smartledger"
+            dopbase export ai/staging --stdout --format dotenv | grep -vE "^($dropped)="
+          } > "$RUNNER_TEMP/ai.env"
+      - name: Run the eval
+        env:
+          REF: ${{ inputs.ref }}
+          SYNC: ${{ inputs.sync }}
+        run: |
+          set -euo pipefail
+          sync=""
+          [ "$SYNC" = true ] && sync="--sync"
+          # uv only warns about a line it cannot parse and drops the rest of the file, so a warning stops the run.
+          uv run --env-file "$RUNNER_TEMP/ai.env" python -c "" 2> "$RUNNER_TEMP/env-check.log" || true
+          if grep -qi "failed to parse" "$RUNNER_TEMP/env-check.log"; then
+            echo "::error::uv could not parse the ai/staging export; check its quoting"
+            exit 1
+          fi
+          uv run --env-file "$RUNNER_TEMP/ai.env" python evaluation/agent_chat/run.py \
+            --name "ci-$(git rev-parse --short HEAD)" --repeats 3 \
+            --gate evaluation/agent_chat/thresholds.toml --report "$RUNNER_TEMP/report.md" $sync
+      - name: Publish the report
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          REPORT="$RUNNER_TEMP/report.md"
+          [ -f "$REPORT" ] || { echo "No report: the run stopped before scoring." >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+          pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$REF" --state open --json number --jq '.[0].number // empty')
+          [ -n "$pr" ] || exit 0
+          # One comment per pull request, found by its marker and edited on the next run.
+          marker='<!-- agent-chat-eval -->'
+          body="$(printf '%s\n%s\n\n[Workflow run](%s/%s/actions/runs/%s)\n' "$marker" "$(cat "$REPORT")" \
+            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          comment=$(gh api "repos/$GITHUB_REPOSITORY/issues/$pr/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | sed -n 1p)
+          if [ -n "$comment" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment" -f body="$body" >/dev/null
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/$pr/comments" -f body="$body" >/dev/null
+          fi
+      - name: Remove the database and settings
+        if: always()
+        working-directory: .
+        run: |
+          docker rm -f -v "$DB_CONTAINER" >/dev/null 2>&1 || true
+          docker volume rm "$DB_CONTAINER" >/dev/null 2>&1 || true
+          rm -f "$RUNNER_TEMP/ai.env"

@@ -1,0 +1,10 @@
+# The minimum mean each gated metric must reach over the rows it applies to; `run.py
+# --gate` exits 1 below one. Metrics left out are reported but do not gate. Judge
+# ratings run 1 to 5, every other gated metric 0 to 1.
+[minimum]
+correct = 0.9
+tool_choice = 0.9
+recalled_expected = 1.0
+no_internal_leak = 1.0
+vietnamese_answer = 1.0
+answer_faithfulness = 4.0

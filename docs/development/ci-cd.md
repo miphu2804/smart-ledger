@@ -81,6 +81,19 @@ CI reads input `runner`, else repository variable `CI_RUNNER`. CD reads input `r
 - Keep backend secrets out of `vercel-*` and `landing-*`.
 - Both backend environments use the same VPS and deploy key, so a `backend-staging` job can reach production containers. The approval guards only the `main` deploy. The project owner accepted this.
 
+<a id="eval-regression"></a>
+
+## Eval regression
+
+`eval-regression.yml` runs the [agent chat evaluation](../../backend/ai/evaluation/agent_chat/README.md) by hand, when a change to the agent or its memory needs one. It does not run on every change, because a run asks the models about 69 chat turns and their judges.
+
+- Dispatch it from `staging` (**Actions → Eval regression → Run workflow**, or `gh workflow run eval-regression.yml --ref staging -f ref=<branch>`). It reads `ai/staging` through `backend-staging`, which only `staging` may use; input `ref` picks the code that is evaluated. GitHub offers a manual run only for a workflow that is on the default branch, so it can be dispatched once this file is on `main`, and it must also be on `staging`. A `ref` from before the workflow existed is refused, because its `local-db.sh` would use the developer database on port 54322.
+- The job starts a throwaway PostgreSQL with `scripts/local-db.sh` on a free port, seeds shop 9001, takes the model gateway, embedding and model alias settings of `ai/staging` with the database URLs pointed at it, then runs `run.py --repeats 3 --gate thresholds.toml --report`.
+- The report goes to the job summary and to one comment on the open pull request of `ref`, edited on the next run. The job fails when a metric in [`thresholds.toml`](../../backend/ai/evaluation/agent_chat/thresholds.toml) misses its minimum.
+- Nothing reaches HoneyHive unless input `sync` is on; a synced run costs about 69 sessions of the monthly quota.
+- The checked-out `ref` runs with the `ai/staging` model and embedding keys. Dispatch only branches of this repository whose changes you have read.
+- Each run adds a deployment to `backend-staging` in the GitHub UI, because the job uses that environment for its token.
+
 <a id="vps"></a>
 
 ## VPS
@@ -89,8 +102,8 @@ One VPS (`103.162.31.93`, Ubuntu 24.04, 4 GB RAM plus swap) runs both environmen
 
 | Environment | Public name | Caddy routes to | App directory | Compose project |
 |---|---|---|---|---|
-| staging | `staging.103-162-31-93.sslip.io` | `core-staging:8080` | `/opt/smartledger` | `smart-ledger-staging` |
-| production | `production.103-162-31-93.sslip.io` | `core-production:8080` | `/opt/smartledger-production` | `smart-ledger-production` |
+| staging | `api-staging.songheloi.id.vn` (also `staging.103-162-31-93.sslip.io`) | `core-staging:8080` | `/opt/smartledger` | `smart-ledger-staging` |
+| production | `api-production.songheloi.id.vn` (also `production.103-162-31-93.sslip.io`) | `core-production:8080` | `/opt/smartledger-production` | `smart-ledger-production` |
 
 ### Networks and ports
 

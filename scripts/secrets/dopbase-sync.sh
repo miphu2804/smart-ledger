@@ -3,12 +3,13 @@
 # change a value there (web UI or `dopbase secret set`) and pull; `seed` only loads a file whose Dopbase environment
 # does not exist yet, such as a new service. Each service is its own Dopbase project, so the web UI and access rules
 # split by service, and the stage is the Dopbase environment. A GitHub environment file is named
-# <service>-<stage>, so its stage comes from the name; `dev` files live in the staging folder:
+# <service>-<stage>, so its stage comes from the name; GitHub `dev` files live in the staging folder, while the
+# service files of a dev machine (core/dev, ai/dev, mobile/dev) live in secrets/dev/env/:
 #   secrets/staging/env/.env.core                    <->  core/staging
 #   secrets/staging/env/github/.env.vercel-staging   <->  github-vercel/staging
 #   secrets/staging/env/github/.env.android-dev      <->  github-android/dev
 # The Dopbase instance serves only SmartLedger, so every project on it maps to a file.
-# A file whose name holds `.` or `_` (.env.railway.tokens) is skipped: Dopbase project names allow neither.
+# A file whose name holds `.` or `_` (.env.vps.tokens) is skipped: Dopbase project names allow neither.
 # A pull asks for your Dopbase password once.
 # Needs the dopbase CLI, logged in once with `dopbase client connect <url>` and `dopbase login`.
 # Usage: scripts/secrets/dopbase-sync.sh seed|pull <environment>
@@ -88,10 +89,11 @@ target_of() {
   esac
 }
 
-# GitHub stages kept in this folder: `dev` has no folder of its own and sits with staging.
+# GitHub stages kept in this folder: GitHub `dev` sits with staging, so the dev folder holds no GitHub files.
 stages_of_folder() {
   case "$environment" in
     staging) echo "staging dev" ;;
+    dev) ;;
     *) echo "$environment" ;;
   esac
 }

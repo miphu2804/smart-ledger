@@ -1,0 +1,28 @@
+name: non-vietnamese-answer
+type: PYTHON
+return_type: boolean
+description: True when the answer has text but not one Vietnamese letter with a diacritic, so Bobi most likely replied in another language.
+enabled_in_prod: true
+sampling_percentage: 100
+filters:
+  filterArray:
+    - field: event_type
+      operator: is
+      value: session
+      type: string
+    - field: event_name
+      operator: is
+      value: agent-chat
+      type: string
+criteria: |
+  import re
+
+  BLOCK = re.compile(r"```.*?```", re.DOTALL)
+  VIETNAMESE = re.compile(
+      r"[àáảãạăằắẳẵặâầấẩẫậđèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ]",
+      re.IGNORECASE,
+  )
+
+  # Chart and button blocks are JSON written for the app, not words for the owner.
+  answer = BLOCK.sub("", outputs.get("answer") or "").strip()
+  result = bool(answer) and not VIETNAMESE.search(answer)
