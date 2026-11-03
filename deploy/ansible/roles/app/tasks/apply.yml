@@ -1,0 +1,21 @@
+# Before the first deploy there are no images to start; the first CD run starts the stack, so a missing image line
+# skips the start. A missing .env, or a Compose failure, fails the run.
+# --remove-orphans drops the per-environment Caddy of the older layout, which held ports 80 and 443.
+- name: Apply the stack
+  ansible.builtin.shell: |
+    set -eu
+    test -f .env
+    if grep -q '^CORE_IMAGE=' .env && grep -q '^AI_IMAGE=' .env; then
+      docker compose up -d --wait --remove-orphans
+    else
+      echo "skipped: no images deployed yet"
+    fi
+  args:
+    chdir: "{{ app_dirs[item] }}"
+  become: true
+  become_user: "{{ sl_deploy_user }}"
+  loop: "{{ app_envs }}"
+  register: app_stack
+  changed_when: "'skipped' not in app_stack.stdout"
+  # The directory may not exist yet in a plan, and a dry run starts nothing.
+  when: not ansible_check_mode

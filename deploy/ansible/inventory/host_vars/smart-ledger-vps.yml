@@ -1,0 +1,2 @@
+# The environments that share this VPS; the monitoring handler attaches Alloy to each one's network that exists.
+smartledger_envs: [staging, production]
