@@ -3,13 +3,13 @@ name: Infra
 # Thin GitHub adapter over scripts/infra/run.sh, which holds the whole flow and knows nothing of GitHub: this file
 # picks the runner, builds deploy/ansible/Dockerfile, maps secrets to the script's neutral variables and runs it in
 # that image. See docs/development/ci-cd.md#vps.
-#   pull request touching deploy/** or scripts/infra/**   plan staging, app scope (a dry run, plan uploaded)
-#   push to staging                                       apply staging, app scope
-#   push to main                                          plan production, then apply it, all scope
+#   pull request touching deploy/** or scripts/infra/**   lint only: unmerged code never gets the VPS key
+#   push to staging                                       plan, then apply staging, app scope
+#   push to main                                          plan, then apply production, all scope
 #   by hand                                               the environment, scope and mode chosen
-# Each plan and apply reads its secrets from a GitHub environment: infra-plan (staging), infra-staging,
-# infra-production-plan and infra-production. Only infra-production requires reviewers, so an apply waits for a
-# person while the plan before it does not.
+# scripts/ci/plan-infra-runs.sh lists the runs. Each reads its secrets from a GitHub environment: infra-staging,
+# infra-production-plan or infra-production. Only infra-production requires reviewers, so a production apply waits
+# for a person while the plan before it does not.
 
 run-name: Infra ${{ github.event_name }} ${{ github.ref_name }}
 
@@ -49,12 +49,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  # Per ref, because GitHub keeps only the newest pending run of a group, and a pull request's plan must never
-  # replace a pending apply. A running apply is never cancelled halfway.
-  group: infra-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
   select-runner:
     uses: ./.github/workflows/select-runner.yml
@@ -77,50 +71,35 @@ jobs:
       - name: Lint
         run: scripts/infra/lint.sh
 
-  # The runs this event asks for, in order; empty for a pull request from a fork, which gets no secrets.
+  # The runs this event asks for, in order; none for a pull request.
   prepare:
     needs: select-runner
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
     outputs:
       runs: ${{ steps.runs.outputs.runs }}
     steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: List the runs
         id: runs
         env:
-          EVENT: ${{ github.event_name }}
-          BRANCH: ${{ github.ref_name }}
-          FORK: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
-          INPUT_ENVIRONMENT: ${{ inputs.environment }}
-          INPUT_SCOPE: ${{ inputs.scope }}
-          INPUT_MODE: ${{ inputs.mode }}
-        run: |
-          set -euo pipefail
-          run() { printf '{"mode":"%s","environment":"%s","scope":"%s","github_environment":"%s"}' "$1" "$2" "$3" "$4"; }
-          runs='[]'
-          if [ "$FORK" = true ]; then
-            runs='[]'
-          elif [ "$EVENT" = pull_request ]; then
-            runs="[$(run plan staging app infra-plan)]"
-          elif [ "$EVENT" = workflow_dispatch ]; then
-            if [ "$INPUT_MODE" = apply ]; then
-              runs="[$(run apply "$INPUT_ENVIRONMENT" "$INPUT_SCOPE" "infra-$INPUT_ENVIRONMENT")]"
-            elif [ "$INPUT_ENVIRONMENT" = production ]; then
-              runs="[$(run plan production "$INPUT_SCOPE" infra-production-plan)]"
-            else
-              runs="[$(run plan staging "$INPUT_SCOPE" infra-plan)]"
-            fi
-          elif [ "$BRANCH" = main ]; then
-            runs="[$(run plan production all infra-production-plan),$(run apply production all infra-production)]"
-          else
-            runs="[$(run apply staging app infra-staging)]"
-          fi
-          echo "runs=$runs" >> "$GITHUB_OUTPUT"
+          SMARTLEDGER_TRIGGER: ${{ github.event_name == 'workflow_dispatch' && 'manual' || github.event_name == 'push' && 'push' || 'review' }}
+          INFRA_ENVIRONMENT: ${{ inputs.environment }}
+          INFRA_SCOPE: ${{ inputs.scope }}
+          INFRA_MODE: ${{ inputs.mode }}
+        run: scripts/ci/plan-infra-runs.sh
 
   run:
     needs: [select-runner, lint, prepare]
     if: needs.prepare.outputs.runs != '[]'
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
-    environment: ${{ matrix.github_environment }}
+    environment: ${{ matrix.secrets }}
+    # Shared with the backend deploy of deploy-backend.yml, which writes the same app directory. A running apply is
+    # never cancelled halfway.
+    concurrency:
+      group: vps-${{ matrix.environment }}
+      cancel-in-progress: false
     strategy:
       # Sequential and in order, so a failed plan stops the apply after it.
       max-parallel: 1

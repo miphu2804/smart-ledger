@@ -40,7 +40,8 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     environment: ${{ github.ref_name == 'main' && 'backend-production' || 'backend-staging' }}
     concurrency:
-      group: deploy-${{ github.ref_name }}
+      # Shared with infra.yml, whose apply writes the same app directory on the VPS.
+      group: vps-${{ github.ref_name == 'main' && 'production' || 'staging' }}
       cancel-in-progress: false
     env:
       # One GHCR package per service and environment, tagged by commit, so staging deploys never push a production
