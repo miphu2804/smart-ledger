@@ -162,7 +162,7 @@ From `backend/core`:
 .\mvnw.cmd test
 ```
 
-On macOS/Linux, use `./mvnw test`. If startup fails, check the PostgreSQL connection, Firebase credentials, and Flyway error in the Core logs.
+On macOS/Linux, use `./mvnw test`. If startup fails, check the PostgreSQL connection, Firebase credentials, and Flyway error in the Core logs. Core keeps retrying the first database connection for 30 s (`spring.datasource.hikari.initialization-fail-timeout`) before startup fails.
 
 For the real PostgreSQL repayment/void concurrency and rollback tests, point these **test-only** variables at a disposable PostgreSQL database:
 
