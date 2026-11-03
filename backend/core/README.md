@@ -332,6 +332,10 @@ If V11 validation fails, PostgreSQL rolls back its schema changes; review the of
 
 To run **all** Core tests, including migration, audit/checkout rollback and real PostgreSQL readiness coverage, keep the three test-only variables above and run `.\mvnw.cmd verify` (or `./mvnw verify`). The migration/audit suites manage their own randomly named schemas; use a disposable database with schema-creation permission. The readiness test checks connectivity with valid and deliberately invalid test credentials, so an expected database-health warning can appear in the logs.
 
+### Independent stock decreases — CORE-021
+
+`POST /api/v1/products/{productId}/stock-adjustments` removes a positive quantity with a mandatory reason, under OWNER/shop/product guards and the shared Product lock. The stock, audit, notification and original idempotent response commit together. No migration or new environment variable is added; see the [contract](../../docs/contracts/api-contracts.md#điều-chỉnh-giảm-tồn-core-021) and [verification/FE handoff](docs/stock-adjustments.md). Implementation in the feature branch is not staging or UI acceptance.
+
 ### Stock-in development tests
 
 Product stock-in adds a positive quantity under the same row lock used by checkout, void and catalog edits. PATCH no longer accepts `stockQuantity`, including null; enabling tracking starts at zero. Create and ProductResponse keep initial/current stock. See the [Product contract](../../docs/contracts/api-contracts.md#22-product) for the request, retry rules and required mobile coordination. No migration is added; V7/V10/V11 storage is reused.

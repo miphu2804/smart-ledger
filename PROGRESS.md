@@ -1,3 +1,12 @@
+### 2026-11-02 — Independent stock decreases for CORE-021
+
+| Area | Change |
+|---|---|
+| Core | • Add an OWNER stock-adjustment API with a positive decrement and mandatory reason; reuse Product locks, V7 idempotency and STOCK_ADJUSTED audit with the new allowed source<br>• Stock, notification reconciliation and original response commit together; reject overdraw/untracked products and preserve prices and money records<br>• PostgreSQL tests cover normalized replay, concurrent writers, overdraw, managed stale stock and failure rollback; require these cases in the CI execution gate |
+| Docs | • Add BR-025, FR-038 and AC-111–115, the API contract and Core handoff; no migration, environment variable or FE/AI change |
+
+Check: `mvn verify` passed 1514 tests with PostgreSQL enabled, zero failures/errors/skips; 13 gate self-tests passed. On 2026-11-03 Docker responded again: the official Python report gate passed all 17 required PostgreSQL suites and methods, and the temporary core021-postgres container was confirmed absent. No shared database or deployment was changed. Commit: the one that adds this entry.
+
 ### 2026-11-02 — Dev machines pull the dev environment from Dopbase
 
 | Area | Change |
@@ -188,12 +197,3 @@ Check: both pages generated (staging 208 keys, production 179); every local env 
 | Docs | • A new `dopbase-secrets-and-backup` diagram shows the three bands — operator and CI, the VPS, and R2 — with who writes secrets in, what the nightly cron does, and where each key lives<br>• The CI/CD guide now says how to create the backup bucket: the bucket and its location hint, a lifecycle rule for retention and incomplete uploads, an R2 API token scoped to that bucket from the R2 page rather than the account API token page, a bucket policy that denies delete because R2 has no write-only preset, and the age key pair generated off the VPS and kept in the password manager<br>• The five backup variables belong in both `vps/staging` and `vps/production`, because a playbook run for an environment without them removes the cron job the other environment's run created<br>• A hand run of `backup.sh` plus a refused `rclone delete` is the check that the bucket is set up right |
 
 Check: a link and anchor pass over `docs/development/ci-cd.md` resolves every link and image added here; the diagram exports with the repository's own drawio flags and was read back as a PNG to check for overlapping labels and edges through nodes; `backup.sh` keeps the volume-tar approach, because `dopbase backup` reaches an administrator-only endpoint and a cron job would have to hold an admin token on the VPS. Not verified against Cloudflare: that R2 accepts `s3:PutBucketPolicy` in a bucket policy, the Asia-Pacific location hint, and the refused delete; no bucket, token or key pair exists yet. Two anchors that predate this change, `#android-runners` and `#ci-runners`, are still broken. Commit: the one that adds this entry.
-
-### 2026-10-29 — Layered Grafana dashboards with Core and AI request metrics
-
-| Area | Change |
-|---|---|
-| Deploy | • Grafana provisions three dashboards in Infra, read-only in the UI: **SmartLedger overview** (health, alerts, per-service RED), **SmartLedger service** (one service's RED, probe, container and logs) and **SmartLedger resources** (VPS and containers by stack), linked by the `smart-ledger` tag<br>• The shared Caddy serves per-host request metrics on `:9180`, unpublished; Alloy joins `edge` to scrape it and labels each probe with its `host`<br>• Prometheus loads recording rules that turn Caddy's metrics into `service:http_requests:rate5m` and `service:http_request_duration_seconds_bucket:rate5m` by `env` and `service`, so a new source adds rules and no dashboard changes<br>• AI exposes `/metrics` with request count, status class and latency per route up to 120 s, without `/health`; the playbook lists each environment's AI in `targets/services/` for Alloy to scrape on the app network |
-| Docs | • The CI/CD guide describes the three layers, the metric schema and how to add a service; the API contract lists AI's `GET /metrics`; the VPS network diagram shows Caddy's `:9180` and Alloy's scrapes |
-
-Check: on a local copy of the monitoring stack with a test Caddy over HTTPS and a fake `smart-ledger-staging-core-1`, every panel query of the three dashboards ran through Grafana without errors; with 1 in 10 requests failing the rules gave 9.99% 5xx; a local AI under uvicorn was scraped (`up=1`) and its rules gave the 4xx rate; the AI test suite passes; `caddy validate`, `promtool check rules` and `docker compose config` with the playbook's override pass. Not verified on the VPS: root disk, certificate days, AI and Bifrost probes, Caddy's host label for the real domains, and the AI scrape on the app network. Bifrost request metrics are not added. Commit: the one that adds this entry.

@@ -8,6 +8,7 @@ Start with the path that matches your task; each step links to the next level of
 
 | Task | Read in this order |
 |---|---|
+| Integrate independent stock decreases | [CORE-021 contract](contracts/api-contracts.md#điều-chỉnh-giảm-tồn-core-021) → [FR-038 / AC-111–115](product/product-requirements.md#điều-chỉnh-giảm-tồn-core-021--đã-duyệt-ngày-2026-11-02) → [Core handoff](../backend/core/docs/stock-adjustments.md); no migration, separate from stock-in, FE/staging acceptance pending |
 | Integrate shared operation quotas | [API contract](contracts/api-contracts.md#giới-hạn-thao-tác-core-019) → [Core transactions and V20 rollout](../backend/core/docs/user-rate-limits.md); default-off, commit-based, cross-instance, no shared-environment activation implied |
 | New to the project | [Project overview](product/project-overview.md) → [PRD §3 main flow](product/product-requirements.md#3-luồng-mvp-chính) → [Technical design §1](architecture/technical-design.md#1-phạm-vi) for what is built today → [Architecture diagram](architecture/diagrams/images/architecture.svg) for the MVP target |
 | Change scope or requirements | [BRD](product/business-requirements.md) → [PRD](product/product-requirements.md) → acceptance criteria in PRD §8; keep `BO/BR → FR/NFR → AC` traceability |
