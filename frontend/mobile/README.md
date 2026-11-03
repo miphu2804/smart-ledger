@@ -22,8 +22,8 @@ Hai script build trên máy tự kiểm tra môi trường trước khi build. M
 
 ## Xem thử với dữ liệu mẫu
 
-- Chọn **Đăng nhập bằng email**, tab **Tạo tài khoản**, nhập email và mật khẩu bất kỳ (từ 6 ký tự); màn xác minh email chỉ cần bấm **Tôi đã xác minh**. Nút Facebook đăng nhập thẳng vào người dùng mẫu.
-- Email nào cũng là người dùng mới: sau khi xác minh sẽ đi qua bước tạo tiệm (tên + ngành hàng). Chỉ nút Facebook (mock) mới vào thẳng tiệm mẫu “Tiệm tạp hoá cô Thỏ”.
+- Bấm **Tạo tài khoản** ở chân thẻ đăng nhập, nhập email và mật khẩu bất kỳ (từ 6 ký tự); màn xác minh email chỉ cần bấm **Tôi đã xác minh**. Bản dev có nút **Vào app** dưới thẻ để vào thẳng người dùng mẫu.
+- Email nào cũng là người dùng mới: sau khi xác minh sẽ đi qua bước tạo tiệm (tên + ngành hàng). Chỉ nút **Vào app** (bản dev) mới vào thẳng tiệm mẫu “Tiệm tạp hoá cô Thỏ”.
 - Lần đầu một tài khoản vào Tổng quan trên máy, app chạy hướng dẫn dạng lớp phủ `src/components/GuideTour.tsx` (các bước ở `src/lib/guideSteps.ts`): khoanh sáng từng nút (Đọc đơn, Chọn hàng, Quét mã, Trợ lý, Bobi, Thông báo, menu chuyển nhanh, tab Đơn hàng, tab Quản lý). Xong hoặc bỏ qua thì nhớ trên máy, không tự mở lại; xem lại ở Quản lý → Xem lại hướng dẫn.
 - Tải lại app (reload) để đưa dữ liệu trong bộ nhớ về trạng thái ban đầu.
 
@@ -191,7 +191,7 @@ Home và Analytics lấy danh sách sale/product/debt/expense qua [`useCoreData.
 
 ### Đăng nhập bằng email + mật khẩu
 
-Màn đầu có nút **Đăng nhập bằng email** và liên kết **Tạo tài khoản** (`app/(auth)/welcome.tsx` → `app/(auth)/email.tsx`). Facebook, Google và Zalo ở hàng nút bên dưới; Zalo bấm được khi build có cấu hình Zalo (Android: `EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID`, web: `EXPO_PUBLIC_ZALO_LOGIN=true`), còn lại hiện nhãn “Sắp có”; app không còn đăng nhập bằng số điện thoại.
+Màn đầu là một thẻ theo bố cục Runpod (`app/(auth)/welcome.tsx`): nút Google và Zalo, ô **Địa chỉ email** với nút **Tiếp tục** sang `app/(auth)/email.tsx` (email điền sẵn), **Quên mật khẩu?** và chân thẻ **Chưa có tài khoản? Tạo tài khoản**; cách đăng nhập thành công gần nhất trên máy có nhãn **Lần trước dùng** (`src/lib/lastSignInStorage.ts`). Không còn nút Facebook; Zalo bấm được khi build có cấu hình Zalo (Android: `EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID`, web: `EXPO_PUBLIC_ZALO_LOGIN=true`), còn lại hiện nhãn “Sắp có”; app không còn đăng nhập bằng số điện thoại.
 
 - **Tạo tài khoản** tự đăng ký bằng Firebase (`createUserWithEmailAndPassword`, không cần ai thêm user trong Console), gửi thư xác minh (`sendEmailVerification`) rồi chuyển sang `app/(auth)/verify-email.tsx`. Chỉ khi người dùng bấm **Tôi đã xác minh** và Firebase báo `emailVerified` thì app mới gửi Firebase ID token xuống Core (`POST /auth/session`). Mở lại app khi chưa xác minh vẫn quay về màn này. Đây là chặn ở phía app; Core chưa kiểm tra `email_verified`.
 - **Đăng nhập** bằng email chưa xác minh cũng đi qua màn xác minh (không tự gửi lại thư; bấm **Gửi lại thư xác minh**, chờ 60 giây giữa hai lần). Sai email hoặc mật khẩu hiện gợi ý “tạo tài khoản” hoặc “đặt lại mật khẩu” thay vì báo lỗi.
@@ -200,7 +200,7 @@ Màn đầu có nút **Đăng nhập bằng email** và liên kết **Tạo tài
 
 ### Đăng nhập bằng Facebook
 
-Nút Facebook ở màn đầu (`app/(auth)/welcome.tsx`) đăng nhập bằng Facebook SDK (`react-native-fbsdk-next`) rồi đổi mã truy cập sang tài khoản Firebase (`FacebookAuthProvider.credential` + `signInWithCredential`, ở `src/lib/auth/firebase.ts`). Sau đó luồng giống email: gửi Firebase ID token xuống Core (`POST /auth/session`); tài khoản mới (Core đòi `displayName`) đi qua màn "Bạn tên gì?" rồi màn tạo tiệm. Core chỉ lưu Firebase UID nên không cần sửa. Trên web dùng cửa sổ popup của Firebase; bản mock đăng nhập vào một người dùng mẫu (`facebook.demo@example.com`).
+Màn đăng nhập đã bỏ nút Facebook; mã đăng nhập Facebook và SDK vẫn giữ để bật lại khi cần. Khi có nút, luồng đăng nhập bằng Facebook SDK (`react-native-fbsdk-next`) rồi đổi mã truy cập sang tài khoản Firebase (`FacebookAuthProvider.credential` + `signInWithCredential`, ở `src/lib/auth/firebase.ts`). Sau đó luồng giống email: gửi Firebase ID token xuống Core (`POST /auth/session`); tài khoản mới (Core đòi `displayName`) đi qua màn "Bạn tên gì?" rồi màn tạo tiệm. Core chỉ lưu Firebase UID nên không cần sửa. Trên web dùng cửa sổ popup của Firebase; bản mock đăng nhập vào một người dùng mẫu (`facebook.demo@example.com`).
 
 Cấu hình một lần (người quản trị app Facebook và Firebase làm):
 

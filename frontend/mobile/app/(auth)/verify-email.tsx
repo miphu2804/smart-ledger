@@ -7,6 +7,7 @@ import { SUPPORT_EMAIL } from '../../src/config';
 import { authClient } from '../../src/lib/auth';
 import { debugLog } from '../../src/lib/debug';
 import { describeError, errorMessage, isDisplayNameRequired } from '../../src/lib/errors';
+import { saveLastSignIn } from '../../src/lib/lastSignInStorage';
 import { useCooldown } from '../../src/lib/useCooldown';
 import { useApp } from '../../src/store/AppStore';
 import { colors } from '../../src/theme';
@@ -35,6 +36,7 @@ export default function VerifyEmail() {
         return;
       }
       const session = await signIn(); // gửi Firebase ID token xuống Core (POST /auth/session)
+      void saveLastSignIn('email');
       router.replace(session.needsOnboarding ? '/(auth)/setup' : '/(tabs)');
     } catch (e) {
       debugLog('auth', 'xác minh email ✗', describeError(e));
