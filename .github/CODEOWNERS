@@ -1,0 +1,17 @@
+# Code owners are asked for review on every pull request that touches their paths. These paths run on the self-hosted
+# runners, reach the VPS or hold secret templates, so a change to them needs the project owner's eye. Paths not listed
+# here have no code owner. See docs/development/ci-cd.md#ownership-and-dependency-updates.
+
+/.github/                @miphu2804
+/deploy/                 @miphu2804
+/scripts/                @miphu2804
+/secrets/                @miphu2804
+/.honeyhive/             @miphu2804
+/sync-dashboards.sh      @miphu2804
+/sync-evaluators.sh      @miphu2804
+/compose.yaml            @miphu2804
+/docs/development/       @miphu2804
+/SECURITY.md             @miphu2804
+
+# Core changes need the project owner's approval (AGENTS.md).
+/backend/core/           @miphu2804

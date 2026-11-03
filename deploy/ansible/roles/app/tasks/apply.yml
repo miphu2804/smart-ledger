@@ -6,7 +6,9 @@
     set -eu
     test -f .env
     if grep -q '^CORE_IMAGE=' .env && grep -q '^AI_IMAGE=' .env; then
-      docker compose up -d --wait --remove-orphans
+      # Once more on failure, as deploy/vps/deploy.sh does: a recreated Core or Bifrost may restart once before it
+      # becomes healthy.
+      docker compose up -d --wait --remove-orphans || docker compose up -d --wait --remove-orphans
     else
       echo "skipped: no images deployed yet"
     fi

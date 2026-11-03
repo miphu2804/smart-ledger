@@ -27,7 +27,7 @@ jobs:
     concurrency:
       group: honeyhive-sync
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Pinned so runs are reproducible. HoneyHive's installer is Linux-only, so a macOS self-hosted machine uses
       # its Homebrew install and only warns when the version differs. yq v4 and jq come with the Linux image and
       # with Homebrew on the self-hosted machines.
