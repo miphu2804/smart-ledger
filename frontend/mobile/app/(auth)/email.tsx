@@ -5,6 +5,8 @@ import { Button, Chips, Field, Header, Screen, T } from '../../src/components/ui
 import { AuthError, authClient } from '../../src/lib/auth';
 import { debugLog } from '../../src/lib/debug';
 import { describeError, errorMessage, isDisplayNameRequired } from '../../src/lib/errors';
+import { takeEmailDraft } from '../../src/lib/emailDraft';
+import { saveLastSignIn } from '../../src/lib/lastSignInStorage';
 import { useCooldown } from '../../src/lib/useCooldown';
 import { useApp } from '../../src/store/AppStore';
 import { colors } from '../../src/theme';
@@ -19,9 +21,10 @@ const EMAIL_RE = /^\S+@\S+\.\S+$/;
  */
 export default function EmailAuth() {
   const { signIn } = useApp();
+  // Màn đăng nhập đã hỏi email ở bước 1 thì điền sẵn (qua bộ nhớ, không qua URL); "Quên mật khẩu?" ở màn đó mở thẳng chế độ đặt lại
   const params = useLocalSearchParams<{ mode?: string }>();
-  const [mode, setMode] = useState<Mode>(params.mode === 'register' ? 'register' : 'login');
-  const [email, setEmail] = useState('');
+  const [mode, setMode] = useState<Mode>(params.mode === 'register' || params.mode === 'reset' ? params.mode : 'login');
+  const [email, setEmail] = useState(takeEmailDraft);
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
@@ -62,6 +65,7 @@ export default function EmailAuth() {
         return;
       }
       const session = await signIn(); // gửi Firebase ID token xuống Core (POST /auth/session)
+      void saveLastSignIn('email');
       router.replace(session.needsOnboarding ? '/(auth)/setup' : '/(tabs)');
     } catch (e) {
       debugLog('auth', 'email flow ✗', describeError(e));
