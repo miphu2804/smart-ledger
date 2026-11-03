@@ -1,0 +1,41 @@
+# Runs before the edge, so Caddy finds Grafana on the edge network when it reloads the new site, and after the
+# stack, so a new environment's network exists. Alloy joins only the app networks that exist: Compose refuses to
+# start a container on a missing external network. Alloy, Loki and Grafana read their bind-mounted config only at
+# start, and Compose does not recreate a container when only a mounted file changed, so every run recreates them;
+# their data stays in named volumes.
+- name: Find the app networks that exist
+  ansible.builtin.shell: |
+    set -eu
+    for env in {{ smartledger_envs | join(' ') }}; do
+      if docker network inspect "smart-ledger-${env}_default" >/dev/null 2>&1; then echo "smart-ledger-${env}_default"; fi
+    done
+  register: monitoring_networks
+  changed_when: false
+  check_mode: false
+
+- name: Attach Alloy to them
+  ansible.builtin.template:
+    src: compose.override.yaml.j2
+    dest: "{{ sl_monitoring_dir }}/compose.override.yaml"
+    owner: "{{ sl_deploy_user }}"
+    group: "{{ sl_deploy_user }}"
+    mode: "0644"
+  vars:
+    monitoring_app_networks: "{{ monitoring_networks.stdout_lines }}"
+  when: monitoring_networks.stdout_lines | length > 0
+
+- name: Drop the Alloy override when no app network exists
+  ansible.builtin.file:
+    path: "{{ sl_monitoring_dir }}/compose.override.yaml"
+    state: absent
+  when: monitoring_networks.stdout_lines | length == 0
+
+- name: Apply monitoring
+  ansible.builtin.command: docker compose up -d --wait --remove-orphans --force-recreate
+  args:
+    chdir: "{{ sl_monitoring_dir }}"
+  become: true
+  become_user: "{{ sl_deploy_user }}"
+  changed_when: true
+  # The directory may not exist yet in a plan, and a dry run starts nothing.
+  when: not ansible_check_mode

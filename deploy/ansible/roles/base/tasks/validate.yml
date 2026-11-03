@@ -1,0 +1,4 @@
+- name: Fail without the deploy key
+  ansible.builtin.assert:
+    that: base_deploy_public_key | length > 0
+    fail_msg: Load secrets/production/env/.env.vps with VPS_SSH_PUBLIC_KEY set.

@@ -1,0 +1,22 @@
+- name: Create the edge directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: ["{{ sl_edge_dir }}", "{{ sl_edge_dir }}/conf", "{{ sl_edge_dir }}/sites"]
+
+- name: Upload the shared Caddy
+  ansible.builtin.copy:
+    src: "{{ sl_deploy_src }}/edge/{{ item.src }}"
+    dest: "{{ sl_edge_dir }}/{{ item.dest }}"
+    mode: "0644"
+  loop:
+    - { src: compose.yaml, dest: compose.yaml }
+    - { src: Caddyfile, dest: conf/Caddyfile }
+  notify: Apply the edge
+
+# Mounted as a single file before conf/; left in place it would look like the live config.
+- name: Remove the Caddyfile the edge no longer reads
+  ansible.builtin.file:
+    path: "{{ sl_edge_dir }}/Caddyfile"
+    state: absent

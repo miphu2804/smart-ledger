@@ -1,0 +1,40 @@
+# Scope `app` runs only the role tagged app (`--tags app`); scope `all` runs everything. Both go through
+# scripts/infra/run.sh, which passes sl_environment, sl_scope and sl_env_dir. Every role checks its inputs in
+# pre_tasks, so a bad input stops the run before the host changes. Order matters: base and edge create what the
+# later roles write into, and app comes last because its handlers run the whole rollout (roles/app/handlers).
+- name: Prepare the SmartLedger backend VPS
+  hosts: vps
+  become: true
+
+  pre_tasks:
+    - name: Fail on an unknown scope or environment
+      ansible.builtin.assert:
+        that:
+          - sl_scope in ['app', 'all']
+          - sl_environment in smartledger_envs
+          - sl_scope == 'app' or sl_environment == 'production'
+        fail_msg: >-
+          Scope must be app or all and the environment staging or production; scope all configures the shared host
+          from vps/production, so it runs for production only (got scope {{ sl_scope }}, environment {{ sl_environment }}).
+      tags: [always]
+
+    - name: Check the base inputs
+      ansible.builtin.import_role: { name: base, tasks_from: validate }
+      when: sl_scope == 'all'
+      tags: [base]
+
+    - name: Check the monitoring inputs
+      ansible.builtin.import_role: { name: monitoring, tasks_from: validate }
+      when: sl_scope == 'all'
+      tags: [monitoring]
+
+    - name: Check the app inputs
+      ansible.builtin.import_role: { name: app, tasks_from: validate }
+      tags: [always]
+
+  roles:
+    - { role: base, tags: [base] }
+    - { role: edge, tags: [edge] }
+    - { role: dopbase, tags: [dopbase] }
+    - { role: monitoring, tags: [monitoring] }
+    - { role: app, tags: [app] }

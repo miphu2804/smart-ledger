@@ -1,0 +1,5 @@
+{{ app_gateway_domain }} {
+	@inference path /v1/* /openai/* /anthropic/* /genai/* /bedrock/* /cohere/* /litellm/* /langchain/* /pydanticai/*
+	respond @inference 404
+	reverse_proxy gateway-{{ app_env }}:8080
+}
