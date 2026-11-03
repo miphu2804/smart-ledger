@@ -29,9 +29,10 @@ services:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health/readiness"]
       interval: 10s
       timeout: 5s
-      # An Infra apply recreates Core while Bifrost and monitoring start on the same VPS; on 2026-11-03 production Core
-      # took 151 s from its container start to the first database connection (62 s in a normal deploy). Failed checks
-      # inside this window do not count, and the first passing check still marks Core healthy at once.
+      # The VPS disk is the bottleneck: during the production Infra apply on 2026-11-03, iowait stayed at 40-58 % while
+      # Core, Bifrost and image pulls shared it, and Core took 151 s from its container start to the first database
+      # connection (62 s in a normal deploy). Failed checks inside this window do not count, and the first passing
+      # check still marks Core healthy at once.
       start_period: 240s
       retries: 6
     networks:
