@@ -64,7 +64,8 @@ jobs:
     secrets:
       RUNNERS_READ_TOKEN: ${{ secrets.RUNNERS_READ_TOKEN }}
 
-  # No secrets: checks the playbook, the script and the workflows.
+  # No secrets: the playbook's syntax and ansible-lint. setup-uv, not setup-python, because setup-python cannot install
+  # into the self-hosted machines' tool cache.
   lint:
     needs: select-runner
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
@@ -72,31 +73,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-      - name: Install the linters
-        run: pip install ansible-core==2.21.5 ansible-lint==26.10.1 shellcheck-py==0.11.0.1 actionlint-py==1.7.12.25
+      - uses: astral-sh/setup-uv@v10.1.0
       - name: Lint
-        working-directory: deploy/ansible
-        env:
-          SMARTLEDGER_VPS_HOST: 203.0.113.1
-          SMARTLEDGER_VPS_USER: root
-        run: |
-          set -euo pipefail
-          ansible-galaxy collection install -r requirements.yml
-          ansible-playbook --syntax-check site.yml -e sl_environment=production -e sl_scope=all -e sl_env_dir=/tmp/env
-          ansible-playbook --syntax-check site.yml -e sl_environment=staging -e sl_scope=app -e sl_env_dir=/tmp/env
-          ansible-lint .
-          shellcheck ../../scripts/infra/run.sh
-          actionlint ../../.github/workflows/infra.yml
-      # The flow must stay runnable from any CI or a laptop, so nothing under it may name GitHub or a CI product.
-      - name: Keep the flow provider-neutral
-        run: |
-          if grep -rnE 'GITHUB_|CI_' deploy/ansible scripts/infra; then
-            echo "::error::deploy/ansible and scripts/infra must not mention GITHUB_ or CI_"
-            exit 1
-          fi
+        run: scripts/infra/lint.sh
 
   # The runs this event asks for, in order; empty for a pull request from a fork, which gets no secrets.
   prepare:
