@@ -85,7 +85,8 @@ services:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 30s
       timeout: 5s
-      start_period: 10s
+      # Bootstrap syncs the MCP library and the model catalog first; it took 43 s on production.
+      start_period: 90s
       retries: 3
     networks:
       default:
