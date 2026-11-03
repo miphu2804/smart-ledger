@@ -183,7 +183,7 @@ Compose names a project after its directory unless the file sets `name:`, which 
 1. Maven builds Core's jar on the runner; [`Dockerfile.prebuilt`](../../backend/core/Dockerfile.prebuilt) wraps it in a JRE.
 2. Images are pushed for `linux/amd64` as `ghcr.io/<owner>/<repo>-<service>-<environment>:<sha>`, using the job's `GITHUB_TOKEN`.
 3. The job uploads the settings GitHub owns, then runs [`deploy/vps/deploy.sh`](../../deploy/vps/deploy.sh) over SSH.
-4. `deploy.sh` writes `ENVIRONMENT` and the new image names to `.env`, pulls, starts `ai` then `core` with `docker compose up --wait` (fails if a container is unhealthy) and prunes unused images.
+4. `deploy.sh` writes `ENVIRONMENT` and the new image names to `.env`, pulls, starts `ai` then `core` with `docker compose up --wait`, waits once more when a container is not healthy (a recreated Core can fail its first database connection and restart), fails if it is still unhealthy, and prunes unused images.
 5. GHCR keeps the latest 10 staging and 20 production images per service; that is the rollback window.
 
 The run page shows a summary table and uploads a `deploy-summary-<branch>` artifact.
