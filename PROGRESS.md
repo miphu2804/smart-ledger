@@ -1,3 +1,12 @@
+### 2026-11-03 — Revenue questions on Orders open the assistant in a sheet
+
+| Area | Change |
+|---|---|
+| Mobile | • Under the totals card on Orders, three chips ask Bobi about revenue (last month, this month against last month, best sellers over 7 days), like the revenue page of MoMo<br>• A chip opens a bottom sheet that sends the question through the same agent stream as the Assistant screen, shows the answer as it arrives, follow-up chips and a box to ask more; an AI error puts the question back in the box, and leaving the screen closes the sheet |
+| Docs | • `AC-116` for the chips and the sheet |
+
+Check: `tsc` passes; `node --test` 185/187 (the new `aiSuggestions` tests pass; `parseOrder` and `quickNav` fail on `staging` too); on the mock web build at 375×812 a chip opens the sheet and sends the question, follow-ups and the AI-failure path work, and opening the Assistant closes the sheet. Not checked against real Core and AI, or on a phone.
+
 ### 2026-11-03 — Infra plans only merged code and shares the VPS lock with the backend deploy
 
 | Area | Change |
@@ -181,13 +190,3 @@ Check: full Maven verify passed 1472 tests on disposable PostgreSQL 16.15 with z
 | Docs | • AI README, technical design, CI/CD guide, service walkthrough and ADR-0008 describe the aliases and Bifrost owning routing and fallback |
 
 Check: `uv run pytest` passes with 442 tests and `uv run ruff check` passes. The pinned Bifrost v2.3.2 image was run against a mock upstream: Anthropic requests reach `/v1/messages` with `cache_control`, session and User-Agent are forwarded, a 429 falls back to OpenAI, and logs show the session, shop and rule without content. Not verified: real OpenCode Go and OpenAI calls, tool calls and streaming through Bifrost, and the Bifrost UI itself. Commit: the one that adds this entry.
-
-### 2026-10-31 — Dozzle and Snoopy for VPS operators
-
-| Area | Change |
-|---|---|
-| Deploy | • The monitoring stack runs Dozzle `v11.4.0` for live container logs, bound to `127.0.0.1:8081` with a 64 MiB limit and reached through an SSH tunnel<br>• The playbook installs Snoopy, accepting its `ld.so.preload` prompt, and adds the `snooplog` shortcut |
-| Docs | • The CI/CD guide describes the tunnel, why Dozzle gets no Caddy site, and what Snoopy can and cannot prove |
-
-Check: a manual Dozzle container on the VPS listed all 13 containers through the tunnel, `docker compose config` accepted the service, `ansible-playbook --syntax-check` passed and the Snoopy debconf key matches the installed package. Not verified: a real playbook run, or the preseed on a new VPS.
-
