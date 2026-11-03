@@ -32,7 +32,7 @@ drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/archi
 
 ### Path filtering
 
-Job `changes` compares a PR with its base branch, or a push with the commit before it. Jobs outside the changed areas show as *Skipped*, which counts as passed.
+Job `changes` runs [`scripts/ci/changes.sh`](../../scripts/ci/changes.sh), which compares a PR with its base commit, or a push with the commit before it, using `git diff` over the full history. Jobs outside the changed areas show as *Skipped*, which counts as passed.
 
 | Area | Paths | Jobs |
 |---|---|---|
@@ -44,7 +44,7 @@ Job `changes` compares a PR with its base branch, or a push with the commit befo
 | `shell` | `**/*.sh`, `.github/workflows/**`, `.shellcheckrc` | `shellcheck` |
 
 - A change to `ci.yml`, `cd.yml` or `select-runner.yml` runs everything; a docs-only change deploys nothing.
-- Job `shellcheck` runs `actionlint` (which lints every `run:` block with shellcheck) and `shellcheck --severity=warning` on every tracked `*.sh` outside `backend/core`. It installs missing tools with Homebrew, so it works on the self-hosted machines, and it does not gate a deploy. Run both locally from the repository root before pushing a script or workflow change.
+- Job `shellcheck` runs `actionlint` (which lints every `run:` block with shellcheck) and `shellcheck --severity=warning` on every tracked `*.sh` outside `backend/core`. It installs missing tools with Homebrew, so it works on the self-hosted machines, and it does not gate a deploy. It also runs `scripts/ci/check-provider-coupling.sh` (see [Scripts and variables](#scripts)). Run all three locally from the repository root before pushing a script or workflow change.
 - Each area deploys on its own checks: a red `landing` does not hold back the backend, and a red `core` does not hold back the web.
 - Re-running CI on a push hands every passing area to CD.
 - To redeploy without testing (say, after changing a variable), start CD by hand: Actions → **CD** → **Run workflow**, with the branch, the full commit SHA and the areas. Leave `ci-run-id` empty to use the latest CI push run of that commit.
@@ -65,6 +65,58 @@ CI reads input `runner`, else repository variable `CI_RUNNER`. CD reads input `r
 - If GitHub-hosted runners are blocked (billing), set `CI_RUNNER=self-hosted` and clear `CD_RUNNER`. `auto` cannot help: its own pick runs on GitHub-hosted.
 - PRs from forks always run on `ubuntu-24.04`, so a fork never runs code on a teammate's machine.
 - Tests start PostgreSQL with `docker run` on a free port, so jobs on one machine do not collide.
+
+<a id="scripts"></a>
+
+## Scripts and variables
+
+A workflow file is an adapter: it holds the triggers, the `needs` graph, runner selection, environments and approvals, the mapping of secrets and variables to environment variables, the `actions/*` setup steps and artifact upload.
+Every other step is one line, `run: scripts/ci/<verb-noun>.sh [arguments]`, so the same script runs on a laptop or under another CI provider.
+A step passes values to its script through `env:`, never by writing `${{ }}` into the script, so a branch name or an input cannot inject shell.
+
+[`scripts/ci/lib.sh`](../../scripts/ci/lib.sh) is the only file of `scripts/` and `deploy/` that knows GitHub.
+It fills the variables below from `GITHUB_*` and wraps the provider features the scripts use: `ci_error`, `ci_warning`, `ci_output`, `ci_env`, `ci_add_path`, `ci_summary` and `ci_temp_dir`.
+Off GitHub they print to the terminal, and `ci_env` and `ci_add_path` print `export` lines for `eval "$(...)"`.
+`scripts/ci/check-provider-coupling.sh` fails when `GITHUB_` or `${{` appears elsewhere in `scripts/` or `deploy/`, except in `scripts/secrets/github.sh`, which syncs GitHub secrets by purpose.
+
+| Variable | Meaning |
+|---|---|
+| `SMARTLEDGER_ENVIRONMENT` | `staging` or `production`; defaults from the branch (`main` is production) |
+| `SMARTLEDGER_COMMIT` | Full SHA being built or deployed |
+| `SMARTLEDGER_REF` | Branch name; `SMARTLEDGER_REF_TYPE` is `branch` or `tag` |
+| `SMARTLEDGER_RUN_ID` | Id of the CI run; `SMARTLEDGER_RUN_URL`, `SMARTLEDGER_JOB`, `SMARTLEDGER_ACTOR` and `SMARTLEDGER_REPOSITORY` (`owner/name`) describe it |
+| `DOPBASE_URL`, `DOPBASE_TOKEN` | Dopbase address and the runner token of one environment |
+
+Names that only one script reads (`VPS_HOST`, `APP_DIR`, `VERCEL_TOKEN` and the like) are documented at the top of that script.
+Never name a variable `CI_*`: GitLab predefines them.
+
+<a id="without-actions"></a>
+
+### When GitHub Actions is down
+
+A script needs no runner of GitHub's, only the tools it calls (`docker`, `gh`, `ssh`, `node`, `uv`) and the same variables as its step.
+Run from the repository root, on the commit to deploy, with `SMARTLEDGER_TEMP_DIR` set so the scripts of one run share a scratch directory.
+This deploys `ai` to staging; the `env:` block of each step in [`deploy-backend.yml`](../../.github/workflows/deploy-backend.yml) names what the other scripts need.
+The gate is `scripts/ci/check-deploy-gate.sh` with `GH_TOKEN` and the variables in its header.
+
+```bash
+export SMARTLEDGER_TEMP_DIR="$(mktemp -d)" SMARTLEDGER_REPOSITORY=<owner>/<repo> SMARTLEDGER_REF=staging \
+  SMARTLEDGER_ENVIRONMENT=staging SMARTLEDGER_COMMIT=<full sha> SMARTLEDGER_DEPLOY_AI=true SMARTLEDGER_DEPLOY_CORE=false \
+  SMARTLEDGER_IMAGE_SOURCE=https://github.com/<owner>/<repo> APP_DIR=/opt/smartledger KEEP_IMAGES=10
+image="ghcr.io/$SMARTLEDGER_REPOSITORY-ai-staging:$SMARTLEDGER_COMMIT"
+eval "$(scripts/ci/isolate-deploy-config.sh)"
+REGISTRY_TOKEN=<token with write:packages> scripts/ci/login-registry.sh
+scripts/ci/build-image.sh ai "$image"
+eval "$(VPS_HOST=<host> VPS_USER=deploy VPS_SSH_KEY=<base64 key> VPS_KNOWN_HOSTS=<known_hosts line> scripts/ci/start-ssh-agent.sh)"
+eval "$(scripts/ci/install-dopbase.sh)"
+DOPBASE_URL=<url> DOPBASE_TOKEN=<ai runner token> scripts/ci/upload-settings.sh ai
+DEPLOY_AI_IMAGE="$image" DEPLOY_CORE_IMAGE= scripts/ci/run-vps-deploy.sh
+GH_TOKEN=<token> SMARTLEDGER_DEPLOY_CORE=false scripts/ci/delete-old-images.sh
+scripts/ci/cleanup-deploy.sh
+```
+
+The web and landing deploys follow the same pattern with `scripts/ci/install-vercel.sh`, `vercel-build.sh`, `vercel-deploy.sh`, `alias-vercel-deployment.sh` and the `smoke-*.sh` scripts.
+Production still needs its approval: run the production deploy only after a reviewer agrees, with `SMARTLEDGER_REF=main` and `SMARTLEDGER_ENVIRONMENT=production`.
 
 ## GitHub environments
 
