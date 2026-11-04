@@ -55,6 +55,7 @@ Check a file before pushing it against the schema the CLI prints, for example `h
 
 - The CLI has no alert update: to change an alert, edit it in the UI, or delete it there and run the script again.
 - HoneyHive refuses an alert whose fields no logged event has yet, and it refused `metrics.query-error` filtered on `event_name`, so `query-errors.yaml` filters on `event_type`. `failed-turns.yaml` filters on `metadata.error` with `exists`, which the API accepts only with an empty `value`.
+- A chart of a session metric (`first_text_ms`, `tool_calls`, `unsupported-figure`) must filter on `event_type` `session`, as HoneyHive's own session charts do; filtered on `event_name` `agent-chat`, HoneyHive looks for the metric on events other than sessions and shows no data.
 - A renamed evaluator, chart or alert is created again and the old one stays on HoneyHive until it is deleted in the UI.
 - Chart names allow only letters, numbers, spaces and `_ - ' &`.
 
