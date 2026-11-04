@@ -11,6 +11,7 @@ scores but no spans, as in "Sync Offline Evaluations" in HoneyHive's docs.
 
 import argparse
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -18,6 +19,13 @@ from pathlib import Path
 # folders would shadow other modules; the project root takes its place.
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[0] = str(ROOT)
+
+# `src.main` sets the log level when it is imported, before the options are parsed, so
+# `--verbose` is read from the raw arguments. The results are what a run is for: the
+# app's INFO lines (every HTTP request, every tool call) bury them. A `LOG_LEVEL` set in
+# the environment still wins.
+if "--verbose" not in sys.argv:
+    os.environ.setdefault("LOG_LEVEL", "WARNING")
 
 from src.app_config import app_config  # noqa: E402
 
@@ -44,15 +52,19 @@ from honeyhive import HoneyHive  # noqa: E402
 # the options it uses. A new evaluation adds a line here and a folder next to
 # `agent_chat/`.
 EVALS = {
-    "agent_chat": lambda arguments: AgentChatEval(arguments.repeats, arguments.judge),
+    "agent_chat": lambda arguments: AgentChatEval(
+        arguments.repeats, arguments.judge, arguments.model
+    ),
     "memory": lambda arguments: MemoryEval(),
 }
 
 
 def main() -> None:
     arguments = parse_arguments()
-    if arguments.sync and arguments.evaluation != "agent_chat":
-        raise SystemExit("--sync is for agent_chat only")
+    if arguments.evaluation != "agent_chat":
+        for option in ("sync", "model"):
+            if getattr(arguments, option):
+                raise SystemExit(f"--{option} is for agent_chat only")
     evaluation = EVALS[arguments.evaluation](arguments)
     if arguments.dry_run:
         evaluation.show_plan(arguments.name)
@@ -60,12 +72,12 @@ def main() -> None:
     if arguments.sync and not HONEYHIVE_KEY:
         raise SystemExit("--sync needs HH_API_KEY")
     # Read before the run, so a bad gate file fails before any model is asked.
-    thresholds = load_thresholds(arguments.gate)
+    thresholds = load_thresholds(arguments.gate or evaluation.thresholds)
     results = asyncio.run(EvaluationPipeline().run(evaluation))
     if not results:
         raise SystemExit("no answers were recorded")
     run_name = f"{evaluation.name}-{arguments.name}"
-    rows = print_report(run_name, results, evaluation.summary)
+    rows = print_report(run_name, results, evaluation.summary, thresholds)
     failures = gate_and_write(arguments, evaluation, rows, thresholds)
     if arguments.sync:
         sync_scores(
@@ -87,7 +99,7 @@ def main() -> None:
 def gate_and_write(
     arguments, evaluation, rows: list[dict], thresholds: dict[str, dict[str, float]]
 ) -> list[str]:
-    """Compares the means with the `--gate` bounds, writes the `--report` markdown and
+    """Compares the means with the bounds, writes the `--report` markdown and
     returns the gate's failures."""
     means = compute_averages(rows)
     failures = find_gate_failures(means, thresholds["minimum"], thresholds["maximum"])
@@ -117,12 +129,25 @@ def parse_arguments() -> argparse.Namespace:
         "--judge", default="chat", help="model alias for the agent_chat judge"
     )
     parser.add_argument(
+        "--model",
+        help="model alias the agent_chat agent uses instead of `chat`; the judge keeps "
+        "`chat`",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="keep the app's log level (INFO by default) instead of WARNING",
+    )
+    parser.add_argument(
         "--sync",
         action="store_true",
         help="also sync the agent_chat scores to HoneyHive as an experiment run",
     )
     parser.add_argument(
-        "--gate", type=Path, help="TOML of metric bounds; a miss exits 1"
+        "--gate",
+        type=Path,
+        help="TOML of metric bounds instead of the evaluation's own thresholds.toml; "
+        "a miss exits 1",
     )
     parser.add_argument("--report", type=Path, help="write the run as markdown here")
     parser.add_argument(
