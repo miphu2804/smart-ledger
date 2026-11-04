@@ -7,10 +7,12 @@ from pydantic_ai.models.function import FunctionModel
 from tests.support import (
     TEST_GUARDRAIL_LIMITS,
     ScriptedModel,
+    tool_call,
     transcript,
 )
 
 from src.agent.errors import ConversationNotFoundError, GuardrailError
+from src.agent.model_tier_selector import ModelTierSelector, Tier
 from src.agent.service import (
     AgentChatResult,
     AgentService,
@@ -451,3 +453,53 @@ async def test_each_run_tells_the_model_the_shop_time_after_the_history() -> Non
     assert get_time().date().isoformat() in current_time
     assert "Current time" not in info.instructions
     assert conversations.saved_exchange["user_message"] == "hôm nay thứ mấy?"
+
+
+class FixedClassifier:
+    def __init__(self, tier: Tier) -> None:
+        self.tier = tier
+
+    async def classify(self, user_messages: list[str]) -> Tier:
+        return self.tier
+
+
+def tiered_agent(
+    tier: Tier, conversations: FakeConversationRepository
+) -> tuple[AgentService, dict[Tier, ScriptedModel]]:
+    models = {each: ScriptedModel("ok", model_name=each.name.lower()) for each in Tier}
+    selector = ModelTierSelector(FixedClassifier(tier), models, timeout_seconds=1)
+    agent = AgentService(
+        ScriptedModel(),
+        conversations,
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
+        tier_selector=selector,
+    )
+    return agent, models
+
+
+async def test_chat_runs_the_turn_on_the_model_of_its_tier() -> None:
+    conversations = FakeConversationRepository()
+    agent, models = tiered_agent(Tier.SIMPLE, conversations)
+
+    result = await agent.chat(user_id=3, shop_id=15, message="hello")
+
+    assert (result.answer, result.model) == ("ok", "simple")
+    assert len(models[Tier.SIMPLE].requests) == 1
+    assert agent.tier_selector.tiers[41][0] is Tier.SIMPLE
+
+
+async def test_stream_chat_runs_every_step_on_the_model_of_its_tier() -> None:
+    conversations = FakeConversationRepository()
+    agent, models = tiered_agent(Tier.MEDIUM, conversations)
+    models[Tier.MEDIUM].responses = [
+        tool_call("suggest_screen", {"screen": "orders"}),
+        "ok",
+    ]
+
+    events = await collect(
+        await agent.stream_chat(user_id=3, shop_id=15, message="orders?")
+    )
+
+    assert events[-1].result.model == "medium"
+    assert len(models[Tier.MEDIUM].requests) == 2
+    assert not models[Tier.SIMPLE].requests and not models[Tier.COMPLEX].requests

@@ -284,6 +284,7 @@ Bifrost also joins `edge` as `gateway-<environment>`. When `.env.vps` sets `GATE
 |---|---|
 | `OPENAI_API_KEY` | OpenAI key for `gpt-6-luna`; `bifrost.json` references it, so add it before deploying that file |
 | `INCEPTIONLABS_API_KEY` | Inception key for `mercury-3`; only Bifrost holds it, and `bifrost.json` references it, so add it before deploying that file |
+| `TYPESAFE_API_KEY` | TypeSafe key for `jev-latest`, which rates each chat turn when AI sets `MODEL_TIERING_ENABLED=true`; `bifrost.json` references it, so add it before deploying that file |
 | `BIFROST_VIRTUAL_KEY` | Random `sk-bf-` value, different per environment; a request without it gets 401 |
 | `BIFROST_ADMIN_USERNAME`, `BIFROST_ADMIN_PASSWORD` | Admin login of the UI and the management API; a long random password, because the domain is public |
 

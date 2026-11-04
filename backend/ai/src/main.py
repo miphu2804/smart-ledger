@@ -3,6 +3,7 @@ import logging
 import sys
 from contextlib import asynccontextmanager
 
+import httpx
 import pydantic_ai
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -11,6 +12,8 @@ from pydantic_ai import Embedder
 
 from src.agent.errors import ConversationNotFoundError, GuardrailError
 from src.agent.guardrails import GuardrailLimits
+from src.agent.jev_tier_classifier import JevTierClassifier
+from src.agent.model_tier_selector import TIER_ALIASES, ModelTierSelector
 from src.agent.repository import AgentConversationRepository
 from src.agent.router import router as agent_router
 from src.agent.service import AgentService
@@ -102,6 +105,26 @@ def build_sandbox() -> Sandbox | None:
         return None
 
 
+def build_tier_selector(
+    factory: LLMFactory, decisions: httpx.AsyncClient
+) -> ModelTierSelector | None:
+    url = app_config.TIER_CLASSIFIER_URL
+    models = {tier: factory.create_model(alias) for tier, alias in TIER_ALIASES.items()}
+    # Half a set of tiers would pin some turns to one model, so all of them or none.
+    if url is None or not url.strip() or None in models.values():
+        logger.error(
+            "model tiering needs TIER_CLASSIFIER_URL and %s; tiering off",
+            ", ".join(TIER_ALIASES.values()),
+        )
+        return None
+    classifier = JevTierClassifier(
+        decisions, url, model=app_config.TIER_CLASSIFIER_MODEL
+    )
+    return ModelTierSelector(
+        classifier, models, timeout_seconds=app_config.TIER_CLASSIFIER_TIMEOUT_SECONDS
+    )
+
+
 def build_memory_service(
     chat_model, postgres: PostgreDBClient, observability: Observability
 ) -> AgentMemoryService | None:
@@ -174,7 +197,21 @@ async def lifespan(app: FastAPI):
     reader = PostgreDBClient(
         app_config.AI_SQL_READER_URL, pool_size=app_config.SQL_POOL_MAX_SIZE
     )
-    chat_model = LLMFactory(app_config).create_model("chat")
+    factory = LLMFactory(app_config)
+    # Memory always uses `chat`; tiering only picks the model of the agent's run.
+    chat_model = factory.create_model("chat")
+    # Carries the virtual key Bifrost checks; closed below.
+    decisions = (
+        httpx.AsyncClient(
+            headers={"x-bf-vk": app_config.OPENAI_API_KEY or ""},
+            timeout=app_config.TIER_CLASSIFIER_TIMEOUT_SECONDS,
+        )
+        if app_config.MODEL_TIERING_ENABLED and chat_model is not None
+        else None
+    )
+    tier_selector = (
+        build_tier_selector(factory, decisions) if decisions is not None else None
+    )
     conversations = AgentConversationRepository(postgres)
     app.state.conversations = conversations
     shop_data = build_shop_data(reader)
@@ -200,6 +237,7 @@ async def lifespan(app: FastAPI):
         calculation=build_calculation(),
         sandbox=build_sandbox(),
         history_turns=app_config.AGENT_HISTORY_TURNS,
+        tier_selector=tier_selector,
     )
     try:
         yield
@@ -217,6 +255,8 @@ async def lifespan(app: FastAPI):
                     "memory writes cancelled at shutdown: %d", len(unfinished)
                 )
                 await asyncio.gather(*unfinished, return_exceptions=True)
+        if decisions is not None:
+            await decisions.aclose()
         await observability.flush()
         postgres.close()
         reader.close()

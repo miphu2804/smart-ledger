@@ -24,6 +24,7 @@ from pydantic_ai.models import Model
 
 from src.agent.errors import GuardrailError
 from src.agent.guardrails import GuardrailLimits, GuardrailService
+from src.agent.model_tier_selector import ModelSelection, ModelTierSelector
 from src.agent.repository import AgentConversationRepository
 from src.agent.tool_events import (
     ToolFinished,
@@ -117,6 +118,7 @@ class AgentService:
         sandbox: Sandbox | None = None,
         history_turns: int = 100,
         observability: Observability | None = None,
+        tier_selector: ModelTierSelector | None = None,
     ) -> None:
         self.model_name = model.model_name if model is not None else ""
         self.conversations = conversations
@@ -156,6 +158,8 @@ class AgentService:
             *([sandbox.capability] if sandbox is not None else []),
         ]
         self.memory = memory
+        # None runs every turn on `model`; otherwise each turn picks a tier model.
+        self.tier_selector = tier_selector
         # Memory writes run after the reply; held here so they are not garbage
         # collected mid-run.
         self.memory_writes: set[asyncio.Task] = set()
@@ -198,12 +202,14 @@ class AgentService:
         context = AgentContext(user_id=user_id, shop_id=shop_id)
         question, history = await self._prepare_turn(context, message, conversation_id)
         async with self._marks_failure():
-            prompt, recalled = await self._with_memories(context, question)
+            prompt, recalled, selection = await self._recall_and_select(
+                context, conversation_id, question, history
+            )
             answer, version = await self._answer(
-                prompt, history, context, self._session_id(conversation_id)
+                prompt, history, context, self._session_id(conversation_id), selection
             )
             return await self._save_turn(
-                context, conversation_id, question, answer, version, recalled
+                context, conversation_id, question, answer, version, recalled, selection
             )
 
     async def stream_chat(
@@ -219,9 +225,18 @@ class AgentService:
         context = AgentContext(user_id=user_id, shop_id=shop_id)
         question, history = await self._prepare_turn(context, message, conversation_id)
         async with self._marks_failure():
-            prompt, recalled = await self._with_memories(context, question)
+            prompt, recalled, selection = await self._recall_and_select(
+                context, conversation_id, question, history
+            )
         return self._stream_events(
-            question, prompt, recalled, history, context, conversation_id, started
+            question,
+            prompt,
+            recalled,
+            history,
+            context,
+            conversation_id,
+            selection,
+            started,
         )
 
     async def _prepare_turn(
@@ -278,6 +293,37 @@ class AgentService:
             )
             raise
 
+    async def _recall_and_select(
+        self,
+        context: AgentContext,
+        conversation_id: int | None,
+        question: str,
+        history: list[dict],
+    ) -> tuple[str, list[RecalledMemory], ModelSelection | None]:
+        """Recall memories and pick the turn's model together, so the classifier call
+        adds no wait while recall is still running."""
+        (prompt, recalled), selection = await asyncio.gather(
+            self._with_memories(context, question),
+            self._select_model(conversation_id, question, history),
+        )
+        return prompt, recalled, selection
+
+    async def _select_model(
+        self, conversation_id: int | None, question: str, history: list[dict]
+    ) -> ModelSelection | None:
+        """The tier model of this turn, or None to run on the default model."""
+        if self.tier_selector is None:
+            return None
+        selection = await self.tier_selector.select(conversation_id, question, history)
+        # The session opened with the default model; the tier model replaces it.
+        self.observability.tag_turn(
+            model=selection.model.model_name,
+            tier=selection.tier.name,
+            tier_alias=selection.alias,
+            tier_mechanism=str(selection.mechanism),
+        )
+        return selection
+
     async def _with_memories(
         self, context: AgentContext, question: str
     ) -> tuple[str, list[RecalledMemory]]:
@@ -298,6 +344,7 @@ class AgentService:
         history: list[dict],
         context: AgentContext,
         session_id: str,
+        selection: ModelSelection | None,
     ) -> tuple[str, str]:
         """Run the agent; return the screened answer and the model version."""
         async with (
@@ -308,6 +355,8 @@ class AgentService:
                 deps=context,
                 usage_limits=self.guardrails.usage_limits,
                 model_settings=session_settings(session_id, context.shop_id),
+                # One model for every step of the turn, tool calls included.
+                model=selection.model if selection is not None else None,
             ) as run,
         ):
             answer = ""
@@ -330,6 +379,7 @@ class AgentService:
         history: list[dict],
         context: AgentContext,
         conversation_id: int | None,
+        selection: ModelSelection | None,
         started: float,
     ) -> AsyncGenerator[AgentStreamEvent]:
         events: asyncio.Queue[AgentStreamEvent | Exception] = asyncio.Queue()
@@ -341,6 +391,7 @@ class AgentService:
                 history,
                 context,
                 conversation_id,
+                selection,
                 started,
                 events,
             )
@@ -367,6 +418,7 @@ class AgentService:
         history: list[dict],
         context: AgentContext,
         conversation_id: int | None,
+        selection: ModelSelection | None,
         started: float,
         events: asyncio.Queue[AgentStreamEvent | Exception],
     ) -> None:
@@ -381,6 +433,7 @@ class AgentService:
                     history,
                     context,
                     self._session_id(conversation_id),
+                    selection,
                     started,
                     events,
                 )
@@ -390,7 +443,13 @@ class AgentService:
                 if answer[len(delivered) :]:
                     events.put_nowait(TextDelta(answer[len(delivered) :]))
                 saved = await self._save_turn(
-                    context, conversation_id, question, answer, version, recalled
+                    context,
+                    conversation_id,
+                    question,
+                    answer,
+                    version,
+                    recalled,
+                    selection,
                 )
                 events.put_nowait(Done(saved))
         except Exception as error:
@@ -403,6 +462,7 @@ class AgentService:
         history: list[dict],
         context: AgentContext,
         session_id: str,
+        selection: ModelSelection | None,
         started: float,
         events: asyncio.Queue[AgentStreamEvent | Exception],
     ) -> tuple[str, str, str]:
@@ -421,6 +481,8 @@ class AgentService:
                 deps=context,
                 usage_limits=self.guardrails.usage_limits,
                 model_settings=session_settings(session_id, context.shop_id),
+                # One model for every step of the turn, tool calls included.
+                model=selection.model if selection is not None else None,
             ) as run,
         ):
             # The answer a response wrote alongside screen-button calls only.
@@ -574,6 +636,7 @@ class AgentService:
         answer: str,
         version: str,
         recalled: list[RecalledMemory],
+        selection: ModelSelection | None,
     ) -> AgentChatResult:
         saved_conversation_id, message_id = await asyncio.to_thread(
             self.conversations.save_exchange,
@@ -587,11 +650,16 @@ class AgentService:
             self.observability.link_conversation(saved_conversation_id)
         if self.memory is not None:
             self._remember(context, saved_conversation_id, question, answer, recalled)
+        if selection is not None:
+            # After the save, so a new conversation keeps its tier under its new id.
+            self.tier_selector.remember(saved_conversation_id, selection)
         return AgentChatResult(
             conversation_id=saved_conversation_id,
             message_id=message_id,
             answer=answer,
-            model=self.model_name,
+            model=(
+                selection.model.model_name if selection is not None else self.model_name
+            ),
             model_version=version,
         )
 
