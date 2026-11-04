@@ -19,7 +19,7 @@ import {
   UserCircle,
   X,
 } from '@phosphor-icons/react'
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Avatar, BrandMark, MeAvatar } from '../../components/admin/ui'
 import Modal from '../../components/Modal'
@@ -31,7 +31,7 @@ import { getSession, logout } from '../../services/authService'
 import { resetPreferencesCache, setPreferences, usePreferences } from '../../services/preferences'
 import { listTasks } from '../../services/taskService'
 import type { AdminUserItem, AttentionItem, CustomerListItem } from '../../types'
-import { formatDate, formatRelative } from '../../utils/format'
+import { formatRelative } from '../../utils/format'
 import '@fontsource-variable/geist'
 import '../../styles/admin.css'
 import TaskFormModal, { type TaskPrefill } from './tasks/TaskFormModal'
@@ -43,33 +43,13 @@ export interface AdminOutletContext {
   openCreateTask: (prefill?: TaskPrefill) => void
 }
 
-const META: { match: (p: string) => boolean; title: string; sub?: string }[] = [
+const META: { match: (p: string) => boolean; title: string }[] = [
   { match: (p) => p === '/admin' || p === '/admin/', title: 'Dashboard' },
-  {
-    match: (p) => p.startsWith('/admin/customers'),
-    title: 'Khách hàng',
-    sub: USE_MOCK ? 'OWNER và cơ sở · chỉ đọc' : 'Chủ tiệm và cửa hàng · dữ liệu hỗ trợ tối thiểu',
-  },
-  {
-    match: (p) => p.startsWith('/admin/access-logs'),
-    title: 'Nhật ký truy cập',
-    sub: 'Các lần bạn xem hoặc thay đổi dữ liệu quản trị',
-  },
-  {
-    match: (p) => p.startsWith('/admin/ai'),
-    title: 'AI Support',
-    sub: 'Phân tích & đề xuất — ADMIN xác nhận trước khi tạo task',
-  },
-  {
-    match: (p) => p.startsWith('/admin/tasks'),
-    title: 'Tasks',
-    sub: 'Kanban hỗ trợ khách hàng',
-  },
-  {
-    match: (p) => p.startsWith('/admin/settings'),
-    title: 'Cài đặt',
-    sub: 'Tuỳ chọn cá nhân · quyền chỉ đọc',
-  },
+  { match: (p) => p.startsWith('/admin/customers'), title: 'Khách hàng' },
+  { match: (p) => p.startsWith('/admin/access-logs'), title: 'Nhật ký truy cập' },
+  { match: (p) => p.startsWith('/admin/ai'), title: 'AI Support' },
+  { match: (p) => p.startsWith('/admin/tasks'), title: 'Tasks' },
+  { match: (p) => p.startsWith('/admin/settings'), title: 'Cài đặt' },
 ]
 
 function useResolvedTheme(theme: 'light' | 'system') {
@@ -114,8 +94,7 @@ export default function AdminLayout() {
       .catch(() => setOpenTasks(null))
   }, [dataVersion, pathname])
 
-  const meta: { title: string; sub?: string } = META.find((m) => m.match(pathname)) ?? { title: 'Quản trị' }
-  const subtitle = meta.sub ?? `Tổng quan hỗ trợ · ${formatDate(new Date().toISOString())}`
+  const meta = META.find((m) => m.match(pathname)) ?? { title: 'Quản trị' }
 
   useEffect(() => {
     document.title = `${meta.title} · Admin Sổ Nghe Lời`
@@ -224,6 +203,7 @@ export default function AdminLayout() {
               <SidebarSimple size={20} aria-hidden="true" />
               <span className="sb-item-label">Thu gọn</span>
             </button>
+            <SidebarAccount onLogout={onLogout} />
           </div>
         </aside>
         <div className="sb-backdrop" onClick={() => setNavOpenAt(null)} aria-hidden="true" />
@@ -235,27 +215,23 @@ export default function AdminLayout() {
             </button>
             <div className="tb-title">
               <h1>{meta.title}</h1>
-              <p>{subtitle}</p>
             </div>
-            <div className="tb-right">
-              {/* Tìm nhanh, AI, thông báo và task đọc dữ liệu mẫu: chỉ ở chế độ mock */}
-              {USE_MOCK && (
-                <>
-                  <GlobalSearch
-                    onOpenShop={(id) => navigate(`/admin/customers?tab=shops&shop=${id}`)}
-                    onOpenUser={(id) => navigate(`/admin/customers?tab=owners&owner=${id}`)}
-                  />
-                  <Link to="/admin/ai" className="icon-btn tb-hide-md" aria-label="Hỏi AI Support" title="Hỏi AI Support">
-                    <Sparkle size={20} />
-                  </Link>
-                  <Notifications dataVersion={dataVersion} />
-                  <button type="button" className="btn btn-primary tb-primary" onClick={() => openCreateTask()} aria-label="Tạo task">
-                    <Plus size={18} weight="bold" /> <span>Tạo task</span>
-                  </button>
-                </>
-              )}
-              <UserMenu onLogout={onLogout} />
-            </div>
+            {/* Tìm nhanh, AI, thông báo và task đọc dữ liệu mẫu: chỉ ở chế độ mock */}
+            {USE_MOCK && (
+              <div className="tb-right">
+                <GlobalSearch
+                  onOpenShop={(id) => navigate(`/admin/customers?tab=shops&shop=${id}`)}
+                  onOpenUser={(id) => navigate(`/admin/customers?tab=owners&owner=${id}`)}
+                />
+                <Link to="/admin/ai" className="icon-btn tb-hide-md" aria-label="Hỏi AI Support" title="Hỏi AI Support">
+                  <Sparkle size={20} />
+                </Link>
+                <Notifications dataVersion={dataVersion} />
+                <button type="button" className="btn btn-primary tb-primary" onClick={() => openCreateTask()} aria-label="Tạo task">
+                  <Plus size={18} weight="bold" /> <span>Tạo task</span>
+                </button>
+              </div>
+            )}
           </header>
 
           <main id="main" className="content" tabIndex={-1}>
@@ -393,8 +369,8 @@ function GlobalSearch({ onOpenShop, onOpenUser }: { onOpenShop: (id: string) => 
             ref={inputRef}
             className="input"
             type="search"
-            placeholder="Tìm OWNER, email, SĐT, cơ sở…"
-            aria-label="Tìm OWNER hoặc cơ sở"
+            placeholder="Tìm chủ tiệm, email, SĐT, cơ sở…"
+            aria-label="Tìm chủ tiệm hoặc cơ sở"
             value={q}
             onFocus={() => setOpen(true)}
             onChange={(e) => {
@@ -418,7 +394,7 @@ function GlobalSearch({ onOpenShop, onOpenUser }: { onOpenShop: (id: string) => 
               <div className="pop-empty">Không có kết quả cho “{q.trim()}”.</div>
             ) : res ? (
               <>
-                {res.users.length > 0 && <div className="pop-label">Chủ cơ sở</div>}
+                {res.users.length > 0 && <div className="pop-label">Chủ tiệm</div>}
                 {res.users.map((u) => (
                   <button
                     key={u.id}
@@ -534,40 +510,64 @@ function Notifications({ dataVersion }: { dataVersion: number }) {
   )
 }
 
-function UserMenu({ onLogout }: { onLogout: () => void }) {
-  const [open, setOpen] = useState(false)
-  const ref = useClickOutside(open, () => setOpen(false))
+/**
+ * Tài khoản ở cuối thanh bên, như ChatGPT: avatar, tên và vai trò; bấm vào mở menu phía trên.
+ * Khi thanh bên thu gọn còn 72px, menu dùng `position: fixed` theo vị trí nút, vì thanh bên cuộn được
+ * (`overflow-y: auto`) sẽ cắt mất phần menu tràn ra ngoài.
+ */
+function SidebarAccount({ onLogout }: { onLogout: () => void }) {
+  const [menu, setMenu] = useState<CSSProperties | null>(null)
+  const close = useCallback(() => setMenu(null), [])
+  const ref = useClickOutside(menu !== null, close)
+  const btnRef = useRef<HTMLButtonElement>(null)
   const prefs = usePreferences()
   const s = getSession()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!menu) return
+    window.addEventListener('resize', close)
+    return () => window.removeEventListener('resize', close)
+  }, [menu, close])
+
+  function toggle() {
+    const r = btnRef.current?.getBoundingClientRect()
+    if (menu || !r) return setMenu(null)
+    // Thanh bên mở: menu nằm ngay trên nút, rộng bằng thanh bên (CSS `.sb-account .popover`).
+    // Thanh bên thu gọn chỉ rộng bằng avatar: menu rộng 240px, tràn sang phải.
+    setMenu(r.width < 160 ? { position: 'fixed', left: r.left, right: 'auto', bottom: window.innerHeight - r.top + 8, width: 240 } : {})
+  }
+
+  const go = (to: string) => {
+    setMenu(null)
+    navigate(to)
+  }
+
   return (
-    <div className="rel" ref={ref}>
+    <div className="sb-account" ref={ref}>
       <button
+        ref={btnRef}
         type="button"
-        className="avatar-btn"
+        className="sb-user"
         aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label="Tài khoản"
-        onClick={() => setOpen((v) => !v)}
+        aria-expanded={menu !== null}
+        aria-label={`Tài khoản ${prefs.displayName}`}
+        title={prefs.displayName}
+        onClick={toggle}
       >
-        <MeAvatar size={36} />
+        <MeAvatar size={32} />
+        <div>
+          <strong>{prefs.displayName}</strong>
+          <span>{s?.user.role === 'ADMIN' ? 'Quản trị viên' : s?.user.role}</span>
+        </div>
       </button>
-      {open && (
-        <div className="popover" role="menu" style={{ width: 260 }}>
-          <div className="pop-item" style={{ cursor: 'default' }}>
-            <MeAvatar size={36} />
-            <div>
-              <strong>{prefs.displayName}</strong>
-              <span>
-                {s?.user.email} · {s?.user.role}
-              </span>
-            </div>
-          </div>
-          <div className="pop-sep" />
-          <button type="button" role="menuitem" className="pop-item" onClick={() => (setOpen(false), navigate('/admin/settings/profile'))}>
+      {menu && (
+        <div className="popover" role="menu" style={menu}>
+          {s?.user.email && <div className="pop-note">{s.user.email}</div>}
+          <button type="button" role="menuitem" className="pop-item" onClick={() => go('/admin/settings/profile')}>
             <UserCircle size={18} /> Hồ sơ
           </button>
-          <button type="button" role="menuitem" className="pop-item" onClick={() => (setOpen(false), navigate('/admin/settings/security'))}>
+          <button type="button" role="menuitem" className="pop-item" onClick={() => go('/admin/settings/security')}>
             <User size={18} /> Phiên & quyền truy cập
           </button>
           <div className="pop-sep" />

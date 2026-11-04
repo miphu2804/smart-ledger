@@ -154,7 +154,7 @@ export async function suggestTasks(): Promise<TaskDraft[]> {
       d = {
         draftId: `sug_sync_${b.id}`,
         title: 'Kiểm tra lỗi đồng bộ',
-        description: `Cơ sở có ${b.syncErrors7d} lần đồng bộ thất bại trong 7 ngày. Liên hệ chủ cơ sở kiểm tra mạng và phiên bản app.`,
+        description: `Cơ sở có ${b.syncErrors7d} lần đồng bộ thất bại trong 7 ngày. Liên hệ chủ tiệm kiểm tra mạng và phiên bản app.`,
         severity: b.syncErrors7d >= 4 ? 'high' : 'medium',
         shopId: b.id,
         shopName: b.name,
@@ -164,11 +164,11 @@ export async function suggestTasks(): Promise<TaskDraft[]> {
       d = {
         draftId: `sug_pend_${b.id}`,
         title: 'Hỗ trợ xác minh số điện thoại',
-        description: 'Chủ cơ sở đăng ký hơn 1 ngày nhưng chưa xác minh OTP.',
+        description: 'Chủ tiệm đăng ký hơn 1 ngày nhưng chưa xác minh OTP.',
         severity: 'low',
         shopId: b.id,
         shopName: b.name,
-        reason: 'Nguồn: trạng thái tài khoản OWNER = Chờ xác minh.',
+        reason: 'Nguồn: trạng thái tài khoản chủ tiệm = Chờ xác minh.',
       }
     if (d && !used[d.draftId]) drafts.push(d)
   }

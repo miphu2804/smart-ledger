@@ -93,6 +93,18 @@ docker compose --env-file backend/core/.env --env-file backend/ai/.env up --buil
 
 Do not run the app with the production bootstrap credentials; production values belong in the `production` environment's secret store. Automated tests use a disposable PostgreSQL (CI service containers), never Supabase: AI integration tests read `POSTGRES_TEST_URL`, Core PostgreSQL tests read `CORE_TEST_POSTGRES_URL` (see [Core README](../../backend/core/README.md#run-tests)).
 
+## Chat-history cache
+
+The AI service caches each conversation's latest messages in Redis when `REDIS_URL` is set; without it every turn reads PostgreSQL.
+Start a local Redis with this command:
+
+```bash
+docker run -d --rm --name smartledger-local-redis -p 127.0.0.1:6379:6379 redis:7-alpine redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
+```
+
+Then set `REDIS_URL=redis://127.0.0.1:6379/0` in `backend/ai/.env`.
+The Redis client tests run against it with `REDIS_TEST_URL=redis://127.0.0.1:6379/15 uv run pytest tests/unit_tests/test_redis_client.py`.
+
 ## Database migrations
 
 Dev and staging share one database, so a migration that runs from a developer machine changes the schema for everyone. Core runs Flyway at startup when `FLYWAY_ENABLED=true` (the Core default); the commands above set it to `false`, and Core then only checks that the schema matches its entities.

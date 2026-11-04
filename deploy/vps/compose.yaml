@@ -55,6 +55,10 @@ services:
       - ai.env
     environment:
       SERVER_PORT: 8001
+    # Started, not healthy: AI reads PostgreSQL when the cache is down, so Redis never blocks a deploy.
+    depends_on:
+      redis:
+        condition: service_started
     healthcheck:
       # The slim image has no curl.
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=4)"]
@@ -65,6 +69,9 @@ services:
     # Docker's 10 s default kills AI mid-shutdown: an open chat stream may run to the 35 s turn limit, then
     # memory writes wait up to 10 s, HoneyHive session updates 10 s and the span flush 5 s.
     stop_grace_period: 60s
+    # Same wildcard-DNS guard as Core: while Redis or Bifrost is down, `redis` or `bifrost` would resolve to an outside
+    # host and AI would send it chat history or the virtual key.
+    dns_search: .
     restart: unless-stopped
     logging: *logging
 
@@ -99,6 +106,22 @@ services:
           - gateway-${ENVIRONMENT}
     # Same wildcard-DNS guard as Core: provider hostnames must not resolve through the VPS search domain.
     dns_search: .
+    restart: unless-stopped
+    logging: *logging
+
+  # Chat-history cache for AI at redis://redis:6379/0, on this project's network only: no published port and no
+  # password, like AI itself. A cache, so nothing is persisted and the oldest keys are evicted at the memory cap; a
+  # restart only makes the next turns read PostgreSQL. Started by the playbook and by AI's depends_on, not rolled by
+  # deploy.sh; a new version is a change to this file.
+  redis:
+    image: redis:7.4.12-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru", "--save", "", "--appendonly", "no"]
+    mem_limit: 96m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     restart: unless-stopped
     logging: *logging
 

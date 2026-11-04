@@ -161,7 +161,7 @@ export default function TasksPage() {
     <>
       <div className="kb-filters">
         <div className="filter-group" role="search" aria-label="Lọc task">
-          <SearchInput className="grow" value={q} onChange={setQ} label="Tìm task" placeholder="Mã, tiêu đề, cơ sở hoặc chủ cơ sở…" />
+          <SearchInput className="grow" value={q} onChange={setQ} label="Tìm task" placeholder="Mã, tiêu đề, cơ sở hoặc chủ tiệm…" />
           <button type="button" className="chip-toggle" aria-pressed={mine} onClick={() => setMine((v) => !v)}>
             <UserCircle size={16} aria-hidden="true" /> Của tôi
           </button>

@@ -236,10 +236,10 @@ function AppearanceTab() {
 
 /* ---------- Bảo mật & quyền ---------- */
 const PERMS: [string, boolean][] = [
-  ['Xem danh sách và chi tiết hỗ trợ của OWNER/cơ sở', true],
+  ['Xem danh sách và chi tiết hỗ trợ của chủ tiệm/cơ sở', true],
   ['Tạo và cập nhật support task', true],
   ['Dùng AI Support trên dữ liệu được phép xem', true],
-  ['Đăng nhập thay / giả danh OWNER', false],
+  ['Đăng nhập thay / giả danh chủ tiệm', false],
   ['Xem hoặc sửa hoá đơn, chi phí, công nợ, tồn kho', false],
   ['Tự thay đổi vai trò hoặc cấp thêm quyền', false],
   ['Tắt nhật ký hoạt động', false],

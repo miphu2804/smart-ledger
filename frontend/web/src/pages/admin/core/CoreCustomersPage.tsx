@@ -3,7 +3,7 @@
  * theo trang của Core. Bấm một dòng mở khung chi tiết; khung cửa hàng có lịch sử trạng thái và nút tạm ngưng / mở lại
  * (`PATCH /api/v1/shops/{id}/status`). Mọi lần xem đều được Core ghi vào nhật ký truy cập.
  */
-import { PauseCircle, PlayCircle, ShieldCheck, Storefront, UserCircle } from '@phosphor-icons/react'
+import { PauseCircle, PlayCircle, Storefront, UserCircle } from '@phosphor-icons/react'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Avatar, DetailDrawer, Panel, SearchInput } from '../../../components/admin/ui'
@@ -77,12 +77,6 @@ export default function CoreCustomersPage() {
 
   return (
     <>
-      <div className="page-bar">
-        <p className="scope-line">
-          <ShieldCheck size={16} aria-hidden="true" /> Chỉ thông tin hỗ trợ tối thiểu. Mỗi lần tìm và mở chi tiết đều được ghi nhật ký.
-        </p>
-      </div>
-
       <Panel bodyClass="">
         <div className="shop-tabs">
           <div className="seg-tabs" role="tablist" aria-label="Loại khách hàng">

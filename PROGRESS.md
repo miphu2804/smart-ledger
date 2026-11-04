@@ -1,3 +1,79 @@
+### 2026-11-04 — Cache the chat history in Redis
+
+| Area | Change |
+|---|---|
+| AI | • New `RedisClient` (`src/infra/redis_client.py`), a general key-value cache that fails open when Redis is unset, down or erroring<br>• `AgentConversationRepository` keeps each conversation's latest messages in Redis for 24 hours, so a repeat turn skips the database read that cost about 200 ms from Hanoi to Singapore; `save_exchange` updates a cached entry after it commits and `delete_conversation` removes it<br>• New optional `REDIS_URL` setting |
+| Deploy | • `deploy/vps/compose.yaml` runs a `redis` service in each environment's stack: pinned by digest, 64 MB cap with LRU eviction, no persistence, no published port; AI starts it through `depends_on` and gets the `dns_search: .` guard Core already had, so a down `redis` or `bifrost` name never resolves through the VPS search domain |
+| Docs | • The AI README and local development guide give the local Redis command and `REDIS_URL`; `ci-cd.md` describes the `redis` service and `REDIS_URL`; the CI/CD and VPS network diagrams show Redis in both stacks; the technical design no longer says the system has no Redis |
+
+Check: `uv run pytest -q` (587 passed, 13 skipped) with `POSTGRES_TEST_URL` on a throwaway `pgvector/pgvector:pg17` container and `REDIS_TEST_URL` on a local `redis:7-alpine`, `ruff check` and `ruff format --check`; the repository tests use an in-memory fake. Four real local turns on one conversation with `REDIS_URL` set read the history in 25 ms on the first database read and 1 ms on the next two cache hits; the credential map is regenerated. `docker compose config` accepts the stack and the pinned image starts with the same flags (`PONG`, `allkeys-lru`, no save, no AOF). Not verified: the gain in production, the playbook applying the stack on the VPS, and `REDIS_URL` in Dopbase, which must be set only after the playbook has applied this compose file. Commit: the one that adds this entry.
+
+### 2026-11-04 — Faster memory recall on the chat hot path
+
+| Area | Change |
+|---|---|
+| AI | • One `recall_ready` query replaces the switch read before recall; an owner with no live memory or with memory off skips both the embedding call and the search<br>• `search` makes one scan instead of two and no longer writes; `mark_used` records the use in the background `remember` step after the answer<br>• An in-process cache keeps the last 256 question vectors, so the Bobi sheet's repeated chips skip the embedding call; the `memory enabled` span is now `memory ready` |
+| Docs | • ADR-0002 says use is recorded after the answer, in the background |
+
+Check: `uv run pytest` (582 passed, 13 skipped) with `POSTGRES_TEST_URL` on a throwaway pgvector container that was removed afterwards, `ruff check` and `ruff format --check` pass. Real turns on `smartledger-local-db`: an owner with no memories skips recall (before: 1015 and 1753 ms), an owner with two memories recalls in 612 and 1045 ms and in 3 ms for a repeated question, and both memories got their use recorded after the answer. Not verified: production timings across the Hanoi to Singapore link. Commit: the one that adds this entry.
+
+### 2026-11-04 — Trace the untimed steps of a chat turn
+
+| Area | Change |
+|---|---|
+| AI | • HoneyHive sessions carry `history_ms`, the time to read the conversation history before the session opens<br>• New `memory enabled` and `save turn` spans time the memory switch read and the exchange save, so the turn's untraced gap splits into named steps |
+
+Check: 475 unit tests and ruff pass; two real turns on `smartledger-local-db` recorded history 0 and 26 ms, memory enabled 81 and 3 ms, memory recall 1015 and 1753 ms, save turn 44 and 33 ms. Not verified: production timings, which need the deploy. Commit: the one that adds this entry.
+
+### 2026-11-04 — Tier classifier tokens reach HoneyHive
+
+| Area | Change |
+|---|---|
+| AI | • `BifrostTierClassifier` records each `/v1/decisions` call as a `tier classifier` span of type `model` with the model and the token counts Bifrost returns, so the session's Total Tokens and model events include the `jev-latest` call; `Observability.span` takes the event type |
+
+Check: `uv run ruff check`, `ruff format --check` and `uv run pytest tests/unit_tests` (474 passed); the SDK's `trace` and `enrich_span` signatures read from the installed package. Not verified: the span on a real HoneyHive session, since traces run only in production. Commit: the one that adds this entry.
+
+### 2026-11-04 — HoneyHive session charts show data
+
+| Area | Change |
+|---|---|
+| AI | • The First words wait, Tool calls per turn and Unsupported figure rate charts in `.honeyhive/charts/` filter on `event_type` `session` instead of `event_name` `agent-chat`; with the old filter HoneyHive searched events other than sessions for these session metrics and drew nothing |
+
+Check: the live chart list shows HoneyHive's own session charts filter on `event_type` `session`. Not verified: the three charts drawing data, since `sync-dashboards.sh` applies them only on a merge into `main` or a manual run. Commit: the one that adds this entry.
+
+### 2026-11-04 — Bifrost prices mercury-3
+
+| Area | Change |
+|---|---|
+| CI | • `deploy/vps/bifrost.json` adds a `governance.pricing_overrides` entry for `mercury-3` on provider `inception` at the launch price from Inception's models page, because Bifrost's synced catalog prices it only under OpenRouter and logged its requests without cost |
+| Docs | • ADR-0009 §5 and the AI README say why HoneyHive shows no cost: its session Cost sums the `metadata.cost` the app sets on events, and Bifrost writes the cost it computes only to its own log, not to the response; embeddings on Cloudflare have no cost record |
+
+Check: `bifrost.json` passes `check-jsonschema` against the `transports/v2.4.0` config schema; the override-only path for a model missing from the catalog read in `cost.go` of that tag. Not verified: a non-zero cost in a live Bifrost log, since the override applies only after deploy. Commit: the one that adds this entry.
+
+### 2026-11-04 — Admin account menu moves to the sidebar
+
+| Area | Change |
+|---|---|
+| Web | • Admin header: no subtitle under the page title and no line under the header<br>• Khách hàng and Nhật ký truy cập: the faded "dữ liệu hỗ trợ tối thiểu" and log notices are gone<br>• The avatar moves from the header to the bottom of the sidebar, under Hệ thống, as a row with name and role; clicking it opens the menu above it (email, Hồ sơ, Phiên & quyền truy cập, Đăng xuất); when the sidebar is collapsed only the avatar shows and the menu opens 240 px wide<br>• Admin labels say "chủ tiệm" instead of OWNER or "chủ cơ sở" (the role value stays `OWNER`)<br>• On desktop (1280 px and up) the sidebar column stays 72 px and the open sidebar slides over the content, which is centered up to 1200 px wide, so opening or closing it never moves the content; it starts collapsed |
+
+Check: `npm run typecheck`, `oxlint` and `npm run build` pass; on the mock admin at 1440 × 900, 1024 × 768 and 375 × 812 the menu opens above the avatar and is not cut off. Not verified: real Core mode in a browser. Commit: the one that adds this entry.
+
+### 2026-11-04 — LLM router call shows up in HoneyHive
+
+| Area | Change |
+|---|---|
+| AI | • The tier classification call to Bifrost runs inside an `llm router` span of the turn's HoneyHive session, with the user messages as input, the tier and alias as output and the mechanism as metadata; the classifier calls Bifrost over plain HTTP, which the agent instrumentation never saw |
+
+Check: `uv run ruff check` and `uv run pytest tests/unit_tests` (472 passed). Not verified: the span on a real HoneyHive session, since traces run only in production. Commit: the one that adds this entry.
+
+### 2026-11-04 — User flow map follows the new sign-in and the Bobi sheet
+
+| Area | Change |
+|---|---|
+| Docs | • Sign-in flow: the card from #499 (Google, Zalo, email with Tiếp tục, no Facebook), a "Quên mật khẩu?" edge straight from the sign-in screen, and the password screen with the email filled in<br>• Orders flow: the Bobi suggestion strip on Đơn hàng and a new "Hỏi Trợ lý Bobi" node for the sheet from #491, with a step that links to Trợ lý history<br>• Bobi flow: notes for the composer shared with the sheet (#505), the thought line while waiting (#513) and the five quick chips<br>• Seven screenshots retaken or added on staging: `welcome`, `email-login`, `invoices`, `ai-ask-sheet`, `chat-tro-ly-ai`, `chat-dat-cau-hoi`, `chat-tra-loi`; the README says how and which test data they show |
+
+Check: `npm run userflow` builds the page; the onboarding and orders flows render with the new edges and node on a local server. Not verified: other browsers. Commit: the one that adds this entry.
+
 ### 2026-11-04 — Cleaner routes in the CI/CD and runtime diagram
 
 | Area | Change |
@@ -132,68 +208,3 @@ Check: `ansible-playbook --syntax-check`, `ansible-lint` (production profile), `
 | Docs | • `ci-cd.md#scripts` describes the adapter split, the variables and a runbook for deploying `ai` from a laptop |
 
 Check: shellcheck and actionlint pass; `changes.sh` matched the old dorny rules on 80 single-commit ranges of `staging`, a fake pull request merge commit and a push; 17 scripts ran locally with sample input, including `start-ssh-agent.sh` with a throwaway key. Not verified: any workflow on a runner (GitHub-hosted runners are billing-locked), the image push, the VPS deploy, the Vercel steps and the R2 publish. Commit: the one that adds this entry.
-
-### 2026-11-02 — Independent stock decreases for CORE-021
-
-| Area | Change |
-|---|---|
-| Core | • Add an OWNER stock-adjustment API with a positive decrement and mandatory reason; reuse Product locks, V7 idempotency and STOCK_ADJUSTED audit with the new allowed source<br>• Stock, notification reconciliation and original response commit together; reject overdraw/untracked products and preserve prices and money records<br>• PostgreSQL tests cover normalized replay, concurrent writers, overdraw, managed stale stock and failure rollback; require these cases in the CI execution gate |
-| Docs | • Add BR-025, FR-038 and AC-111–115, the API contract and Core handoff; no migration, environment variable or FE/AI change |
-
-Check: `mvn verify` passed 1514 tests with PostgreSQL enabled, zero failures/errors/skips; 13 gate self-tests passed. Reverified after merging staging bec1a37 on 2026-11-04: all 1514 tests and the 13 gate self-tests passed; the Python report gate confirmed all 17 required PostgreSQL suites and methods without skips. The disposable PostgreSQL 17.11 container was removed after verification. No shared database or deployment was changed. Commit: the one that adds this entry.
-
-### 2026-11-02 — Agent chat eval offline with a manual CI gate, memory recall on the trace
-
-| Area | Change |
-|---|---|
-| AI | • A `memory recall` span in each chat session carries the question, the recalled memories with their scores and `recalled_count`<br>• `evaluation/agent_chat/run.py` scores locally with five HoneyHive evaluator templates judged through Bifrost, two seeded memory cases (recall only in those cases, writes off), and two safety metrics copied from the production evaluators; `--gate thresholds.toml` exits 1 below a minimum, `--report` writes markdown by layer, and only `--sync` sends scores to HoneyHive<br>• `.honeyhive/evaluators/sql-parse-check.yaml` parses each `query_shop_data` SQL in production |
-| CI | • `eval-regression.yml`, dispatched by hand from `staging`, runs the eval of input `ref` on a throwaway database with `ai/staging` settings and posts the report to the job summary and the pull request<br>• `scripts/local-db.sh` takes a container name and port, and pushes the AI migrations with `sslmode=disable`, without which `supabase db push` failed on a fresh database |
-| Docs | • The eval README, ADR-0009, `.honeyhive/README.md` and `ci-cd.md#eval-regression` |
-
-Check: 484 unit tests and ruff pass; actionlint passes; an Opus review found the report rows replacing the `tool_calls` metric with the list of calls (fixed, with a test on a row built by `report()`), one failed judge call dropping a whole case (now only that metric), and workflow hardening (fixed); the workflow's database step (throwaway container on a free port, owner insert, seed) ran locally and `run.py --dry-run --repeats 3` built 69 datapoints on it; `sql-parse-check` scored 691 real events without an exception and now also reads arguments sent as a JSON string. Not verified: a full run with models, the workflow on a runner, and the pull request comment. Commit: the one that adds this entry.
-
-### 2026-11-02 — HoneyHive config as code and four new answer evaluators
-
-| Area | Change |
-|---|---|
-| AI | • Evaluators and alerts move from `backend/ai/evaluation/honeyhive` to `.honeyhive/` at the repository root in the layout of HoneyHive's Config as Code guide; `apply.py` gives way to the guide's `sync-evaluators.sh` (IDs kept in `.honeyhive/state.json`, seeded with the two existing evaluators) and `sync-dashboards.sh` (charts upserted and alerts created by name for the projects in `projects.yaml`)<br>• Four Python evaluators score each `agent-chat` session against Bobi's prompt: `unsupported-figure` (a figure with no tool call and not in the question), `format-violation` (forbidden Markdown), `invalid-chart` (a chart block `readChart` in the app cannot draw) and `non-vietnamese-answer`; no LLM judge, because of `NFR-008`<br>• Four charts split by `source`: first-words wait p50, tool calls per turn, query error rate and unsupported figure rate |
-| CI | • `honeyhive-sync.yml` and `honeyhive-dashboards.yml` run the scripts on a merge into `main` with the CLI pinned to v1.9.0; the evaluator workflow fails when a run changes `state.json`, so an evaluator created in CI is not duplicated on the next run |
-| Docs | • `.honeyhive/README.md`, the AI README and ADR-0009 point at the new layout; the credential map was regenerated with the three GitHub secrets |
-
-Check: the CLI schemas validate every evaluator, chart and alert file, including as the scripts render them with `metric_id` or `project_id`; shellcheck and actionlint pass; the new evaluators pass 24 hand-written cases and, run locally on the last 99 `agent-chat` sessions, flag only test probes. Not verified: the scripts against HoneyHive, the chart metric names (a chart query needs a workspace data plane key), and that the evaluator sandbox exposes the session's `tool_calls` in `metrics`. Commit: the one that adds this entry.
-### 2026-11-02 — Dev machines pull the dev environment from Dopbase
-
-| Area | Change |
-|---|---|
-| Secrets | • `apply.sh` takes `dev` as the source and skips the loadtest and monitor targets, which only staging holds; `dopbase-sync.sh pull dev` writes `core/dev`, `ai/dev` and `mobile/dev` into `secrets/dev/env/`, so a dev machine no longer reads staging<br>• The templates list the dev-only Core keys and drop `HH_SAMPLE_RATE`; Dopbase lost the stale AI keys, `GOOGLE_APPLICATION_CREDENTIALS`, both `OPENCODE_GO_API_KEY` entries and the stray `USER_RATE_LIMIT_ENABLED` in vps, and gained `MODEL_ALIASES` in `ai/staging`, `USER_RATE_LIMIT_ENABLED=false` in core, the three tuned AI timeout and sandbox values in `ai/production` and `GATEWAY_DOMAIN` in `vps/production`; `LITELLM_URL` is gone from Dopbase, the template and `.env.example`, and `TYPESAFE_API_KEY` stays for future work, and `release/production` now holds `RELEASE_KEYSTORE`, `KEYSTORE_PASSWORD` and `RELEASE_KEY_ALIAS` so `android-release.sh` reads them; `monitor/staging` lost the five uptime URL keys, so `.env.monitor` keeps only the read-only Grafana login |
-| Docs | • Local setup, secrets docs and the AI README pull and apply `dev`; `apply.sh staging dev` stays as the deliberate staging test; the credential map is regenerated and `secrets-and-env.md` describes `.env.monitor` as the Grafana login only |
-
-Check: `scripts/secrets/check-templates.sh` passes; `scripts/secrets/apply.sh dev dev` listed only `+ USER_RATE_LIMIT_ENABLED` in Core, the six removed AI keys and no change for mobile, then wrote the three files with `.bak` backups; `secrets/dev/env/.env.ai` no longer holds the removed keys. Commit: the one that adds this entry.
-
-### 2026-11-02 — User flow map of the mobile app in docs
-
-| Area | Change |
-|---|---|
-| Docs | • `docs/product/userflow/index.html` is a dark pannable map of the mobile app's user flows with screenshots, decisions, system steps and red failure edges; clicking a node opens its source file, FR codes and next hops; it opens straight from disk like the credential map and targets desktop screens only<br>• Six flows follow the current navigation on `staging`: sign-in and shop setup, selling and checkout, orders with reports and notifications, the Bobi tab, the Quản lý tab, and the quick menu with shop switching; the removed mascot "Gợi ý" path is gone<br>• All 40 screenshots are taken on `staging` with the test account on "Tiệm Test Team", using real orders #27282 (debt), #27283 and #27284 (voice order typed through "Nhập tay") and one real Bobi answer; barcode scanning, email verification, shop setup and stock-in stay as step nodes without a picture, with a note saying why<br>• The folder README says how to open, rebuild and retake screenshots; the docs map links it |
-| Web | • The page source lives in `src/userflow`; `npm run userflow` builds it into the docs folder as one file with script, styles and font inlined, because browsers refuse module scripts and fonts from `file://`; the web app's own build does not include it |
-
-Check: `npm run typecheck`, `npm run lint` and `npm run build` pass in `frontend/web`, and `dist` holds no userflow file; headless Chrome opened `index.html` over `file://` for all six flows with every screenshot loaded (52 of 52) and the Geist font active; the design skill's inspector rendered all six flows at 1440 and 768 px with no layout failure. The three test orders and the Bobi conversation stay on the staging test shop. `staff` and `printer` are left out because the app has no way to reach them. Commit: the one that adds this entry.
-
-### 2026-11-01 — OpenAI native and Inception through Bifrost, Anthropic path removed
-
-| Area | Change |
-|---|---|
-| AI | • Every chat turn on staging failed with Bifrost 401 because the Anthropic SDK sends the virtual key as `x-api-key`, which Bifrost accepts only for `sk-bf-` keys; the OpenAI clients now send it in `x-bf-vk` on the client, since a run's `extra_headers` replace the model's whole<br>• `ModelAlias` gains `effort`, and `MODEL_REASONING_EFFORT` is the default for an alias without one; the default alias is `chat` on `gpt-6-luna` over `openai_responses` with effort `high`<br>• `anthropic_messages`, `AnthropicMessagesProvider`, `ANTHROPIC_BASE_URL`, the `anthropic` extra, `SUMMARY_MODEL_NAME` and the `x-opencode-session` and `x-bf-eh-*` headers are gone; `openai_chat` stays for Mercury |
-| Deploy | • `bifrost.json` serves `gpt-6-luna` from `openai` and `mercury-3` from a custom `inception` provider (key `INCEPTIONLABS_API_KEY`), `vk-ai` allows exactly those two, both retry once after 500 ms, and the OpenCode Go providers and routing rules are removed; no alias calls Mercury 3 yet, since it is untested<br>• The credential map was regenerated |
-| Docs | • ADR-0008 update, AI README, technical design, CI/CD, the memory diagram and the policy and Data safety pages name OpenAI and Inception |
-
-Check: `uv run pytest` 460 passed, ruff check and format pass; a local fake gateway received `x-bf-vk`, `x-bf-session-id`, `x-bf-lh-shop-id` and the per-alias effort (`high` on `/responses`, `instant` on `/chat/completions`); `bifrost.json` parses; `tsc --noEmit` and `tsc -b` pass on the web app. A local Bifrost v2.3.2 loaded `bifrost.json` and served both models; Bifrost ignores a `BIFROST_VIRTUAL_KEY` without the `sk-bf-` prefix and makes its own, so every header then fails with 401 `access not found`. Not verified: Mercury 3 quality (no alias calls it), staging, or whether the staging virtual key has the `sk-bf-` prefix. Production keeps the older image and OpenCode Go. Commit: the one that adds this entry.
-
-### 2026-11-01 — snooplog runs from any shell
-
-| Area | Change |
-|---|---|
-| Deploy | • `snooplog` is a script in `/usr/local/bin` instead of an alias in `/etc/profile.d`, so tmux panes and other non-login shells can run it; the filter is unchanged |
-| Docs | • `ci-cd.md` calls it a command, not a shortcut |
-
-Check: `ansible-playbook --syntax-check` passes and the patch applies cleanly to `staging`; not run on the VPS yet, so the tmux case is inferred. Commit: the one that adds this entry.
