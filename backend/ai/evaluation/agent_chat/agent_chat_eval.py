@@ -3,9 +3,9 @@ import json
 from datetime import date
 from pathlib import Path
 
-import yaml
 from evaluation.core.honeyhive import print_sync_plan
 from evaluation.core.schema import Case
+from evaluation.core.utils import load_yaml
 from evaluation.metrics.judge import Judge
 from evaluation.metrics.memory import MemoryEvaluator
 from evaluation.metrics.performance import PerformanceEvaluator
@@ -40,9 +40,9 @@ class AgentChatEval:
 
     def __init__(self, repeats: int, judge_alias: str) -> None:
         require_local_database(app_config.POSTGRES_URL, app_config.AI_SQL_READER_URL)
-        self.definition = yaml.safe_load((DIRECTORY / "cases.yaml").read_text())
+        self.definition = load_yaml(DIRECTORY / "cases.yaml")
         self.shop_id = self.definition["shop_id"]
-        self.started_on = self._shop_today()
+        self.started_on = self._get_shop_today()
         self.cases = self._load_cases(repeats)
         judge = Judge(judge_alias, self.shop_id)
         self.target = AgentTarget(
@@ -60,22 +60,22 @@ class AgentChatEval:
     def check(self) -> None:
         """Fails a run that crossed midnight shop time: the expected answers were
         computed before it, and after it "yesterday" moved."""
-        if self._shop_today() != self.started_on:
+        if self._get_shop_today() != self.started_on:
             raise SystemExit("the run crossed midnight shop time; run it again")
 
     def show_plan(self, name: str) -> None:
         print_sync_plan(name, self.cases)
 
     def _load_cases(self, repeats: int) -> list[Case]:
-        version = self._version()
+        version = self._compute_version()
         cases = []
         with self._connect() as connection:
-            owner_id = self._seeded_owner(connection)
+            owner_id = self._find_seeded_owner(connection)
             for spec in self.definition["cases"]:
                 cases += self._build_cases(connection, spec, owner_id, version, repeats)
         return cases
 
-    def _seeded_owner(self, connection: Connection) -> int:
+    def _find_seeded_owner(self, connection: Connection) -> int:
         """The id of the seeded shop's owner; refuses a shop that is missing or was
         seeded on another day."""
         time_zone, shop_today = (
@@ -104,15 +104,15 @@ class AgentChatEval:
         repeats: int,
     ) -> list[Case]:
         """One case per repeat of a question of `cases.yaml`."""
-        names = self._column(connection, spec.get("names"))
-        numbers = self._column(connection, spec.get("numbers"))
+        names = self._read_column(connection, spec.get("names"))
+        numbers = self._read_column(connection, spec.get("numbers"))
         inputs = {
             "question": spec["question"],
             "follow_up": spec.get("follow_up"),
             "owner_id": owner_id,
             "suite_version": version,
         }
-        truth = self._truth(spec, names, numbers)
+        truth = self._read_truth(spec, names, numbers)
         # The attempt keeps the repeats apart, since HoneyHive keys a datapoint by its
         # content.
         return [
@@ -125,7 +125,7 @@ class AgentChatEval:
             for attempt in range(1, repeats + 1)
         ]
 
-    def _truth(self, spec: dict, names: list, numbers: list) -> dict:
+    def _read_truth(self, spec: dict, names: list, numbers: list) -> dict:
         """What only the metrics read: the expected names and figures, the judge's
         rubric filled with them, and what the case needs from the agent."""
         rubric = spec.get("judge")
@@ -142,7 +142,7 @@ class AgentChatEval:
             else None,
         }
 
-    def _version(self) -> str:
+    def _compute_version(self) -> str:
         """Changes when a case or the seed changes, so runs on different cases are not
         compared as if only the prompt had moved."""
         cases = json.dumps(
@@ -153,7 +153,7 @@ class AgentChatEval:
         seed = (DIRECTORY / "seed.sql").read_text()
         return hashlib.sha256(f"{cases}\n{seed}".encode()).hexdigest()[:12]
 
-    def _shop_today(self) -> date:
+    def _get_shop_today(self) -> date:
         with self._connect() as connection:
             return connection.execute(
                 text(f"SELECT {self.definition['shop_today']}")
@@ -164,7 +164,7 @@ class AgentChatEval:
         return PostgreDBClient(app_config.POSTGRES_URL).engine.connect()
 
     @staticmethod
-    def _column(connection: Connection, query: str | None) -> list:
+    def _read_column(connection: Connection, query: str | None) -> list:
         """The query's values; a sum over no rows is NULL, which means zero here."""
         if query is None:
             return []

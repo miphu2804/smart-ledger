@@ -31,7 +31,7 @@ LAYERS = {
 }
 
 
-def rows_of(results: list[CaseResult]) -> list[dict]:
+def build_rows(results: list[CaseResult]) -> list[dict]:
     """One flat row per result: the case, what the target recorded and each score."""
     return [
         {
@@ -50,16 +50,16 @@ def rows_of(results: list[CaseResult]) -> list[dict]:
     ]
 
 
-def report(
+def print_report(
     name: str, results: list[CaseResult], summary: tuple[str, ...] = ()
 ) -> list[dict]:
     """Prints each case's passes of the `summary` metrics across its repeats, then each
     layer's means, and keeps every row locally so a run can be read without opening
     HoneyHive."""
-    rows = rows_of(results)
+    rows = build_rows(results)
     if summary:
         print_cases(rows, summary)
-    print_layers(averages(rows))
+    print_layers(compute_averages(rows))
     first = rows[0]
     if "model" in first:
         print(
@@ -97,7 +97,7 @@ def print_cases(rows: list[dict], summary: tuple[str, ...]) -> None:
         print(f"{tallies} {slowest:>6}s {case}")
 
 
-def averages(rows: list[dict]) -> dict[str, tuple[float, int]]:
+def compute_averages(rows: list[dict]) -> dict[str, tuple[float, int]]:
     """Each metric's mean over the rows it applies to, with that row count."""
     values: dict[str, list[float]] = {}
     for row in rows:
@@ -110,7 +110,7 @@ def averages(rows: list[dict]) -> dict[str, tuple[float, int]]:
     }
 
 
-def markdown_report(
+def build_markdown_report(
     evaluation: str,
     rows: list[dict],
     means: dict[str, tuple[float, int]],
@@ -135,11 +135,11 @@ def markdown_report(
         "",
         "| Layer | Metric | Mean | Rows | Minimum | |",
         "|---|---|---|---|---|---|",
-        *table_rows(means, thresholds),
+        *build_table_rows(means, thresholds),
     ]
     if failures:
         lines += ["", "### Gate failures", ""] + [f"- {item}" for item in failures]
-    missed = cases_below_minimum(rows, thresholds["minimum"])
+    missed = find_cases_below_minimum(rows, thresholds["minimum"])
     if missed:
         lines += ["", "### Cases below a minimum", ""] + [
             f"- {item}" for item in missed
@@ -147,7 +147,7 @@ def markdown_report(
     return "\n".join(lines) + "\n"
 
 
-def table_rows(
+def build_table_rows(
     means: dict[str, tuple[float, int]], thresholds: dict[str, dict[str, float]]
 ) -> list[str]:
     """One table row per scored metric, grouped by layer, marked ok or fail against
@@ -170,7 +170,7 @@ def table_rows(
     return table
 
 
-def cases_below_minimum(rows: list[dict], minimums: dict[str, float]) -> list[str]:
+def find_cases_below_minimum(rows: list[dict], minimums: dict[str, float]) -> list[str]:
     return sorted(
         {
             f"`{row['case']}` missed `{metric}`"

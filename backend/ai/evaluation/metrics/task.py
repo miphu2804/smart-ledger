@@ -2,7 +2,7 @@ import re
 
 from evaluation.core.schema import Case, MetricResult, Output
 from evaluation.metrics.judge import Judge
-from evaluation.metrics.utils import question_of
+from evaluation.metrics.utils import get_question
 
 UNITS = {
     "tỷ": 1_000_000_000,
@@ -41,29 +41,29 @@ class TaskEvaluator:
         """A judged case is graded by the judge against its rubric, which also leaves
         its verdict in the output; any other case needs every expected figure."""
         if case.truth["judge"]:
-            verdict = await self.judge.verdict(
-                question_of(case), output.values["answer"], case.truth["judge"]
+            verdict = await self.judge.check_answer(
+                get_question(case), output.values["answer"], case.truth["judge"]
             )
             output.values["verdict"] = verdict
             score, explanation = int(verdict["passed"]), verdict["reason"]
         else:
-            missing = self._missing_figures(case, output.values["answer"])
+            missing = self._find_missing_figures(case, output.values["answer"])
             score, explanation = (0 if missing else 1), f"missing: {missing}"
         return [MetricResult(self.layer, "correct", score, case.id, explanation)]
 
     @classmethod
-    def _missing_figures(cls, case: Case, answer: str) -> list[float]:
-        found = cls._numbers_in(answer)
+    def _find_missing_figures(cls, case: Case, answer: str) -> list[float]:
+        found = cls._extract_numbers(answer)
         approximate = case.truth["approximate"]
         return [
             number
             for number in case.truth["numbers"]
-            if not any(cls._matches(number, value, approximate) for value in found)
+            if not any(cls._is_match(number, value, approximate) for value in found)
             and not (number == 0 and NONE_SAID.search(answer.casefold()))
         ]
 
     @classmethod
-    def _numbers_in(cls, answer: str) -> list[float]:
+    def _extract_numbers(cls, answer: str) -> list[float]:
         """Each figure in a Vietnamese answer, with unit words applied.
 
         Dates, times and list markers are dropped first, so the 6 in "tháng 6/2027" or
@@ -103,7 +103,7 @@ class TaskEvaluator:
         return float(f"{number}.{fraction}" if fraction else number)
 
     @staticmethod
-    def _matches(expected: float, value: float, approximate: bool) -> bool:
+    def _is_match(expected: float, value: float, approximate: bool) -> bool:
         expected, value = abs(expected), abs(value)
         if approximate:
             return abs(expected - value) <= expected * 0.001

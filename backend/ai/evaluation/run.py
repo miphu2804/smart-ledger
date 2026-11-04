@@ -29,10 +29,14 @@ app_config.HH_API_KEY = None
 app_config.AGENT_MEMORY_ENABLED = True
 
 from evaluation.agent_chat.agent_chat_eval import AgentChatEval  # noqa: E402
-from evaluation.core.gate import gate_failures, load_thresholds  # noqa: E402
+from evaluation.core.gate import find_gate_failures, load_thresholds  # noqa: E402
 from evaluation.core.honeyhive import sync_scores  # noqa: E402
 from evaluation.core.pipeline import EvaluationPipeline  # noqa: E402
-from evaluation.core.report import averages, markdown_report, report  # noqa: E402
+from evaluation.core.report import (  # noqa: E402
+    build_markdown_report,
+    compute_averages,
+    print_report,
+)
 from evaluation.memory.memory_eval import MemoryEval  # noqa: E402
 from honeyhive import HoneyHive  # noqa: E402
 
@@ -60,7 +64,8 @@ def main() -> None:
     results = asyncio.run(EvaluationPipeline().run(evaluation))
     if not results:
         raise SystemExit("no answers were recorded")
-    rows = report(f"{evaluation.name}-{arguments.name}", results, evaluation.summary)
+    run_name = f"{evaluation.name}-{arguments.name}"
+    rows = print_report(run_name, results, evaluation.summary)
     failures = gate_and_write(arguments, evaluation, rows, thresholds)
     if arguments.sync:
         sync_scores(
@@ -84,11 +89,11 @@ def gate_and_write(
 ) -> list[str]:
     """Compares the means with the `--gate` bounds, writes the `--report` markdown and
     returns the gate's failures."""
-    means = averages(rows)
-    failures = gate_failures(means, thresholds["minimum"], thresholds["maximum"])
+    means = compute_averages(rows)
+    failures = find_gate_failures(means, thresholds["minimum"], thresholds["maximum"])
     if arguments.report:
         arguments.report.write_text(
-            markdown_report(
+            build_markdown_report(
                 evaluation.name,
                 rows,
                 means,

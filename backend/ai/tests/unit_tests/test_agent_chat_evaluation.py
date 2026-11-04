@@ -5,13 +5,13 @@ from types import SimpleNamespace
 import pytest
 from evaluation.agent_chat.agent_chat_eval import AgentChatEval
 from evaluation.core import report as reporting
-from evaluation.core.gate import gate_failures
-from evaluation.core.honeyhive import session_payload, sync_scores
+from evaluation.core.gate import find_gate_failures
+from evaluation.core.honeyhive import build_session_payload, sync_scores
 from evaluation.core.report import (
     LAYERS,
-    averages,
-    markdown_report,
-    report,
+    build_markdown_report,
+    compute_averages,
+    print_report,
 )
 from evaluation.core.schema import Case, CaseResult, MetricResult, Output
 from evaluation.metrics.judge import Judge
@@ -73,7 +73,7 @@ class FakeJudge(Judge):
         super().__init__("chat", 1)
         self.prompts: list[str] = []
 
-    async def rating(self, prompt: str) -> dict:
+    async def rate(self, prompt: str) -> dict:
         self.prompts.append(prompt)
         return {"reason": "fine", "score": 4}
 
@@ -193,7 +193,7 @@ def test_tool_calls_are_read_from_spans_in_order_and_cut_short() -> None:
         ),
     ]
 
-    calls = AgentTarget.tool_calls_in(spans)
+    calls = AgentTarget.extract_tool_calls(spans)
 
     assert calls == [
         {
@@ -202,8 +202,8 @@ def test_tool_calls_are_read_from_spans_in_order_and_cut_short() -> None:
             "result": "x" * RESULT_CHARS,
         }
     ]
-    assert AgentTarget.available_tools_in(spans) == "[defs]"
-    assert AgentTarget.available_tools_in([]) == "[]"
+    assert AgentTarget.extract_available_tools(spans) == "[defs]"
+    assert AgentTarget.extract_available_tools([]) == "[]"
 
 
 async def test_blocked_memory_writes_store_nothing() -> None:
@@ -222,8 +222,8 @@ def test_only_memory_cases_recall() -> None:
     service = memory_service(TestModel(), FakeMemoryRepository())
 
     memory_case = Case("c", {}, {"memory": "Gạo nhập của cô Ba."})
-    assert AgentTarget.memory_for(memory_case, service) is service
-    assert AgentTarget.memory_for(Case("c", {}, {"memory": None}), service) is None
+    assert AgentTarget.select_memory(memory_case, service) is service
+    assert AgentTarget.select_memory(Case("c", {}, {"memory": None}), service) is None
 
 
 async def test_blocked_memory_writes_keep_recall() -> None:
@@ -245,8 +245,8 @@ def test_session_payload_holds_scores_without_spans() -> None:
         ],
     )
 
-    first = session_payload("run-1", "baseline", result)["session"]
-    second = session_payload("run-2", "baseline", result)["session"]
+    first = build_session_payload("run-1", "baseline", result)["session"]
+    second = build_session_payload("run-2", "baseline", result)["session"]
 
     assert first["source"] == "evaluation"
     assert first["metrics"] == {"correct": 1, "recalled_expected": 1}
@@ -319,13 +319,15 @@ def test_averages_skip_rows_a_metric_does_not_apply_to() -> None:
         {"correct": 0, "recalled_expected": None},
     ]
 
-    assert averages(rows) == {"correct": (0.5, 2), "recalled_expected": (1.0, 1)}
+    means = compute_averages(rows)
+
+    assert means == {"correct": (0.5, 2), "recalled_expected": (1.0, 1)}
 
 
 def test_gate_fails_below_a_minimum_or_with_no_row() -> None:
     means = {"correct": (0.85, 20), "tool_choice": (0.95, 20)}
 
-    failures = gate_failures(
+    failures = find_gate_failures(
         means, {"correct": 0.9, "tool_choice": 0.9, "recalled_expected": 1.0}
     )
 
@@ -353,11 +355,11 @@ def test_markdown_report_shows_the_gate_layers_and_missed_cases() -> None:
         },
         {"case": "greeting", "correct": 1},
     ]
-    means = averages(rows)
-    failures = gate_failures(means, {"correct": 0.9})
+    means = compute_averages(rows)
+    failures = find_gate_failures(means, {"correct": 0.9})
     thresholds = {"minimum": {"correct": 0.9}, "maximum": {}}
 
-    markdown = markdown_report("agent_chat", rows, means, thresholds, failures, 3)
+    markdown = build_markdown_report("agent_chat", rows, means, thresholds, failures, 3)
 
     assert markdown.startswith("## agent_chat eval: gate failed")
     assert "2/3 rows" in markdown
@@ -368,10 +370,10 @@ def test_markdown_report_shows_the_gate_layers_and_missed_cases() -> None:
 
 async def test_a_failed_rating_leaves_only_its_metric_out() -> None:
     class FailingJudge(FakeJudge):
-        async def rating(self, prompt: str) -> dict:
+        async def rate(self, prompt: str) -> dict:
             if "faithful" in prompt.casefold():
                 raise RuntimeError("gateway 502")
-            return await super().rating(prompt)
+            return await super().rate(prompt)
 
     outputs = {
         "answer": "Dạ, 12.500.000đ.",
@@ -415,8 +417,8 @@ def test_report_rows_keep_the_tool_calls_metric(tmp_path, monkeypatch) -> None:
         ],
     )
 
-    rows = report("test", [result])
+    rows = print_report("test", [result])
 
     assert rows[0]["tool_calls"] == 1
     assert rows[0]["tool_call_log"] == [call()]
-    assert averages(rows)["tool_calls"] == (1.0, 1)
+    assert compute_averages(rows)["tool_calls"] == (1.0, 1)

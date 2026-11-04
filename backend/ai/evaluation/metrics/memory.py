@@ -2,7 +2,7 @@ import json
 
 from evaluation.core.schema import Case, MetricResult, Output
 from evaluation.metrics.judge import Judge
-from evaluation.metrics.utils import question_of
+from evaluation.metrics.utils import get_question
 
 
 class MemoryEvaluator:
@@ -17,19 +17,19 @@ class MemoryEvaluator:
         if case.truth["memory"] is None:
             return []
         recalled = MetricResult(
-            self.layer, "recalled_expected", self._recalled(case, output), case.id
+            self.layer, "recalled_expected", self._score_recalled(case, output), case.id
         )
         relevance = await self.judge.rate_metric(
             self.layer,
             "context_relevance",
-            self._relevance_prompt(case, output),
+            self._build_relevance_prompt(case, output),
             case,
             output,
         )
         return [recalled] + ([relevance] if relevance else [])
 
     @staticmethod
-    def _recalled(case: Case, output: Output) -> int:
+    def _score_recalled(case: Case, output: Output) -> int:
         """Whether the recall returned the fact the case can only be answered from."""
         return int(
             any(
@@ -39,14 +39,14 @@ class MemoryEvaluator:
         )
 
     @staticmethod
-    def _relevance_prompt(case: Case, output: Output) -> str:
+    def _build_relevance_prompt(case: Case, output: Output) -> str:
         """Context Relevance, of the memories recalled."""
         retrieved = json.dumps(output.values["memories"], ensure_ascii=False)
         return f"""[Criteria]
 The context fetched by the retriever should be relevant to the user's initial query.
 
 [The Start of User's Query]
-{question_of(case)}
+{get_question(case)}
 [The End of User's Query]
 
 [The Start of Retriever's Context]

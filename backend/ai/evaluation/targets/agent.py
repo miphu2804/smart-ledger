@@ -59,7 +59,7 @@ class AgentTarget:
     async def ask(self, case: Case) -> Output:
         """Asks the question, then the follow-up in the same conversation if there is
         one; the output describes the last turn."""
-        self.agent.memory = self.memory_for(case, self.memory)
+        self.agent.memory = self.select_memory(case, self.memory)
         inputs = case.inputs
         questions = [inputs["question"], inputs["follow_up"]]
         conversation_id = None
@@ -72,7 +72,7 @@ class AgentTarget:
         return Output(values)
 
     @staticmethod
-    def memory_for(case: Case, memory: WithoutMemoryWrites | AgentMemoryService):
+    def select_memory(case: Case, memory: WithoutMemoryWrites | AgentMemoryService):
         """Recall runs only in the memory cases.
 
         The seeded facts would otherwise lead every other case's prompt, because recall
@@ -97,7 +97,7 @@ class AgentTarget:
             if isinstance(event, ToolStarted):
                 tools.append(event.name)
             elif isinstance(event, MemoryRecalled):
-                memories = self._recalled_memories(event)
+                memories = self._extract_recalled_memories(event)
             elif isinstance(event, TextDelta):
                 reply += event.text
             elif isinstance(event, Reset):
@@ -112,8 +112,8 @@ class AgentTarget:
         values = {
             "answer": reply,
             "tools": tools,
-            "tool_calls": self.tool_calls_in(spans),
-            "available_tools": self.available_tools_in(spans),
+            "tool_calls": self.extract_tool_calls(spans),
+            "available_tools": self.extract_available_tools(spans),
             "memories": memories,
             "seconds": round(time.monotonic() - started, 2),
             "model": model,
@@ -121,7 +121,7 @@ class AgentTarget:
         return values, conversation_id
 
     @staticmethod
-    def _recalled_memories(event: MemoryRecalled) -> list[dict]:
+    def _extract_recalled_memories(event: MemoryRecalled) -> list[dict]:
         return [
             {
                 "id": memory.id,
@@ -180,7 +180,7 @@ class AgentTarget:
         )
 
     @staticmethod
-    def tool_calls_in(spans: list) -> list[dict]:
+    def extract_tool_calls(spans: list) -> list[dict]:
         """The tool calls of the turn in order, each result cut short."""
         return [
             {
@@ -195,7 +195,7 @@ class AgentTarget:
         ]
 
     @staticmethod
-    def available_tools_in(spans: list) -> str:
+    def extract_available_tools(spans: list) -> str:
         """The tool definitions the model was given, as its first request had them."""
         return next(
             (

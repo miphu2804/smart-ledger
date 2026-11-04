@@ -63,11 +63,11 @@ class CachingEmbedder:
             batch = missing[start : start + BATCH]
             result = await embed(batch)
             for one, vector in zip(batch, result.embeddings, strict=True):
-                self.vectors[f"{kind}|{one}"] = self._unit(vector)
+                self.vectors[f"{kind}|{one}"] = self._normalize(vector)
             print(f"embedded {len(self.vectors)} texts", file=sys.stderr)
 
     @staticmethod
-    def _unit(vector: list[float]) -> list[float]:
+    def _normalize(vector: list[float]) -> list[float]:
         """`vector` scaled to length 1, so a dot product is the cosine pgvector uses."""
         norm = math.sqrt(sum(x * x for x in vector)) or 1.0
         return [x / norm for x in vector]

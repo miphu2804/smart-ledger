@@ -50,7 +50,7 @@ class MemoryTarget:
         )
         try:
             for shop in self.shops:
-                await self._create(shop)
+                await self._create_shop(shop)
         except BaseException:
             await self.__aexit__()
             raise
@@ -78,7 +78,7 @@ class MemoryTarget:
             {"recalled": [created["positions"][item.id] for item in recalled]}
         )
 
-    async def _create(self, shop: dict) -> None:
+    async def _create_shop(self, shop: dict) -> None:
         """Makes the owner and shop, stores the memories and maps their ids."""
         owner, shop_id, conversation = self._insert_rows(shop["shop"])
         # Recorded before the memories go in, so a failure still deletes this shop.

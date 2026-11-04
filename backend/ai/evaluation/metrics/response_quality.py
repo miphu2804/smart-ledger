@@ -10,12 +10,12 @@ class ResponseQualityEvaluator:
 
     async def evaluate(self, case: Case, output: Output) -> list[MetricResult]:
         rated = await self.judge.rate_metric(
-            self.layer, "answer_faithfulness", self._prompt(output), case, output
+            self.layer, "answer_faithfulness", self._build_prompt(output), case, output
         )
         return [rated] if rated else []
 
     @staticmethod
-    def _prompt(output: Output) -> str:
+    def _build_prompt(output: Output) -> str:
         """Answer Faithfulness, against the tool results and the recalled memories."""
         values = output.values
         context = [call["result"] for call in values["tool_calls"]]

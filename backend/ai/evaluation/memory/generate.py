@@ -286,7 +286,7 @@ def make_shop(
     return Shop(memories, rng.sample(PREFERENCES, rng.randint(1, 3))), paraphrase
 
 
-def query_for(
+def make_query(
     rng: random.Random, memory: Memory, half: str, form: str, paraphrase: dict
 ) -> Query | None:
     spec = QUERIES[memory.relation]
@@ -309,7 +309,7 @@ def query_for(
     return Query(text, form, gold, stale, memory.relation)
 
 
-def build(
+def build_shop(
     seed: int,
     half: str,
     size: int,
@@ -336,7 +336,7 @@ def build(
             shop.history.append(Query(rng.choice(NO_MEMORY[half]), "none", None))
             continue
         memory = rng.choices(order, weights)[0]
-        q = query_for(
+        q = make_query(
             rng, memory, half, rng.choice(["lex", "lex", "unacc", "sem"]), paraphrase
         )
         if q:
@@ -347,7 +347,7 @@ def build(
         if rng.random() < 0.15:
             shop.queries.append(Query(rng.choice(NO_MEMORY[half]), "none", None))
             continue
-        q = query_for(rng, rng.choice(roots), half, rng.choice(forms), paraphrase)
+        q = make_query(rng, rng.choice(roots), half, rng.choice(forms), paraphrase)
         if q:
             shop.queries.append(q)
     return shop
@@ -357,14 +357,14 @@ CASES_FILE = Path(__file__).with_name("cases.jsonl")
 # The split held out while the ranking was chosen (ADR-0002): seeds 1001-1008 on the
 # half B lexicon, so a run compares with the ADR's numbers.
 SHOPS = [
-    (f"{seed}-B-{size}-{int(age)}", build(seed, "B", size, max_age=age))
+    (f"{seed}-B-{size}-{int(age)}", build_shop(seed, "B", size, max_age=age))
     for seed in range(1001, 1009)
     for size in (15, 40, 120)
     for age in (30.0, 180.0)
 ]
 
 
-def shop_line(key: str, shop: Shop) -> str:
+def format_shop_line(key: str, shop: Shop) -> str:
     """One shop as a JSON line: its memories and the queries that need one of them.
 
     A memory's id is its position in the shop, and a query's `gold` and `stale` are
@@ -399,7 +399,8 @@ def shop_line(key: str, shop: Shop) -> str:
 
 
 def main() -> None:
-    CASES_FILE.write_text("".join(shop_line(key, shop) + "\n" for key, shop in SHOPS))
+    lines = [format_shop_line(key, shop) + "\n" for key, shop in SHOPS]
+    CASES_FILE.write_text("".join(lines))
 
 
 if __name__ == "__main__":

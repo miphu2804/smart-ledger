@@ -41,7 +41,7 @@ class Judge:
         self.alias = alias
         self.shop_id = shop_id
 
-    async def verdict(self, question: str, answer: str, rubric: str) -> dict:
+    async def check_answer(self, question: str, answer: str, rubric: str) -> dict:
         """Grades an answer against its rubric: `passed` and a `reason`."""
         return await self._grade(
             Verdict,
@@ -49,7 +49,7 @@ class Judge:
             f"Câu hỏi: {question}\n\nTiêu chí: {rubric}\n\nCâu trả lời:\n{answer}",
         )
 
-    async def rating(self, prompt: str) -> dict:
+    async def rate(self, prompt: str) -> dict:
         """Rates 1 to 5 against a prompt adapted from a HoneyHive evaluator template:
         a `score` and a `reason`."""
         return await self._grade(Rating, RATING_INSTRUCTIONS, prompt)
@@ -66,7 +66,7 @@ class Judge:
         still fails the gate.
         """
         try:
-            rating = await self.rating(prompt)
+            rating = await self.rate(prompt)
         except Exception as error:
             output.values.setdefault("judge_errors", {})[name] = repr(error)
             return None

@@ -1,5 +1,5 @@
 import pytest
-from evaluation.core.report import averages
+from evaluation.core.report import compute_averages
 from evaluation.core.schema import Case, Output
 from evaluation.metrics.recall import RecallEvaluator
 
@@ -53,7 +53,7 @@ async def test_means_over_rows_are_the_shares_the_gate_reads() -> None:
         await scores_of([3], 1, "sem", stale=3),
     ]
 
-    means = averages(rows)
+    means = compute_averages(rows)
 
     assert means["recall"] == (2 / 3, 3)
     assert means["recall_lex"] == (1.0, 2)

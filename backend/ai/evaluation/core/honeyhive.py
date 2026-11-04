@@ -9,7 +9,7 @@ from honeyhive.models import (
 )
 
 
-def session_payload(run_id: str, name: str, result: CaseResult) -> dict:
+def build_session_payload(run_id: str, name: str, result: CaseResult) -> dict:
     """One case as a session of the run: inputs, outputs and scores, no spans."""
     case, attempt = result.case.id, result.case.inputs["attempt"]
     outputs = result.output.values
@@ -44,7 +44,9 @@ def sync_scores(client: HoneyHive, name: str, results: list[CaseResult]) -> None
         )
     )
     session_ids = [
-        client.sessions.start(session_payload(run.run_id, name, result)).session_id
+        client.sessions.start(
+            build_session_payload(run.run_id, name, result)
+        ).session_id
         for result in results
     ]
     client.experiments.update_run(
@@ -71,6 +73,6 @@ def print_sync_plan(name: str, cases: list[Case]) -> None:
     print(f"would create run agent-chat-{name}, then log one session per datapoint:")
     print(
         json.dumps(
-            session_payload("<run_id>", name, first), ensure_ascii=False, indent=1
+            build_session_payload("<run_id>", name, first), ensure_ascii=False, indent=1
         )
     )

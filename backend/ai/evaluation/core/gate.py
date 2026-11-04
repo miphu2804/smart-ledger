@@ -12,7 +12,7 @@ def load_thresholds(path: Path | None) -> dict[str, dict[str, float]]:
     }
 
 
-def gate_failures(
+def find_gate_failures(
     means: dict[str, tuple[float, int]],
     minimums: dict[str, float],
     maximums: dict[str, float] | None = None,
