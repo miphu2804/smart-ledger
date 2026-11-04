@@ -263,6 +263,8 @@ On the VPS the deploy sets the HoneyHive values from Dopbase ([AI tracing settin
 
 ## Run
 
+`uv run` runs a command in this folder's virtual environment and syncs it first; a `.py` file runs directly (`uv run evaluation/run.py`), and only a module needs `python -m` (`uv run python -m src.main`).
+
 ```bash
 uv sync --group dev
 cp .env.example .env
@@ -291,3 +293,15 @@ uv run pytest
 ```
 
 `pre-commit` runs Ruff (lint, import order and format) on commit. The live draft test runs only when asked: `RUN_LIVE_MODEL_TESTS=1 uv run pytest tests/integration_tests/test_draft_parse_live.py`.
+
+## Scripts
+
+```bash
+export LOG_LEVEL=WARNING                         # hide the app's info logs
+uv run evaluation/run.py agent_chat --dry-run    # eval plan only: no model call, nothing sent
+uv run evaluation/run.py agent_chat              # chat eval, calls the chat and judge models
+uv run evaluation/run.py memory                  # memory recall eval on the local database
+uv run evaluation/memory/generate.py             # regenerate the memory eval's cases.jsonl
+```
+
+See [Evaluation](evaluation/README.md) for the options.
