@@ -186,10 +186,11 @@ Check: the CLI schemas validate every evaluator, chart and alert file, including
 
 Check: `scripts/secrets/check-templates.sh` passes; `scripts/secrets/apply.sh dev dev` listed only `+ USER_RATE_LIMIT_ENABLED` in Core, the six removed AI keys and no change for mobile, then wrote the three files with `.bak` backups; `secrets/dev/env/.env.ai` no longer holds the removed keys. Commit: the one that adds this entry.
 
-### 2026-11-01 — Playwright covers the main mobile flows
+### 2026-11-02 — User flow map of the mobile app in docs
 
 | Area | Change |
 |---|---|
-| Test | • `e2e/` gains specs for sign-up, sales and payment, invoices, products, debts, expenses, home and reports, notifications, and account (#439 to #448), with shared steps in `e2e/helpers.ts` |
+| Docs | • `docs/product/userflow/index.html` is a dark pannable map of the mobile app's user flows with screenshots, decisions, system steps and red failure edges; clicking a node opens its source file, FR codes and next hops; it opens straight from disk like the credential map and targets desktop screens only<br>• Six flows follow the current navigation on `staging`: sign-in and shop setup, selling and checkout, orders with reports and notifications, the Bobi tab, the Quản lý tab, and the quick menu with shop switching; the removed mascot "Gợi ý" path is gone<br>• All 40 screenshots are taken on `staging` with the test account on "Tiệm Test Team", using real orders #27282 (debt), #27283 and #27284 (voice order typed through "Nhập tay") and one real Bobi answer; barcode scanning, email verification, shop setup and stock-in stay as step nodes without a picture, with a note saying why<br>• The folder README says how to open, rebuild and retake screenshots; the docs map links it |
+| Web | • The page source lives in `src/userflow`; `npm run userflow` builds it into the docs folder as one file with script, styles and font inlined, because browsers refuse module scripts and fonts from `file://`; the web app's own build does not include it |
 
-Check: `npx playwright test` twice in a row, 23/23 both times on the mock web build with a cleared cache; `npx tsc --noEmit` passes; no app bug found. Not covered: real Core, a real phone, voiding an order, stock-in, paying a debt in full, deleting an expense, clearing all notifications. Commit: the one that adds this entry.
+Check: `npm run typecheck`, `npm run lint` and `npm run build` pass in `frontend/web`, and `dist` holds no userflow file; headless Chrome opened `index.html` over `file://` for all six flows with every screenshot loaded (52 of 52) and the Geist font active; the design skill's inspector rendered all six flows at 1440 and 768 px with no layout failure. The three test orders and the Bobi conversation stay on the staging test shop. `staff` and `printer` are left out because the app has no way to reach them. Commit: the one that adds this entry.
