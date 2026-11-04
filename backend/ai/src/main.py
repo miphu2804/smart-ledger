@@ -115,7 +115,7 @@ def build_sandbox() -> Sandbox | None:
 
 
 def build_llm_router(
-    factory: LLMFactory, decisions: httpx.AsyncClient
+    factory: LLMFactory, decisions: httpx.AsyncClient, observability: Observability
 ) -> LLMRouterService | None:
     url = app_config.TIER_CLASSIFIER_URL
     models = {
@@ -134,6 +134,7 @@ def build_llm_router(
         model=app_config.TIER_CLASSIFIER_MODEL,
         instructions=TIER_CLASSIFIER_PROMPT,
         descriptions=TIER_DESCRIPTIONS,
+        observability=observability,
     )
     return LLMRouterService(
         classifier,
@@ -227,7 +228,11 @@ async def lifespan(app: FastAPI):
         if app_config.MODEL_TIERING_ENABLED and chat_model is not None
         else None
     )
-    llm_router = build_llm_router(factory, decisions) if decisions is not None else None
+    llm_router = (
+        build_llm_router(factory, decisions, observability)
+        if decisions is not None
+        else None
+    )
     conversations = AgentConversationRepository(postgres)
     app.state.conversations = conversations
     shop_data = build_shop_data(reader)
