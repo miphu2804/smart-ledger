@@ -83,12 +83,12 @@ function ScreenButtons({
 /**
  * Thẻ nút mở màn hình, đặt riêng dưới bong bóng trả lời (`splitActions` tách khối ```actions ra khỏi
  * chữ), để nút không chen vào nội dung câu trả lời. Nút tím như bong bóng câu hỏi, không nhãn, để tách
- * khỏi bong bóng trả lời trắng.
+ * khỏi bong bóng trả lời trắng. `style` cho nơi câu trả lời không nằm trong bong bóng có lề, như bảng hỏi trợ lý.
  */
-export function ScreenActions({ screens }: { screens: AppScreen[] }) {
+export function ScreenActions({ screens, style }: { screens: AppScreen[]; style?: StyleProp<ViewStyle> }) {
   if (!screens.length) return null;
   return (
-    <View style={styles.actionsCard}>
+    <View style={[styles.actionsCard, style]}>
       <ScreenButtons screens={screens} variant="primary" style={styles.actionsInCard} />
     </View>
   );
