@@ -2516,6 +2516,7 @@ dependencies = [
 dev = [
     { name = "httpx" },
     { name = "pytest" },
+    { name = "rich" },
     { name = "ruff" },
 ]
 memory = [
@@ -2541,6 +2542,7 @@ requires-dist = [
 dev = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "pytest", specifier = ">=8.3" },
+    { name = "rich", specifier = ">=15.0.0" },
     { name = "ruff", specifier = ">=0.8" },
 ]
 memory = [{ name = "sentence-transformers", specifier = ">=5" }]

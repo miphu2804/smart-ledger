@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from evaluation.core.render import Table, markdown_table, print_table
 from evaluation.core.schema import CaseResult
 
 RESULTS = Path(__file__).resolve().parents[1] / "results"
@@ -51,21 +52,20 @@ def build_rows(results: list[CaseResult]) -> list[dict]:
 
 
 def print_report(
-    name: str, results: list[CaseResult], summary: tuple[str, ...] = ()
+    name: str,
+    results: list[CaseResult],
+    summary: tuple[str, ...] = (),
+    thresholds: dict[str, dict[str, float]] | None = None,
 ) -> list[dict]:
     """Prints each case's passes of the `summary` metrics across its repeats, then each
-    layer's means, and keeps every row locally so a run can be read without opening
-    HoneyHive."""
+    layer's means against the `thresholds` bounds, and keeps every row locally so a run
+    can be read without opening HoneyHive."""
     rows = build_rows(results)
     if summary:
-        print_cases(rows, summary)
-    print_layers(compute_averages(rows))
-    first = rows[0]
-    if "model" in first:
-        print(
-            f"model {first['model']}, prompt {first['prompt_version']}, "
-            f"suite {first['suite_version']}"
-        )
+        print_table(build_cases_table(rows, summary))
+    print_table(build_layers_table(compute_averages(rows), thresholds))
+    if versions := describe_versions(rows[0]):
+        print(versions)
     RESULTS.mkdir(exist_ok=True)
     (RESULTS / f"{name}.json").write_text(
         json.dumps(rows, ensure_ascii=False, indent=1) + "\n"
@@ -73,28 +73,66 @@ def print_report(
     return rows
 
 
-def print_layers(means: dict[str, tuple[float, int]]) -> None:
-    for layer, metrics in LAYERS.items():
-        shown = [
-            f"{metric} {means[metric][0]:.2f}" for metric in metrics if metric in means
-        ]
-        if shown:
-            print(f"{layer}: " + ", ".join(shown))
+def describe_versions(row: dict) -> str:
+    """The model, prompt and suite a row was produced with; empty for an evaluation
+    that has none."""
+    if "model" not in row:
+        return ""
+    return (
+        f"model {row['model']}, prompt {row['prompt_version']}, "
+        f"suite {row['suite_version']}"
+    )
 
 
-def print_cases(rows: list[dict], summary: tuple[str, ...]) -> None:
+def build_cases_table(rows: list[dict], summary: tuple[str, ...]) -> Table:
     """Per case, the passes of each `summary` metric over its repeats, and the slowest
     repeat."""
     by_case: dict[str, list[dict]] = {}
     for row in rows:
         by_case.setdefault(row["case"], []).append(row)
+    table_rows = []
     for case, attempts in by_case.items():
-        tallies = " ".join(
+        tallies = [
             f"{sum(row[metric] for row in attempts)}/{len(attempts)}"
             for metric in summary
-        )
+        ]
         slowest = max(row["seconds"] for row in attempts)
-        print(f"{tallies} {slowest:>6}s {case}")
+        table_rows.append([*tallies, f"{slowest:.2f}", case])
+    return Table("Cases", [*summary, "slowest (s)", "case"], table_rows)
+
+
+def build_layers_table(
+    means: dict[str, tuple[float, int]],
+    thresholds: dict[str, dict[str, float]] | None = None,
+) -> Table:
+    """One row per scored metric, grouped by layer, with its bound and PASS or FAIL
+    when the metric is gated."""
+    minimums = (thresholds or {}).get("minimum", {})
+    maximums = (thresholds or {}).get("maximum", {})
+    table_rows = []
+    for layer, metrics in LAYERS.items():
+        for metric in (name for name in metrics if name in means):
+            mean, count = means[metric]
+            bound, status = _describe_bound(
+                mean, minimums.get(metric), maximums.get(metric)
+            )
+            table_rows.append([layer, metric, f"{mean:.2f}", str(count), bound, status])
+    return Table(
+        "Metrics by layer",
+        ["layer", "metric", "mean", "rows", "bound", "status"],
+        table_rows,
+    )
+
+
+def _describe_bound(
+    mean: float, minimum: float | None, maximum: float | None
+) -> tuple[str, str]:
+    """The bound as text and PASS or FAIL against it; empty for an ungated metric."""
+    if minimum is not None:
+        return f">= {minimum:.2f}", "PASS" if mean >= minimum else "FAIL"
+    if maximum is not None:
+        return f"<= {maximum:.2f}", "PASS" if mean <= maximum else "FAIL"
+    return "", ""
 
 
 def compute_averages(rows: list[dict]) -> dict[str, tuple[float, int]]:
@@ -133,9 +171,7 @@ def build_markdown_report(
         "",
         f"{versions}{len(rows)}/{expected_rows} rows.",
         "",
-        "| Layer | Metric | Mean | Rows | Minimum | |",
-        "|---|---|---|---|---|---|",
-        *build_table_rows(means, thresholds),
+        markdown_table(build_layers_table(means, thresholds)),
     ]
     if failures:
         lines += ["", "### Gate failures", ""] + [f"- {item}" for item in failures]
@@ -145,29 +181,6 @@ def build_markdown_report(
             f"- {item}" for item in missed
         ]
     return "\n".join(lines) + "\n"
-
-
-def build_table_rows(
-    means: dict[str, tuple[float, int]], thresholds: dict[str, dict[str, float]]
-) -> list[str]:
-    """One table row per scored metric, grouped by layer, marked ok or fail against
-    its bound when it has one."""
-    minimums, maximums = thresholds["minimum"], thresholds["maximum"]
-    table = []
-    for layer, metrics in LAYERS.items():
-        for metric in (name for name in metrics if name in means):
-            mean, count = means[metric]
-            minimum, maximum = minimums.get(metric), maximums.get(metric)
-            mark = ""
-            shown = ""
-            if minimum is not None:
-                mark, shown = ("ok" if mean >= minimum else "fail"), f"{minimum:g}"
-            elif maximum is not None:
-                mark, shown = ("ok" if mean <= maximum else "fail"), f"max {maximum:g}"
-            table.append(
-                f"| {layer} | `{metric}` | {mean:.2f} | {count} | {shown} | {mark} |"
-            )
-    return table
 
 
 def find_cases_below_minimum(rows: list[dict], minimums: dict[str, float]) -> list[str]:

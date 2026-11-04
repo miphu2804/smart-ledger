@@ -38,7 +38,9 @@ class AgentChatEval:
     # question asked 3 times.
     summary = ("correct", "tool_choice")
 
-    def __init__(self, repeats: int, judge_alias: str) -> None:
+    def __init__(
+        self, repeats: int, judge_alias: str, model_alias: str | None = None
+    ) -> None:
         require_local_database(app_config.POSTGRES_URL, app_config.AI_SQL_READER_URL)
         self.definition = load_yaml(DIRECTORY / "cases.yaml")
         self.shop_id = self.definition["shop_id"]
@@ -46,7 +48,10 @@ class AgentChatEval:
         self.cases = self._load_cases(repeats)
         judge = Judge(judge_alias, self.shop_id)
         self.target = AgentTarget(
-            self.cases[0].inputs["owner_id"], self.shop_id, self.definition["memories"]
+            self.cases[0].inputs["owner_id"],
+            self.shop_id,
+            self.definition["memories"],
+            model_alias,
         )
         self.evaluators = [
             TaskEvaluator(judge),

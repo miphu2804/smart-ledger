@@ -1,3 +1,11 @@
+### 2026-11-04 — Readable eval output and a simpler eval README
+
+| Area | Change |
+|---|---|
+| AI | • `evaluation/core/render.py` renders a `Table` to the terminal with rich and to markdown; the eval report prints a progress bar, a per-case table and a metrics table with bounds and PASS or FAIL<br>• A run logs `WARNING` and above unless `--verbose` or `LOG_LEVEL` is set; `--model ALIAS` runs the agent on another alias while the judge keeps `chat`<br>• A run gates on the evaluation's own `thresholds.toml` by default; `--gate` picks another file |
+| Docs | • The three evaluation READMEs are rewritten short: the plain command first, options after, then the files to touch for common changes |
+
+Check: unit tests 456 passed, ruff check and format pass; `uv run evaluation/run.py memory` with no flags shows 5 PASS rows and exits 0, recall 0.8601516427969671, local database rows equal before and after; a stricter `--gate` file exits with `gate failed: recall: 0.86 < 0.99`; `agent_chat --dry-run` prints no INFO line and the same plan as before. Not verified: a paid `agent_chat` run with `--model`. Commit: the one that adds this entry.
 ### 2026-11-04 — Chat turns pick their model by complexity
 
 | Area | Change |
@@ -17,6 +25,15 @@ Check: unit tests 457 passed, ruff check and format pass; startup wiring checked
 | Docs | • `evaluation/README.md` explains the layout and how to add an evaluation; ADR-0002, ADR-0008, ADR-0009, `ci-cd.md`, `.honeyhive/README.md` and the AI README point at the new paths |
 
 Check: `agent_chat --dry-run` prints the same plan as before except `suite_version`, which moves from `7a34fe0c0744` to `f459b4c569b6` because the SQL in `cases.yaml` lost its stray indentation and trailing spaces (the expected values are unchanged); `memory --gate` gives recall 0.860, by form 0.951 / 0.899 / 0.627, stale-only 0.039, equal to the numbers ADR-0002 recorded, and leaves no row in the local database; unit tests 452 passed; ruff check and format pass. Not verified: a full paid `agent_chat` run, `--sync`, and the CI workflow. Commit: the one that adds this entry.
+
+### 2026-11-04 — Assistant chats wait with the thought line again
+
+| Area | Change |
+|---|---|
+| Mobile | • The Trợ lý screen and the quick-ask sheet show the thought line (`ThoughtLine`: rotating waiting phrases and tool step labels) again instead of the three typing dots<br>• Restored `ThoughtLine`, the waiting phrases and tool step labels with their tests; removed `TypingDots`<br>• Kept the shared `ChatComposer` and answers without the Bobi icon and label |
+| Docs | • `api-contracts.md` and `AC-118` describe the thought line again |
+
+Check: `tsc` reports no error in `src` (only the missing `@playwright/test` module in `e2e/`); `node --test tests/thinkingPhrases.test.ts tests/toolSteps.test.ts` passes 9/9. Not verified on a device.
 
 ### 2026-11-04 — Assistant chats wait with dots and share one composer
 
@@ -172,17 +189,6 @@ Check: `ansible-playbook --syntax-check` passes and the patch applies cleanly to
 | Test | • `e2e/legal-links.spec.ts` checks the three links<br>• `test:e2e` now starts Metro with `--clear`: with `node_modules` shared between worktrees the cached router path served another worktree's screens, so the check recorded for #461 did not hold |
 
 Check: `npx playwright test` 4/4 with a cleared cache, on the code of #420, #421, #458, #459, #460 and #461 together; `npx tsc --noEmit` passes; unit tests 182/184, with `parseOrder` and `quickNav` failing on `staging` too; web lint, `tsc -b` and `vite build` pass. Not verified: a real phone, the Data safety answers against the production AAB, and Minh Thọ's review. Commit: the one that adds this entry.
-
-### 2026-11-01 — HoneyHive replaces Logfire for AI traces
-
-| Area | Change |
-|---|---|
-| AI | • `src/observability.py` sends Pydantic AI spans to HoneyHive when `HH_API_KEY` is set, with message and tool content but no raw media (`NFR-008` now allows it); `InputRedaction` runs before the session opens, so the question, history and memory reach HoneyHive redacted<br>• Each chat turn is one HoneyHive session: it opens with the redacted question, `user_id`, `shop_id`, model and `prompt_version` (12 hex characters of the instructions' SHA-256), and closes with the answer and token counts; the calls run in the background, so the owner never waits on HoneyHive; tracing starts in `lifespan`, not at import, so tests (which clear `HH_API_KEY`) send nothing; on shutdown `lifespan` waits for memory writes and session updates, then flushes queued spans<br>• INFO and WARNING logs keep only tool names, call ids, sizes and error codes; SQL, tool results, error reasons and memory tracebacks log at DEBUG; session updates wait for the session to exist; `prompt_version` also hashes the tool definitions<br>• `AppConfig` gains `HH_API_KEY`, `HH_API_URL`, `HH_SOURCE`; `logfire`, `redis`, `REDIS_URL` and `LANGFUSE_*` are gone<br>• `evaluation/agent_chat` scores the real agent on 21 questions of a made-up shop, 3 times each; the seed sells at 00:30 and 23:30 shop time and has discounts, voided sales, repaid debts and an archived product, number cases must match SQL exactly, and a model judges the low-stock, out-of-scope and top-product cases; each run records model, `prompt_version` and `suite_version`<br>• `evaluation/honeyhive` holds two online Python evaluators, `query-error` on `query_shop_data` calls and `internal-leak` on each session's answer, and three daily alerts on a p95 turn above 20 seconds, a query error rate above 20% and more than five failed turns, all applied by `apply.py`<br>• A failed, timed-out or cancelled turn marks its session `metadata.error`; sessions carry `git_sha` and, when streamed, `first_text_ms`; `HH_SAMPLE_RATE` traces a share of turns; memory spans carry `shop_id` and embeddings are traced; a refused session logs a warning, and shutdown waits for session updates before the flush and then stops the tracer<br>• `first_text_ms` counts from the turn's arrival, memory recall included, and covers turns that stream nothing; session updates run on two HoneyHive threads instead of the default pool; the SDK's warning for each span of an unsampled turn is filtered; the alerts watch `source` `production` only |
-| Deploy | • The workflow and compose file no longer write `github.ai.env` or `REDIS_URL`; the `HH_*` values come from Dopbase `ai/<environment>`; `deploy-backend.yml` builds the deployed commit into the AI image as `GIT_SHA`; the VPS compose file gives the AI container 60 seconds to stop, so a flush is not killed at Docker's 10-second default |
-| Web | • The `/chinh-sach` policy page names HoneyHive and what it receives in the AI section and the processor list, and drops Redis Cloud |
-| Docs | • ADR-0009 accepted for the AI side; AI README, technical design, CI/CD and env guides, service walkthrough, the architecture and CI/CD diagrams and the credential map name HoneyHive and Bifrost and drop Redis and Langfuse |
-
-Check: `uv run pytest` (459 passed, including a turn outside the sample leaving no SDK warning, session updates off the default pool and the first-words timer, plus concurrent turns keeping their own sessions, failed and cancelled turns marking their session, and every fake tracer call binding to the real SDK signature) and ruff passed; real turns on the local database reached HoneyHive with their session, model and tool events, the local capture found the content in the OTLP bytes with email and card numbers redacted; the evaluation (suite `526027def191`, prompt `c0447592b804`) passed all 62 recorded turns of 63, and one turn dropped on a network `ReadError`, which the run reports as a failure; the judge passed the right answers and failed the four wrong ones that the earlier regex scoring accepted, and each seed trap changes the expected figure; both online evaluators are on the HoneyHive project, scored stored and crafted events correctly on HoneyHive's server, and scored a new local chat turn within about two minutes; a local turn then showed `git_sha`, `first_text_ms` and memory spans with `shop_id`, a timed-out turn showed `metadata.error = answer_timeout`, and a session closed three seconds late with leaked SQL scored `internal-leak = True`; the three alerts were deleted in the HoneyHive UI and recreated by `apply.py` with the `production` filter, and have not run yet; `tsc --noEmit` passed on the web app. Dopbase `ai/staging` and `ai/production` hold `HH_API_KEY`, `HH_API_URL` and `HH_SOURCE` and no longer hold `LOGFIRE_*`, `REDIS_URL` or `LANGFUSE_*`, and the credential map was regenerated; neither environment is deployed yet, and `evaluation/agent_chat/results/` stays out of Git. Commit: the one that adds this entry.
 
 ### 2026-11-01 — Playwright covers the main mobile flows
 
