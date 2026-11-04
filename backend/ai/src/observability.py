@@ -107,9 +107,10 @@ class Observability:
         user_id: int,
         conversation_id: int | None,
         question: str,
-        versions: dict[str, str],
+        metadata: dict[str, str | int],
     ) -> None:
-        """Group this turn's spans under a new session that opens with the question."""
+        """Group this turn's spans under a new session that opens with the question and
+        `metadata`, such as the model, the prompt version and the history read time."""
         if self._tracer is None:
             return
         if random.random() >= self._sample_rate:
@@ -134,7 +135,7 @@ class Observability:
                 metadata={
                     "shop_id": shop_id,
                     "conversation_id": conversation_id,
-                    **versions,
+                    **metadata,
                     "git_sha": self._git_sha,
                 },
                 user_properties={"user_id": user_id},

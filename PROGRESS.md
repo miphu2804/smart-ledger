@@ -1,3 +1,11 @@
+### 2026-11-04 — Trace the untimed steps of a chat turn
+
+| Area | Change |
+|---|---|
+| AI | • HoneyHive sessions carry `history_ms`, the time to read the conversation history before the session opens<br>• New `memory enabled` and `save turn` spans time the memory switch read and the exchange save, so the turn's untraced gap splits into named steps |
+
+Check: 475 unit tests and ruff pass; two real turns on `smartledger-local-db` recorded history 0 and 26 ms, memory enabled 81 and 3 ms, memory recall 1015 and 1753 ms, save turn 44 and 33 ms. Not verified: production timings, which need the deploy. Commit: the one that adds this entry.
+
 ### 2026-11-04 — Tier classifier tokens reach HoneyHive
 
 | Area | Change |

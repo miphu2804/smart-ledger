@@ -116,6 +116,7 @@ class RecordingTracer:
         self.enrichments_at_flush: int | None = None
         self.stopped = False
         self.threads: set[str] = set()
+        self.spans: list[dict] = []
 
     async def acreate_session(self, **kwargs) -> str | None:
         self.sessions.append(kwargs)
@@ -124,6 +125,14 @@ class RecordingTracer:
     def enrich_session(self, **kwargs) -> None:
         self.enrichments.append(kwargs)
         self.threads.add(threading.current_thread().name)
+
+    @contextmanager
+    def trace(self, name, event_type=None, **kwargs):
+        self.spans.append({"name": name, "event_type": event_type})
+        yield
+
+    def enrich_span(self, **fields) -> None:
+        self.spans[-1].update(fields)
 
     def force_flush(self, **kwargs) -> None:
         self.flushes.append(kwargs)
@@ -241,6 +250,7 @@ async def test_turn_opens_a_session_with_the_redacted_question() -> None:
     assert remote["session_id"] == local["session_id"]
     assert remote["inputs"] == {"question": "mail [redacted:email]"}
     assert remote["user_properties"] == {"user_id": 3}
+    assert isinstance(remote["metadata"].pop("history_ms"), int)
     assert remote["metadata"] == {
         "shop_id": 15,
         "conversation_id": None,
@@ -248,6 +258,15 @@ async def test_turn_opens_a_session_with_the_redacted_question() -> None:
         "prompt_version": agent.prompt_version,
         "git_sha": None,
     }
+
+
+async def test_traced_turn_times_the_save_in_its_own_span() -> None:
+    tracer = RecordingTracer()
+    agent = traced_agent(tracer)
+
+    await agent.chat(user_id=3, shop_id=15, message=QUESTION)
+
+    assert {"name": "save turn", "event_type": "tool"} in tracer.spans
 
 
 async def test_turn_closes_its_session_with_the_answer_and_tokens() -> None:
@@ -495,24 +514,8 @@ async def test_info_logs_hold_no_turn_content(caplog: pytest.LogCaptureFixture) 
         assert text not in caplog.text
 
 
-class SpanTracer(RecordingTracer):
-    """Records the spans opened with `trace` and what `enrich_span` put in them."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.spans: list[dict] = []
-
-    @contextmanager
-    def trace(self, name, event_type=None, **kwargs):
-        self.spans.append({"name": name, "event_type": event_type})
-        yield
-
-    def enrich_span(self, **fields) -> None:
-        self.spans[-1].update(fields)
-
-
 async def test_recall_span_lists_the_memories_the_turn_received() -> None:
-    tracer = SpanTracer()
+    tracer = RecordingTracer()
     observability = Observability(tracer)
     service = memory_service(
         ScriptedModel(), FakeMemoryRepository(recalled=[recalled()])
@@ -523,6 +526,12 @@ async def test_recall_span_lists_the_memories_the_turn_received() -> None:
     await service.with_memories(15, 3, "gạo?")
 
     assert tracer.spans == [
+        {
+            "name": "memory enabled",
+            "event_type": "tool",
+            "metadata": {"shop_id": 15},
+            "outputs": {"enabled": True},
+        },
         {
             "name": "memory recall",
             "event_type": "tool",
@@ -539,12 +548,12 @@ async def test_recall_span_lists_the_memories_the_turn_received() -> None:
                 ]
             },
             "metrics": {"recalled_count": 1},
-        }
+        },
     ]
 
 
 async def test_failed_recall_leaves_the_turn_and_span_standing() -> None:
-    tracer = SpanTracer()
+    tracer = RecordingTracer()
     observability = Observability(tracer)
     service = memory_service(
         ScriptedModel(), FakeMemoryRepository(error=RuntimeError("db down"))
@@ -555,11 +564,14 @@ async def test_failed_recall_leaves_the_turn_and_span_standing() -> None:
     prompt, used = await service.with_memories(15, 3, "gạo?")
 
     assert (prompt, used) == ("gạo?", [])
-    assert [span["name"] for span in tracer.spans] == ["memory recall"]
+    assert [span["name"] for span in tracer.spans] == [
+        "memory enabled",
+        "memory recall",
+    ]
 
 
 async def test_untraced_turn_recalls_without_a_span() -> None:
-    tracer = SpanTracer()
+    tracer = RecordingTracer()
     service = memory_service(
         ScriptedModel(), FakeMemoryRepository(recalled=[recalled()])
     )
