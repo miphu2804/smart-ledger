@@ -1,4 +1,4 @@
-"""Synthetic owner memories and queries for the agent-memory recall benchmark.
+"""Synthetic owner memories and queries for the memory evaluation.
 
 Every shop gets a store of facts in the shapes MEMORY_EXTRACT_PROMPT asks for
 (preference, semantic, procedural, episodic), with dates, importance and a share of
@@ -6,8 +6,8 @@ Every shop gets a store of facts in the shapes MEMORY_EXTRACT_PROMPT asks for
 surface forms (accented, typed without diacritics, paraphrase with no shared content
 word), plus queries that need no memory at all.
 
-The lexicon and query templates are split in two halves: dev uses half A, the
-held-out test uses half B, so a config cannot win by fitting names or phrasings.
+The lexicon and query templates are split in two halves: the ranking was chosen on
+half A and `run.py` scores half B, so it cannot pass by fitting names or phrasings.
 """
 
 import random
@@ -182,8 +182,6 @@ class Memory:
     # Id of the newer version of the same fact that reconcile failed to link.
     newer: int | None = None
     older: int | None = None
-    last_used_day: float | None = None
-    use_count: int = 0
 
 
 @dataclass
@@ -311,7 +309,12 @@ def build(
     n_history: int = 200,
     max_age: float = 180.0,
 ):
-    """One shop with its past traffic (for use counts) and its scored queries."""
+    """One shop with its past traffic and its scored queries.
+
+    The ranking no longer reads use counts, so `history` goes unscored; it is still
+    drawn because it advances `rng`, and the scored queries must stay the ones
+    ADR-0002 measured.
+    """
     rng = random.Random(seed * 1000 + size + int(max_age) * 7)
     shop, paraphrase = make_shop(rng, half, size, max_age=max_age)
     roots = [m for m in shop.memories if m.older is None]
