@@ -152,7 +152,7 @@ Hai datasource trong [`datasources.yaml`](../../../deploy/monitoring/grafana/pro
 ### 7.3 Provisioning, playbook và secrets
 
 - Dashboard nằm ở [`deploy/monitoring/grafana/product/product.json`](../../../deploy/monitoring/grafana/product/product.json), ngoài thư mục provisioning của Infra vì provider đọc cả thư mục con; provider thứ hai đưa nó vào folder `Product`.
-- Login đọc nằm trong nhóm `monitor` của Dopbase với các khoá đã có trong mẫu [`.env.monitor`](../../../secrets/templates/.env.monitor): `GRAFANA_PG_HOST`, `GRAFANA_PG_PORT` (mặc định 5432), `GRAFANA_PG_DATABASE` (mặc định `postgres`), `GRAFANA_PG_USER`, `GRAFANA_PG_PASSWORD`. [`vps-playbook.sh`](../../../scripts/secrets/vps-playbook.sh) nạp file này cùng `.env.vps`.
+- Login đọc nằm trong nhóm `monitor` của Dopbase với các khoá đã có trong mẫu [`.env.monitor`](../../../secrets/templates/.env.monitor): `GRAFANA_PG_HOST`, `GRAFANA_PG_PORT` (mặc định 5432), `GRAFANA_PG_DATABASE` (mặc định `postgres`), `GRAFANA_PG_USER`, `GRAFANA_PG_PASSWORD`. [`run.sh`](../../../scripts/infra/run.sh) nạp file này cùng `.env.vps`.
 - Playbook ghi `postgres-<environment>.env` (0600, `no_log`) cạnh `.env` của monitoring; Compose đọc cả hai file như `env_file` tuỳ chọn. Mỗi môi trường chỉ ghi file của mình, nên lần chạy staging không xoá datasource production như khi dùng chung `.env`.
 - Host rỗng thì playbook bỏ qua bước này; dashboard vẫn provision nhưng panel SQL báo lỗi kết nối.
 

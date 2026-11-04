@@ -40,7 +40,7 @@ None.
 | Step | Done by | Notes |
 |---|---|---|
 | Merge with a merge commit (no squash) | | |
-| Approve `deploy` and `deploy-web` in Review deployments | | |
+| Approve `approve` (backend), `deploy-web`, `deploy-landing` in CD and `approve` in Infra (when `deploy/**` changed) in Review deployments | | |
 | Production web smoke test passes | | |
 | Dispatch `mobile-release.yml` with `android-production` (only if an APK must ship) | | |
 | Tag the release | | |

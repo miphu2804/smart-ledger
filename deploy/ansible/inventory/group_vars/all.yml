@@ -1,0 +1,52 @@
+# The only place that reads the environment, which scripts/infra/run.sh fills from Dopbase; Dopbase owns every value,
+# so nothing here has a fallback and the roles' validate tasks name what is missing. A domain or token left empty
+# skips that feature. run.sh also passes sl_environment, sl_scope and sl_env_dir as extra vars.
+
+# Constants shared by the roles: the deploy login, the repository's deploy/ directory and the shared directories.
+sl_deploy_user: deploy
+sl_deploy_src: "{{ playbook_dir }}/.."
+sl_edge_dir: /opt/smartledger-edge
+sl_dopbase_dir: /opt/dopbase
+sl_monitoring_dir: /opt/smart-ledger-monitoring
+
+# Scope `app` touches one environment's files; `all` also configures the shared host and runs for production only.
+# Staging keeps the directory it had before production joined the VPS.
+app_envs: "{{ [sl_environment] if sl_scope == 'app' else ['production'] }}"
+app_dirs:
+  staging: /opt/smartledger
+  production: /opt/smartledger-production
+app_caddy_domain: "{{ lookup('env', 'CADDY_DOMAIN') }}"
+app_gateway_domain: "{{ lookup('env', 'GATEWAY_DOMAIN') }}"
+
+# Host setup: pinned lazydocker, swap, the CI deploy key and an optional read-only GHCR login.
+base_lazydocker_version: 0.25.2
+base_lazydocker_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'x86_64' }}"
+base_lazydocker_sha256:
+  x86_64: 0d9dbfc26068b218e7ed84b104748cadc6e3cf733c0afd35465306fb39b9523c
+  arm64: 005c38b685aaa557e7d646d83a3dadb5024340eeed8c6a2e1949eee6f530de23
+base_swap_size_mb: 2048
+base_deploy_public_key: "{{ lookup('env', 'VPS_SSH_PUBLIC_KEY') }}"
+base_ghcr_username: "{{ lookup('env', 'GHCR_USERNAME') }}"
+base_ghcr_read_token: "{{ lookup('env', 'GHCR_READ_TOKEN') }}"
+
+# Dopbase and its nightly age+rclone backup; an empty domain skips Dopbase and an empty bucket the backup.
+dopbase_domain: "{{ lookup('env', 'DOPBASE_DOMAIN') }}"
+dopbase_backup_bucket: "{{ lookup('env', 'DOPBASE_BACKUP_BUCKET') }}"
+dopbase_backup_endpoint: "{{ lookup('env', 'DOPBASE_BACKUP_ENDPOINT') }}"
+dopbase_backup_recipient: "{{ lookup('env', 'DOPBASE_BACKUP_RECIPIENT') }}"
+dopbase_backup_key_id: "{{ lookup('env', 'DOPBASE_BACKUP_KEY_ID') }}"
+dopbase_backup_secret: "{{ lookup('env', 'DOPBASE_BACKUP_SECRET') }}"
+dopbase_backup_hour: 3
+
+# Monitoring: an empty domain skips it everywhere, including the files each app role writes for it. The two
+# app_grafana_pg_* groups are one environment's read-only Supabase login (ADR-0003); an empty host skips it.
+monitoring_domain: "{{ lookup('env', 'MONITOR_DOMAIN') }}"
+monitoring_grafana_admin_password: "{{ lookup('env', 'GRAFANA_ADMIN_PASSWORD') }}"
+monitoring_discord_webhook_url: "{{ lookup('env', 'MONITOR_DISCORD_WEBHOOK_URL') }}"
+monitoring_telegram_bot_token: "{{ lookup('env', 'MONITOR_TELEGRAM_BOT_TOKEN') }}"
+monitoring_telegram_chat_id: "{{ lookup('env', 'MONITOR_TELEGRAM_CHAT_ID') }}"
+app_grafana_pg_host: "{{ lookup('env', 'GRAFANA_PG_HOST') }}"
+app_grafana_pg_port: "{{ lookup('env', 'GRAFANA_PG_PORT') }}"
+app_grafana_pg_database: "{{ lookup('env', 'GRAFANA_PG_DATABASE') }}"
+app_grafana_pg_user: "{{ lookup('env', 'GRAFANA_PG_USER') }}"
+app_grafana_pg_password: "{{ lookup('env', 'GRAFANA_PG_PASSWORD') }}"

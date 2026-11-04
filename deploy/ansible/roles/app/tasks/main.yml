@@ -1,0 +1,10 @@
+- name: Configure each environment
+  ansible.builtin.include_tasks:
+    file: environment.yml
+    apply:
+      tags: [app]
+  vars:
+    app_dir: "{{ app_dirs[app_env] }}"
+  loop: "{{ app_envs }}"
+  loop_control:
+    loop_var: app_env

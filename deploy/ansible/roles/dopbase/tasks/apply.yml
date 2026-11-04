@@ -1,0 +1,10 @@
+# On first start Dopbase prints a protected setup link: read it with `docker compose logs dopbase`.
+- name: Apply Dopbase
+  ansible.builtin.command: docker compose up -d --build --wait
+  args:
+    chdir: "{{ sl_dopbase_dir }}"
+  become: true
+  become_user: "{{ sl_deploy_user }}"
+  changed_when: true
+  # The directory may not exist yet in a plan, and a dry run starts nothing.
+  when: not ansible_check_mode

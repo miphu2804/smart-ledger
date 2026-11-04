@@ -90,9 +90,11 @@ class ScriptedModel(FunctionModel):
     streamed request replays the same responses in chunks.
     """
 
-    def __init__(self, *responses: str | ModelResponse) -> None:
+    def __init__(
+        self, *responses: str | ModelResponse, model_name: str = "test-model"
+    ) -> None:
         super().__init__(
-            self._respond, stream_function=self._stream, model_name="test-model"
+            self._respond, stream_function=self._stream, model_name=model_name
         )
         self.responses = list(responses)
         self.requests: list[tuple[list[ModelMessage], AgentInfo]] = []

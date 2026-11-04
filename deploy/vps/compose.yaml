@@ -29,7 +29,11 @@ services:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health/readiness"]
       interval: 10s
       timeout: 5s
-      start_period: 90s
+      # The VPS disk is the bottleneck: during the production Infra apply on 2026-11-03, iowait stayed at 40-58 % while
+      # Core, Bifrost and image pulls shared it, and Core took 151 s from its container start to the first database
+      # connection (62 s in a normal deploy). Failed checks inside this window do not count, and the first passing
+      # check still marks Core healthy at once.
+      start_period: 240s
       retries: 6
     networks:
       default:
@@ -70,7 +74,7 @@ services:
   # authoritative over the config store in the volume; bifrost.env holds the provider key, the virtual key and the
   # admin login it references, a resolved copy of secrets/<env>/env/.env.bifrost.
   bifrost:
-    image: maximhq/bifrost:v2.3.2@sha256:f5b18826349fe9e1c402c10d19f1cbb5567a3c800ad928580d07f72e69106ec7
+    image: maximhq/bifrost:v2.4.0@sha256:a1c90607dcfd13c1fb2f9476ceb3bb24407a50ade7fdf3e61a59fb42b09e5c57
     env_file:
       - bifrost.env
     environment:
@@ -85,7 +89,8 @@ services:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 30s
       timeout: 5s
-      start_period: 10s
+      # Bootstrap syncs the MCP library and the model catalog first; it took 43 s on production.
+      start_period: 90s
       retries: 3
     networks:
       default:

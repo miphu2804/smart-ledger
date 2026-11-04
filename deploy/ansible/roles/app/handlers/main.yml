@@ -1,0 +1,18 @@
+# Ansible runs handlers in the order they are defined, not the order they are notified, and the roles list puts app
+# last. All four live here so the order is written once, and each one runs its owning role's tasks/apply.yml
+# (a handler cannot include a role, only a file):
+#   1. the app stack, so each environment's network exists,
+#   2. Dopbase,
+#   3. monitoring, which needs those networks and must run before the edge so Caddy finds Grafana,
+#   4. the edge, after the older per-environment Caddy has freed ports 80 and 443.
+- name: Apply the stack
+  ansible.builtin.include_tasks: "{{ role_path }}/tasks/apply.yml"
+
+- name: Apply Dopbase
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/roles/dopbase/tasks/apply.yml"
+
+- name: Apply monitoring
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/roles/monitoring/tasks/apply.yml"
+
+- name: Apply the edge
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/roles/edge/tasks/apply.yml"

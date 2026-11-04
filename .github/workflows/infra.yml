@@ -1,0 +1,124 @@
+name: Infra
+
+# Thin GitHub adapter over scripts/infra/run.sh, which holds the whole flow and knows nothing of GitHub: this file
+# picks the runner, builds deploy/ansible/Dockerfile, maps secrets to the script's neutral variables and runs it in
+# that image (infra-run.yml). See docs/development/ci-cd.md#vps.
+#   pull request touching deploy/** or scripts/infra/**   lint only: unmerged code never gets the VPS key
+#   push to staging                                       plan, then apply staging, app scope
+#   push to main                                          plan, then apply production, all scope
+#   by hand                                               the environment, scope and mode chosen
+# scripts/ci/plan-infra-runs.sh lists the runs. Each reads its secrets from a GitHub environment: infra-staging,
+# infra-production-plan or infra-production. A production apply first waits in job approve, whose environment
+# production-approval requires reviewers, so a person approves after reading the plan and before the apply takes the
+# VPS lock; a backend deploy never waits behind an approval.
+
+run-name: Infra ${{ github.event_name }} ${{ github.ref_name }}
+
+on:
+  pull_request:
+    paths: [deploy/**, scripts/infra/**, .github/workflows/infra.yml, .github/workflows/infra-run.yml]
+  push:
+    branches: [staging, main]
+    paths: [deploy/**, scripts/infra/**, .github/workflows/infra.yml, .github/workflows/infra-run.yml]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to plan or apply
+        type: choice
+        required: true
+        default: staging
+        options: [staging, production]
+      scope:
+        description: app writes the environment's own files; all also configures the shared host (production only)
+        type: choice
+        required: true
+        default: app
+        options: [app, all]
+      mode:
+        description: plan is a dry run, apply changes the VPS
+        type: choice
+        required: true
+        default: plan
+        options: [plan, apply]
+      runner:
+        description: default reads the repository variable CD_RUNNER, else CI_RUNNER, else github-hosted
+        type: choice
+        required: true
+        default: default
+        options: [default, github-hosted, self-hosted, auto]
+
+permissions:
+  contents: read
+
+jobs:
+  select-runner:
+    uses: ./.github/workflows/select-runner.yml
+    with:
+      choice: ${{ inputs.runner != 'default' && inputs.runner || vars.CD_RUNNER || vars.CI_RUNNER || 'github-hosted' }}
+      allow-self-hosted: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    secrets:
+      RUNNERS_READ_TOKEN: ${{ secrets.RUNNERS_READ_TOKEN }}
+
+  # No secrets: the playbook's syntax and ansible-lint. setup-uv, not setup-python, because setup-python cannot install
+  # into the self-hosted machines' tool cache.
+  lint:
+    needs: select-runner
+    runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Lint
+        run: scripts/infra/lint.sh
+
+  # The runs this event asks for; none for a pull request.
+  prepare:
+    needs: select-runner
+    runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
+    outputs:
+      plan: ${{ steps.runs.outputs.plan }}
+      apply: ${{ steps.runs.outputs.apply }}
+      approval: ${{ steps.runs.outputs.approval }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: List the runs
+        id: runs
+        env:
+          SMARTLEDGER_TRIGGER: ${{ github.event_name == 'workflow_dispatch' && 'manual' || github.event_name == 'push' && 'push' || 'review' }}
+          INFRA_ENVIRONMENT: ${{ inputs.environment }}
+          INFRA_SCOPE: ${{ inputs.scope }}
+          INFRA_MODE: ${{ inputs.mode }}
+        run: scripts/ci/plan-infra-runs.sh
+
+  plan:
+    needs: [select-runner, lint, prepare]
+    if: needs.prepare.outputs.plan != ''
+    uses: ./.github/workflows/infra-run.yml
+    with:
+      runs-on: ${{ needs.select-runner.outputs.runs_on }}
+      mode: plan
+      run: ${{ needs.prepare.outputs.plan }}
+    secrets: inherit
+
+  # Outside the VPS lock, so a pending approval blocks nothing. It runs nothing and holds no secrets.
+  # `!cancelled() && !failure()` lets a skipped plan (a manual apply) through and stops after a failed one.
+  approve:
+    needs: [select-runner, lint, prepare, plan]
+    if: ${{ !cancelled() && !failure() && needs.prepare.outputs.approval == 'true' }}
+    runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
+    environment: production-approval
+    steps:
+      - run: echo "Production apply approved"
+
+  apply:
+    needs: [select-runner, lint, prepare, plan, approve]
+    if: ${{ !cancelled() && !failure() && needs.prepare.outputs.apply != '' }}
+    uses: ./.github/workflows/infra-run.yml
+    with:
+      runs-on: ${{ needs.select-runner.outputs.runs_on }}
+      mode: apply
+      run: ${{ needs.prepare.outputs.apply }}
+    secrets: inherit

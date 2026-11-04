@@ -80,10 +80,33 @@ The agent runs on [Pydantic AI](https://ai.pydantic.dev/). Prompts live in `src/
 
 - Every model shares `OPENAI_API_KEY`, the gateway credential: the Bifrost virtual key when AI calls Bifrost, and the OpenAI key when it calls OpenAI directly. Both clients also send it as `x-bf-vk`, because Bifrost reads a virtual key from the Bearer header only when it starts with `sk-bf-`; the header lives on the client because a run's `extra_headers` replace the model's whole. OpenAI ignores it.
 - `OPENAI_BASE_URL` is the base of the OpenAI APIs, and blank means the OpenAI default.
-- Through Bifrost the model id has no provider prefix: the virtual key's allowed models pick the upstream, and routing rules in `deploy/vps/bifrost.json` hold any fallback ([ADR-0008](../../docs/architecture/adr/0008-bifrost-owns-routing-and-fallback.md)). Bifrost also serves `mercury-3` from Inception, but no alias asks for it yet; use `openai_chat` when one does.
+- Through Bifrost the model id has no provider prefix: the virtual key's allowed models pick the upstream, and routing rules in `deploy/vps/bifrost.json` hold any fallback ([ADR-0008](../../docs/architecture/adr/0008-bifrost-owns-routing-and-fallback.md)). Bifrost also serves `mercury-3` from Inception, which has only `/chat/completions`, so an alias for it uses `openai_chat`; Bifrost refuses any other request type for Inception.
 - `MODEL_FALLBACKS` is a JSON list of `protocol:model` tried in order, for an environment that calls a provider directly; a fallback gets only what is left of the turn timeout, so it mainly covers fast failures.
 - `session_settings` sends `x-bf-session-id` (`conversation-<id>` for each turn, one-off ids for drafts and memory calls) to group a conversation's Bifrost logs and `x-bf-lh-shop-id` to add the shop to log metadata.
 - `effort` of an alias maps to `openai_reasoning_effort`; an alias without one uses `MODEL_REASONING_EFFORT`. The values depend on the model: `gpt-6-luna` takes `none` to `max`, Mercury 3 takes `instant`, `low`, `medium` or `high`.
+
+### Model tiers
+
+With `MODEL_TIERING_ENABLED=true`, each chat turn runs on the model its request needs instead of always on `chat`. `LLMRouterService` (`src/llm_router/`) asks TypeSafe Jev through Bifrost's `/v1/decisions` with `BifrostTierClassifier` (`TIER_CLASSIFIER_URL`, e.g. `http://bifrost:8080/v1/decisions`) to rate the owner's latest message, led by their previous one, and picks the alias of that tier:
+
+| Tier | Alias | Intended model |
+|---|---|---|
+| `SIMPLE` | `chat-simple` | `mercury-3` over `openai_chat`, effort `low` |
+| `MEDIUM` | `chat-medium` | `mercury-3` over `openai_chat`, effort `high` |
+| `COMPLEX` | `chat-complex` | `gpt-6-luna` over `openai_responses`, effort `xhigh` |
+
+```json
+{"chat": {"protocol": "openai_responses", "model": "gpt-6-luna", "effort": "high"},
+ "chat-simple": {"protocol": "openai_chat", "model": "mercury-3", "effort": "low"},
+ "chat-medium": {"protocol": "openai_chat", "model": "mercury-3", "effort": "high"},
+ "chat-complex": {"protocol": "openai_responses", "model": "gpt-6-luna", "effort": "xhigh"}}
+```
+
+- The aliases live in `MODEL_ALIASES`; when the URL or any of the three is missing, AI logs `tiering off` at startup and every turn runs on `chat`. Memory recall and writes always use `chat`.
+- The classification runs beside memory recall and waits at most `TIER_CLASSIFIER_TIMEOUT_SECONDS`; an error, a timeout or a refused answer runs the turn on `chat-complex`.
+- A conversation keeps the highest tier it has reached, so a short follow-up to a hard question stays on the stronger model and its prompt cache; once it is `COMPLEX` Jev is not asked again. The tiers live in the process for a day of inactivity and a restart only means the next turn is classified again.
+- The model is picked once per turn, so every tool-call step of the turn runs on it. The HoneyHive session records `model`, `tier`, `tier_alias` and `tier_mechanism` (`classified`, `conversation` or `fallback`), and the log has one `model tier` line per turn.
+- Whether `gpt-6-luna` accepts `xhigh` has not been tried yet; check it with one direct call before enabling tiers.
 
 ## Read-only shop data
 
@@ -164,7 +187,7 @@ The tool-call guardrail counts one `run_code` as one call and does not see calls
 
 ## Long-term memory (off by default)
 
-`AGENT_MEMORY_ENABLED=true` turns on the [ADR-0002](../../docs/architecture/adr/0002-agent-long-term-memory.md) memory. It is not product behavior until the PO approves it. ADR-0002 owns the recall, ranking and reconcile design; [the recall benchmark](evaluation/memory_recall/README.md) measures it.
+`AGENT_MEMORY_ENABLED=true` turns on the [ADR-0002](../../docs/architecture/adr/0002-agent-long-term-memory.md) memory. It is not product behavior until the PO approves it. ADR-0002 owns the recall, ranking and reconcile design; [the memory evaluation](evaluation/memory/README.md) measures its recall.
 
 - Needs the migrations `20261014000000_agent_memories.sql` and `20261015000000_agent_memory_visibility.sql`, and an embedder from `AGENT_MEMORY_EMBEDDING_PROVIDER`:
   - `sentence-transformers` (default) runs locally and needs `uv sync --group memory`; the Docker image leaves that group out, so there the flag logs an error and stays off.
@@ -232,6 +255,10 @@ Settings come from `src/app_config.py`, read from the environment or `.env`; bla
 | | `MODEL_FALLBACKS` | `[]` | JSON list of `provider:model` |
 | | `MODEL_TIMEOUT_SECONDS` | `20` | Timeout per model request |
 | | `MODEL_REASONING_EFFORT` | `medium` | Effort of an alias that sets none; the values depend on the model |
+| | `MODEL_TIERING_ENABLED` | `false` | Pick each turn's model by tier; see [Model tiers](#model-tiers) |
+| | `TIER_CLASSIFIER_URL` | unset | Bifrost's `/v1/decisions` URL; required for tiers |
+| | `TIER_CLASSIFIER_MODEL` | `typesafe/jev-latest` | Decision model that rates each turn |
+| | `TIER_CLASSIFIER_TIMEOUT_SECONDS` | `1.5` | Longest wait for a rating; past it the turn runs `chat-complex` |
 | | `OPENAI_API_KEY`, `OPENAI_BASE_URL` | unset | Shared by every model; blank URL means OpenAI |
 | Guardrails | `AGENT_MAX_INPUT_CHARS` | `2000` | See [Guardrails](#guardrails) |
 | | `AGENT_MODEL_CALL_LIMIT` | `4` | |
@@ -263,11 +290,15 @@ On the VPS the deploy sets the HoneyHive values from Dopbase ([AI tracing settin
 
 ## Run
 
+`uv run` runs a command in this folder's virtual environment and syncs it first; a `.py` file runs directly (`uv run evaluation/run.py`), and only a module needs `python -m` (`uv run python -m src.main`).
+
 ```bash
 uv sync --group dev
 cp .env.example .env
 uv run python -m src.main
 ```
+
+While editing code, `uv run uvicorn src.main:app --reload --port 8001` restarts the server on each change; it uses Uvicorn's own log format instead of the app's.
 
 To run against the local database instead of staging, see [Develop against the local database](../../docs/development/local-development.md#develop-against-the-local-database).
 
@@ -291,3 +322,14 @@ uv run pytest
 ```
 
 `pre-commit` runs Ruff (lint, import order and format) on commit. The live draft test runs only when asked: `RUN_LIVE_MODEL_TESTS=1 uv run pytest tests/integration_tests/test_draft_parse_live.py`.
+
+## Scripts
+
+```bash
+uv run evaluation/run.py memory                # memory recall eval, no model call
+uv run evaluation/run.py agent_chat --dry-run  # chat eval plan, no model call
+uv run evaluation/run.py agent_chat            # chat eval, calls the chat and judge models
+uv run evaluation/memory/generate.py           # regenerate the memory eval's cases.jsonl
+```
+
+See [Evaluation](evaluation/README.md) for the options.

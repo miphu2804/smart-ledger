@@ -5,8 +5,8 @@ name: Deploy backend
 # the tests so a change here cannot break a required check, and so the backend deploy waits only for the backend jobs.
 # See docs/development/ci-cd.md#vps.
 # Each GitHub environment holds its own VPS address, SSH key and settings, plus its branch policy;
-# `backend-production` requires approval. The environment is set on the job below, so its secrets reach the job
-# without the caller passing them.
+# a `main` deploy first waits in job approve, whose environment `production-approval` requires reviewers. The
+# environment is set on the deploy job, so its secrets reach the job without the caller passing them.
 
 on:
   workflow_call:
@@ -36,12 +36,27 @@ permissions:
   packages: write
 
 jobs:
+  # Outside the VPS lock: a job waiting for approval would already hold the concurrency group of the deploy job and
+  # block the Infra apply of that environment. It runs nothing and holds no secrets.
+  approve:
+    if: github.ref_name == 'main'
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    environment: production-approval
+    steps:
+      - run: echo "Production deploy approved"
+
   deploy:
+    needs: approve
+    # Runs after an approval, or with none for staging; a rejected approval fails approve and skips the deploy.
+    if: ${{ !cancelled() && !failure() }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     environment: ${{ github.ref_name == 'main' && 'backend-production' || 'backend-staging' }}
     concurrency:
-      group: deploy-${{ github.ref_name }}
+      # Shared with infra.yml, whose apply writes the same app directory on the VPS; `queue: max` keeps every waiting
+      # job instead of only the newest.
+      group: vps-${{ github.ref_name == 'main' && 'production' || 'staging' }}
       cancel-in-progress: false
+      queue: max
     env:
       # One GHCR package per service and environment, tagged by commit, so staging deploys never push a production
       # image out of its rollback window. Image names must be lowercase, which this repository's owner and name are.
@@ -58,7 +73,7 @@ jobs:
       SMARTLEDGER_IMAGE_SOURCE: ${{ github.server_url }}/${{ github.repository }}
       APP_DIR: ${{ vars.VPS_APP_DIR || '/opt/smartledger' }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.sha }}
           persist-credentials: false
@@ -76,7 +91,7 @@ jobs:
         if: inputs.ai
         run: scripts/ci/build-image.sh ai "$AI_IMAGE"
       # The runner builds the jar and the image only wraps it in a JRE, so the image build needs no Maven.
-      - uses: actions/setup-java@v6
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         if: inputs.core
         with:
           distribution: temurin
@@ -136,7 +151,7 @@ jobs:
           DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
           TARGET_ENV: ${{ github.ref_name == 'main' && 'backend-production' || 'backend-staging' }}
         run: scripts/ci/report-deploy.sh
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         # The summary is already in the job summary; a full artifact quota must not fail CI or skip deploys.
         continue-on-error: true
         if: always()
