@@ -134,8 +134,8 @@ Production still needs its approval: run the production deploy only after a revi
 | `vercel-production` | `main` | Yes | Same | `EXPO_PUBLIC_*` |
 | `landing-staging` | `staging` | No | Same, for Vercel project `landing` | `LANDING_URL`, admin variables |
 | `landing-production` | `main` | Yes | Same | Same, plus `VITE_ANDROID_APK_URL` |
-| `android-dev` | Other branches (checked by `gate`) | No | `ANDROID_GOOGLE_SERVICES_JSON` | `EXPO_PUBLIC_*` |
-| `android-staging` | `staging` | No | `ANDROID_GOOGLE_SERVICES_JSON` | `EXPO_PUBLIC_*` |
+| `android-dev` | Other branches (checked by `gate`) | No | `ANDROID_GOOGLE_SERVICES_JSON`, `R2_*` of the test-build bucket | `EXPO_PUBLIC_*`, `R2_BUCKET`, `R2_PUBLIC_URL` |
+| `android-staging` | `staging` | No | Same as `android-dev` | Same as `android-dev` |
 | `android-production` | `main` | Yes | `ANDROID_GOOGLE_SERVICES_JSON`, `ANDROID_KEYSTORE_*`, `R2_*` | `EXPO_PUBLIC_*`, `R2_BUCKET`, `R2_PUBLIC_URL` |
 
 - Keep backend secrets out of `vercel-*` and `landing-*`.
@@ -493,8 +493,15 @@ Each `android-*` environment needs:
 - Secret `ANDROID_GOOGLE_SERVICES_JSON`: the content of `google-services.json`.
 - Variables `EXPO_PUBLIC_*`, as for the [mobile web](#mobile-web-on-vercel).
 - Variable `STT_MODEL_BASE_URL`: the public R2 address holding the speech model ([models README](../../frontend/mobile/assets/models/README.md#đưa-model-lên-r2)). A publish uploads missing files; a test build only warns.
+- Secrets `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and variables `R2_BUCKET`, `R2_PUBLIC_URL` (no trailing slash): where the build goes. Job `build` checks them before it starts, and the runner needs the `aws` CLI.
 
-Every run uploads `android-build-summary-<environment>-<run>` (runner, toolchain, timings, size and SHA-256). A successful run uploads the APK or AAB as `android-<environment>-<run>`, kept 14 days.
+The run page shows a summary (runner, toolchain, timings, size and SHA-256). A successful run that does not publish uploads the APK or AAB to R2 as `android/<environment>/ci/<run>/<file>` and puts its download link on the run page. GitHub artifacts are not used: the account's artifact storage is 500 MB, and a full quota failed every Android build from 2026-11-03.
+
+- The bucket is public through `r2.dev` and the run page of this public repository shows the link, so anyone can download these builds. They hold no secrets: only `EXPO_PUBLIC_*` values and `google-services.json`, which every APK carries anyway.
+- Give `android-dev` and `android-staging` their own bucket and token, not the release bucket: `android-dev` runs code from any branch, and a token for the release bucket could overwrite `latest.apk`.
+- R2 keeps the files until a lifecycle rule deletes them; expire the `ci/` prefixes after 14 days.
+
+To send a production build to Google Play, run from `main` with `environment=android-production` and `publish=false`, download the AAB from the link, and upload it in Play Console under **Testing > Closed testing** (track Alpha) or **Internal testing**. Only a publish sets `EXPO_PUBLIC_UPDATE_URL`, so this build has no self-update, which Google Play forbids.
 
 <a id="android-runners"></a>
 
@@ -540,7 +547,7 @@ One-time setup:
 2. Create an R2 API token with **Object Read & Write** on that bucket.
 3. In `android-production`, add secrets `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and variables `R2_BUCKET`, `R2_PUBLIC_URL` (no trailing slash), `STT_MODEL_BASE_URL`.
 4. In `landing-production`, set `VITE_ANDROID_APK_URL=https://pub-<hash>.r2.dev/android/production/latest.apk` and redeploy the landing.
-5. Optional: expire `android/production/builds/` after 30 days. Never `stt-model/`.
+5. Optional: expire `android/production/builds/` after 30 days and `android/production/ci/` after 14 days. Never `stt-model/`.
 
 - The app checks `version.json` on launch and offers newer builds. Only published APKs check; APKs published before this feature never ask.
 - Rollback: copy a file from `builds/` over `latest.apk` and edit `version.json`. Do not re-run an old publish run; it overwrites files.
