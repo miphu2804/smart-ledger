@@ -178,13 +178,17 @@ class Observability:
         self._enrich_session(metadata=metadata)
 
     @contextmanager
-    def span(self, name: str, **fields) -> Iterator[None]:
+    def span(self, name: str, event_type: str = "tool", **fields) -> Iterator[None]:
         """Run the block inside a span of this turn's session; `fields` fill it up front
-        and `enrich_span` adds the rest. Without a traced turn the block just runs."""
+        and `enrich_span` adds the rest. Without a traced turn the block just runs.
+
+        A `model` span is a model call no agent instrumentation sees: HoneyHive counts
+        it among the session's model events and adds the token counts in its metadata
+        to the session's totals."""
         if not self._traced():
             yield
             return
-        with self._tracer.trace(name, event_type="tool"):
+        with self._tracer.trace(name, event_type=event_type):
             self._tracer.enrich_span(**fields)
             yield
 

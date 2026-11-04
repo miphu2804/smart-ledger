@@ -1,3 +1,28 @@
+### 2026-11-04 — Tier classifier tokens reach HoneyHive
+
+| Area | Change |
+|---|---|
+| AI | • `BifrostTierClassifier` records each `/v1/decisions` call as a `tier classifier` span of type `model` with the model and the token counts Bifrost returns, so the session's Total Tokens and model events include the `jev-latest` call; `Observability.span` takes the event type |
+
+Check: `uv run ruff check`, `ruff format --check` and `uv run pytest tests/unit_tests` (474 passed); the SDK's `trace` and `enrich_span` signatures read from the installed package. Not verified: the span on a real HoneyHive session, since traces run only in production. Commit: the one that adds this entry.
+
+### 2026-11-04 — HoneyHive session charts show data
+
+| Area | Change |
+|---|---|
+| AI | • The First words wait, Tool calls per turn and Unsupported figure rate charts in `.honeyhive/charts/` filter on `event_type` `session` instead of `event_name` `agent-chat`; with the old filter HoneyHive searched events other than sessions for these session metrics and drew nothing |
+
+Check: the live chart list shows HoneyHive's own session charts filter on `event_type` `session`. Not verified: the three charts drawing data, since `sync-dashboards.sh` applies them only on a merge into `main` or a manual run. Commit: the one that adds this entry.
+
+### 2026-11-04 — Bifrost prices mercury-3
+
+| Area | Change |
+|---|---|
+| CI | • `deploy/vps/bifrost.json` adds a `governance.pricing_overrides` entry for `mercury-3` on provider `inception` at the launch price from Inception's models page, because Bifrost's synced catalog prices it only under OpenRouter and logged its requests without cost |
+| Docs | • ADR-0009 §5 and the AI README say why HoneyHive shows no cost: its session Cost sums the `metadata.cost` the app sets on events, and Bifrost writes the cost it computes only to its own log, not to the response; embeddings on Cloudflare have no cost record |
+
+Check: `bifrost.json` passes `check-jsonschema` against the `transports/v2.4.0` config schema; the override-only path for a model missing from the catalog read in `cost.go` of that tag. Not verified: a non-zero cost in a live Bifrost log, since the override applies only after deploy. Commit: the one that adds this entry.
+
 ### 2026-11-04 — Admin account menu moves to the sidebar
 
 | Area | Change |
@@ -166,30 +191,3 @@ Check: `ansible-playbook --syntax-check`, `ansible-lint` (production profile), `
 | Docs | • `ci-cd.md#scripts` describes the adapter split, the variables and a runbook for deploying `ai` from a laptop |
 
 Check: shellcheck and actionlint pass; `changes.sh` matched the old dorny rules on 80 single-commit ranges of `staging`, a fake pull request merge commit and a push; 17 scripts ran locally with sample input, including `start-ssh-agent.sh` with a throwaway key. Not verified: any workflow on a runner (GitHub-hosted runners are billing-locked), the image push, the VPS deploy, the Vercel steps and the R2 publish. Commit: the one that adds this entry.
-
-### 2026-11-03 — Reuse E2E helpers and select the active quick menu
-
-| Area | Change |
-|---|---|
-| Mobile | • Smoke and shop-switching checks reuse error and navigation helpers.<br>• Quick navigation uses role locators to skip background tabs and preserve Playwright's actionability checks. |
-
-Check: delayed and background-menu browser checks pass after failing on the earlier selectors. `npm run typecheck` and all 23 Playwright tests pass. Commit: the one that adds this entry.
-
-### 2026-11-02 — Independent stock decreases for CORE-021
-
-| Area | Change |
-|---|---|
-| Core | • Add an OWNER stock-adjustment API with a positive decrement and mandatory reason; reuse Product locks, V7 idempotency and STOCK_ADJUSTED audit with the new allowed source<br>• Stock, notification reconciliation and original response commit together; reject overdraw/untracked products and preserve prices and money records<br>• PostgreSQL tests cover normalized replay, concurrent writers, overdraw, managed stale stock and failure rollback; require these cases in the CI execution gate |
-| Docs | • Add BR-025, FR-038 and AC-111–115, the API contract and Core handoff; no migration, environment variable or FE/AI change |
-
-Check: `mvn verify` passed 1514 tests with PostgreSQL enabled, zero failures/errors/skips; 13 gate self-tests passed. Reverified after merging staging bec1a37 on 2026-11-04: all 1514 tests and the 13 gate self-tests passed; the Python report gate confirmed all 17 required PostgreSQL suites and methods without skips. The disposable PostgreSQL 17.11 container was removed after verification. No shared database or deployment was changed. Commit: the one that adds this entry.
-
-### 2026-11-02 — Agent chat eval offline with a manual CI gate, memory recall on the trace
-
-| Area | Change |
-|---|---|
-| AI | • A `memory recall` span in each chat session carries the question, the recalled memories with their scores and `recalled_count`<br>• `evaluation/agent_chat/run.py` scores locally with five HoneyHive evaluator templates judged through Bifrost, two seeded memory cases (recall only in those cases, writes off), and two safety metrics copied from the production evaluators; `--gate thresholds.toml` exits 1 below a minimum, `--report` writes markdown by layer, and only `--sync` sends scores to HoneyHive<br>• `.honeyhive/evaluators/sql-parse-check.yaml` parses each `query_shop_data` SQL in production |
-| CI | • `eval-regression.yml`, dispatched by hand from `staging`, runs the eval of input `ref` on a throwaway database with `ai/staging` settings and posts the report to the job summary and the pull request<br>• `scripts/local-db.sh` takes a container name and port, and pushes the AI migrations with `sslmode=disable`, without which `supabase db push` failed on a fresh database |
-| Docs | • The eval README, ADR-0009, `.honeyhive/README.md` and `ci-cd.md#eval-regression` |
-
-Check: 484 unit tests and ruff pass; actionlint passes; an Opus review found the report rows replacing the `tool_calls` metric with the list of calls (fixed, with a test on a row built by `report()`), one failed judge call dropping a whole case (now only that metric), and workflow hardening (fixed); the workflow's database step (throwaway container on a free port, owner insert, seed) ran locally and `run.py --dry-run --repeats 3` built 69 datapoints on it; `sql-parse-check` scored 691 real events without an exception and now also reads arguments sent as a JSON string. Not verified: a full run with models, the workflow on a runner, and the pull request comment. Commit: the one that adds this entry.

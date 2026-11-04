@@ -6,8 +6,10 @@ groupBy: source
 bucketing: day
 dateRange:
   relative: 30d
+# HoneyHive charts session metrics only under an event_type filter; filtered on
+# event_name it looks for the metric on child events and finds none.
 query:
-  - field: event_name
+  - field: event_type
     operator: is
-    value: agent-chat
+    value: session
     type: string
