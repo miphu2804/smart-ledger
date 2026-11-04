@@ -363,7 +363,7 @@ def test_markdown_report_shows_the_gate_layers_and_missed_cases() -> None:
 
     assert markdown.startswith("## agent_chat eval: gate failed")
     assert "2/3 rows" in markdown
-    assert "| task | `correct` | 0.50 | 2 | 0.9 | fail |" in markdown
+    assert "| task | correct | 0.50 | 2 | >= 0.90 | FAIL |" in markdown
     assert "- correct: 0.50 < 0.9" in markdown
     assert "- `revenue_last_month` missed `correct`" in markdown
 

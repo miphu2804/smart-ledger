@@ -299,11 +299,10 @@ uv run pytest
 ## Scripts
 
 ```bash
-export LOG_LEVEL=WARNING                         # hide the app's info logs
-uv run evaluation/run.py agent_chat --dry-run    # eval plan only: no model call, nothing sent
-uv run evaluation/run.py agent_chat              # chat eval, calls the chat and judge models
-uv run evaluation/run.py memory                  # memory recall eval on the local database
-uv run evaluation/memory/generate.py             # regenerate the memory eval's cases.jsonl
+uv run evaluation/run.py memory                # memory recall eval, no model call
+uv run evaluation/run.py agent_chat --dry-run  # chat eval plan, no model call
+uv run evaluation/run.py agent_chat            # chat eval, calls the chat and judge models
+uv run evaluation/memory/generate.py           # regenerate the memory eval's cases.jsonl
 ```
 
 See [Evaluation](evaluation/README.md) for the options.

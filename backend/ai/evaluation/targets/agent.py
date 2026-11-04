@@ -21,6 +21,7 @@ from src.agent.service import (
     TextDelta,
     ToolStarted,
 )
+from src.app_config import app_config
 
 # `run.py` switches the app config before it imports this module, so `src.main` below
 # is imported with tracing off and memory on.
@@ -39,15 +40,25 @@ class AgentTarget:
     the app's lifespan and stores the made-up `memories` for the shop.
     """
 
-    def __init__(self, owner_id: int, shop_id: int, memories: dict[str, dict]) -> None:
+    def __init__(
+        self,
+        owner_id: int,
+        shop_id: int,
+        memories: dict[str, dict],
+        model_alias: str | None = None,
+    ) -> None:
+        if model_alias is not None and model_alias not in app_config.MODEL_ALIASES:
+            known = ", ".join(sorted(app_config.MODEL_ALIASES))
+            raise SystemExit(f"unknown --model {model_alias!r}; known aliases: {known}")
         self.owner_id = owner_id
         self.shop_id = shop_id
         self.memories = memories
+        self.model_alias = model_alias
         self.stack = AsyncExitStack()
 
     async def __aenter__(self) -> "AgentTarget":
         self.exporter = self._trace_tools()
-        await self.stack.enter_async_context(lifespan(app))
+        await self._start_app()
         self.agent = app.state.agent
         self.memory = WithoutMemoryWrites(app.state.memory)
         await self._seed_memories()
@@ -55,6 +66,21 @@ class AgentTarget:
 
     async def __aexit__(self, *error) -> None:
         await self.stack.aclose()
+
+    async def _start_app(self) -> None:
+        """Starts the app's lifespan, which builds the agent from the `chat` alias.
+
+        With `model_alias`, `chat` points at that alias only while the agent is built.
+        The judge reads `chat` on every grade, so it must find the original back.
+        """
+        aliases = app_config.MODEL_ALIASES
+        original = aliases["chat"]
+        if self.model_alias is not None:
+            aliases["chat"] = aliases[self.model_alias]
+        try:
+            await self.stack.enter_async_context(lifespan(app))
+        finally:
+            aliases["chat"] = original
 
     async def ask(self, case: Case) -> Output:
         """Asks the question, then the follow-up in the same conversation if there is

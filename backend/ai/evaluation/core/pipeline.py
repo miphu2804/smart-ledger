@@ -1,6 +1,10 @@
-import sys
-
 from evaluation.core.schema import Case, CaseResult
+from rich.progress import (
+    MofNCompleteColumn,
+    Progress,
+    TextColumn,
+    TimeElapsedColumn,
+)
 
 
 class EvaluationPipeline:
@@ -17,12 +21,24 @@ class EvaluationPipeline:
         The target is entered once for the whole run.
         """
         results = []
-        async with evaluation.target:
-            for case in evaluation.cases:
-                try:
-                    results.append(await self._run_case(evaluation, case))
-                except Exception as error:
-                    print(f"{case.id} failed: {error!r}", file=sys.stderr)
+        columns = (
+            TextColumn("case"),
+            MofNCompleteColumn(),
+            TimeElapsedColumn(),
+            TextColumn("{task.fields[case_id]}"),
+        )
+        # The bar redraws in place on a terminal and prints once elsewhere; failures go
+        # through its console so they do not break the line.
+        with Progress(*columns) as progress:
+            task = progress.add_task("", total=len(evaluation.cases), case_id="")
+            async with evaluation.target:
+                for case in evaluation.cases:
+                    progress.update(task, case_id=case.id)
+                    try:
+                        results.append(await self._run_case(evaluation, case))
+                    except Exception as error:
+                        progress.console.print(f"{case.id} failed: {error!r}")
+                    progress.advance(task)
         return results
 
     async def _run_case(self, evaluation, case: Case) -> CaseResult:

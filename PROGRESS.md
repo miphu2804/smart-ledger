@@ -1,3 +1,12 @@
+### 2026-11-04 — Readable eval output and a simpler eval README
+
+| Area | Change |
+|---|---|
+| AI | • `evaluation/core/render.py` renders a `Table` to the terminal with rich and to markdown; the eval report prints a progress bar, a per-case table and a metrics table with bounds and PASS or FAIL<br>• A run logs `WARNING` and above unless `--verbose` or `LOG_LEVEL` is set; `--model ALIAS` runs the agent on another alias while the judge keeps `chat`<br>• A run gates on the evaluation's own `thresholds.toml` by default; `--gate` picks another file |
+| Docs | • The three evaluation READMEs are rewritten short: the plain command first, options after, then the files to touch for common changes |
+
+Check: unit tests 456 passed, ruff check and format pass; `uv run evaluation/run.py memory` with no flags shows 5 PASS rows and exits 0, recall 0.8601516427969671, local database rows equal before and after; a stricter `--gate` file exits with `gate failed: recall: 0.86 < 0.99`; `agent_chat --dry-run` prints no INFO line and the same plan as before. Not verified: a paid `agent_chat` run with `--model`. Commit: the one that adds this entry.
+
 ### 2026-11-04 — One class-based evaluation pipeline for agent_chat and memory
 
 | Area | Change |
@@ -183,12 +192,3 @@ Check: 2 new tests pass; `npx tsc --noEmit` passes; on the mock web build `/ai` 
 | Test | • `tests/profileValidation.test.ts` covers the tester's inputs (`dsa mipu gfd.,!@#$%^&*()`, a phone of dots, `324253432dsa2`) and valid ones |
 
 Check: 16 new tests pass; all mobile tests 173/175, the two failures in `parseOrder` and `quickNav` exist on `staging`; `npx tsc --noEmit` passes; on the mock web build the three tester inputs show errors with save locked, and valid values unlock it. Not verified: a real phone. Commit: the one that adds this entry.
-
-### 2026-10-31 — Playwright for the mobile web build
-
-| Area | Change |
-|---|---|
-| Test | • `npm run test:e2e` starts the Expo web build with mock data on port 8090 and runs `e2e/` in Chromium at a phone viewport (#438)<br>• `e2e/smoke.spec.ts` opens the sign-in screen, enters with the mock account and checks Tổng quan with no page error |
-| Docs | • The mobile README says how to install and run it |
-
-Check: the smoke test passes through `npx playwright test`; it failed first without `EXPO_PUBLIC_API_ENDPOINT`, so the config sets it; `npx tsc --noEmit` passes. Not run in CI, which the issue does not ask for. Commit: the one that adds this entry.
