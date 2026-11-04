@@ -21,7 +21,7 @@ function defaults(): AdminPreferences {
     locale: 'vi',
     theme: 'light',
     density: 'comfortable',
-    sidebarCollapsed: false,
+    sidebarCollapsed: true,
   }
 }
 

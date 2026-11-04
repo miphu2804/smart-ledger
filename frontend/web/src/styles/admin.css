@@ -390,10 +390,21 @@ body:has(.adm) {
 .shell.is-collapsed {
   grid-template-columns: var(--sb-w-collapsed) minmax(0, 1fr);
 }
-/* Desktop: the sidebar column slides between 248px and 72px instead of snapping */
+/* Desktop: the grid column stays 72px so the content never moves; the open sidebar slides over it, and the
+   centered content clears it once the window is wide enough */
 @media (min-width: 1280px) {
-  .shell {
-    transition: grid-template-columns 0.2s ease;
+  .shell,
+  .shell.is-collapsed {
+    grid-template-columns: var(--sb-w-collapsed) minmax(0, 1fr);
+  }
+  .shell .sb {
+    width: var(--sb-w);
+    transition: width 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: var(--shadow-pop);
+  }
+  .shell.is-collapsed .sb {
+    width: var(--sb-w-collapsed);
+    box-shadow: none;
   }
 }
 
@@ -793,7 +804,8 @@ body:has(.adm) {
 .content {
   padding: var(--pad);
   width: 100%;
-  max-width: 1600px;
+  max-width: 1200px;
+  margin-inline: auto;
 }
 .grid-12 {
   display: grid;
