@@ -16,6 +16,7 @@ import asyncio
 import logging
 import re
 import uuid
+from collections import OrderedDict
 from dataclasses import replace
 from typing import Literal
 
@@ -103,6 +104,9 @@ class AgentMemoryService:
     RECONCILE_MIN_RELEVANCE = 0.6
     # Remembered facts checked per new fact.
     RECONCILE_CANDIDATES = 3
+    # Question vectors kept in memory: the Bobi sheet's quick chips repeat the same
+    # texts, and one process serves the AI, so no shared cache is needed.
+    QUERY_CACHE_SIZE = 256
 
     def __init__(
         self,
@@ -124,6 +128,7 @@ class AgentMemoryService:
         # Standing preferences sent every turn on top of the search, so a growing list
         # cannot crowd the prompt.
         self.preference_limit = preference_limit
+        self.query_vectors: OrderedDict[str, list[float]] = OrderedDict()
         # Prompted JSON works on every provider, including those that reject native
         # structured output.
         self.extractor = Agent(
@@ -150,16 +155,19 @@ class AgentMemoryService:
     ) -> tuple[str, list[RecalledMemory]]:
         """Return `message` led by the owner's best memories, and those memories.
 
-        An owner who switched memory off, a failed search or no match answers without
-        memories rather than failing the turn.
+        An owner who switched memory off or has none, a failed search or no match
+        answers without memories rather than failing the turn.
         """
         try:
-            with self.observability.span(
-                "memory enabled", metadata={"shop_id": shop_id}
-            ):
-                enabled = await self.memory_enabled(shop_id, user_id)
-                self.observability.enrich_span(outputs={"enabled": enabled})
-            if not enabled:
+            # Checked before the embedding call, so the question of an owner who
+            # switched memory off never reaches the embedding provider, and an owner
+            # without memories skips the call.
+            with self.observability.span("memory ready", metadata={"shop_id": shop_id}):
+                ready = await asyncio.to_thread(
+                    self.repository.recall_ready, shop_id, user_id
+                )
+                self.observability.enrich_span(outputs={"ready": ready})
+            if not ready:
                 return message, []
             memories = await self._recall(shop_id, user_id, message)
         except Exception as error:
@@ -209,9 +217,11 @@ class AgentMemoryService:
         Runs after the turn is saved, so the owner never waits for it. A failure in
         either step is logged, never raised, so a broken memory step cannot fail a
         chat. Does nothing for an owner who switched memory off. `recalled` are the
-        memories the turn used: the model skips them and may mark one a new fact
-        replaces.
+        memories the turn used: their use is recorded here, off the recall path, and
+        the model skips them and may mark one a new fact replaces.
         """
+        if recalled:
+            await self._mark_used(shop_id, user_id, recalled)
         try:
             if not await self.memory_enabled(shop_id, user_id):
                 return
@@ -223,6 +233,22 @@ class AgentMemoryService:
             return
         await self._store(shop_id, user_id, conversation_id, question, answer, recalled)
         await self._summarize(shop_id, user_id)
+
+    async def _mark_used(
+        self, shop_id: int, user_id: int, recalled: list[RecalledMemory]
+    ) -> None:
+        try:
+            await asyncio.to_thread(
+                self.repository.mark_used,
+                shop_id,
+                user_id,
+                [memory.id for memory in recalled],
+            )
+        except Exception as error:
+            logger.warning(
+                "memory use not recorded: shop=%s (%s)", shop_id, type(error).__name__
+            )
+            logger.debug("memory use not recorded: shop=%s", shop_id, exc_info=True)
 
     async def _store(
         self,
@@ -407,6 +433,16 @@ class AgentMemoryService:
             for fact, vector in zip(facts, vectors.embeddings, strict=True)
         ]
 
+    async def _query_vector(self, message: str) -> list[float]:
+        if message in self.query_vectors:
+            self.query_vectors.move_to_end(message)
+            return self.query_vectors[message]
+        vector = list((await self.embedder.embed_query(message))[0])
+        self.query_vectors[message] = vector
+        if len(self.query_vectors) > self.QUERY_CACHE_SIZE:
+            self.query_vectors.popitem(last=False)
+        return vector
+
     async def _recall(
         self, shop_id: int, user_id: int, message: str
     ) -> list[RecalledMemory]:
@@ -415,12 +451,12 @@ class AgentMemoryService:
         with self.observability.span(
             "memory recall", inputs={"question": message}, metadata={"shop_id": shop_id}
         ):
-            query = await self.embedder.embed_query(message)
+            query = await self._query_vector(message)
             memories = await asyncio.to_thread(
                 self.repository.search,
                 shop_id,
                 user_id,
-                list(query[0]),
+                query,
                 self.recall_limit,
                 self.preference_limit,
                 message,
