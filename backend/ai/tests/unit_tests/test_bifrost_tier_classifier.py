@@ -2,7 +2,7 @@ import json
 
 import httpx
 import pytest
-from tests.unit_tests.test_observability import SpanTracer
+from tests.unit_tests.test_observability import RecordingTracer
 
 from src.llm_router.bifrost_tier_classifier import BifrostTierClassifier
 from src.llm_router.tier import Tier
@@ -79,7 +79,7 @@ MEDIUM_ANSWER = {"type": "choice", "name": "tier", "choice": "MEDIUM", "confiden
 
 
 async def test_traced_turn_records_the_call_as_a_model_event_with_its_tokens() -> None:
-    tracer = SpanTracer()
+    tracer = RecordingTracer()
     observability = Observability(tracer)
     await observability.start_turn_session(15, 3, None, "revenue today?", {})
     classifier = classifier_answering(MEDIUM_ANSWER, [], observability)
@@ -97,7 +97,7 @@ async def test_traced_turn_records_the_call_as_a_model_event_with_its_tokens() -
 
 
 async def test_untraced_turn_classifies_without_a_span() -> None:
-    tracer = SpanTracer()
+    tracer = RecordingTracer()
     classifier = classifier_answering(MEDIUM_ANSWER, [], Observability(tracer))
 
     assert await classifier.classify(["revenue today?"]) is Tier.MEDIUM

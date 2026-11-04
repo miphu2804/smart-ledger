@@ -154,7 +154,12 @@ class AgentMemoryService:
         memories rather than failing the turn.
         """
         try:
-            if not await self.memory_enabled(shop_id, user_id):
+            with self.observability.span(
+                "memory enabled", metadata={"shop_id": shop_id}
+            ):
+                enabled = await self.memory_enabled(shop_id, user_id)
+                self.observability.enrich_span(outputs={"enabled": enabled})
+            if not enabled:
                 return message, []
             memories = await self._recall(shop_id, user_id, message)
         except Exception as error:
