@@ -104,6 +104,20 @@
       }
     ],
     "routing_rules": [],
+    "pricing_overrides": [
+      {
+        "id": "inception-mercury-3",
+        "name": "Mercury 3 launch price",
+        "scope_kind": "provider",
+        "provider_id": "inception",
+        "match_type": "exact",
+        "pattern": "mercury-3",
+        "request_types": [
+          "chat_completion"
+        ],
+        "pricing_patch": "{\"input_cost_per_token\":1e-7,\"cache_read_input_token_cost\":1e-8,\"output_cost_per_token\":3.5e-7}"
+      }
+    ],
     "auth_config": {
       "is_enabled": true,
       "admin_username": "env.BIFROST_ADMIN_USERNAME",
