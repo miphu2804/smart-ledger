@@ -25,7 +25,7 @@ export type Industry = (typeof INDUSTRIES)[number]
 /* Auth & phân quyền                                                   */
 /* ------------------------------------------------------------------ */
 
-/** ADMIN: đội vận hành. OWNER: chủ cơ sở dùng app mobile — không được vào /admin. */
+/** ADMIN: đội vận hành. OWNER: chủ tiệm dùng app mobile — không được vào /admin. */
 export type Role = 'ADMIN' | 'OWNER'
 
 export interface SessionUser {
@@ -85,7 +85,7 @@ export interface OwnerSummary {
   status: AccountStatus
 }
 
-/** Một dòng trong danh sách khách hàng — mỗi dòng là một cơ sở kèm chủ cơ sở. */
+/** Một dòng trong danh sách khách hàng — mỗi dòng là một cơ sở kèm chủ tiệm. */
 export interface CustomerListItem {
   businessId: string
   businessName: string

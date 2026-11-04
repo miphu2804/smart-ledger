@@ -33,7 +33,7 @@ const SEEDS: Seed[] = [
   },
   {
     title: 'Khách không nhận được mã OTP',
-    description: 'Chủ cơ sở gọi hotline báo không nhận được SMS OTP khi đăng ký.',
+    description: 'Chủ tiệm gọi hotline báo không nhận được SMS OTP khi đăng ký.',
     status: 'inbox',
     severity: 'medium',
     source: 'manual',
@@ -64,7 +64,7 @@ const SEEDS: Seed[] = [
   },
   {
     title: 'Đăng nhập bất thường từ nhiều thiết bị',
-    description: 'Tài khoản bị khoá tự động. Xác minh danh tính chủ cơ sở trước khi hướng dẫn mở khoá.',
+    description: 'Tài khoản bị khoá tự động. Xác minh danh tính chủ tiệm trước khi hướng dẫn mở khoá.',
     status: 'investigating',
     severity: 'high',
     source: 'system',
@@ -86,7 +86,7 @@ const SEEDS: Seed[] = [
   },
   {
     title: 'Chờ khách gửi ảnh màn hình lỗi',
-    description: 'Đã nhắn Zalo cho chủ cơ sở, đang chờ ảnh chụp màn hình khi app bị treo.',
+    description: 'Đã nhắn Zalo cho chủ tiệm, đang chờ ảnh chụp màn hình khi app bị treo.',
     status: 'waiting',
     severity: 'medium',
     source: 'manual',
@@ -96,8 +96,8 @@ const SEEDS: Seed[] = [
     ageHours: 50,
   },
   {
-    title: 'Xác nhận thông tin chủ cơ sở thứ 2',
-    description: 'OWNER tạo thêm cơ sở mới, cần xác nhận đúng người (qua SĐT đã xác minh).',
+    title: 'Xác nhận thông tin chủ tiệm thứ 2',
+    description: 'Chủ tiệm tạo thêm cơ sở mới, cần xác nhận đúng người (qua SĐT đã xác minh).',
     status: 'waiting',
     severity: 'low',
     source: 'system',
