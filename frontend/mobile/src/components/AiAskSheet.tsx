@@ -1,19 +1,18 @@
 import { Feather } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { Image, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { ChatMessage, ThoughtStep } from '../data/types';
+import type { ChatMessage } from '../data/types';
 import { agentApi, agentErrorMessage } from '../lib/agentApi';
 import { followUpSuggestions, revenueSuggestions } from '../lib/aiSuggestions';
 import { ApiError } from '../lib/api';
 import { splitActions } from '../lib/chatMarkdown';
 import { triggerFeedback } from '../lib/feedback';
 import { ddmmyyyy, hhmm } from '../lib/format';
-import { applyToolEvent } from '../lib/toolSteps';
-import { colors, font } from '../theme';
+import { colors } from '../theme';
+import { ChatComposer } from './ChatComposer';
 import { ChatText, ScreenActions, StreamingChatText } from './ChatText';
-import { ThoughtLine } from './ThoughtLine';
+import { TypingDots } from './TypingDots';
 import { IconBtn, KEYBOARD_AVOID_BEHAVIOR, Row, T } from './ui';
 
 /** Hàng gợi ý dưới thẻ tổng: chạm một gợi ý thì mở bảng hỏi trợ lý với đúng câu đó. */
@@ -59,7 +58,6 @@ export function AiAskSheet({ question, onClose }: { question: string | null; onC
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [typing, setTyping] = useState(false);
   const [draft, setDraft] = useState('');
-  const [steps, setSteps] = useState<ThoughtStep[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [text, setText] = useState('');
 
@@ -71,14 +69,8 @@ export function AiAskSheet({ question, onClose }: { question: string | null; onC
     setText('');
     setError(null);
     setTyping(true);
-    let turnSteps: ThoughtStep[] = [];
     try {
-      const reply = await agentApi.chatStream(
-        { conversation_id: conversation, message },
-        (t) => mine === session.current && setDraft(t),
-        undefined,
-        (event) => mine === session.current && setSteps((turnSteps = applyToolEvent(turnSteps, event))),
-      );
+      const reply = await agentApi.chatStream({ conversation_id: conversation, message }, (t) => mine === session.current && setDraft(t));
       if (mine !== session.current) return;
       setConversationId(reply.conversation_id);
       setMsgs((m) => [...m, { id: `a${reply.message_id}`, from: 'ai', text: reply.answer }]);
@@ -91,7 +83,6 @@ export function AiAskSheet({ question, onClose }: { question: string | null; onC
     } finally {
       if (mine === session.current) {
         setDraft('');
-        setSteps([]);
         setTyping(false);
       }
     }
@@ -105,7 +96,6 @@ export function AiAskSheet({ question, onClose }: { question: string | null; onC
     setError(null);
     setText('');
     setDraft('');
-    setSteps([]);
     setTyping(false);
     if (question) {
       setOpenedAt(new Date());
@@ -174,7 +164,7 @@ export function AiAskSheet({ question, onClose }: { question: string | null; onC
             })}
 
             {typing ? (
-              <View style={styles.answer}>{draft ? <StreamingChatText text={splitActions(draft, true).text} /> : <ThoughtLine steps={steps} />}</View>
+              <View style={styles.answer}>{draft ? <StreamingChatText text={splitActions(draft, true).text} /> : <TypingDots />}</View>
             ) : null}
 
             {error ? (
@@ -199,32 +189,10 @@ export function AiAskSheet({ question, onClose }: { question: string | null; onC
             ) : null}
           </ScrollView>
 
-          <Row gap={8} style={styles.inputRow}>
-            {/* Mở màn Trợ lý đầy đủ (lịch sử, ghi nhớ, giọng nói); rời màn này thì bảng tự đóng */}
-            <IconBtn name="message-square" size={44} bg={colors.brandSoft} color={colors.brand} onPress={() => router.push('/ai')} label="Mở Trợ lý" />
-            <View style={styles.inputWrap}>
-              <TextInput
-                value={text}
-                onChangeText={setText}
-                placeholder="Hỏi Bobi..."
-                placeholderTextColor={colors.faint}
-                style={styles.input}
-                returnKeyType="send"
-                onSubmitEditing={() => ask(text)}
-                editable={!typing}
-                accessibilityLabel="Câu hỏi cho trợ lý"
-              />
-              <Pressable
-                onPress={() => ask(text)}
-                disabled={typing || !text.trim()}
-                style={({ pressed }) => [styles.sendBtn, (typing || !text.trim()) && { opacity: 0.4 }, pressed && styles.pressed]}
-                accessibilityRole="button"
-                accessibilityLabel="Gửi câu hỏi"
-              >
-                <Feather name="send" size={16} color={colors.white} />
-              </Pressable>
-            </View>
-          </Row>
+          {/* Cùng ô nhập với màn Trợ lý; không có nút sang màn Trợ lý vì từ đó không quay lại được bảng này. */}
+          <View style={styles.composerWrap}>
+            <ChatComposer value={text} onChangeText={setText} onSend={() => ask(text)} busy={typing} />
+          </View>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -296,19 +264,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brandTint,
     maxWidth: '86%',
   },
-  inputRow: { paddingTop: 8, alignItems: 'center' },
-  inputWrap: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.bg,
-    paddingLeft: 14,
-    paddingRight: 5,
-    minHeight: 44,
-  },
-  input: { flex: 1, fontFamily: font.medium, fontSize: 14, color: colors.ink, paddingVertical: 10 },
-  sendBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  composerWrap: { paddingTop: 8 },
 });

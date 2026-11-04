@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
-import { router, useFocusEffect } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { router } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Image,
@@ -10,19 +10,17 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ChatComposer } from '../src/components/ChatComposer';
 import { ChatText, ScreenActions, StreamingChatText } from '../src/components/ChatText';
 import { BusinessIcon } from '../src/components/icons';
 import { MemoryGraph } from '../src/components/MemoryGraph';
 import { MascotBadge } from '../src/components/MascotBadge';
 import { ACTION_MENU_DURATION, easeOut, useReducedMotion } from '../src/motion';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SlingSendButton } from '../src/components/SlingSendButton';
-import { ThoughtLine } from '../src/components/ThoughtLine';
-import { VoicePillButton } from '../src/components/VoicePillButton';
+import { TypingDots } from '../src/components/TypingDots';
 import { Button, Dialog, EmptyState, Field, IconBtn, KEYBOARD_AVOID_BEHAVIOR, Row, Sheet, T, Toggle } from '../src/components/ui';
 import type {
   AgentConversationSummary,
@@ -31,15 +29,13 @@ import type {
   AgentMemoryItem,
   AgentMessageView,
   ChatMessage,
-  ThoughtStep,
 } from '../src/data/types';
 import { agentApi, agentErrorMessage } from '../src/lib/agentApi';
 import { ApiError } from '../src/lib/api';
 import { splitActions } from '../src/lib/chatMarkdown';
 import { hhmm, relDay } from '../src/lib/format';
-import { applyToolEvent } from '../src/lib/toolSteps';
 import { useApp } from '../src/store/AppStore';
-import { colors, font, shadow } from '../src/theme';
+import { colors, shadow } from '../src/theme';
 
 // Trợ lý đọc hồ sơ tiệm, sản phẩm và đơn bán; chi phí và công nợ xem ở màn khác.
 const QUICK = [
@@ -77,18 +73,6 @@ function lastActive(iso: string): string {
   return `${relDay(d)} · ${hhmm(d)}`;
 }
 
-/** Nhãn "Trợ lý Bobi" đầu bong bóng; biểu tượng sáng khi tiệm bật ghi nhớ. Ghi nhớ xem ở Cài đặt trợ lý. */
-function BobiLabel({ memoryOn }: { memoryOn: boolean }) {
-  return (
-    <Row gap={3} style={[styles.assistantBubbleHeader, { alignItems: 'center' }]}>
-      <Image source={require('../assets/voice/agent-default.png')} resizeMode="contain" style={{ width: 22, height: 22 }} />
-      <T w="bold" size={13.5} color={colors.brand} style={{ marginLeft: 3 }}>
-        Trợ lý Bobi
-      </T>
-    </Row>
-  );
-}
-
 /** Trợ lý AI — gửi qua agentApi (Core `/api/v1/agent/chat`; khi bật mock thì mockCore trả lời giả). */
 const HEADER_BTN = 40;
 
@@ -110,19 +94,14 @@ export default function Ai() {
   const scroll = useRef<ScrollView>(null);
   const sending = useRef(false);
   const [text, setText] = useState('');
-  const voiceBase = useRef<string | null>(null);
   const [typing, setTyping] = useState(false);
   // Chữ trợ lý đang trả lời dở; vào `msgs` khi có sự kiện `done`.
   const [draft, setDraft] = useState('');
-  // Các bước (gọi tool) của lượt đang chạy, hiện trong bong bóng chờ cho tới khi chữ đầu tiên tới.
-  const [steps, setSteps] = useState<ThoughtStep[]>([]);
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [msgs, setMsgs] = useState<ChatMessage[]>(() => [welcome(app.user.name)]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // Trạng thái công tắc "Ghi nhớ dài hạn"; chưa tải được hoặc tiệm chưa bật ghi nhớ thì coi là tắt.
-  const [memoryOn, setMemoryOn] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   useEffect(() => {
@@ -134,18 +113,7 @@ export default function Ai() {
     };
   }, []);
 
-  const loadMemoryOn = useCallback(() => {
-    agentApi
-      .getMemorySettings()
-      .then((s) => setMemoryOn(s.available && s.memory_enabled))
-      .catch(() => setMemoryOn(false));
-  }, []);
-  useFocusEffect(loadMemoryOn);
-
-  const closeSettings = () => {
-    setSettingsOpen(false);
-    loadMemoryOn();
-  };
+  const closeSettings = () => setSettingsOpen(false);
 
   const startNew = () => {
     setConversationId(null);
@@ -186,14 +154,6 @@ export default function Ai() {
     return () => clearTimeout(t);
   }, [draft, typing]);
 
-  // Chữ nói ra được đổ vào ô nhập, nối sau phần đã gõ; người dùng xem lại rồi bấm gửi.
-  const dictate = (spoken: string, done = false) => {
-    if (voiceBase.current === null) voiceBase.current = text.trim();
-    const base = voiceBase.current;
-    setText(base && spoken ? `${base} ${spoken}` : base || spoken);
-    if (done) voiceBase.current = null;
-  };
-
   const send = async (q: string) => {
     const message = q.trim();
     // `typing` là state nên chưa kịp true khi hai lần bấm đến cùng một nhịp: ref chặn gửi trùng.
@@ -214,14 +174,8 @@ export default function Ai() {
         setDraft(latest);
       });
     };
-    let turnSteps: ThoughtStep[] = [];
     try {
-      const reply = await agentApi.chatStream(
-        { conversation_id: conversationId, message },
-        showDraft,
-        undefined,
-        (event) => setSteps((turnSteps = applyToolEvent(turnSteps, event))),
-      );
+      const reply = await agentApi.chatStream({ conversation_id: conversationId, message }, showDraft);
       setConversationId(reply.conversation_id);
       setMsgs((m) => [...m, { id: `a${reply.message_id}`, from: 'ai', text: reply.answer }]);
     } catch (err) {
@@ -235,7 +189,6 @@ export default function Ai() {
       if (frame !== null) cancelAnimationFrame(frame);
       sending.current = false;
       setDraft('');
-      setSteps([]);
       setTyping(false);
     }
   };
@@ -275,9 +228,6 @@ export default function Ai() {
               <React.Fragment key={m.id}>
                 <View style={[styles.messageRow, isUser && styles.userMessageRow]}>
                   <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
-                    {!isUser ? (
-<BobiLabel memoryOn={memoryOn} />
-                    ) : null}
                     {isUser ? (
                       <T size={13.5} color={colors.white} style={styles.messageText}>
                         {m.text}
@@ -292,18 +242,16 @@ export default function Ai() {
             );
           })}
 
-          {/* Chờ chữ đầu tiên: dòng suy nghĩ trôi trên nền, không bọc hộp để không bị nhầm là bong bóng trả lời. */}
+          {/* Chờ chữ đầu tiên: ba chấm trôi trên nền, không bọc hộp để không bị nhầm là bong bóng trả lời. */}
           {typing ? (
             <View style={styles.messageRow}>
               {draft ? (
                 <View style={[styles.bubble, styles.assistantBubble]}>
-                  <BobiLabel memoryOn={memoryOn} />
                   <StreamingChatText text={splitActions(draft, true).text} />
                 </View>
               ) : (
-                // Bề rộng hết hàng để hàng suy nghĩ tự xuống dòng khi có nhiều bước, thay vì tràn ra ngoài màn hình.
                 <View style={styles.thinkingLine}>
-                  <ThoughtLine steps={steps} />
+                  <TypingDots />
                 </View>
               )}
             </View>
@@ -418,23 +366,7 @@ export default function Ai() {
             ))}
           </ScrollView>
         ) : null}
-        <View style={styles.composer}>
-          <TextInput
-            value={text}
-            onChangeText={setText}
-            onSubmitEditing={() => send(text)}
-            multiline
-            numberOfLines={1}
-            textAlignVertical="center"
-            placeholder="Nhập câu hỏi cho trợ lý…"
-            placeholderTextColor={colors.faint}
-            accessibilityLabel="Tin nhắn cho trợ lý"
-            style={styles.input}
-            returnKeyType="send"
-          />
-          <VoicePillButton disabled={typing} onPartial={(t) => dictate(t)} onTranscript={(t) => dictate(t, true)} />
-          <SlingSendButton disabled={!text.trim() || typing} onSend={() => send(text)} />
-        </View>
+        <ChatComposer value={text} onChangeText={setText} onSend={() => send(text)} busy={typing} />
       </View>
 
       <AssistantSettingsSheet
@@ -841,11 +773,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     borderTopLeftRadius: 4,
   },
-  assistantBubbleHeader: {
-    alignItems: 'flex-start',
-    gap: 4,
-    marginBottom: 4,
-  },
   userBubble: {
     maxWidth: '82%',
     backgroundColor: colors.brand,
@@ -855,7 +782,7 @@ const styles = StyleSheet.create({
     lineHeight: 20.5,
     flexWrap: 'wrap',
   },
-  // Dòng suy nghĩ không bọc hộp: chữ và các bước trôi trên nền, chỉ chiếm bề rộng hết hàng để xuống dòng đúng.
+  // Ba chấm chờ không bọc hộp, trôi trên nền.
   thinkingLine: {
     flex: 1,
     minWidth: 0,
@@ -891,34 +818,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderTopWidth: 0,
   },
-  composer: {
-    minHeight: 58,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 7,
-    backgroundColor: 'rgba(255,255,255,0.88)',
-    borderWidth: 1,
-    borderColor: colors.white,
-    borderRadius: 30,
-    ...shadow(2),
-  },
-  input: {
-    flex: 1,
-    minHeight: 42,
-    maxHeight: 112,
-    paddingHorizontal: 12,
-    // Android tự đệm trên dưới cho TextInput, làm ô cao cố định cắt mất dấu tiếng Việt phía trên; bỏ đệm dọc
-    paddingVertical: 0,
-    // textAlignVertical chỉ có tác dụng trên Android; nơi khác đệm (minHeight - lineHeight) / 2 để chữ nằm giữa ô.
-    ...(Platform.OS === 'android' ? null : { paddingVertical: 11 }),
-    lineHeight: 20,
-    fontFamily: font.medium,
-    fontSize: 13.5,
-    color: colors.ink,
-    outlineStyle: 'none',
-  } as never,
   errorCard: {
     gap: 6,
     marginBottom: 10,

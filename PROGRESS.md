@@ -1,3 +1,20 @@
+### 2026-11-04 — Assistant chats wait with dots and share one composer
+
+| Area | Change |
+|---|---|
+| Mobile | • While the first words of an answer are on their way, the Trợ lý screen and the quick-ask sheet on Đơn hàng show only three pulsing dots (`TypingDots`); the waiting phrases, timer and tool step names are gone<br>• Answers no longer start with the Bobi icon and the "Trợ lý Bobi" label<br>• The quick-ask sheet uses the Trợ lý screen's input (`ChatComposer`: type, record, send) and drops its button to the Trợ lý screen, which left no way back<br>• Unused code removed: `ThoughtLine`, the waiting phrases and tool step labels with their tests |
+| Docs | • `api-contracts.md` describes the new waiting state; PRD `AC-118` |
+
+Check: `npx tsc --noEmit` passes; unit tests 178/180, with `parseOrder` and `quickNav` failing on `staging` too; `npx playwright test` on this branch; both screens checked on the mock web build at 375×812 in the session that wrote the change. Not verified: answers from real AI and Core, and a real phone. Commit: the one that adds this entry.
+### 2026-11-04 — agent_chat eval split into a package
+
+| Area | Change |
+|---|---|
+| AI | • `evaluation/agent_chat/run.py` (1167 lines) is now a thin command line over `cases.py`, `scoring.py`, `judge.py`, `pipeline.py`, `reporting.py` and `honeyhive_sync.py`, laid out by role like the NexiraCopilot evaluation platform, with no behavior change<br>• `honeyhive_sync.py` and the command line are the only modules that import `honeyhive`; scoring, judging and reporting run without it<br>• The unit tests import the modules instead of loading the script from its path |
+| Docs | • The agent_chat README lists the new modules and names the module that does each step |
+
+Check: an AST comparison finds 71 of the 72 old top-level symbols unchanged, and `RESULTS` still points at `agent_chat/results`; the 69 datapoints built after the split match the ones built before byte for byte, with `suite_version` `7a34fe0c0744`; `--dry-run` prints the same plan apart from the random `session_id`; unit tests 441 passed; ruff check and format pass. Not verified: a full run with the model and `--sync`. Commit: the one that adds this entry.
+
 ### 2026-11-03 — Follow the email sign-in flow in account tests
 
 | Area | Change |
@@ -180,20 +197,3 @@ Check: 2 new tests pass; `npx tsc --noEmit` passes; on the mock web build `/ai` 
 | Test | • `tests/profileValidation.test.ts` covers the tester's inputs (`dsa mipu gfd.,!@#$%^&*()`, a phone of dots, `324253432dsa2`) and valid ones |
 
 Check: 16 new tests pass; all mobile tests 173/175, the two failures in `parseOrder` and `quickNav` exist on `staging`; `npx tsc --noEmit` passes; on the mock web build the three tester inputs show errors with save locked, and valid values unlock it. Not verified: a real phone. Commit: the one that adds this entry.
-
-### 2026-10-31 — Playwright for the mobile web build
-
-| Area | Change |
-|---|---|
-| Test | • `npm run test:e2e` starts the Expo web build with mock data on port 8090 and runs `e2e/` in Chromium at a phone viewport (#438)<br>• `e2e/smoke.spec.ts` opens the sign-in screen, enters with the mock account and checks Tổng quan with no page error |
-| Docs | • The mobile README says how to install and run it |
-
-Check: the smoke test passes through `npx playwright test`; it failed first without `EXPO_PUBLIC_API_ENDPOINT`, so the config sets it; `npx tsc --noEmit` passes. Not run in CI, which the issue does not ask for. Commit: the one that adds this entry.
-
-### 2026-10-31 — Policy page for Google Play
-
-| Area | Change |
-|---|---|
-| Web | • `/chinh-sach` carries the privacy policy, terms of use and payment policy from the team's Google Doc dated 30/10/2026, with its open details filled from the deploy config and code: AI providers, log retention, what is really collected<br>• `/delete-account` opens the data deletion page, the footer links to the new page, and `/privacy` redirects to it, so one privacy policy remains<br>• The draft label is gone from the legal pages, with `VITE_LEGAL_DRAFT` in the code, the landing workflow and the docs |
-
-Check: `npm run lint`, `tsc -b` and `vite build` pass; at 375 px the page has no horizontal scroll and no draft or "Cần điền" text, and `/privacy` redirects to it. Not verified: legal review. The app still has no in-app account deletion entry, which the page says plainly and Google Play requires. Commit: the one that adds this entry.
