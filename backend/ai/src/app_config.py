@@ -34,6 +34,9 @@ class AppConfig(BaseSettings):
     # small.
     POSTGRES_POOL_MAX_SIZE: int = Field(default=2, gt=0)
 
+    # chat-history cache; unset or unreachable means every turn reads PostgreSQL
+    REDIS_URL: str | None = None
+
     # read-only login granted ai_sql_reader (AI baseline migration); unset disables the
     # agent's shop-data tool while chat keeps working
     AI_SQL_READER_URL: str | None = None

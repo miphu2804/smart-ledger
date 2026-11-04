@@ -67,6 +67,7 @@ The agent runs on [Pydantic AI](https://ai.pydantic.dev/). Prompts live in `src/
 - History is never summarized: older messages than `AGENT_HISTORY_TURNS` (default 30 exchanges) simply do not reach the model. 30 turns at the 2000-character cap fit a 100k-token window.
 - The current shop time (`Asia/Ho_Chi_Minh`) follows the new message after a cache breakpoint and is never stored, so instructions and history stay a cacheable prefix.
 - `AgentConversationRepository.recent_messages` checks the conversation belongs to the user and shop before reading it.
+- With `REDIS_URL` set, the repository keeps each conversation's latest messages in Redis for 24 hours, keyed by conversation, user and shop, so a repeat turn skips the database read; `save_exchange` updates a cached entry after it commits, `delete_conversation` removes it, and an unset or unreachable Redis makes every turn read PostgreSQL. Start a local one with `docker run -d --rm --name smartledger-local-redis -p 127.0.0.1:6379:6379 redis:7-alpine redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru` and set `REDIS_URL=redis://127.0.0.1:6379/0`.
 - `chat_conversations.summary` and `summary_through_message_id` are unused and kept only so the previous release can roll back.
 
 ## Model provider

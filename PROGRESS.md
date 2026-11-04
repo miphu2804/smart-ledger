@@ -1,3 +1,11 @@
+### 2026-11-04 — Cache the chat history in Redis
+
+| Area | Change |
+|---|---|
+| AI | • New `RedisClient` (`src/infra/redis_client.py`), a general key-value cache that fails open when Redis is unset, down or erroring<br>• `AgentConversationRepository` keeps each conversation's latest messages in Redis for 24 hours, so a repeat turn skips the database read that cost about 200 ms from Hanoi to Singapore; `save_exchange` updates a cached entry after it commits and `delete_conversation` removes it<br>• New optional `REDIS_URL` setting |
+| Docs | • The AI README and local development guide give the local Redis command and `REDIS_URL` |
+
+Check: `uv run pytest -q` (587 passed, 13 skipped) with `POSTGRES_TEST_URL` on a throwaway `pgvector/pgvector:pg17` container and `REDIS_TEST_URL` on a local `redis:7-alpine`, `ruff check` and `ruff format --check`; the repository tests use an in-memory fake. Four real local turns on one conversation with `REDIS_URL` set read the history in 25 ms on the first database read and 1 ms on the next two cache hits; the credential map is regenerated. Not verified: the gain in production and a deployed Redis, which staging and production do not run yet. Commit: the one that adds this entry.
 ### 2026-11-04 — Faster memory recall on the chat hot path
 
 | Area | Change |

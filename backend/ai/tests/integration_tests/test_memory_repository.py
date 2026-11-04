@@ -11,6 +11,7 @@ from tests.support import REPO_ROOT, apply_ai_baseline, apply_core_migrations
 
 from src.agent.repository import AgentConversationRepository
 from src.infra.postgre_db_client import PostgreDBClient
+from src.infra.redis_client import RedisClient
 from src.memory.repository import AgentMemoryRepository, NewMemory
 
 MEMORY_MIGRATIONS = [
@@ -83,7 +84,9 @@ def memory_db() -> Iterator[tuple[psycopg.Connection, PostgreDBClient, dict]]:
 
 
 def new_conversation(postgres: PostgreDBClient, user_id: int, shop_id: int) -> int:
-    conversation_id, _ = AgentConversationRepository(postgres).save_exchange(
+    conversation_id, _ = AgentConversationRepository(
+        postgres, RedisClient()
+    ).save_exchange(
         user_id=user_id,
         shop_id=shop_id,
         conversation_id=None,
@@ -162,7 +165,7 @@ def test_deleting_a_conversation_forgets_its_memories(memory_db) -> None:
         ids["shop_a"], ids["user_a"], conversation_id, [memory("gạo chú Tư", 1, 0)]
     )
 
-    AgentConversationRepository(postgres).delete_conversation(
+    AgentConversationRepository(postgres, RedisClient()).delete_conversation(
         conversation_id, ids["user_a"], ids["shop_a"]
     )
 
@@ -249,7 +252,7 @@ def test_old_memories_of_a_chat_day_are_swapped_for_their_summary(memory_db) -> 
     assert found[0].created_at == max(item.created_at for item in group.memories)
     assert memories.due_for_summary(ids["shop_a"], ids["user_a"], 7) == []
 
-    AgentConversationRepository(postgres).delete_conversation(
+    AgentConversationRepository(postgres, RedisClient()).delete_conversation(
         conversation_id, ids["user_a"], ids["shop_a"]
     )
     assert memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 5) == []
@@ -364,7 +367,7 @@ def test_a_superseded_memory_is_hidden_until_the_newer_one_is_forgotten(
     found = memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 5)
     assert [item.content for item in found] == ["họp lúc 9h"]
 
-    AgentConversationRepository(postgres).delete_conversation(
+    AgentConversationRepository(postgres, RedisClient()).delete_conversation(
         new_chat, ids["user_a"], ids["shop_a"]
     )
     found = memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 5)

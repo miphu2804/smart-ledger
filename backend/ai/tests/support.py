@@ -193,3 +193,26 @@ def echo_user_prompts(messages: list[ModelMessage], info: AgentInfo) -> ModelRes
         if kind == "user"
     ]
     return ModelResponse(parts=[TextPart(" | ".join(prompts))])
+
+
+class FakeRedis:
+    """In-memory stand-in with the four `RedisClient` methods, for cache logic tests."""
+
+    def __init__(self) -> None:
+        self.values: dict[str, str] = {}
+        self.ttls: dict[str, int | None] = {}
+
+    def get(self, key: str) -> str | None:
+        return self.values.get(key)
+
+    def set(self, key: str, value: str, ttl_seconds: int | None = None) -> None:
+        self.values[key] = value
+        self.ttls[key] = ttl_seconds
+
+    def delete(self, *keys: str) -> None:
+        for key in keys:
+            self.values.pop(key, None)
+            self.ttls.pop(key, None)
+
+    def close(self) -> None:
+        pass
