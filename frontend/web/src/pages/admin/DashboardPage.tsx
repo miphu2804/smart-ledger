@@ -111,7 +111,7 @@ export default function DashboardPage() {
       <>
         {header}
         <div className="panel">
-          <EmptyState icon={Storefront} title="Chưa có cơ sở nào" description="Số liệu sẽ xuất hiện khi chủ cơ sở đăng ký trên ứng dụng." />
+          <EmptyState icon={Storefront} title="Chưa có cơ sở nào" description="Số liệu sẽ xuất hiện khi chủ tiệm đăng ký trên ứng dụng." />
         </div>
       </>
     )
@@ -132,7 +132,7 @@ export default function DashboardPage() {
         />
         <Metric
           icon={UserPlus}
-          label={`OWNER mới · ${data.periodDays} ngày`}
+          label={`Chủ tiệm mới · ${data.periodDays} ngày`}
           value={data.newOwners}
           foot={
             <>
@@ -254,7 +254,7 @@ export default function DashboardPage() {
         <Panel
           className="col-8"
           icon={Storefront}
-          title="Cơ sở & OWNER mới"
+          title="Cơ sở & chủ tiệm mới"
           subtitle="Đăng ký gần đây"
           bodyClass=""
           actions={
@@ -268,7 +268,7 @@ export default function DashboardPage() {
               <thead>
                 <tr>
                   <th>Cơ sở</th>
-                  <th>OWNER</th>
+                  <th>Chủ tiệm</th>
                   <th className="hide-md">Gói</th>
                   <th>Trạng thái</th>
                   <th>Đăng ký</th>
@@ -290,7 +290,7 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     </td>
-                    <td data-label="OWNER">{s.owner.fullName}</td>
+                    <td data-label="Chủ tiệm">{s.owner.fullName}</td>
                     <td data-label="Gói" className="hide-md">
                       <PlanPill plan={s.plan} />
                     </td>
@@ -309,7 +309,7 @@ export default function DashboardPage() {
 
         <Panel className="col-4" title="Truy cập gần đây của ADMIN" subtitle="Audit khi mở chi tiết khách hàng" bodyClass="panel-body">
           {data.recentAdminAccess.length === 0 ? (
-            <EmptyState compact icon={Eye} title="Chưa có lượt xem" description="Mỗi lần mở chi tiết OWNER/cơ sở sẽ được ghi ở đây." />
+            <EmptyState compact icon={Eye} title="Chưa có lượt xem" description="Mỗi lần mở chi tiết chủ tiệm/cơ sở sẽ được ghi ở đây." />
           ) : (
             <ol className="tl">
               {data.recentAdminAccess.map((a) => (

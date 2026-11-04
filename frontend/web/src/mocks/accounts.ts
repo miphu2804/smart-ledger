@@ -1,7 +1,7 @@
 /**
  * Bộ sinh dữ liệu mẫu cho trang quản trị (seed cố định → lần nào cũng giống nhau).
  *
- * Mô hình mock "database": OWNER (chủ cơ sở) và BUSINESS (cơ sở). Một OWNER có thể
+ * Mô hình mock "database": OWNER (chủ tiệm) và BUSINESS (cơ sở). Một OWNER có thể
  * có nhiều cơ sở. Dữ liệu CHỈ gồm thông tin phục vụ hỗ trợ — không sinh hoá đơn,
  * chi phí, công nợ, tồn kho hay doanh thu.
  */
@@ -162,7 +162,7 @@ const PHONE_PREFIXES = ['032', '033', '034', '035', '036', '037', '038', '039', 
 
 const LOCK_REASONS = [
   'Nghi ngờ tạo đơn ảo hàng loạt',
-  'Chủ cơ sở yêu cầu tạm khoá',
+  'Chủ tiệm yêu cầu tạm khoá',
   'Vi phạm điều khoản sử dụng',
   'Đăng nhập bất thường từ nhiều thiết bị',
 ]

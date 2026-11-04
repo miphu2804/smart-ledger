@@ -137,7 +137,7 @@ export async function getShopDetail(id: string): Promise<AdminShopDetailView> {
   const b = db().businesses.find((x) => x.id === id)
   if (!b || empty) throw new NotFoundError('Không tìm thấy cơ sở này. Có thể cơ sở đã bị xoá hoặc đường dẫn không đúng.')
   const o = ownerOf(b)
-  log('Xem chi tiết cơ sở', b.name, `Mã ${b.id} · OWNER ${o.fullName}`)
+  log('Xem chi tiết cơ sở', b.name, `Mã ${b.id} · chủ tiệm ${o.fullName}`)
   const now = mockNow()
   return clone({
     business: { id: b.id, name: b.name, industry: b.industry, address: b.address, createdAt: b.createdAt, lastActiveAt: b.lastActiveAt },
@@ -173,7 +173,7 @@ export async function getUserDetail(
   if (!USE_MOCK) return request(`/admin/users/${encodeURIComponent(id)}`) // TODO(backend)
   const { empty } = await simulate(300)
   const o = db().owners.find((x) => x.id === id)
-  if (!o || empty) throw new NotFoundError('Không tìm thấy chủ cơ sở này.')
+  if (!o || empty) throw new NotFoundError('Không tìm thấy chủ tiệm này.')
   log('Xem chi tiết OWNER', o.fullName, `Mã ${o.id}`)
   return clone({ ...toUserItem(o), devices: o.devices, lockReason: o.lockReason, phoneVerified: o.phoneVerified, emailVerified: o.emailVerified })
 }
@@ -237,7 +237,7 @@ export async function getOverview(days = 14): Promise<AdminOverviewView> {
         id: `a_pend_${b.id}`,
         kind: 'pending_verify',
         title: b.name,
-        detail: 'Chủ cơ sở chưa xác minh số điện thoại',
+        detail: 'Chủ tiệm chưa xác minh số điện thoại',
         shopId: b.id,
         at: b.createdAt,
       }),
