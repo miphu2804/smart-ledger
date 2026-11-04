@@ -5,7 +5,7 @@
 | Trạng thái | Core: hành vi đã chốt dưới đây; AI/dashboard và FE: cần nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; người rà soát kỹ thuật |
-| Cập nhật lần cuối | 2026-10-31 (CORE-019: FR-037, AC-104–108; không rà soát lại các feature khác) |
+| Cập nhật lần cuối | 2026-11-02 (CORE-021: FR-038, AC-111–115; không rà soát lại các feature khác) |
 
 ## Tài liệu liên quan
 
@@ -101,6 +101,7 @@ Luồng hỗ trợ: ADMIN đăng nhập dashboard web, tìm OWNER hoặc cơ s�
 | `FR-035` | `BR-001` | Trên bốn tab chính (Tổng quan, Đơn hàng, Bán hàng, Quản lý), OWNER mở menu chuyển nhanh trượt từ bên trái bằng nút ☰ (Tổng quan: cạnh logo; Quản lý: cạnh tiêu đề; Đơn hàng và Bán hàng: bên trái ô tìm; Tổng quan và Bán hàng còn có nút gọn ở phần đầu đã thu khi cuộn) hoặc vuốt từ mép trái. Menu liệt kê Tổng quan, Bán hàng, Đơn hàng, Công nợ, Hàng hoá, Báo cáo, Chi phí, Trợ lý AI và Cài đặt, đánh dấu màn đang mở; chạm một mục là chuyển ngay. Thanh tab dưới giữ nguyên. | P1 — MVP |
 | `FR-036` | `BO-003`, `BR-023` | Khi được bật sau migration, Core ghi tối đa một ngày hoạt động cho mỗi user ACTIVE có request API nghiệp vụ đã xác thực và phản hồi 2xx/3xx, gồm API đọc; ngày theo Asia/Ho_Chi_Minh tại lúc nhận request. Không tính public OAuth, health, OPTIONS hoặc 4xx/5xx. Lưu mã user/ngày trong 90 ngày gồm hôm nay; cache có giới hạn, lỗi ghi không đổi response nghiệp vụ và được thử lại. Grafana đọc DAU/MAU tách OWNER/ADMIN, bỏ email bắt đầu loadtest+; MAU là 30 ngày lịch gồm hôm nay. Không thêm API FE, không đo CCU hay hiệu quả câu trả lời AI. | CORE-018 #409; chủ sản phẩm duyệt ngày 2026-10-29; nhánh feat/core-daily-activity, chưa nghiệm thu staging |
 | `FR-037` | `BR-024` | Core giới hạn thao tác thành công theo tài khoản; dùng chung giữa các instance, giữ qua restart và miễn replay hợp lệ. Nhóm, cửa sổ, lease, lỗi và retry theo [contract](../contracts/api-contracts.md#giới-hạn-thao-tác-core-019). | CORE-019 #430; đã duyệt ngày 2026-10-31, mặc định tắt, chưa nghiệm thu staging |
+| `FR-038` | `BO-002`, `BR-009`, `BR-016`, `BR-017`, `BR-025` | OWNER giảm tồn bằng lượng dương tối đa 12 chữ số nguyên và 3 thập phân, có lý do không rỗng tối đa 500 ký tự. Core khóa sản phẩm, không cho tồn âm, yêu cầu Idempotency-Key và ghi STOCK_ADJUSTED/source STOCK_ADJUSTMENT cùng cảnh báo tồn trong transaction; giữ nguyên các khoản tiền và giá vốn. | CORE-021 #457; triển khai trong nhánh, chưa nghiệm thu FE/staging |
 
 `FR-001`–`FR-009` giữ nguyên mã. `FR-007` không bị tái sử dụng cho yêu cầu khác.
 
@@ -288,6 +289,7 @@ chứng, không phải tuyên bố FE hoặc staging đã đạt.
 | `AC-110` | Ở tab Quản lý, OWNER mở được “Chính sách và điều khoản” và “Xoá tài khoản”; màn đăng nhập có link “Chính sách và điều khoản”. Các link mở `/chinh-sach` và `/delete-account` trên trang công khai, không cần đăng nhập. Việc xoá do nhóm xử lý theo hướng dẫn ở trang đó. | `FR-010` |
 | `AC-116` | Ở Đơn hàng, dưới thẻ tổng, OWNER thấy gợi ý hỏi trợ lý về doanh thu (phân tích tháng trước, tháng này so với tháng trước, món bán chạy 7 ngày). Chạm một gợi ý mở bảng chat từ dưới lên và gửi ngay câu đó qua cùng API với màn Trợ lý; câu trả lời hiện dần, kèm gợi ý hỏi tiếp và ô hỏi thêm. AI lỗi thì hiện câu báo và trả câu hỏi về ô nhập; rời màn hình thì bảng đóng. | `FR-020`, `FR-021`, `FR-027` |
 | `AC-117` | Màn đăng nhập theo bố cục một thẻ: Google, Zalo, ô “Địa chỉ email” với nút “Tiếp tục” sang màn mật khẩu đã điền sẵn email (email sai định dạng thì báo ngay, không chuyển màn), “Quên mật khẩu?” mở thẳng phần đặt lại, chân thẻ “Chưa có tài khoản? Tạo tài khoản”. Không có nút Facebook. Cách đăng nhập thành công gần nhất trên máy có nhãn “Lần trước dùng”; link “Chính sách và điều khoản” vẫn ở màn này. | `FR-010` |
+| `AC-118` | Ở màn Trợ lý và bảng hỏi nhanh ở Đơn hàng, trong lúc chờ chữ đầu tiên hiện dòng suy nghĩ (câu chờ đổi dần, nhãn bước tool đang chạy), không phải ba chấm; câu trả lời không kèm icon hay tên “Trợ lý Bobi”. Bảng hỏi nhanh dùng cùng ô nhập với màn Trợ lý (gõ, ghi âm, gửi) và không còn nút mở màn Trợ lý. | `FR-020`, `FR-021` |
 
 ### Giới hạn thao tác CORE-019 — đã duyệt ngày 2026-10-31
 
@@ -298,6 +300,18 @@ chứng, không phải tuyên bố FE hoặc staging đã đạt.
 | `AC-106` | Hai instance và instance mới sau restart thấy cùng counter. Lượt PENDING chiếm chỗ tạm thời; lease hết hạn được thu hồi và request mất lease không được ghi nghiệp vụ. Hoàn tất trễ vẫn tính cửa sổ đã giữ chỗ. DB lỗi không fallback RAM; giới hạn không dựa trên token/email/ID do client tự khai báo. | `FR-037`, `NFR-003` |
 | `AC-107` | Proxy được tin cậy đưa đúng IP client đến Zalo limiter; peer không được tin cậy không đổi IP bằng header giả. 429 có Retry-After/no-store theo contract và FE đọc được header qua CORS; giữ 401/quyền OWNER/ADMIN và các route ngoài phạm vi. | `FR-037`, `NFR-003` |
 | `AC-108` | V20 nâng cấp V19 giữ dữ liệu cũ, có FK/index/constraint, RLS và không mở quyền client. Tính năng quota mặc định tắt; chỉ bật sau migration đã merge và toàn bộ writer được nâng cấp. Test PostgreSQL local không tự nghiệm thu Caddy/FE/staging/production. | `FR-037`, `BR-024` |
+
+### Điều chỉnh giảm tồn CORE-021 — đã duyệt ngày 2026-11-02
+
+Các tiêu chí dưới đây kiểm chứng `FR-038`; triển khai Core trong nhánh không thay nghiệm thu FE/staging.
+
+| ID | Tiêu chí | Truy vết |
+|---|---|---|
+| `AC-111` | Tồn 10 giảm 2.125 với lý do hợp lệ trả 200 ProductResponse có tồn 7.875; giảm hết về 0 hợp lệ, vượt tồn trả 409 product_stock_insufficient và không thay đổi tồn. Không tạo sale/draft/expense/payment/debt/refund hoặc đổi giá bán/giá vốn. | `FR-038`, `BR-025` |
+| `AC-112` | Thiếu/null/0/âm quantity, quá 12 chữ số nguyên hoặc 3 thập phân, reason thiếu/null/trống/vượt 500 ký tự trả 400. Thiếu Idempotency-Key bị 400; thiếu/sai Bearer bị 401. ADMIN/OWNER khác chủ/shop INACTIVE không điều chỉnh được; sản phẩm khác shop/ARCHIVED trả 404; không theo dõi tồn trả 409 product_stock_adjustment_unavailable. | `FR-038`, `NFR-003` |
+| `AC-113` | Retry cùng key/người dùng/product, quantity tương đương (2 và 2.000) và reason đã trim trả snapshot 200 ban đầu dù tồn đã đổi. Đổi quantity/reason/product với key cũ trả 409 idempotency_key_conflict; key hết hạn trả 409 idempotency_key_expired. Không nhân đôi trừ tồn, audit hoặc cảnh báo. | `FR-038`, `BR-016` |
+| `AC-114` | Hai điều chỉnh đồng thời khóa cùng sản phẩm, không mất cập nhật hoặc làm tồn âm; retry cùng key chỉ trừ một lần. Checkout/void/PATCH/stock-in đồng thời giữ tác động hợp lệ của cả hai thao tác. Audit chứa đúng OWNER/shop/product, reason/key và quantity/beforeStock/afterStock/source; lỗi audit/notification/idempotency rollback toàn bộ và cho retry lại. | `FR-038`, `FR-028`, `FR-032`, `BR-017` |
+| `AC-115` | Giảm tồn qua ngưỡng cập nhật LOW_STOCK/OUT_OF_STOCK theo cơ chế episode hiện có; replay không thêm notification/recipient. API dùng lại schema/idempotency/audit hiện có, không thêm migration, không mở PATCH stockQuantity và không cho AI tự ghi giảm tồn. Test Core không tự nghiệm thu UI, shared DB hoặc production. | `FR-038`, `FR-032`, `BR-025` |
 
 ## 9. Phạm vi và câu hỏi mở
 

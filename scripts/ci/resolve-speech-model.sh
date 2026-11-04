@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Sets EXPO_PUBLIC_STT_MODEL_URL for the later steps. The model is not in git, so the APK downloads it from R2 on first
 # use. A publish (PUBLISH=true) uploads the version named in core.ts when R2 lacks it (only missing or wrong-size
-# files, so a released version is never rewritten); other builds have no R2 credentials and carry on with a warning, as
-# voice input then cannot work. Reads STT_MODEL_BASE_URL, BUCKET and the AWS_* settings for R2. Run from the repository
+# files, so a released version is never rewritten); other builds only warn, as voice input then cannot work. Reads STT_MODEL_BASE_URL, BUCKET and the AWS_* settings for R2. Run from the repository
 # root.
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"

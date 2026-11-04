@@ -5,6 +5,7 @@ import com.smartledger.core.dto.request.OwnerListQuery.Products;
 import com.smartledger.core.dto.request.OwnerListQuery.StockStatus;
 import com.smartledger.core.dto.request.ProductPatchRequest;
 import com.smartledger.core.dto.request.ProductStockInRequest;
+import com.smartledger.core.dto.request.ProductStockAdjustmentRequest;
 import com.smartledger.core.dto.request.ProductWriteRequest;
 import com.smartledger.core.dto.response.PageResponse;
 import com.smartledger.core.dto.response.ProductResponse;
@@ -170,6 +171,22 @@ public class ProductController {
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             @Valid @RequestBody ProductStockInRequest request) {
         return productService.stockIn(firebaseToken, shopId, productId, idempotencyKey, request);
+    }
+
+    @PostMapping("/{productId}/stock-adjustments")
+    @Operation(summary = "Decrease stock for damage, loss or a stock-count shortage",
+            description = "Positive quantity to remove, up to 12 integer and 3 fractional digits, with a required reason. "
+                    + "Requires an active OWNER/shop and active tracked product. Never permits negative stock. "
+                    + "Retry with the same key and normalized payload replays the original response. Creates no money transaction.")
+    @ApiResponse(responseCode = "200", description = "Stock reduced or original result replayed",
+            content = @Content(schema = @Schema(implementation = ProductResponse.class)))
+    public ProductResponse adjustStock(
+            @AuthenticationPrincipal VerifiedFirebaseToken firebaseToken,
+            @RequestHeader("X-Shop-Id") String shopId,
+            @PathVariable String productId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @Valid @RequestBody ProductStockAdjustmentRequest request) {
+        return productService.adjustStock(firebaseToken, shopId, productId, idempotencyKey, request);
     }
 
     @DeleteMapping("/{productId}")

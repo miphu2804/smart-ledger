@@ -1,7 +1,6 @@
 import { Feather } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { Image, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ChatMessage, ThoughtStep } from '../data/types';
 import { agentApi, agentErrorMessage } from '../lib/agentApi';
@@ -11,7 +10,8 @@ import { splitActions } from '../lib/chatMarkdown';
 import { triggerFeedback } from '../lib/feedback';
 import { ddmmyyyy, hhmm } from '../lib/format';
 import { applyToolEvent } from '../lib/toolSteps';
-import { colors, font } from '../theme';
+import { colors } from '../theme';
+import { ChatComposer } from './ChatComposer';
 import { ChatText, ScreenActions, StreamingChatText } from './ChatText';
 import { ThoughtLine } from './ThoughtLine';
 import { IconBtn, KEYBOARD_AVOID_BEHAVIOR, Row, T } from './ui';
@@ -148,83 +148,62 @@ export function AiAskSheet({ question, onClose }: { question: string | null; onC
             <T size={12} color={colors.faint} style={styles.center}>
               {ddmmyyyy(openedAt)}, {hhmm(openedAt)}
             </T>
-            <T size={12} color={colors.muted} style={[styles.center, { marginTop: 2, marginBottom: 12 }]}>
+            <T size={12} color={colors.muted} style={[styles.center, styles.disclaimer]}>
               Bobi đọc số liệu của tiệm để trả lời và có thể nhầm. Hội thoại được lưu ở Trợ lý.
             </T>
 
-            {msgs.map((m) => {
-              if (m.from === 'user') {
-                return (
-                  <View key={m.id} style={styles.userRow}>
-                    <View style={styles.userBubble}>
-                      <T size={14} color={colors.white} style={styles.userText}>
-                        {m.text}
-                      </T>
+            {/* Câu trả lời không có bong bóng nên khoảng cách giữa các tin do `gap` của khối này lo, không dựa vào lề bong bóng. */}
+            <View style={styles.messages}>
+              {msgs.map((m) => {
+                if (m.from === 'user') {
+                  return (
+                    <View key={m.id} style={styles.userRow}>
+                      <View style={styles.userBubble}>
+                        <T size={14} color={colors.white} style={styles.userText}>
+                          {m.text}
+                        </T>
+                      </View>
                     </View>
+                  );
+                }
+                const reply = splitActions(m.text);
+                return (
+                  <View key={m.id}>
+                    <ChatText text={reply.text} />
+                    {reply.screens.length ? <ScreenActions screens={reply.screens} style={styles.actions} /> : null}
                   </View>
                 );
-              }
-              const reply = splitActions(m.text);
-              return (
-                <View key={m.id} style={styles.answer}>
-                  <ChatText text={reply.text} />
-                  {reply.screens.length ? <ScreenActions screens={reply.screens} /> : null}
+              })}
+
+              {typing ? <View>{draft ? <StreamingChatText text={splitActions(draft, true).text} /> : <ThoughtLine steps={steps} />}</View> : null}
+
+              {error ? (
+                <Row gap={6} style={styles.error}>
+                  <Feather name="alert-circle" size={14} color={colors.red} />
+                  <T size={13} color={colors.red} style={{ flex: 1 }}>
+                    {error}
+                  </T>
+                </Row>
+              ) : null}
+
+              {lastIsAnswer && !typing ? (
+                <View style={styles.followUps}>
+                  {followUpSuggestions(asked).map((q) => (
+                    <Pressable key={q} onPress={() => ask(q)} style={({ pressed }) => [styles.followUp, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`Hỏi tiếp: ${q}`}>
+                      <T w="semibold" size={13.5} color={colors.brand}>
+                        {q}
+                      </T>
+                    </Pressable>
+                  ))}
                 </View>
-              );
-            })}
-
-            {typing ? (
-              <View style={styles.answer}>{draft ? <StreamingChatText text={splitActions(draft, true).text} /> : <ThoughtLine steps={steps} />}</View>
-            ) : null}
-
-            {error ? (
-              <Row gap={6} style={styles.error}>
-                <Feather name="alert-circle" size={14} color={colors.red} />
-                <T size={13} color={colors.red} style={{ flex: 1 }}>
-                  {error}
-                </T>
-              </Row>
-            ) : null}
-
-            {lastIsAnswer && !typing ? (
-              <View style={styles.followUps}>
-                {followUpSuggestions(asked).map((q) => (
-                  <Pressable key={q} onPress={() => ask(q)} style={({ pressed }) => [styles.followUp, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`Hỏi tiếp: ${q}`}>
-                    <T w="semibold" size={13.5} color={colors.brand}>
-                      {q}
-                    </T>
-                  </Pressable>
-                ))}
-              </View>
-            ) : null}
+              ) : null}
+            </View>
           </ScrollView>
 
-          <Row gap={8} style={styles.inputRow}>
-            {/* Mở màn Trợ lý đầy đủ (lịch sử, ghi nhớ, giọng nói); rời màn này thì bảng tự đóng */}
-            <IconBtn name="message-square" size={44} bg={colors.brandSoft} color={colors.brand} onPress={() => router.push('/ai')} label="Mở Trợ lý" />
-            <View style={styles.inputWrap}>
-              <TextInput
-                value={text}
-                onChangeText={setText}
-                placeholder="Hỏi Bobi..."
-                placeholderTextColor={colors.faint}
-                style={styles.input}
-                returnKeyType="send"
-                onSubmitEditing={() => ask(text)}
-                editable={!typing}
-                accessibilityLabel="Câu hỏi cho trợ lý"
-              />
-              <Pressable
-                onPress={() => ask(text)}
-                disabled={typing || !text.trim()}
-                style={({ pressed }) => [styles.sendBtn, (typing || !text.trim()) && { opacity: 0.4 }, pressed && styles.pressed]}
-                accessibilityRole="button"
-                accessibilityLabel="Gửi câu hỏi"
-              >
-                <Feather name="send" size={16} color={colors.white} />
-              </Pressable>
-            </View>
-          </Row>
+          {/* Cùng ô nhập với màn Trợ lý; không có nút sang màn Trợ lý vì từ đó không quay lại được bảng này. */}
+          <View style={styles.composerWrap}>
+            <ChatComposer value={text} onChangeText={setText} onSend={() => ask(text)} busy={typing} />
+          </View>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -271,10 +250,13 @@ const styles = StyleSheet.create({
   header: { marginBottom: 6 },
   headerSide: { width: 40 },
   title: { flex: 1, textAlign: 'center' },
-  body: { flex: 1 },
-  bodyContent: { paddingBottom: 16 },
+  // Vùng cuộn tràn ra mép bảng rồi thụt lề lại bên trong, để bóng của nút mở màn hình không bị cắt thẳng ở mép trái.
+  body: { flex: 1, marginHorizontal: -16 },
+  bodyContent: { paddingHorizontal: 16, paddingBottom: 20 },
   center: { textAlign: 'center' },
-  userRow: { alignItems: 'flex-end', marginBottom: 12 },
+  disclaimer: { marginTop: 2, marginBottom: 20 },
+  messages: { gap: 20 },
+  userRow: { alignItems: 'flex-end' },
   userBubble: {
     maxWidth: '82%',
     backgroundColor: colors.brand,
@@ -284,31 +266,18 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   userText: { lineHeight: 20.5 },
-  answer: { marginBottom: 12 },
-  error: { marginBottom: 12, alignItems: 'flex-start' },
-  followUps: { alignItems: 'flex-end', gap: 8 },
+  // Nút mở màn hình cách chữ trả lời một khoảng, vì bóng tím của nút loang lên trên và che dòng cuối.
+  actions: { marginTop: 14 },
+  error: { alignItems: 'flex-start' },
+  followUps: { alignItems: 'flex-end', gap: 10 },
   followUp: {
     paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingVertical: 10,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.brandBorder,
     backgroundColor: colors.brandTint,
     maxWidth: '86%',
   },
-  inputRow: { paddingTop: 8, alignItems: 'center' },
-  inputWrap: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.bg,
-    paddingLeft: 14,
-    paddingRight: 5,
-    minHeight: 44,
-  },
-  input: { flex: 1, fontFamily: font.medium, fontSize: 14, color: colors.ink, paddingVertical: 10 },
-  sendBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  composerWrap: { paddingTop: 8 },
 });

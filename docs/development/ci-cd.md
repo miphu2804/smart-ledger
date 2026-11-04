@@ -19,7 +19,7 @@
 
 ![CI/CD flow](../architecture/diagrams/images/ci-cd.svg)
 
-Green numbers are the deploy, purple the VPS setup with Ansible, from `infra.yml` on a push or `scripts/infra/run.sh` by hand, orange the runtime requests. Gray dashed arrows are secrets: the deploy exports `core` and `ai` from Dopbase with runner tokens kept in the GitHub environment, and `scripts/infra/run.sh` exports every VPS file from Dopbase for Ansible. The diagram shows the target setup: pgvector, the Bifrost gateway in production and the Grafana stack are not built yet; today production AI calls its model provider directly, and AI traces to HoneyHive in every environment where `HH_API_KEY` is set. Edit [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio) and re-export:
+Green numbers are the deploy, purple the VPS setup with Ansible, from `infra.yml` on a push or `scripts/infra/run.sh` by hand, orange the runtime requests. Gray dashed arrows are secrets: the deploy exports `core` and `ai` from Dopbase with runner tokens kept in the GitHub environment, and `scripts/infra/run.sh` exports every VPS file from Dopbase for Ansible. The diagram shows the target setup: pgvector and the Grafana stack are not built yet; AI in both environments calls its models through Bifrost, and AI traces to HoneyHive in every environment where `HH_API_KEY` is set. Edit [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio) and re-export:
 
 ```bash
 drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/ci-cd.svg docs/architecture/diagrams/src/ci-cd.drawio
@@ -134,8 +134,8 @@ Production still needs its approval: run the production deploy only after a revi
 | `vercel-production` | `main` | Yes | Same | `EXPO_PUBLIC_*` |
 | `landing-staging` | `staging` | No | Same, for Vercel project `landing` | `LANDING_URL`, admin variables |
 | `landing-production` | `main` | Yes | Same | Same, plus `VITE_ANDROID_APK_URL` |
-| `android-dev` | Other branches (checked by `gate`) | No | `ANDROID_GOOGLE_SERVICES_JSON` | `EXPO_PUBLIC_*` |
-| `android-staging` | `staging` | No | `ANDROID_GOOGLE_SERVICES_JSON` | `EXPO_PUBLIC_*` |
+| `android-dev` | Other branches (checked by `gate`) | No | `ANDROID_GOOGLE_SERVICES_JSON`, `R2_*` of the test-build bucket | `EXPO_PUBLIC_*`, `R2_BUCKET`, `R2_PUBLIC_URL` |
+| `android-staging` | `staging` | No | Same as `android-dev` | Same as `android-dev` |
 | `android-production` | `main` | Yes | `ANDROID_GOOGLE_SERVICES_JSON`, `ANDROID_KEYSTORE_*`, `R2_*` | `EXPO_PUBLIC_*`, `R2_BUCKET`, `R2_PUBLIC_URL` |
 
 - Keep backend secrets out of `vercel-*` and `landing-*`.
@@ -158,7 +158,7 @@ The repository is public and its jobs can run on the owner's self-hosted machine
 `eval-regression.yml` runs the [agent chat evaluation](../../backend/ai/evaluation/agent_chat/README.md) by hand, when a change to the agent or its memory needs one. It does not run on every change, because a run asks the models about 69 chat turns and their judges.
 
 - Dispatch it from `staging` (**Actions → Eval regression → Run workflow**, or `gh workflow run eval-regression.yml --ref staging -f ref=<branch>`). It reads `ai/staging` through `backend-staging`, which only `staging` may use; input `ref` picks the code that is evaluated. GitHub offers a manual run only for a workflow that is on the default branch, so it can be dispatched once this file is on `main`, and it must also be on `staging`. A `ref` from before the workflow existed is refused, because its `local-db.sh` would use the developer database on port 54322.
-- The job starts a throwaway PostgreSQL with `scripts/local-db.sh` on a free port, seeds shop 9001, takes the model gateway, embedding and model alias settings of `ai/staging` with the database URLs pointed at it, then runs `run.py --repeats 3 --gate thresholds.toml --report`.
+- The job starts a throwaway PostgreSQL with `scripts/local-db.sh` on a free port, seeds shop 9001, takes the model gateway, embedding and model alias settings of `ai/staging` with the database URLs pointed at it, then runs `evaluation/run.py agent_chat --repeats 3 --gate thresholds.toml --report`.
 - The report goes to the job summary and to one comment on the open pull request of `ref`, edited on the next run. The job fails when a metric in [`thresholds.toml`](../../backend/ai/evaluation/agent_chat/thresholds.toml) misses its minimum.
 - Nothing reaches HoneyHive unless input `sync` is on; a synced run costs about 69 sessions of the monthly quota.
 - The checked-out `ref` runs with the `ai/staging` model and embedding keys. Dispatch only branches of this repository whose changes you have read.
@@ -179,7 +179,7 @@ One VPS (`103.162.31.93`, Ubuntu 24.04, 4 GB RAM plus swap) runs both environmen
 
 ![VPS Docker networks and ports](../architecture/diagrams/images/vps-network.svg)
 
-Source: [`vps-network.drawio`](../architecture/diagrams/src/vps-network.drawio). Each dashed region is one Docker network, so a container drawn inside two regions is on both. Each `name:port` is what another container dials: the name is the container's DNS name on that network, prefixed `edge:` for its alias on `edge`, and the port is where the target listens inside its container. Only Caddy publishes host ports, so every other port is reachable only from a container on the same Docker network. Each Compose project has its own `default` network, and Core, Bifrost, Grafana and Dopbase also join `edge` so Caddy can reach them. Compose also registers each service name on `edge`, where `core` matches both environments' Core, so Caddy dials the unique aliases `core-<environment>` and `gateway-<environment>` instead. AI joins only its own project network, so only that environment's Core can call it, and Alloy, which joins every app network to probe AI and Bifrost by container name. Alloy listens on no port: it reads containers through the Docker socket, writes to Prometheus and Loki on the monitoring network, probes each Core through its public domain, joins `edge` to scrape Caddy's request metrics on `smart-ledger-edge-caddy-1:9180`, which Caddy does not publish, and scrapes AI's `/metrics` on each app network. Production runs no Bifrost.
+Source: [`vps-network.drawio`](../architecture/diagrams/src/vps-network.drawio). Each dashed region is one Docker network, so a container drawn inside two regions is on both. Each `name:port` is what another container dials: the name is the container's DNS name on that network, prefixed `edge:` for its alias on `edge`, and the port is where the target listens inside its container. Only Caddy publishes host ports, so every other port is reachable only from a container on the same Docker network. Each Compose project has its own `default` network, and Core, Bifrost, Grafana and Dopbase also join `edge` so Caddy can reach them. Compose also registers each service name on `edge`, where `core` matches both environments' Core, so Caddy dials the unique aliases `core-<environment>` and `gateway-<environment>` instead. AI joins only its own project network, so only that environment's Core can call it, and Alloy, which joins every app network to probe AI and Bifrost by container name. Alloy listens on no port: it reads containers through the Docker socket, writes to Prometheus and Loki on the monitoring network, probes each Core through its public domain, joins `edge` to scrape Caddy's request metrics on `smart-ledger-edge-caddy-1:9180`, which Caddy does not publish, and scrapes AI's `/metrics` on each app network. Both environments run their own Bifrost.
 
 Compose names a project after its directory unless the file sets `name:`, which would make the projects `smartledger` and `smartledger-production` while the repository and the GHCR images are kebab-case. Each compose file sets `name:` instead, so the containers are `smart-ledger-staging-core-1`, `smart-ledger-production-core-1` and `smart-ledger-edge-caddy-1`, and the shared Caddy keeps its certificates in `smart-ledger-edge_caddy_data`. The app directories are unchanged, so each stack reads its own environment from `ENVIRONMENT` in the project `.env`, which both `deploy.sh` and the `app` role write.
 
@@ -276,7 +276,7 @@ Compose sets `AI_BASE_URL`, `SERVER_PORT` and `FLYWAY_ENABLED=false` itself. Bef
 
 **`bifrost`**
 
-The model gateway in front of the providers, reachable by AI inside the project network at `http://bifrost:8080`. [`deploy/vps/bifrost.json`](../../deploy/vps/bifrost.json) declares the providers, any routing rules and their fallback, the virtual key and the admin login, keeps logs for 14 days without message content (NFR-008), and wins over the store in the `bifrost-data` volume; `bifrost.env` holds the values it references. The playbook starts it; `deploy.sh` does not, so a new Bifrost version is a digest change in `compose.yaml` followed by the playbook. AI routes through it when `ai.env` sets `OPENAI_BASE_URL=http://bifrost:8080/openai` and `OPENAI_API_KEY` to the virtual key, with model ids that have no provider prefix, because the virtual key's allowed models pick the upstream; AI sends the key in the `x-bf-vk` header too, which Bifrost needs for a virtual key without the `sk-bf-` prefix. Without those settings AI calls its provider directly, as production does because it runs no Bifrost.
+The model gateway in front of the providers, reachable by AI inside the project network at `http://bifrost:8080`. [`deploy/vps/bifrost.json`](../../deploy/vps/bifrost.json) declares the providers, any routing rules and their fallback, the virtual key and the admin login, keeps logs for 14 days without message content (NFR-008), and wins over the store in the `bifrost-data` volume; `bifrost.env` holds the values it references. The playbook starts it; `deploy.sh` does not, so a new Bifrost version is a digest change in `compose.yaml` followed by the playbook. AI routes through it when `ai.env` sets `OPENAI_BASE_URL=http://bifrost:8080/openai` and `OPENAI_API_KEY` to the virtual key, with model ids that have no provider prefix, because the virtual key's allowed models pick the upstream; AI sends the key in the `x-bf-vk` header too, which Bifrost needs for a virtual key without the `sk-bf-` prefix. Without those settings AI calls its provider directly.
 
 Bifrost also joins `edge` as `gateway-<environment>`. When `.env.vps` sets `GATEWAY_DOMAIN` (`gateway-staging.songheloi.id.vn`, `gateway-production.songheloi.id.vn`), the playbook writes `sites/gateway-<environment>.caddy`, which serves the admin UI and its API behind the admin login and answers 404 to the inference prefixes, so model calls stay internal to AI; without it there is no public UI and an SSH tunnel to the container reaches it instead.
 
@@ -284,6 +284,7 @@ Bifrost also joins `edge` as `gateway-<environment>`. When `.env.vps` sets `GATE
 |---|---|
 | `OPENAI_API_KEY` | OpenAI key for `gpt-6-luna`; `bifrost.json` references it, so add it before deploying that file |
 | `INCEPTIONLABS_API_KEY` | Inception key for `mercury-3`; only Bifrost holds it, and `bifrost.json` references it, so add it before deploying that file |
+| `TYPESAFE_API_KEY` | TypeSafe key for `jev-latest`, which rates each chat turn when AI sets `MODEL_TIERING_ENABLED=true`; `bifrost.json` references it, so add it before deploying that file |
 | `BIFROST_VIRTUAL_KEY` | Random `sk-bf-` value, different per environment; a request without it gets 401 |
 | `BIFROST_ADMIN_USERNAME`, `BIFROST_ADMIN_PASSWORD` | Admin login of the UI and the management API; a long random password, because the domain is public |
 
@@ -492,8 +493,15 @@ Each `android-*` environment needs:
 - Secret `ANDROID_GOOGLE_SERVICES_JSON`: the content of `google-services.json`.
 - Variables `EXPO_PUBLIC_*`, as for the [mobile web](#mobile-web-on-vercel).
 - Variable `STT_MODEL_BASE_URL`: the public R2 address holding the speech model ([models README](../../frontend/mobile/assets/models/README.md#đưa-model-lên-r2)). A publish uploads missing files; a test build only warns.
+- Secrets `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and variables `R2_BUCKET`, `R2_PUBLIC_URL` (no trailing slash): where the build goes. Job `build` checks them before it starts, and the runner needs the `aws` CLI.
 
-Every run uploads `android-build-summary-<environment>-<run>` (runner, toolchain, timings, size and SHA-256). A successful run uploads the APK or AAB as `android-<environment>-<run>`, kept 14 days.
+The run page shows a summary (runner, toolchain, timings, size and SHA-256). A successful run that does not publish uploads the APK or AAB to R2 as `android/<environment>/ci/<run>/<file>` and puts its download link on the run page. GitHub artifacts are not used: the account's artifact storage is 500 MB, and a full quota failed every Android build from 2026-11-03.
+
+- The bucket is public through `r2.dev` and the run page of this public repository shows the link, so anyone can download these builds. They hold no secrets: only `EXPO_PUBLIC_*` values and `google-services.json`, which every APK carries anyway.
+- Give `android-dev` and `android-staging` their own bucket and token, not the release bucket: `android-dev` runs code from any branch, and a token for the release bucket could overwrite `latest.apk`.
+- R2 keeps the files until a lifecycle rule deletes them; expire the `ci/` prefixes after 14 days.
+
+To send a production build to Google Play, run from `main` with `environment=android-production` and `publish=false`, download the AAB from the link, and upload it in Play Console under **Testing > Closed testing** (track Alpha) or **Internal testing**. Only a publish sets `EXPO_PUBLIC_UPDATE_URL`, so this build has no self-update, which Google Play forbids.
 
 <a id="android-runners"></a>
 
@@ -539,7 +547,7 @@ One-time setup:
 2. Create an R2 API token with **Object Read & Write** on that bucket.
 3. In `android-production`, add secrets `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and variables `R2_BUCKET`, `R2_PUBLIC_URL` (no trailing slash), `STT_MODEL_BASE_URL`.
 4. In `landing-production`, set `VITE_ANDROID_APK_URL=https://pub-<hash>.r2.dev/android/production/latest.apk` and redeploy the landing.
-5. Optional: expire `android/production/builds/` after 30 days. Never `stt-model/`.
+5. Optional: expire `android/production/builds/` after 30 days and `android/production/ci/` after 14 days. Never `stt-model/`.
 
 - The app checks `version.json` on launch and offers newer builds. Only published APKs check; APKs published before this feature never ask.
 - Rollback: copy a file from `builds/` over `latest.apk` and edit `version.json`. Do not re-run an old publish run; it overwrites files.

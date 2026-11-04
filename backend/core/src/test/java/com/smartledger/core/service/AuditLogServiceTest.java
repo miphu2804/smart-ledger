@@ -87,6 +87,18 @@ class AuditLogServiceTest {
     }
 
     @Test
+    void stockAdjustmentSourceIsAllowedWithoutAcceptingArbitrarySourceStrings() {
+        var event = AuditLog.success(7L, 42L, SystemRole.OWNER, AuditAction.STOCK_ADJUSTED, 8L,
+                "Damaged", java.util.UUID.randomUUID().toString(), "adjust-key",
+                Map.of("source", "STOCK_ADJUSTMENT", "quantity", BigDecimal.ONE,
+                        "beforeStock", BigDecimal.TEN, "afterStock", new BigDecimal("9")));
+        assertThat(event.getMetadata()).containsEntry("source", "STOCK_ADJUSTMENT");
+        assertThatThrownBy(() -> AuditLog.success(7L, 42L, SystemRole.OWNER, AuditAction.STOCK_ADJUSTED, 8L,
+                "Lost", java.util.UUID.randomUUID().toString(), "key", Map.of("source", "untrusted-value")))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void acceptsJsonDecimalHydrationButRejectsNonFiniteNumbers() {
         var event = AuditLog.success(7L, 42L, SystemRole.OWNER, AuditAction.STOCK_ADJUSTED, 8L,
                 null, java.util.UUID.randomUUID().toString(), null, Map.of("afterStock", new BigDecimal("12.125")));

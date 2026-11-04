@@ -1,0 +1,11 @@
+# Bounds `evaluation/run.py memory --gate` exits 1 outside of, set just under the 2026-10-22 measurement of
+# cosine + 0.1 x BM25 share on embeddinggemma-300m (ADR-0002): recall 0.860, by form
+# 0.951 / 0.899 / 0.627, stale-only 0.039. Every metric runs 0 to 1.
+[minimum]
+recall = 0.85
+recall_lex = 0.94
+recall_unacc = 0.88
+recall_sem = 0.60
+
+[maximum]
+stale_only = 0.05

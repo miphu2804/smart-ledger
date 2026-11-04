@@ -30,7 +30,7 @@ The charts show the wait for the first words, tool calls per turn, the query err
 | `alerts/` | `honeyhive alerts` | `sync-dashboards.sh`, created when no alert has the `name` |
 | `projects.yaml` | | the projects `sync-dashboards.sh` covers; staging and production share one and differ by `source` |
 
-The two scripts sit at the repository root and the workflows `.github/workflows/honeyhive-sync.yml` and `honeyhive-dashboards.yml` run them on every merge into `main`, as in HoneyHive's guide. Datasets and datapoints have no folder: the offline suite in `backend/ai/evaluation/agent_chat` builds its cases and seed in code and hashes them into `suite_version`.
+The two scripts sit at the repository root and the workflows `.github/workflows/honeyhive-sync.yml` and `honeyhive-dashboards.yml` run them on every merge into `main`, as in HoneyHive's guide. Datasets and datapoints have no folder: the offline evaluation in `backend/ai/evaluation/agent_chat` keeps its cases and seed in files (`cases.yaml`, `seed.sql`) and hashes them into `suite_version`.
 
 ## Apply
 
