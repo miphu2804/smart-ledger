@@ -24,8 +24,7 @@ docker exec -i smartledger-local-db psql -U smartledger -d smartledger -q -v ON_
 ```
 
 ```bash
-LOG_LEVEL=WARNING uv run python evaluation/run.py agent_chat --name baseline \
-  --gate evaluation/agent_chat/thresholds.toml --report /tmp/agent-chat.md
+LOG_LEVEL=WARNING uv run evaluation/run.py agent_chat --gate evaluation/agent_chat/thresholds.toml --report /tmp/agent-chat.md
 ```
 
 `--repeats` sets how many times each question runs (3 by default) and `--judge` the model alias that grades the judged cases and rates the templates below (`chat` by default, so the chat model grades itself; add a stronger alias to `MODEL_ALIASES` for fairer grades). `--gate` reads `thresholds.toml` and exits 1 when a gated metric's mean is below its minimum or no row scored it. `--report` writes the run as markdown: the gate, every metric by layer, and the cases that missed a minimum. `--sync` also sends the scores to HoneyHive (below) and needs `HH_API_KEY`; without it nothing leaves the machine. `--dry-run` builds the dataset and prints the run and the first session it would send, with no model call and no request to HoneyHive. The output has one line per case with its passes, its correct tool choices and its slowest run, then the totals, the model, `prompt_version` (the first 12 characters of the SHA-256 of the agent's instructions and tool definitions) and `suite_version` (the same for the cases and the seed). Compare two runs only when they share a `suite_version` and differ in one of the others; one failure in three is noise until it repeats.
