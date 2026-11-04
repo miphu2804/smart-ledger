@@ -1,6 +1,6 @@
 # Evaluation
 
-One pipeline scores the AI service's behaviour. An evaluation is a class that holds its cases, a target and a list of evaluators; the target runs each case against the real service; each evaluator scores what came back; `core/` gates, reports and syncs. Run it from `backend/ai` with `uv run python evaluation/run.py <evaluation> ...`.
+One pipeline scores the AI service's behaviour. An evaluation is a class that holds its cases, a target and a list of evaluators; the target runs each case against the real service; each evaluator scores what came back; `core/` gates, reports and syncs. Run it from `backend/ai` with `uv run evaluation/run.py <evaluation> ...`.
 
 ## Layout
 
@@ -21,9 +21,20 @@ One pipeline scores the AI service's behaviour. An evaluation is a class that ho
 ## Run
 
 ```bash
-LOG_LEVEL=WARNING uv run python evaluation/run.py agent_chat --name baseline --gate evaluation/agent_chat/thresholds.toml --report /tmp/agent-chat.md
-LOG_LEVEL=WARNING uv run python evaluation/run.py memory --gate evaluation/memory/thresholds.toml
+export LOG_LEVEL=WARNING
+
+# plan only: no model call, nothing sent
+uv run evaluation/run.py agent_chat --dry-run
+
+# full runs, gated, with a markdown report
+uv run evaluation/run.py agent_chat --gate evaluation/agent_chat/thresholds.toml --report /tmp/agent-chat.md
+uv run evaluation/run.py memory --gate evaluation/memory/thresholds.toml
+
+# also send the agent_chat scores to HoneyHive
+uv run evaluation/run.py agent_chat --name baseline --sync
 ```
+
+A run without `--sync` stays on the machine: it scores with the HoneyHive templates copied into `metrics/`, prints to the terminal and writes `results/`, so it spends no HoneyHive events (an `agent_chat` sync costs one per case, about 69). `agent_chat` still pays for its chat and judge model calls; `memory` asks no model, and makes no network call once its embedding cache is filled.
 
 | Option | Meaning |
 |---|---|

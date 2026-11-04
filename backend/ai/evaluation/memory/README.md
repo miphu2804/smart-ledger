@@ -32,7 +32,7 @@ These match the numbers ADR-0002 recorded when the ranking was chosen. The old r
 From `backend/ai`, with `smartledger-local-db` running and `POSTGRES_URL` in `.env` pointing at it:
 
 ```bash
-LOG_LEVEL=WARNING uv run python evaluation/run.py memory --gate evaluation/memory/thresholds.toml
+LOG_LEVEL=WARNING uv run evaluation/run.py memory --gate evaluation/memory/thresholds.toml
 ```
 
 The vectors come from `cache/`, so a run with a cached model makes no network call. Without a cache file the run embeds about 1,700 texts through the app's configured memory embedder (`AGENT_MEMORY_EMBEDDING_PROVIDER` and `AGENT_MEMORY_EMBEDDING_MODEL` in `.env`, and `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` for the `cloudflare` provider), under a minute on Workers AI, and saves them. Each query is one row of `evaluation/results/memory-<name>.json`.
@@ -41,5 +41,5 @@ The vectors come from `cache/`, so a run with a cached model makes no network ca
 
 - **Changing the ranking in `src/memory/ranking.py`:** rerun; the service imports it, so there is nothing to mirror. Move a bound in `thresholds.toml` only with the reason in the commit.
 - **A new embedding model:** set it in `.env` and rerun; the cache is per model. Changing the production model also means re-embedding `agent_memories` (see the AI README).
-- **Changing `generate.py`:** any change to the generator or its random draws changes the queries, so the numbers above stop being comparable; run it, commit the new `cases.jsonl` and record the new numbers here.
+- **Changing `generate.py`:** any change to the generator or its random draws changes the queries, so the numbers above stop being comparable; run it with `uv run evaluation/memory/generate.py`, commit the new `cases.jsonl` and record the new numbers here.
 - The data is synthetic Vietnamese shop facts. No real owner's memories are used; the numbers are not product behaviour until the PO approves long-term memory.

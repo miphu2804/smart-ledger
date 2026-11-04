@@ -20,7 +20,10 @@ cd backend/ai && uv sync --group dev && cp -n .env.example .env
 
 ```bash
 cd backend/ai && uv run python -m src.main
+cd backend/ai && uv run uvicorn src.main:app --reload --port 8001   # or this one: restarts on each code change
 ```
+
+Scripts run the same way, without `python` in front: `uv run evaluation/run.py agent_chat --dry-run`. The [AI README](../../backend/ai/README.md#scripts) lists them.
 
 ```bash
 cd backend/ai && uv run ruff check && uv run ruff format --check && uv run pytest
