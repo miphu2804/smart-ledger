@@ -26,7 +26,7 @@ Trên `feat/core-daily-activity`, V19 thêm `user_daily_activity` và recorder c
 
 MVC interceptor giữ Firebase UID đã xác minh và ngày Việt Nam trên request, chỉ ghi sau completion hợp lệ; service tra profile ACTIVE, cache bounded theo user/ngày và repository commit riêng với `ON CONFLICT DO NOTHING`. Lỗi telemetry không đổi response nghiệp vụ; không thay audit bắt buộc của ADMIN hoặc số tạo mới. Chi tiết giới hạn, retention/rollback và SQL bàn giao ở [Core guide](../../backend/core/docs/user-daily-activity.md), schema ở [V19](erd-description.md#core-018-v19).
 
-Kiến trúc trong sơ đồ là **đích MVP**: Mobile dành cho OWNER và dashboard web dành cho ADMIN cùng gọi Core; Core sở hữu API công khai và điều phối AI; PostgreSQL lưu sổ nghiệp vụ, lịch sử Agent chat và vector (pgvector); Bifrost là gateway model và HoneyHive nhận trace của AI. Hệ thống không dùng Redis và Langfuse.
+Kiến trúc trong sơ đồ là **đích MVP**: Mobile dành cho OWNER và dashboard web dành cho ADMIN cùng gọi Core; Core sở hữu API công khai và điều phối AI; PostgreSQL lưu sổ nghiệp vụ, lịch sử Agent chat và vector (pgvector); Bifrost là gateway model, Redis trong stack của mỗi môi trường cache lịch sử Agent chat (PostgreSQL vẫn là nguồn sự thật) và HoneyHive nhận trace của AI. Hệ thống không dùng Langfuse.
 
 Mục này là nơi duy nhất ghi hiện trạng triển khai; tài liệu khác liên kết tới đây thay vì chép lại. Trạng thái từng endpoint nằm trong [hợp đồng API](../contracts/api-contracts.md).
 

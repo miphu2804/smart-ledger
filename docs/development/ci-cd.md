@@ -273,6 +273,11 @@ Compose sets `AI_BASE_URL`, `SERVER_PORT` and `FLYWAY_ENABLED=false` itself. Bef
 | `POSTGRES_POOL_MAX_SIZE`, `SQL_POOL_MAX_SIZE` | Optional, default `2`; they share the Supabase pooler limit with Core ([AI README](../../backend/ai/README.md#database-access)) |
 | Model and tracing variables | From GitHub, see below |
 | `AGENT_MEMORY_*`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | Optional, `ai.env` only; memory is off until the PO approves it ([ADR-0002](../architecture/adr/0002-agent-long-term-memory.md), [AI README](../../backend/ai/README.md#long-term-memory-off-by-default)) |
+| `REDIS_URL` | `redis://redis:6379/0`, the stack's own Redis; unset makes every chat turn read its history from PostgreSQL |
+
+**`redis`**
+
+The chat-history cache of AI, reachable only inside the project network at `redis:6379`, with no published port and no password. It keeps nothing on disk and evicts the oldest keys at its 64 MB cap, so a restart or an outage only makes the next turns read PostgreSQL. AI starts it through `depends_on` and falls back to PostgreSQL whenever it does not answer; the image is pinned by digest and a new version is a change to `compose.yaml`.
 
 **`bifrost`**
 
