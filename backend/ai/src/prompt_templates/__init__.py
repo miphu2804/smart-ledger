@@ -32,6 +32,10 @@ from src.prompt_templates.sql_agent import (
     QUERY_RESULT_HEADER,
     SQL_AGENT_PROMPT,
 )
+from src.prompt_templates.tier_classifier import (
+    TIER_CLASSIFIER_PROMPT,
+    TIER_DESCRIPTIONS,
+)
 
 __all__ = [
     "APP_GUIDE_PROMPT",
@@ -57,4 +61,6 @@ __all__ = [
     "RUN_CODE_PROMPT",
     "SHOP_AGENT_SYSTEM_PROMPT",
     "SQL_AGENT_PROMPT",
+    "TIER_CLASSIFIER_PROMPT",
+    "TIER_DESCRIPTIONS",
 ]

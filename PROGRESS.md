@@ -6,6 +6,15 @@
 | Docs | • The three evaluation READMEs are rewritten short: the plain command first, options after, then the files to touch for common changes |
 
 Check: unit tests 456 passed, ruff check and format pass; `uv run evaluation/run.py memory` with no flags shows 5 PASS rows and exits 0, recall 0.8601516427969671, local database rows equal before and after; a stricter `--gate` file exits with `gate failed: recall: 0.86 < 0.99`; `agent_chat --dry-run` prints no INFO line and the same plan as before. Not verified: a paid `agent_chat` run with `--model`. Commit: the one that adds this entry.
+### 2026-11-04 — Chat turns pick their model by complexity
+
+| Area | Change |
+|---|---|
+| AI | • With `MODEL_TIERING_ENABLED=true`, TypeSafe Jev rates each turn through Bifrost's `/v1/decisions` and the turn runs on `chat-simple`, `chat-medium` or `chat-complex` (planned as `mercury-3` low, `mercury-3` high, `gpt-6-luna` xhigh), so easy questions answer fast; off by default, every turn stays on `chat`<br>• The rating runs beside memory recall; an error, a timeout past 1.5 s or a refusal runs `chat-complex`, a conversation keeps the highest tier it reached and stops asking Jev once complex, and all steps of a turn use one model<br>• HoneyHive sessions carry `tier`, `tier_alias` and `tier_mechanism` next to the turn's real `model` |
+| Deploy | • `bifrost.json` adds the `typesafe` provider (`TYPESAFE_API_KEY`, no retries), lets `vk-ai` use `jev-latest`, and limits `inception` to chat completions, which is all Mercury serves |
+| Docs | • ADR-0008 update on why tiers are picked in AI and not by Bifrost routing rules, AI README section on model tiers, the Bifrost key in `ci-cd.md`, regenerated credential map |
+
+Check: unit tests 457 passed, ruff check and format pass; startup wiring checked with the four aliases set and with them missing (`tiering off`). Not verified: a real `/v1/decisions` call, `gpt-6-luna` with effort `xhigh`, Mercury in real chat, and the chat eval with tiers on. Commit: the one that adds this entry.
 
 ### 2026-11-04 — One class-based evaluation pipeline for agent_chat and memory
 
