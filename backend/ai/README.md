@@ -271,6 +271,8 @@ cp .env.example .env
 uv run python -m src.main
 ```
 
+While editing code, `uv run uvicorn src.main:app --reload --port 8001` restarts the server on each change; it uses Uvicorn's own log format instead of the app's.
+
 To run against the local database instead of staging, see [Develop against the local database](../../docs/development/local-development.md#develop-against-the-local-database).
 
 ### Local Compose
