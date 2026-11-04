@@ -7,8 +7,10 @@ import pytest
 from fastapi.testclient import TestClient
 from psycopg import sql
 from pydantic_ai.models.function import FunctionModel
+from sqlalchemy import text
 from tests.support import (
     TEST_GUARDRAIL_LIMITS,
+    FakeRedis,
     apply_ai_baseline,
     apply_core_migrations,
     echo_user_prompts,
@@ -19,6 +21,7 @@ from src.agent.errors import ConversationNotFoundError
 from src.agent.repository import AgentConversationRepository
 from src.agent.service import AgentService
 from src.infra.postgre_db_client import PostgreDBClient
+from src.infra.redis_client import RedisClient
 from src.main import app
 
 
@@ -80,7 +83,7 @@ def postgres_agent_client(
         postgres = PostgreDBClient(schema_url(database_url, schema_name))
         agent = AgentService(
             FunctionModel(echo_user_prompts),
-            AgentConversationRepository(postgres),
+            AgentConversationRepository(postgres, FakeRedis()),
             guardrail_limits=TEST_GUARDRAIL_LIMITS,
         )
         monkeypatch.setattr(app.state, "agent", agent, raising=False)
@@ -242,3 +245,151 @@ def test_chat_sends_only_the_configured_window(
 
     assert response.status_code == 200
     assert response.json()["answer"] == "question 2 | next"
+
+
+def fresh_history(
+    conversations: AgentConversationRepository,
+    conversation_id: int,
+    user_id: int,
+    shop_id: int,
+    limit: int,
+) -> list[dict]:
+    """Read the window from the database, as a repository with an empty cache does."""
+    reader = AgentConversationRepository(conversations.postgres, FakeRedis())
+    return reader.recent_messages(conversation_id, user_id, shop_id, limit)
+
+
+def test_recent_messages_second_read_skips_the_database(
+    postgres_agent_client: tuple[TestClient, int, int, AgentConversationRepository],
+) -> None:
+    _, user_id, shop_id, conversations = postgres_agent_client
+    conversation_id = seed_conversation(conversations, user_id, shop_id, 1)
+    first = conversations.recent_messages(conversation_id, user_id, shop_id, 4)
+
+    # Rows changed behind the repository's back show a database read would differ.
+    with conversations.postgres.session() as session:
+        session.execute(text("UPDATE chat_messages SET content = 'changed'"))
+
+    assert conversations.recent_messages(conversation_id, user_id, shop_id, 4) == first
+    assert fresh_history(conversations, conversation_id, user_id, shop_id, 4) != first
+
+
+def test_recent_messages_reads_again_for_a_different_limit(
+    postgres_agent_client: tuple[TestClient, int, int, AgentConversationRepository],
+) -> None:
+    _, user_id, shop_id, conversations = postgres_agent_client
+    conversation_id = seed_conversation(conversations, user_id, shop_id, 2)
+    conversations.recent_messages(conversation_id, user_id, shop_id, 4)
+
+    window = conversations.recent_messages(conversation_id, user_id, shop_id, 2)
+
+    assert [message["content"] for message in window] == ["question 1", "answer 1"]
+
+
+def test_save_exchange_updates_the_cached_history_and_trims_it(
+    postgres_agent_client: tuple[TestClient, int, int, AgentConversationRepository],
+) -> None:
+    _, user_id, shop_id, conversations = postgres_agent_client
+    conversation_id = seed_conversation(conversations, user_id, shop_id, 2)
+    conversations.recent_messages(conversation_id, user_id, shop_id, 4)
+
+    conversations.save_exchange(
+        user_id, shop_id, conversation_id, "question 2", "answer 2"
+    )
+
+    cached = conversations.recent_messages(conversation_id, user_id, shop_id, 4)
+    assert [message["content"] for message in cached] == [
+        "question 1",
+        "answer 1",
+        "question 2",
+        "answer 2",
+    ]
+    assert cached == fresh_history(conversations, conversation_id, user_id, shop_id, 4)
+
+
+def test_save_exchange_does_not_cache_a_new_conversation(
+    postgres_agent_client: tuple[TestClient, int, int, AgentConversationRepository],
+) -> None:
+    _, user_id, shop_id, conversations = postgres_agent_client
+
+    seed_conversation(conversations, user_id, shop_id, 1)
+
+    assert conversations.cache.values == {}
+
+
+def test_recent_messages_keeps_the_ownership_check_after_a_cache_fill(
+    postgres_agent_client: tuple[TestClient, int, int, AgentConversationRepository],
+) -> None:
+    _, user_id, shop_id, conversations = postgres_agent_client
+    conversation_id = seed_conversation(conversations, user_id, shop_id, 1)
+    conversations.recent_messages(conversation_id, user_id, shop_id, 4)
+
+    with pytest.raises(ConversationNotFoundError):
+        conversations.recent_messages(conversation_id, user_id + 1, shop_id, 4)
+    with pytest.raises(ConversationNotFoundError):
+        conversations.recent_messages(conversation_id, user_id, shop_id + 1, 4)
+
+
+def test_delete_conversation_drops_the_cached_history(
+    postgres_agent_client: tuple[TestClient, int, int, AgentConversationRepository],
+) -> None:
+    _, user_id, shop_id, conversations = postgres_agent_client
+    conversation_id = seed_conversation(conversations, user_id, shop_id, 1)
+    conversations.recent_messages(conversation_id, user_id, shop_id, 4)
+
+    conversations.delete_conversation(conversation_id, user_id, shop_id)
+
+    with pytest.raises(ConversationNotFoundError):
+        conversations.recent_messages(conversation_id, user_id, shop_id, 4)
+
+
+def test_recent_messages_returns_a_copy_of_the_cached_list(
+    postgres_agent_client: tuple[TestClient, int, int, AgentConversationRepository],
+) -> None:
+    _, user_id, shop_id, conversations = postgres_agent_client
+    conversation_id = seed_conversation(conversations, user_id, shop_id, 1)
+    first = conversations.recent_messages(conversation_id, user_id, shop_id, 4)
+    first.clear()
+    second = conversations.recent_messages(conversation_id, user_id, shop_id, 4)
+    second.clear()
+
+    third = conversations.recent_messages(conversation_id, user_id, shop_id, 4)
+
+    assert len(third) == 2
+
+
+def test_history_cache_entries_expire(
+    postgres_agent_client: tuple[TestClient, int, int, AgentConversationRepository],
+) -> None:
+    _, user_id, shop_id, conversations = postgres_agent_client
+    conversation_id = seed_conversation(conversations, user_id, shop_id, 1)
+
+    conversations.recent_messages(conversation_id, user_id, shop_id, 4)
+    conversations.save_exchange(user_id, shop_id, conversation_id, "q", "a")
+
+    assert list(conversations.cache.ttls.values()) == [
+        AgentConversationRepository.HISTORY_CACHE_TTL_SECONDS
+    ]
+
+
+def test_history_is_correct_when_the_cache_never_answers(
+    postgres_agent_client: tuple[TestClient, int, int, AgentConversationRepository],
+) -> None:
+    _, user_id, shop_id, conversations = postgres_agent_client
+    # A fail-open client: reads find nothing and writes are dropped.
+    conversations.cache = RedisClient(None)
+    conversation_id = seed_conversation(conversations, user_id, shop_id, 2)
+    conversations.recent_messages(conversation_id, user_id, shop_id, 4)
+
+    conversations.save_exchange(user_id, shop_id, conversation_id, "q", "a")
+
+    window = conversations.recent_messages(conversation_id, user_id, shop_id, 4)
+    assert [message["content"] for message in window] == [
+        "question 1",
+        "answer 1",
+        "q",
+        "a",
+    ]
+    conversations.delete_conversation(conversation_id, user_id, shop_id)
+    with pytest.raises(ConversationNotFoundError):
+        conversations.recent_messages(conversation_id, user_id, shop_id, 4)

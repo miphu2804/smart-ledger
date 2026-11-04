@@ -18,6 +18,7 @@ from src.agent.service import AgentService
 from src.app_config import app_config
 from src.calculation.service import CalculationLimits, CalculationService
 from src.infra.postgre_db_client import PostgreDBClient
+from src.infra.redis_client import RedisClient
 from src.llm_router.bifrost_tier_classifier import BifrostTierClassifier
 from src.llm_router.service import LLMRouterService
 from src.llm_router.tier import Tier
@@ -212,6 +213,7 @@ async def lifespan(app: FastAPI):
     postgres = PostgreDBClient(
         app_config.POSTGRES_URL, pool_size=app_config.POSTGRES_POOL_MAX_SIZE
     )
+    cache = RedisClient(app_config.REDIS_URL)
     # Model-written SQL runs as the read-only login, so it gets its own pool.
     reader = PostgreDBClient(
         app_config.AI_SQL_READER_URL, pool_size=app_config.SQL_POOL_MAX_SIZE
@@ -233,7 +235,7 @@ async def lifespan(app: FastAPI):
         if decisions is not None
         else None
     )
-    conversations = AgentConversationRepository(postgres)
+    conversations = AgentConversationRepository(postgres, cache)
     app.state.conversations = conversations
     shop_data = build_shop_data(reader)
     memory = build_memory_service(chat_model, postgres, observability)
@@ -281,6 +283,7 @@ async def lifespan(app: FastAPI):
         await observability.flush()
         postgres.close()
         reader.close()
+        cache.close()
 
 
 # The handlers do no I/O, so they are async and answer without a worker thread.
