@@ -1,3 +1,12 @@
+### 2026-11-04 — agent_chat eval split into a package
+
+| Area | Change |
+|---|---|
+| AI | • `evaluation/agent_chat/run.py` (1167 lines) is now a thin command line over `cases.py`, `scoring.py`, `judge.py`, `pipeline.py`, `reporting.py` and `honeyhive_sync.py`, laid out by role like the NexiraCopilot evaluation platform, with no behavior change<br>• `honeyhive_sync.py` and the command line are the only modules that import `honeyhive`; scoring, judging and reporting run without it<br>• The unit tests import the modules instead of loading the script from its path |
+| Docs | • The agent_chat README lists the new modules and names the module that does each step |
+
+Check: an AST comparison finds 71 of the 72 old top-level symbols unchanged, and `RESULTS` still points at `agent_chat/results`; the 69 datapoints built after the split match the ones built before byte for byte, with `suite_version` `7a34fe0c0744`; `--dry-run` prints the same plan apart from the random `session_id`; unit tests 441 passed; ruff check and format pass. Not verified: a full run with the model and `--sync`. Commit: the one that adds this entry.
+
 ### 2026-11-03 — Revenue questions on Orders open the assistant in a sheet
 
 | Area | Change |
@@ -181,12 +190,3 @@ Check: `npm run lint`, `tsc -b` and `vite build` pass; at 375 px the page has no
 | Mobile | • `src/tabBar.ts` holds the tab bar height (100) and the space a tab screen leaves at its end (124); the tab bar drew 100 above the screen edge whatever the bottom inset, but each screen reserved its own number<br>• Quản lý reserved 96, so "Phiên bản 1.0.0" sat under the bar; Đơn hàng reserved 108 and Tạo đơn `insets.bottom + 96`, both short on devices without a bottom inset; all three, and the Tạo đơn cart bar, now use the shared values |
 
 Check: `npx tsc --noEmit` passes; on the mock web build at 375×812 the end of Quản lý, Đơn hàng ("Đã hiện hết 6 đơn") and Tạo đơn with one item in the cart sit above the tab bar. Not verified: a real phone, and a phone with 3-button navigation, where the bar's labels may sit under the system buttons. Commit: the one that adds this entry.
-
-### 2026-10-31 — Bruno collection for the Core API
-
-| Area | Change |
-|---|---|
-| CI | • CD job `smoke-staging` runs the read-only `Smoke` folder after each staging backend deploy; a failure marks the run without rolling back |
-| Docs | • `scripts/bruno` adds Bruno requests for the Core API in OpenCollection YAML with `local` and `staging` environments, Firebase login and a read-only `Smoke` folder<br>• Production has no environment because most requests write data |
-
-Check: `bru run Smoke --env staging` passed 4 of 4 assertions; 65 of the 87 requests returned 2xx or their expected status in OWNER and ADMIN flows against local Core, PostgreSQL and the Firebase Auth Emulator; the 22 media, Zalo and Agent requests were not run because they need Cloudinary, Zalo or AI. Commit: the squash merge of this branch.
