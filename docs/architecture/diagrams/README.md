@@ -19,6 +19,23 @@ Product images in [marketing](../../marketing/README.md) are dated mock captures
 the [mobile reference image](../../design/mobile-ui-style-migration.md) is design
 input. Neither is evidence that Core or a provider integration has passed UAT.
 
+## Reading `ci-cd.svg`
+
+The image keeps labels short; this section explains them. Edge colors mark three flows, each numbered from 1: orange for a user request, green for a code delivery, purple for server setup. Grey dashed edges carry data and are not steps.
+
+| Area | Meaning |
+|---|---|
+| Clients | The mobile app and the admin web on Vercel. Both call the API over HTTPS. |
+| VPS | One Ubuntu server, shown with its logo, that runs every container in Docker Compose. |
+| Edge | One Caddy shared by all environments. It alone opens ports 80 and 443, gets a TLS certificate per domain and forwards each domain to the Core of its environment over the Docker network `edge` ([`deploy/edge/`](../../../deploy/edge/)). |
+| Staging, Production | Two copies of the same application stack, Core, AI and Bifrost, each in its own Compose project and app directory ([`deploy/vps/compose.yaml`](../../../deploy/vps/compose.yaml)). AI is reachable only from Core inside its own stack. Bifrost is the model gateway that forwards AI calls to the LLM providers. |
+| Secrets | Dopbase, the self-hosted secrets vault shared by every environment. CI/CD and Ansible read service variables from it, and it copies its data to Cloudflare R2 every night. |
+| Monitoring | One shared stack. Alloy collects container metrics and logs, Prometheus stores metrics, Loki stores logs, and Grafana shows dashboards and sends alerts to Discord and Telegram ([`deploy/monitoring/`](../../../deploy/monitoring/)). |
+| External | Managed services outside the VPS: Firebase Auth for sign-in, Supabase for Postgres with pgvector, HoneyHive for AI traces, the LLM providers that [`bifrost.json`](../../../deploy/vps/bifrost.json) configures (OpenAI and Inception for chat, Typesafe for the tier classifier), Cloudflare R2 for backups, and Discord and Telegram for alerts. |
+| CI/CD | A push to GitHub runs GitHub Actions on a self-hosted runner, which builds images, pushes them to GHCR and runs `deploy.sh` over SSH; the VPS then pulls the new images. An operator runs Ansible separately to set up the VPS itself. |
+
+Request flow, in order: the shop owner uses the mobile app (1), which signs in with Firebase (2) and calls Caddy over HTTPS (3). Caddy forwards the request to Core (4), which verifies the Firebase ID token (5), calls AI with the internal token `X-Internal-Token` (6), and reads or writes Supabase (7), which AI also reads directly for chat history and shop data. AI calls a model through Bifrost (8) and sends traces to HoneyHive (9).
+
 ## System diagrams (draw.io)
 
 - Create and edit with the `drawio-skill` in [`.agents/skills/drawio-skill`](../../../.agents/skills/drawio-skill) and its `smartledger` preset. English labels only.
