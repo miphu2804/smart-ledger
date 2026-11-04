@@ -12,7 +12,8 @@ from tests.support import (
 )
 
 from src.agent.errors import ConversationNotFoundError, GuardrailError
-from src.agent.model_tier_selector import ModelTierSelector, Tier
+from src.agent.model_tier import Tier
+from src.agent.model_tier_selector import ModelTierSelector
 from src.agent.service import (
     AgentChatResult,
     AgentService,

@@ -1,6 +1,6 @@
 import httpx
 
-from src.agent.model_tier_selector import Tier
+from src.agent.model_tier import Tier
 
 # Bifrost's complexity router asks its decision model the same question with the same
 # fixed rules (docs.getbifrost.ai/features/complexity-router); the tier descriptions

@@ -3,7 +3,8 @@ import asyncio
 import pytest
 from pydantic_ai.models.test import TestModel
 
-from src.agent.model_tier_selector import Mechanism, ModelTierSelector, Tier
+from src.agent.model_tier import Tier
+from src.agent.model_tier_selector import Mechanism, ModelTierSelector
 
 pytestmark = pytest.mark.anyio
 

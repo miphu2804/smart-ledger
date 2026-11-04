@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 from src.agent.jev_tier_classifier import JevTierClassifier
-from src.agent.model_tier_selector import Tier
+from src.agent.model_tier import Tier
 
 pytestmark = pytest.mark.anyio
 

@@ -3,24 +3,14 @@ import logging
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
-from enum import IntEnum, StrEnum
-from typing import TYPE_CHECKING
+from enum import StrEnum
 
 from pydantic_ai.models import Model
 
-if TYPE_CHECKING:
-    # Only for the annotation: the classifier imports Tier from here.
-    from src.agent.jev_tier_classifier import JevTierClassifier
+from src.agent.jev_tier_classifier import JevTierClassifier
+from src.agent.model_tier import Tier
 
 logger = logging.getLogger(__name__)
-
-
-class Tier(IntEnum):
-    """How much work a chat request takes; ordered, so a higher tier wins."""
-
-    SIMPLE = 0
-    MEDIUM = 1
-    COMPLEX = 2
 
 
 # The alias in MODEL_ALIASES each tier runs on.
@@ -59,7 +49,7 @@ class ModelTierSelector:
 
     def __init__(
         self,
-        classifier: "JevTierClassifier",
+        classifier: JevTierClassifier,
         models: dict[Tier, Model],
         timeout_seconds: float,
         max_conversations: int = 10_000,
