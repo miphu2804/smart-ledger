@@ -1,7 +1,7 @@
 /**
  * Khách hàng — tab OWNER / Cơ sở, tìm kiếm, phân trang, trạng thái tải/rỗng/lỗi.
  * Bấm một dòng mở drawer chi tiết bên phải (mỗi lần mở đều ghi audit).
- * Chỉ đọc: không sửa hoá đơn/chi phí/công nợ/tồn kho, không giả danh OWNER.
+ * Chỉ đọc: không sửa hoá đơn/chi phí/công nợ/tồn kho, không giả danh chủ tiệm.
  */
 import { CaretRight, ChatCircleDots, CloudSlash, DeviceMobile, Info, NotePencil, ShieldCheck, Storefront, UserCircle } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
@@ -87,7 +87,7 @@ export default function CustomersPage() {
         <div className="shop-tabs">
           <div className="seg-tabs" role="tablist" aria-label="Loại khách hàng">
             <button type="button" role="tab" aria-selected={tab === 'owners'} onClick={() => setTab('owners')}>
-              <UserCircle size={16} aria-hidden="true" /> OWNER
+              <UserCircle size={16} aria-hidden="true" /> Chủ tiệm
             </button>
             <button type="button" role="tab" aria-selected={tab === 'shops'} onClick={() => setTab('shops')}>
               <Storefront size={16} aria-hidden="true" /> Cơ sở
@@ -95,7 +95,7 @@ export default function CustomersPage() {
           </div>
           {active.data && (
             <span className="muted num" aria-live="polite">
-              {active.data.total} {tab === 'owners' ? 'OWNER' : 'cơ sở'}
+              {active.data.total} {tab === 'owners' ? 'chủ tiệm' : 'cơ sở'}
             </span>
           )}
         </div>
@@ -166,17 +166,17 @@ export default function CustomersPage() {
               }
             />
           ) : (
-            <EmptyState icon={Storefront} title="Chưa có khách hàng" description="Chủ cơ sở đăng ký trên ứng dụng sẽ xuất hiện ở đây." />
+            <EmptyState icon={Storefront} title="Chưa có khách hàng" description="Chủ tiệm đăng ký trên ứng dụng sẽ xuất hiện ở đây." />
           )
         ) : (
           <div className={active.loading ? 'dt-loading' : undefined} aria-busy={active.loading}>
             <div className="dt-wrap">
               {tab === 'owners' && users.data ? (
                 <table className="dt dt-list">
-                  <caption className="sr-only">Danh sách OWNER</caption>
+                  <caption className="sr-only">Danh sách chủ tiệm</caption>
                   <thead>
                     <tr>
-                      <th scope="col">OWNER</th>
+                      <th scope="col">Chủ tiệm</th>
                       <th scope="col">Số điện thoại</th>
                       <th scope="col" className="hide-md">
                         Cơ sở
@@ -244,7 +244,7 @@ export default function CustomersPage() {
                   <thead>
                     <tr>
                       <th scope="col">Cơ sở</th>
-                      <th scope="col">OWNER</th>
+                      <th scope="col">Chủ tiệm</th>
                       <th scope="col" className="hide-md">
                         Khu vực
                       </th>
@@ -289,7 +289,7 @@ export default function CustomersPage() {
                             </div>
                           </div>
                         </td>
-                        <td data-label="OWNER">
+                        <td data-label="Chủ tiệm">
                           {s.owner.fullName}
                           {s.ownerBusinessCount > 1 && <span className="sub"> · {s.ownerBusinessCount} cơ sở</span>}
                         </td>
@@ -319,7 +319,7 @@ export default function CustomersPage() {
               pageSize={active.data.pageSize}
               total={active.data.total}
               totalPages={active.data.totalPages}
-              unit={tab === 'owners' ? 'OWNER' : 'cơ sở'}
+              unit={tab === 'owners' ? 'chủ tiệm' : 'cơ sở'}
               onPage={setPage}
               onPageSize={(n) => {
                 setPageSize(n)
@@ -344,7 +344,7 @@ function ScopeNotice() {
       <Info size={18} aria-hidden="true" />
       <span>
         ADMIN chỉ xem thông tin hỗ trợ. Không hiển thị doanh thu, hoá đơn, chi phí, công nợ, tồn kho hay token; không có thao tác sửa sổ hoặc đăng
-        nhập thay chủ cơ sở.
+        nhập thay chủ tiệm.
       </span>
     </div>
   )
@@ -405,7 +405,7 @@ function ShopDrawer({ id, onClose, onOpenOwner }: { id: string | null; onClose: 
             )}
           </div>
 
-          <h3 className="section-title">Chủ cơ sở</h3>
+          <h3 className="section-title">Chủ tiệm</h3>
           <button type="button" className="list-item" style={{ padding: '8px 0', borderBottom: 0 }} onClick={() => onOpenOwner(d.owner.id)}>
             <Avatar name={d.owner.fullName} size={36} />
             <div>
@@ -484,7 +484,7 @@ function ShopDrawer({ id, onClose, onOpenOwner }: { id: string | null; onClose: 
 
           {d.otherBusinesses.length > 0 && (
             <>
-              <h3 className="section-title">Cơ sở khác của OWNER</h3>
+              <h3 className="section-title">Cơ sở khác của chủ tiệm</h3>
               <div className="chip-links">
                 {d.otherBusinesses.map((b) => (
                   <Link key={b.id} className="chip-link" to={`/admin/customers?tab=shops&shop=${b.id}`}>
@@ -537,14 +537,14 @@ function OwnerDrawer({ id, onClose, onOpenShop }: { id: string | null; onClose: 
     <DetailDrawer
       open={Boolean(id)}
       onClose={onClose}
-      title={u?.fullName ?? 'Chi tiết OWNER'}
-      subtitle={u ? `OWNER · Mã ${u.id}` : 'Đang tải…'}
+      title={u?.fullName ?? 'Chi tiết chủ tiệm'}
+      subtitle={u ? `Chủ tiệm · Mã ${u.id}` : 'Đang tải…'}
       leading={u ? <Avatar name={u.fullName} size={40} /> : undefined}
     >
       {error ? (
-        <ErrorState compact error={error} onRetry={reload} title="Không mở được chi tiết OWNER" />
+        <ErrorState compact error={error} onRetry={reload} title="Không mở được chi tiết chủ tiệm" />
       ) : !u ? (
-        <LoadingState variant="list" rows={4} label="Đang tải chi tiết OWNER…" />
+        <LoadingState variant="list" rows={4} label="Đang tải chi tiết chủ tiệm…" />
       ) : (
         <>
           <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>

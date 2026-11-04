@@ -16,7 +16,7 @@ import { clone, conversations, db, idempotency, log, mockNow, saveConversations,
 export const SUGGESTED_PROMPTS = [
   'Tóm tắt các cơ sở cần chú ý hôm nay',
   'Cơ sở nào đang lỗi đồng bộ?',
-  'Chủ cơ sở nào chưa xác minh số điện thoại?',
+  'Chủ tiệm nào chưa xác minh số điện thoại?',
   'Đề xuất task cho cơ sở đang chọn',
 ]
 
@@ -44,7 +44,7 @@ function draftFor(b: MockBusiness): TaskDraft | null {
     d = {
       draftId: `ai_sync_${b.id}`,
       title: 'Kiểm tra lỗi đồng bộ',
-      description: `${b.syncErrors7d} lần đồng bộ thất bại trong 7 ngày. Liên hệ chủ cơ sở kiểm tra kết nối mạng và phiên bản ứng dụng.`,
+      description: `${b.syncErrors7d} lần đồng bộ thất bại trong 7 ngày. Liên hệ chủ tiệm kiểm tra kết nối mạng và phiên bản ứng dụng.`,
       severity: b.syncErrors7d >= 4 ? 'high' : 'medium',
       shopId: b.id,
       shopName: b.name,
@@ -54,11 +54,11 @@ function draftFor(b: MockBusiness): TaskDraft | null {
     d = {
       draftId: `ai_pend_${b.id}`,
       title: 'Hỗ trợ xác minh số điện thoại',
-      description: 'Chủ cơ sở chưa hoàn tất xác minh OTP. Gọi hỏi khách có nhận được SMS không.',
+      description: 'Chủ tiệm chưa hoàn tất xác minh OTP. Gọi hỏi khách có nhận được SMS không.',
       severity: 'low',
       shopId: b.id,
       shopName: b.name,
-      reason: 'Căn cứ: trạng thái OWNER = Chờ xác minh.',
+      reason: 'Căn cứ: trạng thái chủ tiệm = Chờ xác minh.',
     }
   else if (o.plan === 'basic' && b.ordersThisMonth >= BASIC_MONTHLY_QUOTA * 0.8)
     d = {
@@ -85,7 +85,7 @@ function answer(prompt: string, shopId?: string): Omit<AiMessage, 'id' | 'at' | 
   if (OUT_OF_SCOPE.test(n)) {
     return {
       content:
-        'Yêu cầu này nằm ngoài phạm vi AI Support. Mình không đọc hay sửa sổ nghiệp vụ (hoá đơn, chi phí, công nợ, tồn kho), không xem mật khẩu/token và không thao tác thay chủ cơ sở. Bạn có thể hỏi về trạng thái tài khoản, đồng bộ, thiết bị hoặc hạn mức.',
+        'Yêu cầu này nằm ngoài phạm vi AI Support. Mình không đọc hay sửa sổ nghiệp vụ (hoá đơn, chi phí, công nợ, tồn kho), không xem mật khẩu/token và không thao tác thay chủ tiệm. Bạn có thể hỏi về trạng thái tài khoản, đồng bộ, thiết bị hoặc hạn mức.',
       scope: 'Không truy vấn dữ liệu',
       evidence: [],
       limits: baseLimits,
@@ -102,7 +102,7 @@ function answer(prompt: string, shopId?: string): Omit<AiMessage, 'id' | 'at' | 
         limits: [...baseLimits, 'Chỉ xem được số lần lỗi, không xem nội dung dữ liệu đồng bộ.'],
       }
     return {
-      content: `Có ${list.length} cơ sở gặp lỗi đồng bộ trong 7 ngày. Nhiều nhất là ${list[0]?.name} (${list[0]?.syncErrors7d} lần). Nguyên nhân thường gặp: mất kết nối mạng hoặc app phiên bản cũ — cần xác nhận với chủ cơ sở.`,
+      content: `Có ${list.length} cơ sở gặp lỗi đồng bộ trong 7 ngày. Nhiều nhất là ${list[0]?.name} (${list[0]?.syncErrors7d} lần). Nguyên nhân thường gặp: mất kết nối mạng hoặc app phiên bản cũ — cần xác nhận với chủ tiệm.`,
       scope: scopeShop,
       evidence: list
         .slice(0, 5)
@@ -118,7 +118,7 @@ function answer(prompt: string, shopId?: string): Omit<AiMessage, 'id' | 'at' | 
   if (/xac minh|otp|chua xac/.test(n)) {
     const pend = owners.filter((o) => o.status === 'pending')
     return {
-      content: `${pend.length} chủ cơ sở chưa xác minh số điện thoại. Đa số đăng ký trong 14 ngày gần đây — nên gọi hỏi khách có nhận được SMS OTP không.`,
+      content: `${pend.length} chủ tiệm chưa xác minh số điện thoại. Đa số đăng ký trong 14 ngày gần đây — nên gọi hỏi khách có nhận được SMS OTP không.`,
       scope: scopeAll,
       evidence: pend.slice(0, 6).map((o) => {
         const b = businesses.find((x) => x.ownerId === o.id)!
@@ -172,11 +172,11 @@ function answer(prompt: string, shopId?: string): Omit<AiMessage, 'id' | 'at' | 
     const locked = owners.filter((o) => o.status === 'locked').length
     const overdue = tasks().filter((t) => t.status !== 'resolved' && t.dueAt && new Date(t.dueAt) < mockNow()).length
     return {
-      content: `Hôm nay có ${sync} cơ sở lỗi đồng bộ, ${pend} chủ cơ sở chưa xác minh, ${locked} tài khoản bị khoá và ${overdue} task quá hạn. Nên ưu tiên task quá hạn và các cơ sở lỗi đồng bộ nhiều lần.`,
+      content: `Hôm nay có ${sync} cơ sở lỗi đồng bộ, ${pend} chủ tiệm chưa xác minh, ${locked} tài khoản bị khoá và ${overdue} task quá hạn. Nên ưu tiên task quá hạn và các cơ sở lỗi đồng bộ nhiều lần.`,
       scope: scopeAll,
       evidence: [
         { label: 'Cơ sở lỗi đồng bộ (7 ngày)', value: String(sync) },
-        { label: 'OWNER chờ xác minh', value: String(pend) },
+        { label: 'Chủ tiệm chờ xác minh', value: String(pend) },
         { label: 'Tài khoản bị khoá', value: String(locked) },
         { label: 'Task quá hạn', value: String(overdue) },
       ],
@@ -185,7 +185,7 @@ function answer(prompt: string, shopId?: string): Omit<AiMessage, 'id' | 'at' | 
   }
 
   return {
-    content: `${shop.name}: chủ cơ sở ${owners.find((o) => o.id === shop.ownerId)?.fullName}, ${shop.syncErrors7d ? `${shop.syncErrors7d} lỗi đồng bộ trong 7 ngày` : 'đồng bộ ổn định'}, hoạt động gần nhất ${fmtTime(shop.lastActiveAt)}.`,
+    content: `${shop.name}: chủ tiệm ${owners.find((o) => o.id === shop.ownerId)?.fullName}, ${shop.syncErrors7d ? `${shop.syncErrors7d} lỗi đồng bộ trong 7 ngày` : 'đồng bộ ổn định'}, hoạt động gần nhất ${fmtTime(shop.lastActiveAt)}.`,
     scope: scopeShop,
     evidence: shopEvidence(shop),
     limits: baseLimits,

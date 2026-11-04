@@ -369,8 +369,8 @@ function GlobalSearch({ onOpenShop, onOpenUser }: { onOpenShop: (id: string) => 
             ref={inputRef}
             className="input"
             type="search"
-            placeholder="Tìm OWNER, email, SĐT, cơ sở…"
-            aria-label="Tìm OWNER hoặc cơ sở"
+            placeholder="Tìm chủ tiệm, email, SĐT, cơ sở…"
+            aria-label="Tìm chủ tiệm hoặc cơ sở"
             value={q}
             onFocus={() => setOpen(true)}
             onChange={(e) => {
@@ -394,7 +394,7 @@ function GlobalSearch({ onOpenShop, onOpenUser }: { onOpenShop: (id: string) => 
               <div className="pop-empty">Không có kết quả cho “{q.trim()}”.</div>
             ) : res ? (
               <>
-                {res.users.length > 0 && <div className="pop-label">Chủ cơ sở</div>}
+                {res.users.length > 0 && <div className="pop-label">Chủ tiệm</div>}
                 {res.users.map((u) => (
                   <button
                     key={u.id}

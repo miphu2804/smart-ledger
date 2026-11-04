@@ -33,7 +33,7 @@ export default function ForbiddenPage({ user }: { user: SessionUser }) {
             description={
               <>
                 Bạn đang đăng nhập bằng <strong>{user.email}</strong> với vai trò <strong>{user.role}</strong>. Trang quản trị chỉ dành cho tài khoản
-                ADMIN. Chủ cơ sở vui lòng dùng ứng dụng Sổ Nghe Lời trên điện thoại.
+                ADMIN. Chủ tiệm vui lòng dùng ứng dụng Sổ Nghe Lời trên điện thoại.
               </>
             }
             action={

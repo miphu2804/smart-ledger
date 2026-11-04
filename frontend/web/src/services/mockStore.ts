@@ -86,7 +86,7 @@ export function audit(): AuditEntry[] {
       at: new Date(`${MOCK_TODAY}T08:00:00`).toISOString(),
       actor: 'Hệ thống',
       action: 'Khởi tạo dữ liệu mẫu',
-      detail: 'Tạo OWNER, cơ sở và support task mẫu cho môi trường demo',
+      detail: 'Tạo chủ tiệm, cơ sở và support task mẫu cho môi trường demo',
     },
   ]))
 }
