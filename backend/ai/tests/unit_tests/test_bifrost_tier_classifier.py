@@ -3,15 +3,18 @@ import json
 import httpx
 import pytest
 
-from src.agent.jev_tier_classifier import JevTierClassifier
-from src.agent.model_tier import Tier
+from src.llm_router.bifrost_tier_classifier import BifrostTierClassifier
+from src.llm_router.tier import Tier
 
 pytestmark = pytest.mark.anyio
 
 URL = "http://bifrost:8080/v1/decisions"
 
 
-def classifier_answering(answer: dict, requests: list) -> JevTierClassifier:
+DESCRIPTIONS = {tier.name: f"{tier.name.lower()} work" for tier in Tier}
+
+
+def classifier_answering(answer: dict, requests: list) -> BifrostTierClassifier:
     def respond(request: httpx.Request) -> httpx.Response:
         requests.append(request)
         return httpx.Response(200, json={"answers": [answer]})
@@ -19,7 +22,13 @@ def classifier_answering(answer: dict, requests: list) -> JevTierClassifier:
     client = httpx.AsyncClient(
         transport=httpx.MockTransport(respond), headers={"x-bf-vk": "sk-bf-test"}
     )
-    return JevTierClassifier(client, URL, model="typesafe/jev-latest")
+    return BifrostTierClassifier(
+        client,
+        URL,
+        model="typesafe/jev-latest",
+        instructions="Which tier?",
+        descriptions=DESCRIPTIONS,
+    )
 
 
 async def test_asks_jev_one_choice_question_about_the_owner_messages() -> None:
@@ -43,10 +52,11 @@ async def test_asks_jev_one_choice_question_about_the_owner_messages() -> None:
     ]
     (question,) = body["questions"]
     assert (question["type"], question["name"]) == ("choice", "tier")
-    assert [choice["value"] for choice in question["choices"]] == [
-        "SIMPLE",
-        "MEDIUM",
-        "COMPLEX",
+    assert question["instructions"] == "Which tier?"
+    assert question["choices"] == [
+        {"value": "SIMPLE", "description": "simple work"},
+        {"value": "MEDIUM", "description": "medium work"},
+        {"value": "COMPLEX", "description": "complex work"},
     ]
 
 

@@ -1,23 +1,33 @@
 import httpx
 
-from src.agent.model_tier import Tier
-from src.prompt_templates import TIER_CLASSIFIER_PROMPT, TIER_DESCRIPTIONS
+from src.llm_router.tier import Tier
 
 
-class JevTierClassifier:
-    """Rates a chat request with TypeSafe Jev through Bifrost's `/v1/decisions`.
+class BifrostTierClassifier:
+    """Rates a request with a decision model through Bifrost's `/v1/decisions`.
 
-    Bifrost holds the TypeSafe key; `client` carries the AI service's virtual key and
-    is owned by the composition root.
+    The model, such as `typesafe/jev-latest`, is whichever decision model Bifrost
+    serves; Bifrost holds its provider key. `client` carries the caller's virtual key
+    and is owned by the composition root. `instructions` and `descriptions` (keyed by
+    `Tier` name) are the caller's domain wording of the one `choice` question asked.
     """
 
-    def __init__(self, client: httpx.AsyncClient, url: str, model: str) -> None:
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+        model: str,
+        instructions: str,
+        descriptions: dict[str, str],
+    ) -> None:
         self.client = client
         self.url = url
         self.model = model
+        self.instructions = instructions
+        self.descriptions = descriptions
 
     async def classify(self, user_messages: list[str]) -> Tier:
-        """The tier of the last message; raises when Jev gives no valid answer."""
+        """The tier of the last message; raises when the model gives no valid answer."""
         response = await self.client.post(
             self.url,
             json={
@@ -29,11 +39,11 @@ class JevTierClassifier:
                     {
                         "type": "choice",
                         "name": "tier",
-                        "instructions": TIER_CLASSIFIER_PROMPT,
+                        "instructions": self.instructions,
                         "choices": [
                             {
                                 "value": tier.name,
-                                "description": TIER_DESCRIPTIONS[tier.name],
+                                "description": self.descriptions[tier.name],
                             }
                             for tier in Tier
                         ],

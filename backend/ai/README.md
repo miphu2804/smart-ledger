@@ -87,7 +87,7 @@ The agent runs on [Pydantic AI](https://ai.pydantic.dev/). Prompts live in `src/
 
 ### Model tiers
 
-With `MODEL_TIERING_ENABLED=true`, each chat turn runs on the model its request needs instead of always on `chat`. `ModelTierSelector` (`src/agent/model_tier_selector.py`) asks TypeSafe Jev through Bifrost's `/v1/decisions` (`TIER_CLASSIFIER_URL`, e.g. `http://bifrost:8080/v1/decisions`) to rate the owner's latest message, led by their previous one, and picks the alias of that tier:
+With `MODEL_TIERING_ENABLED=true`, each chat turn runs on the model its request needs instead of always on `chat`. `LLMRouterService` (`src/llm_router/`) asks TypeSafe Jev through Bifrost's `/v1/decisions` with `BifrostTierClassifier` (`TIER_CLASSIFIER_URL`, e.g. `http://bifrost:8080/v1/decisions`) to rate the owner's latest message, led by their previous one, and picks the alias of that tier:
 
 | Tier | Alias | Intended model |
 |---|---|---|

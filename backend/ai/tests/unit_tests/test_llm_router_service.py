@@ -3,12 +3,17 @@ import asyncio
 import pytest
 from pydantic_ai.models.test import TestModel
 
-from src.agent.model_tier import Tier
-from src.agent.model_tier_selector import Mechanism, ModelTierSelector
+from src.llm_router.service import LLMRouterService, Mechanism
+from src.llm_router.tier import Tier
 
 pytestmark = pytest.mark.anyio
 
 MODELS = {tier: TestModel(model_name=tier.name.lower()) for tier in Tier}
+ALIASES = {
+    Tier.SIMPLE: "chat-simple",
+    Tier.MEDIUM: "chat-medium",
+    Tier.COMPLEX: "chat-complex",
+}
 
 
 class FakeClassifier:
@@ -28,12 +33,12 @@ class FakeClassifier:
         return answer
 
 
-def selector(classifier: FakeClassifier, **options) -> ModelTierSelector:
-    return ModelTierSelector(classifier, MODELS, timeout_seconds=0.5, **options)
+def router(classifier: FakeClassifier, **options) -> LLMRouterService:
+    return LLMRouterService(classifier, MODELS, ALIASES, timeout_seconds=0.5, **options)
 
 
-async def turn(tiers: ModelTierSelector, conversation_id: int | None, question="?"):
-    selection = await tiers.select(conversation_id, question, [])
+async def turn(tiers: LLMRouterService, conversation_id: int | None, question="?"):
+    selection = await tiers.route(conversation_id, [question])
     if conversation_id is not None:
         tiers.remember(conversation_id, selection)
     return selection
@@ -48,7 +53,7 @@ async def turn(tiers: ModelTierSelector, conversation_id: int | None, question="
     ],
 )
 async def test_each_tier_runs_on_its_alias(tier: Tier, alias: str) -> None:
-    selection = await selector(FakeClassifier(tier)).select(None, "?", [])
+    selection = await router(FakeClassifier(tier)).route(None, ["?"])
 
     assert (selection.tier, selection.alias) == (tier, alias)
     assert selection.model is MODELS[tier]
@@ -56,7 +61,7 @@ async def test_each_tier_runs_on_its_alias(tier: Tier, alias: str) -> None:
 
 
 async def test_a_conversation_keeps_the_highest_tier_it_reached() -> None:
-    tiers = selector(FakeClassifier(Tier.SIMPLE, Tier.MEDIUM, Tier.SIMPLE))
+    tiers = router(FakeClassifier(Tier.SIMPLE, Tier.MEDIUM, Tier.SIMPLE))
 
     picked = [(await turn(tiers, 7)).tier for _ in range(3)]
 
@@ -65,7 +70,7 @@ async def test_a_conversation_keeps_the_highest_tier_it_reached() -> None:
 
 async def test_a_complex_conversation_is_not_classified_again() -> None:
     classifier = FakeClassifier(Tier.COMPLEX)
-    tiers = selector(classifier)
+    tiers = router(classifier)
 
     await turn(tiers, 7)
     selection = await turn(tiers, 7)
@@ -89,7 +94,7 @@ async def test_a_complex_conversation_is_not_classified_again() -> None:
 async def test_a_failed_classification_runs_complex_and_is_not_kept(
     classifier: FakeClassifier,
 ) -> None:
-    tiers = selector(classifier)
+    tiers = router(classifier)
 
     selection = await turn(tiers, 7)
 
@@ -97,22 +102,8 @@ async def test_a_failed_classification_runs_complex_and_is_not_kept(
     assert tiers.tiers == {}
 
 
-async def test_only_the_previous_owner_message_leads_the_question() -> None:
-    classifier = FakeClassifier(Tier.SIMPLE)
-    history = [
-        {"role": "USER", "content": "revenue today?"},
-        {"role": "ASSISTANT", "content": "1.200.000 VND"},
-        {"role": "USER", "content": "and this week?"},
-        {"role": "ASSISTANT", "content": "8.400.000 VND"},
-    ]
-
-    await selector(classifier).select(7, "and last week?", history)
-
-    assert classifier.requests == [["and this week?", "and last week?"]]
-
-
 async def test_a_new_conversation_stores_nothing_until_it_is_saved() -> None:
-    tiers = selector(FakeClassifier(Tier.MEDIUM))
+    tiers = router(FakeClassifier(Tier.MEDIUM))
 
     await turn(tiers, None)
 
@@ -120,7 +111,7 @@ async def test_a_new_conversation_stores_nothing_until_it_is_saved() -> None:
 
 
 async def test_an_idle_conversation_is_classified_afresh() -> None:
-    tiers = selector(FakeClassifier(Tier.COMPLEX, Tier.SIMPLE), ttl_seconds=0)
+    tiers = router(FakeClassifier(Tier.COMPLEX, Tier.SIMPLE), ttl_seconds=0)
 
     await turn(tiers, 7)
     selection = await turn(tiers, 7)
@@ -129,7 +120,7 @@ async def test_an_idle_conversation_is_classified_afresh() -> None:
 
 
 async def test_the_least_recent_conversation_is_dropped_past_the_cap() -> None:
-    tiers = selector(FakeClassifier(*[Tier.MEDIUM] * 3), max_conversations=2)
+    tiers = router(FakeClassifier(*[Tier.MEDIUM] * 3), max_conversations=2)
 
     for conversation_id in (1, 2, 3):
         await turn(tiers, conversation_id)

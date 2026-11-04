@@ -12,8 +12,6 @@ from tests.support import (
 )
 
 from src.agent.errors import ConversationNotFoundError, GuardrailError
-from src.agent.model_tier import Tier
-from src.agent.model_tier_selector import ModelTierSelector
 from src.agent.service import (
     AgentChatResult,
     AgentService,
@@ -22,6 +20,8 @@ from src.agent.service import (
     TextDelta,
 )
 from src.agent.tool_events import ToolFinished, ToolStarted
+from src.llm_router.service import LLMRouterService
+from src.llm_router.tier import Tier
 from src.prompt_templates import APP_GUIDE_PROMPT, SHOP_AGENT_SYSTEM_PROMPT
 from src.utils import get_time
 
@@ -459,8 +459,10 @@ async def test_each_run_tells_the_model_the_shop_time_after_the_history() -> Non
 class FixedClassifier:
     def __init__(self, tier: Tier) -> None:
         self.tier = tier
+        self.requests: list[list[str]] = []
 
     async def classify(self, user_messages: list[str]) -> Tier:
+        self.requests.append(user_messages)
         return self.tier
 
 
@@ -468,12 +470,13 @@ def tiered_agent(
     tier: Tier, conversations: FakeConversationRepository
 ) -> tuple[AgentService, dict[Tier, ScriptedModel]]:
     models = {each: ScriptedModel("ok", model_name=each.name.lower()) for each in Tier}
-    selector = ModelTierSelector(FixedClassifier(tier), models, timeout_seconds=1)
+    aliases = {each: each.name.lower() for each in Tier}
+    router = LLMRouterService(FixedClassifier(tier), models, aliases, timeout_seconds=1)
     agent = AgentService(
         ScriptedModel(),
         conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
-        tier_selector=selector,
+        llm_router=router,
     )
     return agent, models
 
@@ -486,7 +489,7 @@ async def test_chat_runs_the_turn_on_the_model_of_its_tier() -> None:
 
     assert (result.answer, result.model) == ("ok", "simple")
     assert len(models[Tier.SIMPLE].requests) == 1
-    assert agent.tier_selector.tiers[41][0] is Tier.SIMPLE
+    assert agent.llm_router.tiers[41][0] is Tier.SIMPLE
 
 
 async def test_stream_chat_runs_every_step_on_the_model_of_its_tier() -> None:
@@ -504,3 +507,23 @@ async def test_stream_chat_runs_every_step_on_the_model_of_its_tier() -> None:
     assert events[-1].result.model == "medium"
     assert len(models[Tier.MEDIUM].requests) == 2
     assert not models[Tier.SIMPLE].requests and not models[Tier.COMPLEX].requests
+
+
+async def test_only_the_previous_owner_message_leads_the_routed_question() -> None:
+    conversations = FakeConversationRepository(
+        [
+            {"message_id": 1, "role": "USER", "content": "revenue today?"},
+            {"message_id": 2, "role": "ASSISTANT", "content": "1.200.000 VND"},
+            {"message_id": 3, "role": "USER", "content": "and this week?"},
+            {"message_id": 4, "role": "ASSISTANT", "content": "8.400.000 VND"},
+        ]
+    )
+    agent, _ = tiered_agent(Tier.SIMPLE, conversations)
+
+    await agent.chat(
+        user_id=3, shop_id=15, conversation_id=41, message="and last week?"
+    )
+
+    assert agent.llm_router.classifier.requests == [
+        ["and this week?", "and last week?"]
+    ]

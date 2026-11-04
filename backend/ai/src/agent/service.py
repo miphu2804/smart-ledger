@@ -24,7 +24,6 @@ from pydantic_ai.models import Model
 
 from src.agent.errors import GuardrailError
 from src.agent.guardrails import GuardrailLimits, GuardrailService
-from src.agent.model_tier_selector import ModelSelection, ModelTierSelector
 from src.agent.repository import AgentConversationRepository
 from src.agent.tool_events import (
     ToolFinished,
@@ -40,6 +39,7 @@ from src.agent.tools import (
     suggest_screen,
 )
 from src.calculation.service import CalculationService
+from src.llm_router.service import LLMRouterService, ModelSelection
 from src.memory.repository import RecalledMemory
 from src.memory.service import AgentMemoryService
 from src.observability import Observability
@@ -118,7 +118,7 @@ class AgentService:
         sandbox: Sandbox | None = None,
         history_turns: int = 100,
         observability: Observability | None = None,
-        tier_selector: ModelTierSelector | None = None,
+        llm_router: LLMRouterService | None = None,
     ) -> None:
         self.model_name = model.model_name if model is not None else ""
         self.conversations = conversations
@@ -159,7 +159,7 @@ class AgentService:
         ]
         self.memory = memory
         # None runs every turn on `model`; otherwise each turn picks a tier model.
-        self.tier_selector = tier_selector
+        self.llm_router = llm_router
         # Memory writes run after the reply; held here so they are not garbage
         # collected mid-run.
         self.memory_writes: set[asyncio.Task] = set()
@@ -312,9 +312,11 @@ class AgentService:
         self, conversation_id: int | None, question: str, history: list[dict]
     ) -> ModelSelection | None:
         """The tier model of this turn, or None to run on the default model."""
-        if self.tier_selector is None:
+        if self.llm_router is None:
             return None
-        selection = await self.tier_selector.select(conversation_id, question, history)
+        selection = await self.llm_router.route(
+            conversation_id, self._user_messages(question, history)
+        )
         # The session opened with the default model; the tier model replaces it.
         self.observability.tag_turn(
             model=selection.model.model_name,
@@ -323,6 +325,13 @@ class AgentService:
             tier_mechanism=str(selection.mechanism),
         )
         return selection
+
+    @staticmethod
+    def _user_messages(question: str, history: list[dict]) -> list[str]:
+        """The new question led by the owner's previous message, which resolves a
+        follow-up such as "and last month?". Assistant replies are never sent."""
+        previous = [entry["content"] for entry in history if entry["role"] == "USER"]
+        return [*previous[-1:], question]
 
     async def _with_memories(
         self, context: AgentContext, question: str
@@ -652,7 +661,7 @@ class AgentService:
             self._remember(context, saved_conversation_id, question, answer, recalled)
         if selection is not None:
             # After the save, so a new conversation keeps its tier under its new id.
-            self.tier_selector.remember(saved_conversation_id, selection)
+            self.llm_router.remember(saved_conversation_id, selection)
         return AgentChatResult(
             conversation_id=saved_conversation_id,
             message_id=message_id,

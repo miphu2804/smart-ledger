@@ -12,19 +12,21 @@ from pydantic_ai import Embedder
 
 from src.agent.errors import ConversationNotFoundError, GuardrailError
 from src.agent.guardrails import GuardrailLimits
-from src.agent.jev_tier_classifier import JevTierClassifier
-from src.agent.model_tier_selector import TIER_ALIASES, ModelTierSelector
 from src.agent.repository import AgentConversationRepository
 from src.agent.router import router as agent_router
 from src.agent.service import AgentService
 from src.app_config import app_config
 from src.calculation.service import CalculationLimits, CalculationService
 from src.infra.postgre_db_client import PostgreDBClient
+from src.llm_router.bifrost_tier_classifier import BifrostTierClassifier
+from src.llm_router.service import LLMRouterService
+from src.llm_router.tier import Tier
 from src.log_formatter import LevelColorFormatter
 from src.memory.repository import EMBEDDING_DIMENSIONS, AgentMemoryRepository
 from src.memory.service import AgentMemoryService
 from src.memory.workers_ai_embedding import WorkersAIEmbeddingModel
 from src.observability import Observability
+from src.prompt_templates import TIER_CLASSIFIER_PROMPT, TIER_DESCRIPTIONS
 from src.providers.llm_factory import LLMFactory
 from src.restock.service import RestockService
 from src.sandbox.wrapper import Sandbox, SandboxLimits
@@ -82,6 +84,13 @@ SANDBOX_TOOLS: tuple[str, ...] = ()
 # tools' budget would cut off ordinary answers. Nothing here does I/O.
 TOOL_CALL_EXEMPT = frozenset({"calculate"})
 
+# The MODEL_ALIASES alias each tier of a chat turn runs on.
+CHAT_TIER_ALIASES = {
+    Tier.SIMPLE: "chat-simple",
+    Tier.MEDIUM: "chat-medium",
+    Tier.COMPLEX: "chat-complex",
+}
+
 
 def build_sandbox() -> Sandbox | None:
     if not app_config.SANDBOX_ENABLED:
@@ -105,23 +114,32 @@ def build_sandbox() -> Sandbox | None:
         return None
 
 
-def build_tier_selector(
+def build_llm_router(
     factory: LLMFactory, decisions: httpx.AsyncClient
-) -> ModelTierSelector | None:
+) -> LLMRouterService | None:
     url = app_config.TIER_CLASSIFIER_URL
-    models = {tier: factory.create_model(alias) for tier, alias in TIER_ALIASES.items()}
+    models = {
+        tier: factory.create_model(alias) for tier, alias in CHAT_TIER_ALIASES.items()
+    }
     # Half a set of tiers would pin some turns to one model, so all of them or none.
     if url is None or not url.strip() or None in models.values():
         logger.error(
             "model tiering needs TIER_CLASSIFIER_URL and %s; tiering off",
-            ", ".join(TIER_ALIASES.values()),
+            ", ".join(CHAT_TIER_ALIASES.values()),
         )
         return None
-    classifier = JevTierClassifier(
-        decisions, url, model=app_config.TIER_CLASSIFIER_MODEL
+    classifier = BifrostTierClassifier(
+        decisions,
+        url,
+        model=app_config.TIER_CLASSIFIER_MODEL,
+        instructions=TIER_CLASSIFIER_PROMPT,
+        descriptions=TIER_DESCRIPTIONS,
     )
-    return ModelTierSelector(
-        classifier, models, timeout_seconds=app_config.TIER_CLASSIFIER_TIMEOUT_SECONDS
+    return LLMRouterService(
+        classifier,
+        models,
+        CHAT_TIER_ALIASES,
+        timeout_seconds=app_config.TIER_CLASSIFIER_TIMEOUT_SECONDS,
     )
 
 
@@ -209,9 +227,7 @@ async def lifespan(app: FastAPI):
         if app_config.MODEL_TIERING_ENABLED and chat_model is not None
         else None
     )
-    tier_selector = (
-        build_tier_selector(factory, decisions) if decisions is not None else None
-    )
+    llm_router = build_llm_router(factory, decisions) if decisions is not None else None
     conversations = AgentConversationRepository(postgres)
     app.state.conversations = conversations
     shop_data = build_shop_data(reader)
@@ -237,7 +253,7 @@ async def lifespan(app: FastAPI):
         calculation=build_calculation(),
         sandbox=build_sandbox(),
         history_turns=app_config.AGENT_HISTORY_TURNS,
-        tier_selector=tier_selector,
+        llm_router=llm_router,
     )
     try:
         yield

@@ -4,21 +4,19 @@ import time
 from collections import OrderedDict
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Protocol
 
 from pydantic_ai.models import Model
 
-from src.agent.jev_tier_classifier import JevTierClassifier
-from src.agent.model_tier import Tier
+from src.llm_router.tier import Tier
 
 logger = logging.getLogger(__name__)
 
 
-# The alias in MODEL_ALIASES each tier runs on.
-TIER_ALIASES = {
-    Tier.SIMPLE: "chat-simple",
-    Tier.MEDIUM: "chat-medium",
-    Tier.COMPLEX: "chat-complex",
-}
+class TierClassifier(Protocol):
+    """Rates how much work a request takes; raises when it has no valid answer."""
+
+    async def classify(self, user_messages: list[str]) -> Tier: ...
 
 
 class Mechanism(StrEnum):
@@ -37,8 +35,13 @@ class ModelSelection:
     mechanism: Mechanism
 
 
-class ModelTierSelector:
-    """Picks the model of a chat turn from the complexity of the owner's request.
+class LLMRouterService:
+    """Routes each turn of a conversation to the model its request's tier needs.
+
+    It knows no gateway, agent or prompt: the classifier rates the request, and the
+    caller supplies the user messages and the model and alias of each tier. Provider
+    retries and fallbacks stay with the gateway the models call; a classification that
+    fails only routes the turn to the COMPLEX model.
 
     A conversation keeps the highest tier it has reached, as Bifrost's session-aware
     routing does, so an easy follow-up to a hard question stays on the stronger model
@@ -49,32 +52,37 @@ class ModelTierSelector:
 
     def __init__(
         self,
-        classifier: JevTierClassifier,
+        classifier: TierClassifier,
         models: dict[Tier, Model],
+        aliases: dict[Tier, str],
         timeout_seconds: float,
         max_conversations: int = 10_000,
         ttl_seconds: float = 86_400,
     ) -> None:
         self.classifier = classifier
         self.models = models
+        self.aliases = aliases
         self.timeout_seconds = timeout_seconds
         self.max_conversations = max_conversations
         self.ttl_seconds = ttl_seconds
         # conversation id -> (highest tier, when it was last used), oldest first
         self.tiers: OrderedDict[int, tuple[Tier, float]] = OrderedDict()
 
-    async def select(
-        self, conversation_id: int | None, question: str, history: list[dict]
+    async def route(
+        self, conversation_id: int | None, user_messages: list[str]
     ) -> ModelSelection:
         """The model for this turn; never raises, a failed classification picks the
-        strongest model."""
+        strongest model.
+
+        `user_messages` ends with the new request; earlier ones only resolve a
+        follow-up such as "and last month?".
+        """
         stored = self._stored_tier(conversation_id)
         if stored is Tier.COMPLEX:
             return self._selected(Tier.COMPLEX, Mechanism.CONVERSATION, conversation_id)
         try:
             classified = await asyncio.wait_for(
-                self.classifier.classify(self._user_messages(question, history)),
-                self.timeout_seconds,
+                self.classifier.classify(user_messages), self.timeout_seconds
             )
         except Exception as error:
             # Any failure, including the timeout, costs a stronger model, never a turn.
@@ -109,7 +117,7 @@ class ModelTierSelector:
     def _selected(
         self, tier: Tier, mechanism: Mechanism, conversation_id: int | None
     ) -> ModelSelection:
-        alias = TIER_ALIASES[tier]
+        alias = self.aliases[tier]
         logger.info(
             "model tier %s (%s) for conversation %s: %s",
             tier.name,
@@ -118,10 +126,3 @@ class ModelTierSelector:
             alias,
         )
         return ModelSelection(tier, alias, self.models[tier], mechanism)
-
-    @staticmethod
-    def _user_messages(question: str, history: list[dict]) -> list[str]:
-        """The new question led by the owner's previous message, which resolves a
-        follow-up such as "and last month?". Assistant replies are never sent."""
-        previous = [entry["content"] for entry in history if entry["role"] == "USER"]
-        return [*previous[-1:], question]

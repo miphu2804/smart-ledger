@@ -82,7 +82,7 @@ class AppConfig(BaseSettings):
     MODEL_TIMEOUT_SECONDS: float = 20.0
     # reasoning effort of an alias that sets no `effort` of its own
     MODEL_REASONING_EFFORT: str = "medium"
-    # per-turn model tiers (src/agent/model_tier_selector.py): a decision model rates
+    # per-turn model tiers (src/llm_router/): a decision model rates
     # each request SIMPLE, MEDIUM or COMPLEX through Bifrost and the turn runs on the
     # chat-simple, chat-medium or chat-complex alias of MODEL_ALIASES. Off, or with
     # any of those aliases or the URL missing, every turn runs on `chat`.

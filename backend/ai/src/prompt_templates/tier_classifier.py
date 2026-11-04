@@ -1,4 +1,4 @@
-"""Prompts of the per-turn model tier classifier (src/agent/jev_tier_classifier.py).
+"""Prompts of the per-turn model tier classifier (src/llm_router/).
 
 These are not chat messages: TIER_CLASSIFIER_PROMPT is the `instructions` of one
 `choice` question to Bifrost's `/v1/decisions`, and each TIER_DESCRIPTIONS value is the
