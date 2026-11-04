@@ -390,6 +390,12 @@ body:has(.adm) {
 .shell.is-collapsed {
   grid-template-columns: var(--sb-w-collapsed) minmax(0, 1fr);
 }
+/* Desktop: the sidebar column slides between 248px and 72px instead of snapping */
+@media (min-width: 1280px) {
+  .shell {
+    transition: grid-template-columns 0.2s ease;
+  }
+}
 
 .sb {
   position: sticky;
