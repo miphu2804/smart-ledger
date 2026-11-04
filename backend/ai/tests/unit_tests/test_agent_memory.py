@@ -40,6 +40,8 @@ class FakeMemoryRepository:
         self.searches: list[tuple] = []
         self.similar_searches: list[tuple] = []
         self.added: list[tuple] = []
+        self.used: list[tuple] = []
+        self.mark_used_error: Exception | None = None
         self.replaced: list[tuple] = []
 
     def search(self, shop_id, user_id, query, limit, preference_limit=0, text=""):
@@ -58,6 +60,14 @@ class FakeMemoryRepository:
         if self.error is not None:
             raise self.error
         self.added.append((shop_id, user_id, conversation_id, memories))
+
+    def recall_ready(self, shop_id, user_id):
+        return self.enabled and bool(self.recalled)
+
+    def mark_used(self, shop_id, user_id, memory_ids):
+        if self.mark_used_error is not None:
+            raise self.mark_used_error
+        self.used.append((shop_id, user_id, memory_ids))
 
     def memory_enabled(self, shop_id, user_id):
         return self.enabled
@@ -178,7 +188,9 @@ async def test_a_failed_search_answers_without_memories(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     chat_model = ScriptedModel("ok")
-    repository = FakeMemoryRepository(error=RuntimeError("postgres down"))
+    repository = FakeMemoryRepository(
+        recalled=[recalled()], error=RuntimeError("postgres down")
+    )
     agent = agent_with(chat_model, memory_service(ScriptedModel(facts()), repository))
 
     with caplog.at_level(logging.WARNING):
@@ -644,3 +656,92 @@ async def test_a_fact_replacing_a_recalled_memory_skips_the_reconcile() -> None:
     assert repository.similar_searches == []
     ((_, _, _, (memory,)),) = repository.added
     assert memory.supersedes == 7
+
+
+class CountingEmbeddingModel(TestEmbeddingModel):
+    """Counts the query embeddings requested."""
+
+    def __init__(self) -> None:
+        super().__init__(dimensions=2)
+        self.query_calls = 0
+
+    async def embed(self, inputs, *, input_type, settings=None):
+        if input_type == "query":
+            self.query_calls += 1
+        return await super().embed(inputs, input_type=input_type, settings=settings)
+
+
+async def test_an_owner_without_live_memories_skips_the_search_and_the_embedding() -> (
+    None
+):
+    model = CountingEmbeddingModel()
+    repository = FakeMemoryRepository(recalled=[])
+    service = memory_service(ScriptedModel(), repository)
+    service.embedder = Embedder(model)
+
+    prompt, used = await service.with_memories(15, 3, "gạo?")
+
+    assert (prompt, used) == ("gạo?", [])
+    assert repository.searches == []
+    assert model.query_calls == 0
+
+
+async def test_the_same_question_is_embedded_once() -> None:
+    model = CountingEmbeddingModel()
+    service = memory_service(
+        ScriptedModel(), FakeMemoryRepository(recalled=[recalled()])
+    )
+    service.embedder = Embedder(model)
+
+    await service.with_memories(15, 3, "gạo?")
+    await service.with_memories(15, 3, "gạo?")
+
+    assert model.query_calls == 1
+
+
+async def test_the_question_cache_drops_the_oldest_when_full() -> None:
+    model = CountingEmbeddingModel()
+    service = memory_service(
+        ScriptedModel(), FakeMemoryRepository(recalled=[recalled()])
+    )
+    service.embedder = Embedder(model)
+    service.QUERY_CACHE_SIZE = 1
+
+    await service.with_memories(15, 3, "a")
+    await service.with_memories(15, 3, "b")
+    await service.with_memories(15, 3, "a")
+
+    assert model.query_calls == 3
+
+
+async def test_remember_records_the_use_of_recalled_memories() -> None:
+    repository = FakeMemoryRepository()
+
+    await memory_service(ScriptedModel(facts()), repository).remember(
+        15, 3, 9, "q", "a", [recalled(memory_id=7), recalled(memory_id=8)]
+    )
+
+    assert repository.used == [(15, 3, [7, 8])]
+
+
+async def test_a_failed_use_record_does_not_stop_the_new_memories(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    repository = FakeMemoryRepository()
+    repository.mark_used_error = RuntimeError("postgres down")
+
+    with caplog.at_level(logging.WARNING):
+        await memory_service(ScriptedModel(facts(PREFERENCE)), repository).remember(
+            15, 3, 9, "q", "a", [recalled()]
+        )
+
+    assert "memory use not recorded: shop=15" in caplog.text
+    assert len(repository.added) == 1
+
+
+async def test_recall_does_not_record_use() -> None:
+    repository = FakeMemoryRepository(recalled=[recalled()])
+
+    await memory_service(ScriptedModel(), repository).with_memories(15, 3, "gạo?")
+
+    assert repository.used == []
