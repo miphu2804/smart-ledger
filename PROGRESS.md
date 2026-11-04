@@ -1,3 +1,11 @@
+### 2026-11-04 — User flow map follows the new sign-in and the Bobi sheet
+
+| Area | Change |
+|---|---|
+| Docs | • Sign-in flow: the card from #499 (Google, Zalo, email with Tiếp tục, no Facebook), a "Quên mật khẩu?" edge straight from the sign-in screen, and the password screen with the email filled in<br>• Orders flow: the Bobi suggestion strip on Đơn hàng and a new "Hỏi Trợ lý Bobi" node for the sheet from #491, with a step that links to Trợ lý history<br>• Bobi flow: notes for the composer shared with the sheet (#505), the thought line while waiting (#513) and the five quick chips<br>• Seven screenshots retaken or added on staging: `welcome`, `email-login`, `invoices`, `ai-ask-sheet`, `chat-tro-ly-ai`, `chat-dat-cau-hoi`, `chat-tra-loi`; the README says how and which test data they show |
+
+Check: `npm run userflow` builds the page; the onboarding and orders flows render with the new edges and node on a local server. Not verified: other browsers. Commit: the one that adds this entry.
+
 ### 2026-11-04 — Cleaner routes in the CI/CD and runtime diagram
 
 | Area | Change |
@@ -188,12 +196,3 @@ Check: `npm run typecheck`, `npm run lint` and `npm run build` pass in `frontend
 | Docs | • ADR-0008 update, AI README, technical design, CI/CD, the memory diagram and the policy and Data safety pages name OpenAI and Inception |
 
 Check: `uv run pytest` 460 passed, ruff check and format pass; a local fake gateway received `x-bf-vk`, `x-bf-session-id`, `x-bf-lh-shop-id` and the per-alias effort (`high` on `/responses`, `instant` on `/chat/completions`); `bifrost.json` parses; `tsc --noEmit` and `tsc -b` pass on the web app. A local Bifrost v2.3.2 loaded `bifrost.json` and served both models; Bifrost ignores a `BIFROST_VIRTUAL_KEY` without the `sk-bf-` prefix and makes its own, so every header then fails with 401 `access not found`. Not verified: Mercury 3 quality (no alias calls it), staging, or whether the staging virtual key has the `sk-bf-` prefix. Production keeps the older image and OpenCode Go. Commit: the one that adds this entry.
-
-### 2026-11-01 — snooplog runs from any shell
-
-| Area | Change |
-|---|---|
-| Deploy | • `snooplog` is a script in `/usr/local/bin` instead of an alias in `/etc/profile.d`, so tmux panes and other non-login shells can run it; the filter is unchanged |
-| Docs | • `ci-cd.md` calls it a command, not a shortcut |
-
-Check: `ansible-playbook --syntax-check` passes and the patch applies cleanly to `staging`; not run on the VPS yet, so the tmux case is inferred. Commit: the one that adds this entry.
