@@ -1,7 +1,7 @@
 /**
  * Đăng nhập & phiên làm việc.
  *
- * Chỉ role ADMIN được dùng trang quản trị. OWNER (chủ cơ sở) vẫn đăng nhập được
+ * Chỉ role ADMIN được dùng trang quản trị. OWNER (chủ tiệm) vẫn đăng nhập được
  * ở tầng xác thực, nhưng mọi URL /admin/* sẽ trả trang 403 (xem RequireAuth).
  *
  * Chế độ thật: đăng nhập Firebase bằng email + mật khẩu (REST, xem firebaseAuth.ts) rồi hỏi Core `GET /api/v1/me`;
@@ -33,7 +33,7 @@ export const DEMO_ACCOUNTS: { email: string; password: string; role: Role; note:
     email: 'owner@songhloi.vn',
     password: 'owner123',
     role: 'OWNER',
-    note: 'Chủ cơ sở — sẽ nhận trang 403',
+    note: 'Chủ tiệm — sẽ nhận trang 403',
     user: { id: 'own_001', fullName: 'Nguyễn Thị Lan', email: 'owner@songhloi.vn', role: 'OWNER' },
   },
 ]
