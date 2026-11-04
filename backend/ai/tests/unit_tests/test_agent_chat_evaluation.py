@@ -3,28 +3,26 @@ import tomllib
 from types import SimpleNamespace
 
 import pytest
-from evaluation.agent_chat import reporting
-from evaluation.agent_chat.honeyhive_sync import session_payload, sync_scores
-from evaluation.agent_chat.judge import judged_scores
-from evaluation.agent_chat.pipeline import (
-    HERE,
-    RESULT_CHARS,
-    available_tools_in,
-    memory_for,
-    tool_calls_in,
-    without_memory_writes,
-)
-from evaluation.agent_chat.reporting import (
+from evaluation.core import report as reporting
+from evaluation.core.gate import gate_failures
+from evaluation.core.honeyhive import session_payload, sync_scores
+from evaluation.core.report import (
     LAYERS,
     averages,
-    gate_failures,
     markdown_report,
     report,
 )
-from evaluation.agent_chat.scoring import (
-    no_internal_leak,
-    recalled_expected,
-    vietnamese_answer,
+from evaluation.core.schema import Case, CaseResult, MetricResult, Output
+from evaluation.metrics.judge import judged_scores
+from evaluation.metrics.memory import recalled_expected
+from evaluation.metrics.safety import no_internal_leak, vietnamese_answer
+from evaluation.targets.agent import (
+    RESULT_CHARS,
+    SUITE,
+    WithoutMemoryWrites,
+    available_tools_in,
+    memory_for,
+    tool_calls_in,
 )
 from pydantic_ai.models.test import TestModel
 from tests.support import ScriptedModel
@@ -204,9 +202,9 @@ async def test_blocked_memory_writes_store_nothing() -> None:
     extractor = ScriptedModel(json.dumps({"facts": []}))
     repository = FakeMemoryRepository()
     service = memory_service(extractor, repository)
-    without_memory_writes(service)
+    memory = WithoutMemoryWrites(service)
 
-    await service.remember(15, 3, 9, "gạo nhập của cô Ba", "Dạ.", [])
+    await memory.remember(15, 3, 9, "gạo nhập của cô Ba", "Dạ.", [])
 
     assert repository.added == []
     assert extractor.requests == []
@@ -216,30 +214,29 @@ def test_only_memory_cases_recall() -> None:
     service = memory_service(TestModel(), FakeMemoryRepository())
 
     assert (
-        memory_for({"ground_truth": {"memory": "Gạo nhập của cô Ba."}}, service)
-        is service
+        memory_for(Case("c", {}, {"memory": "Gạo nhập của cô Ba."}), service) is service
     )
-    assert memory_for({"ground_truth": {"memory": None}}, service) is None
+    assert memory_for(Case("c", {}, {"memory": None}), service) is None
 
 
 async def test_blocked_memory_writes_keep_recall() -> None:
     service = memory_service(TestModel(), FakeMemoryRepository(recalled=[recalled()]))
-    without_memory_writes(service)
+    memory = WithoutMemoryWrites(service)
 
-    _, memories = await service.with_memories(15, 3, "gạo?")
+    _, memories = await memory.with_memories(15, 3, "gạo?")
 
     assert len(memories) == 1
 
 
 def test_session_payload_holds_scores_without_spans() -> None:
-    result = {
-        "datapoint": {
-            "inputs": INPUTS,
-            "ground_truth": {"case": "memory_rice_supplier"},
-        },
-        "outputs": outputs_of(),
-        "metrics": {"correct": 1, "recalled_expected": 1},
-    }
+    result = CaseResult(
+        Case("memory_rice_supplier", INPUTS, {}),
+        Output(outputs_of()),
+        [
+            MetricResult("task", "correct", 1, "memory_rice_supplier"),
+            MetricResult("memory", "recalled_expected", 1, "memory_rice_supplier"),
+        ],
+    )
 
     first = session_payload("run-1", "baseline", result)["session"]
     second = session_payload("run-2", "baseline", result)["session"]
@@ -273,11 +270,11 @@ def test_sync_creates_the_run_logs_each_case_then_completes_it() -> None:
             )
         )
 
-    result = {
-        "datapoint": {"inputs": INPUTS, "ground_truth": {"case": "c"}},
-        "outputs": outputs_of(),
-        "metrics": {"correct": 1},
-    }
+    result = CaseResult(
+        Case("c", INPUTS, {}),
+        Output(outputs_of()),
+        [MetricResult("task", "correct", 1, "c")],
+    )
 
     sync_scores(Client(), "baseline", [result, result])
 
@@ -330,7 +327,7 @@ def test_gate_fails_below_a_minimum_or_with_no_row() -> None:
 
 
 def test_thresholds_gate_only_reported_metrics() -> None:
-    minimums = tomllib.loads((HERE / "thresholds.toml").read_text())["minimum"]
+    minimums = tomllib.loads((SUITE / "thresholds.toml").read_text())["minimum"]
     reported = {name for names in LAYERS.values() for name in names}
 
     assert set(minimums) <= reported
@@ -349,8 +346,9 @@ def test_markdown_report_shows_the_gate_layers_and_missed_cases() -> None:
     ]
     means = averages(rows)
     failures = gate_failures(means, {"correct": 0.9})
+    thresholds = {"minimum": {"correct": 0.9}, "maximum": {}}
 
-    markdown = markdown_report(rows, means, {"correct": 0.9}, failures, 3)
+    markdown = markdown_report("agent_chat", rows, means, thresholds, failures, 3)
 
     assert markdown.startswith("## agent_chat eval: gate failed")
     assert "2/3 rows" in markdown
@@ -384,18 +382,25 @@ async def test_a_failed_rating_leaves_only_its_metric_out() -> None:
 
 def test_report_rows_keep_the_tool_calls_metric(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(reporting, "RESULTS", tmp_path)
-    result = {
-        "datapoint": {"ground_truth": {"case": "revenue", "numbers": [1], "names": []}},
-        "outputs": {
-            "answer": "1",
-            "tool_calls": [call()],
-            "seconds": 1.0,
-            "model": "m",
-            "prompt_version": "p",
-            "suite_version": "s",
-        },
-        "metrics": {"correct": 1, "tool_choice": 1, "tool_calls": 1, "seconds": 1.0},
-    }
+    result = CaseResult(
+        Case("revenue", {}, {}, expected=[1]),
+        Output(
+            {
+                "answer": "1",
+                "tool_calls": [call()],
+                "seconds": 1.0,
+                "model": "m",
+                "prompt_version": "p",
+                "suite_version": "s",
+            }
+        ),
+        [
+            MetricResult("task", "correct", 1, "revenue"),
+            MetricResult("tool_use", "tool_choice", 1, "revenue"),
+            MetricResult("tool_use", "tool_calls", 1, "revenue"),
+            MetricResult("performance", "seconds", 1.0, "revenue"),
+        ],
+    )
 
     rows = report("test", [result])
 

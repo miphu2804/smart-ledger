@@ -1,4 +1,9 @@
-"""Synthetic owner memories and queries for the memory evaluation.
+"""Generates `cases.jsonl`, the synthetic shops of the memory evaluation.
+
+Run `uv run python evaluation/suites/memory/generate.py` from `backend/ai` to rewrite
+it; the evaluation reads only the file. Changing the lexicon, the templates or any
+random draw changes the queries, so the committed file stays until a new baseline is
+recorded in the README.
 
 Every shop gets a store of facts in the shapes MEMORY_EXTRACT_PROMPT asks for
 (preference, semantic, procedural, episodic), with dates, importance and a share of
@@ -7,12 +12,15 @@ surface forms (accented, typed without diacritics, paraphrase with no shared con
 word), plus queries that need no memory at all.
 
 The lexicon and query templates are split in two halves: the ranking was chosen on
-half A and `run.py` scores half B, so it cannot pass by fitting names or phrasings.
+half A and the evaluation scores half B, so it cannot pass by fitting names or
+phrasings.
 """
 
+import json
 import random
 import unicodedata
 from dataclasses import dataclass, field
+from pathlib import Path
 
 # --- lexicon, split A (dev) / B (test) -------------------------------------------
 
@@ -343,3 +351,56 @@ def build(
         if q:
             shop.queries.append(q)
     return shop
+
+
+CASES_FILE = Path(__file__).with_name("cases.jsonl")
+# The split held out while the ranking was chosen (ADR-0002): seeds 1001-1008 on the
+# half B lexicon, so a run compares with the ADR's numbers.
+SHOPS = [
+    (f"{seed}-B-{size}-{int(age)}", build(seed, "B", size, max_age=age))
+    for seed in range(1001, 1009)
+    for size in (15, 40, 120)
+    for age in (30.0, 180.0)
+]
+
+
+def shop_line(key: str, shop: Shop) -> str:
+    """One shop as a JSON line: its memories and the queries that need one of them.
+
+    A memory's id is its position in the shop, and a query's `gold` and `stale` are
+    ids; the evaluation maps the ids the database gives back to these. The queries
+    that need no memory and the unscored history are left out.
+    """
+    return json.dumps(
+        {
+            "shop": key,
+            "memories": [
+                {
+                    "id": memory.id,
+                    "memory_type": memory.memory_type,
+                    "content": memory.content,
+                    "importance": memory.importance,
+                }
+                for memory in shop.memories
+            ],
+            "queries": [
+                {
+                    "text": query.text,
+                    "form": query.form,
+                    "gold": query.gold,
+                    "stale": query.stale,
+                }
+                for query in shop.queries
+                if query.gold is not None
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+
+def main() -> None:
+    CASES_FILE.write_text("".join(shop_line(key, shop) + "\n" for key, shop in SHOPS))
+
+
+if __name__ == "__main__":
+    main()

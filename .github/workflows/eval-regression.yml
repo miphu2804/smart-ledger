@@ -1,9 +1,9 @@
 name: Eval regression
 
-# Runs the agent_chat eval (backend/ai/evaluation/agent_chat) by hand, when a change to the agent or its memory needs
+# Runs the agent_chat eval (backend/ai/evaluation/suites/agent_chat) by hand, when a change to the agent or its memory needs
 # one; it does not run on every change, because each run asks the models about 69 chat turns plus their judges. It
 # scores everything on the runner with metrics built on HoneyHive's evaluator templates, writes the report to the job
-# summary and to the open pull request of `ref`, and fails when a metric in thresholds.toml misses its minimum.
+# summary and to the open pull request of `ref`, and fails when a metric in its thresholds.toml misses its minimum.
 # Nothing is sent to HoneyHive unless `sync` is on. Dispatch it from `staging`: the ai/staging settings come through
 # the backend-staging environment, which only `staging` may use; `ref` picks the code that is evaluated.
 # See docs/development/ci-cd.md#eval-regression.

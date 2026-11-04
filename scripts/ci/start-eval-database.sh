@@ -15,4 +15,4 @@ LOCAL_DB_CONTAINER="$DB_CONTAINER" LOCAL_DB_PORT="$port" sh scripts/local-db.sh
 docker exec "$DB_CONTAINER" psql -q -U smartledger -d smartledger -v ON_ERROR_STOP=1 \
   -c "INSERT INTO users (display_name) VALUES ('Eval owner')"
 docker exec -i "$DB_CONTAINER" psql -q -U smartledger -d smartledger -v ON_ERROR_STOP=1 \
-  < backend/ai/evaluation/agent_chat/seed.sql
+  < backend/ai/evaluation/suites/agent_chat/seed.sql

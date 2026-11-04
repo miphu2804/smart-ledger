@@ -16,7 +16,7 @@ Bobi answers one shop owner in Vietnamese, from tool results only, and cannot ch
 | `evaluators/non-vietnamese-answer.yaml` | each `agent-chat` session | the answer has text but no Vietnamese letter with a diacritic |
 | `evaluators/sql-parse-check.yaml` | each `execute_tool query_shop_data` event | the SQL in `inputs.tool_arguments.sql` parses as PostgreSQL, by HoneyHive's SQL Parse Check template; false means a syntax error before the guard or the database saw it |
 
-All seven are Python, run at 100% sampling and cost no model calls. Session evaluators read `outputs.answer`, which includes the `actions` block the service appends for screen buttons, rather than the `invoke_agent chat` span, because a turn that ends early on screen buttons has no output on that span; HoneyHive scores the session again when the answer arrives after it opened. `unsupported-figure` reads `metrics.tool_calls`, the session metric the AI service writes with the answer. The AI service also records a `memory recall` event per turn (the question, the memories recalled with their scores, and `metrics.recalled_count`) in the same session; no evaluator reads it online. `backend/ai/evaluation/agent_chat` runs send scores and no spans, so these online evaluators do not score them; their model-graded scores come from the templates in that folder.
+All seven are Python, run at 100% sampling and cost no model calls. Session evaluators read `outputs.answer`, which includes the `actions` block the service appends for screen buttons, rather than the `invoke_agent chat` span, because a turn that ends early on screen buttons has no output on that span; HoneyHive scores the session again when the answer arrives after it opened. `unsupported-figure` reads `metrics.tool_calls`, the session metric the AI service writes with the answer. The AI service also records a `memory recall` event per turn (the question, the memories recalled with their scores, and `metrics.recalled_count`) in the same session; no evaluator reads it online. `backend/ai/evaluation/suites/agent_chat` runs send scores and no spans, so these online evaluators do not score them; their model-graded scores come from the templates in that folder.
 
 The charts show the wait for the first words, tool calls per turn, the query error rate and the unsupported figure rate per day, split by `source`, so staging, production and evaluation runs stay apart. The alerts fire on `production` traffic only and email every project member: a daily p95 above 20 seconds for `invoke_agent chat`, a daily `query-error` rate above 20%, and more than five failed turns a day, cancelled ones aside.
 
@@ -30,7 +30,7 @@ The charts show the wait for the first words, tool calls per turn, the query err
 | `alerts/` | `honeyhive alerts` | `sync-dashboards.sh`, created when no alert has the `name` |
 | `projects.yaml` | | the projects `sync-dashboards.sh` covers; staging and production share one and differ by `source` |
 
-The two scripts sit at the repository root and the workflows `.github/workflows/honeyhive-sync.yml` and `honeyhive-dashboards.yml` run them on every merge into `main`, as in HoneyHive's guide. Datasets and datapoints have no folder: the offline suite in `backend/ai/evaluation/agent_chat` builds its cases and seed in code and hashes them into `suite_version`.
+The two scripts sit at the repository root and the workflows `.github/workflows/honeyhive-sync.yml` and `honeyhive-dashboards.yml` run them on every merge into `main`, as in HoneyHive's guide. Datasets and datapoints have no folder: the offline suite in `backend/ai/evaluation/suites/agent_chat` keeps its cases and seed in files (`cases.yaml`, `seed.sql`) and hashes them into `suite_version`.
 
 ## Apply
 
@@ -60,4 +60,4 @@ Check a file before pushing it against the schema the CLI prints, for example `h
 
 ## Why no LLM evaluator
 
-An online LLM judge would send each owner's question and answer through HoneyHive to a model provider configured in the workspace, a data flow `NFR-008` does not cover. The model-graded cases and the LLM templates (Tool Usage, Failure Recovery, Answer Faithfulness, Context Relevance, Tool Trajectory) stay in `backend/ai/evaluation/agent_chat`, which runs on a made-up shop and rates them client-side, so no model key is needed in HoneyHive.
+An online LLM judge would send each owner's question and answer through HoneyHive to a model provider configured in the workspace, a data flow `NFR-008` does not cover. The model-graded cases and the LLM templates (Tool Usage, Failure Recovery, Answer Faithfulness, Context Relevance, Tool Trajectory) stay in `backend/ai/evaluation/suites/agent_chat`, which runs on a made-up shop and rates them client-side, so no model key is needed in HoneyHive.

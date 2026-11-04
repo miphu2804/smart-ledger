@@ -31,63 +31,6 @@ def correct(outputs: dict, inputs: dict, ground_truth: dict) -> dict:
     return {"score": 0 if missing else 1, "explanation": f"missing: {missing}"}
 
 
-def tool_choice(outputs: dict, inputs: dict, ground_truth: dict) -> int:
-    """A shop question reads the shop's data; any other question reads none.
-
-    `suggest_screen` and `calculate` read nothing, so only `query_shop_data` counts.
-    """
-    return int(("query_shop_data" in outputs["tools"]) == ground_truth["needs_tool"])
-
-
-def tool_calls(outputs: dict, inputs: dict, ground_truth: dict) -> int:
-    return len(outputs["tools"])
-
-
-def seconds(outputs: dict, inputs: dict, ground_truth: dict) -> float:
-    return outputs["seconds"]
-
-
-def recalled_expected(outputs: dict, inputs: dict, ground_truth: dict) -> int | None:
-    """Whether the recall returned the fact the case can only be answered from; None
-    for a case that needs no memory."""
-    if ground_truth["memory"] is None:
-        return None
-    return int(
-        any(
-            memory["content"] == ground_truth["memory"]
-            for memory in outputs["memories"]
-        )
-    )
-
-
-# The same patterns as `.honeyhive/evaluators/internal-leak.yaml` and
-# `non-vietnamese-answer.yaml`, which score production; those run on HoneyHive and
-# cannot import this file, so a change to one belongs in the other.
-INTERNALS = re.compile(
-    r"ai_read|\bv_[a-z_]+|\bselect\b[\s\S]+\bfrom\b|\b(shop|user)_id\b"
-    r"|query_shop_data|suggest_screen|Error\[",
-    re.IGNORECASE,
-)
-CODE_BLOCK = re.compile(r"```.*?```", re.DOTALL)
-VIETNAMESE = re.compile(
-    r"[àáảãạăằắẳẵặâầấẩẫậđèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ]",
-    re.IGNORECASE,
-)
-
-
-def no_internal_leak(outputs: dict, inputs: dict, ground_truth: dict) -> int:
-    """1 when the answer shows the owner no view name, SQL, id column, tool name or
-    tool error code."""
-    return int(not INTERNALS.search(outputs["answer"]))
-
-
-def vietnamese_answer(outputs: dict, inputs: dict, ground_truth: dict) -> int:
-    """1 unless the answer has words but not one Vietnamese letter with a diacritic;
-    chart and button blocks are JSON for the app, so they do not count."""
-    words = CODE_BLOCK.sub("", outputs["answer"]).strip()
-    return int(not words or bool(VIETNAMESE.search(words)))
-
-
 def numbers_in(answer_text: str) -> list[float]:
     """Each figure in a Vietnamese answer, with unit words applied.
 
@@ -144,3 +87,8 @@ def matches(expected: float, value: float, approximate: bool) -> bool:
     if approximate:
         return abs(expected - value) <= expected * 0.001
     return expected == value
+
+
+def question_of(inputs: dict) -> str:
+    """The question the answer is for: the follow-up when the case has one."""
+    return inputs["follow_up"] or inputs["question"]

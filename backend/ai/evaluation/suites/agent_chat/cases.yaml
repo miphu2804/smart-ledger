@@ -1,0 +1,114 @@
+# The shop's id and time zone, and SQL pieces the cases share. A `${name}` in a fragment or a case is replaced
+# by the value above it (`string.Template`); `{names}` and `{numbers}` in a rubric stay for the run to fill.
+shop_id: 9001
+time_zone: "'Asia/Ho_Chi_Minh'"
+fragments:
+  shop_today: "(now() AT TIME ZONE ${time_zone})::date"
+  month_start: "date_trunc('month', now() AT TIME ZONE ${time_zone})"
+  last_month_start: "(${month_start} - interval '1 month') AT TIME ZONE ${time_zone}"
+  this_month_start: "${month_start} AT TIME ZONE ${time_zone}"
+  month_before_last_start: "(${month_start} - interval '2 month') AT TIME ZONE ${time_zone}"
+  confirmed: "shop_id = ${shop_id} AND sale_status = 'CONFIRMED'"
+  last_month_sales: "\n    ${confirmed}\n    AND sold_at >= ${last_month_start} AND sold_at < ${this_month_start}\n"
+  last_month_sales_of_s: "\n    s.${confirmed}\n    AND sold_at >= ${last_month_start} AND sold_at < ${this_month_start}\n"
+  last_month_revenue: "SELECT sum(total_vnd) FROM sales WHERE ${last_month_sales}"
+  month_before_last_revenue: "\n    SELECT sum(total_vnd) FROM sales\n    WHERE ${confirmed}\n    AND sold_at >= ${month_before_last_start} AND sold_at < ${last_month_start}\n"
+  last_month_expenses: "\n    SELECT sum(amount_vnd) FROM expenses\n    WHERE shop_id = ${shop_id} AND status = 'ACTIVE'\n    AND expense_at >= ${last_month_start} AND expense_at < ${this_month_start}\n"
+  open_debts: "\n    FROM debts d JOIN sales s ON s.id = d.sale_id\n    WHERE s.shop_id = ${shop_id} AND d.status = 'OPEN'\n"
+
+# The expected answer is SQL against the base tables, not a stored number: the seed dates sales from today, and the
+# agent only reads the views, so a wrong view shows up. A case with `judge` is graded by a model against that rubric,
+# filled with the expected names and numbers, because a phrase or a name is too loose for a regex.
+cases:
+  - id: "revenue_last_month"
+    question: "Tháng trước shop bán được bao nhiêu tiền?"
+    numbers: "${last_month_revenue}"
+  - id: "orders_last_month"
+    question: "Tháng trước có bao nhiêu đơn hàng, không tính đơn đã hủy?"
+    numbers: "SELECT count(*) FROM sales WHERE ${last_month_sales}"
+  - id: "revenue_yesterday"
+    question: "Hôm qua doanh thu bao nhiêu?"
+    numbers: "\n            SELECT sum(total_vnd) FROM sales\n            WHERE ${confirmed}\n            AND (sold_at AT TIME ZONE ${time_zone})::date = ${shop_today} - 1\n        "
+  - id: "revenue_today"
+    question: "Hôm nay bán được bao nhiêu tiền rồi?"
+    numbers: "\n            SELECT sum(total_vnd) FROM sales\n            WHERE ${confirmed}\n            AND (sold_at AT TIME ZONE ${time_zone})::date = ${shop_today}\n        "
+  # The seed sells at 00:30 on the 1st, which is still last month in UTC.
+  - id: "revenue_month_to_date"
+    question: "Từ đầu tháng này tới giờ doanh thu bao nhiêu?"
+    numbers: "\n            SELECT sum(total_vnd) FROM sales\n            WHERE ${confirmed} AND sold_at >= ${this_month_start}\n        "
+  - id: "top_product_last_month"
+    question: "Tháng trước mặt hàng nào bán được nhiều nhất theo số lượng?"
+    names: "\n            WITH sold AS (\n                SELECT i.product_name_snapshot AS name, sum(i.quantity) AS quantity\n                FROM sale_items i JOIN sales s ON s.id = i.sale_id\n                WHERE ${last_month_sales_of_s}\n                GROUP BY 1\n            )\n            SELECT name FROM sold WHERE quantity = (SELECT max(quantity) FROM sold)\n        "
+    judge: "Mặt hàng bán nhiều nhất theo số lượng tháng trước là: {names}. Đạt khi câu trả lời nói rõ mặt hàng đó là mặt hàng bán nhiều nhất. Không đạt khi câu trả lời gọi một mặt hàng khác là bán nhiều nhất, hoặc chỉ liệt kê các mặt hàng mà không nói mặt hàng nào nhiều nhất."
+  # Repayments lower the debt but not the sale's paid_vnd, so total minus paid overstates what is owed.
+  - id: "debt_total"
+    question: "Khách đang nợ shop tổng cộng bao nhiêu?"
+    numbers: "SELECT sum(d.outstanding_vnd) ${open_debts}"
+  - id: "debt_count"
+    question: "Có bao nhiêu khoản nợ chưa thu?"
+    numbers: "SELECT count(*) ${open_debts}"
+  # The agent's views carry no low_stock_threshold, so the honest answer is that the minimum is unknown; a list of the lowest stock is not an answer to this.
+  - id: "low_stock_unknown"
+    question: "Mặt hàng nào đang dưới mức tồn kho tối thiểu?"
+    judge: "Dữ liệu agent đọc được không có mức tồn kho tối thiểu của từng mặt hàng. Đạt khi câu trả lời nói rõ là không có hoặc không biết mức tối thiểu nên chưa xác định được mặt hàng nào dưới mức đó; liệt kê tồn kho hiện tại để tham khảo vẫn đạt. Không đạt khi câu trả lời khẳng định mặt hàng nào đó đang dưới mức tối thiểu, khẳng định không có mặt hàng nào dưới mức tối thiểu, hoặc tự đặt một ngưỡng rồi coi đó là mức của shop."
+  - id: "expenses_last_month"
+    question: "Tháng trước shop chi hết bao nhiêu tiền?"
+    numbers: "${last_month_expenses}"
+  - id: "net_last_month"
+    question: "Tháng trước doanh thu trừ chi phí còn lại bao nhiêu?"
+    numbers: "SELECT (${last_month_revenue}) - (${last_month_expenses})"
+  - id: "discount_last_month"
+    question: "Tháng trước shop đã giảm giá cho khách tổng cộng bao nhiêu?"
+    numbers: "SELECT sum(discount_vnd) FROM sales WHERE ${last_month_sales}"
+  - id: "stock_unaccented"
+    question: "mi hao hao con bao nhieu goi"
+    numbers: "\n            SELECT stock_quantity FROM products\n            WHERE shop_id = ${shop_id} AND name = 'Mì Hảo Hảo'\n        "
+  - id: "selling_price"
+    question: "Dầu ăn Neptune bán giá bao nhiêu?"
+    numbers: "\n            SELECT selling_price_vnd FROM products\n            WHERE shop_id = ${shop_id} AND name = 'Dầu ăn Neptune 1L'\n        "
+  # The seed keeps one archived product, which is no longer on sale.
+  - id: "active_products"
+    question: "Shop đang bán bao nhiêu mặt hàng?"
+    numbers: "\n            SELECT count(*) FROM products\n            WHERE shop_id = ${shop_id} AND status = 'ACTIVE'\n        "
+  - id: "voided_last_month"
+    question: "Tháng trước có mấy đơn bị hủy?"
+    numbers: "\n            SELECT count(*) FROM sales\n            WHERE shop_id = ${shop_id} AND sale_status = 'VOIDED'\n            AND sold_at >= ${last_month_start} AND sold_at < ${this_month_start}\n        "
+  - id: "revenue_change"
+    question: "Doanh thu tháng trước chênh bao nhiêu so với tháng trước nữa?"
+    numbers: "SELECT (${last_month_revenue}) - (${month_before_last_revenue})"
+  # The second question names no month, so only the history says which one.
+  - id: "follow_up_month"
+    question: "Tháng trước doanh thu bao nhiêu?"
+    follow_up: "Còn tháng trước nữa thì sao?"
+    numbers: "${month_before_last_revenue}"
+  - id: "debtor_count"
+    question: "Hiện có bao nhiêu khách đang nợ?"
+    numbers: "SELECT count(DISTINCT d.customer_id) ${open_debts}"
+  - id: "average_order_last_month"
+    question: "Tháng trước trung bình mỗi đơn bao nhiêu tiền?"
+    numbers: "SELECT avg(total_vnd) FROM sales WHERE ${last_month_sales}"
+    approximate: true
+  - id: "memory_rice_supplier"
+    question: "Gạo ST25 bên mình nhập của ai và giao vào ngày nào nhỉ?"
+    memory: "rice_supplier"
+    judge: "Shop nhập gạo ST25 từ cô Ba ở chợ Bến Thành, giao vào thứ Hai hằng tuần. Đạt khi câu trả lời nói nhà cung cấp là cô Ba và ngày giao là thứ Hai. Không đạt khi câu trả lời nêu người hoặc ngày khác, hoặc nói không biết."
+    needs_tool: false
+  - id: "memory_debt_habit"
+    question: "Anh Hùng thường trả nợ vào lúc nào trong tuần?"
+    memory: "debt_habit"
+    judge: "Anh Hùng hay hẹn trả nợ vào cuối tuần, thường là chiều thứ Bảy. Đạt khi câu trả lời nói anh Hùng thường trả vào cuối tuần hoặc thứ Bảy. Không đạt khi câu trả lời nêu ngày khác, hoặc nói không biết."
+    needs_tool: false
+  - id: "out_of_scope"
+    question: "Thời tiết Hà Nội hôm nay thế nào?"
+    judge: "Câu hỏi nằm ngoài dữ liệu cửa hàng. Đạt khi câu trả lời từ chối hoặc nói không có thông tin thời tiết, và không đưa ra nhiệt độ, dự báo hay tình trạng thời tiết nào, kể cả kèm lời rào đón."
+    needs_tool: false
+
+# Facts stored before the run, each embedded the way the app embeds its own memories. A case with `memory` is
+# answerable only from that fact, and is scored on whether the recall returned it.
+memories:
+  rice_supplier:
+    memory_type: "semantic"
+    content: "Gạo ST25 của shop nhập từ cô Ba ở chợ Bến Thành, giao hàng vào mỗi thứ Hai."
+  debt_habit:
+    memory_type: "semantic"
+    content: "Anh Hùng hay mua chịu và hẹn trả nợ vào cuối tuần, thường là chiều thứ Bảy."

@@ -2,7 +2,7 @@
 
 No I/O: the repository loads the owner's memories with their cosine relevance, and
 this module scores the words, picks the candidates and orders them, so the ranking is
-testable without a database and the memory evaluation (`evaluation/memory/`)
+testable without a database and the memory evaluation (`evaluation/suites/memory/`)
 measures the same rule.
 
 A memory ranks by cosine relevance + `LEXICAL_WEIGHT` * its share of the best BM25

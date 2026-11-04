@@ -1,11 +1,12 @@
-### 2026-11-04 — Memory evaluation scores the shipped ranking
+### 2026-11-04 — One evaluation pipeline for agent_chat and memory
 
 | Area | Change |
 |---|---|
-| AI | • `evaluation/memory/run.py` embeds the synthetic shops with the app's memory embedder, ranks them with `src/memory/ranking.py` as `search` does, and exits 1 outside `thresholds.toml`<br>• The grid-search harness that chose the ranking is removed (`autoresearch.py`, `systems.py`, `common.py`, `calibrate.py`, `cloudflare_dense.py`, `e2e.py`, `PREREG.md`, `results/`); it stays in PR #346's history |
-| Docs | • `evaluation/memory_recall` is renamed `evaluation/memory`, and its README describes the evaluation; ADR-0002 points at it |
+| AI | • `evaluation/run.py <suite>` runs every suite through `core/` (dataclass schema, pipeline, gate with `[minimum]` and `[maximum]`, report, HoneyHive exporter); `SUITES` is a dict literal<br>• `targets/agent.py` starts the app's lifespan and runs the real agent, with a `WithoutMemoryWrites` proxy instead of patching `remember`; `targets/memory.py` calls `AgentMemoryService.with_memories` on the local database with a vector cache<br>• `metrics/` holds one module per layer (task, tool_use, memory, response_quality, safety, performance) and the shared judge<br>• `suites/agent_chat` keeps its cases as `cases.yaml`; `suites/memory` freezes its 2374 queries in `cases.jsonl` from `generate.py`<br>• The memory_recall grid-search harness is removed and the folder became the `memory` suite, which scores the shipped ranking instead of a copy of it |
+| CI | • `run-eval.sh` and `start-eval-database.sh` use the new paths |
+| Docs | • `evaluation/README.md` explains the layout and how to add a suite; ADR-0002, ADR-0008, ADR-0009, `ci-cd.md`, `.honeyhive/README.md` and the AI README point at the new paths |
 
-Check: on embeddinggemma-300m the run gives recall 0.860, by form 0.951 / 0.899 / 0.627, stale-only 0.039, equal to the recorded test numbers of the shipped config; a cached rerun takes 4 s; ruff check and format pass. Not verified: the sentence-transformers provider. Commit: the one that adds this entry.
+Check: `agent_chat --dry-run` prints the same plan as before and `suite_version` stays `7a34fe0c0744`; `memory --gate` gives recall 0.860, by form 0.951 / 0.899 / 0.627, stale-only 0.039, equal to the numbers ADR-0002 recorded, and leaves no row in the local database; unit tests 452 passed; ruff check and format pass. Not verified: a full paid `agent_chat` run, `--sync`, and the CI workflow. Commit: the one that adds this entry.
 
 ### 2026-11-04 — Assistant chats wait with dots and share one composer
 
