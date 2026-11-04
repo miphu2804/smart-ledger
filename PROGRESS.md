@@ -6,6 +6,14 @@
 
 Check: `npm run typecheck`, `oxlint` and `npm run build` pass; on the mock admin at 1440 × 900, 1024 × 768 and 375 × 812 the menu opens above the avatar and is not cut off. Not verified: real Core mode in a browser. Commit: the one that adds this entry.
 
+### 2026-11-04 — LLM router call shows up in HoneyHive
+
+| Area | Change |
+|---|---|
+| AI | • The tier classification call to Bifrost runs inside an `llm router` span of the turn's HoneyHive session, with the user messages as input, the tier and alias as output and the mechanism as metadata; the classifier calls Bifrost over plain HTTP, which the agent instrumentation never saw |
+
+Check: `uv run ruff check` and `uv run pytest tests/unit_tests` (472 passed). Not verified: the span on a real HoneyHive session, since traces run only in production. Commit: the one that adds this entry.
+
 ### 2026-11-04 — User flow map follows the new sign-in and the Bobi sheet
 
 | Area | Change |

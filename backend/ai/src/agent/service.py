@@ -314,9 +314,17 @@ class AgentService:
         """The tier model of this turn, or None to run on the default model."""
         if self.llm_router is None:
             return None
-        selection = await self.llm_router.route(
-            conversation_id, self._user_messages(question, history)
-        )
+        user_messages = self._user_messages(question, history)
+        # The classifier calls Bifrost over plain HTTP, which no agent instrumentation
+        # sees, so its time and verdict would otherwise be missing from the turn.
+        with self.observability.span(
+            "llm router", inputs={"user_messages": user_messages}
+        ):
+            selection = await self.llm_router.route(conversation_id, user_messages)
+            self.observability.enrich_span(
+                outputs={"tier": selection.tier.name, "alias": selection.alias},
+                metadata={"mechanism": str(selection.mechanism)},
+            )
         # The session opened with the default model; the tier model replaces it.
         self.observability.tag_turn(
             model=selection.model.model_name,
