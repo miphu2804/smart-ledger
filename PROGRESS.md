@@ -1,3 +1,11 @@
+### 2026-11-04 — User flow map follows the new sign-in and the Bobi sheet
+
+| Area | Change |
+|---|---|
+| Docs | • Sign-in flow: the card from #499 (Google, Zalo, email with Tiếp tục, no Facebook), a "Quên mật khẩu?" edge straight from the sign-in screen, and the password screen with the email filled in<br>• Orders flow: the Bobi suggestion strip on Đơn hàng and a new "Hỏi Trợ lý Bobi" node for the sheet from #491, with a step that links to Trợ lý history<br>• Bobi flow: notes for the composer shared with the sheet (#505), the thought line while waiting (#513) and the five quick chips<br>• Seven screenshots retaken or added on staging: `welcome`, `email-login`, `invoices`, `ai-ask-sheet`, `chat-tro-ly-ai`, `chat-dat-cau-hoi`, `chat-tra-loi`; the README says how and which test data they show |
+
+Check: `npm run userflow` builds the page; the onboarding and orders flows render with the new edges and node on a local server. Not verified: other browsers. Commit: the one that adds this entry.
+
 ### 2026-11-04 — Cleaner routes in the CI/CD and runtime diagram
 
 | Area | Change |
@@ -185,12 +193,3 @@ Check: the CLI schemas validate every evaluator, chart and alert file, including
 | Docs | • Local setup, secrets docs and the AI README pull and apply `dev`; `apply.sh staging dev` stays as the deliberate staging test; the credential map is regenerated and `secrets-and-env.md` describes `.env.monitor` as the Grafana login only |
 
 Check: `scripts/secrets/check-templates.sh` passes; `scripts/secrets/apply.sh dev dev` listed only `+ USER_RATE_LIMIT_ENABLED` in Core, the six removed AI keys and no change for mobile, then wrote the three files with `.bak` backups; `secrets/dev/env/.env.ai` no longer holds the removed keys. Commit: the one that adds this entry.
-
-### 2026-11-02 — User flow map of the mobile app in docs
-
-| Area | Change |
-|---|---|
-| Docs | • `docs/product/userflow/index.html` is a dark pannable map of the mobile app's user flows with screenshots, decisions, system steps and red failure edges; clicking a node opens its source file, FR codes and next hops; it opens straight from disk like the credential map and targets desktop screens only<br>• Six flows follow the current navigation on `staging`: sign-in and shop setup, selling and checkout, orders with reports and notifications, the Bobi tab, the Quản lý tab, and the quick menu with shop switching; the removed mascot "Gợi ý" path is gone<br>• All 40 screenshots are taken on `staging` with the test account on "Tiệm Test Team", using real orders #27282 (debt), #27283 and #27284 (voice order typed through "Nhập tay") and one real Bobi answer; barcode scanning, email verification, shop setup and stock-in stay as step nodes without a picture, with a note saying why<br>• The folder README says how to open, rebuild and retake screenshots; the docs map links it |
-| Web | • The page source lives in `src/userflow`; `npm run userflow` builds it into the docs folder as one file with script, styles and font inlined, because browsers refuse module scripts and fonts from `file://`; the web app's own build does not include it |
-
-Check: `npm run typecheck`, `npm run lint` and `npm run build` pass in `frontend/web`, and `dist` holds no userflow file; headless Chrome opened `index.html` over `file://` for all six flows with every screenshot loaded (52 of 52) and the Geist font active; the design skill's inspector rendered all six flows at 1440 and 768 px with no layout failure. The three test orders and the Bobi conversation stay on the staging test shop. `staff` and `printer` are left out because the app has no way to reach them. Commit: the one that adds this entry.

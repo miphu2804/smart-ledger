@@ -3,7 +3,7 @@
  *
  * Nguồn: điều hướng thật trong `frontend/mobile/app` (các lệnh router.push/replace và Redirect) và mã yêu cầu trong
  * `docs/product/product-requirements.md`. Ảnh chụp từ bản web staging (app-staging.songheloi.id.vn) với tài khoản thử
- * trên tiệm "Tiệm Test Team", khung 390×844. Màn không chụp được trên staging (quét mã cần camera, tài khoản thử đã
+ * trên tiệm "Tiệm Test Team", khung 390×844; các màn chụp lại ngày 04/11 dùng tiệm thử "AAAAAA" (xem README). Màn không chụp được trên staging (quét mã cần camera, tài khoản thử đã
  * xác minh và đã có tiệm, tiệm thử không theo dõi tồn kho) là nút bước kèm ghi chú, không có ảnh.
  *
  * Toạ độ tính bằng px trên canvas, gốc ở góc trên trái của nút. Màn cao SCREEN.h, ảnh bắt đầu sau phần tiêu đề, nên
@@ -86,21 +86,30 @@ export const FLOWS: Flow[] = [
   {
     id: 'onboarding',
     title: 'Đăng nhập và tạo tiệm',
-    summary: 'Từ lúc mở app tới Tổng quan: phiên đã lưu, đăng nhập bằng email hoặc Google, xác minh email, tên và tiệm.',
+    summary: 'Từ lúc mở app tới Tổng quan: phiên đã lưu, đăng nhập bằng Google, Zalo hoặc email, xác minh email, tên và tiệm.',
     nodes: [
       { kind: 'step', id: 'open', x: 0, y: 244, title: 'Mở app', caption: 'Logo trong lúc đọc phiên đã lưu', file: 'app/index.tsx' },
       { kind: 'decision', id: 'd-session', x: 260, y: 232, title: 'Đã có phiên Core?' },
       { kind: 'decision', id: 'd-verify', x: 260, y: 520, title: 'Email chưa xác minh?' },
       {
-        kind: 'screen', id: 'welcome', x: 520, y: 309, title: 'Đăng nhập', caption: 'Chọn cách vào sổ', image: 'welcome',
+        kind: 'screen', id: 'welcome', x: 520, y: 309, title: 'Đăng nhập', caption: 'Google, Zalo hoặc email', image: 'welcome',
         file: 'app/(auth)/welcome.tsx', refs: ['FR-010'],
-        notes: ['Email và Google dùng được; Facebook hiện “Tạm khoá”; Zalo bật theo cấu hình của bản build.', 'Bản dev có thêm nút “Vào app”.'],
+        notes: [
+          'Một thẻ: Google, Zalo, ô Địa chỉ email với nút Tiếp tục, Quên mật khẩu?, chân thẻ Tạo tài khoản. Không có nút Facebook.',
+          'Email sai định dạng thì báo ngay, không chuyển màn.',
+          'Cách đăng nhập thành công gần nhất trên máy có nhãn “Lần trước dùng”.',
+          'Zalo bật theo cấu hình của bản build; thiếu cấu hình thì nút mờ, ghi “Sắp có”. Bản dev có thêm nút “Vào app”.',
+        ],
       },
       {
-        kind: 'screen', id: 'email-login', x: 820, y: 0, title: 'Đăng nhập bằng email', caption: 'Email và mật khẩu', image: 'email-login',
-        file: 'app/(auth)/email.tsx', refs: ['FR-010'], notes: ['Sai mật khẩu thì hiện gợi ý Quên mật khẩu hoặc Tạo tài khoản.'],
+        kind: 'screen', id: 'email-login', x: 820, y: 0, title: 'Đăng nhập bằng email', caption: 'Email điền sẵn, nhập mật khẩu', image: 'email-login',
+        file: 'app/(auth)/email.tsx', refs: ['FR-010'],
+        notes: ['Email gõ ở màn Đăng nhập được điền sẵn qua bộ nhớ app, không nằm trên URL.', 'Sai mật khẩu thì hiện gợi ý Quên mật khẩu hoặc Tạo tài khoản.'],
       },
-      { kind: 'screen', id: 'email-reset', x: 1120, y: 0, title: 'Quên mật khẩu', caption: 'Gửi liên kết đặt lại', image: 'email-reset', file: 'app/(auth)/email.tsx', refs: ['FR-010'] },
+      {
+        kind: 'screen', id: 'email-reset', x: 1120, y: 0, title: 'Quên mật khẩu', caption: 'Gửi liên kết đặt lại', image: 'email-reset', file: 'app/(auth)/email.tsx', refs: ['FR-010'],
+        notes: ['Mở từ màn Đăng nhập hoặc màn mật khẩu; email đã gõ được điền sẵn.'],
+      },
       {
         kind: 'screen', id: 'email-register', x: 820, y: 620, title: 'Tạo tài khoản', caption: 'Nhập lại mật khẩu, gửi thư', image: 'email-register',
         file: 'app/(auth)/email.tsx', refs: ['FR-010'],
@@ -139,7 +148,8 @@ export const FLOWS: Flow[] = [
       { from: 'd-session', to: 'd-verify', label: 'Chưa', sides: 'bt' },
       { from: 'd-verify', to: 'welcome', label: 'Không' },
       { from: 'd-verify', to: 'verify-email', label: 'Có', sides: 'bb', via: [[344, 1130], [1210, 1130]], labelSeg: 0 },
-      { from: 'welcome', to: 'email-login', label: 'Đăng nhập bằng email', sides: 'tl' },
+      { from: 'welcome', to: 'email-login', label: 'Gõ email, Tiếp tục', sides: 'tl' },
+      { from: 'welcome', to: 'email-reset', label: 'Quên mật khẩu?', sides: 'tt', via: [[610, -70], [1240, -70]], toShift: 30, labelSeg: 1 },
       { from: 'welcome', to: 'email-register', label: 'Tạo tài khoản', sides: 'bl' },
       { from: 'welcome', to: 'session', label: 'Google hoặc Zalo' },
       { from: 'email-login', to: 'email-reset', label: 'Quên mật khẩu?' },
@@ -236,12 +246,28 @@ export const FLOWS: Flow[] = [
   {
     id: 'orders',
     title: 'Đơn hàng, báo cáo và thông báo',
-    summary: 'Từ Tổng quan: tab Đơn hàng tới chi tiết và huỷ đơn, thẻ doanh thu tới Báo cáo, danh sách bán chạy, chuông thông báo.',
+    summary: 'Từ Tổng quan: tab Đơn hàng tới chi tiết và huỷ đơn, gợi ý hỏi Bobi về doanh thu, thẻ doanh thu tới Báo cáo, danh sách bán chạy, chuông thông báo.',
     nodes: [
       { kind: 'screen', id: 'home', x: 0, y: 930, title: 'Tổng quan', caption: 'Thẻ doanh thu, bán chạy, chuông', image: 'dashboard-tong-quan-uu-tien-va-ban-chay', file: 'app/(tabs)/index.tsx', refs: ['FR-006'] },
       {
-        kind: 'screen', id: 'invoices', x: 500, y: 0, title: 'Đơn hàng', caption: 'Tìm, lọc theo ngày, nhóm theo ngày', image: 'invoices', file: 'app/(tabs)/invoices.tsx', refs: ['FR-005'],
-        notes: ['Các nút ngày: Tất cả, Hôm nay, Hôm qua, 7 ngày; nút lọc mở thêm điều kiện.'],
+        kind: 'screen', id: 'invoices', x: 500, y: 0, title: 'Đơn hàng', caption: 'Tìm, lọc, gợi ý hỏi Bobi', image: 'invoices', file: 'app/(tabs)/invoices.tsx', refs: ['FR-005', 'FR-020'],
+        notes: [
+          'Các nút ngày: Tất cả, Hôm nay, Hôm qua, 7 ngày; nút lọc mở thêm điều kiện.',
+          'Dưới thẻ tổng có dải gợi ý hỏi Bobi: phân tích doanh thu tháng trước, tháng này so với tháng trước, món bán chạy 7 ngày (src/lib/aiSuggestions.ts).',
+        ],
+      },
+      {
+        kind: 'screen', id: 'ask-sheet', x: 500, y: -620, title: 'Hỏi Trợ lý Bobi', caption: 'Bảng trượt, gửi ngay câu gợi ý', image: 'ai-ask-sheet',
+        file: 'src/components/AiAskSheet.tsx', refs: ['FR-020', 'FR-021', 'FR-027'],
+        notes: [
+          'Gửi câu gợi ý qua cùng API với màn Trợ lý (POST /agent/chat/stream); chữ trả lời hiện dần.',
+          'Dưới câu trả lời có tối đa bốn gợi ý hỏi tiếp và ô hỏi thêm; nút “Mở …” trong câu trả lời mở màn có dữ liệu.',
+          'AI lỗi thì hiện câu báo và trả câu hỏi về ô nhập. Đóng bảng hoặc rời màn thì bảng đóng.',
+        ],
+      },
+      {
+        kind: 'step', id: 'ask-history', x: 800, y: -397, title: 'Lưu ở Lịch sử', caption: 'Xem lại ở Trợ lý, Lịch sử', file: 'src/components/AiAskSheet.tsx',
+        link: { flow: 'assistant', node: 'ai-history' },
       },
       { kind: 'screen', id: 'invoice', x: 800, y: 0, title: 'Chi tiết đơn', caption: 'Món, cách thu, huỷ đơn', image: 'invoice', file: 'app/invoice/[id].tsx', refs: ['FR-005'] },
       {
@@ -266,6 +292,8 @@ export const FLOWS: Flow[] = [
       { from: 'home', to: 'bestsellers', label: 'Xem tất cả', mid: 240, labelSeg: 2 },
       { from: 'home', to: 'notifications', label: 'Chuông', mid: 240, labelSeg: 2 },
       { from: 'invoices', to: 'invoice', label: 'Chạm một đơn' },
+      { from: 'invoices', to: 'ask-sheet', label: 'Chạm gợi ý', sides: 'tb' },
+      { from: 'ask-sheet', to: 'ask-history', label: 'Hội thoại được lưu' },
       { from: 'invoice', to: 'invoice-cancel', label: 'Huỷ đơn' },
       { from: 'invoices', to: 'analytics', label: 'Báo cáo', sides: 'bt' },
       { from: 'analytics', to: 'debts', label: 'Công nợ' },
@@ -282,11 +310,14 @@ export const FLOWS: Flow[] = [
         kind: 'screen', id: 'chat', x: 300, y: 620, title: 'Trợ lý Bobi', caption: 'Lời chào, chip gợi ý trên ô nhập', image: 'chat-tro-ly-ai', file: 'app/ai.tsx', refs: ['FR-020', 'FR-027'],
         notes: [
           'Tab Trợ lý Bobi chuyển thẳng sang màn này bằng router.replace.',
-          'Đầu màn có Cuộc trò chuyện mới, Lịch sử trò chuyện và Cài đặt trợ lý; ô nhập có nút nói và nút gửi.',
-          'Hai chip “Gợi ý nhập hàng 7 ngày qua” và “Doanh thu 7 ngày qua?” gửi thẳng câu hỏi; ẩn đi khi đang gõ.',
+          'Đầu màn có Cuộc trò chuyện mới, Lịch sử trò chuyện và Cài đặt trợ lý; ô nhập (src/components/ChatComposer.tsx, dùng chung với bảng hỏi Bobi ở Đơn hàng) có nút nói và nút gửi.',
+          'Hàng chip cuộn ngang (Gợi ý nhập hàng 7 ngày qua, Doanh thu 7 ngày qua?, Món nào sắp hết hàng?, Năm món đắt nhất?, Tiệm có bao nhiêu mặt hàng?) gửi thẳng câu hỏi; ẩn đi khi Bobi đang trả lời.',
         ],
       },
-      { kind: 'screen', id: 'ai-history', x: 300, y: 0, title: 'Lịch sử trò chuyện', caption: 'Mở lại cuộc trò chuyện cũ', image: 'ai-history', file: 'app/ai.tsx', refs: ['FR-020'] },
+      {
+        kind: 'screen', id: 'ai-history', x: 300, y: 0, title: 'Lịch sử trò chuyện', caption: 'Mở lại cuộc trò chuyện cũ', image: 'ai-history', file: 'app/ai.tsx', refs: ['FR-020'],
+        notes: ['Gồm cả các hội thoại hỏi từ bảng gợi ý ở Đơn hàng.'],
+      },
       {
         kind: 'screen', id: 'ai-settings', x: 300, y: 1240, title: 'Cài đặt trợ lý', caption: 'Ghi nhớ dài hạn', image: 'ai-settings', file: 'app/ai.tsx',
         notes: ['Bật tắt Ghi nhớ dài hạn và xem những gì trợ lý đã nhớ.'],
@@ -294,7 +325,10 @@ export const FLOWS: Flow[] = [
       { kind: 'screen', id: 'chat-ask', x: 600, y: 620, title: 'Đặt câu hỏi', caption: 'Gõ câu hỏi về tiệm', image: 'chat-dat-cau-hoi', file: 'app/ai.tsx', refs: ['FR-020'] },
       {
         kind: 'step', id: 'agent', x: 900, y: 843, title: 'Agent trả lời', caption: 'POST /agent/chat/stream', refs: ['FR-018', 'FR-019', 'FR-020'],
-        notes: ['Core chuyển câu hỏi sang dịch vụ AI; câu trả lời chỉ dùng dữ liệu của tiệm đang chọn.'],
+        notes: [
+          'Core chuyển câu hỏi sang dịch vụ AI; câu trả lời chỉ dùng dữ liệu của tiệm đang chọn.',
+          'Trong lúc chờ chữ đầu tiên, dòng suy nghĩ có chấm chạy và tên bước đang làm (src/components/ThoughtLine.tsx).',
+        ],
       },
       {
         kind: 'screen', id: 'chat-answer', x: 1200, y: 620, title: 'Câu trả lời', caption: 'Kèm kỳ và phạm vi dữ liệu', image: 'chat-tra-loi', file: 'app/ai.tsx', refs: ['FR-020'],
