@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Runs the agent_chat eval of backend/ai against the ai.env of write-eval-settings.sh, gates it on thresholds.toml and
-# writes report.md under ci_temp_dir. Adds --sync when SYNC=true. Run from backend/ai.
+# Runs the agent_chat eval of backend/ai against the ai.env of write-eval-settings.sh, gates it on its
+# agent_chat/thresholds.toml and writes report.md under ci_temp_dir. Adds --sync when SYNC=true. Run from backend/ai.
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -14,6 +14,6 @@ if grep -qi "failed to parse" "$temp/env-check.log"; then
   exit 1
 fi
 # shellcheck disable=SC2086 # $sync is one flag or nothing
-uv run --env-file "$temp/ai.env" python evaluation/agent_chat/run.py \
+uv run --env-file "$temp/ai.env" python evaluation/run.py agent_chat \
   --name "ci-$(git rev-parse --short HEAD)" --repeats 3 \
   --gate evaluation/agent_chat/thresholds.toml --report "$temp/report.md" $sync
