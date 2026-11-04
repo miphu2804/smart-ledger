@@ -618,7 +618,7 @@ Chỉ text do model viết đã qua answer screen mới được gửi; khối `
 
 Core proxy route này qua `POST /api/v1/agent/chat/stream` với cùng auth, `X-Shop-Id` và body như `/api/v1/agent/chat`. Lỗi trước sự kiện đầu tiên là JSON lỗi của Core và ánh xạ như route JSON: AI `404` thành `conversation_not_found`, AI `422` mang mã guardrail (`input_too_long`) giữ nguyên `422` như route JSON, lỗi khác thành `503 ai_unavailable`. Sau đó Core chuyển từng sự kiện của AI nguyên văn, trừ `done` chỉ giữ `conversation_id`, `message_id`, `answer` như `AgentChatMessageView`. App ngắt kết nối thì Core đóng stream tới AI, nên AI hủy lượt như trên. Request async của Core hết hạn sau 60 giây, trên thời hạn lượt mặc định 35 giây của AI.
 
-Màn Trợ lý AI trên mobile gọi route stream và hiện chữ dần trong bong bóng trả lời; `reset` xóa phần đã hiện, `done` thay bằng câu đã lưu. Trong lúc chờ chữ đầu tiên, app hiện ba chấm chờ; ba chấm biến mất khi có `delta` đầu tiên. App không hiện `tool_start` / `tool_end`. Câu trả lời, dữ liệu lưu và guardrail không đổi so với `/api/v1/agent/chat`.
+Màn Trợ lý AI trên mobile gọi route stream và hiện chữ dần trong bong bóng trả lời; `reset` xóa phần đã hiện, `done` thay bằng câu đã lưu. Trong lúc chờ chữ đầu tiên, dòng suy nghĩ hiện câu chờ; mỗi `tool_start` thay nó bằng nhãn của bước mới nhất, `tool_end` thêm dấu tick sau nhãn. Dòng này biến mất khi có `delta` đầu tiên. Câu trả lời, dữ liệu lưu và guardrail không đổi so với `/api/v1/agent/chat`.
 
 `answer` (và chữ ghép từ `delta`) là văn bản thuần với một tập Markdown nhỏ do prompt của AI quy định: `**đậm**`, danh sách `- `/`1. `, bảng Markdown, và tối đa một khối biểu đồ:
 
