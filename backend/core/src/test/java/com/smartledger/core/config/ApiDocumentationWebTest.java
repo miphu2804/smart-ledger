@@ -213,6 +213,9 @@ class ApiDocumentationWebTest {
         void productSchemasSeparateInitialStockFromPatchAndDocumentStockIn() throws Exception {
             mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
                     .andExpect(jsonPath("$.paths['/api/v1/products/{productId}/stock-in'].post.responses['200']").exists())
+                    .andExpect(jsonPath("$.paths['/api/v1/products/{productId}/stock-adjustments'].post.responses['200']").exists())
+                    .andExpect(jsonPath("$.components.schemas.ProductStockAdjustmentRequest.required",
+                            org.hamcrest.Matchers.containsInAnyOrder("quantity", "reason")))
                     .andExpect(jsonPath("$.components.schemas.ProductStockInRequest.required[0]").value("quantity"))
                     .andExpect(jsonPath("$.components.schemas.ProductPatchRequest.properties.stockQuantity").doesNotExist())
                     .andExpect(jsonPath("$.components.schemas.ProductWriteRequest.properties.stockQuantity").exists())

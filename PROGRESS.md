@@ -107,6 +107,16 @@ Check: `ansible-playbook --syntax-check`, `ansible-lint` (production profile), `
 | Docs | • `ci-cd.md#scripts` describes the adapter split, the variables and a runbook for deploying `ai` from a laptop |
 
 Check: shellcheck and actionlint pass; `changes.sh` matched the old dorny rules on 80 single-commit ranges of `staging`, a fake pull request merge commit and a push; 17 scripts ran locally with sample input, including `start-ssh-agent.sh` with a throwaway key. Not verified: any workflow on a runner (GitHub-hosted runners are billing-locked), the image push, the VPS deploy, the Vercel steps and the R2 publish. Commit: the one that adds this entry.
+
+### 2026-11-02 — Independent stock decreases for CORE-021
+
+| Area | Change |
+|---|---|
+| Core | • Add an OWNER stock-adjustment API with a positive decrement and mandatory reason; reuse Product locks, V7 idempotency and STOCK_ADJUSTED audit with the new allowed source<br>• Stock, notification reconciliation and original response commit together; reject overdraw/untracked products and preserve prices and money records<br>• PostgreSQL tests cover normalized replay, concurrent writers, overdraw, managed stale stock and failure rollback; require these cases in the CI execution gate |
+| Docs | • Add BR-025, FR-038 and AC-111–115, the API contract and Core handoff; no migration, environment variable or FE/AI change |
+
+Check: `mvn verify` passed 1514 tests with PostgreSQL enabled, zero failures/errors/skips; 13 gate self-tests passed. Reverified after merging staging bec1a37 on 2026-11-04: all 1514 tests and the 13 gate self-tests passed; the Python report gate confirmed all 17 required PostgreSQL suites and methods without skips. The disposable PostgreSQL 17.11 container was removed after verification. No shared database or deployment was changed. Commit: the one that adds this entry.
+
 ### 2026-11-02 — Agent chat eval offline with a manual CI gate, memory recall on the trace
 
 | Area | Change |
@@ -184,12 +194,3 @@ Check: `npx playwright test` 4/4 with a cleared cache, on the code of #420, #421
 | Docs | • ADR-0009 accepted for the AI side; AI README, technical design, CI/CD and env guides, service walkthrough, the architecture and CI/CD diagrams and the credential map name HoneyHive and Bifrost and drop Redis and Langfuse |
 
 Check: `uv run pytest` (459 passed, including a turn outside the sample leaving no SDK warning, session updates off the default pool and the first-words timer, plus concurrent turns keeping their own sessions, failed and cancelled turns marking their session, and every fake tracer call binding to the real SDK signature) and ruff passed; real turns on the local database reached HoneyHive with their session, model and tool events, the local capture found the content in the OTLP bytes with email and card numbers redacted; the evaluation (suite `526027def191`, prompt `c0447592b804`) passed all 62 recorded turns of 63, and one turn dropped on a network `ReadError`, which the run reports as a failure; the judge passed the right answers and failed the four wrong ones that the earlier regex scoring accepted, and each seed trap changes the expected figure; both online evaluators are on the HoneyHive project, scored stored and crafted events correctly on HoneyHive's server, and scored a new local chat turn within about two minutes; a local turn then showed `git_sha`, `first_text_ms` and memory spans with `shop_id`, a timed-out turn showed `metadata.error = answer_timeout`, and a session closed three seconds late with leaked SQL scored `internal-leak = True`; the three alerts were deleted in the HoneyHive UI and recreated by `apply.py` with the `production` filter, and have not run yet; `tsc --noEmit` passed on the web app. Dopbase `ai/staging` and `ai/production` hold `HH_API_KEY`, `HH_API_URL` and `HH_SOURCE` and no longer hold `LOGFIRE_*`, `REDIS_URL` or `LANGFUSE_*`, and the credential map was regenerated; neither environment is deployed yet, and `evaluation/agent_chat/results/` stays out of Git. Commit: the one that adds this entry.
-
-### 2026-10-31 — Create a second shop and switch between shops
-
-| Area | Change |
-|---|---|
-| Mobile | • Tapping the shop name in the quick menu lists the account's shops and "Tạo cửa hàng mới"; `app/shop-new.tsx` takes a name and industries<br>• The app always used the first shop; the store now keeps the list, picks the last shop chosen on this device and skips suspended shops, which show as "Tạm ngưng" and cannot be chosen<br>• Switching rebuilds the tabs from `shopId` and clears the cart and draft; the bank account is stored per shop, and the old single account goes to the first shop |
-| Docs | • PRD `FR-011` and `AC-104` |
-
-Check: 7 new tests pass; all mobile tests 164/166, with `parseOrder` and `quickNav` failing on `staging` too; `npx tsc --noEmit` passes; a temporary Playwright run on the mock web build signed up, created two shops, switched both ways and kept each shop's bank account with no console error; the cart cleared on switching in a browser check. Not verified: real Core, data separation between shops (mock data is shared), reopening the app on the chosen shop, and a real phone. Commit: the one that adds this entry.
