@@ -20,7 +20,7 @@ import { MemoryGraph } from '../src/components/MemoryGraph';
 import { MascotBadge } from '../src/components/MascotBadge';
 import { ACTION_MENU_DURATION, easeOut, useReducedMotion } from '../src/motion';
 import { LinearGradient } from 'expo-linear-gradient';
-import { TypingDots } from '../src/components/TypingDots';
+import { ThoughtLine } from '../src/components/ThoughtLine';
 import { Button, Dialog, EmptyState, Field, IconBtn, KEYBOARD_AVOID_BEHAVIOR, Row, Sheet, T, Toggle } from '../src/components/ui';
 import type {
   AgentConversationSummary,
@@ -29,11 +29,13 @@ import type {
   AgentMemoryItem,
   AgentMessageView,
   ChatMessage,
+  ThoughtStep,
 } from '../src/data/types';
 import { agentApi, agentErrorMessage } from '../src/lib/agentApi';
 import { ApiError } from '../src/lib/api';
 import { splitActions } from '../src/lib/chatMarkdown';
 import { hhmm, relDay } from '../src/lib/format';
+import { applyToolEvent } from '../src/lib/toolSteps';
 import { useApp } from '../src/store/AppStore';
 import { colors, shadow } from '../src/theme';
 
@@ -97,6 +99,8 @@ export default function Ai() {
   const [typing, setTyping] = useState(false);
   // Chữ trợ lý đang trả lời dở; vào `msgs` khi có sự kiện `done`.
   const [draft, setDraft] = useState('');
+  // Các bước (gọi tool) của lượt đang chạy, hiện trong dòng chờ cho tới khi chữ đầu tiên tới.
+  const [steps, setSteps] = useState<ThoughtStep[]>([]);
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [msgs, setMsgs] = useState<ChatMessage[]>(() => [welcome(app.user.name)]);
@@ -174,8 +178,14 @@ export default function Ai() {
         setDraft(latest);
       });
     };
+    let turnSteps: ThoughtStep[] = [];
     try {
-      const reply = await agentApi.chatStream({ conversation_id: conversationId, message }, showDraft);
+      const reply = await agentApi.chatStream(
+        { conversation_id: conversationId, message },
+        showDraft,
+        undefined,
+        (event) => setSteps((turnSteps = applyToolEvent(turnSteps, event))),
+      );
       setConversationId(reply.conversation_id);
       setMsgs((m) => [...m, { id: `a${reply.message_id}`, from: 'ai', text: reply.answer }]);
     } catch (err) {
@@ -189,6 +199,7 @@ export default function Ai() {
       if (frame !== null) cancelAnimationFrame(frame);
       sending.current = false;
       setDraft('');
+      setSteps([]);
       setTyping(false);
     }
   };
@@ -242,7 +253,7 @@ export default function Ai() {
             );
           })}
 
-          {/* Chờ chữ đầu tiên: ba chấm trôi trên nền, không bọc hộp để không bị nhầm là bong bóng trả lời. */}
+          {/* Chờ chữ đầu tiên: dòng suy nghĩ trôi trên nền, không bọc hộp để không bị nhầm là bong bóng trả lời. */}
           {typing ? (
             <View style={styles.messageRow}>
               {draft ? (
@@ -251,7 +262,7 @@ export default function Ai() {
                 </View>
               ) : (
                 <View style={styles.thinkingLine}>
-                  <TypingDots />
+                  <ThoughtLine steps={steps} />
                 </View>
               )}
             </View>
