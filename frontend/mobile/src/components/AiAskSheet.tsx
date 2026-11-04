@@ -148,55 +148,56 @@ export function AiAskSheet({ question, onClose }: { question: string | null; onC
             <T size={12} color={colors.faint} style={styles.center}>
               {ddmmyyyy(openedAt)}, {hhmm(openedAt)}
             </T>
-            <T size={12} color={colors.muted} style={[styles.center, { marginTop: 2, marginBottom: 12 }]}>
+            <T size={12} color={colors.muted} style={[styles.center, styles.disclaimer]}>
               Bobi đọc số liệu của tiệm để trả lời và có thể nhầm. Hội thoại được lưu ở Trợ lý.
             </T>
 
-            {msgs.map((m) => {
-              if (m.from === 'user') {
-                return (
-                  <View key={m.id} style={styles.userRow}>
-                    <View style={styles.userBubble}>
-                      <T size={14} color={colors.white} style={styles.userText}>
-                        {m.text}
-                      </T>
+            {/* Câu trả lời không có bong bóng nên khoảng cách giữa các tin do `gap` của khối này lo, không dựa vào lề bong bóng. */}
+            <View style={styles.messages}>
+              {msgs.map((m) => {
+                if (m.from === 'user') {
+                  return (
+                    <View key={m.id} style={styles.userRow}>
+                      <View style={styles.userBubble}>
+                        <T size={14} color={colors.white} style={styles.userText}>
+                          {m.text}
+                        </T>
+                      </View>
                     </View>
+                  );
+                }
+                const reply = splitActions(m.text);
+                return (
+                  <View key={m.id}>
+                    <ChatText text={reply.text} />
+                    {reply.screens.length ? <ScreenActions screens={reply.screens} style={styles.actions} /> : null}
                   </View>
                 );
-              }
-              const reply = splitActions(m.text);
-              return (
-                <View key={m.id} style={styles.answer}>
-                  <ChatText text={reply.text} />
-                  {reply.screens.length ? <ScreenActions screens={reply.screens} /> : null}
+              })}
+
+              {typing ? <View>{draft ? <StreamingChatText text={splitActions(draft, true).text} /> : <ThoughtLine steps={steps} />}</View> : null}
+
+              {error ? (
+                <Row gap={6} style={styles.error}>
+                  <Feather name="alert-circle" size={14} color={colors.red} />
+                  <T size={13} color={colors.red} style={{ flex: 1 }}>
+                    {error}
+                  </T>
+                </Row>
+              ) : null}
+
+              {lastIsAnswer && !typing ? (
+                <View style={styles.followUps}>
+                  {followUpSuggestions(asked).map((q) => (
+                    <Pressable key={q} onPress={() => ask(q)} style={({ pressed }) => [styles.followUp, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`Hỏi tiếp: ${q}`}>
+                      <T w="semibold" size={13.5} color={colors.brand}>
+                        {q}
+                      </T>
+                    </Pressable>
+                  ))}
                 </View>
-              );
-            })}
-
-            {typing ? (
-              <View style={styles.answer}>{draft ? <StreamingChatText text={splitActions(draft, true).text} /> : <ThoughtLine steps={steps} />}</View>
-            ) : null}
-
-            {error ? (
-              <Row gap={6} style={styles.error}>
-                <Feather name="alert-circle" size={14} color={colors.red} />
-                <T size={13} color={colors.red} style={{ flex: 1 }}>
-                  {error}
-                </T>
-              </Row>
-            ) : null}
-
-            {lastIsAnswer && !typing ? (
-              <View style={styles.followUps}>
-                {followUpSuggestions(asked).map((q) => (
-                  <Pressable key={q} onPress={() => ask(q)} style={({ pressed }) => [styles.followUp, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`Hỏi tiếp: ${q}`}>
-                    <T w="semibold" size={13.5} color={colors.brand}>
-                      {q}
-                    </T>
-                  </Pressable>
-                ))}
-              </View>
-            ) : null}
+              ) : null}
+            </View>
           </ScrollView>
 
           {/* Cùng ô nhập với màn Trợ lý; không có nút sang màn Trợ lý vì từ đó không quay lại được bảng này. */}
@@ -249,10 +250,13 @@ const styles = StyleSheet.create({
   header: { marginBottom: 6 },
   headerSide: { width: 40 },
   title: { flex: 1, textAlign: 'center' },
-  body: { flex: 1 },
-  bodyContent: { paddingBottom: 16 },
+  // Vùng cuộn tràn ra mép bảng rồi thụt lề lại bên trong, để bóng của nút mở màn hình không bị cắt thẳng ở mép trái.
+  body: { flex: 1, marginHorizontal: -16 },
+  bodyContent: { paddingHorizontal: 16, paddingBottom: 20 },
   center: { textAlign: 'center' },
-  userRow: { alignItems: 'flex-end', marginBottom: 12 },
+  disclaimer: { marginTop: 2, marginBottom: 20 },
+  messages: { gap: 20 },
+  userRow: { alignItems: 'flex-end' },
   userBubble: {
     maxWidth: '82%',
     backgroundColor: colors.brand,
@@ -262,12 +266,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   userText: { lineHeight: 20.5 },
-  answer: { marginBottom: 12 },
-  error: { marginBottom: 12, alignItems: 'flex-start' },
-  followUps: { alignItems: 'flex-end', gap: 8 },
+  // Nút mở màn hình cách chữ trả lời một khoảng, vì bóng tím của nút loang lên trên và che dòng cuối.
+  actions: { marginTop: 14 },
+  error: { alignItems: 'flex-start' },
+  followUps: { alignItems: 'flex-end', gap: 10 },
   followUp: {
     paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingVertical: 10,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.brandBorder,
