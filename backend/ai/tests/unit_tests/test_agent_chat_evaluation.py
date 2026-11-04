@@ -1,9 +1,31 @@
-import importlib.util
 import json
-from pathlib import Path
+import tomllib
 from types import SimpleNamespace
 
 import pytest
+from evaluation.agent_chat import reporting
+from evaluation.agent_chat.honeyhive_sync import session_payload, sync_scores
+from evaluation.agent_chat.judge import judged_scores
+from evaluation.agent_chat.pipeline import (
+    HERE,
+    RESULT_CHARS,
+    available_tools_in,
+    memory_for,
+    tool_calls_in,
+    without_memory_writes,
+)
+from evaluation.agent_chat.reporting import (
+    LAYERS,
+    averages,
+    gate_failures,
+    markdown_report,
+    report,
+)
+from evaluation.agent_chat.scoring import (
+    no_internal_leak,
+    recalled_expected,
+    vietnamese_answer,
+)
 from pydantic_ai.models.test import TestModel
 from tests.support import ScriptedModel
 from tests.unit_tests.test_agent_memory import (
@@ -12,25 +34,10 @@ from tests.unit_tests.test_agent_memory import (
     recalled,
 )
 
-from src.app_config import app_config
-
 pytestmark = pytest.mark.anyio
 
-RUN = Path(__file__).parents[2] / "evaluation" / "agent_chat" / "run.py"
 MEMORY_TEXT = "Gạo ST25 của shop nhập từ cô Ba."
 SQL_ERROR = "Error[SQL_REJECTED] unknown view. Rewrite the query and retry."
-
-
-@pytest.fixture(scope="module")
-def run():
-    """Loads the script, which switches the app config for its own run, and puts the
-    config back so the other tests see it unchanged."""
-    saved = (app_config.HH_API_KEY, app_config.AGENT_MEMORY_ENABLED)
-    spec = importlib.util.spec_from_file_location("agent_chat_run", RUN)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    app_config.HH_API_KEY, app_config.AGENT_MEMORY_ENABLED = saved
-    return module
 
 
 def call(result: str = '{"row_count": 1}') -> dict:
@@ -75,10 +82,10 @@ class FakeRater:
         return {"reason": "fine", "score": 4}
 
 
-async def test_tool_usage_reads_the_tools_query_and_actions(run) -> None:
+async def test_tool_usage_reads_the_tools_query_and_actions() -> None:
     rater = FakeRater()
 
-    scores = await run.judged_scores(outputs_of([call()]), INPUTS, PLAIN, rater)
+    scores = await judged_scores(outputs_of([call()]), INPUTS, PLAIN, rater)
 
     prompt = rater.prompts[0]
     assert scores["tool_usage"] == 4
@@ -87,11 +94,11 @@ async def test_tool_usage_reads_the_tools_query_and_actions(run) -> None:
     assert "SELECT 1" in prompt
 
 
-async def test_failure_recovery_runs_only_when_a_tool_failed(run) -> None:
+async def test_failure_recovery_runs_only_when_a_tool_failed() -> None:
     clean, failed = FakeRater(), FakeRater()
 
-    clean_scores = await run.judged_scores(outputs_of([call()]), INPUTS, PLAIN, clean)
-    failed_scores = await run.judged_scores(
+    clean_scores = await judged_scores(outputs_of([call()]), INPUTS, PLAIN, clean)
+    failed_scores = await judged_scores(
         outputs_of([call(SQL_ERROR), call()]), INPUTS, PLAIN, failed
     )
 
@@ -103,11 +110,11 @@ async def test_failure_recovery_runs_only_when_a_tool_failed(run) -> None:
     )
 
 
-async def test_answer_faithfulness_reads_tool_results_and_memories(run) -> None:
+async def test_answer_faithfulness_reads_tool_results_and_memories() -> None:
     rater = FakeRater()
     outputs = outputs_of([call('{"rows": [[10000000]]}')], [memory_of()])
 
-    scores = await run.judged_scores(outputs, INPUTS, WITH_MEMORY, rater)
+    scores = await judged_scores(outputs, INPUTS, WITH_MEMORY, rater)
 
     prompt = next(item for item in rater.prompts if "faithful" in item)
     assert scores["answer_faithfulness"] == 4
@@ -116,11 +123,11 @@ async def test_answer_faithfulness_reads_tool_results_and_memories(run) -> None:
     assert outputs["answer"] in prompt
 
 
-async def test_context_relevance_scores_only_memory_cases(run) -> None:
+async def test_context_relevance_scores_only_memory_cases() -> None:
     plain, remembering = FakeRater(), FakeRater()
 
-    plain_scores = await run.judged_scores(outputs_of(), INPUTS, PLAIN, plain)
-    memory_scores = await run.judged_scores(
+    plain_scores = await judged_scores(outputs_of(), INPUTS, PLAIN, plain)
+    memory_scores = await judged_scores(
         outputs_of(memories=[memory_of()]), INPUTS, WITH_MEMORY, remembering
     )
 
@@ -131,12 +138,12 @@ async def test_context_relevance_scores_only_memory_cases(run) -> None:
     assert INPUTS["question"] in prompt
 
 
-async def test_tool_trajectory_lists_calls_in_order_for_tool_turns_only(run) -> None:
+async def test_tool_trajectory_lists_calls_in_order_for_tool_turns_only() -> None:
     without, with_calls = FakeRater(), FakeRater()
     second = {**call(), "arguments": {"sql": "SELECT 2"}}
 
-    without_scores = await run.judged_scores(outputs_of(), INPUTS, PLAIN, without)
-    scores = await run.judged_scores(
+    without_scores = await judged_scores(outputs_of(), INPUTS, PLAIN, without)
+    scores = await judged_scores(
         outputs_of([call(), second]), INPUTS, PLAIN, with_calls
     )
 
@@ -148,23 +155,23 @@ async def test_tool_trajectory_lists_calls_in_order_for_tool_turns_only(run) -> 
     assert prompt.index("SELECT 1") < prompt.index("SELECT 2")
 
 
-async def test_judge_reasons_travel_in_the_outputs(run) -> None:
+async def test_judge_reasons_travel_in_the_outputs() -> None:
     outputs = outputs_of([call()])
 
-    await run.judged_scores(outputs, INPUTS, PLAIN, FakeRater())
+    await judged_scores(outputs, INPUTS, PLAIN, FakeRater())
 
     assert outputs["judge_reasons"]["tool_usage"] == "fine"
 
 
-def test_recalled_expected_checks_the_seeded_fact(run) -> None:
+def test_recalled_expected_checks_the_seeded_fact() -> None:
     hit = outputs_of(memories=[memory_of()])
 
-    assert run.recalled_expected(hit, INPUTS, WITH_MEMORY) == 1
-    assert run.recalled_expected(outputs_of(), INPUTS, WITH_MEMORY) == 0
-    assert run.recalled_expected(hit, INPUTS, PLAIN) is None
+    assert recalled_expected(hit, INPUTS, WITH_MEMORY) == 1
+    assert recalled_expected(outputs_of(), INPUTS, WITH_MEMORY) == 0
+    assert recalled_expected(hit, INPUTS, PLAIN) is None
 
 
-def test_tool_calls_are_read_from_spans_in_order_and_cut_short(run) -> None:
+def test_tool_calls_are_read_from_spans_in_order_and_cut_short() -> None:
     def span(name, **attributes):
         return SimpleNamespace(name=name, attributes=attributes)
 
@@ -180,24 +187,24 @@ def test_tool_calls_are_read_from_spans_in_order_and_cut_short(run) -> None:
         ),
     ]
 
-    calls = run.tool_calls_in(spans)
+    calls = tool_calls_in(spans)
 
     assert calls == [
         {
             "name": "query_shop_data",
             "arguments": {"sql": "SELECT 1"},
-            "result": "x" * run.RESULT_CHARS,
+            "result": "x" * RESULT_CHARS,
         }
     ]
-    assert run.available_tools_in(spans) == "[defs]"
-    assert run.available_tools_in([]) == "[]"
+    assert available_tools_in(spans) == "[defs]"
+    assert available_tools_in([]) == "[]"
 
 
-async def test_blocked_memory_writes_store_nothing(run) -> None:
+async def test_blocked_memory_writes_store_nothing() -> None:
     extractor = ScriptedModel(json.dumps({"facts": []}))
     repository = FakeMemoryRepository()
     service = memory_service(extractor, repository)
-    run.without_memory_writes(service)
+    without_memory_writes(service)
 
     await service.remember(15, 3, 9, "gạo nhập của cô Ba", "Dạ.", [])
 
@@ -205,26 +212,26 @@ async def test_blocked_memory_writes_store_nothing(run) -> None:
     assert extractor.requests == []
 
 
-def test_only_memory_cases_recall(run) -> None:
+def test_only_memory_cases_recall() -> None:
     service = memory_service(TestModel(), FakeMemoryRepository())
 
     assert (
-        run.memory_for({"ground_truth": {"memory": "Gạo nhập của cô Ba."}}, service)
+        memory_for({"ground_truth": {"memory": "Gạo nhập của cô Ba."}}, service)
         is service
     )
-    assert run.memory_for({"ground_truth": {"memory": None}}, service) is None
+    assert memory_for({"ground_truth": {"memory": None}}, service) is None
 
 
-async def test_blocked_memory_writes_keep_recall(run) -> None:
+async def test_blocked_memory_writes_keep_recall() -> None:
     service = memory_service(TestModel(), FakeMemoryRepository(recalled=[recalled()]))
-    run.without_memory_writes(service)
+    without_memory_writes(service)
 
     _, memories = await service.with_memories(15, 3, "gạo?")
 
     assert len(memories) == 1
 
 
-def test_session_payload_holds_scores_without_spans(run) -> None:
+def test_session_payload_holds_scores_without_spans() -> None:
     result = {
         "datapoint": {
             "inputs": INPUTS,
@@ -234,8 +241,8 @@ def test_session_payload_holds_scores_without_spans(run) -> None:
         "metrics": {"correct": 1, "recalled_expected": 1},
     }
 
-    first = run.session_payload("run-1", "baseline", result)["session"]
-    second = run.session_payload("run-2", "baseline", result)["session"]
+    first = session_payload("run-1", "baseline", result)["session"]
+    second = session_payload("run-2", "baseline", result)["session"]
 
     assert first["source"] == "evaluation"
     assert first["metrics"] == {"correct": 1, "recalled_expected": 1}
@@ -246,7 +253,7 @@ def test_session_payload_holds_scores_without_spans(run) -> None:
     assert first["session_id"] != second["session_id"]
 
 
-def test_sync_creates_the_run_logs_each_case_then_completes_it(run) -> None:
+def test_sync_creates_the_run_logs_each_case_then_completes_it() -> None:
     calls = []
 
     class Client:
@@ -272,7 +279,7 @@ def test_sync_creates_the_run_logs_each_case_then_completes_it(run) -> None:
         "metrics": {"correct": 1},
     }
 
-    run.sync_scores(Client(), "baseline", [result, result])
+    sync_scores(Client(), "baseline", [result, result])
 
     assert [item[0] for item in calls] == ["create", "session", "session", "complete"]
     assert calls[0][1] == "pending"
@@ -280,9 +287,9 @@ def test_sync_creates_the_run_logs_each_case_then_completes_it(run) -> None:
     assert calls[3][2:] == ("completed", ["s2", "s3"])
 
 
-def test_no_internal_leak_flags_views_sql_and_tool_names(run) -> None:
+def test_no_internal_leak_flags_views_sql_and_tool_names() -> None:
     def leak(answer: str) -> int:
-        return run.no_internal_leak({"answer": answer}, {}, {})
+        return no_internal_leak({"answer": answer}, {}, {})
 
     assert leak("Tháng trước shop bán được 12.500.000đ.") == 1
     assert leak("Em đọc từ ai_read.v_sales nhé.") == 0
@@ -290,9 +297,9 @@ def test_no_internal_leak_flags_views_sql_and_tool_names(run) -> None:
     assert leak("Error[SQL_REJECTED] unknown view") == 0
 
 
-def test_vietnamese_answer_ignores_blocks_and_empty_answers(run) -> None:
+def test_vietnamese_answer_ignores_blocks_and_empty_answers() -> None:
     def vietnamese(answer: str) -> int:
-        return run.vietnamese_answer({"answer": answer}, {}, {})
+        return vietnamese_answer({"answer": answer}, {}, {})
 
     assert vietnamese("Dạ, doanh thu hôm nay là 1.200.000đ.") == 1
     assert vietnamese("Revenue today is 1,200,000 VND.") == 0
@@ -300,19 +307,19 @@ def test_vietnamese_answer_ignores_blocks_and_empty_answers(run) -> None:
     assert vietnamese("") == 1
 
 
-def test_averages_skip_rows_a_metric_does_not_apply_to(run) -> None:
+def test_averages_skip_rows_a_metric_does_not_apply_to() -> None:
     rows = [
         {"correct": 1, "recalled_expected": 1},
         {"correct": 0, "recalled_expected": None},
     ]
 
-    assert run.averages(rows) == {"correct": (0.5, 2), "recalled_expected": (1.0, 1)}
+    assert averages(rows) == {"correct": (0.5, 2), "recalled_expected": (1.0, 1)}
 
 
-def test_gate_fails_below_a_minimum_or_with_no_row(run) -> None:
+def test_gate_fails_below_a_minimum_or_with_no_row() -> None:
     means = {"correct": (0.85, 20), "tool_choice": (0.95, 20)}
 
-    failures = run.gate_failures(
+    failures = gate_failures(
         means, {"correct": 0.9, "tool_choice": 0.9, "recalled_expected": 1.0}
     )
 
@@ -322,14 +329,14 @@ def test_gate_fails_below_a_minimum_or_with_no_row(run) -> None:
     ]
 
 
-def test_thresholds_gate_only_reported_metrics(run) -> None:
-    minimums = run.tomllib.loads((run.HERE / "thresholds.toml").read_text())["minimum"]
-    reported = {name for names in run.LAYERS.values() for name in names}
+def test_thresholds_gate_only_reported_metrics() -> None:
+    minimums = tomllib.loads((HERE / "thresholds.toml").read_text())["minimum"]
+    reported = {name for names in LAYERS.values() for name in names}
 
     assert set(minimums) <= reported
 
 
-def test_markdown_report_shows_the_gate_layers_and_missed_cases(run) -> None:
+def test_markdown_report_shows_the_gate_layers_and_missed_cases() -> None:
     rows = [
         {
             "case": "revenue_last_month",
@@ -340,10 +347,10 @@ def test_markdown_report_shows_the_gate_layers_and_missed_cases(run) -> None:
         },
         {"case": "greeting", "correct": 1},
     ]
-    means = run.averages(rows)
-    failures = run.gate_failures(means, {"correct": 0.9})
+    means = averages(rows)
+    failures = gate_failures(means, {"correct": 0.9})
 
-    markdown = run.markdown_report(rows, means, {"correct": 0.9}, failures, 3)
+    markdown = markdown_report(rows, means, {"correct": 0.9}, failures, 3)
 
     assert markdown.startswith("## agent_chat eval: gate failed")
     assert "2/3 rows" in markdown
@@ -352,7 +359,7 @@ def test_markdown_report_shows_the_gate_layers_and_missed_cases(run) -> None:
     assert "- `revenue_last_month` missed `correct`" in markdown
 
 
-async def test_a_failed_rating_leaves_only_its_metric_out(run) -> None:
+async def test_a_failed_rating_leaves_only_its_metric_out() -> None:
     async def rate(prompt: str) -> dict:
         if "faithful" in prompt.casefold():
             raise RuntimeError("gateway 502")
@@ -368,15 +375,15 @@ async def test_a_failed_rating_leaves_only_its_metric_out(run) -> None:
     inputs = {"question": "Doanh thu tháng trước?", "follow_up": None}
     truth = {"memory": None}
 
-    scores = await run.judged_scores(outputs, inputs, truth, rate)
+    scores = await judged_scores(outputs, inputs, truth, rate)
 
     assert "answer_faithfulness" not in scores
     assert scores["tool_usage"] == 4
     assert "gateway 502" in outputs["judge_errors"]["answer_faithfulness"]
 
 
-def test_report_rows_keep_the_tool_calls_metric(run, tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(run, "RESULTS", tmp_path)
+def test_report_rows_keep_the_tool_calls_metric(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(reporting, "RESULTS", tmp_path)
     result = {
         "datapoint": {"ground_truth": {"case": "revenue", "numbers": [1], "names": []}},
         "outputs": {
@@ -390,8 +397,8 @@ def test_report_rows_keep_the_tool_calls_metric(run, tmp_path, monkeypatch) -> N
         "metrics": {"correct": 1, "tool_choice": 1, "tool_calls": 1, "seconds": 1.0},
     }
 
-    rows = run.report("test", [result])
+    rows = report("test", [result])
 
     assert rows[0]["tool_calls"] == 1
     assert rows[0]["tool_call_log"] == [call()]
-    assert run.averages(rows)["tool_calls"] == (1.0, 1)
+    assert averages(rows)["tool_calls"] == (1.0, 1)
