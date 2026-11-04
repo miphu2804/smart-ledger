@@ -3,6 +3,7 @@ package com.smartledger.core.service.impl;
 import com.smartledger.core.dto.request.OwnerListQuery.Products;
 import com.smartledger.core.dto.request.ProductPatchRequest;
 import com.smartledger.core.dto.request.ProductStockInRequest;
+import com.smartledger.core.dto.request.ProductStockAdjustmentRequest;
 import com.smartledger.core.dto.request.ProductWriteRequest;
 import com.smartledger.core.dto.response.PageResponse;
 import com.smartledger.core.dto.response.ProductResponse;
@@ -177,6 +178,31 @@ public class ProductServiceImpl implements ProductService {
                     auditLogService.recordOwner(shop, AuditAction.STOCK_ADJUSTED, product.getId(),
                             normalized.reason(), idempotencyKey.trim(), AuditLogService.metadata(
                                     "source", "STOCK_IN", "quantity", normalized.quantity(),
+                                    "beforeStock", before, "afterStock", product.getStockQuantity()));
+                    productRepository.flush();
+                    return toResponse(product);
+                });
+    }
+
+    @Override
+    @Transactional
+    public ProductResponse adjustStock(VerifiedFirebaseToken firebaseToken, String shopId, String productId,
+            String idempotencyKey, ProductStockAdjustmentRequest request) {
+        Shop shop = shopService.requireOwnedActiveShop(firebaseToken, shopId);
+        Long id = parseProductId(productId);
+        ProductStockAdjustmentRequest normalized = new ProductStockAdjustmentRequest(
+                request.quantity().stripTrailingZeros(), request.reason().trim());
+        return idempotencyService.execute(shop.getId(), shop.getOwnerId(), "PRODUCT_STOCK_ADJUSTMENT", idempotencyKey,
+                new Object[] {id, normalized}, "PRODUCT", ProductResponse::id, ProductResponse.class, 200, () -> {
+                    Product product = requireLockedActiveProduct(shop.getId(), id.toString());
+                    // A caller may already have this entity managed before another transaction commits.
+                    entityManager.refresh(product, LockModeType.PESSIMISTIC_WRITE);
+                    BigDecimal before = product.getStockQuantity();
+                    product.adjustStockDown(normalized.quantity());
+                    notifications.reconcileStock(shop, product);
+                    auditLogService.recordOwner(shop, AuditAction.STOCK_ADJUSTED, product.getId(),
+                            normalized.reason(), idempotencyKey.trim(), AuditLogService.metadata(
+                                    "source", "STOCK_ADJUSTMENT", "quantity", normalized.quantity(),
                                     "beforeStock", before, "afterStock", product.getStockQuantity()));
                     productRepository.flush();
                     return toResponse(product);

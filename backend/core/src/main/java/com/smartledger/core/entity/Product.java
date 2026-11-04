@@ -152,6 +152,17 @@ public class Product {
         stockQuantity = stockQuantity.subtract(quantity);
     }
 
+    /** Removes damaged, lost or missing stock without creating a sale. */
+    public void adjustStockDown(BigDecimal quantity) {
+        if (quantity == null || quantity.signum() <= 0) {
+            throw new IllegalArgumentException("Stock adjustment quantity must be positive");
+        }
+        if (!tracked || stockQuantity == null) {
+            throw new BusinessException(ErrorCode.PRODUCT_STOCK_ADJUSTMENT_UNAVAILABLE);
+        }
+        deductStock(quantity);
+    }
+
     public void addStock(BigDecimal quantity) {
         if (quantity == null || quantity.signum() <= 0) {
             throw new IllegalArgumentException("Stock-in quantity must be positive");

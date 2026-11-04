@@ -78,6 +78,7 @@ REQUIRED = {
         "invalidLocalThresholdFailsNotificationMigrationAtomicallyAndAllowsRetry",
     },
     "com.smartledger.core.service.NotificationPostgresTest": {
+        "stockAdjustmentsTransitionLowToOutWithoutDuplicatingRetryNotifications",
         "concurrentConfirmationOfTheSameDraftCreatesOneSaleAndOneAlert",
         "concurrentDifferentSalesProduceOnlyOneOpenStockAlert",
         "concurrentVoidRetryCreatesOneNotificationAndRefund",
@@ -89,6 +90,14 @@ REQUIRED = {
     },
     "com.smartledger.core.service.DebtVoidPostgresTest": set(),
     "com.smartledger.core.service.AuditLogPostgresTest": {
+        "stockAdjustmentReplaysNormalizedSnapshotAndChangesNoMoneyOrCustomerRecords",
+        "stockAdjustmentRejectsChangedExpiredAndInvalidKeysWithoutFurtherMutation",
+        "stockAdjustmentEnforcesOwnerShopProductTrackingAndAvailableStock",
+        "stockAdjustmentFailureRollsBackStockAuditNotificationAndKey",
+        "concurrentStockAdjustmentsDoNotLoseOrDuplicateDeductions",
+        "otherStockWritersWaitForAdjustmentAndPreserveBothChanges",
+        "concurrentAdjustmentsCannotOverdrawAvailableStock",
+        "adjustmentRefreshesStockCommittedWhileProductWasAlreadyManaged",
         "lateCheckoutFailureRollsBackEveryBusinessWriteAndCanBeRetried",
         "laterProductFailureRollsBackEarlierStockChangeAndCustomer",
     },

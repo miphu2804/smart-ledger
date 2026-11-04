@@ -54,6 +54,7 @@ public enum ErrorCode {
     PRODUCT_STOCK_REQUIRED(HttpStatus.BAD_REQUEST, "product_stock_required", "Tracked products require a stock quantity."),
     PRODUCT_STOCK_NOT_TRACKED(HttpStatus.BAD_REQUEST, "product_stock_not_tracked", "Untracked products must not have a stock quantity."),
     PRODUCT_STOCK_IN_UNAVAILABLE(HttpStatus.CONFLICT, "product_stock_in_unavailable", "Stock-in requires a product with stock tracking enabled."),
+    PRODUCT_STOCK_ADJUSTMENT_UNAVAILABLE(HttpStatus.CONFLICT, "product_stock_adjustment_unavailable", "Stock adjustment requires a product with stock tracking enabled."),
     PRODUCT_STOCK_OVERFLOW(HttpStatus.CONFLICT, "product_stock_overflow", "Resulting stock cannot exceed 999999999999.999."),
     IMAGE_REQUIRED(HttpStatus.BAD_REQUEST, "image_required", "An image file is required."),
     IMAGE_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "image_too_large", "Image files must not exceed 5 MB."),

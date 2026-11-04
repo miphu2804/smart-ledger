@@ -115,6 +115,7 @@ Check: `ansible-playbook --syntax-check`, `ansible-lint` (production profile), `
 | Docs | • `ci-cd.md#scripts` describes the adapter split, the variables and a runbook for deploying `ai` from a laptop |
 
 Check: shellcheck and actionlint pass; `changes.sh` matched the old dorny rules on 80 single-commit ranges of `staging`, a fake pull request merge commit and a push; 17 scripts ran locally with sample input, including `start-ssh-agent.sh` with a throwaway key. Not verified: any workflow on a runner (GitHub-hosted runners are billing-locked), the image push, the VPS deploy, the Vercel steps and the R2 publish. Commit: the one that adds this entry.
+
 ### 2026-11-03 — Reuse E2E helpers and select the active quick menu
 
 | Area | Change |
@@ -122,6 +123,15 @@ Check: shellcheck and actionlint pass; `changes.sh` matched the old dorny rules 
 | Mobile | • Smoke and shop-switching checks reuse error and navigation helpers.<br>• Quick navigation uses role locators to skip background tabs and preserve Playwright's actionability checks. |
 
 Check: delayed and background-menu browser checks pass after failing on the earlier selectors. `npm run typecheck` and all 23 Playwright tests pass. Commit: the one that adds this entry.
+
+### 2026-11-02 — Independent stock decreases for CORE-021
+
+| Area | Change |
+|---|---|
+| Core | • Add an OWNER stock-adjustment API with a positive decrement and mandatory reason; reuse Product locks, V7 idempotency and STOCK_ADJUSTED audit with the new allowed source<br>• Stock, notification reconciliation and original response commit together; reject overdraw/untracked products and preserve prices and money records<br>• PostgreSQL tests cover normalized replay, concurrent writers, overdraw, managed stale stock and failure rollback; require these cases in the CI execution gate |
+| Docs | • Add BR-025, FR-038 and AC-111–115, the API contract and Core handoff; no migration, environment variable or FE/AI change |
+
+Check: `mvn verify` passed 1514 tests with PostgreSQL enabled, zero failures/errors/skips; 13 gate self-tests passed. Reverified after merging staging bec1a37 on 2026-11-04: all 1514 tests and the 13 gate self-tests passed; the Python report gate confirmed all 17 required PostgreSQL suites and methods without skips. The disposable PostgreSQL 17.11 container was removed after verification. No shared database or deployment was changed. Commit: the one that adds this entry.
 
 ### 2026-11-02 — Agent chat eval offline with a manual CI gate, memory recall on the trace
 
@@ -178,17 +188,6 @@ Check: `uv run pytest` 460 passed, ruff check and format pass; a local fake gate
 | Docs | • `ci-cd.md` calls it a command, not a shortcut |
 
 Check: `ansible-playbook --syntax-check` passes and the patch applies cleanly to `staging`; not run on the VPS yet, so the tmux case is inferred. Commit: the one that adds this entry.
-
-### 2026-11-01 — Policy and account deletion links in the app
-
-| Area | Change |
-|---|---|
-| Mobile | • Quản lý has "Chính sách và điều khoản" and "Xoá tài khoản", and the sign-in screen links the policy; they open `/chinh-sach` and `/delete-account` on the public site, which Google Play requires for account deletion |
-| Web | • The policy and the data deletion page say the request can start in the app; Minh Thọ is named as the owner of the legal content |
-| Docs | • `docs/product/google-play-data-safety.md` holds the answers for the Play Console form, matched to the policy, including what #467 sends to HoneyHive<br>• PRD `AC-110`; the multi-shop criterion moves to `AC-109`, because `AC-104` was already CORE-019's |
-| Test | • `e2e/legal-links.spec.ts` checks the three links<br>• `test:e2e` now starts Metro with `--clear`: with `node_modules` shared between worktrees the cached router path served another worktree's screens, so the check recorded for #461 did not hold |
-
-Check: `npx playwright test` 4/4 with a cleared cache, on the code of #420, #421, #458, #459, #460 and #461 together; `npx tsc --noEmit` passes; unit tests 182/184, with `parseOrder` and `quickNav` failing on `staging` too; web lint, `tsc -b` and `vite build` pass. Not verified: a real phone, the Data safety answers against the production AAB, and Minh Thọ's review. Commit: the one that adds this entry.
 
 ### 2026-11-01 — Playwright covers the main mobile flows
 
