@@ -187,7 +187,7 @@ The tool-call guardrail counts one `run_code` as one call and does not see calls
 
 ## Long-term memory (off by default)
 
-`AGENT_MEMORY_ENABLED=true` turns on the [ADR-0002](../../docs/architecture/adr/0002-agent-long-term-memory.md) memory. It is not product behavior until the PO approves it. ADR-0002 owns the recall, ranking and reconcile design; [the recall benchmark](evaluation/memory_recall/README.md) measures it.
+`AGENT_MEMORY_ENABLED=true` turns on the [ADR-0002](../../docs/architecture/adr/0002-agent-long-term-memory.md) memory. It is not product behavior until the PO approves it. ADR-0002 owns the recall, ranking and reconcile design; [the memory evaluation](evaluation/memory/README.md) measures its recall.
 
 - Needs the migrations `20261014000000_agent_memories.sql` and `20261015000000_agent_memory_visibility.sql`, and an embedder from `AGENT_MEMORY_EMBEDDING_PROVIDER`:
   - `sentence-transformers` (default) runs locally and needs `uv sync --group memory`; the Docker image leaves that group out, so there the flag logs an error and stays off.
@@ -290,11 +290,15 @@ On the VPS the deploy sets the HoneyHive values from Dopbase ([AI tracing settin
 
 ## Run
 
+`uv run` runs a command in this folder's virtual environment and syncs it first; a `.py` file runs directly (`uv run evaluation/run.py`), and only a module needs `python -m` (`uv run python -m src.main`).
+
 ```bash
 uv sync --group dev
 cp .env.example .env
 uv run python -m src.main
 ```
+
+While editing code, `uv run uvicorn src.main:app --reload --port 8001` restarts the server on each change; it uses Uvicorn's own log format instead of the app's.
 
 To run against the local database instead of staging, see [Develop against the local database](../../docs/development/local-development.md#develop-against-the-local-database).
 
@@ -318,3 +322,15 @@ uv run pytest
 ```
 
 `pre-commit` runs Ruff (lint, import order and format) on commit. The live draft test runs only when asked: `RUN_LIVE_MODEL_TESTS=1 uv run pytest tests/integration_tests/test_draft_parse_live.py`.
+
+## Scripts
+
+```bash
+export LOG_LEVEL=WARNING                         # hide the app's info logs
+uv run evaluation/run.py agent_chat --dry-run    # eval plan only: no model call, nothing sent
+uv run evaluation/run.py agent_chat              # chat eval, calls the chat and judge models
+uv run evaluation/run.py memory                  # memory recall eval on the local database
+uv run evaluation/memory/generate.py             # regenerate the memory eval's cases.jsonl
+```
+
+See [Evaluation](evaluation/README.md) for the options.

@@ -1,4 +1,9 @@
-"""Synthetic owner memories and queries for the agent-memory recall benchmark.
+"""Generates `cases.jsonl`, the synthetic shops of the memory evaluation.
+
+Run `uv run python evaluation/memory/generate.py` from `backend/ai` to rewrite
+it; the evaluation reads only the file. Changing the lexicon, the templates or any
+random draw changes the queries, so the committed file stays until a new baseline is
+recorded in the README.
 
 Every shop gets a store of facts in the shapes MEMORY_EXTRACT_PROMPT asks for
 (preference, semantic, procedural, episodic), with dates, importance and a share of
@@ -6,13 +11,16 @@ Every shop gets a store of facts in the shapes MEMORY_EXTRACT_PROMPT asks for
 surface forms (accented, typed without diacritics, paraphrase with no shared content
 word), plus queries that need no memory at all.
 
-The lexicon and query templates are split in two halves: dev uses half A, the
-held-out test uses half B, so a config cannot win by fitting names or phrasings.
+The lexicon and query templates are split in two halves: the ranking was chosen on
+half A and the evaluation scores half B, so it cannot pass by fitting names or
+phrasings.
 """
 
+import json
 import random
 import unicodedata
 from dataclasses import dataclass, field
+from pathlib import Path
 
 # --- lexicon, split A (dev) / B (test) -------------------------------------------
 
@@ -182,8 +190,6 @@ class Memory:
     # Id of the newer version of the same fact that reconcile failed to link.
     newer: int | None = None
     older: int | None = None
-    last_used_day: float | None = None
-    use_count: int = 0
 
 
 @dataclass
@@ -280,7 +286,7 @@ def make_shop(
     return Shop(memories, rng.sample(PREFERENCES, rng.randint(1, 3))), paraphrase
 
 
-def query_for(
+def make_query(
     rng: random.Random, memory: Memory, half: str, form: str, paraphrase: dict
 ) -> Query | None:
     spec = QUERIES[memory.relation]
@@ -303,7 +309,7 @@ def query_for(
     return Query(text, form, gold, stale, memory.relation)
 
 
-def build(
+def build_shop(
     seed: int,
     half: str,
     size: int,
@@ -311,7 +317,12 @@ def build(
     n_history: int = 200,
     max_age: float = 180.0,
 ):
-    """One shop with its past traffic (for use counts) and its scored queries."""
+    """One shop with its past traffic and its scored queries.
+
+    The ranking no longer reads use counts, so `history` goes unscored; it is still
+    drawn because it advances `rng`, and the scored queries must stay the ones
+    ADR-0002 measured.
+    """
     rng = random.Random(seed * 1000 + size + int(max_age) * 7)
     shop, paraphrase = make_shop(rng, half, size, max_age=max_age)
     roots = [m for m in shop.memories if m.older is None]
@@ -325,7 +336,7 @@ def build(
             shop.history.append(Query(rng.choice(NO_MEMORY[half]), "none", None))
             continue
         memory = rng.choices(order, weights)[0]
-        q = query_for(
+        q = make_query(
             rng, memory, half, rng.choice(["lex", "lex", "unacc", "sem"]), paraphrase
         )
         if q:
@@ -336,7 +347,61 @@ def build(
         if rng.random() < 0.15:
             shop.queries.append(Query(rng.choice(NO_MEMORY[half]), "none", None))
             continue
-        q = query_for(rng, rng.choice(roots), half, rng.choice(forms), paraphrase)
+        q = make_query(rng, rng.choice(roots), half, rng.choice(forms), paraphrase)
         if q:
             shop.queries.append(q)
     return shop
+
+
+CASES_FILE = Path(__file__).with_name("cases.jsonl")
+# The split held out while the ranking was chosen (ADR-0002): seeds 1001-1008 on the
+# half B lexicon, so a run compares with the ADR's numbers.
+SHOPS = [
+    (f"{seed}-B-{size}-{int(age)}", build_shop(seed, "B", size, max_age=age))
+    for seed in range(1001, 1009)
+    for size in (15, 40, 120)
+    for age in (30.0, 180.0)
+]
+
+
+def format_shop_line(key: str, shop: Shop) -> str:
+    """One shop as a JSON line: its memories and the queries that need one of them.
+
+    A memory's id is its position in the shop, and a query's `gold` and `stale` are
+    ids; the evaluation maps the ids the database gives back to these. The queries
+    that need no memory and the unscored history are left out.
+    """
+    return json.dumps(
+        {
+            "shop": key,
+            "memories": [
+                {
+                    "id": memory.id,
+                    "memory_type": memory.memory_type,
+                    "content": memory.content,
+                    "importance": memory.importance,
+                }
+                for memory in shop.memories
+            ],
+            "queries": [
+                {
+                    "text": query.text,
+                    "form": query.form,
+                    "gold": query.gold,
+                    "stale": query.stale,
+                }
+                for query in shop.queries
+                if query.gold is not None
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+
+def main() -> None:
+    lines = [format_shop_line(key, shop) + "\n" for key, shop in SHOPS]
+    CASES_FILE.write_text("".join(lines))
+
+
+if __name__ == "__main__":
+    main()
