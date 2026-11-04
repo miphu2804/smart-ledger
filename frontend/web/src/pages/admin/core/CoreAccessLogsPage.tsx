@@ -3,7 +3,7 @@
  * Core không cho xem nhật ký của ADMIN khác và không có nhật ký nghiệp vụ (hoá đơn, công nợ) ở đây.
  * Lọc theo thao tác, mã cửa hàng và khoảng ngày (giờ Việt Nam; "đến ngày" tính cả ngày đó).
  */
-import { ClockCounterClockwise, ShieldCheck } from '@phosphor-icons/react'
+import { ClockCounterClockwise } from '@phosphor-icons/react'
 import { useState } from 'react'
 import { Panel } from '../../../components/admin/ui'
 import { EmptyState, ErrorState, LoadingState } from '../../../components/States'
@@ -59,11 +59,6 @@ export default function CoreAccessLogsPage() {
 
   return (
     <>
-      <div className="page-bar">
-        <p className="scope-line">
-          <ShieldCheck size={16} aria-hidden="true" /> Chỉ các lần bạn truy cập dữ liệu quản trị. Không ai tắt hay sửa được nhật ký này.
-        </p>
-      </div>
       <Panel bodyClass="">
         <div className="filterbar" role="search">
           <select

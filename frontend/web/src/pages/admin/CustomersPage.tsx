@@ -83,12 +83,6 @@ export default function CustomersPage() {
 
   return (
     <>
-      <div className="page-bar">
-        <p className="scope-line">
-          <ShieldCheck size={16} aria-hidden="true" /> Chỉ thông tin hỗ trợ tối thiểu. Mỗi lần mở chi tiết đều được ghi nhật ký.
-        </p>
-      </div>
-
       <Panel bodyClass="">
         <div className="shop-tabs">
           <div className="seg-tabs" role="tablist" aria-label="Loại khách hàng">
