@@ -3,6 +3,7 @@ package com.smartledger.core.service;
 import com.smartledger.core.dto.request.OwnerListQuery.Products;
 import com.smartledger.core.dto.request.ProductPatchRequest;
 import com.smartledger.core.dto.request.ProductStockInRequest;
+import com.smartledger.core.dto.request.ProductStockAdjustmentRequest;
 import com.smartledger.core.dto.request.ProductWriteRequest;
 import com.smartledger.core.dto.response.PageResponse;
 import com.smartledger.core.dto.response.ProductResponse;
@@ -25,4 +26,8 @@ public interface ProductService {
 
     ProductResponse stockIn(VerifiedFirebaseToken firebaseToken, String shopId, String productId,
             String idempotencyKey, ProductStockInRequest request);
+
+    /** Decreases tracked stock once per key and records the mandatory reason in the same transaction. */
+    ProductResponse adjustStock(VerifiedFirebaseToken firebaseToken, String shopId, String productId,
+            String idempotencyKey, ProductStockAdjustmentRequest request);
 }

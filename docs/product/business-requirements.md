@@ -5,7 +5,7 @@
 | Trạng thái | Core: quy tắc dưới đây đã chốt; AI/dashboard: đích MVP, cần nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ kinh doanh/sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; chủ thuế cho `BR-INV-*` |
-| Cập nhật lần cuối | 2026-10-31 (CORE-019: BR-024; không rà soát lại căn cứ pháp lý) |
+| Cập nhật lần cuối | 2026-11-02 (CORE-021: BR-025; không rà soát lại căn cứ pháp lý) |
 
 ## Tài liệu liên quan
 
@@ -118,6 +118,14 @@ Truy vết CORE-019 đã được chủ dự án chốt ngày 2026-10-31: `BR-02
 - Theo `BR-009`/`BR-022`, Android dùng trình duyệt ngoài/Custom Tabs rồi quay về APK qua HTTPS App Link đã xác minh. Không tích hợp Zalo Android SDK hoặc WebView trong đợt này; LOGIN và LINK giữ cùng tài khoản chuẩn và quy tắc sở hữu của CORE-015.
 - Tiếp nối duyệt schema/API, đã duyệt tạo V18 và chuẩn bị cấu hình bật native **staging sau khi merge** trên `feat/zalo-android` (#276). V18 có trong nhánh, chưa áp dụng DB dùng chung hoặc bật trên VPS; runtime mặc định vẫn tắt, production cần phê duyệt riêng. Chưa nghiệm thu APK/provider thật; FE/AI không thuộc thay đổi này. Không suy ra đã hoàn thành rollout chỉ từ việc cấu hình package/chứng chỉ/domain trên Zalo Developer. Ranh giới triển khai tại [thiết kế kỹ thuật](../architecture/technical-design.md#zalo-android-core-016).
 
+### Điều chỉnh giảm tồn CORE-021 — đã duyệt ngày 2026-11-02
+
+| ID | Yêu cầu / quy tắc kinh doanh |
+|---|---|
+| `BR-025` | OWNER được giảm tồn của sản phẩm ACTIVE có theo dõi tồn trong tiệm ACTIVE mình sở hữu do hàng hỏng, thất thoát hoặc kiểm kho thiếu; nhập số lượng giảm dương và lý do bắt buộc, không nhập số tồn tuyệt đối hoặc để tồn âm. Thao tác không tạo sale/expense/payment/debt/refund hay đổi giá vốn; tồn, audit, cảnh báo và kết quả chống ghi trùng cùng commit/rollback. |
+
+Truy vết: `BO-002`, `BR-009`, `BR-016`, `BR-017`, `BR-025` → `FR-038` → `AC-111`–`AC-115`. CORE-021 #457 mở rộng phạm vi giảm tồn đơn lẻ; không bổ sung sổ kiểm kê, ledger kho riêng, điều chỉnh tăng hoặc hoàn tiền từng phần.
+
 ### Barcode Core đã chốt — 2026-10-12
 
 - CORE-012 #159 chọn D1b: unique barcode chỉ trên ACTIVE; không thêm API restore. D4 dùng chi tiết lỗi tùy chọn `productId`/`status`; lỗi tranh chấp ở DB vẫn có thể không có chi tiết. Quy ước cụ thể nằm trong [contract Product](../contracts/api-contracts.md#barcode-core-012).
@@ -127,7 +135,7 @@ Truy vết CORE-019 đã được chủ dự án chốt ngày 2026-10-31: `BR-02
 
 - Theo `BR-018`, tồn mới bằng tồn hiện tại cộng số lượng nhập dương. Bật theo dõi từ không theo dõi khởi tạo 0, sau đó nhập kho riêng; tắt theo dõi giữ hành vi xóa số tồn. Tồn ban đầu khi tạo sản phẩm vẫn được phép nhập.
 - Nhập kho và bán/hủy đơn phải nhất quán khi đồng thời; cộng tồn, audit và kết quả chống ghi trùng cùng commit/rollback. Không suy ra mua hàng, chi tiền, công nợ nhà cung cấp hoặc cập nhật giá vốn từ thao tác này.
-- Gợi ý AI không tự nhập kho. Không bổ sung sổ phiếu nhập, ledger điều chỉnh tồn, nhập âm/kiểm kê hoặc hoàn tiền/trả hàng từng phần. Cần phối hợp FE theo contract mới, chưa coi kiểm thử Core là nghiệm thu mobile/staging.
+- Gợi ý AI không tự nhập kho. Stock-in không nhận số lượng âm và không bổ sung sổ phiếu nhập, ledger kho riêng hoặc hoàn tiền/trả hàng từng phần; giảm tồn đơn lẻ theo CORE-021 dùng thao tác riêng ở `BR-025`. Cần phối hợp FE theo contract mới, chưa coi kiểm thử Core là nghiệm thu mobile/staging.
 
 ### Media hồ sơ và danh mục đã chốt — 2026-10-07
 
@@ -223,6 +231,7 @@ Copy UI viện dẫn nghị định trên màn bản ghi bán hàng **không** b
 | `BR-007` | `FR-009`, `FR-013` | tạm thời — MVP đã chấp nhận |
 | `BO-002`, `BR-007`, `BR-009`, `BR-021` | `FR-009`, `FR-034`, `AC-064`–`AC-067` | Barcode Core #163/#164 trên feat/core-barcode; V16/FE/staging cần review và nghiệm thu |
 | `BO-002`, `BR-007`, `BR-009`, `BR-016`, `BR-017`, `BR-018` | `FR-009`, `FR-030`, `AC-044`–`AC-048` | Nhập kho Core; FE/staging cần nghiệm thu |
+| `BO-002`, `BR-009`, `BR-016`, `BR-017`, `BR-025` | `FR-038`, `AC-111`–`AC-115` | CORE-021 #457 giảm tồn độc lập trong nhánh feat/core-stock-adjustment; chưa nghiệm thu FE/staging |
 | `BR-007`, `BR-009`, `BR-017`, `BR-019` | `FR-011`, `FR-031`, `NFR-003`, `NFR-010`, `AC-053`–`AC-054` | Media Core có trên nhánh; FE/staging và migration shared DB cần nghiệm thu |
 | `BR-009` | `FR-010`, `FR-011`, `NFR-003` | tạm thời — MVP đã chấp nhận; không tuyên bố sẵn sàng sản xuất |
 | `BR-009`, `BR-022` | `FR-010`, `NFR-003`, `AC-081`–`AC-086` | CORE-015 #238: backend Zalo web-popup trên feat/zalo-login; LOGIN local do người dùng xác nhận, FE/LINK thật/staging còn nghiệm thu |

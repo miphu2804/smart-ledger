@@ -96,6 +96,23 @@ class NotificationPostgresTest {
         assertThat(inbox.unreadCount(owner, null, null)).isEqualTo(2);
     }
 
+    @Test void stockAdjustmentsTransitionLowToOutWithoutDuplicatingRetryNotifications() {
+        var product = product("10", "5");
+        var lowRequest = new ProductStockAdjustmentRequest(new BigDecimal("6"), "Damaged");
+        products.adjustStock(owner, shopId, product.id().toString(), "adjust-low", lowRequest);
+        assertThat(count("LOW_STOCK")).isEqualTo(1);
+        assertThat(open()).isEqualTo(1);
+        products.adjustStock(owner, shopId, product.id().toString(), "adjust-low", lowRequest);
+        assertThat(count("LOW_STOCK")).isEqualTo(1);
+        var outRequest = new ProductStockAdjustmentRequest(new BigDecimal("4"), "Lost");
+        products.adjustStock(owner, shopId, product.id().toString(), "adjust-out", outRequest);
+        products.adjustStock(owner, shopId, product.id().toString(), "adjust-out", outRequest);
+        assertThat(count("OUT_OF_STOCK")).isEqualTo(1);
+        assertThat(open()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select resolved_at from notification_events where shop_id=? and type='LOW_STOCK'", OffsetDateTime.class, Long.valueOf(shopId))).isNotNull();
+        assertThat(inbox.unreadCount(owner, null, null)).isEqualTo(2);
+    }
+
     @Test void nullThresholdOnlyAlertsOnZeroAndThresholdPatchPreservesStock() {
         var product = product("4", null);
         assertThat(count(null)).isZero();

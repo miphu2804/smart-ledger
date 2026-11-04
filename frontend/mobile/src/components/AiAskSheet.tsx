@@ -2,17 +2,18 @@ import { Feather } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
 import { Image, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { ChatMessage } from '../data/types';
+import type { ChatMessage, ThoughtStep } from '../data/types';
 import { agentApi, agentErrorMessage } from '../lib/agentApi';
 import { followUpSuggestions, revenueSuggestions } from '../lib/aiSuggestions';
 import { ApiError } from '../lib/api';
 import { splitActions } from '../lib/chatMarkdown';
 import { triggerFeedback } from '../lib/feedback';
 import { ddmmyyyy, hhmm } from '../lib/format';
+import { applyToolEvent } from '../lib/toolSteps';
 import { colors } from '../theme';
 import { ChatComposer } from './ChatComposer';
 import { ChatText, ScreenActions, StreamingChatText } from './ChatText';
-import { TypingDots } from './TypingDots';
+import { ThoughtLine } from './ThoughtLine';
 import { IconBtn, KEYBOARD_AVOID_BEHAVIOR, Row, T } from './ui';
 
 /** Hàng gợi ý dưới thẻ tổng: chạm một gợi ý thì mở bảng hỏi trợ lý với đúng câu đó. */
@@ -58,6 +59,7 @@ export function AiAskSheet({ question, onClose }: { question: string | null; onC
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [typing, setTyping] = useState(false);
   const [draft, setDraft] = useState('');
+  const [steps, setSteps] = useState<ThoughtStep[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [text, setText] = useState('');
 
@@ -69,8 +71,14 @@ export function AiAskSheet({ question, onClose }: { question: string | null; onC
     setText('');
     setError(null);
     setTyping(true);
+    let turnSteps: ThoughtStep[] = [];
     try {
-      const reply = await agentApi.chatStream({ conversation_id: conversation, message }, (t) => mine === session.current && setDraft(t));
+      const reply = await agentApi.chatStream(
+        { conversation_id: conversation, message },
+        (t) => mine === session.current && setDraft(t),
+        undefined,
+        (event) => mine === session.current && setSteps((turnSteps = applyToolEvent(turnSteps, event))),
+      );
       if (mine !== session.current) return;
       setConversationId(reply.conversation_id);
       setMsgs((m) => [...m, { id: `a${reply.message_id}`, from: 'ai', text: reply.answer }]);
@@ -83,6 +91,7 @@ export function AiAskSheet({ question, onClose }: { question: string | null; onC
     } finally {
       if (mine === session.current) {
         setDraft('');
+        setSteps([]);
         setTyping(false);
       }
     }
@@ -96,6 +105,7 @@ export function AiAskSheet({ question, onClose }: { question: string | null; onC
     setError(null);
     setText('');
     setDraft('');
+    setSteps([]);
     setTyping(false);
     if (question) {
       setOpenedAt(new Date());
@@ -164,7 +174,7 @@ export function AiAskSheet({ question, onClose }: { question: string | null; onC
             })}
 
             {typing ? (
-              <View style={styles.answer}>{draft ? <StreamingChatText text={splitActions(draft, true).text} /> : <TypingDots />}</View>
+              <View style={styles.answer}>{draft ? <StreamingChatText text={splitActions(draft, true).text} /> : <ThoughtLine steps={steps} />}</View>
             ) : null}
 
             {error ? (
