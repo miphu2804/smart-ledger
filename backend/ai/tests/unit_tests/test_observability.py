@@ -527,10 +527,10 @@ async def test_recall_span_lists_the_memories_the_turn_received() -> None:
 
     assert tracer.spans == [
         {
-            "name": "memory enabled",
+            "name": "memory ready",
             "event_type": "tool",
             "metadata": {"shop_id": 15},
-            "outputs": {"enabled": True},
+            "outputs": {"ready": True},
         },
         {
             "name": "memory recall",
@@ -556,7 +556,8 @@ async def test_failed_recall_leaves_the_turn_and_span_standing() -> None:
     tracer = RecordingTracer()
     observability = Observability(tracer)
     service = memory_service(
-        ScriptedModel(), FakeMemoryRepository(error=RuntimeError("db down"))
+        ScriptedModel(),
+        FakeMemoryRepository(recalled=[recalled()], error=RuntimeError("db down")),
     )
     service.observability = observability
     await observability.start_turn_session(15, 3, None, "gạo?", {})
@@ -565,7 +566,7 @@ async def test_failed_recall_leaves_the_turn_and_span_standing() -> None:
 
     assert (prompt, used) == ("gạo?", [])
     assert [span["name"] for span in tracer.spans] == [
-        "memory enabled",
+        "memory ready",
         "memory recall",
     ]
 
