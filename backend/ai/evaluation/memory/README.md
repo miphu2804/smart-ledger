@@ -1,11 +1,12 @@
 # Memory evaluation
 
-Scores the agent's long-term memory apart from the chat agent. Today it measures recall only: whether `AgentMemoryService.with_memories` returns the owner memory a chat message needs. Extraction and reconcile are not measured yet; the two `memory_*` cases of [agent_chat](../agent_chat/README.md) check recall end to end. The run calls the shipped service on the local database, so the ranking (`src/memory/ranking.py`, cosine + 0.1 × BM25 share, [ADR-0002](../../../../../docs/architecture/adr/0002-agent-long-term-memory.md#bổ-sung-xếp-hạng-lai-thay-cho-suy-giảm)) is the one the app runs, and exits 1 when a metric leaves its bound in `thresholds.toml`. The pipeline, targets and metrics are described in the [evaluation README](../../README.md).
+Scores the agent's long-term memory apart from the chat agent. Today it measures recall only: whether `AgentMemoryService.with_memories` returns the owner memory a chat message needs. Extraction and reconcile are not measured yet; the two `memory_*` cases of [agent_chat](../agent_chat/README.md) check recall end to end. The run calls the shipped service on the local database, so the ranking (`src/memory/ranking.py`, cosine + 0.1 × BM25 share, [ADR-0002](../../../../docs/architecture/adr/0002-agent-long-term-memory.md#bổ-sung-xếp-hạng-lai-thay-cho-suy-giảm)) is the one the app runs, and exits 1 when a metric leaves its bound in `thresholds.toml`. `MemoryEval` in `memory_eval.py` holds this evaluation. The pipeline, targets and metrics are described in the [evaluation README](../README.md).
 
 ## Files
 
 | File | What it does |
 |---|---|
+| `memory_eval.py` | `MemoryEval`: reads `cases.jsonl`, builds one case per query and scores each with `RecallEvaluator` |
 | `generate.py` | Generates the shops: 15 / 40 / 120 Vietnamese facts, stale versions, 60 queries per shop in three forms (exact, unaccented, reworded) plus no-memory queries, and writes `cases.jsonl` |
 | `cases.jsonl` | The frozen output of `generate.py`, one JSON line per shop (48 shops, 3025 memories) with the 2374 queries that need a memory; the run reads only this file |
 | `thresholds.toml` | The minimum or maximum of each gated metric |
@@ -31,7 +32,7 @@ These match the numbers ADR-0002 recorded when the ranking was chosen. The old r
 From `backend/ai`, with `smartledger-local-db` running and `POSTGRES_URL` in `.env` pointing at it:
 
 ```bash
-LOG_LEVEL=WARNING uv run python evaluation/run.py memory --gate evaluation/suites/memory/thresholds.toml
+LOG_LEVEL=WARNING uv run python evaluation/run.py memory --gate evaluation/memory/thresholds.toml
 ```
 
 The vectors come from `cache/`, so a run with a cached model makes no network call. Without a cache file the run embeds about 1,700 texts through the app's configured memory embedder (`AGENT_MEMORY_EMBEDDING_PROVIDER` and `AGENT_MEMORY_EMBEDDING_MODEL` in `.env`, and `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` for the `cloudflare` provider), under a minute on Workers AI, and saves them. Each query is one row of `evaluation/results/memory-<name>.json`.

@@ -1,46 +1,93 @@
 import json
 
-from evaluation.metrics.task import question_of
+from evaluation.core.schema import Case, MetricResult, Output
+from evaluation.metrics.judge import Judge
+from evaluation.metrics.utils import question_of
+
+TRAJECTORY_PROMPT = """\
+Evaluate whether the agent called tools in a logical, minimal order to
+resolve the user's request. Below are the user's goal and the ordered tool calls.
+Rate 1 (wrong or wasteful tool use) to 5 (correct and efficient).
+
+[User goal]
+{goal}
+
+[Tool calls in order]
+{calls}"""
 
 
-def tool_choice(outputs: dict, inputs: dict, ground_truth: dict) -> int:
-    """A shop question reads the shop's data; any other question reads none.
+class ToolUseEvaluator:
+    """How the agent used its tools: two counts, and three ratings by the judge."""
 
-    `suggest_screen` and `calculate` read nothing, so only `query_shop_data` counts.
-    """
-    return int(("query_shop_data" in outputs["tools"]) == ground_truth["needs_tool"])
+    layer = "tool_use"
 
+    def __init__(self, judge: Judge) -> None:
+        self.judge = judge
 
-def tool_calls(outputs: dict, inputs: dict, ground_truth: dict) -> int:
-    return len(outputs["tools"])
+    async def evaluate(self, case: Case, output: Output) -> list[MetricResult]:
+        metrics = [
+            MetricResult(
+                self.layer, "tool_choice", self._choice(case, output), case.id
+            ),
+            MetricResult(
+                self.layer, "tool_calls", len(output.values["tools"]), case.id
+            ),
+        ]
+        # The prompts are HoneyHive's evaluator templates (docs.honeyhive.ai,
+        # "Evaluator Templates"), with each field they read mapped to the case's
+        # outputs. A template that does not apply to the case has no prompt.
+        prompts = {
+            "tool_usage": self._usage_prompt(case, output),
+            "failure_recovery": self._recovery_prompt(case, output),
+            "tool_trajectory": self._trajectory_prompt(case, output),
+        }
+        for name, prompt in prompts.items():
+            if prompt is not None:
+                rated = await self.judge.rate_metric(
+                    self.layer, name, prompt, case, output
+                )
+                if rated:
+                    metrics.append(rated)
+        return metrics
 
+    @staticmethod
+    def _choice(case: Case, output: Output) -> int:
+        """A shop question reads the shop's data; any other question reads none.
 
-def tool_usage_prompt(outputs: dict, inputs: dict, truth: dict) -> str:
-    """Tool Usage."""
-    return f"""[Criteria]
+        `suggest_screen` and `calculate` read nothing, so only `query_shop_data`
+        counts.
+        """
+        used = "query_shop_data" in output.values["tools"]
+        return int(used == case.truth["needs_tool"])
+
+    @classmethod
+    def _usage_prompt(cls, case: Case, output: Output) -> str:
+        """Tool Usage."""
+        return f"""[Criteria]
 1. Tool Selection: Did the assistant choose the most appropriate tool for the task?
 2. Tool Usage: Was the tool used correctly and effectively?
 3. Necessity: Was the tool usage necessary or could the task be accomplished without it?
 4. Integration: How well was the tool output integrated into the response?
 
 [The Start of Available Tools]
-{outputs["available_tools"]}
+{output.values["available_tools"]}
 [The End of Available Tools]
 
 [The Start of User Query]
-{question_of(inputs)}
+{question_of(case)}
 [The End of User Query]
 
 [The Start of Assistant's Actions]
-{actions_of(outputs)}
+{cls._actions(output)}
 [The End of Assistant's Actions]"""
 
-
-def failure_recovery_prompt(outputs: dict, inputs: dict, truth: dict) -> str | None:
-    """Failure Recovery, for a turn where a tool answered with an error."""
-    if not any(call["result"].startswith("Error[") for call in outputs["tool_calls"]):
-        return None
-    return f"""[Criteria]
+    @classmethod
+    def _recovery_prompt(cls, case: Case, output: Output) -> str | None:
+        """Failure Recovery, for a turn where a tool answered with an error."""
+        calls = output.values["tool_calls"]
+        if not any(call["result"].startswith("Error[") for call in calls):
+            return None
+        return f"""[Criteria]
 Failure Recovery: The agent should handle errors gracefully. It should:
 - Detect when errors or failures occur
 - Implement appropriate recovery strategies
@@ -48,36 +95,32 @@ Failure Recovery: The agent should handle errors gracefully. It should:
 - Provide useful feedback about what went wrong and how it was addressed
 
 [User Input]
-{question_of(inputs)}
+{question_of(case)}
 [End of Input]
 
 [The Start of Agent Response with Error Handling]
-{actions_of(outputs)}
+{cls._actions(output)}
 
-Final answer: {outputs["answer"]}
+Final answer: {output.values["answer"]}
 [The End of Agent Response]"""
 
+    @staticmethod
+    def _trajectory_prompt(case: Case, output: Output) -> str | None:
+        """Tool Trajectory, for a turn that called a tool."""
+        if not output.values["tool_calls"]:
+            return None
+        calls = "\n".join(
+            f"- {call['name']}({ToolUseEvaluator._arguments(call)})"
+            for call in output.values["tool_calls"]
+        )
+        return TRAJECTORY_PROMPT.format(goal=question_of(case)[:400], calls=calls)
 
-def tool_trajectory_prompt(outputs: dict, inputs: dict, truth: dict) -> str | None:
-    """Tool Trajectory, for a turn that called a tool."""
-    if not outputs["tool_calls"]:
-        return None
-    calls = "\n".join(
-        f"- {call['name']}({json.dumps(call['arguments'], ensure_ascii=False)[:200]})"
-        for call in outputs["tool_calls"]
-    )
-    return f"""Evaluate whether the agent called tools in a logical, minimal order to
-resolve the user's request. Below are the user's goal and the ordered tool calls.
-Rate 1 (wrong or wasteful tool use) to 5 (correct and efficient).
+    @staticmethod
+    def _arguments(call: dict) -> str:
+        return json.dumps(call["arguments"], ensure_ascii=False)[:200]
 
-[User goal]
-{question_of(inputs)[:400]}
-
-[Tool calls in order]
-{calls}"""
-
-
-def actions_of(outputs: dict) -> str:
-    if not outputs["tool_calls"]:
-        return "(no tool calls)"
-    return json.dumps(outputs["tool_calls"], ensure_ascii=False, indent=1)
+    @staticmethod
+    def _actions(output: Output) -> str:
+        if not output.values["tool_calls"]:
+            return "(no tool calls)"
+        return json.dumps(output.values["tool_calls"], ensure_ascii=False, indent=1)

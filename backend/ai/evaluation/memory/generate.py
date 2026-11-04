@@ -1,6 +1,6 @@
 """Generates `cases.jsonl`, the synthetic shops of the memory evaluation.
 
-Run `uv run python evaluation/suites/memory/generate.py` from `backend/ai` to rewrite
+Run `uv run python evaluation/memory/generate.py` from `backend/ai` to rewrite
 it; the evaluation reads only the file. Changing the lexicon, the templates or any
 random draw changes the queries, so the committed file stays until a new baseline is
 recorded in the README.

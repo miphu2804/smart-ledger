@@ -29,7 +29,6 @@ LAYERS = {
     "safety": ["no_internal_leak", "vietnamese_answer"],
     "performance": ["seconds"],
 }
-LAYER_OF = {name: layer for layer, names in LAYERS.items() for name in names}
 
 
 def rows_of(results: list[CaseResult]) -> list[dict]:
@@ -60,13 +59,7 @@ def report(
     rows = rows_of(results)
     if summary:
         print_cases(rows, summary)
-    means = averages(rows)
-    for layer, metrics in LAYERS.items():
-        shown = [
-            f"{metric} {means[metric][0]:.2f}" for metric in metrics if metric in means
-        ]
-        if shown:
-            print(f"{layer}: " + ", ".join(shown))
+    print_layers(averages(rows))
     first = rows[0]
     if "model" in first:
         print(
@@ -80,7 +73,18 @@ def report(
     return rows
 
 
+def print_layers(means: dict[str, tuple[float, int]]) -> None:
+    for layer, metrics in LAYERS.items():
+        shown = [
+            f"{metric} {means[metric][0]:.2f}" for metric in metrics if metric in means
+        ]
+        if shown:
+            print(f"{layer}: " + ", ".join(shown))
+
+
 def print_cases(rows: list[dict], summary: tuple[str, ...]) -> None:
+    """Per case, the passes of each `summary` metric over its repeats, and the slowest
+    repeat."""
     by_case: dict[str, list[dict]] = {}
     for row in rows:
         by_case.setdefault(row["case"], []).append(row)
@@ -107,7 +111,7 @@ def averages(rows: list[dict]) -> dict[str, tuple[float, int]]:
 
 
 def markdown_report(
-    suite: str,
+    evaluation: str,
     rows: list[dict],
     means: dict[str, tuple[float, int]],
     thresholds: dict[str, dict[str, float]],
@@ -116,7 +120,6 @@ def markdown_report(
 ) -> str:
     """The run as markdown for a job summary or a pull request comment: the gate, every
     metric by layer, then the cases that missed a gated minimum."""
-    minimums, maximums = thresholds["minimum"], thresholds["maximum"]
     first = rows[0]
     verdict = "failed" if failures else "passed"
     versions = (
@@ -126,17 +129,33 @@ def markdown_report(
         else ""
     )
     lines = [
-        f"## {suite} eval: gate {verdict}",
+        f"## {evaluation} eval: gate {verdict}",
         "",
         f"{versions}{len(rows)}/{expected_rows} rows.",
         "",
         "| Layer | Metric | Mean | Rows | Minimum | |",
         "|---|---|---|---|---|---|",
+        *table_rows(means, thresholds),
     ]
+    if failures:
+        lines += ["", "### Gate failures", ""] + [f"- {item}" for item in failures]
+    missed = cases_below_minimum(rows, thresholds["minimum"])
+    if missed:
+        lines += ["", "### Cases below a minimum", ""] + [
+            f"- {item}" for item in missed
+        ]
+    return "\n".join(lines) + "\n"
+
+
+def table_rows(
+    means: dict[str, tuple[float, int]], thresholds: dict[str, dict[str, float]]
+) -> list[str]:
+    """One table row per scored metric, grouped by layer, marked ok or fail against
+    its bound when it has one."""
+    minimums, maximums = thresholds["minimum"], thresholds["maximum"]
+    table = []
     for layer, metrics in LAYERS.items():
-        for metric in metrics:
-            if metric not in means:
-                continue
+        for metric in (name for name in metrics if name in means):
             mean, count = means[metric]
             minimum, maximum = minimums.get(metric), maximums.get(metric)
             mark = ""
@@ -145,12 +164,14 @@ def markdown_report(
                 mark, shown = ("ok" if mean >= minimum else "fail"), f"{minimum:g}"
             elif maximum is not None:
                 mark, shown = ("ok" if mean <= maximum else "fail"), f"max {maximum:g}"
-            lines.append(
+            table.append(
                 f"| {layer} | `{metric}` | {mean:.2f} | {count} | {shown} | {mark} |"
             )
-    if failures:
-        lines += ["", "### Gate failures", ""] + [f"- {item}" for item in failures]
-    missed = sorted(
+    return table
+
+
+def cases_below_minimum(rows: list[dict], minimums: dict[str, float]) -> list[str]:
+    return sorted(
         {
             f"`{row['case']}` missed `{metric}`"
             for row in rows
@@ -158,8 +179,3 @@ def markdown_report(
             if row.get(metric) is not None and row[metric] < minimum
         }
     )
-    if missed:
-        lines += ["", "### Cases below a minimum", ""] + [
-            f"- {item}" for item in missed
-        ]
-    return "\n".join(lines) + "\n"

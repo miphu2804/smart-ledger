@@ -3,20 +3,31 @@ import sys
 from evaluation.core.schema import Case, CaseResult
 
 
-async def run_cases(cases: list[Case], target, score) -> list[CaseResult]:
-    """Runs each case through the target and scores its output, one case after
-    another, so `seconds` measures the target and not a shared rate limit.
+class EvaluationPipeline:
+    """Runs an evaluation: each case through its target, then through its evaluators.
 
-    `target` is entered once for the whole run and called with a case for its output;
-    `score` turns a case and its output into metric results. A case that raises is
-    logged and left out.
+    An evaluation is any object with `cases`, a `target` and `evaluators`; see
+    `AgentChatEval` and `MemoryEval`.
     """
-    results = []
-    async with target:
-        for case in cases:
-            try:
-                output = await target(case)
-                results.append(CaseResult(case, output, await score(case, output)))
-            except Exception as error:
-                print(f"{case.id} failed: {error!r}", file=sys.stderr)
-    return results
+
+    async def run(self, evaluation) -> list[CaseResult]:
+        """Runs the cases one after another, so `seconds` measures the target and not a
+        shared rate limit. A case that raises is logged and left out.
+
+        The target is entered once for the whole run.
+        """
+        results = []
+        async with evaluation.target:
+            for case in evaluation.cases:
+                try:
+                    results.append(await self._run_case(evaluation, case))
+                except Exception as error:
+                    print(f"{case.id} failed: {error!r}", file=sys.stderr)
+        return results
+
+    async def _run_case(self, evaluation, case: Case) -> CaseResult:
+        output = await evaluation.target.ask(case)
+        metrics = []
+        for evaluator in evaluation.evaluators:
+            metrics += await evaluator.evaluate(case, output)
+        return CaseResult(case, output, metrics)

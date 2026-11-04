@@ -3,6 +3,7 @@ import tomllib
 from types import SimpleNamespace
 
 import pytest
+from evaluation.agent_chat.agent_chat_eval import AgentChatEval
 from evaluation.core import report as reporting
 from evaluation.core.gate import gate_failures
 from evaluation.core.honeyhive import session_payload, sync_scores
@@ -13,17 +14,13 @@ from evaluation.core.report import (
     report,
 )
 from evaluation.core.schema import Case, CaseResult, MetricResult, Output
-from evaluation.metrics.judge import judged_scores
-from evaluation.metrics.memory import recalled_expected
-from evaluation.metrics.safety import no_internal_leak, vietnamese_answer
-from evaluation.targets.agent import (
-    RESULT_CHARS,
-    SUITE,
-    WithoutMemoryWrites,
-    available_tools_in,
-    memory_for,
-    tool_calls_in,
-)
+from evaluation.metrics.judge import Judge
+from evaluation.metrics.memory import MemoryEvaluator
+from evaluation.metrics.response_quality import ResponseQualityEvaluator
+from evaluation.metrics.safety import SafetyEvaluator
+from evaluation.metrics.tool_use import ToolUseEvaluator
+from evaluation.targets.agent import RESULT_CHARS, AgentTarget
+from evaluation.targets.without_memory_writes import WithoutMemoryWrites
 from pydantic_ai.models.test import TestModel
 from tests.support import ScriptedModel
 from tests.unit_tests.test_agent_memory import (
@@ -65,27 +62,34 @@ def memory_of(content: str = MEMORY_TEXT) -> dict:
 
 
 INPUTS = {"question": "Gạo ST25 nhập của ai?", "follow_up": None, "attempt": 1}
-PLAIN = {"memory": None}
-WITH_MEMORY = {"memory": MEMORY_TEXT}
+PLAIN = {"memory": None, "needs_tool": True}
+WITH_MEMORY = {"memory": MEMORY_TEXT, "needs_tool": False}
 
 
-class FakeRater:
-    """Stands in for the judge: records each prompt and rates it 4."""
+class FakeJudge(Judge):
+    """Stands in for the model: records each prompt and rates it 4."""
 
     def __init__(self) -> None:
+        super().__init__("chat", 1)
         self.prompts: list[str] = []
 
-    async def __call__(self, prompt: str) -> dict:
+    async def rating(self, prompt: str) -> dict:
         self.prompts.append(prompt)
         return {"reason": "fine", "score": 4}
 
 
+async def scores_of(evaluator, outputs: dict, truth: dict, inputs=INPUTS) -> dict:
+    """The score of each metric the evaluator gave the case, by name."""
+    results = await evaluator.evaluate(Case("c", inputs, truth), Output(outputs))
+    return {metric.name: metric.score for metric in results}
+
+
 async def test_tool_usage_reads_the_tools_query_and_actions() -> None:
-    rater = FakeRater()
+    judge = FakeJudge()
 
-    scores = await judged_scores(outputs_of([call()]), INPUTS, PLAIN, rater)
+    scores = await scores_of(ToolUseEvaluator(judge), outputs_of([call()]), PLAIN)
 
-    prompt = rater.prompts[0]
+    prompt = judge.prompts[0]
     assert scores["tool_usage"] == 4
     assert '[{"name": "query_shop_data"}]' in prompt
     assert INPUTS["question"] in prompt
@@ -93,11 +97,11 @@ async def test_tool_usage_reads_the_tools_query_and_actions() -> None:
 
 
 async def test_failure_recovery_runs_only_when_a_tool_failed() -> None:
-    clean, failed = FakeRater(), FakeRater()
+    clean, failed = FakeJudge(), FakeJudge()
 
-    clean_scores = await judged_scores(outputs_of([call()]), INPUTS, PLAIN, clean)
-    failed_scores = await judged_scores(
-        outputs_of([call(SQL_ERROR), call()]), INPUTS, PLAIN, failed
+    clean_scores = await scores_of(ToolUseEvaluator(clean), outputs_of([call()]), PLAIN)
+    failed_scores = await scores_of(
+        ToolUseEvaluator(failed), outputs_of([call(SQL_ERROR), call()]), PLAIN
     )
 
     assert "failure_recovery" not in clean_scores
@@ -109,12 +113,12 @@ async def test_failure_recovery_runs_only_when_a_tool_failed() -> None:
 
 
 async def test_answer_faithfulness_reads_tool_results_and_memories() -> None:
-    rater = FakeRater()
+    judge = FakeJudge()
     outputs = outputs_of([call('{"rows": [[10000000]]}')], [memory_of()])
 
-    scores = await judged_scores(outputs, INPUTS, WITH_MEMORY, rater)
+    scores = await scores_of(ResponseQualityEvaluator(judge), outputs, WITH_MEMORY)
 
-    prompt = next(item for item in rater.prompts if "faithful" in item)
+    prompt = judge.prompts[0]
     assert scores["answer_faithfulness"] == 4
     assert "10000000" in prompt
     assert MEMORY_TEXT in prompt
@@ -122,27 +126,28 @@ async def test_answer_faithfulness_reads_tool_results_and_memories() -> None:
 
 
 async def test_context_relevance_scores_only_memory_cases() -> None:
-    plain, remembering = FakeRater(), FakeRater()
+    plain, remembering = FakeJudge(), FakeJudge()
 
-    plain_scores = await judged_scores(outputs_of(), INPUTS, PLAIN, plain)
-    memory_scores = await judged_scores(
-        outputs_of(memories=[memory_of()]), INPUTS, WITH_MEMORY, remembering
+    plain_scores = await scores_of(MemoryEvaluator(plain), outputs_of(), PLAIN)
+    memory_scores = await scores_of(
+        MemoryEvaluator(remembering), outputs_of(memories=[memory_of()]), WITH_MEMORY
     )
 
-    assert "context_relevance" not in plain_scores
+    assert plain_scores == {}
     assert memory_scores["context_relevance"] == 4
-    prompt = next(item for item in remembering.prompts if "retriever" in item)
+    prompt = remembering.prompts[0]
+    assert "retriever" in prompt
     assert MEMORY_TEXT in prompt
     assert INPUTS["question"] in prompt
 
 
 async def test_tool_trajectory_lists_calls_in_order_for_tool_turns_only() -> None:
-    without, with_calls = FakeRater(), FakeRater()
+    without, with_calls = FakeJudge(), FakeJudge()
     second = {**call(), "arguments": {"sql": "SELECT 2"}}
 
-    without_scores = await judged_scores(outputs_of(), INPUTS, PLAIN, without)
-    scores = await judged_scores(
-        outputs_of([call(), second]), INPUTS, PLAIN, with_calls
+    without_scores = await scores_of(ToolUseEvaluator(without), outputs_of(), PLAIN)
+    scores = await scores_of(
+        ToolUseEvaluator(with_calls), outputs_of([call(), second]), PLAIN
     )
 
     assert "tool_trajectory" not in without_scores
@@ -156,17 +161,20 @@ async def test_tool_trajectory_lists_calls_in_order_for_tool_turns_only() -> Non
 async def test_judge_reasons_travel_in_the_outputs() -> None:
     outputs = outputs_of([call()])
 
-    await judged_scores(outputs, INPUTS, PLAIN, FakeRater())
+    await scores_of(ToolUseEvaluator(FakeJudge()), outputs, PLAIN)
 
     assert outputs["judge_reasons"]["tool_usage"] == "fine"
 
 
-def test_recalled_expected_checks_the_seeded_fact() -> None:
+async def test_recalled_expected_checks_the_seeded_fact() -> None:
+    evaluator = MemoryEvaluator(FakeJudge())
     hit = outputs_of(memories=[memory_of()])
 
-    assert recalled_expected(hit, INPUTS, WITH_MEMORY) == 1
-    assert recalled_expected(outputs_of(), INPUTS, WITH_MEMORY) == 0
-    assert recalled_expected(hit, INPUTS, PLAIN) is None
+    assert (await scores_of(evaluator, hit, WITH_MEMORY))["recalled_expected"] == 1
+    assert (await scores_of(evaluator, outputs_of(), WITH_MEMORY))[
+        "recalled_expected"
+    ] == 0
+    assert "recalled_expected" not in await scores_of(evaluator, hit, PLAIN)
 
 
 def test_tool_calls_are_read_from_spans_in_order_and_cut_short() -> None:
@@ -185,7 +193,7 @@ def test_tool_calls_are_read_from_spans_in_order_and_cut_short() -> None:
         ),
     ]
 
-    calls = tool_calls_in(spans)
+    calls = AgentTarget.tool_calls_in(spans)
 
     assert calls == [
         {
@@ -194,8 +202,8 @@ def test_tool_calls_are_read_from_spans_in_order_and_cut_short() -> None:
             "result": "x" * RESULT_CHARS,
         }
     ]
-    assert available_tools_in(spans) == "[defs]"
-    assert available_tools_in([]) == "[]"
+    assert AgentTarget.available_tools_in(spans) == "[defs]"
+    assert AgentTarget.available_tools_in([]) == "[]"
 
 
 async def test_blocked_memory_writes_store_nothing() -> None:
@@ -213,10 +221,9 @@ async def test_blocked_memory_writes_store_nothing() -> None:
 def test_only_memory_cases_recall() -> None:
     service = memory_service(TestModel(), FakeMemoryRepository())
 
-    assert (
-        memory_for(Case("c", {}, {"memory": "Gạo nhập của cô Ba."}), service) is service
-    )
-    assert memory_for(Case("c", {}, {"memory": None}), service) is None
+    memory_case = Case("c", {}, {"memory": "Gạo nhập của cô Ba."})
+    assert AgentTarget.memory_for(memory_case, service) is service
+    assert AgentTarget.memory_for(Case("c", {}, {"memory": None}), service) is None
 
 
 async def test_blocked_memory_writes_keep_recall() -> None:
@@ -284,24 +291,26 @@ def test_sync_creates_the_run_logs_each_case_then_completes_it() -> None:
     assert calls[3][2:] == ("completed", ["s2", "s3"])
 
 
-def test_no_internal_leak_flags_views_sql_and_tool_names() -> None:
-    def leak(answer: str) -> int:
-        return no_internal_leak({"answer": answer}, {}, {})
+async def test_no_internal_leak_flags_views_sql_and_tool_names() -> None:
+    async def leak(answer: str) -> int:
+        scores = await scores_of(SafetyEvaluator(), {"answer": answer}, {})
+        return scores["no_internal_leak"]
 
-    assert leak("Tháng trước shop bán được 12.500.000đ.") == 1
-    assert leak("Em đọc từ ai_read.v_sales nhé.") == 0
-    assert leak("SELECT sum(total_vnd) FROM sales") == 0
-    assert leak("Error[SQL_REJECTED] unknown view") == 0
+    assert await leak("Tháng trước shop bán được 12.500.000đ.") == 1
+    assert await leak("Em đọc từ ai_read.v_sales nhé.") == 0
+    assert await leak("SELECT sum(total_vnd) FROM sales") == 0
+    assert await leak("Error[SQL_REJECTED] unknown view") == 0
 
 
-def test_vietnamese_answer_ignores_blocks_and_empty_answers() -> None:
-    def vietnamese(answer: str) -> int:
-        return vietnamese_answer({"answer": answer}, {}, {})
+async def test_vietnamese_answer_ignores_blocks_and_empty_answers() -> None:
+    async def vietnamese(answer: str) -> int:
+        scores = await scores_of(SafetyEvaluator(), {"answer": answer}, {})
+        return scores["vietnamese_answer"]
 
-    assert vietnamese("Dạ, doanh thu hôm nay là 1.200.000đ.") == 1
-    assert vietnamese("Revenue today is 1,200,000 VND.") == 0
-    assert vietnamese('```chart\n{"type": "bar"}\n```') == 1
-    assert vietnamese("") == 1
+    assert await vietnamese("Dạ, doanh thu hôm nay là 1.200.000đ.") == 1
+    assert await vietnamese("Revenue today is 1,200,000 VND.") == 0
+    assert await vietnamese('```chart\n{"type": "bar"}\n```') == 1
+    assert await vietnamese("") == 1
 
 
 def test_averages_skip_rows_a_metric_does_not_apply_to() -> None:
@@ -327,7 +336,7 @@ def test_gate_fails_below_a_minimum_or_with_no_row() -> None:
 
 
 def test_thresholds_gate_only_reported_metrics() -> None:
-    minimums = tomllib.loads((SUITE / "thresholds.toml").read_text())["minimum"]
+    minimums = tomllib.loads(AgentChatEval.thresholds.read_text())["minimum"]
     reported = {name for names in LAYERS.values() for name in names}
 
     assert set(minimums) <= reported
@@ -358,10 +367,11 @@ def test_markdown_report_shows_the_gate_layers_and_missed_cases() -> None:
 
 
 async def test_a_failed_rating_leaves_only_its_metric_out() -> None:
-    async def rate(prompt: str) -> dict:
-        if "faithful" in prompt.casefold():
-            raise RuntimeError("gateway 502")
-        return {"score": 4, "reason": "ok"}
+    class FailingJudge(FakeJudge):
+        async def rating(self, prompt: str) -> dict:
+            if "faithful" in prompt.casefold():
+                raise RuntimeError("gateway 502")
+            return await super().rating(prompt)
 
     outputs = {
         "answer": "Dạ, 12.500.000đ.",
@@ -371,12 +381,15 @@ async def test_a_failed_rating_leaves_only_its_metric_out() -> None:
         "memories": [],
     }
     inputs = {"question": "Doanh thu tháng trước?", "follow_up": None}
-    truth = {"memory": None}
+    judge = FailingJudge()
 
-    scores = await judged_scores(outputs, inputs, truth, rate)
+    faithfulness = await scores_of(
+        ResponseQualityEvaluator(judge), outputs, PLAIN, inputs
+    )
+    tool_use = await scores_of(ToolUseEvaluator(judge), outputs, PLAIN, inputs)
 
-    assert "answer_faithfulness" not in scores
-    assert scores["tool_usage"] == 4
+    assert "answer_faithfulness" not in faithfulness
+    assert tool_use["tool_usage"] == 4
     assert "gateway 502" in outputs["judge_errors"]["answer_faithfulness"]
 
 

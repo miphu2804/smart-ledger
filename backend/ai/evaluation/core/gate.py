@@ -2,9 +2,10 @@ import tomllib
 from pathlib import Path
 
 
-def load_thresholds(path: Path) -> dict[str, dict[str, float]]:
-    """The `[minimum]` and `[maximum]` tables of a suite's `thresholds.toml`."""
-    thresholds = tomllib.loads(path.read_text())
+def load_thresholds(path: Path | None) -> dict[str, dict[str, float]]:
+    """The `[minimum]` and `[maximum]` tables of an evaluation's `thresholds.toml`; no
+    path gates nothing."""
+    thresholds = tomllib.loads(path.read_text()) if path else {}
     return {
         "minimum": thresholds.get("minimum", {}),
         "maximum": thresholds.get("maximum", {}),
