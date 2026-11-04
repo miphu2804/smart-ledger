@@ -82,6 +82,16 @@ class AppConfig(BaseSettings):
     MODEL_TIMEOUT_SECONDS: float = 20.0
     # reasoning effort of an alias that sets no `effort` of its own
     MODEL_REASONING_EFFORT: str = "medium"
+    # per-turn model tiers (src/llm_router/): a decision model rates
+    # each request SIMPLE, MEDIUM or COMPLEX through Bifrost and the turn runs on the
+    # chat-simple, chat-medium or chat-complex alias of MODEL_ALIASES. Off, or with
+    # any of those aliases or the URL missing, every turn runs on `chat`.
+    MODEL_TIERING_ENABLED: bool = False
+    # Bifrost's unified decisions route, e.g. http://bifrost:8080/v1/decisions
+    TIER_CLASSIFIER_URL: str | None = None
+    TIER_CLASSIFIER_MODEL: str = "typesafe/jev-latest"
+    # the classification waits on the request path; past this the turn runs COMPLEX
+    TIER_CLASSIFIER_TIMEOUT_SECONDS: float = Field(default=1.5, gt=0)
 
     # agent guardrails (src/agent/guardrails/), per chat turn
     AGENT_MAX_INPUT_CHARS: int = Field(default=2000, gt=0)

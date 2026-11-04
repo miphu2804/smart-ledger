@@ -169,9 +169,13 @@ class Observability:
 
     def link_conversation(self, conversation_id: int) -> None:
         """Tag this turn's session with the conversation its save just created."""
+        self.tag_turn(conversation_id=conversation_id)
+
+    def tag_turn(self, **metadata) -> None:
+        """Add metadata learned after this turn's session opened, such as its model."""
         if not self._traced():
             return
-        self._enrich_session(metadata={"conversation_id": conversation_id})
+        self._enrich_session(metadata=metadata)
 
     @contextmanager
     def span(self, name: str, **fields) -> Iterator[None]:
