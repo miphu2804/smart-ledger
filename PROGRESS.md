@@ -1,3 +1,11 @@
+### 2026-11-04 — Cleaner routes in the CI/CD and runtime diagram
+
+| Area | Change |
+|---|---|
+| Docs | • `ci-cd.drawio` and `ci-cd.svg`: Staging and Production use the same data lanes (SQL above traces), Core and AI share one SQL lane, and HoneyHive sits under Production DB<br>• Fixed the Loki icon offset, the `7. chat` arrows into LLM providers and the DB names in the diagram guide |
+
+Check: `validate.py` 0 errors; SVG exported with `drawio` and checked on rendered PNGs. Not verified: a dark viewer. Commit: the one that adds this entry.
+
 ### 2026-11-04 — More room between messages in the Bobi sheet
 
 | Area | Change |
