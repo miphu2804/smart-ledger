@@ -39,13 +39,17 @@ class AgentChatEval:
     summary = ("correct", "tool_choice")
 
     def __init__(
-        self, repeats: int, judge_alias: str, model_alias: str | None = None
+        self,
+        repeats: int,
+        judge_alias: str,
+        model_alias: str | None = None,
+        limit: int | None = None,
     ) -> None:
         require_local_database(app_config.POSTGRES_URL, app_config.AI_SQL_READER_URL)
         self.definition = load_yaml(DIRECTORY / "cases.yaml")
         self.shop_id = self.definition["shop_id"]
         self.started_on = self._get_shop_today()
-        self.cases = self._load_cases(repeats)
+        self.cases = self._load_cases(repeats, limit)
         judge = Judge(judge_alias, self.shop_id)
         self.target = AgentTarget(
             self.cases[0].inputs["owner_id"],
@@ -71,12 +75,12 @@ class AgentChatEval:
     def show_plan(self, name: str) -> None:
         print_sync_plan(name, self.cases)
 
-    def _load_cases(self, repeats: int) -> list[Case]:
+    def _load_cases(self, repeats: int, limit: int | None) -> list[Case]:
         version = self._compute_version()
         cases = []
         with self._connect() as connection:
             owner_id = self._find_seeded_owner(connection)
-            for spec in self.definition["cases"]:
+            for spec in self.definition["cases"][:limit]:
                 cases += self._build_cases(connection, spec, owner_id, version, repeats)
         return cases
 

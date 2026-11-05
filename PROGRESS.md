@@ -1,3 +1,12 @@
+### 2026-11-05 — Keep the shop time out of chat answers
+
+| Area | Change |
+|---|---|
+| AI | • Rule 5 of the shop agent prompt and the current-time line now say the time is for working out dates only and is never written in an answer unless the owner asks what time or day it is, because low-effort tiers (`chat-simple`, mercury-3 low) appended "Giờ tại tiệm: …" to answers |
+| AI eval | • Metric `no_time_echo` (gated at 1.0) flags a clock time in an answer<br>• Option `--limit N` asks only the first N `agent_chat` questions |
+
+Check: `uv run pytest tests/unit_tests -q` (493 passed, 1 skipped), `ruff check` and `ruff format --check`; `agent_chat --repeats 1 --limit 15` with model tiering on through a local Bifrost with staging's aliases: `no_time_echo` 0.87 with the old prompt (`orders_last_month`, `revenue_today` echoed the time) and 1.00 in two runs with the new one. Not verified: the other 8 cases and 3 repeats. Commit: the one that adds this entry.
+
 ### 2026-11-05 — Read the chat hot path without a transaction
 
 | Area | Change |
@@ -187,12 +196,3 @@ Check: `agent_chat --dry-run` prints the same plan as before except `suite_versi
 | Docs | • `api-contracts.md` and `AC-118` describe the thought line again |
 
 Check: `tsc` reports no error in `src` (only the missing `@playwright/test` module in `e2e/`); `node --test tests/thinkingPhrases.test.ts tests/toolSteps.test.ts` passes 9/9. Not verified on a device.
-
-### 2026-11-04 — Assistant chats wait with dots and share one composer
-
-| Area | Change |
-|---|---|
-| Mobile | • While the first words of an answer are on their way, the Trợ lý screen and the quick-ask sheet on Đơn hàng show only three pulsing dots (`TypingDots`); the waiting phrases, timer and tool step names are gone<br>• Answers no longer start with the Bobi icon and the "Trợ lý Bobi" label<br>• The quick-ask sheet uses the Trợ lý screen's input (`ChatComposer`: type, record, send) and drops its button to the Trợ lý screen, which left no way back<br>• Unused code removed: `ThoughtLine`, the waiting phrases and tool step labels with their tests |
-| Docs | • `api-contracts.md` describes the new waiting state; PRD `AC-118` |
-
-Check: `npx tsc --noEmit` passes; unit tests 178/180, with `parseOrder` and `quickNav` failing on `staging` too; `npx playwright test` on this branch; both screens checked on the mock web build at 375×812 in the session that wrote the change. Not verified: answers from real AI and Core, and a real phone. Commit: the one that adds this entry.
