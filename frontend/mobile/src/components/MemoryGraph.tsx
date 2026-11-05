@@ -3,7 +3,7 @@ import { Animated, StyleSheet, View } from 'react-native';
 import Svg, { Circle, G, Line, Text as SvgText } from 'react-native-svg';
 import type { AgentMemoryItem } from '../data/types';
 import { ddmmyyyy } from '../lib/format';
-import { colors } from '../theme';
+import { colors, font } from '../theme';
 import { Button, Row, T } from './ui';
 
 // Mỗi loại ghi nhớ một góc phần tư, theo thứ tự kim đồng hồ từ trên cùng.
@@ -70,7 +70,7 @@ export function MemoryGraph({
                   x={c + Math.cos(a) * c * 0.9}
                   y={c + Math.sin(a) * c * 0.9 + 4}
                   fontSize={12}
-                  fontWeight="bold"
+                  fontFamily={font.bold}
                   fill={colors.ink}
                   textAnchor="middle"
                 >
@@ -110,6 +110,7 @@ export function MemoryGraph({
                     x={n.x + (n.x >= c ? n.r + 4 : -n.r - 4)}
                     y={n.y + 3.5}
                     fontSize={10}
+                    fontFamily={font.medium}
                     fill={n.stale ? colors.faint : colors.ink}
                     textAnchor={n.x >= c ? 'start' : 'end'}
                   >

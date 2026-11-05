@@ -7,9 +7,23 @@ import { T } from './ui';
 
 type Point = { label: string; value: number };
 
-/** Biểu đồ vùng (area) giống màn "Doanh thu" trong prototype. Chạm để xem giá trị. */
-export function AreaChart({ data, height = 150, color = colors.data.revenue }: { data: Point[]; height?: number; color?: string }) {
+const TIP_MIN_W = 88;
+
+/** Biểu đồ vùng (area) giống màn "Doanh thu" trong prototype. Chạm để xem giá trị; `format` ghi giá trị trong nhãn. */
+export function AreaChart({
+  data,
+  height = 150,
+  color = colors.data.revenue,
+  format = vnd,
+}: {
+  data: Point[];
+  height?: number;
+  color?: string;
+  format?: (value: number) => string;
+}) {
   const [w, setW] = useState(0);
+  // Nhãn giá trị rộng theo chữ, nên số tiền lớn không tràn khỏi khung; bề rộng đo được dùng để giữ nhãn trong biểu đồ.
+  const [tipW, setTipW] = useState(TIP_MIN_W);
   const [sel, setSel] = useState<number | null>(null);
   const max = Math.max(1, ...data.map((d) => d.value)) * 1.15;
   const padX = 8;
@@ -64,22 +78,24 @@ export function AreaChart({ data, height = 150, color = colors.data.revenue }: {
         {w > 0 && pts[active] ? (
           <View
             pointerEvents="none"
+            onLayout={(e: LayoutChangeEvent) => setTipW(e.nativeEvent.layout.width)}
             style={{
               position: 'absolute',
-              left: Math.min(Math.max(pts[active].x - 44, 0), w - 88),
+              left: Math.min(Math.max(pts[active].x - tipW / 2, 0), Math.max(w - tipW, 0)),
               top: Math.max(pts[active].y - 50, 0),
-              width: 88,
+              minWidth: TIP_MIN_W,
               backgroundColor: colors.ink,
               borderRadius: 9,
               paddingVertical: 5,
+              paddingHorizontal: 8,
               alignItems: 'center',
             }}
           >
             <T size={12} color={colors.white}>
               {data[active].label}
             </T>
-            <T w="bold" size={12} color={colors.white}>
-              {data[active].value.toLocaleString('vi-VN')}đ
+            <T w="bold" size={12} color={colors.white} numberOfLines={1}>
+              {format(data[active].value)}
             </T>
           </View>
         ) : null}
