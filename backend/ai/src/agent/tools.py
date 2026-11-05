@@ -50,7 +50,8 @@ Screen = Literal[
 
 
 def suggest_screen(screen: Screen) -> ToolReturn:
-    """Add a button under the reply that opens this app screen."""
+    """Add a button under the reply that opens this app screen; the reply still says
+    where the screen is in the app."""
     # The screen travels as metadata, which the model never reads back; the service
     # turns it into the button after the run, so no model text reaches the button.
     return ToolReturn(

@@ -241,7 +241,7 @@ export default function Ai() {
                 <View style={[styles.messageRow, isUser && styles.userMessageRow]}>
                   <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
                     {isUser ? (
-                      <T size={13.5} color={colors.white} style={styles.messageText}>
+                      <T size={14} color={colors.white} style={styles.messageText}>
                         {m.text}
                       </T>
                     ) : (
@@ -539,7 +539,7 @@ function HistorySheet({
   };
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="Lịch sử trò chuyện">
+    <Sheet visible={visible} onClose={onClose} title="Lịch sử trò chuyện" ready={history !== null || !!historyError}>
       {historyError ? (
         <T size={13} color={colors.red} style={styles.historyError} accessibilityRole="alert">
           {historyError}
@@ -703,7 +703,7 @@ function AssistantSettingsSheet({
   };
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="Cài đặt trợ lý">
+    <Sheet visible={visible} onClose={onClose} title="Cài đặt trợ lý" ready={settings !== null || !!error}>
       {error ? (
         <View style={styles.historyError}>
           <T size={13} color={colors.red} accessibilityRole="alert">
@@ -806,7 +806,8 @@ const styles = StyleSheet.create({
   },
   menuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12 },
   menuItemPressed: { backgroundColor: colors.brandTint },
-  messages: { gap: 16 },
+  // Cùng nhịp với bảng hỏi trợ lý: các tin cách nhau rộng hơn nên câu trả lời dễ đọc thành từng khối.
+  messages: { gap: 20 },
   welcomeHero: {
     flex: 1,
     minHeight: 280,
