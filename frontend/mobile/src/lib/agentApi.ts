@@ -10,6 +10,7 @@ import type {
 } from '../data/types';
 import { USE_MOCK } from '../config';
 import { ApiError, apiRequest, apiStream } from './api';
+import { preambleBefore } from './toolSteps';
 
 /**
  * Trợ lý AI qua Core (`/api/v1/agent/*`, docs/contracts/api-contracts.md §5) — cần header X-Shop-Id.
@@ -18,6 +19,8 @@ import { ApiError, apiRequest, apiStream } from './api';
  */
 const CHAT_TIMEOUT_MS = 45000;
 const MOCK_THINK_MS = 1200;
+// Câu dẫn giả của bước tool, để chế độ mock cũng thấy câu dẫn trong dòng suy nghĩ.
+const MOCK_PREAMBLE = 'Để tôi kiểm tra số liệu của tiệm.';
 const MOCK_TOOL_MS = 1500;
 const MOCK_CHUNK = 12;
 const MOCK_CHUNK_MS = 60;
@@ -51,6 +54,8 @@ export const agentApi = {
    * (rỗng khi AI báo `reset`), Promise trả câu cuối từ sự kiện `done`. Sự kiện `error` mang mã lỗi như `chat`.
    * Sự kiện `memory` (trước chữ đầu tiên, chỉ khi trợ lý dùng ghi nhớ) đưa các ghi nhớ đó cho `onMemories`.
    * Sự kiện `tool_start` / `tool_end` (mỗi lần AI gọi tool) đi vào `onTool`; AI chỉ gửi tên tool, không gửi tham số.
+   * Chữ đã tới trước `tool_start` của tool lấy dữ liệu là câu dẫn: `onText('')` gỡ nó khỏi câu trả lời và
+   * `onTool` mang nó theo bước tool để hiện ở dòng suy nghĩ.
    * Khi bật mock thì hỏi `chat` rồi giả lập độ trễ, một bước tool và chữ đến từng đoạn.
    */
   chatStream: async (
@@ -64,7 +69,7 @@ export const agentApi = {
       // Giả lập một lượt thật để thấy dòng suy nghĩ: chờ model, một bước tool, rồi chữ đến từng đoạn.
       const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
       await pause(MOCK_THINK_MS);
-      onTool?.({ phase: 'start', callId: 'mock', name: 'query_shop_data' });
+      onTool?.({ phase: 'start', callId: 'mock', name: 'query_shop_data', preamble: MOCK_PREAMBLE });
       await pause(MOCK_TOOL_MS);
       onTool?.({ phase: 'end', callId: 'mock' });
       for (let end = MOCK_CHUNK; end < reply.answer.length; end += MOCK_CHUNK) {
@@ -82,7 +87,10 @@ export const agentApi = {
       else if (event === 'memory') onMemories?.((data as { used: AgentMemoryUsed[] }).used);
       else if (event === 'tool_start') {
         const { call_id, name } = data as { call_id: string; name: string };
-        onTool?.({ phase: 'start', callId: call_id, name });
+        // Chữ đã tới trước tool lấy dữ liệu là câu dẫn: rời bong bóng trả lời, vào dòng suy nghĩ.
+        const preamble = preambleBefore(name, text);
+        if (preamble) onText((text = ''));
+        onTool?.({ phase: 'start', callId: call_id, name, preamble });
       } else if (event === 'tool_end') onTool?.({ phase: 'end', callId: (data as { call_id: string }).call_id });
       else if (event === 'done') reply = data as AgentChatMessageView;
       else if (event === 'error') {

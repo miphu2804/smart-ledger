@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { vnd } from '../lib/format';
 import { parseChatMarkdown, SCREEN_LINKS, type AppScreen, type ChartSpec, type ChatBlock, type Inline } from '../lib/chatMarkdown';
 import { useSmoothText } from '../lib/smoothText';
 import { colors, font } from '../theme';
@@ -10,6 +11,7 @@ import { Button, T } from './ui';
 const SIZE = 13.5;
 // Bề ngang tối thiểu cho mỗi điểm biểu đồ, đủ cho nhãn hai chữ như "Giặt tẩy" ở cỡ 12.
 const CHART_SLOT = 58;
+const count = (n: number) => n.toLocaleString('vi-VN');
 const MONO = Platform.select({ ios: 'Menlo', default: 'monospace' });
 
 function Inlines({ inlines, color }: { inlines: Inline[]; color: string }) {
@@ -43,9 +45,8 @@ function ChartCard({ spec }: { spec: ChartSpec }) {
       {/* Mỗi điểm cần đủ chỗ cho nhãn: ít điểm thì giãn cho đầy thẻ, nhiều điểm thì cuộn ngang thay vì tràn. */}
       <ScrollView horizontal contentContainerStyle={{ flexGrow: 1 }}>
         <View style={{ flexGrow: 1, minWidth: spec.data.length * CHART_SLOT }}>
-          {/* AreaChart ghi "đ" sau giá trị nên số lượng luôn vẽ bằng cột. */}
-          {spec.type === 'line' && spec.unit === 'vnd' ? (
-            <AreaChart data={spec.data} height={120} />
+          {spec.type === 'line' ? (
+            <AreaChart data={spec.data} height={120} format={spec.unit === 'vnd' ? vnd : count} />
           ) : (
             <BarChart data={spec.data} height={110} selected={selected} onSelect={setSelected} />
           )}
@@ -59,10 +60,12 @@ function ScreenButtons({
   screens,
   variant = 'outline',
   style,
+  onOpen,
 }: {
   screens: AppScreen[];
   variant?: 'outline' | 'primary';
   style?: StyleProp<ViewStyle>;
+  onOpen?: () => void;
 }) {
   return (
     <View style={[styles.actions, style]}>
@@ -73,7 +76,10 @@ function ScreenButtons({
           variant={variant}
           small
           style={variant === 'primary' && [styles.pill, styles.brandShadow]}
-          onPress={() => router.navigate(SCREEN_LINKS[screen].route)}
+          onPress={() => {
+            onOpen?.();
+            router.navigate(SCREEN_LINKS[screen].route);
+          }}
         />
       ))}
     </View>
@@ -85,11 +91,20 @@ function ScreenButtons({
  * chữ), để nút không chen vào nội dung câu trả lời. Nút tím như bong bóng câu hỏi, không nhãn, để tách
  * khỏi bong bóng trả lời trắng. `style` cho nơi câu trả lời không nằm trong bong bóng có lề, như bảng hỏi trợ lý.
  */
-export function ScreenActions({ screens, style }: { screens: AppScreen[]; style?: StyleProp<ViewStyle> }) {
+export function ScreenActions({
+  screens,
+  style,
+  onOpen,
+}: {
+  screens: AppScreen[];
+  style?: StyleProp<ViewStyle>;
+  /** Gọi ngay trước khi mở màn hình, như bảng hỏi trợ lý ẩn mình để màn mới không nằm dưới nó. */
+  onOpen?: () => void;
+}) {
   if (!screens.length) return null;
   return (
     <View style={[styles.actionsCard, style]}>
-      <ScreenButtons screens={screens} variant="primary" style={styles.actionsInCard} />
+      <ScreenButtons screens={screens} variant="primary" style={styles.actionsInCard} onOpen={onOpen} />
     </View>
   );
 }

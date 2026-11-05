@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { applyToolEvent } from '../src/lib/toolSteps.ts';
+import { applyToolEvent, preambleBefore } from '../src/lib/toolSteps.ts';
 
 describe('applyToolEvent', () => {
   it('adds a running step with the app-side label when a tool starts', () => {
@@ -46,5 +46,30 @@ describe('applyToolEvent', () => {
   it('ignores an end for a call it never saw', () => {
     const steps = applyToolEvent([], { phase: 'end', callId: 'missing' });
     assert.deepEqual(steps, []);
+  });
+});
+
+describe('preambleBefore', () => {
+  it('takes the text streamed before a data tool as the lead-in, without markdown', () => {
+    assert.equal(preambleBefore('query_shop_data', 'Để tôi **kiểm tra** lại\nsố liệu. '), 'Để tôi kiểm tra lại số liệu.');
+  });
+
+  it('keeps the text before the screen-button tool as the answer', () => {
+    assert.equal(preambleBefore('suggest_screen', 'Doanh thu hôm nay là 1.200.000đ.'), undefined);
+  });
+
+  it('finds no lead-in when nothing was streamed', () => {
+    assert.equal(preambleBefore('query_shop_data', '  '), undefined);
+  });
+
+  it('shortens a long lead-in to fit the thinking line', () => {
+    const lead = preambleBefore('query_shop_data', 'a'.repeat(300));
+    assert.equal(lead?.length, 140);
+    assert.ok(lead?.endsWith('…'));
+  });
+
+  it('labels the new step with the lead-in instead of the tool label', () => {
+    const [step] = applyToolEvent([], { phase: 'start', callId: 'c1', name: 'query_shop_data', preamble: 'Để tôi xem.' });
+    assert.equal(step.label, 'Để tôi xem.');
   });
 });

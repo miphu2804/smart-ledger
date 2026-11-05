@@ -1,5 +1,6 @@
 import { Feather } from '@expo/vector-icons';
-import React, { useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ChatMessage, ThoughtStep } from '../data/types';
@@ -55,6 +56,10 @@ export function AiAskSheet({ question, onClose }: { question: string | null; onC
   // Mỗi lần mở là một phiên; câu trả lời của phiên đã đóng về muộn thì bỏ.
   const session = useRef(0);
   const [openedAt, setOpenedAt] = useState(() => new Date());
+  // Mở màn hình từ nút trong câu trả lời thì bảng ẩn đi nhưng giữ hội thoại; quay lại màn này là bảng hiện lại
+  // đúng đoạn chat đó, như màn Trợ lý vẫn còn trong ngăn điều hướng.
+  const [parked, setParked] = useState(false);
+  useFocusEffect(useCallback(() => setParked(false), []));
   const [msgs, setMsgs] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [typing, setTyping] = useState(false);
@@ -128,8 +133,9 @@ export function AiAskSheet({ question, onClose }: { question: string | null; onC
   const asked = msgs.filter((m) => m.from === 'user').map((m) => m.text);
   const lastIsAnswer = msgs.length > 0 && msgs[msgs.length - 1].from === 'ai';
 
+  // Hiện dần như `Sheet` (cài đặt trợ lý): kiểu "slide" kéo cả nền tối trượt lên theo bảng, chậm và nặng.
   return (
-    <Modal visible={question !== null} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={question !== null && !parked} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={KEYBOARD_AVOID_BEHAVIOR} style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Đóng" />
         <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 12) }]} accessibilityViewIsModal>
@@ -149,7 +155,8 @@ export function AiAskSheet({ question, onClose }: { question: string | null; onC
               {ddmmyyyy(openedAt)}, {hhmm(openedAt)}
             </T>
             <T size={12} color={colors.muted} style={[styles.center, styles.disclaimer]}>
-              Bobi đọc số liệu của tiệm để trả lời và có thể nhầm. Hội thoại được lưu ở Trợ lý.
+              {/* Mỗi câu một dòng, để dòng không bị cắt giữa câu thứ hai. */}
+              Bobi đọc số liệu của tiệm để trả lời và có thể nhầm.{'\n'}Hội thoại được lưu ở Trợ lý.
             </T>
 
             {/* Câu trả lời không có bong bóng nên khoảng cách giữa các tin do `gap` của khối này lo, không dựa vào lề bong bóng. */}
@@ -170,7 +177,7 @@ export function AiAskSheet({ question, onClose }: { question: string | null; onC
                 return (
                   <View key={m.id}>
                     <ChatText text={reply.text} />
-                    {reply.screens.length ? <ScreenActions screens={reply.screens} style={styles.actions} /> : null}
+                    {reply.screens.length ? <ScreenActions screens={reply.screens} style={styles.actions} onOpen={() => setParked(true)} /> : null}
                   </View>
                 );
               })}

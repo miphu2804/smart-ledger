@@ -102,7 +102,10 @@ export interface ThoughtStep {
   done: boolean;
 }
 
-export type AgentToolEvent = { phase: 'start'; callId: string; name: string } | { phase: 'end'; callId: string };
+// `preamble`: câu dẫn AI đã stream trước lời gọi tool này, xem `preambleBefore`.
+export type AgentToolEvent =
+  | { phase: 'start'; callId: string; name: string; preamble?: string }
+  | { phase: 'end'; callId: string };
 
 // ---- Trợ lý AI (Agent chat) — khớp docs/contracts/api-contracts.md §5, AI dùng snake_case ----
 export interface AgentChatRequest {

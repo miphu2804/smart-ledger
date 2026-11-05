@@ -687,23 +687,38 @@ export function Stepper({ value, onChange, min = 0 }: { value: number; onChange:
 }
 
 // ---------------------------------------------------------------- Sheet / Dialog
+const SHEET_REVEAL_MS = 220;
+
 export function Sheet({
   visible,
   onClose,
   title,
+  ready,
   children,
 }: {
   visible: boolean;
   onClose: () => void;
   title?: string;
+  /**
+   * Có `ready` là bảng tải nội dung sau khi mở: bảng mở sẵn ở chiều cao cố định thay vì cao dần theo dữ liệu, và
+   * nội dung hiện dần khi `ready` thành true. Các bảng như vậy cao bằng nhau.
+   */
+  ready?: boolean;
   children: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
+  const loads = ready !== undefined;
+  const reveal = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!loads) return;
+    reveal.setValue(0);
+    Animated.timing(reveal, { toValue: 1, duration: SHEET_REVEAL_MS, useNativeDriver: Platform.OS !== 'web' }).start();
+  }, [loads, ready, reveal]);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={KEYBOARD_AVOID_BEHAVIOR} style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Đóng" />
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]} accessibilityViewIsModal>
+        <View style={[styles.sheet, loads && styles.sheetFixed, { paddingBottom: Math.max(insets.bottom, 16) }]} accessibilityViewIsModal>
           <View style={styles.grabber} />
           {title ? (
             <Row style={{ marginBottom: 14 }}>
@@ -714,7 +729,7 @@ export function Sheet({
             </Row>
           ) : null}
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            {children}
+            <Animated.View style={{ opacity: reveal }}>{children}</Animated.View>
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
@@ -954,6 +969,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     maxHeight: '88%',
   },
+  sheetFixed: { height: '88%' },
   grabber: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: 14 },
   dialog: { backgroundColor: colors.white, borderRadius: 24, padding: 20, width: '100%', maxWidth: 380, alignSelf: 'center' },
   dialogIcon: {
