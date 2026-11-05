@@ -8,6 +8,7 @@ Start with the path that matches your task; each step links to the next level of
 
 | Task | Read in this order |
 |---|---|
+| Complete the EXE201 MVP | [Course scope](product/project-overview.md) → [BRD priorities](product/business-requirements.md#3-phạm-vi-kinh-doanh) → [Demo and user validation](product/mvp-demo-validation.md); finish the existing end-to-end flow before optional integrations or architecture expansion |
 | Integrate independent stock decreases | [CORE-021 contract](contracts/api-contracts.md#điều-chỉnh-giảm-tồn-core-021) → [FR-038 / AC-111–115](product/product-requirements.md#điều-chỉnh-giảm-tồn-core-021--đã-duyệt-ngày-2026-11-02) → [Core handoff](../backend/core/docs/stock-adjustments.md); no migration, separate from stock-in, FE/staging acceptance pending |
 | Integrate shared operation quotas | [API contract](contracts/api-contracts.md#giới-hạn-thao-tác-core-019) → [Core transactions and V20 rollout](../backend/core/docs/user-rate-limits.md); default-off, commit-based, cross-instance, no shared-environment activation implied |
 | New to the project | [Project overview](product/project-overview.md) → [PRD §3 main flow](product/product-requirements.md#3-luồng-mvp-chính) → [Technical design §1](architecture/technical-design.md#1-phạm-vi) for what is built today → [Architecture diagram](architecture/diagrams/images/architecture.svg) for the MVP target |
@@ -27,6 +28,7 @@ Start with the path that matches your task; each step links to the next level of
 - BRD, PRD and the architecture diagram describe the **MVP target**. A requirement or diagram box does not mean the code exists.
 - What is implemented today is recorded in one place: [Technical design §1](architecture/technical-design.md#1-phạm-vi). [API contracts](contracts/api-contracts.md) marks each endpoint as implemented or target. Other documents link there instead of restating status.
 - Code on `staging` is the evidence for current behavior. When a document disagrees with it, fix the document in the same pull request. When code disagrees with the PRD, treat it as a bug or a requirement change and update the PRD and its acceptance criteria.
+- The current delivery goal is the EXE201 course MVP: a working core demo, understandable UX and real user feedback. Keep implemented capabilities; advanced infrastructure and optional integrations are not prerequisites for the course demo. See the [PRD delivery priorities](product/product-requirements.md#11-ưu-tiên-hoàn-thành-môn-exe201).
 - Implemented is not accepted: a feature is done only when its `AC-*` pass on the integrated system.
 
 ### Conventions
@@ -44,6 +46,7 @@ Start with the path that matches your task; each step links to the next level of
 | [Business requirements](product/business-requirements.md) | Outcomes, business rules, approvals |
 | [Google Play Data safety](product/google-play-data-safety.md) | Answers for the Play Console form, matched to the public policy page |
 | [Product requirements](product/product-requirements.md) | Observable behavior, `FR-*`, `NFR-*`, `AC-*` |
+| [MVP demo and validation](product/mvp-demo-validation.md) | EXE201 demo fixture, end-to-end steps, user feedback and remaining-work priorities; planned checks are not completed results |
 | [User flows](product/userflow/README.md) | Screen-to-screen map of the mobile app with staging screenshots, linked to source files and `FR-*` codes |
 | [Technical design](architecture/technical-design.md) | Implementation status (§1), MVP components, data, flows, verification |
 | [API contracts](contracts/api-contracts.md) | FE ↔ Core and Core ↔ AI contracts, per-endpoint status |

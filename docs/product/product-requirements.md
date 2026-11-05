@@ -2,14 +2,15 @@
 
 | Siêu dữ liệu | Giá trị |
 |---|---|
-| Trạng thái | Core: hành vi đã chốt dưới đây; AI/dashboard và FE: cần nghiệm thu tích hợp |
+| Trạng thái | MVP EXE201 — ưu tiên luồng cốt lõi; danh mục yêu cầu và trạng thái tích hợp được giữ để tra cứu |
 | Chủ sở hữu | Chủ sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; người rà soát kỹ thuật |
-| Cập nhật lần cuối | 2026-11-06 (kiểm định BRD: sửa luồng Zalo, phạm vi chat/trace và AC-020/021/078; không đổi code) |
+| Cập nhật lần cuối | 2026-11-06 (chốt ưu tiên EXE201, phạm vi demo và phần hoãn; giữ định nghĩa FR/NFR/AC và code hiện có) |
 
 ## Tài liệu liên quan
 
 - [Yêu cầu kinh doanh](business-requirements.md): kết quả, phạm vi và quy tắc kinh doanh.
+- [Demo và kiểm chứng EXE201](mvp-demo-validation.md): fixture, bước kiểm tra và mẫu ghi phản hồi.
 - [Mô tả sản phẩm](project-overview.md): định vị sản phẩm.
 - [Thiết kế kỹ thuật](../architecture/technical-design.md): hiện thực MVP.
 - [Hợp đồng API](../contracts/api-contracts.md): FE ↔ Core và Core ↔ AI.
@@ -39,7 +40,19 @@
 
 ## 1. Mục tiêu sản phẩm
 
-Cho phép người bán rất nhỏ ghi nhận bán hàng, chi phí và công nợ trên điện thoại, rồi xem báo cáo vận hành; không buộc họ dùng POS/kế toán đầy đủ và không biến đề xuất của hệ thống thành sổ trước khi họ chốt thanh toán.
+Trong môn EXE201, hoàn thiện một MVP có thể demo đầu-cuối và cho người dùng thử: ghi bán hàng, chi phí, công nợ trên điện thoại rồi xem báo cáo; không buộc họ dùng POS/kế toán đầy đủ và không biến đề xuất của hệ thống thành sổ trước khi họ chốt thanh toán.
+
+### 1.1. Ưu tiên hoàn thành môn EXE201
+
+| Nhóm | FR/AC áp dụng | Điều kiện hoàn thành hiện tại |
+|---|---|---|
+| Cốt lõi | FR-001–006, FR-008–011, FR-013–016, FR-020–021, FR-027; AC theo từng bước trong [kịch bản demo](mvp-demo-validation.md#3-kịch-bản-đầu-cuối-ưu-tiên) | Chạy thật phần được chọn, đối chiếu tiền/nợ/tồn và báo cáo; kiểm lỗi/đường tiếp tục; voice và Bobi chưa chạy thì ghi chưa đạt phần đó |
+| Hỗ trợ đã có | FR-022–026, FR-028–035, FR-038 và các khả năng backend/UI đã triển khai | Giữ nguyên; dùng trong demo khi ổn định/cần thiết. AC tương ứng chỉ được báo đạt khi đã kiểm, không yêu cầu lấp mọi UI còn thiếu trước buổi demo |
+| Hoãn phần mới/bật thêm | FR-007 nếu cần mở rộng gợi ý, FR-017–019, mở rộng memory, chart growth trong FR-024, bật thêm FR-036–037 và các UI/provider chưa cần | Không xóa code/API/AC. Không bắt buộc thêm endpoint ảnh/audio/RAG, hệ đo lường hoặc kiến trúc mới để hoàn thành luồng cốt lõi; tool gợi ý đã có vẫn giữ |
+
+Phân loại này là ưu tiên giao sản phẩm mới nhất của chủ dự án; các nhãn P0/P1 ở danh mục phía dưới thể hiện mức yêu cầu của từng hạng mục, không có nghĩa mọi P0/P1 hoặc toàn bộ 120 AC đều là điều kiện nộp demo EXE201. Các bảo đảm đúng tiền/nợ/tồn, quyền truy cập và xác nhận trước ghi sổ vẫn áp dụng ở mọi chức năng được sử dụng. Không thay tiêu chí đạt riêng của tính năng bằng việc rút gọn kịch bản.
+
+Không thêm mục tiêu tải lớn, nhiều vùng, SLA thương mại hoặc bộ phận vận hành riêng. Dùng hạ tầng, kiểm thử và công cụ hiện có; sửa lỗi và UX cốt lõi trước. Một tiệm thử và một nền tảng chạy tốt đủ cho demo chính, không chứng minh sản phẩm sẵn sàng thương mại hoặc thay kiểm tra cô lập dữ liệu.
 
 ## 2. Vai trò
 
@@ -50,7 +63,7 @@ Cho phép người bán rất nhỏ ghi nhận bán hàng, chi phí và công n�
 
 1. Người bán đăng nhập bằng email và mật khẩu (đăng ký phải xác minh email, có quên mật khẩu) hoặc Google; màn đăng nhập không còn nút Facebook, Zalo LOGIN khả dụng theo nền tảng/cấu hình của `FR-010`; nếu chưa có tiệm thì tạo tiệm và ngành hàng.
 2. Người bán lập hoặc bổ sung danh mục mặt hàng.
-3. Người bán lên đơn bằng text, voice, ảnh, POS hoặc thêm món lẻ.
+3. Trong demo chính, người bán lên đơn bằng text/voice hiện có, POS hoặc thêm món lẻ; nhận diện ảnh/API draft AI chưa tích hợp được hoãn và không trình bày như tính năng đã chạy.
 4. Sản phẩm hiện bản nháp để kiểm tra, sửa số lượng/giá, thêm món chưa có trong danh mục.
 5. Người bán chốt thanh toán: tiền mặt, chuyển khoản, hoặc ghi nợ / trả một phần.
 6. Sản phẩm lưu bản ghi bán hàng; trừ tồn nếu hàng được theo dõi; ghi nợ nếu chưa thu đủ.
@@ -60,7 +73,7 @@ Khi AI lỗi, text/POS thủ công vẫn phải dùng được. Không output AI
 
 Luồng hỗ trợ: ADMIN đăng nhập dashboard web, tìm OWNER hoặc cơ sở khách hàng, xem thông tin cần thiết để hỗ trợ và tổng quan hệ thống. Mọi truy cập nhạy cảm phải được ghi audit.
 
-## 4. Yêu cầu chức năng — MVP đã chấp nhận
+## 4. Danh mục yêu cầu chức năng — áp dụng ưu tiên EXE201 ở mục 1.1
 
 | ID | Nguồn | Hành vi quan sát được | Trạng thái |
 |---|---|---|---|
@@ -149,7 +162,9 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 | `NFR-009` | `BR-014` | ADMIN không thể tự cấp role từ client; quyền lấy từ profile ACTIVE trong DB sau xác thực Firebase. Mọi GET dashboard thành công, kể cả tìm kiếm/trang rỗng, và thao tác đổi trạng thái tiệm ghi audit trong cùng transaction trước khi trả dữ liệu. Không ghi được audit thì từ chối trả dữ liệu/rollback thay đổi. ADMIN chỉ xem lịch sử truy cập của chính mình bằng projection hỗ trợ, không trả metadata nghiệp vụ; metadata audit đọc chỉ ghi sự hiện diện của query và số kết quả, không lưu query hoặc liên hệ thô. |
 | `NFR-010` | `BR-019` | Credential Cloudinary chỉ có ở Core/runtime secret store, không có trong FE, response, audit metadata hay log nghiệp vụ. Core kiểm tra bytes JPEG/PNG, dung lượng và kích thước trước upload. Khi media disabled/unavailable, write media trả lỗi rõ ràng nhưng auth/session không thất bại chỉ vì avatar đã lưu. |
 
-## 8. Tiêu chí nghiệm thu cốt lõi
+## 8. Danh mục tiêu chí nghiệm thu
+
+Đối với demo EXE201, chọn AC theo kịch bản ở mục 1.1 và ghi đạt/chưa đạt/chưa thử. Các AC còn lại được giữ cho chức năng tương ứng và kiểm tra hồi quy khi thay đổi; không trở thành yêu cầu mở rộng hoặc điều kiện hoàn thành đồng loạt.
 
 | ID | Xác minh | Liên kết |
 |---|---|---|

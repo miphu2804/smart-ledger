@@ -2,14 +2,15 @@
 
 | Siêu dữ liệu | Giá trị |
 |---|---|
-| Trạng thái | Quy tắc MVP đã duyệt và sáng kiến còn chờ quyết định được tách riêng; chưa chứng nhận nghiệm thu tích hợp |
+| Trạng thái | MVP môn EXE201 — ưu tiên demo đầu-cuối và kiểm chứng người dùng; chưa chứng nhận nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ kinh doanh/sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; chủ thuế/pháp lý cho `BR-INV-*` và nghĩa vụ tuân thủ |
-| Cập nhật lần cuối | 2026-11-06 — kiểm định lại với Core, AI, mobile và web tại staging `494fa6c` |
+| Cập nhật lần cuối | 2026-11-06 — thu gọn ưu tiên EXE201 theo chỉ đạo chủ dự án; giữ kết quả rà code staging `494fa6c` |
 
 ## Tài liệu liên quan
 
 - [Mô tả sản phẩm](project-overview.md): người dùng mục tiêu và định vị.
+- [Demo và kiểm chứng EXE201](mvp-demo-validation.md): kịch bản đầu-cuối, dữ liệu thử và mẫu ghi phản hồi.
 - [PRD](product-requirements.md): hành vi `FR-*`, chất lượng `NFR-*` và tiêu chí `AC-*`.
 - [Thiết kế kỹ thuật §1](../architecture/technical-design.md#1-phạm-vi) và [API contracts](../contracts/api-contracts.md): nguồn duy nhất về trạng thái triển khai và ranh giới endpoint.
 - [Phụ lục kiểm định](business-requirements-audit.md): thiếu sót phát hiện, bằng chứng code và truy vết chi tiết; không thay phê duyệt phạm vi.
@@ -25,9 +26,9 @@ BRD quyết định **giá trị, phạm vi và nguyên tắc kinh doanh**; có 
 
 ## 1. Vấn đề và kết quả kinh doanh
 
-Sổ Nghe Lời giúp người bán rất nhỏ ghi đủ bán hàng, chi phí và công nợ với ít thao tác, rồi hiểu số liệu của tiệm. Danh mục là cơ sở lên đơn; người bán quyết định dữ liệu chính thức; AI hỗ trợ nhập và giải thích, không thay quyền quyết định hoặc tự sửa sổ.
+Sổ Nghe Lời là MVP phục vụ môn EXE201, kiểm chứng một giải pháp ghi bán hàng cho cửa hàng rất nhỏ trong thời gian có hạn. Mục tiêu trước mắt là có sản phẩm chạy được, demo đầu-cuối và phản hồi từ người dùng; không đặt mục tiêu hệ thống enterprise hoặc thương mại quy mô lớn. Sản phẩm giúp ghi bán hàng, chi phí và công nợ với ít thao tác, rồi hiểu số liệu của tiệm. Danh mục là cơ sở lên đơn; người bán quyết định dữ liệu chính thức; AI hỗ trợ nhập và giải thích, không thay quyền quyết định hoặc tự sửa sổ.
 
-| ID | Kết quả kinh doanh | Đo trong pilot |
+| ID | Kết quả kinh doanh | Quan sát khi dùng thử |
 |---|---|---|
 | `BO-001` | Tăng tỷ lệ giao dịch được ghi nhận | Tỷ lệ giao dịch thực tế được ghi; thời gian hoàn tất giao dịch và trường hợp phải chuyển nhập tay |
 | `BO-002` | Có dữ liệu bán hàng đủ tin cậy | Tỷ lệ giỏ phải sửa trước chốt, giao dịch thiếu trường bắt buộc và sai lệch khi đối chiếu tiền/nợ/tồn |
@@ -35,7 +36,7 @@ Sổ Nghe Lời giúp người bán rất nhỏ ghi đủ bán hàng, chi phí v
 | `BO-004` | Nếu sáng kiến hóa đơn được duyệt, giảm nhập lại và sai lệch tuân thủ | Giao dịch thuộc diện lập hóa đơn được xử lý đúng hạn và số sai lệch đối soát; chưa áp dụng cho MVP hiện tại |
 | `BO-005` | Giảm công nợ và chi phí bị bỏ sót | Khoản nợ còn mở được theo dõi, khoản thu gắn đúng nợ và chi phí được ghi so với đối chiếu của chủ tiệm |
 
-Chưa có baseline hoặc target định lượng được duyệt. Chủ sản phẩm chịu trách nhiệm chốt nhóm pilot, cách lấy mẫu, mẫu số và target trước khi kết luận đạt BO; số người dùng mới, DAU/MAU hoặc số request không thay các phép đo này (`OQ-007`).
+Chưa có baseline hoặc target định lượng được duyệt. Trong môn học, nhóm ghi tác vụ làm được/chưa làm được, thời gian quan sát, lỗi và phản hồi của người dùng theo [kế hoạch kiểm chứng](mvp-demo-validation.md#4-kiểm-chứng-với-người-dùng). Không cần nghiên cứu quy mô lớn hoặc dashboard đo lường mới trước demo; chưa đo thì không tuyên bố đạt BO. Nhóm trưởng tổng hợp kết quả và chọn thay đổi nhỏ giúp luồng chính tốt hơn (`OQ-007`).
 
 ## 2. Vai trò và trách nhiệm
 
@@ -43,28 +44,26 @@ Chưa có baseline hoặc target định lượng được duyệt. Chủ sản 
 |---|---|---|
 | OWNER | Tạo/chọn tiệm mình sở hữu, quản lý danh mục, xác nhận bán hàng, chi phí, thu nợ và xem số liệu | Không đọc/ghi tiệm khác, tự mở khóa tiệm hoặc cấp quyền ADMIN |
 | ADMIN | Hỗ trợ hồ sơ OWNER/tiệm, tạm ngưng/kích hoạt tiệm và xem tổng quan hỗ trợ | Không giả danh OWNER, mở/sửa sổ tiền/nợ/tồn hoặc đọc lịch sử của ADMIN khác |
-| Chủ sản phẩm | Chốt phạm vi, câu hỏi mở, target pilot và kết quả nghiệm thu theo PRD | Không dùng code/mock/ảnh để thay phê duyệt nghiệp vụ |
-| Chủ kỹ thuật Core/AI/FE và vận hành | Chứng minh contract, quyền, tính nhất quán và điều kiện rollout | Tính năng sau cờ, migration hoặc cấu hình mẫu không tự bật môi trường dùng chung |
+| Nhóm trưởng / phụ trách sản phẩm trong nhóm | Chốt kịch bản, phân công, tổng hợp thử nghiệm và ưu tiên lỗi trước buổi demo | Không dùng code/mock/ảnh để thay bằng chứng luồng chạy thật |
+| Thành viên phụ trách Core/AI/FE và triển khai | Hoàn thiện phần được giao, nối luồng thật và ghi kết quả kiểm tra | Đây là trách nhiệm trong nhóm môn học, không yêu cầu lập thêm bộ phận vận hành; tính năng sau cờ không tự được bật |
 | Chủ thuế/pháp lý và bên vận hành dữ liệu | Xác nhận quy tắc tuân thủ, nguồn chính thức, lưu/xóa dữ liệu và trách nhiệm bên cung cấp | Minh Thọ được ghi là người duyệt nội dung chính sách công khai trong tài liệu hiện có; điều này không tự chỉ định chủ thuế hoặc chứng minh đã có người vận hành/xác nhận hoàn tất xóa dữ liệu |
 
 MVP chỉ có hai role hệ thống OWNER và ADMIN; nhân viên/thành viên tiệm không thuộc phạm vi.
 
 ## 3. Phạm vi kinh doanh
 
-### 3.1. Năng lực MVP đã chấp nhận
+### 3.1. Ưu tiên hoàn thành trong môn học
 
-| Nhóm nghiệp vụ | Giá trị và phạm vi | Quy tắc |
+| Mức | Phạm vi | Cách xử lý trong thời gian còn lại |
 |---|---|---|
-| Tiếp cận và quản lý tiệm | Đăng nhập, tạo hồ sơ, nhiều tiệm và chuyển tiệm; thông tin/trạng thái hỗ trợ rõ ràng | `BR-001`, `BR-009`, `BR-015`, `BR-022` |
-| Danh mục và tồn đơn giản | Nhóm hàng, mặt hàng, đơn vị/giá, barcode và ảnh; nhập tăng tồn hoặc giảm tồn có lý do | `BR-007`, `BR-018`, `BR-019`, `BR-021`, `BR-025` |
-| Ghi nhận bán hàng | Text/voice, chọn POS, quét mã, món lẻ; kiểm tra giỏ, chốt thu đủ/một phần/ghi nợ | `BR-002`, `BR-003`, `BR-010` |
-| Sửa sai và bảo toàn lịch sử | Draft chưa chốt được sửa/hủy khi hợp lệ; sale đã chốt chỉ hủy toàn bộ có dấu vết | `BR-006`, `BR-016`, `BR-017` |
-| Chi phí, khách và công nợ | Ghi chi, theo dõi nghĩa vụ nợ và thu đúng khoản; không thay sổ kế toán hoặc CRM | `BR-005`, `BR-008`, `BR-009` |
-| Báo cáo và hỗ trợ quyết định | Phân biệt doanh thu, thu/hoàn tiền, nợ hiện tại, bán chạy và lãi/lỗ ước tính; AI giải thích có căn cứ | `BR-004`, `BR-005`, `BR-011`, `BR-012` |
-| Tiện ích OWNER | Hướng dẫn lần đầu/xem lại, menu chuyển nhanh, mascot Bobi, hội thoại và thông báo trong app | `BR-001`, `BR-011`, `BR-012`, `BR-020` |
-| Hỗ trợ và vận hành nền tảng | ADMIN tra cứu hồ sơ/tổng quan tạo mới/audit cá nhân; đo ngày hoạt động và quota thao tác đã duyệt | `BR-013`, `BR-014`, `BR-023`, `BR-024` |
+| Cốt lõi cần demo thật | Đăng nhập bằng cách đã cấu hình, một tiệm thử, danh mục, POS/nhập câu và voice theo nền tảng, sửa giỏ/chốt, lịch sử đơn, chi phí, công nợ/thu nợ, báo cáo cơ bản và hỏi Bobi | Hoàn thiện đường mobile → Core → dữ liệu và Core → AI cho chat; ưu tiên lỗi chặn luồng, sai số liệu và chỗ người dùng khó hiểu. Nhập tay/POS là đường tiếp tục khi mic lỗi, không thay bằng chứng voice/AI |
+| Có sẵn thì giữ và kiểm tra khi sử dụng | Nhiều tiệm, barcode, tồn đơn giản, hủy toàn bộ, ảnh Product, inbox/audit, hỗ trợ ADMIN và các tiện ích đã có code | Không gỡ bỏ hoặc viết lại; chọn thêm vào demo khi ổn định và có ích. Backend có API không đồng nghĩa mọi UI đã hoàn chỉnh |
+| Có thể hoãn phần tích hợp/mở rộng | API parse audio/ảnh mới, RAG mới, memory dài hạn, UI logo/avatar/chọn khách/giảm tồn còn thiếu, chart ADMIN growth, bật thêm telemetry/quota hoặc provider chưa cần | Ghi backlog và trạng thái thật; không biến thành điều kiện hoàn thành demo chính. Nếu lỗi hiện tại gây sai dữ liệu/quyền hoặc chặn kịch bản thì vẫn ưu tiên sửa |
+| Ngoài mục tiêu EXE201 | Quy mô tải lớn, kiến trúc/phân hệ mới, high availability nhiều vùng, microservice bổ sung, kế toán/thuế/hóa đơn điện tử thương mại | Không mở thêm thiết kế hoặc triển khai để đáp ứng các mục tiêu này trong đợt hoàn thành môn học |
 
-STT/parser AI, nhận diện ảnh thành bản nháp, gợi ý nhập hàng và hỏi đáp có căn cứ thuộc **đích MVP**; từng đường tích hợp có trạng thái riêng tại thiết kế kỹ thuật và API contract. Mobile hiện dùng nhận giọng nói theo nền tảng và parser FE; không coi service parse text trong AI là API audio/ảnh đã tích hợp. Zalo LOGIN khả dụng theo cấu hình web/Android; Core có LINK nhưng app chưa có UI LINK. UI chọn lại khách có sẵn, giảm tồn, logo/avatar và chart growth ADMIN không được coi đã đầy đủ chỉ vì backend có API; bằng chứng ở phụ lục.
+Các quy tắc và mã yêu cầu đã có vẫn được giữ để tránh làm sai chức năng đang chạy; đây là điều chỉnh **ưu tiên giao sản phẩm**, không phải xóa code hoặc đổi API. Quy mô benchmark, quota dùng chung, bộ giám sát và cơ chế concurrency đã triển khai được giữ nguyên; không yêu cầu đầu tư thêm cho quy mô chưa có nhu cầu.
+
+Mobile hiện dùng nhận giọng nói theo nền tảng và parser FE; không cần chuyển parser sang dịch vụ AI mới chỉ để đồng nhất kiến trúc. Giữ Bobi chat qua Core/AI hiện có làm phần kiểm chứng AI. API draft/audio/ảnh còn là đích lịch sử, không được trình bày như đã chạy đầu-cuối. Zalo tùy cấu hình; Core có LINK nhưng app chưa có UI LINK. Các phần tích hợp còn thiếu được ghi tại [phụ lục](business-requirements-audit.md), không cần lấp hết trước buổi demo.
 
 ### 3.2. Ngoài phạm vi và chưa cam kết
 
@@ -146,19 +145,19 @@ Trang công khai về chính sách/xóa tài khoản và câu trả lời [Googl
 
 Nút xóa tài khoản dẫn tới hướng dẫn gửi yêu cầu, không phải API tự xóa toàn bộ dữ liệu. Trang công khai liệt kê Firebase, hồ sơ, tiệm/sổ nghiệp vụ và lịch sử chat là dữ liệu xóa; audit và bản sao lưu có giới hạn giữ lại được mô tả riêng. Cần chủ dữ liệu/vận hành xác nhận người xử lý, phạm vi thực tế, xác minh và bằng chứng hoàn tất, gồm media/memory/trace/provider. Xóa hội thoại, tắt/xóa ghi nhớ và xóa tài khoản/trace là các phạm vi khác nhau; phần còn thiếu theo `OQ-006`/`OQ-008`, không tuyên bố đã đáp ứng chỉ từ trang chính sách.
 
-## 7. Điều kiện kiểm chứng và phụ thuộc
+## 7. Điều kiện hoàn thành demo và kiểm chứng
 
-| Nhóm | Điều kiện để kết luận đạt | Người chịu trách nhiệm |
+Nhóm thực hiện [kịch bản demo và ghi kết quả](mvp-demo-validation.md); tiêu chí dưới đây chỉ áp dụng phạm vi đã chọn cho môn học, không buộc nghiệm thu mọi FR/AC đã tích lũy trong repo.
+
+| Ưu tiên | Điều kiện kiểm tra | Bằng chứng vừa đủ |
 |---|---|---|
-| Dữ liệu chính thức | Theo AC của PRD: chỉ ghi sau xác nhận; retry/rollback/concurrency không sai tiền, nợ, tồn, audit hoặc thông báo | Chủ Core và QA tích hợp |
-| Quyền và tiệm | Chứng minh chéo OWNER/ADMIN/shop, trạng thái tiệm và đổi tài khoản/đổi tiệm; không coi email verification ở app là bảo vệ phía Core | Chủ Core/FE và QA |
-| Báo cáo | Tách tiền/doanh thu/nợ/lãi, giá vốn thiếu và kỳ hủy chéo; giữ số lỗ và đối chiếu tập nhiều trang | Chủ sản phẩm/Core/FE |
-| AI | Đúng nguồn/phạm vi, báo thiếu dữ liệu, không tự ghi; thử lỗi/timeout/stream và dữ liệu gửi model/trace theo cấu hình đã duyệt | Chủ AI/FE và chủ sản phẩm |
-| Trải nghiệm | Thực hiện flow có thật trên nền tảng cần nghiệm thu; parser, camera, provider, media, lựa chọn khách và chart không được suy từ backend/mock | Chủ FE và QA |
-| Vận hành | Migration/feature flag/secret/rollout theo quy trình; không tự bật shared DB hoặc production từ PR docs | Chủ vận hành và người duyệt release |
-| Hiệu quả kinh doanh | Có baseline, mẫu số và target pilot theo `BO-*`; chưa có thì chỉ báo kết quả quan sát | Chủ sản phẩm |
+| Luồng đầu-cuối | Đăng nhập → danh mục → lập/sửa/chốt đơn → lịch sử → chi/nợ/thu nợ → báo cáo; thử voice và Bobi thật | Build/nền tảng/cấu hình, fixture và kết quả từng bước; ghi riêng bước mock hoặc chưa chạy |
+| Dữ liệu đúng và quyền cơ bản | Không sai tiền/nợ/tồn, không nhân đôi khi retry các thao tác có chống trùng, không xem được dữ liệu tiệm/tài khoản khác | Đối chiếu số trước/sau, một tình huống retry/lỗi và kiểm tra sai quyền; dùng kiểm thử hiện có phù hợp |
+| Dùng được khi lỗi | Người dùng biết đang chờ, thành công hay lỗi; không mất input và có đường nhập tay/POS để tiếp tục | Quan sát thao tác lỗi mic/mạng/AI và cách phục hồi, không chỉ chụp màn thành công |
+| Kiểm chứng giá trị | Người dùng mục tiêu thử tác vụ, nhóm ghi điểm khó hiểu, giá trị voice/chat và cải tiến tiếp theo | Ghi đúng người tham gia, kết quả quan sát/phản hồi; không tự suy rộng từ bạn học hoặc tiệm demo |
+| Hoàn thành đúng hạn | Sửa lỗi chặn luồng/sai dữ liệu trước, chuẩn bị bản demo tái chạy được và danh sách giới hạn | Danh sách việc còn lại có người nhận; hoãn mở rộng chưa giúp kịch bản, không thiết kế lại kiến trúc |
 
-Rủi ro còn lại: luồng UI/API có mức tích hợp khác nhau; xác minh email chỉ ở app; khách cùng phone có thể bị hiểu nhầm thành cùng identity; tổng một trang không đại diện toàn sổ; retention/provider và ghi nhớ chưa chốt; quy tắc thuế chưa được xác nhận. Các điều kiện này là phạm vi cần kiểm chứng, không phải tuyên bố đã chạy hoặc đã đạt.
+Giữ an toàn dữ liệu và contract đang có dù là dự án môn học. Demo dùng dữ liệu thử không nhạy cảm; các khoảng trống auth/privacy/xóa dữ liệu vẫn được công bố, không suy ra đã đủ điều kiện vận hành thương mại. Kế hoạch triển khai/migration hiện có vẫn áp dụng khi cần, nhưng thay đổi docs này không tự bật flag hoặc môi trường.
 
 ## 8. Quyết định và câu hỏi còn mở
 
@@ -166,13 +165,13 @@ Rủi ro còn lại: luồng UI/API có mức tích hợp khác nhau; xác minh 
 |---|---|---|---|
 | `OQ-001` | Voice/STT có bắt buộc để kiểm chứng khác biệt MVP? | Chủ sản phẩm | Đã chốt có trong đích MVP; nghiệm thu riêng theo nền tảng và `AC-008`/`AC-074`, không nói mọi FE chỉ giả lập |
 | `OQ-002` | Xóa cứng hay hủy có dấu vết? | Chủ sản phẩm + chủ Core | Đã chốt hủy toàn bộ, hoàn tiền đã thu/hủy số dư nợ; chi phí archive; hoàn từng phần ngoài MVP |
-| `OQ-003` | Chuyển parser câu từ FE sang AI khi nào? | Chủ AI/Core/FE | Đích MVP đã chốt; contract draft/audio và tích hợp vẫn chưa hoàn chỉnh; giữ nhập tay/POS |
-| `OQ-004` | Hoàn thiện yêu cầu cho bảng/biểu đồ, nút mở màn, tính toán/sandbox và cập nhật APK đã có code | Chủ sản phẩm + chủ AI/FE | Mở; `AC-116`/`AC-118` đã phủ hỏi nhanh/dòng chờ, phần còn thiếu cần FR/AC riêng; không duyệt lại phần đã có AC |
+| `OQ-003` | Chuyển parser câu từ FE sang AI khi nào? | Chủ AI/Core/FE | Hoãn việc chuyển parser/API draft-audio mới sau demo EXE201 nếu không cần cho luồng cốt lõi; giữ parser FE, voice hiện có và nhập tay/POS, ghi đúng trạng thái chưa tích hợp |
+| `OQ-004` | Hoàn thiện yêu cầu cho bảng/biểu đồ, nút mở màn, tính toán/sandbox và cập nhật APK đã có code | Chủ sản phẩm + chủ AI/FE | Giữ code và `AC-116`/`AC-118` đã có; chỉ bổ sung yêu cầu/kiểm tra cho phần dùng trong demo. Các cải tiến chưa giúp luồng chính hoãn sau môn học |
 | `OQ-005` | Làm sao tránh hiểu nhầm hai customerId dùng chung phone là cùng người? | Chủ sản phẩm + chủ FE | Nhóm UI theo phone đã có `FR-016`/`AC-075`; chỉ còn chốt nhãn/xử lý collision nếu cần, không gộp identity hoặc chuyển nghĩa vụ |
-| `OQ-006` | Có duyệt memory dài hạn, default/opt-in, retention và quyền xóa không? | Chủ sản phẩm + chủ AI + chủ dữ liệu | Proposed theo ADR-0002; khi system flag bật code hiện mặc định memory_enabled=true nếu chưa có setting; tắt chỉ ngừng đọc/ghi, không xóa fact. Phải chốt trước khi biến thành cam kết sản phẩm |
-| `OQ-007` | Baseline, mẫu số, nhóm pilot và target từng BO là gì? | Chủ sản phẩm | Mở; chốt kế hoạch đo, không tự đặt số từ benchmark/test |
+| `OQ-006` | Có duyệt memory dài hạn, default/opt-in, retention và quyền xóa không? | Chủ sản phẩm + chủ AI + chủ dữ liệu | Hoãn kích hoạt/mở rộng cho demo EXE201, vẫn Proposed theo ADR-0002 và giữ code. Khi system flag bật, setting mới mặc định true; tắt không xóa fact. Chỉ chốt chính sách khi thực sự chọn dùng |
+| `OQ-007` | Baseline, mẫu số, nhóm pilot và target từng BO là gì? | Chủ sản phẩm | Trong môn học, ghi tác vụ, thời gian/lỗi quan sát và phản hồi theo kế hoạch kiểm chứng; không cần thêm hệ analytics. Target định lượng chưa có thì để mở, không tự đặt số |
 | `OQ-008` | Ai duyệt dữ liệu người bán tự gõ gửi model/trace, retention và vận hành xóa? | Minh Thọ (nội dung công khai) + chủ dữ liệu/vận hành cần chỉ định | Mở về phạm vi dữ liệu được phép và thực thi; che secret/email không che toàn bộ tên/phone, xóa chat không tự xóa trace. Đối chiếu cam kết công khai 30 ngày sau xác minh với quy trình Firebase/Core/chat/media/memory/provider; ghi người xử lý, cấu hình cho phép và bằng chứng hoàn tất |
-| `OQ-INV-001` | Hóa đơn điện tử thuộc MVP, pilot riêng hay giai đoạn sau? | Chủ sản phẩm | Mở; hiện ngoài MVP |
+| `OQ-INV-001` | Hóa đơn điện tử thuộc MVP, pilot riêng hay giai đoạn sau? | Chủ sản phẩm | Hoãn sau EXE201; hiện ngoài MVP |
 | `OQ-INV-002` | Nhóm người bán đầu tiên có hồ sơ pháp lý/ngưỡng doanh thu nào? | Chủ kinh doanh + chủ thuế | Mở |
 | `OQ-INV-003` | Mỗi nhóm giao dịch cần chứng từ, thời điểm lập/truyền nào? | Chủ thuế | Mở; xác minh nguồn chính thức và phê duyệt |
 | `OQ-INV-004` | Chọn provider, bên mua/quản lý gói/chữ ký số/hợp đồng? | Chủ kinh doanh | Mở |

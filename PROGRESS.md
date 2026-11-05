@@ -1,3 +1,11 @@
+### 2026-11-06 — Tập trung hoàn thành MVP môn EXE201
+
+| Area | Change |
+|---|---|
+| Docs | • Chốt ưu tiên demo đầu-cuối, UX và phản hồi người dùng; phân biệt luồng cốt lõi, chức năng có sẵn giữ nguyên và mở rộng có thể hoãn<br>• Thêm kịch bản demo/fixture và mẫu ghi kết quả; đồng bộ overview, BRD, PRD, bản đồ docs và cách đọc tài liệu kỹ thuật/audit; không yêu cầu đầu tư thêm cho tải lớn hoặc kiến trúc mới |
+
+Check: 377 link/anchor nội bộ hợp lệ, giữ nguyên 55 FR/NFR và 120 định nghĩa AC so với commit trước, full trace khớp; đối chiếu fixture 70.000đ doanh thu/42.000đ giá vốn/18.000đ lãi sau chi và kiểm tra không có diff runtime. Demo/người dùng chưa chạy trong đợt sửa docs, mẫu kết quả để chưa thử. Commit: commit thêm mục này; giữ log cũ theo yêu cầu append-only.
+
 ### 2026-11-06 — Kiểm định lại BRD bằng ba chuyên môn
 
 | Area | Change |

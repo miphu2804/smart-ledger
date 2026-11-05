@@ -9,6 +9,8 @@
 
 [BRD](business-requirements.md) sở hữu mục tiêu/quy tắc và quyết định kinh doanh; [PRD](product-requirements.md) sở hữu hành vi/AC. Phụ lục này ghi bằng chứng và giới hạn của lần kiểm định, không thay nguồn trạng thái triển khai ở [thiết kế kỹ thuật §1](../architecture/technical-design.md#1-phạm-vi) hoặc [API contracts](../contracts/api-contracts.md).
 
+**Cách dùng trong EXE201:** đây là phụ lục rà soát và backlog, không phải cổng bắt nhóm giải quyết mọi gap trước demo. Ưu tiên phát hiện làm sai dữ liệu/quyền, chặn luồng hoặc gây hiểu nhầm trong kịch bản thực tế. Giữ findings và code đã có, hoãn mở rộng chưa cần theo [BRD](business-requirements.md#3-phạm-vi-kinh-doanh) và [kế hoạch demo](mvp-demo-validation.md).
+
 ## 1. Phương pháp và giới hạn
 
 - Ba người rà độc lập theo vai trò Core/nghiệp vụ, AI/chat/privacy và mobile/web; agent chỉ đọc, người tổng hợp kiểm lại phát hiện trước khi sửa tài liệu.
