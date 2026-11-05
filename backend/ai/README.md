@@ -72,7 +72,7 @@ The agent runs on [Pydantic AI](https://ai.pydantic.dev/). Prompts live in `src/
 
 ## Model provider
 
-`LLMFactory.create_model(alias)` in `src/providers/llm_factory.py` reads `MODEL_ALIASES`, a JSON object mapping each alias to a `protocol`, the `model` id, an optional `effort` and an optional `service_tier`. The application uses one alias, `chat`, on `gpt-6-luna` over `openai_responses` with effort `high`. The protocol picks the provider class:
+`LLMFactory.create_model(alias)` in `src/providers/llm_factory.py` reads `MODEL_ALIASES`, a JSON object mapping each alias to a `protocol`, the `model` id, an optional `effort` and an optional `service_tier`. The application uses one alias, `chat`, on `gpt-6-luna` over `openai_responses` with effort `medium`. The protocol picks the provider class:
 
 | `protocol` | Provider | API |
 |---|---|---|
@@ -93,15 +93,15 @@ With `MODEL_TIERING_ENABLED=true`, each chat turn runs on the model its request 
 
 | Tier | Alias | Intended model |
 |---|---|---|
-| `SIMPLE` | `chat-simple` | `mercury-3` over `openai_chat`, effort `low` |
-| `MEDIUM` | `chat-medium` | `mercury-3` over `openai_chat`, effort `high` |
-| `COMPLEX` | `chat-complex` | `gpt-6-luna` over `openai_responses`, effort `xhigh` |
+| `SIMPLE` | `chat-simple` | `mercury-3` over `openai_chat`, effort `instant` |
+| `MEDIUM` | `chat-medium` | `mercury-3` over `openai_chat`, effort `medium` |
+| `COMPLEX` | `chat-complex` | `gpt-6-luna` over `openai_responses`, effort `high` |
 
 ```json
-{"chat": {"protocol": "openai_responses", "model": "gpt-6-luna", "effort": "high"},
- "chat-simple": {"protocol": "openai_chat", "model": "mercury-3", "effort": "low"},
- "chat-medium": {"protocol": "openai_chat", "model": "mercury-3", "effort": "high"},
- "chat-complex": {"protocol": "openai_responses", "model": "gpt-6-luna", "effort": "xhigh"}}
+{"chat": {"protocol": "openai_responses", "model": "gpt-6-luna", "effort": "medium"},
+ "chat-simple": {"protocol": "openai_chat", "model": "mercury-3", "effort": "instant"},
+ "chat-medium": {"protocol": "openai_chat", "model": "mercury-3", "effort": "medium"},
+ "chat-complex": {"protocol": "openai_responses", "model": "gpt-6-luna", "effort": "high"}}
 ```
 
 - The aliases live in `MODEL_ALIASES`; when the URL or any of the three is missing, AI logs `tiering off` at startup and every turn runs on `chat`. Memory recall and writes always use `chat`.
@@ -254,10 +254,10 @@ Settings come from `src/app_config.py`, read from the environment or `.env`; bla
 | | `SQL_POOL_MAX_SIZE` | `2` | Reader pool size |
 | | `SQL_TIMEOUT_MS` | `3000` | Statement timeout |
 | | `SQL_ROW_LIMIT` | `100` | Row cap per query |
-| Model | `MODEL_ALIASES` | `chat` on `gpt-6-luna` over `openai_responses`, effort `high` | Alias to `protocol`, `model` and optional `effort` |
+| Model | `MODEL_ALIASES` | `chat` on `gpt-6-luna` over `openai_responses`, effort `medium` | Alias to `protocol`, `model` and optional `effort` |
 | | `MODEL_FALLBACKS` | `[]` | JSON list of `provider:model` |
 | | `MODEL_TIMEOUT_SECONDS` | `20` | Timeout per model request |
-| | `MODEL_REASONING_EFFORT` | `medium` | Effort of an alias that sets none; the values depend on the model |
+| | `MODEL_REASONING_EFFORT` | `low` | Effort of an alias that sets none; the values depend on the model |
 | | `MODEL_TIERING_ENABLED` | `false` | Pick each turn's model by tier; see [Model tiers](#model-tiers) |
 | | `TIER_CLASSIFIER_URL` | unset | Bifrost's `/v1/decisions` URL; required for tiers |
 | | `TIER_CLASSIFIER_MODEL` | `typesafe/jev-latest` | Decision model that rates each turn |

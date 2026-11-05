@@ -81,7 +81,7 @@ class AppConfig(BaseSettings):
     # effort and service_tier are optional
     MODEL_ALIASES: dict[str, ModelAlias] = {
         "chat": ModelAlias(
-            protocol="openai_responses", model="gpt-6-luna", effort="high"
+            protocol="openai_responses", model="gpt-6-luna", effort="medium"
         )
     }
     # models tried in order when the previous one fails, as a JSON list of
@@ -90,7 +90,7 @@ class AppConfig(BaseSettings):
     MODEL_FALLBACKS: list[str] = []
     MODEL_TIMEOUT_SECONDS: float = 20.0
     # reasoning effort of an alias that sets no `effort` of its own
-    MODEL_REASONING_EFFORT: str = "medium"
+    MODEL_REASONING_EFFORT: str = "low"
     # per-turn model tiers (src/llm_router/): a decision model rates
     # each request SIMPLE, MEDIUM or COMPLEX through Bifrost and the turn runs on the
     # chat-simple, chat-medium or chat-complex alias of MODEL_ALIASES. Off, or with

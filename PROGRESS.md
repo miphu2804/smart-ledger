@@ -1,3 +1,12 @@
+### 2026-11-05 — Think less and show a plainer thinking line in chat
+
+| Area | Change |
+|---|---|
+| AI | • The `chat` alias defaults to reasoning effort `medium` and `MODEL_REASONING_EFFORT` to `low`, so turns spend fewer reasoning tokens<br>• The shop agent prompt asks for the full explanation, breakdown or steps a question needs after the answer, instead of one or two sentences |
+| Mobile | • The thinking line drops the check mark and the seconds counter and rotates through 10 plain phrases, in both assistant chat and quick transaction chat<br>• The three Bobi chat header buttons fold into one menu button that opens a floating menu; the title and the button borders are gone |
+
+Check: `uv run pytest tests/unit_tests -q` (493 passed, 1 skipped), `ruff check`, `ruff format --check`; mobile `npm run typecheck` and `npm test` (187 passed, 2 failing before this change: `parseOrder`, `quickNav`); header checked in the Expo web preview. Not verified: a real device and a live chat turn with the lower effort; the effort of the deployed aliases lives in Dopbase. Commit: the one that adds this entry.
+
 ### 2026-11-05 — Keep the shop time out of chat answers
 
 | Area | Change |
@@ -187,12 +196,3 @@ Check: unit tests 457 passed, ruff check and format pass; startup wiring checked
 | Docs | • `evaluation/README.md` explains the layout and how to add an evaluation; ADR-0002, ADR-0008, ADR-0009, `ci-cd.md`, `.honeyhive/README.md` and the AI README point at the new paths |
 
 Check: `agent_chat --dry-run` prints the same plan as before except `suite_version`, which moves from `7a34fe0c0744` to `f459b4c569b6` because the SQL in `cases.yaml` lost its stray indentation and trailing spaces (the expected values are unchanged); `memory --gate` gives recall 0.860, by form 0.951 / 0.899 / 0.627, stale-only 0.039, equal to the numbers ADR-0002 recorded, and leaves no row in the local database; unit tests 452 passed; ruff check and format pass. Not verified: a full paid `agent_chat` run, `--sync`, and the CI workflow. Commit: the one that adds this entry.
-
-### 2026-11-04 — Assistant chats wait with the thought line again
-
-| Area | Change |
-|---|---|
-| Mobile | • The Trợ lý screen and the quick-ask sheet show the thought line (`ThoughtLine`: rotating waiting phrases and tool step labels) again instead of the three typing dots<br>• Restored `ThoughtLine`, the waiting phrases and tool step labels with their tests; removed `TypingDots`<br>• Kept the shared `ChatComposer` and answers without the Bobi icon and label |
-| Docs | • `api-contracts.md` and `AC-118` describe the thought line again |
-
-Check: `tsc` reports no error in `src` (only the missing `@playwright/test` module in `e2e/`); `node --test tests/thinkingPhrases.test.ts tests/toolSteps.test.ts` passes 9/9. Not verified on a device.
