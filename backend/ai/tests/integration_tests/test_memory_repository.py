@@ -546,3 +546,21 @@ def test_a_often_used_memory_does_not_outrank_a_closer_one(memory_db) -> None:
     found = memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 5)
 
     assert [item.content for item in found] == ["gạo chú Tư", "gạo cô Ba"]
+
+
+def test_read_session_is_autocommit_and_leaves_session_transactional(
+    memory_db,
+) -> None:
+    _, postgres, _ = memory_db
+    # One pooled connection, so both sessions borrow the same one in turn.
+    client = PostgreDBClient(
+        postgres.engine.url.render_as_string(hide_password=False), 1
+    )
+    try:
+        with client.read_session() as session:
+            assert session.connection().connection.driver_connection.autocommit
+
+        with client.session() as session:
+            assert not session.connection().connection.driver_connection.autocommit
+    finally:
+        client.close()
