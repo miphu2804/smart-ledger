@@ -171,4 +171,3 @@ Bảng này nối từng FR/NFR với nguồn BRD và AC đang liên kết trự
 | `BR-019` | `NFR-010` | `AC-053`, `AC-054` |
 
 Các ô chưa có AC liên kết trực tiếp là khoảng trống truy vết cần chủ sản phẩm bổ sung; không tự tạo AC hoặc tuyên bố nghiệm thu từ code. Hành vi quan sát ở `OQ-004` và ghi nhớ dài hạn ở `OQ-006` vẫn cần duyệt riêng. `AC-012` là tiêu chí cô lập dữ liệu của đích RAG; không dùng nó để tuyên bố RAG danh mục/giao dịch đã được triển khai từ bảng vector ghi nhớ. Các AC hóa đơn hiện có vẫn là đích provisional, chỉ dùng sau khi chủ thuế phê duyệt sáng kiến.
-
