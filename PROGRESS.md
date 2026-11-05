@@ -1,3 +1,11 @@
+### 2026-11-06 — Đối chiếu business requirements với staging
+
+| Area | Change |
+|---|---|
+| Docs | • Rà tĩnh Core, AI, mobile và web tại staging `494fa6c`; bổ sung bản đồ tính năng và bằng chứng code trong BRD<br>• Nối đủ 55 FR/NFR với nguồn BRD và AC hiện có; sửa mô tả voice, Zalo, avatar, tồn và media lỗi thời; ghi câu hỏi cần sản phẩm chốt, không đổi AC hoặc nâng scope từ mock/code |
+
+Check: kiểm tra 104 liên kết/anchor nội bộ, mã BRD, 55 dòng truy vết và 120 định nghĩa AC giữ nguyên; `git diff --check`. Chưa chạy runtime/provider/UAT vì chỉ sửa tài liệu. Commit: commit thêm mục này. Giữ nguyên log cũ theo yêu cầu append-only của phiên làm việc.
+
 ### 2026-11-06 — Bobi refers to itself by name only
 
 | Area | Change |
