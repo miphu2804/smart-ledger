@@ -126,6 +126,7 @@ So với chế độ `pro` của [Hy Memory](https://github.com/Tencent-Hunyuan/
 - PO: chủ tiệm có cần agent nhớ qua hội thoại không và có cần màn xem/xóa từng memory riêng không (hiện chỉ có biểu tượng ghi nhớ và công tắc bật/tắt)?
 - Thời hạn lưu: hợp đồng hiện tại nói MVP không có TTL; `expires_at` có dùng không?
 - Chọn embedder cho staging/production: embeddinggemma qua Cloudflare Workers AI (model beta, chưa công bố giá; dữ liệu chat ra khỏi hạ tầng của mình) hay chạy local (cần gói RAM trên 1.3 GB). Cần PO/owner duyệt việc gửi nội dung chat tới Cloudflare.
+- Provider `onnx` (2026-11-05) chạy bản int8 của `static-similarity-mrl-multilingual-v1` trong process AI: trên VPS 1 CPU tốn khoảng 330 MB RAM, dưới 1 ms mỗi câu và tối đa 11 ms khi 10 câu cùng lúc, so với 680-835 ms mỗi lượt qua Workers AI. Trên bench recall ở 384 chiều nó đạt 0.753 (embeddinggemma 0.861), phần câu diễn đạt khác từ khóa chỉ 0.331 (embeddinggemma 0.627). Cần đo trên staging trước khi quyết định dùng cho production; đổi provider trên một environment phải embed lại `agent_memories` của environment đó.
 
 ## Tham khảo
 

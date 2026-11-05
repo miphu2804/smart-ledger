@@ -10,6 +10,8 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 .venv/
+# agent memory embedding model, fetched by scripts/ai/fetch-embedding-model.sh
+backend/ai/models/
 venv/
 
 # CodeGraph generated index

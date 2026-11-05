@@ -12,7 +12,12 @@ class OpenAIResponsesProvider:
     """
 
     def __init__(
-        self, api_key: str, base_url: str, timeout: float, reasoning_effort: str
+        self,
+        api_key: str,
+        base_url: str,
+        timeout: float,
+        reasoning_effort: str,
+        service_tier: str | None = None,
     ) -> None:
         # Bifrost reads the key from `x-bf-vk` for every virtual key, but from the
         # Bearer header only for keys prefixed `sk-bf-`. The header sits on the client
@@ -25,6 +30,8 @@ class OpenAIResponsesProvider:
         self.settings = OpenAIResponsesModelSettings(
             timeout=timeout, openai_reasoning_effort=reasoning_effort
         )
+        if service_tier is not None:
+            self.settings["openai_service_tier"] = service_tier
 
     def create_model(self, model_name: str) -> Model:
         return OpenAIResponsesModel(

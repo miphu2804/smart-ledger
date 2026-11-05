@@ -164,6 +164,32 @@ def test_alias_without_effort_uses_the_default_effort() -> None:
     assert model.settings["openai_reasoning_effort"] == "medium"
 
 
+def test_alias_service_tier_is_sent_with_the_model_settings() -> None:
+    config = AppConfig(
+        OPENAI_API_KEY="sk-test",
+        MODEL_ALIASES={
+            "chat": ModelAlias(
+                protocol="openai_responses", model="gpt-6-luna", service_tier="priority"
+            )
+        },
+    )
+
+    model = build_chat_model(config)
+
+    assert model.settings["openai_service_tier"] == "priority"
+    assert model.settings["timeout"] == config.MODEL_TIMEOUT_SECONDS
+
+
+def test_alias_without_service_tier_leaves_the_provider_default() -> None:
+    config = AppConfig(
+        OPENAI_API_KEY="sk-test", MODEL_ALIASES=chat_alias("openai_responses")
+    )
+
+    model = build_chat_model(config)
+
+    assert "openai_service_tier" not in model.settings
+
+
 @pytest.mark.parametrize("protocol", ["openai_responses", "openai_chat"])
 def test_client_sends_the_key_as_a_bifrost_virtual_key_header(protocol: str) -> None:
     config = AppConfig(

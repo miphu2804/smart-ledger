@@ -16,3 +16,5 @@ def test_unreadable_url_leaves_the_database_unavailable() -> None:
     assert client.engine is None
     with pytest.raises(RuntimeError, match="postgres unavailable"):
         client.session()
+    with pytest.raises(RuntimeError, match="postgres unavailable"):
+        client.read_session()

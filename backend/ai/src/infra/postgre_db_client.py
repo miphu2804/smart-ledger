@@ -33,6 +33,7 @@ class PostgreDBClient:
     def __init__(self, url: str | None = None, pool_size: int = 2) -> None:
         self.engine = None
         self.sessions = None
+        self.read_sessions = None
         if url is None or not url.strip():
             logger.info("postgres unconfigured")
             return
@@ -58,12 +59,25 @@ class PostgreDBClient:
         # Repositories return plain values after the transaction, so loaded objects
         # keep their attributes instead of reloading them from a closed session.
         self.sessions = sessionmaker(self.engine, expire_on_commit=False)
+        self.read_sessions = sessionmaker(
+            self.engine.execution_options(isolation_level="AUTOCOMMIT"),
+            expire_on_commit=False,
+        )
 
     def session(self) -> AbstractContextManager[Session]:
         """A session in one transaction: commit on success, roll back on error."""
         if self.sessions is None:
             raise RuntimeError("postgres unavailable")
         return self.sessions.begin()
+
+    def read_session(self) -> AbstractContextManager[Session]:
+        """A session on an autocommit connection, so a read sends no BEGIN or COMMIT.
+
+        Each statement commits alone; use it only for reads that need no transaction.
+        """
+        if self.read_sessions is None:
+            raise RuntimeError("postgres unavailable")
+        return self.read_sessions()
 
     def close(self) -> None:
         if self.engine is not None:
