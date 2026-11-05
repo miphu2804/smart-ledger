@@ -72,7 +72,7 @@ The agent runs on [Pydantic AI](https://ai.pydantic.dev/). Prompts live in `src/
 
 ## Model provider
 
-`LLMFactory.create_model(alias)` in `src/providers/llm_factory.py` reads `MODEL_ALIASES`, a JSON object mapping each alias to a `protocol`, the `model` id and an optional `effort`. The application uses one alias, `chat`, on `gpt-6-luna` over `openai_responses` with effort `high`. The protocol picks the provider class:
+`LLMFactory.create_model(alias)` in `src/providers/llm_factory.py` reads `MODEL_ALIASES`, a JSON object mapping each alias to a `protocol`, the `model` id, an optional `effort` and an optional `service_tier`. The application uses one alias, `chat`, on `gpt-6-luna` over `openai_responses` with effort `high`. The protocol picks the provider class:
 
 | `protocol` | Provider | API |
 |---|---|---|
@@ -85,6 +85,7 @@ The agent runs on [Pydantic AI](https://ai.pydantic.dev/). Prompts live in `src/
 - `MODEL_FALLBACKS` is a JSON list of `protocol:model` tried in order, for an environment that calls a provider directly; a fallback gets only what is left of the turn timeout, so it mainly covers fast failures.
 - `session_settings` sends `x-bf-session-id` (`conversation-<id>` for each turn, one-off ids for drafts and memory calls) to group a conversation's Bifrost logs and `x-bf-lh-shop-id` to add the shop to log metadata.
 - `effort` of an alias maps to `openai_reasoning_effort`; an alias without one uses `MODEL_REASONING_EFFORT`. The values depend on the model: `gpt-6-luna` takes `none` to `max`, Mercury 3 takes `instant`, `low`, `medium` or `high`.
+- `service_tier` of an alias maps to `openai_service_tier`: `auto`, `default`, `flex` or `priority`, where `priority` is OpenAI's faster and pricier tier; an alias without one sends no tier and leaves the provider default. Set it per alias in `MODEL_ALIASES`, for example `"service_tier": "priority"` on a `gpt-6-luna` alias.
 
 ### Model tiers
 
