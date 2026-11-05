@@ -4,9 +4,9 @@ import { describe, it } from 'node:test';
 import { THINKING_PHRASES, nextThinkingPhrase } from '../src/lib/thinkingPhrases.ts';
 
 describe('THINKING_PHRASES', () => {
-  it('has 80 distinct phrases ending with an ellipsis', () => {
-    assert.equal(THINKING_PHRASES.length, 80);
-    assert.equal(new Set(THINKING_PHRASES).size, 80);
+  it('has 10 distinct phrases ending with an ellipsis', () => {
+    assert.equal(THINKING_PHRASES.length, 10);
+    assert.equal(new Set(THINKING_PHRASES).size, 10);
     for (const phrase of THINKING_PHRASES) assert.match(phrase, /^Đang .+…$/);
   });
 

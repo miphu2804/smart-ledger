@@ -1,4 +1,3 @@
-import { Feather } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import type { ThoughtStep } from '../data/types';
@@ -25,32 +24,29 @@ const SHIMMER_MS = 1800;
 const SHIMMER_DIM = 0.4;
 const SHIMMER_BAND = 0.18;
 const USE_NATIVE = Platform.OS !== 'web';
-const MONO = Platform.select({ ios: 'Menlo', default: 'monospace' });
 
 interface ThoughtLineProps {
-  /** Các bước trợ lý đang làm (mỗi lần gọi tool một bước): bước đã xong có dấu tick. */
+  /** Các bước trợ lý đang làm (mỗi lần gọi tool một bước); bước mới nhất thế chỗ câu chờ. */
   steps?: ThoughtStep[];
   color?: string;
 }
 
 /**
  * Dòng suy nghĩ của trợ lý lúc chờ câu trả lời, theo "Thought Line" của React Bits: lưới chấm chạy, câu chờ
- * đổi dần, đồng hồ đếm. Khi trợ lý gọi tool thì bước đang làm thế chỗ câu chờ, chữ chạy dần như đang gõ.
+ * đổi dần. Khi trợ lý gọi tool thì bước đang làm thế chỗ câu chờ, chữ chạy dần như đang gõ.
  * Ngôi sao của mẫu gốc được thay bằng lưới chấm của LatticeLoader.
  * Có chữ đầu tiên thì màn chat bỏ cả bong bóng này.
  */
 export function ThoughtLine({ steps = [], color = colors.brand }: ThoughtLineProps) {
   const [phrase, setPhrase] = useState(() => nextThinkingPhrase());
-  const [tenths, setTenths] = useState(0);
   const clock = useRef(new Animated.Value(0)).current;
-  // Đồng hồ render lại 10 lần/giây: dựng node animation một lần thay vì mỗi lần render.
   const opacities = useMemo(() => ORBIT.map((delay) => (delay == null ? IDLE * 0.47 : dotOpacity(clock, delay))), [clock]);
   const current = steps[steps.length - 1];
 
   useEffect(() => {
     let loop: Animated.CompositeAnimation | null = null;
     let cancelled = false;
-    // Người bật giảm chuyển động chỉ thấy lưới đứng yên; chữ và đồng hồ vẫn chạy.
+    // Người bật giảm chuyển động chỉ thấy lưới đứng yên; chữ vẫn đổi.
     AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
       if (cancelled || reduce) return;
       loop = Animated.loop(
@@ -58,13 +54,10 @@ export function ThoughtLine({ steps = [], color = colors.brand }: ThoughtLinePro
       );
       loop.start();
     });
-    const startedAt = Date.now();
-    const timer = setInterval(() => setTenths(Math.floor((Date.now() - startedAt) / 100)), 100);
     const rotate = setInterval(() => setPhrase((current) => nextThinkingPhrase(current)), PHRASE_MS);
     return () => {
       cancelled = true;
       loop?.stop();
-      clearInterval(timer);
       clearInterval(rotate);
     };
   }, [clock]);
@@ -79,19 +72,15 @@ export function ThoughtLine({ steps = [], color = colors.brand }: ThoughtLinePro
         </View>
         {/* Mỗi lúc chỉ một việc ở ô đầu hàng: bước tool mới nhất thế chỗ câu chờ và bước trước nó. */}
         {current ? (
-          // Nhãn bắt đầu đúng chỗ câu chờ; dấu tick đứng sau nhãn nên chữ không dịch khi tool xong.
+          // Nhãn bắt đầu đúng chỗ câu chờ.
           <SlideIn key={current.id} trigger={current.id} style={styles.step}>
             <StreamedLabel text={current.label} color={colors.muted} />
-            {current.done ? <Feather name="check" size={11} color={colors.faint} /> : null}
           </SlideIn>
         ) : (
           <SlideIn trigger={phrase} style={styles.label}>
             <ShimmerText text={phrase} color={colors.ink} />
           </SlideIn>
         )}
-        <T w="medium" size={11.5} color={colors.faint} style={{ fontFamily: MONO }}>
-          {elapsedText(tenths)}
-        </T>
       </View>
     </View>
   );
@@ -140,8 +129,8 @@ function useSweep() {
 
 /**
  * Nhãn của bước đang làm, chạy chữ dần như đang được gõ ra. Mọi chữ đã nằm sẵn trong hàng nên bề rộng
- * không đổi: bong bóng và đồng hồ không nhảy theo từng chữ, chỉ độ hiện của từng chữ tăng dần.
- * Dải sáng quét qua như câu chờ cả khi tool đã xong: trợ lý vẫn đang viết câu trả lời, chỉ dấu tick báo bước xong.
+ * không đổi: bong bóng không nhảy theo từng chữ, chỉ độ hiện của từng chữ tăng dần.
+ * Dải sáng quét qua như câu chờ cả khi tool đã xong: trợ lý vẫn đang viết câu trả lời.
  */
 function StreamedLabel({ text, color }: { text: string; color: string }) {
   const progress = useRef(new Animated.Value(0)).current;
@@ -228,16 +217,12 @@ function easedRange(keys: number[], levels: number[], ease: (t: number) => numbe
   return { inputRange, outputRange };
 }
 
-function elapsedText(tenths: number) {
-  return tenths < 600 ? `${(tenths / 10).toFixed(1)}s` : `${Math.floor(tenths / 600)}m ${Math.floor((tenths % 600) / 10)}s`;
-}
-
 const styles = StyleSheet.create({
-  // Câu chờ (hoặc bước đang làm) và đồng hồ chung một hàng.
+  // Lưới chấm và câu chờ (hoặc bước đang làm) chung một hàng.
   row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 9, rowGap: 4 },
   grid: { width: GRID, flexDirection: 'row', flexWrap: 'wrap', gap: GAP },
   dot: { width: DOT, height: DOT, borderRadius: DOT / 2 },
   label: { flexShrink: 1 },
   shimmer: { flexDirection: 'row', flexWrap: 'wrap' },
-  step: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  step: { flexDirection: 'row', alignItems: 'center' },
 });
