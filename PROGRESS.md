@@ -1,3 +1,11 @@
+### 2026-11-06 — Kiểm định lại BRD bằng ba chuyên môn
+
+| Area | Change |
+|---|---|
+| Docs | • Viết lại BRD theo mục tiêu, vai trò, phạm vi và quy tắc; tách inventory/code và truy vết chi tiết sang phụ lục kiểm định với 13 phát hiện<br>• Sửa AC-020/021/078 và mô tả privacy, Zalo, nhóm nợ; phân biệt context/lịch sử, local/Core, lưu Product/ảnh từng phần và cam kết xóa dữ liệu; không sửa runtime |
+
+Check: ba sub-agent rà độc lập Core, AI/chat và mobile/web, sau đó đọc lại bản sửa; kiểm 153 link/anchor nội bộ, 55 dòng trace, 120 mã AC ổn định (chỉ sửa nội dung AC-020/021/078), mã BO/BR/OQ cũ được giữ và `git diff --check`. Chưa chạy runtime/provider/UAT. Commit: commit thêm mục này; giữ log cũ theo yêu cầu append-only.
+
 ### 2026-11-06 — Đối chiếu business requirements với staging
 
 | Area | Change |
