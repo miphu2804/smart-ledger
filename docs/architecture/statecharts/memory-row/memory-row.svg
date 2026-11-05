@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="pele pele-state" viewBox="0 0 1275 584" width="1275" height="584" style="max-width:100%;height:auto;--_bg:var(--pele-bg,#fff);--_fg:var(--pele-fg,#1f1f1f);--_m:var(--pele-muted,#6e6e6e);--_l:var(--pele-line,#1f1f1f);--_s:var(--pele-surface,#f3f3f3);--_a:var(--pele-surface-alt,#e6e6e6);--_b:var(--pele-border,#8a8a8a);--_c:var(--pele-accent,#5b7bd5);color:var(--_fg);--_tw:var(--pele-title-weight,bold);--_fm:var(--pele-font-mono,monospace);font:16px sans-serif;letter-spacing:normal;word-spacing:normal;text-transform:none;direction:ltr;font-family:var(--pele-font,sans-serif)" fill="var(--_fg)" role="graphics-document document" aria-roledescription="state"><style>.pele {
+  --pele-bg: #ffffff;
+  --pele-fg: #1c1c1c;
+  --pele-muted: #656565;
+  --pele-line: #808080;
+  --pele-surface: #fcfcfc;
+  --pele-surface-alt: #f1f1f1;
+  --pele-border: #c9c9c9;
+}
+.pele .blue rect { fill: #c3e0ff; }
+.pele .orange rect { fill: #f0d3bf; }
+.pele .purple rect { fill: #e3d5ff; }
+.pele .yellow rect { fill: #f0dcbf; }
+.pele .teal rect { fill: #bfe3df; }
+.pele .tan rect { fill: #e5d9ce; }
+.pele .pink rect { fill: #ffcbe6; }
+.pele .breaks rect {
+  fill: #ffecee !important;
+  stroke: #e72e3b !important;
+  stroke-width: 2.5px !important;
+}
+.pele .breaks text {
+  fill: #cd2834 !important;
+}
+.pele .mayBreak rect {
+  fill: #fff3e6 !important;
+  stroke: #e8730c !important;
+  stroke-width: 2.5px !important;
+}
+.pele .mayBreak text {
+  fill: #b85a06 !important;
+}
+.pele .bugPath rect {
+  stroke: #1680f3 !important;
+  stroke-width: 2.5px !important;
+}
+.pele .repeats rect {
+  stroke: #9b35d6 !important;
+  stroke-width: 2.5px !important;
+  stroke-dasharray: 6 3;
+}
+@media (prefers-color-scheme: dark) {
+  .pele {
+    --pele-bg: #1f1f1f;
+    --pele-fg: #f5f5f5;
+    --pele-muted: #acacac;
+    --pele-line: #939393;
+    --pele-surface: #121212;
+    --pele-surface-alt: #2c2c2c;
+    --pele-border: #4e4e4e;
+  }
+  .pele .blue rect { fill: #1b3857; }
+  .pele .orange rect { fill: #573117; }
+  .pele .purple rect { fill: #3c2e57; }
+  .pele .yellow rect { fill: #573d17; }
+  .pele .teal rect { fill: #174641; }
+  .pele .tan rect { fill: #3d3127; }
+  .pele .pink rect { fill: #57233e; }
+  .pele .breaks rect {
+    fill: #2e2021 !important;
+    stroke: #cf2b35 !important;
+  }
+  .pele .breaks text {
+    fill: #ff6463 !important;
+  }
+  .pele .mayBreak rect {
+    fill: #2e2619 !important;
+    stroke: #d0700f !important;
+  }
+  .pele .mayBreak text {
+    fill: #ffa257 !important;
+  }
+  .pele .bugPath rect {
+    stroke: #116dd2 !important;
+  }
+  .pele .repeats rect {
+    stroke: #9a3fcf !important;
+  }
+}
+
+.pele .pele-title { fill: var(--pele-fg) !important; }
+</style><text class="pele-title" font-weight="var(--_tw)" text-anchor="middle" xml:space="preserve"><tspan x="637.5" y="25.6">Memory: one stored fact</tspan></text><g transform="translate(0,36)"><g class="pele-clusters"><g class="pele-cluster pele-state-composite" data-id="legend"><rect x="715.7" y="8" width="344.94" height="112" rx="10" fill="var(--_a)" fill-opacity="0.5" stroke="var(--_b)"/><path d="M715.7,44H1060.65" fill="none" stroke="var(--_b)"/><text class="pele-cluster-label" x="888.17" y="31.6" text-anchor="middle">Legend</text></g></g><g class="pele-edges" fill="none" stroke="var(--_l)" stroke-linecap="round"><g class="pele-edge pele-transition" data-id="edge0"><path d="M668.7,120L668.7,157"/><path class="pele-marker" d="M668.7,164L665.34,156L672.06,156Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-transition" data-id="edge1"><path d="M589.55,208L589.55,221C589.55,234.02 496.37,242 344.35,242C192.33,242 99.15,259.48 99.15,288L99.15,352"/><path class="pele-marker" d="M99.15,359L95.79,351L102.51,351Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-transition" data-id="edge2"><path d="M605.55,208L605.55,221C605.55,259.5 320.02,259.5 320.02,298L320.02,412C320.02,447.5 370.29,447.5 370.29,483L370.29,489"/><path class="pele-marker" d="M370.29,496L366.93,488L373.65,488Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-transition" data-id="edge3"><path d="M621.55,208L621.55,221C621.55,241.46 607.32,254 584.1,254C560.88,254 546.65,266.92 546.65,288L546.65,343"/><path class="pele-marker" d="M546.65,350L543.29,342L550.01,342Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-transition" data-id="edge4"><path d="M715.85,208L715.85,221C715.85,245.18 730.08,260 753.3,260C776.52,260 790.75,270.64 790.75,288L790.75,343"/><path class="pele-marker" d="M790.75,350L787.39,342L794.11,342Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-transition" data-id="edge5"><path d="M731.85,208L731.85,221C731.85,237.74 782.06,248 863.97,248C945.88,248 996.08,263.2 996.08,288L996.08,343"/><path class="pele-marker" d="M996.08,350L992.72,342L999.44,342Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-transition" data-id="edge6"><path d="M790.75,412L790.75,470.5C790.75,473.97 485.91,480.91 485.91,484.38L485.91,489"/><path class="pele-marker" d="M485.91,496L482.55,488L489.27,488Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-transition" data-id="edge7"><path d="M1096.69,350L1096.69,340.38C1096.69,334.19 1175.45,334.19 1175.45,328L1175.45,288C1175.45,255.76 1094.21,236 961.65,236C829.1,236 747.85,230.02 747.85,220.25L747.85,215"/><path class="pele-marker" d="M747.85,208L751.21,216L744.49,216Z" fill="var(--_l)" stroke="none"/></g></g><g class="pele-edge-labels" font-size="14"><g class="pele-edge-label" data-id="edge1"><rect x="43.42" y="297.5" width="111.47" height="21" rx="3" fill="var(--_bg)"/><text x="99.15" y="312.9" text-anchor="middle">its expiry passes</text></g><g class="pele-edge-label" data-id="edge2"><rect x="220.3" y="363" width="199.42" height="36" rx="3" fill="var(--_bg)"/><text text-anchor="middle" xml:space="preserve"><tspan x="320.02" y="376.9">the owner deletes it or a newer</tspan><tspan x="320.02" y="394.9">version</tspan></text></g><g class="pele-edge-label" data-id="edge3"><rect x="456.88" y="290" width="179.56" height="36" rx="3" fill="var(--_bg)"/><text text-anchor="middle" xml:space="preserve"><tspan x="546.65" y="303.9">its group is summarized [2+</tspan><tspan x="546.65" y="321.9">facts, older than 7 days]</tspan></text></g><g class="pele-edge-label" data-id="edge4"><rect x="714.78" y="297.5" width="151.95" height="21" rx="3" fill="var(--_bg)"/><text x="790.75" y="312.9" text-anchor="middle">a newer fact replaces it</text></g><g class="pele-edge-label" data-id="edge5"><rect x="925.94" y="297.5" width="140.29" height="21" rx="3" fill="var(--_bg)"/><text x="996.08" y="312.9" text-anchor="middle">a question matches it</text></g><g class="pele-edge-label" data-id="edge6"><rect x="691.04" y="432.5" width="199.42" height="36" rx="3" fill="var(--_bg)"/><text text-anchor="middle" xml:space="preserve"><tspan x="790.75" y="446.4">the owner deletes it or a newer</tspan><tspan x="790.75" y="464.4">version</tspan></text></g><g class="pele-edge-label" data-id="edge7"><rect x="1086.23" y="290" width="178.45" height="36" rx="3" fill="var(--_bg)"/><text text-anchor="middle" xml:space="preserve"><tspan x="1175.45" y="303.9">use count updated after the</tspan><tspan x="1175.45" y="321.9">answer</tspan></text></g></g><g class="pele-nodes"><g class="pele-node pele-state teal" data-id="s0" transform="translate(668.7,186)"><rect x="-115.15" y="-22" width="230.3" height="44" rx="10" fill="var(--_s)" stroke="var(--_b)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">Live: recalled when relevant</text></g><g class="pele-node pele-state tan" data-id="s1" transform="translate(99.15,381)"><rect x="-91.15" y="-22" width="182.3" height="44" rx="10" fill="var(--_s)" stroke="var(--_b)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">Expired: hidden, kept</text></g><g class="pele-node pele-state pink" data-id="s2" transform="translate(428.1,518)"><rect x="-109.81" y="-22" width="219.62" height="44" rx="10" fill="var(--_s)" stroke="var(--_b)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">Deleted with every version</text></g><g class="pele-node pele-state pink" data-id="s3" transform="translate(546.65,381)"><rect x="-96.93" y="-31" width="193.86" height="62" rx="10" fill="var(--_s)" stroke="var(--_b)"/><text class="pele-label" text-anchor="middle" xml:space="preserve"><tspan x="0" y="-4.9">Deleted: merged into a</tspan><tspan x="0" y="16.1">summary row</tspan></text></g><g class="pele-node pele-state tan" data-id="s4" transform="translate(790.75,381)"><rect x="-107.17" y="-31" width="214.34" height="62" rx="10" fill="var(--_s)" stroke="var(--_b)"/><text class="pele-label" text-anchor="middle" xml:space="preserve"><tspan x="0" y="-4.9">Superseded: hidden, kept</tspan><tspan x="0" y="16.1">as history</tspan></text></g><g class="pele-node pele-state teal" data-id="s5" transform="translate(1043.3,381)"><rect x="-105.38" y="-31" width="210.77" height="62" rx="10" fill="var(--_s)" stroke="var(--_b)"/><text class="pele-label" text-anchor="middle" xml:space="preserve"><tspan x="0" y="-4.9">Handed to the model in a</tspan><tspan x="0" y="16.1">turn</tspan></text></g><g class="pele-node pele-state-start" data-id="root_start" transform="translate(668.7,113)"><circle r="7" fill="var(--_l)"/></g><g class="pele-node pele-state teal" data-id="lg0" transform="translate(771.26,82)"><rect x="-39.56" y="-22" width="79.12" height="44" rx="10" fill="var(--_s)" stroke="var(--_b)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">Visible</text></g><g class="pele-node pele-state tan" data-id="lg1" transform="translate(892.17,82)"><rect x="-41.34" y="-22" width="82.69" height="44" rx="10" fill="var(--_s)" stroke="var(--_b)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">Hidden</text></g><g class="pele-node pele-state pink" data-id="lg2" transform="translate(1009.08,82)"><rect x="-35.57" y="-22" width="71.14" height="44" rx="10" fill="var(--_s)" stroke="var(--_b)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">Gone</text></g></g></g></svg>

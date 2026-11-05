@@ -1,3 +1,11 @@
+### 2026-11-05 — Statecharts of the agent chat turn and the agent memory
+
+| Area | Change |
+|---|---|
+| Docs | • New `docs/architecture/statecharts/` with three charts drawn from small TLA+ models: the agent chat turn, the memory task after a turn, and one stored memory row<br>• Each chart maps its states to the HoneyHive spans and log lines they leave, and lists the rules TLC checks and what the model leaves out<br>• Linked from the docs map and the service walkthrough §8.2 |
+
+Check: TLC checked every rule on each model with none broken (agent turn 156 states, memory task 36, memory row 6); the SVGs were rendered with Pele 1.9.0 and viewed in a browser. The models were written from the code on `staging`, not replayed against it. Commit: the one that adds this entry.
+
 ### 2026-11-04 — Cache the chat history in Redis
 
 | Area | Change |
@@ -180,31 +188,3 @@ Check: `tsc --noEmit` passes; `node --test tests/*.test.ts` passes 184 of 186, a
 | Docs | • `SECURITY.md` asks for private vulnerability reports; `ci-cd.md` gains "Ownership and dependency updates" |
 
 Check: `actionlint` passes; `check-jsonschema` validates `dependabot.yml` and every workflow; each pinned SHA was resolved from its tag through the GitHub API. Not verified: Dependabot's first run, and private vulnerability reporting, which is still off in the repository settings. Commit: the one that adds this entry.
-
-### 2026-11-03 — Infra plans only merged code and shares the VPS lock with the backend deploy
-
-| Area | Change |
-|---|---|
-| CI | • A pull request into `infra.yml` gets only the lint, so code that is not merged never reads the root SSH key; a push to `staging` now plans then applies, and the `infra-plan` environment is gone<br>• `scripts/ci/plan-infra-runs.sh` lists the runs instead of a 20-line inline step<br>• The infra run and `deploy-backend.yml` share the concurrency group `vps-<environment>` with `queue: max`, because both write the app directory and the default queue cancels all waiting jobs but the newest; `.github/actionlint.yaml` ignores the `queue` key, which actionlint 1.7.12 does not know yet |
-| Docs | • `ci-cd.md` lists every workflow and the three infra environments with their branch rules; `ci-cd.drawio` draws `infra.yml` to Ansible and the SVG is re-exported |
-
-Check: `actionlint`, `shellcheck` and `check-provider-coupling.sh` pass; `plan-infra-runs.sh` printed the expected runs for a review, a push to `staging` and `main`, two manual runs and an unknown trigger. Not verified: the workflow on a runner, because the infra environments do not exist yet. Commit: the one that adds this entry.
-
-### 2026-11-03 — Ansible flow in roles, a provider-neutral entrypoint and an infra workflow
-
-| Area | Change |
-|---|---|
-| Deploy | • `deploy/ansible/playbook.yml` becomes `site.yml` with five roles (`base`, `edge`, `dopbase`, `monitoring`, `app`) and a committed one-host inventory `smart-ledger-vps`, so host-wide tasks run once instead of once per pseudo-host<br>• Scope `app` (staging or production) writes only that environment's files; scope `all` (production only) also configures the host, Dopbase with its backup cron and the shared monitoring, so a staging run no longer rewrites them or deletes the backup cron<br>• All asserts run before the host changes, the stack handler no longer ends in `|| true`, apt uses `cache_valid_time`, the Alloy override is a template, and values read from the environment have no fallbacks |
-| CI | • `scripts/infra/run.sh <plan\|apply> <environment> [--scope app\|all]` replaces `scripts/secrets/vps-playbook.sh` and takes only neutral variables; `deploy/ansible/Dockerfile` is its runtime<br>• `infra.yml` lints, plans staging on pull requests, applies staging on a push to `staging` and plans then applies production on a push to `main` |
-| Docs | • `ci-cd.md` describes the roles, scopes, the entrypoint and the four GitHub environments |
-
-Check: `ansible-playbook --syntax-check`, `ansible-lint` (production profile), `shellcheck`, `actionlint` pass; `--list-tasks` for scope `app` lists no `base`, `edge`, `dopbase` or `monitoring` task; the new templates render byte-identical to the old inline content; a check-mode run of the `app` role against localhost passes; the image builds with Dopbase 0.1.10 verified by sha256. Not verified: any run against the VPS, the workflow on a runner, and the credential map pages (no logged-in Dopbase). Commit: the one that adds this entry.
-
-### 2026-11-03 — GitHub Actions as a thin adapter over scripts/ci
-
-| Area | Change |
-|---|---|
-| CI | • Every workflow step of more than five lines moved to `scripts/ci/<verb-noun>.sh` and reads its inputs from `env:`, so no `${{ }}` reaches a script and the same script runs on a laptop; inline `run:` lines fell from 563 to 96, 9 of them in `release-policy.yml`, which another branch owns<br>• `scripts/ci/lib.sh` is the one file that reads `GITHUB_*`; it fills `SMARTLEDGER_ENVIRONMENT`, `_COMMIT`, `_REF`, `_RUN_ID` and four more, and wraps annotations, outputs, env, PATH, summary and temp directory; `check-provider-coupling.sh` runs in the shellcheck job and fails on `GITHUB_` or `${{` elsewhere in `scripts/` and `deploy/`<br>• `changes.sh` replaces `dorny/paths-filter` with a `git diff` over a full checkout, with the same areas and output names; `select-runner.yml`, the CI summary job, the CD hand-off and the mobile gate now check out `scripts/ci` to reach their script<br>• `android-release.sh` and `preflight.sh` use `ci_running` and `ci_summary` |
-| Docs | • `ci-cd.md#scripts` describes the adapter split, the variables and a runbook for deploying `ai` from a laptop |
-
-Check: shellcheck and actionlint pass; `changes.sh` matched the old dorny rules on 80 single-commit ranges of `staging`, a fake pull request merge commit and a push; 17 scripts ran locally with sample input, including `start-ssh-agent.sh` with a throwaway key. Not verified: any workflow on a runner (GitHub-hosted runners are billing-locked), the image push, the VPS deploy, the Vercel steps and the R2 publish. Commit: the one that adds this entry.
