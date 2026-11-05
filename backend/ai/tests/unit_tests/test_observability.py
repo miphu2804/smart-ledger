@@ -3,6 +3,7 @@ import inspect
 import json
 import logging
 import threading
+import time
 from collections import Counter
 from contextlib import contextmanager
 from dataclasses import replace
@@ -10,6 +11,10 @@ from types import SimpleNamespace
 
 import pytest
 from honeyhive import HoneyHiveTracer
+from honeyhive._generated.models.LegacyStartSessionRequestSession import (
+    LegacyStartSessionRequestSession,
+)
+from honeyhive.models import StartSessionRequest
 from opentelemetry import baggage, context
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
@@ -109,6 +114,9 @@ def slow_agent(tracer, turn_timeout_seconds: float = 60) -> AgentService:
 class RecordingTracer:
     """Records each call the way the HoneyHive SDK receives it."""
 
+    project_name = "smartledger"
+    source_environment = "production"
+
     def __init__(self) -> None:
         self.sessions: list[dict] = []
         self.enrichments: list[dict] = []
@@ -121,6 +129,16 @@ class RecordingTracer:
     async def acreate_session(self, **kwargs) -> str | None:
         self.sessions.append(kwargs)
         return kwargs["session_id"]
+
+    @property
+    def client(self) -> SimpleNamespace:
+        """The sessions API the real creation goes through; it lands in
+        `acreate_session`, so each fake decides how creation behaves."""
+
+        async def start_async(data: dict) -> str | None:
+            return await self.acreate_session(**data["session"])
+
+        return SimpleNamespace(sessions=SimpleNamespace(start_async=start_async))
 
     def enrich_session(self, **kwargs) -> None:
         self.enrichments.append(kwargs)
@@ -248,6 +266,7 @@ async def test_turn_opens_a_session_with_the_redacted_question() -> None:
     local, remote = tracer.sessions
     assert local["skip_api_call"] is True
     assert remote["session_id"] == local["session_id"]
+    assert remote["start_time"] == pytest.approx(time.time() * 1000, abs=60_000)
     assert remote["inputs"] == {"question": "mail [redacted:email]"}
     assert remote["user_properties"] == {"user_id": 3}
     assert isinstance(remote["metadata"].pop("history_ms"), int)
@@ -425,15 +444,17 @@ async def test_calls_match_the_honeyhive_sdk() -> None:
     await agent.chat(user_id=3, shop_id=15, message=QUESTION)
     await agent.observability.flush()
 
+    local, remote = tracer.sessions
+    StartSessionRequest.model_validate({"session": remote})
     for method, calls in (
-        (HoneyHiveTracer.acreate_session, tracer.sessions),
+        (HoneyHiveTracer.acreate_session, [local]),
         (HoneyHiveTracer.enrich_session, tracer.enrichments),
         (HoneyHiveTracer.force_flush, tracer.flushes),
     ):
         for kwargs in calls:
             inspect.signature(method).bind(tracer, **kwargs)
-    assert {"inputs", "metadata", "user_properties"} <= set(
-        inspect.signature(HoneyHiveTracer.acreate_session).parameters
+    assert {"start_time", "inputs", "metadata", "user_properties"} <= set(
+        LegacyStartSessionRequestSession.model_fields
     )
     assert {"outputs", "metrics", "metadata"} <= set(
         inspect.signature(HoneyHiveTracer.enrich_session).parameters

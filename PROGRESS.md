@@ -1,3 +1,12 @@
+### 2026-11-05 — Send each HoneyHive session's start time
+
+| Area | Change |
+|---|---|
+| AI | • The session opens through HoneyHive's sessions API with the turn's start time in milliseconds, because the SDK's `acreate_session` sends none: HoneyHive stored 0 and showed a turn's duration as the time from 1970 to its last span (498294 h) |
+| Docs | • The AI README says why the session bypasses `acreate_session` |
+
+Check: `uv run pytest -q` (535 passed, 79 skipped), `ruff check` and `ruff format --check`; the production session `d5af044c` read back from HoneyHive had `start_time`, `end_time` and `duration` 0 on its session event while every span was timed. Not verified: a production session after deploy. Commit: the one that adds this entry.
+
 ### 2026-11-05 — Set an OpenAI service tier per model alias
 
 | Area | Change |
@@ -187,12 +196,3 @@ Check: `npx tsc --noEmit` passes; unit tests 178/180, with `parseOrder` and `qui
 | Docs | • The agent_chat README lists the new modules and names the module that does each step |
 
 Check: an AST comparison finds 71 of the 72 old top-level symbols unchanged, and `RESULTS` still points at `agent_chat/results`; the 69 datapoints built after the split match the ones built before byte for byte, with `suite_version` `7a34fe0c0744`; `--dry-run` prints the same plan apart from the random `session_id`; unit tests 441 passed; ruff check and format pass. Not verified: a full run with the model and `--sync`. Commit: the one that adds this entry.
-
-### 2026-11-03 — Revenue questions on Orders open the assistant in a sheet
-
-| Area | Change |
-|---|---|
-| Mobile | • Under the totals card on Orders, three chips ask Bobi about revenue (last month, this month against last month, best sellers over 7 days), like the revenue page of MoMo<br>• A chip opens a bottom sheet that sends the question through the same agent stream as the Assistant screen, shows the answer as it arrives, follow-up chips and a box to ask more; an AI error puts the question back in the box, and leaving the screen closes the sheet |
-| Docs | • `AC-116` for the chips and the sheet |
-
-Check: `tsc` passes; `node --test` 185/187 (the new `aiSuggestions` tests pass; `parseOrder` and `quickNav` fail on `staging` too); on the mock web build at 375×812 a chip opens the sheet and sends the question, follow-ups and the AI-failure path work, and opening the Assistant closes the sheet. Not checked against real Core and AI, or on a phone.
