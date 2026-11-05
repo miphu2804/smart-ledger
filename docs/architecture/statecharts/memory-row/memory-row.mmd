@@ -1,0 +1,32 @@
+---
+title: "Memory: one stored fact"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: Visible
+    lg1: Hidden
+    lg2: Gone
+  }
+  class lg0 teal
+  class lg1 tan
+  class lg2 pink
+  s0: Live: recalled when relevant
+  s1: Expired: hidden, kept
+  s2: Deleted with every version
+  s3: Deleted: merged into a summary row
+  s4: Superseded: hidden, kept as history
+  s5: Handed to the model in a turn
+  [*] --> s0
+  s0 --> s1: its expiry passes
+  s0 --> s2: the owner deletes it or a newer version
+  s0 --> s3: its group is summarized [2+ facts, older than 7 days]
+  s0 --> s4: a newer fact replaces it
+  s0 --> s5: a question matches it
+  s4 --> s2: the owner deletes it or a newer version
+  s5 --> s0: use count updated after the answer
+  class s0 teal
+  class s1 tan
+  class s2 pink
+  class s3 pink
+  class s4 tan
+  class s5 teal

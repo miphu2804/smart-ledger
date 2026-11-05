@@ -668,6 +668,8 @@ flowchart LR
 
 ### 8.2 One chat turn end-to-end
 
+The [AI statecharts](../statecharts/README.md) draw the same turn, and the memory task after it, as states with the trace span or log line each state leaves.
+
 `POST /chat` returns one JSON reply after the turn is saved. `POST /chat/stream` answers with server-sent events while the model runs: `memory` lists the recalled memories once, before the first `delta`, when memory is on and some were used; `delta` carries new text, `reset` discards text already sent (a preamble before a data tool call, or an answer the screen rejected; text written before a call to `suggest_screen` alone is part of the answer and stays), and `done` carries the saved ids and answer. `done` is sent only after `save_exchange`. A refusal before the stream opens, such as `input_too_long` or a missing conversation, is an HTTP error; a later failure, such as `answer_timeout`, arrives as an `error` event. If the app disconnects, Core closes the stream and the turn is cancelled; nothing is saved unless the disconnect lands while the exchange is already being written.
 
 Core checks the owner's shop, sends the owner's `user_id` with `shop_id`, and copies the stream line by line, narrowing `done` to `conversation_id`, `message_id` and `answer`; the JSON route returns the same three fields. An AI `404` becomes `conversation_not_found`, an AI `422` with a guardrail code (`input_too_long`, `answer_unavailable` or `answer_timeout`) keeps that code, and any other failure, including any other `422`, becomes `503 ai_unavailable`. The codes are listed in [API contracts](../../contracts/api-contracts.md).
