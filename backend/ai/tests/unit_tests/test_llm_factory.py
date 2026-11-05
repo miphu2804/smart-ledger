@@ -130,14 +130,14 @@ def test_fallbacks_parse_from_a_json_env_value(monkeypatch) -> None:
     assert config.MODEL_FALLBACKS == ["openai_chat:mercury-3"]
 
 
-def test_default_alias_is_luna_on_responses_with_high_effort() -> None:
+def test_default_alias_is_luna_on_responses_with_medium_effort() -> None:
     config = AppConfig(_env_file=None, OPENAI_API_KEY="sk-test")
 
     model = build_chat_model(config)
 
     assert isinstance(model, OpenAIResponsesModel)
     assert model.model_name == "gpt-6-luna"
-    assert model.settings["openai_reasoning_effort"] == "high"
+    assert model.settings["openai_reasoning_effort"] == "medium"
 
 
 def test_alias_effort_overrides_the_default_effort() -> None:
