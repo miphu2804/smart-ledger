@@ -1,10 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
+import { collectPageErrors, openQuickNav } from './helpers';
 
-/** Các tab giữ nguyên trong trang và Tổng quan có hai nút ☰ (đầu màn và đầu đã thu gọn), nên chọn nút đang hiện. */
+/** Mở danh sách tiệm từ menu chuyển nhanh. */
 async function openShopList(page: Page) {
-  await page.locator('[aria-label="Mở menu chuyển nhanh"]').evaluateAll((buttons) => {
-    (buttons.filter((button) => (button as HTMLElement).offsetParent).pop() as HTMLElement).click();
-  });
+  await openQuickNav(page);
   await page.getByRole('button', { name: /đổi hoặc tạo cửa hàng/ }).click();
 }
 
@@ -15,8 +14,7 @@ async function openProfile(page: Page, shopName: string) {
 }
 
 test('tạo cửa hàng thứ hai, đổi qua lại, mỗi cửa hàng giữ tài khoản ngân hàng riêng', async ({ page }) => {
-  const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
+  const errors = collectPageErrors(page);
 
   await page.goto('/');
   await page.getByRole('button', { name: 'Đăng nhập bằng Google' }).click();
