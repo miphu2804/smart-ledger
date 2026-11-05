@@ -141,15 +141,18 @@ class AppConfig(BaseSettings):
     # comma-separated memory types the model may write on its own; the rest stay
     # unwritten until the PO approves them
     AGENT_MEMORY_TYPES: str = "preference,procedural,semantic"
-    # where memory embeddings come from: sentence-transformers runs the model in this
-    # process (the `memory` dependency group); cloudflare calls Workers AI and needs
-    # the CLOUDFLARE_* settings below
-    AGENT_MEMORY_EMBEDDING_PROVIDER: str = "sentence-transformers"
-    # a Hugging Face model for sentence-transformers, a Workers AI model such as
-    # @cf/google/embeddinggemma-300m for cloudflare
-    AGENT_MEMORY_EMBEDDING_MODEL: str = (
-        "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-    )
+    # where memory embeddings come from: onnx runs a static ONNX model in this process
+    # without torch; cloudflare calls Workers AI and needs the CLOUDFLARE_* settings
+    # below; sentence-transformers runs a model with torch (the `memory` dependency
+    # group). One environment uses one provider: vectors from two models cannot be
+    # compared, so switching means re-embedding the stored memories.
+    AGENT_MEMORY_EMBEDDING_PROVIDER: str = "onnx"
+    # for onnx a directory holding model.onnx and tokenizer.json, relative to the
+    # working directory: backend/ai locally (scripts/ai/fetch-embedding-model.sh puts
+    # it there), /app in the image, which ships it. A Workers AI model such as
+    # @cf/google/embeddinggemma-300m for cloudflare, a Hugging Face model for
+    # sentence-transformers.
+    AGENT_MEMORY_EMBEDDING_MODEL: str = "models/static-mrl-int8"
 
     # cloudflare workers ai: account that runs the embeddings, and an API token with
     # the Workers AI Read permission
