@@ -7,4 +7,5 @@ tool_choice = 0.9
 recalled_expected = 1.0
 no_internal_leak = 1.0
 vietnamese_answer = 1.0
+no_time_echo = 1.0
 answer_faithfulness = 4.0

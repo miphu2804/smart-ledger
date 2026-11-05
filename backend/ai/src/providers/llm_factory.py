@@ -47,7 +47,9 @@ class LLMFactory:
             logger.warning("unknown model alias: %s", alias)
             return None
         effort = target.effort or self.config.MODEL_REASONING_EFFORT
-        primary = self._build_model(target.protocol, target.model, effort)
+        primary = self._build_model(
+            target.protocol, target.model, effort, target.service_tier
+        )
         if primary is None:
             return None
         fallbacks = [self._build_fallback(e) for e in self.config.MODEL_FALLBACKS]
@@ -72,19 +74,28 @@ class LLMFactory:
             protocol, model_name, self.config.MODEL_REASONING_EFFORT
         )
 
-    def _build_model(self, protocol: str, model_name: str, effort: str) -> Model | None:
-        provider = self._build_provider(protocol, effort)
+    def _build_model(
+        self,
+        protocol: str,
+        model_name: str,
+        effort: str,
+        service_tier: str | None = None,
+    ) -> Model | None:
+        provider = self._build_provider(protocol, effort, service_tier)
         if provider is None:
             return None
         return provider.create_model(model_name)
 
-    def _build_provider(self, protocol: str, effort: str) -> Provider | None:
+    def _build_provider(
+        self, protocol: str, effort: str, service_tier: str | None
+    ) -> Provider | None:
         config = self.config
         options = {
             "api_key": config.OPENAI_API_KEY,
             "base_url": config.OPENAI_BASE_URL or OPENAI_DEFAULT_BASE_URL,
             "timeout": config.MODEL_TIMEOUT_SECONDS,
             "reasoning_effort": effort,
+            "service_tier": service_tier,
         }
         if protocol == "openai_responses":
             return OpenAIResponsesProvider(**options)

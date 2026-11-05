@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -10,6 +12,9 @@ class ModelAlias(BaseModel):
     # reasoning effort of this model; unset uses MODEL_REASONING_EFFORT. The accepted
     # values differ by model: OpenAI takes none to max, Mercury takes instant to high.
     effort: str | None = None
+    # OpenAI service tier of this model's requests; "priority" is the faster, pricier
+    # tier. Unset leaves the provider default.
+    service_tier: Literal["auto", "default", "flex", "priority"] | None = None
 
 
 class AppConfig(BaseSettings):
@@ -72,7 +77,8 @@ class AppConfig(BaseSettings):
     GIT_SHA: str | None = None
 
     # models the application asks for by alias, as a JSON object; protocol is the API
-    # the model speaks: openai_responses or openai_chat
+    # the model speaks: openai_responses or openai_chat;
+    # effort and service_tier are optional
     MODEL_ALIASES: dict[str, ModelAlias] = {
         "chat": ModelAlias(
             protocol="openai_responses", model="gpt-6-luna", effort="high"

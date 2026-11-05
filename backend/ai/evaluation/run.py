@@ -53,7 +53,7 @@ from honeyhive import HoneyHive  # noqa: E402
 # `agent_chat/`.
 EVALS = {
     "agent_chat": lambda arguments: AgentChatEval(
-        arguments.repeats, arguments.judge, arguments.model
+        arguments.repeats, arguments.judge, arguments.model, arguments.limit
     ),
     "memory": lambda arguments: MemoryEval(),
 }
@@ -62,7 +62,7 @@ EVALS = {
 def main() -> None:
     arguments = parse_arguments()
     if arguments.evaluation != "agent_chat":
-        for option in ("sync", "model"):
+        for option in ("sync", "model", "limit"):
             if getattr(arguments, option):
                 raise SystemExit(f"--{option} is for agent_chat only")
     evaluation = EVALS[arguments.evaluation](arguments)
@@ -132,6 +132,11 @@ def parse_arguments() -> argparse.Namespace:
         "--model",
         help="model alias the agent_chat agent uses instead of `chat`; the judge keeps "
         "`chat`",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        help="ask only the first N agent_chat questions, for a quick check",
     )
     parser.add_argument(
         "--verbose",

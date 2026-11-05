@@ -23,6 +23,7 @@ Add options when you need more:
 ```bash
 uv run evaluation/run.py agent_chat --dry-run            # show the plan; no model call
 uv run evaluation/run.py agent_chat --repeats 1          # each question once instead of 3 times
+uv run evaluation/run.py agent_chat --limit 15           # only the first 15 questions, for a quick check
 uv run evaluation/run.py agent_chat --model ALIAS        # the agent on another model alias
 uv run evaluation/run.py agent_chat --judge ALIAS        # grade with another model alias
 uv run evaluation/run.py memory --report /tmp/memory.md  # also write the result as markdown
