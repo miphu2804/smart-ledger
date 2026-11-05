@@ -3,6 +3,7 @@ import contextvars
 import functools
 import logging
 import random
+import time
 import uuid
 from collections.abc import Coroutine, Iterator
 from concurrent.futures import ThreadPoolExecutor
@@ -129,6 +130,7 @@ class Observability:
         created = self._run_in_background(
             self._create_session(
                 session_id,
+                start_time=time.time() * 1000,
                 inputs={"question": question},
                 # The SDK takes no session config, so the model and prompt version
                 # ride in the metadata, where the session list can filter them.
@@ -214,11 +216,25 @@ class Observability:
         return self._tracer is not None and _session_created.get() is not None
 
     async def _create_session(self, session_id: str, **fields) -> None:
-        created = await self._tracer.acreate_session(
-            session_name="agent-chat", session_id=session_id, **fields
-        )
-        # The SDK returns None instead of raising, so a refused key or an outage would
-        # otherwise leave sessions without their fields and no sign why.
+        # Sent through the sessions API, not `acreate_session`, because only the API
+        # takes a start time: without one HoneyHive stores 0 and the session's
+        # duration runs from 1970 to its last span.
+        try:
+            created = await self._tracer.client.sessions.start_async(
+                {
+                    "session": {
+                        "project": self._tracer.project_name,
+                        "source": self._tracer.source_environment,
+                        "session_name": "agent-chat",
+                        "session_id": session_id,
+                        **fields,
+                    }
+                }
+            )
+        except Exception:
+            created = None
+        # A refused key or an outage would otherwise leave sessions without their
+        # fields and no sign why.
         if created is None:
             logger.warning("honeyhive session not created: %s", session_id)
 
