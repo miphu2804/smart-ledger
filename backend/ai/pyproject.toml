@@ -6,6 +6,8 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
     "honeyhive>=1.8.1",
+    "numpy>=2.4.6",
+    "onnxruntime>=1.31.1",
     "pgvector>=0.4",
     "prometheus-fastapi-instrumentator>=8.1",
     "psycopg[binary]>=3.2",
@@ -17,6 +19,7 @@ dependencies = [
     "redis>=8.1.0",
     "sqlalchemy>=2.1.4",
     "sqlglot>=30.21.0",
+    "tokenizers>=0.23.3",
     "uvicorn>=0.32",
 ]
 

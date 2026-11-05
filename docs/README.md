@@ -57,6 +57,7 @@ Start with the path that matches your task; each step links to the next level of
 | [Android APK release diagram](architecture/diagrams/images/apk-release.svg) | Manual release pipeline, release signing, the R2 bucket and the download from the landing page; edit [`apk-release.drawio`](architecture/diagrams/src/apk-release.drawio) and re-export the SVG |
 | [CI/CD and environments diagram](architecture/diagrams/images/ci-cd.svg) | CI/CD, VPS runtime, clients, dev machine, Supabase staging and production; edit [`ci-cd.drawio`](architecture/diagrams/src/ci-cd.drawio) and re-export the SVG; dashed edges are planned |
 | [Service walkthrough](architecture/service-walkthrough/README.md) | Reading notes with diagrams of Core and AI service flows; not a source of truth |
+| [AI statecharts](architecture/statecharts/README.md) | TLC-checked statecharts of the agent chat turn and the agent memory, with the span or log each state leaves, for debugging |
 | [Mobile UI style and migration](design/mobile-ui-style-migration.md) | Visual direction and implementation checks for the mobile app |
 | [Mobile wording review](design/mobile-wording-review.md) | Proposed UI wording, icon and feedback mapping pending product approval |
 | [Local development](development/local-development.md) | Setup, run commands, pre-PR checks, local Compose, the local database and the shared-database migration workflow |

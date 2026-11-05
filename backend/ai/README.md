@@ -191,9 +191,10 @@ The tool-call guardrail counts one `run_code` as one call and does not see calls
 `AGENT_MEMORY_ENABLED=true` turns on the [ADR-0002](../../docs/architecture/adr/0002-agent-long-term-memory.md) memory. It is not product behavior until the PO approves it. ADR-0002 owns the recall, ranking and reconcile design; [the memory evaluation](evaluation/memory/README.md) measures its recall.
 
 - Needs the migrations `20261014000000_agent_memories.sql` and `20261015000000_agent_memory_visibility.sql`, and an embedder from `AGENT_MEMORY_EMBEDDING_PROVIDER`:
-  - `sentence-transformers` (default) runs locally and needs `uv sync --group memory`; the Docker image leaves that group out, so there the flag logs an error and stays off.
+  - `sentence-transformers` runs locally and needs `uv sync --group memory`; the Docker image leaves that group out, so there the flag logs an error and stays off.
   - `cloudflare` calls Workers AI with `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`; owner messages and facts are sent to Cloudflare.
-- Vectors are cut to 384 dimensions. Changing the model needs `agent_memories` cleared or re-embedded first.
+  - `onnx` runs a static ONNX model in this process with onnxruntime, without torch; `AGENT_MEMORY_EMBEDDING_MODEL` is a directory holding `model.onnx` and `tokenizer.json`. The default. The Docker image ships the int8 export of `static-similarity-mrl-multilingual-v1` at `/app/models/static-mrl-int8`, pinned to one revision and checked by SHA-256. It embeds a message in under 1 ms and adds about 330 MB of memory, but its recall on the memory evaluation is lower than embeddinggemma's (0.753 against 0.861 at 384 dimensions).
+- Vectors are cut to 384 dimensions. Vectors of two models cannot be compared, so an environment that changes provider or model re-embeds its stored memories: set the new values in Dopbase and deploy, then run `uv run python -m src.memory.reembed` from `backend/ai` with that environment's `POSTGRES_URL` and the new embedding settings, first as a dry run and then with `--apply`. In that order no memory written in between keeps the old model's vector; recall is off-target only from the deploy until the script finishes. All vectors are written in one transaction, and running it again with the old settings restores the old model's vectors.
 - Recall: up to ten `preference` memories lead every turn, then the five best matches by cosine plus BM25 (`src/memory/ranking.py`). A failed search answers without memories. The stream sends a `memory` event before the first `delta`.
 - Write: after a saved turn, the chat model extracts up to five facts of the types in `AGENT_MEMORY_TYPES`, reconciles them with similar live memories and merges memories older than 7 days. It runs in the background and never fails the turn. Facts with a Vietnamese phone number are dropped.
 - The owner's switch lives in `agent_memory_settings` (on when no row); off stops recall and writes and deletes nothing. Deleting a conversation deletes the memories it produced.
@@ -277,8 +278,8 @@ Settings come from `src/app_config.py`, read from the environment or `.env`; bla
 | | `SANDBOX_MAX_SUSPENSIONS` | `1000` | |
 | Memory | `AGENT_MEMORY_ENABLED` | `false` | See [Long-term memory](#long-term-memory-off-by-default) |
 | | `AGENT_MEMORY_TYPES` | `preference,procedural,semantic` | Types the model may write |
-| | `AGENT_MEMORY_EMBEDDING_PROVIDER` | `sentence-transformers` | Or `cloudflare` |
-| | `AGENT_MEMORY_EMBEDDING_MODEL` | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | Embedding model |
+| | `AGENT_MEMORY_EMBEDDING_PROVIDER` | `onnx` | Or `cloudflare`, `sentence-transformers`; one provider per environment |
+| | `AGENT_MEMORY_EMBEDDING_MODEL` | `models/static-mrl-int8` | Embedding model; for `onnx` a directory relative to the working directory, filled locally by `scripts/ai/fetch-embedding-model.sh` |
 | | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | unset | Workers AI embeddings |
 | Tracing | `HH_API_KEY` | unset | Unset sends nothing; also needs `HH_SOURCE=production` |
 | | `HH_API_URL` | unset | Data plane URL; unset uses HoneyHive's multi-tenant default |

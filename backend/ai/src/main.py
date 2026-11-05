@@ -2,6 +2,7 @@ import asyncio
 import logging
 import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
 import pydantic_ai
@@ -23,6 +24,7 @@ from src.llm_router.bifrost_tier_classifier import BifrostTierClassifier
 from src.llm_router.service import LLMRouterService
 from src.llm_router.tier import Tier
 from src.log_formatter import LevelColorFormatter
+from src.memory.onnx_embedding import OnnxEmbeddingModel
 from src.memory.repository import EMBEDDING_DIMENSIONS, AgentMemoryRepository
 from src.memory.service import AgentMemoryService
 from src.memory.workers_ai_embedding import WorkersAIEmbeddingModel
@@ -186,6 +188,15 @@ def build_memory_embedder() -> Embedder | None:
                 dimensions=EMBEDDING_DIMENSIONS,
             )
         )
+    if provider == "onnx":
+        try:
+            return Embedder(
+                OnnxEmbeddingModel(Path(model), dimensions=EMBEDDING_DIMENSIONS)
+            )
+        except Exception as error:
+            # Missing or unreadable model files turn memory off; chat still works.
+            logger.error("onnx embedding model at %r failed to load: %s", model, error)
+            return None
     if provider != "sentence-transformers":
         logger.error("unknown memory embedding provider %r; memory off", provider)
         return None

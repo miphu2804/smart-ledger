@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="pele pele-state" viewBox="0 0 868 1217" width="868" height="1217" style="max-width:100%;height:auto;--_bg:var(--pele-bg,#fff);--_fg:var(--pele-fg,#1f1f1f);--_m:var(--pele-muted,#6e6e6e);--_l:var(--pele-line,#1f1f1f);--_s:var(--pele-surface,#f3f3f3);--_a:var(--pele-surface-alt,#e6e6e6);--_b:var(--pele-border,#8a8a8a);--_c:var(--pele-accent,#5b7bd5);color:var(--_fg);--_tw:var(--pele-title-weight,bold);--_fm:var(--pele-font-mono,monospace);font:16px sans-serif;letter-spacing:normal;word-spacing:normal;text-transform:none;direction:ltr;font-family:var(--pele-font,sans-serif)" fill="var(--_fg)" role="graphics-document document" aria-roledescription="state"><style>.pele {
+  --pele-bg: #ffffff;
+  --pele-fg: #1c1c1c;
+  --pele-muted: #656565;
+  --pele-line: #808080;
+  --pele-surface: #fcfcfc;
+  --pele-surface-alt: #f1f1f1;
+  --pele-border: #c9c9c9;
+}
+.pele .blue rect { fill: #c3e0ff; }
+.pele .orange rect { fill: #f0d3bf; }
+.pele .purple rect { fill: #e3d5ff; }
+.pele .yellow rect { fill: #f0dcbf; }
+.pele .teal rect { fill: #bfe3df; }
+.pele .tan rect { fill: #e5d9ce; }
+.pele .pink rect { fill: #ffcbe6; }
+.pele .breaks rect {
+  fill: #ffecee !important;
+  stroke: #e72e3b !important;
+  stroke-width: 2.5px !important;
+}
+.pele .breaks text {
+  fill: #cd2834 !important;
+}
+.pele .mayBreak rect {
+  fill: #fff3e6 !important;
+  stroke: #e8730c !important;
+  stroke-width: 2.5px !important;
+}
+.pele .mayBreak text {
+  fill: #b85a06 !important;
+}
+.pele .bugPath rect {
+  stroke: #1680f3 !important;
+  stroke-width: 2.5px !important;
+}
+.pele .repeats rect {
+  stroke: #9b35d6 !important;
+  stroke-width: 2.5px !important;
+  stroke-dasharray: 6 3;
+}
+@media (prefers-color-scheme: dark) {
+  .pele {
+    --pele-bg: #1f1f1f;
+    --pele-fg: #f5f5f5;
+    --pele-muted: #acacac;
+    --pele-line: #939393;
+    --pele-surface: #121212;
+    --pele-surface-alt: #2c2c2c;
+    --pele-border: #4e4e4e;
+  }
+  .pele .blue rect { fill: #1b3857; }
+  .pele .orange rect { fill: #573117; }
+  .pele .purple rect { fill: #3c2e57; }
+  .pele .yellow rect { fill: #573d17; }
+  .pele .teal rect { fill: #174641; }
+  .pele .tan rect { fill: #3d3127; }
+  .pele .pink rect { fill: #57233e; }
+  .pele .breaks rect {
+    fill: #2e2021 !important;
+    stroke: #cf2b35 !important;
+  }
+  .pele .breaks text {
+    fill: #ff6463 !important;
+  }
+  .pele .mayBreak rect {
+    fill: #2e2619 !important;
+    stroke: #d0700f !important;
+  }
+  .pele .mayBreak text {
+    fill: #ffa257 !important;
+  }
+  .pele .bugPath rect {
+    stroke: #116dd2 !important;
+  }
+  .pele .repeats rect {
+    stroke: #9a3fcf !important;
+  }
+}
+
+.pele .pele-title { fill: var(--pele-fg) !important; }
+</style><text class="pele-title" font-weight="var(--_tw)" text-anchor="middle" xml:space="preserve"><tspan x="434" y="25.6">Memory: learning after a turn</tspan></text><g transform="translate(0,36)"><g class="pele-clusters"><g class="pele-cluster pele-state-composite" data-id="legend"><rect x="403.67" y="8" width="456.06" height="112" rx="10" fill="var(--_a)" fill-opacity="0.5" stroke="var(--_b)"/><path d="M403.67,44H859.73" fill="none" stroke="var(--_b)"/><text class="pele-cluster-label" x="631.7" y="31.6" text-anchor="middle">Legend</text></g></g><g class="pele-edges" fill="none" stroke="var(--_l)" stroke-linecap="round"><g class="pele-edge pele-transition" data-id="edge0"><path d="M356.67,120L356.67,157"/><path class="pele-marker" d="M356.67,164L353.31,156L360.03,156Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-transition" data-id="edge1"><path d="M302.42,226C302.42,235.25 257.13,235.25 257.13,244.5L257.13,288"/><path class="pele-marker" d="M257.13,295L253.77,287L260.49,287Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-transition" data-id="edge2"><path d="M410.92,226C410.92,260.5 456.21,260.5 456.21,295L456.21,357C456.21,385 393.34,385 393.34,413L393.34,419"/><path class="pele-marker" d="M393.34,426L389.98,418L396.7,418Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-transition" data-id="edge3"><path d="M257.13,357L257.13,400.5C257.13,407.44 320,407.44 320,414.38L320,419"/><path class="pele-marker" d="M320,426L316.64,418L323.36,418Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-transition" data-id="edge4"><path d="M320,488C320,522.5 109.49,522.5 109.49,557L109.49,1104"/><path class="pele-marker" d="M109.49,1111L106.13,1103L112.85,1103Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-transition" data-id="edge5"><path d="M393.34,488C393.34,497.25 474.57,497.25 474.57,506.5L474.57,550"/><path class="pele-marker" d="M474.57,557L471.21,549L477.93,549Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-transition" data-id="edge6"><path d="M426.09,619C426.09,628.25 356.19,628.25 356.19,637.5L356.19,681"/><path class="pele-marker" d="M356.19,688L352.83,680L359.55,680Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-transition" data-id="edge7"><path d="M523.05,619C523.05,653.5 599.96,653.5 599.96,688L599.96,933.25C599.96,942.63 530.75,942.63 530.75,952L530.75,958"/><path class="pele-marker" d="M530.75,965L527.39,957L534.11,957Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-transition" data-id="edge8"><path d="M295.7,750C295.7,792 247.13,792 247.13,834L247.13,933.25C247.13,941.08 426.65,944.17 426.65,952L426.65,958"/><path class="pele-marker" d="M426.65,965L423.29,957L430.01,957Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-transition" data-id="edge9"><path d="M416.68,750C416.68,759.25 465.25,759.25 465.25,768.5L465.25,827"/><path class="pele-marker" d="M465.25,834L461.89,826L468.61,826Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-transition" data-id="edge10"><path d="M426.65,1027L426.65,1036.63C426.65,1039.72 164.74,1045.91 164.74,1049L164.74,1104"/><path class="pele-marker" d="M164.74,1111L161.38,1103L168.1,1103Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-transition" data-id="edge11"><path d="M478.7,1027L478.7,1089C478.7,1094.63 539,1094.63 539,1100.25L539,1104"/><path class="pele-marker" d="M539,1111L535.64,1103L542.36,1103Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-transition" data-id="edge12"><path d="M636.84,1111L636.84,1101.38C636.84,1095.19 697.13,1095.19 697.13,1089L697.13,1049C697.13,1045.96 530.75,1040.79 530.75,1037.75L530.75,1034"/><path class="pele-marker" d="M530.75,1027L534.11,1035L527.39,1035Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-transition" data-id="edge13"><path d="M465.25,896L465.25,958"/><path class="pele-marker" d="M465.25,965L461.89,957L468.61,957Z" fill="var(--_l)" stroke="none"/></g></g><g class="pele-edge-labels" font-size="14"><g class="pele-edge-label" data-id="edge1"><rect x="179.6" y="246.5" width="155.06" height="21" rx="3" fill="var(--_bg)"/><text x="257.13" y="261.9" text-anchor="middle">the turn used memories</text></g><g class="pele-edge-label" data-id="edge2"><rect x="393.83" y="315.5" width="124.75" height="21" rx="3" fill="var(--_bg)"/><text x="456.21" y="330.9" text-anchor="middle">the turn used none</text></g><g class="pele-edge-label" data-id="edge3"><rect x="155.84" y="377.5" width="202.57" height="21" rx="3" fill="var(--_bg)"/><text x="257.13" y="392.9" text-anchor="middle">use count and last use updated</text></g><g class="pele-edge-label" data-id="edge4"><rect x="24.18" y="708.5" width="170.62" height="21" rx="3" fill="var(--_bg)"/><text x="109.49" y="723.9" text-anchor="middle">switch off, or the read fails</text></g><g class="pele-edge-label" data-id="edge5"><rect x="441.39" y="508.5" width="66.35" height="21" rx="3" fill="var(--_bg)"/><text x="474.57" y="523.9" text-anchor="middle">switch on</text></g><g class="pele-edge-label" data-id="edge6"><rect x="317.95" y="639.5" width="76.49" height="21" rx="3" fill="var(--_bg)"/><text x="356.19" y="654.9" text-anchor="middle">facts found</text></g><g class="pele-edge-label" data-id="edge7"><rect x="505.69" y="701" width="188.53" height="36" rx="3" fill="var(--_bg)"/><text text-anchor="middle" xml:space="preserve"><tspan x="599.96" y="714.9">no new facts, or the extractor</tspan><tspan x="599.96" y="732.9">fails</tspan></text></g><g class="pele-edge-label" data-id="edge8"><rect x="165.71" y="854.5" width="162.84" height="21" rx="3" fill="var(--_bg)"/><text x="247.13" y="869.9" text-anchor="middle">every fact already known</text></g><g class="pele-edge-label" data-id="edge9"><rect x="361.66" y="770.5" width="207.19" height="36" rx="3" fill="var(--_bg)"/><text text-anchor="middle" xml:space="preserve"><tspan x="465.25" y="784.4">new or replacing facts [all kept if</tspan><tspan x="465.25" y="802.4">the reconciler fails]</tspan></text></g><g class="pele-edge-label" data-id="edge10"><rect x="119.49" y="1058.5" width="90.5" height="21" rx="3" fill="var(--_bg)"/><text x="164.74" y="1073.9" text-anchor="middle">no group due</text></g><g class="pele-edge-label" data-id="edge11"><rect x="383.08" y="1051" width="191.25" height="36" rx="3" fill="var(--_bg)"/><text text-anchor="middle" xml:space="preserve"><tspan x="478.7" y="1064.9">a group of 2+ memories older</tspan><tspan x="478.7" y="1082.9">than 7 days [3 per turn]</tspan></text></g><g class="pele-edge-label" data-id="edge12"><rect x="594.32" y="1051" width="205.62" height="36" rx="3" fill="var(--_bg)"/><text text-anchor="middle" xml:space="preserve"><tspan x="697.13" y="1064.9">summary replaces the group, or</tspan><tspan x="697.13" y="1082.9">the group is kept</tspan></text></g><g class="pele-edge-label" data-id="edge13"><rect x="388.11" y="916.5" width="154.29" height="21" rx="3" fill="var(--_bg)"/><text x="465.25" y="931.9" text-anchor="middle">stored, or the store fails</text></g></g><g class="pele-nodes"><g class="pele-node pele-state blue" data-id="s0" transform="translate(356.67,195)"><rect x="-106.25" y="-31" width="212.5" height="62" rx="10" fill="var(--_s)" stroke="var(--_b)"/><text class="pele-label" text-anchor="middle" xml:space="preserve"><tspan x="0" y="-4.9">Turn saved, memory task</tspan><tspan x="0" y="16.1">starts</tspan></text></g><g class="pele-node pele-state blue" data-id="s1" transform="translate(257.13,326)"><rect x="-106.7" y="-31" width="213.41" height="62" rx="10" fill="var(--_s)" stroke="var(--_b)"/><text class="pele-label" text-anchor="middle" xml:space="preserve"><tspan x="0" y="-4.9">Recording use of recalled</tspan><tspan x="0" y="16.1">memories</tspan></text></g><g class="pele-node pele-state blue" data-id="s2" transform="translate(356.67,457)"><rect x="-88.67" y="-31" width="177.34" height="62" rx="10" fill="var(--_s)" stroke="var(--_b)"/><text class="pele-label" text-anchor="middle" xml:space="preserve"><tspan x="0" y="-4.9">Reading the owner's</tspan><tspan x="0" y="16.1">memory switch</tspan></text></g><g class="pele-node pele-state purple" data-id="s3" transform="translate(474.57,588)"><rect x="-100.48" y="-31" width="200.96" height="62" rx="10" fill="var(--_s)" stroke="var(--_b)"/><text class="pele-label" text-anchor="middle" xml:space="preserve"><tspan x="0" y="-4.9">Extracting facts with the</tspan><tspan x="0" y="16.1">extractor model</tspan></text></g><g class="pele-node pele-state yellow" data-id="s4" transform="translate(119.14,1142)"><rect x="-111.14" y="-31" width="222.29" height="62" rx="10" fill="var(--_s)" stroke="var(--_b)"/><text class="pele-label" text-anchor="middle" xml:space="preserve"><tspan x="0" y="-4.9">Finished, every failure only</tspan><tspan x="0" y="16.1">logged</tspan></text></g><g class="pele-node pele-state purple" data-id="s5" transform="translate(356.19,719)"><rect x="-112.49" y="-31" width="224.98" height="62" rx="10" fill="var(--_s)" stroke="var(--_b)"/><text class="pele-label" text-anchor="middle" xml:space="preserve"><tspan x="0" y="-4.9">Embedding and reconciling</tspan><tspan x="0" y="16.1">with similar memories</tspan></text></g><g class="pele-node pele-state teal" data-id="s6" transform="translate(478.7,996)"><rect x="-104.05" y="-31" width="208.1" height="62" rx="10" fill="var(--_s)" stroke="var(--_b)"/><text class="pele-label" text-anchor="middle" xml:space="preserve"><tspan x="0" y="-4.9">Looking for old groups to</tspan><tspan x="0" y="16.1">summarize</tspan></text></g><g class="pele-node pele-state teal" data-id="s7" transform="translate(587.92,1133)"><rect x="-100.92" y="-22" width="201.84" height="44" rx="10" fill="var(--_s)" stroke="var(--_b)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">Summarizing one group</text></g><g class="pele-node pele-state purple" data-id="s8" transform="translate(465.25,865)"><rect x="-106.7" y="-31" width="213.41" height="62" rx="10" fill="var(--_s)" stroke="var(--_b)"/><text class="pele-label" text-anchor="middle" xml:space="preserve"><tspan x="0" y="-4.9">Storing facts, marking the</tspan><tspan x="0" y="16.1">ones they replace</tspan></text></g><g class="pele-node pele-state-start" data-id="root_start" transform="translate(356.67,113)"><circle r="7" fill="var(--_l)"/></g><g class="pele-node pele-state blue" data-id="lg0" transform="translate(452.56,82)"><rect x="-32.9" y="-22" width="65.79" height="44" rx="10" fill="var(--_s)" stroke="var(--_b)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">Start</text></g><g class="pele-node pele-state purple" data-id="lg1" transform="translate(561.92,82)"><rect x="-36.46" y="-22" width="72.91" height="44" rx="10" fill="var(--_s)" stroke="var(--_b)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">Learn</text></g><g class="pele-node pele-state teal" data-id="lg2" transform="translate(690.82,82)"><rect x="-52.45" y="-22" width="104.9" height="44" rx="10" fill="var(--_s)" stroke="var(--_b)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">Compress</text></g><g class="pele-node pele-state yellow" data-id="lg3" transform="translate(813.5,82)"><rect x="-30.23" y="-22" width="60.46" height="44" rx="10" fill="var(--_s)" stroke="var(--_b)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">End</text></g></g></g></svg>
