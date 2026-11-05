@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 
 from sqlalchemy import (
@@ -16,6 +17,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from src.agent.errors import ConversationNotFoundError
 from src.infra.postgre_db_client import Base, PostgreDBClient
+from src.infra.redis_client import RedisClient
 
 
 class ChatConversation(Base):
@@ -51,8 +53,14 @@ class ChatMessage(Base):
 
 
 class AgentConversationRepository:
-    def __init__(self, postgres: PostgreDBClient) -> None:
+    # Each turn reads the latest messages that the previous turn just saved, and the
+    # database is a round trip to another region. Redis keeps them instead of the
+    # process, so every AI process shares one cache and it survives a restart.
+    HISTORY_CACHE_TTL_SECONDS = 24 * 3600
+
+    def __init__(self, postgres: PostgreDBClient, cache: RedisClient) -> None:
         self.postgres = postgres
+        self.cache = cache
 
     def list_conversations(self, user_id: int, shop_id: int) -> list[dict]:
         with self.postgres.session() as session:
@@ -99,6 +107,15 @@ class AgentConversationRepository:
         self, conversation_id: int, user_id: int, shop_id: int, limit: int
     ) -> list[dict]:
         """Return the conversation's latest `limit` messages, oldest first."""
+        # The owner is in the key, so a hit means the database ownership check already
+        # passed for this owner.
+        key = self._history_key(conversation_id, user_id, shop_id)
+        cached = self.cache.get(key)
+        if cached is not None:
+            entry = json.loads(cached)
+            if entry["limit"] == limit:
+                return entry["messages"]
+
         with self.postgres.session() as session:
             self._owned_conversation(session, conversation_id, user_id, shop_id)
             messages = session.scalars(
@@ -108,10 +125,12 @@ class AgentConversationRepository:
                 .limit(limit)
             ).all()
 
-        return [
+        history = [
             {"message_id": message.id, "role": message.role, "content": message.content}
             for message in reversed(messages)
         ]
+        self._cache_history(key, limit, history)
+        return history
 
     def save_exchange(
         self,
@@ -138,23 +157,39 @@ class AgentConversationRepository:
             # Flushed first, so a new conversation has its id for the messages.
             session.flush()
 
+            question = ChatMessage(
+                conversation_id=conversation.id,
+                role="USER",
+                content=user_message,
+            )
             reply = ChatMessage(
                 conversation_id=conversation.id,
                 role="ASSISTANT",
                 content=assistant_message,
             )
-            session.add_all(
-                [
-                    ChatMessage(
-                        conversation_id=conversation.id,
-                        role="USER",
-                        content=user_message,
-                    ),
-                    reply,
-                ]
-            )
+            session.add_all([question, reply])
             session.flush()
-            return conversation.id, reply.id
+            saved_conversation_id, question_id, reply_id = (
+                conversation.id,
+                question.id,
+                reply.id,
+            )
+
+        # After the commit, so a failed save leaves the cache untouched.
+        key = self._history_key(saved_conversation_id, user_id, shop_id)
+        cached = self.cache.get(key)
+        if cached is not None:
+            entry = json.loads(cached)
+            messages = entry["messages"] + [
+                {"message_id": question_id, "role": "USER", "content": user_message},
+                {
+                    "message_id": reply_id,
+                    "role": "ASSISTANT",
+                    "content": assistant_message,
+                },
+            ]
+            self._cache_history(key, entry["limit"], messages[-entry["limit"] :])
+        return saved_conversation_id, reply_id
 
     def rename_conversation(
         self, conversation_id: int, user_id: int, shop_id: int, title: str
@@ -196,6 +231,19 @@ class AgentConversationRepository:
                 )
             )
             session.delete(conversation)
+
+        self.cache.delete(self._history_key(conversation_id, user_id, shop_id))
+
+    @staticmethod
+    def _history_key(conversation_id: int, user_id: int, shop_id: int) -> str:
+        return f"chat-history:{conversation_id}:{user_id}:{shop_id}"
+
+    def _cache_history(self, key: str, limit: int, messages: list[dict]) -> None:
+        self.cache.set(
+            key,
+            json.dumps({"limit": limit, "messages": messages}),
+            self.HISTORY_CACHE_TTL_SECONDS,
+        )
 
     @staticmethod
     def _owned_conversation(

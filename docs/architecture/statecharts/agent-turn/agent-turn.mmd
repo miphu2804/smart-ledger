@@ -1,0 +1,61 @@
+---
+title: "Agent chat turn"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: Prepare
+    lg1: Recall
+    lg2: Run
+    lg3: Save
+    lg4: Stopped
+  }
+  class lg0 blue
+  class lg1 purple
+  class lg2 teal
+  class lg3 yellow
+  class lg4 pink
+  s0: Reading the history
+  s1: Checking the question
+  s2: Refused: 503 ai_unavailable
+  s3: Refused: 404 conversation_not_found
+  s4: Recalling memories and picking the tier
+  s5: Refused: 422 input_too_long
+  s6: Model writing the answer
+  s7: Failed: error event, nothing saved
+  s8: Answer ready
+  s9: Answer rejected, text reset
+  s10: Tools running
+  s11: Saving the exchange
+  s12: Done sent, memory learns in the background
+  [*] --> s0
+  s0 --> s1: history read: Redis hit, else the database
+  s0 --> s2: no chat model is configured
+  s0 --> s3: the conversation is another owner's
+  s1 --> s4: the question passes, secrets redacted
+  s1 --> s5: the question is too long
+  s4 --> s6: memories added, or none [off, empty, or failed]
+  s6 --> s7: timeout, limit, provider error, or app disconnects
+  s6 --> s8: the answer passes the screen
+  s6 --> s9: the screen rejects the answer
+  s6 --> s10: the model calls tools
+  s8 --> s11: the rest of the text is sent
+  s9 --> s6: the model writes again
+  s9 --> s7: timeout, limit, provider error, or app disconnects
+  s10 --> s6: the tools return
+  s10 --> s7: timeout, limit, provider error, or app disconnects
+  s10 --> s8: only screen buttons are called
+  s11 --> s7: the save fails
+  s11 --> s12: the exchange is saved
+  class s0 blue
+  class s1 blue
+  class s2 pink
+  class s3 pink
+  class s4 purple
+  class s5 pink
+  class s6 teal
+  class s7 pink
+  class s8 teal
+  class s9 teal
+  class s10 teal
+  class s11 yellow
+  class s12 yellow

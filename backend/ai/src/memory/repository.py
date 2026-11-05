@@ -14,14 +14,13 @@ from sqlalchemy import (
     Text,
     delete,
     func,
-    null,
     or_,
     select,
     update,
 )
 from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.engine import Row
-from sqlalchemy.orm import Mapped, Session, load_only, mapped_column
+from sqlalchemy.orm import Mapped, load_only, mapped_column
 
 from src.infra.postgre_db_client import Base, PostgreDBClient
 from src.memory import ranking
@@ -141,41 +140,43 @@ class AgentMemoryRepository:
         count no longer rank: weighed into every recall they locked onto a few often
         used memories and buried relevant ones (Recall@5 0.28 against 0.86 for this
         rank on real embeddinggemma vectors).
-        The memories returned still have their use recorded, which the owner sees.
+        Recall only reads: `mark_used` records the use after the answer.
         Superseded and expired memories are skipped.
         """
-        live = self._live(shop_id, user_id)
-        preferences = (
-            select(
-                AgentMemory.id,
-                AgentMemory.content,
-                AgentMemory.memory_type,
-                AgentMemory.created_at,
-                null().label("relevance"),
-                AgentMemory.source_conversation_id,
-            )
-            .where(*live, AgentMemory.memory_type == "preference")
-            .order_by(AgentMemory.importance.desc(), AgentMemory.created_at.desc())
-            .limit(preference_limit)
-        )
+        # One scan answers both parts: every round trip costs 35-46 ms between the
+        # servers, and the owner's memories are few enough to rank in Python.
         with self.postgres.session() as session:
-            rows = session.execute(preferences).all() if preference_limit else []
-            rows += self._searched(
-                session, live, query, text, limit, [row.id for row in rows]
+            rows = session.execute(
+                select(
+                    AgentMemory.id,
+                    AgentMemory.content,
+                    AgentMemory.memory_type,
+                    AgentMemory.created_at,
+                    AgentMemory.importance,
+                    (1 - AgentMemory.embedding.cosine_distance(query)).label(
+                        "relevance"
+                    ),
+                    AgentMemory.source_conversation_id,
+                ).where(*self._live(shop_id, user_id))
+            ).all()
+        preferences = sorted(
+            (row for row in rows if row.memory_type == "preference"),
+            key=lambda row: (row.importance, row.created_at),
+            reverse=True,
+        )[:preference_limit]
+        recalled = [
+            RecalledMemory(
+                row.id,
+                row.content,
+                row.memory_type,
+                row.created_at,
+                None,
+                row.source_conversation_id,
             )
-            if rows:
-                session.execute(
-                    update(AgentMemory)
-                    .where(
-                        AgentMemory.shop_id == shop_id,
-                        AgentMemory.user_id == user_id,
-                        AgentMemory.id.in_([row.id for row in rows]),
-                    )
-                    .values(
-                        last_used_at=func.now(), use_count=AgentMemory.use_count + 1
-                    )
-                )
-        return [
+            for row in preferences
+        ]
+        skipped = {row.id for row in preferences}
+        return recalled + [
             RecalledMemory(
                 row.id,
                 row.content,
@@ -184,43 +185,36 @@ class AgentMemoryRepository:
                 row.relevance,
                 row.source_conversation_id,
             )
-            for row in rows
+            for row in self._searched(
+                [row for row in rows if row.id not in skipped], text, limit
+            )
         ]
 
-    def _searched(
-        self,
-        session: Session,
-        live: tuple,
-        query: list[float],
-        text: str,
-        limit: int,
-        skipped: list[int],
-    ) -> list[Row]:
-        """The `limit` live memories best matching `query` and `text`, not `skipped`."""
+    def _searched(self, rows: list[Row], text: str, limit: int) -> list[Row]:
+        """The `limit` rows best matching the message by cosine and by `text`."""
         # Cosine over every live memory, not the HNSW index: PostgreSQL applies the
         # owner filter after the index's 40 nearest of all owners, so a shop holding
         # a few percent of the rows got fewer than 20 candidates. BM25 needs every
         # live memory's words anyway (ADR-0002, "Giới hạn mở rộng").
-        rows = {
-            row.id: row
-            for row in session.execute(
-                select(
-                    AgentMemory.id,
-                    AgentMemory.content,
-                    AgentMemory.memory_type,
-                    AgentMemory.created_at,
-                    (1 - AgentMemory.embedding.cosine_distance(query)).label(
-                        "relevance"
-                    ),
-                    AgentMemory.source_conversation_id,
-                ).where(*live, AgentMemory.id.not_in(skipped))
-            )
-        }
-        relevance = {memory_id: row.relevance for memory_id, row in rows.items()}
-        lexical = ranking.bm25(text, ((row.id, row.content) for row in rows.values()))
+        by_id = {row.id: row for row in rows}
+        relevance = {row.id: row.relevance for row in rows}
+        lexical = ranking.bm25(text, ((row.id, row.content) for row in rows))
         return [
-            rows[memory_id] for memory_id in ranking.rank(relevance, lexical)[:limit]
+            by_id[memory_id] for memory_id in ranking.rank(relevance, lexical)[:limit]
         ]
+
+    def mark_used(self, shop_id: int, user_id: int, memory_ids: list[int]) -> None:
+        """Record that a turn used these memories; the owner sees the count."""
+        with self.postgres.session() as session:
+            session.execute(
+                update(AgentMemory)
+                .where(
+                    AgentMemory.shop_id == shop_id,
+                    AgentMemory.user_id == user_id,
+                    AgentMemory.id.in_(memory_ids),
+                )
+                .values(last_used_at=func.now(), use_count=AgentMemory.use_count + 1)
+            )
 
     @staticmethod
     def _live(shop_id: int, user_id: int) -> tuple:
@@ -514,6 +508,27 @@ class AgentMemoryRepository:
                 ids += frontier
             session.execute(delete(AgentMemory).where(AgentMemory.id.in_(ids)))
         return True
+
+    def recall_ready(self, shop_id: int, user_id: int) -> bool:
+        """Whether recall has anything to do: switch not off and a live memory exists.
+
+        One statement, so the hot path pays one round trip instead of two and an
+        owner without memories skips the embedding call.
+        """
+        switched_off = (
+            select(AgentMemorySetting.shop_id)
+            .where(
+                AgentMemorySetting.shop_id == shop_id,
+                AgentMemorySetting.user_id == user_id,
+                AgentMemorySetting.memory_enabled.is_(False),
+            )
+            .exists()
+        )
+        has_memory = (
+            select(AgentMemory.id).where(*self._live(shop_id, user_id)).exists()
+        )
+        with self.postgres.session() as session:
+            return bool(session.scalar(select(has_memory & ~switched_off)))
 
     def memory_enabled(self, shop_id: int, user_id: int) -> bool:
         """The owner's switch; on until they turn it off."""

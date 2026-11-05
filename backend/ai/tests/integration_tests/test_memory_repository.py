@@ -11,6 +11,7 @@ from tests.support import REPO_ROOT, apply_ai_baseline, apply_core_migrations
 
 from src.agent.repository import AgentConversationRepository
 from src.infra.postgre_db_client import PostgreDBClient
+from src.infra.redis_client import RedisClient
 from src.memory.repository import AgentMemoryRepository, NewMemory
 
 MEMORY_MIGRATIONS = [
@@ -83,7 +84,9 @@ def memory_db() -> Iterator[tuple[psycopg.Connection, PostgreDBClient, dict]]:
 
 
 def new_conversation(postgres: PostgreDBClient, user_id: int, shop_id: int) -> int:
-    conversation_id, _ = AgentConversationRepository(postgres).save_exchange(
+    conversation_id, _ = AgentConversationRepository(
+        postgres, RedisClient()
+    ).save_exchange(
         user_id=user_id,
         shop_id=shop_id,
         conversation_id=None,
@@ -162,7 +165,7 @@ def test_deleting_a_conversation_forgets_its_memories(memory_db) -> None:
         ids["shop_a"], ids["user_a"], conversation_id, [memory("gạo chú Tư", 1, 0)]
     )
 
-    AgentConversationRepository(postgres).delete_conversation(
+    AgentConversationRepository(postgres, RedisClient()).delete_conversation(
         conversation_id, ids["user_a"], ids["shop_a"]
     )
 
@@ -249,27 +252,34 @@ def test_old_memories_of_a_chat_day_are_swapped_for_their_summary(memory_db) -> 
     assert found[0].created_at == max(item.created_at for item in group.memories)
     assert memories.due_for_summary(ids["shop_a"], ids["user_a"], 7) == []
 
-    AgentConversationRepository(postgres).delete_conversation(
+    AgentConversationRepository(postgres, RedisClient()).delete_conversation(
         conversation_id, ids["user_a"], ids["shop_a"]
     )
     assert memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 5) == []
 
 
-def test_search_records_the_use_of_the_memories_it_returns(memory_db) -> None:
+def test_search_only_reads_and_mark_used_records_the_use(memory_db) -> None:
     admin, postgres, ids = memory_db
     memories = AgentMemoryRepository(postgres)
-    conversation_id = new_conversation(postgres, ids["user_a"], ids["shop_a"])
+    shop, user = ids["shop_a"], ids["user_a"]
+    conversation_id = new_conversation(postgres, user, shop)
     memories.add(
-        ids["shop_a"],
-        ids["user_a"],
+        shop,
+        user,
         conversation_id,
         [memory("gạo chú Tư", 1, 0), memory("đóng cửa 22h", 0, 1)],
     )
 
-    found = memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 1)
-    memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 1)
+    (found,) = memories.search(shop, user, vector(1, 0), 1)
+    assert admin.execute(
+        "SELECT count(*) FROM agent_memories WHERE last_used_at IS NOT NULL"
+    ).fetchone() == (0,)
 
-    assert [item.content for item in found] == ["gạo chú Tư"]
+    memories.mark_used(shop, user, [found.id])
+    memories.mark_used(shop, user, [found.id])
+    # Another owner's call cannot touch the memory.
+    memories.mark_used(ids["shop_b"], ids["user_b"], [found.id])
+
     rows = dict(
         admin.execute(
             "SELECT content, use_count FROM agent_memories"
@@ -277,6 +287,46 @@ def test_search_records_the_use_of_the_memories_it_returns(memory_db) -> None:
         ).fetchall()
     )
     assert rows == {"gạo chú Tư": 2}
+
+
+def test_recall_is_ready_only_with_the_switch_not_off_and_a_live_memory(
+    memory_db,
+) -> None:
+    admin, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    shop, user = ids["shop_a"], ids["user_a"]
+    conversation_id = new_conversation(postgres, user, shop)
+
+    assert memories.recall_ready(shop, user) is False
+
+    memories.add(shop, user, conversation_id, [memory("gạo chú Tư", 1, 0)])
+    assert memories.recall_ready(shop, user) is True
+    assert memories.recall_ready(ids["shop_b"], ids["user_b"]) is False
+
+    memories.set_memory_enabled(shop, user, False)
+    assert memories.recall_ready(shop, user) is False
+    memories.set_memory_enabled(shop, user, True)
+    assert memories.recall_ready(shop, user) is True
+
+    admin.execute("UPDATE agent_memories SET expires_at = NOW() - INTERVAL '1 day'")
+    assert memories.recall_ready(shop, user) is False
+
+    admin.execute("UPDATE agent_memories SET expires_at = NULL")
+    memories.add(
+        shop,
+        user,
+        conversation_id,
+        [memory("gạo cô Ba", 1, 0.1)],
+    )
+    admin.execute(
+        "UPDATE agent_memories SET superseded_by = (SELECT max(id) FROM agent_memories)"
+        " WHERE content = 'gạo chú Tư'"
+    )
+    admin.execute(
+        "UPDATE agent_memories SET superseded_by = (SELECT min(id) FROM agent_memories)"
+        " WHERE content = 'gạo cô Ba'"
+    )
+    assert memories.recall_ready(shop, user) is False
 
 
 def test_decay_counts_from_the_last_use(memory_db) -> None:
@@ -317,7 +367,7 @@ def test_a_superseded_memory_is_hidden_until_the_newer_one_is_forgotten(
     found = memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 5)
     assert [item.content for item in found] == ["họp lúc 9h"]
 
-    AgentConversationRepository(postgres).delete_conversation(
+    AgentConversationRepository(postgres, RedisClient()).delete_conversation(
         new_chat, ids["user_a"], ids["shop_a"]
     )
     found = memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 5)
@@ -395,6 +445,7 @@ def test_a_summary_inherits_use_and_keeps_superseded_memories_hidden(
     chat = new_conversation(postgres, ids["user_a"], ids["shop_a"])
     memories.add(ids["shop_a"], ids["user_a"], old_chat, [memory("họp lúc 8h", 0, 1)])
     (old,) = memories.search(ids["shop_a"], ids["user_a"], vector(0, 1), 5)
+    memories.mark_used(ids["shop_a"], ids["user_a"], [old.id])
     memories.add(
         ids["shop_a"],
         ids["user_a"],
@@ -404,7 +455,8 @@ def test_a_summary_inherits_use_and_keeps_superseded_memories_hidden(
             memory("chợ Bà Chiểu", 1, 0.1),
         ],
     )
-    memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 5)
+    found = memories.search(ids["shop_a"], ids["user_a"], vector(1, 0), 5)
+    memories.mark_used(ids["shop_a"], ids["user_a"], [item.id for item in found])
     age(admin, "họp lúc 9h", 10)
     age(admin, "chợ Bà Chiểu", 10)
 

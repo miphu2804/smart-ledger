@@ -249,6 +249,7 @@ class AgentService:
         # Read first, so a conversation outside the owner's scope fails before any model
         # call. Owners rarely reach the window, so it bounds the prompt for the odd long
         # conversation without summarizing anything.
+        history_started = time.monotonic()
         history = (
             await asyncio.to_thread(
                 self.conversations.recent_messages,
@@ -260,6 +261,9 @@ class AgentService:
             if conversation_id is not None
             else []
         )
+        # The read runs before the session exists, so its time rides in the session's
+        # metadata instead of a span.
+        history_ms = round(1000 * (time.monotonic() - history_started))
         # Stored as the model sees it, so a pasted key is not replayed with the history
         # on later turns.
         question = self.guardrails.check_input(message)
@@ -269,7 +273,11 @@ class AgentService:
             context.user_id,
             conversation_id,
             question,
-            {"model": self.model_name, "prompt_version": self.prompt_version},
+            {
+                "model": self.model_name,
+                "prompt_version": self.prompt_version,
+                "history_ms": history_ms,
+            },
         )
         return question, history
 
@@ -655,14 +663,15 @@ class AgentService:
         recalled: list[RecalledMemory],
         selection: ModelSelection | None,
     ) -> AgentChatResult:
-        saved_conversation_id, message_id = await asyncio.to_thread(
-            self.conversations.save_exchange,
-            user_id=context.user_id,
-            shop_id=context.shop_id,
-            conversation_id=conversation_id,
-            user_message=question,
-            assistant_message=answer,
-        )
+        with self.observability.span("save turn"):
+            saved_conversation_id, message_id = await asyncio.to_thread(
+                self.conversations.save_exchange,
+                user_id=context.user_id,
+                shop_id=context.shop_id,
+                conversation_id=conversation_id,
+                user_message=question,
+                assistant_message=answer,
+            )
         if conversation_id is None:
             self.observability.link_conversation(saved_conversation_id)
         if self.memory is not None:

@@ -1,0 +1,46 @@
+---
+title: "Memory: learning after a turn"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: Start
+    lg1: Learn
+    lg2: Compress
+    lg3: End
+  }
+  class lg0 blue
+  class lg1 purple
+  class lg2 teal
+  class lg3 yellow
+  s0: Turn saved, memory task starts
+  s1: Recording use of recalled memories
+  s2: Reading the owner's memory switch
+  s3: Extracting facts with the extractor model
+  s4: Finished, every failure only logged
+  s5: Embedding and reconciling with similar memories
+  s6: Looking for old groups to summarize
+  s7: Summarizing one group
+  s8: Storing facts, marking the ones they replace
+  [*] --> s0
+  s0 --> s1: the turn used memories
+  s0 --> s2: the turn used none
+  s1 --> s2: use count and last use updated
+  s2 --> s4: switch off, or the read fails
+  s2 --> s3: switch on
+  s3 --> s5: facts found
+  s3 --> s6: no new facts, or the extractor fails
+  s5 --> s6: every fact already known
+  s5 --> s8: new or replacing facts [all kept if the reconciler fails]
+  s6 --> s4: no group due
+  s6 --> s7: a group of 2+ memories older than 7 days [3 per turn]
+  s7 --> s6: summary replaces the group, or the group is kept
+  s8 --> s6: stored, or the store fails
+  class s0 blue
+  class s1 blue
+  class s2 blue
+  class s3 purple
+  class s4 yellow
+  class s5 purple
+  class s6 teal
+  class s7 teal
+  class s8 purple
