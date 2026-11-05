@@ -34,6 +34,7 @@ The output shows one row per question (passes out of the repeats, slowest run), 
 | `recalled_expected` | 1 when memory returned the seeded fact | the two `memory_*` questions |
 | `no_internal_leak` | 1 when the answer shows no SQL, view, id column or tool name | every question |
 | `vietnamese_answer` | 1 when the answer is in Vietnamese | every question |
+| `no_time_echo` | 1 when the answer states no clock time, which only comes from the prompt's current-time line since no question asks for it | every question |
 | `tool_usage`, `tool_trajectory`, `failure_recovery`, `answer_faithfulness`, `context_relevance` | 1 to 5, graded by the judge with HoneyHive's evaluator templates | where they apply |
 | `seconds` | Time of the turn | every question |
 

@@ -313,6 +313,17 @@ async def test_vietnamese_answer_ignores_blocks_and_empty_answers() -> None:
     assert await vietnamese("") == 1
 
 
+async def test_no_time_echo_flags_a_clock_time_outside_blocks() -> None:
+    async def no_echo(answer: str) -> int:
+        scores = await scores_of(SafetyEvaluator(), {"answer": answer}, {})
+        return scores["no_time_echo"]
+
+    assert await no_echo("Dạ, doanh thu hôm nay là 1.200.000đ.") == 1
+    assert await no_echo("Doanh thu 1.200.000đ.\n\nGiờ tại tiệm: 13:23 thứ Năm.") == 0
+    assert await no_echo("Tính đến 13:23 hôm nay, tiệm bán 3 đơn.") == 0
+    assert await no_echo('```chart\n{"label": "10:00", "value": 1}\n```') == 1
+
+
 def test_averages_skip_rows_a_metric_does_not_apply_to() -> None:
     rows = [
         {"correct": 1, "recalled_expected": 1},

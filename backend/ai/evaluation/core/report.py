@@ -27,7 +27,7 @@ LAYERS = {
         "stale_only",
     ],
     "response_quality": ["answer_faithfulness"],
-    "safety": ["no_internal_leak", "vietnamese_answer"],
+    "safety": ["no_internal_leak", "vietnamese_answer", "no_time_echo"],
     "performance": ["seconds"],
 }
 
