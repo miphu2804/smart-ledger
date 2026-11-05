@@ -18,10 +18,10 @@ import { ChatText, ScreenActions, StreamingChatText } from '../src/components/Ch
 import { BusinessIcon } from '../src/components/icons';
 import { MemoryGraph } from '../src/components/MemoryGraph';
 import { MascotBadge } from '../src/components/MascotBadge';
-import { ACTION_MENU_DURATION, easeOut, useReducedMotion } from '../src/motion';
+import { ACTION_MENU_DURATION, dur, easeOut, useReducedMotion } from '../src/motion';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ThoughtLine } from '../src/components/ThoughtLine';
-import { Button, Dialog, EmptyState, Field, IconBtn, KEYBOARD_AVOID_BEHAVIOR, Row, Sheet, T, Toggle } from '../src/components/ui';
+import { Button, Dialog, EmptyState, Field, IconBtn, KEYBOARD_AVOID_BEHAVIOR, Row, Sheet, T, Toggle, type IconName } from '../src/components/ui';
 import type {
   AgentConversationSummary,
   AgentConversationView,
@@ -106,6 +106,7 @@ export default function Ai() {
   const [msgs, setMsgs] = useState<ChatMessage[]>(() => [welcome(app.user.name)]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   useEffect(() => {
@@ -280,29 +281,8 @@ export default function Ai() {
         >
           <Feather name="chevron-left" size={20} color={colors.ink} />
         </Pressable>
-        <View pointerEvents="none" style={styles.titleWrap}>
-          <T w="bold" size={15} color={colors.ink}>
-            Trợ lý Bobi
-          </T>
-        </View>
-        <View style={styles.toolbar}>
-        <Row gap={8}>
-          <View style={styles.floatBtn}>
-            <IconBtn
-              name="edit"
-              label="Cuộc trò chuyện mới"
-              size={HEADER_BTN}
-              color={typing ? colors.faint : colors.ink}
-              onPress={() => !typing && startNew()}
-            />
-          </View>
-          <View style={styles.floatBtn}>
-            <IconBtn name="clock" label="Lịch sử trò chuyện" size={HEADER_BTN} color={typing ? colors.faint : colors.ink} onPress={openHistory} />
-          </View>
-          <View style={styles.floatBtn}>
-            <IconBtn name="sliders" label="Cài đặt trợ lý" size={HEADER_BTN} onPress={() => setSettingsOpen(true)} />
-          </View>
-        </Row>
+        <View style={styles.floatBtn}>
+          <IconBtn name="menu" label="Tuỳ chọn trò chuyện" size={HEADER_BTN} onPress={() => setMenuOpen(true)} />
         </View>
       </View>
 
@@ -380,6 +360,19 @@ export default function Ai() {
         <ChatComposer value={text} onChangeText={setText} onSend={() => send(text)} busy={typing} />
       </View>
 
+      {/* Sau thanh nhập để menu và lớp chạm-ra-ngoài nằm trên mọi thứ của màn chat. */}
+      <ChatMenu
+        visible={menuOpen}
+        top={insets.top + 6 + HEADER_BTN + 8}
+        onClose={() => setMenuOpen(false)}
+        items={[
+          // Khoá đổi hội thoại khi đang chờ trả lời, như hai nút riêng trước đây.
+          { icon: 'edit', label: 'Cuộc trò chuyện mới', disabled: typing, onPress: startNew },
+          { icon: 'clock', label: 'Lịch sử trò chuyện', disabled: typing, onPress: openHistory },
+          { icon: 'sliders', label: 'Cài đặt trợ lý', onPress: () => setSettingsOpen(true) },
+        ]}
+      />
+
       <AssistantSettingsSheet
         visible={settingsOpen}
         onClose={closeSettings}
@@ -400,6 +393,73 @@ export default function Ai() {
 }
 
 /** Lịch sử trò chuyện: tải danh sách mỗi lần mở, mở/đổi tên/xoá hội thoại. */
+interface ChatMenuItem {
+  icon: IconName;
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+}
+
+/**
+ * Menu của nút ba gạch trên header: gom các thao tác của màn chat vào một nút để header gọn.
+ * Chạm ra ngoài thì đóng; chọn một mục thì đóng menu rồi chạy mục đó.
+ * Không dùng Modal: các Sheet mà mục mở ra cũng là Modal, và iOS không mở được Modal mới khi
+ * Modal trước còn đang đóng dở.
+ */
+function ChatMenu({ visible, top, items, onClose }: { visible: boolean; top: number; items: ChatMenuItem[]; onClose: () => void }) {
+  const reducedMotion = useReducedMotion();
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!visible) return;
+    if (reducedMotion) {
+      progress.setValue(1);
+      return;
+    }
+    progress.setValue(0);
+    const animation = Animated.timing(progress, {
+      toValue: 1,
+      duration: dur.fast,
+      easing: easeOut,
+      useNativeDriver: Platform.OS !== 'web',
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [visible, reducedMotion, progress]);
+
+  if (!visible) return null;
+  const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [-6, 0] });
+  return (
+    <View style={styles.menuLayer}>
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel="Đóng menu" />
+      <Animated.View accessibilityRole="menu" style={[styles.menu, { top, opacity: progress, transform: [{ translateY }] }]}>
+        {items.map((item) => {
+          const color = item.disabled ? colors.faint : colors.ink;
+          return (
+            <Pressable
+              key={item.label}
+              disabled={item.disabled}
+              onPress={() => {
+                onClose();
+                item.onPress();
+              }}
+              style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}
+              accessibilityRole="menuitem"
+              accessibilityLabel={item.label}
+              accessibilityState={{ disabled: item.disabled }}
+            >
+              <Feather name={item.icon} size={18} color={color} />
+              <T w="medium" size={14.5} color={color}>
+                {item.label}
+              </T>
+            </Pressable>
+          );
+        })}
+      </Animated.View>
+    </View>
+  );
+}
+
 function HistorySheet({
   visible,
   activeId,
@@ -713,21 +773,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  titleWrap: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: 7,
-    marginHorizontal: 10,
-  },
-  // Bóng đậm hơn shadow(0) của IconBtn để nút nổi rõ khi tin nhắn trôi bên dưới.
+  // Không viền; bóng đậm hơn shadow(0) của IconBtn để nút nổi rõ khi tin nhắn trôi bên dưới.
   floatBtn: {
     borderRadius: 20,
     backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: 'rgba(69,47,160,0.16)',
+    ...shadow(2),
   },
   backBtn: {
     width: HEADER_BTN,
@@ -741,7 +791,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingBottom: 24,
   },
-  toolbar: { flexDirection: 'row' },
+  // Trên header (zIndex 1) để lớp chạm-ra-ngoài phủ cả các nút nổi.
+  menuLayer: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, zIndex: 2 },
+  menu: {
+    position: 'absolute',
+    right: 14,
+    minWidth: 220,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: 'rgba(69,47,160,0.16)',
+    ...shadow(3),
+  },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12 },
+  menuItemPressed: { backgroundColor: colors.brandTint },
   messages: { gap: 16 },
   welcomeHero: {
     flex: 1,

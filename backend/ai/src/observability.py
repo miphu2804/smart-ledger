@@ -111,7 +111,8 @@ class Observability:
         metadata: dict[str, str | int],
     ) -> None:
         """Group this turn's spans under a new session that opens with the question and
-        `metadata`, such as the model, the prompt version and the history read time."""
+        `metadata`, such as the model and the prompt version; call `wait_for_session`
+        before the turn's first span."""
         if self._tracer is None:
             return
         if random.random() >= self._sample_rate:
@@ -120,13 +121,12 @@ class Observability:
             _session_created.set(None)
             return
         session_id = str(uuid.uuid4())
-        # No request here: HoneyHive keeps spans under an id it has not seen, so the
-        # owner never waits on it and a slow HoneyHive costs only the session fields.
+        # No request here: it only puts the session id in the context for the spans.
         await self._tracer.acreate_session(
             session_name="agent-chat", session_id=session_id, skip_api_call=True
         )
-        # Sent now, not after the turn: once a span lands first, HoneyHive has already
-        # made the session and these fields are dropped.
+        # Sent in the background, so the caller can do other work until
+        # `wait_for_session` needs it done.
         created = self._run_in_background(
             self._create_session(
                 session_id,
@@ -144,6 +144,18 @@ class Observability:
             )
         )
         _session_created.set(created)
+
+    async def wait_for_session(self) -> None:
+        """Wait until HoneyHive has this turn's session, at most `SESSION_WAIT_SECONDS`.
+
+        A span that lands first makes HoneyHive create the session itself, with source
+        `api`, start time 0 and no inputs, and the later start does not fix them. A
+        slow or failing HoneyHive costs the turn this wait at most, never the answer.
+        """
+        if self._traced():
+            await asyncio.wait(
+                {_session_created.get()}, timeout=self.SESSION_WAIT_SECONDS
+            )
 
     def finish_turn(
         self, answer: str, usage: RunUsage, first_text_ms: int | None = None

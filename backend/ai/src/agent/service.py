@@ -246,39 +246,42 @@ class AgentService:
         if self.agent is None:
             raise RuntimeError("agent model unavailable")
 
-        # Read first, so a conversation outside the owner's scope fails before any model
-        # call. Owners rarely reach the window, so it bounds the prompt for the odd long
-        # conversation without summarizing anything.
-        history_started = time.monotonic()
-        history = (
-            await asyncio.to_thread(
-                self.conversations.recent_messages,
-                conversation_id,
-                context.user_id,
-                context.shop_id,
-                self.history_messages,
-            )
-            if conversation_id is not None
-            else []
-        )
-        # The read runs before the session exists, so its time rides in the session's
-        # metadata instead of a span.
-        history_ms = round(1000 * (time.monotonic() - history_started))
         # Stored as the model sees it, so a pasted key is not replayed with the history
         # on later turns.
         question = self.guardrails.check_input(message)
-        # After the redaction, so the session opens with the question the model sees.
+        # After the redaction, so the session opens with the question the model sees,
+        # and before the history read, so HoneyHive creates the session while the
+        # database answers.
         await self.observability.start_turn_session(
             context.shop_id,
             context.user_id,
             conversation_id,
             question,
-            {
-                "model": self.model_name,
-                "prompt_version": self.prompt_version,
-                "history_ms": history_ms,
-            },
+            {"model": self.model_name, "prompt_version": self.prompt_version},
         )
+        async with self._marks_failure():
+            # Read before any model call, so a conversation outside the owner's scope
+            # fails first. Owners rarely reach the window, so it bounds the prompt for
+            # the odd long conversation without summarizing anything.
+            history_started = time.monotonic()
+            history = (
+                await asyncio.to_thread(
+                    self.conversations.recent_messages,
+                    conversation_id,
+                    context.user_id,
+                    context.shop_id,
+                    self.history_messages,
+                )
+                if conversation_id is not None
+                else []
+            )
+            # No span covers the read, so its time rides in the session's metadata.
+            self.observability.tag_turn(
+                history_ms=round(1000 * (time.monotonic() - history_started))
+            )
+        # The turn's first span comes next; it must not reach HoneyHive before the
+        # session does.
+        await self.observability.wait_for_session()
         return question, history
 
     @asynccontextmanager
