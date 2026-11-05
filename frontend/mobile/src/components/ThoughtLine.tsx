@@ -74,7 +74,7 @@ export function ThoughtLine({ steps = [], color = colors.brand }: ThoughtLinePro
         {current ? (
           // Nhãn bắt đầu đúng chỗ câu chờ.
           <SlideIn key={current.id} trigger={current.id} style={styles.step}>
-            <StreamedLabel text={current.label} color={colors.muted} />
+            <StreamedLabel text={current.label} color={colors.ink} />
           </SlideIn>
         ) : (
           <SlideIn trigger={phrase} style={styles.label}>
@@ -158,7 +158,8 @@ function StreamedLabel({ text, color }: { text: string; color: string }) {
     }).start();
   }, [progress, chars.length]);
 
-  return <CharRun chars={chars} opacities={opacities} w="medium" size={12.5} color={color} />;
+  // Cùng cỡ, độ đậm và màu với câu chờ, để chữ không nhỏ và nhạt đi khi trợ lý gọi tool.
+  return <CharRun chars={chars} opacities={opacities} w="semibold" size={13} color={color} />;
 }
 
 /** Mỗi chữ một view vì opacity không áp được lên đoạn Text lồng nhau; nhãn quét sáng và nhãn chạy chữ dùng chung. */
